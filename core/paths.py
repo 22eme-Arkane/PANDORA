@@ -4,7 +4,7 @@ Tous les modules core qui ont besoin de _ROOT doivent importer APP_ROOT depuis
 ce module plutôt que de recalculer os.path.dirname(os.path.dirname(__file__)).
 
 - Dev        : répertoire parent de core/ (le répertoire du projet)
-- Gelé       : %LOCALAPPDATA%\PANDORA\ (inscriptible sans UAC, même depuis Program Files)
+- Gelé       : %LOCALAPPDATA%\\PANDORA\\ (inscriptible sans UAC, même depuis Program Files)
 """
 import os
 import sys
