@@ -86,7 +86,7 @@ tools/     Scripts utilitaires (build, conversion ICO)
 
 ## Soutenir PANDORA
 
-PANDORA est gratuit et open source. Si ce projet vous est utile :
+PANDORA est gratuit. Si ce projet vous est utile :
 
 - ⭐ Mettez une étoile sur GitHub
 - ❤ [Faites un don](../../releases) (PayPal / crypto)
