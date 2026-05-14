@@ -209,6 +209,7 @@ class ApiHelpDialog(QDialog):
         )
         nl = QVBoxLayout(note_frame)
         nl.setContentsMargins(14, 12, 14, 12)
+        nl.setSpacing(8)
         note = QLabel(
             "💡  <b>Utilisation :</b> fal.ai et Anthropic sont des services payants à l'usage. "
             "Chaque génération consomme des crédits. "
@@ -219,6 +220,16 @@ class ApiHelpDialog(QDialog):
             f"color:{CP['orange']};font-size:11px;background:transparent;border:none;"
         )
         nl.addWidget(note)
+
+        vpn_note = QLabel(
+            "🔒  <b>VPN :</b> si Claude ne répond pas ou génère des erreurs, "
+            "désactivez votre VPN — certains serveurs VPN sont bloqués par l'API Anthropic."
+        )
+        vpn_note.setWordWrap(True)
+        vpn_note.setStyleSheet(
+            f"color:{CP['orange']};font-size:11px;background:transparent;border:none;"
+        )
+        nl.addWidget(vpn_note)
         lay.addWidget(note_frame)
 
         scroll.setWidget(inner)
