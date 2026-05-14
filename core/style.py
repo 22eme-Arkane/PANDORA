@@ -2,6 +2,7 @@
 
 import json
 import os
+import sys
 
 from core.paths import APP_ROOT as _ROOT
 _STYLES_FILE = os.path.join(_ROOT, "data", "project_styles.json")
@@ -478,15 +479,20 @@ _IMG_EXTS = {".jpg", ".jpeg", ".png", ".webp"}
 
 
 def get_style_ref_images_for_key(key: str) -> list[str]:
-    """Lists available reference images for a given style key from assets/style_refs/{key}/."""
-    folder = os.path.join(_STYLE_REFS_DIR, key)
-    if not os.path.isdir(folder):
-        return []
-    return sorted([
-        os.path.join(folder, f)
-        for f in os.listdir(folder)
-        if os.path.splitext(f)[1].lower() in _IMG_EXTS
-    ])
+    """Lists reference images for a given style key — checks user dir + bundled assets."""
+    folders = [os.path.join(_STYLE_REFS_DIR, key)]
+    if getattr(sys, "frozen", False):
+        bundled = os.path.join(sys._MEIPASS, "assets", "style_refs", key)
+        if bundled not in folders:
+            folders.append(bundled)
+    paths, seen = [], set()
+    for folder in folders:
+        if os.path.isdir(folder):
+            for f in sorted(os.listdir(folder)):
+                if os.path.splitext(f)[1].lower() in _IMG_EXTS and f not in seen:
+                    seen.add(f)
+                    paths.append(os.path.join(folder, f))
+    return paths
 
 
 def get_style_ref_image_for_key(key: str) -> str:

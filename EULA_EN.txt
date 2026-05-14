@@ -1,0 +1,209 @@
+END USER LICENSE AGREEMENT — PANDORA SOFTWARE
+Version 1.0 — May 2026
+22eme Arkane — Matthieu Terrien
+Contact: 22eme.arkane@gmail.com
+
+════════════════════════════════════════════════════════════════
+
+PREAMBLE
+
+This document constitutes an End User License Agreement (EULA)
+between you, the User, and 22eme Arkane (Matthieu Terrien), hereinafter referred to
+as "the Publisher", concerning the PANDORA software and any future updates.
+
+By installing, copying, or using PANDORA, you declare that you have read, understood,
+and unconditionally accepted the terms of this agreement. If you do not accept these
+terms, do not install or use this software.
+
+════════════════════════════════════════════════════════════════
+
+ARTICLE 1 — PURPOSE OF THE SOFTWARE
+
+PANDORA is a cinematographic pre-production tool for managing scripts, storyboards,
+casting, locations, props, costume, hair & makeup (CHM), and vehicles, as well as
+generating video and image content through third-party artificial intelligence services.
+
+════════════════════════════════════════════════════════════════
+
+ARTICLE 2 — LICENSE GRANTED
+
+The Publisher grants the User a personal, free, non-exclusive, non-transferable, and
+revocable license to:
+
+  a) Install and use PANDORA on personal devices running Microsoft Windows 10 or
+     Windows 11 (64-bit);
+  b) Use PANDORA for personal or professional projects, within the limits defined
+     in Article 3.
+
+This license does not confer any ownership rights over the software, its source code,
+or any of its components.
+
+════════════════════════════════════════════════════════════════
+
+ARTICLE 3 — RESTRICTIONS
+
+The following are strictly prohibited:
+
+  a) Reproducing, distributing, publishing, selling, renting, or lending PANDORA to
+     third parties in any form;
+  b) Modifying, adapting, translating, decompiling, disassembling, or performing any
+     form of reverse engineering on the software;
+  c) Creating derivative works based on PANDORA;
+  d) Removing, modifying, or concealing any intellectual property notices appearing
+     in the software or its documentation;
+  e) Sublicensing the software to third parties;
+  f) Using PANDORA for unlawful purposes, contrary to applicable laws and regulations,
+     or infringing upon the rights of third parties.
+
+════════════════════════════════════════════════════════════════
+
+ARTICLE 4 — THIRD-PARTY SERVICES AND APIS
+
+PANDORA interfaces with artificial intelligence services provided by third parties.
+The User expressly acknowledges and agrees that:
+
+4.1 API Keys — The use of these services requires personal API keys obtained directly
+    from each provider. The Publisher provides no API keys and is not party to any
+    contracts concluded between the User and these services. Currently integrated
+    providers include:
+      · fal.ai (Seedance 2.0, Kling, PixVerse, Flux, Kokoro TTS)
+      · Anthropic (Claude — script assistance, storyboard, optimization)
+      · Nano Banana (portrait and visual element generation)
+
+4.2 Costs — Each operation performed through these services may be billed directly
+    to the User by the relevant provider, according to their applicable rates.
+    The Publisher is in no way responsible for these costs or their evolution.
+
+4.3 Availability — The Publisher does not guarantee the continuous availability of
+    third-party services, their proper functioning, or the continuity of their
+    offerings. The interruption of a third-party service shall not engage the
+    Publisher's liability.
+
+4.4 Third-party terms — The User agrees to comply with the general terms of use and
+    acceptable use policies of each third-party service. It is the User's
+    responsibility to consult them directly with each provider.
+
+4.5 Generated content — The User is solely responsible for prompts, instructions,
+    and content submitted to third-party services via PANDORA, as well as the
+    content generated as a result. The Publisher disclaims all liability with
+    respect to such content.
+
+════════════════════════════════════════════════════════════════
+
+ARTICLE 5 — REQUIRED THIRD-PARTY SOFTWARE
+
+PANDORA is designed to work with DaVinci Resolve Studio (paid version, published by
+Blackmagic Design). This license is the exclusive responsibility of the User. The
+Publisher is not affiliated with Blackmagic Design and does not guarantee
+compatibility with all versions of DaVinci Resolve.
+
+════════════════════════════════════════════════════════════════
+
+ARTICLE 6 — INTELLECTUAL PROPERTY
+
+PANDORA, its entire source code, graphical interface, visual elements, documentation,
+and all its components are the exclusive property of 22eme Arkane (Matthieu Terrien)
+and are protected by French and international laws relating to intellectual property,
+in particular the French Intellectual Property Code.
+
+Any violation of the Publisher's intellectual property rights may result in civil
+and/or criminal proceedings.
+
+════════════════════════════════════════════════════════════════
+
+ARTICLE 7 — PERSONAL DATA AND PRIVACY
+
+7.1 No data collection — PANDORA does not collect, transmit, or process any personal
+    data from the User to the Publisher. The software operates exclusively locally.
+
+7.2 Local storage — All data created in PANDORA (projects, scripts, storyboards,
+    images, configurations) is stored exclusively on the User's device, under their
+    sole responsibility.
+
+7.3 Transmission to third-party services — Prompts, images, and other data
+    transmitted to third-party APIs during generation operations are governed by the
+    privacy policies of each provider. The Publisher encourages the User to consult
+    them before use.
+
+════════════════════════════════════════════════════════════════
+
+ARTICLE 8 — DISCLAIMER OF WARRANTY
+
+PANDORA is provided "as is", without warranty of any kind, express or implied, to
+the extent permitted by applicable law.
+
+The Publisher does not warrant, in particular:
+  · That the software will be free from errors, bugs, or interruptions;
+  · That the software will operate without interruption or failure;
+  · The suitability of the software to the User's specific needs;
+  · Compatibility with any particular hardware or software environment;
+  · The accuracy, relevance, or quality of content generated by third-party services.
+
+════════════════════════════════════════════════════════════════
+
+ARTICLE 9 — LIMITATION OF LIABILITY
+
+To the extent permitted by French law, the Publisher shall not be held liable for:
+
+  a) Any direct, indirect, incidental, special, or consequential damages resulting
+     from the use or inability to use PANDORA;
+  b) Generation costs incurred through third-party services;
+  c) Loss, corruption, or destruction of data, projects, or creative content;
+  d) Any damage caused by use not in accordance with this agreement;
+  e) The failure, unavailability, or modification of third-party services integrated
+     into PANDORA.
+
+════════════════════════════════════════════════════════════════
+
+ARTICLE 10 — UPDATES
+
+The Publisher may release updates, patches, and new versions of PANDORA. These
+updates are subject to the terms of this agreement, unless otherwise stated. The
+User is not required to install them but may benefit from them freely.
+
+The automatic update check at startup may be disabled in the software settings. It
+consists solely of querying the public GitHub Releases API and transmits no personal
+data.
+
+════════════════════════════════════════════════════════════════
+
+ARTICLE 11 — TERMINATION
+
+This license terminates automatically and without notice if the User fails to comply
+with any of its provisions. Upon termination, the User agrees to immediately cease
+all use of PANDORA and to uninstall it from all their devices.
+
+════════════════════════════════════════════════════════════════
+
+ARTICLE 12 — GOVERNING LAW AND JURISDICTION
+
+This agreement is governed, interpreted, and enforced in accordance with French law,
+to the exclusion of any other law.
+
+Any dispute relating to the validity, interpretation, or performance of this
+agreement that cannot be resolved amicably between the parties shall be submitted to
+the exclusive jurisdiction of the competent French courts.
+
+════════════════════════════════════════════════════════════════
+
+ARTICLE 13 — GENERAL PROVISIONS
+
+13.1 Entire agreement — This agreement constitutes the entire agreement between the
+     parties regarding the subject matter defined herein and supersedes all prior
+     agreements, written or oral.
+
+13.2 Severability — If any provision of this agreement is declared invalid, illegal,
+     or unenforceable by a competent court, the remaining provisions shall remain in
+     full force and effect.
+
+13.3 Non-waiver — The Publisher's failure to exercise or enforce any right provided
+     by this agreement shall not constitute a waiver of that right.
+
+13.4 Modification — The Publisher reserves the right to modify this agreement. The
+     applicable version is the one accepted at installation or, for major updates,
+     the one presented at the time of the relevant update.
+
+════════════════════════════════════════════════════════════════
+
+22eme Arkane — Matthieu Terrien
+Version 1.0 — May 2026

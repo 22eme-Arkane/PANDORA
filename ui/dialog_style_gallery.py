@@ -17,9 +17,11 @@ _THUMB_W   = 168
 _THUMB_H   = 106
 _GRID_COLS = 4
 import sys as _sys
+from core.paths import APP_ROOT as _APP_ROOT
 _ASSETS_ROOT = (os.path.join(_sys._MEIPASS, "assets") if getattr(_sys, "frozen", False)
                 else os.path.join(os.path.dirname(os.path.dirname(__file__)), "assets"))
-_STYLE_REFS_DIR = os.path.join(_ASSETS_ROOT, "style_refs")
+# Write dir : always writable (LOCALAPPDATA in frozen, project root in dev)
+_STYLE_REFS_DIR = os.path.join(_APP_ROOT, "assets", "style_refs")
 
 
 # ── Image card ────────────────────────────────────────────────────────────────
