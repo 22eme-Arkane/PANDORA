@@ -37,6 +37,11 @@
 3. Lancer **PANDORA** depuis le menu Démarrer ou le bureau
 4. Renseigner vos clés API dans **Paramètres** (optionnel)
 
+> **Note Windows :** lors de la première installation, Windows peut afficher un avertissement
+> SmartScreen ("Application inconnue"). Cliquez sur **"Informations complémentaires"** puis
+> **"Exécuter quand même"**. Cet avertissement disparaîtra dans une prochaine version
+> (certificat de signature en cours d'acquisition).
+
 ---
 
 ## Utilisation rapide
