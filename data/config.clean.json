@@ -1,0 +1,12 @@
+{
+  "api_key": "",
+  "default_model": "seedance-2.0",
+  "default_duration": "5",
+  "default_resolution": "720p",
+  "output_dir": "",
+  "anthropic_key": "",
+  "nano_banana_key": "",
+  "last_project_location": "",
+  "ui_language": "fr",
+  "eula_accepted": false
+}

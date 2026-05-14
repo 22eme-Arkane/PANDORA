@@ -1,0 +1,218 @@
+CHARTE D'UTILISATION — LOGICIEL PANDORA
+Version 1.0 — Mai 2026
+22ème Arkane — Matthieu Terrien
+Contact : 22eme.arkane@gmail.com
+
+════════════════════════════════════════════════════════════════
+
+PRÉAMBULE
+
+Le présent document constitue un Contrat de Licence d'Utilisation Finale (CLUF)
+entre vous, l'Utilisateur, et 22ème Arkane (Matthieu Terrien), ci-après désigné
+« l'Éditeur », concernant le logiciel PANDORA et ses mises à jour éventuelles.
+
+En installant, copiant ou utilisant PANDORA, vous déclarez avoir lu, compris et
+accepté sans réserve les termes de la présente charte. Si vous n'acceptez pas ces
+termes, n'installez pas et n'utilisez pas ce logiciel.
+
+════════════════════════════════════════════════════════════════
+
+ARTICLE 1 — OBJET DU LOGICIEL
+
+PANDORA est un outil de pré-production cinématographique permettant la gestion du
+scénario, du storyboard, du casting, des décors, des accessoires, du HMC
+(habillage, maquillage, coiffure) et des véhicules, ainsi que la génération de
+contenus vidéo et image via des services d'intelligence artificielle tiers.
+
+════════════════════════════════════════════════════════════════
+
+ARTICLE 2 — LICENCE ACCORDÉE
+
+L'Éditeur accorde à l'Utilisateur une licence personnelle, gratuite, non exclusive,
+non transférable et révocable pour :
+
+  a) Installer et utiliser PANDORA sur ses équipements personnels fonctionnant sous
+     Microsoft Windows 10 ou Windows 11 (64 bits) ;
+  b) Utiliser PANDORA dans le cadre de projets personnels ou professionnels, dans
+     les limites définies à l'article 3.
+
+Cette licence ne confère aucun droit de propriété sur le logiciel, son code source
+ou tout élément le composant.
+
+════════════════════════════════════════════════════════════════
+
+ARTICLE 3 — RESTRICTIONS
+
+Il est formellement interdit de :
+
+  a) Reproduire, distribuer, publier, vendre, louer ou prêter PANDORA à des tiers,
+     sous quelque forme que ce soit ;
+  b) Modifier, adapter, traduire, décompiler, désassembler ou pratiquer toute forme
+     d'ingénierie inverse sur le logiciel ;
+  c) Créer des œuvres dérivées à partir de PANDORA ;
+  d) Supprimer, modifier ou masquer toute mention de droits de propriété
+     intellectuelle figurant dans le logiciel ou sa documentation ;
+  e) Sous-licencier le logiciel à des tiers ;
+  f) Utiliser PANDORA à des fins illicites, contraires aux lois et réglementations
+     applicables, ou portant atteinte aux droits de tiers.
+
+════════════════════════════════════════════════════════════════
+
+ARTICLE 4 — SERVICES ET APIS TIERS
+
+PANDORA s'interface avec des services d'intelligence artificielle fournis par des
+tiers. L'Utilisateur reconnaît et accepte expressément que :
+
+4.1 Clés API — L'utilisation de ces services nécessite des clés API personnelles
+    obtenues directement auprès de chaque prestataire. L'Éditeur ne fournit aucune
+    clé API et n'est pas partie aux contrats conclus entre l'Utilisateur et ces
+    services. Les prestataires actuellement intégrés sont notamment :
+      · fal.ai (Seedance 2.0, Kling, PixVerse, Flux, Kokoro TTS)
+      · Anthropic (Claude — assistance scénario, storyboard, optimisation)
+      · Nano Banana (génération de portraits et d'éléments visuels)
+
+4.2 Coûts — Chaque opération effectuée via ces services est susceptible d'être
+    facturée directement à l'Utilisateur par le prestataire concerné, selon ses
+    propres tarifs en vigueur. L'Éditeur n'est en aucun cas responsable de ces
+    coûts, ni de leur évolution.
+
+4.3 Disponibilité — L'Éditeur ne garantit pas la disponibilité continue des
+    services tiers, leur bon fonctionnement, ni la pérennité de leurs offres.
+    L'interruption d'un service tiers ne saurait engager la responsabilité de
+    l'Éditeur.
+
+4.4 Conditions d'utilisation tierces — L'Utilisateur s'engage à respecter les
+    conditions générales d'utilisation et les politiques d'usage acceptable propres
+    à chaque service tiers. Il lui appartient de les consulter directement auprès
+    de chaque prestataire.
+
+4.5 Contenu généré — L'Utilisateur est seul responsable des prompts, instructions
+    et contenus qu'il soumet aux services tiers via PANDORA, ainsi que des contenus
+    générés en résultant. L'Éditeur décline toute responsabilité quant à ces
+    contenus.
+
+════════════════════════════════════════════════════════════════
+
+ARTICLE 5 — LOGICIELS TIERS REQUIS
+
+PANDORA est conçu pour fonctionner avec DaVinci Resolve Studio (version payante,
+éditée par Blackmagic Design). Cette licence est à la charge exclusive de
+l'Utilisateur. L'Éditeur n'est pas affilié à Blackmagic Design et ne garantit pas
+la compatibilité avec toutes les versions de DaVinci Resolve.
+
+════════════════════════════════════════════════════════════════
+
+ARTICLE 6 — PROPRIÉTÉ INTELLECTUELLE
+
+PANDORA, l'intégralité de son code source, son interface graphique, ses éléments
+visuels, sa documentation et tous ses composants sont la propriété exclusive de
+22ème Arkane (Matthieu Terrien) et sont protégés par les lois françaises et
+internationales relatives à la propriété intellectuelle, notamment le Code de la
+propriété intellectuelle français.
+
+Toute violation des droits de propriété intellectuelle de l'Éditeur peut donner
+lieu à des poursuites civiles et/ou pénales.
+
+════════════════════════════════════════════════════════════════
+
+ARTICLE 7 — DONNÉES PERSONNELLES ET CONFIDENTIALITÉ
+
+7.1 Absence de collecte — PANDORA ne collecte, ne transmet et ne traite aucune
+    donnée personnelle de l'Utilisateur à destination de l'Éditeur. Le logiciel
+    fonctionne exclusivement en local.
+
+7.2 Stockage local — L'ensemble des données créées dans PANDORA (projets, scénarios,
+    storyboards, images, configurations) est stocké exclusivement sur l'équipement
+    de l'Utilisateur, sous son entière responsabilité.
+
+7.3 Transmission aux services tiers — Les prompts, images et autres données
+    transmis aux APIs tierces lors des opérations de génération sont régis par les
+    politiques de confidentialité propres à chaque prestataire. L'Éditeur invite
+    l'Utilisateur à les consulter avant toute utilisation.
+
+════════════════════════════════════════════════════════════════
+
+ARTICLE 8 — EXCLUSION DE GARANTIE
+
+PANDORA est fourni « en l'état » (as is), sans garantie d'aucune sorte, expresse
+ou implicite, dans les limites autorisées par la loi applicable.
+
+L'Éditeur ne garantit notamment pas :
+  · Que le logiciel sera exempt d'erreurs, de bugs ou d'interruptions ;
+  · Que le logiciel fonctionnera sans interruption ni défaillance ;
+  · L'adéquation du logiciel aux besoins spécifiques de l'Utilisateur ;
+  · La compatibilité avec tout environnement matériel ou logiciel particulier ;
+  · L'exactitude, la pertinence ou la qualité des contenus générés par les
+    services tiers.
+
+════════════════════════════════════════════════════════════════
+
+ARTICLE 9 — LIMITATION DE RESPONSABILITÉ
+
+Dans les limites autorisées par la loi française, l'Éditeur ne saurait être tenu
+responsable de :
+
+  a) Tout dommage direct, indirect, accessoire, spécial ou consécutif résultant
+     de l'utilisation ou de l'impossibilité d'utilisation de PANDORA ;
+  b) Les coûts de génération engagés auprès des services tiers ;
+  c) La perte, corruption ou destruction de données, projets ou contenus créatifs ;
+  d) Tout dommage causé par un usage non conforme à la présente charte ;
+  e) La défaillance, l'indisponibilité ou la modification des services tiers
+     intégrés à PANDORA.
+
+════════════════════════════════════════════════════════════════
+
+ARTICLE 10 — MISES À JOUR
+
+L'Éditeur peut publier des mises à jour, corrections et nouvelles versions de
+PANDORA. Ces mises à jour sont soumises aux termes de la présente charte, sauf
+mention contraire. L'Utilisateur n'est pas tenu de les installer mais peut en
+bénéficier librement.
+
+La vérification automatique de mise à jour au démarrage peut être désactivée dans
+les paramètres du logiciel. Elle consiste uniquement à interroger l'API publique
+de GitHub Releases et ne transmet aucune donnée personnelle.
+
+════════════════════════════════════════════════════════════════
+
+ARTICLE 11 — RÉSILIATION
+
+La présente licence prend fin automatiquement et sans préavis si l'Utilisateur
+ne respecte pas l'une quelconque de ses dispositions. En cas de résiliation,
+l'Utilisateur s'engage à cesser immédiatement toute utilisation de PANDORA et
+à le désinstaller de l'ensemble de ses équipements.
+
+════════════════════════════════════════════════════════════════
+
+ARTICLE 12 — LOI APPLICABLE ET JURIDICTION
+
+La présente charte est régie, interprétée et exécutée conformément au droit
+français, à l'exclusion de toute autre loi.
+
+Tout litige relatif à la validité, l'interprétation ou l'exécution de la présente
+charte, qui ne pourrait être résolu à l'amiable entre les parties, sera soumis à
+la compétence exclusive des tribunaux français compétents.
+
+════════════════════════════════════════════════════════════════
+
+ARTICLE 13 — DISPOSITIONS GÉNÉRALES
+
+13.1 Intégralité de l'accord — La présente charte constitue l'intégralité de
+     l'accord entre les parties concernant l'objet qu'elle définit et remplace
+     tout accord antérieur, écrit ou oral.
+
+13.2 Divisibilité — Si une disposition de la présente charte est déclarée invalide,
+     illégale ou inapplicable par une juridiction compétente, les autres dispositions
+     demeurent en pleine vigueur.
+
+13.3 Non-renonciation — Le fait pour l'Éditeur de ne pas exercer ou faire valoir un
+     droit prévu par la présente charte ne constitue pas une renonciation à ce droit.
+
+13.4 Modification — L'Éditeur se réserve le droit de modifier la présente charte.
+     La version applicable est celle acceptée lors de l'installation ou, pour les
+     mises à jour majeures, celle présentée lors de la mise à jour concernée.
+
+════════════════════════════════════════════════════════════════
+
+22ème Arkane — Matthieu Terrien
+Version 1.0 — Mai 2026

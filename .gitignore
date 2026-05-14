@@ -1,0 +1,69 @@
+# ── Python ────────────────────────────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.so
+*.egg
+*.egg-info/
+dist/
+build/
+.eggs/
+
+# ── PyInstaller ───────────────────────────────────────────────────────────────
+# dist/ et build/ déjà listés ci-dessus
+*.spec.bak
+
+# ── Données utilisateur (JAMAIS commitées) ────────────────────────────────────
+# config.json contient les clés API — sensible
+data/config.json
+
+# Données de projet générées (castings, storyboard, décors, etc.)
+data/castings/
+data/decors/
+data/accessories/
+data/hmc/
+data/vehicles/
+data/storyboard/
+data/scenarios/
+data/history.json
+data/project_styles.json
+data/camera_prefs.json
+data/recent_projects.json
+data/migrated_*.flag
+data/Seedance/
+
+# Conserver uniquement le template vierge
+!data/config.clean.json
+
+# ── Claude Code (fichiers internes) ──────────────────────────────────────────
+.claude/
+
+# ── Projets utilisateur (données personnelles) ────────────────────────────────
+data/projects/
+
+# ── Éditeurs et IDE ───────────────────────────────────────────────────────────
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+
+# ── Environnements virtuels ───────────────────────────────────────────────────
+.venv/
+venv/
+env/
+
+# ── Logs et temporaires ───────────────────────────────────────────────────────
+*.log
+*.tmp
+*.bak
+
+# ── Assets générés (ICO depuis PNG) ──────────────────────────────────────────
+assets/pandora_badge.ico
+
+# ── Test et debug ─────────────────────────────────────────────────────────────
+test_*.py
+debug_*.py
