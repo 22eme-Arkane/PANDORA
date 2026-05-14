@@ -20,8 +20,9 @@ a = Analysis(
     datas=[
         # Tout le dossier assets (icônes, badges, style_refs, svg)
         ("assets", "assets"),
-        # Charte d'utilisation (lue par dialog_eula.py via sys._MEIPASS)
+        # Chartes d'utilisation FR + EN (lues par dialog_eula.py via sys._MEIPASS)
         ("EULA.txt", "."),
+        ("EULA_EN.txt", "."),
     ],
     hiddenimports=[
         # Pillow

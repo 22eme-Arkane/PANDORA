@@ -9,19 +9,31 @@ from PyQt6.QtCore import Qt
 from PyQt6.QtGui import QFont
 
 from ui.styles import CP, PANDORA_STYLESHEET
+from core.i18n import get_lang
 
 if getattr(sys, "frozen", False):
-    _EULA_PATH = os.path.join(sys._MEIPASS, "EULA.txt")
+    _BASE = sys._MEIPASS
 else:
-    _EULA_PATH = os.path.join(os.path.dirname(os.path.dirname(__file__)), "EULA.txt")
+    _BASE = os.path.dirname(os.path.dirname(__file__))
+
+_EULA_PATH    = os.path.join(_BASE, "EULA.txt")
+_EULA_EN_PATH = os.path.join(_BASE, "EULA_EN.txt")
 
 
-def _load_eula() -> str:
+def _load(path: str) -> str:
     try:
-        with open(_EULA_PATH, encoding="utf-8") as f:
+        with open(path, encoding="utf-8") as f:
             return f.read()
     except Exception:
-        return "Impossible de charger la charte d'utilisation."
+        return "Could not load the license agreement."
+
+
+_BTN_LANG = (
+    "QPushButton{background:transparent;border:1px solid %s;border-radius:4px;"
+    "color:%s;font-size:10px;font-weight:700;padding:0 8px;min-width:32px;min-height:22px;}"
+    "QPushButton:hover{background:rgba(255,255,255,0.06);}"
+    "QPushButton[active=true]{background:%s;color:#07080f;border-color:%s;}"
+)
 
 
 class EulaDialog(QDialog):
@@ -35,6 +47,7 @@ class EulaDialog(QDialog):
     def __init__(self, parent=None, mode: str = "read"):
         super().__init__(parent)
         self._mode = mode
+        self._lang = get_lang()
         self.setWindowTitle("Charte d'utilisation — PANDORA")
         self.setMinimumSize(760, 580)
         self.setStyleSheet(PANDORA_STYLESHEET + f"QDialog{{background:{CP['bg1']};}}")
@@ -49,21 +62,38 @@ class EulaDialog(QDialog):
         hdr.setStyleSheet(f"background:{CP['bg2']};border-bottom:1px solid {CP['border']};")
         hl = QHBoxLayout(hdr)
         hl.setContentsMargins(24, 0, 24, 0)
-        title_lbl = QLabel("Charte d'utilisation")
-        title_lbl.setStyleSheet(
+        hl.setSpacing(8)
+
+        self._title_lbl = QLabel()
+        self._title_lbl.setStyleSheet(
             f"color:{CP['text_primary']};font-size:14px;font-weight:700;background:transparent;"
         )
-        hl.addWidget(title_lbl)
+        hl.addWidget(self._title_lbl)
         hl.addStretch()
+
         sub_lbl = QLabel("PANDORA v1.0 — 22eme Arkane")
         sub_lbl.setStyleSheet(f"color:{CP['text_dim']};font-size:10px;background:transparent;")
         hl.addWidget(sub_lbl)
+
+        hl.addSpacing(16)
+
+        # Toggle FR / EN
+        _s = _BTN_LANG % (CP['border'], CP['text_secondary'], CP['accent'], CP['accent'])
+        self._btn_fr = QPushButton("🇫🇷")
+        self._btn_en = QPushButton("🇬🇧")
+        for btn in (self._btn_fr, self._btn_en):
+            btn.setStyleSheet(_s)
+            btn.setCursor(Qt.CursorShape.PointingHandCursor)
+            btn.setCheckable(False)
+            hl.addWidget(btn)
+        self._btn_fr.clicked.connect(lambda: self._set_lang("fr"))
+        self._btn_en.clicked.connect(lambda: self._set_lang("en"))
+
         lay.addWidget(hdr)
 
         # ── Texte ─────────────────────────────────────────────────────────────
         self._text = QTextEdit()
         self._text.setReadOnly(True)
-        self._text.setPlainText(_load_eula())
         self._text.setFont(QFont("Consolas", 10))
         self._text.setStyleSheet(
             f"QTextEdit{{background:{CP['bg2']};color:{CP['text_secondary']};"
@@ -82,48 +112,83 @@ class EulaDialog(QDialog):
         fl.setSpacing(12)
 
         if mode == "accept":
-            hint = QLabel("Vous devez accepter la charte pour utiliser PANDORA.")
-            hint.setStyleSheet(f"color:{CP['text_dim']};font-size:10px;background:transparent;")
-            fl.addWidget(hint, 1)
+            self._hint = QLabel()
+            self._hint.setStyleSheet(f"color:{CP['text_dim']};font-size:10px;background:transparent;")
+            fl.addWidget(self._hint, 1)
 
-            btn_refuse = QPushButton("Je refuse")
-            btn_refuse.setFixedHeight(36)
-            btn_refuse.setCursor(Qt.CursorShape.PointingHandCursor)
-            btn_refuse.setStyleSheet(
+            self._btn_refuse = QPushButton()
+            self._btn_refuse.setFixedHeight(36)
+            self._btn_refuse.setCursor(Qt.CursorShape.PointingHandCursor)
+            self._btn_refuse.setStyleSheet(
                 f"QPushButton{{background:transparent;color:{CP['red']};"
                 f"border:1px solid rgba(255,79,106,0.40);border-radius:6px;"
                 f"font-size:11px;font-weight:700;padding:0 18px;}}"
                 f"QPushButton:hover{{background:rgba(255,79,106,0.10);}}"
             )
-            btn_refuse.clicked.connect(self.reject)
-            fl.addWidget(btn_refuse)
+            self._btn_refuse.clicked.connect(self.reject)
+            fl.addWidget(self._btn_refuse)
 
-            btn_accept = QPushButton("J'accepte")
-            btn_accept.setFixedHeight(36)
-            btn_accept.setCursor(Qt.CursorShape.PointingHandCursor)
-            btn_accept.setStyleSheet(
+            self._btn_accept = QPushButton()
+            self._btn_accept.setFixedHeight(36)
+            self._btn_accept.setCursor(Qt.CursorShape.PointingHandCursor)
+            self._btn_accept.setStyleSheet(
                 f"QPushButton{{background:{CP['accent']};color:#07080f;"
                 f"border:none;border-radius:6px;"
                 f"font-size:11px;font-weight:700;padding:0 22px;}}"
                 f"QPushButton:hover{{background:#6eded6;}}"
                 f"QPushButton:pressed{{background:#3bc0b8;}}"
             )
-            btn_accept.clicked.connect(self.accept)
-            fl.addWidget(btn_accept)
+            self._btn_accept.clicked.connect(self.accept)
+            fl.addWidget(self._btn_accept)
 
         else:  # "read"
             fl.addStretch()
-            btn_close = QPushButton("Fermer")
-            btn_close.setFixedHeight(36)
-            btn_close.setCursor(Qt.CursorShape.PointingHandCursor)
-            btn_close.setStyleSheet(
+            self._btn_close = QPushButton()
+            self._btn_close.setFixedHeight(36)
+            self._btn_close.setCursor(Qt.CursorShape.PointingHandCursor)
+            self._btn_close.setStyleSheet(
                 f"QPushButton{{background:{CP['bg3']};color:{CP['text_primary']};"
                 f"border:1px solid {CP['border']};border-radius:6px;"
                 f"font-size:11px;font-weight:700;padding:0 22px;}}"
-                f"QPushButton:hover{{background:{CP['bg4'] if 'bg4' in CP else CP['border']};"
+                f"QPushButton:hover{{background:{CP.get('bg4', CP['border'])};"
                 f"border-color:{CP['border_bright']};}}"
             )
-            btn_close.clicked.connect(self.accept)
-            fl.addWidget(btn_close)
+            self._btn_close.clicked.connect(self.accept)
+            fl.addWidget(self._btn_close)
 
         lay.addWidget(footer)
+
+        # Initial render
+        self._refresh()
+
+    # ── Langue ───────────────────────────────────────────────────────────────
+
+    def _set_lang(self, lang: str):
+        self._lang = lang
+        self._refresh()
+
+    def _refresh(self):
+        fr = self._lang == "fr"
+        # Texte
+        self._text.setPlainText(_load(_EULA_PATH if fr else _EULA_EN_PATH))
+        self._text.verticalScrollBar().setValue(0)
+        # Titre
+        self._title_lbl.setText("Charte d'utilisation" if fr else "License Agreement")
+        # Boutons actifs
+        self._btn_fr.setProperty("active", fr)
+        self._btn_en.setProperty("active", not fr)
+        for btn in (self._btn_fr, self._btn_en):
+            btn.style().unpolish(btn)
+            btn.style().polish(btn)
+        # Labels mode accept
+        if self._mode == "accept":
+            if fr:
+                self._hint.setText("Vous devez accepter la charte pour utiliser PANDORA.")
+                self._btn_refuse.setText("Je refuse")
+                self._btn_accept.setText("J'accepte")
+            else:
+                self._hint.setText("You must accept the agreement to use PANDORA.")
+                self._btn_refuse.setText("Decline")
+                self._btn_accept.setText("Accept")
+        else:
+            self._btn_close.setText("Fermer" if fr else "Close")

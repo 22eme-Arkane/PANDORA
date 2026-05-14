@@ -2,7 +2,7 @@
 import os
 import sys
 
-ROOT = os.path.dirname(os.path.dirname(__file__))
+ROOT   = os.path.dirname(os.path.dirname(__file__))
 ASSETS = os.path.join(ROOT, "assets")
 
 src = os.path.join(ASSETS, "pandora_badge.png")
@@ -19,9 +19,22 @@ except ImportError:
     sys.exit(1)
 
 img = Image.open(src).convert("RGBA")
-sizes = [16, 24, 32, 48, 64, 128, 256]
+
+# Toutes les tailles standard Windows + haute densité
+sizes = [16, 20, 24, 32, 40, 48, 64, 96, 128, 256]
+
+# Pillow ICO : passer les images pré-redimensionnées comme liste
+# La première doit être la plus grande (256) pour que Windows l'utilise en priorité
 frames = [img.resize((s, s), Image.LANCZOS) for s in sizes]
 
 dst = os.path.join(ASSETS, "pandora_badge.ico")
-frames[0].save(dst, format="ICO", sizes=[(s, s) for s in sizes], append_images=frames[1:])
-print(f"ICO généré : {dst}")
+
+# Sauvegarder : frame[0] = 16px, puis toutes les autres en append
+# sizes= doit lister exactement les mêmes dimensions que les frames
+frames[0].save(
+    dst,
+    format="ICO",
+    sizes=[(s, s) for s in sizes],
+    append_images=frames[1:],
+)
+print(f"ICO généré : {dst}  ({len(sizes)} tailles : {sizes})")
