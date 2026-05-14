@@ -1,6 +1,6 @@
 CHARTE D'UTILISATION — LOGICIEL PANDORA
 Version 1.0 — Mai 2026
-22ème Arkane — Matthieu Terrien
+22eme Arkane — Matthieu Terrien
 Contact : 22eme.arkane@gmail.com
 
 ════════════════════════════════════════════════════════════════
@@ -8,7 +8,7 @@ Contact : 22eme.arkane@gmail.com
 PRÉAMBULE
 
 Le présent document constitue un Contrat de Licence d'Utilisation Finale (CLUF)
-entre vous, l'Utilisateur, et 22ème Arkane (Matthieu Terrien), ci-après désigné
+entre vous, l'Utilisateur, et 22eme Arkane (Matthieu Terrien), ci-après désigné
 « l'Éditeur », concernant le logiciel PANDORA et ses mises à jour éventuelles.
 
 En installant, copiant ou utilisant PANDORA, vous déclarez avoir lu, compris et
@@ -106,7 +106,7 @@ ARTICLE 6 — PROPRIÉTÉ INTELLECTUELLE
 
 PANDORA, l'intégralité de son code source, son interface graphique, ses éléments
 visuels, sa documentation et tous ses composants sont la propriété exclusive de
-22ème Arkane (Matthieu Terrien) et sont protégés par les lois françaises et
+22eme Arkane (Matthieu Terrien) et sont protégés par les lois françaises et
 internationales relatives à la propriété intellectuelle, notamment le Code de la
 propriété intellectuelle français.
 
@@ -214,5 +214,5 @@ ARTICLE 13 — DISPOSITIONS GÉNÉRALES
 
 ════════════════════════════════════════════════════════════════
 
-22ème Arkane — Matthieu Terrien
+22eme Arkane — Matthieu Terrien
 Version 1.0 — Mai 2026

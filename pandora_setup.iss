@@ -11,7 +11,7 @@
 
 #define MyAppName      "PANDORA"
 #define MyAppVersion   "1.0.0"
-#define MyAppPublisher "22ème Arkane"
+#define MyAppPublisher "22eme Arkane"
 #define MyAppURL       "https://github.com/22eme-arkane/pandora"
 #define MyAppExeName   "PANDORA.exe"
 #define MyBuildDir     "dist\PANDORA"
@@ -58,8 +58,6 @@ LicenseFile=EULA.txt
 
 ; Page de bienvenue
 WizardStyle=modern
-WizardImageFile=assets\pandora_badge.png
-WizardSmallImageFile=assets\pandora_badge.png
 
 ; Désinstalleur
 UninstallDisplayName={#MyAppName} {#MyAppVersion}

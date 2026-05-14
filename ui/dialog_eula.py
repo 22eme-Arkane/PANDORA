@@ -55,7 +55,7 @@ class EulaDialog(QDialog):
         )
         hl.addWidget(title_lbl)
         hl.addStretch()
-        sub_lbl = QLabel("PANDORA v1.0 — 22ème Arkane")
+        sub_lbl = QLabel("PANDORA v1.0 — 22eme Arkane")
         sub_lbl.setStyleSheet(f"color:{CP['text_dim']};font-size:10px;background:transparent;")
         hl.addWidget(sub_lbl)
         lay.addWidget(hdr)
