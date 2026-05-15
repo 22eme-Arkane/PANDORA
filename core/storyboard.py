@@ -203,6 +203,21 @@ def delete_version(version_id: str):
     # list_versions() will auto-create a fresh default on next call if none remain
 
 
+def clear_version_shots(version_id: str = DEFAULT_VERSION_ID):
+    """Supprime tous les plans d'une version sans supprimer la version elle-même."""
+    from core.context import get_project_id
+    pid = get_project_id()
+    index = _load_index()
+    index = [
+        s for s in index
+        if not (
+            s.get("version_id", DEFAULT_VERSION_ID) == version_id
+            and (not pid or s.get("project_id") == pid)
+        )
+    ]
+    _save_index(index)
+
+
 # ── Snapshot management ─────────────────────────────────────────────────────
 # Snapshots = named, timestamped copies of a storyboard version's shots.
 # Independent from "workspace" versions — each workspace can have many snapshots.

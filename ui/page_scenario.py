@@ -1237,14 +1237,17 @@ class PageScenario(QWidget):
         if not text:
             self._ai_progress_lbl.setText("Écris d'abord un scénario à découper.")
             return
-        reply = QMessageBox.question(
-            self, "Générer le storyboard",
-            "Générer un découpage technique depuis ce scénario ?\n"
-            "Une nouvelle version du storyboard sera créée.",
-            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
-        )
-        if reply != QMessageBox.StandardButton.Yes:
-            return
+        import core.storyboard as sb_api
+        existing = sb_api.list_shots(sb_api.DEFAULT_VERSION_ID)
+        if existing:
+            reply = QMessageBox.question(
+                self, "Remplacer le storyboard",
+                f"Un storyboard existe déjà ({len(existing)} plan{'s' if len(existing) > 1 else ''}).\n"
+                "Souhaitez-vous le remplacer par un nouveau découpage ?",
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            )
+            if reply != QMessageBox.StandardButton.Yes:
+                return
         from api.screenplay import GenerateStoryboardWorker
         self._set_ai_busy(True)
         self._ai_progress_lbl.setText("Génération du découpage via Claude…")
@@ -1262,20 +1265,12 @@ class PageScenario(QWidget):
         try:
             import core.storyboard as sb_api
             sc_id = (self._current or {}).get("id", "")
-            sc_title = (self._current or {}).get("title", "").strip() or "Scénario"
-            base_name = f"Découpage — {sc_title}"
-            existing_names = {v["name"] for v in sb_api.list_versions()}
-            v_name = base_name
-            counter = 2
-            while v_name in existing_names:
-                v_name = f"{base_name} ({counter})"
-                counter += 1
-            new_version = sb_api.create_version(v_name)
-            new_vid = new_version["id"]
-            self._last_storyboard_version_id = new_vid
+            vid = sb_api.DEFAULT_VERSION_ID
+            # Remplace le contenu de la version par défaut par le nouveau découpage
+            sb_api.clear_version_shots(vid)
             for shot in shots:
                 shot["scenario_id"] = sc_id
-                shot["version_id"] = new_vid
+                shot["version_id"] = vid
                 sb_api.save_shot(shot)
         except Exception as e:
             self._ai_progress_lbl.setText(f"Erreur lors de la sauvegarde : {e}")

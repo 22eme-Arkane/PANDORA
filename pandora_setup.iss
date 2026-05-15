@@ -1,4 +1,4 @@
-; pandora_setup.iss — Inno Setup script pour PANDORA v1.0.0
+; pandora_setup.iss — Inno Setup script pour PANDORA v1.0.8
 ;
 ; Prérequis :
 ;   - Inno Setup 6.x installé (https://jrsoftware.org/isinfo.php)
@@ -7,10 +7,10 @@
 ;
 ; Pour compiler :
 ;   iscc pandora_setup.iss
-; Produit : dist\PANDORA_Setup_1.0.0.exe
+; Produit : dist\PANDORA_Setup_1.0.8.exe
 
 #define MyAppName      "PANDORA"
-#define MyAppVersion   "1.0.0"
+#define MyAppVersion   "1.0.8"
 #define MyAppPublisher "22eme Arkane"
 #define MyAppURL       "https://github.com/22eme-arkane/pandora"
 #define MyAppExeName   "PANDORA.exe"
@@ -39,6 +39,10 @@ ArchitecturesAllowed=x64compatible
 
 ; Icône de l'installeur
 SetupIconFile=assets\pandora_badge.ico
+
+; Images de l'assistant (générées par tools/make_wizard_images.py)
+WizardImageFile=assets\wizard_large.bmp
+WizardSmallImageFile=assets\wizard_small.bmp
 
 ; Exige les droits administrateur (pour écrire dans Program Files)
 PrivilegesRequired=admin

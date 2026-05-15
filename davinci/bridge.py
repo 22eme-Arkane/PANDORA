@@ -57,7 +57,12 @@ def install_bridge_server() -> tuple[bool, str]:
     Copie bridge_server.py dans le dossier Scripts de DaVinci Resolve.
     Retourne (succès, chemin_installé_ou_erreur).
     """
-    src = os.path.join(os.path.dirname(__file__), "bridge_server.py")
+    if getattr(sys, "frozen", False):
+        src = os.path.join(sys._MEIPASS, "davinci", "bridge_server.py")
+    else:
+        src = os.path.join(os.path.dirname(__file__), "bridge_server.py")
+    if not os.path.isfile(src):
+        return False, f"bridge_server.py introuvable : {src}"
     for dest_dir in _SCRIPTS_DIRS:
         try:
             os.makedirs(dest_dir, exist_ok=True)

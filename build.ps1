@@ -1,4 +1,4 @@
-# build.ps1 — Script de build PANDORA v1.0.0 (Windows)
+# build.ps1 — Script de build PANDORA (Windows)
 #
 # Usage :
 #   .\build.ps1              # PyInstaller uniquement
@@ -25,13 +25,12 @@ if (-not (Test-Path $PYTHON)) {
 
 Write-Host "`n=== PANDORA Build ===" -ForegroundColor Cyan
 
-# ── 1. Génération du .ico ─────────────────────────────────────────────────────
-Write-Host "`n[1/4] Génération de l'icône .ico..." -ForegroundColor Yellow
+# ── 1. Génération des assets (ico + images wizard) ───────────────────────────
+Write-Host "`n[1/4] Génération des assets (icône .ico + images wizard)..." -ForegroundColor Yellow
 & $PYTHON tools\make_ico.py
-if ($LASTEXITCODE -ne 0) {
-    Write-Error "Échec de la génération du .ico"
-    exit 1
-}
+if ($LASTEXITCODE -ne 0) { Write-Error "Échec make_ico.py"; exit 1 }
+& $PYTHON tools\make_wizard_images.py
+if ($LASTEXITCODE -ne 0) { Write-Error "Échec make_wizard_images.py"; exit 1 }
 
 # ── 2. Nettoyage du build précédent ───────────────────────────────────────────
 Write-Host "`n[2/4] Nettoyage des builds précédents..." -ForegroundColor Yellow
@@ -55,6 +54,16 @@ if (Test-Path $CONFIG_IN_BUILD) {
     Write-Host "config.json supprimé du build." -ForegroundColor Green
 }
 
+# Nettoyage style_refs — supprimer les images de dev, garder les dossiers vides
+$STYLE_REFS = "dist\PANDORA\_internal\assets\style_refs"
+if (Test-Path $STYLE_REFS) {
+    $imgs = Get-ChildItem -Path $STYLE_REFS -Recurse -File
+    if ($imgs.Count -gt 0) {
+        $imgs | Remove-Item -Force
+        Write-Host "style_refs nettoyé : $($imgs.Count) image(s) de dev supprimée(s)." -ForegroundColor Green
+    }
+}
+
 # ── 4. Inno Setup (optionnel) ─────────────────────────────────────────────────
 if ($Installer) {
     Write-Host "`n[4/4] Compilation de l'installeur Inno Setup..." -ForegroundColor Yellow
@@ -67,7 +76,8 @@ if ($Installer) {
             Write-Error "Échec Inno Setup"
             exit 1
         }
-        Write-Host "Installeur créé : dist\PANDORA_Setup_1.0.0.exe" -ForegroundColor Green
+        $ver = (Select-String -Path pandora_setup.iss -Pattern '#define MyAppVersion\s+"([^"]+)"').Matches[0].Groups[1].Value
+        Write-Host "Installeur créé : dist\PANDORA_Setup_$ver.exe" -ForegroundColor Green
     }
 } else {
     Write-Host "`n[4/4] Inno Setup ignoré (utilisez -Installer pour créer l'installeur)." -ForegroundColor DarkGray
@@ -76,7 +86,8 @@ if ($Installer) {
 # ── Résultat ──────────────────────────────────────────────────────────────────
 Write-Host "`n=== Build terminé ===" -ForegroundColor Green
 Write-Host "Distribution  : dist\PANDORA\" -ForegroundColor Green
-if ($Installer -and (Test-Path "dist\PANDORA_Setup_1.0.0.exe")) {
-    Write-Host "Installeur    : dist\PANDORA_Setup_1.0.0.exe" -ForegroundColor Green
+$ver = (Select-String -Path pandora_setup.iss -Pattern '#define MyAppVersion\s+"([^"]+)"').Matches[0].Groups[1].Value
+if ($Installer -and (Test-Path "dist\PANDORA_Setup_$ver.exe")) {
+    Write-Host "Installeur    : dist\PANDORA_Setup_$ver.exe" -ForegroundColor Green
 }
 Write-Host ""

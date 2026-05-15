@@ -369,19 +369,6 @@ class VehicleDialog(QDialog):
         _gen_row.addWidget(self._spinbox_count)
         lay.addLayout(_gen_row)
 
-        self._btn_variation = QPushButton("🎲  Générer une variation")
-        self._btn_variation.setFixedHeight(32)
-        self._btn_variation.setVisible(False)
-        self._btn_variation.setStyleSheet(
-            f"QPushButton{{background:{CP['bg3']};color:{CP['text_secondary']};"
-            f"border:1px solid {CP['border']};border-radius:8px;font-size:11px;font-weight:600;}}"
-            f"QPushButton:hover{{background:{CP['bg4']};color:{CP['text_primary']};"
-            f"border-color:{CP['border_bright']};}}"
-            f"QPushButton:disabled{{opacity:0.4;}}"
-        )
-        self._btn_variation.clicked.connect(self._on_generate)
-        lay.addWidget(self._btn_variation)
-
         price_lbl = QLabel("💰  Nano Banana (fal.ai) : ~0,03–0,05 $ / image")
         price_lbl.setStyleSheet(
             f"color:{CP['text_dim']};font-size:9px;"
@@ -500,20 +487,46 @@ class VehicleDialog(QDialog):
         nav_row.addWidget(self._nav_counter, 1)
         nav_row.addWidget(self._nav_next)
         lay.addLayout(nav_row)
+
+        self._btn_activate = QPushButton("✓  Activer")
+        self._btn_activate.setFixedHeight(30)
+        self._btn_activate.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._btn_activate.setVisible(False)
+        self._btn_activate.clicked.connect(self._activate_current)
+        lay.addWidget(self._btn_activate)
+
         self._refresh_preview_nav()
 
-        self._btn_panel_variation = QPushButton("🎲  Générer une variation")
+        _act_row = QHBoxLayout()
+        _act_row.setSpacing(6)
+        self._btn_del_img = QPushButton("🗑  Supprimer cette image")
+        self._btn_del_img.setFixedHeight(28)
+        self._btn_del_img.setVisible(False)
+        self._btn_del_img.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._btn_del_img.setStyleSheet(
+            f"QPushButton{{background:transparent;color:{CP['red']};"
+            f"border:1px solid rgba(255,79,106,0.40);border-radius:7px;"
+            f"font-size:10px;font-weight:600;padding:0 8px;}}"
+            f"QPushButton:hover{{background:rgba(255,79,106,0.12);border-color:{CP['red']};}}"
+        )
+        self._btn_del_img.clicked.connect(self._on_delete_current_image)
+        _act_row.addWidget(self._btn_del_img, 1)
+
+        self._btn_panel_variation = QPushButton("🎲  Variation")
         self._btn_panel_variation.setFixedHeight(28)
         self._btn_panel_variation.setVisible(False)
+        self._btn_panel_variation.setCursor(Qt.CursorShape.PointingHandCursor)
         self._btn_panel_variation.setStyleSheet(
             f"QPushButton{{background:{CP['bg3']};color:{CP['text_secondary']};"
-            f"border:1px solid {CP['border']};border-radius:7px;font-size:10px;font-weight:600;}}"
+            f"border:1px solid {CP['border']};border-radius:7px;"
+            f"font-size:10px;font-weight:600;padding:0 8px;}}"
             f"QPushButton:hover{{background:{CP['bg4']};color:{CP['text_primary']};"
             f"border-color:{CP['border_bright']};}}"
             f"QPushButton:disabled{{opacity:0.4;}}"
         )
         self._btn_panel_variation.clicked.connect(self._on_generate)
-        lay.addWidget(self._btn_panel_variation)
+        _act_row.addWidget(self._btn_panel_variation, 1)
+        lay.addLayout(_act_row)
 
         lay.addSpacing(8)
 
@@ -742,6 +755,22 @@ class VehicleDialog(QDialog):
         self._worker_gen.failed.connect(self._on_gen_fail)
         self._worker_gen.start()
 
+    def _on_delete_current_image(self):
+        if not self._generated_images:
+            return
+        self._generated_images.pop(self._preview_idx)
+        n = len(self._generated_images)
+        if n == 0:
+            self._preview_idx = 0
+            self._image_path = ""
+            self._preview.clear()
+            self._preview.setText("Aucune image\ngénérée")
+        else:
+            self._preview_idx = min(self._preview_idx, n - 1)
+            self._image_path = self._generated_images[self._preview_idx]
+            self._load_preview(self._image_path)
+        self._refresh_preview_nav()
+
     def _navigate_preview(self, delta: int):
         if not self._generated_images:
             return
@@ -760,10 +789,40 @@ class VehicleDialog(QDialog):
         if has_many:
             self._nav_counter.setText(f"{self._preview_idx + 1} / {n}")
         has_any = n > 0
-        if hasattr(self, "_btn_variation"):
-            self._btn_variation.setVisible(has_any)
         if hasattr(self, "_btn_panel_variation"):
             self._btn_panel_variation.setVisible(has_any)
+        if hasattr(self, "_btn_del_img"):
+            self._btn_del_img.setVisible(has_any)
+        if hasattr(self, "_btn_activate"):
+            self._btn_activate.setVisible(has_any)
+            if has_any:
+                cur = self._generated_images[min(self._preview_idx, n - 1)]
+                if cur == self._image_path:
+                    self._btn_activate.setText("✓  Active")
+                    self._btn_activate.setStyleSheet(
+                        f"QPushButton{{background:rgba(61,220,151,0.15);color:{CP['green']};"
+                        f"border:1px solid rgba(61,220,151,0.40);border-radius:7px;"
+                        f"font-size:11px;font-weight:700;padding:0 6px;}}"
+                        f"QPushButton:hover{{background:rgba(61,220,151,0.25);}}"
+                    )
+                else:
+                    self._btn_activate.setText("✓  Activer")
+                    self._btn_activate.setStyleSheet(
+                        f"QPushButton{{background:{CP['accent2']};color:#fff;"
+                        f"border:none;border-radius:7px;"
+                        f"font-size:11px;font-weight:700;padding:0 6px;}}"
+                        f"QPushButton:hover{{background:#9d8fff;}}"
+                        f"QPushButton:pressed{{background:{CP['accent2_dim']};}}"
+                    )
+
+    def _activate_current(self):
+        if not self._generated_images:
+            return
+        path = self._generated_images[min(self._preview_idx, len(self._generated_images) - 1)]
+        self._image_path = path
+        self._load_preview(path)
+        self._refresh_preview_nav()
+        self._status.setText("Image active ✓")
 
     def _on_gen_done(self, path):
         self._btn_gen.setEnabled(True)
@@ -835,6 +894,8 @@ class VehicleDialog(QDialog):
         path = self._generated_images[self._preview_idx] if self._generated_images else ""
         if path:
             self._load_preview(path)
+            if self._image_path not in self._generated_images:
+                self._image_path = path
         self._refresh_preview_nav()
 
     def _load_preview(self, path):
@@ -941,10 +1002,6 @@ class VehicleDialog(QDialog):
             "ref_usage_key":      self._ref_usage_combo.currentData() if hasattr(self, "_ref_usage_combo") else "inspiration",
         })
         self._saved_data = veh_api.save_vehicle(data)
-
-        if self._image_path and os.path.isfile(self._image_path):
-            from davinci.importer import import_image_to_bin
-            import_image_to_bin(self._image_path, "Véhicules")
 
         self.accept()
 

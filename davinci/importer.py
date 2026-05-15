@@ -127,10 +127,10 @@ def import_result(result: dict, dest_dir: str, shot_title: str = "",
     except Exception as e:
         return {"success": False, "local_path": "", "mock": False, "error": str(e)}
 
-    # Import DaVinci — uniquement si demandé et connecté
+    # Import DaVinci — directement dans le bin PANDORA (sans sous-dossier)
     ok = False
     if import_to_davinci and resolve.is_connected():
-        ok = import_to_media_pool(local_path)
+        ok = resolve.import_media_to_bin(local_path, "")
 
     return {"success": True, "local_path": local_path, "mock": False,
             "davinci_imported": ok, "error": ""}

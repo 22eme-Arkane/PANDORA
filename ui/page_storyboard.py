@@ -2018,6 +2018,7 @@ class PageStoryboard(QWidget):
         )
         self._version_combo.currentIndexChanged.connect(self._on_combo_changed)
         lay.addWidget(self._version_combo)
+        self._version_combo.setVisible(False)
 
         btn_new_ver = QPushButton("＋ Créer un storyboard")
         btn_new_ver.setFixedHeight(32)
@@ -2031,6 +2032,7 @@ class PageStoryboard(QWidget):
         )
         btn_new_ver.clicked.connect(self._on_new_version)
         lay.addWidget(btn_new_ver)
+        btn_new_ver.setVisible(False)
 
         # ── Séparateur + versions snapshot ────────────────────────────────────
         _vs = QFrame()
@@ -2038,6 +2040,7 @@ class PageStoryboard(QWidget):
         _vs.setStyleSheet(f"background:{CP['border']};")
         lay.addSpacing(4)
         lay.addWidget(_vs)
+        _vs.setVisible(False)
         lay.addSpacing(4)
 
         _snap_lbl = QLabel("Versions :")
@@ -2046,6 +2049,7 @@ class PageStoryboard(QWidget):
             f"letter-spacing:0.5px;background:transparent;"
         )
         lay.addWidget(_snap_lbl)
+        _snap_lbl.setVisible(False)
 
         self._snap_combo = QComboBox()
         self._snap_combo.setFixedHeight(30)
@@ -2067,6 +2071,7 @@ class PageStoryboard(QWidget):
         self._snap_combo.currentIndexChanged.connect(self._on_snap_selected)
         self._snap_combo.activated.connect(self._on_snap_activated)
         lay.addWidget(self._snap_combo)
+        self._snap_combo.setVisible(False)
 
         _snap_btn_ss = (
             f"QPushButton{{background:transparent;color:{CP['text_dim']};"
@@ -2082,6 +2087,7 @@ class PageStoryboard(QWidget):
         self._btn_save_snap.setStyleSheet(_snap_btn_ss)
         self._btn_save_snap.clicked.connect(self._on_save_snapshot)
         lay.addWidget(self._btn_save_snap)
+        self._btn_save_snap.setVisible(False)
 
         self._btn_del_snap = QPushButton("✕")
         self._btn_del_snap.setFixedSize(30, 30)
@@ -2094,6 +2100,7 @@ class PageStoryboard(QWidget):
         )
         self._btn_del_snap.clicked.connect(self._on_delete_snapshot)
         lay.addWidget(self._btn_del_snap)
+        self._btn_del_snap.setVisible(False)
 
         lay.addStretch(1)
 
@@ -2175,6 +2182,7 @@ class PageStoryboard(QWidget):
         )
         self._btn_del_sb.clicked.connect(self._on_delete_current_version)
         lay.addWidget(self._btn_del_sb)
+        self._btn_del_sb.setVisible(False)
         return bar
 
     def _fill_version_combo(self):

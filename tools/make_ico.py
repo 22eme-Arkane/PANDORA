@@ -5,11 +5,12 @@ import sys
 ROOT   = os.path.dirname(os.path.dirname(__file__))
 ASSETS = os.path.join(ROOT, "assets")
 
-src = os.path.join(ASSETS, "pandora_badge.png")
+# app_icon.png (1024×1024) est la source haute résolution préférée
+src = os.path.join(ASSETS, "app_icon.png")
 if not os.path.isfile(src):
-    src = os.path.join(ASSETS, "app_icon.png")
+    src = os.path.join(ASSETS, "pandora_badge.png")
 if not os.path.isfile(src):
-    print("ERREUR : aucun fichier source trouvé dans assets/ (pandora_badge.png ou app_icon.png)")
+    print("ERREUR : aucun fichier source trouvé dans assets/ (app_icon.png ou pandora_badge.png)")
     sys.exit(1)
 
 try:

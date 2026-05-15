@@ -92,9 +92,17 @@ def load_icon(filename: str, size: int = 20, color: str | None = None) -> QPixma
 
 
 def app_icon() -> QIcon:
-    """Icône principale de l'application — badge PANDORA en priorité."""
+    """Icône principale de l'application — charge le .ico pré-rendu (LANCZOS) en priorité."""
+    # Le .ico contient des pixels pré-rendus à chaque taille via Pillow LANCZOS
+    # → beaucoup plus net que rescaler un PNG via Qt bilinéaire
+    ico_path = os.path.join(_ASSETS, "pandora_badge.ico")
+    if os.path.isfile(ico_path):
+        icon = QIcon(ico_path)
+        if not icon.isNull():
+            return icon
+    # Fallback : scaling PNG si le .ico est absent (mode dev sans build)
     icon = QIcon()
-    for name in ("pandora_badge.png", "app_icon.png"):
+    for name in ("app_icon.png", "pandora_badge.png"):
         path = os.path.join(_ASSETS, name)
         if not os.path.isfile(path):
             continue

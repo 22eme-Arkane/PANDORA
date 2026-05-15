@@ -1214,6 +1214,16 @@ class CharacterDialog(QDialog):
         nav_row.addStretch()
         outer.addLayout(nav_row)
 
+        outer.addSpacing(6)
+
+        # Bouton Activer — sélectionne l'image courante du nav comme portrait principal
+        self._btn_activate = QPushButton("✓  Activer")
+        self._btn_activate.setFixedHeight(30)
+        self._btn_activate.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._btn_activate.setVisible(False)
+        self._btn_activate.clicked.connect(self._use_current_preview)
+        outer.addWidget(self._btn_activate)
+
         outer.addStretch()
 
         # ── Actions en bas ────────────────────────────────────────────────────
@@ -1771,6 +1781,36 @@ class CharacterDialog(QDialog):
             idx = max(0, min(self._preview_idx, n - 1)) if n else 0
             self._preview_counter.setText(f"{idx + 1} / {n}" if n else "")
 
+        if hasattr(self, "_btn_activate"):
+            has_any = n > 0
+            self._btn_activate.setVisible(has_any)
+            if has_any:
+                idx = max(0, min(self._preview_idx, n - 1))
+                entry = self._generated_images[idx]
+                p = entry.get("portrait", "")
+                s = entry.get("sheet", "")
+                is_active = (
+                    (p and p == self._image_path) or
+                    (s and (s == self._image_path or s == self._sheet_path))
+                )
+                if is_active:
+                    self._btn_activate.setText("✓  Active")
+                    self._btn_activate.setStyleSheet(
+                        f"QPushButton{{background:rgba(61,220,151,0.15);color:{CP['green']};"
+                        f"border:1px solid rgba(61,220,151,0.40);border-radius:7px;"
+                        f"font-size:11px;font-weight:700;padding:0 6px;}}"
+                        f"QPushButton:hover{{background:rgba(61,220,151,0.25);}}"
+                    )
+                else:
+                    self._btn_activate.setText("✓  Activer")
+                    self._btn_activate.setStyleSheet(
+                        f"QPushButton{{background:{CP['accent2']};color:#fff;"
+                        f"border:none;border-radius:7px;"
+                        f"font-size:11px;font-weight:700;padding:0 6px;}}"
+                        f"QPushButton:hover{{background:#9d8fff;}}"
+                        f"QPushButton:pressed{{background:{CP['accent2_dim']};}}"
+                    )
+
     def _navigate_preview(self, delta: int):
         n = len(self._generated_images)
         if n == 0:
@@ -1792,10 +1832,15 @@ class CharacterDialog(QDialog):
         entry = self._generated_images[idx]
         p = entry.get("portrait", "")
         s = entry.get("sheet", "")
+        # Reset first — évite les chemins périmés de l'entrée précédente
+        self._image_path = ""
+        self._sheet_path = ""
         if p and os.path.isfile(p):
             self._image_path = p
         if s and os.path.isfile(s):
             self._sheet_path = s
+            if not self._image_path:
+                self._image_path = s
         preview = s if (s and os.path.isfile(s)) else p
         if preview and os.path.isfile(preview):
             self._load_preview(preview)
@@ -2174,6 +2219,11 @@ class CharacterDialog(QDialog):
             self._sheet_path = s
             if not self._image_path:
                 self._image_path = s
+        # Sync _preview_idx to the selected entry so the nav counter matches
+        for new_i, e in enumerate(self._generated_images):
+            if e is entry:
+                self._preview_idx = new_i
+                break
         preview = s if (s and os.path.isfile(s)) else p
         if preview and os.path.isfile(preview):
             self._load_preview(preview)
@@ -2539,10 +2589,6 @@ class CharacterDialog(QDialog):
             "ref_usage_key":    self._ref_usage_combo.currentData() if hasattr(self, "_ref_usage_combo") else "inspiration",
         })
         self._saved_data = casting_api.save_character(data)
-
-        if self._image_path and os.path.isfile(self._image_path):
-            from davinci.importer import import_image_to_bin
-            import_image_to_bin(self._image_path, "Castings")
 
         self.accept()
 

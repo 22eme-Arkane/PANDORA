@@ -40,12 +40,14 @@ def analyze_style_for_image(image_path: str, anthropic_key: str) -> str:
                 {"type": "image", "source": {"type": "base64",
                  "media_type": _media_type, "data": _b64}},
                 {"type": "text", "text": (
-                    "Describe the visual style of this image in 10-15 English words "
+                    "Describe the VISUAL/PICTURAL STYLE of this image in 10-15 English words "
                     "as an image generation prompt prefix. Include: rendering medium "
                     "(photorealistic live-action / 3D CGI / 2D anime / watercolor / "
                     "oil painting / illustration / etc.), color treatment "
                     "(full color / black and white / sepia / monochrome), and overall "
                     "aesthetic (cinematic / editorial / fantasy / sci-fi / impressionist / etc.). "
+                    "DO NOT describe the scene content, subjects, characters, or objects. "
+                    "ONLY describe the artistic/visual rendering style. "
                     "Output ONLY the style keywords comma-separated, no punctuation at end, "
                     "no explanation."
                 )},
@@ -726,6 +728,68 @@ class OptimizeStyleReferenceWorker(OptimizeWithReferencesWorker):
     Utilisé quand ref_usage == 'style' — tous types d'éléments (perso, décor, accessoire, etc.).
     Ne force jamais le photoréalisme si la référence est illustrée ou animée."""
     _SYSTEM = _OPTIMIZE_STYLE_REF_SYSTEM
+
+    def run(self):
+        cfg = load_config()
+        key = cfg.get("anthropic_key", "").strip()
+        if not key:
+            self.failed.emit("Clé API Anthropic manquante.\nConfigure-la dans Paramètres.")
+            return
+        try:
+            import anthropic, base64
+            from pathlib import Path
+
+            lang = _get_lang()
+            client = anthropic.Anthropic(api_key=key)
+            _mime = {
+                "jpg": "image/jpeg", "jpeg": "image/jpeg",
+                "png": "image/png",  "webp": "image/webp", "bmp": "image/bmp",
+            }
+            content = []
+            for path in self._paths:
+                if not os.path.isfile(path):
+                    continue
+                with open(path, "rb") as f:
+                    data = base64.standard_b64encode(f.read()).decode()
+                mt = _mime.get(Path(path).suffix.lower().lstrip("."), "image/jpeg")
+                content.append({
+                    "type": "image",
+                    "source": {"type": "base64", "media_type": mt, "data": data},
+                })
+
+            if not content:
+                self.failed.emit("Aucune image de référence valide trouvée.")
+                return
+
+            user_text = (
+                "REFERENCE IMAGE(S) — STYLE ONLY: Extract ONLY the pictural/visual style "
+                "of these reference images (rendering medium, color palette, lighting mood, "
+                "texture, line treatment, overall artistic aesthetic). "
+                "DO NOT describe, reproduce, or incorporate any scene content, subjects, "
+                "characters, objects, or actions from the reference — extract ONLY the "
+                "artistic/visual style.\n\n"
+            )
+            if self._text:
+                user_text += (
+                    f"ELEMENT TO STYLE (keep this concept intact, only change the visual style): "
+                    f"{self._text}\n\n"
+                )
+            user_text += (
+                "Apply the extracted pictural style to the element above, "
+                "keeping the user's original concept and subject entirely unchanged. "
+                "Output only the styled prompt."
+            )
+            content.append({"type": "text", "text": user_text})
+
+            msg = client.messages.create(
+                model="claude-haiku-4-5",
+                max_tokens=350,
+                system=_apply_lang_to_system(self._SYSTEM, lang),
+                messages=[{"role": "user", "content": content}],
+            )
+            self.finished.emit(msg.content[0].text.strip())
+        except Exception as e:
+            self.failed.emit(f"Erreur Anthropic : {e}")
 
 
 # ── Worker : génération du portrait via Nano Banana ───────────────────────────
