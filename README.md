@@ -4,13 +4,32 @@
 
 ---
 
+## Présentation
+
+[![Voir la présentation PANDORA sur YouTube](https://img.youtube.com/vi/ci9jA_Tye2E/maxresdefault.jpg)](https://youtu.be/ci9jA_Tye2E)
+
+---
+
+## Téléchargement
+
+**[⬇ Télécharger PANDORA v1.0.8](https://github.com/22eme-Arkane/PANDORA/releases/download/v1.0.8/PANDORA_Setup_1.0.8.exe)**
+
+Toutes les versions : [Releases](../../releases)
+
+> **Note Windows :** lors de la première installation, Windows peut afficher un avertissement
+> SmartScreen ("Application inconnue"). Cliquez sur **"Informations complémentaires"** puis
+> **"Exécuter quand même"**. Cet avertissement disparaîtra dans une prochaine version
+> (certificat de signature en cours d'acquisition).
+
+---
+
 ## Fonctionnalités
 
 | Module | Description |
 |--------|-------------|
 | **Scénario** | Éditeur de scénario cinéma + mise en page automatique via Claude IA + gestion de versions |
 | **Storyboard** | Grille de plans avec génération vidéo directe (Seedance 2.0) depuis chaque plan |
-| **Castings** | Fiches personnages + génération de portraits IA (Nano Banana) |
+| **Castings** | Fiches personnages + génération de portraits IA |
 | **Décors** | Fiches de lieux + génération d'images IA multi-vues |
 | **Accessoires / HMC / Véhicules** | Fiches éléments + génération d'images IA |
 | **AI Studio** | Génération vidéo Seedance 2.0 — Text-to-Video, Image-to-Video, Extension, Référence multimodale |
@@ -26,21 +45,15 @@
 - Clés API (optionnelles — le logiciel fonctionne en mode simulation sans elles) :
   - [fal.ai](https://fal.ai) — génération vidéo Seedance 2.0
   - [Anthropic](https://www.anthropic.com) — assistant IA (scénario, storyboard, prompts)
-  - Nano Banana — génération de portraits et d'images
 
 ---
 
 ## Installation
 
-1. Télécharger `PANDORA_Setup_1.0.0.exe` depuis la page [Releases](../../releases)
-2. Exécuter l'installeur et accepter la charte d'utilisation
+1. Télécharger `PANDORA_Setup_1.0.8.exe` depuis le lien ci-dessus
+2. Exécuter l'installeur et accepter la charte d'utilisation (CLUF)
 3. Lancer **PANDORA** depuis le menu Démarrer ou le bureau
 4. Renseigner vos clés API dans **Paramètres** (optionnel)
-
-> **Note Windows :** lors de la première installation, Windows peut afficher un avertissement
-> SmartScreen ("Application inconnue"). Cliquez sur **"Informations complémentaires"** puis
-> **"Exécuter quand même"**. Cet avertissement disparaîtra dans une prochaine version
-> (certificat de signature en cours d'acquisition).
 
 ---
 
@@ -54,37 +67,15 @@
 
 ---
 
-## Construire depuis les sources
-
-**Prérequis dev :**
-```
-Python 3.14+
-pip install PyQt6 anthropic fal-client Pillow requests pyinstaller
-```
-
-**Lancer en dev :**
-```powershell
-python main.py
-```
-
-**Créer l'installeur :**
-```powershell
-.\build.ps1 -Installer
-```
-
-Produit : `dist\PANDORA_Setup_1.0.0.exe`
-
----
-
 ## Architecture
 
 ```
 core/      Logique métier (config, projets, scénario, storyboard, i18n, migration…)
-api/       Appels réseau dans QThread (Seedance, Claude, Nano Banana, update check)
+api/       Appels réseau dans QThread (Seedance, Claude, update check)
 ui/        Composants PyQt6 (pages, dialogs, onglets AI Studio)
 davinci/   Pont DaVinci Resolve Scripting API
 assets/    Icônes, badges, références visuelles
-tools/     Scripts utilitaires (build, conversion ICO)
+tools/     Scripts utilitaires (build, conversion ICO, wizard images)
 ```
 
 ---
@@ -94,7 +85,6 @@ tools/     Scripts utilitaires (build, conversion ICO)
 PANDORA est gratuit. Si ce projet vous est utile :
 
 - ⭐ Mettez une étoile sur GitHub
-- ❤ [Faites un don](../../releases) (PayPal / crypto)
 - 🐛 [Signalez un bug](../../issues) — objet : `Bug`
 - 💬 [Partagez vos retours](mailto:22eme.arkane@gmail.com) — objet : `Avis`
 
@@ -108,6 +98,6 @@ Voir [EULA.txt](EULA.txt) — acceptée lors de la première installation.
 
 ## Licence
 
-© 2025 22ème Arkane. Tous droits réservés.  
-Distribution autorisée uniquement via les [Releases officielles](../../releases).  
-Voir [EULA.txt](EULA.txt) pour les conditions complètes.
+© 2026 22eme Arkane. Tous droits réservés.  
+Logiciel propriétaire — la consultation du code source ne confère aucun droit d'utilisation, de copie ou de redistribution.  
+Voir [LICENSE](LICENSE) et [EULA.txt](EULA.txt) pour les conditions complètes.
