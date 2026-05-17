@@ -5,6 +5,7 @@ from PyQt6.QtWidgets import (
 from PyQt6.QtCore import pyqtSignal, Qt
 from ui.styles import C
 from davinci.bridge import resolve, install_bridge_server
+from davinci.ping_worker import BridgePingWorker
 
 
 class DaVinciPanel(QWidget):
@@ -116,6 +117,10 @@ class DaVinciPanel(QWidget):
 
         self._refresh_ui()
 
+        # Ping unique au démarrage — pas de timer récurrent
+        self._ping_worker: BridgePingWorker | None = None
+        self._auto_ping()
+
     def _on_install(self):
         ok, path = install_bridge_server()
         if ok:
@@ -185,3 +190,26 @@ class DaVinciPanel(QWidget):
 
     def is_connected(self) -> bool:
         return resolve.is_connected()
+
+    # ── Polling automatique ───────────────────────────────────────────────────
+
+    def _auto_ping(self):
+        """Lance un ping asynchrone si aucun n'est en cours."""
+        if self._ping_worker and self._ping_worker.isRunning():
+            return
+        self._ping_worker = BridgePingWorker()
+        self._ping_worker.result.connect(self._on_auto_ping_result)
+        self._ping_worker.start()
+
+    def _on_auto_ping_result(self, connected: bool, timeline_name: str):
+        was_connected = resolve._connected
+        resolve._connected = connected
+        if connected != was_connected:
+            # État changé → mettre à jour l'UI et émettre le signal
+            self._refresh_ui()
+            self.status_changed.emit(connected)
+        elif connected:
+            # Toujours connecté → mettre à jour juste la timeline si elle a changé
+            tl_text = timeline_name or "Aucune timeline ouverte"
+            if self._subtitle_lbl.text() != tl_text:
+                self._subtitle_lbl.setText(tl_text)

@@ -15,7 +15,7 @@ from PyQt6.QtWidgets import (
     QScrollArea, QSlider,
 )
 from PyQt6.QtCore import Qt
-from ui.styles import CP
+from ui.styles import CP, C
 
 
 # ── Configurations par module ─────────────────────────────────────────────────
@@ -156,6 +156,41 @@ VEHICLE_CONTROLS = {
         ("Profil",          "side profile view, lateral"),
         ("3/4 Arrière",     "three-quarter rear angle"),
         ("Dessus",          "top-down aerial view"),
+    ],
+}
+
+I2V_CONTROLS = {
+    "Style visuel": [
+        ("Cinématique",     "cinematic film look, anamorphic lens, shallow depth of field"),
+        ("Photoréaliste",   "photorealistic, ultra-detailed, high fidelity"),
+        ("Noir & blanc",    "black and white, monochrome, film noir aesthetic"),
+        ("Animation",       "animation style, stylized, illustrated"),
+        ("Vintage",         "vintage film grain, retro aesthetic, aged look"),
+        ("Néon",            "neon glow, cyberpunk, vivid saturated colors"),
+    ],
+    "Mouvement caméra": [
+        ("Fixe",            "static shot, locked camera, no movement"),
+        ("Dolly",           "dolly shot, smooth forward camera movement"),
+        ("Pan",             "camera pan, horizontal sweep"),
+        ("Handheld",        "handheld camera, slight shake, documentary feel"),
+        ("Drone",           "drone shot, aerial perspective"),
+        ("Zoom lent",       "slow zoom, subtle lens zoom movement"),
+    ],
+    "Éclairage": [
+        ("Naturel",         "natural daylight, outdoor ambient light"),
+        ("Dramatique",      "dramatic chiaroscuro, deep shadows, high contrast"),
+        ("Golden Hour",     "golden hour, warm sunset glow, magic hour"),
+        ("Nuit",            "night scene, artificial lights, low-key lighting"),
+        ("Studio",          "professional studio lighting, clean, controlled"),
+        ("Contrejour",      "backlit, silhouette, contre-jour, rim light"),
+    ],
+    "Ambiance": [
+        ("Épique",          "epic, grand, cinematic gravitas"),
+        ("Calme",           "calm, serene, peaceful, contemplative"),
+        ("Intense",         "intense, high energy, dynamic, fast-paced"),
+        ("Mystérieux",      "mysterious, eerie, atmospheric, uncanny"),
+        ("Émotionnel",      "emotional, intimate, heartfelt, tender"),
+        ("Futuriste",       "futuristic, sci-fi, high-tech, sleek"),
     ],
 }
 
@@ -430,3 +465,215 @@ class NanoBananaControlsPanel(QWidget):
 
     def get_suffix(self) -> str:
         return self.get_prompt_suffix()
+
+
+# ── Contrôles créatifs Seedance — sliders (partagé T2V + DaVinci edit) ────────
+
+_SDANCE_DEFS = [
+    # (key, group, fr_label, left_pole, right_pole, {pos: english_phrase})
+    # pos=3 est neutre → pas injecté
+    ("prompt_adherence", "RÉALISATION", "Interprétation", "Créatif",   "Littéral", {
+        1: "experimental free cinematic interpretation, prioritize visual impact over literal faithfulness",
+        2: "loose creative adaptation, loosely inspired by the prompt",
+        4: "close to the prompt with minor artistic liberties",
+        5: "strictly faithful to the prompt description, literal visual rendering",
+    }),
+    ("camera_motion",    "RÉALISATION", "Caméra",         "Fixe",      "Dynamique", {
+        1: "completely static camera, locked tripod, absolutely no camera movement",
+        2: "very subtle camera movement, nearly static",
+        4: "active camera movement, noticeable dynamic motion",
+        5: "highly dynamic handheld camera, fast kinetic movement",
+    }),
+    ("drama_level",      "RÉALISATION", "Atmosphère",     "Calme",     "Dramatique", {
+        1: "calm peaceful atmosphere, minimal drama, serene quiet mood",
+        2: "relaxed tone, mild gentle tension",
+        4: "strong dramatic tension, intense cinematic atmosphere",
+        5: "strong drama, high tension, deeply intense cinematic atmosphere",
+    }),
+    ("action_pace",      "RÉALISATION", "Rythme",         "Lent",      "Rapide", {
+        1: "very slow contemplative rhythm, long slow takes",
+        2: "slow calm pace, deliberate unhurried timing",
+        4: "fast-paced energetic rhythm, quick action",
+        5: "very fast pace, high-energy rapid action sequence",
+    }),
+    ("lighting_contrast","RÉALISATION", "Lumière",        "Douce",     "Contrastée", {
+        1: "very soft diffused lighting, no harsh shadows, flat even illumination",
+        2: "soft natural lighting, gentle soft shadows",
+        4: "strong contrast, deep shadows, crisp bright highlights",
+        5: "strong high contrast, dramatic chiaroscuro lighting",
+    }),
+    ("temporal_coherence","FIDÉLITÉ",   "Cohérence",      "Variable",  "Stable", {
+        1: "allow temporal discontinuities and dreamlike visual transitions",
+        2: "slightly loose temporal flow, some visual variation allowed",
+        4: "strong temporal coherence, smooth consistent motion flow",
+        5: "maximum temporal stability, perfectly consistent motion, no flickering",
+    }),
+    ("realism",          "ESTHÉTIQUE",  "Rendu",          "Stylisé",   "Réaliste", {
+        1: "highly stylized surreal aesthetic, artistic painterly visual treatment",
+        2: "stylized look with graphic or painterly quality",
+        4: "mostly realistic with subtle cinematic treatment",
+        5: "photorealistic documentary-style natural rendering",
+    }),
+    ("visual_density",   "ESTHÉTIQUE",  "Composition",    "Épurée",    "Riche", {
+        1: "minimalist composition, clean empty frame, single subject focus",
+        2: "simple clean composition, few visual elements",
+        4: "rich detailed composition, many visual elements",
+        5: "very dense visual composition, richly layered detail",
+    }),
+]
+
+_SDANCE_PHRASES = {d[0]: d[5] for d in _SDANCE_DEFS}
+
+
+class SeedanceCreativePanel(QFrame):
+    """
+    Panneau collapsible de contrôles créatifs à sliders — même look que T2V.
+    Usage :
+        self._creative = SeedanceCreativePanel()
+        lay.addWidget(self._creative)
+        suffix = self._creative.get_creative_suffix()
+    """
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setObjectName("sdance_creative_panel")
+        self.setStyleSheet(
+            f"QFrame#sdance_creative_panel{{background:{C['bg1']};"
+            f"border:1px solid {C['border']};border-radius:10px;}}"
+        )
+        self._expanded = False
+        self._sliders: dict[str, QSlider] = {}
+        self.setMaximumHeight(38)  # Réduit à l'en-tête quand replié
+
+        root = QVBoxLayout(self)
+        root.setContentsMargins(0, 0, 0, 0)
+        root.setSpacing(0)
+
+        # ── En-tête toggle ────────────────────────────────────────────────────
+        self._header = QPushButton("⚙  Contrôles créatifs    ▶")
+        self._header.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._header.setFixedHeight(36)
+        self._header.setStyleSheet(
+            f"QPushButton{{background:transparent;border:none;"
+            f"color:{C['text_secondary']};font-size:11px;font-weight:700;"
+            f"text-align:left;padding:0 14px;}}"
+            f"QPushButton:hover{{color:{C['text_primary']};}}"
+        )
+        self._header.clicked.connect(self._toggle)
+        root.addWidget(self._header)
+
+        # ── Corps collapsible ─────────────────────────────────────────────────
+        self._body = QWidget()
+        self._body.setVisible(False)
+        body_lay = QVBoxLayout(self._body)
+        body_lay.setContentsMargins(14, 4, 14, 12)
+        body_lay.setSpacing(4)
+
+        current_group = None
+        for key, group, fr_label, left_pole, right_pole, _ in _SDANCE_DEFS:
+            if group != current_group:
+                current_group = group
+                if body_lay.count() > 0:
+                    body_lay.addSpacing(6)
+                g_lbl = QLabel(group)
+                g_lbl.setStyleSheet(
+                    f"color:{C['text_dim']};font-size:9px;font-weight:700;"
+                    f"font-family:'Consolas',monospace;letter-spacing:1px;background:transparent;"
+                )
+                body_lay.addWidget(g_lbl)
+            body_lay.addLayout(self._make_row(key, fr_label, left_pole, right_pole))
+
+        # Bouton réinitialiser
+        body_lay.addSpacing(8)
+        reset_row = QHBoxLayout()
+        reset_row.addStretch()
+        reset_btn = QPushButton("↺  Réinitialiser")
+        reset_btn.setFixedHeight(26)
+        reset_btn.setStyleSheet(
+            f"QPushButton{{background:{C['bg3']};border:1px solid {C['border']};"
+            f"border-radius:6px;color:{C['text_dim']};font-size:10px;padding:0 12px;}}"
+            f"QPushButton:hover{{color:{C['text_primary']};border-color:{C['border_bright']};}}"
+        )
+        reset_btn.clicked.connect(self._reset)
+        reset_row.addWidget(reset_btn)
+        body_lay.addLayout(reset_row)
+
+        root.addWidget(self._body)
+
+    @staticmethod
+    def _slider_style() -> str:
+        return (
+            f"QSlider::groove:horizontal{{height:4px;background:{C['bg3']};border-radius:2px;}}"
+            f"QSlider::handle:horizontal{{width:12px;height:12px;margin:-4px 0;"
+            f"background:{C['accent']};border-radius:6px;}}"
+            f"QSlider::sub-page:horizontal{{background:{C['accent_dim']};border-radius:2px;}}"
+        )
+
+    def _make_row(self, key: str, fr_label: str,
+                  left_pole: str, right_pole: str) -> QHBoxLayout:
+        row = QHBoxLayout()
+        row.setSpacing(8)
+        row.setContentsMargins(0, 0, 0, 0)
+
+        lbl = QLabel(fr_label)
+        lbl.setFixedWidth(82)
+        lbl.setStyleSheet(f"color:{C['text_secondary']};font-size:10px;background:transparent;")
+        row.addWidget(lbl)
+
+        left_lbl = QLabel(left_pole)
+        left_lbl.setFixedWidth(46)
+        left_lbl.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+        left_lbl.setStyleSheet(f"color:{C['text_dim']};font-size:9px;background:transparent;")
+        row.addWidget(left_lbl)
+
+        slider = QSlider(Qt.Orientation.Horizontal)
+        slider.setRange(1, 5)
+        slider.setValue(3)
+        slider.setFixedHeight(18)
+        slider.setStyleSheet(self._slider_style())
+        self._sliders[key] = slider
+        row.addWidget(slider, 1)
+
+        right_lbl = QLabel(right_pole)
+        right_lbl.setFixedWidth(56)
+        right_lbl.setStyleSheet(f"color:{C['text_dim']};font-size:9px;background:transparent;")
+        row.addWidget(right_lbl)
+
+        val_lbl = QLabel("·")
+        val_lbl.setFixedWidth(16)
+        val_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        val_lbl.setStyleSheet(
+            f"color:{C['accent']};font-size:9px;font-weight:700;"
+            f"font-family:'Consolas',monospace;background:transparent;"
+        )
+        row.addWidget(val_lbl)
+        slider.valueChanged.connect(
+            lambda v, l=val_lbl: l.setText("·" if v == 3 else str(v))
+        )
+        return row
+
+    def _toggle(self):
+        self._expanded = not self._expanded
+        self._body.setVisible(self._expanded)
+        arrow = "▼" if self._expanded else "▶"
+        self._header.setText(f"⚙  Contrôles créatifs    {arrow}")
+        self.setMaximumHeight(16777215 if self._expanded else 38)
+
+    def _reset(self):
+        for slider in self._sliders.values():
+            slider.setValue(3)
+
+    def get_creative_suffix(self) -> str:
+        """Retourne les phrases anglaises des sliders non-neutres, séparées par des virgules."""
+        parts = []
+        for key, slider in self._sliders.items():
+            v = slider.value()
+            if v == 3:
+                continue
+            phrase = _SDANCE_PHRASES.get(key, {}).get(v, "")
+            if phrase:
+                parts.append(phrase)
+        return ", ".join(parts)
+
+    def get_suffix(self) -> str:
+        return self.get_creative_suffix()

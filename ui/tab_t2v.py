@@ -2106,6 +2106,7 @@ class TabT2V(QScrollArea):
         self._batch_total:   int        = 0
         self._batch_idx:     int        = 0
         self._is_batch_mode: bool       = False
+        self._last_seed:     int | None = None
 
         container = QWidget()
         self.setWidget(container)
@@ -2204,7 +2205,12 @@ class TabT2V(QScrollArea):
             f"QPushButton:pressed{{background:rgba(124,107,255,0.28);}}"
         )
         self._btn_style_gallery.clicked.connect(self._on_style_gallery)
-        _fs_left.addWidget(self._btn_style_gallery)
+        _t2v_style_btn_row = QHBoxLayout()
+        _t2v_style_btn_row.setContentsMargins(0, 0, 268, 0)
+        _t2v_style_btn_row.addStretch()
+        _t2v_style_btn_row.addWidget(self._btn_style_gallery)
+        _t2v_style_btn_row.addStretch()
+        _fs_left.addLayout(_t2v_style_btn_row)
         _fs_left.addStretch()
 
         _fs_outer.addLayout(_fs_left, 1)
@@ -2299,54 +2305,31 @@ class TabT2V(QScrollArea):
         )
         _dur_outer.addWidget(self._dur_lock_lbl)
 
-        _seed_sep = QFrame()
-        _seed_sep.setFixedSize(1, 16)
-        _seed_sep.setStyleSheet(f"background:{C['border_bright']};")
-        _dur_outer.addWidget(_seed_sep, 0, Qt.AlignmentFlag.AlignVCenter)
+        _dur_outer.addStretch()
+        lay.addLayout(_dur_outer)
 
-        self._seed_lock_btn = QPushButton("🔓")
-        self._seed_lock_btn.setFixedSize(26, 26)
+        self._seed_lock_btn = QPushButton("🔓  ADN visuel — aléatoire")
         self._seed_lock_btn.setCheckable(True)
+        self._seed_lock_btn.setFixedHeight(26)
+        self._seed_lock_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         self._seed_lock_btn.setToolTip(
-            "Verrouiller l'ADN visuel — tous les clips partagent la même empreinte visuelle"
+            "Verrouiller l'ADN visuel — même empreinte visuelle pour tous les plans"
         )
         self._seed_lock_btn.setStyleSheet(
             f"QPushButton{{background:transparent;border:1px solid {C['border']};"
-            f"border-radius:6px;font-size:12px;color:{C['text_dim']};}}"
-            f"QPushButton:checked{{background:rgba(124,107,255,0.18);"
+            f"border-radius:6px;font-size:10px;font-weight:600;color:{C['text_dim']};"
+            f"padding:0 10px;}}"
+            f"QPushButton:checked{{background:rgba(124,107,255,0.12);"
             f"border-color:{C['accent']};color:{C['accent']};}}"
             f"QPushButton:hover{{background:{C['bg3']};}}"
         )
         self._seed_lock_btn.toggled.connect(self._on_seed_toggle)
-        _dur_outer.addWidget(self._seed_lock_btn)
-
-        self._seed_lbl = QLabel("ADN visuel :")
-        self._seed_lbl.setStyleSheet(
-            f"color:{C['text_dim']};font-size:10px;font-weight:600;"
-            f"background:transparent;border:none;"
-        )
-        _dur_outer.addWidget(self._seed_lbl)
-
-        self._seed_input = QLineEdit()
-        self._seed_input.setPlaceholderText("0 – 999 999 999")
-        self._seed_input.setFixedWidth(110)
-        self._seed_input.setFixedHeight(26)
-        self._seed_input.setValidator(QIntValidator(0, 999_999_999))
-        self._seed_input.setEnabled(False)
-        self._seed_input.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self._seed_input.setStyleSheet(
-            f"QLineEdit{{background:{C['bg3']};color:{C['text_primary']};"
-            f"border:1px solid {C['border']};border-radius:5px;padding:3px 6px;"
-            f"font-size:11px;font-family:'Consolas',monospace;}}"
-            f"QLineEdit:enabled{{border-color:{C['accent']};}}"
-            f"QLineEdit:disabled{{color:{C['text_dim']};}}"
-        )
-        self._seed_input.textChanged.connect(self._update_injection_banner)
-        _dur_outer.addWidget(self._seed_input)
-
-
-        _dur_outer.addStretch()
-        lay.addLayout(_dur_outer)
+        _t2v_adn_row = QHBoxLayout()
+        _t2v_adn_row.setContentsMargins(0, 0, 268, 0)
+        _t2v_adn_row.addStretch()
+        _t2v_adn_row.addWidget(self._seed_lock_btn)
+        _t2v_adn_row.addStretch()
+        lay.addLayout(_t2v_adn_row)
 
         # ── Panel multi-sélection (visible uniquement lors d'une sélection multiple) ──
         self._multi_panel = QFrame()
@@ -2571,9 +2554,7 @@ class TabT2V(QScrollArea):
             grid.addWidget(g, row, col)
         lay.addLayout(grid)
 
-        # ── DaVinci connection indicator ──────────────────────────────────────
         self._davinci_bar = _DaVinciBar()
-        lay.addWidget(self._davinci_bar)
 
         # ── GCS warning (shown after failed uploads) ───────────────────────────
         self._gcs_warning = _GCSWarningBar()
@@ -2582,9 +2563,7 @@ class TabT2V(QScrollArea):
         self.progress = ProgressBlock()
         lay.addWidget(self.progress)
 
-        btn_row = QHBoxLayout()
-        btn_row.setSpacing(8)
-        self.btn_generate = QPushButton("▶  Générer le clip")
+        self.btn_generate = QPushButton("▶▶  Lancer la file d'attente")
         self.btn_generate.setMinimumHeight(46)
         self.btn_generate.clicked.connect(self.start_generation)
 
@@ -2617,11 +2596,17 @@ class TabT2V(QScrollArea):
             QPushButton:hover{{background:{C['border']};color:{C['text_primary']};}}
         """)
         self.btn_cancel.clicked.connect(self.cancel_generation)
+
+        btn_row = QHBoxLayout()
+        btn_row.setContentsMargins(84, 0, 268, 0)
+        btn_row.setSpacing(8)
         btn_row.addWidget(self.btn_generate)
         btn_row.addWidget(_rep_lbl)
         btn_row.addWidget(self._spinbox_repeat)
         btn_row.addWidget(self.btn_cancel)
         lay.addLayout(btn_row)
+
+        lay.addWidget(self._davinci_bar)
 
         # ── Encart prix (sous le bouton Générer) ──────────────────────────────
         price_frame = QFrame()
@@ -2675,7 +2660,7 @@ class TabT2V(QScrollArea):
             self.cb_dur.removeItem(0)
         self.cb_dur.blockSignals(False)
         if not self._is_batch_mode:
-            self.btn_generate.setText("▶  Générer le clip")
+            self.btn_generate.setText("▶▶  Lancer la file d'attente")
 
         if not shot:
             self._active_shot_title = ""
@@ -2800,16 +2785,15 @@ class TabT2V(QScrollArea):
         # Auto-verrouille l'ADN visuel pour cohérence entre les clips
         if not self._seed_lock_btn.isChecked():
             self._seed_lock_btn.setChecked(True)
-        if not self._seed_input.text().strip():
+        if self._last_seed is None:
             import random
-            self._seed_input.setText(str(random.randint(1, 999_999_999)))
-        seed_val = self._seed_input.text().strip()
+            self._last_seed = random.randint(1, 999_999_999)
         if hasattr(self, "_multi_seed_lbl"):
-            self._multi_seed_lbl.setText(f"🔒  ADN visuel verrouillé — seed : {seed_val}")
+            self._multi_seed_lbl.setText("🔒  ADN visuel verrouillé — cohérence visuelle activée")
             self._multi_seed_lbl.setVisible(True)
 
         if not self._is_batch_mode:
-            self.btn_generate.setText(f"▶  Générer les {count} clips")
+            self.btn_generate.setText("▶▶  Lancer la file d'attente")
 
     def _on_context_changed(self, _ctx: str):
         images = self._casting.get_selected_images()
@@ -2970,23 +2954,17 @@ class TabT2V(QScrollArea):
         return ["seedance-2.0", "seedance-2.0-fast"][self.cb_model.currentIndex()]
 
     def _on_seed_toggle(self, checked: bool):
-        self._seed_lock_btn.setText("🔒" if checked else "🔓")
-        self._seed_input.setEnabled(checked)
-        color = C['accent'] if checked else C['text_dim']
-        self._seed_lbl.setStyleSheet(
-            f"color:{color};font-size:10px;font-weight:600;"
-            f"background:transparent;border:none;"
-        )
+        if checked:
+            self._seed_lock_btn.setText("🔒  ADN visuel — garder pour tous les plans")
+        else:
+            self._seed_lock_btn.setText("🔓  ADN visuel — aléatoire")
+            self._last_seed = None
         self._update_injection_banner()
 
     def _get_seed(self) -> int | None:
         if not self._seed_lock_btn.isChecked():
             return None
-        text = self._seed_input.text().strip()
-        try:
-            return int(text) if text else None
-        except ValueError:
-            return None
+        return self._last_seed
 
 
     def _check_davinci_connection(self) -> bool:
@@ -3260,10 +3238,10 @@ class TabT2V(QScrollArea):
             else:
                 davinci_msg = f"\n\n◈ Téléchargement échoué : {ir['error']}"
 
-        # ADN visuel : afficher la valeur du seed utilisée
+        # ADN visuel : mémorise le seed utilisé pour les prochaines générations
         seed_used = result.get("seed", 0)
         if seed_used and seed_used > 0:
-            self._seed_input.setText(str(seed_used))
+            self._last_seed = seed_used
 
         # Alerte GCS si des images de référence n'ont pas pu être uploadées
         _attempted = result.get("ref_images_attempted", 0)
@@ -3312,7 +3290,7 @@ class TabT2V(QScrollArea):
             if self.cb_dur.itemText(0) == "— s":
                 self.cb_dur.removeItem(0)
             self.cb_dur.blockSignals(False)
-            self.btn_generate.setText("▶  Générer le clip")
+            self.btn_generate.setText("▶▶  Lancer la file d'attente")
             QMessageBox.information(
                 self, f"✓ {self._batch_total} clips générés",
                 f"Génération en série terminée !\n\n{self._batch_total} clips générés avec succès."
@@ -3375,7 +3353,7 @@ class TabT2V(QScrollArea):
             if self.cb_dur.itemText(0) == "— s":
                 self.cb_dur.removeItem(0)
             self.cb_dur.blockSignals(False)
-            self.btn_generate.setText("▶  Générer le clip")
+            self.btn_generate.setText("▶▶  Lancer la file d'attente")
             QMessageBox.critical(
                 self, "Erreur — génération en série interrompue",
                 f"Erreur sur le plan {self._batch_idx}/{self._batch_total} :\n\n{error}\n\n"

@@ -23,8 +23,9 @@ a = Analysis(
         # Chartes d'utilisation FR + EN (lues par dialog_eula.py via sys._MEIPASS)
         ("EULA.txt", "."),
         ("EULA_EN.txt", "."),
-        # Script bridge DaVinci — doit être copiable en tant que fichier .py
+        # Scripts DaVinci — copiés dans Fusion/Scripts/Utility par PANDORA
         ("davinci/bridge_server.py", "davinci"),
+        ("davinci/pandora_send.py",  "davinci"),
     ],
     hiddenimports=[
         # Pillow

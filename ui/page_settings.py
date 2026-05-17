@@ -9,6 +9,7 @@ from ui.styles import CP
 from ui.icons import load_icon
 from ui.davinci_panel import DaVinciPanel
 from core.config import load_config, save_config
+from davinci.bridge import install_pandora_send
 
 _FAL_KEYS_URL       = "https://fal.ai/dashboard/keys"
 _ANTHROPIC_KEYS_URL = "https://console.anthropic.com/settings/keys"
@@ -123,6 +124,41 @@ class SettingsPage(QScrollArea):
             f"border-radius:10px;"
         )
         lay.addWidget(self._davinci)
+
+        # Bouton installation script pandora_send (AI Studio → Modifier depuis DaVinci)
+        _send_row = QHBoxLayout()
+        _send_row.setContentsMargins(0, 4, 0, 0)
+        _btn_send = QPushButton("⚙  Installer le script PANDORA dans DaVinci Resolve Studio")
+        _btn_send.setFixedHeight(30)
+        _btn_send.setCursor(Qt.CursorShape.PointingHandCursor)
+        _btn_send.setStyleSheet(
+            f"QPushButton{{background:{CP['bg3']};color:{CP['text_secondary']};"
+            f"border:1px solid {CP['border']};border-radius:6px;"
+            f"font-size:11px;padding:0 14px;}}"
+            f"QPushButton:hover{{background:{CP['bg2']};}}"
+        )
+        _btn_send.setToolTip(
+            "Installe le script pandora_send dans DaVinci Resolve Studio\n"
+            "(Fusion/Scripts/Utility).\n"
+            "Permet d'envoyer des clips vers AI Studio\n"
+            "→ Modifier depuis DaVinci Resolve\n"
+            "via Espace de travail → Scripts → pandora_send.\n\n"
+            "Pour configurer un raccourci clavier dans DaVinci Resolve Studio :\n"
+            "Espace de travail → Personnalisation du clavier\n"
+            "→ Rechercher « pandora_send »\n"
+            "→ Assigner votre raccourci (ex. Ctrl+Shift+P)"
+        )
+        _btn_send.clicked.connect(self._install_pandora_send)
+        _lbl_send = QLabel("Script pour DaVinci Resolve Studio → AI Studio → Modifier depuis DaVinci Resolve")
+        _lbl_send.setStyleSheet(
+            f"color:{CP['text_dim']};font-size:10px;font-family:'Consolas',monospace;"
+        )
+        _send_row.addWidget(_btn_send)
+        _send_row.addSpacing(10)
+        _send_row.addWidget(_lbl_send)
+        _send_row.addStretch()
+        lay.addLayout(_send_row)
+
         lay.addWidget(_divider())
 
         # ── Clés API ──────────────────────────────────────────────────────────
@@ -220,6 +256,22 @@ class SettingsPage(QScrollArea):
         btn_row.addStretch()
         lay.addLayout(btn_row)
         lay.addStretch()
+
+    def _install_pandora_send(self):
+        ok, msg = install_pandora_send()
+        if ok:
+            QMessageBox.information(
+                self, "Script installé",
+                f"pandora_send.py installé dans :\n{msg}\n\n"
+                "Dans DaVinci Resolve Studio, pour configurer un raccourci clavier :\n\n"
+                "  1. Espace de travail → Personnalisation du clavier\n"
+                "  2. Dans la barre de recherche, taper « pandora_send »\n"
+                "  3. Assigner votre raccourci (ex. Ctrl+Shift+P)\n\n"
+                "Le script s'exécute aussi via :\n"
+                "DaVinci Resolve Studio → Espace de travail → Scripts → pandora_send",
+            )
+        else:
+            QMessageBox.warning(self, "Erreur", msg)
 
     # ── Dialogues d'aide ─────────────────────────────────────────────────────
 

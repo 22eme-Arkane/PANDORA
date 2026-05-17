@@ -1,10 +1,21 @@
-"""Génère assets/pandora_badge.ico depuis assets/pandora_badge.png (ou app_icon.png)."""
+"""Génère assets/pandora_badge.ico depuis assets/icons/pandora_icone.ico (prioritaire)
+ou depuis assets/app_icon.png / pandora_badge.png en fallback."""
 import os
 import sys
+import shutil
 
 ROOT   = os.path.dirname(os.path.dirname(__file__))
 ASSETS = os.path.join(ROOT, "assets")
 
+# Priorité 1 : ICO déjà préparé manuellement → copie directe, pas de reconversion
+ico_src = os.path.join(ASSETS, "icons", "pandora_icone.ico")
+dst = os.path.join(ASSETS, "pandora_badge.ico")
+if os.path.isfile(ico_src):
+    shutil.copy2(ico_src, dst)
+    print(f"ICO copié directement : {dst}")
+    sys.exit(0)
+
+# Fallback : générer depuis PNG haute résolution
 # app_icon.png (1024×1024) est la source haute résolution préférée
 src = os.path.join(ASSETS, "app_icon.png")
 if not os.path.isfile(src):

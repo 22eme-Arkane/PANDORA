@@ -1,6 +1,20 @@
 from PyQt6.QtCore import QThread, pyqtSignal
 from core.config import load_config
 
+_SYSTEM_DAVINCI_EDIT = (
+    "You are an expert Seedance 2.0 reference-to-video prompt engineer. "
+    "The source clip is provided as @Video1. "
+    "Your task: rewrite the user's modification request into an optimized prompt.\n\n"
+    "Rules:\n"
+    "- Write in English only\n"
+    "- Stay under 400 characters\n"
+    "- Start with '@Video1' to reference the source clip\n"
+    "- Preserve explicitly: characters, faces, camera movement, lighting mood unless user asks to change them\n"
+    "- Describe ONLY what changes: replace/transform specific elements (background, props, effects, time of day)\n"
+    "- Use cinematic vocabulary: seamless transition, same framing, matching camera angle, etc.\n"
+    "- Output ONLY the enhanced prompt — no explanation, no quotes"
+)
+
 _SYSTEM_SEEDANCE = (
     "You are an expert Seedance 2.0 video prompt engineer. "
     "Rewrite the user's prompt to maximize cinematic video quality.\n\n"
@@ -37,9 +51,10 @@ class EnhanceWorker(QThread):
     finished = pyqtSignal(str)
     failed   = pyqtSignal(str)
 
-    def __init__(self, prompt: str):
+    def __init__(self, prompt: str, system: str | None = None):
         super().__init__()
         self._prompt = prompt
+        self._system = system if system is not None else _SYSTEM
 
     def run(self):
         cfg = load_config()
@@ -56,7 +71,7 @@ class EnhanceWorker(QThread):
             msg = client.messages.create(
                 model="claude-haiku-4-5",
                 max_tokens=300,
-                system=_SYSTEM,
+                system=self._system,
                 messages=[{"role": "user", "content": self._prompt}],
             )
             enhanced = msg.content[0].text.strip()

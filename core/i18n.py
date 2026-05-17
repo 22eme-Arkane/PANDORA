@@ -957,6 +957,129 @@ _FR_TO_EN: dict[str, str] = {
         "▸ Creative controls: adjust interpretation, rhythm, fidelity and content tolerance.",
     "▸ Mode mock : sans clé fal.ai configurée, la génération est simulée localement (aucun crédit consommé).":
         "▸ Mock mode: without a fal.ai key, generation is simulated locally (no credits used).",
+
+    # ── Tab Modifier depuis DaVinci Resolve ────────────────────────────────────
+    "Modifier depuis DaVinci Resolve — Génération batch":
+        "Edit from DaVinci Resolve — Batch generation",
+    "▸ Sélectionner des clips spécifiques : clic droit sur chaque clip → Flag → couleur.":
+        "▸ Select specific clips: right-click each clip → Flag → color.",
+    "  pandora_send n'envoie que les clips flaggés. Sans flag = toute la timeline.":
+        "  pandora_send only sends flagged clips. No flag = entire timeline.",
+    "▸ Envoyez vos clips : Espace de travail → Scripts → pandora_send":
+        "▸ Send your clips: Workspace → Scripts → pandora_send",
+    "  (ou votre raccourci clavier — Personnalisation du clavier → pandora_send).":
+        "  (or your keyboard shortcut — Keyboard Customization → pandora_send).",
+    "▸ Écrivez un prompt global ou un prompt différent par clip.":
+        "▸ Write a global prompt or a different prompt per clip.",
+    "▸ Cliquez sur « Lancer la file d'attente » : chaque clip est uploadé comme référence":
+        "▸ Click 'Launch queue': each clip is uploaded as a reference",
+    "  vidéo (@Video1) et Seedance génère une nouvelle version selon votre prompt,":
+        "  video (@Video1) and Seedance generates a new version based on your prompt,",
+    "  séquentiellement (1 clip à la fois), N prises par clip.":
+        "  sequentially (1 clip at a time), N takes per clip.",
+    "▸ Les vidéos générées sont automatiquement importées dans le Media Pool de DaVinci.":
+        "▸ Generated videos are automatically imported into DaVinci's Media Pool.",
+    "⚠  Format requis par Seedance 2.0 pour l'upload de référence vidéo :":
+        "⚠  Format required by Seedance 2.0 for video reference upload:",
+    "  • Résolution : 720p maximum":             "  • Resolution: 720p maximum",
+    "  • Taille : moins de 50 MB":               "  • Size: less than 50 MB",
+    "  • Format : H.264 MP4 ou MOV recommandé":  "  • Format: H.264 MP4 or MOV recommended",
+    "  → Depuis DaVinci : Fichier → Exporter → sélectionner H.264 Master à 720p":
+        "  → From DaVinci: File → Export → select H.264 Master at 720p",
+    "    avant d'envoyer les clips via pandora_send.":
+        "    before sending clips via pandora_send.",
+
+    # Status bridge
+    "○  Bridge non connecté":                   "○  Bridge not connected",
+    "↻  Actualiser":                             "↻  Refresh",
+    "Pour connecter le bridge : dans DaVinci Resolve Studio →\n"
+    "Espace de travail → Scripts → seedance_bridge\n"
+    "Laissez la fenêtre PANDORA Bridge ouverte pendant votre session.":
+        "To connect the bridge: in DaVinci Resolve Studio →\n"
+        "Workspace → Scripts → seedance_bridge\n"
+        "Keep the PANDORA Bridge window open during your session.",
+
+    # Style film
+    "selon image de référence":                  "according to reference image",
+    "\U0001f5bc  Template de style":             "\U0001f5bc  Style template",
+
+    # ADN visuel
+    "🔓  ADN visuel — aléatoire":                "🔓  Visual DNA — random",
+    "🔒  ADN visuel — garder pour tous les plans": "🔒  Visual DNA — keep for all shots",
+
+    # Section Clips importés
+    "Clips importés":                            "Imported clips",
+    "▼  Clips importés":                         "▼  Imported clips",
+    "▶  Clips importés":                         "▶  Imported clips",
+    "Tout désélectionner":                       "Deselect all",
+    "✕  Vider la liste":                         "✕  Clear list",
+    "Aucun clip — lancez pandora_send dans DaVinci (Espace de travail → Scripts)":
+        "No clips — run pandora_send in DaVinci (Workspace → Scripts)",
+
+    # Section Prompt de modification
+    "Prompt de modification":                    "Edit prompt",
+    "▼  Prompt de modification":                 "▼  Edit prompt",
+    "▶  Prompt de modification":                 "▶  Edit prompt",
+    "Prompt global":                             "Global prompt",
+    "Prompt par clip":                           "Per-clip prompt",
+    "← Sélectionne un clip pour écrire son prompt":
+        "← Select a clip to write its prompt",
+
+    # Section Paramètres (section headers)
+    "16:9 — Paysage":                            "16:9 — Landscape",
+    "9:16 — Portrait":                           "9:16 — Portrait",
+    "▼  Paramètres":                             "▼  Settings",
+    "▶  Paramètres":                             "▶  Settings",
+
+    # Section File d'attente
+    "File d'attente":                            "Queue",
+    "▼  File d'attente":                         "▼  Queue",
+    "▶  File d'attente":                         "▶  Queue",
+    "Aucune génération en cours.":               "No generation in progress.",
+    "Import auto dans DaVinci Media Pool après génération":
+        "Auto import to DaVinci Media Pool after generation",
+    "▶▶  Lancer la file d'attente":              "▶▶  Launch queue",
+    "📁  Ouvrir le dossier des vidéos":          "📁  Open videos folder",
+    "Nombre de prises par clip (1–10)":          "Number of takes per clip (1–10)",
+
+    # Dialog bridge non connecté
+    "Bridge non connecté":                       "Bridge not connected",
+    "○  Le bridge DaVinci n'est pas connecté.\n\n"
+    "Les vidéos générées ne seront pas importées\n"
+    "automatiquement dans le Media Pool.\n\n"
+    "Pour connecter le bridge :\n"
+    "DaVinci Resolve → Espace de travail → Scripts → seedance_bridge\n"
+    "Laissez la fenêtre PANDORA Bridge ouverte.":
+        "○  The DaVinci bridge is not connected.\n\n"
+        "Generated videos will not be imported\n"
+        "automatically into the Media Pool.\n\n"
+        "To connect the bridge:\n"
+        "DaVinci Resolve → Workspace → Scripts → seedance_bridge\n"
+        "Keep the PANDORA Bridge window open.",
+    "↻  Vérifier la connexion":                  "↻  Check connection",
+    "Générer sans import":                       "Generate without import",
+
+    # Warning dialogs queue
+    "Génération en cours":                       "Generation in progress",
+    "Une génération est déjà en cours. Attendez qu'elle se termine.":
+        "A generation is already in progress. Wait for it to finish.",
+    "Aucun clip sélectionné":                    "No clip selected",
+    "Cochez au moins un clip avant de lancer la file d'attente.":
+        "Check at least one clip before launching the queue.",
+
+    # Status labels
+    "File annulée.":                             "Queue cancelled.",
+    "× Retirer":                                 "× Remove",
+
+    # Enhance Claude — DaVinci Edit prompts
+    "Optimiser avec Claude\nAméliore le prompt de modification pour Seedance 2.0.":
+        "Optimize with Claude\nImproves the modification prompt for Seedance 2.0.",
+    "Prompt vide":                               "Empty prompt",
+    "Écris un prompt à améliorer !":             "Write a prompt to improve!",
+    "Amélioration impossible":                   "Cannot improve",
+
+    # Format validation
+    "Format non supporté":                       "Unsupported format",
 }
 
 

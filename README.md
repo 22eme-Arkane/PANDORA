@@ -12,7 +12,7 @@
 
 ## Téléchargement
 
-**[⬇ Télécharger PANDORA v1.0.8](https://github.com/22eme-Arkane/PANDORA/releases/download/v1.0.8/PANDORA_Setup_1.0.8.exe)**
+**[⬇ Télécharger PANDORA v1.0.9](https://github.com/22eme-Arkane/PANDORA/releases/download/v1.0.9/PANDORA_Setup_1.0.9.exe)**
 
 Toutes les versions : [Releases](../../releases)
 
@@ -50,7 +50,7 @@ Toutes les versions : [Releases](../../releases)
 
 ## Installation
 
-1. Télécharger `PANDORA_Setup_1.0.8.exe` depuis le lien ci-dessus
+1. Télécharger `PANDORA_Setup_1.0.9.exe` depuis le lien ci-dessus
 2. Exécuter l'installeur et accepter la charte d'utilisation (CLUF)
 3. Lancer **PANDORA** depuis le menu Démarrer ou le bureau
 4. Renseigner vos clés API dans **Paramètres** (optionnel)

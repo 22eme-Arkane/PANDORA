@@ -1,4 +1,4 @@
-; pandora_setup.iss — Inno Setup script pour PANDORA v1.0.8
+; pandora_setup.iss — Inno Setup script pour PANDORA v1.0.9
 ;
 ; Prérequis :
 ;   - Inno Setup 6.x installé (https://jrsoftware.org/isinfo.php)
@@ -7,10 +7,10 @@
 ;
 ; Pour compiler :
 ;   iscc pandora_setup.iss
-; Produit : dist\PANDORA_Setup_1.0.8.exe
+; Produit : dist\PANDORA_Setup_1.0.9.exe
 
 #define MyAppName      "PANDORA"
-#define MyAppVersion   "1.0.8"
+#define MyAppVersion   "1.0.9"
 #define MyAppPublisher "22eme Arkane"
 #define MyAppURL       "https://github.com/22eme-arkane/pandora"
 #define MyAppExeName   "PANDORA.exe"
@@ -98,6 +98,39 @@ Filename: "{app}\{#MyAppExeName}"; Description: "{cm:LaunchProgram,{#StringChang
 ; La config dans %LOCALAPPDATA%\PANDORA\ est intentionnellement conservée
 
 [Code]
+
+{ ── Détection DaVinci Resolve ─────────────────────────────────────────────── }
+function DaVinciInstalled(): Boolean;
+begin
+  Result := FileExists('C:\Program Files\Blackmagic Design\DaVinci Resolve\Resolve.exe');
+end;
+
+{ ── Copie des scripts bridge après installation ──────────────────────────────
+  seedance_bridge.py  → Espace de travail → Scripts → seedance_bridge
+  pandora_send.py     → Espace de travail → Scripts → pandora_send (Ctrl+Shift+P) }
+procedure InstallDaVinciScripts();
+var
+  ScriptsDir : String;
+  AppDavinci : String;
+begin
+  ScriptsDir := 'C:\ProgramData\Blackmagic Design\DaVinci Resolve\Fusion\Scripts\Utility';
+  AppDavinci := ExpandConstant('{app}\davinci');
+
+  ForceDirectories(ScriptsDir);
+  FileCopy(AppDavinci + '\bridge_server.py', ScriptsDir + '\seedance_bridge.py', False);
+  FileCopy(AppDavinci + '\pandora_send.py',  ScriptsDir + '\pandora_send.py',  False);
+end;
+
+{ ── Exécuté à la fin de l'installation principale ───────────────────────────}
+procedure CurStepChanged(CurStep: TSetupStep);
+begin
+  if CurStep = ssPostInstall then
+  begin
+    if DaVinciInstalled() then
+      InstallDaVinciScripts();
+  end;
+end;
+
 function InitializeSetup(): Boolean;
 begin
   Result := True;

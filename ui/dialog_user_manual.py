@@ -539,6 +539,49 @@ def _s_seedance() -> str:
             "Les vidéos sont stockées dans <code>data/Seedance/</code> du dossier projet",
         ),
         _tip("Les prompts sont automatiquement traduits en anglais avant envoi à Seedance 2.0. Rédigez vos prompts en français — la traduction est transparente et optimisée."),
+        _sep_html(),
+        _h("Modifier depuis DaVinci Resolve — Génération batch"),
+        _p("L'onglet <b>Modifier depuis DaVinci Resolve</b> permet de transformer en masse des clips de votre timeline DaVinci avec Seedance 2.0. Chaque clip est uploadé comme référence vidéo et Seedance génère une version modifiée selon votre prompt."),
+        _ul(
+            "<b>1.</b> Dans DaVinci : clic droit sur un clip → <b>Flag</b> → couleur pour le sélectionner "
+            "(sans flag = toute la timeline est envoyée)",
+            "<b>2.</b> DaVinci → <b>Espace de travail → Scripts → pandora_send</b> "
+            "(ou votre raccourci clavier personnalisé)",
+            "<b>3.</b> PANDORA affiche les clips reçus dans l'onglet <b>Modifier depuis DaVinci Resolve</b>",
+            "<b>4.</b> Écrivez un <b>prompt global</b> (même prompt pour tous les clips) "
+            "ou un <b>prompt par clip</b> (cliquez sur chaque vignette pour le personnaliser)",
+            "<b>5.</b> Cliquez <b>▶▶ Lancer la file d'attente</b> — traitement séquentiel, 1 clip à la fois",
+            "Les vidéos générées sont importées automatiquement dans le <b>Media Pool de DaVinci</b>",
+            "Utilisez le spinbox <b>×N</b> pour générer plusieurs prises par clip",
+        ),
+        _warn(
+            "Format requis par Seedance 2.0 pour les clips de référence : "
+            "<b>720p maximum · moins de 50 MB · H.264 MP4 ou MOV</b>. "
+            "Depuis DaVinci : Fichier → Exporter → sélectionner H.264 Master à 720p "
+            "avant d'envoyer vos clips via pandora_send."
+        ),
+        _h("ADN visuel — Seed Lock"),
+        _ul(
+            "<b>🔒 ADN visuel — garder pour tous les plans</b> : verrouille le seed Seedance "
+            "pour maintenir la cohérence visuelle entre tous les clips de la file d'attente",
+            "Activé <b>automatiquement</b> quand plusieurs clips sont cochés",
+            "Chaque clip modifié utilise le même seed → style et palette cohérents malgré des angles différents",
+            "Décochez si vous souhaitez une variation aléatoire par clip",
+        ),
+        _h("Bridge DaVinci"),
+        _ul(
+            "Le bridge est nécessaire pour l'<b>import automatique dans le Media Pool</b>",
+            "Si le bridge n'est pas connecté, PANDORA propose : "
+            "<i>Fermer</i> / <i>↻ Vérifier la connexion</i> / <i>Générer sans import</i>",
+            "Pour connecter : DaVinci Resolve → Espace de travail → Scripts → <b>seedance_bridge</b>",
+            "Laissez la fenêtre PANDORA Bridge ouverte pendant toute votre session",
+        ),
+        _tip(
+            "Prompt efficace pour la modification : soyez précis sur ce que vous voulez <i>garder</i> "
+            "et ce que vous voulez <i>changer</i>. Ex : "
+            "<i>« same scene, same characters and camera movement, replace background with a luxury restaurant, "
+            "keep lighting mood »</i>"
+        ),
     ])
 
 
@@ -1239,6 +1282,49 @@ def _e_seedance() -> str:
             "Videos are stored in <code>data/Seedance/</code> of the project folder",
         ),
         _tip("Prompts are automatically translated to English before being sent to Seedance 2.0. Write your prompts in French — translation is transparent and optimised."),
+        _sep_html(),
+        _h("Edit from DaVinci Resolve — Batch generation"),
+        _p("The <b>Edit from DaVinci Resolve</b> tab lets you bulk-transform clips from your DaVinci timeline with Seedance 2.0. Each clip is uploaded as a video reference and Seedance generates a modified version based on your prompt."),
+        _ul(
+            "<b>1.</b> In DaVinci: right-click a clip → <b>Flag</b> → color to select it "
+            "(no flag = entire timeline is sent)",
+            "<b>2.</b> DaVinci → <b>Workspace → Scripts → pandora_send</b> "
+            "(or your custom keyboard shortcut)",
+            "<b>3.</b> PANDORA displays the received clips in the <b>Edit from DaVinci Resolve</b> tab",
+            "<b>4.</b> Write a <b>global prompt</b> (same for all clips) "
+            "or a <b>per-clip prompt</b> (click each thumbnail to customise)",
+            "<b>5.</b> Click <b>▶▶ Launch queue</b> — sequential processing, 1 clip at a time",
+            "Generated videos are automatically imported into DaVinci's <b>Media Pool</b>",
+            "Use the <b>×N</b> spinbox to generate multiple takes per clip",
+        ),
+        _warn(
+            "Format required by Seedance 2.0 for reference clips: "
+            "<b>720p maximum · less than 50 MB · H.264 MP4 or MOV</b>. "
+            "From DaVinci: File → Export → select H.264 Master at 720p "
+            "before sending your clips via pandora_send."
+        ),
+        _h("Visual DNA — Seed Lock"),
+        _ul(
+            "<b>🔒 Visual DNA — keep for all shots</b>: locks the Seedance seed "
+            "to maintain visual consistency across all clips in the queue",
+            "<b>Automatically enabled</b> when multiple clips are checked",
+            "Each modified clip uses the same seed → coherent style and palette despite different camera angles",
+            "Uncheck if you want random variation per clip",
+        ),
+        _h("DaVinci Bridge"),
+        _ul(
+            "The bridge is required for <b>automatic import into the Media Pool</b>",
+            "If the bridge is not connected, PANDORA offers: "
+            "<i>Close</i> / <i>↻ Check connection</i> / <i>Generate without import</i>",
+            "To connect: DaVinci Resolve → Workspace → Scripts → <b>seedance_bridge</b>",
+            "Keep the PANDORA Bridge window open throughout your session",
+        ),
+        _tip(
+            "Effective modification prompt: be precise about what you want to <i>keep</i> "
+            "and what you want to <i>change</i>. E.g.: "
+            "<i>\"same scene, same characters and camera movement, replace background with a luxury restaurant, "
+            "keep lighting mood\"</i>"
+        ),
     ])
 
 

@@ -52,6 +52,28 @@ def _send(cmd: str, params: dict | None = None) -> tuple[bool, object]:
 
 # ── Installation du bridge server ─────────────────────────────────────────────
 
+def install_pandora_send() -> tuple[bool, str]:
+    """
+    Copie davinci/pandora_send.py dans le dossier Scripts de DaVinci Resolve.
+    Ce script permet d'envoyer des clips vers PANDORA depuis DaVinci (Ctrl+Shift+P).
+    """
+    if getattr(sys, "frozen", False):
+        src = os.path.join(sys._MEIPASS, "davinci", "pandora_send.py")
+    else:
+        src = os.path.join(os.path.dirname(__file__), "pandora_send.py")
+    if not os.path.isfile(src):
+        return False, f"pandora_send.py introuvable : {src}"
+    for dest_dir in _SCRIPTS_DIRS:
+        try:
+            os.makedirs(dest_dir, exist_ok=True)
+            dest = os.path.join(dest_dir, "pandora_send.py")
+            shutil.copy2(src, dest)
+            return True, dest
+        except Exception:
+            continue
+    return False, "Impossible d'écrire dans les dossiers Scripts DaVinci."
+
+
 def install_bridge_server() -> tuple[bool, str]:
     """
     Copie bridge_server.py dans le dossier Scripts de DaVinci Resolve.
@@ -152,6 +174,11 @@ class DaVinciConnection:
     def get_selected_clip_info(self) -> dict:
         _, info = _send("get_selected_clip")
         return info if isinstance(info, dict) else {}
+
+    def get_timeline_clips(self) -> list:
+        """Retourne tous les clips vidéo de la timeline active (pistes 1-4)."""
+        _, clips = _send("get_timeline_clips")
+        return clips if isinstance(clips, list) else []
 
     # ── Compatibilité avec l'ancien code ──────────────────────────────────────
 

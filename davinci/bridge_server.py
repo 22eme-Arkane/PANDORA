@@ -1,7 +1,7 @@
 """
-Seedance Bridge Server — script à lancer depuis DaVinci Resolve.
+PANDORA Bridge Server — script à lancer depuis DaVinci Resolve.
 
-Installation automatique : clique "Installer bridge" dans le plugin Seedance.
+Installation automatique : clique "Installer le bridge" dans PANDORA → Paramètres.
 Ou copie manuellement ce fichier dans :
     C:\\ProgramData\\Blackmagic Design\\DaVinci Resolve\\Fusion\\Scripts\\Utility\\
 
@@ -15,10 +15,15 @@ Laisse-la ouverte pendant ta session.
 import builtins
 import json
 import os
+import queue
 import socket
 import sys
 import threading
 import tkinter as tk
+
+# ── Queues pour passer les appels DaVinci sur le thread principal ─────────────
+_req_queue = queue.Queue()   # (cmd, params, result_queue)
+
 
 _resolve   = None
 _dvr_error = ""
@@ -72,9 +77,10 @@ HOST = "127.0.0.1"
 PORT = 19876
 
 
-# ── Commandes DaVinci ─────────────────────────────────────────────────────────
+# ── Commandes DaVinci (doit s'exécuter sur le thread principal) ───────────────
 
 def _handle(cmd: str, params: dict) -> object:
+    """Toutes les commandes DaVinci doivent être appelées depuis le thread principal."""
     if cmd == "ping":
         return "pong"
     if cmd == "get_dvr_error":
@@ -166,7 +172,60 @@ def _handle(cmd: str, params: dict) -> object:
         except Exception:
             return {}
 
+    if cmd == "get_timeline_clips":
+        if not project:
+            return []
+        tl = project.GetCurrentTimeline()
+        if not tl:
+            return []
+        clips = []
+        try:
+            n_tracks = int(tl.GetTrackCount("video"))
+        except Exception:
+            n_tracks = 1
+        for track_idx in range(1, min(n_tracks + 1, 5)):
+            try:
+                items = tl.GetItemListInTrack("video", track_idx)
+            except Exception:
+                continue
+            if not items:
+                continue
+            for item in (items if isinstance(items, list) else []):
+                try:
+                    mi    = item.GetMediaPoolItem()
+                    props = mi.GetClipProperty() if mi else {}
+                    fp    = props.get("File Path", "")
+                    name  = props.get("Clip Name", "") or os.path.basename(fp)
+                    if not name and not fp:
+                        continue
+                    clips.append({
+                        "name":       name,
+                        "file_path":  fp,
+                        "duration":   props.get("Duration", ""),
+                        "resolution": props.get("Resolution", ""),
+                        "fps":        props.get("FPS", ""),
+                        "track":      track_idx,
+                    })
+                except Exception:
+                    pass
+        return clips
+
     raise ValueError(f"Commande inconnue : {cmd}")
+
+
+def _dispatch_on_main(root):
+    """Polling 50 ms — exécute les commandes DaVinci en attente sur le thread principal."""
+    try:
+        while not _req_queue.empty():
+            cmd, params, resp_q = _req_queue.get_nowait()
+            try:
+                result = _handle(cmd, params)
+                resp_q.put(("ok", result))
+            except Exception as exc:
+                resp_q.put(("err", str(exc)))
+    except Exception:
+        pass
+    root.after(50, lambda: _dispatch_on_main(root))
 
 
 # ── Serveur TCP ───────────────────────────────────────────────────────────────
@@ -187,9 +246,25 @@ def _client(conn, addr, counter_var, root):
                 data += chunk
                 if data.endswith(b"\n"):
                     break
-            req    = json.loads(data.decode("utf-8"))
-            result = _handle(req.get("cmd", ""), req.get("params", {}))
-            resp   = json.dumps({"ok": True, "result": result})
+            req  = json.loads(data.decode("utf-8"))
+            cmd  = req.get("cmd", "")
+            prms = req.get("params", {})
+
+            if cmd == "ping":
+                # ping sans appel DaVinci — réponse directe
+                resp = json.dumps({"ok": True, "result": "pong"})
+            else:
+                # Commandes DaVinci → déléguer au thread principal via queue
+                resp_q = queue.Queue()
+                _req_queue.put((cmd, prms, resp_q))
+                try:
+                    status, result = resp_q.get(timeout=6.0)
+                    if status == "ok":
+                        resp = json.dumps({"ok": True, "result": result})
+                    else:
+                        resp = json.dumps({"ok": False, "error": result})
+                except queue.Empty:
+                    resp = json.dumps({"ok": False, "error": "Timeout — thread principal occupé"})
         except Exception as e:
             resp = json.dumps({"ok": False, "error": str(e)})
         conn.sendall((resp + "\n").encode("utf-8"))
@@ -218,14 +293,14 @@ def _run_ui():
     has_error = not _resolve and _dvr_error
     height = 210 if has_error else 110
     root = tk.Tk()
-    root.title("Seedance Bridge")
+    root.title("PANDORA Bridge")
     root.geometry(f"380x{height}")
     root.resizable(False, False)
     root.configure(bg="#111113")
     root.attributes("-topmost", True)
 
     tk.Label(
-        root, text="◈  SEEDANCE BRIDGE",
+        root, text="◈  PANDORA BRIDGE",
         fg="#7c6bff", bg="#111113",
         font=("Consolas", 11, "bold")
     ).pack(pady=(12, 4))
@@ -273,6 +348,9 @@ def _run_ui():
         fg="#3a3a4a", bg="#111113",
         font=("Consolas", 8)
     ).pack(pady=(2, 6))
+
+    # Démarre le polling des commandes DaVinci sur le thread principal (50 ms)
+    root.after(50, lambda: _dispatch_on_main(root))
 
     t = threading.Thread(target=_start_server, args=(counter_var, root), daemon=False)
     t.start()

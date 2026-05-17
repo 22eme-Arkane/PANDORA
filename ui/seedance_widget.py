@@ -5,9 +5,9 @@ from PyQt6.QtCore import Qt, QTimer
 from ui.icons import load_icon
 from ui.styles import C, STYLESHEET
 from ui.tab_t2v import TabT2V
-from ui.tab_extension import TabExtension
 from ui.tab_history import TabHistory
 from ui.tab_video_engines import TabVideoEngines
+from ui.tab_davinci_edit import TabDavinciEdit
 
 
 class SeedanceHeader(QWidget):
@@ -80,19 +80,27 @@ class SeedanceWidget(QWidget):
         self.tabs.setDocumentMode(True)
 
         self.tab_t2v     = TabT2V()
-        self.tab_ext     = TabExtension()
+        self.tab_davinci = TabDavinciEdit()
         self.tab_engines = TabVideoEngines()
         self.tab_history = TabHistory()
 
         self.tabs.addTab(self.tab_t2v,     "Créer un nouveau clip")
-        self.tabs.addTab(self.tab_ext,     "Modifier un clip")
+        self.tabs.addTab(self.tab_davinci, "Modifier depuis DaVinci Resolve")
         self.tabs.addTab(self.tab_engines, "Génération directe")
         self.tabs.addTab(self.tab_history, "Historique")
 
         self.tab_t2v.generation_done.connect(self.tab_history.add_entry)
-        self.tab_ext.generation_done.connect(self.tab_history.add_entry)
+        self.tab_davinci.generation_done.connect(self.tab_history.add_entry)
+
+        # Ping bridge quand l'onglet "Modifier depuis DaVinci" devient actif
+        self._davinci_tab_index = self.tabs.indexOf(self.tab_davinci)
+        self.tabs.currentChanged.connect(self._on_tab_changed)
 
         root.addWidget(self.tabs)
+
+    def _on_tab_changed(self, index: int):
+        if index == self._davinci_tab_index:
+            self.tab_davinci._ping_bridge()
 
     def refresh(self):
         self.tab_t2v.refresh()
