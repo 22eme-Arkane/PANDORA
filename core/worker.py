@@ -1,5 +1,24 @@
 from PyQt6.QtCore import QThread, pyqtSignal
 
+_CREDIT_KEYWORDS = (
+    "insufficient", "credit", "balance", "payment", "402",
+    "not enough", "out of", "topup", "top up", "top-up",
+    "quota", "limit exceeded", "billing",
+)
+
+def is_credit_error(err: str) -> bool:
+    low = err.lower()
+    return any(kw in low for kw in _CREDIT_KEYWORDS)
+
+def humanize_api_error(err: str) -> str:
+    """Détecte les erreurs de crédit fal.ai et retourne un message lisible."""
+    if is_credit_error(err):
+        return (
+            "Crédits fal.ai insuffisants — la génération n'a pas pu démarrer.\n"
+            "Rechargez votre compte sur fal.ai/dashboard pour continuer."
+        )
+    return err
+
 
 class GenerationWorker(QThread):
     progress = pyqtSignal(int, str)
@@ -42,4 +61,4 @@ class GenerationWorker(QThread):
                 self.finished.emit(result)
         except Exception as e:
             if not self._cancelled:
-                self.failed.emit(str(e))
+                self.failed.emit(humanize_api_error(str(e)))

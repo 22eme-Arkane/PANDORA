@@ -335,11 +335,22 @@ def run_real(params: dict, emit_progress, is_cancelled) -> dict:
                         f"reinterpreted in the film's visual style."
                     )
                 elif _role == "decor":
-                    _prompt_additions.append(
-                        f"@Image{_idx} provides the scene's spatial layout and architecture only — "
-                        f"use its structure as location context but apply the film's visual style, "
-                        f"do not copy its color grading or photographic style."
-                    )
+                    if params.get("decor_ref_free", False):
+                        _prompt_additions.append(
+                            f"VISUAL ATMOSPHERE @Image{_idx}: Draw inspiration from the mood, "
+                            f"color palette, and aesthetic of this location — but reinterpret "
+                            f"the space freely. Do not replicate the exact architecture or layout. "
+                            f"Use the image as a stylistic reference only."
+                        )
+                    else:
+                        _prompt_additions.append(
+                            f"FILMING LOCATION @Image{_idx}: This is the physical space the camera "
+                            f"moves through — NOT a static backdrop or background plate. "
+                            f"The camera explores this environment freely: tracking shots, pans, "
+                            f"depth reveals, different angles and viewpoints within the space. "
+                            f"Preserve the architectural character and atmosphere of the location "
+                            f"while showing it from multiple perspectives."
+                        )
                 elif _role == "accessory":
                     _prompt_additions.append(
                         f"@Image{_idx} shows props and accessories — "

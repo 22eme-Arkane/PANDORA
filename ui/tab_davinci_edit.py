@@ -21,7 +21,7 @@ from PyQt6.QtWidgets import (
 )
 
 from ui.styles import C
-from ui.widgets import HelpBlock, section_label, combo
+from ui.widgets import HelpBlock, section_label, combo, toggle_row
 from ui.creative_panel import SeedanceCreativePanel
 from ui.icons import claude_icon_pixmap, install_hover_icon
 from core.config import load_config, get_output_dir
@@ -30,7 +30,12 @@ from core.worker import GenerationWorker
 from api.enhance import EnhanceWorker, _SYSTEM_DAVINCI_EDIT
 from davinci.importer import import_result
 from davinci.ping_worker import BridgePingWorker
-from ui.tab_t2v import _DaVinciBar
+from ui.tab_t2v import (
+    _DaVinciBar, _ENGINES, _DAVINCI_ENGINES, _SEEDANCE_ENGINES,
+    _FIXED_RES_ENGINES, _FIXED_RATIO_ENGINES, _ENGINE_RES_FORCED,
+    _TEXT_FALLBACK_ENGINES,
+    _make_ext_worker, _norm_ext_result,
+)
 
 
 _INBOX = os.path.join(os.environ.get("TEMP", tempfile.gettempdir()), "pandora_clips_inbox.json")
@@ -214,6 +219,7 @@ class TabDavinciEdit(QScrollArea):
         self._active_clip_idx:  int | None               = None
         self._worker:           GenerationWorker | None  = None
         self._ping_worker:      BridgePingWorker | None  = None
+        self._lipsync_worker                             = None
         self._enhance_worker_global:   EnhanceWorker | None = None
         self._enhance_worker_per_clip: EnhanceWorker | None = None
         self._bridge_connected  = False
@@ -708,39 +714,76 @@ class TabDavinciEdit(QScrollArea):
 
         body_prompt.addWidget(self._per_clip_panel)
 
-        self._creative = SeedanceCreativePanel()
-        body_prompt.addWidget(self._creative)
         lay.addWidget(sec_prompt)
+
+        # ── Resynchroniser les lèvres (LatentSync) ────────────────────────────
+        from api.lipsync import ffmpeg_available as _ffmpeg_ok
+        self._lipsync_toggle_row = toggle_row(
+            "Resynchroniser les lèvres",
+            "Synchronisation labiale LatentSync — aligne les lèvres sur l'audio source du clip",
+            False,
+        )
+        self._cb_lipsync = self._lipsync_toggle_row.findChild(QCheckBox)
+        if not _ffmpeg_ok():
+            self._cb_lipsync.setEnabled(False)
+            self._lipsync_toggle_row.setToolTip(
+                "ffmpeg non détecté — installez ffmpeg et ajoutez-le au PATH pour activer LatentSync."
+            )
+        else:
+            self._lipsync_toggle_row.setToolTip(
+                "Après génération Seedance, resynchronise les lèvres de l'acteur\n"
+                "avec l'audio source du clip DaVinci (fal-ai/latentsync).\n"
+                "Importe la vidéo lip-synced + la piste audio séparément dans DaVinci."
+            )
+        lay.addWidget(self._lipsync_toggle_row)
+
+        # ── Contrôles créatifs ────────────────────────────────────────────────
+        self._creative = SeedanceCreativePanel()
+        lay.addWidget(self._creative)
 
         # ── Section : Paramètres ──────────────────────────────────────────────
         sec_params, body_params = self._make_section("Paramètres")
 
-        params_row = QHBoxLayout()
-        params_row.setSpacing(16)
+        from PyQt6.QtWidgets import QGridLayout as _QGrid
+        params_grid = _QGrid()
+        params_grid.setSpacing(12)
 
-        col_model = QVBoxLayout()
-        col_model.setSpacing(4)
-        col_model.addWidget(section_label("Modèle"))
-        self._cb_model = combo(["Seedance 2.0", "Seedance 2.0 Fast"])
-        col_model.addWidget(self._cb_model)
-        params_row.addLayout(col_model)
-
-        col_ratio = QVBoxLayout()
-        col_ratio.setSpacing(4)
-        col_ratio.addWidget(section_label("Ratio"))
+        self._cb_model = combo(_DAVINCI_ENGINES)
+        self._cb_model.currentIndexChanged.connect(self._on_engine_changed)
         self._cb_ratio = combo(["16:9 — Paysage", "9:16 — Portrait", "4:3", "3:4"])
-        col_ratio.addWidget(self._cb_ratio)
-        params_row.addLayout(col_ratio)
+        self._cb_res   = combo(["1080p", "720p", "480p"])
 
-        col_res = QVBoxLayout()
-        col_res.setSpacing(4)
-        col_res.addWidget(section_label("Résolution"))
-        self._cb_res = combo(["720p", "480p"])
-        col_res.addWidget(self._cb_res)
-        params_row.addLayout(col_res)
+        for (row, col), lbl, widget in [
+            ((0, 0), "Moteur de génération", self._cb_model),
+            ((0, 1), "Ratio",                self._cb_ratio),
+            ((1, 0), "Résolution",           self._cb_res),
+        ]:
+            g = QWidget()
+            l = QVBoxLayout(g)
+            l.setContentsMargins(0, 0, 0, 0)
+            l.setSpacing(6)
+            l.addWidget(section_label(lbl))
+            l.addWidget(widget)
+            params_grid.addWidget(g, row, col)
 
-        params_row.addStretch()
-        body_params.addLayout(params_row)
+        body_params.addLayout(params_grid)
+
+        # ── Banner compatibilité références (moteurs texte-seul) ─────────────
+        self._ref_compat_banner = QLabel(
+            "⚠  Ce moteur ne supporte pas les images de référence nativement. "
+            "Vos personnages, décors et accessoires seront convertis en mots-clés de style "
+            "via Claude Vision et ajoutés au prompt texte."
+        )
+        self._ref_compat_banner.setWordWrap(True)
+        self._ref_compat_banner.setStyleSheet(
+            "background:rgba(255,79,106,0.12);"
+            f"color:{C['red']};"
+            "border:1px solid rgba(255,79,106,0.45);"
+            "border-radius:6px;padding:8px 12px;font-size:11px;font-weight:600;"
+        )
+        self._ref_compat_banner.setVisible(False)
+        body_params.addWidget(self._ref_compat_banner)
+
         lay.addWidget(sec_params)
 
         # ── Section : File d'attente ──────────────────────────────────────────
@@ -772,6 +815,16 @@ class TabDavinciEdit(QScrollArea):
         self._cb_import.setChecked(True)
         self._cb_import.setStyleSheet(f"color:{C['text_secondary']};font-size:11px;")
         body_queue.addWidget(self._cb_import)
+
+        # Stage label (visible uniquement pendant la file LatentSync)
+        self._lbl_lipsync_stage = QLabel("")
+        self._lbl_lipsync_stage.setVisible(False)
+        self._lbl_lipsync_stage.setStyleSheet(
+            f"color:{C['accent']};font-size:10px;font-family:'Consolas',monospace;"
+            f"background:rgba(78,205,196,0.08);border:1px solid {C['accent']}33;"
+            f"border-radius:4px;padding:4px 10px;"
+        )
+        body_queue.addWidget(self._lbl_lipsync_stage)
 
         self._btn_generate = QPushButton("▶▶  Lancer la file d'attente")
         self._btn_generate.setMinimumHeight(46)
@@ -816,7 +869,7 @@ class TabDavinciEdit(QScrollArea):
         )
 
         btn_row = QHBoxLayout()
-        btn_row.setContentsMargins(84, 0, 268, 0)
+        btn_row.setContentsMargins(0, 0, 0, 0)
         btn_row.setSpacing(8)
         btn_row.addWidget(self._btn_generate)
         btn_row.addWidget(_x)
@@ -1122,7 +1175,17 @@ class TabDavinciEdit(QScrollArea):
     # ── Modèle / ratio ────────────────────────────────────────────────────────
 
     def _get_model(self) -> str:
-        return ["seedance-2.0", "seedance-2.0-fast"][self._cb_model.currentIndex()]
+        return self._cb_model.currentData() or "seedance-2.0"
+
+    def _on_engine_changed(self):
+        key = self._get_model()
+        fixed_res = key in _FIXED_RES_ENGINES
+        self._cb_res.setEnabled(not fixed_res)
+        self._cb_ratio.setEnabled(key not in _FIXED_RATIO_ENGINES)
+        if fixed_res:
+            self._cb_res.setCurrentText(_ENGINE_RES_FORCED.get(key, "1080p"))
+        if hasattr(self, "_ref_compat_banner"):
+            self._ref_compat_banner.setVisible(key in _TEXT_FALLBACK_ENGINES)
 
     def _get_aspect_ratio(self) -> str:
         return self._cb_ratio.currentText().split(" ")[0]
@@ -1348,10 +1411,26 @@ class TabDavinciEdit(QScrollArea):
         if seed:
             params["seed"] = seed
 
-        self._worker = GenerationWorker(params)
+        _model_key = self._get_model()
+        if _model_key in _SEEDANCE_ENGINES:
+            self._worker = GenerationWorker(params)
+            self._worker.finished.connect(
+                lambda r, ci=clip_idx, pi=prise_idx: self._on_clip_done(r, ci, pi)
+            )
+        else:
+            self._worker = _make_ext_worker(_model_key, params)
+            if self._worker is None:
+                self._on_clip_failed(f"Moteur inconnu : {_model_key}", clip_idx, prise_idx)
+                return
+            _raw = params.get("prompt", "")
+            self._worker.finished.connect(
+                lambda r, ci=clip_idx, pi=prise_idx, p=_raw:
+                    self._on_clip_done(_norm_ext_result(r, p), ci, pi)
+            )
         self._worker.progress.connect(self._on_progress)
-        self._worker.finished.connect(lambda r: self._on_clip_done(r, clip_idx, prise_idx))
-        self._worker.failed.connect(lambda e: self._on_clip_failed(e, clip_idx, prise_idx))
+        self._worker.failed.connect(
+            lambda e, ci=clip_idx, pi=prise_idx: self._on_clip_failed(e, ci, pi)
+        )
         self._worker.start()
 
         total = len(self._queue)
@@ -1379,9 +1458,98 @@ class TabDavinciEdit(QScrollArea):
         if seed_used and seed_used > 0 and self._seed_lock_btn.isChecked():
             self._last_seed = seed_used
 
-        local_path = ""
+        # ── LatentSync branch ─────────────────────────────────────────────────
+        if self._cb_lipsync.isChecked() and self._cb_lipsync.isEnabled():
+            video_url   = result.get("video_url", "")
+            source_path = self._clips_data[clip_idx].get("file_path", "")
+            mock_url    = not video_url or "mock" in video_url or not video_url.startswith("http")
+            if video_url and not mock_url and source_path and os.path.isfile(source_path):
+                self._start_lipsync(result, clip_idx, prise_idx)
+                return  # la file avancera depuis _on_lipsync_done/_on_lipsync_failed
+
+        self._import_and_advance(result, clip_idx, prise_idx)
+
+    def _start_lipsync(self, seedance_result: dict, clip_idx: int, prise_idx: int):
+        from api.lipsync import LatentSyncWorker
+        card      = self._clip_cards[clip_idx]
+        n_pr      = self._spin_prises.value()
+        clip_name = card.clip().get("name", "") if card else ""
+        card.set_status(f"P{prise_idx + 1}/{n_pr} ↷ LS…", C["accent"])
+
+        self._lbl_lipsync_stage.setText("● Étape 2/3 — Synchronisation LatentSync…")
+        self._lbl_lipsync_stage.setVisible(True)
+
+        self._lipsync_worker = LatentSyncWorker(
+            video_url         = seedance_result.get("video_url", ""),
+            source_video_path = self._clips_data[clip_idx].get("file_path", ""),
+            output_dir        = get_output_dir(),
+            shot_name         = clip_name,
+        )
+        self._lipsync_worker.progress.connect(self._on_lipsync_progress)
+        self._lipsync_worker.finished.connect(
+            lambda vp, ap: self._on_lipsync_done(seedance_result, clip_idx, prise_idx, vp, ap)
+        )
+        self._lipsync_worker.failed.connect(
+            lambda err: self._on_lipsync_failed(seedance_result, clip_idx, prise_idx, err)
+        )
+        self._lipsync_worker.start()
+
+    def _on_lipsync_progress(self, pct: int, msg: str):
+        self._lbl_lipsync_stage.setText(f"● Étape 2/3 — LatentSync  {pct}%  {msg}")
+
+    def _on_lipsync_done(self, seedance_result: dict, clip_idx: int, prise_idx: int,
+                          video_path: str, audio_path: str):
+        from davinci.importer import import_audio_to_bin
+        card     = self._clip_cards[clip_idx]
+        n_pr     = self._spin_prises.value()
+        do_import = self._cb_import.isChecked()
+
+        self._lbl_lipsync_stage.setText("● Étape 3/3 — Import DaVinci…")
+
+        # Import vidéo lip-synced
+        dav_ok = False
+        if do_import and video_path and os.path.isfile(video_path):
+            from davinci.bridge import resolve as _resolve
+            if _resolve.is_connected():
+                dav_ok = _resolve.import_media_to_bin(video_path, "")
+                # Import piste audio séparée
+                if audio_path and os.path.isfile(audio_path):
+                    import_audio_to_bin(audio_path)
+
+        if dav_ok:
+            card.set_status(f"P{prise_idx + 1}/{n_pr} ↷ → DaVinci", C["green"])
+        elif video_path:
+            card.set_status(f"P{prise_idx + 1}/{n_pr} ↷ ✓ sauvegardé", C["green"])
+        else:
+            card.set_status(f"P{prise_idx + 1}/{n_pr} ↷ ✓", C["green"])
+
+        self._lbl_lipsync_stage.setVisible(False)
+
+        hist_entry = {
+            "mode":       "t2v",
+            "prompt":     seedance_result.get("prompt", ""),
+            "model":      self._get_model(),
+            "video_path": video_path,
+            "duration":   seedance_result.get("duration", ""),
+        }
+        save_to_history(hist_entry)
+        self.generation_done.emit(hist_entry)
+        self._advance_queue()
+
+    def _on_lipsync_failed(self, seedance_result: dict, clip_idx: int, prise_idx: int, error: str):
+        card = self._clip_cards[clip_idx]
+        n_pr = self._spin_prises.value()
+        card.set_status(f"P{prise_idx + 1}/{n_pr} ↷ ✗", C["red"])
+        self._lbl_lipsync_stage.setVisible(False)
+        # Fallback : import Seedance result normalement
+        self._import_and_advance(seedance_result, clip_idx, prise_idx)
+
+    def _import_and_advance(self, result: dict, clip_idx: int, prise_idx: int):
+        card      = self._clip_cards[clip_idx]
+        n_pr      = self._spin_prises.value()
         clip_name = card.clip().get("name", "") if card else ""
         do_import = self._cb_import.isChecked()
+        local_path = ""
         try:
             ir = import_result(result, get_output_dir(), shot_title=clip_name,
                                import_to_davinci=do_import)
@@ -1399,7 +1567,6 @@ class TabDavinciEdit(QScrollArea):
         else:
             err = ir.get("error", "erreur inconnue")
             card.set_status(f"P{prise_idx + 1}/{n_pr} ✗ {err[:40]}", C["red"])
-            print(f"[DavinciEdit] import_result failed for clip '{clip_name}': {err}")
 
         hist_entry = {
             "mode":       "t2v",
@@ -1410,7 +1577,9 @@ class TabDavinciEdit(QScrollArea):
         }
         save_to_history(hist_entry)
         self.generation_done.emit(hist_entry)
+        self._advance_queue()
 
+    def _advance_queue(self):
         self._queue_pos += 1
         total = len(self._queue)
         done  = self._queue_pos
@@ -1423,9 +1592,19 @@ class TabDavinciEdit(QScrollArea):
         n_pr = self._spin_prises.value()
         card.set_status(f"P{prise_idx + 1}/{n_pr} ✗", C["red"])
         self._queue_pos += 1
+        self._lbl_lipsync_stage.setVisible(False)
         self._process_next()
 
     def _cancel_queue(self):
+        if self._lipsync_worker:
+            try:
+                self._lipsync_worker.finished.disconnect()
+                self._lipsync_worker.failed.disconnect()
+                self._lipsync_worker.progress.disconnect()
+            except Exception:
+                pass
+            self._lipsync_worker.quit()
+            self._lipsync_worker = None
         if self._worker:
             try:
                 self._worker.finished.disconnect()
@@ -1433,11 +1612,16 @@ class TabDavinciEdit(QScrollArea):
                 self._worker.progress.disconnect()
             except Exception:
                 pass
-            self._worker.cancel()
+            if hasattr(self._worker, "cancel"):
+                self._worker.cancel()
+            else:
+                self._worker.quit()
+                self._worker.terminate()
             self._worker = None
         self._queue_pos = len(self._queue)
         self._lbl_queue_info.setText("File annulée.")
         self._lbl_progress.setText("")
+        self._lbl_lipsync_stage.setVisible(False)
         self._progress.setVisible(False)
         self._btn_generate.setEnabled(True)
         self._btn_cancel.setVisible(False)
@@ -1452,6 +1636,7 @@ class TabDavinciEdit(QScrollArea):
         self._btn_generate.setEnabled(True)
         self._btn_cancel.setVisible(False)
         self._btn_open_folder.setVisible(True)
+        self._lbl_lipsync_stage.setVisible(False)
         total = len(self._queue)
         self._lbl_queue_info.setText(f"File terminée — {total} génération(s) complétée(s).")
         self._progress.setValue(100)

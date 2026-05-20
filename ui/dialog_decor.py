@@ -314,11 +314,13 @@ class DecorDialog(QDialog):
         self._gen_mode = QComboBox()
         self._gen_mode.addItem("🖼  Image unique", "single")
         self._gen_mode.addItem("🗺  Sheet 4 vues  (avant · arrière · gauche · droite)", "sheet")
+        self._gen_mode.setCurrentIndex(1)   # Sheet 4 vues par défaut — meilleure navigation spatiale IA
         self._gen_mode.setFixedHeight(34)
         self._gen_mode.setToolTip(
             "Image unique : vue principale du décor.\n"
-            "Sheet 4 vues : une seule image 2×2 montrant le même lieu\n"
-            "depuis l'avant, l'arrière, la gauche et la droite."
+            "Sheet 4 vues (défaut) : image 2×2 montrant le même lieu depuis 4 angles.\n"
+            "Recommandé — permet aux moteurs IA de comprendre le lieu comme un espace 3D\n"
+            "et de générer des mouvements de caméra naturels à travers le décor."
         )
         self._gen_mode.setStyleSheet(
             f"QComboBox{{background:{CP['bg3']};border:1px solid {CP['border']};"

@@ -19,6 +19,7 @@ from ui.page_scenario import PageScenario
 from ui.page_storyboard import PageStoryboard
 from ui.page_doublage import PageDoublage
 from ui.icons import load_icon, badge_pixmap, dim, tint
+from ui.assistant_panel import AssistantPanel, AssistantToggleStrip
 from core.i18n import tr, get_lang, set_lang, retranslate_widget
 
 
@@ -372,8 +373,14 @@ class PandoraWindow(QMainWindow):
         self._stack   = QStackedWidget()
         self._stack.setStyleSheet(f"background:{CP['bg0']};")
 
+        self._assistant         = AssistantPanel()
+        self._assistant.setVisible(False)
+        self._assistant_toggle  = AssistantToggleStrip(self._assistant)
+
         body_lay.addWidget(self._sidebar)
         body_lay.addWidget(self._stack, 1)
+        body_lay.addWidget(self._assistant)
+        body_lay.addWidget(self._assistant_toggle)
         outer.addWidget(body, 1)
 
         self._pages: dict[str, QWidget] = {}
@@ -446,22 +453,42 @@ class PandoraWindow(QMainWindow):
         self._stack.addWidget(seedance)
 
     def _build_global_topbar(self) -> QWidget:
+        from PyQt6.QtWidgets import QStackedLayout
+
         bar = QWidget()
         bar.setFixedHeight(70)
+        bar.setObjectName("GlobalTopBar")
         bar.setStyleSheet(
-            f"background:{CP['bg1']};border-bottom:1px solid {CP['border']};"
+            f"QWidget#GlobalTopBar{{background:{CP['bg1']};"
+            f"border-bottom:1px solid {CP['border']};}}"
         )
-        lay = QHBoxLayout(bar)
-        lay.setContentsMargins(12, 0, 12, 0)
-        lay.setSpacing(0)
 
-        # ── Colonne gauche (vide — stretch=1) ─────────────────────────────────
+        bar_lay = QStackedLayout(bar)
+        bar_lay.setContentsMargins(0, 0, 0, 0)
+        bar_lay.setSpacing(0)
+        bar_lay.setStackingMode(QStackedLayout.StackingMode.StackAll)
+
+        # ── Couche 0 : gauche vide + droite boutons ───────────────────────────
+        _lr = QWidget()
+        _lr.setStyleSheet("background:transparent;")
+        _lr_lay = QHBoxLayout(_lr)
+        _lr_lay.setContentsMargins(12, 0, 12, 0)
+        _lr_lay.setSpacing(0)
+
         _left = QWidget()
         _left.setStyleSheet("background:transparent;")
-        lay.addWidget(_left, 1)
+        _lr_lay.addWidget(_left, 1)   # stretch — remplit tout l'espace à gauche
 
-        # ── Colonne centrale : logo + titre — toujours au centre exact ────────
+        _right = QWidget()
+        _right.setStyleSheet("background:transparent;")
+        _rlay = QHBoxLayout(_right)
+        _rlay.setContentsMargins(0, 0, 0, 0)
+        _rlay.setSpacing(0)
+        _rlay.setAlignment(Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignRight)
+
+        # ── Couche 1 : logo PANDORA — centré géométriquement dans toute la barre
         _center = QWidget()
+        _center.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents)
         _center.setStyleSheet("background:transparent;")
         _clay = QHBoxLayout(_center)
         _clay.setContentsMargins(0, 0, 0, 0)
@@ -492,16 +519,6 @@ class PandoraWindow(QMainWindow):
         )
         _clay.addWidget(title_lbl)
 
-        lay.addWidget(_center)
-
-        # ── Colonne droite : boutons — stretch=1 pour équilibrer la gauche ────
-        _right = QWidget()
-        _right.setStyleSheet("background:transparent;")
-        _rlay = QHBoxLayout(_right)
-        _rlay.setContentsMargins(0, 0, 0, 0)
-        _rlay.setSpacing(0)
-        _rlay.setAlignment(Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignRight)
-
         def _vsep():
             f = QFrame()
             f.setFixedSize(1, 20)
@@ -531,6 +548,28 @@ class PandoraWindow(QMainWindow):
         _rlay.addWidget(_vsep())
         _rlay.addSpacing(6)
 
+        # ── Vérifier les mises à jour ─────────────────────────────────────────
+        self._btn_update_header = QPushButton("↑  Mises à jour")
+        self._btn_update_header.setFixedHeight(26)
+        self._btn_update_header.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._btn_update_header.setToolTip("Vérifier les mises à jour de PANDORA")
+        self._btn_update_header.setStyleSheet(
+            f"QPushButton{{background:transparent;color:{CP['accent']};"
+            f"border:1px solid rgba(78,205,196,0.38);border-radius:5px;"
+            f"font-size:10px;font-weight:700;padding:0 10px;}}"
+            f"QPushButton:hover{{background:rgba(78,205,196,0.09);"
+            f"border-color:rgba(78,205,196,0.70);}}"
+            f"QPushButton:pressed{{background:rgba(78,205,196,0.16);}}"
+            f"QPushButton:disabled{{color:{CP['text_dim']};"
+            f"border-color:{CP['border']};}}"
+        )
+        self._btn_update_header.clicked.connect(self._manual_update_check)
+        _rlay.addWidget(self._btn_update_header)
+
+        _rlay.addSpacing(6)
+        _rlay.addWidget(_vsep())
+        _rlay.addSpacing(6)
+
         # ── Sauvegarder ───────────────────────────────────────────────────────
         self._btn_save_global = QPushButton(tr("btn.save"))
         self._btn_save_global.setFixedHeight(26)
@@ -546,7 +585,11 @@ class PandoraWindow(QMainWindow):
         self._btn_save_global.clicked.connect(self._on_global_save_click)
         _rlay.addWidget(self._btn_save_global)
 
-        lay.addWidget(_right, 1)
+        _lr_lay.addWidget(_right)
+
+        bar_lay.addWidget(_lr)       # couche 0 — gauche/droite
+        bar_lay.addWidget(_center)   # couche 1 — logo centré, passe-transparent
+        bar_lay.setCurrentIndex(1)   # couche 1 au-dessus (z-order)
         return bar
 
     def _on_global_save_click(self):
@@ -582,6 +625,7 @@ class PandoraWindow(QMainWindow):
             if get_lang() != "fr":
                 retranslate_widget(page)
         self._sidebar.set_active(key)
+        self._assistant.set_context(key)
 
     def _refresh_project_page(self):
         """Reconstruit la page Projets après un renommage du projet courant."""
@@ -806,6 +850,31 @@ class PandoraWindow(QMainWindow):
 
         banner.setVisible(False)
         return banner
+
+    def _manual_update_check(self):
+        self._btn_update_header.setEnabled(False)
+        self._btn_update_header.setText("Vérification…")
+        from api.update_check import UpdateCheckWorker
+        self._manual_update_worker = UpdateCheckWorker()
+        self._manual_update_worker.update_available.connect(self._on_update_available)
+        self._manual_update_worker.update_available.connect(
+            lambda v, u: self._reset_update_btn()
+        )
+        self._manual_update_worker.no_update.connect(self._on_no_update_manual)
+        self._manual_update_worker.check_failed.connect(self._on_update_check_failed)
+        self._manual_update_worker.start()
+
+    def _reset_update_btn(self):
+        self._btn_update_header.setEnabled(True)
+        self._btn_update_header.setText("↑  Mises à jour")
+
+    def _on_no_update_manual(self):
+        self._reset_update_btn()
+        from PyQt6.QtWidgets import QMessageBox
+        QMessageBox.information(self, "Mises à jour", "PANDORA est à jour.")
+
+    def _on_update_check_failed(self):
+        self._reset_update_btn()
 
     def _start_update_check(self):
         from api.update_check import UpdateCheckWorker

@@ -2,8 +2,12 @@
 api/tts.py — Workers audio pour la page Doublage.
 
 Modèles fal.ai utilisés :
-  - Kokoro TTS       : fal-ai/kokoro          — $0.02/1000 chars
-  - BiRefNet         : fal-ai/birefnet         — détourage fond, PNG alpha
+  - ElevenLabs Turbo v2.5 : fal-ai/elevenlabs/tts/turbo-v2.5 — $0.05/1000 chars, multilingue FR
+  - Index TTS 2           : fal-ai/index-tts-2/text-to-speech — $0.002/s, clonage voix multilingue
+  - SFX 1.6 (Mirelo AI)  : mirelo-ai/sfx1.6/text-to-audio    — $0.01/s, ambiances sonores
+  - Kokoro TTS            : fal-ai/kokoro                     — $0.02/1000 chars (conservé pour pipeline)
+  - Lux TTS               : fal-ai/lux-tts                    — $0.0014/1000 chars (conservé pour pipeline)
+  - BiRefNet              : fal-ai/birefnet                   — détourage fond, PNG alpha
 """
 
 import os
@@ -12,6 +16,7 @@ import time
 from PyQt6.QtCore import QThread, pyqtSignal
 from core.config import load_config
 from core.pandora_dirs import get_bin_dir
+from core.worker import humanize_api_error
 
 
 # ── Voix Kokoro disponibles ───────────────────────────────────────────────────
@@ -159,7 +164,103 @@ class KokoroTTSWorker(QThread):
             self.finished.emit(path)
 
         except Exception as e:
-            self.failed.emit(f"Erreur Kokoro TTS : {e}")
+            self.failed.emit(humanize_api_error(f"Erreur Kokoro TTS : {e}"))
+
+
+# ── Worker Lux TTS — clonage de voix ─────────────────────────────────────────
+
+class LuxTTSWorker(QThread):
+    """
+    Clonage de voix via Lux TTS (fal-ai/lux-tts).
+    Prend un échantillon audio de référence + un texte → audio 48kHz avec la voix clonée.
+    Coût : ~$0.0014/1000 chars.
+    """
+    progress = pyqtSignal(int, str)
+    finished = pyqtSignal(str)   # chemin local du fichier audio
+    failed   = pyqtSignal(str)
+
+    def __init__(self, text: str, voice_sample_path: str, label: str = ""):
+        super().__init__()
+        self._text              = text
+        self._voice_sample_path = voice_sample_path
+        self._label             = label or "lux_voice"
+
+    def run(self):
+        cfg = load_config()
+        key = cfg.get("api_key", "").strip()
+        if not key:
+            self._mock()
+        else:
+            self._real(key)
+
+    def _mock(self):
+        steps = [
+            (20, "Clonage voix (mode mock)…"),
+            (60, "Synthèse vocale clonée…"),
+            (90, "Finalisation…"),
+            (100, "Terminé — mode mock (aucune clé fal.ai)"),
+        ]
+        for pct, msg in steps:
+            self.progress.emit(pct, msg)
+            time.sleep(0.4)
+        self.finished.emit("")
+
+    def _real(self, key: str):
+        try:
+            import fal_client
+            import requests
+
+            os.environ["FAL_KEY"] = key
+            fal_client.api_key = key
+
+            # Upload voice sample
+            self.progress.emit(10, "Upload de l'échantillon vocal…")
+            import sys, io as _io
+            _cap = _io.StringIO()
+            _old_out, _old_err = sys.stdout, sys.stderr
+            sys.stdout = sys.stderr = _cap
+            try:
+                voice_url = fal_client.upload_file(self._voice_sample_path)
+            finally:
+                sys.stdout = _old_out
+                sys.stderr = _old_err
+
+            n_chars   = len(self._text)
+            cost_est  = n_chars / 1000 * 0.0014
+            self.progress.emit(30, f"Clonage vocal — {n_chars} caractères (~${cost_est:.4f})…")
+
+            result = fal_client.subscribe(
+                "fal-ai/lux-tts",
+                arguments={
+                    "audio_url": voice_url,
+                    "prompt":    self._text,
+                },
+                with_logs=False,
+            )
+
+            audio_url = ""
+            if isinstance(result, dict):
+                audio_url = (
+                    result.get("audio", {}).get("url", "")
+                    or result.get("audio_url", "")
+                )
+            if not audio_url:
+                raise RuntimeError(f"Réponse inattendue Lux TTS : {str(result)[:200]}")
+
+            self.progress.emit(75, "Téléchargement du fichier audio…")
+            data = requests.get(audio_url, timeout=120).content
+
+            safe = "".join(c for c in self._label if c.isalnum() or c in " -_").strip() or "lux"
+            ts   = int(time.time())
+            path = os.path.join(_audio_output_dir(), f"{safe}_{ts}.wav")
+            with open(path, "wb") as f:
+                f.write(data)
+
+            self.progress.emit(100, f"Voix clonée ✓  (~${cost_est:.4f})")
+            self.finished.emit(path)
+
+        except Exception as e:
+            self.failed.emit(humanize_api_error(f"Erreur Lux TTS : {e}"))
 
 
 # ── Worker BiRefNet — détourage fond ─────────────────────────────────────────
@@ -242,4 +343,375 @@ class RemoveBackgroundWorker(QThread):
             self.finished.emit(out_path)
 
         except Exception as e:
-            self.failed.emit(f"Erreur BiRefNet : {e}")
+            self.failed.emit(humanize_api_error(f"Erreur BiRefNet : {e}"))
+
+
+# ── ElevenLabs TTS Turbo v2.5 — voix multilingues ────────────────────────────
+
+ELEVENLABS_VOICES = [
+    "Charlotte", "River", "Alice", "Matilda", "Sarah", "Laura",
+    "Aria", "Jessica", "Lily", "Callum", "Daniel", "George",
+    "Brian", "Charlie", "Chris", "Eric", "Liam", "Roger", "Will", "Bill",
+]
+
+ELEVENLABS_VOICES_FR = [
+    "Charlotte", "River", "Alice", "Matilda", "Lily",
+    "Daniel", "George", "Brian",
+]
+
+
+class ElevenLabsWorker(QThread):
+    """
+    Génère un fichier audio via ElevenLabs TTS Turbo v2.5 (fal-ai).
+    Supporte le français via language_code='fr'.
+    Coût : ~$0.05/1000 chars.
+    """
+    progress = pyqtSignal(int, str)
+    finished = pyqtSignal(str)
+    failed   = pyqtSignal(str)
+
+    def __init__(self, text: str, voice: str = "Charlotte",
+                 language_code: str = "fr", speed: float = 1.0,
+                 label: str = ""):
+        super().__init__()
+        self._text          = text
+        self._voice         = voice
+        self._language_code = language_code
+        self._speed         = max(0.7, min(1.2, speed))
+        self._label         = label or "elevenlabs"
+
+    def run(self):
+        cfg = load_config()
+        key = cfg.get("api_key", "").strip()
+        if not key:
+            self._mock()
+        else:
+            self._real(key)
+
+    def _mock(self):
+        for pct, msg in [
+            (20, "ElevenLabs TTS (mode mock)…"),
+            (60, "Génération de l'audio…"),
+            (100, "Terminé — mode mock (aucune clé fal.ai)"),
+        ]:
+            self.progress.emit(pct, msg)
+            time.sleep(0.4)
+        self.finished.emit("")
+
+    def _real(self, key: str):
+        try:
+            import fal_client
+            import requests
+
+            os.environ["FAL_KEY"] = key
+            self.progress.emit(10, "Connexion ElevenLabs TTS…")
+
+            n_chars  = len(self._text)
+            cost_est = n_chars / 1000 * 0.05
+            self.progress.emit(20, f"Synthèse {n_chars} caractères (~${cost_est:.4f})…")
+
+            args: dict = {
+                "text":  self._text,
+                "voice": self._voice,
+                "speed": self._speed,
+            }
+            if self._language_code:
+                args["language_code"] = self._language_code
+
+            result = fal_client.subscribe(
+                "fal-ai/elevenlabs/tts/turbo-v2.5",
+                arguments=args,
+            )
+
+            audio_url = ""
+            if isinstance(result, dict):
+                audio = result.get("audio", {})
+                audio_url = audio.get("url", "") if isinstance(audio, dict) else ""
+                if not audio_url:
+                    audio_url = result.get("url", "")
+            if not audio_url:
+                raise RuntimeError(f"URL audio manquante : {str(result)[:200]}")
+
+            self.progress.emit(70, "Téléchargement du fichier audio…")
+            data = requests.get(audio_url, timeout=120).content
+
+            safe = "".join(c for c in self._label if c.isalnum() or c in " -_").strip() or "eleven"
+            ts   = int(time.time())
+            path = os.path.join(_audio_output_dir(), f"{safe}_{ts}.mp3")
+            with open(path, "wb") as f:
+                f.write(data)
+
+            self.progress.emit(100, f"Audio généré ✓  (~${cost_est:.4f})")
+            self.finished.emit(path)
+
+        except Exception as e:
+            self.failed.emit(humanize_api_error(f"Erreur ElevenLabs : {e}"))
+
+
+# ── Index TTS 2 — clonage de voix multilingue ────────────────────────────────
+
+class IndexTTS2Worker(QThread):
+    """
+    Clonage de voix multilingue via Index TTS 2 (fal-ai/index-tts-2).
+    Supporte le français nativement.
+    Coût : ~$0.002/s de son généré.
+    """
+    progress = pyqtSignal(int, str)
+    finished = pyqtSignal(str)
+    failed   = pyqtSignal(str)
+
+    def __init__(self, text: str, voice_sample_path: str, label: str = "", language: str = "fr"):
+        super().__init__()
+        self._text              = text
+        self._voice_sample_path = voice_sample_path
+        self._label             = label or "indextts2"
+        self._language          = language or "fr"
+
+    def run(self):
+        cfg = load_config()
+        key = cfg.get("api_key", "").strip()
+        if not key:
+            self._mock()
+        else:
+            self._real(key)
+
+    def _mock(self):
+        for pct, msg in [
+            (20, "Clonage voix Index TTS 2 (mode mock)…"),
+            (60, "Synthèse vocale clonée…"),
+            (100, "Terminé — mode mock (aucune clé fal.ai)"),
+        ]:
+            self.progress.emit(pct, msg)
+            time.sleep(0.4)
+        self.finished.emit("")
+
+    def _real(self, key: str):
+        try:
+            import fal_client
+            import requests
+
+            os.environ["FAL_KEY"] = key
+            fal_client.api_key = key
+
+            # Upload voice sample
+            self.progress.emit(10, "Upload de l'échantillon vocal…")
+            import sys, io as _io
+            _cap = _io.StringIO()
+            _old_out, _old_err = sys.stdout, sys.stderr
+            sys.stdout = sys.stderr = _cap
+            try:
+                voice_url = fal_client.upload_file(self._voice_sample_path)
+            finally:
+                sys.stdout = _old_out
+                sys.stderr = _old_err
+
+            self.progress.emit(30, "Clonage vocal Index TTS 2…")
+
+            result = fal_client.subscribe(
+                "fal-ai/index-tts-2/text-to-speech",
+                arguments={
+                    "prompt":    self._text,
+                    "audio_url": voice_url,
+                    "language":  self._language,
+                },
+                with_logs=False,
+            )
+
+            audio_url = ""
+            if isinstance(result, dict):
+                audio = result.get("audio", {})
+                audio_url = audio.get("url", "") if isinstance(audio, dict) else ""
+                if not audio_url:
+                    audio_url = result.get("audio_url", "") or result.get("url", "")
+            if not audio_url:
+                raise RuntimeError(f"URL audio manquante : {str(result)[:200]}")
+
+            self.progress.emit(75, "Téléchargement du fichier audio…")
+            data = requests.get(audio_url, timeout=120).content
+
+            safe = "".join(c for c in self._label if c.isalnum() or c in " -_").strip() or "indextts2"
+            ts   = int(time.time())
+            path = os.path.join(_audio_output_dir(), f"{safe}_{ts}.wav")
+            with open(path, "wb") as f:
+                f.write(data)
+
+            self.progress.emit(100, "Voix clonée ✓  (~$0.002/s)")
+            self.finished.emit(path)
+
+        except Exception as e:
+            self.failed.emit(humanize_api_error(f"Erreur Index TTS 2 : {e}"))
+
+
+# ── F5-TTS — Clonage voix multilingue (FR/EN/ES/ZH…) ────────────────────────
+
+class F5TTSWorker(QThread):
+    """
+    Clonage de voix multilingue via F5-TTS (fal-ai/f5-tts).
+    Langue détectée automatiquement depuis le texte — pas de paramètre language.
+    Supporte FR, EN, ES, DE, IT, ZH et plus.
+    Coût : ~$0.003/s estimé.
+    """
+    progress = pyqtSignal(int, str)
+    finished = pyqtSignal(str)
+    failed   = pyqtSignal(str)
+
+    def __init__(self, text: str, voice_sample_path: str, label: str = ""):
+        super().__init__()
+        self._text              = text
+        self._voice_sample_path = voice_sample_path
+        self._label             = label or "f5tts"
+
+    def run(self):
+        cfg = load_config()
+        key = cfg.get("api_key", "").strip()
+        if not key:
+            self._mock()
+        else:
+            self._real(key)
+
+    def _mock(self):
+        for pct, msg in [
+            (20, "Clonage voix F5-TTS (mode mock)…"),
+            (60, "Synthèse vocale multilingue…"),
+            (100, "Terminé — mode mock (aucune clé fal.ai)"),
+        ]:
+            self.progress.emit(pct, msg)
+            time.sleep(0.4)
+        self.finished.emit("")
+
+    def _real(self, key: str):
+        try:
+            import fal_client
+            import requests
+
+            os.environ["FAL_KEY"] = key
+            fal_client.api_key = key
+
+            self.progress.emit(10, "Upload de l'échantillon vocal…")
+            import sys, io as _io
+            _cap = _io.StringIO()
+            _old_out, _old_err = sys.stdout, sys.stderr
+            sys.stdout = sys.stderr = _cap
+            try:
+                voice_url = fal_client.upload_file(self._voice_sample_path)
+            finally:
+                sys.stdout = _old_out
+                sys.stderr = _old_err
+
+            self.progress.emit(30, "Clonage vocal F5-TTS (détection langue auto)…")
+
+            result = fal_client.subscribe(
+                "fal-ai/f5-tts",
+                arguments={
+                    "gen_text":      self._text,
+                    "ref_audio_url": voice_url,
+                    "model_type":    "F5-TTS",
+                    "remove_silence": True,
+                },
+                with_logs=False,
+            )
+
+            audio_url = ""
+            if isinstance(result, dict):
+                audio_obj = result.get("audio_url", {})
+                audio_url = audio_obj.get("url", "") if isinstance(audio_obj, dict) else ""
+                if not audio_url:
+                    audio_url = result.get("url", "")
+            if not audio_url:
+                raise RuntimeError(f"URL audio manquante : {str(result)[:200]}")
+
+            self.progress.emit(75, "Téléchargement du fichier audio…")
+            data = requests.get(audio_url, timeout=120).content
+
+            safe = "".join(c for c in self._label if c.isalnum() or c in " -_").strip() or "f5tts"
+            ts   = int(time.time())
+            path = os.path.join(_audio_output_dir(), f"{safe}_{ts}.wav")
+            with open(path, "wb") as f:
+                f.write(data)
+
+            self.progress.emit(100, "Voix clonée ✓  (F5-TTS multilingue)")
+            self.finished.emit(path)
+
+        except Exception as e:
+            self.failed.emit(humanize_api_error(f"Erreur F5-TTS : {e}"))
+
+
+# ── SFX 1.6 — Ambiances sonores ──────────────────────────────────────────────
+
+class SFX1Worker(QThread):
+    """
+    Génère des ambiances sonores depuis un texte via SFX 1.6 (Mirelo AI).
+    Coût : ~$0.01/s de son généré.
+    """
+    progress = pyqtSignal(int, str)
+    finished = pyqtSignal(str)
+    failed   = pyqtSignal(str)
+
+    def __init__(self, text: str, duration: float = 10.0, label: str = ""):
+        super().__init__()
+        self._text     = text
+        self._duration = float(duration)
+        self._label    = label or "sfx"
+
+    def run(self):
+        cfg = load_config()
+        key = cfg.get("api_key", "").strip()
+        if not key:
+            self._mock()
+        else:
+            self._real(key)
+
+    def _mock(self):
+        for pct, msg in [
+            (20, "Ambiance SFX 1.6 (mode mock)…"),
+            (60, "Création sonore…"),
+            (100, "Terminé — mode mock (aucune clé fal.ai)"),
+        ]:
+            self.progress.emit(pct, msg)
+            time.sleep(0.4)
+        self.finished.emit("")
+
+    def _real(self, key: str):
+        try:
+            import fal_client
+            import requests
+
+            os.environ["FAL_KEY"] = key
+            cost_est = self._duration * 0.01
+            self.progress.emit(10, f"SFX 1.6 — {self._duration}s (~${cost_est:.2f})…")
+
+            result = fal_client.subscribe(
+                "mirelo-ai/sfx1.6/text-to-audio",
+                arguments={
+                    "text_prompt": self._text,
+                    "duration":    self._duration,
+                },
+            )
+
+            audio_url = ""
+            if isinstance(result, dict):
+                audio = result.get("audio", {})
+                if isinstance(audio, dict):
+                    audio_url = audio.get("url", "") or audio.get("ref", "")
+                elif isinstance(audio, str):
+                    audio_url = audio
+                if not audio_url:
+                    audio_url = (result.get("url", "") or result.get("ref", "")
+                                 or result.get("audio_url", ""))
+            if not audio_url:
+                raise RuntimeError(f"URL audio manquante : {str(result)[:200]}")
+
+            self.progress.emit(70, "Téléchargement de l'ambiance…")
+            data = requests.get(audio_url, timeout=120).content
+
+            safe = "".join(c for c in self._label if c.isalnum() or c in " -_").strip() or "sfx"
+            ts   = int(time.time())
+            path = os.path.join(_audio_output_dir(), f"{safe}_{ts}.wav")
+            with open(path, "wb") as f:
+                f.write(data)
+
+            self.progress.emit(100, f"Ambiance générée ✓  {self._duration}s · ~${cost_est:.2f}")
+            self.finished.emit(path)
+
+        except Exception as e:
+            self.failed.emit(humanize_api_error(f"Erreur SFX 1.6 : {e}"))

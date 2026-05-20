@@ -9,7 +9,9 @@ from ui.styles import CP
 from ui.icons import load_icon
 from ui.davinci_panel import DaVinciPanel
 from core.config import load_config, save_config
+from core.version import VERSION
 from davinci.bridge import install_pandora_send
+from api.update_check import UpdateCheckWorker
 
 _FAL_KEYS_URL       = "https://fal.ai/dashboard/keys"
 _ANTHROPIC_KEYS_URL = "https://console.anthropic.com/settings/keys"
@@ -213,6 +215,22 @@ class SettingsPage(QScrollArea):
         # ── Sauvegarde / Test ─────────────────────────────────────────────────
         btn_row = QHBoxLayout()
 
+        btn_update = QPushButton("↑  Vérifier les mises à jour")
+        btn_update.setMinimumHeight(44)
+        btn_update.setCursor(Qt.CursorShape.PointingHandCursor)
+        btn_update.setStyleSheet("""
+            QPushButton{
+                background:#1a6bbf;color:#ffffff;border:none;
+                border-radius:8px;font-size:12px;font-weight:700;
+                letter-spacing:1px;padding:0 20px;
+            }
+            QPushButton:hover{background:#2480d9;}
+            QPushButton:pressed{background:#1558a0;}
+            QPushButton:disabled{background:#1a3d5c;color:#5a7a99;}
+        """)
+        btn_update.clicked.connect(self._check_updates)
+        self._btn_update = btn_update
+
         btn_save = QPushButton("💾  Sauvegarder")
         btn_save.setMinimumHeight(44)
         btn_save.setStyleSheet(f"""
@@ -250,12 +268,43 @@ class SettingsPage(QScrollArea):
         """)
         btn_test_ant.clicked.connect(self.test_anthropic_connection)
 
+        btn_row.addWidget(btn_update)
         btn_row.addWidget(btn_save)
         btn_row.addWidget(btn_test)
         btn_row.addWidget(btn_test_ant)
         btn_row.addStretch()
         lay.addLayout(btn_row)
         lay.addStretch()
+
+    def _check_updates(self):
+        self._btn_update.setEnabled(False)
+        self._btn_update.setText("Vérification…")
+        self._update_worker = UpdateCheckWorker()
+        self._update_worker.update_available.connect(self._on_update_available)
+        self._update_worker.no_update.connect(self._on_no_update)
+        self._update_worker.check_failed.connect(self._on_update_failed)
+        self._update_worker.start()
+
+    def _on_update_available(self, version: str, url: str):
+        self._btn_update.setEnabled(True)
+        self._btn_update.setText("↑  Vérifier les mises à jour")
+        msg = QMessageBox(self)
+        msg.setWindowTitle("Mise à jour disponible")
+        msg.setText(f"Une nouvelle version est disponible : <b>v{version}</b><br><br>Voulez-vous ouvrir la page de téléchargement ?")
+        msg.setStandardButtons(QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
+        msg.setDefaultButton(QMessageBox.StandardButton.Yes)
+        if msg.exec() == QMessageBox.StandardButton.Yes:
+            webbrowser.open(url)
+
+    def _on_no_update(self):
+        self._btn_update.setEnabled(True)
+        self._btn_update.setText("↑  Vérifier les mises à jour")
+        QMessageBox.information(self, "À jour", f"PANDORA v{VERSION} est la dernière version disponible ✓")
+
+    def _on_update_failed(self):
+        self._btn_update.setEnabled(True)
+        self._btn_update.setText("↑  Vérifier les mises à jour")
+        QMessageBox.warning(self, "Vérification impossible", "Impossible de contacter le serveur.\nVérifiez votre connexion internet.")
 
     def _install_pandora_send(self):
         ok, msg = install_pandora_send()

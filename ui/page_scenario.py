@@ -330,13 +330,14 @@ class PageScenario(QWidget):
         self._title_edit = QLineEdit()
         self._title_edit.setPlaceholderText("Titre du scénario…")
         self._title_edit.setFixedHeight(34)
-        self._title_edit.setMinimumWidth(120)
+        self._title_edit.setFixedWidth(160)
         self._title_edit.setStyleSheet(
             f"QLineEdit{{background:{CP['bg2']};border:1px solid {CP['border']};"
             f"border-radius:6px;color:{CP['text_primary']};font-size:13px;font-weight:600;padding:0 12px;}}"
             f"QLineEdit:focus{{border-color:{CP['accent2_dim']};}}"
         )
         self._title_edit.textChanged.connect(self._schedule_autosave)
+        self._title_edit.textChanged.connect(self._adjust_title_width)
         tl.addWidget(self._title_edit)
 
         # ── Versions (top bar, juste à droite du titre) ───────────────────────
@@ -468,7 +469,7 @@ class PageScenario(QWidget):
         sl.setSpacing(10)
 
         # ── Style visuel ──────────────────────────────────────────────────────
-        _style_lbl = QLabel("Style :")
+        _style_lbl = QLabel("Style visuel")
         _style_lbl.setStyleSheet(
             f"color:{CP['text_dim']};font-size:10px;font-weight:600;"
             f"letter-spacing:0.5px;background:transparent;"
@@ -495,31 +496,24 @@ class PageScenario(QWidget):
                     _sep_i.setForeground(QColor(CP.get("accent2", CP.get("accent", "#7c6bff"))))
             self._film_style_combo.addItem(f"    {_s['icon']}  {_s['name']}", _s["key"])
         self._film_style_combo.setFixedHeight(30)
-        self._film_style_combo.setMinimumWidth(220)
-        self._film_style_combo.setMaximumWidth(300)
+        self._film_style_combo.setMinimumWidth(160)
         self._film_style_combo.setStyleSheet(
             f"QComboBox{{background:{CP['bg2']};border:1px solid {CP['border']};"
-            f"border-radius:6px;color:{CP['text_secondary']};font-size:11px;padding:0 10px;}}"
-            f"QComboBox:hover{{border-color:{CP['border_bright']};}}"
-            f"QComboBox::drop-down{{border:none;width:20px;}}"
-            f"QComboBox::down-arrow{{image:none;border-left:4px solid transparent;"
-            f"border-right:4px solid transparent;border-top:5px solid {CP['text_dim']};"
-            f"margin-right:6px;}}"
-            f"QComboBox QAbstractItemView{{background:{CP['bg2']};border:1px solid {CP['border_bright']};"
-            f"selection-background-color:{CP['accent_dim']};color:{CP['text_primary']};"
-            f"font-size:11px;padding:4px;}}"
+            f"border-radius:5px;color:{CP['text_primary']};font-size:10px;padding:0 6px;}}"
+            f"QComboBox:focus{{border-color:{CP.get('accent2_dim', CP['border_bright'])};}}"
+            f"QComboBox::drop-down{{border:none;width:18px;}}"
+            f"QComboBox QAbstractItemView{{background:{CP['bg2']};color:{CP['text_primary']};"
+            f"selection-background-color:{CP.get('accent2_dim', CP['bg3'])};border:1px solid {CP['border']};}}"
         )
         self._film_style_combo.currentIndexChanged.connect(self._schedule_autosave)
         self._film_style_combo.currentIndexChanged.connect(self._on_scenario_style_changed)
         sl.addWidget(self._film_style_combo)
 
-        # ── Séparateur vertical ────────────────────────────────────────────────
         _vs = QFrame()
-        _vs.setFixedSize(1, 24)
-        _vs.setStyleSheet(f"background:{CP['border']};")
-        sl.addSpacing(6)
+        _vs.setFrameShape(QFrame.Shape.VLine)
+        _vs.setFixedHeight(20)
+        _vs.setStyleSheet(f"color:{CP['border']};background:{CP['border']};")
         sl.addWidget(_vs)
-        sl.addSpacing(6)
 
         # ── Durée du film ─────────────────────────────────────────────────────
         self._dur_defined_check = QCheckBox("Durée cible :")
@@ -834,6 +828,19 @@ class PageScenario(QWidget):
         ):
             l_gen.addWidget(_b)
 
+        _red = CP.get("red", "#ff4f6a")
+        # ── Bouton Tout Générer (placé dans la zone basse dédiée, créé ici pour _set_ai_busy) ──
+        self._btn_generate_all = QPushButton()
+        self._btn_generate_all.setFixedHeight(60)
+        self._btn_generate_all.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._btn_generate_all.setStyleSheet(
+            f"QPushButton{{background:{CP['bg2']};border:1.5px solid {_red};"
+            f"border-radius:8px;text-align:left;padding:0 10px;}}"
+            f"QPushButton:hover{{background:rgba(255,79,106,0.08);border-color:{_red};}}"
+            f"QPushButton:pressed{{background:rgba(255,79,106,0.16);}}"
+            f"QPushButton:disabled{{opacity:0.35;border-color:{CP['border']};}}"
+        )
+        self._btn_generate_all.clicked.connect(self._on_generate_all)
         tog_gen = _make_toggle("☁  Générer depuis le scénario", c_gen, expanded=True)
         sc_lay.addWidget(tog_gen)
         sc_lay.addWidget(c_gen)
@@ -921,6 +928,67 @@ class PageScenario(QWidget):
         b_lay.addWidget(self._btn_goto_storyboard)
 
         root_lay.addWidget(bottom)
+
+        # ══════════════════════════════════════════════════════════════════════
+        # Zone basse : Génération complète — isolée visuellement
+        # ══════════════════════════════════════════════════════════════════════
+        gen_all_zone = QWidget()
+        gen_all_zone.setStyleSheet(
+            f"background:{CP['bg1']};"
+        )
+        ga_lay = QVBoxLayout(gen_all_zone)
+        ga_lay.setContentsMargins(16, 10, 16, 12)
+        ga_lay.setSpacing(8)
+
+        self._gen_all_progress_bar = QProgressBar()
+        self._gen_all_progress_bar.setRange(0, 0)
+        self._gen_all_progress_bar.setFixedHeight(4)
+        self._gen_all_progress_bar.setTextVisible(False)
+        self._gen_all_progress_bar.setVisible(False)
+        self._gen_all_progress_bar.setStyleSheet(
+            f"QProgressBar{{background:{CP['bg3']};border:none;border-radius:2px;}}"
+            f"QProgressBar::chunk{{background:{CP.get('red','#ff4f6a')};border-radius:2px;}}"
+        )
+        ga_lay.addWidget(self._gen_all_progress_bar)
+
+        self._gen_all_status_lbl = QLabel("")
+        self._gen_all_status_lbl.setVisible(False)
+        self._gen_all_status_lbl.setWordWrap(True)
+        self._gen_all_status_lbl.setStyleSheet(
+            f"color:{CP['text_dim']};font-size:9px;font-family:'Consolas',monospace;"
+            f"background:transparent;"
+        )
+        ga_lay.addWidget(self._gen_all_status_lbl)
+
+        _ga_btn_lay = QVBoxLayout(self._btn_generate_all)
+        _ga_btn_lay.setContentsMargins(6, 6, 6, 6)
+        _ga_btn_lay.setSpacing(1)
+        _ga_btn_row = QHBoxLayout()
+        _ga_btn_row.setSpacing(6)
+        _ga_btn_ico = QLabel("⚡")
+        _ga_btn_ico.setStyleSheet(
+            f"color:{CP.get('red','#ff4f6a')};font-size:14px;background:transparent;border:none;"
+        )
+        _ga_btn_txt = QLabel("Tout générer")
+        _ga_btn_txt.setStyleSheet(
+            f"color:{CP.get('red','#ff4f6a')};font-size:10px;font-weight:700;"
+            f"background:transparent;border:none;"
+        )
+        _ga_btn_row.addWidget(_ga_btn_ico)
+        _ga_btn_row.addWidget(_ga_btn_txt)
+        _ga_btn_row.addStretch()
+        _ga_btn_sub = QLabel(
+            "Personnages · Décors · Accessoires · HMC · Véhicules"
+            " · Storyboard · Images · Moods"
+        )
+        _ga_btn_sub.setStyleSheet(
+            f"color:{CP['text_dim']};font-size:8px;background:transparent;border:none;"
+        )
+        _ga_btn_lay.addLayout(_ga_btn_row)
+        _ga_btn_lay.addWidget(_ga_btn_sub)
+        ga_lay.addWidget(self._btn_generate_all)
+
+        root_lay.addWidget(gen_all_zone)
         return w
 
     # ── Navigation ────────────────────────────────────────────────────────────
@@ -1043,6 +1111,12 @@ class PageScenario(QWidget):
 
     # ── Save ─────────────────────────────────────────────────────────────────
 
+    def _adjust_title_width(self, text: str = ""):
+        fm = self._title_edit.fontMetrics()
+        text = text or self._title_edit.text() or self._title_edit.placeholderText()
+        w = fm.horizontalAdvance(text) + 28  # 28 = left+right padding
+        self._title_edit.setFixedWidth(max(160, min(w, 480)))
+
     def _schedule_autosave(self):
         self._autosave_timer.start()
 
@@ -1122,6 +1196,7 @@ class PageScenario(QWidget):
             self._btn_format, self._btn_arrange, self._btn_storyboard,
             self._btn_gen_characters, self._btn_gen_decors,
             self._btn_gen_accessories, self._btn_gen_hmc, self._btn_gen_vehicles,
+            self._btn_generate_all,
         ):
             btn.setEnabled(not busy)
         self._ai_progress_bar.setVisible(busy)
@@ -1248,43 +1323,14 @@ class PageScenario(QWidget):
             )
             if reply != QMessageBox.StandardButton.Yes:
                 return
-        from api.screenplay import GenerateStoryboardWorker
-        self._set_ai_busy(True)
-        self._ai_progress_lbl.setText("Génération du découpage via Claude…")
-        self._result_area.clear()
-        self._result_area.setVisible(False)
-        self._btn_undo_action.setVisible(False)
         dur_secs = (self._dur_min.value() * 60 + self._dur_sec.value()) if self._dur_defined_check.isChecked() else 0
-        self._worker = GenerateStoryboardWorker(text, dur_secs)
-        self._worker.finished.connect(self._on_storyboard_done)
-        self._worker.failed.connect(self._on_ai_fail)
-        self._worker.start()
-
-    def _on_storyboard_done(self, shots: list):
-        self._set_ai_busy(False)
-        try:
-            import core.storyboard as sb_api
-            sc_id = (self._current or {}).get("id", "")
-            vid = sb_api.DEFAULT_VERSION_ID
-            # Remplace le contenu de la version par défaut par le nouveau découpage
-            sb_api.clear_version_shots(vid)
-            for shot in shots:
-                shot["scenario_id"] = sc_id
-                shot["version_id"] = vid
-                sb_api.save_shot(shot)
-        except Exception as e:
-            self._ai_progress_lbl.setText(f"Erreur lors de la sauvegarde : {e}")
-            return
-        self._ai_progress_lbl.setText(f"{len(shots)} plans importés dans le Storyboard ✓")
-        self._show_log(
-            f"Découpage généré : {len(shots)} plans.\n\n"
-            + "\n".join(
-                f"Plan {s.get('number','?')} — {s.get('scene_title','')}"
-                f" ({s.get('duration', 5):.1f}s)"
-                for s in shots
-            )
-        )
-        self._btn_goto_storyboard.setVisible(True)
+        sc_id = (self._current or {}).get("id", "")
+        from ui.dialog_storyboard_generate import StoryboardGenerateDialog
+        dlg = StoryboardGenerateDialog(text, dur_secs, sc_id, parent=self)
+        if dlg.exec() == StoryboardGenerateDialog.DialogCode.Accepted and dlg._shots:
+            count = len(dlg._shots)
+            self._ai_progress_lbl.setText(f"{count} plans importés dans le Storyboard ✓")
+            self._btn_goto_storyboard.setVisible(True)
 
     # ── Handlers extraction ───────────────────────────────────────────────────
 
@@ -1308,197 +1354,49 @@ class PageScenario(QWidget):
         return w
 
     def _on_gen_characters(self):
-        from api.screenplay import ExtractCharactersWorker
-        w = self._start_extraction(ExtractCharactersWorker, "Extraction des personnages")
-        if w:
-            w.finished.connect(self._on_gen_characters_done)
-            w.start()
-
-    def _on_gen_characters_done(self, items: list):
-        import core.casting as casting_api
-        saved = []
-        for item in items:
-            if not item.get("name"):
-                continue
-            s = casting_api.save_character({
-                "name":          item.get("name", ""),
-                "description":   item.get("description", ""),
-                "role":          item.get("role", "Secondaire"),
-                "image_path":    "",
-                "accessory_ids": [],
-                "hmc_ids":       [],
-            })
-            saved.append(s)
-        count = len(saved)
-        list_txt = "\n".join(
-            f"• {it.get('name', '?')}  ({it.get('role', '')})" for it in saved
-        )
-        self._set_ai_busy(False)
-        self._ai_progress_lbl.setText(f"{count} personnages créés dans Casting ✓")
-        self._show_log(
-            f"{count} personnages créés dans l'onglet Casting.\n\n"
-            "Fiches vides — éditez-les manuellement dans Casting pour ajouter les visuels.\n\n"
-            + list_txt
-        )
+        text = self._get_text()
+        if not text:
+            self._ai_progress_lbl.setText("Écris d'abord un scénario.")
+            return
+        from ui.dialog_extract_generate import ExtractGenerateDialog
+        dlg = ExtractGenerateDialog.for_characters(text, self)
+        dlg.exec()
 
     def _on_gen_decors(self):
-        from api.screenplay import ExtractDecorsWorker
-        w = self._start_extraction(ExtractDecorsWorker, "Extraction des décors")
-        if w:
-            w.finished.connect(self._on_gen_decors_done)
-            w.start()
-
-    def _on_gen_decors_done(self, items: list):
-        import core.decors as decors_api
-        import core.storyboard as sb_api
-        shots = sb_api.list_shots()
-
-        saved = []
-        for item in items:
-            if not item.get("name"):
-                continue
-            s = decors_api.save_decor({
-                "name":       item.get("name", ""),
-                "prompt":     item.get("description", ""),
-                "category":   item.get("category", "Autre"),
-                "image_path": "",
-                "ref_paths":  [],
-            })
-            saved.append(s)
-
-            # Auto-assign decor to storyboard shots by matching scene headers and decor name
-            scene_headers = [h.upper() for h in item.get("scene_headers", [])]
-            decor_name_up = item.get("name", "").upper()
-            decor_id   = s.get("id", "")
-            decor_name = s.get("name", "")
-            matched_shot_ids = []
-            for shot in shots:
-                shot_decor = (shot.get("decor_name") or "").upper()
-                shot_header = (shot.get("scene_title") or "").upper()
-                match = (
-                    (shot_decor and shot_decor == decor_name_up)
-                    or any(h and h in shot_header for h in scene_headers)
-                    or any(h and shot_decor and shot_decor in h for h in scene_headers)
-                )
-                if match:
-                    matched_shot_ids.append(shot.get("id", ""))
-                    updated = dict(shot)
-                    updated["decor_id"]   = decor_id
-                    updated["decor_name"] = decor_name
-                    sb_api.save_shot(updated)
-            if matched_shot_ids:
-                s["assigned_shots"] = matched_shot_ids
-                decors_api.save_decor(s)
-        count = len(saved)
-        list_txt = "\n".join(
-            f"• {it.get('name', '?')}  [{it.get('category', '')}]" for it in saved
-        )
-        self._set_ai_busy(False)
-        self._ai_progress_lbl.setText(f"{count} décors créés dans Décors ✓")
-        self._show_log(
-            f"{count} décors créés dans l'onglet Décors.\n\n"
-            "Fiches vides — éditez-les manuellement dans Décors pour ajouter les visuels.\n\n"
-            + list_txt
-        )
+        text = self._get_text()
+        if not text:
+            self._ai_progress_lbl.setText("Écris d'abord un scénario.")
+            return
+        from ui.dialog_extract_generate import ExtractGenerateDialog
+        dlg = ExtractGenerateDialog.for_decors(text, self)
+        dlg.exec()
 
     def _on_gen_accessories(self):
-        from api.screenplay import ExtractAccessoriesWorker
-        w = self._start_extraction(ExtractAccessoriesWorker, "Extraction des accessoires")
-        if w:
-            w.finished.connect(self._on_gen_accessories_done)
-            w.start()
-
-    def _on_gen_accessories_done(self, items: list):
-        import core.accessories as acc_api
-        saved = []
-        for item in items:
-            if not item.get("name"):
-                continue
-            s = acc_api.save_accessory({
-                "name":        item.get("name", ""),
-                "description": item.get("description", ""),
-                "category":    item.get("category", "Autre…"),
-                "image_path":  "",
-            })
-            saved.append(s)
-        count = len(saved)
-        list_txt = "\n".join(
-            f"• {it.get('name', '?')}  [{it.get('category', '')}]" for it in saved
-        )
-        self._set_ai_busy(False)
-        self._ai_progress_lbl.setText(f"{count} accessoires créés dans Accessoires ✓")
-        self._show_log(
-            f"{count} accessoires créés dans l'onglet Accessoires.\n\n"
-            "Fiches vides — éditez-les manuellement dans Accessoires pour ajouter les visuels.\n\n"
-            + list_txt
-        )
+        text = self._get_text()
+        if not text:
+            self._ai_progress_lbl.setText("Écris d'abord un scénario.")
+            return
+        from ui.dialog_extract_generate import ExtractGenerateDialog
+        dlg = ExtractGenerateDialog.for_accessories(text, self)
+        dlg.exec()
 
     def _on_gen_hmc(self):
-        from api.screenplay import ExtractHMCWorker
-        w = self._start_extraction(ExtractHMCWorker, "Extraction du HMC")
-        if w:
-            w.finished.connect(self._on_gen_hmc_done)
-            w.start()
+        text = self._get_text()
+        if not text:
+            self._ai_progress_lbl.setText("Écris d'abord un scénario.")
+            return
+        from ui.dialog_extract_generate import ExtractGenerateDialog
+        dlg = ExtractGenerateDialog.for_hmc(text, self)
+        dlg.exec()
 
     def _on_gen_vehicles(self):
-        from api.screenplay import ExtractVehiclesWorker
-        w = self._start_extraction(ExtractVehiclesWorker, "Extraction des véhicules")
-        if w:
-            w.finished.connect(self._on_gen_vehicles_done)
-            w.start()
-
-    def _on_gen_vehicles_done(self, items: list):
-        import core.vehicles as veh_api
-        saved = []
-        for item in items:
-            if not item.get("name"):
-                continue
-            s = veh_api.save_vehicle({
-                "name":        item.get("name", ""),
-                "description": item.get("description", ""),
-                "category":    item.get("category", "Autre"),
-                "image_path":  "",
-            })
-            saved.append(s)
-        count = len(saved)
-        list_txt = "\n".join(
-            f"• {it.get('name', '?')}  [{it.get('category', '')}]" for it in saved
-        )
-        self._set_ai_busy(False)
-        self._ai_progress_lbl.setText(f"{count} véhicules créés dans Véhicules ✓")
-        self._show_log(
-            f"{count} véhicules créés dans l'onglet Véhicules.\n\n"
-            "Fiches vides — éditez-les manuellement dans Véhicules pour ajouter les visuels.\n\n"
-            + list_txt
-        )
-
-    def _on_gen_hmc_done(self, items: list):
-        import core.hmc as hmc_api
-        saved = []
-        for item in items:
-            if not item.get("name"):
-                continue
-            s = hmc_api.save_hmc_item({
-                "name":           item.get("name", ""),
-                "description":    item.get("description", ""),
-                "hmc_type":       item.get("hmc_type", "Habit"),
-                "image_path":     "",
-                "character_name": item.get("character_name", ""),
-            })
-            saved.append(s)
-        count = len(saved)
-        list_txt = "\n".join(
-            f"• {it.get('name', '?')}  [{it.get('hmc_type', '')}]"
-            + (f"  — {it.get('character_name')}" if it.get("character_name") else "")
-            for it in saved
-        )
-        self._set_ai_busy(False)
-        self._ai_progress_lbl.setText(f"{count} éléments HMC créés dans HMC ✓")
-        self._show_log(
-            f"{count} éléments HMC créés dans l'onglet HMC.\n\n"
-            "Fiches vides — éditez-les manuellement dans HMC pour ajouter les visuels.\n\n"
-            + list_txt
-        )
+        text = self._get_text()
+        if not text:
+            self._ai_progress_lbl.setText("Écris d'abord un scénario.")
+            return
+        from ui.dialog_extract_generate import ExtractGenerateDialog
+        dlg = ExtractGenerateDialog.for_vehicles(text, self)
+        dlg.exec()
 
     def _on_ai_fail(self, err: str):
         self._set_ai_busy(False)
@@ -1741,6 +1639,510 @@ class PageScenario(QWidget):
             self._current = scenario_api.save_scenario(self._current)
         self._refresh_version_combo()
         self._ai_progress_lbl.setText(f"« {label} » supprimée ✓")
+
+    # ── Tout Générer — pipeline complet ──────────────────────────────────────────
+
+    def _on_generate_all(self):
+        """Fenêtre de confirmation, puis pipeline complet si accepté."""
+        if not self._get_text():
+            self._ai_progress_lbl.setText("Écris d'abord un scénario.")
+            return
+
+        # Comptage des éléments existants pour l'estimation
+        def _count(mod_fn):
+            try: return len(mod_fn())
+            except Exception: return 0
+        import core.casting as _ca_m
+        import core.decors as _dc_m
+        import core.accessories as _ac_m
+        import core.hmc as _hm_m
+        import core.vehicles as _ve_m
+        import core.storyboard as _sb_m
+        n_chars  = _count(_ca_m.list_characters)
+        n_decors = _count(_dc_m.list_decors)
+        n_acc    = _count(_ac_m.list_accessories)
+        n_hmc    = _count(_hm_m.list_hmc_items)
+        n_veh    = _count(_ve_m.list_vehicles)
+        n_shots  = _count(_sb_m.list_shots)
+        n_elems  = n_chars + n_decors + n_acc + n_hmc + n_veh
+
+        from PyQt6.QtWidgets import QDialog, QVBoxLayout, QHBoxLayout as _QHB, QLabel as _QL, QPushButton as _QPB, QFrame as _QF
+        dlg = QDialog(self)
+        dlg.setWindowTitle("Tout Générer — Confirmation")
+        dlg.setFixedWidth(560)
+        dlg.setStyleSheet(f"QDialog{{background:{CP['bg1']};}}")
+        lay = QVBoxLayout(dlg)
+        lay.setContentsMargins(28, 28, 28, 24)
+        lay.setSpacing(14)
+
+        _red = CP.get("red", "#ff4f6a")
+        t = _QL("⚡  Génération complète du projet")
+        t.setStyleSheet(
+            f"color:{_red};font-size:16px;font-weight:800;background:transparent;"
+        )
+        lay.addWidget(t)
+
+        body = _QL(
+            "Vous êtes sur le point de lancer la génération complète :\n\n"
+            "  ☁  Extraction depuis le scénario (Claude IA)\n"
+            "       personnages · décors · accessoires · HMC · véhicules · storyboard\n\n"
+            "  ◉  Génération d'images (Nano Banana)\n"
+            "       1 image par personnage · 1 image par décor · 1 image par accessoire\n"
+            "       1 image par élément HMC · 1 image par véhicule\n\n"
+            "  ◈  Génération des Moods storyboard (Flux IA)\n"
+            "       1 aperçu par plan storyboard"
+        )
+        body.setWordWrap(True)
+        body.setStyleSheet(
+            f"color:{CP['text_primary']};font-size:11px;background:transparent;"
+        )
+        lay.addWidget(body)
+
+        _s1 = _QF(); _s1.setFixedHeight(1)
+        _s1.setStyleSheet(f"background:{CP['border']};")
+        lay.addWidget(_s1)
+
+        if n_elems > 0 or n_shots > 0:
+            min_c = n_elems * 0.039 + n_shots * 0.06
+            max_c = n_elems * 0.15  + n_shots * 0.06
+            cost_txt = (
+                f"Éléments actuels : {n_chars} personnages · {n_decors} décors · "
+                f"{n_acc} accessoires · {n_hmc} HMC · {n_veh} véhicules\n"
+                f"Plans storyboard : {n_shots}\n"
+                f"Estimation (éléments actuels) : ~${min_c:.2f} — ~${max_c:.2f}\n"
+                f"L'extraction peut créer plus d'éléments — le coût final sera plus élevé."
+            )
+        else:
+            cost_txt = (
+                "Estimation (sans données actuelles) :\n"
+                "  • Images Nano Banana : ~$0.039/image (standard) — $0.15/image (Pro)\n"
+                "  • Moods Flux IA : ~$0.06/image\n"
+                "  • Extraction Claude IA : < $0.05"
+            )
+
+        cost_lbl = _QL(cost_txt)
+        cost_lbl.setWordWrap(True)
+        cost_lbl.setStyleSheet(
+            f"color:{CP['text_secondary']};font-size:10px;font-family:'Consolas',monospace;"
+            f"background:{CP['bg2']};border:1px solid {CP['border']};border-radius:6px;"
+            f"padding:10px;"
+        )
+        lay.addWidget(cost_lbl)
+
+        warn = _QL(
+            "⚠  Les tarifs sont indicatifs et peuvent varier.\n"
+            "Consultez fal.ai pour vérifier les prix actuels avant de lancer."
+        )
+        warn.setWordWrap(True)
+        warn.setStyleSheet(
+            f"color:{CP['text_dim']};font-size:10px;font-style:italic;background:transparent;"
+        )
+        lay.addWidget(warn)
+
+        advice = _QL(
+            "💡  La méthode la moins coûteuse\n\n"
+            "Identifiez vos éléments manuellement et créez-les un à un dans les onglets "
+            "dédiés : Castings pour les personnages, Décors, Accessoires, HMC, Véhicules. "
+            "Vous gardez ainsi la main sur chaque génération d'image et ne payez que "
+            "ce que vous validez.\n\n"
+            "« Tout générer » est pratique pour un premier jet rapide, mais chaque image "
+            "générée automatiquement est facturée — le coût peut rapidement devenir élevé "
+            "si le scénario contient de nombreux éléments."
+        )
+        advice.setWordWrap(True)
+        advice.setStyleSheet(
+            f"color:{CP.get('accent','#7c6af7')};font-size:10px;"
+            f"background:rgba(124,106,247,0.08);border:1px solid rgba(124,106,247,0.30);"
+            f"border-radius:6px;padding:10px;"
+        )
+        lay.addWidget(advice)
+
+        _s2 = _QF(); _s2.setFixedHeight(1)
+        _s2.setStyleSheet(f"background:{CP.get('red','#ff4f6a')};")
+        lay.addWidget(_s2)
+
+        warn_delete = _QL(
+            "⚠  ATTENTION — SUPPRESSION PRÉALABLE\n\n"
+            "Avant de régénérer, cette opération va d'abord supprimer\n"
+            "TOUS les personnages, décors, accessoires, HMC, véhicules\n"
+            "et plans storyboard existants.\n\n"
+            "Cette action est irréversible. Partez d'un scénario finalisé."
+        )
+        warn_delete.setWordWrap(True)
+        warn_delete.setStyleSheet(
+            f"color:{CP.get('red','#ff4f6a')};font-size:10px;font-weight:700;"
+            f"background:rgba(255,79,106,0.08);border:1px solid rgba(255,79,106,0.35);"
+            f"border-radius:6px;padding:10px;"
+        )
+        lay.addWidget(warn_delete)
+
+        btn_row = _QHB()
+        btn_cancel = _QPB("Annuler")
+        btn_cancel.setFixedHeight(38)
+        btn_cancel.setStyleSheet(
+            f"QPushButton{{background:{CP['bg3']};color:{CP['text_secondary']};"
+            f"border:1px solid {CP['border']};border-radius:7px;"
+            f"font-size:11px;font-weight:600;padding:0 20px;}}"
+            f"QPushButton:hover{{background:{CP['bg4']};color:{CP['text_primary']};}}"
+        )
+        btn_cancel.clicked.connect(dlg.reject)
+        btn_launch = _QPB("⚡  Lancer la génération complète")
+        btn_launch.setFixedHeight(38)
+        btn_launch.setStyleSheet(
+            f"QPushButton{{background:transparent;color:{_red};"
+            f"border:1.5px solid {_red};border-radius:7px;"
+            f"font-size:11px;font-weight:700;padding:0 20px;}}"
+            f"QPushButton:hover{{background:rgba(255,79,106,0.12);}}"
+        )
+        btn_launch.clicked.connect(dlg.accept)
+        btn_row.addWidget(btn_cancel)
+        btn_row.addStretch()
+        btn_row.addWidget(btn_launch)
+        lay.addLayout(btn_row)
+
+        if dlg.exec() != QDialog.DialogCode.Accepted:
+            return
+        self._gen_all_start()
+
+    def _gen_all_start(self):
+        text = self._get_text()
+
+        # ── Supprimer tous les éléments existants ─────────────────────────────
+        try:
+            import core.casting as _ca_m
+            import core.decors as _dc_m
+            import core.accessories as _ac_m
+            import core.hmc as _hm_m
+            import core.vehicles as _ve_m
+            import core.storyboard as _sb_m
+            for c in _ca_m.list_characters(): _ca_m.delete_character(c["id"])
+            for d in _dc_m.list_decors():     _dc_m.delete_decor(d["id"])
+            for a in _ac_m.list_accessories():_ac_m.delete_accessory(a["id"])
+            for h in _hm_m.list_hmc_items():  _hm_m.delete_hmc_item(h["id"])
+            for v in _ve_m.list_vehicles():   _ve_m.delete_vehicle(v["id"])
+            _sb_m.clear_version_shots()
+        except Exception:
+            pass
+
+        # ── Extraction + génération images : une fenêtre par catégorie ─────────
+        from ui.dialog_extract_generate import ExtractGenerateDialog
+        from PyQt6.QtCore import QTimer
+        for make_dlg in [
+            lambda: ExtractGenerateDialog.for_characters(text, self),
+            lambda: ExtractGenerateDialog.for_decors(text, self),
+            lambda: ExtractGenerateDialog.for_accessories(text, self),
+            lambda: ExtractGenerateDialog.for_hmc(text, self),
+            lambda: ExtractGenerateDialog.for_vehicles(text, self),
+        ]:
+            dlg = make_dlg()
+            dlg._auto_close = True
+            QTimer.singleShot(150, lambda d=dlg: d._start(generate=True))
+            if not dlg.exec():  # 0 = fermé/annulé — stoppe toute la séquence
+                return
+
+        # ── Storyboard + moods en arrière-plan ────────────────────────────────
+        self._gen_all_workers: list = []
+        self._gen_all_elements: dict = {
+            "chars": [], "decors": [], "accessories": [], "hmc": [], "vehicles": [],
+        }
+        self._gen_all_shots: list = []
+        self._gen_all_image_queue: list = []
+        self._gen_all_error_count = 0
+        self._gen_all_queue = [
+            self._gen_all_step_storyboard,
+            self._gen_all_step_moods,
+        ]
+        self._set_ai_busy(True)
+        self._ai_progress_lbl.setText("Génération complète — Storyboard…")
+        if hasattr(self, "_gen_all_progress_bar"):
+            self._gen_all_progress_bar.setVisible(True)
+            self._gen_all_status_lbl.setVisible(True)
+            self._gen_all_status_lbl.setText("Génération du storyboard…")
+        self._gen_all_run_next()
+
+    def _gen_all_run_next(self):
+        if not self._gen_all_queue:
+            self._gen_all_finish()
+            return
+        self._gen_all_queue.pop(0)()
+
+    def _gen_all_step_error(self, error: str, phase: str):
+        self._gen_all_error_count += 1
+        self._ai_progress_lbl.setText(f"⚠ Erreur {phase} : {error[:80]} — poursuite…")
+        if hasattr(self, "_gen_all_status_lbl"):
+            self._gen_all_status_lbl.setText(f"⚠ Erreur {phase} : {error[:80]}")
+        self._gen_all_run_next()
+
+    # ── Extractions ───────────────────────────────────────────────────────────
+
+    def _gen_all_step_chars(self):
+        from api.screenplay import ExtractCharactersWorker
+        self._ai_progress_lbl.setText("Génération complète [1/8] — Personnages…")
+        w = ExtractCharactersWorker(self._get_text())
+        w.finished.connect(self._gen_all_chars_done)
+        w.failed.connect(lambda e: self._gen_all_step_error(e, "Personnages"))
+        self._gen_all_workers.append(w); w.start()
+
+    def _gen_all_chars_done(self, items: list):
+        import core.casting as casting_api
+        for item in items:
+            if not item.get("name"): continue
+            s = casting_api.save_character({
+                "name": item.get("name", ""), "description": item.get("description", ""),
+                "role": item.get("role", "Secondaire"), "image_path": "",
+                "accessory_ids": [], "hmc_ids": [],
+            })
+            self._gen_all_elements["chars"].append(s)
+        self._gen_all_run_next()
+
+    def _gen_all_step_decors(self):
+        from api.screenplay import ExtractDecorsWorker
+        self._ai_progress_lbl.setText("Génération complète [2/8] — Décors…")
+        w = ExtractDecorsWorker(self._get_text())
+        w.finished.connect(self._gen_all_decors_done)
+        w.failed.connect(lambda e: self._gen_all_step_error(e, "Décors"))
+        self._gen_all_workers.append(w); w.start()
+
+    def _gen_all_decors_done(self, items: list):
+        import core.decors as decors_api
+        for item in items:
+            if not item.get("name"): continue
+            s = decors_api.save_decor({
+                "name": item.get("name", ""), "prompt": item.get("description", ""),
+                "category": item.get("category", "Autre"), "image_path": "", "ref_paths": [],
+            })
+            self._gen_all_elements["decors"].append(s)
+        self._gen_all_run_next()
+
+    def _gen_all_step_accessories(self):
+        from api.screenplay import ExtractAccessoriesWorker
+        self._ai_progress_lbl.setText("Génération complète [3/8] — Accessoires…")
+        w = ExtractAccessoriesWorker(self._get_text())
+        w.finished.connect(self._gen_all_accessories_done)
+        w.failed.connect(lambda e: self._gen_all_step_error(e, "Accessoires"))
+        self._gen_all_workers.append(w); w.start()
+
+    def _gen_all_accessories_done(self, items: list):
+        import core.accessories as acc_api
+        for item in items:
+            if not item.get("name"): continue
+            s = acc_api.save_accessory({
+                "name": item.get("name", ""), "description": item.get("description", ""),
+                "category": item.get("category", "Autre…"), "image_path": "",
+            })
+            self._gen_all_elements["accessories"].append(s)
+        self._gen_all_run_next()
+
+    def _gen_all_step_hmc(self):
+        from api.screenplay import ExtractHMCWorker
+        self._ai_progress_lbl.setText("Génération complète [4/8] — HMC…")
+        w = ExtractHMCWorker(self._get_text())
+        w.finished.connect(self._gen_all_hmc_done)
+        w.failed.connect(lambda e: self._gen_all_step_error(e, "HMC"))
+        self._gen_all_workers.append(w); w.start()
+
+    def _gen_all_hmc_done(self, items: list):
+        import core.hmc as hmc_api
+        for item in items:
+            if not item.get("name"): continue
+            s = hmc_api.save_hmc_item({
+                "name": item.get("name", ""), "description": item.get("description", ""),
+                "hmc_type": item.get("hmc_type", "Habit"), "image_path": "",
+                "character_name": item.get("character_name", ""),
+            })
+            self._gen_all_elements["hmc"].append(s)
+        self._gen_all_run_next()
+
+    def _gen_all_step_vehicles(self):
+        from api.screenplay import ExtractVehiclesWorker
+        self._ai_progress_lbl.setText("Génération complète [5/8] — Véhicules…")
+        w = ExtractVehiclesWorker(self._get_text())
+        w.finished.connect(self._gen_all_vehicles_done)
+        w.failed.connect(lambda e: self._gen_all_step_error(e, "Véhicules"))
+        self._gen_all_workers.append(w); w.start()
+
+    def _gen_all_vehicles_done(self, items: list):
+        import core.vehicles as veh_api
+        for item in items:
+            if not item.get("name"): continue
+            s = veh_api.save_vehicle({
+                "name": item.get("name", ""), "description": item.get("description", ""),
+                "category": item.get("category", "Autre"), "image_path": "",
+            })
+            self._gen_all_elements["vehicles"].append(s)
+        self._gen_all_run_next()
+
+    def _gen_all_step_storyboard(self):
+        from api.screenplay import GenerateStoryboardWorker
+        self._ai_progress_lbl.setText("Génération complète [6/8] — Storyboard…")
+        dur = (
+            self._dur_min.value() * 60 + self._dur_sec.value()
+        ) if self._dur_defined_check.isChecked() else 0
+        w = GenerateStoryboardWorker(self._get_text(), dur)
+        w.finished.connect(self._gen_all_storyboard_done)
+        w.failed.connect(lambda e: self._gen_all_step_error(e, "Storyboard"))
+        self._gen_all_workers.append(w); w.start()
+
+    def _gen_all_storyboard_done(self, shots: list):
+        try:
+            import core.storyboard as sb_api
+            sc_id = (self._current or {}).get("id", "")
+            vid = sb_api.DEFAULT_VERSION_ID
+            sb_api.clear_version_shots(vid)
+            for shot in shots:
+                try:
+                    shot["scenario_id"] = sc_id
+                    shot["version_id"] = vid
+                    saved = sb_api.save_shot(shot)
+                    self._gen_all_shots.append(saved)
+                except Exception:
+                    self._gen_all_error_count += 1
+        except Exception as e:
+            self._gen_all_error_count += 1
+            self._ai_progress_lbl.setText(f"Erreur storyboard : {str(e)[:80]}")
+        self._gen_all_run_next()
+
+    # ── Images ────────────────────────────────────────────────────────────────
+
+    def _gen_all_step_images(self):
+        self._ai_progress_lbl.setText("Génération complète [7/8] — Images…")
+        self._gen_all_image_queue = (
+            [("character",  c) for c in self._gen_all_elements["chars"]]
+            + [("decor",    d) for d in self._gen_all_elements["decors"]]
+            + [("accessory", a) for a in self._gen_all_elements["accessories"]]
+            + [("hmc",       h) for h in self._gen_all_elements["hmc"]]
+            + [("vehicle",   v) for v in self._gen_all_elements["vehicles"]]
+        )
+        self._gen_all_image_total = len(self._gen_all_image_queue)
+        self._gen_all_image_done  = 0
+        self._gen_all_next_image()
+
+    def _gen_all_next_image(self):
+        if not self._gen_all_image_queue:
+            self._gen_all_run_next()
+            return
+
+        item_type, item = self._gen_all_image_queue.pop(0)
+        self._gen_all_image_done += 1
+        n, t = self._gen_all_image_done, self._gen_all_image_total
+        self._ai_progress_lbl.setText(
+            f"Génération complète [7/8] — Image {n}/{t} "
+            f"({item_type} : {item.get('name','?')[:28]})"
+        )
+
+        from api.nano_banana import GeneratePortraitWorker, GenerateItemWorker, GenerateDecorSheetWorker
+
+        if item_type == "character":
+            prompt = item.get("description") or item.get("name", "")
+            w = GeneratePortraitWorker(prompt, item.get("name", ""),
+                                       gen_mode="classic", num_images=1)
+            def _done_portrait(p, _s, _i=item):
+                img = p or _s  # portrait_path toujours "", sheet_path = image réelle
+                if img:
+                    import core.casting as _c; _i["image_path"] = img; _c.save_character(_i)
+                self._gen_all_next_image()
+            w.finished.connect(_done_portrait)
+            w.failed.connect(lambda _e: (
+                self.__dict__.update({"_gen_all_error_count": self._gen_all_error_count + 1}),
+                self._gen_all_next_image(),
+            ))
+        else:
+            _subdir_map = {
+                "decor": ("decors", "decors", "location"),
+                "accessory": ("accessories", "accessories", "accessory"),
+                "hmc": ("hmc", "hmc", "outfit/makeup/hair"),
+                "vehicle": ("vehicles", "vehicles", "vehicle"),
+            }
+            _api_map = {
+                "decor": "core.decors",
+                "accessory": "core.accessories",
+                "hmc": "core.hmc",
+                "vehicle": "core.vehicles",
+            }
+            _save_map = {
+                "decor": "save_decor",
+                "accessory": "save_accessory",
+                "hmc": "save_hmc_item",
+                "vehicle": "save_vehicle",
+            }
+            subdir, _, hint = _subdir_map.get(item_type, ("accessories", "", ""))
+            prompt_key = "prompt" if item_type == "decor" else "description"
+            prompt = item.get(prompt_key) or item.get("name", "")
+            _mod  = _api_map.get(item_type, "core.accessories")
+            _sfn  = _save_map.get(item_type, "save_accessory")
+            if item_type == "decor":
+                w = GenerateDecorSheetWorker(prompt, item.get("name", ""), num_images=1)
+            else:
+                w = GenerateItemWorker(prompt, item.get("name", ""),
+                                       subdir=subdir, num_images=1, subject_hint=hint)
+            def _done_item(p, _i=item, _m=_mod, _f=_sfn):
+                if p:
+                    import importlib; m = importlib.import_module(_m)
+                    _i["image_path"] = p; getattr(m, _f)(_i)
+                self._gen_all_next_image()
+            w.finished.connect(_done_item)
+            w.failed.connect(lambda _e: (
+                self.__dict__.update({"_gen_all_error_count": self._gen_all_error_count + 1}),
+                self._gen_all_next_image(),
+            ))
+
+        self._gen_all_workers.append(w)
+        w.start()
+
+    # ── Moods ─────────────────────────────────────────────────────────────────
+
+    def _gen_all_step_moods(self):
+        self._ai_progress_lbl.setText("Génération complète [8/8] — Moods…")
+        shots = self._gen_all_shots
+        if not shots:
+            try:
+                import core.storyboard as sb_api
+                shots = sb_api.list_shots()
+            except Exception:
+                pass
+        if not shots:
+            self._gen_all_run_next()
+            return
+        from api.apercu import MoodBatchWorker
+        w = MoodBatchWorker(shots)
+        w.shot_progress.connect(lambda cur, tot, msg:
+            self._ai_progress_lbl.setText(
+                f"Génération complète [8/8] — Mood {cur}/{tot} : {msg}"
+            )
+        )
+        w.shot_failed.connect(lambda _sid, _e:
+            self.__dict__.update({"_gen_all_error_count": self._gen_all_error_count + 1})
+        )
+        w.all_done.connect(self._gen_all_run_next)
+        self._gen_all_workers.append(w); w.start()
+
+    def _gen_all_finish(self):
+        self._set_ai_busy(False)
+        errs = self._gen_all_error_count
+        try:
+            import core.casting as _ca_m, core.decors as _dc_m
+            import core.accessories as _ac_m, core.hmc as _hm_m, core.vehicles as _ve_m
+            n_chars  = len(_ca_m.list_characters())
+            n_decors = len(_dc_m.list_decors())
+            n_acc    = len(_ac_m.list_accessories())
+            n_hmc    = len(_hm_m.list_hmc_items())
+            n_veh    = len(_ve_m.list_vehicles())
+        except Exception:
+            n_chars = n_decors = n_acc = n_hmc = n_veh = 0
+        msg = (
+            f"✓  Génération complète terminée — "
+            f"{n_chars} personnages · {n_decors} décors · "
+            f"{n_acc} accessoires · {n_hmc} HMC · {n_veh} véhicules · "
+            f"{len(self._gen_all_shots)} plans"
+        )
+        if errs:
+            msg += f" ({errs} erreur{'s' if errs > 1 else ''})"
+        self._ai_progress_lbl.setText(msg)
+        if hasattr(self, "_gen_all_progress_bar"):
+            self._gen_all_progress_bar.setVisible(False)
+            self._gen_all_status_lbl.setText(msg)
+        self._btn_goto_storyboard.setVisible(True)
+        self._gen_all_workers.clear()
 
     # ── Lifecycle ─────────────────────────────────────────────────────────────
 

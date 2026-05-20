@@ -1889,6 +1889,37 @@ class PageStoryboard(QWidget):
             self._refresh_snap_combo()
             self._render()
 
+    def _on_sync(self):
+        if not self._all_shots:
+            return
+        from ui.dialog_storyboard_sync import StoryboardSyncConfirmDialog, StoryboardSyncDialog
+        confirm = StoryboardSyncConfirmDialog(len(self._all_shots), parent=self)
+        if confirm.exec() != StoryboardSyncConfirmDialog.DialogCode.Accepted:
+            return
+        dlg = StoryboardSyncDialog(self._all_shots, parent=self)
+        if dlg.exec() == StoryboardSyncDialog.DialogCode.Accepted:
+            self._all_shots = sb_api.list_shots(self._active_version_id)
+            self._render()
+
+    def _on_clear_shots(self):
+        """Supprime tous les plans du découpage actuel pour permettre une régénération."""
+        n = len(self._all_shots)
+        if not n:
+            return
+        reply = QMessageBox.question(
+            self, "Vider le découpage",
+            f"Supprimer les {n} plan(s) du découpage actuel ?\n\n"
+            "Le découpage sera vidé pour permettre une régénération depuis le scénario.\n"
+            "Cette action est irréversible.",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+        )
+        if reply != QMessageBox.StandardButton.Yes:
+            return
+        for shot in list(self._all_shots):
+            sb_api.delete_shot(shot["id"])
+        self._all_shots = []
+        self._render()
+
     # ── Page des plans ────────────────────────────────────────────────────────
 
     def _build_shots_page(self) -> QWidget:
@@ -2146,6 +2177,26 @@ class PageStoryboard(QWidget):
         self._btn_analyze = QPushButton()
         self._btn_analyze.setVisible(False)
 
+        _sync_accent = CP.get("accent2", "#7c6bff")
+        self._btn_sync = QPushButton("⟳  Synchronisation")
+        self._btn_sync.setFixedHeight(34)
+        self._btn_sync.setToolTip(
+            "Synchronise les prompts Seedance avec les descriptions actuelles\n"
+            "du casting, des décors, accessoires, HMC et véhicules.\n"
+            "Rapproche les noms légèrement différents (ex : « Le Samouraï » ↔ « samouraï »).\n"
+            "Utilise Claude Haiku pour détecter et corriger les incohérences."
+        )
+        self._btn_sync.setStyleSheet(
+            f"QPushButton{{background:transparent;color:{_sync_accent};"
+            f"border:1px solid {_sync_accent};border-radius:8px;"
+            f"font-size:11px;font-weight:700;padding:0 14px;}}"
+            f"QPushButton:hover{{background:rgba(124,107,255,0.12);}}"
+            f"QPushButton:pressed{{background:rgba(124,107,255,0.22);}}"
+            f"QPushButton:disabled{{color:{CP['text_dim']};border-color:{CP['border']};}}"
+        )
+        self._btn_sync.clicked.connect(self._on_sync)
+        lay.addWidget(self._btn_sync)
+
         self._btn_batch_mood = QPushButton("✦  Générer les Moods")
         self._btn_batch_mood.setFixedHeight(34)
         self._btn_batch_mood.setStyleSheet(
@@ -2169,6 +2220,20 @@ class PageStoryboard(QWidget):
         )
         btn_new.clicked.connect(self._on_new)
         lay.addWidget(btn_new)
+
+        self._btn_clear_shots = QPushButton("✕  Supprimer")
+        self._btn_clear_shots.setFixedHeight(34)
+        self._btn_clear_shots.setStyleSheet(
+            f"QPushButton{{background:transparent;color:{CP['red']};"
+            f"border:1px solid {CP['red']};border-radius:8px;"
+            f"font-size:11px;font-weight:700;padding:0 14px;}}"
+            f"QPushButton:hover{{background:rgba(220,50,50,0.12);}}"
+            f"QPushButton:pressed{{background:rgba(220,50,50,0.25);}}"
+            f"QPushButton:disabled{{color:{CP['text_dim']};border-color:{CP['border']};}}"
+        )
+        self._btn_clear_shots.setToolTip("Supprimer tous les plans du découpage actuel pour le régénérer")
+        self._btn_clear_shots.clicked.connect(self._on_clear_shots)
+        lay.addWidget(self._btn_clear_shots)
 
         self._btn_del_sb = QPushButton("Supprimer")
         self._btn_del_sb.setFixedHeight(34)

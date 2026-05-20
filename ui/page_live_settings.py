@@ -1,0 +1,289 @@
+"""
+ui/page_live_settings.py — Paramètres PANDORA | Live.
+
+Connexion Resolume par défaut + clés API utilisées par le module Live.
+"""
+
+from PyQt6.QtWidgets import (
+    QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
+    QLineEdit, QSpinBox, QFrame,
+)
+from PyQt6.QtCore import Qt
+from ui.styles import CP
+
+
+def _section_title(text: str) -> QLabel:
+    lbl = QLabel(text)
+    lbl.setStyleSheet(
+        f"color:{CP['text_secondary']};font-size:10px;font-weight:700;"
+        f"letter-spacing:3px;font-family:'Consolas',monospace;"
+        f"background:transparent;border:none;"
+    )
+    return lbl
+
+
+def _label(text: str) -> QLabel:
+    lbl = QLabel(text)
+    lbl.setStyleSheet(
+        f"color:{CP['text_secondary']};font-size:11px;"
+        f"background:transparent;border:none;"
+    )
+    return lbl
+
+
+def _input(placeholder: str = "", width: int = 320) -> QLineEdit:
+    e = QLineEdit()
+    e.setPlaceholderText(placeholder)
+    e.setFixedHeight(36)
+    if width:
+        e.setFixedWidth(width)
+    e.setStyleSheet(
+        f"QLineEdit{{background:{CP['bg3']};border:1px solid {CP['border']};"
+        f"border-radius:6px;color:{CP['text_primary']};font-size:12px;padding:0 12px;}}"
+        f"QLineEdit:focus{{border-color:{CP['accent2']};}}"
+    )
+    return e
+
+
+def _separator() -> QFrame:
+    sep = QFrame()
+    sep.setFixedHeight(1)
+    sep.setStyleSheet(f"background:{CP['border']};")
+    return sep
+
+
+class PageLiveSettings(QWidget):
+    """Page Paramètres — connexion Resolume + clés API Live."""
+
+    def __init__(self):
+        super().__init__()
+        self.setStyleSheet(f"background:{CP['bg0']};")
+
+        scroll_area = QWidget()
+        scroll_area.setStyleSheet("background:transparent;")
+        root = QVBoxLayout(self)
+        root.setContentsMargins(0, 0, 0, 0)
+        root.setSpacing(0)
+
+        content = QWidget()
+        content.setStyleSheet("background:transparent;")
+        lay = QVBoxLayout(content)
+        lay.setContentsMargins(48, 36, 48, 36)
+        lay.setSpacing(0)
+
+        # ── Titre ──────────────────────────────────────────────────────────────
+        title = QLabel("Paramètres Live")
+        title.setStyleSheet(
+            f"color:{CP['text_primary']};font-size:22px;font-weight:800;"
+            f"background:transparent;border:none;"
+        )
+        lay.addWidget(title)
+        lay.addSpacing(4)
+
+        sub = QLabel("Configuration de la connexion Resolume et des clés API.")
+        sub.setStyleSheet(
+            f"color:{CP['text_dim']};font-size:12px;"
+            f"background:transparent;border:none;"
+        )
+        lay.addWidget(sub)
+        lay.addSpacing(32)
+
+        # ── Section Resolume ────────────────────────────────────────────────────
+        lay.addWidget(_section_title("CONNEXION RESOLUME"))
+        lay.addSpacing(14)
+
+        resolume_card = QFrame()
+        resolume_card.setStyleSheet(
+            f"QFrame{{background:{CP['bg2']};border:1px solid {CP['border']};"
+            f"border-radius:12px;}}"
+        )
+        rc = QVBoxLayout(resolume_card)
+        rc.setContentsMargins(24, 20, 24, 20)
+        rc.setSpacing(14)
+
+        info = QLabel(
+            "Resolume Arena ou Avenue doit être lancé avec Wire activé :\n"
+            "Preferences → Wire → Enable REST API  (port par défaut : 8080)"
+        )
+        info.setWordWrap(True)
+        info.setStyleSheet(
+            f"color:{CP['text_secondary']};font-size:11px;"
+            f"background:transparent;border:none;"
+        )
+        rc.addWidget(info)
+
+        rc.addWidget(_separator())
+
+        # Adresse hôte
+        host_row = QHBoxLayout()
+        host_row.setSpacing(12)
+        host_row.addWidget(_label("Adresse IP / hôte :"))
+        self._host_input = _input("localhost", 200)
+        self._host_input.setText("localhost")
+        host_row.addWidget(self._host_input)
+        host_row.addStretch()
+        rc.addLayout(host_row)
+
+        # Port
+        port_row = QHBoxLayout()
+        port_row.setSpacing(12)
+        port_row.addWidget(_label("Port Wire :"))
+        self._port_spin = QSpinBox()
+        self._port_spin.setRange(1024, 65535)
+        self._port_spin.setValue(8080)
+        self._port_spin.setFixedSize(100, 36)
+        self._port_spin.setStyleSheet(
+            f"QSpinBox{{background:{CP['bg3']};border:1px solid {CP['border']};"
+            f"border-radius:6px;color:{CP['text_primary']};font-size:12px;padding:0 8px;}}"
+            f"QSpinBox:focus{{border-color:{CP['accent2']};}}"
+        )
+        port_row.addWidget(self._port_spin)
+        port_row.addStretch()
+        rc.addLayout(port_row)
+
+        # Bouton tester
+        btn_test = QPushButton("◈  Tester la connexion")
+        btn_test.setFixedHeight(38)
+        btn_test.setFixedWidth(220)
+        btn_test.setCursor(Qt.CursorShape.PointingHandCursor)
+        btn_test.setStyleSheet(
+            f"QPushButton{{background:transparent;color:{CP['accent2']};"
+            f"border:1.5px solid {CP['accent2']};border-radius:8px;"
+            f"font-size:12px;font-weight:700;padding:0 16px;}}"
+            f"QPushButton:hover{{background:rgba(124,107,255,0.12);}}"
+            f"QPushButton:pressed{{background:rgba(124,107,255,0.22);}}"
+        )
+        btn_test.clicked.connect(self._test_connection)
+
+        self._test_lbl = QLabel("")
+        self._test_lbl.setStyleSheet(
+            f"color:{CP['text_dim']};font-size:11px;background:transparent;border:none;"
+        )
+
+        test_row = QHBoxLayout()
+        test_row.setSpacing(14)
+        test_row.addWidget(btn_test)
+        test_row.addWidget(self._test_lbl, 1)
+        rc.addLayout(test_row)
+
+        lay.addWidget(resolume_card)
+        lay.addSpacing(28)
+
+        # ── Section API fal.ai ─────────────────────────────────────────────────
+        lay.addWidget(_section_title("CLÉ API FAL.AI"))
+        lay.addSpacing(14)
+
+        api_card = QFrame()
+        api_card.setStyleSheet(
+            f"QFrame{{background:{CP['bg2']};border:1px solid {CP['border']};"
+            f"border-radius:12px;}}"
+        )
+        ac = QVBoxLayout(api_card)
+        ac.setContentsMargins(24, 20, 24, 20)
+        ac.setSpacing(14)
+
+        api_info = QLabel(
+            "La clé fal.ai est partagée avec PANDORA | Cinéma.\n"
+            "Elle est utilisée pour la génération de clips IA dans le module Live."
+        )
+        api_info.setWordWrap(True)
+        api_info.setStyleSheet(
+            f"color:{CP['text_secondary']};font-size:11px;"
+            f"background:transparent;border:none;"
+        )
+        ac.addWidget(api_info)
+
+        ac.addWidget(_separator())
+
+        key_row = QHBoxLayout()
+        key_row.setSpacing(12)
+        key_row.addWidget(_label("Clé fal.ai :"))
+        self._api_key_input = _input("xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx:xxxx…", 0)
+        self._api_key_input.setEchoMode(QLineEdit.EchoMode.Password)
+        key_row.addWidget(self._api_key_input, 1)
+        ac.addLayout(key_row)
+
+        btn_save = QPushButton("Enregistrer")
+        btn_save.setFixedHeight(36)
+        btn_save.setFixedWidth(140)
+        btn_save.setCursor(Qt.CursorShape.PointingHandCursor)
+        btn_save.setStyleSheet(
+            f"QPushButton{{background:{CP['accent']};color:#07080f;border:none;"
+            f"border-radius:8px;font-size:12px;font-weight:700;padding:0 16px;}}"
+            f"QPushButton:hover{{background:#6eded6;}}"
+            f"QPushButton:pressed{{background:{CP['accent_dim']};color:#fff;}}"
+        )
+        btn_save.clicked.connect(self._save_api_key)
+        ac.addWidget(btn_save)
+
+        lay.addWidget(api_card)
+        lay.addStretch()
+
+        root.addWidget(content, 1)
+
+        self._load_settings()
+
+    def _load_settings(self):
+        from core.config import load_config
+        cfg = load_config()
+        key = cfg.get("api_key", "")
+        if key:
+            self._api_key_input.setText(key)
+        host = cfg.get("resolume_host", "localhost")
+        port = cfg.get("resolume_port", 8080)
+        self._host_input.setText(str(host))
+        self._port_spin.setValue(int(port))
+
+    def _save_api_key(self):
+        from core.config import load_config, save_config
+        cfg = load_config()
+        cfg["api_key"]       = self._api_key_input.text().strip()
+        cfg["resolume_host"] = self._host_input.text().strip() or "localhost"
+        cfg["resolume_port"] = self._port_spin.value()
+        save_config(cfg)
+        self._test_lbl.setText("✓  Paramètres enregistrés.")
+        self._test_lbl.setStyleSheet(
+            f"color:{CP['accent']};font-size:11px;background:transparent;border:none;"
+        )
+
+    def _test_connection(self):
+        host = self._host_input.text().strip() or "localhost"
+        port = self._port_spin.value()
+        self._test_lbl.setText("Connexion…")
+        self._test_lbl.setStyleSheet(
+            f"color:#f5a623;font-size:11px;background:transparent;border:none;"
+        )
+
+        from PyQt6.QtCore import QThread, pyqtSignal as _sig
+
+        class _TestWorker(QThread):
+            done = _sig(str, bool)
+
+            def __init__(self, h, p):
+                super().__init__()
+                self._h, self._p = h, p
+
+            def run(self):
+                try:
+                    from resolume.client import ResolumeClient
+                    info = ResolumeClient(self._h, self._p).get_product_info()
+                    if info:
+                        product = info.get("product", "Resolume")
+                        version = info.get("version", "")
+                        self.done.emit(f"✓  {product} {version} — connecté sur {self._h}:{self._p}", True)
+                    else:
+                        self.done.emit(f"✗  Aucune réponse de {self._h}:{self._p}", False)
+                except Exception as e:
+                    self.done.emit(f"✗  Erreur : {e}", False)
+
+        self._test_worker = _TestWorker(host, port)
+        self._test_worker.done.connect(self._on_test_done)
+        self._test_worker.finished.connect(self._test_worker.deleteLater)
+        self._test_worker.start()
+
+    def _on_test_done(self, msg: str, ok: bool):
+        color = CP["accent"] if ok else "#e05c5c"
+        self._test_lbl.setText(msg)
+        self._test_lbl.setStyleSheet(
+            f"color:{color};font-size:11px;background:transparent;border:none;"
+        )

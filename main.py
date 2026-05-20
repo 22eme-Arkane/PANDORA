@@ -3,6 +3,7 @@ from PyQt6.QtWidgets import QApplication
 from PyQt6.QtGui import QColor, QPalette
 from PyQt6.QtCore import qInstallMessageHandler, QtMsgType
 from ui.styles import CP
+from ui.chooser import ChooserWindow
 from ui.splash import SplashWindow
 from ui.pandora_window import PandoraWindow
 
@@ -67,26 +68,64 @@ if __name__ == "__main__":
         _cfg["eula_accepted"] = True
         save_config(_cfg)
 
-    splash = SplashWindow()
+    chooser = ChooserWindow()
+    if not icon.isNull():
+        chooser.setWindowIcon(icon)
     if get_lang() != "fr":
-        retranslate_widget(splash)
+        retranslate_widget(chooser)
 
-    def _on_project(data: dict):
-        splash.hide()
-        win = PandoraWindow(data)
+    def _on_chooser_lang(lang: str):
+        retranslate_widget(chooser)
 
-        def _on_switch(new_data: dict):
-            win.hide()
-            win.deleteLater()
-            _on_project(new_data)
+    chooser.lang_changed.connect(_on_chooser_lang)
 
-        win.switch_requested.connect(_on_switch)
-        win.showMaximized()
+    def _show_splash(mode: str):
+        chooser.hide()
+        splash = SplashWindow(mode)
+        if not icon.isNull():
+            splash.setWindowIcon(icon)
         if get_lang() != "fr":
-            retranslate_widget(win)
-        app._pandora = win
+            retranslate_widget(splash)
 
-    splash.project_selected.connect(_on_project)
-    splash.show()
+        def _on_back():
+            splash.hide()
+            splash.deleteLater()
+            chooser.show()
+            app._splash = None
+
+        def _on_project(data: dict):
+            splash.hide()
+            win = PandoraWindow(data)
+
+            def _on_switch(new_data: dict):
+                win.hide()
+                win.deleteLater()
+                _on_project(new_data)
+
+            win.switch_requested.connect(_on_switch)
+            win.showMaximized()
+            if get_lang() != "fr":
+                retranslate_widget(win)
+            app._pandora = win
+
+        def _on_live_project(_data: dict):
+            splash.hide()
+            from live_window import LiveWindow
+            live = LiveWindow()
+            live.showMaximized()
+            app._live = live
+
+        splash.back_requested.connect(_on_back)
+        if mode == "cinema":
+            splash.project_selected.connect(_on_project)
+        else:
+            splash.project_selected.connect(_on_live_project)
+
+        splash.show()
+        app._splash = splash
+
+    chooser.cinema_requested.connect(lambda: _show_splash("cinema"))
+    chooser.live_requested.connect(lambda: _show_splash("live"))
+    chooser.show()
 
     sys.exit(app.exec())

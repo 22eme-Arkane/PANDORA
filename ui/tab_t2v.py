@@ -8,7 +8,7 @@ from PyQt6.QtWidgets import (
 from PyQt6.QtCore import Qt, pyqtSignal
 from PyQt6.QtGui import QPixmap, QIntValidator
 from ui.styles import C
-from ui.widgets import section_label, combo, toggle_row, prompt_block, ProgressBlock, HelpBlock
+from ui.widgets import section_label, combo, toggle_row, prompt_block, ProgressBlock, HelpBlock, show_api_error
 from core.history import save_to_history
 from core.config import get_output_dir
 from core.worker import GenerationWorker
@@ -19,6 +19,65 @@ import core.casting as casting_api
 import core.accessories as acc_api
 import core.vehicles as veh_api
 import core.storyboard as sb_api
+
+# ── Catalogue moteurs de génération — classement ELO Avril 2026 ──────────────
+# Ordre : du plus performant au moins performant (ELO vidéo April 2026)
+
+_ENGINES = [
+    ("Seedance 2.0  (recommandée)", "seedance-2.0"),        # Défaut — optimisé dans Pandora
+    ("Happy Horse 1.0  (prochainement)", "happy-horse-1.0"), # n°1 ELO — intégration en cours
+    ("Kling v3 Pro  (prochainement)",    "kling-v3-pro"),    # n°3 ELO — 1080p + audio natif
+    ("Kling O3 4K  (prochainement)",     "kling-o3-4k"),     # Variante 4K Kling
+    ("Veo 3.1  (prochainement)",         "veo-3.1"),         # Google — audio natif
+    ("Sora 2  (prochainement)",          "sora-2"),          # OpenAI — 1080p
+    ("PixVerse v6  (prochainement)",     "pixverse-v6"),     # PixVerse — flexible
+    ("Seedance 2.0 Fast",               "seedance-2.0-fast"), # Rapide — qualité réduite
+]
+
+_SEEDANCE_ENGINES    = {"seedance-2.0", "seedance-2.0-fast"}
+_FIXED_RES_ENGINES   = {"veo-3.1", "kling-v3-pro", "kling-o3-4k", "sora-2"}
+_FIXED_RATIO_ENGINES = {"veo-3.1", "kling-v3-pro", "kling-o3-4k"}
+# Moteurs sans support natif d'images de référence (fallback texte uniquement)
+_TEXT_FALLBACK_ENGINES = {"kling-v3-pro", "kling-o3-4k", "veo-3.1", "sora-2"}
+_ENGINE_RES_FORCED   = {
+    "veo-3.1":      "1080p",
+    "kling-v3-pro": "1080p",
+    "kling-o3-4k":  "4K",
+    "sora-2":       "1080p",
+}
+# Moteurs disponibles dans le tab DaVinci Edit (workflow testé et validé uniquement)
+_DAVINCI_ENGINES = [e for e in _ENGINES if e[1] in _SEEDANCE_ENGINES]
+
+
+def _make_ext_worker(model: str, params: dict):
+    from api.video_engines import (
+        Veo3Worker, KlingWorker, KlingO3Worker,
+        HappyHorseWorker, PixVerseV6Worker, Sora2Worker,
+    )
+    p = dict(params)
+    p.setdefault("mode", "t2v")
+    mapping = {
+        "veo-3.1":         Veo3Worker,
+        "kling-v3-pro":    KlingWorker,
+        "kling-o3-4k":     KlingO3Worker,
+        "happy-horse-1.0": HappyHorseWorker,
+        "pixverse-v6":     PixVerseV6Worker,
+        "sora-2":          Sora2Worker,
+    }
+    cls = mapping.get(model)
+    return cls(p) if cls else None
+
+
+def _norm_ext_result(r: dict, prompt: str = "") -> dict:
+    """Normalise le résultat d'un worker externe au format attendu par les onglets."""
+    out = dict(r)
+    out.setdefault("video_url", out.get("url", ""))
+    out.setdefault("prompt", prompt)
+    out.setdefault("seed", 0)
+    out.setdefault("ref_images_attempted", 0)
+    out.setdefault("ref_images_sent", 0)
+    out.setdefault("gcs_blocked", False)
+    return out
 import core.decors as dec_api
 import core.camera_prefs as cam_prefs
 from core.camera_data import build_camera_prompt_suffix
@@ -92,17 +151,18 @@ class _ThumbCard(QFrame):
     def _apply_style(self):
         if self._selected:
             self.setStyleSheet(
-                f"QFrame{{background:rgba(124,107,255,0.18);"
-                f"border:2px solid {C['accent']};border-radius:8px;}}"
+                f"QFrame{{background:rgba(124,107,255,0.16);"
+                f"border:2px solid {C['accent']};border-radius:10px;}}"
             )
             self._lbl.setStyleSheet(
                 f"color:{C['accent']};font-size:9px;font-weight:700;background:transparent;"
             )
         else:
             self.setStyleSheet(
-                f"QFrame{{background:{C['bg2']};border:1px solid {C['border']};"
-                f"border-radius:8px;}}"
-                f"QFrame:hover{{border-color:{C['border_bright']};}}"
+                f"QFrame{{background:{C['bg2']};"
+                f"border:1px solid rgba(124,107,255,0.22);border-radius:10px;}}"
+                f"QFrame:hover{{background:{C['bg3']};"
+                f"border:1px solid rgba(124,107,255,0.58);}}"
             )
             self._lbl.setStyleSheet(
                 f"color:{C['text_secondary']};font-size:9px;background:transparent;"
@@ -287,11 +347,34 @@ class CastingSelector(QWidget):
         self._no_decor_ref_cb = QCheckBox("⊘ Ne pas envoyer")
         self._no_decor_ref_cb.setToolTip("Exclure l'image de décor des références visuelles")
         self._no_decor_ref_cb.setStyleSheet(_cb_ss)
+
+        # Toggle mode référence décor : Ancré (spatial) ↔ Libre (style)
+        self._decor_ref_free: bool = False
+        self._decor_mode_btn = QPushButton("🏛  Ancré")
+        self._decor_mode_btn.setCheckable(True)
+        self._decor_mode_btn.setFixedHeight(22)
+        self._decor_mode_btn.setToolTip(
+            "Ancré (défaut) : Seedance traite le décor comme un espace 3D à traverser — "
+            "conserve l'architecture et les angles du lieu.\n"
+            "Libre : Seedance s'inspire du style visuel du décor mais réinterprète "
+            "librement l'espace — plus de créativité, moins de fidélité spatiale."
+        )
+        self._decor_mode_btn.setStyleSheet(
+            f"QPushButton{{background:transparent;color:{C['text_secondary']};"
+            f"border:1px solid {C['border']};border-radius:5px;font-size:9px;"
+            f"padding:0 7px;}}"
+            f"QPushButton:hover{{background:{C['bg3']};color:{C['text_primary']};}}"
+            f"QPushButton:checked{{background:{C['accent_dim']};color:{C['accent']};"
+            f"border:1px solid {C['accent']};}}"
+        )
+        self._decor_mode_btn.toggled.connect(self._on_decor_mode_toggled)
+
         _decor_hrow = QHBoxLayout()
         _decor_hrow.setContentsMargins(0, 0, 0, 0)
         _decor_hrow.setSpacing(6)
         _decor_hrow.addWidget(self._decor_toggle)
         _decor_hrow.addWidget(self._no_decor_ref_cb)
+        _decor_hrow.addWidget(self._decor_mode_btn)
         _decor_hrow.addStretch()
         lay.addLayout(_decor_hrow)
 
@@ -479,6 +562,16 @@ class CastingSelector(QWidget):
             self._decors_meta[decor["id"]] = decor
             self._decor_hbox.addWidget(card)
         self._decor_hbox.addStretch()
+
+    def _on_decor_mode_toggled(self, checked: bool):
+        self._decor_ref_free = checked
+        if checked:
+            self._decor_mode_btn.setText("🎨  Libre")
+        else:
+            self._decor_mode_btn.setText("🏛  Ancré")
+
+    def get_decor_ref_free(self) -> bool:
+        return self._decor_ref_free
 
     def _update_items_placeholder(self):
         while self._items_hbox.count():
@@ -1017,8 +1110,8 @@ class StoryboardSelector(QWidget):
         self._inner = QWidget()
         self._inner.setStyleSheet("background:transparent;")
         self._hbox = QHBoxLayout(self._inner)
-        self._hbox.setContentsMargins(0, 0, 8, 0)
-        self._hbox.setSpacing(8)
+        self._hbox.setContentsMargins(4, 4, 12, 4)
+        self._hbox.setSpacing(10)
         self._hbox.setAlignment(
             Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter
         )
@@ -1026,10 +1119,18 @@ class StoryboardSelector(QWidget):
         scroll = QScrollArea()
         scroll.setWidget(self._inner)
         scroll.setWidgetResizable(True)
-        scroll.setFixedHeight(116)
+        scroll.setFixedHeight(120)
         scroll.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
-        scroll.setStyleSheet("QScrollArea{background:transparent;border:none;}")
+        scroll.setStyleSheet(
+            f"QScrollArea{{background:rgba(124,107,255,0.04);"
+            f"border:1px solid rgba(124,107,255,0.18);border-radius:10px;}}"
+            f"QScrollBar:horizontal{{height:4px;background:{C['bg2']};"
+            f"border-radius:2px;margin:0;}}"
+            f"QScrollBar::handle:horizontal{{background:rgba(124,107,255,0.40);"
+            f"border-radius:2px;min-width:30px;}}"
+            f"QScrollBar::add-line:horizontal,QScrollBar::sub-line:horizontal{{width:0;}}"
+        )
         lay.addWidget(scroll)
 
         self._load_shots()
@@ -1079,13 +1180,6 @@ class StoryboardSelector(QWidget):
             )
             self._shot_cards[shot["id"]] = card
             self._shots_meta[shot["id"]] = shot
-
-            if i > 0:
-                vsep = QFrame()
-                vsep.setFixedSize(1, 64)
-                vsep.setStyleSheet(f"background:{C['border']};")
-                self._hbox.addWidget(vsep, 0, Qt.AlignmentFlag.AlignVCenter)
-
             self._hbox.addWidget(card)
         self._hbox.addStretch()
 
@@ -1165,17 +1259,6 @@ class _DaVinciBar(QWidget):
         )
         lay.addWidget(logo)
 
-        self._dot = QLabel("●")
-        self._dot.setStyleSheet(f"color:{C['red']};font-size:10px;background:transparent;")
-        lay.addWidget(self._dot)
-
-        self._status_lbl = QLabel("Non connecté")
-        self._status_lbl.setStyleSheet(
-            f"color:{C['text_dim']};font-size:10px;background:transparent;"
-        )
-        lay.addWidget(self._status_lbl)
-        lay.addStretch()
-
         self._btn_connect = QPushButton("Connecter")
         self._btn_connect.setFixedHeight(28)
         self._btn_connect.setStyleSheet(
@@ -1186,6 +1269,17 @@ class _DaVinciBar(QWidget):
         )
         self._btn_connect.clicked.connect(self._on_connect)
         lay.addWidget(self._btn_connect)
+
+        self._dot = QLabel("●")
+        self._dot.setStyleSheet(f"color:{C['red']};font-size:10px;background:transparent;")
+        lay.addWidget(self._dot)
+
+        self._status_lbl = QLabel("Non connecté")
+        self._status_lbl.setStyleSheet(
+            f"color:{C['text_dim']};font-size:10px;background:transparent;"
+        )
+        lay.addWidget(self._status_lbl)
+        lay.addStretch()
 
         self._refresh()
 
@@ -2114,7 +2208,7 @@ class TabT2V(QScrollArea):
         lay.setContentsMargins(20, 20, 20, 20)
         lay.setSpacing(16)
 
-        lay.addWidget(HelpBlock("Seedance 2.0 — Générer un clip vidéo IA", [
+        lay.addWidget(HelpBlock("Studio IA — Générer un clip vidéo IA", [
             "▸ Storyboard : sélectionnez un plan pour pré-remplir le prompt, la durée et la caméra automatiquement.",
             "▸ Batch : cochez plusieurs plans pour les générer en file d'attente.",
             "▸ Casting : ajoutez des personnages pour injecter leurs portraits comme images de référence visuelles.",
@@ -2483,20 +2577,6 @@ class TabT2V(QScrollArea):
         self._btn_enhance.clicked.connect(self._on_enhance)
         _ez_lay.addWidget(prompt_frame)
 
-        # ── Hint lipsync ──────────────────────────────────────────────────────
-        from PyQt6.QtWidgets import QLabel as _QL
-        _lipsync_hint = _QL(
-            '💬  Lipsync — Placez le dialogue entre guillemets : '
-            '  A man says "Hello, nice to meet you."'
-        )
-        _lipsync_hint.setStyleSheet(
-            f"color:{C['text_dim']};font-size:10px;font-family:'Consolas',monospace;"
-            f"background:rgba(78,205,196,0.06);border:1px solid rgba(78,205,196,0.18);"
-            f"border-radius:5px;padding:4px 10px;"
-        )
-        _lipsync_hint.setWordWrap(True)
-        _ez_lay.addWidget(_lipsync_hint)
-
         # ── Thumbnail strip ───────────────────────────────────────────────────
         self._thumb_strip = _ThumbnailStrip()
         self._thumb_strip.setVisible(False)
@@ -2521,12 +2601,6 @@ class TabT2V(QScrollArea):
         self._subtitle_cb = self._subtitle_toggle_row.findChild(QCheckBox)
         _ez_lay.addWidget(self._subtitle_toggle_row)
 
-        self._import_toggle_row = toggle_row(
-            "Import auto · Media Pool", "Importe automatiquement le clip généré dans DaVinci Resolve", True
-        )
-        self._import_cb = self._import_toggle_row.findChild(QCheckBox)
-        _ez_lay.addWidget(self._import_toggle_row)
-
         lay.addWidget(self._edit_zone)
 
         # ── Contrôles créatifs ────────────────────────────────────────────────
@@ -2536,12 +2610,13 @@ class TabT2V(QScrollArea):
         # ── Paramètres de génération (toujours visibles, y compris en multi-sélection) ──
         grid = QGridLayout()
         grid.setSpacing(12)
-        self.cb_model = combo(["Seedance 2.0", "Seedance 2.0 Fast"])
+        self.cb_model = combo(_DAVINCI_ENGINES)
+        self.cb_model.currentIndexChanged.connect(self._on_engine_changed)
         self.cb_ratio = combo(["16:9 — Paysage", "9:16 — Portrait", "4:3", "3:4"])
-        self.cb_res   = combo(["720p", "480p"])
+        self.cb_res   = combo(["1080p", "720p", "480p"])
 
         for (row, col), lbl, widget in [
-            ((0, 0), "Modèle",     self.cb_model),
+            ((0, 0), "Moteur de génération", self.cb_model),
             ((0, 1), "Ratio",      self.cb_ratio),
             ((1, 0), "Résolution", self.cb_res),
         ]:
@@ -2553,6 +2628,22 @@ class TabT2V(QScrollArea):
             l.addWidget(widget)
             grid.addWidget(g, row, col)
         lay.addLayout(grid)
+
+        # ── Banner compatibilité références (moteurs texte-seul) ───────────────
+        self._ref_compat_banner = QLabel(
+            "⚠  Ce moteur ne supporte pas les images de référence nativement. "
+            "Vos personnages, décors et accessoires seront convertis en mots-clés de style "
+            "via Claude Vision et ajoutés au prompt texte."
+        )
+        self._ref_compat_banner.setWordWrap(True)
+        self._ref_compat_banner.setStyleSheet(
+            "background:rgba(255,79,106,0.12);"
+            f"color:{C['red']};"
+            "border:1px solid rgba(255,79,106,0.45);"
+            "border-radius:6px;padding:8px 12px;font-size:11px;font-weight:600;"
+        )
+        self._ref_compat_banner.setVisible(False)
+        lay.addWidget(self._ref_compat_banner)
 
         self._davinci_bar = _DaVinciBar()
 
@@ -2597,8 +2688,13 @@ class TabT2V(QScrollArea):
         """)
         self.btn_cancel.clicked.connect(self.cancel_generation)
 
+        self._import_cb = QCheckBox("Import auto dans DaVinci Media Pool après génération")
+        self._import_cb.setChecked(True)
+        self._import_cb.setStyleSheet(f"color:{C['text_secondary']};font-size:11px;")
+        lay.addWidget(self._import_cb)
+
         btn_row = QHBoxLayout()
-        btn_row.setContentsMargins(84, 0, 268, 0)
+        btn_row.setContentsMargins(0, 0, 0, 0)
         btn_row.setSpacing(8)
         btn_row.addWidget(self.btn_generate)
         btn_row.addWidget(_rep_lbl)
@@ -2951,7 +3047,17 @@ class TabT2V(QScrollArea):
             self._dur_lock_lbl.setText(f"🔒 {self._DUR_OPTIONS[best_idx]}s — depuis storyboard")
 
     def _get_model(self) -> str:
-        return ["seedance-2.0", "seedance-2.0-fast"][self.cb_model.currentIndex()]
+        return self.cb_model.currentData() or "seedance-2.0"
+
+    def _on_engine_changed(self):
+        key = self._get_model()
+        fixed_res = key in _FIXED_RES_ENGINES
+        self.cb_res.setEnabled(not fixed_res)
+        self.cb_ratio.setEnabled(key not in _FIXED_RATIO_ENGINES)
+        if fixed_res:
+            self.cb_res.setCurrentText(_ENGINE_RES_FORCED.get(key, "1080p"))
+        if hasattr(self, "_ref_compat_banner"):
+            self._ref_compat_banner.setVisible(key in _TEXT_FALLBACK_ENGINES)
 
     def _on_seed_toggle(self, checked: bool):
         if checked:
@@ -2970,6 +3076,12 @@ class TabT2V(QScrollArea):
     def _check_davinci_connection(self) -> bool:
         """Returns True if ok to proceed, False if user cancelled."""
         if resolve.is_connected():
+            return True
+        # Tentative silencieuse avant d'afficher le dialogue — couvre les faux
+        # négatifs transitoires (ping raté après un import dans on_finished).
+        ok_silent, _ = resolve.connect()
+        if ok_silent:
+            self._davinci_bar._refresh()
             return True
         reply = QMessageBox.question(
             self, "DaVinci non connecté",
@@ -3107,17 +3219,16 @@ class TabT2V(QScrollArea):
         if not subtitle_on:
             full_prompt = f"{full_prompt}, no subtitles"
 
-        # Build composite reference mosaics for Seedance (3 slots: chars, decor, others)
+        # Build composite reference mosaics — Seedance only
+        _is_seedance = self._get_model() in _SEEDANCE_ENGINES
         from core.context import get_data_root as _get_data_root
         _ref_dir = os.path.join(_get_data_root(), "seedance_refs")
         _no_ref_global = getattr(self, "_no_ref_global_cb", None) and self._no_ref_global_cb.isChecked()
-        if _no_ref_global:
+        if not _is_seedance or _no_ref_global:
             ref_images, ref_image_roles = [], []
         else:
             ref_images, ref_image_roles = self._casting.get_ref_mosaics(output_dir=_ref_dir)
-        # Style reference image — toujours envoyé même si _no_ref_global (c'est un paramètre de rendu,
-        # pas une référence de contenu scène) ; real.py l'uploade en @Image1 (priorité maximale)
-        if hasattr(self, "_style_ref_path") and self._style_ref_path and os.path.isfile(self._style_ref_path):
+        if _is_seedance and hasattr(self, "_style_ref_path") and self._style_ref_path and os.path.isfile(self._style_ref_path):
             ref_images = ref_images + [self._style_ref_path]
             ref_image_roles = ref_image_roles + ["style"]
 
@@ -3170,6 +3281,7 @@ class TabT2V(QScrollArea):
             "ref_images":      ref_images,
             "ref_image_roles": ref_image_roles,
             "style_ref_path":  self._style_ref_path if _style_ref_active else "",
+            "decor_ref_free":  self._casting.get_decor_ref_free(),
         }
         if seed is not None:
             params["seed"] = seed
@@ -3181,15 +3293,37 @@ class TabT2V(QScrollArea):
         self.progress.reset()
         self.progress.setVisible(True)
 
-        self._worker = GenerationWorker(params)
+        _model_key = self._get_model()
+        if _model_key in _SEEDANCE_ENGINES:
+            self._worker = GenerationWorker(params)
+            self._worker.finished.connect(self.on_finished)
+        else:
+            self._worker = _make_ext_worker(_model_key, params)
+            if self._worker is None:
+                self.on_failed(f"Moteur inconnu : {_model_key}")
+                return
+            _raw = params.get("prompt", "")
+            self._worker.finished.connect(
+                lambda r, p=_raw: self.on_finished(_norm_ext_result(r, p))
+            )
         self._worker.progress.connect(self.on_progress)
-        self._worker.finished.connect(self.on_finished)
         self._worker.failed.connect(self.on_failed)
         self._worker.start()
 
     def cancel_generation(self):
         if self._worker:
-            self._worker.cancel()
+            # Déconnecter les signaux en premier pour ignorer les émissions tardives
+            for sig in ("finished", "failed", "progress"):
+                try:
+                    getattr(self._worker, sig).disconnect()
+                except RuntimeError:
+                    pass
+            if hasattr(self._worker, "cancel"):
+                self._worker.cancel()
+            else:
+                self._worker.quit()
+                self._worker.terminate()
+            self._worker = None
         if self._is_batch_mode:
             self._batch_queue.clear()
             self._is_batch_mode = False
@@ -3222,21 +3356,24 @@ class TabT2V(QScrollArea):
         davinci_msg = ""
         local_path = ""
         _import_checked = bool(self._import_cb and self._import_cb.isChecked())
-        if _import_checked:
-            self.progress.update(100, "Sauvegarde du clip…")
-            shot_title = result.get("shot_title") or self._active_shot_title
-            ir = import_result(result, get_output_dir(), shot_title=shot_title,
-                               import_to_davinci=True)
-            if ir["mock"]:
+
+        # Toujours sauvegarder localement, que le bridge soit connecté ou non.
+        # import_to_davinci=True uniquement si la case est cochée ET bridge connecté.
+        self.progress.update(100, "Sauvegarde du clip…")
+        shot_title = result.get("shot_title") or self._active_shot_title
+        ir = import_result(result, get_output_dir(), shot_title=shot_title,
+                           import_to_davinci=_import_checked)
+        if ir["mock"]:
+            if _import_checked:
                 davinci_msg = "\n\n◈ Import DaVinci : simulé (mode mock)"
-            elif ir["success"]:
-                local_path = ir.get("local_path", "")
-                if ir.get("davinci_imported"):
-                    davinci_msg = f"\n\n◈ Sauvegardé + importé dans le Media Pool ✓\n{local_path}"
-                else:
-                    davinci_msg = f"\n\n◈ Vidéo sauvegardée localement :\n{local_path}"
+        elif ir["success"]:
+            local_path = ir.get("local_path", "")
+            if ir.get("davinci_imported"):
+                davinci_msg = f"\n\n◈ Sauvegardé + importé dans le Media Pool ✓\n{local_path}"
             else:
-                davinci_msg = f"\n\n◈ Téléchargement échoué : {ir['error']}"
+                davinci_msg = f"\n\n◈ Vidéo sauvegardée :\n{local_path}"
+        else:
+            davinci_msg = f"\n\n◈ Téléchargement échoué : {ir['error']}"
 
         # ADN visuel : mémorise le seed utilisé pour les prochaines générations
         seed_used = result.get("seed", 0)
@@ -3329,6 +3466,7 @@ class TabT2V(QScrollArea):
 
     def on_failed(self, error: str):
         self.progress.set_error(error)
+        show_api_error(self, error)
         self._reset_ui()
         entry = {
             "mode":         "t2v",
@@ -3386,6 +3524,7 @@ class TabT2V(QScrollArea):
 
     def _reset_ui(self):
         self.btn_generate.setEnabled(True)
+        self.btn_generate.setText("▶▶  Lancer la file d'attente")
         self.btn_cancel.setVisible(False)
 
     def refresh(self):
@@ -3426,9 +3565,9 @@ class TabT2V(QScrollArea):
             self._music_toggle_row.setEnabled(not no_audio)
             if no_audio and self._music_cb:
                 self._music_cb.setChecked(False)
-        if hasattr(self, "_import_toggle_row") and self._import_toggle_row:
-            self._import_toggle_row.setEnabled(not no_audio)
-            if no_audio and self._import_cb:
+        if hasattr(self, "_import_cb") and self._import_cb:
+            self._import_cb.setEnabled(not no_audio)
+            if no_audio:
                 self._import_cb.setChecked(False)
 
     def _on_film_style_changed(self, idx: int):

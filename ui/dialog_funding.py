@@ -254,7 +254,7 @@ class FundingDialog(QDialog):
         title.setStyleSheet(
             f"color:{CP['text_primary']};font-size:20px;font-weight:800;background:transparent;"
         )
-        sub = QLabel("PANDORA × Seedance 2.0")
+        sub = QLabel("PANDORA | Studio IA")
         sub.setStyleSheet(
             f"color:{CP['text_dim']};font-size:10px;font-family:'Consolas',monospace;"
             f"letter-spacing:1px;background:transparent;"

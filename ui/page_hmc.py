@@ -277,7 +277,21 @@ class PageHMC(QWidget):
             f"QPushButton:pressed{{background:{CP['accent_dim']};color:#fff;}}"
         )
         btn_new.clicked.connect(self._on_new)
+
+        _red = CP.get("red", "#ff4f6a")
+        btn_del_all = QPushButton("✕  Supprimer tout le HMC")
+        btn_del_all.setFixedHeight(36)
+        btn_del_all.setStyleSheet(
+            f"QPushButton{{background:transparent;color:{_red};"
+            f"border:1.5px solid {_red};border-radius:8px;"
+            f"font-size:11px;font-weight:700;padding:0 14px;}}"
+            f"QPushButton:hover{{background:rgba(255,79,106,0.10);}}"
+            f"QPushButton:pressed{{background:rgba(255,79,106,0.20);}}"
+        )
+        btn_del_all.clicked.connect(self._on_delete_all)
+
         lay.addWidget(btn_new)
+        lay.addWidget(btn_del_all)
         return bar
 
     def _filter_style(self, active: bool) -> str:
@@ -332,6 +346,21 @@ class PageHMC(QWidget):
             card.edit_requested.connect(self._on_edit)
             card.delete_requested.connect(self._on_delete)
             self._grid.addWidget(card, i // cols, i % cols)
+
+    def _on_delete_all(self):
+        if not self._all_items:
+            return
+        from PyQt6.QtWidgets import QMessageBox
+        r = QMessageBox.question(
+            self, "Supprimer tout le HMC",
+            f"Supprimer les {len(self._all_items)} élément(s) HMC ?\nCette action est irréversible.",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+        )
+        if r != QMessageBox.StandardButton.Yes:
+            return
+        for item in list(self._all_items):
+            hmc_api.delete_hmc_item(item["id"])
+        self.refresh()
 
     def _on_new(self):
         dlg = HMCDialog(self)

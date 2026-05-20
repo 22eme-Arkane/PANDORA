@@ -8,6 +8,8 @@ Workers Claude pour les opérations sur le scénario :
 """
 
 import json
+import re
+import unicodedata
 from PyQt6.QtCore import QThread, pyqtSignal
 from core.config import load_config
 
@@ -613,10 +615,12 @@ class GenerateStoryboardWorker(QThread):
     finished = pyqtSignal(list)   # liste de dicts (plans)
     failed   = pyqtSignal(str)
 
-    def __init__(self, text: str, duration_secs: int = 0):
+    def __init__(self, text: str, duration_secs: int = 0,
+                 element_names: dict | None = None):
         super().__init__()
         self._text          = text
         self._duration_secs = duration_secs
+        self._element_names = element_names or {}
 
     def run(self):
         cfg = load_config()
@@ -628,7 +632,26 @@ class GenerateStoryboardWorker(QThread):
             import anthropic
             lang = _get_lang()
             client = anthropic.Anthropic(api_key=key)
-            user_content = _lang_hint(lang) + self._text
+
+            # Bloc noms exacts — injecté AVANT le scénario pour ancrer les noms
+            names_block = ""
+            en = self._element_names
+            if en:
+                lines = [
+                    "[NOMS EXACTS DES ÉLÉMENTS PANDORA — utilise EXACTEMENT ces noms "
+                    "dans character_names, decor_name, accessory_names et vehicle_names :]"
+                ]
+                if en.get("characters"):
+                    lines.append("Personnages : " + ", ".join(en["characters"]))
+                if en.get("decors"):
+                    lines.append("Décors : " + ", ".join(en["decors"]))
+                if en.get("accessories"):
+                    lines.append("Accessoires : " + ", ".join(en["accessories"]))
+                if en.get("vehicles"):
+                    lines.append("Véhicules : " + ", ".join(en["vehicles"]))
+                names_block = "\n".join(lines) + "\n\n"
+
+            user_content = _lang_hint(lang) + names_block + self._text
             if self._duration_secs > 0:
                 mins, secs = divmod(self._duration_secs, 60)
                 dur_str = f"{mins}min {secs:02d}s" if mins else f"{secs}s"
@@ -646,7 +669,7 @@ class GenerateStoryboardWorker(QThread):
                         f" Répartis intelligemment ce budget — plans courts pour les actions,"
                         f" plans plus longs pour les atmosphères et dialogues.]\n\n"
                     )
-                user_content = _lang_hint(lang) + budget_hint + self._text
+                user_content = _lang_hint(lang) + names_block + budget_hint + self._text
             msg = client.messages.create(
                 model=_MODEL_STORYBOARD,
                 max_tokens=16000,
@@ -785,6 +808,309 @@ class ExtractVehiclesWorker(QThread):
             self.finished.emit(items)
         except Exception as e:
             self.failed.emit(_fmt_err(e))
+
+
+# ── Helpers correspondance de noms (fuzzy / normalisé) ───────────────────────
+
+def _strip_accents(text: str) -> str:
+    """Lowercase + supprime les accents (NFD decomposition)."""
+    nfkd = unicodedata.normalize("NFD", text.lower())
+    return "".join(c for c in nfkd if not unicodedata.combining(c))
+
+
+_FRENCH_ARTICLES_RE = re.compile(
+    r"^(le |la |les |l’|l'|un |une |des |du |de la |de |d’|d')"
+)
+
+
+def _normalize_catalog_name(name: str) -> str:
+    """Normalise un nom de catalogue : accents supprimés + article initial retiré."""
+    s = _strip_accents(name.strip())
+    s = _FRENCH_ARTICLES_RE.sub("", s).strip()
+    return s
+
+
+def _same_name(n1: str, n2: str) -> bool:
+    """True si deux noms référencent le même élément après normalisation."""
+    return _normalize_catalog_name(n1) == _normalize_catalog_name(n2)
+
+
+def _name_in_text(catalog_name: str, search_text: str) -> bool:
+    """True si catalog_name (ou sa forme normalisée) est présent dans search_text.
+
+    Gère :
+    - "Le Samouraï" ↔ "samouraï"  (article + accent)
+    - "Inspector Tanaka" ↔ "Tanaka"  (token overlap, token len > 3)
+    """
+    norm_name = _normalize_catalog_name(catalog_name)
+    norm_text = _strip_accents(search_text)
+
+    if norm_name in norm_text:
+        return True
+
+    # Token overlap : TOUS les tokens significatifs du nom doivent être dans le texte
+    # (évite les faux positifs quand deux persos partagent un mot, ex. "démon")
+    name_tokens = [t for t in norm_name.split() if len(t) > 3]
+    if not name_tokens:
+        return False
+    text_tokens = set(re.split(r"\W+", norm_text))
+    return all(token in text_tokens for token in name_tokens)
+
+
+# ── Synchronisation storyboard ↔ casting / décors / accessoires ───────────────
+
+_SYNC_STORYBOARD_SYSTEM = """\
+Tu es un superviseur storyboard pour une production cinématographique.
+Pour chaque plan dans le JSON fourni, vérifie si le champ "current_prompt" reflète \
+fidèlement les descriptions actuelles des éléments assignés (personnages, décor, accessoires).
+
+RÈGLES :
+- Si le prompt est déjà cohérent avec toutes les descriptions actuelles → changed: false, prompt inchangé
+- Si un élément a des traits/descriptions qui ne correspondent plus au prompt \
+(traits physiques différents, style modifié, costume changé, nouveau nom de lieu…) → réécris le prompt
+- CONSERVE : intention cinématographique, mouvement caméra, valeur de plan, action dramatique, atmosphère
+- MODIFIE UNIQUEMENT : la description des personnages, du lieu, des costumes/accessoires pour \
+coller aux données actuelles
+- Garde le même registre et la même langue que le prompt original
+- Sois précis dans "reason" (15 mots max, en français)
+
+COHÉRENCE LUMIÈRE PAR SÉQUENCE :
+- Si un plan contient le champ "seq_lighting_ref" (non-vide), sa lumière et son atmosphère \
+doivent être cohérentes avec ce prompt de référence de séquence.
+- Si le plan actuel ne mentionne pas de lumière mais que seq_lighting_ref en décrit une \
+(ex. "lumière dorée, ciel orageux"), ajoute ces conditions lumineuses au prompt réécrit.
+- Ne force jamais une lumière si seq_lighting_ref n'en mentionne pas.
+- La lumière est une donnée de continuité : elle ne doit pas changer entre les plans \
+d'une même séquence sauf si une intention dramatique explicite l'impose.
+
+- Réponds UNIQUEMENT en JSON valide, sans markdown, sans texte hors JSON
+
+FORMAT OBLIGATOIRE :
+{"shots":[{"id":"...","prompt":"...","changed":true,"reason":"..."},...]}
+"""
+
+
+class SyncStoryboardWorker(QThread):
+    """Synchronise les prompts Seedance avec les descriptions actuelles du casting.
+
+    Phase 1 (sans IA) : ré-assignation par correspondance de noms dans scene_title/prompt.
+    Phase 2 (Claude Haiku) : réécriture des prompts qui ne reflètent plus les descriptions.
+
+    Chaque shot retourné dans finished() porte des champs meta (préfixe _) :
+      _reassigned     : list[str]  — noms d'éléments nouvellement assignés
+      _prompt_changed : bool       — True si le prompt a été réécrit
+      _old_prompt     : str        — prompt original avant sync
+      _reason         : str        — raison courte de la modification
+    """
+    progress = pyqtSignal(int, str)
+    finished = pyqtSignal(list)
+    failed   = pyqtSignal(str)
+
+    def __init__(self, shots: list):
+        super().__init__()
+        self._shots = [dict(s) for s in shots]
+
+    def run(self):
+        try:
+            self._run()
+        except Exception as e:
+            self.failed.emit(f"Erreur synchronisation : {e}")
+
+    def _run(self):
+        import core.casting as casting_api
+        import core.decors as decors_api
+        import core.accessories as acc_api
+        import core.hmc as hmc_api
+        import core.vehicles as veh_api
+
+        self.progress.emit(5, "Chargement du casting et des éléments…")
+
+        characters  = casting_api.list_characters()
+        decors      = decors_api.list_decors()
+        accessories = acc_api.list_accessories()
+
+        char_by_id   = {c["id"]: c for c in characters}
+        char_by_name = {c["name"].lower(): c for c in characters if c.get("name")}
+        decor_by_id  = {d["id"]: d for d in decors}
+        decor_by_name = {d["name"].lower(): d for d in decors if d.get("name")}
+        acc_by_name  = {a["name"].lower(): a for a in accessories if a.get("name")}
+
+        self.progress.emit(15, "Phase 1 — ré-assignation des éléments par nom…")
+
+        # ── Phase 1 : name matching ────────────────────────────────────────────
+        for shot in self._shots:
+            shot["_reassigned"]     = []
+            shot["_prompt_changed"] = False
+            shot["_old_prompt"]     = shot.get("seedance_prompt", "")
+            shot["_reason"]         = ""
+
+            search_text = (
+                (shot.get("scene_title") or "") + " " +
+                (shot.get("seedance_prompt") or "")
+            ).lower()
+
+            existing_char_ids = set(shot.get("character_ids") or [])
+            for char in characters:
+                if not char.get("name"):
+                    continue
+                canonical = char["name"]
+                if char["id"] in existing_char_ids:
+                    # ID déjà présent — corriger le nom affiché si c'est un variant fuzzy
+                    cur_names = shot.get("character_names") or []
+                    if canonical not in cur_names:
+                        for i, old in enumerate(cur_names):
+                            if _same_name(old, canonical) and old != canonical:
+                                cur_names[i] = canonical
+                                shot["_reassigned"].append(
+                                    f"personnage : {old} → {canonical}"
+                                )
+                                break
+                    continue
+                if _name_in_text(canonical, search_text):
+                    existing_char_ids.add(char["id"])
+                    shot.setdefault("character_ids", [])
+                    shot.setdefault("character_names", [])
+                    if char["id"] not in shot["character_ids"]:
+                        shot["character_ids"].append(char["id"])
+                        # Remplace l'ancien variant fuzzy si présent, sinon ajoute
+                        old_names = shot["character_names"]
+                        replaced = False
+                        for i, old in enumerate(old_names):
+                            if _same_name(old, canonical) and old != canonical:
+                                old_names[i] = canonical
+                                shot["_reassigned"].append(
+                                    f"personnage : {old} → {canonical}"
+                                )
+                                replaced = True
+                                break
+                        if not replaced:
+                            old_names.append(canonical)
+                            shot["_reassigned"].append(f"personnage : {canonical}")
+
+            if not shot.get("decor_id"):
+                for decor in decors:
+                    if not decor.get("name"):
+                        continue
+                    if _name_in_text(decor["name"], search_text):
+                        shot["decor_id"]   = decor["id"]
+                        shot["decor_name"] = decor["name"]
+                        shot["_reassigned"].append(f"décor : {decor['name']}")
+                        break
+
+        self.progress.emit(30, "Phase 2 — préparation des données pour Claude Haiku…")
+
+        # ── Phase 2 : build Claude payload ────────────────────────────────────
+
+        def _cdesc(cid):
+            c = char_by_id.get(cid, {})
+            return {
+                "name":        c.get("name", ""),
+                "description": (c.get("description") or c.get("prompt") or "").strip(),
+            }
+
+        def _ddesc(did):
+            d = decor_by_id.get(did, {})
+            return {
+                "name":        d.get("name", ""),
+                "description": (d.get("prompt") or d.get("description") or "").strip(),
+            }
+
+        # ── Référence lumière par séquence ────────────────────────────────────────
+        # Pour chaque seq_num, on retient le premier prompt non vide comme référence
+        # lumineuse/atmosphérique — transmis à Claude pour assurer la continuité.
+        seq_ref: dict[str, str] = {}
+        for shot in self._shots:
+            sn = str(shot.get("seq_num") or "").strip()
+            if sn and sn not in seq_ref:
+                p = (shot.get("seedance_prompt") or "").strip()
+                if p:
+                    seq_ref[sn] = p[:300]  # 300 chars suffisent pour la lumière
+
+        shots_payload = []
+        for shot in self._shots:
+            chars = [_cdesc(cid) for cid in (shot.get("character_ids") or [])
+                     if cid in char_by_id and char_by_id[cid].get("description") or char_by_id[cid].get("prompt")]
+            decor_el = _ddesc(shot["decor_id"]) if shot.get("decor_id") and shot["decor_id"] in decor_by_id else None
+            acc_els  = [
+                {"name": n, "description": acc_by_name.get(n.lower(), {}).get("description", "")}
+                for n in (shot.get("accessory_names") or [])
+                if acc_by_name.get(n.lower(), {}).get("description")
+            ]
+
+            has_elements = bool(chars or decor_el or acc_els)
+            prompt = (shot.get("seedance_prompt") or "").strip()
+            if not has_elements or not prompt:
+                continue
+
+            sn = str(shot.get("seq_num") or "").strip()
+            entry = {
+                "id":            shot.get("id", ""),
+                "scene_title":   shot.get("scene_title", ""),
+                "current_prompt": prompt,
+                "assigned_elements": {
+                    "characters":  chars,
+                    "decor":       decor_el,
+                    "accessories": acc_els,
+                },
+            }
+            if sn and sn in seq_ref:
+                entry["seq_lighting_ref"] = seq_ref[sn]
+            shots_payload.append(entry)
+
+        if not shots_payload:
+            self.progress.emit(100, "Aucun prompt à synchroniser (aucun élément assigné avec description)")
+            self.finished.emit(self._shots)
+            return
+
+        cfg = load_config()
+        key = cfg.get("anthropic_key", "").strip()
+        if not key:
+            self.failed.emit("Clé API Anthropic manquante.\nConfigure-la dans Paramètres.")
+            return
+
+        import anthropic
+        client = anthropic.Anthropic(api_key=key)
+        payload_str = json.dumps({"shots": shots_payload}, ensure_ascii=False, indent=2)
+
+        self.progress.emit(50, f"Claude Haiku analyse {len(shots_payload)} plan(s)…")
+
+        msg = client.messages.create(
+            model="claude-haiku-4-5",
+            max_tokens=8192,
+            system=_SYNC_STORYBOARD_SYSTEM,
+            messages=[{"role": "user", "content": payload_str}],
+        )
+
+        raw = msg.content[0].text.strip()
+        # Nettoyer le markdown si Claude en ajoute malgré les instructions
+        if "```" in raw:
+            parts = raw.split("```")
+            for part in parts:
+                candidate = part.lstrip("json").strip()
+                if candidate.startswith("{"):
+                    raw = candidate
+                    break
+
+        try:
+            result = json.loads(raw)
+        except json.JSONDecodeError as e:
+            raise ValueError(
+                f"Réponse JSON invalide de Claude ({e}). "
+                f"Essayez avec moins de plans simultanément."
+            )
+
+        self.progress.emit(85, "Application des résultats…")
+
+        updated_map = {s["id"]: s for s in result.get("shots", [])}
+        for shot in self._shots:
+            upd = updated_map.get(shot.get("id", ""))
+            if upd and upd.get("changed"):
+                shot["_prompt_changed"] = True
+                shot["_reason"]         = upd.get("reason", "")
+                shot["seedance_prompt"] = upd.get("prompt", shot.get("seedance_prompt", ""))
+
+        self.progress.emit(100, "Synchronisation terminée")
+        self.finished.emit(self._shots)
 
 
 # ── Session de chat interactif — co-écriture arrangement ──────────────────────

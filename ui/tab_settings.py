@@ -4,7 +4,7 @@ from PyQt6.QtWidgets import (
     QLineEdit, QPushButton, QMessageBox, QFileDialog, QLabel,
 )
 from PyQt6.QtCore import Qt
-from ui.styles import C
+from ui.styles import C, CP
 from ui.widgets import section_label, divider, combo, HelpBlock
 from core.config import load_config, save_config, get_output_dir
 
@@ -126,24 +126,29 @@ class TabSettings(QScrollArea):
         lay.addWidget(divider())
 
         # ── Boutons ───────────────────────────────────────────────────────────
-        btn_row = QHBoxLayout()
         btn_save = QPushButton("💾  Sauvegarder")
-        btn_save.setMinimumHeight(42)
+        btn_save.setMinimumHeight(46)
+        btn_save.setStyleSheet(f"""
+            QPushButton{{background:{CP['accent']};color:#07080f;border:none;
+            border-radius:8px;font-size:13px;font-weight:700;
+            letter-spacing:1px;padding:0 24px;}}
+            QPushButton:hover{{background:#6eded6;}}
+            QPushButton:pressed{{background:{CP['accent_dim']};color:#ffffff;}}
+            QPushButton:disabled{{background:{CP['bg3']};color:{CP['text_dim']};}}
+        """)
         btn_save.clicked.connect(self.save)
+        lay.addWidget(btn_save)
 
-        btn_test = QPushButton("Tester API")
-        btn_test.setFixedWidth(110)
-        btn_test.setMinimumHeight(42)
+        btn_test = QPushButton("Tester la connexion API")
+        btn_test.setMinimumHeight(34)
         btn_test.setStyleSheet(f"""
-            QPushButton{{background:{C['bg3']};color:{C['text_secondary']};
-            border:1px solid {C['border']};border-radius:8px;font-size:11px;font-weight:700;}}
-            QPushButton:hover{{background:{C['border']};color:{C['text_primary']};}}
+            QPushButton{{background:transparent;color:{CP['text_secondary']};
+            border:1px solid {CP['border']};border-radius:8px;font-size:11px;font-weight:700;}}
+            QPushButton:hover{{background:{CP['bg3']};color:{CP['text_primary']};
+            border-color:{CP['border_bright']};}}
         """)
         btn_test.clicked.connect(self.test_connection)
-
-        btn_row.addWidget(btn_save)
-        btn_row.addWidget(btn_test)
-        lay.addLayout(btn_row)
+        lay.addWidget(btn_test)
         lay.addStretch()
 
     def _browse_dir(self):

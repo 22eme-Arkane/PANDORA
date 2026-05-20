@@ -253,8 +253,21 @@ class PageCastings(QWidget):
         )
         btn_new.clicked.connect(self._on_new)
 
+        _red = CP.get("red", "#ff4f6a")
+        btn_del_all = QPushButton("✕  Supprimer tout le casting")
+        btn_del_all.setFixedHeight(36)
+        btn_del_all.setStyleSheet(
+            f"QPushButton{{background:transparent;color:{_red};"
+            f"border:1.5px solid {_red};border-radius:8px;"
+            f"font-size:11px;font-weight:700;padding:0 14px;}}"
+            f"QPushButton:hover{{background:rgba(255,79,106,0.10);}}"
+            f"QPushButton:pressed{{background:rgba(255,79,106,0.20);}}"
+        )
+        btn_del_all.clicked.connect(self._on_delete_all)
+
         lay.addWidget(btn_import)
         lay.addWidget(btn_new)
+        lay.addWidget(btn_del_all)
         return bar
 
     # ── Grille ────────────────────────────────────────────────────────────────
@@ -294,6 +307,21 @@ class PageCastings(QWidget):
         self._render(filtered)
 
     # ── Actions ───────────────────────────────────────────────────────────────
+
+    def _on_delete_all(self):
+        if not self._all_chars:
+            return
+        from PyQt6.QtWidgets import QMessageBox
+        r = QMessageBox.question(
+            self, "Supprimer tout le casting",
+            f"Supprimer les {len(self._all_chars)} personnage(s) ?\nCette action est irréversible.",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+        )
+        if r != QMessageBox.StandardButton.Yes:
+            return
+        for char in list(self._all_chars):
+            casting_api.delete_character(char["id"])
+        self.refresh()
 
     def _on_new(self):
         dlg = CharacterDialog(self)

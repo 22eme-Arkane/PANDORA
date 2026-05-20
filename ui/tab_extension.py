@@ -8,7 +8,7 @@ from PyQt6.QtWidgets import (
 from PyQt6.QtCore import Qt, pyqtSignal
 from PyQt6.QtGui import QPixmap
 from ui.styles import C
-from ui.widgets import section_label, combo, toggle_row, prompt_block, ProgressBlock, HelpBlock
+from ui.widgets import section_label, combo, toggle_row, prompt_block, ProgressBlock, HelpBlock, show_api_error
 from core.history import save_to_history
 from core.config import get_output_dir
 from core.worker import GenerationWorker
@@ -629,6 +629,7 @@ class TabExtension(QScrollArea):
 
     def on_failed(self, error: str):
         self.progress.set_error(error)
+        show_api_error(self, error)
         self._reset_ui()
         entry = {
             "mode":         "ext",

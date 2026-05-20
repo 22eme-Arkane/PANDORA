@@ -1270,6 +1270,16 @@ class CharacterDialog(QDialog):
         self._btn_import_photo.clicked.connect(self._import_photo_as_character)
         outer.addWidget(self._btn_import_photo)
 
+        outer.addSpacing(12)
+
+        # Bouton Doublage — séparé visuellement du groupe génération
+        self._btn_doublage = QPushButton("🎙  Doublage")
+        self._btn_doublage.setFixedHeight(32)
+        self._btn_doublage.setStyleSheet(_s_neutral)
+        self._btn_doublage.setToolTip("Assigner ou écouter la voix de doublage de ce personnage")
+        self._btn_doublage.clicked.connect(self._on_doublage)
+        outer.addWidget(self._btn_doublage)
+
         if self._image_path and os.path.isfile(self._image_path):
             self._load_preview(self._image_path)
         elif self._sheet_path and os.path.isfile(self._sheet_path):
@@ -1984,6 +1994,116 @@ class CharacterDialog(QDialog):
             self._btn_nb2edit.setEnabled(True)
         self._status.setText(f"✗  {err[:100]}")
         QMessageBox.critical(self, "Erreur NB2 Edit", err)
+
+    def _on_doublage(self):
+        """Ouvre une fenêtre d'assignation de voix pour ce personnage."""
+        import os
+        from PyQt6.QtWidgets import QDialog, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, QFileDialog
+        from PyQt6.QtCore import QUrl
+        from PyQt6.QtGui import QDesktopServices
+        from core.context import get_data_root
+        import core.casting as casting_api
+
+        char = self._char
+        voice_path = char.get("doublage_voice", "")
+        doublage_dir = os.path.join(get_data_root(), "doublage")
+
+        dlg = QDialog(self)
+        dlg.setWindowTitle(f"Doublage — {char.get('name', '')}")
+        dlg.setFixedSize(480, 260)
+        dlg.setStyleSheet(
+            f"QDialog{{background:{CP['bg2']};}} QLabel{{background:transparent;}}"
+        )
+
+        lay = QVBoxLayout(dlg)
+        lay.setContentsMargins(24, 20, 24, 20)
+        lay.setSpacing(12)
+
+        title = QLabel(f"Voix de doublage — {char.get('name', '')}")
+        title.setStyleSheet(
+            f"color:{CP['text_primary']};font-size:14px;font-weight:700;background:transparent;"
+        )
+        lay.addWidget(title)
+
+        if voice_path and os.path.isfile(voice_path):
+            voice_lbl = QLabel(f"🎙  {os.path.basename(voice_path)}")
+            voice_lbl.setStyleSheet(
+                f"color:{CP['accent']};font-size:11px;font-family:'Consolas',monospace;"
+                f"background:{CP['bg3']};border:1px solid {CP['accent']}44;"
+                f"border-radius:6px;padding:8px 12px;"
+            )
+        else:
+            voice_lbl = QLabel("Aucune voix assignée à ce personnage.")
+            voice_lbl.setStyleSheet(
+                f"color:{CP['text_dim']};font-size:11px;"
+                f"background:{CP['bg3']};border:1px solid {CP['border']};"
+                f"border-radius:6px;padding:8px 12px;"
+            )
+        lay.addWidget(voice_lbl)
+
+        hint = QLabel(f"Dossier doublage : {doublage_dir}")
+        hint.setStyleSheet(
+            f"color:{CP['text_dim']};font-size:9px;font-family:'Consolas',monospace;"
+        )
+        lay.addWidget(hint)
+
+        lay.addStretch()
+
+        btn_row = QHBoxLayout()
+        btn_row.setSpacing(8)
+
+        if voice_path and os.path.isfile(voice_path):
+            btn_play = QPushButton("▶  Écouter")
+            btn_play.setFixedHeight(36)
+            btn_play.setStyleSheet(
+                f"QPushButton{{background:transparent;color:{CP['accent']};"
+                f"border:1px solid {CP['accent']}44;border-radius:7px;font-size:11px;font-weight:700;}}"
+                f"QPushButton:hover{{background:{CP['accent']}18;}}"
+            )
+            btn_play.clicked.connect(lambda: QDesktopServices.openUrl(QUrl.fromLocalFile(voice_path)))
+            btn_row.addWidget(btn_play)
+
+        def _assign():
+            p, _ = QFileDialog.getOpenFileName(
+                dlg, "Choisir un fichier audio",
+                doublage_dir if os.path.isdir(doublage_dir) else os.path.expanduser("~"),
+                "Audio (*.mp3 *.wav *.m4a *.aac *.ogg);;Tous (*.*)",
+            )
+            if p:
+                char["doublage_voice"] = p
+                casting_api.save_character(char)
+                dlg.accept()
+
+        def _remove():
+            char["doublage_voice"] = ""
+            casting_api.save_character(char)
+            dlg.accept()
+
+        btn_assign = QPushButton("📂  Assigner une voix")
+        btn_assign.setFixedHeight(36)
+        btn_assign.setStyleSheet(
+            f"QPushButton{{background:{CP['accent2']};color:#fff;"
+            f"border:none;border-radius:7px;font-size:11px;font-weight:700;}}"
+            f"QPushButton:hover{{background:#9d8bff;}}"
+        )
+        btn_assign.clicked.connect(_assign)
+        btn_row.addWidget(btn_assign)
+
+        if voice_path and os.path.isfile(voice_path):
+            btn_rm = QPushButton("✕  Retirer")
+            btn_rm.setFixedHeight(36)
+            btn_rm.setFixedWidth(90)
+            btn_rm.setStyleSheet(
+                f"QPushButton{{background:transparent;color:{CP['text_dim']};"
+                f"border:1px solid {CP['border']};border-radius:7px;font-size:11px;font-weight:700;}}"
+                f"QPushButton:hover{{color:{CP['red'] if CP.get('red') else '#ff4f6a'};"
+                f"border-color:{CP['red'] if CP.get('red') else '#ff4f6a'};}}"
+            )
+            btn_rm.clicked.connect(_remove)
+            btn_row.addWidget(btn_rm)
+
+        lay.addLayout(btn_row)
+        dlg.exec()
 
     def _show_fullsize(self):
         fallback = self._sheet_path or self._image_path

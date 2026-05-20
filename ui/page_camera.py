@@ -1,8 +1,11 @@
-﻿from PyQt6.QtWidgets import (
+﻿import os
+from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QFrame,
     QPushButton, QComboBox, QScrollArea, QCheckBox, QGridLayout,
+    QTextEdit, QSlider, QProgressBar,
 )
-from PyQt6.QtCore import Qt, QTimer
+from PyQt6.QtCore import Qt, QTimer, QUrl
+from PyQt6.QtGui import QDesktopServices
 from ui.styles import CP
 from ui.icons import load_icon
 from ui.widgets import HelpBlock
@@ -86,16 +89,60 @@ class PageCamera(QWidget):
         lay.setContentsMargins(32, 28, 32, 40)
         lay.setSpacing(20)
 
-        lay.addWidget(HelpBlock("Image & Son — Préférences caméra et optique", [
-            "▸ Définissez le corps de caméra principal du film (marque, modèle) pour contextualiser les plans.",
-            "▸ Configurez la gamme d'optiques disponibles (focales fixes et zooms) pour les suggestions de plans.",
-            "▸ Ces préférences sont injectées dans les prompts Seedance pour guider le rendu visuel.",
-            "▸ Les données caméra et optique s'intègrent automatiquement aux fiches de plans du storyboard.",
+        lay.addWidget(HelpBlock("Image & Son", [
+            "▸ Bloc 1 — Réglages techniques : corps de caméra, optiques, filtres et microphone.",
+            "  Ces préférences sont injectées dans les prompts Seedance pour guider le rendu visuel.",
+            "▸ Bloc 2 — Sound Design : génère des ambiances sonores IA (Mirelo AI SFX 1.6 · $0.01/s).",
+            "  L'audio généré est automatiquement importé dans le Media Pool de DaVinci Resolve.",
         ], CP))
 
-        # ── Corps de caméra ───────────────────────────────────────────────────
-        lay.addWidget(_label("CORPS DE CAMÉRA", size=10, color=CP["text_dim"], bold=True))
-        lay.addWidget(_sep())
+        # ══════════════════════════════════════════════════════════════════════
+        # BLOC 1 — Réglages techniques (caméra, optiques, micro → prompts)
+        # ══════════════════════════════════════════════════════════════════════
+        bloc1 = QFrame()
+        bloc1.setStyleSheet(
+            f"QFrame{{background:{CP['bg1']};border:1px solid {CP['border']};"
+            f"border-radius:12px;}}"
+        )
+        b1_lay = QVBoxLayout(bloc1)
+        b1_lay.setContentsMargins(22, 18, 22, 18)
+        b1_lay.setSpacing(14)
+
+        # — En-tête bloc 1 ————————————————————————————————————————————————————
+        b1_hdr = QHBoxLayout()
+        b1_title = QLabel("Réglages techniques")
+        b1_title.setStyleSheet(
+            f"color:{CP['text_primary']};font-size:15px;font-weight:700;"
+            f"background:transparent;border:none;"
+        )
+        b1_sub = QLabel("Corps de caméra · Optiques · Filtres · Microphone")
+        b1_sub.setStyleSheet(
+            f"color:{CP['text_dim']};font-size:10px;font-family:'Consolas',monospace;"
+            f"letter-spacing:0.3px;background:transparent;border:none;"
+        )
+        b1_col = QVBoxLayout()
+        b1_col.setSpacing(3)
+        b1_col.addWidget(b1_title)
+        b1_col.addWidget(b1_sub)
+        b1_hdr.addLayout(b1_col, 1)
+        b1_lay.addLayout(b1_hdr)
+
+        b1_desc = QLabel(
+            "Ces paramètres s'injectent automatiquement dans les prompts de génération vidéo "
+            "pour reproduire le rendu d'un équipement spécifique — corps de caméra, gamme "
+            "d'optiques, filtres et microphone du tournage."
+        )
+        b1_desc.setWordWrap(True)
+        b1_desc.setStyleSheet(
+            f"color:{CP['text_secondary']};font-size:11px;"
+            f"background:transparent;border:none;"
+        )
+        b1_lay.addWidget(b1_desc)
+
+        b1_lay.addWidget(_sep())
+
+        # — Corps de caméra ————————————————————————————————————————————————————
+        b1_lay.addWidget(_label("CORPS DE CAMÉRA", size=10, color=CP["text_dim"], bold=True))
 
         cam_grid = QGridLayout()
         cam_grid.setSpacing(12)
@@ -109,12 +156,11 @@ class PageCamera(QWidget):
 
         cam_grid.addWidget(self._cb_cam_brand, 1, 0)
         cam_grid.addWidget(self._cb_cam_body,  1, 1)
-        lay.addLayout(cam_grid)
+        b1_lay.addLayout(cam_grid)
 
-        # ── Optiques ──────────────────────────────────────────────────────────
-        lay.addSpacing(4)
-        lay.addWidget(_label("OPTIQUES", size=10, color=CP["text_dim"], bold=True))
-        lay.addWidget(_sep())
+        # — Optiques ———————————————————————————————————————————————————————————
+        b1_lay.addWidget(_sep())
+        b1_lay.addWidget(_label("OPTIQUES", size=10, color=CP["text_dim"], bold=True))
 
         opt_grid = QGridLayout()
         opt_grid.setSpacing(12)
@@ -128,10 +174,10 @@ class PageCamera(QWidget):
 
         opt_grid.addWidget(self._cb_opt_brand,  1, 0)
         opt_grid.addWidget(self._cb_opt_series, 1, 1)
-        lay.addLayout(opt_grid)
+        b1_lay.addLayout(opt_grid)
 
-        # ── Filtres (section dépliable) ───────────────────────────────────────
-        lay.addSpacing(4)
+        # — Filtres (dépliable) ————————————————————————————————————————————————
+        b1_lay.addWidget(_sep())
 
         filter_header = QHBoxLayout()
         filter_header.setSpacing(0)
@@ -154,8 +200,7 @@ class PageCamera(QWidget):
         filter_header.addSpacing(8)
         filter_header.addWidget(self._filter_count_lbl)
         filter_header.addStretch()
-        lay.addLayout(filter_header)
-        lay.addWidget(_sep())
+        b1_lay.addLayout(filter_header)
 
         self._filter_container = QWidget()
         self._filter_container.setStyleSheet("background:transparent;")
@@ -168,14 +213,13 @@ class PageCamera(QWidget):
             size=10, color=CP["text_dim"]
         ))
         self._build_filter_checkboxes()
-        lay.addWidget(self._filter_container)
+        b1_lay.addWidget(self._filter_container)
 
-        # ── Microphone ───────────────────────────────────────────────────────
-        lay.addSpacing(4)
-        lay.addWidget(_label("MICROPHONE", size=10, color=CP["text_dim"], bold=True))
-        lay.addWidget(_sep())
-        lay.addWidget(_label(
-            "Choisissez le microphone principal utilisé pour ce tournage.",
+        # — Microphone ————————————————————————————————————————————————————————
+        b1_lay.addWidget(_sep())
+        b1_lay.addWidget(_label("MICROPHONE", size=10, color=CP["text_dim"], bold=True))
+        b1_lay.addWidget(_label(
+            "Microphone principal du tournage — injecté dans les paramètres sonores des prompts.",
             size=10, color=CP["text_dim"]
         ))
 
@@ -191,11 +235,10 @@ class PageCamera(QWidget):
 
         mic_grid.addWidget(self._cb_mic_cat,   1, 0)
         mic_grid.addWidget(self._cb_mic_model, 1, 1)
-        lay.addLayout(mic_grid)
+        b1_lay.addLayout(mic_grid)
 
-        # ── Prompt preview ────────────────────────────────────────────────────
-        lay.addSpacing(8)
-        lay.addWidget(_sep())
+        # — Suffixe prompt preview ————————————————————————————————————————————
+        b1_lay.addWidget(_sep())
 
         preview_row = QHBoxLayout()
         preview_row.setSpacing(10)
@@ -208,8 +251,147 @@ class PageCamera(QWidget):
             f"border-radius:6px;padding:6px 10px;"
         )
         preview_row.addWidget(self._preview_lbl, 1)
-        lay.addLayout(preview_row)
+        b1_lay.addLayout(preview_row)
 
+        lay.addWidget(bloc1)
+
+        # ══════════════════════════════════════════════════════════════════════
+        # BLOC 2 — Sound Design (génération d'ambiances → import DaVinci)
+        # ══════════════════════════════════════════════════════════════════════
+        bloc2 = QFrame()
+        bloc2.setStyleSheet(
+            f"QFrame{{background:{CP['bg1']};border:1px solid {CP['border']};"
+            f"border-radius:12px;}}"
+        )
+        b2_lay = QVBoxLayout(bloc2)
+        b2_lay.setContentsMargins(22, 20, 22, 20)
+        b2_lay.setSpacing(14)
+
+        # — En-tête bloc 2 ————————————————————————————————————————————————————
+        b2_hdr = QHBoxLayout()
+        b2_icon = QLabel("🎵")
+        b2_icon.setStyleSheet(
+            "font-size:26px;background:transparent;border:none;"
+        )
+        b2_icon.setFixedWidth(38)
+        b2_hdr.addWidget(b2_icon, 0, Qt.AlignmentFlag.AlignTop)
+
+        b2_col = QVBoxLayout()
+        b2_col.setSpacing(4)
+        b2_title = QLabel("Sound Design")
+        b2_title.setStyleSheet(
+            f"color:{CP['accent2']};font-size:18px;font-weight:700;"
+            f"background:transparent;border:none;"
+        )
+        b2_sub = QLabel("Génération d'ambiances sonores & bruitages IA")
+        b2_sub.setStyleSheet(
+            f"color:{CP['text_dim']};font-size:10px;font-family:'Consolas',monospace;"
+            f"letter-spacing:0.3px;background:transparent;border:none;"
+        )
+        b2_col.addWidget(b2_title)
+        b2_col.addWidget(b2_sub)
+        b2_hdr.addLayout(b2_col, 1)
+
+        badge_sfx = QLabel("SFX 1.6 · $0.01/s")
+        badge_sfx.setStyleSheet(
+            f"color:{CP['accent2']};font-size:9px;font-weight:700;font-family:'Consolas',monospace;"
+            f"background:rgba(122,90,248,0.12);border:1px solid rgba(122,90,248,0.35);"
+            f"border-radius:4px;padding:3px 8px;"
+        )
+        b2_hdr.addWidget(badge_sfx, 0, Qt.AlignmentFlag.AlignTop)
+
+        b2_lay.addLayout(b2_hdr)
+
+        b2_desc = QLabel(
+            "Générez des sons d'atmosphère, d'ambiance et de bruitage réalistes à partir "
+            "d'une simple description texte. Idéal pour enrichir votre montage : "
+            "paysages sonores, ambiances intérieures, bruits de fond de scène.\n\n"
+            "L'audio généré est automatiquement importé dans le Media Pool de DaVinci Resolve "
+            "et prêt à être glissé sur votre timeline pour améliorer l'immersion de votre animatique."
+        )
+        b2_desc.setWordWrap(True)
+        b2_desc.setStyleSheet(
+            f"color:{CP['text_secondary']};font-size:11px;line-height:1.5;"
+            f"background:transparent;border:none;"
+        )
+        b2_lay.addWidget(b2_desc)
+
+        b2_lay.addWidget(_sep())
+
+        self._sfx_prompt = QTextEdit()
+        self._sfx_prompt.setPlaceholderText(
+            "Décrivez l'ambiance à générer…\n"
+            "ex: Forêt la nuit, grillons, vent léger dans les feuilles\n"
+            "ex: Café animé, conversations lointaines, tasses qui tintent\n"
+            "ex: Pluie sur un toit en tôle, tonnerre au loin"
+        )
+        self._sfx_prompt.setMinimumHeight(90)
+        self._sfx_prompt.setMaximumHeight(130)
+        self._sfx_prompt.setStyleSheet(
+            f"QTextEdit{{background:{CP['bg3']};border:1px solid {CP['border']};"
+            f"border-radius:8px;color:{CP['text_primary']};font-size:12px;"
+            f"font-family:'Segoe UI',sans-serif;padding:8px;}}"
+            f"QTextEdit:focus{{border-color:{CP['accent2']};}}"
+        )
+        b2_lay.addWidget(self._sfx_prompt)
+
+        sfx_dur_row = QHBoxLayout()
+        sfx_dur_row.setSpacing(12)
+        self._sfx_dur_lbl = _label("Durée : 10 s  (~$0.10)", size=11, color=CP["text_secondary"])
+        self._sfx_dur_slider = QSlider(Qt.Orientation.Horizontal)
+        self._sfx_dur_slider.setMinimum(3)
+        self._sfx_dur_slider.setMaximum(30)
+        self._sfx_dur_slider.setValue(10)
+        self._sfx_dur_slider.setStyleSheet(
+            f"QSlider::groove:horizontal{{height:4px;background:{CP['bg3']};border-radius:2px;}}"
+            f"QSlider::handle:horizontal{{width:14px;height:14px;"
+            f"background:{CP['accent2']};border-radius:7px;margin:-5px 0;}}"
+            f"QSlider::sub-page:horizontal{{background:rgba(122,90,248,0.45);border-radius:2px;}}"
+        )
+        self._sfx_dur_slider.valueChanged.connect(self._on_sfx_dur_changed)
+        sfx_dur_row.addWidget(self._sfx_dur_lbl)
+        sfx_dur_row.addWidget(self._sfx_dur_slider, 1)
+        b2_lay.addLayout(sfx_dur_row)
+
+        self._sfx_progress = QProgressBar()
+        self._sfx_progress.setFixedHeight(4)
+        self._sfx_progress.setTextVisible(False)
+        self._sfx_progress.setRange(0, 100)
+        self._sfx_progress.setValue(0)
+        self._sfx_progress.setVisible(False)
+        self._sfx_progress.setStyleSheet(
+            f"QProgressBar{{background:{CP['bg3']};border-radius:2px;border:none;}}"
+            f"QProgressBar::chunk{{background:{CP['accent2']};border-radius:2px;}}"
+        )
+        b2_lay.addWidget(self._sfx_progress)
+
+        self._sfx_status_lbl = _label("", size=10, color=CP["text_dim"])
+        self._sfx_status_lbl.setVisible(False)
+        b2_lay.addWidget(self._sfx_status_lbl)
+
+        sfx_btn_row = QHBoxLayout()
+        sfx_btn_row.addStretch()
+        self._btn_sfx = QPushButton("🎵  Générer l'ambiance")
+        self._btn_sfx.setFixedHeight(42)
+        self._btn_sfx.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._btn_sfx.setStyleSheet(
+            f"QPushButton{{background:{CP['accent2']};color:#ffffff;"
+            f"border:none;border-radius:8px;font-size:12px;font-weight:700;padding:0 20px;}}"
+            f"QPushButton:hover{{background:#9a7aff;}}"
+            f"QPushButton:disabled{{background:{CP['bg3']};color:{CP['text_dim']};}}"
+        )
+        self._btn_sfx.clicked.connect(self._on_sfx_generate)
+        sfx_btn_row.addWidget(self._btn_sfx)
+        b2_lay.addLayout(sfx_btn_row)
+
+        self._sfx_result_lbl = _label("", size=10, color=CP["accent2"])
+        self._sfx_result_lbl.setVisible(False)
+        b2_lay.addWidget(self._sfx_result_lbl)
+
+        self._sfx_worker = None
+
+        # bloc2 (Sound Design) temporairement masqué — API SFX instable
+        # lay.addWidget(bloc2)
         lay.addStretch()
 
         scroll.setWidget(container)
@@ -413,3 +595,59 @@ class PageCamera(QWidget):
 
     def refresh(self):
         self._load_prefs()
+
+    # ── SFX 1.6 ──────────────────────────────────────────────────────────────
+
+    def _on_sfx_dur_changed(self, v: int):
+        self._sfx_dur_lbl.setText(f"Durée : {v} s  (~${v * 0.01:.2f})")
+
+    def _on_sfx_generate(self):
+        text = self._sfx_prompt.toPlainText().strip()
+        if not text:
+            return
+        from api.tts import SFX1Worker
+        dur   = self._sfx_dur_slider.value()
+        label = text[:30].strip().replace(" ", "_")
+        self._sfx_worker = SFX1Worker(text, duration=float(dur), label=label)
+        self._sfx_worker.progress.connect(self._on_sfx_progress)
+        self._sfx_worker.finished.connect(self._on_sfx_done)
+        self._sfx_worker.failed.connect(self._on_sfx_failed)
+        self._btn_sfx.setEnabled(False)
+        self._sfx_progress.setVisible(True)
+        self._sfx_progress.setValue(0)
+        self._sfx_status_lbl.setVisible(True)
+        self._sfx_status_lbl.setText("Initialisation…")
+        self._sfx_result_lbl.setVisible(False)
+        self._sfx_worker.start()
+
+    def _on_sfx_progress(self, pct: int, msg: str):
+        self._sfx_progress.setValue(pct)
+        self._sfx_status_lbl.setText(msg)
+
+    def _on_sfx_done(self, path: str):
+        self._btn_sfx.setEnabled(True)
+        self._sfx_progress.setValue(100)
+        if path and os.path.isfile(path):
+            self._sfx_result_lbl.setText(f"✓  {os.path.basename(path)}")
+            self._sfx_result_lbl.setVisible(True)
+            self._sfx_result_lbl.mousePressEvent = lambda _: QDesktopServices.openUrl(
+                QUrl.fromLocalFile(os.path.dirname(path))
+            )
+            self._sfx_result_lbl.setCursor(Qt.CursorShape.PointingHandCursor)
+            # Import auto dans DaVinci (silencieux si non connecté)
+            try:
+                from davinci.importer import import_audio_to_bin
+                imported = import_audio_to_bin(path)
+            except Exception:
+                imported = False
+            if imported:
+                self._sfx_status_lbl.setText("✓  Ambiance générée · importée dans DaVinci")
+            else:
+                self._sfx_status_lbl.setText("✓  Ambiance générée")
+        else:
+            self._sfx_status_lbl.setText("✓  Terminé (mode mock — aucune clé fal.ai)")
+
+    def _on_sfx_failed(self, err: str):
+        self._btn_sfx.setEnabled(True)
+        self._sfx_progress.setVisible(False)
+        self._sfx_status_lbl.setText(f"⚠  {err[:120]}")
