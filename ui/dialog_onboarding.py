@@ -6,12 +6,11 @@ Guide pas-à-pas : fal.ai + Anthropic Claude → coller les clés dans PANDORA.
 """
 import webbrowser
 from PyQt6.QtWidgets import (
-    QDialog, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
+    QApplication, QDialog, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
     QFrame, QScrollArea, QWidget, QCheckBox, QStackedWidget,
 )
-from PyQt6.QtCore import Qt, QTimer
+from PyQt6.QtCore import Qt, QUrl
 from PyQt6.QtGui import QDesktopServices
-from PyQt6.QtCore import QUrl
 from ui.styles import CP, PANDORA_STYLESHEET
 
 _FAL_SIGNUP   = "https://fal.ai/signup"
@@ -726,6 +725,7 @@ class OnboardingDialog(QDialog):
 
         self.setWindowTitle("Guide de démarrage — PANDORA")
         self.setFixedSize(680, 680)
+        self.setWindowModality(Qt.WindowModality.ApplicationModal)
         self.setStyleSheet(PANDORA_STYLESHEET + f"QDialog{{background:{CP['bg1']};}}")
 
         outer = QVBoxLayout(self)
@@ -887,6 +887,15 @@ class OnboardingDialog(QDialog):
             cfg = load_config()
             cfg["show_api_guide"] = False
             save_config(cfg)
+
+    def showEvent(self, event):
+        super().showEvent(event)
+        screen = QApplication.primaryScreen()
+        if screen:
+            avail = screen.availableGeometry()
+            x = avail.x() + max(0, (avail.width()  - self.width())  // 2)
+            y = avail.y() + max(0, (avail.height() - self.height()) // 2)
+            self.move(x, y)
 
     def closeEvent(self, e):
         self._save_pref()
