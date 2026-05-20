@@ -374,7 +374,7 @@ class PandoraWindow(QMainWindow):
         self._stack.setStyleSheet(f"background:{CP['bg0']};")
 
         self._assistant         = AssistantPanel()
-        self._assistant.setVisible(False)
+        self._assistant.setVisible(True)
         self._assistant_toggle  = AssistantToggleStrip(self._assistant)
 
         body_lay.addWidget(self._sidebar)
@@ -394,6 +394,7 @@ class PandoraWindow(QMainWindow):
 
         from PyQt6.QtCore import QTimer
         QTimer.singleShot(1200, self._start_update_check)
+        QTimer.singleShot(900,  self._maybe_show_onboarding)
 
         _sc = QShortcut(QKeySequence("Ctrl+S"), self)
         _sc.activated.connect(self._on_global_save_click)
@@ -875,6 +876,18 @@ class PandoraWindow(QMainWindow):
 
     def _on_update_check_failed(self):
         self._reset_update_btn()
+
+    def _maybe_show_onboarding(self):
+        from core.config import load_config
+        cfg = load_config()
+        if not cfg.get("show_api_guide", True):
+            return
+        from ui.dialog_onboarding import OnboardingDialog
+        dlg = OnboardingDialog(
+            navigate_to_settings_fn=lambda: self._navigate("settings"),
+            parent=self,
+        )
+        dlg.exec()
 
     def _start_update_check(self):
         from api.update_check import UpdateCheckWorker

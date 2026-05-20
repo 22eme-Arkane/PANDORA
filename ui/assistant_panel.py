@@ -474,7 +474,7 @@ class AssistantToggleStrip(QWidget):
         self._arrow.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self._arrow.setFixedWidth(20)
         self._arrow.setStyleSheet(
-            f"color:{CP['text_dim']};font-size:12px;background:transparent;"
+            f"color:{CP['accent']};font-size:12px;font-weight:700;background:transparent;"
         )
         lay.addWidget(self._arrow)
         lay.addStretch()
@@ -490,10 +490,10 @@ class AssistantToggleStrip(QWidget):
 
     def enterEvent(self, e):
         self._arrow.setStyleSheet(
-            f"color:{CP['accent']};font-size:12px;background:transparent;"
+            f"color:#ffffff;font-size:12px;font-weight:700;background:transparent;"
         )
 
     def leaveEvent(self, e):
         self._arrow.setStyleSheet(
-            f"color:{CP['text_dim']};font-size:12px;background:transparent;"
+            f"color:{CP['accent']};font-size:12px;font-weight:700;background:transparent;"
         )
