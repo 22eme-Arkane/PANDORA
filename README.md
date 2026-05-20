@@ -48,9 +48,8 @@ All versions: [Releases](../../releases)
 - **Windows 10/11** 64-bit
 - **DaVinci Resolve Studio** (optional — only for Media Pool integration)
 - API keys (optional — the software runs in simulation mode without them):
-  - [fal.ai](https://fal.ai) — Seedance 2.0 video generation
+  - [fal.ai](https://fal.ai) — AI video & image generation (Seedance 2.0, portraits, elements…)
   - [Anthropic](https://www.anthropic.com) — Claude AI (screenplay, storyboard, prompts)
-  - [Nano Banana](https://nano-banana.com) — character portrait & element image generation
 
 ---
 
