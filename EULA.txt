@@ -67,9 +67,8 @@ tiers. L'Utilisateur reconnaît et accepte expressément que :
     obtenues directement auprès de chaque prestataire. L'Éditeur ne fournit aucune
     clé API et n'est pas partie aux contrats conclus entre l'Utilisateur et ces
     services. Les prestataires actuellement intégrés sont notamment :
-      · fal.ai (Seedance 2.0, Kling, PixVerse, Flux, Kokoro TTS)
+      · fal.ai (Seedance 2.0, Kling, PixVerse, Flux, Kokoro TTS, génération de portraits et d'éléments visuels)
       · Anthropic (Claude — assistance scénario, storyboard, optimisation)
-      · Nano Banana (génération de portraits et d'éléments visuels)
 
 4.2 Coûts — Chaque opération effectuée via ces services est susceptible d'être
     facturée directement à l'Utilisateur par le prestataire concerné, selon ses
