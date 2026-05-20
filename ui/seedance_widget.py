@@ -35,7 +35,7 @@ class SeedanceHeader(QWidget):
 
         col = QVBoxLayout()
         col.setSpacing(1)
-        name = QLabel("SEEDANCE 2.0")
+        name = QLabel("STUDIO IA")
         name.setStyleSheet(
             f"color:{C['text_primary']};font-size:13px;font-weight:700;letter-spacing:1px;"
         )
@@ -66,7 +66,7 @@ class SeedanceHeader(QWidget):
 
 
 class SeedanceWidget(QWidget):
-    """Contenu complet Seedance 2.0 — embarquable dans PandoraWindow."""
+    """Contenu complet Studio IA — embarquable dans PandoraWindow."""
 
     def __init__(self):
         super().__init__()

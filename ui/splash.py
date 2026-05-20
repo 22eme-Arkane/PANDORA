@@ -49,8 +49,9 @@ def _glow(widget: QWidget, color: str, radius: int = 22):
 # ── Dialogue Nouveau Projet ───────────────────────────────────────────────────
 
 class NewProjectDialog(QDialog):
-    def __init__(self, parent=None):
+    def __init__(self, parent=None, mode: str = "cinema"):
         super().__init__(parent)
+        self._mode = mode
         self.setWindowTitle("Nouveau projet PANDORA")
         self.setFixedSize(500, 260)
         self.setStyleSheet(PANDORA_STYLESHEET + f"QDialog{{background:{CP['bg2']};}}")
@@ -157,7 +158,7 @@ class NewProjectDialog(QDialog):
             return
         parent = self._location.text().strip() or project_api._DEFAULT_DIR
         try:
-            self._result_data = project_api.create_project(name, parent)
+            self._result_data = project_api.create_project(name, parent, mode=self._mode)
             from core.config import load_config as _load_cfg, save_config as _save_cfg
             _cfg = _load_cfg()
             _cfg["last_project_location"] = parent
@@ -255,12 +256,14 @@ class ProjectCard(QWidget):
 # ── Panneau gauche ────────────────────────────────────────────────────────────
 
 class _LeftPanel(QWidget):
-    new_project  = pyqtSignal()
-    open_project = pyqtSignal()
-    lang_changed = pyqtSignal(str)
+    new_project   = pyqtSignal()
+    open_project  = pyqtSignal()
+    lang_changed  = pyqtSignal(str)
+    back_requested = pyqtSignal()
 
-    def __init__(self):
+    def __init__(self, mode: str = "cinema"):
         super().__init__()
+        self._mode = mode
         self.setFixedWidth(390)
         self.setStyleSheet(f"background:{CP['bg1']};")
 
@@ -268,15 +271,32 @@ class _LeftPanel(QWidget):
         lay.setContentsMargins(0, 0, 0, 0)
         lay.setSpacing(0)
 
+        # ── Bouton Retour ─────────────────────────────────────────────────────
+        back_bar = QWidget()
+        back_bar.setStyleSheet("background:transparent;")
+        back_lay = QHBoxLayout(back_bar)
+        back_lay.setContentsMargins(20, 16, 20, 0)
+        btn_back = QPushButton("← Retour")
+        btn_back.setFixedHeight(28)
+        btn_back.setCursor(Qt.CursorShape.PointingHandCursor)
+        btn_back.setStyleSheet(
+            f"QPushButton{{background:transparent;color:{CP['text_dim']};"
+            f"border:none;font-size:11px;font-weight:600;padding:0;}}"
+            f"QPushButton:hover{{color:{CP['text_secondary']};}}"
+        )
+        btn_back.clicked.connect(self.back_requested)
+        back_lay.addWidget(btn_back)
+        back_lay.addStretch()
+        lay.addWidget(back_bar)
+
         # ── Logo ──────────────────────────────────────────────────────────────
         logo_area = QWidget()
         logo_area.setStyleSheet("background:transparent;")
         ll = QVBoxLayout(logo_area)
-        ll.setContentsMargins(40, 44, 40, 0)
+        ll.setContentsMargins(40, 28, 40, 0)
         ll.setSpacing(6)
         ll.setAlignment(Qt.AlignmentFlag.AlignHCenter)
 
-        # Badge "P"
         pix_badge = badge_pixmap(72)
         badge_lbl = QLabel()
         badge_lbl.setFixedSize(72, 72)
@@ -293,7 +313,6 @@ class _LeftPanel(QWidget):
             )
         ll.addWidget(badge_lbl, 0, Qt.AlignmentFlag.AlignHCenter)
 
-        # Wordmark
         img_lbl = QLabel("PANDORA")
         img_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
         img_lbl.setStyleSheet(
@@ -323,48 +342,51 @@ class _LeftPanel(QWidget):
         cl.setContentsMargins(28, 28, 28, 28)
         cl.setSpacing(14)
 
-        sub = QLabel("Suite de pré-production IA")
+        _accent = CP["accent"] if mode == "cinema" else CP["accent2"]
+        _accent_open = CP["accent2"] if mode == "cinema" else CP["accent"]
+        _subtitle = ("Suite de pré-production IA"
+                     if mode == "cinema"
+                     else "Performance live · Mapping · VJ")
+
+        sub = QLabel(_subtitle)
         sub.setAlignment(Qt.AlignmentFlag.AlignCenter)
         sub.setStyleSheet(
             f"color:{CP['text_secondary']};font-size:11px;background:transparent;border:none;"
         )
         cl.addWidget(sub)
-        cl.addSpacing(6)
 
         btn_new = QPushButton("  NOUVEAU PROJET")
         btn_new.setFixedHeight(52)
         btn_new.setStyleSheet(
-            f"QPushButton{{background:transparent;color:{CP['accent']};"
-            f"border:1.5px solid {CP['accent']};border-radius:10px;"
+            f"QPushButton{{background:transparent;color:{_accent};"
+            f"border:1.5px solid {_accent};border-radius:10px;"
             f"font-size:13px;font-weight:700;letter-spacing:1.5px;}}"
-            f"QPushButton:hover{{background:rgba(78,205,196,0.1);}}"
-            f"QPushButton:pressed{{background:rgba(78,205,196,0.2);}}"
+            f"QPushButton:hover{{background:{_accent}1a;}}"
+            f"QPushButton:pressed{{background:{_accent}2e;}}"
         )
         btn_new.setCursor(Qt.CursorShape.PointingHandCursor)
         btn_new.clicked.connect(self.new_project)
-        pix_new = load_icon("new_project.png", 20, CP["accent"])
+        pix_new = load_icon("new_project.png", 20, _accent)
         if not pix_new.isNull():
-            from PyQt6.QtGui import QIcon as _QIcon
-            btn_new.setIcon(_QIcon(pix_new))
-        _glow(btn_new, CP["accent"], 18)
+            btn_new.setIcon(QIcon(pix_new))
+        _glow(btn_new, _accent, 18)
         cl.addWidget(btn_new)
 
         btn_open = QPushButton("  OUVRIR UN PROJET")
         btn_open.setFixedHeight(52)
         btn_open.setStyleSheet(
-            f"QPushButton{{background:transparent;color:{CP['accent2']};"
-            f"border:1.5px solid {CP['accent2']};border-radius:10px;"
+            f"QPushButton{{background:transparent;color:{_accent_open};"
+            f"border:1.5px solid {_accent_open};border-radius:10px;"
             f"font-size:13px;font-weight:700;letter-spacing:1.5px;}}"
-            f"QPushButton:hover{{background:rgba(124,107,255,0.1);}}"
-            f"QPushButton:pressed{{background:rgba(124,107,255,0.2);}}"
+            f"QPushButton:hover{{background:{_accent_open}1a;}}"
+            f"QPushButton:pressed{{background:{_accent_open}2e;}}"
         )
         btn_open.setCursor(Qt.CursorShape.PointingHandCursor)
         btn_open.clicked.connect(self.open_project)
-        pix_open = load_icon("open_project.png", 20, CP["accent2"])
+        pix_open = load_icon("open_project.png", 20, _accent_open)
         if not pix_open.isNull():
-            from PyQt6.QtGui import QIcon as _QIcon
-            btn_open.setIcon(_QIcon(pix_open))
-        _glow(btn_open, CP["accent2"], 18)
+            btn_open.setIcon(QIcon(pix_open))
+        _glow(btn_open, _accent_open, 18)
         cl.addWidget(btn_open)
 
         card_wrap = QWidget()
@@ -377,7 +399,6 @@ class _LeftPanel(QWidget):
         lay.addStretch()
 
         # ── Bas de page ───────────────────────────────────────────────────────
-        # Sélecteur de langue
         self._splash_lang_btns: dict[str, QPushButton] = {}
         lang_row = QHBoxLayout()
         lang_row.setSpacing(6)
@@ -403,7 +424,8 @@ class _LeftPanel(QWidget):
             self._splash_lang_btns[code] = btn
         lay.addLayout(lang_row)
 
-        ver = QLabel("v2.0 — alpha")
+        from core.version import VERSION as _VERSION
+        ver = QLabel(f"v{_VERSION}")
         ver.setAlignment(Qt.AlignmentFlag.AlignCenter)
         ver.setStyleSheet(
             f"color:{CP['text_dim']};font-size:9px;font-family:'Consolas',monospace;"
@@ -457,22 +479,39 @@ class _ProjectRow(QWidget):
         lay.setContentsMargins(14, 0, 16, 0)
         lay.setSpacing(14)
 
-        # Icône
-        ico = QLabel("🎬")
-        ico.setFixedSize(34, 34)
+        # Icône — logo cinéma ou live selon le mode du projet
+        ico = QLabel()
+        ico.setFixedSize(48, 30)
         ico.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        ico.setStyleSheet(
-            f"background:{CP['bg3']};border-radius:7px;font-size:16px;border:none;"
-        )
+        ico.setStyleSheet("background:transparent;border:none;")
+        _mode = data.get("mode", "cinema")
+        _logo_file = "cinéma.png" if _mode == "cinema" else "Live.png"
+        _logo_path = os.path.join(_ASSETS, "icons", _logo_file)
+        _logo_loaded = False
         thumb_path = data.get("thumbnail", "")
         if thumb_path and os.path.isfile(thumb_path):
             pix = QPixmap(thumb_path).scaled(
-                34, 34,
-                Qt.AspectRatioMode.KeepAspectRatioByExpanding,
+                48, 30,
+                Qt.AspectRatioMode.KeepAspectRatio,
                 Qt.TransformationMode.SmoothTransformation,
             )
-            ico.setPixmap(pix)
-            ico.setText("")
+            if not pix.isNull():
+                ico.setPixmap(pix)
+                _logo_loaded = True
+        if not _logo_loaded and os.path.isfile(_logo_path):
+            pix = QPixmap(_logo_path).scaled(
+                48, 30,
+                Qt.AspectRatioMode.KeepAspectRatio,
+                Qt.TransformationMode.SmoothTransformation,
+            )
+            if not pix.isNull():
+                ico.setPixmap(pix)
+                _logo_loaded = True
+        if not _logo_loaded:
+            ico.setText("🎬" if _mode == "cinema" else "◈")
+            ico.setStyleSheet(
+                f"background:{CP['bg3']};border-radius:7px;font-size:16px;border:none;"
+            )
         lay.addWidget(ico)
 
         # Nom
@@ -505,22 +544,63 @@ class _ProjectRow(QWidget):
             self.clicked.emit(self._data)
 
 
-# ── Panneau droit (projets récents) ──────────────────────────────────────────
+# ── Panneau droit (logo + projets récents) ───────────────────────────────────
 
 class _RightPanel(QWidget):
     project_selected = pyqtSignal(dict)
 
-    def __init__(self):
+    def __init__(self, mode: str = "cinema"):
         super().__init__()
+        self._mode = mode
         self.setStyleSheet(f"background:{CP['bg0']};")
 
-        lay = QVBoxLayout(self)
-        lay.setContentsMargins(32, 32, 32, 24)
+        root = QVBoxLayout(self)
+        root.setContentsMargins(0, 0, 0, 0)
+        root.setSpacing(0)
+
+        # ── Logo module (centré en haut) ──────────────────────────────────────
+        logo_zone = QWidget()
+        logo_zone.setStyleSheet(f"background:{CP['bg0']};")
+        lz_lay = QVBoxLayout(logo_zone)
+        lz_lay.setContentsMargins(32, 28, 32, 0)
+        lz_lay.setSpacing(0)
+        lz_lay.setAlignment(Qt.AlignmentFlag.AlignHCenter | Qt.AlignmentFlag.AlignTop)
+
+        logo_file = "cinéma.png" if mode == "cinema" else "Live.png"
+        logo_path = os.path.join(_ASSETS, "icons", logo_file)
+        if os.path.isfile(logo_path):
+            pix = QPixmap(logo_path)
+            if not pix.isNull():
+                pix = pix.scaledToHeight(
+                    min(pix.height(), 120),
+                    Qt.TransformationMode.SmoothTransformation,
+                )
+                logo_img = QLabel()
+                logo_img.setPixmap(pix)
+                logo_img.setAlignment(Qt.AlignmentFlag.AlignCenter)
+                logo_img.setStyleSheet("background:transparent;border:none;")
+                logo_img.setFixedWidth(min(pix.width(), 320))
+                lz_lay.addWidget(logo_img, 0, Qt.AlignmentFlag.AlignCenter)
+                lz_lay.addSpacing(16)
+
+        sep = QFrame()
+        sep.setFixedHeight(1)
+        sep.setStyleSheet(f"background:{CP['border']};")
+        lz_lay.addWidget(sep)
+        root.addWidget(logo_zone)
+
+        # ── Zone projets récents ──────────────────────────────────────────────
+        page = QWidget()
+        page.setStyleSheet("background:transparent;")
+        lay = QVBoxLayout(page)
+        lay.setContentsMargins(32, 24, 32, 24)
         lay.setSpacing(0)
 
-        hdr = QLabel("PROJETS RÉCENTS")
+        _accent = CP["accent"] if mode == "cinema" else CP["accent2"]
+        _title  = "PROJETS RÉCENTS — CINÉMA" if mode == "cinema" else "PROJETS RÉCENTS — LIVE"
+        hdr = QLabel(_title)
         hdr.setStyleSheet(
-            f"color:{CP['text_secondary']};font-size:10px;font-weight:700;"
+            f"color:{_accent};font-size:10px;font-weight:700;"
             f"letter-spacing:3px;font-family:'Consolas',monospace;"
             f"background:transparent;border:none;"
         )
@@ -541,15 +621,34 @@ class _RightPanel(QWidget):
         scroll.setWidget(self._container)
         lay.addWidget(scroll)
 
+        root.addWidget(page, 1)
         self.refresh()
 
+    # ── Refresh ───────────────────────────────────────────────────────────────
+
     def refresh(self):
+        # ── Scan automatique des dossiers connus ──────────────────────────────
+        from core.config import load_config as _load_cfg
+        _cfg = _load_cfg()
+        _scan_dirs: set[str] = set()
+        _last = _cfg.get("last_project_location", "").strip()
+        if _last and os.path.isdir(_last):
+            _scan_dirs.add(os.path.normpath(_last))
+        _scan_dirs.add(os.path.normpath(project_api._DEFAULT_DIR))
+        for _d in _scan_dirs:
+            project_api.scan_folder(_d)
+
+        # ── Affichage ─────────────────────────────────────────────────────────
         while self._vlay.count():
             item = self._vlay.takeAt(0)
             if item.widget():
                 item.widget().deleteLater()
 
-        projects = project_api.list_recent(20)
+        all_projects = project_api.list_recent(20)
+        projects = [
+            p for p in all_projects
+            if p.get("mode", "cinema") == self._mode
+        ]
         pruned = project_api.get_last_pruned()
         if pruned:
             n = len(pruned)
@@ -585,9 +684,11 @@ class _RightPanel(QWidget):
 
 class SplashWindow(QWidget):
     project_selected = pyqtSignal(dict)
+    back_requested   = pyqtSignal()
 
-    def __init__(self):
+    def __init__(self, mode: str = "cinema"):
         super().__init__()
+        self._mode = mode
         self.setWindowTitle("PANDORA — by 22eme ARKANE")
         self.setFixedSize(1100, 700)
         self.setStyleSheet(PANDORA_STYLESHEET)
@@ -596,8 +697,8 @@ class SplashWindow(QWidget):
         lay.setContentsMargins(0, 0, 0, 0)
         lay.setSpacing(0)
 
-        self._left  = _LeftPanel()
-        self._right = _RightPanel()
+        self._left  = _LeftPanel(mode)
+        self._right = _RightPanel(mode)
 
         sep = QFrame()
         sep.setFixedWidth(1)
@@ -606,6 +707,7 @@ class SplashWindow(QWidget):
         self._left.new_project.connect(self._on_new)
         self._left.open_project.connect(self._on_open)
         self._left.lang_changed.connect(self._on_lang_changed)
+        self._left.back_requested.connect(self.back_requested)
         self._right.project_selected.connect(self._on_card)
 
         lay.addWidget(self._left)
@@ -613,7 +715,7 @@ class SplashWindow(QWidget):
         lay.addWidget(self._right, 1)
 
     def _on_new(self):
-        dlg = NewProjectDialog(self)
+        dlg = NewProjectDialog(self, mode=self._mode)
         if dlg.exec() == QDialog.DialogCode.Accepted:
             data = dlg.get_project()
             if data:

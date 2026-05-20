@@ -469,9 +469,22 @@ _FR_TO_EN: dict[str, str] = {
     "Audio":                         "Audio",
     "Générer l'audio":               "Generate audio",
     "Moteur vidéo":                  "Video engine",
+    "Moteur de génération":          "Generation engine",
+    "⚠  Ce moteur ne supporte pas les images de référence nativement. "
+    "Vos personnages, décors et accessoires seront convertis en mots-clés de style "
+    "via Claude Vision et ajoutés au prompt texte.":
+        "⚠  This engine does not natively support reference images. "
+        "Your characters, sets and props will be converted to style keywords "
+        "via Claude Vision and added to the text prompt.",
+    "Créer un nouveau clip":         "Create a new clip",
     "Sélectionner une image":        "Select an image",
     "Choisir une image…":            "Choose an image…",
     "Parcourir":                     "Browse",
+
+    # ── Tab video engines (DaVinci Edit — LatentSync) ────────────────────────────
+    "Resynchroniser les lèvres":     "Resync lips",
+    "Synchronisation labiale LatentSync — aligne les lèvres sur l'audio source du clip":
+        "LatentSync lip sync — aligns lips with the source audio",
 
     # ── Tab Kling & PixVerse ─────────────────────────────────────────────────────
     "Kling v3 Pro I2V":              "Kling v3 Pro I2V",
@@ -675,6 +688,17 @@ _FR_TO_EN: dict[str, str] = {
     "Aucune image sélectionnée.":       "No image selected.",
     "Clé API manquante":                "Missing API key",
     "Configure ta clé fal.ai dans Paramètres.": "Configure your fal.ai key in Settings.",
+
+    # ── Storyboard sync confirm dialog ───────────────────────────────────────────
+    "Synchronisation — Confirmation":   "Sync — Confirmation",
+    "Synchronisation — Storyboard":     "Sync — Storyboard",
+    "Synchronisation du Storyboard":    "Storyboard Synchronization",
+    "Continuer":                        "Continue",
+    "Continuer →":                      "Continue →",
+    "Appliquer la synchronisation":     "Apply synchronization",
+    "Tout est synchronisé":             "Everything is in sync",
+    "Chargement du casting…":           "Loading cast…",
+    "Sauvegarde…":                      "Saving…",
 
     # ── Dialog titles ─────────────────────────────────────────────────────────
     "Aperçu du décor":                  "Location preview",

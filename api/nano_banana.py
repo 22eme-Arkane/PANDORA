@@ -14,6 +14,7 @@ import time
 from PyQt6.QtCore import QThread, pyqtSignal
 from core.config import load_config, get_image_endpoint, get_image_price
 from core.pandora_dirs import get_bin_dir
+from core.worker import humanize_api_error
 
 
 def analyze_style_for_image(image_path: str, anthropic_key: str) -> str:
@@ -1000,7 +1001,7 @@ class GeneratePortraitWorker(QThread):
                 self.finished.emit("", sheet_path)
 
         except Exception as e:
-            self.failed.emit(f"Erreur Nano Banana : {e}")
+            self.failed.emit(humanize_api_error(f"Erreur Nano Banana : {e}"))
 
 
 # ── Storyboard sketch generation ─────────────────────────────────────────────
@@ -1482,7 +1483,7 @@ class GeneratePortraitWithFaceIDWorker(QThread):
             self.finished.emit("", sheet_path)
 
         except Exception as e:
-            self.failed.emit(f"Erreur génération portrait : {e}")
+            self.failed.emit(humanize_api_error(f"Erreur génération portrait : {e}"))
 
 
 # Keep alias for backward compatibility
@@ -1626,7 +1627,7 @@ class GenerateDecorSheetWorker(QThread):
                 self.multi_finished.emit(paths)
 
         except Exception as e:
-            self.failed.emit(f"Erreur Nano Banana : {e}")
+            self.failed.emit(humanize_api_error(f"Erreur Nano Banana : {e}"))
 
 
 class GenerateItemWorker(QThread):
@@ -1764,7 +1765,7 @@ class GenerateItemWorker(QThread):
                 self.finished.emit(path)
 
         except Exception as e:
-            self.failed.emit(f"Erreur Nano Banana : {e}")
+            self.failed.emit(humanize_api_error(f"Erreur Nano Banana : {e}"))
 
 
 # ── NB2 Edit — Portrait avec photo de référence ───────────────────────────────
@@ -1872,4 +1873,4 @@ class GeneratePortraitNB2EditWorker(QThread):
             self.finished.emit(path)
 
         except Exception as e:
-            self.failed.emit(f"Erreur NB2 Edit : {e}")
+            self.failed.emit(humanize_api_error(f"Erreur NB2 Edit : {e}"))

@@ -6,7 +6,7 @@ from PyQt6.QtWidgets import (
 )
 from PyQt6.QtCore import Qt, pyqtSignal
 from ui.styles import C
-from ui.widgets import section_label, combo, toggle_row, ProgressBlock, HelpBlock
+from ui.widgets import section_label, combo, toggle_row, ProgressBlock, HelpBlock, show_api_error
 from core.history import save_to_history
 from core.config import get_output_dir
 from core.worker import GenerationWorker
@@ -251,7 +251,7 @@ class TabReference(QScrollArea):
         grid = QGridLayout()
         grid.setSpacing(12)
         self.cb_dur = combo(["5 secondes", "10 secondes", "15 secondes"])
-        self.cb_res = combo(["720p", "480p"])
+        self.cb_res = combo(["1080p", "720p", "480p"])
         self.cb_ratio = combo(["16:9 — Paysage", "9:16 — Portrait", "4:3", "3:4"])
 
         for (row, col), lbl, widget in [
@@ -376,6 +376,7 @@ class TabReference(QScrollArea):
 
     def on_failed(self, error: str):
         self.progress.set_error(error)
+        show_api_error(self, error)
         self._reset_ui()
         entry = {
             "mode":         "ref",

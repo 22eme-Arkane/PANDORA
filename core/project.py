@@ -43,12 +43,15 @@ def _init_project_dirs(folder: str):
     """Crée les sous-dossiers data/ dans le dossier du projet."""
     for sub in (
         "storyboard",
+        "storyboard/frames",
         "decors/images",
         "castings/images",
         "accessories/images",
         "vehicles/images",
         "scenarios",
         "hmc/images",
+        "Seedance",
+        "doublage",
     ):
         os.makedirs(os.path.join(folder, "data", sub), exist_ok=True)
 
@@ -93,9 +96,36 @@ def list_recent(max_count: int = 9) -> list[dict]:
     return result[:max_count]
 
 
+def scan_folder(folder: str):
+    """Scanne un dossier à la recherche de projets PANDORA non encore enregistrés.
+
+    Chaque sous-dossier qui contient un fichier JSON valide (id + name) est ajouté
+    en queue du registre s'il n'y était pas déjà.
+    """
+    if not os.path.isdir(folder):
+        return
+    current = {os.path.normpath(p) for p in _load_registry()}
+    new_paths: list[str] = []
+    try:
+        entries = sorted(os.listdir(folder))
+    except OSError:
+        return
+    for name in entries:
+        sub = os.path.normpath(os.path.join(folder, name))
+        if not os.path.isdir(sub) or sub in current:
+            continue
+        data = load_project(sub)
+        if data:
+            new_paths.append(sub)
+            current.add(sub)           # évite les doublons dans la même passe
+    if new_paths:
+        merged = list(_load_registry()) + new_paths
+        _save_registry(merged[:50])
+
+
 # ── CRUD projets ──────────────────────────────────────────────────────────────
 
-def create_project(name: str, parent_dir: str = "") -> dict:
+def create_project(name: str, parent_dir: str = "", mode: str = "cinema") -> dict:
     """Crée un nouveau projet dans parent_dir (défaut : Documents/PANDORA Projects)."""
     base = parent_dir.strip() or _DEFAULT_DIR
     os.makedirs(base, exist_ok=True)
@@ -113,6 +143,7 @@ def create_project(name: str, parent_dir: str = "") -> dict:
     data = {
         "id":          str(uuid.uuid4()),
         "name":        name,
+        "mode":        mode,
         "created_at":  now,
         "modified_at": now,
         "thumbnail":   "",

@@ -5,6 +5,7 @@ from davinci.bridge import resolve
 
 _IMAGE_EXTS = {".png", ".jpg", ".jpeg", ".webp", ".bmp", ".tiff", ".tif"}
 _VIDEO_EXTS = {".mp4", ".mov", ".mxf", ".avi", ".mkv"}
+_AUDIO_EXTS = {".wav", ".mp3", ".aac", ".m4a", ".ogg"}
 
 # (data subfolder, DaVinci bin name)
 _PROJECT_BINS = [
@@ -89,6 +90,21 @@ def import_image_to_bin(image_path: str, sub_bin: str) -> bool:
 def import_to_media_pool(file_path: str) -> bool:
     """Importe un fichier local dans le Media Pool du projet DaVinci courant."""
     return resolve.import_media(file_path)
+
+
+def import_audio_to_bin(audio_path: str) -> bool:
+    """
+    Importe une piste audio (.wav, .mp3, …) dans le bin PANDORA du Media Pool.
+    Retourne False silencieusement si DaVinci n'est pas connecté.
+    """
+    if not audio_path or not os.path.isfile(audio_path):
+        return False
+    ext = os.path.splitext(audio_path)[1].lower()
+    if ext not in _AUDIO_EXTS:
+        return False
+    if not resolve.is_connected():
+        return False
+    return resolve.import_media_to_bin(audio_path, "")
 
 
 def import_result(result: dict, dest_dir: str, shot_title: str = "",

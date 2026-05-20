@@ -517,13 +517,26 @@ def _s_seedance() -> str:
             'Durée recommandée : 5-10 s pour un court dialogue, 10-15 s pour un monologue',
         ),
         _sep_html(),
-        _h("Moteurs vidéo alternatifs — Kling & PixVerse"),
+        _h("Moteur de génération — 8 moteurs disponibles"),
+        _p("Dans les onglets <b>Créer un nouveau clip</b> et <b>Modifier depuis DaVinci Resolve</b>, "
+           "le menu <b>Moteur de génération</b> donne accès à 8 moteurs vidéo IA. "
+           "Le moteur sélectionné s'applique à toute la file d'attente."),
         _ul(
-            "<b>Kling v3 Pro I2V</b> — Anime une image (Image-to-Video) · $0.112-0.168/s · jusqu'à 15 s · audio natif",
-            "<b>Kling v3 Pro T2V</b> — Génère depuis un texte (Text-to-Video) · $0.112-0.196/s · jusqu'à 15 s",
-            "<b>PixVerse v4.5 I2V</b> — Ultra-rapide et économique · $0.04-0.08/s · 5 s fixe · sans audio natif",
-            "Accessibles dans l'onglet <b>Kling & PixVerse</b> de la page Seedance 2.0",
+            "<b>Seedance 2.0</b> (ByteDance) — T2V + I2V + Extension · jusqu'à 15 s · lipsync · <i>par défaut · n°2 ELO</i> · $0.02-0.06/s",
+            "<b>Happy Horse 1.0</b> (Alibaba) — T2V + I2V · 720p/1080p · <i>n°1 ELO Avril 2026</i> · $0.14-0.28/s",
+            "<b>Kling v3 Pro</b> (Kwai) — T2V + I2V · 1080p · audio natif · <i>n°3 ELO</i> · $0.112-0.196/s",
+            "<b>Kling O3 4K</b> — T2V + I2V · résolution 4K · ~$0.42/s",
+            "<b>Veo 3.1</b> (Google) — T2V · 1080p · audio natif · ~$1.00/vidéo",
+            "<b>Sora 2</b> (OpenAI) — T2V · 1080p · durée fixe · ~$0.40/vidéo",
+            "<b>PixVerse v6</b> — T2V · 360p à 1080p · $0.025-0.115/s · économique",
+            "<b>Seedance 2.0 Fast</b> — Version rapide · économique · $0.09/s",
         ),
+        _tip("Seedance 2.0 est le moteur par défaut — le plus optimisé dans Pandora (références, lipsync, storyboard). "
+             "Classement ELO vidéo Avril 2026. "
+             "La résolution et le ratio se règlent automatiquement selon le moteur choisi. "
+             "Kling O3 4K passe automatiquement en 4K ; Veo 3.1 et Sora 2 verrouillent le 1080p."),
+        _p("L'onglet <b>Génération directe</b> donne accès à ces 8 moteurs avec des formulaires "
+           "dédiés (image de départ, paramètres avancés…) sans intégration storyboard."),
         _sep_html(),
         _h("Mode Mock vs Mode Réel"),
         _ul(
@@ -640,10 +653,15 @@ def _s_tarifs() -> str:
     ])
     table_video = "".join([
         '<table style="border-collapse:collapse;width:100%;margin:10px 0 16px 0;">',
-        _table_row(["Moteur", "Mode", "Durée max", "Audio natif", "Prix"], header=True),
-        _table_row(["Seedance 2.0", "T2V + I2V + Extension", "15 s", "✓ (lipsync)", "$0.02-0.06/s"]),
-        _table_row(["Kling v3 Pro", "I2V + T2V", "15 s", "✓", "$0.112-0.196/s"]),
-        _table_row(["PixVerse v4.5", "I2V", "5 s", "✗", "$0.04-0.08/s"]),
+        _table_row(["Moteur (ELO Avr. 2026)", "Mode", "Résolution", "Audio natif", "Prix"], header=True),
+        _table_row(["Seedance 2.0 ★ (défaut)", "T2V + I2V + Extension", "jusqu'à 1080p", "✓ (lipsync)", "$0.02-0.06/s"]),
+        _table_row(["#1 Happy Horse 1.0", "T2V + I2V", "720p / 1080p", "✗", "$0.14-0.28/s"]),
+        _table_row(["#3 Kling v3 Pro", "T2V + I2V", "1080p", "✓", "$0.112-0.196/s"]),
+        _table_row(["Kling O3 4K", "T2V + I2V", "4K", "✗", "~$0.42/s"]),
+        _table_row(["Veo 3.1", "T2V", "1080p", "✓", "~$1.00/vidéo"]),
+        _table_row(["Sora 2", "T2V", "1080p", "✗", "~$0.40/vidéo"]),
+        _table_row(["PixVerse v6", "T2V", "360p → 1080p", "✗", "$0.025-0.115/s"]),
+        _table_row(["Seedance 2.0 Fast", "T2V", "jusqu'à 720p", "✓", "~$0.09/s"]),
         "</table>",
     ])
     table_audio = "".join([
@@ -1260,13 +1278,26 @@ def _e_seedance() -> str:
             'Recommended duration: 5-10 s for short dialogue, 10-15 s for a monologue',
         ),
         _sep_html(),
-        _h("Alternative video engines — Kling & PixVerse"),
+        _h("Generation engine — 8 engines available"),
+        _p("In the <b>Create a new clip</b> and <b>Edit from DaVinci Resolve</b> tabs, "
+           "the <b>Generation engine</b> menu gives access to 8 AI video engines. "
+           "The selected engine applies to the entire queue."),
         _ul(
-            "<b>Kling v3 Pro I2V</b> — Animate an image (Image-to-Video) · $0.112-0.168/s · up to 15 s · native audio",
-            "<b>Kling v3 Pro T2V</b> — Generate from text (Text-to-Video) · $0.112-0.196/s · up to 15 s",
-            "<b>PixVerse v4.5 I2V</b> — Ultra-fast and economical · $0.04-0.08/s · 5 s fixed · no native audio",
-            "Accessible in the <b>Kling & PixVerse</b> tab of the Seedance 2.0 page",
+            "<b>Seedance 2.0</b> (ByteDance) — T2V + I2V + Extension · up to 15 s · lipsync · <i>default · #2 ELO</i> · $0.02-0.06/s",
+            "<b>Happy Horse 1.0</b> (Alibaba) — T2V + I2V · 720p/1080p · <i>#1 ELO April 2026</i> · $0.14-0.28/s",
+            "<b>Kling v3 Pro</b> (Kwai) — T2V + I2V · 1080p · native audio · <i>#3 ELO</i> · $0.112-0.196/s",
+            "<b>Kling O3 4K</b> — T2V + I2V · 4K resolution · ~$0.42/s",
+            "<b>Veo 3.1</b> (Google) — T2V · 1080p · native audio · ~$1.00/video",
+            "<b>Sora 2</b> (OpenAI) — T2V · 1080p · fixed duration · ~$0.40/video",
+            "<b>PixVerse v6</b> — T2V · 360p to 1080p · $0.025-0.115/s · economical",
+            "<b>Seedance 2.0 Fast</b> — Fast version · economical · $0.09/s",
         ),
+        _tip("Seedance 2.0 is the default engine — most optimized in Pandora (references, lipsync, storyboard). "
+             "ELO video ranking, April 2026. "
+             "Resolution and ratio are set automatically based on the chosen engine. "
+             "Kling O3 4K automatically switches to 4K; Veo 3.1 and Sora 2 lock to 1080p."),
+        _p("The <b>Direct generation</b> tab gives access to all 8 engines with dedicated forms "
+           "(start image, advanced parameters…) without storyboard integration."),
         _sep_html(),
         _h("Mock mode vs Real mode"),
         _ul(
@@ -1371,10 +1402,15 @@ def _e_pricing() -> str:
     ])
     table_video = "".join([
         '<table style="border-collapse:collapse;width:100%;margin:10px 0 16px 0;">',
-        _table_row(["Engine", "Mode", "Max duration", "Native audio", "Price"], header=True),
-        _table_row(["Seedance 2.0", "T2V + I2V + Extension", "15 s", "✓ (lipsync)", "$0.02-0.06/s"]),
-        _table_row(["Kling v3 Pro", "I2V + T2V", "15 s", "✓", "$0.112-0.196/s"]),
-        _table_row(["PixVerse v4.5", "I2V", "5 s", "✗", "$0.04-0.08/s"]),
+        _table_row(["Engine (ELO Apr. 2026)", "Mode", "Resolution", "Native audio", "Price"], header=True),
+        _table_row(["Seedance 2.0 ★ (default)", "T2V + I2V + Extension", "up to 1080p", "✓ (lipsync)", "$0.02-0.06/s"]),
+        _table_row(["#1 Happy Horse 1.0", "T2V + I2V", "720p / 1080p", "✗", "$0.14-0.28/s"]),
+        _table_row(["#3 Kling v3 Pro", "T2V + I2V", "1080p", "✓", "$0.112-0.196/s"]),
+        _table_row(["Kling O3 4K", "T2V + I2V", "4K", "✗", "~$0.42/s"]),
+        _table_row(["Veo 3.1", "T2V", "1080p", "✓", "~$1.00/video"]),
+        _table_row(["Sora 2", "T2V", "1080p", "✗", "~$0.40/video"]),
+        _table_row(["PixVerse v6", "T2V", "360p → 1080p", "✗", "$0.025-0.115/s"]),
+        _table_row(["Seedance 2.0 Fast", "T2V", "up to 720p", "✓", "~$0.09/s"]),
         "</table>",
     ])
     table_audio = "".join([

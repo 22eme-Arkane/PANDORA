@@ -1,10 +1,67 @@
 from PyQt6.QtWidgets import (
     QLabel, QFrame, QComboBox, QWidget, QVBoxLayout, QHBoxLayout,
-    QTextEdit, QPushButton, QCheckBox, QProgressBar,
+    QTextEdit, QPushButton, QCheckBox, QProgressBar, QDialog, QDialogButtonBox,
 )
 from PyQt6.QtCore import Qt, QObject, QEvent
-from ui.styles import C
+from ui.styles import C, CP
 from ui.icons import claude_icon_pixmap, install_hover_icon
+
+
+def show_api_error(parent, message: str):
+    """Affiche une fenêtre d'erreur. Si c'est une erreur de crédit fal.ai, dialog dédié."""
+    from core.worker import is_credit_error
+    if is_credit_error(message):
+        dlg = QDialog(parent)
+        dlg.setWindowTitle("Crédits insuffisants")
+        dlg.setMinimumWidth(420)
+        dlg.setStyleSheet(
+            f"QDialog{{background:{CP['bg1']};color:{CP['text_primary']};}}"
+            f"QLabel{{background:transparent;color:{CP['text_primary']};}}"
+        )
+        lay = QVBoxLayout(dlg)
+        lay.setContentsMargins(28, 24, 28, 20)
+        lay.setSpacing(16)
+
+        ico = QLabel("💳")
+        ico.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        ico.setStyleSheet("font-size:40px;background:transparent;")
+        lay.addWidget(ico)
+
+        title = QLabel("Crédits fal.ai insuffisants")
+        title.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        title.setStyleSheet(
+            f"color:{CP.get('red','#ff4f6a')};font-size:15px;font-weight:700;"
+            f"background:transparent;"
+        )
+        lay.addWidget(title)
+
+        body = QLabel(
+            "La génération n'a pas pu démarrer.\n\n"
+            "Rechargez votre compte sur fal.ai/dashboard\n"
+            "pour continuer à utiliser PANDORA."
+        )
+        body.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        body.setWordWrap(True)
+        body.setStyleSheet(
+            f"color:{CP['text_secondary']};font-size:11px;background:transparent;"
+        )
+        lay.addWidget(body)
+
+        btns = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok)
+        btns.button(QDialogButtonBox.StandardButton.Ok).setText("OK")
+        btns.button(QDialogButtonBox.StandardButton.Ok).setStyleSheet(
+            f"QPushButton{{background:{CP.get('red','#ff4f6a')};color:#fff;"
+            f"border:none;border-radius:8px;font-size:12px;font-weight:700;"
+            f"padding:8px 28px;}}"
+            f"QPushButton:hover{{background:#cc2040;}}"
+        )
+        btns.accepted.connect(dlg.accept)
+        lay.addWidget(btns, 0, Qt.AlignmentFlag.AlignCenter)
+
+        dlg.exec()
+    else:
+        from PyQt6.QtWidgets import QMessageBox
+        QMessageBox.critical(parent, "Erreur de génération", message)
 
 
 class _WheelIgnoreFilter(QObject):
@@ -90,8 +147,8 @@ class HelpBlock(QFrame):
 def section_label(text: str) -> QLabel:
     lbl = QLabel(text.upper())
     lbl.setStyleSheet(
-        f"color:{C['text_dim']};font-size:9px;letter-spacing:2px;"
-        f"font-family:'Consolas',monospace;font-weight:600;margin-bottom:4px;"
+        f"color:{C['accent']};font-size:9px;letter-spacing:2px;"
+        f"font-family:'Consolas',monospace;font-weight:700;margin-bottom:4px;"
     )
     return lbl
 
@@ -108,9 +165,13 @@ _wheel_ignore = _WheelIgnoreFilter()
 
 def combo(options: list) -> QComboBox:
     cb = QComboBox()
-    cb.addItems(options)
     cb.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
     cb.installEventFilter(_wheel_ignore)
+    for opt in options:
+        if isinstance(opt, tuple):
+            cb.addItem(opt[0], opt[1])  # (label, data)
+        else:
+            cb.addItem(str(opt))
     return cb
 
 

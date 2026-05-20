@@ -9,6 +9,7 @@ import os
 import uuid
 import requests
 from PyQt6.QtCore import QThread, pyqtSignal
+from core.worker import humanize_api_error
 
 
 # ── Camera term mappings (Flux-native English) ────────────────────────────────
@@ -233,7 +234,7 @@ class MoodGenerationWorker(QThread):
                                   self.progress.emit)
             self.finished.emit(path)
         except Exception as e:
-            self.failed.emit(str(e))
+            self.failed.emit(humanize_api_error(str(e)))
 
 
 # ── Worker batch ──────────────────────────────────────────────────────────────

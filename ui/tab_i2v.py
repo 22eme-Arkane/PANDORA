@@ -5,7 +5,7 @@ from PyQt6.QtWidgets import (
 )
 from PyQt6.QtCore import Qt, pyqtSignal
 from ui.styles import C
-from ui.widgets import section_label, combo, toggle_row, prompt_block, upload_zone, ProgressBlock, HelpBlock
+from ui.widgets import section_label, combo, toggle_row, prompt_block, upload_zone, ProgressBlock, HelpBlock, show_api_error
 from core.history import save_to_history
 from core.config import get_output_dir
 from core.worker import GenerationWorker
@@ -59,7 +59,7 @@ class TabI2V(QScrollArea):
         grid = QGridLayout()
         grid.setSpacing(12)
         self.cb_dur = combo(["5 secondes", "10 secondes", "15 secondes"])
-        self.cb_res = combo(["720p", "480p"])
+        self.cb_res = combo(["1080p", "720p", "480p"])
         for col_idx, lbl, widget in [(0, "Durée", self.cb_dur), (1, "Résolution", self.cb_res)]:
             g = QWidget()
             l = QVBoxLayout(g)
@@ -144,7 +144,7 @@ class TabI2V(QScrollArea):
     def on_failed(self, error: str):
         self.progress.set_error(error)
         self.btn_generate.setEnabled(True)
-        QMessageBox.critical(self, "Erreur", error)
+        show_api_error(self, error)
 
     def _on_enhance(self):
         prompt = self.prompt_ta.toPlainText().strip()

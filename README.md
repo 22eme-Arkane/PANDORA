@@ -1,103 +1,110 @@
-# PANDORA — Plugin de pré-production cinéma × Seedance 2.0
+# PANDORA — Cinema Pre-Production Plugin × Seedance 2.0
 
-**PANDORA** est un logiciel de pré-production cinéma pour Windows qui intègre la génération vidéo IA (Seedance 2.0 / ByteDance via fal.ai) dans un workflow complet : scénario, storyboard, casting, décors, accessoires, HMC et véhicules.
-
----
-
-## Présentation
-
-[![Voir la présentation PANDORA sur YouTube](https://img.youtube.com/vi/ci9jA_Tye2E/maxresdefault.jpg)](https://youtu.be/ci9jA_Tye2E)
+**PANDORA** is a cinema pre-production software for Windows that integrates AI video generation (Seedance 2.0 / ByteDance via fal.ai) into a complete workflow: screenplay, storyboard, casting, sets, props, costumes & makeup, and vehicles.
 
 ---
 
-## Téléchargement
+## Presentation
 
-**[⬇ Télécharger PANDORA v1.0.9](https://github.com/22eme-Arkane/PANDORA/releases/download/v1.0.9/PANDORA_Setup_1.0.9.exe)**
+[![Watch the PANDORA presentation on YouTube](https://img.youtube.com/vi/ci9jA_Tye2E/maxresdefault.jpg)](https://youtu.be/ci9jA_Tye2E)
 
-Toutes les versions : [Releases](../../releases)
+## Full Tutorial
 
-> **Note Windows :** lors de la première installation, Windows peut afficher un avertissement
-> SmartScreen ("Application inconnue"). Cliquez sur **"Informations complémentaires"** puis
-> **"Exécuter quand même"**. Cet avertissement disparaîtra dans une prochaine version
-> (certificat de signature en cours d'acquisition).
+[![Watch the full PANDORA tutorial on YouTube](https://img.youtube.com/vi/SC3pRI5bR1Q/maxresdefault.jpg)](https://www.youtube.com/watch?v=SC3pRI5bR1Q)
 
 ---
 
-## Fonctionnalités
+## Download
+
+**[⬇ Download PANDORA v1.1.2](https://github.com/22eme-Arkane/PANDORA/releases/download/v1.1.2/PANDORA_Setup_1.1.2.exe)**
+
+All versions: [Releases](../../releases)
+
+> **Windows note:** on first install, Windows may show a SmartScreen warning ("Unknown app").
+> Click **"More info"** then **"Run anyway"**. This warning will disappear in a future version
+> (code signing certificate in progress).
+
+---
+
+## Features
 
 | Module | Description |
 |--------|-------------|
-| **Scénario** | Éditeur de scénario cinéma + mise en page automatique via Claude IA + gestion de versions |
-| **Storyboard** | Grille de plans avec génération vidéo directe (Seedance 2.0) depuis chaque plan |
-| **Castings** | Fiches personnages + génération de portraits IA |
-| **Décors** | Fiches de lieux + génération d'images IA multi-vues |
-| **Accessoires / HMC / Véhicules** | Fiches éléments + génération d'images IA |
-| **AI Studio** | Génération vidéo Seedance 2.0 — Text-to-Video, Image-to-Video, Extension, Référence multimodale |
-| **Image & Son** | Préférences caméra et optiques |
-| **Intégration DaVinci Resolve** | Import automatique des clips dans le Media Pool (DaVinci Studio requis) |
+| **Screenplay** | Cinema screenplay editor + auto-formatting via Claude AI + version management |
+| **Storyboard** | Shot grid with direct AI video generation (Seedance 2.0) from each shot |
+| **Castings** | Character sheets + AI portrait generation |
+| **Sets** | Location sheets + multi-angle AI image generation |
+| **Props / Costumes / Vehicles** | Element sheets + AI image generation |
+| **AI Studio** | 13 video engines — Seedance 2.0, Kling, PixVerse, Veo 3.1, Happy Horse, Sora 2… |
+| **"Generate All"** | One-click extraction + image generation for all screenplay elements |
+| **Dubbing** | Text-to-speech synthesis + background removal (BiRefNet) |
+| **Image & Sound** | Camera and optics preferences |
+| **DaVinci Resolve** | Automatic clip import into Media Pool (DaVinci Studio required) |
 
 ---
 
-## Prérequis
+## Requirements
 
-- **Windows 10/11** 64 bits
-- **DaVinci Resolve Studio** (optionnel — uniquement pour l'intégration Media Pool)
-- Clés API (optionnelles — le logiciel fonctionne en mode simulation sans elles) :
-  - [fal.ai](https://fal.ai) — génération vidéo Seedance 2.0
-  - [Anthropic](https://www.anthropic.com) — assistant IA (scénario, storyboard, prompts)
+- **Windows 10/11** 64-bit
+- **DaVinci Resolve Studio** (optional — only for Media Pool integration)
+- API keys (optional — the software runs in simulation mode without them):
+  - [fal.ai](https://fal.ai) — Seedance 2.0 video generation
+  - [Anthropic](https://www.anthropic.com) — Claude AI (screenplay, storyboard, prompts)
+  - [Nano Banana](https://nano-banana.com) — character portrait & element image generation
 
 ---
 
 ## Installation
 
-1. Télécharger `PANDORA_Setup_1.0.9.exe` depuis le lien ci-dessus
-2. Exécuter l'installeur et accepter la charte d'utilisation (CLUF)
-3. Lancer **PANDORA** depuis le menu Démarrer ou le bureau
-4. Renseigner vos clés API dans **Paramètres** (optionnel)
+1. Download `PANDORA_Setup_1.1.2.exe` from the link above
+2. Run the installer and accept the End User License Agreement
+3. Launch **PANDORA** from the Start menu or desktop shortcut
+4. Enter your API keys in **Settings** (optional)
 
 ---
 
-## Utilisation rapide
+## Quick Start
 
-1. **Créer un projet** — depuis l'écran d'accueil, cliquez sur "Nouveau projet"
-2. **Écrire le scénario** — page Scénario, avec mise en page et suggestions Claude IA
-3. **Générer le storyboard** — depuis le scénario, cliquez "Générer le storyboard"
-4. **Créer les fiches** — Castings, Décors, Accessoires, HMC, Véhicules
-5. **Générer des vidéos** — page AI Studio, onglet Text-to-Video ou depuis chaque plan du storyboard
+1. **Create a project** — from the home screen, click "New project"
+2. **Write the screenplay** — Screenplay page, with auto-formatting and Claude AI suggestions
+3. **Generate the storyboard** — from the screenplay, click "Generate storyboard"
+4. **Create element sheets** — Castings, Sets, Props, Costumes, Vehicles
+5. **Or use "Generate All"** — one-click extraction of all elements from the screenplay
+6. **Generate videos** — AI Studio tab, Text-to-Video or directly from each storyboard shot
 
 ---
 
 ## Architecture
 
 ```
-core/      Logique métier (config, projets, scénario, storyboard, i18n, migration…)
-api/       Appels réseau dans QThread (Seedance, Claude, update check)
-ui/        Composants PyQt6 (pages, dialogs, onglets AI Studio)
-davinci/   Pont DaVinci Resolve Scripting API
-assets/    Icônes, badges, références visuelles
-tools/     Scripts utilitaires (build, conversion ICO, wizard images)
+core/      Business logic (config, projects, screenplay, storyboard, i18n, migration…)
+api/       Network calls in QThread (Seedance, Claude, Nano Banana, update check)
+ui/        PyQt6 components (pages, dialogs, AI Studio tabs)
+davinci/   DaVinci Resolve Scripting API bridge
+assets/    Icons, badges, visual references
+tools/     Utility scripts (build, ICO conversion, wizard images)
 ```
 
 ---
 
-## Soutenir PANDORA
+## Support PANDORA
 
-PANDORA est gratuit. Si ce projet vous est utile :
+PANDORA is free. If this project is useful to you:
 
-- ⭐ Mettez une étoile sur GitHub
-- 🐛 [Signalez un bug](../../issues) — objet : `Bug`
-- 💬 [Partagez vos retours](mailto:22eme.arkane@gmail.com) — objet : `Avis`
-
----
-
-## Charte d'utilisation
-
-Voir [EULA.txt](EULA.txt) — acceptée lors de la première installation.
+- ⭐ Star the repo on GitHub
+- 🐛 [Report a bug](../../issues) — subject: `Bug`
+- 💬 [Share your feedback](mailto:22eme.arkane@gmail.com) — subject: `Feedback`
 
 ---
 
-## Licence
+## End User License Agreement
 
-© 2026 22eme Arkane. Tous droits réservés.  
-Logiciel propriétaire — la consultation du code source ne confère aucun droit d'utilisation, de copie ou de redistribution.  
-Voir [LICENSE](LICENSE) et [EULA.txt](EULA.txt) pour les conditions complètes.
+See [EULA.txt](EULA.txt) — accepted at first launch.
+
+---
+
+## License
+
+© 2026 22eme Arkane. All rights reserved.  
+Proprietary software — viewing the source code does not grant any right to use, copy, or redistribute.  
+See [LICENSE](LICENSE) and [EULA.txt](EULA.txt) for full terms.
