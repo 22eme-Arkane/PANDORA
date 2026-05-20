@@ -28,6 +28,8 @@ _DEFAULTS = {
     "nano_banana_key":       "",
     # Charte d'utilisation — True = acceptée par l'utilisateur
     "eula_accepted":         False,
+    # Guide de démarrage — True = afficher au premier lancement
+    "show_api_guide":        True,
 }
 
 # ── Mapping modèle image → endpoint fal.ai ────────────────────────────────────

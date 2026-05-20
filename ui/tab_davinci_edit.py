@@ -812,7 +812,11 @@ class TabDavinciEdit(QScrollArea):
         body_queue.addWidget(self._lbl_progress)
 
         self._cb_import = QCheckBox("Import auto dans DaVinci Media Pool après génération")
-        self._cb_import.setChecked(True)
+        self._cb_import.setChecked(False)
+        self._cb_import.setEnabled(False)
+        self._cb_import.setToolTip(
+            "DaVinci Resolve Studio requis — connectez le bridge pour activer cette option"
+        )
         self._cb_import.setStyleSheet(f"color:{C['text_secondary']};font-size:11px;")
         body_queue.addWidget(self._cb_import)
 
@@ -926,6 +930,14 @@ class TabDavinciEdit(QScrollArea):
                 f"color:{C['text_dim']};font-size:10px;font-family:'Consolas',monospace;"
             )
             self._lbl_bridge_help.setVisible(True)
+        self._cb_import.setEnabled(connected)
+        if not connected:
+            self._cb_import.setChecked(False)
+            self._cb_import.setToolTip(
+                "DaVinci Resolve Studio requis — connectez le bridge pour activer cette option"
+            )
+        else:
+            self._cb_import.setToolTip("")
 
     # ── Inbox (écrit par pandora_send.py dans DaVinci) ───────────────────────
 

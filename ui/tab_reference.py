@@ -11,6 +11,7 @@ from core.history import save_to_history
 from core.config import get_output_dir
 from core.worker import GenerationWorker
 from api.enhance import EnhanceWorker
+from davinci.bridge import resolve
 from davinci.importer import import_result
 
 
@@ -270,6 +271,13 @@ class TabReference(QScrollArea):
 
         toggle_import = toggle_row("Import auto dans Media Pool", "Après génération terminée", True)
         self._import_cb = toggle_import.findChild(QCheckBox)
+        _dv_ok = resolve.is_connected()
+        self._import_cb.setChecked(_dv_ok)
+        self._import_cb.setEnabled(_dv_ok)
+        if not _dv_ok:
+            self._import_cb.setToolTip(
+                "DaVinci Resolve Studio requis — connectez le bridge pour activer cette option"
+            )
         lay.addWidget(toggle_import)
 
         # ── Progression ───────────────────────────────────────────────────────

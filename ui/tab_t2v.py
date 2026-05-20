@@ -1246,8 +1246,11 @@ class StoryboardSelector(QWidget):
 # ── DaVinci status bar ────────────────────────────────────────────────────────
 
 class _DaVinciBar(QWidget):
+    connection_changed = pyqtSignal(bool)
+
     def __init__(self):
         super().__init__()
+        self._prev_connected: bool | None = None
         self.setFixedHeight(36)
         lay = QHBoxLayout(self)
         lay.setContentsMargins(0, 0, 0, 0)
@@ -1301,6 +1304,9 @@ class _DaVinciBar(QWidget):
             )
             self._btn_connect.setText("Connecter")
             self._btn_connect.setEnabled(True)
+        if connected != self._prev_connected:
+            self._prev_connected = connected
+            self.connection_changed.emit(connected)
 
     def _on_connect(self):
         ok, msg = resolve.connect()
@@ -2656,7 +2662,13 @@ class TabT2V(QScrollArea):
 
         self.btn_generate = QPushButton("▶▶  Lancer la file d'attente")
         self.btn_generate.setMinimumHeight(46)
-        self.btn_generate.clicked.connect(self.start_generation)
+        self.btn_generate.clicked.connect(self._start_with_credit_check)
+        self._billing_worker = None
+        self._balance_lbl = QLabel("")
+        self._balance_lbl.setStyleSheet(
+            f"color:{C['text_dim']};font-size:9px;"
+            f"font-family:'Consolas',monospace;background:transparent;"
+        )
 
         _rep_lbl = QLabel("×")
         _rep_lbl.setFixedWidth(14)
@@ -2689,20 +2701,33 @@ class TabT2V(QScrollArea):
         self.btn_cancel.clicked.connect(self.cancel_generation)
 
         self._import_cb = QCheckBox("Import auto dans DaVinci Media Pool après génération")
-        self._import_cb.setChecked(True)
+        _dv_ok = resolve.is_connected()
+        self._import_cb.setChecked(_dv_ok)
+        self._import_cb.setEnabled(_dv_ok)
+        self._import_cb.setToolTip(
+            "" if _dv_ok
+            else "DaVinci Resolve Studio requis — connectez le bridge pour activer cette option"
+        )
         self._import_cb.setStyleSheet(f"color:{C['text_secondary']};font-size:11px;")
         lay.addWidget(self._import_cb)
 
         btn_row = QHBoxLayout()
         btn_row.setContentsMargins(0, 0, 0, 0)
         btn_row.setSpacing(8)
-        btn_row.addWidget(self.btn_generate)
+        btn_row.addWidget(self.btn_generate, 1)
         btn_row.addWidget(_rep_lbl)
         btn_row.addWidget(self._spinbox_repeat)
         btn_row.addWidget(self.btn_cancel)
         lay.addLayout(btn_row)
 
+        balance_row = QHBoxLayout()
+        balance_row.setContentsMargins(0, 0, 0, 0)
+        balance_row.addStretch()
+        balance_row.addWidget(self._balance_lbl)
+        lay.addLayout(balance_row)
+
         lay.addWidget(self._davinci_bar)
+        self._davinci_bar.connection_changed.connect(self._on_davinci_connection_changed)
 
         # ── Encart prix (sous le bouton Générer) ──────────────────────────────
         price_frame = QFrame()
@@ -3099,6 +3124,171 @@ class TabT2V(QScrollArea):
                 QMessageBox.warning(self, "Connexion impossible", msg)
         return True
 
+    # ── Garde-fou crédit fal.ai ───────────────────────────────────────────────
+
+    def _start_with_credit_check(self):
+        from api.billing import BillingCheckWorker, get_cached_balance
+        cached = get_cached_balance()
+        if cached is not None:
+            self._on_billing_result(*cached)
+            return
+        self.btn_generate.setEnabled(False)
+        self.btn_generate.setText("Vérification du solde…")
+        self._billing_worker = BillingCheckWorker()
+        self._billing_worker.result.connect(self._on_billing_result)
+        self._billing_worker.failed.connect(self._on_billing_failed)
+        self._billing_worker.start()
+
+    def _on_billing_result(self, balance: float, currency: str):
+        self.btn_generate.setEnabled(True)
+        self.btn_generate.setText("▶▶  Lancer la file d'attente")
+        from api.billing import WARN_THRESHOLD, BLOCK_THRESHOLD, _DASHBOARD_URL
+        sym = "$" if currency.upper() == "USD" else currency
+        # Mise à jour du label de solde
+        if balance <= 1.0:
+            color = C['red']
+        elif balance < WARN_THRESHOLD:
+            color = "#f5c518"
+        else:
+            color = C['text_dim']
+        self._balance_lbl.setText(f"Solde fal.ai : {sym}{balance:.2f}")
+        self._balance_lbl.setStyleSheet(
+            f"color:{color};font-size:9px;"
+            f"font-family:'Consolas',monospace;background:transparent;"
+        )
+        # Blocage si solde épuisé
+        if balance <= BLOCK_THRESHOLD:
+            from PyQt6.QtWidgets import QDialog, QVBoxLayout, QLabel, QPushButton, QHBoxLayout
+            from PyQt6.QtGui import QDesktopServices
+            from PyQt6.QtCore import QUrl
+            dlg = QDialog(self)
+            dlg.setWindowTitle("Solde insuffisant — fal.ai")
+            dlg.setMinimumWidth(420)
+            dlg.setStyleSheet(f"background:{C['bg1']};")
+            v = QVBoxLayout(dlg)
+            v.setContentsMargins(24, 20, 24, 20)
+            v.setSpacing(14)
+            ico = QLabel("⛔")
+            ico.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            ico.setStyleSheet("font-size:36px;background:transparent;")
+            v.addWidget(ico)
+            title = QLabel("Solde fal.ai insuffisant")
+            title.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            title.setStyleSheet(f"color:{C['red']};font-size:15px;font-weight:700;background:transparent;")
+            v.addWidget(title)
+            msg = QLabel(
+                f"Votre solde actuel est de <b>{sym}{balance:.2f}</b>.<br><br>"
+                "La génération a été annulée pour éviter un débit imprévu.<br>"
+                "Rechargez votre compte fal.ai pour continuer."
+            )
+            msg.setWordWrap(True)
+            msg.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            msg.setStyleSheet(f"color:{C['text_secondary']};font-size:12px;background:transparent;")
+            v.addWidget(msg)
+            h = QHBoxLayout()
+            btn_dash = QPushButton("🔗  Recharger sur fal.ai →")
+            btn_dash.setMinimumHeight(36)
+            btn_dash.setCursor(Qt.CursorShape.PointingHandCursor)
+            btn_dash.setStyleSheet(
+                f"QPushButton{{background:{C['accent']};color:#07080f;"
+                f"border:none;border-radius:8px;font-size:12px;font-weight:700;padding:0 16px;}}"
+                f"QPushButton:hover{{background:#6eded6;}}"
+            )
+            btn_dash.clicked.connect(lambda: QDesktopServices.openUrl(QUrl(_DASHBOARD_URL)))
+            btn_close = QPushButton("Fermer")
+            btn_close.setMinimumHeight(36)
+            btn_close.setStyleSheet(
+                f"QPushButton{{background:{C['bg3']};color:{C['text_secondary']};"
+                f"border:1px solid {C['border']};border-radius:8px;font-size:12px;padding:0 16px;}}"
+                f"QPushButton:hover{{background:{C['border']};}}"
+            )
+            btn_close.clicked.connect(dlg.accept)
+            h.addWidget(btn_dash)
+            h.addWidget(btn_close)
+            v.addLayout(h)
+            dlg.exec()
+            return
+        # Avertissement si solde faible
+        if balance < WARN_THRESHOLD:
+            from PyQt6.QtWidgets import QDialog, QVBoxLayout, QLabel, QPushButton, QHBoxLayout
+            from PyQt6.QtGui import QDesktopServices
+            from PyQt6.QtCore import QUrl
+            dlg = QDialog(self)
+            dlg.setWindowTitle("Solde faible — fal.ai")
+            dlg.setMinimumWidth(420)
+            dlg.setStyleSheet(f"background:{C['bg1']};")
+            v = QVBoxLayout(dlg)
+            v.setContentsMargins(24, 20, 24, 20)
+            v.setSpacing(14)
+            ico = QLabel("⚠️")
+            ico.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            ico.setStyleSheet("font-size:32px;background:transparent;")
+            v.addWidget(ico)
+            title = QLabel("Solde fal.ai faible")
+            title.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            title.setStyleSheet(f"color:#f5c518;font-size:15px;font-weight:700;background:transparent;")
+            v.addWidget(title)
+            msg = QLabel(
+                f"Votre solde actuel est de <b>{sym}{balance:.2f}</b>.<br><br>"
+                "Il reste peu de crédit — une longue génération pourrait dépasser ce solde.<br>"
+                "Vérifiez votre compte avant de lancer une série de clips."
+            )
+            msg.setWordWrap(True)
+            msg.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            msg.setStyleSheet(f"color:{C['text_secondary']};font-size:12px;background:transparent;")
+            v.addWidget(msg)
+            h = QHBoxLayout()
+            btn_dash = QPushButton("🔗  Voir mon compte fal.ai")
+            btn_dash.setMinimumHeight(36)
+            btn_dash.setCursor(Qt.CursorShape.PointingHandCursor)
+            btn_dash.setStyleSheet(
+                f"QPushButton{{background:rgba(245,197,24,0.15);color:#f5c518;"
+                f"border:1px solid rgba(245,197,24,0.4);border-radius:8px;"
+                f"font-size:12px;font-weight:700;padding:0 16px;}}"
+                f"QPushButton:hover{{background:rgba(245,197,24,0.25);}}"
+            )
+            btn_dash.clicked.connect(lambda: QDesktopServices.openUrl(QUrl(_DASHBOARD_URL)))
+            btn_go = QPushButton("▶  Générer quand même")
+            btn_go.setMinimumHeight(36)
+            btn_go.setStyleSheet(
+                f"QPushButton{{background:{C['bg3']};color:{C['text_secondary']};"
+                f"border:1px solid {C['border']};border-radius:8px;font-size:12px;padding:0 16px;}}"
+                f"QPushButton:hover{{background:{C['border']};}}"
+            )
+            btn_go.clicked.connect(dlg.accept)
+            btn_cancel = QPushButton("Annuler")
+            btn_cancel.setMinimumHeight(36)
+            btn_cancel.setStyleSheet(
+                f"QPushButton{{background:transparent;color:{C['text_dim']};"
+                f"border:none;font-size:12px;padding:0 10px;}}"
+                f"QPushButton:hover{{color:{C['text_primary']};}}"
+            )
+            btn_cancel.clicked.connect(dlg.reject)
+            h.addWidget(btn_dash)
+            h.addWidget(btn_go)
+            h.addWidget(btn_cancel)
+            v.addLayout(h)
+            if not dlg.exec():
+                return
+        self.start_generation()
+
+    def _on_billing_failed(self, _err: str):
+        # Fail-open : on ne bloque pas si l'API billing est inaccessible
+        self.btn_generate.setEnabled(True)
+        self.btn_generate.setText("▶▶  Lancer la file d'attente")
+        self.start_generation()
+
+    def _on_davinci_connection_changed(self, connected: bool):
+        self._import_cb.setEnabled(connected)
+        if not connected:
+            self._import_cb.setChecked(False)
+            self._import_cb.setToolTip(
+                "DaVinci Resolve Studio requis — connectez le bridge pour activer cette option"
+            )
+        else:
+            self._import_cb.setChecked(True)
+            self._import_cb.setToolTip("")
+
     def _start_batch_generation(self, shots: list):
         count = len(shots)
         dlg = QMessageBox(self)
@@ -3153,7 +3343,18 @@ class TabT2V(QScrollArea):
             QMessageBox.warning(self, "Prompt vide", "Écris un prompt avant de générer !")
             return
 
-        if self._import_cb and self._import_cb.isChecked():
+        if not resolve.is_connected():
+            reply = QMessageBox.question(
+                self, "DaVinci Resolve non connecté",
+                "Vous n'êtes pas connecté à DaVinci Resolve.\n\n"
+                "La vidéo générée sera sauvegardée dans votre dossier projet "
+                "et dans PANDORA, mais ne sera pas importée dans DaVinci Resolve.\n\n"
+                "Voulez-vous continuer ?",
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            )
+            if reply != QMessageBox.StandardButton.Yes:
+                return
+        elif self._import_cb and self._import_cb.isChecked():
             if not self._check_davinci_connection():
                 return
 
