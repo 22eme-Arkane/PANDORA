@@ -393,8 +393,7 @@ class PandoraWindow(QMainWindow):
         self._navigate("scenario")
 
         from PyQt6.QtCore import QTimer
-        QTimer.singleShot(1200, self._start_update_check)
-        QTimer.singleShot(900,  self._maybe_show_onboarding)
+        QTimer.singleShot(900, self._maybe_show_onboarding)
 
         _sc = QShortcut(QKeySequence("Ctrl+S"), self)
         _sc.activated.connect(self._on_global_save_click)
@@ -879,15 +878,16 @@ class PandoraWindow(QMainWindow):
 
     def _maybe_show_onboarding(self):
         from core.config import load_config
+        from PyQt6.QtCore import QTimer
         cfg = load_config()
-        if not cfg.get("show_api_guide", True):
-            return
-        from ui.dialog_onboarding import OnboardingDialog
-        dlg = OnboardingDialog(
-            navigate_to_settings_fn=lambda: self._navigate("settings"),
-            parent=self,
-        )
-        dlg.exec()
+        if cfg.get("show_api_guide", True):
+            from ui.dialog_onboarding import OnboardingDialog
+            dlg = OnboardingDialog(
+                navigate_to_settings_fn=lambda: self._navigate("settings"),
+                parent=self,
+            )
+            dlg.exec()
+        QTimer.singleShot(400, self._start_update_check)
 
     def _start_update_check(self):
         from api.update_check import UpdateCheckWorker
