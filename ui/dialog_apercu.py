@@ -57,8 +57,9 @@ class MoodDialog(QDialog):
         n = shot.get("number", "?")
         title_text = (shot.get("scene_title") or "")[:60]
         self.setWindowTitle(f"Mood — Plan {n}")
-        self.setMinimumSize(900, 780)
         self.setStyleSheet(PANDORA_STYLESHEET + f"QDialog{{background:{CP['bg1']};}}")
+        from ui.widgets import fit_dialog_to_screen
+        fit_dialog_to_screen(self, 0.70, 0.92, 760, 580)
         self.setModal(True)
 
         self._load()

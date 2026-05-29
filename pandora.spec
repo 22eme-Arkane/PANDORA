@@ -13,10 +13,18 @@ block_cipher = None
 
 _ICO = os.path.join("assets", "pandora_badge.ico")
 
+# Binaires ffmpeg — inclus s'ils sont présents dans le dossier racine du projet.
+# build.ps1 les télécharge automatiquement avant de lancer PyInstaller.
+_FFMPEG_BINS = [
+    (exe, ".")
+    for exe in ("ffmpeg.exe", "ffprobe.exe")
+    if os.path.isfile(exe)
+]
+
 a = Analysis(
     ["main.py"],
     pathex=["."],
-    binaries=[],
+    binaries=_FFMPEG_BINS,
     datas=[
         # Tout le dossier assets (icônes, badges, style_refs, svg)
         ("assets", "assets"),

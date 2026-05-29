@@ -217,9 +217,12 @@ def run_real(params: dict, emit_progress, is_cancelled) -> dict:
     if _creative_suffix and _prompt_en:
         _prompt_en = f"{_prompt_en}, {_creative_suffix}"
 
+    _raw_res = params.get("resolution", "720p") or "720p"
+    _res_clean = _raw_res.split()[0]  # strip price label: "720p (~$0.30/s)" → "720p"
+
     args = {
         "prompt":           _prompt_en,
-        "resolution":       params.get("resolution", "720p"),
+        "resolution":       _res_clean,
         "duration":         str(_dur_int),
         "aspect_ratio":     params.get("aspect_ratio", "16:9"),
         "generate_audio":   params.get("audio", True),
@@ -383,14 +386,45 @@ def run_real(params: dict, emit_progress, is_cancelled) -> dict:
 
         endpoint = f"{base}/reference-to-video"
 
+        _video_upload_ok = False
         if direction == "new_take":
             if video_path and os.path.isfile(video_path):
-                emit_progress(8, f"Upload clip référence : {os.path.basename(video_path)}…")
-                args["video_urls"] = [_fal_upload(fal_client,video_path)]
+                try:
+                    emit_progress(8, f"Upload clip référence : {os.path.basename(video_path)}…")
+                    args["video_urls"] = [_fal_upload(fal_client, video_path)]
+                    _video_upload_ok = True
+                except Exception as _vu:
+                    _vu_str = str(_vu)
+                    if "gcs" in _vu_str.lower() or "storage target" in _vu_str.lower():
+                        try:
+                            _ct = _mimetypes.guess_type(video_path)[0] or "video/mp4"
+                            with open(video_path, "rb") as _vf:
+                                args["video_urls"] = [fal_client.upload(_vf.read(), content_type=_ct)]
+                            _video_upload_ok = True
+                        except Exception as _fb:
+                            emit_progress(9, f"⚠ Upload clip échoué ({_fb}) — génération sans référence vidéo")
+                    else:
+                        emit_progress(9, f"⚠ Upload clip échoué ({_vu_str[:60]}) — génération sans référence vidéo")
+            else:
+                emit_progress(8, "⚠ Fichier clip introuvable — génération sans référence vidéo")
         else:
             if video_path and os.path.isfile(video_path):
-                emit_progress(8, f"Upload clip : {os.path.basename(video_path)}…")
-                args["video_urls"] = [_fal_upload(fal_client,video_path)]
+                try:
+                    emit_progress(8, f"Upload clip : {os.path.basename(video_path)}…")
+                    args["video_urls"] = [_fal_upload(fal_client, video_path)]
+                    _video_upload_ok = True
+                except Exception as _vu:
+                    _vu_str = str(_vu)
+                    if "gcs" in _vu_str.lower() or "storage target" in _vu_str.lower():
+                        try:
+                            _ct = _mimetypes.guess_type(video_path)[0] or "video/mp4"
+                            with open(video_path, "rb") as _vf:
+                                args["video_urls"] = [fal_client.upload(_vf.read(), content_type=_ct)]
+                            _video_upload_ok = True
+                        except Exception as _fb:
+                            emit_progress(9, f"⚠ Upload clip échoué ({_fb}) — génération sans référence vidéo")
+                    else:
+                        emit_progress(9, f"⚠ Upload clip échoué ({_vu_str[:60]}) — génération sans référence vidéo")
             args.pop("video_url", None)
             if direction == "before":
                 hint = "Extend the beginning of this scene:"
@@ -404,7 +438,7 @@ def run_real(params: dict, emit_progress, is_cancelled) -> dict:
             for i, p in enumerate(ext_refs):
                 try:
                     emit_progress(9 + i, f"Upload image de référence {i + 1}/{len(ext_refs)}…")
-                    uploaded_refs.append(_fal_upload(fal_client,p))
+                    uploaded_refs.append(_fal_upload(fal_client, p))
                 except Exception:
                     pass
             if uploaded_refs:

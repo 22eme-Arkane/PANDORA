@@ -59,7 +59,10 @@ class PageScenario(QWidget):
         self._redo_stack: list[str] = []
         self._last_analysis: str = ""
         self._last_format_result: str = ""
-        self._last_result_kind: str = ""   # "format" | "arrange"
+        self._arrange_intensity_value: int = 5  # managed inside ArrangeSessionDialog
+        self._last_result_kind: str = ""   # "format" | "arrange" | "refs"
+        self._last_ref_analysis: str = ""
+        self._ref_images: list[str] = []
         self._autosave_timer = QTimer()
         self._autosave_timer.setSingleShot(True)
         self._autosave_timer.setInterval(3000)
@@ -303,30 +306,6 @@ class PageScenario(QWidget):
         btn_back.clicked.connect(self._go_landing)
         tl.addWidget(btn_back)
 
-        _undo_redo_ss = (
-            f"QPushButton{{background:transparent;color:{CP['text_dim']};"
-            f"border:1px solid {CP['border']};border-radius:6px;"
-            f"font-size:13px;font-weight:700;padding:0 10px;}}"
-            f"QPushButton:hover:enabled{{background:{CP['bg2']};color:{CP['text_primary']};"
-            f"border-color:{CP['border_bright']};}}"
-            f"QPushButton:disabled{{color:{CP['bg3']};border-color:{CP['bg3']};}}"
-        )
-        self._btn_undo = QPushButton("↩")
-        self._btn_undo.setFixedSize(34, 34)
-        self._btn_undo.setToolTip("Annuler (Ctrl+Z)")
-        self._btn_undo.setEnabled(False)
-        self._btn_undo.setStyleSheet(_undo_redo_ss)
-        self._btn_undo.clicked.connect(self._on_undo)
-        tl.addWidget(self._btn_undo)
-
-        self._btn_redo = QPushButton("↪")
-        self._btn_redo.setFixedSize(34, 34)
-        self._btn_redo.setToolTip("Rétablir (Ctrl+Y)")
-        self._btn_redo.setEnabled(False)
-        self._btn_redo.setStyleSheet(_undo_redo_ss)
-        self._btn_redo.clicked.connect(self._on_redo)
-        tl.addWidget(self._btn_redo)
-
         self._title_edit = QLineEdit()
         self._title_edit.setPlaceholderText("Titre du scénario…")
         self._title_edit.setFixedHeight(34)
@@ -395,6 +374,47 @@ class PageScenario(QWidget):
         )
         self._btn_del_version.clicked.connect(self._delete_version)
         tl.addWidget(self._btn_del_version)
+
+        # ── Style visuel (top bar, après les boutons de version) ──────────────
+        _style_sep_top = QFrame()
+        _style_sep_top.setFixedSize(1, 24)
+        _style_sep_top.setStyleSheet(f"background:{CP['border']};")
+        tl.addWidget(_style_sep_top)
+
+        import core.style as _sc_style_mod
+        self._film_style_combo = QComboBox()
+        self._film_style_combo.addItem("— Style —", "")
+        _cur_grp_sc = None
+        for _s in _sc_style_mod.STYLES:
+            _g = _s.get("group", "")
+            if _g != _cur_grp_sc:
+                _cur_grp_sc = _g
+                _gi = next((g for g in _sc_style_mod.GROUPS if g["key"] == _g), None)
+                if _gi:
+                    self._film_style_combo.addItem(
+                        f"  {_gi['icon']}  {_gi['name'].upper()}", "__sep__"
+                    )
+                    _sep_i = self._film_style_combo.model().item(
+                        self._film_style_combo.count() - 1
+                    )
+                    _sep_i.setEnabled(False)
+                    _sep_i.setForeground(QColor(CP.get("accent2", CP.get("accent", "#7c6bff"))))
+            self._film_style_combo.addItem(f"    {_s['icon']}  {_s['name']}", _s["key"])
+        self._film_style_combo.setFixedHeight(30)
+        self._film_style_combo.setMinimumWidth(140)
+        self._film_style_combo.setMaximumWidth(200)
+        self._film_style_combo.setStyleSheet(
+            f"QComboBox{{background:{CP['bg2']};border:1px solid {CP['border']};"
+            f"border-radius:5px;color:{CP['text_primary']};font-size:10px;padding:0 6px;}}"
+            f"QComboBox:focus{{border-color:{CP.get('accent2_dim', CP['border_bright'])};}}"
+            f"QComboBox::drop-down{{border:none;width:18px;}}"
+            f"QComboBox QAbstractItemView{{background:{CP['bg2']};color:{CP['text_primary']};"
+            f"selection-background-color:{CP.get('accent2_dim', CP['bg3'])};border:1px solid {CP['border']};}}"
+        )
+        self._film_style_combo.currentIndexChanged.connect(self._schedule_autosave)
+        self._film_style_combo.currentIndexChanged.connect(self._on_scenario_style_changed)
+        tl.addWidget(self._film_style_combo)
+
         tl.addStretch(1)
 
         _ver_sep2 = QFrame()
@@ -458,7 +478,7 @@ class PageScenario(QWidget):
         return w
 
     def _build_film_strip(self) -> QWidget:
-        """Bande de configuration — Style visuel et Durée du film (visible en permanence au-dessus de l'éditeur)."""
+        """Bande de configuration — Durée du film (visible en permanence au-dessus de l'éditeur)."""
         strip = QWidget()
         strip.setFixedHeight(46)
         strip.setStyleSheet(
@@ -467,53 +487,6 @@ class PageScenario(QWidget):
         sl = QHBoxLayout(strip)
         sl.setContentsMargins(24, 0, 24, 0)
         sl.setSpacing(10)
-
-        # ── Style visuel ──────────────────────────────────────────────────────
-        _style_lbl = QLabel("Style visuel")
-        _style_lbl.setStyleSheet(
-            f"color:{CP['text_dim']};font-size:10px;font-weight:600;"
-            f"letter-spacing:0.5px;background:transparent;"
-        )
-        sl.addWidget(_style_lbl)
-
-        import core.style as _sc_style_mod
-        self._film_style_combo = QComboBox()
-        self._film_style_combo.addItem("— Style visuel —", "")
-        _cur_grp_sc = None
-        for _s in _sc_style_mod.STYLES:
-            _g = _s.get("group", "")
-            if _g != _cur_grp_sc:
-                _cur_grp_sc = _g
-                _gi = next((g for g in _sc_style_mod.GROUPS if g["key"] == _g), None)
-                if _gi:
-                    self._film_style_combo.addItem(
-                        f"  {_gi['icon']}  {_gi['name'].upper()}", "__sep__"
-                    )
-                    _sep_i = self._film_style_combo.model().item(
-                        self._film_style_combo.count() - 1
-                    )
-                    _sep_i.setEnabled(False)
-                    _sep_i.setForeground(QColor(CP.get("accent2", CP.get("accent", "#7c6bff"))))
-            self._film_style_combo.addItem(f"    {_s['icon']}  {_s['name']}", _s["key"])
-        self._film_style_combo.setFixedHeight(30)
-        self._film_style_combo.setMinimumWidth(160)
-        self._film_style_combo.setStyleSheet(
-            f"QComboBox{{background:{CP['bg2']};border:1px solid {CP['border']};"
-            f"border-radius:5px;color:{CP['text_primary']};font-size:10px;padding:0 6px;}}"
-            f"QComboBox:focus{{border-color:{CP.get('accent2_dim', CP['border_bright'])};}}"
-            f"QComboBox::drop-down{{border:none;width:18px;}}"
-            f"QComboBox QAbstractItemView{{background:{CP['bg2']};color:{CP['text_primary']};"
-            f"selection-background-color:{CP.get('accent2_dim', CP['bg3'])};border:1px solid {CP['border']};}}"
-        )
-        self._film_style_combo.currentIndexChanged.connect(self._schedule_autosave)
-        self._film_style_combo.currentIndexChanged.connect(self._on_scenario_style_changed)
-        sl.addWidget(self._film_style_combo)
-
-        _vs = QFrame()
-        _vs.setFrameShape(QFrame.Shape.VLine)
-        _vs.setFixedHeight(20)
-        _vs.setStyleSheet(f"color:{CP['border']};background:{CP['border']};")
-        sl.addWidget(_vs)
 
         # ── Durée du film ─────────────────────────────────────────────────────
         self._dur_defined_check = QCheckBox("Durée cible :")
@@ -666,130 +639,52 @@ class PageScenario(QWidget):
         sc_lay.setContentsMargins(0, 0, 0, 0)
         sc_lay.setSpacing(0)
 
+        # ── Section 0 : Références visuelles ──────────────────────────────────
+        c_refs, l_refs = _section_container()
+
+        _refs_scroll = QScrollArea()
+        _refs_scroll.setFixedHeight(76)
+        _refs_scroll.setWidgetResizable(True)
+        _refs_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
+        _refs_scroll.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        _refs_scroll.setStyleSheet(
+            "QScrollArea{border:none;background:transparent;}"
+            f"QScrollBar:horizontal{{background:{CP['bg2']};height:3px;border-radius:2px;}}"
+            f"QScrollBar::handle:horizontal{{background:{CP['border_bright']};border-radius:2px;}}"
+            f"QScrollBar::add-line:horizontal, QScrollBar::sub-line:horizontal{{width:0;}}"
+        )
+        self._refs_container_w = QWidget()
+        self._refs_container_w.setStyleSheet(f"background:{CP['bg2']};border-radius:8px;")
+        self._refs_hbox = QHBoxLayout(self._refs_container_w)
+        self._refs_hbox.setContentsMargins(8, 8, 8, 8)
+        self._refs_hbox.setSpacing(8)
+        _refs_scroll.setWidget(self._refs_container_w)
+        l_refs.addWidget(_refs_scroll)
+
+        self._btn_analyze_refs = _ai_btn(
+            "◈", "Analyser avec Claude",
+            "Décrypte les images pour enrichir le scénario",
+            self._on_analyze_refs,
+        )
+        l_refs.addWidget(self._btn_analyze_refs)
+
+        tog_refs = _make_toggle("◎  Références visuelles", c_refs, expanded=False)
+        sc_lay.addWidget(tog_refs)
+        sc_lay.addWidget(c_refs)
+
+        self._refresh_refs_display()
+
         # ── Section 1 : Claude IA ─────────────────────────────────────────────
         c_ia, l_ia = _section_container()
 
-        self._btn_format = _ai_btn(
-            "≡", "Mise en page scénario", "Format standard INT./EXT.", self._on_format,
-        )
         self._btn_arrange = _ai_btn(
             "⊞", "Proposer un arrangement", "Analyse structure + suggestions", self._on_arrange,
         )
-        l_ia.addWidget(self._btn_format)
+        self._btn_format = _ai_btn(
+            "◈", "Mise en page PANDORA", "Structure le scénario en blocs plans optimisés pour PANDORA", self._on_format,
+        )
         l_ia.addWidget(self._btn_arrange)
-
-        # Intensité
-        _intens_row = QWidget()
-        _intens_row.setStyleSheet("background:transparent;")
-        _ir = QVBoxLayout(_intens_row)
-        _ir.setContentsMargins(2, 2, 2, 0)
-        _ir.setSpacing(3)
-
-        _intens_header = QHBoxLayout()
-        _intens_title = QLabel("Intensité d'arrangement")
-        _intens_title.setStyleSheet(
-            f"color:{CP['text_secondary']};font-size:9px;font-weight:600;background:transparent;"
-        )
-        self._arrange_intensity_lbl = QLabel("5")
-        self._arrange_intensity_lbl.setFixedWidth(18)
-        self._arrange_intensity_lbl.setAlignment(Qt.AlignmentFlag.AlignRight)
-        self._arrange_intensity_lbl.setStyleSheet(
-            f"color:{CP['accent2']};font-size:10px;font-weight:700;background:transparent;"
-        )
-        _intens_header.addWidget(_intens_title)
-        _intens_header.addStretch()
-        _intens_header.addWidget(self._arrange_intensity_lbl)
-
-        self._arrange_intensity = QSlider(Qt.Orientation.Horizontal)
-        self._arrange_intensity.setRange(1, 10)
-        self._arrange_intensity.setValue(5)
-        self._arrange_intensity.setFixedHeight(16)
-        self._arrange_intensity.setStyleSheet(f"""
-            QSlider::groove:horizontal {{
-                height: 4px; background: {CP['bg3']}; border-radius: 2px;
-            }}
-            QSlider::handle:horizontal {{
-                background: {CP['accent2']}; width: 12px; height: 12px;
-                margin: -4px 0; border-radius: 6px;
-            }}
-            QSlider::sub-page:horizontal {{
-                background: {CP['accent2_dim']}; border-radius: 2px;
-            }}
-        """)
-
-        _intens_ends = QHBoxLayout()
-        for _t, _align in [("1", Qt.AlignmentFlag.AlignLeft), ("10", Qt.AlignmentFlag.AlignRight)]:
-            _l = QLabel(_t)
-            _l.setStyleSheet(f"color:{CP['text_dim']};font-size:8px;background:transparent;")
-            _intens_ends.addWidget(_l)
-            if _t == "1":
-                _intens_ends.addStretch()
-
-        self._arrange_intensity_desc = QLabel(_intensity_label(5))
-        self._arrange_intensity_desc.setWordWrap(True)
-        self._arrange_intensity_desc.setStyleSheet(
-            f"color:{CP['accent2']};font-size:8px;font-style:italic;background:transparent;"
-        )
-        self._arrange_intensity.valueChanged.connect(
-            lambda v: (
-                self._arrange_intensity_lbl.setText(str(v)),
-                self._arrange_intensity_desc.setText(_intensity_label(v)),
-            )
-        )
-
-        # Légende 1-10 (repliable)
-        _leg_container = QWidget()
-        _leg_container.setStyleSheet("background:transparent;")
-        _leg_lay = QVBoxLayout(_leg_container)
-        _leg_lay.setContentsMargins(0, 4, 0, 0)
-        _leg_lay.setSpacing(1)
-        _legend_frame = QFrame()
-        _legend_frame.setStyleSheet(
-            f"QFrame{{background:{CP['bg2']};border:1px solid {CP['border']};"
-            f"border-radius:6px;}}"
-        )
-        _lf_lay = QVBoxLayout(_legend_frame)
-        _lf_lay.setContentsMargins(8, 5, 8, 5)
-        _lf_lay.setSpacing(1)
-        for _lvl, _txt in _INTENSITY_LEGEND:
-            _row = QHBoxLayout()
-            _row.setSpacing(5)
-            _n = QLabel(_lvl)
-            _n.setFixedWidth(18)
-            _n.setStyleSheet(
-                f"color:{CP['accent2']};font-size:7px;font-weight:700;"
-                f"background:transparent;border:none;"
-            )
-            _d = QLabel(_txt)
-            _d.setStyleSheet(
-                f"color:{CP['text_dim']};font-size:7px;background:transparent;border:none;"
-            )
-            _row.addWidget(_n)
-            _row.addWidget(_d, 1)
-            _lf_lay.addLayout(_row)
-        _leg_lay.addWidget(_legend_frame)
-
-        _btn_toggle_legend = QPushButton("▶  Légende niveaux 1-10")
-        _btn_toggle_legend.setCheckable(True)
-        _btn_toggle_legend.setChecked(False)
-        _btn_toggle_legend.setStyleSheet(
-            f"QPushButton{{background:transparent;color:{CP['text_dim']};"
-            f"border:none;font-size:8px;font-weight:600;text-align:left;padding:2px 0;}}"
-            f"QPushButton:hover{{color:{CP['text_secondary']};}}"
-        )
-        _leg_container.setVisible(False)
-        def _tog_leg(checked, b=_btn_toggle_legend, c=_leg_container):
-            c.setVisible(checked)
-            b.setText(f"{'▼' if checked else '▶'}  Légende niveaux 1-10")
-        _btn_toggle_legend.toggled.connect(_tog_leg)
-
-        _ir.addLayout(_intens_header)
-        _ir.addWidget(self._arrange_intensity)
-        _ir.addLayout(_intens_ends)
-        _ir.addWidget(self._arrange_intensity_desc)
-        _ir.addWidget(_btn_toggle_legend)
-        _ir.addWidget(_leg_container)
-        l_ia.addWidget(_intens_row)
+        l_ia.addWidget(self._btn_format)
 
         tog_ia = _make_toggle("☁  Claude IA", c_ia, expanded=True)
         sc_lay.addWidget(tog_ia)
@@ -1039,8 +934,6 @@ class PageScenario(QWidget):
         self._current = {}
         self._undo_stack.clear()
         self._redo_stack.clear()
-        self._btn_undo.setEnabled(False)
-        self._btn_redo.setEnabled(False)
         self._title_edit.setText(_pname)
         self._set_editor_text("")
         self._dur_defined_check.setChecked(False)
@@ -1055,8 +948,6 @@ class PageScenario(QWidget):
         self._current = sc
         self._undo_stack.clear()
         self._redo_stack.clear()
-        self._btn_undo.setEnabled(False)
-        self._btn_redo.setEnabled(False)
         self._title_edit.setText(sc.get("title", ""))
         content = sc.get("formatted_content") or sc.get("raw_content", "")
         self._set_editor_text(content)
@@ -1191,12 +1082,102 @@ class PageScenario(QWidget):
     def _get_text(self) -> str:
         return self._editor_text.toPlainText().strip()
 
+    # ── Références visuelles ─────────────────────────────────────────────────
+
+    def _refresh_refs_display(self):
+        while self._refs_hbox.count():
+            item = self._refs_hbox.takeAt(0)
+            if item.widget():
+                item.widget().deleteLater()
+        # Bouton "+" toujours en premier à gauche — pas besoin de scroller pour l'atteindre
+        btn_add = QPushButton("+")
+        btn_add.setFixedSize(60, 60)
+        btn_add.setCursor(Qt.CursorShape.PointingHandCursor)
+        btn_add.setToolTip("Ajouter des images de référence\nClaude les analysera pour enrichir les descriptions.")
+        btn_add.setStyleSheet(f"""
+            QPushButton{{
+                background:transparent;color:{CP['text_dim']};
+                border:1px dashed {CP['border_bright']};border-radius:8px;
+                font-size:24px;font-weight:300;padding:0;
+            }}
+            QPushButton:hover{{color:{CP['accent']};border-color:{CP['accent']};
+                background:rgba(78,205,196,0.08);}}
+            QPushButton:pressed{{background:rgba(78,205,196,0.16);}}
+        """)
+        btn_add.clicked.connect(self._on_add_refs)
+        self._refs_hbox.addWidget(btn_add)
+        for path in self._ref_images:
+            self._refs_hbox.addWidget(self._make_ref_thumbnail(path))
+        self._refs_hbox.addStretch()
+
+    def _make_ref_thumbnail(self, path: str) -> QWidget:
+        container = QWidget()
+        container.setFixedSize(68, 60)
+        lbl = QLabel(container)
+        lbl.setGeometry(0, 0, 60, 60)
+        lbl.setStyleSheet("border-radius:6px;")
+        pix = QPixmap(path)
+        if not pix.isNull():
+            pix = pix.scaled(60, 60, Qt.AspectRatioMode.KeepAspectRatioByExpanding,
+                             Qt.TransformationMode.SmoothTransformation)
+            lbl.setPixmap(pix)
+        btn_rm = QPushButton("✕", container)
+        btn_rm.setGeometry(50, 0, 16, 16)
+        btn_rm.setCursor(Qt.CursorShape.PointingHandCursor)
+        btn_rm.setStyleSheet(
+            f"QPushButton{{background:{CP['bg3']};color:{CP['text_primary']};"
+            f"border:1px solid {CP['border_bright']};border-radius:3px;"
+            f"font-size:9px;font-weight:700;padding:0;}}"
+            f"QPushButton:hover{{background:{CP['red']};color:#fff;border-color:{CP['red']};}}"
+        )
+        btn_rm.clicked.connect(lambda checked=False, p=path: self._remove_ref(p))
+        return container
+
+    def _remove_ref(self, path: str):
+        if path in self._ref_images:
+            self._ref_images.remove(path)
+            self._refresh_refs_display()
+
+    def _on_add_refs(self):
+        paths, _ = QFileDialog.getOpenFileNames(
+            self, "Ajouter des images de référence", "",
+            "Images (*.png *.jpg *.jpeg *.webp *.bmp);;Tous les fichiers (*)",
+        )
+        for p in paths:
+            if p not in self._ref_images:
+                self._ref_images.append(p)
+        if paths:
+            self._refresh_refs_display()
+            self._ai_progress_lbl.setText(
+                f"{len(self._ref_images)} image(s) ajoutée(s) — clique « Analyser » pour enrichir le prompt."
+            )
+
+    def _on_analyze_refs(self):
+        if not self._ref_images:
+            self._ai_progress_lbl.setText("Ajoute d'abord des images dans la section Références visuelles.")
+            return
+        from api.screenplay import AnalyzeReferencesWorker
+        scenario_text = self._get_text() if self._current else ""
+        self._worker = AnalyzeReferencesWorker(
+            ref_paths=self._ref_images,
+            scenario_text=scenario_text,
+        )
+        self._worker.failed.connect(self._on_refs_failed)
+        self._set_ai_busy(True)
+        self._ai_progress_lbl.setText("Analyse des images en cours…")
+        # Le worker démarre à l'intérieur de _open_refs_window, après connexion des signaux
+        self._open_refs_window(worker=self._worker)
+
+    def _on_refs_failed(self, msg: str):
+        self._set_ai_busy(False)
+        self._ai_progress_lbl.setText(f"Erreur : {msg}")
+
     def _set_ai_busy(self, busy: bool):
         for btn in (
             self._btn_format, self._btn_arrange, self._btn_storyboard,
             self._btn_gen_characters, self._btn_gen_decors,
             self._btn_gen_accessories, self._btn_gen_hmc, self._btn_gen_vehicles,
-            self._btn_generate_all,
+            self._btn_generate_all, self._btn_analyze_refs,
         ):
             btn.setEnabled(not busy)
         self._ai_progress_bar.setVisible(busy)
@@ -1204,27 +1185,18 @@ class PageScenario(QWidget):
     def _on_format(self):
         text = self._get_text()
         if not text:
-            self._ai_progress_lbl.setText("Écris d'abord un texte à formater.")
+            self._ai_progress_lbl.setText("Écris d'abord un texte à mettre en page.")
             return
-        from api.screenplay import FormatScreenplayWorker
+        from api.screenplay import FormatPandoraWorker
         self._set_ai_busy(True)
-        self._ai_progress_lbl.setText("Formatage en cours via Claude…")
+        self._ai_progress_lbl.setText("Mise en page PANDORA en cours via Claude…")
         self._btn_reopen_window.setVisible(False)
         self._btn_undo_action.setVisible(False)
         self._result_area.clear()
         self._result_area.setVisible(False)
-        self._worker = FormatScreenplayWorker(text)
-        self._worker.finished.connect(self._on_format_done)
+        self._worker = FormatPandoraWorker(text)
         self._worker.failed.connect(self._on_ai_fail)
-        self._worker.start()
-
-    def _on_format_done(self, result: str):
-        self._set_ai_busy(False)
-        self._ai_progress_lbl.setText("Formatage terminé ✓")
-        self._last_format_result = result
-        self._last_result_kind = "format"
-        self._btn_reopen_window.setVisible(True)
-        self._open_simple_result_window(result)
+        self._open_format_window(worker=self._worker)
 
     def _on_arrange(self):
         text = self._get_text()
@@ -1239,45 +1211,17 @@ class PageScenario(QWidget):
         self._btn_reopen_window.setVisible(False)
         self._btn_undo_action.setVisible(False)
         self._result_area.clear()
-        self._result_area.setVisible(True)
-        self._result_area.setPlaceholderText("Analyse en cours…")
+        self._result_area.setVisible(False)
         dur_secs  = (self._dur_min.value() * 60 + self._dur_sec.value()) if self._dur_defined_check.isChecked() else 0
-        intensity = self._arrange_intensity.value()
+        intensity = self._arrange_intensity_value
         try:
-            project_context = {
-                "characters": list_characters(),
-                "decors":     list_decors(),
-            }
+            project_context = {"characters": list_characters(), "decors": list_decors()}
         except Exception:
             project_context = {}
-        self._worker = ArrangeScreenplayWorker(text, dur_secs, intensity, project_context)
-        self._worker.chunk.connect(self._on_arrange_chunk)
-        self._worker.finished.connect(self._on_arrange_done)
+        self._worker = ArrangeScreenplayWorker(text, dur_secs, intensity, project_context,
+                                               ref_analysis=self._last_ref_analysis)
         self._worker.failed.connect(self._on_ai_fail)
-        self._worker.start()
-
-    def _on_arrange_chunk(self, text: str):
-        cursor = self._result_area.textCursor()
-        cursor.movePosition(cursor.MoveOperation.End)
-        cursor.insertText(text)
-        self._result_area.setTextCursor(cursor)
-
-    def _on_arrange_done(self, result: str):
-        self._result_area.setVisible(False)
-        self._result_area.clear()
-        self._set_ai_busy(False)
-        self._last_analysis = result
-        self._last_result_kind = "arrange"
-        # Durée estimée affichée dans le statut
-        text = self._editor_text.toPlainText()
-        mins, secs = self._estimate_duration(text)
-        if mins or secs:
-            est = f"~{mins}m{secs:02d}" if mins else f"~{secs}s"
-            self._ai_progress_lbl.setText(f"Analyse terminée ✓  ·  Durée estimée : {est}")
-        else:
-            self._ai_progress_lbl.setText("Analyse terminée ✓")
-        self._btn_reopen_window.setVisible(True)
-        self._open_arrange_session(result)
+        self._open_arrange_window(worker=self._worker)
 
     def _on_modify_arrange(self):
         original    = self._get_text()
@@ -1292,7 +1236,7 @@ class PageScenario(QWidget):
         self._set_ai_busy(True)
         self._ai_progress_lbl.setText("Application des suggestions via Claude…")
         self._btn_undo_action.setVisible(False)
-        intensity = self._arrange_intensity.value()
+        intensity = self._arrange_intensity_value
         self._worker = ApplyArrangeWorker(original, suggestions, intensity)
         self._worker.finished.connect(self._on_modify_done)
         self._worker.failed.connect(self._on_ai_fail)
@@ -1361,6 +1305,8 @@ class PageScenario(QWidget):
         from ui.dialog_extract_generate import ExtractGenerateDialog
         dlg = ExtractGenerateDialog.for_characters(text, self)
         dlg.exec()
+        if dlg._page_key and dlg.result() == dlg.DialogCode.Accepted:
+            self.navigate_requested.emit(dlg._page_key, "")
 
     def _on_gen_decors(self):
         text = self._get_text()
@@ -1370,6 +1316,8 @@ class PageScenario(QWidget):
         from ui.dialog_extract_generate import ExtractGenerateDialog
         dlg = ExtractGenerateDialog.for_decors(text, self)
         dlg.exec()
+        if dlg._page_key and dlg.result() == dlg.DialogCode.Accepted:
+            self.navigate_requested.emit(dlg._page_key, "")
 
     def _on_gen_accessories(self):
         text = self._get_text()
@@ -1379,6 +1327,8 @@ class PageScenario(QWidget):
         from ui.dialog_extract_generate import ExtractGenerateDialog
         dlg = ExtractGenerateDialog.for_accessories(text, self)
         dlg.exec()
+        if dlg._page_key and dlg.result() == dlg.DialogCode.Accepted:
+            self.navigate_requested.emit(dlg._page_key, "")  # "accessoires"
 
     def _on_gen_hmc(self):
         text = self._get_text()
@@ -1388,6 +1338,8 @@ class PageScenario(QWidget):
         from ui.dialog_extract_generate import ExtractGenerateDialog
         dlg = ExtractGenerateDialog.for_hmc(text, self)
         dlg.exec()
+        if dlg._page_key and dlg.result() == dlg.DialogCode.Accepted:
+            self.navigate_requested.emit(dlg._page_key, "")
 
     def _on_gen_vehicles(self):
         text = self._get_text()
@@ -1397,6 +1349,8 @@ class PageScenario(QWidget):
         from ui.dialog_extract_generate import ExtractGenerateDialog
         dlg = ExtractGenerateDialog.for_vehicles(text, self)
         dlg.exec()
+        if dlg._page_key and dlg.result() == dlg.DialogCode.Accepted:
+            self.navigate_requested.emit(dlg._page_key, "")
 
     def _on_ai_fail(self, err: str):
         self._set_ai_busy(False)
@@ -1405,15 +1359,454 @@ class PageScenario(QWidget):
 
     def _open_result_window(self):
         if self._last_result_kind == "arrange" and self._last_analysis:
-            self._open_arrange_session(self._last_analysis)
+            self._open_arrange_window(analysis=self._last_analysis)
         elif self._last_result_kind == "format" and self._last_format_result:
-            self._open_simple_result_window(self._last_format_result)
+            self._open_format_window(text=self._last_format_result)
+        elif self._last_result_kind == "refs" and self._last_ref_analysis:
+            self._open_refs_window(self._last_ref_analysis)
+
+    # ── Dialog Mise en page (streaming) ──────────────────────────────────────
+
+    def _open_format_window(self, text: str = "", worker=None):
+        """Dialog de mise en page — streaming immédiat si worker fourni, statique sinon."""
+        from PyQt6.QtWidgets import QDialog, QVBoxLayout, QHBoxLayout, QTextEdit
+        streaming = worker is not None
+        dlg = QDialog(self)
+        dlg.setWindowTitle("Mise en page PANDORA — Aperçu Claude")
+        dlg.resize(900, 680)
+        dlg.setStyleSheet(
+            f"QDialog{{background:{CP['bg1']};}}"
+            f"QLabel{{background:transparent;color:{CP['text_primary']};}}"
+        )
+        lay = QVBoxLayout(dlg)
+        lay.setContentsMargins(22, 20, 22, 20)
+        lay.setSpacing(12)
+
+        hdr = QHBoxLayout()
+        title_lbl = QLabel("◈  Mise en page PANDORA — Aperçu")
+        title_lbl.setStyleSheet(f"color:{CP['text_primary']};font-size:14px;font-weight:700;")
+        status_lbl = QLabel("Mise en page en cours…" if streaming else "Mise en page terminée")
+        status_lbl.setStyleSheet(
+            f"color:{CP['accent'] if streaming else CP['text_dim']};"
+            f"font-size:10px;font-family:'Consolas',monospace;"
+        )
+        hdr.addWidget(title_lbl)
+        hdr.addStretch()
+        hdr.addWidget(status_lbl)
+        lay.addLayout(hdr)
+
+        te = QTextEdit()
+        te.setReadOnly(True)
+        if text:
+            te.setPlainText(text)
+        else:
+            te.setPlaceholderText("Le scénario mis en page apparaît ici au fil de la génération…")
+        _f = QFont("Courier New", 11)
+        _f.setStyleHint(QFont.StyleHint.TypeWriter)
+        te.setFont(_f)
+        te.setStyleSheet(
+            f"QTextEdit{{background:{CP['bg2']};border:1px solid {CP['border']};"
+            f"border-radius:8px;color:{CP['text_primary']};font-size:11px;padding:16px;}}"
+        )
+        lay.addWidget(te, 1)
+
+        _ghost_ss = (
+            f"QPushButton{{background:{CP['bg3']};color:{CP['text_secondary']};"
+            f"border:1px solid {CP['border']};border-radius:7px;font-size:11px;font-weight:600;padding:0 20px;}}"
+            f"QPushButton:hover{{background:{CP['bg4']};color:{CP['text_primary']};}}"
+        )
+        _cancel_ss = (
+            f"QPushButton{{background:{CP['bg3']};color:{CP['red']};"
+            f"border:1px solid {CP['red']};border-radius:7px;font-size:11px;font-weight:600;padding:0 20px;}}"
+            f"QPushButton:hover{{background:rgba(255,79,106,0.12);}}"
+        )
+        _streaming_active = [streaming]
+
+        def _stop_worker():
+            if _streaming_active[0] and worker is not None:
+                _streaming_active[0] = False
+                worker.quit()
+                worker.terminate()
+                self._set_ai_busy(False)
+                self._ai_progress_lbl.setText("Mise en page annulée.")
+                btn_close.setText("Fermer")
+                btn_close.setStyleSheet(_ghost_ss)
+
+        btn_row = QHBoxLayout()
+        btn_row.setSpacing(8)
+        btn_close = QPushButton("Annuler" if streaming else "Fermer")
+        btn_close.setFixedHeight(36)
+        btn_close.setStyleSheet(_cancel_ss if streaming else _ghost_ss)
+
+        def _on_close_btn():
+            _stop_worker()
+            dlg.accept()
+
+        btn_close.clicked.connect(_on_close_btn)
+        dlg.rejected.connect(_stop_worker)
+
+        btn_apply = QPushButton("↩  Remplacer le texte")
+        btn_apply.setFixedHeight(36)
+        btn_apply.setEnabled(not streaming)
+        btn_apply.setStyleSheet(
+            f"QPushButton{{background:{CP['accent2']};color:#fff;"
+            f"border:none;border-radius:7px;font-size:11px;font-weight:700;padding:0 20px;}}"
+            f"QPushButton:hover{{background:#9d8fff;}}"
+            f"QPushButton:pressed{{background:#6a5acd;}}"
+            f"QPushButton:disabled{{background:{CP['bg3']};color:{CP['text_dim']};"
+            f"border:1px solid {CP['border']};}}"
+        )
+        _final_text = [text]
+
+        def _do_apply():
+            result = _final_text[0].strip()
+            if not result:
+                return
+            self._push_undo()
+            self._set_editor_text(result)
+            if self._current is not None:
+                self._current["formatted_content"] = result
+            self._ai_progress_lbl.setText("Mise en page PANDORA appliquée ✓")
+            self._btn_undo_action.setVisible(True)
+            dlg.accept()
+
+        btn_apply.clicked.connect(_do_apply)
+        btn_row.addWidget(btn_close)
+        btn_row.addStretch()
+        btn_row.addWidget(btn_apply)
+        lay.addLayout(btn_row)
+
+        if streaming:
+            def _on_chunk(chunk: str):
+                cursor = te.textCursor()
+                cursor.movePosition(cursor.MoveOperation.End)
+                cursor.insertText(chunk)
+                te.setTextCursor(cursor)
+
+            def _on_done(result: str):
+                _streaming_active[0] = False
+                btn_close.setText("Fermer")
+                btn_close.setStyleSheet(_ghost_ss)
+                _final_text[0] = result
+                self._set_ai_busy(False)
+                self._last_format_result = result
+                self._last_result_kind = "format"
+                self._btn_reopen_window.setVisible(True)
+                self._ai_progress_lbl.setText("Mise en page PANDORA terminée ✓")
+                status_lbl.setText("Mise en page PANDORA terminée")
+                status_lbl.setStyleSheet(
+                    f"color:{CP['text_dim']};font-size:10px;font-family:'Consolas',monospace;"
+                )
+                btn_apply.setEnabled(True)
+
+            def _on_failed(msg: str):
+                _streaming_active[0] = False
+                btn_close.setText("Fermer")
+                btn_close.setStyleSheet(_ghost_ss)
+                self._set_ai_busy(False)
+                self._ai_progress_lbl.setText(f"Erreur : {msg[:120]}")
+                status_lbl.setText("Erreur")
+                status_lbl.setStyleSheet(
+                    f"color:{CP['red']};font-size:10px;font-family:'Consolas',monospace;"
+                )
+                te.setPlainText(f"Erreur lors de la mise en page :\n{msg}")
+
+            worker.chunk.connect(_on_chunk)
+            worker.finished.connect(_on_done)
+            worker.failed.connect(_on_failed)
+            worker.start()
+
+        dlg.exec()
+
+    # ── Dialog Arrangement (streaming + appliquer direct) ─────────────────────
+
+    def _open_arrange_window(self, analysis: str = "", worker=None):
+        """Dialog d'arrangement — streaming si worker fourni, statique (rouvrir) sinon.
+
+        Quand l'analyse est complète, deux boutons :
+          - « Session de co-écriture » → ArrangeSessionDialog
+          - « Appliquer les suggestions » → ApplyArrangeWorker en streaming dans le même dialog
+        """
+        from PyQt6.QtWidgets import QDialog, QVBoxLayout, QHBoxLayout, QTextEdit
+        streaming = worker is not None
+        dlg = QDialog(self)
+        dlg.setWindowTitle("Arrangement — Analyse Claude")
+        dlg.resize(900, 700)
+        dlg.setStyleSheet(
+            f"QDialog{{background:{CP['bg1']};}}"
+            f"QLabel{{background:transparent;color:{CP['text_primary']};}}"
+        )
+        lay = QVBoxLayout(dlg)
+        lay.setContentsMargins(22, 20, 22, 20)
+        lay.setSpacing(12)
+
+        hdr = QHBoxLayout()
+        title_lbl = QLabel("◈  Arrangement — Analyse")
+        title_lbl.setStyleSheet(f"color:{CP['text_primary']};font-size:14px;font-weight:700;")
+        status_lbl = QLabel("Analyse en cours…" if streaming else "Analyse terminée")
+        status_lbl.setStyleSheet(
+            f"color:{CP['accent'] if streaming else CP['text_dim']};"
+            f"font-size:10px;font-family:'Consolas',monospace;"
+        )
+        hdr.addWidget(title_lbl)
+        hdr.addStretch()
+        hdr.addWidget(status_lbl)
+        lay.addLayout(hdr)
+
+        te = QTextEdit()
+        te.setReadOnly(True)
+        if analysis:
+            te.setPlainText(analysis)
+        else:
+            te.setPlaceholderText("L'analyse apparaît ici au fil de la génération…")
+        te.setStyleSheet(
+            f"QTextEdit{{background:{CP['bg2']};border:1px solid {CP['border']};"
+            f"border-radius:8px;color:{CP['text_primary']};font-size:11px;padding:14px;}}"
+        )
+        lay.addWidget(te, 1)
+
+        # ── Boutons ──────────────────────────────────────────────────────────
+        btn_row = QHBoxLayout()
+        btn_row.setSpacing(8)
+
+        _ghost_ss = (
+            f"QPushButton{{background:{CP['bg3']};color:{CP['text_secondary']};"
+            f"border:1px solid {CP['border']};border-radius:7px;font-size:11px;font-weight:600;padding:0 20px;}}"
+            f"QPushButton:hover{{background:{CP['bg4']};color:{CP['text_primary']};}}"
+        )
+        _cancel_ss = (
+            f"QPushButton{{background:{CP['bg3']};color:{CP['red']};"
+            f"border:1px solid {CP['red']};border-radius:7px;font-size:11px;font-weight:600;padding:0 20px;}}"
+            f"QPushButton:hover{{background:rgba(255,79,106,0.12);}}"
+        )
+        _streaming_active = [streaming]
+        _apply_worker = [None]      # worker de phase 2 (ApplyArrangeWorker)
+
+        def _stop_worker():
+            if _streaming_active[0]:
+                _streaming_active[0] = False
+                if worker is not None:
+                    worker.quit()
+                    worker.terminate()
+                if _apply_worker[0] is not None:
+                    _apply_worker[0].quit()
+                    _apply_worker[0].terminate()
+                    _apply_worker[0] = None
+                self._set_ai_busy(False)
+                self._ai_progress_lbl.setText("Arrangement annulé.")
+                btn_close.setText("Fermer")
+                btn_close.setStyleSheet(_ghost_ss)
+
+        btn_close = QPushButton("Annuler" if streaming else "Fermer")
+        btn_close.setFixedHeight(36)
+        btn_close.setStyleSheet(_cancel_ss if streaming else _ghost_ss)
+
+        def _on_close_btn():
+            _stop_worker()
+            dlg.accept()
+
+        btn_close.clicked.connect(_on_close_btn)
+        dlg.rejected.connect(_stop_worker)
+
+        btn_session = QPushButton("☁  Session de co-écriture")
+        btn_session.setFixedHeight(36)
+        btn_session.setEnabled(not streaming)
+        btn_session.setToolTip("Dialogue interactif avec Claude pour affiner l'arrangement.")
+        btn_session.setStyleSheet(
+            f"QPushButton{{background:{CP['bg3']};color:{CP['accent']};"
+            f"border:1px solid {CP['accent_dim']};border-radius:7px;font-size:11px;font-weight:600;padding:0 20px;}}"
+            f"QPushButton:hover{{background:rgba(78,205,196,0.10);color:{CP['accent']};}}"
+            f"QPushButton:disabled{{background:{CP['bg2']};color:{CP['text_dim']};"
+            f"border:1px solid {CP['border']};}}"
+        )
+
+        btn_direct = QPushButton("✓  Appliquer les suggestions")
+        btn_direct.setFixedHeight(36)
+        btn_direct.setEnabled(not streaming)
+        btn_direct.setToolTip(
+            "Claude réécrit le scénario en appliquant directement les suggestions.\n"
+            "Le résultat apparaît ici pour prévisualisation avant d'être appliqué."
+        )
+        btn_direct.setStyleSheet(
+            f"QPushButton{{background:{CP['accent2']};color:#fff;"
+            f"border:none;border-radius:7px;font-size:11px;font-weight:700;padding:0 20px;}}"
+            f"QPushButton:hover{{background:#9d8fff;}}"
+            f"QPushButton:pressed{{background:#6a5acd;}}"
+            f"QPushButton:disabled{{background:{CP['bg3']};color:{CP['text_dim']};"
+            f"border:1px solid {CP['border']};}}"
+        )
+
+        btn_update = QPushButton("↩  Mettre à jour le scénario")
+        btn_update.setFixedHeight(36)
+        btn_update.setEnabled(False)
+        btn_update.setVisible(False)
+        btn_update.setStyleSheet(
+            f"QPushButton{{background:{CP['accent2']};color:#fff;"
+            f"border:none;border-radius:7px;font-size:11px;font-weight:700;padding:0 20px;}}"
+            f"QPushButton:hover{{background:#9d8fff;}}"
+            f"QPushButton:disabled{{background:{CP['bg3']};color:{CP['text_dim']};"
+            f"border:1px solid {CP['border']};}}"
+        )
+
+        btn_row.addWidget(btn_close)
+        btn_row.addStretch()
+        btn_row.addWidget(btn_session)
+        btn_row.addWidget(btn_direct)
+        btn_row.addWidget(btn_update)
+        lay.addLayout(btn_row)
+
+        _final_analysis = [analysis]
+        _rewritten      = [""]
+
+        # ── Phase 2 : Appliquer les suggestions ──────────────────────────────
+        def _do_apply_direct():
+            from api.screenplay import ApplyArrangeWorker
+            analysis_txt = _final_analysis[0]
+            original     = self._get_text()
+            if not analysis_txt or not original:
+                return
+            intensity = self._arrange_intensity_value
+            w = ApplyArrangeWorker(original, analysis_txt, intensity)
+            _apply_worker[0] = w
+            _streaming_active[0] = True
+            btn_close.setText("Annuler")
+            btn_close.setStyleSheet(_cancel_ss)
+
+            title_lbl.setText("✦  Application des suggestions")
+            status_lbl.setText("Réécriture en cours…")
+            status_lbl.setStyleSheet(
+                f"color:{CP['accent']};font-size:10px;font-family:'Consolas',monospace;"
+            )
+            te.clear()
+            te.setPlaceholderText("Le scénario réécrit apparaît ici…")
+            _f = QFont("Courier New", 11)
+            _f.setStyleHint(QFont.StyleHint.TypeWriter)
+            te.setFont(_f)
+            btn_direct.setEnabled(False)
+            btn_direct.setVisible(False)
+            btn_session.setEnabled(False)
+            btn_session.setVisible(False)
+            self._set_ai_busy(True)
+
+            def _on_apply_chunk(chunk: str):
+                if not _streaming_active[0]:
+                    return
+                cursor = te.textCursor()
+                cursor.movePosition(cursor.MoveOperation.End)
+                cursor.insertText(chunk)
+                te.setTextCursor(cursor)
+                _rewritten[0] += chunk
+
+            def _on_apply_done(result: str):
+                if not _streaming_active[0]:
+                    return
+                _streaming_active[0] = False
+                _apply_worker[0] = None
+                btn_close.setText("Fermer")
+                btn_close.setStyleSheet(_ghost_ss)
+                _rewritten[0] = result
+                self._set_ai_busy(False)
+                status_lbl.setText("Réécriture terminée ✓")
+                status_lbl.setStyleSheet(
+                    f"color:{CP['green']};font-size:10px;font-family:'Consolas',monospace;"
+                )
+                btn_update.setEnabled(True)
+                btn_update.setVisible(True)
+
+            def _on_apply_failed(msg: str):
+                _streaming_active[0] = False
+                _apply_worker[0] = None
+                btn_close.setText("Fermer")
+                btn_close.setStyleSheet(_ghost_ss)
+                self._set_ai_busy(False)
+                status_lbl.setText("Erreur")
+                status_lbl.setStyleSheet(
+                    f"color:{CP['red']};font-size:10px;font-family:'Consolas',monospace;"
+                )
+                te.setPlainText(f"Erreur lors de l'application :\n{msg}")
+
+            def _do_update():
+                result = _rewritten[0].strip()
+                if not result:
+                    return
+                self._push_undo()
+                self._set_editor_text(result)
+                if self._current is not None:
+                    self._current["formatted_content"] = result
+                self._ai_progress_lbl.setText("Scénario réécrit et appliqué ✓")
+                self._btn_undo_action.setVisible(True)
+                dlg.accept()
+
+            btn_update.clicked.connect(_do_update)
+            w.chunk.connect(_on_apply_chunk)
+            w.finished.connect(_on_apply_done)
+            w.failed.connect(_on_apply_failed)
+            w.start()
+
+        def _do_open_session():
+            dlg.accept()
+            self._open_arrange_session(_final_analysis[0])
+
+        btn_session.clicked.connect(_do_open_session)
+        btn_direct.clicked.connect(_do_apply_direct)
+
+        # ── Connexions streaming (phase analyse) ──────────────────────────────
+        if streaming:
+            def _on_chunk(chunk: str):
+                if not _streaming_active[0]:
+                    return
+                cursor = te.textCursor()
+                cursor.movePosition(cursor.MoveOperation.End)
+                cursor.insertText(chunk)
+                te.setTextCursor(cursor)
+
+            def _on_done(result: str):
+                _streaming_active[0] = False
+                btn_close.setText("Fermer")
+                btn_close.setStyleSheet(_ghost_ss)
+                _final_analysis[0] = result
+                self._set_ai_busy(False)
+                self._last_analysis = result
+                self._last_result_kind = "arrange"
+                self._btn_reopen_window.setVisible(True)
+                text = self._editor_text.toPlainText()
+                mins, secs = self._estimate_duration(text)
+                if mins or secs:
+                    est = f"~{mins}m{secs:02d}" if mins else f"~{secs}s"
+                    self._ai_progress_lbl.setText(f"Analyse terminée ✓  ·  Durée estimée : {est}")
+                else:
+                    self._ai_progress_lbl.setText("Analyse terminée ✓")
+                status_lbl.setText("Analyse terminée")
+                status_lbl.setStyleSheet(
+                    f"color:{CP['text_dim']};font-size:10px;font-family:'Consolas',monospace;"
+                )
+                btn_session.setEnabled(True)
+                btn_direct.setEnabled(True)
+
+            def _on_failed(msg: str):
+                _streaming_active[0] = False
+                btn_close.setText("Fermer")
+                btn_close.setStyleSheet(_ghost_ss)
+                self._set_ai_busy(False)
+                self._ai_progress_lbl.setText(f"Erreur : {msg[:120]}")
+                status_lbl.setText("Erreur")
+                status_lbl.setStyleSheet(
+                    f"color:{CP['red']};font-size:10px;font-family:'Consolas',monospace;"
+                )
+                te.setPlainText(f"Erreur lors de l'analyse :\n{msg}")
+
+            worker.chunk.connect(_on_chunk)
+            worker.finished.connect(_on_done)
+            worker.failed.connect(_on_failed)
+            worker.start()
+
+        dlg.exec()
 
     def _open_arrange_session(self, analysis_text: str):
         """Ouvre le studio de co-écriture interactif Claude × Réalisateur."""
         from ui.dialog_arrange_session import ArrangeSessionDialog
         original   = self._get_text()
-        intensity  = self._arrange_intensity.value()
+        intensity  = self._arrange_intensity_value
         dlg = ArrangeSessionDialog(self, original, analysis_text, intensity)
         dlg.exec()
         if dlg.was_applied():
@@ -1425,6 +1818,303 @@ class PageScenario(QWidget):
                     self._current["formatted_content"] = final
                 self._ai_progress_lbl.setText("Scénario co-écrit appliqué ✓")
                 self._btn_undo_action.setVisible(True)
+
+    def _open_refs_window(self, analysis: str = "", worker=None):
+        """Fenêtre d'analyse des références visuelles.
+
+        Modes :
+          - worker fourni  → streaming en temps réel (ouverture immédiate)
+          - analysis fourni → ré-ouverture avec texte complet (bouton Rouvrir)
+        """
+        from PyQt6.QtWidgets import QDialog, QVBoxLayout, QHBoxLayout, QTextEdit, QScrollArea
+
+        streaming = worker is not None
+
+        dlg = QDialog(self)
+        dlg.setWindowTitle("Références visuelles — Analyse Claude")
+        dlg.resize(860, 640)
+        dlg.setStyleSheet(
+            f"QDialog{{background:{CP['bg1']};}}"
+            f"QLabel{{background:transparent;color:{CP['text_primary']};}}"
+        )
+        lay = QVBoxLayout(dlg)
+        lay.setContentsMargins(22, 20, 22, 20)
+        lay.setSpacing(14)
+
+        # ── En-tête ──────────────────────────────────────────────────────────
+        hdr = QHBoxLayout()
+        title_lbl = QLabel("◎  Analyse des références visuelles")
+        title_lbl.setStyleSheet(
+            f"color:{CP['text_primary']};font-size:14px;font-weight:700;"
+        )
+        self._refs_status_lbl = QLabel(
+            "Analyse en cours…" if streaming else f"{len(self._ref_images)} image(s) analysée(s)"
+        )
+        self._refs_status_lbl.setStyleSheet(
+            f"color:{CP['accent'] if streaming else CP['text_dim']};"
+            f"font-size:10px;font-family:'Consolas',monospace;"
+        )
+        hdr.addWidget(title_lbl)
+        hdr.addStretch()
+        hdr.addWidget(self._refs_status_lbl)
+        lay.addLayout(hdr)
+
+        # ── Thumbnails ───────────────────────────────────────────────────────
+        if self._ref_images:
+            thumb_scroll = QScrollArea()
+            thumb_scroll.setFixedHeight(92)
+            thumb_scroll.setWidgetResizable(True)
+            thumb_scroll.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+            thumb_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
+            thumb_scroll.setStyleSheet(
+                "QScrollArea{border:none;background:transparent;}"
+                f"QScrollBar:horizontal{{background:{CP['bg2']};height:3px;border-radius:2px;}}"
+                f"QScrollBar::handle:horizontal{{background:{CP['border_bright']};border-radius:2px;}}"
+                f"QScrollBar::add-line:horizontal,QScrollBar::sub-line:horizontal{{width:0;}}"
+            )
+            thumb_scroll.setFrameStyle(0)
+            thumb_ctn = QWidget()
+            thumb_ctn.setStyleSheet("background:transparent;")
+            thumb_hbox = QHBoxLayout(thumb_ctn)
+            thumb_hbox.setContentsMargins(0, 0, 0, 0)
+            thumb_hbox.setSpacing(8)
+            for path in self._ref_images:
+                lbl_img = QLabel()
+                lbl_img.setFixedSize(80, 80)
+                lbl_img.setAlignment(Qt.AlignmentFlag.AlignCenter)
+                lbl_img.setStyleSheet(
+                    f"background:{CP['bg2']};border:1px solid {CP['border']};border-radius:6px;"
+                )
+                pix = QPixmap(path)
+                if not pix.isNull():
+                    pix = pix.scaled(78, 78, Qt.AspectRatioMode.KeepAspectRatio,
+                                     Qt.TransformationMode.SmoothTransformation)
+                    lbl_img.setPixmap(pix)
+                else:
+                    lbl_img.setText("?")
+                thumb_hbox.addWidget(lbl_img)
+            thumb_hbox.addStretch()
+            thumb_scroll.setWidget(thumb_ctn)
+            lay.addWidget(thumb_scroll)
+
+        # ── Texte d'analyse ──────────────────────────────────────────────────
+        te = QTextEdit()
+        te.setReadOnly(True)
+        if analysis:
+            te.setPlainText(analysis)
+        else:
+            te.setPlaceholderText("L'analyse apparaît ici au fil de la génération…")
+        te.setStyleSheet(
+            f"QTextEdit{{background:{CP['bg2']};border:1px solid {CP['border']};"
+            f"border-radius:8px;color:{CP['text_primary']};font-size:11px;padding:14px;}}"
+        )
+        lay.addWidget(te, 1)
+
+        # ── Boutons ──────────────────────────────────────────────────────────
+        btn_row = QHBoxLayout()
+        btn_row.setSpacing(8)
+
+        _refs_ghost_ss = (
+            f"QPushButton{{background:{CP['bg3']};color:{CP['text_secondary']};"
+            f"border:1px solid {CP['border']};border-radius:7px;"
+            f"font-size:11px;font-weight:600;padding:0 20px;}}"
+            f"QPushButton:hover{{background:{CP['bg4']};color:{CP['text_primary']};}}"
+        )
+        _refs_cancel_ss = (
+            f"QPushButton{{background:{CP['bg3']};color:{CP['red']};"
+            f"border:1px solid {CP['red']};border-radius:7px;font-size:11px;font-weight:600;padding:0 20px;}}"
+            f"QPushButton:hover{{background:rgba(255,79,106,0.12);}}"
+        )
+        _refs_streaming_active = [streaming]
+
+        def _stop_refs_worker():
+            if _refs_streaming_active[0]:
+                _refs_streaming_active[0] = False
+                if worker is not None:
+                    worker.quit()
+                    worker.terminate()
+                if _enrich_worker[0] is not None:
+                    _enrich_worker[0].quit()
+                    _enrich_worker[0].terminate()
+                    _enrich_worker[0] = None
+                self._set_ai_busy(False)
+                self._ai_progress_lbl.setText("Analyse annulée.")
+                btn_close.setText("Fermer")
+                btn_close.setStyleSheet(_refs_ghost_ss)
+
+        btn_close = QPushButton("Annuler" if streaming else "Fermer")
+        btn_close.setFixedHeight(36)
+        btn_close.setStyleSheet(_refs_cancel_ss if streaming else _refs_ghost_ss)
+
+        def _on_close_btn():
+            _stop_refs_worker()
+            dlg.accept()
+
+        btn_close.clicked.connect(_on_close_btn)
+        dlg.rejected.connect(_stop_refs_worker)
+
+        _ghost_btn_ss = (
+            f"QPushButton{{background:{CP['bg3']};color:{CP['text_dim']};"
+            f"border:1px solid {CP['border']};border-radius:7px;"
+            f"font-size:11px;font-weight:600;padding:0 20px;}}"
+            f"QPushButton:hover{{background:{CP['bg4']};color:{CP['text_primary']};}}"
+            f"QPushButton:disabled{{background:{CP['bg2']};color:{CP['text_dim']};"
+            f"border:1px solid {CP['border']};}}"
+        )
+        _accent_btn_ss = (
+            f"QPushButton{{background:{CP['accent']};color:#07080f;"
+            f"border:none;border-radius:7px;font-size:11px;font-weight:700;padding:0 20px;}}"
+            f"QPushButton:hover{{background:#6eded6;}}"
+            f"QPushButton:pressed{{background:{CP['accent_dim']};color:#fff;}}"
+            f"QPushButton:disabled{{background:{CP['bg3']};color:{CP['text_dim']};"
+            f"border:1px solid {CP['border']};}}"
+        )
+
+        btn_enrich = QPushButton("◎  Enrichir le scénario")
+        btn_enrich.setFixedHeight(36)
+        btn_enrich.setEnabled(not streaming)
+        btn_enrich.setToolTip(
+            "Claude croise l'analyse visuelle avec le scénario et enrichit\n"
+            "les descriptions correspondantes (personnages, décors, ambiances)."
+        )
+        btn_enrich.setStyleSheet(_accent_btn_ss)
+
+        btn_apply = QPushButton("✓  Appliquer au scénario")
+        btn_apply.setFixedHeight(36)
+        btn_apply.setEnabled(False)
+        btn_apply.setVisible(False)
+        btn_apply.setToolTip("Remplace le scénario actuel par la version enrichie.")
+        btn_apply.setStyleSheet(_accent_btn_ss)
+
+        _final_analysis = [analysis]   # analyse visuelle complète
+        _enrich_worker  = [None]        # worker d'enrichissement en cours
+
+        def _do_enrich():
+            txt = _final_analysis[0]
+            if not txt:
+                return
+            scenario_text = self._get_text() if self._current else ""
+            if not scenario_text.strip():
+                return
+
+            from api.screenplay import EnrichScenarioWithRefsWorker
+            w = EnrichScenarioWithRefsWorker(scenario_text, txt)
+            _enrich_worker[0] = w
+            _refs_streaming_active[0] = True
+            btn_close.setText("Annuler")
+            btn_close.setStyleSheet(_refs_cancel_ss)
+
+            # ── Bascule en phase "enrichissement" ─────────────────────────────
+            title_lbl.setText("✦  Enrichissement du scénario")
+            self._refs_status_lbl.setText("Enrichissement en cours…")
+            self._refs_status_lbl.setStyleSheet(
+                f"color:{CP['accent']};font-size:10px;font-family:'Consolas',monospace;"
+            )
+            te.clear()
+            te.setPlaceholderText("Le scénario enrichi apparaît ici au fil de la génération…")
+            btn_enrich.setEnabled(False)
+            btn_enrich.setVisible(False)
+
+            _enriched = [""]
+
+            def _on_enrich_chunk(text: str):
+                cursor = te.textCursor()
+                cursor.movePosition(cursor.MoveOperation.End)
+                cursor.insertText(text)
+                te.setTextCursor(cursor)
+                _enriched[0] += text
+
+            def _on_enrich_done(result: str):
+                _refs_streaming_active[0] = False
+                btn_close.setText("Fermer")
+                btn_close.setStyleSheet(_refs_ghost_ss)
+                _enriched[0] = result
+                self._refs_status_lbl.setText("Enrichissement terminé ✓")
+                self._refs_status_lbl.setStyleSheet(
+                    f"color:{CP['green']};font-size:10px;font-family:'Consolas',monospace;"
+                )
+                btn_apply.setEnabled(True)
+                btn_apply.setVisible(True)
+
+            def _on_enrich_failed(msg: str):
+                _refs_streaming_active[0] = False
+                btn_close.setText("Fermer")
+                btn_close.setStyleSheet(_refs_ghost_ss)
+                te.setPlainText(f"Erreur lors de l'enrichissement :\n{msg}")
+                self._refs_status_lbl.setText("Erreur")
+                self._refs_status_lbl.setStyleSheet(
+                    f"color:{CP['red']};font-size:10px;font-family:'Consolas',monospace;"
+                )
+
+            def _do_apply():
+                result = _enriched[0].strip()
+                if not result:
+                    return
+                self._push_undo()
+                self._set_editor_text(result)
+                if self._current is not None:
+                    self._current["formatted_content"] = result
+                self._ai_progress_lbl.setText("Scénario enrichi par les références visuelles ✓")
+                self._btn_undo_action.setVisible(True)
+                dlg.accept()
+
+            btn_apply.clicked.connect(_do_apply)
+            w.chunk.connect(_on_enrich_chunk)
+            w.done.connect(_on_enrich_done)
+            w.failed.connect(_on_enrich_failed)
+            w.start()
+
+        btn_enrich.clicked.connect(_do_enrich)
+
+        btn_row.addWidget(btn_close)
+        btn_row.addStretch()
+        btn_row.addWidget(btn_enrich)
+        btn_row.addWidget(btn_apply)
+        lay.addLayout(btn_row)
+
+        # ── Connexions streaming ──────────────────────────────────────────────
+        if streaming:
+            def _on_chunk(text: str):
+                cursor = te.textCursor()
+                cursor.movePosition(cursor.MoveOperation.End)
+                cursor.insertText(text)
+                te.setTextCursor(cursor)
+
+            def _on_done(result: str):
+                _refs_streaming_active[0] = False
+                btn_close.setText("Fermer")
+                btn_close.setStyleSheet(_refs_ghost_ss)
+                _final_analysis[0] = result
+                self._set_ai_busy(False)
+                self._last_result_kind = "refs"
+                self._last_ref_analysis = result
+                n = len(self._ref_images)
+                self._ai_progress_lbl.setText(f"Analyse terminée — {n} image(s).")
+                self._btn_reopen_window.setVisible(True)
+                self._refs_status_lbl.setText(f"{n} image(s) analysée(s)")
+                self._refs_status_lbl.setStyleSheet(
+                    f"color:{CP['text_dim']};font-size:10px;font-family:'Consolas',monospace;"
+                )
+                btn_enrich.setEnabled(True)
+
+            def _on_failed(msg: str):
+                _refs_streaming_active[0] = False
+                btn_close.setText("Fermer")
+                btn_close.setStyleSheet(_refs_ghost_ss)
+                self._set_ai_busy(False)
+                self._ai_progress_lbl.setText(f"Erreur : {msg}")
+                self._refs_status_lbl.setText("Erreur")
+                self._refs_status_lbl.setStyleSheet(
+                    f"color:{CP['red']};font-size:10px;font-family:'Consolas',monospace;"
+                )
+                te.setPlainText(f"Erreur lors de l'analyse :\n{msg}")
+
+            worker.chunk.connect(_on_chunk)
+            worker.done.connect(_on_done)
+            worker.failed.connect(_on_failed)
+            worker.start()  # démarre après connexion des signaux — aucun chunk ne peut être perdu
+
+        dlg.exec()
 
     def _open_simple_result_window(self, text: str):
         """Fenêtre pour les résultats de formatage — avec bouton Remplacer intégré."""
@@ -1516,24 +2206,18 @@ class PageScenario(QWidget):
         content = self._editor_text.toPlainText()
         self._undo_stack.append(content)
         self._redo_stack.clear()
-        self._btn_undo.setEnabled(True)
-        self._btn_redo.setEnabled(False)
 
     def _on_undo(self):
         if not self._undo_stack:
             return
         self._redo_stack.append(self._editor_text.toPlainText())
         self._set_editor_text(self._undo_stack.pop())
-        self._btn_undo.setEnabled(bool(self._undo_stack))
-        self._btn_redo.setEnabled(True)
 
     def _on_redo(self):
         if not self._redo_stack:
             return
         self._undo_stack.append(self._editor_text.toPlainText())
         self._set_editor_text(self._redo_stack.pop())
-        self._btn_undo.setEnabled(True)
-        self._btn_redo.setEnabled(bool(self._redo_stack))
 
     # ── Versions ──────────────────────────────────────────────────────────────
 
@@ -1978,7 +2662,21 @@ class PageScenario(QWidget):
         dur = (
             self._dur_min.value() * 60 + self._dur_sec.value()
         ) if self._dur_defined_check.isChecked() else 0
-        w = GenerateStoryboardWorker(self._get_text(), dur)
+        _el: dict = {}
+        try:
+            import core.casting as _ca_sb, core.decors as _dc_sb
+            import core.accessories as _ac_sb, core.vehicles as _ve_sb
+            chars = [c["name"] for c in _ca_sb.list_characters() if c.get("name")]
+            decs  = [d["name"] for d in _dc_sb.list_decors()     if d.get("name")]
+            accs  = [a["name"] for a in _ac_sb.list_accessories() if a.get("name")]
+            vehs  = [v["name"] for v in _ve_sb.list_vehicles()    if v.get("name")]
+            if chars: _el["characters"]  = chars
+            if decs:  _el["decors"]      = decs
+            _el["accessories"] = accs   # toujours transmis (liste vide = contrainte explicite)
+            if vehs:  _el["vehicles"]    = vehs
+        except Exception:
+            pass
+        w = GenerateStoryboardWorker(self._get_text(), dur, _el or None)
         w.finished.connect(self._gen_all_storyboard_done)
         w.failed.connect(lambda e: self._gen_all_step_error(e, "Storyboard"))
         self._gen_all_workers.append(w); w.start()

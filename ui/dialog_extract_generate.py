@@ -88,6 +88,8 @@ class ExtractGenerateDialog(QDialog):
         self._extract_worker   = None
         self._gen_worker       = None
         self._cancelled        = False
+        self._page_key: str    = ""   # set by factory — page to navigate to after completion
+        self._page_label: str  = ""   # label for the navigate button
 
         self.setWindowTitle(f"Générer — {title}")
         self.setMinimumWidth(520)
@@ -241,8 +243,20 @@ class ExtractGenerateDialog(QDialog):
             f"border-color:rgba(255,79,106,0.70);}}"
         )
         self._btn_cancel.clicked.connect(self._on_cancel)
-        footer.addStretch()
+
+        self._btn_navigate = QPushButton("→  Voir")
+        self._btn_navigate.setFixedHeight(38)
+        self._btn_navigate.setStyleSheet(
+            f"QPushButton{{background:{CP['accent']};color:#07080f;"
+            f"border:none;border-radius:8px;font-size:12px;font-weight:700;padding:0 18px;}}"
+            f"QPushButton:hover{{background:#6eded6;}}"
+        )
+        self._btn_navigate.clicked.connect(self._on_navigate)
+        self._btn_navigate.setVisible(False)
+
         footer.addWidget(self._btn_cancel)
+        footer.addStretch()
+        footer.addWidget(self._btn_navigate)
         root.addLayout(footer)
 
     # ── Cancel / close ────────────────────────────────────────────────────────
@@ -262,8 +276,20 @@ class ExtractGenerateDialog(QDialog):
     def _on_cancel(self):
         self.reject()
 
-    def _finish_state(self):
-        self._btn_cancel.setVisible(False)
+    def _finish_state(self, show_navigate: bool = False):
+        self._btn_cancel.setText("Fermer")
+        self._btn_cancel.setStyleSheet(
+            f"QPushButton{{background:{CP['bg3']};color:{CP['text_secondary']};"
+            f"border:1px solid {CP['border']};border-radius:8px;"
+            f"font-size:12px;font-weight:600;padding:0 18px;}}"
+            f"QPushButton:hover{{background:{CP['bg2']};}}"
+        )
+        if show_navigate and self._page_key:
+            self._btn_navigate.setText(f"→  {self._page_label}")
+            self._btn_navigate.setVisible(True)
+
+    def _on_navigate(self):
+        self.accept()
 
     # ── Mode selection ─────────────────────────────────────────────────────────
 
@@ -358,7 +384,7 @@ class ExtractGenerateDialog(QDialog):
         total = len(self._saved_items)
         self._status_lbl.setText(f"{total} élément(s) sauvegardé(s) — sans image")
         self._phase_lbl.setText("Terminé")
-        self._finish_state()
+        self._finish_state(show_navigate=True)
         if getattr(self, "_auto_close", False):
             from PyQt6.QtCore import QTimer
             QTimer.singleShot(800, self.accept)
@@ -381,7 +407,7 @@ class ExtractGenerateDialog(QDialog):
             f"Image {self._gen_idx + 1}/{n} — {item.get('name', '?')}"
         )
 
-        prompt = item.get("description") or item.get("prompt") or item.get("name", "")
+        prompt = item.get("prompt") or item.get("description") or item.get("name", "")
         name   = item.get("name", "item")
 
         if self._is_characters:
@@ -447,7 +473,7 @@ class ExtractGenerateDialog(QDialog):
         self._status_lbl.setText(
             f"{total} élément(s) sauvegardé(s) · {done} image(s) générée(s)"
         )
-        self._finish_state()
+        self._finish_state(show_navigate=True)
         if getattr(self, "_auto_close", False):
             from PyQt6.QtCore import QTimer
             QTimer.singleShot(1200, self.accept)
@@ -463,6 +489,7 @@ class ExtractGenerateDialog(QDialog):
             d = {
                 "name":          it.get("name", ""),
                 "description":   it.get("description", ""),
+                "prompt":        it.get("prompt") or it.get("description", ""),
                 "role":          it.get("role", "Secondaire"),
                 "image_path":    it.get("image_path", ""),
                 "accessory_ids": it.get("accessory_ids", []),
@@ -472,7 +499,7 @@ class ExtractGenerateDialog(QDialog):
                 d["id"] = it["id"]
             return casting_api.save_character(d)
 
-        return cls(
+        dlg = cls(
             parent,
             title="Personnages depuis le scénario",
             icon="◎",
@@ -483,6 +510,9 @@ class ExtractGenerateDialog(QDialog):
             is_characters=True,
             category_label="personnages",
         )
+        dlg._page_key   = "castings"
+        dlg._page_label = "Voir le Casting"
+        return dlg
 
     @classmethod
     def for_decors(cls, scenario_text: str, parent=None):
@@ -493,7 +523,7 @@ class ExtractGenerateDialog(QDialog):
         def save(it):
             d = {
                 "name":       it.get("name", ""),
-                "prompt":     it.get("description") or it.get("prompt", ""),
+                "prompt":     it.get("prompt") or it.get("description", ""),
                 "category":   it.get("category", "Autre"),
                 "image_path": it.get("image_path", ""),
                 "ref_paths":  it.get("ref_paths", []),
@@ -522,7 +552,7 @@ class ExtractGenerateDialog(QDialog):
                     updated["decor_name"] = decor_name
                     sb_api.save_shot(updated)
 
-        return cls(
+        dlg = cls(
             parent,
             title="Décors depuis le scénario",
             icon="⌂",
@@ -533,6 +563,9 @@ class ExtractGenerateDialog(QDialog):
             post_save_fn=post_save,
             category_label="décors",
         )
+        dlg._page_key   = "decors"
+        dlg._page_label = "Voir les Décors"
+        return dlg
 
     @classmethod
     def for_accessories(cls, scenario_text: str, parent=None):
@@ -543,6 +576,7 @@ class ExtractGenerateDialog(QDialog):
             d = {
                 "name":        it.get("name", ""),
                 "description": it.get("description", ""),
+                "prompt":      it.get("prompt") or it.get("description", ""),
                 "category":    it.get("category", "Autre…"),
                 "image_path":  it.get("image_path", ""),
             }
@@ -550,7 +584,7 @@ class ExtractGenerateDialog(QDialog):
                 d["id"] = it["id"]
             return acc_api.save_accessory(d)
 
-        return cls(
+        dlg = cls(
             parent,
             title="Accessoires depuis le scénario",
             icon="⊡",
@@ -560,6 +594,9 @@ class ExtractGenerateDialog(QDialog):
             item_subdir="accessories",
             category_label="accessoires",
         )
+        dlg._page_key   = "accessoires"
+        dlg._page_label = "Voir les Accessoires"
+        return dlg
 
     @classmethod
     def for_hmc(cls, scenario_text: str, parent=None):
@@ -570,6 +607,7 @@ class ExtractGenerateDialog(QDialog):
             d = {
                 "name":           it.get("name", ""),
                 "description":    it.get("description", ""),
+                "prompt":         it.get("prompt") or it.get("description", ""),
                 "hmc_type":       it.get("hmc_type", "Habit"),
                 "image_path":     it.get("image_path", ""),
                 "character_name": it.get("character_name", ""),
@@ -578,7 +616,7 @@ class ExtractGenerateDialog(QDialog):
                 d["id"] = it["id"]
             return hmc_api.save_hmc_item(d)
 
-        return cls(
+        dlg = cls(
             parent,
             title="HMC depuis le scénario",
             icon="✂",
@@ -588,6 +626,9 @@ class ExtractGenerateDialog(QDialog):
             item_subdir="hmc",
             category_label="éléments HMC",
         )
+        dlg._page_key   = "hmc"
+        dlg._page_label = "Voir le HMC"
+        return dlg
 
     @classmethod
     def for_vehicles(cls, scenario_text: str, parent=None):
@@ -598,6 +639,7 @@ class ExtractGenerateDialog(QDialog):
             d = {
                 "name":        it.get("name", ""),
                 "description": it.get("description", ""),
+                "prompt":      it.get("prompt") or it.get("description", ""),
                 "category":    it.get("category", "Autre"),
                 "image_path":  it.get("image_path", ""),
             }
@@ -605,7 +647,7 @@ class ExtractGenerateDialog(QDialog):
                 d["id"] = it["id"]
             return veh_api.save_vehicle(d)
 
-        return cls(
+        dlg = cls(
             parent,
             title="Véhicules depuis le scénario",
             icon="🚗",
@@ -615,3 +657,6 @@ class ExtractGenerateDialog(QDialog):
             item_subdir="vehicles",
             category_label="véhicules",
         )
+        dlg._page_key   = "vehicles"
+        dlg._page_label = "Voir les Véhicules"
+        return dlg

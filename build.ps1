@@ -25,20 +25,48 @@ if (-not (Test-Path $PYTHON)) {
 
 Write-Host "`n=== PANDORA Build ===" -ForegroundColor Cyan
 
-# ── 1. Génération des assets (ico + images wizard) ───────────────────────────
-Write-Host "`n[1/4] Génération des assets (icône .ico + images wizard)..." -ForegroundColor Yellow
+# ── 1. ffmpeg — téléchargement automatique si absent ─────────────────────────
+Write-Host "`n[1/5] Vérification ffmpeg..." -ForegroundColor Yellow
+$ffmpegMissing = (-not (Test-Path "ffmpeg.exe")) -or (-not (Test-Path "ffprobe.exe"))
+if ($ffmpegMissing) {
+    Write-Host "  ffmpeg.exe / ffprobe.exe absents - telechargement depuis gyan.dev..." -ForegroundColor Gray
+    $ffmpegUrl = "https://www.gyan.dev/ffmpeg/builds/ffmpeg-release-essentials.zip"
+    $zipPath   = Join-Path $env:TEMP "pandora_ffmpeg.zip"
+    try {
+        Invoke-WebRequest -Uri $ffmpegUrl -OutFile $zipPath -UseBasicParsing
+        Add-Type -AssemblyName System.IO.Compression.FileSystem
+        $zip = [System.IO.Compression.ZipFile]::OpenRead($zipPath)
+        foreach ($bin in @("ffmpeg.exe", "ffprobe.exe")) {
+            $entry = $zip.Entries | Where-Object { $_.Name -eq $bin } | Select-Object -First 1
+            if ($entry) {
+                [System.IO.Compression.ZipFileExtensions]::ExtractToFile($entry, $bin, $true)
+                Write-Host "  $bin téléchargé et extrait." -ForegroundColor Gray
+            }
+        }
+        $zip.Dispose()
+        Remove-Item $zipPath -Force
+    } catch {
+        Write-Warning "Impossible de télécharger ffmpeg : $_"
+        Write-Warning "Les miniatures vidéo ne fonctionneront pas. Téléchargez manuellement ffmpeg.exe et ffprobe.exe dans le dossier du projet."
+    }
+} else {
+    Write-Host "  ffmpeg.exe et ffprobe.exe présents." -ForegroundColor Gray
+}
+
+# ── 2. Génération des assets (ico + images wizard) ───────────────────────────
+Write-Host "`n[2/5] Génération des assets (icône .ico + images wizard)..." -ForegroundColor Yellow
 & $PYTHON tools\make_ico.py
 if ($LASTEXITCODE -ne 0) { Write-Error "Échec make_ico.py"; exit 1 }
 & $PYTHON tools\make_wizard_images.py
 if ($LASTEXITCODE -ne 0) { Write-Error "Échec make_wizard_images.py"; exit 1 }
 
-# ── 2. Nettoyage du build précédent ───────────────────────────────────────────
-Write-Host "`n[2/4] Nettoyage des builds précédents..." -ForegroundColor Yellow
+# ── 3. Nettoyage du build précédent ───────────────────────────────────────────
+Write-Host "`n[3/5] Nettoyage des builds précédents..." -ForegroundColor Yellow
 if (Test-Path "dist\PANDORA") { Remove-Item -Recurse -Force "dist\PANDORA" }
 if (Test-Path "build\PANDORA") { Remove-Item -Recurse -Force "build\PANDORA" }
 
-# ── 3. PyInstaller ────────────────────────────────────────────────────────────
-Write-Host "`n[3/4] Build PyInstaller..." -ForegroundColor Yellow
+# ── 4. PyInstaller ────────────────────────────────────────────────────────────
+Write-Host "`n[4/5] Build PyInstaller..." -ForegroundColor Yellow
 & $PYTHON -m PyInstaller pandora.spec --noconfirm
 if ($LASTEXITCODE -ne 0) {
     Write-Error "Échec PyInstaller"
@@ -64,9 +92,9 @@ if (Test-Path $STYLE_REFS) {
     }
 }
 
-# ── 4. Inno Setup (optionnel) ─────────────────────────────────────────────────
+# ── 5. Inno Setup (optionnel) ─────────────────────────────────────────────────
 if ($Installer) {
-    Write-Host "`n[4/4] Compilation de l'installeur Inno Setup..." -ForegroundColor Yellow
+    Write-Host "`n[5/5] Compilation de l'installeur Inno Setup..." -ForegroundColor Yellow
     if (-not (Test-Path $ISCC)) {
         Write-Warning "Inno Setup introuvable : $ISCC"
         Write-Warning "Installez Inno Setup 6 depuis https://jrsoftware.org/isinfo.php"
@@ -80,7 +108,7 @@ if ($Installer) {
         Write-Host "Installeur créé : dist\PANDORA_Setup_$ver.exe" -ForegroundColor Green
     }
 } else {
-    Write-Host "`n[4/4] Inno Setup ignoré (utilisez -Installer pour créer l'installeur)." -ForegroundColor DarkGray
+    Write-Host "`n[5/5] Inno Setup ignoré (utilisez -Installer pour créer l'installeur)." -ForegroundColor DarkGray
 }
 
 # ── Résultat ──────────────────────────────────────────────────────────────────

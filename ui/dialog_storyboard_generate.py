@@ -116,6 +116,17 @@ class StoryboardGenerateDialog(QDialog):
         sep.setStyleSheet(f"background:{CP['border']};")
         root.addWidget(sep)
 
+        # ── Warning label ───────────────────────────────────────────────────────
+        warn = QLabel(
+            "⏳  La génération peut prendre du temps selon la longueur du scénario.\n"
+            "Si vous utilisez un VPN, désactivez-le — il peut bloquer la connexion avec Claude."
+        )
+        warn.setWordWrap(True)
+        warn.setStyleSheet(
+            f"color:{CP['text_dim']};font-size:9px;font-style:italic;background:transparent;"
+        )
+        root.addWidget(warn)
+
         # ── Progress bar (indeterminate while generating) ────────────────────────
         self._progress = QProgressBar()
         self._progress.setRange(0, 0)

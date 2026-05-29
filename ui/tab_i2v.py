@@ -60,15 +60,18 @@ class TabI2V(QScrollArea):
         grid = QGridLayout()
         grid.setSpacing(12)
         self.cb_dur = combo(["5 secondes", "10 secondes", "15 secondes"])
-        self.cb_res = combo(["1080p", "720p", "480p"])
-        for col_idx, lbl, widget in [(0, "Durée", self.cb_dur), (1, "Résolution", self.cb_res)]:
+        self.cb_res = combo([("1080p  (~$0.60/s)", "1080p"), ("720p  (~$0.30/s)", "720p"), ("480p  (~$0.16/s)", "480p")])
+        for (row, col_idx), lbl, widget in [
+            ((0, 0), "Durée",      self.cb_dur),
+            ((0, 1), "Résolution", self.cb_res),
+        ]:
             g = QWidget()
             l = QVBoxLayout(g)
             l.setContentsMargins(0, 0, 0, 0)
             l.setSpacing(6)
             l.addWidget(section_label(lbl))
             l.addWidget(widget)
-            grid.addWidget(g, 0, col_idx)
+            grid.addWidget(g, row, col_idx)
         lay.addLayout(grid)
 
         lay.addWidget(toggle_row("Contrôle premier / dernier frame", "Frames-to-Video mode", False))
@@ -112,7 +115,7 @@ class TabI2V(QScrollArea):
             "prompt":     prompt,
             "model":      "seedance-2.0",
             "duration":   [5, 10, 15][self.cb_dur.currentIndex()],
-            "resolution": self.cb_res.currentText(),
+            "resolution": (self.cb_res.currentData() or self.cb_res.currentText()),
             "image_path": self._image_path or "",
         }
 
@@ -160,7 +163,8 @@ class TabI2V(QScrollArea):
             QMessageBox.warning(self, "Prompt vide", "Écris un prompt à améliorer !")
             return
         self._btn_enhance.setEnabled(False)
-        self._btn_enhance.setText("…")
+        if hasattr(self._btn_enhance, "_loading"):
+            self._btn_enhance._loading.setVisible(True)
         self._enhance_worker = EnhanceWorker(prompt)
         self._enhance_worker.finished.connect(self._on_enhance_done)
         self._enhance_worker.failed.connect(self._on_enhance_failed)
@@ -169,9 +173,11 @@ class TabI2V(QScrollArea):
     def _on_enhance_done(self, enhanced: str):
         self.prompt_ta.setPlainText(enhanced)
         self._btn_enhance.setEnabled(True)
-        self._btn_enhance.setText("✦ Améliorer")
+        if hasattr(self._btn_enhance, "_loading"):
+            self._btn_enhance._loading.setVisible(False)
 
     def _on_enhance_failed(self, error: str):
         self._btn_enhance.setEnabled(True)
-        self._btn_enhance.setText("✦ Améliorer")
+        if hasattr(self._btn_enhance, "_loading"):
+            self._btn_enhance._loading.setVisible(False)
         QMessageBox.warning(self, "Amélioration impossible", error)

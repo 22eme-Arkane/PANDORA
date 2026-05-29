@@ -39,15 +39,6 @@ class DaVinciPanel(QWidget):
         )
         r1.addWidget(self._title_lbl)
 
-        self._status_chip = QLabel("— Non connecté")
-        self._status_chip.setStyleSheet(
-            f"color:{C['red']};font-size:12px;font-weight:600;"
-            f"border:none;background:transparent;"
-        )
-        r1.addWidget(self._status_chip)
-
-        r1.addStretch(1)
-
         self._btn = QPushButton("Connecter")
         self._btn.setFixedHeight(30)
         self._btn.setMinimumWidth(100)
@@ -62,6 +53,15 @@ class DaVinciPanel(QWidget):
         """)
         self._btn.clicked.connect(self._on_connect)
         r1.addWidget(self._btn)
+
+        self._status_chip = QLabel("— Non connecté")
+        self._status_chip.setStyleSheet(
+            f"color:{C['red']};font-size:12px;font-weight:600;"
+            f"border:none;background:transparent;"
+        )
+        r1.addWidget(self._status_chip)
+
+        r1.addStretch(1)
         root.addLayout(r1)
 
         # ── Instructions de connexion (visible uniquement quand non connecté) ─

@@ -8,6 +8,7 @@ from ui.tab_t2v import TabT2V
 from ui.tab_history import TabHistory
 from ui.tab_video_engines import TabVideoEngines
 from ui.tab_davinci_edit import TabDavinciEdit
+from ui.tab_video_library import TabVideoLibrary
 
 
 class SeedanceHeader(QWidget):
@@ -79,21 +80,28 @@ class SeedanceWidget(QWidget):
         self.tabs = QTabWidget()
         self.tabs.setDocumentMode(True)
 
-        self.tab_t2v     = TabT2V()
-        self.tab_davinci = TabDavinciEdit()
-        self.tab_engines = TabVideoEngines()
-        self.tab_history = TabHistory()
+        self.tab_t2v      = TabT2V()
+        self.tab_davinci  = TabDavinciEdit()
+        self.tab_engines  = TabVideoEngines()
+        self.tab_history  = TabHistory()
+        self.tab_library  = TabVideoLibrary()
 
-        self.tabs.addTab(self.tab_t2v,     "Créer un nouveau clip")
-        self.tabs.addTab(self.tab_davinci, "Modifier depuis DaVinci Resolve")
+        self.tabs.addTab(self.tab_t2v,     "Générer depuis Storyboard")
+        self.tabs.addTab(self.tab_davinci, "Modifier des clips")
         self.tabs.addTab(self.tab_engines, "Génération directe")
+        self.tabs.addTab(self.tab_library, "Vidéothèque")
         self.tabs.addTab(self.tab_history, "Historique")
 
         self.tab_t2v.generation_done.connect(self.tab_history.add_entry)
         self.tab_davinci.generation_done.connect(self.tab_history.add_entry)
 
+        # Vidéothèque → Modifier depuis DaVinci
+        self.tab_library.send_to_davinci_edit.connect(self._on_send_to_edit)
+
         # Ping bridge quand l'onglet "Modifier depuis DaVinci" devient actif
+        # Refresh vidéothèque quand on clique sur l'onglet
         self._davinci_tab_index = self.tabs.indexOf(self.tab_davinci)
+        self._library_tab_index = self.tabs.indexOf(self.tab_library)
         self.tabs.currentChanged.connect(self._on_tab_changed)
 
         root.addWidget(self.tabs)
@@ -101,6 +109,12 @@ class SeedanceWidget(QWidget):
     def _on_tab_changed(self, index: int):
         if index == self._davinci_tab_index:
             self.tab_davinci._ping_bridge()
+        elif index == self._library_tab_index:
+            self.tab_library.refresh()
+
+    def _on_send_to_edit(self, paths: list):
+        self.tab_davinci.add_clips_from_paths(paths)
+        self.tabs.setCurrentWidget(self.tab_davinci)
 
     def refresh(self):
         self.tab_t2v.refresh()

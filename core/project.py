@@ -139,6 +139,10 @@ def create_project(name: str, parent_dir: str = "", mode: str = "cinema") -> dic
     os.makedirs(folder)
     _init_project_dirs(folder)
 
+    # Ensure the style_refs write dir exists so custom categories are available immediately
+    from core.paths import APP_ROOT as _pr
+    os.makedirs(os.path.join(_pr, "assets", "style_refs"), exist_ok=True)
+
     now  = datetime.now().isoformat()
     data = {
         "id":          str(uuid.uuid4()),

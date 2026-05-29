@@ -21,7 +21,10 @@ def _load_index() -> list[dict]:
     if not os.path.exists(index_file):
         return []
     with open(index_file, "r", encoding="utf-8") as f:
-        return json.load(f)
+        try:
+            return json.load(f)
+        except json.JSONDecodeError:
+            return []
 
 
 def _save_index(index: list[dict]):

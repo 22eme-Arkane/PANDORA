@@ -1,5 +1,5 @@
-# ── PANDORA Palette ───────────────────────────────────────────────────────────
-CP = {
+# ── PANDORA Palette — dark ────────────────────────────────────────────────────
+_CP_DARK = {
     "bg0":           "#07080f",
     "bg1":           "#0c0e1a",
     "bg2":           "#111320",
@@ -19,6 +19,43 @@ CP = {
     "text_secondary":"#8a93ac",
     "text_dim":      "#3d4460",
 }
+
+# ── PANDORA Palette — light ───────────────────────────────────────────────────
+_CP_LIGHT = {
+    "bg0":           "#f0f2f9",    # fond légèrement cassé (moins éblouissant que blanc pur)
+    "bg1":           "#e8ebf4",
+    "bg2":           "#dde1ee",
+    "bg3":           "#d0d5e8",
+    "bg4":           "#c4cae0",
+    "sidebar":       "#e4e7f2",
+    "border":        "#b8c0d8",
+    "border_bright": "#8e9abf",
+    "accent":        "#2fa89f",    # Teal — contraste suffisant sur fond clair
+    "accent_dim":    "#1d7a73",
+    "accent2":       "#5e4edc",    # Purple
+    "accent2_dim":   "#3d2fa0",
+    "green":         "#1a8a55",
+    "red":           "#cc2840",
+    "orange":        "#c06018",
+    "text_primary":  "#12152a",    # très foncé — bon contraste
+    "text_secondary":"#3a4068",    # foncé — lisible
+    "text_dim":      "#5e6898",    # assez foncé pour être lisible
+}
+
+
+def _load_theme_cp() -> dict:
+    """Read the saved theme from config and return the appropriate palette dict."""
+    try:
+        from core.config import load_config
+        cfg = load_config()
+        if cfg.get("theme") == "light":
+            return dict(_CP_LIGHT)
+    except Exception:
+        pass
+    return dict(_CP_DARK)
+
+
+CP = _load_theme_cp()
 
 # ── Seedance Palette (fond raccord PANDORA, accent purple) ────────────────────
 C = {
@@ -136,8 +173,32 @@ QPushButton {{
     border: none; border-radius: 8px; font-size: 13px;
     font-weight: 700; padding: 13px 20px;
 }}
-QPushButton:hover {{ background-color: {CP['accent_dim']}; }}
-QPushButton:disabled {{ background-color: {CP['bg3']}; color: {CP['text_dim']}; }}
+QPushButton:hover {{ background-color: {CP['accent_dim']}; color: #ffffff; }}
+QPushButton:pressed {{ background-color: {CP['accent_dim']}; color: #ffffff; }}
+QPushButton:disabled {{ background-color: {CP['bg3']}; color: {CP['text_secondary']}; }}
+QCheckBox {{
+    color: {CP['text_primary']};
+    font-size: 12px;
+    spacing: 6px;
+}}
+QCheckBox::indicator {{
+    width: 16px;
+    height: 16px;
+    border: 2px solid {CP['border_bright']};
+    border-radius: 3px;
+    background: {CP['bg3']};
+}}
+QCheckBox::indicator:checked {{
+    background: {CP['accent']};
+    border-color: {CP['accent']};
+}}
+QCheckBox::indicator:hover {{
+    border-color: {CP['accent_dim']};
+}}
+QCheckBox::indicator:disabled {{
+    background: {CP['bg2']};
+    border-color: {CP['border']};
+}}
 QMessageBox {{ background: {CP['bg2']}; }}
 QMessageBox QLabel {{ color: {CP['text_primary']}; }}
 QInputDialog {{ background: {CP['bg2']}; }}

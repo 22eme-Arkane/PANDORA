@@ -1104,6 +1104,1152 @@ _FR_TO_EN: dict[str, str] = {
 
     # Format validation
     "Format non supporté":                       "Unsupported format",
+
+    # ── HelpBlock — titres ────────────────────────────────────────────────────
+    "Scénario — Éditeur et assistant Claude IA":
+        "Screenplay — Editor and Claude AI assistant",
+    "Storyboard — Découpage plan par plan":
+        "Storyboard — Shot-by-shot breakdown",
+    "Castings — Personnages du film":
+        "Cast — Film characters",
+    "Décors — Lieux de tournage":
+        "Locations — Shooting locations",
+    "Accessoires — Props & matériel":
+        "Props — Equipment & materials",
+    "HMC — Habillage, Maquillage, Coiffure":
+        "HMC — Costume, Makeup, Hair",
+    "Véhicules — Parc automobile & transport":
+        "Vehicles — Fleet & transport",
+    "Image & Son":
+        "Camera & Sound",
+    "Doublage & Synthèse vocale IA":
+        "Dubbing & AI Voice Synthesis",
+    "Image-to-Video — Animer une image fixe":
+        "Image-to-Video — Animate a still image",
+    "Extension de clip — Prolonger ou modifier":
+        "Clip Extension — Extend or modify",
+    "Référence multimodale — Guider avec image, vidéo ou audio":
+        "Multimodal Reference — Guide with image, video or audio",
+    "Historique des générations":
+        "Generation history",
+    "Paramètres — Clés API et préférences":
+        "Settings — API keys and preferences",
+
+    # ── HelpBlock — page Scénario ─────────────────────────────────────────────
+    "▸ Rédigez ou collez votre scénario, puis utilisez Claude pour le formater en mise en page cinéma standard.":
+        "▸ Write or paste your screenplay, then use Claude to format it in standard cinema layout.",
+    "▸ Arrangement IA : Claude analyse la structure narrative et propose des améliorations (intensité réglable 1-10).":
+        "▸ AI Arrangement: Claude analyzes the narrative structure and suggests improvements (adjustable intensity 1-10).",
+    "▸ Générez automatiquement depuis le scénario : personnages, décors, accessoires, HMC, véhicules et storyboard.":
+        "▸ Auto-generate from the screenplay: characters, locations, props, HMC, vehicles and storyboard.",
+    "▸ Versions : sauvegardez plusieurs versions nommées et basculez entre elles à tout moment.":
+        "▸ Versions: save multiple named versions and switch between them at any time.",
+    "▸ Undo\\Redo : chaque modification par Claude est annulable — les boutons ↩ ↪ conservent l'historique manuel.":
+        "▸ Undo/Redo: every Claude edit is reversible — the ↩ ↪ buttons keep the manual history.",
+    "▸ Style de film : le style sélectionné ici se propage à Seedance 2.0 et aux générations d'éléments.":
+        "▸ Film style: the style selected here propagates to Seedance 2.0 and element generations.",
+
+    # ── HelpBlock — page Storyboard ───────────────────────────────────────────
+    "▸ Chaque ligne représente un plan : numéro, mouvement caméra, valeur, focale, vitesse, décor, acteurs.":
+        "▸ Each row represents a shot: number, camera movement, size, focal, speed, location, actors.",
+    "▸ Cliquez sur une cellule pour modifier en ligne, ou sur Éditer pour ouvrir la fiche complète du plan.":
+        "▸ Click a cell to edit inline, or click Edit to open the full shot card.",
+    "▸ Glissez-déposez les plans (⠿) pour réorganiser le découpage.":
+        "▸ Drag and drop shots (⠿) to reorder the breakdown.",
+    "▸ Mood IA : générez automatiquement le prompt Seedance de chaque plan depuis la description de la scène.":
+        "▸ AI Mood: automatically generate the Seedance prompt for each shot from the scene description.",
+    "▸ Bouton Générer (▶) sur chaque plan : envoie directement le plan vers Seedance 2.0 pour la génération.":
+        "▸ Generate button (▶) on each shot: sends the shot directly to Seedance 2.0 for generation.",
+    "▸ Versions : gérez plusieurs versions du découpage (découpage final, alternatives, montage court…).":
+        "▸ Versions: manage multiple breakdown versions (final cut, alternatives, short edit…).",
+
+    # ── HelpBlock — page Décors ───────────────────────────────────────────────
+    "▸ Répertoriez tous les lieux de tournage avec description, ambiance et contraintes techniques.":
+        "▸ List all shooting locations with description, atmosphere and technical constraints.",
+    "▸ Ajoutez des images de référence (photo de repérage, moodboard) pour chaque décor.":
+        "▸ Add reference images (location scouting photo, moodboard) for each location.",
+    "▸ Catégorisez par type (intérieur, extérieur, studio…) pour filtrer rapidement.":
+        "▸ Categorize by type (interior, exterior, studio…) for quick filtering.",
+    "▸ Les décors sont assignables aux plans du storyboard pour un suivi de production précis.":
+        "▸ Locations can be assigned to storyboard shots for precise production tracking.",
+    "▸ La liste des décors peut être générée automatiquement depuis le scénario (page Scénario → Claude IA).":
+        "▸ The location list can be auto-generated from the screenplay (Screenplay page → Claude AI).",
+
+    # ── HelpBlock — page Accessoires ──────────────────────────────────────────
+    "▸ Listez tous les accessoires nécessaires au tournage avec description et quantité.":
+        "▸ List all props needed for the shoot with description and quantity.",
+    "▸ Ajoutez des images de référence pour chaque prop afin de faciliter les achats et la régie.":
+        "▸ Add reference images for each prop to facilitate purchasing and production management.",
+    "▸ Assignez les accessoires aux personnages et aux plans du storyboard.":
+        "▸ Assign props to characters and storyboard shots.",
+    "▸ La liste peut être générée automatiquement depuis le scénario (page Scénario → Claude IA).":
+        "▸ The list can be auto-generated from the screenplay (Screenplay page → Claude AI).",
+
+    # ── HelpBlock — page HMC ─────────────────────────────────────────────────
+    "▸ Créez une fiche HMC par personnage ou par scène avec description et références visuelles.":
+        "▸ Create an HMC card per character or scene with description and visual references.",
+    "▸ Catégories : Habillage (costumes, tenues), Maquillage, Coiffure, Effets spéciaux.":
+        "▸ Categories: Costume, Makeup, Hair, Special effects.",
+    "▸ Ajoutez des images de référence pour chaque élément afin de guider les équipes artistiques.":
+        "▸ Add reference images for each item to guide the artistic teams.",
+    "▸ Les fiches HMC peuvent être générées automatiquement depuis le scénario (page Scénario → Claude IA).":
+        "▸ HMC cards can be auto-generated from the screenplay (Screenplay page → Claude AI).",
+
+    # ── HelpBlock — page Véhicules ────────────────────────────────────────────
+    "▸ Répertoriez tous les véhicules nécessaires au tournage (voitures, motos, camions…).":
+        "▸ List all vehicles needed for the shoot (cars, motorcycles, trucks…).",
+    "▸ Précisez la marque, le modèle, l'année, la couleur et les contraintes de disponibilité.":
+        "▸ Specify the brand, model, year, color and availability constraints.",
+    "▸ Ajoutez des images de référence pour faciliter la recherche et la location.":
+        "▸ Add reference images to facilitate sourcing and rental.",
+
+    # ── HelpBlock — page Image & Son ──────────────────────────────────────────
+    "▸ Bloc 1 — Réglages techniques : corps de caméra, optiques, filtres et microphone.":
+        "▸ Block 1 — Technical settings: camera body, lenses, filters and microphone.",
+    "  Ces préférences sont injectées dans les prompts Seedance pour guider le rendu visuel.":
+        "  These preferences are injected into Seedance prompts to guide the visual rendering.",
+    "▸ Bloc 2 — Sound Design : génère des ambiances sonores IA (Mirelo AI SFX 1.6 · $0.01/s).":
+        "▸ Block 2 — Sound Design: generates AI soundscapes (Mirelo AI SFX 1.6 · $0.01/s).",
+    "  L'audio généré est automatiquement importé dans le Media Pool de DaVinci Resolve.":
+        "  Generated audio is automatically imported into DaVinci Resolve's Media Pool.",
+
+    # ── HelpBlock — page Doublage ─────────────────────────────────────────────
+    "▸ ElevenLabs Turbo v2.5 : synthèse vocale avec sélection de voix — principalement anglais, résultats variables en français.":
+        "▸ ElevenLabs Turbo v2.5: voice synthesis with voice selection — mainly English, variable results in French.",
+    "▸ F5-TTS Clonage : clone une voix depuis un échantillon audio — langue détectée depuis le texte. Entraîné principalement sur l'anglais et le chinois : le français peut sonner avec un accent.":
+        "▸ F5-TTS Cloning: clones a voice from an audio sample — language detected from text. Trained mainly on English and Chinese: French may sound accented.",
+    "▸ Note : les modèles de synthèse vocale IA sont encore peu optimisés pour le français. Pour un résultat professionnel en FR, un comédien de doublage reste la meilleure option.":
+        "▸ Note: AI voice synthesis models are still poorly optimized for French. For professional FR results, a voice actor remains the best option.",
+    "▸ Sélectionne un mode, écris le texte, puis clique sur « Générer l'audio ».":
+        "▸ Select a mode, write the text, then click 'Generate audio'.",
+    "▸ Les fichiers générés apparaissent en bas — clique ▶ pour écouter ou 📁 pour ouvrir le dossier.":
+        "▸ Generated files appear below — click ▶ to listen or 📁 to open the folder.",
+
+    # ── HelpBlock — tab I2V ───────────────────────────────────────────────────
+    "▸ Chargez une image (PNG · JPG · WEBP) pour l'animer et en faire un clip vidéo.":
+        "▸ Load an image (PNG · JPG · WEBP) to animate it into a video clip.",
+    "▸ Ajoutez un prompt pour décrire le mouvement et l'ambiance souhaitée.":
+        "▸ Add a prompt to describe the desired movement and atmosphere.",
+    "▸ Activez Référence casting pour injecter les portraits des personnages sélectionnés.":
+        "▸ Enable Cast Reference to inject the portraits of selected characters.",
+    "▸ Choisissez la durée (2–10 s), la résolution et le style de film avant de lancer.":
+        "▸ Choose the duration (2–10 s), resolution and film style before launching.",
+    "▸ Sans clé fal.ai → mode mock (simulation locale, aucun crédit consommé).":
+        "▸ Without a fal.ai key → mock mode (local simulation, no credits used).",
+
+    # ── HelpBlock — tab Extension ─────────────────────────────────────────────
+    "▸ Prolongez un clip existant avant (étendre au début) ou après (étendre à la fin) sa durée originale.":
+        "▸ Extend an existing clip before (extend at start) or after (extend at end) its original duration.",
+    "▸ Mode Nouveau rush : génère une nouvelle prise à partir du même clip source.":
+        "▸ New take mode: generates a new take from the same source clip.",
+    "▸ Importez un fichier vidéo local ou récupérez le clip actif depuis la timeline DaVinci Resolve.":
+        "▸ Import a local video file or retrieve the active clip from the DaVinci Resolve timeline.",
+    "▸ Ajoutez un prompt pour guider la direction visuelle de la continuation.":
+        "▸ Add a prompt to guide the visual direction of the continuation.",
+    "▸ La durée ajoutée s'additionne à la durée originale du clip source.":
+        "▸ The added duration is cumulative with the original source clip duration.",
+
+    # ── HelpBlock — tab Référence ─────────────────────────────────────────────
+    "▸ Combinez jusqu'à 3 références (image + vidéo + audio) pour guider la génération.":
+        "▸ Combine up to 3 references (image + video + audio) to guide generation.",
+    "▸ Image de référence : impose l'apparence visuelle, les couleurs et la composition.":
+        "▸ Reference image: imposes the visual appearance, colors and composition.",
+    "▸ Vidéo de référence : guide le mouvement et le rythme du clip généré.":
+        "▸ Reference video: guides the movement and rhythm of the generated clip.",
+    "▸ Audio de référence : synchronise l'ambiance sonore avec le rendu visuel.":
+        "▸ Reference audio: synchronizes the soundscape with the visual rendering.",
+    "▸ Ajoutez un prompt pour affiner davantage le résultat au-delà des références.":
+        "▸ Add a prompt to further refine the result beyond the references.",
+
+    # ── HelpBlock — tab Historique ────────────────────────────────────────────
+    "▸ Retrouvez toutes les générations effectuées pour ce projet (50 entrées max).":
+        "▸ Find all generations made for this project (50 entries max).",
+    "▸ Chaque entrée affiche le mode (T2V · I2V · Extension · Référence), le prompt, la durée et la résolution.":
+        "▸ Each entry shows the mode (T2V · I2V · Extension · Reference), prompt, duration and resolution.",
+    "▸ Les clips sont sauvegardés localement ; utilisez le bouton Import DaVinci au moment de la génération.":
+        "▸ Clips are saved locally; use the Import DaVinci button at the time of generation.",
+
+    # ── HelpBlock — tab Paramètres ────────────────────────────────────────────
+    "▸ Clé fal.ai : requise pour générer des vidéos réelles via Seedance 2.0. Sans clé → mode mock.":
+        "▸ fal.ai key: required to generate real videos via Seedance 2.0. Without key → mock mode.",
+    "▸ Clé Anthropic : requise pour l'assistant Claude (formatage scénario, génération storyboard, optimisation prompts).":
+        "▸ Anthropic key: required for the Claude assistant (screenplay formatting, storyboard generation, prompt optimization).",
+    "▸ Clé Nano Banana : requise pour la génération de portraits de personnages (page Castings).":
+        "▸ Nano Banana key: required for character portrait generation (Cast page).",
+    "▸ Dossier de sortie : répertoire local où sont sauvegardés les clips générés.":
+        "▸ Output folder: local directory where generated clips are saved.",
+
+    # ── Onboarding / Guide de démarrage ──────────────────────────────────────
+    "Guide de démarrage - PANDORA":              "Getting Started - PANDORA",
+    "Passer":                                    "Skip",
+    "Guide de configuration des services IA":   "AI Services Configuration Guide",
+    "Voir le tutoriel":                          "Watch the tutorial",
+    "Ne plus afficher ce message":               "Don't show this again",
+    "Tutoriel complet PANDORA":                  "Complete PANDORA Tutorial",
+    "Visionner le tuto sur notre chaine de vidéo — YouTube":
+        "Watch the tutorial on our YouTube channel",
+    "Configurer ffal.ai":                        "Set up fal.ai",
+    "Configurer Anthropic":                      "Set up Anthropic",
+    "Coller les clés":                           "Paste the keys",
+    "Coller les clés dans PANDORA":              "Paste the keys into PANDORA",
+    "Aller aux Paramètres ->":                   "Go to Settings →",
+    "Créer un compte (Sign up)":                 "Create an account (Sign up)",
+    "Ouvrir ffal.ai/signup":                     "Open fal.ai/signup",
+    "Ouvrir ffal.ai/dashboard/keys":             "Open fal.ai/dashboard/keys",
+    "Ouvrir Billing":                            "Open Billing",
+    "Ouvrir console.anthropic.com":              "Open console.anthropic.com",
+    "Ouvrir API Keys":                           "Open API Keys",
+    "Recommandé : 10$ minimum":                  "Recommended: $10 minimum",
+    "Recommandé : 15$ minimum":                  "Recommended: $15 minimum",
+
+    # ── Splash / Projet ───────────────────────────────────────────────────────
+    "PROJETS RÉCENTS - CINÉMA":                  "RECENT PROJECTS - CINEMA",
+    "Nouveau projet PANDORA":                    "New PANDORA project",
+    "Mon Film":                                  "My Film",
+    "Choisir...":                                "Choose...",
+    "Créer le projet":                           "Create project",
+
+    # ── Mise à jour ───────────────────────────────────────────────────────────
+    "Mise à jour":                               "Update",
+    "PANDORA est à jour.":                       "PANDORA is up to date.",
+    "Vérifier les mises à jour":                 "Check for updates",
+
+    # ── Financement ───────────────────────────────────────────────────────────
+    "Finance le developpement":                  "Fund development",
+    "Financer le développement":                 "Fund development",
+    "Choisissez votre moyen de soutenir le developpement de PANDORA :":
+        "Choose how to support PANDORA's development:",
+    "Cryptomonnaie":                             "Cryptocurrency",
+    "Bientôt disponible...":                     "Coming soon...",
+    "Bientôt disponible… (Prochaine version)":   "Coming soon… (Next version)",
+
+    # ── Page Scénario — manquants ─────────────────────────────────────────────
+    "Proposer un arrangement":                   "Propose an arrangement",
+    "Mise en page PANDORA":                      "PANDORA Layout",
+    "Session de co-écriture":                    "Co-writing session",
+    "Appliquer les suggestions":                 "Apply suggestions",
+    "DIALOGUE AVEC CLAUDE":                      "DIALOGUE WITH CLAUDE",
+    "VOTRE INSTRUCTION":                         "YOUR INSTRUCTION",
+    "Envoyer à Claude":                          "Send to Claude",
+    "Mise en page PANDORA — Aperçu":             "PANDORA Layout — Preview",
+    "Mise en page PANDORA terminée":             "PANDORA layout complete",
+    "Aucun scénario détecté.":                   "No screenplay detected.",
+    "Remplacer le texte":                        "Replace text",
+    "Comment souhaitez-vous procéder ?":         "How would you like to proceed?",
+    "Identifier les personnages":                "Identify characters",
+    "Identifier les décors":                     "Identify locations",
+    "Identifier les accessoires":                "Identify props",
+    "Identifier les véhicules":                  "Identify vehicles",
+    "Identifier la HMC":                         "Identify HMC",
+    "Identifier et générer les images":          "Identify and generate images",
+    "Claude analyse le scénario...":             "Claude is analyzing the screenplay...",
+    "Aucun élément détecté dans le scénario.":   "No elements detected in the screenplay.",
+    "Générer — Personnages depuis le scénario":  "Generate — Characters from screenplay",
+    "Générer — Décors depuis le scénario":       "Generate — Locations from screenplay",
+    "Générer — Accessoires depuis le scénario":  "Generate — Props from screenplay",
+    "Générer — HMC depuis le scénario":          "Generate — HMC from screenplay",
+    "Générer — Véhicules depuis le scénario":    "Generate — Vehicles from screenplay",
+    "Générer — Découpage Storyboard":            "Generate — Storyboard Breakdown",
+    "Générer characters":                        "Generate characters",
+    "Générer les décors":                        "Generate locations",
+    "Générer les accessoires":                   "Generate props",
+    "Générer la HMC":                            "Generate HMC",
+    "Générer les véhicules":                     "Generate vehicles",
+    "Générer le storyboard":                     "Generate storyboard",
+    "Analyse en cours...":                       "Analyzing...",
+    "L'analyse apparaît ici au fil de la génération...":
+        "Analysis will appear here as it generates...",
+    "Arrangement — Analyse":                     "Arrangement — Analysis",
+    "Studio de Création — Co-écriture avec Claude":
+        "Creation Studio — Co-writing with Claude",
+    "Glissez-déposez des images ou cliquez pour en ajouter":
+        "Drag and drop images or click to add",
+    "Soumettez un scénario avec scènes, personnages et dialogues pour que j'en génère la mise en page PANDORA.":
+        "Submit a screenplay with scenes, characters and dialogue so I can generate the PANDORA layout.",
+
+    # ── Page Storyboard — manquants ───────────────────────────────────────────
+    "Storyboard — Planification plan par plan":  "Storyboard — Shot-by-shot planning",
+    "Aucun découpage pour ce projet.":           "No breakdown for this project.",
+    "Génère un découpage depuis l'onglet Scénario.":
+        "Generate a breakdown from the Screenplay tab.",
+
+    # ── Page Castings — manquants ─────────────────────────────────────────────
+    "Aucun personnage.":                         "No characters.",
+    "Cliquez sur Créer un personnage pour commencer.":
+        "Click Create a character to get started.",
+    "Inspiration — Claude enrichit le prompt":   "Inspiration — Claude enriches the prompt",
+    "Génération d'idées":                        "Idea generation",
+    "Générer portrait":                          "Generate portrait",
+    "Supprimer le fond":                         "Remove background",
+    "Avertissement de prompt":                   "Prompt warning",
+
+    # ── Pages éléments — manquants ────────────────────────────────────────────
+    "Catégories : Toutes":                       "Categories: All",
+    "Aucun décor.":                              "No locations.",
+    "Aucun accessoire.":                         "No props.",
+    "Cliquez sur Créer un décor pour commencer.":
+        "Click Create a location to get started.",
+    "Cliquez sur Créer un accessoire pour commencer.":
+        "Click Create a prop to get started.",
+    "HMC — Habillage - Maquillage - Coiffure":   "HMC — Costume - Makeup - Hair",
+    "Véhicule — Parc automobile":                "Vehicles — Fleet",
+    "Véhicule — Parc automobile _transport":     "Vehicles — Fleet",
+
+    # ── Page Image & Son — manquants ──────────────────────────────────────────
+    "Réglages techniques":                       "Technical settings",
+
+    # ── Page Doublage — manquants ─────────────────────────────────────────────
+    "Doublage & Synthèse vocale IA":             "Dubbing & AI Voice Synthesis",
+    "Prochainement — Intégration audio multi-personnages":
+        "Coming soon — Multi-character audio integration",
+    "TEXTE À SYNTHÉTISER":                       "TEXT TO SYNTHESIZE",
+    "VOIX DISPONIBLES":                          "AVAILABLE VOICES",
+    "VOIX ASSIGNÉES AUX PERSONNAGES":            "VOICES ASSIGNED TO CHARACTERS",
+    "Clonage de voix — FS-TTS":                  "Voice cloning — FS-TTS",
+    "Générer des voix à partir d'échantillons personnalisés...":
+        "Generate voices from custom samples...",
+    "Aucun fichier généré.":                     "No files generated.",
+
+    # ── AI Studio — manquants ─────────────────────────────────────────────────
+    "Générer depuis Storyboard":                 "Generate from Storyboard",
+    "Modifier des clips":                        "Edit clips",
+    "Vidéothèque":                               "Video Library",
+    "Choisir une référence visuelle":            "Choose a visual reference",
+    "Générer depuis les images de référence":    "Generate from reference images",
+    "Notice audio":                              "Audio notice",
+    "Prise de vue réelle":                       "Real footage",
+    "Action de la caméra":                       "Camera action",
+    "Améliorer le prompt":                       "Improve prompt",
+    "Analyser le prompt":                        "Analyze prompt",
+    "Vidéothèque — Bibliothèque des vidéos générées":
+        "Video Library — Generated videos library",
+    "Aucune vidéo générée dans ce projet.":      "No videos generated in this project.",
+    "Lancez une génération depuis l'onglet Storyboard ou « Modifier des clips ».":
+        "Start a generation from the Storyboard tab or 'Edit clips'.",
+    "COHÉRENCE VISUELLE — maintenu":             "VISUAL CONSISTENCY — maintained",
+    "Importer des fichiers vidéo":               "Import video files",
+    "Décris la modification souhaitée...":       "Describe the desired edit...",
+    "Décrivez précisément la scène à générer...": "Describe the scene to generate precisely...",
+    "Sélection 2.0 (recommandé)":                "Selection 2.0 (recommended)",
+    "Activer le rendu réaliste (ex: 8k, IMAX, grain argentique, ultra-réaliste, photo, etc.). Utile pour le rendu cinéma.":
+        "Enable realistic rendering (e.g. 8K, IMAX, film grain, ultra-realistic, photo). Useful for cinema rendering.",
+
+    # ── Page Paramètres — manquants ───────────────────────────────────────────
+    "APPARENCE":                                 "APPEARANCE",
+    "Sombre":                                    "Dark",
+    "Clair":                                     "Light",
+    "Test ffal.ai API":                          "Test fal.ai API",
+
+    # ── Dialog Contact — manquants ────────────────────────────────────────────
+    "Contactez-nous":                            "Contact us",
+    "Communauté WhatsApp":                       "WhatsApp Community",
+    "Rejoindre":                                 "Join",
+    "Avis / suggestion — objet : Avis":          "Feedback — subject: Feedback",
+    "Donnez votre avis, partagez vos idées et impressions.":
+        "Share your feedback, ideas and impressions.",
+    "Charte d'utilisation":                      "Terms of use",
+
+    # ── Chips créatifs (creative_panel.py) ───────────────────────────────────
+    "Éclairage":                    "Lighting",
+    "Météo":                        "Weather",
+    "Époque":                       "Era",
+    "Photoréaliste":                "Photorealistic",
+    "Néon":                         "Neon",
+    "Héroïque":                     "Heroic",
+    "Mystérieux":                   "Mysterious",
+    "Épique":                       "Epic",
+    "Crépuscule":                   "Dusk",
+    "Ensoleillé":                   "Sunny",
+    "Abandonné":                    "Abandoned",
+    "Animé":                        "Animated",
+    "Métal":                        "Metal",
+    "Abîmé":                        "Worn",
+    "Détail":                       "Detail",
+    "Années 80":                    "80s",
+    "Années 70":                    "70s",
+    "Médiéval":                     "Medieval",
+    "Endommagé":                    "Damaged",
+    "Modifié":                      "Modified",
+    "Chromé":                       "Chrome",
+    "Rouillé":                      "Rusty",
+    "Cinématique":                  "Cinematic",
+    "Émotionnel":                   "Emotional",
+    "↺  Réinitialiser":             "↺  Reset",
+
+    # ── Sliders créatifs ─────────────────────────────────────────────────────
+    "RÉALISATION":                  "EXECUTION",
+    "Interprétation":               "Interpretation",
+    "Littéral":                     "Literal",
+    "Lumière":                      "Light",
+    "Contrastée":                   "Contrasted",
+    "FIDÉLITÉ":                     "FIDELITY",
+    "Cohérence":                    "Consistency",
+    "ESTHÉTIQUE":                   "AESTHETIC",
+    "Stylisé":                      "Stylized",
+    "Épurée":                       "Minimalist",
+    "Désaturé":                     "Desaturated",
+    "Éclatant":                     "Vibrant",
+    "Tolérance":                    "Tolerance",
+    "  Contrôles créatifs":         "  Creative controls",
+    "  Liberté créative":           "  Creative freedom",
+    "⚙  Contrôles créatifs    ":    "⚙  Creative controls    ",
+    "Expérimental  —  Liberté créative maximale":
+        "Experimental  —  Maximum creative freedom",
+    "Très libre  —  Interprétation artistique affirmée":
+        "Very free  —  Expressive artistic interpretation",
+    "Libre  —  Grande liberté créative":
+        "Free  —  Great creative freedom",
+    "Créatif  —  Interprétation libre du prompt":
+        "Creative  —  Free prompt interpretation",
+    "Souple  —  Interprétation nuancée du prompt":
+        "Flexible  —  Nuanced prompt interpretation",
+    "Équilibré  —  Latitude artistique raisonnable":
+        "Balanced  —  Reasonable artistic latitude",
+    "Fidèle  —  Légère latitude sur les détails mineurs":
+        "Faithful  —  Slight latitude on minor details",
+    "Précis  —  Respecte strictement le prompt":
+        "Precise  —  Strictly follows the prompt",
+    "Strict  —  Composition précise et contrôlée":
+        "Strict  —  Precise and controlled composition",
+    "Très strict  —  Reproduction fidèle, sans interprétation":
+        "Very strict  —  Faithful reproduction, no interpretation",
+
+    # ── Panneau DaVinci ───────────────────────────────────────────────────────
+    "— Non connecté":               "— Not connected",
+    "Bridge installé ✓":            "Bridge installed ✓",
+    "Échec installation":           "Installation failed",
+    "Connecté":                     "Connected",
+    "✓ Connecté":                   "✓ Connected",
+    "Non connecté":                 "Not connected",
+    "DaVinci non connecté":         "DaVinci not connected",
+
+    # ── Dialog Mood / Aperçu ─────────────────────────────────────────────────
+    "Recharger le prompt depuis les données du plan":
+        "Reload prompt from shot data",
+    "✦  Générer une variation":     "✦  Generate a variation",
+    "Génération du Mood…":          "Generating Mood…",
+    "Aucun Mood disponible\n\nCliquez sur  ✦  Générer une variation  pour créer le premier":
+        "No Mood available\n\nClick  ✦  Generate a variation  to create the first one",
+
+    # ── Dialog arrangement (session) ─────────────────────────────────────────
+    "Minimal — uniquement ce qui est demandé, rien d'autre":
+        "Minimal — only what is asked, nothing more",
+    "Précis — modifie exactement les zones indiquées":
+        "Precise — modifies exactly the indicated areas",
+    "Ciblé — suit l'instruction, affine légèrement le style dans la zone":
+        "Targeted — follows the instruction, slightly refines the style in the area",
+    "Créatif — enrichit et reformule, retouche les passages adjacents":
+        "Creative — enriches and rephrases, touches up adjacent passages",
+    "Libre — réécrit dans son style, transforme le rythme et l'écriture":
+        "Free — rewrites in its own style, transforms the rhythm and writing",
+    "☁  Studio de Création — Co-écriture avec Claude":
+        "☁  Creation Studio — Co-writing with Claude",
+    "Remplace le scénario de l'éditeur par la version co-écrite avec Claude":
+        "Replace the editor's screenplay with the co-written version",
+    "Copier le scénario remanié dans le presse-papier":
+        "Copy the revised screenplay to clipboard",
+    "✏  Édition manuelle active":   "✏  Manual editing active",
+    "✦  Scénario remanié":          "✦  Revised screenplay",
+    "Envoyer à Claude  ☁":          "Send to Claude  ☁",
+    "Ajouter des images de référence (max 4)":
+        "Add reference images (max 4)",
+    "Sélectionner des images de référence":
+        "Select reference images",
+    "Rédaction en cours…":          "Writing in progress…",
+
+    # ── Dialog contact ────────────────────────────────────────────────────────
+    "Communauté WhatsApp\nPANDORA | Cinéma":
+        "WhatsApp Community\nPANDORA | Cinema",
+    "Rejoignez les utilisateurs de PANDORA pour signaler des bugs, suivre les nouveautés et échanger avec la communauté.":
+        "Join PANDORA users to report bugs, follow updates and connect with the community.",
+
+    # ── Dialog extraction + génération ───────────────────────────────────────
+    "⟳  Génération image…":         "⟳  Generating image…",
+    "✓  Image générée":             "✓  Image generated",
+    "✓  Sauvegardé":                "✓  Saved",
+    "Choisir une option pour démarrer":
+        "Choose an option to start",
+    "Extrait et sauvegarde les éléments — sans générer d'images":
+        "Extract and save elements — without generating images",
+    "Extrait, sauvegarde, puis génère une image via Nano Banana pour chaque élément":
+        "Extract, save, then generate an image via Nano Banana for each element",
+    "Claude analyse le scénario…":  "Claude is analyzing the screenplay…",
+    "Générer — ":                   "Generate — ",
+    "  Identifier et générer les images":
+        "  Identify and generate images",
+    "Aucun élément identifié dans le scénario.":
+        "No elements identified in the screenplay.",
+    "Génération des images via Nano Banana…":
+        "Generating images via Nano Banana…",
+    " élément(s) sauvegardé(s) — sans image":
+        " element(s) saved — without image",
+    "✓  Terminé — ":                "✓  Done — ",
+    " image(s) générée(s)":         " image(s) generated",
+    " élément(s) sauvegardé(s) · ": " element(s) saved · ",
+    "Personnages depuis le scénario":
+        "Characters from screenplay",
+    "Décors depuis le scénario":    "Locations from screenplay",
+    "décors":                       "locations",
+    "Accessoires depuis le scénario":
+        "Props from screenplay",
+    "HMC depuis le scénario":       "HMC from screenplay",
+    "éléments HMC":                 "HMC items",
+    "Véhicules depuis le scénario": "Vehicles from screenplay",
+    "véhicules":                    "vehicles",
+    " élément(s) identifié(s) — génération des images…":
+        " element(s) identified — generating images…",
+    "Voir les Décors":              "View Locations",
+    "Voir les Véhicules":           "View Vehicles",
+
+    # ── Dialog onboarding — étapes ────────────────────────────────────────────
+    "fal.ai — Vidéos & Images IA":  "fal.ai — AI Videos & Images",
+    "ÉTAPE 1 — CRÉER UN COMPTE":    "STEP 1 — CREATE AN ACCOUNT",
+    "👆  Clique sur  [ Create account ]  puis vérifie ton e-mail":
+        "👆  Click on  [ Create account ]  then check your email",
+    "ÉTAPE 2 — CRÉER UNE CLÉ API":  "STEP 2 — CREATE AN API KEY",
+    "👆  Clique sur l'icône  📋  pour copier ta clé  fal_key_xxxx…":
+        "👆  Click the  📋  icon to copy your key  fal_key_xxxx…",
+    "ÉTAPE 3 — AJOUTER DES CRÉDITS":
+        "STEP 3 — ADD CREDITS",
+    "👆  Clique sur  [ Add credits ]  →  Recommandé : $10 minimum":
+        "👆  Click  [ Add credits ]  →  Recommended: $10 minimum",
+    "👆  Clique sur l'icône  📋  pour copier ta clé  sk-ant-api03-xxxx…":
+        "👆  Click the  📋  icon to copy your key  sk-ant-api03-xxxx…",
+    "👆  Clique sur  [ Add to credit balance ]  →  Recommandé : $5 minimum":
+        "👆  Click  [ Add to credit balance ]  →  Recommended: $5 minimum",
+    "DANS PANDORA — PAGE PARAMÈTRES":
+        "IN PANDORA — SETTINGS PAGE",
+    "PANDORA  ›  Paramètres":       "PANDORA  ›  Settings",
+    "👆  Colle tes clés ici et clique  [ Enregistrer ]":
+        "👆  Paste your keys here and click  [ Save ]",
+    "Guide de démarrage — PANDORA": "Getting Started — PANDORA",
+    "← Précédent":                  "← Previous",
+    "Crédits à la consommation — commence avec $10":
+        "Pay-as-you-go — start with $10",
+    "Crédits à la consommation — commence avec $5":
+        "Pay-as-you-go — start with $5",
+    "Assiste la rédaction du scénario, génère le storyboard et optimise les prompts vidéo":
+        "Assists screenplay writing, generates storyboard and optimizes video prompts",
+    "Découvrez toutes les fonctionnalités en vidéo — YouTube":
+        "Discover all features on video — YouTube",
+    "Scénario  ·  Storyboard  ·  Prompts  ·  Extraction d'éléments":
+        "Screenplay  ·  Storyboard  ·  Prompts  ·  Element extraction",
+    "⚙  Aller aux Paramètres →":    "⚙  Go to Settings →",
+
+    # ── Dialog génération storyboard ─────────────────────────────────────────
+    "Générer le Storyboard":        "Generate Storyboard",
+    "Découpage Storyboard":         "Storyboard Breakdown",
+    "Claude génère le découpage technique…":
+        "Claude is generating the technical breakdown…",
+    "Analyse du scénario via Claude Sonnet…":
+        "Analyzing screenplay via Claude Sonnet…",
+    "Aucun plan généré — le scénario est peut-être trop court.":
+        "No shots generated — the screenplay may be too short.",
+    " générés":                     " generated",
+    " · durée totale ":             " · total duration ",
+
+    # ── Dialog sync storyboard ────────────────────────────────────────────────
+    " plan(s) analysé(s)":          " shot(s) analyzed",
+    "Vérification des prompts  —  Claude Haiku":
+        "Prompt verification  —  Claude Haiku",
+    "inchangé":                     "unchanged",
+    "après : ":                     "after: ",
+    " plan(s) à mettre à jour":     " shot(s) to update",
+    " prompt(s) réécrit(s) · ":     " prompt(s) rewritten · ",
+    " ré-assignation(s) sur ":      " reassignment(s) on ",
+    " plans modifiés · ":           " shots modified · ",
+    "Aucune mise à jour nécessaire — ":
+        "No update needed — ",
+    " plan(s) analysé(s), tout est cohérent.":
+        " shot(s) analyzed, everything is consistent.",
+    " plans analysés — storyboard déjà synchronisé":
+        " shots analyzed — storyboard already synchronized",
+    "✓  Aucune modification n'est appliquée sans votre confirmation finale.":
+        "✓  No changes are applied without your final confirmation.",
+    "Détecte et réassigne les personnages, décors et accessoires dont\nle nom a légèrement changé (accents, articles, casse…).":
+        "Detects and reassigns characters, locations and props whose\nname has slightly changed (accents, articles, case…).",
+
+    # ── Dialog galerie de styles ──────────────────────────────────────────────
+    "＋  Nouvelle catégorie":        "＋  New category",
+    "Sélectionne un style à gauche": "Select a style on the left",
+    "Ajoutez vos propres images de référence pour ce style :":
+        "Add your own reference images for this style:",
+    "Choisir des images de référence":
+        "Choose reference images",
+    "Nouvelle catégorie":           "New category",
+    "Nom de la catégorie :":        "Category name:",
+    "Sélectionnée : ":              "Selected: ",
+
+    # ── Page Doublage ─────────────────────────────────────────────────────────
+    "Écouter":                      "Listen",
+    "Ouvrir le fichier audio dans le lecteur par défaut":
+        "Open audio file in default player",
+    "🔜  Prochainement — Intégration audio multi-personnages":
+        "🔜  Coming soon — Multi-character audio integration",
+    "🎙  Générer l'audio":          "🎙  Generate audio",
+    "0 caractères":                 "0 characters",
+    "Aucun échantillon chargé":     "No sample loaded",
+    "FICHIERS GÉNÉRÉS":             "GENERATED FILES",
+    "Charger un échantillon vocal": "Load a voice sample",
+    "Texte à synthétiser":          "Text to synthesize",
+    "Échantillon vocal de référence":
+        "Reference voice sample",
+    "✓  Audio généré avec succès":  "✓  Audio successfully generated",
+    "✓  Terminé (mode mock)":       "✓  Done (mock mode)",
+    "Aucune voix assignée":         "No voice assigned",
+    "Retirer la voix assignée":     "Remove assigned voice",
+    "Assigner une voix à ":         "Assign a voice to ",
+    " caractères  ~$":              " characters  ~$",
+    " caractères":                  " characters",
+    "Échantillon vocal requis":     "Voice sample required",
+    "Chargez un fichier audio de référence pour utiliser le clonage de voix.":
+        "Load a reference audio file to use voice cloning.",
+    "La langue est détectée automatiquement depuis le texte saisi — écris en français, le rendu sera en français.":
+        "Language is automatically detected from the text — write in French, the result will be in French.",
+    "Écris ici le dialogue à synthétiser…\nex: « Bienvenue dans PANDORA, l'outil de pré-production cinéma IA. »":
+        "Write the dialogue to synthesize here…\nex: 'Welcome to PANDORA, the AI cinema pre-production tool.'",
+
+    # ── Page Paramètres ───────────────────────────────────────────────────────
+    "Le changement de thème est appliqué au prochain démarrage.":
+        "The theme change will be applied on the next startup.",
+    "↑  Vérifier les mises à jour": "↑  Check for updates",
+    "Vérification…":                "Checking…",
+    "Mise à jour disponible":       "Update available",
+    "À jour":                       "Up to date",
+    "Vérification impossible":      "Cannot check",
+    "Impossible de contacter le serveur.\nVérifiez votre connexion internet.":
+        "Unable to reach the server.\nCheck your internet connection.",
+    "Thème enregistré":             "Theme saved",
+    "Le nouveau thème sera appliqué au prochain démarrage de PANDORA.":
+        "The new theme will be applied on the next startup of PANDORA.",
+    " est la dernière version disponible ✓":
+        " is the latest available version ✓",
+    "Script installé":              "Script installed",
+    "Entre ta clé API fal.ai d'abord !":
+        "Enter your fal.ai API key first!",
+    "Clé fal.ai valide !":          "fal.ai key valid!",
+    "La clé API fal.ai est incorrecte.":
+        "The fal.ai API key is incorrect.",
+
+    # ── Page Stub ─────────────────────────────────────────────────────────────
+    "BIENTÔT DISPONIBLE":           "COMING SOON",
+    "Cette section est en cours de développement.":
+        "This section is under development.",
+
+    # ── Fenêtre principale (mises à jour) ─────────────────────────────────────
+    "↑  Mises à jour":              "↑  Updates",
+    "Vérifier les mises à jour de PANDORA":
+        "Check for PANDORA updates",
+    "Les données du storyboard et des fiches sont sauvegardées automatiquement.":
+        "Storyboard data and cards are saved automatically.",
+    "❤  PANDORA est gratuit. Il fonctionne grâce au soutien de la communauté.":
+        "❤  PANDORA is free. It runs thanks to community support.",
+    "Si ce logiciel vous est utile, un don — même modeste — nous aide à continuer à le développer.":
+        "If this software is useful to you, a donation — even modest — helps us keep developing it.",
+    "Télécharger  →":               "Download  →",
+    "Mises à jour":                 "Updates",
+    " — Mettez à jour PANDORA pour bénéficier des dernières améliorations.":
+        " — Update PANDORA to benefit from the latest improvements.",
+    "Français":                     "French",
+
+    # ── Studio IA (seedance_widget) ───────────────────────────────────────────
+    "Génération vidéo IA — fal.ai": "AI Video Generation — fal.ai",
+    "Studio IA — Générer un clip vidéo IA":
+        "AI Studio — Generate an AI video clip",
+
+    # ── Onglet DaVinci Edit ───────────────────────────────────────────────────
+    "Ajouter une image de référence":
+        "Add a reference image",
+    "Choisir une image de référence":
+        "Choose a reference image",
+    "Image de référence globale (appliquée à tous les clips)":
+        "Global reference image (applied to all clips)",
+    "Image de référence pour ce clip uniquement":
+        "Reference image for this clip only",
+    "ffmpeg non détecté — installez ffmpeg et ajoutez-le au PATH pour activer LatentSync.":
+        "ffmpeg not detected — install ffmpeg and add it to PATH to activate LatentSync.",
+    "Mode simulation — aucune clé fal.ai":
+        "Simulation mode — no fal.ai key",
+    " génération(s)  —  traitement séquentiel, 1 clip à la fois":
+        " generation(s)  —  sequential processing, 1 clip at a time",
+    "Clé API invalide ou expirée":  "Invalid or expired API key",
+    "Délai d'attente dépassé":      "Timeout exceeded",
+    "Erreur de connexion réseau":   "Network connection error",
+    "Durée du clip trop courte":    "Clip duration too short",
+    "File terminée — ":             "Queue complete — ",
+    " génération(s) complétée(s).": " generation(s) completed.",
+    " génération(s) échouée(s)":    " generation(s) failed",
+    "Simulation — aucun fichier créé":
+        "Simulation — no file created",
+    " ✓ sauvegardé":                " ✓ saved",
+    " ↷ ✓ sauvegardé":              " ↷ ✓ saved",
+    " génération(s) sur ":          " generation(s) out of ",
+    " génération(s) — ":            " generation(s) — ",
+    " terminée(s)":                 " completed",
+    " clip(s) n'ont pas pu être générés :\n\n":
+        " clip(s) could not be generated:\n\n",
+    " génération(s) sur ":          " generation(s) out of ",
+
+    # ── Onglet Extension ─────────────────────────────────────────────────────
+    "Clique pour choisir un clip vidéo":
+        "Click to choose a video clip",
+    "Aucun clip sélectionné dans DaVinci Resolve":
+        "No clip selected in DaVinci Resolve",
+    "Générer un début":             "Generate a start",
+    "Générer une suite":            "Generate a continuation",
+    "Photo d'acteur, style, décor… · max 3":
+        "Actor photo, style, location… · max 3",
+    "Si vide → même prompt original · Si rempli → remplace le prompt":
+        "If empty → same original prompt · If filled → replaces the prompt",
+    "Décris ce que doit contenir l'extension… ex: la caméra continue son travelling, le personnage sort du cadre":
+        "Describe what the extension should contain… ex: the camera continues its tracking shot, the character exits the frame",
+    "Après génération terminée":    "After generation complete",
+    "Ajouter des images de référence":
+        "Add reference images",
+    "◀  Générer un début":          "◀  Generate a start",
+    "▶  Générer une suite":         "▶  Generate a continuation",
+    "Extension prête !":            "Extension ready!",
+    "début généré":                 "start generated",
+    "suite générée":                "continuation generated",
+    "✓ Modification terminée":      "✓ Edit complete",
+    "Clip sélectionné":             "Selected clip",
+    "Images de référence (optionnel)":
+        "Reference images (optional)",
+    "Impossible de récupérer le chemin du clip.\nVérifie que le média est bien présent sur le disque.":
+        "Cannot retrieve clip path.\nCheck that the media is present on the disk.",
+    "Sélectionne un clip vidéo à étendre !":
+        "Select a video clip to extend!",
+    "Laisse vide pour réutiliser le prompt original…\nOu décris les changements voulus pour cette nouvelle prise":
+        "Leave empty to reuse the original prompt…\nOr describe the desired changes for this new take",
+    "Clip modifié (":               "Clip edited (",
+    ") !\n\nDurée ajoutée : ":      ") !\n\nDuration added: ",
+    "\n\nCrédits : ":               "\n\nCredits: ",
+
+    # ── Onglet Historique ─────────────────────────────────────────────────────
+    "Générations récentes":         "Recent generations",
+    "Aucune génération pour l'instant.\nLance une génération depuis T2V ou I2V !":
+        "No generations yet.\nStart a generation from T2V or I2V!",
+
+    # ── Onglet I2V ────────────────────────────────────────────────────────────
+    "Décris le mouvement... ex: la caméra recule lentement, le personnage tourne la tête":
+        "Describe the movement... ex: camera slowly pulls back, character turns their head",
+    "✓ Terminé":                    "✓ Done",
+    "Écris un prompt de mouvement !":
+        "Write a movement prompt!",
+
+    # ── Onglet Référence ─────────────────────────────────────────────────────
+    "Image de référence":           "Reference image",
+    "Vidéo de référence":           "Reference video",
+    "Audio de référence":           "Reference audio",
+    "Clique sur un slot pour uploader · Insère @image @video @audio dans le prompt":
+        "Click a slot to upload · Insert @image @video @audio in the prompt",
+    "Vidéo prête !":                "Video ready!",
+    "✓ Génération terminée":        "✓ Generation complete",
+    "Références médias":            "Media references",
+    "Rien à générer":               "Nothing to generate",
+    "Ajoute au moins une référence média ou un prompt !":
+        "Add at least one media reference or a prompt!",
+    "Clip généré depuis références !\n\nDurée : ":
+        "Clip generated from references!\n\nDuration: ",
+    "\nCrédits : ":                 "\nCredits: ",
+
+    # ── Onglet Paramètres Studio ──────────────────────────────────────────────
+    "Clé API Anthropic (bouton Améliorer)":
+        "Anthropic API key (Improve button)",
+    "Paramètres par défaut":        "Default settings",
+    "Durée (s)":                    "Duration (s)",
+    "Par défaut : ":                "Default: ",
+    "Clé fal.ai valide !\nMode réel activé.":
+        "fal.ai key valid!\nReal mode activated.",
+
+    # ── Onglet T2V ────────────────────────────────────────────────────────────
+    "Exclure les images de personnages des références visuelles":
+        "Exclude character images from visual references",
+    "Exclure les images d'accessoires des références visuelles":
+        "Exclude prop images from visual references",
+    "Exclure les images de véhicules des références visuelles":
+        "Exclude vehicle images from visual references",
+    "Exclure l'image de décor des références visuelles":
+        "Exclude location image from visual references",
+    "Sélectionne un personnage pour voir ses accessoires.":
+        "Select a character to see their props.",
+    "Entité absente du plan":       "Entity absent from shot",
+    "Continuer depuis la dernière frame du plan précédent (I2V)":
+        "Continue from the last frame of the previous shot (I2V)",
+    "Verrouiller la graine visuelle — même apparence pour tous les plans":
+        "Lock visual seed — same appearance for all shots",
+    "Aléatoire — résultats variables à chaque génération":
+        "Random — variable results with each generation",
+    "Verrouillée — même ADN visuel pour tous les plans":
+        "Locked — same visual DNA for all shots",
+    "Verrouiller l'ADN visuel — même empreinte visuelle pour tous les plans":
+        "Lock visual DNA — same visual fingerprint for all shots",
+    "🔒  ADN visuel verrouillé — cohérence visuelle activée":
+        "🔒  Visual DNA locked — visual consistency enabled",
+    "⊘  Ne pas envoyer les images de référence":
+        "⊘  Do not send reference images",
+    "Durée :":                      "Duration:",
+    "0 plans sélectionnés":         "0 shots selected",
+    " plans sélectionnés":          " shots selected",
+    "Vous allez générer plusieurs plans en file d'attente.":
+        "You are about to generate multiple shots in a queue.",
+    "Décris ta scène... ex: plan cinématique d'une forêt brumeuse au lever du soleil":
+        "Describe your scene... ex: cinematic shot of a misty forest at sunrise",
+    "Coché → piste musicale présente · Décoché → « no background music » injecté":
+        "Checked → music track present · Unchecked → 'no background music' injected",
+    "Coché → sous-titres incrustés · Décoché → « no subtitles » injecté":
+        "Checked → subtitles embedded · Unchecked → 'no subtitles' injected",
+    "🔒 Paramètres propres à chaque plan":
+        "🔒 Settings per shot",
+    "🔒 Durée définie par le storyboard":
+        "🔒 Duration set by storyboard",
+    "🔒 Paramètres propres à chaque plan":
+        "🔒 Settings per shot",
+    "Vérification du solde…":       "Checking balance…",
+    "Génération en série":          "Series generation",
+    "▶  Générer quand même":        "▶  Generate anyway",
+    "Aucun personnage — crée-en un dans Castings.":
+        "No characters — create one in Cast.",
+    "Aucun véhicule — crée-en un dans Véhicules.":
+        "No vehicles — create one in Vehicles.",
+    "Aucun décor — crée-en un dans Décors.":
+        "No locations — create one in Locations.",
+    "Aucun plan — crée-en un dans le Storyboard.":
+        "No shots — create one in Storyboard.",
+    "Génération en série terminée !\n\n":
+        "Series generation complete!\n\n",
+    " clips générés avec succès.":  " clips generated successfully.",
+    "Clip généré avec succès !\n\nModèle : ":
+        "Clip generated successfully!\n\nModel: ",
+    "Répétition ":                  "Repetition ",
+    " généré":                      " generated",
+    " avec succès !\n\nModèle : ":  " successfully!\n\nModel: ",
+    "\n\n◈ Sauvegardé + importé dans le Media Pool ✓\n":
+        "\n\n◈ Saved + imported into Media Pool ✓\n",
+    "\n\n◈ Vidéo sauvegardée :\n":  "\n\n◈ Video saved:\n",
+    "\n\n◈ Téléchargement échoué : ":
+        "\n\n◈ Download failed: ",
+    "\n\n◈ Import DaVinci : simulé (mode mock)":
+        "\n\n◈ DaVinci import: simulated (mock mode)",
+    "Erreur — génération en série interrompue":
+        "Error — series generation interrupted",
+    "Images de référence partiellement transmises (":
+        "Reference images partially transmitted (",
+    " clips générés":               " clips generated",
+    "Décor : ":                     "Location: ",
+    "Véhicules : ":                 "Vehicles: ",
+    "Caméra : ":                    "Camera: ",
+    "Créatifs : ":                  "Creative: ",
+    "━━━ IMAGES ENVOYÉES ━━━":      "━━━ IMAGES SENT ━━━",
+    "━━━ PARAMÈTRES ━━━":           "━━━ PARAMETERS ━━━",
+    "◈ MODE RÉFÉRENCE ACTIF — ":    "◈ REFERENCE MODE ACTIVE — ",
+    "Certaines images de référence n'ont pas pu être uploadées — la génération a été lancée avec les images disponibles.":
+        "Some reference images could not be uploaded — generation was started with available images.",
+    "Vous n'êtes pas connecté à DaVinci Resolve.\n\nVoulez-vous tenter la connexion avant de générer ?":
+        "You are not connected to DaVinci Resolve.\n\nWould you like to try connecting before generating?",
+
+    # ── Onglet Moteurs vidéo ──────────────────────────────────────────────────
+    "Image de départ (requis)":     "Starting image (required)",
+    "Décrivez le mouvement et l'action de la scène… (FR accepté, traduit auto)":
+        "Describe the movement and action of the scene… (FR accepted, auto-translated)",
+    "Prompt négatif (optionnel) :": "Negative prompt (optional):",
+    "Générer l'audio (recommandé)": "Generate audio (recommended)",
+    "Image de départ requise pour Kling I2V.":
+        "Starting image required for Kling I2V.",
+    "Décrivez la scène complète… (FR accepté, traduit automatiquement en anglais)":
+        "Describe the full scene… (FR accepted, auto-translated to English)",
+    "Résolution :":                 "Resolution:",
+    "1:1 — Carré":                  "1:1 — Square",
+    "Coût":                         "Cost",
+    "Durée : ":                     "Duration: ",
+    "Durée : 5 s  (~$0.56)":        "Duration: 5 s  (~$0.56)",
+    "Durée : 5 s  (~$0.84)":        "Duration: 5 s  (~$0.84)",
+    "Durée : 5 s (fixe)":           "Duration: 5 s (fixed)",
+    "Durée : 5 s  (~$1.40)":        "Duration: 5 s  (~$1.40)",
+    "Durée : 5 s  (~$2.10)":        "Duration: 5 s  (~$2.10)",
+    "Durée : 5 s  (~$0.58)":        "Duration: 5 s  (~$0.58)",
+    "Durée : 5 s  (~$0.70)":        "Duration: 5 s  (~$0.70)",
+    "Durée : 5 s":                  "Duration: 5 s",
+    "Sans audio natif · Idéal pour itérations rapides":
+        "No native audio · Ideal for quick iterations",
+    "Décrivez librement la scène à générer…\n(FR accepté, traduit automatiquement en anglais)":
+        "Freely describe the scene to generate…\n(FR accepted, auto-translated to English)",
+    "Décrivez la scène… (FR accepté, traduit automatiquement en anglais)":
+        "Describe the scene… (FR accepted, auto-translated to English)",
+    "Image de départ requise pour Happy Horse I2V.":
+        "Starting image required for Happy Horse I2V.",
+    "Image de départ requise pour Kling O3 I2V.":
+        "Starting image required for Kling O3 I2V.",
+    "Améliorer le prompt avec Claude":
+        "Improve prompt with Claude",
+    "Aucune vidéo générée.":        "No video generated.",
+    "▸ Génération vidéo sans storyboard — idéal pour expérimenter rapidement avec différents modèles.":
+        "▸ Video generation without storyboard — ideal for quickly experimenting with different models.",
+    "▸ Les prompts en français sont traduits automatiquement en anglais avant envoi.":
+        "▸ French prompts are automatically translated to English before sending.",
+    "Génération Directe — Multi-moteurs IA":
+        "Direct Generation — Multi-engine AI",
+    "Paramètre manquant":           "Missing parameter",
+    "✓  Terminé (mode mock — aucune clé fal.ai)":
+        "✓  Done (mock mode — no fal.ai key)",
+
+    # ── Vidéothèque ───────────────────────────────────────────────────────────
+    "Date (récent → ancien)":       "Date (recent → old)",
+    "Date (ancien → récent)":       "Date (old → recent)",
+    "Aucune vidéo générée dans ce projet.\nLancez une génération depuis « Générer depuis Storyboard » ou « Modifier des clips ».":
+        "No videos generated for this project.\nStart a generation from 'Generate from Storyboard' or 'Edit clips'.",
+    "aperçu indisponible":          "preview unavailable",
+    " vidéo":                       " video",
+    "Aucun log d'erreur trouvé.":   "No error log found.",
+    "▸ Retrouvez ici toutes les vidéos générées pour ce projet.":
+        "▸ Find all videos generated for this project here.",
+    "▸ Cliquez sur ▶ Lire pour ouvrir dans votre lecteur vidéo par défaut.":
+        "▸ Click ▶ Play to open in your default video player.",
+
+    # ── Widgets ───────────────────────────────────────────────────────────────
+    "Crédits insuffisants":         "Insufficient credits",
+    "Crédits fal.ai insuffisants":  "Insufficient fal.ai credits",
+    "GÉNÉRATION EN COURS":          "GENERATION IN PROGRESS",
+    "✓  VIDÉO GÉNÉRÉE":             "✓  VIDEO GENERATED",
+
+    # ── Panneau assistant ─────────────────────────────────────────────────────
+    "Logiciel de pré-production cinéma pour DaVinci Resolve.":
+        "Cinema pre-production software for DaVinci Resolve.",
+    "Gestion des projets de pré-production cinéma.":
+        "Cinema pre-production project management.",
+    "Éditeur de scénario avec Claude IA — mise en page, co-écriture, extraction d'éléments.":
+        "Screenplay editor with Claude AI — layout, co-writing, element extraction.",
+    "Découpage plan par plan avec génération IA intégrée.":
+        "Shot-by-shot breakdown with integrated AI generation.",
+    "Props et objets — références visuelles pour la production.":
+        "Props and objects — visual references for production.",
+    "Habillage, Maquillage, Coiffure — cohérence visuelle.":
+        "Costume, Makeup, Hair — visual consistency.",
+    "Véhicules du film — références visuelles pour la production.":
+        "Film vehicles — visual references for production.",
+    "Préférences caméra, optiques et chaîne son du projet.":
+        "Camera, lens and sound chain preferences for the project.",
+    "Synthèse vocale et clonage vocal pour la post-production.":
+        "Voice synthesis and voice cloning for post-production.",
+    "Clés API et préférences globales de PANDORA.":
+        "API keys and global PANDORA preferences.",
+    "Naviguez entre les sections depuis la barre latérale gauche.":
+        "Navigate between sections from the left sidebar.",
+    "Les données sont sauvegardées automatiquement.":
+        "Data is saved automatically.",
+    "Chaque projet a son propre dossier de données isolé.":
+        "Each project has its own isolated data folder.",
+    "Injectez des références visuelles — Claude les analyse et enrichit votre scénario.":
+        "Inject visual references — Claude analyzes them and enriches your screenplay.",
+    "'Proposer un arrangement' ouvre le Studio de co-écriture interactif avec Claude.":
+        "'Propose an arrangement' opens the interactive co-writing Studio with Claude.",
+    "'Tout Générer' crée personnages, décors, accessoires, HMC, véhicules en une passe.":
+        "'Generate All' creates characters, locations, props, HMC, vehicles in one pass.",
+    "Double-cliquez sur un plan pour éditer : Caméra, Éléments, Mise en scène, Prompt.":
+        "Double-click a shot to edit: Camera, Elements, Scene, Prompt.",
+    "'✦ Générer les Moods' génère un aperçu visuel pour chaque plan en batch.":
+        "'✦ Generate Moods' generates a visual preview for each shot in batch.",
+    "Glissez-déposez les plans pour réorganiser le découpage.":
+        "Drag and drop shots to reorder the breakdown.",
+    "Générez un portrait via Nano Banana depuis la fiche personnage.":
+        "Generate a portrait via Nano Banana from the character card.",
+    "Assignez un personnage à un plan depuis le storyboard pour l'inclure dans la génération.":
+        "Assign a character to a shot from the storyboard to include them in generation.",
+    "Générez une image de référence du décor via Nano Banana.":
+        "Generate a location reference image via Nano Banana.",
+    "Chaque décor peut avoir son propre style visuel.":
+        "Each location can have its own visual style.",
+    "'Sheet 4 vues' génère quatre angles différents du même lieu.":
+        "'4-view sheet' generates four different angles of the same location.",
+    "Associez un style visuel spécifique à chaque accessoire.":
+        "Assign a specific visual style to each prop.",
+    "'Générer une variation' crée une alternative de l'image existante.":
+        "'Generate a variation' creates an alternative to the existing image.",
+    "Décrivez précisément matière, couleur et état (neuf, abîmé, vintage).":
+        "Describe precisely the material, color and condition (new, worn, vintage).",
+    "Associez des éléments HMC à des personnages ou séquences.":
+        "Associate HMC items with characters or sequences.",
+    "Générez une image de référence pour chaque élément.":
+        "Generate a reference image for each item.",
+    "Renseignez marque, modèle, année et couleur pour chaque véhicule.":
+        "Fill in brand, model, year and color for each vehicle.",
+    "Générez une image de référence via Nano Banana.":
+        "Generate a reference image via Nano Banana.",
+    "Précisez l'état (neuf, accidenté, modifié) dans la description.":
+        "Specify the condition (new, damaged, modified) in the description.",
+    "Définissez la caméra principale, les optiques et le format d'image.":
+        "Define the main camera, lenses and image format.",
+    "Ces paramètres pré-remplissent les champs techniques du storyboard.":
+        "These settings pre-fill the technical fields in the storyboard.",
+    "Renseignez le micro et la chaîne son pour préparer le tournage.":
+        "Fill in the microphone and sound chain to prepare for the shoot.",
+    "Le ratio d'image (1.85:1, 2.39:1) s'applique à tous les plans.":
+        "The aspect ratio (1.85:1, 2.39:1) applies to all shots.",
+    "ElevenLabs génère des voix naturalistes multilingues depuis votre texte.":
+        "ElevenLabs generates naturalistic multilingual voices from your text.",
+    "F5-TTS clone n'importe quelle voix depuis un court échantillon audio.":
+        "F5-TTS clones any voice from a short audio sample.",
+    "Le français est pris en charge par ElevenLabs ; F5-TTS fonctionne mieux en anglais.":
+        "French is supported by ElevenLabs; F5-TTS works best in English.",
+    "Les fichiers audio générés s'importent directement dans DaVinci Resolve.":
+        "Generated audio files import directly into DaVinci Resolve.",
+    "T2V : décrivez la scène en français, la traduction est automatique.":
+        "T2V: describe the scene in French, translation is automatic.",
+    "Génération directe : 13 moteurs (Kling v3 Pro, Veo 3.1, Sora 2…).":
+        "Direct generation: 13 engines (Kling v3 Pro, Veo 3.1, Sora 2…).",
+    "La vidéothèque centralise tous les clips avec prévisualisation.":
+        "The video library centralizes all clips with preview.",
+    "Clé Anthropic : assistant IA, scénario, traduction des prompts.":
+        "Anthropic key: AI assistant, screenplay, prompt translation.",
+    "Clé Nano Banana : portraits et images d'éléments.":
+        "Nano Banana key: portraits and element images.",
+    "Le dossier de sortie définit où les vidéos sont enregistrées.":
+        "The output folder defines where videos are saved.",
+    "Activer l'assistant IA — utilise des crédits Anthropic\n(désactivé par défaut)":
+        "Enable AI assistant — uses Anthropic credits\n(disabled by default)",
+    "L'assistant IA est désactivé.\nActivez-le via « IA ○ » pour poser des questions.\n(Utilise des crédits Anthropic)":
+        "The AI assistant is disabled.\nEnable it via 'AI ○' to ask questions.\n(Uses Anthropic credits)",
+
+    # ── Chooser (module Live / Cinéma) ────────────────────────────────────────
+    "Cinéma":                       "Cinema",
+    "Pré-production IA\nScénario · Storyboard · DaVinci":
+        "AI Pre-production\nScreenplay · Storyboard · DaVinci",
+
+    # ── API mock — messages de progression ───────────────────────────────────
+    "Initialisation de la requête...":  "Initializing request...",
+    "Génération des frames clés...":    "Generating key frames...",
+    "Rendu intermédiaire...":           "Intermediate rendering...",
+    "Encodage vidéo...":                "Encoding video...",
+
+    # ── API aperçu / Mood ─────────────────────────────────────────────────────
+    "Travelling arrière":           "Track out",
+    "Travelling latéral":           "Lateral tracking",
+    "Zoom arrière":                 "Zoom out",
+    "Caméra portée":                "Handheld camera",
+    "Génération du Mood via Flux…": "Generating Mood via Flux…",
+    "Téléchargement de l'image…":   "Downloading image…",
+    "Simulation (pas de clé fal.ai)…":
+        "Simulation (no fal.ai key)…",
+
+    # ── API enhance ───────────────────────────────────────────────────────────
+    "Clé API Anthropic manquante.\nConfigure-la dans l'onglet Config → Clé API Anthropic.":
+        "Anthropic API key missing.\nConfigure it in the Config tab → Anthropic API key.",
+
+    # ── API lipsync ───────────────────────────────────────────────────────────
+    "Téléchargement vidéo lip-synced…":
+        "Downloading lip-synced video…",
+    "Terminé.":                     "Done.",
+    "Clé fal.ai non configurée (page Paramètres).":
+        "fal.ai key not configured (Settings page).",
+
+    # ── Page Live ─────────────────────────────────────────────────────────────
+    "BIBLIOTHÈQUE PANDORA":         "PANDORA LIBRARY",
+    "Déconnecté":                   "Disconnected",
+    "Déconnecter":                  "Disconnect",
+    "Connecté : ":                  "Connected: ",
+    "Paramètres Live":              "Live Settings",
+    "Aucune couche détectée dans Resolume.":
+        "No layer detected in Resolume.",
+    "Clip sélectionné : ":          "Selected clip: ",
+    "Sélectionnez d'abord un clip dans la bibliothèque gauche.":
+        "Select a clip in the left library first.",
+    "✗  Connexion à Resolume requise pour déclencher un clip.":
+        "✗  Connection to Resolume required to trigger a clip.",
+    "CLÉ API FAL.AI":               "FAL.AI API KEY",
+    "Clé fal.ai :":                 "fal.ai key:",
+    "✓  Paramètres enregistrés.":   "✓  Settings saved.",
+
+    # ── Chips créatifs — labels manquants ─────────────────────────────────────
+    "État":                         "Condition",
+    "Créatif":                      "Creative",
+    "éléments":                     "elements",
+    "véhicule":                     "vehicle",
+    "décor":                        "location",
+
+    # ── Dialog arrangement — placeholders visibles ────────────────────────────
+    "Entrez votre instruction ici…\nEx : « Ne change pas le flashback de la scène 4 »":
+        "Enter your instruction here…\nEx: 'Don't change the flashback in scene 4'",
+    "💬  Dites à Claude ce que vous voulez changer.\nEx : « Garde la scène 3 intacte », « Rends les dialogues plus percutants »,\n« Développe le personnage secondaire du plan 5 »":
+        "💬  Tell Claude what you want to change.\nEx: 'Keep scene 3 intact', 'Make the dialogues punchier',\n'Develop the secondary character in shot 5'",
+
+    # ── Dialog génération storyboard — texte visible ──────────────────────────
+    "⏳  La génération peut prendre du temps selon la longueur du scénario.\nSi vous utilisez un VPN, désactivez-le — il peut bloquer les connexions API.":
+        "⏳  Generation may take time depending on the screenplay length.\nIf you use a VPN, disable it — it may block API connections.",
+
+    # ── Dialog sync storyboard — descriptions visibles ────────────────────────
+    "La synchronisation va comparer votre storyboard avec le casting,\nles décors et les accessoires actuels. Elle se déroule en deux passes :":
+        "Synchronization will compare your storyboard with the current cast,\nlocations and props. It runs in two passes:",
+    "Analyse si les prompts reflètent encore les descriptions actuelles\ndes éléments assignés. Réécrit uniquement ce qui est incohérent.":
+        "Checks if prompts still reflect the current descriptions\nof assigned elements. Rewrites only what is inconsistent.",
+
+    # ── Onglet DaVinci Edit — strings visibles restants ───────────────────────
+    "📁  Importer des fichiers vidéo":
+        "📁  Import video files",
+    "Image de référence (ce clip)": "Reference image (this clip)",
+    "⚠  Ce moteur ne supporte pas les images de référence nativement. Vos personnages, décors et accessoires seront convertis en mots-clés descriptifs dans le prompt.":
+        "⚠  This engine does not natively support reference images. Your characters, locations and props will be converted to descriptive keywords in the prompt.",
+    "▸ Sélectionner des clips spécifiques : clic droit sur chaque clip → Flag → n'importe quelle couleur.":
+        "▸ Select specific clips: right-click each clip → Flag → any color.",
+    "  pandora_send n'envoie que les clips flaggés (toutes couleurs). Sans flag = toute la timeline.":
+        "  pandora_send only sends flagged clips (all colors). No flag = entire timeline.",
+    "  • Résolution : 1080p maximum":
+        "  • Resolution: 1080p maximum",
+    "  → Depuis DaVinci : Fichier → Exporter → sélectionner H.264 Master à 1080p":
+        "  → From DaVinci: File → Export → select H.264 Master at 1080p",
+    "Décris la modification souhaitée…\nex: same scene but background replaced by a futuristic city at night, cinematic lighting":
+        "Describe the desired edit…\nex: same scene but background replaced by a futuristic city at night, cinematic lighting",
+    "Prompt spécifique à ce clip…\nex: same scene but background replaced by a futuristic city at night":
+        "Prompt for this clip…\nex: same scene but background replaced by a futuristic city at night",
+
+    # ── Onglet I2V ────────────────────────────────────────────────────────────
+    "Image animée avec succès !":   "Image animated successfully!",
+    "\n\n◈ Vidéo sauvegardée localement :\n":
+        "\n\n◈ Video saved locally:\n",
+
+    # ── Onglet Référence — placeholder visible ────────────────────────────────
+    "Décris ta scène... Utilise @image, @video, @audio pour référencer tes uploads.\nEx: génère une scène où @image marche dans la forêt":
+        "Describe your scene... Use @image, @video, @audio to reference your uploads.\nEx: generate a scene where @image walks in the forest",
+
+    # ── Onglet T2V — strings manquants ────────────────────────────────────────
+    "Aucun accessoire assigné aux personnages sélectionnés.":
+        "No props assigned to the selected characters.",
+    "Écris un prompt avant de générer !":
+        "Write a prompt before generating!",
+    "Vous avez sélectionné ":       "You have selected ",
+    " plans.\n\nLa génération sera lancée en file d'attente — un clip après l'autre.\n\n⚠  Chaque plan consomme des crédits fal.ai":
+        " shots.\n\nGeneration will be queued — one clip at a time.\n\n⚠  Each shot consumes fal.ai credits",
+    "(prompt vide — aucun style ni caméra configurés)":
+        "(empty prompt — no style or camera configured)",
+    "(prompt vide — éléments qui seront ajoutés à votre texte :)":
+        "(empty prompt — elements that will be added to your text:)",
+    "\nDurée : ":                    "\nDuration: ",
+    "\nCrédits : ":                  "\nCredits: ",
+    "] → analysé par Claude Vision": "] → analyzed by Claude Vision",
+    "Détail : ":                     "Detail: ",
+    "+ Caméra : ":                   "+ Camera: ",
+    "✗ → no background music injecté":
+        "✗ → no background music injected",
+    "✗ → no subtitles injecté":     "✗ → no subtitles injected",
+    " clip(s) généré(s) avant l'erreur. ":
+        " clip(s) generated before the error. ",
+    " plan(s) annulé(s).":          " shot(s) cancelled.",
+
+    # ── Page Paramètres — strings restants ───────────────────────────────────
+    "L'application est optimisée pour une apparence sombre.  Si vous constatez des problèmes d'affichage en mode clair, contactez 22eme.arkane@gmail.com":
+        "The application is optimized for a dark appearance.  If you notice display issues in light mode, contact 22eme.arkane@gmail.com",
+
+    # ── Panneau DaVinci — texte visible ───────────────────────────────────────
+    "Fichier copié dans :\n":       "File copied to:\n",
+    "Le bridge TCP est actif mais le scripting DaVinci ne répond pas.\n\nCette fonctionnalité nécessite DaVinci Resolve Studio.\n\nLa version gratuite de DaVinci Resolve ne supporte pas le scripting Python.":
+        "The TCP bridge is active but DaVinci scripting is not responding.\n\nThis feature requires DaVinci Resolve Studio.\n\nThe free version of DaVinci Resolve does not support Python scripting.",
+
+    # ── Strings doublage — restants ───────────────────────────────────────────
+    "Formats acceptés : MP3 · WAV · M4A · AAC · OGG  —  durée recommandée : 5–30 s  ·  Langue détectée automatiquement depuis le texte":
+        "Accepted formats: MP3 · WAV · M4A · AAC · OGG  —  recommended duration: 5–30 s  ·  Language detected automatically from text",
+
+    # ── Raccords automatique (tab_t2v.py) ────────────────────────────────────
+    "Raccords automatique":             "Automatic matching",
+    "RACCORDS AUTOMATIQUE":             "AUTOMATIC MATCHING",
 }
 
 

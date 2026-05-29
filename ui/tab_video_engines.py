@@ -378,8 +378,8 @@ class _PixVerseForm(QWidget):
         res_col.addWidget(res_lbl)
         self._res_combo = QComboBox()
         self._res_combo.setStyleSheet(_combo_style())
-        self._res_combo.addItem("720p  (~$0.20 / 5 s)", "720p")
         self._res_combo.addItem("1080p  (~$0.40 / 5 s)", "1080p")
+        self._res_combo.addItem("720p  (~$0.20 / 5 s)", "720p")
         res_col.addWidget(self._res_combo)
         params_row.addLayout(res_col, 1)
 
@@ -448,8 +448,9 @@ class _SeedanceT2VForm(QWidget):
             self._res_combo.addItem("480p  (~$0.09/5s)",  "480p")
             self._res_combo.addItem("720p  (~$0.18/5s)",  "720p")
         else:
-            self._res_combo.addItem("720p  (~$0.30/5s)",  "720p")
-            self._res_combo.addItem("480p  (~$0.16/5s)",  "480p")
+            self._res_combo.addItem("1080p  (~$0.60/5s)", "1080p")
+            self._res_combo.addItem("720p   (~$0.30/5s)", "720p")
+            self._res_combo.addItem("480p   (~$0.16/5s)", "480p")
         res_col.addWidget(self._res_combo)
         params_row.addLayout(res_col, 1)
 
@@ -481,11 +482,6 @@ class _SeedanceT2VForm(QWidget):
         self._dur_slider.setStyleSheet(_slider_style())
         self._dur_slider.valueChanged.connect(lambda v: self._dur_lbl.setText(f"Durée : {v} s"))
         dur_col.addWidget(self._dur_slider)
-        dur_hints = QLabel("2 s                   5 s                  10 s")
-        dur_hints.setStyleSheet(
-            f"color:{C['text_dim']};font-size:9px;font-family:'Consolas',monospace;background:transparent;"
-        )
-        dur_col.addWidget(dur_hints)
         lay.addLayout(dur_col)
 
     def get_params(self) -> dict:
@@ -680,8 +676,8 @@ class _HappyHorseForm(QWidget):
         res_col.addWidget(res_lbl)
         self._res_combo = QComboBox()
         self._res_combo.setStyleSheet(_combo_style())
-        self._res_combo.addItem("720p  (~$0.14/s)", "720p")
         self._res_combo.addItem("1080p  (~$0.28/s)", "1080p")
+        self._res_combo.addItem("720p  (~$0.14/s)", "720p")
         self._res_combo.currentIndexChanged.connect(self._update_dur_label)
         res_col.addWidget(self._res_combo)
         params_row.addLayout(res_col, 1)
@@ -1112,6 +1108,11 @@ class TabVideoEngines(QWidget):
         else:
             self._btn_enhance.setText("☁")
         self._btn_enhance.clicked.connect(self._on_enhance)
+        _lbl_enh = QLabel("Améliorer le prompt")
+        _lbl_enh.setStyleSheet(
+            f"color:{C['text_dim']};font-size:10px;background:transparent;border:none;"
+        )
+        _prompt_hdr.addWidget(_lbl_enh)
         _prompt_hdr.addWidget(self._btn_enhance)
         lay.addLayout(_prompt_hdr)
 

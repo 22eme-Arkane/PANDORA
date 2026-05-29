@@ -2,9 +2,9 @@
 ui/assistant_panel.py — Panneau assistant pédagogique contextuel.
 
 Panneau droit collapsible :
-  - Tips statiques par page (corpus)
+  - Tips statiques + guide complet par page (collapsibles)
   - Chat Claude Haiku pour les questions libres
-  - Toggle strip 20px toujours visible
+  - Toggle strip 28px toujours visible
 """
 
 from PyQt6.QtWidgets import (
@@ -15,116 +15,346 @@ from PyQt6.QtCore import Qt
 from ui.styles import CP
 
 
-# ── Corpus de tips par page ────────────────────────────────────────────────────
+# ── Corpus de contenu par page ─────────────────────────────────────────────────
 
 CORPUS: dict[str, dict] = {
     "projects": {
         "title": "Projets",
-        "context": "L'utilisateur gère ses projets de pré-production cinéma dans PANDORA.",
+        "context": "Gestion des projets de pré-production cinéma.",
         "tips": [
-            "Chaque projet dispose de son propre dossier de données isolé.",
-            "Renommez un projet depuis sa fiche en cliquant sur son nom.",
+            "Chaque projet a son propre dossier de données isolé.",
+            "Renommez un projet en cliquant sur son nom dans la fiche.",
             "Changez de projet depuis cette page sans quitter PANDORA.",
+            "Les données sont sauvegardées automatiquement.",
         ],
+        "guide": (
+            "Créer un projet\n"
+            "Cliquez sur '+ Nouveau projet', donnez un nom et choisissez "
+            "l'emplacement. PANDORA crée automatiquement la structure de fichiers.\n\n"
+            "Ouvrir un projet existant\n"
+            "Cliquez sur un projet dans la liste. Toutes les pages se mettent "
+            "à jour automatiquement avec les données du projet sélectionné.\n\n"
+            "Renommer / supprimer\n"
+            "Accédez à la fiche du projet pour renommer. La suppression retire "
+            "le projet de la liste uniquement — vos fichiers restent sur le disque.\n\n"
+            "Organisation des données\n"
+            "Chaque projet stocke scénario, storyboard, castings, décors, "
+            "accessoires, HMC, véhicules et clips générés dans son propre dossier."
+        ),
     },
     "scenario": {
         "title": "Scénario",
-        "context": "L'utilisateur édite son scénario cinéma avec l'assistant Claude IA.",
+        "context": "Éditeur de scénario avec Claude IA — mise en page, co-écriture, extraction d'éléments.",
         "tips": [
-            "'Formater' applique la mise en page cinéma standard automatiquement.",
-            "Créez des versions nommées avant chaque révision majeure.",
-            "Extrayez personnages, décors et accessoires en un clic depuis le panneau IA.",
+            "Injectez des références visuelles — Claude les analyse et enrichit votre scénario.",
+            "'Mise en page PANDORA' structure le texte en blocs plans optimisés pour Seedance.",
+            "'Proposer un arrangement' ouvre le Studio de co-écriture interactif avec Claude.",
+            "'Tout Générer' crée personnages, décors, accessoires, HMC, véhicules en une passe.",
+            "Versions nommées (✚/✕) et undo/redo (↩/↪) pour revenir à n'importe quel état.",
         ],
+        "guide": (
+            "Éditeur de scénario\n"
+            "Rédigez votre scénario directement dans l'éditeur. Vos modifications sont "
+            "sauvegardées automatiquement. La barre du haut regroupe le choix du style "
+            "visuel, la gestion des versions nommées (✚ ✕) et la durée du film.\n\n"
+            "Références visuelles\n"
+            "Ajoutez des images dans '◎ Références visuelles' — photos de lieux, "
+            "personnages, moodboards. '◈ Analyser avec Claude' analyse ces images et "
+            "enrichit votre scénario en s'inspirant de leurs ambiances et détails.\n\n"
+            "Mise en page PANDORA\n"
+            "'◈ Mise en page PANDORA' restructure votre texte en blocs plans lisibles "
+            "par Seedance : en-têtes INT./EXT., titres de séquences, descriptions d'action. "
+            "Format pensé pour la génération IA, pas pour le format Hollywood classique.\n\n"
+            "Co-écriture avec Claude\n"
+            "'⊞ Proposer un arrangement' ouvre le Studio de co-écriture. Ajustez l'intensité "
+            "(1-10) pour des suggestions légères ou profondes. Claude ne touche que ce que "
+            "vous lui demandez — le reste de votre texte est préservé. Vous pouvez joindre "
+            "des images à vos messages pour guider les suggestions.\n\n"
+            "Générer depuis le scénario\n"
+            "Extrayez automatiquement personnages, décors, accessoires, HMC, véhicules et "
+            "storyboard depuis votre texte. Chaque extraction propose d'identifier uniquement "
+            "ou de générer aussi les images de référence."
+        ),
     },
     "storyboard": {
         "title": "Storyboard",
-        "context": "L'utilisateur gère son découpage storyboard plan par plan.",
+        "context": "Découpage plan par plan avec génération IA intégrée.",
         "tips": [
-            "Double-cliquez sur un plan pour éditer tous ses détails.",
-            "Générez un aperçu visuel Flux T2I depuis le bouton '⊕ Aperçu'.",
+            "Double-cliquez sur un plan pour éditer : Caméra, Éléments, Mise en scène, Prompt.",
+            "'⟳ Synchronisation' aligne les prompts avec les noms actuels du casting/décors.",
+            "'✦ Générer les Moods' génère un aperçu visuel pour chaque plan en batch.",
             "Glissez-déposez les plans pour réorganiser le découpage.",
+            "Assignez personnages et décors à chaque plan — ils servent de références Seedance.",
         ],
+        "guide": (
+            "Le tableau de plans\n"
+            "Chaque ligne représente un plan de votre film. Vous y voyez d'un coup d'œil "
+            "l'aperçu visuel, la séquence, le mouvement caméra, le décor, les personnages, "
+            "la durée et le prompt de génération.\n\n"
+            "Éditer un plan (double-clic)\n"
+            "Ouvrez la fiche complète pour renseigner : les choix caméra (mouvement, valeur "
+            "de plan, focale, vitesse), les éléments du plan (décor, personnages, accessoires, "
+            "véhicules), la mise en scène (placement caméra et acteurs, axe, entrée/sortie), "
+            "la durée et le prompt de génération.\n\n"
+            "Synchronisation\n"
+            "'⟳ Synchronisation' met à jour tous les prompts si vous avez renommé des "
+            "personnages, décors ou accessoires — vos descriptions restent cohérentes.\n\n"
+            "Aperçus visuels\n"
+            "Cliquez sur la colonne Mood d'un plan pour générer un aperçu visuel. "
+            "'✦ Générer les Moods' traite tous les plans en une fois.\n\n"
+            "Génération Seedance\n"
+            "Cliquez '▶' sur un plan pour lancer la génération. Si des personnages ou "
+            "un décor sont assignés, leurs images sont automatiquement utilisées comme "
+            "références visuelles pour plus de cohérence.\n\n"
+            "Versions nommées\n"
+            "Sauvegardez des versions de votre découpage à chaque étape clé pour "
+            "pouvoir revenir en arrière à tout moment."
+        ),
     },
     "castings": {
         "title": "Castings",
-        "context": "L'utilisateur gère les personnages du film.",
+        "context": "Personnages du film — portraits et références Seedance.",
         "tips": [
-            "Générez un portrait de personnage via Nano Banana depuis la fiche.",
-            "Les portraits servent de références visuelles dans la génération Seedance.",
-            "Cochez 'Assigné' pour qu'un personnage apparaisse dans les sélections T2V.",
+            "Générez un portrait via Nano Banana depuis la fiche personnage.",
+            "Les portraits servent de références visuelles dans Seedance.",
+            "Assignez un personnage à un plan depuis le storyboard pour l'inclure dans la génération.",
+            "La 'Fiche 4 vues' génère face, 3/4, profil et dos pour plus de cohérence.",
         ],
+        "guide": (
+            "Créer un personnage\n"
+            "Cliquez '+ Ajouter'. Renseignez : nom, âge, rôle, description physique "
+            "détaillée (cheveux, yeux, silhouette, traits distinctifs) et costume.\n\n"
+            "Générer un portrait\n"
+            "Dans la fiche, cliquez 'Générer portrait'. Nano Banana crée une image "
+            "de référence. Plus la description physique est précise, plus le portrait "
+            "sera fidèle au personnage imaginé.\n\n"
+            "Fiche 4 vues\n"
+            "Cliquez 'Générer fiche' pour obtenir face, 3/4, profil et dos. "
+            "Cette fiche multi-vues donne à Seedance plus de cohérence sur plusieurs plans.\n\n"
+            "Assigner à un plan\n"
+            "Dans le storyboard, ouvrez un plan et sélectionnez les personnages présents "
+            "dans 'Éléments'. Les portraits assignés sont envoyés automatiquement "
+            "comme images de référence à Seedance.\n\n"
+            "Style visuel\n"
+            "Choisissez un style (cinéma, anime, photoréaliste…) pour orienter "
+            "l'esthétique des portraits générés. Chaque personnage peut avoir son propre style."
+        ),
     },
     "decors": {
         "title": "Décors",
-        "context": "L'utilisateur gère les décors et lieux de tournage.",
+        "context": "Lieux de tournage — visuels de référence pour Seedance.",
         "tips": [
             "Générez une image de référence du décor via Nano Banana.",
-            "Chaque décor peut avoir son propre style visuel (cinéma, photoréaliste…).",
-            "'Sheet 4 vues' génère quatre angles différents d'un même lieu.",
+            "Chaque décor peut avoir son propre style visuel.",
+            "'Sheet 4 vues' génère quatre angles différents du même lieu.",
+            "L'image du décor est envoyée automatiquement comme référence visuelle à Seedance.",
         ],
+        "guide": (
+            "Créer un décor\n"
+            "Cliquez '+ Ajouter'. Renseignez : nom, type (INT./EXT.), description "
+            "détaillée (architecture, lumière, ambiance, époque, éléments présents).\n\n"
+            "Générer l'image de référence\n"
+            "Cliquez 'Générer image' pour créer une référence visuelle via Nano Banana. "
+            "Soyez précis sur l'ambiance, la lumière et les détails architecturaux.\n\n"
+            "Sheet 4 vues\n"
+            "Génère quatre angles du décor (entrée, milieu, fond, détail). "
+            "Utile pour les scènes complexes avec plusieurs axes caméra.\n\n"
+            "Style d'image\n"
+            "Chaque décor peut avoir son propre style (cinéma noir et blanc, "
+            "photoréaliste, aquarelle…) indépendamment du style global du projet.\n\n"
+            "Assigner à un plan\n"
+            "Dans l'édition d'un plan storyboard, choisissez le décor dans 'Éléments'. "
+            "Son image est envoyée automatiquement comme référence visuelle à Seedance."
+        ),
     },
     "accessoires": {
         "title": "Accessoires",
-        "context": "L'utilisateur gère les accessoires (props) du film.",
+        "context": "Props et objets — références visuelles pour la production.",
         "tips": [
             "Associez un style visuel spécifique à chaque accessoire.",
             "'Générer une variation' crée une alternative de l'image existante.",
-            "Les accessoires assignés à un plan sont envoyés en référence à Seedance.",
+            "Les accessoires assignés à un plan sont envoyés comme références visuelles à Seedance.",
+            "Décrivez précisément matière, couleur et état (neuf, abîmé, vintage).",
         ],
+        "guide": (
+            "Créer un accessoire\n"
+            "Décrivez précisément l'objet : type, matière, couleur, état (neuf, abîmé, "
+            "vintage), époque et contexte d'utilisation. Plus la description est précise, "
+            "plus la génération sera fidèle.\n\n"
+            "Générer l'image\n"
+            "Cliquez 'Générer image' pour créer une référence visuelle de l'accessoire. "
+            "Utilisez 'Générer une variation' pour explorer d'autres interprétations.\n\n"
+            "Nombre de générations\n"
+            "Choisissez combien d'images générer en une fois. Naviguez entre les résultats "
+            "avec les flèches du panneau de prévisualisation.\n\n"
+            "Assigner à un plan\n"
+            "Dans l'édition d'un plan, section 'Éléments', sélectionnez les accessoires "
+            "présents. Leurs images sont envoyées à Seedance comme références visuelles."
+        ),
     },
     "hmc": {
         "title": "HMC",
-        "context": "L'utilisateur gère l'habillage, maquillage et coiffure du film.",
+        "context": "Habillage, Maquillage, Coiffure — cohérence visuelle.",
         "tips": [
-            "HMC = Habillage, Maquillage, Coiffure — éléments de costume et beauté.",
-            "Associez des éléments HMC à des personnages ou des séquences.",
+            "HMC = Habillage, Maquillage, Coiffure.",
+            "Associez des éléments HMC à des personnages ou séquences.",
             "Générez une image de référence pour chaque élément.",
+            "Partagez ces références avec l'équipe costume/maquillage.",
         ],
+        "guide": (
+            "Rôle du HMC\n"
+            "Le HMC documente les éléments visuels portés par les personnages : "
+            "vêtements, accessoires de mode, maquillage, coiffure. Indispensable "
+            "pour la continuité entre les plans et les jours de tournage.\n\n"
+            "Créer un élément HMC\n"
+            "Renseignez : type (costume, maquillage, coiffure, bijou…), nom, "
+            "description détaillée et le personnage associé.\n\n"
+            "Image de référence\n"
+            "Générez une image via Nano Banana pour visualiser l'élément. "
+            "Ces images peuvent être partagées avec l'équipe costume/maquillage.\n\n"
+            "Style d'image\n"
+            "Choisissez un style adapté : 'Photoréaliste' pour un rendu proche "
+            "du réel, 'Fashion plate' pour un rendu costume de théâtre."
+        ),
     },
     "vehicles": {
         "title": "Véhicules",
-        "context": "L'utilisateur gère les véhicules du film.",
+        "context": "Véhicules du film — références visuelles pour la production.",
         "tips": [
             "Renseignez marque, modèle, année et couleur pour chaque véhicule.",
             "Générez une image de référence via Nano Banana.",
-            "Les véhicules assignés sont inclus dans les mosaïques de référence Seedance.",
+            "Les véhicules assignés à un plan sont envoyés comme références visuelles à Seedance.",
+            "Précisez l'état (neuf, accidenté, modifié) dans la description.",
         ],
+        "guide": (
+            "Créer un véhicule\n"
+            "Renseignez : marque, modèle, année, couleur, état (neuf, vieilli, "
+            "modifié, accidenté) et toute particularité visuelle (autocollants, "
+            "rouille, modification de carrosserie).\n\n"
+            "Image de référence\n"
+            "Nano Banana génère le véhicule sur fond neutre. Pour les véhicules "
+            "historiques ou fictifs, la description est particulièrement importante.\n\n"
+            "Assigner à un plan\n"
+            "Dans l'édition d'un plan storyboard, sélectionnez le(s) véhicule(s) "
+            "présent(s). Leurs images sont envoyées à Seedance comme références visuelles.\n\n"
+            "Cohérence entre plans\n"
+            "En assignant le même véhicule à plusieurs plans, vous garantissez "
+            "une cohérence visuelle dans les séquences de poursuite ou de déplacement."
+        ),
     },
     "camera": {
         "title": "Image & Son",
-        "context": "L'utilisateur configure les préférences caméra et son du projet.",
+        "context": "Préférences caméra, optiques et chaîne son du projet.",
         "tips": [
             "Définissez la caméra principale, les optiques et le format d'image.",
-            "Ces informations pré-remplissent les champs techniques des plans storyboard.",
-            "Renseignez le micro et la chaîne son pour le tournage.",
+            "Ces paramètres pré-remplissent les champs techniques du storyboard.",
+            "Renseignez le micro et la chaîne son pour préparer le tournage.",
+            "Le ratio d'image (1.85:1, 2.39:1) s'applique à tous les plans.",
         ],
+        "guide": (
+            "Caméra et capteur\n"
+            "Choisissez votre caméra principale (ARRI, RED, Sony, Canon…) et le "
+            "format de capteur. Ces informations pré-remplissent les champs techniques du storyboard.\n\n"
+            "Optiques\n"
+            "Renseignez la série d'optiques (Cooke, Leica, Zeiss, Master Prime…) "
+            "et les focales disponibles. Le storyboard proposera ces focales dans ses menus.\n\n"
+            "Format d'image\n"
+            "Définissez le ratio : 1.33:1 (plein cadre), 1.78:1 (16:9), 1.85:1 (flat), "
+            "2.39:1 (scope). S'applique à la génération Seedance et à l'export.\n\n"
+            "Chaîne son\n"
+            "Documentez micros, perches, enregistreurs. Ces notes préparent la "
+            "coordination avec le chef opérateur son."
+        ),
     },
     "doublage": {
         "title": "Doublage",
-        "context": "L'utilisateur génère des pistes audio TTS pour le doublage.",
+        "context": "Synthèse vocale et clonage vocal pour la post-production.",
         "tips": [
-            "Kokoro TTS propose 30 voix pré-entraînées (EN, ES, JA, ZH…).",
-            "Lux TTS clone n'importe quelle voix à partir d'un échantillon audio.",
-            "Les fichiers audio générés peuvent être importés dans DaVinci Resolve.",
+            "ElevenLabs génère des voix naturalistes multilingues depuis votre texte.",
+            "F5-TTS clone n'importe quelle voix depuis un court échantillon audio.",
+            "Le français est pris en charge par ElevenLabs ; F5-TTS fonctionne mieux en anglais.",
+            "Les fichiers audio générés s'importent directement dans DaVinci Resolve.",
         ],
+        "guide": (
+            "Moteurs disponibles\n"
+            "— ElevenLabs Turbo v2.5 : synthèse vocale de haute qualité avec "
+            "sélection de voix préenregistrées (anglais, français et plus). "
+            "Service payant, clé API requise.\n"
+            "— F5-TTS Clonage : clone une voix depuis un échantillon audio de "
+            "quelques secondes. Entraîné principalement sur l'anglais et le chinois "
+            "— le français peut avoir un léger accent.\n\n"
+            "Workflow recommandé\n"
+            "1. Écrivez le texte à doubler dans l'éditeur.\n"
+            "2. Choisissez un moteur : ElevenLabs pour la qualité FR, "
+            "F5-TTS pour reproduire une voix spécifique.\n"
+            "3. Générez et écoutez le rendu.\n"
+            "4. Importez dans DaVinci Resolve pour synchroniser avec la vidéo.\n\n"
+            "Détourage automatique\n"
+            "Supprimez le fond d'une image ou d'une vidéo automatiquement pour "
+            "créer des fonds transparents, sans avoir besoin de fond vert."
+        ),
     },
     "seedance": {
         "title": "Studio IA",
-        "context": "L'utilisateur génère des clips vidéo IA avec Seedance et d'autres moteurs.",
+        "context": "Génération vidéo IA — 13 moteurs dont Seedance, Kling, Veo 3.1.",
         "tips": [
-            "T2V : décrivez la scène en français, le prompt est traduit automatiquement.",
-            "Si des personnages/décors sont assignés, ils servent de références visuelles.",
-            "L'onglet 'Génération directe' donne accès à 13 moteurs : Kling, Veo 3.1, PixVerse, Sora 2…",
+            "T2V : décrivez la scène en français, la traduction est automatique.",
+            "Si des personnages/décors sont assignés, le mode référence s'active.",
+            "Génération directe : 13 moteurs (Kling v3 Pro, Veo 3.1, Sora 2…).",
+            "La vidéothèque centralise tous les clips avec prévisualisation.",
+            "Cochez 'Import auto' pour envoyer les clips dans DaVinci Resolve.",
         ],
+        "guide": (
+            "Générer depuis Storyboard\n"
+            "Sélectionnez un plan et cliquez '▶▶ Lancer'. Le prompt du plan est "
+            "utilisé, traduit en anglais, et les références (personnages, décor) "
+            "sont envoyées automatiquement. Quand des références visuelles sont disponibles, "
+            "elles guident Seedance pour une cohérence visuelle accrue.\n\n"
+            "Modifier des clips\n"
+            "Importez des clips existants et modifiez-les avec un prompt. "
+            "Seedance applique la modification en préservant la structure visuelle. "
+            "LatentSync resynchronise les lèvres sur une nouvelle piste audio.\n\n"
+            "Génération directe\n"
+            "Accès aux 13 moteurs (Seedance, Happy Horse, Kling, Veo 3.1, "
+            "PixVerse, Sora 2…) avec leurs paramètres et tarifs spécifiques.\n\n"
+            "Vidéothèque\n"
+            "Galerie de tous les clips générés pour ce projet. Cliquez sur un clip "
+            "pour le prévisualiser, l'envoyer dans 'Modifier des clips', ou l'ouvrir.\n\n"
+            "Tarifs\n"
+            "La génération est facturée via fal.ai. Seedance 2.0 est le moteur "
+            "recommandé pour la cohérence visuelle. Consultez le Manuel pour le "
+            "comparatif des tarifs par moteur."
+        ),
     },
     "settings": {
         "title": "Paramètres",
-        "context": "L'utilisateur configure les clés API et les préférences globales.",
+        "context": "Clés API et préférences globales de PANDORA.",
         "tips": [
-            "Clé fal.ai requise pour Seedance, Kling, Veo 3.1, PixVerse et Flux.",
-            "Clé Anthropic requise pour l'assistant IA et la génération de scénario.",
-            "Clé Nano Banana requise pour les portraits et images d'éléments.",
+            "Clé fal.ai : Seedance, Kling, Veo 3.1, PixVerse, Flux, SFX1.",
+            "Clé Anthropic : assistant IA, scénario, traduction des prompts.",
+            "Clé Nano Banana : portraits et images d'éléments.",
+            "Le dossier de sortie définit où les vidéos sont enregistrées.",
         ],
+        "guide": (
+            "Clé fal.ai\n"
+            "Créez un compte sur fal.ai et générez une clé API dans votre "
+            "tableau de bord. Donne accès à tous les moteurs vidéo (Seedance, "
+            "Kling, Veo, PixVerse, Sora, Wan…) et aux modèles d'image (Flux).\n\n"
+            "Clé Anthropic\n"
+            "Créez un compte sur console.anthropic.com. Utilisée pour : "
+            "formatage du scénario, génération du storyboard, traduction des "
+            "prompts, et l'assistant pédagogique.\n\n"
+            "Clé Nano Banana\n"
+            "Dédiée à la génération de portraits de personnages et d'images "
+            "d'éléments (décors, accessoires, HMC, véhicules).\n\n"
+            "Dossier de sortie\n"
+            "Choisissez où vos vidéos générées seront enregistrées. Par défaut, "
+            "elles sont sauvegardées dans votre dossier Vidéos, sous-dossier PANDORA. "
+            "Vous pouvez rediriger vers votre NAS ou dossier de projet DaVinci.\n\n"
+            "Mode sans clé\n"
+            "Sans clé fal.ai, PANDORA fonctionne en mode démonstration — les générations "
+            "sont simulées sans consommation de crédits, pour découvrir l'interface."
+        ),
     },
 }
 
@@ -136,6 +366,18 @@ _DEFAULT_CORPUS = {
         "Les données sont sauvegardées automatiquement.",
         "Utilisez Ctrl+S pour une sauvegarde manuelle.",
     ],
+    "guide": (
+        "Bienvenue dans PANDORA\n"
+        "PANDORA est un outil de pré-production cinéma intégré à DaVinci Resolve. "
+        "Il couvre l'ensemble du pipeline de pré-production : scénario, storyboard, "
+        "castings, décors, accessoires, HMC, véhicules et génération vidéo IA.\n\n"
+        "Démarrage rapide\n"
+        "1. Créez ou ouvrez un projet depuis la page Projets.\n"
+        "2. Rédigez votre scénario et utilisez Claude IA pour le formater.\n"
+        "3. Générez le storyboard depuis le scénario.\n"
+        "4. Ajoutez personnages, décors et accessoires avec images de référence.\n"
+        "5. Générez vos clips vidéo depuis Studio IA."
+    ),
 }
 
 
@@ -150,12 +392,10 @@ class AssistantPanel(QWidget):
         self._worker    = None
         self._page_key  = ""
         self._corpus    = _DEFAULT_CORPUS
-        self._ai_enabled: bool = False   # désactivé par défaut
+        self._ai_enabled: bool = False
 
         self.setFixedWidth(258)
-        self.setStyleSheet(
-            f"background:{CP['bg1']};border-left:1px solid {CP['border']};"
-        )
+        self.setStyleSheet(f"background:{CP['bg1']};")
 
         lay = QVBoxLayout(self)
         lay.setContentsMargins(0, 0, 0, 0)
@@ -163,7 +403,7 @@ class AssistantPanel(QWidget):
 
         # ── En-tête ────────────────────────────────────────────────────────────
         header = QWidget()
-        header.setFixedHeight(50)
+        header.setFixedHeight(76)
         header.setStyleSheet(
             f"background:{CP['bg2']};border-bottom:1px solid {CP['border']};"
         )
@@ -216,13 +456,23 @@ class AssistantPanel(QWidget):
         hl.addWidget(btn_clear)
         lay.addWidget(header)
 
-        # ── Tips contextuels ───────────────────────────────────────────────────
-        self._tips_frame = QWidget()
-        self._tips_frame.setStyleSheet(
-            f"background:rgba(78,205,196,0.05);"
-            f"border-bottom:1px solid {CP['border']};"
+        # ── Zone tips + guide (scrollable) ────────────────────────────────────
+        self._tips_outer = QScrollArea()
+        self._tips_outer.setWidgetResizable(True)
+        self._tips_outer.setFrameStyle(0)
+        self._tips_outer.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        self._tips_outer.setStyleSheet(
+            f"QScrollArea{{background:transparent;"
+            f"border:none;border-bottom:1px solid {CP['border']};}}"
+            f"QScrollBar:vertical{{width:3px;background:transparent;}}"
+            f"QScrollBar::handle:vertical{{background:{CP['border_bright']};"
+            f"border-radius:1px;min-height:20px;}}"
+            f"QScrollBar::add-line:vertical,QScrollBar::sub-line:vertical{{height:0px;}}"
         )
-        tips_lay = QVBoxLayout(self._tips_frame)
+
+        tips_inner = QWidget()
+        tips_inner.setStyleSheet("background:transparent;")
+        tips_lay = QVBoxLayout(tips_inner)
         tips_lay.setContentsMargins(12, 10, 12, 10)
         tips_lay.setSpacing(6)
 
@@ -246,12 +496,19 @@ class AssistantPanel(QWidget):
         _sep.setStyleSheet(f"background:{CP['border']};")
         tips_lay.addWidget(_sep)
 
-        _conseils_lbl = QLabel("CONSEILS")
-        _conseils_lbl.setStyleSheet(
-            f"color:{CP['text_dim']};font-size:8px;font-weight:700;"
-            f"letter-spacing:2px;background:transparent;"
+        # ── CONSEILS — collapsible ─────────────────────────────────────────────
+        self._conseils_open = True
+        self._btn_conseils = QPushButton("▼  CONSEILS")
+        self._btn_conseils.setFlat(True)
+        self._btn_conseils.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._btn_conseils.setStyleSheet(
+            f"QPushButton{{background:transparent;color:{CP['text_dim']};"
+            f"font-size:8px;font-weight:700;letter-spacing:2px;"
+            f"border:none;text-align:left;padding:0;}}"
+            f"QPushButton:hover{{color:{CP['accent']};}}"
         )
-        tips_lay.addWidget(_conseils_lbl)
+        self._btn_conseils.clicked.connect(self._toggle_conseils)
+        tips_lay.addWidget(self._btn_conseils)
 
         self._tips_lbl = QLabel()
         self._tips_lbl.setWordWrap(True)
@@ -259,7 +516,39 @@ class AssistantPanel(QWidget):
             f"color:{CP['text_secondary']};font-size:10px;background:transparent;"
         )
         tips_lay.addWidget(self._tips_lbl)
-        lay.addWidget(self._tips_frame)
+
+        # ── GUIDE COMPLET — collapsible ────────────────────────────────────────
+        _guide_sep = QLabel()
+        _guide_sep.setFixedHeight(1)
+        _guide_sep.setStyleSheet(f"background:{CP['border']};margin-top:2px;")
+        tips_lay.addWidget(_guide_sep)
+
+        self._guide_open = True
+        self._btn_guide = QPushButton("▼  GUIDE COMPLET")
+        self._btn_guide.setFlat(True)
+        self._btn_guide.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._btn_guide.setStyleSheet(
+            f"QPushButton{{background:transparent;color:{CP['accent_dim']};"
+            f"font-size:8px;font-weight:700;letter-spacing:2px;"
+            f"border:none;text-align:left;padding:0;}}"
+            f"QPushButton:hover{{color:{CP['accent']};}}"
+        )
+        self._btn_guide.clicked.connect(self._toggle_guide)
+        tips_lay.addWidget(self._btn_guide)
+
+        self._guide_lbl = QLabel()
+        self._guide_lbl.setWordWrap(True)
+        self._guide_lbl.setVisible(True)
+        self._guide_lbl.setStyleSheet(
+            f"color:{CP['text_secondary']};font-size:10px;background:transparent;"
+            f"line-height:1.4;"
+        )
+        tips_lay.addWidget(self._guide_lbl)
+
+        tips_lay.addStretch()
+        self._tips_outer.setWidget(tips_inner)
+        self._tips_outer.setMaximumHeight(16777215)
+        lay.addWidget(self._tips_outer)
 
         # ── Zone de chat ───────────────────────────────────────────────────────
         chat_scroll = QScrollArea()
@@ -289,7 +578,6 @@ class AssistantPanel(QWidget):
         input_lay.setContentsMargins(10, 8, 10, 10)
         input_lay.setSpacing(6)
 
-        # Notice "IA désactivée" — visible quand désactivé
         self._disabled_notice = QLabel(
             "L'assistant IA est désactivé.\n"
             "Activez-le via « IA ○ » pour poser des questions.\n"
@@ -329,9 +617,12 @@ class AssistantPanel(QWidget):
         self._btn_ask.clicked.connect(self._on_ask)
         self._btn_ask.setVisible(False)
         input_lay.addWidget(self._btn_ask)
+
+        self._input_frame = input_frame
         lay.addWidget(input_frame)
 
         self._update_tips()
+        self._apply_ai_state()
 
     # ── API publique ───────────────────────────────────────────────────────────
 
@@ -361,6 +652,24 @@ class AssistantPanel(QWidget):
         self._disabled_notice.setVisible(not on)
         self._input.setVisible(on)
         self._btn_ask.setVisible(on)
+        self._chat_scroll.setVisible(on)
+        self._tips_outer.setMaximumHeight(260 if on else 16777215)
+
+    # ── Collapsibles ──────────────────────────────────────────────────────────
+
+    def _toggle_conseils(self):
+        self._conseils_open = not self._conseils_open
+        self._tips_lbl.setVisible(self._conseils_open)
+        self._btn_conseils.setText(
+            ("▼" if self._conseils_open else "▶") + "  CONSEILS"
+        )
+
+    def _toggle_guide(self):
+        self._guide_open = not self._guide_open
+        self._guide_lbl.setVisible(self._guide_open)
+        self._btn_guide.setText(
+            ("▼" if self._guide_open else "▶") + "  GUIDE COMPLET"
+        )
 
     # ── Interne ────────────────────────────────────────────────────────────────
 
@@ -369,6 +678,9 @@ class AssistantPanel(QWidget):
         self._context_lbl.setText(self._corpus.get("context", ""))
         tips = self._corpus.get("tips", [])
         self._tips_lbl.setText("\n".join(f"· {t}" for t in tips))
+        guide = self._corpus.get("guide", "")
+        self._guide_lbl.setText(guide)
+        self._btn_guide.setVisible(bool(guide))
 
     def _on_ask(self):
         if not self._ai_enabled:
@@ -432,10 +744,8 @@ class AssistantPanel(QWidget):
         )
         b_lay.addWidget(lbl_text)
 
-        # Insérer avant le stretch final
         self._chat_lay.insertWidget(self._chat_lay.count() - 1, bubble)
 
-        # Scroll vers le bas
         from PyQt6.QtCore import QTimer
         QTimer.singleShot(60, lambda: self._chat_scroll.verticalScrollBar().setValue(
             self._chat_scroll.verticalScrollBar().maximum()
@@ -452,29 +762,38 @@ class AssistantPanel(QWidget):
 # ── Toggle strip ───────────────────────────────────────────────────────────────
 
 class AssistantToggleStrip(QWidget):
-    """Bande verticale 20px pour ouvrir/fermer le panneau assistant."""
+    """Bande verticale 28px pour ouvrir/fermer le panneau assistant."""
 
     def __init__(self, panel: AssistantPanel):
         super().__init__()
         self._panel  = panel
         self._open   = panel.isVisible()
-        self.setFixedWidth(20)
+        self.setFixedWidth(28)
         self.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.setToolTip("Ouvrir / fermer l'assistant")
-        self.setStyleSheet(
-            f"background:{CP['bg2']};border-left:1px solid {CP['border']};"
-        )
+        self.setToolTip("Ouvrir / fermer l'assistant pédagogique")
+        self.setStyleSheet(f"background:{CP['bg1']};")
 
         lay = QVBoxLayout(self)
         lay.setContentsMargins(0, 0, 0, 0)
         lay.setSpacing(0)
         lay.addStretch()
 
+        self._ia_lbl = QLabel("IA")
+        self._ia_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self._ia_lbl.setFixedWidth(28)
+        self._ia_lbl.setStyleSheet(
+            f"color:{CP['accent']};font-size:9px;font-weight:900;"
+            f"letter-spacing:1px;background:transparent;"
+        )
+        lay.addWidget(self._ia_lbl)
+
+        lay.addSpacing(6)
+
         self._arrow = QLabel(self._arrow_char())
         self._arrow.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self._arrow.setFixedWidth(20)
+        self._arrow.setFixedWidth(28)
         self._arrow.setStyleSheet(
-            f"color:{CP['accent']};font-size:12px;font-weight:700;background:transparent;"
+            f"color:{CP['accent']};font-size:18px;font-weight:700;background:transparent;"
         )
         lay.addWidget(self._arrow)
         lay.addStretch()
@@ -489,11 +808,19 @@ class AssistantToggleStrip(QWidget):
             self._arrow.setText(self._arrow_char())
 
     def enterEvent(self, e):
+        self._ia_lbl.setStyleSheet(
+            f"color:#ffffff;font-size:9px;font-weight:900;"
+            f"letter-spacing:1px;background:transparent;"
+        )
         self._arrow.setStyleSheet(
-            f"color:#ffffff;font-size:12px;font-weight:700;background:transparent;"
+            f"color:#ffffff;font-size:18px;font-weight:700;background:transparent;"
         )
 
     def leaveEvent(self, e):
+        self._ia_lbl.setStyleSheet(
+            f"color:{CP['accent']};font-size:9px;font-weight:900;"
+            f"letter-spacing:1px;background:transparent;"
+        )
         self._arrow.setStyleSheet(
-            f"color:{CP['accent']};font-size:12px;font-weight:700;background:transparent;"
+            f"color:{CP['accent']};font-size:18px;font-weight:700;background:transparent;"
         )
