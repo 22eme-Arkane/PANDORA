@@ -18,7 +18,7 @@ from ui.page_decors import PageDecors
 from ui.page_scenario import PageScenario
 from ui.page_storyboard import PageStoryboard
 from ui.page_doublage import PageDoublage
-from ui.icons import load_icon, badge_pixmap, dim, tint
+from ui.icons import load_icon, badge_pixmap, app_icon, dim, tint
 from ui.assistant_panel import AssistantPanel, AssistantToggleStrip
 from core.i18n import tr, get_lang, set_lang, retranslate_widget
 
@@ -305,7 +305,7 @@ class _Sidebar(QWidget):
         btn_contact.clicked.connect(self.contact_requested.emit)
         lay.addWidget(btn_contact)
 
-        lay.addSpacing(10)
+        lay.addSpacing(6)
 
     @staticmethod
     def _apply_lang_btn_style(btn: QPushButton, active: bool):
@@ -452,6 +452,45 @@ class PandoraWindow(QMainWindow):
         self._pages["seedance"] = seedance
         self._stack.addWidget(seedance)
 
+    def showEvent(self, event):
+        super().showEvent(event)
+        from PyQt6.QtCore import QTimer
+        QTimer.singleShot(0, self._refresh_taskbar_icon)
+
+    def _refresh_taskbar_icon(self):
+        """Re-applique l'icône via Win32 SendMessage(WM_SETICON) après création du HWND.
+        Qt ne propage pas toujours l'icône vers la barre des tâches Windows au premier show."""
+        try:
+            import sys
+            import ctypes
+            import os
+            if sys.platform != "win32":
+                return
+            hwnd = int(self.winId())
+            if not hwnd:
+                return
+            if getattr(sys, "frozen", False):
+                ico_path = os.path.join(sys._MEIPASS, "assets", "pandora_badge.ico")
+            else:
+                ico_path = os.path.join(
+                    os.path.dirname(os.path.dirname(__file__)), "assets", "pandora_badge.ico"
+                )
+            if not os.path.isfile(ico_path):
+                return
+            IMAGE_ICON    = 1
+            LR_LOADFROMFILE = 0x00000010
+            WM_SETICON    = 0x0080
+            hicon_big   = ctypes.windll.user32.LoadImageW(
+                None, ico_path, IMAGE_ICON, 48, 48, LR_LOADFROMFILE)
+            hicon_small = ctypes.windll.user32.LoadImageW(
+                None, ico_path, IMAGE_ICON, 16, 16, LR_LOADFROMFILE)
+            if hicon_big:
+                ctypes.windll.user32.SendMessageW(hwnd, WM_SETICON, 1, hicon_big)
+            if hicon_small:
+                ctypes.windll.user32.SendMessageW(hwnd, WM_SETICON, 0, hicon_small)
+        except Exception:
+            pass
+
     def _build_global_topbar(self) -> QWidget:
         from PyQt6.QtWidgets import QStackedLayout
 
@@ -499,7 +538,7 @@ class PandoraWindow(QMainWindow):
         badge_lbl.setFixedSize(44, 44)
         badge_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
         badge_lbl.setStyleSheet("background:transparent;border:none;")
-        pix_badge = badge_pixmap(44)
+        pix_badge = app_icon().pixmap(44, 44)
         if not pix_badge.isNull():
             badge_lbl.setPixmap(pix_badge)
         else:

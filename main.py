@@ -1,9 +1,11 @@
+import multiprocessing
+multiprocessing.freeze_support()  # MUST be first — prevents spawned subprocesses from re-launching the GUI on Windows
+
 import sys
 from PyQt6.QtWidgets import QApplication
 from PyQt6.QtGui import QColor, QPalette
 from PyQt6.QtCore import qInstallMessageHandler, QtMsgType
 from ui.styles import CP
-from ui.chooser import ChooserWindow
 from ui.splash import SplashWindow
 from ui.pandora_window import PandoraWindow
 
@@ -68,64 +70,59 @@ if __name__ == "__main__":
         _cfg["eula_accepted"] = True
         save_config(_cfg)
 
-    chooser = ChooserWindow()
+    splash = SplashWindow("cinema")
     if not icon.isNull():
-        chooser.setWindowIcon(icon)
+        splash.setWindowIcon(icon)
     if get_lang() != "fr":
-        retranslate_widget(chooser)
+        retranslate_widget(splash)
 
-    def _on_chooser_lang(lang: str):
-        retranslate_widget(chooser)
+    _project_opening = [False]
 
-    chooser.lang_changed.connect(_on_chooser_lang)
-
-    def _show_splash(mode: str):
-        chooser.hide()
-        splash = SplashWindow(mode)
+    def _on_project(data: dict):
+        if _project_opening[0]:
+            return
+        _project_opening[0] = True
+        try:
+            splash.project_selected.disconnect(_on_project)
+        except (RuntimeError, TypeError):
+            pass
+        splash.setEnabled(False)
+        splash.hide()
+        win = PandoraWindow(data)
         if not icon.isNull():
-            splash.setWindowIcon(icon)
+            win.setWindowIcon(icon)
+        # _project_opening stays True — blocks any queued splash clicks still in the event queue
+
+        def _on_switch(new_data: dict):
+            win.hide()
+            win.deleteLater()
+            _project_opening[0] = False  # allow re-entry only for explicit project switch
+            _on_project(new_data)
+
+        win.switch_requested.connect(_on_switch)
+        win.showMaximized()
+        # Force taskbar icon refresh — Windows sometimes ignores the icon set before show()
+        from PyQt6.QtCore import QTimer
+        QTimer.singleShot(150, lambda: win.setWindowIcon(icon) if not icon.isNull() else None)
         if get_lang() != "fr":
-            retranslate_widget(splash)
+            retranslate_widget(win)
+        app._pandora = win
 
-        def _on_back():
-            splash.hide()
-            splash.deleteLater()
-            chooser.show()
-            app._splash = None
+    splash.back_requested.connect(lambda: sys.exit(0))
+    splash.project_selected.connect(_on_project)
+    splash.show()
+    app._splash = splash
 
-        def _on_project(data: dict):
-            splash.hide()
-            win = PandoraWindow(data)
+    from api.update_check import UpdateCheckWorker
+    from ui.splash import UpdateDialog
 
-            def _on_switch(new_data: dict):
-                win.hide()
-                win.deleteLater()
-                _on_project(new_data)
+    def _on_update_available(version: str, url: str):
+        dlg = UpdateDialog(version, url, splash)
+        dlg.exec()
 
-            win.switch_requested.connect(_on_switch)
-            win.showMaximized()
-            if get_lang() != "fr":
-                retranslate_widget(win)
-            app._pandora = win
-
-        def _on_live_project(_data: dict):
-            splash.hide()
-            from live_window import LiveWindow
-            live = LiveWindow()
-            live.showMaximized()
-            app._live = live
-
-        splash.back_requested.connect(_on_back)
-        if mode == "cinema":
-            splash.project_selected.connect(_on_project)
-        else:
-            splash.project_selected.connect(_on_live_project)
-
-        splash.show()
-        app._splash = splash
-
-    chooser.cinema_requested.connect(lambda: _show_splash("cinema"))
-    chooser.live_requested.connect(lambda: _show_splash("live"))
-    chooser.show()
+    _upd = UpdateCheckWorker()
+    _upd.update_available.connect(_on_update_available)
+    _upd.start()
+    app._update_worker = _upd
 
     sys.exit(app.exec())

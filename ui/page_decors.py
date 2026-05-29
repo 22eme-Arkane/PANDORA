@@ -263,7 +263,7 @@ class PageDecors(QWidget):
         btn_new.clicked.connect(self._on_new)
 
         _red = CP.get("red", "#ff4f6a")
-        btn_del_all = QPushButton("✕  Supprimer tous les décors")
+        btn_del_all = QPushButton("✕  Tout supprimer")
         btn_del_all.setFixedHeight(36)
         btn_del_all.setStyleSheet(
             f"QPushButton{{background:transparent;color:{_red};"

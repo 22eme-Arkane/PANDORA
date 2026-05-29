@@ -12,12 +12,13 @@ import json
 import os
 import tempfile
 
-from PyQt6.QtCore import Qt, QFileSystemWatcher, pyqtSignal
+from PyQt6.QtCore import Qt, QFileSystemWatcher, QThread, pyqtSignal
 from PyQt6.QtGui import QPixmap, QColor, QPainter, QLinearGradient
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
     QScrollArea, QTextEdit, QComboBox, QSpinBox, QButtonGroup,
     QRadioButton, QCheckBox, QFrame, QProgressBar, QMessageBox,
+    QFileDialog,
 )
 
 from ui.styles import C
@@ -33,7 +34,7 @@ from davinci.ping_worker import BridgePingWorker
 from ui.tab_t2v import (
     _DaVinciBar, _ENGINES, _DAVINCI_ENGINES, _SEEDANCE_ENGINES,
     _FIXED_RES_ENGINES, _FIXED_RATIO_ENGINES, _ENGINE_RES_FORCED,
-    _TEXT_FALLBACK_ENGINES,
+    _TEXT_FALLBACK_ENGINES, _ENGINE_RESOLUTIONS,
     _make_ext_worker, _norm_ext_result,
 )
 
@@ -69,6 +70,124 @@ def _make_placeholder_pixmap(name: str, index: int, w: int = 100, h: int = 56) -
     painter.drawText(0, 0, w, h, Qt.AlignmentFlag.AlignCenter, initials)
     painter.end()
     return pix
+
+
+# ── Worker extraction première frame ─────────────────────────────────────────
+
+class _ThumbWorker(QThread):
+    """Extrait la première image d'un clip vidéo (ffmpeg) sans bloquer l'UI."""
+    done = pyqtSignal(int, object)  # index, QImage
+
+    def __init__(self, index: int, path: str, parent=None):
+        super().__init__(parent)
+        self._index = index
+        self._path  = path
+
+    def run(self):
+        from PyQt6.QtGui import QImage
+        from core.video_utils import extract_first_frame, get_thumb_cache_path
+        cache_path = get_thumb_cache_path(self._path)
+        try:
+            if not os.path.isfile(cache_path):
+                ok = extract_first_frame(self._path, cache_path)
+                if not ok:
+                    return
+            img = QImage(cache_path)
+            if not img.isNull():
+                self.done.emit(self._index, img)
+        except Exception:
+            pass
+
+
+# ── Carré de référence visuelle (identique au widget Casting) ────────────────
+
+class _RefSquare(QWidget):
+    """Carré 60×60 — affiche '+' vide ou la miniature de l'image chargée."""
+    picked  = pyqtSignal(str)
+    cleared = pyqtSignal()
+
+    _SZ = 60
+
+    def __init__(self, tooltip: str = "Ajouter une image de référence", parent=None):
+        super().__init__(parent)
+        self.setFixedSize(self._SZ, self._SZ)
+
+        self._btn_pick = QPushButton("+", self)
+        self._btn_pick.setFixedSize(self._SZ, self._SZ)
+        self._btn_pick.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._btn_pick.setToolTip(tooltip)
+        self._btn_pick.setStyleSheet(f"""
+            QPushButton{{
+                background:transparent;color:{C['text_dim']};
+                border:1px dashed {C['border_bright']};border-radius:8px;
+                font-size:24px;font-weight:300;padding:0;
+            }}
+            QPushButton:hover{{
+                color:{C['accent']};border-color:{C['accent']};
+                background:rgba(78,205,196,0.08);
+            }}
+            QPushButton:pressed{{background:rgba(78,205,196,0.16);}}
+        """)
+        self._btn_pick.clicked.connect(self._on_pick)
+
+        self._thumb = QLabel(self)
+        self._thumb.setGeometry(0, 0, self._SZ, self._SZ)
+        self._thumb.setScaledContents(True)
+        self._thumb.setStyleSheet("border-radius:8px;")
+        self._thumb.setVisible(False)
+
+        self._btn_clear = QPushButton("×", self)
+        self._btn_clear.setFixedSize(16, 16)
+        self._btn_clear.move(self._SZ - 18, 2)
+        self._btn_clear.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._btn_clear.setStyleSheet(f"""
+            QPushButton{{background:{C['bg2']};color:{C['text_dim']};
+                border:1px solid {C['border']};border-radius:3px;font-size:9px;padding:0;}}
+            QPushButton:hover{{color:{C['red']};border-color:{C['red']};background:{C['bg3']};}}
+        """)
+        self._btn_clear.setVisible(False)
+        self._btn_clear.clicked.connect(self._on_clear)
+
+        lay = QVBoxLayout(self)
+        lay.setContentsMargins(0, 0, 0, 0)
+        lay.addWidget(self._btn_pick)
+
+    def path(self) -> str:
+        return getattr(self, "_path", "")
+
+    def set_path(self, path: str):
+        if path and os.path.isfile(path):
+            self._path = path
+            pix = QPixmap(path).scaled(
+                self._SZ, self._SZ,
+                Qt.AspectRatioMode.KeepAspectRatioByExpanding,
+                Qt.TransformationMode.SmoothTransformation,
+            )
+            self._thumb.setPixmap(pix)
+            self._thumb.setVisible(True)
+            self._btn_pick.setVisible(False)
+            self._btn_clear.setVisible(True)
+        else:
+            self._clear_state()
+
+    def _clear_state(self):
+        self._path = ""
+        self._thumb.setVisible(False)
+        self._btn_pick.setVisible(True)
+        self._btn_clear.setVisible(False)
+
+    def _on_pick(self):
+        path, _ = QFileDialog.getOpenFileName(
+            self, "Choisir une image de référence", "",
+            "Images (*.png *.jpg *.jpeg *.webp *.bmp);;Tous les fichiers (*)",
+        )
+        if path:
+            self.set_path(path)
+            self.picked.emit(path)
+
+    def _on_clear(self):
+        self._clear_state()
+        self.cleared.emit()
 
 
 # ── Carte compacte d'un clip (style _ThumbCard de T2V) ───────────────────────
@@ -202,6 +321,9 @@ class ClipCard(QFrame):
     def set_checked(self, v: bool):
         self.check.setChecked(v)
 
+    def set_thumb_pixmap(self, pix: QPixmap):
+        self._thumb.setPixmap(pix)
+
 
 # ── Onglet principal ──────────────────────────────────────────────────────────
 
@@ -229,6 +351,11 @@ class TabDavinciEdit(QScrollArea):
         self._queue:            list[tuple[int, int]]    = []
         self._queue_pos         = 0
         self._last_seed:        int | None               = None
+        self._global_ref_image: str                      = ""
+        self._per_clip_ref_images: dict[int, str]        = {}
+        self._mock_count:       int                      = 0
+        self._failed_clips:     list[tuple[int, str]]    = []
+        self._thumb_workers:    list[_ThumbWorker]       = []
 
         container = QWidget()
         self.setWidget(container)
@@ -303,112 +430,52 @@ class TabDavinciEdit(QScrollArea):
             "▸ Les vidéos générées sont automatiquement importées dans le Media Pool de DaVinci.",
             "",
             "⚠  Format requis par Seedance 2.0 pour l'upload de référence vidéo :",
-            "  • Résolution : 720p maximum",
+            "  • Résolution : 1080p maximum",
             "  • Taille : moins de 50 MB",
             "  • Format : H.264 MP4 ou MOV recommandé",
-            "  → Depuis DaVinci : Fichier → Exporter → sélectionner H.264 Master à 720p",
+            "  → Depuis DaVinci : Fichier → Exporter → sélectionner H.264 Master à 1080p",
             "    avant d'envoyer les clips via pandora_send.",
         ], C))
 
-        # ── Statut bridge ────────────────────────────────────────────────────
-        status_row = QHBoxLayout()
-        self._lbl_status = QLabel("○  Bridge non connecté")
-        self._lbl_status.setStyleSheet(
-            f"color:{C['text_dim']};font-size:10px;font-family:'Consolas',monospace;"
-        )
-        btn_refresh = QPushButton("↻  Actualiser")
-        btn_refresh.setFixedHeight(24)
-        btn_refresh.setCursor(Qt.CursorShape.PointingHandCursor)
-        btn_refresh.setStyleSheet(
-            f"QPushButton{{background:transparent;color:{C['text_dim']};"
-            f"border:1px solid {C['border']};border-radius:5px;"
-            f"font-size:10px;padding:0 10px;}}"
-            f"QPushButton:hover{{color:{C['text_primary']};border-color:{C['border_bright']};}}"
-        )
-        btn_refresh.clicked.connect(self._ping_bridge)
-        status_row.addWidget(self._lbl_status)
-        status_row.addSpacing(8)
-        status_row.addWidget(btn_refresh)
-        status_row.addStretch()
-        lay.addLayout(status_row)
-
-        self._lbl_bridge_help = QLabel(
-            "Pour connecter le bridge : dans DaVinci Resolve Studio →\n"
-            "Espace de travail → Scripts → seedance_bridge\n"
-            "Laissez la fenêtre PANDORA Bridge ouverte pendant votre session."
-        )
-        self._lbl_bridge_help.setStyleSheet(
-            f"color:{C['red']};font-size:10px;font-family:'Consolas',monospace;"
-            f"background:rgba(255,79,106,0.08);border:1px solid rgba(255,79,106,0.25);"
-            f"border-radius:6px;padding:8px 12px;"
-        )
-        lay.addWidget(self._lbl_bridge_help)
-
-        # ── Style de film (identique à T2V) ──────────────────────────────────
-        import core.style as _style_mod
-        from PyQt6.QtGui import QColor as _QColor
-
+        # ── Référence visuelle (template de style) ────────────────────────────
         self._film_style_frame = QFrame()
         self._film_style_frame.setStyleSheet(
             f"QFrame{{background:rgba(124,107,255,0.08);"
             f"border:1px solid {C['accent_dim']};border-radius:8px;}}"
         )
-        _fs_outer = QHBoxLayout(self._film_style_frame)
+        _fs_outer = QVBoxLayout(self._film_style_frame)
         _fs_outer.setContentsMargins(14, 12, 14, 12)
-        _fs_outer.setSpacing(12)
+        _fs_outer.setSpacing(8)
+        _fs_outer.setAlignment(Qt.AlignmentFlag.AlignHCenter)
 
-        _fs_left = QVBoxLayout()
-        _fs_left.setContentsMargins(0, 0, 0, 0)
-        _fs_left.setSpacing(6)
-
-        _fs_lbl = QLabel("Style de film")
+        _fs_lbl = QLabel("Choisir une référence visuelle")
+        _fs_lbl.setAlignment(Qt.AlignmentFlag.AlignHCenter)
         _fs_lbl.setStyleSheet(
             f"color:{C['accent']};font-size:11px;font-weight:700;background:transparent;border:none;"
         )
-        _fs_left.addWidget(_fs_lbl)
+        _fs_outer.addWidget(_fs_lbl)
 
-        self._film_style_combo = QComboBox()
-        self._film_style_combo.addItem("— Non défini —", "")
-        _cur_grp = None
-        for _s in _style_mod.STYLES:
-            _g = _s.get("group", "")
-            if _g != _cur_grp:
-                _cur_grp = _g
-                _gi = next((g for g in _style_mod.GROUPS if g["key"] == _g), None)
-                if _gi:
-                    self._film_style_combo.addItem(
-                        f"  {_gi['icon']}  {_gi['name'].upper()}", "__sep__"
-                    )
-                    _sep = self._film_style_combo.model().item(self._film_style_combo.count() - 1)
-                    _sep.setEnabled(False)
-                    _sep.setForeground(_QColor(C.get("accent", "#7c6bff")))
-            self._film_style_combo.addItem(f"    {_s['icon']}  {_s['name']}", _s["key"])
-        self._film_style_combo.setFixedHeight(30)
-        self._film_style_combo.setStyleSheet(
-            f"QComboBox{{background:rgba(124,107,255,0.12);border:1px solid {C['accent_dim']};"
-            f"border-radius:5px;color:{C['accent']};font-size:11px;font-weight:700;padding:0 8px;}}"
-            f"QComboBox:focus{{border-color:{C['accent']};}}"
-            f"QComboBox::drop-down{{border:none;width:18px;}}"
-            f"QComboBox QAbstractItemView{{background:{C['bg2']};border:1px solid {C['border_bright']};"
-            f"color:{C['text_primary']};selection-background-color:{C['accent_dim']};"
-            f"font-size:11px;padding:4px;}}"
+        # Rectangle fixe — toujours visible
+        _preview_h_row = QHBoxLayout()
+        _preview_h_row.setAlignment(Qt.AlignmentFlag.AlignHCenter)
+        _preview_frame_ref = QFrame()
+        _preview_frame_ref.setFixedSize(160, 140)
+        _preview_frame_ref.setStyleSheet(
+            f"QFrame{{background:{C['bg2']};border:1px solid {C['border_bright']};border-radius:8px;}}"
         )
-        self._film_style_combo.currentIndexChanged.connect(self._on_film_style_changed)
-        _fs_left.addWidget(self._film_style_combo)
+        _pf_lay = QVBoxLayout(_preview_frame_ref)
+        _pf_lay.setContentsMargins(4, 4, 4, 4)
+        _pf_lay.setSpacing(0)
+        self._style_ref_thumb = QLabel()
+        self._style_ref_thumb.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self._style_ref_thumb.setStyleSheet("background:transparent;border:none;")
+        _pf_lay.addWidget(self._style_ref_thumb)
+        _preview_h_row.addWidget(_preview_frame_ref)
+        _fs_outer.addLayout(_preview_h_row)
 
-        self._style_ref_override_lbl = QLabel("selon image de référence")
-        self._style_ref_override_lbl.setFixedHeight(30)
-        self._style_ref_override_lbl.setAlignment(
-            Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft
-        )
-        self._style_ref_override_lbl.setStyleSheet(
-            f"color:{C['accent']};font-size:10px;font-weight:700;font-style:italic;"
-            f"background:rgba(78,205,196,0.09);border:1px solid rgba(78,205,196,0.32);"
-            f"border-radius:5px;padding:0 8px;"
-        )
-        self._style_ref_override_lbl.setVisible(False)
-        _fs_left.addWidget(self._style_ref_override_lbl)
-
+        # Bouton "Template de style" — centré, toujours visible
+        _gal_row = QHBoxLayout()
+        _gal_row.setAlignment(Qt.AlignmentFlag.AlignHCenter)
         self._btn_style_gallery = QPushButton("\U0001f5bc  Template de style")
         self._btn_style_gallery.setFixedHeight(28)
         self._btn_style_gallery.setCursor(Qt.CursorShape.PointingHandCursor)
@@ -420,44 +487,26 @@ class TabDavinciEdit(QScrollArea):
             f"QPushButton:pressed{{background:rgba(124,107,255,0.28);}}"
         )
         self._btn_style_gallery.clicked.connect(self._on_style_gallery)
-        _style_btn_row = QHBoxLayout()
-        _style_btn_row.setContentsMargins(0, 0, 268, 0)
-        _style_btn_row.addStretch()
-        _style_btn_row.addWidget(self._btn_style_gallery)
-        _style_btn_row.addStretch()
-        _fs_left.addLayout(_style_btn_row)
-        _fs_outer.addLayout(_fs_left, 1)
+        _gal_row.addWidget(self._btn_style_gallery)
+        _fs_outer.addLayout(_gal_row)
 
-        self._style_ref_preview_frame = QFrame()
-        self._style_ref_preview_frame.setVisible(False)
-        self._style_ref_preview_frame.setFixedWidth(170)
-        self._style_ref_preview_frame.setStyleSheet(
-            f"QFrame{{background:{C['bg2']};border:1px solid {C['border_bright']};border-radius:8px;}}"
-        )
-        _pf_lay = QVBoxLayout(self._style_ref_preview_frame)
-        _pf_lay.setContentsMargins(8, 8, 8, 8)
-        _pf_lay.setSpacing(6)
-        self._style_ref_thumb = QLabel()
-        self._style_ref_thumb.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self._style_ref_thumb.setMinimumHeight(90)
-        self._style_ref_thumb.setStyleSheet(
-            f"background:{C['bg3']};border-radius:6px;border:none;"
-        )
-        _pf_lay.addWidget(self._style_ref_thumb, 1)
+        # Bouton "Retirer" — caché jusqu'à sélection
+        _clear_ref_row = QHBoxLayout()
+        _clear_ref_row.setAlignment(Qt.AlignmentFlag.AlignHCenter)
         self._style_ref_clear_btn = QPushButton("× Retirer")
-        self._style_ref_clear_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         self._style_ref_clear_btn.setFixedHeight(24)
+        self._style_ref_clear_btn.setVisible(False)
+        self._style_ref_clear_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         self._style_ref_clear_btn.setStyleSheet(
             f"QPushButton{{background:transparent;color:{C['text_dim']};"
             f"border:1px solid {C['border']};border-radius:4px;font-size:10px;padding:0 8px;}}"
             f"QPushButton:hover{{color:{C['red']};border-color:{C['red']};}}"
         )
         self._style_ref_clear_btn.clicked.connect(self._on_style_ref_clear)
-        _pf_lay.addWidget(self._style_ref_clear_btn)
-        _fs_outer.addWidget(self._style_ref_preview_frame)
-        lay.addWidget(self._film_style_frame)
+        _clear_ref_row.addWidget(self._style_ref_clear_btn)
+        _fs_outer.addLayout(_clear_ref_row)
 
-        # ── Bouton ADN visuel ─────────────────────────────────────────────────
+        # ── ADN visuel — centré sous le template ─────────────────────────────
         self._seed_lock_btn = QPushButton("🔓  ADN visuel — aléatoire")
         self._seed_lock_btn.setCheckable(True)
         self._seed_lock_btn.setFixedHeight(26)
@@ -472,11 +521,8 @@ class TabDavinciEdit(QScrollArea):
         )
         self._seed_lock_btn.toggled.connect(self._on_seed_toggle)
         _adn_row = QHBoxLayout()
-        _adn_row.setContentsMargins(0, 0, 268, 0)
-        _adn_row.addStretch()
+        _adn_row.setAlignment(Qt.AlignmentFlag.AlignHCenter)
         _adn_row.addWidget(self._seed_lock_btn)
-        _adn_row.addStretch()
-        lay.addLayout(_adn_row)
 
         # ── Section : Clips importés ──────────────────────────────────────────
         sec_clips, body_clips = self._make_section("Clips importés")
@@ -504,6 +550,17 @@ class TabDavinciEdit(QScrollArea):
         )
         btn_clear.clicked.connect(self._clear_clips)
         sel_row.addWidget(btn_clear)
+        self._btn_import_files = QPushButton("📁  Importer des fichiers vidéo")
+        self._btn_import_files.setFixedHeight(26)
+        self._btn_import_files.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._btn_import_files.setStyleSheet(
+            f"QPushButton{{background:transparent;color:{C['accent']};"
+            f"border:1px solid {C['accent']};border-radius:5px;"
+            f"font-size:10px;font-weight:600;padding:0 12px;}}"
+            f"QPushButton:hover{{background:rgba(78,205,196,0.10);}}"
+        )
+        self._btn_import_files.clicked.connect(self._on_import_files)
+        sel_row.addWidget(self._btn_import_files)
         sel_row.addStretch()
         body_clips.addLayout(sel_row)
 
@@ -521,7 +578,12 @@ class TabDavinciEdit(QScrollArea):
         self._clips_scroll.setFixedHeight(ClipCard._TH_H + 52)
         self._clips_scroll.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         self._clips_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
-        self._clips_scroll.setStyleSheet("QScrollArea{background:transparent;border:none;}")
+        self._clips_scroll.setStyleSheet(
+            f"QScrollArea{{background:transparent;border:none;}}"
+            f"QScrollBar:horizontal{{background:{C['bg1']};height:4px;border-radius:2px;margin:0;}}"
+            f"QScrollBar::handle:horizontal{{background:{C['border_bright']};border-radius:2px;min-width:30px;}}"
+            f"QScrollBar::add-line:horizontal,QScrollBar::sub-line:horizontal{{width:0px;}}"
+        )
         self._clips_scroll.setVisible(False)
         body_clips.addWidget(self._clips_scroll)
 
@@ -531,7 +593,10 @@ class TabDavinciEdit(QScrollArea):
         self._lbl_empty.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self._lbl_empty.setStyleSheet(f"color:{C['text_dim']};font-size:11px;padding:20px;")
         body_clips.addWidget(self._lbl_empty)
+
+        lay.addWidget(self._film_style_frame)
         lay.addWidget(sec_clips)
+        lay.addLayout(_adn_row)
 
         # ── Section : Prompt de modification ──────────────────────────────────
         sec_prompt, body_prompt = self._make_section("Prompt de modification")
@@ -553,11 +618,11 @@ class TabDavinciEdit(QScrollArea):
         body_prompt.addLayout(mode_row)
 
         # Prompt global — frame avec bouton Claude
-        _pg_frame = QFrame()
-        _pg_frame.setStyleSheet(
+        self._pg_frame = QFrame()
+        self._pg_frame.setStyleSheet(
             f"QFrame{{background:{C['bg2']};border:1px solid {C['border']};border-radius:10px;}}"
         )
-        _pg_lay = QVBoxLayout(_pg_frame)
+        _pg_lay = QVBoxLayout(self._pg_frame)
         _pg_lay.setContentsMargins(14, 8, 14, 10)
         _pg_lay.setSpacing(4)
 
@@ -590,6 +655,11 @@ class TabDavinciEdit(QScrollArea):
         self._btn_enhance_global.clicked.connect(self._on_enhance_global)
         _pg_header.addWidget(self._pg_counter)
         _pg_header.addStretch()
+        _lbl_enh_g = QLabel("Améliorer le prompt")
+        _lbl_enh_g.setStyleSheet(
+            f"color:{C['text_dim']};font-size:10px;background:transparent;border:none;"
+        )
+        _pg_header.addWidget(_lbl_enh_g)
         _pg_header.addWidget(self._btn_enhance_global)
         _pg_lay.addLayout(_pg_header)
 
@@ -612,7 +682,27 @@ class TabDavinciEdit(QScrollArea):
             lambda: self._pg_counter.setText(str(len(self._prompt_global.toPlainText())))
         )
         _pg_lay.addWidget(self._prompt_global)
-        body_prompt.addWidget(_pg_frame)
+
+        # Ref image — prompt global (carré Casting style)
+        _pg_ref_hdr = QHBoxLayout()
+        _pg_ref_hdr.setContentsMargins(0, 8, 0, 4)
+        _pg_ref_lbl = QLabel("Image de référence")
+        _pg_ref_lbl.setStyleSheet(
+            f"color:{C['text_dim']};font-size:10px;background:transparent;border:none;"
+        )
+        _pg_ref_hdr.addWidget(_pg_ref_lbl)
+        _pg_ref_hdr.addStretch()
+        _pg_lay.addLayout(_pg_ref_hdr)
+        _pg_ref_row = QHBoxLayout()
+        _pg_ref_row.setContentsMargins(0, 0, 0, 0)
+        _pg_ref_row.setSpacing(8)
+        self._global_ref_square = _RefSquare(tooltip="Image de référence globale (appliquée à tous les clips)")
+        self._global_ref_square.picked.connect(lambda p: setattr(self, '_global_ref_image', p))
+        self._global_ref_square.cleared.connect(lambda: setattr(self, '_global_ref_image', ''))
+        _pg_ref_row.addWidget(self._global_ref_square)
+        _pg_ref_row.addStretch()
+        _pg_lay.addLayout(_pg_ref_row)
+        body_prompt.addWidget(self._pg_frame)
 
         # Panneau per-clip (masqué par défaut)
         self._per_clip_panel = QFrame()
@@ -638,7 +728,12 @@ class TabDavinciEdit(QScrollArea):
         self._pc_scroll.setFixedHeight(ClipCard._TH_H + 52)
         self._pc_scroll.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         self._pc_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
-        self._pc_scroll.setStyleSheet("QScrollArea{background:transparent;border:none;}")
+        self._pc_scroll.setStyleSheet(
+            f"QScrollArea{{background:transparent;border:none;}}"
+            f"QScrollBar:horizontal{{background:{C['bg1']};height:4px;border-radius:2px;margin:0;}}"
+            f"QScrollBar::handle:horizontal{{background:{C['border_bright']};border-radius:2px;min-width:30px;}}"
+            f"QScrollBar::add-line:horizontal,QScrollBar::sub-line:horizontal{{width:0px;}}"
+        )
         _pp_outer.addWidget(self._pc_scroll)
 
         # Label clip sélectionné
@@ -687,6 +782,11 @@ class TabDavinciEdit(QScrollArea):
         self._btn_enhance_per_clip.clicked.connect(self._on_enhance_per_clip)
         _pc_header.addWidget(self._pc_counter)
         _pc_header.addStretch()
+        _lbl_enh_pc = QLabel("Améliorer le prompt")
+        _lbl_enh_pc.setStyleSheet(
+            f"color:{C['text_dim']};font-size:10px;background:transparent;border:none;"
+        )
+        _pc_header.addWidget(_lbl_enh_pc)
         _pc_header.addWidget(self._btn_enhance_per_clip)
         _pc_lay.addLayout(_pc_header)
 
@@ -710,6 +810,26 @@ class TabDavinciEdit(QScrollArea):
             lambda: self._pc_counter.setText(str(len(self._per_clip_prompt.toPlainText())))
         )
         _pc_lay.addWidget(self._per_clip_prompt)
+
+        # Ref image — prompt par clip (carré Casting style)
+        _pc_ref_hdr = QHBoxLayout()
+        _pc_ref_hdr.setContentsMargins(0, 8, 0, 4)
+        _pc_ref_lbl = QLabel("Image de référence (ce clip)")
+        _pc_ref_lbl.setStyleSheet(
+            f"color:{C['text_dim']};font-size:10px;background:transparent;border:none;"
+        )
+        _pc_ref_hdr.addWidget(_pc_ref_lbl)
+        _pc_ref_hdr.addStretch()
+        _pc_lay.addLayout(_pc_ref_hdr)
+        _pc_ref_row = QHBoxLayout()
+        _pc_ref_row.setContentsMargins(0, 0, 0, 0)
+        _pc_ref_row.setSpacing(8)
+        self._per_clip_ref_square = _RefSquare(tooltip="Image de référence pour ce clip uniquement")
+        self._per_clip_ref_square.picked.connect(self._on_per_clip_ref_picked)
+        self._per_clip_ref_square.cleared.connect(self._on_per_clip_ref_cleared)
+        _pc_ref_row.addWidget(self._per_clip_ref_square)
+        _pc_ref_row.addStretch()
+        _pc_lay.addLayout(_pc_ref_row)
         _pp_outer.addWidget(_pc_frame)
 
         body_prompt.addWidget(self._per_clip_panel)
@@ -751,7 +871,9 @@ class TabDavinciEdit(QScrollArea):
         self._cb_model = combo(_DAVINCI_ENGINES)
         self._cb_model.currentIndexChanged.connect(self._on_engine_changed)
         self._cb_ratio = combo(["16:9 — Paysage", "9:16 — Portrait", "4:3", "3:4"])
-        self._cb_res   = combo(["1080p", "720p", "480p"])
+        _def_key = self._cb_model.currentData() or "seedance-2.0"
+        _def_res = _ENGINE_RESOLUTIONS.get(_def_key, [("1080p", "1080p"), ("720p", "720p"), ("480p", "480p")])
+        self._cb_res = combo(_def_res)
 
         for (row, col), lbl, widget in [
             ((0, 0), "Moteur de génération", self._cb_model),
@@ -843,7 +965,7 @@ class TabDavinciEdit(QScrollArea):
             QPushButton:pressed{{background:{C['accent_dim']};color:#ffffff;}}
             QPushButton:disabled{{background:{C['bg3']};color:{C['text_dim']};}}
         """)
-        self._btn_generate.clicked.connect(self._check_bridge_then_start)
+        self._btn_generate.clicked.connect(self._start_with_credit_check)
 
         self._btn_cancel = QPushButton("Annuler")
         self._btn_cancel.setVisible(False)
@@ -881,11 +1003,8 @@ class TabDavinciEdit(QScrollArea):
         btn_row.addWidget(self._btn_cancel)
         body_queue.addLayout(btn_row)
 
-        self._davinci_bar = _DaVinciBar()
-        body_queue.addWidget(self._davinci_bar)
-
         self._btn_open_folder = QPushButton("📁  Ouvrir le dossier des vidéos")
-        self._btn_open_folder.setVisible(False)
+        self._btn_open_folder.setVisible(True)
         self._btn_open_folder.setCursor(Qt.CursorShape.PointingHandCursor)
         self._btn_open_folder.setStyleSheet(f"""
             QPushButton{{background:transparent;color:{C['text_secondary']};
@@ -895,14 +1014,54 @@ class TabDavinciEdit(QScrollArea):
         """)
         self._btn_open_folder.clicked.connect(self._open_output_folder)
 
-        _folder_row = QHBoxLayout()
-        _folder_row.setContentsMargins(0, 0, 268, 0)
-        _folder_row.addStretch()
-        _folder_row.addWidget(self._btn_open_folder)
-        _folder_row.addStretch()
-        body_queue.addLayout(_folder_row)
+        self._davinci_bar = _DaVinciBar()
+
+        _dav_row = QHBoxLayout()
+        _dav_row.setContentsMargins(0, 0, 0, 0)
+        _dav_row.setSpacing(10)
+        _dav_row.addWidget(self._davinci_bar, 1)
+        _dav_row.addWidget(self._btn_open_folder)
+        body_queue.addLayout(_dav_row)
         lay.addWidget(sec_queue)
+
+        # ── Encart prix (même que "Générer depuis Storyboard") ────────────────
+        price_frame = QFrame()
+        price_frame.setStyleSheet(
+            f"QFrame{{background:rgba(245,197,24,0.05);"
+            f"border:1px solid rgba(245,197,24,0.18);border-radius:8px;}}"
+        )
+        price_h = QHBoxLayout(price_frame)
+        price_h.setContentsMargins(14, 8, 14, 8)
+        price_h.setSpacing(12)
+        price_lbl = QLabel(
+            "💰  Génération facturée via fal.ai (Seedance 2.0)"
+            "  ·  Tarifs détaillés dans le Manuel d'utilisation"
+        )
+        price_lbl.setWordWrap(True)
+        price_lbl.setStyleSheet(
+            f"color:{C['text_dim']};font-size:9px;"
+            f"font-family:'Consolas',monospace;background:transparent;"
+        )
+        price_h.addWidget(price_lbl, 1)
+        btn_tarifs = QPushButton("📖  Tarifs")
+        btn_tarifs.setFixedSize(72, 24)
+        btn_tarifs.setCursor(Qt.CursorShape.PointingHandCursor)
+        btn_tarifs.setStyleSheet(
+            f"QPushButton{{background:transparent;color:{C['text_secondary']};"
+            f"border:1px solid {C['border_bright']};border-radius:5px;"
+            f"font-size:9px;font-weight:700;padding:0;}}"
+            f"QPushButton:hover{{background:rgba(245,197,24,0.12);"
+            f"color:#f5c518;border-color:rgba(245,197,24,0.50);}}"
+        )
+        btn_tarifs.clicked.connect(self._open_manual_tarifs)
+        price_h.addWidget(btn_tarifs)
+        lay.addWidget(price_frame)
+
         lay.addStretch()
+
+    def _open_manual_tarifs(self):
+        from ui.dialog_user_manual import UserManualDialog
+        UserManualDialog(self.window(), start_section=13).exec()
 
     # ── Ping bridge ───────────────────────────────────────────────────────────
 
@@ -917,19 +1076,6 @@ class TabDavinciEdit(QScrollArea):
 
     def _on_ping_result(self, connected: bool, timeline_name: str):
         self._bridge_connected = connected
-        if connected:
-            tl_part = f" — Timeline : {timeline_name}" if timeline_name else ""
-            self._lbl_status.setText(f"● Bridge connecté{tl_part}")
-            self._lbl_status.setStyleSheet(
-                f"color:{C['green']};font-size:10px;font-family:'Consolas',monospace;"
-            )
-            self._lbl_bridge_help.setVisible(False)
-        else:
-            self._lbl_status.setText("○  Bridge non connecté")
-            self._lbl_status.setStyleSheet(
-                f"color:{C['text_dim']};font-size:10px;font-family:'Consolas',monospace;"
-            )
-            self._lbl_bridge_help.setVisible(True)
         self._cb_import.setEnabled(connected)
         if not connected:
             self._cb_import.setChecked(False)
@@ -959,18 +1105,19 @@ class TabDavinciEdit(QScrollArea):
             return
         if _INBOX not in self._watcher.files():
             self._watcher.addPath(_INBOX)
-        self._lbl_status.setText(
-            f"● Script DaVinci — Timeline : {tl_name} — {len(clips)} clip(s) reçu(s)"
-        )
-        self._lbl_status.setStyleSheet(
-            f"color:{C['green']};font-size:10px;font-family:'Consolas',monospace;"
-        )
-        self._lbl_bridge_help.setVisible(False)
         self._load_clips(clips)
 
     # ── Chargement des clips ──────────────────────────────────────────────────
 
     def _load_clips(self, clips: list):
+        # Déconnecte les workers de miniatures précédents pour éviter les callbacks périmés
+        for w in self._thumb_workers:
+            try:
+                w.done.disconnect()
+            except Exception:
+                pass
+        self._thumb_workers.clear()
+
         for hbox in (self._clips_hbox, self._pc_hbox):
             while hbox.count():
                 it = hbox.takeAt(0)
@@ -1007,6 +1154,14 @@ class TabDavinciEdit(QScrollArea):
             self._clips_hbox.addWidget(card)
             self._clip_cards.append(card)
 
+            # Extraction de la première frame si le clip est un fichier local
+            fp = clip.get("file_path", "")
+            if fp and os.path.isfile(fp):
+                tw = _ThumbWorker(i, fp, self)
+                tw.done.connect(self._on_thumb_ready)
+                tw.start()
+                self._thumb_workers.append(tw)
+
             card2 = ClipCard(clip, i)
             card2.focused.connect(self._on_card_focused)
             if i > 0:
@@ -1031,6 +1186,19 @@ class TabDavinciEdit(QScrollArea):
             for i in range(self._pc_hbox.count())
             if isinstance(self._pc_hbox.itemAt(i).widget(), ClipCard)
         ]
+
+    def _on_thumb_ready(self, index: int, img):
+        from PyQt6.QtGui import QImage  # noqa (type hint)
+        pix = QPixmap.fromImage(img).scaled(
+            ClipCard._TH_W, ClipCard._TH_H,
+            Qt.AspectRatioMode.KeepAspectRatioByExpanding,
+            Qt.TransformationMode.SmoothTransformation,
+        )
+        if index < len(self._clip_cards):
+            self._clip_cards[index].set_thumb_pixmap(pix)
+        pc_cards = self._get_pc_cards()
+        if index < len(pc_cards):
+            pc_cards[index].set_thumb_pixmap(pix)
 
     # ── Per-clip prompt ───────────────────────────────────────────────────────
 
@@ -1057,12 +1225,56 @@ class TabDavinciEdit(QScrollArea):
         self._per_clip_prompt.blockSignals(True)
         self._per_clip_prompt.setPlainText(self._per_clip_prompts.get(idx, ""))
         self._per_clip_prompt.blockSignals(False)
+        self._refresh_per_clip_ref_ui(idx)
+
+    def _refresh_per_clip_ref_ui(self, idx: int):
+        ref = self._per_clip_ref_images.get(idx, "")
+        self._per_clip_ref_square.set_path(ref)
 
     def _on_per_clip_prompt_changed(self):
         if self._active_clip_idx is not None:
             self._per_clip_prompts[self._active_clip_idx] = (
                 self._per_clip_prompt.toPlainText()
             )
+
+    # ── Import de fichiers vidéo ──────────────────────────────────────────────
+
+    def _on_import_files(self):
+        paths, _ = QFileDialog.getOpenFileNames(
+            self,
+            "Importer des fichiers vidéo",
+            "",
+            "Vidéos (*.mp4 *.mov *.avi *.mkv *.webm);;Tous les fichiers (*)",
+        )
+        if not paths:
+            return
+        new_clips = [
+            {"name": os.path.splitext(os.path.basename(p))[0], "file_path": p}
+            for p in paths
+        ]
+        self._load_clips(self._clips_data + new_clips)
+
+    def add_clips_from_paths(self, paths: list[str]):
+        """Ajoute des clips directement depuis la Vidéothèque (sans dialog)."""
+        new_clips = [
+            {"name": os.path.splitext(os.path.basename(p))[0], "file_path": p}
+            for p in paths if os.path.isfile(p)
+        ]
+        if new_clips:
+            self._load_clips(self._clips_data + new_clips)
+
+    # ── Ref image — prompt global ─────────────────────────────────────────────
+    # (géré par _global_ref_square.picked / cleared via lambda)
+
+    # ── Ref image — prompt par clip ───────────────────────────────────────────
+
+    def _on_per_clip_ref_picked(self, path: str):
+        if self._active_clip_idx is not None:
+            self._per_clip_ref_images[self._active_clip_idx] = path
+
+    def _on_per_clip_ref_cleared(self):
+        if self._active_clip_idx is not None:
+            self._per_clip_ref_images.pop(self._active_clip_idx, None)
 
     # ── Enhance Claude — prompt global ────────────────────────────────────────
 
@@ -1110,7 +1322,7 @@ class TabDavinciEdit(QScrollArea):
 
     def _on_prompt_mode_changed(self, checked: bool):
         is_global = self._rb_global.isChecked()
-        self._prompt_global.setVisible(is_global)
+        self._pg_frame.setVisible(is_global)
         self._per_clip_panel.setVisible(not is_global)
         if not is_global and self._clip_cards and self._active_clip_idx is None:
             self._on_card_focused(0)
@@ -1124,18 +1336,21 @@ class TabDavinciEdit(QScrollArea):
     def _clear_clips(self):
         self._load_clips([])
 
-    # ── Style de film ─────────────────────────────────────────────────────────
+    # ── Template de style ─────────────────────────────────────────────────────
 
-    def _on_film_style_changed(self, idx: int):
-        import core.style as style_api
-        key = self._film_style_combo.currentData()
-        if not key or key == "__sep__":
-            self._style_key    = ""
-            self._style_suffix = ""
-            return
-        self._style_key = key
-        entry = next((s for s in style_api.STYLES if s["key"] == key), None)
-        self._style_suffix = entry.get("video_suffix", "") if entry else ""
+    def _set_style_ref_image(self, path: str):
+        self._style_ref_path = path
+        has = bool(path and os.path.isfile(path))
+        if has:
+            pix = QPixmap(path).scaled(
+                152, 132,
+                Qt.AspectRatioMode.KeepAspectRatio,
+                Qt.TransformationMode.SmoothTransformation,
+            )
+            self._style_ref_thumb.setPixmap(pix)
+        else:
+            self._style_ref_thumb.setPixmap(QPixmap())
+        self._style_ref_clear_btn.setVisible(has)
 
     def _on_style_gallery(self):
         import core.style as style_api
@@ -1153,36 +1368,15 @@ class TabDavinciEdit(QScrollArea):
         chosen = dlg.result_path()
         if not chosen:
             return
-        self._style_ref_path = chosen
-        self._style_key      = dlg._current_key
+        self._style_key    = dlg._current_key
         style_entry = next((s for s in style_api.STYLES if s["key"] == self._style_key), None)
-        self._style_suffix   = style_entry.get("video_suffix", "") if style_entry else ""
-        for i in range(self._film_style_combo.count()):
-            if self._film_style_combo.itemData(i) == self._style_key:
-                self._film_style_combo.blockSignals(True)
-                self._film_style_combo.setCurrentIndex(i)
-                self._film_style_combo.blockSignals(False)
-                break
-        self._style_ref_override_lbl.setVisible(True)
-        self._film_style_combo.setVisible(False)
-        pix = QPixmap(chosen)
-        if not pix.isNull():
-            self._style_ref_thumb.setPixmap(
-                pix.scaled(154, 100,
-                           Qt.AspectRatioMode.KeepAspectRatio,
-                           Qt.TransformationMode.SmoothTransformation)
-            )
-        self._style_ref_preview_frame.setVisible(True)
+        self._style_suffix = style_entry.get("video_suffix", "") if style_entry else ""
+        self._set_style_ref_image(chosen)
 
     def _on_style_ref_clear(self):
-        self._style_key      = ""
-        self._style_ref_path = ""
-        self._style_suffix   = ""
-        self._style_ref_thumb.setPixmap(QPixmap())
-        self._style_ref_preview_frame.setVisible(False)
-        self._style_ref_override_lbl.setVisible(False)
-        self._film_style_combo.setCurrentIndex(0)
-        self._film_style_combo.setVisible(True)
+        self._style_key    = ""
+        self._style_suffix = ""
+        self._set_style_ref_image("")
 
     # ── Modèle / ratio ────────────────────────────────────────────────────────
 
@@ -1192,10 +1386,20 @@ class TabDavinciEdit(QScrollArea):
     def _on_engine_changed(self):
         key = self._get_model()
         fixed_res = key in _FIXED_RES_ENGINES
-        self._cb_res.setEnabled(not fixed_res)
         self._cb_ratio.setEnabled(key not in _FIXED_RATIO_ENGINES)
-        if fixed_res:
-            self._cb_res.setCurrentText(_ENGINE_RES_FORCED.get(key, "1080p"))
+        options = _ENGINE_RESOLUTIONS.get(key, [("1080p", "1080p"), ("720p", "720p"), ("480p", "480p")])
+        prev = self._cb_res.currentData() or self._cb_res.currentText()
+        self._cb_res.blockSignals(True)
+        self._cb_res.clear()
+        for r in options:
+            if isinstance(r, tuple):
+                self._cb_res.addItem(r[0], r[1])
+            else:
+                self._cb_res.addItem(r, r)
+        idx = self._cb_res.findData(prev)
+        self._cb_res.setCurrentIndex(max(0, idx))
+        self._cb_res.blockSignals(False)
+        self._cb_res.setEnabled(not fixed_res)
         if hasattr(self, "_ref_compat_banner"):
             self._ref_compat_banner.setVisible(key in _TEXT_FALLBACK_ENGINES)
 
@@ -1227,8 +1431,32 @@ class TabDavinciEdit(QScrollArea):
 
     # ── File d'attente ────────────────────────────────────────────────────────
 
+    # ── Credit guard (identique à T2V) ───────────────────────────────────────
+
+    def _start_with_credit_check(self):
+        from core.config import load_config as _lc
+        if not _lc().get("api_key", "").strip():
+            reply = QMessageBox.question(
+                self,
+                "Mode simulation — aucune clé fal.ai",
+                "Aucune clé API fal.ai n'est configurée.\n\n"
+                "La génération va tourner en mode simulation :\n"
+                "les vidéos seront fictives et aucun fichier ne sera créé.\n\n"
+                "Pour générer de vraies vidéos, ajoutez votre clé fal.ai\n"
+                "dans Paramètres, puis relancez.\n\n"
+                "Continuer en mode simulation ?",
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                QMessageBox.StandardButton.No,
+            )
+            if reply != QMessageBox.StandardButton.Yes:
+                return
+        self._check_bridge_then_start()
+
     def _check_bridge_then_start(self):
         """Vérifie la connexion bridge puis lance la file si ok, sinon propose un dialog."""
+        if not self._cb_import.isChecked():
+            self._start_queue()
+            return
         if self._bridge_connected:
             self._start_queue()
             return
@@ -1236,7 +1464,7 @@ class TabDavinciEdit(QScrollArea):
         from PyQt6.QtCore import Qt as _Qt
         dlg = QDialog(self)
         dlg.setWindowTitle("Bridge non connecté")
-        dlg.setFixedWidth(420)
+        dlg.setMinimumWidth(500)
         dlg.setStyleSheet(f"background:{C['bg1']};color:{C['text_primary']};")
         vlay = QVBoxLayout(dlg)
         vlay.setSpacing(12)
@@ -1281,7 +1509,7 @@ class TabDavinciEdit(QScrollArea):
             self._ping_worker.result.connect(_on_retry_result)
             self._ping_worker.start()
         btn_retry.clicked.connect(_retry)
-        btn_continue = QPushButton("Générer sans import")
+        btn_continue = QPushButton("Continuer")
         btn_continue.setFixedHeight(34)
         btn_continue.setStyleSheet(
             f"QPushButton{{background:{C['accent']};color:#07080f;"
@@ -1326,7 +1554,7 @@ class TabDavinciEdit(QScrollArea):
                         parts = res.replace(" ", "").lower().split("x")
                         if len(parts) == 2:
                             h = int(parts[1])
-                            if h > 720:
+                            if h > 1080:
                                 invalid_clips.append(f"{name}  ({res})")
                     except (ValueError, IndexError):
                         pass
@@ -1334,10 +1562,10 @@ class TabDavinciEdit(QScrollArea):
             QMessageBox.warning(
                 self,
                 "Format non supporté",
-                "Pour le moment, seuls les clips exportés en H.264 720p (ou inférieur) "
+                "Pour le moment, seuls les clips exportés en H.264 1080p (ou inférieur) "
                 "et inférieurs à 50 MB peuvent être envoyés à Seedance.\n\n"
                 "Veuillez ré-exporter les clips suivants depuis DaVinci Resolve "
-                "en H.264 720p avant de relancer :\n\n"
+                "en H.264 1080p avant de relancer :\n\n"
                 + "\n".join(f"  • {c}" for c in invalid_clips)
             )
             return
@@ -1354,7 +1582,9 @@ class TabDavinciEdit(QScrollArea):
             for p in range(n_prises):
                 self._queue.append((clip_idx, p))
 
-        self._queue_pos = 0
+        self._queue_pos   = 0
+        self._mock_count  = 0
+        self._failed_clips = []
 
         # Seed fixé UNE SEULE FOIS pour toute la file si verrou activé
         if self._seed_lock_btn.isChecked():
@@ -1415,13 +1645,22 @@ class TabDavinciEdit(QScrollArea):
             "prompt":       prompt,
             "model":        self._get_model(),
             "duration":     5,
-            "resolution":   self._cb_res.currentText(),
+            "resolution":   (self._cb_res.currentData() or self._cb_res.currentText().split()[0]),
             "aspect_ratio": self._get_aspect_ratio(),
         }
         if has_video:
             params["video_path"] = video_path
         if seed:
             params["seed"] = seed
+
+        ref_images = []
+        if self._global_ref_image and os.path.isfile(self._global_ref_image):
+            ref_images.append(self._global_ref_image)
+        per_ref = self._per_clip_ref_images.get(clip_idx, "")
+        if per_ref and os.path.isfile(per_ref) and per_ref not in ref_images:
+            ref_images.append(per_ref)
+        if ref_images:
+            params["ref_images"] = ref_images
 
         _model_key = self._get_model()
         if _model_key in _SEEDANCE_ENGINES:
@@ -1569,16 +1808,20 @@ class TabDavinciEdit(QScrollArea):
             ir = {"success": False, "local_path": "", "mock": False,
                   "davinci_imported": False, "error": str(exc)}
         if ir.get("mock"):
-            card.set_status(f"P{prise_idx + 1}/{n_pr} ✓ (mock)", C["green"])
+            self._mock_count += 1
+            card.set_status(f"P{prise_idx + 1}/{n_pr} ✓ (simulation)", C["green"])
         elif ir.get("success"):
             local_path = ir.get("local_path", "")
             if ir.get("davinci_imported"):
                 card.set_status(f"P{prise_idx + 1}/{n_pr} ✓ → DaVinci", C["green"])
             else:
                 card.set_status(f"P{prise_idx + 1}/{n_pr} ✓ sauvegardé", C["green"])
+            if local_path:
+                card.setToolTip(f"Fichier : {local_path}")
         else:
             err = ir.get("error", "erreur inconnue")
             card.set_status(f"P{prise_idx + 1}/{n_pr} ✗ {err[:40]}", C["red"])
+            self._failed_clips.append((clip_idx, err))
 
         hist_entry = {
             "mode":       "t2v",
@@ -1599,10 +1842,28 @@ class TabDavinciEdit(QScrollArea):
         self._progress.setValue(int(done / total * 100))
         self._process_next()
 
+    @staticmethod
+    def _humanize_error(error: str) -> str:
+        e = error.lower()
+        is_validation = any(k in e for k in ("'loc'", '"loc"', "[{", "unprocessable", "422"))
+        if is_validation:
+            if any(k in e for k in ("duration", "too short", "minimum", "length", "second")):
+                return "Durée du clip trop courte"
+            return "Clip refusé par Seedance (durée trop courte ?)"
+        if "401" in e or "403" in e or "unauthorized" in e or "forbidden" in e:
+            return "Clé API invalide ou expirée"
+        if "timeout" in e or "timed out" in e:
+            return "Délai d'attente dépassé"
+        if "connection" in e or "connexion" in e:
+            return "Erreur de connexion réseau"
+        return error[:80] if error else "erreur inconnue"
+
     def _on_clip_failed(self, error: str, clip_idx: int, prise_idx: int):
         card = self._clip_cards[clip_idx]
         n_pr = self._spin_prises.value()
-        card.set_status(f"P{prise_idx + 1}/{n_pr} ✗", C["red"])
+        short_err = self._humanize_error(error)
+        card.set_status(f"P{prise_idx + 1}/{n_pr} ✗ {short_err}", C["red"])
+        self._failed_clips.append((clip_idx, error))
         self._queue_pos += 1
         self._lbl_lipsync_stage.setVisible(False)
         self._process_next()
@@ -1647,9 +1908,29 @@ class TabDavinciEdit(QScrollArea):
     def _on_queue_done(self):
         self._btn_generate.setEnabled(True)
         self._btn_cancel.setVisible(False)
-        self._btn_open_folder.setVisible(True)
         self._lbl_lipsync_stage.setVisible(False)
         total = len(self._queue)
         self._lbl_queue_info.setText(f"File terminée — {total} génération(s) complétée(s).")
         self._progress.setValue(100)
         self._lbl_progress.setText("")
+        if self._failed_clips:
+            clip_names = []
+            for ci, err in self._failed_clips:
+                name = self._clips_data[ci].get("name", f"Clip {ci + 1}") if ci < len(self._clips_data) else f"Clip {ci + 1}"
+                clip_names.append(f"  • {name} : {err}")
+            QMessageBox.warning(
+                self,
+                f"{len(self._failed_clips)} génération(s) échouée(s)",
+                f"{len(self._failed_clips)} clip(s) n'ont pas pu être générés :\n\n"
+                + "\n".join(clip_names),
+            )
+        elif self._mock_count > 0:
+            QMessageBox.warning(
+                self,
+                "Simulation — aucun fichier créé",
+                f"{self._mock_count} génération(s) sur {total} étaient des simulations.\n\n"
+                "Aucune vraie vidéo n'a été créée ni sauvegardée.\n\n"
+                "Pour générer de vraies vidéos :\n"
+                "  • Configurez votre clé fal.ai dans Paramètres\n"
+                "  • Rechargez votre compte sur fal.ai/dashboard si nécessaire",
+            )

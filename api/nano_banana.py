@@ -156,7 +156,9 @@ Exigences pour le prompt de sortie :
 - Cadrage tête et épaules pour un portrait, corps entier si le costume ou l'équipement est important
 - NE PAS imposer de type d'éclairage spécifique (pas de Rembrandt, pas de fond studio précis) — l'éclairage est défini par le style visuel du projet
 - Si un style visuel est indiqué à la fin du message, adapte OBLIGATOIREMENT le prompt à ce style
-- Qualité photo de casting professionnel film/TV, ultra-détaillé
+- Qualité photo de casting professionnel film/TV
+
+TERMES INTERDITS (ne jamais écrire) : "photorealistic", "ultra-detailed", "highly detailed", "8K", "4K", "HDR photo", "Unreal Engine", "Octane Render", "rendered". Ces mots poussent le modèle vers un rendu 3D/CGI plastique. Utilise à la place le vocabulaire cinématographique : prise de vue sur caméra de cinéma, optique spécifique, lumière naturelle ou d'ambiance, textures organiques, imperfections naturelles.
 
 Retourne UNIQUEMENT le prompt optimisé en français. Pas d'explication, pas de préfixe, pas de guillemets.\
 """
@@ -218,14 +220,15 @@ L'utilisateur décrit un véhicule (voiture, moto, camion, bateau, aéronef, etc
 Transforme l'entrée en un prompt optimisé pour la génération d'images Nano Banana.
 
 Exigences :
-- Photographie automobile photoréaliste et ultra-détaillée
+- Photographie automobile cinématographique haute qualité
 - Fond uni blanc pur — absolument pas de route, de rue, d'environnement, de décor, de ciel
-- Éclairage studio doux et uniforme, reflets nets
+- Éclairage studio doux et uniforme, reflets nets sur la carrosserie
 - AUCUNE personne, AUCUN conducteur, AUCUN piéton — le véhicule doit apparaître seul
 - Angle 3/4 avant préféré — montrer le véhicule entier, sans rognage
 - Qualité de référence département artistique film/TV professionnel
 - Adapté comme référence visuelle pour la conception de production et Seedance 2.0
 
+TERMES INTERDITS : "photorealistic", "ultra-detailed", "highly detailed", "8K", "Unreal Engine", "Octane Render".
 CRITIQUE : Le véhicule doit être totalement isolé sur fond blanc. Aucun élément de fond.
 
 Retourne UNIQUEMENT le prompt optimisé en français. Pas d'explication, pas de préfixe, pas de guillemets.\
@@ -240,7 +243,7 @@ L'utilisateur décrit un accessoire ou un prop (bijou, arme, pièce de costume, 
 Transforme l'entrée en un prompt optimisé pour la génération d'images Nano Banana.
 
 Exigences :
-- Photographie de produit photoréaliste et ultra-détaillée
+- Photographie de produit cinématographique haute qualité
 - Fond uni blanc pur — absolument pas de scène, d'environnement, de texture, de décor
 - Éclairage studio doux et uniforme, pas d'ombres dures
 - AUCUNE personne, AUCUN modèle, AUCUN corps, AUCUN visage, AUCUNE main — l'objet doit apparaître seul
@@ -248,6 +251,7 @@ Exigences :
 - Qualité de référence prop professionnel film/TV
 - Adapté comme référence visuelle pour la conception de production et Seedance 2.0
 
+TERMES INTERDITS : "photorealistic", "ultra-detailed", "highly detailed", "8K", "Unreal Engine", "Octane Render".
 CRITIQUE : Supprimer tout nom de personnage ou personne de l'entrée. La sortie doit montrer UNIQUEMENT l'objet isolé.
 
 Retourne UNIQUEMENT le prompt optimisé en français. Pas d'explication, pas de préfixe, pas de guillemets.\
@@ -262,7 +266,7 @@ L'utilisateur décrit un costume (Habit), un look de maquillage (Maquillage) ou 
 Transforme l'entrée en un prompt optimisé pour la génération d'images Nano Banana.
 
 Exigences :
-- Photographie de mode/beauté photoréaliste et ultra-détaillée
+- Photographie de mode/beauté cinématographique haute qualité
 - Fond uni blanc pur — pas de scène, pas d'environnement, pas de décor
 - Éclairage éditorial studio professionnel
 - Pour Habit : vêtement complet sur un mannequin sans tête/sans visage ou à plat — AUCUNE personne, AUCUN visage, AUCUN individu reconnaissable, vêtement uniquement
@@ -270,6 +274,7 @@ Exigences :
 - Pour Coiffure : cheveux sur un mannequin perruque sans visage — AUCUNE personne reconnaissable, AUCUN visage, mèche uniquement
 - Adapté comme référence de coiffage de personnage pour la production cinématographique
 
+TERMES INTERDITS : "photorealistic", "ultra-detailed", "highly detailed", "8K", "Unreal Engine".
 CRITIQUE : Supprimer tout nom de personnage ou personne spécifique de l'entrée.
 Montrer uniquement le vêtement, le maquillage ou la coiffure en isolation complète.
 
@@ -285,7 +290,7 @@ L'utilisateur décrit un lieu de tournage ou un décor (intérieur, extérieur, 
 Transforme l'entrée en un prompt optimisé pour la génération d'images Nano Banana.
 
 Exigences :
-- Photographie architecturale ou de paysage photoréaliste et ultra-détaillée
+- Photographie architecturale ou de paysage cinématographique haute qualité
 - Plan large d'établissement cinématographique — montrer l'espace et l'atmosphère complète
 - Qualité de référence de lieu professionnel film/TV
 - Éclairage cinématographique dramatique adapté au décor et à l'heure du jour
@@ -294,6 +299,8 @@ Exigences :
 - Inclure les conditions atmosphériques si pertinent (brouillard, pluie, heure dorée, etc.)
 - AUCUNE personne, AUCUN personnage, AUCUNE silhouette dans le cadre
 - Adapté comme référence de lieu pour la production cinématographique et Seedance 2.0
+
+TERMES INTERDITS : "photorealistic", "ultra-detailed", "highly detailed", "8K", "Unreal Engine", "Octane Render".
 
 Retourne UNIQUEMENT le prompt optimisé en français. Pas d'explication, pas de préfixe, pas de guillemets.\
 """
@@ -480,7 +487,7 @@ _VIEW_DEFS = [
 
 _INDIVIDUAL_PORTRAIT_SUFFIX = (
     "White seamless studio background. Professional film/TV casting photography reference. "
-    "Ultra-detailed photorealistic rendering. No text, no labels, no watermarks, no borders."
+    "No text, no labels, no watermarks, no borders."
 )
 
 # ── Lignes automatiquement ajoutées au prompt envoyé à Nano Banana ────────────
@@ -499,7 +506,7 @@ _VEHICLE_LINE = (
 
 # Suffix décors : image de lieu réaliste, pas de fond blanc
 _DECOR_LINE = (
-    "Photorealistic cinematic location photograph. "
+    "Cinematic location photograph. "
     "Wide establishing shot showing the full environment, architecture, landscape or set. "
     "Rich atmospheric lighting, depth and mood. "
     "No people, no characters, no figures anywhere in the frame. "
@@ -798,26 +805,26 @@ class OptimizeStyleReferenceWorker(OptimizeWithReferencesWorker):
 _CLASSIC_PORTRAIT_SUFFIX = (
     "Single character portrait. White seamless studio background. "
     "Professional film/TV casting photograph. Head-and-shoulders or full-body framing. "
-    "Ultra-detailed photorealistic. No text, no labels, no watermarks."
+    "No text, no labels, no watermarks."
 )
 
 _EDITORIAL_PORTRAIT_SUFFIX = (
     "Close-up editorial portrait. Tight head-and-shoulders framing. "
     "Dramatic Rembrandt studio lighting, deep shadows, warm rim light. "
-    "Film/TV casting photograph quality, ultra-detailed, photorealistic skin texture. "
+    "Film/TV casting photograph quality, natural skin texture and pores. "
     "White seamless background. No text, no labels."
 )
 
 _ACTION_POSE_SUFFIX = (
     "Full-body dynamic action pose. Expressive movement, mid-action. "
     "White seamless studio background, professional film production reference. "
-    "Ultra-detailed photorealistic. No text, no labels."
+    "No text, no labels."
 )
 
 _DUO_PORTRAIT_SUFFIX = (
     "Two characters side by side, full-body front view. "
     "White seamless studio background. Both characters fully visible, equal framing. "
-    "Professional film/TV casting reference. Ultra-detailed photorealistic. "
+    "Professional film/TV casting reference. "
     "No text, no labels."
 )
 

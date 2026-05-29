@@ -13,28 +13,30 @@ Prérequis : ffmpeg disponible dans le PATH.
 
 import os
 import subprocess
+import sys
 import tempfile
 from datetime import datetime
 
 from PyQt6.QtCore import QThread, pyqtSignal
+from core.video_utils import get_ffmpeg_exe
+
+_NO_WINDOW = subprocess.CREATE_NO_WINDOW if sys.platform == "win32" else 0
 
 
 def ffmpeg_available() -> bool:
-    try:
-        r = subprocess.run(
-            ["ffmpeg", "-version"],
-            capture_output=True, timeout=5,
-        )
-        return r.returncode == 0
-    except (FileNotFoundError, subprocess.TimeoutExpired, OSError):
-        return False
+    exe = get_ffmpeg_exe()
+    if exe != "ffmpeg":
+        return os.path.isfile(exe)
+    import shutil
+    return shutil.which("ffmpeg") is not None
 
 
 def _run_ffmpeg(*args, timeout: int = 120) -> bool:
     try:
         r = subprocess.run(
-            ["ffmpeg", "-y", *args],
+            [get_ffmpeg_exe(), "-y", *args],
             capture_output=True, timeout=timeout,
+            creationflags=_NO_WINDOW,
         )
         return r.returncode == 0
     except Exception:

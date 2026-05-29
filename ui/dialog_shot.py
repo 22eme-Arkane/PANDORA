@@ -83,9 +83,9 @@ class ShotDialog(QDialog):
         else:
             self.setWindowTitle("Nouveau plan")
 
-        self.setMinimumSize(640, 560)
-        self.resize(720, 700)
         self.setStyleSheet(PANDORA_STYLESHEET + f"QDialog{{background:{CP['bg1']};}}")
+        from ui.widgets import fit_dialog_to_screen
+        fit_dialog_to_screen(self, 0.50, 0.88, 600, 500)
 
         root = QVBoxLayout(self)
         root.setContentsMargins(0, 0, 0, 0)
@@ -201,6 +201,11 @@ class ShotDialog(QDialog):
         else:
             self._btn_enhance_action.setText("☁")
         self._btn_enhance_action.clicked.connect(self._on_enhance_action)
+        _lbl_enh_act = QLabel("Améliorer le prompt")
+        _lbl_enh_act.setStyleSheet(
+            f"color:{CP['text_dim']};font-size:10px;background:transparent;border:none;"
+        )
+        action_header.addWidget(_lbl_enh_act)
         action_header.addWidget(self._btn_enhance_action)
         col_action.addLayout(action_header)
         self._scene_title = QLineEdit(self._shot.get("scene_title", ""))
@@ -550,6 +555,11 @@ class ShotDialog(QDialog):
         else:
             self._btn_enhance_seedance.setText("☁")
         self._btn_enhance_seedance.clicked.connect(self._on_enhance_seedance)
+        _lbl_enh_sd = QLabel("Améliorer le prompt")
+        _lbl_enh_sd.setStyleSheet(
+            f"color:{CP['text_dim']};font-size:10px;background:transparent;border:none;"
+        )
+        seedance_header.addWidget(_lbl_enh_sd)
         seedance_header.addWidget(self._btn_enhance_seedance)
         lay.addLayout(seedance_header)
         self._seedance_prompt = QTextEdit()

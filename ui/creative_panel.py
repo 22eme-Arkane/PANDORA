@@ -484,6 +484,12 @@ _SDANCE_DEFS = [
         4: "active camera movement, noticeable dynamic motion",
         5: "highly dynamic handheld camera, fast kinetic movement",
     }),
+    ("motion_strength",  "RÉALISATION", "Mouvement",      "Subtil",    "Intense", {
+        1: "minimal movement, near-static scene, very subtle micro-motions only",
+        2: "gentle subtle motion, low scene dynamics, soft gentle movement",
+        4: "strong visual dynamics, active motion, significant scene transformation",
+        5: "maximum motion intensity, extreme visual transformation, full kinetic energy",
+    }),
     ("drama_level",      "RÉALISATION", "Atmosphère",     "Calme",     "Dramatique", {
         1: "calm peaceful atmosphere, minimal drama, serene quiet mood",
         2: "relaxed tone, mild gentle tension",
@@ -519,6 +525,18 @@ _SDANCE_DEFS = [
         2: "simple clean composition, few visual elements",
         4: "rich detailed composition, many visual elements",
         5: "very dense visual composition, richly layered detail",
+    }),
+    ("depth_of_field",   "ESTHÉTIQUE",  "Prof. de champ", "Net",       "Flou", {
+        1: "deep focus, everything sharp, infinite depth of field, all elements crisp",
+        2: "moderate depth of field, slight background softness",
+        4: "shallow depth of field, soft blurred background, subject isolation, cinematic bokeh",
+        5: "extreme shallow depth of field, heavy bokeh, strong background blur, wide-aperture lens",
+    }),
+    ("saturation",       "ESTHÉTIQUE",  "Saturation",     "Désaturé",  "Éclatant", {
+        1: "desaturated palette, muted dull tones, near-monochromatic, low chroma",
+        2: "subdued colors, soft muted tones, slightly desaturated palette",
+        4: "vivid saturated colors, rich chromatic intensity, punchy color grading",
+        5: "hyper-saturated, extremely vivid colors, intense high-chroma palette",
     }),
 ]
 

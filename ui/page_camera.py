@@ -64,7 +64,7 @@ class PageCamera(QWidget):
 
         self._autosave_timer = QTimer()
         self._autosave_timer.setSingleShot(True)
-        self._autosave_timer.setInterval(1500)
+        self._autosave_timer.setInterval(400)
         self._autosave_timer.timeout.connect(self._autosave)
 
         root = QVBoxLayout(self)

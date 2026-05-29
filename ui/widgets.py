@@ -7,6 +7,23 @@ from ui.styles import C, CP
 from ui.icons import claude_icon_pixmap, install_hover_icon
 
 
+def fit_dialog_to_screen(dlg, w_pct: float = 0.75, h_pct: float = 0.85,
+                          min_w: int = 640, min_h: int = 480) -> None:
+    """Resize dialog to fit available screen area and center it."""
+    from PyQt6.QtWidgets import QApplication
+    geo = QApplication.primaryScreen().availableGeometry()
+    avail_w, avail_h = geo.width(), geo.height()
+    pref_w = min(int(avail_w * w_pct), avail_w - 20)
+    pref_h = min(int(avail_h * h_pct), avail_h - 20)
+    safe_min_w = min(min_w, avail_w - 20)
+    safe_min_h = min(min_h, avail_h - 20)
+    dlg.setMinimumSize(safe_min_w, safe_min_h)
+    w = max(pref_w, safe_min_w)
+    h = max(pref_h, safe_min_h)
+    dlg.resize(w, h)
+    dlg.move(geo.x() + (avail_w - w) // 2, geo.y() + (avail_h - h) // 2)
+
+
 def show_api_error(parent, message: str):
     """Affiche une fenêtre d'erreur. Si c'est une erreur de crédit fal.ai, dialog dédié."""
     from core.worker import is_credit_error
@@ -306,8 +323,21 @@ def prompt_block(placeholder: str):
         cloud.setEnabled(auto_cb.isChecked())
     auto_cb.toggled.connect(_sync_cloud_state)
 
+    loading_lbl = QLabel("⟳  optimisation…")
+    loading_lbl.setStyleSheet(
+        f"color:{C['accent']};font-size:9px;font-style:italic;background:transparent;border:none;"
+    )
+    loading_lbl.setVisible(False)
+    cloud._loading = loading_lbl
+
     header.addWidget(counter)
     header.addStretch()
+    _lbl_enh = QLabel("Améliorer le prompt")
+    _lbl_enh.setStyleSheet(
+        f"color:{C['text_dim']};font-size:10px;background:transparent;border:none;"
+    )
+    header.addWidget(_lbl_enh)
+    header.addWidget(loading_lbl)
     header.addWidget(auto_cb)
     header.addWidget(cloud)
 

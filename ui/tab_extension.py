@@ -303,7 +303,7 @@ class TabExtension(QScrollArea):
             width:22px;background:{C['bg3']};border:none;}}
             QSpinBox::up-button:hover,QSpinBox::down-button:hover{{background:{C['border_bright']};}}
         """)
-        self.cb_res = combo(["720p", "480p"])
+        self.cb_res = combo([("1080p  (~$0.60/s)", "1080p"), ("720p  (~$0.30/s)", "720p"), ("480p  (~$0.16/s)", "480p")])
 
         for col_idx, lbl, widget in [
             (0, "Durée à ajouter", self.cb_dur),
@@ -573,7 +573,7 @@ class TabExtension(QScrollArea):
             "creative_suffix": creative_suffix,
             "model":       "seedance-2.0",
             "duration":    self._get_duration(),
-            "resolution":  self.cb_res.currentText(),
+            "resolution":  (self.cb_res.currentData() or self.cb_res.currentText()),
             "audio":       False,
             "ref_images":  [p for p in self._ref_images if p and os.path.isfile(p)],
         }
@@ -655,7 +655,8 @@ class TabExtension(QScrollArea):
             QMessageBox.warning(self, "Prompt vide", "Écris un prompt à améliorer !")
             return
         self._btn_enhance.setEnabled(False)
-        self._btn_enhance.setText("…")
+        if hasattr(self._btn_enhance, "_loading"):
+            self._btn_enhance._loading.setVisible(True)
         self._enhance_worker = EnhanceWorker(prompt)
         self._enhance_worker.finished.connect(self._on_enhance_done)
         self._enhance_worker.failed.connect(self._on_enhance_failed)
@@ -664,11 +665,13 @@ class TabExtension(QScrollArea):
     def _on_enhance_done(self, enhanced: str):
         self.prompt_ta.setPlainText(enhanced)
         self._btn_enhance.setEnabled(True)
-        self._btn_enhance.setText("✦ Améliorer")
+        if hasattr(self._btn_enhance, "_loading"):
+            self._btn_enhance._loading.setVisible(False)
 
     def _on_enhance_failed(self, error: str):
         self._btn_enhance.setEnabled(True)
-        self._btn_enhance.setText("✦ Améliorer")
+        if hasattr(self._btn_enhance, "_loading"):
+            self._btn_enhance._loading.setVisible(False)
         QMessageBox.warning(self, "Amélioration impossible", error)
 
     def _clear_clip(self):

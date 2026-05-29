@@ -5,7 +5,7 @@ from PyQt6.QtWidgets import (
     QPushButton, QMessageBox, QCheckBox, QComboBox, QFrame, QLabel, QDialog, QLineEdit,
     QSlider, QSpinBox,
 )
-from PyQt6.QtCore import Qt, pyqtSignal
+from PyQt6.QtCore import Qt, pyqtSignal, QThread
 from PyQt6.QtGui import QPixmap, QIntValidator
 from ui.styles import C
 from ui.widgets import section_label, combo, toggle_row, prompt_block, ProgressBlock, HelpBlock, show_api_error
@@ -44,6 +44,17 @@ _ENGINE_RES_FORCED   = {
     "kling-v3-pro": "1080p",
     "kling-o3-4k":  "4K",
     "sora-2":       "1080p",
+}
+# Résolutions disponibles par moteur — (label affiché, valeur API), premier = défaut
+_ENGINE_RESOLUTIONS = {
+    "seedance-2.0":      [("1080p  (~$0.60/s)", "1080p"), ("720p  (~$0.30/s)", "720p"), ("480p  (~$0.16/s)", "480p")],
+    "seedance-2.0-fast": [("480p  (~$0.09/s)", "480p"),  ("720p  (~$0.18/s)", "720p")],
+    "kling-v3-pro":      [("1080p", "1080p")],
+    "kling-o3-4k":       [("4K",    "4K")],
+    "veo-3.1":           [("1080p", "1080p")],
+    "sora-2":            [("1080p", "1080p")],
+    "pixverse-v6":       [("1080p  (~$0.115/s)", "1080p"), ("720p  (~$0.075/s)", "720p"), ("480p  (~$0.025/s)", "480p")],
+    "happy-horse-1.0":   [("1080p  (~$0.28/s)", "1080p"),  ("720p  (~$0.14/s)", "720p")],
 }
 # Moteurs disponibles dans le tab DaVinci Edit (workflow testé et validé uniquement)
 _DAVINCI_ENGINES = [e for e in _ENGINES if e[1] in _SEEDANCE_ENGINES]
@@ -348,33 +359,11 @@ class CastingSelector(QWidget):
         self._no_decor_ref_cb.setToolTip("Exclure l'image de décor des références visuelles")
         self._no_decor_ref_cb.setStyleSheet(_cb_ss)
 
-        # Toggle mode référence décor : Ancré (spatial) ↔ Libre (style)
-        self._decor_ref_free: bool = False
-        self._decor_mode_btn = QPushButton("🏛  Ancré")
-        self._decor_mode_btn.setCheckable(True)
-        self._decor_mode_btn.setFixedHeight(22)
-        self._decor_mode_btn.setToolTip(
-            "Ancré (défaut) : Seedance traite le décor comme un espace 3D à traverser — "
-            "conserve l'architecture et les angles du lieu.\n"
-            "Libre : Seedance s'inspire du style visuel du décor mais réinterprète "
-            "librement l'espace — plus de créativité, moins de fidélité spatiale."
-        )
-        self._decor_mode_btn.setStyleSheet(
-            f"QPushButton{{background:transparent;color:{C['text_secondary']};"
-            f"border:1px solid {C['border']};border-radius:5px;font-size:9px;"
-            f"padding:0 7px;}}"
-            f"QPushButton:hover{{background:{C['bg3']};color:{C['text_primary']};}}"
-            f"QPushButton:checked{{background:{C['accent_dim']};color:{C['accent']};"
-            f"border:1px solid {C['accent']};}}"
-        )
-        self._decor_mode_btn.toggled.connect(self._on_decor_mode_toggled)
-
         _decor_hrow = QHBoxLayout()
         _decor_hrow.setContentsMargins(0, 0, 0, 0)
         _decor_hrow.setSpacing(6)
         _decor_hrow.addWidget(self._decor_toggle)
         _decor_hrow.addWidget(self._no_decor_ref_cb)
-        _decor_hrow.addWidget(self._decor_mode_btn)
         _decor_hrow.addStretch()
         lay.addLayout(_decor_hrow)
 
@@ -394,8 +383,19 @@ class CastingSelector(QWidget):
         decor_scroll.setStyleSheet("QScrollArea{background:transparent;border:none;}")
         decor_content_lay = QVBoxLayout(decor_content)
         decor_content_lay.setContentsMargins(0, 0, 0, 0)
-        decor_content_lay.setSpacing(0)
+        decor_content_lay.setSpacing(4)
         decor_content_lay.addWidget(decor_scroll)
+
+        # Checkbox "Mode ancré" — remplace l'ancien bouton isolé
+        self._decor_mode_cb = QCheckBox(
+            "🏛  Mode ancré — Seedance traite le décor comme un espace 3D réel "
+            "(conserve l'architecture et les angles du lieu)"
+        )
+        self._decor_mode_cb.setChecked(True)  # ancré par défaut
+        self._decor_mode_cb.setStyleSheet(_cb_ss)
+        self._decor_mode_cb.toggled.connect(self._on_decor_mode_toggled)
+        decor_content_lay.addWidget(self._decor_mode_cb)
+
         lay.addWidget(decor_content)
 
         # ── Context summary ───────────────────────────────────────────────────
@@ -564,14 +564,10 @@ class CastingSelector(QWidget):
         self._decor_hbox.addStretch()
 
     def _on_decor_mode_toggled(self, checked: bool):
-        self._decor_ref_free = checked
-        if checked:
-            self._decor_mode_btn.setText("🎨  Libre")
-        else:
-            self._decor_mode_btn.setText("🏛  Ancré")
+        pass  # état lu directement via get_decor_ref_free()
 
     def get_decor_ref_free(self) -> bool:
-        return self._decor_ref_free
+        return not self._decor_mode_cb.isChecked()
 
     def _update_items_placeholder(self):
         while self._items_hbox.count():
@@ -757,8 +753,15 @@ class CastingSelector(QWidget):
             self._decor_toggle.setChecked(False)
             return
 
-        char_names  = [n.lower() for n in shot.get("character_names",  [])]
-        veh_names   = [n.lower() for n in shot.get("vehicle_names",    [])]
+        shot_char_names = [n.lower() for n in (shot.get("character_names") or [])]
+        shot_veh_names  = [n.lower() for n in (shot.get("vehicle_names")  or [])]
+
+        def _name_matches(db_name: str, shot_names: list) -> bool:
+            """Correspondance insensible à la casse et aux noms partiels."""
+            c = db_name.lower().strip()
+            if not c:
+                return False
+            return any(c == s or c in s or s in c for s in shot_names)
 
         # Auto-select characters
         self._selected_char_ids.clear()
@@ -768,7 +771,7 @@ class CastingSelector(QWidget):
 
         chars = casting_api.list_characters()
         for char in chars:
-            if char.get("name", "").lower() in char_names:
+            if _name_matches(char.get("name", ""), shot_char_names):
                 cid = char["id"]
                 card = self._char_cards.get(cid)
                 if card:
@@ -781,7 +784,7 @@ class CastingSelector(QWidget):
 
         # Reload items based on selected characters + shot accessories
         self._selected_items.clear()
-        shot_acc_ids = set(shot.get("accessory_ids", []))
+        shot_acc_ids = set(shot.get("accessory_ids") or [])
         self._load_items(shot_acc_ids=shot_acc_ids)
         # Auto-select accessories assigned to the shot
         for aid in shot_acc_ids:
@@ -798,7 +801,7 @@ class CastingSelector(QWidget):
         self._selected_vehicles.clear()
 
         for vid, meta in self._vehicles_meta.items():
-            if meta.get("name", "").lower() in veh_names:
+            if _name_matches(meta.get("name", ""), shot_veh_names):
                 card = self._vehicle_cards.get(vid)
                 if card:
                     card.set_selected(True)
@@ -1214,7 +1217,7 @@ class StoryboardSelector(QWidget):
             self._selected_shot_id = None
             shots_list = sorted(
                 [self._shots_meta.get(sid, {}) for sid in self._selected_shot_ids],
-                key=lambda s: s.get("number", 0),
+                key=lambda s: int(s.get("number") or 0) if s.get("number") is not None else 0,
             )
             self.shot_selected.emit({})
             self.shots_selected.emit(shots_list)
@@ -1256,7 +1259,7 @@ class _DaVinciBar(QWidget):
         lay.setContentsMargins(0, 0, 0, 0)
         lay.setSpacing(8)
 
-        logo = QLabel("DaVinci Resolve")
+        logo = QLabel("DaVinci Resolve Studio")
         logo.setStyleSheet(
             f"color:{C['text_secondary']};font-size:11px;font-weight:700;background:transparent;"
         )
@@ -1435,7 +1438,7 @@ class _ContinuityBar(QFrame):
         i2v_inner.addWidget(frame_icon)
 
         self._i2v_cb = QCheckBox("Continuer depuis la dernière frame du plan précédent (I2V)")
-        self._i2v_cb.setChecked(True)
+        self._i2v_cb.setChecked(False)
         self._i2v_cb.setStyleSheet(
             f"QCheckBox{{color:{C['accent']};font-size:10px;font-weight:600;"
             f"background:transparent;border:none;}}"
@@ -1464,10 +1467,13 @@ class _ContinuityBar(QFrame):
             self._prev_shot = None
             return
 
-        curr_num = current_shot.get("number", 0)
+        def _num(s):
+            try: return int(s.get("number") or 0)
+            except (TypeError, ValueError): return 0
+        curr_num = _num(current_shot)
         prev: dict | None = None
-        for s in sorted(all_shots, key=lambda x: x.get("number", 0)):
-            if s.get("number", 0) < curr_num:
+        for s in sorted(all_shots, key=_num):
+            if _num(s) < curr_num:
                 prev = s
 
         if prev is None:
@@ -1592,109 +1598,32 @@ class _ContinuityBar(QFrame):
 # ── Camera & optics picker (compact, for Seedance tab) ────────────────────────
 
 class _CameraOpticsPicker(QFrame):
-    """Shows camera/optics/mic from Image & Son prefs as read-only info; focal is selectable."""
+    """Compact focal picker for the Studio IA tab. Camera/optics/mic come from Image & Son."""
 
     def __init__(self):
         super().__init__()
         self._focal_from_shot: bool = False
-        self.setStyleSheet(
-            f"QFrame{{background:rgba(255,79,106,0.04);"
-            f"border:1px solid rgba(255,79,106,0.25);border-radius:8px;}}"
-        )
-        lay = QVBoxLayout(self)
-        lay.setContentsMargins(14, 10, 14, 10)
-        lay.setSpacing(6)
+        self.setStyleSheet("QFrame{background:transparent;border:none;}")
+        lay = QHBoxLayout(self)
+        lay.setContentsMargins(0, 2, 0, 2)
+        lay.setSpacing(8)
 
-        # Header
-        hdr = QHBoxLayout()
-        title = QLabel("Caméra · Optiques · Micro")
-        title.setStyleSheet(
-            f"color:{C['red']};font-size:10px;font-weight:700;"
-            f"letter-spacing:0.4px;background:transparent;border:none;"
-        )
-        hdr.addWidget(title)
-        hdr.addStretch()
-        info_hint = QLabel("Réglages dans Image & Son")
-        info_hint.setStyleSheet(
-            f"color:{C['text_dim']};font-size:9px;font-family:'Consolas',monospace;"
-            f"background:transparent;border:none;"
-        )
-        hdr.addWidget(info_hint)
-        lay.addLayout(hdr)
-
-        # Read-only red info labels + focal picker — all on one row
-        info_row = QHBoxLayout()
-        info_row.setSpacing(14)
-        self._cam_lbl = QLabel("—")
-        self._opt_lbl = QLabel("—")
-        self._mic_lbl = QLabel("—")
-        self._flt_lbl = QLabel("")
-        _info_ss = (
-            f"color:{C['red']};font-size:10px;font-family:'Consolas',monospace;"
-            f"background:transparent;border:none;font-weight:600;"
-        )
-        self._cam_lbl.setStyleSheet(_info_ss)
-        self._opt_lbl.setStyleSheet(_info_ss)
-        self._mic_lbl.setStyleSheet(_info_ss)
-        self._flt_lbl.setStyleSheet(_info_ss)
-        self._flt_lbl.setVisible(False)
-        info_row.addWidget(self._cam_lbl)
-        info_row.addWidget(self._opt_lbl)
-        info_row.addWidget(self._mic_lbl)
-        info_row.addWidget(self._flt_lbl)
-
-        _sep = QFrame()
-        _sep.setFixedSize(1, 16)
-        _sep.setStyleSheet(f"background:{C['border_bright']};")
-        info_row.addWidget(_sep, 0, Qt.AlignmentFlag.AlignVCenter)
-
-        self._focal_lbl = QLabel("Focale :")
-        self._focal_lbl.setStyleSheet(
-            f"color:{C['text_dim']};font-size:10px;background:transparent;border:none;"
-        )
+        # Focal is defined in the storyboard — no override in Studio IA
         from core.storyboard import FOCALS
-        self._cb_focal = combo(["— Focale —"] + FOCALS)
-        self._cb_focal.setFixedWidth(110)
-        self._cb_focal.currentIndexChanged.connect(self._on_focal_changed)
-        info_row.addWidget(self._focal_lbl)
-        info_row.addWidget(self._cb_focal)
-        info_row.addStretch()
-        lay.addLayout(info_row)
-
-        self._load_prefs()
-
-    def _load_prefs(self):
-        prefs = cam_prefs.get_camera_prefs()
-        cam = " ".join(filter(None, [
-            prefs.get("camera_brand", ""),
-            prefs.get("camera_body", ""),
-        ])) or "—"
-        opt = " ".join(filter(None, [
-            prefs.get("optics_brand", ""),
-            prefs.get("optics_series", ""),
-        ])) or "—"
-        mic = " ".join(filter(None, [
-            prefs.get("mic_category", ""),
-            prefs.get("mic_model", ""),
-        ])) or "—"
-        filters = prefs.get("filters", [])
-        self._cam_lbl.setText(f"◎ {cam}")
-        self._opt_lbl.setText(f"◎ {opt}")
-        self._mic_lbl.setText(f"◎ {mic}")
-        if filters:
-            self._flt_lbl.setText("◎ " + " · ".join(filters))
-            self._flt_lbl.setVisible(True)
-        else:
-            self._flt_lbl.setVisible(False)
+        self._cb_focal = combo(["— Aucune —"] + FOCALS)
+        self._cb_focal.setVisible(False)
+        self._focal_lbl = QLabel("Focale :")
+        self._focal_lbl.setVisible(False)
+        lay.addStretch()
 
     def _on_focal_changed(self):
         self._focal_from_shot = False
         self._update_focal_style()
 
     def _update_focal_style(self):
-        color = C['red'] if self._focal_from_shot else C['text_dim']
+        color = C['accent'] if self._focal_from_shot else C['text_secondary']
         self._focal_lbl.setStyleSheet(
-            f"color:{color};font-size:10px;background:transparent;border:none;"
+            f"color:{color};font-size:11px;font-weight:600;background:transparent;border:none;"
         )
 
     def set_focal_from_shot(self, focal: str):
@@ -1715,16 +1644,12 @@ class _CameraOpticsPicker(QFrame):
         self._update_focal_style()
 
     def get_suffix(self) -> str:
-        """Returns the English suffix (camera + optics + filters + focal) to append to the Seedance prompt."""
-        prefs  = cam_prefs.get_camera_prefs()
-        focal  = self._cb_focal.currentText()
-        suffix = build_camera_prompt_suffix(prefs)
-        if focal and not focal.startswith("—"):
-            suffix = (suffix + ", " if suffix else "") + f"{focal} lens"
-        return suffix
+        """Returns the English suffix (camera + optics + filters) to append to the Seedance prompt."""
+        prefs = cam_prefs.get_camera_prefs()
+        return build_camera_prompt_suffix(prefs)
 
     def refresh(self):
-        self._load_prefs()
+        pass  # camera/optics/mic come from Image & Son; no labels to refresh here
 
 
 # ── Seed widget ───────────────────────────────────────────────────────────────
@@ -1923,6 +1848,12 @@ _CREATIVE_DEFS = [
         4: "active camera movement, noticeable dynamic motion",
         5: "highly dynamic handheld camera, fast kinetic movement",
     }),
+    ("motion_strength", "RÉALISATION", "Mouvement", "Subtil", "Intense", {
+        1: "minimal movement, near-static scene, very subtle micro-motions only",
+        2: "gentle subtle motion, low scene dynamics, soft gentle movement",
+        4: "strong visual dynamics, active motion, significant scene transformation",
+        5: "maximum motion intensity, extreme visual transformation, full kinetic energy",
+    }),
     ("drama_level", "RÉALISATION", "Atmosphère", "Calme", "Dramatique", {
         1: "calm peaceful atmosphere, minimal drama, serene quiet mood",
         2: "relaxed tone, mild gentle tension",
@@ -1970,6 +1901,18 @@ _CREATIVE_DEFS = [
         2: "simple clean composition, few visual elements",
         4: "rich detailed composition, many visual elements",
         5: "very dense visual composition, richly layered detail",
+    }),
+    ("depth_of_field", "ESTHÉTIQUE", "Prof. de champ", "Net", "Flou", {
+        1: "deep focus, everything sharp, infinite depth of field, all elements crisp",
+        2: "moderate depth of field, slight background softness",
+        4: "shallow depth of field, soft blurred background, subject isolation, cinematic bokeh",
+        5: "extreme shallow depth of field, heavy bokeh, strong background blur, wide-aperture lens",
+    }),
+    ("saturation", "ESTHÉTIQUE", "Saturation", "Désaturé", "Éclatant", {
+        1: "desaturated palette, muted dull tones, near-monochromatic, low chroma",
+        2: "subdued colors, soft muted tones, slightly desaturated palette",
+        4: "vivid saturated colors, rich chromatic intensity, punchy color grading",
+        5: "hyper-saturated, extremely vivid colors, intense high-chroma palette",
     }),
 ]
 
@@ -2189,6 +2132,24 @@ class _CreativeControlPanel(QFrame):
         return _SAFETY_MAP[self._safety_slider.value()] if self._safety_slider else 6
 
 
+# ── Prompt preview — translate worker ─────────────────────────────────────────
+
+class _PreviewTranslateWorker(QThread):
+    done = pyqtSignal(str)
+
+    def __init__(self, text: str):
+        super().__init__()
+        self._text = text
+
+    def run(self):
+        try:
+            from core.lang import translate_to_english
+            result = translate_to_english(self._text)
+            self.done.emit(result or self._text)
+        except Exception:
+            self.done.emit(self._text)
+
+
 # ── Tab T2V ───────────────────────────────────────────────────────────────────
 
 class TabT2V(QScrollArea):
@@ -2225,74 +2186,49 @@ class TabT2V(QScrollArea):
             "▸ Mode mock : sans clé fal.ai configurée, la génération est simulée localement (aucun crédit consommé).",
         ], C))
 
-        # ── Film style selector ───────────────────────────────────────────────
+        # ── Référence visuelle (template de style) ────────────────────────────
         self._film_style_frame = QFrame()
         self._film_style_frame.setStyleSheet(
             f"QFrame{{background:rgba(124,107,255,0.08);"
             f"border:1px solid {C['accent_dim']};border-radius:8px;}}"
         )
-        _fs_outer = QHBoxLayout(self._film_style_frame)
+        _fs_outer = QVBoxLayout(self._film_style_frame)
         _fs_outer.setContentsMargins(14, 12, 14, 12)
-        _fs_outer.setSpacing(12)
+        _fs_outer.setSpacing(8)
+        _fs_outer.setAlignment(Qt.AlignmentFlag.AlignHCenter)
 
-        # ── Colonne gauche : titre + combo + bouton template ─────────────
-        _fs_left = QVBoxLayout()
-        _fs_left.setContentsMargins(0, 0, 0, 0)
-        _fs_left.setSpacing(6)
-
-        _fs_lbl = QLabel("Style de film")
+        _fs_lbl = QLabel("Choisir une référence visuelle")
+        _fs_lbl.setAlignment(Qt.AlignmentFlag.AlignHCenter)
         _fs_lbl.setStyleSheet(
             f"color:{C['accent']};font-size:11px;font-weight:700;"
             f"background:transparent;border:none;"
         )
-        _fs_left.addWidget(_fs_lbl)
+        _fs_outer.addWidget(_fs_lbl)
 
-        import core.style as _style_mod
-        from PyQt6.QtGui import QColor as _QColor
-        self._film_style_combo = QComboBox()
-        self._film_style_combo.addItem("— Non défini —", "")
-        _cur_grp_t2v = None
-        for _s in _style_mod.STYLES:
-            _g = _s.get("group", "")
-            if _g != _cur_grp_t2v:
-                _cur_grp_t2v = _g
-                _gi = next((g for g in _style_mod.GROUPS if g["key"] == _g), None)
-                if _gi:
-                    self._film_style_combo.addItem(
-                        f"  {_gi['icon']}  {_gi['name'].upper()}", "__sep__"
-                    )
-                    _sep_item = self._film_style_combo.model().item(
-                        self._film_style_combo.count() - 1
-                    )
-                    _sep_item.setEnabled(False)
-                    _sep_item.setForeground(_QColor(C.get("accent", "#7c6bff")))
-            self._film_style_combo.addItem(f"    {_s['icon']}  {_s['name']}", _s["key"])
-        self._film_style_combo.setFixedHeight(30)
-        self._film_style_combo.setStyleSheet(
-            f"QComboBox{{background:rgba(124,107,255,0.12);border:1px solid {C['accent_dim']};"
-            f"border-radius:5px;color:{C['accent']};font-size:11px;font-weight:700;padding:0 8px;}}"
-            f"QComboBox:focus{{border-color:{C['accent']};}}"
-            f"QComboBox::drop-down{{border:none;width:18px;}}"
-            f"QComboBox QAbstractItemView{{background:{C['bg2']};border:1px solid {C['border_bright']};"
-            f"color:{C['text_primary']};selection-background-color:{C['accent_dim']};"
-            f"font-size:11px;padding:4px;}}"
+        # Rectangle fixe — toujours visible, jamais redimensionné
+        self._style_ref_path: str = ""
+        _preview_frame = QFrame()
+        _preview_frame.setFixedSize(160, 140)
+        _preview_frame.setStyleSheet(
+            f"QFrame{{background:{C['bg2']};border:1px solid {C['border_bright']};"
+            f"border-radius:8px;}}"
         )
-        self._film_style_combo.currentIndexChanged.connect(self._on_film_style_changed)
-        _fs_left.addWidget(self._film_style_combo)
+        _pf_lay = QVBoxLayout(_preview_frame)
+        _pf_lay.setContentsMargins(4, 4, 4, 4)
+        _pf_lay.setSpacing(0)
 
-        # Label override — visible quand une image de référence est active
-        self._style_ref_override_lbl = QLabel("selon image de référence")
-        self._style_ref_override_lbl.setFixedHeight(30)
-        self._style_ref_override_lbl.setAlignment(Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft)
-        self._style_ref_override_lbl.setStyleSheet(
-            f"color:{C['accent']};font-size:10px;font-weight:700;font-style:italic;"
-            f"background:rgba(78,205,196,0.09);border:1px solid rgba(78,205,196,0.32);"
-            f"border-radius:5px;padding:0 8px;"
-        )
-        self._style_ref_override_lbl.setVisible(False)
-        _fs_left.addWidget(self._style_ref_override_lbl)
+        self._style_ref_thumb = QLabel()
+        self._style_ref_thumb.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self._style_ref_thumb.setStyleSheet("background:transparent;border:none;")
+        _pf_lay.addWidget(self._style_ref_thumb, 1)
 
-        # Bouton galerie — sous le combo
+        _rect_row = QHBoxLayout()
+        _rect_row.addStretch()
+        _rect_row.addWidget(_preview_frame)
+        _rect_row.addStretch()
+        _fs_outer.addLayout(_rect_row)
+
+        # Bouton "Template de style" — toujours visible
         self._btn_style_gallery = QPushButton("🖼  Template de style")
         self._btn_style_gallery.setFixedHeight(28)
         self._btn_style_gallery.setCursor(Qt.CursorShape.PointingHandCursor)
@@ -2305,40 +2241,17 @@ class TabT2V(QScrollArea):
             f"QPushButton:pressed{{background:rgba(124,107,255,0.28);}}"
         )
         self._btn_style_gallery.clicked.connect(self._on_style_gallery)
-        _t2v_style_btn_row = QHBoxLayout()
-        _t2v_style_btn_row.setContentsMargins(0, 0, 268, 0)
-        _t2v_style_btn_row.addStretch()
-        _t2v_style_btn_row.addWidget(self._btn_style_gallery)
-        _t2v_style_btn_row.addStretch()
-        _fs_left.addLayout(_t2v_style_btn_row)
-        _fs_left.addStretch()
+        _btn_row = QHBoxLayout()
+        _btn_row.addStretch()
+        _btn_row.addWidget(self._btn_style_gallery)
+        _btn_row.addStretch()
+        _fs_outer.addLayout(_btn_row)
 
-        _fs_outer.addLayout(_fs_left, 1)
-
-        # ── Colonne droite : preview image (rectangle séparé) ────────────
-        self._style_ref_path: str = ""
-        self._style_ref_preview_frame = QFrame()
-        self._style_ref_preview_frame.setVisible(False)
-        self._style_ref_preview_frame.setFixedWidth(170)
-        self._style_ref_preview_frame.setStyleSheet(
-            f"QFrame{{background:{C['bg2']};border:1px solid {C['border_bright']};"
-            f"border-radius:8px;}}"
-        )
-        _pf_lay = QVBoxLayout(self._style_ref_preview_frame)
-        _pf_lay.setContentsMargins(8, 8, 8, 8)
-        _pf_lay.setSpacing(6)
-
-        self._style_ref_thumb = QLabel()
-        self._style_ref_thumb.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self._style_ref_thumb.setMinimumHeight(90)
-        self._style_ref_thumb.setStyleSheet(
-            f"background:{C['bg3']};border-radius:6px;border:none;"
-        )
-        _pf_lay.addWidget(self._style_ref_thumb, 1)
-
+        # Bouton "Retirer" — visible seulement quand un template est sélectionné
         self._style_ref_clear_btn = QPushButton("× Retirer")
         self._style_ref_clear_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         self._style_ref_clear_btn.setFixedHeight(24)
+        self._style_ref_clear_btn.setVisible(False)
         self._style_ref_clear_btn.setStyleSheet(
             f"QPushButton{{background:transparent;color:{C['text_dim']};"
             f"border:1px solid {C['border']};border-radius:4px;"
@@ -2347,9 +2260,12 @@ class TabT2V(QScrollArea):
             f"QPushButton:pressed{{color:rgba(230,80,80,0.7);}}"
         )
         self._style_ref_clear_btn.clicked.connect(self._on_style_ref_clear)
-        _pf_lay.addWidget(self._style_ref_clear_btn)
+        _clear_row = QHBoxLayout()
+        _clear_row.addStretch()
+        _clear_row.addWidget(self._style_ref_clear_btn)
+        _clear_row.addStretch()
+        _fs_outer.addLayout(_clear_row)
 
-        _fs_outer.addWidget(self._style_ref_preview_frame)
         lay.addWidget(self._film_style_frame)
 
         # ── Storyboard selector ───────────────────────────────────────────────
@@ -2425,10 +2341,8 @@ class TabT2V(QScrollArea):
         )
         self._seed_lock_btn.toggled.connect(self._on_seed_toggle)
         _t2v_adn_row = QHBoxLayout()
-        _t2v_adn_row.setContentsMargins(0, 0, 268, 0)
-        _t2v_adn_row.addStretch()
+        _t2v_adn_row.setAlignment(Qt.AlignmentFlag.AlignHCenter)
         _t2v_adn_row.addWidget(self._seed_lock_btn)
-        _t2v_adn_row.addStretch()
         lay.addLayout(_t2v_adn_row)
 
         # ── Panel multi-sélection (visible uniquement lors d'une sélection multiple) ──
@@ -2517,16 +2431,6 @@ class TabT2V(QScrollArea):
         self._camera_picker._cb_focal.currentIndexChanged.connect(self._update_injection_banner)
         _ez_lay.addWidget(self._camera_picker)
 
-        # ── Caméra dynamique (sans storyboard uniquement) ─────────────────────
-        self._dyn_cam_toggle_row = toggle_row(
-            "Caméra dynamique",
-            "Changement d'angle toutes les 2 secondes",
-            False,
-        )
-        self._dyn_cam_cb = self._dyn_cam_toggle_row.findChild(QCheckBox)
-        self._dyn_cam_toggle_row.setVisible(True)  # caché quand shot actif
-        _ez_lay.addWidget(self._dyn_cam_toggle_row)
-
         # ── Prompt ────────────────────────────────────────────────────────────
         _ez_lay.addWidget(section_label("Prompt"))
 
@@ -2549,38 +2453,11 @@ class TabT2V(QScrollArea):
         self._ref_mode_banner.setVisible(False)
         _ez_lay.addWidget(self._ref_mode_banner)
 
-        # ── Injection banner (affiché au-dessus du prompt quand le contexte est actif) ──
-        self._injection_banner = QFrame()
-        self._injection_banner.setStyleSheet(
-            "QFrame{background:rgba(255,79,106,0.07);"
-            "border:1px solid rgba(255,79,106,0.30);border-radius:6px;}"
-        )
-        _ib_lay = QVBoxLayout(self._injection_banner)
-        _ib_lay.setContentsMargins(10, 8, 10, 8)
-        _ib_lay.setSpacing(4)
-        _ib_header = QLabel("⚙  CONTEXTE INJECTÉ (envoyé à Seedance, non visible dans le prompt ci-dessous)")
-        _ib_header.setStyleSheet(
-            f"color:{C['red']};font-size:9px;font-weight:bold;"
-            f"font-family:'Consolas',monospace;background:transparent;border:none;"
-        )
-        _ib_lay.addWidget(_ib_header)
-        self._injection_lbl = QLabel("")
-        self._injection_lbl.setWordWrap(True)
-        self._injection_lbl.setTextInteractionFlags(
-            Qt.TextInteractionFlag.TextSelectableByMouse
-        )
-        self._injection_lbl.setStyleSheet(
-            f"color:{C['red']};font-size:10px;font-family:'Consolas',monospace;"
-            f"background:transparent;border:none;"
-        )
-        _ib_lay.addWidget(self._injection_lbl)
-        self._injection_banner.setVisible(False)
-        _ez_lay.addWidget(self._injection_banner)
-
         prompt_frame, self.prompt_ta, self._btn_enhance, self._enhance_auto_cb = prompt_block(
             "Décris ta scène... ex: plan cinématique d'une forêt brumeuse au lever du soleil"
         )
         self._btn_enhance.clicked.connect(self._on_enhance)
+        self.prompt_ta.textChanged.connect(self._on_prompt_text_changed)
         _ez_lay.addWidget(prompt_frame)
 
         # ── Thumbnail strip ───────────────────────────────────────────────────
@@ -2588,24 +2465,108 @@ class TabT2V(QScrollArea):
         self._thumb_strip.setVisible(False)
         _ez_lay.addWidget(self._thumb_strip)
 
-        self._audio_toggle_row = toggle_row(
+        # ── Prompt preview (prompt exact envoyé à Seedance) ───────────────────
+        self._prompt_preview = self._build_prompt_preview()
+        _ez_lay.addWidget(self._prompt_preview)
+
+        # ── Raccords automatique ──────────────────────────────────────────────
+        _raccords_container = QFrame()
+        _raccords_container.setStyleSheet(
+            f"QFrame#raccords_container{{background:{C['bg2']};border:1px solid {C['border']};"
+            f"border-radius:8px;padding:0px;}}"
+        )
+        _raccords_container.setObjectName("raccords_container")
+        _raccords_lay = QVBoxLayout(_raccords_container)
+        _raccords_lay.setContentsMargins(0, 0, 0, 0)
+        _raccords_lay.setSpacing(1)
+
+        _raccords_header = QWidget()
+        _raccords_header.setStyleSheet("background:transparent;border:none;")
+        _raccords_header_lay = QHBoxLayout(_raccords_header)
+        _raccords_header_lay.setContentsMargins(14, 8, 14, 6)
+        _raccords_title = QLabel("Raccords automatique")
+        _raccords_title.setStyleSheet(
+            f"color:{C['accent']};font-size:9px;letter-spacing:2px;"
+            f"font-family:'Consolas',monospace;font-weight:700;"
+            f"background:transparent;border:none;"
+        )
+        _raccords_title.setText(_raccords_title.text().upper())
+        _raccords_header_lay.addWidget(_raccords_title)
+        _raccords_header_lay.addStretch()
+        _raccords_lay.addWidget(_raccords_header)
+
+        def _raccord_toggle(title, subtitle, checked):
+            w = QFrame()
+            w.setStyleSheet(
+                f"QFrame{{background:transparent;border:none;border-top:1px solid {C['border']};"
+                f"border-radius:0px;padding:4px;}}"
+                f"QCheckBox{{color:{C['text_secondary']};background:transparent;border:none;}}"
+                f"QCheckBox::indicator{{width:16px;height:16px;"
+                f"border:1px solid {C['border_bright']};border-radius:4px;background:{C['bg3']};}}"
+                f"QCheckBox::indicator:checked{{background:{C['accent']};border-color:{C['accent']};}}"
+                f"QCheckBox::indicator:unchecked:hover{{border-color:{C['accent_dim']};}}"
+            )
+            lay = QHBoxLayout(w)
+            lay.setContentsMargins(14, 8, 14, 8)
+            col = QVBoxLayout()
+            col.setSpacing(2)
+            t = QLabel(title)
+            t.setStyleSheet(f"color:{C['text_secondary']};font-size:12px;font-weight:600;border:none;")
+            col.addWidget(t)
+            if subtitle:
+                s = QLabel(subtitle)
+                s.setStyleSheet(
+                    f"color:{C['text_dim']};font-size:10px;font-family:'Consolas',monospace;border:none;"
+                )
+                col.addWidget(s)
+            cb = QCheckBox()
+            cb.setChecked(checked)
+            lay.addLayout(col)
+            lay.addStretch()
+            lay.addWidget(cb)
+            return w, cb
+
+        self._audio_toggle_row, _audio_cb_inner = _raccord_toggle(
             "Audio natif", "Seedance génère le son ambiant et les effets sonores du clip", True
         )
-        self._audio_cb = self._audio_toggle_row.findChild(QCheckBox)
-        _ez_lay.addWidget(self._audio_toggle_row)
+        self._audio_cb = _audio_cb_inner
+        _raccords_lay.addWidget(self._audio_toggle_row)
 
-        self._music_toggle_row = toggle_row(
+        self._music_toggle_row, _music_cb_inner = _raccord_toggle(
             "Musique générée", "Coché → piste musicale présente · Décoché → « no background music » injecté", False
         )
-        self._music_cb = self._music_toggle_row.findChild(QCheckBox)
+        self._music_cb = _music_cb_inner
         self._music_cb.stateChanged.connect(self._update_injection_banner)
-        _ez_lay.addWidget(self._music_toggle_row)
+        self._music_cb.stateChanged.connect(self._refresh_prompt_preview)
+        _raccords_lay.addWidget(self._music_toggle_row)
 
-        self._subtitle_toggle_row = toggle_row(
+        self._subtitle_toggle_row, _subtitle_cb_inner = _raccord_toggle(
             "Sous-titres", "Coché → sous-titres incrustés · Décoché → « no subtitles » injecté", False
         )
-        self._subtitle_cb = self._subtitle_toggle_row.findChild(QCheckBox)
-        _ez_lay.addWidget(self._subtitle_toggle_row)
+        self._subtitle_cb = _subtitle_cb_inner
+        self._subtitle_cb.stateChanged.connect(self._refresh_prompt_preview)
+        _raccords_lay.addWidget(self._subtitle_toggle_row)
+
+        self._film_anchor_toggle_row, _film_anchor_cb_inner = _raccord_toggle(
+            "Prise de vue réelle",
+            "Ancre le rendu dans le filmage réel — ARRI 35mm, grain argentique, peau naturelle, no CGI, no 3D  ·  Automatiquement ignoré si le style 'Film réaliste' ou 'Photoréaliste' est actif (déjà inclus)",
+            False,
+        )
+        self._film_anchor_cb = _film_anchor_cb_inner
+        self._film_anchor_cb.stateChanged.connect(self._refresh_prompt_preview)
+        _raccords_lay.addWidget(self._film_anchor_toggle_row)
+
+        _ez_lay.addWidget(_raccords_container)
+
+        self._dyn_cam_toggle_row = toggle_row(
+            "Caméra dynamique",
+            "Changement d'angle toutes les 2 secondes",
+            False,
+        )
+        self._dyn_cam_cb = self._dyn_cam_toggle_row.findChild(QCheckBox)
+        self._dyn_cam_cb.stateChanged.connect(self._refresh_prompt_preview)
+        self._dyn_cam_toggle_row.setVisible(True)  # caché quand shot actif
+        _ez_lay.addWidget(self._dyn_cam_toggle_row)
 
         lay.addWidget(self._edit_zone)
 
@@ -2619,7 +2580,10 @@ class TabT2V(QScrollArea):
         self.cb_model = combo(_DAVINCI_ENGINES)
         self.cb_model.currentIndexChanged.connect(self._on_engine_changed)
         self.cb_ratio = combo(["16:9 — Paysage", "9:16 — Portrait", "4:3", "3:4"])
-        self.cb_res   = combo(["1080p", "720p", "480p"])
+        # Résolutions initiales pour Seedance 2.0 (moteur par défaut)
+        _default_key = self.cb_model.currentData() or "seedance-2.0"
+        _default_res = _ENGINE_RESOLUTIONS.get(_default_key, ["1080p", "720p", "480p"])
+        self.cb_res = combo(_default_res)
 
         for (row, col), lbl, widget in [
             ((0, 0), "Moteur de génération", self.cb_model),
@@ -2726,10 +2690,26 @@ class TabT2V(QScrollArea):
         balance_row.addWidget(self._balance_lbl)
         lay.addLayout(balance_row)
 
-        lay.addWidget(self._davinci_bar)
+        # ── Ouvrir le dossier des vidéos (toujours visible) ──────────────────
+        self._btn_open_folder = QPushButton("📁  Ouvrir le dossier des vidéos")
+        self._btn_open_folder.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._btn_open_folder.setStyleSheet(f"""
+            QPushButton{{background:transparent;color:{C['text_secondary']};
+            border:1px solid {C['border']};border-radius:8px;font-size:11px;
+            padding:6px 14px;}}
+            QPushButton:hover{{background:{C['bg3']};color:{C['text_primary']};}}
+        """)
+        self._btn_open_folder.clicked.connect(self._open_output_folder)
+
+        _dav_row = QHBoxLayout()
+        _dav_row.setContentsMargins(0, 0, 0, 0)
+        _dav_row.setSpacing(10)
+        _dav_row.addWidget(self._davinci_bar, 1)
+        _dav_row.addWidget(self._btn_open_folder)
+        lay.addLayout(_dav_row)
         self._davinci_bar.connection_changed.connect(self._on_davinci_connection_changed)
 
-        # ── Encart prix (sous le bouton Générer) ──────────────────────────────
+        # ── Encart prix (sous la barre DaVinci) ───────────────────────────────
         price_frame = QFrame()
         price_frame.setStyleSheet(
             f"QFrame{{background:rgba(245,197,24,0.05);"
@@ -2769,6 +2749,13 @@ class TabT2V(QScrollArea):
     # ── Storyboard + context handlers ─────────────────────────────────────────
 
     def _on_shot_selected(self, shot: dict):
+        try:
+            self._on_shot_selected_impl(shot)
+        except Exception as exc:
+            import traceback
+            print(f"[T2V] _on_shot_selected error: {exc}\n{traceback.format_exc()}", flush=True)
+
+    def _on_shot_selected_impl(self, shot: dict):
         # Reset multi-select UI
         self._multi_panel.setVisible(False)
         if hasattr(self, "_multi_seed_lbl"):
@@ -2786,6 +2773,7 @@ class TabT2V(QScrollArea):
         if not shot:
             self._active_shot_title = ""
             self._active_shot = None
+            self._active_shot_apercus = []
             self._camera_picker.set_focal_from_shot("")
             self._casting.set_active_shot({})
             self._continuity_bar.update_shot({}, [])
@@ -2798,6 +2786,7 @@ class TabT2V(QScrollArea):
             if hasattr(self, "_dyn_cam_toggle_row"):
                 self._dyn_cam_toggle_row.setVisible(True)
             self._update_injection_banner()
+            self._refresh_prompt_preview()
             return
 
         # Hide dynamic camera option when a storyboard shot is active
@@ -2854,6 +2843,12 @@ class TabT2V(QScrollArea):
         # Auto-set focal from shot before set_active_shot so the banner is consistent
         self._camera_picker.set_focal_from_shot(shot.get("focal", ""))
 
+        # Load aperçu/mood images for thumbnail strip
+        _apercu_data = sb_api.load_apercus(shot.get("id", ""))
+        self._active_shot_apercus = [
+            p for p in _apercu_data.get("paths", []) if os.path.isfile(p)
+        ]
+
         # Auto-select entities from shot
         self._casting.set_active_shot(shot)
 
@@ -2884,6 +2879,7 @@ class TabT2V(QScrollArea):
             parts.append(shot["comments"])
         self.prompt_ta.setPlainText("\n".join(parts))
         self._update_injection_banner()
+        self._refresh_prompt_preview()
 
     def _on_shots_selected(self, shots: list):
         count = len(shots)
@@ -2917,141 +2913,387 @@ class TabT2V(QScrollArea):
             self.btn_generate.setText("▶▶  Lancer la file d'attente")
 
     def _on_context_changed(self, _ctx: str):
-        images = self._casting.get_selected_images()
-        self._thumb_strip.update_images(images)
+        casting_images = self._casting.get_selected_images()
+        self._thumb_strip.update_images(casting_images)
         self._update_injection_banner()
+        self._refresh_prompt_preview()
+
+    # ── Prompt preview ────────────────────────────────────────────────────────
+
+    def _build_prompt_preview(self) -> QFrame:
+        from PyQt6.QtCore import QTimer as _QTimer
+        self._preview_translate_timer = _QTimer(self)
+        self._preview_translate_timer.setSingleShot(True)
+        self._preview_translate_timer.setInterval(1600)
+        self._preview_translate_timer.timeout.connect(self._start_preview_translate)
+        self._preview_translate_worker = None
+        self._preview_translated_text: str | None = None
+        self._preview_expanded = False  # collapsed by default
+
+        frame = QFrame()
+        frame.setStyleSheet(
+            f"QFrame{{background:{C['bg2']};border:1px solid rgba(255,79,106,0.45);"
+            f"border-radius:10px;}}"
+        )
+        lay = QVBoxLayout(frame)
+        lay.setContentsMargins(14, 0, 14, 0)
+        lay.setSpacing(0)
+
+        # ── Header cliquable ──────────────────────────────────────────────────
+        hdr_w = QWidget()
+        hdr_w.setCursor(Qt.CursorShape.PointingHandCursor)
+        hdr_w.setStyleSheet("background:transparent;")
+        hdr_lay = QHBoxLayout(hdr_w)
+        hdr_lay.setContentsMargins(0, 9, 0, 9)
+        hdr_lay.setSpacing(6)
+
+        self._preview_arrow = QLabel("▶")
+        self._preview_arrow.setStyleSheet(
+            f"color:{C['red']};font-size:9px;background:transparent;border:none;"
+        )
+        _h_lbl = QLabel("◈  PANDORA — Prompt envoyé à Seedance")
+        _h_lbl.setStyleSheet(
+            f"color:{C['red']};font-size:10px;font-weight:700;"
+            f"background:transparent;border:none;"
+        )
+        self._preview_spinner = QLabel()
+        self._preview_spinner.setStyleSheet(
+            f"color:{C['text_dim']};font-size:9px;font-style:italic;"
+            f"background:transparent;border:none;"
+        )
+        self._preview_spinner.setVisible(False)
+        _note = QLabel("traduit auto · sans upload images")
+        _note.setStyleSheet(
+            f"color:{C['text_dim']};font-size:9px;background:transparent;border:none;"
+        )
+        hdr_lay.addWidget(self._preview_arrow)
+        hdr_lay.addWidget(_h_lbl)
+        hdr_lay.addStretch()
+        hdr_lay.addWidget(self._preview_spinner)
+        hdr_lay.addWidget(_note)
+        lay.addWidget(hdr_w)
+
+        # ── Corps (masqué par défaut) ─────────────────────────────────────────
+        self._preview_body_container = QWidget()
+        self._preview_body_container.setStyleSheet("background:transparent;")
+        self._preview_body_container.setVisible(False)
+        body_lay = QVBoxLayout(self._preview_body_container)
+        body_lay.setContentsMargins(0, 0, 0, 10)
+        body_lay.setSpacing(6)
+
+        _sep = QFrame()
+        _sep.setFrameShape(QFrame.Shape.HLine)
+        _sep.setStyleSheet("background:rgba(255,79,106,0.30);max-height:1px;")
+        body_lay.addWidget(_sep)
+
+        self._preview_body = QLabel("(prompt vide)")
+        self._preview_body.setWordWrap(True)
+        self._preview_body.setTextInteractionFlags(
+            Qt.TextInteractionFlag.TextSelectableByMouse
+        )
+        self._preview_body.setStyleSheet(
+            f"color:{C['text_secondary']};font-size:10px;"
+            f"font-family:'Consolas',monospace;"
+            f"background:transparent;border:none;"
+        )
+        body_lay.addWidget(self._preview_body)
+        lay.addWidget(self._preview_body_container)
+
+        def _toggle():
+            self._preview_expanded = not self._preview_expanded
+            self._preview_arrow.setText("▼" if self._preview_expanded else "▶")
+            self._preview_body_container.setVisible(self._preview_expanded)
+            if self._preview_expanded:
+                self._refresh_prompt_preview()
+
+        hdr_w.mousePressEvent = lambda e: _toggle()
+
+        return frame
+
+    def _on_prompt_text_changed(self):
+        self._preview_translated_text = None
+        self._refresh_prompt_preview()
+        self._preview_translate_timer.start()
+
+    def _refresh_prompt_preview(self, *_):
+        if not hasattr(self, "_preview_body") or not self._preview_expanded:
+            return
+        text = self._build_full_preview_text(self._preview_translated_text)
+        self._preview_body.setText(text)
+
+    def _start_preview_translate(self):
+        prompt_fr = self.prompt_ta.toPlainText().strip()
+        if not prompt_fr:
+            return
+        if self._preview_translate_worker and self._preview_translate_worker.isRunning():
+            self._preview_translate_worker.quit()
+        self._preview_spinner.setText("⟳  traduction…")
+        self._preview_spinner.setVisible(True)
+        self._preview_translate_worker = _PreviewTranslateWorker(prompt_fr)
+        self._preview_translate_worker.done.connect(self._on_preview_translated)
+        self._preview_translate_worker.start()
+
+    def _on_preview_translated(self, translated: str):
+        self._preview_spinner.setVisible(False)
+        self._preview_translated_text = translated
+        self._refresh_prompt_preview()
+
+    def _build_full_preview_text(self, translated_user: str | None = None) -> str:
+        """Builds the complete preview text shown in the ◈ PANDORA block."""
+        lines = []
+
+        # ── PROMPT ────────────────────────────────────────────────────────────
+        user_text = translated_user if translated_user is not None else self.prompt_ta.toPlainText().strip()
+        if not user_text:
+            import core.style as _sa_e
+            _cam_e = self._camera_picker.get_suffix() if hasattr(self, "_camera_picker") else ""
+            _vs_e = _sa_e.get_video_suffix_no_cam() if _cam_e else _sa_e.get_video_suffix()
+            if not _vs_e and not _cam_e:
+                return "(prompt vide — aucun style ni caméra configurés)"
+            _hint = ["(prompt vide — éléments qui seront ajoutés à votre texte :)"]
+            if _cam_e:
+                _hint.append(f"+ Caméra : {_cam_e}")
+            if _vs_e:
+                _hint.append(f"+ Style : {_vs_e}")
+            return "\n".join(_hint)
+
+        context = self._casting.get_context()
+        fp = (context + user_text) if context else user_text
+
+        if self._active_shot:
+            _focal = self._active_shot.get("focal", "")
+            if _focal:
+                from core.camera_data import focal_to_framing_prefix
+                _fr = focal_to_framing_prefix(_focal)
+                if _fr:
+                    fp = f"{_fr} — {fp}"
+
+        if (hasattr(self, "_dyn_cam_cb") and self._dyn_cam_cb
+                and self._dyn_cam_cb.isChecked() and not self._active_shot):
+            fp = (f"{fp}, change the camera angle every 2 seconds "
+                  "alternating between several types of shots")
+        else:
+            cam = self._camera_picker.get_suffix()
+            if cam:
+                fp = f"{fp}, {cam}"
+
+        import core.style as _style_api_prev
+        _film_anchor_active_prev = hasattr(self, "_film_anchor_cb") and self._film_anchor_cb and self._film_anchor_cb.isChecked()
+        _film_covered_prev = _style_api_prev.get_style_key() in {"realistic"}
+        if _film_anchor_active_prev and not _film_covered_prev:
+            fp = (f"{fp}, shot on ARRI Alexa 35mm film, photorealistic live action footage, "
+                  "real human actors, authentic film grain, natural skin texture and pores, "
+                  "no CGI, no 3D render, no computer animation, no digital art, "
+                  "organic depth of field, natural practical lighting")
+
+        cont = self._continuity_bar.build_continuity_prefix()
+        if cont:
+            fp = f"{cont}\n{fp}"
+
+        if not (hasattr(self, "_subtitle_cb") and self._subtitle_cb
+                and self._subtitle_cb.isChecked()):
+            fp = f"{fp}, no subtitles"
+
+        fp = (f"{fp}, 4K ultra HD, rich detail, sharp clarity, "
+              "cinematic textures, stable picture")
+
+        _SHOT_TIME_EN = {
+            "Jour":            "strict daylight, natural midday sun, bright neutral light, no golden hour, no sunset",
+            "Nuit":            "nighttime scene, dark environment, night lighting, no daylight, moonlight or artificial light",
+            "Lever du soleil": "sunrise, warm golden morning light, sun just above the horizon, soft pink-orange sky",
+            "Coucher du soleil": "sunset, golden hour, warm amber-orange light, sun low on the horizon",
+        }
+        _st = (self._active_shot.get("shot_time") if self._active_shot else "") or ""
+        ts = _SHOT_TIME_EN.get(_st, "")
+        if ts:
+            fp = f"{ts}, {fp}"
+
+        import core.style as _sa
+        _prev_cam = self._camera_picker.get_suffix() if hasattr(self, "_camera_picker") else ""
+        vs = _sa.get_video_suffix_no_cam() if _prev_cam else _sa.get_video_suffix()
+        if vs:
+            fp = f"{fp}, {vs}"
+
+        music_on = (hasattr(self, "_music_cb") and self._music_cb
+                    and self._music_cb.isChecked())
+        if not music_on:
+            fp = (f"{fp}, no music, no background music, no soundtrack, "
+                  "no musical score, natural ambient sound only")
+
+        cs = self._creative.get_creative_suffix()
+        if cs:
+            fp = f"{fp}, {cs}"
+
+        _pfx = "━━━ PROMPT " + ("(traduit) " if translated_user is not None else "(traduction…) ") + "━━━"
+        lines.append(_pfx)
+        lines.append(fp)
+
+        # ── IMAGES ENVOYÉES ───────────────────────────────────────────────────
+        img_lines = []
+
+        # Personnages
+        char_entries = []
+        for cid in self._casting._selected_char_ids:
+            char_data = self._casting._char_data_map.get(cid, {})
+            name = char_data.get("name", "?")
+            img = char_data.get("sheet_path", "") or char_data.get("image_path", "")
+            if img and os.path.isfile(img):
+                char_entries.append(f"{name} [{os.path.basename(img)}]")
+            else:
+                char_entries.append(f"{name} [⚠ sans portrait]")
+        if char_entries:
+            img_lines.append(f"Personnages : {' · '.join(char_entries)}")
+
+        # Décor
+        _eff_decor_id = self._casting._selected_decor_id or (self._active_shot or {}).get("decor_id", "")
+        _decor_meta = self._casting._decors_meta.get(_eff_decor_id, {}) if _eff_decor_id else {}
+        _decor_name = _decor_meta.get("name", "") or (self._active_shot or {}).get("decor_name", "")
+        _decor_img  = _decor_meta.get("image_path", "")
+        if _decor_name:
+            _di = f" [{os.path.basename(_decor_img)}]" if _decor_img and os.path.isfile(_decor_img) else ""
+            img_lines.append(f"Décor : {_decor_name}{_di}")
+
+        # Accessoires, HMC, Véhicules
+        acc_e, hmc_e, veh_e = [], [], []
+        for iid in self._casting._selected_items:
+            m = self._casting._items_meta.get(iid, {})
+            n = m.get("name", "?")
+            i = m.get("image_path", "")
+            _ie = f" [{os.path.basename(i)}]" if i and os.path.isfile(i) else ""
+            kind = m.get("_kind", "")
+            (hmc_e if kind == "hmc" else acc_e).append(f"{n}{_ie}")
+        for vid in self._casting._selected_vehicles:
+            m = self._casting._vehicles_meta.get(vid, {})
+            n = m.get("name", "?")
+            i = m.get("image_path", "")
+            _ie = f" [{os.path.basename(i)}]" if i and os.path.isfile(i) else ""
+            veh_e.append(f"{n}{_ie}")
+        if acc_e:
+            img_lines.append(f"Accessoires : {' · '.join(acc_e)}")
+        if hmc_e:
+            img_lines.append(f"HMC : {' · '.join(hmc_e)}")
+        if veh_e:
+            img_lines.append(f"Véhicules : {' · '.join(veh_e)}")
+
+        # Style de film (image de référence)
+        _sref = getattr(self, "_style_ref_path", "")
+        if _sref and os.path.isfile(_sref):
+            img_lines.append(f"Template visuel : [{os.path.basename(_sref)}] → analysé par Claude Vision")
+
+        if img_lines:
+            lines.append("")
+            lines.append("━━━ IMAGES ENVOYÉES ━━━")
+            lines.extend(img_lines)
+
+        # ── PARAMÈTRES ────────────────────────────────────────────────────────
+        param_lines = []
+
+        # Caméra
+        if hasattr(self, "_camera_picker"):
+            _prefs = cam_prefs.get_camera_prefs()
+            _body = _prefs.get("camera_body", "").strip()
+            if _body:
+                _brand = _prefs.get("camera_brand", "").strip()
+                param_lines.append(f"Caméra : {(_brand + ' ' + _body).strip()}")
+            _opts = _prefs.get("optics_series", "").strip()
+            if _opts:
+                _ob = _prefs.get("optics_brand", "").strip()
+                param_lines.append(f"Optiques : {(_ob + ' ' + _opts).strip()}")
+            _filters = _prefs.get("filters", [])
+            if _filters:
+                param_lines.append(f"Filtre(s) : {', '.join(_filters)}")
+            _mic = " ".join(filter(None, [_prefs.get("mic_category","").strip(), _prefs.get("mic_model","").strip()]))
+            if _mic:
+                param_lines.append(f"Micro : {_mic}")
+            _shot_focal = (self._active_shot or {}).get("focal", "")
+            if _shot_focal:
+                from core.camera_data import focal_to_framing_prefix
+                _framing = focal_to_framing_prefix(_shot_focal)
+                _fstr = f" → « {_framing} »" if _framing else ""
+                param_lines.append(f"Focale : {_shot_focal}{_fstr}  ← storyboard")
+
+        # Son
+        audio_on = (hasattr(self, "_audio_cb") and self._audio_cb and self._audio_cb.isChecked())
+        subtitle_on = (hasattr(self, "_subtitle_cb") and self._subtitle_cb and self._subtitle_cb.isChecked())
+        snd = []
+        snd.append(f"Audio natif : {'✓' if audio_on else '✗'}")
+        snd.append(f"Musique : {'✓' if music_on else '✗ → no background music injecté'}")
+        snd.append(f"Sous-titres : {'✓' if subtitle_on else '✗ → no subtitles injecté'}")
+        param_lines.append("Son : " + "  ·  ".join(snd))
+
+        # Template / style vidéo
+        if vs:
+            _sname = (_sa.get_style() or {}).get("label", "Style")
+            _vshort = vs[:80] + ("…" if len(vs) > 80 else "")
+            param_lines.append(f"Template : {_sname} → « {_vshort} »")
+
+        # ADN visuel
+        seed = self._get_seed()
+        if seed is not None:
+            param_lines.append(f"ADN visuel : {seed} 🔒")
+
+        # Contrôles créatifs
+        if cs:
+            _cs_short = cs[:100] + ("…" if len(cs) > 100 else "")
+            param_lines.append(f"Créatifs : {_cs_short}")
+
+        if param_lines:
+            lines.append("")
+            lines.append("━━━ PARAMÈTRES ━━━")
+            lines.extend(param_lines)
+
+        return "\n".join(lines)
+
+    def _assemble_preview_prompt(self, translated_user: str | None = None) -> str:
+        return self._build_full_preview_text(translated_user)
 
     def _update_injection_banner(self, *_):
-        if not hasattr(self, "_injection_banner"):
+        if not hasattr(self, "_ref_mode_banner"):
             return
 
-        parts = []
-
-        # ── Mode de génération : T2V pur vs Référence (auto-switch api/real.py) ─
-        if hasattr(self, "_ref_mode_banner"):
-            ref_imgs = self._casting.get_ref_images()
-            if ref_imgs:
-                ctx_parts = self._casting.get_context_parts()
-                char_with_img = []
-                for cid in self._casting._selected_char_ids:
-                    char_data = self._casting._char_data_map.get(cid, {})
-                    p = char_data.get("sheet_path", "") or char_data.get("image_path", "")
-                    if p and os.path.isfile(p):
-                        char_with_img.append(char_data.get("name", ""))
-                slots = []
-                if char_with_img:
-                    slots.append(f"Perso. : {', '.join(char_with_img)}")
-                decor_name = ctx_parts.get("decor_name", "")
-                if decor_name:
-                    slots.append(f"Décor : {decor_name}")
-                others = [
-                    *ctx_parts.get("vehicle_names", []),
-                    *[
-                        self._casting._items_meta.get(i, {}).get("name", "")
-                        for i in self._casting._selected_items
-                        if self._casting._items_meta.get(i, {}).get("_kind") != "hmc"
-                    ],
-                ]
-                others = [o for o in others if o]
-                if others:
-                    slots.append(f"Autres : {', '.join(others)}")
-                # Also count style ref image if present
-                style_ref_path = getattr(self, "_style_ref_path", "")
-                style_ref_active = bool(style_ref_path and os.path.isfile(style_ref_path))
-                total = len(ref_imgs) + (1 if style_ref_active else 0)
-                txt = f"◈ MODE RÉFÉRENCE ACTIF — {total} image(s) envoyée(s) à Seedance"
-                if slots:
-                    txt += "\n   " + "  ·  ".join(slots)
-                if style_ref_active:
-                    txt += f"\n   Style : {os.path.basename(style_ref_path)}"
-                self._ref_mode_lbl.setText(txt)
-                self._ref_mode_banner.setVisible(True)
-            elif getattr(self, "_style_ref_path", "") and os.path.isfile(self._style_ref_path):
-                # Only style ref, no casting refs
-                txt = f"◈ MODE RÉFÉRENCE ACTIF — 1 image envoyée à Seedance"
-                txt += f"\n   Style : {os.path.basename(self._style_ref_path)}"
-                self._ref_mode_lbl.setText(txt)
-                self._ref_mode_banner.setVisible(True)
-            else:
-                self._ref_mode_banner.setVisible(False)
-
-        # ── Avertissement personnages sans portrait ──────────────────────────
+        ref_imgs = self._casting.get_ref_images()
         chars_missing = self._casting.get_chars_without_images()
+        style_ref_path = getattr(self, "_style_ref_path", "")
+        style_ref_active = bool(style_ref_path and os.path.isfile(style_ref_path))
+
+        lines = []
+        if ref_imgs or style_ref_active:
+            total = len(ref_imgs) + (1 if style_ref_active else 0)
+            ctx_parts = self._casting.get_context_parts()
+            char_with_img = [
+                d.get("name", "") for cid, d in self._casting._char_data_map.items()
+                if os.path.isfile(d.get("sheet_path", "") or d.get("image_path", "") or "")
+            ]
+            slots = []
+            if char_with_img:
+                slots.append(f"Perso. : {', '.join(char_with_img)}")
+            if ctx_parts.get("decor_name"):
+                slots.append(f"Décor : {ctx_parts['decor_name']}")
+            others = [*ctx_parts.get("vehicle_names", []),
+                      *[self._casting._items_meta.get(i, {}).get("name", "")
+                        for i in self._casting._selected_items]]
+            others = [o for o in others if o]
+            if others:
+                slots.append(f"Autres : {', '.join(others)}")
+            if style_ref_active:
+                slots.append(f"Style : {os.path.basename(style_ref_path)}")
+            txt = f"◈ MODE RÉFÉRENCE ACTIF — {total} image(s) envoyée(s) à Seedance"
+            if slots:
+                txt += "\n   " + "  ·  ".join(slots)
+            lines.append(txt)
+
         if chars_missing:
             names = ", ".join(f'"{n}"' for n in chars_missing)
             s = "s" if len(chars_missing) > 1 else ""
-            parts.append(
-                f"⚠ COHÉRENCE VISUELLE — Portrait{s} manquant{s} : {names}\n"
-                "→ Sans portrait, Seedance génère un personnage aléatoire à chaque fois.\n"
-                "→ Ajoutez un portrait dans la page Castings pour garantir la cohérence."
+            lines.append(
+                f"⚠ Portrait{s} manquant{s} : {names} — Seedance génère un personnage aléatoire sans portrait."
             )
 
-        # ── Contexte casting (personnages, accessoires, décors) ──────────────
-        ctx = self._casting.get_context().strip()
-        if ctx:
-            parts.append(ctx)
-
-        # ── Données du plan actif (storyboard) ───────────────────────────────
-        if self._active_shot:
-            shot_lines = []
-            _ht = (self._active_shot.get("shot_time") or "").strip()
-            if _ht:
-                shot_lines.append(f"Heure : {_ht}")
-            _mv = (self._active_shot.get("camera_movement") or "").strip()
-            if _mv and _mv != "Fixe":
-                shot_lines.append(f"Mouvement : {_mv}")
-            _sz = (self._active_shot.get("shot_size") or "").strip()
-            if _sz:
-                from core.storyboard import SHOT_SIZE_LABELS
-                shot_lines.append(f"Valeur : {SHOT_SIZE_LABELS.get(_sz, _sz)}")
-            _sp = (self._active_shot.get("speed") or "").strip()
-            if _sp and _sp != "Normale":
-                shot_lines.append(f"Vitesse : {_sp}")
-            _dur = self._active_shot.get("duration")
-            if _dur is not None:
-                shot_lines.append(f"Durée : {_dur}s")
-            if shot_lines:
-                parts.append("[PLAN ACTIF]\n" + "\n".join(shot_lines))
-
-        # ── Paramètres de génération ─────────────────────────────────────────
-        param_lines = []
-
-        # Suffixe caméra / optiques / filtres / focale / micro
-        if hasattr(self, "_camera_picker"):
-            cam_suffix = self._camera_picker.get_suffix()
-            focal = self._camera_picker._cb_focal.currentText()
-            focal_active = bool(focal and not focal.startswith("—"))
-            if cam_suffix:
-                from_shot_str = "  ← Focale depuis storyboard" if (focal_active and self._camera_picker._focal_from_shot) else ""
-                param_lines.append(f"Caméra/Optiques/Micro/Filtres → « {cam_suffix} »{from_shot_str}")
-            elif focal_active:
-                from_shot_str = "  ← depuis storyboard" if self._camera_picker._focal_from_shot else ""
-                param_lines.append(f"Focale : {focal}{from_shot_str}")
-
-        # Musique — signalée uniquement quand supprimée (case décochée)
-        if hasattr(self, "_music_cb") and self._music_cb:
-            if not self._music_cb.isChecked():
-                param_lines.append('Musique désactivée → "no background music" injecté')
-
-        # ADN visuel — uniquement si verrouillé
-        seed = self._get_seed()
-        if seed is not None:
-            param_lines.append(f"ADN visuel verrouillé : {seed}")
-
-        # Style de film — image de référence
-        _sref = getattr(self, "_style_ref_path", "")
-        if _sref and os.path.isfile(_sref):
-            param_lines.append(f"Style de film → image de référence injectée : {os.path.basename(_sref)}")
-
-        if param_lines:
-            params_block = "[PARAMÈTRES DE GÉNÉRATION]\n" + "\n".join(param_lines)
-            parts.append(params_block)
-
-        if parts:
-            self._injection_lbl.setText("\n\n".join(parts))
-            self._injection_banner.setVisible(True)
+        if lines:
+            self._ref_mode_lbl.setText("\n".join(lines))
+            self._ref_mode_banner.setVisible(True)
         else:
-            self._injection_banner.setVisible(False)
+            self._ref_mode_banner.setVisible(False)
 
     # ── Generation ────────────────────────────────────────────────────────────
 
@@ -3077,10 +3319,22 @@ class TabT2V(QScrollArea):
     def _on_engine_changed(self):
         key = self._get_model()
         fixed_res = key in _FIXED_RES_ENGINES
-        self.cb_res.setEnabled(not fixed_res)
         self.cb_ratio.setEnabled(key not in _FIXED_RATIO_ENGINES)
-        if fixed_res:
-            self.cb_res.setCurrentText(_ENGINE_RES_FORCED.get(key, "1080p"))
+        # Mise à jour des options de résolution selon le moteur
+        options = _ENGINE_RESOLUTIONS.get(key, [("1080p", "1080p"), ("720p", "720p"), ("480p", "480p")])
+        prev = self.cb_res.currentData() or self.cb_res.currentText()
+        self.cb_res.blockSignals(True)
+        self.cb_res.clear()
+        for r in options:
+            if isinstance(r, tuple):
+                self.cb_res.addItem(r[0], r[1])
+            else:
+                self.cb_res.addItem(r, r)
+        # Restaurer la sélection précédente (par valeur API), sinon premier item
+        idx = self.cb_res.findData(prev)
+        self.cb_res.setCurrentIndex(max(0, idx))
+        self.cb_res.blockSignals(False)
+        self.cb_res.setEnabled(not fixed_res)
         if hasattr(self, "_ref_compat_banner"):
             self._ref_compat_banner.setVisible(key in _TEXT_FALLBACK_ENGINES)
 
@@ -3343,18 +3597,7 @@ class TabT2V(QScrollArea):
             QMessageBox.warning(self, "Prompt vide", "Écris un prompt avant de générer !")
             return
 
-        if not resolve.is_connected():
-            reply = QMessageBox.question(
-                self, "DaVinci Resolve non connecté",
-                "Vous n'êtes pas connecté à DaVinci Resolve.\n\n"
-                "La vidéo générée sera sauvegardée dans votre dossier projet "
-                "et dans PANDORA, mais ne sera pas importée dans DaVinci Resolve.\n\n"
-                "Voulez-vous continuer ?",
-                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
-            )
-            if reply != QMessageBox.StandardButton.Yes:
-                return
-        elif self._import_cb and self._import_cb.isChecked():
+        if self._import_cb and self._import_cb.isChecked():
             if not self._check_davinci_connection():
                 return
 
@@ -3376,7 +3619,13 @@ class TabT2V(QScrollArea):
         )
         # video_suffix stays active even with a style ref image: text keywords + visual
         # reference are complementary — the image shows the look, the text names it.
-        video_suffix = style_api.get_video_suffix()
+        cam_suffix = self._camera_picker.get_suffix()
+        # When Image & Son has a camera, use the no-cam variant of the style suffix
+        # to avoid duplicate/conflicting camera body references in the prompt.
+        video_suffix = (
+            style_api.get_video_suffix_no_cam() if cam_suffix
+            else style_api.get_video_suffix()
+        )
 
         # Caméra dynamique (mode libre sans shot storyboard)
         if (hasattr(self, "_dyn_cam_cb") and self._dyn_cam_cb.isChecked()
@@ -3385,10 +3634,20 @@ class TabT2V(QScrollArea):
                 f"{full_prompt}, change the camera angle every 2 seconds "
                 "alternating between several types of shots"
             )
-        else:
-            cam_suffix = self._camera_picker.get_suffix()
-            if cam_suffix:
-                full_prompt = f"{full_prompt}, {cam_suffix}"
+        elif cam_suffix:
+            full_prompt = f"{full_prompt}, {cam_suffix}"
+
+        # Prise de vue réelle — ancrage filmique anti-CGI/3D
+        # (ignoré si le style actif couvre déjà le registre live-action)
+        _film_anchor_active = hasattr(self, "_film_anchor_cb") and self._film_anchor_cb.isChecked()
+        _film_already_covered = style_api.get_style_key() in {"realistic"}
+        if _film_anchor_active and not _film_already_covered:
+            full_prompt = (
+                f"{full_prompt}, shot on ARRI Alexa 35mm film, photorealistic live action footage, "
+                "real human actors, authentic film grain, natural skin texture and pores, "
+                "no CGI, no 3D render, no computer animation, no digital art, "
+                "organic depth of field, natural practical lighting"
+            )
 
         continuity = self._continuity_bar.build_continuity_prefix()
         if continuity:
@@ -3475,7 +3734,7 @@ class TabT2V(QScrollArea):
             "safety_tolerance_override": str(self._creative.get_safety_tolerance()),
             "model":          self._get_model(),
             "duration":       self._get_duration(),
-            "resolution":     self.cb_res.currentText(),
+            "resolution":     (self.cb_res.currentData() or self.cb_res.currentText()),
             "aspect_ratio":   self.cb_ratio.currentText().split(" ")[0],
             "shot_title":     self._active_shot_title,
             "audio":          audio_on,
@@ -3707,7 +3966,8 @@ class TabT2V(QScrollArea):
             QMessageBox.warning(self, "Prompt vide", "Écris un prompt à améliorer !")
             return
         self._btn_enhance.setEnabled(False)
-        self._btn_enhance.setText("…")
+        if hasattr(self._btn_enhance, "_loading"):
+            self._btn_enhance._loading.setVisible(True)
         self._enhance_worker = EnhanceWorker(prompt)
         self._enhance_worker.finished.connect(self._on_enhance_done)
         self._enhance_worker.failed.connect(self._on_enhance_failed)
@@ -3716,11 +3976,13 @@ class TabT2V(QScrollArea):
     def _on_enhance_done(self, enhanced: str):
         self.prompt_ta.setPlainText(enhanced)
         self._btn_enhance.setEnabled(True)
-        self._btn_enhance.setText("✦ Améliorer")
+        if hasattr(self._btn_enhance, "_loading"):
+            self._btn_enhance._loading.setVisible(False)
 
     def _on_enhance_failed(self, error: str):
         self._btn_enhance.setEnabled(True)
-        self._btn_enhance.setText("✦ Améliorer")
+        if hasattr(self._btn_enhance, "_loading"):
+            self._btn_enhance._loading.setVisible(False)
         QMessageBox.warning(self, "Amélioration impossible", error)
 
     def _reset_ui(self):
@@ -3735,29 +3997,21 @@ class TabT2V(QScrollArea):
         self._camera_picker.refresh()
         self._refresh_style_badge()
 
+    def _open_output_folder(self):
+        from core.config import get_output_dir
+        import subprocess as _sp
+        folder = get_output_dir()
+        os.makedirs(folder, exist_ok=True)
+        _sp.Popen(["explorer", folder])
+
     def _open_manual_tarifs(self):
         from ui.dialog_user_manual import UserManualDialog
         UserManualDialog(self.window(), start_section=13).exec()
 
     def _refresh_style_badge(self):
         import core.style as style_api
-
-        # Sync combo to the currently saved style for this project
-        current_key = style_api.get_style_key()
-        self._film_style_combo.blockSignals(True)
-        if current_key:
-            idx = self._film_style_combo.findData(current_key)
-            self._film_style_combo.setCurrentIndex(idx if idx >= 0 else 0)
-        else:
-            self._film_style_combo.setCurrentIndex(0)
-        self._film_style_combo.blockSignals(False)
-
-        # Restore saved style ref image for this project
-        if current_key and hasattr(self, "_style_ref_path"):
-            saved_ref = style_api.get_style_ref_image_for_key(current_key)
-            self._set_style_ref_image(saved_ref)
-
         no_audio = style_api.is_no_audio()
+        self._refresh_prompt_preview()
         if hasattr(self, "_audio_toggle_row") and self._audio_toggle_row:
             self._audio_toggle_row.setEnabled(not no_audio)
             if no_audio and self._audio_cb:
@@ -3772,62 +4026,29 @@ class TabT2V(QScrollArea):
                 self._import_cb.setChecked(False)
 
     def _on_film_style_changed(self, idx: int):
-        import core.style as style_api
-        key = self._film_style_combo.itemData(idx)
-        if key:
-            style_api.set_style(key)
-            # Restore saved ref image for this style (per-project memory)
-            saved = style_api.get_style_ref_image_for_key(key)
-            if saved:
-                self._set_style_ref_image(saved)
-            else:
-                self._set_style_ref_image("")
-        else:
-            self._set_style_ref_image("")
-        no_audio = style_api.is_no_audio()
-        if hasattr(self, "_audio_toggle_row") and self._audio_toggle_row:
-            self._audio_toggle_row.setEnabled(not no_audio)
-            if no_audio and self._audio_cb:
-                self._audio_cb.setChecked(False)
-        if hasattr(self, "_music_toggle_row") and self._music_toggle_row:
-            self._music_toggle_row.setEnabled(not no_audio)
-            if no_audio and self._music_cb:
-                self._music_cb.setChecked(False)
+        pass  # combo supprimé — plus utilisé
 
     def _set_style_ref_image(self, path: str):
         self._style_ref_path = path
         has = bool(path and os.path.isfile(path))
         if has:
             pix = QPixmap(path).scaled(
-                154, 200,
+                152, 132,
                 Qt.AspectRatioMode.KeepAspectRatio,
                 Qt.TransformationMode.SmoothTransformation,
             )
             self._style_ref_thumb.setPixmap(pix)
         else:
             self._style_ref_thumb.setPixmap(QPixmap())
-        self._style_ref_preview_frame.setVisible(has)
-        # Swap combo ↔ "selon image de référence" label
-        self._film_style_combo.setVisible(not has)
-        self._style_ref_override_lbl.setVisible(has)
+        self._style_ref_clear_btn.setVisible(has)
         self._update_injection_banner()
 
     def _on_style_gallery(self):
-        import core.style as style_api
         from ui.dialog_style_gallery import StyleGalleryDialog
-        key = self._film_style_combo.currentData() or ""
-        dlg = StyleGalleryDialog(self, current_style_key=key, current_ref_image=self._style_ref_path)
+        dlg = StyleGalleryDialog(self, current_style_key="", current_ref_image=self._style_ref_path)
         if dlg.exec() == StyleGalleryDialog.DialogCode.Accepted:
             chosen = dlg.result_path()
             self._set_style_ref_image(chosen)
-            if key and chosen:
-                style_api.set_style_ref_image_for_key(key, chosen)
-            elif key and dlg.was_cleared():
-                style_api.set_style_ref_image_for_key(key, "")
 
     def _on_style_ref_clear(self):
-        import core.style as style_api
-        key = self._film_style_combo.currentData() or ""
         self._set_style_ref_image("")
-        if key:
-            style_api.set_style_ref_image_for_key(key, "")

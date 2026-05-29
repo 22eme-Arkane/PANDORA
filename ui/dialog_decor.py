@@ -70,12 +70,9 @@ class DecorDialog(QDialog):
         self._saved_data      = None
 
         self.setWindowTitle("Créer un décor" if not item else "Modifier le décor")
-        from PyQt6.QtWidgets import QApplication as _QApp
-        _geo = _QApp.primaryScreen().availableGeometry()
-        self.resize(min(max(900, int(_geo.width() * 0.70)), 1200),
-                    min(max(640, int(_geo.height() * 0.82)), 900))
-        self.setMinimumSize(840, 580)
         self.setStyleSheet(PANDORA_STYLESHEET + f"QDialog{{background:{CP['bg1']};}}")
+        from ui.widgets import fit_dialog_to_screen
+        fit_dialog_to_screen(self, 0.75, 0.84, 860, 540)
 
         root = QHBoxLayout(self)
         root.setContentsMargins(0, 0, 0, 0)
@@ -193,6 +190,11 @@ class DecorDialog(QDialog):
         else:
             self._btn_cloud.setText("☁")
         self._btn_cloud.clicked.connect(self._on_optimize)
+        _lbl_enh = QLabel("Améliorer le prompt")
+        _lbl_enh.setStyleSheet(
+            f"color:{CP['text_dim']};font-size:10px;background:transparent;border:none;"
+        )
+        ph.addWidget(_lbl_enh)
         ph.addWidget(self._btn_cloud)
         lay.addLayout(ph)
 
@@ -310,7 +312,9 @@ class DecorDialog(QDialog):
         # Mode de génération + bouton
         mode_row = QHBoxLayout()
         mode_row.setSpacing(8)
-        mode_row.addWidget(_lbl("Mode"))
+        _mode_lbl = _lbl("Mode")
+        _mode_lbl.setFixedWidth(130)
+        mode_row.addWidget(_mode_lbl)
         self._gen_mode = QComboBox()
         self._gen_mode.addItem("🖼  Image unique", "single")
         self._gen_mode.addItem("🗺  Sheet 4 vues  (avant · arrière · gauche · droite)", "sheet")
@@ -331,6 +335,30 @@ class DecorDialog(QDialog):
         )
         mode_row.addWidget(self._gen_mode, 1)
         lay.addLayout(mode_row)
+        self._style_combo.currentIndexChanged.connect(self._update_suffix_edit)
+        _sfx_lbl = QLabel("↓  Suffix de style injecté (modifiable) :")
+        _sfx_lbl.setStyleSheet(
+            f"color:{CP['text_dim']};font-size:9px;background:transparent;border:none;"
+        )
+        lay.addWidget(_sfx_lbl)
+        self._suffix_edit = QTextEdit()
+        self._suffix_edit.setFixedHeight(54)
+        self._suffix_edit.setStyleSheet(
+            f"QTextEdit{{background:{CP['bg2']};border:1px solid {CP['border']};"
+            f"border-radius:6px;color:#ff8c69;font-size:9px;"
+            f"font-family:'Consolas',monospace;padding:4px;}}"
+            f"QTextEdit:focus{{border-color:{CP['accent']};}}"
+        )
+        self._suffix_edit.setPlaceholderText(
+            "Vide — sélectionnez un Style d'image ci-dessus ou définissez le Style du projet"
+        )
+        self._suffix_edit.setToolTip(
+            "Suffixe de style ajouté automatiquement au prompt (affiché en orange).\n"
+            "Inclut la caméra/optique définie dans Image & Son si configurée.\n"
+            "Modifiable librement — ce texte est envoyé tel quel à l'API."
+        )
+        lay.addWidget(self._suffix_edit)
+        self._update_suffix_edit()
 
         sep_c = QFrame(); sep_c.setFixedHeight(1)
         sep_c.setStyleSheet(f"background:{CP['border']};")
@@ -464,7 +492,7 @@ class DecorDialog(QDialog):
 
     def _build_panel(self):
         w = QWidget()
-        w.setFixedWidth(300)
+        w.setFixedWidth(360)
         w.setStyleSheet(f"background:{CP['bg0']};")
 
         scroll = QScrollArea()
@@ -568,43 +596,33 @@ class DecorDialog(QDialog):
         _act_row.addWidget(self._btn_panel_variation, 1)
         lay.addLayout(_act_row)
 
-        lay.addSpacing(4)
+        lay.addSpacing(8)
 
         # Utilisé dans les séquences
         lay.addWidget(_lbl("Utilisé dans les séquences :", color=CP["text_secondary"]))
-        self._seqs_scroll = QScrollArea()
-        self._seqs_scroll.setFixedHeight(100)
-        self._seqs_scroll.setWidgetResizable(True)
-        self._seqs_scroll.setStyleSheet(
-            f"QScrollArea{{background:{CP['bg2']};border:1px solid {CP['border']};"
+        self._seqs_ctn = QWidget()
+        self._seqs_ctn.setStyleSheet(
+            f"QWidget{{background:{CP['bg2']};border:1px solid {CP['border']};"
             f"border-radius:6px;}}"
         )
-        self._seqs_inner = QWidget()
-        self._seqs_inner.setStyleSheet("background:transparent;")
-        self._seqs_lay = QVBoxLayout(self._seqs_inner)
+        self._seqs_lay = QVBoxLayout(self._seqs_ctn)
         self._seqs_lay.setContentsMargins(8, 8, 8, 8)
         self._seqs_lay.setSpacing(4)
-        self._seqs_scroll.setWidget(self._seqs_inner)
-        lay.addWidget(self._seqs_scroll)
+        lay.addWidget(self._seqs_ctn)
 
-        lay.addSpacing(4)
+        lay.addSpacing(6)
 
         # Utilisé dans les plans
         lay.addWidget(_lbl("Utilisé dans les plans :", color=CP["text_secondary"]))
-        self._shots_scroll = QScrollArea()
-        self._shots_scroll.setFixedHeight(120)
-        self._shots_scroll.setWidgetResizable(True)
-        self._shots_scroll.setStyleSheet(
-            f"QScrollArea{{background:{CP['bg2']};border:1px solid {CP['border']};"
+        self._shots_ctn = QWidget()
+        self._shots_ctn.setStyleSheet(
+            f"QWidget{{background:{CP['bg2']};border:1px solid {CP['border']};"
             f"border-radius:6px;}}"
         )
-        self._shots_inner = QWidget()
-        self._shots_inner.setStyleSheet("background:transparent;")
-        self._shots_lay = QVBoxLayout(self._shots_inner)
+        self._shots_lay = QVBoxLayout(self._shots_ctn)
         self._shots_lay.setContentsMargins(8, 8, 8, 8)
         self._shots_lay.setSpacing(4)
-        self._shots_scroll.setWidget(self._shots_inner)
-        lay.addWidget(self._shots_scroll)
+        lay.addWidget(self._shots_ctn)
         self._refresh_shots_list()
         self._refresh_sequences_list()
 
@@ -612,9 +630,32 @@ class DecorDialog(QDialog):
 
         scroll.setWidget(inner)
 
+        # ── Bouton importer — fixe en bas du panneau, hors scroll ─────────────
+        btn_import = QPushButton("📁  Importer une image depuis le disque")
+        btn_import.setFixedHeight(32)
+        btn_import.setCursor(Qt.CursorShape.PointingHandCursor)
+        btn_import.setStyleSheet(
+            f"QPushButton{{background:transparent;color:{CP['text_secondary']};"
+            f"border:1px solid {CP['border']};border-radius:7px;"
+            f"font-size:10px;font-weight:600;padding:0 8px;}}"
+            f"QPushButton:hover{{background:{CP['bg3']};color:{CP['text_primary']};"
+            f"border-color:{CP['border_bright']};}}"
+        )
+        btn_import.clicked.connect(self._on_import_image)
+
         outer = QVBoxLayout(w)
         outer.setContentsMargins(0, 0, 0, 0)
-        outer.addWidget(scroll)
+        outer.setSpacing(0)
+        outer.addWidget(scroll, 1)
+
+        import_wrap = QWidget()
+        import_wrap.setStyleSheet(
+            f"background:{CP['bg0']};border-top:1px solid {CP['border']};"
+        )
+        import_wrap_lay = QHBoxLayout(import_wrap)
+        import_wrap_lay.setContentsMargins(12, 8, 12, 10)
+        import_wrap_lay.addWidget(btn_import)
+        outer.addWidget(import_wrap)
 
         if self._image_path and os.path.isfile(self._image_path):
             self._load_preview(self._image_path)
@@ -644,7 +685,10 @@ class DecorDialog(QDialog):
             sid  = shot.get("id", "")
             num  = shot.get("number", "?")
             name = shot.get("scene_title", "") or f"Plan {num}"
-            cb   = QCheckBox(f"Plan {num} — {name}")
+            _lbl = f"Plan {num} — {name}"
+            if len(_lbl) > 45:
+                _lbl = _lbl[:44] + "…"
+            cb   = QCheckBox(_lbl)
             cb.setChecked(sid in self._assigned_shots)
             cb.setStyleSheet(
                 f"QCheckBox{{color:{CP['text_secondary']};font-size:10px;background:transparent;}}"
@@ -862,6 +906,34 @@ class DecorDialog(QDialog):
                 "Configurez la clé Anthropic pour optimiser via Claude."
             )
 
+    def _update_suffix_edit(self):
+        if not hasattr(self, "_suffix_edit"):
+            return
+        import core.style as _style_mod
+        from core.camera_prefs import get_camera_prefs
+        prefs = get_camera_prefs()
+        cam = prefs.get("camera_body", "").strip()
+        optic = prefs.get("optics_series", "").strip()
+        has_cam = bool(cam or optic)
+        sk = self._style_combo.currentData() if hasattr(self, "_style_combo") else ""
+        if sk and sk != "__sep__":
+            _s = next((s for s in _style_mod.STYLES if s["key"] == sk), None)
+            if _s:
+                sfx = _s.get("image_suffix_no_cam", _s["image_suffix"]) if has_cam else _s["image_suffix"]
+            else:
+                sfx = _style_mod.get_image_suffix_no_cam() if has_cam else _style_mod.get_image_suffix()
+        else:
+            sfx = _style_mod.get_image_suffix_no_cam() if has_cam else _style_mod.get_image_suffix()
+        cam_parts = []
+        if cam:
+            cam_parts.append(f"shot on {cam}")
+        if optic:
+            cam_parts.append(f"{optic} lenses")
+        if cam_parts:
+            cam_str = ', '.join(cam_parts)
+            sfx = f"{sfx}\n{cam_str}" if sfx else cam_str
+        self._suffix_edit.setPlainText(sfx)
+
     def _on_generate(self):
         prompt = self._prompt.toPlainText().strip()
         if not prompt:
@@ -888,12 +960,7 @@ class DecorDialog(QDialog):
                 # Le style vient de l'image de référence — pas de suffix style combo
                 suffix = ""
             else:
-                style_key = self._style_combo.currentData() if hasattr(self, "_style_combo") else ""
-                if style_key:
-                    _s = next((s for s in style_api.STYLES if s["key"] == style_key), None)
-                    suffix = _s["image_suffix"] if _s else style_api.get_image_suffix()
-                else:
-                    suffix = style_api.get_image_suffix()
+                suffix = self._suffix_edit.toPlainText().strip() if hasattr(self, "_suffix_edit") else style_api.get_image_suffix()
             full_prompt = f"{prompt}, {suffix}" if suffix else prompt
             _cs = self._creative.get_prompt_suffix()
             if _cs:
@@ -1066,6 +1133,15 @@ class DecorDialog(QDialog):
     def _show_fullsize(self):
         if not self._generated_images:
             return
+        try:
+            self._show_fullsize_impl()
+        except Exception as _e:
+            import traceback
+            from PyQt6.QtWidgets import QMessageBox
+            QMessageBox.critical(self, "Erreur aperçu",
+                                 f"Impossible d'ouvrir la prévisualisation :\n{_e}\n\n{traceback.format_exc()}")
+
+    def _show_fullsize_impl(self):
         from ui.dialog_character import _FullscreenDialog
         entries = [{"portrait": p, "sheet": ""} for p in self._generated_images]
         active_idx = self._preview_idx
@@ -1129,6 +1205,26 @@ class DecorDialog(QDialog):
             pix = pix.copy((pix.width()-260)//2, (pix.height()-170)//2, 260, 170)
             self._preview.setPixmap(pix)
             self._preview.setText("")
+
+    def _on_import_image(self):
+        paths, _ = QFileDialog.getOpenFileNames(
+            self, "Importer une image", "",
+            "Images (*.png *.jpg *.jpeg *.webp *.bmp *.gif)"
+        )
+        added = False
+        for path in paths:
+            if os.path.isfile(path) and path not in self._generated_images:
+                self._generated_images.append(path)
+                added = True
+        if added:
+            last = paths[-1]
+            if last in self._generated_images:
+                self._preview_idx = self._generated_images.index(last)
+            else:
+                self._preview_idx = len(self._generated_images) - 1
+            self._image_path = self._generated_images[self._preview_idx]
+            self._load_preview(self._image_path)
+            self._refresh_preview_nav()
 
     def _on_save(self):
         name = self._name.text().strip()

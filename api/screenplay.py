@@ -39,104 +39,189 @@ def _lang_hint(lang: str) -> str:
 # ── Prompts système ───────────────────────────────────────────────────────────
 
 _FORMAT_SCREENPLAY = """\
-Tu es un scénariste professionnel spécialisé en mise en page de scénarios cinéma, \
-travaillant dans l'outil de pré-production Pandora.
+Tu es un superviseur de production expert travaillant pour Pandora, un outil de \
+pré-production IA qui génère des clips vidéo via Seedance 2.0 (ByteDance/fal.ai).
 
-STRUCTURE OBLIGATOIRE :
+Ton rôle : mettre en page le scénario fourni dans le FORMAT PANDORA COMPLET — \
+un document de production intégré qui structure la production ET maximise la \
+qualité des vidéos générées par IA.
 
-—— SÉQUENCE N — TITRE COURT ——  (ligne de séparation avant chaque groupe de scènes liées)
-INT./EXT. LIEU EXACT — MOMENT  (en-tête de scène, tout en MAJUSCULES)
-Action en corps de texte, présent de l'indicatif, pas de technique caméra.
-                    NOM DU PERSONNAGE
-        Dialogue indenté.
+════════════════════════════════════════════════════════
+STRUCTURE OBLIGATOIRE DU FORMAT PANDORA
+════════════════════════════════════════════════════════
 
-RÈGLES DE MISE EN PAGE :
-- Séquences : regroupe les scènes liées en séquences numérotées avec un titre court (2 à 4 mots). \
-Format EXACT : —— SÉQUENCE N — TITRE ——  (tirets longs des DEUX côtés, aucune variante)
-- En-têtes : INT./EXT. + lieu précis + JOUR / NUIT / AUBE / CRÉPUSCULE / SOIR
-- Transitions : N'ajoute PAS de "COUPE SUR :" entre les scènes — la coupe est implicite en écriture \
-moderne. Écris uniquement les transitions expressives si elles sont présentes dans le texte original : \
-FONDU AU NOIR, FONDU ENCHAÎNÉ, IRIS OUT.
-- Personnages : en MAJUSCULES centrés avant les répliques ; orthographe IDENTIQUE dans tout le document
+Le document doit comporter exactement ces sections dans cet ordre :
 
-RÈGLES CRITIQUES POUR PANDORA :
-- Les noms de personnages doivent être STRICTEMENT IDENTIQUES à travers tout le document \
-(même graphie, même casse) — ils sont utilisés pour l'auto-liaison avec le casting et le storyboard.
-- Les en-têtes INT./EXT. doivent nommer le lieu clairement et précisément — \
-ils alimentent l'extraction automatique des décors.
-- Chaque séquence doit avoir un titre court et évocateur — \
-il sera utilisé pour nommer les groupes de plans dans le storyboard.
-- Les accessoires, véhicules et éléments visuels importants doivent apparaître \
-explicitement dans les lignes d'action — ils seront extraits automatiquement.
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+1. EN-TÊTE
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+════════════════════════════════════════════════════════
+[TITRE DU PROJET EN MAJUSCULES]
+[Sous-titre ou accroche — format, durée totale]
+════════════════════════════════════════════════════════
 
-Conserve TOUT le contenu narratif sans rien résumer ni couper.
-Retourne uniquement le scénario formaté, sans commentaires ni explications.\
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+2. PERSONNAGES
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+════════════════════════════════════════════════════════
+PERSONNAGES
+════════════════════════════════════════════════════════
+
+Un bloc par personnage :
+NOM — Rôle ou fonction
+Âge, physique détaillé (taille, corpulence, traits, cheveux, peau).
+Tenue principale : description précise des vêtements, couleurs, matières.
+Attitude, énergie, ce que le corps exprime.
+
+RÈGLE : graphie du NOM strictement identique dans tout le document.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+3. DÉCORS
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+════════════════════════════════════════════════════════
+DÉCORS
+════════════════════════════════════════════════════════
+
+Un bloc par décor unique :
+NOM DU DÉCOR — INT./EXT. — MOMENT (JOUR / NUIT / GOLDEN HOUR / etc.)
+Description visuelle détaillée : architecture, matières, couleurs, lumière \
+naturelle ou artificielle, objets présents, ambiance générale.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+4. SCÉNARIO — PLANS
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+════════════════════════════════════════════════════════
+SCÉNARIO
+════════════════════════════════════════════════════════
+
+Un bloc par plan, séparé par une ligne de tirets :
+
+────────────────────────────────────────────────────────
+PLAN N — [INT./EXT.] [NOM DU DÉCOR] — [MOMENT]
+Séquence N — Plan N — Durée : Xs
+────────────────────────────────────────────────────────
+
+VALEUR DE PLAN : [Plan large / Plan moyen / Plan rapproché / Gros plan / Très gros plan]
+MOUVEMENT CAMÉRA : [description précise du mouvement ou "Caméra fixe"]
+AXE : [Face / Profil / 3/4 / Dos / Plongée / Contre-plongée — préciser si nécessaire]
+FOCALE : [valeur mm — type optique si pertinent]
+VITESSE : [Normale / Ralenti léger / Ralenti (120fps) / Accéléré]
+
+[Description de l'action au présent de l'indicatif. Ce que la caméra voit \
+exactement : position des personnages, gestes précis, expressions, matières, \
+lumières, profondeur de champ, arrière-plan. Minimum 3 lignes par plan.]
+
+[Son : ambiance, musique, effets — si notable]
+
+PROMPT SEEDANCE :
+[Prompt en anglais, 40-80 mots. Structure : shot type + sujet + action + \
+environnement + lumière + style technique + mouvement caméra. \
+Ne jamais inclure de dialogue ou voix off dans ce champ.]
+
+════════════════════════════════════════════════════════
+FIN — DURÉE TOTALE : Xs
+════════════════════════════════════════════════════════
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+RÈGLES IMPÉRATIVES
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+- Conserver TOUT le contenu narratif sans rien résumer ni couper
+- Noms de personnages : graphie STRICTEMENT IDENTIQUE dans tout le document
+- Dialogues et voix off : inclus directement dans le bloc du plan concerné, \
+  sous la description d'action, au format :
+      NOM DU PERSONNAGE (V.O.) ou NOM DU PERSONNAGE
+      "Texte du dialogue ou de la voix off."
+- Prompts Seedance : en anglais, jamais de voix off ni dialogue dedans
+- Descriptions visuelles : concret, dynamique, spécifique, spatial
+  ("la soie noire trempée de pluie" et non "une belle robe")
+  ("ses mains se crispent sur le fourreau" et non "il hésite")
+- Accessoires, véhicules, costumes importants : citer explicitement \
+  dans les descriptions — ils seront extraits automatiquement par Pandora
+- Durées : estimer selon le rythme naturel de la scène (4s minimum par plan)
+- Retourner uniquement le document mis en page, sans commentaires ni explications\
 """
 
 _ARRANGE_SCREENPLAY_TMPL = """\
-Tu es un consultant créatif, dramaturge et superviseur de production pour Pandora, \
-un outil de pré-production cinéma qui génère des vidéos via Seedance 2.0 \
-(IA vidéo ByteDance via fal.ai).
+Tu es un consultant créatif et superviseur de production pour Pandora, \
+un outil de pré-production IA qui génère des clips vidéo via Seedance 2.0 (ByteDance/fal.ai).
 
-CONTEXTE TECHNIQUE IMPORTANT :
-Le scénario analysé sera découpé en plans individuels de 2 à 15 secondes chacun, \
-puis chaque plan sera généré par IA. Pour qu'un plan soit générable, il doit contenir :
-- Une action visuelle principale clairement identifiable
-- Un ou plusieurs personnages dans un décor précis
-Les scènes trop longues, trop denses ou trop abstraites (état intérieur, ellipse, voix off pure) \
-sont difficiles à traduire en vidéo IA et doivent être repensées ou complétées.
+CONTEXTE TECHNIQUE CRUCIAL :
+Ce scénario sera découpé en plans de 2 à 15 secondes, chacun envoyé à Seedance 2.0 sous forme de prompt vidéo. \
+La qualité des clips dépend directement de la qualité visuelle des descriptions dans le scénario. \
+Un bon scénario pour Pandora est un scénario dont chaque ligne d'action peut devenir un prompt efficace.
+
+Un scénario optimal pour Pandora :
+- Décrit ce que la caméra VOIT — personnages, costumes, décors, textures, lumières, mouvements
+- Peut être découpé en plans courts (2-15s) sans perdre de sens visuel
+- Évite les abstractions non visuelles (états intérieurs, ellipses non décrites, voix off sans image)
+- Nomme les personnages et décors de façon stable et précise (pour les extractions automatiques)
+- Intègre les éléments qui ont des références visuelles (personnages iconiques, décors marquants)
 
 Analyse le scénario fourni et structure ta réponse en 6 sections :
 
-### 1. Structure narrative
-Analyse des actes, du rythme, des points de tension et de l'équilibre scènes/dialogues. \
-Le scénario est-il bien découpable en plans courts ? Y a-t-il des séquences trop denses \
-ou trop abstraites pour être traduites en vidéo IA ?
+### 1. Structure narrative et découpage IA
+Rythme général, cohérence des séquences, équilibre action/dialogue. \
+Le scénario est-il découpable en plans de 2-15s ? \
+Y a-t-il des séquences trop longues, trop denses, ou qui créent des transitions visuellement problématiques ?
 
-### 2. Points forts
-Ce qui fonctionne bien — dramatiquement et visuellement. Sois précis et cite des exemples.
+### 2. Qualité des descriptions visuelles pour Seedance
+C'est la section la plus importante pour Pandora. Évalue la richesse "promptable" du scénario : \
+Les personnages sont-ils décrits avec suffisamment de détails (apparence, costumes, expressions, postures) ? \
+Les décors sont-ils assez précis et évocateurs ? \
+Y a-t-il des scènes abstraites qui produiraient des clips génériques ou incohérents d'un plan à l'autre ? \
+Cite les passages exacts à améliorer.
 
-### 3. Points à améliorer
-Problèmes de rythme, raccords, incohérences de personnages, scènes trop longues ou trop abstraites \
-pour la génération vidéo. Cite les scènes concernées.
+### 3. Points forts
+Ce qui fonctionne bien — narrativement ET visuellement pour la génération IA. \
+Cite les passages qui produiraient de bons prompts Seedance.
 
 ### 4. Proposition d'arrangement
-Si la structure peut être améliorée : propose un ordre alternatif des séquences avec justification. \
-Indique les séquences à couper, fusionner ou déplacer, et pourquoi. \
+Si la structure narrative ou le rythme visuel peut être amélioré : \
+propose un ordre alternatif des séquences avec justification (impact dramatique ET impact IA). \
+Indique les séquences à couper, fusionner, diviser ou déplacer. \
 Si la structure est déjà optimale, dis-le explicitement.
 
 ### 5. Suggestions concrètes
-5 à 7 pistes actionnables, priorisées par impact. Pour chaque suggestion : \
-ce qu'il faut changer, pourquoi, et comment le formuler dans le scénario.
+5 à 7 pistes actionnables, priorisées par impact sur la qualité de génération. \
+Pour chaque suggestion : (a) ce qu'il faut changer, \
+(b) pourquoi ça améliore la génération Seedance, \
+(c) exemple de reformulation si pertinent.
 
 ### 6. Inventaire complet des personnages
-Liste TOUS les personnages sans exception : principaux, secondaires, figurants, silhouettes. \
-Ne jamais regrouper sous une formule générique ("les soldats", "ses alliés", "les gardes"). \
-Citer CHAQUE personnage par son nom ou sa fonction précise.
+Liste TOUS les personnages sans exception : principaux, secondaires, figurants. \
+Ne jamais regrouper sous une formule générique. \
 Format par ligne : Nom/Fonction | Rôle (Principal / Secondaire / Figurant) | Scènes d'apparition
 
 Respond in {LANG_INSTRUCTION}, in a structured, direct and constructive way.\
 """
 
 _APPLY_ARRANGE = """\
-Tu es un scénariste et dramaturge professionnel qui applique des suggestions d'arrangement \
-à un scénario existant pour le rendre plus fort et plus adapté à la production vidéo IA.
+Tu es un scénariste expert pour Pandora, un outil de pré-production IA \
+qui génère des clips vidéo via Seedance 2.0 (ByteDance/fal.ai).
+
+Tu appliques des suggestions d'arrangement à un scénario pour le rendre \
+plus fort narrativement ET plus efficace pour la génération vidéo IA.
 
 Tu reçois :
 1. LE SCÉNARIO ORIGINAL — la matière de base à préserver et améliorer
-2. L'ANALYSE ET LES SUGGESTIONS — le résultat de l'analyse dramaturgique
+2. L'ANALYSE ET LES SUGGESTIONS — le résultat de l'analyse créative et technique
 
 RÈGLES D'APPLICATION :
 - Préserve TOUT le contenu narratif essentiel : actions, dialogues, lieux, personnages
 - Applique les suggestions pertinentes selon l'intensité indiquée
-- Maintiens la mise en page standard : séquences numérotées (—— SÉQUENCE N — TITRE ——), \
+- Maintiens la structure Pandora : séquences (—— SÉQUENCE N — TITRE ——), \
 en-têtes INT./EXT., noms de personnages en MAJUSCULES centrés
-- Les noms de personnages doivent être STRICTEMENT IDENTIQUES tout au long du document
-- Assure-toi que chaque scène contient des actions visuelles claires et concrètes \
-(le scénario sera découpé en plans IA de 2 à 15s — pas de scènes trop abstraites)
+- Noms de personnages : graphie STRICTEMENT IDENTIQUE tout au long du document
+- Enrichis les descriptions visuelles là où c'est pertinent : \
+ajoute des détails de costume, d'expression, de texture, de lumière, de mouvement — \
+tout ce qui rend les scènes plus "promptables" pour Seedance 2.0
+- Chaque ligne d'action doit décrire ce que la caméra peut voir — \
+traduis les états intérieurs en gestes, postures, expressions visibles
+- Assure-toi que chaque scène contient au moins une action visuelle claire et concrète \
+(le scénario sera découpé en plans de 2 à 15s)
 - Ne résume pas, ne condense pas arbitrairement les dialogues importants
 
-Retourne UNIQUEMENT le scénario réécrit en mise en page standard, sans commentaires ni explications.\
+Retourne UNIQUEMENT le scénario réécrit en mise en page Pandora, sans commentaires ni explications.\
 """
 
 _GENERATE_STORYBOARD_TMPL = """\
@@ -151,6 +236,8 @@ RÈGLES ABSOLUES :
 Retourne UNIQUEMENT un tableau JSON valide. Chaque élément du tableau représente un plan et contient exactement ces clés :
 {
   "number": <int — numéro séquentiel du plan>,
+  "seq_num": <int — numéro de la séquence contenant ce plan, extrait des titres "—— SÉQUENCE N — TITRE ——" du scénario. Ex : 1 pour SÉQUENCE 1, 3 pour SÉQUENCE 3. Si le scénario ne contient pas de marqueurs de séquence, utiliser 1 pour tous les plans.>,
+  "seq_name": <str — titre de la séquence contenant ce plan, extrait du marqueur "—— SÉQUENCE N — TITRE ——". Ex : "LA FORTERESSE", "RETOUR AU VILLAGE". Chaîne vide si pas de marqueur de séquence.>,
   "scene_title": <str — titre court de la scène, extrait du scénario>,
   "decor_name": <str — nom exact du décor / lieu tel qu'il apparaît dans le scénario>,
   "shot_time": <str — exactement une valeur parmi : "Jour", "Nuit", "Lever du soleil", "Coucher du soleil">,
@@ -171,6 +258,65 @@ Retourne UNIQUEMENT un tableau JSON valide. Chaque élément du tableau représe
 
 Contrainte absolue : duration ne peut jamais dépasser 15.0 secondes (limite de Seedance 2.0).
 Retourne UNIQUEMENT le tableau JSON, sans aucun texte avant ou après.\
+"""
+
+
+_FORMAT_PANDORA = """\
+Tu es un directeur de la photographie et superviseur de production travaillant avec Pandora, \
+un outil de pré-production IA qui génère des clips vidéo via Seedance 2.0 (ByteDance/fal.ai).
+
+Ton rôle : transformer le scénario fourni en mise en page PANDORA — un découpage plan par plan \
+conçu pour piloter directement la génération vidéo IA.
+
+FORMAT DE SORTIE OBLIGATOIRE :
+
+—— SÉQUENCE N — TITRE COURT ——  (titre évocateur 2-4 mots, en MAJUSCULES)
+
+P01 | Valeur de plan | Mouvement de caméra | Axe | ~Durée
+INT./EXT. LIEU PRÉCIS — MOMENT
+Description action : ce que la caméra voit, au présent, concret et visuel.
+                NOM PERSONNAGE  (si dialogue, centré en MAJUSCULES)
+        Réplique indentée.  (dialogue exact du scénario)
+→ SEEDANCE: Prompt vidéo court, descriptif, sensoriel, en français.
+
+P02 | ...
+→ SEEDANCE: ...
+
+RÈGLES DE NUMÉROTATION :
+- Plans numérotés P01, P02, P03... en continu sur tout le scénario (jamais de réinitialisation par séquence)
+- Chaque plan = 2 à 15 secondes maximum (limite absolue Seedance 2.0)
+- Découper les scènes longues en plusieurs plans cohérents
+
+VALEURS DE PLAN (utiliser ces termes exacts) :
+Grand ensemble | Plan d'ensemble | Plan large | Plan moyen | Plan poitrine | Gros plan | Très gros plan | Insert
+
+MOUVEMENTS (utiliser ces termes exacts) :
+Fixe | Panoramique | Travelling avant | Travelling arrière | Travelling latéral | Zoom avant | Zoom arrière | Steadicam | Grue/Drone | Caméra portée
+
+AXES (utiliser ces termes exacts) :
+Face | 3/4 | Latéral | Dos | Plongée | Contre-plongée | Subjectif
+
+DURÉE :
+- Notation "~Xs" (ex: ~6s, ~10s)
+- Maximum absolu : ~15s — si une scène dépasse 15s, la couper en plusieurs plans
+
+RÈGLES POUR LA DESCRIPTION ACTION :
+- Décrire UNIQUEMENT ce que la caméra peut voir : matières, textures, couleurs, lumières, gestes, postures, expressions
+- Personnages cités par leur NOM uniquement — jamais de description physique (les refs images gèrent la cohérence visuelle)
+- Si dialogue présent : le citer intégralement, NOM en MAJUSCULES centré + réplique indentée
+
+RÈGLES POUR LE PROMPT SEEDANCE (après →) :
+- Toujours en FRANÇAIS (traduction automatique gérée par Pandora avant envoi)
+- Jamais de technique caméra (déjà dans la ligne P01) — décrire uniquement sujet, décor, action, ambiance
+- Personnages cités par NOM uniquement — pas de description physique
+- Concis et évocateur : 1 à 3 phrases. Sensations, lumière, textures, rythme.
+- Structure recommandée : [personnage(s)] + [lieu/environnement] + [action] + [ambiance/lumière]
+- Si dialogue : inclure la réplique exacte entre guillemets dans le prompt
+
+RÈGLES GLOBALES :
+- Conserver TOUT le contenu narratif du scénario original — aucune invention, aucune coupure arbitraire
+- Noms de personnages : graphie STRICTEMENT IDENTIQUE partout
+- Pas de commentaires ni d'explications hors format — retourner uniquement la mise en page PANDORA\
 """
 
 
@@ -196,7 +342,8 @@ Inclure OBLIGATOIREMENT :
 Retourne UNIQUEMENT un tableau JSON valide. Chaque élément représente un personnage :
 {
   "name": <str — nom propre du personnage, ou fonction précise si non nommé>,
-  "description": <str — description physique (apparence, morphologie, âge, traits distinctifs) et traits de caractère. 1-2 phrases MAX. EXCLURE ABSOLUMENT : actions du personnage, interactions avec d'autres personnages, relations, événements du scénario. La description doit servir de brief pour un casting visuel — apparence uniquement.>,
+  "description": <str — description physique (apparence, morphologie, âge, traits distinctifs) et traits de caractère. 1-2 phrases MAX. La description doit servir de brief pour un casting visuel — apparence uniquement.>,
+  "prompt": <str — description visuelle ENRICHIE en français pour la génération d'image IA par Nano Banana. Inclure OBLIGATOIREMENT : morphologie et silhouette, âge apparent, carnation et traits du visage (forme du visage, mâchoire, yeux, nez, lèvres), couleur et coupe de cheveux, tenue vestimentaire complète avec couleurs et matières, posture et attitude corporelle, éclairage cinématographique adapté au ton du film (ex : lumière froide de film noir, lumière chaude de comédie). 4-6 phrases détaillées, UNIQUEMENT des descripteurs VISUELS concrets. Exemple de qualité : "Homme de 35 ans, silhouette athlétique et nerveuse, 1m80, peau mate légèrement hâlée. Visage anguleux, mâchoire carrée marquée de barbe de 3 jours grise, regard sombre et légèrement absent sous des sourcils épais. Cheveux châtains courts, légèrement en désordre. Porte une veste de combat kaki délavée et tachée de boue, pantalon cargo beige aux genoux écorchés, casque M1 cabossé posé de travers. Posture droite mais fatiguée, épaules légèrement affaissées. Éclairage latéral naturel avec hautes lumières dorées de fin d'après-midi.">,
   "role": <str — exactement "Principal", "Secondaire" ou "Figurant">
 }
 
@@ -212,6 +359,7 @@ Retourne UNIQUEMENT un tableau JSON valide. Chaque élément représente un déc
 {
   "name": <str — nom court du décor en français, ex: "Salle à manger", "Forêt enneigée">,
   "description": <str — description en FRANÇAIS de l'ambiance, de l'époque, du style visuel, 1-2 phrases>,
+  "prompt": <str — description visuelle ENRICHIE en français pour la génération d'image IA. Inclure OBLIGATOIREMENT : style architectural ou naturel précis (matériaux, époque, état dégradé/neuf), éclairage détaillé (heure du jour, source lumineuse, direction, intensité), palette de couleurs dominante, ambiance atmosphérique (météo, saison, humidité, fumée), détails de mise en scène caractéristiques (mobilier, végétation, objets), profondeur de champ suggérée. 4-6 phrases visuellement riches. Uniquement des descripteurs CONCRETS et VISUELS.>,
   "category": <str — exactement une valeur parmi : "Intérieur", "Extérieur", "Studio", "Urbain", "Rural", "Aquatique", "Aérien", "Fantastique", "Industriel", "Historique", "Autre">,
   "scene_headers": <list[str] — liste des en-têtes de scène exacts (lignes INT./EXT.) du scénario où ce décor apparaît, ex: ["INT. SALLE À MANGER — JOUR", "INT. SALLE À MANGER — NUIT"]>
 }
@@ -231,6 +379,7 @@ Retourne UNIQUEMENT un tableau JSON valide. Chaque élément représente un acce
 {
   "name": <str — nom de l'accessoire>,
   "description": <str — description de l'objet et son rôle dans l'histoire, 1 phrase>,
+  "prompt": <str — description visuelle ENRICHIE en français pour la génération d'image IA. Inclure : matière exacte (cuir vieilli, acier brossé, bois sombre...), couleur dominante et teintes secondaires, dimensions relatives, état de conservation (neuf/usé/endommagé/patiné), détails distinctifs (gravures, décorations, marques d'usure), contexte de présentation (posé sur une surface, tenu en main, éclairage). 2-3 phrases concrètes et visuelles.>,
   "category": <str — exactement une valeur parmi : "Bijoux", "Armes", "Électronique", "Mobilier", "Document", "Bagage", "Outil", "Autre…">
 }
 
@@ -269,6 +418,7 @@ Retourne UNIQUEMENT un tableau JSON valide. Chaque élément représente un item
 {
   "name": <str — nom court descriptif, ex: "Uniforme de combat de Viktor", "Peintures de guerre de Raven", "Coupe rase militaire de Raven">,
   "description": <str — description précise et visuelle, 1-2 phrases>,
+  "prompt": <str — description visuelle ENRICHIE en français pour la génération d'image IA. Inclure : tissu ou matière précis (coton, cuir, laine...), couleurs exactes, coupe et style (militaire, civil, époque), état (neuf/usé/sali), détails distinctifs (insignes, broderies, déchirures, taches). 2-3 phrases visuellement précises.>,
   "hmc_type": <str — exactement "Habit", "Maquillage" ou "Coiffure">,
   "character_name": <str — nom exact du personnage concerné>
 }
@@ -283,6 +433,7 @@ Retourne UNIQUEMENT un tableau JSON valide. Chaque élément représente un véh
 {
   "name": <str — nom du véhicule, ex: "La DS noire de Viktor", "Camion militaire">,
   "description": <str — description de l'aspect visuel et du rôle dans l'histoire, 1-2 phrases>,
+  "prompt": <str — description visuelle ENRICHIE en français pour la génération d'image IA. Inclure : marque et modèle si connu ou type précis, couleur de carrosserie, état (neuf/patiné/endommagé/militaire), époque, détails distinctifs (chromés, rayures, logos, équipements spéciaux), contexte d'éclairage et environnement immédiat. 2-3 phrases concrètes.>,
   "category": <str — exactement une valeur parmi : "Voiture", "Moto", "Camion", "Bateau", "Avion", "Train", "Vélo", "Autre">
 }
 
@@ -362,6 +513,7 @@ def _fmt_err(e: Exception) -> str:
 # ── Workers ───────────────────────────────────────────────────────────────────
 
 class FormatScreenplayWorker(QThread):
+    chunk    = pyqtSignal(str)
     finished = pyqtSignal(str)
     failed   = pyqtSignal(str)
 
@@ -379,13 +531,50 @@ class FormatScreenplayWorker(QThread):
             import anthropic
             lang = _get_lang()
             client = anthropic.Anthropic(api_key=key)
-            msg = client.messages.create(
+            full_text = ""
+            with client.messages.stream(
                 model=_MODEL,
                 max_tokens=8192,
                 system=_FORMAT_SCREENPLAY,
                 messages=[{"role": "user", "content": _lang_hint(lang) + self._text}],
-            )
-            self.finished.emit(msg.content[0].text)
+            ) as stream:
+                for text in stream.text_stream:
+                    full_text += text
+                    self.chunk.emit(text)
+            self.finished.emit(full_text.strip())
+        except Exception as e:
+            self.failed.emit(_fmt_err(e))
+
+
+class FormatPandoraWorker(QThread):
+    chunk    = pyqtSignal(str)
+    finished = pyqtSignal(str)
+    failed   = pyqtSignal(str)
+
+    def __init__(self, text: str):
+        super().__init__()
+        self._text = text
+
+    def run(self):
+        cfg = load_config()
+        key = cfg.get("anthropic_key", "").strip()
+        if not key:
+            self.failed.emit("Clé API Anthropic manquante.\nConfigure-la dans Paramètres.")
+            return
+        try:
+            import anthropic
+            client = anthropic.Anthropic(api_key=key)
+            full_text = ""
+            with client.messages.stream(
+                model=_MODEL,
+                max_tokens=16000,
+                system=_FORMAT_PANDORA,
+                messages=[{"role": "user", "content": self._text}],
+            ) as stream:
+                for text in stream.text_stream:
+                    full_text += text
+                    self.chunk.emit(text)
+            self.finished.emit(full_text.strip())
         except Exception as e:
             self.failed.emit(_fmt_err(e))
 
@@ -488,12 +677,13 @@ class ArrangeScreenplayWorker(QThread):
     chunk    = pyqtSignal(str)
 
     def __init__(self, text: str, duration_secs: int = 0, intensity: int = 5,
-                 project_context: dict | None = None):
+                 project_context: dict | None = None, ref_analysis: str = ""):
         super().__init__()
         self._text            = text
         self._duration_secs   = duration_secs
         self._intensity       = max(1, min(10, intensity))
         self._project_context = project_context or {}
+        self._ref_analysis    = ref_analysis
 
     def run(self):
         cfg = load_config()
@@ -549,6 +739,20 @@ class ArrangeScreenplayWorker(QThread):
                             ctx.append(f"  · {d.get('name', '')} ({cat})" if cat else f"  · {d.get('name', '')}")
                 prefixes.append("\n".join(ctx))
 
+            if self._ref_analysis.strip():
+                if lang == "en":
+                    prefixes.append(
+                        "[VISUAL REFERENCES ANALYSIS — Factor in these visual descriptions "
+                        "for narrative coherence, visual consistency and scene pacing suggestions]\n"
+                        + self._ref_analysis.strip()
+                    )
+                else:
+                    prefixes.append(
+                        "[ANALYSE DES RÉFÉRENCES VISUELLES — Intègre ces descriptions dans tes "
+                        "suggestions d'arrangement : cohérence visuelle, décors, ambiances, rythme]\n"
+                        + self._ref_analysis.strip()
+                    )
+
             user_content = _lang_hint(lang) + "\n\n".join(prefixes) + "\n\n" + self._text
             full_text = ""
             with client.messages.stream(
@@ -567,6 +771,7 @@ class ArrangeScreenplayWorker(QThread):
 
 class ApplyArrangeWorker(QThread):
     """Applique les suggestions d'arrangement au scénario original via Claude."""
+    chunk    = pyqtSignal(str)
     finished = pyqtSignal(str)
     failed   = pyqtSignal(str)
 
@@ -599,13 +804,17 @@ class ApplyArrangeWorker(QThread):
                     f"SCÉNARIO ORIGINAL :\n{self._text}\n\n"
                     f"SUGGESTIONS D'ARRANGEMENT :\n{self._suggestions}"
                 )
-            msg = client.messages.create(
+            full_text = ""
+            with client.messages.stream(
                 model=_MODEL,
                 max_tokens=8192,
                 system=_APPLY_ARRANGE,
                 messages=[{"role": "user", "content": user_content}],
-            )
-            self.finished.emit(msg.content[0].text)
+            ) as stream:
+                for text in stream.text_stream:
+                    full_text += text
+                    self.chunk.emit(text)
+            self.finished.emit(full_text.strip())
         except Exception as e:
             self.failed.emit(_fmt_err(e))
 
@@ -636,19 +845,50 @@ class GenerateStoryboardWorker(QThread):
             # Bloc noms exacts — injecté AVANT le scénario pour ancrer les noms
             names_block = ""
             en = self._element_names
-            if en:
-                lines = [
-                    "[NOMS EXACTS DES ÉLÉMENTS PANDORA — utilise EXACTEMENT ces noms "
-                    "dans character_names, decor_name, accessory_names et vehicle_names :]"
-                ]
-                if en.get("characters"):
-                    lines.append("Personnages : " + ", ".join(en["characters"]))
-                if en.get("decors"):
-                    lines.append("Décors : " + ", ".join(en["decors"]))
-                if en.get("accessories"):
-                    lines.append("Accessoires : " + ", ".join(en["accessories"]))
-                if en.get("vehicles"):
-                    lines.append("Véhicules : " + ", ".join(en["vehicles"]))
+
+            # Charge les accessoires depuis la DB si non fournis explicitement
+            acc_constraint: list | None = en.get("accessories") if en else None
+            if acc_constraint is None:
+                try:
+                    import core.accessories as _acc_m
+                    acc_constraint = [a["name"] for a in _acc_m.list_accessories() if a.get("name")]
+                except Exception:
+                    acc_constraint = None
+
+            # Charge les personnages depuis la DB si non fournis explicitement
+            char_constraint: list | None = en.get("characters") if en else None
+            if char_constraint is None:
+                try:
+                    import core.casting as _cast_m
+                    char_constraint = [c["name"] for c in _cast_m.list_characters() if c.get("name")]
+                except Exception:
+                    char_constraint = None
+
+            lines = [
+                "[NOMS EXACTS DES ÉLÉMENTS PANDORA — utilise EXACTEMENT ces noms "
+                "dans character_names, decor_name, accessory_names et vehicle_names :]"
+            ]
+            if char_constraint:
+                lines.append(
+                    "Personnages (casse OBLIGATOIRE — copie exacte) : "
+                    + ", ".join(char_constraint)
+                )
+            if en and en.get("decors"):
+                lines.append("Décors : " + ", ".join(en["decors"]))
+            if acc_constraint:
+                lines.append(
+                    "Accessoires (LISTE EXHAUSTIVE — n'utilise AUCUN autre nom) : "
+                    + ", ".join(acc_constraint)
+                )
+            elif acc_constraint is not None:
+                # Liste vide explicitement chargée depuis la DB = aucun accessoire défini
+                lines.append(
+                    "[CONTRAINTE ABSOLUE : accessory_names = [] pour TOUS les plans"
+                    " — aucun accessoire n'est défini dans ce projet]"
+                )
+            if en and en.get("vehicles"):
+                lines.append("Véhicules : " + ", ".join(en["vehicles"]))
+            if len(lines) > 1:
                 names_block = "\n".join(lines) + "\n\n"
 
             user_content = _lang_hint(lang) + names_block + self._text
@@ -695,6 +935,41 @@ class GenerateStoryboardWorker(QThread):
                 s.setdefault("character_ids", [])
                 s.setdefault("accessory_ids", [])
                 s.setdefault("decor_id",      "")
+
+            # Résolution automatique decor_name → decor_id
+            try:
+                import core.decors as _dec_m
+                _all_decors  = _dec_m.list_decors()
+                _dec_by_name = {
+                    d["name"].strip().lower(): d
+                    for d in _all_decors if d.get("name") and d.get("id")
+                }
+                for s in shots:
+                    if not s.get("decor_id") and s.get("decor_name"):
+                        _match = _dec_by_name.get(s["decor_name"].strip().lower())
+                        if _match:
+                            s["decor_id"] = _match["id"]
+            except Exception:
+                pass
+
+            # Résolution automatique character_names → character_ids
+            try:
+                import core.casting as _cast_m
+                _all_chars   = _cast_m.list_characters()
+                _char_by_name = {
+                    c["name"].strip().lower(): c
+                    for c in _all_chars if c.get("name") and c.get("id")
+                }
+                for s in shots:
+                    if not s.get("character_ids") and s.get("character_names"):
+                        s["character_ids"] = [
+                            _char_by_name[n.strip().lower()]["id"]
+                            for n in s["character_names"]
+                            if n.strip().lower() in _char_by_name
+                        ]
+            except Exception:
+                pass
+
             self.finished.emit(shots)
         except Exception as e:
             self.failed.emit(_fmt_err(e))
@@ -806,6 +1081,167 @@ class ExtractVehiclesWorker(QThread):
         try:
             items = _extract_worker(_EXTRACT_VEHICLES, self._text)
             self.finished.emit(items)
+        except Exception as e:
+            self.failed.emit(_fmt_err(e))
+
+
+class AnalyzeReferencesWorker(QThread):
+    """Analyse multimodale d'images de référence via Claude Sonnet.
+    Retourne une description enrichie des personnages/décors/ambiances détectés."""
+    chunk  = pyqtSignal(str)
+    done   = pyqtSignal(str)
+    failed = pyqtSignal(str)
+
+    _SYSTEM = (
+        "Tu es un superviseur artistique pour Pandora, un outil de pré-production cinéma. "
+        "On te fournit une ou plusieurs images de référence visuelle (personnages, décors, ambiances, "
+        "objets, costumes, etc.). Tu dois analyser chaque image et produire une description "
+        "précise et détaillée en français, orientée prompt de génération vidéo IA. "
+        "Pour chaque image, identifie : les personnages visibles (apparence, vêtements, attitude), "
+        "les décors (lieu, éclairage, époque, style architectural), l'ambiance générale "
+        "(heure du jour, météo, palette de couleurs, mood), les accessoires ou props importants. "
+        "Formate le résultat ainsi :\n"
+        "**IMAGE N** (si plusieurs images)\n"
+        "• **Personnages** : ...\n"
+        "• **Décor** : ...\n"
+        "• **Ambiance** : ...\n"
+        "• **Accessoires/Props** : ...\n"
+        "• **Prompt enrichi suggéré** : (un prompt court en anglais, optimisé pour Seedance 2.0)\n\n"
+        "Sois précis, concis et orienté production cinéma. "
+        "Si le scénario est fourni, mets les descriptions en rapport avec l'univers du film."
+    )
+
+    def __init__(self, ref_paths: list[str], scenario_text: str = ""):
+        super().__init__()
+        self._paths   = ref_paths
+        self._scenario = scenario_text
+
+    def run(self):
+        import base64
+        import mimetypes
+        cfg = load_config()
+        key = cfg.get("anthropic_key", "").strip()
+        if not key:
+            self.failed.emit("Clé API Anthropic manquante.\nConfigure-la dans Paramètres.")
+            return
+        try:
+            import anthropic
+            client = anthropic.Anthropic(api_key=key)
+
+            content: list = []
+            for i, path in enumerate(self._paths):
+                if not __import__("os").path.isfile(path):
+                    continue
+                mime, _ = mimetypes.guess_type(path)
+                if not mime or not mime.startswith("image/"):
+                    mime = "image/jpeg"
+                with open(path, "rb") as f:
+                    data = base64.standard_b64encode(f.read()).decode("utf-8")
+                if len(self._paths) > 1:
+                    content.append({
+                        "type": "text",
+                        "text": f"Image {i + 1} :",
+                    })
+                content.append({
+                    "type": "image",
+                    "source": {"type": "base64", "media_type": mime, "data": data},
+                })
+
+            if not content:
+                self.failed.emit("Aucune image valide à analyser.")
+                return
+
+            user_text = "Analyse ces images de référence pour le film."
+            if self._scenario.strip():
+                excerpt = self._scenario.strip()[:1500]
+                user_text += (
+                    f"\n\nExtrait du scénario (contexte) :\n{excerpt}"
+                )
+            content.append({"type": "text", "text": user_text})
+
+            full_text = ""
+            with client.messages.stream(
+                model=_MODEL,
+                max_tokens=2048,
+                system=self._SYSTEM,
+                messages=[{"role": "user", "content": content}],
+            ) as stream:
+                for text in stream.text_stream:
+                    full_text += text
+                    self.chunk.emit(text)
+            self.done.emit(full_text.strip())
+        except Exception as e:
+            self.failed.emit(_fmt_err(e))
+
+
+class EnrichScenarioWithRefsWorker(QThread):
+    """Enrichit le scénario en croisant son texte avec l'analyse visuelle des références.
+
+    Claude identifie les correspondances (personnages, décors, ambiances) et enrichit
+    uniquement les passages du scénario qui ont un équivalent dans les images analysées.
+    """
+    chunk  = pyqtSignal(str)
+    done   = pyqtSignal(str)
+    failed = pyqtSignal(str)
+
+    _SYSTEM = """\
+Tu es un scénariste expert spécialisé dans l'enrichissement de scénarios cinéma \
+à partir de références visuelles.
+
+Tu reçois :
+1. Un scénario existant
+2. Une analyse visuelle d'images de référence (personnages, décors, ambiances, lumières, textures)
+
+Ta mission : enrichir le scénario en intégrant les détails visuels des références \
+là où ils correspondent à des éléments déjà présents dans le texte.
+
+Règles strictes :
+- Ne réécris PAS le scénario de zéro — tu enrichis uniquement ce qui est déjà là
+- Identifie les correspondances : si une référence montre un samouraï et que le scénario \
+mentionne un samouraï, enrichis la description de ce personnage avec les détails visuels \
+(armure, texture, couleurs, posture, éclairage)
+- Idem pour les décors : si une référence montre une architecture symétrique et infinie \
+et que le scénario se déroule dans un lieu similaire, enrichis ce lieu avec ces détails visuels
+- Conserve rigoureusement la structure narrative, le rythme, le ton et les événements du scénario
+- Intègre les détails visuels de façon naturelle dans le flux du texte existant \
+(pas de liste, pas de bloc séparé)
+- Si un élément du scénario n'a aucune correspondance dans les références, laisse-le intact
+- Retourne UNIQUEMENT le scénario enrichi, sans commentaire ni explication préalable
+"""
+
+    def __init__(self, scenario_text: str, ref_analysis: str):
+        super().__init__()
+        self._scenario = scenario_text
+        self._analysis = ref_analysis
+
+    def run(self):
+        try:
+            from anthropic import Anthropic
+            cfg = load_config()
+            key = cfg.get("anthropic_key", "")
+            if not key:
+                self.failed.emit("Clé Anthropic manquante (configurable dans Paramètres).")
+                return
+            client = Anthropic(api_key=key)
+            lang = _get_lang()
+            user_content = (
+                _lang_hint(lang)
+                + "=== SCÉNARIO À ENRICHIR ===\n"
+                + self._scenario.strip()
+                + "\n\n=== ANALYSE DES RÉFÉRENCES VISUELLES ===\n"
+                + self._analysis.strip()
+            )
+            full_text = ""
+            with client.messages.stream(
+                model=_MODEL,
+                max_tokens=4096,
+                system=self._SYSTEM,
+                messages=[{"role": "user", "content": user_content}],
+            ) as stream:
+                for text in stream.text_stream:
+                    full_text += text
+                    self.chunk.emit(text)
+            self.done.emit(full_text.strip())
         except Exception as e:
             self.failed.emit(_fmt_err(e))
 
@@ -1115,32 +1551,65 @@ class SyncStoryboardWorker(QThread):
 
 # ── Session de chat interactif — co-écriture arrangement ──────────────────────
 
-_ARRANGE_CHAT_SYSTEM = """\
-Tu es un co-auteur et dramaturge professionnel qui travaille en dialogue avec le réalisateur \
-pour affiner et co-écrire le scénario. Tu as déjà analysé le scénario et proposé un arrangement.
-
-Tu reçois maintenant des instructions du réalisateur pour modifier, affiner ou valider tes propositions. \
-Ton rôle est de répondre de façon collaborative, créative et bienveillante.
-
-FORMAT DE RÉPONSE OBLIGATOIRE :
-Ta réponse doit contenir EXACTEMENT deux parties séparées par la ligne marqueur ci-dessous :
-
-══════════ MESSAGE ══════════
-[Ton message conversationnel : réponse directe à l'instruction, explications, questions, \
-commentaires créatifs — 2 à 6 lignes max, ton chaleureux et collaboratif]
-══════════ SCÉNARIO ══════════
-[Le scénario COMPLET remanié, intégrant toutes les instructions de la conversation, \
-en mise en page cinéma standard avec séquences numérotées (—— SÉQUENCE N — TITRE ——), \
-en-têtes INT./EXT., noms de personnages en MAJUSCULES centrés avant les répliques.
-Conserve TOUT le contenu narratif. N'invente rien qui n'est pas dans l'original ou demandé explicitement.]
-
-RÈGLES :
-- Si l'instruction dit "ne change pas X" → X reste EXACTEMENT comme dans l'original
-- Si l'instruction demande de développer une scène → ajoute du contenu cohérent
-- Si l'instruction demande de couper → supprime proprement sans laisser d'incohérences
-- Les noms de personnages doivent être IDENTIQUES dans tout le document
-- Intègre TOUTES les instructions précédentes de la conversation, pas seulement la dernière\
-"""
+def _arrange_chat_system(intensity: int) -> str:
+    """Génère le system prompt de co-écriture adapté à l'intensité (1-10)."""
+    if intensity <= 2:
+        rule = (
+            f"━━━ INTENSITÉ MINIMALE ({intensity}/10) — MODIFICATION CHIRURGICALE STRICTE ━━━\n"
+            "Modifie UNIQUEMENT ce que le réalisateur demande, mot pour mot.\n"
+            "Si la demande cible une réplique, seule cette réplique change — rien avant, rien après.\n"
+            "Tout le reste est copié CARACTÈRE PAR CARACTÈRE depuis la version précédente.\n"
+            "Aucune amélioration, aucune correction, aucune retouche hors de la zone ciblée."
+        )
+    elif intensity <= 4:
+        rule = (
+            f"━━━ INTENSITÉ PRÉCISE ({intensity}/10) — CHIRURGIE CIBLÉE ━━━\n"
+            "Tu ne modifies QUE ce que le réalisateur demande EXPLICITEMENT.\n"
+            "Tout le reste du scénario est copié MOT POUR MOT — sans reformulation, sans retouche.\n"
+            "Tu peux uniquement harmoniser la ponctuation dans la phrase ciblée pour la cohérence."
+        )
+    elif intensity <= 6:
+        rule = (
+            f"━━━ INTENSITÉ CIBLÉE ({intensity}/10) — MODIFICATION PRÉCISE ━━━\n"
+            "Tu modifies les zones que le réalisateur demande. Tout le reste est conservé.\n"
+            "Tu peux légèrement affiner le style dans la zone ciblée pour assurer la cohérence de ton.\n"
+            "Ne retouche pas les passages non mentionnés, même si tu penses pouvoir les améliorer."
+        )
+    elif intensity <= 8:
+        rule = (
+            f"━━━ INTENSITÉ CRÉATIVE ({intensity}/10) — RÉÉCRITURE DES ZONES CIBLÉES ━━━\n"
+            "Tu modifies les zones demandées avec liberté créative : reformule, enrichis, améliore le rythme.\n"
+            "Tu peux retoucher les passages adjacents pour assurer la fluidité narrative.\n"
+            "Les zones non mentionnées sont conservées, avec d'éventuelles harmonisations stylistiques légères."
+        )
+    else:
+        rule = (
+            f"━━━ INTENSITÉ LIBRE ({intensity}/10) — CO-ÉCRITURE COMPLÈTE ━━━\n"
+            "Tu réécris dans l'esprit des instructions du réalisateur, avec pleine liberté créative.\n"
+            "Tu peux transformer le style, le rythme, les dialogues et la structure dans l'ensemble du scénario.\n"
+            "Respecte scrupuleusement ce que le réalisateur demande de conserver explicitement."
+        )
+    return (
+        "Tu es un co-auteur travaillant dans Pandora, un outil de pré-production IA. "
+        "Tu dialogues avec le réalisateur pour affiner le scénario.\n\n"
+        f"{rule}\n\n"
+        "RÉFÉRENCES VISUELLES : Si des images sont jointes, intègre leurs détails visuels "
+        "UNIQUEMENT dans les parties que le réalisateur demande de modifier.\n\n"
+        "FORMAT DE RÉPONSE OBLIGATOIRE :\n"
+        "Ta réponse doit contenir EXACTEMENT deux parties séparées par ces marqueurs :\n\n"
+        "══════════ MESSAGE ══════════\n"
+        "[Message conversationnel : indique précisément CE QUE TU AS CHANGÉ et où — "
+        "2 à 4 lignes max, ton direct et collaboratif. Si la portée est ambiguë, pose une question.]\n"
+        "══════════ SCÉNARIO ══════════\n"
+        "[Le scénario complet. Mise en page Pandora : séquences (—— SÉQUENCE N — TITRE ——), "
+        "en-têtes INT./EXT., noms de personnages en MAJUSCULES avant les répliques.]\n\n"
+        "RÈGLES :\n"
+        "- « Ne touche pas X » ou « garde X intact » → X est copié mot pour mot, sans exception\n"
+        "- « Développe Y » → ajoute du contenu cohérent UNIQUEMENT dans Y\n"
+        "- « Coupe Z » → supprime Z proprement, le reste est intact\n"
+        "- Les noms de personnages restent IDENTIQUES dans tout le document\n"
+        "- N'invente rien qui ne soit pas dans l'original ou explicitement demandé"
+    )
 
 
 class ArrangeChatWorker(QThread):
@@ -1165,6 +1634,7 @@ class ArrangeChatWorker(QThread):
         history: list[dict],
         user_message: str,
         intensity: int = 5,
+        ref_images: list | None = None,
     ):
         super().__init__()
         self._original     = original
@@ -1172,6 +1642,7 @@ class ArrangeChatWorker(QThread):
         self._history      = history        # [{"role": "user"/"assistant", "content": str}]
         self._user_message = user_message
         self._intensity    = intensity
+        self._ref_images   = ref_images or []
 
     def run(self):
         try:
@@ -1208,19 +1679,41 @@ class ArrangeChatWorker(QThread):
                 else:
                     messages.append(msg)
 
-            # Message courant
-            if not messages:
-                messages.append({
-                    "role": "user",
-                    "content": context_block + "\n\n" + self._user_message,
-                })
+            # Message courant — multimodal si images jointes
+            if self._ref_images:
+                import base64, os as _os
+                _MT = {"jpg":"image/jpeg","jpeg":"image/jpeg","png":"image/png",
+                       "webp":"image/webp","gif":"image/gif"}
+                cur_content: list = []
+                for path in self._ref_images[:4]:
+                    try:
+                        with open(path, "rb") as fh:
+                            data = base64.b64encode(fh.read()).decode()
+                        ext = _os.path.splitext(path)[1].lower().lstrip(".")
+                        mt  = _MT.get(ext, "image/jpeg")
+                        cur_content.append({"type": "image",
+                                            "source": {"type": "base64",
+                                                       "media_type": mt,
+                                                       "data": data}})
+                    except Exception:
+                        pass
+                text_prefix = context_block + "\n\n" if not messages else ""
+                cur_content.append({"type": "text",
+                                    "text": text_prefix + self._user_message})
+                messages.append({"role": "user", "content": cur_content})
             else:
-                messages.append({"role": "user", "content": self._user_message})
+                if not messages:
+                    messages.append({
+                        "role": "user",
+                        "content": context_block + "\n\n" + self._user_message,
+                    })
+                else:
+                    messages.append({"role": "user", "content": self._user_message})
 
             response = client.messages.create(
                 model=_MODEL,
                 max_tokens=8192,
-                system=_ARRANGE_CHAT_SYSTEM,
+                system=_arrange_chat_system(self._intensity),
                 messages=messages,
             )
             raw = response.content[0].text.strip()

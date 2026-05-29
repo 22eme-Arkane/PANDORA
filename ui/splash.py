@@ -1,4 +1,5 @@
 ﻿import os
+import webbrowser
 from datetime import datetime
 from PyQt6.QtWidgets import (
     QWidget, QDialog, QHBoxLayout, QVBoxLayout, QLabel, QPushButton,
@@ -8,7 +9,7 @@ from PyQt6.QtWidgets import (
 from PyQt6.QtCore import Qt, pyqtSignal, QSize
 from PyQt6.QtGui import QPixmap, QColor, QIcon
 from ui.styles import CP, PANDORA_STYLESHEET
-from ui.icons import badge_pixmap, load_icon
+from ui.icons import app_icon, load_icon
 import core.project as project_api
 from core.i18n import get_lang, set_lang, tr, LANGUAGES
 
@@ -44,6 +45,98 @@ def _glow(widget: QWidget, color: str, radius: int = 22):
     fx.setColor(QColor(color))
     fx.setOffset(0, 0)
     widget.setGraphicsEffect(fx)
+
+
+# ── Dialogue Mise à jour disponible ──────────────────────────────────────────
+
+class UpdateDialog(QDialog):
+    def __init__(self, version: str, html_url: str, parent=None):
+        super().__init__(parent)
+        self._html_url = html_url
+        self.setWindowTitle("Mise à jour disponible")
+        self.setFixedWidth(500)
+        self.setSizePolicy(
+            self.sizePolicy().horizontalPolicy(),
+            self.sizePolicy().verticalPolicy(),
+        )
+        self.setStyleSheet(PANDORA_STYLESHEET + f"QDialog{{background:{CP['bg2']};}}")
+
+        lay = QVBoxLayout(self)
+        lay.setContentsMargins(32, 28, 32, 28)
+        lay.setSpacing(18)
+
+        title = QLabel(f"✦  Mise à jour disponible — v{version}")
+        title.setWordWrap(True)
+        title.setStyleSheet(
+            f"color:{CP['accent']};font-size:16px;font-weight:700;background:transparent;"
+        )
+        lay.addWidget(title)
+
+        msg = QLabel(
+            "Une mise à jour est disponible. Vous pouvez la télécharger maintenant."
+        )
+        msg.setWordWrap(True)
+        msg.setStyleSheet(
+            f"color:{CP['text_primary']};font-size:13px;line-height:1.5;background:transparent;"
+        )
+        lay.addWidget(msg)
+
+        warn_frame = QFrame()
+        warn_frame.setStyleSheet(
+            f"QFrame{{background:rgba(255,180,0,0.08);"
+            f"border:1px solid rgba(255,180,0,0.30);border-radius:8px;}}"
+        )
+        warn_lay = QVBoxLayout(warn_frame)
+        warn_lay.setContentsMargins(16, 14, 16, 14)
+        warn_lbl = QLabel(
+            "⚠  Si vous êtes sur un projet en cours, continuez sur votre version "
+            "actuelle — certaines modifications apportées par la mise à jour peuvent "
+            "altérer un projet existant."
+        )
+        warn_lbl.setWordWrap(True)
+        warn_lbl.setStyleSheet(
+            f"color:{CP['text_secondary']};font-size:12px;line-height:1.5;background:transparent;"
+        )
+        warn_lay.addWidget(warn_lbl)
+        lay.addWidget(warn_frame)
+
+        lay.addSpacing(4)
+
+        btn_row = QHBoxLayout()
+        btn_row.setSpacing(12)
+
+        btn_continue = QPushButton("Continuer")
+        btn_continue.setFixedHeight(40)
+        btn_continue.setStyleSheet(
+            f"QPushButton{{background:transparent;color:{CP['text_secondary']};"
+            f"border:1px solid {CP['border']};border-radius:8px;"
+            f"font-size:12px;font-weight:700;padding:0 20px;}}"
+            f"QPushButton:hover{{background:{CP['bg3']};color:{CP['text_primary']};}}"
+        )
+        btn_continue.clicked.connect(self.accept)
+
+        btn_dl = QPushButton("⬇  Télécharger")
+        btn_dl.setFixedHeight(40)
+        btn_dl.setStyleSheet(
+            f"QPushButton{{background:{CP['accent']};color:#07080f;border:none;"
+            f"border-radius:8px;font-size:13px;font-weight:700;"
+            f"letter-spacing:0.5px;padding:0 24px;}}"
+            f"QPushButton:hover{{background:#6eded6;}}"
+            f"QPushButton:pressed{{background:{CP['accent_dim']};color:#fff;}}"
+        )
+        btn_dl.clicked.connect(self._download)
+
+        btn_row.addWidget(btn_continue)
+        btn_row.addStretch()
+        btn_row.addWidget(btn_dl)
+        lay.addLayout(btn_row)
+
+        self.adjustSize()
+
+    def _download(self):
+        if self._html_url:
+            webbrowser.open(self._html_url)
+        self.accept()
 
 
 # ── Dialogue Nouveau Projet ───────────────────────────────────────────────────
@@ -271,24 +364,6 @@ class _LeftPanel(QWidget):
         lay.setContentsMargins(0, 0, 0, 0)
         lay.setSpacing(0)
 
-        # ── Bouton Retour ─────────────────────────────────────────────────────
-        back_bar = QWidget()
-        back_bar.setStyleSheet("background:transparent;")
-        back_lay = QHBoxLayout(back_bar)
-        back_lay.setContentsMargins(20, 16, 20, 0)
-        btn_back = QPushButton("← Retour")
-        btn_back.setFixedHeight(28)
-        btn_back.setCursor(Qt.CursorShape.PointingHandCursor)
-        btn_back.setStyleSheet(
-            f"QPushButton{{background:transparent;color:{CP['text_dim']};"
-            f"border:none;font-size:11px;font-weight:600;padding:0;}}"
-            f"QPushButton:hover{{color:{CP['text_secondary']};}}"
-        )
-        btn_back.clicked.connect(self.back_requested)
-        back_lay.addWidget(btn_back)
-        back_lay.addStretch()
-        lay.addWidget(back_bar)
-
         # ── Logo ──────────────────────────────────────────────────────────────
         logo_area = QWidget()
         logo_area.setStyleSheet("background:transparent;")
@@ -297,7 +372,8 @@ class _LeftPanel(QWidget):
         ll.setSpacing(6)
         ll.setAlignment(Qt.AlignmentFlag.AlignHCenter)
 
-        pix_badge = badge_pixmap(72)
+        _app_ico = app_icon()
+        pix_badge = _app_ico.pixmap(72, 72)
         badge_lbl = QLabel()
         badge_lbl.setFixedSize(72, 72)
         badge_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
@@ -423,6 +499,7 @@ class _LeftPanel(QWidget):
             lang_row.addWidget(btn)
             self._splash_lang_btns[code] = btn
         lay.addLayout(lang_row)
+        lay.addSpacing(8)
 
         from core.version import VERSION as _VERSION
         ver = QLabel(f"v{_VERSION}")

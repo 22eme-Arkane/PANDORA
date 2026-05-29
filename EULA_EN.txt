@@ -1,5 +1,5 @@
 END USER LICENSE AGREEMENT — PANDORA SOFTWARE
-Version 1.0 — May 2026
+Version 1.1.7 — May 2026
 22eme Arkane — Matthieu Terrien
 Contact: 22eme.arkane@gmail.com
 
@@ -206,4 +206,4 @@ ARTICLE 13 — GENERAL PROVISIONS
 ════════════════════════════════════════════════════════════════
 
 22eme Arkane — Matthieu Terrien
-Version 1.0 — May 2026
+Version 1.1.7 — May 2026

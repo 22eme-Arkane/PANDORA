@@ -185,8 +185,17 @@ def _section_title(text: str, color: str = None) -> QLabel:
 # ── Pages du wizard ────────────────────────────────────────────────────────────
 
 def _page_welcome() -> QWidget:
-    w = QWidget()
-    lay = QVBoxLayout(w)
+    w = QScrollArea()
+    w.setWidgetResizable(True)
+    w.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+    w.setStyleSheet(
+        f"QScrollArea{{background:transparent;border:none;}}"
+        f"QScrollBar:vertical{{width:4px;background:{CP['bg2']};}}"
+        f"QScrollBar::handle:vertical{{background:{CP['border_bright']};border-radius:2px;}}"
+    )
+    inner = QWidget()
+    inner.setStyleSheet("background:transparent;")
+    lay = QVBoxLayout(inner)
     lay.setContentsMargins(32, 28, 32, 28)
     lay.setSpacing(18)
 
@@ -243,6 +252,7 @@ def _page_welcome() -> QWidget:
     fal_txt = QVBoxLayout()
     fal_txt.setSpacing(3)
     fal_name = QLabel("fal.ai")
+    fal_name.setWordWrap(True)
     fal_name.setStyleSheet(
         f"color:{CP['text_primary']};font-size:14px;font-weight:700;background:transparent;"
     )
@@ -253,7 +263,8 @@ def _page_welcome() -> QWidget:
     fal_desc.setStyleSheet(
         f"color:{CP['text_dim']};font-size:11px;background:transparent;"
     )
-    fal_price = QLabel("💰  Crédits à la consommation — commence avec $10")
+    fal_price = QLabel("Crédits à la consommation — commence avec $10")
+    fal_price.setWordWrap(True)
     fal_price.setStyleSheet(
         f"color:#9C3FE4;font-size:10px;font-weight:600;background:transparent;"
     )
@@ -283,6 +294,7 @@ def _page_welcome() -> QWidget:
     ant_txt = QVBoxLayout()
     ant_txt.setSpacing(3)
     ant_name = QLabel("Anthropic — Claude")
+    ant_name.setWordWrap(True)
     ant_name.setStyleSheet(
         f"color:{CP['text_primary']};font-size:14px;font-weight:700;background:transparent;"
     )
@@ -293,7 +305,8 @@ def _page_welcome() -> QWidget:
     ant_desc.setStyleSheet(
         f"color:{CP['text_dim']};font-size:11px;background:transparent;"
     )
-    ant_price = QLabel("💰  Crédits à la consommation — commence avec $5")
+    ant_price = QLabel("Crédits à la consommation — commence avec $5")
+    ant_price.setWordWrap(True)
     ant_price.setStyleSheet(
         f"color:{CP['accent2']};font-size:10px;font-weight:600;background:transparent;"
     )
@@ -349,6 +362,7 @@ def _page_welcome() -> QWidget:
     lay.addLayout(tuto_row)
 
     lay.addStretch()
+    w.setWidget(inner)
     return w
 
 
@@ -635,8 +649,17 @@ def _page_anthropic() -> QWidget:
 
 
 def _page_finish(navigate_to_settings_fn) -> QWidget:
-    w = QWidget()
-    lay = QVBoxLayout(w)
+    w = QScrollArea()
+    w.setWidgetResizable(True)
+    w.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+    w.setStyleSheet(
+        f"QScrollArea{{background:transparent;border:none;}}"
+        f"QScrollBar:vertical{{width:4px;background:{CP['bg2']};}}"
+        f"QScrollBar::handle:vertical{{background:{CP['border_bright']};border-radius:2px;}}"
+    )
+    inner = QWidget()
+    inner.setStyleSheet("background:transparent;")
+    lay = QVBoxLayout(inner)
     lay.setContentsMargins(32, 28, 32, 28)
     lay.setSpacing(18)
 
@@ -705,6 +728,7 @@ def _page_finish(navigate_to_settings_fn) -> QWidget:
     ))
 
     lay.addStretch()
+    w.setWidget(inner)
     return w
 
 
@@ -724,9 +748,10 @@ class OnboardingDialog(QDialog):
         self._navigate_settings = navigate_to_settings_fn or (lambda: None)
 
         self.setWindowTitle("Guide de démarrage — PANDORA")
-        self.setFixedSize(680, 680)
         self.setWindowModality(Qt.WindowModality.ApplicationModal)
         self.setStyleSheet(PANDORA_STYLESHEET + f"QDialog{{background:{CP['bg1']};}}")
+        from ui.widgets import fit_dialog_to_screen
+        fit_dialog_to_screen(self, 0.45, 0.88, 560, 540)
 
         outer = QVBoxLayout(self)
         outer.setContentsMargins(0, 0, 0, 0)

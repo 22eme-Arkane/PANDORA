@@ -44,7 +44,7 @@ def _field_style():
 
 
 def _info_btn(tooltip: str, callback) -> QPushButton:
-    btn = QPushButton("?")
+    btn = QPushButton("ⓘ")
     btn.setFixedSize(24, 24)
     btn.setToolTip(tooltip)
     btn.setCursor(Qt.CursorShape.PointingHandCursor)
@@ -110,57 +110,80 @@ class SettingsPage(QScrollArea):
         lay.addLayout(_title_row)
         lay.addWidget(_divider())
 
-        # ── DaVinci Resolve ───────────────────────────────────────────────────
-        dvr_row = QHBoxLayout()
-        dvr_row.addWidget(_section("Connexion DaVinci Resolve"))
-        dvr_row.addStretch()
-        dvr_row.addWidget(_info_btn(
-            "Guide de connexion DaVinci Resolve",
-            lambda: self._show_davinci_help(),
-        ))
-        lay.addLayout(dvr_row)
+        # ── Apparence ─────────────────────────────────────────────────────────
+        lay.addWidget(_section("Apparence"))
 
-        self._davinci = DaVinciPanel()
-        self._davinci.setStyleSheet(
-            f"background:{CP['bg2']};border:1px solid {CP['border']};"
-            f"border-radius:10px;"
-        )
-        lay.addWidget(self._davinci)
+        _appear_row = QHBoxLayout()
+        _appear_row.setSpacing(8)
 
-        # Bouton installation script pandora_send (AI Studio → Modifier depuis DaVinci)
-        _send_row = QHBoxLayout()
-        _send_row.setContentsMargins(0, 4, 0, 0)
-        _btn_send = QPushButton("⚙  Installer le script PANDORA dans DaVinci Resolve Studio")
-        _btn_send.setFixedHeight(30)
-        _btn_send.setCursor(Qt.CursorShape.PointingHandCursor)
-        _btn_send.setStyleSheet(
-            f"QPushButton{{background:{CP['bg3']};color:{CP['text_secondary']};"
-            f"border:1px solid {CP['border']};border-radius:6px;"
-            f"font-size:11px;padding:0 14px;}}"
-            f"QPushButton:hover{{background:{CP['bg2']};}}"
-        )
-        _btn_send.setToolTip(
-            "Installe le script pandora_send dans DaVinci Resolve Studio\n"
-            "(Fusion/Scripts/Utility).\n"
-            "Permet d'envoyer des clips vers AI Studio\n"
-            "→ Modifier depuis DaVinci Resolve\n"
-            "via Espace de travail → Scripts → pandora_send.\n\n"
-            "Pour configurer un raccourci clavier dans DaVinci Resolve Studio :\n"
-            "Espace de travail → Personnalisation du clavier\n"
-            "→ Rechercher « pandora_send »\n"
-            "→ Assigner votre raccourci (ex. Ctrl+Shift+P)"
-        )
-        _btn_send.clicked.connect(self._install_pandora_send)
-        _lbl_send = QLabel("Script pour DaVinci Resolve Studio → AI Studio → Modifier depuis DaVinci Resolve")
-        _lbl_send.setStyleSheet(
-            f"color:{CP['text_dim']};font-size:10px;font-family:'Consolas',monospace;"
-        )
-        _send_row.addWidget(_btn_send)
-        _send_row.addSpacing(10)
-        _send_row.addWidget(_lbl_send)
-        _send_row.addStretch()
-        lay.addLayout(_send_row)
+        _cfg_now = load_config()
+        _theme_now = _cfg_now.get("theme", "dark")
 
+        _ss_theme_active = (
+            f"QPushButton{{background:{CP['accent']};color:#07080f;"
+            f"border:none;border-radius:7px;font-size:12px;font-weight:700;"
+            f"padding:0 18px;}}"
+            f"QPushButton:hover{{background:{CP['accent_dim']};color:#fff;}}"
+        )
+        _ss_theme_inactive = (
+            f"QPushButton{{background:transparent;color:{CP['text_secondary']};"
+            f"border:1px solid {CP['border']};border-radius:7px;"
+            f"font-size:12px;font-weight:600;padding:0 18px;}}"
+            f"QPushButton:hover{{background:{CP['bg3']};color:{CP['text_primary']};}}"
+        )
+
+        self._btn_dark  = QPushButton("◐  Sombre")
+        self._btn_light = QPushButton("◑  Clair")
+        self._btn_dark.setFixedHeight(36)
+        self._btn_light.setFixedHeight(36)
+        self._btn_dark.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._btn_light.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._btn_dark.setStyleSheet(
+            _ss_theme_active if _theme_now == "dark" else _ss_theme_inactive
+        )
+        self._btn_light.setStyleSheet(
+            _ss_theme_active if _theme_now == "light" else _ss_theme_inactive
+        )
+
+        def _set_theme(theme: str):
+            cfg = load_config()
+            cfg["theme"] = theme
+            save_config(cfg)
+            self._btn_dark.setStyleSheet(
+                _ss_theme_active if theme == "dark" else _ss_theme_inactive
+            )
+            self._btn_light.setStyleSheet(
+                _ss_theme_active if theme == "light" else _ss_theme_inactive
+            )
+            QMessageBox.information(
+                self, "Thème enregistré",
+                "Le nouveau thème sera appliqué au prochain démarrage de PANDORA."
+            )
+
+        self._btn_dark.clicked.connect(lambda: _set_theme("dark"))
+        self._btn_light.clicked.connect(lambda: _set_theme("light"))
+
+        _appear_row.addWidget(self._btn_dark)
+        _appear_row.addWidget(self._btn_light)
+        _appear_row.addStretch()
+        lay.addLayout(_appear_row)
+
+        _lbl_theme = QLabel("Le changement de thème est appliqué au prochain démarrage.")
+        _lbl_theme.setStyleSheet(
+            f"color:{CP['text_dim']};font-size:10px;background:transparent;"
+        )
+        lay.addWidget(_lbl_theme)
+
+        _lbl_light_note = QLabel(
+            "L'application est optimisée pour une apparence sombre.  "
+            "Si vous constatez des problèmes d'affichage en mode clair, "
+            "contactez 22eme.arkane@gmail.com"
+        )
+        _lbl_light_note.setWordWrap(True)
+        _lbl_light_note.setStyleSheet(
+            f"color:{CP['text_dim']};font-size:10px;font-style:italic;background:transparent;"
+        )
+        lay.addWidget(_lbl_light_note)
         lay.addWidget(_divider())
 
         # ── Clés API ──────────────────────────────────────────────────────────
@@ -210,6 +233,75 @@ class SettingsPage(QScrollArea):
         self.anthropic_input.setEchoMode(QLineEdit.EchoMode.Password)
         self.anthropic_input.setStyleSheet(_field_style())
         lay.addWidget(self.anthropic_input)
+        lay.addWidget(_divider())
+
+        # ── Connexion DaVinci Resolve Studio ──────────────────────────────────
+        dvr_row = QHBoxLayout()
+        dvr_row.setSpacing(8)
+        _dvr_title = QLabel("Connexion DaVinci Resolve Studio".upper())
+        _dvr_title.setStyleSheet(
+            f"color:{CP['text_dim']};font-size:9px;font-weight:700;"
+            f"letter-spacing:3px;font-family:'Consolas',monospace;background:transparent;"
+        )
+        dvr_row.addWidget(_dvr_title)
+        _studio_badge = QLabel("Studio uniquement")
+        _studio_badge.setStyleSheet(
+            f"color:{CP['text_dim']};font-size:9px;font-weight:600;"
+            f"background:{CP['bg3']};border:1px solid {CP['border']};"
+            f"border-radius:4px;padding:1px 6px;"
+        )
+        dvr_row.addWidget(_studio_badge)
+        dvr_row.addStretch()
+        dvr_row.addWidget(_info_btn(
+            "Guide de connexion DaVinci Resolve Studio",
+            lambda: self._show_davinci_help(),
+        ))
+        lay.addLayout(dvr_row)
+
+        _lbl_studio_note = QLabel(
+            "Fonctionnalité optionnelle — ne fonctionne pas avec DaVinci Resolve (version gratuite/Lite). "
+            "Requiert DaVinci Resolve Studio (version payante)."
+        )
+        _lbl_studio_note.setWordWrap(True)
+        _lbl_studio_note.setStyleSheet(
+            f"color:{CP['text_dim']};font-size:10px;font-style:italic;background:transparent;"
+        )
+        lay.addWidget(_lbl_studio_note)
+
+        self._davinci = DaVinciPanel()
+        self._davinci.setStyleSheet(
+            f"background:{CP['bg2']};border:1px solid {CP['border']};"
+            f"border-radius:10px;"
+        )
+        lay.addWidget(self._davinci)
+
+        _send_row = QHBoxLayout()
+        _send_row.setContentsMargins(0, 4, 0, 0)
+        _btn_send = QPushButton("⚙  Installer le script PANDORA dans DaVinci Resolve Studio")
+        _btn_send.setFixedHeight(30)
+        _btn_send.setCursor(Qt.CursorShape.PointingHandCursor)
+        _btn_send.setStyleSheet(
+            f"QPushButton{{background:{CP['bg3']};color:{CP['text_dim']};"
+            f"border:1px solid {CP['border']};border-radius:6px;"
+            f"font-size:11px;padding:0 14px;}}"
+            f"QPushButton:hover{{background:{CP['bg2']};color:{CP['text_secondary']};}}"
+        )
+        _btn_send.setToolTip(
+            "Installe le script pandora_send dans DaVinci Resolve Studio\n"
+            "(Fusion/Scripts/Utility).\n"
+            "Permet d'envoyer des clips vers AI Studio\n"
+            "→ Modifier depuis DaVinci Resolve\n"
+            "via Espace de travail → Scripts → pandora_send.\n\n"
+            "Pour configurer un raccourci clavier dans DaVinci Resolve Studio :\n"
+            "Espace de travail → Personnalisation du clavier\n"
+            "→ Rechercher « pandora_send »\n"
+            "→ Assigner votre raccourci (ex. Ctrl+Shift+P)"
+        )
+        _btn_send.clicked.connect(self._install_pandora_send)
+        _send_row.addWidget(_btn_send)
+        _send_row.addStretch()
+        lay.addLayout(_send_row)
+
         lay.addWidget(_divider())
 
         # ── Sauvegarde / Test ─────────────────────────────────────────────────

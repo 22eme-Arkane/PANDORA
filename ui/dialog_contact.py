@@ -13,7 +13,7 @@ class ContactDialog(QDialog):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setWindowTitle("Nous contacter")
-        self.setFixedSize(520, 370)
+        self.setFixedSize(520, 470)
         self.setStyleSheet(PANDORA_STYLESHEET + f"QDialog{{background:{CP['bg1']};}}")
 
         lay = QVBoxLayout(self)
@@ -84,6 +84,61 @@ class ContactDialog(QDialog):
         ef.addWidget(email_lbl, 1)
         ef.addWidget(self._btn_copy)
         lay.addWidget(email_frame)
+
+        # ── Communauté WhatsApp ───────────────────────────────────────────────
+        wa_frame = QFrame()
+        wa_frame.setStyleSheet(
+            f"QFrame{{background:rgba(37,211,102,0.06);"
+            f"border:1px solid rgba(37,211,102,0.20);border-radius:10px;}}"
+        )
+        wf = QHBoxLayout(wa_frame)
+        wf.setContentsMargins(16, 12, 12, 12)
+        wf.setSpacing(12)
+
+        wa_ico = QLabel("💬")
+        wa_ico.setFixedSize(36, 36)
+        wa_ico.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        wa_ico.setStyleSheet(
+            "background:rgba(37,211,102,0.12);border-radius:8px;"
+            "font-size:18px;border:none;"
+        )
+
+        wa_col = QVBoxLayout()
+        wa_col.setSpacing(2)
+        wa_title = QLabel("Communauté WhatsApp\nPANDORA | Cinéma")
+        wa_title.setStyleSheet(
+            f"color:{CP['text_primary']};font-size:11px;font-weight:700;"
+            f"background:transparent;border:none;"
+        )
+        wa_desc = QLabel(
+            "Rejoignez les utilisateurs de PANDORA pour signaler des bugs, "
+            "suivre les nouveautés et échanger avec la communauté."
+        )
+        wa_desc.setWordWrap(True)
+        wa_desc.setStyleSheet(
+            f"color:{CP['text_secondary']};font-size:10px;"
+            f"background:transparent;border:none;"
+        )
+        wa_col.addWidget(wa_title)
+        wa_col.addWidget(wa_desc)
+
+        btn_wa = QPushButton("Rejoindre")
+        btn_wa.setFixedHeight(34)
+        btn_wa.setMinimumWidth(94)
+        btn_wa.setCursor(Qt.CursorShape.PointingHandCursor)
+        btn_wa.setStyleSheet(
+            "QPushButton{background:rgba(37,211,102,0.15);color:#25d366;"
+            "border:1px solid rgba(37,211,102,0.35);border-radius:6px;"
+            "font-size:11px;font-weight:700;}"
+            "QPushButton:hover{background:rgba(37,211,102,0.25);"
+            "border-color:rgba(37,211,102,0.60);}"
+        )
+        btn_wa.clicked.connect(self._open_whatsapp)
+
+        wf.addWidget(wa_ico)
+        wf.addLayout(wa_col, 1)
+        wf.addWidget(btn_wa)
+        lay.addWidget(wa_frame)
 
         # ── Instructions ──────────────────────────────────────────────────────
         inst_frame = QFrame()
@@ -165,6 +220,10 @@ class ContactDialog(QDialog):
 
         from core.i18n import retranslate_widget
         retranslate_widget(self)
+
+    def _open_whatsapp(self):
+        import webbrowser
+        webbrowser.open("https://chat.whatsapp.com/JRo5SWLBwbxLgACtrDksDj")
 
     def _open_eula(self):
         from ui.dialog_eula import EulaDialog

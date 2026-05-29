@@ -49,8 +49,9 @@ class EulaDialog(QDialog):
         self._mode = mode
         self._lang = get_lang()
         self.setWindowTitle("Charte d'utilisation — PANDORA")
-        self.setMinimumSize(760, 580)
         self.setStyleSheet(PANDORA_STYLESHEET + f"QDialog{{background:{CP['bg1']};}}")
+        from ui.widgets import fit_dialog_to_screen
+        fit_dialog_to_screen(self, 0.55, 0.80, 660, 480)
 
         lay = QVBoxLayout(self)
         lay.setContentsMargins(0, 0, 0, 0)

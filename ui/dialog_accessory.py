@@ -81,12 +81,9 @@ class AccessoryDialog(QDialog):
         self._saved_data       = None
 
         self.setWindowTitle("Créer un accessoire" if not item else "Modifier l'accessoire")
-        from PyQt6.QtWidgets import QApplication as _QApp
-        _geo = _QApp.primaryScreen().availableGeometry()
-        self.resize(min(max(860, int(_geo.width() * 0.68)), 1200),
-                    min(max(620, int(_geo.height() * 0.80)), 900))
-        self.setMinimumSize(800, 560)
         self.setStyleSheet(PANDORA_STYLESHEET + f"QDialog{{background:{CP['bg1']};}}")
+        from ui.widgets import fit_dialog_to_screen
+        fit_dialog_to_screen(self, 0.68, 0.82, 740, 480)
 
         root = QHBoxLayout(self)
         root.setContentsMargins(0, 0, 0, 0)
@@ -205,6 +202,11 @@ class AccessoryDialog(QDialog):
         else:
             self._btn_cloud.setText("☁")
         self._btn_cloud.clicked.connect(self._on_optimize)
+        _lbl_enh = QLabel("Améliorer le prompt")
+        _lbl_enh.setStyleSheet(
+            f"color:{CP['text_dim']};font-size:10px;background:transparent;border:none;"
+        )
+        ph.addWidget(_lbl_enh)
         ph.addWidget(self._btn_cloud)
         lay.addLayout(ph)
 
@@ -316,6 +318,30 @@ class AccessoryDialog(QDialog):
         style_row.addWidget(self._style_combo, 1)
         lay.addLayout(style_row)
         self._on_ref_usage_changed()
+        self._style_combo.currentIndexChanged.connect(self._update_suffix_edit)
+        _sfx_lbl = QLabel("↓  Suffix de style injecté (modifiable) :")
+        _sfx_lbl.setStyleSheet(
+            f"color:{CP['text_dim']};font-size:9px;background:transparent;border:none;"
+        )
+        lay.addWidget(_sfx_lbl)
+        self._suffix_edit = QTextEdit()
+        self._suffix_edit.setFixedHeight(54)
+        self._suffix_edit.setStyleSheet(
+            f"QTextEdit{{background:{CP['bg2']};border:1px solid {CP['border']};"
+            f"border-radius:6px;color:#ff8c69;font-size:9px;"
+            f"font-family:'Consolas',monospace;padding:4px;}}"
+            f"QTextEdit:focus{{border-color:{CP['accent']};}}"
+        )
+        self._suffix_edit.setPlaceholderText(
+            "Vide — sélectionnez un Style d'image ci-dessus ou définissez le Style du projet"
+        )
+        self._suffix_edit.setToolTip(
+            "Suffixe de style ajouté automatiquement au prompt (affiché en orange).\n"
+            "Inclut la caméra/optique définie dans Image & Son si configurée.\n"
+            "Modifiable librement — ce texte est envoyé tel quel à l'API."
+        )
+        lay.addWidget(self._suffix_edit)
+        self._update_suffix_edit()
 
         sep_c = QFrame(); sep_c.setFixedHeight(1)
         sep_c.setStyleSheet(f"background:{CP['border']};")
@@ -735,6 +761,34 @@ class AccessoryDialog(QDialog):
                 "Configurez la clé Anthropic pour optimiser via Claude."
             )
 
+    def _update_suffix_edit(self):
+        if not hasattr(self, "_suffix_edit"):
+            return
+        import core.style as _style_mod
+        from core.camera_prefs import get_camera_prefs
+        prefs = get_camera_prefs()
+        cam = prefs.get("camera_body", "").strip()
+        optic = prefs.get("optics_series", "").strip()
+        has_cam = bool(cam or optic)
+        sk = self._style_combo.currentData() if hasattr(self, "_style_combo") else ""
+        if sk and sk != "__sep__":
+            _s = next((s for s in _style_mod.STYLES if s["key"] == sk), None)
+            if _s:
+                sfx = _s.get("image_suffix_no_cam", _s["image_suffix"]) if has_cam else _s["image_suffix"]
+            else:
+                sfx = _style_mod.get_image_suffix_no_cam() if has_cam else _style_mod.get_image_suffix()
+        else:
+            sfx = _style_mod.get_image_suffix_no_cam() if has_cam else _style_mod.get_image_suffix()
+        cam_parts = []
+        if cam:
+            cam_parts.append(f"shot on {cam}")
+        if optic:
+            cam_parts.append(f"{optic} lenses")
+        if cam_parts:
+            cam_str = ', '.join(cam_parts)
+            sfx = f"{sfx}\n{cam_str}" if sfx else cam_str
+        self._suffix_edit.setPlainText(sfx)
+
     def _on_generate(self):
         prompt = self._prompt.toPlainText().strip()
         if not prompt:
@@ -749,12 +803,7 @@ class AccessoryDialog(QDialog):
         if _usage == "style":
             suffix = ""
         else:
-            style_key = self._style_combo.currentData() if hasattr(self, "_style_combo") else ""
-            if style_key:
-                _s = next((s for s in style_api.STYLES if s["key"] == style_key), None)
-                suffix = _s["image_suffix"] if _s else style_api.get_image_suffix()
-            else:
-                suffix = style_api.get_image_suffix()
+            suffix = self._suffix_edit.toPlainText().strip() if hasattr(self, "_suffix_edit") else style_api.get_image_suffix()
         full_prompt = f"{prompt}, {suffix}" if suffix else prompt
         _cs = self._creative.get_prompt_suffix()
         if _cs:
@@ -894,37 +943,43 @@ class AccessoryDialog(QDialog):
     def _show_fullsize(self):
         if not self._generated_images:
             return
-        from ui.dialog_character import _FullscreenDialog
-        entries = [{"portrait": p, "sheet": ""} for p in self._generated_images]
-        dlg = _FullscreenDialog(
-            self, entries, start_idx=self._preview_idx, active_idx=self._preview_idx,
-        )
-        dlg.setWindowTitle("Aperçu accessoire")
-        dlg.exec()
-        deleted = dlg.deleted_indices()
-        if deleted:
-            self._generated_images = [p for i, p in enumerate(self._generated_images)
-                                       if i not in deleted]
-            if not self._generated_images:
-                self._image_path = ""
-                self._preview.setPixmap(QPixmap())
-                self._preview.setText("Aucune image\ngénérée")
-                self._preview_idx = 0
-                self._refresh_preview_nav()
-                return
-            self._preview_idx = min(self._preview_idx, len(self._generated_images) - 1)
-        entry, _ = dlg.chosen_entry()
-        if entry is not None:
-            chosen_path = entry.get("portrait", "")
-            if chosen_path and chosen_path in self._generated_images:
-                self._preview_idx = self._generated_images.index(chosen_path)
-                self._image_path  = chosen_path
-        path = self._generated_images[self._preview_idx] if self._generated_images else ""
-        if path:
-            self._load_preview(path)
-            if self._image_path not in self._generated_images:
-                self._image_path = path
-        self._refresh_preview_nav()
+        try:
+            from ui.dialog_character import _FullscreenDialog
+            entries = [{"portrait": p, "sheet": ""} for p in self._generated_images]
+            dlg = _FullscreenDialog(
+                self, entries, start_idx=self._preview_idx, active_idx=self._preview_idx,
+            )
+            dlg.setWindowTitle("Aperçu accessoire")
+            dlg.exec()
+            deleted = dlg.deleted_indices()
+            if deleted:
+                self._generated_images = [p for i, p in enumerate(self._generated_images)
+                                           if i not in deleted]
+                if not self._generated_images:
+                    self._image_path = ""
+                    self._preview.setPixmap(QPixmap())
+                    self._preview.setText("Aucune image\ngénérée")
+                    self._preview_idx = 0
+                    self._refresh_preview_nav()
+                    return
+                self._preview_idx = min(self._preview_idx, len(self._generated_images) - 1)
+            entry, _ = dlg.chosen_entry()
+            if entry is not None:
+                chosen_path = entry.get("portrait", "")
+                if chosen_path and chosen_path in self._generated_images:
+                    self._preview_idx = self._generated_images.index(chosen_path)
+                    self._image_path  = chosen_path
+            path = self._generated_images[self._preview_idx] if self._generated_images else ""
+            if path:
+                self._load_preview(path)
+                if self._image_path not in self._generated_images:
+                    self._image_path = path
+            self._refresh_preview_nav()
+        except Exception as _e:
+            import traceback
+            from PyQt6.QtWidgets import QMessageBox
+            QMessageBox.critical(self, "Erreur aperçu",
+                                 f"Impossible d'ouvrir la prévisualisation :\n{_e}\n\n{traceback.format_exc()}")
 
     def _load_preview(self, path):
         pix = QPixmap(path)
@@ -952,7 +1007,10 @@ class AccessoryDialog(QDialog):
             sid  = shot.get("id", "")
             num  = shot.get("number", "?")
             name = shot.get("scene_title", "") or f"Plan {num}"
-            cb   = QCheckBox(f"Plan {num} — {name}")
+            _lbl = f"Plan {num} — {name}"
+            if len(_lbl) > 45:
+                _lbl = _lbl[:44] + "…"
+            cb   = QCheckBox(_lbl)
             cb.setChecked(sid in self._assigned_shots)
             cb.setStyleSheet(
                 f"QCheckBox{{color:{CP['text_secondary']};font-size:10px;background:transparent;}}"
