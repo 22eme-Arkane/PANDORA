@@ -4,12 +4,11 @@ from pathlib import Path
 
 root = Path(__file__).parent.parent
 
-# Extraire les clés de _FR_TO_EN via regex (évite d'importer les dépendances Qt)
-i18n_src = (root / "core" / "i18n.py").read_text(encoding="utf-8")
-fr_to_en = {}
-for m in re.finditer(r'"((?:[^"\\]|\\.)*)"\s*:\s*"((?:[^"\\]|\\.)*)"', i18n_src):
-    fr_to_en[m.group(1).replace('\\n', '\n')] = m.group(2).replace('\\n', '\n')
-known = set(fr_to_en.keys())
+# Charge les clés depuis le vrai dictionnaire (core.i18n n'a pas de dépendance Qt)
+import sys as _sys
+_sys.path.insert(0, str(root))
+from core.i18n import _FR_TO_EN
+known = set(_FR_TO_EN.keys())
 
 print(f"_FR_TO_EN chargé : {len(known)} entrées")
 
