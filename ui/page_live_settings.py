@@ -9,6 +9,7 @@ from PyQt6.QtWidgets import (
     QLineEdit, QSpinBox, QFrame,
 )
 from PyQt6.QtCore import Qt
+from core.i18n import translate
 from ui.styles import CP
 
 
@@ -283,7 +284,7 @@ class PageLiveSettings(QWidget):
 
     def _on_test_done(self, msg: str, ok: bool):
         color = CP["accent"] if ok else "#e05c5c"
-        self._test_lbl.setText(msg)
+        self._test_lbl.setText(translate(msg))
         self._test_lbl.setStyleSheet(
             f"color:{color};font-size:11px;background:transparent;border:none;"
         )

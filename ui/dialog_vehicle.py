@@ -9,7 +9,7 @@ from PyQt6.QtGui import QPixmap
 from ui.styles import CP, PANDORA_STYLESHEET
 from ui.icons import claude_icon_pixmap, install_hover_icon
 from ui.creative_panel import NanoBananaControlsPanel
-from core.i18n import to_source
+from core.i18n import translate, to_source
 import core.vehicles as veh_api
 from core.vehicles import CATEGORIES
 from api.nano_banana import (
@@ -798,7 +798,7 @@ class VehicleDialog(QDialog):
             subject_hint="vehicle",
         )
         self._worker_gen.progress.connect(lambda pct, msg: (self._progress.setValue(pct),
-                                                              self._status.setText(msg)))
+                                                              self._status.setText(translate(msg))))
         self._worker_gen.finished.connect(self._on_gen_done)
         if hasattr(self._worker_gen, "multi_finished"):
             self._worker_gen.multi_finished.connect(self._on_multi_gen_done)

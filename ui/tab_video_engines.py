@@ -24,6 +24,7 @@ from PyQt6.QtWidgets import (
     QProgressBar, QFileDialog, QFrame, QStackedWidget,
 )
 from PyQt6.QtCore import Qt, pyqtSignal
+from core.i18n import translate
 from PyQt6.QtGui import QPixmap
 from ui.styles import C
 from ui.widgets import HelpBlock, show_api_error
@@ -1294,7 +1295,7 @@ class TabVideoEngines(QWidget):
 
     def _on_progress(self, pct: int, msg: str):
         self._progress.setValue(pct)
-        self._status_lbl.setText(msg)
+        self._status_lbl.setText(translate(msg))
 
     def _on_finished(self, result: dict):
         self._btn_generate.setEnabled(True)

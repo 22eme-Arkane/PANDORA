@@ -6,6 +6,7 @@ from PyQt6.QtWidgets import (
     QComboBox, QSlider, QCheckBox, QInputDialog,
 )
 from PyQt6.QtCore import Qt, QTimer, pyqtSignal
+from core.i18n import translate
 from PyQt6.QtGui import QPixmap, QFont, QColor
 from ui.styles import CP
 from ui.widgets import HelpBlock
@@ -2835,10 +2836,10 @@ class PageScenario(QWidget):
         )
         if errs:
             msg += f" ({errs} erreur{'s' if errs > 1 else ''})"
-        self._ai_progress_lbl.setText(msg)
+        self._ai_progress_lbl.setText(translate(msg))
         if hasattr(self, "_gen_all_progress_bar"):
             self._gen_all_progress_bar.setVisible(False)
-            self._gen_all_status_lbl.setText(msg)
+            self._gen_all_status_lbl.setText(translate(msg))
         self._btn_goto_storyboard.setVisible(True)
         self._gen_all_workers.clear()
 

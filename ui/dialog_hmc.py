@@ -9,7 +9,7 @@ from PyQt6.QtGui import QPixmap
 from ui.styles import CP, PANDORA_STYLESHEET
 from ui.icons import claude_icon_pixmap, install_hover_icon
 from ui.creative_panel import NanoBananaControlsPanel
-from core.i18n import to_source
+from core.i18n import translate, to_source
 import core.hmc as hmc_api
 from core.hmc import TYPES
 from api.nano_banana import (
@@ -841,7 +841,7 @@ class HMCDialog(QDialog):
             subject_hint="costume / makeup / hairstyle",
         )
         self._worker_gen.progress.connect(lambda pct, msg: (self._progress.setValue(pct),
-                                                              self._status.setText(msg)))
+                                                              self._status.setText(translate(msg))))
         self._worker_gen.finished.connect(self._on_gen_done)
         if hasattr(self._worker_gen, "multi_finished"):
             self._worker_gen.multi_finished.connect(self._on_multi_gen_done)

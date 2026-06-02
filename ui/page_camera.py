@@ -5,6 +5,7 @@ from PyQt6.QtWidgets import (
     QTextEdit, QSlider, QProgressBar,
 )
 from PyQt6.QtCore import Qt, QTimer, QUrl
+from core.i18n import translate
 from PyQt6.QtGui import QDesktopServices
 from ui.styles import CP
 from ui.icons import load_icon
@@ -622,7 +623,7 @@ class PageCamera(QWidget):
 
     def _on_sfx_progress(self, pct: int, msg: str):
         self._sfx_progress.setValue(pct)
-        self._sfx_status_lbl.setText(msg)
+        self._sfx_status_lbl.setText(translate(msg))
 
     def _on_sfx_done(self, path: str):
         self._btn_sfx.setEnabled(True)
