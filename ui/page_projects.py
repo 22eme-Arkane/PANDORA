@@ -10,6 +10,7 @@ from PyQt6.QtCore import Qt, pyqtSignal
 from PyQt6.QtGui import QPixmap
 from ui.styles import CP
 from ui.icons import load_icon
+from core.i18n import translate
 import core.project as project_api
 from datetime import datetime
 
@@ -303,7 +304,7 @@ class PageProjects(QWidget):
         from PyQt6.QtWidgets import QInputDialog
         current_name = self._current.get("name", "")
         new_name, ok = QInputDialog.getText(
-            self, "Renommer le projet", "Nouveau nom :", text=current_name
+            self, translate("Renommer le projet"), translate("Nouveau nom :"), text=current_name
         )
         if not ok or not new_name.strip() or new_name.strip() == current_name:
             return

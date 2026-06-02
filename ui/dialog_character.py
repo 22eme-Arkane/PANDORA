@@ -356,7 +356,7 @@ class _FullscreenDialog(QDialog):
                  active_idx: int = -1, fallback_path: str = "",
                  extra_buttons: list | None = None):
         super().__init__(parent)
-        self.setWindowTitle("Aperçu du personnage")
+        self.setWindowTitle(translate("Aperçu du personnage"))
         self.setStyleSheet(PANDORA_STYLESHEET + f"QDialog{{background:{CP['bg0']};}}")
         from PyQt6.QtWidgets import QApplication as _QApp
         _screen = _QApp.primaryScreen().availableGeometry()
@@ -448,7 +448,7 @@ class _FullscreenDialog(QDialog):
         btn_row = QHBoxLayout()
         btn_row.setSpacing(8)
 
-        self._btn_del = QPushButton("🗑  Supprimer cette image")
+        self._btn_del = QPushButton(translate("🗑  Supprimer cette image"))
         self._btn_del.setFixedHeight(34)
         self._btn_del.setEnabled(bool(self._data))
         self._btn_del.setStyleSheet(
@@ -462,7 +462,7 @@ class _FullscreenDialog(QDialog):
         btn_row.addWidget(self._btn_del)
 
         for _lbl_txt, _cb in (extra_buttons or []):
-            _btn_extra = QPushButton(_lbl_txt)
+            _btn_extra = QPushButton(translate(_lbl_txt))
             _btn_extra.setFixedHeight(34)
             _btn_extra.setEnabled(bool(self._data))
             _btn_extra.setStyleSheet(
@@ -483,7 +483,7 @@ class _FullscreenDialog(QDialog):
         self._btn_use.clicked.connect(self._on_use)
         btn_row.addWidget(self._btn_use)
 
-        btn_close = QPushButton("Fermer")
+        btn_close = QPushButton(translate("Fermer"))
         btn_close.setFixedHeight(34)
         btn_close.setStyleSheet(
             f"QPushButton{{background:transparent;color:{CP['text_secondary']};"
