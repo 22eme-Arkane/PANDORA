@@ -2571,7 +2571,7 @@ class TabT2V(QScrollArea):
         self._dyn_cam_cb = self._dyn_cam_toggle_row.findChild(QCheckBox)
         self._dyn_cam_cb.stateChanged.connect(self._refresh_prompt_preview)
         self._dyn_cam_toggle_row.setVisible(True)  # caché quand shot actif
-        _ez_lay.addWidget(self._dyn_cam_toggle_row)
+        _raccords_lay.addWidget(self._dyn_cam_toggle_row)  # → RENDU & AUDIO, après Raccord automatique
 
         lay.addWidget(self._edit_zone)
 

@@ -9,6 +9,7 @@ from PyQt6.QtGui import QPixmap
 from ui.styles import CP, PANDORA_STYLESHEET
 from ui.icons import claude_icon_pixmap, install_hover_icon
 from ui.creative_panel import NanoBananaControlsPanel
+from core.i18n import to_source
 import core.hmc as hmc_api
 from core.hmc import TYPES
 from api.nano_banana import (
@@ -636,6 +637,7 @@ class HMCDialog(QDialog):
     # ── Dynamique selon le type HMC ──────────────────────────────────────────
 
     def _on_type_changed(self, hmc_type: str):
+        hmc_type = to_source(hmc_type)
         placeholders = {
             "Habit":     "Ex: Victorian three-piece suit, dark navy wool, silver buttons…\n\nClique sur ☁ pour optimiser via Claude.",
             "Maquillage":"Ex: Pale complexion, dark eye contour, subtle scar on left cheek…\n\nClique sur ☁ pour optimiser via Claude.",
@@ -1119,7 +1121,7 @@ class HMCDialog(QDialog):
         data = dict(self._item)
         data.update({
             "name":               name,
-            "hmc_type":           self._type.currentText(),
+            "hmc_type":           to_source(self._type.currentText()),
             "prompt":             self._prompt.toPlainText().strip(),
             "image_path":         self._image_path,
             "generated_images":   self._generated_images,

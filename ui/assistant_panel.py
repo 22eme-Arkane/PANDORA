@@ -674,12 +674,13 @@ class AssistantPanel(QWidget):
     # ── Interne ────────────────────────────────────────────────────────────────
 
     def _update_tips(self):
-        self._page_lbl.setText(self._corpus["title"].upper())
-        self._context_lbl.setText(self._corpus.get("context", ""))
+        from core.i18n import translate
+        self._page_lbl.setText(translate(self._corpus["title"]).upper())
+        self._context_lbl.setText(translate(self._corpus.get("context", "")))
         tips = self._corpus.get("tips", [])
-        self._tips_lbl.setText("\n".join(f"· {t}" for t in tips))
+        self._tips_lbl.setText("\n".join(f"· {translate(t)}" for t in tips))
         guide = self._corpus.get("guide", "")
-        self._guide_lbl.setText(guide)
+        self._guide_lbl.setText(translate(guide))
         self._btn_guide.setVisible(bool(guide))
 
     def _on_ask(self):

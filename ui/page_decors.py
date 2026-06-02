@@ -10,6 +10,7 @@ from ui.icons import load_icon
 from ui.widgets import HelpBlock
 import core.decors as decors_api
 from core.decors import CATEGORIES
+from core.i18n import translate, to_source
 from ui.dialog_decor import DecorDialog
 
 
@@ -286,8 +287,8 @@ class PageDecors(QWidget):
         cat = self._cat_filter.currentText()
         q   = self._search.text().lower()
         items = self._all_items
-        if cat != "Toutes":
-            items = [d for d in items if d.get("category") == cat]
+        if cat != translate("Toutes"):
+            items = [d for d in items if d.get("category") == to_source(cat)]
         if q:
             items = [d for d in items if q in d.get("name", "").lower()]
         self._render(items)
