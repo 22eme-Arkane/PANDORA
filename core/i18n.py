@@ -2601,6 +2601,21 @@ _FR_TO_EN: dict[str, str] = {
     'Image supprimée.': 'Image deleted.',
     'Portrait ajouté ✓': 'Portrait added ✓',
 
+    # ── Lot 8 — Aide API, Projets, divers ──
+    'Optimisation de prompts  ·  Scénario  ·  Storyboard': 'Prompt optimization  ·  Screenplay  ·  Storyboard',
+    "💡  <b>Utilisation :</b> fal.ai et Anthropic sont des services payants à l'usage. Chaque génération consomme des crédits. Les deux plateformes offrent des crédits de démarrage gratuits pour tester.": '💡  <b>Usage:</b> fal.ai and Anthropic are pay-as-you-go services. Each generation consumes credits. Both platforms offer free starter credits to try them out.',
+    "🔒  <b>VPN :</b> si Claude ne répond pas ou génère des erreurs, désactivez votre VPN — certains serveurs VPN sont bloqués par l'API Anthropic.": '🔒  <b>VPN:</b> if Claude does not respond or returns errors, disable your VPN — some VPN servers are blocked by the Anthropic API.',
+    'Va sur <b>fal.ai</b> et crée un compte gratuit (ou connecte-toi).': 'Go to <b>fal.ai</b> and create a free account (or log in).',
+    'Copie la clé (commence par <code>fal_</code>) et colle-la dans PANDORA.': 'Copy the key (starts with <code>fal_</code>) and paste it into PANDORA.',
+    'Recharge ton compte fal.ai pour générer des vidéos et portraits.': 'Top up your fal.ai account to generate videos and portraits.',
+    'Va sur <b>console.anthropic.com</b> et crée un compte (ou connecte-toi).': 'Go to <b>console.anthropic.com</b> and create an account (or log in).',
+    'Copie la clé (commence par <code>sk-ant-</code>) et colle-la dans PANDORA.': 'Copy the key (starts with <code>sk-ant-</code>) and paste it into PANDORA.',
+    'Claude est utilisé pour optimiser les prompts ☁, formater le scénario et générer le storyboard.': 'Claude is used to optimize prompts ☁, format the screenplay and generate the storyboard.',
+    'Tout générer': 'Generate all',
+    '✎  Renommer ce projet…': '✎  Rename this project…',
+    'Renommer le projet': 'Rename project',
+    'Nouveau nom :': 'New name:',
+
     # ── Lot 7 — styles visuels (core/style.py) ──
     'Arts & Esthétiques': 'Arts & Aesthetics',
     'Hybride': 'Hybrid',
