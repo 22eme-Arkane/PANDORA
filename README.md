@@ -1,6 +1,8 @@
 # PANDORA — Cinema Pre-Production Plugin × Seedance 2.0
 
-**PANDORA** is a cinema pre-production software for Windows that integrates AI video generation (Seedance 2.0 / ByteDance via fal.ai) into a complete workflow: screenplay, storyboard, casting, sets, props, costumes & makeup, and vehicles.
+[![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](https://www.gnu.org/licenses/gpl-3.0)
+
+**PANDORA** is a free, open-source cinema pre-production software for Windows that integrates AI video generation (Seedance 2.0 / ByteDance via fal.ai) into a complete workflow: screenplay, storyboard, casting, sets, props, costumes & makeup, and vehicles.
 
 ---
 
@@ -16,7 +18,7 @@
 
 ## Download
 
-**[⬇ Download PANDORA v1.1.4](https://github.com/22eme-Arkane/PANDORA/releases/download/v1.1.4/PANDORA_Setup_1.1.4.exe)**
+**[⬇ Download PANDORA v1.1.7](https://github.com/22eme-Arkane/PANDORA/releases/download/v1.1.7/PANDORA_Setup_1.1.7.exe)**
 
 All versions: [Releases](../../releases)
 
