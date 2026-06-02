@@ -1488,7 +1488,7 @@ class _MoodInfoDialog(QDialog):
     def __init__(self, parent: QWidget):
         super().__init__(parent)
         from ui.styles import PANDORA_STYLESHEET
-        self.setWindowTitle("✦ Avant de générer les Moods")
+        self.setWindowTitle(translate("✦ Avant de générer les Moods"))
         self.setFixedSize(560, 440)
         self.setStyleSheet(PANDORA_STYLESHEET + f"QDialog{{background:{CP['bg1']};}}")
         self._build_ui()
@@ -1505,7 +1505,7 @@ class _MoodInfoDialog(QDialog):
             f"color:{CP['accent']};font-size:24px;background:transparent;"
         )
         title_row.addWidget(icon_lbl)
-        title_lbl = QLabel("Pour un résultat optimal")
+        title_lbl = QLabel(translate("Pour un résultat optimal"))
         title_lbl.setStyleSheet(
             f"color:{CP['text_primary']};font-size:15px;font-weight:700;background:transparent;"
         )
@@ -1554,13 +1554,13 @@ class _MoodInfoDialog(QDialog):
 
             txt_col = QVBoxLayout()
             txt_col.setSpacing(2)
-            t = QLabel(titre)
+            t = QLabel(translate(titre))
             t.setStyleSheet(
                 f"color:{CP['text_primary']};font-size:11px;font-weight:700;"
                 f"background:transparent;border:none;"
             )
             txt_col.addWidget(t)
-            c = QLabel(corps)
+            c = QLabel(translate(corps))
             c.setWordWrap(True)
             c.setStyleSheet(
                 f"color:{CP['text_secondary']};font-size:10px;"
@@ -1574,13 +1574,13 @@ class _MoodInfoDialog(QDialog):
 
         # Checkbox + bouton
         bottom = QHBoxLayout()
-        self._cb_skip = QCheckBox("Ne plus afficher ce message")
+        self._cb_skip = QCheckBox(translate("Ne plus afficher ce message"))
         self._cb_skip.setStyleSheet(
             f"color:{CP['text_secondary']};font-size:10px;background:transparent;"
         )
         bottom.addWidget(self._cb_skip, 1)
 
-        btn = QPushButton("Continuer →")
+        btn = QPushButton(translate("Continuer →"))
         btn.setFixedHeight(36)
         btn.setStyleSheet(
             f"QPushButton{{background:{CP['accent']};color:#07080f;"
@@ -1603,7 +1603,7 @@ class _MoodBatchDialog(QDialog):
     def __init__(self, parent: QWidget, shots: list[dict]):
         super().__init__(parent)
         from ui.styles import PANDORA_STYLESHEET
-        self.setWindowTitle("✦ Génération des Moods")
+        self.setWindowTitle(translate("✦ Génération des Moods"))
         self.setMinimumSize(480, 480)
         self.setStyleSheet(PANDORA_STYLESHEET + f"QDialog{{background:{CP['bg1']};}}")
         self._shots = shots
@@ -1621,23 +1621,23 @@ class _MoodBatchDialog(QDialog):
         lay.setContentsMargins(24, 20, 24, 20)
         lay.setSpacing(14)
 
-        title = QLabel("Génération automatique des Moods")
+        title = QLabel(translate("Génération automatique des Moods"))
         title.setStyleSheet(
             f"color:{CP['text_primary']};font-size:14px;font-weight:700;background:transparent;"
         )
         lay.addWidget(title)
 
-        desc = QLabel(
+        desc = QLabel(translate(
             "Sélectionne les plans pour lesquels générer un Mood. "
             "Les plans marqués ✓ ont déjà un Mood — ils sont décochés par défaut."
-        )
+        ))
         desc.setStyleSheet(f"color:{CP['text_dim']};font-size:11px;background:transparent;")
         desc.setWordWrap(True)
         lay.addWidget(desc)
 
         lay.addWidget(_sep())
 
-        lbl_shots = QLabel("Plans à générer :")
+        lbl_shots = QLabel(translate("Plans à générer :"))
         lbl_shots.setStyleSheet(
             f"color:{CP['text_primary']};font-size:11px;font-weight:600;background:transparent;"
         )
@@ -1645,9 +1645,9 @@ class _MoodBatchDialog(QDialog):
 
         qsel = QHBoxLayout()
         qsel.setSpacing(6)
-        self._btn_all     = QPushButton("Tout")
-        self._btn_none    = QPushButton("Aucun")
-        self._btn_no_mood = QPushButton("Sans Mood")
+        self._btn_all     = QPushButton(translate("Tout"))
+        self._btn_none    = QPushButton(translate("Aucun"))
+        self._btn_no_mood = QPushButton(translate("Sans Mood"))
         _qsel_style = (
             f"QPushButton{{background:transparent;color:{CP['text_dim']};"
             f"border:1px solid {CP['border']};border-radius:5px;"
@@ -1684,7 +1684,7 @@ class _MoodBatchDialog(QDialog):
 
         btns = QHBoxLayout()
         btns.setSpacing(10)
-        cancel_btn = QPushButton("Annuler")
+        cancel_btn = QPushButton(translate("Annuler"))
         cancel_btn.setFixedHeight(36)
         cancel_btn.setStyleSheet(
             f"QPushButton{{background:transparent;color:{CP['text_dim']};"
@@ -1693,7 +1693,7 @@ class _MoodBatchDialog(QDialog):
             f"QPushButton:hover{{color:{CP['text_primary']};border-color:{CP['text_primary']};}}"
         )
         cancel_btn.clicked.connect(self.reject)
-        self._gen_btn = QPushButton("✦  Générer")
+        self._gen_btn = QPushButton(translate("✦  Générer"))
         self._gen_btn.setFixedHeight(36)
         self._gen_btn.setStyleSheet(
             f"QPushButton{{background:{CP['accent']};color:#07080f;"
@@ -1809,7 +1809,7 @@ class PageStoryboard(QWidget):
     def _on_new_version(self):
         from ui.styles import PANDORA_STYLESHEET
         dlg = QDialog(self)
-        dlg.setWindowTitle("Nouvelle version")
+        dlg.setWindowTitle(translate("Nouvelle version"))
         dlg.setFixedSize(380, 160)
         dlg.setStyleSheet(PANDORA_STYLESHEET + f"QDialog{{background:{CP['bg1']};}}")
 
@@ -1817,12 +1817,12 @@ class PageStoryboard(QWidget):
         lay.setContentsMargins(24, 24, 24, 24)
         lay.setSpacing(12)
 
-        lbl = QLabel("Nom de la nouvelle version :")
+        lbl = QLabel(translate("Nom de la nouvelle version :"))
         lbl.setStyleSheet(f"color:{CP['text_primary']};font-size:12px;background:transparent;")
         lay.addWidget(lbl)
 
         inp = QLineEdit()
-        inp.setPlaceholderText("Ex: Découpage final, Version action, Avant-projet…")
+        inp.setPlaceholderText(translate("Ex: Découpage final, Version action, Avant-projet…"))
         inp.setFixedHeight(36)
         inp.setStyleSheet(
             f"QLineEdit{{background:{CP['bg3']};border:1px solid {CP['border']};"
@@ -1841,7 +1841,7 @@ class PageStoryboard(QWidget):
         )
         btn_cancel.clicked.connect(dlg.reject)
 
-        btn_ok = QPushButton("Créer")
+        btn_ok = QPushButton(translate("Créer"))
         btn_ok.setFixedHeight(36)
         btn_ok.setStyleSheet(
             f"QPushButton{{background:{CP['accent']};color:#07080f;"
@@ -2519,7 +2519,7 @@ class PageStoryboard(QWidget):
     def _show_analysis_dialog(self, sc: dict):
         from ui.styles import PANDORA_STYLESHEET
         self._analysis_dlg = QDialog(self)
-        self._analysis_dlg.setWindowTitle("Génération du storyboard")
+        self._analysis_dlg.setWindowTitle(translate("Génération du storyboard"))
         self._analysis_dlg.setFixedSize(440, 210)
         self._analysis_dlg.setStyleSheet(
             PANDORA_STYLESHEET + f"QDialog{{background:{CP['bg1']};}}"
@@ -2533,7 +2533,7 @@ class PageStoryboard(QWidget):
         lay.setContentsMargins(32, 28, 32, 28)
         lay.setSpacing(14)
 
-        title_lbl = QLabel("Analyse du scénario via Claude IA")
+        title_lbl = QLabel(translate("Analyse du scénario via Claude IA"))
         title_lbl.setStyleSheet(
             f"color:{CP['text_primary']};font-size:15px;font-weight:700;background:transparent;"
         )
@@ -2542,7 +2542,7 @@ class PageStoryboard(QWidget):
         sc_name = sc.get("title", "Scénario sans titre")
         info_lbl = QLabel(
             f"« {sc_name} »\n"
-            "Génération du découpage en plans… Cette opération peut prendre quelques secondes."
+            + translate("Génération du découpage en plans… Cette opération peut prendre quelques secondes.")
         )
         info_lbl.setWordWrap(True)
         info_lbl.setStyleSheet(
@@ -2578,7 +2578,7 @@ class PageStoryboard(QWidget):
         from ui.styles import PANDORA_STYLESHEET
 
         dlg = QDialog(self)
-        dlg.setWindowTitle("Choisir un scénario")
+        dlg.setWindowTitle(translate("Choisir un scénario"))
         dlg.setFixedSize(420, 320)
         dlg.setStyleSheet(PANDORA_STYLESHEET + f"QDialog{{background:{CP['bg1']};}}")
 
@@ -2586,7 +2586,7 @@ class PageStoryboard(QWidget):
         lay.setContentsMargins(20, 20, 20, 20)
         lay.setSpacing(12)
 
-        lbl = QLabel("Sélectionne le scénario à analyser :")
+        lbl = QLabel(translate("Sélectionne le scénario à analyser :"))
         lbl.setStyleSheet(f"color:{CP['text_primary']};font-size:12px;background:transparent;")
         lay.addWidget(lbl)
 
