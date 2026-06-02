@@ -9,6 +9,7 @@ from PyQt6.QtGui import QPixmap
 from ui.styles import CP, PANDORA_STYLESHEET
 from ui.icons import claude_icon_pixmap, install_hover_icon
 from ui.creative_panel import NanoBananaControlsPanel
+from core.i18n import to_source
 import core.accessories as acc_api
 from core.accessories import CATEGORIES
 from api.nano_banana import (
@@ -1076,7 +1077,7 @@ class AccessoryDialog(QDialog):
         data = dict(self._item)
         data.update({
             "name":                name,
-            "category":            self._cat.currentText(),
+            "category":            to_source(self._cat.currentText()),
             "prompt":              self._prompt.toPlainText().strip(),
             "image_path":          self._image_path,
             "generated_images":    self._generated_images,

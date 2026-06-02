@@ -19,6 +19,7 @@ from core.storyboard import (
     CAMERA_MOVEMENTS, SPEEDS, SHOT_SIZES, SHOT_SIZE_LABELS, FOCALS, DISTANCES, HEURE_PRESETS,
 )
 from ui.dialog_shot import ShotDialog
+from core.i18n import translate
 
 
 def _sep():
@@ -165,7 +166,7 @@ def _text_dialog(parent: QWidget, title: str, initial: str = "",
 
     btn_row.addStretch()
 
-    btn_cancel = QPushButton("Annuler")
+    btn_cancel = QPushButton(translate("Annuler"))
     btn_cancel.setFixedHeight(34)
     btn_cancel.setStyleSheet(
         f"QPushButton{{background:transparent;color:{CP['text_secondary']};"
@@ -175,7 +176,7 @@ def _text_dialog(parent: QWidget, title: str, initial: str = "",
     )
     btn_cancel.clicked.connect(dlg.reject)
 
-    btn_ok = QPushButton("Valider")
+    btn_ok = QPushButton(translate("Valider"))
     btn_ok.setFixedHeight(34)
     btn_ok.setStyleSheet(
         f"QPushButton{{background:{CP['accent']};color:#07080f;"
@@ -201,7 +202,7 @@ def _decor_picker_dialog(parent: QWidget, current_decor_id: str) -> dict | None:
     decors = dec_api.list_decors()
 
     dlg = QDialog(parent)
-    dlg.setWindowTitle("Choisir un décor")
+    dlg.setWindowTitle(translate("Choisir un décor"))
     dlg.setFixedSize(480, 440)
     dlg.setStyleSheet(PANDORA_STYLESHEET + f"QDialog{{background:{CP['bg1']};}}")
 
@@ -209,7 +210,7 @@ def _decor_picker_dialog(parent: QWidget, current_decor_id: str) -> dict | None:
     lay.setContentsMargins(16, 14, 16, 14)
     lay.setSpacing(10)
 
-    hdr = QLabel("Sélectionner un décor")
+    hdr = QLabel(translate("Sélectionner un décor"))
     hdr.setStyleSheet(
         f"color:{CP['text_primary']};font-size:14px;font-weight:700;background:transparent;"
     )
@@ -227,7 +228,7 @@ def _decor_picker_dialog(parent: QWidget, current_decor_id: str) -> dict | None:
     selected_box = [None]
 
     if not decors:
-        lbl = QLabel("Aucun décor créé dans ce projet.")
+        lbl = QLabel(translate("Aucun décor créé dans ce projet."))
         lbl.setStyleSheet(f"color:{CP['text_dim']};font-size:12px;background:transparent;")
         inner_lay.addWidget(lbl)
     else:
@@ -289,7 +290,7 @@ def _decor_picker_dialog(parent: QWidget, current_decor_id: str) -> dict | None:
     scroll.setWidget(inner)
     lay.addWidget(scroll, 1)
 
-    btn_cancel = QPushButton("Annuler")
+    btn_cancel = QPushButton(translate("Annuler"))
     btn_cancel.setFixedHeight(34)
     btn_cancel.setStyleSheet(
         f"QPushButton{{background:transparent;color:{CP['text_secondary']};"
@@ -311,7 +312,7 @@ def _elements_picker_dialog(parent: QWidget, title: str,
     from ui.styles import PANDORA_STYLESHEET
 
     dlg = QDialog(parent)
-    dlg.setWindowTitle(title)
+    dlg.setWindowTitle(translate(title))
     dlg.setFixedSize(380, 420)
     dlg.setStyleSheet(PANDORA_STYLESHEET + f"QDialog{{background:{CP['bg1']};}}")
 
@@ -344,14 +345,14 @@ def _elements_picker_dialog(parent: QWidget, title: str,
         lst.addItem(li)
 
     if not items:
-        li = QListWidgetItem("Aucun élément disponible.")
+        li = QListWidgetItem(translate("Aucun élément disponible."))
         li.setFlags(Qt.ItemFlag.NoItemFlags)
         lst.addItem(li)
 
     lay.addWidget(lst, 1)
 
     btn_row = QHBoxLayout()
-    btn_cancel = QPushButton("Annuler")
+    btn_cancel = QPushButton(translate("Annuler"))
     btn_cancel.setFixedHeight(34)
     btn_cancel.setStyleSheet(
         f"QPushButton{{background:transparent;color:{CP['text_secondary']};"
@@ -361,7 +362,7 @@ def _elements_picker_dialog(parent: QWidget, title: str,
     )
     btn_cancel.clicked.connect(dlg.reject)
 
-    btn_ok = QPushButton("Valider")
+    btn_ok = QPushButton(translate("Valider"))
     btn_ok.setFixedHeight(34)
     btn_ok.setStyleSheet(
         f"QPushButton{{background:{CP['accent']};color:#07080f;"
@@ -438,7 +439,7 @@ class _ResizableHeader(QWidget):
             cl = QHBoxLayout(cell)
             cl.setContentsMargins(7, 0, 4, 0)
             if title:
-                lbl = QLabel(title.upper())
+                lbl = QLabel(translate(title).upper())
                 lbl.setStyleSheet(
                     f"color:{CP['text_dim']};font-size:8px;font-weight:700;"
                     f"letter-spacing:1.5px;font-family:'Consolas',monospace;"
@@ -704,7 +705,7 @@ class _ShotRow(QFrame):
             )
             for opt in options:
                 label = labels.get(opt, opt) if labels else opt
-                act = menu.addAction(label)
+                act = menu.addAction(translate(label))
                 act.setData(opt)
                 act.setCheckable(True)
                 act.setChecked(opt == current)
@@ -855,7 +856,7 @@ class _ShotRow(QFrame):
             )
             from ui.styles import PANDORA_STYLESHEET
             dlg = QDialog(self.window())
-            dlg.setWindowTitle("Modifier la séquence")
+            dlg.setWindowTitle(translate("Modifier la séquence"))
             dlg.setFixedSize(340, 190)
             dlg.setStyleSheet(PANDORA_STYLESHEET + f"QDialog{{background:{CP['bg1']};}}")
 
@@ -874,7 +875,7 @@ class _ShotRow(QFrame):
 
             _lbl_ss = f"color:{CP['text_secondary']};font-size:11px;background:transparent;"
 
-            num_lbl = QLabel("N° de séquence")
+            num_lbl = QLabel(translate("N° de séquence"))
             num_lbl.setStyleSheet(_lbl_ss)
             spin = QSpinBox()
             spin.setRange(1, 99)
@@ -884,10 +885,10 @@ class _ShotRow(QFrame):
                                f"QSpinBox::up-button, QSpinBox::down-button{{width:18px;}}")
             form.addRow(num_lbl, spin)
 
-            name_lbl = QLabel("Nom de séquence")
+            name_lbl = QLabel(translate("Nom de séquence"))
             name_lbl.setStyleSheet(_lbl_ss)
             name_edit = QLineEdit()
-            name_edit.setPlaceholderText("Ex: La fuite, L'affrontement…")
+            name_edit.setPlaceholderText(translate("Ex: La fuite, L'affrontement…"))
             name_edit.setText(data.get("seq_name", "") or "")
             name_edit.setFixedHeight(36)
             name_edit.setStyleSheet(f"QLineEdit{{{_field_ss}}}"
@@ -968,7 +969,7 @@ class _ShotRow(QFrame):
         _chars_out = (data.get("chars_out", "") or "").strip()
         _cam_place = (data.get("camera_placement", "") or "").strip()
         _act_place = (data.get("actor_placement", "") or "").strip()
-        axe_l.addWidget(_lbl(_cur_axe or "—", CP["accent_dim"], 10, mono=True))
+        axe_l.addWidget(_lbl(translate(_cur_axe) or "—", CP["accent_dim"], 10, mono=True))
         if _chars_in:
             axe_l.addWidget(_lbl(f"↙ {_chars_in}", CP["green"], 8))
         if _chars_out:
@@ -988,7 +989,7 @@ class _ShotRow(QFrame):
         # ── Mouvement ────────────────────────────────────────────────────────
         mvt_w, mvt_l = _cell(_col_widths[6])
         _cur_mvt = data.get("camera_movement", "")
-        mvt_l.addWidget(_lbl(_cur_mvt, size=10))
+        mvt_l.addWidget(_lbl(translate(_cur_mvt), size=10))
         _clickable(mvt_w, lambda _w=mvt_w, _c=_cur_mvt: _dropdown(
             _w, CAMERA_MOVEMENTS, _c, "camera_movement"))
         cells[6] = mvt_w
@@ -1004,7 +1005,7 @@ class _ShotRow(QFrame):
         # ── Focal ─────────────────────────────────────────────────────────────
         foc_w, foc_l = _cell(_col_widths[8])
         _cur_foc = data.get("focal", "")
-        foc_l.addWidget(_lbl(_cur_foc or "—", CP["accent_dim"], 10, mono=True))
+        foc_l.addWidget(_lbl(translate(_cur_foc) or "—", CP["accent_dim"], 10, mono=True))
         _clickable(foc_w, lambda _w=foc_w, _c=_cur_foc: _dropdown(
             _w, FOCALS, _c, "focal"))
         cells[8] = foc_w
@@ -1025,20 +1026,20 @@ class _ShotRow(QFrame):
             )
             for opt in DISTANCES:
                 label = opt if opt else "— Aucune —"
-                act = menu.addAction(label)
+                act = menu.addAction(translate(label))
                 act.setData(opt)
                 act.setCheckable(True)
                 act.setChecked(opt == _c)
             menu.addSeparator()
-            free_act = menu.addAction("✎  Saisir une valeur…")
+            free_act = menu.addAction(translate("✎  Saisir une valeur…"))
             free_act.setData("__free__")
             chosen = menu.exec(_w.mapToGlobal(_w.rect().bottomLeft()))
             if not chosen:
                 return
             if chosen.data() == "__free__":
                 text, ok = QInputDialog.getText(
-                    self, "Distance sujet-caméra",
-                    "Distance (ex : 4m, 4.5m, 12m) :", text=_c
+                    self, translate("Distance sujet-caméra"),
+                    translate("Distance (ex : 4m, 4.5m, 12m) :"), text=_c
                 )
                 if ok and text.strip():
                     _save_field("camera_distance", text.strip())
@@ -1054,7 +1055,7 @@ class _ShotRow(QFrame):
         spd_color = (CP["orange"] if _cur_spd == "Ralenti"
                      else CP["accent"] if _cur_spd == "Accéléré"
                      else CP["text_dim"])
-        spd_l.addWidget(_lbl(_cur_spd, spd_color, 10))
+        spd_l.addWidget(_lbl(translate(_cur_spd), spd_color, 10))
         _clickable(spd_w, lambda _w=spd_w, _c=_cur_spd: _dropdown(
             _w, SPEEDS, _c, "speed"))
         cells[10] = spd_w
@@ -1103,7 +1104,7 @@ class _ShotRow(QFrame):
         # ── Heure (préset + heure libre) ─────────────────────────────────────
         hr_w, hr_l = _cell(_col_widths[12])
         _cur_hr = data.get("shot_time", "") or ""
-        _hr_lbl = _lbl(_cur_hr or "—", size=10)
+        _hr_lbl = _lbl(translate(_cur_hr) or "—", size=10)
         hr_l.addWidget(_hr_lbl)
 
         def _pick_heure(anchor=hr_w):
@@ -1117,12 +1118,12 @@ class _ShotRow(QFrame):
             )
             cur = data.get("shot_time", "") or ""
             for preset in _HEURE_PRESETS:
-                act = menu.addAction(preset)
+                act = menu.addAction(translate(preset))
                 act.setData(preset)
                 act.setCheckable(True)
                 act.setChecked(preset == cur)
             menu.addSeparator()
-            custom_act = menu.addAction("Heure précise…")
+            custom_act = menu.addAction(translate("Heure précise…"))
             custom_act.setData("__custom__")
             chosen = menu.exec(anchor.mapToGlobal(anchor.rect().bottomLeft()))
             if not chosen:
@@ -1131,7 +1132,7 @@ class _ShotRow(QFrame):
             if val == "__custom__":
                 from PyQt6.QtWidgets import QInputDialog
                 v, ok = QInputDialog.getText(
-                    self, "Heure du plan", "Heure (ex : 14h30, 07h00) :",
+                    self, translate("Heure du plan"), translate("Heure (ex : 14h30, 07h00) :"),
                     text=cur if cur not in _HEURE_PRESETS else "",
                 )
                 if ok:
@@ -1191,7 +1192,7 @@ class _ShotRow(QFrame):
         dur_l.addWidget(dur_badge)
         def _edit_duration():
             val, ok = QInputDialog.getDouble(
-                self, "Durée du plan", "Durée (1 — 15 secondes) :",
+                self, translate("Durée du plan"), translate("Durée (1 — 15 secondes) :"),
                 float(data.get("duration", 5.0)), 1.0, 15.0, 1,
             )
             if ok:
@@ -1209,7 +1210,7 @@ class _ShotRow(QFrame):
         bl.setSpacing(6)
         bl.setContentsMargins(6, 10, 6, 10)
 
-        btn_edit = QPushButton("Éditer")
+        btn_edit = QPushButton(translate("Éditer"))
         btn_edit.setFixedHeight(28)
         btn_edit.setCursor(Qt.CursorShape.PointingHandCursor)
         btn_edit.setStyleSheet(
@@ -1455,7 +1456,7 @@ class _VersionCard(QWidget):
         btn_open.clicked.connect(lambda: self.open_requested.emit(self._vid))
         name_row.addWidget(btn_open)
 
-        btn_del = QPushButton("Supprimer")
+        btn_del = QPushButton(translate("Supprimer"))
         btn_del.setFixedHeight(28)
         btn_del.setCursor(Qt.CursorShape.PointingHandCursor)
         btn_del.setStyleSheet(
@@ -1831,7 +1832,7 @@ class PageStoryboard(QWidget):
         lay.addWidget(inp)
 
         btn_row = QHBoxLayout()
-        btn_cancel = QPushButton("Annuler")
+        btn_cancel = QPushButton(translate("Annuler"))
         btn_cancel.setFixedHeight(36)
         btn_cancel.setStyleSheet(
             f"QPushButton{{background:transparent;color:{CP['text_secondary']};"
@@ -2559,7 +2560,7 @@ class PageStoryboard(QWidget):
         )
         lay.addWidget(prog)
 
-        btn_cancel = QPushButton("Annuler")
+        btn_cancel = QPushButton(translate("Annuler"))
         btn_cancel.setFixedHeight(36)
         btn_cancel.setStyleSheet(
             f"QPushButton{{background:transparent;color:{CP['text_secondary']};"

@@ -8,6 +8,7 @@ from ui.styles import CP, PANDORA_STYLESHEET
 from ui.icons import claude_icon_pixmap, install_hover_icon
 import core.storyboard as sb_api
 from core.storyboard import CAMERA_MOVEMENTS, OPTICS, FOCALS, DISTANCES, SHOT_SIZES, SHOT_SIZE_LABELS, SPEEDS, HEURE_PRESETS
+from core.i18n import to_source
 
 
 def _lbl(text, size=11, color=None):
@@ -796,7 +797,7 @@ class ShotDialog(QDialog):
             "shot_in_seq":     shot_in_seq,
             "decor_id":        decor_id or "",
             "decor_name":      decor_name,
-            "shot_time":       self._time_combo.currentText().strip(),
+            "shot_time":       to_source(self._time_combo.currentText().strip()),
             "duration":        duration,
             "character_ids":   char_ids,
             "character_names": char_names,
@@ -804,16 +805,16 @@ class ShotDialog(QDialog):
             "accessory_names": acc_names,
             "vehicle_ids":     veh_ids,
             "vehicle_names":   veh_names,
-            "camera_movement":  self._cam_move.currentText(),
-            "optic":            self._optic.currentText(),
-            "focal":            self._focal.currentText(),
-            "camera_distance":  self._camera_distance.currentText(),
+            "camera_movement":  to_source(self._cam_move.currentText()),
+            "optic":            to_source(self._optic.currentText()),
+            "focal":            to_source(self._focal.currentText()),
+            "camera_distance":  to_source(self._camera_distance.currentText()),
             "shot_size":       self._shot_size.currentData() or "",
-            "speed":           self._speed.currentText(),
+            "speed":           to_source(self._speed.currentText()),
             "comments":          self._comments.toPlainText().strip(),
             "seedance_prompt":   self._seedance_prompt.toPlainText().strip(),
             "image_path":        self._shot.get("image_path", ""),
-            "camera_axis":       self._camera_axis.currentText() if self._camera_axis.currentText() != "—" else "",
+            "camera_axis":       to_source(self._camera_axis.currentText()) if self._camera_axis.currentText() != "—" else "",
             "camera_placement":  self._camera_placement.text().strip(),
             "actor_placement":   self._actor_placement.text().strip(),
             "chars_in":          self._chars_in.text().strip(),
