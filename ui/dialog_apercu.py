@@ -6,6 +6,7 @@ from PyQt6.QtWidgets import (
     QScrollArea, QWidget, QProgressBar, QSizePolicy, QFrame, QTextEdit,
 )
 from PyQt6.QtCore import Qt, pyqtSignal, QTimer
+from core.i18n import translate
 from PyQt6.QtGui import QPixmap
 from ui.styles import CP, PANDORA_STYLESHEET
 import core.storyboard as sb_api
@@ -298,7 +299,7 @@ class MoodDialog(QDialog):
     def _start_loading(self, msg: str = ""):
         self._progress.show()
         self._status_lbl.show()
-        self._status_lbl.setText(msg)
+        self._status_lbl.setText(translate(msg))
         self._pulse_val = 0
         self._pulse_dir = 1
         self._pulse_timer.start(25)
@@ -462,7 +463,7 @@ class MoodDialog(QDialog):
         self._worker.start()
 
     def _on_progress(self, msg: str):
-        self._status_lbl.setText(msg)
+        self._status_lbl.setText(translate(msg))
 
     def _on_generated(self, path: str):
         self._stop_loading()

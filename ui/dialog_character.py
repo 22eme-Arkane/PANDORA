@@ -5,6 +5,7 @@ from PyQt6.QtWidgets import (
     QMessageBox, QFrame, QScrollArea, QGridLayout, QCheckBox, QSpinBox,
 )
 from PyQt6.QtCore import Qt, QTimer
+from core.i18n import translate
 from PyQt6.QtGui import QPixmap, QPixmapCache, QColor
 from ui.styles import CP, PANDORA_STYLESHEET
 from ui.icons import claude_icon_pixmap, install_hover_icon
@@ -1742,7 +1743,7 @@ class CharacterDialog(QDialog):
 
     def _on_gen_progress(self, pct: int, msg: str):
         self._progress.setValue(pct)
-        self._status.setText(msg)
+        self._status.setText(translate(msg))
 
     def _on_gen_done(self, portrait_path: str, sheet_path: str):
         self._btn_gen.setEnabled(True)
@@ -1973,7 +1974,7 @@ class CharacterDialog(QDialog):
         from api.tts import RemoveBackgroundWorker
         out_dir = os.path.dirname(path)
         self._biref_worker = RemoveBackgroundWorker(path, out_dir)
-        self._biref_worker.progress.connect(lambda pct, msg: self._status.setText(msg))
+        self._biref_worker.progress.connect(lambda pct, msg: self._status.setText(translate(msg)))
         self._biref_worker.finished.connect(self._on_bg_removed)
         self._biref_worker.failed.connect(lambda e: QMessageBox.critical(self, "Erreur BiRefNet", e))
         self._biref_worker.start()
@@ -2018,7 +2019,7 @@ class CharacterDialog(QDialog):
 
     def _on_nb2edit_progress(self, pct: int, msg: str):
         self._progress.setValue(pct)
-        self._status.setText(msg)
+        self._status.setText(translate(msg))
 
     def _on_nb2edit_done(self, path: str):
         self._progress.setVisible(False)

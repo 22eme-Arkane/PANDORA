@@ -17,6 +17,7 @@ from PyQt6.QtWidgets import (
     QProgressBar, QSizePolicy,
 )
 from PyQt6.QtCore import Qt, QUrl
+from core.i18n import translate
 from PyQt6.QtGui import QDesktopServices
 
 from ui.styles import CP, PANDORA_STYLESHEET
@@ -638,7 +639,7 @@ class PageDoublage(QWidget):
 
     def _on_progress(self, pct: int, msg: str):
         self._progress.setValue(pct)
-        self._lbl_status.setText(msg)
+        self._lbl_status.setText(translate(msg))
 
     def _on_done(self, path: str, label: str, mode: str):
         self._btn_generate.setEnabled(True)

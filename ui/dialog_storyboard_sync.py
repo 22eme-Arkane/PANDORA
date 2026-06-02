@@ -9,6 +9,7 @@ from PyQt6.QtWidgets import (
     QScrollArea, QWidget, QFrame, QProgressBar,
 )
 from PyQt6.QtCore import Qt
+from core.i18n import translate
 from ui.styles import CP
 
 
@@ -438,8 +439,8 @@ class StoryboardSyncDialog(QDialog):
     def _on_progress(self, pct: int, msg: str):
         self._progress.setRange(0, 100)
         self._progress.setValue(pct)
-        self._status_lbl.setText(msg)
-        self._phase_lbl.setText(msg)
+        self._status_lbl.setText(translate(msg))
+        self._phase_lbl.setText(translate(msg))
 
     def _on_done(self, shots: list):
         self._shots_out = shots
