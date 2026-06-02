@@ -939,14 +939,14 @@ class CharacterDialog(QDialog):
                 _gi = next((g for g in _style_mod.GROUPS if g["key"] == _g), None)
                 if _gi:
                     self._portrait_style_combo.addItem(
-                        f"  {_gi['icon']}  {_gi['name'].upper()}", "__sep__"
+                        f"  {_gi['icon']}  {translate(_gi['name']).upper()}", "__sep__"
                     )
                     _sep_item = self._portrait_style_combo.model().item(
                         self._portrait_style_combo.count() - 1
                     )
                     _sep_item.setEnabled(False)
                     _sep_item.setForeground(QColor(CP.get("accent", "#7c6bff")))
-            self._portrait_style_combo.addItem(f"    {_s['icon']}  {_s['name']}", _s["key"])
+            self._portrait_style_combo.addItem(f"    {_s['icon']}  {translate(_s['name'])}", _s["key"])
         self._portrait_style_combo.setFixedHeight(32)
         self._portrait_style_combo.setStyleSheet(
             f"QComboBox{{background:{CP['bg3']};border:1px solid {CP['border']};"

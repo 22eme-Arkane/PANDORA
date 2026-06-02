@@ -3,6 +3,7 @@
     QFrame, QGridLayout, QTextEdit,
 )
 from PyQt6.QtCore import Qt, pyqtSignal
+from core.i18n import translate
 from ui.styles import CP
 import core.style as style_api
 
@@ -350,7 +351,7 @@ class PageStyle(QWidget):
 
         style = next((s for s in style_api.STYLES if s["key"] == key), None)
         if style:
-            self._active_badge.setText(f"  {style['icon']}  {style['name']}  ")
+            self._active_badge.setText(f"  {style['icon']}  {translate(style['name'])}  ")
             self._active_badge.setStyleSheet(
                 f"color:{CP['bg0']};background:{style['color']};"
                 f"border-radius:8px;font-size:11px;font-weight:700;"
@@ -376,7 +377,7 @@ class PageStyle(QWidget):
         if key:
             style = next((s for s in style_api.STYLES if s["key"] == key), None)
             if style:
-                self._active_badge.setText(f"  {style['icon']}  {style['name']}  ")
+                self._active_badge.setText(f"  {style['icon']}  {translate(style['name'])}  ")
                 self._active_badge.setStyleSheet(
                     f"color:{CP['bg0']};background:{style['color']};"
                     f"border-radius:8px;font-size:11px;font-weight:700;"

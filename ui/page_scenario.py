@@ -393,14 +393,14 @@ class PageScenario(QWidget):
                 _gi = next((g for g in _sc_style_mod.GROUPS if g["key"] == _g), None)
                 if _gi:
                     self._film_style_combo.addItem(
-                        f"  {_gi['icon']}  {_gi['name'].upper()}", "__sep__"
+                        f"  {_gi['icon']}  {translate(_gi['name']).upper()}", "__sep__"
                     )
                     _sep_i = self._film_style_combo.model().item(
                         self._film_style_combo.count() - 1
                     )
                     _sep_i.setEnabled(False)
                     _sep_i.setForeground(QColor(CP.get("accent2", CP.get("accent", "#7c6bff"))))
-            self._film_style_combo.addItem(f"    {_s['icon']}  {_s['name']}", _s["key"])
+            self._film_style_combo.addItem(f"    {_s['icon']}  {translate(_s['name'])}", _s["key"])
         self._film_style_combo.setFixedHeight(30)
         self._film_style_combo.setMinimumWidth(140)
         self._film_style_combo.setMaximumWidth(200)
