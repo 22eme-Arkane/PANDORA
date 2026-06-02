@@ -12,6 +12,7 @@ from PyQt6.QtWidgets import (
 from PyQt6.QtCore import Qt, QUrl
 from PyQt6.QtGui import QDesktopServices
 from ui.styles import CP, PANDORA_STYLESHEET
+from core.i18n import translate
 
 _FAL_SIGNUP   = "https://fal.ai/signup"
 _FAL_KEYS     = "https://fal.ai/dashboard/keys"
@@ -28,7 +29,7 @@ def _open(url):
 
 
 def _h(text: str, size: int = 15, color: str | None = None) -> QLabel:
-    lbl = QLabel(text)
+    lbl = QLabel(translate(text))
     lbl.setStyleSheet(
         f"color:{color or CP['text_primary']};font-size:{size}px;font-weight:700;"
         f"background:transparent;"
@@ -38,7 +39,7 @@ def _h(text: str, size: int = 15, color: str | None = None) -> QLabel:
 
 
 def _p(text: str, size: int = 12, color: str | None = None) -> QLabel:
-    lbl = QLabel(text)
+    lbl = QLabel(translate(text))
     lbl.setWordWrap(True)
     lbl.setStyleSheet(
         f"color:{color or CP['text_secondary']};font-size:{size}px;background:transparent;"
@@ -55,7 +56,7 @@ def _sep() -> QFrame:
 
 def _link_btn(label: str, url: str, color: str = None) -> QPushButton:
     c = color or CP["accent"]
-    btn = QPushButton(label)
+    btn = QPushButton(translate(label))
     btn.setFixedHeight(34)
     btn.setCursor(Qt.CursorShape.PointingHandCursor)
     btn.setStyleSheet(
@@ -80,7 +81,7 @@ def _step_row(num: int, text: str, accent: str = None) -> QHBoxLayout:
         f"background:{a};color:#07080f;border-radius:14px;"
         f"font-size:12px;font-weight:800;border:none;"
     )
-    lbl = QLabel(text)
+    lbl = QLabel(translate(text))
     lbl.setWordWrap(True)
     lbl.setStyleSheet(
         f"color:{CP['text_secondary']};font-size:12px;background:transparent;border:none;"
@@ -135,14 +136,14 @@ def _mock_browser(url_text: str, content_html: str,
     b.setContentsMargins(16, 12, 16, 12)
     b.setSpacing(6)
 
-    content = QLabel(content_html)
+    content = QLabel(translate(content_html))
     content.setWordWrap(True)
     content.setTextFormat(Qt.TextFormat.RichText)
     content.setStyleSheet(f"color:{CP['text_secondary']};font-size:11px;background:transparent;")
     b.addWidget(content)
 
     if highlight_text:
-        hl = QLabel(highlight_text)
+        hl = QLabel(translate(highlight_text))
         hl.setWordWrap(True)
         hl.setTextFormat(Qt.TextFormat.RichText)
         hl.setStyleSheet(
@@ -165,7 +166,7 @@ def _info_box(text: str, color: str = None) -> QFrame:
     )
     lay = QVBoxLayout(f)
     lay.setContentsMargins(14, 10, 14, 10)
-    lbl = QLabel(text)
+    lbl = QLabel(translate(text))
     lbl.setWordWrap(True)
     lbl.setTextFormat(Qt.TextFormat.RichText)
     lbl.setStyleSheet(f"color:{c};font-size:11px;background:transparent;border:none;")
@@ -174,7 +175,7 @@ def _info_box(text: str, color: str = None) -> QFrame:
 
 
 def _section_title(text: str, color: str = None) -> QLabel:
-    lbl = QLabel(text)
+    lbl = QLabel(translate(text))
     lbl.setStyleSheet(
         f"color:{color or CP['text_dim']};font-size:9px;font-weight:700;"
         f"letter-spacing:2px;background:transparent;"
@@ -207,14 +208,14 @@ def _page_welcome() -> QWidget:
     )
     lay.addWidget(ico)
 
-    title = QLabel("Bienvenue dans PANDORA")
+    title = QLabel(translate("Bienvenue dans PANDORA"))
     title.setAlignment(Qt.AlignmentFlag.AlignCenter)
     title.setStyleSheet(
         f"color:{CP['text_primary']};font-size:20px;font-weight:800;background:transparent;"
     )
     lay.addWidget(title)
 
-    sub = QLabel("Guide de configuration des services IA")
+    sub = QLabel(translate("Guide de configuration des services IA"))
     sub.setAlignment(Qt.AlignmentFlag.AlignCenter)
     sub.setStyleSheet(
         f"color:{CP['text_dim']};font-size:11px;font-family:'Consolas',monospace;"
@@ -256,14 +257,14 @@ def _page_welcome() -> QWidget:
     fal_name.setStyleSheet(
         f"color:{CP['text_primary']};font-size:14px;font-weight:700;background:transparent;"
     )
-    fal_desc = QLabel(
+    fal_desc = QLabel(translate(
         "Génère les vidéos (Seedance, Kling, Veo…) et les images de référence (portraits, décors…)"
-    )
+    ))
     fal_desc.setWordWrap(True)
     fal_desc.setStyleSheet(
         f"color:{CP['text_dim']};font-size:11px;background:transparent;"
     )
-    fal_price = QLabel("Crédits à la consommation — commence avec $10")
+    fal_price = QLabel(translate("Crédits à la consommation — commence avec $10"))
     fal_price.setWordWrap(True)
     fal_price.setStyleSheet(
         f"color:#9C3FE4;font-size:10px;font-weight:600;background:transparent;"
@@ -298,14 +299,14 @@ def _page_welcome() -> QWidget:
     ant_name.setStyleSheet(
         f"color:{CP['text_primary']};font-size:14px;font-weight:700;background:transparent;"
     )
-    ant_desc = QLabel(
+    ant_desc = QLabel(translate(
         "Assiste la rédaction du scénario, génère le storyboard et optimise les prompts vidéo"
-    )
+    ))
     ant_desc.setWordWrap(True)
     ant_desc.setStyleSheet(
         f"color:{CP['text_dim']};font-size:11px;background:transparent;"
     )
-    ant_price = QLabel("Crédits à la consommation — commence avec $5")
+    ant_price = QLabel(translate("Crédits à la consommation — commence avec $5"))
     ant_price.setWordWrap(True)
     ant_price.setStyleSheet(
         f"color:{CP['accent2']};font-size:10px;font-weight:600;background:transparent;"
@@ -337,18 +338,18 @@ def _page_welcome() -> QWidget:
     tuto_row.addWidget(tuto_icon)
     tuto_col = QVBoxLayout()
     tuto_col.setSpacing(3)
-    tuto_title = QLabel("Tutoriel complet PANDORA")
+    tuto_title = QLabel(translate("Tutoriel complet PANDORA"))
     tuto_title.setStyleSheet(
         f"color:{CP['text_primary']};font-size:13px;font-weight:700;background:transparent;"
     )
-    tuto_sub = QLabel("Découvrez toutes les fonctionnalités en vidéo — YouTube")
+    tuto_sub = QLabel(translate("Découvrez toutes les fonctionnalités en vidéo — YouTube"))
     tuto_sub.setStyleSheet(
         f"color:{CP['text_dim']};font-size:10px;background:transparent;"
     )
     tuto_col.addWidget(tuto_title)
     tuto_col.addWidget(tuto_sub)
     tuto_row.addLayout(tuto_col, 1)
-    btn_tuto = QPushButton("▶  Voir le tutoriel →")
+    btn_tuto = QPushButton(translate("▶  Voir le tutoriel →"))
     btn_tuto.setFixedHeight(34)
     btn_tuto.setCursor(Qt.CursorShape.PointingHandCursor)
     btn_tuto.setStyleSheet(
@@ -524,7 +525,7 @@ def _page_anthropic() -> QWidget:
     col = QVBoxLayout()
     col.setSpacing(2)
     col.addWidget(_h("Anthropic — Claude IA", 16))
-    sub = QLabel("Scénario  ·  Storyboard  ·  Prompts  ·  Extraction d'éléments")
+    sub = QLabel(translate("Scénario  ·  Storyboard  ·  Prompts  ·  Extraction d'éléments"))
     sub.setStyleSheet(
         f"color:{CP['accent2']};font-size:9px;font-family:'Consolas',monospace;"
         f"letter-spacing:1px;background:transparent;"
@@ -695,7 +696,7 @@ def _page_finish(navigate_to_settings_fn) -> QWidget:
     ))
 
     # Bouton aller aux paramètres
-    btn_settings = QPushButton("⚙  Aller aux Paramètres →")
+    btn_settings = QPushButton(translate("⚙  Aller aux Paramètres →"))
     btn_settings.setMinimumHeight(44)
     btn_settings.setCursor(Qt.CursorShape.PointingHandCursor)
     btn_settings.setStyleSheet(
@@ -747,7 +748,7 @@ class OnboardingDialog(QDialog):
         super().__init__(parent)
         self._navigate_settings = navigate_to_settings_fn or (lambda: None)
 
-        self.setWindowTitle("Guide de démarrage — PANDORA")
+        self.setWindowTitle(translate("Guide de démarrage — PANDORA"))
         self.setWindowModality(Qt.WindowModality.ApplicationModal)
         self.setStyleSheet(PANDORA_STYLESHEET + f"QDialog{{background:{CP['bg1']};}}")
         from ui.widgets import fit_dialog_to_screen
@@ -778,7 +779,7 @@ class OnboardingDialog(QDialog):
 
         title_col = QVBoxLayout()
         title_col.setSpacing(2)
-        self._page_title = QLabel(self._PAGE_TITLES[0])
+        self._page_title = QLabel(translate(self._PAGE_TITLES[0]))
         self._page_title.setStyleSheet(
             f"color:{CP['text_primary']};font-size:16px;font-weight:800;background:transparent;"
         )
@@ -792,7 +793,7 @@ class OnboardingDialog(QDialog):
         hl.addLayout(title_col)
         hl.addStretch()
 
-        btn_skip = QPushButton("Passer ✕")
+        btn_skip = QPushButton(translate("Passer ✕"))
         btn_skip.setFixedHeight(30)
         btn_skip.setCursor(Qt.CursorShape.PointingHandCursor)
         btn_skip.setStyleSheet(
@@ -829,7 +830,7 @@ class OnboardingDialog(QDialog):
         fl.setContentsMargins(28, 0, 28, 0)
         fl.setSpacing(12)
 
-        self._cb_no_show = QCheckBox("Ne plus afficher ce message")
+        self._cb_no_show = QCheckBox(translate("Ne plus afficher ce message"))
         self._cb_no_show.setStyleSheet(
             f"QCheckBox{{color:{CP['text_dim']};font-size:10px;background:transparent;}}"
             f"QCheckBox::indicator{{width:14px;height:14px;"
@@ -839,7 +840,7 @@ class OnboardingDialog(QDialog):
         fl.addWidget(self._cb_no_show)
         fl.addStretch()
 
-        self._btn_prev = QPushButton("← Précédent")
+        self._btn_prev = QPushButton(translate("← Précédent"))
         self._btn_prev.setFixedHeight(38)
         self._btn_prev.setCursor(Qt.CursorShape.PointingHandCursor)
         self._btn_prev.setStyleSheet(
@@ -852,7 +853,7 @@ class OnboardingDialog(QDialog):
         self._btn_prev.clicked.connect(self._prev)
         fl.addWidget(self._btn_prev)
 
-        self._btn_next = QPushButton("Suivant →")
+        self._btn_next = QPushButton(translate("Suivant →"))
         self._btn_next.setFixedHeight(38)
         self._btn_next.setCursor(Qt.CursorShape.PointingHandCursor)
         self._btn_next.setStyleSheet(
@@ -878,11 +879,11 @@ class OnboardingDialog(QDialog):
         i = self._idx
         n = len(self._PAGE_TITLES)
         self._stack.setCurrentIndex(i)
-        self._page_title.setText(self._PAGE_TITLES[i])
+        self._page_title.setText(translate(self._PAGE_TITLES[i]))
         self._step_badge.setText(str(i + 1))
         self._dots_lbl.setText(self._make_dots(i))
         self._btn_prev.setEnabled(i > 0)
-        self._btn_next.setText("Terminer" if i == n - 1 else "Suivant →")
+        self._btn_next.setText(translate("Terminer") if i == n - 1 else translate("Suivant →"))
 
     def _prev(self):
         if self._idx > 0:
