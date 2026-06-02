@@ -591,7 +591,7 @@ class PageCamera(QWidget):
         existing = cam_prefs.get_camera_prefs()
         existing.update(self._collect())
         cam_prefs.save_camera_prefs(existing)
-        self._save_lbl.setText("Sauvegardé ✓")
+        self._save_lbl.setText(translate("Sauvegardé ✓"))
         QTimer.singleShot(2000, lambda: self._save_lbl.setText(""))
 
     def refresh(self):

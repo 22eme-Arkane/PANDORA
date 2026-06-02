@@ -1539,7 +1539,7 @@ class CharacterDialog(QDialog):
     def _on_optimize_done(self, prompt: str):
         self._prompt.setPlainText(prompt)
         self._btn_cloud.setEnabled(True)
-        self._status.setText("Prompt optimisé ✓")
+        self._status.setText(translate("Prompt optimisé ✓"))
 
     def _on_optimize_fail(self, err: str):
         self._btn_cloud.setEnabled(True)
@@ -1773,7 +1773,7 @@ class CharacterDialog(QDialog):
             if preview and os.path.isfile(preview):
                 self._load_preview(preview)
             self._refresh_preview_nav()
-            self._status.setText("Portrait ajouté ✓")
+            self._status.setText(translate("Portrait ajouté ✓"))
             self._set_nav(0)
         else:
             self._status.setText("Image non utilisée — clique Générer pour réessayer.")
@@ -2439,7 +2439,7 @@ class CharacterDialog(QDialog):
                 self._preview_idx -= 1
         self._refresh_gallery_tab()
         self._refresh_preview_nav()
-        self._status.setText("Image supprimée.")
+        self._status.setText(translate("Image supprimée."))
 
     # ── Onglet Accessoires ────────────────────────────────────────────────────
 

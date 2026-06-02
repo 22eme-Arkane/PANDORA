@@ -821,7 +821,7 @@ class DecorDialog(QDialog):
             self._worker_opt = OptimizeDecorPromptWorker(text)
         self._worker_opt.finished.connect(lambda p: (self._prompt.setPlainText(p),
                                                       self._btn_cloud.setEnabled(True),
-                                                      self._status.setText("Prompt optimisé ✓")))
+                                                      self._status.setText(translate("Prompt optimisé ✓"))))
         self._worker_opt.failed.connect(lambda e: (self._btn_cloud.setEnabled(True),
                                                     self._status.setText(f"Erreur : {e[:80]}")))
         self._worker_opt.start()
@@ -996,7 +996,7 @@ class DecorDialog(QDialog):
         self._image_path  = path
         self._load_preview(path)
         self._refresh_preview_nav()
-        self._status.setText("Image ajoutée ✓")
+        self._status.setText(translate("Image ajoutée ✓"))
 
     def _on_multi_gen_done(self, paths: list):
         self._btn_gen.setEnabled(True)

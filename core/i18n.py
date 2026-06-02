@@ -2598,6 +2598,8 @@ _FR_TO_EN: dict[str, str] = {
     'Utilisez Ctrl+S pour une sauvegarde manuelle.': 'Use Ctrl+S for a manual save.',
     'Durée du plan': 'Shot duration',
     'Durée (1 — 15 secondes) :': 'Duration (1 — 15 seconds):',
+    'Image supprimée.': 'Image deleted.',
+    'Portrait ajouté ✓': 'Portrait added ✓',
 
     # ── Lot 6 — messages de statut des workers (api/*) ──
     'Démultiplexage audio/vidéo…': 'Demuxing audio/video…',
