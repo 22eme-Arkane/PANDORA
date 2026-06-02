@@ -282,14 +282,14 @@ class VehicleDialog(QDialog):
                 _gi = next((g for g in _style_mod.GROUPS if g["key"] == _g), None)
                 if _gi:
                     self._style_combo.addItem(
-                        f"  {_gi['icon']}  {_gi['name'].upper()}", "__sep__"
+                        f"  {_gi['icon']}  {translate(_gi['name']).upper()}", "__sep__"
                     )
                     _sep_item = self._style_combo.model().item(
                         self._style_combo.count() - 1
                     )
                     _sep_item.setEnabled(False)
                     _sep_item.setForeground(_QColor(CP.get("accent2", "#7c6bff")))
-            self._style_combo.addItem(f"    {_s['icon']}  {_s['name']}", _s["key"])
+            self._style_combo.addItem(f"    {_s['icon']}  {translate(_s['name'])}", _s["key"])
         saved_key = self._item.get("vehicle_style_key", "") or _style_mod.get_style_key()
         if saved_key:
             for _i in range(self._style_combo.count()):
