@@ -1,5 +1,5 @@
 CHARTE D'UTILISATION — LOGICIEL PANDORA
-Version 1.1.7 — Mai 2026
+Version 1.1.7 — Juin 2026
 22eme Arkane — Matthieu Terrien
 Contact : 22eme.arkane@gmail.com
 
@@ -7,12 +7,16 @@ Contact : 22eme.arkane@gmail.com
 
 PRÉAMBULE
 
-Le présent document constitue un Contrat de Licence d'Utilisation Finale (CLUF)
-entre vous, l'Utilisateur, et 22eme Arkane (Matthieu Terrien), ci-après désigné
-« l'Éditeur », concernant le logiciel PANDORA et ses mises à jour éventuelles.
+Le présent document constitue la Charte d'utilisation de PANDORA entre vous,
+l'Utilisateur, et 22eme Arkane (Matthieu Terrien), ci-après désigné « l'Éditeur »,
+concernant le logiciel PANDORA et ses mises à jour éventuelles.
 
-En installant, copiant ou utilisant PANDORA, vous déclarez avoir lu, compris et
-accepté sans réserve les termes de la présente charte. Si vous n'acceptez pas ces
+PANDORA est un logiciel libre distribué sous licence GNU General Public License
+version 3 (GPL v3). Le code source est disponible publiquement à l'adresse :
+https://github.com/22eme-Arkane/PANDORA
+
+En installant ou utilisant PANDORA, vous déclarez avoir lu, compris et accepté
+sans réserve les termes de la présente charte. Si vous n'acceptez pas ces
 termes, n'installez pas et n'utilisez pas ce logiciel.
 
 ════════════════════════════════════════════════════════════════
@@ -26,35 +30,40 @@ contenus vidéo et image via des services d'intelligence artificielle tiers.
 
 ════════════════════════════════════════════════════════════════
 
-ARTICLE 2 — LICENCE ACCORDÉE
+ARTICLE 2 — LICENCE LOGICIELLE
 
-L'Éditeur accorde à l'Utilisateur une licence personnelle, gratuite, non exclusive,
-non transférable et révocable pour :
+PANDORA est distribué sous licence GNU General Public License version 3 (GPL v3),
+dont le texte intégral est disponible à l'adresse :
+https://www.gnu.org/licenses/gpl-3.0.txt
 
-  a) Installer et utiliser PANDORA sur ses équipements personnels fonctionnant sous
-     Microsoft Windows 10 ou Windows 11 (64 bits) ;
-  b) Utiliser PANDORA dans le cadre de projets personnels ou professionnels, dans
-     les limites définies à l'article 3.
+En vertu de cette licence, vous êtes libre de :
 
-Cette licence ne confère aucun droit de propriété sur le logiciel, son code source
-ou tout élément le composant.
+  a) Utiliser PANDORA pour tout usage personnel ou professionnel ;
+  b) Étudier le code source et le modifier selon vos besoins ;
+  c) Redistribuer PANDORA, modifié ou non, sous les mêmes conditions GPL v3 ;
+  d) Contribuer au projet via le dépôt GitHub officiel.
+
+Toute redistribution doit conserver la mention du copyright original et être
+accompagnée du texte de la licence GPL v3. Le code source doit être rendu
+accessible dans les mêmes conditions.
+
+La présente charte précise les conditions d'utilisation applicables à
+l'application compilée (installeur Windows) et aux services tiers intégrés,
+en complément de la licence GPL v3.
 
 ════════════════════════════════════════════════════════════════
 
-ARTICLE 3 — RESTRICTIONS
+ARTICLE 3 — CONDITIONS D'UTILISATION
 
-Il est formellement interdit de :
+L'Utilisateur s'engage à :
 
-  a) Reproduire, distribuer, publier, vendre, louer ou prêter PANDORA à des tiers,
-     sous quelque forme que ce soit ;
-  b) Modifier, adapter, traduire, décompiler, désassembler ou pratiquer toute forme
-     d'ingénierie inverse sur le logiciel ;
-  c) Créer des œuvres dérivées à partir de PANDORA ;
-  d) Supprimer, modifier ou masquer toute mention de droits de propriété
-     intellectuelle figurant dans le logiciel ou sa documentation ;
-  e) Sous-licencier le logiciel à des tiers ;
-  f) Utiliser PANDORA à des fins illicites, contraires aux lois et réglementations
-     applicables, ou portant atteinte aux droits de tiers.
+  a) Utiliser PANDORA dans le respect des lois et réglementations applicables ;
+  b) Ne pas utiliser PANDORA à des fins illicites ou portant atteinte aux droits
+     de tiers ;
+  c) Respecter les conditions générales d'utilisation des services tiers
+     accessibles depuis PANDORA ;
+  d) Ne pas utiliser PANDORA pour générer des contenus illégaux, diffamatoires,
+     ou violant les droits de propriété intellectuelle de tiers.
 
 ════════════════════════════════════════════════════════════════
 
@@ -101,16 +110,19 @@ la compatibilité avec toutes les versions de DaVinci Resolve.
 
 ════════════════════════════════════════════════════════════════
 
-ARTICLE 6 — PROPRIÉTÉ INTELLECTUELLE
+ARTICLE 6 — PROPRIÉTÉ INTELLECTUELLE ET COPYRIGHT
 
-PANDORA, l'intégralité de son code source, son interface graphique, ses éléments
-visuels, sa documentation et tous ses composants sont la propriété exclusive de
-22eme Arkane (Matthieu Terrien) et sont protégés par les lois françaises et
-internationales relatives à la propriété intellectuelle, notamment le Code de la
-propriété intellectuelle français.
+PANDORA est la création originale de 22eme Arkane (Matthieu Terrien).
+Copyright (C) 2026 22eme Arkane — Matthieu Terrien. Tous droits d'auteur réservés.
 
-Toute violation des droits de propriété intellectuelle de l'Éditeur peut donner
-lieu à des poursuites civiles et/ou pénales.
+Le code source est distribué sous licence GPL v3, ce qui signifie que les droits
+d'auteur sont maintenus tout en autorisant les libertés définies par cette licence.
+Toute copie ou distribution de PANDORA doit conserver la mention de copyright
+originale conformément aux termes de la GPL v3.
+
+Les éléments visuels, l'interface graphique, le nom PANDORA et les marques
+associées demeurent la propriété de 22eme Arkane et ne sont pas couverts par la
+licence GPL v3 en dehors de leur intégration dans le logiciel.
 
 ════════════════════════════════════════════════════════════════
 
@@ -164,8 +176,8 @@ responsable de :
 ARTICLE 10 — MISES À JOUR
 
 L'Éditeur peut publier des mises à jour, corrections et nouvelles versions de
-PANDORA. Ces mises à jour sont soumises aux termes de la présente charte, sauf
-mention contraire. L'Utilisateur n'est pas tenu de les installer mais peut en
+PANDORA. Ces mises à jour sont soumises aux termes de la présente charte et de
+la licence GPL v3. L'Utilisateur n'est pas tenu de les installer mais peut en
 bénéficier librement.
 
 La vérification automatique de mise à jour au démarrage peut être désactivée dans
@@ -174,16 +186,7 @@ de GitHub Releases et ne transmet aucune donnée personnelle.
 
 ════════════════════════════════════════════════════════════════
 
-ARTICLE 11 — RÉSILIATION
-
-La présente licence prend fin automatiquement et sans préavis si l'Utilisateur
-ne respecte pas l'une quelconque de ses dispositions. En cas de résiliation,
-l'Utilisateur s'engage à cesser immédiatement toute utilisation de PANDORA et
-à le désinstaller de l'ensemble de ses équipements.
-
-════════════════════════════════════════════════════════════════
-
-ARTICLE 12 — LOI APPLICABLE ET JURIDICTION
+ARTICLE 11 — LOI APPLICABLE ET JURIDICTION
 
 La présente charte est régie, interprétée et exécutée conformément au droit
 français, à l'exclusion de toute autre loi.
@@ -194,24 +197,24 @@ la compétence exclusive des tribunaux français compétents.
 
 ════════════════════════════════════════════════════════════════
 
-ARTICLE 13 — DISPOSITIONS GÉNÉRALES
+ARTICLE 12 — DISPOSITIONS GÉNÉRALES
 
-13.1 Intégralité de l'accord — La présente charte constitue l'intégralité de
-     l'accord entre les parties concernant l'objet qu'elle définit et remplace
-     tout accord antérieur, écrit ou oral.
+12.1 Intégralité de l'accord — La présente charte, conjointement avec la licence
+     GPL v3, constitue l'intégralité de l'accord entre les parties concernant
+     l'utilisation de PANDORA.
 
-13.2 Divisibilité — Si une disposition de la présente charte est déclarée invalide,
+12.2 Divisibilité — Si une disposition de la présente charte est déclarée invalide,
      illégale ou inapplicable par une juridiction compétente, les autres dispositions
      demeurent en pleine vigueur.
 
-13.3 Non-renonciation — Le fait pour l'Éditeur de ne pas exercer ou faire valoir un
+12.3 Non-renonciation — Le fait pour l'Éditeur de ne pas exercer ou faire valoir un
      droit prévu par la présente charte ne constitue pas une renonciation à ce droit.
 
-13.4 Modification — L'Éditeur se réserve le droit de modifier la présente charte.
+12.4 Modification — L'Éditeur se réserve le droit de modifier la présente charte.
      La version applicable est celle acceptée lors de l'installation ou, pour les
      mises à jour majeures, celle présentée lors de la mise à jour concernée.
 
 ════════════════════════════════════════════════════════════════
 
 22eme Arkane — Matthieu Terrien
-Version 1.1.7 — Mai 2026
+Version 1.1.7 — Juin 2026

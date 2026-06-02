@@ -22,11 +22,18 @@ SKIP_FRAGMENTS = [
     'utf-8', 'win32', '%localappdata', 'AppData',
 ]
 
-ui_files = (
-    sorted((root / "ui").glob("*.py")) +
-    sorted((root / "api").glob("*.py")) +
-    sorted((root / "core").glob("*.py"))
-)
+# Fichiers exclus : ils gèrent leur propre traduction (système bilingue dédié)
+# et ne passent donc pas par _FR_TO_EN.
+SKIP_FILES = {"dialog_user_manual.py"}
+
+ui_files = [
+    p for p in (
+        sorted((root / "ui").glob("*.py")) +
+        sorted((root / "api").glob("*.py")) +
+        sorted((root / "core").glob("*.py"))
+    )
+    if p.name not in SKIP_FILES
+]
 
 missing = {}
 
@@ -37,9 +44,21 @@ for fpath in ui_files:
     except SyntaxError:
         continue
 
+    # Repère les docstrings (module / fonction / classe) pour les ignorer :
+    # ce ne sont pas des chaînes d'interface.
+    docstring_ids = set()
+    for n in ast.walk(tree):
+        if isinstance(n, (ast.Module, ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+            body = getattr(n, "body", None)
+            if body and isinstance(body[0], ast.Expr) and \
+               isinstance(body[0].value, ast.Constant) and isinstance(body[0].value.value, str):
+                docstring_ids.add(id(body[0].value))
+
     file_missing = []
     for node in ast.walk(tree):
         if isinstance(node, ast.Constant) and isinstance(node.value, str):
+            if id(node) in docstring_ids:
+                continue
             s = node.value
             if not FRENCH_RE.search(s):
                 continue
@@ -61,8 +80,8 @@ for fpath, items in missing.items():
     lines.append(f"  {fpath}")
     lines.append(f"{'='*60}")
     for lineno, s in items:
-        display = s.replace('\n', '\\n')[:130]
-        lines.append(f"  L{lineno:4d}  {repr(s.replace(chr(10), '\\n'))[:130]}")
+        display = repr(s.replace(chr(10), '\\n'))[:130]
+        lines.append(f"  L{lineno:4d}  {display}")
         total += 1
 
 lines.append(f"\n\nTOTAL MANQUANTS : {total} strings dans {len(missing)} fichiers")
