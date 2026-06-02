@@ -2601,6 +2601,7 @@ _FR_TO_EN: dict[str, str] = {
     'Image supprimée.': 'Image deleted.',
     'Portrait ajouté ✓': 'Portrait added ✓',
     'Réaliste': 'Realistic',
+    "Ces paramètres s'injectent automatiquement dans les prompts de génération vidéo pour reproduire le rendu d'un équipement spécifique — corps de caméra, gamme d'optiques, filtres et microphone du tournage.": "These settings are automatically injected into the video generation prompts to reproduce the look of specific equipment — camera body, lens range, filters and production microphone.",
 
     # ── Lot 8 — Aide API, Projets, divers ──
     'Optimisation de prompts  ·  Scénario  ·  Storyboard': 'Prompt optimization  ·  Screenplay  ·  Storyboard',
