@@ -1,5 +1,5 @@
-END USER LICENSE AGREEMENT — PANDORA SOFTWARE
-Version 1.1.7 — May 2026
+TERMS OF USE — PANDORA SOFTWARE
+Version 1.1.7 — June 2026
 22eme Arkane — Matthieu Terrien
 Contact: 22eme.arkane@gmail.com
 
@@ -7,13 +7,17 @@ Contact: 22eme.arkane@gmail.com
 
 PREAMBLE
 
-This document constitutes an End User License Agreement (EULA)
-between you, the User, and 22eme Arkane (Matthieu Terrien), hereinafter referred to
-as "the Publisher", concerning the PANDORA software and any future updates.
+This document constitutes the Terms of Use of PANDORA between you, the User, and
+22eme Arkane (Matthieu Terrien), hereinafter referred to as "the Publisher",
+concerning the PANDORA software and any future updates.
 
-By installing, copying, or using PANDORA, you declare that you have read, understood,
-and unconditionally accepted the terms of this agreement. If you do not accept these
-terms, do not install or use this software.
+PANDORA is free software distributed under the GNU General Public License
+version 3 (GPL v3). The source code is publicly available at:
+https://github.com/22eme-Arkane/PANDORA
+
+By installing or using PANDORA, you declare that you have read, understood, and
+unconditionally accepted the terms of these Terms of Use. If you do not accept
+these terms, do not install or use this software.
 
 ════════════════════════════════════════════════════════════════
 
@@ -25,35 +29,40 @@ generating video and image content through third-party artificial intelligence s
 
 ════════════════════════════════════════════════════════════════
 
-ARTICLE 2 — LICENSE GRANTED
+ARTICLE 2 — SOFTWARE LICENSE
 
-The Publisher grants the User a personal, free, non-exclusive, non-transferable, and
-revocable license to:
+PANDORA is distributed under the GNU General Public License version 3 (GPL v3),
+the full text of which is available at:
+https://www.gnu.org/licenses/gpl-3.0.txt
 
-  a) Install and use PANDORA on personal devices running Microsoft Windows 10 or
-     Windows 11 (64-bit);
-  b) Use PANDORA for personal or professional projects, within the limits defined
-     in Article 3.
+Under this license, you are free to:
 
-This license does not confer any ownership rights over the software, its source code,
-or any of its components.
+  a) Use PANDORA for any personal or professional purpose;
+  b) Study the source code and modify it according to your needs;
+  c) Redistribute PANDORA, modified or not, under the same GPL v3 terms;
+  d) Contribute to the project via the official GitHub repository.
+
+Any redistribution must retain the original copyright notice and be accompanied by
+the text of the GPL v3 license. The source code must be made available under the
+same conditions.
+
+These Terms of Use specify the conditions of use applicable to the compiled
+application (Windows installer) and to the integrated third-party services, in
+addition to the GPL v3 license.
 
 ════════════════════════════════════════════════════════════════
 
-ARTICLE 3 — RESTRICTIONS
+ARTICLE 3 — CONDITIONS OF USE
 
-The following are strictly prohibited:
+The User agrees to:
 
-  a) Reproducing, distributing, publishing, selling, renting, or lending PANDORA to
-     third parties in any form;
-  b) Modifying, adapting, translating, decompiling, disassembling, or performing any
-     form of reverse engineering on the software;
-  c) Creating derivative works based on PANDORA;
-  d) Removing, modifying, or concealing any intellectual property notices appearing
-     in the software or its documentation;
-  e) Sublicensing the software to third parties;
-  f) Using PANDORA for unlawful purposes, contrary to applicable laws and regulations,
-     or infringing upon the rights of third parties.
+  a) Use PANDORA in compliance with applicable laws and regulations;
+  b) Not use PANDORA for unlawful purposes or in a manner that infringes upon the
+     rights of third parties;
+  c) Comply with the general terms of use of the third-party services accessible
+     from PANDORA;
+  d) Not use PANDORA to generate illegal or defamatory content, or content that
+     infringes the intellectual property rights of third parties.
 
 ════════════════════════════════════════════════════════════════
 
@@ -66,9 +75,8 @@ The User expressly acknowledges and agrees that:
     from each provider. The Publisher provides no API keys and is not party to any
     contracts concluded between the User and these services. Currently integrated
     providers include:
-      · fal.ai (Seedance 2.0, Kling, PixVerse, Flux, Kokoro TTS)
+      · fal.ai (Seedance 2.0, Kling, PixVerse, Flux, Kokoro TTS, portrait and visual element generation)
       · Anthropic (Claude — script assistance, storyboard, optimization)
-      · Nano Banana (portrait and visual element generation)
 
 4.2 Costs — Each operation performed through these services may be billed directly
     to the User by the relevant provider, according to their applicable rates.
@@ -99,15 +107,19 @@ compatibility with all versions of DaVinci Resolve.
 
 ════════════════════════════════════════════════════════════════
 
-ARTICLE 6 — INTELLECTUAL PROPERTY
+ARTICLE 6 — INTELLECTUAL PROPERTY AND COPYRIGHT
 
-PANDORA, its entire source code, graphical interface, visual elements, documentation,
-and all its components are the exclusive property of 22eme Arkane (Matthieu Terrien)
-and are protected by French and international laws relating to intellectual property,
-in particular the French Intellectual Property Code.
+PANDORA is the original creation of 22eme Arkane (Matthieu Terrien).
+Copyright (C) 2026 22eme Arkane — Matthieu Terrien. All copyright reserved.
 
-Any violation of the Publisher's intellectual property rights may result in civil
-and/or criminal proceedings.
+The source code is distributed under the GPL v3 license, which means that copyright
+is maintained while granting the freedoms defined by that license. Any copy or
+distribution of PANDORA must retain the original copyright notice in accordance with
+the terms of the GPL v3.
+
+The visual elements, the graphical interface, the PANDORA name, and the associated
+trademarks remain the property of 22eme Arkane and are not covered by the GPL v3
+license outside of their integration into the software.
 
 ════════════════════════════════════════════════════════════════
 
@@ -149,7 +161,7 @@ To the extent permitted by French law, the Publisher shall not be held liable fo
      from the use or inability to use PANDORA;
   b) Generation costs incurred through third-party services;
   c) Loss, corruption, or destruction of data, projects, or creative content;
-  d) Any damage caused by use not in accordance with this agreement;
+  d) Any damage caused by use not in accordance with these Terms of Use;
   e) The failure, unavailability, or modification of third-party services integrated
      into PANDORA.
 
@@ -158,8 +170,8 @@ To the extent permitted by French law, the Publisher shall not be held liable fo
 ARTICLE 10 — UPDATES
 
 The Publisher may release updates, patches, and new versions of PANDORA. These
-updates are subject to the terms of this agreement, unless otherwise stated. The
-User is not required to install them but may benefit from them freely.
+updates are subject to the terms of these Terms of Use and of the GPL v3 license.
+The User is not required to install them but may benefit from them freely.
 
 The automatic update check at startup may be disabled in the software settings. It
 consists solely of querying the public GitHub Releases API and transmits no personal
@@ -167,43 +179,34 @@ data.
 
 ════════════════════════════════════════════════════════════════
 
-ARTICLE 11 — TERMINATION
+ARTICLE 11 — GOVERNING LAW AND JURISDICTION
 
-This license terminates automatically and without notice if the User fails to comply
-with any of its provisions. Upon termination, the User agrees to immediately cease
-all use of PANDORA and to uninstall it from all their devices.
+These Terms of Use are governed, interpreted, and enforced in accordance with French
+law, to the exclusion of any other law.
 
-════════════════════════════════════════════════════════════════
-
-ARTICLE 12 — GOVERNING LAW AND JURISDICTION
-
-This agreement is governed, interpreted, and enforced in accordance with French law,
-to the exclusion of any other law.
-
-Any dispute relating to the validity, interpretation, or performance of this
-agreement that cannot be resolved amicably between the parties shall be submitted to
+Any dispute relating to the validity, interpretation, or performance of these Terms
+of Use that cannot be resolved amicably between the parties shall be submitted to
 the exclusive jurisdiction of the competent French courts.
 
 ════════════════════════════════════════════════════════════════
 
-ARTICLE 13 — GENERAL PROVISIONS
+ARTICLE 12 — GENERAL PROVISIONS
 
-13.1 Entire agreement — This agreement constitutes the entire agreement between the
-     parties regarding the subject matter defined herein and supersedes all prior
-     agreements, written or oral.
+12.1 Entire agreement — These Terms of Use, together with the GPL v3 license,
+     constitute the entire agreement between the parties regarding the use of PANDORA.
 
-13.2 Severability — If any provision of this agreement is declared invalid, illegal,
+12.2 Severability — If any provision of these Terms of Use is declared invalid, illegal,
      or unenforceable by a competent court, the remaining provisions shall remain in
      full force and effect.
 
-13.3 Non-waiver — The Publisher's failure to exercise or enforce any right provided
-     by this agreement shall not constitute a waiver of that right.
+12.3 Non-waiver — The Publisher's failure to exercise or enforce any right provided
+     by these Terms of Use shall not constitute a waiver of that right.
 
-13.4 Modification — The Publisher reserves the right to modify this agreement. The
+12.4 Modification — The Publisher reserves the right to modify these Terms of Use. The
      applicable version is the one accepted at installation or, for major updates,
      the one presented at the time of the relevant update.
 
 ════════════════════════════════════════════════════════════════
 
 22eme Arkane — Matthieu Terrien
-Version 1.1.7 — May 2026
+Version 1.1.7 — June 2026

@@ -2469,14 +2469,14 @@ class TabT2V(QScrollArea):
         self._prompt_preview = self._build_prompt_preview()
         _ez_lay.addWidget(self._prompt_preview)
 
-        # ── Raccords automatique ──────────────────────────────────────────────
-        _raccords_container = QFrame()
-        _raccords_container.setStyleSheet(
-            f"QFrame#raccords_container{{background:{C['bg2']};border:1px solid {C['border']};"
+        # ── Rendu & Audio (toujours visible, y compris en multi-sélection) ───
+        self._options_container = QFrame()
+        self._options_container.setStyleSheet(
+            f"QFrame#options_container{{background:{C['bg2']};border:1px solid {C['border']};"
             f"border-radius:8px;padding:0px;}}"
         )
-        _raccords_container.setObjectName("raccords_container")
-        _raccords_lay = QVBoxLayout(_raccords_container)
+        self._options_container.setObjectName("options_container")
+        _raccords_lay = QVBoxLayout(self._options_container)
         _raccords_lay.setContentsMargins(0, 0, 0, 0)
         _raccords_lay.setSpacing(1)
 
@@ -2484,13 +2484,12 @@ class TabT2V(QScrollArea):
         _raccords_header.setStyleSheet("background:transparent;border:none;")
         _raccords_header_lay = QHBoxLayout(_raccords_header)
         _raccords_header_lay.setContentsMargins(14, 8, 14, 6)
-        _raccords_title = QLabel("Raccords automatique")
+        _raccords_title = QLabel("RENDU & AUDIO")
         _raccords_title.setStyleSheet(
             f"color:{C['accent']};font-size:9px;letter-spacing:2px;"
             f"font-family:'Consolas',monospace;font-weight:700;"
             f"background:transparent;border:none;"
         )
-        _raccords_title.setText(_raccords_title.text().upper())
         _raccords_header_lay.addWidget(_raccords_title)
         _raccords_header_lay.addStretch()
         _raccords_lay.addWidget(_raccords_header)
@@ -2556,7 +2555,13 @@ class TabT2V(QScrollArea):
         self._film_anchor_cb.stateChanged.connect(self._refresh_prompt_preview)
         _raccords_lay.addWidget(self._film_anchor_toggle_row)
 
-        _ez_lay.addWidget(_raccords_container)
+        self._raccord_auto_toggle_row, _raccord_auto_cb_inner = _raccord_toggle(
+            "Raccord automatique",
+            "Utilise la dernière frame du plan précédent comme point de départ (I2V) — enchaîne les plans comme un Extend",
+            False,
+        )
+        self._raccord_auto_cb = _raccord_auto_cb_inner
+        _raccords_lay.addWidget(self._raccord_auto_toggle_row)
 
         self._dyn_cam_toggle_row = toggle_row(
             "Caméra dynamique",
@@ -2569,6 +2574,9 @@ class TabT2V(QScrollArea):
         _ez_lay.addWidget(self._dyn_cam_toggle_row)
 
         lay.addWidget(self._edit_zone)
+
+        # ── Rendu & Audio (toujours visible, y compris multi-sélection) ───────
+        lay.addWidget(self._options_container)
 
         # ── Contrôles créatifs ────────────────────────────────────────────────
         self._creative = _CreativeControlPanel()
@@ -3722,6 +3730,13 @@ class TabT2V(QScrollArea):
 
         # I2V continuité depuis la dernière frame du plan précédent
         i2v_frame = self._continuity_bar.get_i2v_frame()
+        # Raccord automatique — force I2V avec la dernière frame du plan précédent
+        if not i2v_frame and getattr(self, "_raccord_auto_cb", None) and self._raccord_auto_cb.isChecked():
+            _prev = getattr(self._continuity_bar, "_prev_shot", None)
+            if _prev:
+                _prev_frame = _prev.get("last_frame_path", "")
+                if _prev_frame and os.path.isfile(_prev_frame):
+                    i2v_frame = _prev_frame
 
         params = {
             "mode":                    "i2v" if i2v_frame else "t2v",

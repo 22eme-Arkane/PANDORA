@@ -58,7 +58,7 @@ All versions: [Releases](../../releases)
 ## Installation
 
 1. Download `PANDORA_Setup_1.1.4.exe` from the link above
-2. Run the installer and accept the End User License Agreement
+2. Run the installer and accept the Terms of Use
 3. Launch **PANDORA** from the Start menu or desktop shortcut
 4. Enter your API keys in **Settings** (optional)
 
@@ -98,14 +98,15 @@ PANDORA is free. If this project is useful to you:
 
 ---
 
-## End User License Agreement
+## Terms of Use
 
-See [EULA.txt](EULA.txt) — accepted at first launch.
+See [EULA.txt](EULA.txt) (English: [EULA_EN.txt](EULA_EN.txt)) — accepted at first launch.
 
 ---
 
 ## License
 
-© 2026 22eme Arkane. All rights reserved.  
-Proprietary software — viewing the source code does not grant any right to use, copy, or redistribute.  
-See [LICENSE](LICENSE) and [EULA.txt](EULA.txt) for full terms.
+PANDORA is free software distributed under the **GNU General Public License v3 (GPL v3)**.  
+You are free to use, study, modify, and redistribute it under the same terms.  
+Copyright © 2026 22eme Arkane — Matthieu Terrien.  
+See [LICENSE](LICENSE) for the full license text, and [EULA.txt](EULA.txt) for the Terms of Use.
