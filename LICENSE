@@ -1,40 +1,17 @@
-PANDORA — Proprietary Software License
-Copyright (c) 2026 22eme Arkane. All Rights Reserved.
+PANDORA — GNU General Public License v3
+Copyright (C) 2026 22eme Arkane — Matthieu Terrien
+Contact: 22eme.arkane@gmail.com
 
-================================================================================
+SPDX-License-Identifier: GPL-3.0-or-later
 
-ENGLISH
+PANDORA is free software: you can redistribute it and/or modify
+it under the terms of the GNU General Public License as published by
+the Free Software Foundation, either version 3 of the License, or
+(at your option) any later version.
 
-This software and its source code are the exclusive property of 22eme Arkane.
-Viewing the source code on this repository does not grant any rights to use,
-copy, modify, merge, publish, distribute, sublicense, or sell copies of this
-software or any part thereof.
+PANDORA is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+GNU General Public License for more details.
 
-Authorized use of the compiled application (PANDORA) is governed exclusively
-by the End User License Agreement (EULA) provided with the installer.
-
-Any unauthorized use, reproduction, or distribution of this software or its
-source code, in whole or in part, is strictly prohibited and may result in
-civil and criminal penalties.
-
-For licensing inquiries: 22eme.arkane@gmail.com
-
-================================================================================
-
-FRANÇAIS
-
-Ce logiciel et son code source sont la propriété exclusive de 22eme Arkane.
-La consultation du code source sur ce dépôt ne confère aucun droit d'utiliser,
-copier, modifier, fusionner, publier, distribuer, sous-licencier ou vendre des
-copies de ce logiciel ou de toute partie de celui-ci.
-
-L'utilisation autorisée de l'application compilée (PANDORA) est régie
-exclusivement par la Charte d'utilisation (CLUF) fournie avec l'installeur.
-
-Toute utilisation, reproduction ou distribution non autorisée de ce logiciel
-ou de son code source, en tout ou en partie, est strictement interdite et peut
-entraîner des sanctions civiles et pénales.
-
-Pour toute demande de licence : 22eme.arkane@gmail.com
-
-================================================================================
+Full license text: https://www.gnu.org/licenses/gpl-3.0.txt
