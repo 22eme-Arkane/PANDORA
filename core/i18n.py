@@ -2600,6 +2600,7 @@ _FR_TO_EN: dict[str, str] = {
     'Durée (1 — 15 secondes) :': 'Duration (1 — 15 seconds):',
     'Image supprimée.': 'Image deleted.',
     'Portrait ajouté ✓': 'Portrait added ✓',
+    'Réaliste': 'Realistic',
 
     # ── Lot 8 — Aide API, Projets, divers ──
     'Optimisation de prompts  ·  Scénario  ·  Storyboard': 'Prompt optimization  ·  Screenplay  ·  Storyboard',
