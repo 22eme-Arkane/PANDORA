@@ -140,9 +140,15 @@ class _CancellableWorker(QThread):
         self._cancelled = False
 
     def cancel(self):
+        # Annulation coopérative : les sous-classes vérifient self._cancelled avant
+        # d'émettre. On coupe les signaux + quit sans terminate() (qui corromprait l'état).
         self._cancelled = True
+        try:
+            self.blockSignals(True)
+        except Exception:
+            pass
+        self.requestInterruption()
         self.quit()
-        self.terminate()
         self.wait(2000)
 
 
