@@ -831,6 +831,7 @@ _FR_TO_EN: dict[str, str] = {
     "Nom du personnage":                "Character name",
     "Rôle":                            "Role",
     "Style de génération :":           "Generation style:",
+    "Style d'image :":                  "Image style:",
     "Utilisées par Claude pour enrichir le prompt":
         "Used by Claude to enrich the prompt",
     "⚠ Mode mock actif\n(clé fal.ai non configurée)":
