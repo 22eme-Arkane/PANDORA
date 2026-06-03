@@ -1044,14 +1044,15 @@ class PageScenario(QWidget):
         """Met à jour le label d'estimation live."""
         text = self._editor_text.toPlainText()
         mins, secs = self._estimate_duration(text)
+        _est = translate("Estimé :")
         if mins == 0 and secs == 0:
-            self._dur_estimate_lbl.setText("Estimé : —")
+            self._dur_estimate_lbl.setText(translate("Estimé : —"))
         elif mins == 0:
-            self._dur_estimate_lbl.setText(f"Estimé : ~{secs}s")
+            self._dur_estimate_lbl.setText(f"{_est} ~{secs}s")
         elif secs == 0:
-            self._dur_estimate_lbl.setText(f"Estimé : ~{mins}m")
+            self._dur_estimate_lbl.setText(f"{_est} ~{mins}m")
         else:
-            self._dur_estimate_lbl.setText(f"Estimé : ~{mins}m{secs:02d}")
+            self._dur_estimate_lbl.setText(f"{_est} ~{mins}m{secs:02d}")
 
     def _save(self, silent=False):
         text = self._editor_text.toPlainText().strip()

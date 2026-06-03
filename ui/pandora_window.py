@@ -830,8 +830,13 @@ class PandoraWindow(QMainWindow):
             scenario._save(silent=True)
 
     def _on_funding(self):
-        from ui.dialog_funding import FundingDialog
-        FundingDialog(self).exec()
+        try:
+            from ui.dialog_funding import FundingDialog
+            FundingDialog(self).exec()
+        except Exception as e:
+            import traceback; traceback.print_exc()
+            from PyQt6.QtWidgets import QMessageBox
+            QMessageBox.warning(self, "PANDORA", f"Impossible d'ouvrir la fenêtre de soutien.\n\n{e}")
 
     def _on_contact(self):
         from ui.dialog_contact import ContactDialog
