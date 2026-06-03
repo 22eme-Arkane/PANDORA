@@ -13,6 +13,7 @@ from PyQt6.QtWidgets import (
 )
 from PyQt6.QtCore import Qt
 from ui.styles import CP
+from core.i18n import translate
 
 
 # ── Small item row ─────────────────────────────────────────────────────────────
@@ -91,7 +92,7 @@ class ExtractGenerateDialog(QDialog):
         self._page_key: str    = ""   # set by factory — page to navigate to after completion
         self._page_label: str  = ""   # label for the navigate button
 
-        self.setWindowTitle(f"Générer — {title}")
+        self.setWindowTitle(f"{translate('Générer —')} {translate(title)}")
         self.setMinimumWidth(520)
         self.setMinimumHeight(400)
         self.setStyleSheet(f"background:{CP['bg1']};")
@@ -109,12 +110,12 @@ class ExtractGenerateDialog(QDialog):
         hdr.addWidget(ico)
         _col = QVBoxLayout()
         _col.setSpacing(2)
-        _t = QLabel(title)
+        _t = QLabel(translate(title))
         _t.setStyleSheet(
             f"color:{CP['text_primary']};font-size:16px;font-weight:700;background:transparent;"
         )
         _col.addWidget(_t)
-        self._phase_lbl = QLabel("Choisir une option pour démarrer")
+        self._phase_lbl = QLabel(translate("Choisir une option pour démarrer"))
         self._phase_lbl.setStyleSheet(
             f"color:{CP['text_dim']};font-size:10px;background:transparent;"
         )
@@ -134,13 +135,13 @@ class ExtractGenerateDialog(QDialog):
         choice_lay.setContentsMargins(0, 8, 0, 8)
         choice_lay.setSpacing(10)
 
-        _hint = QLabel("Comment souhaitez-vous procéder ?")
+        _hint = QLabel(translate("Comment souhaitez-vous procéder ?"))
         _hint.setStyleSheet(
             f"color:{CP['text_secondary']};font-size:11px;background:transparent;"
         )
         choice_lay.addWidget(_hint)
 
-        btn_identify = QPushButton(f"  Identifier les {category_label}")
+        btn_identify = QPushButton("  " + translate(f"Identifier les {category_label}"))
         btn_identify.setFixedHeight(44)
         btn_identify.setStyleSheet(
             f"QPushButton{{background:transparent;color:{CP['text_primary']};"
@@ -148,11 +149,11 @@ class ExtractGenerateDialog(QDialog):
             f"font-size:12px;font-weight:600;text-align:left;padding-left:14px;}}"
             f"QPushButton:hover{{background:{CP['bg3']};border-color:{CP['text_secondary']};}}"
         )
-        btn_identify.setToolTip("Extrait et sauvegarde les éléments — sans générer d'images")
+        btn_identify.setToolTip(translate("Extrait et sauvegarde les éléments — sans générer d'images"))
         btn_identify.clicked.connect(lambda: self._start(generate=False))
         choice_lay.addWidget(btn_identify)
 
-        btn_gen = QPushButton(f"  Identifier et générer les images")
+        btn_gen = QPushButton("  " + translate("Identifier et générer les images"))
         btn_gen.setFixedHeight(44)
         btn_gen.setStyleSheet(
             f"QPushButton{{background:{CP['accent']};color:#07080f;"
@@ -160,7 +161,7 @@ class ExtractGenerateDialog(QDialog):
             f"font-size:12px;font-weight:700;text-align:left;padding-left:14px;}}"
             f"QPushButton:hover{{background:#6eded6;}}"
         )
-        btn_gen.setToolTip("Extrait, sauvegarde, puis génère une image via Nano Banana pour chaque élément")
+        btn_gen.setToolTip(translate("Extrait, sauvegarde, puis génère une image via Nano Banana pour chaque élément"))
         btn_gen.clicked.connect(lambda: self._start(generate=True))
         choice_lay.addWidget(btn_gen)
 
@@ -232,7 +233,7 @@ class ExtractGenerateDialog(QDialog):
         footer.setContentsMargins(0, 6, 0, 0)
         footer.setSpacing(0)
 
-        self._btn_cancel = QPushButton("✕  Annuler")
+        self._btn_cancel = QPushButton(translate("✕  Annuler"))
         self._btn_cancel.setFixedHeight(38)
         self._btn_cancel.setMinimumWidth(120)
         self._btn_cancel.setStyleSheet(
@@ -305,8 +306,8 @@ class ExtractGenerateDialog(QDialog):
     # ── Extraction phase ───────────────────────────────────────────────────────
 
     def _start_extraction(self):
-        self._phase_lbl.setText("Extraction via Claude IA…")
-        self._status_lbl.setText("Claude analyse le scénario…")
+        self._phase_lbl.setText(translate("Extraction via Claude IA…"))
+        self._status_lbl.setText(translate("Claude analyse le scénario…"))
         w = self._extract_cls(self._scenario_text)
         self._extract_worker = w
         w.finished.connect(self._on_extraction_done)
@@ -321,8 +322,8 @@ class ExtractGenerateDialog(QDialog):
 
         valid = [it for it in items if it.get("name")]
         if not valid:
-            self._status_lbl.setText("Aucun élément identifié dans le scénario.")
-            self._phase_lbl.setText("Terminé")
+            self._status_lbl.setText(translate("Aucun élément identifié dans le scénario."))
+            self._phase_lbl.setText(translate("Terminé"))
             self._finish_state()
             if getattr(self, "_auto_close", False):
                 from PyQt6.QtCore import QTimer
