@@ -603,12 +603,13 @@ class PageScenario(QWidget):
         )
 
         def _make_toggle(title: str, container: QWidget, expanded: bool = True):
-            btn = QPushButton(f"{'▼' if expanded else '▶'}  {title}")
+            _t = translate(title)
+            btn = QPushButton(f"{'▼' if expanded else '▶'}  {_t}")
             btn.setCheckable(True)
             btn.setChecked(expanded)
             btn.setStyleSheet(_toggle_ss)
             container.setVisible(expanded)
-            def _tog(checked, b=btn, c=container, t=title):
+            def _tog(checked, b=btn, c=container, t=_t):
                 c.setVisible(checked)
                 b.setText(f"{'▼' if checked else '▶'}  {t}")
             btn.toggled.connect(_tog)
