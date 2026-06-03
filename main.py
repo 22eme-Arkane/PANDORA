@@ -2,6 +2,15 @@ import multiprocessing
 multiprocessing.freeze_support()  # MUST be first — prevents spawned subprocesses from re-launching the GUI on Windows
 
 import sys
+
+# ── Diagnostic : capture les crashes bas niveau (segfault/abort) que sys.excepthook
+#    ne voit pas. faulthandler dumpe la pile de tous les threads dans un fichier. ──
+try:
+    import faulthandler as _faulthandler, tempfile as _tempfile, os as _os
+    _fault_log = open(_os.path.join(_tempfile.gettempdir(), "pandora_fault.log"), "w")
+    _faulthandler.enable(file=_fault_log, all_threads=True)
+except Exception:
+    pass
 from PyQt6.QtWidgets import QApplication
 from PyQt6.QtGui import QColor, QPalette
 from PyQt6.QtCore import qInstallMessageHandler, QtMsgType
