@@ -443,13 +443,13 @@ class PageScenario(QWidget):
 
         # Text editor — page de scénario pleine largeur avec marges latérales
         self._editor_text = QTextEdit()
-        self._editor_text.setPlaceholderText(
+        self._editor_text.setPlaceholderText(translate(
             "Écris ton scénario ici…\n\n"
             "INT. LIEU — JOUR\n\n"
             "Description de la scène…\n\n"
             "PERSONNAGE\n"
             "Dialogue du personnage."
-        )
+        ))
         _tw_font = QFont("Courier New", 14)
         _tw_font.setStyleHint(QFont.StyleHint.TypeWriter)
         self._editor_text.setFont(_tw_font)
@@ -1560,7 +1560,7 @@ class PageScenario(QWidget):
         if analysis:
             te.setPlainText(analysis)
         else:
-            te.setPlaceholderText("L'analyse apparaît ici au fil de la génération…")
+            te.setPlaceholderText(translate("L'analyse apparaît ici au fil de la génération…"))
         te.setStyleSheet(
             f"QTextEdit{{background:{CP['bg2']};border:1px solid {CP['border']};"
             f"border-radius:8px;color:{CP['text_primary']};font-size:11px;padding:14px;}}"
@@ -1625,10 +1625,10 @@ class PageScenario(QWidget):
         btn_direct = QPushButton(translate("✓  Appliquer les suggestions"))
         btn_direct.setFixedHeight(36)
         btn_direct.setEnabled(not streaming)
-        btn_direct.setToolTip(
+        btn_direct.setToolTip(translate(
             "Claude réécrit le scénario en appliquant directement les suggestions.\n"
             "Le résultat apparaît ici pour prévisualisation avant d'être appliqué."
-        )
+        ))
         btn_direct.setStyleSheet(
             f"QPushButton{{background:{CP['accent2']};color:#fff;"
             f"border:none;border-radius:7px;font-size:11px;font-weight:700;padding:0 20px;}}"
@@ -1680,7 +1680,7 @@ class PageScenario(QWidget):
                 f"color:{CP['accent']};font-size:10px;font-family:'Consolas',monospace;"
             )
             te.clear()
-            te.setPlaceholderText("Le scénario réécrit apparaît ici…")
+            te.setPlaceholderText(translate("Le scénario réécrit apparaît ici…"))
             _f = QFont("Courier New", 11)
             _f.setStyleHint(QFont.StyleHint.TypeWriter)
             te.setFont(_f)
@@ -1905,7 +1905,7 @@ class PageScenario(QWidget):
         if analysis:
             te.setPlainText(analysis)
         else:
-            te.setPlaceholderText("L'analyse apparaît ici au fil de la génération…")
+            te.setPlaceholderText(translate("L'analyse apparaît ici au fil de la génération…"))
         te.setStyleSheet(
             f"QTextEdit{{background:{CP['bg2']};border:1px solid {CP['border']};"
             f"border-radius:8px;color:{CP['text_primary']};font-size:11px;padding:14px;}}"
@@ -2013,7 +2013,7 @@ class PageScenario(QWidget):
                 f"color:{CP['accent']};font-size:10px;font-family:'Consolas',monospace;"
             )
             te.clear()
-            te.setPlaceholderText("Le scénario enrichi apparaît ici au fil de la génération…")
+            te.setPlaceholderText(translate("Le scénario enrichi apparaît ici au fil de la génération…"))
             btn_enrich.setEnabled(False)
             btn_enrich.setVisible(False)
 

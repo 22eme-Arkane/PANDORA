@@ -21,6 +21,39 @@ def _qt_msg_handler(msg_type: QtMsgType, context, message: str):
     print(message, file=sys.stderr)
 
 
+def _install_excepthook():
+    """Filet de sécurité : capture toute exception non gérée (y compris dans les slots Qt),
+    la logge dans un fichier, et affiche une erreur — au lieu de laisser PyQt6 fermer l'app."""
+    import traceback, datetime, tempfile, os as _os
+    log_path = _os.path.join(tempfile.gettempdir(), "pandora_crash.log")
+
+    def _hook(exc_type, exc, tb):
+        text = "".join(traceback.format_exception(exc_type, exc, tb))
+        try:
+            with open(log_path, "a", encoding="utf-8") as f:
+                f.write(f"\n===== {datetime.datetime.now().isoformat()} =====\n{text}\n")
+        except Exception:
+            pass
+        try:
+            print(text, file=sys.stderr)
+        except Exception:
+            pass
+        try:
+            from PyQt6.QtWidgets import QApplication as _QA, QMessageBox
+            if _QA.instance() is not None:
+                QMessageBox.critical(
+                    None, "PANDORA — Erreur",
+                    "Une erreur inattendue s'est produite.\n"
+                    "L'application reste ouverte — vous pouvez continuer ou la redémarrer.\n\n"
+                    f"{exc_type.__name__}: {exc}\n\n"
+                    f"Détails enregistrés dans :\n{log_path}",
+                )
+        except Exception:
+            pass
+
+    sys.excepthook = _hook
+
+
 def _set_palette(app: QApplication):
     palette = QPalette()
     palette.setColor(QPalette.ColorRole.Window,          QColor(CP["bg0"]))
@@ -35,6 +68,8 @@ def _set_palette(app: QApplication):
 
 
 if __name__ == "__main__":
+    _install_excepthook()
+
     # Restaurer la langue préférée avant toute création de widget
     from core.i18n import load_saved_lang, get_lang, retranslate_widget
     load_saved_lang()
