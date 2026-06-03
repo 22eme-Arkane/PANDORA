@@ -394,7 +394,10 @@ class FundingDialog(QDialog):
 
     def showEvent(self, event):
         super().showEvent(event)
-        screen = QApplication.primaryScreen().availableGeometry()
+        scr = QApplication.primaryScreen()
+        if scr is None:
+            return
+        screen = scr.availableGeometry()
         x = screen.x() + max(0, (screen.width()  - self.width())  // 2)
         y = screen.y() + max(0, (screen.height() - self.height()) // 2)
         self.move(x, y)

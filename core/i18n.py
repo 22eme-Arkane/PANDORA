@@ -2603,6 +2603,28 @@ _FR_TO_EN: dict[str, str] = {
     'Réaliste': 'Realistic',
     "Ces paramètres s'injectent automatiquement dans les prompts de génération vidéo pour reproduire le rendu d'un équipement spécifique — corps de caméra, gamme d'optiques, filtres et microphone du tournage.": "These settings are automatically injected into the video generation prompts to reproduce the look of specific equipment — camera body, lens range, filters and production microphone.",
 
+    # ── Lot 9 — panneau Scénario + barre Storyboard (captures 2026-06) ──
+    "◎  Références visuelles": "◎  Visual references",
+    "☁  Claude IA": "☁  Claude AI",
+    "☁  Générer depuis le scénario": "☁  Generate from the screenplay",
+    "Analyse structure + suggestions": "Structure analysis + suggestions",
+    "Structure le scénario en blocs plans optimisés pour PANDORA": "Structures the screenplay into shot blocks optimized for PANDORA",
+    "Générer le HMC": "Generate HMC",
+    "Identifier les personnages depuis le scénario": "Identify characters from the screenplay",
+    "Identifier les décors depuis le scénario": "Identify locations from the screenplay",
+    "Identifier les accessoires depuis le scénario": "Identify props from the screenplay",
+    "Identifier les éléments HMC depuis le scénario": "Identify HMC items from the screenplay",
+    "Identifier les véhicules depuis le scénario": "Identify vehicles from the screenplay",
+    "Importe les plans dans Storyboard": "Imports the shots into Storyboard",
+    "Durée cible :": "Target duration:",
+    "Estimé :": "Estimated:",
+    "Estimé : —": "Estimated: —",
+    "Personnages · Décors · Accessoires · HMC · Véhicules · Storyboard · Images · Moods": "Characters · Locations · Props · HMC · Vehicles · Storyboard · Images · Moods",
+    "⟳  Synchronisation": "⟳  Sync",
+    "✕  Supprimer": "✕  Delete",
+    "＋ Créer un storyboard": "＋ Create a storyboard",
+    "＋  Ajouter un plan": "＋  Add shot",
+
     # ── Lot 8 — Aide API, Projets, divers ──
     'Optimisation de prompts  ·  Scénario  ·  Storyboard': 'Prompt optimization  ·  Screenplay  ·  Storyboard',
     "💡  <b>Utilisation :</b> fal.ai et Anthropic sont des services payants à l'usage. Chaque génération consomme des crédits. Les deux plateformes offrent des crédits de démarrage gratuits pour tester.": '💡  <b>Usage:</b> fal.ai and Anthropic are pay-as-you-go services. Each generation consumes credits. Both platforms offer free starter credits to try them out.',
