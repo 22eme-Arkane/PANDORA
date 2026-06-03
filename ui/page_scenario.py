@@ -2364,13 +2364,13 @@ class PageScenario(QWidget):
         lay.setSpacing(14)
 
         _red = CP.get("red", "#ff4f6a")
-        t = _QL("⚡  Génération complète du projet")
+        t = _QL(translate("⚡  Génération complète du projet"))
         t.setStyleSheet(
             f"color:{_red};font-size:16px;font-weight:800;background:transparent;"
         )
         lay.addWidget(t)
 
-        body = _QL(
+        body = _QL(translate(
             "Vous êtes sur le point de lancer la génération complète :\n\n"
             "  ☁  Extraction depuis le scénario (Claude IA)\n"
             "       personnages · décors · accessoires · HMC · véhicules · storyboard\n\n"
@@ -2379,7 +2379,7 @@ class PageScenario(QWidget):
             "       1 image par élément HMC · 1 image par véhicule\n\n"
             "  ◈  Génération des Moods storyboard (Flux IA)\n"
             "       1 aperçu par plan storyboard"
-        )
+        ))
         body.setWordWrap(True)
         body.setStyleSheet(
             f"color:{CP['text_primary']};font-size:11px;background:transparent;"
@@ -2393,15 +2393,23 @@ class PageScenario(QWidget):
         if n_elems > 0 or n_shots > 0:
             min_c = n_elems * 0.039 + n_shots * 0.06
             max_c = n_elems * 0.15  + n_shots * 0.06
+            _lbl_cur   = translate('Éléments actuels :')
+            _lbl_pers  = translate('personnages')
+            _lbl_dec   = translate('décors')
+            _lbl_acc   = translate('accessoires')
+            _lbl_veh   = translate('véhicules')
+            _lbl_plans = translate('Plans storyboard :')
+            _lbl_est   = translate('Estimation (éléments actuels) :')
+            _lbl_more  = translate("L'extraction peut créer plus d'éléments — le coût final sera plus élevé.")
             cost_txt = (
-                f"Éléments actuels : {n_chars} personnages · {n_decors} décors · "
-                f"{n_acc} accessoires · {n_hmc} HMC · {n_veh} véhicules\n"
-                f"Plans storyboard : {n_shots}\n"
-                f"Estimation (éléments actuels) : ~${min_c:.2f} — ~${max_c:.2f}\n"
-                f"L'extraction peut créer plus d'éléments — le coût final sera plus élevé."
+                f"{_lbl_cur} {n_chars} {_lbl_pers} · {n_decors} {_lbl_dec} · "
+                f"{n_acc} {_lbl_acc} · {n_hmc} HMC · {n_veh} {_lbl_veh}\n"
+                f"{_lbl_plans} {n_shots}\n"
+                f"{_lbl_est} ~${min_c:.2f} — ~${max_c:.2f}\n"
+                f"{_lbl_more}"
             )
         else:
-            cost_txt = (
+            cost_txt = translate(
                 "Estimation (sans données actuelles) :\n"
                 "  • Images Nano Banana : ~$0.039/image (standard) — $0.15/image (Pro)\n"
                 "  • Moods Flux IA : ~$0.06/image\n"
@@ -2417,17 +2425,17 @@ class PageScenario(QWidget):
         )
         lay.addWidget(cost_lbl)
 
-        warn = _QL(
+        warn = _QL(translate(
             "⚠  Les tarifs sont indicatifs et peuvent varier.\n"
             "Consultez fal.ai pour vérifier les prix actuels avant de lancer."
-        )
+        ))
         warn.setWordWrap(True)
         warn.setStyleSheet(
             f"color:{CP['text_dim']};font-size:10px;font-style:italic;background:transparent;"
         )
         lay.addWidget(warn)
 
-        advice = _QL(
+        advice = _QL(translate(
             "💡  La méthode la moins coûteuse\n\n"
             "Identifiez vos éléments manuellement et créez-les un à un dans les onglets "
             "dédiés : Castings pour les personnages, Décors, Accessoires, HMC, Véhicules. "
@@ -2436,7 +2444,7 @@ class PageScenario(QWidget):
             "« Tout générer » est pratique pour un premier jet rapide, mais chaque image "
             "générée automatiquement est facturée — le coût peut rapidement devenir élevé "
             "si le scénario contient de nombreux éléments."
-        )
+        ))
         advice.setWordWrap(True)
         advice.setStyleSheet(
             f"color:{CP.get('accent','#7c6af7')};font-size:10px;"
@@ -2449,13 +2457,13 @@ class PageScenario(QWidget):
         _s2.setStyleSheet(f"background:{CP.get('red','#ff4f6a')};")
         lay.addWidget(_s2)
 
-        warn_delete = _QL(
+        warn_delete = _QL(translate(
             "⚠  ATTENTION — SUPPRESSION PRÉALABLE\n\n"
             "Avant de régénérer, cette opération va d'abord supprimer\n"
             "TOUS les personnages, décors, accessoires, HMC, véhicules\n"
             "et plans storyboard existants.\n\n"
             "Cette action est irréversible. Partez d'un scénario finalisé."
-        )
+        ))
         warn_delete.setWordWrap(True)
         warn_delete.setStyleSheet(
             f"color:{CP.get('red','#ff4f6a')};font-size:10px;font-weight:700;"
@@ -2465,7 +2473,7 @@ class PageScenario(QWidget):
         lay.addWidget(warn_delete)
 
         btn_row = _QHB()
-        btn_cancel = _QPB("Annuler")
+        btn_cancel = _QPB(translate("Annuler"))
         btn_cancel.setFixedHeight(38)
         btn_cancel.setStyleSheet(
             f"QPushButton{{background:{CP['bg3']};color:{CP['text_secondary']};"
@@ -2474,7 +2482,7 @@ class PageScenario(QWidget):
             f"QPushButton:hover{{background:{CP['bg4']};color:{CP['text_primary']};}}"
         )
         btn_cancel.clicked.connect(dlg.reject)
-        btn_launch = _QPB("⚡  Lancer la génération complète")
+        btn_launch = _QPB(translate("⚡  Lancer la génération complète"))
         btn_launch.setFixedHeight(38)
         btn_launch.setStyleSheet(
             f"QPushButton{{background:transparent;color:{_red};"
