@@ -27,7 +27,7 @@ from ui.creative_panel import SeedanceCreativePanel
 from ui.icons import claude_icon_pixmap, install_hover_icon
 from core.config import load_config, get_output_dir
 from core.history import save_to_history
-from core.worker import GenerationWorker
+from core.worker import GenerationWorker, abandon_thread
 from api.enhance import EnhanceWorker, _SYSTEM_DAVINCI_EDIT
 from davinci.importer import import_result
 from davinci.ping_worker import BridgePingWorker
@@ -1889,7 +1889,7 @@ class TabDavinciEdit(QScrollArea):
                 self._worker.cancel()
             else:
                 self._worker.quit()
-                self._worker.terminate()
+                abandon_thread(self._worker)
             self._worker = None
         self._queue_pos = len(self._queue)
         self._lbl_queue_info.setText("File annulée.")

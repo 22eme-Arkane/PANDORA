@@ -1,5 +1,40 @@
 from PyQt6.QtCore import QThread, pyqtSignal
 
+# ── Annulation SÛRE d'un QThread ──────────────────────────────────────────────
+# QThread.terminate() est dangereux : il tue le thread n'importe où dans son code,
+# laissant Qt/Python dans un état corrompu → segfault sur l'opération suivante.
+# À la place : on coupe les signaux (résultats ignorés), on demande l'interruption,
+# et on garde une référence pour que le thread finisse tranquillement sans être
+# ramassé par le GC pendant qu'il tourne encore.
+_ABANDONED_THREADS: list = []
+
+def abandon_thread(w) -> None:
+    """Abandonne un QThread en cours sans le terminer brutalement (anti-segfault)."""
+    if w is None:
+        return
+    try:
+        w.blockSignals(True)
+    except Exception:
+        pass
+    try:
+        w.requestInterruption()
+    except Exception:
+        pass
+    try:
+        w.quit()
+    except Exception:
+        pass
+    _ABANDONED_THREADS.append(w)
+    # Purge les threads déjà terminés (sûrs à libérer)
+    _ABANDONED_THREADS[:] = [t for t in _ABANDONED_THREADS if _still_running(t)]
+
+def _still_running(t) -> bool:
+    try:
+        return t.isRunning()
+    except Exception:
+        return False
+
+
 _CREDIT_KEYWORDS = (
     "insufficient", "credit", "balance", "payment", "402",
     "not enough", "out of", "topup", "top up", "top-up",

@@ -11,7 +11,7 @@ from ui.styles import C
 from ui.widgets import section_label, combo, toggle_row, prompt_block, ProgressBlock, HelpBlock, show_api_error
 from core.history import save_to_history
 from core.config import get_output_dir
-from core.worker import GenerationWorker
+from core.worker import GenerationWorker, abandon_thread
 from api.enhance import EnhanceWorker
 from davinci.bridge import resolve
 from davinci.importer import import_result
@@ -3797,7 +3797,7 @@ class TabT2V(QScrollArea):
                 self._worker.cancel()
             else:
                 self._worker.quit()
-                self._worker.terminate()
+                abandon_thread(self._worker)
             self._worker = None
         if self._is_batch_mode:
             self._batch_queue.clear()

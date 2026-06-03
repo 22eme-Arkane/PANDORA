@@ -14,6 +14,7 @@ from PyQt6.QtWidgets import (
 from PyQt6.QtCore import Qt
 from ui.styles import CP
 from core.i18n import translate
+from core.worker import abandon_thread
 
 
 # ── Small item row ─────────────────────────────────────────────────────────────
@@ -271,7 +272,7 @@ class ExtractGenerateDialog(QDialog):
                     w.failed.disconnect()
                 except Exception:
                     pass
-                w.terminate()
+                abandon_thread(w)
         super().reject()
 
     def _on_cancel(self):
