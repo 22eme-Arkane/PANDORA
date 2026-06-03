@@ -1,5 +1,5 @@
 TERMS OF USE — PANDORA SOFTWARE
-Version 1.1.7 — June 2026
+Version 1.1.8 — June 2026
 22eme Arkane — Matthieu Terrien
 Contact: 22eme.arkane@gmail.com
 
@@ -209,4 +209,4 @@ ARTICLE 12 — GENERAL PROVISIONS
 ════════════════════════════════════════════════════════════════
 
 22eme Arkane — Matthieu Terrien
-Version 1.1.7 — June 2026
+Version 1.1.8 — June 2026
