@@ -13,7 +13,10 @@ class ContactDialog(QDialog):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setWindowTitle("Nous contacter")
-        self.setFixedSize(520, 470)
+        # Largeur fixe, hauteur adaptative : évite que le contenu (plus long en
+        # anglais) soit rogné en bas.
+        self.setFixedWidth(520)
+        self.setMinimumHeight(470)
         self.setStyleSheet(PANDORA_STYLESHEET + f"QDialog{{background:{CP['bg1']};}}")
 
         lay = QVBoxLayout(self)
@@ -129,7 +132,7 @@ class ContactDialog(QDialog):
         btn_wa.setStyleSheet(
             "QPushButton{background:rgba(37,211,102,0.15);color:#25d366;"
             "border:1px solid rgba(37,211,102,0.35);border-radius:6px;"
-            "font-size:11px;font-weight:700;}"
+            "font-size:11px;font-weight:700;padding:0 16px;}"
             "QPushButton:hover{background:rgba(37,211,102,0.25);"
             "border-color:rgba(37,211,102,0.60);}"
         )
