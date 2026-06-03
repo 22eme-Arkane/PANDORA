@@ -760,7 +760,7 @@ class PandoraWindow(QMainWindow):
         _btn_don.setCursor(Qt.CursorShape.PointingHandCursor)
         _btn_don.setStyleSheet(_ss_don)
 
-        def _open_funding(dlg=dlg):
+        def _open_funding(*_args, dlg=dlg):
             from ui.dialog_funding import FundingDialog
             FundingDialog(dlg).exec()
 

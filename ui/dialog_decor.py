@@ -421,7 +421,6 @@ class DecorDialog(QDialog):
             f"background:{CP['bg4']};border-radius:3px;}}"
         )
         _gen_row.addWidget(self._spinbox_count)
-        lay.addLayout(_gen_row)
 
         from core.config import get_image_price, load_config as _lc
         _price = get_image_price(_lc())
@@ -430,7 +429,6 @@ class DecorDialog(QDialog):
             f"color:{CP['text_dim']};font-size:9px;"
             f"font-family:'Consolas',monospace;background:transparent;"
         )
-        lay.addWidget(price_lbl)
 
         self._progress = QProgressBar()
         self._progress.setRange(0, 100)
@@ -441,19 +439,29 @@ class DecorDialog(QDialog):
             f"QProgressBar::chunk{{background:qlineargradient(x1:0,y1:0,x2:1,y2:0,"
             f"stop:0 {CP['accent_dim']},stop:1 {CP['accent']});border-radius:2px;}}"
         )
-        lay.addWidget(self._progress)
 
         self._status = QLabel("")
         self._status.setWordWrap(True)
         self._status.setStyleSheet(
             f"color:{CP['text_dim']};font-size:10px;font-family:'Consolas',monospace;background:transparent;"
         )
-        lay.addWidget(self._status)
 
         lay.addStretch()
 
         scroll.setWidget(w)
         outer_lay.addWidget(scroll, 1)
+
+        # ── Barre d'action fixe (toujours visible — pas besoin de scroller) ──
+        _action = QWidget()
+        _action.setStyleSheet(f"background:{CP['bg1']};border-top:1px solid {CP['border']};")
+        _action_lay = QVBoxLayout(_action)
+        _action_lay.setContentsMargins(28, 10, 24, 4)
+        _action_lay.setSpacing(6)
+        _action_lay.addLayout(_gen_row)
+        _action_lay.addWidget(price_lbl)
+        _action_lay.addWidget(self._progress)
+        _action_lay.addWidget(self._status)
+        outer_lay.addWidget(_action)
 
         # ── Boutons fixes en bas (hors scroll) ────────────────────────────────
         btn_bar = QWidget()
