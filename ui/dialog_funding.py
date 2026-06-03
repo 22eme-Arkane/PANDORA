@@ -338,12 +338,12 @@ class FundingDialog(QDialog):
         # Back button
         btn_back = QPushButton("← Retour")
         btn_back.setFixedHeight(32)
-        btn_back.setFixedWidth(100)
+        btn_back.setMinimumWidth(100)
         btn_back.setCursor(Qt.CursorShape.PointingHandCursor)
         btn_back.setStyleSheet(
             f"QPushButton{{background:transparent;color:{CP['text_dim']};"
             f"border:1px solid {CP['border']};border-radius:6px;"
-            f"font-size:11px;font-weight:700;}}"
+            f"font-size:11px;font-weight:700;padding:0 14px;}}"
             f"QPushButton:hover{{background:{CP['bg3']};color:{CP['text_primary']};}}"
         )
         btn_back.clicked.connect(lambda: self._stack.setCurrentIndex(0))

@@ -184,7 +184,7 @@ class StoryboardGenerateDialog(QDialog):
         self._btn_cancel.setFixedHeight(36)
         self._btn_cancel.setStyleSheet(
             f"QPushButton{{background:{CP['bg3']};color:{CP['text_secondary']};"
-            f"border:1px solid {CP['border']};border-radius:8px;font-size:12px;font-weight:600;}}"
+            f"border:1px solid {CP['border']};border-radius:8px;font-size:12px;font-weight:600;padding:0 18px;}}"
             f"QPushButton:hover{{background:{CP['bg2']};}}"
         )
         self._btn_cancel.clicked.connect(self._on_cancel)
@@ -197,7 +197,7 @@ class StoryboardGenerateDialog(QDialog):
         self._btn_confirm.setVisible(False)
         self._btn_confirm.setStyleSheet(
             f"QPushButton{{background:{CP.get('accent2', CP.get('accent','#7c6bff'))};color:#fff;"
-            f"border:none;border-radius:8px;font-size:12px;font-weight:700;}}"
+            f"border:none;border-radius:8px;font-size:12px;font-weight:700;padding:0 18px;}}"
             f"QPushButton:hover{{opacity:0.85;}}"
             f"QPushButton:disabled{{background:{CP['bg3']};color:{CP['text_dim']};"
             f"border:1px solid {CP['border']};}}"
