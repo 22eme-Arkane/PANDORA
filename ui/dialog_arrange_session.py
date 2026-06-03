@@ -29,6 +29,7 @@ from PyQt6.QtWidgets import (
 from PyQt6.QtCore import Qt, QTimer
 from PyQt6.QtGui import QFont, QColor, QTextCursor, QPixmap
 from ui.styles import CP
+from core.i18n import translate
 
 
 # ── Helpers ────────────────────────────────────────────────────────────────────
@@ -66,7 +67,7 @@ def _btn(label: str, style: str = "ghost", min_h: int = 36) -> QPushButton:
 
 
 def _section_lbl(text: str) -> QLabel:
-    lbl = QLabel(text.upper())
+    lbl = QLabel(translate(text).upper())
     lbl.setStyleSheet(
         f"color:{CP['accent']};font-size:9px;font-weight:700;"
         f"letter-spacing:3px;font-family:'Consolas',monospace;background:transparent;"
@@ -86,11 +87,11 @@ _MONO.setStyleHint(QFont.StyleHint.TypeWriter)
 
 
 def _intensity_label(v: int) -> str:
-    if v <= 2:   return "Minimal — uniquement ce qui est demandé, rien d'autre"
-    if v <= 4:   return "Précis — modifie exactement les zones indiquées"
-    if v <= 6:   return "Ciblé — suit l'instruction, affine légèrement le style dans la zone"
-    if v <= 8:   return "Créatif — enrichit et reformule, retouche les passages adjacents"
-    return           "Libre — réécrit dans son style, transforme le rythme et l'écriture"
+    if v <= 2:   return translate("Minimal — uniquement ce qui est demandé, rien d'autre")
+    if v <= 4:   return translate("Précis — modifie exactement les zones indiquées")
+    if v <= 6:   return translate("Ciblé — suit l'instruction, affine légèrement le style dans la zone")
+    if v <= 8:   return translate("Créatif — enrichit et reformule, retouche les passages adjacents")
+    return           translate("Libre — réécrit dans son style, transforme le rythme et l'écriture")
 
 
 # ── Bulle de chat HTML ────────────────────────────────────────────────────────

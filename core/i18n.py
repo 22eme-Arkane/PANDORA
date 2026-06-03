@@ -2674,6 +2674,20 @@ _FR_TO_EN: dict[str, str] = {
     "Aucun élément identifié dans le scénario.": "No item identified in the screenplay.",
     "Terminé": "Done",
 
+    # ── Lot 12 — fenêtre Découpage Storyboard (génération) ──
+    "Générer le Storyboard": "Generate the Storyboard",
+    "Découpage Storyboard": "Storyboard Breakdown",
+    "Claude génère le découpage technique…": "Claude is generating the technical breakdown…",
+    "Analyse du scénario via Claude Sonnet…": "Analyzing the screenplay via Claude Sonnet…",
+    "Aucun plan généré — le scénario est peut-être trop court.": "No shot generated — the screenplay may be too short.",
+    "plans générés": "shots generated",
+    "plans": "shots",
+    "durée totale": "total duration",
+    "Confirmez pour importer dans le Storyboard.": "Confirm to import into the Storyboard.",
+    "Erreur": "Error",
+    "Enregistrement…": "Saving…",
+    "Erreur sauvegarde :": "Save error:",
+
     # ── Lot 8 — Aide API, Projets, divers ──
     'Optimisation de prompts  ·  Scénario  ·  Storyboard': 'Prompt optimization  ·  Screenplay  ·  Storyboard',
     "💡  <b>Utilisation :</b> fal.ai et Anthropic sont des services payants à l'usage. Chaque génération consomme des crédits. Les deux plateformes offrent des crédits de démarrage gratuits pour tester.": '💡  <b>Usage:</b> fal.ai and Anthropic are pay-as-you-go services. Each generation consumes credits. Both platforms offer free starter credits to try them out.',
