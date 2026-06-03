@@ -2696,6 +2696,13 @@ _FR_TO_EN: dict[str, str] = {
     "❤  Soutenir PANDORA  →": "❤  Support PANDORA  →",
     "Sauvegarder et quitter": "Save and quit",
 
+    # ── Lot 14 — placeholders & tooltips Scénario ──
+    "L'analyse apparaît ici au fil de la génération…": "The analysis appears here as it is generated…",
+    "Le scénario réécrit apparaît ici…": "The rewritten screenplay appears here…",
+    "Le scénario enrichi apparaît ici au fil de la génération…": "The enriched screenplay appears here as it is generated…",
+    "Écris ton scénario ici…\n\nINT. LIEU — JOUR\n\nDescription de la scène…\n\nPERSONNAGE\nDialogue du personnage.": "Write your screenplay here…\n\nINT. LOCATION — DAY\n\nScene description…\n\nCHARACTER\nCharacter's dialogue.",
+    "Claude réécrit le scénario en appliquant directement les suggestions.\nLe résultat apparaît ici pour prévisualisation avant d'être appliqué.": "Claude rewrites the screenplay applying the suggestions directly.\nThe result appears here for preview before being applied.",
+
     # ── Lot 8 — Aide API, Projets, divers ──
     'Optimisation de prompts  ·  Scénario  ·  Storyboard': 'Prompt optimization  ·  Screenplay  ·  Storyboard',
     "💡  <b>Utilisation :</b> fal.ai et Anthropic sont des services payants à l'usage. Chaque génération consomme des crédits. Les deux plateformes offrent des crédits de démarrage gratuits pour tester.": '💡  <b>Usage:</b> fal.ai and Anthropic are pay-as-you-go services. Each generation consumes credits. Both platforms offer free starter credits to try them out.',
