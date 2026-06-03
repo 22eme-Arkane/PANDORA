@@ -832,6 +832,21 @@ _FR_TO_EN: dict[str, str] = {
     "Rôle":                            "Role",
     "Style de génération :":           "Generation style:",
     "Style d'image :":                  "Image style:",
+
+    # ── Lot 15 — fenêtre Tout Générer (confirmation) ──
+    '⚡  Génération complète du projet': '⚡  Full project generation',
+    "Vous êtes sur le point de lancer la génération complète :\n\n  ☁  Extraction depuis le scénario (Claude IA)\n       personnages · décors · accessoires · HMC · véhicules · storyboard\n\n  ◉  Génération d'images (Nano Banana)\n       1 image par personnage · 1 image par décor · 1 image par accessoire\n       1 image par élément HMC · 1 image par véhicule\n\n  ◈  Génération des Moods storyboard (Flux IA)\n       1 aperçu par plan storyboard": 'You are about to launch the full generation:\n\n  ☁  Extraction from the screenplay (Claude AI)\n       characters · sets · props · HMC · vehicles · storyboard\n\n  ◉  Image generation (Nano Banana)\n       1 image per character · 1 image per set · 1 image per prop\n       1 image per HMC item · 1 image per vehicle\n\n  ◈  Storyboard Mood generation (Flux AI)\n       1 preview per storyboard shot',
+    'Éléments actuels :': 'Current elements:',
+    'personnages': 'characters',
+    'accessoires': 'props',
+    'Plans storyboard :': 'Storyboard shots:',
+    'Estimation (éléments actuels) :': 'Estimate (current elements):',
+    "L'extraction peut créer plus d'éléments — le coût final sera plus élevé.": 'Extraction may create more elements — the final cost will be higher.',
+    'Estimation (sans données actuelles) :\n  • Images Nano Banana : ~$0.039/image (standard) — $0.15/image (Pro)\n  • Moods Flux IA : ~$0.06/image\n  • Extraction Claude IA : < $0.05': 'Estimate (no current data):\n  • Nano Banana images: ~$0.039/image (standard) — $0.15/image (Pro)\n  • Flux AI Moods: ~$0.06/image\n  • Claude AI extraction: < $0.05',
+    '⚠  Les tarifs sont indicatifs et peuvent varier.\nConsultez fal.ai pour vérifier les prix actuels avant de lancer.': '⚠  Prices are indicative and may vary.\nCheck fal.ai for current prices before launching.',
+    "💡  La méthode la moins coûteuse\n\nIdentifiez vos éléments manuellement et créez-les un à un dans les onglets dédiés : Castings pour les personnages, Décors, Accessoires, HMC, Véhicules. Vous gardez ainsi la main sur chaque génération d'image et ne payez que ce que vous validez.\n\n« Tout générer » est pratique pour un premier jet rapide, mais chaque image générée automatiquement est facturée — le coût peut rapidement devenir élevé si le scénario contient de nombreux éléments.": '💡  The least expensive method\n\nIdentify your elements manually and create them one by one in the dedicated tabs: Castings for characters, Sets, Props, HMC, Vehicles. This way you keep control over each image generation and only pay for what you validate.\n\n« Generate all » is handy for a quick first draft, but each automatically generated image is billed — the cost can quickly become high if the screenplay contains many elements.',
+    "⚠  ATTENTION — SUPPRESSION PRÉALABLE\n\nAvant de régénérer, cette opération va d'abord supprimer\nTOUS les personnages, décors, accessoires, HMC, véhicules\net plans storyboard existants.\n\nCette action est irréversible. Partez d'un scénario finalisé.": '⚠  WARNING — PRIOR DELETION\n\nBefore regenerating, this operation will first delete\nALL existing characters, sets, props, HMC, vehicles\nand storyboard shots.\n\nThis action is irreversible. Start from a finalized screenplay.',
+    '⚡  Lancer la génération complète': '⚡  Launch full generation',
     "Utilisées par Claude pour enrichir le prompt":
         "Used by Claude to enrich the prompt",
     "⚠ Mode mock actif\n(clé fal.ai non configurée)":
