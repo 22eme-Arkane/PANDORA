@@ -7,6 +7,7 @@ from PyQt6.QtWidgets import (
 )
 from PyQt6.QtCore import Qt, QTimer, pyqtSignal
 from core.i18n import translate
+from core.worker import abandon_thread
 from PyQt6.QtGui import QPixmap, QFont, QColor
 from ui.styles import CP
 from ui.widgets import HelpBlock
@@ -1428,7 +1429,7 @@ class PageScenario(QWidget):
             if _streaming_active[0] and worker is not None:
                 _streaming_active[0] = False
                 worker.quit()
-                worker.terminate()
+                abandon_thread(worker)
                 self._set_ai_busy(False)
                 self._ai_progress_lbl.setText("Mise en page annulée.")
                 btn_close.setText(translate("Fermer"))
@@ -1589,10 +1590,10 @@ class PageScenario(QWidget):
                 _streaming_active[0] = False
                 if worker is not None:
                     worker.quit()
-                    worker.terminate()
+                    abandon_thread(worker)
                 if _apply_worker[0] is not None:
                     _apply_worker[0].quit()
-                    _apply_worker[0].terminate()
+                    abandon_thread(_apply_worker[0])
                     _apply_worker[0] = None
                 self._set_ai_busy(False)
                 self._ai_progress_lbl.setText("Arrangement annulé.")
@@ -1934,10 +1935,10 @@ class PageScenario(QWidget):
                 _refs_streaming_active[0] = False
                 if worker is not None:
                     worker.quit()
-                    worker.terminate()
+                    abandon_thread(worker)
                 if _enrich_worker[0] is not None:
                     _enrich_worker[0].quit()
-                    _enrich_worker[0].terminate()
+                    abandon_thread(_enrich_worker[0])
                     _enrich_worker[0] = None
                 self._set_ai_busy(False)
                 self._ai_progress_lbl.setText("Analyse annulée.")

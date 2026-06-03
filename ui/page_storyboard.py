@@ -18,6 +18,7 @@ from core.storyboard import (
     DEFAULT_VERSION_ID,
     CAMERA_MOVEMENTS, SPEEDS, SHOT_SIZES, SHOT_SIZE_LABELS, FOCALS, DISTANCES, HEURE_PRESETS,
 )
+from core.worker import abandon_thread
 from ui.dialog_shot import ShotDialog
 from core.i18n import translate
 
@@ -2729,7 +2730,7 @@ class PageStoryboard(QWidget):
 
     def _cancel_analysis(self):
         if self._worker:
-            self._worker.terminate()
+            abandon_thread(self._worker)
         if hasattr(self, "_analysis_dlg") and self._analysis_dlg:
             self._analysis_dlg.reject()
         self._btn_analyze.setEnabled(True)

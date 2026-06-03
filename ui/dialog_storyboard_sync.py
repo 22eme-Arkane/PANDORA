@@ -10,6 +10,7 @@ from PyQt6.QtWidgets import (
 )
 from PyQt6.QtCore import Qt
 from core.i18n import translate
+from core.worker import abandon_thread
 from ui.styles import CP
 
 
@@ -513,5 +514,5 @@ class StoryboardSyncDialog(QDialog):
 
     def _on_cancel(self):
         if self._worker and self._worker.isRunning():
-            self._worker.terminate()
+            abandon_thread(self._worker)
         self.reject()
