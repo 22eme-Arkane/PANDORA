@@ -13,6 +13,7 @@ from PyQt6.QtWidgets import (
 )
 from PyQt6.QtCore import Qt
 from ui.styles import CP
+from core.i18n import translate, retranslate_widget
 
 
 # ── Shot row ───────────────────────────────────────────────────────────────────
@@ -25,7 +26,7 @@ class _ShotRow(QWidget):
         lay.setSpacing(10)
 
         num = shot.get("number", "?")
-        badge = QLabel(f"Plan {num}")
+        badge = QLabel(f"{translate('Plan')} {num}")
         badge.setStyleSheet(
             f"color:#07080f;background:{CP.get('accent2', CP.get('accent', '#7c6bff'))};"
             f"border-radius:3px;font-size:8px;font-weight:700;padding:1px 6px;"
@@ -205,6 +206,8 @@ class StoryboardGenerateDialog(QDialog):
 
         root.addLayout(foot)
 
+        retranslate_widget(self)
+
         # Start generation immediately
         self._start()
 
@@ -250,9 +253,9 @@ class StoryboardGenerateDialog(QDialog):
         self._progress.setValue(1)
 
         if not shots:
-            self._phase_lbl.setText("Terminé")
-            self._status_lbl.setText("Aucun plan généré — le scénario est peut-être trop court.")
-            self._btn_cancel.setText("Fermer")
+            self._phase_lbl.setText(translate("Terminé"))
+            self._status_lbl.setText(translate("Aucun plan généré — le scénario est peut-être trop court."))
+            self._btn_cancel.setText(translate("Fermer"))
             return
 
         # Build rows
@@ -268,24 +271,24 @@ class StoryboardGenerateDialog(QDialog):
         dur_str = f"{mins}m{secs:02d}s" if mins else f"{secs}s"
         count = len(shots)
 
-        self._phase_lbl.setText(f"{count} plan{'s' if count > 1 else ''} générés")
+        self._phase_lbl.setText(f"{count} {translate('plans générés')}")
         self._status_lbl.setText(
-            f"{count} plan{'s' if count > 1 else ''} · durée totale {dur_str} · "
-            "Confirmez pour importer dans le Storyboard."
+            f"{count} {translate('plans')} · {translate('durée totale')} {dur_str} · "
+            + translate("Confirmez pour importer dans le Storyboard.")
         )
         self._summary_lbl.setText(
-            f"✓  {count} plans · {dur_str} total"
+            f"✓  {count} {translate('plans')} · {dur_str} {translate('total')}"
         )
         self._summary_lbl.setVisible(True)
         self._btn_confirm.setVisible(True)
-        self._btn_cancel.setText("Annuler")
+        self._btn_cancel.setText(translate("Annuler"))
 
     def _on_failed(self, err: str):
         self._progress.setRange(0, 1)
         self._progress.setValue(0)
-        self._phase_lbl.setText("Erreur")
+        self._phase_lbl.setText(translate("Erreur"))
         self._status_lbl.setText(f"⚠ {err[:160]}")
-        self._btn_cancel.setText("Fermer")
+        self._btn_cancel.setText(translate("Fermer"))
 
     # ── Actions ───────────────────────────────────────────────────────────────
 
@@ -294,7 +297,7 @@ class StoryboardGenerateDialog(QDialog):
             self.accept()
             return
         self._btn_confirm.setEnabled(False)
-        self._btn_confirm.setText("Enregistrement…")
+        self._btn_confirm.setText(translate("Enregistrement…"))
         try:
             import core.storyboard as sb_api
             vid = sb_api.DEFAULT_VERSION_ID
@@ -304,9 +307,9 @@ class StoryboardGenerateDialog(QDialog):
                 shot["version_id"]  = vid
                 sb_api.save_shot(shot)
         except Exception as e:
-            self._status_lbl.setText(f"⚠ Erreur sauvegarde : {e}")
+            self._status_lbl.setText(f"⚠ {translate('Erreur sauvegarde :')} {e}")
             self._btn_confirm.setEnabled(True)
-            self._btn_confirm.setText("Importer dans le Storyboard")
+            self._btn_confirm.setText(translate("Importer dans le Storyboard"))
             return
         self.accept()
 
