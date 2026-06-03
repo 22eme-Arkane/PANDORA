@@ -12,6 +12,7 @@ from ui.widgets import section_label, combo, toggle_row, prompt_block, ProgressB
 from core.history import save_to_history
 from core.config import get_output_dir
 from core.worker import GenerationWorker, abandon_thread
+from core.i18n import translate
 from api.enhance import EnhanceWorker
 from davinci.bridge import resolve
 from davinci.importer import import_result
