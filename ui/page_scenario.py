@@ -1374,7 +1374,7 @@ class PageScenario(QWidget):
         from PyQt6.QtWidgets import QDialog, QVBoxLayout, QHBoxLayout, QTextEdit
         streaming = worker is not None
         dlg = QDialog(self)
-        dlg.setWindowTitle("Mise en page PANDORA — Aperçu Claude")
+        dlg.setWindowTitle(translate("Mise en page PANDORA — Aperçu Claude"))
         dlg.resize(900, 680)
         dlg.setStyleSheet(
             f"QDialog{{background:{CP['bg1']};}}"
@@ -1385,9 +1385,9 @@ class PageScenario(QWidget):
         lay.setSpacing(12)
 
         hdr = QHBoxLayout()
-        title_lbl = QLabel("◈  Mise en page PANDORA — Aperçu")
+        title_lbl = QLabel(translate("◈  Mise en page PANDORA — Aperçu"))
         title_lbl.setStyleSheet(f"color:{CP['text_primary']};font-size:14px;font-weight:700;")
-        status_lbl = QLabel("Mise en page en cours…" if streaming else "Mise en page terminée")
+        status_lbl = QLabel(translate("Mise en page en cours…") if streaming else translate("Mise en page terminée"))
         status_lbl.setStyleSheet(
             f"color:{CP['accent'] if streaming else CP['text_dim']};"
             f"font-size:10px;font-family:'Consolas',monospace;"
@@ -1402,7 +1402,7 @@ class PageScenario(QWidget):
         if text:
             te.setPlainText(text)
         else:
-            te.setPlaceholderText("Le scénario mis en page apparaît ici au fil de la génération…")
+            te.setPlaceholderText(translate("Le scénario mis en page apparaît ici au fil de la génération…"))
         _f = QFont("Courier New", 11)
         _f.setStyleHint(QFont.StyleHint.TypeWriter)
         te.setFont(_f)
@@ -1431,12 +1431,12 @@ class PageScenario(QWidget):
                 worker.terminate()
                 self._set_ai_busy(False)
                 self._ai_progress_lbl.setText("Mise en page annulée.")
-                btn_close.setText("Fermer")
+                btn_close.setText(translate("Fermer"))
                 btn_close.setStyleSheet(_ghost_ss)
 
         btn_row = QHBoxLayout()
         btn_row.setSpacing(8)
-        btn_close = QPushButton("Annuler" if streaming else "Fermer")
+        btn_close = QPushButton(translate("Annuler") if streaming else translate("Fermer"))
         btn_close.setFixedHeight(36)
         btn_close.setStyleSheet(_cancel_ss if streaming else _ghost_ss)
 
@@ -1447,7 +1447,7 @@ class PageScenario(QWidget):
         btn_close.clicked.connect(_on_close_btn)
         dlg.rejected.connect(_stop_worker)
 
-        btn_apply = QPushButton("↩  Remplacer le texte")
+        btn_apply = QPushButton(translate("↩  Remplacer le texte"))
         btn_apply.setFixedHeight(36)
         btn_apply.setEnabled(not streaming)
         btn_apply.setStyleSheet(
@@ -1487,7 +1487,7 @@ class PageScenario(QWidget):
 
             def _on_done(result: str):
                 _streaming_active[0] = False
-                btn_close.setText("Fermer")
+                btn_close.setText(translate("Fermer"))
                 btn_close.setStyleSheet(_ghost_ss)
                 _final_text[0] = result
                 self._set_ai_busy(False)
@@ -1495,7 +1495,7 @@ class PageScenario(QWidget):
                 self._last_result_kind = "format"
                 self._btn_reopen_window.setVisible(True)
                 self._ai_progress_lbl.setText("Mise en page PANDORA terminée ✓")
-                status_lbl.setText("Mise en page PANDORA terminée")
+                status_lbl.setText(translate("Mise en page PANDORA terminée"))
                 status_lbl.setStyleSheet(
                     f"color:{CP['text_dim']};font-size:10px;font-family:'Consolas',monospace;"
                 )
@@ -1503,7 +1503,7 @@ class PageScenario(QWidget):
 
             def _on_failed(msg: str):
                 _streaming_active[0] = False
-                btn_close.setText("Fermer")
+                btn_close.setText(translate("Fermer"))
                 btn_close.setStyleSheet(_ghost_ss)
                 self._set_ai_busy(False)
                 self._ai_progress_lbl.setText(f"Erreur : {msg[:120]}")
@@ -1532,7 +1532,7 @@ class PageScenario(QWidget):
         from PyQt6.QtWidgets import QDialog, QVBoxLayout, QHBoxLayout, QTextEdit
         streaming = worker is not None
         dlg = QDialog(self)
-        dlg.setWindowTitle("Arrangement — Analyse Claude")
+        dlg.setWindowTitle(translate("Arrangement — Analyse Claude"))
         dlg.resize(900, 700)
         dlg.setStyleSheet(
             f"QDialog{{background:{CP['bg1']};}}"
@@ -1543,9 +1543,9 @@ class PageScenario(QWidget):
         lay.setSpacing(12)
 
         hdr = QHBoxLayout()
-        title_lbl = QLabel("◈  Arrangement — Analyse")
+        title_lbl = QLabel(translate("◈  Arrangement — Analyse"))
         title_lbl.setStyleSheet(f"color:{CP['text_primary']};font-size:14px;font-weight:700;")
-        status_lbl = QLabel("Analyse en cours…" if streaming else "Analyse terminée")
+        status_lbl = QLabel(translate("Analyse en cours…") if streaming else translate("Analyse terminée"))
         status_lbl.setStyleSheet(
             f"color:{CP['accent'] if streaming else CP['text_dim']};"
             f"font-size:10px;font-family:'Consolas',monospace;"
@@ -1596,10 +1596,10 @@ class PageScenario(QWidget):
                     _apply_worker[0] = None
                 self._set_ai_busy(False)
                 self._ai_progress_lbl.setText("Arrangement annulé.")
-                btn_close.setText("Fermer")
+                btn_close.setText(translate("Fermer"))
                 btn_close.setStyleSheet(_ghost_ss)
 
-        btn_close = QPushButton("Annuler" if streaming else "Fermer")
+        btn_close = QPushButton(translate("Annuler") if streaming else translate("Fermer"))
         btn_close.setFixedHeight(36)
         btn_close.setStyleSheet(_cancel_ss if streaming else _ghost_ss)
 
@@ -1610,7 +1610,7 @@ class PageScenario(QWidget):
         btn_close.clicked.connect(_on_close_btn)
         dlg.rejected.connect(_stop_worker)
 
-        btn_session = QPushButton("☁  Session de co-écriture")
+        btn_session = QPushButton(translate("☁  Session de co-écriture"))
         btn_session.setFixedHeight(36)
         btn_session.setEnabled(not streaming)
         btn_session.setToolTip("Dialogue interactif avec Claude pour affiner l'arrangement.")
@@ -1622,7 +1622,7 @@ class PageScenario(QWidget):
             f"border:1px solid {CP['border']};}}"
         )
 
-        btn_direct = QPushButton("✓  Appliquer les suggestions")
+        btn_direct = QPushButton(translate("✓  Appliquer les suggestions"))
         btn_direct.setFixedHeight(36)
         btn_direct.setEnabled(not streaming)
         btn_direct.setToolTip(
@@ -1704,7 +1704,7 @@ class PageScenario(QWidget):
                     return
                 _streaming_active[0] = False
                 _apply_worker[0] = None
-                btn_close.setText("Fermer")
+                btn_close.setText(translate("Fermer"))
                 btn_close.setStyleSheet(_ghost_ss)
                 _rewritten[0] = result
                 self._set_ai_busy(False)
@@ -1718,7 +1718,7 @@ class PageScenario(QWidget):
             def _on_apply_failed(msg: str):
                 _streaming_active[0] = False
                 _apply_worker[0] = None
-                btn_close.setText("Fermer")
+                btn_close.setText(translate("Fermer"))
                 btn_close.setStyleSheet(_ghost_ss)
                 self._set_ai_busy(False)
                 status_lbl.setText("Erreur")
@@ -1764,7 +1764,7 @@ class PageScenario(QWidget):
 
             def _on_done(result: str):
                 _streaming_active[0] = False
-                btn_close.setText("Fermer")
+                btn_close.setText(translate("Fermer"))
                 btn_close.setStyleSheet(_ghost_ss)
                 _final_analysis[0] = result
                 self._set_ai_busy(False)
@@ -1787,7 +1787,7 @@ class PageScenario(QWidget):
 
             def _on_failed(msg: str):
                 _streaming_active[0] = False
-                btn_close.setText("Fermer")
+                btn_close.setText(translate("Fermer"))
                 btn_close.setStyleSheet(_ghost_ss)
                 self._set_ai_busy(False)
                 self._ai_progress_lbl.setText(f"Erreur : {msg[:120]}")
@@ -1941,10 +1941,10 @@ class PageScenario(QWidget):
                     _enrich_worker[0] = None
                 self._set_ai_busy(False)
                 self._ai_progress_lbl.setText("Analyse annulée.")
-                btn_close.setText("Fermer")
+                btn_close.setText(translate("Fermer"))
                 btn_close.setStyleSheet(_refs_ghost_ss)
 
-        btn_close = QPushButton("Annuler" if streaming else "Fermer")
+        btn_close = QPushButton(translate("Annuler") if streaming else translate("Fermer"))
         btn_close.setFixedHeight(36)
         btn_close.setStyleSheet(_refs_cancel_ss if streaming else _refs_ghost_ss)
 
@@ -2028,7 +2028,7 @@ class PageScenario(QWidget):
 
             def _on_enrich_done(result: str):
                 _refs_streaming_active[0] = False
-                btn_close.setText("Fermer")
+                btn_close.setText(translate("Fermer"))
                 btn_close.setStyleSheet(_refs_ghost_ss)
                 _enriched[0] = result
                 self._refs_status_lbl.setText("Enrichissement terminé ✓")
@@ -2040,7 +2040,7 @@ class PageScenario(QWidget):
 
             def _on_enrich_failed(msg: str):
                 _refs_streaming_active[0] = False
-                btn_close.setText("Fermer")
+                btn_close.setText(translate("Fermer"))
                 btn_close.setStyleSheet(_refs_ghost_ss)
                 te.setPlainText(f"Erreur lors de l'enrichissement :\n{msg}")
                 self._refs_status_lbl.setText("Erreur")
@@ -2084,7 +2084,7 @@ class PageScenario(QWidget):
 
             def _on_done(result: str):
                 _refs_streaming_active[0] = False
-                btn_close.setText("Fermer")
+                btn_close.setText(translate("Fermer"))
                 btn_close.setStyleSheet(_refs_ghost_ss)
                 _final_analysis[0] = result
                 self._set_ai_busy(False)
@@ -2101,7 +2101,7 @@ class PageScenario(QWidget):
 
             def _on_failed(msg: str):
                 _refs_streaming_active[0] = False
-                btn_close.setText("Fermer")
+                btn_close.setText(translate("Fermer"))
                 btn_close.setStyleSheet(_refs_ghost_ss)
                 self._set_ai_busy(False)
                 self._ai_progress_lbl.setText(f"Erreur : {msg}")
@@ -2151,7 +2151,7 @@ class PageScenario(QWidget):
         )
         btn_close.clicked.connect(dlg.accept)
 
-        btn_apply = QPushButton("↩  Remplacer le texte")
+        btn_apply = QPushButton(translate("↩  Remplacer le texte"))
         btn_apply.setFixedHeight(36)
         btn_apply.setStyleSheet(
             f"QPushButton{{background:{CP['accent2']};color:#fff;"

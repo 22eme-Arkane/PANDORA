@@ -20,7 +20,7 @@ from ui.page_storyboard import PageStoryboard
 from ui.page_doublage import PageDoublage
 from ui.icons import load_icon, badge_pixmap, app_icon, dim, tint
 from ui.assistant_panel import AssistantPanel, AssistantToggleStrip
-from core.i18n import tr, get_lang, set_lang, retranslate_widget
+from core.i18n import tr, get_lang, set_lang, retranslate_widget, translate
 
 
 def _get_nav_items():
@@ -915,7 +915,7 @@ class PandoraWindow(QMainWindow):
     def _on_no_update_manual(self):
         self._reset_update_btn()
         from PyQt6.QtWidgets import QMessageBox
-        QMessageBox.information(self, "Mises à jour", "PANDORA est à jour.")
+        QMessageBox.information(self, translate("Mises à jour"), translate("PANDORA est à jour."))
 
     def _on_update_check_failed(self):
         self._reset_update_btn()
