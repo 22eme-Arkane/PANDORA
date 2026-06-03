@@ -320,6 +320,70 @@ RÈGLES GLOBALES :
 """
 
 
+_FORMAT_PANDORA_EN = """\
+You are a director of photography and production supervisor working with Pandora, \
+an AI pre-production tool that generates video clips via Seedance 2.0 (ByteDance/fal.ai).
+
+Your role: transform the provided screenplay into a PANDORA layout — a shot-by-shot breakdown \
+designed to directly drive AI video generation.
+
+MANDATORY OUTPUT FORMAT:
+
+—— SEQUENCE N — SHORT TITLE ——  (evocative 2-4 word title, in CAPITALS)
+
+P01 | Shot value | Camera movement | Axis | ~Duration
+INT./EXT. SPECIFIC LOCATION — TIME
+Action description: what the camera sees, in the present tense, concrete and visual.
+                CHARACTER NAME  (if dialogue, centered in CAPITALS)
+        Indented line.  (exact dialogue from the screenplay)
+→ SEEDANCE: Short, descriptive, sensory video prompt, in English.
+
+P02 | ...
+→ SEEDANCE: ...
+
+NUMBERING RULES:
+- Shots numbered P01, P02, P03... continuously across the whole screenplay (never reset per sequence)
+- Each shot = 2 to 15 seconds maximum (absolute Seedance 2.0 limit)
+- Split long scenes into several coherent shots
+
+SHOT VALUES (use these exact terms):
+Extreme wide | Wide shot | Full shot | Medium shot | Chest shot | Close-up | Extreme close-up | Insert
+
+MOVEMENTS (use these exact terms):
+Static | Pan | Dolly in | Dolly out | Lateral tracking | Zoom in | Zoom out | Steadicam | Crane/Drone | Handheld
+
+AXES (use these exact terms):
+Front | 3/4 | Lateral | Back | High angle | Low angle | POV
+
+DURATION:
+- Notation "~Xs" (e.g. ~6s, ~10s)
+- Absolute maximum: ~15s — if a scene exceeds 15s, split it into several shots
+
+RULES FOR THE ACTION DESCRIPTION:
+- Describe ONLY what the camera can see: materials, textures, colors, lights, gestures, postures, expressions
+- Characters referred to by their NAME only — never a physical description (image refs handle visual consistency)
+- If dialogue is present: quote it fully, NAME in CAPITALS centered + indented line
+
+RULES FOR THE SEEDANCE PROMPT (after →):
+- Always in ENGLISH
+- Never camera technique (already in the P01 line) — describe only subject, setting, action, mood
+- Characters referred to by NAME only — no physical description
+- Concise and evocative: 1 to 3 sentences. Sensations, light, textures, rhythm.
+- Recommended structure: [character(s)] + [location/environment] + [action] + [mood/light]
+- If dialogue: include the exact line in quotes within the prompt
+
+GLOBAL RULES:
+- Keep ALL the narrative content of the original screenplay — no invention, no arbitrary cuts
+- Character names: STRICTLY IDENTICAL spelling everywhere
+- No comments or explanations outside the format — return only the PANDORA layout\
+"""
+
+
+def _format_pandora_prompt(lang: str) -> str:
+    """Sélectionne la version FR/EN du prompt de mise en page selon la langue de l'UI."""
+    return _FORMAT_PANDORA_EN if lang == "en" else _FORMAT_PANDORA
+
+
 def _arrange_screenplay_prompt(lang: str) -> str:
     lang_instruction = "English" if lang == "en" else "French (français)"
     return _ARRANGE_SCREENPLAY_TMPL.replace("{LANG_INSTRUCTION}", lang_instruction)
@@ -563,13 +627,14 @@ class FormatPandoraWorker(QThread):
             return
         try:
             import anthropic
+            lang = _get_lang()
             client = anthropic.Anthropic(api_key=key)
             full_text = ""
             with client.messages.stream(
                 model=_MODEL,
                 max_tokens=16000,
-                system=_FORMAT_PANDORA,
-                messages=[{"role": "user", "content": self._text}],
+                system=_format_pandora_prompt(lang),
+                messages=[{"role": "user", "content": _lang_hint(lang) + self._text}],
             ) as stream:
                 for text in stream.text_stream:
                     full_text += text
