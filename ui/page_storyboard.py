@@ -2634,7 +2634,7 @@ class PageStoryboard(QWidget):
             if shot.get("decor_name") and not shot.get("decor_id"):
                 shot["decor_id"] = decor_by_name.get(shot["decor_name"].strip().lower(), "")
             sb_api.save_shot(shot)
-        self._ai_lbl.setText(f"{len(shots)} plans importés ✓")
+        self._ai_lbl.setText(f"{len(shots)} {translate('plans importés ✓')}")
         self.refresh()
 
     def _on_ai_fail(self, err: str):

@@ -1211,7 +1211,7 @@ class PageScenario(QWidget):
         from core.casting import list_characters
         from core.decors import list_decors
         self._set_ai_busy(True)
-        self._ai_progress_lbl.setText("Analyse en cours via Claude…")
+        self._ai_progress_lbl.setText(translate("Analyse en cours via Claude…"))
         self._btn_reopen_window.setVisible(False)
         self._btn_undo_action.setVisible(False)
         self._result_area.clear()
@@ -1277,7 +1277,7 @@ class PageScenario(QWidget):
         dlg = StoryboardGenerateDialog(text, dur_secs, sc_id, parent=self)
         if dlg.exec() == StoryboardGenerateDialog.DialogCode.Accepted and dlg._shots:
             count = len(dlg._shots)
-            self._ai_progress_lbl.setText(f"{count} plans importés dans le Storyboard ✓")
+            self._ai_progress_lbl.setText(f"{count} {translate('plans importés dans le Storyboard ✓')}")
             self._btn_goto_storyboard.setVisible(True)
 
     # ── Handlers extraction ───────────────────────────────────────────────────
@@ -1835,7 +1835,7 @@ class PageScenario(QWidget):
         streaming = worker is not None
 
         dlg = QDialog(self)
-        dlg.setWindowTitle("Références visuelles — Analyse Claude")
+        dlg.setWindowTitle(translate("Références visuelles — Analyse Claude"))
         dlg.resize(860, 640)
         dlg.setStyleSheet(
             f"QDialog{{background:{CP['bg1']};}}"
@@ -1847,12 +1847,12 @@ class PageScenario(QWidget):
 
         # ── En-tête ──────────────────────────────────────────────────────────
         hdr = QHBoxLayout()
-        title_lbl = QLabel("◎  Analyse des références visuelles")
+        title_lbl = QLabel(translate("◎  Analyse des références visuelles"))
         title_lbl.setStyleSheet(
             f"color:{CP['text_primary']};font-size:14px;font-weight:700;"
         )
         self._refs_status_lbl = QLabel(
-            "Analyse en cours…" if streaming else f"{len(self._ref_images)} image(s) analysée(s)"
+            translate("Analyse en cours…") if streaming else f"{len(self._ref_images)} {translate('image(s) analysée(s)')}"
         )
         self._refs_status_lbl.setStyleSheet(
             f"color:{CP['accent'] if streaming else CP['text_dim']};"
@@ -1974,7 +1974,7 @@ class PageScenario(QWidget):
             f"border:1px solid {CP['border']};}}"
         )
 
-        btn_enrich = QPushButton("◎  Enrichir le scénario")
+        btn_enrich = QPushButton(translate("◎  Enrichir le scénario"))
         btn_enrich.setFixedHeight(36)
         btn_enrich.setEnabled(not streaming)
         btn_enrich.setToolTip(

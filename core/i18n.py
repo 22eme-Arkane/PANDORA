@@ -847,6 +847,17 @@ _FR_TO_EN: dict[str, str] = {
     "💡  La méthode la moins coûteuse\n\nIdentifiez vos éléments manuellement et créez-les un à un dans les onglets dédiés : Castings pour les personnages, Décors, Accessoires, HMC, Véhicules. Vous gardez ainsi la main sur chaque génération d'image et ne payez que ce que vous validez.\n\n« Tout générer » est pratique pour un premier jet rapide, mais chaque image générée automatiquement est facturée — le coût peut rapidement devenir élevé si le scénario contient de nombreux éléments.": '💡  The least expensive method\n\nIdentify your elements manually and create them one by one in the dedicated tabs: Castings for characters, Sets, Props, HMC, Vehicles. This way you keep control over each image generation and only pay for what you validate.\n\n« Generate all » is handy for a quick first draft, but each automatically generated image is billed — the cost can quickly become high if the screenplay contains many elements.',
     "⚠  ATTENTION — SUPPRESSION PRÉALABLE\n\nAvant de régénérer, cette opération va d'abord supprimer\nTOUS les personnages, décors, accessoires, HMC, véhicules\net plans storyboard existants.\n\nCette action est irréversible. Partez d'un scénario finalisé.": '⚠  WARNING — PRIOR DELETION\n\nBefore regenerating, this operation will first delete\nALL existing characters, sets, props, HMC, vehicles\nand storyboard shots.\n\nThis action is irreversible. Start from a finalized screenplay.',
     '⚡  Lancer la génération complète': '⚡  Launch full generation',
+
+    # ── Lot 16 — Analyse références visuelles + plans importés ──
+    "Analyser avec Claude": "Analyze with Claude",
+    "Décrypte les images pour enrichir le scénario": "Decodes the images to enrich the screenplay",
+    "Analyse en cours via Claude…": "Analysis in progress via Claude…",
+    "Références visuelles — Analyse Claude": "Visual references — Claude Analysis",
+    "◎  Analyse des références visuelles": "◎  Visual references analysis",
+    "◎  Enrichir le scénario": "◎  Enrich the screenplay",
+    "image(s) analysée(s)": "image(s) analyzed",
+    "plans importés dans le Storyboard ✓": "shots imported into the Storyboard ✓",
+    "plans importés ✓": "shots imported ✓",
     "Utilisées par Claude pour enrichir le prompt":
         "Used by Claude to enrich the prompt",
     "⚠ Mode mock actif\n(clé fal.ai non configurée)":
