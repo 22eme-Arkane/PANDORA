@@ -630,7 +630,7 @@ class ArrangeSessionDialog(QDialog):
         self._analysis_edit.setPlainText(self._analysis)
 
         # Premier message Claude dans le chat = l'analyse initiale (résumé court)
-        intro = (
+        intro = translate(
             "J'ai analysé votre scénario et rédigé des suggestions détaillées "
             "(visibles dans l'onglet « Analyse initiale »).\n\n"
             "Dites-moi ce que vous souhaitez modifier, affiner ou conserver — "

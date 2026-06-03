@@ -3554,11 +3554,13 @@ class TabT2V(QScrollArea):
     def _start_batch_generation(self, shots: list):
         count = len(shots)
         dlg = QMessageBox(self)
-        dlg.setWindowTitle("Génération en série")
+        dlg.setWindowTitle(translate("Génération en série"))
         dlg.setText(
-            f"Vous avez sélectionné {count} plans.\n\n"
-            "La génération sera lancée en file d'attente — un clip après l'autre.\n\n"
-            "⚠  Chaque plan consomme des crédits fal.ai."
+            f"{translate('Vous avez sélectionné')} {count} {translate('plans.')}\n\n"
+            + translate(
+                "La génération sera lancée en file d'attente — un clip après l'autre.\n\n"
+                "⚠  Chaque plan consomme des crédits fal.ai."
+            )
         )
         dlg.setStandardButtons(
             QMessageBox.StandardButton.Ok | QMessageBox.StandardButton.Cancel

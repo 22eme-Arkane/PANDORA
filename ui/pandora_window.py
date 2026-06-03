@@ -837,7 +837,8 @@ class PandoraWindow(QMainWindow):
         except Exception as e:
             import traceback; traceback.print_exc()
             from PyQt6.QtWidgets import QMessageBox
-            QMessageBox.warning(self, "PANDORA", f"Impossible d'ouvrir la fenêtre de soutien.\n\n{e}")
+            _msg = translate("Impossible d'ouvrir la fenêtre de soutien.")
+            QMessageBox.warning(self, "PANDORA", f"{_msg}\n\n{e}")
 
     def _on_contact(self):
         from ui.dialog_contact import ContactDialog

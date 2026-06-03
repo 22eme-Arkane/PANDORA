@@ -858,6 +858,14 @@ _FR_TO_EN: dict[str, str] = {
     "image(s) analysée(s)": "image(s) analyzed",
     "plans importés dans le Storyboard ✓": "shots imported into the Storyboard ✓",
     "plans importés ✓": "shots imported ✓",
+
+    # ── Lot 17 — co-écriture (accueil), génération en série, divers ──
+    "J'ai analysé votre scénario et rédigé des suggestions détaillées (visibles dans l'onglet « Analyse initiale »).\n\nDites-moi ce que vous souhaitez modifier, affiner ou conserver — je produirai alors une version remaniée de votre scénario en direct. Nous pouvons itérer autant de fois que nécessaire.": "I've analyzed your screenplay and written detailed suggestions (visible in the « Initial analysis » tab).\n\nTell me what you'd like to change, refine or keep — I'll then produce a reworked version of your screenplay live. We can iterate as many times as needed.",
+    "Génération en série": "Batch generation",
+    "Vous avez sélectionné": "You selected",
+    "plans.": "shots.",
+    "La génération sera lancée en file d'attente — un clip après l'autre.\n\n⚠  Chaque plan consomme des crédits fal.ai.": "Generation will run in a queue — one clip after another.\n\n⚠  Each shot consumes fal.ai credits.",
+    "Impossible d'ouvrir la fenêtre de soutien.": "Could not open the support window.",
     "Utilisées par Claude pour enrichir le prompt":
         "Used by Claude to enrich the prompt",
     "⚠ Mode mock actif\n(clé fal.ai non configurée)":
