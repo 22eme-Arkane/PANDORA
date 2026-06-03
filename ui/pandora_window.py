@@ -814,6 +814,7 @@ class PandoraWindow(QMainWindow):
         btn_row.addWidget(btn_save_quit)
         lay.addLayout(btn_row)
 
+        retranslate_widget(dlg)
         result = dlg.exec()
         if result == 0:
             e.ignore()

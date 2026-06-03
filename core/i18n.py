@@ -2688,6 +2688,14 @@ _FR_TO_EN: dict[str, str] = {
     "Enregistrement…": "Saving…",
     "Erreur sauvegarde :": "Save error:",
 
+    # ── Lot 13 — fenêtre Quitter PANDORA ──
+    "Quitter PANDORA": "Quit PANDORA",
+    "Les données du storyboard et des fiches sont sauvegardées automatiquement.": "Storyboard and sheet data are saved automatically.",
+    "❤  PANDORA est gratuit. Il fonctionne grâce au soutien de la communauté.": "❤  PANDORA is free. It runs thanks to community support.",
+    "Si ce logiciel vous est utile, un don — même modeste — nous aide à continuer à le développer.": "If this software is useful to you, a donation — even a small one — helps us keep developing it.",
+    "❤  Soutenir PANDORA  →": "❤  Support PANDORA  →",
+    "Sauvegarder et quitter": "Save and quit",
+
     # ── Lot 8 — Aide API, Projets, divers ──
     'Optimisation de prompts  ·  Scénario  ·  Storyboard': 'Prompt optimization  ·  Screenplay  ·  Storyboard',
     "💡  <b>Utilisation :</b> fal.ai et Anthropic sont des services payants à l'usage. Chaque génération consomme des crédits. Les deux plateformes offrent des crédits de démarrage gratuits pour tester.": '💡  <b>Usage:</b> fal.ai and Anthropic are pay-as-you-go services. Each generation consumes credits. Both platforms offer free starter credits to try them out.',
