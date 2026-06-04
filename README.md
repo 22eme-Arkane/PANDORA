@@ -18,7 +18,7 @@
 
 ## Download
 
-**[⬇ Download PANDORA v1.1.7](https://github.com/22eme-Arkane/PANDORA/releases/download/v1.1.7/PANDORA_Setup_1.1.7.exe)**
+**[⬇ Download PANDORA v1.1.9](https://github.com/22eme-Arkane/PANDORA/releases/download/v1.1.9/PANDORA_Setup_1.1.9.exe)**
 
 All versions: [Releases](../../releases)
 
@@ -57,7 +57,7 @@ All versions: [Releases](../../releases)
 
 ## Installation
 
-1. Download `PANDORA_Setup_1.1.4.exe` from the link above
+1. Download `PANDORA_Setup_1.1.9.exe` from the link above
 2. Run the installer and accept the Terms of Use
 3. Launch **PANDORA** from the Start menu or desktop shortcut
 4. Enter your API keys in **Settings** (optional)

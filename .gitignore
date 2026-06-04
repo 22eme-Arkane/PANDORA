@@ -69,6 +69,11 @@ assets/wizard_small.bmp
 # ── Fichiers marketing / doc externe ─────────────────────────────────────────
 youtube_description.txt
 
+# ── Contexte Claude (LOCAL — jamais commité, à fournir manuellement à Claude Chat) ──
+PANDORA_CONTEXT.md
+PANDORA_COMMS.md
+PANDORA_DEVLOG.md
+
 # ── Test et debug ─────────────────────────────────────────────────────────────
 test_*.py
 debug_*.py
