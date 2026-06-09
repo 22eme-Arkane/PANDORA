@@ -33,7 +33,7 @@ def _intensity_label(v: int) -> str:
     if v <= 4:   return "Modéré — restructuration douce, rythme"
     if v <= 6:   return "Standard — reformulation, cohérence, dialogues"
     if v <= 8:   return "Fort — refonte de séquences et de scènes"
-    return           "Radical — réécriture complète du scénario"
+    return           "Radical — réécriture complète du conducteur"
 
 
 
@@ -45,7 +45,7 @@ def _sep():
     return f
 
 
-# ── Page Scénario (landing + éditeur) ────────────────────────────────────────
+# ── Page Conducteur (landing + éditeur) ────────────────────────────────────────
 
 class PageScenario(QWidget):
     navigate_requested = pyqtSignal(str, str)  # (page_key, extra_arg)
@@ -54,7 +54,8 @@ class PageScenario(QWidget):
     def __init__(self):
         super().__init__()
         self.setStyleSheet(f"background:{CP['bg0']};")
-        self._current: dict | None = None   # scenario data being edited
+        self._current: dict | None = None   # conducteur data being edited
+        self._live_mode = "live"             # "live" | "mapping" — calibre l'IA Claude
         self._worker = None
         self._last_storyboard_version_id = ""
         self._undo_stack: list[str] = []
@@ -110,7 +111,7 @@ class PageScenario(QWidget):
             _ico.setPixmap(_ico_pix)
         tl.addWidget(_ico)
 
-        title_lbl = QLabel("Scénario")
+        title_lbl = QLabel("Conducteur")
         title_lbl.setStyleSheet(
             f"color:{CP['text_primary']};font-size:22px;font-weight:700;background:transparent;"
         )
@@ -130,10 +131,10 @@ class PageScenario(QWidget):
         lay.setContentsMargins(56, 48, 56, 48)
         lay.setSpacing(32)
 
-        lay.addWidget(HelpBlock("Scénario — Éditeur et assistant Claude IA", [
-            "▸ Rédigez ou collez votre scénario, puis utilisez Claude pour le formater en mise en page cinéma standard.",
+        lay.addWidget(HelpBlock("Conducteur — Éditeur et assistant Claude IA", [
+            "▸ Rédigez ou collez votre conducteur, puis utilisez Claude pour le formater en mise en page cinéma standard.",
             "▸ Arrangement IA : Claude analyse la structure narrative et propose des améliorations (intensité réglable 1-10).",
-            "▸ Générez automatiquement depuis le scénario : personnages, décors, accessoires, HMC, véhicules et storyboard.",
+            "▸ Générez automatiquement depuis le conducteur : personnages, décors, accessoires, HMC, véhicules et storyboard.",
             "▸ Versions : sauvegardez plusieurs versions nommées et basculez entre elles à tout moment.",
             "▸ Undo/Redo : chaque modification par Claude est annulable — les boutons ↩ ↪ conservent l'historique manuel.",
             "▸ Style de film : le style sélectionné ici se propage à Seedance 2.0 et aux générations d'éléments.",
@@ -175,7 +176,7 @@ class PageScenario(QWidget):
             return card
 
         hero.addWidget(_action_card(
-            "✦", "Nouveau scénario", "Écrire depuis zéro",
+            "✦", "Nouveau conducteur", "Écrire depuis zéro",
             CP["accent"], self._new_scenario,
         ))
         hero.addWidget(_action_card(
@@ -191,7 +192,7 @@ class PageScenario(QWidget):
         sep2.setStyleSheet(f"background:{CP['border']};")
         lay.addWidget(sep2)
 
-        lbl_recent = QLabel("Scénarios récents")
+        lbl_recent = QLabel("Conducteurs récents")
         lbl_recent.setStyleSheet(
             f"color:{CP['text_secondary']};font-size:12px;font-weight:700;"
             f"letter-spacing:0.5px;background:transparent;"
@@ -218,7 +219,7 @@ class PageScenario(QWidget):
 
         scenarios = scenario_api.list_scenarios()
         if not scenarios:
-            lbl = QLabel("Aucun scénario récent.")
+            lbl = QLabel("Aucun conducteur récent.")
             lbl.setStyleSheet(
                 f"color:{CP['text_dim']};font-size:12px;background:transparent;"
             )
@@ -252,7 +253,7 @@ class PageScenario(QWidget):
 
         info = QVBoxLayout()
         info.setSpacing(2)
-        title_lbl = QLabel(sc.get("title") or "Scénario sans titre")
+        title_lbl = QLabel(sc.get("title") or "Conducteur sans titre")
         title_lbl.setStyleSheet(
             f"color:{CP['text_primary']};font-size:12px;font-weight:700;background:transparent;border:none;"
         )
@@ -309,7 +310,7 @@ class PageScenario(QWidget):
         tl.addWidget(btn_back)
 
         self._title_edit = QLineEdit()
-        self._title_edit.setPlaceholderText("Titre du scénario…")
+        self._title_edit.setPlaceholderText("Titre du conducteur…")
         self._title_edit.setFixedHeight(34)
         self._title_edit.setFixedWidth(160)
         self._title_edit.setStyleSheet(
@@ -383,25 +384,12 @@ class PageScenario(QWidget):
         _style_sep_top.setStyleSheet(f"background:{CP['border']};")
         tl.addWidget(_style_sep_top)
 
-        import core.style as _sc_style_mod
+        # Conducteur Live : styles dédiés au VJing (mêmes que le Studio IA)
+        import core.vj_styles as _vj_styles
         self._film_style_combo = QComboBox()
-        self._film_style_combo.addItem("— Style —", "")
-        _cur_grp_sc = None
-        for _s in _sc_style_mod.STYLES:
-            _g = _s.get("group", "")
-            if _g != _cur_grp_sc:
-                _cur_grp_sc = _g
-                _gi = next((g for g in _sc_style_mod.GROUPS if g["key"] == _g), None)
-                if _gi:
-                    self._film_style_combo.addItem(
-                        f"  {_gi['icon']}  {translate(_gi['name']).upper()}", "__sep__"
-                    )
-                    _sep_i = self._film_style_combo.model().item(
-                        self._film_style_combo.count() - 1
-                    )
-                    _sep_i.setEnabled(False)
-                    _sep_i.setForeground(QColor(CP.get("accent2", CP.get("accent", "#7c6bff"))))
-            self._film_style_combo.addItem(f"    {_s['icon']}  {translate(_s['name'])}", _s["key"])
+        self._film_style_combo.addItem("— Style VJ —", "")
+        for _s in _vj_styles.get_styles():
+            self._film_style_combo.addItem(f"    ✦  {_vj_styles.localized_name(_s)}", _s["key"])
         self._film_style_combo.setFixedHeight(30)
         self._film_style_combo.setMinimumWidth(140)
         self._film_style_combo.setMaximumWidth(200)
@@ -416,6 +404,19 @@ class PageScenario(QWidget):
         self._film_style_combo.currentIndexChanged.connect(self._schedule_autosave)
         self._film_style_combo.currentIndexChanged.connect(self._on_scenario_style_changed)
         tl.addWidget(self._film_style_combo)
+
+        # ── Mode du conducteur : Live / Mapping (calibre l'IA Claude) ──────────
+        _mode_sep = QFrame()
+        _mode_sep.setFixedSize(1, 24)
+        _mode_sep.setStyleSheet(f"background:{CP['border']};")
+        tl.addWidget(_mode_sep)
+        self._btn_mode_live    = self._make_mode_btn("Live")
+        self._btn_mode_mapping = self._make_mode_btn("Mapping")
+        self._btn_mode_live.clicked.connect(lambda: self._set_live_mode("live"))
+        self._btn_mode_mapping.clicked.connect(lambda: self._set_live_mode("mapping"))
+        tl.addWidget(self._btn_mode_live)
+        tl.addWidget(self._btn_mode_mapping)
+        self._apply_mode_style()
 
         tl.addStretch(1)
 
@@ -442,10 +443,10 @@ class PageScenario(QWidget):
         main.setContentsMargins(0, 0, 0, 0)
         main.setSpacing(0)
 
-        # Text editor — page de scénario pleine largeur avec marges latérales
+        # Text editor — page de conducteur pleine largeur avec marges latérales
         self._editor_text = QTextEdit()
         self._editor_text.setPlaceholderText(translate(
-            "Écris ton scénario ici…\n\n"
+            "Écris ton conducteur ici…\n\n"
             "INT. LIEU — JOUR\n\n"
             "Description de la scène…\n\n"
             "PERSONNAGE\n"
@@ -459,7 +460,7 @@ class PageScenario(QWidget):
             f"color:{CP['text_primary']};padding:32px 120px;}}"
         )
         self._editor_text.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
-        # Alignement centré par défaut — style mise en page scénario cinéma
+        # Alignement centré par défaut — style mise en page conducteur cinéma
         from PyQt6.QtGui import QTextOption
         _opt = QTextOption()
         _opt.setAlignment(Qt.AlignmentFlag.AlignHCenter)
@@ -666,7 +667,7 @@ class PageScenario(QWidget):
 
         self._btn_analyze_refs = _ai_btn(
             "◈", "Analyser avec Claude",
-            "Décrypte les images pour enrichir le scénario",
+            "Décrypte les images pour enrichir le conducteur",
             self._on_analyze_refs,
         )
         l_refs.addWidget(self._btn_analyze_refs)
@@ -684,7 +685,7 @@ class PageScenario(QWidget):
             "⊞", "Proposer un arrangement", "Analyse structure + suggestions", self._on_arrange,
         )
         self._btn_format = _ai_btn(
-            "◈", "Mise en page PANDORA", "Structure le scénario en blocs plans optimisés pour PANDORA", self._on_format,
+            "◈", "Mise en page PANDORA", "Structure le conducteur en blocs plans optimisés pour PANDORA", self._on_format,
         )
         l_ia.addWidget(self._btn_arrange)
         l_ia.addWidget(self._btn_format)
@@ -693,36 +694,28 @@ class PageScenario(QWidget):
         sc_lay.addWidget(tog_ia)
         sc_lay.addWidget(c_ia)
 
-        # ── Section 2 : Générer depuis le scénario (repliée par défaut) ───────
+        # ── Section 2 : Générer depuis le conducteur (repliée par défaut) ───────
         c_gen, l_gen = _section_container()
 
         self._btn_gen_characters = _ai_btn(
-            "◎", "Générer les personnages", "Identifier les personnages depuis le scénario",
+            "◎", "Générer les personnages", "Identifier les personnages depuis le conducteur",
             self._on_gen_characters,
         )
-        self._btn_gen_decors = _ai_btn(
-            "⌂", "Générer les décors", "Identifier les décors depuis le scénario",
-            self._on_gen_decors,
-        )
         self._btn_gen_accessories = _ai_btn(
-            "⊡", "Générer les accessoires", "Identifier les accessoires depuis le scénario",
+            "⊡", "Générer les accessoires", "Identifier les accessoires depuis le conducteur",
             self._on_gen_accessories,
         )
-        self._btn_gen_hmc = _ai_btn(
-            "✂", "Générer le HMC", "Identifier les éléments HMC depuis le scénario",
-            self._on_gen_hmc,
-        )
         self._btn_gen_vehicles = _ai_btn(
-            "🚗", "Générer les véhicules", "Identifier les véhicules depuis le scénario",
+            "🚗", "Générer les véhicules", "Identifier les véhicules depuis le conducteur",
             self._on_gen_vehicles,
         )
         self._btn_storyboard = _ai_btn(
-            "⊕", "Générer le storyboard", "Importe les plans dans Storyboard",
+            "⊕", "Générer le découpage", "Découpe le conducteur en séquence (Live/Mapping)",
             self._on_storyboard,
         )
         for _b in (
-            self._btn_gen_characters, self._btn_gen_decors, self._btn_gen_accessories,
-            self._btn_gen_hmc, self._btn_gen_vehicles, self._btn_storyboard,
+            self._btn_gen_characters, self._btn_gen_accessories,
+            self._btn_gen_vehicles, self._btn_storyboard,
         ):
             l_gen.addWidget(_b)
 
@@ -739,7 +732,7 @@ class PageScenario(QWidget):
             f"QPushButton:disabled{{opacity:0.35;border-color:{CP['border']};}}"
         )
         self._btn_generate_all.clicked.connect(self._on_generate_all)
-        tog_gen = _make_toggle("☁  Générer depuis le scénario", c_gen, expanded=True)
+        tog_gen = _make_toggle("☁  Générer depuis le conducteur", c_gen, expanded=True)
         sc_lay.addWidget(tog_gen)
         sc_lay.addWidget(c_gen)
 
@@ -963,12 +956,14 @@ class PageScenario(QWidget):
         film_style = sc.get("film_style", "")
         idx = self._film_style_combo.findData(film_style) if film_style else -1
         self._film_style_combo.setCurrentIndex(idx if idx > 0 else 0)
+        self._live_mode = sc.get("live_mode", "live")
+        self._apply_mode_style()
         self._refresh_version_combo()
         self._go_editor()
 
     def _import_scenario(self):
         path, _ = QFileDialog.getOpenFileName(
-            self, "Importer un scénario", "",
+            self, "Importer un conducteur", "",
             "Textes (*.txt *.docx *.pdf)"
         )
         if not path:
@@ -987,7 +982,7 @@ class PageScenario(QWidget):
     def _delete_scenario(self, scenario_id: str):
         reply = QMessageBox.question(
             self, "Supprimer",
-            "Supprimer ce scénario ?",
+            "Supprimer ce conducteur ?",
             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
         )
         if reply == QMessageBox.StandardButton.Yes:
@@ -997,11 +992,39 @@ class PageScenario(QWidget):
     # ── Style propagation ─────────────────────────────────────────────────────
 
     def _on_scenario_style_changed(self, _idx: int):
+        # Conducteur Live : style VJ sauvegardé avec le conducteur (champ film_style).
+        # Pas de style film global (core.style) — c'est un style de VJing.
         key = self._film_style_combo.currentData() or ""
-        if key and key != "__sep__":
-            import core.style as _style_mod
-            _style_mod.set_style(key, _style_mod.get_style_custom())
+        if key:
             self.style_changed.emit(key)
+
+    # ── Mode Live / Mapping (calibre toutes les actions Claude) ─────────────────
+
+    def _make_mode_btn(self, label: str) -> QPushButton:
+        b = QPushButton(translate(label))
+        b.setFixedHeight(26)
+        b.setCursor(Qt.CursorShape.PointingHandCursor)
+        return b
+
+    def _set_live_mode(self, mode: str):
+        self._live_mode = mode if mode in ("live", "mapping") else "live"
+        self._apply_mode_style()
+        try:
+            self._schedule_autosave()
+        except Exception:
+            pass
+
+    def _apply_mode_style(self):
+        _acc = CP.get("accent2", CP.get("accent", "#7c6bff"))
+        for b, m in ((self._btn_mode_live, "live"), (self._btn_mode_mapping, "mapping")):
+            active = (self._live_mode == m)
+            b.setStyleSheet(
+                f"QPushButton{{background:{'rgba(124,107,255,0.18)' if active else 'transparent'};"
+                f"color:{_acc if active else CP['text_secondary']};"
+                f"border:1px solid {_acc if active else CP['border']};border-radius:5px;"
+                f"font-size:10px;font-weight:700;padding:0 10px;}}"
+                f"QPushButton:hover{{border-color:{_acc};}}"
+            )
 
     # ── Save ─────────────────────────────────────────────────────────────────
 
@@ -1066,12 +1089,13 @@ class PageScenario(QWidget):
         dur_secs       = (self._dur_min.value() * 60 + self._dur_sec.value()) if dur_defined else 0
         film_style_key = self._film_style_combo.currentData() or ""
         data.update({
-            "title":             title or "Scénario sans titre",
+            "title":             title or "Conducteur sans titre",
             "raw_content":       text,
             "formatted_content": text,   # keep in sync so reload always shows current content
             "duration_secs":     dur_secs,
             "duration_defined":  dur_defined,
             "film_style":        film_style_key if film_style_key not in ("", "__sep__") else "",
+            "live_mode":         self._live_mode,
         })
         self._current = scenario_api.save_scenario(data)
         if not silent:
@@ -1179,8 +1203,8 @@ class PageScenario(QWidget):
     def _set_ai_busy(self, busy: bool):
         for btn in (
             self._btn_format, self._btn_arrange, self._btn_storyboard,
-            self._btn_gen_characters, self._btn_gen_decors,
-            self._btn_gen_accessories, self._btn_gen_hmc, self._btn_gen_vehicles,
+            self._btn_gen_characters,
+            self._btn_gen_accessories, self._btn_gen_vehicles,
             self._btn_generate_all, self._btn_analyze_refs,
         ):
             btn.setEnabled(not busy)
@@ -1189,43 +1213,52 @@ class PageScenario(QWidget):
     def _on_format(self):
         text = self._get_text()
         if not text:
-            self._ai_progress_lbl.setText("Écris d'abord un texte à mettre en page.")
+            self._ai_progress_lbl.setText(translate("Écris d'abord un texte à mettre en page."))
             return
-        from api.screenplay import FormatPandoraWorker
+        from api.live_extract import FormatConducteurWorker
         self._set_ai_busy(True)
-        self._ai_progress_lbl.setText("Mise en page PANDORA en cours via Claude…")
+        self._ai_progress_lbl.setText(translate("Mise en page du conducteur via Claude…"))
         self._btn_reopen_window.setVisible(False)
         self._btn_undo_action.setVisible(False)
         self._result_area.clear()
         self._result_area.setVisible(False)
-        self._worker = FormatPandoraWorker(text)
+        self._worker = FormatConducteurWorker(text, self._live_mode)
+        self._worker.finished.connect(self._on_conducteur_text_result)
         self._worker.failed.connect(self._on_ai_fail)
-        self._open_format_window(worker=self._worker)
+        self._worker.start()
+
+    def _on_conducteur_text_result(self, new_text: str):
+        """Résultat d'une action Claude qui réécrit le conducteur (mise en page / arrangement)."""
+        self._set_ai_busy(False)
+        if not new_text:
+            return
+        try:
+            self._undo_stack.append(self._get_text())
+        except Exception:
+            pass
+        self._set_editor_text(new_text)
+        try:
+            self._save(silent=True)
+        except Exception:
+            pass
+        self._ai_progress_lbl.setText(translate("Conducteur mis à jour par Claude ✓"))
 
     def _on_arrange(self):
         text = self._get_text()
         if not text:
-            self._ai_progress_lbl.setText("Écris d'abord un texte à analyser.")
+            self._ai_progress_lbl.setText(translate("Écris d'abord un texte à analyser."))
             return
-        from api.screenplay import ArrangeScreenplayWorker
-        from core.casting import list_characters
-        from core.decors import list_decors
+        from api.live_extract import ArrangeConducteurWorker
         self._set_ai_busy(True)
-        self._ai_progress_lbl.setText(translate("Analyse en cours via Claude…"))
+        self._ai_progress_lbl.setText(translate("Arrangement du conducteur via Claude…"))
         self._btn_reopen_window.setVisible(False)
         self._btn_undo_action.setVisible(False)
         self._result_area.clear()
         self._result_area.setVisible(False)
-        dur_secs  = (self._dur_min.value() * 60 + self._dur_sec.value()) if self._dur_defined_check.isChecked() else 0
-        intensity = self._arrange_intensity_value
-        try:
-            project_context = {"characters": list_characters(), "decors": list_decors()}
-        except Exception:
-            project_context = {}
-        self._worker = ArrangeScreenplayWorker(text, dur_secs, intensity, project_context,
-                                               ref_analysis=self._last_ref_analysis)
+        self._worker = ArrangeConducteurWorker(text, self._live_mode)
+        self._worker.finished.connect(self._on_conducteur_text_result)
         self._worker.failed.connect(self._on_ai_fail)
-        self._open_arrange_window(worker=self._worker)
+        self._worker.start()
 
     def _on_modify_arrange(self):
         original    = self._get_text()
@@ -1248,7 +1281,7 @@ class PageScenario(QWidget):
 
     def _on_modify_done(self, result: str):
         self._set_ai_busy(False)
-        self._ai_progress_lbl.setText("Scénario modifié selon les suggestions ✓")
+        self._ai_progress_lbl.setText("Conducteur modifié selon les suggestions ✓")
         self._push_undo()
         self._set_editor_text(result)
         if self._current is not None:
@@ -1256,36 +1289,47 @@ class PageScenario(QWidget):
         self._btn_undo_action.setVisible(True)
 
     def _on_storyboard(self):
+        # Conducteur Live : « Générer le découpage » → découpe calibrée Live/Mapping,
+        # écrite dans la séquence correspondante (namespace live_seq_*).
         text = self._get_text()
         if not text:
-            self._ai_progress_lbl.setText("Écris d'abord un scénario à découper.")
+            self._ai_progress_lbl.setText(translate("Écris d'abord un conducteur à découper."))
             return
-        import core.storyboard as sb_api
-        existing = sb_api.list_shots(sb_api.DEFAULT_VERSION_ID)
-        if existing:
-            reply = QMessageBox.question(
-                self, "Remplacer le storyboard",
-                f"Un storyboard existe déjà ({len(existing)} plan{'s' if len(existing) > 1 else ''}).\n"
-                "Souhaitez-vous le remplacer par un nouveau découpage ?",
-                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
-            )
-            if reply != QMessageBox.StandardButton.Yes:
-                return
-        dur_secs = (self._dur_min.value() * 60 + self._dur_sec.value()) if self._dur_defined_check.isChecked() else 0
+        from api.live_screenplay import GenerateDecoupageWorker
+        self._set_ai_busy(True)
+        self._ai_progress_lbl.setText(translate("Génération du découpage via Claude…"))
+        self._worker = GenerateDecoupageWorker(text, self._live_mode)
+        self._worker.finished.connect(self._on_decoupage_done)
+        self._worker.failed.connect(self._on_ai_fail)
+        self._worker.start()
+
+    def _on_decoupage_done(self, segments: list):
+        self._set_ai_busy(False)
+        import core.storyboard as _sb
+        _sb.set_namespace(f"live_seq_{self._live_mode}")
+        _sb.clear_version_shots(_sb.DEFAULT_VERSION_ID)
         sc_id = (self._current or {}).get("id", "")
-        from ui.dialog_storyboard_generate import StoryboardGenerateDialog
-        dlg = StoryboardGenerateDialog(text, dur_secs, sc_id, parent=self)
-        if dlg.exec() == StoryboardGenerateDialog.DialogCode.Accepted and dlg._shots:
-            count = len(dlg._shots)
-            self._ai_progress_lbl.setText(f"{count} {translate('plans importés dans le Storyboard ✓')}")
-            self._btn_goto_storyboard.setVisible(True)
+        for i, seg in enumerate(segments, 1):
+            _sb.save_shot({
+                "number":          i,
+                "scenario_id":     sc_id,
+                "scene_title":     seg.get("action", ""),
+                "shot_size":       seg.get("shot_size", ""),
+                "camera_movement": seg.get("camera_movement", ""),
+                "duration":        seg.get("duration", 5),
+                "seedance_prompt": seg.get("prompt", ""),
+            }, _sb.DEFAULT_VERSION_ID)
+        seq_name = translate("Séquences Mapping") if self._live_mode == "mapping" else translate("Séquences Live")
+        self._ai_progress_lbl.setText(f"✓  {len(segments)} " + translate("segments générés →") + f" {seq_name}")
+        self.navigate_requested.emit(
+            "seq_mapping" if self._live_mode == "mapping" else "seq_live", "")
 
     # ── Handlers extraction ───────────────────────────────────────────────────
 
     def _start_extraction(self, worker_cls, label: str) -> object | None:
         text = self._get_text()
         if not text:
-            self._ai_progress_lbl.setText("Écris d'abord un scénario.")
+            self._ai_progress_lbl.setText("Écris d'abord un conducteur.")
             return None
         self._ai_progress_bar.setRange(0, 0)
         self._set_ai_busy(True)
@@ -1304,7 +1348,7 @@ class PageScenario(QWidget):
     def _on_gen_characters(self):
         text = self._get_text()
         if not text:
-            self._ai_progress_lbl.setText("Écris d'abord un scénario.")
+            self._ai_progress_lbl.setText("Écris d'abord un conducteur.")
             return
         from ui.dialog_extract_generate import ExtractGenerateDialog
         dlg = ExtractGenerateDialog.for_characters(text, self)
@@ -1315,7 +1359,7 @@ class PageScenario(QWidget):
     def _on_gen_decors(self):
         text = self._get_text()
         if not text:
-            self._ai_progress_lbl.setText("Écris d'abord un scénario.")
+            self._ai_progress_lbl.setText("Écris d'abord un conducteur.")
             return
         from ui.dialog_extract_generate import ExtractGenerateDialog
         dlg = ExtractGenerateDialog.for_decors(text, self)
@@ -1326,7 +1370,7 @@ class PageScenario(QWidget):
     def _on_gen_accessories(self):
         text = self._get_text()
         if not text:
-            self._ai_progress_lbl.setText("Écris d'abord un scénario.")
+            self._ai_progress_lbl.setText("Écris d'abord un conducteur.")
             return
         from ui.dialog_extract_generate import ExtractGenerateDialog
         dlg = ExtractGenerateDialog.for_accessories(text, self)
@@ -1337,7 +1381,7 @@ class PageScenario(QWidget):
     def _on_gen_hmc(self):
         text = self._get_text()
         if not text:
-            self._ai_progress_lbl.setText("Écris d'abord un scénario.")
+            self._ai_progress_lbl.setText("Écris d'abord un conducteur.")
             return
         from ui.dialog_extract_generate import ExtractGenerateDialog
         dlg = ExtractGenerateDialog.for_hmc(text, self)
@@ -1348,7 +1392,7 @@ class PageScenario(QWidget):
     def _on_gen_vehicles(self):
         text = self._get_text()
         if not text:
-            self._ai_progress_lbl.setText("Écris d'abord un scénario.")
+            self._ai_progress_lbl.setText("Écris d'abord un conducteur.")
             return
         from ui.dialog_extract_generate import ExtractGenerateDialog
         dlg = ExtractGenerateDialog.for_vehicles(text, self)
@@ -1404,7 +1448,7 @@ class PageScenario(QWidget):
         if text:
             te.setPlainText(text)
         else:
-            te.setPlaceholderText(translate("Le scénario mis en page apparaît ici au fil de la génération…"))
+            te.setPlaceholderText(translate("Le conducteur mis en page apparaît ici au fil de la génération…"))
         _f = QFont("Courier New", 11)
         _f.setStyleHint(QFont.StyleHint.TypeWriter)
         te.setFont(_f)
@@ -1628,7 +1672,7 @@ class PageScenario(QWidget):
         btn_direct.setFixedHeight(36)
         btn_direct.setEnabled(not streaming)
         btn_direct.setToolTip(translate(
-            "Claude réécrit le scénario en appliquant directement les suggestions.\n"
+            "Claude réécrit le conducteur en appliquant directement les suggestions.\n"
             "Le résultat apparaît ici pour prévisualisation avant d'être appliqué."
         ))
         btn_direct.setStyleSheet(
@@ -1640,7 +1684,7 @@ class PageScenario(QWidget):
             f"border:1px solid {CP['border']};}}"
         )
 
-        btn_update = QPushButton("↩  Mettre à jour le scénario")
+        btn_update = QPushButton("↩  Mettre à jour le conducteur")
         btn_update.setFixedHeight(36)
         btn_update.setEnabled(False)
         btn_update.setVisible(False)
@@ -1682,7 +1726,7 @@ class PageScenario(QWidget):
                 f"color:{CP['accent']};font-size:10px;font-family:'Consolas',monospace;"
             )
             te.clear()
-            te.setPlaceholderText(translate("Le scénario réécrit apparaît ici…"))
+            te.setPlaceholderText(translate("Le conducteur réécrit apparaît ici…"))
             _f = QFont("Courier New", 11)
             _f.setStyleHint(QFont.StyleHint.TypeWriter)
             te.setFont(_f)
@@ -1737,7 +1781,7 @@ class PageScenario(QWidget):
                 self._set_editor_text(result)
                 if self._current is not None:
                     self._current["formatted_content"] = result
-                self._ai_progress_lbl.setText("Scénario réécrit et appliqué ✓")
+                self._ai_progress_lbl.setText("Conducteur réécrit et appliqué ✓")
                 self._btn_undo_action.setVisible(True)
                 dlg.accept()
 
@@ -1820,7 +1864,7 @@ class PageScenario(QWidget):
                 self._set_editor_text(final)
                 if self._current is not None:
                     self._current["formatted_content"] = final
-                self._ai_progress_lbl.setText("Scénario co-écrit appliqué ✓")
+                self._ai_progress_lbl.setText("Conducteur co-écrit appliqué ✓")
                 self._btn_undo_action.setVisible(True)
 
     def _open_refs_window(self, analysis: str = "", worker=None):
@@ -1974,20 +2018,20 @@ class PageScenario(QWidget):
             f"border:1px solid {CP['border']};}}"
         )
 
-        btn_enrich = QPushButton(translate("◎  Enrichir le scénario"))
+        btn_enrich = QPushButton(translate("◎  Enrichir le conducteur"))
         btn_enrich.setFixedHeight(36)
         btn_enrich.setEnabled(not streaming)
         btn_enrich.setToolTip(
-            "Claude croise l'analyse visuelle avec le scénario et enrichit\n"
+            "Claude croise l'analyse visuelle avec le conducteur et enrichit\n"
             "les descriptions correspondantes (personnages, décors, ambiances)."
         )
         btn_enrich.setStyleSheet(_accent_btn_ss)
 
-        btn_apply = QPushButton("✓  Appliquer au scénario")
+        btn_apply = QPushButton("✓  Appliquer au conducteur")
         btn_apply.setFixedHeight(36)
         btn_apply.setEnabled(False)
         btn_apply.setVisible(False)
-        btn_apply.setToolTip("Remplace le scénario actuel par la version enrichie.")
+        btn_apply.setToolTip("Remplace le conducteur actuel par la version enrichie.")
         btn_apply.setStyleSheet(_accent_btn_ss)
 
         _final_analysis = [analysis]   # analyse visuelle complète
@@ -2009,13 +2053,13 @@ class PageScenario(QWidget):
             btn_close.setStyleSheet(_refs_cancel_ss)
 
             # ── Bascule en phase "enrichissement" ─────────────────────────────
-            title_lbl.setText("✦  Enrichissement du scénario")
+            title_lbl.setText("✦  Enrichissement du conducteur")
             self._refs_status_lbl.setText("Enrichissement en cours…")
             self._refs_status_lbl.setStyleSheet(
                 f"color:{CP['accent']};font-size:10px;font-family:'Consolas',monospace;"
             )
             te.clear()
-            te.setPlaceholderText(translate("Le scénario enrichi apparaît ici au fil de la génération…"))
+            te.setPlaceholderText(translate("Le conducteur enrichi apparaît ici au fil de la génération…"))
             btn_enrich.setEnabled(False)
             btn_enrich.setVisible(False)
 
@@ -2058,7 +2102,7 @@ class PageScenario(QWidget):
                 self._set_editor_text(result)
                 if self._current is not None:
                     self._current["formatted_content"] = result
-                self._ai_progress_lbl.setText("Scénario enrichi par les références visuelles ✓")
+                self._ai_progress_lbl.setText("Conducteur enrichi par les références visuelles ✓")
                 self._btn_undo_action.setVisible(True)
                 dlg.accept()
 
@@ -2333,7 +2377,7 @@ class PageScenario(QWidget):
     def _on_generate_all(self):
         """Fenêtre de confirmation, puis pipeline complet si accepté."""
         if not self._get_text():
-            self._ai_progress_lbl.setText("Écris d'abord un scénario.")
+            self._ai_progress_lbl.setText("Écris d'abord un conducteur.")
             return
 
         # Comptage des éléments existants pour l'estimation
@@ -2372,7 +2416,7 @@ class PageScenario(QWidget):
 
         body = _QL(translate(
             "Vous êtes sur le point de lancer la génération complète :\n\n"
-            "  ☁  Extraction depuis le scénario (Claude IA)\n"
+            "  ☁  Extraction depuis le conducteur (Claude IA)\n"
             "       personnages · décors · accessoires · HMC · véhicules · storyboard\n\n"
             "  ◉  Génération d'images (Nano Banana)\n"
             "       1 image par personnage · 1 image par décor · 1 image par accessoire\n"
@@ -2443,7 +2487,7 @@ class PageScenario(QWidget):
             "ce que vous validez.\n\n"
             "« Tout générer » est pratique pour un premier jet rapide, mais chaque image "
             "générée automatiquement est facturée — le coût peut rapidement devenir élevé "
-            "si le scénario contient de nombreux éléments."
+            "si le conducteur contient de nombreux éléments."
         ))
         advice.setWordWrap(True)
         advice.setStyleSheet(
@@ -2462,7 +2506,7 @@ class PageScenario(QWidget):
             "Avant de régénérer, cette opération va d'abord supprimer\n"
             "TOUS les personnages, décors, accessoires, HMC, véhicules\n"
             "et plans storyboard existants.\n\n"
-            "Cette action est irréversible. Partez d'un scénario finalisé."
+            "Cette action est irréversible. Partez d'un conducteur finalisé."
         ))
         warn_delete.setWordWrap(True)
         warn_delete.setStyleSheet(

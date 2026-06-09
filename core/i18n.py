@@ -220,7 +220,16 @@ _FR_TO_EN: dict[str, str] = {
     "Écrivez la trame de votre performance d'abord.":
         "Write the outline of your performance first.",
     "Génération du découpage avec Claude…": "Generating the breakdown with Claude…",
+    "Génération du découpage via Claude…":  "Generating the breakdown via Claude…",
     "segments générés →":                  "segments generated →",
+    "Mise en page du conducteur via Claude…": "Formatting the rundown via Claude…",
+    "Arrangement du conducteur via Claude…":  "Arranging the rundown via Claude…",
+    "Conducteur mis à jour par Claude ✓":  "Rundown updated by Claude ✓",
+    "Découpe le conducteur en séquence (Live/Mapping)":
+        "Breaks the rundown into a sequence (Live/Mapping)",
+    "Écris d'abord un texte à mettre en page.": "Write a text to format first.",
+    "Écris d'abord un texte à analyser.":  "Write a text to analyze first.",
+    "Écris d'abord un conducteur à découper.": "Write a rundown to break down first.",
     # Panneau Conducteur (Claude IA / Générer / Références)
     "☁  Claude IA":                        "☁  Claude AI",
     "☁  Générer depuis le conducteur":     "☁  Generate from the rundown",
