@@ -40,11 +40,11 @@ class _LiveNavItem(QWidget):
         super().__init__()
         self._key    = key
         self._active = False
-        self.setFixedHeight(54)
+        self.setFixedHeight(44)
         self.setCursor(Qt.CursorShape.PointingHandCursor)
 
         outer = QHBoxLayout(self)
-        outer.setContentsMargins(10, 3, 8, 3)
+        outer.setContentsMargins(10, 2, 8, 2)
         outer.setSpacing(10)
         outer.setAlignment(Qt.AlignmentFlag.AlignVCenter)
 
@@ -121,13 +121,22 @@ class _LiveNavItem(QWidget):
 # ── Sidebar Live ──────────────────────────────────────────────────────────────
 
 # (icône emoji, libellé FR, clé)
+# (icône emoji, libellé FR, clé)
+# Onglets retirés pour le moment (code conservé) : "Outils Mapping" (page_mapping)
+# et "Contrôleur Resolume" (page_live). À réactiver quand nécessaire.
 _NAV_ITEMS = [
-    ("✦", "Studio IA",  "studio"),
-    ("▤", "Séquences",  "sequences"),
-    ("◳", "Mapping",    "mapping"),
-    ("▦", "Resolume",   "resolume"),
+    ("⊞", "Projets",             "projects"),
+    ("✎", "Conducteur",          "conducteur"),
     None,
-    ("⚙", "Paramètres", "settings"),
+    ("▤", "Séquences Live",      "seq_live"),
+    ("▥", "Séquences Mapping",   "seq_mapping"),
+    None,
+    ("☺", "Casting",             "casting"),
+    ("❖", "Accessoires",         "accessoires"),
+    ("⛟", "Véhicules",           "vehicules"),
+    None,
+    ("✦", "Studio IA",           "studio"),
+    ("⚙", "Paramètres",          "settings"),
 ]
 
 
@@ -211,12 +220,12 @@ class _LiveSidebar(QWidget):
         self._items: dict[str, _LiveNavItem] = {}
         for entry in _NAV_ITEMS:
             if entry is None:
-                lay.addStretch()
+                lay.addSpacing(6)
                 sep = QFrame()
                 sep.setFixedHeight(1)
-                sep.setStyleSheet(f"background:{CP['border']};margin:0 12px;")
+                sep.setStyleSheet("background:rgba(255,255,255,0.06);margin:0 16px;")
                 lay.addWidget(sep)
-                lay.addSpacing(4)
+                lay.addSpacing(6)
                 continue
             icon, label, key = entry
             item = _LiveNavItem(icon, translate(label), key)
@@ -224,6 +233,7 @@ class _LiveSidebar(QWidget):
             self._items[key] = item
             lay.addWidget(item)
 
+        lay.addStretch()   # pousse Manuel / Contact tout en bas (groupes restent compacts)
         lay.addSpacing(4)
 
         # ── Boutons bas : Manuel / Contact ────────────────────────────────────
@@ -288,11 +298,16 @@ class LiveWindow(QMainWindow):
 
     # nav key → clé de corpus de l'assistant
     _ASSIST_CTX = {
-        "studio":    "live_studio",
-        "sequences": "live_sequences",
-        "mapping":   "mapping",
-        "resolume":  "resolume",
-        "settings":  "live_settings",
+        "conducteur":  "live_conducteur",
+        "casting":     "live_casting",
+        "accessoires": "live_accessoires",
+        "vehicules":   "live_vehicules",
+        "seq_live":    "live_sequences",
+        "seq_mapping": "live_seq_mapping",
+        "studio":      "live_studio",
+        "mapping":     "mapping",
+        "resolume":    "resolume",
+        "settings":    "live_settings",
     }
 
     def __init__(self, project: dict | None = None):
@@ -334,7 +349,8 @@ class LiveWindow(QMainWindow):
         self._stack   = QStackedWidget()
         self._stack.setStyleSheet(f"background:{CP['bg0']};")
 
-        self._assistant        = AssistantPanel()
+        from ui.live_pages import AssistantPanelLive
+        self._assistant        = AssistantPanelLive()
         self._assistant.setVisible(True)
         self._assistant_toggle = AssistantToggleStrip(self._assistant)
 
@@ -352,37 +368,63 @@ class LiveWindow(QMainWindow):
         self._sidebar.contact_requested.connect(self._on_contact)
         self._sidebar.lang_change_requested.connect(self._on_lang_change)
 
-        self._navigate("studio")
+        self._navigate("conducteur")
 
     def _build_pages(self):
-        # Studio IA Live (dédié) — Génération directe (+ styles VJ), Générer depuis
-        # Séquences (placeholder), Vidéothèque, Historique. Pas de DaVinci.
-        # TODO : mode loop Resolume (première image = dernière).
+        # Toutes les pages ci-dessous sont des VERSIONS LIVE INDÉPENDANTES
+        # (sous-classes dédiées, voir ui/live_pages.py) → modifiables sans toucher Cinéma.
+        from ui.live_pages import (
+            ProjetsLivePage, ConducteurPage, SequenceLivePage, SequenceMappingPage,
+            CastingLivePage, AccessoiresLivePage, VehiculesLivePage,
+        )
+
+        # ── Projets ─────────────────────────────────────────────────────────────
+        projects = ProjetsLivePage(self._project)
+        projects.switch_requested.connect(self.switch_requested)
+        self._pages["projects"] = projects
+
+        # ── Conducteur (version Live du Scénario) ───────────────────────────────
+        conducteur = ConducteurPage()
+        conducteur.navigate_requested.connect(lambda key, extra=None: self._navigate(key))
+        self._pages["conducteur"] = conducteur
+
+        # ── Séquences Live + Mapping (versions Live du Storyboard) ──────────────
+        self._pages["seq_live"]    = SequenceLivePage()
+        self._pages["seq_mapping"] = SequenceMappingPage()
+
+        # ── Casting / Accessoires / Véhicules (versions Live) ──────────────────
+        self._pages["casting"]     = CastingLivePage()
+        self._pages["accessoires"] = AccessoiresLivePage()
+        self._pages["vehicules"]   = VehiculesLivePage()
+
+        # ── Studio IA Live (dédié) ──────────────────────────────────────────────
         from ui.live_studio_widget import LiveStudioWidget
         studio = LiveStudioWidget()
-        studio.open_resolume.connect(lambda: self._navigate("resolume"))
+        studio.open_resolume.connect(lambda: None)   # Resolume retiré pour le moment
         self._pages["studio"] = studio
-
-        from ui.page_live_sequences import PageLiveSequences
-        self._pages["sequences"] = PageLiveSequences()
-
-        from ui.page_mapping import PageMapping
-        self._pages["mapping"] = PageMapping()
-
-        # Page Resolume existante — conservée dans un onglet (évaluation)
-        from ui.page_live import PageLive
-        self._pages["resolume"] = PageLive()
 
         from ui.page_live_settings import PageLiveSettings
         self._pages["settings"] = PageLiveSettings()
 
-        for key in ("studio", "sequences", "mapping", "resolume", "settings"):
+        for key in ("projects", "conducteur", "seq_live", "seq_mapping", "casting",
+                    "accessoires", "vehicules", "studio", "settings"):
             self._stack.addWidget(self._pages[key])
 
     def _navigate(self, key: str):
         if key not in self._pages:
             return
-        self._stack.setCurrentWidget(self._pages[key])
+        page = self._pages[key]
+        # Storyboard partagé : bascule le namespace selon la séquence (Live/Mapping),
+        # ou revient au namespace par défaut "storyboard" pour les autres pages.
+        import core.storyboard as _sb
+        _live_ns = getattr(page, "_live_ns", None)
+        _sb.set_namespace(_live_ns or "storyboard")
+        if _live_ns and hasattr(page, "refresh"):
+            try:
+                page.refresh()
+            except Exception:
+                pass
+        self._stack.setCurrentWidget(page)
         self._sidebar.set_active(key)
         # Contexte de l'assistant
         ctx = self._ASSIST_CTX.get(key)
@@ -392,12 +434,12 @@ class LiveWindow(QMainWindow):
     # ── Handlers ────────────────────────────────────────────────────────────────
 
     def _on_manual(self):
-        from ui.dialog_user_manual import UserManualDialog
-        UserManualDialog(self).exec()
+        from ui.live_pages import UserManualDialogLive
+        UserManualDialogLive(self).exec()
 
     def _on_contact(self):
-        from ui.dialog_contact import ContactDialog
-        ContactDialog(self).exec()
+        from ui.live_pages import ContactDialogLive
+        ContactDialogLive(self).exec()
 
     def _on_lang_change(self, new_lang: str):
         if new_lang == get_lang():

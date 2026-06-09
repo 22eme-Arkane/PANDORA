@@ -341,6 +341,9 @@ class PandoraWindow(QMainWindow):
         _ctx.set_project_id(pid)
         _ctx.set_project_path(project.get("_path", ""))
         migrate_legacy_data(pid)  # no-op after first run; always uses oldest project
+        # Réinitialise le namespace storyboard (PANDORA | Live peut l'avoir changé)
+        import core.storyboard as _sb_ns
+        _sb_ns.set_namespace("storyboard")
 
         self.setWindowTitle(f"PANDORA — {project.get('name', 'Projet')}")
         self.setMinimumSize(1100, 720)

@@ -7,9 +7,21 @@ from core.paths import APP_ROOT as _ROOT
 _FALLBACK_SB_DIR = os.path.join(_ROOT, "data", "storyboard")
 
 
+# Namespace du storyboard : permet à PANDORA | Live de réutiliser la même page
+# Storyboard avec des données séparées (live_seq_live / live_seq_mapping) sans
+# toucher au comportement Cinéma (défaut "storyboard").
+_NAMESPACE = "storyboard"
+
+def set_namespace(ns: str):
+    global _NAMESPACE
+    _NAMESPACE = ns or "storyboard"
+
+def get_namespace() -> str:
+    return _NAMESPACE
+
 def _sb_dir() -> str:
     from core.context import get_data_root
-    return os.path.join(get_data_root(), "storyboard")
+    return os.path.join(get_data_root(), _NAMESPACE)
 
 DEFAULT_VERSION_ID = "default"
 

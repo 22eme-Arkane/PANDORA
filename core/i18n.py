@@ -167,7 +167,146 @@ _FR_TO_EN: dict[str, str] = {
     "Aucun style":                         "No style",
     "Images de référence":                 "Reference images",
     "Ajouter une image de référence":      "Add a reference image",
+    "Mapping source":                      "Mapping source",
+    "Ajouter l'image à mapper":            "Add the image to map",
+    "Contexte injecté":                    "Injected context",
+    "prompt vide":                         "empty prompt",
+    "image(s) jointe(s) en référence":     "reference image(s) attached",
+    "dont mapping verrouillé":             "incl. locked mapping",
+    "traduction automatique en anglais avant envoi":
+        "automatic translation to English before sending",
+    "Image du lieu/objet à mapper — gardée identique (caméra fixe). "
+    "Seuls lumière, ambiance et fond peuvent changer via le prompt.":
+        "Image of the place/object to map — kept identical (locked camera). "
+        "Only lighting, atmosphere and background may change via the prompt.",
     "Générer depuis Séquences":            "Generate from Sequences",
+    # Nav Live (nouvelles sections)
+    "Conducteur":                          "Rundown",
+    "Séquences Live":                      "Live Sequences",
+    "Séquences Mapping":                   "Mapping Sequences",
+    "Outils de mapping":                   "Mapping tools",
+    "Contrôleur Resolume":                 "Resolume controller",
+    # Pages Casting / Accessoires / Véhicules Live
+    "Ajouter un personnage":               "Add a character",
+    "Ajouter un accessoire":               "Add a prop",
+    "Ajouter un véhicule":                 "Add a vehicle",
+    "Nom du personnage":                   "Character name",
+    "Nom de l'accessoire":                 "Prop name",
+    "Nom du véhicule":                     "Vehicle name",
+    "Rôle / type":                         "Role / type",
+    "Catégorie":                           "Category",
+    "Apparence, costume, style visuel…":   "Appearance, costume, visual style…",
+    "Matière, couleur, état…":             "Material, color, condition…",
+    "Marque, modèle, couleur, état…":      "Make, model, color, condition…",
+    "Aucun élément. Cliquez « + » pour en créer un.":
+        "No item yet. Click “+” to create one.",
+    "Nouvel élément":                      "New item",
+    "Nom":                                 "Name",
+    "Générer une image":                   "Generate an image",
+    "Ajouter une image":                   "Add an image",
+    "Nom requis":                          "Name required",
+    "Donnez un nom à l'élément.":          "Give the item a name.",
+    "Donnez un nom avant d'ajouter des images.":
+        "Give a name before adding images.",
+    "Choisir une ou plusieurs images":     "Choose one or more images",
+    "Description requise":                 "Description required",
+    "Décrivez l'élément pour générer une image.":
+        "Describe the item to generate an image.",
+    # Conducteur
+    "Mode :":                              "Mode:",
+    "Conducteur enregistré.":              "Rundown saved.",
+    "Générer le découpage avec Claude":    "Generate the breakdown with Claude",
+    "Trame vide":                          "Empty outline",
+    "Écrivez la trame de votre performance d'abord.":
+        "Write the outline of your performance first.",
+    "Génération du découpage avec Claude…": "Generating the breakdown with Claude…",
+    "segments générés →":                  "segments generated →",
+    # Panneau Conducteur (Claude IA / Générer / Références)
+    "☁  Claude IA":                        "☁  Claude AI",
+    "☁  Générer depuis le conducteur":     "☁  Generate from the rundown",
+    "◎  Références visuelles":             "◎  Visual references",
+    "Références visuelles":                "Visual references",
+    "Mise en page":                        "Layout",
+    "Met en forme la trame (typée Live/Mapping)": "Formats the outline (Live/Mapping-typed)",
+    "Proposer un arrangement":             "Propose an arrangement",
+    "Réécrit une version améliorée de la trame": "Rewrites an improved version of the outline",
+    "Générer le casting":                  "Generate the casting",
+    "Identifier les personnages depuis la trame": "Identify characters from the outline",
+    "Générer les accessoires":             "Generate the props",
+    "Identifier les accessoires depuis la trame": "Identify props from the outline",
+    "Générer les véhicules":               "Generate the vehicles",
+    "Identifier les véhicules depuis la trame": "Identify vehicles from the outline",
+    "Générer le découpage":                "Generate the breakdown",
+    "Découpe la trame en séquence (Live/Mapping)": "Breaks the outline into a sequence (Live/Mapping)",
+    "Tout générer":                        "Generate all",
+    "Casting + accessoires + véhicules + découpage": "Casting + props + vehicles + breakdown",
+    "Ajouter des images":                  "Add images",
+    "Photos de lieux, ambiances, références": "Photos of places, moods, references",
+    "Analyser avec Claude":                "Analyze with Claude",
+    "Enrichit la trame à partir des images": "Enriches the outline from the images",
+    "Mise en page en cours via Claude…":   "Formatting via Claude…",
+    "Arrangement en cours via Claude…":    "Arranging via Claude…",
+    "Trame mise à jour par Claude.":       "Outline updated by Claude.",
+    "Extraction en cours via Claude…":     "Extracting via Claude…",
+    "éléments ajoutés à":                  "items added to",
+    "Lancer l'extraction du casting, des accessoires, des véhicules et "
+    "le découpage depuis la trame ?":
+        "Run extraction of casting, props, vehicles and the breakdown from the outline?",
+    "Tout générer — en cours via Claude…": "Generate all — running via Claude…",
+    "Tout générer terminé.":               "Generate all finished.",
+    "Choisir des images de référence":     "Choose reference images",
+    "Ajoutez d'abord des images de référence.": "Add reference images first.",
+    "Analyse des références avec Claude…": "Analyzing references with Claude…",
+    "Trame enrichie depuis les références.": "Outline enriched from the references.",
+    "Écrivez la trame de votre performance… (ambiances, moments, montée, "
+    "ruptures, final). Claude la découpera en segments selon le mode choisi.":
+        "Write the outline of your performance… (moods, moments, build-up, breaks, "
+        "finale). Claude will break it into segments based on the chosen mode.",
+    "Mode Mapping : la trame sera découpée en une séquence CONTINUE projetée "
+    "sur une façade verrouillée (caméra fixe, raccord automatique).":
+        "Mapping mode: the outline will be broken into a CONTINUOUS sequence projected "
+        "onto a locked facade (static camera, automatic continuity).",
+    "Mode Live : la trame sera découpée en une suite de plans/loops pour "
+    "votre performance VJ (valeurs de plan, mouvements).":
+        "Live mode: the outline will be broken into a series of shots/loops for your "
+        "VJ performance (shot sizes, movements).",
+    # Séquences
+    "Source de mapping :":                 "Mapping source:",
+    "Choisir la façade…":                  "Choose facade…",
+    "Choisir la façade à mapper":          "Choose the facade to map",
+    "Raccord continu (un seul plan long)": "Continuous take (one long shot)",
+    "Ajouter un plan":                     "Add a shot",
+    "Aucun plan. Cliquez « + » ou générez le découpage depuis le Conducteur.":
+        "No shot yet. Click “+” or generate the breakdown from the Rundown.",
+    "(plan sans description)":             "(shot without description)",
+    "Aucun plan sélectionné":              "No shot selected",
+    "Valeur de plan":                      "Shot size",
+    "Mouvement":                           "Movement",
+    "Supprimer ce plan":                   "Delete this shot",
+    "Plan":                                "Shot",
+    "Écrivez la trame de votre performance. À la création, vous choisissez "
+    "Live ou Mapping : l'arrangement avec Claude et la mise en page PANDORA "
+    "sont alors calibrés pour produire un découpage adapté — séquence live "
+    "ou séquence à mapper. À venir.":
+        "Write the outline of your performance. When creating it, you choose Live or "
+        "Mapping: the Claude arrangement and the PANDORA layout are then calibrated to "
+        "produce a suitable breakdown — a live sequence or a sequence to map. Coming soon.",
+    "Personnages et performers de la performance, propres au module Live "
+    "(générés et stockés séparément du Cinéma). À venir.":
+        "Characters and performers of the show, specific to the Live module (generated "
+        "and stored separately from Cinema). Coming soon.",
+    "Objets et accessoires propres au Live, avec leurs images de référence. "
+    "À venir.":
+        "Objects and props specific to Live, with their reference images. Coming soon.",
+    "Véhicules propres au Live, avec leurs images de référence. À venir.":
+        "Vehicles specific to Live, with their reference images. Coming soon.",
+    "Séquence destinée à être mappée sur un bâtiment. On choisit la source "
+    "de mapping (façade), puis on construit une séquence continue où les plans "
+    "s'enchaînent via le raccord automatique — pour ne former qu'un seul plan "
+    "long. À venir.":
+        "A sequence meant to be mapped onto a building. You pick the mapping source "
+        "(facade), then build a continuous sequence where shots chain together via "
+        "auto-continuity — forming a single long take. Coming soon.",
     "Cet onglet générera les loops directement à partir de vos séquences "
     "(onglet Séquences) : choix du segment, du style et du moteur, puis envoi "
     "vers Resolume. Disponible une fois les Séquences construites.":

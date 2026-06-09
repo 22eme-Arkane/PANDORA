@@ -175,6 +175,94 @@ class _ImagePicker(QWidget):
         self._thumb.setPixmap(QPixmap())
 
 
+# ── Carré de référence visuelle « + » (style PANDORA, réutilisable) ─────────────
+
+class _RefSquare(QWidget):
+    """Carré 60×60 — '+' vide ou miniature de l'image chargée, avec bouton × pour retirer."""
+    picked  = pyqtSignal(str)
+    cleared = pyqtSignal()
+
+    _SZ = 60
+
+    def __init__(self, tooltip: str = "Ajouter une image de référence", parent=None):
+        super().__init__(parent)
+        self.setFixedSize(self._SZ, self._SZ)
+        self._path = ""
+
+        self._btn_pick = QPushButton("+", self)
+        self._btn_pick.setFixedSize(self._SZ, self._SZ)
+        self._btn_pick.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._btn_pick.setToolTip(tooltip)
+        self._btn_pick.setStyleSheet(
+            f"QPushButton{{background:transparent;color:{C['text_dim']};"
+            f"border:1px dashed {C['border_bright']};border-radius:8px;"
+            f"font-size:24px;font-weight:300;padding:0;}}"
+            f"QPushButton:hover{{color:{C['accent']};border-color:{C['accent']};"
+            f"background:rgba(124,107,255,0.08);}}"
+            f"QPushButton:pressed{{background:rgba(124,107,255,0.16);}}"
+        )
+        self._btn_pick.clicked.connect(self._on_pick)
+
+        self._thumb = QLabel(self)
+        self._thumb.setGeometry(0, 0, self._SZ, self._SZ)
+        self._thumb.setScaledContents(True)
+        self._thumb.setStyleSheet("border-radius:8px;")
+        self._thumb.setVisible(False)
+
+        self._btn_clear = QPushButton("×", self)
+        self._btn_clear.setFixedSize(16, 16)
+        self._btn_clear.move(self._SZ - 18, 2)
+        self._btn_clear.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._btn_clear.setStyleSheet(
+            f"QPushButton{{background:{C['bg2']};color:{C['text_dim']};"
+            f"border:1px solid {C['border']};border-radius:3px;font-size:9px;padding:0;}}"
+            f"QPushButton:hover{{color:{C['red']};border-color:{C['red']};background:{C['bg3']};}}"
+        )
+        self._btn_clear.setVisible(False)
+        self._btn_clear.clicked.connect(self._on_clear)
+
+        lay = QVBoxLayout(self)
+        lay.setContentsMargins(0, 0, 0, 0)
+        lay.addWidget(self._btn_pick)
+
+    def path(self) -> str:
+        return self._path
+
+    def set_path(self, path: str):
+        if path and os.path.isfile(path):
+            self._path = path
+            pix = QPixmap(path).scaled(
+                self._SZ, self._SZ,
+                Qt.AspectRatioMode.KeepAspectRatioByExpanding,
+                Qt.TransformationMode.SmoothTransformation,
+            )
+            self._thumb.setPixmap(pix)
+            self._thumb.setVisible(True)
+            self._btn_pick.setVisible(False)
+            self._btn_clear.setVisible(True)
+        else:
+            self._clear_state()
+
+    def _clear_state(self):
+        self._path = ""
+        self._thumb.setVisible(False)
+        self._btn_pick.setVisible(True)
+        self._btn_clear.setVisible(False)
+
+    def _on_pick(self):
+        path, _ = QFileDialog.getOpenFileName(
+            self, "Choisir une image de référence", "",
+            "Images (*.png *.jpg *.jpeg *.webp *.bmp);;Tous les fichiers (*)",
+        )
+        if path:
+            self.set_path(path)
+            self.picked.emit(path)
+
+    def _on_clear(self):
+        self._clear_state()
+        self.cleared.emit()
+
+
 # ── Sous-formulaires par moteur ────────────────────────────────────────────────
 
 class _KlingI2VForm(QWidget):
@@ -1009,6 +1097,20 @@ class _Sora2Form(QWidget):
 
 # ── Tab principal ──────────────────────────────────────────────────────────────
 
+# Consigne injectée quand une « Mapping source » est fournie (image verrouillée).
+_MAPPING_LOCK = (
+    "The first frame must exactly match the reference image: identical "
+    "subject, identical perspective, identical window/element positions, "
+    "identical proportions and architecture. Do not redraw, reframe, or "
+    "alter the geometry of the structure. Static locked-off camera, fixed "
+    "frame, no camera movement (no pan, no tilt, no zoom in or out, no "
+    "dolly, no rotation, no perspective change). The facade/object stays "
+    "geometrically identical to the reference for the whole clip; only "
+    "lighting, time of day, atmosphere, colors and background may change "
+    "as described next."
+)
+
+
 class TabVideoEngines(QWidget):
     """Onglet génération directe multi-moteurs."""
     generation_done = pyqtSignal(dict)
@@ -1053,6 +1155,15 @@ class TabVideoEngines(QWidget):
         lay = QVBoxLayout(container)
         lay.setContentsMargins(24, 20, 24, 24)
         lay.setSpacing(16)
+        # Réfs pour l'insertion optionnelle du sélecteur de styles VJ (PANDORA | Live).
+        # Inertes pour Cinéma : enable_vj_style_selector() n'est jamais appelé là.
+        self._main_lay = lay
+        self._vj_style_combo = None
+        self._ref_squares = None
+        self._mapping_squares = None
+        self._live_extra = 0   # nb de widgets Live insérés avant le prompt
+        self._inj_preview_body = None
+        self._inj_preview_open = False
 
         # ── En-tête ────────────────────────────────────────────────────────────
         lay.addWidget(HelpBlock("Génération Directe — Multi-moteurs IA", [
@@ -1085,6 +1196,9 @@ class TabVideoEngines(QWidget):
                     item.setForeground(_QBrush(_QColor(C['text_dim'])))
         self._engine_combo.currentIndexChanged.connect(self._on_engine_changed)
         lay.addWidget(self._engine_combo)
+
+        # Point d'insertion du sélecteur de styles VJ (Live) — juste avant le prompt
+        self._vj_insert_index = lay.count()
 
         # ── Prompt header : label + bouton améliorer à droite ─────────────────
         _prompt_hdr = QHBoxLayout()
@@ -1194,6 +1308,15 @@ class TabVideoEngines(QWidget):
         lay.addWidget(self._result_card)
         lay.addStretch()
 
+        # PANDORA | Live : active les outils VJ / Mapping (génération de loops)
+        try:
+            self.enable_vj_style_selector()
+            self.enable_reference_images()
+            self.enable_mapping_source()
+            self.enable_injection_preview()
+        except Exception:
+            pass
+
     # ── Changement moteur ──────────────────────────────────────────────────────
 
     def _on_engine_changed(self, idx: int):
@@ -1213,6 +1336,232 @@ class TabVideoEngines(QWidget):
             new_prompt = getattr(self._forms[idx], "_prompt", None)
             if new_prompt is not None and not new_prompt.toPlainText().strip():
                 new_prompt.setPlainText(carried)
+
+    # ── Sélecteur de styles VJ (PANDORA | Live uniquement) ──────────────────────
+
+    def enable_vj_style_selector(self):
+        """Insère un menu déroulant « Template de style » (20 styles VJ) au-dessus du
+        prompt. Choisir un style charge son prompt de loop dans le champ prompt du
+        moteur courant. Appelé seulement par PANDORA | Live — Cinéma n'est pas touché.
+        """
+        if self._vj_style_combo is not None:
+            return
+        import core.vj_styles as vj
+
+        self._vj_section = _section(translate("Template de style"))
+        self._vj_style_combo = QComboBox()
+        self._vj_style_combo.setMinimumHeight(34)
+        self._vj_style_combo.setStyleSheet(_combo_style())
+        self._vj_style_combo.addItem(translate("Aucun style"), "")
+        for s in vj.get_styles():
+            self._vj_style_combo.addItem(vj.localized_name(s), s["key"])
+        self._vj_style_combo.currentIndexChanged.connect(self._on_vj_style_changed)
+
+        base = self._vj_insert_index + self._live_extra
+        self._main_lay.insertWidget(base, self._vj_section)
+        self._main_lay.insertWidget(base + 1, self._vj_style_combo)
+        self._live_extra += 2
+
+    def _on_vj_style_changed(self, _idx: int):
+        key = self._vj_style_combo.currentData()
+        if not key:
+            return
+        import core.vj_styles as vj
+        st = vj.get_style(key)
+        if not st:
+            return
+        # Charge le prompt du style dans le champ prompt du moteur courant.
+        form = self._current_form()
+        prompt_widget = getattr(form, "_prompt", None)
+        if prompt_widget is not None:
+            prompt_widget.setPlainText(st["prompt"])
+
+    # ── Images de référence (carrés « + ») — PANDORA | Live uniquement ──────────
+
+    def enable_reference_images(self, n: int = 3):
+        """Insère une rangée de carrés « + » pour ajouter jusqu'à n images de référence.
+        Les chemins choisis sont injectés dans params['ref_images'] à la génération.
+        Appelé seulement par PANDORA | Live — Cinéma n'est pas touché.
+        """
+        if self._ref_squares is not None:
+            return
+        cont = QWidget()
+        cont.setStyleSheet("background:transparent;")
+        cl = QVBoxLayout(cont)
+        cl.setContentsMargins(0, 0, 0, 0)
+        cl.setSpacing(6)
+        cl.addWidget(_section(translate("Images de référence")))
+        row = QHBoxLayout()
+        row.setSpacing(8)
+        self._ref_squares = []
+        for _ in range(n):
+            sq = _RefSquare(tooltip=translate("Ajouter une image de référence"))
+            self._ref_squares.append(sq)
+            row.addWidget(sq)
+        row.addStretch()
+        cl.addLayout(row)
+
+        self._main_lay.insertWidget(self._vj_insert_index + self._live_extra, cont)
+        self._live_extra += 1
+
+    def _collect_ref_images(self) -> list:
+        if not self._ref_squares:
+            return []
+        return [s.path() for s in self._ref_squares
+                if s.path() and os.path.isfile(s.path())][:3]
+
+    # ── Mapping source (image verrouillée) — PANDORA | Live uniquement ──────────
+
+    def enable_mapping_source(self, n: int = 2):
+        """Insère une rangée de carrés « + » pour l'image à mapper (façade, objet…).
+        Quand une image est présente, on injecte une consigne forte : Seedance doit
+        garder l'image IDENTIQUE (caméra fixe, pas de zoom/pan/rotation) — seuls la
+        lumière, l'ambiance et le fond peuvent changer. Live uniquement.
+        """
+        if self._mapping_squares is not None:
+            return
+        cont = QWidget()
+        cont.setStyleSheet("background:transparent;")
+        cl = QVBoxLayout(cont)
+        cl.setContentsMargins(0, 0, 0, 0)
+        cl.setSpacing(6)
+        cl.addWidget(_section(translate("Mapping source")))
+        hint = QLabel(translate(
+            "Image du lieu/objet à mapper — gardée identique (caméra fixe). "
+            "Seuls lumière, ambiance et fond peuvent changer via le prompt."
+        ))
+        hint.setWordWrap(True)
+        hint.setStyleSheet(
+            f"color:{C['text_dim']};font-size:10px;background:transparent;border:none;"
+        )
+        cl.addWidget(hint)
+        row = QHBoxLayout()
+        row.setSpacing(8)
+        self._mapping_squares = []
+        for _ in range(n):
+            sq = _RefSquare(tooltip=translate("Ajouter l'image à mapper"))
+            self._mapping_squares.append(sq)
+            row.addWidget(sq)
+        row.addStretch()
+        cl.addLayout(row)
+
+        self._main_lay.insertWidget(self._vj_insert_index + self._live_extra, cont)
+        self._live_extra += 1
+
+    def _collect_mapping_sources(self) -> list:
+        if not self._mapping_squares:
+            return []
+        return [s.path() for s in self._mapping_squares
+                if s.path() and os.path.isfile(s.path())][:2]
+
+    # ── Contexte injecté (aperçu en rouge) — PANDORA | Live uniquement ──────────
+
+    def enable_injection_preview(self):
+        """Encart repliable « Contexte injecté » : montre le prompt complet envoyé,
+        avec le texte utilisateur en clair et tout l'ajout automatique en rouge.
+        À appeler après enable_vj_style_selector / reference_images / mapping_source.
+        """
+        if self._inj_preview_body is not None:
+            return
+
+        cont = QWidget()
+        cont.setStyleSheet("background:transparent;")
+        cl = QVBoxLayout(cont)
+        cl.setContentsMargins(0, 0, 0, 0)
+        cl.setSpacing(6)
+
+        self._inj_header = QPushButton("▶  ◈ " + translate("Contexte injecté"))
+        self._inj_header.setFlat(True)
+        self._inj_header.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._inj_header.setStyleSheet(
+            f"QPushButton{{background:transparent;color:{C['red']};"
+            f"font-size:10px;font-weight:700;letter-spacing:1px;"
+            f"border:none;text-align:left;padding:0;}}"
+            f"QPushButton:hover{{color:#ff7d8a;}}"
+        )
+        self._inj_header.clicked.connect(self._toggle_injection_preview)
+        cl.addWidget(self._inj_header)
+
+        self._inj_preview_body = QLabel("")
+        self._inj_preview_body.setWordWrap(True)
+        self._inj_preview_body.setTextInteractionFlags(
+            Qt.TextInteractionFlag.TextSelectableByMouse
+        )
+        self._inj_preview_body.setVisible(False)
+        self._inj_preview_body.setStyleSheet(
+            f"color:{C['text_secondary']};font-size:10px;"
+            f"font-family:'Consolas',monospace;"
+            f"background:rgba(255,79,106,0.05);border:1px solid rgba(255,79,106,0.25);"
+            f"border-radius:6px;padding:8px 10px;"
+        )
+        cl.addWidget(self._inj_preview_body)
+
+        idx = self._main_lay.indexOf(self._btn_generate)
+        if idx < 0:
+            idx = self._main_lay.count()
+        self._main_lay.insertWidget(idx, cont)
+
+        # Mises à jour en direct
+        for f in self._forms:
+            pw = getattr(f, "_prompt", None)
+            if pw is not None:
+                pw.textChanged.connect(self._refresh_injection_preview)
+        if self._vj_style_combo is not None:
+            self._vj_style_combo.currentIndexChanged.connect(self._refresh_injection_preview)
+        for sq in (self._ref_squares or []) + (self._mapping_squares or []):
+            sq.picked.connect(lambda *_: self._refresh_injection_preview())
+            sq.cleared.connect(self._refresh_injection_preview)
+        self._engine_combo.currentIndexChanged.connect(self._refresh_injection_preview)
+
+        self._refresh_injection_preview()
+
+    def _toggle_injection_preview(self):
+        self._inj_preview_open = not self._inj_preview_open
+        self._inj_preview_body.setVisible(self._inj_preview_open)
+        self._inj_header.setText(
+            ("▼" if self._inj_preview_open else "▶") + "  ◈ " + translate("Contexte injecté")
+        )
+
+    def _refresh_injection_preview(self):
+        if self._inj_preview_body is None:
+            return
+        import html as _html
+        RED  = C["red"]
+        SEC  = C["text_secondary"]
+        DIM  = C["text_dim"]
+
+        form = self._current_form()
+        pw   = getattr(form, "_prompt", None)
+        user = pw.toPlainText().strip() if pw is not None else ""
+        maps = self._collect_mapping_sources()
+        refs = self._collect_ref_images()
+
+        segments = []
+        if maps:
+            segments.append(
+                f"<span style='color:{RED};'>{_html.escape(_MAPPING_LOCK)}</span>"
+            )
+        if user:
+            segments.append(f"<span style='color:{SEC};'>{_html.escape(user)}</span>")
+        elif not maps:
+            segments.append(f"<span style='color:{DIM};'>({translate('prompt vide')})</span>")
+
+        notes = []
+        n_img = len(maps) + len(refs)
+        if n_img:
+            _t = f"+ {n_img} {translate('image(s) jointe(s) en référence')}"
+            if maps:
+                _t += f" ({translate('dont mapping verrouillé')})"
+            notes.append(_t)
+        notes.append("+ " + translate("traduction automatique en anglais avant envoi"))
+
+        notes_html = "<br>".join(
+            f"<span style='color:{RED};'>{_html.escape(n)}</span>" for n in notes
+        )
+        body = " ".join(segments)
+        if notes_html:
+            body += "<br><br>" + notes_html
+        self._inj_preview_body.setText(body)
 
     # ── Amélioration Claude ────────────────────────────────────────────────────
 
@@ -1257,7 +1606,13 @@ class TabVideoEngines(QWidget):
             return
 
         form = self._current_form()
+        maps = self._collect_mapping_sources()
+        refs = self._collect_ref_images()
         err  = form.error()
+        # Une image de référence/mapping conditionne la génération : un prompt texte
+        # vide est alors acceptable (on ne bloque pas sur « prompt requis »).
+        if err and (maps or refs) and "prompt" in err.lower():
+            err = ""
         if err:
             from PyQt6.QtWidgets import QMessageBox
             QMessageBox.warning(self, "Paramètre manquant", err)
@@ -1267,6 +1622,18 @@ class TabVideoEngines(QWidget):
         params = form.get_params()
         if params is None:
             return
+
+        # Images de référence + mapping → reference-to-video côté Seedance.
+        # L'image de mapping passe en premier (référence dominante @Image1).
+        all_refs = (maps + refs)[:4]
+        if all_refs:
+            params["ref_images"] = all_refs
+
+        # Mapping : verrouille l'image source (caméra fixe, géométrie identique).
+        # Seuls lumière / ambiance / fond peuvent changer via le prompt utilisateur.
+        if maps:
+            user_p = (params.get("prompt") or "").strip()
+            params["prompt"] = f"{_MAPPING_LOCK} {user_p}".strip()
 
         if key in ("seedance_t2v", "seedance_fast_t2v"):
             from core.worker import GenerationWorker

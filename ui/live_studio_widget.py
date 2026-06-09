@@ -24,10 +24,9 @@ from PyQt6.QtCore import Qt, pyqtSignal
 
 from ui.styles import C, STYLESHEET
 from core.i18n import translate
-from ui.tab_video_engines import TabVideoEngines
+from ui.live_pages import TabVideoEnginesLive, TabHistoryLive
 from ui.tab_video_library_live import TabVideoLibraryLive
 from ui.tab_modify_live import TabModifyLive
-from ui.tab_history import TabHistory
 
 
 # ── Onglet « Générer depuis Séquences » (placeholder) ──────────────────────────
@@ -110,13 +109,8 @@ class LiveStudioWidget(QWidget):
         self.tabs = QTabWidget()
         self.tabs.setDocumentMode(True)
 
-        # 1. Génération directe (+ sélecteur de style VJ)
-        self.tab_engines = TabVideoEngines()
-        try:
-            self.tab_engines.enable_vj_style_selector()
-            self.tab_engines.enable_reference_images()
-        except Exception:
-            pass
+        # 1. Génération directe (version Live : outils VJ/Mapping activés dans __init__)
+        self.tab_engines = TabVideoEnginesLive()
 
         # 2. Générer depuis Séquences (placeholder)
         self.tab_sequences = _FromSequencesTab()
@@ -127,8 +121,8 @@ class LiveStudioWidget(QWidget):
         # 4. Modifier (Live) — pont depuis la Vidéothèque
         self.tab_modify = TabModifyLive()
 
-        # 5. Historique
-        self.tab_history = TabHistory()
+        # 5. Historique (version Live)
+        self.tab_history = TabHistoryLive()
 
         self.tabs.addTab(self.tab_engines,   translate("Génération directe"))
         self.tabs.addTab(self.tab_sequences, translate("Générer depuis Séquences"))

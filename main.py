@@ -144,13 +144,13 @@ if __name__ == "__main__":
         else:
             win = PandoraWindow(data)
 
-            def _on_switch(new_data: dict):
-                win.hide()
-                win.deleteLater()
-                state["opening"] = False  # ré-entrée autorisée seulement sur changement explicite
-                _open_project(new_data)
+        def _on_switch(new_data: dict):
+            win.hide()
+            win.deleteLater()
+            state["opening"] = False  # ré-entrée autorisée seulement sur changement explicite
+            _open_project(new_data)
 
-            win.switch_requested.connect(_on_switch)
+        win.switch_requested.connect(_on_switch)
 
         if not icon.isNull():
             win.setWindowIcon(icon)

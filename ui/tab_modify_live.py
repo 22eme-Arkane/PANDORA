@@ -24,7 +24,7 @@ from ui.widgets import HelpBlock, show_api_error
 from core.i18n import translate
 from core.worker import GenerationWorker, abandon_thread
 import core.vj_styles as vj
-from ui.tab_video_engines import (
+from ui.tab_video_engines_live import (
     _section, _divider, _combo_style, _prompt_style,
     _slider_style, _btn_accent_style, _btn_ghost_style,
 )

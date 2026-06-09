@@ -133,6 +133,8 @@ def _project_images_dir(subdir: str) -> str:
             import core.vehicles as m; return m.images_dir()
         if subdir == "decors":
             import core.decors as m; return m.images_dir()
+        if subdir in ("live_castings", "live_accessories", "live_vehicles"):
+            import core.live_assets as m; return m.images_dir_for_subdir(subdir)
     except Exception:
         pass
     return get_bin_dir(subdir)
