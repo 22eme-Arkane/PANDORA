@@ -36,6 +36,12 @@ data/Seedance/
 # Conserver uniquement le template vierge
 !data/config.clean.json
 
+# Studio Images — clés API + sorties + données perso (jamais commitées)
+studio_images/config.json
+studio_images/prompts.json
+studio_images/refs/
+studio_images/output/
+
 # ── Claude Code (fichiers internes) ──────────────────────────────────────────
 .claude/
 

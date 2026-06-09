@@ -114,36 +114,47 @@ if __name__ == "__main__":
         _cfg["eula_accepted"] = True
         save_config(_cfg)
 
-    splash = SplashWindow("cinema")
-    if not icon.isNull():
-        splash.setWindowIcon(icon)
-    if get_lang() != "fr":
-        retranslate_widget(splash)
+    # ── Flux de démarrage : sélecteur de module → splash → fenêtre ────────────
+    #   Chooser (Cinéma | Live) → SplashWindow(mode) → PandoraWindow ou LiveWindow.
+    #   Le bouton « retour » du splash ramène au sélecteur.
+    from ui.chooser import ChooserWindow
 
-    _project_opening = [False]
+    state = {"chooser": None, "splash": None, "window": None, "opening": False}
 
-    def _on_project(data: dict):
-        if _project_opening[0]:
+    def _show_chooser():
+        ch = state["chooser"]
+        if ch is not None:
+            ch.show()
+            ch.raise_()
+            ch.activateWindow()
+
+    def _open_project(data: dict):
+        if state["opening"]:
             return
-        _project_opening[0] = True
-        try:
-            splash.project_selected.disconnect(_on_project)
-        except (RuntimeError, TypeError):
-            pass
-        splash.setEnabled(False)
-        splash.hide()
-        win = PandoraWindow(data)
+        state["opening"] = True
+        sp = state["splash"]
+        if sp is not None:
+            sp.setEnabled(False)
+            sp.hide()
+
+        mode = data.get("mode", "cinema")
+        if mode == "live":
+            from live_window import LiveWindow
+            win = LiveWindow(data)
+        else:
+            win = PandoraWindow(data)
+
+            def _on_switch(new_data: dict):
+                win.hide()
+                win.deleteLater()
+                state["opening"] = False  # ré-entrée autorisée seulement sur changement explicite
+                _open_project(new_data)
+
+            win.switch_requested.connect(_on_switch)
+
         if not icon.isNull():
             win.setWindowIcon(icon)
-        # _project_opening stays True — blocks any queued splash clicks still in the event queue
-
-        def _on_switch(new_data: dict):
-            win.hide()
-            win.deleteLater()
-            _project_opening[0] = False  # allow re-entry only for explicit project switch
-            _on_project(new_data)
-
-        win.switch_requested.connect(_on_switch)
+        state["window"] = win
         win.showMaximized()
         # Force taskbar icon refresh — Windows sometimes ignores the icon set before show()
         from PyQt6.QtCore import QTimer
@@ -152,16 +163,48 @@ if __name__ == "__main__":
             retranslate_widget(win)
         app._pandora = win
 
-    splash.back_requested.connect(lambda: sys.exit(0))
-    splash.project_selected.connect(_on_project)
-    splash.show()
-    app._splash = splash
+    def _show_splash(mode: str):
+        ch = state["chooser"]
+        if ch is not None:
+            ch.hide()
+        sp = SplashWindow(mode)
+        if not icon.isNull():
+            sp.setWindowIcon(icon)
+        if get_lang() != "fr":
+            retranslate_widget(sp)
+        state["splash"] = sp
+        state["opening"] = False
+
+        def _back():
+            sp.hide()
+            sp.deleteLater()
+            state["splash"] = None
+            _show_chooser()
+
+        sp.back_requested.connect(_back)
+        sp.project_selected.connect(_open_project)
+        sp.show()
+        sp.raise_()
+        sp.activateWindow()
+
+    chooser = ChooserWindow()
+    if not icon.isNull():
+        chooser.setWindowIcon(icon)
+    if get_lang() != "fr":
+        retranslate_widget(chooser)
+    chooser.cinema_requested.connect(lambda: _show_splash("cinema"))
+    chooser.live_requested.connect(lambda: _show_splash("live"))
+    chooser.lang_changed.connect(lambda _c: retranslate_widget(chooser))
+    state["chooser"] = chooser
+    chooser.show()
+    app._chooser = chooser
 
     from api.update_check import UpdateCheckWorker
     from ui.splash import UpdateDialog
 
     def _on_update_available(version: str, url: str):
-        dlg = UpdateDialog(version, url, splash)
+        parent = state["window"] or state["splash"] or state["chooser"]
+        dlg = UpdateDialog(version, url, parent)
         dlg.exec()
 
     _upd = UpdateCheckWorker()

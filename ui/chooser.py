@@ -221,13 +221,13 @@ class ChooserWindow(QWidget):
         )
         self._btn_live = _ModuleBtn(
             "◈", "Live",
-            "Prochainement",
+            "Performance live\nVJ · Mapping",
             CP["accent2"],
             img_normal="live_desactiver.png",
             img_active="Live.png",
         )
         self._btn_cinema.clicked.connect(self.cinema_requested)
-        self._btn_live.set_coming_soon()
+        self._btn_live.clicked.connect(self.live_requested)
 
         btns_row.addWidget(self._btn_cinema)
         btns_row.addWidget(self._btn_live)

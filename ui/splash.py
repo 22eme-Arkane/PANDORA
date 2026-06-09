@@ -364,6 +364,27 @@ class _LeftPanel(QWidget):
         lay.setContentsMargins(0, 0, 0, 0)
         lay.setSpacing(0)
 
+        # ── Bouton retour au sélecteur de module (Cinéma / Live) ──────────────
+        back_row = QWidget()
+        back_row.setStyleSheet("background:transparent;")
+        br = QHBoxLayout(back_row)
+        br.setContentsMargins(16, 14, 16, 0)
+        br.setSpacing(0)
+        btn_back = QPushButton("‹  Retour")
+        btn_back.setCursor(Qt.CursorShape.PointingHandCursor)
+        btn_back.setFixedHeight(28)
+        btn_back.setStyleSheet(
+            f"QPushButton{{background:transparent;color:{CP['text_dim']};"
+            f"border:1px solid {CP['border']};border-radius:6px;"
+            f"font-size:10px;font-weight:700;padding:0 12px;}}"
+            f"QPushButton:hover{{background:{CP['bg3']};color:{CP['text_primary']};"
+            f"border-color:{CP['border_bright']};}}"
+        )
+        btn_back.clicked.connect(self.back_requested)
+        br.addWidget(btn_back)
+        br.addStretch()
+        lay.addWidget(back_row)
+
         # ── Logo ──────────────────────────────────────────────────────────────
         logo_area = QWidget()
         logo_area.setStyleSheet("background:transparent;")

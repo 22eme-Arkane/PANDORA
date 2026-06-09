@@ -170,8 +170,8 @@ class PageLiveSettings(QWidget):
         lay.addWidget(resolume_card)
         lay.addSpacing(28)
 
-        # ── Section API fal.ai ─────────────────────────────────────────────────
-        lay.addWidget(_section_title("CLÉ API FAL.AI"))
+        # ── Section Clés API ────────────────────────────────────────────────────
+        lay.addWidget(_section_title("CLÉS API"))
         lay.addSpacing(14)
 
         api_card = QFrame()
@@ -184,8 +184,8 @@ class PageLiveSettings(QWidget):
         ac.setSpacing(14)
 
         api_info = QLabel(
-            "La clé fal.ai est partagée avec PANDORA | Cinéma.\n"
-            "Elle est utilisée pour la génération de clips IA dans le module Live."
+            "Ces clés sont partagées avec PANDORA | Cinéma (mêmes clés, même config).\n"
+            "fal.ai : génération vidéo IA  ·  Anthropic (Claude) : assistant et traduction des prompts."
         )
         api_info.setWordWrap(True)
         api_info.setStyleSheet(
@@ -196,13 +196,26 @@ class PageLiveSettings(QWidget):
 
         ac.addWidget(_separator())
 
+        def _key_label(text: str) -> QLabel:
+            lbl = _label(text)
+            lbl.setFixedWidth(180)
+            return lbl
+
         key_row = QHBoxLayout()
         key_row.setSpacing(12)
-        key_row.addWidget(_label("Clé fal.ai :"))
+        key_row.addWidget(_key_label("Clé fal.ai :"))
         self._api_key_input = _input("xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx:xxxx…", 0)
         self._api_key_input.setEchoMode(QLineEdit.EchoMode.Password)
         key_row.addWidget(self._api_key_input, 1)
         ac.addLayout(key_row)
+
+        ant_row = QHBoxLayout()
+        ant_row.setSpacing(12)
+        ant_row.addWidget(_key_label("Clé Anthropic (Claude) :"))
+        self._anthropic_input = _input("sk-ant-…", 0)
+        self._anthropic_input.setEchoMode(QLineEdit.EchoMode.Password)
+        ant_row.addWidget(self._anthropic_input, 1)
+        ac.addLayout(ant_row)
 
         btn_save = QPushButton("Enregistrer")
         btn_save.setFixedHeight(36)
@@ -230,6 +243,9 @@ class PageLiveSettings(QWidget):
         key = cfg.get("api_key", "")
         if key:
             self._api_key_input.setText(key)
+        ant = cfg.get("anthropic_key", "")
+        if ant:
+            self._anthropic_input.setText(ant)
         host = cfg.get("resolume_host", "localhost")
         port = cfg.get("resolume_port", 8080)
         self._host_input.setText(str(host))
@@ -239,6 +255,7 @@ class PageLiveSettings(QWidget):
         from core.config import load_config, save_config
         cfg = load_config()
         cfg["api_key"]       = self._api_key_input.text().strip()
+        cfg["anthropic_key"] = self._anthropic_input.text().strip()
         cfg["resolume_host"] = self._host_input.text().strip() or "localhost"
         cfg["resolume_port"] = self._port_spin.value()
         save_config(cfg)

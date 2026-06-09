@@ -175,6 +175,94 @@ class _ImagePicker(QWidget):
         self._thumb.setPixmap(QPixmap())
 
 
+# ── Carré de référence visuelle « + » (style PANDORA, réutilisable) ─────────────
+
+class _RefSquare(QWidget):
+    """Carré 60×60 — '+' vide ou miniature de l'image chargée, avec bouton × pour retirer."""
+    picked  = pyqtSignal(str)
+    cleared = pyqtSignal()
+
+    _SZ = 60
+
+    def __init__(self, tooltip: str = "Ajouter une image de référence", parent=None):
+        super().__init__(parent)
+        self.setFixedSize(self._SZ, self._SZ)
+        self._path = ""
+
+        self._btn_pick = QPushButton("+", self)
+        self._btn_pick.setFixedSize(self._SZ, self._SZ)
+        self._btn_pick.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._btn_pick.setToolTip(tooltip)
+        self._btn_pick.setStyleSheet(
+            f"QPushButton{{background:transparent;color:{C['text_dim']};"
+            f"border:1px dashed {C['border_bright']};border-radius:8px;"
+            f"font-size:24px;font-weight:300;padding:0;}}"
+            f"QPushButton:hover{{color:{C['accent']};border-color:{C['accent']};"
+            f"background:rgba(124,107,255,0.08);}}"
+            f"QPushButton:pressed{{background:rgba(124,107,255,0.16);}}"
+        )
+        self._btn_pick.clicked.connect(self._on_pick)
+
+        self._thumb = QLabel(self)
+        self._thumb.setGeometry(0, 0, self._SZ, self._SZ)
+        self._thumb.setScaledContents(True)
+        self._thumb.setStyleSheet("border-radius:8px;")
+        self._thumb.setVisible(False)
+
+        self._btn_clear = QPushButton("×", self)
+        self._btn_clear.setFixedSize(16, 16)
+        self._btn_clear.move(self._SZ - 18, 2)
+        self._btn_clear.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._btn_clear.setStyleSheet(
+            f"QPushButton{{background:{C['bg2']};color:{C['text_dim']};"
+            f"border:1px solid {C['border']};border-radius:3px;font-size:9px;padding:0;}}"
+            f"QPushButton:hover{{color:{C['red']};border-color:{C['red']};background:{C['bg3']};}}"
+        )
+        self._btn_clear.setVisible(False)
+        self._btn_clear.clicked.connect(self._on_clear)
+
+        lay = QVBoxLayout(self)
+        lay.setContentsMargins(0, 0, 0, 0)
+        lay.addWidget(self._btn_pick)
+
+    def path(self) -> str:
+        return self._path
+
+    def set_path(self, path: str):
+        if path and os.path.isfile(path):
+            self._path = path
+            pix = QPixmap(path).scaled(
+                self._SZ, self._SZ,
+                Qt.AspectRatioMode.KeepAspectRatioByExpanding,
+                Qt.TransformationMode.SmoothTransformation,
+            )
+            self._thumb.setPixmap(pix)
+            self._thumb.setVisible(True)
+            self._btn_pick.setVisible(False)
+            self._btn_clear.setVisible(True)
+        else:
+            self._clear_state()
+
+    def _clear_state(self):
+        self._path = ""
+        self._thumb.setVisible(False)
+        self._btn_pick.setVisible(True)
+        self._btn_clear.setVisible(False)
+
+    def _on_pick(self):
+        path, _ = QFileDialog.getOpenFileName(
+            self, "Choisir une image de référence", "",
+            "Images (*.png *.jpg *.jpeg *.webp *.bmp);;Tous les fichiers (*)",
+        )
+        if path:
+            self.set_path(path)
+            self.picked.emit(path)
+
+    def _on_clear(self):
+        self._clear_state()
+        self.cleared.emit()
+
+
 # ── Sous-formulaires par moteur ────────────────────────────────────────────────
 
 class _KlingI2VForm(QWidget):
@@ -1053,6 +1141,11 @@ class TabVideoEngines(QWidget):
         lay = QVBoxLayout(container)
         lay.setContentsMargins(24, 20, 24, 24)
         lay.setSpacing(16)
+        # Réfs pour l'insertion optionnelle du sélecteur de styles VJ (PANDORA | Live).
+        # Inertes pour Cinéma : enable_vj_style_selector() n'est jamais appelé là.
+        self._main_lay = lay
+        self._vj_style_combo = None
+        self._ref_squares = None
 
         # ── En-tête ────────────────────────────────────────────────────────────
         lay.addWidget(HelpBlock("Génération Directe — Multi-moteurs IA", [
@@ -1085,6 +1178,9 @@ class TabVideoEngines(QWidget):
                     item.setForeground(_QBrush(_QColor(C['text_dim'])))
         self._engine_combo.currentIndexChanged.connect(self._on_engine_changed)
         lay.addWidget(self._engine_combo)
+
+        # Point d'insertion du sélecteur de styles VJ (Live) — juste avant le prompt
+        self._vj_insert_index = lay.count()
 
         # ── Prompt header : label + bouton améliorer à droite ─────────────────
         _prompt_hdr = QHBoxLayout()
@@ -1197,7 +1293,93 @@ class TabVideoEngines(QWidget):
     # ── Changement moteur ──────────────────────────────────────────────────────
 
     def _on_engine_changed(self, idx: int):
+        # Chaque moteur a son propre formulaire (donc son propre champ prompt).
+        # On reporte le prompt du moteur précédent vers le nouveau pour ne pas
+        # « perdre » ce que l'utilisateur a écrit en changeant de moteur.
+        prev_idx = self._stack.currentIndex()
+        carried = ""
+        if 0 <= prev_idx < len(self._forms):
+            prev_prompt = getattr(self._forms[prev_idx], "_prompt", None)
+            if prev_prompt is not None:
+                carried = prev_prompt.toPlainText()
+
         self._stack.setCurrentIndex(idx)
+
+        if carried:
+            new_prompt = getattr(self._forms[idx], "_prompt", None)
+            if new_prompt is not None and not new_prompt.toPlainText().strip():
+                new_prompt.setPlainText(carried)
+
+    # ── Sélecteur de styles VJ (PANDORA | Live uniquement) ──────────────────────
+
+    def enable_vj_style_selector(self):
+        """Insère un menu déroulant « Template de style » (20 styles VJ) au-dessus du
+        prompt. Choisir un style charge son prompt de loop dans le champ prompt du
+        moteur courant. Appelé seulement par PANDORA | Live — Cinéma n'est pas touché.
+        """
+        if self._vj_style_combo is not None:
+            return
+        import core.vj_styles as vj
+
+        self._vj_section = _section(translate("Template de style"))
+        self._vj_style_combo = QComboBox()
+        self._vj_style_combo.setMinimumHeight(34)
+        self._vj_style_combo.setStyleSheet(_combo_style())
+        self._vj_style_combo.addItem(translate("Aucun style"), "")
+        for s in vj.get_styles():
+            self._vj_style_combo.addItem(vj.localized_name(s), s["key"])
+        self._vj_style_combo.currentIndexChanged.connect(self._on_vj_style_changed)
+
+        self._main_lay.insertWidget(self._vj_insert_index, self._vj_section)
+        self._main_lay.insertWidget(self._vj_insert_index + 1, self._vj_style_combo)
+
+    def _on_vj_style_changed(self, _idx: int):
+        key = self._vj_style_combo.currentData()
+        if not key:
+            return
+        import core.vj_styles as vj
+        st = vj.get_style(key)
+        if not st:
+            return
+        # Charge le prompt du style dans le champ prompt du moteur courant.
+        form = self._current_form()
+        prompt_widget = getattr(form, "_prompt", None)
+        if prompt_widget is not None:
+            prompt_widget.setPlainText(st["prompt"])
+
+    # ── Images de référence (carrés « + ») — PANDORA | Live uniquement ──────────
+
+    def enable_reference_images(self, n: int = 3):
+        """Insère une rangée de carrés « + » pour ajouter jusqu'à n images de référence.
+        Les chemins choisis sont injectés dans params['ref_images'] à la génération.
+        Appelé seulement par PANDORA | Live — Cinéma n'est pas touché.
+        """
+        if self._ref_squares is not None:
+            return
+        cont = QWidget()
+        cont.setStyleSheet("background:transparent;")
+        cl = QVBoxLayout(cont)
+        cl.setContentsMargins(0, 0, 0, 0)
+        cl.setSpacing(6)
+        cl.addWidget(_section(translate("Images de référence")))
+        row = QHBoxLayout()
+        row.setSpacing(8)
+        self._ref_squares = []
+        for _ in range(n):
+            sq = _RefSquare(tooltip=translate("Ajouter une image de référence"))
+            self._ref_squares.append(sq)
+            row.addWidget(sq)
+        row.addStretch()
+        cl.addLayout(row)
+
+        offset = 2 if self._vj_style_combo is not None else 0
+        self._main_lay.insertWidget(self._vj_insert_index + offset, cont)
+
+    def _collect_ref_images(self) -> list:
+        if not self._ref_squares:
+            return []
+        return [s.path() for s in self._ref_squares
+                if s.path() and os.path.isfile(s.path())][:3]
 
     # ── Amélioration Claude ────────────────────────────────────────────────────
 
@@ -1253,6 +1435,11 @@ class TabVideoEngines(QWidget):
         if params is None:
             return
 
+        # Images de référence (Live) — déclenche le mode reference-to-video côté Seedance.
+        refs = self._collect_ref_images()
+        if refs:
+            params["ref_images"] = refs
+
         if key in ("seedance_t2v", "seedance_fast_t2v"):
             from core.worker import GenerationWorker
             self._worker = GenerationWorker(params)
@@ -1307,6 +1494,20 @@ class TabVideoEngines(QWidget):
         dur   = result.get("duration", 0)
         cost  = result.get("credits_used", 0)
 
+        # Seedance (run_real) renvoie video_url sans local_path : on télécharge le clip.
+        if not local and result.get("video_url"):
+            try:
+                from davinci.importer import import_result
+                from core.config import get_output_dir
+                ir = import_result(result, get_output_dir(), import_to_davinci=False)
+            except Exception as e:
+                ir = {"success": False, "mock": False, "local_path": "", "error": str(e)}
+            if ir.get("success") and not ir.get("mock"):
+                local = ir.get("local_path", "")
+                result = {**result, "local_path": local}
+            elif not ir.get("mock") and ir.get("error"):
+                self._status_lbl.setText(f"✗  {translate('Téléchargement échoué :')} {ir['error'][:100]}")
+
         if local:
             self._last_folder = os.path.dirname(local)
             self._result_lbl.setText(
@@ -1319,7 +1520,7 @@ class TabVideoEngines(QWidget):
             self._btn_open.setEnabled(True)
             self.generation_done.emit(result)
         else:
-            self._status_lbl.setText("✓  Terminé (mode mock — aucune clé fal.ai)")
+            self._status_lbl.setText(translate("✓  Terminé (mode démo — aucune clé fal.ai)"))
 
     def _on_failed(self, err: str):
         self._btn_generate.setEnabled(True)

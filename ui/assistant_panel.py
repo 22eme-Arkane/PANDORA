@@ -356,6 +356,50 @@ CORPUS: dict[str, dict] = {
             "sont simulées sans consommation de crédits, pour découvrir l'interface."
         ),
     },
+
+    # ── PANDORA | Live ───────────────────────────────────────────────────────
+    "live_studio": {
+        "title": "Studio IA — Live",
+        "context": "Génération de loops vidéo optimisés pour Resolume.",
+        "tips": [
+            "Onglet « Génération directe » : choisissez un moteur et lancez un loop.",
+            "Un sélecteur de 20 styles VJ sera intégré à la génération.",
+            "Mode loop Resolume : la première image rejoint la dernière (boucle parfaite).",
+            "Sans clé fal.ai, la génération est simulée (mode démo).",
+        ],
+        "guide": "",
+    },
+    "live_sequences": {
+        "title": "Séquences",
+        "context": "Enchaînements de loops pour le live (équivalent storyboard).",
+        "tips": [
+            "Composez des séquences de loops par segment.",
+            "À venir : style par segment, durées, transitions, export Resolume.",
+        ],
+        "guide": "",
+    },
+    "mapping": {
+        "title": "Mapping vidéo",
+        "context": "Mapping vidéo (à venir).",
+        "tips": [
+            "Préparation assistée du mapping de projection.",
+        ],
+        "guide": "",
+    },
+    "resolume": {
+        "title": "Resolume",
+        "context": "Contrôle de composition Resolume — expérimental.",
+        "tips": [
+            "Onglet conservé pour évaluation — non prioritaire.",
+        ],
+        "guide": "",
+    },
+    "live_settings": {
+        "title": "Paramètres",
+        "context": "Paramètres du module Live.",
+        "tips": [],
+        "guide": "",
+    },
 }
 
 _DEFAULT_CORPUS = {

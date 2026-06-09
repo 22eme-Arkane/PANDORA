@@ -58,6 +58,149 @@ _T: dict[str, dict[str, str]] = {
 
 _FR_TO_EN: dict[str, str] = {
 
+    # ── PANDORA | Live ───────────────────────────────────────────────────────
+    # Sélecteur de module (chooser)
+    "Choisissez votre espace de travail":  "Choose your workspace",
+    "Cinéma":                              "Cinema",
+    "Live":                                "Live",
+    "Prochainement":                       "Coming soon",
+    "Pré-production IA\nScénario · Storyboard · DaVinci":
+        "AI pre-production\nScreenplay · Storyboard · DaVinci",
+    "Performance live\nVJ · Mapping":      "Live performance\nVJ · Mapping",
+    # Splash (mode Live)
+    "‹  Retour":                           "‹  Back",
+    "Performance live · Mapping · VJ":     "Live performance · Mapping · VJ",
+    "PROJETS RÉCENTS — LIVE":              "RECENT PROJECTS — LIVE",
+    "PROJETS RÉCENTS — CINÉMA":            "RECENT PROJECTS — CINEMA",
+    # Sidebar Live
+    "Styles VJ":                           "VJ Styles",
+    "Mapping":                             "Mapping",
+    "Resolume":                            "Resolume",
+    # Page Bibliothèque de styles VJ
+    "Bibliothèque de styles VJ":           "VJ Style Library",
+    "Presets visuels prêts à générer pour vos performances live.":
+        "Visual presets ready to generate for your live performances.",
+    "styles":                              "styles",
+    "Sélectionnez un style et cliquez Générer.":
+        "Select a style and click Generate.",
+    "Boucle":                              "Loop",
+    "Génération (démo) :":                 "Generation (demo):",
+    "câblage des moteurs vidéo à venir.":  "video engine wiring coming soon.",
+    # Page Mapping (placeholder)
+    "Mapping vidéo":                       "Video Mapping",
+    "Bientôt disponible":                  "Coming soon",
+    "Le mapping assistera la préparation de vos projections : import d'une "
+    "photo du lieu, détection automatique des zones, puis export vers votre "
+    "logiciel de mapping. Cette partie sera développée prochainement.":
+        "Mapping will assist the preparation of your projections: import a photo "
+        "of the venue, automatically detect zones, then export to your mapping "
+        "software. This part will be developed soon.",
+    # Assistant — corpus Live
+    "Styles VJ — Bibliothèque":            "VJ Styles — Library",
+    "Galerie de presets visuels pour le live et le VJing.":
+        "Gallery of visual presets for live and VJing.",
+    "Chaque carte est un style prêt à générer.":
+        "Each card is a style ready to generate.",
+    "La génération réutilisera les moteurs vidéo de PANDORA (Seedance, Kling…).":
+        "Generation will reuse PANDORA's video engines (Seedance, Kling…).",
+    "Les styles en boucle sont pensés pour tourner en continu.":
+        "Looping styles are designed to run continuously.",
+    "Mapping vidéo (à venir).":            "Video mapping (coming soon).",
+    "Préparation assistée du mapping de projection.":
+        "Assisted preparation of projection mapping.",
+    "Contrôle de composition Resolume — expérimental.":
+        "Resolume composition control — experimental.",
+    # Vidéothèque Live
+    "Vidéothèque":                         "Video library",
+    "Historique":                          "History",
+    "Lire":                                "Play",
+    "Vidéothèque Live — loops & vidéos générés":
+        "Live Library — generated loops & videos",
+    "▸ Retrouvez ici tous les loops et vidéos générés pour ce live.":
+        "▸ Find here all the loops and videos generated for this live set.",
+    "▸ ▶ Lire ouvre la vidéo dans votre lecteur par défaut.":
+        "▸ ▶ Play opens the video in your default player.",
+    "▸ ⤷ Modifier envoie le clip vers l'onglet « Modifier ».":
+        "▸ ⤷ Edit sends the clip to the “Edit” tab.",
+    "▸ → Resolume bascule vers l'onglet Resolume pour le charger dans un slot.":
+        "▸ → Resolume switches to the Resolume tab to load it into a slot.",
+    "Envoyer vers l'onglet Modifier (Live)":  "Send to the Edit tab (Live)",
+    "Charger ce clip dans Resolume":          "Load this clip into Resolume",
+    "Tri :":                               "Sort:",
+    "vidéo(s)":                            "video(s)",
+    "Aucune vidéo générée pour ce live.\nLancez une génération depuis « Génération directe ».":
+        "No video generated for this live set.\nStart a generation from “Direct generation”.",
+    # Onglet Modifier (Live)
+    "Modifier un clip (Live)":             "Edit a clip (Live)",
+    "▸ Envoyez un clip depuis la Vidéothèque (⤷ Modifier).":
+        "▸ Send a clip from the Library (⤷ Edit).",
+    "▸ Choisissez un style, écrivez la modification souhaitée, puis générez.":
+        "▸ Pick a style, write the desired change, then generate.",
+    "▸ Le clip source est utilisé comme référence — Seedance en produit une nouvelle version.":
+        "▸ The source clip is used as reference — Seedance produces a new version.",
+    "Clip à modifier":                     "Clip to edit",
+    "Aucun clip — envoyez-en un depuis la Vidéothèque.":
+        "No clip — send one from the Library.",
+    "Prompt de modification":              "Edit prompt",
+    "Décrivez la modification… (FR accepté, traduit automatiquement)":
+        "Describe the change… (FR accepted, auto-translated)",
+    "Moteur de génération":                "Generation engine",
+    "Durée : 5 s":                         "Duration: 5 s",
+    "Durée :":                             "Duration:",
+    "Générer la modification":             "Generate the edit",
+    "Génération en cours…":                "Generating…",
+    "Aucun clip":                          "No clip",
+    "Envoyez d'abord un clip depuis la Vidéothèque.":
+        "First send a clip from the Library.",
+    "Terminé (mode démo — aucune clé fal.ai)":
+        "Done (demo mode — no fal.ai key)",
+    "✓  Terminé (mode démo — aucune clé fal.ai)":
+        "✓  Done (demo mode — no fal.ai key)",
+    "Téléchargement échoué :":             "Download failed:",
+    "Ouvrir le dossier":                   "Open folder",
+    "Actualiser":                          "Refresh",
+    "Onglet conservé pour évaluation — non prioritaire.":
+        "Tab kept for evaluation — not a priority.",
+    "Paramètres du module Live.":          "Live module settings.",
+    # Studio IA / Séquences Live
+    "Template de style":                   "Style template",
+    "Aucun style":                         "No style",
+    "Images de référence":                 "Reference images",
+    "Ajouter une image de référence":      "Add a reference image",
+    "Générer depuis Séquences":            "Generate from Sequences",
+    "Cet onglet générera les loops directement à partir de vos séquences "
+    "(onglet Séquences) : choix du segment, du style et du moteur, puis envoi "
+    "vers Resolume. Disponible une fois les Séquences construites.":
+        "This tab will generate loops directly from your sequences (Sequences tab): "
+        "pick the segment, style and engine, then send to Resolume. Available once "
+        "Sequences are built.",
+    "Studio IA":                           "AI Studio",
+    "Séquences":                           "Sequences",
+    "Studio IA — Live":                    "AI Studio — Live",
+    "Génération de loops vidéo optimisés pour Resolume.":
+        "Generation of video loops optimized for Resolume.",
+    "Onglet « Génération directe » : choisissez un moteur et lancez un loop.":
+        "“Direct generation” tab: pick an engine and launch a loop.",
+    "Un sélecteur de 20 styles VJ sera intégré à la génération.":
+        "A selector of 20 VJ styles will be integrated into generation.",
+    "Mode loop Resolume : la première image rejoint la dernière (boucle parfaite).":
+        "Resolume loop mode: the first frame meets the last (perfect loop).",
+    "Sans clé fal.ai, la génération est simulée (mode démo).":
+        "Without a fal.ai key, generation is simulated (demo mode).",
+    "Enchaînements de loops pour le live (équivalent storyboard).":
+        "Loop sequences for live (storyboard equivalent).",
+    "Composez des séquences de loops par segment.":
+        "Build loop sequences segment by segment.",
+    "À venir : style par segment, durées, transitions, export Resolume.":
+        "Coming: per-segment style, durations, transitions, Resolume export.",
+    "Composez des enchaînements de loops optimisés pour Resolume — "
+    "l'équivalent du storyboard, pensé pour le live. Choix du style par "
+    "segment, durées et transitions, puis export vers votre composition. "
+    "Cette partie sera développée prochainement.":
+        "Build chains of loops optimized for Resolume — the storyboard equivalent, "
+        "designed for live. Per-segment style, durations and transitions, then export "
+        "to your composition. This part will be developed soon.",
+
     # ── Communs ────────────────────────────────────────────────────────────────
     "Annuler":              "Cancel",
     "Sauvegarder":          "Save",
