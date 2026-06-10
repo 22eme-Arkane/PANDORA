@@ -52,6 +52,37 @@ def _track_for(shot: dict, tracks: list, starts: list, at_time: float):
     return (tracks[-1], starts[-1]) if tracks else (None, 0.0)
 
 
+def assign_tracks_to_shots(shots: list, tracks: list) -> list:
+    """Assigne AUTOMATIQUEMENT chaque plan au morceau couvrant sa position dans
+    le set (morceaux enchaînés dans l'ordre, timeline cumulée des durées de plans).
+    Ne modifie RIEN — retourne [{"id", "number", "track"}] pour les plans dont la
+    colonne Musique change. Le BPM de la ligne en dérive (colonne calculée)."""
+    tracks = [t for t in (tracks or []) if t.get("name")]
+    if not tracks or not shots:
+        return []
+    starts = _track_starts(tracks)
+
+    def _num(s):
+        try:
+            return int(s.get("number") or 0)
+        except (TypeError, ValueError):
+            return 0
+
+    out, cum = [], 0.0
+    for shot in sorted(shots, key=_num):
+        track, _start = _track_for({}, tracks, starts, cum)  # par position uniquement
+        name = (track or {}).get("name", "")
+        if name and (shot.get("music_track") or "") != name:
+            out.append({"id": shot.get("id", ""),
+                        "number": shot.get("number", 0),
+                        "track": name})
+        try:
+            cum += float(shot.get("duration", 5.0) or 5.0)
+        except (TypeError, ValueError):
+            cum += 5.0
+    return out
+
+
 def align_shots_to_music(shots: list, tracks: list,
                          min_s: float = 2.0, max_s: float = 15.0,
                          beats_per_bar: int = 4,

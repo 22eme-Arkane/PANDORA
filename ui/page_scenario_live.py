@@ -2029,6 +2029,13 @@ class PageScenario(QWidget):
                 return False
         _sb.clear_version_shots(_sb.DEFAULT_VERSION_ID)
         sc_id = (self._current or {}).get("id", "")
+        # Colonnes Musique/BPM remplies d'office : chaque plan reçoit le morceau
+        # couvrant sa position dans le set (le BPM de la ligne en dérive).
+        from core.music_align import assign_tracks_to_shots
+        _pseudo = [{"id": str(i), "number": i, "duration": seg.get("duration", 5)}
+                   for i, seg in enumerate(segments, 1)]
+        _auto_music = {a["id"]: a["track"]
+                       for a in assign_tracks_to_shots(_pseudo, self._music_tracks)}
         for i, seg in enumerate(segments, 1):
             _sb.save_shot({
                 "number":          i,
@@ -2041,6 +2048,7 @@ class PageScenario(QWidget):
                 "sound_prompt":    seg.get("sound_prompt", ""),
                 "seq_num":         seg.get("act", 1),
                 "seq_name":        seg.get("act_name", ""),
+                "music_track":     _auto_music.get(str(i), ""),
             }, _sb.DEFAULT_VERSION_ID)
         seq_name = translate("Séquences Mapping") if self._live_mode == "mapping" else translate("Séquences Live")
         self._ai_progress_lbl.setText(f"✓  {len(segments)} " + translate("segments générés →") + f" {seq_name}")

@@ -2595,10 +2595,12 @@ class PageStoryboard(QWidget):
                 self, translate("Aucun plan"),
                 translate("Cette séquence ne contient aucun plan à caler."))
             return
-        from core.music_align import align_shots_to_music
+        from core.music_align import align_shots_to_music, assign_tracks_to_shots
+        # Colonnes Musique/BPM : assignation AUTO du morceau couvrant chaque plan
+        assigns = assign_tracks_to_shots(self._all_shots, analyzed)
         changes = align_shots_to_music(self._all_shots, analyzed)
         modified = [c for c in changes if abs(c["new"] - c["old"]) >= 0.05]
-        if not modified:
+        if not modified and not assigns:
             QMessageBox.information(
                 self, translate("Déjà calé"),
                 translate("Toutes les durées sont déjà calées sur les mesures et les drops ✓"))
@@ -2611,23 +2613,33 @@ class PageStoryboard(QWidget):
                   for c in modified[:12]]
         if len(modified) > 12:
             _lines.append(f"  … +{len(modified) - 12}")
+        _msg = (f"{len(modified)} {translate('plan(s) ajusté(s) en mesures')} · "
+                f"{snapped} {translate('cut(s) sur un drop')}\n")
+        if assigns:
+            _msg += f"{len(assigns)} {translate('plan(s) → colonnes Musique/BPM remplies')}\n"
+        _msg += f"{translate('Durée totale :')} {old_total:.1f}s → {new_total:.1f}s\n\n"
         reply = QMessageBox.question(
             self, translate("Caler sur la musique"),
-            f"{len(modified)} {translate('plan(s) ajusté(s) en mesures')} · "
-            f"{snapped} {translate('cut(s) sur un drop')}\n"
-            f"{translate('Durée totale :')} {old_total:.1f}s → {new_total:.1f}s\n\n"
-            + "\n".join(_lines) + "\n\n" + translate("Appliquer ?"),
+            _msg + "\n".join(_lines) + "\n\n" + translate("Appliquer ?"),
             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.Cancel,
             QMessageBox.StandardButton.Yes,
         )
         if reply != QMessageBox.StandardButton.Yes:
             return
         by_id = {s.get("id"): s for s in self._all_shots}
+        dirty: set = set()
+        for a in assigns:
+            shot = by_id.get(a["id"])
+            if shot is not None:
+                shot["music_track"] = a["track"]
+                dirty.add(a["id"])
         for c in modified:
             shot = by_id.get(c["id"])
             if shot is not None:
                 shot["duration"] = c["new"]
-                sb_api.save_shot(shot)
+                dirty.add(c["id"])
+        for sid in dirty:
+            sb_api.save_shot(by_id[sid])
         self.refresh()
 
     def _render(self):

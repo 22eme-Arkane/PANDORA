@@ -586,6 +586,27 @@ def calage_musical_deterministe():
             assert abs((c["new"] / bar) - round(c["new"] / bar)) < 1e-6, "multiple de mesure"
     # Sans morceau analysé → aucun changement proposé
     assert align_shots_to_music(shots, [{"name": "x", "bpm": 0}]) == []
+    # ── Assignation AUTO des colonnes Musique/BPM (2026-06-10) ───────────────
+    from core.music_align import assign_tracks_to_shots
+    two = [{"name": "t1.mp3", "bpm": 128.0, "duration": 20.0},
+           {"name": "t2.mp3", "bpm": 90.0,  "duration": 60.0}]
+    sh = [
+        {"id": "a", "number": 1, "duration": 22.0, "music_track": ""},  # démarre à 0 → t1
+        {"id": "b", "number": 2, "duration": 8.0,  "music_track": ""},  # démarre à 22 → t2
+        {"id": "c", "number": 3, "duration": 8.0,  "music_track": "t2.mp3"},  # déjà bon
+    ]
+    asg = assign_tracks_to_shots(sh, two)
+    assert {a["id"]: a["track"] for a in asg} == {"a": "t1.mp3", "b": "t2.mp3"}, \
+        "morceau couvrant le DÉBUT du plan (timeline cumulée)"
+    assert assign_tracks_to_shots(sh, []) == [], "sans morceaux → rien"
+    # Branchements : découpage (création) + Caler la musique (page Séquences)
+    import inspect
+    from ui.page_scenario_live import PageScenario
+    assert "assign_tracks_to_shots" in inspect.getsource(PageScenario._apply_decoupage), \
+        "les plans naissent avec leur morceau"
+    import ui.page_storyboard_live as M
+    assert "assign_tracks_to_shots" in inspect.getsource(M.PageStoryboard._on_music_align), \
+        "Caler la musique remplit aussi les colonnes Musique/BPM"
     # Le bouton existe sur la page Séquences
     from ui.live_pages import SequenceLivePage
     import core.storyboard as sb
