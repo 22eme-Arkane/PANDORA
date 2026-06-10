@@ -169,6 +169,23 @@ def construction_pages_cinema():
 
 
 @test
+def prompts_nano_banana_qualite():
+    """Suffixes Nano Banana (partagés Cinéma/Live) : qualité + contraintes intactes."""
+    import api.nano_banana as nb
+    # Améliorations 2026-06-10 : lumière/détail partout, ghost-mannequin pour HMC
+    assert "ghost-mannequin" in nb._ITEM_LINE, "costumes/HMC en ghost-mannequin"
+    assert "ultra-detailed" in nb._ITEM_LINE and "lighting" in nb._ITEM_LINE
+    assert "ltra-detailed" in nb._DECOR_LINE, "qualité décors"
+    for sfx in (nb._CLASSIC_PORTRAIT_SUFFIX, nb._ACTION_POSE_SUFFIX,
+                nb._DUO_PORTRAIT_SUFFIX):
+        assert "sharp focus" in sfx, "netteté portraits"
+    # Contraintes historiques préservées
+    assert "No person" in nb._ITEM_LINE and "white seamless background" in nb._ITEM_LINE
+    assert "No people" in nb._DECOR_LINE and "NOT a white background" in nb._DECOR_LINE
+    assert "3/4 front angle" in nb._VEHICLE_LINE, "angle véhicule préservé"
+
+
+@test
 def prompt_mood_cinema_inchange():
     """build_mood_prompt en namespace Cinéma : comportement historique complet."""
     import core.storyboard as sb

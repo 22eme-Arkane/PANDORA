@@ -496,7 +496,11 @@ _INDIVIDUAL_PORTRAIT_SUFFIX = (
 _ITEM_LINE = (
     "Isolated product shot on a pure white seamless background. "
     "No person, no face, no character, no model. "
-    "No scene, no environment, no backdrop."
+    "No scene, no environment, no backdrop. "
+    "If the item is a garment, costume or wig, display it in ghost-mannequin style — "
+    "worn three-dimensional shape with no visible person. "
+    "Professional studio product photography, soft diffused lighting, "
+    "true-to-life materials and colors, ultra-detailed textures, sharp focus."
 )
 
 _VEHICLE_LINE = (
@@ -513,7 +517,8 @@ _DECOR_LINE = (
     "Rich atmospheric lighting, depth and mood. "
     "No people, no characters, no figures anywhere in the frame. "
     "Professional film/TV location reference quality. "
-    "NOT a product shot — NOT a white background — this is a real place, real light, real atmosphere."
+    "NOT a product shot — NOT a white background — this is a real place, real light, real atmosphere. "
+    "Ultra-detailed, sharp focus, high dynamic range, photorealistic."
 )
 _DECOR_SHEET_SUFFIX = (
     "Film production location reference sheet — ONE single image divided into 4 panels "
@@ -807,6 +812,8 @@ class OptimizeStyleReferenceWorker(OptimizeWithReferencesWorker):
 _CLASSIC_PORTRAIT_SUFFIX = (
     "Single character portrait. White seamless studio background. "
     "Professional film/TV casting photograph. Head-and-shoulders or full-body framing. "
+    "Natural skin texture, soft professional studio lighting, "
+    "ultra-detailed, sharp focus. "
     "No text, no labels, no watermarks."
 )
 
@@ -820,6 +827,7 @@ _EDITORIAL_PORTRAIT_SUFFIX = (
 _ACTION_POSE_SUFFIX = (
     "Full-body dynamic action pose. Expressive movement, mid-action. "
     "White seamless studio background, professional film production reference. "
+    "Crisp motion, natural fabric and skin texture, ultra-detailed, sharp focus. "
     "No text, no labels."
 )
 
@@ -827,6 +835,7 @@ _DUO_PORTRAIT_SUFFIX = (
     "Two characters side by side, full-body front view. "
     "White seamless studio background. Both characters fully visible, equal framing. "
     "Professional film/TV casting reference. "
+    "Natural skin texture, soft studio lighting, ultra-detailed, sharp focus. "
     "No text, no labels."
 )
 
