@@ -294,6 +294,70 @@ class ApplyArrangeConducteurWorker(QThread):
             self.failed.emit(humanize_api_error(str(e)))
 
 
+_ARRANGE_CHAT = (
+    "Tu es CO-AUTEUR d'un conducteur de {ctx}. Tu viens de proposer des "
+    "SUGGESTIONS d'arrangement ; l'utilisateur (le réalisateur) en discute avec "
+    "toi pour les affiner AVANT de les appliquer.\n"
+    "Règles :\n"
+    "• Réponds en français, concret et bref — on est en séance de travail ;\n"
+    "• Quand une suggestion évolue suite à la discussion, reformule-la "
+    "clairement et complètement (préfixe « SUGGESTION RÉVISÉE — ») : c'est elle "
+    "qui sera appliquée ;\n"
+    "• Si une direction artistique (références) est fournie, appuie-toi dessus "
+    "— inspiration à transposer, jamais à copier ;\n"
+    "• INTERDIT : vocabulaire scénario (INT./EXT., scènes, séquences) — on "
+    "raisonne en ACTES et en PLANS ;\n"
+    "• Reste sur l'arrangement du conducteur : structure, rythme, dramaturgie."
+)
+
+
+class ArrangeChatConducteurWorker(QThread):
+    """Un tour de CO-ÉCRITURE sur l'arrangement (streaming) — fenêtre Arrangement.
+    messages = historique [{role, content}], dernier = message du réalisateur.
+    Signaux : chunk/done/failed."""
+    done   = pyqtSignal(str)
+    failed = pyqtSignal(str)
+    chunk  = pyqtSignal(str)
+
+    def __init__(self, messages: list, conducteur: str, suggestions: str,
+                 mode: str = "live", refs_analysis: str = ""):
+        super().__init__()
+        self._messages    = list(messages or [])
+        self._conducteur  = conducteur or ""
+        self._suggestions = suggestions or ""
+        self._mode        = mode if mode in ("live", "mapping") else "live"
+        self._refs        = refs_analysis or ""
+
+    def run(self):
+        from core.ai_provider import chat_stream, key_error
+        err = key_error()
+        if err:
+            self.failed.emit(err)
+            return
+        if not self._messages:
+            self.failed.emit("Aucun message à envoyer.")
+            return
+        try:
+            ctx = ("performance de MAPPING vidéo projetée sur une façade (nuit, "
+                   "façade = écran)" if self._mode == "mapping"
+                   else "performance LIVE / VJ (loops visuels projetés)")
+            doc = (f"CONDUCTEUR ACTUEL :\n{self._conducteur}\n\n"
+                   f"SUGGESTIONS D'ARRANGEMENT PROPOSÉES :\n{self._suggestions}")
+            if self._refs.strip():
+                doc += f"\n\nDIRECTION ARTISTIQUE (références) :\n{self._refs.strip()}"
+            messages = [dict(m) for m in self._messages]
+            first = messages[0]
+            messages[0] = {"role": first["role"],
+                           "content": f"{doc}\n\n---\n\n{first['content']}"}
+            full = chat_stream(_ARRANGE_CHAT.format(ctx=ctx), messages,
+                               on_chunk=self.chunk.emit,
+                               tier="creative", max_tokens=8192)
+            self.done.emit(full.strip())
+        except Exception as e:
+            from core.worker import humanize_api_error
+            self.failed.emit(humanize_api_error(str(e)))
+
+
 class ArrangeConducteurStreamWorker(QThread):
     """Arrangement du conducteur en STREAMING (même interface que le worker Cinéma :
     signaux chunk/finished/failed) → alimente la fenêtre de co-écriture. Calibré Live/Mapping."""

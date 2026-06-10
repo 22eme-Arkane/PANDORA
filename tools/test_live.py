@@ -834,6 +834,27 @@ def bibliotheque_images_globale():
 
 
 @test
+def coecriture_arrangement():
+    """La co-écriture vit DANS la fenêtre d'arrangement, en langage conducteur
+    (remplace la Session de co-écriture Cinéma au format scénario, retirée)."""
+    import inspect
+    from api.live_screenplay import ArrangeChatConducteurWorker, _ARRANGE_CHAT
+    w = ArrangeChatConducteurWorker([{"role": "user", "content": "?"}],
+                                    "cond", "sugg", "mapping", refs_analysis="DA")
+    assert hasattr(w, "chunk") and hasattr(w, "done") and hasattr(w, "failed")
+    assert w._refs == "DA", "la co-écriture voit la direction artistique"
+    assert "chat_stream" in inspect.getsource(ArrangeChatConducteurWorker.run)
+    assert "ACTES" in _ARRANGE_CHAT and "SUGGESTION RÉVISÉE" in _ARRANGE_CHAT
+    assert "INT./EXT." in _ARRANGE_CHAT, "format scénario interdit"
+    from ui.page_scenario_live import PageScenario
+    src = inspect.getsource(PageScenario._open_arrange_window)
+    assert "ArrangeChatConducteurWorker" in src, "chat branché dans la fenêtre"
+    assert "DISCUSSION DE CO-ÉCRITURE" in src, \
+        "l'application intègre la discussion (les décisions priment)"
+    assert "abandon_thread(_chat_worker[0])" in src, "anti-crash : worker parqué"
+
+
+@test
 def plafonds_anti_troncature():
     """Tout worker qui SORT un conducteur/découpage COMPLET = 16000 tokens.
     (Vu en réel 2026-06-11 : mise en page et enrichissement tronqués à 8000/8192.)"""
