@@ -685,6 +685,10 @@ def refs_conducteur_file_et_fond():
     from api.live_refs import AnalyzeRefsConducteurWorker, EnrichConducteurWithRefsWorker
     w = AnalyzeRefsConducteurWorker(["a.jpg"], "texte", "mapping")
     assert hasattr(w, "chunk") and w._mode == "mapping"
+    # Contrat fenêtre : chunk/done/failed (« done », pas « finished » — bug 2026-06-11)
+    assert type(w).done is not type(w).failed and hasattr(w, "done"), "signal done présent"
+    assert "self.done.emit" in inspect.getsource(AnalyzeRefsConducteurWorker.run), \
+        "run() émet done (finished masquerait le signal natif QThread)"
     src = inspect.getsource(AnalyzeRefsConducteurWorker.run)
     assert "for i, path in enumerate" in src, "file d'attente image par image"
     assert "SYNTHÈSE" in src, "synthèse de direction visuelle"

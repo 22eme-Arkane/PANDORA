@@ -89,9 +89,11 @@ _ENRICH_SYSTEM = (
 
 class AnalyzeRefsConducteurWorker(QThread):
     """Analyse en FILE D'ATTENTE (1 requête/image, images redimensionnées) puis
-    SYNTHÈSE croisée avec le conducteur. Signaux : chunk/finished/failed —
-    compatible avec la fenêtre d'analyse existante (_open_refs_window)."""
-    finished = pyqtSignal(str)
+    SYNTHÈSE croisée avec le conducteur. Signaux : chunk/done/failed —
+    compatible avec la fenêtre d'analyse existante (_open_refs_window).
+    NB : « done », pas « finished » — redéfinir finished masquerait le signal
+    natif de QThread."""
+    done   = pyqtSignal(str)
     failed   = pyqtSignal(str)
     chunk    = pyqtSignal(str)
 
@@ -154,7 +156,7 @@ class AnalyzeRefsConducteurWorker(QThread):
 
             full = ("\n\n".join(analyses)
                     + "\n\n═══ SYNTHÈSE — DIRECTION VISUELLE ═══\n" + synthesis.strip())
-            self.finished.emit(full)
+            self.done.emit(full)
         except Exception as e:
             from core.worker import humanize_api_error
             self.failed.emit(humanize_api_error(str(e)))
