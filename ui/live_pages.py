@@ -41,12 +41,13 @@ from ui.page_storyboard_live    import PageStoryboard   as _PageStoryboardLive
 # Les deux séquences partagent la copie Storyboard Live, avec un namespace de
 # données distinct (live_seq_live / live_seq_mapping) — seul ajout propre au Live.
 
-# Ordre conducteur par défaut (drag toujours possible ensuite) :
-# grip · Mood · Acte · Plan · TC · Durée · BPM · Musique · Transition · Notes ·
-# Prompt vidéo/son · Vitesse · (colonnes caméra/décor, masquées selon la page) ·
-# Accessoires · Acteurs · boutons.
-_LIVE_DEFAULT_ORDER = [0, 1, 2, 3, 16, 15, 18, 17, 19, 20, 4, 10,
-                       5, 6, 7, 8, 9, 11, 12, 13, 14, 21]
+# Ordre conducteur par défaut — validé par Matthieu (capture 2026-06-10) :
+# grip · Mood · Acte · Plan · TC · Prompt vidéo/son · Musique · BPM · Vitesse ·
+# Durée · Notes/Repère · Transition · Acteurs · Accessoires ·
+# (colonnes caméra/décor, masquées selon la page) · boutons.
+# Drag toujours possible ensuite (l'ordre personnalisé du projet prime).
+_LIVE_DEFAULT_ORDER = [0, 1, 2, 3, 16, 4, 17, 18, 10, 15, 20, 19, 14, 13,
+                       5, 6, 7, 8, 9, 11, 12, 21]
 
 
 class SequenceLivePage(_PageStoryboardLive):

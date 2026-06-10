@@ -259,8 +259,11 @@ def colonnes_sequences():
     vis = M._visible_order()
     assert all(c not in vis for c in (5, 6, 7, 8, 9, 11, 12)), "masquage Mapping (+Mouvement)"
     assert all(c in vis for c in (16, 17, 18, 19, 20)), "colonnes conducteur visibles"
-    # Ordre par défaut conducteur appliqué : TC (16) juste après Plan (3)
-    assert vis[:5] == [0, 1, 2, 3, 16], "TC/Durée en tête par défaut"
+    # Ordre par défaut VALIDÉ (capture Matthieu 2026-06-10) : Mood · Acte · Plan ·
+    # TC · Prompt · Musique · BPM · Vitesse · Durée · Notes · Transition ·
+    # Acteurs · Accessoires
+    assert vis == [0, 1, 2, 3, 16, 4, 17, 18, 10, 15, 20, 19, 14, 13, 21], \
+        "ordre par défaut Mapping = capture validée"
     live = SequenceLivePage(); live.refresh()
     vis_l = M._visible_order()
     assert all(c not in vis_l for c in (6, 11, 12)), "Live masque Mouvement/Décor/Heure"
