@@ -2573,6 +2573,16 @@ class TabT2V(QScrollArea):
         self._raccord_auto_cb = _raccord_auto_cb_inner
         _raccords_lay.addWidget(self._raccord_auto_toggle_row)
 
+        self._sfx_auto_toggle_row, _sfx_auto_cb_inner = _raccord_toggle(
+            "Sound design auto",
+            "À la fin de chaque clip, génère aussi l'ambiance SFX du plan (prompt son, "
+            "Mirelo ~$0.01/s) — exportée dans data/live_sound_design",
+            False,
+        )
+        self._sfx_auto_cb = _sfx_auto_cb_inner
+        _raccords_lay.addWidget(self._sfx_auto_toggle_row)
+        self._sfx_workers: list = []   # refs anti-GC des workers SFX en cours
+
         self._dyn_cam_toggle_row = toggle_row(
             "Caméra dynamique",
             "Changement d'angle toutes les 2 secondes",
@@ -3871,6 +3881,29 @@ class TabT2V(QScrollArea):
             davinci_msg = f"\n\n◈ Vidéo sauvegardée :\n{local_path}"
         else:
             davinci_msg = f"\n\n◈ Téléchargement échoué : {ir['error']}"
+
+        # ── Sound design auto : génère l'ambiance SFX du plan en parallèle ────
+        if (getattr(self, "_sfx_auto_cb", None) and self._sfx_auto_cb.isChecked()
+                and self._active_shot):
+            _sp = (self._active_shot.get("sound_prompt", "") or "").strip()
+            if _sp:
+                try:
+                    from api.tts import SFX1Worker
+                    from core.context import get_data_root
+                    _dur = float(self._active_shot.get("duration", 5.0) or 5.0)
+                    _lbl = (shot_title or f"plan_{self._active_shot.get('number', '')}") + "_sfx"
+                    _w = SFX1Worker(_sp, max(1.0, min(60.0, _dur)), label=_lbl,
+                                    out_dir=os.path.join(get_data_root(), "live_sound_design"))
+                    self._sfx_workers.append(_w)
+                    _w.finished.connect(
+                        lambda _p, w=_w: self._sfx_workers.remove(w)
+                        if w in self._sfx_workers else None)
+                    _w.failed.connect(
+                        lambda _e, w=_w: self._sfx_workers.remove(w)
+                        if w in self._sfx_workers else None)
+                    _w.start()
+                except Exception:
+                    pass
 
         # ADN visuel : mémorise le seed utilisé pour les prochaines générations
         seed_used = result.get("seed", 0)

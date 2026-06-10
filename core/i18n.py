@@ -367,6 +367,46 @@ _FR_TO_EN: dict[str, str] = {
     "Généré ✓":                            "Generated ✓",
     "Envoyer vers Sound Design (Studio IA)":  "Send to Sound Design (AI Studio)",
     "Remplacer le découpage ?":            "Replace the breakdown?",
+    "Caler sur la musique":                "Sync to music",
+    "Quantise les durées en MESURES (BPM du morceau assigné) et attire les cuts "
+    "sur les DROPS — calage exact, calculé localement (pas par l'IA).":
+        "Quantizes durations to BARS (BPM of the assigned track) and snaps cuts "
+        "to DROPS — exact sync, computed locally (not by the AI).",
+    "Musique non analysée":                "Music not analyzed",
+    "Aucun morceau analysé.\n\nDans le Conducteur, ajoute tes morceaux "
+    "dans « Musiques du set » puis clique « Analyser le set » "
+    "(BPM + drops) avant de caler le découpage.":
+        "No analyzed track.\n\nIn the Rundown, add your tracks in “Set music” then "
+        "click “Analyze set” (BPM + drops) before syncing the breakdown.",
+    "Déjà calé":                           "Already in sync",
+    "Toutes les durées sont déjà calées sur les mesures et les drops ✓":
+        "All durations are already snapped to bars and drops ✓",
+    "plan(s) ajusté(s) en mesures":        "shot(s) adjusted to bars",
+    "cut(s) sur un drop":                  "cut(s) on a drop",
+    "Durée totale :":                      "Total duration:",
+    "Appliquer ?":                         "Apply?",
+    "Sound design auto":                   "Auto sound design",
+    "Depuis les Séquences — file d'attente":  "From Sequences — queue",
+    "Charger les plans":                   "Load shots",
+    "Générer la file":                     "Generate queue",
+    "Exporter la bande-son (fondu 1s)":    "Export soundtrack (1s crossfade)",
+    "Concatène les SFX générés en UNE bande-son continue avec fondu enchaîné "
+    "entre les plans (pas de coupes nettes) — ffmpeg acrossfade.":
+        "Concatenates the generated SFX into ONE continuous soundtrack with "
+        "crossfades between shots (no hard cuts) — ffmpeg acrossfade.",
+    "Aucun plan avec prompt son dans cette séquence — génère le découpage "
+    "ou renseigne les champs 🔊 Son.":
+        "No shot with a sound prompt in this sequence — generate the breakdown "
+        "or fill in the 🔊 Sound fields.",
+    "plan(s) chargé(s) — prêt à générer.":  "shot(s) loaded — ready to generate.",
+    "ambiance(s) générée(s)":              "ambience(s) generated",
+    "Il faut au moins 2 ambiances générées.":  "At least 2 generated ambiences are needed.",
+    "Mixage de la bande-son (fondu enchaîné)…":  "Mixing the soundtrack (crossfade)…",
+    "Bande-son continue exportée ✓":       "Continuous soundtrack exported ✓",
+    "À la fin de chaque clip, génère aussi l'ambiance SFX du plan (prompt son, "
+    "Mirelo ~$0.01/s) — exportée dans data/live_sound_design":
+        "At the end of each clip, also generates the shot's SFX ambience (sound "
+        "prompt, Mirelo ~$0.01/s) — exported to data/live_sound_design",
     "plan(s) existant(s) seront REMPLACÉS par le nouveau découpage.\n\nContinuer ?":
         "existing shot(s) will be REPLACED by the new breakdown.\n\nContinue?",
     "Upscaling":                           "Upscaling",

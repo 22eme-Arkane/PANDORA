@@ -2373,6 +2373,22 @@ class PageStoryboard(QWidget):
         self._btn_batch_mood.clicked.connect(self._on_batch_mood)
         lay.addWidget(self._btn_batch_mood)
 
+        self._btn_music_align = QPushButton("♫  " + translate("Caler sur la musique"))
+        self._btn_music_align.setFixedHeight(34)
+        self._btn_music_align.setToolTip(translate(
+            "Quantise les durées en MESURES (BPM du morceau assigné) et attire les cuts "
+            "sur les DROPS — calage exact, calculé localement (pas par l'IA)."))
+        self._btn_music_align.setStyleSheet(
+            f"QPushButton{{background:transparent;color:{CP['accent']};"
+            f"border:1px solid {CP['accent']};border-radius:8px;"
+            f"font-size:11px;font-weight:700;padding:0 14px;}}"
+            f"QPushButton:hover{{background:rgba(78,205,196,0.12);}}"
+            f"QPushButton:pressed{{background:rgba(78,205,196,0.22);}}"
+            f"QPushButton:disabled{{color:{CP['text_dim']};border-color:{CP['border']};}}"
+        )
+        self._btn_music_align.clicked.connect(self._on_music_align)
+        lay.addWidget(self._btn_music_align)
+
         btn_new = QPushButton("＋  Ajouter un plan")
         btn_new.setFixedHeight(34)
         btn_new.setStyleSheet(
@@ -2546,6 +2562,55 @@ class PageStoryboard(QWidget):
             return [t for t in tracks if isinstance(t, dict) and t.get("name")]
         except Exception:
             return []
+
+    def _on_music_align(self):
+        """Cale le découpage sur la musique : durées en mesures + cuts sur les drops.
+        Calcul LOCAL et déterministe (core/music_align) — aperçu avant application."""
+        tracks = self._load_conductor_tracks()
+        analyzed = [t for t in tracks if t.get("bpm")]
+        if not analyzed:
+            QMessageBox.information(
+                self, translate("Musique non analysée"),
+                translate("Aucun morceau analysé.\n\nDans le Conducteur, ajoute tes morceaux "
+                          "dans « Musiques du set » puis clique « Analyser le set » "
+                          "(BPM + drops) avant de caler le découpage."))
+            return
+        if not self._all_shots:
+            return
+        from core.music_align import align_shots_to_music
+        changes = align_shots_to_music(self._all_shots, analyzed)
+        modified = [c for c in changes if abs(c["new"] - c["old"]) >= 0.05]
+        if not modified:
+            QMessageBox.information(
+                self, translate("Déjà calé"),
+                translate("Toutes les durées sont déjà calées sur les mesures et les drops ✓"))
+            return
+        snapped = sum(1 for c in changes if c["snapped_drop"])
+        old_total = sum(c["old"] for c in changes)
+        new_total = sum(c["new"] for c in changes)
+        _lines = [f"  Plan {c['number']} : {c['old']:.1f}s → {c['new']:.1f}s"
+                  + ("  ⚡ drop" if c["snapped_drop"] else "")
+                  for c in modified[:12]]
+        if len(modified) > 12:
+            _lines.append(f"  … +{len(modified) - 12}")
+        reply = QMessageBox.question(
+            self, translate("Caler sur la musique"),
+            f"{len(modified)} {translate('plan(s) ajusté(s) en mesures')} · "
+            f"{snapped} {translate('cut(s) sur un drop')}\n"
+            f"{translate('Durée totale :')} {old_total:.1f}s → {new_total:.1f}s\n\n"
+            + "\n".join(_lines) + "\n\n" + translate("Appliquer ?"),
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.Cancel,
+            QMessageBox.StandardButton.Yes,
+        )
+        if reply != QMessageBox.StandardButton.Yes:
+            return
+        by_id = {s.get("id"): s for s in self._all_shots}
+        for c in modified:
+            shot = by_id.get(c["id"])
+            if shot is not None:
+                shot["duration"] = c["new"]
+                sb_api.save_shot(shot)
+        self.refresh()
 
     def _render(self):
         # Colonnes masquées selon le mode de la page (Mapping en masque plusieurs).

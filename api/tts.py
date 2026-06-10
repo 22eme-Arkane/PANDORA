@@ -647,11 +647,13 @@ class SFX1Worker(QThread):
     finished = pyqtSignal(str)
     failed   = pyqtSignal(str)
 
-    def __init__(self, text: str, duration: float = 10.0, label: str = ""):
+    def __init__(self, text: str, duration: float = 10.0, label: str = "",
+                 out_dir: str = ""):
         super().__init__()
         self._text     = text
         self._duration = float(duration)
         self._label    = label or "sfx"
+        self._out_dir  = out_dir   # vide = dossier Doublage par défaut
 
     def run(self):
         cfg = load_config()
@@ -706,7 +708,9 @@ class SFX1Worker(QThread):
 
             safe = "".join(c for c in self._label if c.isalnum() or c in " -_").strip() or "sfx"
             ts   = int(time.time())
-            path = os.path.join(_audio_output_dir(), f"{safe}_{ts}.wav")
+            out_dir = self._out_dir or _audio_output_dir()
+            os.makedirs(out_dir, exist_ok=True)
+            path = os.path.join(out_dir, f"{safe}_{ts}.wav")
             with open(path, "wb") as f:
                 f.write(data)
 

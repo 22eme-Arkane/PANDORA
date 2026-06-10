@@ -461,6 +461,38 @@ def selecteur_assistant_ia():
 
 
 @test
+def calage_musical_deterministe():
+    """align_shots_to_music : durées en mesures exactes + cuts attirés sur les drops."""
+    from core.music_align import align_shots_to_music, bar_seconds
+    bar = bar_seconds(128.0)                      # 1.875 s
+    assert abs(bar - 1.875) < 1e-9
+    tracks = [{"name": "t1.mp3", "bpm": 128.0, "duration": 120.0,
+               "drops": [7.5, 30.0]}]
+    shots = [
+        {"id": "a", "number": 1, "duration": 6.8, "music_track": "t1.mp3"},
+        {"id": "b", "number": 2, "duration": 5.2, "music_track": "t1.mp3"},
+        {"id": "c", "number": 3, "duration": 14.9, "music_track": ""},
+    ]
+    ch = align_shots_to_music(shots, tracks)
+    assert len(ch) == 3
+    # Plan 1 : 6.8s → ~4 mesures (7.5s) ET le cut tombe pile sur le drop à 7.5s
+    assert ch[0]["new"] == 7.5 and ch[0]["snapped_drop"], "cut sur drop"
+    # Toutes les durées non-snappées = multiples exacts de mesure, bornées 2-15
+    for c in ch:
+        assert 2.0 <= c["new"] <= 15.0
+        if not c["snapped_drop"]:
+            assert abs((c["new"] / bar) - round(c["new"] / bar)) < 1e-6, "multiple de mesure"
+    # Sans morceau analysé → aucun changement proposé
+    assert align_shots_to_music(shots, [{"name": "x", "bpm": 0}]) == []
+    # Le bouton existe sur la page Séquences
+    from ui.live_pages import SequenceLivePage
+    import core.storyboard as sb
+    p = SequenceLivePage()
+    assert hasattr(p, "_btn_music_align") and hasattr(p, "_on_music_align")
+    sb.set_namespace("storyboard")
+
+
+@test
 def sound_prompt_vers_sound_design():
     """« ➤ SFX » : plan → Studio IA → onglet Sound Design pré-rempli."""
     import core.storyboard as sb
@@ -475,6 +507,39 @@ def sound_prompt_vers_sound_design():
     from ui.live_pages import SequenceLivePage
     p = SequenceLivePage()
     assert hasattr(p, "sound_to_studio"), "signal sound_to_studio présent"
+    sb.set_namespace("storyboard")
+
+
+@test
+def sound_design_file_et_crossfade():
+    """File d'attente SFX depuis les Séquences + commande de fondu enchaîné."""
+    import core.storyboard as sb
+    from ui.tab_sound_design_live import TabSoundDesignLive
+    sb.set_namespace("live_seq_live")
+    sb.clear_version_shots(sb.DEFAULT_VERSION_ID)
+    sb.save_shot({"number": 1, "scene_title": "A", "sound_prompt": "bass drone",
+                  "duration": 6}, sb.DEFAULT_VERSION_ID)
+    sb.save_shot({"number": 2, "scene_title": "B", "sound_prompt": "",
+                  "duration": 5}, sb.DEFAULT_VERSION_ID)   # sans prompt → exclu
+    sb.save_shot({"number": 3, "scene_title": "C", "sound_prompt": "glitch riser",
+                  "duration": 8}, sb.DEFAULT_VERSION_ID)
+    sb.set_namespace("storyboard")
+    t = TabSoundDesignLive()
+    t._set_seq_source("live")
+    t._load_seq_plans()
+    assert len(t._sfx_queue) == 2, "seuls les plans avec prompt son sont chargés"
+    assert [q["number"] for q in t._sfx_queue] == [1, 3], "ordre des plans"
+    assert t._btn_run_queue.isEnabled(), "bouton Générer la file actif"
+    # Commande de crossfade (pure) : N entrées → N-1 acrossfade chaînés
+    cmd = TabSoundDesignLive._build_crossfade_cmd(
+        "ffmpeg", ["a.wav", "b.wav", "c.wav"], "out.wav", fade_s=1.0)
+    fc = cmd[cmd.index("-filter_complex") + 1]
+    assert fc.count("acrossfade") == 2 and "[a2]" in fc, "chaîne acrossfade"
+    assert cmd[-1] == "out.wav" and cmd.count("-i") == 3
+    # Toggle « Sound design auto » présent dans Générer depuis Séquences
+    from ui.tab_t2v_live import TabT2V
+    tv = TabT2V()
+    assert hasattr(tv, "_sfx_auto_cb") and not tv._sfx_auto_cb.isChecked()
     sb.set_namespace("storyboard")
 
 
