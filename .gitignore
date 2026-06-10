@@ -91,8 +91,9 @@ PANDORA_DEVLOG.md
 # ── Test et debug ─────────────────────────────────────────────────────────────
 test_*.py
 debug_*.py
-# … mais le harnais de non-régression EST versionné
+# … mais les harnais de non-régression SONT versionnés
 !tools/test_live.py
+!tools/test_cinema.py
 
 # ── Binaires locaux (jamais commités) ────────────────────────────────────────
 ffmpeg.exe

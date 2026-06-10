@@ -201,12 +201,32 @@ class PageLiveSettings(QWidget):
             lbl.setFixedWidth(180)
             return lbl
 
+        def _link_btn(label: str, url: str) -> QPushButton:
+            b = QPushButton(label)
+            b.setFixedHeight(28)
+            b.setCursor(Qt.CursorShape.PointingHandCursor)
+            b.setToolTip(url)
+            b.setStyleSheet(
+                f"QPushButton{{background:transparent;color:{CP['accent']};"
+                f"border:1px solid {CP['accent_dim']};border-radius:6px;"
+                f"font-size:10px;font-weight:700;padding:0 10px;}}"
+                f"QPushButton:hover{{background:rgba(78,205,196,0.10);}}"
+            )
+            def _open(checked=False, u=url):
+                from PyQt6.QtGui import QDesktopServices
+                from PyQt6.QtCore import QUrl
+                QDesktopServices.openUrl(QUrl(u))
+            b.clicked.connect(_open)
+            return b
+
         key_row = QHBoxLayout()
         key_row.setSpacing(12)
         key_row.addWidget(_key_label("Clé fal.ai :"))
         self._api_key_input = _input("xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx:xxxx…", 0)
         self._api_key_input.setEchoMode(QLineEdit.EchoMode.Password)
         key_row.addWidget(self._api_key_input, 1)
+        key_row.addWidget(_link_btn("⇗  Clés", "https://fal.ai/dashboard/keys"))
+        key_row.addWidget(_link_btn("⇗  Crédits", "https://fal.ai/dashboard/billing"))
         ac.addLayout(key_row)
 
         ant_row = QHBoxLayout()
@@ -215,6 +235,8 @@ class PageLiveSettings(QWidget):
         self._anthropic_input = _input("sk-ant-…", 0)
         self._anthropic_input.setEchoMode(QLineEdit.EchoMode.Password)
         ant_row.addWidget(self._anthropic_input, 1)
+        ant_row.addWidget(_link_btn("⇗  Clés", "https://console.anthropic.com/settings/keys"))
+        ant_row.addWidget(_link_btn("⇗  Crédits", "https://console.anthropic.com/settings/billing"))
         ac.addLayout(ant_row)
 
         # ── Assistant IA (texte) — même réglage que Cinéma (config partagée) ──
