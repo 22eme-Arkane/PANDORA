@@ -40,6 +40,8 @@ data/live_sound_design/
 data/upscaled/
 data/live_building_ref.json
 data/facade_fond_noir.jpg
+data/live_ref_library/
+data/image_library/
 
 # Conserver uniquement le template vierge
 !data/config.clean.json
