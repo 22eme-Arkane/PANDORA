@@ -557,10 +557,18 @@ class _ResizableHeader(QWidget):
                 src = self._reorder_vis
                 tgt = self._reorder_target
                 if tgt is not None and src != tgt:
-                    # Perform reorder: move src to tgt position
+                    # src/tgt sont des positions VISUELLES ; _col_order est LOGIQUE
+                    # (et contient aussi les colonnes masquées) → on mappe via
+                    # _cell_logical, sinon le drag déplace la mauvaise colonne
+                    # dès qu'une colonne est masquée (Mapping).
+                    src_logical = self._cell_logical[src]
+                    tgt_logical = self._cell_logical[tgt]
                     new_order = list(_col_order)
-                    item = new_order.pop(src)
-                    new_order.insert(tgt, item)
+                    new_order.remove(src_logical)
+                    insert_at = new_order.index(tgt_logical)
+                    if tgt > src:
+                        insert_at += 1   # déposé À DROITE de la cible
+                    new_order.insert(insert_at, src_logical)
                     _col_order[:] = new_order
                     _col_hub.reordered.emit(new_order)
                 self._reorder_vis = None
@@ -1936,6 +1944,10 @@ class PageStoryboard(QWidget):
     # SequenceMappingPage la surcharge pour masquer Axe/Valeur/Distance/Décor/Heure.
     _hidden_cols: set = set()
 
+    # Ordre de colonnes par défaut de la page (None = ordre naturel). Utilisé
+    # seulement si l'utilisateur n'a pas encore personnalisé l'ordre (drag).
+    _default_col_order: list | None = None
+
     def __init__(self):
         super().__init__()
         self.setStyleSheet(f"background:{CP['bg0']};")
@@ -2359,6 +2371,9 @@ class PageStoryboard(QWidget):
         )
         self._btn_sync.clicked.connect(self._on_sync)
         lay.addWidget(self._btn_sync)
+        # Héritage Cinéma retiré (validé) : la synchro réaligne les prompts sur les
+        # fiches casting/décors — sans objet en Live (prompts issus du découpage).
+        self._btn_sync.setVisible(False)
 
         self._btn_batch_mood = QPushButton("✦  Générer les Moods")
         self._btn_batch_mood.setFixedHeight(34)
@@ -2576,6 +2591,9 @@ class PageStoryboard(QWidget):
                           "(BPM + drops) avant de caler le découpage."))
             return
         if not self._all_shots:
+            QMessageBox.information(
+                self, translate("Aucun plan"),
+                translate("Cette séquence ne contient aucun plan à caler."))
             return
         from core.music_align import align_shots_to_music
         changes = align_shots_to_music(self._all_shots, analyzed)
@@ -2618,6 +2636,11 @@ class PageStoryboard(QWidget):
         _HIDDEN_COLS = set(getattr(self, "_hidden_cols", set()) or set())
         # Reload column order from project config
         order = sb_api.load_col_order(len(_COLS))
+        # Pas de personnalisation sauvegardée → ordre par défaut de la page
+        # (Live : TC/Durée/BPM/Musique/Transition/Notes en tête, acteurs/accessoires en fin)
+        if order == list(range(len(_COLS))) and self._default_col_order \
+                and sorted(self._default_col_order) == list(range(len(_COLS))):
+            order = list(self._default_col_order)
         _col_order[:] = order
 
         while self._list_lay.count():

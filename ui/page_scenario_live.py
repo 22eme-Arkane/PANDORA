@@ -1897,12 +1897,13 @@ class PageScenario(QWidget):
         if not suggestions:
             self._ai_progress_lbl.setText("Lance d'abord « Proposer un arrangement ».")
             return
-        from api.screenplay import ApplyArrangeWorker
+        # Worker CONDUCTEUR (le worker Cinéma réécrivait au format scénario INT./EXT.)
+        from api.live_screenplay import ApplyArrangeConducteurWorker
         self._set_ai_busy(True)
-        self._ai_progress_lbl.setText("Application des suggestions via Claude…")
+        self._ai_progress_lbl.setText(translate("Application des suggestions via Claude…"))
         self._btn_undo_action.setVisible(False)
         intensity = self._arrange_intensity_value
-        self._worker = ApplyArrangeWorker(original, suggestions, intensity)
+        self._worker = ApplyArrangeConducteurWorker(original, suggestions, intensity)
         self._worker.finished.connect(self._on_modify_done)
         self._worker.failed.connect(self._on_ai_fail)
         self._worker.start()
@@ -2127,27 +2128,26 @@ class PageScenario(QWidget):
         w.failed.connect(self._on_ai_fail)
         return w
 
+    def _live_extract_dialog(self, factory, kind: str, text: str):
+        """Construit le dialogue d'extraction partagé MAIS avec l'extracteur LIVE
+        (performers / objets de scène) à la place des extracteurs Cinéma."""
+        from api.live_extract import live_extract_worker_cls
+        dlg = factory(text, self)
+        dlg._extract_cls = live_extract_worker_cls(kind, self._live_mode)
+        return dlg
+
     def _on_gen_characters(self):
         text = self._get_text()
         if not text:
             self._ai_progress_lbl.setText("Écris d'abord un conducteur.")
             return
         from ui.dialog_extract_generate import ExtractGenerateDialog
-        dlg = ExtractGenerateDialog.for_characters(text, self)
+        dlg = self._live_extract_dialog(ExtractGenerateDialog.for_characters, "casting", text)
         dlg.exec()
         if dlg._page_key and dlg.result() == dlg.DialogCode.Accepted:
             self.navigate_requested.emit(dlg._page_key, "")
 
-    def _on_gen_decors(self):
-        text = self._get_text()
-        if not text:
-            self._ai_progress_lbl.setText("Écris d'abord un conducteur.")
-            return
-        from ui.dialog_extract_generate import ExtractGenerateDialog
-        dlg = ExtractGenerateDialog.for_decors(text, self)
-        dlg.exec()
-        if dlg._page_key and dlg.result() == dlg.DialogCode.Accepted:
-            self.navigate_requested.emit(dlg._page_key, "")
+    # (handler Décors supprimé — pas de Décors dans le Live)
 
     def _on_gen_accessories(self):
         text = self._get_text()
@@ -2155,21 +2155,12 @@ class PageScenario(QWidget):
             self._ai_progress_lbl.setText("Écris d'abord un conducteur.")
             return
         from ui.dialog_extract_generate import ExtractGenerateDialog
-        dlg = ExtractGenerateDialog.for_accessories(text, self)
+        dlg = self._live_extract_dialog(ExtractGenerateDialog.for_accessories, "accessoires", text)
         dlg.exec()
         if dlg._page_key and dlg.result() == dlg.DialogCode.Accepted:
             self.navigate_requested.emit(dlg._page_key, "")  # "accessoires"
 
-    def _on_gen_hmc(self):
-        text = self._get_text()
-        if not text:
-            self._ai_progress_lbl.setText("Écris d'abord un conducteur.")
-            return
-        from ui.dialog_extract_generate import ExtractGenerateDialog
-        dlg = ExtractGenerateDialog.for_hmc(text, self)
-        dlg.exec()
-        if dlg._page_key and dlg.result() == dlg.DialogCode.Accepted:
-            self.navigate_requested.emit(dlg._page_key, "")
+    # (handler HMC supprimé — pas de HMC dans le Live)
 
     def _on_gen_vehicles(self):
         text = self._get_text()
@@ -2177,7 +2168,7 @@ class PageScenario(QWidget):
             self._ai_progress_lbl.setText("Écris d'abord un conducteur.")
             return
         from ui.dialog_extract_generate import ExtractGenerateDialog
-        dlg = ExtractGenerateDialog.for_vehicles(text, self)
+        dlg = self._live_extract_dialog(ExtractGenerateDialog.for_vehicles, "vehicules", text)
         dlg.exec()
         if dlg._page_key and dlg.result() == dlg.DialogCode.Accepted:
             self.navigate_requested.emit(dlg._page_key, "")
@@ -2479,6 +2470,9 @@ class PageScenario(QWidget):
         btn_row.addWidget(btn_close)
         btn_row.addStretch()
         btn_row.addWidget(btn_session)
+        # Héritage Cinéma retiré (validé) : la session de co-écriture réécrit au
+        # format SCÉNARIO (INT./EXT.) — sans objet pour un conducteur.
+        btn_session.setVisible(False)
         btn_row.addWidget(btn_direct)
         btn_row.addWidget(btn_update)
         lay.addLayout(btn_row)
@@ -2488,13 +2482,14 @@ class PageScenario(QWidget):
 
         # ── Phase 2 : Appliquer les suggestions ──────────────────────────────
         def _do_apply_direct():
-            from api.screenplay import ApplyArrangeWorker
+            # Worker CONDUCTEUR (celui de Cinéma réécrivait au format scénario)
+            from api.live_screenplay import ApplyArrangeConducteurWorker
             analysis_txt = _final_analysis[0]
             original     = self._get_text()
             if not analysis_txt or not original:
                 return
             intensity = self._arrange_intensity_value
-            w = ApplyArrangeWorker(original, analysis_txt, intensity)
+            w = ApplyArrangeConducteurWorker(original, analysis_txt, intensity)
             _apply_worker[0] = w
             _streaming_active[0] = True
             btn_close.setText("Annuler")
@@ -3345,14 +3340,14 @@ class PageScenario(QWidget):
             pass
 
         # ── Extraction + génération images : une fenêtre par catégorie ─────────
+        # Live : casting / accessoires / véhicules uniquement (pas de Décors ni HMC
+        # dans le Live), avec les extracteurs calibrés LIVE.
         from ui.dialog_extract_generate import ExtractGenerateDialog
         from PyQt6.QtCore import QTimer
         for make_dlg in [
-            lambda: ExtractGenerateDialog.for_characters(text, self),
-            lambda: ExtractGenerateDialog.for_decors(text, self),
-            lambda: ExtractGenerateDialog.for_accessories(text, self),
-            lambda: ExtractGenerateDialog.for_hmc(text, self),
-            lambda: ExtractGenerateDialog.for_vehicles(text, self),
+            lambda: self._live_extract_dialog(ExtractGenerateDialog.for_characters, "casting", text),
+            lambda: self._live_extract_dialog(ExtractGenerateDialog.for_accessories, "accessoires", text),
+            lambda: self._live_extract_dialog(ExtractGenerateDialog.for_vehicles, "vehicules", text),
         ]:
             dlg = make_dlg()
             dlg._auto_close = True

@@ -57,6 +57,8 @@ EXPECTED_ONLY_LIVE = {
         "_on_isolate_building", "_on_isolate_done", "_on_isolate_failed",
         "_make_mode_btn", "_set_live_mode", "_apply_mode_style",
         "_apply_layout", "_apply_decoupage", "_open_decoupage_window",
+        # Extraction calibrée Live (remplace les extracteurs Cinéma)
+        "_live_extract_dialog",
     },
     "ui/page_storyboard_live.py": {
         "_visible_order", "_load_conductor_tracks", "_on_music_align",
@@ -67,6 +69,10 @@ EXPECTED_ONLY_CINEMA = {
         # DaVinci purgé côté Live (voulu)
         "_DaVinciBar", "_check_davinci_connection",
         "_on_davinci_connection_changed", "_refresh", "_on_connect",
+    },
+    "ui/page_scenario_live.py": {
+        # Pas de Décors ni de HMC dans le Live (handlers supprimés, validé)
+        "_on_gen_decors", "_on_gen_hmc",
     },
 }
 

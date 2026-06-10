@@ -237,6 +237,53 @@ Ne réécris pas tout le conducteur — tu PROPOSES. Réponds en français.
 """
 
 
+_APPLY_ARRANGE_CONDUCTEUR = """\
+Tu reçois un CONDUCTEUR de performance visuelle (live VJ ou mapping) et des
+SUGGESTIONS d'arrangement. Réécris le conducteur en appliquant ces suggestions.
+
+IMPORTANT — c'est un CONDUCTEUR, PAS un scénario de film. INTERDIT : « INT. » /
+« EXT. », en-têtes de scène, numéros de scène, « séquence », « scène », mise en
+page scénario. Garde la FORME du conducteur original (déroulé en actes / moments),
+le français et la voix de l'auteur. N'invente aucun élément non demandé.
+
+Réponds UNIQUEMENT avec le conducteur réécrit (aucun commentaire autour).
+"""
+
+
+class ApplyArrangeConducteurWorker(QThread):
+    """Applique les suggestions d'arrangement au CONDUCTEUR (streaming).
+    Remplace ApplyArrangeWorker (Cinéma) qui réécrivait au format scénario."""
+    finished = pyqtSignal(str)
+    failed   = pyqtSignal(str)
+    chunk    = pyqtSignal(str)
+
+    def __init__(self, original: str, suggestions: str, intensity: int = 5):
+        super().__init__()
+        self._original    = original
+        self._suggestions = suggestions
+        self._intensity   = max(1, min(10, intensity))
+
+    def run(self):
+        from core.ai_provider import stream, key_error
+        err = key_error()
+        if err:
+            self.failed.emit(err)
+            return
+        try:
+            user = (
+                f"[INTENSITÉ D'APPLICATION : {self._intensity}/10 — "
+                f"{'modifications légères' if self._intensity <= 3 else 'modifications équilibrées' if self._intensity <= 6 else 'refonte assumée'}]\n\n"
+                f"CONDUCTEUR ORIGINAL :\n{self._original}\n\n"
+                f"SUGGESTIONS D'ARRANGEMENT :\n{self._suggestions}"
+            )
+            full = stream(_APPLY_ARRANGE_CONDUCTEUR, user, on_chunk=self.chunk.emit,
+                          tier="creative", max_tokens=8192)
+            self.finished.emit(full.strip())
+        except Exception as e:
+            from core.worker import humanize_api_error
+            self.failed.emit(humanize_api_error(str(e)))
+
+
 class ArrangeConducteurStreamWorker(QThread):
     """Arrangement du conducteur en STREAMING (même interface que le worker Cinéma :
     signaux chunk/finished/failed) → alimente la fenêtre de co-écriture. Calibré Live/Mapping."""

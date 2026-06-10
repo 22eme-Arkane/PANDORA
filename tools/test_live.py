@@ -238,21 +238,60 @@ def facade_resolution_par_namespace():
 
 @test
 def colonnes_sequences():
-    """22 colonnes, en-têtes conducteur, masquage Mapping {5,7,8,9,11,12}."""
+    """22 colonnes, masquages Live {6,11,12} / Mapping {5..12}, ordre conducteur."""
     import core.storyboard as sb
     import ui.page_storyboard_live as M
-    from ui.live_pages import SequenceLivePage, SequenceMappingPage
+    from ui.live_pages import SequenceLivePage, SequenceMappingPage, _LIVE_DEFAULT_ORDER
     assert len(M._COLS) == 22, "22 colonnes"
     assert M._COLS[2][0] == "Acte" and M._COLS[4][0] == "Prompt vidéo / son"
     assert M._COLS[16][0] == "TC" and M._COLS[17][0] == "Musique"
     assert M._COLS[18][0] == "BPM" and M._COLS[19][0] == "Transition"
+    assert sorted(_LIVE_DEFAULT_ORDER) == list(range(22)), "ordre défaut = permutation valide"
     mp = SequenceMappingPage(); mp.refresh()
     vis = M._visible_order()
-    assert all(c not in vis for c in (5, 7, 8, 9, 11, 12)), "colonnes masquées en Mapping"
-    assert all(c in vis for c in (16, 17, 18, 19, 20)), "colonnes conducteur visibles en Mapping"
+    assert all(c not in vis for c in (5, 6, 7, 8, 9, 11, 12)), "masquage Mapping (+Mouvement)"
+    assert all(c in vis for c in (16, 17, 18, 19, 20)), "colonnes conducteur visibles"
+    # Ordre par défaut conducteur appliqué : TC (16) juste après Plan (3)
+    assert vis[:5] == [0, 1, 2, 3, 16], "TC/Durée en tête par défaut"
     live = SequenceLivePage(); live.refresh()
-    assert len(M._visible_order()) == len(M._COLS), "Live montre tout"
+    vis_l = M._visible_order()
+    assert all(c not in vis_l for c in (6, 11, 12)), "Live masque Mouvement/Décor/Heure"
+    assert 5 in vis_l and 7 in vis_l, "Live garde Axe/Valeur"
     sb.set_namespace("storyboard")
+
+
+@test
+def reorg_colonnes_et_heritages():
+    """Drag de colonnes correct avec colonnes masquées + héritages Cinéma retirés."""
+    import inspect
+    import ui.page_storyboard_live as M
+    src = inspect.getsource(M)
+    assert "src_logical = self._cell_logical[src]" in src, \
+        "reorder mappe visuel→logique (bug du drag avec colonnes masquées)"
+    assert "self._btn_sync.setVisible(False)" in src, "Synchronisation masquée en Live"
+    # Extraction calibrée Live branchée dans le Conducteur
+    from ui.page_scenario_live import PageScenario
+    src_sc = inspect.getsource(PageScenario)
+    assert "_live_extract_dialog" in src_sc and "live_extract_worker_cls" in src_sc
+    assert "for_decors" not in src_sc and "for_hmc" not in src_sc, \
+        "Tout générer sans Décors/HMC (inexistants en Live)"
+    # Appliquer les suggestions = worker CONDUCTEUR (pas le format scénario)
+    assert "ApplyArrangeConducteurWorker" in src_sc
+    from api.live_screenplay import ApplyArrangeConducteurWorker, _APPLY_ARRANGE_CONDUCTEUR
+    assert "INT." in _APPLY_ARRANGE_CONDUCTEUR, "interdiction INT./EXT. énoncée"
+    w = ApplyArrangeConducteurWorker("a", "b", 5)
+    assert hasattr(w, "chunk"), "streaming"
+    # Focale + Tarifs masqués dans Générer depuis Séquences
+    from ui.tab_t2v_live import TabT2V
+    src_tv = inspect.getsource(TabT2V)
+    assert "self._camera_picker.setVisible(False)" in src_tv
+    assert "btn_tarifs.setVisible(False)" in src_tv
+    # Dialogue Éditer : Optique/Décor/Heure/Micro masqués
+    import ui.dialog_shot_live as ds
+    src_ds = inspect.getsource(ds)
+    for marker in ("_hide_col(col_optic)", "_hide_col(col_decor)",
+                   "_hide_col(col_time)", "_hide_col(col_mic)"):
+        assert marker in src_ds, f"dialogue Live : {marker}"
 
 
 @test

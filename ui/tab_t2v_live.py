@@ -2436,8 +2436,11 @@ class TabT2V(QScrollArea):
         _ez_lay.addWidget(sep2)
 
         # ── Camera & Optics picker ────────────────────────────────────────────
+        # Héritage Cinéma retiré (validé) : la focale vient de « Image & Son »,
+        # page qui n'existe pas dans le Live (cadrage = façade/keyframes).
         self._camera_picker = _CameraOpticsPicker()
         self._camera_picker._cb_focal.currentIndexChanged.connect(self._update_injection_banner)
+        self._camera_picker.setVisible(False)
         _ez_lay.addWidget(self._camera_picker)
 
         # ── Prompt ────────────────────────────────────────────────────────────
@@ -2760,6 +2763,8 @@ class TabT2V(QScrollArea):
             f"color:#f5c518;border-color:rgba(245,197,24,0.50);}}"
         )
         btn_tarifs.clicked.connect(self._open_manual_tarifs)
+        # Héritage Cinéma retiré (validé) : ouvrait le manuel CINÉMA depuis le Live.
+        btn_tarifs.setVisible(False)
         price_h.addWidget(btn_tarifs)
         lay.addWidget(price_frame)
 

@@ -160,6 +160,55 @@ _KIND_LABEL = {
 }
 
 
+def extract_live_assets(kind: str, text: str, mode: str) -> list:
+    """Extraction calibrée LIVE (performers / objets de scène / véhicules) —
+    lève une exception en cas d'erreur. Logique partagée worker + adaptateur."""
+    label, fields = _KIND_LABEL.get(kind, _KIND_LABEL["casting"])
+    system = (
+        f"Tu es assistant de production pour PANDORA | Live. {_mode_ctx(mode)} "
+        f"Identifie les {label} évoqués (ou pertinents) dans la trame fournie. "
+        f"Pour chacun, fournis : {fields}. Textes en français. "
+        "Réponds UNIQUEMENT avec un tableau JSON d'objets (aucun texte autour). "
+        "Si aucun élément pertinent, renvoie []."
+    )
+    out = _claude(system, text)
+    items = []
+    for it in _extract_json_array(out):
+        if isinstance(it, dict) and it.get("name"):
+            items.append({
+                "name":        str(it.get("name", "")).strip(),
+                "category":    str(it.get("category", "")).strip(),
+                "description": str(it.get("description", "")).strip(),
+                "images":      [],
+            })
+    return items
+
+
+def live_extract_worker_cls(kind: str, mode: str):
+    """Fabrique une classe worker compatible ExtractGenerateDialog
+    (ctor(text), signaux finished(list)/failed(str)) mais calibrée LIVE —
+    remplace les extracteurs Cinéma (terminologie film) dans le Conducteur."""
+
+    class _LiveExtractWorker(QThread):
+        finished = pyqtSignal(list)
+        failed   = pyqtSignal(str)
+
+        def __init__(self, text: str):
+            super().__init__()
+            self._text = text
+
+        def run(self):
+            if not self._text.strip():
+                self.failed.emit("La trame est vide.")
+                return
+            try:
+                self.finished.emit(extract_live_assets(kind, self._text, mode))
+            except Exception as e:
+                self.failed.emit(_fmt_err(e))
+
+    return _LiveExtractWorker
+
+
 class ExtractLiveAssetsWorker(QThread):
     """Extrait les éléments d'un type depuis la trame → list[{name,category,description}]."""
     finished = pyqtSignal(str, list)   # (kind, items)
@@ -175,25 +224,8 @@ class ExtractLiveAssetsWorker(QThread):
         if not self._text.strip():
             self.failed.emit("La trame est vide.")
             return
-        label, fields = _KIND_LABEL.get(self._kind, _KIND_LABEL["casting"])
         try:
-            system = (
-                f"Tu es assistant de production pour PANDORA | Live. {_mode_ctx(self._mode)} "
-                f"Identifie les {label} évoqués (ou pertinents) dans la trame fournie. "
-                f"Pour chacun, fournis : {fields}. Textes en français. "
-                "Réponds UNIQUEMENT avec un tableau JSON d'objets (aucun texte autour). "
-                "Si aucun élément pertinent, renvoie []."
-            )
-            out = _claude(system, self._text)
-            items = []
-            for it in _extract_json_array(out):
-                if isinstance(it, dict) and it.get("name"):
-                    items.append({
-                        "name":        str(it.get("name", "")).strip(),
-                        "category":    str(it.get("category", "")).strip(),
-                        "description": str(it.get("description", "")).strip(),
-                        "images":      [],
-                    })
-            self.finished.emit(self._kind, items)
+            self.finished.emit(self._kind,
+                               extract_live_assets(self._kind, self._text, self._mode))
         except Exception as e:
             self.failed.emit(_fmt_err(e))

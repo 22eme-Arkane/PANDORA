@@ -41,9 +41,22 @@ from ui.page_storyboard_live    import PageStoryboard   as _PageStoryboardLive
 # Les deux séquences partagent la copie Storyboard Live, avec un namespace de
 # données distinct (live_seq_live / live_seq_mapping) — seul ajout propre au Live.
 
+# Ordre conducteur par défaut (drag toujours possible ensuite) :
+# grip · Mood · Acte · Plan · TC · Durée · BPM · Musique · Transition · Notes ·
+# Prompt vidéo/son · Vitesse · (colonnes caméra/décor, masquées selon la page) ·
+# Accessoires · Acteurs · boutons.
+_LIVE_DEFAULT_ORDER = [0, 1, 2, 3, 16, 15, 18, 17, 19, 20, 4, 10,
+                       5, 6, 7, 8, 9, 11, 12, 13, 14, 21]
+
+
 class SequenceLivePage(_PageStoryboardLive):
-    """Séquences Live — Storyboard Live (namespace de données dédié)."""
+    """Séquences Live — Storyboard Live (namespace de données dédié).
+
+    Héritage Cinéma retiré : Mouvement (6), Décor (11), Heure (12) —
+    les décors n'existent pas dans le Live et le mouvement vient du prompt."""
     _live_ns = "live_seq_live"
+    _hidden_cols = {6, 11, 12}
+    _default_col_order = _LIVE_DEFAULT_ORDER
 
     def __init__(self):
         _sb.set_namespace(self._live_ns)
@@ -54,10 +67,11 @@ class SequenceMappingPage(_PageStoryboardLive):
     """Séquences Mapping — Storyboard Live (namespace de données dédié).
 
     En mapping (façade fixe, caméra fixe, image de référence du bâtiment), on masque
-    les colonnes inutiles : Axe Caméra (5), Valeur (7), Focal (8), Distance (9),
-    Décor (11), Heure (12)."""
+    les colonnes inutiles : Axe Caméra (5), Mouvement (6), Valeur (7), Focal (8),
+    Distance (9), Décor (11), Heure (12)."""
     _live_ns = "live_seq_mapping"
-    _hidden_cols = {5, 7, 8, 9, 11, 12}
+    _hidden_cols = {5, 6, 7, 8, 9, 11, 12}
+    _default_col_order = _LIVE_DEFAULT_ORDER
 
     def __init__(self):
         _sb.set_namespace(self._live_ns)

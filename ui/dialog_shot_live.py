@@ -280,6 +280,15 @@ class ShotDialog(QDialog):
         self._speed = _combo(SPEEDS, self._shot.get("speed", "Normale"))
         col_speed.addWidget(self._speed)
 
+        def _hide_col(_layout):
+            """Héritages Cinéma retirés du dialogue Live (validé utilisateur)."""
+            for _i in range(_layout.count()):
+                _w = _layout.itemAt(_i).widget()
+                if _w:
+                    _w.setVisible(False)
+
+        _hide_col(col_optic)   # Optique (Sphérique/Anamorphique) : sans objet en Live
+
         row_cam.addLayout(col_move, 2)
         row_cam.addLayout(col_size, 1)
         row_cam.addLayout(col_focal, 1)
@@ -336,6 +345,8 @@ class ShotDialog(QDialog):
             f"color:{CP['text_primary']};selection-background-color:{CP['accent_dim']};}}"
         )
         col_time.addWidget(self._time_combo)
+        _hide_col(col_decor)   # Décor : n'existe pas dans le Live
+        _hide_col(col_time)    # Heure : rendu nuit géré par le mapping
 
         row_lieu.addLayout(col_decor, 2)
         row_lieu.addLayout(col_time, 1)
@@ -482,6 +493,7 @@ class ShotDialog(QDialog):
         self._mic_placement.setFixedHeight(34)
         self._mic_placement.setStyleSheet(_FIELD_STYLE)
         col_mic.addWidget(self._mic_placement)
+        _hide_col(col_mic)     # Micro de tournage : sans objet en Live
 
         row_scene2.addLayout(col_in, 2)
         row_scene2.addLayout(col_out, 2)
