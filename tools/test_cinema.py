@@ -169,6 +169,20 @@ def construction_pages_cinema():
 
 
 @test
+def prompt_mood_cinema_inchange():
+    """build_mood_prompt en namespace Cinéma : comportement historique complet."""
+    import core.storyboard as sb
+    from api.apercu import build_mood_prompt
+    sb.set_namespace("storyboard")
+    p = build_mood_prompt({"seedance_prompt": "a forest", "focal": "35mm",
+                           "shot_size": "PL", "scene_title": "Marche en forêt"}, "")
+    assert "35mm" in p and "wide shot" in p, "termes caméra Cinéma présents"
+    assert "film grain" in p, "suffixe qualité Cinéma présent"
+    assert "Marche en forêt" in p, "description d'action présente"
+    assert "OPENING state" not in p, "pas de consigne keyframe Live côté Cinéma"
+
+
+@test
 def prompts_traduction_proteges():
     """core/lang.py : protection des dialogues §D0§ + tier utilitaire."""
     import core.lang as lang

@@ -165,6 +165,31 @@ def prompts_generation_video_mapping():
 
 
 @test
+def prompt_mood_live_propre():
+    """En Séquences Live/Mapping, le prompt mood est épuré : pas de termes caméra,
+    pas de français, pas de film grain, état d'OUVERTURE demandé (keyframe)."""
+    import core.storyboard as sb
+    from api.apercu import build_mood_prompt
+    shot = {"seedance_prompt": "Opening: blue ocean. Then a whale. In the final moment dark.",
+            "scene_title": "Les baleines disparaissent",
+            "focal": "35mm", "shot_size": "PL", "camera_axis": "Face",
+            "camera_distance": "4m", "camera_movement": "Travelling avant",
+            "decor_name": "Façade", "shot_time": "Nuit"}
+    sb.set_namespace("live_seq_mapping")
+    p_live = build_mood_prompt(shot, "style x")
+    sb.set_namespace("storyboard")
+    p_cine = build_mood_prompt(shot, "style x")
+    # Live : épuré
+    assert "lens" not in p_live and "35mm" not in p_live, "pas de focale en Live"
+    assert "film grain" not in p_live, "pas de grain (noirs purs)"
+    assert "Les baleines" not in p_live, "pas de titre français collé"
+    assert "OPENING state" in p_live, "état d'ouverture demandé (keyframe de début)"
+    assert "dolly push in" not in p_live, "pas de mouvement caméra"
+    # Cinéma : comportement historique INCHANGÉ
+    assert "35mm" in p_cine and "film grain" in p_cine and "Les baleines" in p_cine
+
+
+@test
 def prompts_moods_kontext():
     """Moods Kontext : canvas (peut recouvrir/cacher la façade), nuit, fond noir."""
     import api.apercu as A

@@ -97,8 +97,47 @@ def _focal_to_en(focal_str: str) -> str:
 
 # ── Prompt builder ────────────────────────────────────────────────────────────
 
+def _build_mood_prompt_live(shot: dict) -> str:
+    """Prompt mood pour PANDORA | Live (Séquences Live/Mapping).
+
+    Différences voulues vs Cinéma :
+      - AUCUN terme caméra (focale, valeur, axe, distance, mouvement) : en mapping
+        le cadre est verrouillé par la photo de façade — ces termes polluent ;
+      - PAS de titre de plan en français collé au prompt (mélange de langues) ;
+      - PAS de « film grain » : le grain remonte les noirs purs de la projection ;
+      - le prompt vidéo est temporel (« Opening… Then… final moment ») mais le mood
+        est une IMAGE FIXE servant de KEYFRAME DE DÉBUT du plan → on demande
+        explicitement l'état d'OUVERTURE."""
+    seedance = (shot.get("seedance_prompt") or "").strip()
+    parts = []
+    if seedance:
+        parts.append(seedance)
+        parts.append(
+            "Render the OPENING state of this sequence as ONE single still image — "
+            "depict only the initial state described above, ignore the later "
+            "evolution (the 'then' / 'final moment' parts)"
+        )
+    else:
+        action = (shot.get("scene_title") or "").strip()
+        if action:
+            parts.append(action)
+    parts.append("single cinematic still frame, ultra-detailed, sharp focus, 4K")
+    return ". ".join(p for p in parts if p)
+
+
 def build_mood_prompt(shot: dict, film_style: str = "") -> str:
-    """Construit le prompt Flux à partir des données du plan storyboard."""
+    """Construit le prompt Flux à partir des données du plan storyboard.
+
+    Sensible au contexte : en Séquences Live/Mapping (namespace live_seq_*),
+    délègue au builder Live (pas de termes caméra, pas de grain, état d'ouverture).
+    Comportement Cinéma inchangé."""
+    try:
+        import core.storyboard as _sb
+        if _sb.get_namespace().startswith("live_seq_"):
+            return _build_mood_prompt_live(shot)
+    except Exception:
+        pass
+
     parts: list[str] = []
 
     if film_style:
