@@ -200,6 +200,18 @@ def prompt_mood_cinema_inchange():
 
 
 @test
+def moteurs_storyboard_filtres():
+    """Générer depuis Storyboard : combo ouvert aux moteurs compatibles, t2v purs écartés."""
+    import ui.tab_t2v as t2v
+    src = inspect.getsource(t2v)
+    assert "sequence_engines(_ENGINES)" in src, "combo filtré par capacités"
+    from core.engine_caps import sequence_engines
+    keys = [k for _, k in sequence_engines(t2v._ENGINES)]
+    assert "veo-3.1" not in keys and "sora-2" not in keys, "t2v purs écartés"
+    assert "kling-v3-pro" in keys and "seedance-2.0" in keys, "moteurs i2v ouverts"
+
+
+@test
 def prompts_traduction_proteges():
     """core/lang.py : protection des dialogues §D0§ + tier utilitaire."""
     import core.lang as lang

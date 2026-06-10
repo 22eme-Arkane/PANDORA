@@ -367,6 +367,33 @@ def t2v_live_keyframes_mapping():
 
 
 @test
+def moteurs_filtres_workflow():
+    """Seuls les moteurs compatibles workflow (i2v/keyframes/réfs) sont proposés."""
+    from core.engine_caps import workflow_compatible, sequence_engines, ENGINE_CAPS
+    assert not workflow_compatible("veo-3.1") and not workflow_compatible("sora-2"), \
+        "t2v purs écartés"
+    for k in ("seedance-2.0", "kling-v3-pro", "happy-horse-1.0", "pixverse-v6"):
+        assert workflow_compatible(k), f"{k} compatible"
+    assert ENGINE_CAPS["kling-v3-pro"]["end_frame"], "Kling v3 = keyframes (end_image_url)"
+    # Le combo de l'onglet est filtré
+    import core.context as _ctx, tempfile as _tf
+    from ui.tab_t2v_live import TabT2V, _ENGINES
+    keys = [k for _, k in sequence_engines(_ENGINES)]
+    assert "veo-3.1" not in keys and "sora-2" not in keys
+    t = TabT2V()
+    combo_keys = [t.cb_model.itemData(i) for i in range(t.cb_model.count())]
+    assert "veo-3.1" not in combo_keys and "sora-2" not in combo_keys
+    assert "kling-v3-pro" in combo_keys and "seedance-2.0" in combo_keys
+    # Les workers externes savent uploader les keyframes locales
+    import api.video_engines as ve, inspect as _i
+    assert hasattr(ve, "ensure_image_urls"), "helper d'adaptation i2v"
+    for cls in (ve.KlingWorker, ve.KlingO3Worker, ve.HappyHorseWorker, ve.PixVerseV6Worker):
+        assert "ensure_image_urls" in _i.getsource(cls._real), f"{cls.__name__} adapté"
+    import core.storyboard as sb
+    sb.set_namespace("storyboard")
+
+
+@test
 def t2v_live_anticrash_threads():
     """Le worker de traduction d'aperçu passe par abandon_thread (anti-crash)."""
     from ui.tab_t2v_live import TabT2V

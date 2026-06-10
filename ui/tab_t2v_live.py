@@ -2607,7 +2607,10 @@ class TabT2V(QScrollArea):
         # ── Paramètres de génération (toujours visibles, y compris en multi-sélection) ──
         grid = QGridLayout()
         grid.setSpacing(12)
-        self.cb_model = combo(_DAVINCI_ENGINES)
+        # Moteurs ouverts à TOUS ceux compatibles avec le workflow séquences
+        # (i2v / keyframes / réfs) — les t2v purs (Veo, Sora) sont écartés.
+        from core.engine_caps import sequence_engines
+        self.cb_model = combo(sequence_engines(_ENGINES))
         self.cb_model.currentIndexChanged.connect(self._on_engine_changed)
         self.cb_ratio = combo(["16:9 — Paysage", "9:16 — Portrait", "4:3", "3:4"])
         # Résolutions initiales pour Seedance 2.0 (moteur par défaut)

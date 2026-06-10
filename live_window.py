@@ -36,7 +36,7 @@ from core.i18n import get_lang, set_lang, retranslate_widget, translate, tr
 class _LiveNavItem(QWidget):
     nav_clicked = pyqtSignal(str)
 
-    def __init__(self, icon: str, label: str, key: str):
+    def __init__(self, icon: str, label: str, key: str, icon_file: str = ""):
         super().__init__()
         self._key    = key
         self._active = False
@@ -48,10 +48,24 @@ class _LiveNavItem(QWidget):
         outer.setSpacing(10)
         outer.setAlignment(Qt.AlignmentFlag.AlignVCenter)
 
-        self._ico = QLabel(icon)
+        # Icône : PNG des logos Cinéma si disponible (logos dédiés Live à venir),
+        # sinon repli sur le glyphe texte.
+        self._use_png = False
+        self._pix_on = self._pix_off = None
+        if icon_file:
+            from ui.icons import dim
+            _pix = load_icon(icon_file, 30)
+            if not _pix.isNull():
+                self._use_png = True
+                self._pix_on  = _pix
+                self._pix_off = dim(_pix, 0.55)
+
+        self._ico = QLabel("" if self._use_png else icon)
         self._ico.setFixedSize(30, 30)
         self._ico.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self._ico.setStyleSheet("background:transparent;border:none;font-size:16px;")
+        if self._use_png:
+            self._ico.setPixmap(self._pix_off)
 
         self._frame = QFrame()
         self._frame.setFixedHeight(36)
@@ -75,9 +89,12 @@ class _LiveNavItem(QWidget):
                 f"QFrame{{background:rgba(124,107,255,0.18);"
                 f"border:1px solid rgba(124,107,255,0.32);border-radius:8px;}}"
             )
-            self._ico.setStyleSheet(
-                f"color:{accent};font-size:16px;background:transparent;border:none;"
-            )
+            if self._use_png:
+                self._ico.setPixmap(self._pix_on)
+            else:
+                self._ico.setStyleSheet(
+                    f"color:{accent};font-size:16px;background:transparent;border:none;"
+                )
             self._lbl.setStyleSheet(
                 f"color:{accent};font-size:16px;font-weight:700;"
                 f"letter-spacing:0.4px;background:transparent;border:none;"
@@ -86,9 +103,12 @@ class _LiveNavItem(QWidget):
             self._frame.setStyleSheet(
                 "QFrame{background:transparent;border:none;border-radius:8px;}"
             )
-            self._ico.setStyleSheet(
-                f"color:{CP['text_dim']};font-size:16px;background:transparent;border:none;"
-            )
+            if self._use_png:
+                self._ico.setPixmap(self._pix_off)
+            else:
+                self._ico.setStyleSheet(
+                    f"color:{CP['text_dim']};font-size:16px;background:transparent;border:none;"
+                )
             self._lbl.setStyleSheet(
                 f"color:{CP['text_secondary']};font-size:16px;font-weight:600;"
                 f"letter-spacing:0.3px;background:transparent;border:none;"
@@ -104,6 +124,8 @@ class _LiveNavItem(QWidget):
                 "QFrame{background:rgba(255,255,255,0.05);"
                 "border:1px solid rgba(255,255,255,0.08);border-radius:8px;}"
             )
+            if self._use_png:
+                self._ico.setPixmap(self._pix_on)
             self._lbl.setStyleSheet(
                 f"color:{CP['text_primary']};font-size:16px;font-weight:600;"
                 f"background:transparent;border:none;"
@@ -124,19 +146,21 @@ class _LiveNavItem(QWidget):
 # (icône emoji, libellé FR, clé)
 # Onglets retirés pour le moment (code conservé) : "Outils Mapping" (page_mapping)
 # et "Contrôleur Resolume" (page_live). À réactiver quand nécessaire.
+# (glyphe de repli, libellé FR, clé, PNG — logos Cinéma réutilisés en attendant
+#  des logos dédiés Live : Conducteur→scenario.png, Séquences→storyboard.png)
 _NAV_ITEMS = [
-    ("⊞", "Projets",             "projects"),
-    ("✎", "Conducteur",          "conducteur"),
+    ("⊞", "Projets",             "projects",    "projets.png"),
+    ("✎", "Conducteur",          "conducteur",  "scenario.png"),
     None,
-    ("▤", "Séquences Live",      "seq_live"),
-    ("▥", "Séquences Mapping",   "seq_mapping"),
+    ("▤", "Séquences Live",      "seq_live",    "storyboard.png"),
+    ("▥", "Séquences Mapping",   "seq_mapping", "storyboard.png"),
     None,
-    ("☺", "Casting",             "casting"),
-    ("❖", "Accessoires",         "accessoires"),
-    ("⛟", "Véhicules",           "vehicules"),
+    ("☺", "Casting",             "casting",     "castings.png"),
+    ("❖", "Accessoires",         "accessoires", "accesoires.png"),
+    ("⛟", "Véhicules",           "vehicules",   "vehicule.png"),
     None,
-    ("✦", "Studio IA",           "studio"),
-    ("⚙", "Paramètres",          "settings"),
+    ("✦", "Studio IA",           "studio",      "seedance.png"),
+    ("⚙", "Paramètres",          "settings",    "settings.png"),
 ]
 
 
@@ -203,7 +227,7 @@ class _LiveSidebar(QWidget):
                 lay.addWidget(sep)
                 lay.addSpacing(6)
                 continue
-            icon, label, key = entry
+            icon, label, key, icon_file = entry
             # Paramètres poussé tout en bas du dashboard (comme PANDORA Cinéma).
             if key == "settings":
                 lay.addStretch()
@@ -212,7 +236,7 @@ class _LiveSidebar(QWidget):
                 _ssep.setStyleSheet(f"background:{CP['border']};margin:0 12px;")
                 lay.addWidget(_ssep)
                 lay.addSpacing(4)
-            item = _LiveNavItem(icon, translate(label), key)
+            item = _LiveNavItem(icon, translate(label), key, icon_file=icon_file)
             item.nav_clicked.connect(self.nav_clicked)
             self._items[key] = item
             lay.addWidget(item)

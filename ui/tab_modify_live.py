@@ -62,6 +62,34 @@ class TabModifyLive(QScrollArea):
             translate("▸ Le clip source est utilisé comme référence — Seedance en produit une nouvelle version."),
         ], C))
 
+        # ── Sources de clips (comme l'Upscaling) ─────────────────────────────
+        self._library_provider = None    # callable → list[str] (branché par le Studio)
+        src_row = QHBoxLayout()
+        src_row.setSpacing(8)
+        _ss_src = (
+            f"QPushButton{{background:transparent;color:{C['text_secondary']};"
+            f"border:1px solid {C['border']};border-radius:7px;font-size:11px;"
+            f"font-weight:600;padding:0 12px;}}"
+            f"QPushButton:hover{{color:{C['text_primary']};border-color:{C['border_bright']};}}"
+        )
+        self._btn_add_clips = QPushButton("➕  " + translate("Ajouter des clips"))
+        self._btn_add_clips.setMinimumHeight(32)
+        self._btn_add_clips.setStyleSheet(_ss_src)
+        self._btn_add_clips.clicked.connect(self._on_add_files)
+        src_row.addWidget(self._btn_add_clips)
+        self._btn_import_lib = QPushButton("⇪  " + translate("Importer la Vidéothèque"))
+        self._btn_import_lib.setMinimumHeight(32)
+        self._btn_import_lib.setStyleSheet(_ss_src)
+        self._btn_import_lib.clicked.connect(self._on_import_library)
+        src_row.addWidget(self._btn_import_lib)
+        self._btn_clear_clips = QPushButton(translate("Vider"))
+        self._btn_clear_clips.setMinimumHeight(32)
+        self._btn_clear_clips.setStyleSheet(_ss_src)
+        self._btn_clear_clips.clicked.connect(self._on_clear_clips)
+        src_row.addWidget(self._btn_clear_clips)
+        src_row.addStretch()
+        lay.addLayout(src_row)
+
         # ── Clip à modifier ───────────────────────────────────────────────────
         lay.addWidget(_section(translate("Clip à modifier")))
         self._clip_combo = QComboBox()
@@ -166,6 +194,33 @@ class TabModifyLive(QScrollArea):
 
         lay.addStretch()
         self._refresh_clip_state()
+
+    # ── Sources de clips ──────────────────────────────────────────────────────
+
+    def set_library_provider(self, fn):
+        """fn() → list[str] des clips de la Vidéothèque (« Importer la Vidéothèque »)."""
+        self._library_provider = fn
+
+    def _on_add_files(self):
+        from PyQt6.QtWidgets import QFileDialog
+        paths, _ = QFileDialog.getOpenFileNames(
+            self, translate("Ajouter des clips"), "",
+            "Vidéos (*.mp4 *.mov *.webm *.m4v *.gif);;Tous les fichiers (*)")
+        if paths:
+            self.add_clips_from_paths(paths)
+
+    def _on_import_library(self):
+        if not self._library_provider:
+            return
+        try:
+            paths = list(self._library_provider() or [])
+        except Exception:
+            paths = []
+        self.add_clips_from_paths(paths)
+
+    def _on_clear_clips(self):
+        self._clips.clear()
+        self._reload_combo()
 
     # ── Pont depuis la Vidéothèque ──────────────────────────────────────────
 

@@ -131,16 +131,18 @@ class LiveStudioWidget(QWidget):
         # 6. Upscaling (Live) — Topaz / SeedVR2, en lot depuis la Vidéothèque
         self.tab_upscale = TabUpscaleLive()
         self.tab_upscale.set_library_provider(self.tab_library.list_all_clips)
+        self.tab_modify.set_library_provider(self.tab_library.list_all_clips)
 
         # 7. Historique (version Live)
         self.tab_history = TabHistoryLive()
 
-        self.tabs.addTab(self.tab_engines,   translate("Génération directe"))
+        # Ordre validé : Séquences d'abord (le cœur du workflow), puis production.
         self.tabs.addTab(self.tab_sequences, translate("Générer depuis Séquences"))
-        self.tabs.addTab(self.tab_library,   translate("Vidéothèque"))
-        self.tabs.addTab(self.tab_modify,    translate("Modifier"))
+        self.tabs.addTab(self.tab_engines,   translate("Génération directe"))
+        self.tabs.addTab(self.tab_modify,    translate("Modifier des clips"))
         self.tabs.addTab(self.tab_sound,     translate("Sound Design"))
         self.tabs.addTab(self.tab_upscale,   translate("Upscaling"))
+        self.tabs.addTab(self.tab_library,   translate("Vidéothèque"))
         self.tabs.addTab(self.tab_history,   translate("Historique"))
 
         # Générations → historique

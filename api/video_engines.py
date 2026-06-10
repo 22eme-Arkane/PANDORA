@@ -53,6 +53,26 @@ def _fal_upload(fal_client, path: str) -> str:
         sys.stderr = _old_err
 
 
+def ensure_image_urls(fal_client, params: dict, emit_progress=None) -> None:
+    """Adapte les params du workflow séquences/storyboard aux workers externes.
+
+    Le workflow PANDORA fournit des CHEMINS LOCAUX (image_path = mood keyframe ou
+    dernière frame de raccord, end_image_path = mood du plan suivant) ; les moteurs
+    externes attendent des URLs. Uploade et bascule en i2v. Modifie params EN PLACE.
+    """
+    img = params.get("image_path", "")
+    if img and os.path.isfile(img) and not params.get("image_url"):
+        if emit_progress:
+            emit_progress(6, "Upload de l'image de départ…")
+        params["image_url"] = _fal_upload(fal_client, img)
+        params["mode"] = "i2v"
+    end = params.get("end_image_path", "")
+    if end and os.path.isfile(end) and not params.get("end_image_url"):
+        if emit_progress:
+            emit_progress(8, "Upload de l'image de fin (keyframe)…")
+        params["end_image_url"] = _fal_upload(fal_client, end)
+
+
 def _analyze_style_ref(image_path: str) -> str:
     """Claude Haiku Vision → extrait les mots-clés de style d'une image.
     Retourne une chaîne EN (~12 mots) ou '' en cas d'erreur.
@@ -218,6 +238,8 @@ class KlingWorker(_CancellableWorker):
             from core.lang import translate_to_english
 
             os.environ["FAL_KEY"] = key
+            # Workflow séquences : image_path/end_image_path locaux → URLs i2v
+            ensure_image_urls(fal_client, self.params, self.progress.emit)
 
             mode      = self.params.get("mode", "i2v")
             dur       = int(self.params.get("duration", 5))
@@ -577,6 +599,8 @@ class HappyHorseWorker(_CancellableWorker):
             from core.lang import translate_to_english
 
             os.environ["FAL_KEY"] = key
+            # Workflow séquences : image_path/end_image_path locaux → URLs i2v
+            ensure_image_urls(fal_client, self.params, self.progress.emit)
 
             mode     = self.params.get("mode", "t2v")
             dur      = int(self.params.get("duration", 5))
@@ -767,6 +791,8 @@ class KlingO3Worker(_CancellableWorker):
             from core.lang import translate_to_english
 
             os.environ["FAL_KEY"] = key
+            # Workflow séquences : image_path/end_image_path locaux → URLs i2v
+            ensure_image_urls(fal_client, self.params, self.progress.emit)
 
             mode       = self.params.get("mode", "t2v")
             dur        = int(self.params.get("duration", 5))
@@ -900,6 +926,8 @@ class PixVerseV6Worker(_CancellableWorker):
             from core.lang import translate_to_english
 
             os.environ["FAL_KEY"] = key
+            # Workflow séquences : image_path/end_image_path locaux → URLs i2v
+            ensure_image_urls(fal_client, self.params, self.progress.emit)
 
             dur      = int(self.params.get("duration", 5))
             res      = self.params.get("resolution", "720p")
