@@ -149,7 +149,11 @@ def run_real(params: dict, emit_progress, is_cancelled) -> dict:
         endpoint = endpoints["ref"]
 
     _ref_images_sent      = 0   # count of successfully uploaded reference images
-    _ref_images_attempted = len(ref_images)
+    # Compteur d'alerte UI : rempli UNIQUEMENT par le mode "ref", le seul qui
+    # consomme ref_images. En i2v (keyframes mapping) la liste est ignorée —
+    # compter ici déclenchait une fausse alerte « non transmises » alors que
+    # les images i2v partent par image_url/end_image_url.
+    _ref_images_attempted = 0
     _gcs_blocked          = False  # set True if ALL uploads fail (no images transmitted)
     _gcs_error_detail     = ""    # first upload error message for diagnostics
 
@@ -267,6 +271,7 @@ def run_real(params: dict, emit_progress, is_cancelled) -> dict:
                     pass
 
     elif mode == "ref":
+        _ref_images_attempted = len(ref_images)
         image_path = params.get("image_path", "")
         video_path = params.get("video_path", "")
         audio_path = params.get("audio_path", "")

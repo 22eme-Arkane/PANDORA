@@ -413,6 +413,15 @@ def t2v_live_keyframes_mapping():
     assert s1.endswith("mood_1.jpg") and e1.endswith("mood_2.jpg"), "plan 1 chaîné vers mood 2"
     assert s2.endswith("mood_2.jpg") and e2 == "", "plan 2 : pas de mood au plan 3"
     assert (s3, e3) == ("", ""), "plan 3 sans mood → fallback"
+    # Fausse alerte « refs non transmises » corrigée (2026-06-10) : le compteur
+    # attempted n'est rempli QUE par le mode "ref" — en i2v (keyframes) la liste
+    # ref_images est ignorée, l'alerte n'a pas lieu d'être.
+    import inspect
+    import api.real as R
+    src_r = inspect.getsource(R.run_real)
+    assert "_ref_images_attempted = 0" in src_r, "attempted initialisé à 0"
+    assert 'elif mode == "ref":\n        _ref_images_attempted = len(ref_images)' in src_r, \
+        "attempted rempli uniquement dans la branche ref"
     sb.set_namespace("storyboard")
 
 
