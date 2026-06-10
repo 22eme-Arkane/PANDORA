@@ -252,6 +252,14 @@ class MoodDialog(QDialog):
             "bibliothèque ou sur le disque (copiée dans le plan)."))
         self._btn_import.clicked.connect(self._import_image)
         acts.addWidget(self._btn_import)
+        self._btn_inspire = _btn("◎  Mood inspiré d'une image")
+        self._btn_inspire.setToolTip(translate(
+            "Choisis une image d'inspiration (bibliothèque ou disque) :\n"
+            "son univers — palette, lumière, matières, style — est transposé\n"
+            "sur la façade (mapping) ou réinterprété pour le plan.\n"
+            "L'image n'est jamais collée telle quelle."))
+        self._btn_inspire.clicked.connect(self._generate_from_image)
+        acts.addWidget(self._btn_inspire)
         self._btn_generate = _btn("✦  Générer une variation")
         self._btn_generate.clicked.connect(self._generate)
         acts.addWidget(self._btn_generate)
@@ -488,18 +496,32 @@ class MoodDialog(QDialog):
         self._refresh()
 
     def _generate(self):
+        self._start_generation()
+
+    def _generate_from_image(self):
+        """Mood inspiré : l'image choisie sert de DA (transposée, jamais collée)."""
+        from ui.dialog_image_library import ImageLibraryDialog
+        paths = ImageLibraryDialog.pick(self)
+        if not paths:
+            return
+        self._start_generation(inspiration_ref=paths[0])
+
+    def _start_generation(self, inspiration_ref: str = ""):
         from api.apercu import MoodGenerationWorker
         apercu_dir  = sb_api.get_apercu_dir(self._shot["id"])
         custom_prompt = self._prompt_edit.toPlainText().strip()
         self._disconnect_worker()
         self._worker = MoodGenerationWorker(self._shot, apercu_dir,
-                                            custom_prompt=custom_prompt)
+                                            custom_prompt=custom_prompt,
+                                            inspiration_ref=inspiration_ref)
         self._worker.progress.connect(self._on_progress)
         self._worker.finished.connect(self._on_generated)
         self._worker.failed.connect(self._on_failed)
         self._btn_generate.setEnabled(False)
+        self._btn_inspire.setEnabled(False)
         self._btn_activate.setEnabled(False)
-        self._start_loading("Génération du Mood…")
+        self._start_loading("Mood inspiré de l'image…" if inspiration_ref
+                            else "Génération du Mood…")
         self._worker.start()
 
     def _on_progress(self, msg: str):
@@ -508,6 +530,7 @@ class MoodDialog(QDialog):
     def _on_generated(self, path: str):
         self._stop_loading()
         self._btn_generate.setEnabled(True)
+        self._btn_inspire.setEnabled(True)
         if path and os.path.isfile(path):
             self._paths.append(path)
             self._current_idx = len(self._paths) - 1
@@ -519,4 +542,5 @@ class MoodDialog(QDialog):
         self._status_lbl.setText(f"Erreur : {error[:120]}")
         self._status_lbl.show()
         self._btn_generate.setEnabled(True)
+        self._btn_inspire.setEnabled(True)
         self._btn_activate.setEnabled(bool(self._paths) and self._current_idx != self._active_idx)

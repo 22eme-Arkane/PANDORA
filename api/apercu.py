@@ -209,11 +209,16 @@ def _resolve_building_ref() -> str:
 
 
 def run_generation(prompt: str, output_dir: str, api_key: str, progress_cb,
-                   building_ref: str = "") -> str:
+                   building_ref: str = "", inspiration_ref: str = "") -> str:
     """Génère une image et retourne son chemin. Lève une exception si erreur.
 
-    Si `building_ref` (image de façade) est fourni : on utilise Flux Kontext pour
-    ÉDITER la façade en gardant sa géométrie (mapping). Sinon Flux t2i classique."""
+    - `building_ref` (façade, mapping) : Flux Kontext ÉDITE la façade (géométrie
+      conservée) ;
+    - `inspiration_ref` : image d'INSPIRATION (direction artistique à transposer,
+      jamais collée). Avec façade → Kontext multi-images (l'univers de
+      l'inspiration est projeté SUR la façade) ; sans façade → Kontext
+      réinterprète l'inspiration pour dépeindre le plan ;
+    - sinon Flux t2i classique."""
     os.makedirs(output_dir, exist_ok=True)
 
     # ── Mode simulation ───────────────────────────────────────────────────────
@@ -240,21 +245,50 @@ def run_generation(prompt: str, output_dir: str, api_key: str, progress_cb,
     import fal_client
     os.environ["FAL_KEY"] = api_key
 
-    if building_ref and os.path.isfile(building_ref):
-        # Mapping : on édite la façade (géométrie conservée) via Flux Kontext.
-        # Directive impérative : conversion NUIT + isolation sur FOND NOIR PUR
-        # (le mapping se projette de nuit ; la photo de façade est prise de jour).
+    _has_facade = building_ref and os.path.isfile(building_ref)
+    _has_inspi  = inspiration_ref and os.path.isfile(inspiration_ref)
+
+    # Directive impérative mapping : conversion NUIT + isolation sur FOND NOIR PUR
+    # (le mapping se projette de nuit ; la photo de façade est prise de jour).
+    _night_lock = (
+        " | NIGHT projection mapping render: convert the scene to deep night — "
+        "pitch-black night sky, NO daylight, no sun; same framing, scale and viewpoint "
+        "as the source photo. The building is a projection CANVAS: render the projected "
+        "content described above ON it — the content may light up only parts of it, "
+        "transform its material, or completely cover and hide the facade, exactly as "
+        "described. Unlit areas fall to pure black. Remove every surrounding element "
+        "(other buildings, street objects, trees, people, ground, sky) and replace the "
+        "entire background with PURE BLACK #000000."
+    )
+
+    if _has_facade and _has_inspi:
+        # Mapping + image d'inspiration : Kontext multi-images — l'univers de la
+        # 2ᵉ image (DA) est TRANSPOSÉ en visuels projetés sur la 1ʳᵉ (façade).
         kontext_prompt = (
             prompt
-            + " | NIGHT projection mapping render: convert the scene to deep night — "
-            "pitch-black night sky, NO daylight, no sun; same framing, scale and viewpoint "
-            "as the source photo. The building is a projection CANVAS: render the projected "
-            "content described above ON it — the content may light up only parts of it, "
-            "transform its material, or completely cover and hide the facade, exactly as "
-            "described. Unlit areas fall to pure black. Remove every surrounding element "
-            "(other buildings, street objects, trees, people, ground, sky) and replace the "
-            "entire background with PURE BLACK #000000."
+            + " | The FIRST image is the building facade — the projection canvas: keep its "
+            "exact framing, scale and viewpoint. Use the SECOND image purely as artistic "
+            "INSPIRATION: transpose its universe — palette, light, materials, motifs, "
+            "figures, rendering style — into the projected visuals. Do NOT paste, collage "
+            "or copy the second image literally."
+            + _night_lock
         )
+        progress_cb("Envoi de la façade et de l'inspiration à fal.ai…")
+        urls = [fal_client.upload_file(building_ref),
+                fal_client.upload_file(inspiration_ref)]
+        progress_cb("Mood inspiré sur la façade (Kontext multi)…")
+        result = fal_client.subscribe(
+            "fal-ai/flux-pro/kontext/max/multi",
+            arguments={
+                "prompt":         kontext_prompt,
+                "image_urls":     urls,
+                "guidance_scale": 3.5,
+                "aspect_ratio":   "16:9",
+            },
+        )
+    elif _has_facade:
+        # Mapping : on édite la façade (géométrie conservée) via Flux Kontext.
+        kontext_prompt = prompt + _night_lock
         progress_cb("Envoi de la façade à fal.ai…")
         facade_url = fal_client.upload_file(building_ref)
         progress_cb("Génération du Mood nocturne sur la façade (Kontext)…")
@@ -263,6 +297,27 @@ def run_generation(prompt: str, output_dir: str, api_key: str, progress_cb,
             arguments={
                 "prompt":              kontext_prompt,
                 "image_url":           facade_url,
+                "guidance_scale":      3.5,
+                "num_inference_steps": 28,
+            },
+        )
+    elif _has_inspi:
+        # Sans façade (Cinéma / Live hors mapping) : Kontext réinterprète
+        # l'inspiration pour dépeindre le plan — la DA est gardée, pas le contenu.
+        kontext_prompt = (
+            prompt
+            + " | Use this image purely as artistic INSPIRATION: repaint and reimagine it "
+            "to depict the scene described above, keeping its palette, light, materials "
+            "and rendering style. Do not keep its literal content unless it serves the scene."
+        )
+        progress_cb("Envoi de l'image d'inspiration à fal.ai…")
+        inspi_url = fal_client.upload_file(inspiration_ref)
+        progress_cb("Mood inspiré de l'image (Kontext)…")
+        result = fal_client.subscribe(
+            "fal-ai/flux-pro/kontext",
+            arguments={
+                "prompt":              kontext_prompt,
+                "image_url":           inspi_url,
                 "guidance_scale":      3.5,
                 "num_inference_steps": 28,
             },
@@ -296,11 +351,13 @@ class MoodGenerationWorker(QThread):
     finished = pyqtSignal(str)
     failed   = pyqtSignal(str)
 
-    def __init__(self, shot: dict, output_dir: str, custom_prompt: str = ""):
+    def __init__(self, shot: dict, output_dir: str, custom_prompt: str = "",
+                 inspiration_ref: str = ""):
         super().__init__()
         self._shot          = shot
         self._out_dir       = output_dir
         self._custom_prompt = custom_prompt
+        self._inspiration   = inspiration_ref
         from core.config import load_config
         import core.style as style_api
         self._api_key    = load_config().get("api_key", "").strip()
@@ -315,7 +372,8 @@ class MoodGenerationWorker(QThread):
         )
         try:
             path = run_generation(prompt, self._out_dir, self._api_key,
-                                  self.progress.emit, self._building_ref)
+                                  self.progress.emit, self._building_ref,
+                                  inspiration_ref=self._inspiration)
             self.finished.emit(path)
         except Exception as e:
             self.failed.emit(humanize_api_error(str(e)))

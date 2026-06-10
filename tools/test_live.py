@@ -198,6 +198,14 @@ def prompts_moods_kontext():
     assert "lit ONLY" not in src, "ancienne consigne retirée"
     assert "PURE BLACK #000000" in src, "fond noir"
     assert "fal-ai/flux-pro/kontext" in src, "Kontext quand façade fournie"
+    # Image d'INSPIRATION (2026-06-11) : transposée sur la façade, jamais collée
+    assert "kontext/max/multi" in src, "Kontext multi quand façade + inspiration"
+    assert "INSPIRATION" in src and "Do NOT paste" in src, "DA transposée, pas collée"
+    import inspect as _i
+    assert "inspiration_ref" in _i.signature(A.MoodGenerationWorker.__init__).parameters
+    from ui.dialog_apercu import MoodDialog
+    src_d = inspect.getsource(MoodDialog._generate_from_image)
+    assert "ImageLibraryDialog" in src_d, "inspiration choisie via la bibliothèque"
 
 
 @test

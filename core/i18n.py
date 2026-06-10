@@ -1419,6 +1419,18 @@ _FR_TO_EN: dict[str, str] = {
         "Use one of your own images as the mood — picked from the\nlibrary or from disk (copied into the shot).",
     "Image(s) importée(s) — clique « Activer » pour en faire le mood du plan.":
         "Image(s) imported — click « Activate » to make it the shot's mood.",
+    "◎  Mood inspiré d'une image": "◎  Mood inspired by an image",
+    "Choisis une image d'inspiration (bibliothèque ou disque) :\nson univers — palette, lumière, matières, style — est transposé\nsur la façade (mapping) ou réinterprété pour le plan.\nL'image n'est jamais collée telle quelle.":
+        "Pick an inspiration image (library or disk):\nits universe — palette, light, materials, style — is transposed\nonto the facade (mapping) or reinterpreted for the shot.\nThe image is never pasted as-is.",
+    "Mood inspiré de l'image…": "Mood inspired by the image…",
+    "Envoi de la façade et de l'inspiration à fal.ai…":
+        "Sending facade and inspiration to fal.ai…",
+    "Mood inspiré sur la façade (Kontext multi)…":
+        "Inspired mood on the facade (Kontext multi)…",
+    "Envoi de l'image d'inspiration à fal.ai…":
+        "Sending inspiration image to fal.ai…",
+    "Mood inspiré de l'image (Kontext)…":
+        "Mood inspired by the image (Kontext)…",
 
     # ── Lot 17 — co-écriture (accueil), génération en série, divers ──
     "J'ai analysé votre scénario et rédigé des suggestions détaillées (visibles dans l'onglet « Analyse initiale »).\n\nDites-moi ce que vous souhaitez modifier, affiner ou conserver — je produirai alors une version remaniée de votre scénario en direct. Nous pouvons itérer autant de fois que nécessaire.": "I've analyzed your screenplay and written detailed suggestions (visible in the « Initial analysis » tab).\n\nTell me what you'd like to change, refine or keep — I'll then produce a reworked version of your screenplay live. We can iterate as many times as needed.",
