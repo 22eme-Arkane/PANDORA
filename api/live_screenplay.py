@@ -180,7 +180,9 @@ class GenerateDecoupageWorker(QThread):
                 self.failed.emit(err)
                 return
             system = _SYSTEM_MAPPING if self._mode == "mapping" else _SYSTEM_LIVE
-            out = complete(system, text, tier="creative", max_tokens=8000)
+            # 16000 : un découpage dense (beaucoup de plans × prompts détaillés)
+            # atteignait le plafond de 8000 → JSON tronqué
+            out = complete(system, text, tier="creative", max_tokens=16000)
             segments = [_normalize(s, self._mode) for s in _extract_json_array(out) if isinstance(s, dict)]
             if not segments:
                 snippet = (out or "").strip()[:200].replace("\n", " ")
@@ -276,8 +278,9 @@ class ApplyArrangeConducteurWorker(QThread):
                 f"CONDUCTEUR ORIGINAL :\n{self._original}\n\n"
                 f"SUGGESTIONS D'ARRANGEMENT :\n{self._suggestions}"
             )
+            # 16000 : sortie = conducteur COMPLET réécrit — 8192 tronquait les longs
             full = stream(_APPLY_ARRANGE_CONDUCTEUR, user, on_chunk=self.chunk.emit,
-                          tier="creative", max_tokens=8192)
+                          tier="creative", max_tokens=16000)
             self.finished.emit(full.strip())
         except Exception as e:
             from core.worker import humanize_api_error
@@ -319,7 +322,7 @@ class ArrangeConducteurStreamWorker(QThread):
                            "copier : appuie tes suggestions dessus quand c'est "
                            "pertinent.]\n" + self._refs.strip() + "\n\n")
             full = stream(system, prefix + self._text, on_chunk=self.chunk.emit,
-                          tier="creative", max_tokens=4096)
+                          tier="creative", max_tokens=8192)
             self.finished.emit(full)
         except Exception as e:
             from core.worker import humanize_api_error

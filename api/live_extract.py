@@ -115,9 +115,10 @@ class FormatConducteurWorker(QThread):
                         f"Dimensionne le NOMBRE et la durée des plans en conséquence.]\n\n"
                         + self._text)
             # Tier créatif (Sonnet/Fable…) : prompts vidéo riches/détaillés pour
-            # Seedance 2.0. max_tokens élevé pour ne pas tronquer.
+            # Seedance 2.0. 16000 tokens — un conducteur complet mis en page
+            # dépassait 8000 (tronqué en réel le 2026-06-11) ; aligné sur Cinéma.
             full = ai_stream(system, user, on_chunk=self.chunk.emit,
-                             tier="creative", max_tokens=8000)
+                             tier="creative", max_tokens=16000)
             self.finished.emit(full.strip())
         except Exception as e:
             self.failed.emit(_fmt_err(e))

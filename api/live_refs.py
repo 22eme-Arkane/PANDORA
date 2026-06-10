@@ -249,9 +249,10 @@ class EnrichConducteurWithRefsWorker(QThread):
         try:
             user = (f"CONDUCTEUR ORIGINAL :\n{self._text}\n\n"
                     f"DIRECTION VISUELLE (références) :\n{self._analysis}")
+            # 16000 : sortie = conducteur COMPLET enrichi — 8192 tronquait les longs
             full = stream(_ENRICH_SYSTEM.format(ctx=_mode_ctx(self._mode)), user,
                           on_chunk=self.chunk.emit,
-                          tier="creative", max_tokens=8192)
+                          tier="creative", max_tokens=16000)
             self.done.emit(full.strip())
         except Exception as e:
             from core.worker import humanize_api_error

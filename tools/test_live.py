@@ -830,6 +830,23 @@ def bibliotheque_images_globale():
 
 
 @test
+def plafonds_anti_troncature():
+    """Tout worker qui SORT un conducteur/découpage COMPLET = 16000 tokens.
+    (Vu en réel 2026-06-11 : mise en page et enrichissement tronqués à 8000/8192.)"""
+    import inspect
+    from api.live_extract import FormatConducteurWorker
+    from api.live_screenplay import GenerateDecoupageWorker, ApplyArrangeConducteurWorker
+    from api.live_refs import EnrichConducteurWithRefsWorker
+    for cls in (FormatConducteurWorker, GenerateDecoupageWorker,
+                ApplyArrangeConducteurWorker, EnrichConducteurWithRefsWorker):
+        assert "max_tokens=16000" in inspect.getsource(cls.run), \
+            f"{cls.__name__} : sortie complète → 16000 tokens"
+    # Les suggestions d'arrangement (pas un conducteur complet) : 8192 minimum
+    from api.live_screenplay import ArrangeConducteurStreamWorker
+    assert "max_tokens=8192" in inspect.getsource(ArrangeConducteurStreamWorker.run)
+
+
+@test
 def libelles_dynamiques_ia():
     """brand() rebaptise « Claude » selon l'assistant actif ; translate() le propage."""
     import core.ai_provider as ap
