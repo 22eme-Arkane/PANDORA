@@ -1154,11 +1154,10 @@ class AnalyzeReferencesWorker(QThread):
             for i, path in enumerate(self._paths):
                 if not __import__("os").path.isfile(path):
                     continue
-                mime, _ = mimetypes.guess_type(path)
-                if not mime or not mime.startswith("image/"):
-                    mime = "image/jpeg"
-                with open(path, "rb") as f:
-                    data = base64.standard_b64encode(f.read()).decode("utf-8")
+                # Redimensionne AVANT l'envoi (fix « 413 request_too_large » avec
+                # plusieurs photos pleine résolution) — voir core/image_payload.
+                from core.image_payload import encode_image_for_vision
+                mime, data = encode_image_for_vision(path)
                 if len(self._paths) > 1:
                     content.append({
                         "type": "text",

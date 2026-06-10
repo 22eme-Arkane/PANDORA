@@ -1814,11 +1814,14 @@ class PageScenario(QWidget):
         if not self._ref_images:
             self._ai_progress_lbl.setText("Ajoute d'abord des images dans la section Références visuelles.")
             return
-        from api.screenplay import AnalyzeReferencesWorker
+        # Worker LIVE : file d'attente (1 requête/image, redimensionnées — fini le 413)
+        # + synthèse de direction visuelle croisée avec le conducteur.
+        from api.live_refs import AnalyzeRefsConducteurWorker
         scenario_text = self._get_text() if self._current else ""
-        self._worker = AnalyzeReferencesWorker(
+        self._worker = AnalyzeRefsConducteurWorker(
             ref_paths=self._ref_images,
             scenario_text=scenario_text,
+            mode=self._live_mode,
         )
         self._worker.failed.connect(self._on_refs_failed)
         self._set_ai_busy(True)
@@ -2820,8 +2823,9 @@ class PageScenario(QWidget):
             if not scenario_text.strip():
                 return
 
-            from api.screenplay import EnrichScenarioWithRefsWorker
-            w = EnrichScenarioWithRefsWorker(scenario_text, txt)
+            # Worker CONDUCTEUR (celui de Cinéma réécrivait au format scénario)
+            from api.live_refs import EnrichConducteurWithRefsWorker
+            w = EnrichConducteurWithRefsWorker(scenario_text, txt, self._live_mode)
             _enrich_worker[0] = w
             _refs_streaming_active[0] = True
             btn_close.setText("Annuler")

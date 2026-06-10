@@ -212,6 +212,14 @@ def moteurs_storyboard_filtres():
 
 
 @test
+def refs_cinema_redimensionnees():
+    """Analyse des références Cinéma : images redimensionnées avant envoi (fix 413)."""
+    import api.screenplay as s
+    src = inspect.getsource(s.AnalyzeReferencesWorker.run)
+    assert "encode_image_for_vision" in src, "redimensionnement branché"
+
+
+@test
 def prompts_traduction_proteges():
     """core/lang.py : protection des dialogues §D0§ + tier utilitaire."""
     import core.lang as lang

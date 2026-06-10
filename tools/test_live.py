@@ -668,6 +668,37 @@ def sound_design_file_et_crossfade():
 
 
 @test
+def refs_conducteur_file_et_fond():
+    """Références visuelles : redimensionnement (fix 413), file d'attente, synthèse."""
+    import inspect
+    from PIL import Image
+    from core.image_payload import encode_image_for_vision, MAX_SIDE
+    # Une grande image est bien réduite avant envoi
+    big = os.path.join(_TMP, "_big_ref.jpg")
+    Image.new("RGB", (4000, 3000), (120, 90, 60)).save(big)
+    mime, b64 = encode_image_for_vision(big)
+    assert mime == "image/jpeg" and len(b64) < 900_000, "image compressée"
+    import base64, io
+    img = Image.open(io.BytesIO(base64.b64decode(b64)))
+    assert max(img.size) <= MAX_SIDE, "grand côté ≤ 1568 px"
+    # Workers Live : file d'attente (1 requête/image) + synthèse + enrich conducteur
+    from api.live_refs import AnalyzeRefsConducteurWorker, EnrichConducteurWithRefsWorker
+    w = AnalyzeRefsConducteurWorker(["a.jpg"], "texte", "mapping")
+    assert hasattr(w, "chunk") and w._mode == "mapping"
+    src = inspect.getsource(AnalyzeRefsConducteurWorker.run)
+    assert "for i, path in enumerate" in src, "file d'attente image par image"
+    assert "SYNTHÈSE" in src, "synthèse de direction visuelle"
+    e = EnrichConducteurWithRefsWorker("c", "a", "live")
+    assert hasattr(e, "done") and hasattr(e, "chunk"), "contrat fenêtre (chunk/done)"
+    from api.live_refs import _ENRICH_SYSTEM
+    assert "INT." in _ENRICH_SYSTEM, "interdiction format scénario"
+    # La page utilise bien les workers Live
+    from ui.page_scenario_live import PageScenario
+    src_p = inspect.getsource(PageScenario)
+    assert "AnalyzeRefsConducteurWorker" in src_p and "EnrichConducteurWithRefsWorker" in src_p
+
+
+@test
 def libelles_dynamiques_ia():
     """brand() rebaptise « Claude » selon l'assistant actif ; translate() le propage."""
     import core.ai_provider as ap
