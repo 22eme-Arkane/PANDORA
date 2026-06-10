@@ -57,30 +57,15 @@ class EnhanceWorker(QThread):
         self._system = system if system is not None else _SYSTEM
 
     def run(self):
-        cfg = load_config()
-        key = cfg.get("anthropic_key", "").strip()
-        if not key:
-            self.failed.emit(
-                "Clé API Anthropic manquante.\n"
-                "Configure-la dans l'onglet Config → Clé API Anthropic."
-            )
+        from core.ai_provider import complete, key_error
+        err = key_error()
+        if err:
+            self.failed.emit(err)
             return
         try:
-            import anthropic
-            client = anthropic.Anthropic(api_key=key)
-            msg = client.messages.create(
-                model="claude-haiku-4-5",
-                max_tokens=300,
-                system=self._system,
-                messages=[{"role": "user", "content": self._prompt}],
-            )
-            enhanced = msg.content[0].text.strip()
+            enhanced = complete(self._system, self._prompt,
+                                tier="utility", max_tokens=300).strip()
             self.finished.emit(enhanced)
-        except ImportError:
-            self.failed.emit(
-                "Module 'anthropic' manquant.\n"
-                "Installe-le : pip install anthropic"
-            )
         except Exception as e:
             self.failed.emit(str(e)[:200])
 
@@ -94,33 +79,18 @@ class EnhanceShotActionWorker(QThread):
         self._text = text
 
     def run(self):
-        cfg = load_config()
-        key = cfg.get("anthropic_key", "").strip()
-        if not key:
-            self.failed.emit(
-                "Clé API Anthropic manquante.\n"
-                "Configure-la dans l'onglet Config → Clé API Anthropic."
-            )
+        from core.ai_provider import complete, key_error
+        err = key_error()
+        if err:
+            self.failed.emit(err)
             return
         try:
-            import anthropic
             try:
                 from core.i18n import get_lang
                 lang = get_lang()
             except Exception:
                 lang = "fr"
-            client = anthropic.Anthropic(api_key=key)
-            msg = client.messages.create(
-                model="claude-haiku-4-5",
-                max_tokens=200,
-                system=_system_action(lang),
-                messages=[{"role": "user", "content": self._text}],
-            )
-            self.finished.emit(msg.content[0].text.strip())
-        except ImportError:
-            self.failed.emit(
-                "Module 'anthropic' manquant.\n"
-                "Installe-le : pip install anthropic"
-            )
+            self.finished.emit(complete(_system_action(lang), self._text,
+                                        tier="utility", max_tokens=200).strip())
         except Exception as e:
             self.failed.emit(str(e)[:200])

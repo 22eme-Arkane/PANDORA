@@ -590,25 +590,16 @@ class FormatScreenplayWorker(QThread):
         self._text = text
 
     def run(self):
-        cfg = load_config()
-        key = cfg.get("anthropic_key", "").strip()
-        if not key:
-            self.failed.emit("Clé API Anthropic manquante.\nConfigure-la dans Paramètres.")
+        from core.ai_provider import stream as ai_stream, key_error
+        err = key_error()
+        if err:
+            self.failed.emit(err)
             return
         try:
-            import anthropic
             lang = _get_lang()
-            client = anthropic.Anthropic(api_key=key)
-            full_text = ""
-            with client.messages.stream(
-                model=_MODEL,
-                max_tokens=8192,
-                system=_FORMAT_SCREENPLAY,
-                messages=[{"role": "user", "content": _lang_hint(lang) + self._text}],
-            ) as stream:
-                for text in stream.text_stream:
-                    full_text += text
-                    self.chunk.emit(text)
+            full_text = ai_stream(_FORMAT_SCREENPLAY, _lang_hint(lang) + self._text,
+                                  on_chunk=self.chunk.emit,
+                                  tier="creative", max_tokens=8192)
             self.finished.emit(full_text.strip())
         except Exception as e:
             self.failed.emit(_fmt_err(e))
@@ -624,25 +615,17 @@ class FormatPandoraWorker(QThread):
         self._text = text
 
     def run(self):
-        cfg = load_config()
-        key = cfg.get("anthropic_key", "").strip()
-        if not key:
-            self.failed.emit("Clé API Anthropic manquante.\nConfigure-la dans Paramètres.")
+        from core.ai_provider import stream as ai_stream, key_error
+        err = key_error()
+        if err:
+            self.failed.emit(err)
             return
         try:
-            import anthropic
             lang = _get_lang()
-            client = anthropic.Anthropic(api_key=key)
-            full_text = ""
-            with client.messages.stream(
-                model=_MODEL,
-                max_tokens=16000,
-                system=_format_pandora_prompt(lang),
-                messages=[{"role": "user", "content": _lang_hint(lang) + self._text}],
-            ) as stream:
-                for text in stream.text_stream:
-                    full_text += text
-                    self.chunk.emit(text)
+            full_text = ai_stream(_format_pandora_prompt(lang),
+                                  _lang_hint(lang) + self._text,
+                                  on_chunk=self.chunk.emit,
+                                  tier="creative", max_tokens=16000)
             self.finished.emit(full_text.strip())
         except Exception as e:
             self.failed.emit(_fmt_err(e))
@@ -755,15 +738,13 @@ class ArrangeScreenplayWorker(QThread):
         self._ref_analysis    = ref_analysis
 
     def run(self):
-        cfg = load_config()
-        key = cfg.get("anthropic_key", "").strip()
-        if not key:
-            self.failed.emit("Clé API Anthropic manquante.\nConfigure-la dans Paramètres.")
+        from core.ai_provider import stream as ai_stream, key_error
+        err = key_error()
+        if err:
+            self.failed.emit(err)
             return
         try:
-            import anthropic
             lang = _get_lang()
-            client = anthropic.Anthropic(api_key=key)
             prefixes = [_intensity_analyse_hint(self._intensity, lang)]
             if self._duration_secs > 0:
                 mins, secs = divmod(self._duration_secs, 60)
@@ -823,16 +804,9 @@ class ArrangeScreenplayWorker(QThread):
                     )
 
             user_content = _lang_hint(lang) + "\n\n".join(prefixes) + "\n\n" + self._text
-            full_text = ""
-            with client.messages.stream(
-                model=_MODEL,
-                max_tokens=4096,
-                system=_arrange_screenplay_prompt(lang),
-                messages=[{"role": "user", "content": user_content}],
-            ) as stream:
-                for text in stream.text_stream:
-                    full_text += text
-                    self.chunk.emit(text)
+            full_text = ai_stream(_arrange_screenplay_prompt(lang), user_content,
+                                  on_chunk=self.chunk.emit,
+                                  tier="creative", max_tokens=4096)
             self.finished.emit(full_text)
         except Exception as e:
             self.failed.emit(_fmt_err(e))
@@ -851,15 +825,13 @@ class ApplyArrangeWorker(QThread):
         self._intensity   = max(1, min(10, intensity))
 
     def run(self):
-        cfg = load_config()
-        key = cfg.get("anthropic_key", "").strip()
-        if not key:
-            self.failed.emit("Clé API Anthropic manquante.\nConfigure-la dans Paramètres.")
+        from core.ai_provider import stream as ai_stream, key_error
+        err = key_error()
+        if err:
+            self.failed.emit(err)
             return
         try:
-            import anthropic
             lang = _get_lang()
-            client = anthropic.Anthropic(api_key=key)
             if lang == "en":
                 user_content = (
                     f"{_lang_hint(lang)}"
@@ -873,16 +845,9 @@ class ApplyArrangeWorker(QThread):
                     f"SCÉNARIO ORIGINAL :\n{self._text}\n\n"
                     f"SUGGESTIONS D'ARRANGEMENT :\n{self._suggestions}"
                 )
-            full_text = ""
-            with client.messages.stream(
-                model=_MODEL,
-                max_tokens=8192,
-                system=_APPLY_ARRANGE,
-                messages=[{"role": "user", "content": user_content}],
-            ) as stream:
-                for text in stream.text_stream:
-                    full_text += text
-                    self.chunk.emit(text)
+            full_text = ai_stream(_APPLY_ARRANGE, user_content,
+                                  on_chunk=self.chunk.emit,
+                                  tier="creative", max_tokens=8192)
             self.finished.emit(full_text.strip())
         except Exception as e:
             self.failed.emit(_fmt_err(e))
@@ -901,15 +866,13 @@ class GenerateStoryboardWorker(QThread):
         self._element_names = element_names or {}
 
     def run(self):
-        cfg = load_config()
-        key = cfg.get("anthropic_key", "").strip()
-        if not key:
-            self.failed.emit("Clé API Anthropic manquante.\nConfigure-la dans Paramètres.")
+        from core.ai_provider import complete as ai_complete, key_error, ai_name
+        err = key_error()
+        if err:
+            self.failed.emit(err)
             return
         try:
-            import anthropic
             lang = _get_lang()
-            client = anthropic.Anthropic(api_key=key)
 
             # Bloc noms exacts — injecté AVANT le scénario pour ancrer les noms
             names_block = ""
@@ -979,24 +942,19 @@ class GenerateStoryboardWorker(QThread):
                         f" plans plus longs pour les atmosphères et dialogues.]\n\n"
                     )
                 user_content = _lang_hint(lang) + names_block + budget_hint + self._text
-            msg = client.messages.create(
-                model=_MODEL_STORYBOARD,
-                max_tokens=16000,
-                system=_storyboard_prompt(lang),
-                messages=[{"role": "user", "content": user_content}],
-            )
-            raw = msg.content[0].text.strip()
+            raw = ai_complete(_storyboard_prompt(lang), user_content,
+                              tier="creative", max_tokens=16000).strip()
             start = raw.find("[")
             end   = raw.rfind("]") + 1
             if start == -1 or end == 0:
-                self.failed.emit("Réponse Claude invalide — pas de tableau JSON trouvé.")
+                self.failed.emit(f"Réponse {ai_name()} invalide — pas de tableau JSON trouvé.")
                 return
 
             json_str = raw[start:end]
             shots = _parse_shots_robust(json_str)
 
             if not shots:
-                self.failed.emit("Aucun plan extrait — la réponse Claude était mal formée.")
+                self.failed.emit(f"Aucun plan extrait — la réponse {ai_name()} était mal formée.")
                 return
 
             for s in shots:
@@ -1047,21 +1005,14 @@ class GenerateStoryboardWorker(QThread):
 # ── Workers d'extraction ──────────────────────────────────────────────────────
 
 def _extract_worker(system_prompt: str, text: str, max_tokens: int = 4096) -> list:
-    """Shared extraction logic: call Claude, return parsed JSON list."""
-    cfg = load_config()
-    key = cfg.get("anthropic_key", "").strip()
-    if not key:
-        raise ValueError("Clé API Anthropic manquante.\nConfigure-la dans Paramètres.")
+    """Shared extraction logic: call the AI provider, return parsed JSON list."""
+    from core.ai_provider import complete as ai_complete, key_error
+    err = key_error()
+    if err:
+        raise ValueError(err)
     lang = _get_lang()
-    import anthropic
-    client = anthropic.Anthropic(api_key=key)
-    msg = client.messages.create(
-        model=_MODEL,
-        max_tokens=max_tokens,
-        system=system_prompt,
-        messages=[{"role": "user", "content": _lang_hint(lang) + text}],
-    )
-    raw = msg.content[0].text.strip()
+    raw = ai_complete(system_prompt, _lang_hint(lang) + text,
+                      tier="creative", max_tokens=max_tokens).strip()
     start = raw.find("[")
     end   = raw.rfind("]") + 1
     if start == -1 or end == 0:
@@ -1194,6 +1145,8 @@ class AnalyzeReferencesWorker(QThread):
             self.failed.emit("Clé API Anthropic manquante.\nConfigure-la dans Paramètres.")
             return
         try:
+            # VISION (images) : volontairement sur Anthropic, hors couche ai_provider —
+            # les autres fournisseurs gèrent la vision différemment (périmètre v1 = texte).
             import anthropic
             client = anthropic.Anthropic(api_key=key)
 
@@ -1567,26 +1520,18 @@ class SyncStoryboardWorker(QThread):
             self.finished.emit(self._shots)
             return
 
-        cfg = load_config()
-        key = cfg.get("anthropic_key", "").strip()
-        if not key:
-            self.failed.emit("Clé API Anthropic manquante.\nConfigure-la dans Paramètres.")
+        from core.ai_provider import complete as ai_complete, key_error, ai_name
+        err = key_error()
+        if err:
+            self.failed.emit(err)
             return
 
-        import anthropic
-        client = anthropic.Anthropic(api_key=key)
         payload_str = json.dumps({"shots": shots_payload}, ensure_ascii=False, indent=2)
 
-        self.progress.emit(50, f"Claude Haiku analyse {len(shots_payload)} plan(s)…")
+        self.progress.emit(50, f"{ai_name()} analyse {len(shots_payload)} plan(s)…")
 
-        msg = client.messages.create(
-            model="claude-haiku-4-5",
-            max_tokens=8192,
-            system=_SYNC_STORYBOARD_SYSTEM,
-            messages=[{"role": "user", "content": payload_str}],
-        )
-
-        raw = msg.content[0].text.strip()
+        raw = ai_complete(_SYNC_STORYBOARD_SYSTEM, payload_str,
+                          tier="utility", max_tokens=8192).strip()
         # Nettoyer le markdown si Claude en ajoute malgré les instructions
         if "```" in raw:
             parts = raw.split("```")
@@ -1715,15 +1660,13 @@ class ArrangeChatWorker(QThread):
 
     def run(self):
         try:
-            cfg = load_config()
-            key = cfg.get("anthropic_key", "").strip()
-            if not key:
-                self.failed.emit("Clé API Anthropic manquante — configure-la dans Paramètres.")
+            from core.ai_provider import chat as ai_chat, key_error
+            err = key_error()
+            if err:
+                self.failed.emit(err)
                 return
 
-            import anthropic
             lang = _get_lang()
-            client = anthropic.Anthropic(api_key=key)
 
             if lang == "en":
                 context_block = (
@@ -1779,13 +1722,22 @@ class ArrangeChatWorker(QThread):
                 else:
                     messages.append({"role": "user", "content": self._user_message})
 
-            response = client.messages.create(
-                model=_MODEL,
-                max_tokens=8192,
-                system=_arrange_chat_system(self._intensity),
-                messages=messages,
-            )
-            raw = response.content[0].text.strip()
+            if self._ref_images:
+                # VISION (images jointes) : direct Anthropic — hors couche ai_provider
+                # (les autres fournisseurs gèrent la vision différemment ; périmètre v1 = texte).
+                import anthropic
+                from core.config import load_config as _lc
+                client = anthropic.Anthropic(api_key=_lc().get("anthropic_key", "").strip())
+                response = client.messages.create(
+                    model=_MODEL,
+                    max_tokens=8192,
+                    system=_arrange_chat_system(self._intensity),
+                    messages=messages,
+                )
+                raw = response.content[0].text.strip()
+            else:
+                raw = ai_chat(_arrange_chat_system(self._intensity), messages,
+                              tier="creative", max_tokens=8192).strip()
 
             # Split sur les marqueurs
             chat_msg   = ""

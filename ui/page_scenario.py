@@ -576,7 +576,7 @@ class PageScenario(QWidget):
             ico_lbl.setStyleSheet(
                 f"color:{CP['accent2']};font-size:13px;background:transparent;border:none;"
             )
-            txt_lbl = QLabel(label)
+            txt_lbl = QLabel(translate(label))   # translate() rebaptise aussi « Claude »
             txt_lbl.setStyleSheet(
                 f"color:{CP['text_primary']};font-size:10px;font-weight:700;"
                 f"background:transparent;border:none;"
@@ -584,7 +584,7 @@ class PageScenario(QWidget):
             title_row.addWidget(ico_lbl)
             title_row.addWidget(txt_lbl)
             title_row.addStretch()
-            sub_lbl = QLabel(sub)
+            sub_lbl = QLabel(translate(sub))
             sub_lbl.setStyleSheet(
                 f"color:{CP['text_dim']};font-size:8px;background:transparent;border:none;"
             )

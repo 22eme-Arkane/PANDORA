@@ -21,34 +21,28 @@ class AssistantWorker(QThread):
         self._history      = history   # [{"role": "user"/"assistant", "content": str}]
 
     def run(self):
-        cfg = load_config()
-        key = cfg.get("anthropic_key", "").strip()
-        if not key:
+        from core.ai_provider import chat, key_error
+        if key_error():
             time.sleep(0.2)
             self.finished.emit(
-                "Configurez votre clé Anthropic dans Paramètres pour activer l'assistant."
+                "Configurez votre clé IA dans Paramètres pour activer l'assistant."
             )
             return
         try:
-            import anthropic
-            client = anthropic.Anthropic(api_key=key)
-
             # Garder les 3 derniers échanges (6 messages max)
             recent = list(self._history[-6:])
             recent.append({"role": "user", "content": self._question})
 
-            resp = client.messages.create(
-                model="claude-haiku-4-5",
-                max_tokens=250,
-                system=(
+            out = chat(
+                (
                     "Tu es l'assistant intégré de PANDORA, un logiciel de pré-production "
                     "cinéma pour DaVinci Resolve. Tu réponds en français, de façon concise "
                     "(2-3 phrases maximum, pas de liste à puces). Tu donnes des réponses "
                     "pratiques et directes, sans formules d'introduction. "
                     f"Contexte de la page active : {self._page_context}"
                 ),
-                messages=recent,
+                recent, tier="utility", max_tokens=250,
             )
-            self.finished.emit(resp.content[0].text.strip())
+            self.finished.emit(out.strip())
         except Exception as e:
             self.failed.emit(f"Erreur assistant : {e}")

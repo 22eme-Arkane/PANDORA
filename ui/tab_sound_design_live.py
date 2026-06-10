@@ -232,6 +232,16 @@ class TabSoundDesignLive(QWidget):
 
     # ── Génération ────────────────────────────────────────────────────────────
 
+    def open_with_prompt(self, prompt: str, duration: float = 10.0):
+        """Pré-remplit le mode « Prompt → SFX » depuis un plan de séquence
+        (sound_prompt + durée du plan) — bouton « ➤ SFX » du tableau Séquences."""
+        self._set_mode("text")
+        self._txt_prompt.setPlainText(prompt or "")
+        try:
+            self._dur_text.setValue(max(1.0, min(60.0, float(duration or 10.0))))
+        except (TypeError, ValueError):
+            pass
+
     def _on_pick_video(self):
         path, _ = QFileDialog.getOpenFileName(
             self, translate("Choisir un loop vidéo"), "",

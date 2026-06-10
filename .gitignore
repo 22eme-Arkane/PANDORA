@@ -33,6 +33,14 @@ data/recent_projects.json
 data/migrated_*.flag
 data/Seedance/
 
+# Données PANDORA | Live générées
+data/live_seq_*/
+data/live_assets/
+data/live_sound_design/
+data/upscaled/
+data/live_building_ref.json
+data/facade_fond_noir.jpg
+
 # Conserver uniquement le template vierge
 !data/config.clean.json
 
@@ -83,3 +91,10 @@ PANDORA_DEVLOG.md
 # ── Test et debug ─────────────────────────────────────────────────────────────
 test_*.py
 debug_*.py
+# … mais le harnais de non-régression EST versionné
+!tools/test_live.py
+
+# ── Binaires locaux (jamais commités) ────────────────────────────────────────
+ffmpeg.exe
+ffprobe.exe
+tools/audit_i18n_result.txt

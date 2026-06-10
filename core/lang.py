@@ -29,9 +29,8 @@ def translate_to_english(text: str) -> str:
     except Exception:
         pass
 
-    from core.config import load_config
-    key = load_config().get("anthropic_key", "").strip()
-    if not key:
+    from core.ai_provider import complete, key_error
+    if key_error():
         return text
 
     import re
@@ -49,12 +48,8 @@ def translate_to_english(text: str) -> str:
     safe = re.sub(r"‘[^’]{1,300}’", _protect, safe)
 
     try:
-        import anthropic
-        client = anthropic.Anthropic(api_key=key)
-        msg = client.messages.create(
-            model="claude-haiku-4-5",
-            max_tokens=800,
-            system=(
+        result = complete(
+            (
                 "You are a translator specializing in AI video generation prompts. "
                 "Translate the input text into English, preserving all technical details, "
                 "descriptive adjectives, proper nouns, and prompt structure exactly. "
@@ -63,9 +58,8 @@ def translate_to_english(text: str) -> str:
                 "spoken dialogue or text-on-object — copy them exactly as-is. "
                 "Return ONLY the translated text. No explanation, no prefix."
             ),
-            messages=[{"role": "user", "content": safe}],
-        )
-        result = msg.content[0].text.strip()
+            safe, tier="utility", max_tokens=800,
+        ).strip()
     except Exception:
         return text
 
@@ -93,9 +87,8 @@ def translate_to_chinese(text: str) -> str:
     if not text or not text.strip():
         return text
 
-    from core.config import load_config
-    key = load_config().get("anthropic_key", "").strip()
-    if not key:
+    from core.ai_provider import complete, key_error
+    if key_error():
         return text
 
     import re
@@ -116,12 +109,8 @@ def translate_to_chinese(text: str) -> str:
     safe = re.sub(r"‘[^’]{1,300}’", _protect, safe)
 
     try:
-        import anthropic
-        client = anthropic.Anthropic(api_key=key)
-        msg = client.messages.create(
-            model="claude-haiku-4-5",
-            max_tokens=800,
-            system=(
+        result = complete(
+            (
                 "You are a translator specializing in AI video generation prompts. "
                 "Translate the input text into Simplified Chinese (Mandarin), "
                 "preserving all technical details, descriptive adjectives, "
@@ -130,9 +119,8 @@ def translate_to_chinese(text: str) -> str:
                 "copy them exactly as-is without any modification. "
                 "Return ONLY the translated text. No explanation, no prefix."
             ),
-            messages=[{"role": "user", "content": safe}],
-        )
-        result = msg.content[0].text.strip()
+            safe, tier="utility", max_tokens=800,
+        ).strip()
     except Exception:
         return text
 

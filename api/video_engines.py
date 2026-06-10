@@ -56,6 +56,9 @@ def _fal_upload(fal_client, path: str) -> str:
 def _analyze_style_ref(image_path: str) -> str:
     """Claude Haiku Vision → extrait les mots-clés de style d'une image.
     Retourne une chaîne EN (~12 mots) ou '' en cas d'erreur.
+
+    VISION : volontairement sur Anthropic, hors couche core/ai_provider
+    (le sélecteur d'assistant IA ne couvre que le texte en v1).
     """
     try:
         import base64, anthropic as _anthropic, mimetypes

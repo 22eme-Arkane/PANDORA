@@ -592,6 +592,7 @@ class _ShotRow(QFrame):
     edit_requested   = pyqtSignal(dict)
     delete_requested = pyqtSignal(str)
     changed          = pyqtSignal()
+    sound_requested  = pyqtSignal(str, float)   # (sound_prompt, durée) → Sound Design
 
     _MIN_H = 72
 
@@ -964,8 +965,10 @@ class _ShotRow(QFrame):
         pmt_l.setContentsMargins(7, 8, 6, 6)
         pmt_l.setSpacing(5)
 
-        def _prompt_field(icon: str, icon_color: str, value: str, edit_fn):
-            """Un champ prompt cliquable (icône + aperçu), édité inline."""
+        def _prompt_field(icon: str, icon_color: str, value: str, edit_fn,
+                          action=None):
+            """Un champ prompt cliquable (icône + aperçu), édité inline.
+            `action` = (texte_bouton, tooltip, fn) → petit bouton dans l'en-tête."""
             box = QWidget()
             box.setStyleSheet("background:transparent;")
             bl = QVBoxLayout(box)
@@ -975,6 +978,27 @@ class _ShotRow(QFrame):
             head.setStyleSheet(
                 f"color:{icon_color};font-size:8px;font-weight:700;"
                 f"background:transparent;border:none;")
+            if action is not None:
+                _txt, _tip, _fn = action
+                head_row = QWidget()
+                head_row.setStyleSheet("background:transparent;")
+                hr = QHBoxLayout(head_row)
+                hr.setContentsMargins(0, 0, 0, 0)
+                hr.setSpacing(4)
+                hr.addWidget(head)
+                act_btn = QPushButton(_txt)
+                act_btn.setFixedHeight(14)
+                act_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+                act_btn.setToolTip(_tip)
+                act_btn.setStyleSheet(
+                    f"QPushButton{{background:transparent;color:{icon_color};"
+                    f"border:1px solid {CP['border']};border-radius:3px;"
+                    f"font-size:8px;font-weight:700;padding:0 5px;}}"
+                    f"QPushButton:hover{{border-color:{icon_color};}}")
+                act_btn.clicked.connect(_fn)
+                hr.addWidget(act_btn)
+                hr.addStretch()
+                head = head_row
             prev = (value[:280] + "…") if len(value) > 280 else (value or "—")
             body = _WrapLabel(prev)
             body.setWordWrap(True)
@@ -1004,9 +1028,15 @@ class _ShotRow(QFrame):
         _vid_box, _pmt_lbl = _prompt_field(
             "🎬 " + translate("Vidéo"), CP["accent"],
             data.get("seedance_prompt", "") or "", _edit_video)
+        def _send_sound():
+            self.sound_requested.emit(
+                self._data.get("sound_prompt", "") or "",
+                float(self._data.get("duration", 5.0) or 5.0))
+
         _snd_box, _snd_lbl = _prompt_field(
             "🔊 " + translate("Son"), CP.get("orange", CP["accent"]),
-            data.get("sound_prompt", "") or "", _edit_sound)
+            data.get("sound_prompt", "") or "", _edit_sound,
+            action=("➤ SFX", translate("Envoyer vers Sound Design (Studio IA)"), _send_sound))
         pmt_l.addWidget(_vid_box)
         pmt_l.addWidget(_snd_box)
         self._pmt_lbl = _pmt_lbl
@@ -1899,6 +1929,9 @@ class _MoodBatchDialog(QDialog):
 
 class PageStoryboard(QWidget):
 
+    # (sound_prompt, durée) relayé vers le Studio IA → onglet Sound Design.
+    sound_to_studio = pyqtSignal(str, float)
+
     # Colonnes masquées pour cette page (vide = toutes visibles).
     # SequenceMappingPage la surcharge pour masquer Axe/Valeur/Distance/Décor/Heure.
     _hidden_cols: set = set()
@@ -2569,6 +2602,7 @@ class PageStoryboard(QWidget):
             row.edit_requested.connect(self._on_edit)
             row.delete_requested.connect(self._on_delete)
             row.changed.connect(self.refresh)
+            row.sound_requested.connect(self.sound_to_studio)
             self._shot_rows[shot["id"]] = row
             self._list_lay.addWidget(row)
             self._list_lay.addWidget(_RowResizeHandle(row))

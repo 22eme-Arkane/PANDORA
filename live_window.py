@@ -666,6 +666,9 @@ class LiveWindow(QMainWindow):
         # ── Séquences Live + Mapping (versions Live du Storyboard) ──────────────
         self._pages["seq_live"]    = SequenceLivePage()
         self._pages["seq_mapping"] = SequenceMappingPage()
+        # « ➤ SFX » d'un plan → Studio IA, onglet Sound Design pré-rempli
+        for _sk in ("seq_live", "seq_mapping"):
+            self._pages[_sk].sound_to_studio.connect(self._open_sound_design)
 
         # ── Casting / Accessoires / Véhicules (versions Live) ──────────────────
         self._pages["casting"]     = CastingLivePage()
@@ -720,6 +723,13 @@ class LiveWindow(QMainWindow):
             self._assistant.set_context(ctx)
 
     # ── Handlers ────────────────────────────────────────────────────────────────
+
+    def _open_sound_design(self, prompt: str, duration: float):
+        """« ➤ SFX » d'un plan de séquence → Studio IA, onglet Sound Design pré-rempli."""
+        self._navigate("studio")
+        studio = self._pages.get("studio")
+        if studio and hasattr(studio, "open_sound_design"):
+            studio.open_sound_design(prompt, duration)
 
     def _on_manual(self):
         from ui.live_pages import UserManualDialogLive

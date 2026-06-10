@@ -3034,8 +3034,16 @@ class TabT2V(QScrollArea):
         prompt_fr = self.prompt_ta.toPlainText().strip()
         if not prompt_fr:
             return
-        if self._preview_translate_worker and self._preview_translate_worker.isRunning():
-            self._preview_translate_worker.quit()
+        # Anti-crash : un QThread basé sur run() n'a pas de boucle d'événements, donc
+        # quit() est INOPÉRANT. Réassigner la variable laissait l'ancien thread être
+        # collecté par le GC PENDANT qu'il tournait → « QThread: Destroyed while
+        # thread is still running » → plantage de l'app (typiquement en sélectionnant
+        # des plans coup sur coup). abandon_thread() le garde référencé + bloque ses
+        # signaux jusqu'à sa fin.
+        if self._preview_translate_worker is not None:
+            from core.worker import abandon_thread
+            abandon_thread(self._preview_translate_worker)
+            self._preview_translate_worker = None
         self._preview_spinner.setText("⟳  traduction…")
         self._preview_spinner.setVisible(True)
         self._preview_translate_worker = _PreviewTranslateWorker(prompt_fr)

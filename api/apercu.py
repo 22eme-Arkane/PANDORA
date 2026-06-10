@@ -208,11 +208,13 @@ def run_generation(prompt: str, output_dir: str, api_key: str, progress_cb,
         kontext_prompt = (
             prompt
             + " | NIGHT projection mapping render: convert the scene to deep night — "
-            "pitch-black night sky, NO daylight, no sun; the building facade is lit ONLY "
-            "by the projected visuals described above. Keep the building's EXACT geometry, "
-            "architecture and proportions. Remove every surrounding element (other buildings, "
-            "street objects, trees, people, ground, sky) and replace the entire background "
-            "with PURE BLACK #000000. Isolate the single building facade on a pure black void."
+            "pitch-black night sky, NO daylight, no sun; same framing, scale and viewpoint "
+            "as the source photo. The building is a projection CANVAS: render the projected "
+            "content described above ON it — the content may light up only parts of it, "
+            "transform its material, or completely cover and hide the facade, exactly as "
+            "described. Unlit areas fall to pure black. Remove every surrounding element "
+            "(other buildings, street objects, trees, people, ground, sky) and replace the "
+            "entire background with PURE BLACK #000000."
         )
         progress_cb("Envoi de la façade à fal.ai…")
         facade_url = fal_client.upload_file(building_ref)

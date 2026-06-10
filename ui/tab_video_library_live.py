@@ -311,9 +311,15 @@ class TabVideoLibraryLive(QScrollArea):
         project_dir = os.path.join(data_root, "Seedance")
         if os.path.isdir(project_dir):
             dirs_to_scan.append(project_dir)
+        # Sorties des onglets Upscaling et Sound Design (vidéos sonorisées)
+        for sub in ("upscaled", "live_sound_design"):
+            d = os.path.join(data_root, sub)
+            if os.path.isdir(d):
+                dirs_to_scan.append(d)
         output_dir = cfg.get_output_dir()
         if output_dir and os.path.isdir(output_dir):
-            if not dirs_to_scan or os.path.normpath(output_dir) != os.path.normpath(dirs_to_scan[0]):
+            _norm = {os.path.normpath(x) for x in dirs_to_scan}
+            if os.path.normpath(output_dir) not in _norm:
                 dirs_to_scan.append(output_dir)
 
         paths: list[str] = []

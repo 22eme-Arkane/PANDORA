@@ -180,6 +180,11 @@ class LiveStudioWidget(QWidget):
         self.tab_upscale.add_clips_from_paths(paths)
         self.tabs.setCurrentWidget(self.tab_upscale)
 
+    def open_sound_design(self, prompt: str, duration: float = 10.0):
+        """Ouvre l'onglet Sound Design pré-rempli (bouton « ➤ SFX » des Séquences)."""
+        self.tab_sound.open_with_prompt(prompt, duration)
+        self.tabs.setCurrentWidget(self.tab_sound)
+
     def refresh(self):
         if hasattr(self.tab_library, "refresh"):
             self.tab_library.refresh()

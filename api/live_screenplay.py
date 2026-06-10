@@ -49,8 +49,16 @@ plusieurs PLANS qui s'enchaînent.
 Contraintes IMPÉRATIVES :
 - La caméra est TOTALEMENT FIXE (pas de mouvement, pas de zoom). camera_movement = "Fixe".
 - La séquence est CONTINUE : chaque plan enchaîne le précédent comme un seul plan long.
-- La géométrie de la façade reste identique ; seuls la lumière, les effets, les matières
-  et le fond évoluent.
+- Le CADRE physique ne change jamais, mais la façade est un ÉCRAN / CANEVAS, pas un sujet :
+  elle ne doit PAS rester visible en permanence. Un mapping qui montre la façade du début
+  à la fin est un mapping raté (effet « image plaquée à 50 % d'opacité »). JOUE avec sa
+  présence au fil des plans, en variant ces modes :
+  * RÉVÉLATION — depuis le noir total, ses arêtes/fenêtres se dessinent en lignes de lumière ;
+  * EXTINCTION — la façade disparaît entièrement dans le noir (fond noir pur) ;
+  * TRANSFORMATION — elle se fissure, fond, se reconstruit, change de matière (eau, feu, métal…) ;
+  * RECOUVREMENT — le contenu projeté la remplace totalement : un autre monde plein cadre ;
+  * JEU ARCHITECTURAL — seules certaines parties s'illuminent (fenêtres, corniches, colonnes).
+- Alterne ces modes d'un plan à l'autre pour créer des surprises et des respirations.
 
 Pour CHAQUE plan, donne un objet JSON avec :
 - "act": numéro de l'acte auquel ce plan appartient (entier, commence à 1).
@@ -59,13 +67,16 @@ Pour CHAQUE plan, donne un objet JSON avec :
 - "shot_size": "" (non pertinent en mapping).
 - "camera_movement": "Fixe".
 - "duration": durée en secondes (entier entre 4 et 15).
-- "prompt": prompt VIDÉO en ANGLAIS décrivant l'évolution sur la façade (sans mouvement de
+- "prompt": prompt VIDÉO en ANGLAIS décrivant l'évolution projetée (sans mouvement de
   caméra), TRÈS DÉTAILLÉ et dense (Seedance 2.0 exploite un MAXIMUM de détails — ne sois PAS
-  bref). Décris précisément : l'effet/visuel projeté, la lumière (direction, qualité,
-  couleur), la palette, les textures & matières, ce qui évolue et comment, l'atmosphère/mood,
-  le style, et des repères de qualité (cinematic, ultra-detailed, sharp, 4K). 3 à 5 phrases
-  riches. VISUEL UNIQUEMENT — INTERDIT d'y mettre le BPM, un tempo, des chiffres musicaux,
-  des instruments ou tout terme audio.
+  bref). COMMENCE par déclarer l'ÉTAT DE LA FAÇADE dans ce plan (ex: "the facade is fully
+  covered by…", "the facade dissolves into darkness while…", "only the window frames glow…",
+  "the building reappears, rebuilt out of…"). Puis décris précisément : l'effet/visuel
+  projeté, la lumière (direction, qualité, couleur), la palette, les textures & matières,
+  ce qui évolue et comment, l'atmosphère/mood, le style, et des repères de qualité
+  (cinematic, ultra-detailed, sharp, 4K). 3 à 5 phrases riches. VISUEL UNIQUEMENT —
+  INTERDIT d'y mettre le BPM, un tempo, des chiffres musicaux, des instruments ou tout
+  terme audio.
 - "sound_prompt": prompt SOUND DESIGN en ANGLAIS (SFX / ambiance, AUCUNE voix ni parole).
   C'est ICI — et seulement ici — que le BPM et les temps forts sont pris en compte.
 
@@ -155,30 +166,18 @@ class GenerateDecoupageWorker(QThread):
             self.failed.emit("La trame est vide — écrivez votre conducteur d'abord.")
             return
         try:
-            from core.config import load_config
-            key = load_config().get("anthropic_key", "").strip()
-            if not key:
-                self.failed.emit(
-                    "Clé Anthropic (Claude) manquante — renseignez-la dans Paramètres "
-                    "pour générer le découpage.")
+            from core.ai_provider import complete, key_error, ai_name
+            err = key_error()
+            if err:
+                self.failed.emit(err)
                 return
-            import anthropic
-            client = anthropic.Anthropic(api_key=key)
             system = _SYSTEM_MAPPING if self._mode == "mapping" else _SYSTEM_LIVE
-            msg = client.messages.create(
-                model="claude-sonnet-4-6",
-                max_tokens=8000,
-                system=system,
-                messages=[{"role": "user", "content": text}],
-            )
-            out = "".join(
-                block.text for block in msg.content if getattr(block, "type", "") == "text"
-            )
+            out = complete(system, text, tier="creative", max_tokens=8000)
             segments = [_normalize(s, self._mode) for s in _extract_json_array(out) if isinstance(s, dict)]
             if not segments:
                 snippet = (out or "").strip()[:200].replace("\n", " ")
                 self.failed.emit(
-                    "Découpage vide — réponse Claude non exploitable. Réessayez.\n\n"
+                    f"Découpage vide — réponse {ai_name()} non exploitable. Réessayez.\n\n"
                     f"Début de la réponse : {snippet}")
                 return
             self.finished.emit(segments)
@@ -219,7 +218,10 @@ N'emploie JAMAIS de vocabulaire scénaristique : INTERDIT « INT. » / « EXT. �
 
 Analyse-le et propose un ARRANGEMENT :
 - découpage en ACTES (apparition/reveal, transformations, apogée, final) et progression continue ;
-- cohérence sur la façade (géométrie inchangée ; seuls lumière, effets, matières évoluent) ;
+- dramaturgie de la PRÉSENCE de la façade : elle ne doit pas rester visible en permanence —
+  alterne révélations (arêtes qui se dessinent), extinctions (noir total), transformations
+  (matière qui change), recouvrements (le contenu projeté la remplace) et jeux architecturaux
+  (seules des parties s'illuminent) ;
 - placement des moments forts et transitions SANS coupe entre actes.
 
 Donne d'abord une ANALYSE claire, puis des SUGGESTIONS concrètes et numérotées.
@@ -241,14 +243,12 @@ class ArrangeConducteurStreamWorker(QThread):
         self._dur  = duration_secs
 
     def run(self):
-        from core.config import load_config
-        key = load_config().get("anthropic_key", "").strip()
-        if not key:
-            self.failed.emit("Clé Anthropic (Claude) manquante — renseignez-la dans Paramètres.")
+        from core.ai_provider import stream, key_error
+        err = key_error()
+        if err:
+            self.failed.emit(err)
             return
         try:
-            import anthropic
-            client = anthropic.Anthropic(api_key=key)
             system = _ARRANGE_MAPPING if self._mode == "mapping" else _ARRANGE_LIVE
             prefix = ""
             if self._dur > 0:
@@ -256,16 +256,8 @@ class ArrangeConducteurStreamWorker(QThread):
                 dur_str = f"{mins}min {secs:02d}s" if mins else f"{secs}s"
                 prefix = (f"[DURÉE CIBLE : {dur_str} = {self._dur} secondes. "
                           f"Tiens-en compte dans le rythme et la structure.]\n\n")
-            full = ""
-            with client.messages.stream(
-                model="claude-sonnet-4-6",
-                max_tokens=4096,
-                system=system,
-                messages=[{"role": "user", "content": prefix + self._text}],
-            ) as stream:
-                for t in stream.text_stream:
-                    full += t
-                    self.chunk.emit(t)
+            full = stream(system, prefix + self._text, on_chunk=self.chunk.emit,
+                          tier="creative", max_tokens=4096)
             self.finished.emit(full)
         except Exception as e:
             from core.worker import humanize_api_error

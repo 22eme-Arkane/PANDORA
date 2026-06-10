@@ -217,6 +217,61 @@ class PageLiveSettings(QWidget):
         ant_row.addWidget(self._anthropic_input, 1)
         ac.addLayout(ant_row)
 
+        # ── Assistant IA (texte) — même réglage que Cinéma (config partagée) ──
+        from PyQt6.QtWidgets import QComboBox
+        ai_row = QHBoxLayout()
+        ai_row.setSpacing(12)
+        ai_row.addWidget(_key_label("Assistant IA (texte) :"))
+        self._AI_CHOICES = [
+            ("Claude (Anthropic) — défaut",       "anthropic", "claude-sonnet-4-6"),
+            ("Fable 5 (Anthropic) — qualité max", "anthropic", "claude-fable-5"),
+            ("Mistral — expérimental",            "mistral",   ""),
+            ("Ollama local — expérimental",       "ollama",    ""),
+        ]
+        self._ai_combo = QComboBox()
+        self._ai_combo.setFixedHeight(34)
+        self._ai_combo.setStyleSheet(
+            f"QComboBox{{background:{CP['bg3']};border:1px solid {CP['border']};"
+            f"border-radius:8px;color:{CP['text_primary']};font-size:12px;padding:0 10px;}}"
+            f"QComboBox::drop-down{{border:none;width:22px;}}"
+            f"QComboBox QAbstractItemView{{background:{CP['bg3']};"
+            f"border:1px solid {CP['border_bright']};color:{CP['text_primary']};"
+            f"selection-background-color:{CP['accent_dim']};}}"
+        )
+        for label, prov, model in self._AI_CHOICES:
+            self._ai_combo.addItem(label, (prov, model))
+        ai_row.addWidget(self._ai_combo, 1)
+        ac.addLayout(ai_row)
+
+        mis_row = QHBoxLayout()
+        mis_row.setSpacing(12)
+        mis_row.addWidget(_key_label("Clé Mistral :"))
+        self._mistral_input = _input("Clé API Mistral", 0)
+        self._mistral_input.setEchoMode(QLineEdit.EchoMode.Password)
+        mis_row.addWidget(self._mistral_input, 1)
+        self._mistral_row_widgets = (mis_row.itemAt(0).widget(), self._mistral_input)
+        ac.addLayout(mis_row)
+
+        oll_row = QHBoxLayout()
+        oll_row.setSpacing(12)
+        oll_row.addWidget(_key_label("Ollama (URL · modèle) :"))
+        self._ollama_url_input = _input("http://localhost:11434", 0)
+        self._ollama_model_input = _input("llama3.1", 0)
+        oll_row.addWidget(self._ollama_url_input, 1)
+        oll_row.addWidget(self._ollama_model_input, 1)
+        self._ollama_row_widgets = (oll_row.itemAt(0).widget(),
+                                    self._ollama_url_input, self._ollama_model_input)
+        ac.addLayout(oll_row)
+
+        def _on_ai_changed(*_):
+            prov = (self._ai_combo.currentData() or ("anthropic", ""))[0]
+            for wdg in self._mistral_row_widgets:
+                wdg.setVisible(prov == "mistral")
+            for wdg in self._ollama_row_widgets:
+                wdg.setVisible(prov == "ollama")
+        self._ai_combo.currentIndexChanged.connect(_on_ai_changed)
+        self._on_ai_changed = _on_ai_changed
+
         btn_save = QPushButton("Enregistrer")
         btn_save.setFixedHeight(36)
         btn_save.setFixedWidth(140)
@@ -246,6 +301,16 @@ class PageLiveSettings(QWidget):
         ant = cfg.get("anthropic_key", "")
         if ant:
             self._anthropic_input.setText(ant)
+        # Assistant IA (texte)
+        _cur = (cfg.get("ai_provider", "anthropic"), cfg.get("ai_model_creative", ""))
+        for i, (_, prov, model) in enumerate(self._AI_CHOICES):
+            if prov == _cur[0] and (prov != "anthropic" or model == (_cur[1] or "claude-sonnet-4-6")):
+                self._ai_combo.setCurrentIndex(i)
+                break
+        self._mistral_input.setText(cfg.get("mistral_key", ""))
+        self._ollama_url_input.setText(cfg.get("ollama_url", ""))
+        self._ollama_model_input.setText(cfg.get("ollama_model", ""))
+        self._on_ai_changed()
         host = cfg.get("resolume_host", "localhost")
         port = cfg.get("resolume_port", 8080)
         self._host_input.setText(str(host))
@@ -256,9 +321,17 @@ class PageLiveSettings(QWidget):
         cfg = load_config()
         cfg["api_key"]       = self._api_key_input.text().strip()
         cfg["anthropic_key"] = self._anthropic_input.text().strip()
+        prov, model = self._ai_combo.currentData() or ("anthropic", "")
+        cfg["ai_provider"]       = prov
+        cfg["ai_model_creative"] = model
+        cfg["mistral_key"]       = self._mistral_input.text().strip()
+        cfg["ollama_url"]        = self._ollama_url_input.text().strip()
+        cfg["ollama_model"]      = self._ollama_model_input.text().strip()
         cfg["resolume_host"] = self._host_input.text().strip() or "localhost"
         cfg["resolume_port"] = self._port_spin.value()
         save_config(cfg)
+        from core.ai_provider import refresh_name_cache
+        refresh_name_cache()   # le nom de l'assistant change → libellés au prochain démarrage
         self._test_lbl.setText("✓  Paramètres enregistrés.")
         self._test_lbl.setStyleSheet(
             f"color:{CP['accent']};font-size:11px;background:transparent;border:none;"

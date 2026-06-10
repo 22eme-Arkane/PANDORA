@@ -2,7 +2,7 @@ import os
 import webbrowser
 from PyQt6.QtWidgets import (
     QScrollArea, QWidget, QVBoxLayout, QHBoxLayout,
-    QLabel, QLineEdit, QPushButton, QMessageBox,
+    QLabel, QLineEdit, QPushButton, QMessageBox, QComboBox,
 )
 from PyQt6.QtCore import Qt
 from ui.styles import CP
@@ -235,6 +235,76 @@ class SettingsPage(QScrollArea):
         lay.addWidget(self.anthropic_input)
         lay.addWidget(_divider())
 
+        # ── Assistant IA (texte) ──────────────────────────────────────────────
+        lay.addWidget(_section("Assistant IA"))
+        _lbl_ai = QLabel(
+            "Moteur IA des fonctions texte : prompts, scénario, arrangement, storyboard, "
+            "assistant. L'analyse d'images reste sur Anthropic."
+        )
+        _lbl_ai.setWordWrap(True)
+        _lbl_ai.setStyleSheet(
+            f"color:{CP['text_secondary']};font-size:12px;background:transparent;"
+        )
+        lay.addWidget(_lbl_ai)
+
+        # (libellé, provider, modèle créatif)
+        self._AI_CHOICES = [
+            ("Claude (Anthropic) — défaut",          "anthropic", "claude-sonnet-4-6"),
+            ("Fable 5 (Anthropic) — qualité max",    "anthropic", "claude-fable-5"),
+            ("Mistral — expérimental",               "mistral",   ""),
+            ("Ollama local — expérimental",          "ollama",    ""),
+        ]
+        self.ai_combo = QComboBox()
+        self.ai_combo.setFixedHeight(34)
+        self.ai_combo.setStyleSheet(
+            f"QComboBox{{background:{CP['bg2']};border:1px solid {CP['border']};"
+            f"border-radius:8px;color:{CP['text_primary']};font-size:12px;padding:0 10px;}}"
+            f"QComboBox::drop-down{{border:none;width:22px;}}"
+            f"QComboBox QAbstractItemView{{background:{CP['bg3']};"
+            f"border:1px solid {CP['border_bright']};color:{CP['text_primary']};"
+            f"selection-background-color:{CP['accent_dim']};}}"
+        )
+        for label, prov, model in self._AI_CHOICES:
+            self.ai_combo.addItem(label, (prov, model))
+        _cur = (cfg.get("ai_provider", "anthropic"), cfg.get("ai_model_creative", ""))
+        for i, (_, prov, model) in enumerate(self._AI_CHOICES):
+            if prov == _cur[0] and (prov != "anthropic" or model == (_cur[1] or "claude-sonnet-4-6")):
+                self.ai_combo.setCurrentIndex(i)
+                break
+        self.ai_combo.currentIndexChanged.connect(self._on_ai_choice_changed)
+        lay.addWidget(self.ai_combo)
+
+        # Champs spécifiques aux fournisseurs alternatifs (visibles selon le choix)
+        self.mistral_input = QLineEdit()
+        self.mistral_input.setPlaceholderText("Clé API Mistral")
+        self.mistral_input.setText(cfg.get("mistral_key", ""))
+        self.mistral_input.setEchoMode(QLineEdit.EchoMode.Password)
+        self.mistral_input.setStyleSheet(_field_style())
+        lay.addWidget(self.mistral_input)
+
+        self.ollama_url_input = QLineEdit()
+        self.ollama_url_input.setPlaceholderText("URL Ollama (défaut : http://localhost:11434)")
+        self.ollama_url_input.setText(cfg.get("ollama_url", ""))
+        self.ollama_url_input.setStyleSheet(_field_style())
+        lay.addWidget(self.ollama_url_input)
+
+        self.ollama_model_input = QLineEdit()
+        self.ollama_model_input.setPlaceholderText("Modèle Ollama (défaut : llama3.1)")
+        self.ollama_model_input.setText(cfg.get("ollama_model", ""))
+        self.ollama_model_input.setStyleSheet(_field_style())
+        lay.addWidget(self.ollama_model_input)
+
+        self._lbl_ai_restart = QLabel(
+            "Le nom de l'assistant dans l'interface se met à jour au prochain démarrage."
+        )
+        self._lbl_ai_restart.setWordWrap(True)
+        self._lbl_ai_restart.setStyleSheet(
+            f"color:{CP['text_dim']};font-size:10px;font-style:italic;background:transparent;"
+        )
+        lay.addWidget(self._lbl_ai_restart)
+        self._on_ai_choice_changed()
+        lay.addWidget(_divider())
+
         # ── Connexion DaVinci Resolve Studio ──────────────────────────────────
         dvr_row = QHBoxLayout()
         dvr_row.setSpacing(8)
@@ -424,15 +494,30 @@ class SettingsPage(QScrollArea):
         from ui.dialog_api_help import ApiHelpDialog
         ApiHelpDialog(self).exec()
 
+    def _on_ai_choice_changed(self, *_):
+        """Affiche les champs du fournisseur sélectionné uniquement."""
+        prov = (self.ai_combo.currentData() or ("anthropic", ""))[0]
+        self.mistral_input.setVisible(prov == "mistral")
+        self.ollama_url_input.setVisible(prov == "ollama")
+        self.ollama_model_input.setVisible(prov == "ollama")
+
     # ── Sauvegarde ────────────────────────────────────────────────────────────
 
     def save(self):
         cfg = load_config()
+        prov, model = self.ai_combo.currentData() or ("anthropic", "")
         cfg.update({
-            "api_key":       self.api_input.text(),
-            "anthropic_key": self.anthropic_input.text(),
+            "api_key":           self.api_input.text(),
+            "anthropic_key":     self.anthropic_input.text(),
+            "ai_provider":       prov,
+            "ai_model_creative": model,
+            "mistral_key":       self.mistral_input.text(),
+            "ollama_url":        self.ollama_url_input.text(),
+            "ollama_model":      self.ollama_model_input.text(),
         })
         save_config(cfg)
+        from core.ai_provider import refresh_name_cache
+        refresh_name_cache()   # le nom de l'assistant change → libellés au prochain démarrage
         QMessageBox.information(self, "Sauvegardé", "Configuration sauvegardée ✓")
 
     def test_anthropic_connection(self):

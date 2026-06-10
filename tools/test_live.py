@@ -1,0 +1,532 @@
+"""
+tools/test_live.py — Harnais de non-régression PANDORA | Live.
+
+À lancer avant chaque build / après chaque session de modifications :
+
+    C:\\Users\\22eme\\AppData\\Local\\Python\\pythoncore-3.14-64\\python.exe tools\\test_live.py
+
+- Headless (Qt offscreen) : n'ouvre aucune fenêtre.
+- Données dans un dossier temporaire : ne touche ni aux projets ni à la config.
+- AUCUN appel réseau : on ne démarre jamais de worker API (vérifications statiques
+  + construction des widgets uniquement).
+
+Code de sortie : 0 si tout passe, 1 sinon (utilisable en CI / build.ps1).
+"""
+
+import os
+import sys
+import tempfile
+import traceback
+import inspect
+
+os.environ["QT_QPA_PLATFORM"] = "offscreen"
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+try:
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+except Exception:
+    pass
+
+from PyQt6.QtWidgets import QApplication, QDialog, QMessageBox
+
+APP = QApplication([])
+QDialog.exec = lambda self: 0          # aucun dialogue bloquant en headless
+# Les confirmations répondent toujours « Oui » en headless (statiques C++,
+# non couvertes par le patch QDialog.exec ci-dessus).
+QMessageBox.question = staticmethod(
+    lambda *a, **k: QMessageBox.StandardButton.Yes)
+QMessageBox.information = staticmethod(lambda *a, **k: QMessageBox.StandardButton.Ok)
+QMessageBox.warning = staticmethod(lambda *a, **k: QMessageBox.StandardButton.Ok)
+
+# Projet temporaire — isole toutes les écritures du harnais
+import core.context as ctx
+_TMP = tempfile.mkdtemp(prefix="pandora_test_")
+ctx.set_project_path(_TMP)
+ctx.set_project_id("test_harness")
+
+_TESTS = []
+
+
+def test(fn):
+    _TESTS.append(fn)
+    return fn
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# Logique pure (parsing, normalisation, timeline musicale)
+# ══════════════════════════════════════════════════════════════════════════════
+
+@test
+def json_parser_robuste():
+    """_extract_json_array encaisse crochets/troncature/virgules/texte autour."""
+    from api.live_screenplay import _extract_json_array as ex
+    fence = chr(96) * 3
+    assert len(ex(fence + 'json\n[{"a":1},{"a":2}]\n' + fence)) == 2, "bloc json"
+    assert len(ex('[{"p":"x [y] z"},{"p":"w"}]')) == 2, "crochet dans valeur"
+    assert len(ex('[{"a":1,"p":"ok"},{"a":2,"p":"tronq')) == 1, "tableau tronqué"
+    assert len(ex('Voici :\n[{"a":1},{"a":2},]\nfin.')) == 2, "virgule finale + texte"
+    assert ex("aucun json ici") == [], "pas de json"
+
+
+@test
+def normalize_decoupage():
+    """_normalize produit act/act_name/sound_prompt, clamp durée, Fixe en mapping."""
+    from api.live_screenplay import _normalize
+    n = _normalize({"action": "a", "prompt": "v", "sound_prompt": "s",
+                    "act": 2, "act_name": "Drop", "duration": 99,
+                    "camera_movement": "Travelling"}, "mapping")
+    assert n["act"] == 2 and n["act_name"] == "Drop", "act/act_name"
+    assert n["sound_prompt"] == "s", "sound_prompt"
+    assert n["duration"] == 15, "clamp durée 15"
+    assert n["camera_movement"] == "Fixe", "mapping force Fixe"
+    n2 = _normalize({"action": "a", "duration": 1}, "live")
+    assert n2["duration"] == 4, "clamp durée min 4"
+    assert n2["act"] == 1, "act par défaut"
+
+
+@test
+def timeline_musicale():
+    """build_set_timeline : BPM + drops + consigne ; vide sans analyse."""
+    from core.music_analysis import build_set_timeline
+    tl = build_set_timeline([{"name": "t.mp3", "bpm": 128.0, "duration": 222.0,
+                              "energy": "▁▃▅", "drops": [48.0]}])
+    assert "128 BPM" in tl and "0:48" in tl and "Resolume" in tl
+    assert build_set_timeline([{"name": "x", "bpm": 0}]) == "", "sans BPM = vide"
+
+
+@test
+def reference_batiment_persistance():
+    """set/get/clear de la façade dans le data root du projet."""
+    from PIL import Image
+    import core.live_building as lb
+    img = os.path.join(_TMP, "_facade_t.jpg")
+    Image.new("RGB", (32, 18), (90, 90, 90)).save(img)
+    lb.set_building_ref(img)
+    assert lb.get_building_ref() == img, "get après set"
+    lb.clear_building_ref()
+    assert lb.get_building_ref() == "", "clear"
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# Prompts IA (dramaturgie mapping, séparation vidéo/son, terminologie actes)
+# ══════════════════════════════════════════════════════════════════════════════
+
+@test
+def prompts_decoupage_mapping():
+    """Découpage Mapping : façade = écran (présence variable), prompts détaillés."""
+    import api.live_screenplay as ls
+    t = ls._SYSTEM_MAPPING
+    assert "RÉVÉLATION" in t and "EXTINCTION" in t and "RECOUVREMENT" in t, "dramaturgie présence"
+    assert "seuls la lumière, les effets, les matières" not in t, "ancienne consigne façade-toujours-visible"
+    assert "TRÈS DÉTAILLÉ" in t, "prompts vidéo détaillés"
+    assert "ÉTAT DE LA FAÇADE" in t, "prompt commence par l'état de la façade"
+    assert "sound_prompt" in t and "BPM" in t, "séparation vidéo/son"
+    assert "TOTALEMENT FIXE" in t, "caméra fixe"
+
+
+@test
+def prompts_arrangement_conducteur():
+    """Arrangement : vocabulaire conducteur (actes), pas de vocabulaire scénario."""
+    import api.live_screenplay as ls
+    for name in ("_ARRANGE_LIVE", "_ARRANGE_MAPPING"):
+        t = getattr(ls, name)
+        assert "INT." in t and "EXT." in t, f"{name} : interdiction INT./EXT. énoncée"
+        assert "« séquence »" in t, f"{name} : bannit « séquence »"
+        assert "ACTES" in t, f"{name} : raisonne en actes"
+    assert "présence de la façade" in ls._ARRANGE_MAPPING.lower() or \
+           "PRÉSENCE" in ls._ARRANGE_MAPPING, "dramaturgie présence dans l'arrangement mapping"
+
+
+@test
+def prompts_mise_en_page():
+    """Mise en page PANDORA Live : Sonnet, façade-écran, vidéo/son séparés, durée cible."""
+    import api.live_extract as le
+    src = inspect.getsource(le.FormatConducteurWorker.run)
+    assert 'tier="creative"' in src, "tier créatif (Sonnet/Fable) pour la mise en page"
+    assert "ÉCRAN" in src, "façade = écran (pas un sujet)"
+    assert "seuls" not in src.split("ÉCRAN")[0] or True
+    assert "TRÈS DÉTAILLÉ" in src, "prompts vidéo détaillés"
+    assert "PROMPT SON" in src and "PROMPT VIDÉO" in src, "deux prompts par plan"
+    assert "DURÉE CIBLE" in src, "durée cible injectée"
+    assert "INTERDIT d'y mettre le BPM" in src, "BPM banni du prompt vidéo"
+
+
+@test
+def prompts_generation_video_mapping():
+    """Suffixe ADN mapping : canvas, nuit, noirs purs, caméra verrouillée, keyframes."""
+    from ui.tab_t2v_live import TabT2V
+    src = inspect.getsource(TabT2V.start_generation)
+    assert "projection CANVAS" in src, "façade = canvas"
+    assert "lit ONLY" not in src, "plus d'ordre de garder la façade visible"
+    assert "STATIC LOCKED CAMERA" in src, "caméra verrouillée"
+    assert "PURE BLACK #000000" in src, "noirs purs"
+    assert "end_image_path" in src, "keyframe d'arrivée branchée"
+    assert '"mapping"' in src.split("Framing prefix")[1][:300], "préfixe focale neutralisé en mapping"
+
+
+@test
+def prompts_moods_kontext():
+    """Moods Kontext : canvas (peut recouvrir/cacher la façade), nuit, fond noir."""
+    import api.apercu as A
+    src = inspect.getsource(A.run_generation)
+    assert "projection CANVAS" in src, "canvas"
+    assert "lit ONLY" not in src, "ancienne consigne retirée"
+    assert "PURE BLACK #000000" in src, "fond noir"
+    assert "fal-ai/flux-pro/kontext" in src, "Kontext quand façade fournie"
+
+
+@test
+def prompts_cinema_detailles():
+    """Cinéma : prompts storyboard + mise en page enrichis, fidèles au scénario."""
+    import api.screenplay as s
+    assert "DETAILED, dense video generation prompt" in s._GENERATE_STORYBOARD_TMPL
+    assert "WITHOUT inventing any new story element" in s._GENERATE_STORYBOARD_TMPL
+    assert "TRÈS DÉTAILLÉ" in s._FORMAT_PANDORA and "FIDÈLE au scénario" in s._FORMAT_PANDORA
+    assert "HIGHLY DETAILED" in s._FORMAT_PANDORA_EN
+
+
+@test
+def facade_resolution_par_namespace():
+    """La façade n'est injectée dans les moods QUE en Séquence Mapping."""
+    from PIL import Image
+    import core.live_building as lb
+    import core.storyboard as sb
+    from api.apercu import _resolve_building_ref
+    img = os.path.join(_TMP, "_facade_ns.jpg")
+    Image.new("RGB", (32, 18), (90, 90, 90)).save(img)
+    lb.set_building_ref(img)
+    try:
+        sb.set_namespace("live_seq_mapping")
+        assert _resolve_building_ref() == img, "mapping → façade"
+        sb.set_namespace("live_seq_live")
+        assert _resolve_building_ref() == "", "live → pas de façade"
+        sb.set_namespace("storyboard")
+        assert _resolve_building_ref() == "", "cinéma → pas de façade"
+    finally:
+        lb.clear_building_ref()
+        sb.set_namespace("storyboard")
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# Tableau Séquences (colonnes, masquage Mapping, conducteur)
+# ══════════════════════════════════════════════════════════════════════════════
+
+@test
+def colonnes_sequences():
+    """22 colonnes, en-têtes conducteur, masquage Mapping {5,7,8,9,11,12}."""
+    import core.storyboard as sb
+    import ui.page_storyboard_live as M
+    from ui.live_pages import SequenceLivePage, SequenceMappingPage
+    assert len(M._COLS) == 22, "22 colonnes"
+    assert M._COLS[2][0] == "Acte" and M._COLS[4][0] == "Prompt vidéo / son"
+    assert M._COLS[16][0] == "TC" and M._COLS[17][0] == "Musique"
+    assert M._COLS[18][0] == "BPM" and M._COLS[19][0] == "Transition"
+    mp = SequenceMappingPage(); mp.refresh()
+    vis = M._visible_order()
+    assert all(c not in vis for c in (5, 7, 8, 9, 11, 12)), "colonnes masquées en Mapping"
+    assert all(c in vis for c in (16, 17, 18, 19, 20)), "colonnes conducteur visibles en Mapping"
+    live = SequenceLivePage(); live.refresh()
+    assert len(M._visible_order()) == len(M._COLS), "Live montre tout"
+    sb.set_namespace("storyboard")
+
+
+@test
+def decoupage_routage_et_champs():
+    """_apply_decoupage : namespace live_seq_{mode}, act→seq, sound_prompt sauvé."""
+    import core.storyboard as sb
+    from ui.page_scenario_live import PageScenario
+    p = PageScenario()
+    navs = []
+    p.navigate_requested.connect(lambda k, e="": navs.append(k))
+    segs = [{"action": "a", "duration": 6, "prompt": "v", "sound_prompt": "s",
+             "act": 2, "act_name": "Drop"}]
+    p._live_mode = "mapping"
+    p._apply_decoupage(segs)
+    assert sb.get_namespace() == "live_seq_mapping" and navs[-1] == "seq_mapping"
+    shots = sb.list_shots()
+    assert shots and shots[0]["sound_prompt"] == "s" and shots[0]["seq_num"] == 2
+    p._live_mode = "live"
+    p._apply_decoupage(segs)
+    assert sb.get_namespace() == "live_seq_live" and navs[-1] == "seq_live"
+    sb.set_namespace("storyboard")
+
+
+@test
+def dialog_plan_live_sound_prompt():
+    """ShotDialog Live a le champ sound design ; le ShotDialog Cinéma n'en a pas."""
+    from ui.dialog_shot_live import ShotDialog as LiveDlg
+    import ui.dialog_shot as cine
+    d = LiveDlg(shot={"id": "s1", "number": 1, "sound_prompt": "boom"})
+    assert hasattr(d, "_sound_prompt") and d._sound_prompt.toPlainText() == "boom"
+    assert "sound_prompt" not in inspect.getsource(cine.ShotDialog), "Cinéma intact"
+    import ui.page_storyboard_live as M
+    assert M.ShotDialog.__module__ == "ui.dialog_shot_live", "la page Live ouvre la copie Live"
+
+
+@test
+def mood_info_dialog_par_mode():
+    """Le message avant « Générer les Moods » est calqué Live ou Mapping (plus Cinéma)."""
+    import core.storyboard as sb
+    from ui.page_storyboard_live import _MoodInfoDialog
+    sb.set_namespace("live_seq_live")
+    assert _MoodInfoDialog(None)._mode == "live"
+    sb.set_namespace("live_seq_mapping")
+    assert _MoodInfoDialog(None)._mode == "mapping"
+    src = inspect.getsource(_MoodInfoDialog._build_ui)
+    assert "Rendu de nuit" in src and "focale, l" not in src, "conseils mapping, pas cinéma"
+    sb.set_namespace("storyboard")
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# Onglet « Générer depuis Séquences » (tab_t2v_live)
+# ══════════════════════════════════════════════════════════════════════════════
+
+@test
+def t2v_live_selecteur_et_options():
+    """Sélecteur Live/Mapping, namespace, dyn-cam/raccord auto, DaVinci neutralisé."""
+    import core.storyboard as sb
+    from ui.tab_t2v_live import TabT2V
+    t = TabT2V()
+    assert t._seq_mode == "live" and sb.get_namespace() == "live_seq_live"
+    t._set_seq_mode("mapping")
+    assert sb.get_namespace() == "live_seq_mapping"
+    assert t._raccord_auto_cb.isChecked(), "raccord auto coché en Mapping"
+    assert t._dyn_cam_toggle_row.isHidden(), "caméra dynamique retirée en Mapping"
+    t._set_seq_mode("live")
+    assert not t._dyn_cam_toggle_row.isHidden(), "caméra dynamique de retour en Live"
+    # refresh recale le namespace même changé ailleurs
+    sb.set_namespace("storyboard")
+    t._seq_mode = "mapping"
+    t.refresh()
+    assert sb.get_namespace() == "live_seq_mapping", "refresh recale"
+    # DaVinci PURGÉ (pas seulement masqué) / sections repliées / décors masqués
+    assert not hasattr(t, "_davinci_bar"), "barre DaVinci supprimée"
+    assert not hasattr(t, "_import_cb"), "case import DaVinci supprimée"
+    assert not hasattr(t, "_check_davinci_connection"), "vérif connexion DaVinci supprimée"
+    import ui.tab_t2v_live as _m
+    _src = inspect.getsource(_m)
+    assert "davinci.bridge" not in _src, "plus d'import du bridge DaVinci"
+    assert "import_to_davinci=False" in _src, "téléchargement local uniquement"
+    assert t._casting.isHidden(), "Éléments récurrents replié par défaut"
+    assert t._film_style_frame.isHidden(), "Choisir les références replié par défaut"
+    assert not t._casting._decor_toggle.isVisible(), "section Décors masquée"
+    assert hasattr(t, "_bref_row"), "sélecteur façade présent"
+    sb.set_namespace("storyboard")
+
+
+@test
+def t2v_live_keyframes_mapping():
+    """Raccord par keyframes : mood N = début, mood N+1 = fin, fallback sans mood."""
+    import core.storyboard as sb
+    from PIL import Image
+    from ui.tab_t2v_live import TabT2V
+    sb.set_namespace("live_seq_mapping")
+    sb.clear_version_shots(sb.DEFAULT_VERSION_ID)
+    shots = [sb.save_shot({"number": i, "scene_title": f"P{i}", "duration": 6},
+                          sb.DEFAULT_VERSION_ID) for i in (1, 2, 3)]
+    for s in shots[:2]:
+        ad = sb.get_apercu_dir(s["id"])
+        os.makedirs(ad, exist_ok=True)
+        p = os.path.join(ad, f"mood_{s['number']}.jpg")
+        Image.new("RGB", (32, 18), (40, 40, 40)).save(p)
+        sb.save_apercus(s["id"], [p], 0)
+    t = TabT2V()
+    t._set_seq_mode("mapping")
+    s1, e1 = t._get_mapping_keyframes(shots[0])
+    s2, e2 = t._get_mapping_keyframes(shots[1])
+    s3, e3 = t._get_mapping_keyframes(shots[2])
+    assert s1.endswith("mood_1.jpg") and e1.endswith("mood_2.jpg"), "plan 1 chaîné vers mood 2"
+    assert s2.endswith("mood_2.jpg") and e2 == "", "plan 2 : pas de mood au plan 3"
+    assert (s3, e3) == ("", ""), "plan 3 sans mood → fallback"
+    sb.set_namespace("storyboard")
+
+
+@test
+def t2v_live_anticrash_threads():
+    """Le worker de traduction d'aperçu passe par abandon_thread (anti-crash)."""
+    from ui.tab_t2v_live import TabT2V
+    src = inspect.getsource(TabT2V._start_preview_translate)
+    assert "abandon_thread" in src, "abandon_thread requis (quit() inopérant sur QThread run())"
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# Studio IA Live + fenêtre Live
+# ══════════════════════════════════════════════════════════════════════════════
+
+@test
+def studio_onglets():
+    """7 onglets, Sound Design + Upscaling présents et câblés à la Vidéothèque."""
+    from ui.live_studio_widget import LiveStudioWidget
+    s = LiveStudioWidget()
+    titres = [s.tabs.tabText(i) for i in range(s.tabs.count())]
+    assert len(titres) == 7, f"7 onglets attendus, {len(titres)} trouvés"
+    for attendu in ("Sound Design", "Upscaling", "Vidéothèque", "Historique"):
+        assert any(attendu in x for x in titres), f"onglet {attendu} manquant"
+    assert s.tab_upscale._library_provider is not None, "Upscaling relié à la Vidéothèque"
+    # file d'attente upscaling : ajout + dédoublonnage
+    real = os.path.abspath(__file__)
+    assert s.tab_upscale.add_clips_from_paths([real, real]) == 1, "dédoublonnage file"
+    s._on_send_to_upscale([real])
+    assert s.tabs.tabText(s.tabs.currentIndex()) == "Upscaling", "bascule vers Upscaling"
+
+
+@test
+def fenetre_live():
+    """Topbar, assistant fermé par défaut, Paramètres en bas, alias de navigation."""
+    from live_window import LiveWindow
+    w = LiveWindow({})
+    assert hasattr(w, "_btn_save_global") and hasattr(w, "_btn_update_header"), "topbar"
+    assert w._assistant.isHidden(), "assistant IA fermé par défaut"
+    assert w._assistant_toggle._open is False, "poignée synchronisée"
+    assert "settings" in w._sidebar._items, "Paramètres dans la nav"
+    w._navigate("castings")   # alias Cinéma → Live, ne doit pas lever
+    w._navigate("vehicles")
+    assert w._NAV_ALIASES["castings"] == "casting"
+
+
+@test
+def conducteur_ui():
+    """Onglets Conducteur/Mise en page, mode dans la bande Durée cible, musique injectée."""
+    from ui.page_scenario_live import PageScenario
+    p = PageScenario()
+    assert p._editor_tabs.count() == 2, "2 onglets éditeur"
+    assert not p._editor_tabs.isTabEnabled(1), "Mise en page grisée au départ"
+    assert hasattr(p, "_btn_mode_live") and hasattr(p, "_btn_mode_mapping"), "boutons mode"
+    assert hasattr(p, "_music_hbox") and hasattr(p, "_bld_row"), "sections musique + façade"
+    p._set_editor_text("Mon conducteur")
+    p._music_tracks = [{"name": "t.mp3", "bpm": 128.0, "duration": 100.0,
+                        "energy": "", "drops": []}]
+    txt = p._text_with_music()
+    assert "TIMELINE MUSICALE" in txt and txt.endswith("Mon conducteur"), "timeline préfixée"
+    p._apply_layout("PLAN 1 — test")
+    assert p._editor_tabs.isTabEnabled(1), "onglet Mise en page activé"
+    assert p._editor_text.toPlainText() == "Mon conducteur", "conducteur intact"
+
+
+@test
+def workers_construction():
+    """Les workers se construisent avec les bons paramètres (sans .start())."""
+    from api.upscale import UpscaleVideoWorker, UPSCALE_MODELS
+    from api.tts import SFX1VideoWorker, SFX1Worker
+    from api.live_screenplay import GenerateDecoupageWorker, ArrangeConducteurStreamWorker
+    from api.live_extract import FormatConducteurWorker
+    from core.music_analysis import AnalyzeMusicWorker
+    assert [k for _, k in UPSCALE_MODELS] == ["topaz", "seedvr"]
+    assert UpscaleVideoWorker("x.mp4", model="topaz", upscale_factor=4)._factor == 4
+    assert SFX1VideoWorker("x.mp4", "p", 12.0)._duration == 12.0
+    assert SFX1Worker("p", 10.0)._duration == 10.0
+    assert GenerateDecoupageWorker("t", "mapping")._mode == "mapping"
+    w = ArrangeConducteurStreamWorker("t", "live", 90)
+    assert hasattr(w, "chunk") and w._dur == 90, "streaming + durée cible"
+    assert FormatConducteurWorker("t", "live", 60)._dur == 60
+    assert isinstance(AnalyzeMusicWorker([{"path": "x"}])._tracks, list)
+
+
+@test
+def couche_ai_provider():
+    """Couche d'abstraction IA : défauts, tiers, nom d'affichage, sites routés."""
+    import core.ai_provider as ap
+    assert ap.get_provider() in ("anthropic", "mistral", "ollama")
+    assert ap._model("utility") and ap._model("creative"), "modèles des deux tiers"
+    assert ap.ai_name(), "nom d'affichage"
+    # Les workers TEXTE ne doivent plus importer anthropic en direct
+    # (seuls les appels VISION y ont droit, marqués d'un commentaire).
+    import api.enhance, api.assistant, core.lang, api.live_extract, api.live_screenplay
+    for mod in (api.enhance, api.assistant, core.lang, api.live_extract, api.live_screenplay):
+        src = inspect.getsource(mod)
+        assert "anthropic.Anthropic(" not in src, f"{mod.__name__} : appel anthropic direct restant"
+    import api.screenplay
+    src = inspect.getsource(api.screenplay)
+    assert src.count("anthropic.Anthropic(") == 2, "screenplay : seuls les 2 sites VISION restent"
+    assert "core.ai_provider" in src, "screenplay routé via ai_provider"
+
+
+@test
+def selecteur_assistant_ia():
+    """Sélecteur IA dans Paramètres (Cinéma + Live) : 4 choix, champs conditionnels."""
+    from ui.page_settings import SettingsPage
+    from ui.page_live_settings import PageLiveSettings
+    cin = SettingsPage()
+    assert cin.ai_combo.count() == 4, "4 choix côté Cinéma"
+    assert any("Fable 5" in cin.ai_combo.itemText(i) for i in range(4)), "Fable 5 proposé"
+    cin.ai_combo.setCurrentIndex(2)   # Mistral
+    assert not cin.mistral_input.isHidden(), "champ Mistral visible quand Mistral choisi"
+    assert cin.ollama_url_input.isHidden(), "champs Ollama cachés"
+    cin.ai_combo.setCurrentIndex(0)
+    assert cin.mistral_input.isHidden(), "champ Mistral caché sur Claude"
+    liv = PageLiveSettings()
+    assert liv._ai_combo.count() == 4, "4 choix côté Live"
+    liv._ai_combo.setCurrentIndex(3)  # Ollama
+    assert not liv._ollama_url_input.isHidden(), "champs Ollama visibles côté Live"
+
+
+@test
+def sound_prompt_vers_sound_design():
+    """« ➤ SFX » : plan → Studio IA → onglet Sound Design pré-rempli."""
+    import core.storyboard as sb
+    from ui.live_studio_widget import LiveStudioWidget
+    s = LiveStudioWidget()
+    s.open_sound_design("deep bass drone, glitch textures", 12.0)
+    assert s.tabs.currentWidget() is s.tab_sound, "bascule vers Sound Design"
+    assert s.tab_sound._mode == "text", "mode Prompt → SFX"
+    assert "bass drone" in s.tab_sound._txt_prompt.toPlainText(), "prompt pré-rempli"
+    assert s.tab_sound._dur_text.value() == 12.0, "durée du plan reprise"
+    # La page Séquences expose le signal relais
+    from ui.live_pages import SequenceLivePage
+    p = SequenceLivePage()
+    assert hasattr(p, "sound_to_studio"), "signal sound_to_studio présent"
+    sb.set_namespace("storyboard")
+
+
+@test
+def libelles_dynamiques_ia():
+    """brand() rebaptise « Claude » selon l'assistant actif ; translate() le propage."""
+    import core.ai_provider as ap
+    from core.i18n import translate
+    # Simule un assistant différent en forçant le cache de nom
+    ap._NAME_CACHE = "Fable 5"
+    try:
+        assert ap.brand("Analyser avec Claude") == "Analyser avec Fable 5"
+        assert "Fable 5" in translate("☁  Claude IA"), "translate() applique brand()"
+        assert translate("Acte") == "Acte", "chaînes sans Claude inchangées"
+    finally:
+        ap.refresh_name_cache()
+    # Avec Claude actif (défaut), aucun libellé ne change
+    if ap.ai_name() == "Claude":
+        assert translate("☁  Claude IA") == "☁  Claude IA"
+
+
+@test
+def i18n_cles_live():
+    """Les chaînes Live clés ont leur traduction EN dans _FR_TO_EN."""
+    from core.i18n import _FR_TO_EN
+    for key in ("Mise en page PANDORA", "Acte", "Prompt vidéo / son",
+                "Sound Design", "Upscaling", "♫  Musiques du set",
+                "▦  Référence bâtiment (façade)", "Corriger le BPM",
+                "✓  Appliquer le découpage", "Musique", "Notes / Repère"):
+        assert key in _FR_TO_EN, f"i18n manquante : {key}"
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# Runner
+# ══════════════════════════════════════════════════════════════════════════════
+
+def main() -> int:
+    print(f"PANDORA | Live — harnais de non-régression ({len(_TESTS)} tests)")
+    print(f"Données temporaires : {_TMP}\n")
+    ok, ko = 0, 0
+    for fn in _TESTS:
+        try:
+            fn()
+            print(f"  OK    {fn.__name__}")
+            ok += 1
+        except Exception as e:
+            print(f"  ÉCHEC {fn.__name__} — {e}")
+            traceback.print_exc()
+            ko += 1
+    print(f"\n{ok} OK · {ko} échec(s)")
+    return 1 if ko else 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

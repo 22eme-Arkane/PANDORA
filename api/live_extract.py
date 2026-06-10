@@ -25,17 +25,12 @@ def _mode_ctx(mode: str) -> str:
 
 
 def _claude(system: str, user: str) -> str:
-    from core.config import load_config
-    key = load_config().get("anthropic_key", "").strip()
-    if not key:
-        raise RuntimeError("Clé Anthropic (Claude) manquante — renseignez-la dans Paramètres.")
-    import anthropic
-    client = anthropic.Anthropic(api_key=key)
-    msg = client.messages.create(
-        model=_MODEL, max_tokens=4096, system=system,
-        messages=[{"role": "user", "content": user}],
-    )
-    return "".join(b.text for b in msg.content if getattr(b, "type", "") == "text")
+    """Appel IA texte (tier utilitaire) via la couche d'abstraction — voir core/ai_provider."""
+    from core.ai_provider import complete, key_error
+    err = key_error()
+    if err:
+        raise RuntimeError(err)
+    return complete(system, user, tier="utility", max_tokens=4096)
 
 
 def _fmt_err(e) -> str:
@@ -62,14 +57,19 @@ class FormatConducteurWorker(QThread):
         if not self._text.strip():
             self.failed.emit("La trame est vide.")
             return
-        from core.config import load_config
-        key = load_config().get("anthropic_key", "").strip()
-        if not key:
-            self.failed.emit("Clé Anthropic (Claude) manquante — renseignez-la dans Paramètres.")
+        from core.ai_provider import stream as ai_stream, key_error
+        err = key_error()
+        if err:
+            self.failed.emit(err)
             return
         try:
-            _lock = ("Caméra FIXE, façade verrouillée (la géométrie ne change pas ; seuls "
-                     "lumière, effets et matières évoluent). "
+            _lock = ("Caméra FIXE, cadre verrouillé. La façade est un ÉCRAN, pas un sujet : "
+                     "elle ne doit PAS rester visible en permanence. Alterne au fil des plans : "
+                     "révélation (arêtes/fenêtres dessinées en lumière depuis le noir), "
+                     "extinction (façade disparue, noir total), transformation (matière qui se "
+                     "fissure/fond/se reconstruit), recouvrement total (un autre monde plein "
+                     "cadre), jeu architectural (seules des parties s'illuminent). Chaque "
+                     "PROMPT VIDÉO doit COMMENCER par l'état de la façade dans ce plan. "
                      if self._mode == "mapping" else "")
             system = (
                 "Tu es superviseur de génération vidéo IA ET sound designer pour PANDORA | Live. "
@@ -111,18 +111,10 @@ class FormatConducteurWorker(QThread):
                 user = (f"[DURÉE CIBLE TOTALE : {dur_str} = {int(self._dur)} secondes. "
                         f"Dimensionne le NOMBRE et la durée des plans en conséquence.]\n\n"
                         + self._text)
-            import anthropic
-            client = anthropic.Anthropic(api_key=key)
-            full = ""
-            # Sonnet (et non Haiku) : prompts vidéo nettement plus riches/détaillés,
-            # ce dont Seedance 2.0 a besoin. max_tokens élevé pour ne pas tronquer.
-            with client.messages.stream(
-                model="claude-sonnet-4-6", max_tokens=8000, system=system,
-                messages=[{"role": "user", "content": user}],
-            ) as stream:
-                for t in stream.text_stream:
-                    full += t
-                    self.chunk.emit(t)
+            # Tier créatif (Sonnet/Fable…) : prompts vidéo riches/détaillés pour
+            # Seedance 2.0. max_tokens élevé pour ne pas tronquer.
+            full = ai_stream(system, user, on_chunk=self.chunk.emit,
+                             tier="creative", max_tokens=8000)
             self.finished.emit(full.strip())
         except Exception as e:
             self.failed.emit(_fmt_err(e))

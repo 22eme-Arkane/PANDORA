@@ -615,7 +615,7 @@ class PageScenario(QWidget):
             ico_lbl.setStyleSheet(
                 f"color:{CP['accent2']};font-size:13px;background:transparent;border:none;"
             )
-            txt_lbl = QLabel(label)
+            txt_lbl = QLabel(translate(label))   # translate() rebaptise aussi « Claude »
             txt_lbl.setStyleSheet(
                 f"color:{CP['text_primary']};font-size:10px;font-weight:700;"
                 f"background:transparent;border:none;"
@@ -623,7 +623,7 @@ class PageScenario(QWidget):
             title_row.addWidget(ico_lbl)
             title_row.addWidget(txt_lbl)
             title_row.addStretch()
-            sub_lbl = QLabel(sub)
+            sub_lbl = QLabel(translate(sub))
             sub_lbl.setStyleSheet(
                 f"color:{CP['text_dim']};font-size:8px;background:transparent;border:none;"
             )
@@ -1930,10 +1930,26 @@ class PageScenario(QWidget):
         self._worker = GenerateDecoupageWorker(self._text_with_music(), self._live_mode)
         self._open_decoupage_window(self._worker)
 
-    def _apply_decoupage(self, segments: list):
-        """Écrit les segments dans la séquence Live/Mapping et y navigue."""
+    def _apply_decoupage(self, segments: list) -> bool:
+        """Écrit les segments dans la séquence Live/Mapping et y navigue.
+        Demande confirmation si un découpage existe déjà (il serait écrasé)."""
         import core.storyboard as _sb
         _sb.set_namespace(f"live_seq_{self._live_mode}")
+        _existing = _sb.list_shots(_sb.DEFAULT_VERSION_ID)
+        if _existing:
+            from PyQt6.QtWidgets import QMessageBox
+            _seq = translate("Séquences Mapping") if self._live_mode == "mapping" \
+                else translate("Séquences Live")
+            reply = QMessageBox.question(
+                self, translate("Remplacer le découpage ?"),
+                f"{_seq} : {len(_existing)} " +
+                translate("plan(s) existant(s) seront REMPLACÉS par le nouveau découpage.\n\n"
+                          "Continuer ?"),
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.Cancel,
+                QMessageBox.StandardButton.Cancel,
+            )
+            if reply != QMessageBox.StandardButton.Yes:
+                return False
         _sb.clear_version_shots(_sb.DEFAULT_VERSION_ID)
         sc_id = (self._current or {}).get("id", "")
         for i, seg in enumerate(segments, 1):
@@ -1953,6 +1969,7 @@ class PageScenario(QWidget):
         self._ai_progress_lbl.setText(f"✓  {len(segments)} " + translate("segments générés →") + f" {seq_name}")
         self.navigate_requested.emit(
             "seq_mapping" if self._live_mode == "mapping" else "seq_live", "")
+        return True
 
     def _open_decoupage_window(self, worker):
         """Fenêtre d'aperçu du découpage : génération → prévisualisation des plans →
@@ -2070,7 +2087,8 @@ class PageScenario(QWidget):
 
         def _apply():
             if _pending[0]:
-                self._apply_decoupage(_pending[0])
+                if not self._apply_decoupage(_pending[0]):
+                    return   # écrasement refusé — la fenêtre reste ouverte
             dlg.accept()
 
         def _cancel():

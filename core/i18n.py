@@ -365,6 +365,10 @@ _FR_TO_EN: dict[str, str] = {
     "Mode mock — renseigne la clé fal.ai dans Paramètres.":
         "Mock mode — set your fal.ai key in Settings.",
     "Généré ✓":                            "Generated ✓",
+    "Envoyer vers Sound Design (Studio IA)":  "Send to Sound Design (AI Studio)",
+    "Remplacer le découpage ?":            "Replace the breakdown?",
+    "plan(s) existant(s) seront REMPLACÉS par le nouveau découpage.\n\nContinuer ?":
+        "existing shot(s) will be REPLACED by the new breakdown.\n\nContinue?",
     "Upscaling":                           "Upscaling",
     "Upscaling de la séquence (Live)":     "Sequence upscaling (Live)",
     "▸ Ajoutez des clips, ou importez toute la Vidéothèque.":
@@ -3390,10 +3394,21 @@ def tr(key: str) -> str:
 
 def translate(text: str) -> str:
     """Traduit une chaîne FR directe dans la langue courante.
-    Retourne le texte inchangé si pas de traduction ou si langue = FR."""
-    if _LANG == "fr" or not text:
+    Retourne le texte inchangé si pas de traduction ou si langue = FR.
+
+    Les libellés mentionnant l'assistant IA (« Claude ») sont automatiquement
+    rebaptisés au nom de l'assistant actif (Fable 5, Mistral, Ollama…) via
+    core.ai_provider.brand — « Analyser avec Claude » → « Analyser avec Mistral »."""
+    if not text:
         return text
-    return _FR_TO_EN.get(text, text)
+    out = text if _LANG == "fr" else _FR_TO_EN.get(text, text)
+    if "Claude" in out:
+        try:
+            from core.ai_provider import brand
+            out = brand(out)
+        except Exception:
+            pass
+    return out
 
 
 _EN_TO_FR: dict[str, str] | None = None

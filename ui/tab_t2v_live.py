@@ -14,7 +14,8 @@ from core.config import get_output_dir
 from core.worker import GenerationWorker, abandon_thread
 from core.i18n import translate
 from api.enhance import EnhanceWorker
-from davinci.bridge import resolve
+# Live : import_result sert UNIQUEMENT au téléchargement local du clip généré
+# (import_to_davinci toujours False — le pont scène du Live est Resolume).
 from davinci.importer import import_result
 import core.casting as casting_api
 import core.accessories as acc_api
@@ -1253,76 +1254,7 @@ class StoryboardSelector(QWidget):
             self._selected_shot_id = next(iter(self._selected_shot_ids))
 
 
-# ── DaVinci status bar ────────────────────────────────────────────────────────
-
-class _DaVinciBar(QWidget):
-    connection_changed = pyqtSignal(bool)
-
-    def __init__(self):
-        super().__init__()
-        self._prev_connected: bool | None = None
-        self.setFixedHeight(36)
-        lay = QHBoxLayout(self)
-        lay.setContentsMargins(0, 0, 0, 0)
-        lay.setSpacing(8)
-
-        logo = QLabel("DaVinci Resolve Studio")
-        logo.setStyleSheet(
-            f"color:{C['text_secondary']};font-size:11px;font-weight:700;background:transparent;"
-        )
-        lay.addWidget(logo)
-
-        self._btn_connect = QPushButton("Connecter")
-        self._btn_connect.setFixedHeight(28)
-        self._btn_connect.setStyleSheet(
-            f"QPushButton{{background:transparent;color:{C['accent']};"
-            f"border:1px solid {C['accent_dim']};border-radius:6px;"
-            f"font-size:10px;font-weight:700;padding:0 10px;}}"
-            f"QPushButton:hover{{background:rgba(78,205,196,0.12);}}"
-        )
-        self._btn_connect.clicked.connect(self._on_connect)
-        lay.addWidget(self._btn_connect)
-
-        self._dot = QLabel("●")
-        self._dot.setStyleSheet(f"color:{C['red']};font-size:10px;background:transparent;")
-        lay.addWidget(self._dot)
-
-        self._status_lbl = QLabel("Non connecté")
-        self._status_lbl.setStyleSheet(
-            f"color:{C['text_dim']};font-size:10px;background:transparent;"
-        )
-        lay.addWidget(self._status_lbl)
-        lay.addStretch()
-
-        self._refresh()
-
-    def _refresh(self):
-        connected = resolve.is_connected()
-        if connected:
-            self._dot.setStyleSheet(f"color:{C['green']};font-size:10px;background:transparent;")
-            self._status_lbl.setText("Connecté")
-            self._status_lbl.setStyleSheet(
-                f"color:{C['green']};font-size:10px;background:transparent;"
-            )
-            self._btn_connect.setText("✓ Connecté")
-            self._btn_connect.setEnabled(False)
-        else:
-            self._dot.setStyleSheet(f"color:{C['red']};font-size:10px;background:transparent;")
-            self._status_lbl.setText("Non connecté")
-            self._status_lbl.setStyleSheet(
-                f"color:{C['text_dim']};font-size:10px;background:transparent;"
-            )
-            self._btn_connect.setText("Connecter")
-            self._btn_connect.setEnabled(True)
-        if connected != self._prev_connected:
-            self._prev_connected = connected
-            self.connection_changed.emit(connected)
-
-    def _on_connect(self):
-        ok, msg = resolve.connect()
-        self._refresh()
-        if not ok:
-            QMessageBox.warning(self, "Connexion impossible", msg)
+# (Live : pas de barre DaVinci — le pont scène du Live est Resolume, pas DaVinci.)
 
 
 # ── Thumbnail strip ───────────────────────────────────────────────────────────
@@ -2187,15 +2119,15 @@ class TabT2V(QScrollArea):
         lay.setContentsMargins(20, 20, 20, 20)
         lay.setSpacing(16)
 
-        lay.addWidget(HelpBlock("Studio IA — Générer un clip vidéo IA", [
-            "▸ Storyboard : sélectionnez un plan pour pré-remplir le prompt, la durée et la caméra automatiquement.",
-            "▸ Batch : cochez plusieurs plans pour les générer en file d'attente.",
-            "▸ Casting : ajoutez des personnages pour injecter leurs portraits comme images de référence visuelles.",
-            "▸ Style de film : choisissez un preset ou importez une image de référence pour définir l'esthétique du clip.",
-            "▸ Continuité : la dernière frame du plan précédent s'injecte automatiquement comme image de départ.",
-            "▸ Seed : verrouillez un seed pour garantir la cohérence visuelle entre plusieurs clips.",
-            "▸ Contrôles créatifs : réglez l'interprétation, le rythme, la fidélité et la tolérance de contenu.",
-            "▸ Mode mock : sans clé fal.ai configurée, la génération est simulée localement (aucun crédit consommé).",
+        lay.addWidget(HelpBlock("Générer depuis Séquences — loops & mapping", [
+            "▸ Séquence : choisissez Séquences Live ou Séquences Mapping, puis cliquez un plan pour pré-remplir prompt et durée.",
+            "▸ File d'attente : Ctrl+clic pour cocher plusieurs plans et les générer à la suite.",
+            "▸ Mapping : la façade du bâtiment part en référence ; rendu de nuit, noirs purs, caméra verrouillée — automatiques.",
+            "▸ Raccords : générez d'abord les Moods de tous les plans — chaque clip va du mood du plan au mood du plan suivant.",
+            "▸ Références : template de style + façade dans « Choisir les références » ; performers dans « Éléments récurrents ».",
+            "▸ ADN visuel : verrouillez le seed pour garder la même identité visuelle sur toute la séquence.",
+            "▸ Sortie : les clips arrivent dans la Vidéothèque, prêts à être envoyés vers Resolume.",
+            "▸ Mode mock : sans clé fal.ai, la génération est simulée localement (aucun crédit consommé).",
         ], C))
 
         # ── Référence visuelle (template de style) ────────────────────────────
@@ -2703,8 +2635,6 @@ class TabT2V(QScrollArea):
         self._ref_compat_banner.setVisible(False)
         lay.addWidget(self._ref_compat_banner)
 
-        self._davinci_bar = _DaVinciBar()
-        self._davinci_bar.setVisible(False)   # Live : pas de DaVinci (à retirer au fur et à mesure)
 
         # ── GCS warning (shown after failed uploads) ───────────────────────────
         self._gcs_warning = _GCSWarningBar()
@@ -2753,8 +2683,6 @@ class TabT2V(QScrollArea):
         """)
         self.btn_cancel.clicked.connect(self.cancel_generation)
 
-        # Live : pas d'import DaVinci (les gardes `if self._import_cb` gèrent None).
-        self._import_cb = None
 
         btn_row = QHBoxLayout()
         btn_row.setContentsMargins(0, 0, 0, 0)
@@ -2782,13 +2710,12 @@ class TabT2V(QScrollArea):
         """)
         self._btn_open_folder.clicked.connect(self._open_output_folder)
 
-        _dav_row = QHBoxLayout()
-        _dav_row.setContentsMargins(0, 0, 0, 0)
-        _dav_row.setSpacing(10)
-        _dav_row.addWidget(self._davinci_bar, 1)
-        _dav_row.addWidget(self._btn_open_folder)
-        lay.addLayout(_dav_row)
-        self._davinci_bar.connection_changed.connect(self._on_davinci_connection_changed)
+        _folder_row = QHBoxLayout()
+        _folder_row.setContentsMargins(0, 0, 0, 0)
+        _folder_row.setSpacing(10)
+        _folder_row.addStretch()
+        _folder_row.addWidget(self._btn_open_folder)
+        lay.addLayout(_folder_row)
 
         # ── Encart prix (sous la barre DaVinci) ───────────────────────────────
         price_frame = QFrame()
@@ -3459,32 +3386,6 @@ class TabT2V(QScrollArea):
         return self._last_seed
 
 
-    def _check_davinci_connection(self) -> bool:
-        """Returns True if ok to proceed, False if user cancelled."""
-        if resolve.is_connected():
-            return True
-        # Tentative silencieuse avant d'afficher le dialogue — couvre les faux
-        # négatifs transitoires (ping raté après un import dans on_finished).
-        ok_silent, _ = resolve.connect()
-        if ok_silent:
-            self._davinci_bar._refresh()
-            return True
-        reply = QMessageBox.question(
-            self, "DaVinci non connecté",
-            "Vous n'êtes pas connecté à DaVinci Resolve.\n\n"
-            "Voulez-vous tenter la connexion avant de générer ?",
-            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No |
-            QMessageBox.StandardButton.Cancel,
-        )
-        if reply == QMessageBox.StandardButton.Cancel:
-            return False
-        if reply == QMessageBox.StandardButton.Yes:
-            ok, msg = resolve.connect()
-            self._davinci_bar._refresh()
-            if not ok:
-                QMessageBox.warning(self, "Connexion impossible", msg)
-        return True
-
     # ── Garde-fou crédit fal.ai ───────────────────────────────────────────────
 
     def _start_with_credit_check(self):
@@ -3639,19 +3540,6 @@ class TabT2V(QScrollArea):
         self.btn_generate.setText("▶▶  Lancer la file d'attente")
         self.start_generation()
 
-    def _on_davinci_connection_changed(self, connected: bool):
-        if not self._import_cb:   # Live : pas d'import DaVinci
-            return
-        self._import_cb.setEnabled(connected)
-        if not connected:
-            self._import_cb.setChecked(False)
-            self._import_cb.setToolTip(
-                "DaVinci Resolve Studio requis — connectez le bridge pour activer cette option"
-            )
-        else:
-            self._import_cb.setChecked(True)
-            self._import_cb.setToolTip("")
-
     def _start_batch_generation(self, shots: list):
         count = len(shots)
         dlg = QMessageBox(self)
@@ -3707,10 +3595,6 @@ class TabT2V(QScrollArea):
         if not prompt:
             QMessageBox.warning(self, "Prompt vide", "Écris un prompt avant de générer !")
             return
-
-        if self._import_cb and self._import_cb.isChecked():
-            if not self._check_davinci_connection():
-                return
 
         context     = self._casting.get_context()
         full_prompt = (context + prompt) if context else prompt
@@ -3833,14 +3717,16 @@ class TabT2V(QScrollArea):
         # doivent être de VRAIS noirs (#000000). Consigne ajoutée APRÈS traduction.
         if getattr(self, "_seq_mode", "live") == "mapping":
             _mapping_dna = (
-                "night-time projection mapping on the building facade: deep night, "
-                "pitch-black sky, NO daylight; the facade is lit ONLY by the projected "
-                "visuals; keep the facade's exact geometry and architecture; "
+                "night-time projection mapping: deep night, pitch-black sky, NO daylight; "
                 "STATIC LOCKED CAMERA — absolutely no zoom, no push-in, no pull-out, "
-                "no camera movement; the entire building facade stays framed identically, "
-                "at the exact same scale and position in every shot (fixed wide shot); "
-                "pure black background #000000, true deep blacks, no ambient light spill — "
-                "so it can be projection-mapped onto the real building"
+                "no camera movement; framing, scale and position stay identical in every "
+                "shot (fixed wide shot); the building is a projection CANVAS, not a subject: "
+                "the projected content may fully cover, hide, dissolve or transform the "
+                "facade — it may appear, vanish into total darkness, or be completely "
+                "replaced by the projected world, exactly as the shot describes; bold "
+                "high-contrast luminous visuals on a PURE BLACK #000000 background, true "
+                "deep blacks, unlit areas stay completely black — ready to be "
+                "projection-mapped onto the real building"
             )
             time_suffix = (time_suffix + ", " + _mapping_dna) if time_suffix else _mapping_dna
 
@@ -3866,6 +3752,18 @@ class TabT2V(QScrollArea):
                 if _prev_frame and os.path.isfile(_prev_frame):
                     i2v_frame = _prev_frame
 
+        # Mapping : raccord par KEYFRAMES — les moods Kontext (fiables sur la façade)
+        # servent d'images-clés. Début = mood du plan courant, fin = mood du plan
+        # SUIVANT : le clip N se termine exactement sur l'image où le clip N+1
+        # commence (raccord exact par construction), et chaque keyframe est générée
+        # depuis la MÊME façade d'origine (aucune dérive cumulative).
+        end_frame = ""
+        if getattr(self, "_seq_mode", "live") == "mapping" and self._active_shot:
+            kf_start, kf_end = self._get_mapping_keyframes(self._active_shot)
+            if kf_start:
+                i2v_frame = kf_start   # prime sur le raccord dernière-frame
+                end_frame = kf_end
+
         params = {
             "mode":                    "i2v" if i2v_frame else "t2v",
             "prompt":                  full_prompt,
@@ -3890,6 +3788,8 @@ class TabT2V(QScrollArea):
             params["seed"] = seed
         if i2v_frame:
             params["image_path"] = i2v_frame
+        if end_frame:
+            params["end_image_path"] = end_frame   # keyframe d'arrivée (mood du plan suivant)
 
         self.btn_generate.setEnabled(False)
         self.btn_cancel.setVisible(True)
@@ -3950,7 +3850,6 @@ class TabT2V(QScrollArea):
         self.progress.set_done()
         self.progress.update(100, "Vidéo prête !")
         self._reset_ui()
-        self._davinci_bar._refresh()
 
         entry = {**result, "status": "done"}
         save_to_history(entry)
@@ -3958,23 +3857,18 @@ class TabT2V(QScrollArea):
 
         davinci_msg = ""
         local_path = ""
-        _import_checked = bool(self._import_cb and self._import_cb.isChecked())
 
-        # Toujours sauvegarder localement, que le bridge soit connecté ou non.
-        # import_to_davinci=True uniquement si la case est cochée ET bridge connecté.
+        # Live : sauvegarde locale uniquement (le clip part ensuite vers Resolume
+        # via la Vidéothèque) — jamais d'import DaVinci.
         self.progress.update(100, "Sauvegarde du clip…")
         shot_title = result.get("shot_title") or self._active_shot_title
         ir = import_result(result, get_output_dir(), shot_title=shot_title,
-                           import_to_davinci=_import_checked)
+                           import_to_davinci=False)
         if ir["mock"]:
-            if _import_checked:
-                davinci_msg = "\n\n◈ Import DaVinci : simulé (mode mock)"
+            pass
         elif ir["success"]:
             local_path = ir.get("local_path", "")
-            if ir.get("davinci_imported"):
-                davinci_msg = f"\n\n◈ Sauvegardé + importé dans le Media Pool ✓\n{local_path}"
-            else:
-                davinci_msg = f"\n\n◈ Vidéo sauvegardée :\n{local_path}"
+            davinci_msg = f"\n\n◈ Vidéo sauvegardée :\n{local_path}"
         else:
             davinci_msg = f"\n\n◈ Téléchargement échoué : {ir['error']}"
 
@@ -4244,13 +4138,48 @@ class TabT2V(QScrollArea):
         if hasattr(self, "_ref_mode_banner"):
             self._update_injection_banner()
 
+    def _get_mapping_keyframes(self, shot: dict) -> tuple[str, str]:
+        """Raccord par images-clés (Mapping) : mood actif du plan = image de DÉBUT,
+        mood actif du plan SUIVANT = image de FIN. Renvoie ("", "") si pas de mood."""
+        def _active_mood(s: dict) -> str:
+            try:
+                ap = sb_api.load_apercus(s.get("id", ""))
+                paths = [p for p in ap.get("paths", []) if os.path.isfile(p)]
+                if not paths:
+                    return ""
+                idx = min(ap.get("active_idx", 0), len(paths) - 1)
+                return paths[idx]
+            except Exception:
+                return ""
+
+        start = _active_mood(shot)
+        if not start:
+            return "", ""
+        end = ""
+        try:
+            def _num(s):
+                try:
+                    return int(s.get("number") or 0)
+                except (TypeError, ValueError):
+                    return 0
+            cur = _num(shot)
+            nxt = None
+            for s in sorted(sb_api.list_shots(), key=_num):
+                if _num(s) > cur:
+                    nxt = s
+                    break
+            if nxt:
+                end = _active_mood(nxt)
+        except Exception:
+            pass
+        return start, end
+
     def refresh(self):
         # Recale le namespace sur la séquence sélectionnée (Live/Mapping) avant lecture.
         import core.storyboard as _sb
         _sb.set_namespace(f"live_seq_{getattr(self, '_seq_mode', 'live')}")
         self._casting.refresh()
         self._storyboard.refresh()
-        self._davinci_bar._refresh()
         self._camera_picker.refresh()
         self._refresh_style_badge()
 
@@ -4277,10 +4206,6 @@ class TabT2V(QScrollArea):
             self._music_toggle_row.setEnabled(not no_audio)
             if no_audio and self._music_cb:
                 self._music_cb.setChecked(False)
-        if hasattr(self, "_import_cb") and self._import_cb:
-            self._import_cb.setEnabled(not no_audio)
-            if no_audio:
-                self._import_cb.setChecked(False)
 
     def _on_film_style_changed(self, idx: int):
         pass  # combo supprimé — plus utilisé
