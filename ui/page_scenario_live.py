@@ -1977,7 +1977,9 @@ class PageScenario(QWidget):
         self._ai_progress_lbl.setText(translate("Application des suggestions via Claude…"))
         self._btn_undo_action.setVisible(False)
         intensity = self._arrange_intensity_value
-        self._worker = ApplyArrangeConducteurWorker(original, suggestions, intensity)
+        self._worker = ApplyArrangeConducteurWorker(
+            original, suggestions, intensity,
+            refs_analysis=self._last_ref_analysis)
         self._worker.finished.connect(self._on_modify_done)
         self._worker.failed.connect(self._on_ai_fail)
         self._worker.start()
@@ -2563,7 +2565,9 @@ class PageScenario(QWidget):
             if not analysis_txt or not original:
                 return
             intensity = self._arrange_intensity_value
-            w = ApplyArrangeConducteurWorker(original, analysis_txt, intensity)
+            w = ApplyArrangeConducteurWorker(
+                original, analysis_txt, intensity,
+                refs_analysis=self._last_ref_analysis)
             _apply_worker[0] = w
             _streaming_active[0] = True
             btn_close.setText("Annuler")

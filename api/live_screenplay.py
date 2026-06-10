@@ -259,11 +259,13 @@ class ApplyArrangeConducteurWorker(QThread):
     failed   = pyqtSignal(str)
     chunk    = pyqtSignal(str)
 
-    def __init__(self, original: str, suggestions: str, intensity: int = 5):
+    def __init__(self, original: str, suggestions: str, intensity: int = 5,
+                 refs_analysis: str = ""):
         super().__init__()
         self._original    = original
         self._suggestions = suggestions
         self._intensity   = max(1, min(10, intensity))
+        self._refs        = refs_analysis or ""
 
     def run(self):
         from core.ai_provider import stream, key_error
@@ -278,6 +280,11 @@ class ApplyArrangeConducteurWorker(QThread):
                 f"CONDUCTEUR ORIGINAL :\n{self._original}\n\n"
                 f"SUGGESTIONS D'ARRANGEMENT :\n{self._suggestions}"
             )
+            if self._refs.strip():
+                user += ("\n\n[DIRECTION ARTISTIQUE — issue de l'analyse des images "
+                         "de référence. Inspiration à transposer, jamais à copier : "
+                         "ancre les ambiances, matières et lumières du conducteur "
+                         "réécrit dans cette direction.]\n" + self._refs.strip())
             # 16000 : sortie = conducteur COMPLET réécrit — 8192 tronquait les longs
             full = stream(_APPLY_ARRANGE_CONDUCTEUR, user, on_chunk=self.chunk.emit,
                           tier="creative", max_tokens=16000)

@@ -776,13 +776,17 @@ def refs_persistance_bibliotheque_chat():
     assert "WheelHScroller" in src_w2, "molette → défilement horizontal des miniatures"
     from ui.widgets import WheelHScroller
     assert hasattr(WheelHScroller, "attach")
-    # 6. L'arrangement reçoit la direction artistique quand elle existe
-    from api.live_screenplay import ArrangeConducteurStreamWorker
+    # 6. L'arrangement ET son application reçoivent la direction artistique
+    from api.live_screenplay import ArrangeConducteurStreamWorker, ApplyArrangeConducteurWorker
     aw = ArrangeConducteurStreamWorker("t", "live", 0, refs_analysis="DA")
     assert aw._refs == "DA"
     assert "DIRECTION ARTISTIQUE" in inspect.getsource(ArrangeConducteurStreamWorker.run)
-    assert "refs_analysis=self._last_ref_analysis" in inspect.getsource(PageScenario), \
-        "la page passe l'analyse à l'arrangement"
+    ap = ApplyArrangeConducteurWorker("t", "s", 5, refs_analysis="DA")
+    assert ap._refs == "DA", "l'application des suggestions reçoit aussi la DA"
+    assert "DIRECTION ARTISTIQUE" in inspect.getsource(ApplyArrangeConducteurWorker.run)
+    src_page = inspect.getsource(PageScenario)
+    assert src_page.count("refs_analysis=self._last_ref_analysis") >= 3, \
+        "la page passe l'analyse : arrangement + 2 chemins d'application"
 
 
 @test
