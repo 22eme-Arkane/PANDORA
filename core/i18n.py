@@ -1414,6 +1414,11 @@ _FR_TO_EN: dict[str, str] = {
     "Choisir des images sur le disque": "Pick images from disk",
     "Ajouter aussi ces images à la collection courante ?":
         "Also add these images to the current collection?",
+    "⬆  Importer une image": "⬆  Import an image",
+    "Utiliser une image à toi comme mood — choisie dans la\nbibliothèque ou sur le disque (copiée dans le plan).":
+        "Use one of your own images as the mood — picked from the\nlibrary or from disk (copied into the shot).",
+    "Image(s) importée(s) — clique « Activer » pour en faire le mood du plan.":
+        "Image(s) imported — click « Activate » to make it the shot's mood.",
 
     # ── Lot 17 — co-écriture (accueil), génération en série, divers ──
     "J'ai analysé votre scénario et rédigé des suggestions détaillées (visibles dans l'onglet « Analyse initiale »).\n\nDites-moi ce que vous souhaitez modifier, affiner ou conserver — je produirai alors une version remaniée de votre scénario en direct. Nous pouvons itérer autant de fois que nécessaire.": "I've analyzed your screenplay and written detailed suggestions (visible in the « Initial analysis » tab).\n\nTell me what you'd like to change, refine or keep — I'll then produce a reworked version of your screenplay live. We can iterate as many times as needed.",

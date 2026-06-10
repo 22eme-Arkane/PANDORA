@@ -244,6 +244,11 @@ def bibliotheque_images_branchee():
     src = inspect.getsource(StyleGalleryDialog._on_add_image)
     assert "ImageLibraryDialog" in src and "copy2" in src, \
         "templates : choix via bibliothèque puis copie locale"
+    # Moods : import d'une image perso (copiée dans le plan, activable comme mood)
+    from ui.dialog_apercu import MoodDialog
+    src = inspect.getsource(MoodDialog._import_image)
+    assert "ImageLibraryDialog" in src and "save_apercus" in src and "copy2" in src, \
+        "mood importable depuis la bibliothèque/disque"
 
 
 # ══════════════════════════════════════════════════════════════════════════════

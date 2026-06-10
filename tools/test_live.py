@@ -793,6 +793,11 @@ def bibliotheque_images_globale():
     # Porte unique côté Live : le conducteur passe par la bibliothèque
     from ui.page_scenario_live import PageScenario
     assert "ImageLibraryDialog" in inspect.getsource(PageScenario._on_add_refs)
+    # Moods : une image perso peut être importée comme mood (bouton + copie plan)
+    from ui.dialog_apercu import MoodDialog
+    src_m = inspect.getsource(MoodDialog._import_image)
+    assert "ImageLibraryDialog" in src_m and "save_apercus" in src_m, \
+        "mood importable (bibliothèque/disque) — sert de keyframe en mapping"
 
 
 @test

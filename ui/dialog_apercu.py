@@ -246,6 +246,12 @@ class MoodDialog(QDialog):
         acts.addWidget(self._btn_delete)
 
         acts.addStretch()
+        self._btn_import = _btn("⬆  Importer une image")
+        self._btn_import.setToolTip(translate(
+            "Utiliser une image à toi comme mood — choisie dans la\n"
+            "bibliothèque ou sur le disque (copiée dans le plan)."))
+        self._btn_import.clicked.connect(self._import_image)
+        acts.addWidget(self._btn_import)
         self._btn_generate = _btn("✦  Générer une variation")
         self._btn_generate.clicked.connect(self._generate)
         acts.addWidget(self._btn_generate)
@@ -446,6 +452,40 @@ class MoodDialog(QDialog):
     def reject(self):
         self._disconnect_worker()
         super().reject()
+
+    def _import_image(self):
+        """Importer un mood (bibliothèque ou disque) — copié dans le dossier du plan,
+        au même titre qu'un mood généré : navigable, activable, supprimable."""
+        from ui.dialog_image_library import ImageLibraryDialog
+        paths = ImageLibraryDialog.pick(self)
+        if not paths:
+            return
+        import shutil
+        dest = sb_api.get_apercu_dir(self._shot["id"])
+        os.makedirs(dest, exist_ok=True)
+        added = 0
+        for src in paths:
+            if not (src and os.path.isfile(src)):
+                continue
+            base, ext = os.path.splitext(os.path.basename(src))
+            dst = os.path.join(dest, f"import_{base}{ext}")
+            i = 1
+            while os.path.exists(dst):
+                dst = os.path.join(dest, f"import_{base}_{i}{ext}")
+                i += 1
+            try:
+                shutil.copy2(src, dst)
+            except OSError:
+                continue
+            self._paths.append(dst)
+            added += 1
+        if not added:
+            return
+        self._current_idx = len(self._paths) - 1
+        sb_api.save_apercus(self._shot["id"], self._paths, self._active_idx)
+        self._status_lbl.setText(translate("Image(s) importée(s) — clique « Activer » pour en faire le mood du plan."))
+        self._status_lbl.show()
+        self._refresh()
 
     def _generate(self):
         from api.apercu import MoodGenerationWorker
