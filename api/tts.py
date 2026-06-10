@@ -715,3 +715,101 @@ class SFX1Worker(QThread):
 
         except Exception as e:
             self.failed.emit(humanize_api_error(f"Erreur SFX 1.6 : {e}"))
+
+
+def _sfx_output_dir() -> str:
+    """Dossier de sortie du sound design Live (vidéos sonorisées)."""
+    try:
+        from core.context import get_data_root
+        d = os.path.join(get_data_root(), "live_sound_design")
+    except Exception:
+        d = get_bin_dir("live_sound_design")
+    os.makedirs(d, exist_ok=True)
+    return d
+
+
+class SFX1VideoWorker(QThread):
+    """
+    SFX 1.6 video-to-video (Mirelo AI) : ajoute une bande-son SYNCHRONISÉE à un loop
+    vidéo. Sortie = MP4 (loop + son généré). ~$0.01/s.
+    Endpoint : mirelo-ai/sfx1.6/video-to-video
+      Entrée  : video_url (requis), text_prompt (optionnel), duration (1–60, défaut 10)
+      Sortie  : { "video": [ { "url": ... } ] }
+    """
+    progress = pyqtSignal(int, str)
+    finished = pyqtSignal(str)
+    failed   = pyqtSignal(str)
+
+    def __init__(self, video_path: str, text_prompt: str = "",
+                 duration: float = 10.0, label: str = ""):
+        super().__init__()
+        self._video    = video_path
+        self._prompt   = text_prompt or ""
+        self._duration = float(duration)
+        self._label    = label or "sfx_video"
+
+    def run(self):
+        cfg = load_config()
+        key = cfg.get("api_key", "").strip()
+        if not key:
+            self._mock()
+        else:
+            self._real(key)
+
+    def _mock(self):
+        for pct, msg in [
+            (20, "Bande-son SFX 1.6 (mode mock)…"),
+            (60, "Synchronisation sur la vidéo…"),
+            (100, "Terminé — mode mock (aucune clé fal.ai)"),
+        ]:
+            self.progress.emit(pct, msg)
+            time.sleep(0.4)
+        self.finished.emit("")
+
+    def _real(self, key: str):
+        try:
+            import fal_client
+            import requests
+
+            if not self._video or not os.path.isfile(self._video):
+                raise RuntimeError("Vidéo introuvable.")
+            os.environ["FAL_KEY"] = key
+            cost_est = self._duration * 0.01
+
+            self.progress.emit(8, "Envoi de la vidéo à fal.ai…")
+            video_url = fal_client.upload_file(self._video)
+
+            self.progress.emit(25, f"SFX 1.6 vidéo — {self._duration:.0f}s (~${cost_est:.2f})…")
+            args = {"video_url": video_url, "duration": self._duration}
+            if self._prompt.strip():
+                args["text_prompt"] = self._prompt.strip()
+            result = fal_client.subscribe("mirelo-ai/sfx1.6/video-to-video", arguments=args)
+
+            out_url = ""
+            if isinstance(result, dict):
+                vids = result.get("video")
+                if isinstance(vids, list) and vids:
+                    first = vids[0]
+                    out_url = (first.get("url", "") if isinstance(first, dict)
+                               else first if isinstance(first, str) else "")
+                elif isinstance(vids, dict):
+                    out_url = vids.get("url", "")
+                if not out_url:
+                    out_url = result.get("url", "") or result.get("video_url", "")
+            if not out_url:
+                raise RuntimeError(f"URL vidéo manquante : {str(result)[:200]}")
+
+            self.progress.emit(75, "Téléchargement de la vidéo sonorisée…")
+            data = requests.get(out_url, timeout=300).content
+
+            safe = "".join(c for c in self._label if c.isalnum() or c in " -_").strip() or "sfx_video"
+            ts   = int(time.time())
+            path = os.path.join(_sfx_output_dir(), f"{safe}_{ts}.mp4")
+            with open(path, "wb") as f:
+                f.write(data)
+
+            self.progress.emit(100, f"Bande-son générée ✓  ~${cost_est:.2f}")
+            self.finished.emit(path)
+
+        except Exception as e:
+            self.failed.emit(humanize_api_error(f"Erreur SFX 1.6 vidéo : {e}"))

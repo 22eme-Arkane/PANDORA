@@ -23,12 +23,12 @@ from PyQt6.QtWidgets import (
     QLabel, QStackedWidget, QFrame, QPushButton,
 )
 from PyQt6.QtCore import Qt, pyqtSignal, QSize
-from PyQt6.QtGui import QIcon
+from PyQt6.QtGui import QIcon, QShortcut, QKeySequence
 
 from ui.styles import CP, PANDORA_STYLESHEET
 from ui.icons import app_icon, load_icon
 from ui.assistant_panel import AssistantPanel, AssistantToggleStrip
-from core.i18n import get_lang, set_lang, retranslate_widget, translate
+from core.i18n import get_lang, set_lang, retranslate_widget, translate, tr
 
 
 # ── Item de navigation Live ───────────────────────────────────────────────────
@@ -157,63 +157,39 @@ class _LiveSidebar(QWidget):
         lay.setContentsMargins(0, 0, 0, 0)
         lay.setSpacing(2)
 
-        # ── En-tête : badge + sélecteur de langue ─────────────────────────────
-        header = QWidget()
-        header.setFixedHeight(76)
-        header.setStyleSheet(
+        # ── En-tête : sélecteur de langue (drapeaux) — identique à PANDORA Cinéma ──
+        # Le logo + « PANDORA » sont désormais dans la topbar globale (comme Cinéma).
+        logo_strip = QWidget()
+        logo_strip.setFixedHeight(76)
+        logo_strip.setStyleSheet(
             f"background:{CP['bg1']};border:none;border-bottom:1px solid {CP['border']};"
         )
-        hl = QHBoxLayout(header)
-        hl.setContentsMargins(14, 0, 14, 0)
-        hl.setSpacing(10)
-
-        badge = QLabel("◈")
-        badge.setFixedSize(38, 38)
-        badge.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        badge.setStyleSheet(
-            f"background:qlineargradient(x1:0,y1:0,x2:1,y2:1,"
-            f"stop:0 {CP['accent2']},stop:1 #a060ff);"
-            f"border-radius:10px;color:#fff;font-size:18px;font-weight:900;border:none;"
-        )
-        hl.addWidget(badge)
-
-        title_col = QVBoxLayout()
-        title_col.setSpacing(1)
-        t1 = QLabel("PANDORA")
-        t1.setStyleSheet(
-            f"color:{CP['text_primary']};font-size:13px;font-weight:800;"
-            f"letter-spacing:2px;background:transparent;border:none;"
-        )
-        t2 = QLabel("| Live")
-        t2.setStyleSheet(
-            f"color:{CP['accent2']};font-size:11px;font-weight:700;"
-            f"letter-spacing:1px;background:transparent;border:none;"
-        )
-        title_col.addWidget(t1)
-        title_col.addWidget(t2)
-        hl.addLayout(title_col, 1)
+        ll = QHBoxLayout(logo_strip)
+        ll.setContentsMargins(14, 0, 14, 0)
+        ll.setSpacing(8)
 
         self._lang_btns: dict[str, QPushButton] = {}
         _flag_map = {"fr": "Fr.png", "en": "En.png"}
         _cur_lang = get_lang()
         for code, flag_file in _flag_map.items():
             btn = QPushButton()
-            btn.setFixedSize(30, 30)
+            btn.setFixedSize(34, 34)
             btn.setCursor(Qt.CursorShape.PointingHandCursor)
             btn.setToolTip("Français" if code == "fr" else "English")
-            _flag_pix = load_icon(flag_file, 22)
+            _flag_pix = load_icon(flag_file, 24)
             if not _flag_pix.isNull():
                 btn.setIcon(QIcon(_flag_pix))
-                btn.setIconSize(QSize(22, 22))
+                btn.setIconSize(QSize(24, 24))
                 btn.setText("")
             else:
                 btn.setText("FR" if code == "fr" else "EN")
             self._apply_lang_btn_style(btn, code == _cur_lang)
             btn.clicked.connect(lambda checked, c=code: self.lang_change_requested.emit(c))
-            hl.addWidget(btn)
+            ll.addWidget(btn)
             self._lang_btns[code] = btn
 
-        lay.addWidget(header)
+        ll.addStretch()
+        lay.addWidget(logo_strip)
         lay.addSpacing(6)
 
         # ── Items de navigation ───────────────────────────────────────────────
@@ -228,12 +204,19 @@ class _LiveSidebar(QWidget):
                 lay.addSpacing(6)
                 continue
             icon, label, key = entry
+            # Paramètres poussé tout en bas du dashboard (comme PANDORA Cinéma).
+            if key == "settings":
+                lay.addStretch()
+                _ssep = QFrame()
+                _ssep.setFixedHeight(1)
+                _ssep.setStyleSheet(f"background:{CP['border']};margin:0 12px;")
+                lay.addWidget(_ssep)
+                lay.addSpacing(4)
             item = _LiveNavItem(icon, translate(label), key)
             item.nav_clicked.connect(self.nav_clicked)
             self._items[key] = item
             lay.addWidget(item)
 
-        lay.addStretch()   # pousse Manuel / Contact tout en bas (groupes restent compacts)
         lay.addSpacing(4)
 
         # ── Boutons bas : Manuel / Contact ────────────────────────────────────
@@ -339,6 +322,11 @@ class LiveWindow(QMainWindow):
         outer.setContentsMargins(0, 0, 0, 0)
         outer.setSpacing(0)
 
+        outer.addWidget(self._build_global_topbar())
+
+        self._update_banner = self._build_update_banner()
+        outer.addWidget(self._update_banner)
+
         body = QWidget()
         body.setStyleSheet("background:transparent;")
         body_lay = QHBoxLayout(body)
@@ -351,7 +339,7 @@ class LiveWindow(QMainWindow):
 
         from ui.live_pages import AssistantPanelLive
         self._assistant        = AssistantPanelLive()
-        self._assistant.setVisible(True)
+        self._assistant.setVisible(False)   # assistant IA fermé par défaut
         self._assistant_toggle = AssistantToggleStrip(self._assistant)
 
         body_lay.addWidget(self._sidebar)
@@ -369,6 +357,293 @@ class LiveWindow(QMainWindow):
         self._sidebar.lang_change_requested.connect(self._on_lang_change)
 
         self._navigate("conducteur")
+
+        _sc = QShortcut(QKeySequence("Ctrl+S"), self)
+        _sc.activated.connect(self._on_global_save_click)
+
+        from PyQt6.QtCore import QTimer
+        QTimer.singleShot(900, self._start_update_check)
+
+    # ── Topbar globale (logo + Soutenir / Mises à jour / Sauvegarder) ────────────
+
+    def _build_global_topbar(self) -> QWidget:
+        from PyQt6.QtWidgets import QStackedLayout
+
+        bar = QWidget()
+        bar.setFixedHeight(70)
+        bar.setObjectName("GlobalTopBar")
+        bar.setStyleSheet(
+            f"QWidget#GlobalTopBar{{background:{CP['bg1']};"
+            f"border-bottom:1px solid {CP['border']};}}"
+        )
+
+        bar_lay = QStackedLayout(bar)
+        bar_lay.setContentsMargins(0, 0, 0, 0)
+        bar_lay.setSpacing(0)
+        bar_lay.setStackingMode(QStackedLayout.StackingMode.StackAll)
+
+        # ── Couche 0 : gauche vide + droite boutons ───────────────────────────
+        _lr = QWidget()
+        _lr.setStyleSheet("background:transparent;")
+        _lr_lay = QHBoxLayout(_lr)
+        _lr_lay.setContentsMargins(12, 0, 12, 0)
+        _lr_lay.setSpacing(0)
+
+        _left = QWidget()
+        _left.setStyleSheet("background:transparent;")
+        _lr_lay.addWidget(_left, 1)
+
+        _right = QWidget()
+        _right.setStyleSheet("background:transparent;")
+        _rlay = QHBoxLayout(_right)
+        _rlay.setContentsMargins(0, 0, 0, 0)
+        _rlay.setSpacing(0)
+        _rlay.setAlignment(Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignRight)
+
+        # ── Couche 1 : logo PANDORA centré ────────────────────────────────────
+        _center = QWidget()
+        _center.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents)
+        _center.setStyleSheet("background:transparent;")
+        _clay = QHBoxLayout(_center)
+        _clay.setContentsMargins(0, 0, 0, 0)
+        _clay.setSpacing(0)
+        _clay.setAlignment(Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignHCenter)
+
+        badge_lbl = QLabel()
+        badge_lbl.setFixedSize(44, 44)
+        badge_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        badge_lbl.setStyleSheet("background:transparent;border:none;")
+        pix_badge = app_icon().pixmap(44, 44)
+        if not pix_badge.isNull():
+            badge_lbl.setPixmap(pix_badge)
+        else:
+            badge_lbl.setText("P")
+            badge_lbl.setStyleSheet(
+                f"background:qlineargradient(x1:0,y1:0,x2:1,y2:1,"
+                f"stop:0 {CP['accent']},stop:1 {CP['accent2']});"
+                f"border-radius:10px;color:#07080f;font-size:20px;font-weight:900;"
+            )
+        _clay.addWidget(badge_lbl)
+        _clay.addSpacing(10)
+
+        title_lbl = QLabel("PANDORA")
+        title_lbl.setStyleSheet(
+            f"color:{CP['text_primary']};font-size:15px;font-weight:800;"
+            f"letter-spacing:3px;background:transparent;border:none;"
+        )
+        _clay.addWidget(title_lbl)
+
+        def _vsep():
+            f = QFrame()
+            f.setFixedSize(1, 20)
+            f.setStyleSheet(f"background:{CP['border']};")
+            return f
+
+        # ── Soutenir Pandora ──────────────────────────────────────────────────
+        btn_support = QPushButton(tr("btn.support") + "  Pandora")
+        btn_support.setFixedHeight(26)
+        btn_support.setCursor(Qt.CursorShape.PointingHandCursor)
+        btn_support.setStyleSheet(
+            "QPushButton{background:transparent;color:#c8a400;"
+            "border:1px solid rgba(200,164,0,0.35);"
+            "border-radius:5px;font-size:10px;font-weight:700;padding:0 10px;}"
+            "QPushButton:hover{background:rgba(245,197,24,0.10);color:#f5c518;"
+            "border-color:rgba(245,197,24,0.60);}"
+            "QPushButton:pressed{background:rgba(245,197,24,0.18);}"
+        )
+        btn_support.clicked.connect(self._on_funding)
+        _rlay.addWidget(btn_support)
+
+        _rlay.addSpacing(6)
+        _rlay.addWidget(_vsep())
+        _rlay.addSpacing(6)
+
+        # ── Vérifier les mises à jour ─────────────────────────────────────────
+        self._btn_update_header = QPushButton("↑  Mises à jour")
+        self._btn_update_header.setFixedHeight(26)
+        self._btn_update_header.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._btn_update_header.setToolTip("Vérifier les mises à jour de PANDORA")
+        self._btn_update_header.setStyleSheet(
+            f"QPushButton{{background:transparent;color:{CP['accent']};"
+            f"border:1px solid rgba(78,205,196,0.38);border-radius:5px;"
+            f"font-size:10px;font-weight:700;padding:0 10px;}}"
+            f"QPushButton:hover{{background:rgba(78,205,196,0.09);"
+            f"border-color:rgba(78,205,196,0.70);}}"
+            f"QPushButton:pressed{{background:rgba(78,205,196,0.16);}}"
+            f"QPushButton:disabled{{color:{CP['text_dim']};"
+            f"border-color:{CP['border']};}}"
+        )
+        self._btn_update_header.clicked.connect(self._manual_update_check)
+        _rlay.addWidget(self._btn_update_header)
+
+        _rlay.addSpacing(6)
+        _rlay.addWidget(_vsep())
+        _rlay.addSpacing(6)
+
+        # ── Sauvegarder ───────────────────────────────────────────────────────
+        self._btn_save_global = QPushButton(tr("btn.save"))
+        self._btn_save_global.setFixedHeight(26)
+        self._btn_save_global.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._btn_save_global.setStyleSheet(
+            f"QPushButton{{background:transparent;color:{CP['text_dim']};"
+            f"border:1px solid {CP['border']};border-radius:5px;"
+            f"font-size:10px;font-weight:700;padding:0 12px;}}"
+            f"QPushButton:hover{{background:{CP['bg3']};color:{CP['text_primary']};"
+            f"border-color:{CP['border_bright']};}}"
+            f"QPushButton:pressed{{background:{CP['bg4']};}}"
+        )
+        self._btn_save_global.clicked.connect(self._on_global_save_click)
+        _rlay.addWidget(self._btn_save_global)
+
+        _lr_lay.addWidget(_right)
+
+        bar_lay.addWidget(_lr)
+        bar_lay.addWidget(_center)
+        bar_lay.setCurrentIndex(1)
+        return bar
+
+    def _on_global_save_click(self):
+        self._on_global_save()
+        self._btn_save_global.setText(tr("btn.saved"))
+        self._btn_save_global.setStyleSheet(
+            f"QPushButton{{background:transparent;color:{CP['accent']};"
+            f"border:1px solid {CP['accent_dim']};border-radius:5px;"
+            f"font-size:10px;font-weight:700;padding:0 12px;}}"
+        )
+        from PyQt6.QtCore import QTimer
+        QTimer.singleShot(1400, self._reset_save_btn_global)
+
+    def _reset_save_btn_global(self):
+        self._btn_save_global.setText(tr("btn.save"))
+        self._btn_save_global.setStyleSheet(
+            f"QPushButton{{background:transparent;color:{CP['text_dim']};"
+            f"border:1px solid {CP['border']};border-radius:5px;"
+            f"font-size:10px;font-weight:700;padding:0 12px;}}"
+            f"QPushButton:hover{{background:{CP['bg3']};color:{CP['text_primary']};"
+            f"border-color:{CP['border_bright']};}}"
+            f"QPushButton:pressed{{background:{CP['bg4']};}}"
+        )
+
+    def _on_global_save(self):
+        conducteur = self._pages.get("conducteur")
+        if conducteur and hasattr(conducteur, "_save"):
+            try:
+                conducteur._save(silent=True)
+            except Exception:
+                pass
+
+    def _on_funding(self):
+        try:
+            from ui.dialog_funding import FundingDialog
+            FundingDialog(self).exec()
+        except Exception as e:
+            from PyQt6.QtWidgets import QMessageBox
+            _msg = translate("Impossible d'ouvrir la fenêtre de soutien.")
+            QMessageBox.warning(self, "PANDORA", f"{_msg}\n\n{e}")
+
+    # ── Bannière + vérification de mise à jour ───────────────────────────────────
+
+    def _build_update_banner(self) -> QWidget:
+        banner = QWidget()
+        banner.setFixedHeight(36)
+        banner.setStyleSheet(
+            f"background:rgba(78,205,196,0.10);"
+            f"border-bottom:1px solid rgba(78,205,196,0.25);"
+        )
+        lay = QHBoxLayout(banner)
+        lay.setContentsMargins(20, 0, 12, 0)
+        lay.setSpacing(12)
+
+        icon = QLabel("✦")
+        icon.setStyleSheet(
+            f"color:{CP['accent']};font-size:12px;background:transparent;border:none;"
+        )
+        lay.addWidget(icon)
+
+        self._update_banner_lbl = QLabel()
+        self._update_banner_lbl.setStyleSheet(
+            f"color:{CP['text_primary']};font-size:11px;font-weight:600;"
+            f"background:transparent;border:none;"
+        )
+        lay.addWidget(self._update_banner_lbl, 1)
+
+        self._update_dl_btn = QPushButton("Télécharger  →")
+        self._update_dl_btn.setFixedHeight(22)
+        self._update_dl_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._update_dl_btn.setStyleSheet(
+            f"QPushButton{{background:transparent;color:{CP['accent']};"
+            f"border:1px solid rgba(78,205,196,0.45);border-radius:4px;"
+            f"font-size:10px;font-weight:700;padding:0 10px;}}"
+            f"QPushButton:hover{{background:rgba(78,205,196,0.15);}}"
+        )
+        lay.addWidget(self._update_dl_btn)
+
+        btn_close = QPushButton("✕")
+        btn_close.setFixedSize(22, 22)
+        btn_close.setCursor(Qt.CursorShape.PointingHandCursor)
+        btn_close.setStyleSheet(
+            f"QPushButton{{background:transparent;color:{CP['text_dim']};"
+            f"border:none;font-size:10px;font-weight:700;}}"
+            f"QPushButton:hover{{color:{CP['text_primary']};}}"
+        )
+        btn_close.clicked.connect(lambda: banner.setVisible(False))
+        lay.addWidget(btn_close)
+
+        banner.setVisible(False)
+        return banner
+
+    def _start_update_check(self):
+        try:
+            from api.update_check import UpdateCheckWorker
+            self._update_worker = UpdateCheckWorker()
+            self._update_worker.update_available.connect(self._on_update_available)
+            self._update_worker.no_update.connect(lambda: None)
+            self._update_worker.check_failed.connect(lambda: None)
+            self._update_worker.start()
+        except Exception:
+            pass
+
+    def _manual_update_check(self):
+        self._btn_update_header.setEnabled(False)
+        self._btn_update_header.setText("Vérification…")
+        from api.update_check import UpdateCheckWorker
+        self._manual_update_worker = UpdateCheckWorker()
+        self._manual_update_worker.update_available.connect(self._on_update_available)
+        self._manual_update_worker.update_available.connect(
+            lambda v, u: self._reset_update_btn()
+        )
+        self._manual_update_worker.no_update.connect(self._on_no_update_manual)
+        self._manual_update_worker.check_failed.connect(self._on_update_check_failed)
+        self._manual_update_worker.start()
+
+    def _reset_update_btn(self):
+        self._btn_update_header.setEnabled(True)
+        self._btn_update_header.setText("↑  Mises à jour")
+
+    def _on_no_update_manual(self):
+        self._reset_update_btn()
+        from PyQt6.QtWidgets import QMessageBox
+        QMessageBox.information(self, translate("Mises à jour"), translate("PANDORA est à jour."))
+
+    def _on_update_check_failed(self):
+        self._reset_update_btn()
+
+    def _on_update_available(self, version: str, url: str):
+        self._update_banner_lbl.setText(
+            f"Nouvelle version disponible : v{version} — Mettez à jour PANDORA pour bénéficier des dernières améliorations."
+        )
+        try:
+            self._update_dl_btn.clicked.disconnect()
+        except RuntimeError:
+            pass
+        self._update_dl_btn.clicked.connect(lambda: self._open_url(url))
+        self._update_banner.setVisible(True)
+
+    @staticmethod
+    def _open_url(url: str):
+        from PyQt6.QtGui import QDesktopServices
+        from PyQt6.QtCore import QUrl
+        QDesktopServices.openUrl(QUrl(url))
 
     def _build_pages(self):
         # Toutes les pages ci-dessous sont des VERSIONS LIVE INDÉPENDANTES
@@ -410,7 +685,17 @@ class LiveWindow(QMainWindow):
                     "accessoires", "vehicules", "studio", "settings"):
             self._stack.addWidget(self._pages[key])
 
+    # Les pages copiées de Cinéma émettent parfois les clés Cinéma → on les
+    # ré-aiguille vers les clés Live correspondantes.
+    _NAV_ALIASES = {
+        "castings":   "casting",
+        "vehicles":   "vehicules",
+        "scenario":   "conducteur",
+        "storyboard": "seq_live",
+    }
+
     def _navigate(self, key: str):
+        key = self._NAV_ALIASES.get(key, key)
         if key not in self._pages:
             return
         page = self._pages[key]
@@ -419,7 +704,10 @@ class LiveWindow(QMainWindow):
         import core.storyboard as _sb
         _live_ns = getattr(page, "_live_ns", None)
         _sb.set_namespace(_live_ns or "storyboard")
-        if _live_ns and hasattr(page, "refresh"):
+        # Rafraîchit TOUTE page qui le supporte (comme Cinéma) : indispensable pour
+        # que casting / accessoires / véhicules / séquences affichent les éléments
+        # générés depuis le Conducteur ou ajoutés manuellement.
+        if hasattr(page, "refresh"):
             try:
                 page.refresh()
             except Exception:

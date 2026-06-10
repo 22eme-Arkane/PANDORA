@@ -19,7 +19,7 @@ from core.storyboard import (
     CAMERA_MOVEMENTS, SPEEDS, SHOT_SIZES, SHOT_SIZE_LABELS, FOCALS, DISTANCES, HEURE_PRESETS,
 )
 from core.worker import abandon_thread
-from ui.dialog_shot import ShotDialog
+from ui.dialog_shot_live import ShotDialog
 from core.i18n import translate
 
 
@@ -35,9 +35,9 @@ def _sep():
 _COLS = [
     ("",              22,  False),  # 0  Drag grip
     ("Mood",          92,  False),  # 1  mood/aperçu storyboard
-    ("Séq",           78,  False),  # 2
+    ("Acte",          78,  False),  # 2  seq_num / seq_name (acte du conducteur)
     ("Plan",          52,  False),  # 3
-    ("Prompt",       280,  False),  # 4  seedance_prompt
+    ("Prompt vidéo / son", 300, False),  # 4  seedance_prompt + sound_prompt
     ("Axe Caméra",    120, False),  # 5  camera_axis + chars_in + chars_out
     ("Mouvement",     96,  False),  # 6
     ("Valeur",        72,  False),  # 7  Shot size
@@ -49,7 +49,12 @@ _COLS = [
     ("Accessoires",  102,  False),  # 13
     ("Acteurs",       96,  False),  # 14
     ("Durée",         52,  False),  # 15
-    ("",              78,  False),  # 16 Boutons
+    ("TC",            68,  False),  # 16 timecode de début (calculé)
+    ("Musique",      120,  False),  # 17 music_track (depuis « Musiques du set »)
+    ("BPM",           52,  False),  # 18 dérivé du morceau assigné
+    ("Transition",    96,  False),  # 19 transition
+    ("Notes / Repère", 150, False), # 20 cue_note
+    ("",              78,  False),  # 21 Boutons
 ]
 
 _HEURE_PRESETS = HEURE_PRESETS
@@ -61,6 +66,15 @@ _col_widths: list[int] = [w for _, w, _ in _COLS]
 # Indices 0 (grip) and 16 (buttons) always stay at first/last; the rest are reorderable.
 # Loaded from project config in PageStoryboard._render().
 _col_order: list[int] = list(range(len(_COLS)))
+
+# Colonnes masquées pour la page courante (Mapping en masque plusieurs).
+# Défini par PageStoryboard._render() selon le mode (via self._hidden_cols).
+_HIDDEN_COLS: set = set()
+
+
+def _visible_order() -> list:
+    """Ordre d'affichage des colonnes, en retirant celles masquées (par mode)."""
+    return [c for c in _col_order if c not in _HIDDEN_COLS]
 
 
 class _ColHub(QObject):
@@ -431,7 +445,8 @@ class _ResizableHeader(QWidget):
         self._cells = []
         self._cell_logical = []
 
-        for i, col_logical in enumerate(_col_order):
+        _vis = _visible_order()
+        for i, col_logical in enumerate(_vis):
             title, _, _ = _COLS[col_logical]
             w = _col_widths[col_logical]
             cell = QWidget()
@@ -450,7 +465,7 @@ class _ResizableHeader(QWidget):
             self._cells.append(cell)
             self._cell_logical.append(col_logical)
             self._lay.addWidget(cell)
-            if i < len(_col_order) - 1:
+            if i < len(_vis) - 1:
                 s = QWidget()
                 s.setFixedWidth(1)
                 s.setStyleSheet(f"background:{CP['border']};")
@@ -598,9 +613,12 @@ class _ShotRow(QFrame):
             )
             return r.height() + 14  # 8+6 = cell top+bottom padding
 
+        # Colonne 4 = deux prompts empilés (vidéo + son) → on cumule leurs hauteurs.
+        _pmt_h = (_h((self._data.get("seedance_prompt", "") or "")[:300], 4, 9)
+                  + _h((self._data.get("sound_prompt", "") or "")[:300], 4, 9))
         return max(
             self._MIN_H,
-            _h((self._data.get("seedance_prompt", "") or "")[:300], 4, 9),
+            _pmt_h,
             _h(", ".join(self._data.get("accessory_names", []) or []), 12, 9),
             _h(", ".join(self._data.get("character_names", []) or []), 13, 10),
         )
@@ -613,9 +631,12 @@ class _ShotRow(QFrame):
         from PyQt6.QtCore import QSize
         return QSize(max(self.minimumWidth(), 100), self._content_height())
 
-    def __init__(self, data: dict, decors_cache: dict | None = None):
+    def __init__(self, data: dict, decors_cache: dict | None = None,
+                 start_tc: str = "", avail_tracks: list | None = None):
         super().__init__()
         self._data    = data
+        self._start_tc = start_tc          # timecode de début (calculé par la page)
+        self._avail_tracks = avail_tracks or []  # morceaux du conducteur (nom + bpm)
         self._pmt_lbl = None  # set after build; used by _content_height()
         self.setMinimumHeight(self._MIN_H)
 
@@ -935,32 +956,60 @@ class _ShotRow(QFrame):
         plan_l.addWidget(pn)
         cells[3] = plan_w
 
-        # ── Prompt Seedance ───────────────────────────────────────────────────
+        # ── Prompts : vidéo (→ Seedance) + sound design (→ Sound Design) ──────
         pmt_w = QWidget()
         pmt_w.setFixedWidth(_col_widths[4])
         pmt_w.setStyleSheet("background:transparent;")
         pmt_l = QVBoxLayout(pmt_w)
         pmt_l.setContentsMargins(7, 8, 6, 6)
-        pmt_l.setSpacing(0)
-        _full_pmt = data.get("seedance_prompt", "") or ""
-        _prev_pmt = (_full_pmt[:300] + "…") if len(_full_pmt) > 300 else (_full_pmt or "—")
-        _pmt_lbl = _WrapLabel(_prev_pmt or "—")
-        _pmt_lbl.setWordWrap(True)
-        _pmt_lbl.setAlignment(Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignLeft)
-        _pmt_lbl.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
-        _pmt_lbl.setStyleSheet(
-            f"color:{CP['text_dim']};font-size:9px;background:transparent;border:none;"
-        )
-        if _full_pmt:
-            _pmt_lbl.setToolTip(_full_pmt)
-        pmt_l.addWidget(_pmt_lbl)
-        self._pmt_lbl = _pmt_lbl
-        def _edit_prompt():
-            v = _text_dialog(self, "Prompt Seedance", data.get("seedance_prompt", ""),
-                             enhance=True)
+        pmt_l.setSpacing(5)
+
+        def _prompt_field(icon: str, icon_color: str, value: str, edit_fn):
+            """Un champ prompt cliquable (icône + aperçu), édité inline."""
+            box = QWidget()
+            box.setStyleSheet("background:transparent;")
+            bl = QVBoxLayout(box)
+            bl.setContentsMargins(0, 0, 0, 0)
+            bl.setSpacing(0)
+            head = QLabel(icon)
+            head.setStyleSheet(
+                f"color:{icon_color};font-size:8px;font-weight:700;"
+                f"background:transparent;border:none;")
+            prev = (value[:280] + "…") if len(value) > 280 else (value or "—")
+            body = _WrapLabel(prev)
+            body.setWordWrap(True)
+            body.setAlignment(Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignLeft)
+            body.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Minimum)
+            body.setStyleSheet(
+                f"color:{CP['text_dim']};font-size:9px;background:transparent;border:none;")
+            if value:
+                body.setToolTip(value)
+            bl.addWidget(head)
+            bl.addWidget(body)
+            _clickable(box, edit_fn)
+            return box, body
+
+        def _edit_video():
+            v = _text_dialog(self, translate("Prompt vidéo (Seedance)"),
+                             data.get("seedance_prompt", ""), enhance=True)
             if v is not None:
                 _save_field("seedance_prompt", v)
-        _clickable(pmt_w, _edit_prompt)
+
+        def _edit_sound():
+            v = _text_dialog(self, translate("Prompt sound design"),
+                             data.get("sound_prompt", ""), enhance=False)
+            if v is not None:
+                _save_field("sound_prompt", v)
+
+        _vid_box, _pmt_lbl = _prompt_field(
+            "🎬 " + translate("Vidéo"), CP["accent"],
+            data.get("seedance_prompt", "") or "", _edit_video)
+        _snd_box, _snd_lbl = _prompt_field(
+            "🔊 " + translate("Son"), CP.get("orange", CP["accent"]),
+            data.get("sound_prompt", "") or "", _edit_sound)
+        pmt_l.addWidget(_vid_box)
+        pmt_l.addWidget(_snd_box)
+        self._pmt_lbl = _pmt_lbl
         cells[4] = pmt_w
 
         # ── Mise en scène (axe + IN + OUT) ───────────────────────────────────
@@ -1201,9 +1250,65 @@ class _ShotRow(QFrame):
         _clickable(dur_w, _edit_duration)
         cells[15] = dur_w
 
+        _tracks = getattr(self, "_avail_tracks", []) or []
+        _track_names = [t.get("name", "") for t in _tracks if t.get("name")]
+
+        # ── TC (timecode de début, calculé) ───────────────────────────────────
+        tc_w, tc_l = _cell(_col_widths[16])
+        tc_l.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        tc_l.addWidget(_lbl(getattr(self, "_start_tc", "") or "—",
+                            CP["text_secondary"], 10, mono=True))
+        cells[16] = tc_w
+
+        # ── Musique (morceau assigné depuis « Musiques du set ») ──────────────
+        mus_w, mus_l = _cell(_col_widths[17])
+        _cur_mus = data.get("music_track", "") or ""
+        mus_l.addWidget(_lbl(_cur_mus or "—", CP["accent"], 9))
+        def _pick_music(_w=mus_w, _opts=[""] + _track_names, _c=_cur_mus):
+            _dropdown(_w, _opts, _c, "music_track", labels={"": "— Aucune —"})
+        _clickable(mus_w, _pick_music)
+        cells[17] = mus_w
+
+        # ── BPM (dérivé du morceau assigné) ───────────────────────────────────
+        bpm_w, bpm_l = _cell(_col_widths[18])
+        bpm_l.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        _bpm_val = ""
+        if _cur_mus:
+            _tk = next((t for t in _tracks if t.get("name") == _cur_mus), None)
+            if _tk and _tk.get("bpm"):
+                try:
+                    _bpm_val = f"{float(_tk['bpm']):.0f}"
+                except (TypeError, ValueError):
+                    _bpm_val = ""
+        bpm_l.addWidget(_lbl(_bpm_val or "—", CP["accent_dim"], 10, mono=True))
+        cells[18] = bpm_w
+
+        # ── Transition ────────────────────────────────────────────────────────
+        tr_w, tr_l = _cell(_col_widths[19])
+        _cur_tr = data.get("transition", "") or ""
+        tr_l.addWidget(_lbl(translate(_cur_tr) or "—", size=10))
+        _clickable(tr_w, lambda _w=tr_w, _c=_cur_tr: _dropdown(
+            _w, ["", "Cut", "Fondu", "Dissolve", "Glitch", "Flash", "Wipe"], _c,
+            "transition", labels={"": "— Aucune —"}))
+        cells[19] = tr_w
+
+        # ── Notes / Repère ────────────────────────────────────────────────────
+        note_w, note_l = _cell(_col_widths[20], fill=True)
+        _cur_note = data.get("cue_note", "") or ""
+        _note_lbl = _lbl(_cur_note or "—", size=9)
+        _note_lbl.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
+        _note_lbl.setAlignment(Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignLeft)
+        note_l.addWidget(_note_lbl)
+        def _edit_note():
+            v = _text_dialog(self, translate("Notes / Repère"), data.get("cue_note", ""))
+            if v is not None:
+                _save_field("cue_note", v)
+        _clickable(note_w, _edit_note)
+        cells[20] = note_w
+
         # ── Boutons ──────────────────────────────────────────────────────────
         btns_w = QWidget()
-        btns_w.setFixedWidth(_col_widths[16])
+        btns_w.setFixedWidth(_col_widths[21])
         btns_w.setMinimumHeight(self._MIN_H)
         btns_w.setStyleSheet("background:transparent;")
         bl = QVBoxLayout(btns_w)
@@ -1234,12 +1339,13 @@ class _ShotRow(QFrame):
         )
         btn_del.clicked.connect(lambda: self.delete_requested.emit(self._data["id"]))
         bl.addWidget(btn_del)
-        cells[16] = btns_w
+        cells[21] = btns_w
 
         # ── Assemblage des colonnes dans l'ordre visuel (_col_order) ─────────
-        for i, col_logical in enumerate(_col_order):
+        _vis = _visible_order()
+        for i, col_logical in enumerate(_vis):
             outer.addWidget(cells[col_logical])
-            if i < len(_col_order) - 1:
+            if i < len(_vis) - 1:
                 outer.addWidget(_vsep())
         outer.addStretch()
 
@@ -1492,6 +1598,7 @@ class _MoodInfoDialog(QDialog):
         self.setWindowTitle(translate("✦ Avant de générer les Moods"))
         self.setFixedSize(560, 440)
         self.setStyleSheet(PANDORA_STYLESHEET + f"QDialog{{background:{CP['bg1']};}}")
+        self._mode = "mapping" if sb_api.get_namespace() == "live_seq_mapping" else "live"
         self._build_ui()
 
     def _build_ui(self):
@@ -1519,24 +1626,41 @@ class _MoodInfoDialog(QDialog):
         sep.setStyleSheet(f"background:{CP['border']};")
         lay.addWidget(sep)
 
-        # Conseils
-        conseils = [
-            ("✍️", "Soigne le prompt Seedance",
-             "Le Mood est avant tout un test de prompt et d'ambiance. Plus le champ "
-             "\"Prompt Seedance\" du plan est détaillé, plus l'image générée sera "
-             "représentative de ce que tu veux obtenir dans Seedance 2.0."),
-            ("🎬", "Découpage technique complet",
-             "Renseigne la valeur de plan, la focale, l'axe caméra, l'heure et le décor. "
-             "Ces paramètres enrichissent automatiquement le prompt pour valider "
-             "l'ambiance, l'éclairage et le cadrage avant de lancer Seedance 2.0."),
-            ("🎨", "Valider avant de générer la vidéo",
-             "Une fois les Moods satisfaisants, ils peuvent servir de base de discussion "
-             "et de référence visuelle pour la génération Seedance 2.0. "
-             "Ce n'est pas une pré-visualisation fidèle des personnages ou du décor."),
-            ("⚡", "Génération rapide",
-             "La génération batch traite les plans l'un après l'autre. "
-             "Tu peux l'arrêter à tout moment — les Moods déjà générés sont conservés."),
-        ]
+        # Conseils — adaptés au mode (Live VJ / Mapping façade)
+        if self._mode == "mapping":
+            conseils = [
+                ("▦", "Choisis la façade du bâtiment",
+                 "Dans le Conducteur, renseigne la « Référence bâtiment » et isole-la "
+                 "sur fond noir. Les Moods sont générés SUR cette façade, dont la "
+                 "géométrie est conservée."),
+                ("🌙", "Rendu de nuit automatique",
+                 "Le mapping se projette de nuit : les Moods sont automatiquement "
+                 "convertis en nuit (façade éclairée uniquement par la projection, "
+                 "environnement en fond noir)."),
+                ("✍️", "Soigne les prompts vidéo et son",
+                 "Décris l'évolution sur la façade (lumière, effets, matières) dans le "
+                 "« Prompt vidéo ». Ajoute un « Prompt sound design » pour l'ambiance "
+                 "sonore du plan (injecté dans Sound Design)."),
+                ("⚡", "Génération rapide",
+                 "La génération batch traite les plans l'un après l'autre. "
+                 "Tu peux l'arrêter à tout moment — les Moods déjà générés sont conservés."),
+            ]
+        else:
+            conseils = [
+                ("✍️", "Soigne le prompt vidéo",
+                 "Le Mood teste l'ambiance du loop. Plus le « Prompt vidéo » du plan est "
+                 "détaillé, plus l'image générée reflète le visuel VJ que tu veux obtenir."),
+                ("🔊", "Pense au prompt sound design",
+                 "Chaque plan a aussi un « Prompt sound design » (SFX / ambiance, sans "
+                 "voix) qui sera injecté dans l'onglet Sound Design."),
+                ("🎨", "Valider avant de générer la vidéo",
+                 "Une fois les Moods satisfaisants, ils servent de référence visuelle "
+                 "pour générer les loops (Seedance et autres moteurs). "
+                 "Ce n'est pas une pré-visualisation fidèle."),
+                ("⚡", "Génération rapide",
+                 "La génération batch traite les plans l'un après l'autre. "
+                 "Tu peux l'arrêter à tout moment — les Moods déjà générés sont conservés."),
+            ]
 
         for icon, titre, corps in conseils:
             bloc = QFrame()
@@ -1774,6 +1898,10 @@ class _MoodBatchDialog(QDialog):
 # ── Page principale Storyboard ────────────────────────────────────────────────
 
 class PageStoryboard(QWidget):
+
+    # Colonnes masquées pour cette page (vide = toutes visibles).
+    # SequenceMappingPage la surcharge pour masquer Axe/Valeur/Distance/Décor/Heure.
+    _hidden_cols: set = set()
 
     def __init__(self):
         super().__init__()
@@ -2371,7 +2499,25 @@ class PageStoryboard(QWidget):
         self._list_container.setMinimumWidth(total)
         self._list_container.updateGeometry()
 
+    def _load_conductor_tracks(self) -> list:
+        """Morceaux (nom + BPM) du conducteur d'où vient ce découpage — colonne Musique."""
+        try:
+            import core.scenario as _sc
+            scs = _sc.list_scenarios()
+            sc_id = next((s.get("scenario_id") for s in self._all_shots
+                          if s.get("scenario_id")), "")
+            chosen = next((s for s in scs if s.get("id") == sc_id), None) if sc_id else None
+            if chosen is None:
+                chosen = next((s for s in scs if s.get("music_tracks")), None)
+            tracks = (chosen or {}).get("music_tracks", []) or []
+            return [t for t in tracks if isinstance(t, dict) and t.get("name")]
+        except Exception:
+            return []
+
     def _render(self):
+        # Colonnes masquées selon le mode de la page (Mapping en masque plusieurs).
+        global _HIDDEN_COLS
+        _HIDDEN_COLS = set(getattr(self, "_hidden_cols", set()) or set())
         # Reload column order from project config
         order = sb_api.load_col_order(len(_COLS))
         _col_order[:] = order
@@ -2409,8 +2555,17 @@ class PageStoryboard(QWidget):
 
         self._shot_rows = {}
         decors_cache = {d["id"]: d for d in dec_api.list_decors()}
+        avail_tracks = self._load_conductor_tracks()
+        _cum = 0.0   # timecode cumulé (début de chaque plan)
         for shot in self._all_shots:
-            row = _ShotRow(shot, decors_cache=decors_cache)
+            mins, secs = divmod(int(_cum), 60)
+            start_tc = f"{mins}:{secs:02d}"
+            row = _ShotRow(shot, decors_cache=decors_cache,
+                           start_tc=start_tc, avail_tracks=avail_tracks)
+            try:
+                _cum += float(shot.get("duration", 5.0))
+            except (TypeError, ValueError):
+                _cum += 5.0
             row.edit_requested.connect(self._on_edit)
             row.delete_requested.connect(self._on_delete)
             row.changed.connect(self.refresh)

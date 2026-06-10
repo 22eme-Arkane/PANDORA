@@ -223,8 +223,172 @@ _FR_TO_EN: dict[str, str] = {
     "Génération du découpage via Claude…":  "Generating the breakdown via Claude…",
     "segments générés →":                  "segments generated →",
     "Mise en page du conducteur via Claude…": "Formatting the rundown via Claude…",
+    "Mise en page PANDORA":                "PANDORA layout",
+    "Mise en page PANDORA générée ✓":      "PANDORA layout generated ✓",
+    "Clique « Mise en page PANDORA » (panneau de droite) pour générer ici la "
+    "version optimisée pour les moteurs : plans découpés + prompts prêts pour Seedance. "
+    "Ton conducteur, lui, reste intact dans l'onglet Conducteur.":
+        "Click “PANDORA layout” (right panel) to generate here the engine-optimized "
+        "version: broken-down shots + Seedance-ready prompts. Your rundown stays intact "
+        "in the Rundown tab.",
     "Arrangement du conducteur via Claude…":  "Arranging the rundown via Claude…",
     "Conducteur mis à jour par Claude ✓":  "Rundown updated by Claude ✓",
+    "♫  Musiques du set":                  "♫  Set music",
+    "Analyser le set (BPM + drops)":       "Analyze set (BPM + drops)",
+    "Cale le découpage sur la musique (tempo + temps forts)":
+        "Sync the breakdown to the music (tempo + peaks)",
+    "Ajouter des morceaux (mp3/wav…)\nClaude calera le découpage sur leur BPM et leurs drops.":
+        "Add tracks (mp3/wav…)\nClaude will sync the breakdown to their BPM and drops.",
+    "non analysé":                         "not analyzed",
+    "Ajouter des morceaux":                "Add tracks",
+    "Morceau(x) ajouté(s) — clique « Analyser le set » pour détecter BPM et drops.":
+        "Track(s) added — click “Analyze set” to detect BPM and drops.",
+    "Ajoute d'abord des morceaux dans « Musiques du set ».":
+        "First add tracks in “Set music”.",
+    "Analyse audio en cours (BPM + drops)…":  "Analyzing audio (BPM + drops)…",
+    "Analyse":                             "Analyzing",
+    "morceau(x) analysé(s) — timeline musicale prête ✓":
+        "track(s) analyzed — music timeline ready ✓",
+    "Corriger le BPM (tap-tempo, ÷2 / ×2)":  "Fix BPM (tap-tempo, ÷2 / ×2)",
+    "Corriger le BPM":                     "Fix BPM",
+    "Tape en rythme sur la musique…":      "Tap along with the music…",
+    "Continue à taper…":                   "Keep tapping…",
+    "⊙  Tap tempo":                        "⊙  Tap tempo",
+    "Valider":                             "Apply",
+    "Analyse musicale du set":             "Set music analysis",
+    "L'analyse apparaît au fil de l'écoute…":  "The analysis appears as it listens…",
+    "✓  Appliquer l'analyse":              "✓  Apply analysis",
+    "Analyse musicale annulée.":           "Music analysis cancelled.",
+    "analyse…":                            "analyzing…",
+    "énergie":                             "energy",
+    "✓  Appliquer dans l'onglet":          "✓  Apply to the tab",
+    "Mode :":                              "Mode:",
+    "Acte":                                "Act",
+    "Musique":                             "Music",
+    "Notes / Repère":                      "Notes / Cue",
+    "Transition":                          "Transition",
+    "Fondu":                               "Fade",
+    "Prompt vidéo / son":                  "Video / sound prompt",
+    "Vidéo":                               "Video",
+    "Son":                                 "Sound",
+    "Prompt vidéo (Seedance)":             "Video prompt (Seedance)",
+    "Prompt sound design":                 "Sound design prompt",
+    "Ambiance / SFX du plan (anglais), sans voix — injecté dans Sound Design.":
+        "Shot ambience / SFX (English), no voice — fed into Sound Design.",
+    "▦  Référence bâtiment (façade)":      "▦  Building reference (facade)",
+    "Image de la façade projetée. En Séquence Mapping, les moods sont générés "
+    "SUR cette façade (sa géométrie est conservée).":
+        "Image of the projected facade. In the Mapping sequence, moods are generated "
+        "ON this facade (its geometry is preserved).",
+    "Choisir la façade":                   "Choose the facade",
+    "Choisir la façade du bâtiment":       "Choose the building facade",
+    "Façade enregistrée ✓":                "Facade saved ✓",
+    "Isoler sur fond noir":                "Isolate on black",
+    "Isoler (fond noir)":                  "Isolate (black bg)",
+    "Détoure le bâtiment (BiRefNet) et le place sur fond noir pur — "
+    "supprime les bâtiments et objets voisins.":
+        "Cuts out the building (BiRefNet) onto pure black — removes neighboring "
+        "buildings and objects.",
+    "Détourage de la façade (BiRefNet)…":  "Cutting out the facade (BiRefNet)…",
+    "Détourage indisponible (mode démo — renseigne la clé fal.ai).":
+        "Cutout unavailable (demo mode — set your fal.ai key).",
+    "Façade isolée sur fond noir ✓":       "Facade isolated on black ✓",
+    "Choisis la façade du bâtiment":       "Choose the building facade",
+    "Rendu de nuit automatique":           "Automatic night render",
+    "Soigne les prompts vidéo et son":     "Refine the video and sound prompts",
+    "Soigne le prompt vidéo":              "Refine the video prompt",
+    "Pense au prompt sound design":        "Mind the sound design prompt",
+    "Dans le Conducteur, renseigne la « Référence bâtiment » et isole-la "
+    "sur fond noir. Les Moods sont générés SUR cette façade, dont la "
+    "géométrie est conservée.":
+        "In the Rundown, set the « Building reference » and isolate it on black. "
+        "Moods are generated ON that facade, whose geometry is preserved.",
+    "Le mapping se projette de nuit : les Moods sont automatiquement "
+    "convertis en nuit (façade éclairée uniquement par la projection, "
+    "environnement en fond noir).":
+        "Mapping is projected at night: Moods are automatically converted to night "
+        "(facade lit only by the projection, surroundings on black).",
+    "Décris l'évolution sur la façade (lumière, effets, matières) dans le "
+    "« Prompt vidéo ». Ajoute un « Prompt sound design » pour l'ambiance "
+    "sonore du plan (injecté dans Sound Design).":
+        "Describe the evolution on the facade (light, effects, materials) in the "
+        "« Video prompt ». Add a « Sound design prompt » for the shot's ambience "
+        "(fed into Sound Design).",
+    "Le Mood teste l'ambiance du loop. Plus le « Prompt vidéo » du plan est "
+    "détaillé, plus l'image générée reflète le visuel VJ que tu veux obtenir.":
+        "The Mood tests the loop's mood. The more detailed the plan's « Video prompt », "
+        "the more the generated image reflects the VJ visual you want.",
+    "Chaque plan a aussi un « Prompt sound design » (SFX / ambiance, sans "
+    "voix) qui sera injecté dans l'onglet Sound Design.":
+        "Each shot also has a « Sound design prompt » (SFX / ambience, no voice) "
+        "that will be fed into the Sound Design tab.",
+    "Une fois les Moods satisfaisants, ils servent de référence visuelle "
+    "pour générer les loops (Seedance et autres moteurs). "
+    "Ce n'est pas une pré-visualisation fidèle.":
+        "Once the Moods are good, they serve as visual reference to generate the "
+        "loops (Seedance and other engines). It is not a faithful preview.",
+    "Découpage — Aperçu":                  "Breakdown — Preview",
+    "Découpage en cours…":                 "Generating breakdown…",
+    "Découpage terminé":                   "Breakdown complete",
+    "Découpage annulé.":                   "Breakdown cancelled.",
+    "Découpage vide.":                     "Empty breakdown.",
+    "Les plans découpés apparaissent ici…":  "The breakdown shots appear here…",
+    "✓  Appliquer le découpage":           "✓  Apply breakdown",
+    "Écrit les plans dans la séquence Live/Mapping.":
+        "Writes the shots into the Live/Mapping sequence.",
+    "Écrit la mise en page dans l'onglet « Mise en page PANDORA ». "
+    "Le Conducteur reste intact.":
+        "Writes the layout into the “PANDORA layout” tab. The Rundown stays intact.",
+    "Sound Design":                        "Sound Design",
+    "Sound Design — Mirelo SFX":           "Sound Design — Mirelo SFX",
+    "Sonorise ta performance : un prompt son → SFX, ou un loop vidéo → bande-son "
+    "synchronisée. Colle ici les PROMPT SON générés par « Mise en page PANDORA ».":
+        "Score your performance: a sound prompt → SFX, or a video loop → synced "
+        "soundtrack. Paste here the SOUND PROMPTS generated by “PANDORA layout”.",
+    "Prompt → SFX":                        "Prompt → SFX",
+    "Loop vidéo → bande-son":              "Video loop → soundtrack",
+    "⚡  Générer le son":                   "⚡  Generate sound",
+    "Fichiers générés":                    "Generated files",
+    "Décris l'ambiance / les effets sonores (en anglais de préférence). "
+    "Ex. « deep pulsing bass drone, glitchy risers, crowd energy, no vocals »":
+        "Describe the ambience / sound effects (English preferred). "
+        "E.g. “deep pulsing bass drone, glitchy risers, crowd energy, no vocals”",
+    "📁  Choisir un loop vidéo…":           "📁  Choose a video loop…",
+    "Aucun loop sélectionné":              "No loop selected",
+    "Prompt son optionnel (anglais) pour orienter la bande-son. "
+    "Laisse vide pour une sonorisation automatique du loop.":
+        "Optional sound prompt (English) to steer the soundtrack. "
+        "Leave empty for automatic scoring of the loop.",
+    "Choisir un loop vidéo":               "Choose a video loop",
+    "Écris d'abord un prompt son.":        "Write a sound prompt first.",
+    "Choisis d'abord un loop vidéo.":      "Choose a video loop first.",
+    "Mode mock — renseigne la clé fal.ai dans Paramètres.":
+        "Mock mode — set your fal.ai key in Settings.",
+    "Généré ✓":                            "Generated ✓",
+    "Upscaling":                           "Upscaling",
+    "Upscaling de la séquence (Live)":     "Sequence upscaling (Live)",
+    "▸ Ajoutez des clips, ou importez toute la Vidéothèque.":
+        "▸ Add clips, or import the whole library.",
+    "▸ Choisissez le moteur et le facteur (ex. ×2, ×4).":
+        "▸ Pick the engine and factor (e.g. ×2, ×4).",
+    "▸ « Upscaler toute la file » ressort tous les plans en haute résolution.":
+        "▸ “Upscale entire queue” re-renders all shots in high resolution.",
+    "Ajouter des clips":                   "Add clips",
+    "Importer la Vidéothèque":             "Import library",
+    "Vider":                               "Clear",
+    "File d'attente":                      "Queue",
+    "File vide — ajoutez des clips ou importez la Vidéothèque.":
+        "Empty queue — add clips or import the library.",
+    "Moteur d'upscaling":                  "Upscaling engine",
+    "Facteur":                             "Factor",
+    "Modèle Topaz":                        "Topaz model",
+    "Upscaler toute la file":              "Upscale entire queue",
+    "Vidéothèque indisponible.":           "Library unavailable.",
+    "clip(s) importé(s) depuis la Vidéothèque.":  "clip(s) imported from the library.",
+    "upscalé(s)":                          "upscaled",
+    "erreur(s)":                           "error(s)",
+    "Upscale":                             "Upscale",
+    "Envoyer vers l'onglet Upscaling (Live)":  "Send to the Upscaling tab (Live)",
     "Découpe le conducteur en séquence (Live/Mapping)":
         "Breaks the rundown into a sequence (Live/Mapping)",
     "Écris d'abord un texte à mettre en page.": "Write a text to format first.",

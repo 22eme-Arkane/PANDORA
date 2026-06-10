@@ -35,6 +35,7 @@ class _LiveVideoCard(QFrame):
     play_requested     = pyqtSignal(str)
     modify_requested   = pyqtSignal(str)
     resolume_requested = pyqtSignal(str)
+    upscale_requested  = pyqtSignal(str)
 
     _TH_W = 160
     _TH_H = 90
@@ -123,12 +124,22 @@ class _LiveVideoCard(QFrame):
         row1.addWidget(btn_mod)
         lay.addLayout(row1)
 
+        row2 = QHBoxLayout()
+        row2.setContentsMargins(0, 0, 0, 0)
+        row2.setSpacing(4)
         btn_res = QPushButton("→ Resolume")
         btn_res.setCursor(Qt.CursorShape.PointingHandCursor)
         btn_res.setToolTip(translate("Charger ce clip dans Resolume"))
         btn_res.setStyleSheet(_ss_violet)
         btn_res.clicked.connect(lambda: self.resolume_requested.emit(self._path))
-        lay.addWidget(btn_res)
+        row2.addWidget(btn_res)
+        btn_up = QPushButton("⇪ " + translate("Upscale"))
+        btn_up.setCursor(Qt.CursorShape.PointingHandCursor)
+        btn_up.setToolTip(translate("Envoyer vers l'onglet Upscaling (Live)"))
+        btn_up.setStyleSheet(_ss_accent)
+        btn_up.clicked.connect(lambda: self.upscale_requested.emit(self._path))
+        row2.addWidget(btn_up)
+        lay.addLayout(row2)
 
     def set_thumb_pixmap(self, pix: QPixmap):
         self._thumb.setPixmap(pix)
@@ -139,6 +150,7 @@ class _LiveVideoCard(QFrame):
 class TabVideoLibraryLive(QScrollArea):
     send_to_modify   = pyqtSignal(list)  # list[str]
     send_to_resolume = pyqtSignal(list)  # list[str]
+    send_to_upscale  = pyqtSignal(list)  # list[str]
 
     _SORT_OPTIONS = [
         ("Date (récent → ancien)",   "date_desc"),
@@ -244,6 +256,13 @@ class TabVideoLibraryLive(QScrollArea):
 
     # ── Refresh / scan ──────────────────────────────────────────────────────
 
+    def list_all_clips(self) -> list:
+        """Tous les chemins de clips de la Vidéothèque (pour l'onglet Upscaling)."""
+        try:
+            return list(self._scan_videos())
+        except Exception:
+            return []
+
     def refresh(self):
         for w in self._thumb_workers:
             try:
@@ -274,6 +293,7 @@ class TabVideoLibraryLive(QScrollArea):
             card.play_requested.connect(self._on_play)
             card.modify_requested.connect(lambda p: self.send_to_modify.emit([p]))
             card.resolume_requested.connect(lambda p: self.send_to_resolume.emit([p]))
+            card.upscale_requested.connect(lambda p: self.send_to_upscale.emit([p]))
             self._cards[path] = card
             row, col = divmod(i, _COLS)
             self._grid.addWidget(card, row, col)

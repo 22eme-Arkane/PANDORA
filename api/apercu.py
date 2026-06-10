@@ -157,8 +157,24 @@ def build_mood_prompt(shot: dict, film_style: str = "") -> str:
 
 # ── Génération effective ──────────────────────────────────────────────────────
 
-def run_generation(prompt: str, output_dir: str, api_key: str, progress_cb) -> str:
-    """Génère une image t2i et retourne son chemin. Lève une exception si erreur."""
+def _resolve_building_ref() -> str:
+    """Façade du projet à utiliser pour les moods — uniquement en Séquence Mapping."""
+    try:
+        import core.storyboard as sb
+        if sb.get_namespace() == "live_seq_mapping":
+            from core.live_building import get_building_ref
+            return get_building_ref()
+    except Exception:
+        pass
+    return ""
+
+
+def run_generation(prompt: str, output_dir: str, api_key: str, progress_cb,
+                   building_ref: str = "") -> str:
+    """Génère une image et retourne son chemin. Lève une exception si erreur.
+
+    Si `building_ref` (image de façade) est fourni : on utilise Flux Kontext pour
+    ÉDITER la façade en gardant sa géométrie (mapping). Sinon Flux t2i classique."""
     os.makedirs(output_dir, exist_ok=True)
 
     # ── Mode simulation ───────────────────────────────────────────────────────
@@ -185,18 +201,44 @@ def run_generation(prompt: str, output_dir: str, api_key: str, progress_cb) -> s
     import fal_client
     os.environ["FAL_KEY"] = api_key
 
-    progress_cb("Génération du Mood via Flux…")
-    result = fal_client.subscribe(
-        "fal-ai/flux/dev",
-        arguments={
-            "prompt":                prompt,
-            "num_inference_steps":   28,
-            "guidance_scale":        3.5,
-            "num_images":            1,
-            "image_size":            "landscape_16_9",
-            "enable_safety_checker": False,
-        },
-    )
+    if building_ref and os.path.isfile(building_ref):
+        # Mapping : on édite la façade (géométrie conservée) via Flux Kontext.
+        # Directive impérative : conversion NUIT + isolation sur FOND NOIR PUR
+        # (le mapping se projette de nuit ; la photo de façade est prise de jour).
+        kontext_prompt = (
+            prompt
+            + " | NIGHT projection mapping render: convert the scene to deep night — "
+            "pitch-black night sky, NO daylight, no sun; the building facade is lit ONLY "
+            "by the projected visuals described above. Keep the building's EXACT geometry, "
+            "architecture and proportions. Remove every surrounding element (other buildings, "
+            "street objects, trees, people, ground, sky) and replace the entire background "
+            "with PURE BLACK #000000. Isolate the single building facade on a pure black void."
+        )
+        progress_cb("Envoi de la façade à fal.ai…")
+        facade_url = fal_client.upload_file(building_ref)
+        progress_cb("Génération du Mood nocturne sur la façade (Kontext)…")
+        result = fal_client.subscribe(
+            "fal-ai/flux-pro/kontext",
+            arguments={
+                "prompt":              kontext_prompt,
+                "image_url":           facade_url,
+                "guidance_scale":      3.5,
+                "num_inference_steps": 28,
+            },
+        )
+    else:
+        progress_cb("Génération du Mood via Flux…")
+        result = fal_client.subscribe(
+            "fal-ai/flux/dev",
+            arguments={
+                "prompt":                prompt,
+                "num_inference_steps":   28,
+                "guidance_scale":        3.5,
+                "num_images":            1,
+                "image_size":            "landscape_16_9",
+                "enable_safety_checker": False,
+            },
+        )
     image_url = result["images"][0]["url"]
     progress_cb("Téléchargement de l'image…")
     resp = requests.get(image_url, timeout=60)
@@ -222,6 +264,7 @@ class MoodGenerationWorker(QThread):
         import core.style as style_api
         self._api_key    = load_config().get("api_key", "").strip()
         self._film_style = style_api.get_image_suffix() or ""
+        self._building_ref = _resolve_building_ref()
 
     def run(self):
         prompt = (
@@ -231,7 +274,7 @@ class MoodGenerationWorker(QThread):
         )
         try:
             path = run_generation(prompt, self._out_dir, self._api_key,
-                                  self.progress.emit)
+                                  self.progress.emit, self._building_ref)
             self.finished.emit(path)
         except Exception as e:
             self.failed.emit(humanize_api_error(str(e)))
@@ -254,6 +297,7 @@ class MoodBatchWorker(QThread):
         import core.style as style_api
         self._api_key    = load_config().get("api_key", "").strip()
         self._film_style = style_api.get_image_suffix() or ""
+        self._building_ref = _resolve_building_ref()
 
     def cancel(self):
         self._cancelled     = True
@@ -279,7 +323,8 @@ class MoodBatchWorker(QThread):
                     def _prog(msg, _i=i, _t=total):
                         self.shot_progress.emit(_i + 1, _t, msg)
 
-                    path = run_generation(prompt, out_dir, self._api_key, _prog)
+                    path = run_generation(prompt, out_dir, self._api_key, _prog,
+                                          self._building_ref)
 
                     if path and os.path.isfile(path):
                         existing = sb_api.load_apercus(shot["id"])

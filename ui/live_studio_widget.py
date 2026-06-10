@@ -27,6 +27,9 @@ from core.i18n import translate
 from ui.live_pages import TabVideoEnginesLive, TabHistoryLive
 from ui.tab_video_library_live import TabVideoLibraryLive
 from ui.tab_modify_live import TabModifyLive
+from ui.tab_sound_design_live import TabSoundDesignLive
+from ui.tab_upscale_live import TabUpscaleLive
+from ui.tab_t2v_live import TabT2V as FromSequencesTabLive
 
 
 # ── Onglet « Générer depuis Séquences » (placeholder) ──────────────────────────
@@ -112,8 +115,9 @@ class LiveStudioWidget(QWidget):
         # 1. Génération directe (version Live : outils VJ/Mapping activés dans __init__)
         self.tab_engines = TabVideoEnginesLive()
 
-        # 2. Générer depuis Séquences (placeholder)
-        self.tab_sequences = _FromSequencesTab()
+        # 2. Générer depuis Séquences (adapté de « Générer depuis Storyboard » Cinéma,
+        #    avec sélecteur Séquences Live / Mapping)
+        self.tab_sequences = FromSequencesTabLive()
 
         # 3. Vidéothèque (Live, dédiée)
         self.tab_library = TabVideoLibraryLive()
@@ -121,25 +125,38 @@ class LiveStudioWidget(QWidget):
         # 4. Modifier (Live) — pont depuis la Vidéothèque
         self.tab_modify = TabModifyLive()
 
-        # 5. Historique (version Live)
+        # 5. Sound Design (Live) — Mirelo SFX (texte→audio + vidéo→bande-son synchro)
+        self.tab_sound = TabSoundDesignLive()
+
+        # 6. Upscaling (Live) — Topaz / SeedVR2, en lot depuis la Vidéothèque
+        self.tab_upscale = TabUpscaleLive()
+        self.tab_upscale.set_library_provider(self.tab_library.list_all_clips)
+
+        # 7. Historique (version Live)
         self.tab_history = TabHistoryLive()
 
         self.tabs.addTab(self.tab_engines,   translate("Génération directe"))
         self.tabs.addTab(self.tab_sequences, translate("Générer depuis Séquences"))
         self.tabs.addTab(self.tab_library,   translate("Vidéothèque"))
         self.tabs.addTab(self.tab_modify,    translate("Modifier"))
+        self.tabs.addTab(self.tab_sound,     translate("Sound Design"))
+        self.tabs.addTab(self.tab_upscale,   translate("Upscaling"))
         self.tabs.addTab(self.tab_history,   translate("Historique"))
 
         # Générations → historique
         self.tab_engines.generation_done.connect(self.tab_history.add_entry)
         self.tab_modify.generation_done.connect(self.tab_history.add_entry)
+        self.tab_sequences.generation_done.connect(self.tab_history.add_entry)
 
         # Pont Vidéothèque → Modifier (Live)
         self.tab_library.send_to_modify.connect(self._on_send_to_modify)
         # Vidéothèque → Resolume (connexion REST gérée par l'onglet Resolume / page_live.py)
         self.tab_library.send_to_resolume.connect(self._on_send_to_resolume)
+        # Vidéothèque → Upscaling (Live)
+        self.tab_library.send_to_upscale.connect(self._on_send_to_upscale)
 
-        self._library_tab_index = self.tabs.indexOf(self.tab_library)
+        self._library_tab_index   = self.tabs.indexOf(self.tab_library)
+        self._sequences_tab_index  = self.tabs.indexOf(self.tab_sequences)
         self.tabs.currentChanged.connect(self._on_tab_changed)
 
         root.addWidget(self.tabs)
@@ -147,6 +164,9 @@ class LiveStudioWidget(QWidget):
     def _on_tab_changed(self, index: int):
         if index == self._library_tab_index:
             self.tab_library.refresh()
+        elif index == self._sequences_tab_index:
+            # Recale le namespace sur la séquence sélectionnée + recharge les plans.
+            self.tab_sequences.refresh()
 
     def _on_send_to_modify(self, paths):
         self.tab_modify.add_clips_from_paths(paths)
@@ -155,6 +175,10 @@ class LiveStudioWidget(QWidget):
     def _on_send_to_resolume(self, _paths):
         # Bascule vers l'onglet Resolume (connexion REST + chargement dans les slots).
         self.open_resolume.emit()
+
+    def _on_send_to_upscale(self, paths):
+        self.tab_upscale.add_clips_from_paths(paths)
+        self.tabs.setCurrentWidget(self.tab_upscale)
 
     def refresh(self):
         if hasattr(self.tab_library, "refresh"):

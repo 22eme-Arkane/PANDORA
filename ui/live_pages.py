@@ -51,8 +51,13 @@ class SequenceLivePage(_PageStoryboardLive):
 
 
 class SequenceMappingPage(_PageStoryboardLive):
-    """Séquences Mapping — Storyboard Live (namespace de données dédié)."""
+    """Séquences Mapping — Storyboard Live (namespace de données dédié).
+
+    En mapping (façade fixe, caméra fixe, image de référence du bâtiment), on masque
+    les colonnes inutiles : Axe Caméra (5), Valeur (7), Focal (8), Distance (9),
+    Décor (11), Heure (12)."""
     _live_ns = "live_seq_mapping"
+    _hidden_cols = {5, 7, 8, 9, 11, 12}
 
     def __init__(self):
         _sb.set_namespace(self._live_ns)

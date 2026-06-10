@@ -253,7 +253,7 @@ Retourne UNIQUEMENT un tableau JSON valide. Chaque élément du tableau représe
   "optic": <str — "Sphérique" ou "Anamorphique">,
   "focal": <str — focale adaptée à la valeur de plan et à l'effet souhaité, ex: "24mm", "35mm", "50mm", "85mm", "100mm">,
   "comments": <str — description factuelle et fidèle de ce qui se passe dans ce plan, extraite du scénario. OBLIGATOIRE : si ce plan contient un dialogue, le citer intégralement entre guillemets avec le nom du personnage (ex : MARC : « Je t'ai toujours aimée. »). INTERDIT : technique caméra, mouvements de caméra, focale, optique — ces éléments sont déjà dans les champs dédiés. AUTORISÉ : qui fait quoi, ce qu'on voit, ce qu'on entend, les dialogues exacts, l'ambiance du moment telle qu'écrite dans le scénario.>,
-  "seedance_prompt": <str — video generation prompt in {PROMPT_LANG}. Mandatory structure: (1) characters present with their appearance/state as described in the screenplay, (2) exact location and environment description from the screenplay, (3) main action and — if dialogue present — the exact words spoken in quotes. NO camera technique, NO creative interpretation — only what is written in the screenplay.>
+  "seedance_prompt": <str — DETAILED, dense video generation prompt in {PROMPT_LANG}. Seedance 2.0 yields far better results with RICH visual descriptions, so do NOT be brief. Mandatory structure, faithful to the screenplay: (1) characters present with their appearance/state as described in the screenplay, (2) exact location and environment description from the screenplay, (3) main action and — if dialogue present — the exact words spoken in quotes. THEN enrich the VISUAL rendering WITHOUT inventing any new story element: lighting (direction, quality, color temperature), color palette, textures and materials, mood and atmosphere, and quality cues such as cinematic, ultra-detailed, sharp, photorealistic. Write 3 to 5 rich sentences. NO camera technique (it lives in the dedicated fields); stay strictly faithful to what the screenplay describes.>
 }
 
 Contrainte absolue : duration ne peut jamais dépasser 15.0 secondes (limite de Seedance 2.0).
@@ -309,8 +309,10 @@ RÈGLES POUR LE PROMPT SEEDANCE (après →) :
 - Toujours en FRANÇAIS (traduction automatique gérée par Pandora avant envoi)
 - Jamais de technique caméra (déjà dans la ligne P01) — décrire uniquement sujet, décor, action, ambiance
 - Personnages cités par NOM uniquement — pas de description physique
-- Concis et évocateur : 1 à 3 phrases. Sensations, lumière, textures, rythme.
-- Structure recommandée : [personnage(s)] + [lieu/environnement] + [action] + [ambiance/lumière]
+- RICHE et TRÈS DÉTAILLÉ : Seedance 2.0 donne de bien meilleurs résultats avec des prompts denses — ne sois PAS bref. 3 à 5 phrases développées.
+- Décrire précisément : personnage(s) (par NOM), lieu/environnement, action, lumière (direction, qualité, température de couleur), palette de couleurs, textures & matières, atmosphère/mood, et repères de qualité (cinématographique, ultra-détaillé, net, photoréaliste).
+- Rester FIDÈLE au scénario : enrichir le rendu visuel mais n'inventer aucun élément narratif (personnages, lieux, événements).
+- Structure recommandée : [personnage(s)] + [lieu/environnement] + [action] + [lumière/couleurs/textures/ambiance]
 - Si dialogue : inclure la réplique exacte entre guillemets dans le prompt
 
 RÈGLES GLOBALES :
@@ -368,8 +370,10 @@ RULES FOR THE SEEDANCE PROMPT (after →):
 - Always in ENGLISH
 - Never camera technique (already in the P01 line) — describe only subject, setting, action, mood
 - Characters referred to by NAME only — no physical description
-- Concise and evocative: 1 to 3 sentences. Sensations, light, textures, rhythm.
-- Recommended structure: [character(s)] + [location/environment] + [action] + [mood/light]
+- RICH and HIGHLY DETAILED: Seedance 2.0 yields far better results with dense prompts — do NOT be brief. 3 to 5 developed sentences.
+- Describe precisely: character(s) (by NAME), location/environment, action, lighting (direction, quality, color temperature), color palette, textures & materials, mood/atmosphere, and quality cues (cinematic, ultra-detailed, sharp, photorealistic).
+- Stay FAITHFUL to the screenplay: enrich the visual rendering but invent no new narrative element (characters, places, events).
+- Recommended structure: [character(s)] + [location/environment] + [action] + [light/color/textures/mood]
 - If dialogue: include the exact line in quotes within the prompt
 
 GLOBAL RULES:

@@ -3,7 +3,7 @@ from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
     QTextEdit, QLineEdit, QFrame, QScrollArea, QFileDialog,
     QMessageBox, QStackedWidget, QApplication, QProgressBar, QSpinBox,
-    QComboBox, QSlider, QCheckBox, QInputDialog,
+    QComboBox, QSlider, QCheckBox, QInputDialog, QTabWidget,
 )
 from PyQt6.QtCore import Qt, QTimer, pyqtSignal
 from core.i18n import translate
@@ -66,6 +66,7 @@ class PageScenario(QWidget):
         self._last_result_kind: str = ""   # "format" | "arrange" | "refs"
         self._last_ref_analysis: str = ""
         self._ref_images: list[str] = []
+        self._music_tracks: list[dict] = []   # [{path,name,bpm,duration,energy,drops}]
         self._autosave_timer = QTimer()
         self._autosave_timer.setSingleShot(True)
         self._autosave_timer.setInterval(3000)
@@ -405,19 +406,8 @@ class PageScenario(QWidget):
         self._film_style_combo.currentIndexChanged.connect(self._on_scenario_style_changed)
         tl.addWidget(self._film_style_combo)
 
-        # ── Mode du conducteur : Live / Mapping (calibre l'IA Claude) ──────────
-        _mode_sep = QFrame()
-        _mode_sep.setFixedSize(1, 24)
-        _mode_sep.setStyleSheet(f"background:{CP['border']};")
-        tl.addWidget(_mode_sep)
-        self._btn_mode_live    = self._make_mode_btn("Live")
-        self._btn_mode_mapping = self._make_mode_btn("Mapping")
-        self._btn_mode_live.clicked.connect(lambda: self._set_live_mode("live"))
-        self._btn_mode_mapping.clicked.connect(lambda: self._set_live_mode("mapping"))
-        tl.addWidget(self._btn_mode_live)
-        tl.addWidget(self._btn_mode_mapping)
-        self._apply_mode_style()
-
+        # (Les boutons Live / Mapping sont désormais dans la bande « Durée cible »,
+        #  en haut à droite — voir _build_film_strip.)
         tl.addStretch(1)
 
         _ver_sep2 = QFrame()
@@ -467,7 +457,37 @@ class PageScenario(QWidget):
         self._editor_text.document().setDefaultTextOption(_opt)
         self._editor_text.textChanged.connect(self._schedule_autosave)
         self._editor_text.textChanged.connect(self._update_dur_estimate)
-        main.addWidget(self._editor_text, 1)
+
+        # ── Deux onglets : Conducteur (édition) / Mise en page PANDORA (optimisé moteurs) ──
+        self._editor_tabs = QTabWidget()
+        self._editor_tabs.setDocumentMode(True)
+        self._editor_tabs.setStyleSheet(
+            "QTabWidget::pane{border:none;}"
+            f"QTabBar::tab{{background:{CP['bg1']};color:{CP['text_secondary']};"
+            f"padding:6px 18px;border:none;font-size:11px;font-weight:700;}}"
+            f"QTabBar::tab:selected{{color:{CP['accent2']};"
+            f"border-bottom:2px solid {CP['accent2']};}}"
+            f"QTabBar::tab:disabled{{color:{CP['text_dim']};}}"
+        )
+        self._editor_tabs.addTab(self._editor_text, translate("Conducteur"))
+
+        # Onglet « Mise en page PANDORA » — vue optimisée moteurs (grisée jusqu'au clic)
+        self._layout_view = QTextEdit()
+        self._layout_view.setReadOnly(True)
+        self._layout_view.setFont(_tw_font)
+        self._layout_view.setStyleSheet(
+            f"QTextEdit{{background:{CP['bg0']};border:none;"
+            f"color:{CP['text_primary']};padding:32px 60px;}}"
+        )
+        self._layout_view.setPlaceholderText(translate(
+            "Clique « Mise en page PANDORA » (panneau de droite) pour générer ici la "
+            "version optimisée pour les moteurs : plans découpés + prompts prêts pour Seedance. "
+            "Ton conducteur, lui, reste intact dans l'onglet Conducteur."
+        ))
+        self._editor_tabs.addTab(self._layout_view, translate("Mise en page PANDORA"))
+        self._editor_tabs.setTabEnabled(1, False)   # grisé tant qu'aucune mise en page
+
+        main.addWidget(self._editor_tabs, 1)
 
         # Right panel
         right_sep = QFrame()
@@ -544,6 +564,24 @@ class PageScenario(QWidget):
         self._on_dur_defined_toggled(False)  # non défini par défaut
 
         sl.addStretch()
+
+        # ── Mode du conducteur : Live / Mapping (calibre toutes les actions Claude) ──
+        # Placés en haut à droite, dans le même encart que « Durée cible »,
+        # au-dessus de la section « Références visuelles » du panneau droit.
+        _mode_lbl = QLabel(translate("Mode :"))
+        _mode_lbl.setStyleSheet(
+            f"color:{CP['text_dim']};font-size:10px;font-weight:600;"
+            f"letter-spacing:0.5px;background:transparent;"
+        )
+        sl.addWidget(_mode_lbl)
+        self._btn_mode_live    = self._make_mode_btn("Live")
+        self._btn_mode_mapping = self._make_mode_btn("Mapping")
+        self._btn_mode_live.clicked.connect(lambda: self._set_live_mode("live"))
+        self._btn_mode_mapping.clicked.connect(lambda: self._set_live_mode("mapping"))
+        sl.addWidget(self._btn_mode_live)
+        sl.addWidget(self._btn_mode_mapping)
+        self._apply_mode_style()
+
         return strip
 
     def _build_right_panel(self):
@@ -677,6 +715,65 @@ class PageScenario(QWidget):
         sc_lay.addWidget(c_refs)
 
         self._refresh_refs_display()
+
+        # ── Section 0ter : Référence bâtiment (façade) ────────────────────────
+        # Image de la façade pour le mapping. Réutilisée par la génération des
+        # moods en Séquence Mapping (Flux Kontext édite la façade).
+        c_bld, l_bld = _section_container()
+        self._bld_row = QVBoxLayout()
+        self._bld_row.setContentsMargins(0, 0, 0, 0)
+        self._bld_row.setSpacing(6)
+        l_bld.addLayout(self._bld_row)
+        _bld_hint = QLabel(translate(
+            "Image de la façade projetée. En Séquence Mapping, les moods sont générés "
+            "SUR cette façade (sa géométrie est conservée)."))
+        _bld_hint.setWordWrap(True)
+        _bld_hint.setStyleSheet(
+            f"color:{CP['text_dim']};font-size:9px;background:transparent;border:none;")
+        l_bld.addWidget(_bld_hint)
+
+        tog_bld = _make_toggle("▦  Référence bâtiment (façade)", c_bld, expanded=False)
+        sc_lay.addWidget(tog_bld)
+        sc_lay.addWidget(c_bld)
+
+        self._refresh_building_display()
+
+        # ── Section 0bis : Musiques du set ────────────────────────────────────
+        # Fonctionne comme les références visuelles, mais on y ajoute des morceaux.
+        # librosa analyse BPM + énergie + drops → timeline injectée dans Claude.
+        c_music, l_music = _section_container()
+
+        _music_scroll = QScrollArea()
+        _music_scroll.setFixedHeight(76)
+        _music_scroll.setWidgetResizable(True)
+        _music_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
+        _music_scroll.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        _music_scroll.setStyleSheet(
+            "QScrollArea{border:none;background:transparent;}"
+            f"QScrollBar:horizontal{{background:{CP['bg2']};height:3px;border-radius:2px;}}"
+            f"QScrollBar::handle:horizontal{{background:{CP['border_bright']};border-radius:2px;}}"
+            f"QScrollBar::add-line:horizontal, QScrollBar::sub-line:horizontal{{width:0;}}"
+        )
+        self._music_container_w = QWidget()
+        self._music_container_w.setStyleSheet(f"background:{CP['bg2']};border-radius:8px;")
+        self._music_hbox = QHBoxLayout(self._music_container_w)
+        self._music_hbox.setContentsMargins(8, 8, 8, 8)
+        self._music_hbox.setSpacing(8)
+        _music_scroll.setWidget(self._music_container_w)
+        l_music.addWidget(_music_scroll)
+
+        self._btn_analyze_music = _ai_btn(
+            "♫", "Analyser le set (BPM + drops)",
+            "Cale le découpage sur la musique (tempo + temps forts)",
+            self._on_analyze_music,
+        )
+        l_music.addWidget(self._btn_analyze_music)
+
+        tog_music = _make_toggle("♫  Musiques du set", c_music, expanded=False)
+        sc_lay.addWidget(tog_music)
+        sc_lay.addWidget(c_music)
+
+        self._refresh_music_display()
 
         # ── Section 1 : Claude IA ─────────────────────────────────────────────
         c_ia, l_ia = _section_container()
@@ -958,6 +1055,13 @@ class PageScenario(QWidget):
         self._film_style_combo.setCurrentIndex(idx if idx > 0 else 0)
         self._live_mode = sc.get("live_mode", "live")
         self._apply_mode_style()
+        _layout = sc.get("layout_content", "")
+        self._layout_view.setPlainText(_layout)
+        self._editor_tabs.setCurrentIndex(0)
+        self._editor_tabs.setTabEnabled(1, bool(_layout.strip()))
+        _mt = sc.get("music_tracks", [])
+        self._music_tracks = list(_mt) if isinstance(_mt, list) else []
+        self._refresh_music_display()
         self._refresh_version_combo()
         self._go_editor()
 
@@ -1096,6 +1200,8 @@ class PageScenario(QWidget):
             "duration_defined":  dur_defined,
             "film_style":        film_style_key if film_style_key not in ("", "__sep__") else "",
             "live_mode":         self._live_mode,
+            "layout_content":    self._layout_view.toPlainText(),
+            "music_tracks":      self._music_tracks,
         })
         self._current = scenario_api.save_scenario(data)
         if not silent:
@@ -1180,6 +1286,530 @@ class PageScenario(QWidget):
                 f"{len(self._ref_images)} image(s) ajoutée(s) — clique « Analyser » pour enrichir le prompt."
             )
 
+    # ── Musiques du set ──────────────────────────────────────────────────────
+
+    def _refresh_music_display(self):
+        while self._music_hbox.count():
+            item = self._music_hbox.takeAt(0)
+            if item.widget():
+                item.widget().deleteLater()
+        btn_add = QPushButton("+")
+        btn_add.setFixedSize(60, 60)
+        btn_add.setCursor(Qt.CursorShape.PointingHandCursor)
+        btn_add.setToolTip(translate(
+            "Ajouter des morceaux (mp3/wav…)\nClaude calera le découpage sur leur BPM et leurs drops."))
+        btn_add.setStyleSheet(f"""
+            QPushButton{{
+                background:transparent;color:{CP['text_dim']};
+                border:1px dashed {CP['border_bright']};border-radius:8px;
+                font-size:24px;font-weight:300;padding:0;
+            }}
+            QPushButton:hover{{color:{CP['accent']};border-color:{CP['accent']};
+                background:rgba(78,205,196,0.08);}}
+            QPushButton:pressed{{background:rgba(78,205,196,0.16);}}
+        """)
+        btn_add.clicked.connect(self._on_add_music)
+        self._music_hbox.addWidget(btn_add)
+        for i, t in enumerate(self._music_tracks):
+            self._music_hbox.addWidget(self._make_music_chip(i, t))
+        self._music_hbox.addStretch()
+
+    def _make_music_chip(self, index: int, track: dict) -> QWidget:
+        container = QWidget()
+        container.setFixedSize(132, 60)
+        container.setStyleSheet(
+            f"background:{CP['bg3']};border:1px solid {CP['border']};border-radius:8px;")
+        lay = QVBoxLayout(container)
+        lay.setContentsMargins(8, 6, 8, 6)
+        lay.setSpacing(1)
+        name = track.get("name", "?")
+        short = name if len(name) <= 16 else name[:15] + "…"
+        name_lbl = QLabel("♫ " + short)
+        name_lbl.setToolTip(name)
+        name_lbl.setStyleSheet(
+            f"color:{CP['text_primary']};font-size:9px;font-weight:700;"
+            "background:transparent;border:none;")
+        bpm = track.get("bpm", 0)
+        if bpm:
+            info = f"{bpm:.0f} BPM · {int(track.get('duration',0)//60)}:{int(track.get('duration',0)%60):02d}  ✎"
+            info_color = CP["accent"]
+        else:
+            info = translate("non analysé") + "  ✎"
+            info_color = CP["text_dim"]
+        info_btn = QPushButton(info)
+        info_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        info_btn.setToolTip(translate("Corriger le BPM (tap-tempo, ÷2 / ×2)"))
+        info_btn.setStyleSheet(
+            f"QPushButton{{color:{info_color};font-size:8px;font-weight:700;"
+            f"background:transparent;border:none;text-align:left;padding:0;}}"
+            f"QPushButton:hover{{color:{CP['accent']};}}")
+        info_btn.clicked.connect(lambda checked=False, i=index: self._edit_bpm(i))
+        energy = track.get("energy", "")
+        en_lbl = QLabel(energy[:16] if energy else "")
+        en_lbl.setStyleSheet(
+            f"color:{CP['text_dim']};font-size:8px;background:transparent;border:none;")
+        lay.addWidget(name_lbl)
+        lay.addWidget(info_btn)
+        lay.addWidget(en_lbl)
+        btn_rm = QPushButton("✕", container)
+        btn_rm.setGeometry(114, 2, 16, 16)
+        btn_rm.setCursor(Qt.CursorShape.PointingHandCursor)
+        btn_rm.setStyleSheet(
+            f"QPushButton{{background:{CP['bg2']};color:{CP['text_primary']};"
+            f"border:1px solid {CP['border_bright']};border-radius:3px;"
+            f"font-size:9px;font-weight:700;padding:0;}}"
+            f"QPushButton:hover{{background:{CP['red']};color:#fff;border-color:{CP['red']};}}"
+        )
+        btn_rm.clicked.connect(lambda checked=False, i=index: self._remove_music(i))
+        return container
+
+    def _remove_music(self, index: int):
+        if 0 <= index < len(self._music_tracks):
+            self._music_tracks.pop(index)
+            self._refresh_music_display()
+            self._save(silent=True)
+
+    def _edit_bpm(self, index: int):
+        """Correction manuelle du BPM : spinbox + ÷2 / ×2 (erreurs d'octave) + tap-tempo.
+        librosa confond parfois 64↔128 BPM → indispensable pour le calage Resolume."""
+        if not (0 <= index < len(self._music_tracks)):
+            return
+        import time
+        from PyQt6.QtWidgets import (
+            QDialog, QVBoxLayout, QHBoxLayout, QLabel, QDoubleSpinBox, QPushButton,
+        )
+        track = self._music_tracks[index]
+        dlg = QDialog(self)
+        dlg.setWindowTitle(translate("Corriger le BPM"))
+        dlg.setFixedWidth(360)
+        dlg.setStyleSheet(f"QDialog{{background:{CP['bg1']};}}")
+        lay = QVBoxLayout(dlg)
+        lay.setContentsMargins(20, 18, 20, 18)
+        lay.setSpacing(12)
+
+        head = QLabel("♫ " + track.get("name", "?"))
+        head.setStyleSheet(
+            f"color:{CP['text_primary']};font-size:12px;font-weight:700;background:transparent;")
+        head.setWordWrap(True)
+        lay.addWidget(head)
+
+        row = QHBoxLayout()
+        row.setSpacing(8)
+        spin = QDoubleSpinBox()
+        spin.setRange(30.0, 300.0)
+        spin.setDecimals(1)
+        spin.setSingleStep(0.5)
+        spin.setValue(float(track.get("bpm", 0) or 120.0))
+        spin.setSuffix(" BPM")
+        spin.setStyleSheet(
+            f"QDoubleSpinBox{{background:{CP['bg2']};color:{CP['text_primary']};"
+            f"border:1px solid {CP['border']};border-radius:6px;padding:6px 8px;font-size:13px;}}")
+        row.addWidget(spin, 1)
+
+        def _mk(txt, fn):
+            b = QPushButton(txt)
+            b.setFixedSize(44, 34)
+            b.setCursor(Qt.CursorShape.PointingHandCursor)
+            b.setStyleSheet(
+                f"QPushButton{{background:{CP['bg2']};color:{CP['text_secondary']};"
+                f"border:1px solid {CP['border']};border-radius:6px;font-size:11px;font-weight:700;}}"
+                f"QPushButton:hover{{background:{CP['bg3']};color:{CP['text_primary']};"
+                f"border-color:{CP['border_bright']};}}")
+            b.clicked.connect(fn)
+            return b
+        row.addWidget(_mk("÷2", lambda: spin.setValue(round(spin.value() / 2, 1))))
+        row.addWidget(_mk("×2", lambda: spin.setValue(round(spin.value() * 2, 1))))
+        lay.addLayout(row)
+
+        # ── Tap-tempo ─────────────────────────────────────────────────────────
+        taps: list = []
+        tap_lbl = QLabel(translate("Tape en rythme sur la musique…"))
+        tap_lbl.setStyleSheet(f"color:{CP['text_dim']};font-size:9px;background:transparent;")
+        btn_tap = QPushButton(translate("⊙  Tap tempo"))
+        btn_tap.setFixedHeight(40)
+        btn_tap.setCursor(Qt.CursorShape.PointingHandCursor)
+        btn_tap.setStyleSheet(
+            f"QPushButton{{background:transparent;color:{CP['accent']};"
+            f"border:1px solid {CP['accent_dim']};border-radius:7px;font-size:12px;font-weight:700;}}"
+            f"QPushButton:hover{{background:rgba(78,205,196,0.10);}}"
+            f"QPushButton:pressed{{background:rgba(78,205,196,0.20);}}")
+
+        def _on_tap():
+            t = time.perf_counter()
+            if taps and (t - taps[-1]) > 2.0:
+                taps.clear()   # pause trop longue → on repart
+            taps.append(t)
+            if len(taps) > 8:
+                del taps[0]
+            if len(taps) >= 2:
+                intervals = [taps[i + 1] - taps[i] for i in range(len(taps) - 1)]
+                avg = sum(intervals) / len(intervals)
+                if avg > 0:
+                    val = 60.0 / avg
+                    spin.setValue(round(val, 1))
+                    tap_lbl.setText(f"{len(taps)} taps → {val:.1f} BPM")
+            else:
+                tap_lbl.setText(translate("Continue à taper…"))
+        btn_tap.clicked.connect(_on_tap)
+        lay.addWidget(btn_tap)
+        lay.addWidget(tap_lbl)
+
+        # ── Boutons ───────────────────────────────────────────────────────────
+        brow = QHBoxLayout()
+        brow.setSpacing(8)
+        brow.addStretch()
+        btn_cancel = QPushButton(translate("Annuler"))
+        btn_cancel.setFixedHeight(34)
+        btn_cancel.setStyleSheet(
+            f"QPushButton{{background:transparent;color:{CP['text_secondary']};"
+            f"border:1px solid {CP['border']};border-radius:7px;font-size:11px;font-weight:700;padding:0 16px;}}"
+            f"QPushButton:hover{{background:{CP['bg2']};color:{CP['text_primary']};}}")
+        btn_cancel.clicked.connect(dlg.reject)
+        btn_ok = QPushButton(translate("Valider"))
+        btn_ok.setFixedHeight(34)
+        btn_ok.setStyleSheet(
+            f"QPushButton{{background:{CP['accent']};color:#07080f;border:none;"
+            f"border-radius:7px;font-size:11px;font-weight:700;padding:0 18px;}}"
+            f"QPushButton:hover{{background:#6eded6;}}")
+        btn_ok.clicked.connect(dlg.accept)
+        brow.addWidget(btn_cancel)
+        brow.addWidget(btn_ok)
+        lay.addLayout(brow)
+
+        if dlg.exec() == QDialog.DialogCode.Accepted:
+            track["bpm"] = round(spin.value(), 1)
+            self._refresh_music_display()
+            self._save(silent=True)
+            self._ai_progress_lbl.setText(
+                f"BPM ← {track['bpm']:.0f} — {track.get('name','')}")
+
+    def _on_add_music(self):
+        paths, _ = QFileDialog.getOpenFileNames(
+            self, translate("Ajouter des morceaux"), "",
+            "Audio (*.mp3 *.wav *.flac *.ogg *.m4a *.aac);;Tous les fichiers (*)",
+        )
+        existing = {t.get("path") for t in self._music_tracks}
+        added = 0
+        for p in paths:
+            if p and p not in existing:
+                self._music_tracks.append({
+                    "path": p, "name": os.path.basename(p),
+                    "bpm": 0, "duration": 0, "energy": "", "drops": [],
+                })
+                added += 1
+        if added:
+            self._refresh_music_display()
+            self._save(silent=True)
+            self._ai_progress_lbl.setText(translate(
+                "Morceau(x) ajouté(s) — clique « Analyser le set » pour détecter BPM et drops."))
+
+    def _on_analyze_music(self):
+        if not self._music_tracks:
+            self._ai_progress_lbl.setText(translate(
+                "Ajoute d'abord des morceaux dans « Musiques du set »."))
+            return
+        from core.music_analysis import AnalyzeMusicWorker
+        self._ai_progress_lbl.setText(translate("Analyse audio en cours (BPM + drops)…"))
+        self._music_worker = AnalyzeMusicWorker(self._music_tracks)
+        self._open_music_analysis_window(self._music_worker)
+
+    def _open_music_analysis_window(self, worker):
+        """Fenêtre d'analyse musicale (comme l'arrangement Claude) : progression
+        visible + prévisualisation de la timeline + choix Appliquer / Annuler."""
+        from PyQt6.QtWidgets import (
+            QDialog, QVBoxLayout, QHBoxLayout, QTextEdit, QProgressBar, QPushButton,
+        )
+        dlg = QDialog(self)
+        dlg.setWindowTitle(translate("Analyse musicale du set"))
+        dlg.resize(720, 600)
+        dlg.setStyleSheet(
+            f"QDialog{{background:{CP['bg1']};}}"
+            f"QLabel{{background:transparent;color:{CP['text_primary']};}}")
+        lay = QVBoxLayout(dlg)
+        lay.setContentsMargins(22, 20, 22, 20)
+        lay.setSpacing(12)
+
+        hdr = QHBoxLayout()
+        title_lbl = QLabel("♫  " + translate("Analyse musicale du set"))
+        title_lbl.setStyleSheet(f"color:{CP['text_primary']};font-size:14px;font-weight:700;")
+        status_lbl = QLabel(translate("Analyse en cours…"))
+        status_lbl.setStyleSheet(
+            f"color:{CP['accent']};font-size:10px;font-family:'Consolas',monospace;")
+        hdr.addWidget(title_lbl)
+        hdr.addStretch()
+        hdr.addWidget(status_lbl)
+        lay.addLayout(hdr)
+
+        bar = QProgressBar()
+        bar.setRange(0, 0)   # indéterminé jusqu'au 1er morceau
+        bar.setTextVisible(False)
+        bar.setFixedHeight(5)
+        bar.setStyleSheet(
+            f"QProgressBar{{background:{CP['bg3']};border:none;border-radius:2px;}}"
+            f"QProgressBar::chunk{{background:{CP['accent']};border-radius:2px;}}")
+        lay.addWidget(bar)
+
+        te = QTextEdit()
+        te.setReadOnly(True)
+        te.setPlaceholderText(translate("L'analyse apparaît au fil de l'écoute…"))
+        te.setStyleSheet(
+            f"QTextEdit{{background:{CP['bg2']};border:1px solid {CP['border']};"
+            f"border-radius:8px;color:{CP['text_primary']};font-size:11px;"
+            f"font-family:'Consolas',monospace;padding:14px;}}")
+        lay.addWidget(te, 1)
+
+        btn_row = QHBoxLayout()
+        btn_row.setSpacing(8)
+        btn_cancel = QPushButton(translate("Annuler"))
+        btn_cancel.setFixedHeight(36)
+        btn_cancel.setStyleSheet(
+            f"QPushButton{{background:{CP['bg3']};color:{CP['red']};"
+            f"border:1px solid {CP['red']};border-radius:7px;font-size:11px;font-weight:600;padding:0 20px;}}"
+            f"QPushButton:hover{{background:rgba(255,79,106,0.12);}}")
+        btn_apply = QPushButton(translate("✓  Appliquer l'analyse"))
+        btn_apply.setFixedHeight(36)
+        btn_apply.setEnabled(False)
+        btn_apply.setStyleSheet(
+            f"QPushButton{{background:{CP['accent']};color:#07080f;border:none;"
+            f"border-radius:7px;font-size:11px;font-weight:700;padding:0 22px;}}"
+            f"QPushButton:hover{{background:#6eded6;}}"
+            f"QPushButton:disabled{{background:{CP['bg3']};color:{CP['text_dim']};"
+            f"border:1px solid {CP['border']};}}")
+        btn_row.addWidget(btn_cancel)
+        btn_row.addStretch()
+        btn_row.addWidget(btn_apply)
+        lay.addLayout(btn_row)
+
+        _pending = [None]
+        _active  = [True]
+
+        def _stop():
+            if _active[0]:
+                _active[0] = False
+                worker.quit()
+                abandon_thread(worker)
+
+        def _mmss(s):
+            s = max(0, int(s))
+            return f"{s // 60}:{s % 60:02d}"
+
+        def _on_prog(i, total, name):
+            if not _active[0]:
+                return
+            bar.setRange(0, total)
+            bar.setValue(i)
+            status_lbl.setText(f"{i}/{total}")
+            te.append(f"[{i}/{total}] {name} — {translate('analyse…')}")
+
+        def _on_done(tracks):
+            _active[0] = False
+            _pending[0] = tracks
+            bar.setRange(0, 100)
+            bar.setValue(100)
+            status_lbl.setText(translate("Analyse terminée"))
+            status_lbl.setStyleSheet(
+                f"color:{CP['green']};font-size:10px;font-family:'Consolas',monospace;")
+            from core.music_analysis import build_set_timeline
+            lines = []
+            for t in tracks:
+                if t.get("bpm"):
+                    lines.append(f"♫ {t.get('name','?')} — {t['bpm']:.0f} BPM · "
+                                 f"{_mmss(t.get('duration', 0))}")
+                    if t.get("energy"):
+                        lines.append(f"   {translate('énergie')} {t['energy']}")
+                    drops = t.get("drops", [])
+                    if drops:
+                        lines.append("   drops: " + ", ".join(_mmss(d) for d in drops))
+                else:
+                    lines.append(f"♫ {t.get('name','?')} — {translate('non analysé')}")
+                lines.append("")
+            tl = build_set_timeline(tracks)
+            te.setPlainText("\n".join(lines) + (("\n" + tl) if tl else ""))
+            btn_apply.setEnabled(True)
+            btn_apply.setFocus()
+
+        def _on_fail(msg):
+            _active[0] = False
+            status_lbl.setText(translate("Erreur"))
+            status_lbl.setStyleSheet(
+                f"color:{CP['red']};font-size:10px;font-family:'Consolas',monospace;")
+            bar.setRange(0, 100)
+            bar.setValue(0)
+            te.setPlainText(f"{translate('Erreur')} : {msg}")
+
+        def _apply():
+            if _pending[0] is not None:
+                self._music_tracks = _pending[0]
+                self._refresh_music_display()
+                self._save(silent=True)
+                n = sum(1 for t in _pending[0] if t.get("bpm"))
+                self._ai_progress_lbl.setText(
+                    f"{n} " + translate("morceau(x) analysé(s) — timeline musicale prête ✓"))
+            dlg.accept()
+
+        def _cancel():
+            _stop()
+            self._ai_progress_lbl.setText(translate("Analyse musicale annulée."))
+            dlg.reject()
+
+        btn_cancel.clicked.connect(_cancel)
+        btn_apply.clicked.connect(_apply)
+        dlg.rejected.connect(_stop)
+
+        worker.progress.connect(_on_prog)
+        worker.finished.connect(_on_done)
+        worker.failed.connect(_on_fail)
+        worker.start()
+        dlg.exec()
+
+    def _text_with_music(self) -> str:
+        """Conducteur + timeline musicale (si analysée) à injecter dans Claude."""
+        text = self._get_text()
+        from core.music_analysis import build_set_timeline
+        timeline = build_set_timeline(self._music_tracks)
+        return (timeline + "\n\n" + text) if timeline else text
+
+    # ── Référence bâtiment (façade) ───────────────────────────────────────────
+
+    def _refresh_building_display(self):
+        while self._bld_row.count():
+            item = self._bld_row.takeAt(0)
+            if item.widget():
+                item.widget().deleteLater()
+        from core.live_building import get_building_ref
+        path = get_building_ref()
+        if path and os.path.isfile(path):
+            # Vignette (centrée) avec ✕ de suppression en incrustation
+            thumb_row = QWidget()
+            thumb_row.setStyleSheet("background:transparent;")
+            _tr = QHBoxLayout(thumb_row)
+            _tr.setContentsMargins(0, 0, 0, 0)
+            _tr.addStretch()
+            thumb = QWidget()
+            thumb.setFixedSize(160, 84)
+            lbl = QLabel(thumb)
+            lbl.setGeometry(0, 0, 160, 84)
+            lbl.setStyleSheet("border-radius:6px;")
+            pix = QPixmap(path)
+            if not pix.isNull():
+                pix = pix.scaled(160, 84, Qt.AspectRatioMode.KeepAspectRatioByExpanding,
+                                 Qt.TransformationMode.SmoothTransformation)
+                lbl.setPixmap(pix)
+            btn_rm = QPushButton("✕", thumb)
+            btn_rm.setGeometry(142, 2, 16, 16)
+            btn_rm.setCursor(Qt.CursorShape.PointingHandCursor)
+            btn_rm.setStyleSheet(
+                f"QPushButton{{background:{CP['bg3']};color:{CP['text_primary']};"
+                f"border:1px solid {CP['border_bright']};border-radius:3px;"
+                f"font-size:9px;font-weight:700;padding:0;}}"
+                f"QPushButton:hover{{background:{CP['red']};color:#fff;border-color:{CP['red']};}}")
+            btn_rm.clicked.connect(self._on_clear_building)
+            _tr.addWidget(thumb)
+            _tr.addStretch()
+            self._bld_row.addWidget(thumb_row)
+
+            # Boutons sous la vignette (libellés courts, tooltips détaillés)
+            btns = QWidget()
+            btns.setStyleSheet("background:transparent;")
+            _bl = QHBoxLayout(btns)
+            _bl.setContentsMargins(0, 0, 0, 0)
+            _bl.setSpacing(6)
+            btn_chg = QPushButton(translate("Remplacer"))
+            btn_chg.setFixedHeight(28)
+            btn_chg.setCursor(Qt.CursorShape.PointingHandCursor)
+            btn_chg.setStyleSheet(
+                f"QPushButton{{background:transparent;color:{CP['text_secondary']};"
+                f"border:1px solid {CP['border']};border-radius:6px;font-size:10px;"
+                f"font-weight:600;padding:0 10px;}}"
+                f"QPushButton:hover{{color:{CP['text_primary']};border-color:{CP['border_bright']};}}")
+            btn_chg.clicked.connect(self._on_pick_building)
+            self._btn_isolate = QPushButton("◐  " + translate("Isoler (fond noir)"))
+            self._btn_isolate.setFixedHeight(28)
+            self._btn_isolate.setCursor(Qt.CursorShape.PointingHandCursor)
+            self._btn_isolate.setToolTip(translate(
+                "Détoure le bâtiment (BiRefNet) et le place sur fond noir pur — "
+                "supprime les bâtiments et objets voisins."))
+            self._btn_isolate.setStyleSheet(
+                f"QPushButton{{background:transparent;color:{CP['accent']};"
+                f"border:1px solid {CP['accent_dim']};border-radius:6px;font-size:10px;"
+                f"font-weight:700;padding:0 10px;}}"
+                f"QPushButton:hover{{background:rgba(78,205,196,0.10);}}")
+            self._btn_isolate.clicked.connect(self._on_isolate_building)
+            _bl.addWidget(btn_chg, 1)
+            _bl.addWidget(self._btn_isolate, 1)
+            self._bld_row.addWidget(btns)
+        else:
+            btn_add = QPushButton("▦  " + translate("Choisir la façade"))
+            btn_add.setFixedHeight(60)
+            btn_add.setCursor(Qt.CursorShape.PointingHandCursor)
+            btn_add.setStyleSheet(
+                f"QPushButton{{background:transparent;color:{CP['text_dim']};"
+                f"border:1px dashed {CP['border_bright']};border-radius:8px;"
+                f"font-size:11px;font-weight:600;padding:0 14px;}}"
+                f"QPushButton:hover{{color:{CP['accent']};border-color:{CP['accent']};"
+                f"background:rgba(78,205,196,0.08);}}")
+            btn_add.clicked.connect(self._on_pick_building)
+            self._bld_row.addWidget(btn_add)
+
+    def _on_pick_building(self):
+        path, _ = QFileDialog.getOpenFileName(
+            self, translate("Choisir la façade du bâtiment"), "",
+            "Images (*.png *.jpg *.jpeg *.webp *.bmp);;Tous les fichiers (*)")
+        if path:
+            from core.live_building import set_building_ref
+            set_building_ref(path)
+            self._refresh_building_display()
+            self._ai_progress_lbl.setText(translate("Façade enregistrée ✓"))
+
+    def _on_clear_building(self):
+        from core.live_building import clear_building_ref
+        clear_building_ref()
+        self._refresh_building_display()
+
+    def _on_isolate_building(self):
+        """Détoure le bâtiment (BiRefNet) puis le composite sur fond NOIR pur."""
+        from core.live_building import get_building_ref
+        src = get_building_ref()
+        if not src or not os.path.isfile(src):
+            return
+        from api.tts import RemoveBackgroundWorker
+        from core.context import get_data_root
+        if hasattr(self, "_btn_isolate"):
+            self._btn_isolate.setEnabled(False)
+        self._ai_progress_lbl.setText(translate("Détourage de la façade (BiRefNet)…"))
+        self._isolate_worker = RemoveBackgroundWorker(src, out_dir=get_data_root())
+        self._isolate_worker.failed.connect(self._on_isolate_failed)
+        self._isolate_worker.finished.connect(self._on_isolate_done)
+        self._isolate_worker.start()
+
+    def _on_isolate_done(self, png_path: str):
+        if hasattr(self, "_btn_isolate"):
+            self._btn_isolate.setEnabled(True)
+        if not png_path or not os.path.isfile(png_path):
+            # mode mock (aucune clé) — rien à composer
+            self._ai_progress_lbl.setText(translate(
+                "Détourage indisponible (mode démo — renseigne la clé fal.ai)."))
+            return
+        try:
+            from PIL import Image
+            from core.context import get_data_root
+            img = Image.open(png_path).convert("RGBA")
+            bg = Image.new("RGBA", img.size, (0, 0, 0, 255))
+            bg.alpha_composite(img)
+            out = os.path.join(get_data_root(), "facade_fond_noir.jpg")
+            bg.convert("RGB").save(out, "JPEG", quality=92)
+            from core.live_building import set_building_ref
+            set_building_ref(out)
+            self._refresh_building_display()
+            self._ai_progress_lbl.setText(translate("Façade isolée sur fond noir ✓"))
+        except Exception as e:
+            self._ai_progress_lbl.setText(f"{translate('Erreur')} : {e}")
+
+    def _on_isolate_failed(self, msg: str):
+        if hasattr(self, "_btn_isolate"):
+            self._btn_isolate.setEnabled(True)
+        self._ai_progress_lbl.setText(f"{translate('Erreur')} : {msg[:120]}")
+
     def _on_analyze_refs(self):
         if not self._ref_images:
             self._ai_progress_lbl.setText("Ajoute d'abord des images dans la section Références visuelles.")
@@ -1219,46 +1849,44 @@ class PageScenario(QWidget):
         self._set_ai_busy(True)
         self._ai_progress_lbl.setText(translate("Mise en page du conducteur via Claude…"))
         self._btn_reopen_window.setVisible(False)
-        self._btn_undo_action.setVisible(False)
-        self._result_area.clear()
-        self._result_area.setVisible(False)
-        self._worker = FormatConducteurWorker(text, self._live_mode)
-        self._worker.finished.connect(self._on_conducteur_text_result)
+        dur_secs = (self._dur_min.value() * 60 + self._dur_sec.value()) if self._dur_defined_check.isChecked() else 0
+        # Fenêtre d'aperçu en streaming (comme l'arrangement) ; l'« Appliquer »
+        # écrit le résultat dans l'onglet « Mise en page PANDORA » (Conducteur intact).
+        self._worker = FormatConducteurWorker(self._text_with_music(), self._live_mode, dur_secs)
         self._worker.failed.connect(self._on_ai_fail)
-        self._worker.start()
+        self._open_format_window(worker=self._worker)
 
-    def _on_conducteur_text_result(self, new_text: str):
-        """Résultat d'une action Claude qui réécrit le conducteur (mise en page / arrangement)."""
-        self._set_ai_busy(False)
-        if not new_text:
+    def _apply_layout(self, layout_text: str):
+        """Écrit la mise en page dans l'onglet dédié (le Conducteur reste intact)."""
+        if not layout_text:
             return
-        try:
-            self._undo_stack.append(self._get_text())
-        except Exception:
-            pass
-        self._set_editor_text(new_text)
+        self._layout_view.setPlainText(layout_text)
+        self._editor_tabs.setTabEnabled(1, True)
+        self._editor_tabs.setCurrentIndex(1)
         try:
             self._save(silent=True)
         except Exception:
             pass
-        self._ai_progress_lbl.setText(translate("Conducteur mis à jour par Claude ✓"))
+        self._ai_progress_lbl.setText(translate("Mise en page PANDORA générée ✓"))
 
     def _on_arrange(self):
         text = self._get_text()
         if not text:
             self._ai_progress_lbl.setText(translate("Écris d'abord un texte à analyser."))
             return
-        from api.live_extract import ArrangeConducteurWorker
+        # Conducteur Live : on garde la FENÊTRE de co-écriture (comme Cinéma),
+        # calibrée Live/Mapping via le worker streaming.
+        from api.live_screenplay import ArrangeConducteurStreamWorker
         self._set_ai_busy(True)
-        self._ai_progress_lbl.setText(translate("Arrangement du conducteur via Claude…"))
+        self._ai_progress_lbl.setText(translate("Analyse en cours via Claude…"))
         self._btn_reopen_window.setVisible(False)
         self._btn_undo_action.setVisible(False)
         self._result_area.clear()
         self._result_area.setVisible(False)
-        self._worker = ArrangeConducteurWorker(text, self._live_mode)
-        self._worker.finished.connect(self._on_conducteur_text_result)
+        dur_secs = (self._dur_min.value() * 60 + self._dur_sec.value()) if self._dur_defined_check.isChecked() else 0
+        self._worker = ArrangeConducteurStreamWorker(self._text_with_music(), self._live_mode, dur_secs)
         self._worker.failed.connect(self._on_ai_fail)
-        self._worker.start()
+        self._open_arrange_window(worker=self._worker)
 
     def _on_modify_arrange(self):
         original    = self._get_text()
@@ -1289,8 +1917,8 @@ class PageScenario(QWidget):
         self._btn_undo_action.setVisible(True)
 
     def _on_storyboard(self):
-        # Conducteur Live : « Générer le découpage » → découpe calibrée Live/Mapping,
-        # écrite dans la séquence correspondante (namespace live_seq_*).
+        # Conducteur Live : « Générer le découpage » → fenêtre d'aperçu, puis
+        # « Appliquer » écrit les plans dans la séquence (namespace live_seq_*).
         text = self._get_text()
         if not text:
             self._ai_progress_lbl.setText(translate("Écris d'abord un conducteur à découper."))
@@ -1298,13 +1926,12 @@ class PageScenario(QWidget):
         from api.live_screenplay import GenerateDecoupageWorker
         self._set_ai_busy(True)
         self._ai_progress_lbl.setText(translate("Génération du découpage via Claude…"))
-        self._worker = GenerateDecoupageWorker(text, self._live_mode)
-        self._worker.finished.connect(self._on_decoupage_done)
-        self._worker.failed.connect(self._on_ai_fail)
-        self._worker.start()
+        self._btn_reopen_window.setVisible(False)
+        self._worker = GenerateDecoupageWorker(self._text_with_music(), self._live_mode)
+        self._open_decoupage_window(self._worker)
 
-    def _on_decoupage_done(self, segments: list):
-        self._set_ai_busy(False)
+    def _apply_decoupage(self, segments: list):
+        """Écrit les segments dans la séquence Live/Mapping et y navigue."""
         import core.storyboard as _sb
         _sb.set_namespace(f"live_seq_{self._live_mode}")
         _sb.clear_version_shots(_sb.DEFAULT_VERSION_ID)
@@ -1318,11 +1945,148 @@ class PageScenario(QWidget):
                 "camera_movement": seg.get("camera_movement", ""),
                 "duration":        seg.get("duration", 5),
                 "seedance_prompt": seg.get("prompt", ""),
+                "sound_prompt":    seg.get("sound_prompt", ""),
+                "seq_num":         seg.get("act", 1),
+                "seq_name":        seg.get("act_name", ""),
             }, _sb.DEFAULT_VERSION_ID)
         seq_name = translate("Séquences Mapping") if self._live_mode == "mapping" else translate("Séquences Live")
         self._ai_progress_lbl.setText(f"✓  {len(segments)} " + translate("segments générés →") + f" {seq_name}")
         self.navigate_requested.emit(
             "seq_mapping" if self._live_mode == "mapping" else "seq_live", "")
+
+    def _open_decoupage_window(self, worker):
+        """Fenêtre d'aperçu du découpage : génération → prévisualisation des plans →
+        choix Appliquer (écrit dans la séquence) / Annuler."""
+        from PyQt6.QtWidgets import (
+            QDialog, QVBoxLayout, QHBoxLayout, QTextEdit, QProgressBar, QPushButton,
+        )
+        dlg = QDialog(self)
+        dlg.setWindowTitle(translate("Découpage — Aperçu"))
+        dlg.resize(820, 640)
+        dlg.setStyleSheet(
+            f"QDialog{{background:{CP['bg1']};}}"
+            f"QLabel{{background:transparent;color:{CP['text_primary']};}}")
+        lay = QVBoxLayout(dlg)
+        lay.setContentsMargins(22, 20, 22, 20)
+        lay.setSpacing(12)
+
+        hdr = QHBoxLayout()
+        title_lbl = QLabel("▤  " + translate("Découpage — Aperçu"))
+        title_lbl.setStyleSheet(f"color:{CP['text_primary']};font-size:14px;font-weight:700;")
+        status_lbl = QLabel(translate("Découpage en cours…"))
+        status_lbl.setStyleSheet(
+            f"color:{CP['accent']};font-size:10px;font-family:'Consolas',monospace;")
+        hdr.addWidget(title_lbl)
+        hdr.addStretch()
+        hdr.addWidget(status_lbl)
+        lay.addLayout(hdr)
+
+        bar = QProgressBar()
+        bar.setRange(0, 0)
+        bar.setTextVisible(False)
+        bar.setFixedHeight(5)
+        bar.setStyleSheet(
+            f"QProgressBar{{background:{CP['bg3']};border:none;border-radius:2px;}}"
+            f"QProgressBar::chunk{{background:{CP['accent']};border-radius:2px;}}")
+        lay.addWidget(bar)
+
+        te = QTextEdit()
+        te.setReadOnly(True)
+        te.setPlaceholderText(translate("Les plans découpés apparaissent ici…"))
+        _f = QFont("Courier New", 11)
+        _f.setStyleHint(QFont.StyleHint.TypeWriter)
+        te.setFont(_f)
+        te.setStyleSheet(
+            f"QTextEdit{{background:{CP['bg2']};border:1px solid {CP['border']};"
+            f"border-radius:8px;color:{CP['text_primary']};font-size:11px;padding:14px;}}")
+        lay.addWidget(te, 1)
+
+        btn_row = QHBoxLayout()
+        btn_row.setSpacing(8)
+        btn_cancel = QPushButton(translate("Annuler"))
+        btn_cancel.setFixedHeight(36)
+        btn_cancel.setStyleSheet(
+            f"QPushButton{{background:{CP['bg3']};color:{CP['red']};"
+            f"border:1px solid {CP['red']};border-radius:7px;font-size:11px;font-weight:600;padding:0 20px;}}"
+            f"QPushButton:hover{{background:rgba(255,79,106,0.12);}}")
+        btn_apply = QPushButton(translate("✓  Appliquer le découpage"))
+        btn_apply.setFixedHeight(36)
+        btn_apply.setEnabled(False)
+        btn_apply.setToolTip(translate("Écrit les plans dans la séquence Live/Mapping."))
+        btn_apply.setStyleSheet(
+            f"QPushButton{{background:{CP['accent2']};color:#fff;border:none;"
+            f"border-radius:7px;font-size:11px;font-weight:700;padding:0 22px;}}"
+            f"QPushButton:hover{{background:#9d8fff;}}"
+            f"QPushButton:disabled{{background:{CP['bg3']};color:{CP['text_dim']};"
+            f"border:1px solid {CP['border']};}}")
+        btn_row.addWidget(btn_cancel)
+        btn_row.addStretch()
+        btn_row.addWidget(btn_apply)
+        lay.addLayout(btn_row)
+
+        _pending = [None]
+        _active  = [True]
+
+        def _stop():
+            if _active[0]:
+                _active[0] = False
+                worker.quit()
+                abandon_thread(worker)
+
+        def _on_done(segments):
+            _active[0] = False
+            _pending[0] = segments
+            self._set_ai_busy(False)
+            bar.setRange(0, 100)
+            bar.setValue(100)
+            status_lbl.setText(translate("Découpage terminé"))
+            status_lbl.setStyleSheet(
+                f"color:{CP['green']};font-size:10px;font-family:'Consolas',monospace;")
+            lines = []
+            for i, seg in enumerate(segments, 1):
+                lines.append(f"PLAN {i} — {seg.get('action', '')}")
+                meta = []
+                if seg.get("duration"):        meta.append(f"{seg.get('duration')}s")
+                if seg.get("shot_size"):       meta.append(str(seg.get("shot_size")))
+                if seg.get("camera_movement"): meta.append(str(seg.get("camera_movement")))
+                if meta:
+                    lines.append("   " + " · ".join(meta))
+                if seg.get("prompt"):
+                    lines.append(f"   PROMPT: {seg.get('prompt')}")
+                lines.append("")
+            te.setPlainText("\n".join(lines) if segments else translate("Découpage vide."))
+            btn_apply.setEnabled(bool(segments))
+            btn_apply.setFocus()
+
+        def _on_failed(msg):
+            _active[0] = False
+            self._set_ai_busy(False)
+            status_lbl.setText(translate("Erreur"))
+            status_lbl.setStyleSheet(
+                f"color:{CP['red']};font-size:10px;font-family:'Consolas',monospace;")
+            bar.setRange(0, 100)
+            bar.setValue(0)
+            te.setPlainText(f"{translate('Erreur')} : {msg}")
+
+        def _apply():
+            if _pending[0]:
+                self._apply_decoupage(_pending[0])
+            dlg.accept()
+
+        def _cancel():
+            _stop()
+            self._set_ai_busy(False)
+            self._ai_progress_lbl.setText(translate("Découpage annulé."))
+            dlg.reject()
+
+        btn_cancel.clicked.connect(_cancel)
+        btn_apply.clicked.connect(_apply)
+        dlg.rejected.connect(_stop)
+
+        worker.finished.connect(_on_done)
+        worker.failed.connect(_on_failed)
+        worker.start()
+        dlg.exec()
 
     # ── Handlers extraction ───────────────────────────────────────────────────
 
@@ -1493,9 +2257,12 @@ class PageScenario(QWidget):
         btn_close.clicked.connect(_on_close_btn)
         dlg.rejected.connect(_stop_worker)
 
-        btn_apply = QPushButton(translate("↩  Remplacer le texte"))
+        btn_apply = QPushButton(translate("✓  Appliquer dans l'onglet"))
         btn_apply.setFixedHeight(36)
         btn_apply.setEnabled(not streaming)
+        btn_apply.setToolTip(translate(
+            "Écrit la mise en page dans l'onglet « Mise en page PANDORA ». "
+            "Le Conducteur reste intact."))
         btn_apply.setStyleSheet(
             f"QPushButton{{background:{CP['accent2']};color:#fff;"
             f"border:none;border-radius:7px;font-size:11px;font-weight:700;padding:0 20px;}}"
@@ -1510,12 +2277,7 @@ class PageScenario(QWidget):
             result = _final_text[0].strip()
             if not result:
                 return
-            self._push_undo()
-            self._set_editor_text(result)
-            if self._current is not None:
-                self._current["formatted_content"] = result
-            self._ai_progress_lbl.setText("Mise en page PANDORA appliquée ✓")
-            self._btn_undo_action.setVisible(True)
+            self._apply_layout(result)
             dlg.accept()
 
         btn_apply.clicked.connect(_do_apply)
