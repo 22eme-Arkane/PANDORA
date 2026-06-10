@@ -1865,17 +1865,22 @@ class PageScenario(QWidget):
         # ── Thumbnails ───────────────────────────────────────────────────────
         if self._ref_images:
             thumb_scroll = QScrollArea()
-            thumb_scroll.setFixedHeight(92)
+            thumb_scroll.setFixedHeight(100)
             thumb_scroll.setWidgetResizable(True)
             thumb_scroll.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
             thumb_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
             thumb_scroll.setStyleSheet(
                 "QScrollArea{border:none;background:transparent;}"
-                f"QScrollBar:horizontal{{background:{CP['bg2']};height:3px;border-radius:2px;}}"
-                f"QScrollBar::handle:horizontal{{background:{CP['border_bright']};border-radius:2px;}}"
+                f"QScrollBar:horizontal{{background:{CP['bg2']};height:9px;border-radius:4px;}}"
+                f"QScrollBar::handle:horizontal{{background:{CP['border_bright']};"
+                f"border-radius:4px;min-width:40px;}}"
+                f"QScrollBar::handle:horizontal:hover{{background:{CP['accent']};}}"
                 f"QScrollBar::add-line:horizontal,QScrollBar::sub-line:horizontal{{width:0;}}"
             )
             thumb_scroll.setFrameStyle(0)
+            # Molette → défilement horizontal de la bande de miniatures
+            from ui.widgets import WheelHScroller
+            WheelHScroller.attach(thumb_scroll)
             thumb_ctn = QWidget()
             thumb_ctn.setStyleSheet("background:transparent;")
             thumb_hbox = QHBoxLayout(thumb_ctn)

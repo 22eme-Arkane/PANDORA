@@ -755,6 +755,16 @@ def refs_persistance_bibliotheque_chat():
     assert hasattr(w, "chunk") and hasattr(w, "done") and hasattr(w, "failed")
     assert "chat_stream" in inspect.getsource(RefsChatWorker.run)
     assert "ACTES" in _CHAT_SYSTEM and "jamais à copier" in _CHAT_SYSTEM
+    # 5b. ANTI-CRASH chat (2026-06-11) : le worker fini est PARQUE via abandon_thread,
+    # jamais déréférencé pendant que le QThread se termine (segfault sinon) ;
+    # et la bande de miniatures défile à la molette (101 images).
+    src_w2 = inspect.getsource(PageScenario._open_refs_window)
+    assert src_w2.count("abandon_thread(_chat_worker[0])") >= 2, \
+        "chat : worker parqué en done ET failed"
+    assert "_chat_worker[0] = None\n" in src_w2
+    assert "WheelHScroller" in src_w2, "molette → défilement horizontal des miniatures"
+    from ui.widgets import WheelHScroller
+    assert hasattr(WheelHScroller, "attach")
     # 6. L'arrangement reçoit la direction artistique quand elle existe
     from api.live_screenplay import ArrangeConducteurStreamWorker
     aw = ArrangeConducteurStreamWorker("t", "live", 0, refs_analysis="DA")

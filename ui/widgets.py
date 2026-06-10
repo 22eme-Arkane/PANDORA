@@ -90,6 +90,32 @@ class _WheelIgnoreFilter(QObject):
         return super().eventFilter(obj, event)
 
 
+class WheelHScroller(QObject):
+    """Molette → défilement HORIZONTAL d'un QScrollArea (bandes de miniatures).
+
+    Par défaut Qt route la molette vers le scroll vertical : sur une bande
+    horizontale, elle ne fait rien. Usage :
+        WheelHScroller.attach(scroll_area)
+    """
+    def __init__(self, area):
+        super().__init__(area)
+        self._area = area
+
+    def eventFilter(self, obj, event):
+        if event.type() == QEvent.Type.Wheel:
+            sb = self._area.horizontalScrollBar()
+            delta = event.angleDelta().y() or event.angleDelta().x()
+            sb.setValue(sb.value() - delta)
+            return True
+        return super().eventFilter(obj, event)
+
+    @classmethod
+    def attach(cls, area):
+        f = cls(area)
+        area.viewport().installEventFilter(f)
+        return f
+
+
 # ── Help block ─────────────────────────────────────────────────────────────────
 
 class HelpBlock(QFrame):

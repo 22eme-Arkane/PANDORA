@@ -217,6 +217,10 @@ def refs_cinema_redimensionnees():
     import api.screenplay as s
     src = inspect.getsource(s.AnalyzeReferencesWorker.run)
     assert "encode_image_for_vision" in src, "redimensionnement branché"
+    # Bande de miniatures : défilement molette (fix 2026-06-11, partagé avec Live)
+    from ui.page_scenario import PageScenario
+    assert "WheelHScroller" in inspect.getsource(PageScenario._open_refs_window), \
+        "molette → défilement horizontal des miniatures"
 
 
 @test

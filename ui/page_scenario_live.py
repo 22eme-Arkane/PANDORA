@@ -2713,17 +2713,22 @@ class PageScenario(QWidget):
         # ── Thumbnails ───────────────────────────────────────────────────────
         if self._ref_images:
             thumb_scroll = QScrollArea()
-            thumb_scroll.setFixedHeight(92)
+            thumb_scroll.setFixedHeight(100)
             thumb_scroll.setWidgetResizable(True)
             thumb_scroll.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
             thumb_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
             thumb_scroll.setStyleSheet(
                 "QScrollArea{border:none;background:transparent;}"
-                f"QScrollBar:horizontal{{background:{CP['bg2']};height:3px;border-radius:2px;}}"
-                f"QScrollBar::handle:horizontal{{background:{CP['border_bright']};border-radius:2px;}}"
+                f"QScrollBar:horizontal{{background:{CP['bg2']};height:9px;border-radius:4px;}}"
+                f"QScrollBar::handle:horizontal{{background:{CP['border_bright']};"
+                f"border-radius:4px;min-width:40px;}}"
+                f"QScrollBar::handle:horizontal:hover{{background:{CP['accent']};}}"
                 f"QScrollBar::add-line:horizontal,QScrollBar::sub-line:horizontal{{width:0;}}"
             )
             thumb_scroll.setFrameStyle(0)
+            # Molette → défilement horizontal (101 images = slider inutilisable sinon)
+            from ui.widgets import WheelHScroller
+            WheelHScroller.attach(thumb_scroll)
             thumb_ctn = QWidget()
             thumb_ctn.setStyleSheet("background:transparent;")
             thumb_hbox = QHBoxLayout(thumb_ctn)
@@ -2986,6 +2991,9 @@ class PageScenario(QWidget):
             def _chat_done(result: str):
                 _chat_msgs.append({"role": "assistant", "content": result})
                 _append_chat("\n")
+                # ANTI-CRASH : ne jamais lâcher la dernière référence d'un QThread
+                # qui se termine encore — on le parque jusqu'à extinction réelle.
+                abandon_thread(_chat_worker[0])
                 _chat_worker[0] = None
                 _set_chat_enabled(True)
                 chat_in.setFocus()
@@ -2994,6 +3002,7 @@ class PageScenario(QWidget):
                 if _chat_msgs and _chat_msgs[-1].get("role") == "user":
                     _chat_msgs.pop()   # la question peut être renvoyée telle quelle
                 _append_chat(f"\n⚠ {msg}\n")
+                abandon_thread(_chat_worker[0])
                 _chat_worker[0] = None
                 _set_chat_enabled(True)
 
