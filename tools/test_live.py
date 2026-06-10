@@ -524,6 +524,13 @@ def workers_construction():
     from core.music_analysis import AnalyzeMusicWorker
     assert [k for _, k in UPSCALE_MODELS] == ["topaz", "seedvr"]
     assert UpscaleVideoWorker("x.mp4", model="topaz", upscale_factor=4)._factor == 4
+    # Sortie upscale = MÊME NOM que la source (relink direct dans DaVinci)
+    import inspect
+    src_u = inspect.getsource(UpscaleVideoWorker._real)
+    assert "os.path.basename(self._video)" in src_u, \
+        "nom de sortie = nom du fichier source"
+    assert "int(time.time())" not in src_u, \
+        "pas de timestamp dans le nom (casserait le relink)"
     assert SFX1VideoWorker("x.mp4", "p", 12.0)._duration == 12.0
     assert SFX1Worker("p", 10.0)._duration == 10.0
     assert GenerateDecoupageWorker("t", "mapping")._mode == "mapping"

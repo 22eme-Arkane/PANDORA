@@ -107,9 +107,14 @@ class UpscaleVideoWorker(QThread):
             self.progress.emit(75, "Téléchargement de la vidéo upscalée…")
             data = requests.get(out_url, timeout=600).content
 
-            safe = "".join(c for c in self._label if c.isalnum() or c in " -_").strip() or "upscaled"
-            ts   = int(time.time())
-            path = os.path.join(_upscale_output_dir(), f"{safe}_x{self._factor}_{ts}.mp4")
+            # MÊME NOM que le fichier source (dossier différent) → « Relink Media »
+            # direct dans DaVinci Resolve : on pointe le dossier data/upscaled/ et
+            # toute la timeline se relinke en haute résolution. Un ré-upscale du
+            # même clip remplace la version précédente.
+            base = os.path.splitext(os.path.basename(self._video))[0]
+            safe = "".join(c for c in base if c.isalnum() or c in " -_.()").strip() \
+                or (self._label or "upscaled")
+            path = os.path.join(_upscale_output_dir(), f"{safe}.mp4")
             with open(path, "wb") as f:
                 f.write(data)
 
