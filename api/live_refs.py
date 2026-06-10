@@ -150,9 +150,10 @@ class AnalyzeRefsConducteurWorker(QThread):
                 user += f"\n\nCONDUCTEUR :\n{self._text.strip()}"
             else:
                 user += "\n\n(Pas de conducteur fourni — fais la direction globale et les suggestions.)"
+            # 8192 tokens : la synthèse croise N analyses × actes — 4096 tronquait
             synthesis = stream(_SYNTHESIS_SYSTEM.format(ctx=ctx), user,
                                on_chunk=self.chunk.emit,
-                               tier="creative", max_tokens=4096)
+                               tier="creative", max_tokens=8192)
 
             full = ("\n\n".join(analyses)
                     + "\n\n═══ SYNTHÈSE — DIRECTION VISUELLE ═══\n" + synthesis.strip())
@@ -214,9 +215,11 @@ class RefsChatWorker(QThread):
             first = messages[0]
             messages[0] = {"role": first["role"],
                            "content": f"{ctx_doc}\n\n---\n\n{first['content']}"}
+            # 8192 tokens : une réponse acte par acte dépasse largement 2048
+            # (vu en réel : coupure nette en plein acte 7).
             full = chat_stream(_CHAT_SYSTEM.format(ctx=_mode_ctx(self._mode)),
                                messages, on_chunk=self.chunk.emit,
-                               tier="creative", max_tokens=2048)
+                               tier="creative", max_tokens=8192)
             self.done.emit(full.strip())
         except Exception as e:
             from core.worker import humanize_api_error

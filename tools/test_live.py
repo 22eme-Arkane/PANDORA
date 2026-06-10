@@ -762,6 +762,10 @@ def refs_persistance_bibliotheque_chat():
     assert hasattr(w, "chunk") and hasattr(w, "done") and hasattr(w, "failed")
     assert "chat_stream" in inspect.getsource(RefsChatWorker.run)
     assert "ACTES" in _CHAT_SYSTEM and "jamais à copier" in _CHAT_SYSTEM
+    # Anti-troncature (vu en réel : réponse coupée à l'acte 7 avec 2048 tokens)
+    assert "max_tokens=8192" in inspect.getsource(RefsChatWorker.run), "chat : 8192 tokens"
+    from api.live_refs import AnalyzeRefsConducteurWorker as _ARW
+    assert "max_tokens=8192" in inspect.getsource(_ARW.run), "synthèse : 8192 tokens"
     # 5b. ANTI-CRASH chat (2026-06-11) : le worker fini est PARQUE via abandon_thread,
     # jamais déréférencé pendant que le QThread se termine (segfault sinon) ;
     # et la bande de miniatures défile à la molette (101 images).
