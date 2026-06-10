@@ -31,29 +31,43 @@ def _mode_ctx(mode: str) -> str:
 
 
 _PER_IMAGE_SYSTEM = (
-    "Tu analyses UNE image de référence pour une {ctx}. "
-    "Décris-la en français, orienté direction visuelle de projection :\n"
-    "• **Ambiance / mood** : l'émotion, l'énergie\n"
+    "Tu décodes UNE image de référence pour une {ctx}. Ce n'est PAS une image à "
+    "réutiliser telle quelle : c'est une INSPIRATION, une direction artistique à "
+    "décoder ENTIÈREMENT pour en extraire les codes réutilisables.\n"
+    "Analyse en français, de façon complète :\n"
+    "• **Ambiance / mood** : l'émotion, l'énergie, l'univers évoqué\n"
+    "• **Style d'image** : médium et rendu (photo, peinture, 3D, gravure, "
+    "argentique…), technique, grain, époque, références culturelles/artistiques\n"
+    "• **Architecture & espaces** : formes bâties, volumes, ornements, échelle, "
+    "vocabulaire architectural — ce qui peut dialoguer avec une façade/projection\n"
+    "• **Personnages & figures** : silhouettes, costumes, postures, traitement "
+    "(réaliste, stylisé, spectral…) — comme codes de style, pas comme casting\n"
     "• **Lumière** : direction, qualité, température, contrastes\n"
     "• **Palette** : couleurs dominantes et accents (précis : teintes, saturation)\n"
-    "• **Matières & textures** : ce qui pourrait vivre/se transformer en projection\n"
-    "• **Motifs & composition** : formes, rythmes graphiques exploitables en loop\n"
-    "• **Idée de projection** : 1 phrase — comment cette image pourrait nourrir un plan\n"
-    "Sois concret et concis (≤ 120 mots). Pas de personnages/casting : on parle "
-    "de matière visuelle."
+    "• **Matières, textures & motifs** : ce qui peut vivre, se répéter, se "
+    "transformer en projection\n"
+    "• **Idée de projection** : 1-2 phrases — comment transposer ces codes dans un plan\n"
+    "Sois concret et précis (≤ 200 mots). Décode les codes, ne décris pas pour copier."
 )
 
 _SYNTHESIS_SYSTEM = (
     "Tu es directeur artistique d'une {ctx}. On te fournit le CONDUCTEUR et les "
     "analyses individuelles des images de référence.\n\n"
-    "Produis la SYNTHÈSE de direction visuelle, en français :\n"
-    "1. **DIRECTION GLOBALE** — palette maîtresse, signature lumineuse, matières "
-    "récurrentes, énergie d'ensemble qui se dégage du moodboard ;\n"
+    "Les références sont une INSPIRATION à décoder, jamais à copier : extrais-en "
+    "les codes (architecture, traitement des figures, style d'image, lumière, "
+    "matières) et TRANSPOSE-les en langage de projection.\n"
+    "Produis la SYNTHÈSE de direction artistique, en français :\n"
+    "1. **DIRECTION GLOBALE** — l'univers qui se dégage du moodboard : style "
+    "d'image et rendu (médium, époque, technique), vocabulaire architectural, "
+    "traitement des personnages/figures, palette maîtresse, signature lumineuse, "
+    "matières récurrentes, énergie d'ensemble ;\n"
     "2. **CORRESPONDANCES PAR ACTE** — pour chaque acte/moment du conducteur, "
-    "quelles images le nourrissent et comment (sois précis : « Image 3 → acte 2 : "
-    "ses dorures deviennent les filaments du build-up ») ;\n"
+    "quelles images le nourrissent et comment leurs codes se transposent (sois "
+    "précis : « Image 3 → acte 2 : ses arcades gothiques deviennent la grammaire "
+    "des ouvertures lumineuses du build-up ») ;\n"
     "3. **SUGGESTIONS CONCRÈTES** — 5 à 8 propositions actionnables : ambiances de "
-    "plans, transitions visuelles, mots-clés de style à injecter dans les prompts.\n"
+    "plans, figures et architectures à faire vivre, transitions visuelles, "
+    "mots-clés de style (rendu, médium, lumière) à injecter dans les prompts.\n"
     "INTERDIT : vocabulaire scénario (INT./EXT., scènes, séquences). On raisonne "
     "en ACTES et en PLANS projetés."
 )
@@ -61,9 +75,11 @@ _SYNTHESIS_SYSTEM = (
 _ENRICH_SYSTEM = (
     "Tu reçois un CONDUCTEUR de {ctx} et la SYNTHÈSE de direction visuelle issue "
     "des images de référence. Réécris le conducteur en l'ENRICHISSANT : intègre "
-    "la palette, la lumière, les matières et les correspondances par acte là où "
-    "elles renforcent le propos — sans changer la structure, les intentions ni la "
-    "voix de l'auteur.\n"
+    "les codes décodés — style d'image et rendu, vocabulaire architectural, "
+    "traitement des figures, palette, lumière, matières — et les correspondances "
+    "par acte là où ils renforcent le propos, sans changer la structure, les "
+    "intentions ni la voix de l'auteur. La direction artistique est une "
+    "inspiration transposée, pas une copie des images.\n"
     "IMPORTANT — c'est un CONDUCTEUR, PAS un scénario : INTERDIT « INT. » / "
     "« EXT. », en-têtes de scène, « séquence », « scène ». Garde la forme du "
     "conducteur original et le français.\n"
@@ -111,7 +127,7 @@ class AnalyzeRefsConducteurWorker(QThread):
                 mime, b64 = encode_image_for_vision(path)
                 msg = client.messages.create(
                     model="claude-haiku-4-5",
-                    max_tokens=500,
+                    max_tokens=800,
                     system=_PER_IMAGE_SYSTEM.format(ctx=ctx),
                     messages=[{"role": "user", "content": [
                         {"type": "image",

@@ -690,8 +690,12 @@ def refs_conducteur_file_et_fond():
     assert "SYNTHÈSE" in src, "synthèse de direction visuelle"
     e = EnrichConducteurWithRefsWorker("c", "a", "live")
     assert hasattr(e, "done") and hasattr(e, "chunk"), "contrat fenêtre (chunk/done)"
-    from api.live_refs import _ENRICH_SYSTEM
+    from api.live_refs import _ENRICH_SYSTEM, _PER_IMAGE_SYSTEM, _SYNTHESIS_SYSTEM
     assert "INT." in _ENRICH_SYSTEM, "interdiction format scénario"
+    # Doctrine 2026-06-11 : décodage COMPLET de direction artistique (pas que palette)
+    for kw in ("Architecture", "Personnages & figures", "Style d'image", "INSPIRATION"):
+        assert kw in _PER_IMAGE_SYSTEM, f"décodage DA complet : {kw}"
+    assert "jamais à copier" in _SYNTHESIS_SYSTEM, "transposer les codes, pas copier"
     # La page utilise bien les workers Live
     from ui.page_scenario_live import PageScenario
     src_p = inspect.getsource(PageScenario)
