@@ -1386,6 +1386,35 @@ _FR_TO_EN: dict[str, str] = {
     "Aucune analyse sauvegardée": "No saved analysis",
     "Analyse supprimée de la bibliothèque.": "Analysis deleted from the library.",
 
+    # ── Bibliothèque d'images globale (Cinéma + Live) ──
+    "Bibliothèque d'images": "Image library",
+    "📚  Bibliothèque d'images": "📚  Image library",
+    "Partagée entre tous les projets — Cinéma et Live":
+        "Shared across all projects — Cinema and Live",
+    "Nouvelle collection": "New collection",
+    "Renommer la collection": "Rename collection",
+    "Supprimer la collection": "Delete collection",
+    "Nom de la collection :": "Collection name:",
+    "Crée une collection (✚) puis ajoute-lui des images.":
+        "Create a collection (✚) then add images to it.",
+    "⬆  Ajouter des images": "⬆  Add images",
+    "Copie des images du disque dans cette collection\n(la bibliothèque garde sa propre copie).":
+        "Copies images from disk into this collection\n(the library keeps its own copy).",
+    "Retirer de la collection": "Remove from collection",
+    "💻  Parcourir le disque…": "💻  Browse disk…",
+    "Choisir des fichiers hors bibliothèque —\nPANDORA proposera de les ranger dans une collection.":
+        "Pick files outside the library —\nPANDORA will offer to file them into a collection.",
+    "✓  Utiliser la sélection": "✓  Use selection",
+    "Utiliser la sélection": "Use selection",
+    "Supprimer cette collection et ses images ?":
+        "Delete this collection and its images?",
+    "les copies de la bibliothèque seront effacées.":
+        "the library copies will be erased.",
+    "Ajouter des images à la collection": "Add images to the collection",
+    "Choisir des images sur le disque": "Pick images from disk",
+    "Ajouter aussi ces images à la collection courante ?":
+        "Also add these images to the current collection?",
+
     # ── Lot 17 — co-écriture (accueil), génération en série, divers ──
     "J'ai analysé votre scénario et rédigé des suggestions détaillées (visibles dans l'onglet « Analyse initiale »).\n\nDites-moi ce que vous souhaitez modifier, affiner ou conserver — je produirai alors une version remaniée de votre scénario en direct. Nous pouvons itérer autant de fois que nécessaire.": "I've analyzed your screenplay and written detailed suggestions (visible in the « Initial analysis » tab).\n\nTell me what you'd like to change, refine or keep — I'll then produce a reworked version of your screenplay live. We can iterate as many times as needed.",
     "Génération en série": "Batch generation",

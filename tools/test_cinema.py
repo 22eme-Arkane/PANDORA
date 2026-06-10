@@ -228,6 +228,24 @@ def prompts_traduction_proteges():
     assert 'tier="utility"' in src, "traduction sur le tier utilitaire"
 
 
+@test
+def bibliotheque_images_branchee():
+    """Bibliothèque d'images globale : porte unique sur TOUS les points d'ajout Cinéma."""
+    from ui.page_scenario import PageScenario
+    assert "ImageLibraryDialog" in inspect.getsource(PageScenario._on_add_refs), \
+        "refs du scénario via la bibliothèque"
+    for mod_name in ("ui.dialog_character", "ui.dialog_decor", "ui.dialog_accessory",
+                     "ui.dialog_hmc", "ui.dialog_vehicle", "ui.dialog_arrange_session"):
+        mod = __import__(mod_name, fromlist=["_"])
+        assert "ImageLibraryDialog" in inspect.getsource(mod), \
+            f"{mod_name} : refs via la bibliothèque"
+    # Templates Studio IA : ajout d'images via la bibliothèque (copie dans la catégorie)
+    from ui.dialog_style_gallery import StyleGalleryDialog
+    src = inspect.getsource(StyleGalleryDialog._on_add_image)
+    assert "ImageLibraryDialog" in src and "copy2" in src, \
+        "templates : choix via bibliothèque puis copie locale"
+
+
 # ══════════════════════════════════════════════════════════════════════════════
 # Runner
 # ══════════════════════════════════════════════════════════════════════════════

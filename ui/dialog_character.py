@@ -1600,10 +1600,8 @@ class CharacterDialog(QDialog):
             self._refs_hint_lbl.setText(hints.get(usage, ""))
 
     def _on_add_refs(self):
-        paths, _ = QFileDialog.getOpenFileNames(
-            self, "Sélectionner des images de référence", "",
-            "Images (*.png *.jpg *.jpeg *.webp *.bmp)"
-        )
+        from ui.dialog_image_library import ImageLibraryDialog
+        paths = ImageLibraryDialog.pick(self)
         if not paths:
             return
 

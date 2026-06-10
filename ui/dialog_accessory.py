@@ -736,9 +736,8 @@ class AccessoryDialog(QDialog):
         self._worker_opt.start()
 
     def _on_add_refs(self):
-        paths, _ = QFileDialog.getOpenFileNames(
-            self, "Images de référence", "", "Images (*.png *.jpg *.jpeg *.webp *.bmp)"
-        )
+        from ui.dialog_image_library import ImageLibraryDialog
+        paths = ImageLibraryDialog.pick(self)
         if not paths:
             return
         for p in paths:

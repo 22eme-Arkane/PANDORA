@@ -604,12 +604,8 @@ class ArrangeSessionDialog(QDialog):
     def _on_add_refs(self):
         if len(self._ref_images) >= 4:
             return
-        paths, _ = QFileDialog.getOpenFileNames(
-            self,
-            "Sélectionner des images de référence",
-            "",
-            "Images (*.png *.jpg *.jpeg *.webp *.bmp)",
-        )
+        from ui.dialog_image_library import ImageLibraryDialog
+        paths = ImageLibraryDialog.pick(self)
         if not paths:
             return
         remaining = 4 - len(self._ref_images)

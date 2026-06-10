@@ -757,6 +757,45 @@ def refs_persistance_bibliotheque_chat():
 
 
 @test
+def bibliotheque_images_globale():
+    """Bibliothèque d'images partagée : cœur (copies, collections) + porte unique."""
+    import inspect
+    from PIL import Image
+    from core import image_library as ilib
+    ilib.LIB_DIR_OVERRIDE = os.path.join(_TMP, "img_lib")
+    try:
+        # Roundtrip complet : collection, ajout (COPIE), listing, renommage, retraits
+        src = os.path.join(_TMP, "_lib_src.jpg")
+        Image.new("RGB", (64, 64), (10, 20, 30)).save(src)
+        key = ilib.create_collection("Mes façades")
+        copied = ilib.add_images(key, [src, "inexistant.jpg"])
+        assert len(copied) == 1 and copied[0] != src, "image COPIÉE dans la bibliothèque"
+        assert os.path.isfile(copied[0]), "copie présente sur disque"
+        cols = ilib.list_collections()
+        assert cols[0]["name"] == "Mes façades" and cols[0]["count"] == 1
+        assert cols[0]["cover"] == copied[0], "couverture = première image"
+        # Dédoublonnage de nom au second ajout du même fichier
+        again = ilib.add_images(key, [src])
+        assert again and again[0] != copied[0], "pas d'écrasement (suffixe _1)"
+        assert ilib.rename_collection(key, "Façades nuit")
+        assert ilib.list_collections()[0]["name"] == "Façades nuit"
+        assert ilib.remove_image(copied[0]) and len(ilib.list_images(key)) == 1
+        assert not ilib.remove_image(src), "fichiers HORS bibliothèque protégés"
+        ilib.delete_collection(key)
+        assert not ilib.list_collections()
+        # Dialog : construction + contrat pick
+        from ui.dialog_image_library import ImageLibraryDialog
+        d = ImageLibraryDialog(pick=True)
+        assert hasattr(ImageLibraryDialog, "pick") and d.picked == []
+        assert hasattr(d, "_on_browse_disk"), "parcours disque intégré au dialog"
+    finally:
+        ilib.LIB_DIR_OVERRIDE = None
+    # Porte unique côté Live : le conducteur passe par la bibliothèque
+    from ui.page_scenario_live import PageScenario
+    assert "ImageLibraryDialog" in inspect.getsource(PageScenario._on_add_refs)
+
+
+@test
 def libelles_dynamiques_ia():
     """brand() rebaptise « Claude » selon l'assistant actif ; translate() le propage."""
     import core.ai_provider as ap

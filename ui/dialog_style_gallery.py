@@ -516,12 +516,10 @@ class StyleGalleryDialog(QDialog):
     def _on_add_image(self):
         if not self._current_key:
             return
-        paths, _ = QFileDialog.getOpenFileNames(
-            self,
-            "Choisir des images de référence",
-            "",
-            "Images (*.jpg *.jpeg *.png *.webp)",
-        )
+        # Porte unique : bibliothèque globale (disque accessible depuis le dialog) —
+        # l'image choisie est ensuite COPIÉE dans la catégorie de templates.
+        from ui.dialog_image_library import ImageLibraryDialog
+        paths = ImageLibraryDialog.pick(self)
         if not paths:
             return
         dest_dir = os.path.join(_STYLE_REFS_DIR, self._current_key)

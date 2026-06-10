@@ -1143,10 +1143,9 @@ class PageScenario(QWidget):
             self._refresh_refs_display()
 
     def _on_add_refs(self):
-        paths, _ = QFileDialog.getOpenFileNames(
-            self, "Ajouter des images de référence", "",
-            "Images (*.png *.jpg *.jpeg *.webp *.bmp);;Tous les fichiers (*)",
-        )
+        # Porte unique : bibliothèque globale (avec « Parcourir le disque… » intégré)
+        from ui.dialog_image_library import ImageLibraryDialog
+        paths = ImageLibraryDialog.pick(self)
         for p in paths:
             if p not in self._ref_images:
                 self._ref_images.append(p)
