@@ -735,6 +735,13 @@ def refs_persistance_bibliotheque_chat():
     for token in ("Relancer l'analyse", "ref_library", "RefsChatWorker",
                   "_save(silent=True)", "Supprimer une analyse"):
         assert token in src_w, f"fenêtre refs : {token}"
+    # 3b. Bouton « Charger une analyse » DANS la section (accessible sans images —
+    # la fenêtre, elle, ne s'ouvre que si analyse/images présentes)
+    src_load = inspect.getsource(PageScenario._on_load_saved_analysis)
+    assert "ref_library" in src_load and "_apply_saved_analysis" in src_load
+    src_apply = inspect.getsource(PageScenario._apply_saved_analysis)
+    assert "_open_refs_window" in src_apply and "_save(silent=True)" in src_apply, \
+        "chargement → persistance projet + fenêtre (chat inclus)"
     # 4. Bibliothèque globale : aller-retour complet en dossier temporaire
     from core import ref_library
     ref_library.LIB_DIR_OVERRIDE = os.path.join(_TMP, "ref_lib")

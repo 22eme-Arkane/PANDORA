@@ -61,7 +61,7 @@ EXPECTED_ONLY_LIVE = {
         "_live_extract_dialog",
         # Refs visuelles 2026-06-11 : persistance + bibliothèque + chat DA
         # (chantier à reporter vers Cinéma après validation Live)
-        "_start_refs_analysis",
+        "_start_refs_analysis", "_on_load_saved_analysis", "_apply_saved_analysis",
     },
     "ui/page_storyboard_live.py": {
         "_visible_order", "_load_conductor_tracks", "_on_music_align",

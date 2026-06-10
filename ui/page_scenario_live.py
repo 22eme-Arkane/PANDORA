@@ -710,6 +710,13 @@ class PageScenario(QWidget):
         )
         l_refs.addWidget(self._btn_analyze_refs)
 
+        self._btn_load_analysis = _ai_btn(
+            "📂", "Charger une analyse",
+            "Recharge une analyse sauvegardée — réutilisable entre projets",
+            self._on_load_saved_analysis,
+        )
+        l_refs.addWidget(self._btn_load_analysis)
+
         tog_refs = _make_toggle("◎  Références visuelles", c_refs, expanded=False)
         sc_lay.addWidget(tog_refs)
         sc_lay.addWidget(c_refs)
@@ -1852,6 +1859,47 @@ class PageScenario(QWidget):
     def _on_refs_failed(self, msg: str):
         self._set_ai_busy(False)
         self._ai_progress_lbl.setText(f"Erreur : {msg}")
+
+    def _on_load_saved_analysis(self):
+        """Menu des analyses sauvegardées (bibliothèque globale, entre projets)."""
+        from PyQt6.QtWidgets import QMenu
+        from core import ref_library
+        entries = ref_library.list_analyses()
+        menu = QMenu(self)
+        menu.setStyleSheet(
+            f"QMenu{{background:{CP['bg2']};color:{CP['text_primary']};"
+            f"border:1px solid {CP['border_bright']};border-radius:6px;padding:4px;}}"
+            f"QMenu::item{{padding:6px 14px;border-radius:4px;}}"
+            f"QMenu::item:selected{{background:{CP['bg4']};}}"
+        )
+        if not entries:
+            act = menu.addAction(translate("Aucune analyse sauvegardée"))
+            act.setEnabled(False)
+        for e in entries:
+            lbl = (f"{e.get('name', '?')}  —  {e.get('mode', 'live')} · "
+                   f"{len(e.get('images', []))} img · {e.get('date', '')}")
+            act = menu.addAction(lbl)
+            act.triggered.connect(lambda checked=False, ee=e: self._apply_saved_analysis(ee))
+        btn = self._btn_load_analysis
+        menu.exec(btn.mapToGlobal(btn.rect().bottomLeft()))
+
+    def _apply_saved_analysis(self, e: dict):
+        """Recharge une analyse : état + persistance projet + fenêtre (avec chat)."""
+        txt = e.get("analysis", "")
+        if not txt:
+            return
+        self._last_ref_analysis = txt
+        self._last_result_kind = "refs"
+        self._btn_reopen_window.setVisible(True)
+        imgs = [p for p in e.get("images", [])
+                if isinstance(p, str) and os.path.isfile(p)]
+        if imgs:
+            self._ref_images = imgs
+            self._refresh_refs_display()
+        if self._current is not None:
+            self._save(silent=True)
+        self._ai_progress_lbl.setText(f"{translate('Analyse chargée')} : {e.get('name', '')} ✓")
+        self._open_refs_window(txt)
 
     def _set_ai_busy(self, busy: bool):
         for btn in (

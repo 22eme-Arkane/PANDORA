@@ -1382,6 +1382,9 @@ _FR_TO_EN: dict[str, str] = {
     "Charge une analyse sauvegardée — mêmes références visuelles,\nmême direction artistique, sans refaire l'analyse.":
         "Loads a saved analysis — same visual references,\nsame art direction, without re-running the analysis.",
     "Analyse chargée": "Analysis loaded",
+    "Charger une analyse": "Load an analysis",
+    "Recharge une analyse sauvegardée — réutilisable entre projets":
+        "Reloads a saved analysis — reusable across projects",
     "Supprimer une analyse": "Delete an analysis",
     "Aucune analyse sauvegardée": "No saved analysis",
     "Analyse supprimée de la bibliothèque.": "Analysis deleted from the library.",
