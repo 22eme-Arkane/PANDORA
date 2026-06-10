@@ -2654,6 +2654,11 @@ class PageScenario(QWidget):
         btn_send.clicked.connect(_send_chat)
         chat_in.returnPressed.connect(_send_chat)
 
+        # Entrée dans le champ = ENVOYER le message — jamais Annuler/Appliquer
+        # (Qt fait du 1er bouton du dialogue le bouton par défaut sinon).
+        from ui.widgets import disable_default_buttons
+        disable_default_buttons(dlg)
+
         # ── Phase 2 : Appliquer les suggestions ──────────────────────────────
         def _do_apply_direct():
             # Worker CONDUCTEUR (celui de Cinéma réécrivait au format scénario)
@@ -3355,6 +3360,9 @@ class PageScenario(QWidget):
             worker.failed.connect(_on_failed)
             worker.start()  # démarre après connexion des signaux — aucun chunk ne peut être perdu
 
+        # Entrée dans le champ de chat = ENVOYER — jamais le bouton par défaut Qt
+        from ui.widgets import disable_default_buttons
+        disable_default_buttons(dlg)
         dlg.exec()
 
     def _open_simple_result_window(self, text: str):

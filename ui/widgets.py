@@ -116,6 +116,19 @@ class WheelHScroller(QObject):
         return f
 
 
+def disable_default_buttons(dlg) -> None:
+    """Neutralise les boutons « auto-default » d'un QDialog.
+
+    Par défaut Qt fait de chaque QPushButton un bouton par défaut potentiel :
+    appuyer sur Entrée dans un champ déclenche le premier bouton du dialogue
+    (Annuler, Appliquer…) au lieu d'envoyer le message. À appeler juste avant
+    dlg.exec() sur toute fenêtre contenant un champ de saisie + des boutons."""
+    from PyQt6.QtWidgets import QPushButton
+    for b in dlg.findChildren(QPushButton):
+        b.setAutoDefault(False)
+        b.setDefault(False)
+
+
 # ── Help block ─────────────────────────────────────────────────────────────────
 
 class HelpBlock(QFrame):

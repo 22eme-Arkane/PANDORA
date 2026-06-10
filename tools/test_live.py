@@ -852,6 +852,13 @@ def coecriture_arrangement():
     assert "DISCUSSION DE CO-ÉCRITURE" in src, \
         "l'application intègre la discussion (les décisions priment)"
     assert "abandon_thread(_chat_worker[0])" in src, "anti-crash : worker parqué"
+    # Entrée dans le champ = envoyer — jamais le bouton par défaut Qt
+    # (vu en réel : Entrée déclenchait Annuler/Appliquer dans les fenêtres à chat)
+    assert "disable_default_buttons" in src, "arrangement : boutons par défaut neutralisés"
+    assert "disable_default_buttons" in inspect.getsource(PageScenario._open_refs_window), \
+        "refs : boutons par défaut neutralisés"
+    from ui.widgets import disable_default_buttons
+    assert callable(disable_default_buttons)
 
 
 @test
