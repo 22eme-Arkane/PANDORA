@@ -3882,6 +3882,27 @@ class TabT2V(QScrollArea):
         else:
             davinci_msg = f"\n\n◈ Téléchargement échoué : {ir['error']}"
 
+        # ── Conformation à la durée musicale exacte ───────────────────────────
+        # Seedance ne génère qu'en secondes ENTIÈRES ; le calage musical produit
+        # des durées en mesures (5.625 s…). Retime léger ffmpeg → le clip dure
+        # EXACTEMENT la durée du plan : plus de dérive cumulée en timeline
+        # (DaVinci) et les cuts restent sur les drops. Première/dernière frame
+        # préservées → raccords par keyframes intacts.
+        if local_path and self._active_shot:
+            try:
+                _target = float(self._active_shot.get("duration", 0) or 0)
+            except (TypeError, ValueError):
+                _target = 0.0
+            if _target > 0:
+                try:
+                    from core.video_conform import conform_clip
+                    _cf = conform_clip(local_path, _target)
+                    if _cf["conformed"]:
+                        davinci_msg += (f"\n♫ Conformé : {_cf['actual']:.2f}s → "
+                                        f"{_cf['target']:.3f}s (calage musical)")
+                except Exception:
+                    pass
+
         # ── Sound design auto : génère l'ambiance SFX du plan en parallèle ────
         if (getattr(self, "_sfx_auto_cb", None) and self._sfx_auto_cb.isChecked()
                 and self._active_shot):

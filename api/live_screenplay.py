@@ -32,7 +32,11 @@ Pour CHAQUE plan, donne un objet JSON avec :
   décris précisément : sujet + action, décor/environnement, composition & cadrage, lumière
   (direction, qualité, température), palette de couleurs, textures & matières, mouvement
   (ce qui bouge et comment), atmosphère/mood, style visuel, repères de qualité (cinematic,
-  ultra-detailed, sharp, 4K). 3 à 5 phrases riches. VISUEL UNIQUEMENT — INTERDIT d'y mettre
+  ultra-detailed, sharp, 4K). STRUCTURE TEMPORELLE EN BEATS RELATIFS : décris l'évolution
+  dans l'ordre avec "opening:", "then", "building up", "in the final moment" — JAMAIS de
+  timecode absolu ("at 3 seconds") : le moteur ne respecte pas les horodatages ; les impacts
+  musicaux exacts sont gérés par les CUTS entre plans, pas à l'intérieur du clip.
+  3 à 5 phrases riches. VISUEL UNIQUEMENT — INTERDIT d'y mettre
   le BPM, un tempo, des chiffres musicaux, des instruments ou tout terme audio.
 - "sound_prompt": prompt SOUND DESIGN en ANGLAIS (SFX / ambiance, AUCUNE voix ni parole).
   C'est ICI — et seulement ici — que le BPM et les temps forts sont pris en compte.
@@ -74,7 +78,11 @@ Pour CHAQUE plan, donne un objet JSON avec :
   "the building reappears, rebuilt out of…"). Puis décris précisément : l'effet/visuel
   projeté, la lumière (direction, qualité, couleur), la palette, les textures & matières,
   ce qui évolue et comment, l'atmosphère/mood, le style, et des repères de qualité
-  (cinematic, ultra-detailed, sharp, 4K). 3 à 5 phrases riches. VISUEL UNIQUEMENT —
+  (cinematic, ultra-detailed, sharp, 4K). STRUCTURE TEMPORELLE EN BEATS RELATIFS :
+  décris l'évolution dans l'ordre avec "opening:", "then", "building up", "in the final
+  moment" — JAMAIS de timecode absolu ("at 3 seconds") : le moteur ne respecte pas les
+  horodatages ; les impacts musicaux exacts sont gérés par les CUTS entre plans.
+  3 à 5 phrases riches. VISUEL UNIQUEMENT —
   INTERDIT d'y mettre le BPM, un tempo, des chiffres musicaux, des instruments ou tout
   terme audio.
 - "sound_prompt": prompt SOUND DESIGN en ANGLAIS (SFX / ambiance, AUCUNE voix ni parole).

@@ -511,6 +511,39 @@ def sound_prompt_vers_sound_design():
 
 
 @test
+def conformation_duree_musicale():
+    """conform_clip : retime branché dans on_finished, garde-fous corrects."""
+    from core.video_conform import conform_clip, MAX_DEVIATION
+    # Garde-fous (sans ffmpeg : entrées invalides → refus propre)
+    r = conform_clip("", 5.0)
+    assert not r["conformed"] and r["reason"], "entrée vide refusée"
+    r = conform_clip(__file__, 0)
+    assert not r["conformed"], "cible nulle refusée"
+    assert MAX_DEVIATION <= 0.15, "retime limité (imperceptible)"
+    # Branché dans la génération, AVANT l'extraction des frames de raccord
+    import inspect
+    import ui.tab_t2v_live as M
+    src = inspect.getsource(M.TabT2V.on_finished)
+    assert "conform_clip" in src, "conformation branchée"
+    assert src.index("conform_clip") < src.index("extract_last_frame"), \
+        "conformation AVANT l'extraction de la dernière frame (raccord)"
+
+
+@test
+def prompts_beats_relatifs():
+    """Les prompts vidéo structurent le temps en beats relatifs, sans timecodes."""
+    import api.live_screenplay as ls
+    import inspect
+    import api.live_extract as le
+    for t in (ls._SYSTEM_LIVE, ls._SYSTEM_MAPPING):
+        tt = " ".join(t.split())   # neutralise les retours à la ligne
+        assert "BEATS RELATIFS" in tt and "JAMAIS de timecode absolu" in tt, "beats relatifs"
+        assert "CUTS" in tt, "les impacts musicaux vont sur les cuts"
+    src = " ".join(inspect.getsource(le.FormatConducteurWorker.run).split())
+    assert "BEATS RELATIFS" in src and "JAMAIS de timecode absolu" in src
+
+
+@test
 def sound_design_file_et_crossfade():
     """File d'attente SFX depuis les Séquences + commande de fondu enchaîné."""
     import core.storyboard as sb
