@@ -162,6 +162,67 @@ class AnalyzeRefsConducteurWorker(QThread):
             self.failed.emit(humanize_api_error(str(e)))
 
 
+_CHAT_SYSTEM = (
+    "Tu es conseiller en direction artistique pour une {ctx}. "
+    "Tu disposes de l'ANALYSE du moodboard de référence (décodage complet : "
+    "architecture, figures, style d'image, lumière, palette, matières) et du "
+    "CONDUCTEUR du spectacle. L'utilisateur dialogue avec toi pour décider "
+    "comment TRANSPOSER cette direction artistique dans son conducteur et ses "
+    "plans projetés.\n"
+    "Règles :\n"
+    "• Réponds en français, concret et actionnable — propose des formulations "
+    "prêtes à coller dans le conducteur ou dans les prompts quand c'est utile ;\n"
+    "• La DA est une inspiration à transposer, jamais à copier ;\n"
+    "• INTERDIT : vocabulaire scénario (INT./EXT., scènes, séquences) — on "
+    "raisonne en ACTES et en PLANS projetés ;\n"
+    "• Reste dans ton rôle : direction artistique, visuels, projection."
+)
+
+
+class RefsChatWorker(QThread):
+    """Un tour de dialogue direction artistique (streaming) dans la fenêtre
+    Références visuelles. messages = historique [{role, content}] complet,
+    dernier message = question de l'utilisateur. Signaux : chunk/done/failed."""
+    done   = pyqtSignal(str)
+    failed = pyqtSignal(str)
+    chunk  = pyqtSignal(str)
+
+    def __init__(self, messages: list, analysis: str, scenario_text: str = "",
+                 mode: str = "live"):
+        super().__init__()
+        self._messages = list(messages or [])
+        self._analysis = analysis or ""
+        self._text     = scenario_text or ""
+        self._mode     = mode if mode in ("live", "mapping") else "live"
+
+    def run(self):
+        from core.ai_provider import chat_stream, key_error
+        err = key_error()
+        if err:
+            self.failed.emit(err)
+            return
+        if not self._messages:
+            self.failed.emit("Aucun message à envoyer.")
+            return
+        try:
+            ctx_doc = f"ANALYSE DES RÉFÉRENCES (direction artistique) :\n{self._analysis}"
+            if self._text.strip():
+                ctx_doc += f"\n\nCONDUCTEUR ACTUEL :\n{self._text.strip()}"
+            # Le contexte documentaire est préfixé au premier message utilisateur
+            # (les providers locaux n'aiment pas les très longs system prompts).
+            messages = [dict(m) for m in self._messages]
+            first = messages[0]
+            messages[0] = {"role": first["role"],
+                           "content": f"{ctx_doc}\n\n---\n\n{first['content']}"}
+            full = chat_stream(_CHAT_SYSTEM.format(ctx=_mode_ctx(self._mode)),
+                               messages, on_chunk=self.chunk.emit,
+                               tier="creative", max_tokens=2048)
+            self.done.emit(full.strip())
+        except Exception as e:
+            from core.worker import humanize_api_error
+            self.failed.emit(humanize_api_error(str(e)))
+
+
 class EnrichConducteurWithRefsWorker(QThread):
     """Réécrit le CONDUCTEUR en intégrant la direction visuelle (streaming).
     Signaux chunk/done/failed — compatibles avec le bouton « Enrichir » existant.

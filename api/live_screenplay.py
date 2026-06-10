@@ -291,11 +291,13 @@ class ArrangeConducteurStreamWorker(QThread):
     failed   = pyqtSignal(str)
     chunk    = pyqtSignal(str)
 
-    def __init__(self, text: str, mode: str, duration_secs: int = 0):
+    def __init__(self, text: str, mode: str, duration_secs: int = 0,
+                 refs_analysis: str = ""):
         super().__init__()
         self._text = text
         self._mode = mode if mode in ("live", "mapping") else "live"
         self._dur  = duration_secs
+        self._refs = refs_analysis or ""
 
     def run(self):
         from core.ai_provider import stream, key_error
@@ -311,6 +313,11 @@ class ArrangeConducteurStreamWorker(QThread):
                 dur_str = f"{mins}min {secs:02d}s" if mins else f"{secs}s"
                 prefix = (f"[DURÉE CIBLE : {dur_str} = {self._dur} secondes. "
                           f"Tiens-en compte dans le rythme et la structure.]\n\n")
+            if self._refs.strip():
+                prefix += ("[DIRECTION ARTISTIQUE — issue de l'analyse des images de "
+                           "référence. C'est une inspiration à transposer, jamais à "
+                           "copier : appuie tes suggestions dessus quand c'est "
+                           "pertinent.]\n" + self._refs.strip() + "\n\n")
             full = stream(system, prefix + self._text, on_chunk=self.chunk.emit,
                           tier="creative", max_tokens=4096)
             self.finished.emit(full)

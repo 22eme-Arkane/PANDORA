@@ -59,6 +59,9 @@ EXPECTED_ONLY_LIVE = {
         "_apply_layout", "_apply_decoupage", "_open_decoupage_window",
         # Extraction calibrée Live (remplace les extracteurs Cinéma)
         "_live_extract_dialog",
+        # Refs visuelles 2026-06-11 : persistance + bibliothèque + chat DA
+        # (chantier à reporter vers Cinéma après validation Live)
+        "_start_refs_analysis",
     },
     "ui/page_storyboard_live.py": {
         "_visible_order", "_load_conductor_tracks", "_on_music_align",

@@ -1358,6 +1358,34 @@ _FR_TO_EN: dict[str, str] = {
     "plans importés dans le Storyboard ✓": "shots imported into the Storyboard ✓",
     "plans importés ✓": "shots imported ✓",
 
+    # ── Références visuelles Live — persistance, bibliothèque, chat DA ──
+    "Analyse des références disponible ✓": "Reference analysis available ✓",
+    "Discuter de la direction artistique avec": "Discuss the art direction with",
+    "Envoyer": "Send",
+    "Vous": "You",
+    "↻  Relancer l'analyse": "↻  Re-run analysis",
+    "Refait l'analyse complète des images (une requête par image).":
+        "Re-runs the full image analysis (one request per image).",
+    "Aucune image dans la section Références visuelles.":
+        "No image in the Visual references section.",
+    "Relancer l'analyse": "Re-run analysis",
+    "Relancer l'analyse complète ?": "Re-run the full analysis?",
+    "requête(s) IA": "AI request(s)",
+    "💾  Sauvegarder": "💾  Save",
+    "Sauvegarde cette analyse dans la bibliothèque globale\npour la réutiliser dans d'autres projets.":
+        "Saves this analysis to the global library\nto reuse it in other projects.",
+    "Sauvegarder l'analyse": "Save analysis",
+    "Nom de l'analyse :": "Analysis name:",
+    "Analyse sans titre": "Untitled analysis",
+    "Analyse sauvegardée dans la bibliothèque ✓": "Analysis saved to the library ✓",
+    "📂  Bibliothèque": "📂  Library",
+    "Charge une analyse sauvegardée — mêmes références visuelles,\nmême direction artistique, sans refaire l'analyse.":
+        "Loads a saved analysis — same visual references,\nsame art direction, without re-running the analysis.",
+    "Analyse chargée": "Analysis loaded",
+    "Supprimer une analyse": "Delete an analysis",
+    "Aucune analyse sauvegardée": "No saved analysis",
+    "Analyse supprimée de la bibliothèque.": "Analysis deleted from the library.",
+
     # ── Lot 17 — co-écriture (accueil), génération en série, divers ──
     "J'ai analysé votre scénario et rédigé des suggestions détaillées (visibles dans l'onglet « Analyse initiale »).\n\nDites-moi ce que vous souhaitez modifier, affiner ou conserver — je produirai alors une version remaniée de votre scénario en direct. Nous pouvons itérer autant de fois que nécessaire.": "I've analyzed your screenplay and written detailed suggestions (visible in the « Initial analysis » tab).\n\nTell me what you'd like to change, refine or keep — I'll then produce a reworked version of your screenplay live. We can iterate as many times as needed.",
     "Génération en série": "Batch generation",

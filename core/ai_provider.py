@@ -237,6 +237,17 @@ def chat(system: str, messages: list, tier: str = "creative",
     return _anthropic_complete(system, messages, tier, max_tokens)
 
 
+def chat_stream(system: str, messages: list, on_chunk=None, tier: str = "creative",
+                max_tokens: int = 2048) -> str:
+    """Conversation multi-tours en streaming : on_chunk(str) à chaque fragment."""
+    provider = get_provider()
+    if provider == "mistral":
+        return _mistral_stream(system, messages, on_chunk, tier, max_tokens)
+    if provider == "ollama":
+        return _ollama_stream(system, messages, on_chunk, tier, max_tokens)
+    return _anthropic_stream(system, messages, on_chunk, tier, max_tokens)
+
+
 def complete(system: str, user: str, tier: str = "utility",
              max_tokens: int = 2048) -> str:
     """Appel one-shot : un message utilisateur → texte complet."""

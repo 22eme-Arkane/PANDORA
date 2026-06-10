@@ -707,6 +707,56 @@ def refs_conducteur_file_et_fond():
 
 
 @test
+def refs_persistance_bibliotheque_chat():
+    """Refs visuelles 2026-06-11 : persistance projet, bibliothèque globale, chat DA."""
+    import inspect
+    # 1. Persistance par projet : refs + analyse écrites et restaurées avec le conducteur
+    from ui.page_scenario_live import PageScenario
+    src_save = inspect.getsource(PageScenario._save)
+    assert "ref_images" in src_save and "ref_analysis" in src_save, \
+        "refs + analyse sauvegardées avec le conducteur"
+    src_open = inspect.getsource(PageScenario._open_scenario)
+    assert "ref_images" in src_open and "ref_analysis" in src_open, \
+        "refs + analyse restaurées à l'ouverture du projet"
+    # 2. Le bouton Analyser rouvre l'analyse existante (pas de relance silencieuse)
+    src_an = inspect.getsource(PageScenario._on_analyze_refs)
+    assert "_open_refs_window" in src_an and "_start_refs_analysis" in src_an, \
+        "analyse existante rouverte ; relance via _start_refs_analysis"
+    # 3. Fenêtre : Relancer / Sauvegarder / Bibliothèque / chat DA + sauvegarde auto
+    src_w = inspect.getsource(PageScenario._open_refs_window)
+    for token in ("Relancer l'analyse", "ref_library", "RefsChatWorker",
+                  "_save(silent=True)", "Supprimer une analyse"):
+        assert token in src_w, f"fenêtre refs : {token}"
+    # 4. Bibliothèque globale : aller-retour complet en dossier temporaire
+    from core import ref_library
+    ref_library.LIB_DIR_OVERRIDE = os.path.join(_TMP, "ref_lib")
+    try:
+        p = ref_library.save_analysis("Océan originel", "DA test", ["x.jpg"], "mapping")
+        entries = ref_library.list_analyses()
+        assert len(entries) == 1 and entries[0]["name"] == "Océan originel"
+        loaded = ref_library.load_analysis(p)
+        assert loaded["analysis"] == "DA test" and loaded["mode"] == "mapping"
+        assert ref_library.delete_analysis(p) and not ref_library.list_analyses()
+    finally:
+        ref_library.LIB_DIR_OVERRIDE = None
+    # 5. Chat DA : worker multi-tours streaming via la couche IA
+    from core.ai_provider import chat_stream
+    assert callable(chat_stream), "chat multi-tours en streaming disponible"
+    from api.live_refs import RefsChatWorker, _CHAT_SYSTEM
+    w = RefsChatWorker([{"role": "user", "content": "?"}], "analyse", "cond", "mapping")
+    assert hasattr(w, "chunk") and hasattr(w, "done") and hasattr(w, "failed")
+    assert "chat_stream" in inspect.getsource(RefsChatWorker.run)
+    assert "ACTES" in _CHAT_SYSTEM and "jamais à copier" in _CHAT_SYSTEM
+    # 6. L'arrangement reçoit la direction artistique quand elle existe
+    from api.live_screenplay import ArrangeConducteurStreamWorker
+    aw = ArrangeConducteurStreamWorker("t", "live", 0, refs_analysis="DA")
+    assert aw._refs == "DA"
+    assert "DIRECTION ARTISTIQUE" in inspect.getsource(ArrangeConducteurStreamWorker.run)
+    assert "refs_analysis=self._last_ref_analysis" in inspect.getsource(PageScenario), \
+        "la page passe l'analyse à l'arrangement"
+
+
+@test
 def libelles_dynamiques_ia():
     """brand() rebaptise « Claude » selon l'assistant actif ; translate() le propage."""
     import core.ai_provider as ap
