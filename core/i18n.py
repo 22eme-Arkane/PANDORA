@@ -2910,6 +2910,13 @@ _FR_TO_EN: dict[str, str] = {
     "Mode show (enchaînement auto, calé mesure)": "Show mode (auto-chain, bar-snapped)",
     "Annuler la file": "Cancel queue",
     "Annuler l'envoi": "Cancel sending",
+    "Proteus  (polyvalent — recommandé)": "Proteus  (all-round — recommended)",
+    "Artemis HQ  (footage propre)": "Artemis HQ  (clean footage)",
+    "Artemis MQ  (footage moyen)": "Artemis MQ  (average footage)",
+    "Gaia HQ  (rendu naturel)": "Gaia HQ  (natural render)",
+    "Gaia CG  (rendu 3D / CG)": "Gaia CG  (3D / CG render)",
+    "Nyx  (réduction de bruit)": "Nyx  (noise reduction)",
+    "Starlight Mini  (qualité max, lent)": "Starlight Mini  (max quality, slow)",
     "Arrête la file : le plan en cours est abandonné,\nles plans restants sont conservés en attente.":
         "Stops the queue: the current shot is abandoned,\nremaining shots stay pending.",
     "Arrête la file : le clip en cours est abandonné,\nles clips restants sont conservés en attente.":

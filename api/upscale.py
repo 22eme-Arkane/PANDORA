@@ -26,8 +26,19 @@ UPSCALE_MODELS = [
     ("SeedVR2  (rapide, ~$0.001/MP)",     "seedvr"),
 ]
 
-# Modèles d'amélioration Topaz (sous-sélection des 19 dispo — défaut Proteus)
-TOPAZ_MODELS = ["Proteus", "Artemis", "Gaia", "Nyx", "Starlight"]
+# Modèles d'amélioration Topaz — (libellé affiché, valeur EXACTE de l'enum API).
+# ⚠ Vu en réel (2026-06-11) : « Gaia »/« Artemis »/« Starlight » nus n'existent
+# pas dans l'enum fal.ai → erreur immédiate. Valeurs valides (doc API) :
+# Proteus, Artemis HQ/MQ/LQ, Nyx, Nyx Fast/XL/HF, Gaia HQ/CG/2, Starlight *.
+TOPAZ_MODELS = [
+    ("Proteus  (polyvalent — recommandé)",      "Proteus"),
+    ("Artemis HQ  (footage propre)",            "Artemis HQ"),
+    ("Artemis MQ  (footage moyen)",             "Artemis MQ"),
+    ("Gaia HQ  (rendu naturel)",                "Gaia HQ"),
+    ("Gaia CG  (rendu 3D / CG)",                "Gaia CG"),
+    ("Nyx  (réduction de bruit)",               "Nyx"),
+    ("Starlight Mini  (qualité max, lent)",     "Starlight Mini"),
+]
 
 _ENDPOINTS = {
     "topaz":  "fal-ai/topaz/upscale/video",

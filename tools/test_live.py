@@ -524,6 +524,17 @@ def workers_construction():
     from core.music_analysis import AnalyzeMusicWorker
     assert [k for _, k in UPSCALE_MODELS] == ["topaz", "seedvr"]
     assert UpscaleVideoWorker("x.mp4", model="topaz", upscale_factor=4)._factor == 4
+    # Modèles Topaz = valeurs EXACTES de l'enum fal.ai (vu en réel : « Gaia » nu
+    # → erreur immédiate ; seuls Proteus/Nyx nus existent)
+    from api.upscale import TOPAZ_MODELS
+    _enum = {"Proteus", "Artemis HQ", "Artemis MQ", "Artemis LQ",
+             "Nyx", "Nyx Fast", "Nyx XL", "Nyx HF",
+             "Gaia HQ", "Gaia CG", "Gaia 2",
+             "Starlight Precise 1", "Starlight Precise 2", "Starlight Precise 2.5",
+             "Starlight HQ", "Starlight Mini", "Starlight Sharp",
+             "Starlight Fast 1", "Starlight Fast 2"}
+    assert all(k in _enum for _, k in TOPAZ_MODELS), "enum API Topaz exact"
+    assert all(isinstance(t, tuple) and len(t) == 2 for t in TOPAZ_MODELS)
     # File d'upscale ANNULABLE (demande 2026-06-11) : bouton ■, worker parqué,
     # clips restants conservés en attente
     import inspect

@@ -121,8 +121,8 @@ class TabUpscaleLive(QScrollArea):
         self._topaz_combo = QComboBox()
         self._topaz_combo.setMinimumHeight(34)
         self._topaz_combo.setStyleSheet(_combo_style())
-        for m in TOPAZ_MODELS:
-            self._topaz_combo.addItem(m, m)
+        for label, key in TOPAZ_MODELS:
+            self._topaz_combo.addItem(translate(label), key)
         tcol.addWidget(self._topaz_combo)
         set_row.addLayout(tcol, 1)
         lay.addLayout(set_row)
