@@ -919,6 +919,102 @@ def plafonds_anti_troncature():
 
 
 @test
+def pont_resolume():
+    """Pont Resolume : client REST (endpoints + body URI texte), worker d'envoi,
+    page contrôleur réactivée et branchée à la Vidéothèque."""
+    import inspect
+    from resolume.client import ResolumeClient, file_uri
+
+    class _Resp:
+        def __init__(self, code=200, payload=None):
+            self.status_code = code
+            self._p = payload if payload is not None else {}
+        def json(self):
+            return self._p
+
+    class _Session:
+        def __init__(self):
+            self.calls = []
+        def get(self, url, **k):
+            self.calls.append(("get", url, k))
+            if url.endswith("/product"):
+                return _Resp(200, {"name": "Arena", "major": 7})
+            return _Resp(200, {"layers": [
+                {"name": {"value": "PANDORA"},
+                 "clips": [{"name": {"value": "P1"}, "connected": {"value": True}}]},
+            ]})
+        def post(self, url, **k):
+            self.calls.append(("post", url, k))
+            return _Resp(204)
+        def put(self, url, **k):
+            self.calls.append(("put", url, k))
+            return _Resp(200)
+        def delete(self, url, **k):
+            self.calls.append(("delete", url, k))
+            return _Resp(204)
+
+    s = _Session()
+    c = ResolumeClient("127.0.0.1", 8080, session=s)
+    # Ping + composition
+    assert c.get_product_info().get("name") == "Arena"
+    layers = c.get_layers()
+    assert layers and layers[0].name == "PANDORA" and layers[0].clips[0].active
+    assert s.calls[-1][1].endswith("/api/v1/composition"), "couches via GET /composition"
+    # /open : body = URI fichier en TEXTE BRUT (l'ancien JSON ne chargeait rien)
+    clip = os.path.join(_TMP, "plan_01.mp4")
+    open(clip, "wb").close()
+    assert c.load_clip(1, 2, clip)
+    m, url, kw = s.calls[-1]
+    assert m == "post" and url.endswith("/composition/layers/1/clips/2/open")
+    assert kw["data"] == file_uri(clip).encode("utf-8"), "URI fichier en body"
+    assert kw["headers"]["Content-Type"] == "text/plain", "texte brut, pas JSON"
+    # Renommage, tempo, colonne
+    assert c.set_clip_name(1, 2, "P1") and '"P1"' in s.calls[-1][2]["data"]
+    assert c.set_tempo(129.0) and "tempocontroller" in s.calls[-1][2]["data"]
+    assert c.trigger_column(3) and s.calls[-1][1].endswith("/composition/columns/3/connect")
+    # Échec réseau → message Webserver dans last_error
+    class _Down:
+        def get(self, *a, **k):
+            raise OSError("refused")
+    d = ResolumeClient("127.0.0.1", 8080, session=_Down())
+    assert d.get_product_info() == {} and "Webserver" in d.last_error
+
+    # Worker d'envoi : 2 clips → slots consécutifs + BPM compo (run() synchrone)
+    from api.resolume_push import PushToResolumeWorker
+    clip2 = os.path.join(_TMP, "plan_02.mp4")
+    open(clip2, "wb").close()
+    s2 = _Session()
+    w = PushToResolumeWorker(
+        [{"path": clip, "name": "P1"}, {"path": clip2, "name": "P2"}],
+        layer=2, start_column=5, bpm=129.0,
+        client=ResolumeClient("127.0.0.1", 8080, session=s2))
+    results = []
+    w.finished.connect(results.append)
+    w.run()   # synchrone — pas de start() dans le harnais
+    assert results and results[0]["sent"] == 2 and not results[0]["failed"]
+    opens = [u for m, u, _ in s2.calls if m == "post" and u.endswith("/open")]
+    assert opens[0].endswith("/layers/2/clips/5/open") \
+        and opens[1].endswith("/layers/2/clips/6/open"), "slots consécutifs"
+    assert any("tempocontroller" in (k.get("data") or "") for m, _, k in s2.calls
+               if m == "put"), "BPM compo réglé"
+
+    # Page contrôleur : réactivée dans la nav + branchée à la Vidéothèque
+    import live_window as LW
+    src_w = inspect.getsource(LW)
+    assert '"resolume"' in src_w and "PageLive()" in src_w, "page dans la fenêtre Live"
+    assert "queue_paths" in src_w, "Vidéothèque → file pré-chargée"
+    from ui.page_live import PageLive
+    src_p = inspect.getsource(PageLive)
+    assert "scan_live_clips" in src_p, "bibliothèque = clips du PROJET"
+    assert "PushToResolumeWorker" in src_p and "get_resolume_config" in src_p
+    p = PageLive()
+    p.queue_paths([clip, clip2])
+    assert len(p._pending_paths) == 2, "file reçue"
+    p.queue_paths([])
+    assert p._pending_paths == []
+
+
+@test
 def libelles_dynamiques_ia():
     """brand() rebaptise « Claude » selon l'assistant actif ; translate() le propage."""
     import core.ai_provider as ap

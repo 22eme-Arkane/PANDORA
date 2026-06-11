@@ -1,16 +1,17 @@
 """
-ui/page_live.py — Page principale PANDORA | Live.
+ui/page_live.py — Contrôleur Resolume (PANDORA | Live).
 
-Intégration Resolume Arena/Avenue via l'API REST Wire (port 8080).
-  - Bibliothèque de clips PANDORA (fichiers .mp4 générés)
-  - Grille de composition couches × colonnes
-  - Connexion REST à Resolume (mock si déconnecté)
-  - Chargement de clips dans des slots (clic gauche)
-  - Déclenchement de clips (clic droit sur un slot)
+Intégration Resolume Arena/Avenue via l'API REST du Webserver (port 8080,
+à activer dans Resolume : Préférences → Webserver).
+  - Bibliothèque = les clips du PROJET (Vidéothèque : Seedance/upscalés/sonorisés)
+  - Grille de composition couches × colonnes (réelle si connecté, mock sinon)
+  - Chargement d'un clip dans un slot (clic gauche) · déclenchement (clic droit)
+  - ENVOI EN FILE : la Vidéothèque pousse ses clips ici (queue_paths) — chaque
+    clip remplit un slot consécutif de la couche choisie ; BPM compo optionnel
+    depuis le set analysé du Conducteur (PushToResolumeWorker).
 """
 
 import os
-import glob
 
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
@@ -18,6 +19,7 @@ from PyQt6.QtWidgets import (
 )
 from PyQt6.QtCore import Qt, QThread, pyqtSignal
 from ui.styles import CP
+from core.i18n import translate
 
 
 # ── Workers QThread ────────────────────────────────────────────────────────────
@@ -39,8 +41,8 @@ class _ConnectWorker(QThread):
         else:
             self.failed.emit(
                 f"Impossible de joindre Resolume sur {self._host}:{self._port}. "
-                "Vérifiez que Resolume est lancé et que Wire est activé "
-                "(Preferences → Wire → Enable REST API)."
+                "Vérifiez que Resolume est lancé et que le Webserver est activé "
+                "(Préférences → Webserver)."
             )
 
 
@@ -214,10 +216,12 @@ class PageLive(QWidget):
 
     def __init__(self):
         super().__init__()
-        self._host          = "localhost"
-        self._port          = 8080
+        from resolume.client import get_resolume_config
+        self._host, self._port = get_resolume_config()
         self._connected     = False
         self._selected_clip = ""
+        self._pending_paths: list[str] = []   # file reçue de la Vidéothèque
+        self._push_worker   = None
         self._slot_widgets: dict[tuple, _SlotBtn] = {}
         self._clip_cards:   list[_ClipCard]       = []
         self._workers:      list                  = []
@@ -256,7 +260,7 @@ class PageLive(QWidget):
         self._dot.setStyleSheet(f"color:{CP['text_dim']};font-size:12px;background:transparent;")
         lay.addWidget(self._dot)
 
-        self._host_input = QLineEdit("localhost")
+        self._host_input = QLineEdit(self._host)
         self._host_input.setFixedSize(130, 28)
         self._host_input.setStyleSheet(
             f"QLineEdit{{background:{CP['bg3']};border:1px solid {CP['border']};"
@@ -270,7 +274,7 @@ class PageLive(QWidget):
 
         self._port_spin = QSpinBox()
         self._port_spin.setRange(1024, 65535)
-        self._port_spin.setValue(8080)
+        self._port_spin.setValue(self._port)
         self._port_spin.setFixedSize(76, 28)
         self._port_spin.setStyleSheet(
             f"QSpinBox{{background:{CP['bg3']};border:1px solid {CP['border']};"
@@ -348,6 +352,70 @@ class PageLive(QWidget):
         )
         btn_refresh.clicked.connect(self._refresh_library)
         lib_lay.addWidget(btn_refresh)
+
+        # ── Envoi en file (Vidéothèque → slots consécutifs) ────────────────────
+        push_hdr = QLabel("ENVOI EN FILE")
+        push_hdr.setStyleSheet(
+            f"color:{CP['text_dim']};font-size:9px;font-weight:700;"
+            f"letter-spacing:2px;background:transparent;padding-top:8px;"
+        )
+        lib_lay.addWidget(push_hdr)
+
+        self._push_info = QLabel(translate("Toute la bibliothèque"))
+        self._push_info.setWordWrap(True)
+        self._push_info.setStyleSheet(
+            f"color:{CP['text_secondary']};font-size:9px;background:transparent;"
+        )
+        lib_lay.addWidget(self._push_info)
+
+        push_row = QHBoxLayout()
+        push_row.setSpacing(6)
+        for lbl_txt, attr, default, mx in (("Couche", "_push_layer", 1, 99),
+                                           ("Col.", "_push_col", 1, 256)):
+            lbl = QLabel(lbl_txt)
+            lbl.setStyleSheet(
+                f"color:{CP['text_secondary']};font-size:9px;background:transparent;")
+            push_row.addWidget(lbl)
+            spin = QSpinBox()
+            spin.setRange(1, mx)
+            spin.setValue(default)
+            spin.setFixedSize(48, 24)
+            spin.setStyleSheet(
+                f"QSpinBox{{background:{CP['bg3']};border:1px solid {CP['border']};"
+                f"border-radius:4px;color:{CP['text_primary']};font-size:10px;padding:0 2px;}}")
+            push_row.addWidget(spin)
+            setattr(self, attr, spin)
+        push_row.addStretch()
+        lib_lay.addLayout(push_row)
+
+        from PyQt6.QtWidgets import QCheckBox
+        self._push_bpm_cb = QCheckBox(translate("Régler le BPM de la composition"))
+        self._push_bpm_cb.setStyleSheet(
+            f"QCheckBox{{color:{CP['text_secondary']};font-size:9px;background:transparent;}}")
+        _bpm = self._conductor_bpm()
+        if _bpm > 0:
+            self._push_bpm_cb.setText(
+                translate("Régler le BPM de la composition") + f" ({_bpm:g})")
+            self._push_bpm_cb.setChecked(True)
+        else:
+            self._push_bpm_cb.setEnabled(False)
+            self._push_bpm_cb.setToolTip(translate(
+                "Analyse d'abord le set dans le Conducteur (« Analyser le set »)."))
+        lib_lay.addWidget(self._push_bpm_cb)
+
+        self._btn_push = QPushButton("⇪  " + translate("Envoyer vers Resolume"))
+        self._btn_push.setFixedHeight(30)
+        self._btn_push.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._btn_push.setStyleSheet(
+            f"QPushButton{{background:{CP['accent']};color:#07080f;"
+            f"border:none;border-radius:6px;font-size:10px;font-weight:700;}}"
+            f"QPushButton:hover{{background:#6eded6;}}"
+            f"QPushButton:disabled{{background:{CP['bg3']};color:{CP['text_dim']};"
+            f"border:1px solid {CP['border']};}}"
+        )
+        self._btn_push.clicked.connect(self._on_push_queue)
+        lib_lay.addWidget(self._btn_push)
+
         lay.addWidget(lib)
 
         # ── Grille Resolume ────────────────────────────────────────────────────
@@ -597,16 +665,17 @@ class PageLive(QWidget):
             if item and item.widget():
                 item.widget().deleteLater()
 
-        pandora_root = os.path.join(os.path.expanduser("~"), "Videos", "PANDORA")
-        clips = glob.glob(os.path.join(pandora_root, "**", "*.mp4"), recursive=True)
+        # Mêmes sources que la Vidéothèque du Studio (clips du PROJET)
+        from ui.tab_video_library_live import scan_live_clips
+        clips = scan_live_clips()
         clips.sort(
             key=lambda p: os.path.getmtime(p) if os.path.isfile(p) else 0,
             reverse=True
         )
-        clips = clips[:60]
+        clips = clips[:80]
 
         if not clips:
-            lbl = QLabel("Aucun clip trouvé\ndans ~/Videos/PANDORA/")
+            lbl = QLabel("Aucun clip dans le projet —\ngénère depuis le Studio IA.")
             lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
             lbl.setStyleSheet(
                 f"color:{CP['text_dim']};font-size:10px;background:transparent;"
@@ -680,3 +749,74 @@ class PageLive(QWidget):
         w.finished.connect(w.deleteLater)
         self._workers.append(w)
         w.start()
+
+    # ── Envoi en file (Vidéothèque → slots consécutifs) ────────────────────────
+
+    def _conductor_bpm(self) -> float:
+        """BPM du premier morceau analysé du conducteur (0 si aucun)."""
+        try:
+            import core.scenario as _sc
+            for sc in _sc.list_scenarios():
+                for t in sc.get("music_tracks", []) or []:
+                    if isinstance(t, dict) and t.get("bpm"):
+                        return float(t["bpm"])
+        except Exception:
+            pass
+        return 0.0
+
+    def queue_paths(self, paths: list):
+        """Reçoit une file de clips (Vidéothèque « → Resolume »)."""
+        self._pending_paths = [p for p in (paths or []) if p and os.path.isfile(p)]
+        n = len(self._pending_paths)
+        if n:
+            self._push_info.setText(
+                f"{n} " + translate("clip(s) reçus de la Vidéothèque"))
+            self._push_info.setStyleSheet(
+                f"color:{CP['accent']};font-size:9px;background:transparent;")
+        else:
+            self._push_info.setText(translate("Toute la bibliothèque"))
+            self._push_info.setStyleSheet(
+                f"color:{CP['text_secondary']};font-size:9px;background:transparent;")
+
+    def _on_push_queue(self):
+        """Envoie la file (ou toute la bibliothèque) vers les slots consécutifs."""
+        paths = self._pending_paths or [c._path for c in self._clip_cards
+                                        if os.path.isfile(getattr(c, "_path", ""))]
+        if not paths:
+            self._status_lbl.setText("✗  Aucun clip à envoyer.")
+            return
+        # L'ordre Vidéothèque/bibliothèque = ordre des colonnes (P1, P2…)
+        clips = [{"path": p, "name": os.path.splitext(os.path.basename(p))[0]}
+                 for p in paths]
+        bpm = self._conductor_bpm() if self._push_bpm_cb.isChecked() else 0.0
+        from api.resolume_push import PushToResolumeWorker
+        self._host = self._host_input.text().strip() or self._host
+        self._port = self._port_spin.value()
+        w = PushToResolumeWorker(clips, layer=self._push_layer.value(),
+                                 start_column=self._push_col.value(),
+                                 bpm=bpm, host=self._host, port=self._port)
+        self._push_worker = w
+        self._btn_push.setEnabled(False)
+        w.progress.connect(lambda _p, msg: self._status_lbl.setText(msg))
+        w.finished.connect(self._on_push_done)
+        w.failed.connect(self._on_push_failed)
+        w.start()
+
+    def _on_push_done(self, result: dict):
+        self._btn_push.setEnabled(True)
+        sent   = result.get("sent", 0)
+        failed = result.get("failed", [])
+        msg = (f"✓  {sent} clip(s) chargé(s) dans Resolume "
+               f"(couche {result.get('layer', 1)}, colonnes "
+               f"{result.get('first_column', 1)}+)")
+        if failed:
+            msg += f" · ⚠ {len(failed)} échec(s) : {', '.join(failed[:4])}"
+        self._status_lbl.setText(msg)
+        self._pending_paths = []
+        self._push_info.setText(translate("Toute la bibliothèque"))
+        if self._connected:
+            self._fetch_layers()   # la grille reflète les nouveaux slots
+
+    def _on_push_failed(self, msg: str):
+        self._btn_push.setEnabled(True)
+        self._status_lbl.setText(f"✗  {msg}")

@@ -103,8 +103,8 @@ class PageLiveSettings(QWidget):
         rc.setSpacing(14)
 
         info = QLabel(
-            "Resolume Arena ou Avenue doit être lancé avec Wire activé :\n"
-            "Preferences → Wire → Enable REST API  (port par défaut : 8080)"
+            "Resolume Arena ou Avenue doit être lancé avec le Webserver activé :\n"
+            "Préférences → Webserver → Enable Webserver  (port par défaut : 8080)"
         )
         info.setWordWrap(True)
         info.setStyleSheet(
@@ -128,7 +128,7 @@ class PageLiveSettings(QWidget):
         # Port
         port_row = QHBoxLayout()
         port_row.setSpacing(12)
-        port_row.addWidget(_label("Port Wire :"))
+        port_row.addWidget(_label("Port Webserver :"))
         self._port_spin = QSpinBox()
         self._port_spin.setRange(1024, 65535)
         self._port_spin.setValue(8080)

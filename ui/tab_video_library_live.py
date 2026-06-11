@@ -29,6 +29,43 @@ from ui.tab_video_library import _LibThumbWorker, _VIDEO_EXTS
 _COLS = 4
 
 
+def scan_live_clips() -> list:
+    """Tous les clips vidéo du projet Live (Seedance, upscalés, sonorisés,
+    dossier de sortie). Source UNIQUE — partagée avec le contrôleur Resolume."""
+    import core.context as ctx
+    import core.config as cfg
+    dirs_to_scan: list[str] = []
+    data_root   = ctx.get_data_root()
+    project_dir = os.path.join(data_root, "Seedance")
+    if os.path.isdir(project_dir):
+        dirs_to_scan.append(project_dir)
+    # Sorties des onglets Upscaling et Sound Design (vidéos sonorisées)
+    for sub in ("upscaled", "live_sound_design"):
+        d = os.path.join(data_root, sub)
+        if os.path.isdir(d):
+            dirs_to_scan.append(d)
+    output_dir = cfg.get_output_dir()
+    if output_dir and os.path.isdir(output_dir):
+        _norm = {os.path.normpath(x) for x in dirs_to_scan}
+        if os.path.normpath(output_dir) not in _norm:
+            dirs_to_scan.append(output_dir)
+
+    paths: list[str] = []
+    seen: set[str] = set()
+    for d in dirs_to_scan:
+        try:
+            for fname in sorted(os.listdir(d)):
+                if os.path.splitext(fname)[1].lower() not in _VIDEO_EXTS:
+                    continue
+                full = os.path.normpath(os.path.join(d, fname))
+                if full not in seen and os.path.isfile(full):
+                    seen.add(full)
+                    paths.append(full)
+        except OSError:
+            pass
+    return paths
+
+
 # ── Carte vidéo Live ────────────────────────────────────────────────────────
 
 class _LiveVideoCard(QFrame):
@@ -304,38 +341,7 @@ class TabVideoLibraryLive(QScrollArea):
             self._thumb_workers.append(tw)
 
     def _scan_videos(self) -> list[str]:
-        import core.context as ctx
-        import core.config as cfg
-        dirs_to_scan: list[str] = []
-        data_root   = ctx.get_data_root()
-        project_dir = os.path.join(data_root, "Seedance")
-        if os.path.isdir(project_dir):
-            dirs_to_scan.append(project_dir)
-        # Sorties des onglets Upscaling et Sound Design (vidéos sonorisées)
-        for sub in ("upscaled", "live_sound_design"):
-            d = os.path.join(data_root, sub)
-            if os.path.isdir(d):
-                dirs_to_scan.append(d)
-        output_dir = cfg.get_output_dir()
-        if output_dir and os.path.isdir(output_dir):
-            _norm = {os.path.normpath(x) for x in dirs_to_scan}
-            if os.path.normpath(output_dir) not in _norm:
-                dirs_to_scan.append(output_dir)
-
-        paths: list[str] = []
-        seen: set[str] = set()
-        for d in dirs_to_scan:
-            try:
-                for fname in sorted(os.listdir(d)):
-                    if os.path.splitext(fname)[1].lower() not in _VIDEO_EXTS:
-                        continue
-                    full = os.path.normpath(os.path.join(d, fname))
-                    if full not in seen and os.path.isfile(full):
-                        seen.add(full)
-                        paths.append(full)
-            except OSError:
-                pass
-        return self._sort_paths(paths)
+        return self._sort_paths(scan_live_clips())
 
     def _sort_paths(self, paths: list[str]) -> list[str]:
         k = self._sort_key

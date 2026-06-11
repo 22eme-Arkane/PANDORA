@@ -160,6 +160,7 @@ _NAV_ITEMS = [
     ("⛟", "Véhicules",           "vehicules",   "vehicule.png"),
     None,
     ("✦", "Studio IA",           "studio",      "seedance.png"),
+    ("▶", "Resolume",            "resolume",    "Live.png"),
     ("⚙", "Paramètres",          "settings",    "settings.png"),
 ]
 
@@ -702,14 +703,22 @@ class LiveWindow(QMainWindow):
         # ── Studio IA Live (dédié) ──────────────────────────────────────────────
         from ui.live_studio_widget import LiveStudioWidget
         studio = LiveStudioWidget()
-        studio.open_resolume.connect(lambda: None)   # Resolume retiré pour le moment
+        studio.open_resolume.connect(lambda: self._navigate("resolume"))
         self._pages["studio"] = studio
+
+        # ── Contrôleur Resolume (réactivé — chantier 2026-06-11) ───────────────
+        from ui.page_live import PageLive
+        resolume = PageLive()
+        self._pages["resolume"] = resolume
+        # Vidéothèque « → Resolume » : la file de clips arrive pré-chargée
+        studio.tab_library.send_to_resolume.connect(
+            lambda paths: (resolume.queue_paths(paths), self._navigate("resolume")))
 
         from ui.page_live_settings import PageLiveSettings
         self._pages["settings"] = PageLiveSettings()
 
         for key in ("projects", "conducteur", "seq_live", "seq_mapping", "casting",
-                    "accessoires", "vehicules", "studio", "settings"):
+                    "accessoires", "vehicules", "studio", "resolume", "settings"):
             self._stack.addWidget(self._pages[key])
 
     # Les pages copiées de Cinéma émettent parfois les clés Cinéma → on les
