@@ -11,7 +11,7 @@ Tout passe par la clé Anthropic (config.json).
 
 from PyQt6.QtCore import QThread, pyqtSignal
 
-from api.live_screenplay import _extract_json_array
+from api.live_screenplay import _extract_json_array, _FACADE_FRAME_RULE
 
 _MODEL = "claude-haiku-4-5"
 
@@ -19,7 +19,9 @@ _MODEL = "claude-haiku-4-5"
 def _mode_ctx(mode: str) -> str:
     if mode == "mapping":
         return ("Contexte : performance de MAPPING vidéo projeté sur la façade d'un "
-                "bâtiment (façade verrouillée, caméra fixe, séquence continue).")
+                "bâtiment (façade verrouillée, caméra fixe, séquence continue). "
+                "SEULE la façade de la photo de référence existe — aucune action "
+                "hors de cette zone (cheminée, toit, côtés, sol, alentours).")
     return ("Contexte : performance LIVE / VJ (visuels en boucle projetés en concert "
             "ou installation).")
 
@@ -69,7 +71,8 @@ class FormatConducteurWorker(QThread):
                      "extinction (façade disparue, noir total), transformation (matière qui se "
                      "fissure/fond/se reconstruit), recouvrement total (un autre monde plein "
                      "cadre), jeu architectural (seules des parties s'illuminent). Chaque "
-                     "PROMPT VIDÉO doit COMMENCER par l'état de la façade dans ce plan. "
+                     "PROMPT VIDÉO doit COMMENCER par l'état de la façade dans ce plan.\n"
+                     + _FACADE_FRAME_RULE
                      if self._mode == "mapping" else "")
             system = (
                 "Tu es superviseur de génération vidéo IA ET sound designer pour PANDORA | Live. "

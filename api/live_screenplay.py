@@ -44,6 +44,22 @@ Pour CHAQUE plan, donne un objet JSON avec :
 Réponds UNIQUEMENT avec un tableau JSON de plans (aucun texte autour).
 """
 
+# Règle PARTAGÉE par tous les prompts IA du mode Mapping (découpage, mise en
+# page, arrangement, application, co-écriture). Retour de test réel : l'IA
+# demandait « le Père Noël entre par la cheminée » — or la cheminée n'est pas
+# sur la façade mappée. L'amont (texte) doit être confiné comme l'aval (image).
+_FACADE_FRAME_RULE = """\
+- ZONE MAPPÉE — la seule chose qui existe est la façade telle qu'elle apparaît
+  sur la photo de référence, en plan frontal. N'écris JAMAIS d'action qui repose
+  sur un élément ABSENT de cette zone : pas de cheminée, pas de toit au-delà du
+  faîte visible, pas des côtés ni de l'arrière du bâtiment, pas de sol ou de rue
+  devant, pas de ciel ni d'alentours. Tout ce qui apparaît, entre ou sort passe
+  par les BORDS du cadre ou par les éléments DE la façade (portes, fenêtres,
+  corniches, arêtes). Si la trame évoque un élément hors zone (ex. « il entre
+  par la cheminée »), TRANSPOSE l'action sur la façade (ex. une fenêtre
+  s'illumine et il s'y engouffre) au lieu de la reprendre telle quelle.
+"""
+
 _SYSTEM_MAPPING = """\
 Tu es un concepteur de mapping vidéo (projection sur façade de bâtiment). À partir du
 CONDUCTEUR fourni, produis le DÉCOUPAGE d'une séquence de mapping projetée sur une
@@ -63,6 +79,7 @@ Contraintes IMPÉRATIVES :
   * RECOUVREMENT — le contenu projeté la remplace totalement : un autre monde plein cadre ;
   * JEU ARCHITECTURAL — seules certaines parties s'illuminent (fenêtres, corniches, colonnes).
 - Alterne ces modes d'un plan à l'autre pour créer des surprises et des respirations.
+""" + _FACADE_FRAME_RULE + """\
 
 Pour CHAQUE plan, donne un objet JSON avec :
 - "act": numéro de l'acte auquel ce plan appartient (entier, commence à 1).
@@ -84,7 +101,10 @@ Pour CHAQUE plan, donne un objet JSON avec :
   horodatages ; les impacts musicaux exacts sont gérés par les CUTS entre plans.
   3 à 5 phrases riches. VISUEL UNIQUEMENT —
   INTERDIT d'y mettre le BPM, un tempo, des chiffres musicaux, des instruments ou tout
-  terme audio.
+  terme audio. RESTE DANS LA ZONE : le prompt ne mentionne JAMAIS d'architecture
+  absente de la façade de référence (no chimney, no roof beyond the visible ridge,
+  no building sides, no ground, no sky, no surroundings) — entries and exits happen
+  through the frame edges or through the facade's own elements (doors, windows).
 - "sound_prompt": prompt SOUND DESIGN en ANGLAIS (SFX / ambiance, AUCUNE voix ni parole).
   C'est ICI — et seulement ici — que le BPM et les temps forts sont pris en compte.
 
@@ -233,6 +253,7 @@ Analyse-le et propose un ARRANGEMENT :
   (matière qui change), recouvrements (le contenu projeté la remplace) et jeux architecturaux
   (seules des parties s'illuminent) ;
 - placement des moments forts et transitions SANS coupe entre actes.
+""" + _FACADE_FRAME_RULE + """\
 
 Donne d'abord une ANALYSE claire, puis des SUGGESTIONS concrètes et numérotées.
 Ne réécris pas tout le conducteur — tu PROPOSES. Réponds en français.
@@ -247,6 +268,10 @@ IMPORTANT — c'est un CONDUCTEUR, PAS un scénario de film. INTERDIT : « INT. 
 « EXT. », en-têtes de scène, numéros de scène, « séquence », « scène », mise en
 page scénario. Garde la FORME du conducteur original (déroulé en actes / moments),
 le français et la voix de l'auteur. N'invente aucun élément non demandé.
+Pour un conducteur de MAPPING : toute action reste STRICTEMENT sur la façade
+mappée (la photo de référence, plan frontal) — jamais de cheminée, toit, côtés,
+sol ou alentours hors zone ; si une suggestion l'exige, transpose l'action sur
+la façade (portes, fenêtres, arêtes, bords du cadre).
 
 Réponds UNIQUEMENT avec le conducteur réécrit (aucun commentaire autour).
 """
@@ -339,7 +364,10 @@ class ArrangeChatConducteurWorker(QThread):
             return
         try:
             ctx = ("performance de MAPPING vidéo projetée sur une façade (nuit, "
-                   "façade = écran)" if self._mode == "mapping"
+                   "façade = écran ; SEULE la façade de la photo de référence "
+                   "existe — jamais d'action sur une cheminée, un toit, les côtés "
+                   "ou les alentours hors zone : transpose sur la façade)"
+                   if self._mode == "mapping"
                    else "performance LIVE / VJ (loops visuels projetés)")
             doc = (f"CONDUCTEUR ACTUEL :\n{self._conducteur}\n\n"
                    f"SUGGESTIONS D'ARRANGEMENT PROPOSÉES :\n{self._suggestions}")
