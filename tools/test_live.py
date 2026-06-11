@@ -927,6 +927,35 @@ def plafonds_anti_troncature():
 
 
 @test
+def files_annulables():
+    """Garde-fous (2026-06-11) : TOUTE file d'attente est annulable proprement —
+    worker parqué (abandon_thread), éléments restants conservés en attente."""
+    import inspect
+    import ui.tab_upscale_live as UPS
+    import ui.tab_sound_design_live as SDX
+    import ui.page_live as PLV
+    for mod, btn, handler in (
+        (UPS, "_btn_cancel",       "def _on_cancel"),
+        (SDX, "_btn_cancel_queue", "def _on_cancel_queue"),
+        (PLV, "_btn_push_cancel",  "def _on_push_cancel"),
+    ):
+        src = inspect.getsource(mod)
+        assert btn in src and handler in src, f"{mod.__name__} : bouton Annuler"
+        assert "abandon_thread" in src, f"{mod.__name__} : worker parqué (anti-crash)"
+    # Sound Design : le plan interrompu repasse en attente (relançable)
+    src_sd = inspect.getsource(SDX.TabSoundDesignLive._on_cancel_queue)
+    assert 'it["status"] = "pending"' in src_sd
+    assert "_sfx_cancelled" in inspect.getsource(SDX.TabSoundDesignLive._process_next_sfx)
+    # t2v (série) et moods (batch) ont déjà leur annulation — on la fige aussi
+    from ui.tab_t2v_live import TabT2V
+    src_t2v = inspect.getsource(TabT2V.cancel_generation)
+    assert "_batch_queue.clear()" in src_t2v, "t2v : Annuler vide la file en série"
+    import ui.page_storyboard_live as SBL
+    assert ".cancel()" in inspect.getsource(SBL.PageStoryboard._on_batch_mood), \
+        "moods : bouton Arrêter"
+
+
+@test
 def pont_resolume():
     """Pont Resolume : client REST (endpoints + body URI texte), worker d'envoi,
     page contrôleur réactivée et branchée à la Vidéothèque."""

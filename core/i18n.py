@@ -2909,6 +2909,9 @@ _FR_TO_EN: dict[str, str] = {
     "Envoyer vers Resolume": "Send to Resolume",
     "Mode show (enchaînement auto, calé mesure)": "Show mode (auto-chain, bar-snapped)",
     "Annuler la file": "Cancel queue",
+    "Annuler l'envoi": "Cancel sending",
+    "Arrête la file : le plan en cours est abandonné,\nles plans restants sont conservés en attente.":
+        "Stops the queue: the current shot is abandoned,\nremaining shots stay pending.",
     "Arrête la file : le clip en cours est abandonné,\nles clips restants sont conservés en attente.":
         "Stops the queue: the current clip is abandoned,\nremaining clips stay pending.",
     "File annulée": "Queue cancelled",

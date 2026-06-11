@@ -151,6 +151,20 @@ class TabSoundDesignLive(QWidget):
             f"QPushButton:disabled{{background:{C['bg3']};color:{C['text_dim']};}}")
         self._btn_run_queue.clicked.connect(self._on_run_queue)
         run_row.addWidget(self._btn_run_queue)
+        self._btn_cancel_queue = QPushButton("■  " + translate("Annuler la file"))
+        self._btn_cancel_queue.setFixedHeight(38)
+        self._btn_cancel_queue.setVisible(False)
+        self._btn_cancel_queue.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._btn_cancel_queue.setToolTip(translate(
+            "Arrête la file : le plan en cours est abandonné,\n"
+            "les plans restants sont conservés en attente."))
+        self._btn_cancel_queue.setStyleSheet(
+            f"QPushButton{{background:{C['bg3']};color:{C['red']};"
+            f"border:1px solid {C['red']};border-radius:8px;font-size:11px;"
+            f"font-weight:700;padding:0 14px;}}"
+            f"QPushButton:hover{{background:rgba(255,79,106,0.12);}}")
+        self._btn_cancel_queue.clicked.connect(self._on_cancel_queue)
+        run_row.addWidget(self._btn_cancel_queue)
         self._btn_export_mix = QPushButton("⤓  " + translate("Exporter la bande-son (fondu 1s)"))
         self._btn_export_mix.setFixedHeight(38)
         self._btn_export_mix.setEnabled(False)
@@ -476,13 +490,35 @@ class TabSoundDesignLive(QWidget):
             if it["status"] != "done":
                 it["status"] = "pending"
         self._sfx_running = True
+        self._sfx_cancelled = False
         self._btn_run_queue.setEnabled(False)
         self._btn_load_plans.setEnabled(False)
+        self._btn_cancel_queue.setVisible(True)
         self._set_busy(True)
         self._refresh_sfx_queue()
         self._process_next_sfx()
 
+    def _on_cancel_queue(self):
+        """Arrêt de la file : plan en cours abandonné, restants conservés."""
+        if not self._sfx_running:
+            return
+        self._sfx_cancelled = True
+        if getattr(self, "_queue_worker", None) is not None:
+            # ANTI-CRASH : worker PARQUÉ (signaux coupés) — jamais déréférencé à chaud
+            from core.worker import abandon_thread
+            abandon_thread(self._queue_worker)
+            self._queue_worker = None
+        # Le plan interrompu repasse en attente (relançable tel quel)
+        if 0 <= getattr(self, "_sfx_idx", -1) < len(self._sfx_queue):
+            it = self._sfx_queue[self._sfx_idx]
+            if it["status"] == "running":
+                it["status"] = "pending"
+        self._finish_sfx_queue()
+
     def _process_next_sfx(self):
+        if getattr(self, "_sfx_cancelled", False):
+            self._finish_sfx_queue()
+            return
         nxt = next((i for i, it in enumerate(self._sfx_queue)
                     if it["status"] == "pending"), None)
         if nxt is None:
@@ -524,11 +560,19 @@ class TabSoundDesignLive(QWidget):
         self._sfx_running = False
         self._set_busy(False)
         self._btn_load_plans.setEnabled(True)
+        self._btn_cancel_queue.setVisible(False)
         ok  = sum(1 for it in self._sfx_queue if it["status"] == "done")
         err = sum(1 for it in self._sfx_queue if it["status"] == "error")
-        self._status.setText(
-            f"✓  {ok} {translate('ambiance(s) générée(s)')}"
-            + (f"  ·  {err} {translate('erreur(s)')}" if err else ""))
+        if getattr(self, "_sfx_cancelled", False):
+            rest = sum(1 for it in self._sfx_queue if it["status"] == "pending")
+            self._status.setText(
+                "■  " + translate("File annulée") + f" — {ok} "
+                + translate("ambiance(s) générée(s)") + f", {rest} "
+                + translate("en attente"))
+        else:
+            self._status.setText(
+                f"✓  {ok} {translate('ambiance(s) générée(s)')}"
+                + (f"  ·  {err} {translate('erreur(s)')}" if err else ""))
         self._refresh_sfx_queue()
 
     # ── Bande-son continue (fondu enchaîné entre les plans) ───────────────────

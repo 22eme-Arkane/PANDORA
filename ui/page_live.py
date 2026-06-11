@@ -425,6 +425,19 @@ class PageLive(QWidget):
         self._btn_push.clicked.connect(self._on_push_queue)
         lib_lay.addWidget(self._btn_push)
 
+        self._btn_push_cancel = QPushButton("■  " + translate("Annuler l'envoi"))
+        self._btn_push_cancel.setFixedHeight(28)
+        self._btn_push_cancel.setVisible(False)
+        self._btn_push_cancel.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._btn_push_cancel.setStyleSheet(
+            f"QPushButton{{background:{CP['bg3']};color:{CP['red']};"
+            f"border:1px solid {CP['red']};border-radius:6px;"
+            f"font-size:10px;font-weight:700;}}"
+            f"QPushButton:hover{{background:rgba(255,79,106,0.12);}}"
+        )
+        self._btn_push_cancel.clicked.connect(self._on_push_cancel)
+        lib_lay.addWidget(self._btn_push_cancel)
+
         lay.addWidget(lib)
 
         # ── Grille Resolume ────────────────────────────────────────────────────
@@ -807,13 +820,27 @@ class PageLive(QWidget):
                                  show_mode=self._show_mode_cb.isChecked())
         self._push_worker = w
         self._btn_push.setEnabled(False)
+        self._btn_push_cancel.setVisible(True)
         w.progress.connect(lambda _p, msg: self._status_lbl.setText(msg))
         w.finished.connect(self._on_push_done)
         w.failed.connect(self._on_push_failed)
         w.start()
 
+    def _on_push_cancel(self):
+        """Arrêt de l'envoi : le worker s'interrompt au prochain clip (parqué)."""
+        if self._push_worker is not None:
+            from core.worker import abandon_thread
+            abandon_thread(self._push_worker)   # requestInterruption + signaux coupés
+            self._push_worker = None
+        self._btn_push.setEnabled(True)
+        self._btn_push_cancel.setVisible(False)
+        self._status_lbl.setText("■  Envoi vers Resolume annulé.")
+        if self._connected:
+            self._fetch_layers()   # la grille reflète les clips déjà chargés
+
     def _on_push_done(self, result: dict):
         self._btn_push.setEnabled(True)
+        self._btn_push_cancel.setVisible(False)
         sent   = result.get("sent", 0)
         failed = result.get("failed", [])
         msg = (f"✓  {sent} clip(s) chargé(s) dans Resolume "
@@ -829,4 +856,5 @@ class PageLive(QWidget):
 
     def _on_push_failed(self, msg: str):
         self._btn_push.setEnabled(True)
+        self._btn_push_cancel.setVisible(False)
         self._status_lbl.setText(f"✗  {msg}")
