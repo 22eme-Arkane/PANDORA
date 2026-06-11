@@ -1436,6 +1436,13 @@ _FR_TO_EN: dict[str, str] = {
         "Mood inspired by the image (Kontext)…",
     "Co-écrire l'arrangement avec": "Co-write the arrangement with",
     "plan(s) → colonnes Musique/BPM remplies": "shot(s) → Music/BPM columns filled",
+    "Aucun plan — génère le découpage depuis le Conducteur.":
+        "No shot — generate the breakdown from the Rundown.",
+    "Charge les plans en file d'attente — la sélection du Conducteur\nsi tu en as une (Ctrl+clic = multi), sinon toute la séquence.":
+        "Loads shots into the queue — the Rundown selection\nif you have one (Ctrl+click = multi), otherwise the whole sequence.",
+    "RENDU": "OUTPUT",
+    "Exporter la bande-son fondue (1s) à la fin de la file":
+        "Export the crossfaded soundtrack (1s) when the queue ends",
 
     # ── Lot 17 — co-écriture (accueil), génération en série, divers ──
     "J'ai analysé votre scénario et rédigé des suggestions détaillées (visibles dans l'onglet « Analyse initiale »).\n\nDites-moi ce que vous souhaitez modifier, affiner ou conserver — je produirai alors une version remaniée de votre scénario en direct. Nous pouvons itérer autant de fois que nécessaire.": "I've analyzed your screenplay and written detailed suggestions (visible in the « Initial analysis » tab).\n\nTell me what you'd like to change, refine or keep — I'll then produce a reworked version of your screenplay live. We can iterate as many times as needed.",

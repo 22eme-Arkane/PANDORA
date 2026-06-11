@@ -720,7 +720,24 @@ def sound_design_file_et_crossfade():
     t._load_seq_plans()
     assert len(t._sfx_queue) == 2, "seuls les plans avec prompt son sont chargés"
     assert [q["number"] for q in t._sfx_queue] == [1, 3], "ordre des plans"
-    assert t._btn_run_queue.isEnabled(), "bouton Générer la file actif"
+    # Refonte 2026-06-11 (retours Matthieu) : bouton UNIQUE « Générer » (file si
+    # chargée, sinon manuel), Conducteur visuel partagé avec Générer depuis Séq.,
+    # export de la bande-son fondue = option RENDU cochée par défaut
+    assert not hasattr(t, "_btn_run_queue"), "plus de double bouton"
+    assert "Générer la file" in t._btn_generate.text(), "bouton unique contextuel"
+    import inspect as _i
+    assert "_on_run_queue" in _i.getsource(TabSoundDesignLive._on_generate), \
+        "Générer = file en priorité"
+    assert hasattr(t, "_storyboard"), "Conducteur visuel (StoryboardSelector partagé)"
+    assert type(t._storyboard).__name__ == "StoryboardSelector"
+    assert t._auto_mix_cb.isChecked(), "bande-son fondue auto par défaut"
+    assert "_auto_mix_cb.isChecked" in _i.getsource(TabSoundDesignLive._finish_sfx_queue), \
+        "export auto en fin de file"
+    # La sélection du Conducteur prime sur « toute la séquence »
+    assert "get_selected_shots" in _i.getsource(TabSoundDesignLive._load_seq_plans)
+    # Le sélecteur s'appelle désormais « Conducteur » (t2v + sound design)
+    import ui.tab_t2v_live as T2V
+    assert 'section_label("Conducteur")' in _i.getsource(T2V.StoryboardSelector)
     # Commande de crossfade (pure) : N entrées → N-1 acrossfade chaînés
     cmd = TabSoundDesignLive._build_crossfade_cmd(
         "ffmpeg", ["a.wav", "b.wav", "c.wav"], "out.wav", fade_s=1.0)

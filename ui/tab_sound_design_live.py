@@ -82,31 +82,11 @@ class TabSoundDesignLive(QWidget):
             f"color:{C['text_dim']};font-size:11px;background:transparent;border:none;")
         root.addWidget(sub)
 
-        # ── Sélecteur de mode (segmenté) ──────────────────────────────────────
-        mode_row = QHBoxLayout()
-        mode_row.setSpacing(0)
-        self._btn_mode_text  = self._make_mode_btn(translate("Prompt → SFX"), "text")
-        self._btn_mode_video = self._make_mode_btn(translate("Loop vidéo → bande-son"), "video")
-        mode_row.addWidget(self._btn_mode_text)
-        mode_row.addWidget(self._btn_mode_video)
-        mode_row.addStretch()
-        root.addLayout(mode_row)
-
-        # ── Panneaux ──────────────────────────────────────────────────────────
-        self._stack = QStackedWidget()
-        self._stack.addWidget(self._build_text_panel())
-        self._stack.addWidget(self._build_video_panel())
-        root.addWidget(self._stack)
-
-        # ── Depuis les Séquences : file d'attente de plans ────────────────────
+        # ── Depuis les Séquences EN HAUT (même logique que Générer depuis
+        #    Séquences : sélecteur Live/Mapping + Conducteur visuel des plans)
         self._sfx_queue: list[dict] = []     # {number, title, prompt, duration, status, out}
         self._sfx_running = False
         self._seq_mode = "live"
-
-        _sep = QFrame()
-        _sep.setFixedHeight(1)
-        _sep.setStyleSheet(f"background:{C['border']};")
-        root.addWidget(_sep)
 
         _seq_title = QLabel(translate("Depuis les Séquences — file d'attente"))
         _seq_title.setStyleSheet(
@@ -123,6 +103,9 @@ class TabSoundDesignLive(QWidget):
         self._btn_load_plans = QPushButton("⟳  " + translate("Charger les plans"))
         self._btn_load_plans.setFixedHeight(30)
         self._btn_load_plans.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._btn_load_plans.setToolTip(translate(
+            "Charge les plans en file d'attente — la sélection du Conducteur\n"
+            "si tu en as une (Ctrl+clic = multi), sinon toute la séquence."))
         self._btn_load_plans.setStyleSheet(
             f"QPushButton{{background:transparent;color:{C['text_secondary']};"
             f"border:1px solid {C['border']};border-radius:7px;font-size:11px;"
@@ -132,25 +115,38 @@ class TabSoundDesignLive(QWidget):
         seq_row.addWidget(self._btn_load_plans)
         seq_row.addStretch()
         root.addLayout(seq_row)
+
+        # Conducteur visuel (vignettes des plans) — même composant que
+        # « Générer depuis Séquences » ; suit le sélecteur Live/Mapping.
+        from ui.tab_t2v_live import StoryboardSelector
+        self._storyboard = StoryboardSelector()
+        root.addWidget(self._storyboard)
         self._apply_seq_btn_style()
+        self._set_seq_source(self._seq_mode)
 
         self._queue_box = QVBoxLayout()
         self._queue_box.setSpacing(5)
         root.addLayout(self._queue_box)
 
+        # ── RENDU : options de sortie de la file ──────────────────────────────
+        rendu_lbl = QLabel(translate("RENDU"))
+        rendu_lbl.setStyleSheet(
+            f"color:{C['text_dim']};font-size:9px;font-weight:700;letter-spacing:2px;"
+            f"background:transparent;border:none;")
+        root.addWidget(rendu_lbl)
+        from PyQt6.QtWidgets import QCheckBox
+        self._auto_mix_cb = QCheckBox(translate(
+            "Exporter la bande-son fondue (1s) à la fin de la file"))
+        self._auto_mix_cb.setChecked(True)
+        self._auto_mix_cb.setToolTip(translate(
+            "Concatène les SFX générés en UNE bande-son continue avec fondu enchaîné "
+            "entre les plans (pas de coupes nettes) — ffmpeg acrossfade."))
+        self._auto_mix_cb.setStyleSheet(
+            f"QCheckBox{{color:{C['text_secondary']};font-size:10px;background:transparent;}}")
+        root.addWidget(self._auto_mix_cb)
+
         run_row = QHBoxLayout()
         run_row.setSpacing(8)
-        self._btn_run_queue = QPushButton("⚡  " + translate("Générer la file"))
-        self._btn_run_queue.setFixedHeight(38)
-        self._btn_run_queue.setEnabled(False)
-        self._btn_run_queue.setCursor(Qt.CursorShape.PointingHandCursor)
-        self._btn_run_queue.setStyleSheet(
-            f"QPushButton{{background:{C['accent']};color:#07080f;border:none;"
-            f"border-radius:8px;font-size:12px;font-weight:800;padding:0 18px;}}"
-            f"QPushButton:hover{{background:#6eded6;}}"
-            f"QPushButton:disabled{{background:{C['bg3']};color:{C['text_dim']};}}")
-        self._btn_run_queue.clicked.connect(self._on_run_queue)
-        run_row.addWidget(self._btn_run_queue)
         self._btn_cancel_queue = QPushButton("■  " + translate("Annuler la file"))
         self._btn_cancel_queue.setFixedHeight(38)
         self._btn_cancel_queue.setVisible(False)
@@ -165,25 +161,30 @@ class TabSoundDesignLive(QWidget):
             f"QPushButton:hover{{background:rgba(255,79,106,0.12);}}")
         self._btn_cancel_queue.clicked.connect(self._on_cancel_queue)
         run_row.addWidget(self._btn_cancel_queue)
-        self._btn_export_mix = QPushButton("⤓  " + translate("Exporter la bande-son (fondu 1s)"))
-        self._btn_export_mix.setFixedHeight(38)
-        self._btn_export_mix.setEnabled(False)
-        self._btn_export_mix.setCursor(Qt.CursorShape.PointingHandCursor)
-        self._btn_export_mix.setToolTip(translate(
-            "Concatène les SFX générés en UNE bande-son continue avec fondu enchaîné "
-            "entre les plans (pas de coupes nettes) — ffmpeg acrossfade."))
-        self._btn_export_mix.setStyleSheet(
-            f"QPushButton{{background:transparent;color:{C['accent']};"
-            f"border:1px solid {C['accent_dim']};border-radius:8px;font-size:11px;"
-            f"font-weight:700;padding:0 14px;}}"
-            f"QPushButton:hover{{background:rgba(78,205,196,0.10);}}"
-            f"QPushButton:disabled{{color:{C['text_dim']};border-color:{C['border']};}}")
-        self._btn_export_mix.clicked.connect(self._on_export_mix)
-        run_row.addWidget(self._btn_export_mix)
         run_row.addStretch()
         root.addLayout(run_row)
 
-        # ── Barre de génération ───────────────────────────────────────────────
+        # ── Génération manuelle (un prompt / un loop) ─────────────────────────
+        _sep = QFrame()
+        _sep.setFixedHeight(1)
+        _sep.setStyleSheet(f"background:{C['border']};")
+        root.addWidget(_sep)
+
+        mode_row = QHBoxLayout()
+        mode_row.setSpacing(0)
+        self._btn_mode_text  = self._make_mode_btn(translate("Prompt → SFX"), "text")
+        self._btn_mode_video = self._make_mode_btn(translate("Loop vidéo → bande-son"), "video")
+        mode_row.addWidget(self._btn_mode_text)
+        mode_row.addWidget(self._btn_mode_video)
+        mode_row.addStretch()
+        root.addLayout(mode_row)
+
+        self._stack = QStackedWidget()
+        self._stack.addWidget(self._build_text_panel())
+        self._stack.addWidget(self._build_video_panel())
+        root.addWidget(self._stack)
+
+        # ── Barre de génération (UNIQUE : file si chargée, sinon manuel) ─────
         self._btn_generate = QPushButton(translate("⚡  Générer le son"))
         self._btn_generate.setFixedHeight(44)
         self._btn_generate.setCursor(Qt.CursorShape.PointingHandCursor)
@@ -379,15 +380,23 @@ class TabSoundDesignLive(QWidget):
     def _set_seq_source(self, mode: str):
         self._seq_mode = mode if mode in ("live", "mapping") else "live"
         self._apply_seq_btn_style()
+        # Le Conducteur visuel suit la séquence choisie (comme Générer depuis Séq.)
+        import core.storyboard as sb
+        sb.set_namespace(f"live_seq_{self._seq_mode}")
+        if hasattr(self, "_storyboard"):
+            self._storyboard.refresh()
 
     def _load_seq_plans(self):
-        import core.storyboard as sb
-        prev_ns = sb.get_namespace()
-        try:
-            sb.set_namespace(f"live_seq_{self._seq_mode}")
-            shots = sb.list_shots()
-        finally:
-            sb.set_namespace(prev_ns)
+        # Sélection du Conducteur si présente (Ctrl+clic = multi), sinon toute la séquence
+        shots = self._storyboard.get_selected_shots() if hasattr(self, "_storyboard") else []
+        if not shots:
+            import core.storyboard as sb
+            prev_ns = sb.get_namespace()
+            try:
+                sb.set_namespace(f"live_seq_{self._seq_mode}")
+                shots = sb.list_shots()
+            finally:
+                sb.set_namespace(prev_ns)
 
         def _num(s):
             try:
@@ -428,13 +437,14 @@ class TabSoundDesignLive(QWidget):
                 it.widget().deleteLater()
         for i, it in enumerate(self._sfx_queue):
             self._queue_box.addWidget(self._make_sfx_row(i, it))
-        n_pending = sum(1 for x in self._sfx_queue if x["status"] != "done")
-        self._btn_run_queue.setText(
-            "⚡  " + translate("Générer la file")
-            + (f"  ({n_pending})" if self._sfx_queue else ""))
-        self._btn_run_queue.setEnabled(bool(self._sfx_queue) and not self._sfx_running)
-        n_done = sum(1 for x in self._sfx_queue if x["status"] == "done" and x["out"])
-        self._btn_export_mix.setEnabled(n_done >= 2 and not self._sfx_running)
+        # Bouton UNIQUE : « Générer la file (N) » si une file est chargée,
+        # sinon « Générer le son » (mode manuel)
+        n_pending = sum(1 for x in self._sfx_queue if x["status"] == "pending")
+        if n_pending:
+            self._btn_generate.setText(
+                "⚡  " + translate("Générer la file") + f"  ({n_pending})")
+        else:
+            self._btn_generate.setText("⚡  " + translate("Générer le son"))
 
     def _make_sfx_row(self, index: int, it: dict) -> QWidget:
         row = QWidget()
@@ -491,7 +501,6 @@ class TabSoundDesignLive(QWidget):
                 it["status"] = "pending"
         self._sfx_running = True
         self._sfx_cancelled = False
-        self._btn_run_queue.setEnabled(False)
         self._btn_load_plans.setEnabled(False)
         self._btn_cancel_queue.setVisible(True)
         self._set_busy(True)
@@ -574,6 +583,12 @@ class TabSoundDesignLive(QWidget):
                 f"✓  {ok} {translate('ambiance(s) générée(s)')}"
                 + (f"  ·  {err} {translate('erreur(s)')}" if err else ""))
         self._refresh_sfx_queue()
+        # RENDU : export automatique de la bande-son fondue (option cochée)
+        n_done = sum(1 for it in self._sfx_queue
+                     if it["status"] == "done" and it["out"])
+        if (not getattr(self, "_sfx_cancelled", False) and n_done >= 2
+                and self._auto_mix_cb.isChecked()):
+            self._on_export_mix()
 
     # ── Bande-son continue (fondu enchaîné entre les plans) ───────────────────
 
@@ -607,7 +622,6 @@ class TabSoundDesignLive(QWidget):
             ff = "ffmpeg"
         out = os.path.join(self._sfx_out_dir(), f"bande_son_{int(_time.time())}.wav")
         cmd = self._build_crossfade_cmd(ff, ins, out)
-        self._btn_export_mix.setEnabled(False)
         self._status.setText(translate("Mixage de la bande-son (fondu enchaîné)…"))
         self._mix_worker = _MixWorker(cmd, out)
         self._mix_worker.finished.connect(self._on_mix_done)
@@ -615,13 +629,11 @@ class TabSoundDesignLive(QWidget):
         self._mix_worker.start()
 
     def _on_mix_done(self, path: str):
-        self._btn_export_mix.setEnabled(True)
         self._status.setText(translate("Bande-son continue exportée ✓"))
         self._add_result(path)
         self.generation_done.emit(path)
 
     def _on_mix_failed(self, msg: str):
-        self._btn_export_mix.setEnabled(True)
         self._status.setText(f"✗  {msg[:120]}")
 
     def _on_pick_video(self):
@@ -635,6 +647,11 @@ class TabSoundDesignLive(QWidget):
                 f"color:{C['text_secondary']};font-size:10px;background:transparent;border:none;")
 
     def _on_generate(self):
+        # Bouton UNIQUE : une file chargée se génère en priorité ; sans file,
+        # c'est la génération manuelle (prompt ou loop vidéo).
+        if any(x["status"] == "pending" for x in self._sfx_queue):
+            self._on_run_queue()
+            return
         if self._mode == "text":
             prompt = self._txt_prompt.toPlainText().strip()
             if not prompt:

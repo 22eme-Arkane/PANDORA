@@ -1116,7 +1116,7 @@ class StoryboardSelector(QWidget):
         lay.setContentsMargins(0, 0, 0, 0)
         lay.setSpacing(8)
 
-        lay.addWidget(section_label("Storyboard"))
+        lay.addWidget(section_label("Conducteur"))
 
         self._inner = QWidget()
         self._inner.setStyleSheet("background:transparent;")
@@ -1156,7 +1156,7 @@ class StoryboardSelector(QWidget):
 
         shots = sb_api.list_shots()
         if not shots:
-            lbl = QLabel("Aucun plan — crée-en un dans le Storyboard.")
+            lbl = QLabel(translate("Aucun plan — génère le découpage depuis le Conducteur."))
             lbl.setStyleSheet(f"color:{C['text_dim']};font-size:10px;background:transparent;")
             self._hbox.addWidget(lbl)
             self._hbox.addStretch()
