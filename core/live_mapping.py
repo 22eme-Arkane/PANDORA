@@ -235,6 +235,22 @@ def save_advanced_output_preset(xml_text: str, name: str,
     return path
 
 
+def generate_full_calage(ref_path: str, name: str, data_root: str) -> dict:
+    """Chaîne complète (partagée Conducteur / page Resolume) :
+    polygone → preset Advanced Output → mire. Lève ValueError si façade
+    non détectée. Renvoie {points, preset_path, mire_path, preset_name}."""
+    points = extract_facade_polygon(ref_path)
+    if len(points) < 4:
+        raise ValueError("façade non détectée — isole-la d'abord sur fond noir")
+    safe_name = (name or "facade").replace("|", "-").strip() or "facade"
+    xml = build_advanced_output_preset(safe_name, points, guide_image=ref_path)
+    preset_path = save_advanced_output_preset(xml, f"PANDORA {safe_name}")
+    mire_path = build_calibration_card(
+        ref_path, points, os.path.join(data_root, "mapping", "mire_calage.png"))
+    return {"points": points, "preset_path": preset_path,
+            "mire_path": mire_path, "preset_name": f"PANDORA {safe_name}"}
+
+
 # ── 3. Mire de calage spécifique au bâtiment ──────────────────────────────────
 
 def build_calibration_card(image_path: str, points: list, out_path: str,

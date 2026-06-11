@@ -265,14 +265,6 @@ class PageLive(QWidget):
         self._dot = QLabel("●")
         self._dot.setStyleSheet(f"color:{CP['text_dim']};font-size:12px;background:transparent;border:none;")
         lay.addWidget(self._dot)
-        lay.addStretch()
-
-        conn_lbl = QLabel(translate("Connexion :"))
-        conn_lbl.setStyleSheet(
-            f"color:{CP['text_dim']};font-size:11px;font-weight:600;"
-            f"background:transparent;border:none;"
-        )
-        lay.addWidget(conn_lbl)
 
         self._host_input = QLineEdit(self._host)
         self._host_input.setFixedSize(130, 28)
@@ -309,6 +301,7 @@ class PageLive(QWidget):
         )
         self._btn_connect.clicked.connect(self._on_connect)
         lay.addWidget(self._btn_connect)
+        lay.addStretch()   # tout est regroupé à gauche (demande Matthieu)
 
         return bar
 
@@ -456,6 +449,23 @@ class PageLive(QWidget):
         )
         self._btn_push_cancel.clicked.connect(self._on_push_cancel)
         lib_lay.addWidget(self._btn_push_cancel)
+
+        self._btn_calage = QPushButton("▱  " + translate("Calage Resolume"))
+        self._btn_calage.setFixedHeight(30)
+        self._btn_calage.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._btn_calage.setToolTip(translate(
+            "Extrait automatiquement le polygone de la façade et génère :\n"
+            "• un preset Advanced Output (menu Presets de Resolume)\n"
+            "• une mire de calage PNG spécifique au bâtiment.\n"
+            "Le calage manuel des points devient une simple vérification."))
+        self._btn_calage.setStyleSheet(
+            f"QPushButton{{background:transparent;color:{CP['accent2']};"
+            f"border:1px solid rgba(124,107,255,0.5);border-radius:6px;"
+            f"font-size:10px;font-weight:700;}}"
+            f"QPushButton:hover{{background:rgba(124,107,255,0.10);}}"
+        )
+        self._btn_calage.clicked.connect(self._on_generate_calage)
+        lib_lay.addWidget(self._btn_calage)
 
         lay.addWidget(lib)
 
@@ -835,7 +845,16 @@ class PageLive(QWidget):
         if not paths:
             self._status_lbl.setText("✗  Aucun clip à envoyer.")
             return
-        # L'ordre Vidéothèque/bibliothèque = ordre des colonnes (P1, P2…)
+        # Ordre des colonnes = ordre NATUREL des noms (SQ1_P1 < SQ1_P2 < SQ7_P21),
+        # pas l'ordre d'affichage de la bibliothèque (date) — vu en réel : le set
+        # arrivait mélangé (SQ1_P2 avant SQ1_P1).
+        import re as _re
+
+        def _natural(p):
+            base = os.path.basename(p).lower()
+            return [int(t) if t.isdigit() else t for t in _re.split(r"(\d+)", base)]
+
+        paths = sorted(paths, key=_natural)
         clips = [{"path": p, "name": os.path.splitext(os.path.basename(p))[0]}
                  for p in paths]
         bpm = self._conductor_bpm() if self._push_bpm_cb.isChecked() else 0.0
@@ -886,3 +905,32 @@ class PageLive(QWidget):
         self._btn_push.setEnabled(True)
         self._btn_push_cancel.setVisible(False)
         self._status_lbl.setText(f"✗  {msg}")
+
+    def _on_generate_calage(self):
+        """Assistant de calage (aussi accessible depuis le Conducteur)."""
+        from core.live_building import get_building_ref
+        ref = get_building_ref()
+        if not (ref and os.path.isfile(ref)):
+            self._status_lbl.setText("✗  " + translate(
+                "Choisis d'abord la façade du bâtiment (Conducteur → Référence bâtiment)."))
+            return
+        try:
+            from core.live_mapping import generate_full_calage
+            from core.context import get_data_root
+            import core.scenario as _sc
+            scs = _sc.list_scenarios()
+            name = next((s.get("title", "") for s in scs if s.get("title")), "facade")
+            res = generate_full_calage(ref, name, get_data_root())
+            self._status_lbl.setText(
+                f"▱  {translate('Calage généré')} ✓ — {len(res['points'])} points · "
+                f"preset « {res['preset_name']} » (Advanced Output → Presets) · "
+                f"mire : {os.path.basename(res['mire_path'])}")
+            try:
+                os.startfile(res["mire_path"])
+            except OSError:
+                pass
+        except ValueError:
+            self._status_lbl.setText("✗  " + translate(
+                "Façade non détectée — utilise « Isoler (fond noir) » d'abord."))
+        except Exception as e:
+            self._status_lbl.setText(f"✗  {str(e)[:120]}")

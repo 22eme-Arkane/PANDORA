@@ -2918,6 +2918,8 @@ _FR_TO_EN: dict[str, str] = {
     "Extrait automatiquement le polygone de la façade et génère :\n• un preset Advanced Output (menu Presets de Resolume)\n• une mire de calage PNG spécifique au bâtiment.\nLe calage manuel des points devient une simple vérification.":
         "Automatically extracts the facade polygon and generates:\n• an Advanced Output preset (Resolume's Presets menu)\n• a building-specific PNG calibration card.\nManual point calibration becomes a simple check.",
     "Choisis d'abord la façade du bâtiment.": "Pick the building facade first.",
+    "Choisis d'abord la façade du bâtiment (Conducteur → Référence bâtiment).":
+        "Pick the building facade first (Conductor → Building reference).",
     "Façade non détectée — utilise « Isoler (fond noir) » d'abord.":
         "Facade not detected — use « Isolate (black background) » first.",
     "Calage généré": "Calibration generated",

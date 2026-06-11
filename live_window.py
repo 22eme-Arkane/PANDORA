@@ -160,6 +160,7 @@ _NAV_ITEMS = [
     ("⛟", "Véhicules",           "vehicules",   "vehicule.png"),
     None,
     ("✦", "Studio IA",           "studio",      "seedance.png"),
+    None,
     ("▶", "Resolume",            "resolume",    "Live.png"),
     ("⚙", "Paramètres",          "settings",    "settings.png"),
 ]

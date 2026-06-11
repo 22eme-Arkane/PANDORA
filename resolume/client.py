@@ -45,8 +45,16 @@ def get_resolume_config() -> tuple:
 
 
 def file_uri(path: str) -> str:
-    """Chemin Windows → URI fichier pour /open (file:///C:/dir/clip.mp4)."""
+    """Chemin Windows → URI fichier PERCENT-ENCODÉE pour /open(file).
+
+    ⚠ Diagnostic en réel (2026-06-11, Arena 7.26.2) : sans encodage, le parseur
+    d'Arena s'arrête au premier ESPACE et répond 200 'leftover' SANS RIEN
+    CHARGER — neuf clips « envoyés » fantômes. La spec embarquée (swagger.yaml)
+    l'exige : « Spaces must be encoded as %20 — this is a common source of
+    errors »."""
+    from urllib.parse import quote
     p = os.path.abspath(path).replace("\\", "/")
+    p = quote(p, safe="/:")
     return f"file:///{p}" if not p.startswith("/") else f"file://{p}"
 
 
@@ -205,18 +213,66 @@ class ResolumeClient:
             return self._fail(e)
 
     def load_clip(self, layer: int, col: int, file_path: str) -> bool:
-        """Charge un média dans le slot. ⚠ Body = URI fichier en texte brut —
-        l'ancien body JSON {"path": …} ne chargeait RIEN dans le vrai Arena."""
+        """Charge un média dans le slot. Body = URI fichier percent-encodée,
+        en texte brut (l'ancien JSON {"path": …} ne chargeait RIEN).
+
+        ⚠ Bug Arena 7.26.2 constaté en réel : /open répond 404 « the requested
+        clip is not found » même conforme à sa propre spec, alors que l'endpoint
+        historique /openfile (déprécié) charge parfaitement → on tente /open
+        (builds futurs corrigés) puis on BASCULE sur /openfile.
+        Un 200 avec corps 'leftover'/'mismatch' = no-op du parseur → échec."""
+        body    = file_uri(file_path).encode("utf-8")
+        headers = {"Content-Type": "text/plain"}
+
+        def _loaded(r) -> bool:
+            if getattr(r, "status_code", 0) not in (200, 204):
+                return False
+            return getattr(r, "text", "").strip() not in ("leftover", "mismatch")
+
         try:
             r = self._s.post(
                 f"{self._base}/composition/layers/{layer}/clips/{col}/open",
-                data=file_uri(file_path).encode("utf-8"),
-                headers={"Content-Type": "text/plain"},
-                timeout=self._timeout,
+                data=body, headers=headers, timeout=self._timeout,
             )
+            if _loaded(r):
+                return True
+            r2 = self._s.post(
+                f"{self._base}/composition/layers/{layer}/clips/{col}/openfile",
+                data=body, headers=headers, timeout=self._timeout,
+            )
+            if _loaded(r2):
+                return True
+            if not self._ok(r2):
+                return False
+            # 200 mais corps 'leftover'/'mismatch' : la requête est « acceptée »
+            # sans que rien ne soit chargé — c'est un échec, pas un succès.
+            self.last_error = ("Resolume a accepté la requête sans charger le média "
+                               f"(réponse « {getattr(r2, 'text', '').strip()} »)")
+            return False
+        except Exception as e:
+            return self._fail(e)
+
+    def add_column(self) -> bool:
+        """Ajoute une colonne en fin de composition (POST /composition/columns/add)."""
+        try:
+            r = self._s.post(f"{self._base}/composition/columns/add",
+                             timeout=self._timeout)
             return self._ok(r)
         except Exception as e:
             return self._fail(e)
+
+    def composition_counts(self) -> tuple:
+        """(nb couches, nb colonnes) — pour dimensionner un envoi en file."""
+        try:
+            r = self._s.get(f"{self._base}/composition", timeout=self._timeout)
+            if r.status_code != 200:
+                return (0, 0)
+            comp = r.json()
+            return (len(comp.get("layers", []) or []),
+                    len(comp.get("columns", []) or []))
+        except Exception as e:
+            self._fail(e)
+            return (0, 0)
 
     def set_clip_name(self, layer: int, col: int, name: str) -> bool:
         try:

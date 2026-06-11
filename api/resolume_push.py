@@ -73,6 +73,21 @@ class PushToResolumeWorker(QThread):
                     # Non bloquant : les clips comptent plus que le tempo
                     self.progress.emit(8, f"⚠ Tempo non réglé — {client.last_error}")
 
+            # La composition doit avoir assez de COLONNES (vu en réel : 9 colonnes
+            # pour 27 clips → 18 échecs). On l'étend automatiquement.
+            _layers, _cols = client.composition_counts()
+            needed = self._start + len(self._clips) - 1
+            if _cols and needed > _cols:
+                self.progress.emit(9, f"Ajout de {needed - _cols} colonne(s)…")
+                added = 0
+                for _ in range(needed - _cols):
+                    if not client.add_column():
+                        break
+                    added += 1
+                if added < needed - _cols:
+                    self.progress.emit(
+                        9, f"⚠ {added} colonne(s) ajoutée(s) seulement — {client.last_error}")
+
             total, sent, failures = len(self._clips), 0, []
             for i, clip in enumerate(self._clips):
                 if self.isInterruptionRequested():

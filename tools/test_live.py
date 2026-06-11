@@ -1018,11 +1018,15 @@ def assistant_calage_mapping():
     with Image.open(mire) as m:
         assert m.size == (1920, 1080)
 
-    # Bouton branché dans la section façade du Conducteur
+    # Bouton branché DANS LES DEUX pages (Conducteur + contrôleur Resolume),
+    # via le helper partagé generate_full_calage
+    from core.live_mapping import generate_full_calage
+    res = generate_full_calage(fp, "test", os.path.join(_TMP, "calage_data"))
+    assert os.path.isfile(res["mire_path"]) and res["preset_name"] == "PANDORA test"
     from ui.page_scenario_live import PageScenario
-    src = inspect.getsource(PageScenario._on_generate_calage)
-    assert "extract_facade_polygon" in src and "save_advanced_output_preset" in src
-    assert "build_calibration_card" in src, "mire générée avec le preset"
+    assert "generate_full_calage" in inspect.getsource(PageScenario._on_generate_calage)
+    from ui.page_live import PageLive as _PL2
+    assert "generate_full_calage" in inspect.getsource(_PL2._on_generate_calage)
 
 
 @test
@@ -1033,9 +1037,10 @@ def pont_resolume():
     from resolume.client import ResolumeClient, file_uri
 
     class _Resp:
-        def __init__(self, code=200, payload=None):
+        def __init__(self, code=200, payload=None, text=""):
             self.status_code = code
             self._p = payload if payload is not None else {}
+            self.text = text
         def json(self):
             return self._p
 
@@ -1061,7 +1066,7 @@ def pont_resolume():
                     "autopilot": {"target": {"options": ["Off", "Previous Clip",
                                                          "Next Clip"], "index": 0}},
                 })
-            return _Resp(200, {"layers": [
+            return _Resp(200, {"columns": [{} for _ in range(9)], "layers": [
                 {"name": {"value": "PANDORA"},
                  "clips": [{"name": {"value": "P1"}, "connected": {"value": True}}]},
             ]})
@@ -1082,7 +1087,10 @@ def pont_resolume():
     layers = c.get_layers()
     assert layers and layers[0].name == "PANDORA" and layers[0].clips[0].active
     assert s.calls[-1][1].endswith("/api/v1/composition"), "couches via GET /composition"
-    # /open : body = URI fichier en TEXTE BRUT (l'ancien JSON ne chargeait rien)
+    # /open : body = URI fichier PERCENT-ENCODÉE en texte brut (vu en réel :
+    # les espaces non encodés → 200 'leftover' sans rien charger)
+    assert file_uri(r"C:\a b\c d.mp4") == "file:///C:/a%20b/c%20d.mp4", \
+        "espaces encodés %20 (exigé par la spec Arena)"
     clip = os.path.join(_TMP, "plan_01.mp4")
     open(clip, "wb").close()
     assert c.load_clip(1, 2, clip)
@@ -1090,6 +1098,29 @@ def pont_resolume():
     assert m == "post" and url.endswith("/composition/layers/1/clips/2/open")
     assert kw["data"] == file_uri(clip).encode("utf-8"), "URI fichier en body"
     assert kw["headers"]["Content-Type"] == "text/plain", "texte brut, pas JSON"
+
+    # Bug Arena 7.26.2 : /open → 404 alors que /openfile charge → FALLBACK
+    class _OpenBroken(_Session):
+        def post(self, url, **k):
+            self.calls.append(("post", url, k))
+            if url.endswith("/open"):
+                return _Resp(404, text="the requested clip is not found")
+            return _Resp(204)
+    sb_ = _OpenBroken()
+    cb_ = ResolumeClient("127.0.0.1", 8080, session=sb_)
+    assert cb_.load_clip(1, 1, clip), "bascule sur /openfile"
+    assert sb_.calls[-1][1].endswith("/openfile"), "endpoint de secours utilisé"
+    # 200 'leftover' (parseur no-op) = ÉCHEC, pas succès
+    class _Leftover(_Session):
+        def post(self, url, **k):
+            self.calls.append(("post", url, k))
+            return _Resp(200, text="leftover")
+    assert not ResolumeClient("x", 1, session=_Leftover()).load_clip(1, 1, clip), \
+        "'leftover' n'est pas un chargement"
+
+    # Extension de composition : add_column + composition_counts
+    assert c.composition_counts() == (1, 9), "comptes couches/colonnes"
+    assert c.add_column() and s.calls[-1][1].endswith("/composition/columns/add")
     # Renommage, tempo, colonne
     assert c.set_clip_name(1, 2, "P1") and '"P1"' in s.calls[-1][2]["data"]
     assert c.set_tempo(129.0) and "tempocontroller" in s.calls[-1][2]["data"]
@@ -1133,6 +1164,20 @@ def pont_resolume():
         and opens[1].endswith("/layers/2/clips/6/open"), "slots consécutifs"
     assert any("tempocontroller" in (k.get("data") or "") for m, _, k in s2.calls
                if m == "put"), "BPM compo réglé"
+    # Composition trop petite → colonnes ajoutées automatiquement (vu en réel :
+    # 9 colonnes pour 27 clips = 18 échecs)
+    s3 = _Session()
+    w3 = PushToResolumeWorker(
+        [{"path": clip, "name": "P1"}, {"path": clip2, "name": "P2"}],
+        layer=1, start_column=9,   # besoin de la colonne 10 → +1
+        client=ResolumeClient("127.0.0.1", 8080, session=s3))
+    w3.run()
+    adds = [u for m, u, _ in s3.calls if m == "post" and u.endswith("/columns/add")]
+    assert len(adds) == 1, "1 colonne ajoutée pour atteindre la colonne 10"
+    # L'envoi « toute la bibliothèque » suit l'ordre NATUREL des plans
+    from ui.page_live import PageLive as _PL
+    assert "_natural" in inspect.getsource(_PL._on_push_queue), \
+        "tri naturel SQ/P avant envoi"
     # Mode show : chaque clip est relu (GET) puis réécrit (PUT) avec les patches
     show_puts = [k.get("data", "") for m, u, k in s2.calls
                  if m == "put" and "/clips/" in u and "Hold" in k.get("data", "")]
