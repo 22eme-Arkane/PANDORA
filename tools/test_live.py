@@ -524,8 +524,16 @@ def workers_construction():
     from core.music_analysis import AnalyzeMusicWorker
     assert [k for _, k in UPSCALE_MODELS] == ["topaz", "seedvr"]
     assert UpscaleVideoWorker("x.mp4", model="topaz", upscale_factor=4)._factor == 4
-    # Sortie upscale = MÊME NOM que la source (relink direct dans DaVinci)
+    # File d'upscale ANNULABLE (demande 2026-06-11) : bouton ■, worker parqué,
+    # clips restants conservés en attente
     import inspect
+    import ui.tab_upscale_live as UPS
+    src_tab = inspect.getsource(UPS)
+    assert "_btn_cancel" in src_tab and "def _on_cancel" in src_tab, "bouton Annuler"
+    assert "abandon_thread" in src_tab, "annulation = worker parqué (anti-crash)"
+    assert "_cancelled" in inspect.getsource(UPS.TabUpscaleLive._process_next), \
+        "la file s'arrête après annulation"
+    # Sortie upscale = MÊME NOM que la source (relink direct dans DaVinci)
     src_u = inspect.getsource(UpscaleVideoWorker._real)
     assert "os.path.basename(self._video)" in src_u, \
         "nom de sortie = nom du fichier source"

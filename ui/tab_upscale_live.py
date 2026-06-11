@@ -134,6 +134,21 @@ class TabUpscaleLive(QScrollArea):
         self._btn_run.clicked.connect(self._on_run)
         lay.addWidget(self._btn_run)
 
+        self._btn_cancel = QPushButton("■  " + translate("Annuler la file"))
+        self._btn_cancel.setMinimumHeight(36)
+        self._btn_cancel.setVisible(False)
+        self._btn_cancel.setToolTip(translate(
+            "Arrête la file : le clip en cours est abandonné,\n"
+            "les clips restants sont conservés en attente."))
+        self._btn_cancel.setStyleSheet(
+            f"QPushButton{{background:{C['bg3']};color:{C['red']};"
+            f"border:1px solid {C['red']};border-radius:7px;"
+            f"font-size:11px;font-weight:700;}}"
+            f"QPushButton:hover{{background:rgba(255,79,106,0.12);}}"
+        )
+        self._btn_cancel.clicked.connect(self._on_cancel)
+        lay.addWidget(self._btn_cancel)
+
         self._progress = QProgressBar()
         self._progress.setFixedHeight(6)
         self._progress.setTextVisible(False)
@@ -284,15 +299,33 @@ class TabUpscaleLive(QScrollArea):
             if it["status"] != "done":
                 it["status"] = "pending"
         self._proc_running = True
+        self._cancelled = False
         self._btn_run.setEnabled(False)
         self._btn_add.setEnabled(False)
         self._btn_import_lib.setEnabled(False)
         self._btn_clear.setEnabled(False)
+        self._btn_cancel.setVisible(True)
         self._progress.show()
         self._refresh_queue()
         self._process_next()
 
+    def _on_cancel(self):
+        """Arrêt de la file : clip en cours abandonné, restants conservés."""
+        if not self._proc_running:
+            return
+        self._cancelled = True
+        if self._worker is not None:
+            # ANTI-CRASH : on PARQUE le worker (signaux coupés) — jamais de
+            # déréférencement d'un QThread en cours d'exécution.
+            from core.worker import abandon_thread
+            abandon_thread(self._worker)
+            self._worker = None
+        self._finish_batch()
+
     def _process_next(self):
+        if getattr(self, "_cancelled", False):
+            self._finish_batch()
+            return
         nxt = next((i for i, it in enumerate(self._queue)
                     if it["status"] == "pending"), None)
         if nxt is None:
@@ -343,15 +376,23 @@ class TabUpscaleLive(QScrollArea):
 
     def _finish_batch(self):
         self._proc_running = False
-        self._progress.setValue(100)
+        self._btn_cancel.setVisible(False)
         self._btn_add.setEnabled(True)
         self._btn_import_lib.setEnabled(True)
         self._btn_clear.setEnabled(True)
         ok  = sum(1 for it in self._queue if it["status"] == "done")
         err = sum(1 for it in self._queue if it["status"] == "error")
-        self._status.setText(
-            f"✓  {ok} " + translate("upscalé(s)")
-            + (f"  ·  {err} " + translate("erreur(s)") if err else ""))
+        if getattr(self, "_cancelled", False):
+            rest = sum(1 for it in self._queue if it["status"] == "pending")
+            self._progress.hide()
+            self._status.setText(
+                "■  " + translate("File annulée") + f" — {ok} "
+                + translate("upscalé(s)") + f", {rest} " + translate("en attente"))
+        else:
+            self._progress.setValue(100)
+            self._status.setText(
+                f"✓  {ok} " + translate("upscalé(s)")
+                + (f"  ·  {err} " + translate("erreur(s)") if err else ""))
         self._refresh_queue()
 
     def _on_open_folder(self):

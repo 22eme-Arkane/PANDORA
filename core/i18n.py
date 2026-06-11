@@ -2908,6 +2908,11 @@ _FR_TO_EN: dict[str, str] = {
         "Analyze the set first in the Conductor (« Analyze the set »).",
     "Envoyer vers Resolume": "Send to Resolume",
     "Mode show (enchaînement auto, calé mesure)": "Show mode (auto-chain, bar-snapped)",
+    "Annuler la file": "Cancel queue",
+    "Arrête la file : le clip en cours est abandonné,\nles clips restants sont conservés en attente.":
+        "Stops the queue: the current clip is abandoned,\nremaining clips stay pending.",
+    "File annulée": "Queue cancelled",
+    "en attente": "pending",
     "Chaque clip est réglé : Play Once & Hold (joue une fois, tient sa\ndernière frame), Beat Snap 1 mesure, Autopilot « clip suivant ».\nDéclenche le 1er clip : toute la séquence se joue seule, au tempo.":
         "Each clip is set to: Play Once & Hold (plays once, holds its\nlast frame), Beat Snap 1 bar, Autopilot \"next clip\".\nTrigger the 1st clip: the whole sequence plays itself, on tempo.",
     "◈  Tester la connexion": "◈  Test connection",
