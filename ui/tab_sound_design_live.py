@@ -120,6 +120,10 @@ class TabSoundDesignLive(QWidget):
         # « Générer depuis Séquences » ; suit le sélecteur Live/Mapping.
         from ui.tab_t2v_live import StoryboardSelector
         self._storyboard = StoryboardSelector()
+        # Connecté comme dans Générer depuis Séquences : un plan → prompt SON +
+        # durée chargés ; plusieurs plans → la file se construit immédiatement.
+        self._storyboard.shot_selected.connect(self._on_conductor_shot)
+        self._storyboard.shots_selected.connect(self._on_conductor_shots)
         root.addWidget(self._storyboard)
         self._apply_seq_btn_style()
         self._set_seq_source(self._seq_mode)
@@ -128,22 +132,65 @@ class TabSoundDesignLive(QWidget):
         self._queue_box.setSpacing(5)
         root.addLayout(self._queue_box)
 
-        # ── RENDU : options de sortie de la file ──────────────────────────────
-        rendu_lbl = QLabel(translate("RENDU"))
-        rendu_lbl.setStyleSheet(
-            f"color:{C['text_dim']};font-size:9px;font-weight:700;letter-spacing:2px;"
-            f"background:transparent;border:none;")
-        root.addWidget(rendu_lbl)
+        # ── RENDU : même design que « RENDU & AUDIO » de Générer depuis Séq. ──
         from PyQt6.QtWidgets import QCheckBox
-        self._auto_mix_cb = QCheckBox(translate(
-            "Exporter la bande-son fondue (1s) à la fin de la file"))
-        self._auto_mix_cb.setChecked(True)
-        self._auto_mix_cb.setToolTip(translate(
-            "Concatène les SFX générés en UNE bande-son continue avec fondu enchaîné "
-            "entre les plans (pas de coupes nettes) — ffmpeg acrossfade."))
-        self._auto_mix_cb.setStyleSheet(
-            f"QCheckBox{{color:{C['text_secondary']};font-size:10px;background:transparent;}}")
-        root.addWidget(self._auto_mix_cb)
+        rendu_box = QFrame()
+        rendu_box.setObjectName("sd_rendu")
+        rendu_box.setStyleSheet(
+            f"QFrame#sd_rendu{{background:{C['bg2']};border:1px solid {C['border']};"
+            f"border-radius:8px;padding:0px;}}")
+        rb_lay = QVBoxLayout(rendu_box)
+        rb_lay.setContentsMargins(0, 0, 0, 0)
+        rb_lay.setSpacing(1)
+        _rendu_header = QWidget()
+        _rendu_header.setStyleSheet("background:transparent;border:none;")
+        _rh_lay = QHBoxLayout(_rendu_header)
+        _rh_lay.setContentsMargins(14, 8, 14, 6)
+        _rendu_title = QLabel(translate("RENDU"))
+        _rendu_title.setStyleSheet(
+            f"color:{C['accent']};font-size:9px;letter-spacing:2px;"
+            f"font-family:'Consolas',monospace;font-weight:700;"
+            f"background:transparent;border:none;")
+        _rh_lay.addWidget(_rendu_title)
+        _rh_lay.addStretch()
+        rb_lay.addWidget(_rendu_header)
+
+        def _rendu_toggle(title: str, subtitle: str, checked: bool) -> QFrame:
+            w = QFrame()
+            w.setStyleSheet(
+                f"QFrame{{background:transparent;border:none;border-top:1px solid {C['border']};"
+                f"border-radius:0px;padding:4px;}}"
+                f"QCheckBox{{color:{C['text_secondary']};background:transparent;border:none;}}"
+                f"QCheckBox::indicator{{width:16px;height:16px;"
+                f"border:1px solid {C['border_bright']};border-radius:4px;background:{C['bg3']};}}"
+                f"QCheckBox::indicator:checked{{background:{C['accent']};border-color:{C['accent']};}}"
+                f"QCheckBox::indicator:unchecked:hover{{border-color:{C['accent_dim']};}}")
+            lw = QHBoxLayout(w)
+            lw.setContentsMargins(14, 8, 14, 8)
+            col = QVBoxLayout()
+            col.setSpacing(2)
+            t = QLabel(title)
+            t.setStyleSheet(f"color:{C['text_secondary']};font-size:12px;font-weight:600;border:none;")
+            col.addWidget(t)
+            if subtitle:
+                s = QLabel(subtitle)
+                s.setWordWrap(True)
+                s.setStyleSheet(f"color:{C['text_dim']};font-size:10px;border:none;")
+                col.addWidget(s)
+            lw.addLayout(col, 1)
+            cb = QCheckBox()
+            cb.setChecked(checked)
+            lw.addWidget(cb)
+            return w
+
+        _auto_mix_row = _rendu_toggle(
+            translate("Exporter la bande-son fondue (1s)"),
+            translate("À la fin de la file : une bande-son continue (fondu enchaîné "
+                      "entre les plans, pas de coupes nettes)."),
+            True)
+        self._auto_mix_cb = _auto_mix_row.findChild(QCheckBox)
+        rb_lay.addWidget(_auto_mix_row)
+        root.addWidget(rendu_box)
 
         run_row = QHBoxLayout()
         run_row.setSpacing(8)
@@ -387,7 +434,7 @@ class TabSoundDesignLive(QWidget):
             self._storyboard.refresh()
 
     def _load_seq_plans(self):
-        # Sélection du Conducteur si présente (Ctrl+clic = multi), sinon toute la séquence
+        # Sélection du Conducteur si présente (Ctrl/Maj/lasso), sinon toute la séquence
         shots = self._storyboard.get_selected_shots() if hasattr(self, "_storyboard") else []
         if not shots:
             import core.storyboard as sb
@@ -397,7 +444,9 @@ class TabSoundDesignLive(QWidget):
                 shots = sb.list_shots()
             finally:
                 sb.set_namespace(prev_ns)
+        self._build_queue_from_shots(shots)
 
+    def _build_queue_from_shots(self, shots: list):
         def _num(s):
             try:
                 return int(s.get("number") or 0)
@@ -429,6 +478,35 @@ class TabSoundDesignLive(QWidget):
         else:
             self._status.setText(
                 f"{len(self._sfx_queue)} {translate('plan(s) chargé(s) — prêt à générer.')}")
+
+    # ── Conducteur → champs (comme Générer depuis Séquences) ─────────────────
+
+    def _on_conductor_shot(self, shot: dict):
+        """Un plan sélectionné → son PROMPT SON et sa DURÉE remplissent le
+        panneau manuel ; la file est remise à zéro (le plan prime)."""
+        if not shot:
+            return
+        prompt = (shot.get("sound_prompt", "") or "").strip()
+        try:
+            dur = float(shot.get("duration", 5.0) or 5.0)
+        except (TypeError, ValueError):
+            dur = 5.0
+        dur = max(1.0, min(60.0, dur))
+        self._set_mode("text")
+        self._txt_prompt.setPlainText(prompt)
+        self._dur_text.setValue(dur)
+        self._sfx_queue = []
+        self._refresh_sfx_queue()
+        n = shot.get("number", "?")
+        self._status.setText(
+            f"Plan {n} → {dur:g}s · "
+            + (translate("prompt son chargé ✓") if prompt
+               else translate("⚠ pas de prompt son sur ce plan (champ 🔊 Son)")))
+
+    def _on_conductor_shots(self, shots: list):
+        """Multi-sélection (Ctrl/Maj/lasso) → la file se construit aussitôt,
+        avec le prompt son et la durée de CHAQUE plan."""
+        self._build_queue_from_shots(shots or [])
 
     def _refresh_sfx_queue(self):
         while self._queue_box.count():

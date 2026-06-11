@@ -735,6 +735,22 @@ def sound_design_file_et_crossfade():
         "export auto en fin de file"
     # La sélection du Conducteur prime sur « toute la séquence »
     assert "get_selected_shots" in _i.getsource(TabSoundDesignLive._load_seq_plans)
+    # Conducteur connecté aux champs (comme Générer depuis Séquences) :
+    # un plan → prompt SON + durée ; multi → file immédiate ; design RENDU encadré
+    t._on_conductor_shot({"number": 1, "sound_prompt": "bass drone", "duration": 6})
+    assert t._txt_prompt.toPlainText() == "bass drone", "prompt son chargé"
+    assert abs(t._dur_text.value() - 6.0) < 0.01, "durée calée sur le plan"
+    assert t._sfx_queue == [], "sélection simple → file remise à zéro"
+    t._on_conductor_shots([
+        {"number": 1, "sound_prompt": "a", "duration": 5},
+        {"number": 2, "sound_prompt": "b", "duration": 7},
+    ])
+    assert len(t._sfx_queue) == 2 and t._sfx_queue[1]["duration"] == 7.0, \
+        "multi-sélection → file immédiate avec prompts + durées"
+    src_sd = _i.getsource(__import__("ui.tab_sound_design_live",
+                                     fromlist=["TabSoundDesignLive"]))
+    assert "sd_rendu" in src_sd and "Consolas" in src_sd, \
+        "section RENDU au design RENDU & AUDIO (titre accent + encarts)"
     # Le sélecteur s'appelle désormais « Conducteur » (t2v + sound design)
     import ui.tab_t2v_live as T2V
     assert 'section_label("Conducteur")' in _i.getsource(T2V.StoryboardSelector)

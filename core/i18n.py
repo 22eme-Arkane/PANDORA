@@ -1443,6 +1443,12 @@ _FR_TO_EN: dict[str, str] = {
     "RENDU": "OUTPUT",
     "Exporter la bande-son fondue (1s) à la fin de la file":
         "Export the crossfaded soundtrack (1s) when the queue ends",
+    "Exporter la bande-son fondue (1s)": "Export the crossfaded soundtrack (1s)",
+    "À la fin de la file : une bande-son continue (fondu enchaîné entre les plans, pas de coupes nettes).":
+        "When the queue ends: one continuous soundtrack (crossfade between shots, no hard cuts).",
+    "prompt son chargé ✓": "sound prompt loaded ✓",
+    "⚠ pas de prompt son sur ce plan (champ 🔊 Son)":
+        "⚠ no sound prompt on this shot (🔊 Sound field)",
 
     # ── Lot 17 — co-écriture (accueil), génération en série, divers ──
     "J'ai analysé votre scénario et rédigé des suggestions détaillées (visibles dans l'onglet « Analyse initiale »).\n\nDites-moi ce que vous souhaitez modifier, affiner ou conserver — je produirai alors une version remaniée de votre scénario en direct. Nous pouvons itérer autant de fois que nécessaire.": "I've analyzed your screenplay and written detailed suggestions (visible in the « Initial analysis » tab).\n\nTell me what you'd like to change, refine or keep — I'll then produce a reworked version of your screenplay live. We can iterate as many times as needed.",
