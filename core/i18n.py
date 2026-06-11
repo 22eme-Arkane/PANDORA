@@ -2910,6 +2910,16 @@ _FR_TO_EN: dict[str, str] = {
     "Mode show (enchaînement auto, calé mesure)": "Show mode (auto-chain, bar-snapped)",
     "Annuler la file": "Cancel queue",
     "Annuler l'envoi": "Cancel sending",
+    "Calage Resolume": "Resolume calibration",
+    "Extrait automatiquement le polygone de la façade et génère :\n• un preset Advanced Output (menu Presets de Resolume)\n• une mire de calage PNG spécifique au bâtiment.\nLe calage manuel des points devient une simple vérification.":
+        "Automatically extracts the facade polygon and generates:\n• an Advanced Output preset (Resolume's Presets menu)\n• a building-specific PNG calibration card.\nManual point calibration becomes a simple check.",
+    "Choisis d'abord la façade du bâtiment.": "Pick the building facade first.",
+    "Façade non détectée — utilise « Isoler (fond noir) » d'abord.":
+        "Facade not detected — use « Isolate (black background) » first.",
+    "Calage généré": "Calibration generated",
+    "preset": "preset",
+    "mire": "calibration card",
+    "Resolume : Advanced Output → Presets": "Resolume: Advanced Output → Presets",
     "Proteus  (polyvalent — recommandé)": "Proteus  (all-round — recommended)",
     "Artemis HQ  (footage propre)": "Artemis HQ  (clean footage)",
     "Artemis MQ  (footage moyen)": "Artemis MQ  (average footage)",

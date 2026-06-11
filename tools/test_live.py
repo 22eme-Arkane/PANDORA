@@ -967,6 +967,65 @@ def files_annulables():
 
 
 @test
+def assistant_calage_mapping():
+    """Assistant de calage : polygone auto depuis le masque + preset Advanced
+    Output conforme au fichier disséqué (export réel Arena 7.26) + mire PNG."""
+    import inspect
+    import xml.etree.ElementTree as ET
+    from PIL import Image, ImageDraw
+    from core.live_mapping import (
+        extract_facade_polygon, build_advanced_output_preset,
+        save_advanced_output_preset, build_calibration_card, douglas_peucker,
+    )
+    # Douglas-Peucker : une polyligne en V se réduit à ses 3 sommets
+    line = [(0, 0), (1, 1), (2, 2), (3, 1), (4, 0)]
+    assert douglas_peucker(line, 0.3) == [(0, 0), (2, 2), (4, 0)]
+
+    # Façade synthétique : maison à pignon (fond noir, sujet blanc)
+    img = Image.new("L", (640, 360), 0)
+    d = ImageDraw.Draw(img)
+    d.polygon([(60, 330), (60, 140), (320, 40), (580, 140), (580, 330)], fill=255)
+    fp = os.path.join(_TMP, "facade_synth.png")
+    img.save(fp)
+    pts = extract_facade_polygon(fp, max_points=12)
+    assert 4 <= len(pts) <= 12, f"polygone simplifié ({len(pts)} points)"
+    # Le faîte du pignon (320, 40) → composition ×3 = (960, 120)
+    apex = min(pts, key=lambda p: p[1])
+    assert abs(apex[0] - 960) < 45 and abs(apex[1] - 120) < 45, "faîte détecté"
+    xs = [p[0] for p in pts]
+    assert min(xs) < 240 and max(xs) > 1680, "emprise gauche/droite correcte"
+
+    # Preset XML : parsable, structure Arena (InputContour/segments/guide)
+    xml_text = build_advanced_output_preset("test", pts, guide_image=fp,
+                                            uid_base=1781155649252)
+    root = ET.fromstring(xml_text)
+    poly = root.find(".//Polygon")
+    assert poly is not None, "slice Polygon présente"
+    vs = poly.findall("./InputContour/points/v")
+    assert len(vs) == len(pts), "tous les points dans InputContour"
+    assert poly.find("./InputContour/segments").text == "L" * len(pts)
+    assert len(poly.findall("./OutputContour/points/v")) == len(pts)
+    guide = root.find(".//ScreenGuide/Params/ParamPixels")
+    assert guide.get("fileName") == fp, "photo de façade en guide"
+    assert root.find(".//CurrentCompositionTextureSize").get("width") == "1920"
+    # Écriture (dossier de test — pas le vrai dossier Resolume)
+    out = save_advanced_output_preset(xml_text, "PANDORA test",
+                                      out_dir=os.path.join(_TMP, "ao_presets"))
+    assert os.path.isfile(out) and out.endswith(".xml")
+
+    # Mire : PNG 1920×1080
+    mire = build_calibration_card(fp, pts, os.path.join(_TMP, "mapping", "mire.png"))
+    with Image.open(mire) as m:
+        assert m.size == (1920, 1080)
+
+    # Bouton branché dans la section façade du Conducteur
+    from ui.page_scenario_live import PageScenario
+    src = inspect.getsource(PageScenario._on_generate_calage)
+    assert "extract_facade_polygon" in src and "save_advanced_output_preset" in src
+    assert "build_calibration_card" in src, "mire générée avec le preset"
+
+
+@test
 def pont_resolume():
     """Pont Resolume : client REST (endpoints + body URI texte), worker d'envoi,
     page contrôleur réactivée et branchée à la Vidéothèque."""

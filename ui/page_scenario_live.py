@@ -1754,8 +1754,23 @@ class PageScenario(QWidget):
                 f"font-weight:700;padding:0 10px;}}"
                 f"QPushButton:hover{{background:rgba(78,205,196,0.10);}}")
             self._btn_isolate.clicked.connect(self._on_isolate_building)
+            self._btn_calage = QPushButton("▱  " + translate("Calage Resolume"))
+            self._btn_calage.setFixedHeight(28)
+            self._btn_calage.setCursor(Qt.CursorShape.PointingHandCursor)
+            self._btn_calage.setToolTip(translate(
+                "Extrait automatiquement le polygone de la façade et génère :\n"
+                "• un preset Advanced Output (menu Presets de Resolume)\n"
+                "• une mire de calage PNG spécifique au bâtiment.\n"
+                "Le calage manuel des points devient une simple vérification."))
+            self._btn_calage.setStyleSheet(
+                f"QPushButton{{background:transparent;color:{CP['accent2']};"
+                f"border:1px solid {CP['accent2_dim']};border-radius:6px;font-size:10px;"
+                f"font-weight:700;padding:0 10px;}}"
+                f"QPushButton:hover{{background:rgba(124,107,255,0.10);}}")
+            self._btn_calage.clicked.connect(self._on_generate_calage)
             _bl.addWidget(btn_chg, 1)
             _bl.addWidget(self._btn_isolate, 1)
+            _bl.addWidget(self._btn_calage, 1)
             self._bld_row.addWidget(btns)
         else:
             btn_add = QPushButton("▦  " + translate("Choisir la façade"))
@@ -1828,6 +1843,43 @@ class PageScenario(QWidget):
         if hasattr(self, "_btn_isolate"):
             self._btn_isolate.setEnabled(True)
         self._ai_progress_lbl.setText(f"{translate('Erreur')} : {msg[:120]}")
+
+    def _on_generate_calage(self):
+        """Assistant de calage : polygone auto → preset Advanced Output + mire.
+        Calcul local et rapide (numpy + PIL) — aucun appel réseau."""
+        from core.live_building import get_building_ref
+        ref = get_building_ref()
+        if not (ref and os.path.isfile(ref)):
+            self._ai_progress_lbl.setText(translate("Choisis d'abord la façade du bâtiment."))
+            return
+        try:
+            from core.live_mapping import (
+                extract_facade_polygon, build_advanced_output_preset,
+                save_advanced_output_preset, build_calibration_card,
+            )
+            points = extract_facade_polygon(ref)
+            if len(points) < 4:
+                self._ai_progress_lbl.setText(translate(
+                    "Façade non détectée — utilise « Isoler (fond noir) » d'abord."))
+                return
+            name = (self._title_edit.text().strip() or "facade").replace("|", "-")
+            xml = build_advanced_output_preset(name, points, guide_image=ref)
+            preset_path = save_advanced_output_preset(xml, f"PANDORA {name}")
+            from core.context import get_data_root
+            mire_path = build_calibration_card(
+                ref, points, os.path.join(get_data_root(), "mapping", "mire_calage.png"))
+            self._ai_progress_lbl.setText(
+                f"▱ {translate('Calage généré')} ✓ — {len(points)} points · "
+                f"{translate('preset')} « PANDORA {name} » "
+                f"({translate('Resolume : Advanced Output → Presets')}) · "
+                f"{translate('mire')} : {os.path.basename(mire_path)}")
+            # La mire s'ouvre pour contrôle visuel immédiat
+            try:
+                os.startfile(mire_path)
+            except OSError:
+                pass
+        except Exception as e:
+            self._ai_progress_lbl.setText(f"{translate('Erreur')} : {str(e)[:120]}")
 
     def _on_analyze_refs(self):
         # Une analyse existe déjà → on la rouvre (avec chat + bouton Relancer),
