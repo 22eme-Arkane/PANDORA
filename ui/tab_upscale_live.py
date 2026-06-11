@@ -337,6 +337,10 @@ class TabUpscaleLive(QScrollArea):
         total = len(self._queue)
         self._status.setText(
             f"[{done + 1}/{total}] {os.path.basename(it['path'])} …")
+        # ANTI-ARRÊT DE CHAÎNE : parquer le worker précédent avant de réassigner
+        if getattr(self, "_worker", None) is not None:
+            from core.worker import abandon_thread
+            abandon_thread(self._worker)
         from api.upscale import UpscaleVideoWorker
         self._worker = UpscaleVideoWorker(
             it["path"],

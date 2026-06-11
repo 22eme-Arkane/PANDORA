@@ -751,6 +751,25 @@ def sound_design_file_et_crossfade():
                                      fromlist=["TabSoundDesignLive"]))
     assert "sd_rendu" in src_sd and "Consolas" in src_sd, \
         "section RENDU au design RENDU & AUDIO (titre accent + encarts)"
+    # Retours 2026-06-11 soir : (1) file SCROLLABLE (12 lignes écrasaient tout
+    # l'onglet) ; (2) chaque plan part avec SON prompt, affiché au statut ;
+    # (3) anti-arrêt de chaîne : worker précédent PARQUÉ avant réassignation
+    assert "_queue_scroll" in src_sd, "file scrollable (plus d'écrasement)"
+    src_next = _i.getsource(TabSoundDesignLive._process_next_sfx)
+    assert "abandon_thread(self._queue_worker)" in src_next, \
+        "chaîne protégée (la file s'arrêtait au 1er clip)"
+    assert 'it["prompt"][:60]' in src_next, "prompt du plan affiché au statut"
+    assert 'SFX1Worker(\n            it["prompt"]' in src_next, \
+        "chaque clip part avec le prompt de SON plan"
+    # Ordre des contrôles : progression AU-DESSUS de Générer, Annuler EN DESSOUS
+    init_src = _i.getsource(TabSoundDesignLive.__init__)
+    assert (init_src.index("root.addWidget(self._progress)")
+            < init_src.index("root.addWidget(self._btn_generate)")
+            < init_src.index("root.addWidget(self._btn_cancel_queue)")), \
+        "ordre progression → Générer → Annuler"
+    # L'upscale est protégé du même arrêt de chaîne
+    import ui.tab_upscale_live as UPS2
+    assert "abandon_thread(self._worker)" in _i.getsource(UPS2.TabUpscaleLive._process_next)
     # Le sélecteur s'appelle désormais « Conducteur » (t2v + sound design)
     import ui.tab_t2v_live as T2V
     assert 'section_label("Conducteur")' in _i.getsource(T2V.StoryboardSelector)

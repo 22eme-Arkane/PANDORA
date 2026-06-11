@@ -128,9 +128,28 @@ class TabSoundDesignLive(QWidget):
         self._apply_seq_btn_style()
         self._set_seq_source(self._seq_mode)
 
+        # File SCROLLABLE (hauteur bornée) — 12+ lignes écrasaient tout l'onglet
+        # en fines lignes illisibles (vu en réel)
         self._queue_box = QVBoxLayout()
         self._queue_box.setSpacing(5)
-        root.addLayout(self._queue_box)
+        self._queue_box.setContentsMargins(0, 0, 6, 0)
+        _queue_host = QWidget()
+        _queue_host.setStyleSheet("background:transparent;")
+        _qh_lay = QVBoxLayout(_queue_host)
+        _qh_lay.setContentsMargins(0, 0, 0, 0)
+        _qh_lay.addLayout(self._queue_box)
+        _qh_lay.addStretch()
+        _queue_scroll = QScrollArea()
+        _queue_scroll.setWidget(_queue_host)
+        _queue_scroll.setWidgetResizable(True)
+        _queue_scroll.setMaximumHeight(210)
+        _queue_scroll.setStyleSheet(
+            "QScrollArea{border:none;background:transparent;}"
+            f"QScrollBar:vertical{{background:{C['bg2']};width:6px;border-radius:3px;}}"
+            f"QScrollBar::handle:vertical{{background:{C['border_bright']};"
+            f"border-radius:3px;min-height:24px;}}"
+            f"QScrollBar::add-line:vertical,QScrollBar::sub-line:vertical{{height:0;}}")
+        root.addWidget(_queue_scroll)
 
         # ── RENDU : même design que « RENDU & AUDIO » de Générer depuis Séq. ──
         from PyQt6.QtWidgets import QCheckBox
@@ -192,25 +211,6 @@ class TabSoundDesignLive(QWidget):
         rb_lay.addWidget(_auto_mix_row)
         root.addWidget(rendu_box)
 
-        run_row = QHBoxLayout()
-        run_row.setSpacing(8)
-        self._btn_cancel_queue = QPushButton("■  " + translate("Annuler la file"))
-        self._btn_cancel_queue.setFixedHeight(38)
-        self._btn_cancel_queue.setVisible(False)
-        self._btn_cancel_queue.setCursor(Qt.CursorShape.PointingHandCursor)
-        self._btn_cancel_queue.setToolTip(translate(
-            "Arrête la file : le plan en cours est abandonné,\n"
-            "les plans restants sont conservés en attente."))
-        self._btn_cancel_queue.setStyleSheet(
-            f"QPushButton{{background:{C['bg3']};color:{C['red']};"
-            f"border:1px solid {C['red']};border-radius:8px;font-size:11px;"
-            f"font-weight:700;padding:0 14px;}}"
-            f"QPushButton:hover{{background:rgba(255,79,106,0.12);}}")
-        self._btn_cancel_queue.clicked.connect(self._on_cancel_queue)
-        run_row.addWidget(self._btn_cancel_queue)
-        run_row.addStretch()
-        root.addLayout(run_row)
-
         # ── Génération manuelle (un prompt / un loop) ─────────────────────────
         _sep = QFrame()
         _sep.setFixedHeight(1)
@@ -241,8 +241,9 @@ class TabSoundDesignLive(QWidget):
             f"QPushButton:hover{{background:#6eded6;}}"
             f"QPushButton:disabled{{background:{C['bg3']};color:{C['text_dim']};}}")
         self._btn_generate.clicked.connect(self._on_generate)
-        root.addWidget(self._btn_generate)
 
+        # Ordre demandé : barre de progression AU-DESSUS de Générer,
+        # « Annuler la file » EN DESSOUS.
         self._progress = QProgressBar()
         self._progress.setRange(0, 100)
         self._progress.setValue(0)
@@ -253,6 +254,22 @@ class TabSoundDesignLive(QWidget):
             f"QProgressBar{{background:{C['bg2']};border:none;border-radius:2px;}}"
             f"QProgressBar::chunk{{background:{C['accent']};border-radius:2px;}}")
         root.addWidget(self._progress)
+        root.addWidget(self._btn_generate)
+
+        self._btn_cancel_queue = QPushButton("■  " + translate("Annuler la file"))
+        self._btn_cancel_queue.setFixedHeight(34)
+        self._btn_cancel_queue.setVisible(False)
+        self._btn_cancel_queue.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._btn_cancel_queue.setToolTip(translate(
+            "Arrête la file : le plan en cours est abandonné,\n"
+            "les plans restants sont conservés en attente."))
+        self._btn_cancel_queue.setStyleSheet(
+            f"QPushButton{{background:{C['bg3']};color:{C['red']};"
+            f"border:1px solid {C['red']};border-radius:8px;font-size:11px;"
+            f"font-weight:700;padding:0 14px;}}"
+            f"QPushButton:hover{{background:rgba(255,79,106,0.12);}}")
+        self._btn_cancel_queue.clicked.connect(self._on_cancel_queue)
+        root.addWidget(self._btn_cancel_queue)
 
         self._status = QLabel("")
         self._status.setStyleSheet(
@@ -616,7 +633,18 @@ class TabSoundDesignLive(QWidget):
         it["status"] = "running"
         self._refresh_sfx_queue()
         done = sum(1 for x in self._sfx_queue if x["status"] == "done")
-        self._status.setText(f"[{done + 1}/{len(self._sfx_queue)}] Plan {it['number']} …")
+        # Le statut montre LE prompt du plan en cours — chaque clip part bien
+        # avec SON prompt (retour Matthieu : doute sur un prompt unique)
+        _snip = it["prompt"][:60] + ("…" if len(it["prompt"]) > 60 else "")
+        self._status.setText(
+            f"[{done + 1}/{len(self._sfx_queue)}] Plan {it['number']} "
+            f"({it['duration']:g}s) · {_snip}")
+        # ANTI-ARRÊT DE CHAÎNE : parquer le worker PRÉCÉDENT avant de réassigner
+        # (le réassigner à chaud détruisait un QThread en train de se terminer —
+        # la file s'arrêtait après le 1er clip, vu en réel avec 12 plans)
+        if getattr(self, "_queue_worker", None) is not None:
+            from core.worker import abandon_thread
+            abandon_thread(self._queue_worker)
         from api.tts import SFX1Worker
         self._queue_worker = SFX1Worker(
             it["prompt"], it["duration"],
