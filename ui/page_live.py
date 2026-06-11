@@ -228,6 +228,17 @@ class _ClipCard(QWidget):
         meta.setStyleSheet(
             f"color:{CP['text_dim']};font-size:9px;background:transparent;border:none;")
 
+        play = QPushButton("▶")
+        play.setFixedSize(22, 22)
+        play.setCursor(Qt.CursorShape.PointingHandCursor)
+        play.setToolTip("Lire le clip (lecteur par défaut) — ou double-clic sur la carte")
+        play.setStyleSheet(
+            f"QPushButton{{background:rgba(78,205,196,0.14);color:{CP['accent']};"
+            f"border:1px solid {CP['accent_dim']};border-radius:11px;"
+            f"font-size:10px;font-weight:700;}}"
+            f"QPushButton:hover{{background:{CP['accent']};color:#07080f;}}")
+        play.clicked.connect(self._play)
+
         if view_mode == "large":
             # Grande vignette (frame du milieu) au-dessus du nom
             self.setFixedHeight(168)
@@ -238,6 +249,7 @@ class _ClipCard(QWidget):
             self._thumb_size = (216, 122)
             lay.addWidget(self._thumb)
             row = QHBoxLayout()
+            row.addWidget(play)
             row.addWidget(name, 1)
             row.addWidget(meta)
             lay.addLayout(row)
@@ -255,6 +267,17 @@ class _ClipCard(QWidget):
             col.addWidget(name)
             col.addWidget(meta)
             lay.addLayout(col, 1)
+            lay.addWidget(play)
+
+    def _play(self):
+        """Prévisualise le clip dans le lecteur par défaut."""
+        from PyQt6.QtGui import QDesktopServices
+        from PyQt6.QtCore import QUrl
+        QDesktopServices.openUrl(QUrl.fromLocalFile(self._path))
+
+    def mouseDoubleClickEvent(self, e):
+        if e.button() == Qt.MouseButton.LeftButton:
+            self._play()
 
     def set_thumb(self, png_path: str):
         from PyQt6.QtGui import QPixmap
@@ -492,10 +515,12 @@ class PageLive(QWidget):
         lay.setSpacing(0)
 
         # ── Bibliothèque gauche ────────────────────────────────────────────────
+        # Bordure GAUCHE 2px : ferme visuellement le contrôleur Resolume par
+        # rapport au dashboard (demande Matthieu) — même trait que la topbar.
         lib = QWidget()
-        lib.setFixedWidth(264)
+        lib.setMinimumWidth(264)
         lib.setStyleSheet(
-            f"background:{CP['bg1']};border-right:1px solid {CP['border']};"
+            f"QWidget{{background:{CP['bg1']};}}"
         )
         lib_lay = QVBoxLayout(lib)
         lib_lay.setContentsMargins(12, 14, 12, 14)
@@ -678,7 +703,23 @@ class PageLive(QWidget):
         self._btn_calage.clicked.connect(self._on_generate_calage)
         lib_lay.addWidget(self._btn_calage)
 
-        lay.addWidget(lib)
+        # Colonne SCROLLABLE : plus aucun bouton tronqué en bas (vu en réel :
+        # « Calage Resolume » coupé), et bordures gauche/droite pleine hauteur.
+        lib_scroll_col = QScrollArea()
+        lib_scroll_col.setWidget(lib)
+        lib_scroll_col.setWidgetResizable(True)
+        lib_scroll_col.setFixedWidth(286)
+        lib_scroll_col.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        lib_scroll_col.setStyleSheet(
+            f"QScrollArea{{background:{CP['bg1']};"
+            f"border-left:2px solid {CP['border_bright']};"
+            f"border-right:1px solid {CP['border']};border-top:none;border-bottom:none;}}"
+            f"QScrollBar:vertical{{background:{CP['bg2']};width:6px;border-radius:3px;}}"
+            f"QScrollBar::handle:vertical{{background:{CP['border_bright']};"
+            f"border-radius:3px;min-height:30px;}}"
+            f"QScrollBar::add-line:vertical,QScrollBar::sub-line:vertical{{height:0;}}"
+        )
+        lay.addWidget(lib_scroll_col)
 
         # ── Grille Resolume ────────────────────────────────────────────────────
         grid_area = QWidget()

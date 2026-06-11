@@ -56,6 +56,15 @@ def get_ffmpeg_exe() -> str:
             _ffmpeg_exe_cache = bundled
             return bundled
 
+    # 1b. Racine du projet (mode DEV) — ffmpeg.exe y est posé par convention.
+    # ⚠ Vu en réel (2026-06-11) : seul le cas frozen était couvert → en dev,
+    # vignettes noires et conformation/mixages dépendants de fallbacks fragiles.
+    from core.paths import APP_ROOT
+    _root_exe = os.path.join(APP_ROOT, "ffmpeg.exe")
+    if os.path.isfile(_root_exe):
+        _ffmpeg_exe_cache = _root_exe
+        return _root_exe
+
     # 2. imageio-ffmpeg — ce package embarque son propre binaire
     try:
         import imageio_ffmpeg as _iio_ffmpeg  # type: ignore
@@ -88,6 +97,13 @@ def get_ffprobe_exe() -> str:
         if os.path.isfile(bundled):
             _ffprobe_exe_cache = bundled
             return bundled
+
+    # Racine du projet (mode DEV) — même convention que ffmpeg.exe
+    from core.paths import APP_ROOT
+    _root_probe = os.path.join(APP_ROOT, "ffprobe.exe")
+    if os.path.isfile(_root_probe):
+        _ffprobe_exe_cache = _root_probe
+        return _root_probe
 
     # DaVinci Resolve a ffprobe au même emplacement que ffmpeg
     dvr_dir = os.path.dirname(_find_davinci_ffmpeg() or "")

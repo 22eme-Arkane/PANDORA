@@ -1155,8 +1155,15 @@ def pont_resolume():
     src_pl = inspect.getsource(__import__("ui.page_live", fromlist=["PageLive"]))
     for token in ("_MidThumbWorker", "_SlotThumbWorker", "drop_req", "clear_req",
                   "_acte_layers_cb", "_view_combo", "def _on_clear_layer",
-                  "_selected_clip and os.path.isfile"):
+                  "_selected_clip and os.path.isfile",
+                  "def _play", "mouseDoubleClickEvent",   # preview des clips
+                  "border-left:2px", "lib_scroll_col"):   # cadre + colonne scrollable
         assert token in src_pl, f"page Resolume : {token}"
+    # ffmpeg.exe à la RACINE du projet trouvé en mode dev (vignettes noires
+    # sinon — et conformation/mixages sur fallbacks fragiles)
+    from core.video_utils import get_ffmpeg_exe, get_ffprobe_exe
+    assert "APP_ROOT" in inspect.getsource(get_ffmpeg_exe), "ffmpeg racine (dev)"
+    assert "APP_ROOT" in inspect.getsource(get_ffprobe_exe), "ffprobe racine (dev)"
     # Renommage, tempo, colonne
     assert c.set_clip_name(1, 2, "P1") and '"P1"' in s.calls[-1][2]["data"]
     assert c.set_tempo(129.0) and "tempocontroller" in s.calls[-1][2]["data"]
