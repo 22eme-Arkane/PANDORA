@@ -1206,6 +1206,16 @@ def confinement_facade():
     assert ("non visible" in LE._mode_ctx("mapping")
             and "non visible" not in LE._mode_ctx("live"))
 
+    # 6. ANCRAGE ARCHITECTURAL (retour test réel : la maison rétrécissait —
+    #    effet superbe MAIS si la nuit n'est pas noire, la fenêtre projetée se
+    #    sépare de la vraie fenêtre = impression de raté) : l'architecture
+    #    visible reste à position/échelle EXACTES, jamais de zoom du contenu
+    assert "ANCRAGE ARCHITECTURAL" in _FACADE_FRAME_RULE, \
+        "règle d'ancrage dans tous les prompts IA mapping"
+    assert "dézoom" in _FACADE_FRAME_RULE and "échelle" in _FACADE_FRAME_RULE
+    assert "never shrinks" in src_gen and "registered with the real building" in src_gen, \
+        "ADN mapping Seedance : la façade ne rétrécit/glisse jamais"
+
 
 @test
 def selection_plage_et_lasso():

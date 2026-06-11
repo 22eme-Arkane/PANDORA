@@ -59,6 +59,14 @@ _FACADE_FRAME_RULE = """\
   par la cheminée » alors qu'aucune cheminée n'apparaît sur la photo),
   TRANSPOSE l'action sur un élément visible (ex. une fenêtre s'illumine et il
   s'y engouffre) au lieu de la reprendre telle quelle.
+- ANCRAGE ARCHITECTURAL — la projection se SUPERPOSE au vrai bâtiment : quand
+  la façade ou l'un de ses éléments (fenêtres, portes, arêtes) est visible, il
+  est EXACTEMENT à la position et à l'échelle de la photo de référence. JAMAIS
+  de zoom, dézoom, rétrécissement, agrandissement ou glissement de la façade
+  ENTIÈRE : si la nuit n'est pas parfaitement noire le soir du mapping, la
+  fenêtre projetée se sépare de la vraie fenêtre et tout paraît raté. La façade
+  peut disparaître, changer de matière ou être recouverte par un autre monde —
+  mais dès que son architecture se montre, elle est à sa place exacte.
 """
 
 _SYSTEM_MAPPING = """\
