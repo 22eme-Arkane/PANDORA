@@ -1177,25 +1177,34 @@ def confinement_facade():
         "option décochée par défaut (le plein cadre reste recadrable dans Resolume)"
 
     # 5. Confinement AMONT (retour test réel : « le Père Noël entre par la
-    #    cheminée » — or la cheminée n'est pas sur la façade mappée) : la règle
-    #    de zone est dans TOUS les prompts IA du mode Mapping, jamais en Live
+    #    cheminée » — or la cheminée n'était pas sur la façade mappée) : la règle
+    #    de zone est dans TOUS les prompts IA du mode Mapping, jamais en Live.
+    #    ⚠ Le critère est la VISIBILITÉ sur la photo de référence — JAMAIS de
+    #    liste noire d'éléments (« no chimney » interdirait une vraie cheminée
+    #    mappée ; retour Matthieu : « c'était un exemple, pas une généralité »)
     from api.live_screenplay import (
         _FACADE_FRAME_RULE, _SYSTEM_MAPPING, _ARRANGE_MAPPING, _SYSTEM_LIVE,
         _APPLY_ARRANGE_CONDUCTEUR, ArrangeChatConducteurWorker,
     )
-    assert "cheminée" in _FACADE_FRAME_RULE and "TRANSPOSE" in _FACADE_FRAME_RULE, \
-        "la règle interdit le hors-zone ET demande la transposition sur la façade"
+    assert "NON VISIBLE" in " ".join(_FACADE_FRAME_RULE.split()), \
+        "le critère est la visibilité sur la photo"
+    assert "TRANSPOSE" in _FACADE_FRAME_RULE, \
+        "la règle demande la transposition sur un élément visible"
+    assert "no chimney" not in _SYSTEM_MAPPING and "no sky" not in _SYSTEM_MAPPING, \
+        "pas de liste noire d'éléments (une vraie cheminée mappée doit rester possible)"
     assert _FACADE_FRAME_RULE in _SYSTEM_MAPPING, "découpage confiné"
     assert _FACADE_FRAME_RULE in _ARRANGE_MAPPING, "arrangement confiné"
-    assert "no chimney" in _SYSTEM_MAPPING, "prompt vidéo anglais confiné"
-    assert "cheminée" in _APPLY_ARRANGE_CONDUCTEUR, "application d'arrangement confinée"
+    assert "actually visible in the reference facade image" in _SYSTEM_MAPPING, \
+        "prompt vidéo anglais confiné par VISIBILITÉ"
+    assert "non visible" in _APPLY_ARRANGE_CONDUCTEUR, "application d'arrangement confinée"
     assert _FACADE_FRAME_RULE not in _SYSTEM_LIVE, "le mode Live reste libre"
     assert "transpose" in inspect.getsource(ArrangeChatConducteurWorker.run), \
         "co-écriture (chat d'arrangement) confinée"
     import api.live_extract as LE
     assert "_FACADE_FRAME_RULE" in inspect.getsource(LE.FormatConducteurWorker.run), \
         "Mise en page PANDORA confinée"
-    assert "cheminée" in LE._mode_ctx("mapping") and "cheminée" not in LE._mode_ctx("live")
+    assert ("non visible" in LE._mode_ctx("mapping")
+            and "non visible" not in LE._mode_ctx("live"))
 
 
 @test

@@ -21,7 +21,7 @@ def _mode_ctx(mode: str) -> str:
         return ("Contexte : performance de MAPPING vidéo projeté sur la façade d'un "
                 "bâtiment (façade verrouillée, caméra fixe, séquence continue). "
                 "SEULE la façade de la photo de référence existe — aucune action "
-                "hors de cette zone (cheminée, toit, côtés, sol, alentours).")
+                "reposant sur un élément non visible sur cette photo.")
     return ("Contexte : performance LIVE / VJ (visuels en boucle projetés en concert "
             "ou installation).")
 
