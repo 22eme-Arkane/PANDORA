@@ -2907,6 +2907,9 @@ _FR_TO_EN: dict[str, str] = {
     "Analyse d'abord le set dans le Conducteur (« Analyser le set »).":
         "Analyze the set first in the Conductor (« Analyze the set »).",
     "Envoyer vers Resolume": "Send to Resolume",
+    "Mode show (enchaînement auto, calé mesure)": "Show mode (auto-chain, bar-snapped)",
+    "Chaque clip est réglé : Play Once & Hold (joue une fois, tient sa\ndernière frame), Beat Snap 1 mesure, Autopilot « clip suivant ».\nDéclenche le 1er clip : toute la séquence se joue seule, au tempo.":
+        "Each clip is set to: Play Once & Hold (plays once, holds its\nlast frame), Beat Snap 1 bar, Autopilot \"next clip\".\nTrigger the 1st clip: the whole sequence plays itself, on tempo.",
     "◈  Tester la connexion": "◈  Test connection",
     "La clé fal.ai est partagée avec PANDORA | Cinéma.\nElle est utilisée pour la génération de clips IA dans le module Live.": "The fal.ai key is shared with PANDORA | Cinéma.\nIt is used for AI clip generation in the Live module.",
     "Fonctionnalité optionnelle — ne fonctionne pas avec DaVinci Resolve (version gratuite/Lite). Requiert DaVinci Resolve Studio (version payante).": "Optional feature — does not work with DaVinci Resolve (free/Lite version). Requires DaVinci Resolve Studio (paid version).",

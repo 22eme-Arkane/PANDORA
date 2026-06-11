@@ -50,6 +50,54 @@ def file_uri(path: str) -> str:
     return f"file:///{p}" if not p.startswith("/") else f"file://{p}"
 
 
+def set_choice_param(node, names: set, option_substring: str) -> bool:
+    """Patch TOLÉRANT d'un paramètre « choix » dans le JSON d'un clip Resolume.
+
+    Cherche récursivement une clé dont le nom ∈ `names` (insensible à la casse)
+    portant un dict avec une liste "options", et sélectionne la première option
+    contenant `option_substring`. Robuste aux variations de schéma entre
+    versions d'Arena (manuel 7.x fourni par Matthieu, 2026-06-11) :
+      - playmode  → "Play Once & Hold" (chaque plan joue une fois, tient sa frame)
+      - beatsnap  → "1 Bar" (déclenchements quantisés à la mesure)
+      - target (autopilot) → "Next clip" (la séquence s'enchaîne seule)
+    Renvoie True si un paramètre a été modifié."""
+    if isinstance(node, dict):
+        for key, val in node.items():
+            if (key.lower() in names and isinstance(val, dict)
+                    and isinstance(val.get("options"), list)):
+                opts = val["options"]
+                for i, opt in enumerate(opts):
+                    if option_substring.lower() in str(opt).lower():
+                        val["index"] = i
+                        val["value"] = opt
+                        return True
+            if set_choice_param(val, names, option_substring):
+                return True
+    elif isinstance(node, list):
+        for item in node:
+            if set_choice_param(item, names, option_substring):
+                return True
+    return False
+
+
+def find_subtree(node, key: str):
+    """Premier sous-dict porté par la clé `key` (insensible à la casse) — pour
+    scoper un patch (ex. le « target » de l'AUTOPILOT, pas le Clip Target)."""
+    if isinstance(node, dict):
+        for k, v in node.items():
+            if k.lower() == key.lower():
+                return v
+            r = find_subtree(v, key)
+            if r is not None:
+                return r
+    elif isinstance(node, list):
+        for item in node:
+            r = find_subtree(item, key)
+            if r is not None:
+                return r
+    return None
+
+
 @dataclass
 class ClipInfo:
     layer:  int
@@ -188,6 +236,29 @@ class ResolumeClient:
             r = self._s.put(
                 f"{self._base}/composition",
                 data=json.dumps({"tempocontroller": {"tempo": {"value": float(bpm)}}}),
+                headers={"Content-Type": "application/json"},
+                timeout=self._timeout,
+            )
+            return self._ok(r)
+        except Exception as e:
+            return self._fail(e)
+
+    def get_clip(self, layer: int, col: int) -> dict:
+        """JSON complet d'un clip (pour patch tolérant des paramètres)."""
+        try:
+            r = self._s.get(f"{self._base}/composition/layers/{layer}/clips/{col}",
+                            timeout=self._timeout)
+            return r.json() if r.status_code == 200 else {}
+        except Exception as e:
+            self._fail(e)
+            return {}
+
+    def put_clip(self, layer: int, col: int, payload: dict) -> bool:
+        """Réécrit le JSON d'un clip (après modification de paramètres)."""
+        try:
+            r = self._s.put(
+                f"{self._base}/composition/layers/{layer}/clips/{col}",
+                data=json.dumps(payload),
                 headers={"Content-Type": "application/json"},
                 timeout=self._timeout,
             )

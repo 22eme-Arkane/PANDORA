@@ -24,8 +24,11 @@ class PushToResolumeWorker(QThread):
 
     def __init__(self, clips: list, layer: int = 1, start_column: int = 1,
                  bpm: float = 0.0, host: str = "", port: int = 0,
+                 show_mode: bool = False,
                  client: ResolumeClient | None = None):
-        """clips = [{"path": str, "name": str}] — name optionnel (nom du slot)."""
+        """clips = [{"path": str, "name": str}] — name optionnel (nom du slot).
+        show_mode : chaque clip est réglé « Play Once & Hold » + Beat Snap 1 mesure
+        + Autopilot « next clip » → la séquence s'enchaîne seule, calée au tempo."""
         super().__init__()
         self._clips  = [c for c in (clips or []) if c.get("path")]
         self._layer  = max(1, int(layer))
@@ -33,7 +36,22 @@ class PushToResolumeWorker(QThread):
         self._bpm    = float(bpm or 0)
         self._host   = host
         self._port   = port
+        self._show   = bool(show_mode)
         self._client = client   # injecté par les tests ; sinon créé dans run()
+
+    def _apply_show_mode(self, client: ResolumeClient, col: int) -> bool:
+        """Patch tolérant du clip chargé (voir resolume.client.set_choice_param)."""
+        from resolume.client import set_choice_param, find_subtree
+        clip = client.get_clip(self._layer, col)
+        if not clip:
+            return False
+        patched = False
+        patched |= set_choice_param(clip, {"playmode"}, "hold")
+        patched |= set_choice_param(clip, {"beatsnap"}, "bar")
+        ap = find_subtree(clip, "autopilot")
+        if ap is not None:
+            patched |= set_choice_param(ap, {"target", "action"}, "next")
+        return bool(patched) and client.put_clip(self._layer, col, clip)
 
     def run(self):
         if not self._clips:
@@ -74,6 +92,8 @@ class PushToResolumeWorker(QThread):
                     if label:
                         client.set_clip_name(self._layer, col, label)
                         # le clip est chargé — un échec de renommage est cosmétique
+                    if self._show and not self._apply_show_mode(client, col):
+                        self.progress.emit(pct, f"⚠ Mode show non appliqué sur {base}")
                 else:
                     failures.append(base)
                     self.progress.emit(pct, f"⚠ {base} : {client.last_error}")

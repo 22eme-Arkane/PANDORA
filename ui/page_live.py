@@ -403,6 +403,15 @@ class PageLive(QWidget):
                 "Analyse d'abord le set dans le Conducteur (« Analyser le set »)."))
         lib_lay.addWidget(self._push_bpm_cb)
 
+        self._show_mode_cb = QCheckBox(translate("Mode show (enchaînement auto, calé mesure)"))
+        self._show_mode_cb.setStyleSheet(
+            f"QCheckBox{{color:{CP['text_secondary']};font-size:9px;background:transparent;}}")
+        self._show_mode_cb.setToolTip(translate(
+            "Chaque clip est réglé : Play Once & Hold (joue une fois, tient sa\n"
+            "dernière frame), Beat Snap 1 mesure, Autopilot « clip suivant ».\n"
+            "Déclenche le 1er clip : toute la séquence se joue seule, au tempo."))
+        lib_lay.addWidget(self._show_mode_cb)
+
         self._btn_push = QPushButton("⇪  " + translate("Envoyer vers Resolume"))
         self._btn_push.setFixedHeight(30)
         self._btn_push.setCursor(Qt.CursorShape.PointingHandCursor)
@@ -794,7 +803,8 @@ class PageLive(QWidget):
         self._port = self._port_spin.value()
         w = PushToResolumeWorker(clips, layer=self._push_layer.value(),
                                  start_column=self._push_col.value(),
-                                 bpm=bpm, host=self._host, port=self._port)
+                                 bpm=bpm, host=self._host, port=self._port,
+                                 show_mode=self._show_mode_cb.isChecked())
         self._push_worker = w
         self._btn_push.setEnabled(False)
         w.progress.connect(lambda _p, msg: self._status_lbl.setText(msg))

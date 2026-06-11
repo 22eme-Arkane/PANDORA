@@ -939,6 +939,21 @@ def pont_resolume():
             self.calls.append(("get", url, k))
             if url.endswith("/product"):
                 return _Resp(200, {"name": "Arena", "major": 7})
+            if "/clips/" in url:
+                # JSON minimal d'un clip (paramètres « choix » façon Arena)
+                return _Resp(200, {
+                    "name": {"value": "clip"},
+                    "target": {"options": ["This Layer", "Active Layer"], "index": 0},
+                    "beatsnapping": {
+                        "beatsnap": {"options": ["Off", "1/2", "1 Bar", "2 Bars"],
+                                     "index": 0}},
+                    "transport": {"controls": {
+                        "playmode": {"options": ["Loop", "Ping Pong",
+                                                 "Play Once & Eject",
+                                                 "Play Once & Hold"], "index": 0}}},
+                    "autopilot": {"target": {"options": ["Off", "Previous Clip",
+                                                         "Next Clip"], "index": 0}},
+                })
             return _Resp(200, {"layers": [
                 {"name": {"value": "PANDORA"},
                  "clips": [{"name": {"value": "P1"}, "connected": {"value": True}}]},
@@ -979,14 +994,28 @@ def pont_resolume():
     d = ResolumeClient("127.0.0.1", 8080, session=_Down())
     assert d.get_product_info() == {} and "Webserver" in d.last_error
 
-    # Worker d'envoi : 2 clips → slots consécutifs + BPM compo (run() synchrone)
+    # Patch tolérant : set_choice_param + scoping autopilot (manuel Arena 7.x)
+    from resolume.client import set_choice_param, find_subtree
+    clip_json = s.get("x/clips/1").json()
+    assert set_choice_param(clip_json, {"playmode"}, "hold")
+    pm = clip_json["transport"]["controls"]["playmode"]
+    assert pm["index"] == 3 and "Hold" in pm["value"], "Play Once & Hold"
+    assert set_choice_param(clip_json, {"beatsnap"}, "1 bar")
+    assert clip_json["beatsnapping"]["beatsnap"]["index"] == 2, "Beat Snap 1 mesure"
+    ap = find_subtree(clip_json, "autopilot")
+    assert set_choice_param(ap, {"target", "action"}, "next")
+    assert ap["target"]["index"] == 2, "Autopilot → Next Clip"
+    assert clip_json["target"]["index"] == 0, \
+        "le Clip Target hors autopilot n'est PAS touché (scoping)"
+
+    # Worker d'envoi : 2 clips → slots consécutifs + BPM compo + MODE SHOW
     from api.resolume_push import PushToResolumeWorker
     clip2 = os.path.join(_TMP, "plan_02.mp4")
     open(clip2, "wb").close()
     s2 = _Session()
     w = PushToResolumeWorker(
         [{"path": clip, "name": "P1"}, {"path": clip2, "name": "P2"}],
-        layer=2, start_column=5, bpm=129.0,
+        layer=2, start_column=5, bpm=129.0, show_mode=True,
         client=ResolumeClient("127.0.0.1", 8080, session=s2))
     results = []
     w.finished.connect(results.append)
@@ -997,6 +1026,11 @@ def pont_resolume():
         and opens[1].endswith("/layers/2/clips/6/open"), "slots consécutifs"
     assert any("tempocontroller" in (k.get("data") or "") for m, _, k in s2.calls
                if m == "put"), "BPM compo réglé"
+    # Mode show : chaque clip est relu (GET) puis réécrit (PUT) avec les patches
+    show_puts = [k.get("data", "") for m, u, k in s2.calls
+                 if m == "put" and "/clips/" in u and "Hold" in k.get("data", "")]
+    assert len(show_puts) == 2, "mode show appliqué aux 2 clips"
+    assert all("Next Clip" in d for d in show_puts), "autopilot next dans le PUT"
 
     # Page contrôleur : réactivée dans la nav + branchée à la Vidéothèque
     import live_window as LW
