@@ -202,12 +202,15 @@ class _ClipCard(QWidget):
     def __init__(self, path: str, view_mode: str = "detail"):
         super().__init__()
         self._path      = path
+        self._mode      = view_mode
         self._is_sel    = False
         self._drag_from = None
+        self.drag_provider = None        # posé par la page : sélection multiple
         self.setObjectName("clipcard")   # style SCOPÉ — sinon la bordure
         self.setCursor(Qt.CursorShape.OpenHandCursor)   # cascade sur les enfants
         self.setToolTip(os.path.basename(path)
-                        + "\n" + "Glisser-déposer sur un slot pour le charger.")
+                        + "\nClic : sélectionner (Ctrl = multi · Maj = plage)"
+                        + "\nGlisser-déposer sur un slot pour charger.")
         self._apply_style(False)
 
         base = os.path.basename(path)
@@ -290,16 +293,23 @@ class _ClipCard(QWidget):
             Qt.TransformationMode.SmoothTransformation))
 
     def _apply_style(self, sel: bool):
+        # Sélection BIEN visible : cadre accent 2px — autour de la VIGNETTE en
+        # mode grandes vignettes, autour de toute la carte en mode détails.
         if sel:
             self.setStyleSheet(
                 f"QWidget#clipcard{{background:rgba(78,205,196,0.15);"
-                f"border:1px solid {CP['accent_dim']};border-radius:8px;}}"
+                f"border:2px solid {CP['accent']};border-radius:8px;}}"
             )
         else:
             self.setStyleSheet(
                 f"QWidget#clipcard{{background:{CP['bg2']};"
                 f"border:1px solid {CP['border']};border-radius:8px;}}"
             )
+        if hasattr(self, "_thumb") and self._mode == "large":
+            self._thumb.setStyleSheet(
+                f"background:{CP['bg0']};border-radius:4px;color:{CP['text_dim']};"
+                f"font-size:9px;border:2px solid "
+                + (CP['accent'] if sel else "transparent") + ";")
 
     def set_selected(self, v: bool):
         self._is_sel = v
@@ -311,14 +321,15 @@ class _ClipCard(QWidget):
             self.selected.emit(self._path)
 
     def mouseMoveEvent(self, e):
-        # Glisser-déposer vers un slot de la grille Resolume
+        # Glisser-déposer vers un slot de la grille Resolume (multi-sélection OK)
         if (self._drag_from is not None
                 and (e.position().toPoint() - self._drag_from).manhattanLength() > 12):
             from PyQt6.QtGui import QDrag
             from PyQt6.QtCore import QMimeData
             drag = QDrag(self)
             mime = QMimeData()
-            mime.setText(self._path)
+            paths = self.drag_provider(self._path) if self.drag_provider else [self._path]
+            mime.setText("\n".join(paths))
             drag.setMimeData(mime)
             pm = self._thumb.pixmap()
             if pm is not None and not pm.isNull():
@@ -371,9 +382,9 @@ class _SlotBtn(QPushButton):
             self.setText(self._clip[:12] + ("…" if len(self._clip) > 12 else ""))
 
     def dragEnterEvent(self, e):
-        if e.mimeData().hasText() and os.path.splitext(
-                e.mimeData().text())[1].lower() in (".mp4", ".mov", ".webm",
-                                                    ".m4v", ".gif", ".png", ".jpg"):
+        first = e.mimeData().text().splitlines()[0] if e.mimeData().hasText() else ""
+        if os.path.splitext(first)[1].lower() in (".mp4", ".mov", ".webm",
+                                                  ".m4v", ".gif", ".png", ".jpg"):
             e.acceptProposedAction()
 
     def dropEvent(self, e):
@@ -563,6 +574,8 @@ class PageLive(QWidget):
         lib_lay.addLayout(view_row)
 
         lib_scroll = QScrollArea()
+        self._lib_scroll = lib_scroll
+        lib_scroll.setMinimumHeight(220)
         lib_scroll.setWidgetResizable(True)
         lib_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         lib_scroll.setStyleSheet("QScrollArea{background:transparent;border:none;}")
@@ -1000,13 +1013,20 @@ class PageLive(QWidget):
     # ── Bibliothèque ───────────────────────────────────────────────────────────
 
     def _refresh_library(self):
+        # Anti-résidus de peinture : détacher AVANT deleteLater (vu en réel au
+        # passage Détails ↔ Grandes vignettes)
         for c in self._clip_cards:
+            c.hide()
+            c.setParent(None)
             c.deleteLater()
         self._clip_cards.clear()
         while self._lib_lay.count():
             item = self._lib_lay.takeAt(0)
-            if item and item.widget():
-                item.widget().deleteLater()
+            w = item.widget() if item else None
+            if w:
+                w.hide()
+                w.setParent(None)
+                w.deleteLater()
 
         # Mêmes sources que la Vidéothèque du Studio (clips du PROJET)
         from ui.tab_video_library_live import scan_live_clips
@@ -1030,8 +1050,13 @@ class PageLive(QWidget):
             for path in clips:
                 card = _ClipCard(path, view_mode=view)
                 card.selected.connect(self._on_clip_selected)
+                # Drag multi : si la carte fait partie de la sélection, tout part
+                card.drag_provider = self._drag_paths
                 self._clip_cards.append(card)
                 self._lib_lay.addWidget(card)
+            # Anti-résidus : remonte la liste en haut après reconstruction
+            if hasattr(self, "_lib_scroll"):
+                self._lib_scroll.verticalScrollBar().setValue(0)
             # Vignettes = frame du MILIEU du clip (les plans ouvrent/ferment au noir)
             if getattr(self, "_thumb_worker", None) is not None:
                 from core.worker import abandon_thread
@@ -1052,13 +1077,34 @@ class PageLive(QWidget):
     # ── Interactions ───────────────────────────────────────────────────────────
 
     def _on_clip_selected(self, path: str):
-        self._selected_clip = path
+        """Sélection multiple : clic = seul · Ctrl = ajouter/retirer · Maj = plage."""
+        from PyQt6.QtWidgets import QApplication
+        mods  = QApplication.keyboardModifiers()
+        order = [c._path for c in self._clip_cards]
+        sel   = getattr(self, "_selected_paths", [])
+        if mods & Qt.KeyboardModifier.ShiftModifier and self._selected_clip in order:
+            i1, i2 = order.index(self._selected_clip), order.index(path)
+            rng = order[min(i1, i2):max(i1, i2) + 1]
+            sel = list(dict.fromkeys(sel + rng))
+        elif mods & Qt.KeyboardModifier.ControlModifier:
+            if path in sel:
+                sel = [p for p in sel if p != path]
+            else:
+                sel = sel + [path]
+            self._selected_clip = path
+        else:
+            sel = [path]
+            self._selected_clip = path
+        self._selected_paths = sel
         for card in self._clip_cards:
-            card.set_selected(card._path == path)
+            card.set_selected(card._path in sel)
+        n = len(sel)
         if not self._pending_paths and hasattr(self, "_push_info"):
-            self._push_info.setText(translate("Envoi : le clip sélectionné")
-                                    + f" ({os.path.basename(path)})")
-        self._selected_lbl.setText(os.path.basename(path))
+            self._push_info.setText(
+                translate("Envoi : le clip sélectionné") + f" ({os.path.basename(path)})"
+                if n <= 1 else f"{translate('Envoi :')} {n} {translate('clips sélectionnés')}")
+        self._selected_lbl.setText(os.path.basename(path) if n <= 1
+                                   else f"{n} clips sélectionnés")
         self._selected_lbl.setStyleSheet(
             f"color:{CP['accent']};font-size:9px;background:transparent;"
         )
@@ -1094,22 +1140,37 @@ class PageLive(QWidget):
         suffix = "" if self._connected else " (mock — Resolume non connecté)"
         self._status_lbl.setText(f"✓  '{clip_name}' → slot {layer}:{col}{suffix}")
 
-    def _on_slot_drop(self, layer: int, col: int, path: str):
-        """Glisser-déposer d'un clip de la bibliothèque sur un slot."""
-        if not os.path.isfile(path):
+    def _drag_paths(self, origin_path: str) -> list:
+        """Chemins à glisser : la sélection multiple si la carte en fait partie."""
+        sel = getattr(self, "_selected_paths", [])
+        if origin_path in sel and len(sel) > 1:
+            order = [c._path for c in self._clip_cards]
+            return [p for p in order if p in sel]
+        return [origin_path]
+
+    def _on_slot_drop(self, layer: int, col: int, text: str):
+        """Dépôt d'un (ou plusieurs) clips sur un slot — slots consécutifs."""
+        paths = [p for p in text.splitlines() if os.path.isfile(p)]
+        if not paths:
             return
-        clip_name = os.path.basename(path)
-        if self._connected:
-            self._status_lbl.setText(f"Chargement de '{clip_name}' → slot {layer}:{col}…")
-            w = _LoadWorker(self._host, self._port, layer, col, path)
-            w.success.connect(lambda l, c, n=clip_name: (
-                self._on_load_done(l, c, n), self._fetch_layers()))
-            w.failed.connect(lambda e: self._status_lbl.setText(f"✗  {e}"))
-            w.finished.connect(w.deleteLater)
-            self._workers.append(w)
-            w.start()
-        else:
-            self._on_load_done(layer, col, clip_name)
+        if len(paths) == 1 and not self._connected:
+            self._on_load_done(layer, col, os.path.basename(paths[0]))
+            return
+        if not self._connected:
+            self._status_lbl.setText("✗  Connexion requise pour déposer plusieurs clips.")
+            return
+        from api.resolume_push import PushToResolumeWorker
+        clips = [{"path": p, "name": os.path.splitext(os.path.basename(p))[0]}
+                 for p in paths]
+        w = PushToResolumeWorker(clips, layer=layer, start_column=col,
+                                 host=self._host, port=self._port)
+        self._workers.append(w)
+        w.progress.connect(lambda _p, msg: self._status_lbl.setText(msg))
+        w.finished.connect(lambda r: (self._status_lbl.setText(
+            f"✓  {r.get('sent', 0)} clip(s) déposé(s) (couche {layer}, colonnes {col}+)"),
+            self._fetch_layers()))
+        w.failed.connect(lambda e: self._status_lbl.setText(f"✗  {e}"))
+        w.start()
 
     def _on_slot_clear(self, layer: int, col: int):
         """Maj+clic sur un slot = le vider."""
@@ -1196,8 +1257,11 @@ class PageLive(QWidget):
         # Priorité : file reçue de la Vidéothèque > clip sélectionné > toute la
         # bibliothèque (retour Matthieu : « ça envoie tous les plans » — la
         # sélection est désormais respectée et l'étiquette l'annonce).
+        _sel = [p for p in getattr(self, "_selected_paths", []) if os.path.isfile(p)]
         if self._pending_paths:
             paths = list(self._pending_paths)
+        elif _sel:
+            paths = _sel
         elif self._selected_clip and os.path.isfile(self._selected_clip):
             paths = [self._selected_clip]
         else:

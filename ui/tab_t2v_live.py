@@ -1144,7 +1144,76 @@ class StoryboardSelector(QWidget):
         )
         lay.addWidget(scroll)
 
+        # Lasso : cliquer-glisser sur le fond de la bande = sélection rectangle
+        from PyQt6.QtWidgets import QRubberBand
+        self._rubber = QRubberBand(QRubberBand.Shape.Rectangle, self._inner)
+        self._rubber_origin = None
+        self._last_clicked_id: str | None = None   # ancre du Maj+clic (plage)
+        self._inner.installEventFilter(self)
+
         self._load_shots()
+
+    def eventFilter(self, obj, ev):
+        from PyQt6.QtCore import QEvent, QRect
+        if obj is self._inner:
+            t = ev.type()
+            if (t == QEvent.Type.MouseButtonPress
+                    and ev.button() == Qt.MouseButton.LeftButton
+                    and self._inner.childAt(ev.position().toPoint()) is None):
+                self._rubber_origin = ev.position().toPoint()
+                self._rubber.setGeometry(QRect(self._rubber_origin, self._rubber_origin))
+                self._rubber.show()
+                return True
+            if t == QEvent.Type.MouseMove and self._rubber_origin is not None:
+                self._rubber.setGeometry(
+                    QRect(self._rubber_origin, ev.position().toPoint()).normalized())
+                return True
+            if t == QEvent.Type.MouseButtonRelease and self._rubber_origin is not None:
+                rect = self._rubber.geometry()
+                self._rubber.hide()
+                self._rubber_origin = None
+                self._apply_lasso(rect)
+                return True
+        return super().eventFilter(obj, ev)
+
+    def _apply_lasso(self, rect):
+        """Sélectionne tous les plans dont la vignette croise le rectangle."""
+        hits = [sid for sid, card in self._shot_cards.items()
+                if rect.intersects(card.geometry())]
+        if not hits:
+            return
+        self._selected_shot_ids = set(hits)
+        for sid, card in self._shot_cards.items():
+            card.set_selected(sid in self._selected_shot_ids)
+        self._emit_selection()
+
+    def _shot_order(self) -> list:
+        def _num(s):
+            try:
+                return int(s.get("number") or 0)
+            except (TypeError, ValueError):
+                return 0
+        return [s["id"] for s in sorted(self._shots_meta.values(), key=_num)]
+
+    def _emit_selection(self):
+        count = len(self._selected_shot_ids)
+        if count == 1:
+            self._selected_shot_id = next(iter(self._selected_shot_ids))
+            fresh = sb_api.get_shot(self._selected_shot_id)
+            if fresh:
+                self._shots_meta[self._selected_shot_id] = fresh
+            self.shot_selected.emit(self._shots_meta.get(self._selected_shot_id, {}))
+        elif count == 0:
+            self._selected_shot_id = None
+            self.shot_selected.emit({})
+        else:
+            self._selected_shot_id = None
+            shots_list = sorted(
+                [self._shots_meta.get(sid, {}) for sid in self._selected_shot_ids],
+                key=lambda s: int(s.get("number") or 0) if s.get("number") is not None else 0,
+            )
+            self.shot_selected.emit({})
+            self.shots_selected.emit(shots_list)
 
     def _load_shots(self):
         while self._hbox.count():
@@ -1196,39 +1265,31 @@ class StoryboardSelector(QWidget):
 
     def _on_shot_toggled(self, shot_id: str, selected: bool):
         from PyQt6.QtWidgets import QApplication
-        mods = QApplication.keyboardModifiers()
-        multi = bool(mods & (Qt.KeyboardModifier.ControlModifier | Qt.KeyboardModifier.ShiftModifier))
+        mods  = QApplication.keyboardModifiers()
+        shift = bool(mods & Qt.KeyboardModifier.ShiftModifier)
+        ctrl  = bool(mods & Qt.KeyboardModifier.ControlModifier)
 
-        if multi:
+        if shift and self._last_clicked_id in self._shots_meta:
+            # Maj+clic : sélectionne TOUTE LA PLAGE entre le dernier clic et ici
+            order = self._shot_order()
+            try:
+                i1, i2 = order.index(self._last_clicked_id), order.index(shot_id)
+            except ValueError:
+                i1 = i2 = order.index(shot_id) if shot_id in order else 0
+            self._selected_shot_ids |= set(order[min(i1, i2):max(i1, i2) + 1])
+        elif ctrl:
             if selected:
                 self._selected_shot_ids.add(shot_id)
             else:
                 self._selected_shot_ids.discard(shot_id)
+            self._last_clicked_id = shot_id
         else:
-            for sid, card in self._shot_cards.items():
-                if sid != shot_id:
-                    card.set_selected(False)
             self._selected_shot_ids = {shot_id} if selected else set()
+            self._last_clicked_id = shot_id
 
-        count = len(self._selected_shot_ids)
-        if count == 1:
-            self._selected_shot_id = next(iter(self._selected_shot_ids))
-            # Relit depuis le disque pour avoir le prompt et les champs les plus récents
-            fresh = sb_api.get_shot(self._selected_shot_id)
-            if fresh:
-                self._shots_meta[self._selected_shot_id] = fresh
-            self.shot_selected.emit(self._shots_meta.get(self._selected_shot_id, {}))
-        elif count == 0:
-            self._selected_shot_id = None
-            self.shot_selected.emit({})
-        else:
-            self._selected_shot_id = None
-            shots_list = sorted(
-                [self._shots_meta.get(sid, {}) for sid in self._selected_shot_ids],
-                key=lambda s: int(s.get("number") or 0) if s.get("number") is not None else 0,
-            )
-            self.shot_selected.emit({})
-            self.shots_selected.emit(shots_list)
+        for sid, card in self._shot_cards.items():
+            card.set_selected(sid in self._selected_shot_ids)
+        self._emit_selection()
 
     def get_selected_shot(self) -> dict | None:
         if self._selected_shot_id:

@@ -2928,6 +2928,8 @@ _FR_TO_EN: dict[str, str] = {
     "Répartit les clips par acte : tous les SQ1 sur la 1re couche,\nles SQ2 sur la suivante, etc. (colonnes redémarrent à 1 par couche).\nDécoché : tout sur la couche choisie, colonnes consécutives.":
         "Distributes clips by act: all SQ1 on the 1st layer,\nSQ2 on the next, etc. (columns restart at 1 per layer).\nUnchecked: everything on the chosen layer, consecutive columns.",
     "Envoi : le clip sélectionné": "Sending: the selected clip",
+    "Envoi :": "Sending:",
+    "clips sélectionnés": "clips selected",
     "glisser un clip sur un slot · clic droit : déclencher · Maj+clic : vider":
         "drag a clip onto a slot · right click: trigger · Shift+click: clear",
     "Annuler la file": "Cancel queue",

@@ -1047,6 +1047,24 @@ def assistant_calage_mapping():
 
 
 @test
+def selection_plage_et_lasso():
+    """Maj+clic = plage + lasso (rubber band) dans le Conducteur visuel —
+    Live ET Cinéma ; bibliothèque Resolume : multi-sélection + drag multiple."""
+    import inspect
+    for mod_name in ("ui.tab_t2v_live", "ui.tab_t2v"):
+        M = __import__(mod_name, fromlist=["StoryboardSelector"])
+        src = inspect.getsource(M.StoryboardSelector)
+        assert "QRubberBand" in src and "_apply_lasso" in src, f"{mod_name} : lasso"
+        assert "ShiftModifier" in src and "_shot_order" in src, f"{mod_name} : Maj = plage"
+        assert "_emit_selection" in src, f"{mod_name} : émission factorisée"
+    import ui.page_live as PL
+    src = inspect.getsource(PL)
+    for tok in ("_selected_paths", "def _drag_paths", "drag_provider",
+                "splitlines", "setValue(0)"):
+        assert tok in src, f"page_live : {tok}"
+
+
+@test
 def pont_resolume():
     """Pont Resolume : client REST (endpoints + body URI texte), worker d'envoi,
     page contrôleur réactivée et branchée à la Vidéothèque."""
