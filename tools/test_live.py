@@ -1113,6 +1113,71 @@ def assistant_calage_mapping():
 
 
 @test
+def confinement_facade():
+    """Confinement façade (retour test réel : les clips « sortent » de la
+    façade) : masque pixel + keyframes masquées + verrouillage clip (option)."""
+    import inspect
+    from PIL import Image, ImageDraw
+    from core.live_mapping import (
+        build_facade_mask, apply_facade_mask_to_image, masked_keyframe,
+        build_video_mask_cmd,
+    )
+    # Même façade synthétique que le calage : maison à pignon sur fond noir
+    img = Image.new("L", (640, 360), 0)
+    d = ImageDraw.Draw(img)
+    d.polygon([(60, 330), (60, 140), (320, 40), (580, 140), (580, 330)], fill=255)
+    fp = os.path.join(_TMP, "facade_conf.png")
+    img.save(fp)
+
+    # 1. Masque pixel : blanc dans la façade, noir dehors
+    mp = build_facade_mask(fp, os.path.join(_TMP, "mapping", "mask.png"))
+    assert mp and os.path.isfile(mp), "masque construit"
+    with Image.open(mp) as m:
+        assert m.getpixel((320, 220)) > 200, "intérieur façade = blanc"
+        assert m.getpixel((10, 10)) < 30, "hors silhouette = noir"
+    # Garde-fou : façade NON isolée (image pleine) → pas de masque (on ne
+    # détruit jamais une image dont on ne maîtrise pas le détourage)
+    full = Image.new("L", (64, 64), 255)
+    fpf = os.path.join(_TMP, "facade_full.png")
+    full.save(fpf)
+    assert build_facade_mask(fpf, os.path.join(_TMP, "mapping", "m2.png")) == ""
+
+    # 2. Keyframe masquée : copie en cache (mood original INTACT), rouge dans
+    #    la façade, noir pur dehors ; ref non isolée → original renvoyé tel quel
+    kf = os.path.join(_TMP, "kf_red.png")
+    Image.new("RGB", (640, 360), (200, 30, 30)).save(kf)
+    out = masked_keyframe(kf, fp, os.path.join(_TMP, "conf_data"))
+    assert out != kf and os.path.isfile(out), "copie masquée en cache"
+    with Image.open(out) as o:
+        assert o.getpixel((320, 220))[0] > 150, "contenu conservé dans la façade"
+        assert sum(o.getpixel((10, 10))) < 30, "noir pur hors silhouette"
+    with Image.open(kf) as orig:
+        assert orig.getpixel((10, 10))[0] > 150, "le mood original n'est pas touché"
+    assert masked_keyframe(kf, fpf, os.path.join(_TMP, "conf_data")) == kf, \
+        "façade non isolée → keyframe d'origine (jamais bloquant)"
+
+    # 3. Commande vidéo (pure) : multiplication par le masque, audio copié
+    cmd = build_video_mask_cmd("ffmpeg", "clip.mp4", "mask.png", "out.mp4")
+    fc = cmd[cmd.index("-filter_complex") + 1]
+    assert "blend=all_mode=multiply" in fc and "scale2ref" in fc
+    assert "0:a?" in cmd and "copy" in cmd and cmd[-1] == "out.mp4"
+
+    # 4. Branchements dans Générer depuis Séquences (mode Mapping) :
+    #    prompt confiné + keyframes masquées + verrouillage optionnel du clip
+    from ui.tab_t2v_live import TabT2V
+    src_gen = inspect.getsource(TabT2V.start_generation)
+    assert "STRICTLY INSIDE the building's silhouette" in src_gen, \
+        "consigne de confinement dans l'ADN mapping"
+    assert "masked_keyframe" in src_gen, "keyframes masquées avant l'envoi"
+    src_fin = inspect.getsource(TabT2V.on_finished)
+    assert "lock_video_to_facade" in src_fin and "_facade_lock_cb" in src_fin, \
+        "verrouillage du clip final (option à cocher)"
+    tv = TabT2V()
+    assert hasattr(tv, "_facade_lock_cb") and not tv._facade_lock_cb.isChecked(), \
+        "option décochée par défaut (le plein cadre reste recadrable dans Resolume)"
+
+
+@test
 def selection_plage_et_lasso():
     """Maj+clic = plage + lasso (rubber band) dans le Conducteur visuel —
     Live ET Cinéma ; bibliothèque Resolume : multi-sélection + drag multiple."""

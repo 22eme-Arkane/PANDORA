@@ -2515,6 +2515,11 @@ _FR_TO_EN: dict[str, str] = {
         "🔒  Visual DNA locked — visual consistency enabled",
     "⊘  Ne pas envoyer les images de référence":
         "⊘  Do not send reference images",
+    "▦  Verrouiller les clips au masque de façade (noir hors silhouette)":
+        "▦  Lock clips to the facade mask (black outside the silhouette)",
+    "Après chaque génération Mapping : tout ce qui dépasse la silhouette du bâtiment est rendu noir pur dans le clip final (garanti à 100 %). Nécessite une façade isolée sur fond noir (BiRefNet).":
+        "After every Mapping generation: anything beyond the building silhouette is rendered pure black in the final clip (100% guaranteed). Requires a facade isolated on a black background (BiRefNet).",
+    "▦ Verrouillé au masque de façade": "▦ Locked to the facade mask",
     "Durée :":                      "Duration:",
     "0 plans sélectionnés":         "0 shots selected",
     " plans sélectionnés":          " shots selected",

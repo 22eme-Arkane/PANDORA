@@ -2281,6 +2281,25 @@ class TabT2V(QScrollArea):
         self._bref_row.setAlignment(Qt.AlignmentFlag.AlignHCenter)
         _fs_outer.addLayout(self._bref_row)
         self._refresh_bref()
+        # Verrouillage au masque de façade : garantie 100 % (multiplication
+        # ffmpeg par le masque BiRefNet) — option, car le noir hors silhouette
+        # est alors BRÛLÉ dans le fichier (plus de recadrage libre dans Resolume)
+        self._facade_lock_cb = QCheckBox(
+            "▦  Verrouiller les clips au masque de façade (noir hors silhouette)")
+        self._facade_lock_cb.setToolTip(
+            "Après chaque génération Mapping : tout ce qui dépasse la silhouette "
+            "du bâtiment est rendu noir pur dans le clip final (garanti à 100 %). "
+            "Nécessite une façade isolée sur fond noir (BiRefNet).")
+        self._facade_lock_cb.setStyleSheet(
+            f"QCheckBox{{color:{C['text_dim']};font-size:10px;background:transparent;spacing:5px;}}"
+            f"QCheckBox:hover{{color:{C['text_secondary']};}}"
+            f"QCheckBox::indicator{{width:13px;height:13px;border:1px solid {C['border']};"
+            f"border-radius:3px;background:{C['bg1']};}}"
+            f"QCheckBox::indicator:checked{{background:{C['accent']};border-color:{C['accent']};}}")
+        _lock_row = QHBoxLayout()
+        _lock_row.setAlignment(Qt.AlignmentFlag.AlignHCenter)
+        _lock_row.addWidget(self._facade_lock_cb)
+        _fs_outer.addLayout(_lock_row)
 
         # ── En-tête repliable (replié par défaut : gagne de la place si inutilisé) ──
         self._film_style_frame.setVisible(False)
@@ -3804,8 +3823,10 @@ class TabT2V(QScrollArea):
                 "facade — it may appear, vanish into total darkness, or be completely "
                 "replaced by the projected world, exactly as the shot describes; bold "
                 "high-contrast luminous visuals on a PURE BLACK #000000 background, true "
-                "deep blacks, unlit areas stay completely black — ready to be "
-                "projection-mapped onto the real building"
+                "deep blacks, unlit areas stay completely black; ALL luminous content "
+                "stays STRICTLY INSIDE the building's silhouette — nothing crosses its "
+                "outline, the sky and surroundings remain pure untouched black — ready "
+                "to be projection-mapped onto the real building"
             )
             time_suffix = (time_suffix + ", " + _mapping_dna) if time_suffix else _mapping_dna
 
@@ -3839,6 +3860,17 @@ class TabT2V(QScrollArea):
         end_frame = ""
         if getattr(self, "_seq_mode", "live") == "mapping" and self._active_shot:
             kf_start, kf_end = self._get_mapping_keyframes(self._active_shot)
+            # Confinement façade : keyframes MASQUÉES avant l'envoi (noir pur
+            # hors silhouette) — Seedance suit sa première frame, le contenu
+            # reste dans la façade. Copies en cache, les moods restent intacts.
+            if kf_start or kf_end:
+                from core.live_mapping import masked_keyframe
+                from core.live_building import get_building_ref
+                from core.context import get_data_root
+                _bref = get_building_ref()
+                if _bref:
+                    kf_start = masked_keyframe(kf_start, _bref, get_data_root())
+                    kf_end   = masked_keyframe(kf_end, _bref, get_data_root())
             if kf_start:
                 i2v_frame = kf_start   # prime sur le raccord dernière-frame
                 end_frame = kf_end
@@ -3971,6 +4003,20 @@ class TabT2V(QScrollArea):
                                         f"{_cf['target']:.3f}s (calage musical)")
                 except Exception:
                     pass
+
+        # ── Verrouillage façade (option) : noir pur garanti hors silhouette ───
+        if (local_path and getattr(self, "_seq_mode", "live") == "mapping"
+                and getattr(self, "_facade_lock_cb", None)
+                and self._facade_lock_cb.isChecked()):
+            try:
+                from core.live_mapping import lock_video_to_facade
+                from core.live_building import get_building_ref
+                from core.context import get_data_root
+                if lock_video_to_facade(local_path, get_building_ref(),
+                                        get_data_root()):
+                    davinci_msg += "\n▦ Verrouillé au masque de façade"
+            except Exception:
+                pass
 
         # ── Sound design auto : génère l'ambiance SFX du plan en parallèle ────
         if (getattr(self, "_sfx_auto_cb", None) and self._sfx_auto_cb.isChecked()

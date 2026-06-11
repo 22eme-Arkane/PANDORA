@@ -251,7 +251,133 @@ def generate_full_calage(ref_path: str, name: str, data_root: str) -> dict:
             "mire_path": mire_path, "preset_name": f"PANDORA {safe_name}"}
 
 
-# ── 3. Mire de calage spécifique au bâtiment ──────────────────────────────────
+# ── 3. Verrouillage du contenu au masque de façade ────────────────────────────
+# Retour de test réel : les clips générés « sortent » parfois de la façade.
+# Trois leviers cumulés : consigne prompt (doux), keyframes masquées AVANT la
+# génération (fort — Seedance suit sa première frame), masque appliqué au clip
+# final (option, garanti à 100 %). Le masque pixel vient de la façade isolée
+# sur fond noir (BiRefNet) — la même image qui sert au calage.
+
+_MASK_MIN_COVER, _MASK_MAX_COVER = 0.02, 0.95
+
+
+def build_facade_mask(ref_path: str, out_path: str, feather: int = 2) -> str:
+    """Masque pixel PNG (blanc = façade, noir = hors silhouette) depuis la
+    façade isolée sur fond noir. Renvoie "" si la façade n'est PAS isolée
+    (masque couvrant ~tout ou ~rien du cadre) — on ne détruit jamais une image
+    dont on ne maîtrise pas le détourage."""
+    from PIL import Image, ImageFilter
+
+    img = Image.open(ref_path).convert("L")
+    mask = img.point(lambda v: 255 if v > _LUMA_THRESHOLD else 0)
+    hist = mask.histogram()
+    cover = hist[255] / float(mask.size[0] * mask.size[1])
+    if not (_MASK_MIN_COVER < cover < _MASK_MAX_COVER):
+        return ""
+    if feather > 0:
+        mask = mask.filter(ImageFilter.GaussianBlur(feather))
+    os.makedirs(os.path.dirname(out_path) or ".", exist_ok=True)
+    mask.save(out_path, "PNG")
+    return out_path
+
+
+def ensure_facade_mask(ref_path: str, data_root: str) -> str:
+    """Masque en cache (invalide si la façade change). "" si indisponible."""
+    if not ref_path or not os.path.isfile(ref_path):
+        return ""
+    import hashlib
+    key = hashlib.md5(
+        f"{ref_path}|{os.path.getmtime(ref_path)}".encode()).hexdigest()[:16]
+    out = os.path.join(data_root, "mapping", f"facade_mask_{key}.png")
+    if os.path.isfile(out):
+        return out
+    try:
+        return build_facade_mask(ref_path, out)
+    except Exception:
+        return ""
+
+
+def apply_facade_mask_to_image(image_path: str, mask_path: str,
+                               out_path: str) -> str:
+    """Copie de l'image avec tout ce qui dépasse la silhouette rendu noir pur
+    (l'original n'est jamais modifié — les moods restent intacts à l'écran)."""
+    from PIL import Image
+
+    img = Image.open(image_path).convert("RGB")
+    mask = Image.open(mask_path).convert("L").resize(img.size)
+    black = Image.new("RGB", img.size, (0, 0, 0))
+    out = Image.composite(img, black, mask)
+    os.makedirs(os.path.dirname(out_path) or ".", exist_ok=True)
+    out.save(out_path, "PNG")
+    return out_path
+
+
+def masked_keyframe(kf_path: str, ref_path: str, data_root: str) -> str:
+    """Copie masquée d'un keyframe (cache) — renvoie l'ORIGINAL si le masque
+    est indisponible (façade non isolée, erreur PIL…) : jamais bloquant."""
+    if not kf_path or not os.path.isfile(kf_path):
+        return kf_path
+    mask = ensure_facade_mask(ref_path, data_root)
+    if not mask:
+        return kf_path
+    import hashlib
+    key = hashlib.md5(
+        f"{kf_path}|{os.path.getmtime(kf_path)}|{mask}".encode()).hexdigest()[:16]
+    out = os.path.join(data_root, "mapping", "masked_kf", f"{key}.png")
+    if os.path.isfile(out):
+        return out
+    try:
+        return apply_facade_mask_to_image(kf_path, mask, out)
+    except Exception:
+        return kf_path
+
+
+def build_video_mask_cmd(ffmpeg: str, video_path: str, mask_path: str,
+                         out_path: str) -> list:
+    """Commande ffmpeg (pure, testable) : multiplie le clip par le masque —
+    noir pur GARANTI hors silhouette, audio copié tel quel."""
+    return [ffmpeg, "-y", "-i", video_path, "-loop", "1", "-i", mask_path,
+            "-filter_complex",
+            "[0:v]format=gbrp[vid];[1:v]format=gbrp[mg];"
+            "[mg][vid]scale2ref[mk][v2];"
+            "[v2][mk]blend=all_mode=multiply:shortest=1,format=yuv420p[out]",
+            "-map", "[out]", "-map", "0:a?", "-c:a", "copy", out_path]
+
+
+def lock_video_to_facade(video_path: str, ref_path: str, data_root: str) -> bool:
+    """Applique le masque de façade au clip EN PLACE (même nom → Vidéothèque,
+    Resolume et relinks inchangés). False si masque indisponible ou échec —
+    le clip d'origine est alors conservé intact."""
+    mask = ensure_facade_mask(ref_path, data_root)
+    if not mask or not os.path.isfile(video_path):
+        return False
+    try:
+        from core.video_utils import get_ffmpeg_exe
+        ff = get_ffmpeg_exe()
+    except Exception:
+        ff = "ffmpeg"
+    tmp = video_path + ".lock.mp4"
+    try:
+        import subprocess
+        flags = 0x08000000 if os.name == "nt" else 0   # CREATE_NO_WINDOW
+        proc = subprocess.run(build_video_mask_cmd(ff, video_path, mask, tmp),
+                              capture_output=True, creationflags=flags, timeout=600)
+        if (proc.returncode == 0 and os.path.isfile(tmp)
+                and os.path.getsize(tmp) > 0):
+            os.replace(tmp, video_path)
+            return True
+        return False
+    except Exception:
+        return False
+    finally:
+        if os.path.isfile(tmp):
+            try:
+                os.remove(tmp)
+            except OSError:
+                pass
+
+
+# ── 4. Mire de calage spécifique au bâtiment ──────────────────────────────────
 
 def build_calibration_card(image_path: str, points: list, out_path: str,
                            comp_size: tuple = (COMP_W, COMP_H)) -> str:
