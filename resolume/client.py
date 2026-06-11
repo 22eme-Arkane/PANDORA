@@ -139,8 +139,9 @@ class ResolumeClient:
         return False
 
     def _fail(self, e: Exception) -> bool:
-        self.last_error = (f"connexion impossible ({e}) — Resolume est-il lancé, "
-                           f"avec le Webserver activé (Préférences → Webserver) ?")
+        self.last_error = (f"connexion impossible ({e}) — Resolume est-il lancé, avec "
+                           f"« Enable Webserver & REST API » coché "
+                           f"(Préférences → Webserver) ?")
         return False
 
     # ── Connexion ──────────────────────────────────────────────────────────────

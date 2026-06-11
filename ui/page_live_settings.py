@@ -103,8 +103,8 @@ class PageLiveSettings(QWidget):
         rc.setSpacing(14)
 
         info = QLabel(
-            "Resolume Arena ou Avenue doit être lancé avec le Webserver activé :\n"
-            "Préférences → Webserver → Enable Webserver  (port par défaut : 8080)"
+            "Resolume Arena ou Avenue doit être lancé avec le serveur web activé :\n"
+            "Préférences → Webserver → « Enable Webserver & REST API »  (port : 8080)"
         )
         info.setWordWrap(True)
         info.setStyleSheet(

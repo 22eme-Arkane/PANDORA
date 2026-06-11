@@ -2899,7 +2899,7 @@ _FR_TO_EN: dict[str, str] = {
     "Déconnecté · Clic gauche sur un slot = charger le clip sélectionné · Clic droit = déclencher (nécessite connexion)": "Disconnected · Left-click a slot = load the selected clip · Right-click = trigger (requires connection)",
     "Aucun clip trouvé\ndans ~/Videos/PANDORA/": "No clip found\nin ~/Videos/PANDORA/",
     "Configuration de la connexion Resolume et des clés API.": "Resolume connection and API keys configuration.",
-    "Resolume Arena ou Avenue doit être lancé avec le Webserver activé :\nPréférences → Webserver → Enable Webserver  (port par défaut : 8080)": "Resolume Arena or Avenue must be running with the Webserver enabled:\nPreferences → Webserver → Enable Webserver  (default port: 8080)",
+    "Resolume Arena ou Avenue doit être lancé avec le serveur web activé :\nPréférences → Webserver → « Enable Webserver & REST API »  (port : 8080)": "Resolume Arena or Avenue must be running with the web server enabled:\nPreferences → Webserver → \"Enable Webserver & REST API\"  (port: 8080)",
     "Port Webserver :": "Webserver port:",
     "Toute la bibliothèque": "Whole library",
     "clip(s) reçus de la Vidéothèque": "clip(s) received from the Video library",

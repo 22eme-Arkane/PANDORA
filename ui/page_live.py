@@ -41,8 +41,8 @@ class _ConnectWorker(QThread):
         else:
             self.failed.emit(
                 f"Impossible de joindre Resolume sur {self._host}:{self._port}. "
-                "Vérifiez que Resolume est lancé et que le Webserver est activé "
-                "(Préférences → Webserver)."
+                "Vérifiez que Resolume est lancé et que « Enable Webserver & REST API » "
+                "est coché (Préférences → Webserver)."
             )
 
 
