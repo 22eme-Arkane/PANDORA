@@ -754,10 +754,15 @@ def sound_design_file_et_crossfade():
                                      fromlist=["TabSoundDesignLive"]))
     assert "sd_rendu" in src_sd and "Consolas" in src_sd, \
         "section RENDU au design RENDU & AUDIO (titre accent + encarts)"
-    # Retours 2026-06-11 soir : (1) file SCROLLABLE (12 lignes écrasaient tout
-    # l'onglet) ; (2) chaque plan part avec SON prompt, affiché au statut ;
+    # Retours 2026-06-11 soir : (1) PAS de liste détaillée des plans chargés —
+    # la sélection se LIT dans le Conducteur (comme les autres onglets), seul le
+    # bouton affiche (N) ; (2) chaque plan part avec SON prompt, au statut ;
     # (3) anti-arrêt de chaîne : worker précédent PARQUÉ avant réassignation
-    assert "_queue_scroll" in src_sd, "file scrollable (plus d'écrasement)"
+    assert "_make_sfx_row" not in src_sd and "_queue_box" not in src_sd, \
+        "pas de liste détaillée sous le Conducteur (le bouton affiche N)"
+    from PyQt6.QtWidgets import QScrollArea as _QSA
+    assert isinstance(t, _QSA), \
+        "l'onglet ENTIER est scrollable (liste tronquée sans scrollbar sinon)"
     src_next = _i.getsource(TabSoundDesignLive._process_next_sfx)
     assert "abandon_thread(self._queue_worker)" in src_next, \
         "chaîne protégée (la file s'arrêtait au 1er clip)"

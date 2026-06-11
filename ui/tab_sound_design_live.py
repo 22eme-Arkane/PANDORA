@@ -51,19 +51,27 @@ class _MixWorker(QThread):
             self.failed.emit(str(e)[:200])
 
 
-class TabSoundDesignLive(QWidget):
-    """Sound design Live via Mirelo SFX 1.6 (texte→audio + vidéo→bande-son synchronisée)."""
+class TabSoundDesignLive(QScrollArea):
+    """Sound design Live via Mirelo SFX 1.6 (texte→audio + vidéo→bande-son synchronisée).
+
+    L'onglet ENTIER est scrollable (comme Générer depuis Séquences) — sinon Qt
+    écrase/tronque les sections quand le contenu dépasse la fenêtre (vu en réel)."""
 
     generation_done = pyqtSignal(str)   # chemin du fichier généré
 
     def __init__(self):
         super().__init__()
         self.setStyleSheet(STYLESHEET)
+        self.setWidgetResizable(True)
+        self.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        self.setFrameStyle(0)
         self._mode = "text"          # "text" | "video"
         self._video_path = ""
         self._worker = None
 
-        root = QVBoxLayout(self)
+        _container = QWidget()
+        self.setWidget(_container)
+        root = QVBoxLayout(_container)
         root.setContentsMargins(28, 22, 28, 22)
         root.setSpacing(14)
 
@@ -128,28 +136,8 @@ class TabSoundDesignLive(QWidget):
         self._apply_seq_btn_style()
         self._set_seq_source(self._seq_mode)
 
-        # File SCROLLABLE (hauteur bornée) — 12+ lignes écrasaient tout l'onglet
-        # en fines lignes illisibles (vu en réel)
-        self._queue_box = QVBoxLayout()
-        self._queue_box.setSpacing(5)
-        self._queue_box.setContentsMargins(0, 0, 6, 0)
-        _queue_host = QWidget()
-        _queue_host.setStyleSheet("background:transparent;")
-        _qh_lay = QVBoxLayout(_queue_host)
-        _qh_lay.setContentsMargins(0, 0, 0, 0)
-        _qh_lay.addLayout(self._queue_box)
-        _qh_lay.addStretch()
-        _queue_scroll = QScrollArea()
-        _queue_scroll.setWidget(_queue_host)
-        _queue_scroll.setWidgetResizable(True)
-        _queue_scroll.setMaximumHeight(210)
-        _queue_scroll.setStyleSheet(
-            "QScrollArea{border:none;background:transparent;}"
-            f"QScrollBar:vertical{{background:{C['bg2']};width:6px;border-radius:3px;}}"
-            f"QScrollBar::handle:vertical{{background:{C['border_bright']};"
-            f"border-radius:3px;min-height:24px;}}"
-            f"QScrollBar::add-line:vertical,QScrollBar::sub-line:vertical{{height:0;}}")
-        root.addWidget(_queue_scroll)
+        # Pas de liste détaillée des plans chargés : la sélection se LIT dans le
+        # Conducteur (comme Générer depuis Séquences) et le bouton affiche (N).
 
         # ── RENDU : même design que « RENDU & AUDIO » de Générer depuis Séq. ──
         from PyQt6.QtWidgets import QCheckBox
@@ -301,6 +289,7 @@ class TabSoundDesignLive(QWidget):
 
         _scroll = QScrollArea()
         _scroll.setWidgetResizable(True)
+        _scroll.setMinimumHeight(160)   # jamais écrasé par le reste de l'onglet
         _scroll.setStyleSheet("QScrollArea{border:none;background:transparent;}")
         self._results_w = QWidget()
         self._results_w.setStyleSheet("background:transparent;")
@@ -542,58 +531,12 @@ class TabSoundDesignLive(QWidget):
         self._build_queue_from_shots(shots or [])
 
     def _refresh_sfx_queue(self):
-        while self._queue_box.count():
-            it = self._queue_box.takeAt(0)
-            if it.widget():
-                it.widget().deleteLater()
-        for i, it in enumerate(self._sfx_queue):
-            self._queue_box.addWidget(self._make_sfx_row(i, it))
-        # Bouton UNIQUE, harmonisé avec « Générer depuis Séquences »
+        """Pas de liste détaillée (la sélection se lit dans le Conducteur) —
+        seul le bouton reflète la file, harmonisé avec Générer depuis Séquences."""
         n_pending = sum(1 for x in self._sfx_queue if x["status"] == "pending")
         self._btn_generate.setText(
             "▶▶  " + translate("Lancer la file d'attente")
             + (f"  ({n_pending})" if n_pending else ""))
-
-    def _make_sfx_row(self, index: int, it: dict) -> QWidget:
-        row = QWidget()
-        row.setStyleSheet(
-            f"background:{C['bg2']};border:1px solid {C['border']};border-radius:6px;")
-        rl = QHBoxLayout(row)
-        rl.setContentsMargins(10, 5, 8, 5)
-        rl.setSpacing(8)
-        badge = {"pending": "•", "running": "⟳", "done": "✓", "error": "✗"}.get(it["status"], "•")
-        bcol  = {"pending": C["text_dim"], "running": C["accent"],
-                 "done": C["accent"], "error": C["red"]}.get(it["status"], C["text_dim"])
-        bl = QLabel(badge)
-        bl.setFixedWidth(14)
-        bl.setStyleSheet(f"color:{bcol};font-size:12px;font-weight:800;"
-                         "background:transparent;border:none;")
-        rl.addWidget(bl)
-        _p = it["prompt"]
-        name = QLabel(f"Plan {it['number']} · {it['duration']:.1f}s — "
-                      + (_p[:70] + "…" if len(_p) > 70 else _p))
-        name.setToolTip(_p + (f"\n✗ {it['error']}" if it.get("error") else ""))
-        name.setStyleSheet(
-            f"color:{C['text_primary']};font-size:10px;background:transparent;border:none;")
-        rl.addWidget(name, 1)
-        if not self._sfx_running:
-            rm = QPushButton("✕")
-            rm.setFixedSize(20, 20)
-            rm.setCursor(Qt.CursorShape.PointingHandCursor)
-            rm.setStyleSheet(
-                f"QPushButton{{background:{C['bg3']};color:{C['text_secondary']};"
-                f"border:1px solid {C['border']};border-radius:3px;font-size:9px;font-weight:700;}}"
-                f"QPushButton:hover{{background:{C['red']};color:#fff;border-color:{C['red']};}}")
-            rm.clicked.connect(lambda checked=False, i=index: self._remove_sfx(i))
-            rl.addWidget(rm)
-        return row
-
-    def _remove_sfx(self, index: int):
-        if self._sfx_running:
-            return
-        if 0 <= index < len(self._sfx_queue):
-            self._sfx_queue.pop(index)
-            self._refresh_sfx_queue()
 
     def _sfx_out_dir(self) -> str:
         from core.context import get_data_root
