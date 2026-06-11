@@ -324,11 +324,24 @@ class ResolumeClient:
             return self._fail(e)
 
     def clear_clip(self, layer: int, col: int) -> bool:
+        """Vide un slot. ⚠ C'est un POST /clear — le DELETE échouait en réel."""
         try:
-            r = self._s.delete(
-                f"{self._base}/composition/layers/{layer}/clips/{col}",
+            r = self._s.post(
+                f"{self._base}/composition/layers/{layer}/clips/{col}/clear",
                 timeout=self._timeout,
             )
             return self._ok(r)
         except Exception as e:
             return self._fail(e)
+
+    def get_clip_thumbnail(self, layer: int, col: int) -> bytes:
+        """Vignette PNG du clip chargé (GET /thumbnail) — b'' si indisponible."""
+        try:
+            r = self._s.get(
+                f"{self._base}/composition/layers/{layer}/clips/{col}/thumbnail",
+                timeout=self._timeout,
+            )
+            return r.content if r.status_code == 200 else b""
+        except Exception as e:
+            self._fail(e)
+            return b""

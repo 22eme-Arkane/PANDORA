@@ -1054,10 +1054,11 @@ def pont_resolume():
     from resolume.client import ResolumeClient, file_uri
 
     class _Resp:
-        def __init__(self, code=200, payload=None, text=""):
+        def __init__(self, code=200, payload=None, text="", content=b""):
             self.status_code = code
             self._p = payload if payload is not None else {}
             self.text = text
+            self.content = content
         def json(self):
             return self._p
 
@@ -1138,6 +1139,24 @@ def pont_resolume():
     # Extension de composition : add_column + composition_counts
     assert c.composition_counts() == (1, 9), "comptes couches/colonnes"
     assert c.add_column() and s.calls[-1][1].endswith("/composition/columns/add")
+    # Vider un slot = POST /clear (le DELETE échouait en réel) + vignette Arena
+    assert c.clear_clip(1, 2)
+    assert s.calls[-1][0] == "post" and s.calls[-1][1].endswith("/clips/2/clear")
+    class _ThumbSession(_Session):
+        def get(self, url, **k):
+            if url.endswith("/thumbnail"):
+                self.calls.append(("get", url, k))
+                return _Resp(200, content=b"PNGDATA")
+            return super().get(url, **k)
+    ct = ResolumeClient("127.0.0.1", 8080, session=_ThumbSession())
+    assert ct.get_clip_thumbnail(1, 1) == b"PNGDATA", "vignette du clip chargé"
+
+    # Page : vignettes mi-clip, drag & drop, vider, modes d'affichage, sélection
+    src_pl = inspect.getsource(__import__("ui.page_live", fromlist=["PageLive"]))
+    for token in ("_MidThumbWorker", "_SlotThumbWorker", "drop_req", "clear_req",
+                  "_acte_layers_cb", "_view_combo", "def _on_clear_layer",
+                  "_selected_clip and os.path.isfile"):
+        assert token in src_pl, f"page Resolume : {token}"
     # Renommage, tempo, colonne
     assert c.set_clip_name(1, 2, "P1") and '"P1"' in s.calls[-1][2]["data"]
     assert c.set_tempo(129.0) and "tempocontroller" in s.calls[-1][2]["data"]
@@ -1191,6 +1210,16 @@ def pont_resolume():
     w3.run()
     adds = [u for m, u, _ in s3.calls if m == "post" and u.endswith("/columns/add")]
     assert len(adds) == 1, "1 colonne ajoutée pour atteindre la colonne 10"
+    # Cibles par clip (répartition par acte) : layer/column explicites respectés
+    s4 = _Session()
+    w4 = PushToResolumeWorker(
+        [{"path": clip, "name": "SQ1_P1", "layer": 1, "column": 1},
+         {"path": clip2, "name": "SQ2_P2", "layer": 2, "column": 1}],
+        client=ResolumeClient("127.0.0.1", 8080, session=s4))
+    w4.run()
+    opens4 = [u for m, u, _ in s4.calls if m == "post" and u.endswith("/open")]
+    assert opens4[0].endswith("/layers/1/clips/1/open") \
+        and opens4[1].endswith("/layers/2/clips/1/open"), "une couche par acte"
     # L'envoi « toute la bibliothèque » suit l'ordre NATUREL des plans
     from ui.page_live import PageLive as _PL
     assert "_natural" in inspect.getsource(_PL._on_push_queue), \

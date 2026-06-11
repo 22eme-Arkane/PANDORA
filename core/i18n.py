@@ -2915,6 +2915,21 @@ _FR_TO_EN: dict[str, str] = {
         "Analyze the set first in the Conductor (« Analyze the set »).",
     "Envoyer vers Resolume": "Send to Resolume",
     "Mode show (enchaînement auto, calé mesure)": "Show mode (auto-chain, bar-snapped)",
+    "Actualiser la bibliothèque": "Refresh library",
+    "Re-scanne les clips du projet.": "Re-scans the project's clips.",
+    "Affichage :": "View:",
+    "Détails": "Details",
+    "Grandes vignettes": "Large thumbnails",
+    "Vider la couche": "Clear layer",
+    "Vider TOUS les slots de la couche": "Clear ALL slots of layer",
+    "Vide TOUS les slots de la couche choisie\n(spin « Couche » de l'envoi en file).":
+        "Clears ALL slots of the chosen layer\n(the queue's « Layer » spin).",
+    "Une couche par acte (SQ1 → couche 1…)": "One layer per act (SQ1 → layer 1…)",
+    "Répartit les clips par acte : tous les SQ1 sur la 1re couche,\nles SQ2 sur la suivante, etc. (colonnes redémarrent à 1 par couche).\nDécoché : tout sur la couche choisie, colonnes consécutives.":
+        "Distributes clips by act: all SQ1 on the 1st layer,\nSQ2 on the next, etc. (columns restart at 1 per layer).\nUnchecked: everything on the chosen layer, consecutive columns.",
+    "Envoi : le clip sélectionné": "Sending: the selected clip",
+    "glisser un clip sur un slot · clic droit : déclencher · Maj+clic : vider":
+        "drag a clip onto a slot · right click: trigger · Shift+click: clear",
     "Annuler la file": "Cancel queue",
     "Annuler l'envoi": "Cancel sending",
     "Calage Resolume": "Resolume calibration",

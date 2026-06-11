@@ -39,10 +39,12 @@ class PushToResolumeWorker(QThread):
         self._show   = bool(show_mode)
         self._client = client   # injecté par les tests ; sinon créé dans run()
 
-    def _apply_show_mode(self, client: ResolumeClient, col: int) -> bool:
+    def _apply_show_mode(self, client: ResolumeClient, col: int,
+                         layer: int = 0) -> bool:
         """Patch tolérant du clip chargé (voir resolume.client.set_choice_param)."""
         from resolume.client import set_choice_param, find_subtree
-        clip = client.get_clip(self._layer, col)
+        layer = layer or self._layer
+        clip = client.get_clip(layer, col)
         if not clip:
             return False
         patched = False
@@ -51,7 +53,7 @@ class PushToResolumeWorker(QThread):
         ap = find_subtree(clip, "autopilot")
         if ap is not None:
             patched |= set_choice_param(ap, {"target", "action"}, "next")
-        return bool(patched) and client.put_clip(self._layer, col, clip)
+        return bool(patched) and client.put_clip(layer, col, clip)
 
     def run(self):
         if not self._clips:
@@ -73,10 +75,23 @@ class PushToResolumeWorker(QThread):
                     # Non bloquant : les clips comptent plus que le tempo
                     self.progress.emit(8, f"⚠ Tempo non réglé — {client.last_error}")
 
+            # Cibles par clip : couche/colonne explicites ({"layer","column"})
+            # sinon couche commune + colonnes consécutives
+            _targets = []
+            _auto_col = {}
+            for clip in self._clips:
+                lay = int(clip.get("layer", self._layer) or self._layer)
+                if "column" in clip:
+                    col = int(clip["column"])
+                else:
+                    col = _auto_col.get(lay, self._start)
+                _auto_col[lay] = col + 1
+                _targets.append((lay, col))
+
             # La composition doit avoir assez de COLONNES (vu en réel : 9 colonnes
             # pour 27 clips → 18 échecs). On l'étend automatiquement.
             _layers, _cols = client.composition_counts()
-            needed = self._start + len(self._clips) - 1
+            needed = max((c for _, c in _targets), default=self._start)
             if _cols and needed > _cols:
                 self.progress.emit(9, f"Ajout de {needed - _cols} colonne(s)…")
                 added = 0
@@ -94,20 +109,20 @@ class PushToResolumeWorker(QThread):
                     return
                 path = clip["path"]
                 base = os.path.basename(path)
-                col  = self._start + i
+                lay, col = _targets[i]
                 pct  = 10 + int(85 * i / total)
                 if not os.path.isfile(path):
                     failures.append(base)
                     self.progress.emit(pct, f"⚠ Introuvable : {base}")
                     continue
-                self.progress.emit(pct, f"Slot L{self._layer}·C{col} ← {base}…")
-                if client.load_clip(self._layer, col, path):
+                self.progress.emit(pct, f"Slot L{lay}·C{col} ← {base}…")
+                if client.load_clip(lay, col, path):
                     sent += 1
                     label = (clip.get("name") or "").strip()
                     if label:
-                        client.set_clip_name(self._layer, col, label)
+                        client.set_clip_name(lay, col, label)
                         # le clip est chargé — un échec de renommage est cosmétique
-                    if self._show and not self._apply_show_mode(client, col):
+                    if self._show and not self._apply_show_mode(client, col, lay):
                         self.progress.emit(pct, f"⚠ Mode show non appliqué sur {base}")
                 else:
                     failures.append(base)

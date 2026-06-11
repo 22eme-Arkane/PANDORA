@@ -79,6 +79,26 @@ class _LoadWorker(QThread):
             self.failed.emit(f"Chargement échoué → slot {self._layer}:{self._col}")
 
 
+class _ClearWorker(QThread):
+    """Vide un ou plusieurs slots d'une couche (POST /clear par slot)."""
+    done = pyqtSignal(int)   # nombre de slots vidés
+
+    def __init__(self, host: str, port: int, layer: int, cols: list):
+        super().__init__()
+        self._host, self._port = host, port
+        self._layer = layer
+        self._cols  = list(cols or [])
+
+    def run(self):
+        from resolume.client import ResolumeClient
+        client = ResolumeClient(self._host, self._port)
+        n = 0
+        for col in self._cols:
+            if client.clear_clip(self._layer, col):
+                n += 1
+        self.done.emit(n)
+
+
 class _TriggerWorker(QThread):
     done = pyqtSignal(bool)
 
@@ -94,50 +114,157 @@ class _TriggerWorker(QThread):
         self.done.emit(ResolumeClient(self._host, self._port).trigger_clip(self._layer, self._col))
 
 
+# ── Miniatures mi-clip ─────────────────────────────────────────────────────────
+
+class _MidThumbWorker(QThread):
+    """Extrait la frame du MILIEU de chaque clip (ffmpeg) — pas la première :
+    les plans ouvrent/ferment souvent au noir (demande Matthieu). Cache disque."""
+    thumb_ready = pyqtSignal(str, str)   # (clip_path, png_path)
+
+    def __init__(self, paths: list):
+        super().__init__()
+        self._paths = list(paths or [])
+
+    @staticmethod
+    def cache_path(path: str) -> str:
+        import hashlib
+        from core.context import get_data_root
+        d = os.path.join(get_data_root(), ".thumbs_mid")
+        os.makedirs(d, exist_ok=True)
+        try:
+            mtime = int(os.path.getmtime(path))
+        except OSError:
+            mtime = 0
+        h = hashlib.md5(f"{path}|{mtime}".encode("utf-8")).hexdigest()[:16]
+        return os.path.join(d, f"{h}.png")
+
+    def run(self):
+        import subprocess
+        try:
+            from core.video_utils import get_ffmpeg_exe
+            ff = get_ffmpeg_exe()
+        except Exception:
+            ff = "ffmpeg"
+        try:
+            from core.video_conform import probe_duration
+        except Exception:
+            probe_duration = None
+        flags = 0x08000000 if os.name == "nt" else 0
+        for p in self._paths:
+            if self.isInterruptionRequested():
+                return
+            out = self.cache_path(p)
+            if os.path.isfile(out):
+                self.thumb_ready.emit(p, out)
+                continue
+            mid = 0.0
+            if probe_duration is not None:
+                try:
+                    mid = max(0.0, (probe_duration(p) or 0) / 2.0)
+                except Exception:
+                    mid = 0.0
+            cmd = [ff, "-y", "-ss", f"{mid:.2f}", "-i", p,
+                   "-frames:v", "1", "-vf", "scale=320:-1", out]
+            try:
+                subprocess.run(cmd, capture_output=True, creationflags=flags,
+                               timeout=30)
+            except Exception:
+                continue
+            if os.path.isfile(out):
+                self.thumb_ready.emit(p, out)
+
+
+class _SlotThumbWorker(QThread):
+    """Récupère les vignettes des clips CHARGÉS dans Arena (GET /thumbnail)."""
+    thumb_ready = pyqtSignal(int, int, bytes)   # (layer, col, png_bytes)
+
+    def __init__(self, host: str, port: int, slots: list):
+        super().__init__()
+        self._host, self._port = host, port
+        self._slots = list(slots or [])
+
+    def run(self):
+        from resolume.client import ResolumeClient
+        client = ResolumeClient(self._host, self._port)
+        for layer, col in self._slots:
+            if self.isInterruptionRequested():
+                return
+            data = client.get_clip_thumbnail(layer, col)
+            if data:
+                self.thumb_ready.emit(layer, col, data)
+
+
 # ── Carte clip bibliothèque ────────────────────────────────────────────────────
 
 class _ClipCard(QWidget):
     selected = pyqtSignal(str)
 
-    def __init__(self, path: str):
+    def __init__(self, path: str, view_mode: str = "detail"):
         super().__init__()
-        self._path   = path
-        self._is_sel = False
+        self._path      = path
+        self._is_sel    = False
+        self._drag_from = None
         self.setObjectName("clipcard")   # style SCOPÉ — sinon la bordure
-        self.setFixedHeight(46)          # cascade sur les QLabel enfants
-        self.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.setCursor(Qt.CursorShape.OpenHandCursor)   # cascade sur les enfants
+        self.setToolTip(os.path.basename(path)
+                        + "\n" + "Glisser-déposer sur un slot pour le charger.")
         self._apply_style(False)
 
-        lay = QHBoxLayout(self)
-        lay.setContentsMargins(10, 0, 10, 0)
-        lay.setSpacing(10)
-
-        ico = QLabel("▶")
-        ico.setFixedSize(22, 22)
-        ico.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        ico.setStyleSheet(
-            f"color:{CP['accent']};font-size:11px;border:none;"
-            f"background:rgba(78,205,196,0.10);border-radius:4px;"
-        )
-        lay.addWidget(ico)
-
-        col = QVBoxLayout()
-        col.setSpacing(1)
-
         base = os.path.basename(path)
+        size_mb = os.path.getsize(path) / 1_000_000 if os.path.isfile(path) else 0
+
+        self._thumb = QLabel()
+        self._thumb.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self._thumb.setStyleSheet(
+            f"background:{CP['bg0']};border:none;border-radius:4px;"
+            f"color:{CP['text_dim']};font-size:9px;")
+        self._thumb.setText("▶")
+
         name = QLabel(base if len(base) <= 26 else base[:25] + "…")
-        name.setToolTip(base)
         name.setStyleSheet(
             f"color:{CP['text_primary']};font-size:10px;font-weight:600;"
-            f"background:transparent;border:none;"
-        )
-        size_mb = os.path.getsize(path) / 1_000_000 if os.path.isfile(path) else 0
+            f"background:transparent;border:none;")
         meta = QLabel(f"{size_mb:.1f} MB")
         meta.setStyleSheet(
             f"color:{CP['text_dim']};font-size:9px;background:transparent;border:none;")
-        col.addWidget(name)
-        col.addWidget(meta)
-        lay.addLayout(col, 1)
+
+        if view_mode == "large":
+            # Grande vignette (frame du milieu) au-dessus du nom
+            self.setFixedHeight(168)
+            lay = QVBoxLayout(self)
+            lay.setContentsMargins(8, 8, 8, 6)
+            lay.setSpacing(4)
+            self._thumb.setFixedHeight(122)
+            self._thumb_size = (216, 122)
+            lay.addWidget(self._thumb)
+            row = QHBoxLayout()
+            row.addWidget(name, 1)
+            row.addWidget(meta)
+            lay.addLayout(row)
+        else:
+            # Détails : petite vignette à gauche
+            self.setFixedHeight(50)
+            lay = QHBoxLayout(self)
+            lay.setContentsMargins(8, 4, 10, 4)
+            lay.setSpacing(10)
+            self._thumb.setFixedSize(70, 40)
+            self._thumb_size = (70, 40)
+            lay.addWidget(self._thumb)
+            col = QVBoxLayout()
+            col.setSpacing(1)
+            col.addWidget(name)
+            col.addWidget(meta)
+            lay.addLayout(col, 1)
+
+    def set_thumb(self, png_path: str):
+        from PyQt6.QtGui import QPixmap
+        pix = QPixmap(png_path)
+        if pix.isNull():
+            return
+        w, h = self._thumb_size
+        self._thumb.setPixmap(pix.scaled(
+            w, h, Qt.AspectRatioMode.KeepAspectRatio,
+            Qt.TransformationMode.SmoothTransformation))
 
     def _apply_style(self, sel: bool):
         if sel:
@@ -157,7 +284,27 @@ class _ClipCard(QWidget):
 
     def mousePressEvent(self, e):
         if e.button() == Qt.MouseButton.LeftButton:
+            self._drag_from = e.position().toPoint()
             self.selected.emit(self._path)
+
+    def mouseMoveEvent(self, e):
+        # Glisser-déposer vers un slot de la grille Resolume
+        if (self._drag_from is not None
+                and (e.position().toPoint() - self._drag_from).manhattanLength() > 12):
+            from PyQt6.QtGui import QDrag
+            from PyQt6.QtCore import QMimeData
+            drag = QDrag(self)
+            mime = QMimeData()
+            mime.setText(self._path)
+            drag.setMimeData(mime)
+            pm = self._thumb.pixmap()
+            if pm is not None and not pm.isNull():
+                drag.setPixmap(pm.scaledToWidth(90))
+            self._drag_from = None
+            drag.exec(Qt.DropAction.CopyAction)
+
+    def mouseReleaseEvent(self, e):
+        self._drag_from = None
 
     def enterEvent(self, e):
         if not self._is_sel:
@@ -176,6 +323,8 @@ class _ClipCard(QWidget):
 class _SlotBtn(QPushButton):
     load_req    = pyqtSignal(int, int)
     trigger_req = pyqtSignal(int, int)
+    drop_req    = pyqtSignal(int, int, str)   # dépôt d'un clip (chemin)
+    clear_req   = pyqtSignal(int, int)        # Maj+clic = vider le slot
 
     def __init__(self, layer: int, col: int, clip_name: str = ""):
         super().__init__()
@@ -183,13 +332,37 @@ class _SlotBtn(QPushButton):
         self._col   = col
         self.setFixedSize(104, 60)
         self.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.setAcceptDrops(True)
         self.set_clip(clip_name)
+
+    def set_thumb(self, png_bytes: bytes):
+        """Vignette du clip chargé (servie par Arena)."""
+        from PyQt6.QtGui import QPixmap, QIcon
+        pix = QPixmap()
+        if not pix.loadFromData(png_bytes) or pix.isNull():
+            return
+        from PyQt6.QtCore import QSize
+        self.setIcon(QIcon(pix))
+        self.setIconSize(QSize(92, 40))
+        if self._clip:
+            self.setText(self._clip[:12] + ("…" if len(self._clip) > 12 else ""))
+
+    def dragEnterEvent(self, e):
+        if e.mimeData().hasText() and os.path.splitext(
+                e.mimeData().text())[1].lower() in (".mp4", ".mov", ".webm",
+                                                    ".m4v", ".gif", ".png", ".jpg"):
+            e.acceptProposedAction()
+
+    def dropEvent(self, e):
+        self.drop_req.emit(self._layer, self._col, e.mimeData().text())
+        e.acceptProposedAction()
 
     def set_clip(self, name: str):
         self._clip = name
         if name:
             self.setText(name[:16] + ("…" if len(name) > 16 else ""))
-            self.setToolTip(name)
+            self.setToolTip(f"{name}\nClic : charger la sélection · Clic droit : déclencher\n"
+                            f"Maj+clic : vider · Glisser un clip ici pour le charger")
             self.setStyleSheet(
                 f"QPushButton{{background:rgba(78,205,196,0.12);color:{CP['accent']};"
                 f"border:1px solid {CP['accent_dim']};border-radius:6px;"
@@ -198,7 +371,9 @@ class _SlotBtn(QPushButton):
             )
         else:
             self.setText(f"{self._layer} : {self._col}")
-            self.setToolTip(f"Slot {self._layer}:{self._col} — vide\nClic gauche : charger · Clic droit : déclencher")
+            self.setIcon(__import__("PyQt6.QtGui", fromlist=["QIcon"]).QIcon())
+            self.setToolTip(f"Slot {self._layer}:{self._col} — vide\n"
+                            f"Clic : charger la sélection · Glisser un clip ici")
             self.setStyleSheet(
                 f"QPushButton{{background:{CP['bg3']};color:{CP['text_dim']};"
                 f"border:1px solid {CP['border']};border-radius:6px;"
@@ -208,8 +383,12 @@ class _SlotBtn(QPushButton):
             )
 
     def mousePressEvent(self, e):
+        from PyQt6.QtWidgets import QApplication
         if e.button() == Qt.MouseButton.LeftButton:
-            self.load_req.emit(self._layer, self._col)
+            if QApplication.keyboardModifiers() & Qt.KeyboardModifier.ShiftModifier:
+                self.clear_req.emit(self._layer, self._col)   # Maj+clic = vider
+            else:
+                self.load_req.emit(self._layer, self._col)
         elif e.button() == Qt.MouseButton.RightButton:
             self.trigger_req.emit(self._layer, self._col)
         super().mousePressEvent(e)
@@ -332,9 +511,31 @@ class PageLive(QWidget):
         self._selected_lbl = QLabel("Aucun clip sélectionné")
         self._selected_lbl.setWordWrap(True)
         self._selected_lbl.setStyleSheet(
-            f"color:{CP['text_dim']};font-size:9px;font-style:italic;background:transparent;"
+            f"color:{CP['text_dim']};font-size:9px;font-style:italic;background:transparent;border:none;"
         )
         lib_lay.addWidget(self._selected_lbl)
+
+        # Affichage : détails (liste) ou grandes vignettes (frame du MILIEU du clip)
+        from PyQt6.QtWidgets import QComboBox
+        view_row = QHBoxLayout()
+        view_row.setSpacing(6)
+        _v_lbl = QLabel(translate("Affichage :"))
+        _v_lbl.setStyleSheet(
+            f"color:{CP['text_dim']};font-size:9px;background:transparent;border:none;")
+        view_row.addWidget(_v_lbl)
+        self._view_combo = QComboBox()
+        self._view_combo.addItem(translate("Détails"), "detail")
+        self._view_combo.addItem(translate("Grandes vignettes"), "large")
+        self._view_combo.setFixedHeight(24)
+        self._view_combo.setStyleSheet(
+            f"QComboBox{{background:{CP['bg3']};border:1px solid {CP['border']};"
+            f"border-radius:4px;color:{CP['text_primary']};font-size:10px;padding:0 8px;}}"
+            f"QComboBox::drop-down{{border:none;width:16px;}}"
+            f"QComboBox QAbstractItemView{{background:{CP['bg3']};"
+            f"border:1px solid {CP['border_bright']};color:{CP['text_primary']};}}")
+        self._view_combo.currentIndexChanged.connect(self._refresh_library)
+        view_row.addWidget(self._view_combo, 1)
+        lib_lay.addLayout(view_row)
 
         lib_scroll = QScrollArea()
         lib_scroll.setWidgetResizable(True)
@@ -349,14 +550,15 @@ class PageLive(QWidget):
         lib_scroll.setWidget(self._lib_container)
         lib_lay.addWidget(lib_scroll, 1)
 
-        btn_refresh = QPushButton("↺  Actualiser")
+        btn_refresh = QPushButton("↺  " + translate("Actualiser la bibliothèque"))
         btn_refresh.setFixedHeight(28)
         btn_refresh.setCursor(Qt.CursorShape.PointingHandCursor)
+        btn_refresh.setToolTip(translate("Re-scanne les clips du projet."))
         btn_refresh.setStyleSheet(
-            f"QPushButton{{background:transparent;color:{CP['text_secondary']};"
+            f"QPushButton{{background:transparent;color:{CP['text_primary']};"
             f"border:1px solid {CP['border']};border-radius:5px;"
             f"font-size:10px;font-weight:700;}}"
-            f"QPushButton:hover{{background:{CP['bg2']};}}"
+            f"QPushButton:hover{{background:{CP['bg2']};border-color:{CP['border_bright']};}}"
         )
         btn_refresh.clicked.connect(self._refresh_library)
         lib_lay.addWidget(btn_refresh)
@@ -414,6 +616,15 @@ class PageLive(QWidget):
             self._push_bpm_cb.setToolTip(translate(
                 "Analyse d'abord le set dans le Conducteur (« Analyser le set »)."))
         lib_lay.addWidget(self._push_bpm_cb)
+
+        self._acte_layers_cb = QCheckBox(translate("Une couche par acte (SQ1 → couche 1…)"))
+        self._acte_layers_cb.setStyleSheet(
+            f"QCheckBox{{color:{CP['text_secondary']};font-size:9px;background:transparent;}}")
+        self._acte_layers_cb.setToolTip(translate(
+            "Répartit les clips par acte : tous les SQ1 sur la 1re couche,\n"
+            "les SQ2 sur la suivante, etc. (colonnes redémarrent à 1 par couche).\n"
+            "Décoché : tout sur la couche choisie, colonnes consécutives."))
+        lib_lay.addWidget(self._acte_layers_cb)
 
         self._show_mode_cb = QCheckBox(translate("Mode show (enchaînement auto, calé mesure)"))
         self._show_mode_cb.setStyleSheet(
@@ -483,11 +694,23 @@ class PageLive(QWidget):
             f"letter-spacing:2px;background:transparent;"
         )
         grid_hdr.addWidget(self._grid_title)
-        _hint = QLabel(translate("couches × colonnes — clic gauche : charger le clip sélectionné · clic droit : déclencher"))
+        _hint = QLabel(translate("glisser un clip sur un slot · clic droit : déclencher · Maj+clic : vider"))
         _hint.setStyleSheet(
             f"color:{CP['text_dim']};font-size:9px;background:transparent;border:none;")
         grid_hdr.addWidget(_hint)
         grid_hdr.addStretch()
+        self._btn_clear_layer = QPushButton("🗑  " + translate("Vider la couche"))
+        self._btn_clear_layer.setFixedHeight(24)
+        self._btn_clear_layer.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._btn_clear_layer.setToolTip(translate(
+            "Vide TOUS les slots de la couche choisie\n(spin « Couche » de l'envoi en file)."))
+        self._btn_clear_layer.setStyleSheet(
+            f"QPushButton{{background:transparent;color:{CP['red']};"
+            f"border:1px solid {CP['red']};border-radius:4px;font-size:9px;"
+            f"font-weight:700;padding:0 10px;}}"
+            f"QPushButton:hover{{background:rgba(255,79,106,0.12);}}")
+        self._btn_clear_layer.clicked.connect(self._on_clear_layer)
+        grid_hdr.addWidget(self._btn_clear_layer)
 
         # Config grille (visible en mode mock)
         self._grid_config = QWidget()
@@ -668,8 +891,25 @@ class PageLive(QWidget):
                 btn = _SlotBtn(clip.layer, clip.col, clip.name)
                 btn.load_req.connect(self._on_slot_load)
                 btn.trigger_req.connect(self._on_slot_trigger)
+                btn.drop_req.connect(self._on_slot_drop)
+                btn.clear_req.connect(self._on_slot_clear)
                 self._slot_widgets[(clip.layer, clip.col)] = btn
                 self._grid_layout.addWidget(btn, i, clip.col)
+
+        # Vignettes des clips chargés (servies par Arena)
+        loaded = [(l.index, c.col) for l in layers for c in l.clips if c.name]
+        if loaded and self._connected:
+            if getattr(self, "_slot_thumb_worker", None) is not None:
+                from core.worker import abandon_thread
+                abandon_thread(self._slot_thumb_worker)
+            self._slot_thumb_worker = _SlotThumbWorker(self._host, self._port, loaded)
+            self._slot_thumb_worker.thumb_ready.connect(self._on_slot_thumb)
+            self._slot_thumb_worker.start()
+
+    def _on_slot_thumb(self, layer: int, col: int, data: bytes):
+        btn = self._slot_widgets.get((layer, col))
+        if btn:
+            btn.set_thumb(data)
 
     # ── Grille mock ────────────────────────────────────────────────────────────
 
@@ -704,6 +944,8 @@ class PageLive(QWidget):
                 btn = _SlotBtn(i, j)
                 btn.load_req.connect(self._on_slot_load)
                 btn.trigger_req.connect(self._on_slot_trigger)
+                btn.drop_req.connect(self._on_slot_drop)
+                btn.clear_req.connect(self._on_slot_clear)
                 self._slot_widgets[(i, j)] = btn
                 self._grid_layout.addWidget(btn, i, j)
 
@@ -742,14 +984,29 @@ class PageLive(QWidget):
             )
             self._lib_lay.addWidget(lbl)
         else:
+            view = (self._view_combo.currentData() or "detail"
+                    if hasattr(self, "_view_combo") else "detail")
             for path in clips:
-                card = _ClipCard(path)
+                card = _ClipCard(path, view_mode=view)
                 card.selected.connect(self._on_clip_selected)
                 self._clip_cards.append(card)
                 self._lib_lay.addWidget(card)
+            # Vignettes = frame du MILIEU du clip (les plans ouvrent/ferment au noir)
+            if getattr(self, "_thumb_worker", None) is not None:
+                from core.worker import abandon_thread
+                abandon_thread(self._thumb_worker)
+            self._thumb_worker = _MidThumbWorker(clips)
+            self._thumb_worker.thumb_ready.connect(self._on_lib_thumb)
+            self._thumb_worker.start()
 
         if not self._connected:
             self._rebuild_grid()
+
+    def _on_lib_thumb(self, clip_path: str, png_path: str):
+        for card in self._clip_cards:
+            if getattr(card, "_path", "") == clip_path:
+                card.set_thumb(png_path)
+                break
 
     # ── Interactions ───────────────────────────────────────────────────────────
 
@@ -757,6 +1014,9 @@ class PageLive(QWidget):
         self._selected_clip = path
         for card in self._clip_cards:
             card.set_selected(card._path == path)
+        if not self._pending_paths and hasattr(self, "_push_info"):
+            self._push_info.setText(translate("Envoi : le clip sélectionné")
+                                    + f" ({os.path.basename(path)})")
         self._selected_lbl.setText(os.path.basename(path))
         self._selected_lbl.setStyleSheet(
             f"color:{CP['accent']};font-size:9px;background:transparent;"
@@ -792,6 +1052,58 @@ class PageLive(QWidget):
             btn.set_clip(clip_name)
         suffix = "" if self._connected else " (mock — Resolume non connecté)"
         self._status_lbl.setText(f"✓  '{clip_name}' → slot {layer}:{col}{suffix}")
+
+    def _on_slot_drop(self, layer: int, col: int, path: str):
+        """Glisser-déposer d'un clip de la bibliothèque sur un slot."""
+        if not os.path.isfile(path):
+            return
+        clip_name = os.path.basename(path)
+        if self._connected:
+            self._status_lbl.setText(f"Chargement de '{clip_name}' → slot {layer}:{col}…")
+            w = _LoadWorker(self._host, self._port, layer, col, path)
+            w.success.connect(lambda l, c, n=clip_name: (
+                self._on_load_done(l, c, n), self._fetch_layers()))
+            w.failed.connect(lambda e: self._status_lbl.setText(f"✗  {e}"))
+            w.finished.connect(w.deleteLater)
+            self._workers.append(w)
+            w.start()
+        else:
+            self._on_load_done(layer, col, clip_name)
+
+    def _on_slot_clear(self, layer: int, col: int):
+        """Maj+clic sur un slot = le vider."""
+        if not self._connected:
+            self._status_lbl.setText("✗  Connexion requise pour vider un slot.")
+            return
+        w = _ClearWorker(self._host, self._port, layer, [col])
+        w.done.connect(lambda n, l=layer, c=col: (
+            self._status_lbl.setText(f"✓  Slot {l}:{c} vidé"), self._fetch_layers()))
+        w.finished.connect(w.deleteLater)
+        self._workers.append(w)
+        w.start()
+
+    def _on_clear_layer(self):
+        """Vide TOUTE la couche choisie (spin Couche de l'envoi en file)."""
+        if not self._connected:
+            self._status_lbl.setText("✗  Connexion requise pour vider une couche.")
+            return
+        layer = self._push_layer.value()
+        from PyQt6.QtWidgets import QMessageBox
+        reply = QMessageBox.question(
+            self, translate("Vider la couche"),
+            translate("Vider TOUS les slots de la couche") + f" {layer} ?",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+        )
+        if reply != QMessageBox.StandardButton.Yes:
+            return
+        cols = [c for (l, c) in self._slot_widgets if l == layer]
+        w = _ClearWorker(self._host, self._port, layer, sorted(cols))
+        w.done.connect(lambda n, l=layer: (
+            self._status_lbl.setText(f"✓  Couche {l} vidée ({n} slot(s))"),
+            self._fetch_layers()))
+        w.finished.connect(w.deleteLater)
+        self._workers.append(w)
+        w.start()
 
     def _on_slot_trigger(self, layer: int, col: int):
         if not self._connected:
@@ -840,8 +1152,16 @@ class PageLive(QWidget):
 
     def _on_push_queue(self):
         """Envoie la file (ou toute la bibliothèque) vers les slots consécutifs."""
-        paths = self._pending_paths or [c._path for c in self._clip_cards
-                                        if os.path.isfile(getattr(c, "_path", ""))]
+        # Priorité : file reçue de la Vidéothèque > clip sélectionné > toute la
+        # bibliothèque (retour Matthieu : « ça envoie tous les plans » — la
+        # sélection est désormais respectée et l'étiquette l'annonce).
+        if self._pending_paths:
+            paths = list(self._pending_paths)
+        elif self._selected_clip and os.path.isfile(self._selected_clip):
+            paths = [self._selected_clip]
+        else:
+            paths = [c._path for c in self._clip_cards
+                     if os.path.isfile(getattr(c, "_path", ""))]
         if not paths:
             self._status_lbl.setText("✗  Aucun clip à envoyer.")
             return
@@ -857,6 +1177,21 @@ class PageLive(QWidget):
         paths = sorted(paths, key=_natural)
         clips = [{"path": p, "name": os.path.splitext(os.path.basename(p))[0]}
                  for p in paths]
+
+        # Répartition par acte : SQ1 → couche de départ, SQ2 → suivante, etc.
+        if self._acte_layers_cb.isChecked():
+            base_layer = self._push_layer.value()
+            sq_order: list = []
+            col_counter: dict = {}
+            for c in clips:
+                m = _re.search(r"sq(\d+)", c["name"].lower())
+                sq = int(m.group(1)) if m else 0
+                if sq not in sq_order:
+                    sq_order.append(sq)
+                lay = base_layer + sq_order.index(sq)
+                col_counter[lay] = col_counter.get(lay, self._push_col.value() - 1) + 1
+                c["layer"] = lay
+                c["column"] = col_counter[lay]
         bpm = self._conductor_bpm() if self._push_bpm_cb.isChecked() else 0.0
         from api.resolume_push import PushToResolumeWorker
         self._host = self._host_input.text().strip() or self._host
