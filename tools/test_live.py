@@ -793,11 +793,22 @@ def sound_design_file_et_crossfade():
     # Le sélecteur s'appelle désormais « Conducteur » (t2v + sound design)
     import ui.tab_t2v_live as T2V
     assert 'section_label("Conducteur")' in _i.getsource(T2V.StoryboardSelector)
-    # Commande de crossfade (pure) : N entrées → N-1 acrossfade chaînés
-    cmd = TabSoundDesignLive._build_crossfade_cmd(
-        "ffmpeg", ["a.wav", "b.wav", "c.wav"], "out.wav", fade_s=1.0)
+    # Calage audio↔vidéo (retour 2026-06-11 : l'acrossfade CHEVAUCHAIT → la
+    # bande perdait (N-1)×1s vs les clips vidéo posés bout à bout) :
+    # 1) chaque ambiance est conformée à la durée CALÉE de son plan
+    cf = TabSoundDesignLive._build_conform_cmd("ffmpeg", "in.wav", "out.wav", 6.5)
+    assert "apad,atrim=0:6.5" in cf[cf.index("-af") + 1], "conformation apad+atrim"
+    assert "_conform_audio" in _i.getsource(TabSoundDesignLive._on_sfx_item_done), \
+        "chaque clip son conformé à la durée du plan dès sa génération"
+    # 2) assemblage SANS chevauchement : durée totale = somme exacte des plans
+    cmd = TabSoundDesignLive._build_assemble_cmd(
+        "ffmpeg", ["a.wav", "b.wav", "c.wav"], [5.0, 7.0, 6.5], "out.wav")
     fc = cmd[cmd.index("-filter_complex") + 1]
-    assert fc.count("acrossfade") == 2 and "[a2]" in fc, "chaîne acrossfade"
+    assert "acrossfade" not in fc, "plus de chevauchement (décalage vs vidéo)"
+    assert "atrim=0:5" in fc and "atrim=0:7" in fc and "atrim=0:6.5" in fc, \
+        "chaque entrée conformée à SA durée calée"
+    assert "concat=n=3:v=0:a=1" in fc and fc.count("afade=t=in") == 3, \
+        "concat + micro-fondus aux jonctions (aucune durée mangée)"
     assert cmd[-1] == "out.wav" and cmd.count("-i") == 3
     # Toggle « Sound design auto » présent dans Générer depuis Séquences
     from ui.tab_t2v_live import TabT2V

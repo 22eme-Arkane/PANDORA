@@ -191,9 +191,10 @@ class TabSoundDesignLive(QScrollArea):
             return w
 
         _auto_mix_row = _rendu_toggle(
-            translate("Exporter la bande-son fondue (1s)"),
-            translate("À la fin de la file : une bande-son continue (fondu enchaîné "
-                      "entre les plans, pas de coupes nettes)."),
+            translate("Assembler la bande-son (durée exacte)"),
+            translate("À la fin de la file : une seule piste CALÉE sur la vidéo — "
+                      "chaque plan garde sa durée exacte, micro-fondus aux jonctions "
+                      "(pas de coupes nettes, pas de décalage)."),
             True)
         self._auto_mix_cb = _auto_mix_row.findChild(QCheckBox)
         rb_lay.addWidget(_auto_mix_row)
@@ -613,6 +614,10 @@ class TabSoundDesignLive(QScrollArea):
     def _on_sfx_item_done(self, path: str):
         it = self._sfx_queue[self._sfx_idx]
         it["status"] = "done"
+        # Conformation à la durée CALÉE du plan (l'API rend une durée approchée) :
+        # le clip son se pose tel quel sous sa vidéo, sans recalage manuel
+        if path:
+            path = self._conform_audio(path, it.get("duration") or 0.0)
         it["out"] = path or ""
         if path:
             self._add_result(path)
@@ -654,36 +659,82 @@ class TabSoundDesignLive(QScrollArea):
                 f"✓  {ok} {translate('ambiance(s) générée(s)')}"
                 + (f"  ·  {err} {translate('erreur(s)')}" if err else ""))
         self._refresh_sfx_queue()
-        # RENDU : export automatique de la bande-son fondue (option cochée)
+        # RENDU : export automatique de la bande-son assemblée (option cochée)
         n_done = sum(1 for it in self._sfx_queue
                      if it["status"] == "done" and it["out"])
         if (not getattr(self, "_sfx_cancelled", False) and n_done >= 2
                 and self._auto_mix_cb.isChecked()):
             self._on_export_mix()
 
-    # ── Bande-son continue (fondu enchaîné entre les plans) ───────────────────
+    # ── Bande-son CALÉE sur la vidéo (durée exacte, sans chevauchement) ───────
+    # L'acrossfade CHEVAUCHE les clips : la bande perdait (N-1)×1s et n'était
+    # plus alignée avec les clips vidéo posés bout à bout (vu en réel, 12 plans).
+    # Doctrine = même principe que la conformation vidéo : chaque ambiance est
+    # d'abord conformée à la durée CALÉE de son plan (silence si trop courte,
+    # coupe si trop longue), puis concaténée avec des micro-fondus de 50 ms qui
+    # ne mangent AUCUNE durée. Total = somme exacte des plans = la timeline.
 
     @staticmethod
-    def _build_crossfade_cmd(ffmpeg: str, ins: list, out: str,
-                             fade_s: float = 1.0) -> list:
-        """Commande ffmpeg : enchaîne N fichiers audio avec acrossfade (pas de
-        coupes nettes). Pure (testable) — N ≥ 2."""
+    def _build_conform_cmd(ffmpeg: str, src: str, dst: str, dur: float) -> list:
+        """Conforme UN fichier audio à la durée calée du plan. Pure (testable)."""
+        return [ffmpeg, "-y", "-i", src,
+                "-af", f"apad,atrim=0:{dur:g}", dst]
+
+    @staticmethod
+    def _build_assemble_cmd(ffmpeg: str, ins: list, durs: list, out: str,
+                            fade_s: float = 0.05) -> list:
+        """Commande ffmpeg : concatène N fichiers audio, chacun conformé à SA
+        durée calée, micro-fondus aux jonctions SANS chevauchement (la durée
+        totale = somme exacte des durées). Pure (testable) — N ≥ 2."""
         cmd = [ffmpeg, "-y"]
         for p in ins:
             cmd += ["-i", p]
-        parts, prev = [], "0:a"
-        for i in range(1, len(ins)):
-            label = f"a{i}"
-            parts.append(f"[{prev}][{i}:a]acrossfade=d={fade_s}:c1=tri:c2=tri[{label}]")
-            prev = label
-        cmd += ["-filter_complex", ";".join(parts), "-map", f"[{prev}]", out]
+        parts = []
+        for i, d in enumerate(durs):
+            st = max(0.0, d - fade_s)
+            parts.append(
+                f"[{i}:a]aresample=48000,aformat=channel_layouts=stereo,"
+                f"apad,atrim=0:{d:g},"
+                f"afade=t=in:d={fade_s:g},afade=t=out:st={st:g}:d={fade_s:g}[c{i}]")
+        parts.append("".join(f"[c{i}]" for i in range(len(ins)))
+                     + f"concat=n={len(ins)}:v=0:a=1[mix]")
+        cmd += ["-filter_complex", ";".join(parts), "-map", "[mix]", out]
         return cmd
+
+    def _conform_audio(self, path: str, dur: float) -> str:
+        """Conforme le fichier généré à la durée du plan, EN PLACE (même nom →
+        le clip se pose tel quel sous sa vidéo dans la timeline). Silencieux en
+        cas d'échec : on garde le fichier brut plutôt que de perdre la génération."""
+        if not path or not os.path.isfile(path) or not dur:
+            return path
+        try:
+            from core.video_utils import get_ffmpeg_exe
+            ff = get_ffmpeg_exe()
+        except Exception:
+            ff = "ffmpeg"
+        tmp = path + ".cale.wav"
+        try:
+            import subprocess
+            flags = 0x08000000 if os.name == "nt" else 0   # CREATE_NO_WINDOW
+            proc = subprocess.run(self._build_conform_cmd(ff, path, tmp, dur),
+                                  capture_output=True, creationflags=flags, timeout=120)
+            if proc.returncode == 0 and os.path.isfile(tmp) and os.path.getsize(tmp) > 0:
+                os.replace(tmp, path)
+        except Exception:
+            pass
+        finally:
+            if os.path.isfile(tmp):
+                try:
+                    os.remove(tmp)
+                except OSError:
+                    pass
+        return path
 
     def _on_export_mix(self):
         import time as _time
-        ins = [it["out"] for it in self._sfx_queue
-               if it["status"] == "done" and it["out"] and os.path.isfile(it["out"])]
-        if len(ins) < 2:
+        pairs = [(it["out"], float(it["duration"])) for it in self._sfx_queue
+                 if it["status"] == "done" and it["out"] and os.path.isfile(it["out"])]
+        if len(pairs) < 2:
             self._status.setText(translate("Il faut au moins 2 ambiances générées."))
             return
         try:
@@ -691,16 +742,18 @@ class TabSoundDesignLive(QScrollArea):
             ff = get_ffmpeg_exe()
         except Exception:
             ff = "ffmpeg"
+        ins  = [p for p, _ in pairs]
+        durs = [d for _, d in pairs]
         out = os.path.join(self._sfx_out_dir(), f"bande_son_{int(_time.time())}.wav")
-        cmd = self._build_crossfade_cmd(ff, ins, out)
-        self._status.setText(translate("Mixage de la bande-son (fondu enchaîné)…"))
+        cmd = self._build_assemble_cmd(ff, ins, durs, out)
+        self._status.setText(translate("Assemblage de la bande-son (durée exacte)…"))
         self._mix_worker = _MixWorker(cmd, out)
         self._mix_worker.finished.connect(self._on_mix_done)
         self._mix_worker.failed.connect(self._on_mix_failed)
         self._mix_worker.start()
 
     def _on_mix_done(self, path: str):
-        self._status.setText(translate("Bande-son continue exportée ✓"))
+        self._status.setText(translate("Bande-son calée exportée ✓ (durée = somme des plans)"))
         self._add_result(path)
         self.generation_done.emit(path)
 

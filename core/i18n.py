@@ -401,8 +401,10 @@ _FR_TO_EN: dict[str, str] = {
     "plan(s) chargé(s) — prêt à générer.":  "shot(s) loaded — ready to generate.",
     "ambiance(s) générée(s)":              "ambience(s) generated",
     "Il faut au moins 2 ambiances générées.":  "At least 2 generated ambiences are needed.",
-    "Mixage de la bande-son (fondu enchaîné)…":  "Mixing the soundtrack (crossfade)…",
-    "Bande-son continue exportée ✓":       "Continuous soundtrack exported ✓",
+    "Assemblage de la bande-son (durée exacte)…":
+        "Assembling the soundtrack (exact duration)…",
+    "Bande-son calée exportée ✓ (durée = somme des plans)":
+        "Aligned soundtrack exported ✓ (duration = sum of shots)",
     "À la fin de chaque clip, génère aussi l'ambiance SFX du plan (prompt son, "
     "Mirelo ~$0.01/s) — exportée dans data/live_sound_design":
         "At the end of each clip, also generates the shot's SFX ambience (sound "
@@ -1441,11 +1443,10 @@ _FR_TO_EN: dict[str, str] = {
     "Charge les plans en file d'attente — la sélection du Conducteur\nsi tu en as une (Ctrl+clic = multi), sinon toute la séquence.":
         "Loads shots into the queue — the Rundown selection\nif you have one (Ctrl+click = multi), otherwise the whole sequence.",
     "RENDU": "OUTPUT",
-    "Exporter la bande-son fondue (1s) à la fin de la file":
-        "Export the crossfaded soundtrack (1s) when the queue ends",
-    "Exporter la bande-son fondue (1s)": "Export the crossfaded soundtrack (1s)",
-    "À la fin de la file : une bande-son continue (fondu enchaîné entre les plans, pas de coupes nettes).":
-        "When the queue ends: one continuous soundtrack (crossfade between shots, no hard cuts).",
+    "Assembler la bande-son (durée exacte)":
+        "Assemble the soundtrack (exact duration)",
+    "À la fin de la file : une seule piste CALÉE sur la vidéo — chaque plan garde sa durée exacte, micro-fondus aux jonctions (pas de coupes nettes, pas de décalage).":
+        "When the queue ends: one single track ALIGNED with the video — every shot keeps its exact duration, micro-fades at junctions (no hard cuts, no drift).",
     "prompt son chargé ✓": "sound prompt loaded ✓",
     "⚠ pas de prompt son sur ce plan (champ 🔊 Son)":
         "⚠ no sound prompt on this shot (🔊 Sound field)",
