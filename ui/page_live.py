@@ -103,7 +103,8 @@ class _ClipCard(QWidget):
         super().__init__()
         self._path   = path
         self._is_sel = False
-        self.setFixedHeight(50)
+        self.setObjectName("clipcard")   # style SCOPÉ — sinon la bordure
+        self.setFixedHeight(46)          # cascade sur les QLabel enfants
         self.setCursor(Qt.CursorShape.PointingHandCursor)
         self._apply_style(False)
 
@@ -115,21 +116,25 @@ class _ClipCard(QWidget):
         ico.setFixedSize(22, 22)
         ico.setAlignment(Qt.AlignmentFlag.AlignCenter)
         ico.setStyleSheet(
-            f"color:{CP['accent']};font-size:11px;"
+            f"color:{CP['accent']};font-size:11px;border:none;"
             f"background:rgba(78,205,196,0.10);border-radius:4px;"
         )
         lay.addWidget(ico)
 
         col = QVBoxLayout()
-        col.setSpacing(2)
+        col.setSpacing(1)
 
-        name = QLabel(os.path.basename(path))
+        base = os.path.basename(path)
+        name = QLabel(base if len(base) <= 26 else base[:25] + "…")
+        name.setToolTip(base)
         name.setStyleSheet(
-            f"color:{CP['text_primary']};font-size:10px;font-weight:600;background:transparent;"
+            f"color:{CP['text_primary']};font-size:10px;font-weight:600;"
+            f"background:transparent;border:none;"
         )
         size_mb = os.path.getsize(path) / 1_000_000 if os.path.isfile(path) else 0
         meta = QLabel(f"{size_mb:.1f} MB")
-        meta.setStyleSheet(f"color:{CP['text_dim']};font-size:9px;background:transparent;")
+        meta.setStyleSheet(
+            f"color:{CP['text_dim']};font-size:9px;background:transparent;border:none;")
         col.addWidget(name)
         col.addWidget(meta)
         lay.addLayout(col, 1)
@@ -137,12 +142,13 @@ class _ClipCard(QWidget):
     def _apply_style(self, sel: bool):
         if sel:
             self.setStyleSheet(
-                f"background:rgba(78,205,196,0.15);"
-                f"border:1px solid {CP['accent_dim']};border-radius:8px;"
+                f"QWidget#clipcard{{background:rgba(78,205,196,0.15);"
+                f"border:1px solid {CP['accent_dim']};border-radius:8px;}}"
             )
         else:
             self.setStyleSheet(
-                f"background:{CP['bg2']};border:1px solid {CP['border']};border-radius:8px;"
+                f"QWidget#clipcard{{background:{CP['bg2']};"
+                f"border:1px solid {CP['border']};border-radius:8px;}}"
             )
 
     def set_selected(self, v: bool):
@@ -156,8 +162,8 @@ class _ClipCard(QWidget):
     def enterEvent(self, e):
         if not self._is_sel:
             self.setStyleSheet(
-                f"background:{CP['bg3']};"
-                f"border:1px solid {CP['border_bright']};border-radius:8px;"
+                f"QWidget#clipcard{{background:{CP['bg3']};"
+                f"border:1px solid {CP['border_bright']};border-radius:8px;}}"
             )
 
     def leaveEvent(self, e):
@@ -241,24 +247,32 @@ class PageLive(QWidget):
 
     def _build_topbar(self) -> QWidget:
         bar = QWidget()
-        bar.setFixedHeight(48)
+        bar.setFixedHeight(54)
         bar.setStyleSheet(
-            f"background:{CP['bg1']};border-bottom:1px solid {CP['border']};"
+            f"background:{CP['bg1']};border-bottom:2px solid {CP['border_bright']};"
         )
         lay = QHBoxLayout(bar)
         lay.setContentsMargins(20, 0, 20, 0)
         lay.setSpacing(12)
 
-        conn_lbl = QLabel("Resolume")
-        conn_lbl.setStyleSheet(
-            f"color:{CP['text_dim']};font-size:11px;font-weight:600;"
-            f"letter-spacing:1px;background:transparent;"
+        title = QLabel("🎛  " + translate("CONTRÔLEUR RESOLUME"))
+        title.setStyleSheet(
+            f"color:{CP['text_primary']};font-size:13px;font-weight:800;"
+            f"letter-spacing:2px;background:transparent;border:none;"
         )
-        lay.addWidget(conn_lbl)
+        lay.addWidget(title)
 
         self._dot = QLabel("●")
-        self._dot.setStyleSheet(f"color:{CP['text_dim']};font-size:12px;background:transparent;")
+        self._dot.setStyleSheet(f"color:{CP['text_dim']};font-size:12px;background:transparent;border:none;")
         lay.addWidget(self._dot)
+        lay.addStretch()
+
+        conn_lbl = QLabel(translate("Connexion :"))
+        conn_lbl.setStyleSheet(
+            f"color:{CP['text_dim']};font-size:11px;font-weight:600;"
+            f"background:transparent;border:none;"
+        )
+        lay.addWidget(conn_lbl)
 
         self._host_input = QLineEdit(self._host)
         self._host_input.setFixedSize(130, 28)
@@ -269,13 +283,14 @@ class PageLive(QWidget):
         lay.addWidget(self._host_input)
 
         port_sep = QLabel(":")
-        port_sep.setStyleSheet(f"color:{CP['text_dim']};background:transparent;")
+        port_sep.setStyleSheet(f"color:{CP['text_dim']};background:transparent;border:none;")
         lay.addWidget(port_sep)
 
         self._port_spin = QSpinBox()
         self._port_spin.setRange(1024, 65535)
         self._port_spin.setValue(self._port)
-        self._port_spin.setFixedSize(76, 28)
+        self._port_spin.setButtonSymbols(QSpinBox.ButtonSymbols.NoButtons)
+        self._port_spin.setFixedSize(64, 28)
         self._port_spin.setStyleSheet(
             f"QSpinBox{{background:{CP['bg3']};border:1px solid {CP['border']};"
             f"border-radius:5px;color:{CP['text_primary']};font-size:11px;padding:0 4px;}}"
@@ -306,7 +321,7 @@ class PageLive(QWidget):
 
         # ── Bibliothèque gauche ────────────────────────────────────────────────
         lib = QWidget()
-        lib.setFixedWidth(240)
+        lib.setFixedWidth(264)
         lib.setStyleSheet(
             f"background:{CP['bg1']};border-right:1px solid {CP['border']};"
         )
@@ -371,18 +386,22 @@ class PageLive(QWidget):
         push_row = QHBoxLayout()
         push_row.setSpacing(6)
         for lbl_txt, attr, default, mx in (("Couche", "_push_layer", 1, 99),
-                                           ("Col.", "_push_col", 1, 256)):
+                                           ("Colonne", "_push_col", 1, 256)):
             lbl = QLabel(lbl_txt)
             lbl.setStyleSheet(
-                f"color:{CP['text_secondary']};font-size:9px;background:transparent;")
+                f"color:{CP['text_secondary']};font-size:10px;"
+                f"background:transparent;border:none;")
             push_row.addWidget(lbl)
             spin = QSpinBox()
             spin.setRange(1, mx)
             spin.setValue(default)
-            spin.setFixedSize(48, 24)
+            spin.setButtonSymbols(QSpinBox.ButtonSymbols.NoButtons)
+            spin.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            spin.setFixedSize(40, 26)
             spin.setStyleSheet(
                 f"QSpinBox{{background:{CP['bg3']};border:1px solid {CP['border']};"
-                f"border-radius:4px;color:{CP['text_primary']};font-size:10px;padding:0 2px;}}")
+                f"border-radius:4px;color:{CP['text_primary']};font-size:11px;"
+                f"font-weight:700;padding:0 2px;}}")
             push_row.addWidget(spin)
             setattr(self, attr, spin)
         push_row.addStretch()
@@ -413,7 +432,7 @@ class PageLive(QWidget):
         lib_lay.addWidget(self._show_mode_cb)
 
         self._btn_push = QPushButton("⇪  " + translate("Envoyer vers Resolume"))
-        self._btn_push.setFixedHeight(30)
+        self._btn_push.setFixedHeight(34)
         self._btn_push.setCursor(Qt.CursorShape.PointingHandCursor)
         self._btn_push.setStyleSheet(
             f"QPushButton{{background:{CP['accent']};color:#07080f;"
@@ -454,6 +473,10 @@ class PageLive(QWidget):
             f"letter-spacing:2px;background:transparent;"
         )
         grid_hdr.addWidget(self._grid_title)
+        _hint = QLabel(translate("couches × colonnes — clic gauche : charger le clip sélectionné · clic droit : déclencher"))
+        _hint.setStyleSheet(
+            f"color:{CP['text_dim']};font-size:9px;background:transparent;border:none;")
+        grid_hdr.addWidget(_hint)
         grid_hdr.addStretch()
 
         # Config grille (visible en mode mock)
@@ -467,12 +490,14 @@ class PageLive(QWidget):
             ("Colonnes :", "_spin_cols", 8, 16),
         ]:
             lbl = QLabel(lbl_text)
-            lbl.setStyleSheet(f"color:{CP['text_secondary']};font-size:10px;background:transparent;")
+            lbl.setStyleSheet(f"color:{CP['text_secondary']};font-size:10px;background:transparent;border:none;")
             gc_lay.addWidget(lbl)
             spin = QSpinBox()
             spin.setRange(1, max_val)
             spin.setValue(default)
-            spin.setFixedSize(52, 24)
+            spin.setButtonSymbols(QSpinBox.ButtonSymbols.NoButtons)
+            spin.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            spin.setFixedSize(40, 24)
             spin.setStyleSheet(
                 f"QSpinBox{{background:{CP['bg3']};border:1px solid {CP['border']};"
                 f"border-radius:4px;color:{CP['text_primary']};font-size:10px;padding:0 2px;}}"
@@ -524,8 +549,8 @@ class PageLive(QWidget):
             "Clic droit = déclencher (nécessite connexion)"
         )
         self._status_lbl.setStyleSheet(
-            f"color:{CP['text_dim']};font-size:9px;"
-            f"font-family:'Consolas',monospace;background:transparent;"
+            f"color:{CP['text_secondary']};font-size:10px;"
+            f"font-family:'Consolas',monospace;background:transparent;border:none;"
         )
         lay.addWidget(self._status_lbl, 1)
         return bar
@@ -615,14 +640,17 @@ class PageLive(QWidget):
             self._grid_layout.addWidget(lbl, 0, j)
 
         for i, layer in enumerate(layers, 1):
-            lyr_lbl = QLabel(layer.name[:14])
-            lyr_lbl.setFixedSize(72, 60)
+            # Resolume nomme ses couches avec le joker « # » (= numéro auto)
+            _name = (layer.name or "").replace("#", str(i)).strip() or f"Couche {i}"
+            lyr_lbl = QLabel(_name[:14])
+            lyr_lbl.setToolTip(_name)
+            lyr_lbl.setFixedSize(86, 60)
             lyr_lbl.setAlignment(
                 Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter
             )
             lyr_lbl.setStyleSheet(
-                f"color:{CP['text_secondary']};font-size:10px;font-weight:600;"
-                f"background:transparent;padding-right:6px;"
+                f"color:{CP['text_secondary']};font-size:10px;font-weight:700;"
+                f"background:transparent;border:none;padding-right:8px;"
             )
             self._grid_layout.addWidget(lyr_lbl, i, 0)
 
@@ -652,13 +680,13 @@ class PageLive(QWidget):
 
         for i in range(1, n_layers + 1):
             lyr_lbl = QLabel(f"Couche {i}")
-            lyr_lbl.setFixedSize(72, 60)
+            lyr_lbl.setFixedSize(86, 60)
             lyr_lbl.setAlignment(
                 Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter
             )
             lyr_lbl.setStyleSheet(
-                f"color:{CP['text_secondary']};font-size:10px;font-weight:600;"
-                f"background:transparent;padding-right:6px;"
+                f"color:{CP['text_secondary']};font-size:10px;font-weight:700;"
+                f"background:transparent;border:none;padding-right:8px;"
             )
             self._grid_layout.addWidget(lyr_lbl, i, 0)
 

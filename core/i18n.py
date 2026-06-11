@@ -2911,6 +2911,10 @@ _FR_TO_EN: dict[str, str] = {
     "Annuler la file": "Cancel queue",
     "Annuler l'envoi": "Cancel sending",
     "Calage Resolume": "Resolume calibration",
+    "CONTRÔLEUR RESOLUME": "RESOLUME CONTROLLER",
+    "Connexion :": "Connection:",
+    "couches × colonnes — clic gauche : charger le clip sélectionné · clic droit : déclencher":
+        "layers × columns — left click: load selected clip · right click: trigger",
     "Extrait automatiquement le polygone de la façade et génère :\n• un preset Advanced Output (menu Presets de Resolume)\n• une mire de calage PNG spécifique au bâtiment.\nLe calage manuel des points devient une simple vérification.":
         "Automatically extracts the facade polygon and generates:\n• an Advanced Output preset (Resolume's Presets menu)\n• a building-specific PNG calibration card.\nManual point calibration becomes a simple check.",
     "Choisis d'abord la façade du bâtiment.": "Pick the building facade first.",
