@@ -16,7 +16,7 @@ from PyQt6.QtCore import Qt, pyqtSignal, QUrl
 from PyQt6.QtGui import QDesktopServices
 from PyQt6.QtWidgets import (
     QScrollArea, QWidget, QVBoxLayout, QHBoxLayout, QLabel,
-    QPushButton, QComboBox, QProgressBar, QFileDialog,
+    QPushButton, QComboBox, QProgressBar, QFileDialog, QFrame,
 )
 
 from ui.styles import C
@@ -86,9 +86,34 @@ class TabUpscaleLive(QScrollArea):
         self._empty_lbl.setStyleSheet(
             f"color:{C['text_dim']};font-size:11px;font-style:italic;background:transparent;")
         lay.addWidget(self._empty_lbl)
-        self._queue_box = QVBoxLayout()
-        self._queue_box.setSpacing(5)
-        lay.addLayout(self._queue_box)
+        # Bande HORIZONTALE de petits carrés — même esprit que le Conducteur :
+        # compact, propre, hauteur BORNÉE (pas d'écrasement façon Sound Design).
+        self._chips_host = QWidget()
+        self._chips_host.setStyleSheet("background:transparent;")
+        self._chips_box = QHBoxLayout(self._chips_host)
+        self._chips_box.setContentsMargins(6, 6, 12, 6)
+        self._chips_box.setSpacing(8)
+        self._chips_box.setAlignment(
+            Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
+        self._chips_scroll = QScrollArea()
+        self._chips_scroll.setWidget(self._chips_host)
+        self._chips_scroll.setWidgetResizable(True)
+        self._chips_scroll.setFixedHeight(116)
+        self._chips_scroll.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        self._chips_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
+        self._chips_scroll.setStyleSheet(
+            f"QScrollArea{{background:rgba(124,107,255,0.04);"
+            f"border:1px solid rgba(124,107,255,0.18);border-radius:10px;}}"
+            f"QScrollBar:horizontal{{height:4px;background:{C['bg2']};"
+            f"border-radius:2px;margin:0;}}"
+            f"QScrollBar::handle:horizontal{{background:rgba(124,107,255,0.40);"
+            f"border-radius:2px;min-width:30px;}}"
+            f"QScrollBar::add-line:horizontal,QScrollBar::sub-line:horizontal{{width:0;}}")
+        from ui.widgets import WheelHScroller
+        WheelHScroller.attach(self._chips_scroll)
+        self._chip_thumbs: dict = {}
+        self._chip_thumb_worker = None
+        lay.addWidget(self._chips_scroll)
 
         # ── Réglages ──────────────────────────────────────────────────────────
         lay.addWidget(_divider())
@@ -165,9 +190,10 @@ class TabUpscaleLive(QScrollArea):
             f"font-family:'Consolas',monospace;background:transparent;")
         lay.addWidget(self._status)
 
-        self._btn_open = QPushButton(translate("Ouvrir le dossier"))
+        self._btn_open = QPushButton("📁  " + translate("Ouvrir le dossier"))
         self._btn_open.setFixedHeight(30)
-        self._btn_open.setEnabled(False)
+        # Toujours actif : ouvre le dossier de DESTINATION même avant de générer
+        self._btn_open.setToolTip(translate("Ouvre le dossier de destination des upscales."))
         self._btn_open.setStyleSheet(_btn_ghost_style())
         self._btn_open.clicked.connect(self._on_open_folder)
         lay.addWidget(self._btn_open)
@@ -219,62 +245,92 @@ class TabUpscaleLive(QScrollArea):
         self._queue.clear()
         self._refresh_queue()
 
-    # ── File d'attente (rendu) ────────────────────────────────────────────────
+    # ── File d'attente (rendu) — petits carrés façon Conducteur ──────────────
 
     def _refresh_queue(self):
-        while self._queue_box.count():
-            item = self._queue_box.takeAt(0)
-            if item.widget():
-                item.widget().deleteLater()
+        while self._chips_box.count():
+            item = self._chips_box.takeAt(0)
+            w = item.widget() if item else None
+            if w:
+                w.hide()
+                w.setParent(None)
+                w.deleteLater()
+        self._chip_thumbs.clear()
         self._empty_lbl.setVisible(not self._queue)
+        self._chips_scroll.setVisible(bool(self._queue))
         for i, it in enumerate(self._queue):
-            self._queue_box.addWidget(self._make_queue_row(i, it))
+            self._chips_box.addWidget(self._make_chip(i, it))
+        self._chips_box.addStretch()
         n = len(self._queue)
-        self._btn_run.setText("▶  " + translate("Upscaler toute la file")
+        # Bouton harmonisé avec « Générer depuis Séquences »
+        self._btn_run.setText("▶▶  " + translate("Lancer la file d'attente")
                               + (f"  ({n})" if n else ""))
         self._btn_run.setEnabled(bool(n) and not self._proc_running)
+        # Vignettes mi-clip (cache partagé avec le contrôleur Resolume)
+        paths = [it["path"] for it in self._queue if os.path.isfile(it["path"])]
+        if paths:
+            if self._chip_thumb_worker is not None:
+                from core.worker import abandon_thread
+                abandon_thread(self._chip_thumb_worker)
+            from ui.page_live import _MidThumbWorker
+            self._chip_thumb_worker = _MidThumbWorker(paths)
+            self._chip_thumb_worker.thumb_ready.connect(self._on_chip_thumb)
+            self._chip_thumb_worker.start()
 
-    def _make_queue_row(self, index: int, it: dict) -> QWidget:
-        row = QWidget()
-        row.setStyleSheet(
-            f"background:{C['bg2']};border:1px solid {C['border']};border-radius:6px;")
-        rl = QHBoxLayout(row)
-        rl.setContentsMargins(10, 5, 8, 5)
-        rl.setSpacing(8)
+    def _on_chip_thumb(self, clip_path: str, png_path: str):
+        from PyQt6.QtGui import QPixmap
+        lbl = self._chip_thumbs.get(clip_path)
+        if lbl is None:
+            return
+        pix = QPixmap(png_path)
+        if not pix.isNull():
+            lbl.setPixmap(pix.scaled(
+                104, 56, Qt.AspectRatioMode.KeepAspectRatio,
+                Qt.TransformationMode.SmoothTransformation))
+
+    def _make_chip(self, index: int, it: dict) -> QWidget:
         st = it["status"]
-        badge = {"pending": "•", "done": "✓", "error": "✗"}.get(st, "•")
-        bcol  = {"pending": C["text_dim"], "done": C["accent"], "error": C["red"]}.get(st, C["text_dim"])
-        bl = QLabel(badge)
-        bl.setFixedWidth(14)
-        bl.setStyleSheet(f"color:{bcol};font-size:12px;font-weight:800;background:transparent;border:none;")
-        rl.addWidget(bl)
-        name = QLabel(os.path.basename(it["path"]))
+        border = {"pending": C["border"], "running": C["accent"],
+                  "done": C["green"], "error": C["red"]}.get(st, C["border"])
+        chip = QFrame()
+        chip.setObjectName("upchip")
+        chip.setFixedSize(118, 96)
+        chip.setStyleSheet(
+            f"QFrame#upchip{{background:{C['bg2']};border:2px solid {border};"
+            f"border-radius:8px;}}")
+        cl = QVBoxLayout(chip)
+        cl.setContentsMargins(5, 5, 5, 4)
+        cl.setSpacing(3)
+        thumb = QLabel("▶")
+        thumb.setFixedSize(104, 56)
+        thumb.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        thumb.setStyleSheet(
+            f"background:{C['bg0']};border:none;border-radius:4px;"
+            f"color:{C['text_dim']};font-size:9px;")
+        cl.addWidget(thumb)
+        self._chip_thumbs[it["path"]] = thumb
+        base = os.path.basename(it["path"])
+        badge = {"pending": "•", "running": "⟳", "done": "✓", "error": "✗"}.get(st, "•")
+        name = QLabel(f"{badge} {base[:13]}" + ("…" if len(base) > 13 else ""))
         name.setStyleSheet(
-            f"color:{C['text_primary']};font-size:10px;background:transparent;border:none;")
-        rl.addWidget(name, 1)
+            f"color:{border if st != 'pending' else C['text_secondary']};"
+            f"font-size:8px;font-weight:700;background:transparent;border:none;")
+        cl.addWidget(name)
+        tip = base + f"\n{translate('Statut')} : {st}"
+        if st == "error" and it.get("error"):
+            tip += f"\n✗ {it['error']}"
         if st == "done" and it.get("out"):
-            btn = QPushButton(translate("Lire"))
-            btn.setFixedHeight(24)
-            btn.setCursor(Qt.CursorShape.PointingHandCursor)
-            btn.setStyleSheet(
-                f"QPushButton{{background:transparent;color:{C['accent']};"
-                f"border:1px solid {C['accent_dim']};border-radius:5px;font-size:9px;"
-                f"font-weight:700;padding:0 10px;}}"
-                f"QPushButton:hover{{background:rgba(78,205,196,0.10);}}")
-            btn.clicked.connect(lambda checked=False, p=it["out"]:
-                                QDesktopServices.openUrl(QUrl.fromLocalFile(p)))
-            rl.addWidget(btn)
+            tip += "\n" + translate("Double-clic : lire le clip upscalé")
         if not self._proc_running:
-            rm = QPushButton("✕")
-            rm.setFixedSize(20, 20)
-            rm.setCursor(Qt.CursorShape.PointingHandCursor)
-            rm.setStyleSheet(
-                f"QPushButton{{background:{C['bg3']};color:{C['text_secondary']};"
-                f"border:1px solid {C['border']};border-radius:3px;font-size:9px;font-weight:700;}}"
-                f"QPushButton:hover{{background:{C['red']};color:#fff;border-color:{C['red']};}}")
-            rm.clicked.connect(lambda checked=False, i=index: self._remove(i))
-            rl.addWidget(rm)
-        return row
+            tip += "\n" + translate("Clic droit : retirer de la file")
+        chip.setToolTip(tip)
+
+        chip.mousePressEvent = lambda e, i=index: (
+            self._remove(i) if e.button() == Qt.MouseButton.RightButton else None)
+        if st == "done" and it.get("out"):
+            chip.mouseDoubleClickEvent = lambda e, p=it["out"]: \
+                QDesktopServices.openUrl(QUrl.fromLocalFile(p))
+        return chip
 
     def _remove(self, index: int):
         if self._proc_running:
@@ -320,6 +376,10 @@ class TabUpscaleLive(QScrollArea):
             from core.worker import abandon_thread
             abandon_thread(self._worker)
             self._worker = None
+        # Le clip interrompu repasse en attente (relançable tel quel)
+        for it in self._queue:
+            if it["status"] == "running":
+                it["status"] = "pending"
         self._finish_batch()
 
     def _process_next(self):
@@ -333,6 +393,8 @@ class TabUpscaleLive(QScrollArea):
             return
         self._proc_index = nxt
         it = self._queue[nxt]
+        it["status"] = "running"
+        self._refresh_queue()
         done = sum(1 for x in self._queue if x["status"] == "done")
         total = len(self._queue)
         self._status.setText(
@@ -374,6 +436,7 @@ class TabUpscaleLive(QScrollArea):
     def _on_item_failed(self, err: str):
         it = self._queue[self._proc_index]
         it["status"] = "error"
+        it["error"]  = err[:200]   # visible dans l'info-bulle de la puce
         self._status.setText(f"✗  {err[:100]}")
         self._refresh_queue()
         self._process_next()
@@ -400,12 +463,17 @@ class TabUpscaleLive(QScrollArea):
         self._refresh_queue()
 
     def _on_open_folder(self):
-        if self._last_folder and os.path.isdir(self._last_folder):
-            try:
-                os.startfile(self._last_folder)
-            except AttributeError:
-                import subprocess
-                subprocess.Popen(["xdg-open", self._last_folder])
+        """Ouvre le dossier de destination — disponible AVANT toute génération."""
+        folder = self._last_folder if (self._last_folder
+                                       and os.path.isdir(self._last_folder)) else ""
+        if not folder:
+            from api.upscale import _upscale_output_dir
+            folder = _upscale_output_dir()
+        try:
+            os.startfile(folder)
+        except AttributeError:
+            import subprocess
+            subprocess.Popen(["xdg-open", folder])
 
     def retranslate(self):
         pass

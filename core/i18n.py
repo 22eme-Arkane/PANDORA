@@ -2939,6 +2939,12 @@ _FR_TO_EN: dict[str, str] = {
     "glisser un clip sur un slot · clic droit : déclencher · Maj+clic : vider":
         "drag a clip onto a slot · right click: trigger · Shift+click: clear",
     "Annuler la file": "Cancel queue",
+    "Lancer la file d'attente": "Launch queue",
+    "Ouvre le dossier de destination des upscales.": "Opens the upscales destination folder.",
+    "Ouvre le dossier de destination du sound design.": "Opens the sound design destination folder.",
+    "Statut": "Status",
+    "Double-clic : lire le clip upscalé": "Double-click: play the upscaled clip",
+    "Clic droit : retirer de la file": "Right click: remove from queue",
     "Annuler l'envoi": "Cancel sending",
     "Calage Resolume": "Resolume calibration",
     "CONTRÔLEUR RESOLUME": "RESOLUME CONTROLLER",

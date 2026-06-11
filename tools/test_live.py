@@ -724,7 +724,10 @@ def sound_design_file_et_crossfade():
     # chargée, sinon manuel), Conducteur visuel partagé avec Générer depuis Séq.,
     # export de la bande-son fondue = option RENDU cochée par défaut
     assert not hasattr(t, "_btn_run_queue"), "plus de double bouton"
-    assert "Générer la file" in t._btn_generate.text(), "bouton unique contextuel"
+    assert "Lancer la file d'attente" in t._btn_generate.text(), \
+        "bouton unique harmonisé avec Générer depuis Séquences"
+    assert "(2)" in t._btn_generate.text(), "compteur de file affiché"
+    assert hasattr(t, "_btn_open_dir"), "Ouvrir le dossier toujours présent"
     import inspect as _i
     assert "_on_run_queue" in _i.getsource(TabSoundDesignLive._on_generate), \
         "Générer = file en priorité"
@@ -770,6 +773,18 @@ def sound_design_file_et_crossfade():
     # L'upscale est protégé du même arrêt de chaîne
     import ui.tab_upscale_live as UPS2
     assert "abandon_thread(self._worker)" in _i.getsource(UPS2.TabUpscaleLive._process_next)
+    # Upscale : file en PETITS CARRÉS (façon Conducteur), hauteur bornée,
+    # bouton harmonisé, Ouvrir le dossier TOUJOURS actif (destination par défaut)
+    src_up = _i.getsource(UPS2)
+    for tok in ("_make_chip", "_chips_scroll", "WheelHScroller",
+                "Lancer la file d'attente", "_upscale_output_dir"):
+        assert tok in src_up, f"upscale : {tok}"
+    assert "self._btn_open.setEnabled(False)" not in src_up, \
+        "Ouvrir le dossier jamais désactivé"
+    # Parseur SFX : 'audio' est une LISTE (12 générations payées et perdues sinon)
+    from api.tts import SFX1Worker as _SFXW
+    assert "isinstance(audio, list)" in _i.getsource(_SFXW._real), \
+        "schéma audio[] de l'API Mirelo géré"
     # Le sélecteur s'appelle désormais « Conducteur » (t2v + sound design)
     import ui.tab_t2v_live as T2V
     assert 'section_label("Conducteur")' in _i.getsource(T2V.StoryboardSelector)

@@ -693,7 +693,13 @@ class SFX1Worker(QThread):
             audio_url = ""
             if isinstance(result, dict):
                 audio = result.get("audio", {})
-                if isinstance(audio, dict):
+                # ⚠ Schéma réel de l'API (vu en réel : 12 générations payées et
+                # perdues) : "audio" est une LISTE d'objets [{url, file_name…}]
+                if isinstance(audio, list) and audio:
+                    first = audio[0]
+                    audio_url = (first.get("url", "") if isinstance(first, dict)
+                                 else first if isinstance(first, str) else "")
+                elif isinstance(audio, dict):
                     audio_url = audio.get("url", "") or audio.get("ref", "")
                 elif isinstance(audio, str):
                     audio_url = audio

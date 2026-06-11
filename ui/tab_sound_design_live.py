@@ -232,7 +232,7 @@ class TabSoundDesignLive(QWidget):
         root.addWidget(self._stack)
 
         # ── Barre de génération (UNIQUE : file si chargée, sinon manuel) ─────
-        self._btn_generate = QPushButton(translate("⚡  Générer le son"))
+        self._btn_generate = QPushButton("▶▶  " + translate("Lancer la file d'attente"))
         self._btn_generate.setFixedHeight(44)
         self._btn_generate.setCursor(Qt.CursorShape.PointingHandCursor)
         self._btn_generate.setStyleSheet(
@@ -277,11 +277,27 @@ class TabSoundDesignLive(QWidget):
         root.addWidget(self._status)
 
         # ── Résultats ─────────────────────────────────────────────────────────
+        res_row = QHBoxLayout()
         res_lbl = QLabel(translate("Fichiers générés"))
         res_lbl.setStyleSheet(
             f"color:{C['text_dim']};font-size:9px;font-weight:700;letter-spacing:1px;"
             f"background:transparent;border:none;")
-        root.addWidget(res_lbl)
+        res_row.addWidget(res_lbl)
+        res_row.addStretch()
+        self._btn_open_dir = QPushButton("📁  " + translate("Ouvrir le dossier"))
+        self._btn_open_dir.setFixedHeight(26)
+        self._btn_open_dir.setCursor(Qt.CursorShape.PointingHandCursor)
+        # Toujours actif : ouvre la destination même avant de générer
+        self._btn_open_dir.setToolTip(translate(
+            "Ouvre le dossier de destination du sound design."))
+        self._btn_open_dir.setStyleSheet(
+            f"QPushButton{{background:transparent;color:{C['text_secondary']};"
+            f"border:1px solid {C['border']};border-radius:5px;font-size:10px;"
+            f"font-weight:600;padding:0 12px;}}"
+            f"QPushButton:hover{{color:{C['text_primary']};border-color:{C['border_bright']};}}")
+        self._btn_open_dir.clicked.connect(self._on_open_dir)
+        res_row.addWidget(self._btn_open_dir)
+        root.addLayout(res_row)
 
         _scroll = QScrollArea()
         _scroll.setWidgetResizable(True)
@@ -532,14 +548,11 @@ class TabSoundDesignLive(QWidget):
                 it.widget().deleteLater()
         for i, it in enumerate(self._sfx_queue):
             self._queue_box.addWidget(self._make_sfx_row(i, it))
-        # Bouton UNIQUE : « Générer la file (N) » si une file est chargée,
-        # sinon « Générer le son » (mode manuel)
+        # Bouton UNIQUE, harmonisé avec « Générer depuis Séquences »
         n_pending = sum(1 for x in self._sfx_queue if x["status"] == "pending")
-        if n_pending:
-            self._btn_generate.setText(
-                "⚡  " + translate("Générer la file") + f"  ({n_pending})")
-        else:
-            self._btn_generate.setText("⚡  " + translate("Générer le son"))
+        self._btn_generate.setText(
+            "▶▶  " + translate("Lancer la file d'attente")
+            + (f"  ({n_pending})" if n_pending else ""))
 
     def _make_sfx_row(self, index: int, it: dict) -> QWidget:
         row = QWidget()
@@ -559,7 +572,7 @@ class TabSoundDesignLive(QWidget):
         _p = it["prompt"]
         name = QLabel(f"Plan {it['number']} · {it['duration']:.1f}s — "
                       + (_p[:70] + "…" if len(_p) > 70 else _p))
-        name.setToolTip(_p)
+        name.setToolTip(_p + (f"\n✗ {it['error']}" if it.get("error") else ""))
         name.setStyleSheet(
             f"color:{C['text_primary']};font-size:10px;background:transparent;border:none;")
         rl.addWidget(name, 1)
@@ -667,9 +680,18 @@ class TabSoundDesignLive(QWidget):
     def _on_sfx_item_failed(self, msg: str):
         it = self._sfx_queue[self._sfx_idx]
         it["status"] = "error"
+        it["error"]  = msg[:200]   # visible dans l'info-bulle de la ligne
         self._status.setText(f"✗  Plan {it['number']} : {msg[:90]}")
         self._refresh_sfx_queue()
         self._process_next_sfx()
+
+    def _on_open_dir(self):
+        """Ouvre le dossier de destination — disponible AVANT toute génération."""
+        try:
+            os.startfile(self._sfx_out_dir())
+        except AttributeError:
+            import subprocess
+            subprocess.Popen(["xdg-open", self._sfx_out_dir()])
 
     def _finish_sfx_queue(self):
         self._sfx_running = False
