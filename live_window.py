@@ -165,8 +165,8 @@ _NAV_ITEMS = [
 
 class _LiveSidebar(QWidget):
     """Barre de navigation BASSE — taskbar façon DaVinci Resolve / Windows :
-    drapeaux de langue à gauche, icônes de pages au centre, Contact puis
-    Paramètres en bas à droite (le Manuel vit dans la topbar, en haut à
+    drapeaux de langue à gauche, icônes de pages au centre, Paramètres en bas
+    à droite (Manuel et Nous contacter vivent dans la topbar, en haut à
     gauche). Toute la largeur de l'écran revient aux pages."""
     nav_clicked           = pyqtSignal(str)
     manual_requested      = pyqtSignal()
@@ -243,25 +243,9 @@ class _LiveSidebar(QWidget):
         lay.addWidget(_vsep())
         lay.addSpacing(4)
 
-        # ── Droite : Contact (compact) puis Paramètres tout au bord ──────────
-        # (le Manuel d'utilisation vit désormais dans la topbar, en haut à gauche)
-        _ss_yellow = (
-            "QPushButton{background:transparent;color:#c8a400;"
-            "border:1px solid rgba(200,164,0,0.35);border-radius:6px;"
-            "font-size:13px;font-weight:700;}"
-            "QPushButton:hover{background:rgba(245,197,24,0.10);color:#f5c518;"
-            "border-color:rgba(245,197,24,0.60);}"
-            "QPushButton:pressed{background:rgba(245,197,24,0.18);}"
-        )
-
-        self._btn_contact = QPushButton("✉")
-        self._btn_contact.setToolTip(translate("Nous contacter"))
-        self._btn_contact.setFixedSize(32, 32)
-        self._btn_contact.setCursor(Qt.CursorShape.PointingHandCursor)
-        self._btn_contact.setStyleSheet(_ss_yellow)
-        self._btn_contact.clicked.connect(self.contact_requested.emit)
-        lay.addWidget(self._btn_contact)
-
+        # ── Droite : Paramètres tout au bord ──────────────────────────────────
+        # (Manuel d'utilisation et Nous contacter vivent dans la topbar, en
+        # haut à gauche)
         if _settings_entry:
             icon, label, key, icon_file = _settings_entry
             lay.addSpacing(4)
@@ -424,11 +408,8 @@ class LiveWindow(QMainWindow):
         _llay.setSpacing(0)
         _llay.setAlignment(Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft)
 
-        # ── Manuel d'utilisation — en haut à gauche (demande 2026-06-12) ──────
-        self._btn_manual_top = QPushButton("☰  " + translate("Manuel d'utilisation"))
-        self._btn_manual_top.setFixedHeight(26)
-        self._btn_manual_top.setCursor(Qt.CursorShape.PointingHandCursor)
-        self._btn_manual_top.setStyleSheet(
+        # ── Manuel + Nous contacter — en haut à gauche (demandes 2026-06-12) ──
+        _ss_yellow_top = (
             "QPushButton{background:transparent;color:#c8a400;"
             "border:1px solid rgba(200,164,0,0.35);border-radius:5px;"
             "font-size:10px;font-weight:700;padding:0 10px;}"
@@ -436,8 +417,16 @@ class LiveWindow(QMainWindow):
             "border-color:rgba(245,197,24,0.60);}"
             "QPushButton:pressed{background:rgba(245,197,24,0.18);}"
         )
+        self._btn_manual_top = QPushButton("☰  " + translate("Manuel d'utilisation"))
         self._btn_manual_top.clicked.connect(self._on_manual)
-        _llay.addWidget(self._btn_manual_top)
+        self._btn_contact_top = QPushButton("✉  " + translate("Nous contacter"))
+        self._btn_contact_top.clicked.connect(self._on_contact)
+        for _b in (self._btn_manual_top, self._btn_contact_top):
+            _b.setFixedHeight(26)
+            _b.setCursor(Qt.CursorShape.PointingHandCursor)
+            _b.setStyleSheet(_ss_yellow_top)
+            _llay.addWidget(_b)
+            _llay.addSpacing(6)
 
         _lr_lay.addWidget(_left, 1)
 

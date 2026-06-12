@@ -1424,11 +1424,17 @@ class _ShotListContainer(QWidget):
 
     def minimumSizeHint(self):
         from PyQt6.QtCore import QSize
+        # Mode vide (pas de tableau) : aucune largeur imposée — le message
+        # « Aucun découpage » se centre dans la fenêtre, pas dans les colonnes
+        if getattr(self, "_empty_mode", False):
+            return super().minimumSizeHint()
         w = sum(_col_widths) + len(_col_widths) - 1
         return QSize(w, super().minimumSizeHint().height())
 
     def sizeHint(self):
         from PyQt6.QtCore import QSize
+        if getattr(self, "_empty_mode", False):
+            return super().sizeHint()
         w = sum(_col_widths) + len(_col_widths) - 1
         return QSize(w, super().sizeHint().height())
 
@@ -2677,16 +2683,21 @@ class PageStoryboard(QWidget):
                 f"color:{CP['text_dim']};font-size:13px;background:transparent;border:none;"
             )
             # Pas de tableau → le conteneur reprend la largeur de la FENÊTRE
-            # (message centré à l'écran, pas dans la largeur des colonnes) et
+            # (message centré à l'écran, pas dans la largeur des colonnes —
+            # _empty_mode neutralise les sizeHint « somme des colonnes ») et
             # la barre de défilement horizontale disparaît (aucune utilité)
+            self._list_container._empty_mode = True
             self._list_container.setMinimumWidth(0)
+            self._list_container.updateGeometry()
             self._top_hscroll.setVisible(False)
             self._list_lay.addWidget(empty)
             self._dur_lbl.setText("")
             return
 
         # Tableau présent → largeur des colonnes + scrollbar de tête rétablies
+        self._list_container._empty_mode = False
         self._list_container.setMinimumWidth(sum(_col_widths) + len(_col_widths) - 1)
+        self._list_container.updateGeometry()
         self._top_hscroll.setVisible(True)
 
         total_dur = sum(float(s.get("duration", 5.0)) for s in self._all_shots)

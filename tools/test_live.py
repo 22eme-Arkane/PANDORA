@@ -274,6 +274,14 @@ def colonnes_sequences():
     import inspect as _isp
     src_render = _isp.getsource(M.PageStoryboard._render)
     assert "setMinimumWidth(0)" in src_render, "vide → conteneur à la fenêtre (centré)"
+    # Le conteneur imposait sa largeur via sizeHint (somme des colonnes) même
+    # vide → message décentré malgré setMinimumWidth(0). _empty_mode neutralise.
+    c = M._ShotListContainer()
+    full_w = c.sizeHint().width()
+    c._empty_mode = True
+    assert c.sizeHint().width() < full_w and c.minimumSizeHint().width() < full_w, \
+        "_empty_mode neutralise la largeur des colonnes (message centré à l'écran)"
+    assert "_empty_mode = True" in src_render and "_empty_mode = False" in src_render
     assert "_top_hscroll.setVisible(False)" in src_render, "vide → pas de scrollbar"
     assert "_top_hscroll.setVisible(True)" in src_render, "tableau → scrollbar rétablie"
     assert "depuis le Conducteur" in src_render, "message Live (pas « onglet Scénario »)"
@@ -523,18 +531,17 @@ def fenetre_live():
     assert (_body_lay.indexOf(w._assistant_toggle) < _body_lay.indexOf(w._assistant)
             < _body_lay.indexOf(w._stack)), "assistant à gauche : poignée, panneau, pages"
     assert w._assistant_toggle._side == "left", "flèches du strip en miroir côté gauche"
-    # Retours 2026-06-12 : Manuel en HAUT À GAUCHE (topbar), Paramètres en BAS
-    # À DROITE (après Contact, hors du groupe central), séparation Projets|Conducteur
-    assert hasattr(w, "_btn_manual_top"), "Manuel dans la topbar"
-    assert not hasattr(w._sidebar, "_btn_manual"), "plus de Manuel dans la barre basse"
+    # Retours 2026-06-12 : Manuel ET Nous contacter en HAUT À GAUCHE (topbar),
+    # Paramètres seul en BAS À DROITE, séparation Projets|Conducteur
+    assert hasattr(w, "_btn_manual_top") and hasattr(w, "_btn_contact_top"), \
+        "Manuel + Contact dans la topbar"
+    assert not hasattr(w._sidebar, "_btn_manual") and not hasattr(w._sidebar, "_btn_contact"), \
+        "plus de Manuel/Contact dans la barre basse"
     _bar_lay = w._sidebar.layout()
-    assert (_bar_lay.indexOf(w._sidebar._btn_contact)
-            < _bar_lay.indexOf(w._sidebar._items["settings"])), \
-        "Paramètres tout au bord, en bas à droite"
     assert all(_bar_lay.indexOf(w._sidebar._items[k])
-               < _bar_lay.indexOf(w._sidebar._btn_contact)
+               < _bar_lay.indexOf(w._sidebar._items["settings"])
                for k in w._sidebar._items if k != "settings"), \
-        "les autres pages restent dans le groupe central"
+        "Paramètres tout au bord, en bas à droite"
     from live_window import _NAV_ITEMS as _NI
     assert _NI[1] is None and _NI[0][2] == "projects" and _NI[2][2] == "conducteur", \
         "séparateur entre Projets et Conducteur"
