@@ -26,6 +26,7 @@ from ui.widgets import HelpBlock, section_label, combo, toggle_row
 from ui.creative_panel import SeedanceCreativePanel
 from ui.icons import claude_icon_pixmap, install_hover_icon
 from core.config import load_config, get_output_dir
+from core.i18n import translate
 from core.history import save_to_history
 from core.worker import GenerationWorker, abandon_thread
 from api.enhance import EnhanceWorker, _SYSTEM_DAVINCI_EDIT
@@ -594,6 +595,24 @@ class TabDavinciEdit(QScrollArea):
         self._lbl_empty.setStyleSheet(f"color:{C['text_dim']};font-size:11px;padding:20px;")
         body_clips.addWidget(self._lbl_empty)
 
+        # ── En-tête repliable (comme Générer depuis Storyboard / Live) ────────
+        self._film_style_frame.setVisible(False)
+        self._btn_style_toggle = QPushButton("▸  Choisir les références")
+        self._btn_style_toggle.setCheckable(True)
+        self._btn_style_toggle.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._btn_style_toggle.setStyleSheet(
+            f"QPushButton{{background:{C['bg2']};color:{C['text_secondary']};"
+            f"border:1px solid {C['border']};border-radius:8px;text-align:left;"
+            f"font-size:11px;font-weight:700;padding:8px 14px;}}"
+            f"QPushButton:hover{{background:{C['bg3']};color:{C['text_primary']};}}"
+            f"QPushButton:checked{{color:{C['accent']};border-color:{C['accent_dim']};}}")
+
+        def _toggle_style(checked):
+            self._film_style_frame.setVisible(checked)
+            self._btn_style_toggle.setText(
+                ("▾  " if checked else "▸  ") + "Choisir les références")
+        self._btn_style_toggle.toggled.connect(_toggle_style)
+        lay.addWidget(self._btn_style_toggle)
         lay.addWidget(self._film_style_frame)
         lay.addWidget(sec_clips)
         lay.addLayout(_adn_row)
@@ -1003,25 +1022,25 @@ class TabDavinciEdit(QScrollArea):
         btn_row.addWidget(self._btn_cancel)
         body_queue.addLayout(btn_row)
 
-        self._btn_open_folder = QPushButton("📁  Ouvrir le dossier des vidéos")
-        self._btn_open_folder.setVisible(True)
+        # ── Ouvrir le dossier — pleine largeur, style « ghost » uniforme ; la
+        #    barre DaVinci passe DESSOUS (comme Générer depuis Storyboard) ─────
+        self._btn_open_folder = QPushButton(translate("Ouvrir le dossier des vidéos"))
+        self._btn_open_folder.setFixedHeight(30)
         self._btn_open_folder.setCursor(Qt.CursorShape.PointingHandCursor)
-        self._btn_open_folder.setStyleSheet(f"""
-            QPushButton{{background:transparent;color:{C['text_secondary']};
-            border:1px solid {C['border']};border-radius:8px;font-size:11px;
-            padding:6px 14px;}}
-            QPushButton:hover{{background:{C['bg3']};color:{C['text_primary']};}}
-        """)
+        self._btn_open_folder.setToolTip(translate("Ouvre le dossier de destination des clips."))
+        self._btn_open_folder.setStyleSheet(
+            f"QPushButton{{background:transparent;color:{C['text_secondary']};"
+            f"border:1px solid {C['border']};border-radius:7px;"
+            f"font-size:11px;font-weight:700;padding:0 14px;}}"
+            f"QPushButton:hover{{background:{C['bg3']};color:{C['text_primary']};"
+            f"border-color:{C['border_bright']};}}"
+            f"QPushButton:pressed{{background:{C['bg3']};}}"
+        )
         self._btn_open_folder.clicked.connect(self._open_output_folder)
+        body_queue.addWidget(self._btn_open_folder)
 
         self._davinci_bar = _DaVinciBar()
-
-        _dav_row = QHBoxLayout()
-        _dav_row.setContentsMargins(0, 0, 0, 0)
-        _dav_row.setSpacing(10)
-        _dav_row.addWidget(self._davinci_bar, 1)
-        _dav_row.addWidget(self._btn_open_folder)
-        body_queue.addLayout(_dav_row)
+        body_queue.addWidget(self._davinci_bar)
         lay.addWidget(sec_queue)
 
         # ── Encart prix (même que "Générer depuis Storyboard") ────────────────
