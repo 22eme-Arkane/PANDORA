@@ -558,6 +558,9 @@ def fenetre_live():
     # Paramètres seul en BAS À DROITE, séparation Projets|Conducteur
     assert hasattr(w, "_btn_manual_top") and hasattr(w, "_btn_contact_top"), \
         "Manuel + Contact dans la topbar"
+    # Couleurs (retour 2026-06-12 soir) : Manuel ROUGE, Nous contacter VERT
+    assert "255,79,106" in w._btn_manual_top.styleSheet(), "Manuel en rouge"
+    assert "37,211,102" in w._btn_contact_top.styleSheet(), "Contact en vert"
     assert not hasattr(w._sidebar, "_btn_manual") and not hasattr(w._sidebar, "_btn_contact"), \
         "plus de Manuel/Contact dans la barre basse"
     _bar_lay = w._sidebar.layout()
@@ -594,6 +597,17 @@ def fenetre_live():
         _cls = getattr(_m, "PageStoryboard", None) or getattr(_m, "PageLive")
         assert "setFixedHeight(60)" in _isp_lw.getsource(getattr(_cls, _meth)), \
             f"bandeau 60 px : {_mod}.{_meth}"
+    # Conducteur (retours 2026-06-12 soir) : scrollbar de l'éditeur AU BORD
+    # (marges dans le document, pas en padding CSS) et « Rouvrir la fenêtre »
+    # TOUT EN BAS du panneau droit, sous « Tout générer »
+    from ui.page_scenario_live import PageScenario as _PSC
+    src_ed = _isp_lw.getsource(_PSC._build_editor)
+    assert "setDocumentMargin" in src_ed and "padding:32px 120px" not in src_ed, \
+        "scrollbar de l'éditeur collée au panneau de droite"
+    src_rp = _isp_lw.getsource(_PSC._build_right_panel)
+    assert (src_rp.index("addWidget(self._btn_generate_all)")
+            < src_rp.index("ga_lay.addWidget(self._btn_reopen_window)")), \
+        "Rouvrir la fenêtre sous Tout générer"
     # Colonne droite permanente = largeur de la poignée IA fermée (symétrie)
     assert w._right_spacer.maximumWidth() == w._assistant_toggle.maximumWidth() == 28
     assert _body_lay.indexOf(w._right_spacer) > _body_lay.indexOf(w._stack), \

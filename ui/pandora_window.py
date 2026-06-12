@@ -503,23 +503,32 @@ class PandoraWindow(QMainWindow):
         _llay.setSpacing(0)
         _llay.setAlignment(Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft)
 
-        # ── Manuel + Nous contacter — en haut à gauche (refonte 2026-06-12) ───
-        _ss_yellow_top = (
-            "QPushButton{background:transparent;color:#c8a400;"
-            "border:1px solid rgba(200,164,0,0.35);border-radius:5px;"
+        # ── Manuel (ROUGE) + Nous contacter (VERT) — en haut à gauche ─────────
+        _ss_manual_red = (
+            "QPushButton{background:transparent;color:#ff4f6a;"
+            "border:1px solid rgba(255,79,106,0.35);border-radius:5px;"
             "font-size:10px;font-weight:700;padding:0 10px;}"
-            "QPushButton:hover{background:rgba(245,197,24,0.10);color:#f5c518;"
-            "border-color:rgba(245,197,24,0.60);}"
-            "QPushButton:pressed{background:rgba(245,197,24,0.18);}"
+            "QPushButton:hover{background:rgba(255,79,106,0.10);color:#ff7187;"
+            "border-color:rgba(255,79,106,0.60);}"
+            "QPushButton:pressed{background:rgba(255,79,106,0.18);}"
+        )
+        _ss_contact_green = (
+            "QPushButton{background:transparent;color:#25d366;"
+            "border:1px solid rgba(37,211,102,0.35);border-radius:5px;"
+            "font-size:10px;font-weight:700;padding:0 10px;}"
+            "QPushButton:hover{background:rgba(37,211,102,0.10);color:#2ee27a;"
+            "border-color:rgba(37,211,102,0.60);}"
+            "QPushButton:pressed{background:rgba(37,211,102,0.18);}"
         )
         self._btn_manual_top = QPushButton("☰  " + translate("Manuel d'utilisation"))
         self._btn_manual_top.clicked.connect(self._on_manual)
+        self._btn_manual_top.setStyleSheet(_ss_manual_red)
         self._btn_contact_top = QPushButton("✉  " + translate("Nous contacter"))
         self._btn_contact_top.clicked.connect(self._on_contact)
+        self._btn_contact_top.setStyleSheet(_ss_contact_green)
         for _b in (self._btn_manual_top, self._btn_contact_top):
             _b.setFixedHeight(26)
             _b.setCursor(Qt.CursorShape.PointingHandCursor)
-            _b.setStyleSheet(_ss_yellow_top)
             _llay.addWidget(_b)
             _llay.addSpacing(6)
 

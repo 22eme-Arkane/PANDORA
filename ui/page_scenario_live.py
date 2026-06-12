@@ -447,8 +447,12 @@ class PageScenario(QWidget):
         self._editor_text.setFont(_tw_font)
         self._editor_text.setStyleSheet(
             f"QTextEdit{{background:{CP['bg0']};border:none;"
-            f"color:{CP['text_primary']};padding:32px 120px;}}"
+            f"color:{CP['text_primary']};}}"
         )
+        # Marges DANS le document (pas en padding CSS : le padding repoussait la
+        # scrollbar à 120 px du bord — retour 2026-06-12, elle colle désormais
+        # au panneau de droite)
+        self._editor_text.document().setDocumentMargin(72)
         self._editor_text.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         # Alignement centré par défaut — style mise en page conducteur cinéma
         from PyQt6.QtGui import QTextOption
@@ -477,8 +481,9 @@ class PageScenario(QWidget):
         self._layout_view.setFont(_tw_font)
         self._layout_view.setStyleSheet(
             f"QTextEdit{{background:{CP['bg0']};border:none;"
-            f"color:{CP['text_primary']};padding:32px 60px;}}"
+            f"color:{CP['text_primary']};}}"
         )
+        self._layout_view.document().setDocumentMargin(48)   # scrollbar au bord
         self._layout_view.setPlaceholderText(translate(
             "Clique « Mise en page PANDORA » (panneau de droite) pour générer ici la "
             "version optimisée pour les moteurs : plans découpés + prompts prêts pour Seedance. "
@@ -895,7 +900,7 @@ class PageScenario(QWidget):
             f"QPushButton:hover{{background:rgba(124,107,255,0.12);}}"
         )
         self._btn_reopen_window.clicked.connect(self._open_result_window)
-        b_lay.addWidget(self._btn_reopen_window)
+        # (ajouté TOUT EN BAS du panneau, sous « Tout générer » — retour 2026-06-12)
 
         self._btn_undo_action = QPushButton("↺  Annuler")
         self._btn_undo_action.setFixedHeight(30)
@@ -982,6 +987,8 @@ class PageScenario(QWidget):
         _ga_btn_lay.addLayout(_ga_btn_row)
         _ga_btn_lay.addWidget(_ga_btn_sub)
         ga_lay.addWidget(self._btn_generate_all)
+        # « Rouvrir la fenêtre » TOUT EN BAS, sous « Tout générer »
+        ga_lay.addWidget(self._btn_reopen_window)
 
         root_lay.addWidget(gen_all_zone)
         return w

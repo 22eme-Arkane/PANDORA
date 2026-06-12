@@ -456,8 +456,11 @@ class PageScenario(QWidget):
         self._editor_text.setFont(_tw_font)
         self._editor_text.setStyleSheet(
             f"QTextEdit{{background:{CP['bg0']};border:none;"
-            f"color:{CP['text_primary']};padding:32px 120px;}}"
+            f"color:{CP['text_primary']};}}"
         )
+        # Marges DANS le document (pas en padding CSS : le padding repoussait la
+        # scrollbar à 120 px du bord — refonte 2026-06-12, portée depuis Live)
+        self._editor_text.document().setDocumentMargin(72)
         self._editor_text.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         # Alignement centré par défaut — style mise en page scénario cinéma
         from PyQt6.QtGui import QTextOption

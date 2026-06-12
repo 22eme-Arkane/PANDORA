@@ -115,6 +115,12 @@ def refonte_interface():
     src_top = inspect.getsource(PW.PandoraWindow._build_global_topbar)
     assert "_btn_manual_top" in src_top and "_btn_contact_top" in src_top, \
         "Manuel + Nous contacter en haut à gauche"
+    assert "255,79,106" in src_top and "37,211,102" in src_top, \
+        "Manuel en ROUGE, Nous contacter en VERT"
+    # Éditeur scénario : scrollbar au bord (marges document, pas padding CSS)
+    from ui.page_scenario import PageScenario as _PSC
+    src_ed = inspect.getsource(_PSC._build_editor)
+    assert "setDocumentMargin" in src_ed and "padding:32px 120px" not in src_ed
     src_pages = inspect.getsource(PW.PandoraWindow._build_pages)
     assert "setMaximumWidth(1360)" in src_pages and "_settings_wrap" in src_pages, \
         "Paramètres centré comme le Studio IA"
