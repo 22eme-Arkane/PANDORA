@@ -81,7 +81,7 @@ _SECTIONS = [
     ("🚗", "Véhicules"),
     ("◎",  "Image & Son"),
     # STUDIO IA
-    ("✦",  "Seedance 2.0"),
+    ("✦",  "Studio IA"),
     ("🎨", "Style visuel"),
     ("🎙", "Doublage"),
     ("💰", "Tarifs IA"),
@@ -112,8 +112,22 @@ def _s_welcome() -> str:
             "Répertorier décors, accessoires, HMC et véhicules nécessaires au tournage",
             "Définir les préférences caméra et optique du film",
             "Choisir un <b>style visuel</b> qui influence toutes les générations IA",
-            "Générer des vidéos Seedance 2.0 : T2V, I2V, Extension, Référence multimodale",
+            "Générer des vidéos IA : Seedance 2.0 (recommandé), Kling, Happy Horse, PixVerse…",
+            "Sonoriser vos plans avec le <b>Sound Design</b> (Mirelo SFX : prompt → SFX, vidéo → bande-son)",
+            "Monter vos clips en résolution avec l'<b>Upscaling</b> (Topaz / SeedVR2, ×2/×4)",
             "Importer automatiquement les vidéos dans <b>DaVinci Resolve</b> (Studio requis)",
+        ),
+        _sep_html(),
+        _h("La nouvelle interface"),
+        _p("Depuis la refonte, PANDORA s'organise comme DaVinci Resolve :"),
+        _ul(
+            "La <b>barre de navigation</b> est en <b>bas de la fenêtre</b> — les icônes des pages au centre, "
+            "les drapeaux FR/EN à gauche, <b>Paramètres</b> tout à droite",
+            "L'<b>assistant IA</b> vit à <b>gauche</b> de l'écran — la poignée <b>IA</b> l'ouvre et le ferme",
+            "<b>☰ Manuel d'utilisation</b> (rouge) et <b>✉ Nous contacter</b> (vert) sont en <b>haut à gauche</b>",
+            "Soutenir Pandora, Mises à jour et Sauvegarder restent en haut à droite",
+            "Les pages occupent <b>toute la largeur de l'écran</b> ; Paramètres et les formulaires "
+            "du Studio IA sont centrés pour rester lisibles",
         ),
         _sep_html(),
         _h("Workflow recommandé"),
@@ -124,7 +138,8 @@ def _s_welcome() -> str:
             "<b>4.</b> Générez automatiquement personnages, décors, HMC, accessoires, véhicules depuis le scénario",
             "<b>5.</b> Générez le storyboard avec Claude IA, affinez plan par plan",
             "<b>6.</b> Configurez les moods Seedance pour chaque plan",
-            "<b>7.</b> Lancez la génération vidéo depuis le storyboard ou l'onglet Seedance 2.0",
+            "<b>7.</b> Lancez la génération vidéo depuis le storyboard ou le Studio IA",
+            "<b>8.</b> Sonorisez (Sound Design) et montez en résolution (Upscaling) au besoin",
         ),
         _tip("PANDORA fonctionne sans aucune clé API en <b>mode démo (mock)</b> : les vidéos et portraits sont simulés localement. Ajoutez vos clés API dans Paramètres pour les générations réelles."),
         _sep_html(),
@@ -157,7 +172,7 @@ def _s_projects() -> str:
         ),
         _h("Changer de projet"),
         _ul(
-            "Rendez-vous dans la page <b>Projets</b> depuis la barre latérale",
+            "Rendez-vous dans la page <b>Projets</b> depuis la barre de navigation, en bas de la fenêtre",
             "Cliquez sur un projet récent pour basculer vers lui",
             "PANDORA sauvegarde automatiquement avant de changer",
         ),
@@ -591,8 +606,15 @@ def _s_camera() -> str:
 
 def _s_seedance() -> str:
     return "".join([
-        _h("Seedance 2.0 — Génération vidéo IA", 1),
-        _p("Seedance 2.0 est le moteur de génération vidéo de ByteDance, accessible via fal.ai. PANDORA propose 4 modes de génération vidéo adaptés à chaque usage."),
+        _h("Studio IA — Génération vidéo, son et upscaling", 1),
+        _p("Le Studio IA regroupe toute la production en <b>7 onglets</b> : "
+           "<b>Générer depuis Storyboard</b> · <b>Modifier des clips</b> · <b>Génération directe</b> · "
+           "<b>Sound Design</b> · <b>Upscaling</b> · <b>Vidéothèque</b> · <b>Historique</b>. "
+           "Le moteur principal est <b>Seedance 2.0</b> (ByteDance, via fal.ai) — marqué "
+           "<b>« recommandé »</b> dans le sélecteur de moteurs : c'est lui qui donne les meilleurs "
+           "résultats sur le workflow storyboard. Le bouton de génération s'appelle partout "
+           "<b>▶▶ Lancer la file d'attente</b>, et <b>Ouvrir le dossier</b> est toujours actif, "
+           "même avant la première génération."),
         _sep_html(),
         _h("Les 4 modes de génération"),
         _ul(
@@ -641,8 +663,11 @@ def _s_seedance() -> str:
         ),
         _sep_html(),
         _h("Moteur de génération — 8 moteurs disponibles"),
-        _p("Dans les onglets <b>Créer un nouveau clip</b> et <b>Modifier depuis DaVinci Resolve</b>, "
-           "le menu <b>Moteur de génération</b> donne accès à 8 moteurs vidéo IA. "
+        _p("Dans les onglets <b>Générer depuis Storyboard</b> et <b>Modifier des clips</b>, "
+           "le menu <b>Moteur de génération</b> donne accès aux moteurs vidéo IA compatibles. "
+           "Chaque libellé affiche les capacités réellement utilisées par le workflow "
+           "(<i>raccord i2v · réfs</i>) et <b>Seedance 2.0 est marqué « recommandé »</b> — "
+           "les autres moteurs ne donnent pas encore d'aussi bons résultats. "
            "Le moteur sélectionné s'applique à toute la file d'attente."),
         _ul(
             "<b>Seedance 2.0</b> (ByteDance) — T2V + I2V + Extension · jusqu'à 15 s · lipsync · <i>par défaut · n°2 ELO</i> · $0.02-0.06/s",
@@ -662,7 +687,7 @@ def _s_seedance() -> str:
            "dédiés (image de départ, paramètres avancés…) sans intégration storyboard."),
         _sep_html(),
         _h("Bascule automatique T2V → Référence"),
-        _p("Dans l'onglet <b>Créer un nouveau clip</b>, si des références visuelles sont disponibles (personnages, décors, accessoires assignés au plan), PANDORA bascule automatiquement de <i>text-to-video</i> vers <i>reference-to-video</i> — sans aucune action de votre part."),
+        _p("Dans l'onglet <b>Générer depuis Storyboard</b>, si des références visuelles sont disponibles (personnages, décors, accessoires assignés au plan), PANDORA bascule automatiquement de <i>text-to-video</i> vers <i>reference-to-video</i> — sans aucune action de votre part."),
         _ul(
             "Slot 1 : mosaïque des <b>portraits des personnages</b> assignés au plan",
             "Slot 2 : <b>image du décor</b> assigné au plan",
@@ -682,19 +707,46 @@ def _s_seedance() -> str:
         _h("Historique des générations"),
         _ul(
             "Les 50 dernières générations réelles sont conservées dans l'historique",
-            "Accédez à toutes les vidéos depuis le panneau Historique de l'onglet Seedance",
+            "Accédez à toutes les vidéos depuis l'onglet <b>Historique</b> du Studio IA",
             "Les vidéos sont stockées dans <code>data/Seedance/</code> du dossier projet",
         ),
         _tip("Les prompts sont automatiquement traduits en anglais avant envoi à Seedance 2.0. Rédigez vos prompts en français — la traduction est transparente et optimisée."),
         _sep_html(),
-        _h("Modifier depuis DaVinci Resolve — Génération batch"),
-        _p("L'onglet <b>Modifier depuis DaVinci Resolve</b> permet de transformer en masse des clips de votre timeline DaVinci avec Seedance 2.0. Chaque clip est uploadé comme référence vidéo et Seedance génère une version modifiée selon votre prompt."),
+        _h("Sound Design — Mirelo SFX (nouveau)"),
+        _p("L'onglet <b>Sound Design</b> sonorise vos plans via Mirelo SFX 1.6 (~$0.01/s) :"),
+        _ul(
+            "<b>Prompt → SFX</b> — décrivez l'ambiance ou les effets sonores (en anglais de "
+            "préférence) et obtenez un fichier audio prêt pour la timeline",
+            "<b>Vidéo → bande-son</b> — donnez un clip vidéo : Mirelo génère une bande-son "
+            "<b>synchronisée sur l'image</b> (prompt optionnel pour orienter le style)",
+            "Les fichiers générés sont listés en bas de l'onglet avec un bouton <b>Lire</b>",
+            "<b>Ouvrir le dossier</b> ouvre la destination (<code>data/sound_design/</code>), "
+            "même avant la première génération",
+        ),
+        _sep_html(),
+        _h("Upscaling — Topaz / SeedVR2 (nouveau)"),
+        _p("L'onglet <b>Upscaling</b> monte vos clips en résolution, en lot :"),
+        _ul(
+            "<b>Ajouter des clips</b> ou <b>⇪ Importer la Vidéothèque</b> remplit la file "
+            "d'attente — affichée en <b>petits carrés</b> avec vignettes (clic droit = retirer)",
+            "Choisissez le moteur (<b>Topaz Video</b> qualité max, <b>SeedVR2</b> rapide) "
+            "et le facteur <b>×2</b> (480p→~1080p) ou <b>×4</b> (480p→~4K)",
+            "<b>▶▶ Lancer la file d'attente</b> traite tous les clips, un par un — "
+            "annulable à tout moment (les clips restants sont conservés)",
+            "La sortie garde le <b>même nom que la source</b> : dans DaVinci, un simple "
+            "<b>Relink Media</b> remplace vos clips par la version haute résolution",
+        ),
+        _tip("Workflow économique : générez tout en 480p (rapide et peu cher), montez le film, "
+             "puis upscalez uniquement les plans retenus en ×2 ou ×4."),
+        _sep_html(),
+        _h("Modifier des clips — Génération batch"),
+        _p("L'onglet <b>Modifier des clips</b> permet de transformer en masse des clips de votre timeline DaVinci avec Seedance 2.0. Chaque clip est uploadé comme référence vidéo et Seedance génère une version modifiée selon votre prompt."),
         _ul(
             "<b>1.</b> Dans DaVinci : clic droit sur un clip → <b>Flag</b> → couleur pour le sélectionner "
             "(sans flag = toute la timeline est envoyée)",
             "<b>2.</b> DaVinci → <b>Espace de travail → Scripts → pandora_send</b> "
             "(ou votre raccourci clavier personnalisé)",
-            "<b>3.</b> PANDORA affiche les clips reçus dans l'onglet <b>Modifier depuis DaVinci Resolve</b>",
+            "<b>3.</b> PANDORA affiche les clips reçus dans l'onglet <b>Modifier des clips</b>",
             "<b>4.</b> Écrivez un <b>prompt global</b> (même prompt pour tous les clips) "
             "ou un <b>prompt par clip</b> (cliquez sur chaque vignette pour le personnaliser)",
             "<b>5.</b> Cliquez <b>▶▶ Lancer la file d'attente</b> — traitement séquentiel, 1 clip à la fois",
@@ -828,7 +880,7 @@ def _s_style() -> str:
         _h("Accéder au style visuel"),
         _ul(
             "Depuis l'<b>éditeur de Scénario</b> — combo déroulant dans la barre du haut, à côté des boutons de versions (✚ ✕)",
-            "Depuis la page <b>Style visuel</b> dans la barre latérale — vue complète avec toutes les cartes",
+            "Depuis la page <b>Style visuel</b> dans la barre de navigation — vue complète avec toutes les cartes",
         ),
         _h("20 styles organisés en 4 catégories"),
         _ul(
@@ -975,7 +1027,7 @@ _SECTIONS_EN = [
     ("🚗", "Vehicles"),
     ("◎",  "Camera & Sound"),
     # AI STUDIO
-    ("✦",  "Seedance 2.0"),
+    ("✦",  "AI Studio"),
     ("🎨", "Visual style"),
     ("🎙", "Dubbing"),
     ("💰", "AI Pricing"),
@@ -1005,8 +1057,22 @@ def _e_welcome() -> str:
             "Catalogue locations, props, HMC and vehicles needed for the shoot",
             "Define camera and lens preferences for the film",
             "Choose a <b>visual style</b> that influences all AI generations",
-            "Generate Seedance 2.0 videos: T2V, I2V, Extension, Multimodal Reference",
+            "Generate AI videos: Seedance 2.0 (recommended), Kling, Happy Horse, PixVerse…",
+            "Add sound to your shots with <b>Sound Design</b> (Mirelo SFX: prompt → SFX, video → soundtrack)",
+            "Upscale your clips with <b>Upscaling</b> (Topaz / SeedVR2, ×2/×4)",
             "Automatically import videos into <b>DaVinci Resolve</b> (Studio required)",
+        ),
+        _sep_html(),
+        _h("The new interface"),
+        _p("Since the redesign, PANDORA is organized like DaVinci Resolve:"),
+        _ul(
+            "The <b>navigation bar</b> sits at the <b>bottom of the window</b> — page icons in the "
+            "center, FR/EN flags on the left, <b>Settings</b> at the far right",
+            "The <b>AI assistant</b> lives on the <b>left</b> side — the <b>IA</b> handle opens and closes it",
+            "<b>☰ User manual</b> (red) and <b>✉ Contact us</b> (green) are at the <b>top left</b>",
+            "Support Pandora, Updates and Save remain at the top right",
+            "Pages use the <b>full width of the screen</b>; Settings and the AI Studio forms "
+            "are centered for readability",
         ),
         _sep_html(),
         _h("Recommended workflow"),
@@ -1017,7 +1083,8 @@ def _e_welcome() -> str:
             "<b>4.</b> Auto-generate characters, locations, HMC, props and vehicles from the screenplay",
             "<b>5.</b> Generate the storyboard with Claude AI, refine shot by shot",
             "<b>6.</b> Configure Seedance Moods for each shot",
-            "<b>7.</b> Launch video generation from the storyboard or the Seedance 2.0 tab",
+            "<b>7.</b> Launch video generation from the storyboard or the AI Studio",
+            "<b>8.</b> Add sound (Sound Design) and upscale (Upscaling) as needed",
         ),
         _tip("PANDORA works without any API key in <b>demo (mock) mode</b>: videos and portraits are simulated locally. Add your API keys in Settings for real generations."),
         _sep_html(),
@@ -1050,7 +1117,7 @@ def _e_projects() -> str:
         ),
         _h("Switch project"),
         _ul(
-            "Go to the <b>Projects</b> page from the sidebar",
+            "Go to the <b>Projects</b> page from the navigation bar at the bottom of the window",
             "Click on a recent project to switch to it",
             "PANDORA saves automatically before switching",
         ),
@@ -1468,8 +1535,14 @@ def _e_camera() -> str:
 
 def _e_seedance() -> str:
     return "".join([
-        _h("Seedance 2.0 — AI video generation", 1),
-        _p("Seedance 2.0 is ByteDance's video generation engine, accessible via fal.ai. PANDORA offers 4 video generation modes adapted to every use case."),
+        _h("AI Studio — Video generation, sound and upscaling", 1),
+        _p("The AI Studio gathers all production in <b>7 tabs</b>: "
+           "<b>Generate from Storyboard</b> · <b>Edit clips</b> · <b>Direct generation</b> · "
+           "<b>Sound Design</b> · <b>Upscaling</b> · <b>Video library</b> · <b>History</b>. "
+           "The main engine is <b>Seedance 2.0</b> (ByteDance, via fal.ai) — marked "
+           "<b>“recommended”</b> in the engine selector: it gives the best results on the "
+           "storyboard workflow. The generation button is named <b>▶▶ Start the queue</b> "
+           "everywhere, and <b>Open folder</b> is always active, even before the first generation."),
         _sep_html(),
         _h("The 4 generation modes"),
         _ul(
@@ -1518,8 +1591,11 @@ def _e_seedance() -> str:
         ),
         _sep_html(),
         _h("Generation engine — 8 engines available"),
-        _p("In the <b>Create a new clip</b> and <b>Edit from DaVinci Resolve</b> tabs, "
-           "the <b>Generation engine</b> menu gives access to 8 AI video engines. "
+        _p("In the <b>Generate from Storyboard</b> and <b>Edit clips</b> tabs, "
+           "the <b>Generation engine</b> menu gives access to the compatible AI video engines. "
+           "Each label shows the capabilities actually used by the workflow "
+           "(<i>i2v continuity · refs</i>) and <b>Seedance 2.0 is marked “recommended”</b> — "
+           "the other engines do not yet deliver results as good. "
            "The selected engine applies to the entire queue."),
         _ul(
             "<b>Seedance 2.0</b> (ByteDance) — T2V + I2V + Extension · up to 15 s · lipsync · <i>default · #2 ELO</i> · $0.02-0.06/s",
@@ -1539,7 +1615,7 @@ def _e_seedance() -> str:
            "(start image, advanced parameters…) without storyboard integration."),
         _sep_html(),
         _h("Automatic T2V → Reference switch"),
-        _p("In the <b>Create a new clip</b> tab, if visual references are available (characters, locations, props assigned to the shot), PANDORA automatically switches from <i>text-to-video</i> to <i>reference-to-video</i> — with no action on your part."),
+        _p("In the <b>Generate from Storyboard</b> tab, if visual references are available (characters, locations, props assigned to the shot), PANDORA automatically switches from <i>text-to-video</i> to <i>reference-to-video</i> — with no action on your part."),
         _ul(
             "Slot 1: mosaic of <b>character portraits</b> assigned to the shot",
             "Slot 2: <b>location image</b> assigned to the shot",
@@ -1559,19 +1635,46 @@ def _e_seedance() -> str:
         _h("Generation history"),
         _ul(
             "The last 50 real generations are kept in history",
-            "Access all videos from the History panel of the Seedance tab",
+            "Access all videos from the <b>History</b> tab of the AI Studio",
             "Videos are stored in <code>data/Seedance/</code> of the project folder",
         ),
         _tip("Prompts are automatically translated to English before being sent to Seedance 2.0. Write your prompts in French — translation is transparent and optimised."),
         _sep_html(),
-        _h("Edit from DaVinci Resolve — Batch generation"),
-        _p("The <b>Edit from DaVinci Resolve</b> tab lets you bulk-transform clips from your DaVinci timeline with Seedance 2.0. Each clip is uploaded as a video reference and Seedance generates a modified version based on your prompt."),
+        _h("Sound Design — Mirelo SFX (new)"),
+        _p("The <b>Sound Design</b> tab adds sound to your shots via Mirelo SFX 1.6 (~$0.01/s):"),
+        _ul(
+            "<b>Prompt → SFX</b> — describe the ambience or sound effects (preferably in "
+            "English) and get an audio file ready for the timeline",
+            "<b>Video → soundtrack</b> — give it a video clip: Mirelo generates a soundtrack "
+            "<b>synchronized to the picture</b> (optional prompt to guide the style)",
+            "Generated files are listed at the bottom of the tab with a <b>Play</b> button",
+            "<b>Open folder</b> opens the destination (<code>data/sound_design/</code>), "
+            "even before the first generation",
+        ),
+        _sep_html(),
+        _h("Upscaling — Topaz / SeedVR2 (new)"),
+        _p("The <b>Upscaling</b> tab upscales your clips in batch:"),
+        _ul(
+            "<b>Add clips</b> or <b>⇪ Import the Video library</b> fills the queue — "
+            "shown as <b>small cards</b> with thumbnails (right-click = remove)",
+            "Choose the engine (<b>Topaz Video</b> max quality, <b>SeedVR2</b> fast) "
+            "and the factor <b>×2</b> (480p→~1080p) or <b>×4</b> (480p→~4K)",
+            "<b>▶▶ Start the queue</b> processes every clip, one at a time — "
+            "cancellable at any moment (remaining clips are kept)",
+            "The output keeps the <b>same name as the source</b>: in DaVinci, a simple "
+            "<b>Relink Media</b> swaps your clips for the high-resolution version",
+        ),
+        _tip("Budget workflow: generate everything in 480p (fast and cheap), edit the film, "
+             "then upscale only the selected shots at ×2 or ×4."),
+        _sep_html(),
+        _h("Edit clips — Batch generation"),
+        _p("The <b>Edit clips</b> tab lets you bulk-transform clips from your DaVinci timeline with Seedance 2.0. Each clip is uploaded as a video reference and Seedance generates a modified version based on your prompt."),
         _ul(
             "<b>1.</b> In DaVinci: right-click a clip → <b>Flag</b> → color to select it "
             "(no flag = entire timeline is sent)",
             "<b>2.</b> DaVinci → <b>Workspace → Scripts → pandora_send</b> "
             "(or your custom keyboard shortcut)",
-            "<b>3.</b> PANDORA displays the received clips in the <b>Edit from DaVinci Resolve</b> tab",
+            "<b>3.</b> PANDORA displays the received clips in the <b>Edit clips</b> tab",
             "<b>4.</b> Write a <b>global prompt</b> (same for all clips) "
             "or a <b>per-clip prompt</b> (click each thumbnail to customise)",
             "<b>5.</b> Click <b>▶▶ Launch queue</b> — sequential processing, 1 clip at a time",
@@ -1693,7 +1796,7 @@ def _e_style() -> str:
         _h("Access the visual style"),
         _ul(
             "From the <b>Screenplay editor</b> — configuration strip above the editor (always visible)",
-            "From the <b>Visual style</b> page in the sidebar — full view with all cards",
+            "From the <b>Visual style</b> page in the navigation bar — full view with all cards",
         ),
         _h("30+ styles organised in 6 categories"),
         _ul(

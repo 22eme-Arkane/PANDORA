@@ -296,34 +296,46 @@ CORPUS: dict[str, dict] = {
     },
     "seedance": {
         "title": "Studio IA",
-        "context": "Génération vidéo IA — 13 moteurs dont Seedance, Kling, Veo 3.1.",
+        "context": ("Génération vidéo IA, sound design et upscaling — 7 onglets : "
+                    "Storyboard, Modifier, Génération directe, Sound Design, "
+                    "Upscaling, Vidéothèque, Historique."),
         "tips": [
-            "T2V : décrivez la scène en français, la traduction est automatique.",
+            "Décrivez la scène en français, la traduction est automatique.",
+            "Moteur recommandé : Seedance 2.0 — les meilleurs résultats du workflow.",
             "Si des personnages/décors sont assignés, le mode référence s'active.",
-            "Génération directe : 13 moteurs (Kling v3 Pro, Veo 3.1, Sora 2…).",
-            "La vidéothèque centralise tous les clips avec prévisualisation.",
-            "Cochez 'Import auto' pour envoyer les clips dans DaVinci Resolve.",
+            "Le bouton '▶▶ Lancer la file d'attente' lance TOUTES les générations.",
+            "'Ouvrir le dossier' est toujours actif — même avant de générer.",
         ],
         "guide": (
             "Générer depuis Storyboard\n"
-            "Sélectionnez un plan et cliquez '▶▶ Lancer'. Le prompt du plan est "
-            "utilisé, traduit en anglais, et les références (personnages, décor) "
-            "sont envoyées automatiquement. Quand des références visuelles sont disponibles, "
-            "elles guident Seedance pour une cohérence visuelle accrue.\n\n"
+            "Sélectionnez un ou plusieurs plans et cliquez '▶▶ Lancer la file "
+            "d'attente'. Le prompt de chaque plan est traduit en anglais et les "
+            "références (personnages, décor, accessoires) partent automatiquement. "
+            "Le menu Moteur affiche les capacités réelles de chacun (raccord i2v, "
+            "réfs) — Seedance 2.0 est marqué « recommandé » : c'est lui qui donne "
+            "les meilleurs résultats sur ce workflow.\n\n"
             "Modifier des clips\n"
-            "Importez des clips existants et modifiez-les avec un prompt. "
-            "Seedance applique la modification en préservant la structure visuelle. "
-            "LatentSync resynchronise les lèvres sur une nouvelle piste audio.\n\n"
+            "Importez des clips existants (ou recevez-les depuis DaVinci via "
+            "pandora_send) et modifiez-les avec un prompt. Seedance préserve la "
+            "structure visuelle ; LatentSync resynchronise les lèvres au besoin.\n\n"
             "Génération directe\n"
-            "Accès aux 13 moteurs (Seedance, Happy Horse, Kling, Veo 3.1, "
-            "PixVerse, Sora 2…) avec leurs paramètres et tarifs spécifiques.\n\n"
+            "Accès direct aux moteurs (Seedance, Happy Horse, Kling, Veo 3.1, "
+            "PixVerse, Sora 2…) avec leurs paramètres et tarifs spécifiques, "
+            "sans passer par le storyboard.\n\n"
+            "Sound Design (nouveau)\n"
+            "Deux modes Mirelo SFX : un prompt son → SFX/ambiance, ou un clip "
+            "vidéo → bande-son synchronisée sur l'image (~$0.01/s).\n\n"
+            "Upscaling (nouveau)\n"
+            "File d'attente de clips à monter en résolution (Topaz ou SeedVR2, "
+            "×2/×4). La sortie garde le MÊME NOM que la source : dans DaVinci, "
+            "un simple Relink Media remplace vos clips par la version haute "
+            "résolution. 'Importer la Vidéothèque' charge tout en un clic.\n\n"
             "Vidéothèque\n"
-            "Galerie de tous les clips générés pour ce projet. Cliquez sur un clip "
-            "pour le prévisualiser, l'envoyer dans 'Modifier des clips', ou l'ouvrir.\n\n"
+            "Galerie de tous les clips générés. Cliquez pour prévisualiser, "
+            "envoyer vers 'Modifier des clips' ou ouvrir le fichier.\n\n"
             "Tarifs\n"
-            "La génération est facturée via fal.ai. Seedance 2.0 est le moteur "
-            "recommandé pour la cohérence visuelle. Consultez le Manuel pour le "
-            "comparatif des tarifs par moteur."
+            "La génération est facturée via fal.ai. Consultez le Manuel "
+            "d'utilisation (en haut à gauche) pour le comparatif par moteur."
         ),
     },
     "settings": {
@@ -371,26 +383,32 @@ CORPUS: dict[str, dict] = {
     },
     "live_sequences": {
         "title": "Séquences",
-        "context": "Enchaînements de loops pour le live (équivalent storyboard).",
+        "context": "Découpage de la performance en plans calés sur la musique.",
         "tips": [
-            "Composez des séquences de loops par segment.",
-            "À venir : style par segment, durées, transitions, export Resolume.",
+            "« Caler sur la musique » quantise les durées en MESURES (BPM du set).",
+            "« Générer les Moods » crée une image d'ancrage par plan.",
+            "Maj+clic = plage de plans, lasso souris = sélection visuelle.",
         ],
         "guide": "",
     },
     "mapping": {
         "title": "Mapping vidéo",
-        "context": "Mapping vidéo (à venir).",
+        "context": "Séquences projetées sur une façade (caméra fixe, raccords par keyframes).",
         "tips": [
-            "Préparation assistée du mapping de projection.",
+            "La façade isolée sur fond noir (BiRefNet) sert de canevas ET de masque.",
+            "« ▱ Calage Resolume » génère le preset Advanced Output + la mire du bâtiment.",
+            "Le contenu reste confiné DANS la silhouette visible sur la photo.",
         ],
         "guide": "",
     },
     "resolume": {
         "title": "Resolume",
-        "context": "Contrôle de composition Resolume — expérimental.",
+        "context": "Contrôleur Resolume — envoi des clips dans les slots via l'API REST.",
         "tips": [
-            "Onglet conservé pour évaluation — non prioritaire.",
+            "Activez « Enable Webserver & REST API » dans Resolume (port 8080).",
+            "Glissez-déposez les clips de la bibliothèque vers la grille de slots.",
+            "« Une couche par acte » répartit SQ1/SQ2/… sur des couches distinctes.",
+            "Le mode show enchaîne les clips au tempo (Play Once & Hold + Autopilot).",
         ],
         "guide": "",
     },
@@ -406,21 +424,29 @@ _DEFAULT_CORPUS = {
     "title": "PANDORA",
     "context": "Logiciel de pré-production cinéma pour DaVinci Resolve.",
     "tips": [
-        "Naviguez entre les sections depuis la barre latérale gauche.",
-        "Les données sont sauvegardées automatiquement.",
-        "Utilisez Ctrl+S pour une sauvegarde manuelle.",
+        "Naviguez entre les pages depuis la barre en BAS de la fenêtre (façon DaVinci).",
+        "Les données sont sauvegardées automatiquement (Ctrl+S = sauvegarde manuelle).",
+        "Manuel d'utilisation et Nous contacter : en haut à gauche de la fenêtre.",
+        "Paramètres : tout en bas à droite, à côté des onglets.",
     ],
     "guide": (
         "Bienvenue dans PANDORA\n"
         "PANDORA est un outil de pré-production cinéma intégré à DaVinci Resolve. "
-        "Il couvre l'ensemble du pipeline de pré-production : scénario, storyboard, "
-        "castings, décors, accessoires, HMC, véhicules et génération vidéo IA.\n\n"
+        "Il couvre l'ensemble du pipeline : scénario, storyboard, castings, décors, "
+        "accessoires, HMC, véhicules, génération vidéo IA, sound design et upscaling.\n\n"
+        "La nouvelle interface\n"
+        "La navigation vit en BAS de la fenêtre, comme la barre de pages de DaVinci "
+        "Resolve : les icônes des pages au centre, les drapeaux FR/EN à gauche, "
+        "Paramètres tout à droite. Le Manuel d'utilisation (rouge) et Nous contacter "
+        "(vert) sont en haut à gauche. Cet assistant vit à GAUCHE de l'écran — "
+        "la poignée « IA » l'ouvre et le ferme. Les pages occupent toute la largeur.\n\n"
         "Démarrage rapide\n"
         "1. Créez ou ouvrez un projet depuis la page Projets.\n"
-        "2. Rédigez votre scénario et utilisez Claude IA pour le formater.\n"
+        "2. Rédigez votre scénario et utilisez l'IA pour le mettre en page.\n"
         "3. Générez le storyboard depuis le scénario.\n"
         "4. Ajoutez personnages, décors et accessoires avec images de référence.\n"
-        "5. Générez vos clips vidéo depuis Studio IA."
+        "5. Générez vos clips vidéo depuis Studio IA (Seedance 2.0 recommandé).\n"
+        "6. Sonorisez (Sound Design) et montez en résolution (Upscaling) au besoin."
     ),
 }
 
