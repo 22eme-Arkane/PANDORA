@@ -340,6 +340,11 @@ class TabVideoLibrary(QScrollArea):
 
     # ── Scan ─────────────────────────────────────────────────────────────────
 
+    def list_all_clips(self) -> list[str]:
+        """Tous les clips de la Vidéothèque — pont « Importer la Vidéothèque »
+        de l'onglet Upscaling (même API que la Vidéothèque Live)."""
+        return self._scan_videos()
+
     def _scan_videos(self) -> list[str]:
         import core.context as ctx
         import core.config  as cfg

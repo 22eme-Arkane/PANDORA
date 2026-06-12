@@ -84,22 +84,35 @@ class SeedanceWidget(QWidget):
         # (refonte 2026-06-12, portée depuis Live)
         self.tabs.tabBar().setDrawBase(False)
 
+        from ui.tab_sound_design import TabSoundDesign
+        from ui.tab_upscale import TabUpscale
+
         self.tab_t2v      = TabT2V()
         self.tab_davinci  = TabDavinciEdit()
         self.tab_engines  = TabVideoEngines()
+        self.tab_sound    = TabSoundDesign()
+        self.tab_upscale  = TabUpscale()
         self.tab_history  = TabHistory()
         self.tab_library  = TabVideoLibrary()
+
+        # Upscaling relié à la Vidéothèque (« Importer la Vidéothèque »)
+        self.tab_upscale.set_library_provider(self.tab_library.list_all_clips)
 
         # Lisibilité plein écran (nav en barre basse) : le contenu des onglets
         # FORMULAIRE est plafonné en largeur et centré — le fond remplit les
         # côtés. Vidéothèque et Historique (galeries/listes) gardent la pleine
         # largeur.
-        for _t in (self.tab_t2v, self.tab_davinci, self.tab_engines):
+        for _t in (self.tab_t2v, self.tab_davinci, self.tab_engines,
+                   self.tab_sound, self.tab_upscale):
             self._clamp_content_width(_t)
 
+        # Ordre validé (2026-06-13) : après Génération directe viennent
+        # Sound Design puis Upscaling, comme dans le Studio IA Live.
         self.tabs.addTab(self.tab_t2v,     "Générer depuis Storyboard")
         self.tabs.addTab(self.tab_davinci, "Modifier des clips")
         self.tabs.addTab(self.tab_engines, "Génération directe")
+        self.tabs.addTab(self.tab_sound,   "Sound Design")
+        self.tabs.addTab(self.tab_upscale, "Upscaling")
         self.tabs.addTab(self.tab_library, "Vidéothèque")
         self.tabs.addTab(self.tab_history, "Historique")
 

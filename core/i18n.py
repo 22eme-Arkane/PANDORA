@@ -2956,6 +2956,22 @@ _FR_TO_EN: dict[str, str] = {
     "Ouvre le dossier de destination des upscales.": "Opens the upscales destination folder.",
     "Ouvre le dossier de destination du sound design.": "Opens the sound design destination folder.",
     "Ouvre le dossier de destination des clips.": "Opens the clips destination folder.",
+
+    # ── Studio IA Cinéma : onglets Sound Design + Upscaling (portés du Live) ──
+    "Upscaling de vos clips": "Upscale your clips",
+    "▸ La sortie garde le MÊME NOM que la source → Relink Media direct dans DaVinci.":
+        "▸ The output keeps the SAME NAME as the source → direct Relink Media in DaVinci.",
+    "Sonorise tes plans : un prompt son → SFX/ambiance, ou un clip vidéo → bande-son synchronisée (Mirelo SFX 1.6, ~$0.01/s).":
+        "Add sound to your shots: a sound prompt → SFX/ambience, or a video clip → synchronized soundtrack (Mirelo SFX 1.6, ~$0.01/s).",
+    "Vidéo → bande-son": "Video → soundtrack",
+    "📁  Choisir un clip vidéo…": "📁  Choose a video clip…",
+    "Aucun clip sélectionné": "No clip selected",
+    "Choisir un clip vidéo": "Choose a video clip",
+    "Choisis d'abord un clip vidéo.": "Choose a video clip first.",
+    "Prompt son optionnel (anglais) pour orienter la bande-son. Laisse vide pour une sonorisation automatique du clip.":
+        "Optional sound prompt (English) to guide the soundtrack. Leave empty for automatic clip scoring.",
+    "Décris l'ambiance / les effets sonores (en anglais de préférence). Ex. « rain on a tin roof, distant thunder, no music, no vocals »":
+        "Describe the ambience / sound effects (preferably in English). E.g. \"rain on a tin roof, distant thunder, no music, no vocals\"",
     "Statut": "Status",
     "Double-clic : lire le clip upscalé": "Double-click: play the upscaled clip",
     "Clic droit : retirer de la file": "Right click: remove from queue",

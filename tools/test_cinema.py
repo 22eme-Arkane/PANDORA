@@ -150,6 +150,43 @@ def refonte_interface():
     assert "setFixedHeight(60)" in inspect.getsource(_PSB._build_shots_topbar)
 
 
+@test
+def studio_sound_design_upscaling():
+    """Studio IA Cinéma : onglets Sound Design + Upscaling (portés du Live) —
+    ordre après Génération directe, Vidéothèque branchée, AUCUN import Live."""
+    import ui.seedance_widget as SW
+    src = inspect.getsource(SW)
+    assert (src.index("addTab(self.tab_engines")
+            < src.index("addTab(self.tab_sound")
+            < src.index("addTab(self.tab_upscale")
+            < src.index("addTab(self.tab_library")), \
+        "ordre : Génération directe → Sound Design → Upscaling → Vidéothèque"
+    assert "set_library_provider(self.tab_library.list_all_clips)" in src, \
+        "Upscaling relié à la Vidéothèque Cinéma"
+    assert "self.tab_sound, self.tab_upscale" in src, \
+        "Sound Design + Upscaling plafonnés/centrés comme les autres formulaires"
+    # Copies Cinéma : aucun IMPORT de fichier Live (séparation stricte)
+    import ui.tab_upscale as UP
+    import ui.tab_sound_design as SD
+    for mod in (UP, SD):
+        for line in inspect.getsource(mod).splitlines():
+            if line.strip().startswith(("from ui.", "import ui.")):
+                assert "_live" not in line, f"{mod.__name__} : import Live interdit"
+    # Instanciation headless + invariants
+    t = UP.TabUpscale()
+    assert "Lancer la file d'attente" in t._btn_run.text(), "nom unique du bouton"
+    assert t._btn_open.isEnabled(), "Ouvrir le dossier toujours actif"
+    real = os.path.abspath(__file__)
+    assert t.add_clips_from_paths([real, real]) == 1, "dédoublonnage de la file"
+    assert "abandon_thread(self._worker)" in inspect.getsource(UP.TabUpscale._process_next), \
+        "chaîne protégée (worker précédent parqué)"
+    sd = SD.TabSoundDesign()
+    assert "Lancer la file d'attente" in sd._btn_generate.text()
+    assert sd._btn_open_dir.isEnabled()
+    from ui.tab_video_library import TabVideoLibrary
+    assert hasattr(TabVideoLibrary, "list_all_clips")
+
+
 # ══════════════════════════════════════════════════════════════════════════════
 # Prompts Cinéma — enrichis mais FIDÈLES au scénario
 # ══════════════════════════════════════════════════════════════════════════════
