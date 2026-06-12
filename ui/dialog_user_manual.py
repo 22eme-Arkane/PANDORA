@@ -1935,6 +1935,14 @@ _BUILDERS_EN = [
 # ── Dialogue ───────────────────────────────────────────────────────────────────
 
 class UserManualDialog(QDialog):
+    # Contenu surchargeable par sous-classe (le manuel LIVE remplace ces six
+    # attributs — voir ui/dialog_user_manual_live.py) ; défaut = Cinéma.
+    SECTIONS_FR = _SECTIONS
+    GROUPS_FR   = _GROUPS_FR
+    BUILDERS_FR = _BUILDERS
+    SECTIONS_EN = _SECTIONS_EN
+    GROUPS_EN   = _GROUPS_EN
+    BUILDERS_EN = _BUILDERS_EN
 
     def __init__(self, parent=None, start_section: int = 0):
         super().__init__(parent)
@@ -2076,8 +2084,8 @@ class UserManualDialog(QDialog):
             f"padding:10px 10px 3px 12px;"
         )
 
-        groups   = _GROUPS_FR   if self._lang == "fr" else _GROUPS_EN
-        sections = _SECTIONS    if self._lang == "fr" else _SECTIONS_EN
+        groups   = self.GROUPS_FR   if self._lang == "fr" else self.GROUPS_EN
+        sections = self.SECTIONS_FR if self._lang == "fr" else self.SECTIONS_EN
         sec_idx  = 0
         for group_name, group_count in groups:
             grp_lbl = QLabel(group_name)
@@ -2111,7 +2119,7 @@ class UserManualDialog(QDialog):
         self._current_idx = idx
         for i, btn in enumerate(self._nav_btns):
             btn.setChecked(i == idx)
-        builders = _BUILDERS if self._lang == "fr" else _BUILDERS_EN
+        builders = self.BUILDERS_FR if self._lang == "fr" else self.BUILDERS_EN
         html = builders[idx]()
         self._content.setHtml(
             f'<html><body style="background:{CP["bg0"]};'

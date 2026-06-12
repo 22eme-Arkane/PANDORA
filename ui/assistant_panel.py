@@ -370,16 +370,85 @@ CORPUS: dict[str, dict] = {
     },
 
     # ── PANDORA | Live ───────────────────────────────────────────────────────
-    "live_studio": {
-        "title": "Studio IA — Live",
-        "context": "Génération de loops vidéo optimisés pour Resolume.",
+    "live_conducteur": {
+        "title": "Conducteur",
+        "context": "Trame écrite de la performance — musiques du set, façade, IA.",
         "tips": [
-            "Onglet « Génération directe » : choisissez un moteur et lancez un loop.",
-            "Un sélecteur de 20 styles VJ sera intégré à la génération.",
-            "Mode loop Resolume : la première image rejoint la dernière (boucle parfaite).",
-            "Sans clé fal.ai, la génération est simulée (mode démo).",
+            "Ajoutez les musiques du set : BPM, énergie et drops nourrissent l'IA.",
+            "Mode Mapping : isolez la façade sur fond noir (détourage intégré).",
+            "« Mise en page PANDORA » produit un PROMPT VIDÉO + un PROMPT SON par plan.",
+            "« ⤢ Rouvrir la fenêtre » est tout en bas, sous « Tout générer ».",
+        ],
+        "guide": (
+            "Le Conducteur\n"
+            "Écrivez la trame du show (actes, moments, ambiances). L'IA s'appuie "
+            "dessus pour l'arrangement, la mise en page et le découpage.\n\n"
+            "Musiques du set\n"
+            "Ajoutez vos morceaux : l'analyse locale extrait BPM, énergie et drops. "
+            "Cette timeline musicale guide les durées des plans et les prompts son.\n\n"
+            "Façade (mode Mapping)\n"
+            "La photo de la façade isolée sur fond noir sert de canevas aux moods, "
+            "de masque de confinement et de base au calage Resolume.\n\n"
+            "Générer\n"
+            "« Proposer un arrangement » (analyse + co-écriture), « Mise en page "
+            "PANDORA » (actes/plans + prompts), « Générer le découpage » (séquence "
+            "Live ou Mapping), ou « ⚡ Tout générer » pour enchaîner."
+        ),
+    },
+    "live_casting": {
+        "title": "Casting",
+        "context": "Performers de la performance, avec portraits IA.",
+        "tips": [
+            "Identifiés automatiquement depuis le Conducteur (« Générer les personnages »).",
+            "Les portraits partent en référence à la génération des clips.",
         ],
         "guide": "",
+    },
+    "live_accessoires": {
+        "title": "Accessoires",
+        "context": "Objets de scène, avec images de référence IA.",
+        "tips": [
+            "Identifiés depuis le Conducteur ou ajoutés à la main.",
+            "Envoyés en référence aux moteurs vidéo pour la cohérence.",
+        ],
+        "guide": "",
+    },
+    "live_vehicules": {
+        "title": "Véhicules",
+        "context": "Véhicules de la performance, avec images de référence IA.",
+        "tips": [
+            "Identifiés depuis le Conducteur ou ajoutés à la main.",
+            "Envoyés en référence aux moteurs vidéo pour la cohérence.",
+        ],
+        "guide": "",
+    },
+    "live_studio": {
+        "title": "Studio IA — Live",
+        "context": ("Production des clips — 7 onglets : Séquences, Génération directe, "
+                    "Modifier, Sound Design, Upscaling, Vidéothèque, Historique."),
+        "tips": [
+            "Conducteur visuel : clic = un plan, Ctrl/Maj/lasso = file d'attente.",
+            "Moteur recommandé : Seedance 2.0 (capacités affichées dans le menu).",
+            "'▶▶ Lancer la file d'attente' partout — annulable à tout moment.",
+            "'Ouvrir le dossier' est toujours actif, même avant de générer.",
+            "Vidéothèque : lecture, envoi vers Modifier / Upscaling / → Resolume.",
+        ],
+        "guide": (
+            "Générer depuis Séquences\n"
+            "Sélectionnez les plans dans le Conducteur visuel (Ctrl/Maj/lasso) et "
+            "lancez la file. Mode Mapping : façade en référence, keyframes de moods "
+            "(raccords exacts), contenu confiné dans la silhouette.\n\n"
+            "Sound Design\n"
+            "Le Conducteur charge le prompt SON et la durée de chaque plan ; chaque "
+            "ambiance est conformée à la durée calée. Option « Assembler la "
+            "bande-son (durée exacte) » : une piste = la timeline.\n\n"
+            "Upscaling\n"
+            "File en petits carrés, Topaz/SeedVR2, ×2/×4 — la sortie garde le même "
+            "nom que la source (relink direct).\n\n"
+            "Vidéothèque\n"
+            "Tous les clips du projet ; « → Resolume » pré-charge la file du "
+            "contrôleur."
+        ),
     },
     "live_sequences": {
         "title": "Séquences",
@@ -388,8 +457,37 @@ CORPUS: dict[str, dict] = {
             "« Caler sur la musique » quantise les durées en MESURES (BPM du set).",
             "« Générer les Moods » crée une image d'ancrage par plan.",
             "Maj+clic = plage de plans, lasso souris = sélection visuelle.",
+            "Colonnes dédiées : TC, Musique, BPM, Transition, Prompt vidéo/son.",
         ],
-        "guide": "",
+        "guide": (
+            "Caler sur la musique\n"
+            "Quantise la durée de chaque plan en MESURES du morceau assigné et "
+            "attire les cuts sur les DROPS — calcul local, exact. Les clips générés "
+            "sont ensuite conformés à ces durées (aucune dérive en timeline).\n\n"
+            "Moods\n"
+            "Une image d'ancrage par plan. En Mapping, le mood est généré SUR la "
+            "façade et sert de keyframe de raccord entre plans."
+        ),
+    },
+    "live_seq_mapping": {
+        "title": "Séquences Mapping",
+        "context": "Séquence continue projetée sur une façade (caméra fixe).",
+        "tips": [
+            "La façade isolée sur fond noir sert de canevas ET de masque.",
+            "Raccords par keyframes : le mood du plan N+1 termine le plan N.",
+            "Le contenu reste confiné dans la silhouette VISIBLE, à échelle exacte.",
+            "« ▱ Calage Resolume » : preset Advanced Output + mire du bâtiment.",
+        ],
+        "guide": (
+            "Le principe\n"
+            "Une séquence continue sur façade VERROUILLÉE : caméra fixe, l'architecture "
+            "visible reste à position et échelle exactes (la projection se superpose "
+            "au vrai bâtiment). La façade peut disparaître, changer de matière ou "
+            "être recouverte — jamais zoomer ni glisser.\n\n"
+            "Calage Resolume\n"
+            "Le polygone de la façade est extrait automatiquement du masque et écrit "
+            "en preset Advanced Output, avec une mire de calage propre au bâtiment."
+        ),
     },
     "mapping": {
         "title": "Mapping vidéo",
@@ -410,12 +508,30 @@ CORPUS: dict[str, dict] = {
             "« Une couche par acte » répartit SQ1/SQ2/… sur des couches distinctes.",
             "Le mode show enchaîne les clips au tempo (Play Once & Hold + Autopilot).",
         ],
-        "guide": "",
+        "guide": (
+            "Connexion\n"
+            "Resolume → Préférences → Webserver → « Enable Webserver & REST API » "
+            "(port 8080), puis « Connecter » — le point passe au vert.\n\n"
+            "Envoi du set\n"
+            "« Envoyer vers Resolume » charge les clips dans les slots : tri naturel "
+            "(SQ1_P1, SQ1_P2…), colonnes ajoutées automatiquement, BPM de la compo "
+            "réglé sur le set. « Une couche par acte » répartit les séquences.\n\n"
+            "Mode show\n"
+            "Chaque clip passe en Play Once & Hold + Beat Snap + Autopilot Next : "
+            "le set s'enchaîne seul, calé au tempo.\n\n"
+            "Manipulation directe\n"
+            "Drag & drop multi vers les slots, Maj+clic = vider un slot, "
+            "« Vider la couche » dans l'en-tête de la grille."
+        ),
     },
     "live_settings": {
         "title": "Paramètres",
-        "context": "Paramètres du module Live.",
-        "tips": [],
+        "context": "Connexion Resolume + clés API (partagées avec Cinéma) + assistant IA.",
+        "tips": [
+            "Hôte/port Resolume + test de connexion en tête de page.",
+            "Les clés fal.ai et Anthropic sont partagées avec PANDORA | Cinéma.",
+            "Choisissez l'assistant IA : Claude, Fable 5, Mistral ou Ollama local.",
+        ],
         "guide": "",
     },
 }

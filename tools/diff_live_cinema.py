@@ -136,6 +136,13 @@ def report(verbose: bool = False) -> int:
             print("  ✓ alias — zéro doublon (réexporte la classe Cinéma ; "
                   "procédure de divergence dans l'en-tête)")
             continue
+        if "Divergence ASSUMÉE" in "".join(ll[:8]):
+            # Contenu distinct PAR NATURE (ex. manuel Live) : sous-classe du
+            # squelette Cinéma, sections propres — pas de comparaison méthode
+            # à méthode, l'en-tête documente la divergence.
+            print(f"\n{cin_rel}  ↔  {live_rel}")
+            print("  ✓ divergence totale documentée (sous-classe, contenu Live dédié)")
+            continue
         ratio = difflib.SequenceMatcher(None, cl, ll).ratio() * 100
 
         dc, dl = _defs(cin), _defs(live)
