@@ -146,6 +146,7 @@ class _LiveNavItem(QWidget):
 # L'ordre gauche→droite reprend l'ancien ordre haut→bas du dashboard latéral.
 _NAV_ITEMS = [
     ("⊞", "Projets",             "projects",    "projets.png"),
+    None,
     ("✎", "Conducteur",          "conducteur",  "scenario.png"),
     None,
     ("▤", "Séquences Live",      "seq_live",    "storyboard.png"),
@@ -164,8 +165,9 @@ _NAV_ITEMS = [
 
 class _LiveSidebar(QWidget):
     """Barre de navigation BASSE — taskbar façon DaVinci Resolve / Windows :
-    drapeaux de langue à gauche, icônes de pages au centre, Manuel/Contact à
-    droite. Toute la largeur de l'écran revient aux pages."""
+    drapeaux de langue à gauche, icônes de pages au centre, Contact puis
+    Paramètres en bas à droite (le Manuel vit dans la topbar, en haut à
+    gauche). Toute la largeur de l'écran revient aux pages."""
     nav_clicked           = pyqtSignal(str)
     manual_requested      = pyqtSignal()
     contact_requested     = pyqtSignal()
@@ -214,15 +216,24 @@ class _LiveSidebar(QWidget):
         lay.addWidget(_vsep())
         lay.addStretch()
 
-        # ── Centre : items de navigation (séparateurs verticaux entre groupes) ──
+        # ── Centre : items de navigation (séparateurs verticaux entre groupes).
+        # Paramètres est extrait du groupe central : il vit en BAS À DROITE.
         self._items: dict[str, _LiveNavItem] = {}
+        _settings_entry = None
+        _pending_sep = False
         for entry in _NAV_ITEMS:
             if entry is None:
+                _pending_sep = True
+                continue
+            icon, label, key, icon_file = entry
+            if key == "settings":
+                _settings_entry = entry
+                continue
+            if _pending_sep and self._items:
                 lay.addSpacing(4)
                 lay.addWidget(_vsep())
                 lay.addSpacing(4)
-                continue
-            icon, label, key, icon_file = entry
+            _pending_sep = False
             item = _LiveNavItem(icon, translate(label), key, icon_file=icon_file)
             item.nav_clicked.connect(self.nav_clicked)
             self._items[key] = item
@@ -232,7 +243,8 @@ class _LiveSidebar(QWidget):
         lay.addWidget(_vsep())
         lay.addSpacing(4)
 
-        # ── Droite : Manuel / Contact (compacts, icône seule) ─────────────────
+        # ── Droite : Contact (compact) puis Paramètres tout au bord ──────────
+        # (le Manuel d'utilisation vit désormais dans la topbar, en haut à gauche)
         _ss_yellow = (
             "QPushButton{background:transparent;color:#c8a400;"
             "border:1px solid rgba(200,164,0,0.35);border-radius:6px;"
@@ -242,17 +254,21 @@ class _LiveSidebar(QWidget):
             "QPushButton:pressed{background:rgba(245,197,24,0.18);}"
         )
 
-        self._btn_manual = QPushButton("☰")
-        self._btn_manual.setToolTip(translate("Manuel d'utilisation"))
         self._btn_contact = QPushButton("✉")
         self._btn_contact.setToolTip(translate("Nous contacter"))
-        for _b, _sig in ((self._btn_manual, self.manual_requested),
-                         (self._btn_contact, self.contact_requested)):
-            _b.setFixedSize(32, 32)
-            _b.setCursor(Qt.CursorShape.PointingHandCursor)
-            _b.setStyleSheet(_ss_yellow)
-            _b.clicked.connect(_sig.emit)
-            lay.addWidget(_b)
+        self._btn_contact.setFixedSize(32, 32)
+        self._btn_contact.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._btn_contact.setStyleSheet(_ss_yellow)
+        self._btn_contact.clicked.connect(self.contact_requested.emit)
+        lay.addWidget(self._btn_contact)
+
+        if _settings_entry:
+            icon, label, key, icon_file = _settings_entry
+            lay.addSpacing(4)
+            item = _LiveNavItem(icon, translate(label), key, icon_file=icon_file)
+            item.nav_clicked.connect(self.nav_clicked)
+            self._items[key] = item
+            lay.addWidget(item)
 
     @staticmethod
     def _apply_lang_btn_style(btn: QPushButton, active: bool):
@@ -396,6 +412,26 @@ class LiveWindow(QMainWindow):
 
         _left = QWidget()
         _left.setStyleSheet("background:transparent;")
+        _llay = QHBoxLayout(_left)
+        _llay.setContentsMargins(0, 0, 0, 0)
+        _llay.setSpacing(0)
+        _llay.setAlignment(Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft)
+
+        # ── Manuel d'utilisation — en haut à gauche (demande 2026-06-12) ──────
+        self._btn_manual_top = QPushButton("☰  " + translate("Manuel d'utilisation"))
+        self._btn_manual_top.setFixedHeight(26)
+        self._btn_manual_top.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._btn_manual_top.setStyleSheet(
+            "QPushButton{background:transparent;color:#c8a400;"
+            "border:1px solid rgba(200,164,0,0.35);border-radius:5px;"
+            "font-size:10px;font-weight:700;padding:0 10px;}"
+            "QPushButton:hover{background:rgba(245,197,24,0.10);color:#f5c518;"
+            "border-color:rgba(245,197,24,0.60);}"
+            "QPushButton:pressed{background:rgba(245,197,24,0.18);}"
+        )
+        self._btn_manual_top.clicked.connect(self._on_manual)
+        _llay.addWidget(self._btn_manual_top)
+
         _lr_lay.addWidget(_left, 1)
 
         _right = QWidget()

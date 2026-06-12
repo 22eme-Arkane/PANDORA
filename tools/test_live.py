@@ -501,6 +501,21 @@ def fenetre_live():
     assert (_body_lay.indexOf(w._assistant_toggle) < _body_lay.indexOf(w._assistant)
             < _body_lay.indexOf(w._stack)), "assistant à gauche : poignée, panneau, pages"
     assert w._assistant_toggle._side == "left", "flèches du strip en miroir côté gauche"
+    # Retours 2026-06-12 : Manuel en HAUT À GAUCHE (topbar), Paramètres en BAS
+    # À DROITE (après Contact, hors du groupe central), séparation Projets|Conducteur
+    assert hasattr(w, "_btn_manual_top"), "Manuel dans la topbar"
+    assert not hasattr(w._sidebar, "_btn_manual"), "plus de Manuel dans la barre basse"
+    _bar_lay = w._sidebar.layout()
+    assert (_bar_lay.indexOf(w._sidebar._btn_contact)
+            < _bar_lay.indexOf(w._sidebar._items["settings"])), \
+        "Paramètres tout au bord, en bas à droite"
+    assert all(_bar_lay.indexOf(w._sidebar._items[k])
+               < _bar_lay.indexOf(w._sidebar._btn_contact)
+               for k in w._sidebar._items if k != "settings"), \
+        "les autres pages restent dans le groupe central"
+    from live_window import _NAV_ITEMS as _NI
+    assert _NI[1] is None and _NI[0][2] == "projects" and _NI[2][2] == "conducteur", \
+        "séparateur entre Projets et Conducteur"
     w._navigate("castings")   # alias Cinéma → Live, ne doit pas lever
     w._navigate("vehicles")
     assert w._NAV_ALIASES["castings"] == "casting"
