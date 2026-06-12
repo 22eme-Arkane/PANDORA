@@ -362,10 +362,17 @@ class LiveWindow(QMainWindow):
 
         # Nav en BAS (façon DaVinci Resolve) : les pages récupèrent toute la
         # largeur de l'écran — plus de colonne latérale.
-        # Assistant IA à GAUCHE (poignée au bord, panneau, puis les pages).
+        # Assistant IA à GAUCHE (poignée au bord, panneau, puis les pages) ;
+        # à DROITE, une colonne permanente de la largeur de la poignée fermée
+        # — symétrie demandée (retour 2026-06-12).
+        self._right_spacer = QWidget()
+        # même largeur que la poignée IA (fixée à 28 px) — symétrie exacte
+        self._right_spacer.setFixedWidth(self._assistant_toggle.maximumWidth())
+        self._right_spacer.setStyleSheet(f"background:{CP['bg1']};")
         body_lay.addWidget(self._assistant_toggle)
         body_lay.addWidget(self._assistant)
         body_lay.addWidget(self._stack, 1)
+        body_lay.addWidget(self._right_spacer)
         outer.addWidget(body, 1)
         outer.addWidget(self._sidebar)
 
@@ -690,9 +697,13 @@ class LiveWindow(QMainWindow):
     # 2026-06-12 : en plein écran, boutons/encadrés étirés jusqu'aux bords =
     # illisible). Même valeur que les onglets du Studio IA.
     _PAGE_MAX_W = 1360
-    # Pages dont la largeur est FONCTIONNELLE (tableaux, contrôleur, galeries)
-    # — jamais plafonnées. Le Studio gère ses onglets lui-même.
-    _FULL_WIDTH_PAGES = {"seq_live", "seq_mapping", "resolume", "studio"}
+    # Pages dont la largeur est FONCTIONNELLE — jamais plafonnées : tableaux,
+    # contrôleur, Studio (gère ses onglets lui-même) ; et (retour 2026-06-12)
+    # Conducteur/Casting/Accessoires/Véhicules prennent TOUTE la fenêtre — le
+    # panneau droit du Conducteur (Références/IA/Générer) reste collé au bord
+    # droit, comme la poignée du menu IA.
+    _FULL_WIDTH_PAGES = {"seq_live", "seq_mapping", "resolume", "studio",
+                         "conducteur", "casting", "accessoires", "vehicules"}
 
     def _clamp_wrap(self, page: QWidget) -> QWidget:
         """Centre la page dans un conteneur : elle s'étend jusqu'à _PAGE_MAX_W,
