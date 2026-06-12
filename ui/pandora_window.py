@@ -69,6 +69,9 @@ _COLOR_ICONS: frozenset[str] = frozenset({
 
 
 class NavItem(QWidget):
+    """Item de la barre de navigation BASSE (refonte 2026-06-12, portée depuis
+    PANDORA | Live) : icône au-dessus d'un libellé court, centré, façon barre
+    de pages DaVinci Resolve. Actif = pastille accent (teal Cinéma)."""
     nav_clicked = pyqtSignal(str)
 
     def __init__(self, icon_file: str, label: str, key: str):
@@ -77,9 +80,12 @@ class NavItem(QWidget):
         self._active   = False
         self._ico_file = icon_file
         self.setFixedHeight(54)
+        self.setMinimumWidth(72)
         self.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
+        self.setObjectName("NavItem")
 
-        _pix_raw  = load_icon(icon_file, 30)
+        _pix_raw  = load_icon(icon_file, 24)
         _is_color = icon_file in _COLOR_ICONS
         if not _pix_raw.isNull():
             if _is_color:
@@ -97,66 +103,54 @@ class NavItem(QWidget):
         self._pix_off = dim(self._pix_white, 0.55)
         self._use_png = not _pix_raw.isNull()
 
-        outer = QHBoxLayout(self)
-        outer.setContentsMargins(10, 3, 8, 3)
-        outer.setSpacing(10)
-        outer.setAlignment(Qt.AlignmentFlag.AlignVCenter)
+        lay = QVBoxLayout(self)
+        lay.setContentsMargins(12, 5, 12, 4)
+        lay.setSpacing(2)
+        lay.setAlignment(Qt.AlignmentFlag.AlignHCenter | Qt.AlignmentFlag.AlignVCenter)
 
-        # ── Icône — entité indépendante, jamais de bordure ────────────────────
         self._ico = QLabel()
-        self._ico.setFixedSize(30, 30)
+        self._ico.setFixedSize(24, 24)
         self._ico.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self._ico.setStyleSheet("background:transparent;border:none;")
 
-        # ── Frame label — seul élément qui reçoit la bordure hover/actif ──────
-        self._frame = QFrame()
-        self._frame.setFixedHeight(36)
-        fl = QHBoxLayout(self._frame)
-        fl.setContentsMargins(10, 0, 10, 0)
-        fl.setSpacing(0)
-
         self._lbl = QLabel(label)
-        fl.addWidget(self._lbl)
-        fl.addStretch()
+        self._lbl.setAlignment(Qt.AlignmentFlag.AlignHCenter)
 
-        outer.addWidget(self._ico)
-        outer.addWidget(self._frame, 1)
+        lay.addWidget(self._ico, alignment=Qt.AlignmentFlag.AlignHCenter)
+        lay.addWidget(self._lbl)
 
         self._apply(False)
 
+    def _bg(self, css: str):
+        self.setStyleSheet(f"QWidget#NavItem{{{css}border-radius:8px;}}")
+
     def _apply(self, active: bool):
         if active:
-            self._frame.setStyleSheet(
-                f"QFrame{{background:rgba(78,205,196,0.18);"
-                f"border:1px solid rgba(78,205,196,0.32);border-radius:8px;}}"
-            )
+            self._bg("background:rgba(78,205,196,0.16);"
+                     "border:1px solid rgba(78,205,196,0.30);")
             if self._use_png:
                 self._ico.setPixmap(self._pix_accent)  # teal sur fond actif
-                self._ico.setStyleSheet("background:transparent;border:none;")
             else:
                 self._ico.setText(_FALLBACK.get(self._ico_file, "●"))
                 self._ico.setStyleSheet(
-                    f"color:{CP['accent']};font-size:15px;background:transparent;border:none;"
+                    f"color:{CP['accent']};font-size:14px;background:transparent;border:none;"
                 )
             self._lbl.setStyleSheet(
-                f"color:{CP['accent']};font-size:16px;font-weight:700;"
-                f"letter-spacing:0.4px;background:transparent;border:none;"
+                f"color:{CP['accent']};font-size:10px;font-weight:700;"
+                f"letter-spacing:0.3px;background:transparent;border:none;"
             )
         else:
-            self._frame.setStyleSheet(
-                "QFrame{background:transparent;border:none;border-radius:8px;}"
-            )
+            self._bg("background:transparent;border:1px solid transparent;")
             if self._use_png:
                 self._ico.setPixmap(self._pix_off)  # blanc dim
-                self._ico.setStyleSheet("background:transparent;border:none;")
             else:
                 self._ico.setText(_FALLBACK.get(self._ico_file, "●"))
                 self._ico.setStyleSheet(
-                    f"color:{CP['text_dim']};font-size:15px;background:transparent;border:none;"
+                    f"color:{CP['text_dim']};font-size:14px;background:transparent;border:none;"
                 )
             self._lbl.setStyleSheet(
-                f"color:{CP['text_secondary']};font-size:16px;font-weight:600;"
-                f"letter-spacing:0.3px;background:transparent;border:none;"
+                f"color:{CP['text_secondary']};font-size:10px;font-weight:600;"
+                f"letter-spacing:0.2px;background:transparent;border:none;"
             )
 
     def setActive(self, active: bool):
@@ -165,14 +159,12 @@ class NavItem(QWidget):
 
     def enterEvent(self, e):
         if not self._active:
-            self._frame.setStyleSheet(
-                "QFrame{background:rgba(255,255,255,0.05);"
-                "border:1px solid rgba(255,255,255,0.08);border-radius:8px;}"
-            )
+            self._bg("background:rgba(255,255,255,0.05);"
+                     "border:1px solid rgba(255,255,255,0.08);")
             if self._use_png:
                 self._ico.setPixmap(self._pix_on)
             self._lbl.setStyleSheet(
-                f"color:{CP['text_primary']};font-size:16px;font-weight:600;"
+                f"color:{CP['text_primary']};font-size:10px;font-weight:600;"
                 f"background:transparent;border:none;"
             )
 
@@ -186,6 +178,10 @@ class NavItem(QWidget):
 
 
 class _Sidebar(QWidget):
+    """Barre de navigation BASSE (refonte 2026-06-12, portée depuis Live) —
+    taskbar façon DaVinci Resolve : drapeaux de langue à gauche, icônes de
+    pages au centre, Paramètres en bas à droite (Manuel et Nous contacter
+    vivent dans la topbar). Toute la largeur de l'écran revient aux pages."""
     nav_clicked           = pyqtSignal(str)
     manual_requested      = pyqtSignal()
     contact_requested     = pyqtSignal()
@@ -193,119 +189,83 @@ class _Sidebar(QWidget):
 
     def __init__(self):
         super().__init__()
-        self.setFixedWidth(268)
+        self.setFixedHeight(64)
         self.setStyleSheet(
-            f"background:{CP['sidebar']};border-right:1px solid {CP['border']};"
+            f"background:{CP['sidebar']};border-top:1px solid {CP['border']};"
         )
 
-        lay = QVBoxLayout(self)
-        lay.setContentsMargins(0, 0, 0, 0)
-        lay.setSpacing(2)
+        lay = QHBoxLayout(self)
+        lay.setContentsMargins(10, 4, 10, 4)
+        lay.setSpacing(4)
+        lay.setAlignment(Qt.AlignmentFlag.AlignVCenter)
 
-        # ── Sélecteur de langue (remplace l'ancien logo) ───────────────────────
-        logo_strip = QWidget()
-        logo_strip.setFixedHeight(76)
-        logo_strip.setStyleSheet(
-            f"background:{CP['bg1']};"
-            f"border:none;border-bottom:1px solid {CP['border']};"
-        )
-        ll = QHBoxLayout(logo_strip)
-        ll.setContentsMargins(14, 0, 14, 0)
-        ll.setSpacing(8)
+        def _vsep() -> QFrame:
+            f = QFrame()
+            f.setFixedSize(1, 32)
+            f.setStyleSheet("background:rgba(255,255,255,0.08);")
+            return f
 
+        # ── Gauche : sélecteur de langue (drapeaux) ───────────────────────────
         self._lang_btns: dict[str, QPushButton] = {}
         _flag_map = {"fr": "Fr.png", "en": "En.png"}
         _cur_lang = get_lang()
         for code, flag_file in _flag_map.items():
             btn = QPushButton()
-            btn.setFixedSize(34, 34)
+            btn.setFixedSize(32, 32)
             btn.setCursor(Qt.CursorShape.PointingHandCursor)
             btn.setToolTip("Français" if code == "fr" else "English")
-            _flag_pix = load_icon(flag_file, 24)
+            _flag_pix = load_icon(flag_file, 22)
             if not _flag_pix.isNull():
                 from PyQt6.QtGui import QIcon as _QIcon
                 from PyQt6.QtCore import QSize as _QSize
                 btn.setIcon(_QIcon(_flag_pix))
-                btn.setIconSize(_QSize(24, 24))
+                btn.setIconSize(_QSize(22, 22))
                 btn.setText("")
             else:
                 btn.setText("FR" if code == "fr" else "EN")
             self._apply_lang_btn_style(btn, code == _cur_lang)
             btn.clicked.connect(lambda checked, c=code: self.lang_change_requested.emit(c))
-            ll.addWidget(btn)
+            lay.addWidget(btn)
             self._lang_btns[code] = btn
 
-        ll.addStretch()
-        lay.addWidget(logo_strip)
+        lay.addSpacing(4)
+        lay.addWidget(_vsep())
+        lay.addStretch()
 
-        lay.addSpacing(6)
-
-        # ── Nav items ─────────────────────────────────────────────────────────
+        # ── Centre : items de navigation (séparateurs verticaux entre groupes).
+        # Paramètres est extrait du groupe central : il vit en BAS À DROITE.
         self._items: dict[str, NavItem] = {}
+        _settings_entry = None
+        _pending_sep = False
         for entry in _get_nav_items():
             if entry is None:
-                # Séparateur inter-groupe
-                lay.addSpacing(2)
-                _gsep = QFrame()
-                _gsep.setFixedHeight(1)
-                _gsep.setStyleSheet(
-                    f"background:rgba(255,255,255,0.07);margin:0 20px;"
-                )
-                lay.addWidget(_gsep)
-                lay.addSpacing(2)
+                _pending_sep = True
                 continue
-
             icon_file, label, key = entry
             if key == "settings":
-                lay.addStretch()
-                sep = QFrame()
-                sep.setFixedHeight(1)
-                sep.setStyleSheet(f"background:{CP['border']};margin:0 12px;")
-                lay.addWidget(sep)
+                _settings_entry = entry
+                continue
+            if _pending_sep and self._items:
                 lay.addSpacing(4)
-
+                lay.addWidget(_vsep())
+                lay.addSpacing(4)
+            _pending_sep = False
             item = NavItem(icon_file, label, key)
             item.nav_clicked.connect(self.nav_clicked)
             self._items[key] = item
             lay.addWidget(item)
 
+        lay.addStretch()
+        lay.addWidget(_vsep())
         lay.addSpacing(4)
 
-        # ── Boutons fixes en bas de la sidebar ────────────────────────────────
-        _sep_bottom = QFrame()
-        _sep_bottom.setFixedHeight(1)
-        _sep_bottom.setStyleSheet(f"background:{CP['border']};margin:0 12px;")
-        lay.addWidget(_sep_bottom)
-
-        _ss_yellow = (
-            "QPushButton{"
-            "background:transparent;color:#c8a400;"
-            "border:1px solid rgba(200,164,0,0.35);"
-            "border-radius:6px;font-size:10px;font-weight:700;"
-            "text-align:left;padding:0 14px;}"
-            "QPushButton:hover{"
-            "background:rgba(245,197,24,0.10);color:#f5c518;"
-            "border-color:rgba(245,197,24,0.60);}"
-            "QPushButton:pressed{background:rgba(245,197,24,0.18);}"
-        )
-
-        btn_manual = QPushButton("☰  Manuel d'utilisation")
-        btn_manual.setFixedHeight(34)
-        btn_manual.setCursor(Qt.CursorShape.PointingHandCursor)
-        btn_manual.setStyleSheet(_ss_yellow)
-        btn_manual.clicked.connect(self.manual_requested.emit)
-        lay.addWidget(btn_manual)
-
-        lay.addSpacing(6)
-
-        btn_contact = QPushButton("✉  Nous contacter")
-        btn_contact.setFixedHeight(34)
-        btn_contact.setCursor(Qt.CursorShape.PointingHandCursor)
-        btn_contact.setStyleSheet(_ss_yellow)
-        btn_contact.clicked.connect(self.contact_requested.emit)
-        lay.addWidget(btn_contact)
-
-        lay.addSpacing(6)
+        # ── Droite : Paramètres tout au bord ──────────────────────────────────
+        if _settings_entry:
+            icon_file, label, key = _settings_entry
+            item = NavItem(icon_file, label, key)
+            item.nav_clicked.connect(self.nav_clicked)
+            self._items[key] = item
+            lay.addWidget(item)
 
     @staticmethod
     def _apply_lang_btn_style(btn: QPushButton, active: bool):
@@ -372,19 +332,28 @@ class PandoraWindow(QMainWindow):
         body_lay.setContentsMargins(0, 0, 0, 0)
         body_lay.setSpacing(0)
 
-        self._sidebar = _Sidebar()
+        self._sidebar = _Sidebar()   # barre de navigation BASSE (refonte 2026-06-12)
         self._stack   = QStackedWidget()
         self._stack.setStyleSheet(f"background:{CP['bg0']};")
 
-        self._assistant         = AssistantPanel()
+        # header_height=60 : la ligne de l'en-tête Assistant s'ALIGNE sur celle
+        # des bandeaux de pages (60 px partout)
+        self._assistant         = AssistantPanel(header_height=60)
         self._assistant.setVisible(True)
-        self._assistant_toggle  = AssistantToggleStrip(self._assistant)
+        self._assistant_toggle  = AssistantToggleStrip(self._assistant, side="left")
 
-        body_lay.addWidget(self._sidebar)
-        body_lay.addWidget(self._stack, 1)
-        body_lay.addWidget(self._assistant)
+        # Assistant IA à GAUCHE (poignée au bord, panneau, puis les pages) ;
+        # à DROITE, une colonne permanente de la largeur de la poignée fermée
+        # (symétrie) ; la nav vit en BAS — les pages prennent toute la largeur.
+        self._right_spacer = QWidget()
+        self._right_spacer.setFixedWidth(self._assistant_toggle.maximumWidth())
+        self._right_spacer.setStyleSheet(f"background:{CP['bg1']};")
         body_lay.addWidget(self._assistant_toggle)
+        body_lay.addWidget(self._assistant)
+        body_lay.addWidget(self._stack, 1)
+        body_lay.addWidget(self._right_spacer)
         outer.addWidget(body, 1)
+        outer.addWidget(self._sidebar)
 
         self._pages: dict[str, QWidget] = {}
         self._build_pages()
@@ -449,7 +418,17 @@ class PandoraWindow(QMainWindow):
 
         settings = SettingsPage()
         self._pages["settings"] = settings
-        self._stack.addWidget(settings)
+        # Paramètres : SEULE page centrée comme le Studio IA (refonte 2026-06-12)
+        settings.setMaximumWidth(1360)
+        self._settings_wrap = QWidget()
+        self._settings_wrap.setStyleSheet(f"background:{CP['bg0']};")
+        _sl = QHBoxLayout(self._settings_wrap)
+        _sl.setContentsMargins(0, 0, 0, 0)
+        _sl.setSpacing(0)
+        _sl.addStretch(1)
+        _sl.addWidget(settings, 4)
+        _sl.addStretch(1)
+        self._stack.addWidget(self._settings_wrap)
 
         seedance = SeedanceWidget()
         self._pages["seedance"] = seedance
@@ -519,6 +498,31 @@ class PandoraWindow(QMainWindow):
 
         _left = QWidget()
         _left.setStyleSheet("background:transparent;")
+        _llay = QHBoxLayout(_left)
+        _llay.setContentsMargins(0, 0, 0, 0)
+        _llay.setSpacing(0)
+        _llay.setAlignment(Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft)
+
+        # ── Manuel + Nous contacter — en haut à gauche (refonte 2026-06-12) ───
+        _ss_yellow_top = (
+            "QPushButton{background:transparent;color:#c8a400;"
+            "border:1px solid rgba(200,164,0,0.35);border-radius:5px;"
+            "font-size:10px;font-weight:700;padding:0 10px;}"
+            "QPushButton:hover{background:rgba(245,197,24,0.10);color:#f5c518;"
+            "border-color:rgba(245,197,24,0.60);}"
+            "QPushButton:pressed{background:rgba(245,197,24,0.18);}"
+        )
+        self._btn_manual_top = QPushButton("☰  " + translate("Manuel d'utilisation"))
+        self._btn_manual_top.clicked.connect(self._on_manual)
+        self._btn_contact_top = QPushButton("✉  " + translate("Nous contacter"))
+        self._btn_contact_top.clicked.connect(self._on_contact)
+        for _b in (self._btn_manual_top, self._btn_contact_top):
+            _b.setFixedHeight(26)
+            _b.setCursor(Qt.CursorShape.PointingHandCursor)
+            _b.setStyleSheet(_ss_yellow_top)
+            _llay.addWidget(_b)
+            _llay.addSpacing(6)
+
         _lr_lay.addWidget(_left, 1)   # stretch — remplit tout l'espace à gauche
 
         _right = QWidget()
@@ -659,7 +663,9 @@ class PandoraWindow(QMainWindow):
     def _navigate(self, key: str, extra: str = ""):
         page = self._pages.get(key)
         if page:
-            self._stack.setCurrentWidget(page)
+            # Paramètres vit dans son conteneur centré
+            self._stack.setCurrentWidget(
+                self._settings_wrap if key == "settings" else page)
             if extra and hasattr(page, "open_version"):
                 page.open_version(extra)
             elif hasattr(page, "refresh"):

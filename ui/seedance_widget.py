@@ -79,12 +79,23 @@ class SeedanceWidget(QWidget):
 
         self.tabs = QTabWidget()
         self.tabs.setDocumentMode(True)
+        # Un seul trait en haut (celui de la topbar) : le documentMode dessine
+        # sa propre ligne de base sous la barre d'onglets → trait DOUBLÉ
+        # (refonte 2026-06-12, portée depuis Live)
+        self.tabs.tabBar().setDrawBase(False)
 
         self.tab_t2v      = TabT2V()
         self.tab_davinci  = TabDavinciEdit()
         self.tab_engines  = TabVideoEngines()
         self.tab_history  = TabHistory()
         self.tab_library  = TabVideoLibrary()
+
+        # Lisibilité plein écran (nav en barre basse) : le contenu des onglets
+        # FORMULAIRE est plafonné en largeur et centré — le fond remplit les
+        # côtés. Vidéothèque et Historique (galeries/listes) gardent la pleine
+        # largeur.
+        for _t in (self.tab_t2v, self.tab_davinci, self.tab_engines):
+            self._clamp_content_width(_t)
 
         self.tabs.addTab(self.tab_t2v,     "Générer depuis Storyboard")
         self.tabs.addTab(self.tab_davinci, "Modifier des clips")
@@ -105,6 +116,17 @@ class SeedanceWidget(QWidget):
         self.tabs.currentChanged.connect(self._on_tab_changed)
 
         root.addWidget(self.tabs)
+
+    @staticmethod
+    def _clamp_content_width(tab: QWidget, max_w: int = 1360):
+        """Plafonne la largeur du CONTENU d'un onglet formulaire et le centre
+        (l'onglet lui-même reste pleine largeur, le fond remplit les côtés)."""
+        from PyQt6.QtWidgets import QScrollArea
+        from PyQt6.QtCore import Qt as _Qt
+        scroll = tab if isinstance(tab, QScrollArea) else tab.findChild(QScrollArea)
+        if scroll is not None and scroll.widget() is not None:
+            scroll.widget().setMaximumWidth(max_w)
+            scroll.setAlignment(_Qt.AlignmentFlag.AlignHCenter | _Qt.AlignmentFlag.AlignTop)
 
     def _on_tab_changed(self, index: int):
         if index == self._davinci_tab_index:

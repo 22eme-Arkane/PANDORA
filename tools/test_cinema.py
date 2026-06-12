@@ -96,6 +96,41 @@ def branding_libelles_partage():
     assert "QLabel(translate(label))" in src, "boutons IA Scénario routés par translate"
 
 
+@test
+def refonte_interface():
+    """Refonte UI 2026-06-12 (portée depuis Live) : nav en BARRE BASSE façon
+    DaVinci, assistant à GAUCHE + colonne symétrique, Manuel/Contact en topbar,
+    Paramètres centré, Studio IA sans trait doublé, bandeaux alignés 60 px."""
+    import ui.pandora_window as PW
+    src_sb = inspect.getsource(PW._Sidebar.__init__)
+    assert "setFixedHeight(64)" in src_sb and "border-top" in src_sb, \
+        "nav en barre basse (taskbar), plus de colonne latérale"
+    assert "setFixedWidth(268)" not in inspect.getsource(PW), "colonne 268px retirée"
+    src_nav = inspect.getsource(PW.NavItem.__init__)
+    assert "QVBoxLayout" in src_nav, "items : icône au-dessus du libellé"
+    src_init = inspect.getsource(PW.PandoraWindow.__init__)
+    assert 'side="left"' in src_init, "assistant IA à gauche"
+    assert "_right_spacer" in src_init, "colonne symétrique au bord droit"
+    assert "header_height=60" in src_init, "en-tête assistant aligné sur les bandeaux"
+    src_top = inspect.getsource(PW.PandoraWindow._build_global_topbar)
+    assert "_btn_manual_top" in src_top and "_btn_contact_top" in src_top, \
+        "Manuel + Nous contacter en haut à gauche"
+    src_pages = inspect.getsource(PW.PandoraWindow._build_pages)
+    assert "setMaximumWidth(1360)" in src_pages and "_settings_wrap" in src_pages, \
+        "Paramètres centré comme le Studio IA"
+    assert "_settings_wrap" in inspect.getsource(PW.PandoraWindow._navigate)
+    # Studio IA : trait unique + onglets formulaire plafonnés/centrés
+    from ui.seedance_widget import SeedanceWidget
+    src_sw = inspect.getsource(SeedanceWidget)
+    assert "setDrawBase(False)" in src_sw, "pas de ligne de base doublée"
+    assert "_clamp_content_width" in src_sw, "onglets formulaire plafonnés"
+    assert "self.tab_t2v, self.tab_davinci, self.tab_engines" in src_sw, \
+        "plafonnés : formulaires seulement (Vidéothèque/Historique pleine largeur)"
+    # Bandeaux des pages au STANDARD 60 px (alignés avec l'assistant)
+    from ui.page_storyboard import PageStoryboard as _PSB
+    assert "setFixedHeight(60)" in inspect.getsource(_PSB._build_shots_topbar)
+
+
 # ══════════════════════════════════════════════════════════════════════════════
 # Prompts Cinéma — enrichis mais FIDÈLES au scénario
 # ══════════════════════════════════════════════════════════════════════════════

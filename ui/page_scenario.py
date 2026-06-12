@@ -1,4 +1,4 @@
-﻿import os
+import os
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
     QTextEdit, QLineEdit, QFrame, QScrollArea, QFileDialog,
@@ -292,7 +292,7 @@ class PageScenario(QWidget):
 
         # Top bar
         topbar = QWidget()
-        topbar.setFixedHeight(56)
+        topbar.setFixedHeight(60)   # hauteur STANDARD des bandeaux (alignement assistant)
         topbar.setStyleSheet(f"background:{CP['bg1']};")
         tl = QHBoxLayout(topbar)
         tl.setContentsMargins(16, 0, 16, 0)
