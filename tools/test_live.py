@@ -562,25 +562,18 @@ def fenetre_live():
     from live_window import _NAV_ITEMS as _NI
     assert _NI[1] is None and _NI[0][2] == "projects" and _NI[2][2] == "conducteur", \
         "séparateur entre Projets et Conducteur"
-    # Largeur de lecture (retours 2026-06-12) : Paramètres plafonné/centré ;
-    # Projets = bandeau-titre PLEINE LARGEUR + contenu plafonné dessous ;
-    # Conducteur/Casting/Accessoires/Véhicules + tableaux/contrôleur/Studio
-    # prennent TOUTE la fenêtre (panneau droit du Conducteur au bord)
-    assert w._pages["settings"].maximumWidth() == 1360, "Paramètres plafonné"
-    assert w._stack_widgets["settings"] is not w._pages["settings"], "Paramètres centré"
-    for k in ("projects", "conducteur", "casting", "accessoires", "vehicules",
-              "seq_live", "seq_mapping", "resolume", "studio"):
-        assert w._stack_widgets[k] is w._pages[k], f"page {k} pleine largeur"
-    # Projets : le bandeau va aux bords, le CONTENU (dernier item) est centré
-    _pp = w._pages["projects"]
-    assert _pp.maximumWidth() > 100000, "bandeau Projets jusqu'aux bords"
-    _pl = _pp.layout()
-    _wrap = _pl.itemAt(_pl.count() - 1).widget()
-    assert _wrap.layout().itemAt(1).widget().maximumWidth() == 1360, \
-        "contenu Projets plafonné sous le bandeau"
+    # Largeur (retour final 2026-06-12) : TOUTES les pages s'étirent jusqu'aux
+    # bords — seul le Studio IA centre ses onglets formulaire (testé dans
+    # studio_onglets). Plus aucune machinerie de plafonnement dans la fenêtre.
+    for k in w._pages:
+        assert w._pages[k].maximumWidth() > 100000, f"page {k} pleine largeur"
+    import inspect as _isp_lw
+    import live_window as _LW
+    src_lw = _isp_lw.getsource(_LW)
+    assert "_clamp_wrap" not in src_lw and "_clamp_inner" not in src_lw, \
+        "machinerie de plafonnement retirée de la fenêtre"
     w._navigate("settings")
-    assert w._stack.currentWidget() is w._stack_widgets["settings"], \
-        "navigation → conteneur centré, pas la page brute"
+    assert w._stack.currentWidget() is w._pages["settings"]
     # Colonne droite permanente = largeur de la poignée IA fermée (symétrie)
     assert w._right_spacer.maximumWidth() == w._assistant_toggle.maximumWidth() == 28
     assert _body_lay.indexOf(w._right_spacer) > _body_lay.indexOf(w._stack), \
