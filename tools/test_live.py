@@ -483,13 +483,19 @@ def studio_onglets():
 
 @test
 def fenetre_live():
-    """Topbar, assistant fermé par défaut, Paramètres en bas, alias de navigation."""
+    """Topbar, assistant fermé par défaut, nav en BARRE BASSE, alias de navigation."""
     from live_window import LiveWindow
     w = LiveWindow({})
     assert hasattr(w, "_btn_save_global") and hasattr(w, "_btn_update_header"), "topbar"
     assert w._assistant.isHidden(), "assistant IA fermé par défaut"
     assert w._assistant_toggle._open is False, "poignée synchronisée"
     assert "settings" in w._sidebar._items, "Paramètres dans la nav"
+    # Nav en BAS façon DaVinci (demande 2026-06-12) : barre horizontale fine
+    # sous le corps — les pages récupèrent toute la largeur de l'écran
+    assert w._sidebar.maximumHeight() == 64, "barre basse fine (taskbar)"
+    assert w._sidebar.maximumWidth() > 10000, "plus de colonne latérale fixe"
+    assert w._sidebar.parentWidget() is w.centralWidget(), \
+        "la barre vit sous le corps (layout vertical racine), pas dans le body"
     w._navigate("castings")   # alias Cinéma → Live, ne doit pas lever
     w._navigate("vehicles")
     assert w._NAV_ALIASES["castings"] == "casting"
