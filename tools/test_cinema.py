@@ -204,6 +204,14 @@ def studio_sound_design_upscaling():
     assert sd._btn_open_dir.isEnabled()
     from ui.tab_video_library import TabVideoLibrary
     assert hasattr(TabVideoLibrary, "list_all_clips")
+    # Menus déroulants portés du Live (retour 2026-06-13) : « Choisir les
+    # références » et « Éléments récurrents » repliés par défaut dans t2v
+    import ui.tab_t2v as _T2V2
+    src_t2v2 = inspect.getsource(_T2V2)
+    assert "_btn_style_toggle" in src_t2v2 and "_btn_casting_toggle" in src_t2v2, \
+        "toggles Choisir les références + Éléments récurrents"
+    assert "self._film_style_frame.setVisible(False)" in src_t2v2, "réfs repliées"
+    assert "self._casting.setVisible(False)" in src_t2v2, "éléments repliés"
 
 
 # ══════════════════════════════════════════════════════════════════════════════

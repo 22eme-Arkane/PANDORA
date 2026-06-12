@@ -2328,6 +2328,24 @@ class TabT2V(QScrollArea):
         _clear_row.addStretch()
         _fs_outer.addLayout(_clear_row)
 
+        # ── En-tête repliable (comme dans Live — replié par défaut) ──────────
+        self._film_style_frame.setVisible(False)
+        self._btn_style_toggle = QPushButton("▸  Choisir les références")
+        self._btn_style_toggle.setCheckable(True)
+        self._btn_style_toggle.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._btn_style_toggle.setStyleSheet(
+            f"QPushButton{{background:{C['bg2']};color:{C['text_secondary']};"
+            f"border:1px solid {C['border']};border-radius:8px;text-align:left;"
+            f"font-size:11px;font-weight:700;padding:8px 14px;}}"
+            f"QPushButton:hover{{background:{C['bg3']};color:{C['text_primary']};}}"
+            f"QPushButton:checked{{color:{C['accent']};border-color:{C['accent_dim']};}}")
+
+        def _toggle_style(checked):
+            self._film_style_frame.setVisible(checked)
+            self._btn_style_toggle.setText(
+                ("▾  " if checked else "▸  ") + "Choisir les références")
+        self._btn_style_toggle.toggled.connect(_toggle_style)
+        lay.addWidget(self._btn_style_toggle)
         lay.addWidget(self._film_style_frame)
 
         # ── Storyboard selector ───────────────────────────────────────────────
@@ -2478,9 +2496,28 @@ class TabT2V(QScrollArea):
         self._continuity_bar = _ContinuityBar()
         _ez_lay.addWidget(self._continuity_bar)
 
-        # ── Casting selector ──────────────────────────────────────────────────
+        # ── Éléments récurrents (casting · accessoires · véhicules) — repliable
+        #    comme dans Live (replié par défaut : gagne de la place) ───────────
         self._casting = CastingSelector()
         self._casting.context_changed.connect(self._on_context_changed)
+        self._casting.setVisible(False)
+        self._btn_casting_toggle = QPushButton(
+            "▸  Éléments récurrents  ·  casting · accessoires · véhicules")
+        self._btn_casting_toggle.setCheckable(True)
+        self._btn_casting_toggle.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._btn_casting_toggle.setStyleSheet(
+            f"QPushButton{{background:transparent;color:{C['accent']};"
+            f"border:none;text-align:left;font-size:12px;font-weight:800;"
+            f"letter-spacing:0.5px;padding:4px 2px;}}"
+            f"QPushButton:hover{{color:{C['text_primary']};}}")
+
+        def _toggle_casting(checked):
+            self._casting.setVisible(checked)
+            self._btn_casting_toggle.setText(
+                ("▾  " if checked else "▸  ")
+                + "Éléments récurrents  ·  casting · accessoires · véhicules")
+        self._btn_casting_toggle.toggled.connect(_toggle_casting)
+        _ez_lay.addWidget(self._btn_casting_toggle)
         _ez_lay.addWidget(self._casting)
 
         sep2 = QFrame()

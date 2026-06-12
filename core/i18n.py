@@ -2956,6 +2956,12 @@ _FR_TO_EN: dict[str, str] = {
     "Ouvre le dossier de destination des upscales.": "Opens the upscales destination folder.",
     "Ouvre le dossier de destination du sound design.": "Opens the sound design destination folder.",
     "Ouvre le dossier de destination des clips.": "Opens the clips destination folder.",
+    "▸  Choisir les références": "▸  Choose references",
+    "▾  Choisir les références": "▾  Choose references",
+    "▸  Éléments récurrents  ·  casting · accessoires · véhicules":
+        "▸  Recurring elements  ·  cast · props · vehicles",
+    "▾  Éléments récurrents  ·  casting · accessoires · véhicules":
+        "▾  Recurring elements  ·  cast · props · vehicles",
 
     # ── Studio IA Cinéma : onglets Sound Design + Upscaling (portés du Live) ──
     "Upscaling de vos clips": "Upscale your clips",
