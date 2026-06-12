@@ -2191,6 +2191,8 @@ _FR_TO_EN: dict[str, str] = {
     # ── Dialog contact ────────────────────────────────────────────────────────
     "Communauté WhatsApp\nPANDORA | Cinéma":
         "WhatsApp Community\nPANDORA | Cinema",
+    "Communauté WhatsApp\nPANDORA | Live":
+        "WhatsApp Community\nPANDORA | Live",
     "Rejoignez les utilisateurs de PANDORA pour signaler des bugs, suivre les nouveautés et échanger avec la communauté.":
         "Join PANDORA users to report bugs, follow updates and connect with the community.",
 

@@ -9,6 +9,9 @@ _EMAIL = "22eme.arkane@gmail.com"
 
 
 class ContactDialog(QDialog):
+    # Groupe WhatsApp — surchargé par la variante Live (ui/dialog_contact_live.py)
+    _WA_GROUP = "PANDORA | Cinéma"
+    _WA_LINK  = "https://chat.whatsapp.com/JRo5SWLBwbxLgACtrDksDj"
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -108,7 +111,7 @@ class ContactDialog(QDialog):
 
         wa_col = QVBoxLayout()
         wa_col.setSpacing(2)
-        wa_title = QLabel("Communauté WhatsApp\nPANDORA | Cinéma")
+        wa_title = QLabel("Communauté WhatsApp\n" + self._WA_GROUP)
         wa_title.setStyleSheet(
             f"color:{CP['text_primary']};font-size:11px;font-weight:700;"
             f"background:transparent;border:none;"
@@ -226,7 +229,7 @@ class ContactDialog(QDialog):
 
     def _open_whatsapp(self):
         import webbrowser
-        webbrowser.open("https://chat.whatsapp.com/JRo5SWLBwbxLgACtrDksDj")
+        webbrowser.open(self._WA_LINK)
 
     def _open_eula(self):
         from ui.dialog_eula import EulaDialog

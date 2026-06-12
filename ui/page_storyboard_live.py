@@ -2174,7 +2174,20 @@ class PageStoryboard(QWidget):
         tw_lay.setSpacing(0)
         tw_lay.addWidget(self._top_hscroll)
         tw_lay.addWidget(scroll, 1)
+        self._table_wrap = table_wrap
         lay.addWidget(table_wrap, 1)
+
+        # Message « tableau vide » HORS du scroll : centré dans la fenêtre de
+        # façon déterministe (le conteneur de colonnes gardait sa largeur même
+        # vide — vu deux fois en réel malgré sizeHint/minimumWidth neutralisés)
+        self._empty_lbl = QLabel("")
+        self._empty_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self._empty_lbl.setWordWrap(True)
+        self._empty_lbl.setStyleSheet(
+            f"color:{CP['text_dim']};font-size:13px;background:transparent;border:none;"
+        )
+        self._empty_lbl.setVisible(False)
+        lay.addWidget(self._empty_lbl, 1)
 
         # Synchroniser la scrollbar du haut avec la scrollbar interne du QScrollArea
         h_bar = scroll.horizontalScrollBar()
@@ -2677,28 +2690,22 @@ class PageStoryboard(QWidget):
                 if no_version else
                 "Aucun plan dans ce découpage.\n\nClique ＋ Ajouter un plan pour créer un plan manuellement."
             )
-            empty = QLabel(translate(msg))
-            empty.setAlignment(Qt.AlignmentFlag.AlignCenter)
-            empty.setStyleSheet(
-                f"color:{CP['text_dim']};font-size:13px;background:transparent;border:none;"
-            )
-            # Pas de tableau → le conteneur reprend la largeur de la FENÊTRE
-            # (message centré à l'écran, pas dans la largeur des colonnes —
-            # _empty_mode neutralise les sizeHint « somme des colonnes ») et
-            # la barre de défilement horizontale disparaît (aucune utilité)
+            # Pas de tableau → on masque ENTIÈREMENT la zone tableau (scroll +
+            # scrollbar) et on affiche le message dans un label dédié, centré
+            # dans la fenêtre de façon déterministe
             self._list_container._empty_mode = True
             self._list_container.setMinimumWidth(0)
-            self._list_container.updateGeometry()
-            self._top_hscroll.setVisible(False)
-            self._list_lay.addWidget(empty)
+            self._empty_lbl.setText(translate(msg))
+            self._table_wrap.setVisible(False)
+            self._empty_lbl.setVisible(True)
             self._dur_lbl.setText("")
             return
 
-        # Tableau présent → largeur des colonnes + scrollbar de tête rétablies
+        # Tableau présent → zone tableau rétablie, message masqué
         self._list_container._empty_mode = False
         self._list_container.setMinimumWidth(sum(_col_widths) + len(_col_widths) - 1)
-        self._list_container.updateGeometry()
-        self._top_hscroll.setVisible(True)
+        self._empty_lbl.setVisible(False)
+        self._table_wrap.setVisible(True)
 
         total_dur = sum(float(s.get("duration", 5.0)) for s in self._all_shots)
         mins = int(total_dur) // 60

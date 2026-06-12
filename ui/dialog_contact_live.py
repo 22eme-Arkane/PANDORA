@@ -1,16 +1,15 @@
 """
-ui/dialog_contact_live.py — PANDORA | Live : ALIAS SANS DOUBLON.
+ui/dialog_contact_live.py — PANDORA | Live : divergence LÉGÈRE de Cinéma.
 
-Ce composant n'a JAMAIS divergé de Cinéma (vérifié : tools/diff_live_cinema.py,
-similarité 100 %) — il réexporte donc la classe Cinéma à l'identique au lieu
-d'en dupliquer ~255 lignes.
-
-⚠ POUR FAIRE DIVERGER LE LIVE (règle d'or de séparation) :
-  1. remplacer CE fichier par une copie complète de ui/dialog_contact.py.py ;
-  2. modifier la copie (jamais le fichier Cinéma) ;
-  3. déclarer les divergences attendues dans tools/diff_live_cinema.py ;
-  4. lancer tools/test_live.py ET tools/test_cinema.py.
+Même dialogue que ui/dialog_contact.py, mais la communauté WhatsApp est celle
+de PANDORA | Live (retour Matthieu 2026-06-12 : le dialogue affichait encore
+le groupe Cinéma). La classe Cinéma expose _WA_GROUP/_WA_LINK pour cette
+surcharge — toute autre évolution du dialogue reste héritée de Cinéma.
 """
 
-from ui.dialog_contact import *          # noqa: F401,F403
-from ui.dialog_contact import ContactDialog  # noqa: F401  (exports explicites)
+from ui.dialog_contact import ContactDialog as _ContactDialogCinema
+
+
+class ContactDialog(_ContactDialogCinema):
+    _WA_GROUP = "PANDORA | Live"
+    _WA_LINK  = "https://chat.whatsapp.com/LEVinbwbtOv3yn8zr8zWPL"

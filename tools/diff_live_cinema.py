@@ -79,6 +79,13 @@ EXPECTED_ONLY_CINEMA = {
         # Pas de Décors ni de HMC dans le Live (handlers supprimés, validé)
         "_on_gen_decors", "_on_gen_hmc",
     },
+    "ui/dialog_contact_live.py": {
+        # Divergence LÉGÈRE voulue (2026-06-12) : le Live est une sous-classe
+        # qui ne surcharge que _WA_GROUP/_WA_LINK (groupe WhatsApp Live) —
+        # tout le corps du dialogue reste hérité de Cinéma, d'où ces méthodes
+        # « uniquement Cinéma » aux yeux du radar.
+        "__init__", "_copy_email", "_open_eula", "_open_whatsapp",
+    },
 }
 
 

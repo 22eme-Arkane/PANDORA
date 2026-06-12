@@ -282,10 +282,16 @@ def colonnes_sequences():
     assert c.sizeHint().width() < full_w and c.minimumSizeHint().width() < full_w, \
         "_empty_mode neutralise la largeur des colonnes (message centré à l'écran)"
     assert "_empty_mode = True" in src_render and "_empty_mode = False" in src_render
-    assert "_top_hscroll.setVisible(False)" in src_render, "vide → pas de scrollbar"
-    assert "_top_hscroll.setVisible(True)" in src_render, "tableau → scrollbar rétablie"
+    # Centrage DÉTERMINISTE (3e retour) : la zone tableau (scroll + scrollbar)
+    # est masquée ENTIÈREMENT quand il n'y a pas de plans, et le message vit
+    # dans un label dédié hors du scroll — plus aucun caprice de QScrollArea
+    assert "_table_wrap.setVisible(False)" in src_render, "vide → zone tableau masquée"
+    assert "_empty_lbl.setVisible(True)" in src_render, "vide → label dédié affiché"
+    assert "_table_wrap.setVisible(True)" in src_render, "tableau → zone rétablie"
     assert "depuis le Conducteur" in src_render, "message Live (pas « onglet Scénario »)"
     for pg in (live, mp):
+        assert hasattr(pg, "_empty_lbl") and hasattr(pg, "_table_wrap"), \
+            "label vide + zone tableau présents (Live ET Mapping)"
         _tlay = pg._btn_batch_mood.parentWidget().layout()
         assert (_tlay.indexOf(pg._btn_batch_mood) < _tlay.indexOf(pg._btn_music_align)
                 < _tlay.indexOf(pg._ai_lbl) < _tlay.indexOf(pg._btn_clear_shots)), \
@@ -562,18 +568,23 @@ def fenetre_live():
     from live_window import _NAV_ITEMS as _NI
     assert _NI[1] is None and _NI[0][2] == "projects" and _NI[2][2] == "conducteur", \
         "séparateur entre Projets et Conducteur"
-    # Largeur (retour final 2026-06-12) : TOUTES les pages s'étirent jusqu'aux
-    # bords — seul le Studio IA centre ses onglets formulaire (testé dans
-    # studio_onglets). Plus aucune machinerie de plafonnement dans la fenêtre.
+    # Largeur (retours finaux 2026-06-12) : toutes les pages s'étirent jusqu'aux
+    # bords SAUF Paramètres, centré comme les onglets du Studio IA
     for k in w._pages:
+        if k == "settings":
+            continue
         assert w._pages[k].maximumWidth() > 100000, f"page {k} pleine largeur"
+    assert w._pages["settings"].maximumWidth() == 1360, "Paramètres plafonné"
     import inspect as _isp_lw
-    import live_window as _LW
-    src_lw = _isp_lw.getsource(_LW)
-    assert "_clamp_wrap" not in src_lw and "_clamp_inner" not in src_lw, \
-        "machinerie de plafonnement retirée de la fenêtre"
     w._navigate("settings")
-    assert w._stack.currentWidget() is w._pages["settings"]
+    assert w._stack.currentWidget() is w._settings_wrap, \
+        "Paramètres affiché dans son conteneur centré"
+    # Dialogue « Nous contacter » Live : groupe + lien WhatsApp PANDORA | Live
+    # (le dialogue Cinéma reste sur le groupe Cinéma)
+    from ui.dialog_contact_live import ContactDialog as _CDL
+    from ui.dialog_contact import ContactDialog as _CDC
+    assert _CDL._WA_GROUP == "PANDORA | Live" and "LEVinbwbtOv3yn8zr8zWPL" in _CDL._WA_LINK
+    assert _CDC._WA_GROUP == "PANDORA | Cinéma" and "JRo5SWLBwbxLgACtrDksDj" in _CDC._WA_LINK
     # Alignement des bandeaux (retour 2026-06-12) : l'en-tête de l'assistant
     # partage la hauteur STANDARD 60 px des bandeaux de pages — lignes alignées
     assert w._assistant._header.maximumHeight() == 60, "en-tête assistant aligné"

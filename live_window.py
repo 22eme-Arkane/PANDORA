@@ -733,11 +733,23 @@ class LiveWindow(QMainWindow):
             lambda paths: (resolume.queue_paths(paths), self._navigate("resolume")))
 
         from ui.page_live_settings import PageLiveSettings
-        self._pages["settings"] = PageLiveSettings()
+        settings = PageLiveSettings()
+        self._pages["settings"] = settings
+        # Paramètres : SEULE page centrée comme le Studio IA (retour 2026-06-12)
+        settings.setMaximumWidth(1360)
+        self._settings_wrap = QWidget()
+        self._settings_wrap.setStyleSheet(f"background:{CP['bg0']};")
+        _sl = QHBoxLayout(self._settings_wrap)
+        _sl.setContentsMargins(0, 0, 0, 0)
+        _sl.setSpacing(0)
+        _sl.addStretch(1)
+        _sl.addWidget(settings, 4)
+        _sl.addStretch(1)
 
         for key in ("projects", "conducteur", "seq_live", "seq_mapping", "casting",
                     "accessoires", "vehicules", "studio", "resolume", "settings"):
-            self._stack.addWidget(self._pages[key])
+            self._stack.addWidget(self._settings_wrap if key == "settings"
+                                  else self._pages[key])
 
     # Les pages copiées de Cinéma émettent parfois les clés Cinéma → on les
     # ré-aiguille vers les clés Live correspondantes.
@@ -766,7 +778,7 @@ class LiveWindow(QMainWindow):
                 page.refresh()
             except Exception:
                 pass
-        self._stack.setCurrentWidget(page)
+        self._stack.setCurrentWidget(self._settings_wrap if key == "settings" else page)
         self._sidebar.set_active(key)
         # Contexte de l'assistant
         ctx = self._ASSIST_CTX.get(key)
