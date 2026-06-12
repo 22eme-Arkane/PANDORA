@@ -538,6 +538,17 @@ def fenetre_live():
     from live_window import _NAV_ITEMS as _NI
     assert _NI[1] is None and _NI[0][2] == "projects" and _NI[2][2] == "conducteur", \
         "séparateur entre Projets et Conducteur"
+    # Largeur de lecture commune (retour 2026-06-12) : toutes les pages
+    # formulaire plafonnées/centrées ; tableaux, contrôleur et Studio (qui
+    # gère ses onglets) restent pleine largeur
+    for k in ("settings", "conducteur", "projects", "casting", "accessoires", "vehicules"):
+        assert w._pages[k].maximumWidth() == 1360, f"page {k} plafonnée"
+        assert w._stack_widgets[k] is not w._pages[k], f"page {k} centrée (conteneur)"
+    for k in ("seq_live", "seq_mapping", "resolume", "studio"):
+        assert w._stack_widgets[k] is w._pages[k], f"page {k} pleine largeur"
+    w._navigate("settings")
+    assert w._stack.currentWidget() is w._stack_widgets["settings"], \
+        "navigation → conteneur centré, pas la page brute"
     w._navigate("castings")   # alias Cinéma → Live, ne doit pas lever
     w._navigate("vehicles")
     assert w._NAV_ALIASES["castings"] == "casting"

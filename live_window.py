@@ -686,6 +686,28 @@ class LiveWindow(QMainWindow):
         from PyQt6.QtCore import QUrl
         QDesktopServices.openUrl(QUrl(url))
 
+    # Largeur de lecture commune à toutes les pages formulaire (retour
+    # 2026-06-12 : en plein écran, boutons/encadrés étirés jusqu'aux bords =
+    # illisible). Même valeur que les onglets du Studio IA.
+    _PAGE_MAX_W = 1360
+    # Pages dont la largeur est FONCTIONNELLE (tableaux, contrôleur, galeries)
+    # — jamais plafonnées. Le Studio gère ses onglets lui-même.
+    _FULL_WIDTH_PAGES = {"seq_live", "seq_mapping", "resolume", "studio"}
+
+    def _clamp_wrap(self, page: QWidget) -> QWidget:
+        """Centre la page dans un conteneur : elle s'étend jusqu'à _PAGE_MAX_W,
+        le fond remplit les côtés."""
+        page.setMaximumWidth(self._PAGE_MAX_W)
+        wrap = QWidget()
+        wrap.setStyleSheet(f"background:{CP['bg0']};")
+        hl = QHBoxLayout(wrap)
+        hl.setContentsMargins(0, 0, 0, 0)
+        hl.setSpacing(0)
+        hl.addStretch(1)
+        hl.addWidget(page, 4)
+        hl.addStretch(1)
+        return wrap
+
     def _build_pages(self):
         # Toutes les pages ci-dessous sont des VERSIONS LIVE INDÉPENDANTES
         # (sous-classes dédiées, voir ui/live_pages.py) → modifiables sans toucher Cinéma.
@@ -733,9 +755,13 @@ class LiveWindow(QMainWindow):
         from ui.page_live_settings import PageLiveSettings
         self._pages["settings"] = PageLiveSettings()
 
+        self._stack_widgets: dict[str, QWidget] = {}
         for key in ("projects", "conducteur", "seq_live", "seq_mapping", "casting",
                     "accessoires", "vehicules", "studio", "resolume", "settings"):
-            self._stack.addWidget(self._pages[key])
+            page = self._pages[key]
+            w = page if key in self._FULL_WIDTH_PAGES else self._clamp_wrap(page)
+            self._stack_widgets[key] = w
+            self._stack.addWidget(w)
 
     # Les pages copiées de Cinéma émettent parfois les clés Cinéma → on les
     # ré-aiguille vers les clés Live correspondantes.
@@ -764,7 +790,8 @@ class LiveWindow(QMainWindow):
                 page.refresh()
             except Exception:
                 pass
-        self._stack.setCurrentWidget(page)
+        # Le stack contient le conteneur centré (pages plafonnées) ou la page brute
+        self._stack.setCurrentWidget(self._stack_widgets.get(key, page))
         self._sidebar.set_active(key)
         # Contexte de l'assistant
         ctx = self._ASSIST_CTX.get(key)
