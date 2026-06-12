@@ -807,11 +807,13 @@ class AssistantPanel(QWidget):
 # ── Toggle strip ───────────────────────────────────────────────────────────────
 
 class AssistantToggleStrip(QWidget):
-    """Bande verticale 28px pour ouvrir/fermer le panneau assistant."""
+    """Bande verticale 28px pour ouvrir/fermer le panneau assistant.
+    side="right" (défaut — Cinéma) ou "left" (Live) : flèches en miroir."""
 
-    def __init__(self, panel: AssistantPanel):
+    def __init__(self, panel: AssistantPanel, side: str = "right"):
         super().__init__()
         self._panel  = panel
+        self._side   = "left" if side == "left" else "right"
         self._open   = panel.isVisible()
         self.setFixedWidth(28)
         self.setCursor(Qt.CursorShape.PointingHandCursor)
@@ -844,6 +846,8 @@ class AssistantToggleStrip(QWidget):
         lay.addStretch()
 
     def _arrow_char(self) -> str:
+        if self._side == "left":
+            return "❯" if self._open else "❮"
         return "❮" if self._open else "❯"
 
     def mousePressEvent(self, e):

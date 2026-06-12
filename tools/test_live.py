@@ -496,6 +496,11 @@ def fenetre_live():
     assert w._sidebar.maximumWidth() > 10000, "plus de colonne latérale fixe"
     assert w._sidebar.parentWidget() is w.centralWidget(), \
         "la barre vit sous le corps (layout vertical racine), pas dans le body"
+    # Assistant IA à GAUCHE des pages (poignée au bord gauche)
+    _body_lay = w._stack.parentWidget().layout()
+    assert (_body_lay.indexOf(w._assistant_toggle) < _body_lay.indexOf(w._assistant)
+            < _body_lay.indexOf(w._stack)), "assistant à gauche : poignée, panneau, pages"
+    assert w._assistant_toggle._side == "left", "flèches du strip en miroir côté gauche"
     w._navigate("castings")   # alias Cinéma → Live, ne doit pas lever
     w._navigate("vehicles")
     assert w._NAV_ALIASES["castings"] == "casting"

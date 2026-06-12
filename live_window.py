@@ -342,13 +342,14 @@ class LiveWindow(QMainWindow):
         from ui.live_pages import AssistantPanelLive
         self._assistant        = AssistantPanelLive()
         self._assistant.setVisible(False)   # assistant IA fermé par défaut
-        self._assistant_toggle = AssistantToggleStrip(self._assistant)
+        self._assistant_toggle = AssistantToggleStrip(self._assistant, side="left")
 
         # Nav en BAS (façon DaVinci Resolve) : les pages récupèrent toute la
         # largeur de l'écran — plus de colonne latérale.
-        body_lay.addWidget(self._stack, 1)
-        body_lay.addWidget(self._assistant)
+        # Assistant IA à GAUCHE (poignée au bord, panneau, puis les pages).
         body_lay.addWidget(self._assistant_toggle)
+        body_lay.addWidget(self._assistant)
+        body_lay.addWidget(self._stack, 1)
         outer.addWidget(body, 1)
         outer.addWidget(self._sidebar)
 
