@@ -2952,6 +2952,7 @@ _FR_TO_EN: dict[str, str] = {
     "Lancer la file d'attente": "Launch queue",
     "Ouvre le dossier de destination des upscales.": "Opens the upscales destination folder.",
     "Ouvre le dossier de destination du sound design.": "Opens the sound design destination folder.",
+    "Ouvre le dossier de destination des clips.": "Opens the clips destination folder.",
     "Statut": "Status",
     "Double-clic : lire le clip upscalé": "Double-click: play the upscaled clip",
     "Clic droit : retirer de la file": "Right click: remove from queue",

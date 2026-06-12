@@ -2795,23 +2795,15 @@ class TabT2V(QScrollArea):
         balance_row.addWidget(self._balance_lbl)
         lay.addLayout(balance_row)
 
-        # ── Ouvrir le dossier des vidéos (toujours visible) ──────────────────
-        self._btn_open_folder = QPushButton("📁  Ouvrir le dossier des vidéos")
+        # ── Ouvrir le dossier (toujours actif) — style uniforme « ghost » ─────
+        from ui.tab_video_engines_live import _btn_ghost_style as _bgs
+        self._btn_open_folder = QPushButton(translate("Ouvrir le dossier"))
+        self._btn_open_folder.setFixedHeight(30)
         self._btn_open_folder.setCursor(Qt.CursorShape.PointingHandCursor)
-        self._btn_open_folder.setStyleSheet(f"""
-            QPushButton{{background:transparent;color:{C['text_secondary']};
-            border:1px solid {C['border']};border-radius:8px;font-size:11px;
-            padding:6px 14px;}}
-            QPushButton:hover{{background:{C['bg3']};color:{C['text_primary']};}}
-        """)
+        self._btn_open_folder.setToolTip(translate("Ouvre le dossier de destination des clips."))
+        self._btn_open_folder.setStyleSheet(_bgs())
         self._btn_open_folder.clicked.connect(self._open_output_folder)
-
-        _folder_row = QHBoxLayout()
-        _folder_row.setContentsMargins(0, 0, 0, 0)
-        _folder_row.setSpacing(10)
-        _folder_row.addStretch()
-        _folder_row.addWidget(self._btn_open_folder)
-        lay.addLayout(_folder_row)
+        lay.addWidget(self._btn_open_folder)
 
         # ── Encart prix (sous la barre DaVinci) ───────────────────────────────
         price_frame = QFrame()

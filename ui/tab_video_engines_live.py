@@ -1296,15 +1296,13 @@ class TabVideoEngines(QWidget):
         )
         self._result_lbl.setWordWrap(True)
         result_lay.addWidget(self._result_lbl)
-        result_btn_row = QHBoxLayout()
-        self._btn_open = QPushButton("Ouvrir le dossier")
+        self._btn_open = QPushButton(translate("Ouvrir le dossier"))
         self._btn_open.setFixedHeight(30)
-        self._btn_open.setEnabled(False)
+        # Toujours actif : ouvre le dossier de DESTINATION même avant de générer
+        self._btn_open.setToolTip(translate("Ouvre le dossier de destination des clips."))
         self._btn_open.setStyleSheet(_btn_ghost_style())
         self._btn_open.clicked.connect(self._on_open_folder)
-        result_btn_row.addWidget(self._btn_open)
-        result_btn_row.addStretch()
-        result_lay.addLayout(result_btn_row)
+        result_lay.addWidget(self._btn_open)
         lay.addWidget(self._result_card)
         lay.addStretch()
 
@@ -1712,7 +1710,6 @@ class TabVideoEngines(QWidget):
             self._result_lbl.setStyleSheet(
                 f"color:{C['accent']};font-size:12px;background:transparent;"
             )
-            self._btn_open.setEnabled(True)
             self.generation_done.emit(result)
         else:
             self._status_lbl.setText(translate("✓  Terminé (mode démo — aucune clé fal.ai)"))
@@ -1725,9 +1722,15 @@ class TabVideoEngines(QWidget):
         show_api_error(self, err)
 
     def _on_open_folder(self):
-        if self._last_folder and os.path.isdir(self._last_folder):
-            try:
-                os.startfile(self._last_folder)
-            except AttributeError:
-                import subprocess
-                subprocess.Popen(["xdg-open", self._last_folder])
+        """Dernier dossier de sortie, sinon la DESTINATION par défaut — le
+        bouton fonctionne donc même avant toute génération."""
+        folder = self._last_folder
+        if not folder or not os.path.isdir(folder):
+            from core.config import get_output_dir
+            folder = get_output_dir()
+            os.makedirs(folder, exist_ok=True)
+        try:
+            os.startfile(folder)
+        except AttributeError:
+            import subprocess
+            subprocess.Popen(["xdg-open", folder])

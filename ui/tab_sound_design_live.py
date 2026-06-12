@@ -273,20 +273,19 @@ class TabSoundDesignLive(QScrollArea):
             f"background:transparent;border:none;")
         res_row.addWidget(res_lbl)
         res_row.addStretch()
-        self._btn_open_dir = QPushButton("📁  " + translate("Ouvrir le dossier"))
-        self._btn_open_dir.setFixedHeight(26)
+        root.addLayout(res_row)
+
+        # Toujours actif : ouvre la destination même avant de générer.
+        # Style uniforme « ghost » pleine largeur (comme Modifier des clips)
+        from ui.tab_video_engines_live import _btn_ghost_style as _bgs
+        self._btn_open_dir = QPushButton(translate("Ouvrir le dossier"))
+        self._btn_open_dir.setFixedHeight(30)
         self._btn_open_dir.setCursor(Qt.CursorShape.PointingHandCursor)
-        # Toujours actif : ouvre la destination même avant de générer
         self._btn_open_dir.setToolTip(translate(
             "Ouvre le dossier de destination du sound design."))
-        self._btn_open_dir.setStyleSheet(
-            f"QPushButton{{background:transparent;color:{C['text_secondary']};"
-            f"border:1px solid {C['border']};border-radius:5px;font-size:10px;"
-            f"font-weight:600;padding:0 12px;}}"
-            f"QPushButton:hover{{color:{C['text_primary']};border-color:{C['border_bright']};}}")
+        self._btn_open_dir.setStyleSheet(_bgs())
         self._btn_open_dir.clicked.connect(self._on_open_dir)
-        res_row.addWidget(self._btn_open_dir)
-        root.addLayout(res_row)
+        root.addWidget(self._btn_open_dir)
 
         _scroll = QScrollArea()
         _scroll.setWidgetResizable(True)

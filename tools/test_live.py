@@ -512,6 +512,20 @@ def studio_onglets():
     # Un seul trait en haut du Studio : pas de ligne de base native sous les
     # onglets (documentMode la doublait avec celle de la topbar)
     assert s.tabs.tabBar().drawBase() is False, "ligne de base des onglets retirée"
+    # « Ouvrir le dossier » : style ghost UNIFORME (référence Modifier des
+    # clips) sur les 5 onglets, TOUJOURS cliquable (destination par défaut)
+    from ui.tab_video_engines_live import _btn_ghost_style as _ghost
+    _open_btns = (s.tab_sequences._btn_open_folder, s.tab_engines._btn_open,
+                  s.tab_modify._btn_open, s.tab_sound._btn_open_dir,
+                  s.tab_upscale._btn_open)
+    for _b in _open_btns:
+        assert _b.styleSheet() == _ghost(), "style ghost uniforme"
+        assert _b.isEnabled(), "toujours cliquable (même sans génération)"
+        assert "📁" not in _b.text(), "libellé uniforme sans emoji"
+    import inspect as _isp2
+    for _cls in (type(s.tab_modify), type(s.tab_engines)):
+        assert "get_output_dir" in _isp2.getsource(_cls._on_open_folder), \
+            f"{_cls.__name__} : repli sur la destination par défaut"
 
 
 @test

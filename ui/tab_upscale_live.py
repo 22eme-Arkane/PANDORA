@@ -190,7 +190,7 @@ class TabUpscaleLive(QScrollArea):
             f"font-family:'Consolas',monospace;background:transparent;")
         lay.addWidget(self._status)
 
-        self._btn_open = QPushButton("📁  " + translate("Ouvrir le dossier"))
+        self._btn_open = QPushButton(translate("Ouvrir le dossier"))
         self._btn_open.setFixedHeight(30)
         # Toujours actif : ouvre le dossier de DESTINATION même avant de générer
         self._btn_open.setToolTip(translate("Ouvre le dossier de destination des upscales."))
