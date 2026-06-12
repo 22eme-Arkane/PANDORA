@@ -268,6 +268,20 @@ def colonnes_sequences():
     vis_l = M._visible_order()
     assert all(c not in vis_l for c in (6, 11, 12)), "Live masque Mouvement/Décor/Heure"
     assert 5 in vis_l and 7 in vis_l, "Live garde Axe/Valeur"
+    # Retours 2026-06-12 (capture) — vaut pour Séquences Live ET Mapping :
+    # tableau vide → message centré À L'ÉCRAN (conteneur sans largeur de colonnes)
+    # et AUCUNE scrollbar horizontale ; Moods/Caler à GAUCHE de la toolbar
+    import inspect as _isp
+    src_render = _isp.getsource(M.PageStoryboard._render)
+    assert "setMinimumWidth(0)" in src_render, "vide → conteneur à la fenêtre (centré)"
+    assert "_top_hscroll.setVisible(False)" in src_render, "vide → pas de scrollbar"
+    assert "_top_hscroll.setVisible(True)" in src_render, "tableau → scrollbar rétablie"
+    assert "depuis le Conducteur" in src_render, "message Live (pas « onglet Scénario »)"
+    for pg in (live, mp):
+        _tlay = pg._btn_batch_mood.parentWidget().layout()
+        assert (_tlay.indexOf(pg._btn_batch_mood) < _tlay.indexOf(pg._btn_music_align)
+                < _tlay.indexOf(pg._ai_lbl) < _tlay.indexOf(pg._btn_clear_shots)), \
+            "Moods et Caler à gauche, actions à droite"
     sb.set_namespace("storyboard")
 
 

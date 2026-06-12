@@ -1999,6 +1999,10 @@ _FR_TO_EN: dict[str, str] = {
     "Aucun découpage pour ce projet.":           "No breakdown for this project.",
     "Génère un découpage depuis l'onglet Scénario.":
         "Generate a breakdown from the Screenplay tab.",
+    "Aucun découpage pour ce projet.\n\nGénère un découpage depuis le Conducteur.":
+        "No breakdown for this project.\n\nGenerate a breakdown from the Rundown.",
+    "Aucun plan dans ce découpage.\n\nClique ＋ Ajouter un plan pour créer un plan manuellement.":
+        "No shot in this breakdown.\n\nClick ＋ Add a shot to create one manually.",
 
     # ── Page Castings — manquants ─────────────────────────────────────────────
     "Aucun personnage.":                         "No characters.",

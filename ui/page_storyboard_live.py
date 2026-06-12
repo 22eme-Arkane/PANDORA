@@ -2332,7 +2332,7 @@ class PageStoryboard(QWidget):
             f"background:transparent;"
         )
         self._ai_lbl.setMinimumWidth(0)
-        lay.addWidget(self._ai_lbl, 1)
+        # (ajouté au layout APRÈS Moods/Caler — boutons d'IA à GAUCHE, actions à droite)
 
         self._mood_progress = QProgressBar()
         self._mood_progress.setRange(0, 100)
@@ -2346,7 +2346,6 @@ class PageStoryboard(QWidget):
             f"QProgressBar{{background:{CP['bg3']};border:none;border-radius:3px;}}"
             f"QProgressBar::chunk{{background:{CP['accent']};border-radius:3px;}}"
         )
-        lay.addWidget(self._mood_progress)
 
         # Hidden analyze button kept so callbacks (_on_shots_generated, _on_ai_fail) work
         self._btn_analyze = QPushButton()
@@ -2403,6 +2402,11 @@ class PageStoryboard(QWidget):
         )
         self._btn_music_align.clicked.connect(self._on_music_align)
         lay.addWidget(self._btn_music_align)
+
+        # Boutons d'IA (Moods / Caler) à GAUCHE — la progression et le statut
+        # les suivent, puis l'espace extensible pousse les actions à droite.
+        lay.addWidget(self._mood_progress)
+        lay.addWidget(self._ai_lbl, 1)
 
         btn_new = QPushButton("＋  Ajouter un plan")
         btn_new.setFixedHeight(34)
@@ -2663,18 +2667,27 @@ class PageStoryboard(QWidget):
         if not self._all_shots:
             no_version = not self._active_version_id or self._active_version_id == DEFAULT_VERSION_ID
             msg = (
-                "Aucun découpage pour ce projet.\n\nGénère un découpage depuis l'onglet Scénario."
+                "Aucun découpage pour ce projet.\n\nGénère un découpage depuis le Conducteur."
                 if no_version else
                 "Aucun plan dans ce découpage.\n\nClique ＋ Ajouter un plan pour créer un plan manuellement."
             )
-            empty = QLabel(msg)
+            empty = QLabel(translate(msg))
             empty.setAlignment(Qt.AlignmentFlag.AlignCenter)
             empty.setStyleSheet(
                 f"color:{CP['text_dim']};font-size:13px;background:transparent;border:none;"
             )
+            # Pas de tableau → le conteneur reprend la largeur de la FENÊTRE
+            # (message centré à l'écran, pas dans la largeur des colonnes) et
+            # la barre de défilement horizontale disparaît (aucune utilité)
+            self._list_container.setMinimumWidth(0)
+            self._top_hscroll.setVisible(False)
             self._list_lay.addWidget(empty)
             self._dur_lbl.setText("")
             return
+
+        # Tableau présent → largeur des colonnes + scrollbar de tête rétablies
+        self._list_container.setMinimumWidth(sum(_col_widths) + len(_col_widths) - 1)
+        self._top_hscroll.setVisible(True)
 
         total_dur = sum(float(s.get("duration", 5.0)) for s in self._all_shots)
         mins = int(total_dur) // 60
