@@ -111,6 +111,10 @@ class LiveStudioWidget(QWidget):
 
         self.tabs = QTabWidget()
         self.tabs.setDocumentMode(True)
+        # Un seul trait en haut (celui de la topbar) : le documentMode dessine
+        # sa propre ligne de base sous la barre d'onglets → trait DOUBLÉ (retour
+        # 2026-06-12). On supprime la ligne native, l'accent par onglet suffit.
+        self.tabs.tabBar().setDrawBase(False)
 
         # 1. Génération directe (version Live : outils VJ/Mapping activés dans __init__)
         self.tab_engines = TabVideoEnginesLive()

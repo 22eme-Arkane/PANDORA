@@ -509,6 +509,9 @@ def studio_onglets():
         assert _t.widget().maximumWidth() == 1360, "contenu plafonné en largeur"
         assert _t.alignment() & _Qt.AlignmentFlag.AlignHCenter, "contenu centré"
     assert s.tab_library.widget().maximumWidth() > 100000, "Vidéothèque pleine largeur"
+    # Un seul trait en haut du Studio : pas de ligne de base native sous les
+    # onglets (documentMode la doublait avec celle de la topbar)
+    assert s.tabs.tabBar().drawBase() is False, "ligne de base des onglets retirée"
 
 
 @test
@@ -545,15 +548,22 @@ def fenetre_live():
     from live_window import _NAV_ITEMS as _NI
     assert _NI[1] is None and _NI[0][2] == "projects" and _NI[2][2] == "conducteur", \
         "séparateur entre Projets et Conducteur"
-    # Largeur de lecture (retours 2026-06-12) : Projets/Paramètres plafonnés et
-    # centrés ; Conducteur/Casting/Accessoires/Véhicules + tableaux/contrôleur/
-    # Studio prennent TOUTE la fenêtre (panneau droit du Conducteur au bord)
-    for k in ("settings", "projects"):
-        assert w._pages[k].maximumWidth() == 1360, f"page {k} plafonnée"
-        assert w._stack_widgets[k] is not w._pages[k], f"page {k} centrée (conteneur)"
-    for k in ("conducteur", "casting", "accessoires", "vehicules",
+    # Largeur de lecture (retours 2026-06-12) : Paramètres plafonné/centré ;
+    # Projets = bandeau-titre PLEINE LARGEUR + contenu plafonné dessous ;
+    # Conducteur/Casting/Accessoires/Véhicules + tableaux/contrôleur/Studio
+    # prennent TOUTE la fenêtre (panneau droit du Conducteur au bord)
+    assert w._pages["settings"].maximumWidth() == 1360, "Paramètres plafonné"
+    assert w._stack_widgets["settings"] is not w._pages["settings"], "Paramètres centré"
+    for k in ("projects", "conducteur", "casting", "accessoires", "vehicules",
               "seq_live", "seq_mapping", "resolume", "studio"):
         assert w._stack_widgets[k] is w._pages[k], f"page {k} pleine largeur"
+    # Projets : le bandeau va aux bords, le CONTENU (dernier item) est centré
+    _pp = w._pages["projects"]
+    assert _pp.maximumWidth() > 100000, "bandeau Projets jusqu'aux bords"
+    _pl = _pp.layout()
+    _wrap = _pl.itemAt(_pl.count() - 1).widget()
+    assert _wrap.layout().itemAt(1).widget().maximumWidth() == 1360, \
+        "contenu Projets plafonné sous le bandeau"
     w._navigate("settings")
     assert w._stack.currentWidget() is w._stack_widgets["settings"], \
         "navigation → conteneur centré, pas la page brute"

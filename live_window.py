@@ -692,7 +692,32 @@ class LiveWindow(QMainWindow):
     # panneau droit du Conducteur (Références/IA/Générer) reste collé au bord
     # droit, comme la poignée du menu IA.
     _FULL_WIDTH_PAGES = {"seq_live", "seq_mapping", "resolume", "studio",
-                         "conducteur", "casting", "accessoires", "vehicules"}
+                         "conducteur", "casting", "accessoires", "vehicules",
+                         "projects"}
+
+    def _clamp_inner(self, page: QWidget):
+        """Retour 2026-06-12 : les BANDEAUX-TITRES (« Projets », « Conducteur »…)
+        vont jusqu'aux bords — seul le CONTENU sous le bandeau est plafonné.
+        Le dernier item du layout racine (le contenu extensible) est ré-emballé
+        dans un conteneur centré ; les bandes au-dessus restent pleine largeur."""
+        lay = page.layout()
+        if lay is None or lay.count() == 0:
+            return
+        idx = lay.count() - 1
+        content = lay.itemAt(idx).widget()
+        if content is None:
+            return
+        lay.removeWidget(content)
+        content.setMaximumWidth(self._PAGE_MAX_W)
+        wrap = QWidget()
+        wrap.setStyleSheet("background:transparent;")
+        hl = QHBoxLayout(wrap)
+        hl.setContentsMargins(0, 0, 0, 0)
+        hl.setSpacing(0)
+        hl.addStretch(1)
+        hl.addWidget(content, 4)
+        hl.addStretch(1)
+        lay.insertWidget(idx, wrap, 1)
 
     def _clamp_wrap(self, page: QWidget) -> QWidget:
         """Centre la page dans un conteneur : elle s'étend jusqu'à _PAGE_MAX_W,
@@ -719,6 +744,8 @@ class LiveWindow(QMainWindow):
         # ── Projets ─────────────────────────────────────────────────────────────
         projects = ProjetsLivePage(self._project)
         projects.switch_requested.connect(self.switch_requested)
+        # Bandeau « Projets » pleine largeur, contenu plafonné/centré dessous
+        self._clamp_inner(projects)
         self._pages["projects"] = projects
 
         # ── Conducteur (version Live du Scénario) ───────────────────────────────
