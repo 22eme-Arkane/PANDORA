@@ -493,6 +493,14 @@ def studio_onglets():
     assert s.tab_upscale.add_clips_from_paths([real, real]) == 1, "dédoublonnage file"
     s._on_send_to_upscale([real])
     assert s.tabs.tabText(s.tabs.currentIndex()) == "Upscaling", "bascule vers Upscaling"
+    # Lisibilité plein écran (retour 2026-06-12, nav en barre basse) : les
+    # onglets FORMULAIRE sont plafonnés en largeur et centrés ; la Vidéothèque
+    # (galerie) garde la pleine largeur
+    from PyQt6.QtCore import Qt as _Qt
+    for _t in (s.tab_sequences, s.tab_modify, s.tab_sound, s.tab_upscale):
+        assert _t.widget().maximumWidth() == 1360, "contenu plafonné en largeur"
+        assert _t.alignment() & _Qt.AlignmentFlag.AlignHCenter, "contenu centré"
+    assert s.tab_library.widget().maximumWidth() > 100000, "Vidéothèque pleine largeur"
 
 
 @test

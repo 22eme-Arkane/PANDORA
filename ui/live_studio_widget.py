@@ -19,7 +19,7 @@ Différences avec le Studio Cinéma :
 Cinéma n'est pas modifié : ce widget est un composant séparé.
 """
 
-from PyQt6.QtWidgets import QWidget, QVBoxLayout, QLabel, QTabWidget
+from PyQt6.QtWidgets import QWidget, QVBoxLayout, QLabel, QTabWidget, QScrollArea
 from PyQt6.QtCore import Qt, pyqtSignal
 
 from ui.styles import C, STYLESHEET
@@ -136,6 +136,14 @@ class LiveStudioWidget(QWidget):
         # 7. Historique (version Live)
         self.tab_history = TabHistoryLive()
 
+        # Lisibilité plein écran (nav en barre basse, retour 2026-06-12) : le
+        # contenu des onglets FORMULAIRE est plafonné en largeur et centré —
+        # le fond remplit les côtés. La Vidéothèque et l'Historique (galeries /
+        # listes) gardent la pleine largeur.
+        for _t in (self.tab_sequences, self.tab_engines, self.tab_modify,
+                   self.tab_sound, self.tab_upscale):
+            self._clamp_content_width(_t)
+
         # Ordre validé : Séquences d'abord (le cœur du workflow), puis production.
         self.tabs.addTab(self.tab_sequences, translate("Générer depuis Séquences"))
         self.tabs.addTab(self.tab_engines,   translate("Génération directe"))
@@ -162,6 +170,15 @@ class LiveStudioWidget(QWidget):
         self.tabs.currentChanged.connect(self._on_tab_changed)
 
         root.addWidget(self.tabs)
+
+    @staticmethod
+    def _clamp_content_width(tab: QWidget, max_w: int = 1360):
+        """Plafonne la largeur du CONTENU d'un onglet formulaire et le centre
+        (l'onglet lui-même reste pleine largeur, le fond remplit les côtés)."""
+        scroll = tab if isinstance(tab, QScrollArea) else tab.findChild(QScrollArea)
+        if scroll is not None and scroll.widget() is not None:
+            scroll.widget().setMaximumWidth(max_w)
+            scroll.setAlignment(Qt.AlignmentFlag.AlignHCenter | Qt.AlignmentFlag.AlignTop)
 
     def _on_tab_changed(self, index: int):
         if index == self._library_tab_index:
