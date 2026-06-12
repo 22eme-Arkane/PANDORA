@@ -2191,7 +2191,7 @@ class PageStoryboard(QWidget):
 
     def _build_shots_topbar(self) -> QWidget:
         bar = QWidget()
-        bar.setFixedHeight(56)
+        bar.setFixedHeight(60)   # hauteur STANDARD des bandeaux (alignement assistant)
         bar.setStyleSheet(f"background:{CP['bg1']};")
         lay = QHBoxLayout(bar)
         lay.setContentsMargins(20, 0, 20, 0)

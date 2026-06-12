@@ -460,7 +460,7 @@ class PageLive(QWidget):
 
     def _build_topbar(self) -> QWidget:
         bar = QWidget()
-        bar.setFixedHeight(54)
+        bar.setFixedHeight(60)   # hauteur STANDARD des bandeaux (alignement assistant)
         bar.setStyleSheet(
             f"background:{CP['bg1']};border-bottom:2px solid {CP['border_bright']};"
         )

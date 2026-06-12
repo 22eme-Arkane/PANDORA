@@ -294,7 +294,7 @@ class PageScenario(QWidget):
 
         # Top bar
         topbar = QWidget()
-        topbar.setFixedHeight(56)
+        topbar.setFixedHeight(60)   # hauteur STANDARD des bandeaux (alignement assistant)
         topbar.setStyleSheet(f"background:{CP['bg1']};")
         tl = QHBoxLayout(topbar)
         tl.setContentsMargins(16, 0, 16, 0)

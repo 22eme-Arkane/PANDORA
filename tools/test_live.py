@@ -574,6 +574,15 @@ def fenetre_live():
         "machinerie de plafonnement retirée de la fenêtre"
     w._navigate("settings")
     assert w._stack.currentWidget() is w._pages["settings"]
+    # Alignement des bandeaux (retour 2026-06-12) : l'en-tête de l'assistant
+    # partage la hauteur STANDARD 60 px des bandeaux de pages — lignes alignées
+    assert w._assistant._header.maximumHeight() == 60, "en-tête assistant aligné"
+    for _mod, _meth in (("ui.page_storyboard_live", "_build_shots_topbar"),
+                        ("ui.page_live", "_build_topbar")):
+        _m = __import__(_mod, fromlist=["x"])
+        _cls = getattr(_m, "PageStoryboard", None) or getattr(_m, "PageLive")
+        assert "setFixedHeight(60)" in _isp_lw.getsource(getattr(_cls, _meth)), \
+            f"bandeau 60 px : {_mod}.{_meth}"
     # Colonne droite permanente = largeur de la poignée IA fermée (symétrie)
     assert w._right_spacer.maximumWidth() == w._assistant_toggle.maximumWidth() == 28
     assert _body_lay.indexOf(w._right_spacer) > _body_lay.indexOf(w._stack), \

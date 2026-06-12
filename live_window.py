@@ -340,7 +340,9 @@ class LiveWindow(QMainWindow):
         self._stack.setStyleSheet(f"background:{CP['bg0']};")
 
         from ui.live_pages import AssistantPanelLive
-        self._assistant        = AssistantPanelLive()
+        # header_height=60 : la ligne de l'en-tête Assistant s'ALIGNE sur celle
+        # des bandeaux de pages (60 px partout — retour 2026-06-12)
+        self._assistant        = AssistantPanelLive(header_height=60)
         self._assistant.setVisible(False)   # assistant IA fermé par défaut
         self._assistant_toggle = AssistantToggleStrip(self._assistant, side="left")
 

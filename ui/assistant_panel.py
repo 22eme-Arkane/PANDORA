@@ -428,9 +428,11 @@ _DEFAULT_CORPUS = {
 # ── Panneau assistant ──────────────────────────────────────────────────────────
 
 class AssistantPanel(QWidget):
-    """Panneau assistant contextuel avec corpus par page et chat Haiku."""
+    """Panneau assistant contextuel avec corpus par page et chat Haiku.
+    header_height : hauteur de l'en-tête — Live passe 60 pour ALIGNER la ligne
+    de l'assistant sur celle des bandeaux de pages (défaut 76 = Cinéma)."""
 
-    def __init__(self):
+    def __init__(self, header_height: int = 76):
         super().__init__()
         self._history:  list[dict] = []
         self._worker    = None
@@ -447,7 +449,8 @@ class AssistantPanel(QWidget):
 
         # ── En-tête ────────────────────────────────────────────────────────────
         header = QWidget()
-        header.setFixedHeight(76)
+        header.setFixedHeight(header_height)
+        self._header = header
         header.setStyleSheet(
             f"background:{CP['bg2']};border-bottom:1px solid {CP['border']};"
         )
