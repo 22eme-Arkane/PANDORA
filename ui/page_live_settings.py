@@ -294,13 +294,13 @@ class PageLiveSettings(QWidget):
         self._ai_combo.currentIndexChanged.connect(_on_ai_changed)
         self._on_ai_changed = _on_ai_changed
 
-        btn_save = QPushButton("Enregistrer")
-        btn_save.setFixedHeight(36)
-        btn_save.setFixedWidth(140)
+        # Harmonisé avec Cinéma (retour 2026-06-13) : « Sauvegarder », pleine largeur
+        btn_save = QPushButton("Sauvegarder")
+        btn_save.setMinimumHeight(42)
         btn_save.setCursor(Qt.CursorShape.PointingHandCursor)
         btn_save.setStyleSheet(
             f"QPushButton{{background:{CP['accent']};color:#07080f;border:none;"
-            f"border-radius:8px;font-size:12px;font-weight:700;padding:0 16px;}}"
+            f"border-radius:9px;font-size:13px;font-weight:800;letter-spacing:0.5px;}}"
             f"QPushButton:hover{{background:#6eded6;}}"
             f"QPushButton:pressed{{background:{CP['accent_dim']};color:#fff;}}"
         )

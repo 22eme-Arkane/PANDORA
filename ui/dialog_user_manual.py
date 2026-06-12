@@ -2016,17 +2016,24 @@ class UserManualDialog(QDialog):
         scroll_nav.setWidget(nav_content)
         nav_lay.addWidget(scroll_nav, 1)
 
+        # ROUGE comme tous les boutons de fermeture (retour 2026-06-13 : le
+        # texte ne se voyait pas — la marge CSS écrasait le libellé)
         self._close_btn = QPushButton("Fermer" if self._lang == "fr" else "Close")
         self._close_btn.setFixedHeight(38)
         self._close_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         self._close_btn.setStyleSheet(
-            f"QPushButton{{background:{CP['bg3']};color:{CP['text_secondary']};"
-            f"border:1px solid {CP['border']};border-radius:8px;"
-            f"font-size:12px;font-weight:700;margin:8px;}}"
-            f"QPushButton:hover{{background:{CP['bg4']};color:{CP['text_primary']};}}"
+            f"QPushButton{{background:transparent;color:{CP['red']};"
+            f"border:1px solid rgba(255,79,106,0.45);border-radius:8px;"
+            f"font-size:12px;font-weight:700;}}"
+            f"QPushButton:hover{{background:rgba(255,79,106,0.14);}}"
+            f"QPushButton:pressed{{background:rgba(255,79,106,0.22);}}"
         )
         self._close_btn.clicked.connect(self.accept)
-        nav_lay.addWidget(self._close_btn)
+        _close_wrap = QWidget()
+        _cw_lay = QVBoxLayout(_close_wrap)
+        _cw_lay.setContentsMargins(8, 8, 8, 8)
+        _cw_lay.addWidget(self._close_btn)
+        nav_lay.addWidget(_close_wrap)
 
         main.addWidget(nav_panel)
 

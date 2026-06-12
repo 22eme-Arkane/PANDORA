@@ -9,9 +9,7 @@ from ui.styles import CP
 from ui.icons import load_icon
 from ui.davinci_panel import DaVinciPanel
 from core.config import load_config, save_config
-from core.version import VERSION
 from davinci.bridge import install_pandora_send
-from api.update_check import UpdateCheckWorker
 
 _FAL_KEYS_URL       = "https://fal.ai/dashboard/keys"
 _ANTHROPIC_KEYS_URL = "https://console.anthropic.com/settings/keys"
@@ -44,16 +42,33 @@ def _field_style():
 
 
 def _info_btn(tooltip: str, callback) -> QPushButton:
-    btn = QPushButton("ⓘ")
+    # « ? » bien visible (l'ancien glyphe ⓘ ne se rendait pas → rond vide,
+    # personne ne comprenait que c'était un bouton d'aide — retour 2026-06-13)
+    btn = QPushButton("?")
     btn.setFixedSize(24, 24)
     btn.setToolTip(tooltip)
     btn.setCursor(Qt.CursorShape.PointingHandCursor)
     btn.setStyleSheet(
-        f"QPushButton{{background:{CP['bg3']};color:{CP['text_secondary']};"
-        f"border:1px solid {CP['border_bright']};border-radius:12px;"
-        f"font-size:11px;font-weight:700;}}"
-        f"QPushButton:hover{{color:{CP['accent']};border-color:{CP['accent_dim']};"
-        f"background:rgba(78,205,196,0.12);}}"
+        f"QPushButton{{background:rgba(78,205,196,0.10);color:{CP['accent']};"
+        f"border:1px solid {CP['accent_dim']};border-radius:12px;"
+        f"font-size:13px;font-weight:900;}}"
+        f"QPushButton:hover{{color:#07080f;background:{CP['accent']};"
+        f"border-color:{CP['accent']};}}"
+    )
+    btn.clicked.connect(callback)
+    return btn
+
+
+def _test_btn(label: str, callback) -> QPushButton:
+    """Bouton « Tester API… » — même style bleu que les liens « Obtenir une clé »."""
+    btn = QPushButton(label)
+    btn.setFixedHeight(26)
+    btn.setCursor(Qt.CursorShape.PointingHandCursor)
+    btn.setStyleSheet(
+        f"QPushButton{{background:transparent;color:{CP['accent2']};"
+        f"border:1px solid {CP['accent2_dim']};border-radius:6px;"
+        f"font-size:10px;font-weight:700;padding:0 10px;}}"
+        f"QPushButton:hover{{background:rgba(124,107,255,0.12);color:#9d8fff;}}"
     )
     btn.clicked.connect(callback)
     return btn
@@ -186,56 +201,9 @@ class SettingsPage(QScrollArea):
         lay.addWidget(_lbl_light_note)
         lay.addWidget(_divider())
 
-        # ── Clés API ──────────────────────────────────────────────────────────
-        api_row = QHBoxLayout()
-        api_row.addWidget(_section("Clés API"))
-        api_row.addStretch()
-        api_row.addWidget(_info_btn(
-            "Comment obtenir les clés API",
-            lambda: self._show_api_help(),
-        ))
-        lay.addLayout(api_row)
-
         cfg = load_config()
 
-        # fal.ai
-        fal_lbl_row = QHBoxLayout()
-        lbl_fal = QLabel(
-            "fal.ai — Seedance 2.0 (vidéo)  ·  Nano Banana (portraits, accessoires, HMC)"
-        )
-        lbl_fal.setStyleSheet(
-            f"color:{CP['text_secondary']};font-size:12px;background:transparent;"
-        )
-        fal_lbl_row.addWidget(lbl_fal, 1)
-        fal_lbl_row.addWidget(_link_btn("⇗  Obtenir une clé fal.ai", _FAL_KEYS_URL))
-        lay.addLayout(fal_lbl_row)
-
-        self.api_input = QLineEdit()
-        self.api_input.setPlaceholderText("fal_••••••••••••••••••••••••")
-        self.api_input.setText(cfg.get("api_key", ""))
-        self.api_input.setEchoMode(QLineEdit.EchoMode.Password)
-        self.api_input.setStyleSheet(_field_style())
-        lay.addWidget(self.api_input)
-
-        # Anthropic
-        ant_lbl_row = QHBoxLayout()
-        lbl_ant = QLabel("Anthropic — Claude  (optimisation prompts, scénario, storyboard)")
-        lbl_ant.setStyleSheet(
-            f"color:{CP['text_secondary']};font-size:12px;background:transparent;"
-        )
-        ant_lbl_row.addWidget(lbl_ant, 1)
-        ant_lbl_row.addWidget(_link_btn("⇗  Obtenir une clé Anthropic", _ANTHROPIC_KEYS_URL))
-        lay.addLayout(ant_lbl_row)
-
-        self.anthropic_input = QLineEdit()
-        self.anthropic_input.setPlaceholderText("sk-ant-••••••••••••••••••••••••")
-        self.anthropic_input.setText(cfg.get("anthropic_key", ""))
-        self.anthropic_input.setEchoMode(QLineEdit.EchoMode.Password)
-        self.anthropic_input.setStyleSheet(_field_style())
-        lay.addWidget(self.anthropic_input)
-        lay.addWidget(_divider())
-
-        # ── Assistant IA (texte) ──────────────────────────────────────────────
+        # ── Assistant IA (texte) — juste après l'Apparence (retour 2026-06-13) ─
         lay.addWidget(_section("Assistant IA"))
         _lbl_ai = QLabel(
             "Moteur IA des fonctions texte : prompts, scénario, arrangement, storyboard, "
@@ -305,7 +273,72 @@ class SettingsPage(QScrollArea):
         self._on_ai_choice_changed()
         lay.addWidget(_divider())
 
-        # ── Connexion DaVinci Resolve Studio ──────────────────────────────────
+        # ── Clés API (testeurs à côté des liens « Obtenir une clé ») ──────────
+        api_row = QHBoxLayout()
+        api_row.addWidget(_section("Clés API"))
+        api_row.addStretch()
+        api_row.addWidget(_info_btn(
+            "Comment obtenir les clés API",
+            lambda: self._show_api_help(),
+        ))
+        lay.addLayout(api_row)
+
+        # fal.ai
+        fal_lbl_row = QHBoxLayout()
+        fal_lbl_row.setSpacing(8)
+        lbl_fal = QLabel(
+            "fal.ai — Seedance 2.0 (vidéo)  ·  Nano Banana (portraits, accessoires, HMC)"
+        )
+        lbl_fal.setStyleSheet(
+            f"color:{CP['text_secondary']};font-size:12px;background:transparent;"
+        )
+        fal_lbl_row.addWidget(lbl_fal, 1)
+        fal_lbl_row.addWidget(_test_btn("✓  Tester API fal.ai", self.test_connection))
+        fal_lbl_row.addWidget(_link_btn("⇗  Obtenir une clé fal.ai", _FAL_KEYS_URL))
+        lay.addLayout(fal_lbl_row)
+
+        self.api_input = QLineEdit()
+        self.api_input.setPlaceholderText("fal_••••••••••••••••••••••••")
+        self.api_input.setText(cfg.get("api_key", ""))
+        self.api_input.setEchoMode(QLineEdit.EchoMode.Password)
+        self.api_input.setStyleSheet(_field_style())
+        lay.addWidget(self.api_input)
+
+        # Anthropic
+        ant_lbl_row = QHBoxLayout()
+        ant_lbl_row.setSpacing(8)
+        lbl_ant = QLabel("Anthropic — Claude  (optimisation prompts, scénario, storyboard)")
+        lbl_ant.setStyleSheet(
+            f"color:{CP['text_secondary']};font-size:12px;background:transparent;"
+        )
+        ant_lbl_row.addWidget(lbl_ant, 1)
+        ant_lbl_row.addWidget(_test_btn("✓  Tester API Anthropic", self.test_anthropic_connection))
+        ant_lbl_row.addWidget(_link_btn("⇗  Obtenir une clé Anthropic", _ANTHROPIC_KEYS_URL))
+        lay.addLayout(ant_lbl_row)
+
+        self.anthropic_input = QLineEdit()
+        self.anthropic_input.setPlaceholderText("sk-ant-••••••••••••••••••••••••")
+        self.anthropic_input.setText(cfg.get("anthropic_key", ""))
+        self.anthropic_input.setEchoMode(QLineEdit.EchoMode.Password)
+        self.anthropic_input.setStyleSheet(_field_style())
+        lay.addWidget(self.anthropic_input)
+        lay.addWidget(_divider())
+
+        # ── Sauvegarder (pleine largeur, style harmonisé) ─────────────────────
+        btn_save = QPushButton("Sauvegarder")
+        btn_save.setMinimumHeight(46)
+        btn_save.setCursor(Qt.CursorShape.PointingHandCursor)
+        btn_save.setStyleSheet(
+            f"QPushButton{{background:{CP['accent']};color:#07080f;border:none;"
+            f"border-radius:9px;font-size:13px;font-weight:800;letter-spacing:0.5px;}}"
+            f"QPushButton:hover{{background:#6eded6;}}"
+            f"QPushButton:pressed{{background:{CP['accent_dim']};color:#ffffff;}}"
+        )
+        btn_save.clicked.connect(self.save)
+        lay.addWidget(btn_save)
+        lay.addWidget(_divider())
+
+        # ── Connexion DaVinci Resolve Studio — tout en bas ────────────────────
         dvr_row = QHBoxLayout()
         dvr_row.setSpacing(8)
         _dvr_title = QLabel("Connexion DaVinci Resolve Studio".upper())
@@ -371,102 +404,9 @@ class SettingsPage(QScrollArea):
         _send_row.addWidget(_btn_send)
         _send_row.addStretch()
         lay.addLayout(_send_row)
-
-        lay.addWidget(_divider())
-
-        # ── Sauvegarde / Test ─────────────────────────────────────────────────
-        btn_row = QHBoxLayout()
-
-        btn_update = QPushButton("↑  Vérifier les mises à jour")
-        btn_update.setMinimumHeight(44)
-        btn_update.setCursor(Qt.CursorShape.PointingHandCursor)
-        btn_update.setStyleSheet("""
-            QPushButton{
-                background:#1a6bbf;color:#ffffff;border:none;
-                border-radius:8px;font-size:12px;font-weight:700;
-                letter-spacing:1px;padding:0 20px;
-            }
-            QPushButton:hover{background:#2480d9;}
-            QPushButton:pressed{background:#1558a0;}
-            QPushButton:disabled{background:#1a3d5c;color:#5a7a99;}
-        """)
-        btn_update.clicked.connect(self._check_updates)
-        self._btn_update = btn_update
-
-        btn_save = QPushButton("💾  Sauvegarder")
-        btn_save.setMinimumHeight(44)
-        btn_save.setStyleSheet(f"""
-            QPushButton{{
-                background:{CP['accent']};color:#07080f;border:none;
-                border-radius:8px;font-size:13px;font-weight:700;
-                letter-spacing:1px;padding:0 24px;
-            }}
-            QPushButton:hover{{background:#6eded6;}}
-            QPushButton:pressed{{background:{CP['accent_dim']};color:#ffffff;}}
-        """)
-        btn_save.clicked.connect(self.save)
-
-        btn_test = QPushButton("Tester API fal.ai")
-        btn_test.setMinimumHeight(44)
-        btn_test.setStyleSheet(f"""
-            QPushButton{{
-                background:transparent;color:{CP['text_secondary']};
-                border:1px solid {CP['border']};border-radius:8px;
-                font-size:12px;font-weight:700;padding:0 20px;
-            }}
-            QPushButton:hover{{background:{CP['bg3']};color:{CP['text_primary']};}}
-        """)
-        btn_test.clicked.connect(self.test_connection)
-
-        btn_test_ant = QPushButton("Tester API Anthropic")
-        btn_test_ant.setMinimumHeight(44)
-        btn_test_ant.setStyleSheet(f"""
-            QPushButton{{
-                background:transparent;color:{CP['text_secondary']};
-                border:1px solid {CP['border']};border-radius:8px;
-                font-size:12px;font-weight:700;padding:0 20px;
-            }}
-            QPushButton:hover{{background:{CP['bg3']};color:{CP['text_primary']};}}
-        """)
-        btn_test_ant.clicked.connect(self.test_anthropic_connection)
-
-        btn_row.addWidget(btn_update)
-        btn_row.addWidget(btn_save)
-        btn_row.addWidget(btn_test)
-        btn_row.addWidget(btn_test_ant)
-        btn_row.addStretch()
-        lay.addLayout(btn_row)
+        # (le bouton de vérification de mise à jour a été retiré de cette page :
+        # il existe déjà en haut à droite de la fenêtre — retour 2026-06-13)
         lay.addStretch()
-
-    def _check_updates(self):
-        self._btn_update.setEnabled(False)
-        self._btn_update.setText("Vérification…")
-        self._update_worker = UpdateCheckWorker()
-        self._update_worker.update_available.connect(self._on_update_available)
-        self._update_worker.no_update.connect(self._on_no_update)
-        self._update_worker.check_failed.connect(self._on_update_failed)
-        self._update_worker.start()
-
-    def _on_update_available(self, version: str, url: str):
-        self._btn_update.setEnabled(True)
-        self._btn_update.setText("↑  Vérifier les mises à jour")
-        msg = QMessageBox(self)
-        msg.setWindowTitle("Mise à jour disponible")
-        msg.setText(f"Une nouvelle version est disponible : <b>v{version}</b><br><br>Voulez-vous ouvrir la page de téléchargement ?")
-        msg.setStandardButtons(QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
-        msg.setDefaultButton(QMessageBox.StandardButton.Yes)
-        if msg.exec() == QMessageBox.StandardButton.Yes:
-            webbrowser.open(url)
-
-    def _on_no_update(self):
-        self._btn_update.setEnabled(True)
-        self._btn_update.setText("↑  Vérifier les mises à jour")
-        QMessageBox.information(self, "À jour", f"PANDORA v{VERSION} est la dernière version disponible ✓")
-
-    def _on_update_failed(self):
-        self._btn_update.setEnabled(True)
-        self._btn_update.setText("↑  Vérifier les mises à jour")
-        QMessageBox.warning(self, "Vérification impossible", "Impossible de contacter le serveur.\nVérifiez votre connexion internet.")
 
     def _install_pandora_send(self):
         ok, msg = install_pandora_send()

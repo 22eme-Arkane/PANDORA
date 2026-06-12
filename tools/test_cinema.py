@@ -66,6 +66,25 @@ def selecteur_ia_present():
     src = inspect.getsource(SettingsPage.save)
     for key in ("ai_provider", "ai_model_creative", "mistral_key", "ollama_url"):
         assert key in src, f"save() persiste {key}"
+    # Réorganisation 2026-06-13 : Apparence → Assistant IA → Clés API →
+    # Sauvegarder → DaVinci tout en bas ; testeurs en bleu à côté des liens
+    # « Obtenir une clé » ; bouton Mises à jour retiré (déjà en topbar) ;
+    # boutons d'aide = « ? » bien visible
+    src_pg = inspect.getsource(__import__("ui.page_settings", fromlist=["_"]))
+    assert "Vérifier les mises à jour" not in src_pg, "bouton Mises à jour retiré"
+    assert (src_pg.index('_section("Assistant IA")')
+            < src_pg.index('_section("Clés API")')), "Assistant IA avant les clés"
+    assert (src_pg.index('QPushButton("Sauvegarder")')
+            < src_pg.index('"Connexion DaVinci Resolve Studio"')), \
+        "Sauvegarder avant DaVinci (DaVinci tout en bas)"
+    assert '_test_btn("✓  Tester API fal.ai"' in src_pg, "testeur fal.ai inline"
+    assert '_test_btn("✓  Tester API Anthropic"' in src_pg, "testeur Anthropic inline"
+    assert 'QPushButton("?")' in src_pg, "boutons d'aide « ? » lisibles"
+    # Manuel : bouton Fermer en ROUGE avec son libellé
+    src_man = inspect.getsource(__import__("ui.dialog_user_manual", fromlist=["_"]))
+    assert '"Fermer" if self._lang == "fr" else "Close"' in src_man
+    assert "rgba(255,79,106" in src_man.split("_close_btn = QPushButton")[1][:800], \
+        "Fermer en rouge"
 
 
 @test
