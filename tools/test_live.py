@@ -528,6 +528,15 @@ def studio_onglets():
         assert _b.styleSheet() == _ghost(), "style ghost uniforme"
         assert _b.isEnabled(), "toujours cliquable (même sans génération)"
         assert "📁" not in _b.text(), "libellé uniforme sans emoji"
+    # Nom UNIQUE du bouton de génération (retour 2026-06-13) : « Lancer la
+    # file d'attente » partout — Génération directe et Modifier des clips inclus
+    assert "Lancer la file d'attente" in s.tab_engines._btn_generate.text()
+    assert "Lancer la file d'attente" in s.tab_modify._btn_generate.text()
+    # Centrage : spacer symétrique du bloc « × N » dans Générer depuis Séquences
+    import inspect as _isp_btn
+    import ui.tab_t2v_live as _T2VL
+    assert "_sym_spacer" in _isp_btn.getsource(_T2VL), \
+        "texte du bouton centré avec le logo PANDORA"
     import inspect as _isp2
     for _cls in (type(s.tab_modify), type(s.tab_engines)):
         assert "get_output_dir" in _isp2.getsource(_cls._on_open_folder), \

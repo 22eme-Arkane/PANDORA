@@ -1141,7 +1141,7 @@ class TabVideoEngines(QWidget):
         lay.addWidget(_divider())
 
         # ── Bouton génération ──────────────────────────────────────────────────
-        self._btn_generate = QPushButton("▶  Générer")
+        self._btn_generate = QPushButton("▶▶  Lancer la file d'attente")
         self._btn_generate.setMinimumHeight(46)
         self._btn_generate.setStyleSheet(_btn_accent_style())
         self._btn_generate.clicked.connect(self._on_generate)
@@ -1314,7 +1314,7 @@ class TabVideoEngines(QWidget):
 
     def _on_finished(self, result: dict):
         self._btn_generate.setEnabled(True)
-        self._btn_generate.setText("▶  Générer")
+        self._btn_generate.setText("▶▶  Lancer la file d'attente")
         self._progress.setValue(100)
 
         local = result.get("local_path", "")
@@ -1352,7 +1352,7 @@ class TabVideoEngines(QWidget):
 
     def _on_failed(self, err: str):
         self._btn_generate.setEnabled(True)
-        self._btn_generate.setText("▶  Générer")
+        self._btn_generate.setText("▶▶  Lancer la file d'attente")
         self._progress.setValue(0)
         self._status_lbl.setText(f"✗  {err[:120]}")
         show_api_error(self, err)

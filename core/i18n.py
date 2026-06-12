@@ -1691,6 +1691,7 @@ _FR_TO_EN: dict[str, str] = {
         "Auto import to DaVinci Media Pool after generation",
     "▶▶  Lancer la file d'attente":              "▶▶  Launch queue",
     "📁  Ouvrir le dossier des vidéos":          "📁  Open videos folder",
+    "Ouvrir le dossier des vidéos":              "Open videos folder",
     "Nombre de prises par clip (1–10)":          "Number of takes per clip (1–10)",
 
     # Dialog bridge non connecté

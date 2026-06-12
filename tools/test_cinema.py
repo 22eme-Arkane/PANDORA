@@ -121,6 +121,19 @@ def refonte_interface():
     from ui.page_scenario import PageScenario as _PSC
     src_ed = inspect.getsource(_PSC._build_editor)
     assert "setDocumentMargin" in src_ed and "padding:32px 120px" not in src_ed
+    # Retours 2026-06-13 : t2v — dossier vidéos pleine largeur (ghost) avec la
+    # barre DaVinci DESSOUS ; bouton centré avec le logo (spacer symétrique ×N)
+    import ui.tab_t2v as _T2V
+    src_t2v = inspect.getsource(_T2V)
+    assert "lay.addWidget(self._btn_open_folder)" in src_t2v, "dossier pleine largeur"
+    assert (src_t2v.index("lay.addWidget(self._btn_open_folder)")
+            < src_t2v.index("lay.addWidget(self._davinci_bar)")), \
+        "barre DaVinci sous le bouton dossier"
+    assert "_sym_spacer" in src_t2v, "texte du bouton centré avec le logo PANDORA"
+    # Nom UNIQUE du bouton de génération : « Lancer la file d'attente » partout
+    import ui.tab_video_engines as _VE
+    assert "▶  Générer" not in inspect.getsource(_VE), \
+        "Génération directe : « Lancer la file d'attente »"
     src_pages = inspect.getsource(PW.PandoraWindow._build_pages)
     assert "setMaximumWidth(1360)" in src_pages and "_settings_wrap" in src_pages, \
         "Paramètres centré comme le Studio IA"

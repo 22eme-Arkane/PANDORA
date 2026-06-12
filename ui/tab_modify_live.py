@@ -160,7 +160,7 @@ class TabModifyLive(QScrollArea):
         lay.addWidget(_divider())
 
         # ── Générer ───────────────────────────────────────────────────────────
-        self._btn_generate = QPushButton("▶  " + translate("Générer la modification"))
+        self._btn_generate = QPushButton("▶▶  " + translate("Lancer la file d'attente"))
         self._btn_generate.setMinimumHeight(46)
         self._btn_generate.setStyleSheet(_btn_accent_style())
         self._btn_generate.clicked.connect(self._on_generate)
@@ -302,7 +302,7 @@ class TabModifyLive(QScrollArea):
 
     def _on_finished(self, result: dict):
         self._btn_generate.setEnabled(True)
-        self._btn_generate.setText("▶  " + translate("Générer la modification"))
+        self._btn_generate.setText("▶▶  " + translate("Lancer la file d'attente"))
         self._progress.setValue(100)
         local = result.get("local_path", "")
         # Seedance (run_real) renvoie video_url sans local_path : on télécharge le clip.
@@ -328,7 +328,7 @@ class TabModifyLive(QScrollArea):
 
     def _on_failed(self, err: str):
         self._btn_generate.setEnabled(True)
-        self._btn_generate.setText("▶  " + translate("Générer la modification"))
+        self._btn_generate.setText("▶▶  " + translate("Lancer la file d'attente"))
         self._progress.setValue(0)
         self._status_lbl.setText(f"✗  {err[:120]}")
         show_api_error(self, err)

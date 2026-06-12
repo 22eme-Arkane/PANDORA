@@ -2783,6 +2783,12 @@ class TabT2V(QScrollArea):
         btn_row = QHBoxLayout()
         btn_row.setContentsMargins(0, 0, 0, 0)
         btn_row.setSpacing(8)
+        # Spacer symétrique du bloc « × N » (14 + 8 + 54) : le TEXTE du bouton
+        # reste centré avec le logo PANDORA (retour 2026-06-13)
+        _sym_spacer = QWidget()
+        _sym_spacer.setFixedWidth(76)
+        _sym_spacer.setStyleSheet("background:transparent;")
+        btn_row.addWidget(_sym_spacer)
         btn_row.addWidget(self.btn_generate, 1)
         btn_row.addWidget(_rep_lbl)
         btn_row.addWidget(self._spinbox_repeat)

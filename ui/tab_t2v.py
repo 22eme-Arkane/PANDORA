@@ -2756,6 +2756,12 @@ class TabT2V(QScrollArea):
         btn_row = QHBoxLayout()
         btn_row.setContentsMargins(0, 0, 0, 0)
         btn_row.setSpacing(8)
+        # Spacer symétrique du bloc « × N » (14 + 8 + 54) : le TEXTE du bouton
+        # reste centré avec le logo PANDORA (retour 2026-06-13)
+        _sym_spacer = QWidget()
+        _sym_spacer.setFixedWidth(76)
+        _sym_spacer.setStyleSheet("background:transparent;")
+        btn_row.addWidget(_sym_spacer)
         btn_row.addWidget(self.btn_generate, 1)
         btn_row.addWidget(_rep_lbl)
         btn_row.addWidget(self._spinbox_repeat)
@@ -2768,23 +2774,24 @@ class TabT2V(QScrollArea):
         balance_row.addWidget(self._balance_lbl)
         lay.addLayout(balance_row)
 
-        # ── Ouvrir le dossier des vidéos (toujours visible) ──────────────────
-        self._btn_open_folder = QPushButton("📁  Ouvrir le dossier des vidéos")
+        # ── Ouvrir le dossier des vidéos — pleine largeur, style « ghost »
+        #    uniforme (comme Live) ; la barre DaVinci passe DESSOUS ────────────
+        self._btn_open_folder = QPushButton(translate("Ouvrir le dossier des vidéos"))
+        self._btn_open_folder.setFixedHeight(30)
         self._btn_open_folder.setCursor(Qt.CursorShape.PointingHandCursor)
-        self._btn_open_folder.setStyleSheet(f"""
-            QPushButton{{background:transparent;color:{C['text_secondary']};
-            border:1px solid {C['border']};border-radius:8px;font-size:11px;
-            padding:6px 14px;}}
-            QPushButton:hover{{background:{C['bg3']};color:{C['text_primary']};}}
-        """)
+        self._btn_open_folder.setStyleSheet(
+            f"QPushButton{{background:transparent;color:{C['text_secondary']};"
+            f"border:1px solid {C['border']};border-radius:7px;"
+            f"font-size:11px;font-weight:700;padding:0 14px;}}"
+            f"QPushButton:hover{{background:{C['bg3']};color:{C['text_primary']};"
+            f"border-color:{C['border_bright']};}}"
+            f"QPushButton:pressed{{background:{C['bg3']};}}"
+        )
         self._btn_open_folder.clicked.connect(self._open_output_folder)
+        lay.addWidget(self._btn_open_folder)
 
-        _dav_row = QHBoxLayout()
-        _dav_row.setContentsMargins(0, 0, 0, 0)
-        _dav_row.setSpacing(10)
-        _dav_row.addWidget(self._davinci_bar, 1)
-        _dav_row.addWidget(self._btn_open_folder)
-        lay.addLayout(_dav_row)
+        # « DaVinci Resolve Studio connecté » SOUS le bouton (retour 2026-06-13)
+        lay.addWidget(self._davinci_bar)
         self._davinci_bar.connection_changed.connect(self._on_davinci_connection_changed)
 
         # ── Encart prix (sous la barre DaVinci) ───────────────────────────────
