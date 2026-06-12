@@ -2647,10 +2647,15 @@ class TabT2V(QScrollArea):
         # ── Paramètres de génération (toujours visibles, y compris en multi-sélection) ──
         grid = QGridLayout()
         grid.setSpacing(12)
-        # Moteurs ouverts à TOUS ceux compatibles avec le workflow storyboard
-        # (i2v / keyframes / réfs) — les t2v purs (Veo, Sora) sont écartés.
+        # Moteurs ouverts à TOUS ceux compatibles avec le workflow storyboard —
+        # les t2v purs (Veo, Sora) sont écartés. use_keyframes=False : le Cinéma
+        # n'envoie JAMAIS de keyframes de moods (mécanisme Live/Mapping), les
+        # libellés n'affichent donc que raccord i2v + réfs. Seedance 2.0 marqué
+        # « recommandé » — les autres moteurs ne donnent pas encore d'aussi
+        # bons résultats sur ce workflow.
         from core.engine_caps import sequence_engines
-        self.cb_model = combo(sequence_engines(_ENGINES))
+        self.cb_model = combo(sequence_engines(_ENGINES, use_keyframes=False,
+                                               recommended=("seedance-2.0",)))
         self.cb_model.currentIndexChanged.connect(self._on_engine_changed)
         self.cb_ratio = combo(["16:9 — Paysage", "9:16 — Portrait", "4:3", "3:4"])
         # Résolutions initiales pour Seedance 2.0 (moteur par défaut)

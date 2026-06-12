@@ -37,16 +37,19 @@ def workflow_compatible(key: str) -> bool:
     return bool(caps and (caps["i2v"] or caps["refs"] != "none"))
 
 
-def caps_hint(key: str) -> str:
-    """Suffixe court de capacités pour le libellé du combo."""
+def caps_hint(key: str, use_keyframes: bool = True) -> str:
+    """Suffixe court de capacités pour le libellé du combo.
+    use_keyframes=False (Cinéma) : le workflow n'envoie JAMAIS d'image de fin
+    (les keyframes de moods sont un mécanisme Live/Mapping) — on n'affiche
+    donc que ce que le workflow utilise réellement : raccord i2v + réfs."""
     caps = ENGINE_CAPS.get(key)
     if not caps:
         return ""
     bits = []
-    if caps["end_frame"]:
+    if caps["end_frame"] and use_keyframes:
         bits.append("keyframes")
     elif caps["i2v"]:
-        bits.append("i2v début")
+        bits.append("raccord i2v" if not use_keyframes else "i2v début")
     if caps["refs"] == "full":
         bits.append("réfs")
     elif caps["refs"] == "style":
@@ -54,14 +57,19 @@ def caps_hint(key: str) -> str:
     return " · ".join(bits)
 
 
-def sequence_engines(all_engines: list) -> list:
+def sequence_engines(all_engines: list, use_keyframes: bool = True,
+                     recommended: tuple = ()) -> list:
     """Filtre une liste [(label, key)] aux moteurs compatibles workflow, en
-    annotant le libellé avec les capacités réelles."""
+    annotant le libellé avec les capacités réelles.
+    recommended : clés marquées « recommandé » dans le libellé (ex. Seedance 2.0
+    en Cinéma — les autres moteurs ne donnent pas encore d'aussi bons résultats)."""
     out = []
     for label, key in all_engines:
         if not workflow_compatible(key):
             continue   # écarté : t2v pur, incompatible avec moods/raccords/façade
         base = label.split("  (")[0].strip()
-        hint = caps_hint(key)
+        hint = caps_hint(key, use_keyframes=use_keyframes)
+        if key in recommended:
+            hint = ("recommandé · " + hint) if hint else "recommandé"
         out.append((f"{base}  ({hint})" if hint else base, key))
     return out

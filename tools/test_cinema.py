@@ -242,14 +242,30 @@ def prompt_mood_cinema_inchange():
 
 @test
 def moteurs_storyboard_filtres():
-    """Générer depuis Storyboard : combo ouvert aux moteurs compatibles, t2v purs écartés."""
+    """Générer depuis Storyboard : combo ouvert aux moteurs compatibles, t2v purs
+    écartés ; libellés SANS « keyframes » (les keyframes de moods sont un
+    mécanisme Live/Mapping — vérifié : aucun end_image_path en Cinéma) et
+    Seedance 2.0 marqué « recommandé » (retour Matthieu 2026-06-13)."""
     import ui.tab_t2v as t2v
     src = inspect.getsource(t2v)
-    assert "sequence_engines(_ENGINES)" in src, "combo filtré par capacités"
+    assert "use_keyframes=False" in src, "combo filtré, libellés sans keyframes"
+    assert 'recommended=("seedance-2.0",)' in src, "Seedance 2.0 recommandé"
+    assert "end_image_path" not in src and "_get_mapping_keyframes" not in src, \
+        "le Cinéma n'envoie JAMAIS de keyframes de moods"
     from core.engine_caps import sequence_engines
-    keys = [k for _, k in sequence_engines(t2v._ENGINES)]
+    pairs = sequence_engines(t2v._ENGINES, use_keyframes=False,
+                             recommended=("seedance-2.0",))
+    keys = [k for _, k in pairs]
     assert "veo-3.1" not in keys and "sora-2" not in keys, "t2v purs écartés"
     assert "kling-v3-pro" in keys and "seedance-2.0" in keys, "moteurs i2v ouverts"
+    labels = dict((k, l) for l, k in pairs)
+    assert "keyframes" not in " ".join(labels.values()), \
+        "aucun libellé keyframes en Cinéma"
+    assert "recommandé" in labels["seedance-2.0"], "« recommandé » sur Seedance 2.0"
+    assert "raccord i2v" in labels["seedance-2.0"] and "réfs" in labels["seedance-2.0"]
+    # Le Live, lui, garde l'affichage keyframes (raccords par moods)
+    live_labels = dict((k, l) for l, k in sequence_engines(t2v._ENGINES))
+    assert "keyframes" in live_labels["seedance-2.0"], "Live conserve keyframes"
 
 
 @test
