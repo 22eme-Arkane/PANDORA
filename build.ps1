@@ -82,6 +82,16 @@ if (Test-Path $CONFIG_IN_BUILD) {
     Write-Host "config.json supprimé du build." -ForegroundColor Green
 }
 
+# Build Cinéma : retirer les icônes Live orphelines du bundle (le code Live
+# est exclu par pandora.spec ; ces PNG ne sont plus référencés)
+$ICONS_DIR = "dist\PANDORA\_internal\assets\icons"
+if (Test-Path $ICONS_DIR) {
+    foreach ($liveIcon in @("Live.png", "live_desactiver.png")) {
+        $p = Join-Path $ICONS_DIR $liveIcon
+        if (Test-Path $p) { Remove-Item -Force $p; Write-Host "  Icone Live retiree : $liveIcon" -ForegroundColor Green }
+    }
+}
+
 # Nettoyage style_refs — supprimer les images de dev, garder les dossiers vides
 $STYLE_REFS = "dist\PANDORA\_internal\assets\style_refs"
 if (Test-Path $STYLE_REFS) {

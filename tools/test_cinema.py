@@ -88,6 +88,34 @@ def selecteur_ia_present():
 
 
 @test
+def edition_cinema_only():
+    """Build v1.2.0 : édition Cinéma seule détectée par core.edition ; main.py
+    saute le sélecteur ; le splash masque « Retour » ; le .spec exclut le Live."""
+    import core.edition as ed
+    # En dev (live_window présent), l'édition complète reste active → chooser
+    assert ed.is_cinema_only() is False, "dev = édition complète (Live présent)"
+    # main.py : démarrage conditionnel, sans import statique du Live/chooser
+    # hors de la branche dev
+    src_main = open("main.py", encoding="utf-8").read()
+    assert "from core.edition import is_cinema_only" in src_main
+    assert "if _CINEMA_ONLY:" in src_main, "branche Cinéma directe"
+    assert 'mode == "live" and not _CINEMA_ONLY' in src_main, "Live jamais ouvert en Cinéma"
+    # Splash : bouton Retour optionnel (masqué en Cinéma seule)
+    from PyQt6.QtWidgets import QApplication
+    from ui.splash import SplashWindow
+    assert "show_back" in inspect.getsource(SplashWindow.__init__)
+    SplashWindow("cinema", show_back=False)   # ne doit pas lever
+    # Le .spec exclut explicitement le Live (aucun module Live dans le build)
+    spec = open("pandora.spec", encoding="utf-8").read()
+    for mod in ("live_window", "ui.chooser", "resolume", "core.live_mapping",
+                "api.resolume_push", "ui.tab_t2v_live"):
+        assert f'"{mod}"' in spec, f".spec doit exclure {mod}"
+    # Version bumpée
+    from core.version import VERSION
+    assert VERSION == "1.2.0", f"version attendue 1.2.0, lue {VERSION}"
+
+
+@test
 def workers_cinema_routes_via_provider():
     """api/screenplay.py : tout le TEXTE passe par core.ai_provider (VISION = 2 sites)."""
     import api.screenplay as s

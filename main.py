@@ -114,10 +114,13 @@ if __name__ == "__main__":
         _cfg["eula_accepted"] = True
         save_config(_cfg)
 
-    # ── Flux de démarrage : sélecteur de module → splash → fenêtre ────────────
-    #   Chooser (Cinéma | Live) → SplashWindow(mode) → PandoraWindow ou LiveWindow.
-    #   Le bouton « retour » du splash ramène au sélecteur.
-    from ui.chooser import ChooserWindow
+    # ── Flux de démarrage ──────────────────────────────────────────────────────
+    #   Édition CINÉMA (build distribué) : pas de sélecteur de module, pas de
+    #   Live — SplashWindow("cinema") direct → PandoraWindow.
+    #   Édition COMPLÈTE (dev) : Chooser (Cinéma | Live) → SplashWindow(mode) →
+    #   PandoraWindow ou LiveWindow ; le bouton « retour » du splash y ramène.
+    from core.edition import is_cinema_only
+    _CINEMA_ONLY = is_cinema_only()
 
     state = {"chooser": None, "splash": None, "window": None, "opening": False}
 
@@ -138,7 +141,7 @@ if __name__ == "__main__":
             sp.hide()
 
         mode = data.get("mode", "cinema")
-        if mode == "live":
+        if mode == "live" and not _CINEMA_ONLY:
             from live_window import LiveWindow
             win = LiveWindow(data)
         else:
@@ -167,7 +170,8 @@ if __name__ == "__main__":
         ch = state["chooser"]
         if ch is not None:
             ch.hide()
-        sp = SplashWindow(mode)
+        # En édition Cinéma : pas de bouton « retour » (aucun sélecteur derrière)
+        sp = SplashWindow(mode, show_back=not _CINEMA_ONLY)
         if not icon.isNull():
             sp.setWindowIcon(icon)
         if get_lang() != "fr":
@@ -187,17 +191,23 @@ if __name__ == "__main__":
         sp.raise_()
         sp.activateWindow()
 
-    chooser = ChooserWindow()
-    if not icon.isNull():
-        chooser.setWindowIcon(icon)
-    if get_lang() != "fr":
-        retranslate_widget(chooser)
-    chooser.cinema_requested.connect(lambda: _show_splash("cinema"))
-    chooser.live_requested.connect(lambda: _show_splash("live"))
-    chooser.lang_changed.connect(lambda _c: retranslate_widget(chooser))
-    state["chooser"] = chooser
-    chooser.show()
-    app._chooser = chooser
+    if _CINEMA_ONLY:
+        # Édition Cinéma : splash Cinéma direct, sans jamais importer le
+        # sélecteur de module ni le Live.
+        _show_splash("cinema")
+    else:
+        from ui.chooser import ChooserWindow
+        chooser = ChooserWindow()
+        if not icon.isNull():
+            chooser.setWindowIcon(icon)
+        if get_lang() != "fr":
+            retranslate_widget(chooser)
+        chooser.cinema_requested.connect(lambda: _show_splash("cinema"))
+        chooser.live_requested.connect(lambda: _show_splash("live"))
+        chooser.lang_changed.connect(lambda _c: retranslate_widget(chooser))
+        state["chooser"] = chooser
+        chooser.show()
+        app._chooser = chooser
 
     from api.update_check import UpdateCheckWorker
     from ui.splash import UpdateDialog
