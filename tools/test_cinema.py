@@ -212,6 +212,15 @@ def studio_sound_design_upscaling():
         "toggles Choisir les références + Éléments récurrents"
     assert "self._film_style_frame.setVisible(False)" in src_t2v2, "réfs repliées"
     assert "self._casting.setVisible(False)" in src_t2v2, "éléments repliés"
+    # Création de personnage : défaut PORTRAIT classique, pas character sheet
+    # 5 vues (retour 2026-06-13). La génération auto depuis scénario est déjà
+    # en gen_mode="classic".
+    from ui.dialog_character import CharacterDialog
+    cd = CharacterDialog(None, {"name": "Test", "role": ""})
+    assert cd._gen_mode_combo.currentData() == "classic", "défaut = portrait"
+    assert cd._gen_mode_combo.itemData(0) == "classic", "portrait en 1er"
+    src_sc2 = inspect.getsource(__import__("ui.page_scenario", fromlist=["_"]))
+    assert 'gen_mode="classic"' in src_sc2, "génération auto en portrait classique"
 
 
 # ══════════════════════════════════════════════════════════════════════════════

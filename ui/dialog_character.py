@@ -1002,9 +1002,12 @@ class CharacterDialog(QDialog):
         _gen_mode_lbl.setFixedWidth(150)
         _gen_mode_row.addWidget(_gen_mode_lbl)
         self._gen_mode_combo = QComboBox()
+        # Portrait classique EN PREMIER = défaut (retour 2026-06-13) : à
+        # l'ouverture de la création de personnage, on génère un portrait,
+        # pas un character sheet 5 vues.
         _GEN_MODES = [
-            ("🎬  Character Sheet 5 vues", "sheet_5views"),
             ("📷  Portrait classique",     "classic"),
+            ("🎬  Character Sheet 5 vues", "sheet_5views"),
         ]
         for _label, _key in _GEN_MODES:
             self._gen_mode_combo.addItem(_label, _key)
@@ -1095,7 +1098,7 @@ class CharacterDialog(QDialog):
         _cfg  = _lc()
         _price = get_image_price(_cfg)
         price_lbl = QLabel(
-            f"Génération du character sheet  ·  {_price} / image"
+            f"Génération d'image  ·  {_price} / image"
             f"  ·  Voir le Manuel d'utilisation pour tous les tarifs"
         )
         price_lbl.setWordWrap(True)
