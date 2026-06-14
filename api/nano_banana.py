@@ -1789,11 +1789,15 @@ class GenerateItemWorker(QThread):
 # ── Les 6 vues d'une pièce (décor) ─────────────────────────────────────────────
 
 class GenerateRoomViewsWorker(QThread):
-    """Génère les 6 faces d'une pièce (avant · arrière · gauche · droite · sol ·
-    plafond) — un prompt auto par face depuis la description du décor, cohérence
-    spatiale stricte. Une image par face, nommée <decor>_<face>."""
+    """Génère les 7 vues d'une pièce : les 6 faces (avant · arrière · gauche ·
+    droite · sol · plafond) PUIS un plan d'ensemble qui les regroupe — un prompt
+    auto par vue depuis la description du décor, cohérence spatiale stricte.
+    Une image par vue, nommée <decor>_<code>.
+
+    Émet views_finished avec une liste structurée [{"label","code","path"}] —
+    chaque vue devient un DÉCOR distinct côté appelant."""
     progress       = pyqtSignal(int, str)
-    multi_finished = pyqtSignal(list)   # liste de chemins (6 faces)
+    views_finished = pyqtSignal(list)   # [{"label","code","path"}, …] (7 vues)
     failed         = pyqtSignal(str)
 
     def __init__(self, base_prompt: str, decor_name: str,
@@ -1813,19 +1817,20 @@ class GenerateRoomViewsWorker(QThread):
             self._real(key)
 
     def _mock(self):
-        from core.room_views import SIX_FACES
-        for i, (label, _c, _d) in enumerate(SIX_FACES):
-            self.progress.emit(int((i + 1) / len(SIX_FACES) * 100),
-                               f"[{i+1}/6] {label} (mode mock)…")
+        from core.room_views import build_seven_view_prompts
+        views = build_seven_view_prompts("")
+        for i, (label, _c, _d) in enumerate(views):
+            self.progress.emit(int((i + 1) / len(views) * 100),
+                               f"[{i+1}/7] {label} (mode mock)…")
             time.sleep(0.3)
-        self.multi_finished.emit([])
+        self.views_finished.emit([])
 
     def _real(self, key: str):
         try:
             import fal_client
             import requests
             from core.lang import translate_to_english
-            from core.room_views import build_six_view_prompts
+            from core.room_views import build_seven_view_prompts
 
             os.environ["FAL_KEY"] = key
             cfg = load_config()
@@ -1834,17 +1839,19 @@ class GenerateRoomViewsWorker(QThread):
                 cfg["image_model"] = self._model_key
             price = get_image_price(cfg)
 
-            # Traduit la description du décor UNE fois, puis construit les 6 faces
+            # Traduit la description du décor UNE fois, puis construit les 7 vues
+            # (6 faces + plan d'ensemble en dernier).
             base_en = translate_to_english(self._base) if self._base else ""
-            faces   = build_six_view_prompts(base_en)
+            views   = build_seven_view_prompts(base_en)
+            n       = len(views)
 
             safe = "".join(c for c in self._name if c.isalnum() or c in " -_").strip() or "decor"
             ts   = int(time.time())
-            paths: list[str] = []
-            for i, (label, code, fprompt) in enumerate(faces):
+            out: list[dict] = []
+            for i, (label, code, fprompt) in enumerate(views):
                 self.progress.emit(
-                    5 + int(i / len(faces) * 88),
-                    f"[{i+1}/6] Vue « {label} »…  ({price})"
+                    5 + int(i / n * 88),
+                    f"[{i+1}/{n}] Vue « {label} »…  ({price})"
                 )
                 full = fprompt
                 if self._style_suffix:
@@ -1857,9 +1864,11 @@ class GenerateRoomViewsWorker(QThread):
                 p = os.path.join(_project_images_dir("decors"), f"{safe}_{code}_{ts}.png")
                 with open(p, "wb") as f:
                     f.write(data)
-                paths.append(p)
-            self.progress.emit(100, "6 vues de la pièce générées !")
-            self.multi_finished.emit(paths)
+                # On renvoie le prompt PAR VUE (cadrage compris) pour que la
+                # régénération depuis la fiche décor reproduise la MÊME vue.
+                out.append({"label": label, "code": code, "path": p, "prompt": fprompt})
+            self.progress.emit(100, "7 vues de la pièce générées !")
+            self.views_finished.emit(out)
         except Exception as e:
             self.failed.emit(humanize_api_error(f"Erreur Nano Banana : {e}"))
 

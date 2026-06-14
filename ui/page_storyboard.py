@@ -1927,6 +1927,11 @@ class PageStoryboard(QWidget):
             self._refresh_snap_combo()
             self._render()
 
+    def _on_chat_applied(self):
+        """Le chat storyboard a appliqué des modifications → recharge et réaffiche."""
+        self._all_shots = sb_api.list_shots(self._active_version_id)
+        self._render()
+
     def _on_sync(self):
         if not self._all_shots:
             return
@@ -1934,7 +1939,8 @@ class PageStoryboard(QWidget):
         confirm = StoryboardSyncConfirmDialog(len(self._all_shots), parent=self)
         if confirm.exec() != StoryboardSyncConfirmDialog.DialogCode.Accepted:
             return
-        dlg = StoryboardSyncDialog(self._all_shots, parent=self)
+        options = confirm.selected_options()
+        dlg = StoryboardSyncDialog(self._all_shots, options, parent=self)
         if dlg.exec() == StoryboardSyncDialog.DialogCode.Accepted:
             self._all_shots = sb_api.list_shots(self._active_version_id)
             self._render()

@@ -423,27 +423,51 @@ def moteurs_storyboard_filtres():
 
 
 @test
-def decor_six_vues():
-    """Décors : option « 6 vues de la pièce » — 6 prompts auto (sol, plafond,
-    gauche, droite, avant, arrière) générés depuis la description, cohérence
-    spatiale stricte ; worker dédié + entrée dans le combo de mode."""
-    from core.room_views import SIX_FACES, build_six_view_prompts
+def decor_sept_vues():
+    """Décors : option « 7 vues de la pièce » — 6 faces (sol, plafond, gauche,
+    droite, avant, arrière) PUIS un 7e plan d'ensemble qui les regroupe ;
+    cohérence spatiale stricte ; worker dédié + combo de mode + option depuis
+    le scénario (dialog d'extraction)."""
+    from core.room_views import (SIX_FACES, build_six_view_prompts,
+                                  build_overview_prompt, build_seven_view_prompts)
     assert len(SIX_FACES) == 6
     codes = {c for _, c, _ in SIX_FACES}
     assert codes == {"sol", "plafond", "gauche", "droite", "avant", "arriere"}
-    prompts = build_six_view_prompts("salle à manger chaleureuse")
-    assert len(prompts) == 6
-    for label, code, p in prompts:
-        assert "salle à manger" in p and "EXACT CENTER of the room" in p
-        assert "strict spatial consistency" in p and "no people" in p
-    # worker dédié
+    six = build_six_view_prompts("salle à manger chaleureuse")
+    assert len(six) == 6
+    seven = build_seven_view_prompts("salle à manger chaleureuse")
+    assert len(seven) == 7, "6 faces + 1 plan d'ensemble"
+    # La 7e vue est le plan d'ensemble et arrive en DERNIER.
+    o_label, o_code, o_prompt = seven[-1]
+    assert o_code == "ensemble" and "ENTIRE room" in o_prompt
+    assert o_code == build_overview_prompt("x")[1]
+    for label, code, p in seven:
+        assert "salle à manger" in p and "strict spatial consistency" in p
+    # worker dédié — émet une liste structurée (1 entrée par vue)
     from api.nano_banana import GenerateRoomViewsWorker
     w = GenerateRoomViewsWorker("salle à manger", "Salle à manger")
-    assert hasattr(w, "multi_finished")
-    # branché dans le dialogue décor (combo + génération)
+    assert hasattr(w, "views_finished"), "signal structuré (label/code/path) par vue"
+    # Les 7 vues créent 7 DÉCORS distincts (pas 1 décor à 7 images).
     import inspect
     src = inspect.getsource(__import__("ui.dialog_decor", fromlist=["_"]))
-    assert '"six_views"' in src and "GenerateRoomViewsWorker" in src
+    assert '"seven_views"' in src and "GenerateRoomViewsWorker" in src
+    assert "_on_room_decors_done" in src and "save_decor" in src, \
+        "la fiche décor crée 7 décors (1 par vue)"
+    # Mode « Image unique » par défaut + confirmation avant les 7 vues.
+    assert "setCurrentIndex(0)" in src, "mode image unique par défaut dans la fiche décor"
+    assert "Générer les 7 vues de la pièce" in src, "confirmation avant les 7 vues"
+    # Chaque décor-vue stocke SON prompt (cadrage) → régénération fidèle.
+    nb = inspect.getsource(GenerateRoomViewsWorker._real)
+    assert '"prompt": fprompt' in nb, "le worker renvoie le prompt par vue"
+    assert 'v.get("prompt")' in src, "la fiche stocke le prompt par vue (pas la base)"
+    # disponible aussi depuis le scénario (« Générer les décors »), en 7 décors
+    eg = inspect.getsource(__import__("ui.dialog_extract_generate", fromlist=["_"]))
+    assert "offer_room_views=True" in eg and "views_finished" in eg
+    assert "delete_decor" in eg and 'f"{base} — {v[' in eg, \
+        "depuis le scénario : 7 décors nommés par vue, la pièce d'origine retirée"
+    # Identifier+générer depuis le scénario : image unique (portrait), pas 5 vues.
+    assert 'gen_mode="classic"' in eg and 'gen_mode="sheet_5views"' not in eg, \
+        "personnages : portrait unique par défaut depuis le scénario"
 
 
 @test
@@ -488,6 +512,92 @@ def bibliotheque_images_branchee():
     src = inspect.getsource(MoodDialog._import_image)
     assert "ImageLibraryDialog" in src and "save_apercus" in src and "copy2" in src, \
         "mood importable depuis la bibliothèque/disque"
+
+
+@test
+def synchronisation_multi_options():
+    """Synchronisation Storyboard : fenêtre multi-options (réassigner noms /
+    réécrire prompts / re-synchroniser décors / réécrire scénario), preview,
+    worker piloté par options + worker de réécriture de scénario (nouvelle version)."""
+    from ui.dialog_storyboard_sync import StoryboardSyncConfirmDialog, StoryboardSyncDialog
+
+    # 1) La fenêtre de confirmation expose 4 options ; défauts cohérents.
+    dlg = StoryboardSyncConfirmDialog(3)
+    opts = dlg.selected_options()
+    assert set(opts) == {"reassign", "rewrite_prompts", "resync_decors", "rewrite_scenario"}, \
+        "4 options de synchronisation"
+    assert opts["reassign"] and opts["rewrite_prompts"], "réassigner + prompts cochés par défaut"
+    assert not opts["resync_decors"] and not opts["rewrite_scenario"], \
+        "décors + scénario décochés par défaut"
+    assert hasattr(dlg, "selected_options")
+
+    # 2) Le worker de sync honore un dict d'options (phases gated).
+    from api.screenplay import SyncStoryboardWorker
+    w = SyncStoryboardWorker([], {"reassign": True, "rewrite_prompts": False,
+                                  "resync_decors": False})
+    assert w._opt_reassign and not w._opt_prompts and not w._opt_decors, \
+        "options propagées au worker"
+
+    # 3) Worker de réécriture du scénario depuis le storyboard.
+    from api.screenplay import RewriteScreenplayFromStoryboardWorker
+    rw = RewriteScreenplayFromStoryboardWorker([])
+    assert hasattr(rw, "finished") and hasattr(rw, "failed")
+
+    # 4) Le dialog principal accepte les options et sauvegarde le scénario en
+    #    NOUVELLE version (non destructif).
+    src = inspect.getsource(StoryboardSyncDialog)
+    assert "rewrite_scenario" in src and "_save_scenario_version" in src, \
+        "branche scénario dans le dialog"
+    assert '"versions"' in src and "save_scenario" in src, \
+        "sauvegarde en nouvelle version (jamais d'écrasement)"
+
+
+@test
+def storyboard_chat_ia():
+    """Chat Storyboard : panneau droit repliable (poignée CHAT), worker connecté
+    à l'IA sélectionnée, lit tout le storyboard, éditions CHIRURGICALES sur liste
+    blanche de champs ; fermé par défaut, branché dans la page."""
+    # Worker
+    from api.screenplay import StoryboardChatWorker, STORYBOARD_CHAT_FIELDS, _STORYBOARD_CHAT_SYSTEM
+    assert "seedance_prompt" in STORYBOARD_CHAT_FIELDS and "scene_title" in STORYBOARD_CHAT_FIELDS
+    w = StoryboardChatWorker("bonjour", [{"id": "1", "number": "1"}])
+    assert hasattr(w, "finished") and hasattr(w, "failed")
+    # Le system prompt impose la chirurgie + le format JSON edits/reply.
+    assert "CHIRURGIE STRICTE" in _STORYBOARD_CHAT_SYSTEM
+    assert '"edits"' in _STORYBOARD_CHAT_SYSTEM and '"reply"' in _STORYBOARD_CHAT_SYSTEM
+
+    # Panneau + poignée
+    from ui.storyboard_chat import StoryboardChatPanel, StoryboardChatToggleStrip
+    panel = StoryboardChatPanel(shots_provider=lambda: [], on_applied=None)
+    strip = StoryboardChatToggleStrip(panel)
+    assert hasattr(panel, "_apply_edits")
+    # L'application filtre sur la liste blanche (pas d'écriture hors champs autorisés).
+    src = inspect.getsource(StoryboardChatPanel._apply_edits)
+    assert "STORYBOARD_CHAT_FIELDS" in src and "save_shot" in src
+
+    # Branché au niveau APPLICATION (miroir de l'assistant IA), fermé par défaut,
+    # actif uniquement sur la page Storyboard.
+    wsrc = inspect.getsource(__import__("ui.pandora_window", fromlist=["_"]))
+    assert "StoryboardChatPanel" in wsrc and "StoryboardChatToggleStrip" in wsrc
+    assert "_sb_chat_panel.setVisible(False)" in wsrc, "chat fermé par défaut"
+    assert "_update_sb_chat" in wsrc and 'key == "storyboard"' in wsrc, \
+        "chat affiché seulement sur la page Storyboard (symétrie spacer sinon)"
+    # La page expose le rafraîchissement appelé par le chat.
+    psrc = inspect.getsource(__import__("ui.page_storyboard", fromlist=["_"]))
+    assert "_on_chat_applied" in psrc
+
+
+@test
+def pas_de_verif_solde():
+    """Le bouton « Lancer la file d'attente » lance directement la génération —
+    plus de garde-fou « Vérification du solde… » avant de partir."""
+    import inspect
+    for mod_name in ("ui.tab_t2v", "ui.tab_t2v_live"):
+        src = inspect.getsource(__import__(mod_name, fromlist=["_"]))
+        assert "btn_generate.clicked.connect(self.start_generation)" in src, \
+            f"{mod_name} : le bouton lance directement la file"
+        assert "btn_generate.clicked.connect(self._start_with_credit_check)" not in src, \
+            f"{mod_name} : plus de vérification du solde sur le bouton"
 
 
 # ══════════════════════════════════════════════════════════════════════════════

@@ -332,12 +332,15 @@ class PageDecors(QWidget):
 
     def _on_new(self):
         dlg = DecorDialog(self)
-        if dlg.exec() == DecorDialog.DialogCode.Accepted:
+        accepted = dlg.exec() == DecorDialog.DialogCode.Accepted
+        # Les « 7 vues → 7 décors » persistent même si la fiche est juste fermée.
+        if accepted or getattr(dlg, "_decors_created", False):
             self.refresh()
 
     def _on_edit(self, item: dict):
         dlg = DecorDialog(self, item=item)
-        if dlg.exec() == DecorDialog.DialogCode.Accepted:
+        accepted = dlg.exec() == DecorDialog.DialogCode.Accepted
+        if accepted or getattr(dlg, "_decors_created", False):
             self.refresh()
 
     def _on_delete(self, decor_id: str):

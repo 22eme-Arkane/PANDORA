@@ -21,6 +21,11 @@ SIX_FACES = [
 ]
 
 
+# 7e vue — un plan d'ensemble qui regroupe les six faces (vue maîtresse).
+OVERVIEW = ("Plan d'ensemble", "ensemble",
+            "wide establishing 3/4 high-angle master view of the whole room")
+
+
 def build_six_view_prompts(base_prompt: str) -> list[tuple]:
     """À partir de la description du décor, renvoie [(label, code, prompt), …]
     pour les 6 faces. base_prompt peut être en français ou en anglais —
@@ -39,3 +44,23 @@ def build_six_view_prompts(base_prompt: str) -> list[tuple]:
         )
         out.append((label, code, prompt))
     return out
+
+
+def build_overview_prompt(base_prompt: str) -> tuple:
+    """7e vue : un plan d'ensemble qui regroupe les six faces — une vue maîtresse
+    de toute la pièce en une seule image. Renvoie (label, code, prompt)."""
+    base = (base_prompt or "").strip().rstrip(".")
+    prompt = (
+        f"{base}. Wide establishing shot of the ENTIRE room seen at once: "
+        f"3/4 high-angle perspective showing the floor, the ceiling and all the "
+        f"surrounding walls together in a single coherent view — a master plan "
+        f"that ties together the six individual faces. SAME room as the other "
+        f"views — identical architecture, materials, colors, lighting and "
+        f"furniture style, strict spatial consistency. Empty location, no people."
+    )
+    return (OVERVIEW[0], OVERVIEW[1], prompt)
+
+
+def build_seven_view_prompts(base_prompt: str) -> list[tuple]:
+    """Les 7 vues : les 6 faces PUIS le plan d'ensemble (généré en dernier)."""
+    return build_six_view_prompts(base_prompt) + [build_overview_prompt(base_prompt)]

@@ -320,16 +320,16 @@ class DecorDialog(QDialog):
         self._gen_mode.addItem("🖼  Image unique", "single")
         self._gen_mode.addItem("🗺  Sheet 4 vues  (avant · arrière · gauche · droite)", "sheet")
         self._gen_mode.addItem(
-            "📦  Les 6 vues de la pièce  (sol · plafond · gauche · droite · avant · arrière)",
-            "six_views")
-        self._gen_mode.setCurrentIndex(1)   # Sheet 4 vues par défaut — meilleure navigation spatiale IA
+            "📦  Les 7 vues de la pièce  (6 faces + plan d'ensemble)",
+            "seven_views")
+        self._gen_mode.setCurrentIndex(0)   # Image unique par défaut
         self._gen_mode.setFixedHeight(34)
         self._gen_mode.setToolTip(
             "Image unique : vue principale du décor.\n"
             "Sheet 4 vues (défaut) : image 2×2 montrant le même lieu depuis 4 angles.\n"
-            "Les 6 vues de la pièce : 6 images séparées, une par face — comme un\n"
-            "personnage au centre qui regarde le sol, le plafond et les 4 murs.\n"
-            "Idéal pour les champs/contrechamps et un contrôle total du lieu."
+            "Les 7 vues de la pièce : 6 images séparées (sol, plafond, 4 murs) comme\n"
+            "un personnage au centre qui regarde chaque face, PUIS un 7e plan\n"
+            "d'ensemble qui les regroupe. Idéal pour les champs/contrechamps."
         )
         self._gen_mode.setStyleSheet(
             f"QComboBox{{background:{CP['bg3']};border:1px solid {CP['border']};"
@@ -962,16 +962,39 @@ class DecorDialog(QDialog):
         _valid_refs = [p for p in self._ref_paths if p and os.path.isfile(p)]
         _style_ref  = _valid_refs[0] if _valid_refs else ""
 
-        if mode == "six_views":
+        if mode == "seven_views":
+            reply = QMessageBox.question(
+                self, "Générer les 7 vues de la pièce",
+                f"Cette option va générer 7 images et créer 7 décors distincts "
+                f"à partir de « {name} » :\n\n"
+                f"sol · plafond · gauche · droite · avant · arrière · plan d'ensemble\n\n"
+                f"Le décor actuel reste inchangé ; les 7 vues sont créées en plus.\n"
+                f"Chaque vue consomme des crédits.\n\nContinuer ?",
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                QMessageBox.StandardButton.Yes,
+            )
+            if reply != QMessageBox.StandardButton.Yes:
+                self._btn_gen.setEnabled(True)
+                self._progress.setVisible(False)
+                return
             import core.style as style_api
             if _usage == "style":
                 suffix = ""
             else:
                 suffix = self._suffix_edit.toPlainText().strip() if hasattr(self, "_suffix_edit") else style_api.get_image_suffix()
-            self._status.setText("Génération des 6 vues de la pièce…")
+            self._status.setText("Génération des 7 vues → 7 décors…")
             from api.nano_banana import GenerateRoomViewsWorker
+            self._seven_base_name = name
+            self._seven_base_prompt = prompt
             self._worker_gen = GenerateRoomViewsWorker(
                 prompt, name, model_key=_mk, style_suffix=suffix)
+            self._worker_gen.progress.connect(
+                lambda pct, msg: (self._progress.setValue(pct),
+                                  self._status.setText(translate(msg))))
+            self._worker_gen.views_finished.connect(self._on_room_decors_done)
+            self._worker_gen.failed.connect(self._on_gen_fail)
+            self._worker_gen.start()
+            return
         elif mode == "sheet":
             self._status.setText("Génération du sheet 4 vues…")
             self._worker_gen = GenerateDecorSheetWorker(prompt, name, model_key=_mk,
@@ -1037,6 +1060,37 @@ class DecorDialog(QDialog):
         self._status.setText(
             f"{n} image{'s' if n > 1 else ''} importée{'s' if n > 1 else ''} — "
             f"supprime les non désirées dans la galerie →"
+        )
+
+    def _on_room_decors_done(self, views: list):
+        """Les 7 vues → 7 DÉCORS distincts (sol, plafond, gauche, droite, avant,
+        arrière, vue d'ensemble), chacun avec sa propre image."""
+        self._btn_gen.setEnabled(True)
+        self._progress.setVisible(False)
+        valid = [v for v in (views or []) if v.get("path") and os.path.isfile(v["path"])]
+        if not valid:
+            self._status.setText("Mode mock : aucune image générée (clé fal.ai absente)")
+            return
+        import core.decors as decors_api
+        base = getattr(self, "_seven_base_name", "") or self._name.text().strip() or "Décor"
+        bprompt = getattr(self, "_seven_base_prompt", "") or self._prompt.toPlainText().strip()
+        _cat = self._cat.currentText() if hasattr(self, "_cat") else "Autre"
+        created = 0
+        for v in valid:
+            try:
+                decors_api.save_decor({
+                    "name":       f"{base} — {v['label']}",
+                    # Prompt PAR VUE (cadrage inclus) → régénération fidèle.
+                    "prompt":     v.get("prompt") or bprompt,
+                    "category":   _cat,
+                    "image_path": v["path"],
+                })
+                created += 1
+            except Exception:
+                pass
+        self._decors_created = True   # le parent rechargera la liste à la fermeture
+        self._status.setText(
+            f"✓ {created} décors créés (1 par vue) — ferme cette fiche pour les voir."
         )
 
     def _on_gen_fail(self, err):

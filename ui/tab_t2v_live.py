@@ -2741,7 +2741,8 @@ class TabT2V(QScrollArea):
 
         self.btn_generate = QPushButton("▶▶  Lancer la file d'attente")
         self.btn_generate.setMinimumHeight(46)
-        self.btn_generate.clicked.connect(self._start_with_credit_check)
+        # Vérification du solde fal.ai retirée : on lance directement la file.
+        self.btn_generate.clicked.connect(self.start_generation)
         self._billing_worker = None
         self._balance_lbl = QLabel("")
         self._balance_lbl.setStyleSheet(

@@ -6,7 +6,7 @@ puis sauvegarde sur confirmation.
 """
 from PyQt6.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
-    QScrollArea, QWidget, QFrame, QProgressBar,
+    QScrollArea, QWidget, QFrame, QProgressBar, QCheckBox,
 )
 from PyQt6.QtCore import Qt
 from core.i18n import translate
@@ -18,24 +18,53 @@ from ui.styles import CP
 
 class StoryboardSyncConfirmDialog(QDialog):
     """
-    Dialogue affiché avant de lancer la synchronisation.
-    Explique ce qui va se passer et demande confirmation.
+    Fenêtre de synchronisation : l'utilisateur choisit les opérations à lancer.
+
+    Options (sélection multiple) :
+      • reassign        — réassigner les noms (personnages / décors / accessoires)
+      • rewrite_prompts — réécrire les prompts incohérents (IA)
+      • resync_decors   — re-synchroniser les décors
+      • rewrite_scenario— réécrire le scénario depuis le storyboard (IA, nouvelle version)
+
+    Après exec() == Accepted, lire selected_options() → dict[str, bool].
     """
+
+    # (clé, libellé, description, coché par défaut, badge IA)
+    _OPTIONS = [
+        ("reassign",
+         "Réassigner les noms",
+         "Détecte les personnages, décors et accessoires renommés (accents, articles, "
+         "casse…) et met à jour les assignations de chaque plan.",
+         True, False),
+        ("rewrite_prompts",
+         "Réécrire les prompts",
+         "Vérifie chaque prompt et réécrit uniquement ceux qui ne reflètent plus les "
+         "fiches actuelles (traits, costumes, lieux…).",
+         True, True),
+        ("resync_decors",
+         "Re-synchroniser les décors",
+         "Met à jour le nom des décors renommés et ré-assigne les plans sans décor "
+         "d'après le titre et le prompt.",
+         False, False),
+        ("rewrite_scenario",
+         "Réécrire le scénario depuis le storyboard",
+         "Reconstitue un scénario littéraire à partir des plans. Enregistré comme "
+         "NOUVELLE version — le scénario actuel n'est jamais écrasé.",
+         False, True),
+    ]
 
     def __init__(self, n_shots: int, parent=None):
         super().__init__(parent)
-        self.setWindowTitle("Synchronisation — Confirmation")
-        self.setMinimumWidth(500)
-        self.setMaximumWidth(560)
-        self.setSizePolicy(
-            self.sizePolicy().horizontalPolicy(),
-            self.sizePolicy().verticalPolicy(),
-        )
+        self._checks: dict[str, QCheckBox] = {}
+
+        self.setWindowTitle("Synchronisation — Storyboard")
+        self.setMinimumWidth(540)
+        self.setMaximumWidth(600)
         self.setStyleSheet(f"background:{CP['bg1']};")
 
         root = QVBoxLayout(self)
         root.setContentsMargins(28, 24, 28, 24)
-        root.setSpacing(20)
+        root.setSpacing(18)
 
         # ── Header ──────────────────────────────────────────────────────────
         hdr = QHBoxLayout()
@@ -52,15 +81,13 @@ class StoryboardSyncConfirmDialog(QDialog):
 
         title_col = QVBoxLayout()
         title_col.setSpacing(3)
-
         t = QLabel("Synchronisation du Storyboard")
         t.setStyleSheet(
             f"color:{CP['text_primary']};font-size:16px;"
             f"font-weight:700;background:transparent;"
         )
         title_col.addWidget(t)
-
-        sub = QLabel(f"{n_shots} plan(s) analysé(s)")
+        sub = QLabel(f"{n_shots} plan(s) — choisissez les opérations à lancer")
         sub.setStyleSheet(
             f"color:{CP['text_dim']};font-size:10px;background:transparent;"
         )
@@ -68,85 +95,60 @@ class StoryboardSyncConfirmDialog(QDialog):
         hdr.addLayout(title_col, 1)
         root.addLayout(hdr)
 
-        # ── Séparateur ───────────────────────────────────────────────────────
         sep = QFrame()
         sep.setFixedHeight(1)
         sep.setStyleSheet(f"background:{CP['border']};")
         root.addWidget(sep)
 
-        # ── Description ──────────────────────────────────────────────────────
-        desc_lbl = QLabel(
-            "La synchronisation va comparer votre storyboard avec le casting,\n"
-            "les décors et les accessoires actuels. Elle se déroule en deux phases :"
-        )
-        desc_lbl.setStyleSheet(
-            f"color:{CP['text_secondary']};font-size:12px;"
-            f"line-height:1.5;background:transparent;"
-        )
-        desc_lbl.setWordWrap(True)
-        root.addWidget(desc_lbl)
-
-        # ── Phases ───────────────────────────────────────────────────────────
-        phases_frame = QFrame()
-        phases_frame.setStyleSheet(
-            f"background:{CP['bg2']};border-radius:10px;border:1px solid {CP['border']};"
-        )
-        phases_lay = QVBoxLayout(phases_frame)
-        phases_lay.setContentsMargins(16, 14, 16, 14)
-        phases_lay.setSpacing(12)
-
-        for badge, title, detail in [
-            (
-                "1",
-                "Correspondance des noms  —  sans IA",
-                "Détecte et réassigne les personnages, décors et accessoires dont\n"
-                "le nom a légèrement changé (accents, articles, casse…).",
-            ),
-            (
-                "2",
-                "Vérification des prompts  —  Claude Haiku",
-                "Analyse si les prompts reflètent encore les descriptions actuelles\n"
-                "des éléments assignés. Réécrit uniquement ce qui est incohérent.",
-            ),
-        ]:
-            row = QHBoxLayout()
-            row.setSpacing(12)
-            row.setAlignment(Qt.AlignmentFlag.AlignTop)
-
-            badge_lbl = QLabel(badge)
-            badge_lbl.setFixedSize(22, 22)
-            badge_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
-            badge_lbl.setStyleSheet(
-                f"background:{CP.get('accent2', '#7c6bff')};color:#fff;"
-                f"border-radius:11px;font-size:10px;font-weight:700;"
+        # ── Options (cases à cocher) ─────────────────────────────────────────
+        for key, label, detail, default_on, is_ai in self._OPTIONS:
+            card = QFrame()
+            card.setStyleSheet(
+                f"background:{CP['bg2']};border-radius:10px;border:1px solid {CP['border']};"
             )
-            row.addWidget(badge_lbl)
+            card_lay = QVBoxLayout(card)
+            card_lay.setContentsMargins(14, 12, 14, 12)
+            card_lay.setSpacing(4)
 
-            text_col = QVBoxLayout()
-            text_col.setSpacing(2)
-
-            t_lbl = QLabel(title)
-            t_lbl.setStyleSheet(
-                f"color:{CP['text_primary']};font-size:11px;"
-                f"font-weight:700;background:transparent;"
+            top = QHBoxLayout()
+            top.setSpacing(8)
+            chk = QCheckBox(label)
+            chk.setChecked(default_on)
+            chk.setStyleSheet(
+                f"QCheckBox{{color:{CP['text_primary']};font-size:13px;font-weight:700;"
+                f"background:transparent;spacing:8px;}}"
+                f"QCheckBox::indicator{{width:17px;height:17px;border-radius:4px;"
+                f"border:1px solid {CP['border']};background:{CP['bg3']};}}"
+                f"QCheckBox::indicator:checked{{background:{CP.get('accent2','#7c6bff')};"
+                f"border:1px solid {CP.get('accent2','#7c6bff')};}}"
             )
-            text_col.addWidget(t_lbl)
+            chk.stateChanged.connect(self._update_launch)
+            self._checks[key] = chk
+            top.addWidget(chk)
+            top.addStretch()
+            if is_ai:
+                ai_badge = QLabel("IA")
+                ai_badge.setStyleSheet(
+                    f"color:{CP.get('accent','#4ecdc4')};background:transparent;"
+                    f"border:1px solid {CP.get('accent','#4ecdc4')};border-radius:4px;"
+                    f"font-size:8px;font-weight:700;padding:1px 6px;"
+                )
+                top.addWidget(ai_badge)
+            card_lay.addLayout(top)
 
             d_lbl = QLabel(detail)
             d_lbl.setStyleSheet(
-                f"color:{CP['text_secondary']};font-size:10px;background:transparent;"
+                f"color:{CP['text_secondary']};font-size:10px;"
+                f"background:transparent;padding-left:25px;"
             )
             d_lbl.setWordWrap(True)
-            text_col.addWidget(d_lbl)
+            card_lay.addWidget(d_lbl)
 
-            row.addLayout(text_col, 1)
-            phases_lay.addLayout(row)
-
-        root.addWidget(phases_frame)
+            root.addWidget(card)
 
         # ── Note finale ──────────────────────────────────────────────────────
         note = QLabel(
-            "✓  Aucune modification n'est appliquée sans votre confirmation finale."
+            "✓  Une prévisualisation des modifications s'affiche avant toute écriture."
         )
         note.setStyleSheet(
             f"color:{CP.get('accent', '#4ecdc4')};font-size:10px;"
@@ -155,7 +157,6 @@ class StoryboardSyncConfirmDialog(QDialog):
         note.setWordWrap(True)
         root.addWidget(note)
 
-        # ── Séparateur footer ────────────────────────────────────────────────
         sep2 = QFrame()
         sep2.setFixedHeight(1)
         sep2.setStyleSheet(f"background:{CP['border']};")
@@ -179,20 +180,30 @@ class StoryboardSyncConfirmDialog(QDialog):
 
         foot.addStretch()
 
-        btn_ok = QPushButton("Continuer")
-        btn_ok.setMinimumHeight(40)
-        btn_ok.setMinimumWidth(130)
-        btn_ok.setStyleSheet(
+        self._btn_ok = QPushButton("Lancer la synchronisation")
+        self._btn_ok.setMinimumHeight(40)
+        self._btn_ok.setMinimumWidth(200)
+        self._btn_ok.setStyleSheet(
             f"QPushButton{{background:{CP.get('accent2', '#7c6bff')};color:#fff;"
             f"border:none;border-radius:8px;"
             f"font-size:13px;font-weight:700;padding:0 24px;}}"
             f"QPushButton:hover{{background:#9a8aff;}}"
+            f"QPushButton:disabled{{background:{CP['bg3']};color:{CP['text_dim']};"
+            f"border:1px solid {CP['border']};}}"
         )
-        btn_ok.clicked.connect(self.accept)
-        btn_ok.setDefault(True)
-        foot.addWidget(btn_ok)
+        self._btn_ok.clicked.connect(self.accept)
+        self._btn_ok.setDefault(True)
+        foot.addWidget(self._btn_ok)
 
         root.addLayout(foot)
+        self._update_launch()
+
+    def _update_launch(self):
+        any_on = any(c.isChecked() for c in self._checks.values())
+        self._btn_ok.setEnabled(any_on)
+
+    def selected_options(self) -> dict:
+        return {key: chk.isChecked() for key, chk in self._checks.items()}
 
 
 # ── Ligne de résultat par plan ─────────────────────────────────────────────────
@@ -292,17 +303,23 @@ class _ShotSyncRow(QWidget):
 class StoryboardSyncDialog(QDialog):
     """
     Usage:
-        dlg = StoryboardSyncDialog(shots, parent)
+        dlg = StoryboardSyncDialog(shots, options, parent)
         dlg.exec()
-        # shots saved internally on confirm
+        # shots (et éventuellement une nouvelle version de scénario) sauvegardés sur confirmation
     """
 
-    def __init__(self, shots: list, parent=None):
+    def __init__(self, shots: list, options: dict | None = None, parent=None):
         super().__init__(parent)
         self._shots_in    = shots
         self._shots_out   = []
         self._worker      = None
         self._n_changed   = 0
+        self._options     = options or {
+            "reassign": True, "rewrite_prompts": True,
+            "resync_decors": True, "rewrite_scenario": False,
+        }
+        self._scenario_text   = ""   # texte du scénario reconstruit (si demandé)
+        self._scenario_worker = None
 
         self.setWindowTitle("Synchronisation — Storyboard")
         self.setMinimumWidth(560)
@@ -429,13 +446,21 @@ class StoryboardSyncDialog(QDialog):
     # ── Worker ─────────────────────────────────────────────────────────────────
 
     def _start(self):
-        from api.screenplay import SyncStoryboardWorker
-        w = SyncStoryboardWorker(self._shots_in)
-        self._worker = w
-        w.progress.connect(self._on_progress)
-        w.finished.connect(self._on_done)
-        w.failed.connect(self._on_failed)
-        w.start()
+        # Y a-t-il au moins une opération qui touche les plans ?
+        shot_ops = any(self._options.get(k) for k in
+                       ("reassign", "rewrite_prompts", "resync_decors"))
+        if shot_ops:
+            from api.screenplay import SyncStoryboardWorker
+            w = SyncStoryboardWorker(self._shots_in, self._options)
+            self._worker = w
+            w.progress.connect(self._on_progress)
+            w.finished.connect(self._on_shots_done)
+            w.failed.connect(self._on_failed)
+            w.start()
+        else:
+            # Uniquement la réécriture du scénario : on saute la phase plans.
+            self._shots_out = [dict(s) for s in self._shots_in]
+            self._start_scenario()
 
     def _on_progress(self, pct: int, msg: str):
         self._progress.setRange(0, 100)
@@ -443,8 +468,36 @@ class StoryboardSyncDialog(QDialog):
         self._status_lbl.setText(translate(msg))
         self._phase_lbl.setText(translate(msg))
 
-    def _on_done(self, shots: list):
+    def _on_shots_done(self, shots: list):
         self._shots_out = shots
+        if self._options.get("rewrite_scenario"):
+            self._start_scenario()
+        else:
+            self._finalize()
+
+    # ── Réécriture du scénario (optionnelle) ─────────────────────────────────────
+
+    def _start_scenario(self):
+        from api.screenplay import RewriteScreenplayFromStoryboardWorker
+        self._progress.setRange(0, 100)
+        self._progress.setValue(0)
+        self._phase_lbl.setText("Réécriture du scénario…")
+        self._status_lbl.setText("Reconstruction du scénario depuis le storyboard…")
+        w = RewriteScreenplayFromStoryboardWorker(self._shots_in)
+        self._scenario_worker = w
+        w.progress.connect(self._on_progress)
+        w.finished.connect(self._on_scenario_done)
+        w.failed.connect(self._on_failed)
+        w.start()
+
+    def _on_scenario_done(self, text: str):
+        self._scenario_text = text or ""
+        self._finalize()
+
+    # ── Finalisation : preview + résumé ──────────────────────────────────────────
+
+    def _finalize(self):
+        shots = self._shots_out
         self._progress.setRange(0, 1)
         self._progress.setValue(1)
 
@@ -454,25 +507,53 @@ class StoryboardSyncDialog(QDialog):
 
         self._list_frame.setVisible(True)
 
-        # Changed first, then unchanged
-        for shot in changed + unchanged:
-            row = _ShotSyncRow(shot)
-            self._list_lay.addWidget(row)
+        shot_ops = any(self._options.get(k) for k in
+                       ("reassign", "rewrite_prompts", "resync_decors"))
+
+        # Changed first, then unchanged — uniquement si une opération sur les plans
+        # a réellement tourné (sinon mode « scénario seul »).
+        if shot_ops:
+            for shot in changed + unchanged:
+                row = _ShotSyncRow(shot)
+                self._list_lay.addWidget(row)
+
+        # ── Ligne scénario reconstruit (si demandé) ──────────────────────────
+        if self._scenario_text:
+            self._list_lay.addWidget(self._build_scenario_row())
+
         self._list_lay.addStretch()
 
         total = len(shots)
         n_reassign = sum(1 for s in shots if s.get("_reassigned"))
         n_prompt   = sum(1 for s in shots if s.get("_prompt_changed"))
+        has_scenario = bool(self._scenario_text)
 
-        if self._n_changed:
-            self._phase_lbl.setText(f"{self._n_changed} plan(s) à mettre à jour")
-            self._status_lbl.setText(
+        if self._n_changed or has_scenario:
+            bits = []
+            if self._n_changed:
+                bits.append(f"{self._n_changed} plan(s)")
+            if has_scenario:
+                bits.append("scénario réécrit")
+            self._phase_lbl.setText(" · ".join(bits) + " à appliquer")
+            sm = (
                 f"{n_prompt} prompt(s) réécrit(s) · {n_reassign} ré-assignation(s) sur {total} plans"
+                if self._n_changed else f"{total} plan(s) analysé(s)"
             )
-            self._summary_lbl.setText(
-                f"✓  {self._n_changed}/{total} plans modifiés · {n_prompt} prompts · {n_reassign} assignations"
-            )
-            self._btn_confirm.setText(f"Appliquer ({self._n_changed} plan(s))")
+            if has_scenario:
+                sm += f" · scénario {len(self._scenario_text)} caractères → nouvelle version"
+            self._status_lbl.setText(sm)
+            summ = f"✓  {self._n_changed}/{total} plans modifiés · {n_prompt} prompts · {n_reassign} assignations"
+            if has_scenario:
+                summ += " · + scénario (nouvelle version)"
+            self._summary_lbl.setText(summ)
+            btn_txt = "Appliquer"
+            if self._n_changed and has_scenario:
+                btn_txt = f"Appliquer ({self._n_changed} plan(s) + scénario)"
+            elif self._n_changed:
+                btn_txt = f"Appliquer ({self._n_changed} plan(s))"
+            elif has_scenario:
+                btn_txt = "Enregistrer le scénario"
+            self._btn_confirm.setText(btn_txt)
             self._btn_confirm.setVisible(True)
         else:
             self._phase_lbl.setText("Tout est synchronisé")
@@ -484,6 +565,47 @@ class StoryboardSyncDialog(QDialog):
 
         self._summary_lbl.setVisible(True)
 
+    def _build_scenario_row(self) -> QWidget:
+        w = QWidget()
+        lay = QVBoxLayout(w)
+        lay.setContentsMargins(10, 8, 10, 8)
+        lay.setSpacing(4)
+
+        top = QHBoxLayout()
+        top.setSpacing(8)
+        icon_lbl = QLabel("✎")
+        icon_lbl.setStyleSheet(
+            f"color:{CP.get('accent2', '#7c6bff')};font-size:13px;font-weight:700;background:transparent;"
+        )
+        icon_lbl.setFixedWidth(18)
+        top.addWidget(icon_lbl)
+        tag = QLabel("Scénario")
+        tag.setStyleSheet(
+            f"color:#07080f;background:{CP.get('accent2', '#7c6bff')};"
+            f"border-radius:3px;font-size:8px;font-weight:700;padding:1px 6px;"
+        )
+        tag.setFixedHeight(17)
+        top.addWidget(tag)
+        title_lbl = QLabel("Scénario reconstruit depuis le storyboard")
+        title_lbl.setStyleSheet(
+            f"color:{CP['text_primary']};font-size:11px;font-weight:600;background:transparent;"
+        )
+        top.addWidget(title_lbl, 1)
+        new_lbl = QLabel("nouvelle version")
+        new_lbl.setStyleSheet(f"color:{CP['text_dim']};font-size:9px;background:transparent;")
+        top.addWidget(new_lbl)
+        lay.addLayout(top)
+
+        preview = self._scenario_text.strip().replace("\n", " ")
+        ex = QLabel(f"{preview[:160]}{'…' if len(preview) > 160 else ''}")
+        ex.setStyleSheet(
+            f"color:{CP['text_dim']};font-size:8px;font-family:'Consolas',monospace;"
+            f"background:transparent;padding-left:26px;"
+        )
+        ex.setWordWrap(True)
+        lay.addWidget(ex)
+        return w
+
     def _on_failed(self, err: str):
         self._progress.setRange(0, 1)
         self._progress.setValue(0)
@@ -494,7 +616,7 @@ class StoryboardSyncDialog(QDialog):
     # ── Actions ────────────────────────────────────────────────────────────────
 
     def _on_confirm(self):
-        if not self._shots_out:
+        if not self._shots_out and not self._scenario_text:
             self.accept()
             return
         self._btn_confirm.setEnabled(False)
@@ -505,14 +627,37 @@ class StoryboardSyncDialog(QDialog):
                 if shot.get("_reassigned") or shot.get("_prompt_changed"):
                     clean = {k: v for k, v in shot.items() if not k.startswith("_")}
                     sb_api.save_shot(clean)
+            if self._scenario_text:
+                self._save_scenario_version(self._scenario_text)
         except Exception as e:
             self._status_lbl.setText(f"⚠ Erreur sauvegarde : {e}")
             self._btn_confirm.setEnabled(True)
-            self._btn_confirm.setText(f"Appliquer ({self._n_changed} plan(s))")
+            self._btn_confirm.setText("Réessayer")
             return
         self.accept()
 
+    def _save_scenario_version(self, text: str):
+        """Enregistre le scénario reconstruit comme NOUVELLE version — sans jamais
+        écraser le contenu courant du scénario du projet."""
+        from datetime import datetime
+        import core.scenario as scenario_api
+
+        scenarios = scenario_api.list_scenarios()
+        current = scenarios[0] if scenarios else {"title": "Scénario", "raw_content": ""}
+
+        versions = list(current.get("versions", []))
+        num = (versions[-1]["num"] + 1) if versions else 1
+        versions.append({
+            "num":      num,
+            "name":     "Reconstruit depuis le storyboard",
+            "content":  text,
+            "saved_at": datetime.now().isoformat(timespec="seconds"),
+        })
+        current["versions"] = versions
+        scenario_api.save_scenario(current)
+
     def _on_cancel(self):
-        if self._worker and self._worker.isRunning():
-            abandon_thread(self._worker)
+        for w in (self._worker, self._scenario_worker):
+            if w and w.isRunning():
+                abandon_thread(w)
         self.reject()

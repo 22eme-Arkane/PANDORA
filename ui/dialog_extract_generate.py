@@ -74,7 +74,7 @@ class ExtractGenerateDialog(QDialog):
     def __init__(self, parent, title: str, icon: str, scenario_text: str,
                  extract_worker_cls, save_fn, item_subdir: str,
                  is_characters: bool = False, post_save_fn=None,
-                 category_label: str = "éléments"):
+                 category_label: str = "éléments", offer_room_views: bool = False):
         super().__init__(parent)
         self._scenario_text      = scenario_text
         self._extract_cls        = extract_worker_cls
@@ -83,7 +83,9 @@ class ExtractGenerateDialog(QDialog):
         self._subdir             = item_subdir
         self._is_characters      = is_characters
         self._category_label     = category_label
+        self._offer_room_views   = offer_room_views
         self._generate_images    = False          # set by user choice
+        self._room_views         = False          # set by user choice (décors only)
         self._saved_items: list[dict] = []
         self._item_rows:   list[_ItemRow] = []
         self._gen_idx      = 0
@@ -165,6 +167,24 @@ class ExtractGenerateDialog(QDialog):
         btn_gen.setToolTip(translate("Extrait, sauvegarde, puis génère une image via Nano Banana pour chaque élément"))
         btn_gen.clicked.connect(lambda: self._start(generate=True))
         choice_lay.addWidget(btn_gen)
+
+        # ── 3e option (décors uniquement) : les 7 vues de chaque pièce ──────────
+        if self._offer_room_views:
+            btn_seven = QPushButton(
+                "  " + translate("Identifier et générer les 7 vues de la pièce"))
+            btn_seven.setFixedHeight(44)
+            btn_seven.setStyleSheet(
+                f"QPushButton{{background:transparent;color:{CP['text_primary']};"
+                f"border:1px solid {CP.get('accent2','#7c6bff')};border-radius:8px;"
+                f"font-size:12px;font-weight:700;text-align:left;padding-left:14px;}}"
+                f"QPushButton:hover{{background:{CP['bg3']};"
+                f"border-color:{CP.get('accent2','#7c6bff')};}}"
+            )
+            btn_seven.setToolTip(translate(
+                "Pour chaque décor : 6 faces (sol, plafond, 4 murs) + un plan "
+                "d'ensemble — 7 images par pièce, cohérence spatiale stricte"))
+            btn_seven.clicked.connect(lambda: self._start(generate=True, room_views=True))
+            choice_lay.addWidget(btn_seven)
 
         root.addWidget(self._choice_frame)
 
@@ -295,10 +315,11 @@ class ExtractGenerateDialog(QDialog):
 
     # ── Mode selection ─────────────────────────────────────────────────────────
 
-    def _start(self, generate: bool):
+    def _start(self, generate: bool, room_views: bool = False):
         if self._cancelled:
             return
         self._generate_images = generate
+        self._room_views      = room_views
         self._choice_frame.setVisible(False)
         self._progress.setVisible(True)
         self._status_lbl.setVisible(True)
@@ -412,12 +433,27 @@ class ExtractGenerateDialog(QDialog):
         prompt = item.get("prompt") or item.get("description") or item.get("name", "")
         name   = item.get("name", "item")
 
+        if self._room_views:
+            # Décors : 7 vues par pièce (6 faces + plan d'ensemble).
+            from api.nano_banana import GenerateRoomViewsWorker
+            import core.style as style_api
+            w = GenerateRoomViewsWorker(
+                base_prompt=prompt, decor_name=name,
+                style_suffix=style_api.get_image_suffix(),
+            )
+            w.views_finished.connect(self._on_room_views_done)
+            w.failed.connect(self._on_img_failed)
+            self._gen_worker = w
+            w.start()
+            return
+
         if self._is_characters:
             from api.nano_banana import GeneratePortraitWorker
+            # Image unique (portrait) par défaut — pas le sheet 5 vues.
             w = GeneratePortraitWorker(
                 prompt=prompt,
                 char_name=name,
-                gen_mode="sheet_5views",
+                gen_mode="classic",
             )
             w.finished.connect(lambda p, s: self._on_img_done(p or s))
             w.failed.connect(self._on_img_failed)
@@ -446,6 +482,47 @@ class ExtractGenerateDialog(QDialog):
                 self._save_fn(item)
             except Exception:
                 pass
+            row.set_state("DONE")
+        else:
+            row.set_state("NO_IMG")
+
+        self._gen_progress.setValue(self._gen_idx + 1)
+        self._gen_idx += 1
+        self._gen_next()
+
+    def _on_room_views_done(self, views: list):
+        """7 vues générées pour une pièce → 7 DÉCORS distincts (sol, plafond,
+        gauche, droite, avant, arrière, vue d'ensemble). Le décor « pièce »
+        d'origine est remplacé par ces 7 vues."""
+        if self._cancelled:
+            return
+        item = self._saved_items[self._gen_idx]
+        row  = self._item_rows[self._gen_idx]
+
+        valid = [v for v in (views or [])
+                 if v.get("path") and os.path.isfile(v["path"])]
+        if valid:
+            import core.decors as decors_api
+            base    = item.get("name", "Décor")
+            bprompt = item.get("prompt") or item.get("description") or base
+            cat     = item.get("category", "Autre")
+            for v in valid:
+                try:
+                    self._save_fn({
+                        "name":       f"{base} — {v['label']}",
+                        # Prompt PAR VUE (cadrage inclus) → régénération fidèle.
+                        "prompt":     v.get("prompt") or bprompt,
+                        "category":   cat,
+                        "image_path": v["path"],
+                    })
+                except Exception:
+                    pass
+            # On ne garde QUE les 7 vues : retire le décor « pièce » d'origine.
+            if item.get("id"):
+                try:
+                    decors_api.delete_decor(item["id"])
+                except Exception:
+                    pass
             row.set_state("DONE")
         else:
             row.set_state("NO_IMG")
@@ -564,6 +641,7 @@ class ExtractGenerateDialog(QDialog):
             item_subdir="decors",
             post_save_fn=post_save,
             category_label="décors",
+            offer_room_views=True,
         )
         dlg._page_key   = "decors"
         dlg._page_label = "Voir les Décors"

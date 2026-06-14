@@ -1364,9 +1364,17 @@ class SyncStoryboardWorker(QThread):
     finished = pyqtSignal(list)
     failed   = pyqtSignal(str)
 
-    def __init__(self, shots: list):
+    def __init__(self, shots: list, options: dict | None = None):
         super().__init__()
         self._shots = [dict(s) for s in shots]
+        # Options sélectionnées dans la fenêtre de synchronisation.
+        #   reassign        : ré-assignation noms (personnages / décors / accessoires)
+        #   resync_decors   : re-synchroniser les décors (assignation + nom à jour)
+        #   rewrite_prompts : réécriture IA des prompts incohérents
+        o = options or {}
+        self._opt_reassign  = o.get("reassign", True)
+        self._opt_decors    = o.get("resync_decors", True)
+        self._opt_prompts   = o.get("rewrite_prompts", True)
 
     def run(self):
         try:
@@ -1393,19 +1401,47 @@ class SyncStoryboardWorker(QThread):
         decor_by_name = {d["name"].lower(): d for d in decors if d.get("name")}
         acc_by_name  = {a["name"].lower(): a for a in accessories if a.get("name")}
 
-        self.progress.emit(15, "Phase 1 — ré-assignation des éléments par nom…")
-
-        # ── Phase 1 : name matching ────────────────────────────────────────────
+        # Initialisation des champs meta sur tous les plans (toujours)
         for shot in self._shots:
             shot["_reassigned"]     = []
             shot["_prompt_changed"] = False
             shot["_old_prompt"]     = shot.get("seedance_prompt", "")
             shot["_reason"]         = ""
 
+        do_names  = self._opt_reassign
+        do_decors = self._opt_reassign or self._opt_decors
+
+        if do_names or do_decors:
+            self.progress.emit(15, "Phase 1 — ré-assignation des éléments par nom…")
+
+        # ── Phase 1 : name matching ────────────────────────────────────────────
+        for shot in self._shots:
             search_text = (
                 (shot.get("scene_title") or "") + " " +
                 (shot.get("seedance_prompt") or "")
             ).lower()
+
+            # ── Re-synchronisation des décors : rafraîchir le nom si la fiche a
+            #    été renommée (decor_id présent mais decor_name obsolète).
+            if self._opt_decors and shot.get("decor_id") in decor_by_id:
+                _d = decor_by_id[shot["decor_id"]]
+                if _d.get("name") and shot.get("decor_name") != _d["name"]:
+                    _old = shot.get("decor_name") or "—"
+                    shot["decor_name"] = _d["name"]
+                    shot["_reassigned"].append(f"décor : {_old} → {_d['name']}")
+
+            if not do_names:
+                # Seuls les décors sont traités si la ré-assignation des noms est désactivée.
+                if do_decors and not shot.get("decor_id"):
+                    for decor in decors:
+                        if not decor.get("name"):
+                            continue
+                        if _name_in_text(decor["name"], search_text):
+                            shot["decor_id"]   = decor["id"]
+                            shot["decor_name"] = decor["name"]
+                            shot["_reassigned"].append(f"décor : {decor['name']}")
+                            break
+                continue
 
             existing_char_ids = set(shot.get("character_ids") or [])
             for char in characters:
@@ -1445,7 +1481,7 @@ class SyncStoryboardWorker(QThread):
                             old_names.append(canonical)
                             shot["_reassigned"].append(f"personnage : {canonical}")
 
-            if not shot.get("decor_id"):
+            if do_decors and not shot.get("decor_id"):
                 for decor in decors:
                     if not decor.get("name"):
                         continue
@@ -1454,6 +1490,12 @@ class SyncStoryboardWorker(QThread):
                         shot["decor_name"] = decor["name"]
                         shot["_reassigned"].append(f"décor : {decor['name']}")
                         break
+
+        # ── Phase 2 désactivée : on s'arrête après la ré-assignation ──────────
+        if not self._opt_prompts:
+            self.progress.emit(100, "Synchronisation terminée")
+            self.finished.emit(self._shots)
+            return
 
         self.progress.emit(30, "Phase 2 — préparation des données pour Claude Haiku…")
 
@@ -1561,6 +1603,229 @@ class SyncStoryboardWorker(QThread):
 
         self.progress.emit(100, "Synchronisation terminée")
         self.finished.emit(self._shots)
+
+
+# ── Réécriture du scénario depuis le storyboard ───────────────────────────────
+
+_REWRITE_SCENARIO_SYSTEM = """\
+Tu es un scénariste professionnel. On te fournit un découpage technique (storyboard) \
+sous forme de liste de plans, dans l'ordre, groupés par séquence. À partir de ces plans, \
+reconstitue un SCÉNARIO littéraire complet et cohérent, au format cinéma français standard.
+
+RÈGLES :
+- Respecte STRICTEMENT l'ordre des séquences et des plans fournis.
+- Pour chaque séquence, écris un en-tête de scène (ex. « SÉQUENCE 1 — INT. SALON — JOUR ») \
+en t'appuyant sur le décor et l'heure indiqués.
+- Transforme les actions, descriptions et intentions des plans en prose d'action fluide \
+(présent de narration), sans jargon technique (pas de « plan large », « travelling »…).
+- Si des dialogues sont présents (texte entre guillemets dans les prompts/commentaires), \
+intègre-les en format dialogue avec le nom du personnage en majuscules.
+- N'invente pas d'événements majeurs absents du storyboard, mais lie les plans entre eux \
+de façon naturelle et lisible.
+- Conserve les noms exacts des personnages et des lieux.
+- Écris en français.
+- Réponds UNIQUEMENT avec le texte du scénario, sans préambule, sans markdown, sans commentaire.
+"""
+
+
+class RewriteScreenplayFromStoryboardWorker(QThread):
+    """Reconstruit un scénario littéraire à partir du découpage storyboard (Claude).
+
+    Émet finished(str) avec le texte du scénario reconstruit. Ne touche à AUCUNE
+    donnée : la sauvegarde (en nouvelle version) est gérée par l'appelant.
+    """
+    progress = pyqtSignal(int, str)
+    finished = pyqtSignal(str)
+    failed   = pyqtSignal(str)
+
+    def __init__(self, shots: list):
+        super().__init__()
+        self._shots = [dict(s) for s in shots]
+
+    def run(self):
+        try:
+            self._run()
+        except Exception as e:
+            self.failed.emit(f"Erreur réécriture scénario : {e}")
+
+    def _run(self):
+        from core.ai_provider import complete as ai_complete, key_error, ai_name
+
+        err = key_error()
+        if err:
+            self.failed.emit(err)
+            return
+
+        self.progress.emit(10, "Lecture du storyboard…")
+
+        # Groupe les plans par séquence dans l'ordre rencontré.
+        seqs: list[dict] = []
+        seq_index: dict[str, dict] = {}
+        for shot in self._shots:
+            sn = str(shot.get("seq_num") or "1").strip() or "1"
+            if sn not in seq_index:
+                grp = {
+                    "seq_num":  sn,
+                    "seq_name": shot.get("seq_name", ""),
+                    "shots":    [],
+                }
+                seq_index[sn] = grp
+                seqs.append(grp)
+            seq_index[sn]["shots"].append({
+                "number":     shot.get("number", ""),
+                "action":     shot.get("scene_title", ""),
+                "decor":      shot.get("decor_name", ""),
+                "heure":      shot.get("shot_time", ""),
+                "personnages": shot.get("character_names", []),
+                "accessoires": shot.get("accessory_names", []),
+                "commentaire": shot.get("comments", ""),
+                "prompt":      shot.get("seedance_prompt", ""),
+            })
+
+        if not seqs:
+            self.failed.emit("Aucun plan dans le storyboard.")
+            return
+
+        payload = json.dumps({"sequences": seqs}, ensure_ascii=False, indent=2)
+
+        self.progress.emit(45, f"{ai_name()} réécrit le scénario…")
+
+        text = ai_complete(_REWRITE_SCENARIO_SYSTEM, payload,
+                           tier="creative", max_tokens=8192).strip()
+
+        # Nettoyage d'un éventuel bloc markdown.
+        if text.startswith("```"):
+            parts = text.split("```")
+            text = max((p for p in parts), key=len).strip()
+            for pre in ("text", "txt", "markdown"):
+                if text.lower().startswith(pre):
+                    text = text[len(pre):].lstrip()
+
+        if not text:
+            self.failed.emit("Le scénario reconstruit est vide.")
+            return
+
+        self.progress.emit(100, "Scénario reconstruit")
+        self.finished.emit(text)
+
+
+# ── Chat Storyboard — modification du découpage par conversation ──────────────
+
+# Champs du plan que le chat est autorisé à modifier (liste blanche stricte).
+STORYBOARD_CHAT_FIELDS = [
+    "scene_title", "seedance_prompt", "sound_prompt",
+    "camera_movement", "shot_size", "focal", "speed",
+    "decor_name", "shot_time", "duration", "comments",
+    "camera_axis", "camera_placement", "actor_placement",
+    "character_names", "accessory_names", "dialogue_lang",
+]
+
+_STORYBOARD_CHAT_SYSTEM = """\
+Tu es l'assistant de découpage d'un réalisateur, branché en direct sur son STORYBOARD.
+Tu reçois le storyboard complet (liste de plans en JSON) et un message du réalisateur.
+
+TON RÔLE :
+- Si le réalisateur POSE UNE QUESTION ou demande une analyse → réponds en texte, AUCUNE modification.
+- Si le réalisateur DEMANDE UNE MODIFICATION → applique EXACTEMENT ce qu'il demande, RIEN DE PLUS.
+
+RÈGLE D'OR — CHIRURGIE STRICTE :
+- Ne modifie QUE ce qui est explicitement demandé. Si on te demande de changer une seule
+  phrase de dialogue dans le plan 3, tu ne touches QUE cette phrase, dans CE plan.
+- Tout le reste du champ (et tous les autres plans) est conservé MOT POUR MOT.
+- N'invente jamais une modification que le réalisateur n'a pas demandée.
+- Ne reformule pas, ne « améliore » pas, ne corrige pas hors de la zone ciblée.
+- En cas de doute sur le plan ou le champ visé, NE MODIFIE RIEN et demande une précision.
+
+IDENTIFICATION DES PLANS :
+- Réfère-toi aux plans par leur "number" (numéro affiché). Utilise "id" dans ta réponse JSON.
+
+CHAMPS MODIFIABLES (aucun autre) :
+%s
+
+FORMAT DE RÉPONSE — JSON STRICT, sans markdown, sans texte hors JSON :
+{
+  "reply": "<ta réponse en français au réalisateur, courte et claire>",
+  "edits": [
+    {"id": "<id du plan>", "number": "<numéro affiché>", "field": "<champ>",
+     "value": "<nouvelle valeur COMPLÈTE du champ>", "summary": "<résumé court FR de ce qui change>"}
+  ]
+}
+- "edits" est une liste VIDE [] si aucune modification n'est demandée.
+- "value" doit contenir la valeur ENTIÈRE du champ après modification (pas un fragment).
+- Garde la même langue que le contenu d'origine du champ.
+""" % ("\n".join(f"  - {f}" for f in STORYBOARD_CHAT_FIELDS))
+
+
+class StoryboardChatWorker(QThread):
+    """Chat connecté au storyboard : lit tout le découpage, répond au réalisateur
+    et renvoie des éditions CHIRURGICALES (uniquement ce qui est demandé).
+
+    finished(dict) → {"reply": str, "edits": [ {id, number, field, value, summary} ]}
+    """
+    finished = pyqtSignal(dict)
+    failed   = pyqtSignal(str)
+
+    def __init__(self, message: str, shots: list, history: list | None = None):
+        super().__init__()
+        self._message = message
+        self._shots   = [dict(s) for s in shots]
+        self._history = list(history or [])
+
+    def run(self):
+        try:
+            self._run()
+        except Exception as e:
+            self.failed.emit(f"Erreur chat storyboard : {e}")
+
+    def _run(self):
+        from core.ai_provider import chat as ai_chat, key_error
+        err = key_error()
+        if err:
+            self.failed.emit(err)
+            return
+
+        # Payload : uniquement les champs utiles + id/number pour cibler les plans.
+        payload_shots = []
+        for s in self._shots:
+            entry = {"id": s.get("id", ""), "number": s.get("number", "")}
+            for f in STORYBOARD_CHAT_FIELDS:
+                if f in s and s.get(f) not in (None, ""):
+                    entry[f] = s.get(f)
+            payload_shots.append(entry)
+
+        sb_json = json.dumps({"shots": payload_shots}, ensure_ascii=False)
+        user_msg = (
+            f"STORYBOARD ACTUEL :\n{sb_json}\n\n"
+            f"MESSAGE DU RÉALISATEUR :\n{self._message}"
+        )
+
+        messages = self._history + [{"role": "user", "content": user_msg}]
+        raw = ai_chat(_STORYBOARD_CHAT_SYSTEM, messages,
+                      tier="utility", max_tokens=4096).strip()
+
+        # Nettoyage markdown éventuel.
+        if "```" in raw:
+            for part in raw.split("```"):
+                cand = part.lstrip("json").strip()
+                if cand.startswith("{"):
+                    raw = cand
+                    break
+
+        try:
+            result = json.loads(raw)
+        except json.JSONDecodeError:
+            # Pas de JSON exploitable → on renvoie la réponse brute sans édition.
+            self.finished.emit({"reply": raw, "edits": []})
+            return
+
+        reply = str(result.get("reply", "")).strip()
+        edits = result.get("edits", []) or []
+        # Filtre les éditions sur la liste blanche des champs.
+        clean_edits = [
+            e for e in edits
+            if isinstance(e, dict) and e.get("field") in STORYBOARD_CHAT_FIELDS
+        ]
+        self.finished.emit({"reply": reply, "edits": clean_edits})
 
 
 # ── Session de chat interactif — co-écriture arrangement ──────────────────────
