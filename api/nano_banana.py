@@ -2038,3 +2038,54 @@ class CleanBackgroundWorker(QThread):
             self.finished.emit(path)
         except Exception as e:
             self.failed.emit(humanize_api_error(f"Erreur nettoyage fond : {e}"))
+
+
+# ── Plan d'architecte vu de dessus — base de la Mise en scène ────────────────────
+
+class GenerateFloorPlanWorker(QThread):
+    """Génère un PLAN VU DE DESSUS (style plan d'architecte) du décor — base sur
+    laquelle on place caméra, personnages, éléments (et lumières pour le Plan de
+    feu). finished(path) ; "" en mock."""
+    progress = pyqtSignal(int, str)
+    finished = pyqtSignal(str)
+    failed   = pyqtSignal(str)
+
+    def __init__(self, decor_prompt: str, decor_name: str = "plan"):
+        super().__init__()
+        self._prompt = decor_prompt
+        self._name   = decor_name
+
+    def run(self):
+        cfg = load_config()
+        key = cfg.get("api_key", "").strip()
+        if not key:
+            self.finished.emit("")   # mock → canvas vierge éditable
+            return
+        try:
+            import fal_client
+            import requests
+            from core.lang import translate_to_english
+            from core.staging import images_dir
+
+            os.environ["FAL_KEY"] = key
+            self.progress.emit(15, "Génération du plan vu de dessus…")
+            base_en = translate_to_english(self._prompt) if self._prompt else "an interior room"
+            prompt = (
+                f"TOP-DOWN architectural floor plan (bird's eye view, seen from directly "
+                f"above) of: {base_en}. Clean schematic blueprint / architect plan style: "
+                f"walls, doors, windows and furniture drawn from above with simple lines and "
+                f"flat tones, neutral background, clear and uncluttered, no people, no camera, "
+                f"no text labels. Square framing."
+            )
+            ep, args = _build_image_args(prompt, "1:1", "1K", cfg, 1)
+            result = fal_client.subscribe(ep, arguments=args)
+            url  = _extract_image_url(result)
+            data = requests.get(url, timeout=180).content
+            safe = "".join(c for c in self._name if c.isalnum() or c in " -_").strip() or "plan"
+            path = os.path.join(images_dir(), f"{safe}_floorplan_{int(time.time())}.png")
+            with open(path, "wb") as f:
+                f.write(data)
+            self.progress.emit(100, "Plan généré ✓")
+            self.finished.emit(path)
+        except Exception as e:
+            self.failed.emit(humanize_api_error(f"Erreur plan vu de dessus : {e}"))

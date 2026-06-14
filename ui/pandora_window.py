@@ -29,6 +29,7 @@ def _get_nav_items():
         None,
         ("scenario.png",   tr("nav.scenario"),    "scenario"),
         ("storyboard.png", tr("nav.storyboard"),  "storyboard"),
+        ("mise_en_scene.png", tr("nav.mise_en_scene"), "mise_en_scene"),
         None,
         ("castings.png",   tr("nav.castings"),    "castings"),
         ("decors.png",     tr("nav.decors"),      "decors"),
@@ -37,6 +38,7 @@ def _get_nav_items():
         ("vehicule.png",   tr("nav.vehicles"),    "vehicles"),
         None,
         ("camera.png",     tr("nav.camera"),      "camera"),
+        ("plan_de_feu.png", tr("nav.plan_de_feu"), "plan_de_feu"),
         ("doublage.png",   tr("nav.doublage"),    "doublage"),
         None,
         ("seedance.png",   tr("nav.seedance"),    "seedance"),
@@ -49,6 +51,8 @@ _FALLBACK = {
     "univers.png":     "◈",
     "scenario.png":    "≡",
     "storyboard.png":  "⊞",
+    "mise_en_scene.png": "▦",
+    "plan_de_feu.png": "💡",
     "castings.png":    "⊕",
     "decors.png":      "◻",
     "accesoires.png":  "◈",
@@ -397,6 +401,15 @@ class PandoraWindow(QMainWindow):
         storyboard = PageStoryboard()
         self._pages["storyboard"] = storyboard
         self._stack.addWidget(storyboard)
+
+        from ui.page_staging import PageStaging, PageLighting
+        mise_en_scene = PageStaging()
+        self._pages["mise_en_scene"] = mise_en_scene
+        self._stack.addWidget(mise_en_scene)
+
+        plan_de_feu = PageLighting()
+        self._pages["plan_de_feu"] = plan_de_feu
+        self._stack.addWidget(plan_de_feu)
 
         decors = PageDecors()
         self._pages["decors"] = decors
@@ -1026,12 +1039,14 @@ class PandoraWindow(QMainWindow):
             "projects":   "nav.projects",
             "scenario":   "nav.scenario",
             "storyboard": "nav.storyboard",
+            "mise_en_scene": "nav.mise_en_scene",
             "castings":   "nav.castings",
             "decors":     "nav.decors",
             "accessoires":"nav.accessories",
             "hmc":        "nav.hmc",
             "vehicles":   "nav.vehicles",
             "camera":     "nav.camera",
+            "plan_de_feu": "nav.plan_de_feu",
             "doublage":   "nav.doublage",
             "seedance":   "nav.seedance",
             "settings":   "nav.settings",

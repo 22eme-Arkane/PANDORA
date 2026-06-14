@@ -690,6 +690,41 @@ def synchro_decor_meme_axe():
     assert "get_synced_bg" in t, "réinjection du fond figé comme réf décor"
 
 
+@test
+def mise_en_scene_plan_de_feu():
+    """Mise en scène & Plan de feu : plans vus de dessus éditables (caméra/acteurs/
+    éléments puis lumières), record partagé par plan, axe caméra dérivé, intégration
+    nav (groupes Scénario/Storyboard et Image&Son/Doublage) + synchro des prompts."""
+    import core.staging as st
+    # Modèle + axe caméra dérivé de l'angle
+    assert st.axis_from_angle(0) == "Face" and st.axis_from_angle(180) == "Dos"
+    assert st.axis_from_angle(90) == "Latéral 90°"
+    rec = st.get("zz")
+    assert "camera" in rec and "actors" in rec and "lights" in rec
+    assert st.PROJECTOR_TYPES, "types de projecteurs définis"
+    # Worker plan d'architecte vu de dessus
+    from api.nano_banana import GenerateFloorPlanWorker
+    w = GenerateFloorPlanWorker("salon", "Salon")
+    assert hasattr(w, "finished")
+    fp = inspect.getsource(GenerateFloorPlanWorker._real) if hasattr(GenerateFloorPlanWorker, "_real") \
+        else inspect.getsource(GenerateFloorPlanWorker)
+    assert "TOP-DOWN" in fp
+    # Pages + canevas éditable
+    from ui.page_staging import PageStaging, PageLighting
+    assert PageStaging.MODE == "staging" and PageLighting.MODE == "lighting"
+    cv = inspect.getsource(__import__("ui.staging_canvas", fromlist=["_"]))
+    assert "ItemIsMovable" in cv and "add_actor" in cv and "add_light" in cv and "rotate_selected" in cv
+    # Nav : intégrées dans les bons groupes
+    wsrc = inspect.getsource(__import__("ui.pandora_window", fromlist=["_"]))
+    assert '"mise_en_scene"' in wsrc and '"plan_de_feu"' in wsrc
+    assert wsrc.index('"storyboard"') < wsrc.index('"mise_en_scene"'), "Mise en scène après Storyboard"
+    assert wsrc.index('"camera"') < wsrc.index('"plan_de_feu"') < wsrc.index('"doublage"'), \
+        "Plan de feu entre Image & Son et Doublage"
+    # Synchro des prompts : tient compte de la mise en scène
+    sp = inspect.getsource(__import__("api.screenplay", fromlist=["_"]))
+    assert "mise_en_scene" in sp and "import core.staging" in sp
+
+
 # ══════════════════════════════════════════════════════════════════════════════
 # Runner
 # ══════════════════════════════════════════════════════════════════════════════

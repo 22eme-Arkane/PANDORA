@@ -1341,6 +1341,14 @@ doivent être cohérentes avec ce prompt de référence de séquence.
 - La lumière est une donnée de continuité : elle ne doit pas changer entre les plans \
 d'une même séquence sauf si une intention dramatique explicite l'impose.
 
+MISE EN SCÈNE & PLAN DE FEU :
+- Si un plan contient le champ "mise_en_scene" (non-vide), il décrit le placement réel
+  vu de dessus : axe caméra, position des acteurs (fond/milieu/avant × gauche/centre/droite)
+  et éclairage (lumières + type de projecteur).
+- Réécris alors le prompt pour COLLER à ce placement : qui est à gauche/droite/au fond,
+  l'axe caméra indiqué, et l'ambiance lumineuse décrite (direction et type des sources).
+- N'invente pas de positions absentes ; respecte exactement ce qui est fourni.
+
 - Réponds UNIQUEMENT en JSON valide, sans markdown, sans texte hors JSON
 
 FORMAT OBLIGATOIRE :
@@ -1526,6 +1534,8 @@ class SyncStoryboardWorker(QThread):
                 if p:
                     seq_ref[sn] = p[:300]  # 300 chars suffisent pour la lumière
 
+        import core.staging as _staging
+
         shots_payload = []
         for shot in self._shots:
             chars = [_cdesc(cid) for cid in (shot.get("character_ids") or [])
@@ -1537,9 +1547,15 @@ class SyncStoryboardWorker(QThread):
                 if acc_by_name.get(n.lower(), {}).get("description")
             ]
 
+            try:
+                stg_summary = _staging.summary(shot.get("id", ""))
+            except Exception:
+                stg_summary = ""
+
             has_elements = bool(chars or decor_el or acc_els)
             prompt = (shot.get("seedance_prompt") or "").strip()
-            if not has_elements or not prompt:
+            # On traite le plan s'il a des éléments OU une mise en scène définie.
+            if (not has_elements and not stg_summary) or not prompt:
                 continue
 
             sn = str(shot.get("seq_num") or "").strip()
@@ -1555,6 +1571,8 @@ class SyncStoryboardWorker(QThread):
             }
             if sn and sn in seq_ref:
                 entry["seq_lighting_ref"] = seq_ref[sn]
+            if stg_summary:
+                entry["mise_en_scene"] = stg_summary
             shots_payload.append(entry)
 
         if not shots_payload:
