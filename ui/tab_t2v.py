@@ -1042,6 +1042,19 @@ class CastingSelector(QWidget):
                 if meta:
                     decor_image_path = meta.get("image_path", "")
 
+            # Synchro décor (même axe) : si un fond a été figé pour ce (décor, axe),
+            # il REMPLACE l'image du décor → continuité d'un champ/contrechamp à l'autre.
+            if (getattr(self, "_decor_sync_cb", None) and self._decor_sync_cb.isChecked()
+                    and self._active_shot):
+                try:
+                    import core.decor_sync as _ds
+                    _dec_key = _mosaic_decor_id or self._active_shot.get("decor_name")
+                    _synced = _ds.get_synced_bg(_dec_key, self._active_shot.get("camera_axis"))
+                    if _synced:
+                        decor_image_path = _synced
+                except Exception:
+                    pass
+
         # HMC items are NOT sent to Seedance — they feed character generation only
         acc_only = set() if no_item else {
             iid for iid in self._selected_items
@@ -2672,6 +2685,16 @@ class TabT2V(QScrollArea):
         self._dyn_cam_toggle_row.setVisible(True)  # caché quand shot actif
         _raccords_lay.addWidget(self._dyn_cam_toggle_row)  # → RENDU & AUDIO, après Raccord automatique
 
+        self._decor_sync_toggle_row, _decor_sync_cb_inner = _raccord_toggle(
+            "Synchroniser le décor (même axe)",
+            "Réutilise le décor d'un plan déjà généré dans le même axe : on extrait le "
+            "fond du clip (personnage retiré par IA) comme référence — décor identique "
+            "d'un champ/contrechamp à l'autre",
+            False,
+        )
+        self._decor_sync_cb = _decor_sync_cb_inner
+        _raccords_lay.addWidget(self._decor_sync_toggle_row)
+
         lay.addWidget(self._edit_zone)
 
         # ── Rendu & Audio (toujours visible, y compris multi-sélection) ───────
@@ -3946,6 +3969,35 @@ class TabT2V(QScrollArea):
         else:
             self.progress.update(pct, msg)
 
+    def _maybe_capture_decor_bg(self, video_path: str, shot: dict):
+        """1er plan d'un (décor + axe) : extrait une frame, efface le personnage par
+        IA et fige le fond pour les plans suivants du même axe. Sans effet si un fond
+        existe déjà pour ce couple, ou si décor/axe manquent."""
+        try:
+            import core.decor_sync as ds
+            decor = shot.get("decor_id") or shot.get("decor_name")
+            axis  = shot.get("camera_axis")
+            if not decor or not axis or ds.get_synced_bg(decor, axis):
+                return
+            from core.video_utils import extract_first_frame
+            from core.context import get_data_root
+            tmp_dir = os.path.join(get_data_root(), "decor_sync", "_frames")
+            os.makedirs(tmp_dir, exist_ok=True)
+            frame = os.path.join(tmp_dir, f"frame_{shot.get('id', 'x')}.png")
+            if not extract_first_frame(video_path, frame):
+                return
+            from api.nano_banana import CleanBackgroundWorker
+            w = CleanBackgroundWorker(frame)
+            w.finished.connect(
+                lambda path, d=decor, a=axis: ds.set_synced_bg(d, a, path) if path else None)
+            w.failed.connect(lambda _e: None)
+            if not hasattr(self, "_bg_sync_workers"):
+                self._bg_sync_workers = []
+            self._bg_sync_workers.append(w)
+            w.start()
+        except Exception:
+            pass
+
     def on_finished(self, result: dict):
         self.progress.set_done()
         self.progress.update(100, "Vidéo prête !")
@@ -4015,6 +4067,11 @@ class TabT2V(QScrollArea):
                     self._active_shot = updated
                 except Exception:
                     pass
+
+        # Synchro décor (même axe) : fige le fond du 1er plan d'un (décor + axe)
+        if (local_path and os.path.isfile(local_path) and self._active_shot
+                and getattr(self, "_decor_sync_cb", None) and self._decor_sync_cb.isChecked()):
+            self._maybe_capture_decor_bg(local_path, self._active_shot)
 
         if self._batch_queue:
             from PyQt6.QtCore import QTimer

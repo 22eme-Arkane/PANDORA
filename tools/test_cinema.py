@@ -53,18 +53,24 @@ def test(fn):
 
 @test
 def selecteur_ia_present():
-    """Paramètres Cinéma : sélecteur d'assistant IA (Claude/Fable 5/Mistral/Ollama)."""
+    """Paramètres Cinéma : sélecteur d'assistant IA (Claude/Fable 5/GPT-5.5/Mistral/Ollama)."""
     from ui.page_settings import SettingsPage
     p = SettingsPage()
-    assert p.ai_combo.count() == 4, "4 choix d'assistant"
-    labels = [p.ai_combo.itemText(i) for i in range(4)]
+    n = p.ai_combo.count()
+    assert n == 8, "8 choix (Claude Sonnet/Opus/Haiku, Fable 5, GPT-5.5, Mistral, Ollama, Personnalisé)"
+    labels = [p.ai_combo.itemText(i) for i in range(n)]
     assert any("Fable 5" in x for x in labels), "Fable 5 proposé"
+    assert any("GPT-5.5" in x for x in labels), "GPT-5.5 proposé"
+    assert any("Opus 4.8" in x for x in labels), "Claude Opus 4.8 proposé"
+    assert any("Choix personnalisé" in x for x in labels), "Choix personnalisé proposé"
     assert any("Mistral" in x for x in labels) and any("Ollama" in x for x in labels)
-    p.ai_combo.setCurrentIndex(2)
-    assert not p.mistral_input.isHidden(), "champ Mistral conditionnel"
-    # La sauvegarde écrit bien les clés de config IA
+    # Clés GPT + Mistral présentes (menu déroulant facultatif)
+    assert hasattr(p, "openai_input") and hasattr(p, "mistral_input")
+    assert hasattr(p, "_opt_keys_box") and hasattr(p, "_btn_opt_keys"), "menu clés facultatives"
+    # La sauvegarde écrit bien les clés de config IA + moteur par tâche
     src = inspect.getsource(SettingsPage.save)
-    for key in ("ai_provider", "ai_model_creative", "mistral_key", "ollama_url"):
+    for key in ("ai_provider", "ai_model_creative", "openai_key", "mistral_key",
+                "ollama_url", "ai_task_engines"):
         assert key in src, f"save() persiste {key}"
     # Réorganisation 2026-06-13 : Apparence → Assistant IA → Clés API →
     # Sauvegarder → DaVinci tout en bas ; testeurs en bleu à côté des liens
@@ -598,6 +604,83 @@ def pas_de_verif_solde():
             f"{mod_name} : le bouton lance directement la file"
         assert "btn_generate.clicked.connect(self._start_with_credit_check)" not in src, \
             f"{mod_name} : plus de vérification du solde sur le bouton"
+
+
+@test
+def moteurs_ia_par_tache():
+    """Intégration moteurs : GPT-5.5 (OpenAI) ajouté ; moteur IA paramétrable
+    PAR TÂCHE sans dégrader le défaut ; appels câblés avec task=."""
+    import core.ai_provider as ap
+    assert "openai" in ap._PROVIDERS
+    assert set(ap.ENGINES) == {"claude", "opus", "haiku", "fable5", "gpt", "mistral", "ollama"}
+    assert ap.ENGINES["gpt"]["provider"] == "openai"
+    assert ap.ENGINES["opus"]["creative_model"] == "claude-opus-4-8"
+    keys = [t[0] for t in ap.TASKS]
+    for k in ("enhance", "storyboard_chat", "assistant", "storyboard_gen",
+              "screenplay", "extraction", "sync"):
+        assert k in keys, f"tâche {k} paramétrable"
+    # Défaut inchangé (non régression)
+    assert ap._resolve_engine() == ("anthropic", "claude-sonnet-4-6")
+    # Override par tâche
+    orig = ap._cfg
+    ap._cfg = lambda: {"ai_provider": "anthropic", "ai_model_creative": "claude-sonnet-4-6",
+                       "ai_task_engines": {"enhance": "gpt", "storyboard_chat": "fable5"}}
+    try:
+        assert ap._resolve_engine("enhance") == ("openai", "")
+        assert ap._resolve_engine("storyboard_chat") == ("anthropic", "claude-fable-5")
+        assert ap._resolve_engine("assistant") == ("anthropic", "claude-sonnet-4-6")
+        assert ap._model("creative", "openai") == "gpt-5.5"
+    finally:
+        ap._cfg = orig
+    # Choix personnalisé : global "custom" → repli Anthropic Sonnet ; overrides actifs
+    ap._cfg = lambda: {"ai_provider": "custom", "ai_model_creative": "",
+                       "ai_task_engines": {"enhance": "opus"}}
+    try:
+        assert ap._resolve_engine() == ("anthropic", "claude-sonnet-4-6")
+        assert ap._resolve_engine("enhance") == ("anthropic", "claude-opus-4-8")
+    finally:
+        ap._cfg = orig
+    # Appels câblés avec task=
+    sp = inspect.getsource(__import__("api.screenplay", fromlist=["_"]))
+    for t in ('task="storyboard_chat"', 'task="storyboard_gen"', 'task="sync"',
+              'task="screenplay"', 'task="extraction"'):
+        assert t in sp, f"{t} câblé dans screenplay"
+    assert 'task="enhance"' in inspect.getsource(__import__("api.enhance", fromlist=["_"]))
+    assert 'task="assistant"' in inspect.getsource(__import__("api.assistant", fromlist=["_"]))
+    # Paramètres : clés + testeurs GPT/Mistral + menu avancé par tâche
+    src_pg = inspect.getsource(__import__("ui.page_settings", fromlist=["_"]))
+    assert '_test_btn("✓  Tester API GPT-5.5"' in src_pg and '_test_btn("✓  Tester API Mistral"' in src_pg
+    assert "Paramètres avancés" in src_pg and "_task_combos" in src_pg
+    # Clés obligatoires (rouge) vs facultatives (menu déroulant bleu)
+    assert '_badge("Obligatoire", "req")' in src_pg and '_badge("Facultatif", "opt")' in src_pg
+    assert "Clés API facultatives" in src_pg
+    # Description avancés : PANDORA optimisé Fable 5
+    assert "optimisé avec Fable 5" in src_pg
+    # Choix personnalisé câblé sur le moteur par tâche
+    assert '"custom"' in src_pg and "_set_advanced" in src_pg
+
+
+@test
+def synchro_decor_meme_axe():
+    """Studio IA / RENDU & AUDIO : option « Synchroniser le décor (même axe) » —
+    fige le fond d'un plan généré (perso retiré par IA) et le réutilise comme
+    référence décor pour les plans du même décor + même axe."""
+    # Store par (décor, axe)
+    import core.decor_sync as ds
+    assert ds.get_synced_bg("", "") is None
+    assert ds.get_synced_bg("salon", "Face") is None  # rien au départ
+    assert hasattr(ds, "set_synced_bg") and hasattr(ds, "get_synced_bg")
+    # Worker de nettoyage de fond (efface perso + reconstruit la pièce, NB2 edit)
+    from api.nano_banana import CleanBackgroundWorker
+    w = CleanBackgroundWorker("inexistant.png")
+    assert hasattr(w, "finished") and hasattr(w, "failed")
+    src = inspect.getsource(CleanBackgroundWorker)
+    assert "nano-banana-2/edit" in src and "Remove ALL people" in src
+    # Branché dans le Studio IA (toggle + capture + réinjection) — Cinéma
+    t = inspect.getsource(__import__("ui.tab_t2v", fromlist=["_"]))
+    assert "Synchroniser le décor (même axe)" in t, "toggle dans RENDU & AUDIO"
+    assert "_maybe_capture_decor_bg" in t and "CleanBackgroundWorker" in t
+    assert "get_synced_bg" in t, "réinjection du fond figé comme réf décor"
 
 
 # ══════════════════════════════════════════════════════════════════════════════

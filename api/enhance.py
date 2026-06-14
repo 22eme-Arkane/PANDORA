@@ -58,13 +58,13 @@ class EnhanceWorker(QThread):
 
     def run(self):
         from core.ai_provider import complete, key_error
-        err = key_error()
+        err = key_error("enhance")
         if err:
             self.failed.emit(err)
             return
         try:
             enhanced = complete(self._system, self._prompt,
-                                tier="utility", max_tokens=300).strip()
+                                tier="utility", max_tokens=300, task="enhance").strip()
             self.finished.emit(enhanced)
         except Exception as e:
             self.failed.emit(str(e)[:200])
@@ -80,7 +80,7 @@ class EnhanceShotActionWorker(QThread):
 
     def run(self):
         from core.ai_provider import complete, key_error
-        err = key_error()
+        err = key_error("enhance")
         if err:
             self.failed.emit(err)
             return
@@ -91,6 +91,6 @@ class EnhanceShotActionWorker(QThread):
             except Exception:
                 lang = "fr"
             self.finished.emit(complete(_system_action(lang), self._text,
-                                        tier="utility", max_tokens=200).strip())
+                                        tier="utility", max_tokens=200, task="enhance").strip())
         except Exception as e:
             self.failed.emit(str(e)[:200])

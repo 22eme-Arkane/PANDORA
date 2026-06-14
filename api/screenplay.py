@@ -600,7 +600,7 @@ class FormatScreenplayWorker(QThread):
             lang = _get_lang()
             full_text = ai_stream(_FORMAT_SCREENPLAY, _lang_hint(lang) + self._text,
                                   on_chunk=self.chunk.emit,
-                                  tier="creative", max_tokens=8192)
+                                  tier="creative", max_tokens=8192, task="screenplay")
             self.finished.emit(full_text.strip())
         except Exception as e:
             self.failed.emit(_fmt_err(e))
@@ -626,7 +626,7 @@ class FormatPandoraWorker(QThread):
             full_text = ai_stream(_format_pandora_prompt(lang),
                                   _lang_hint(lang) + self._text,
                                   on_chunk=self.chunk.emit,
-                                  tier="creative", max_tokens=16000)
+                                  tier="creative", max_tokens=16000, task="screenplay")
             self.finished.emit(full_text.strip())
         except Exception as e:
             self.failed.emit(_fmt_err(e))
@@ -807,7 +807,7 @@ class ArrangeScreenplayWorker(QThread):
             user_content = _lang_hint(lang) + "\n\n".join(prefixes) + "\n\n" + self._text
             full_text = ai_stream(_arrange_screenplay_prompt(lang), user_content,
                                   on_chunk=self.chunk.emit,
-                                  tier="creative", max_tokens=4096)
+                                  tier="creative", max_tokens=4096, task="screenplay")
             self.finished.emit(full_text)
         except Exception as e:
             self.failed.emit(_fmt_err(e))
@@ -848,7 +848,7 @@ class ApplyArrangeWorker(QThread):
                 )
             full_text = ai_stream(_APPLY_ARRANGE, user_content,
                                   on_chunk=self.chunk.emit,
-                                  tier="creative", max_tokens=8192)
+                                  tier="creative", max_tokens=8192, task="screenplay")
             self.finished.emit(full_text.strip())
         except Exception as e:
             self.failed.emit(_fmt_err(e))
@@ -944,7 +944,7 @@ class GenerateStoryboardWorker(QThread):
                     )
                 user_content = _lang_hint(lang) + names_block + budget_hint + self._text
             raw = ai_complete(_storyboard_prompt(lang), user_content,
-                              tier="creative", max_tokens=16000).strip()
+                              tier="creative", max_tokens=16000, task="storyboard_gen").strip()
             start = raw.find("[")
             end   = raw.rfind("]") + 1
             if start == -1 or end == 0:
@@ -1013,7 +1013,7 @@ def _extract_worker(system_prompt: str, text: str, max_tokens: int = 4096) -> li
         raise ValueError(err)
     lang = _get_lang()
     raw = ai_complete(system_prompt, _lang_hint(lang) + text,
-                      tier="creative", max_tokens=max_tokens).strip()
+                      tier="creative", max_tokens=max_tokens, task="extraction").strip()
     start = raw.find("[")
     end   = raw.rfind("]") + 1
     if start == -1 or end == 0:
@@ -1573,7 +1573,7 @@ class SyncStoryboardWorker(QThread):
         self.progress.emit(50, f"{ai_name()} analyse {len(shots_payload)} plan(s)…")
 
         raw = ai_complete(_SYNC_STORYBOARD_SYSTEM, payload_str,
-                          tier="utility", max_tokens=8192).strip()
+                          tier="utility", max_tokens=8192, task="sync").strip()
         # Nettoyer le markdown si Claude en ajoute malgré les instructions
         if "```" in raw:
             parts = raw.split("```")
@@ -1691,7 +1691,7 @@ class RewriteScreenplayFromStoryboardWorker(QThread):
         self.progress.emit(45, f"{ai_name()} réécrit le scénario…")
 
         text = ai_complete(_REWRITE_SCENARIO_SYSTEM, payload,
-                           tier="creative", max_tokens=8192).strip()
+                           tier="creative", max_tokens=8192, task="sync").strip()
 
         # Nettoyage d'un éventuel bloc markdown.
         if text.startswith("```"):
@@ -1779,7 +1779,7 @@ class StoryboardChatWorker(QThread):
 
     def _run(self):
         from core.ai_provider import chat as ai_chat, key_error
-        err = key_error()
+        err = key_error("storyboard_chat")
         if err:
             self.failed.emit(err)
             return
@@ -1801,7 +1801,7 @@ class StoryboardChatWorker(QThread):
 
         messages = self._history + [{"role": "user", "content": user_msg}]
         raw = ai_chat(_STORYBOARD_CHAT_SYSTEM, messages,
-                      tier="utility", max_tokens=4096).strip()
+                      tier="utility", max_tokens=4096, task="storyboard_chat").strip()
 
         # Nettoyage markdown éventuel.
         if "```" in raw:
@@ -2002,7 +2002,7 @@ class ArrangeChatWorker(QThread):
                 raw = response.content[0].text.strip()
             else:
                 raw = ai_chat(_arrange_chat_system(self._intensity), messages,
-                              tier="creative", max_tokens=8192).strip()
+                              tier="creative", max_tokens=8192, task="screenplay").strip()
 
             # Split sur les marqueurs
             chat_msg   = ""

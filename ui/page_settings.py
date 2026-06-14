@@ -13,6 +13,8 @@ from davinci.bridge import install_pandora_send
 
 _FAL_KEYS_URL       = "https://fal.ai/dashboard/keys"
 _ANTHROPIC_KEYS_URL = "https://console.anthropic.com/settings/keys"
+_OPENAI_KEYS_URL    = "https://platform.openai.com/api-keys"
+_MISTRAL_KEYS_URL   = "https://console.mistral.ai/api-keys"
 
 
 def _section(text: str) -> QLabel:
@@ -86,6 +88,19 @@ def _link_btn(label: str, url: str) -> QPushButton:
     )
     btn.clicked.connect(lambda: webbrowser.open(url))
     return btn
+
+
+def _badge(text: str, kind: str) -> QLabel:
+    """Pastille « Obligatoire » (rouge) ou « Facultatif » (bleu) — contour, pas
+    d'opacité hex (rend mal sur fond sombre)."""
+    col = CP.get("red", "#ff4f6a") if kind == "req" else CP["accent2"]
+    b = QLabel(text)
+    b.setFixedHeight(18)
+    b.setStyleSheet(
+        f"color:{col};background:transparent;border:1px solid {col};"
+        f"border-radius:5px;font-size:8px;font-weight:700;padding:1px 6px;"
+    )
+    return b
 
 
 class SettingsPage(QScrollArea):
@@ -217,10 +232,14 @@ class SettingsPage(QScrollArea):
 
         # (libellé, provider, modèle créatif)
         self._AI_CHOICES = [
-            ("Claude (Anthropic) — défaut",          "anthropic", "claude-sonnet-4-6"),
-            ("Fable 5 (Anthropic) — qualité max",    "anthropic", "claude-fable-5"),
-            ("Mistral — expérimental",               "mistral",   ""),
-            ("Ollama local — expérimental",          "ollama",    ""),
+            ("Claude Sonnet 4.6 (Anthropic) — défaut",    "anthropic", "claude-sonnet-4-6"),
+            ("Claude Opus 4.8 (Anthropic) — qualité max", "anthropic", "claude-opus-4-8"),
+            ("Claude Haiku 4.5 (Anthropic) — rapide",     "anthropic", "claude-haiku-4-5"),
+            ("Fable 5 (Anthropic) — optimisé PANDORA",    "anthropic", "claude-fable-5"),
+            ("GPT-5.5 (OpenAI)",                          "openai",    ""),
+            ("Mistral — expérimental",                    "mistral",   ""),
+            ("Ollama local — expérimental",               "ollama",    ""),
+            ("Choix personnalisé — un moteur par tâche",  "custom",     ""),
         ]
         self.ai_combo = QComboBox()
         self.ai_combo.setFixedHeight(34)
@@ -242,14 +261,9 @@ class SettingsPage(QScrollArea):
         self.ai_combo.currentIndexChanged.connect(self._on_ai_choice_changed)
         lay.addWidget(self.ai_combo)
 
-        # Champs spécifiques aux fournisseurs alternatifs (visibles selon le choix)
-        self.mistral_input = QLineEdit()
-        self.mistral_input.setPlaceholderText("Clé API Mistral")
-        self.mistral_input.setText(cfg.get("mistral_key", ""))
-        self.mistral_input.setEchoMode(QLineEdit.EchoMode.Password)
-        self.mistral_input.setStyleSheet(_field_style())
-        lay.addWidget(self.mistral_input)
-
+        # Champs spécifiques aux fournisseurs alternatifs (visibles selon le choix).
+        # Les CLÉS (OpenAI, Mistral) vivent dans la section « Clés API » plus bas
+        # pour rester accessibles même quand on règle un moteur PAR TÂCHE.
         self.ollama_url_input = QLineEdit()
         self.ollama_url_input.setPlaceholderText("URL Ollama (défaut : http://localhost:11434)")
         self.ollama_url_input.setText(cfg.get("ollama_url", ""))
@@ -270,6 +284,72 @@ class SettingsPage(QScrollArea):
             f"color:{CP['text_dim']};font-size:10px;font-style:italic;background:transparent;"
         )
         lay.addWidget(self._lbl_ai_restart)
+
+        # ── Paramètres avancés : moteur IA PAR TÂCHE (repliable) ───────────────
+        self._adv_open = False
+        self._btn_adv = QPushButton("▶  Paramètres avancés — moteur IA par tâche")
+        self._btn_adv.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._btn_adv.setStyleSheet(
+            f"QPushButton{{background:transparent;color:{CP['accent2']};"
+            f"border:none;text-align:left;font-size:11px;font-weight:700;padding:4px 0;}}"
+            f"QPushButton:hover{{color:#9d8fff;}}"
+        )
+        self._btn_adv.clicked.connect(self._toggle_advanced)
+        lay.addWidget(self._btn_adv)
+
+        self._adv_box = QWidget()
+        self._adv_box.setVisible(False)
+        self._adv_box.setStyleSheet("background:transparent;")
+        adv_lay = QVBoxLayout(self._adv_box)
+        adv_lay.setContentsMargins(2, 2, 2, 6)
+        adv_lay.setSpacing(8)
+        _adv_hint = QLabel(
+            "Choisissez un moteur différent selon la tâche. « Par défaut » utilise "
+            "le moteur sélectionné ci-dessus ; les clés se renseignent dans « Clés API ». "
+            "PANDORA est optimisé avec Fable 5 — le rendu avec les autres moteurs "
+            "n'est pas encore totalement fiable."
+        )
+        _adv_hint.setWordWrap(True)
+        _adv_hint.setStyleSheet(f"color:{CP['text_dim']};font-size:10px;background:transparent;")
+        adv_lay.addWidget(_adv_hint)
+
+        from core.ai_provider import TASKS, ENGINES, ENGINE_ORDER
+        _engine_items = [("Par défaut", "")] + [
+            (ENGINES[k]["name"], k) for k in ENGINE_ORDER
+        ]
+        self._task_combos = {}
+        _saved_tasks = cfg.get("ai_task_engines") or {}
+        for task_key, task_label in TASKS:
+            row = QHBoxLayout()
+            row.setSpacing(8)
+            lbl = QLabel(task_label)
+            lbl.setStyleSheet(
+                f"color:{CP['text_secondary']};font-size:11px;background:transparent;"
+            )
+            row.addWidget(lbl, 1)
+            combo = QComboBox()
+            combo.setFixedHeight(28)
+            combo.setMinimumWidth(160)
+            combo.setStyleSheet(
+                f"QComboBox{{background:{CP['bg2']};border:1px solid {CP['border']};"
+                f"border-radius:6px;color:{CP['text_primary']};font-size:11px;padding:0 8px;}}"
+                f"QComboBox::drop-down{{border:none;width:20px;}}"
+                f"QComboBox QAbstractItemView{{background:{CP['bg3']};"
+                f"border:1px solid {CP['border_bright']};color:{CP['text_primary']};"
+                f"selection-background-color:{CP['accent_dim']};}}"
+            )
+            for name, key in _engine_items:
+                combo.addItem(name, key)
+            _cur_eng = _saved_tasks.get(task_key, "")
+            for i, (_, key) in enumerate(_engine_items):
+                if key == _cur_eng:
+                    combo.setCurrentIndex(i)
+                    break
+            self._task_combos[task_key] = combo
+            row.addWidget(combo)
+            adv_lay.addLayout(row)
+        lay.addWidget(self._adv_box)
+
         self._on_ai_choice_changed()
         lay.addWidget(_divider())
 
@@ -283,6 +363,7 @@ class SettingsPage(QScrollArea):
         ))
         lay.addLayout(api_row)
 
+        # ── Clés OBLIGATOIRES (fal.ai + Anthropic, pastille rouge) ────────────
         # fal.ai
         fal_lbl_row = QHBoxLayout()
         fal_lbl_row.setSpacing(8)
@@ -293,6 +374,7 @@ class SettingsPage(QScrollArea):
             f"color:{CP['text_secondary']};font-size:12px;background:transparent;"
         )
         fal_lbl_row.addWidget(lbl_fal, 1)
+        fal_lbl_row.addWidget(_badge("Obligatoire", "req"))
         fal_lbl_row.addWidget(_test_btn("✓  Tester API fal.ai", self.test_connection))
         fal_lbl_row.addWidget(_link_btn("⇗  Obtenir une clé fal.ai", _FAL_KEYS_URL))
         lay.addLayout(fal_lbl_row)
@@ -312,6 +394,7 @@ class SettingsPage(QScrollArea):
             f"color:{CP['text_secondary']};font-size:12px;background:transparent;"
         )
         ant_lbl_row.addWidget(lbl_ant, 1)
+        ant_lbl_row.addWidget(_badge("Obligatoire", "req"))
         ant_lbl_row.addWidget(_test_btn("✓  Tester API Anthropic", self.test_anthropic_connection))
         ant_lbl_row.addWidget(_link_btn("⇗  Obtenir une clé Anthropic", _ANTHROPIC_KEYS_URL))
         lay.addLayout(ant_lbl_row)
@@ -322,6 +405,75 @@ class SettingsPage(QScrollArea):
         self.anthropic_input.setEchoMode(QLineEdit.EchoMode.Password)
         self.anthropic_input.setStyleSheet(_field_style())
         lay.addWidget(self.anthropic_input)
+
+        # ── Clés FACULTATIVES (menu déroulant : OpenAI, Mistral, à venir) ──────
+        self._opt_keys_open = False
+        self._btn_opt_keys = QPushButton(
+            "▶  Clés API facultatives  (OpenAI, Mistral, autres à venir)")
+        self._btn_opt_keys.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._btn_opt_keys.setStyleSheet(
+            f"QPushButton{{background:transparent;color:{CP['accent2']};"
+            f"border:none;text-align:left;font-size:11px;font-weight:700;padding:4px 0;}}"
+            f"QPushButton:hover{{color:#9d8fff;}}"
+        )
+        self._btn_opt_keys.clicked.connect(self._toggle_opt_keys)
+        lay.addWidget(self._btn_opt_keys)
+
+        self._opt_keys_box = QWidget()
+        self._opt_keys_box.setVisible(False)
+        self._opt_keys_box.setStyleSheet("background:transparent;")
+        opt_lay = QVBoxLayout(self._opt_keys_box)
+        opt_lay.setContentsMargins(2, 2, 2, 4)
+        opt_lay.setSpacing(8)
+        _opt_hint = QLabel(
+            "Non requises pour faire fonctionner PANDORA — uniquement si vous "
+            "voulez utiliser ces moteurs comme assistant texte (global ou par tâche)."
+        )
+        _opt_hint.setWordWrap(True)
+        _opt_hint.setStyleSheet(f"color:{CP['text_dim']};font-size:10px;background:transparent;")
+        opt_lay.addWidget(_opt_hint)
+
+        # OpenAI (GPT-5.5)
+        oa_lbl_row = QHBoxLayout()
+        oa_lbl_row.setSpacing(8)
+        lbl_oa = QLabel("OpenAI — GPT-5.5  (assistant texte, par moteur ou par tâche)")
+        lbl_oa.setStyleSheet(
+            f"color:{CP['text_secondary']};font-size:12px;background:transparent;"
+        )
+        oa_lbl_row.addWidget(lbl_oa, 1)
+        oa_lbl_row.addWidget(_badge("Facultatif", "opt"))
+        oa_lbl_row.addWidget(_test_btn("✓  Tester API GPT-5.5", self.test_openai_connection))
+        oa_lbl_row.addWidget(_link_btn("⇗  Obtenir une clé OpenAI", _OPENAI_KEYS_URL))
+        opt_lay.addLayout(oa_lbl_row)
+
+        self.openai_input = QLineEdit()
+        self.openai_input.setPlaceholderText("sk-••••••••••••••••••••••••")
+        self.openai_input.setText(cfg.get("openai_key", ""))
+        self.openai_input.setEchoMode(QLineEdit.EchoMode.Password)
+        self.openai_input.setStyleSheet(_field_style())
+        opt_lay.addWidget(self.openai_input)
+
+        # Mistral
+        ms_lbl_row = QHBoxLayout()
+        ms_lbl_row.setSpacing(8)
+        lbl_ms = QLabel("Mistral  (assistant texte, expérimental)")
+        lbl_ms.setStyleSheet(
+            f"color:{CP['text_secondary']};font-size:12px;background:transparent;"
+        )
+        ms_lbl_row.addWidget(lbl_ms, 1)
+        ms_lbl_row.addWidget(_badge("Facultatif", "opt"))
+        ms_lbl_row.addWidget(_test_btn("✓  Tester API Mistral", self.test_mistral_connection))
+        ms_lbl_row.addWidget(_link_btn("⇗  Obtenir une clé Mistral", _MISTRAL_KEYS_URL))
+        opt_lay.addLayout(ms_lbl_row)
+
+        self.mistral_input = QLineEdit()
+        self.mistral_input.setPlaceholderText("Clé API Mistral")
+        self.mistral_input.setText(cfg.get("mistral_key", ""))
+        self.mistral_input.setEchoMode(QLineEdit.EchoMode.Password)
+        self.mistral_input.setStyleSheet(_field_style())
+        opt_lay.addWidget(self.mistral_input)
+
+        lay.addWidget(self._opt_keys_box)
         lay.addWidget(_divider())
 
         # ── Sauvegarder (pleine largeur, style harmonisé) ─────────────────────
@@ -435,25 +587,53 @@ class SettingsPage(QScrollArea):
         ApiHelpDialog(self).exec()
 
     def _on_ai_choice_changed(self, *_):
-        """Affiche les champs du fournisseur sélectionné uniquement."""
+        """Champs Ollama conditionnels + « Choix personnalisé » ouvre les avancés."""
         prov = (self.ai_combo.currentData() or ("anthropic", ""))[0]
-        self.mistral_input.setVisible(prov == "mistral")
         self.ollama_url_input.setVisible(prov == "ollama")
         self.ollama_model_input.setVisible(prov == "ollama")
+        # « Choix personnalisé » → déplie automatiquement le moteur IA par tâche
+        if prov == "custom" and not self._adv_open:
+            self._set_advanced(True)
+
+    def _set_advanced(self, open_: bool):
+        self._adv_open = open_
+        self._adv_box.setVisible(open_)
+        self._btn_adv.setText(
+            ("▼" if open_ else "▶") + "  Paramètres avancés — moteur IA par tâche"
+        )
+
+    def _toggle_advanced(self):
+        self._set_advanced(not self._adv_open)
+
+    def _toggle_opt_keys(self):
+        self._opt_keys_open = not self._opt_keys_open
+        self._opt_keys_box.setVisible(self._opt_keys_open)
+        self._btn_opt_keys.setText(
+            ("▼" if self._opt_keys_open else "▶")
+            + "  Clés API facultatives  (OpenAI, Mistral, autres à venir)"
+        )
 
     # ── Sauvegarde ────────────────────────────────────────────────────────────
 
     def save(self):
         cfg = load_config()
         prov, model = self.ai_combo.currentData() or ("anthropic", "")
+        # Moteur PAR TÂCHE : ne garder que les tâches dont le moteur ≠ « Par défaut »
+        task_engines = {}
+        for task_key, combo in getattr(self, "_task_combos", {}).items():
+            eng = combo.currentData()
+            if eng:
+                task_engines[task_key] = eng
         cfg.update({
             "api_key":           self.api_input.text(),
             "anthropic_key":     self.anthropic_input.text(),
+            "openai_key":        self.openai_input.text(),
             "ai_provider":       prov,
             "ai_model_creative": model,
             "mistral_key":       self.mistral_input.text(),
             "ollama_url":        self.ollama_url_input.text(),
             "ollama_model":      self.ollama_model_input.text(),
+            "ai_task_engines":   task_engines,
         })
         save_config(cfg)
         from core.ai_provider import refresh_name_cache
@@ -485,6 +665,50 @@ class SettingsPage(QScrollArea):
                 QMessageBox.critical(self, "Clé invalide", "La clé API Anthropic est incorrecte.")
             else:
                 QMessageBox.critical(self, "Erreur Anthropic", f"Erreur : {err[:200]}")
+
+    def test_openai_connection(self):
+        key = self.openai_input.text().strip()
+        if not key:
+            QMessageBox.warning(self, "Clé manquante", "Entre ta clé API OpenAI d'abord !")
+            return
+        try:
+            import requests
+            r = requests.get(
+                "https://api.openai.com/v1/models",
+                headers={"Authorization": f"Bearer {key}"}, timeout=20,
+            )
+            if r.status_code == 200:
+                QMessageBox.information(self, "✓ Connexion OK", "Clé OpenAI (GPT-5.5) valide !")
+            elif r.status_code in (401, 403):
+                QMessageBox.critical(self, "Clé invalide", "La clé API OpenAI est incorrecte.")
+            else:
+                QMessageBox.information(
+                    self, "Réponse OpenAI",
+                    f"Code {r.status_code}. La clé sera testée à la première génération.")
+        except Exception as e:
+            QMessageBox.critical(self, "Erreur OpenAI", f"Erreur : {str(e)[:200]}")
+
+    def test_mistral_connection(self):
+        key = self.mistral_input.text().strip()
+        if not key:
+            QMessageBox.warning(self, "Clé manquante", "Entre ta clé API Mistral d'abord !")
+            return
+        try:
+            import requests
+            r = requests.get(
+                "https://api.mistral.ai/v1/models",
+                headers={"Authorization": f"Bearer {key}"}, timeout=20,
+            )
+            if r.status_code == 200:
+                QMessageBox.information(self, "✓ Connexion OK", "Clé Mistral valide !")
+            elif r.status_code in (401, 403):
+                QMessageBox.critical(self, "Clé invalide", "La clé API Mistral est incorrecte.")
+            else:
+                QMessageBox.information(
+                    self, "Réponse Mistral",
+                    f"Code {r.status_code}. La clé sera testée à la première génération.")
+        except Exception as e:
+            QMessageBox.critical(self, "Erreur Mistral", f"Erreur : {str(e)[:200]}")
 
     def test_connection(self):
         key = self.api_input.text().strip()

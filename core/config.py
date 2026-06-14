@@ -30,6 +30,15 @@ _DEFAULTS = {
     "eula_accepted":         False,
     # Guide de démarrage — True = afficher au premier lancement
     "show_api_guide":        True,
+    # ── Assistant IA texte (voir core/ai_provider.py) ──────────────────────────
+    "ai_provider":           "anthropic",          # anthropic | openai | mistral | ollama
+    "ai_model_creative":     "claude-sonnet-4-6",  # Anthropic : claude-sonnet-4-6 | claude-fable-5
+    "openai_key":            "",                   # clé OpenAI (GPT-5.5)
+    "openai_model":          "",                   # vide = défaut gpt-5.5
+    "mistral_key":           "",
+    "ollama_url":            "",                   # vide = http://localhost:11434
+    "ollama_model":          "",                   # vide = llama3.1
+    "ai_task_engines":       {},                   # {task_key: engine_key} — moteur par tâche
 }
 
 # ── Mapping modèle image → endpoint fal.ai ────────────────────────────────────

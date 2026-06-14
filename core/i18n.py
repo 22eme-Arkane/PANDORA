@@ -1213,6 +1213,32 @@ _FR_TO_EN: dict[str, str] = {
     "Discuter du storyboard avec l'IA…": "Chat about the storyboard with the AI…",
     "Envoyer":                          "Send",
     "Le chat IA est désactivé.":        "The AI chat is disabled.",
+    "▶  Paramètres avancés — moteur IA par tâche": "▶  Advanced — AI engine per task",
+    "▼  Paramètres avancés — moteur IA par tâche": "▼  Advanced — AI engine per task",
+    "Par défaut":                       "Default",
+    "Amélioration des prompts":         "Prompt enhancement",
+    "Chat du Storyboard":               "Storyboard chat",
+    "Assistant / guide complet":        "Assistant / full guide",
+    "Génération du storyboard":         "Storyboard generation",
+    "Scénario (mise en page, arrangement)": "Screenplay (formatting, arrangement)",
+    "Extraction d'éléments (personnages, décors…)": "Element extraction (characters, locations…)",
+    "Synchronisation du storyboard":    "Storyboard synchronization",
+    "✓  Tester API GPT-5.5":            "✓  Test GPT-5.5 API",
+    "✓  Tester API Mistral":            "✓  Test Mistral API",
+    "⇗  Obtenir une clé OpenAI":        "⇗  Get an OpenAI key",
+    "⇗  Obtenir une clé Mistral":       "⇗  Get a Mistral key",
+    "OpenAI — GPT-5.5  (assistant texte, par moteur ou par tâche)":
+        "OpenAI — GPT-5.5  (text assistant, per engine or per task)",
+    "Mistral  (assistant texte, expérimental)":
+        "Mistral  (text assistant, experimental)",
+    "Obligatoire":                      "Required",
+    "Facultatif":                       "Optional",
+    "▶  Clés API facultatives  (OpenAI, Mistral, autres à venir)":
+        "▶  Optional API keys  (OpenAI, Mistral, more to come)",
+    "▼  Clés API facultatives  (OpenAI, Mistral, autres à venir)":
+        "▼  Optional API keys  (OpenAI, Mistral, more to come)",
+    "Choix personnalisé — un moteur par tâche":
+        "Custom — one engine per task",
     "Tout est synchronisé":             "Everything is in sync",
     "Chargement du casting…":           "Loading cast…",
     "Sauvegarde…":                      "Saving…",

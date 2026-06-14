@@ -714,13 +714,21 @@ def selecteur_assistant_ia():
     from ui.page_settings import SettingsPage
     from ui.page_live_settings import PageLiveSettings
     cin = SettingsPage()
-    assert cin.ai_combo.count() == 4, "4 choix côté Cinéma"
-    assert any("Fable 5" in cin.ai_combo.itemText(i) for i in range(4)), "Fable 5 proposé"
-    cin.ai_combo.setCurrentIndex(2)   # Mistral
-    assert not cin.mistral_input.isHidden(), "champ Mistral visible quand Mistral choisi"
-    assert cin.ollama_url_input.isHidden(), "champs Ollama cachés"
+    nc = cin.ai_combo.count()
+    assert nc == 8, "8 choix côté Cinéma (Claude Sonnet/Opus/Haiku, Fable 5, GPT-5.5, Mistral, Ollama, Personnalisé)"
+    assert any("Fable 5" in cin.ai_combo.itemText(i) for i in range(nc)), "Fable 5 proposé"
+    assert any("GPT-5.5" in cin.ai_combo.itemText(i) for i in range(nc)), "GPT-5.5 proposé"
+    # Clés GPT + Mistral toujours présentes (menu déroulant facultatif)
+    assert hasattr(cin, "openai_input") and hasattr(cin, "mistral_input")
+    # Ollama : champs conditionnels au choix global
+    for i in range(nc):
+        d = cin.ai_combo.itemData(i)
+        if d and d[0] == "ollama":
+            cin.ai_combo.setCurrentIndex(i)
+            break
+    assert not cin.ollama_url_input.isHidden(), "champs Ollama visibles quand Ollama choisi"
     cin.ai_combo.setCurrentIndex(0)
-    assert cin.mistral_input.isHidden(), "champ Mistral caché sur Claude"
+    assert cin.ollama_url_input.isHidden(), "champs Ollama cachés sur Claude"
     liv = PageLiveSettings()
     assert liv._ai_combo.count() == 4, "4 choix côté Live"
     liv._ai_combo.setCurrentIndex(3)  # Ollama

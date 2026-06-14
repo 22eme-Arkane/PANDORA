@@ -22,7 +22,7 @@ class AssistantWorker(QThread):
 
     def run(self):
         from core.ai_provider import chat, key_error
-        if key_error():
+        if key_error("assistant"):
             time.sleep(0.2)
             self.finished.emit(
                 "Configurez votre clé IA dans Paramètres pour activer l'assistant."
@@ -41,7 +41,7 @@ class AssistantWorker(QThread):
                     "pratiques et directes, sans formules d'introduction. "
                     f"Contexte de la page active : {self._page_context}"
                 ),
-                recent, tier="utility", max_tokens=250,
+                recent, tier="utility", max_tokens=250, task="assistant",
             )
             self.finished.emit(out.strip())
         except Exception as e:

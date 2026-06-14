@@ -1979,3 +1979,62 @@ class GeneratePortraitNB2EditWorker(QThread):
 
         except Exception as e:
             self.failed.emit(humanize_api_error(f"Erreur NB2 Edit : {e}"))
+
+
+# ── Nettoyage de fond — efface les personnes, garde le décor (continuité d'axe) ──
+
+class CleanBackgroundWorker(QThread):
+    """À partir d'une frame d'un plan généré, efface les personnages et reconstruit
+    la pièce vide via NB2 edit (Gemini). Sert de fond de référence réutilisable pour
+    les plans du même décor + même axe (voir core/decor_sync). finished("") en mock."""
+    progress = pyqtSignal(int, str)
+    finished = pyqtSignal(str)
+    failed   = pyqtSignal(str)
+
+    def __init__(self, frame_path: str, out_dir: str = ""):
+        super().__init__()
+        self._frame   = frame_path
+        self._out_dir = out_dir
+
+    def run(self):
+        cfg = load_config()
+        key = cfg.get("api_key", "").strip()
+        if not key or not self._frame or not os.path.isfile(self._frame):
+            self.finished.emit("")   # mock / pas de clé → pas de fond synchronisé
+            return
+        try:
+            import fal_client
+            import requests
+            import base64
+
+            os.environ["FAL_KEY"] = key
+            self.progress.emit(20, "Nettoyage du fond (suppression du personnage)…")
+            with open(self._frame, "rb") as f:
+                b64 = base64.b64encode(f.read()).decode()
+            data_url = f"data:image/png;base64,{b64}"
+            prompt = (
+                "Remove ALL people and characters from this image. Reconstruct the "
+                "empty room/background exactly as it is — identical architecture, "
+                "furniture, materials, colors, lighting and camera angle. "
+                "Photorealistic, no people, no characters, empty location."
+            )
+            result = fal_client.subscribe(
+                "fal-ai/nano-banana-2/edit",
+                arguments={
+                    "prompt":        prompt,
+                    "image_urls":    [data_url],
+                    "num_images":    1,
+                    "resolution":    "1K",
+                    "output_format": "png",
+                },
+            )
+            url  = _extract_image_url(result)
+            data = requests.get(url, timeout=180).content
+            out_dir = self._out_dir or _project_images_dir("decors")
+            path = os.path.join(out_dir, f"bg_clean_{int(time.time())}.png")
+            with open(path, "wb") as f:
+                f.write(data)
+            self.progress.emit(100, "Fond synchronisé prêt ✓")
+            self.finished.emit(path)
+        except Exception as e:
+            self.failed.emit(humanize_api_error(f"Erreur nettoyage fond : {e}"))
