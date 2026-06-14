@@ -2233,7 +2233,6 @@ class PageStoryboard(QWidget):
             f"QPushButton:disabled{{color:{CP['text_dim']};border-color:{CP['border']};}}"
         )
         self._btn_sync.clicked.connect(self._on_sync)
-        lay.addWidget(self._btn_sync)
 
         self._btn_batch_mood = QPushButton("✦  Générer les Moods")
         self._btn_batch_mood.setFixedHeight(34)
@@ -2246,7 +2245,10 @@ class PageStoryboard(QWidget):
             f"QPushButton:disabled{{color:{CP['text_dim']};border-color:{CP['border']};}}"
         )
         self._btn_batch_mood.clicked.connect(self._on_batch_mood)
-        lay.addWidget(self._btn_batch_mood)
+        # « Générer les Moods » tout à gauche, « Synchronisation » à sa droite
+        # (retour 2026-06-14) — avant le label/stretch qui pousse le reste à droite
+        lay.insertWidget(0, self._btn_batch_mood)
+        lay.insertWidget(1, self._btn_sync)
 
         btn_new = QPushButton("＋  Ajouter un plan")
         btn_new.setFixedHeight(34)
