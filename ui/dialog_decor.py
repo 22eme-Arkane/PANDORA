@@ -319,13 +319,17 @@ class DecorDialog(QDialog):
         self._gen_mode = QComboBox()
         self._gen_mode.addItem("🖼  Image unique", "single")
         self._gen_mode.addItem("🗺  Sheet 4 vues  (avant · arrière · gauche · droite)", "sheet")
+        self._gen_mode.addItem(
+            "📦  Les 6 vues de la pièce  (sol · plafond · gauche · droite · avant · arrière)",
+            "six_views")
         self._gen_mode.setCurrentIndex(1)   # Sheet 4 vues par défaut — meilleure navigation spatiale IA
         self._gen_mode.setFixedHeight(34)
         self._gen_mode.setToolTip(
             "Image unique : vue principale du décor.\n"
             "Sheet 4 vues (défaut) : image 2×2 montrant le même lieu depuis 4 angles.\n"
-            "Recommandé — permet aux moteurs IA de comprendre le lieu comme un espace 3D\n"
-            "et de générer des mouvements de caméra naturels à travers le décor."
+            "Les 6 vues de la pièce : 6 images séparées, une par face — comme un\n"
+            "personnage au centre qui regarde le sol, le plafond et les 4 murs.\n"
+            "Idéal pour les champs/contrechamps et un contrôle total du lieu."
         )
         self._gen_mode.setStyleSheet(
             f"QComboBox{{background:{CP['bg3']};border:1px solid {CP['border']};"
@@ -958,7 +962,17 @@ class DecorDialog(QDialog):
         _valid_refs = [p for p in self._ref_paths if p and os.path.isfile(p)]
         _style_ref  = _valid_refs[0] if _valid_refs else ""
 
-        if mode == "sheet":
+        if mode == "six_views":
+            import core.style as style_api
+            if _usage == "style":
+                suffix = ""
+            else:
+                suffix = self._suffix_edit.toPlainText().strip() if hasattr(self, "_suffix_edit") else style_api.get_image_suffix()
+            self._status.setText("Génération des 6 vues de la pièce…")
+            from api.nano_banana import GenerateRoomViewsWorker
+            self._worker_gen = GenerateRoomViewsWorker(
+                prompt, name, model_key=_mk, style_suffix=suffix)
+        elif mode == "sheet":
             self._status.setText("Génération du sheet 4 vues…")
             self._worker_gen = GenerateDecorSheetWorker(prompt, name, model_key=_mk,
                                                         num_images=_num)

@@ -1786,6 +1786,84 @@ class GenerateItemWorker(QThread):
             self.failed.emit(humanize_api_error(f"Erreur Nano Banana : {e}"))
 
 
+# ── Les 6 vues d'une pièce (décor) ─────────────────────────────────────────────
+
+class GenerateRoomViewsWorker(QThread):
+    """Génère les 6 faces d'une pièce (avant · arrière · gauche · droite · sol ·
+    plafond) — un prompt auto par face depuis la description du décor, cohérence
+    spatiale stricte. Une image par face, nommée <decor>_<face>."""
+    progress       = pyqtSignal(int, str)
+    multi_finished = pyqtSignal(list)   # liste de chemins (6 faces)
+    failed         = pyqtSignal(str)
+
+    def __init__(self, base_prompt: str, decor_name: str,
+                 model_key: str | None = None, style_suffix: str = ""):
+        super().__init__()
+        self._base         = base_prompt
+        self._name         = decor_name
+        self._model_key    = model_key
+        self._style_suffix = style_suffix
+
+    def run(self):
+        cfg = load_config()
+        key = cfg.get("api_key", "").strip()
+        if not key:
+            self._mock()
+        else:
+            self._real(key)
+
+    def _mock(self):
+        from core.room_views import SIX_FACES
+        for i, (label, _c, _d) in enumerate(SIX_FACES):
+            self.progress.emit(int((i + 1) / len(SIX_FACES) * 100),
+                               f"[{i+1}/6] {label} (mode mock)…")
+            time.sleep(0.3)
+        self.multi_finished.emit([])
+
+    def _real(self, key: str):
+        try:
+            import fal_client
+            import requests
+            from core.lang import translate_to_english
+            from core.room_views import build_six_view_prompts
+
+            os.environ["FAL_KEY"] = key
+            cfg = load_config()
+            if self._model_key:
+                cfg = dict(cfg)
+                cfg["image_model"] = self._model_key
+            price = get_image_price(cfg)
+
+            # Traduit la description du décor UNE fois, puis construit les 6 faces
+            base_en = translate_to_english(self._base) if self._base else ""
+            faces   = build_six_view_prompts(base_en)
+
+            safe = "".join(c for c in self._name if c.isalnum() or c in " -_").strip() or "decor"
+            ts   = int(time.time())
+            paths: list[str] = []
+            for i, (label, code, fprompt) in enumerate(faces):
+                self.progress.emit(
+                    5 + int(i / len(faces) * 88),
+                    f"[{i+1}/6] Vue « {label} »…  ({price})"
+                )
+                full = fprompt
+                if self._style_suffix:
+                    full = f"{full}, {self._style_suffix}"
+                full = f"{full}\n\n{_DECOR_LINE}"
+                _ep, _args = _build_image_args(full, "16:9", "1K", cfg, 1)
+                _result = fal_client.subscribe(_ep, arguments=_args)
+                _url = _extract_image_url(_result)
+                data = requests.get(_url, timeout=120).content
+                p = os.path.join(_project_images_dir("decors"), f"{safe}_{code}_{ts}.png")
+                with open(p, "wb") as f:
+                    f.write(data)
+                paths.append(p)
+            self.progress.emit(100, "6 vues de la pièce générées !")
+            self.multi_finished.emit(paths)
+        except Exception as e:
+            self.failed.emit(humanize_api_error(f"Erreur Nano Banana : {e}"))
+
+
 # ── NB2 Edit — Portrait avec photo de référence ───────────────────────────────
 
 class GeneratePortraitNB2EditWorker(QThread):

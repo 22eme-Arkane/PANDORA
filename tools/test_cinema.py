@@ -423,6 +423,30 @@ def moteurs_storyboard_filtres():
 
 
 @test
+def decor_six_vues():
+    """Décors : option « 6 vues de la pièce » — 6 prompts auto (sol, plafond,
+    gauche, droite, avant, arrière) générés depuis la description, cohérence
+    spatiale stricte ; worker dédié + entrée dans le combo de mode."""
+    from core.room_views import SIX_FACES, build_six_view_prompts
+    assert len(SIX_FACES) == 6
+    codes = {c for _, c, _ in SIX_FACES}
+    assert codes == {"sol", "plafond", "gauche", "droite", "avant", "arriere"}
+    prompts = build_six_view_prompts("salle à manger chaleureuse")
+    assert len(prompts) == 6
+    for label, code, p in prompts:
+        assert "salle à manger" in p and "EXACT CENTER of the room" in p
+        assert "strict spatial consistency" in p and "no people" in p
+    # worker dédié
+    from api.nano_banana import GenerateRoomViewsWorker
+    w = GenerateRoomViewsWorker("salle à manger", "Salle à manger")
+    assert hasattr(w, "multi_finished")
+    # branché dans le dialogue décor (combo + génération)
+    import inspect
+    src = inspect.getsource(__import__("ui.dialog_decor", fromlist=["_"]))
+    assert '"six_views"' in src and "GenerateRoomViewsWorker" in src
+
+
+@test
 def refs_cinema_redimensionnees():
     """Analyse des références Cinéma : images redimensionnées avant envoi (fix 413)."""
     import api.screenplay as s
