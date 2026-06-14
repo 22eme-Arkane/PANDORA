@@ -186,6 +186,16 @@ def run_real(params: dict, emit_progress, is_cancelled) -> dict:
         if _prompt_zh and len(_prompt_zh) < len(_prompt_en):
             _prompt_en = _prompt_zh
 
+    # Langue des dialogues (colonne « Langues » du storyboard) : à l'ENVOI
+    # uniquement, on traduit les dialogues entre guillemets vers la langue
+    # choisie pour ce plan (par défaut anglais). Le prompt à l'écran reste tel quel.
+    _dialogue_lang = (params.get("dialogue_lang", "en") or "en")
+    _has_quotes = any(q in _prompt_en for q in ('"', "«", "“", "‘", "'"))
+    if _prompt_en and _has_anthropic and _has_quotes:
+        from core.lang import translate_dialogues_to
+        emit_progress(5, "Traduction des dialogues…")
+        _prompt_en = translate_dialogues_to(_prompt_en, _dialogue_lang)
+
     # ── Vision analysis of style reference image ───────────────────────────────
     # Claude Haiku reads the style image and extracts visual style keywords
     # (e.g. "photorealistic cinema, black and white, 35mm film grain").

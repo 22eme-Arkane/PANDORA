@@ -389,6 +389,7 @@ def save_shot(data: dict, version_id: str = DEFAULT_VERSION_ID) -> dict:
         data.setdefault("image_path", "")
         data.setdefault("seedance_prompt", "")
         data.setdefault("sound_prompt", "")
+        data.setdefault("dialogue_lang", "en")   # langue des dialogues (envoi Seedance)
         data.setdefault("last_frame_path", "")
         index.append(data)
     else:

@@ -278,6 +278,32 @@ def prompts_storyboard_cinema():
 
 
 @test
+def colonne_langues_dialogues():
+    """Colonne « Langues » (storyboard Cinéma) : choix par plan, défaut anglais ;
+    dialogues traduits À L'ENVOI uniquement (pas dans le prompt affiché)."""
+    import ui.page_storyboard as M
+    assert len(M._COLS) == 18, "colonne Langues ajoutée (18 colonnes)"
+    assert M._COLS[16][0] == "Langues" and M._COLS[17][0] == "", "Langues en 16, boutons en 17"
+    # défaut « en » persisté
+    import core.storyboard as sb
+    assert 'setdefault("dialogue_lang", "en")' in inspect.getsource(sb.save_shot)
+    # liste de langues + anglais recommandé en tête
+    from core.lang import DIALOGUE_LANGS, translate_dialogues_to, lang_label
+    assert DIALOGUE_LANGS[0][1] == "en" and "recommand" in DIALOGUE_LANGS[0][0].lower()
+    assert lang_label("en") == "Anglais"
+    # traduction des dialogues = à l'ENVOI (api/real), pas dans le prompt à l'écran
+    src_real = inspect.getsource(__import__("api.real", fromlist=["_"]))
+    assert "translate_dialogues_to" in src_real and "dialogue_lang" in src_real
+    # le prompt builder NE traduit PAS le dialogue (seulement à l'envoi)
+    src_t2v = inspect.getsource(__import__("ui.tab_t2v", fromlist=["_"]))
+    assert '"dialogue_lang":' in src_t2v, "params transporte dialogue_lang"
+    # translate_dialogues_to ne touche QUE les guillemets : sans guillemets =
+    # no-op déterministe (aucun appel réseau)
+    assert translate_dialogues_to("texte sans aucun dialogue", "fr") == "texte sans aucun dialogue"
+    assert translate_dialogues_to("", "fr") == ""
+
+
+@test
 def prompts_mise_en_page_cinema():
     import api.screenplay as s
     assert "TRÈS DÉTAILLÉ" in s._FORMAT_PANDORA and "FIDÈLE au scénario" in s._FORMAT_PANDORA

@@ -2956,6 +2956,10 @@ _FR_TO_EN: dict[str, str] = {
     "Ouvre le dossier de destination des upscales.": "Opens the upscales destination folder.",
     "Ouvre le dossier de destination du sound design.": "Opens the sound design destination folder.",
     "Ouvre le dossier de destination des clips.": "Opens the clips destination folder.",
+    "Langues":                                   "Languages",
+    "Anglais  (recommandé)":                     "English  (recommended)",
+    "Langue des dialogues — traduite automatiquement à l'envoi vers Seedance.\nAnglais recommandé (meilleur lipsync). Le prompt à l'écran n'est pas modifié.":
+        "Dialogue language — translated automatically when sent to Seedance.\nEnglish recommended (best lipsync). The on-screen prompt is left unchanged.",
     "▸  Choisir les références": "▸  Choose references",
     "▾  Choisir les références": "▾  Choose references",
     "▸  Éléments récurrents  ·  casting · accessoires · véhicules":

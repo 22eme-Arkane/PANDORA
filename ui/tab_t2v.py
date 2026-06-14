@@ -3876,6 +3876,9 @@ class TabT2V(QScrollArea):
             "resolution":     (self.cb_res.currentData() or self.cb_res.currentText()),
             "aspect_ratio":   self.cb_ratio.currentText().split(" ")[0],
             "shot_title":     self._active_shot_title,
+            # Langue des dialogues du plan (colonne « Langues ») — traduits à
+            # l'envoi vers Seedance ; défaut anglais (recommandé).
+            "dialogue_lang":  (self._active_shot or {}).get("dialogue_lang", "en"),
             "audio":          audio_on,
             "ref_images":      ref_images,
             "ref_image_roles": ref_image_roles,

@@ -49,7 +49,8 @@ _COLS = [
     ("Accessoires",  102,  False),  # 13
     ("Acteurs",       96,  False),  # 14
     ("Durée",         52,  False),  # 15
-    ("",              78,  False),  # 16 Boutons
+    ("Langues",      120,  False),  # 16 dialogue_lang (traduit à l'envoi Seedance)
+    ("",              78,  False),  # 17 Boutons
 ]
 
 _HEURE_PRESETS = HEURE_PRESETS
@@ -1201,9 +1202,44 @@ class _ShotRow(QFrame):
         _clickable(dur_w, _edit_duration)
         cells[15] = dur_w
 
+        # ── Langues (dialogue_lang) — traduit à l'ENVOI vers Seedance ─────────
+        from core.lang import DIALOGUE_LANGS, lang_label
+        lang_w, lang_l = _cell(_col_widths[16])
+        _cur_lang = data.get("dialogue_lang", "en") or "en"
+        _lang_lbl = _lbl(lang_label(_cur_lang), size=10)
+        if _cur_lang == "en":
+            _lang_lbl.setStyleSheet(
+                f"color:{CP['accent']};font-size:10px;background:transparent;border:none;")
+        lang_l.addWidget(_lang_lbl)
+        lang_w.setToolTip(translate(
+            "Langue des dialogues — traduite automatiquement à l'envoi vers Seedance.\n"
+            "Anglais recommandé (meilleur lipsync). Le prompt à l'écran n'est pas modifié."))
+
+        def _pick_lang(anchor=lang_w):
+            menu = QMenu(self)
+            menu.setStyleSheet(
+                f"QMenu{{background:{CP['bg2']};border:1px solid {CP['border_bright']};"
+                f"border-radius:8px;padding:4px 0;}}"
+                f"QMenu::item{{color:{CP['text_primary']};padding:7px 18px;font-size:11px;}}"
+                f"QMenu::item:selected{{background:{CP['accent_dim']};color:{CP['text_primary']};}}"
+                f"QMenu::item:checked{{color:{CP['accent']};font-weight:700;}}"
+            )
+            cur = data.get("dialogue_lang", "en") or "en"
+            for _label, _code in DIALOGUE_LANGS:
+                act = menu.addAction(_label)
+                act.setData(_code)
+                act.setCheckable(True)
+                act.setChecked(_code == cur)
+            chosen = menu.exec(anchor.mapToGlobal(anchor.rect().bottomLeft()))
+            if chosen:
+                _save_field("dialogue_lang", chosen.data())
+
+        _clickable(lang_w, _pick_lang)
+        cells[16] = lang_w
+
         # ── Boutons ──────────────────────────────────────────────────────────
         btns_w = QWidget()
-        btns_w.setFixedWidth(_col_widths[16])
+        btns_w.setFixedWidth(_col_widths[17])
         btns_w.setMinimumHeight(self._MIN_H)
         btns_w.setStyleSheet("background:transparent;")
         bl = QVBoxLayout(btns_w)
@@ -1234,7 +1270,7 @@ class _ShotRow(QFrame):
         )
         btn_del.clicked.connect(lambda: self.delete_requested.emit(self._data["id"]))
         bl.addWidget(btn_del)
-        cells[16] = btns_w
+        cells[17] = btns_w
 
         # ── Assemblage des colonnes dans l'ordre visuel (_col_order) ─────────
         for i, col_logical in enumerate(_col_order):
