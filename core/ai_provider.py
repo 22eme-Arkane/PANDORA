@@ -67,6 +67,13 @@ TASKS: list[tuple[str, str]] = [
     ("sync",            "Synchronisation du storyboard"),
 ]
 
+# Modèle par défaut (créatif) — Opus 4.8.
+_DEFAULT_CREATIVE = "claude-opus-4-8"
+
+# Preset « PANDORA optimisé » : moteur conseillé par tâche. Opus 4.8 partout —
+# les appels du tier utilitaire restent automatiquement sur Haiku (rapide/économe).
+PANDORA_OPTIMIZED: dict[str, str] = {key: "opus" for key, _ in TASKS}
+
 _ANTHROPIC_UTILITY = "claude-haiku-4-5"
 _MISTRAL_MODELS = {"utility": "mistral-small-latest", "creative": "mistral-large-latest"}
 _OPENAI_MODELS  = {"utility": "gpt-5.5", "creative": "gpt-5.5"}
@@ -88,7 +95,7 @@ def get_provider() -> str:
 def get_creative_model() -> str:
     """Modèle du tier créatif chez Anthropic (Sonnet par défaut, Fable 5 en option)."""
     m = (_cfg().get("ai_model_creative") or "").strip()
-    return m or "claude-sonnet-4-6"
+    return m or _DEFAULT_CREATIVE
 
 
 def _resolve_engine(task: str | None = None) -> tuple[str, str]:
@@ -103,7 +110,7 @@ def _resolve_engine(task: str | None = None) -> tuple[str, str]:
     provider = (cfg.get("ai_provider") or "anthropic").strip().lower()
     if provider not in _PROVIDERS:
         provider = "anthropic"
-    creative = (cfg.get("ai_model_creative") or "").strip() or "claude-sonnet-4-6"
+    creative = (cfg.get("ai_model_creative") or "").strip() or _DEFAULT_CREATIVE
     return provider, creative
 
 
@@ -112,7 +119,7 @@ def _model(tier: str, provider: str | None = None, creative_model: str = "") -> 
     if provider is None:
         provider, creative_model = _resolve_engine()
     if provider == "anthropic":
-        return (creative_model or "claude-sonnet-4-6") if tier == "creative" else _ANTHROPIC_UTILITY
+        return (creative_model or _DEFAULT_CREATIVE) if tier == "creative" else _ANTHROPIC_UTILITY
     if provider == "openai":
         m = (_cfg().get("openai_model") or "").strip()
         return m or _OPENAI_MODELS["creative" if tier == "creative" else "utility"]
@@ -120,7 +127,7 @@ def _model(tier: str, provider: str | None = None, creative_model: str = "") -> 
         return _MISTRAL_MODELS["creative" if tier == "creative" else "utility"]
     if provider == "ollama":
         return (_cfg().get("ollama_model") or "llama3.1").strip() or "llama3.1"
-    return creative_model or "claude-sonnet-4-6"
+    return creative_model or _DEFAULT_CREATIVE
 
 
 # ── Nom d'affichage du moteur global ────────────────────────────────────────────

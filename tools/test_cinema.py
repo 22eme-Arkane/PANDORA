@@ -57,12 +57,13 @@ def selecteur_ia_present():
     from ui.page_settings import SettingsPage
     p = SettingsPage()
     n = p.ai_combo.count()
-    assert n == 8, "8 choix (Claude Sonnet/Opus/Haiku, Fable 5, GPT-5.5, Mistral, Ollama, Personnalisé)"
+    assert n == 9, "9 choix (3 Claude, Fable 5, GPT-5.5, Mistral, Ollama, PANDORA optimisé, Personnalisé)"
     labels = [p.ai_combo.itemText(i) for i in range(n)]
+    assert "Opus 4.8" in labels[0] and "défaut" in labels[0], "Opus 4.8 = défaut (1er)"
     assert any("Fable 5" in x for x in labels), "Fable 5 proposé"
     assert any("GPT-5.5" in x for x in labels), "GPT-5.5 proposé"
-    assert any("Opus 4.8" in x for x in labels), "Claude Opus 4.8 proposé"
     assert any("Choix personnalisé" in x for x in labels), "Choix personnalisé proposé"
+    assert any("PANDORA optimisé" in x for x in labels), "PANDORA optimisé proposé"
     assert any("Mistral" in x for x in labels) and any("Ollama" in x for x in labels)
     # Clés GPT + Mistral présentes (menu déroulant facultatif)
     assert hasattr(p, "openai_input") and hasattr(p, "mistral_input")
@@ -80,9 +81,13 @@ def selecteur_ia_present():
     assert "Vérifier les mises à jour" not in src_pg, "bouton Mises à jour retiré"
     assert (src_pg.index('_section("Assistant IA")')
             < src_pg.index('_section("Clés API")')), "Assistant IA avant les clés"
-    assert (src_pg.index('QPushButton("Sauvegarder")')
-            < src_pg.index('"Connexion DaVinci Resolve Studio"')), \
-        "Sauvegarder avant DaVinci (DaVinci tout en bas)"
+    # Sauvegarde AUTOMATIQUE : plus de bouton « Sauvegarder »
+    assert 'QPushButton("Sauvegarder")' not in src_pg, "bouton Sauvegarder retiré"
+    assert "_wire_autosave" in src_pg and "Sauvegarde automatique" in src_pg, "auto-save branché"
+    # Défaut Opus 4.8 + preset PANDORA optimisé + bridge auto (bouton retiré)
+    assert '"claude-opus-4-8"' in src_pg and "_apply_pandora_preset" in src_pg
+    src_dv = inspect.getsource(__import__("ui.davinci_panel", fromlist=["_"]))
+    assert "Installer le bridge" not in src_dv, "bouton Installer le bridge retiré (auto à l'install)"
     assert '_test_btn("✓  Tester API fal.ai"' in src_pg, "testeur fal.ai inline"
     assert '_test_btn("✓  Tester API Anthropic"' in src_pg, "testeur Anthropic inline"
     assert 'QPushButton("?")' in src_pg, "boutons d'aide « ? » lisibles"
@@ -615,12 +620,14 @@ def moteurs_ia_par_tache():
     assert set(ap.ENGINES) == {"claude", "opus", "haiku", "fable5", "gpt", "mistral", "ollama"}
     assert ap.ENGINES["gpt"]["provider"] == "openai"
     assert ap.ENGINES["opus"]["creative_model"] == "claude-opus-4-8"
+    # Preset PANDORA optimisé : Opus 4.8 par tâche (utilitaire reste Haiku via le tier)
+    assert ap.PANDORA_OPTIMIZED and all(v == "opus" for v in ap.PANDORA_OPTIMIZED.values())
     keys = [t[0] for t in ap.TASKS]
     for k in ("enhance", "storyboard_chat", "assistant", "storyboard_gen",
               "screenplay", "extraction", "sync"):
         assert k in keys, f"tâche {k} paramétrable"
     # Défaut inchangé (non régression)
-    assert ap._resolve_engine() == ("anthropic", "claude-sonnet-4-6")
+    assert ap._resolve_engine() == ("anthropic", "claude-opus-4-8")
     # Override par tâche
     orig = ap._cfg
     ap._cfg = lambda: {"ai_provider": "anthropic", "ai_model_creative": "claude-sonnet-4-6",
@@ -636,7 +643,7 @@ def moteurs_ia_par_tache():
     ap._cfg = lambda: {"ai_provider": "custom", "ai_model_creative": "",
                        "ai_task_engines": {"enhance": "opus"}}
     try:
-        assert ap._resolve_engine() == ("anthropic", "claude-sonnet-4-6")
+        assert ap._resolve_engine() == ("anthropic", "claude-opus-4-8")
         assert ap._resolve_engine("enhance") == ("anthropic", "claude-opus-4-8")
     finally:
         ap._cfg = orig

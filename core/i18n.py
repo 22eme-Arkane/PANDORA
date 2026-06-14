@@ -1239,6 +1239,11 @@ _FR_TO_EN: dict[str, str] = {
         "▼  Optional API keys  (OpenAI, Mistral, more to come)",
     "Choix personnalisé — un moteur par tâche":
         "Custom — one engine per task",
+    "PANDORA optimisé — moteur conseillé par tâche":
+        "PANDORA optimized — recommended engine per task",
+    "✓  Sauvegarde automatique — chaque modification est enregistrée.":
+        "✓  Auto-save — every change is saved.",
+    "✓  Enregistré automatiquement.":   "✓  Saved automatically.",
     "Tout est synchronisé":             "Everything is in sync",
     "Chargement du casting…":           "Loading cast…",
     "Sauvegarde…":                      "Saving…",

@@ -32,7 +32,7 @@ _DEFAULTS = {
     "show_api_guide":        True,
     # ── Assistant IA texte (voir core/ai_provider.py) ──────────────────────────
     "ai_provider":           "anthropic",          # anthropic | openai | mistral | ollama
-    "ai_model_creative":     "claude-sonnet-4-6",  # Anthropic : claude-sonnet-4-6 | claude-fable-5
+    "ai_model_creative":     "claude-opus-4-8",    # défaut Opus 4.8 (Sonnet 4.6 / Fable 5 en option)
     "openai_key":            "",                   # clé OpenAI (GPT-5.5)
     "openai_model":          "",                   # vide = défaut gpt-5.5
     "mistral_key":           "",
@@ -88,11 +88,30 @@ def get_output_dir(cfg: dict | None = None) -> str:
     return get_bin_dir("seedance", cfg)
 
 
+def _migrate(cfg: dict) -> dict:
+    """Migrations légères, idempotentes (drapeau one-shot)."""
+    changed = False
+    # Bascule UNIQUE de l'ancien défaut Sonnet 4.6 → Opus 4.8. Le choix de version
+    # Claude est nouveau : personne n'avait choisi Sonnet délibérément avant.
+    if not cfg.get("_opus_default_done"):
+        if ((cfg.get("ai_model_creative") or "") in ("", "claude-sonnet-4-6")
+                and (cfg.get("ai_provider") or "anthropic") == "anthropic"):
+            cfg["ai_model_creative"] = "claude-opus-4-8"
+        cfg["_opus_default_done"] = True
+        changed = True
+    if changed:
+        try:
+            save_config(cfg)
+        except Exception:
+            pass
+    return cfg
+
+
 def load_config() -> dict:
     os.makedirs(_DATA_DIR, exist_ok=True)
     if os.path.exists(_CONFIG_FILE):
         with open(_CONFIG_FILE, "r") as f:
-            return json.load(f)
+            return _migrate(json.load(f))
     return dict(_DEFAULTS)
 
 

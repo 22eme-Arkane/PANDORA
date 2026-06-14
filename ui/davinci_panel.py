@@ -4,7 +4,7 @@ from PyQt6.QtWidgets import (
 )
 from PyQt6.QtCore import pyqtSignal, Qt
 from ui.styles import C
-from davinci.bridge import resolve, install_bridge_server
+from davinci.bridge import resolve
 from davinci.ping_worker import BridgePingWorker
 
 
@@ -76,33 +76,15 @@ class DaVinciPanel(QWidget):
             f"background:transparent;border:none;"
         )
 
-        step1_row = QHBoxLayout()
-        step1_row.setSpacing(4)
-        step1_row.setContentsMargins(0, 0, 0, 0)
-        step1_num = QLabel("1.")
-        step1_num.setStyleSheet(_red)
-        step1_row.addWidget(step1_num)
-        self._btn_install = QPushButton("Installer le bridge PANDORA dans DaVinci →")
-        self._btn_install.setFlat(True)
-        self._btn_install.setCursor(Qt.CursorShape.PointingHandCursor)
-        self._btn_install.setStyleSheet(
-            f"QPushButton{{color:{C['red']};font-size:10px;font-family:'Consolas',monospace;"
-            f"background:transparent;border:none;text-align:left;padding:0;"
-            f"text-decoration:underline;}}"
-            f"QPushButton:hover{{color:#ff7b89;}}"
-        )
-        self._btn_install.clicked.connect(self._on_install)
-        step1_row.addWidget(self._btn_install)
-        step1_row.addStretch()
-        ins.addLayout(step1_row)
+        # Le bridge PANDORA est installé AUTOMATIQUEMENT à l'installation de PANDORA
+        # (le bouton d'installation manuelle a été retiré).
+        step1 = QLabel("1.  Dans DaVinci : Espace de travail → Scripts → seedance_bridge")
+        step1.setStyleSheet(_red)
+        ins.addWidget(step1)
 
-        step2 = QLabel("2.  Dans DaVinci : Espace de travail → Scripts → seedance_bridge")
+        step2 = QLabel("2.  Revenez ici et cliquez sur « Connecter » →")
         step2.setStyleSheet(_red)
         ins.addWidget(step2)
-
-        step3 = QLabel("3.  Revenez ici et cliquez sur « Connecter » →")
-        step3.setStyleSheet(_red)
-        ins.addWidget(step3)
 
         root.addWidget(self._instructions_w)
 
@@ -120,19 +102,6 @@ class DaVinciPanel(QWidget):
         # Ping unique au démarrage — pas de timer récurrent
         self._ping_worker: BridgePingWorker | None = None
         self._auto_ping()
-
-    def _on_install(self):
-        ok, path = install_bridge_server()
-        if ok:
-            QMessageBox.information(
-                self, "Bridge installé ✓",
-                f"Fichier copié dans :\n{path}\n\n"
-                "Dans DaVinci Resolve :\n"
-                "Espace de travail → Scripts → seedance_bridge\n\n"
-                "Puis clique Connecter ici."
-            )
-        else:
-            QMessageBox.warning(self, "Échec installation", path)
 
     def _on_connect(self):
         if resolve.is_connected():

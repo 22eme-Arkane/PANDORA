@@ -232,13 +232,14 @@ class SettingsPage(QScrollArea):
 
         # (libellé, provider, modèle créatif)
         self._AI_CHOICES = [
-            ("Claude Sonnet 4.6 (Anthropic) — défaut",    "anthropic", "claude-sonnet-4-6"),
-            ("Claude Opus 4.8 (Anthropic) — qualité max", "anthropic", "claude-opus-4-8"),
+            ("Claude Opus 4.8 (Anthropic) — défaut",      "anthropic", "claude-opus-4-8"),
+            ("Claude Sonnet 4.6 (Anthropic) — équilibré", "anthropic", "claude-sonnet-4-6"),
             ("Claude Haiku 4.5 (Anthropic) — rapide",     "anthropic", "claude-haiku-4-5"),
             ("Fable 5 (Anthropic) — optimisé PANDORA",    "anthropic", "claude-fable-5"),
             ("GPT-5.5 (OpenAI)",                          "openai",    ""),
             ("Mistral — expérimental",                    "mistral",   ""),
             ("Ollama local — expérimental",               "ollama",    ""),
+            ("PANDORA optimisé — moteur conseillé par tâche", "pandora", ""),
             ("Choix personnalisé — un moteur par tâche",  "custom",     ""),
         ]
         self.ai_combo = QComboBox()
@@ -476,19 +477,16 @@ class SettingsPage(QScrollArea):
         lay.addWidget(self._opt_keys_box)
         lay.addWidget(_divider())
 
-        # ── Sauvegarder (pleine largeur, style harmonisé) ─────────────────────
-        btn_save = QPushButton("Sauvegarder")
-        btn_save.setMinimumHeight(46)
-        btn_save.setCursor(Qt.CursorShape.PointingHandCursor)
-        btn_save.setStyleSheet(
-            f"QPushButton{{background:{CP['accent']};color:#07080f;border:none;"
-            f"border-radius:9px;font-size:13px;font-weight:800;letter-spacing:0.5px;}}"
-            f"QPushButton:hover{{background:#6eded6;}}"
-            f"QPushButton:pressed{{background:{CP['accent_dim']};color:#ffffff;}}"
+        # ── Sauvegarde AUTOMATIQUE (plus de bouton — tout changement est enregistré) ──
+        self._autosave_lbl = QLabel("✓  Sauvegarde automatique — chaque modification est enregistrée.")
+        self._autosave_lbl.setStyleSheet(
+            f"color:{CP['text_dim']};font-size:11px;font-style:italic;background:transparent;"
         )
-        btn_save.clicked.connect(self.save)
-        lay.addWidget(btn_save)
+        lay.addWidget(self._autosave_lbl)
         lay.addWidget(_divider())
+
+        # Brancher l'auto-save sur tous les champs (après construction complète).
+        self._wire_autosave()
 
         # ── Connexion DaVinci Resolve Studio — tout en bas ────────────────────
         dvr_row = QHBoxLayout()
@@ -591,9 +589,12 @@ class SettingsPage(QScrollArea):
         prov = (self.ai_combo.currentData() or ("anthropic", ""))[0]
         self.ollama_url_input.setVisible(prov == "ollama")
         self.ollama_model_input.setVisible(prov == "ollama")
-        # « Choix personnalisé » → déplie automatiquement le moteur IA par tâche
-        if prov == "custom" and not self._adv_open:
+        # « Choix personnalisé » et « PANDORA optimisé » déplient le moteur par tâche
+        if prov in ("custom", "pandora") and not self._adv_open:
             self._set_advanced(True)
+        # « PANDORA optimisé » remplit les combos avec le preset conseillé
+        if prov == "pandora":
+            self._apply_pandora_preset()
 
     def _set_advanced(self, open_: bool):
         self._adv_open = open_
@@ -638,7 +639,28 @@ class SettingsPage(QScrollArea):
         save_config(cfg)
         from core.ai_provider import refresh_name_cache
         refresh_name_cache()   # le nom de l'assistant change → libellés au prochain démarrage
-        QMessageBox.information(self, "Sauvegardé", "Configuration sauvegardée ✓")
+        # Sauvegarde automatique : retour discret (pas de pop-up à chaque frappe)
+        if hasattr(self, "_autosave_lbl"):
+            self._autosave_lbl.setText("✓  Enregistré automatiquement.")
+
+    def _wire_autosave(self):
+        """Sauvegarde automatique : tout changement de champ persiste aussitôt."""
+        self.ai_combo.currentIndexChanged.connect(self.save)
+        for w in (self.api_input, self.anthropic_input, self.openai_input,
+                  self.mistral_input, self.ollama_url_input, self.ollama_model_input):
+            w.textChanged.connect(self.save)
+        for combo in getattr(self, "_task_combos", {}).values():
+            combo.currentIndexChanged.connect(self.save)
+
+    def _apply_pandora_preset(self):
+        """Renseigne les combos « moteur par tâche » avec le preset PANDORA optimisé."""
+        from core.ai_provider import PANDORA_OPTIMIZED
+        for task_key, combo in getattr(self, "_task_combos", {}).items():
+            eng = PANDORA_OPTIMIZED.get(task_key, "")
+            for i in range(combo.count()):
+                if combo.itemData(i) == eng:
+                    combo.setCurrentIndex(i)
+                    break
 
     def test_anthropic_connection(self):
         key = self.anthropic_input.text().strip()
