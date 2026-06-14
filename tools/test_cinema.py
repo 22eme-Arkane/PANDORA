@@ -262,6 +262,19 @@ def prompts_storyboard_cinema():
     assert "DETAILED, dense video generation prompt" in t, "prompt vidéo détaillé"
     assert "WITHOUT inventing any new story element" in t, "fidélité au scénario"
     assert "duration" in t and "15.0" in t, "contrainte durée Seedance"
+    # Sound design généré AVEC le storyboard (retour 2026-06-13, parité Live)
+    assert '"sound_prompt"' in t, "le storyboard génère aussi un prompt sound design"
+    assert "NO speech" in t and "SFX" in t, "sound_prompt = ambiance/SFX sans voix"
+    # Persisté + champ dans le dialogue de plan ; bouton « Améliorer » Seedance
+    # RETIRÉ provisoirement (Fable 5 dégrade), prompt Action conservé
+    import core.storyboard as sb
+    assert 'setdefault("sound_prompt"' in inspect.getsource(sb.save_shot)
+    src_ds = inspect.getsource(__import__("ui.dialog_shot", fromlist=["_"]))
+    assert "self._sound_prompt" in src_ds and "Prompt sound design" in src_ds, \
+        "champ sound design dans le dialogue de plan"
+    assert '"sound_prompt":      self._sound_prompt.toPlainText()' in src_ds, "sound_prompt sauvé"
+    assert "self._btn_enhance_seedance = None" in src_ds, "Améliorer Seedance retiré"
+    assert "_btn_enhance_action" in src_ds, "Améliorer Action conservé"
 
 
 @test
@@ -287,9 +300,10 @@ def anticrash_preview_translate():
 
 @test
 def separation_live_intacte():
-    """Aucune fonctionnalité Live n'a fui dans les fichiers Cinéma."""
-    import ui.dialog_shot as shot_c
-    assert "sound_prompt" not in inspect.getsource(shot_c), "pas de prompt son côté Cinéma"
+    """Aucune fonctionnalité Live n'a fui dans les fichiers Cinéma.
+    (Le sound_prompt n'est PLUS un marqueur Live : depuis 2026-06-13 le storyboard
+    Cinéma le génère aussi — parité voulue. On vérifie ici les marqueurs propres
+    au Live qui ne doivent pas exister côté Cinéma : masquage de colonnes, musique.)"""
     import ui.page_storyboard as sb_c
     src = inspect.getsource(sb_c)
     assert "_HIDDEN_COLS" not in src, "pas de masquage de colonnes côté Cinéma"

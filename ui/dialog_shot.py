@@ -536,32 +536,10 @@ class ShotDialog(QDialog):
         seedance_header.setSpacing(6)
         seedance_header.addWidget(_lbl("Prompt Seedance 2.0"))
         seedance_header.addStretch()
-        self._btn_enhance_seedance = QPushButton()
-        self._btn_enhance_seedance.setFixedSize(26, 26)
-        self._btn_enhance_seedance.setToolTip(
-            "Améliorer avec Claude\n"
-            "Réécrit le prompt en anglais cinématographique optimisé Seedance 2.0 (<400 car.)"
-        )
-        self._btn_enhance_seedance.setCursor(Qt.CursorShape.PointingHandCursor)
-        self._btn_enhance_seedance.setStyleSheet("""
-            QPushButton{background:transparent;border:none;border-radius:5px;padding:0;}
-            QPushButton:hover{background:rgba(78,205,196,0.12);}
-            QPushButton:pressed{background:rgba(78,205,196,0.22);}
-            QPushButton:disabled{opacity:0.3;}
-        """)
-        _pix_n2 = claude_icon_pixmap(15, CP["text_dim"])
-        _pix_h2 = claude_icon_pixmap(15, CP["accent"])
-        if not _pix_n2.isNull():
-            install_hover_icon(self._btn_enhance_seedance, _pix_n2, _pix_h2, icon_size=15)
-        else:
-            self._btn_enhance_seedance.setText("☁")
-        self._btn_enhance_seedance.clicked.connect(self._on_enhance_seedance)
-        _lbl_enh_sd = QLabel("Améliorer le prompt")
-        _lbl_enh_sd.setStyleSheet(
-            f"color:{CP['text_dim']};font-size:10px;background:transparent;border:none;"
-        )
-        seedance_header.addWidget(_lbl_enh_sd)
-        seedance_header.addWidget(self._btn_enhance_seedance)
+        # « Améliorer le prompt » RETIRÉ provisoirement (2026-06-13) : l'enhance
+        # dégrade le prompt depuis le passage à Fable 5 — à réactiver au retour
+        # de Fable 5. Le handler _on_enhance_seedance est conservé (inutilisé).
+        self._btn_enhance_seedance = None
         lay.addLayout(seedance_header)
         self._seedance_prompt = QTextEdit()
         self._seedance_prompt.setPlainText(self._shot.get("seedance_prompt", ""))
@@ -570,6 +548,19 @@ class ShotDialog(QDialog):
             _TEXTAREA_STYLE.replace(CP["accent"], CP["accent2_dim"])
         )
         lay.addWidget(self._seedance_prompt)
+
+        # ── Prompt sound design (généré avec le storyboard → Sound Design) ────
+        lay.addWidget(_lbl("Prompt sound design"))
+        self._sound_prompt = QTextEdit()
+        self._sound_prompt.setPlainText(self._shot.get("sound_prompt", ""))
+        self._sound_prompt.setFixedHeight(60)
+        self._sound_prompt.setPlaceholderText(
+            "Ambiance / SFX du plan (anglais), sans voix — à utiliser dans l'onglet Sound Design."
+        )
+        self._sound_prompt.setStyleSheet(
+            _TEXTAREA_STYLE.replace(CP["accent"], CP.get("orange", CP["accent"]))
+        )
+        lay.addWidget(self._sound_prompt)
 
         self._enhance_status = QLabel("")
         self._enhance_status.setWordWrap(True)
@@ -703,7 +694,8 @@ class ShotDialog(QDialog):
             self._enhance_status.setText("Écris une description avant d'améliorer.")
             return
         self._btn_enhance_action.setEnabled(False)
-        self._btn_enhance_seedance.setEnabled(False)
+        if self._btn_enhance_seedance:
+            self._btn_enhance_seedance.setEnabled(False)
         self._enhance_status.setText("Amélioration en cours…")
         self._worker_enhance_action = EnhanceShotActionWorker(text)
         self._worker_enhance_action.finished.connect(self._on_enhance_action_done)
@@ -713,7 +705,8 @@ class ShotDialog(QDialog):
     def _on_enhance_action_done(self, result: str):
         self._scene_title.setText(result)
         self._btn_enhance_action.setEnabled(True)
-        self._btn_enhance_seedance.setEnabled(True)
+        if self._btn_enhance_seedance:
+            self._btn_enhance_seedance.setEnabled(True)
         self._enhance_status.setText("Description améliorée ✓")
 
     def _on_enhance_seedance(self):
@@ -723,7 +716,8 @@ class ShotDialog(QDialog):
             self._enhance_status.setText("Écris un prompt avant d'améliorer.")
             return
         self._btn_enhance_action.setEnabled(False)
-        self._btn_enhance_seedance.setEnabled(False)
+        if self._btn_enhance_seedance:
+            self._btn_enhance_seedance.setEnabled(False)
         self._enhance_status.setText("Optimisation en cours…")
         self._worker_enhance_seedance = EnhanceWorker(text)
         self._worker_enhance_seedance.finished.connect(self._on_enhance_seedance_done)
@@ -733,12 +727,14 @@ class ShotDialog(QDialog):
     def _on_enhance_seedance_done(self, result: str):
         self._seedance_prompt.setPlainText(result)
         self._btn_enhance_action.setEnabled(True)
-        self._btn_enhance_seedance.setEnabled(True)
+        if self._btn_enhance_seedance:
+            self._btn_enhance_seedance.setEnabled(True)
         self._enhance_status.setText("Prompt optimisé ✓")
 
     def _on_enhance_fail(self, err: str):
         self._btn_enhance_action.setEnabled(True)
-        self._btn_enhance_seedance.setEnabled(True)
+        if self._btn_enhance_seedance:
+            self._btn_enhance_seedance.setEnabled(True)
         self._enhance_status.setText(f"Erreur : {err[:80]}")
 
     # ── Save ──────────────────────────────────────────────────────────────────
@@ -813,6 +809,7 @@ class ShotDialog(QDialog):
             "speed":           to_source(self._speed.currentText()),
             "comments":          self._comments.toPlainText().strip(),
             "seedance_prompt":   self._seedance_prompt.toPlainText().strip(),
+            "sound_prompt":      self._sound_prompt.toPlainText().strip(),
             "image_path":        self._shot.get("image_path", ""),
             "camera_axis":       to_source(self._camera_axis.currentText()) if self._camera_axis.currentText() != "—" else "",
             "camera_placement":  self._camera_placement.text().strip(),

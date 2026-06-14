@@ -356,12 +356,11 @@ def decoupage_routage_et_champs():
 
 @test
 def dialog_plan_live_sound_prompt():
-    """ShotDialog Live a le champ sound design ; le ShotDialog Cinéma n'en a pas."""
+    """ShotDialog Live a le champ sound design (le Cinéma l'a AUSSI depuis
+    2026-06-13 — parité voulue) ; la page Live ouvre bien la copie Live."""
     from ui.dialog_shot_live import ShotDialog as LiveDlg
-    import ui.dialog_shot as cine
     d = LiveDlg(shot={"id": "s1", "number": 1, "sound_prompt": "boom"})
     assert hasattr(d, "_sound_prompt") and d._sound_prompt.toPlainText() == "boom"
-    assert "sound_prompt" not in inspect.getsource(cine.ShotDialog), "Cinéma intact"
     import ui.page_storyboard_live as M
     assert M.ShotDialog.__module__ == "ui.dialog_shot_live", "la page Live ouvre la copie Live"
 
