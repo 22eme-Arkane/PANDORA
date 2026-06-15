@@ -16,8 +16,10 @@ from ui.styles import CP
 from ui.widgets import HelpBlock
 from ui.staging_canvas import StagingCanvas
 from core.i18n import translate
+import os
 import core.storyboard as sb_api
 import core.staging as staging
+import core.decors as decors_api
 
 
 def _btn(label: str) -> QPushButton:
@@ -168,6 +170,11 @@ class PageStaging(QWidget):
             return
         self._shot = self._shots[row]
         rec = staging.get(self._shot["id"])
+        # Plan vu de dessus = celui du DÉCOR assigné (source unique, synchro avec
+        # la page Décors). Le Plan de feu réutilise le MÊME plan que la Mise en scène.
+        fp = decors_api.floor_plan_for_shot(self._shot)
+        if fp and os.path.isfile(fp):
+            rec["plan_image"] = fp
         # Amorçage : acteurs depuis les personnages du plan (si vide)
         if self._mode == "staging" and not rec.get("actors"):
             names = self._shot.get("character_names", []) or []
@@ -226,6 +233,14 @@ class PageStaging(QWidget):
         self._btn_gen.setEnabled(True)
         self._btn_gen.setText("✦  " + translate("Générer le plan"))
         if path and self._shot:
+            # Enregistre le plan sur le DÉCOR (source unique → visible aussi dans
+            # la page Décors et réutilisé par le Plan de feu). Repli : par plan.
+            did = self._shot.get("decor_id")
+            if did:
+                try:
+                    decors_api.set_floor_plan(did, path)
+                except Exception:
+                    pass
             rec = staging.get(self._shot["id"])
             rec["plan_image"] = path
             staging.save(self._shot["id"], rec)

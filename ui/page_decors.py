@@ -187,6 +187,14 @@ class PageDecors(QWidget):
         scroll.setWidget(self._grid_container)
         root.addWidget(scroll, 1)
 
+        # ── Séparation + « Plan des décors » (synchro Mise en scène / Plan de feu) ──
+        fp_sep = QFrame()
+        fp_sep.setFixedHeight(1)
+        fp_sep.setStyleSheet(f"background:{CP['border']};")
+        root.addWidget(fp_sep)
+        root.addWidget(self._build_floor_plans_section())
+
+        self._fp_worker = None
         self.refresh()
 
     def _build_topbar(self):
@@ -279,9 +287,135 @@ class PageDecors(QWidget):
         lay.addWidget(btn_del_all)
         return bar
 
+    # ── Plan des décors (vue de dessus, partagée avec Mise en scène / Plan de feu) ──
+
+    def _build_floor_plans_section(self):
+        wrap = QWidget()
+        wrap.setFixedHeight(168)
+        wrap.setStyleSheet(f"background:{CP['bg0']};")
+        v = QVBoxLayout(wrap)
+        v.setContentsMargins(32, 8, 32, 10)
+        v.setSpacing(4)
+
+        head = QHBoxLayout()
+        lbl = QLabel("▦  " + translate("Plan des décors"))
+        lbl.setStyleSheet(
+            f"color:{CP['text_secondary']};font-size:12px;font-weight:700;"
+            f"letter-spacing:1px;background:transparent;")
+        head.addWidget(lbl)
+        sub = QLabel(translate("— vus de dessus, synchronisés avec Mise en scène et Plan de feu"))
+        sub.setStyleSheet(f"color:{CP['text_dim']};font-size:9px;background:transparent;")
+        head.addWidget(sub)
+        head.addStretch()
+        self._fp_btn = QPushButton("✦  " + translate("Générer les plans manquants"))
+        self._fp_btn.setFixedHeight(28)
+        self._fp_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._fp_btn.setStyleSheet(
+            f"QPushButton{{background:transparent;color:{CP['accent']};"
+            f"border:1px solid {CP['accent_dim']};border-radius:6px;"
+            f"font-size:10px;font-weight:700;padding:0 12px;}}"
+            f"QPushButton:hover{{background:rgba(78,205,196,0.10);}}"
+            f"QPushButton:disabled{{color:{CP['text_dim']};border-color:{CP['border']};}}")
+        self._fp_btn.clicked.connect(self._on_gen_missing_plans)
+        head.addWidget(self._fp_btn)
+        v.addLayout(head)
+
+        hs = QScrollArea()
+        hs.setWidgetResizable(True)
+        hs.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        hs.setStyleSheet("QScrollArea{background:transparent;border:none;}")
+        inner = QWidget()
+        inner.setStyleSheet("background:transparent;")
+        self._fp_row = QHBoxLayout(inner)
+        self._fp_row.setContentsMargins(0, 4, 0, 0)
+        self._fp_row.setSpacing(12)
+        self._fp_row.addStretch()
+        hs.setWidget(inner)
+        v.addWidget(hs, 1)
+        return wrap
+
+    def _fp_card(self, decor: dict):
+        card = QWidget()
+        card.setFixedSize(132, 104)
+        cv = QVBoxLayout(card)
+        cv.setContentsMargins(0, 0, 0, 0)
+        cv.setSpacing(0)
+        thumb = QLabel()
+        thumb.setFixedSize(132, 78)
+        thumb.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        fp = decor.get("floor_plan", "")
+        has = bool(fp and os.path.isfile(fp))
+        thumb.setStyleSheet(
+            f"background:{CP['bg3']};border:1px solid {CP['border']};"
+            f"border-radius:8px 8px 0 0;color:{CP['text_dim']};font-size:11px;")
+        if has:
+            pix = QPixmap(fp).scaled(
+                132, 78, Qt.AspectRatioMode.KeepAspectRatioByExpanding,
+                Qt.TransformationMode.SmoothTransformation)
+            pix = pix.copy((pix.width() - 132) // 2, (pix.height() - 78) // 2, 132, 78)
+            thumb.setPixmap(pix)
+        else:
+            thumb.setText("▦\n" + translate("à générer"))
+        cv.addWidget(thumb)
+        name = QLabel(decor.get("name", "—"))
+        name.setFixedHeight(26)
+        name.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        name.setStyleSheet(
+            f"color:{CP['text_primary'] if has else CP['text_dim']};font-size:9px;"
+            f"background:{CP['bg2']};border:1px solid {CP['border']};border-top:none;"
+            f"border-radius:0 0 8px 8px;")
+        cv.addWidget(name)
+        card.setToolTip(decor.get("name", ""))
+        return card
+
+    def _refresh_floor_plans(self):
+        if not hasattr(self, "_fp_row"):
+            return
+        while self._fp_row.count() > 1:   # garde le stretch final
+            it = self._fp_row.takeAt(0)
+            if it.widget():
+                it.widget().deleteLater()
+        for d in self._all_items:
+            self._fp_row.insertWidget(self._fp_row.count() - 1, self._fp_card(d))
+        missing = sum(1 for d in self._all_items
+                      if not (d.get("floor_plan") and os.path.isfile(d["floor_plan"])))
+        if hasattr(self, "_fp_btn"):
+            self._fp_btn.setEnabled(missing > 0 and (self._fp_worker is None
+                                                     or not self._fp_worker.isRunning()))
+            self._fp_btn.setText("✦  " + translate("Générer les plans manquants")
+                                 + (f" ({missing})" if missing else ""))
+
+    def _on_gen_missing_plans(self):
+        if self._fp_worker is not None and self._fp_worker.isRunning():
+            return
+        decors = [d for d in self._all_items
+                  if not (d.get("floor_plan") and os.path.isfile(d["floor_plan"]))]
+        if not decors:
+            return
+        jobs = [{"id": d["id"], "prompt": d.get("prompt") or d.get("name", ""),
+                 "name": d.get("name", "plan")} for d in decors if d.get("id")]
+        from api.nano_banana import GenerateFloorPlansWorker
+        self._fp_worker = GenerateFloorPlansWorker(jobs)
+        self._fp_worker.plan_done.connect(self._on_fp_plan_done)
+        self._fp_worker.finished.connect(self._on_fp_plans_finished)
+        self._fp_btn.setEnabled(False)
+        self._fp_btn.setText(translate("Génération…"))
+        self._fp_worker.start()
+
+    def _on_fp_plan_done(self, decor_id: str, path: str):
+        if path:
+            try:
+                decors_api.set_floor_plan(decor_id, path)
+            except Exception:
+                pass
+
+    def _on_fp_plans_finished(self, n: int):
+        self.refresh()
+
     def refresh(self):
         self._all_items = decors_api.list_decors()
         self._apply_filter()
+        self._refresh_floor_plans()
 
     def _apply_filter(self):
         cat = self._cat_filter.currentText()

@@ -2095,6 +2095,34 @@ _FR_TO_EN: dict[str, str] = {
     "Générer depuis Storyboard":                 "Generate from Storyboard",
     "Modifier des clips":                        "Edit clips",
     "Vidéothèque":                               "Video Library",
+
+    # ── Studio IA — Musique IA + Image IA (2026-06-15) ────────────────────────
+    "Musique IA":                                "AI Music",
+    "Image IA":                                  "AI Image",
+    "Compose la musique de tes scènes : score instrumental ou chanson "
+    "avec paroles, via les meilleurs moteurs de fal.ai.":
+        "Compose the music for your scenes: instrumental score or song with "
+        "lyrics, via the best fal.ai engines.",
+    "MOTEUR DE GÉNÉRATION":                      "GENERATION ENGINE",
+    "STYLE / DESCRIPTION":                       "STYLE / DESCRIPTION",
+    "PAROLES (optionnel)":                       "LYRICS (optional)",
+    "Décris la musique (en anglais de préférence). "
+    "Ex. « epic orchestral score, slow build, strings and brass, cinematic, tense »":
+        "Describe the music (preferably in English). "
+        "E.g. « epic orchestral score, slow build, strings and brass, cinematic, tense »",
+    "Paroles à chanter. Laisse vide pour un morceau instrumental.":
+        "Lyrics to sing. Leave empty for an instrumental track.",
+    "Générer la musique":                        "Generate music",
+    "Décris d'abord la musique à générer.":      "Describe the music to generate first.",
+    "Ouvre le dossier des musiques générées.":   "Opens the generated music folder.",
+
+    # ── Plan des décors (vue de dessus, Mise en scène / Plan de feu) ───────────
+    "Plan des décors":                           "Set floor plans",
+    "— vus de dessus, synchronisés avec Mise en scène et Plan de feu":
+        "— top-down, synced with Staging and Lighting plan",
+    "Générer les plans manquants":               "Generate missing plans",
+    "à générer":                                 "to generate",
+    "Génération…":                               "Generating…",
     "Choisir une référence visuelle":            "Choose a visual reference",
     "Générer depuis les images de référence":    "Generate from reference images",
     "Notice audio":                              "Audio notice",

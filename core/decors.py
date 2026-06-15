@@ -84,6 +84,7 @@ def save_decor(data: dict) -> dict:
         data.setdefault("category", "Autre")
         data.setdefault("prompt", "")
         data.setdefault("image_path", "")
+        data.setdefault("floor_plan", "")   # plan vu de dessus (Mise en scène / Plan de feu)
         data.setdefault("ref_paths", [])
         data.setdefault("assigned_to", [])
         data.setdefault("assigned_sequences", [])
@@ -109,3 +110,26 @@ def delete_decor(decor_id: str):
     index = _load_index()
     index = [d for d in index if d.get("id") != decor_id]
     _save_index(index)
+
+
+def set_floor_plan(decor_id: str, path: str) -> bool:
+    """Associe un plan vu de dessus (image) à un décor — source unique partagée
+    par la page Décors, la Mise en scène et le Plan de feu. True si écrit."""
+    index = _load_index()
+    for decor in index:
+        if decor.get("id") == decor_id:
+            decor["floor_plan"] = path or ""
+            decor["updated_at"] = datetime.now().isoformat()
+            _save_index(index)
+            return True
+    return False
+
+
+def floor_plan_for_shot(shot: dict) -> str:
+    """Plan vu de dessus à utiliser pour un plan du storyboard : celui de son
+    décor assigné (decor_id), sinon vide."""
+    did = (shot or {}).get("decor_id")
+    if not did:
+        return ""
+    dec = get_decor(did)
+    return (dec or {}).get("floor_plan", "") if dec else ""

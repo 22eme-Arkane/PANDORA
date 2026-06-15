@@ -2089,3 +2089,80 @@ class GenerateFloorPlanWorker(QThread):
             self.finished.emit(path)
         except Exception as e:
             self.failed.emit(humanize_api_error(f"Erreur plan vu de dessus : {e}"))
+
+
+def _floor_plan_prompt(base_en: str) -> str:
+    """Prompt commun (plan d'architecte vu de dessus)."""
+    return (
+        f"TOP-DOWN architectural floor plan (bird's eye view, seen from directly "
+        f"above) of: {base_en}. Clean schematic blueprint / architect plan style: "
+        f"walls, doors, windows and furniture drawn from above with simple lines and "
+        f"flat tones, neutral background, clear and uncluttered, no people, no camera, "
+        f"no text labels. Square framing."
+    )
+
+
+class GenerateFloorPlansWorker(QThread):
+    """Génère EN LOT les plans vus de dessus (un par job). Sert à l'automatisation
+    lors de la génération/identification des décors depuis le scénario.
+
+    jobs : liste de {"id": <opaque>, "prompt": str, "name": str}.
+    Émet plan_done(job_id, path) pour chaque job (path="" si mock/échec), puis
+    finished(n) avec le nombre de plans réellement générés.
+    """
+    progress  = pyqtSignal(int, str)
+    plan_done = pyqtSignal(str, str)   # job_id, path ("" si non généré)
+    finished  = pyqtSignal(int)
+
+    def __init__(self, jobs: list):
+        super().__init__()
+        self._jobs = list(jobs or [])
+
+    def run(self):
+        cfg = load_config()
+        key = cfg.get("api_key", "").strip()
+        n = len(self._jobs)
+        if not key:
+            # Mode mock : aucun plan généré (cohérent avec le reste de l'app).
+            for j in self._jobs:
+                self.plan_done.emit(str(j.get("id", "")), "")
+            self.finished.emit(0)
+            return
+        try:
+            import fal_client
+            import requests
+            from core.lang import translate_to_english
+            from core.staging import images_dir
+            os.environ["FAL_KEY"] = key
+        except Exception as e:
+            self.failed_safe(e, n)
+            return
+
+        made = 0
+        for i, j in enumerate(self._jobs):
+            jid = str(j.get("id", ""))
+            try:
+                self.progress.emit(int((i / max(1, n)) * 100),
+                                   f"Plan {i + 1}/{n} — {j.get('name', '')}")
+                base = j.get("prompt") or j.get("name") or "an interior room"
+                base_en = translate_to_english(base) if base else "an interior room"
+                ep, args = _build_image_args(_floor_plan_prompt(base_en), "1:1", "1K", cfg, 1)
+                result = fal_client.subscribe(ep, arguments=args)
+                url  = _extract_image_url(result)
+                data = requests.get(url, timeout=180).content
+                safe = "".join(c for c in j.get("name", "plan")
+                               if c.isalnum() or c in " -_").strip() or "plan"
+                path = os.path.join(images_dir(), f"{safe}_floorplan_{int(time.time())}_{i}.png")
+                with open(path, "wb") as f:
+                    f.write(data)
+                made += 1
+                self.plan_done.emit(jid, path)
+            except Exception:
+                self.plan_done.emit(jid, "")
+        self.progress.emit(100, "Plans terminés")
+        self.finished.emit(made)
+
+    def failed_safe(self, e, n):
+        for j in self._jobs:
+            self.plan_done.emit(str(j.get("id", "")), "")
+        self.finished.emit(0)

@@ -23,18 +23,25 @@ class _Token(QGraphicsEllipseItem):
     """Jeton déplaçable lié à une entrée du modèle (dict avec x, y[, angle])."""
 
     def __init__(self, canvas, kind: str, label: str, model: dict,
-                 color: str, has_dir: bool = False):
+                 color: str, has_dir: bool = False, reference: bool = False):
         super().__init__(-_R, -_R, 2 * _R, 2 * _R)
         self._canvas  = canvas
         self.kind     = kind
         self.model    = model
         self.has_dir  = has_dir
+        self.reference = reference   # affiché en référence (non éditable, estompé)
         self.setBrush(QBrush(QColor(color)))
         self.setPen(QPen(QColor("#07080f"), 2))
-        self.setZValue(10)
-        self.setFlag(QGraphicsEllipseItem.GraphicsItemFlag.ItemIsMovable, True)
-        self.setFlag(QGraphicsEllipseItem.GraphicsItemFlag.ItemIsSelectable, True)
-        self.setFlag(QGraphicsEllipseItem.GraphicsItemFlag.ItemSendsGeometryChanges, True)
+        if reference:
+            # Référence (ex. caméra/acteurs visibles dans le Plan de feu) : non
+            # déplaçable, estompée, sous les jetons actifs.
+            self.setZValue(5)
+            self.setOpacity(0.40)
+        else:
+            self.setZValue(10)
+            self.setFlag(QGraphicsEllipseItem.GraphicsItemFlag.ItemIsMovable, True)
+            self.setFlag(QGraphicsEllipseItem.GraphicsItemFlag.ItemIsSelectable, True)
+            self.setFlag(QGraphicsEllipseItem.GraphicsItemFlag.ItemSendsGeometryChanges, True)
         self.setPos(model.get("x", 0.5) * _SIZE, model.get("y", 0.5) * _SIZE)
 
         txt = QGraphicsSimpleTextItem(label, self)
@@ -115,6 +122,19 @@ class StagingCanvas(QGraphicsView):
                 self._scene.addItem(_Token(self, "prop", _initials(p.get("name", "?")),
                                            p, CP.get("text_dim", "#5a6a7a")))
         else:
+            # Plan de feu : on AFFICHE la caméra et les acteurs placés en Mise en
+            # scène (référence non éditable, estompée) pour éclairer juste.
+            cam = record.get("camera")
+            if cam:
+                self._scene.addItem(_Token(self, "camera", "CAM", cam,
+                                           CP["accent"], has_dir=True, reference=True))
+            for a in record.get("actors", []):
+                self._scene.addItem(_Token(self, "actor", _initials(a.get("name", "?")),
+                                           a, CP.get("green", "#3ddc97"), reference=True))
+            for p in record.get("props", []):
+                self._scene.addItem(_Token(self, "prop", _initials(p.get("name", "?")),
+                                           p, CP.get("text_dim", "#5a6a7a"), reference=True))
+            # Lumières (éditables)
             for l in record.get("lights", []):
                 self._scene.addItem(_Token(self, "light", _initials(l.get("name", "L")),
                                            l, "#f5c518", has_dir=True))

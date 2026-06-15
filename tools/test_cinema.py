@@ -215,14 +215,14 @@ def studio_sound_design_upscaling():
     import ui.seedance_widget as SW
     src = inspect.getsource(SW)
     assert (src.index("addTab(self.tab_engines")
-            < src.index("addTab(self.tab_sound")
             < src.index("addTab(self.tab_upscale")
+            < src.index("addTab(self.tab_sound")
             < src.index("addTab(self.tab_library")), \
-        "ordre : Génération directe → Sound Design → Upscaling → Vidéothèque"
+        "ordre : Génération directe → Upscaling → Sound Design → Vidéothèque"
     assert "set_library_provider(self.tab_library.list_all_clips)" in src, \
         "Upscaling relié à la Vidéothèque Cinéma"
-    assert "self.tab_sound, self.tab_upscale" in src, \
-        "Sound Design + Upscaling plafonnés/centrés comme les autres formulaires"
+    assert "self.tab_sound, self.tab_music, self.tab_upscale" in src, \
+        "Sound Design + Musique IA + Upscaling plafonnés/centrés comme les autres formulaires"
     # Copies Cinéma : aucun IMPORT de fichier Live (séparation stricte)
     import ui.tab_upscale as UP
     import ui.tab_sound_design as SD
@@ -723,6 +723,113 @@ def mise_en_scene_plan_de_feu():
     # Synchro des prompts : tient compte de la mise en scène
     sp = inspect.getsource(__import__("api.screenplay", fromlist=["_"]))
     assert "mise_en_scene" in sp and "import core.staging" in sp
+
+
+@test
+def studio_musique_ia_et_image_ia():
+    """Studio IA : onglets « Musique IA » (multi-moteurs fal.ai, défaut = le plus
+    performant) et « Image IA » (panneau Studio Images partagé, source unique)."""
+    import ui.seedance_widget as SW
+    src = inspect.getsource(SW)
+    # Ordre groupé : … Upscaling (fin G1) → Sound Design → Musique IA (G2) → Image IA (G3)
+    assert (src.index("addTab(self.tab_upscale")
+            < src.index("addTab(self.tab_sound")
+            < src.index("addTab(self.tab_music")
+            < src.index("addTab(self.tab_image")), \
+        "ordre groupé : Upscaling → Sound Design → Musique IA → Image IA"
+    # Barre d'onglets groupée : trait vertical en fin de groupe (façon dashboard)
+    assert "_GroupedTabBar" in src and "set_group_ends" in src, \
+        "barre d'onglets avec séparateurs de groupes"
+    assert "set_group_ends({3, 5, 6})" in src, \
+        "traits après Upscaling (G1), Musique IA (G2), Image IA (G3)"
+
+    # ── Musique IA : catalogue multi-moteurs + défaut performant ──────────────
+    import api.music as M
+    assert len(M.MUSIC_ENGINES) >= 5, "plusieurs moteurs musique"
+    assert M.default_engine() in M.MUSIC_ENGINES, "défaut valide"
+    assert M.MUSIC_ENGINES[M.default_engine()].get("default"), "un moteur marqué défaut"
+    # Tous les endpoints sont des modèles fal.ai
+    for k, spec in M.MUSIC_ENGINES.items():
+        assert "/" in spec["endpoint"], f"endpoint fal.ai pour {k}"
+    # Worker : mock sans clé (finished(\"\")), pas d'appel réseau
+    w = M.MusicWorker(M.default_engine(), "epic orchestral score", duration=20)
+    assert hasattr(w, "finished") and hasattr(w, "failed")
+    assert "fal_client.subscribe" in inspect.getsource(M.MusicWorker._real), "appel réel fal.ai"
+    # Onglet UI instanciable, moteur par défaut sélectionné
+    from ui.tab_music import TabMusic
+    tm = TabMusic()
+    assert tm._engine.currentData() == M.default_engine(), "défaut pré-sélectionné dans l'UI"
+    assert tm._engine.count() == len(M.ENGINE_ORDER), "tous les moteurs listés"
+    # Durée : tirette (slider) + saisie directe SYNCHRONISÉES
+    from PyQt6.QtWidgets import QSlider, QSpinBox
+    assert isinstance(tm._dur_slider, QSlider) and isinstance(tm._duration, QSpinBox), \
+        "tirette + saisie de durée"
+    tm._dur_slider.setValue(40)
+    assert tm._duration.value() == 40, "saisie suit la tirette"
+    tm._duration.setValue(25)
+    assert tm._dur_slider.value() == 25, "tirette suit la saisie"
+    # Aucun import de fichier Live (séparation stricte)
+    for line in inspect.getsource(__import__("ui.tab_music", fromlist=["_"])).splitlines():
+        if line.strip().startswith(("from ui.", "import ui.")):
+            assert "_live" not in line, "tab_music : import Live interdit"
+
+    # ── Image IA : panneau Studio Images partagé (source unique) ──────────────
+    from ui.tab_image import TabImage
+    ti = TabImage()
+    assert ti.panel is not None, "StudioImagesPanel chargé dans l'onglet"
+    assert type(ti.panel).__name__ == "StudioImagesPanel", "même classe que l'app autonome"
+    # Discussion Claude repliable à droite (ouvrable/fermable) + génération recentrée
+    assert hasattr(ti.panel, "_chat_panel") and hasattr(ti.panel, "_chat_toggle"), \
+        "chat Claude repliable à droite"
+    tog = ti.panel._chat_toggle
+    assert tog._open is True, "discussion ouverte par défaut"
+    # Simule un clic gauche sur la poignée
+    from PyQt6.QtCore import Qt as _Qt
+    tog.mousePressEvent(type("E", (), {"button": lambda s: _Qt.MouseButton.LeftButton})())
+    assert tog._open is False and ti.panel._chat_panel.isHidden(), "se ferme au clic"
+
+
+@test
+def decors_plan_auto_et_sync():
+    """Plan vu de dessus stocké PAR DÉCOR (source unique) : auto-généré à la
+    création/identification des décors, affiché dans « Plan des décors », réutilisé
+    par Mise en scène ET Plan de feu (qui montre aussi caméra + acteurs)."""
+    import core.decors as d
+    # Champ floor_plan + helpers
+    assert hasattr(d, "set_floor_plan") and hasattr(d, "floor_plan_for_shot")
+    src_save = inspect.getsource(d.save_decor)
+    assert '"floor_plan"' in src_save or "'floor_plan'" in src_save, "défaut floor_plan"
+
+    # Worker batch
+    from api.nano_banana import GenerateFloorPlansWorker
+    assert hasattr(GenerateFloorPlansWorker, "plan_done")
+
+    # Auto-génération depuis le scénario (décors uniquement)
+    eg = inspect.getsource(__import__("ui.dialog_extract_generate", fromlist=["_"]))
+    assert "_auto_floor_plans = True" in eg, "auto plans activé pour les décors"
+    assert "_maybe_start_floor_plans" in eg and "set_floor_plan" in eg
+
+    # Page Décors : section « Plan des décors » synchronisée
+    import ui.page_decors as PD
+    pdsrc = inspect.getsource(PD)
+    assert "_build_floor_plans_section" in pdsrc and "Plan des décors" in pdsrc
+    assert "floor_plan" in pdsrc, "lit le plan du décor (source unique)"
+
+    # Mise en scène / Plan de feu : utilisent le plan du décor + enregistrent dessus
+    ps = inspect.getsource(__import__("ui.page_staging", fromlist=["_"]))
+    assert "floor_plan_for_shot" in ps, "Mise en scène lit le plan du décor"
+    assert "set_floor_plan" in ps, "Générer le plan l'enregistre sur le décor"
+
+    # Plan de feu montre caméra + acteurs (référence non éditable)
+    from ui.staging_canvas import StagingCanvas
+    cv = StagingCanvas(mode="lighting")
+    rec = {"plan_image": "", "camera": {"x": 0.5, "y": 0.8, "angle": 0.0},
+           "actors": [{"name": "Jean", "x": 0.3, "y": 0.5}], "props": [], "lights": []}
+    cv.load(rec)
+    from ui.staging_canvas import _Token
+    refs = [it for it in cv._scene.items()
+            if isinstance(it, _Token) and getattr(it, "reference", False)]
+    assert len(refs) >= 2, "caméra + acteurs visibles en Plan de feu"
 
 
 # ══════════════════════════════════════════════════════════════════════════════

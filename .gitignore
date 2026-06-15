@@ -32,6 +32,10 @@ data/camera_prefs.json
 data/recent_projects.json
 data/migrated_*.flag
 data/Seedance/
+data/music/
+data/sound_design/
+data/staging/
+data/decor_sync/
 
 # Données PANDORA | Live générées
 data/live_seq_*/
