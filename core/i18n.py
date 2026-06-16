@@ -2137,6 +2137,15 @@ _FR_TO_EN: dict[str, str] = {
     "Synchroniser la mise en scène":             "Sync staging",
     "Synchroniser le plan de feu":               "Sync lighting plan",
     "Générer les décors + plan":                 "Generate sets + plan",
+    "Mise en page PANDORA":                      "PANDORA layout",
+    "◈  Mettre dans « Mise en page PANDORA »":    "◈  Put into « PANDORA layout »",
+
+    # ── Draw-to-Video (Modifier des clips) ─────────────────────────────────────
+    "Dessiner sur la vidéo":                     "Draw on the video",
+    "Dessiner sur la vidéo — Draw-to-Video":     "Draw on the video — Draw-to-Video",
+    "Instant :":                                 "Time:",
+    "Gomme":                                     "Eraser",
+    "Effacer":                                   "Clear",
     "Choisir une référence visuelle":            "Choose a visual reference",
     "Générer depuis les images de référence":    "Generate from reference images",
     "Notice audio":                              "Audio notice",

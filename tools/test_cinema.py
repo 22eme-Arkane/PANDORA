@@ -971,6 +971,22 @@ def transcode_h264_et_starlight2():
     assert not any("Astra" in v for v in vals), "Astra non dispo sur fal.ai"
 
 
+@test
+def draw_to_video():
+    """Draw-to-Video : dessin sur une image du clip → référence + prompt préfixé."""
+    import tempfile
+    from ui.dialog_draw_video import DrawVideoDialog, _DrawCanvas
+    d = DrawVideoDialog("absent.mp4", tempfile.gettempdir())
+    assert d._canvas.has_base(), "canevas avec image de fond (repli blanc si ffmpeg/clip absent)"
+    from ui.tab_davinci_edit import TabDavinciEdit
+    t = TabDavinciEdit()
+    assert hasattr(t, "_btn_draw") and hasattr(t, "_on_draw_to_video") and hasattr(t, "_draw_images")
+    src = inspect.getsource(TabDavinciEdit)
+    assert "Remplace les dessins" in src, "consigne préfixée au prompt"
+    assert "_draw_images" in src and "ref_images.append(_draw_img)" in src, \
+        "image annotée envoyée comme référence"
+
+
 # ══════════════════════════════════════════════════════════════════════════════
 # Runner
 # ══════════════════════════════════════════════════════════════════════════════

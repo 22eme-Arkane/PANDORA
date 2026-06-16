@@ -354,6 +354,7 @@ class TabDavinciEdit(QScrollArea):
         self._last_seed:        int | None               = None
         self._global_ref_image: str                      = ""
         self._per_clip_ref_images: dict[int, str]        = {}
+        self._draw_images:      dict[int, str]           = {}   # Draw-to-Video : image annotée par clip
         self._mock_count:       int                      = 0
         self._failed_clips:     list[tuple[int, str]]    = []
         self._thumb_workers:    list[_ThumbWorker]       = []
@@ -719,6 +720,21 @@ class TabDavinciEdit(QScrollArea):
         self._global_ref_square.picked.connect(lambda p: setattr(self, '_global_ref_image', p))
         self._global_ref_square.cleared.connect(lambda: setattr(self, '_global_ref_image', ''))
         _pg_ref_row.addWidget(self._global_ref_square)
+
+        # Draw-to-Video — dessiner sur le clip sélectionné pour guider l'effet
+        self._btn_draw = QPushButton("✏  " + translate("Dessiner sur la vidéo"))
+        self._btn_draw.setFixedHeight(34)
+        self._btn_draw.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._btn_draw.setToolTip(translate(
+            "Draw-to-Video : choisis un clip, dessine les zones de l'effet "
+            "(feu, fumée…), puis génère — l'effet est appliqué là où tu as dessiné."))
+        self._btn_draw.setStyleSheet(
+            f"QPushButton{{background:transparent;color:{C['accent']};"
+            f"border:1px solid {C['accent']};border-radius:8px;font-size:11px;font-weight:700;padding:0 14px;}}"
+            f"QPushButton:hover{{background:rgba(78,205,196,0.12);}}")
+        self._btn_draw.clicked.connect(self._on_draw_to_video)
+        _pg_ref_row.addWidget(self._btn_draw)
+
         _pg_ref_row.addStretch()
         _pg_lay.addLayout(_pg_ref_row)
         body_prompt.addWidget(self._pg_frame)
@@ -1129,6 +1145,9 @@ class TabDavinciEdit(QScrollArea):
     # ── Chargement des clips ──────────────────────────────────────────────────
 
     def _load_clips(self, clips: list):
+        # Les images Draw-to-Video sont indexées par position : la liste de clips
+        # change → on repart à zéro (indices obsolètes).
+        self._draw_images = {}
         # Déconnecte les workers de miniatures précédents pour éviter les callbacks périmés
         for w in self._thumb_workers:
             try:
@@ -1294,6 +1313,43 @@ class TabDavinciEdit(QScrollArea):
     def _on_per_clip_ref_cleared(self):
         if self._active_clip_idx is not None:
             self._per_clip_ref_images.pop(self._active_clip_idx, None)
+
+    # ── Draw-to-Video ─────────────────────────────────────────────────────────
+
+    def _draw_dir(self) -> str:
+        try:
+            from core.context import get_data_root
+            d = os.path.join(get_data_root(), "draw_to_video")
+        except Exception:
+            from core.pandora_dirs import get_bin_dir
+            d = get_bin_dir("draw_to_video")
+        os.makedirs(d, exist_ok=True)
+        return d
+
+    def _on_draw_to_video(self):
+        idx = self._active_clip_idx
+        if idx is None and len(self._clips_data) == 1:
+            idx = 0
+        if idx is None or idx >= len(self._clips_data):
+            QMessageBox.information(
+                self, "Draw-to-Video",
+                "Sélectionne d'abord un clip (clique sur sa vignette).")
+            return
+        clip = self._clips_data[idx]
+        path = clip.get("file_path", "")
+        if not (path and os.path.isfile(path)):
+            QMessageBox.warning(self, "Draw-to-Video", "Clip introuvable sur le disque.")
+            return
+        from ui.dialog_draw_video import DrawVideoDialog
+        dlg = DrawVideoDialog(path, self._draw_dir(), self)
+        if dlg.exec() == DrawVideoDialog.DialogCode.Accepted:
+            rp = dlg.result_path()
+            if rp and os.path.isfile(rp):
+                self._draw_images[idx] = rp
+                QMessageBox.information(
+                    self, "Draw-to-Video",
+                    f"Dessin enregistré pour « {clip.get('name', 'clip')} ».\n"
+                    "Lance la génération : l'effet sera appliqué aux zones dessinées.")
 
     # ── Enhance Claude — prompt global ────────────────────────────────────────
 
@@ -1649,6 +1705,15 @@ class TabDavinciEdit(QScrollArea):
         creative_suffix = self._creative.get_creative_suffix()
         prompt = " ".join(p for p in [base_prompt, creative_suffix, self._style_suffix] if p)
 
+        # Draw-to-Video : consigne préfixée + image annotée envoyée comme référence.
+        _draw_img = self._draw_images.get(clip_idx, "")
+        if _draw_img and os.path.isfile(_draw_img):
+            prompt = (
+                "Remplace les dessins (marques colorées) tracés sur l'image de "
+                "référence par l'effet décrit, exactement aux endroits dessinés. "
+                + prompt
+            ).strip()
+
         seed = self._get_seed()
 
         video_path = clip.get("file_path", "")
@@ -1678,6 +1743,9 @@ class TabDavinciEdit(QScrollArea):
         per_ref = self._per_clip_ref_images.get(clip_idx, "")
         if per_ref and os.path.isfile(per_ref) and per_ref not in ref_images:
             ref_images.append(per_ref)
+        # Image annotée Draw-to-Video → référence (guide l'effet)
+        if _draw_img and os.path.isfile(_draw_img) and _draw_img not in ref_images:
+            ref_images.append(_draw_img)
         if ref_images:
             params["ref_images"] = ref_images
 
