@@ -232,41 +232,144 @@ class StudioImagesPanel(QWidget):
     def _build_topbar(self):
         bar = QHBoxLayout()
         # (titre retiré — l'onglet « Image IA » fait déjà office de titre)
+        # (bouton de configuration des clés retiré — clés gérées dans Paramètres)
         bar.addStretch(1)
 
-        # Projets
-        bar.addWidget(self._mini_label("Projet"))
-        self._project_combo = QComboBox()
-        self._project_combo.setMinimumWidth(200)
-        self._project_combo.currentIndexChanged.connect(self._on_project_change)
-        bar.addWidget(self._project_combo)
+        # Sauvegarder (jaune) / Ouvrir (bleu) — session Image IA sauvegardée
+        # physiquement dans <projet>/data/Image IA/ (comme Scénario / Storyboard).
+        _yellow, _blue = "#f5c518", "#4aa3ff"
+        self._btn_img_save = QPushButton("💾  Sauvegarder")
+        self._btn_img_save.setToolTip("Sauvegarder cette session Image IA sous un nom")
+        self._btn_img_save.setStyleSheet(
+            f"QPushButton{{background:transparent;color:{_yellow};"
+            f"border:1px solid {_yellow};border-radius:7px;font-size:11px;font-weight:700;padding:6px 14px;}}"
+            f"QPushButton:hover{{background:rgba(245,197,24,0.12);}}")
+        self._btn_img_save.clicked.connect(self._on_save_session)
+        bar.addWidget(self._btn_img_save)
 
-        new_btn = QPushButton("✚")
-        new_btn.setObjectName("secondary")
-        new_btn.setToolTip("Nouveau projet")
-        new_btn.setFixedWidth(40)
-        new_btn.clicked.connect(self._new_project)
-        bar.addWidget(new_btn)
+        self._btn_img_open = QPushButton("📂  Ouvrir")
+        self._btn_img_open.setToolTip("Ouvrir une session Image IA sauvegardée")
+        self._btn_img_open.setStyleSheet(
+            f"QPushButton{{background:transparent;color:{_blue};"
+            f"border:1px solid {_blue};border-radius:7px;font-size:11px;font-weight:700;padding:6px 14px;}}"
+            f"QPushButton:hover{{background:rgba(74,163,255,0.12);}}")
+        self._btn_img_open.clicked.connect(self._on_open_session)
+        bar.addWidget(self._btn_img_open)
 
-        self._save_proj_btn = QPushButton("💾")
-        self._save_proj_btn.setObjectName("secondary")
-        self._save_proj_btn.setToolTip("Enregistrer le projet")
-        self._save_proj_btn.setFixedWidth(40)
-        self._save_proj_btn.clicked.connect(self._save_project_clicked)
-        bar.addWidget(self._save_proj_btn)
-
-        keys = QPushButton("⚙  Clés API")
-        keys.setObjectName("secondary")
-        keys.clicked.connect(self._open_keys)
-        bar.addWidget(keys)
-
-        self._refresh_projects()
         return bar
 
     def _mini_label(self, text):
         lbl = QLabel(text)
         lbl.setStyleSheet(f"color: {CP['text_secondary']}; font-size: 11px; font-weight: 600;")
         return lbl
+
+    # ── Sauvegarder / Ouvrir une session Image IA (dossier « Image IA ») ───────
+
+    def _img_saves_dir(self) -> str:
+        """Dossier des sessions Image IA : <projet>/data/Image IA/ si embarqué
+        dans PANDORA, sinon le dossier de sortie configuré (app autonome)."""
+        try:
+            from core.context import get_data_root
+            base = get_data_root()
+        except Exception:
+            base = self.cfg.get("output_dir") or cfg_mod.default_output_dir()
+        d = os.path.join(base, "Image IA")
+        os.makedirs(d, exist_ok=True)
+        return d
+
+    def _session_dict(self) -> dict:
+        return {
+            "settings": {
+                "image_model": self._model.currentData(),
+                "format":      self._format.currentData(),
+                "resolution":  self._res.currentText(),
+                "custom_w":    self._cw.value(),
+                "custom_h":    self._ch.value(),
+                "prompt":      self._prompt.toPlainText(),
+            },
+            "history":    self._history,
+            "last_image": self._current_path,
+            "ref_paths":  self._ref_paths,
+        }
+
+    def _on_save_session(self):
+        import json
+        name, ok = QInputDialog.getText(self, "Sauvegarder", "Nom de la session :")
+        if not (ok and name.strip()):
+            return
+        safe = "".join(c for c in name.strip() if c.isalnum() or c in " -_").strip() or "image"
+        try:
+            with open(os.path.join(self._img_saves_dir(), safe + ".json"), "w",
+                      encoding="utf-8") as f:
+                json.dump(self._session_dict(), f, ensure_ascii=False, indent=2)
+            self._status.setText(f"Session « {name.strip()} » sauvegardée ✓")
+        except Exception as e:
+            QMessageBox.critical(self, "Erreur", f"Échec de la sauvegarde : {e}")
+
+    def _on_open_session(self):
+        import json
+        d = self._img_saves_dir()
+        try:
+            names = sorted(f[:-5] for f in os.listdir(d) if f.endswith(".json"))
+        except Exception:
+            names = []
+        if not names:
+            QMessageBox.information(self, "Ouvrir", "Aucune session Image IA sauvegardée.")
+            return
+        name, ok = QInputDialog.getItem(self, "Ouvrir une session", "Session :",
+                                        names, 0, False)
+        if not (ok and name):
+            return
+        try:
+            with open(os.path.join(d, name + ".json"), encoding="utf-8") as f:
+                data = json.load(f)
+        except Exception as e:
+            QMessageBox.critical(self, "Erreur", f"Échec de l'ouverture : {e}")
+            return
+        self._load_session_dict(data)
+        self._status.setText(f"Session « {name} » ouverte ✓")
+
+    def _load_session_dict(self, data: dict):
+        s = data.get("settings", {})
+        if s.get("image_model"):
+            self._select_data(self._model, s["image_model"])
+        if s.get("format"):
+            self._select_data(self._format, s["format"])
+        if s.get("resolution"):
+            self._res.setCurrentText(s["resolution"])
+        if s.get("custom_w"):
+            self._cw.setValue(int(s["custom_w"]))
+        if s.get("custom_h"):
+            self._ch.setValue(int(s["custom_h"]))
+        self._custom_row.setVisible(self._format.currentData() == "free")
+        self._prompt.setPlainText(s.get("prompt", ""))
+
+        self._history = data.get("history", [])
+        self._refs_in_chat = set()
+        for m in self._history:
+            c = m.get("content")
+            if isinstance(c, list):
+                for it in c:
+                    if it.get("t") == "image":
+                        self._refs_in_chat.add(it.get("path"))
+        self._rebuild_chat_view()
+
+        self._pending_images = []
+        self._chat_attachments = []
+        self._refresh_attach()
+        self._ref_paths = [p for p in data.get("ref_paths", []) if p and os.path.isfile(p)]
+        self._refresh_refs()
+        self._persist_refs()
+        last = data.get("last_image", "")
+        if last and os.path.isfile(last):
+            self._current_path = last
+            self._show_preview(last)
+            self._discuss_btn.setEnabled(True)
+        else:
+            self._current_path = ""
+            self._preview.setPixmap(QPixmap())
+            self._preview.setText("En attente d'aperçu")
+            self._discuss_btn.setEnabled(False)
 
     # ── Panneau gauche : génération ──────────────────────────────────────────
     def _build_left(self):
@@ -408,14 +511,14 @@ class StudioImagesPanel(QWidget):
         self._status.setStyleSheet(f"color: {CP['text_secondary']}; font-size: 11px;")
         lay.addWidget(self._status)
 
-        # Aperçu — n'apparaît QUE lorsqu'une image est générée
-        self._preview = QLabel("")
+        # Aperçu — TOUJOURS visible (placeholder si vide) : il absorbe l'espace
+        # vertical et garde la mise en page compacte (sinon gros trous).
+        self._preview = QLabel("En attente d'aperçu")
         self._preview.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self._preview.setMinimumHeight(280)
         self._preview.setStyleSheet(
             f"background: {CP['bg0']}; border: 1px solid {CP['border']}; "
             f"border-radius: 10px; color: {CP['text_dim']};")
-        self._preview.setVisible(False)
         lay.addWidget(self._preview, 1)
 
         # Actions image
@@ -771,8 +874,7 @@ class StudioImagesPanel(QWidget):
         self._persist_refs()
         self._rebuild_chat_view()
         self._preview.setPixmap(QPixmap())
-        self._preview.setText("")
-        self._preview.setVisible(False)
+        self._preview.setText("En attente d'aperçu")
         self._discuss_btn.setEnabled(False)
         # vide l'historique de miniatures
         while self._hist_row.count() > 1:
