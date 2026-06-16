@@ -64,11 +64,13 @@ _FALLBACK = {
     "settings.png":    "⚙",
 }
 
-# Toutes les icônes sont affichées telles quelles (sans re-teintage QPainter)
+# Toutes les icônes sont affichées telles quelles (sans re-teintage QPainter) :
+# ce sont des badges colorés (carré bleu marine + dessin blanc), pas des
+# silhouettes — les teinter les écraserait en un aplat uni.
 _COLOR_ICONS: frozenset[str] = frozenset({
-    "projets.png", "scenario.png", "storyboard.png", "castings.png",
-    "decors.png", "accesoires.png", "HMC.png", "vehicule.png",
-    "camera.png", "doublage.png", "seedance.png", "settings.png",
+    "projets.png", "scenario.png", "storyboard.png", "mise_en_scene.png",
+    "castings.png", "decors.png", "accesoires.png", "HMC.png", "vehicule.png",
+    "camera.png", "plan_de_feu.png", "doublage.png", "seedance.png", "settings.png",
 })
 
 

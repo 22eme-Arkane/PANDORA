@@ -2143,10 +2143,11 @@ _FR_TO_EN: dict[str, str] = {
     # ── Draw-to-Video (Modifier des clips) ─────────────────────────────────────
     "Dessiner sur la vidéo":                     "Draw on the video",
     "Dessiner sur la vidéo — Draw-to-Video":     "Draw on the video — Draw-to-Video",
-    "Instant :":                                 "Time:",
+    "Time Code :":                               "Timecode:",
     "Gomme":                                     "Eraser",
     "Effacer":                                   "Clear",
     "Choisir une référence visuelle":            "Choose a visual reference",
+    "Ajouter des images de référence":           "Add reference images",
     "Générer depuis les images de référence":    "Generate from reference images",
     "Notice audio":                              "Audio notice",
     "Prise de vue réelle":                       "Real footage",

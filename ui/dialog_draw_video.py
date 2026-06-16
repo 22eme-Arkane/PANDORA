@@ -53,6 +53,33 @@ def _extract_frame(path: str, t: float, out_path: str) -> bool:
         return False
 
 
+def _probe_fps(path: str) -> float:
+    """Cadence (images/seconde) du flux vidéo, pour un vrai time code SMPTE."""
+    try:
+        out = subprocess.run(
+            [get_ffprobe_exe(), "-v", "error", "-select_streams", "v:0",
+             "-show_entries", "stream=r_frame_rate", "-of", "default=nw=1:nk=1", path],
+            capture_output=True, text=True, timeout=30, creationflags=_NO_WINDOW)
+        val = (out.stdout or "").strip()
+        if "/" in val:
+            num, den = val.split("/", 1)
+            den = float(den)
+            return float(num) / den if den else 0.0
+        return float(val) if val else 0.0
+    except Exception:
+        return 0.0
+
+
+def _format_tc(frame: int, fps: float) -> str:
+    """Index d'image → time code SMPTE HH:MM:SS:FF."""
+    f = max(1, int(round(fps)))
+    frame = max(0, int(frame))
+    total_s, ff = divmod(frame, f)
+    hh, rem = divmod(total_s, 3600)
+    mm, ss = divmod(rem, 60)
+    return f"{hh:02d}:{mm:02d}:{ss:02d}:{ff:02d}"
+
+
 class _DrawCanvas(QWidget):
     """Image de fond + calque de dessin transparent (trait libre)."""
 
@@ -70,9 +97,26 @@ class _DrawCanvas(QWidget):
     def set_base(self, pixmap: QPixmap):
         scaled = pixmap.scaledToWidth(_DISPLAY_W, Qt.TransformationMode.SmoothTransformation)
         self._base = scaled
-        self._overlay = QImage(scaled.size(), QImage.Format.Format_ARGB32)
-        self._overlay.fill(Qt.GlobalColor.transparent)
+        # On PRÉSERVE le dessin en cours tant que la taille ne change pas (scrub
+        # entre images d'un même clip). Calque neuf seulement à la 1re image ou si
+        # la taille diffère.
+        if self._overlay is None or self._overlay.size() != scaled.size():
+            self._overlay = QImage(scaled.size(), QImage.Format.Format_ARGB32)
+            self._overlay.fill(Qt.GlobalColor.transparent)
         self.setFixedSize(scaled.size())
+        self.update()
+
+    def set_overlay(self, image_path: str):
+        """Recharge un calque de dessin existant (ré-édition d'un dessin précédent)."""
+        if self._base is None or not image_path or not os.path.isfile(image_path):
+            return
+        img = QImage(image_path)
+        if img.isNull():
+            return
+        if img.size() != self._base.size():
+            img = img.scaled(self._base.size(), Qt.AspectRatioMode.IgnoreAspectRatio,
+                             Qt.TransformationMode.SmoothTransformation)
+        self._overlay = img.convertToFormat(QImage.Format.Format_ARGB32)
         self.update()
 
     def clear_drawing(self):
@@ -127,16 +171,27 @@ class _DrawCanvas(QWidget):
         p.end()
         return result.save(out_path, "PNG")
 
+    def export_overlay(self, out_path: str) -> bool:
+        """Sauve le calque de dessin SEUL (transparent) → permet la ré-édition."""
+        if self._overlay is None:
+            return False
+        return self._overlay.save(out_path, "PNG")
+
 
 class DrawVideoDialog(QDialog):
     """Dialogue Draw-to-Video. result_path() = image annotée (ou '')."""
 
-    def __init__(self, clip_path: str, out_dir: str, parent=None):
+    def __init__(self, clip_path: str, out_dir: str, parent=None,
+                 prev_overlay: str = "", prev_frame: int = 0):
         super().__init__(parent)
         self._clip = clip_path
         self._out_dir = out_dir
         self._result_path = ""
+        self._overlay_path = ""              # calque seul (ré-édition)
+        self._prev_overlay = prev_overlay or ""
         self._dur = _probe_duration(clip_path)
+        self._fps = _probe_fps(clip_path) or 25.0
+        self._frame = max(0, int(prev_frame))
         self.setWindowTitle(translate("Dessiner sur la vidéo — Draw-to-Video"))
         self.setStyleSheet(f"background:{CP['bg1']};")
         self.setMinimumWidth(_DISPLAY_W + 60)
@@ -159,18 +214,21 @@ class DrawVideoDialog(QDialog):
         # ── Curseur d'instant ───────────────────────────────────────────────────
         tl = QHBoxLayout()
         tl.setSpacing(8)
-        tlbl = QLabel(translate("Instant :"))
+        tlbl = QLabel(translate("Time Code :"))
         tlbl.setStyleSheet(f"color:{CP['text_secondary']};font-size:11px;background:transparent;")
         tl.addWidget(tlbl)
         self._slider = QSlider(Qt.Orientation.Horizontal)
-        self._slider.setRange(0, max(0, int(self._dur * 10)))   # dixièmes de seconde
-        self._slider.setValue(0)
+        _total_frames = max(0, int(round(self._dur * self._fps)) - 1)   # index image
+        self._slider.setRange(0, _total_frames)
+        self._slider.setValue(min(self._frame, _total_frames))
         self._slider.sliderReleased.connect(self._reload_frame)
         tl.addWidget(self._slider, 1)
-        self._time_lbl = QLabel("0.0 s")
-        self._time_lbl.setStyleSheet(f"color:{CP['text_dim']};font-size:10px;background:transparent;")
+        self._time_lbl = QLabel(_format_tc(self._slider.value(), self._fps))
+        self._time_lbl.setStyleSheet(
+            f"color:{CP['text_dim']};font-size:11px;font-family:Consolas,monospace;"
+            f"background:transparent;")
         self._slider.valueChanged.connect(
-            lambda v: self._time_lbl.setText(f"{v/10:.1f} s"))
+            lambda v: self._time_lbl.setText(_format_tc(v, self._fps)))
         tl.addWidget(self._time_lbl)
         root.addLayout(tl)
 
@@ -228,7 +286,11 @@ class DrawVideoDialog(QDialog):
         btns.addWidget(ok)
         root.addLayout(btns)
 
-        self._reload_frame()   # charge la 1re image
+        self._reload_frame()   # charge l'image du time code courant
+        # Ré-édition : si un dessin existait déjà pour ce clip, on le restaure sur
+        # le calque (éditable) au lieu d'ouvrir un schéma vierge.
+        if self._prev_overlay:
+            self._canvas.set_overlay(self._prev_overlay)
 
     def _tlabel(self, text):
         l = QLabel(text)
@@ -252,7 +314,7 @@ class DrawVideoDialog(QDialog):
         self._canvas.eraser = self._btn_eraser.isChecked()
 
     def _reload_frame(self):
-        t = self._slider.value() / 10.0
+        t = self._slider.value() / (self._fps or 25.0)
         tmp = os.path.join(self._out_dir, "_frame_tmp.png")
         os.makedirs(self._out_dir, exist_ok=True)
         if _extract_frame(self._clip, t, tmp):
@@ -267,10 +329,23 @@ class DrawVideoDialog(QDialog):
             self._canvas.set_base(blank)
 
     def _accept(self):
-        out = os.path.join(self._out_dir, f"drawtovideo_{int(time.time())}.png")
-        if self._canvas.export(out):
+        ts = int(time.time())
+        out = os.path.join(self._out_dir, f"drawtovideo_{ts}.png")
+        if self._canvas.export(out):                       # image aplatie (réf. génération)
             self._result_path = out
+        ov = os.path.join(self._out_dir, f"drawoverlay_{ts}.png")
+        if self._canvas.export_overlay(ov):                # calque seul (ré-édition)
+            self._overlay_path = ov
+        self._frame = self._slider.value()
         self.accept()
 
     def result_path(self) -> str:
         return self._result_path
+
+    def overlay_path(self) -> str:
+        """Calque de dessin seul — à repasser en `prev_overlay` pour ré-éditer."""
+        return self._overlay_path
+
+    def frame_index(self) -> int:
+        """Index d'image choisi — à repasser en `prev_frame` pour ré-éditer."""
+        return self._frame

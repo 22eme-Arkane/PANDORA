@@ -12,8 +12,8 @@ import json
 import os
 import tempfile
 
-from PyQt6.QtCore import Qt, QFileSystemWatcher, QThread, pyqtSignal
-from PyQt6.QtGui import QPixmap, QColor, QPainter, QLinearGradient
+from PyQt6.QtCore import Qt, QFileSystemWatcher, QThread, QSize, pyqtSignal
+from PyQt6.QtGui import QPixmap, QColor, QPainter, QLinearGradient, QIcon
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
     QScrollArea, QTextEdit, QComboBox, QSpinBox, QButtonGroup,
@@ -24,7 +24,7 @@ from PyQt6.QtWidgets import (
 from ui.styles import C
 from ui.widgets import HelpBlock, section_label, combo, toggle_row
 from ui.creative_panel import SeedanceCreativePanel
-from ui.icons import claude_icon_pixmap, install_hover_icon
+from ui.icons import claude_icon_pixmap, install_hover_icon, load_icon
 from core.config import load_config, get_output_dir
 from core.i18n import translate
 from core.history import save_to_history
@@ -355,6 +355,8 @@ class TabDavinciEdit(QScrollArea):
         self._global_ref_image: str                      = ""
         self._per_clip_ref_images: dict[int, str]        = {}
         self._draw_images:      dict[int, str]           = {}   # Draw-to-Video : image annotée par clip
+        self._draw_overlays:    dict[int, str]           = {}   # calque de dessin seul (ré-édition)
+        self._draw_frames:      dict[int, int]           = {}   # index d'image dessinée (ré-édition)
         self._mock_count:       int                      = 0
         self._failed_clips:     list[tuple[int, str]]    = []
         self._thumb_workers:    list[_ThumbWorker]       = []
@@ -701,7 +703,38 @@ class TabDavinciEdit(QScrollArea):
         self._prompt_global.textChanged.connect(
             lambda: self._pg_counter.setText(str(len(self._prompt_global.toPlainText())))
         )
-        _pg_lay.addWidget(self._prompt_global)
+
+        # Draw-to-Video — bouton LOGO « Dessiner sur la vidéo » placé à DROITE du
+        # rectangle de prompt (badge couleur affiché tel quel, sans teinte ; repli
+        # texte si l'asset est introuvable). Le clic ouvre le dialogue Draw-to-Video.
+        self._btn_draw = QPushButton()
+        self._btn_draw.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._btn_draw.setToolTip(translate("Dessiner sur la vidéo") + " — " + translate(
+            "Draw-to-Video : choisis un clip, dessine les zones de l'effet "
+            "(feu, fumée…), puis génère — l'effet est appliqué là où tu as dessiné."))
+        _draw_pix = load_icon("draw_to_video.png", 56)   # badge couleur → pas de teinte
+        if not _draw_pix.isNull():
+            self._btn_draw.setIcon(QIcon(_draw_pix))
+            self._btn_draw.setIconSize(QSize(56, 56))
+            self._btn_draw.setFixedSize(60, 60)
+            self._btn_draw.setStyleSheet(
+                "QPushButton{background:transparent;border:none;border-radius:12px;padding:2px;}"
+                "QPushButton:hover{background:rgba(78,205,196,0.14);}")
+        else:
+            self._btn_draw.setText("✏  " + translate("Dessiner sur la vidéo"))
+            self._btn_draw.setFixedHeight(34)
+            self._btn_draw.setStyleSheet(
+                f"QPushButton{{background:transparent;color:{C['accent']};"
+                f"border:1px solid {C['accent']};border-radius:8px;font-size:11px;font-weight:700;padding:0 14px;}}"
+                f"QPushButton:hover{{background:rgba(78,205,196,0.12);}}")
+        self._btn_draw.clicked.connect(self._on_draw_to_video)
+
+        _pg_prompt_row = QHBoxLayout()
+        _pg_prompt_row.setContentsMargins(0, 0, 0, 0)
+        _pg_prompt_row.setSpacing(8)
+        _pg_prompt_row.addWidget(self._prompt_global, 1)
+        _pg_prompt_row.addWidget(self._btn_draw, 0, Qt.AlignmentFlag.AlignTop)
+        _pg_lay.addLayout(_pg_prompt_row)
 
         # Ref image — prompt global (carré Casting style)
         _pg_ref_hdr = QHBoxLayout()
@@ -720,21 +753,6 @@ class TabDavinciEdit(QScrollArea):
         self._global_ref_square.picked.connect(lambda p: setattr(self, '_global_ref_image', p))
         self._global_ref_square.cleared.connect(lambda: setattr(self, '_global_ref_image', ''))
         _pg_ref_row.addWidget(self._global_ref_square)
-
-        # Draw-to-Video — dessiner sur le clip sélectionné pour guider l'effet
-        self._btn_draw = QPushButton("✏  " + translate("Dessiner sur la vidéo"))
-        self._btn_draw.setFixedHeight(34)
-        self._btn_draw.setCursor(Qt.CursorShape.PointingHandCursor)
-        self._btn_draw.setToolTip(translate(
-            "Draw-to-Video : choisis un clip, dessine les zones de l'effet "
-            "(feu, fumée…), puis génère — l'effet est appliqué là où tu as dessiné."))
-        self._btn_draw.setStyleSheet(
-            f"QPushButton{{background:transparent;color:{C['accent']};"
-            f"border:1px solid {C['accent']};border-radius:8px;font-size:11px;font-weight:700;padding:0 14px;}}"
-            f"QPushButton:hover{{background:rgba(78,205,196,0.12);}}")
-        self._btn_draw.clicked.connect(self._on_draw_to_video)
-        _pg_ref_row.addWidget(self._btn_draw)
-
         _pg_ref_row.addStretch()
         _pg_lay.addLayout(_pg_ref_row)
         body_prompt.addWidget(self._pg_frame)
@@ -1032,7 +1050,9 @@ class TabDavinciEdit(QScrollArea):
         btn_row = QHBoxLayout()
         btn_row.setContentsMargins(0, 0, 0, 0)
         btn_row.setSpacing(8)
-        btn_row.addWidget(self._btn_generate)
+        # stretch=1 → le bouton prend toute la largeur disponible (aligné à gauche,
+        # le « ×N » et Annuler restent à droite) au lieu de se réduire à son texte.
+        btn_row.addWidget(self._btn_generate, 1)
         btn_row.addWidget(_x)
         btn_row.addWidget(self._spin_prises)
         btn_row.addWidget(self._btn_cancel)
@@ -1148,6 +1168,8 @@ class TabDavinciEdit(QScrollArea):
         # Les images Draw-to-Video sont indexées par position : la liste de clips
         # change → on repart à zéro (indices obsolètes).
         self._draw_images = {}
+        self._draw_overlays = {}
+        self._draw_frames = {}
         # Déconnecte les workers de miniatures précédents pour éviter les callbacks périmés
         for w in self._thumb_workers:
             try:
@@ -1341,11 +1363,18 @@ class TabDavinciEdit(QScrollArea):
             QMessageBox.warning(self, "Draw-to-Video", "Clip introuvable sur le disque.")
             return
         from ui.dialog_draw_video import DrawVideoDialog
-        dlg = DrawVideoDialog(path, self._draw_dir(), self)
+        # Ré-édition : si ce clip a déjà un dessin, on le rouvre éditable (calque +
+        # time code mémorisés) au lieu de repartir d'un schéma vierge.
+        dlg = DrawVideoDialog(
+            path, self._draw_dir(), self,
+            prev_overlay=self._draw_overlays.get(idx, ""),
+            prev_frame=self._draw_frames.get(idx, 0))
         if dlg.exec() == DrawVideoDialog.DialogCode.Accepted:
             rp = dlg.result_path()
             if rp and os.path.isfile(rp):
                 self._draw_images[idx] = rp
+                self._draw_overlays[idx] = dlg.overlay_path()
+                self._draw_frames[idx] = dlg.frame_index()
                 QMessageBox.information(
                     self, "Draw-to-Video",
                     f"Dessin enregistré pour « {clip.get('name', 'clip')} ».\n"

@@ -97,6 +97,15 @@ def load_config() -> dict:
         cfg["resolution"] = "Personnaliser"
         cfg["_res_personnaliser_done"] = True
         save_config(cfg)
+    # Migration one-shot : Largeur/Hauteur deviennent la source de vérité (toujours
+    # visibles, pré-remplies par le template) → on les aligne sur le format courant
+    # pour un premier affichage cohérent. Le combo de résolution (4K/2K/1K) est retiré.
+    if not cfg.get("_dims_from_format_done"):
+        fmt = cfg.get("format", "thumbnail")
+        if fmt in FORMATS and fmt != "free":
+            cfg["custom_w"], cfg["custom_h"] = FORMATS[fmt][1]
+        cfg["_dims_from_format_done"] = True
+        save_config(cfg)
     return cfg
 
 

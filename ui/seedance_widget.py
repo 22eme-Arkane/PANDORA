@@ -110,9 +110,16 @@ class SeedanceWidget(QWidget):
         root.setSpacing(0)
 
         self.tabs = QTabWidget()
-        self.tabs.setDocumentMode(True)
+        # documentMode=False : sinon la barre d'onglets occupe toute la largeur et
+        # « alignment:center » n'a aucun effet (onglets collés à gauche).
+        self.tabs.setDocumentMode(False)
+        # Onglets CENTRÉS dans la fenêtre (esprit du dashboard du bas)
+        self.tabs.setStyleSheet(
+            self.tabs.styleSheet() + "QTabWidget::pane{border:none;}"
+            "QTabWidget::tab-bar{alignment:center;}")
         # Barre d'onglets GROUPÉE (trait vertical entre groupes, façon dashboard).
         self.tabs.setTabBar(_GroupedTabBar())
+        self.tabs.tabBar().setExpanding(False)
         # Un seul trait en haut (celui de la topbar) : le documentMode dessine
         # sa propre ligne de base sous la barre d'onglets → trait DOUBLÉ
         # (refonte 2026-06-12, portée depuis Live)

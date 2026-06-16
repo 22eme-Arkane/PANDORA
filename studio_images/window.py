@@ -8,13 +8,32 @@ Droite  : dialogue avec Claude + bouton de synthèse du prompt.
 import os
 import time
 
-from PyQt6.QtCore import Qt, QUrl, pyqtSignal
+from PyQt6.QtCore import Qt, QPoint, QUrl, pyqtSignal
 from PyQt6.QtGui import QDesktopServices, QPixmap
 from PyQt6.QtWidgets import (
-    QComboBox, QDialog, QFileDialog, QFormLayout, QHBoxLayout, QInputDialog, QLabel,
-    QLineEdit, QMainWindow, QMessageBox, QProgressBar, QPushButton, QScrollArea,
-    QSpinBox, QSplitter, QTextEdit, QVBoxLayout, QWidget,
+    QAbstractSpinBox, QComboBox, QDialog, QFileDialog, QFormLayout, QHBoxLayout,
+    QInputDialog, QLabel, QLineEdit, QMainWindow, QMessageBox, QProgressBar,
+    QPushButton, QScrollArea, QSpinBox, QSplitter, QTextEdit, QVBoxLayout, QWidget,
 )
+
+
+# ── Combo dont la liste s'ouvre TOUJOURS vers le bas ─────────────────────────
+class DownComboBox(QComboBox):
+    """QComboBox dont le menu déroulant s'ouvre toujours SOUS le champ.
+
+    Par défaut Qt positionne le popup pour que l'élément sélectionné chevauche le
+    champ : sélectionner un élément en bas de liste fait « remonter » le popup
+    (il s'ouvre vers le haut, parfois tronqué). On force ici le haut du popup à
+    s'aligner sur le bas du champ — il déroule donc toujours vers le bas."""
+
+    def showPopup(self):
+        super().showPopup()
+        view = self.view()
+        popup = view.window() if view is not None else None
+        if popup is None:
+            return
+        below = self.mapToGlobal(self.rect().bottomLeft())
+        popup.move(QPoint(below.x(), below.y()))
 
 import config as cfg_mod
 import engines
@@ -206,7 +225,11 @@ class StudioImagesPanel(QWidget):
         body.setSpacing(0)
 
         left = self._build_left()
-        left.setMaximumWidth(900)
+        # Largeur de colonne « document » : un MINIMUM confortable (sinon, coincée
+        # entre deux stretch, la colonne s'effondrait à sa sizeHint ≈ 285 px → tout
+        # paraissait riquiqui) + un MAXIMUM pour rester centrée sur écran large.
+        left.setMinimumWidth(680)
+        left.setMaximumWidth(860)
         left_wrap = QWidget()
         lw = QHBoxLayout(left_wrap)
         lw.setContentsMargins(0, 0, 0, 0)
@@ -263,6 +286,20 @@ class StudioImagesPanel(QWidget):
         lbl.setStyleSheet(f"color: {CP['text_secondary']}; font-size: 11px; font-weight: 600;")
         return lbl
 
+    def _dim_spin(self, value):
+        """Champ de dimension (px) SANS flèches : on clique et on tape la valeur."""
+        sb = QSpinBox()
+        sb.setRange(64, 14000)
+        sb.setValue(int(value))
+        sb.setSuffix(" px")
+        sb.setButtonSymbols(QAbstractSpinBox.ButtonSymbols.NoButtons)
+        sb.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        sb.setToolTip("Clique et tape la valeur en pixels")
+        sb.setStyleSheet(
+            f"background:{CP['bg2']}; border:1px solid {CP['border']}; "
+            f"border-radius:6px; padding:7px; color:{CP['text_primary']}; font-weight:600;")
+        return sb
+
     # ── Sauvegarder / Ouvrir une session Image IA (dossier « Image IA ») ───────
 
     def _img_saves_dir(self) -> str:
@@ -282,7 +319,6 @@ class StudioImagesPanel(QWidget):
             "settings": {
                 "image_model": self._model.currentData(),
                 "format":      self._format.currentData(),
-                "resolution":  self._res.currentText(),
                 "custom_w":    self._cw.value(),
                 "custom_h":    self._ch.value(),
                 "prompt":      self._prompt.toPlainText(),
@@ -334,14 +370,11 @@ class StudioImagesPanel(QWidget):
         if s.get("image_model"):
             self._select_data(self._model, s["image_model"])
         if s.get("format"):
-            self._select_data(self._format, s["format"])
-        if s.get("resolution"):
-            self._res.setCurrentText(s["resolution"])
+            self._select_data(self._format, s["format"])   # peut pré-remplir L/H…
         if s.get("custom_w"):
-            self._cw.setValue(int(s["custom_w"]))
+            self._cw.setValue(int(s["custom_w"]))          # …puis on restaure la taille saisie
         if s.get("custom_h"):
             self._ch.setValue(int(s["custom_h"]))
-        self._custom_row.setVisible(self._format.currentData() == "free")
         self._prompt.setPlainText(s.get("prompt", ""))
 
         self._history = data.get("history", [])
@@ -367,8 +400,7 @@ class StudioImagesPanel(QWidget):
             self._discuss_btn.setEnabled(True)
         else:
             self._current_path = ""
-            self._preview.setPixmap(QPixmap())
-            self._preview.setText("En attente d'aperçu")
+            self._clear_preview()
             self._discuss_btn.setEnabled(False)
 
     # ── Panneau gauche : génération ──────────────────────────────────────────
@@ -379,7 +411,7 @@ class StudioImagesPanel(QWidget):
         lay.setSpacing(10)
 
         # Moteur de génération (catalogue engines.py)
-        self._model = QComboBox()
+        self._model = DownComboBox()
         for key, spec in engines.ENGINES.items():
             self._model.addItem(spec["label"], key)
         self._select_data(self._model, self.cfg.get("image_model", "nb_pro"))
@@ -387,20 +419,16 @@ class StudioImagesPanel(QWidget):
         lay.addWidget(self._section_label("MOTEUR DE GÉNÉRATION"))
         lay.addWidget(self._model)
 
-        # Format + résolution
+        # Format (templates) + nombre d'images. Choisir un template pré-remplit
+        # Largeur/Hauteur ci-dessous (ils restent la source de vérité de la taille).
         row = QHBoxLayout()
-        self._format = QComboBox()
+        self._format = DownComboBox()
         for key, (label, _sz) in cfg_mod.FORMATS.items():
             self._format.addItem(label, key)
         self._select_data(self._format, self.cfg.get("format", "thumbnail"))
+        # NB : on connecte APRÈS _select_data → le format initial ne réécrit pas
+        # les Largeur/Hauteur restaurés de la config.
         self._format.currentIndexChanged.connect(self._on_format_changed)
-
-        self._res = QComboBox()
-        self._res.addItems(["Personnaliser", "512x512", "1K", "2K", "4K"])
-        self._res.setCurrentText(self.cfg.get("resolution", "Personnaliser"))
-        self._res.setToolTip(
-            "Résolution des moteurs Nano Banana.\n"
-            "« Personnaliser » = utilise la taille exacte du format choisi à gauche.")
 
         self._count = QSpinBox()
         self._count.setRange(1, 4)
@@ -411,32 +439,29 @@ class StudioImagesPanel(QWidget):
             f"background:{CP['bg2']}; border:1px solid {CP['border']}; "
             f"border-radius:6px; padding:7px; color:{CP['text_primary']}; font-weight:600;")
 
-        row.addWidget(self._format, 3)
-        row.addWidget(self._res, 1)
-        row.addWidget(self._count, 1)
+        row.addWidget(self._format, 1)
+        row.addWidget(self._count)
         lay.addLayout(row)
 
-        # Taille personnalisée (visible seulement pour le format « Personnalisé »)
+        # Largeur × Hauteur — TOUJOURS visibles, saisie directe au clavier (pas de
+        # flèches). Un template les pré-remplit ; on peut toujours taper une valeur.
         self._custom_row = QWidget()
         crow = QHBoxLayout(self._custom_row)
         crow.setContentsMargins(0, 0, 0, 0)
-        self._cw = QSpinBox(); self._cw.setRange(64, 14000); self._cw.setValue(int(self.cfg.get("custom_w", 1024)))
-        self._ch = QSpinBox(); self._ch.setRange(64, 14000); self._ch.setValue(int(self.cfg.get("custom_h", 1024)))
-        for sb in (self._cw, self._ch):
-            sb.setStyleSheet(f"background:{CP['bg2']}; border:1px solid {CP['border']}; "
-                             f"border-radius:6px; padding:6px; color:{CP['text_primary']};")
-        crow.addWidget(QLabel("Largeur"))
+        crow.setSpacing(8)
+        self._cw = self._dim_spin(int(self.cfg.get("custom_w", 1024)))
+        self._ch = self._dim_spin(int(self.cfg.get("custom_h", 1024)))
+        crow.addWidget(self._mini_label("Largeur"))
         crow.addWidget(self._cw, 1)
-        crow.addWidget(QLabel("Hauteur"))
+        crow.addWidget(self._mini_label("Hauteur"))
         crow.addWidget(self._ch, 1)
         lay.addWidget(self._custom_row)
-        self._custom_row.setVisible(self.cfg.get("format") == "free")
 
         # Prompt — en-tête avec bibliothèque de prompts
         prompt_head = QHBoxLayout()
         prompt_head.addWidget(self._section_label("PROMPT"))
         prompt_head.addStretch(1)
-        self._prompt_lib = QComboBox()
+        self._prompt_lib = DownComboBox()
         self._prompt_lib.setMinimumWidth(150)
         self._prompt_lib.setToolTip("Prompts enregistrés — sélectionne pour charger")
         self._prompt_lib.activated.connect(self._on_prompt_selected)
@@ -511,15 +536,17 @@ class StudioImagesPanel(QWidget):
         self._status.setStyleSheet(f"color: {CP['text_secondary']}; font-size: 11px;")
         lay.addWidget(self._status)
 
-        # Aperçu — TOUJOURS visible (placeholder si vide) : il absorbe l'espace
-        # vertical et garde la mise en page compacte (sinon gros trous).
-        self._preview = QLabel("En attente d'aperçu")
+        # Aperçu : COMPACT tant qu'aucune image (petit cadre placeholder), puis
+        # dimensionné EXACTEMENT à l'image générée (mise à l'échelle pour tenir
+        # dans la zone) → pas de bandes noires autour. Centré ; le ressort ajouté
+        # en bas de colonne absorbe l'espace libre (contenu calé en haut).
+        self._preview = QLabel(self._PREVIEW_PLACEHOLDER)
         self._preview.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self._preview.setMinimumHeight(280)
         self._preview.setStyleSheet(
-            f"background: {CP['bg0']}; border: 1px solid {CP['border']}; "
-            f"border-radius: 10px; color: {CP['text_dim']};")
-        lay.addWidget(self._preview, 1)
+            f"QLabel{{background: {CP['bg2']}; border: 1px solid {CP['border_bright']}; "
+            f"border-radius: 12px; color: {CP['text_secondary']}; font-size: 14px;}}")
+        self._preview.setFixedSize(*self._PREVIEW_EMPTY_SIZE)
+        lay.addWidget(self._preview, 0, Qt.AlignmentFlag.AlignHCenter)
 
         # Actions image
         actions = QHBoxLayout()
@@ -550,6 +577,10 @@ class StudioImagesPanel(QWidget):
         hist_scroll.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         lay.addWidget(hist_scroll)
 
+        # Ressort final : absorbe l'espace libre en bas → tout le contenu reste
+        # calé en haut, l'aperçu garde sa taille réelle (pas de trous au milieu).
+        lay.addStretch(1)
+
         return panel
 
     # ── Panneau droit : chat ─────────────────────────────────────────────────
@@ -577,6 +608,24 @@ class StudioImagesPanel(QWidget):
             "joindre une image de référence. Je t'aide à le concevoir, puis je "
             "génère le prompt.")
         self._add_bubble("assistant", self._greeting)
+
+        # Indicateur de chargement DU CHAT (« Claude réfléchit ») — distinct de la
+        # barre de génération à gauche, qui ne sert qu'au prompt et à l'image.
+        self._chat_busy = QWidget()
+        _cb = QHBoxLayout(self._chat_busy)
+        _cb.setContentsMargins(2, 0, 8, 0)
+        _cb.setSpacing(8)
+        self._chat_status = QLabel("")
+        self._chat_status.setStyleSheet(
+            f"color:{CP['accent']};font-size:11px;background:transparent;")
+        _cb.addWidget(self._chat_status)
+        self._chat_progress = QProgressBar()
+        self._chat_progress.setRange(0, 0)        # indéterminé (animé)
+        self._chat_progress.setTextVisible(False)
+        self._chat_progress.setFixedHeight(6)
+        _cb.addWidget(self._chat_progress, 1)
+        self._chat_busy.setVisible(False)
+        lay.addWidget(self._chat_busy)
 
         # Pièces jointes de discussion (n'entrent PAS dans la génération)
         attach_head = QHBoxLayout()
@@ -684,7 +733,6 @@ class StudioImagesPanel(QWidget):
 
     def _persist_cfg(self):
         self.cfg["image_model"] = self._model.currentData()
-        self.cfg["resolution"] = self._res.currentText()
         self.cfg["format"] = self._format.currentData()
         self.cfg["custom_w"] = self._cw.value()
         self.cfg["custom_h"] = self._ch.value()
@@ -692,13 +740,16 @@ class StudioImagesPanel(QWidget):
         cfg_mod.save_config(self.cfg)
 
     def _on_format_changed(self):
-        self._custom_row.setVisible(self._format.currentData() == "free")
+        """Sélectionner un template qui a des dimensions les reporte automatiquement
+        dans Largeur/Hauteur. « Personnalisé… » ne touche pas aux valeurs saisies."""
+        fmt = self._format.currentData()
+        if fmt and fmt != "free" and fmt in cfg_mod.FORMATS:
+            w, h = cfg_mod.FORMATS[fmt][1]
+            self._cw.setValue(int(w))
+            self._ch.setValue(int(h))
 
     def _on_engine_changed(self):
         key = self._model.currentData()
-        # La résolution ne concerne que les moteurs Nano Banana
-        is_nano = engines.ENGINES.get(key, {}).get("kind") == "nano"
-        self._res.setEnabled(is_nano)
         # Support des références par ce moteur
         if hasattr(self, "_refs_hint"):
             sup = engines.ref_support(key)
@@ -738,10 +789,9 @@ class StudioImagesPanel(QWidget):
         return t
 
     def _target_size(self):
-        fmt_key = self._format.currentData()
-        if fmt_key == "free":
-            return (self._cw.value(), self._ch.value())
-        return cfg_mod.FORMATS[fmt_key][1]
+        # Largeur/Hauteur sont la source de vérité (toujours visibles ; un template
+        # les pré-remplit). La taille de sortie exacte = ces deux champs.
+        return (self._cw.value(), self._ch.value())
 
     # ── Projets ──────────────────────────────────────────────────────────────
     def _refresh_projects(self):
@@ -802,7 +852,6 @@ class StudioImagesPanel(QWidget):
         data["settings"] = {
             "image_model": self._model.currentData(),
             "format":      self._format.currentData(),
-            "resolution":  self._res.currentText(),
             "custom_w":    self._cw.value(),
             "custom_h":    self._ch.value(),
             "prompt":      self._prompt.toPlainText(),
@@ -820,14 +869,11 @@ class StudioImagesPanel(QWidget):
         if s.get("image_model"):
             self._select_data(self._model, s["image_model"])
         if s.get("format"):
-            self._select_data(self._format, s["format"])
-        if s.get("resolution"):
-            self._res.setCurrentText(s["resolution"])
+            self._select_data(self._format, s["format"])   # peut pré-remplir L/H…
         if s.get("custom_w"):
-            self._cw.setValue(int(s["custom_w"]))
+            self._cw.setValue(int(s["custom_w"]))          # …puis on restaure la taille saisie
         if s.get("custom_h"):
             self._ch.setValue(int(s["custom_h"]))
-        self._custom_row.setVisible(self._format.currentData() == "free")
         self._prompt.setPlainText(s.get("prompt", ""))
 
         # Fil de discussion
@@ -856,8 +902,7 @@ class StudioImagesPanel(QWidget):
             self._discuss_btn.setEnabled(True)
         else:
             self._current_path = ""
-            self._preview.setPixmap(QPixmap())
-            self._preview.setText("Aucune image générée")
+            self._clear_preview()
             self._discuss_btn.setEnabled(False)
         self._refresh_projects()
         self._status.setText(f"Projet « {data.get('name', pid)} » ouvert.")
@@ -873,8 +918,7 @@ class StudioImagesPanel(QWidget):
         self._refresh_refs()
         self._persist_refs()
         self._rebuild_chat_view()
-        self._preview.setPixmap(QPixmap())
-        self._preview.setText("En attente d'aperçu")
+        self._clear_preview()
         self._discuss_btn.setEnabled(False)
         # vide l'historique de miniatures
         while self._hist_row.count() > 1:
@@ -968,15 +1012,15 @@ class StudioImagesPanel(QWidget):
         self._add_bubble("user", text, images=imgs)
         self._history.append({"role": "user", "content": content})
 
-        self._set_busy(True, "Claude réfléchit…")
+        self._set_chat_busy(True, "Claude réfléchit…")
         self._chat_worker = ChatWorker(self.cfg.get("anthropic_key", ""), list(self._history))
         self._chat_worker.finished.connect(self._on_chat_done)
         self._chat_worker.failed.connect(self._on_chat_error)
-        self._chat_worker.notice.connect(lambda m: self._set_busy(True, m))
+        self._chat_worker.notice.connect(lambda m: self._set_chat_busy(True, m))
         self._chat_worker.start()
 
     def _on_chat_done(self, reply):
-        self._set_busy(False, "")
+        self._set_chat_busy(False)
         self._history.append({"role": "assistant", "content": reply})
         self._add_bubble("assistant", reply)
         self._autosave()
@@ -985,7 +1029,7 @@ class StudioImagesPanel(QWidget):
         # Retire le dernier tour utilisateur pour garder l'historique cohérent
         if self._history and self._history[-1]["role"] == "user":
             self._history.pop()
-        self._set_busy(False, "")
+        self._set_chat_busy(False)
         QMessageBox.critical(self, "Erreur", msg)
 
     def _synth_prompt(self):
@@ -1166,20 +1210,39 @@ class StudioImagesPanel(QWidget):
         self._progress.setValue(0)
         QMessageBox.critical(self, "Erreur de génération", msg)
 
+    _PREVIEW_PLACEHOLDER = "🖼\n\nEn attente d'aperçu"
+    _PREVIEW_EMPTY_SIZE  = (340, 150)   # petit cadre tant qu'aucune image
+    _PREVIEW_MAX_W       = 660          # plafond d'affichage de l'image générée
+    _PREVIEW_MAX_H       = 600
+
+    def _clear_preview(self):
+        """Remet l'aperçu sur son état vide : petit cadre + placeholder centré."""
+        self._preview.setPixmap(QPixmap())
+        self._preview.setText(self._PREVIEW_PLACEHOLDER)
+        self._preview.setFixedSize(*self._PREVIEW_EMPTY_SIZE)
+
     def _show_preview(self, path):
         # L'image affichée devient celle jointe au prochain message Claude
         self._current_path = path
         self._pending_images = [path]
         self._discuss_btn.setEnabled(True)
-        self._preview.setVisible(True)   # l'aperçu n'apparaît qu'une fois une image générée
         pm = self._load_pixmap(path)
         if pm is None or pm.isNull():
+            self._preview.setPixmap(QPixmap())
             self._preview.setText("🅥  Logo vectoriel SVG généré\n\nOuvre-le via 📂 Voir le fichier")
+            self._preview.setFixedSize(*self._PREVIEW_EMPTY_SIZE)
             return
-        self._preview.setPixmap(pm.scaled(
-            self._preview.width(), self._preview.height(),
-            Qt.AspectRatioMode.KeepAspectRatio,
-            Qt.TransformationMode.SmoothTransformation))
+        # Affiche à la taille réelle de l'image, plafonnée à la zone max (on ne
+        # sur-agrandit jamais une petite image). La zone épouse EXACTEMENT l'image
+        # affichée → aucune bande noire autour.
+        bound_w = min(pm.width(), self._PREVIEW_MAX_W)
+        bound_h = min(pm.height(), self._PREVIEW_MAX_H)
+        disp = pm.scaled(bound_w, bound_h,
+                         Qt.AspectRatioMode.KeepAspectRatio,
+                         Qt.TransformationMode.SmoothTransformation)
+        self._preview.setText("")
+        self._preview.setPixmap(disp)
+        self._preview.setFixedSize(disp.size())
 
     def _load_pixmap(self, path):
         """Charge un QPixmap (rasterise les SVG via QtSvg si disponible)."""
@@ -1239,8 +1302,10 @@ class StudioImagesPanel(QWidget):
         QMessageBox.critical(self, "Erreur", msg)
 
     def _set_busy(self, busy, msg):
+        # Barre de chargement GAUCHE (fenêtre Image IA) : réservée à la GÉNÉRATION
+        # du prompt et de l'image — PAS à la discussion (qui a son propre indicateur
+        # dans le chat, voir _set_chat_busy).
         self._status.setText(msg)
-        # Barre de chargement + bouton Annuler visibles UNIQUEMENT pendant un travail.
         self._progress.setVisible(busy)
         self._cancel_btn.setVisible(busy)
         self._gen_btn.setEnabled(not busy)
@@ -1248,6 +1313,11 @@ class StudioImagesPanel(QWidget):
             self._progress.setRange(0, 0)  # indéterminé
         else:
             self._progress.setRange(0, 100)
+
+    def _set_chat_busy(self, busy, msg=""):
+        """Indicateur de chargement DANS le chat (« Claude réfléchit »)."""
+        self._chat_status.setText(msg)
+        self._chat_busy.setVisible(busy)
 
     def _cancel_work(self):
         """Annule le travail en cours (génération image / discussion / synthèse)."""
@@ -1260,17 +1330,22 @@ class StudioImagesPanel(QWidget):
                 except Exception:
                     pass
         self._set_busy(False, "Travail annulé.")
+        self._set_chat_busy(False)
         self._gen_btn.setEnabled(True)
 
     def _res_value(self) -> str:
-        """Résolution réelle pour les moteurs Nano Banana. « Personnaliser » =
-        dérive le palier le plus proche de la taille du format choisi."""
-        r = self._res.currentText()
-        if r != "Personnaliser":
-            return r
+        """Palier de résolution Nano Banana, dérivé de la taille saisie
+        (Largeur × Hauteur). L'image finale est de toute façon redimensionnée à
+        la taille exacte par imagegen — ce palier ne pilote que la génération."""
         w, h = self._target_size()
         m = max(int(w), int(h))
-        return "1K" if m <= 1024 else ("2K" if m <= 2048 else "4K")
+        if m <= 512:
+            return "512x512"
+        if m <= 1024:
+            return "1K"
+        if m <= 2048:
+            return "2K"
+        return "4K"
 
     def resizeEvent(self, e):
         super().resizeEvent(e)

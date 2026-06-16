@@ -796,7 +796,27 @@ def studio_musique_ia_et_image_ia():
         "barre de chargement / Annuler masqués tant qu'inactif"
     assert not pn._preview.isHidden() and "attente" in pn._preview.text().lower(), \
         "aperçu visible avec placeholder (évite les trous)"
-    assert pn._res.itemText(0) == "Personnaliser", "résolution « Personnaliser » par défaut"
+    # Résolution : le combo 4K/2K/1K est SUPPRIMÉ (doublon avec la taille). Largeur
+    # et Hauteur sont TOUJOURS visibles, saisie directe sans flèches (NoButtons), et
+    # un template les pré-remplit. Les menus déroulants s'ouvrent vers le bas.
+    from PyQt6.QtWidgets import QAbstractSpinBox as _QASB
+    assert not hasattr(pn, "_res"), "combo de résolution retiré (doublon)"
+    assert pn._cw.buttonSymbols() == _QASB.ButtonSymbols.NoButtons, "Largeur sans flèches"
+    assert pn._ch.buttonSymbols() == _QASB.ButtonSymbols.NoButtons, "Hauteur sans flèches"
+    assert type(pn._format).__name__ == "DownComboBox", "templates : menu déroulant vers le bas"
+    pn._format.setCurrentIndex(pn._format.findData("logo_sq"))   # Logo carré 1024×1024
+    assert (pn._cw.value(), pn._ch.value()) == (1024, 1024), "template pré-remplit Largeur/Hauteur"
+    assert pn._target_size() == (1024, 1024) and pn._res_value() == "1K", \
+        "Largeur/Hauteur = source de vérité de la taille + du palier"
+    # Chargement : la barre GAUCHE est réservée à la génération (prompt + image) ;
+    # la discussion charge dans le chat (_chat_busy), pas dans la fenêtre Image IA.
+    assert hasattr(pn, "_chat_busy") and hasattr(pn, "_set_chat_busy"), "indicateur de chat dédié"
+    assert pn._chat_busy.isHidden(), "indicateur de chat masqué au repos"
+    assert "_set_chat_busy" in inspect.getsource(type(pn)._do_send), "le chat charge dans le chat"
+    assert "_set_busy(True" not in inspect.getsource(type(pn)._do_send), \
+        "le chat ne déclenche PAS la barre gauche"
+    assert "_set_busy(True" in inspect.getsource(type(pn)._generate), "génération image → barre gauche"
+    assert "_set_busy(True" in inspect.getsource(type(pn)._synth_prompt), "génération prompt → barre gauche"
     # Plus de bouton « Clés API » + Sauvegarder/Ouvrir dans la barre
     tb = inspect.getsource(type(pn)._build_topbar)
     assert "Clés API" not in tb, "bouton Clés API retiré"
@@ -973,18 +993,47 @@ def transcode_h264_et_starlight2():
 
 @test
 def draw_to_video():
-    """Draw-to-Video : dessin sur une image du clip → référence + prompt préfixé."""
+    """Draw-to-Video : dessin sur une image du clip → référence + prompt préfixé.
+    Time code SMPTE (HH:MM:SS:FF) au lieu des secondes + ré-édition du dessin."""
     import tempfile
-    from ui.dialog_draw_video import DrawVideoDialog, _DrawCanvas
+    from ui.dialog_draw_video import DrawVideoDialog, _DrawCanvas, _format_tc
     d = DrawVideoDialog("absent.mp4", tempfile.gettempdir())
     assert d._canvas.has_base(), "canevas avec image de fond (repli blanc si ffmpeg/clip absent)"
+
+    # Time code SMPTE plutôt que des secondes
+    assert _format_tc(0, 25.0) == "00:00:00:00"
+    assert _format_tc(50, 25.0) == "00:00:02:00"               # 50 images @25 = 2 s
+    assert _format_tc(3661 * 25 + 7, 25.0) == "01:01:01:07"
+    tc = d._time_lbl.text()
+    assert len(tc) == 11 and tc.count(":") == 3, "label = vrai time code HH:MM:SS:FF"
+    init_src = inspect.getsource(DrawVideoDialog.__init__)
+    assert "Time Code" in init_src and "Instant :" not in init_src, "libellé « Time Code »"
+
+    # Ré-édition : paramètres prev_overlay/prev_frame + accesseurs + round-trip calque
+    params = inspect.signature(DrawVideoDialog.__init__).parameters
+    assert "prev_overlay" in params and "prev_frame" in params, "ré-ouverture éditable"
+    assert hasattr(d, "overlay_path") and hasattr(d, "frame_index"), "accesseurs de ré-édition"
+    ovp = os.path.join(tempfile.gettempdir(), "test_overlay_drawvideo.png")
+    assert d._canvas.export_overlay(ovp) and os.path.isfile(ovp), "export du calque seul"
+    d._canvas.set_overlay(ovp)   # rechargement d'un calque existant ne doit pas planter
+
     from ui.tab_davinci_edit import TabDavinciEdit
     t = TabDavinciEdit()
     assert hasattr(t, "_btn_draw") and hasattr(t, "_on_draw_to_video") and hasattr(t, "_draw_images")
+    assert hasattr(t, "_draw_overlays") and hasattr(t, "_draw_frames"), "mémorisation pour ré-édition"
     src = inspect.getsource(TabDavinciEdit)
     assert "Remplace les dessins" in src, "consigne préfixée au prompt"
     assert "_draw_images" in src and "ref_images.append(_draw_img)" in src, \
         "image annotée envoyée comme référence"
+    assert "prev_overlay=" in src and "overlay_path()" in src and "frame_index()" in src, \
+        "le clic rouvre le dessin existant (ré-édition)"
+    # Bouton « Dessiner sur la vidéo » remplacé par son LOGO (icône, sans libellé)
+    assert "draw_to_video.png" in src, "bouton = logo Dessiner sur la vidéo"
+    assert t._btn_draw.text() == "" and not t._btn_draw.icon().isNull(), "bouton icône (logo)"
+    # Logo placé à DROITE du rectangle de prompt (pas dans la rangée du carré de réf.)
+    assert "_pg_prompt_row.addWidget(self._btn_draw" in src, "logo à droite du prompt"
+    # File d'attente : bouton pleine largeur (stretch) aligné à gauche, plus rétréci
+    assert "addWidget(self._btn_generate, 1)" in src, "bouton file d'attente pleine largeur"
 
 
 # ══════════════════════════════════════════════════════════════════════════════

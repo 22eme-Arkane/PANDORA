@@ -448,9 +448,14 @@ class PageScenario(QWidget):
         # propre onglet et NE touche JAMAIS au scénario.
         from PyQt6.QtWidgets import QTabWidget
         self._editor_tabs = QTabWidget()
-        self._editor_tabs.setDocumentMode(True)
+        # documentMode=False : sinon la barre d'onglets occupe toute la largeur et
+        # « alignment:center » n'a aucun effet (onglets collés à gauche).
+        self._editor_tabs.setDocumentMode(False)
+        self._editor_tabs.tabBar().setExpanding(False)
         self._editor_tabs.setStyleSheet(
             "QTabWidget::pane{border:none;}"
+            # Onglets CENTRÉS dans la fenêtre (esprit du dashboard du bas)
+            "QTabWidget::tab-bar{alignment:center;}"
             f"QTabBar::tab{{background:{CP['bg1']};color:{CP['text_secondary']};"
             f"padding:6px 18px;border:none;font-size:11px;font-weight:700;}}"
             f"QTabBar::tab:selected{{color:{CP['accent']};"
@@ -1186,30 +1191,42 @@ class PageScenario(QWidget):
     # ── Références visuelles ─────────────────────────────────────────────────
 
     def _refresh_refs_display(self):
+        from PyQt6.QtWidgets import QSizePolicy
         while self._refs_hbox.count():
             item = self._refs_hbox.takeAt(0)
             if item.widget():
                 item.widget().deleteLater()
-        # Bouton "+" toujours en premier à gauche — pas besoin de scroller pour l'atteindre
-        btn_add = QPushButton("+")
-        btn_add.setFixedSize(60, 60)
+
+        has_imgs = bool(self._ref_images)
+        # VIDE : zone de dépôt PLEINE LARGEUR (au lieu d'un « + » isolé dans un coin
+        # d'une grande boîte vide → c'était le problème de mise en page).
+        # AVEC images : « + » compact à gauche + miniatures (strip horizontal).
+        btn_add = QPushButton("+" if has_imgs else "＋  " + translate("Ajouter des images de référence"))
         btn_add.setCursor(Qt.CursorShape.PointingHandCursor)
         btn_add.setToolTip("Ajouter des images de référence\nClaude les analysera pour enrichir les descriptions.")
+        _fs = "24px" if has_imgs else "12px"
+        _fw = "300" if has_imgs else "700"
         btn_add.setStyleSheet(f"""
             QPushButton{{
                 background:transparent;color:{CP['text_dim']};
                 border:1px dashed {CP['border_bright']};border-radius:8px;
-                font-size:24px;font-weight:300;padding:0;
+                font-size:{_fs};font-weight:{_fw};padding:0;
             }}
             QPushButton:hover{{color:{CP['accent']};border-color:{CP['accent']};
                 background:rgba(78,205,196,0.08);}}
             QPushButton:pressed{{background:rgba(78,205,196,0.16);}}
         """)
         btn_add.clicked.connect(self._on_add_refs)
-        self._refs_hbox.addWidget(btn_add)
-        for path in self._ref_images:
-            self._refs_hbox.addWidget(self._make_ref_thumbnail(path))
-        self._refs_hbox.addStretch()
+        if has_imgs:
+            btn_add.setFixedSize(60, 60)
+            self._refs_hbox.addWidget(btn_add)
+            for path in self._ref_images:
+                self._refs_hbox.addWidget(self._make_ref_thumbnail(path))
+            self._refs_hbox.addStretch()
+        else:
+            btn_add.setMinimumHeight(60)
+            btn_add.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+            self._refs_hbox.addWidget(btn_add)
 
     def _make_ref_thumbnail(self, path: str) -> QWidget:
         container = QWidget()
