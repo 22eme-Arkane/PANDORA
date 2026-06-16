@@ -28,16 +28,22 @@ UPSCALE_MODELS = [
 
 # Modèles d'amélioration Topaz — (libellé affiché, valeur EXACTE de l'enum API).
 # ⚠ Vu en réel (2026-06-11) : « Gaia »/« Artemis »/« Starlight » nus n'existent
-# pas dans l'enum fal.ai → erreur immédiate. Valeurs valides (doc API) :
-# Proteus, Artemis HQ/MQ/LQ, Nyx, Nyx Fast/XL/HF, Gaia HQ/CG/2, Starlight *.
+# pas dans l'enum fal.ai → erreur immédiate. Enum complet vérifié sur la doc
+# fal.ai (2026-06-16) : Proteus, Artemis HQ/MQ/LQ, Nyx, Nyx Fast/XL/HF,
+# Gaia HQ/CG/2, Starlight Precise 1/2/2.5, Starlight HQ/Mini/Sharp, Starlight Fast 1/2.
+# ⚠ « Astra » n'est PAS dans l'enum vidéo fal.ai → non disponible.
 TOPAZ_MODELS = [
-    ("Proteus  (polyvalent — recommandé)",      "Proteus"),
-    ("Artemis HQ  (footage propre)",            "Artemis HQ"),
-    ("Artemis MQ  (footage moyen)",             "Artemis MQ"),
-    ("Gaia HQ  (rendu naturel)",                "Gaia HQ"),
-    ("Gaia CG  (rendu 3D / CG)",                "Gaia CG"),
-    ("Nyx  (réduction de bruit)",               "Nyx"),
-    ("Starlight Mini  (qualité max, lent)",     "Starlight Mini"),
+    ("Proteus  (polyvalent — recommandé)",            "Proteus"),
+    ("Artemis HQ  (footage propre)",                  "Artemis HQ"),
+    ("Artemis MQ  (footage moyen)",                   "Artemis MQ"),
+    ("Gaia HQ  (rendu naturel)",                      "Gaia HQ"),
+    ("Gaia CG  (rendu 3D / CG)",                      "Gaia CG"),
+    ("Gaia 2  (génératif, naturel)",                  "Gaia 2"),
+    ("Nyx  (réduction de bruit)",                     "Nyx"),
+    ("Starlight Mini  (génératif, rapide)",           "Starlight Mini"),
+    ("Starlight Precise 2  (génératif v2, fidèle)",   "Starlight Precise 2"),
+    ("Starlight Precise 2.5  (génératif, dernier)",   "Starlight Precise 2.5"),
+    ("Starlight Fast 2  (génératif v2, rapide)",      "Starlight Fast 2"),
 ]
 
 _ENDPOINTS = {

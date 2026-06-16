@@ -143,6 +143,20 @@ def run_real(params: dict, emit_progress, is_cancelled) -> dict:
     ref_images = ref_images[:4]
     ref_roles  = ref_roles[:4]
 
+    # ── Clip source : transcodage H.264 automatique si format non supporté ──────
+    # (ex. MXF/ProRes/HEVC/4K exotique) → évite les rejets des moteurs. Conserve
+    # la résolution native. No-op si déjà mp4/H.264 ou ffmpeg absent.
+    _vp = params.get("video_path", "")
+    if _vp and os.path.isfile(_vp):
+        try:
+            from core.video_utils import ensure_engine_video
+            _vp2 = ensure_engine_video(_vp, emit=lambda m: emit_progress(2, m))
+            if _vp2 and _vp2 != _vp:
+                params = dict(params)
+                params["video_path"] = _vp2
+        except Exception:
+            pass
+
     _auto_ref = mode == "t2v" and bool(ref_images)  # track auto-switch to restore on upload failure
     if _auto_ref:
         mode = "ref"

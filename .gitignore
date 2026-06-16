@@ -38,6 +38,9 @@ data/staging/
 data/decor_sync/
 data/Storyboard/
 data/Scénario/
+data/Image IA/
+data/.transcode/
+data/upscaled/
 
 # Données PANDORA | Live générées
 data/live_seq_*/

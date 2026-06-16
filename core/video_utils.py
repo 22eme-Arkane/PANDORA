@@ -405,3 +405,78 @@ def extract_last_frame(video_path: str, output_path: str) -> bool:
         pass
 
     return False
+
+
+# ── Compatibilité moteurs : transcodage H.264 automatique ──────────────────────
+
+def _video_codec(path: str) -> str:
+    """Codec vidéo (ex. 'h264', 'hevc', 'prores') via ffprobe ; '' si indéterminé."""
+    try:
+        out = subprocess.run(
+            [get_ffprobe_exe(), "-v", "error", "-select_streams", "v:0",
+             "-show_entries", "stream=codec_name", "-of", "default=nw=1:nk=1", path],
+            capture_output=True, text=True, timeout=30, creationflags=_NO_WINDOW)
+        return (out.stdout or "").strip().lower()
+    except Exception:
+        return ""
+
+
+def _transcode_cache_dir() -> str:
+    try:
+        from core.context import get_data_root
+        d = os.path.join(get_data_root(), ".transcode")
+    except Exception:
+        import tempfile
+        d = os.path.join(tempfile.gettempdir(), "pandora_transcode")
+    os.makedirs(d, exist_ok=True)
+    return d
+
+
+def is_engine_compatible(path: str) -> bool:
+    """True si le fichier est directement exploitable par les moteurs (mp4 H.264)."""
+    if not path or not os.path.isfile(path):
+        return False
+    if os.path.splitext(path)[1].lower() != ".mp4":
+        return False
+    codec = _video_codec(path)
+    return codec in ("", "h264")   # '' = ffprobe absent → on fait confiance au .mp4
+
+
+def ensure_engine_video(path: str, emit=None) -> str:
+    """Retourne un chemin vidéo H.264/mp4 exploitable par les moteurs IA.
+
+    Transcode automatiquement si le format/codec n'est pas supporté (MXF, ProRes,
+    HEVC, conteneurs exotiques…), en CONSERVANT la résolution native (la plus
+    haute). Renvoie l'original si déjà compatible OU si ffmpeg est indisponible.
+    Résultat mis en cache (par chemin+taille+date) pour ne pas re-transcoder.
+    `emit(msg)` : callback optionnel de progression.
+    """
+    if not path or not os.path.isfile(path):
+        return path
+    if is_engine_compatible(path):
+        return path
+    try:
+        st = os.stat(path)
+        sig = f"{os.path.splitext(os.path.basename(path))[0]}_{st.st_size}_{int(st.st_mtime)}"
+    except Exception:
+        sig = os.path.splitext(os.path.basename(path))[0]
+    safe = "".join(c for c in sig if c.isalnum() or c in "-_") or "clip"
+    out = os.path.join(_transcode_cache_dir(), safe + "_h264.mp4")
+    if os.path.isfile(out) and os.path.getsize(out) > 0:
+        return out
+    if emit:
+        try:
+            emit("Conversion du clip en H.264…")
+        except Exception:
+            pass
+    try:
+        cmd = [get_ffmpeg_exe(), "-y", "-i", path,
+               "-c:v", "libx264", "-preset", "veryfast", "-crf", "18",
+               "-pix_fmt", "yuv420p", "-movflags", "+faststart",
+               "-c:a", "aac", "-b:a", "192k", out]
+        r = subprocess.run(cmd, capture_output=True, timeout=1800, creationflags=_NO_WINDOW)
+        if r.returncode == 0 and os.path.isfile(out) and os.path.getsize(out) > 0:
+            return out
+    except Exception:
+        pass
+    return path   # repli : on tente l'original

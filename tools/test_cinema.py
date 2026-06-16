@@ -788,14 +788,19 @@ def studio_musique_ia_et_image_ia():
     tog = ti.panel._chat_toggle
     assert tog._open is True, "discussion ouverte par défaut"
 
-    # Réglages Image IA : Annuler + chargement/aperçu masqués au repos + résolution
+    # Réglages Image IA : Annuler + chargement masqués au repos ; aperçu TOUJOURS
+    # visible (placeholder) pour garder la mise en page compacte.
     pn = ti.panel
     assert hasattr(pn, "_cancel_btn") and hasattr(pn, "_res_value"), "Annuler + résolution dérivée"
-    assert pn._progress.isHidden() and pn._cancel_btn.isHidden() and pn._preview.isHidden(), \
-        "barre de chargement / Annuler / aperçu masqués tant qu'inactif"
+    assert pn._progress.isHidden() and pn._cancel_btn.isHidden(), \
+        "barre de chargement / Annuler masqués tant qu'inactif"
+    assert not pn._preview.isHidden() and "attente" in pn._preview.text().lower(), \
+        "aperçu visible avec placeholder (évite les trous)"
     assert pn._res.itemText(0) == "Personnaliser", "résolution « Personnaliser » par défaut"
-    assert "Studio Images" not in inspect.getsource(type(pn)._build_topbar), \
-        "titre « Studio Images » retiré de la barre"
+    # Plus de bouton « Clés API » + Sauvegarder/Ouvrir dans la barre
+    tb = inspect.getsource(type(pn)._build_topbar)
+    assert "Clés API" not in tb, "bouton Clés API retiré"
+    assert "_on_save_session" in tb and "_on_open_session" in tb, "Sauvegarder/Ouvrir Image IA"
     # Simule un clic gauche sur la poignée
     from PyQt6.QtCore import Qt as _Qt
     tog.mousePressEvent(type("E", (), {"button": lambda s: _Qt.MouseButton.LeftButton})())
@@ -947,6 +952,23 @@ def scenario_storyboard_save_open():
     pb = PageStoryboard()
     assert hasattr(pb, "_btn_save_sb_file") and hasattr(pb, "_btn_open_sb_file")
     assert hasattr(pb, "_on_save_storyboard_file") and hasattr(pb, "_on_open_storyboard_file")
+
+
+@test
+def transcode_h264_et_starlight2():
+    """Transcodage H.264 auto des clips avant envoi moteur + modèles Starlight 2
+    dans l'Upscaling Topaz (Astra absent de fal.ai)."""
+    from core.video_utils import ensure_engine_video, is_engine_compatible
+    assert ensure_engine_video("absent.mxf") == "absent.mxf", "no-op si fichier absent"
+    assert is_engine_compatible("absent.mxf") is False
+    # api/real transcode le clip source avant l'upload
+    import api.real as r
+    assert "ensure_engine_video" in inspect.getsource(r), "transcodage H.264 avant upload"
+    # Upscaling : Starlight 2 présents, Astra absent
+    import api.upscale as up
+    vals = [v for _, v in up.TOPAZ_MODELS]
+    assert "Starlight Precise 2" in vals and "Starlight Fast 2" in vals and "Gaia 2" in vals
+    assert not any("Astra" in v for v in vals), "Astra non dispo sur fal.ai"
 
 
 # ══════════════════════════════════════════════════════════════════════════════
