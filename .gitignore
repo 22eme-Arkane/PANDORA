@@ -36,6 +36,8 @@ data/music/
 data/sound_design/
 data/staging/
 data/decor_sync/
+data/Storyboard/
+data/Scénario/
 
 # Données PANDORA | Live générées
 data/live_seq_*/

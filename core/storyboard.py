@@ -485,3 +485,70 @@ def save_apercus(shot_id: str, paths: list, active_idx: int) -> None:
     os.makedirs(d, exist_ok=True)
     with open(os.path.join(d, "apercus.json"), "w", encoding="utf-8") as f:
         json.dump({"paths": paths, "active_idx": active_idx}, f, indent=2)
+
+
+# ── Sauvegarde / ouverture PHYSIQUE (fichiers nommés, dossier « Storyboard ») ───
+# Déjà dans le dossier du projet → pas de sous-dossier projet.
+
+def _saves_dir() -> str:
+    from core.context import get_data_root
+    d = os.path.join(get_data_root(), "Storyboard")
+    os.makedirs(d, exist_ok=True)
+    return d
+
+
+def _safe_name(name: str) -> str:
+    s = "".join(c for c in (name or "") if c.isalnum() or c in " -_").strip()
+    return s[:80] or "storyboard"
+
+
+def list_saved() -> list[str]:
+    """Noms des storyboards sauvegardés (fichiers .json du dossier Storyboard)."""
+    try:
+        return sorted(f[:-5] for f in os.listdir(_saves_dir()) if f.endswith(".json"))
+    except Exception:
+        return []
+
+
+def export_storyboard(name: str, version_id: str = DEFAULT_VERSION_ID) -> str:
+    """Sauvegarde physique des plans (version courante) sous
+    <projet>/data/Storyboard/<nom>.json."""
+    shots = [{k: v for k, v in s.items() if not k.startswith("_")}
+             for s in list_shots(version_id)]
+    payload = {
+        "saved_name": name,
+        "saved_at": datetime.now().isoformat(timespec="seconds"),
+        "shots": shots,
+    }
+    path = os.path.join(_saves_dir(), _safe_name(name) + ".json")
+    with open(path, "w", encoding="utf-8") as f:
+        json.dump(payload, f, ensure_ascii=False, indent=2)
+    return path
+
+
+def import_storyboard(name: str, version_id: str = DEFAULT_VERSION_ID) -> int:
+    """Recharge un storyboard sauvegardé : REMPLACE les plans de la version
+    courante du projet. Retourne le nombre de plans importés."""
+    from core.context import get_project_id
+    path = os.path.join(_saves_dir(), _safe_name(name) + ".json")
+    if not os.path.isfile(path):
+        return 0
+    with open(path, "r", encoding="utf-8") as f:
+        data = json.load(f)
+    shots = data.get("shots", []) or []
+    pid = get_project_id()
+    index = _load_index()
+    # Retire les plans de cette version (pour ce projet)
+    index = [s for s in index if not (
+        s.get("version_id", DEFAULT_VERSION_ID) == version_id
+        and (not pid or s.get("project_id") == pid))]
+    for s in shots:
+        s = dict(s)
+        s["version_id"] = version_id
+        if pid:
+            s["project_id"] = pid
+        if not s.get("id"):
+            s["id"] = str(uuid.uuid4())
+        index.append(s)
+    _save_index(index)
+    return len(shots)

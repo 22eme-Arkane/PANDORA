@@ -900,6 +900,55 @@ def staging_outils_projecteurs_sections():
     assert "ProjectorDialog" in psrc and "_on_light_context" in psrc and "_on_actor_context" in psrc
 
 
+@test
+def scenario_onglet_mise_en_page():
+    """Page Scénario : 2 onglets (Scénario / Mise en page PANDORA) façon Live —
+    la mise en page va dans son onglet et NE touche PAS au scénario."""
+    from ui.page_scenario import PageScenario
+    p = PageScenario()
+    assert hasattr(p, "_editor_tabs") and hasattr(p, "_layout_view"), "onglets éditeur"
+    assert p._editor_tabs.count() == 2, "Scénario + Mise en page PANDORA"
+    assert not p._editor_tabs.isTabEnabled(1), "Mise en page grisée tant que vide"
+    # La mise en page n'écrase pas le scénario
+    p._set_editor_text("SCENARIO ORIGINAL")
+    p._current = {}
+    p._apply_layout("MISE EN PAGE PANDORA")
+    assert p._editor_text.toPlainText().strip() == "SCENARIO ORIGINAL", "scénario intact"
+    assert "MISE EN PAGE" in p._layout_view.toPlainText()
+    assert p._editor_tabs.isTabEnabled(1) and p._editor_tabs.currentIndex() == 1
+    assert p._current.get("layout_content"), "mise en page persistée séparément"
+    # La fenêtre de mise en page applique vers l'onglet (pas _set_editor_text)
+    fw = inspect.getsource(PageScenario._open_format_window)
+    assert "_apply_layout" in fw and "_set_editor_text" not in fw, \
+        "la fenêtre Mise en page écrit dans l'onglet dédié"
+    # Largeur de ligne limitée (lisibilité « page Word »)
+    be = inspect.getsource(PageScenario._build_editor)
+    assert "FixedPixelWidth" in be, "lignes de la mise en page limitées en largeur"
+
+
+@test
+def scenario_storyboard_save_open():
+    """Sauvegarde / ouverture PHYSIQUE du scénario (dossier Scénario) et du
+    storyboard (dossier Storyboard) — fichiers nommés dans le dossier du projet."""
+    import core.scenario as sc, core.storyboard as sb
+    # API présentes
+    for m in ("export_scenario_file", "import_scenario_file", "list_saved"):
+        assert hasattr(sc, m), f"scenario.{m}"
+    for m in ("export_storyboard", "import_storyboard", "list_saved"):
+        assert hasattr(sb, m), f"storyboard.{m}"
+    # Page Scénario : boutons Sauvegarder/Ouvrir, plus de combo Versions
+    from ui.page_scenario import PageScenario
+    ps = PageScenario()
+    assert hasattr(ps, "_btn_scn_save") and hasattr(ps, "_btn_scn_open"), "boutons scénario"
+    assert not hasattr(ps, "_version_combo"), "contrôles Versions retirés"
+    assert hasattr(ps, "_on_save_scenario_file") and hasattr(ps, "_on_open_scenario_file")
+    # Page Storyboard : boutons Sauvegarder/Ouvrir près de Synchronisation
+    from ui.page_storyboard import PageStoryboard
+    pb = PageStoryboard()
+    assert hasattr(pb, "_btn_save_sb_file") and hasattr(pb, "_btn_open_sb_file")
+    assert hasattr(pb, "_on_save_storyboard_file") and hasattr(pb, "_on_open_storyboard_file")
+
+
 # ══════════════════════════════════════════════════════════════════════════════
 # Runner
 # ══════════════════════════════════════════════════════════════════════════════

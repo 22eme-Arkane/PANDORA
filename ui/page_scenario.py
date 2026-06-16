@@ -321,61 +321,34 @@ class PageScenario(QWidget):
         self._title_edit.textChanged.connect(self._adjust_title_width)
         tl.addWidget(self._title_edit)
 
-        # ── Versions (top bar, juste à droite du titre) ───────────────────────
-        _ver_sep = QFrame()
-        _ver_sep.setFixedSize(1, 24)
-        _ver_sep.setStyleSheet(f"background:{CP['border']};")
-        tl.addWidget(_ver_sep)
+        # ── Sauvegarder / Ouvrir le scénario (fichiers physiques, dossier Scénario) ──
+        _scn_sep = QFrame()
+        _scn_sep.setFixedSize(1, 24)
+        _scn_sep.setStyleSheet(f"background:{CP['border']};")
+        tl.addWidget(_scn_sep)
 
-        self._version_combo = QComboBox()
-        self._version_combo.setFixedHeight(30)
-        self._version_combo.setMinimumWidth(150)
-        self._version_combo.setMaximumWidth(200)
-        self._version_combo.setPlaceholderText("Versions…")
-        self._version_combo.setStyleSheet(
-            f"QComboBox{{background:{CP['bg2']};border:1px solid {CP['border']};"
-            f"border-radius:6px;color:{CP['text_secondary']};font-size:10px;padding:0 8px;}}"
-            f"QComboBox:focus{{border-color:{CP['accent2_dim']};}}"
-            f"QComboBox::drop-down{{border:none;width:16px;}}"
-            f"QComboBox::down-arrow{{image:none;border-left:4px solid transparent;"
-            f"border-right:4px solid transparent;border-top:5px solid {CP['text_dim']};"
-            f"margin-right:4px;}}"
-            f"QComboBox QAbstractItemView{{background:{CP['bg2']};border:1px solid {CP['border_bright']};"
-            f"selection-background-color:{CP['accent2_dim']};color:{CP['text_primary']};"
-            f"font-size:10px;padding:4px;}}"
+        _yellow, _blue = "#f5c518", "#4aa3ff"
+        self._btn_scn_save = QPushButton("💾  Sauvegarder")
+        self._btn_scn_save.setFixedHeight(30)
+        self._btn_scn_save.setToolTip("Sauvegarder ce scénario sous un nom (dossier Scénario du projet)")
+        self._btn_scn_save.setStyleSheet(
+            f"QPushButton{{background:transparent;color:{_yellow};"
+            f"border:1px solid {_yellow};border-radius:6px;font-size:10px;font-weight:700;padding:0 12px;}}"
+            f"QPushButton:hover{{background:rgba(245,197,24,0.12);}}"
         )
-        self._version_combo.currentIndexChanged.connect(self._on_version_selected)
-        self._version_combo.activated.connect(self._on_version_activated)
-        tl.addWidget(self._version_combo)
+        self._btn_scn_save.clicked.connect(self._on_save_scenario_file)
+        tl.addWidget(self._btn_scn_save)
 
-        _ver_btn_ss = (
-            f"QPushButton{{background:transparent;color:{CP['text_dim']};"
-            f"border:1px solid {CP['border']};border-radius:6px;"
-            f"font-size:11px;font-weight:700;padding:0 8px;}}"
-            f"QPushButton:hover:enabled{{background:{CP['bg2']};color:{CP['text_primary']};"
-            f"border-color:{CP['border_bright']};}}"
-            f"QPushButton:disabled{{color:{CP['bg3']};border-color:{CP['bg3']};}}"
+        self._btn_scn_open = QPushButton("📂  Ouvrir")
+        self._btn_scn_open.setFixedHeight(30)
+        self._btn_scn_open.setToolTip("Ouvrir un scénario sauvegardé")
+        self._btn_scn_open.setStyleSheet(
+            f"QPushButton{{background:transparent;color:{_blue};"
+            f"border:1px solid {_blue};border-radius:6px;font-size:10px;font-weight:700;padding:0 12px;}}"
+            f"QPushButton:hover{{background:rgba(74,163,255,0.12);}}"
         )
-        self._btn_save_version = QPushButton("✚")
-        self._btn_save_version.setFixedSize(30, 30)
-        self._btn_save_version.setToolTip("Sauvegarder une version")
-        self._btn_save_version.setStyleSheet(_ver_btn_ss)
-        self._btn_save_version.clicked.connect(self._save_version)
-        tl.addWidget(self._btn_save_version)
-
-        # ⤓ button removed — selecting from the combo now loads the version directly
-
-        self._btn_del_version = QPushButton("✕")
-        self._btn_del_version.setFixedSize(30, 30)
-        self._btn_del_version.setToolTip("Supprimer la version sélectionnée")
-        self._btn_del_version.setEnabled(False)
-        self._btn_del_version.setStyleSheet(
-            _ver_btn_ss
-            + f"QPushButton:hover:enabled{{color:{CP['red']};border-color:{CP['red']};"
-            f"background:rgba(255,79,106,0.1);}}"
-        )
-        self._btn_del_version.clicked.connect(self._delete_version)
-        tl.addWidget(self._btn_del_version)
+        self._btn_scn_open.clicked.connect(self._on_open_scenario_file)
+        tl.addWidget(self._btn_scn_open)
 
         # ── Style visuel (top bar, après les boutons de version) ──────────────
         _style_sep_top = QFrame()
@@ -469,7 +442,43 @@ class PageScenario(QWidget):
         self._editor_text.document().setDefaultTextOption(_opt)
         self._editor_text.textChanged.connect(self._schedule_autosave)
         self._editor_text.textChanged.connect(self._update_dur_estimate)
-        main.addWidget(self._editor_text, 1)
+
+        # ── Deux onglets : Scénario (édition) / Mise en page PANDORA (optimisé) ──
+        # Comme dans PANDORA | Live : la mise en page PANDORA s'écrit dans son
+        # propre onglet et NE touche JAMAIS au scénario.
+        from PyQt6.QtWidgets import QTabWidget
+        self._editor_tabs = QTabWidget()
+        self._editor_tabs.setDocumentMode(True)
+        self._editor_tabs.setStyleSheet(
+            "QTabWidget::pane{border:none;}"
+            f"QTabBar::tab{{background:{CP['bg1']};color:{CP['text_secondary']};"
+            f"padding:6px 18px;border:none;font-size:11px;font-weight:700;}}"
+            f"QTabBar::tab:selected{{color:{CP['accent']};"
+            f"border-bottom:2px solid {CP['accent']};}}"
+            f"QTabBar::tab:disabled{{color:{CP['text_dim']};}}"
+        )
+        self._editor_tabs.addTab(self._editor_text, translate("Scénario"))
+
+        self._layout_view = QTextEdit()
+        self._layout_view.setReadOnly(True)
+        self._layout_view.setFont(_tw_font)
+        self._layout_view.setStyleSheet(
+            f"QTextEdit{{background:{CP['bg0']};border:none;color:{CP['text_primary']};}}"
+        )
+        self._layout_view.document().setDocumentMargin(48)
+        # Largeur de ligne limitée (lisibilité « page Word » : ~90 caractères) —
+        # sinon les phrases prennent toute la largeur de l'écran.
+        self._layout_view.setLineWrapMode(QTextEdit.LineWrapMode.FixedPixelWidth)
+        self._layout_view.setLineWrapColumnOrWidth(780)
+        self._layout_view.setPlaceholderText(translate(
+            "Clique « Mise en page PANDORA » (panneau de droite) pour générer ici la "
+            "version optimisée pour les moteurs. Ton scénario, lui, reste intact "
+            "dans l'onglet Scénario."
+        ))
+        self._editor_tabs.addTab(self._layout_view, translate("Mise en page PANDORA"))
+        self._editor_tabs.setTabEnabled(1, False)   # grisé tant qu'aucune mise en page
+
+        main.addWidget(self._editor_tabs, 1)
 
         # Right panel
         right_sep = QFrame()
@@ -919,6 +928,35 @@ class PageScenario(QWidget):
         self._editor_text.setPlainText(text)
         self._apply_center_alignment()
 
+    def _apply_layout(self, text: str):
+        """Écrit la Mise en page PANDORA dans son onglet dédié — le Scénario
+        (onglet 1) reste INTACT. Active l'onglet et l'affiche."""
+        if not text:
+            return
+        self._layout_view.setPlainText(text)
+        if hasattr(self, "_editor_tabs"):
+            self._editor_tabs.setTabEnabled(1, True)
+            self._editor_tabs.setCurrentIndex(1)
+        if self._current is not None:
+            self._current["layout_content"] = text
+
+    def _clear_layout(self):
+        """Vide la Mise en page PANDORA et désactive son onglet."""
+        if hasattr(self, "_layout_view"):
+            self._layout_view.clear()
+        if hasattr(self, "_editor_tabs"):
+            self._editor_tabs.setTabEnabled(1, False)
+            self._editor_tabs.setCurrentIndex(0)
+
+    def _restore_layout(self, text: str):
+        """Recharge la Mise en page PANDORA depuis le scénario (onglet activé si présente)."""
+        if not hasattr(self, "_layout_view"):
+            return
+        self._layout_view.setPlainText(text or "")
+        if hasattr(self, "_editor_tabs"):
+            self._editor_tabs.setTabEnabled(1, bool((text or "").strip()))
+            self._editor_tabs.setCurrentIndex(0)
+
     def _apply_center_alignment(self):
         """Applique AlignHCenter à tous les blocs du document sans polluer le undo Qt."""
         from PyQt6.QtGui import QTextCursor, QTextBlockFormat
@@ -944,6 +982,7 @@ class PageScenario(QWidget):
         self._redo_stack.clear()
         self._title_edit.setText(_pname)
         self._set_editor_text("")
+        self._clear_layout()
         self._dur_defined_check.setChecked(False)
         self._dur_min.setValue(90)
         self._dur_sec.setValue(0)
@@ -959,6 +998,8 @@ class PageScenario(QWidget):
         self._title_edit.setText(sc.get("title", ""))
         content = sc.get("formatted_content") or sc.get("raw_content", "")
         self._set_editor_text(content)
+        # Mise en page PANDORA — restaurée dans son onglet dédié (scénario intact)
+        self._restore_layout(sc.get("layout_content", ""))
         dur         = sc.get("duration_secs", 0)
         dur_defined = sc.get("duration_defined", False) or dur > 0
         self._dur_defined_check.setChecked(dur_defined)
@@ -1077,6 +1118,7 @@ class PageScenario(QWidget):
             "duration_secs":     dur_secs,
             "duration_defined":  dur_defined,
             "film_style":        film_style_key if film_style_key not in ("", "__sep__") else "",
+            "layout_content":    self._layout_view.toPlainText() if hasattr(self, "_layout_view") else "",
         })
         self._current = scenario_api.save_scenario(data)
         if not silent:
@@ -1090,6 +1132,56 @@ class PageScenario(QWidget):
 
     def _get_text(self) -> str:
         return self._editor_text.toPlainText().strip()
+
+    # ── Sauvegarde / ouverture physique du scénario (dossier « Scénario ») ──────
+
+    def _on_save_scenario_file(self):
+        from PyQt6.QtWidgets import QInputDialog, QMessageBox
+        import core.scenario as scenario_api
+        text  = self._get_text()
+        title = self._title_edit.text().strip()
+        if not text and not title:
+            QMessageBox.information(self, "Sauvegarder", "Le scénario est vide.")
+            return
+        name, ok = QInputDialog.getText(self, "Sauvegarder le scénario", "Nom :",
+                                        text=title or "Scénario")
+        if not (ok and name.strip()):
+            return
+        dur_defined = self._dur_defined_check.isChecked()
+        dur_secs    = (self._dur_min.value() * 60 + self._dur_sec.value()) if dur_defined else 0
+        data = dict(self._current or {})
+        data.update({
+            "title":             title or name.strip(),
+            "raw_content":       text,
+            "formatted_content": text,
+            "layout_content":    self._layout_view.toPlainText() if hasattr(self, "_layout_view") else "",
+            "duration_secs":     dur_secs,
+            "duration_defined":  dur_defined,
+            "film_style":        self._film_style_combo.currentData() or "",
+        })
+        try:
+            scenario_api.export_scenario_file(name.strip(), data)
+            self._ai_progress_lbl.setText(f"Scénario « {name.strip()} » sauvegardé ✓")
+        except Exception as e:
+            QMessageBox.critical(self, "Erreur", f"Échec de la sauvegarde : {e}")
+
+    def _on_open_scenario_file(self):
+        from PyQt6.QtWidgets import QInputDialog, QMessageBox
+        import core.scenario as scenario_api
+        names = scenario_api.list_saved()
+        if not names:
+            QMessageBox.information(self, "Ouvrir", "Aucun scénario sauvegardé.")
+            return
+        name, ok = QInputDialog.getItem(self, "Ouvrir un scénario",
+                                        "Scénario :", names, 0, False)
+        if not (ok and name):
+            return
+        data = scenario_api.import_scenario_file(name)
+        if not data:
+            QMessageBox.warning(self, "Ouvrir", "Fichier introuvable ou illisible.")
+            return
+        self._open_scenario(data)
+        self._ai_progress_lbl.setText(f"Scénario « {name} » ouvert ✓")
 
     # ── Références visuelles ─────────────────────────────────────────────────
 
@@ -1453,7 +1545,7 @@ class PageScenario(QWidget):
         btn_close.clicked.connect(_on_close_btn)
         dlg.rejected.connect(_stop_worker)
 
-        btn_apply = QPushButton(translate("↩  Remplacer le texte"))
+        btn_apply = QPushButton(translate("◈  Mettre dans « Mise en page PANDORA »"))
         btn_apply.setFixedHeight(36)
         btn_apply.setEnabled(not streaming)
         btn_apply.setStyleSheet(
@@ -1470,12 +1562,9 @@ class PageScenario(QWidget):
             result = _final_text[0].strip()
             if not result:
                 return
-            self._push_undo()
-            self._set_editor_text(result)
-            if self._current is not None:
-                self._current["formatted_content"] = result
-            self._ai_progress_lbl.setText("Mise en page PANDORA appliquée ✓")
-            self._btn_undo_action.setVisible(True)
+            # La mise en page va dans son onglet dédié — le scénario reste intact.
+            self._apply_layout(result)
+            self._ai_progress_lbl.setText("Mise en page PANDORA générée ✓ (onglet dédié)")
             dlg.accept()
 
         btn_apply.clicked.connect(_do_apply)
@@ -2235,6 +2324,9 @@ class PageScenario(QWidget):
     # ── Versions ──────────────────────────────────────────────────────────────
 
     def _refresh_version_combo(self):
+        # Contrôles « Versions » remplacés par Sauvegarder/Ouvrir — no-op si absents.
+        if not hasattr(self, "_version_combo"):
+            return
         self._version_combo.blockSignals(True)
         self._version_combo.clear()
         versions = (self._current or {}).get("versions", [])

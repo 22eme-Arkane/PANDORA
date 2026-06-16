@@ -78,6 +78,15 @@ EXPECTED_ONLY_CINEMA = {
     "ui/page_scenario_live.py": {
         # Pas de Décors ni de HMC dans le Live (handlers supprimés, validé)
         "_on_gen_decors", "_on_gen_hmc",
+        # Onglet « Mise en page PANDORA » Cinéma : helpers de persistance/reset
+        # (le Live gère sa mise en page inline dans _open_scenario) — voulu.
+        "_clear_layout", "_restore_layout",
+        # Sauvegarder/Ouvrir le scénario en fichier (dossier Scénario) — Cinéma only.
+        "_on_save_scenario_file", "_on_open_scenario_file",
+    },
+    "ui/page_storyboard_live.py": {
+        # Sauvegarder/Ouvrir le storyboard en fichier (dossier Storyboard) — Cinéma only.
+        "_on_save_storyboard_file", "_on_open_storyboard_file",
     },
     "ui/dialog_contact_live.py": {
         # Divergence LÉGÈRE voulue (2026-06-12) : le Live est une sous-classe

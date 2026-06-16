@@ -1864,6 +1864,21 @@ class GenerateRoomViewsWorker(QThread):
                 _res = fal_client.subscribe(_ep, arguments=_args)
                 return requests.get(_extract_image_url(_res), timeout=120).content
 
+            def _gen_edit(prompt: str, ref_urls: list, aspect: str) -> bytes:
+                _res = fal_client.subscribe("fal-ai/nano-banana-2/edit", arguments={
+                    "prompt":           prompt,
+                    "image_urls":       ref_urls,
+                    "num_images":       1,
+                    "aspect_ratio":     aspect,
+                    "resolution":       "1K",
+                    "output_format":    "png",
+                    "safety_tolerance": "6",
+                })
+                return requests.get(_extract_image_url(_res), timeout=120).content
+
+            # ⚠ RÉSILIENCE : chaque vue est isolée. Une vue qui échoue ne doit PAS
+            # faire perdre les autres (sinon on se retrouve avec « 1 décor + le plan »).
+
             # 1) PLAN D'ENSEMBLE d'abord (vue maîtresse) ─────────────────────────
             self.progress.emit(8, f"[1/8] Plan d'ensemble…  ({price})")
             ov_label, ov_code, ov_prompt = build_overview_prompt(base_en)
@@ -1871,46 +1886,55 @@ class GenerateRoomViewsWorker(QThread):
             if self._style_suffix:
                 full_ov = f"{full_ov}, {self._style_suffix}"
             full_ov = f"{full_ov}\n\n{_DECOR_LINE}"
-            ov_path = _save(_gen_text(full_ov, "16:9"), ov_code)
-            out.append({"label": ov_label, "code": ov_code, "path": ov_path, "prompt": ov_prompt})
+            ov_path = ""
+            try:
+                ov_path = _save(_gen_text(full_ov, "16:9"), ov_code)
+                out.append({"label": ov_label, "code": ov_code, "path": ov_path, "prompt": ov_prompt})
+            except Exception:
+                pass
 
             # 2) PLAN D'ARCHITECTURE vu de dessus (contexte : tous les éléments) ──
             self.progress.emit(20, "[2/8] Plan d'architecture (vue de dessus)…")
             fp_prompt = _floor_plan_prompt(base_en or "an interior room")
-            fp_path = _save(_gen_text(fp_prompt, "1:1"), "floorplan")
-            out.append({"label": "Plan (vue de dessus)", "code": "floorplan",
-                        "path": fp_path, "prompt": fp_prompt, "is_floor_plan": True})
+            fp_path = ""
+            try:
+                fp_path = _save(_gen_text(fp_prompt, "1:1"), "floorplan")
+                out.append({"label": "Plan (vue de dessus)", "code": "floorplan",
+                            "path": fp_path, "prompt": fp_prompt, "is_floor_plan": True})
+            except Exception:
+                pass
 
-            # 3) Les 6 FACES en INJECTANT plan d'architecture + plan d'ensemble ───
-            #    (NB2 edit) → mêmes objets/positions d'une vue à l'autre (raccord).
-            ref_urls = [_dataurl(fp_path), _dataurl(ov_path)]
+            # 3) Les 6 FACES — en INJECTANT plan d'architecture + plan d'ensemble si
+            #    disponibles (NB2 edit, raccord). REPLI : génération texte simple si
+            #    l'édition échoue → on a TOUJOURS les 6 vues.
+            ref_urls = [_dataurl(p) for p in (fp_path, ov_path) if p and os.path.isfile(p)]
             consistency = (
-                "CRITICAL CONSISTENCY: the two provided images are (1) a top-down "
-                "architectural floor plan and (2) a wide establishing view of THIS "
-                "exact room. Reproduce the SAME room — same walls, furniture, props, "
-                "materials, colors and their RELATIVE POSITIONS. Strict spatial "
-                "continuity with both references."
+                "CRITICAL CONSISTENCY: the provided images are a top-down architectural "
+                "floor plan and a wide establishing view of THIS exact room. Reproduce "
+                "the SAME room — same walls, furniture, props, materials, colors and "
+                "their RELATIVE POSITIONS. Strict spatial continuity with the references."
             )
             faces = build_six_view_prompts(base_en)
             for i, (label, code, fprompt) in enumerate(faces):
                 self.progress.emit(
                     30 + int(i / len(faces) * 66),
-                    f"[{i+3}/8] Vue « {label} » (raccord)…  ({price})"
+                    f"[{i+3}/8] Vue « {label} »…  ({price})"
                 )
-                full = fprompt
+                base_full = fprompt
                 if self._style_suffix:
-                    full = f"{full}, {self._style_suffix}"
-                full = f"{full}\n\n{consistency}\n\n{_DECOR_LINE}"
-                _res = fal_client.subscribe("fal-ai/nano-banana-2/edit", arguments={
-                    "prompt":           full,
-                    "image_urls":       ref_urls,
-                    "num_images":       1,
-                    "aspect_ratio":     "16:9",
-                    "resolution":       "1K",
-                    "output_format":    "png",
-                    "safety_tolerance": "6",
-                })
-                data = requests.get(_extract_image_url(_res), timeout=120).content
+                    base_full = f"{base_full}, {self._style_suffix}"
+                data = None
+                if ref_urls:
+                    try:
+                        data = _gen_edit(f"{base_full}\n\n{consistency}\n\n{_DECOR_LINE}",
+                                         ref_urls, "16:9")
+                    except Exception:
+                        data = None
+                if data is None:   # repli : génération texte simple (sans injection)
+                    try:
+                        data = _gen_text(f"{base_full}\n\n{_DECOR_LINE}", "16:9")
+                    except Exception:
+                        continue   # cette face échoue, on garde les autres
                 p = _save(data, code)
                 # Prompt PAR VUE renvoyé (cadrage compris) → régénération fidèle.
                 out.append({"label": label, "code": code, "path": p, "prompt": fprompt})

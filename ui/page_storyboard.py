@@ -2251,10 +2251,37 @@ class PageStoryboard(QWidget):
             f"QPushButton:disabled{{color:{CP['text_dim']};border-color:{CP['border']};}}"
         )
         self._btn_batch_mood.clicked.connect(self._on_batch_mood)
+        # Sauvegarder (jaune) / Ouvrir (bleu) — storyboard sauvegardé physiquement
+        # dans <projet>/data/Storyboard/ (comme un projet à part).
+        _yellow, _blue = "#f5c518", "#4aa3ff"
+        self._btn_save_sb_file = QPushButton("💾  Sauvegarder")
+        self._btn_save_sb_file.setFixedHeight(34)
+        self._btn_save_sb_file.setToolTip("Sauvegarder ce storyboard sous un nom (dossier Storyboard du projet)")
+        self._btn_save_sb_file.setStyleSheet(
+            f"QPushButton{{background:transparent;color:{_yellow};"
+            f"border:1px solid {_yellow};border-radius:8px;font-size:11px;font-weight:700;padding:0 14px;}}"
+            f"QPushButton:hover{{background:rgba(245,197,24,0.12);}}"
+            f"QPushButton:pressed{{background:rgba(245,197,24,0.22);}}"
+        )
+        self._btn_save_sb_file.clicked.connect(self._on_save_storyboard_file)
+
+        self._btn_open_sb_file = QPushButton("📂  Ouvrir")
+        self._btn_open_sb_file.setFixedHeight(34)
+        self._btn_open_sb_file.setToolTip("Ouvrir un storyboard sauvegardé")
+        self._btn_open_sb_file.setStyleSheet(
+            f"QPushButton{{background:transparent;color:{_blue};"
+            f"border:1px solid {_blue};border-radius:8px;font-size:11px;font-weight:700;padding:0 14px;}}"
+            f"QPushButton:hover{{background:rgba(74,163,255,0.12);}}"
+            f"QPushButton:pressed{{background:rgba(74,163,255,0.22);}}"
+        )
+        self._btn_open_sb_file.clicked.connect(self._on_open_storyboard_file)
+
         # « Générer les Moods » tout à gauche, « Synchronisation » à sa droite
         # (retour 2026-06-14) — avant le label/stretch qui pousse le reste à droite
         lay.insertWidget(0, self._btn_batch_mood)
         lay.insertWidget(1, self._btn_sync)
+        lay.insertWidget(2, self._btn_save_sb_file)
+        lay.insertWidget(3, self._btn_open_sb_file)
 
         btn_new = QPushButton("＋  Ajouter un plan")
         btn_new.setFixedHeight(34)
@@ -2409,6 +2436,46 @@ class PageStoryboard(QWidget):
         self._all_shots = sb_api.list_shots(self._active_version_id)
         self._refresh_snap_combo()
         self._render()
+
+    # ── Sauvegarde / ouverture physique du storyboard ───────────────────────────
+
+    def _on_save_storyboard_file(self):
+        from PyQt6.QtWidgets import QInputDialog, QMessageBox
+        if not self._all_shots:
+            QMessageBox.information(self, "Sauvegarder", "Le storyboard est vide.")
+            return
+        name, ok = QInputDialog.getText(self, "Sauvegarder le storyboard", "Nom :")
+        if not (ok and name.strip()):
+            return
+        try:
+            sb_api.export_storyboard(name.strip(), self._active_version_id)
+            QMessageBox.information(self, "Sauvegardé",
+                                    f"Storyboard « {name.strip()} » sauvegardé.")
+        except Exception as e:
+            QMessageBox.critical(self, "Erreur", f"Échec de la sauvegarde : {e}")
+
+    def _on_open_storyboard_file(self):
+        from PyQt6.QtWidgets import QInputDialog, QMessageBox
+        names = sb_api.list_saved()
+        if not names:
+            QMessageBox.information(self, "Ouvrir", "Aucun storyboard sauvegardé.")
+            return
+        name, ok = QInputDialog.getItem(self, "Ouvrir un storyboard",
+                                        "Storyboard :", names, 0, False)
+        if not (ok and name):
+            return
+        if QMessageBox.question(
+                self, "Ouvrir",
+                f"Charger « {name} » ? Les plans actuels de cette version seront remplacés.",
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
+        ) != QMessageBox.StandardButton.Yes:
+            return
+        try:
+            n = sb_api.import_storyboard(name, self._active_version_id)
+            self.refresh()
+            QMessageBox.information(self, "Ouvert", f"{n} plan(s) chargé(s) depuis « {name} ».")
+        except Exception as e:
+            QMessageBox.critical(self, "Erreur", f"Échec de l'ouverture : {e}")
 
     def _on_col_width_changed(self, col_idx: int, new_w: int):
         total = sum(_col_widths) + len(_col_widths) - 1
