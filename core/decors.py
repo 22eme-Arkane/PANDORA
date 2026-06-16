@@ -85,6 +85,8 @@ def save_decor(data: dict) -> dict:
         data.setdefault("prompt", "")
         data.setdefault("image_path", "")
         data.setdefault("floor_plan", "")   # plan vu de dessus (Mise en scène / Plan de feu)
+        data.setdefault("generated_images", [])  # galerie (dont les 7 vues de la pièce)
+        data.setdefault("room_views", [])        # [{label, code, path, prompt}] des 7 vues
         data.setdefault("ref_paths", [])
         data.setdefault("assigned_to", [])
         data.setdefault("assigned_sequences", [])

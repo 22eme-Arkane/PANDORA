@@ -41,6 +41,16 @@ class StoryboardSyncConfirmDialog(QDialog):
          "Vérifie chaque prompt et réécrit uniquement ceux qui ne reflètent plus les "
          "fiches actuelles (traits, costumes, lieux…).",
          True, True),
+        ("sync_staging",
+         "Synchroniser la mise en scène",
+         "Ajoute au prompt une section MISE EN SCÈNE : placement des personnages "
+         "(in/off, assis/debout…) et de la caméra, d'après le plan vu de dessus.",
+         False, False),
+        ("sync_lighting",
+         "Synchroniser le plan de feu",
+         "Ajoute au prompt une section PLAN DE FEU : description de la lumière et de "
+         "l'ambiance d'après les projecteurs placés.",
+         False, False),
         ("resync_decors",
          "Re-synchroniser les décors",
          "Met à jour le nom des décors renommés et ré-assigne les plans sans décor "
@@ -317,6 +327,7 @@ class StoryboardSyncDialog(QDialog):
         self._options     = options or {
             "reassign": True, "rewrite_prompts": True,
             "resync_decors": True, "rewrite_scenario": False,
+            "sync_staging": False, "sync_lighting": False,
         }
         self._scenario_text   = ""   # texte du scénario reconstruit (si demandé)
         self._scenario_worker = None
@@ -448,7 +459,8 @@ class StoryboardSyncDialog(QDialog):
     def _start(self):
         # Y a-t-il au moins une opération qui touche les plans ?
         shot_ops = any(self._options.get(k) for k in
-                       ("reassign", "rewrite_prompts", "resync_decors"))
+                       ("reassign", "rewrite_prompts", "resync_decors",
+                        "sync_staging", "sync_lighting"))
         if shot_ops:
             from api.screenplay import SyncStoryboardWorker
             w = SyncStoryboardWorker(self._shots_in, self._options)
@@ -508,7 +520,8 @@ class StoryboardSyncDialog(QDialog):
         self._list_frame.setVisible(True)
 
         shot_ops = any(self._options.get(k) for k in
-                       ("reassign", "rewrite_prompts", "resync_decors"))
+                       ("reassign", "rewrite_prompts", "resync_decors",
+                        "sync_staging", "sync_lighting"))
 
         # Changed first, then unchanged — uniquement si une opération sur les plans
         # a réellement tourné (sinon mode « scénario seul »).

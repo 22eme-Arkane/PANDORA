@@ -1383,12 +1383,41 @@ class SyncStoryboardWorker(QThread):
         self._opt_reassign  = o.get("reassign", True)
         self._opt_decors    = o.get("resync_decors", True)
         self._opt_prompts   = o.get("rewrite_prompts", True)
+        # Sections structurées du prompt (mise en scène / plan de feu).
+        self._opt_staging   = o.get("sync_staging", False)
+        self._opt_lighting  = o.get("sync_lighting", False)
 
     def run(self):
         try:
             self._run()
         except Exception as e:
             self.failed.emit(f"Erreur synchronisation : {e}")
+
+    def _finish(self):
+        """Assemble (si demandé) le prompt en SECTIONS étiquetées — [ACTION] +
+        [MISE EN SCÈNE] + [PLAN DE FEU] + [SOUND DESIGN] — puis émet finished.
+        Déterministe : la mise en scène / le plan de feu viennent des données."""
+        if self._opt_staging or self._opt_lighting:
+            import core.staging as _staging
+            from core.prompt_sections import build as _build, parse as _parse
+            for shot in self._shots:
+                sid = shot.get("id", "")
+                cur = (shot.get("seedance_prompt") or "").strip()
+                sec = _parse(cur)                       # récupère l'action si déjà structuré
+                action = sec.get("action") or cur
+                staging_txt = _staging.staging_summary(sid) if self._opt_staging else sec.get("staging", "")
+                light_txt   = _staging.lighting_summary(sid) if self._opt_lighting else sec.get("lighting", "")
+                sound_txt   = sec.get("sound") or (shot.get("sound_prompt") or "").strip()
+                if not (staging_txt or light_txt):
+                    continue
+                new = _build(action, staging_txt, light_txt, sound_txt)
+                if new and new != cur:
+                    shot["seedance_prompt"] = new
+                    shot["_prompt_changed"] = True
+                    if not shot.get("_reason"):
+                        shot["_reason"] = "sections mise en scène / plan de feu"
+        self.progress.emit(100, "Synchronisation terminée")
+        self.finished.emit(self._shots)
 
     def _run(self):
         import core.casting as casting_api
@@ -1501,8 +1530,7 @@ class SyncStoryboardWorker(QThread):
 
         # ── Phase 2 désactivée : on s'arrête après la ré-assignation ──────────
         if not self._opt_prompts:
-            self.progress.emit(100, "Synchronisation terminée")
-            self.finished.emit(self._shots)
+            self._finish()   # assemble les sections (mise en scène / plan de feu) si demandé
             return
 
         self.progress.emit(30, "Phase 2 — préparation des données pour Claude Haiku…")
@@ -1576,8 +1604,8 @@ class SyncStoryboardWorker(QThread):
             shots_payload.append(entry)
 
         if not shots_payload:
-            self.progress.emit(100, "Aucun prompt à synchroniser (aucun élément assigné avec description)")
-            self.finished.emit(self._shots)
+            self.progress.emit(60, "Aucun prompt à réécrire — assemblage des sections…")
+            self._finish()
             return
 
         from core.ai_provider import complete as ai_complete, key_error, ai_name
@@ -1619,8 +1647,8 @@ class SyncStoryboardWorker(QThread):
                 shot["_reason"]         = upd.get("reason", "")
                 shot["seedance_prompt"] = upd.get("prompt", shot.get("seedance_prompt", ""))
 
-        self.progress.emit(100, "Synchronisation terminée")
-        self.finished.emit(self._shots)
+        self.progress.emit(90, "Assemblage des sections…")
+        self._finish()
 
 
 # ── Réécriture du scénario depuis le storyboard ───────────────────────────────

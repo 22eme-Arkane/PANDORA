@@ -12,6 +12,7 @@ from PyQt6.QtWidgets import (
     QListWidget, QListWidgetItem, QInputDialog, QMenu,
 )
 from PyQt6.QtCore import Qt
+from PyQt6.QtGui import QShortcut, QKeySequence
 from ui.styles import CP
 from ui.widgets import HelpBlock
 from ui.staging_canvas import StagingCanvas
@@ -100,10 +101,16 @@ class PageStaging(QWidget):
         right.setSpacing(8)
         self._canvas = StagingCanvas(mode=self._mode)
         self._canvas.changed.connect(self._autosave)
+        self._canvas.actor_context.connect(self._on_actor_context)
+        self._canvas.light_context.connect(self._on_light_context)
         right.addLayout(self._build_toolbar())
         right.addWidget(self._canvas, 1)
         body.addLayout(right, 1)
         root.addLayout(body, 1)
+
+        # Raccourci R : bascule Déplacer ↔ Rotation (façon Photoshop)
+        self._sc_rotate = QShortcut(QKeySequence("R"), self)
+        self._sc_rotate.activated.connect(self._toggle_tool)
 
     # ── Contenu spécifique au mode ──────────────────────────────────────────────
 
@@ -126,6 +133,18 @@ class PageStaging(QWidget):
         self._btn_gen = _btn("✦  " + translate("Générer le plan"))
         self._btn_gen.clicked.connect(self._on_generate_plan)
         tb.addWidget(self._btn_gen)
+
+        # Modes outil : Déplacer / Rotation (+ raccourci R)
+        self._btn_move = _btn("✥  " + translate("Déplacer"))
+        self._btn_move.setCheckable(True)
+        self._btn_move.clicked.connect(lambda: self._set_tool("move"))
+        self._btn_rotate = _btn("⟳  " + translate("Rotation"))
+        self._btn_rotate.setCheckable(True)
+        self._btn_rotate.setToolTip(translate("Raccourci : R"))
+        self._btn_rotate.clicked.connect(lambda: self._set_tool("rotate"))
+        tb.addWidget(self._btn_move)
+        tb.addWidget(self._btn_rotate)
+        self._set_tool("move")
         if self._mode == "staging":
             b_actor = _btn("＋ " + translate("Acteur")); b_actor.clicked.connect(self._add_actor)
             b_prop  = _btn("＋ " + translate("Élément")); b_prop.clicked.connect(self._add_prop)
@@ -206,16 +225,72 @@ class PageStaging(QWidget):
             self._canvas.add_prop(name.strip())
 
     def _add_light(self):
-        items = [lbl for _, lbl in staging.PROJECTOR_TYPES]
-        lbl, ok = QInputDialog.getItem(self, translate("Lumière"),
-                                       translate("Type de projecteur :"), items, 0, False)
-        if not ok:
-            return
-        ltype = next((k for k, l in staging.PROJECTOR_TYPES if l == lbl), "key")
-        name, ok2 = QInputDialog.getText(self, translate("Lumière"), translate("Nom :"),
-                                         text=lbl.split(" (")[0])
-        if ok2 and name.strip():
-            self._canvas.add_light(name.strip(), ltype)
+        from ui.dialog_projector import ProjectorDialog
+        dlg = ProjectorDialog(self)
+        if dlg.exec() == ProjectorDialog.DialogCode.Accepted:
+            r = dlg.result_data()
+            if r:
+                self._canvas.add_light(r["name"], r["role"],
+                                       r.get("family", ""), r.get("model", ""))
+
+    # ── Outils : Déplacer / Rotation (raccourci R) ──────────────────────────────
+
+    def _set_tool(self, tool: str):
+        self._canvas.set_tool(tool)
+        is_rot = (tool == "rotate")
+        self._btn_move.setChecked(not is_rot)
+        self._btn_rotate.setChecked(is_rot)
+        self._style_tool_btn(self._btn_move, not is_rot)
+        self._style_tool_btn(self._btn_rotate, is_rot)
+
+    def _toggle_tool(self):
+        self._set_tool("move" if self._btn_rotate.isChecked() else "rotate")
+
+    def _style_tool_btn(self, btn, active: bool):
+        if active:
+            btn.setStyleSheet(
+                f"QPushButton{{background:rgba(78,205,196,0.16);color:{CP['accent']};"
+                f"border:1px solid {CP['accent']};border-radius:7px;font-size:11px;"
+                f"font-weight:700;padding:0 12px;}}")
+        else:
+            btn.setStyleSheet(
+                f"QPushButton{{background:{CP['bg3']};color:{CP['text_secondary']};"
+                f"border:1px solid {CP['border']};border-radius:7px;font-size:11px;"
+                f"font-weight:600;padding:0 12px;}}"
+                f"QPushButton:hover{{background:{CP['bg2']};border-color:{CP['accent_dim']};}}")
+
+    # ── Clic droit : changer l'acteur (Mise en scène) / le projecteur (Plan de feu) ──
+
+    def _on_actor_context(self, model: dict):
+        names = (self._shot or {}).get("character_names", []) or []
+        menu = QMenu(self)
+        for n in names:
+            menu.addAction(n, lambda _=False, nm=n: self._rename_actor(model, nm))
+        menu.addAction(translate("Autre…"), lambda: self._rename_actor_free(model))
+        menu.exec(self.cursor().pos())
+
+    def _rename_actor(self, model: dict, name: str):
+        model["name"] = name
+        self._canvas.reload()
+        self._autosave()
+
+    def _rename_actor_free(self, model: dict):
+        name, ok = QInputDialog.getText(self, translate("Acteur"), translate("Nom :"),
+                                        text=model.get("name", ""))
+        if ok and name.strip():
+            self._rename_actor(model, name.strip())
+
+    def _on_light_context(self, model: dict):
+        from ui.dialog_projector import ProjectorDialog
+        dlg = ProjectorDialog(self, role=model.get("type", "key"),
+                              family=model.get("family", ""), model=model.get("model", ""))
+        if dlg.exec() == ProjectorDialog.DialogCode.Accepted:
+            r = dlg.result_data()
+            if r:
+                model.update({"name": r["name"], "type": r["role"],
+                              "family": r.get("family", ""), "model": r.get("model", "")})
+                self._canvas.reload()
+                self._autosave()
 
     def _on_generate_plan(self):
         if not self._shot:

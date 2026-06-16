@@ -704,7 +704,9 @@ class PageScenario(QWidget):
             self._on_gen_characters,
         )
         self._btn_gen_decors = _ai_btn(
-            "⌂", "Générer les décors", "Identifier les décors depuis le scénario",
+            "⌂", "Générer les décors + plan",
+            "Identifier les décors depuis le scénario et générer leur plan vu de dessus "
+            "(Mise en scène / Plan de feu)",
             self._on_gen_decors,
         )
         self._btn_gen_accessories = _ai_btn(

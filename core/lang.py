@@ -72,7 +72,7 @@ def translate_dialogues_to(text: str, lang: str) -> str:
                 (f"Translate the following spoken movie dialogue line into {target}. "
                  "Keep it natural, spoken, faithful to the meaning and tone. "
                  "Return ONLY the translated line — no quotes, no notes, no prefix."),
-                inner, tier="utility", max_tokens=300,
+                inner, tier="utility", max_tokens=300, task="translate",
             ).strip()
         except Exception:
             return seg
@@ -137,7 +137,7 @@ def translate_to_english(text: str) -> str:
                 "spoken dialogue or text-on-object — copy them exactly as-is. "
                 "Return ONLY the translated text. No explanation, no prefix."
             ),
-            safe, tier="utility", max_tokens=800,
+            safe, tier="utility", max_tokens=800, task="translate",
         ).strip()
     except Exception:
         return text
@@ -198,7 +198,7 @@ def translate_to_chinese(text: str) -> str:
                 "copy them exactly as-is without any modification. "
                 "Return ONLY the translated text. No explanation, no prefix."
             ),
-            safe, tier="utility", max_tokens=800,
+            safe, tier="utility", max_tokens=800, task="translate",
         ).strip()
     except Exception:
         return text

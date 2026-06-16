@@ -173,6 +173,13 @@ def run_real(params: dict, emit_progress, is_cancelled) -> dict:
     _has_anthropic = bool(_cfg.get("anthropic_key", "").strip())
     _anthropic_key = _cfg.get("anthropic_key", "").strip()
     _raw_prompt = params.get("prompt", "")
+    # Prompt structuré en sections : le bloc [SOUND DESIGN] n'est PAS envoyé au
+    # modèle vidéo (séparation image/son). Les autres sections sont conservées.
+    try:
+        from core.prompt_sections import strip_for_video as _strip_sound_section
+        _raw_prompt = _strip_sound_section(_raw_prompt)
+    except Exception:
+        pass
     if _raw_prompt and not _has_anthropic:
         emit_progress(3, "⚠ Clé Anthropic manquante — prompt envoyé sans traduction")
     else:

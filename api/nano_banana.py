@@ -1789,13 +1789,16 @@ class GenerateItemWorker(QThread):
 # ── Les 6 vues d'une pièce (décor) ─────────────────────────────────────────────
 
 class GenerateRoomViewsWorker(QThread):
-    """Génère les 7 vues d'une pièce : les 6 faces (avant · arrière · gauche ·
-    droite · sol · plafond) PUIS un plan d'ensemble qui les regroupe — un prompt
-    auto par vue depuis la description du décor, cohérence spatiale stricte.
-    Une image par vue, nommée <decor>_<code>.
+    """Génère les vues d'une pièce dans un ORDRE qui maximise le raccord :
+      1. le PLAN D'ENSEMBLE (vue maîtresse 3/4) ;
+      2. le PLAN D'ARCHITECTURE vu de dessus (contexte : tous les éléments) ;
+      3. les 6 FACES (avant · arrière · gauche · droite · sol · plafond), générées
+         en INJECTANT le plan d'architecture + le plan d'ensemble comme références
+         (NB2 edit) → mêmes objets, mêmes positions d'une vue à l'autre.
 
-    Émet views_finished avec une liste structurée [{"label","code","path"}] —
-    chaque vue devient un DÉCOR distinct côté appelant."""
+    Émet views_finished avec [{"label","code","path","prompt"[, "is_floor_plan"]}].
+    Les 7 vues (ensemble + 6 faces) deviennent des DÉCORS ; l'entrée
+    `is_floor_plan` (le plan vu de dessus) sert de plan partagé (decor.floor_plan)."""
     progress       = pyqtSignal(int, str)
     views_finished = pyqtSignal(list)   # [{"label","code","path"}, …] (7 vues)
     failed         = pyqtSignal(str)
@@ -1829,8 +1832,9 @@ class GenerateRoomViewsWorker(QThread):
         try:
             import fal_client
             import requests
+            import base64, mimetypes
             from core.lang import translate_to_english
-            from core.room_views import build_seven_view_prompts
+            from core.room_views import build_six_view_prompts, build_overview_prompt
 
             os.environ["FAL_KEY"] = key
             cfg = load_config()
@@ -1838,36 +1842,80 @@ class GenerateRoomViewsWorker(QThread):
                 cfg = dict(cfg)
                 cfg["image_model"] = self._model_key
             price = get_image_price(cfg)
-
-            # Traduit la description du décor UNE fois, puis construit les 7 vues
-            # (6 faces + plan d'ensemble en dernier).
             base_en = translate_to_english(self._base) if self._base else ""
-            views   = build_seven_view_prompts(base_en)
-            n       = len(views)
 
             safe = "".join(c for c in self._name if c.isalnum() or c in " -_").strip() or "decor"
             ts   = int(time.time())
             out: list[dict] = []
-            for i, (label, code, fprompt) in enumerate(views):
+
+            def _save(data: bytes, code: str) -> str:
+                p = os.path.join(_project_images_dir("decors"), f"{safe}_{code}_{ts}.png")
+                with open(p, "wb") as f:
+                    f.write(data)
+                return p
+
+            def _dataurl(path: str) -> str:
+                mime = mimetypes.guess_type(path)[0] or "image/png"
+                with open(path, "rb") as f:
+                    return f"data:{mime};base64,{base64.b64encode(f.read()).decode()}"
+
+            def _gen_text(prompt: str, aspect: str) -> bytes:
+                _ep, _args = _build_image_args(prompt, aspect, "1K", cfg, 1)
+                _res = fal_client.subscribe(_ep, arguments=_args)
+                return requests.get(_extract_image_url(_res), timeout=120).content
+
+            # 1) PLAN D'ENSEMBLE d'abord (vue maîtresse) ─────────────────────────
+            self.progress.emit(8, f"[1/8] Plan d'ensemble…  ({price})")
+            ov_label, ov_code, ov_prompt = build_overview_prompt(base_en)
+            full_ov = ov_prompt
+            if self._style_suffix:
+                full_ov = f"{full_ov}, {self._style_suffix}"
+            full_ov = f"{full_ov}\n\n{_DECOR_LINE}"
+            ov_path = _save(_gen_text(full_ov, "16:9"), ov_code)
+            out.append({"label": ov_label, "code": ov_code, "path": ov_path, "prompt": ov_prompt})
+
+            # 2) PLAN D'ARCHITECTURE vu de dessus (contexte : tous les éléments) ──
+            self.progress.emit(20, "[2/8] Plan d'architecture (vue de dessus)…")
+            fp_prompt = _floor_plan_prompt(base_en or "an interior room")
+            fp_path = _save(_gen_text(fp_prompt, "1:1"), "floorplan")
+            out.append({"label": "Plan (vue de dessus)", "code": "floorplan",
+                        "path": fp_path, "prompt": fp_prompt, "is_floor_plan": True})
+
+            # 3) Les 6 FACES en INJECTANT plan d'architecture + plan d'ensemble ───
+            #    (NB2 edit) → mêmes objets/positions d'une vue à l'autre (raccord).
+            ref_urls = [_dataurl(fp_path), _dataurl(ov_path)]
+            consistency = (
+                "CRITICAL CONSISTENCY: the two provided images are (1) a top-down "
+                "architectural floor plan and (2) a wide establishing view of THIS "
+                "exact room. Reproduce the SAME room — same walls, furniture, props, "
+                "materials, colors and their RELATIVE POSITIONS. Strict spatial "
+                "continuity with both references."
+            )
+            faces = build_six_view_prompts(base_en)
+            for i, (label, code, fprompt) in enumerate(faces):
                 self.progress.emit(
-                    5 + int(i / n * 88),
-                    f"[{i+1}/{n}] Vue « {label} »…  ({price})"
+                    30 + int(i / len(faces) * 66),
+                    f"[{i+3}/8] Vue « {label} » (raccord)…  ({price})"
                 )
                 full = fprompt
                 if self._style_suffix:
                     full = f"{full}, {self._style_suffix}"
-                full = f"{full}\n\n{_DECOR_LINE}"
-                _ep, _args = _build_image_args(full, "16:9", "1K", cfg, 1)
-                _result = fal_client.subscribe(_ep, arguments=_args)
-                _url = _extract_image_url(_result)
-                data = requests.get(_url, timeout=120).content
-                p = os.path.join(_project_images_dir("decors"), f"{safe}_{code}_{ts}.png")
-                with open(p, "wb") as f:
-                    f.write(data)
-                # On renvoie le prompt PAR VUE (cadrage compris) pour que la
-                # régénération depuis la fiche décor reproduise la MÊME vue.
+                full = f"{full}\n\n{consistency}\n\n{_DECOR_LINE}"
+                _res = fal_client.subscribe("fal-ai/nano-banana-2/edit", arguments={
+                    "prompt":           full,
+                    "image_urls":       ref_urls,
+                    "num_images":       1,
+                    "aspect_ratio":     "16:9",
+                    "resolution":       "1K",
+                    "output_format":    "png",
+                    "safety_tolerance": "6",
+                })
+                data = requests.get(_extract_image_url(_res), timeout=120).content
+                p = _save(data, code)
+                # Prompt PAR VUE renvoyé (cadrage compris) → régénération fidèle.
                 out.append({"label": label, "code": code, "path": p, "prompt": fprompt})
-            self.progress.emit(100, "7 vues de la pièce générées !")
+
+            self.progress.emit(100, "Pièce générée (plan + 7 vues raccord) !")
             self.views_finished.emit(out)
         except Exception as e:
             self.failed.emit(humanize_api_error(f"Erreur Nano Banana : {e}"))

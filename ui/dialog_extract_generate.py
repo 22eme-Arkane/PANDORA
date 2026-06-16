@@ -494,46 +494,47 @@ class ExtractGenerateDialog(QDialog):
         self._gen_next()
 
     def _on_room_views_done(self, views: list):
-        """7 vues générées pour une pièce → 7 DÉCORS distincts (sol, plafond,
-        gauche, droite, avant, arrière, vue d'ensemble). Le décor « pièce »
-        d'origine est remplacé par ces 7 vues."""
+        """7 vues générées pour une pièce → UN SEUL décor (la même pièce) dont la
+        galerie contient les 7 vues (avant, arrière, gauche, droite, haut, bas,
+        vue d'ensemble). Le plan d'architecture devient le plan vu de dessus du
+        décor (Mise en scène / Plan de feu)."""
         if self._cancelled:
             return
         item = self._saved_items[self._gen_idx]
         row  = self._item_rows[self._gen_idx]
 
-        valid = [v for v in (views or [])
-                 if v.get("path") and os.path.isfile(v["path"])]
-        if valid:
+        all_views = [v for v in (views or [])
+                     if v.get("path") and os.path.isfile(v["path"])]
+        fp_entry = next((v for v in all_views if v.get("is_floor_plan")), None)
+        view_entries = [v for v in all_views if not v.get("is_floor_plan")]
+        if view_entries:
             import core.decors as decors_api
             base    = item.get("name", "Décor")
             bprompt = item.get("prompt") or item.get("description") or base
             cat     = item.get("category", "Autre")
-            created_ids = []
-            for v in valid:
+            overview = next((v for v in view_entries if v.get("code") == "ensemble"),
+                            view_entries[0])
+            paths = [v["path"] for v in view_entries]
+            room_views = [{"label": v.get("label", ""), "code": v.get("code", ""),
+                           "path": v["path"], "prompt": v.get("prompt", "")}
+                          for v in view_entries]
+            # Met à jour LE décor d'origine (une seule pièce) avec sa galerie 7 vues.
+            d = decors_api.get_decor(item.get("id", "")) or {}
+            d.update({
+                "id":               item.get("id", ""),
+                "name":             base,
+                "prompt":           bprompt,
+                "category":         cat,
+                "image_path":       overview["path"],
+                "generated_images": paths,
+                "room_views":       room_views,
+            })
+            saved = decors_api.save_decor(d)
+            did = saved.get("id", item.get("id", ""))
+            fp_path = fp_entry.get("path") if fp_entry else ""
+            if fp_path and did:
                 try:
-                    sv = self._save_fn({
-                        "name":       f"{base} — {v['label']}",
-                        # Prompt PAR VUE (cadrage inclus) → régénération fidèle.
-                        "prompt":     v.get("prompt") or bprompt,
-                        "category":   cat,
-                        "image_path": v["path"],
-                    })
-                    if sv and sv.get("id"):
-                        created_ids.append(sv["id"])
-                except Exception:
-                    pass
-            # Un SEUL plan vu de dessus par pièce (depuis le prompt de base),
-            # partagé par les 7 vues → Mise en scène / Plan de feu.
-            if created_ids:
-                self._floor_jobs.append({
-                    "id": f"room_{self._gen_idx}", "decor_ids": created_ids,
-                    "prompt": bprompt, "name": base,
-                })
-            # On ne garde QUE les 7 vues : retire le décor « pièce » d'origine.
-            if item.get("id"):
-                try:
-                    decors_api.delete_decor(item["id"])
+                    decors_api.set_floor_plan(did, fp_path)
                 except Exception:
                     pass
             row.set_state("DONE")

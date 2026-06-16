@@ -65,6 +65,7 @@ TASKS: list[tuple[str, str]] = [
     ("screenplay",      "Scénario (mise en page, arrangement)"),
     ("extraction",      "Extraction d'éléments (personnages, décors…)"),
     ("sync",            "Synchronisation du storyboard"),
+    ("translate",       "Traduction des prompts (FR → EN/ZH)"),
 ]
 
 # Modèle par défaut (créatif) — Opus 4.8.

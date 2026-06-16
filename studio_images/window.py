@@ -231,10 +231,7 @@ class StudioImagesPanel(QWidget):
     # ── Barre supérieure ─────────────────────────────────────────────────────
     def _build_topbar(self):
         bar = QHBoxLayout()
-        title = QLabel("✦ Studio Images")
-        title.setStyleSheet(
-            f"font-size: 18px; font-weight: 800; color: {CP['accent']}; letter-spacing: 1px;")
-        bar.addWidget(title)
+        # (titre retiré — l'onglet « Image IA » fait déjà office de titre)
         bar.addStretch(1)
 
         # Projets
@@ -296,9 +293,11 @@ class StudioImagesPanel(QWidget):
         self._format.currentIndexChanged.connect(self._on_format_changed)
 
         self._res = QComboBox()
-        self._res.addItems(["512x512", "1K", "2K", "4K"])
-        self._res.setCurrentText(self.cfg.get("resolution", "2K"))
-        self._res.setToolTip("Résolution — utilisée par les moteurs Nano Banana")
+        self._res.addItems(["Personnaliser", "512x512", "1K", "2K", "4K"])
+        self._res.setCurrentText(self.cfg.get("resolution", "Personnaliser"))
+        self._res.setToolTip(
+            "Résolution des moteurs Nano Banana.\n"
+            "« Personnaliser » = utilise la taille exacte du format choisi à gauche.")
 
         self._count = QSpinBox()
         self._count.setRange(1, 4)
@@ -387,21 +386,36 @@ class StudioImagesPanel(QWidget):
         self._gen_btn.clicked.connect(self._generate)
         lay.addWidget(self._gen_btn)
 
+        # Annuler — visible uniquement pendant un travail en cours
+        self._cancel_btn = QPushButton("✕  Annuler")
+        self._cancel_btn.setObjectName("secondary")
+        self._cancel_btn.setStyleSheet(
+            f"QPushButton{{background: transparent; color: {CP.get('red', '#ff4f6a')}; "
+            f"border: 1px solid rgba(255,79,106,0.40); border-radius: 8px; "
+            f"font-weight: 700; padding: 6px;}}"
+            f"QPushButton:hover{{background: rgba(255,79,106,0.10); "
+            f"border-color: rgba(255,79,106,0.70);}}")
+        self._cancel_btn.clicked.connect(self._cancel_work)
+        self._cancel_btn.setVisible(False)
+        lay.addWidget(self._cancel_btn)
+
         self._progress = QProgressBar()
         self._progress.setRange(0, 100)
         self._progress.setValue(0)
+        self._progress.setVisible(False)   # visible seulement pendant le chargement
         lay.addWidget(self._progress)
         self._status = QLabel("")
         self._status.setStyleSheet(f"color: {CP['text_secondary']}; font-size: 11px;")
         lay.addWidget(self._status)
 
-        # Aperçu
-        self._preview = QLabel("Aucune image générée")
+        # Aperçu — n'apparaît QUE lorsqu'une image est générée
+        self._preview = QLabel("")
         self._preview.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self._preview.setMinimumHeight(280)
         self._preview.setStyleSheet(
             f"background: {CP['bg0']}; border: 1px solid {CP['border']}; "
             f"border-radius: 10px; color: {CP['text_dim']};")
+        self._preview.setVisible(False)
         lay.addWidget(self._preview, 1)
 
         # Actions image
@@ -757,7 +771,8 @@ class StudioImagesPanel(QWidget):
         self._persist_refs()
         self._rebuild_chat_view()
         self._preview.setPixmap(QPixmap())
-        self._preview.setText("Aucune image générée")
+        self._preview.setText("")
+        self._preview.setVisible(False)
         self._discuss_btn.setEnabled(False)
         # vide l'historique de miniatures
         while self._hist_row.count() > 1:
@@ -1010,7 +1025,7 @@ class StudioImagesPanel(QWidget):
             fal_key=self.cfg.get("fal_key", ""),
             engine_key=self._model.currentData(),
             prompt=prompt,
-            resolution=self._res.currentText(),
+            resolution=self._res_value(),
             ref_paths=self._ref_paths,
             out_dir=out_dir,
             target_size=target,
@@ -1054,6 +1069,7 @@ class StudioImagesPanel(QWidget):
         self._current_path = path
         self._pending_images = [path]
         self._discuss_btn.setEnabled(True)
+        self._preview.setVisible(True)   # l'aperçu n'apparaît qu'une fois une image générée
         pm = self._load_pixmap(path)
         if pm is None or pm.isNull():
             self._preview.setText("🅥  Logo vectoriel SVG généré\n\nOuvre-le via 📂 Voir le fichier")
@@ -1122,10 +1138,37 @@ class StudioImagesPanel(QWidget):
 
     def _set_busy(self, busy, msg):
         self._status.setText(msg)
+        # Barre de chargement + bouton Annuler visibles UNIQUEMENT pendant un travail.
+        self._progress.setVisible(busy)
+        self._cancel_btn.setVisible(busy)
+        self._gen_btn.setEnabled(not busy)
         if busy:
             self._progress.setRange(0, 0)  # indéterminé
         else:
             self._progress.setRange(0, 100)
+
+    def _cancel_work(self):
+        """Annule le travail en cours (génération image / discussion / synthèse)."""
+        for w in (self._img_worker, self._chat_worker, self._synth_worker):
+            if w and w.isRunning():
+                try:
+                    w.blockSignals(True)
+                    w.terminate()
+                    w.wait(300)
+                except Exception:
+                    pass
+        self._set_busy(False, "Travail annulé.")
+        self._gen_btn.setEnabled(True)
+
+    def _res_value(self) -> str:
+        """Résolution réelle pour les moteurs Nano Banana. « Personnaliser » =
+        dérive le palier le plus proche de la taille du format choisi."""
+        r = self._res.currentText()
+        if r != "Personnaliser":
+            return r
+        w, h = self._target_size()
+        m = max(int(w), int(h))
+        return "1K" if m <= 1024 else ("2K" if m <= 2048 else "4K")
 
     def resizeEvent(self, e):
         super().resizeEvent(e)

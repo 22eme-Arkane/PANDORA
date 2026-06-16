@@ -130,3 +130,49 @@ def _zone(item: dict) -> str:
     h = "gauche" if x < 0.4 else ("droite" if x > 0.6 else "centre")
     v = "fond" if y < 0.4 else ("avant" if y > 0.6 else "milieu")
     return f"{v}-{h}"
+
+
+def staging_summary(shot_id: str) -> str:
+    """Résumé MISE EN SCÈNE seule (caméra + personnages + éléments) — pour la
+    section [MISE EN SCÈNE] du prompt structuré."""
+    rec = get(shot_id)
+    parts = []
+    cam = rec.get("camera") or {}
+    if cam:
+        parts.append(f"Caméra : axe {axis_from_angle(cam.get('angle', 0))}, "
+                     f"placée en {_zone(cam)}.")
+    actors = rec.get("actors") or []
+    if actors:
+        parts.append("Personnages : " + ", ".join(
+            f"{a.get('name','?')} en {_zone(a)}" for a in actors) + ".")
+    props = rec.get("props") or []
+    if props:
+        parts.append("Éléments : " + ", ".join(
+            f"{p.get('name','?')} en {_zone(p)}" for p in props) + ".")
+    return " ".join(parts)
+
+
+def lighting_summary(shot_id: str) -> str:
+    """Résumé PLAN DE FEU (lumières : rôle, modèle, position, direction) — pour la
+    section [PLAN DE FEU] du prompt structuré."""
+    rec = get(shot_id)
+    lights = rec.get("lights") or []
+    if not lights:
+        return ""
+    try:
+        import core.projectors as proj
+        role_lbl = proj.role_label
+    except Exception:
+        role_lbl = lambda c: c
+    bits = []
+    for l in lights:
+        desc = role_lbl(l.get("type", "")) or l.get("type", "lumière")
+        model = (l.get("model") or "").strip()
+        if model:
+            desc += f" ({model})"
+        desc += f", {_zone(l)}"
+        bits.append(desc)
+    return ("Éclairage : " + " ; ".join(bits) + ". "
+            "IMPORTANT : les projecteurs / sources d'éclairage ne sont PAS visibles "
+            "dans le plan — ils décrivent uniquement la lumière et l'ambiance, "
+            "n'affiche aucun appareil d'éclairage à l'image.")

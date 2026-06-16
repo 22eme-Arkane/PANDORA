@@ -458,24 +458,25 @@ def decor_sept_vues():
     from api.nano_banana import GenerateRoomViewsWorker
     w = GenerateRoomViewsWorker("salle à manger", "Salle à manger")
     assert hasattr(w, "views_finished"), "signal structuré (label/code/path) par vue"
-    # Les 7 vues créent 7 DÉCORS distincts (pas 1 décor à 7 images).
+    # Les 7 vues vont dans UN SEUL décor (galerie), PAS 7 décors distincts.
     import inspect
     src = inspect.getsource(__import__("ui.dialog_decor", fromlist=["_"]))
     assert '"seven_views"' in src and "GenerateRoomViewsWorker" in src
-    assert "_on_room_decors_done" in src and "save_decor" in src, \
-        "la fiche décor crée 7 décors (1 par vue)"
+    assert "_on_room_decors_done" in src and "generated_images" in src, \
+        "la fiche décor regroupe les 7 vues dans la galerie d'UN décor"
+    assert "room_views" in src, "les libellés de vue sont mémorisés (repérage)"
+    assert "_view_label_for" in src, "libellé de vue affiché dans l'aperçu"
     # Mode « Image unique » par défaut + confirmation avant les 7 vues.
     assert "setCurrentIndex(0)" in src, "mode image unique par défaut dans la fiche décor"
     assert "Générer les 7 vues de la pièce" in src, "confirmation avant les 7 vues"
-    # Chaque décor-vue stocke SON prompt (cadrage) → régénération fidèle.
+    # Chaque vue stocke SON prompt (cadrage) → régénération fidèle.
     nb = inspect.getsource(GenerateRoomViewsWorker._real)
     assert '"prompt": fprompt' in nb, "le worker renvoie le prompt par vue"
-    assert 'v.get("prompt")' in src, "la fiche stocke le prompt par vue (pas la base)"
-    # disponible aussi depuis le scénario (« Générer les décors »), en 7 décors
+    # disponible aussi depuis le scénario (« Générer les décors ») → 1 décor / galerie
     eg = inspect.getsource(__import__("ui.dialog_extract_generate", fromlist=["_"]))
     assert "offer_room_views=True" in eg and "views_finished" in eg
-    assert "delete_decor" in eg and 'f"{base} — {v[' in eg, \
-        "depuis le scénario : 7 décors nommés par vue, la pièce d'origine retirée"
+    assert "room_views" in eg and "generated_images" in eg, \
+        "depuis le scénario : les 7 vues fusionnées dans un seul décor"
     # Identifier+générer depuis le scénario : image unique (portrait), pas 5 vues.
     assert 'gen_mode="classic"' in eg and 'gen_mode="sheet_5views"' not in eg, \
         "personnages : portrait unique par défaut depuis le scénario"
@@ -532,14 +533,17 @@ def synchronisation_multi_options():
     worker piloté par options + worker de réécriture de scénario (nouvelle version)."""
     from ui.dialog_storyboard_sync import StoryboardSyncConfirmDialog, StoryboardSyncDialog
 
-    # 1) La fenêtre de confirmation expose 4 options ; défauts cohérents.
+    # 1) La fenêtre de confirmation expose les options ; défauts cohérents.
     dlg = StoryboardSyncConfirmDialog(3)
     opts = dlg.selected_options()
-    assert set(opts) == {"reassign", "rewrite_prompts", "resync_decors", "rewrite_scenario"}, \
-        "4 options de synchronisation"
+    assert set(opts) == {"reassign", "rewrite_prompts", "resync_decors", "rewrite_scenario",
+                         "sync_staging", "sync_lighting"}, \
+        "options de synchronisation (dont mise en scène + plan de feu)"
     assert opts["reassign"] and opts["rewrite_prompts"], "réassigner + prompts cochés par défaut"
     assert not opts["resync_decors"] and not opts["rewrite_scenario"], \
         "décors + scénario décochés par défaut"
+    assert not opts["sync_staging"] and not opts["sync_lighting"], \
+        "mise en scène + plan de feu décochés par défaut"
     assert hasattr(dlg, "selected_options")
 
     # 2) Le worker de sync honore un dict d'options (phases gated).
@@ -783,6 +787,15 @@ def studio_musique_ia_et_image_ia():
         "chat Claude repliable à droite"
     tog = ti.panel._chat_toggle
     assert tog._open is True, "discussion ouverte par défaut"
+
+    # Réglages Image IA : Annuler + chargement/aperçu masqués au repos + résolution
+    pn = ti.panel
+    assert hasattr(pn, "_cancel_btn") and hasattr(pn, "_res_value"), "Annuler + résolution dérivée"
+    assert pn._progress.isHidden() and pn._cancel_btn.isHidden() and pn._preview.isHidden(), \
+        "barre de chargement / Annuler / aperçu masqués tant qu'inactif"
+    assert pn._res.itemText(0) == "Personnaliser", "résolution « Personnaliser » par défaut"
+    assert "Studio Images" not in inspect.getsource(type(pn)._build_topbar), \
+        "titre « Studio Images » retiré de la barre"
     # Simule un clic gauche sur la poignée
     from PyQt6.QtCore import Qt as _Qt
     tog.mousePressEvent(type("E", (), {"button": lambda s: _Qt.MouseButton.LeftButton})())
@@ -801,8 +814,17 @@ def decors_plan_auto_et_sync():
     assert '"floor_plan"' in src_save or "'floor_plan'" in src_save, "défaut floor_plan"
 
     # Worker batch
-    from api.nano_banana import GenerateFloorPlansWorker
+    from api.nano_banana import GenerateFloorPlansWorker, GenerateRoomViewsWorker
     assert hasattr(GenerateFloorPlansWorker, "plan_done")
+
+    # Pipeline 7 vues raccord : plan d'ensemble → plan d'architecture (contexte)
+    # → 6 faces en injectant ces références (NB2 edit).
+    rv = inspect.getsource(GenerateRoomViewsWorker._real)
+    assert "build_overview_prompt" in rv and "_floor_plan_prompt" in rv, "ensemble + architecture"
+    assert "is_floor_plan" in rv, "plan d'architecture renvoyé séparément"
+    assert "nano-banana-2/edit" in rv and "image_urls" in rv, "faces avec références injectées"
+    assert rv.index("build_overview_prompt(base_en)") < rv.index("build_six_view_prompts(base_en)"), \
+        "plan d'ensemble AVANT les 6 faces"
 
     # Auto-génération depuis le scénario (décors uniquement)
     eg = inspect.getsource(__import__("ui.dialog_extract_generate", fromlist=["_"]))
@@ -830,6 +852,52 @@ def decors_plan_auto_et_sync():
     refs = [it for it in cv._scene.items()
             if isinstance(it, _Token) and getattr(it, "reference", False)]
     assert len(refs) >= 2, "caméra + acteurs visibles en Plan de feu"
+
+
+@test
+def staging_outils_projecteurs_sections():
+    """Mise en scène / Plan de feu : rotation directe (poignée + mode + R),
+    clic droit (acteur / projecteur), catalogue de projecteurs Famille→modèles,
+    et prompt structuré en sections + toggles de synchro (son non envoyé)."""
+    # Catalogue projecteurs
+    import core.projectors as pr
+    assert pr.families() and pr.models("led_panel"), "catalogue famille → modèles"
+    assert any("SkyPanel" in m for m in pr.models("led_panel"))
+    assert any("Titan" in m for m in pr.models("tube"))
+
+    # Sections de prompt + strip du son
+    import core.prompt_sections as ps
+    full = ps.build("action X", "perso à gauche", "key SkyPanel", "pluie")
+    assert "[MISE EN SCÈNE]" in full and "[PLAN DE FEU]" in full and "[SOUND DESIGN]" in full
+    assert "[SOUND DESIGN]" not in ps.strip_for_video(full), "son non envoyé à la vidéo"
+    assert ps.parse(full)["action"] == "action X"
+
+    # api/real strippe la section son avant envoi Seedance
+    rsrc = inspect.getsource(__import__("api.real", fromlist=["_"]))
+    assert "strip_for_video" in rsrc, "real.py retire le bloc son"
+
+    # Résumés mise en scène / plan de feu
+    import core.staging as st
+    assert hasattr(st, "staging_summary") and hasattr(st, "lighting_summary")
+
+    # Worker sync : options + assemblage des sections
+    sw = inspect.getsource(__import__("api.screenplay", fromlist=["_"]))
+    assert "sync_staging" in sw and "sync_lighting" in sw and "_finish" in sw
+
+    # Dialog sync : 2 nouvelles cases
+    dsrc = inspect.getsource(__import__("ui.dialog_storyboard_sync", fromlist=["_"]))
+    assert "sync_staging" in dsrc and "sync_lighting" in dsrc
+
+    # Canevas : rotation (poignée + modes) + clic droit
+    cvsrc = inspect.getsource(__import__("ui.staging_canvas", fromlist=["_"]))
+    assert "_RotKnob" in cvsrc and "set_tool" in cvsrc and "set_angle" in cvsrc
+    assert "actor_context" in cvsrc and "light_context" in cvsrc
+    assert "contextMenuEvent" in cvsrc
+
+    # Page : barre Déplacer/Rotation + raccourci R + fenêtre projecteur
+    psrc = inspect.getsource(__import__("ui.page_staging", fromlist=["_"]))
+    assert "_btn_move" in psrc and "_btn_rotate" in psrc and "QShortcut" in psrc
+    assert "ProjectorDialog" in psrc and "_on_light_context" in psrc and "_on_actor_context" in psrc
 
 
 # ══════════════════════════════════════════════════════════════════════════════

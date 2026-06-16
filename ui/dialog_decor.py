@@ -327,9 +327,10 @@ class DecorDialog(QDialog):
         self._gen_mode.setToolTip(
             "Image unique : vue principale du décor.\n"
             "Sheet 4 vues (défaut) : image 2×2 montrant le même lieu depuis 4 angles.\n"
-            "Les 7 vues de la pièce : 6 images séparées (sol, plafond, 4 murs) comme\n"
-            "un personnage au centre qui regarde chaque face, PUIS un 7e plan\n"
-            "d'ensemble qui les regroupe. Idéal pour les champs/contrechamps."
+            "Les 7 vues de la pièce : 6 faces (avant, arrière, gauche, droite, haut,\n"
+            "bas) comme un personnage au centre qui regarde chaque face, PUIS un\n"
+            "plan d'ensemble — le tout dans la galerie d'UN SEUL décor (même pièce).\n"
+            "Idéal pour les champs/contrechamps."
         )
         self._gen_mode.setStyleSheet(
             f"QComboBox{{background:{CP['bg3']};border:1px solid {CP['border']};"
@@ -965,10 +966,11 @@ class DecorDialog(QDialog):
         if mode == "seven_views":
             reply = QMessageBox.question(
                 self, "Générer les 7 vues de la pièce",
-                f"Cette option va générer 7 images et créer 7 décors distincts "
-                f"à partir de « {name} » :\n\n"
-                f"sol · plafond · gauche · droite · avant · arrière · plan d'ensemble\n\n"
-                f"Le décor actuel reste inchangé ; les 7 vues sont créées en plus.\n"
+                f"Cette option va générer le plan d'ensemble, le plan vu de dessus, "
+                f"puis les 6 faces de « {name} » :\n\n"
+                f"avant · arrière · gauche · droite · haut · bas · plan d'ensemble\n\n"
+                f"Les 7 vues sont regroupées dans la galerie de CE décor (même pièce) ; "
+                f"le plan vu de dessus sert à la Mise en scène / au Plan de feu.\n"
                 f"Chaque vue consomme des crédits.\n\nContinuer ?",
                 QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
                 QMessageBox.StandardButton.Yes,
@@ -1063,34 +1065,36 @@ class DecorDialog(QDialog):
         )
 
     def _on_room_decors_done(self, views: list):
-        """Les 7 vues → 7 DÉCORS distincts (sol, plafond, gauche, droite, avant,
-        arrière, vue d'ensemble), chacun avec sa propre image."""
+        """Les 7 vues → UN SEUL décor (la même pièce) : la galerie contient les 7
+        vues (avant, arrière, gauche, droite, haut, bas, vue d'ensemble) et le plan
+        d'architecture devient le plan vu de dessus (Mise en scène / Plan de feu)."""
         self._btn_gen.setEnabled(True)
         self._progress.setVisible(False)
-        valid = [v for v in (views or []) if v.get("path") and os.path.isfile(v["path"])]
-        if not valid:
+        all_views = [v for v in (views or []) if v.get("path") and os.path.isfile(v["path"])]
+        fp_entry = next((v for v in all_views if v.get("is_floor_plan")), None)
+        view_entries = [v for v in all_views if not v.get("is_floor_plan")]
+        if not view_entries:
             self._status.setText("Mode mock : aucune image générée (clé fal.ai absente)")
             return
-        import core.decors as decors_api
-        base = getattr(self, "_seven_base_name", "") or self._name.text().strip() or "Décor"
-        bprompt = getattr(self, "_seven_base_prompt", "") or self._prompt.toPlainText().strip()
-        _cat = self._cat.currentText() if hasattr(self, "_cat") else "Autre"
-        created = 0
-        for v in valid:
-            try:
-                decors_api.save_decor({
-                    "name":       f"{base} — {v['label']}",
-                    # Prompt PAR VUE (cadrage inclus) → régénération fidèle.
-                    "prompt":     v.get("prompt") or bprompt,
-                    "category":   _cat,
-                    "image_path": v["path"],
-                })
-                created += 1
-            except Exception:
-                pass
-        self._decors_created = True   # le parent rechargera la liste à la fermeture
+        overview = next((v for v in view_entries if v.get("code") == "ensemble"),
+                        view_entries[0])
+        self._generated_images = [v["path"] for v in view_entries]
+        self._image_path = overview["path"]
+        self._preview_idx = self._generated_images.index(overview["path"])
+        # Mémorise les libellés de vue + le plan vu de dessus sur l'item (persistés
+        # par _on_save qui copie self._item).
+        self._item["room_views"] = [
+            {"label": v.get("label", ""), "code": v.get("code", ""),
+             "path": v["path"], "prompt": v.get("prompt", "")}
+            for v in view_entries
+        ]
+        if fp_entry:
+            self._item["floor_plan"] = fp_entry["path"]
+        self._decors_created = True
+        self._load_preview(self._image_path)
+        self._refresh_preview_nav()
         self._status.setText(
-            f"✓ {created} décors créés (1 par vue) — ferme cette fiche pour les voir."
+            "✓ 1 décor avec ses 7 vues — clique Enregistrer pour le conserver."
         )
 
     def _on_gen_fail(self, err):
@@ -1169,6 +1173,14 @@ class DecorDialog(QDialog):
         self._refresh_preview_nav()
         self._status.setText("Image active ✓")
 
+    def _view_label_for(self, path: str) -> str:
+        """Libellé de la vue (ex. « Vue d'ensemble ») pour une image de la galerie,
+        d'après room_views — pour se repérer dans les 7 vues d'une pièce."""
+        for v in (self._item.get("room_views") or []):
+            if v.get("path") == path:
+                return v.get("label", "")
+        return ""
+
     def _refresh_preview_nav(self):
         n = len(self._generated_images)
         has_multi = n > 1
@@ -1177,7 +1189,12 @@ class DecorDialog(QDialog):
         if n == 0:
             self._preview_counter.setText("")
         else:
-            self._preview_counter.setText(f"{self._preview_idx + 1} / {n}")
+            cur_path = self._generated_images[min(self._preview_idx, n - 1)]
+            label = self._view_label_for(cur_path)
+            txt = f"{self._preview_idx + 1} / {n}"
+            if label:                       # libellé de vue EN TÊTE (ex. « Vue d'ensemble · 1 / 7 »)
+                txt = f"{label} · {txt}"
+            self._preview_counter.setText(txt)
         self._preview_counter.setVisible(n > 0)
         has_any = n > 0
         if hasattr(self, "_btn_panel_variation"):

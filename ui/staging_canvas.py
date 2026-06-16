@@ -7,6 +7,8 @@ positions sont normalisées 0..1 et réécrites en direct dans le dict de mise e
 scène (core/staging). Caméra et lumières ont une direction (flèche) pivotable.
 """
 
+import math
+
 from PyQt6.QtWidgets import (
     QGraphicsView, QGraphicsScene, QGraphicsEllipseItem,
     QGraphicsSimpleTextItem, QGraphicsLineItem, QGraphicsRectItem,
@@ -17,6 +19,17 @@ from ui.styles import CP
 
 _SIZE = 1000.0   # côté de la scène (unités) — normalisation = pos / _SIZE
 _R    = 26       # rayon des jetons
+_ARM  = _R * 1.9 # longueur de la flèche de direction (= position de la poignée)
+
+
+class _RotKnob(QGraphicsEllipseItem):
+    """Poignée de rotation au bout de la flèche (jetons à direction)."""
+    def __init__(self, parent, color):
+        super().__init__(-7, -7, 14, 14, parent)
+        self.setBrush(QBrush(QColor("#07080f")))
+        self.setPen(QPen(QColor(color), 2))
+        self.setZValue(12)
+        self.setPos(0, -_ARM)
 
 
 class _Token(QGraphicsEllipseItem):
@@ -51,10 +64,14 @@ class _Token(QGraphicsEllipseItem):
         txt.setPos(-br.width() / 2, -br.height() / 2)
 
         self._arrow = None
+        self._knob  = None
         if has_dir:
-            self._arrow = QGraphicsLineItem(0, 0, 0, -_R * 1.9, self)
+            self._arrow = QGraphicsLineItem(0, 0, 0, -_ARM, self)
             self._arrow.setPen(QPen(QColor(color), 4))
             self._arrow.setZValue(9)
+            # Poignée de rotation (sauf en référence, non éditable)
+            if not reference:
+                self._knob = _RotKnob(self, color)
             self.setRotation(model.get("angle", 0.0))
 
     def itemChange(self, change, value):
@@ -66,9 +83,12 @@ class _Token(QGraphicsEllipseItem):
         return super().itemChange(change, value)
 
     def rotate_by(self, delta: float):
+        self.set_angle(self.model.get("angle", 0.0) + delta)
+
+    def set_angle(self, angle: float):
         if not self.has_dir:
             return
-        ang = (self.model.get("angle", 0.0) + delta) % 360
+        ang = angle % 360
         self.model["angle"] = ang
         self.setRotation(ang)
         if self._canvas:
@@ -78,13 +98,17 @@ class _Token(QGraphicsEllipseItem):
 class StagingCanvas(QGraphicsView):
     """Canevas éditable. mode = 'staging' (caméra/acteurs/éléments) ou 'lighting'
     (lumières). load(record) puis commit() pour relire les positions."""
-    changed   = pyqtSignal()
-    selection = pyqtSignal()
+    changed       = pyqtSignal()
+    selection     = pyqtSignal()
+    actor_context = pyqtSignal(object)   # clic droit sur un acteur (model dict)
+    light_context = pyqtSignal(object)   # clic droit sur une lumière (model dict)
 
     def __init__(self, mode: str = "staging"):
         super().__init__()
         self._mode   = mode
         self._record = None
+        self._tool   = "move"            # "move" | "rotate"
+        self._rotating = None            # _Token en cours de rotation
         self._scene  = QGraphicsScene(0, 0, _SIZE, _SIZE)
         self.setScene(self._scene)
         self.setRenderHint(QPainter.RenderHint.Antialiasing, True)
@@ -92,9 +116,70 @@ class StagingCanvas(QGraphicsView):
         self.setMinimumHeight(420)
         self.scene().selectionChanged.connect(self.selection.emit)
 
+    def set_tool(self, tool: str):
+        self._tool = "rotate" if tool == "rotate" else "move"
+
     def resizeEvent(self, e):
         super().resizeEvent(e)
         self.fitInView(self._scene.sceneRect(), Qt.AspectRatioMode.KeepAspectRatio)
+
+    # ── Rotation directe (poignée) + mode Rotation (glisser sur le jeton) ───────
+
+    def _token_at(self, item):
+        """Remonte jusqu'au _Token parent (item peut être texte/flèche/poignée)."""
+        while item is not None and not isinstance(item, _Token):
+            item = item.parentItem()
+        return item
+
+    def mousePressEvent(self, e):
+        if e.button() == Qt.MouseButton.LeftButton:
+            sp   = self.mapToScene(e.pos())
+            item = self._scene.itemAt(sp, self.transform())
+            on_knob = isinstance(item, _RotKnob)
+            tok = self._token_at(item)
+            if tok is not None and tok.has_dir and not tok.reference and \
+                    (on_knob or self._tool == "rotate"):
+                self._rotating = tok
+                tok.setSelected(True)
+                self._apply_rotation(sp)
+                e.accept()
+                return
+        super().mousePressEvent(e)
+
+    def mouseMoveEvent(self, e):
+        if self._rotating is not None:
+            self._apply_rotation(self.mapToScene(e.pos()))
+            e.accept()
+            return
+        super().mouseMoveEvent(e)
+
+    def mouseReleaseEvent(self, e):
+        if self._rotating is not None:
+            self._rotating = None
+            e.accept()
+            return
+        super().mouseReleaseEvent(e)
+
+    def _apply_rotation(self, scene_pos):
+        tok = self._rotating
+        if tok is None:
+            return
+        c = tok.pos()
+        dx = scene_pos.x() - c.x()
+        dy = scene_pos.y() - c.y()
+        # angle 0 = flèche vers le haut, horaire
+        ang = math.degrees(math.atan2(dx, -dy))
+        tok.set_angle(ang)
+
+    def contextMenuEvent(self, e):
+        sp   = self.mapToScene(e.pos())
+        tok  = self._token_at(self._scene.itemAt(sp, self.transform()))
+        if tok is None or tok.reference:
+            return
+        if tok.kind == "actor":
+            self.actor_context.emit(tok.model)
+        elif tok.kind == "light":
+            self.light_context.emit(tok.model)
 
     # ── Chargement / relecture ──────────────────────────────────────────────────
 
@@ -174,11 +259,17 @@ class StagingCanvas(QGraphicsView):
         self._scene.addItem(_Token(self, "prop", _initials(name), p, CP.get("text_dim", "#5a6a7a")))
         self.changed.emit()
 
-    def add_light(self, name: str, ltype: str):
-        l = {"name": name, "type": ltype, "x": 0.5, "y": 0.3, "angle": 180.0}
+    def add_light(self, name: str, role: str, family: str = "", model: str = ""):
+        l = {"name": name, "type": role, "family": family, "model": model,
+             "x": 0.5, "y": 0.3, "angle": 180.0}
         self._record.setdefault("lights", []).append(l)
         self._scene.addItem(_Token(self, "light", _initials(name), l, "#f5c518", has_dir=True))
         self.changed.emit()
+
+    def reload(self):
+        """Recharge le canevas depuis le record courant (après édition externe)."""
+        if self._record is not None:
+            self.load(self._record)
 
     def remove_selected(self):
         tok = self.selected_token()

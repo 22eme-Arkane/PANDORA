@@ -18,14 +18,22 @@ _PANDORA_CONFIG = os.path.join(os.path.dirname(_HERE), "data", "config.json")
 # L'aspect_ratio est dérivé de la taille par chaque moteur (engines.py).
 # "free" = taille personnalisée saisie dans l'UI (voir custom_size).
 FORMATS = {
+    # Réseaux / vidéo
     "thumbnail": ("Vignette YouTube 1280×720",   (1280, 720)),
     "banner":    ("Bannière YouTube 2560×1440",  (2560, 1440)),
-    "logo_sq":   ("Logo carré 1024×1024",        (1024, 1024)),
-    "logo_wide": ("Logo / bandeau 1600×400",     (1600, 400)),
-    "poster":   ("Affiche 1080×1350",            (1080, 1350)),
-    "wide":      ("Paysage 1920×1080",           (1920, 1080)),
+    "wide":      ("Paysage HD 1920×1080",        (1920, 1080)),
+    "uhd4k":     ("4K UHD 3840×2160",            (3840, 2160)),
     "square":    ("Carré réseaux 1080×1080",     (1080, 1080)),
     "story":     ("Story / Reel 1080×1920",      (1080, 1920)),
+    "poster":    ("Affiche 1080×1350",           (1080, 1350)),
+    "logo_sq":   ("Logo carré 1024×1024",        (1024, 1024)),
+    "logo_wide": ("Logo / bandeau 1600×400",     (1600, 400)),
+    # Formats classiques (référence Photoshop / impression)
+    "dci4k":     ("Cinéma DCI 4K 4096×2160",     (4096, 2160)),
+    "a4_port":   ("A4 portrait 2480×3508 (300dpi)", (2480, 3508)),
+    "a4_land":   ("A4 paysage 3508×2480 (300dpi)",  (3508, 2480)),
+    "letter":    ("US Letter 2550×3300 (300dpi)",   (2550, 3300)),
+    "hd_sd":     ("SD 1024×768 (4:3)",           (1024, 768)),
     "free":      ("Personnalisé…",               (1024, 1024)),
 }
 
@@ -33,7 +41,7 @@ _DEFAULTS = {
     "anthropic_key": "",
     "fal_key":       "",
     "image_model":   "nb_pro",     # clé de engines.ENGINES
-    "resolution":    "2K",         # 512x512 | 1K | 2K | 4K (moteurs Nano Banana)
+    "resolution":    "Personnaliser",  # Personnaliser (= taille du format) | 512x512 | 1K | 2K | 4K
     "format":        "thumbnail",  # clé de FORMATS
     "custom_w":      1024,
     "custom_h":      1024,
@@ -83,6 +91,12 @@ def load_config() -> dict:
         save_config(cfg)
     if not cfg.get("output_dir"):
         cfg["output_dir"] = default_output_dir()
+    # Migration one-shot : nouveau défaut de résolution = « Personnaliser »
+    # (= taille exacte du format), pour lever le doublon format ↔ résolution.
+    if not cfg.get("_res_personnaliser_done"):
+        cfg["resolution"] = "Personnaliser"
+        cfg["_res_personnaliser_done"] = True
+        save_config(cfg)
     return cfg
 
 
