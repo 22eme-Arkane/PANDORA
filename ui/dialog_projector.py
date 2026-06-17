@@ -12,8 +12,10 @@ from PyQt6.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, QComboBox,
     QListWidget, QListWidgetItem, QLineEdit,
 )
-from PyQt6.QtCore import Qt
+from PyQt6.QtCore import Qt, QSize
+from PyQt6.QtGui import QIcon
 from ui.styles import CP
+from ui.icons import load_icon
 from core.i18n import translate
 import core.projectors as proj
 
@@ -62,9 +64,15 @@ class ProjectorDialog(QDialog):
         col1.addWidget(self._col_label(translate("Famille")))
         self._fam_list = QListWidget()
         self._fam_list.setStyleSheet(self._list_style())
+        self._fam_list.setIconSize(QSize(26, 26))
         for code, label in proj.families():
             it = QListWidgetItem(label)
             it.setData(Qt.ItemDataRole.UserRole, code)
+            _icf = proj.family_icon(code)
+            if _icf:
+                _pm = load_icon(_icf, size=26)
+                if not _pm.isNull():
+                    it.setIcon(QIcon(_pm))
             self._fam_list.addItem(it)
         self._fam_list.currentRowChanged.connect(self._on_family)
         col1.addWidget(self._fam_list, 1)

@@ -50,7 +50,7 @@ def _init_project_dirs(folder: str):
         "vehicles/images",
         "scenarios",
         "hmc/images",
-        "Seedance",
+        "Studio IA",
         "doublage",
     ):
         os.makedirs(os.path.join(folder, "data", sub), exist_ok=True)

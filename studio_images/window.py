@@ -59,10 +59,10 @@ class ChatInput(QTextEdit):
         super().keyPressEvent(e)
 
 
-# ── Poignée d'ouverture/fermeture de la discussion Claude (à droite) ─────────
+# ── Poignée d'ouverture/fermeture de la discussion Claude (à gauche) ─────────
 class _ChatToggleStrip(QWidget):
     """Bande verticale pour ouvrir/fermer la discussion Claude — même principe
-    que le chat du Storyboard de PANDORA (poignée + flèche)."""
+    que le chat du Storyboard de PANDORA (poignée + flèche), placée à GAUCHE."""
 
     def __init__(self, panel, start_open: bool = False):
         super().__init__()
@@ -92,7 +92,9 @@ class _ChatToggleStrip(QWidget):
         lay.addStretch()
 
     def _arrow_char(self) -> str:
-        return "❮" if self._open else "❯"
+        # Chat à GAUCHE : ouvert → on replie vers la droite (❯) ; fermé → on déplie
+        # vers la gauche (❮, là où le chat apparaît).
+        return "❯" if self._open else "❮"
 
     def mousePressEvent(self, e):
         if e.button() == Qt.MouseButton.LeftButton:
@@ -228,8 +230,9 @@ class StudioImagesPanel(QWidget):
         root.setContentsMargins(14, 12, 14, 12)
         root.setSpacing(10)
 
-        # Corps : génération RECENTRÉE (largeur plafonnée + centrée) dans un SCROLL
-        # vertical + discussion Claude repliable à DROITE (poignée + flèche).
+        # Corps : discussion Claude repliable à GAUCHE (poignée + flèche, comme le
+        # chat du Storyboard) + génération RECENTRÉE (largeur plafonnée + centrée)
+        # dans un SCROLL vertical à droite.
         # (Sauvegarder/Ouvrir ont migré à côté du « Moteur de génération ».)
         body = QHBoxLayout()
         body.setContentsMargins(0, 0, 0, 0)
@@ -255,13 +258,15 @@ class StudioImagesPanel(QWidget):
         left_scroll.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
         left_scroll.setStyleSheet("QScrollArea{border:none;background:transparent;}")
         left_scroll.setWidget(left_wrap)
-        body.addWidget(left_scroll, 1)
 
+        # Discussion Claude à GAUCHE (comme le chat du Storyboard), puis poignée,
+        # puis la génération (qui occupe le reste de la largeur).
         self._chat_panel = self._build_right()
         self._chat_panel.setFixedWidth(440)
         self._chat_toggle = _ChatToggleStrip(self._chat_panel)
-        body.addWidget(self._chat_toggle)
         body.addWidget(self._chat_panel)
+        body.addWidget(self._chat_toggle)
+        body.addWidget(left_scroll, 1)
 
         root.addLayout(body, 1)
 
@@ -340,40 +345,36 @@ class StudioImagesPanel(QWidget):
 
     def _on_save_session(self):
         import json
-        name, ok = QInputDialog.getText(self, "Sauvegarder", "Nom de la session :")
-        if not (ok and name.strip()):
+        # Boîte de dialogue Windows : choisir où enregistrer (défaut = dossier Image IA).
+        start = os.path.join(self._img_saves_dir(), "Image IA.json")
+        path, _ = QFileDialog.getSaveFileName(
+            self, "Sauvegarder la session", start, "Session Image IA (*.json)")
+        if not path:
             return
-        safe = "".join(c for c in name.strip() if c.isalnum() or c in " -_").strip() or "image"
+        if not path.lower().endswith(".json"):
+            path += ".json"
         try:
-            with open(os.path.join(self._img_saves_dir(), safe + ".json"), "w",
-                      encoding="utf-8") as f:
+            with open(path, "w", encoding="utf-8") as f:
                 json.dump(self._session_dict(), f, ensure_ascii=False, indent=2)
-            self._status.setText(f"Session « {name.strip()} » sauvegardée ✓")
+            self._status.setText("Session sauvegardée ✓")
         except Exception as e:
             QMessageBox.critical(self, "Erreur", f"Échec de la sauvegarde : {e}")
 
     def _on_open_session(self):
         import json
-        d = self._img_saves_dir()
-        try:
-            names = sorted(f[:-5] for f in os.listdir(d) if f.endswith(".json"))
-        except Exception:
-            names = []
-        if not names:
-            QMessageBox.information(self, "Ouvrir", "Aucune session Image IA sauvegardée.")
-            return
-        name, ok = QInputDialog.getItem(self, "Ouvrir une session", "Session :",
-                                        names, 0, False)
-        if not (ok and name):
+        path, _ = QFileDialog.getOpenFileName(
+            self, "Ouvrir une session", self._img_saves_dir(),
+            "Session Image IA (*.json)")
+        if not path:
             return
         try:
-            with open(os.path.join(d, name + ".json"), encoding="utf-8") as f:
+            with open(path, encoding="utf-8") as f:
                 data = json.load(f)
         except Exception as e:
             QMessageBox.critical(self, "Erreur", f"Échec de l'ouverture : {e}")
             return
         self._load_session_dict(data)
-        self._status.setText(f"Session « {name} » ouverte ✓")
+        self._status.setText("Session ouverte ✓")
 
     def _load_session_dict(self, data: dict):
         s = data.get("settings", {})

@@ -293,8 +293,20 @@ def colonne_langues_dialogues():
     """Colonne « Langues » (storyboard Cinéma) : choix par plan, défaut anglais ;
     dialogues traduits À L'ENVOI uniquement (pas dans le prompt affiché)."""
     import ui.page_storyboard as M
-    assert len(M._COLS) == 18, "colonne Langues ajoutée (18 colonnes)"
-    assert M._COLS[16][0] == "Langues" and M._COLS[17][0] == "", "Langues en 16, boutons en 17"
+    assert len(M._COLS) == 19, "Langues (16) + Nom du plan (17) + boutons (18) = 19 colonnes"
+    assert M._COLS[16][0] == "Langues" and M._COLS[17][0] == "Nom du plan" and M._COLS[18][0] == "", \
+        "Langues en 16, Nom du plan en 17, boutons en 18"
+    # « Nom du plan » (scene_title) s'affiche par défaut juste après « Plan » (logique 3)
+    assert M._DEFAULT_COL_ORDER.index(17) == M._DEFAULT_COL_ORDER.index(3) + 1, \
+        "Nom du plan affiché juste après Plan"
+    # Séquence affichée « S<n> » (et non plus « SQ<n> »)
+    rsrc = inspect.getsource(M._ShotRow.__init__)
+    assert 'f"S{sq}"' in rsrc and 'f"SQ' not in rsrc, "libellé séquence = S<n>"
+    assert 'scene_title' in rsrc, "colonne Nom du plan = scene_title"
+    # Dialog d'édition : titre « S<n> — P<n> » + champ renommé « Nom du plan »
+    dsrc = inspect.getsource(__import__("ui.dialog_shot", fromlist=["_"]))
+    assert 'f"S{seq} — P{siq}"' in dsrc and '"Nom du plan"' in dsrc, \
+        "dialog : titre S<n> + libellé Nom du plan"
     # défaut « en » persisté
     import core.storyboard as sb
     assert 'setdefault("dialogue_lang", "en")' in inspect.getsource(sb.save_shot)
@@ -879,10 +891,11 @@ def decors_plan_auto_et_sync():
         "plan vu de dessus généré à la création manuelle du décor"
     assert dd.count("_maybe_gen_floor_plan()") >= 2, "appelé après image simple ET sheet"
 
-    # Mise en scène / Plan de feu : utilisent le plan du décor + enregistrent dessus
+    # Mise en scène / Plan de feu : lisent le plan du décor (par plan, via sélecteur)
     ps = inspect.getsource(__import__("ui.page_staging", fromlist=["_"]))
     assert "floor_plan_for_shot" in ps, "Mise en scène lit le plan du décor"
-    assert "set_floor_plan" in ps, "Générer le plan l'enregistre sur le décor"
+    assert "plan_decor_id" in ps, "sélecteur du plan de décor par plan"
+    assert "_sync_decors" in ps, "synchro storyboard → plans (remplace Générer le plan)"
 
     # Plan de feu montre caméra + acteurs (référence non éditable)
     from ui.staging_canvas import StagingCanvas
@@ -933,6 +946,9 @@ def staging_outils_projecteurs_sections():
     # Résumés mise en scène / plan de feu
     import core.staging as st
     assert hasattr(st, "staging_summary") and hasattr(st, "lighting_summary")
+    # Sync staging → storyboard : placement acteurs SEUL + placement caméra (technique)
+    assert hasattr(st, "staging_actors_summary") and hasattr(st, "camera_placement"), \
+        "acteurs seuls (→ [MISE EN SCÈNE]) + caméra (→ champs techniques)"
 
     # Worker sync : options + assemblage des sections
     sw = inspect.getsource(__import__("api.screenplay", fromlist=["_"]))
@@ -948,10 +964,34 @@ def staging_outils_projecteurs_sections():
     assert "actor_context" in cvsrc and "light_context" in cvsrc
     assert "contextMenuEvent" in cvsrc
 
-    # Page : barre Déplacer/Rotation + raccourci R + fenêtre projecteur
+    # Page : Déplacer/Rotation/Générer-le-plan RETIRÉS (souris + poignée) ; nouveaux
+    # sélecteur de plan, « Ajouter acteur » (casting complet) et menu Synchronisation.
     psrc = inspect.getsource(__import__("ui.page_staging", fromlist=["_"]))
-    assert "_btn_move" in psrc and "_btn_rotate" in psrc and "QShortcut" in psrc
+    assert "_btn_move" not in psrc and "_btn_rotate" not in psrc, "boutons Déplacer/Rotation retirés"
+    assert "_on_generate_plan" not in psrc and "_btn_gen" not in psrc, \
+        "génération de plan retirée (→ Synchronisation)"
+    assert "_plan_combo" in psrc and "plan_decor_id" in psrc, "sélecteur de plan de décor par plan"
+    assert "Ajouter acteur" in psrc and "list_characters" in psrc, "Ajouter acteur = casting complet"
+    assert "_btn_sync" in psrc and "_sync_decors" in psrc and "_sync_to_storyboard" in psrc, \
+        "menu Synchronisation (décors ↔ storyboard, 2 sens)"
+    # Boutons rotation (⟲ ⟳) + poubelle (🗑) RETIRÉS → souris/poignée + touche Suppr + clic droit
+    assert "rotate_selected" not in psrc, "boutons de rotation retirés (souris/poignée)"
+    assert "_sc_del" in psrc and "remove_model" in psrc, "Suppr + clic droit Supprimer"
+    assert "_on_save_staging" in psrc and "_on_open_staging" in psrc and "staging_saves_dir" in psrc, \
+        "Sauvegarder/Ouvrir (dossier dédié Mise en scène / Plan de feu)"
     assert "ProjectorDialog" in psrc and "_on_light_context" in psrc and "_on_actor_context" in psrc
+    # « Tout supprimer » retire AUSSI le plan de décor assigné (B4)
+    from ui.staging_canvas import StagingCanvas as _SC2
+    _cp = _SC2(mode="staging")
+    _cp.load({"plan_image": "x.png", "camera": {"x": .5, "y": .8, "angle": 0.0},
+              "actors": [], "props": [], "lights": []})
+    assert _cp.has_clearable() is True, "un plan de fond compte comme « à supprimer »"
+    _cp.clear_all()
+    assert _cp._record.get("plan_image") == "" and _cp._record.get("plan_decor_id") == "__none__", \
+        "Tout supprimer vide aussi le plan de décor (figé sur « aucun »)"
+    # core.staging : export/import par fichier + résolution « aucun plan »
+    assert hasattr(st, "export_staging_to") and hasattr(st, "import_staging_from") \
+        and hasattr(st, "staging_saves_dir"), "save/open mise en scène par fichier"
     # Bouton ROUGE « Tout supprimer » à droite (Mise en scène ET Plan de feu, par héritage)
     assert "_btn_clear_all" in psrc and "Tout supprimer" in psrc and "clear_all" in psrc, \
         "bouton rouge Tout supprimer"

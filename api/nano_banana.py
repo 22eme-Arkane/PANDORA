@@ -1931,10 +1931,15 @@ class GenerateRoomViewsWorker(QThread):
                     except Exception:
                         data = None
                 if data is None:   # repli : génération texte simple (sans injection)
-                    try:
-                        data = _gen_text(f"{base_full}\n\n{_DECOR_LINE}", "16:9")
-                    except Exception:
-                        continue   # cette face échoue, on garde les autres
+                    for _attempt in range(2):
+                        try:
+                            data = _gen_text(f"{base_full}\n\n{_DECOR_LINE}", "16:9")
+                            break
+                        except Exception:
+                            data = None
+                            time.sleep(3)   # transitoire (ex. limite de débit) → 1 réessai
+                    if data is None:
+                        continue   # cette face échoue vraiment, on garde les autres
                 p = _save(data, code)
                 # Prompt PAR VUE renvoyé (cadrage compris) → régénération fidèle.
                 out.append({"label": label, "code": code, "path": p, "prompt": fprompt})

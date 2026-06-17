@@ -2,14 +2,23 @@
 ui/page_staging.py — Mise en scène & Plan de feu (vue de dessus, par plan).
 
 PageStaging (mode 'staging') : place CAMÉRA, personnages et éléments sur un plan
-vu de dessus généré depuis le décor. L'axe caméra est réécrit dans le plan du
-storyboard. PageLighting (mode 'lighting') : place les LUMIÈRES (type de
-projecteur + direction) sur le MÊME plan — record partagé par plan (core/staging).
+vu de dessus issu du décor. L'axe caméra est réécrit dans le plan du storyboard.
+PageLighting (mode 'lighting') : place les LUMIÈRES (type de projecteur +
+direction) sur le MÊME plan — record partagé par plan (core/staging).
+
+Le plan de fond vient d'un DÉCOR : par défaut celui assigné au plan du storyboard,
+mais un sélecteur permet de choisir un AUTRE décor par plan (rec["plan_decor_id"]).
+
+« Synchronisation » remplace l'ancienne génération de plan :
+  · storyboard → plans : chaque plan reprend le plan vu de dessus de son décor ;
+  · mise en scène → storyboard : place les comédiens dans la section [MISE EN SCÈNE]
+    du prompt et la caméra dans les champs techniques (camera_axis / camera_placement) ;
+  · plan de feu → storyboard : alimente la section [PLAN DE FEU] du prompt.
 """
 
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, QComboBox,
-    QListWidget, QListWidgetItem, QInputDialog, QMenu,
+    QListWidget, QListWidgetItem, QInputDialog, QMenu, QMessageBox, QFileDialog,
 )
 from PyQt6.QtCore import Qt
 from PyQt6.QtGui import QShortcut, QKeySequence
@@ -45,7 +54,6 @@ class PageStaging(QWidget):
         self._mode = self.MODE
         self._shots: list[dict] = []
         self._shot: dict | None = None
-        self._worker = None
         self.setStyleSheet(f"background:{CP['bg0']};")
 
         root = QVBoxLayout(self)
@@ -108,55 +116,70 @@ class PageStaging(QWidget):
         body.addLayout(right, 1)
         root.addLayout(body, 1)
 
-        # Raccourci R : bascule Déplacer ↔ Rotation (façon Photoshop)
-        self._sc_rotate = QShortcut(QKeySequence("R"), self)
-        self._sc_rotate.activated.connect(self._toggle_tool)
+        # Suppr / Retour arrière : retire le jeton sélectionné (la poubelle a été
+        # retirée de la barre ; le déplacement et la rotation se font à la souris).
+        self._sc_del = QShortcut(QKeySequence(QKeySequence.StandardKey.Delete), self)
+        self._sc_del.activated.connect(self._canvas.remove_selected)
+        self._sc_bs = QShortcut(QKeySequence(Qt.Key.Key_Backspace), self)
+        self._sc_bs.activated.connect(self._canvas.remove_selected)
 
     # ── Contenu spécifique au mode ──────────────────────────────────────────────
 
     def _help_lines(self):
         if self._mode == "staging":
             return [
-                "▸ Sélectionnez un plan, générez le plan vu de dessus du décor, puis placez caméra, acteurs et éléments.",
-                "▸ Glissez les jetons ; pivotez la caméra avec ⟲ ⟳. L'axe caméra est réécrit dans le storyboard.",
-                "▸ Tout est enregistré automatiquement et réutilisé par la synchronisation des prompts.",
+                "▸ Sélectionnez un plan, choisissez le plan de décor à utiliser, puis placez la caméra, les acteurs et les éléments.",
+                "▸ Glissez les jetons à la souris ; pivotez la caméra avec sa poignée ou ⟲ ⟳. L'axe caméra est réécrit dans le storyboard.",
+                "▸ « Synchronisation » : récupère les plans des décors, ou renvoie la mise en scène vers les prompts du storyboard.",
             ]
         return [
             "▸ Reprend le plan de la Mise en scène : placez les projecteurs et choisissez leur type.",
-            "▸ Glissez chaque lumière, orientez-la avec ⟲ ⟳ pour définir la direction du faisceau.",
-            "▸ La synchronisation des prompts tient compte de l'éclairage défini ici.",
+            "▸ Glissez chaque lumière à la souris, orientez-la avec sa poignée ou ⟲ ⟳ pour définir le faisceau.",
+            "▸ « Synchronisation » renvoie l'éclairage défini ici vers les prompts du storyboard.",
         ]
 
     def _build_toolbar(self) -> QHBoxLayout:
         tb = QHBoxLayout()
         tb.setSpacing(8)
-        self._btn_gen = _btn("✦  " + translate("Générer le plan"))
-        self._btn_gen.clicked.connect(self._on_generate_plan)
-        tb.addWidget(self._btn_gen)
 
-        # Modes outil : Déplacer / Rotation (+ raccourci R)
-        self._btn_move = _btn("✥  " + translate("Déplacer"))
-        self._btn_move.setCheckable(True)
-        self._btn_move.clicked.connect(lambda: self._set_tool("move"))
-        self._btn_rotate = _btn("⟳  " + translate("Rotation"))
-        self._btn_rotate.setCheckable(True)
-        self._btn_rotate.setToolTip(translate("Raccourci : R"))
-        self._btn_rotate.clicked.connect(lambda: self._set_tool("rotate"))
-        tb.addWidget(self._btn_move)
-        tb.addWidget(self._btn_rotate)
-        self._set_tool("move")
+        # Sélecteur : quel plan de décor utiliser pour CE plan du storyboard.
+        _pl_lbl = QLabel(translate("Plan du décor :"))
+        _pl_lbl.setStyleSheet(f"color:{CP['text_dim']};font-size:11px;background:transparent;")
+        tb.addWidget(_pl_lbl)
+        self._plan_combo = QComboBox()
+        self._plan_combo.setMinimumWidth(190)
+        self._plan_combo.setStyleSheet(
+            f"QComboBox{{background:{CP['bg3']};color:{CP['text_primary']};"
+            f"border:1px solid {CP['border']};border-radius:7px;font-size:11px;"
+            f"padding:5px 10px;}}"
+            f"QComboBox:hover{{border-color:{CP['accent_dim']};}}")
+        self._plan_combo.currentIndexChanged.connect(self._on_plan_decor_changed)
+        tb.addWidget(self._plan_combo)
+
+        # Sauvegarder / Ouvrir (dossier dédié : « Mise en scène » ou « Plan de feu »).
+        b_save = _btn("💾  " + translate("Sauvegarder"))
+        b_save.clicked.connect(self._on_save_staging)
+        b_open = _btn("📂  " + translate("Ouvrir"))
+        b_open.clicked.connect(self._on_open_staging)
+        tb.addWidget(b_save)
+        tb.addWidget(b_open)
+
+        # Ajout d'un élément selon le mode (déplacement + rotation = souris/poignée ;
+        # suppression d'un jeton = touche Suppr ou clic droit → Supprimer).
         if self._mode == "staging":
-            b_actor = _btn("＋ " + translate("Acteur")); b_actor.clicked.connect(self._add_actor)
-            b_prop  = _btn("＋ " + translate("Élément")); b_prop.clicked.connect(self._add_prop)
-            tb.addWidget(b_actor); tb.addWidget(b_prop)
+            b_actor = _btn("＋ " + translate("Ajouter acteur"))
+            b_actor.clicked.connect(self._add_actor)
+            tb.addWidget(b_actor)
         else:
-            b_light = _btn("＋ " + translate("Lumière")); b_light.clicked.connect(self._add_light)
+            b_light = _btn("＋ " + translate("Lumière"))
+            b_light.clicked.connect(self._add_light)
             tb.addWidget(b_light)
-        b_rl = _btn("⟲"); b_rl.setFixedWidth(40); b_rl.clicked.connect(lambda: self._canvas.rotate_selected(-15))
-        b_rr = _btn("⟳"); b_rr.setFixedWidth(40); b_rr.clicked.connect(lambda: self._canvas.rotate_selected(15))
-        b_del = _btn("🗑"); b_del.setFixedWidth(40); b_del.clicked.connect(self._canvas.remove_selected)
-        tb.addWidget(b_rl); tb.addWidget(b_rr); tb.addWidget(b_del)
         tb.addStretch()
+
+        # « Synchronisation » — remplace « Générer le plan ». Menu déroulant.
+        self._btn_sync = _btn("⟳  " + translate("Synchronisation"))
+        self._btn_sync.clicked.connect(self._open_sync_menu)
+        tb.addWidget(self._btn_sync)
 
         # « Tout supprimer » — bouton rouge à DROITE (même emplacement que dans
         # le Storyboard). Vide tous les éléments éditables du plan courant.
@@ -173,7 +196,6 @@ class PageStaging(QWidget):
         return tb
 
     def _on_clear_all(self):
-        from PyQt6.QtWidgets import QMessageBox
         # Rien à supprimer ? (ex. Plan de feu sans projecteur, ou plan déjà vide) →
         # on le DIT clairement (sinon le clic semble « ne rien faire »).
         if not self._canvas.has_clearable():
@@ -188,7 +210,8 @@ class PageStaging(QWidget):
         box.setStandardButtons(QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
         box.setDefaultButton(QMessageBox.StandardButton.No)
         if box.exec() == QMessageBox.StandardButton.Yes:
-            self._canvas.clear_all()   # émet changed → autosave
+            self._canvas.clear_all()   # émet changed → autosave (vide aussi le plan)
+            self._refresh_plan_combo()  # reflète « Aucun plan »
 
     # ── Données ─────────────────────────────────────────────────────────────────
 
@@ -214,20 +237,29 @@ class PageStaging(QWidget):
             idx = next((i for i, s in enumerate(self._shots) if s.get("id") == cur), 0)
             self._list.setCurrentRow(idx)
 
+    def _resolve_floor_plan(self, shot: dict, rec: dict) -> str:
+        """Plan vu de dessus à afficher : décor choisi pour CE plan (plan_decor_id),
+        sinon le décor assigné dans le storyboard. « __none__ » = aucun plan
+        (forcé par « Tout supprimer »)."""
+        override = rec.get("plan_decor_id", "")
+        if override == "__none__":
+            return ""
+        if override:
+            dec = decors_api.get_decor(override)
+            return (dec or {}).get("floor_plan", "")
+        return decors_api.floor_plan_for_shot(shot)
+
     def _on_shot_changed(self, row: int):
         if row < 0 or row >= len(self._shots):
             self._shot = None
             return
         self._shot = self._shots[row]
         rec = staging.get(self._shot["id"])
-        # Plan vu de dessus = celui du DÉCOR assigné (source unique, synchro avec
-        # la page Décors). Le Plan de feu réutilise le MÊME plan que la Mise en scène.
-        fp = decors_api.floor_plan_for_shot(self._shot)
+        fp = self._resolve_floor_plan(self._shot, rec)
         if fp and os.path.isfile(fp):
             rec["plan_image"] = fp
         # Amorçage : acteurs depuis les personnages du plan, UNE SEULE FOIS.
-        # Le flag « _actors_seeded » évite de re-semer après un « Tout supprimer »
-        # (sinon les acteurs revenaient à chaque rechargement → suppression sans effet).
+        # Le flag « _actors_seeded » évite de re-semer après un « Tout supprimer ».
         if self._mode == "staging":
             if not rec.get("actors") and not rec.get("_actors_seeded"):
                 names = self._shot.get("character_names", []) or []
@@ -235,15 +267,63 @@ class PageStaging(QWidget):
                                  for i, n in enumerate(names[:6])]
             rec["_actors_seeded"] = True
         self._canvas.load(rec)
+        self._refresh_plan_combo()
+
+    def _reload_current(self):
+        self._on_shot_changed(self._list.currentRow())
+
+    def _refresh_plan_combo(self):
+        if not hasattr(self, "_plan_combo"):
+            return
+        self._plan_combo.blockSignals(True)
+        self._plan_combo.clear()
+        self._plan_combo.addItem(translate("Auto (décor du plan)"), "")
+        self._plan_combo.addItem(translate("Aucun plan (vide)"), "__none__")
+        try:
+            for d in decors_api.list_decors():
+                name = d.get("name") or translate("(décor sans nom)")
+                # ◆ = un plan vu de dessus existe déjà pour ce décor.
+                label = ("◆ " + name) if d.get("floor_plan") else name
+                self._plan_combo.addItem(label, d.get("id", ""))
+        except Exception:
+            pass
+        cur = staging.get(self._shot["id"]).get("plan_decor_id", "") if self._shot else ""
+        idx = 0
+        for i in range(self._plan_combo.count()):
+            if self._plan_combo.itemData(i) == cur:
+                idx = i
+                break
+        self._plan_combo.setCurrentIndex(idx)
+        self._plan_combo.blockSignals(False)
+
+    def _on_plan_decor_changed(self, idx: int):
+        if not self._shot:
+            return
+        rec = staging.get(self._shot["id"])
+        rec["plan_decor_id"] = self._plan_combo.currentData() or ""
+        fp = self._resolve_floor_plan(self._shot, rec)
+        rec["plan_image"] = fp if (fp and os.path.isfile(fp)) else ""
+        staging.save(self._shot["id"], rec)
+        self._canvas.load(rec)
 
     # ── Actions ─────────────────────────────────────────────────────────────────
 
     def _add_actor(self):
-        names = (self._shot or {}).get("character_names", []) or []
-        if names:
+        # Liste COMPLÈTE du casting du projet (+ les personnages déjà sur ce plan).
+        chars = []
+        try:
+            import core.casting as casting
+            chars = [c.get("name", "") for c in casting.list_characters() if c.get("name")]
+        except Exception:
+            chars = []
+        for n in (self._shot or {}).get("character_names", []) or []:
+            if n and n not in chars:
+                chars.append(n)
+        if chars:
             menu = QMenu(self)
-            for n in names:
+            for n in chars:
                 menu.addAction(n, lambda _=False, nm=n: self._canvas.add_actor(nm))
+            menu.addSeparator()
             menu.addAction(translate("Autre…"), self._add_actor_free)
             menu.exec(self.cursor().pos())
         else:
@@ -254,11 +334,6 @@ class PageStaging(QWidget):
         if ok and name.strip():
             self._canvas.add_actor(name.strip())
 
-    def _add_prop(self):
-        name, ok = QInputDialog.getText(self, translate("Élément"), translate("Nom :"))
-        if ok and name.strip():
-            self._canvas.add_prop(name.strip())
-
     def _add_light(self):
         from ui.dialog_projector import ProjectorDialog
         dlg = ProjectorDialog(self)
@@ -268,32 +343,6 @@ class PageStaging(QWidget):
                 self._canvas.add_light(r["name"], r["role"],
                                        r.get("family", ""), r.get("model", ""))
 
-    # ── Outils : Déplacer / Rotation (raccourci R) ──────────────────────────────
-
-    def _set_tool(self, tool: str):
-        self._canvas.set_tool(tool)
-        is_rot = (tool == "rotate")
-        self._btn_move.setChecked(not is_rot)
-        self._btn_rotate.setChecked(is_rot)
-        self._style_tool_btn(self._btn_move, not is_rot)
-        self._style_tool_btn(self._btn_rotate, is_rot)
-
-    def _toggle_tool(self):
-        self._set_tool("move" if self._btn_rotate.isChecked() else "rotate")
-
-    def _style_tool_btn(self, btn, active: bool):
-        if active:
-            btn.setStyleSheet(
-                f"QPushButton{{background:rgba(78,205,196,0.16);color:{CP['accent']};"
-                f"border:1px solid {CP['accent']};border-radius:7px;font-size:11px;"
-                f"font-weight:700;padding:0 12px;}}")
-        else:
-            btn.setStyleSheet(
-                f"QPushButton{{background:{CP['bg3']};color:{CP['text_secondary']};"
-                f"border:1px solid {CP['border']};border-radius:7px;font-size:11px;"
-                f"font-weight:600;padding:0 12px;}}"
-                f"QPushButton:hover{{background:{CP['bg2']};border-color:{CP['accent_dim']};}}")
-
     # ── Clic droit : changer l'acteur (Mise en scène) / le projecteur (Plan de feu) ──
 
     def _on_actor_context(self, model: dict):
@@ -302,6 +351,8 @@ class PageStaging(QWidget):
         for n in names:
             menu.addAction(n, lambda _=False, nm=n: self._rename_actor(model, nm))
         menu.addAction(translate("Autre…"), lambda: self._rename_actor_free(model))
+        menu.addSeparator()
+        menu.addAction(translate("Supprimer"), lambda: self._canvas.remove_model(model))
         menu.exec(self.cursor().pos())
 
     def _rename_actor(self, model: dict, name: str):
@@ -316,6 +367,13 @@ class PageStaging(QWidget):
             self._rename_actor(model, name.strip())
 
     def _on_light_context(self, model: dict):
+        menu = QMenu(self)
+        menu.addAction(translate("Modifier le projecteur"), lambda: self._edit_light(model))
+        menu.addSeparator()
+        menu.addAction(translate("Supprimer"), lambda: self._canvas.remove_model(model))
+        menu.exec(self.cursor().pos())
+
+    def _edit_light(self, model: dict):
         from ui.dialog_projector import ProjectorDialog
         dlg = ProjectorDialog(self, role=model.get("type", "key"),
                               family=model.get("family", ""), model=model.get("model", ""))
@@ -327,47 +385,131 @@ class PageStaging(QWidget):
                 self._canvas.reload()
                 self._autosave()
 
-    def _on_generate_plan(self):
-        if not self._shot:
-            return
-        self._btn_gen.setEnabled(False)
-        self._btn_gen.setText("…")
-        from api.nano_banana import GenerateFloorPlanWorker
-        prompt = self._decor_prompt(self._shot)
-        self._worker = GenerateFloorPlanWorker(prompt, self._shot.get("decor_name", "plan"))
-        self._worker.finished.connect(self._on_plan_done)
-        self._worker.failed.connect(self._on_plan_fail)
-        self._worker.start()
+    # ── Synchronisation (remplace « Générer le plan ») ──────────────────────────
 
-    def _on_plan_done(self, path: str):
-        self._btn_gen.setEnabled(True)
-        self._btn_gen.setText("✦  " + translate("Générer le plan"))
-        if path and self._shot:
-            # Enregistre le plan sur le DÉCOR (source unique → visible aussi dans
-            # la page Décors et réutilisé par le Plan de feu). Repli : par plan.
-            did = self._shot.get("decor_id")
-            if did:
+    def _open_sync_menu(self):
+        menu = QMenu(self)
+        menu.setStyleSheet(
+            f"QMenu{{background:{CP['bg2']};border:1px solid {CP['border']};"
+            f"border-radius:8px;padding:4px 0;}}"
+            f"QMenu::item{{color:{CP['text_primary']};padding:8px 18px;font-size:11px;}}"
+            f"QMenu::item:selected{{background:{CP['accent_dim']};color:#07080f;}}")
+        menu.addAction(translate("Synchroniser les décors (storyboard → plans)"),
+                       self._sync_decors)
+        if self._mode == "staging":
+            menu.addAction(translate("Synchroniser la mise en scène → storyboard"),
+                           self._sync_to_storyboard)
+        else:
+            menu.addAction(translate("Synchroniser le plan de feu → storyboard"),
+                           self._sync_to_storyboard)
+        menu.exec(self._btn_sync.mapToGlobal(self._btn_sync.rect().bottomLeft()))
+
+    def _sync_decors(self):
+        """storyboard → plans : chaque plan reprend le plan vu de dessus de son décor
+        assigné (repasse en Auto, ignore un éventuel choix manuel)."""
+        n = 0
+        for s in self._shots:
+            sid = s.get("id")
+            if not sid:
+                continue
+            rec = staging.get(sid)
+            rec["plan_decor_id"] = ""
+            fp = decors_api.floor_plan_for_shot(s)
+            if fp and os.path.isfile(fp):
+                rec["plan_image"] = fp
+                n += 1
+            staging.save(sid, rec)
+        self._reload_current()
+        QMessageBox.information(
+            self, translate("Synchronisation"),
+            translate("Décors synchronisés depuis le storyboard.") + f"  ({n})")
+
+    def _sync_to_storyboard(self):
+        """mise en scène / plan de feu → storyboard : place les comédiens dans la
+        section [MISE EN SCÈNE] du prompt et la caméra dans les champs techniques
+        (camera_axis / camera_placement) ; le plan de feu alimente [PLAN DE FEU]."""
+        from core.prompt_sections import parse as _parse, build as _build
+        n = 0
+        for s in self._shots:
+            sid = s.get("id")
+            if not sid:
+                continue
+            rec = staging.get(sid)
+            cur = s.get("seedance_prompt", "") or ""
+            sec = _parse(cur)
+            action = sec.get("action") or cur
+            changed = False
+            if self._mode == "staging":
+                actors_txt = staging.staging_actors_summary(sid)
+                new = _build(action, actors_txt or sec.get("staging", ""),
+                             sec.get("lighting", ""), sec.get("sound", ""))
+                if new and new != cur:
+                    s["seedance_prompt"] = new
+                    changed = True
+                # Caméra → champs TECHNIQUES du plan (pas dans le texte de mise en scène)
+                cam = rec.get("camera") or {}
+                axis = staging.axis_from_angle(cam.get("angle", 0)) if cam else ""
+                zone = staging.camera_placement(sid)
+                if axis and s.get("camera_axis") != axis:
+                    s["camera_axis"] = axis
+                    changed = True
+                if zone and s.get("camera_placement") != zone:
+                    s["camera_placement"] = zone
+                    changed = True
+            else:
+                light_txt = staging.lighting_summary(sid)
+                new = _build(action, sec.get("staging", ""),
+                             light_txt or sec.get("lighting", ""), sec.get("sound", ""))
+                if new and new != cur:
+                    s["seedance_prompt"] = new
+                    changed = True
+            if changed:
                 try:
-                    decors_api.set_floor_plan(did, path)
+                    sb_api.save_shot({k: v for k, v in s.items() if not k.startswith("_")})
+                    n += 1
                 except Exception:
                     pass
-            rec = staging.get(self._shot["id"])
-            rec["plan_image"] = path
-            staging.save(self._shot["id"], rec)
-            self._canvas.load(rec)
-        elif not path:
-            self._btn_gen.setText("Mode mock — plan non généré (clé fal.ai absente)")
+        msg = (translate("Mise en scène synchronisée vers le storyboard.")
+               if self._mode == "staging"
+               else translate("Plan de feu synchronisé vers le storyboard."))
+        QMessageBox.information(self, translate("Synchronisation"), msg + f"  ({n})")
 
-    def _on_plan_fail(self, err: str):
-        self._btn_gen.setEnabled(True)
-        self._btn_gen.setText("✦  " + translate("Générer le plan"))
+    # ── Sauvegarder / Ouvrir (dossier dédié, boîte de dialogue Windows) ─────────
+
+    def _on_save_staging(self):
+        sub = "Mise en scène" if self._mode == "staging" else "Plan de feu"
+        start = os.path.join(staging.staging_saves_dir(self._mode), sub + ".json")
+        path, _ = QFileDialog.getSaveFileName(
+            self, translate("Sauvegarder"), start, "PANDORA (*.json)")
+        if not path:
+            return
+        if not path.lower().endswith(".json"):
+            path += ".json"
+        try:
+            staging.export_staging_to(path)
+            QMessageBox.information(self, translate("Sauvegarder"), translate("Enregistré ✓"))
+        except Exception as e:
+            QMessageBox.critical(self, "Erreur", f"Échec de la sauvegarde : {e}")
+
+    def _on_open_staging(self):
+        path, _ = QFileDialog.getOpenFileName(
+            self, translate("Ouvrir"), staging.staging_saves_dir(self._mode),
+            "PANDORA (*.json)")
+        if not path:
+            return
+        try:
+            n = staging.import_staging_from(path)
+            self._reload_current()
+            QMessageBox.information(self, translate("Ouvrir"), f"{n} plan(s) chargé(s).")
+        except Exception as e:
+            QMessageBox.critical(self, "Erreur", f"Échec de l'ouverture : {e}")
 
     def _autosave(self):
         if not self._shot:
             return
         rec = self._canvas.commit()
         staging.save(self._shot["id"], rec)
-        # Mise en scène → axe caméra réécrit dans le storyboard
+        # Mise en scène → axe caméra réécrit dans le storyboard (suivi en direct).
         if self._mode == "staging":
             cam = rec.get("camera") or {}
             axis = staging.axis_from_angle(cam.get("angle", 0))
@@ -377,18 +519,6 @@ class PageStaging(QWidget):
                     sb_api.save_shot({k: v for k, v in self._shot.items() if not k.startswith("_")})
                 except Exception:
                     pass
-
-    def _decor_prompt(self, shot: dict) -> str:
-        did = shot.get("decor_id")
-        if did:
-            try:
-                import core.decors as d
-                dec = d.get_decor(did)
-                if dec:
-                    return dec.get("prompt") or dec.get("name", "")
-            except Exception:
-                pass
-        return shot.get("decor_name", "") or shot.get("scene_title", "")
 
 
 class PageLighting(PageStaging):

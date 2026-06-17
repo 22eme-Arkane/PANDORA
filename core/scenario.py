@@ -152,6 +152,30 @@ def import_scenario_file(name: str) -> dict | None:
         return json.load(f)
 
 
+def saves_dir() -> str:
+    """Dossier par défaut des scénarios sauvegardés (pour la boîte de dialogue)."""
+    return _saves_dir()
+
+
+def export_scenario_to(path: str, data: dict) -> str:
+    """Sauvegarde le scénario vers un fichier CHOISI par l'utilisateur (boîte de
+    dialogue Windows). Chargeable depuis n'importe quel projet."""
+    payload = dict(data or {})
+    payload.setdefault("saved_name", os.path.splitext(os.path.basename(path))[0])
+    payload["saved_at"] = datetime.now().isoformat(timespec="seconds")
+    with open(path, "w", encoding="utf-8") as f:
+        json.dump(payload, f, ensure_ascii=False, indent=2)
+    return path
+
+
+def import_scenario_from(path: str) -> dict | None:
+    """Recharge un scénario depuis un fichier CHOISI (boîte de dialogue Windows)."""
+    if not path or not os.path.isfile(path):
+        return None
+    with open(path, "r", encoding="utf-8") as f:
+        return json.load(f)
+
+
 def read_file(path: str) -> str:
     ext = os.path.splitext(path)[1].lower()
 

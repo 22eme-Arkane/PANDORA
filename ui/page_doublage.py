@@ -214,42 +214,6 @@ class PageDoublage(QWidget):
         scroll.setWidget(content)
         root.addWidget(scroll, 1)
 
-        # ── Banner "Prochainement" — intégration audio moteurs ───────────────────
-        coming_soon = QFrame()
-        coming_soon.setStyleSheet(
-            f"QFrame{{background:rgba(255,140,66,0.10);"
-            f"border:1px solid rgba(255,140,66,0.40);border-radius:10px;}}"
-        )
-        cs_lay = QVBoxLayout(coming_soon)
-        cs_lay.setContentsMargins(18, 14, 18, 14)
-        cs_lay.setSpacing(8)
-
-        cs_title = QLabel("🔜  Prochainement — Intégration audio multi-personnages")
-        cs_title.setStyleSheet(
-            f"color:{CP['orange']};font-size:13px;font-weight:700;"
-            f"background:transparent;border:none;"
-        )
-        cs_lay.addWidget(cs_title)
-
-        cs_body = QLabel(
-            "Les moteurs de génération vidéo (Seedance, Kling, Veo…) ne permettent pas encore "
-            "d'incorporer un audio personnalisé par personnage directement dans la génération. "
-            "L'injection multi-personnages avec timecodes — \"personnage A parle de T1 à T2, "
-            "personnage B de T3 à T4\" — est prévue dans une prochaine version de PANDORA.\n\n"
-            "En attendant : les outils de synthèse vocale ci-dessous restent pleinement "
-            "fonctionnels pour générer et prévisualiser les voix de vos personnages. "
-            "L'audio produit peut ensuite être appliqué manuellement via LatentSync "
-            "(onglet Modifier depuis DaVinci Resolve) ou intégré dans DaVinci Resolve."
-        )
-        cs_body.setWordWrap(True)
-        cs_body.setStyleSheet(
-            f"color:{CP['text_secondary']};font-size:11px;line-height:1.5;"
-            f"background:transparent;border:none;"
-        )
-        cs_lay.addWidget(cs_body)
-
-        self._content_lay.addWidget(coming_soon)
-
         self._content_lay.addWidget(HelpBlock("Doublage & Synthèse vocale IA", [
             "▸ ElevenLabs Turbo v2.5 : synthèse vocale avec sélection de voix — principalement anglais, résultats variables en français.",
             "▸ F5-TTS Clonage : clone une voix depuis un échantillon audio — langue détectée depuis le texte. Entraîné principalement sur l'anglais et le chinois : le français peut sonner avec un accent.",

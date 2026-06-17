@@ -103,6 +103,39 @@ def save(shot_id: str, data: dict) -> None:
     _save(idx)
 
 
+def staging_saves_dir(mode: str = "staging") -> str:
+    """Dossier par défaut des sauvegardes de mise en scène / plan de feu (pour la
+    boîte de dialogue Windows)."""
+    from core.context import get_data_root
+    sub = "Mise en scène" if mode == "staging" else "Plan de feu"
+    d = os.path.join(get_data_root(), sub)
+    os.makedirs(d, exist_ok=True)
+    return d
+
+
+def export_staging_to(path: str) -> str:
+    """Exporte TOUTE la mise en scène / plan de feu (tous les plans) vers un fichier
+    CHOISI par l'utilisateur — rechargeable ensuite dans n'importe quel projet."""
+    payload = {"staging": _load()}
+    with open(path, "w", encoding="utf-8") as f:
+        json.dump(payload, f, ensure_ascii=False, indent=2)
+    return path
+
+
+def import_staging_from(path: str) -> int:
+    """Recharge une mise en scène depuis un fichier CHOISI : REMPLACE l'index
+    courant. Retourne le nombre de plans importés."""
+    if not path or not os.path.isfile(path):
+        return 0
+    with open(path, "r", encoding="utf-8") as f:
+        data = json.load(f)
+    stg = data.get("staging", data) if isinstance(data, dict) else {}
+    if not isinstance(stg, dict):
+        return 0
+    _save(stg)
+    return len(stg)
+
+
 def summary(shot_id: str) -> str:
     """Résumé textuel de la mise en scène — injecté dans la synchronisation des
     prompts pour réadapter au placement et à la lumière."""
@@ -150,6 +183,31 @@ def staging_summary(shot_id: str) -> str:
         parts.append("Éléments : " + ", ".join(
             f"{p.get('name','?')} en {_zone(p)}" for p in props) + ".")
     return " ".join(parts)
+
+
+def staging_actors_summary(shot_id: str) -> str:
+    """Placement des PERSONNAGES (+ éléments) SEUL — pour la section [MISE EN SCÈNE]
+    du prompt. La caméra, elle, part dans les champs TECHNIQUES du plan
+    (camera_axis / camera_placement) — cf. PageStaging._sync_to_storyboard."""
+    rec = get(shot_id)
+    parts = []
+    actors = rec.get("actors") or []
+    if actors:
+        parts.append("Personnages : " + ", ".join(
+            f"{a.get('name','?')} en {_zone(a)}" for a in actors) + ".")
+    props = rec.get("props") or []
+    if props:
+        parts.append("Éléments : " + ", ".join(
+            f"{p.get('name','?')} en {_zone(p)}" for p in props) + ".")
+    return " ".join(parts)
+
+
+def camera_placement(shot_id: str) -> str:
+    """Zone de placement de la caméra (ex. « avant-centre ») — pour le champ
+    technique camera_placement du storyboard."""
+    rec = get(shot_id)
+    cam = rec.get("camera") or {}
+    return _zone(cam) if cam else ""
 
 
 def lighting_summary(shot_id: str) -> str:

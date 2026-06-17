@@ -437,21 +437,25 @@ def delete_shot(shot_id: str):
 
 # ── Column order ──────────────────────────────────────────────────────────────
 
-def load_col_order(n_cols: int) -> list:
-    """Load column visual order from project config. Falls back to default."""
+def load_col_order(n_cols: int, default: list | None = None) -> list:
+    """Load column visual order from project config. Falls back to `default`
+    (or the natural 0..n-1 order). A saved order is only accepted if it contains
+    exactly the same set of indices as `default` — sinon on retombe sur le défaut
+    (gère l'ajout d'une colonne : un ordre enregistré plus court est ignoré)."""
     _ensure()
     path = os.path.join(_sb_dir(), "col_order.json")
-    default = list(range(n_cols))
+    if default is None:
+        default = list(range(n_cols))
     if not os.path.exists(path):
-        return default
+        return list(default)
     try:
         with open(path, encoding="utf-8") as f:
             order = json.load(f)
-        if isinstance(order, list) and sorted(order) == default:
+        if isinstance(order, list) and sorted(order) == sorted(default):
             return order
     except Exception:
         pass
-    return default
+    return list(default)
 
 
 def save_col_order(order: list) -> None:
@@ -539,6 +543,52 @@ def import_storyboard(name: str, version_id: str = DEFAULT_VERSION_ID) -> int:
     pid = get_project_id()
     index = _load_index()
     # Retire les plans de cette version (pour ce projet)
+    index = [s for s in index if not (
+        s.get("version_id", DEFAULT_VERSION_ID) == version_id
+        and (not pid or s.get("project_id") == pid))]
+    for s in shots:
+        s = dict(s)
+        s["version_id"] = version_id
+        if pid:
+            s["project_id"] = pid
+        if not s.get("id"):
+            s["id"] = str(uuid.uuid4())
+        index.append(s)
+    _save_index(index)
+    return len(shots)
+
+
+def saves_dir() -> str:
+    """Dossier par défaut des storyboards sauvegardés (pour la boîte de dialogue)."""
+    return _saves_dir()
+
+
+def export_storyboard_to(path: str, version_id: str = DEFAULT_VERSION_ID) -> str:
+    """Sauvegarde les plans (version courante) vers un fichier CHOISI par
+    l'utilisateur (boîte de dialogue Windows). Chargeable depuis tout projet."""
+    shots = [{k: v for k, v in s.items() if not k.startswith("_")}
+             for s in list_shots(version_id)]
+    payload = {
+        "saved_name": os.path.splitext(os.path.basename(path))[0],
+        "saved_at": datetime.now().isoformat(timespec="seconds"),
+        "shots": shots,
+    }
+    with open(path, "w", encoding="utf-8") as f:
+        json.dump(payload, f, ensure_ascii=False, indent=2)
+    return path
+
+
+def import_storyboard_from(path: str, version_id: str = DEFAULT_VERSION_ID) -> int:
+    """Recharge un storyboard depuis un fichier CHOISI : REMPLACE les plans de la
+    version courante. Retourne le nombre de plans importés."""
+    from core.context import get_project_id
+    if not path or not os.path.isfile(path):
+        return 0
+    with open(path, "r", encoding="utf-8") as f:
+        data = json.load(f)
+    shots = data.get("shots", []) or []
+    pid = get_project_id()
+    index = _load_index()
     index = [s for s in index if not (
         s.get("version_id", DEFAULT_VERSION_ID) == version_id
         and (not pid or s.get("project_id") == pid))]

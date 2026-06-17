@@ -2140,6 +2140,35 @@ _FR_TO_EN: dict[str, str] = {
     "Valider":                                   "Confirm",
     "Synchroniser la mise en scène":             "Sync staging",
     "Synchroniser le plan de feu":               "Sync lighting plan",
+    # ── Mise en scène / Plan de feu — sélecteur de plan + synchro (2026-06-17) ─
+    "Plan du décor :":                           "Set plan:",
+    "Auto (décor du plan)":                      "Auto (shot's set)",
+    "Aucun plan (vide)":                         "No plan (empty)",
+    "(décor sans nom)":                          "(unnamed set)",
+    "Modifier le projecteur":                    "Edit fixture",
+    "Enregistré ✓":                              "Saved ✓",
+    "Sauvegarder le scénario":                   "Save the screenplay",
+    "Ouvrir un scénario":                        "Open a screenplay",
+    "Sauvegarder le storyboard":                 "Save the storyboard",
+    "Ouvrir un storyboard":                      "Open a storyboard",
+    "Ajouter acteur":                            "Add actor",
+    "Pivoter à gauche":                          "Rotate left",
+    "Pivoter à droite":                          "Rotate right",
+    "Supprimer la sélection":                    "Delete selection",
+    "Synchronisation":                           "Synchronize",
+    "Synchroniser les décors (storyboard → plans)":
+        "Sync sets (storyboard → plans)",
+    "Synchroniser la mise en scène → storyboard":
+        "Sync staging → storyboard",
+    "Synchroniser le plan de feu → storyboard":
+        "Sync lighting plan → storyboard",
+    "Décors synchronisés depuis le storyboard.":
+        "Sets synced from the storyboard.",
+    "Mise en scène synchronisée vers le storyboard.":
+        "Staging synced to the storyboard.",
+    "Plan de feu synchronisé vers le storyboard.":
+        "Lighting plan synced to the storyboard.",
+    "Nom du plan":                               "Shot name",
     "Générer les décors + plan":                 "Generate sets + plan",
     "Mise en page PANDORA":                      "PANDORA layout",
     "◈  Mettre dans « Mise en page PANDORA »":    "◈  Put into « PANDORA layout »",

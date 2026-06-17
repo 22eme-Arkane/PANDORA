@@ -78,7 +78,7 @@ class ShotDialog(QDialog):
         seq = self._shot.get("seq_num", "")
         siq = self._shot.get("shot_in_seq", "")
         if seq and siq and shot:
-            self.setWindowTitle(f"SQ{seq} — P{siq}")
+            self.setWindowTitle(f"S{seq} — P{siq}")
         elif shot:
             self.setWindowTitle(f"P{self._shot.get('number', '?')}")
         else:
@@ -122,7 +122,7 @@ class ShotDialog(QDialog):
         _seq = self._shot.get("seq_num", "")
         _siq = self._shot.get("shot_in_seq", "")
         if _seq and _siq and not is_new:
-            header_text = f"SQ{_seq} — P{_siq}"
+            header_text = f"S{_seq} — P{_siq}"
         elif not is_new:
             header_text = f"P{self._shot.get('number', '?')}"
         else:
@@ -180,7 +180,7 @@ class ShotDialog(QDialog):
         col_action.setSpacing(4)
         action_header = QHBoxLayout()
         action_header.setSpacing(6)
-        action_header.addWidget(_lbl("Description de l'action"))
+        action_header.addWidget(_lbl("Nom du plan"))
         action_header.addStretch()
         self._btn_enhance_action = QPushButton()
         self._btn_enhance_action.setFixedSize(26, 26)

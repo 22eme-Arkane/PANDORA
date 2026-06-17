@@ -12,14 +12,30 @@ import math
 from PyQt6.QtWidgets import (
     QGraphicsView, QGraphicsScene, QGraphicsEllipseItem,
     QGraphicsSimpleTextItem, QGraphicsLineItem, QGraphicsRectItem,
+    QGraphicsPixmapItem,
 )
 from PyQt6.QtCore import Qt, QRectF, pyqtSignal
 from PyQt6.QtGui import QPen, QBrush, QColor, QPixmap, QPainter
 from ui.styles import CP
+from ui.icons import load_icon
+import core.projectors as _proj
 
 _SIZE = 1000.0   # côté de la scène (unités) — normalisation = pos / _SIZE
 _R    = 26       # rayon des jetons
 _ARM  = _R * 1.9 # longueur de la flèche de direction (= position de la poignée)
+
+
+def _token_icon_file(kind: str, model: dict) -> str:
+    """Fichier d'icône (badge circulaire d'assets/icons) pour un jeton, ou "" si
+    aucun (→ pastille colorée). Caméra/acteurs (Mise en scène) + projecteurs PAR
+    FAMILLE (Plan de feu, cf. core.projectors.FAMILY_ICONS)."""
+    if kind == "camera":
+        return "camera_mise en scene.png"
+    if kind == "actor":
+        return "Acteur.png"
+    if kind == "light":
+        return _proj.family_icon((model or {}).get("family", ""))
+    return ""
 
 
 class _RotKnob(QGraphicsEllipseItem):
@@ -43,8 +59,6 @@ class _Token(QGraphicsEllipseItem):
         self.model    = model
         self.has_dir  = has_dir
         self.reference = reference   # affiché en référence (non éditable, estompé)
-        self.setBrush(QBrush(QColor(color)))
-        self.setPen(QPen(QColor("#07080f"), 2))
         if reference:
             # Référence (ex. caméra/acteurs visibles dans le Plan de feu) : non
             # déplaçable, estompée, sous les jetons actifs.
@@ -56,12 +70,36 @@ class _Token(QGraphicsEllipseItem):
             self.setFlag(QGraphicsEllipseItem.GraphicsItemFlag.ItemIsSelectable, True)
             self.setFlag(QGraphicsEllipseItem.GraphicsItemFlag.ItemSendsGeometryChanges, True)
         self.setPos(model.get("x", 0.5) * _SIZE, model.get("y", 0.5) * _SIZE)
+        if model.get("name"):
+            self.setToolTip(model.get("name"))
 
-        txt = QGraphicsSimpleTextItem(label, self)
-        txt.setBrush(QBrush(QColor("#07080f")))
-        f = txt.font(); f.setBold(True); f.setPointSize(9); txt.setFont(f)
-        br = txt.boundingRect()
-        txt.setPos(-br.width() / 2, -br.height() / 2)
+        # Icône (badge circulaire) si disponible → remplace la pastille colorée +
+        # les initiales ; l'ellipse devient un ANNEAU coloré (identité + sélection).
+        # Repli (élément, ou famille sans icône) : pastille colorée + initiales.
+        icon_file = _token_icon_file(kind, model)
+        pix = load_icon(icon_file, size=int(2 * _R)) if icon_file else None
+        if pix is not None and not pix.isNull():
+            self.setBrush(QBrush(QColor(Qt.GlobalColor.transparent)))
+            self.setPen(QPen(QColor(color), 2))
+            ic = QGraphicsPixmapItem(pix, self)
+            ic.setOffset(-_R, -_R)
+            ic.setZValue(11)
+            # Nom sous l'icône — seulement pour les jetons SANS direction
+            # (acteurs/éléments) ; ceux à direction pivotent → label illisible tourné.
+            if label and not has_dir:
+                cap = QGraphicsSimpleTextItem(label, self)
+                cap.setBrush(QBrush(QColor(color)))
+                cf = cap.font(); cf.setBold(True); cf.setPointSize(8); cap.setFont(cf)
+                cbr = cap.boundingRect()
+                cap.setPos(-cbr.width() / 2, _R + 1)
+        else:
+            self.setBrush(QBrush(QColor(color)))
+            self.setPen(QPen(QColor("#07080f"), 2))
+            txt = QGraphicsSimpleTextItem(label, self)
+            txt.setBrush(QBrush(QColor("#07080f")))
+            f = txt.font(); f.setBold(True); f.setPointSize(9); txt.setFont(f)
+            br = txt.boundingRect()
+            txt.setPos(-br.width() / 2, -br.height() / 2)
 
         self._arrow = None
         self._knob  = None
@@ -275,21 +313,28 @@ class StagingCanvas(QGraphicsView):
         return ("actors", "props") if self._mode == "staging" else ("lights",)
 
     def has_clearable(self) -> bool:
-        """Y a-t-il des éléments ÉDITABLES à supprimer dans ce mode ?"""
+        """Y a-t-il quelque chose à supprimer ? (éléments éditables OU plan de fond)"""
         if self._record is None:
             return False
-        return any(self._record.get(k) for k in self._clearable_keys())
+        if any(self._record.get(k) for k in self._clearable_keys()):
+            return True
+        return bool(self._record.get("plan_image"))
 
     def clear_all(self):
         """Retire TOUS les éléments éditables de ce mode (acteurs + accessoires en
-        Mise en scène, projecteurs en Plan de feu). Conserve le plan de fond, la
-        caméra et les références non éditables."""
+        Mise en scène, projecteurs en Plan de feu) ET le PLAN DE DÉCOR assigné (fond).
+        Conserve la caméra et les références non éditables. Le plan est figé sur
+        « aucun » (plan_decor_id = __none__) pour qu'il ne se ré-rattache pas au
+        rechargement via le décor du storyboard."""
         if self._record is None:
             return False
         keys = self._clearable_keys()
-        had = any(self._record.get(k) for k in keys)
+        had = (any(self._record.get(k) for k in keys)
+               or bool(self._record.get("plan_image")))
         for k in keys:
             self._record[k] = []
+        self._record["plan_image"] = ""
+        self._record["plan_decor_id"] = "__none__"
         self.load(self._record)
         if had:
             self.changed.emit()
@@ -304,6 +349,18 @@ class StagingCanvas(QGraphicsView):
             self._record[key].remove(tok.model)
         self._scene.removeItem(tok)
         self.changed.emit()
+
+    def remove_model(self, model: dict):
+        """Retire un jeton donné par son modèle (clic droit → Supprimer)."""
+        if self._record is None:
+            return
+        for key in ("actors", "props", "lights"):
+            lst = self._record.get(key, [])
+            if model in lst:
+                lst.remove(model)
+                self.load(self._record)
+                self.changed.emit()
+                return
 
     def rotate_selected(self, delta: float):
         tok = self.selected_token()

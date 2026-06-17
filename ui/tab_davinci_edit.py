@@ -194,9 +194,10 @@ class _RefSquare(QWidget):
 # ── Carte compacte d'un clip (style _ThumbCard de T2V) ───────────────────────
 
 class ClipCard(QFrame):
-    """Carte compacte — nom + checkbox include/exclude + badge index + statut génération."""
-    focused       = pyqtSignal(int)
-    check_changed = pyqtSignal(int, bool)  # index, checked
+    """Carte compacte — vignette + nom + badge index + statut génération.
+    Sélection par CLIC (contour lumineux) + Ctrl/Maj pour la multi-sélection,
+    comme dans « Générer depuis Storyboard » (plus de case à cocher)."""
+    focused = pyqtSignal(int)
 
     _W    = 112
     _TH_W = 100
@@ -204,9 +205,10 @@ class ClipCard(QFrame):
 
     def __init__(self, clip: dict, index: int, parent=None):
         super().__init__(parent)
-        self._clip   = clip
-        self._index  = index
-        self._active = False
+        self._clip     = clip
+        self._index    = index
+        self._active   = False
+        self._selected = False
 
         self.setFixedSize(self._W, self._TH_H + 36)  # ~92px total
         self.setCursor(Qt.CursorShape.PointingHandCursor)
@@ -243,21 +245,6 @@ class ClipCard(QFrame):
         self._badge.move(5, 5)
         self._badge.raise_()
 
-        # Overlay : checkbox include/exclude (top-right)
-        self.check = QCheckBox(self)
-        self.check.setChecked(True)
-        self.check.setFixedSize(18, 18)
-        self.check.move(self._W - 22, 4)
-        self.check.stateChanged.connect(
-            lambda state: self.check_changed.emit(self._index, bool(state))
-        )
-        self.check.setStyleSheet(
-            f"QCheckBox::indicator{{width:16px;height:16px;border-radius:4px;"
-            f"border:2px solid {C['accent']};background:{C['bg3']};}}"
-            f"QCheckBox::indicator:checked{{background:{C['accent']};border-color:{C['accent']};}}"
-        )
-        self.check.raise_()
-
         # Overlay : statut génération (bottom)
         self._status_ov = QLabel("", self)
         self._status_ov.setAlignment(Qt.AlignmentFlag.AlignCenter)
@@ -271,7 +258,7 @@ class ClipCard(QFrame):
         self._apply_style()
 
     def _apply_style(self):
-        if self._active:
+        if self._active or self._selected:
             self.setStyleSheet(
                 f"QFrame{{background:rgba(78,205,196,0.15);"
                 f"border:2px solid {C['accent']};border-radius:8px;}}"
@@ -292,6 +279,13 @@ class ClipCard(QFrame):
     def set_active(self, v: bool):
         self._active = v
         self._apply_style()
+
+    def set_selected(self, v: bool):
+        self._selected = v
+        self._apply_style()
+
+    def is_selected(self) -> bool:
+        return self._selected
 
     def mousePressEvent(self, e):
         if e.button() == Qt.MouseButton.LeftButton:
@@ -316,12 +310,6 @@ class ClipCard(QFrame):
     def clip(self) -> dict:
         return self._clip
 
-    def is_checked(self) -> bool:
-        return self.check.isChecked()
-
-    def set_checked(self, v: bool):
-        self.check.setChecked(v)
-
     def set_thumb_pixmap(self, pix: QPixmap):
         self._thumb.setPixmap(pix)
 
@@ -340,6 +328,8 @@ class TabDavinciEdit(QScrollArea):
         self._clips_data:       list[dict]               = []
         self._per_clip_prompts: dict[int, str]           = {}
         self._active_clip_idx:  int | None               = None
+        self._selected_clips:   set[int]                 = set()  # clips sélectionnés (clic+glow)
+        self._sel_anchor:       int | None               = None   # ancre pour Maj+clic
         self._worker:           GenerationWorker | None  = None
         self._ping_worker:      BridgePingWorker | None  = None
         self._lipsync_worker                             = None
@@ -1204,8 +1194,7 @@ class TabDavinciEdit(QScrollArea):
 
         for i, clip in enumerate(clips):
             card = ClipCard(clip, i)
-            card.focused.connect(self._on_card_focused)
-            card.check_changed.connect(self._on_card_check_changed)
+            card.focused.connect(self._on_card_selected)
             if i > 0:
                 sep = QFrame()
                 sep.setFixedSize(1, ClipCard._TH_H)
@@ -1233,6 +1222,12 @@ class TabDavinciEdit(QScrollArea):
 
         self._clips_hbox.addStretch()
         self._pc_hbox.addStretch()
+
+        # Tous les clips SÉLECTIONNÉS par défaut (contour lumineux) — « générer tout ».
+        self._selected_clips = set(range(len(self._clip_cards)))
+        self._sel_anchor = None
+        for c in self._clip_cards:
+            c.set_selected(True)
 
         # Verrouille l'ADN visuel par défaut si plusieurs clips
         self._update_seed_lock_default()
@@ -1262,23 +1257,50 @@ class TabDavinciEdit(QScrollArea):
 
     # ── Per-clip prompt ───────────────────────────────────────────────────────
 
+    def _on_card_selected(self, idx: int):
+        """Clic sur une vignette : sélection avec contour lumineux + Ctrl/Maj pour la
+        multi-sélection (comme « Générer depuis Storyboard »). Le clip cliqué devient
+        aussi l'actif (aperçu per-clip + cible du dessin)."""
+        from PyQt6.QtWidgets import QApplication
+        mods  = QApplication.keyboardModifiers()
+        shift = bool(mods & Qt.KeyboardModifier.ShiftModifier)
+        ctrl  = bool(mods & Qt.KeyboardModifier.ControlModifier)
+        n = len(self._clip_cards)
+        if shift and self._sel_anchor is not None and 0 <= self._sel_anchor < n:
+            lo, hi = sorted((self._sel_anchor, idx))
+            self._selected_clips |= set(range(lo, hi + 1))
+        elif ctrl:
+            if idx in self._selected_clips:
+                self._selected_clips.discard(idx)
+            else:
+                self._selected_clips.add(idx)
+            self._sel_anchor = idx
+        else:
+            self._selected_clips = {idx}
+            self._sel_anchor = idx
+        for i, card in enumerate(self._clip_cards):
+            card.set_selected(i in self._selected_clips)
+        self._on_card_focused(idx)          # actif (aperçu per-clip + dessin)
+        self._update_seed_lock_default()
+
     def _on_card_focused(self, idx: int):
-        if not self._rb_per_clip.isChecked():
-            return
-        # Sauvegarde le prompt courant
-        if self._active_clip_idx is not None:
+        # Sauvegarde le prompt du clip actif AVANT de changer (mode per-clip).
+        if self._rb_per_clip.isChecked() and self._active_clip_idx is not None:
             self._per_clip_prompts[self._active_clip_idx] = (
                 self._per_clip_prompt.toPlainText()
             )
-        # Désactive la carte précédente dans le panneau per-clip
+        # Glow « actif » sur la carte du panneau per-clip (ancienne → nouvelle).
         pc_cards = self._get_pc_cards()
         if self._active_clip_idx is not None and self._active_clip_idx < len(pc_cards):
             pc_cards[self._active_clip_idx].set_active(False)
-        # Active la nouvelle carte
+        # L'ACTIF est TOUJOURS mis à jour — nécessaire au dessin (Draw-to-Video),
+        # même en mode prompt global (avant, l'actif restait None → dessin refusé).
         self._active_clip_idx = idx
         if idx < len(pc_cards):
             pc_cards[idx].set_active(True)
-        # Mise à jour label + textarea
+        if not self._rb_per_clip.isChecked():
+            return
+        # Mise à jour label + textarea (mode prompt per-clip)
         if idx < len(self._clip_cards):
             name = self._clip_cards[idx].clip().get("name", f"Clip {idx + 1}")
             self._per_clip_title.setText(f"▸  Prompt pour : {name}")
@@ -1434,8 +1456,12 @@ class TabDavinciEdit(QScrollArea):
     # ── Sélection ─────────────────────────────────────────────────────────────
 
     def _set_all_checked(self, state: bool):
+        # « Tout sélectionner » / « Tout désélectionner » (contour lumineux).
+        self._selected_clips = set(range(len(self._clip_cards))) if state else set()
+        self._sel_anchor = None
         for card in self._clip_cards:
-            card.set_checked(state)
+            card.set_selected(state)
+        self._update_seed_lock_default()
 
     def _clear_clips(self):
         self._load_clips([])
@@ -1514,12 +1540,8 @@ class TabDavinciEdit(QScrollArea):
 
     def _update_seed_lock_default(self):
         """Coche le verrou ADN si plusieurs clips sont sélectionnés."""
-        n_checked = sum(1 for c in self._clip_cards if c.is_checked())
-        if n_checked > 1 and not self._seed_lock_btn.isChecked():
+        if len(self._selected_clips) > 1 and not self._seed_lock_btn.isChecked():
             self._seed_lock_btn.setChecked(True)
-
-    def _on_card_check_changed(self, _index: int, _checked: bool):
-        self._update_seed_lock_default()
 
     def _on_seed_toggle(self, checked: bool):
         if checked:
@@ -1635,15 +1657,18 @@ class TabDavinciEdit(QScrollArea):
                                 "Une génération est déjà en cours. Attendez qu'elle se termine.")
             return
 
-        checked = [(i, card) for i, card in enumerate(self._clip_cards) if card.is_checked()]
-        if not checked:
-            QMessageBox.warning(self, "Aucun clip sélectionné",
-                                "Cochez au moins un clip avant de lancer la file d'attente.")
+        selected = [(i, card) for i, card in enumerate(self._clip_cards)
+                    if i in self._selected_clips]
+        if not selected:   # aucune sélection explicite → on prend tous les clips
+            selected = list(enumerate(self._clip_cards))
+        if not selected:
+            QMessageBox.warning(self, "Aucun clip",
+                                "Importez et sélectionnez au moins un clip avant de lancer la file.")
             return
 
         # Validation du format : H.264 720p, fichier < 50 MB
         invalid_clips = []
-        for clip_idx, _card in checked:
+        for clip_idx, _card in selected:
             clip = self._clips_data[clip_idx]
             fp = clip.get("file_path", "")
             name = clip.get("name", f"Clip {clip_idx + 1}")
@@ -1682,7 +1707,7 @@ class TabDavinciEdit(QScrollArea):
 
         n_prises = self._spin_prises.value()
         self._queue = []
-        for (clip_idx, _card) in checked:
+        for (clip_idx, _card) in selected:
             for p in range(n_prises):
                 self._queue.append((clip_idx, p))
 

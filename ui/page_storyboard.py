@@ -50,7 +50,8 @@ _COLS = [
     ("Acteurs",       96,  False),  # 14
     ("Durée",         52,  False),  # 15
     ("Langues",      120,  False),  # 16 dialogue_lang (traduit à l'envoi Seedance)
-    ("",              78,  False),  # 17 Boutons
+    ("Nom du plan",  150,  False),  # 17 scene_title (nom du plan) — affiché après « Plan »
+    ("",              78,  False),  # 18 Boutons
 ]
 
 _HEURE_PRESETS = HEURE_PRESETS
@@ -59,9 +60,11 @@ _HEURE_PRESETS = HEURE_PRESETS
 _col_widths: list[int] = [w for _, w, _ in _COLS]
 
 # Mutable column visual order — list of logical column indices in left→right display order.
-# Indices 0 (grip) and 16 (buttons) always stay at first/last; the rest are reorderable.
-# Loaded from project config in PageStoryboard._render().
-_col_order: list[int] = list(range(len(_COLS)))
+# Index 0 (grip) reste en tête et la colonne Boutons (dernière) reste en queue ; le reste
+# est réordonnable. « Nom du plan » (logique 17) s'affiche par défaut juste après « Plan »
+# (logique 3). Loaded from project config in PageStoryboard._render().
+_DEFAULT_COL_ORDER: list[int] = [0, 1, 2, 3, 17, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 18]
+_col_order: list[int] = list(_DEFAULT_COL_ORDER)
 
 
 class _ColHub(QObject):
@@ -602,6 +605,7 @@ class _ShotRow(QFrame):
         return max(
             self._MIN_H,
             _h((self._data.get("seedance_prompt", "") or "")[:300], 4, 9),
+            _h(self._data.get("scene_title", "") or "", 17, 10),
             _h(", ".join(self._data.get("accessory_names", []) or []), 12, 9),
             _h(", ".join(self._data.get("character_names", []) or []), 13, 10),
         )
@@ -834,7 +838,7 @@ class _ShotRow(QFrame):
         sq = data.get("seq_num", "")
         sn = data.get("seq_name", "")
         if sq is not None and str(sq):
-            n = QLabel(f"SQ{sq}")
+            n = QLabel(f"S{sq}")
             n.setAlignment(Qt.AlignmentFlag.AlignCenter)
             n.setStyleSheet(
                 f"color:{seq_color};font-size:22px;font-weight:800;"
@@ -935,6 +939,21 @@ class _ShotRow(QFrame):
         )
         plan_l.addWidget(pn)
         cells[3] = plan_w
+
+        # ── Nom du plan (scene_title) ─────────────────────────────────────────
+        nom_w, nom_l = _cell(_col_widths[17], fill=True)
+        nom_l.setAlignment(Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignLeft)
+        _nom_full = data.get("scene_title", "") or ""
+        _nom_lbl = _lbl(_nom_full or "—", size=10)
+        if _nom_full:
+            _nom_lbl.setToolTip(_nom_full)
+        nom_l.addWidget(_nom_lbl)
+        def _edit_nom():
+            v = _text_dialog(self, "Nom du plan", data.get("scene_title", ""))
+            if v is not None:
+                _save_field("scene_title", v)
+        _clickable(nom_w, _edit_nom)
+        cells[17] = nom_w
 
         # ── Prompt Seedance ───────────────────────────────────────────────────
         pmt_w = QWidget()
@@ -1239,7 +1258,7 @@ class _ShotRow(QFrame):
 
         # ── Boutons ──────────────────────────────────────────────────────────
         btns_w = QWidget()
-        btns_w.setFixedWidth(_col_widths[17])
+        btns_w.setFixedWidth(_col_widths[18])
         btns_w.setMinimumHeight(self._MIN_H)
         btns_w.setStyleSheet("background:transparent;")
         bl = QVBoxLayout(btns_w)
@@ -1270,7 +1289,7 @@ class _ShotRow(QFrame):
         )
         btn_del.clicked.connect(lambda: self.delete_requested.emit(self._data["id"]))
         bl.addWidget(btn_del)
-        cells[17] = btns_w
+        cells[18] = btns_w
 
         # ── Assemblage des colonnes dans l'ordre visuel (_col_order) ─────────
         for i, col_logical in enumerate(_col_order):
@@ -2440,40 +2459,42 @@ class PageStoryboard(QWidget):
     # ── Sauvegarde / ouverture physique du storyboard ───────────────────────────
 
     def _on_save_storyboard_file(self):
-        from PyQt6.QtWidgets import QInputDialog, QMessageBox
+        from PyQt6.QtWidgets import QFileDialog, QMessageBox
+        import os
         if not self._all_shots:
             QMessageBox.information(self, "Sauvegarder", "Le storyboard est vide.")
             return
-        name, ok = QInputDialog.getText(self, "Sauvegarder le storyboard", "Nom :")
-        if not (ok and name.strip()):
+        start = os.path.join(sb_api.saves_dir(), "Storyboard.json")
+        path, _ = QFileDialog.getSaveFileName(
+            self, translate("Sauvegarder le storyboard"), start,
+            "Storyboard PANDORA (*.json)")
+        if not path:
             return
+        if not path.lower().endswith(".json"):
+            path += ".json"
         try:
-            sb_api.export_storyboard(name.strip(), self._active_version_id)
-            QMessageBox.information(self, "Sauvegardé",
-                                    f"Storyboard « {name.strip()} » sauvegardé.")
+            sb_api.export_storyboard_to(path, self._active_version_id)
+            QMessageBox.information(self, "Sauvegardé", "Storyboard sauvegardé.")
         except Exception as e:
             QMessageBox.critical(self, "Erreur", f"Échec de la sauvegarde : {e}")
 
     def _on_open_storyboard_file(self):
-        from PyQt6.QtWidgets import QInputDialog, QMessageBox
-        names = sb_api.list_saved()
-        if not names:
-            QMessageBox.information(self, "Ouvrir", "Aucun storyboard sauvegardé.")
-            return
-        name, ok = QInputDialog.getItem(self, "Ouvrir un storyboard",
-                                        "Storyboard :", names, 0, False)
-        if not (ok and name):
+        from PyQt6.QtWidgets import QFileDialog, QMessageBox
+        path, _ = QFileDialog.getOpenFileName(
+            self, translate("Ouvrir un storyboard"), sb_api.saves_dir(),
+            "Storyboard PANDORA (*.json)")
+        if not path:
             return
         if QMessageBox.question(
                 self, "Ouvrir",
-                f"Charger « {name} » ? Les plans actuels de cette version seront remplacés.",
+                "Charger ce storyboard ? Les plans actuels de cette version seront remplacés.",
                 QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
         ) != QMessageBox.StandardButton.Yes:
             return
         try:
-            n = sb_api.import_storyboard(name, self._active_version_id)
+            n = sb_api.import_storyboard_from(path, self._active_version_id)
             self.refresh()
-            QMessageBox.information(self, "Ouvert", f"{n} plan(s) chargé(s) depuis « {name} ».")
+            QMessageBox.information(self, "Ouvert", f"{n} plan(s) chargé(s).")
         except Exception as e:
             QMessageBox.critical(self, "Erreur", f"Échec de l'ouverture : {e}")
 
@@ -2484,7 +2505,7 @@ class PageStoryboard(QWidget):
 
     def _render(self):
         # Reload column order from project config
-        order = sb_api.load_col_order(len(_COLS))
+        order = sb_api.load_col_order(len(_COLS), _DEFAULT_COL_ORDER)
         _col_order[:] = order
 
         while self._list_lay.count():

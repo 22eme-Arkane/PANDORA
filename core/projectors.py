@@ -91,6 +91,25 @@ FIXTURES = {
 }
 
 
+# ── Icônes (assets/icons) par famille — badges circulaires du Plan de feu ─────
+FAMILY_ICONS = {
+    "led_panel": "led panel.png",
+    "cob":       "Cobb light.png",
+    "fresnel":   "Fresnel light.png",
+    "tube":      "Les Tube.png",
+    "mat":       "Soft mat light.png",
+    "par_hmi":   "HMI light.png",
+    "profile":   "Elipsoidal spotlight.png",
+    "balloon":   "Pratical Balloon.png",
+    "practical": "stage spotlight.png",
+}
+
+
+def family_icon(code: str) -> str:
+    """Fichier d'icône (dans assets/icons) pour une famille de projecteur, ou ""."""
+    return FAMILY_ICONS.get(code, "")
+
+
 def families() -> list:
     """[(code, label), …] des familles ayant au moins un modèle."""
     return [(c, l) for c, l in FAMILIES if FIXTURES.get(c)]

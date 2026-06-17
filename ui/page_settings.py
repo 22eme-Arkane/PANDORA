@@ -528,34 +528,12 @@ class SettingsPage(QScrollArea):
         )
         lay.addWidget(self._davinci)
 
-        _send_row = QHBoxLayout()
-        _send_row.setContentsMargins(0, 4, 0, 0)
-        _btn_send = QPushButton("⚙  Installer le script PANDORA dans DaVinci Resolve Studio")
-        _btn_send.setFixedHeight(30)
-        _btn_send.setCursor(Qt.CursorShape.PointingHandCursor)
-        _btn_send.setStyleSheet(
-            f"QPushButton{{background:{CP['bg3']};color:{CP['text_dim']};"
-            f"border:1px solid {CP['border']};border-radius:6px;"
-            f"font-size:11px;padding:0 14px;}}"
-            f"QPushButton:hover{{background:{CP['bg2']};color:{CP['text_secondary']};}}"
-        )
-        _btn_send.setToolTip(
-            "Installe le script pandora_send dans DaVinci Resolve Studio\n"
-            "(Fusion/Scripts/Utility).\n"
-            "Permet d'envoyer des clips vers AI Studio\n"
-            "→ Modifier depuis DaVinci Resolve\n"
-            "via Espace de travail → Scripts → pandora_send.\n\n"
-            "Pour configurer un raccourci clavier dans DaVinci Resolve Studio :\n"
-            "Espace de travail → Personnalisation du clavier\n"
-            "→ Rechercher « pandora_send »\n"
-            "→ Assigner votre raccourci (ex. Ctrl+Shift+P)"
-        )
-        _btn_send.clicked.connect(self._install_pandora_send)
-        _send_row.addWidget(_btn_send)
-        _send_row.addStretch()
-        lay.addLayout(_send_row)
-        # (le bouton de vérification de mise à jour a été retiré de cette page :
-        # il existe déjà en haut à droite de la fenêtre — retour 2026-06-13)
+        # (Le bouton « Installer le script / bridge PANDORA » a été retiré : les
+        # scripts DaVinci — pandora_send + seedance_bridge — sont installés
+        # AUTOMATIQUEMENT par l'installeur PANDORA. Les instructions restent dans
+        # le panneau DaVinci ci-dessus.)
+        # (le bouton de vérification de mise à jour a aussi été retiré : il existe
+        # déjà en haut à droite de la fenêtre — retour 2026-06-13)
         lay.addStretch()
 
     def _install_pandora_send(self):

@@ -445,6 +445,7 @@ class ExtractGenerateDialog(QDialog):
                 style_suffix=style_api.get_image_suffix(),
             )
             w.views_finished.connect(self._on_room_views_done)
+            w.progress.connect(self._on_room_progress)   # « [3/8] Vue gauche… »
             w.failed.connect(self._on_img_failed)
             self._gen_worker = w
             w.start()
@@ -493,6 +494,13 @@ class ExtractGenerateDialog(QDialog):
         self._gen_idx += 1
         self._gen_next()
 
+    def _on_room_progress(self, pct: int, msg: str):
+        """Progression PAR VUE d'un décor 7 vues (le worker émet « [i/8] … »)."""
+        if self._cancelled:
+            return
+        n = len(self._saved_items)
+        self._gen_lbl.setText(f"Décor {self._gen_idx + 1}/{n} — {msg}")
+
     def _on_room_views_done(self, views: list):
         """7 vues générées pour une pièce → UN SEUL décor (la même pièce) dont la
         galerie contient les 7 vues (avant, arrière, gauche, droite, haut, bas,
@@ -537,7 +545,14 @@ class ExtractGenerateDialog(QDialog):
                     decors_api.set_floor_plan(did, fp_path)
                 except Exception:
                     pass
+            # Marque l'item comme « image générée » pour le décompte final (sinon
+            # « 0/1 » alors que la pièce + ses vues ont bien été produites).
+            item["image_path"] = overview["path"]
+            n_views = len(view_entries) + (1 if fp_entry else 0)
             row.set_state("DONE")
+            self._gen_lbl.setText(
+                f"Décor {self._gen_idx + 1}/{len(self._saved_items)} — "
+                f"{n_views} vue(s) générée(s)")
         else:
             row.set_state("NO_IMG")
 

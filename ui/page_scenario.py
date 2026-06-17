@@ -481,8 +481,10 @@ class PageScenario(QWidget):
             "dans l'onglet Scénario."
         ))
         # « Page » CENTRÉE dans la largeur de l'éditeur (au lieu d'être collée à
-        # gauche) : largeur plafonnée + ressorts de part et d'autre.
-        self._layout_view.setMaximumWidth(900)   # 780 (wrap) + 2×48 marge + ascenseur
+        # gauche) : largeur FIXE + ressorts de part et d'autre. Largeur fixe (et non
+        # « max ») = la page réclame réellement ses 900 px → plus de colonne écrasée
+        # à ~280 px qui tronquait le texte (wrap à 780 + 2×48 marge + ascenseur).
+        self._layout_view.setFixedWidth(900)
         _layout_wrap = QWidget()
         _lw = QHBoxLayout(_layout_wrap)
         _lw.setContentsMargins(0, 0, 0, 0)
@@ -1151,22 +1153,29 @@ class PageScenario(QWidget):
     # ── Sauvegarde / ouverture physique du scénario (dossier « Scénario ») ──────
 
     def _on_save_scenario_file(self):
-        from PyQt6.QtWidgets import QInputDialog, QMessageBox
+        from PyQt6.QtWidgets import QFileDialog, QMessageBox
         import core.scenario as scenario_api
+        import os
         text  = self._get_text()
         title = self._title_edit.text().strip()
         if not text and not title:
             QMessageBox.information(self, "Sauvegarder", "Le scénario est vide.")
             return
-        name, ok = QInputDialog.getText(self, "Sauvegarder le scénario", "Nom :",
-                                        text=title or "Scénario")
-        if not (ok and name.strip()):
+        # Boîte de dialogue Windows : choisir où enregistrer (défaut = dossier Scénario).
+        suggested = scenario_api._safe_name(title or "Scénario") + ".json"
+        start = os.path.join(scenario_api.saves_dir(), suggested)
+        path, _ = QFileDialog.getSaveFileName(
+            self, translate("Sauvegarder le scénario"), start,
+            "Scénario PANDORA (*.json)")
+        if not path:
             return
+        if not path.lower().endswith(".json"):
+            path += ".json"
         dur_defined = self._dur_defined_check.isChecked()
         dur_secs    = (self._dur_min.value() * 60 + self._dur_sec.value()) if dur_defined else 0
         data = dict(self._current or {})
         data.update({
-            "title":             title or name.strip(),
+            "title":             title or os.path.splitext(os.path.basename(path))[0],
             "raw_content":       text,
             "formatted_content": text,
             "layout_content":    self._layout_view.toPlainText() if hasattr(self, "_layout_view") else "",
@@ -1175,68 +1184,55 @@ class PageScenario(QWidget):
             "film_style":        self._film_style_combo.currentData() or "",
         })
         try:
-            scenario_api.export_scenario_file(name.strip(), data)
-            self._ai_progress_lbl.setText(f"Scénario « {name.strip()} » sauvegardé ✓")
+            scenario_api.export_scenario_to(path, data)
+            self._ai_progress_lbl.setText("Scénario sauvegardé ✓")
         except Exception as e:
             QMessageBox.critical(self, "Erreur", f"Échec de la sauvegarde : {e}")
 
     def _on_open_scenario_file(self):
-        from PyQt6.QtWidgets import QInputDialog, QMessageBox
+        from PyQt6.QtWidgets import QFileDialog, QMessageBox
         import core.scenario as scenario_api
-        names = scenario_api.list_saved()
-        if not names:
-            QMessageBox.information(self, "Ouvrir", "Aucun scénario sauvegardé.")
+        path, _ = QFileDialog.getOpenFileName(
+            self, translate("Ouvrir un scénario"), scenario_api.saves_dir(),
+            "Scénario PANDORA (*.json)")
+        if not path:
             return
-        name, ok = QInputDialog.getItem(self, "Ouvrir un scénario",
-                                        "Scénario :", names, 0, False)
-        if not (ok and name):
-            return
-        data = scenario_api.import_scenario_file(name)
+        data = scenario_api.import_scenario_from(path)
         if not data:
             QMessageBox.warning(self, "Ouvrir", "Fichier introuvable ou illisible.")
             return
         self._open_scenario(data)
-        self._ai_progress_lbl.setText(f"Scénario « {name} » ouvert ✓")
+        self._ai_progress_lbl.setText("Scénario ouvert ✓")
 
     # ── Références visuelles ─────────────────────────────────────────────────
 
     def _refresh_refs_display(self):
-        from PyQt6.QtWidgets import QSizePolicy
         while self._refs_hbox.count():
             item = self._refs_hbox.takeAt(0)
             if item.widget():
                 item.widget().deleteLater()
 
-        has_imgs = bool(self._ref_images)
-        # VIDE : zone de dépôt PLEINE LARGEUR (au lieu d'un « + » isolé dans un coin
-        # d'une grande boîte vide → c'était le problème de mise en page).
-        # AVEC images : « + » compact à gauche + miniatures (strip horizontal).
-        btn_add = QPushButton("+" if has_imgs else "＋  " + translate("Ajouter des images de référence"))
+        # Bouton « + » TOUJOURS un carré 60×60 à gauche (raccord avec Live ;
+        # plus de long rectangle pleine largeur quand la zone est vide).
+        btn_add = QPushButton("+")
+        btn_add.setFixedSize(60, 60)
         btn_add.setCursor(Qt.CursorShape.PointingHandCursor)
         btn_add.setToolTip("Ajouter des images de référence\nClaude les analysera pour enrichir les descriptions.")
-        _fs = "24px" if has_imgs else "12px"
-        _fw = "300" if has_imgs else "700"
         btn_add.setStyleSheet(f"""
             QPushButton{{
                 background:transparent;color:{CP['text_dim']};
                 border:1px dashed {CP['border_bright']};border-radius:8px;
-                font-size:{_fs};font-weight:{_fw};padding:0;
+                font-size:24px;font-weight:300;padding:0;
             }}
             QPushButton:hover{{color:{CP['accent']};border-color:{CP['accent']};
                 background:rgba(78,205,196,0.08);}}
             QPushButton:pressed{{background:rgba(78,205,196,0.16);}}
         """)
         btn_add.clicked.connect(self._on_add_refs)
-        if has_imgs:
-            btn_add.setFixedSize(60, 60)
-            self._refs_hbox.addWidget(btn_add)
-            for path in self._ref_images:
-                self._refs_hbox.addWidget(self._make_ref_thumbnail(path))
-            self._refs_hbox.addStretch()
-        else:
-            btn_add.setMinimumHeight(60)
-            btn_add.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
-            self._refs_hbox.addWidget(btn_add)
+        self._refs_hbox.addWidget(btn_add)
+        for path in self._ref_images:
+            self._refs_hbox.addWidget(self._make_ref_thumbnail(path))
+        self._refs_hbox.addStretch()
 
     def _make_ref_thumbnail(self, path: str) -> QWidget:
         container = QWidget()

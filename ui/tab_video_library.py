@@ -352,7 +352,7 @@ class TabVideoLibrary(QScrollArea):
         dirs_to_scan: list[str] = []
 
         data_root   = ctx.get_data_root()
-        project_dir = os.path.join(data_root, "Seedance")
+        project_dir = cfg.project_video_dir()
         if os.path.isdir(project_dir):
             dirs_to_scan.append(project_dir)
 
@@ -398,12 +398,11 @@ class TabVideoLibrary(QScrollArea):
         return paths
 
     def _get_output_dir(self) -> str:
-        import core.context as ctx
         import core.config  as cfg
         output_dir = cfg.get_output_dir()
         if output_dir and os.path.isdir(output_dir):
             return output_dir
-        return os.path.join(ctx.get_data_root(), "Seedance")
+        return cfg.project_video_dir()
 
     # ── Slots ────────────────────────────────────────────────────────────────
 

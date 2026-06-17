@@ -81,11 +81,28 @@ def get_output_dir(cfg: dict | None = None) -> str:
     from core.context import get_project_path
     project_path = get_project_path()
     if project_path:
-        path = os.path.join(project_path, "data", "Seedance")
-        os.makedirs(path, exist_ok=True)
-        return path
+        new    = os.path.join(project_path, "data", "Studio IA")
+        legacy = os.path.join(project_path, "data", "Seedance")
+        # Projet créé avant le renommage Seedance → Studio IA : on conserve son
+        # dossier « Seedance » existant pour ne pas perdre ses vidéos.
+        if not os.path.isdir(new) and os.path.isdir(legacy):
+            return legacy
+        os.makedirs(new, exist_ok=True)
+        return new
     from core.pandora_dirs import get_bin_dir
     return get_bin_dir("seedance", cfg)
+
+
+def project_video_dir() -> str:
+    """<projet>/data/Studio IA/ (ou « Seedance » legacy si présent) — dossier des
+    vidéos générées du projet courant, pour la Vidéothèque."""
+    from core.context import get_data_root
+    base   = get_data_root()
+    new    = os.path.join(base, "Studio IA")
+    legacy = os.path.join(base, "Seedance")
+    if not os.path.isdir(new) and os.path.isdir(legacy):
+        return legacy
+    return new
 
 
 def _migrate(cfg: dict) -> dict:
