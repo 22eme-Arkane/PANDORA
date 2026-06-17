@@ -1,18 +1,56 @@
 """
-Configuration de Studio Images — application autonome.
+Configuration de Studio Images — application autonome ET onglet « Image IA »
+embarqué dans PANDORA | Cinéma.
 
-Stocke les clés API et préférences dans studio_images/config.json.
-Au premier lancement, pré-remplit les clés depuis la config de PANDORA
-(../data/config.json) si elle existe — pour ne pas avoir à les ressaisir.
+Stocke les clés API et préférences dans config.json (dossier inscriptible —
+voir user_data_dir). Au premier lancement, pré-remplit les clés depuis la config
+de PANDORA si elle existe — pour ne pas avoir à les ressaisir.
 """
 
 import json
 import os
+import sys
 
-_HERE = os.path.dirname(os.path.abspath(__file__))
+
+def user_data_dir() -> str:
+    """Dossier INSCRIPTIBLE des données Studio Images (config, refs, prompts).
+
+    - Build gelé (PyInstaller, embarqué dans PANDORA) : le dossier de
+      l'application est en lecture seule (Program Files) → on écrit dans
+      %LOCALAPPDATA%\\PANDORA\\studio_images\\.
+    - Dev / app autonome (`python studio_images/main.py`) : le dossier
+      studio_images/ lui-même, comme avant.
+    """
+    if getattr(sys, "frozen", False):
+        base = os.path.join(
+            os.environ.get("LOCALAPPDATA", os.path.expanduser("~")),
+            "PANDORA", "studio_images")
+    else:
+        base = os.path.dirname(os.path.abspath(__file__))
+    try:
+        os.makedirs(base, exist_ok=True)
+    except Exception:
+        pass
+    return base
+
+
+def _pandora_config_path() -> str:
+    """config.json de PANDORA — emplacement réel selon dev vs. gelé.
+    Sert à pré-remplir les clés API au premier lancement."""
+    if getattr(sys, "frozen", False):
+        return os.path.join(
+            os.environ.get("LOCALAPPDATA", os.path.expanduser("~")),
+            "PANDORA", "data", "config.json")
+    # dev : un niveau au-dessus de studio_images/
+    return os.path.join(
+        os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+        "data", "config.json")
+
+
+_HERE = user_data_dir()
 _CONFIG_FILE = os.path.join(_HERE, "config.json")
-# config.json de PANDORA (un niveau au-dessus de ce dossier)
-_PANDORA_CONFIG = os.path.join(os.path.dirname(_HERE), "data", "config.json")
+# config.json de PANDORA (pour récupérer les clés au premier lancement)
+_PANDORA_CONFIG = _pandora_config_path()
 
 # Formats de sortie : (label, (largeur, hauteur) pixels d'export)
 # L'aspect_ratio est dérivé de la taille par chaque moteur (engines.py).

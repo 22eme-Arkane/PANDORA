@@ -1,6 +1,6 @@
 # -*- mode: python ; coding: utf-8 -*-
 #
-# pandora.spec — PyInstaller build spec for PANDORA v1.0.0
+# pandora.spec — PyInstaller build spec for PANDORA v1.2.0 (Cinéma)
 #
 # Prérequis :
 #   python tools/make_ico.py     # génère assets/pandora_badge.ico
@@ -23,7 +23,9 @@ _FFMPEG_BINS = [
 
 a = Analysis(
     ["main.py"],
-    pathex=["."],
+    # studio_images/ contient l'app « Image IA » importée à plat (import config,
+    # window, …) → on l'ajoute au chemin d'analyse pour résoudre ses modules.
+    pathex=[".", "studio_images"],
     binaries=_FFMPEG_BINS,
     datas=[
         # Tout le dossier assets (icônes, badges, style_refs, svg)
@@ -63,6 +65,15 @@ a = Analysis(
         "anthropic._streaming",
         # PyQt6
         "PyQt6.sip",
+        # ── Studio Images (onglet « Image IA ») ───────────────────────────────
+        # Modules importés à plat au runtime via sys.path.insert dans
+        # ui/tab_image.py → invisibles à l'analyse statique de PyInstaller.
+        # On les déclare explicitement (résolus via pathex="studio_images").
+        # NB : config.json / refs / prompts.json NE sont PAS embarqués — ils
+        # contiennent des clés API et des données de dev ; le code est
+        # frozen-aware et les recrée dans %LOCALAPPDATA%\PANDORA\studio_images\.
+        "window", "styles", "config", "engines", "imagegen",
+        "prompts", "projects", "chat",
     ],
     hookspath=[],
     hooksconfig={},

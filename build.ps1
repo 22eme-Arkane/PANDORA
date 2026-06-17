@@ -82,6 +82,21 @@ if (Test-Path $CONFIG_IN_BUILD) {
     Write-Host "config.json supprimé du build." -ForegroundColor Green
 }
 
+# Défense en profondeur : studio_images/config.json contient des clés API (anthropic
+# + fal) et refs/ des images de dev. Le spec ne les embarque PAS (seuls les .py sont
+# compilés), mais on s'assure qu'aucun fichier sensible n'a fui dans le bundle.
+foreach ($leak in @(
+    "dist\PANDORA\_internal\studio_images\config.json",
+    "dist\PANDORA\_internal\config.json",
+    "dist\PANDORA\_internal\studio_images\prompts.json",
+    "dist\PANDORA\_internal\studio_images\refs",
+    "dist\PANDORA\_internal\refs")) {
+    if (Test-Path $leak) {
+        Remove-Item -Recurse -Force $leak
+        Write-Host "  Fichier studio_images sensible retiré du build : $leak" -ForegroundColor Green
+    }
+}
+
 # Build Cinéma : retirer les icônes Live orphelines du bundle (le code Live
 # est exclu par pandora.spec ; ces PNG ne sont plus référencés)
 $ICONS_DIR = "dist\PANDORA\_internal\assets\icons"

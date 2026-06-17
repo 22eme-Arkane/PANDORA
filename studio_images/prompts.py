@@ -8,8 +8,14 @@ entre tous les projets : un bon prompt se réutilise partout.
 import json
 import os
 
-_HERE = os.path.dirname(os.path.abspath(__file__))
-_FILE = os.path.join(_HERE, "prompts.json")
+# Même dossier inscriptible que config.json (frozen → %LOCALAPPDATA%\PANDORA\…).
+try:
+    from config import user_data_dir as _user_data_dir
+except Exception:
+    def _user_data_dir() -> str:
+        return os.path.dirname(os.path.abspath(__file__))
+
+_FILE = os.path.join(_user_data_dir(), "prompts.json")
 
 
 def load_prompts() -> list:
