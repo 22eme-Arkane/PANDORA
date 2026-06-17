@@ -480,7 +480,17 @@ class PageScenario(QWidget):
             "version optimisée pour les moteurs. Ton scénario, lui, reste intact "
             "dans l'onglet Scénario."
         ))
-        self._editor_tabs.addTab(self._layout_view, translate("Mise en page PANDORA"))
+        # « Page » CENTRÉE dans la largeur de l'éditeur (au lieu d'être collée à
+        # gauche) : largeur plafonnée + ressorts de part et d'autre.
+        self._layout_view.setMaximumWidth(900)   # 780 (wrap) + 2×48 marge + ascenseur
+        _layout_wrap = QWidget()
+        _lw = QHBoxLayout(_layout_wrap)
+        _lw.setContentsMargins(0, 0, 0, 0)
+        _lw.setSpacing(0)
+        _lw.addStretch(1)
+        _lw.addWidget(self._layout_view)
+        _lw.addStretch(1)
+        self._editor_tabs.addTab(_layout_wrap, translate("Mise en page PANDORA"))
         self._editor_tabs.setTabEnabled(1, False)   # grisé tant qu'aucune mise en page
 
         main.addWidget(self._editor_tabs, 1)

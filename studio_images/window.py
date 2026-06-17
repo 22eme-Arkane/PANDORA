@@ -64,12 +64,12 @@ class _ChatToggleStrip(QWidget):
     """Bande verticale pour ouvrir/fermer la discussion Claude — même principe
     que le chat du Storyboard de PANDORA (poignée + flèche)."""
 
-    def __init__(self, panel, start_open: bool = True):
+    def __init__(self, panel, start_open: bool = False):
         super().__init__()
         self._panel = panel
-        self._open = start_open   # ouvert par défaut ; pilote la visibilité réelle
+        self._open = start_open   # fermé par défaut (comme le chat Storyboard)
         panel.setVisible(start_open)
-        self.setFixedWidth(26)
+        self.setFixedWidth(28)
         self.setCursor(Qt.CursorShape.PointingHandCursor)
         self.setToolTip("Ouvrir / fermer la discussion")
         self.setStyleSheet(f"background:{CP['bg1']};")
@@ -99,6 +99,18 @@ class _ChatToggleStrip(QWidget):
             self._open = not self._open
             self._panel.setVisible(self._open)
             self._arrow.setText(self._arrow_char())
+
+    def enterEvent(self, e):
+        self._lbl.setStyleSheet(
+            "color:#ffffff;font-size:8px;font-weight:900;letter-spacing:1px;background:transparent;")
+        self._arrow.setStyleSheet(
+            "color:#ffffff;font-size:18px;font-weight:700;background:transparent;")
+
+    def leaveEvent(self, e):
+        self._lbl.setStyleSheet(
+            f"color:{CP['accent']};font-size:8px;font-weight:900;letter-spacing:1px;background:transparent;")
+        self._arrow.setStyleSheet(
+            f"color:{CP['accent']};font-size:18px;font-weight:700;background:transparent;")
 
 
 # ── Dialogue de configuration des clés ───────────────────────────────────────
@@ -216,18 +228,16 @@ class StudioImagesPanel(QWidget):
         root.setContentsMargins(14, 12, 14, 12)
         root.setSpacing(10)
 
-        root.addLayout(self._build_topbar())
-
-        # Corps : génération RECENTRÉE (méthode Studio IA — largeur plafonnée +
-        # centrée) + discussion Claude repliable à DROITE (poignée + flèche).
+        # Corps : génération RECENTRÉE (largeur plafonnée + centrée) dans un SCROLL
+        # vertical + discussion Claude repliable à DROITE (poignée + flèche).
+        # (Sauvegarder/Ouvrir ont migré à côté du « Moteur de génération ».)
         body = QHBoxLayout()
         body.setContentsMargins(0, 0, 0, 0)
         body.setSpacing(0)
 
         left = self._build_left()
-        # Largeur de colonne « document » : un MINIMUM confortable (sinon, coincée
-        # entre deux stretch, la colonne s'effondrait à sa sizeHint ≈ 285 px → tout
-        # paraissait riquiqui) + un MAXIMUM pour rester centrée sur écran large.
+        # Largeur de colonne « document » : MINIMUM confortable + MAXIMUM pour
+        # rester centrée sur écran large.
         left.setMinimumWidth(680)
         left.setMaximumWidth(860)
         left_wrap = QWidget()
@@ -237,7 +247,15 @@ class StudioImagesPanel(QWidget):
         lw.addStretch(1)
         lw.addWidget(left)
         lw.addStretch(1)
-        body.addWidget(left_wrap, 1)
+        # Barre de défilement verticale : si la fenêtre est courte, on swipe
+        # haut/bas → preview, boutons et historique ne sont plus cropés.
+        left_scroll = QScrollArea()
+        left_scroll.setWidgetResizable(True)
+        left_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        left_scroll.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
+        left_scroll.setStyleSheet("QScrollArea{border:none;background:transparent;}")
+        left_scroll.setWidget(left_wrap)
+        body.addWidget(left_scroll, 1)
 
         self._chat_panel = self._build_right()
         self._chat_panel.setFixedWidth(440)
@@ -251,35 +269,27 @@ class StudioImagesPanel(QWidget):
         self._ref_paths = [p for p in self.cfg.get("ref_paths", []) if p and os.path.isfile(p)]
         self._refresh_refs()
 
-    # ── Barre supérieure ─────────────────────────────────────────────────────
-    def _build_topbar(self):
-        bar = QHBoxLayout()
-        # (titre retiré — l'onglet « Image IA » fait déjà office de titre)
-        # (bouton de configuration des clés retiré — clés gérées dans Paramètres)
-        bar.addStretch(1)
-
-        # Sauvegarder (jaune) / Ouvrir (bleu) — session Image IA sauvegardée
-        # physiquement dans <projet>/data/Image IA/ (comme Scénario / Storyboard).
+    # ── Sauvegarder / Ouvrir — placés à côté du « Moteur de génération » ───────
+    def _build_save_open_buttons(self):
+        """Crée les boutons Sauvegarder (jaune) / Ouvrir (bleu) d'une session
+        Image IA — physiquement dans <projet>/data/Image IA/. Ajoutés dans
+        l'en-tête « Moteur de génération » (voir _build_left)."""
         _yellow, _blue = "#f5c518", "#4aa3ff"
         self._btn_img_save = QPushButton("💾  Sauvegarder")
         self._btn_img_save.setToolTip("Sauvegarder cette session Image IA sous un nom")
         self._btn_img_save.setStyleSheet(
             f"QPushButton{{background:transparent;color:{_yellow};"
-            f"border:1px solid {_yellow};border-radius:7px;font-size:11px;font-weight:700;padding:6px 14px;}}"
+            f"border:1px solid {_yellow};border-radius:7px;font-size:11px;font-weight:700;padding:5px 12px;}}"
             f"QPushButton:hover{{background:rgba(245,197,24,0.12);}}")
         self._btn_img_save.clicked.connect(self._on_save_session)
-        bar.addWidget(self._btn_img_save)
-
         self._btn_img_open = QPushButton("📂  Ouvrir")
         self._btn_img_open.setToolTip("Ouvrir une session Image IA sauvegardée")
         self._btn_img_open.setStyleSheet(
             f"QPushButton{{background:transparent;color:{_blue};"
-            f"border:1px solid {_blue};border-radius:7px;font-size:11px;font-weight:700;padding:6px 14px;}}"
+            f"border:1px solid {_blue};border-radius:7px;font-size:11px;font-weight:700;padding:5px 12px;}}"
             f"QPushButton:hover{{background:rgba(74,163,255,0.12);}}")
         self._btn_img_open.clicked.connect(self._on_open_session)
-        bar.addWidget(self._btn_img_open)
-
-        return bar
+        return self._btn_img_save, self._btn_img_open
 
     def _mini_label(self, text):
         lbl = QLabel(text)
@@ -416,7 +426,16 @@ class StudioImagesPanel(QWidget):
             self._model.addItem(spec["label"], key)
         self._select_data(self._model, self.cfg.get("image_model", "nb_pro"))
         self._model.currentIndexChanged.connect(self._on_engine_changed)
-        lay.addWidget(self._section_label("MOTEUR DE GÉNÉRATION"))
+        # En-tête : libellé à gauche + Sauvegarder/Ouvrir (session) à droite.
+        _eng_head = QHBoxLayout()
+        _eng_head.setContentsMargins(0, 0, 0, 0)
+        _eng_head.setSpacing(6)
+        _eng_head.addWidget(self._section_label("MOTEUR DE GÉNÉRATION"))
+        _eng_head.addStretch(1)
+        _btn_save, _btn_open = self._build_save_open_buttons()
+        _eng_head.addWidget(_btn_save)
+        _eng_head.addWidget(_btn_open)
+        lay.addLayout(_eng_head)
         lay.addWidget(self._model)
 
         # Format (templates) + nombre d'images. Choisir un template pré-remplit
@@ -590,7 +609,32 @@ class StudioImagesPanel(QWidget):
         lay.setContentsMargins(6, 0, 0, 0)
         lay.setSpacing(8)
 
-        lay.addWidget(self._section_label("DISCUSSION AVEC CLAUDE"))
+        # En-tête style chat Storyboard : icône ✦ + titre + bouton « effacer ».
+        _chat_header = QWidget()
+        _chat_header.setStyleSheet(
+            f"background:{CP['bg2']};border:1px solid {CP['border']};border-radius:8px;")
+        _chl = QHBoxLayout(_chat_header)
+        _chl.setContentsMargins(12, 7, 8, 7)
+        _chl.setSpacing(8)
+        _ico = QLabel("✦")
+        _ico.setStyleSheet(f"color:{CP['accent']};font-size:13px;background:transparent;border:none;")
+        _chl.addWidget(_ico)
+        _ttl = QLabel("Discussion avec Claude")
+        _ttl.setStyleSheet(
+            f"color:{CP['text_primary']};font-size:12px;font-weight:700;background:transparent;border:none;")
+        _chl.addWidget(_ttl)
+        _chl.addStretch(1)
+        _btn_clear = QPushButton("✕")
+        _btn_clear.setFixedSize(20, 20)
+        _btn_clear.setCursor(Qt.CursorShape.PointingHandCursor)
+        _btn_clear.setToolTip("Effacer la conversation")
+        _btn_clear.setStyleSheet(
+            f"QPushButton{{background:transparent;color:{CP['text_dim']};"
+            f"border:none;font-size:10px;font-weight:700;}}"
+            f"QPushButton:hover{{color:{CP['text_primary']};}}")
+        _btn_clear.clicked.connect(self._clear_chat)
+        _chl.addWidget(_btn_clear)
+        lay.addWidget(_chat_header)
 
         self._chat_scroll = QScrollArea()
         self._chat_scroll.setWidgetResizable(True)
@@ -925,6 +969,12 @@ class StudioImagesPanel(QWidget):
             item = self._hist_row.takeAt(0)
             if item.widget():
                 item.widget().deleteLater()
+
+    def _clear_chat(self):
+        """Efface la conversation (bouton ✕ de l'en-tête, comme le chat Storyboard)."""
+        self._history = []
+        self._refs_in_chat = set()
+        self._rebuild_chat_view()
 
     def _rebuild_chat_view(self):
         # Retire toutes les bulles (garde le stretch final)

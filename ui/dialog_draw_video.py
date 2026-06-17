@@ -205,8 +205,9 @@ class DrawVideoDialog(QDialog):
         root.addWidget(title)
 
         hint = QLabel(translate(
-            "Choisis l'instant, dessine les zones de l'effet (ex. où ajouter du feu), "
-            "puis valide. Le prompt précisera de remplacer les dessins par ton effet."))
+            "Choisis l'instant, puis dessine pour REPÉRER les zones (entoure ce qu'il "
+            "faut modifier, ou esquisse où ajouter un élément). Les traits servent "
+            "seulement de repère : ils n'apparaîtront PAS dans la vidéo finale."))
         hint.setWordWrap(True)
         hint.setStyleSheet(f"color:{CP['text_dim']};font-size:11px;background:transparent;")
         root.addWidget(hint)

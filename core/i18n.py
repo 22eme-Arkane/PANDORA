@@ -2127,6 +2127,10 @@ _FR_TO_EN: dict[str, str] = {
     # ── Mise en scène / Plan de feu — outils & projecteurs (2026-06-16) ────────
     "Déplacer":                                  "Move",
     "Rotation":                                  "Rotate",
+    "Tout supprimer":                            "Delete all",
+    "Tout supprimer du plan ? Cette action est irréversible.":
+        "Clear everything from the plan? This cannot be undone.",
+    "Rien à supprimer sur ce plan.":             "Nothing to delete on this plan.",
     "Raccourci : R":                             "Shortcut: R",
     "Choisir un projecteur":                     "Choose a fixture",
     "Famille":                                   "Family",
@@ -2144,6 +2148,12 @@ _FR_TO_EN: dict[str, str] = {
     "Dessiner sur la vidéo":                     "Draw on the video",
     "Dessiner sur la vidéo — Draw-to-Video":     "Draw on the video — Draw-to-Video",
     "Time Code :":                               "Timecode:",
+    "Choisis l'instant, puis dessine pour REPÉRER les zones (entoure ce qu'il "
+    "faut modifier, ou esquisse où ajouter un élément). Les traits servent "
+    "seulement de repère : ils n'apparaîtront PAS dans la vidéo finale.":
+        "Pick the moment, then draw to MARK the regions (circle what to change, or "
+        "sketch where to add an element). The strokes are guidance only — they will "
+        "NOT appear in the final video.",
     "Gomme":                                     "Eraser",
     "Effacer":                                   "Clear",
     "Choisir une référence visuelle":            "Choose a visual reference",

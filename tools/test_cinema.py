@@ -782,11 +782,13 @@ def studio_musique_ia_et_image_ia():
     ti = TabImage()
     assert ti.panel is not None, "StudioImagesPanel chargé dans l'onglet"
     assert type(ti.panel).__name__ == "StudioImagesPanel", "même classe que l'app autonome"
-    # Discussion Claude repliable à droite (ouvrable/fermable) + génération recentrée
+    # Discussion Claude repliable à droite, présentée comme le chat Storyboard :
+    # FERMÉE par défaut + en-tête (✦ titre + ✕ effacer).
     assert hasattr(ti.panel, "_chat_panel") and hasattr(ti.panel, "_chat_toggle"), \
         "chat Claude repliable à droite"
     tog = ti.panel._chat_toggle
-    assert tog._open is True, "discussion ouverte par défaut"
+    assert tog._open is False, "discussion fermée par défaut (comme Storyboard)"
+    assert hasattr(ti.panel, "_clear_chat"), "bouton effacer la conversation (en-tête)"
 
     # Réglages Image IA : Annuler + chargement masqués au repos ; aperçu TOUJOURS
     # visible (placeholder) pour garder la mise en page compacte.
@@ -817,14 +819,23 @@ def studio_musique_ia_et_image_ia():
         "le chat ne déclenche PAS la barre gauche"
     assert "_set_busy(True" in inspect.getsource(type(pn)._generate), "génération image → barre gauche"
     assert "_set_busy(True" in inspect.getsource(type(pn)._synth_prompt), "génération prompt → barre gauche"
-    # Plus de bouton « Clés API » + Sauvegarder/Ouvrir dans la barre
-    tb = inspect.getsource(type(pn)._build_topbar)
-    assert "Clés API" not in tb, "bouton Clés API retiré"
-    assert "_on_save_session" in tb and "_on_open_session" in tb, "Sauvegarder/Ouvrir Image IA"
-    # Simule un clic gauche sur la poignée
+    # Sauvegarder/Ouvrir déplacés À CÔTÉ du « Moteur de génération » (barre du haut
+    # supprimée) + colonne de génération SCROLLABLE (plus rien de cropé).
+    assert not hasattr(pn, "_build_topbar"), "barre supérieure supprimée"
+    assert hasattr(pn, "_btn_img_save") and hasattr(pn, "_btn_img_open"), "boutons Save/Open présents"
+    so = inspect.getsource(type(pn)._build_save_open_buttons)
+    assert "Clés API" not in so, "pas de bouton Clés API"
+    assert "_on_save_session" in so and "_on_open_session" in so, "Sauvegarder/Ouvrir Image IA"
+    bl = inspect.getsource(type(pn)._build_left)
+    assert "_build_save_open_buttons()" in bl and "MOTEUR DE GÉNÉRATION" in bl, \
+        "Save/Open dans l'en-tête du moteur de génération"
+    init_src = inspect.getsource(type(pn).__init__)
+    assert "left_scroll" in init_src and "setWidgetResizable(True)" in init_src, \
+        "colonne de génération scrollable (anti-crop)"
+    # Simule un clic gauche sur la poignée → ouvre la discussion (fermée par défaut)
     from PyQt6.QtCore import Qt as _Qt
     tog.mousePressEvent(type("E", (), {"button": lambda s: _Qt.MouseButton.LeftButton})())
-    assert tog._open is False and ti.panel._chat_panel.isHidden(), "se ferme au clic"
+    assert tog._open is True and not ti.panel._chat_panel.isHidden(), "s'ouvre au clic"
 
 
 @test
@@ -862,6 +873,12 @@ def decors_plan_auto_et_sync():
     assert "_build_floor_plans_section" in pdsrc and "Plan des décors" in pdsrc
     assert "floor_plan" in pdsrc, "lit le plan du décor (source unique)"
 
+    # « Créer un décor » génère le plan EN MÊME TEMPS que le décor (manuel aussi)
+    dd = inspect.getsource(__import__("ui.dialog_decor", fromlist=["_"]))
+    assert "GenerateFloorPlanWorker" in dd and "_maybe_gen_floor_plan" in dd, \
+        "plan vu de dessus généré à la création manuelle du décor"
+    assert dd.count("_maybe_gen_floor_plan()") >= 2, "appelé après image simple ET sheet"
+
     # Mise en scène / Plan de feu : utilisent le plan du décor + enregistrent dessus
     ps = inspect.getsource(__import__("ui.page_staging", fromlist=["_"]))
     assert "floor_plan_for_shot" in ps, "Mise en scène lit le plan du décor"
@@ -877,6 +894,18 @@ def decors_plan_auto_et_sync():
     refs = [it for it in cv._scene.items()
             if isinstance(it, _Token) and getattr(it, "reference", False)]
     assert len(refs) >= 2, "caméra + acteurs visibles en Plan de feu"
+
+    # « Tout supprimer » : Plan de feu vide les projecteurs, GARDE les réfs (acteurs)
+    rec["lights"] = [{"name": "Key", "type": "key", "x": 0.5, "y": 0.3, "angle": 180.0}]
+    cv.load(rec); cv.clear_all()
+    assert rec["lights"] == [] and rec["actors"], "Plan de feu : projecteurs vidés, réfs gardées"
+    # Mise en scène : vide acteurs + accessoires
+    cvs = StagingCanvas(mode="staging")
+    recs = {"plan_image": "", "camera": {"x": 0.5, "y": 0.8, "angle": 0.0},
+            "actors": [{"name": "A", "x": 0.3, "y": 0.5}],
+            "props": [{"name": "P", "x": 0.6, "y": 0.5}], "lights": []}
+    cvs.load(recs); cvs.clear_all()
+    assert recs["actors"] == [] and recs["props"] == [], "Mise en scène : acteurs/accessoires vidés"
 
 
 @test
@@ -923,6 +952,29 @@ def staging_outils_projecteurs_sections():
     psrc = inspect.getsource(__import__("ui.page_staging", fromlist=["_"]))
     assert "_btn_move" in psrc and "_btn_rotate" in psrc and "QShortcut" in psrc
     assert "ProjectorDialog" in psrc and "_on_light_context" in psrc and "_on_actor_context" in psrc
+    # Bouton ROUGE « Tout supprimer » à droite (Mise en scène ET Plan de feu, par héritage)
+    assert "_btn_clear_all" in psrc and "Tout supprimer" in psrc and "clear_all" in psrc, \
+        "bouton rouge Tout supprimer"
+    # Régression : après « Tout supprimer », les acteurs ne sont PAS ré-amorcés au
+    # rechargement (flag _actors_seeded) — sinon la suppression semblait sans effet.
+    assert "_actors_seeded" in psrc, "acteurs amorcés une seule fois (pas de re-seed)"
+    from ui.page_staging import PageStaging, PageLighting
+    for _C in (PageStaging, PageLighting):
+        _p = _C()
+        assert hasattr(_p, "_btn_clear_all") and hasattr(_p, "_on_clear_all"), \
+            f"{_C.__name__} : bouton Tout supprimer"
+    # Le canevas vide réellement les éléments éditables + détecte le « rien à faire »
+    assert "has_clearable" in psrc and "Rien à supprimer" in psrc, \
+        "feedback quand il n'y a rien à supprimer"
+    from ui.staging_canvas import StagingCanvas as _SC, _Token as _Tk
+    _cc = _SC(mode="staging")
+    _cc.load({"plan_image": "", "camera": {"x": .5, "y": .8, "angle": 0.0},
+              "actors": [{"name": "X", "x": .3, "y": .5}], "props": [], "lights": []})
+    assert _cc.has_clearable() is True, "détecte des éléments à supprimer"
+    _cc.clear_all()
+    assert _cc.has_clearable() is False, "plus rien à supprimer après clear_all"
+    assert [it for it in _cc._scene.items() if isinstance(it, _Tk) and not it.reference and it.kind != "camera"] == [], \
+        "clear_all vide les jetons éditables"
 
 
 @test
@@ -940,6 +992,10 @@ def scenario_onglet_mise_en_page():
     p._apply_layout("MISE EN PAGE PANDORA")
     assert p._editor_text.toPlainText().strip() == "SCENARIO ORIGINAL", "scénario intact"
     assert "MISE EN PAGE" in p._layout_view.toPlainText()
+    # La « page » est centrée : largeur plafonnée + entourée de ressorts (pas collée à gauche)
+    assert p._layout_view.maximumWidth() <= 1000, "page mise en page centrée (largeur plafonnée)"
+    _lwrap = p._layout_view.parentWidget()
+    assert _lwrap.layout().count() == 3, "ressorts gauche/droite autour de la page"
     assert p._editor_tabs.isTabEnabled(1) and p._editor_tabs.currentIndex() == 1
     assert p._current.get("layout_content"), "mise en page persistée séparément"
     # La fenêtre de mise en page applique vers l'onglet (pas _set_editor_text)
@@ -1022,9 +1078,14 @@ def draw_to_video():
     assert hasattr(t, "_btn_draw") and hasattr(t, "_on_draw_to_video") and hasattr(t, "_draw_images")
     assert hasattr(t, "_draw_overlays") and hasattr(t, "_draw_frames"), "mémorisation pour ré-édition"
     src = inspect.getsource(TabDavinciEdit)
-    assert "Remplace les dessins" in src, "consigne préfixée au prompt"
-    assert "_draw_images" in src and "ref_images.append(_draw_img)" in src, \
-        "image annotée envoyée comme référence"
+    # L'image annotée n'est PAS envoyée comme référence (les traits seraient
+    # reproduits) → passée comme GUIDE via draw_guidance_path ; Claude Vision côté
+    # worker la lit pour réécrire le prompt sans les traits.
+    assert "draw_guidance_path" in src, "image annotée passée comme guide (pas en référence)"
+    assert "ref_images.append(_draw_img)" not in src, "les traits ne partent PAS à Seedance"
+    rsrc = inspect.getsource(__import__("api.real", fromlist=["_"]))
+    assert "_analyze_draw_guidance" in rsrc and "draw_guidance_path" in rsrc, \
+        "Claude Vision décrit les zones marquées, traits jamais envoyés au modèle vidéo"
     assert "prev_overlay=" in src and "overlay_path()" in src and "frame_index()" in src, \
         "le clic rouvre le dessin existant (ré-édition)"
     # Bouton « Dessiner sur la vidéo » remplacé par son LOGO (icône, sans libellé)

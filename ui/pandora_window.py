@@ -345,7 +345,7 @@ class PandoraWindow(QMainWindow):
         # header_height=60 : la ligne de l'en-tête Assistant s'ALIGNE sur celle
         # des bandeaux de pages (60 px partout)
         self._assistant         = AssistantPanel(header_height=60)
-        self._assistant.setVisible(True)
+        self._assistant.setVisible(False)   # replié par défaut (ouvrir via la poignée « IA »)
         self._assistant_toggle  = AssistantToggleStrip(self._assistant, side="left")
 
         # Assistant IA à GAUCHE (poignée au bord, panneau, puis les pages) ;

@@ -271,6 +271,30 @@ class StagingCanvas(QGraphicsView):
         if self._record is not None:
             self.load(self._record)
 
+    def _clearable_keys(self):
+        return ("actors", "props") if self._mode == "staging" else ("lights",)
+
+    def has_clearable(self) -> bool:
+        """Y a-t-il des éléments ÉDITABLES à supprimer dans ce mode ?"""
+        if self._record is None:
+            return False
+        return any(self._record.get(k) for k in self._clearable_keys())
+
+    def clear_all(self):
+        """Retire TOUS les éléments éditables de ce mode (acteurs + accessoires en
+        Mise en scène, projecteurs en Plan de feu). Conserve le plan de fond, la
+        caméra et les références non éditables."""
+        if self._record is None:
+            return False
+        keys = self._clearable_keys()
+        had = any(self._record.get(k) for k in keys)
+        for k in keys:
+            self._record[k] = []
+        self.load(self._record)
+        if had:
+            self.changed.emit()
+        return had
+
     def remove_selected(self):
         tok = self.selected_token()
         if not tok or tok.kind == "camera":

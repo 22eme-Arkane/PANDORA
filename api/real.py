@@ -102,6 +102,63 @@ def _analyze_style_ref(image_path: str, anthropic_key: str) -> str:
         return ""
 
 
+def _analyze_draw_guidance(image_path: str, user_instruction: str, anthropic_key: str) -> str:
+    """Draw-to-Video : Claude Haiku Vision lit une image annotée (traits colorés
+    tracés par l'utilisateur pour REPÉRER des zones) + son instruction, et renvoie
+    UNE instruction d'édition vidéo claire en anglais qui nomme les objets/zones
+    marqués par leur position réelle, SANS mentionner les traits (qui ne sont JAMAIS
+    envoyés au modèle vidéo → ils n'apparaissent pas). Retourne "" en cas d'erreur.
+    """
+    try:
+        import base64
+        import anthropic as _anthropic
+
+        _ext = os.path.splitext(image_path)[1].lower()
+        _mime_map = {
+            ".jpg": "image/jpeg", ".jpeg": "image/jpeg",
+            ".png": "image/png",  ".webp": "image/webp",
+        }
+        _media_type = _mime_map.get(_ext, "image/png")
+        with open(image_path, "rb") as _f:
+            _img_b64 = base64.standard_b64encode(_f.read()).decode("utf-8")
+
+        _client = _anthropic.Anthropic(api_key=anthropic_key)
+        _msg = _client.messages.create(
+            model="claude-haiku-4-5",
+            max_tokens=300,
+            messages=[{
+                "role": "user",
+                "content": [
+                    {
+                        "type": "image",
+                        "source": {"type": "base64", "media_type": _media_type, "data": _img_b64},
+                    },
+                    {
+                        "type": "text",
+                        "text": (
+                            "A user drew colored marks (e.g. red strokes) on this video "
+                            "frame to indicate WHERE to apply an edit. Their instruction "
+                            f"(may be in French): \"{user_instruction}\".\n\n"
+                            "Rewrite their instruction as ONE precise, self-contained "
+                            "English video-editing prompt that:\n"
+                            "- names the exact objects/regions the marks cover, using their "
+                            "real position in the frame (e.g. 'the two white plates on the "
+                            "center-right of the table'), or — if the user sketched a new "
+                            "element — describes that element and where to place it;\n"
+                            "- does NOT mention the marks, strokes, drawings or their colors "
+                            "(they will NOT be visible to the video model and must not appear);\n"
+                            "- keeps the rest of the scene unchanged.\n"
+                            "Output ONLY the rewritten instruction, no preamble."
+                        ),
+                    },
+                ],
+            }],
+        )
+        return _msg.content[0].text.strip()
+    except Exception:
+        return ""
+
+
 def run_real(params: dict, emit_progress, is_cancelled) -> dict:
     import fal_client
 
@@ -194,6 +251,16 @@ def run_real(params: dict, emit_progress, is_cancelled) -> dict:
         _raw_prompt = _strip_sound_section(_raw_prompt)
     except Exception:
         pass
+    # Draw-to-Video : si une image annotée (traits de repérage) est fournie, Claude
+    # Vision la lit pour RÉÉCRIRE l'instruction en décrivant les zones/objets marqués
+    # SANS les traits. L'image annotée n'est JAMAIS envoyée à Seedance → les traits
+    # n'apparaissent pas ; seul le clip d'origine + ce prompt partent.
+    _draw_guidance = params.get("draw_guidance_path", "")
+    if _draw_guidance and os.path.isfile(_draw_guidance) and _anthropic_key:
+        emit_progress(4, "Analyse du dessin (repérage des zones)…")
+        _drawn = _analyze_draw_guidance(_draw_guidance, _raw_prompt, _anthropic_key)
+        if _drawn:
+            _raw_prompt = _drawn
     if _raw_prompt and not _has_anthropic:
         emit_progress(3, "⚠ Clé Anthropic manquante — prompt envoyé sans traduction")
     else:

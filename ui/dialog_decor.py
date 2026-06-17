@@ -15,6 +15,7 @@ from core.decors import CATEGORIES
 from api.nano_banana import (
     OptimizeDecorPromptWorker, OptimizeDecorWithReferencesWorker,
     OptimizeStyleReferenceWorker, GenerateItemWorker, GenerateDecorSheetWorker,
+    GenerateFloorPlanWorker,
 )
 
 
@@ -63,6 +64,7 @@ class DecorDialog(QDialog):
         self._worker_opt      = None
         self._worker_refs     = None
         self._worker_gen      = None
+        self._floor_plan_worker = None   # plan vu de dessus généré avec le décor
         # Gallery of all generated image paths for this decor
         self._generated_images: list[str] = list(self._item.get("generated_images", []))
         if self._image_path and self._image_path not in self._generated_images and os.path.isfile(self._image_path):
@@ -1043,6 +1045,7 @@ class DecorDialog(QDialog):
         self._load_preview(path)
         self._refresh_preview_nav()
         self._status.setText(translate("Image ajoutée ✓"))
+        self._maybe_gen_floor_plan()   # plan vu de dessus EN MÊME TEMPS que le décor
 
     def _on_multi_gen_done(self, paths: list):
         self._btn_gen.setEnabled(True)
@@ -1063,6 +1066,36 @@ class DecorDialog(QDialog):
             f"{n} image{'s' if n > 1 else ''} importée{'s' if n > 1 else ''} — "
             f"supprime les non désirées dans la galerie →"
         )
+        self._maybe_gen_floor_plan()   # plan vu de dessus EN MÊME TEMPS que le décor
+
+    def _maybe_gen_floor_plan(self):
+        """Génère le PLAN vu de dessus EN MÊME TEMPS que le décor (si pas déjà un).
+        Worker en QThread, non bloquant ; "" en mock (pas de clé fal.ai). Le plan
+        est stocké sur self._item['floor_plan'] (persisté par _on_save)."""
+        existing = self._item.get("floor_plan", "")
+        if existing and os.path.isfile(existing):
+            return
+        prompt = self._prompt.toPlainText().strip()
+        if not prompt:
+            return
+        name = self._name.text().strip() or "decor"
+        self._floor_plan_worker = GenerateFloorPlanWorker(prompt, name)
+        self._floor_plan_worker.finished.connect(self._on_floor_plan_done)
+        self._floor_plan_worker.failed.connect(lambda _e: None)   # non bloquant
+        self._floor_plan_worker.start()
+
+    def _on_floor_plan_done(self, path: str):
+        if not (path and os.path.isfile(path)):
+            return   # mock / échec → pas de plan (la page Décors peut le générer plus tard)
+        self._item["floor_plan"] = path
+        # Si le décor est déjà sauvegardé (édition), persiste tout de suite.
+        _id = self._item.get("id")
+        if _id:
+            try:
+                import core.decors as _d
+                _d.set_floor_plan(_id, path)
+            except Exception:
+                pass
 
     def _on_room_decors_done(self, views: list):
         """Les 7 vues → UN SEUL décor (la même pièce) : la galerie contient les 7

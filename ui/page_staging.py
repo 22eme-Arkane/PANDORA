@@ -157,7 +157,38 @@ class PageStaging(QWidget):
         b_del = _btn("🗑"); b_del.setFixedWidth(40); b_del.clicked.connect(self._canvas.remove_selected)
         tb.addWidget(b_rl); tb.addWidget(b_rr); tb.addWidget(b_del)
         tb.addStretch()
+
+        # « Tout supprimer » — bouton rouge à DROITE (même emplacement que dans
+        # le Storyboard). Vide tous les éléments éditables du plan courant.
+        self._btn_clear_all = QPushButton("✕  " + translate("Tout supprimer"))
+        self._btn_clear_all.setCursor(Qt.CursorShape.PointingHandCursor)
+        _red = CP.get("red", "#ff4f6a")
+        self._btn_clear_all.setStyleSheet(
+            f"QPushButton{{background:transparent;color:{_red};"
+            f"border:1px solid {_red};border-radius:8px;"
+            f"font-size:12px;font-weight:700;padding:7px 16px;}}"
+            f"QPushButton:hover{{background:rgba(255,79,106,0.12);}}")
+        self._btn_clear_all.clicked.connect(self._on_clear_all)
+        tb.addWidget(self._btn_clear_all)
         return tb
+
+    def _on_clear_all(self):
+        from PyQt6.QtWidgets import QMessageBox
+        # Rien à supprimer ? (ex. Plan de feu sans projecteur, ou plan déjà vide) →
+        # on le DIT clairement (sinon le clic semble « ne rien faire »).
+        if not self._canvas.has_clearable():
+            QMessageBox.information(
+                self, translate("Tout supprimer"),
+                translate("Rien à supprimer sur ce plan."))
+            return
+        box = QMessageBox(self)
+        box.setIcon(QMessageBox.Icon.Warning)
+        box.setWindowTitle(translate("Tout supprimer"))
+        box.setText(translate("Tout supprimer du plan ? Cette action est irréversible."))
+        box.setStandardButtons(QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
+        box.setDefaultButton(QMessageBox.StandardButton.No)
+        if box.exec() == QMessageBox.StandardButton.Yes:
+            self._canvas.clear_all()   # émet changed → autosave
 
     # ── Données ─────────────────────────────────────────────────────────────────
 
@@ -194,11 +225,15 @@ class PageStaging(QWidget):
         fp = decors_api.floor_plan_for_shot(self._shot)
         if fp and os.path.isfile(fp):
             rec["plan_image"] = fp
-        # Amorçage : acteurs depuis les personnages du plan (si vide)
-        if self._mode == "staging" and not rec.get("actors"):
-            names = self._shot.get("character_names", []) or []
-            rec["actors"] = [{"name": n, "x": 0.3 + 0.15 * i, "y": 0.5}
-                             for i, n in enumerate(names[:6])]
+        # Amorçage : acteurs depuis les personnages du plan, UNE SEULE FOIS.
+        # Le flag « _actors_seeded » évite de re-semer après un « Tout supprimer »
+        # (sinon les acteurs revenaient à chaque rechargement → suppression sans effet).
+        if self._mode == "staging":
+            if not rec.get("actors") and not rec.get("_actors_seeded"):
+                names = self._shot.get("character_names", []) or []
+                rec["actors"] = [{"name": n, "x": 0.3 + 0.15 * i, "y": 0.5}
+                                 for i, n in enumerate(names[:6])]
+            rec["_actors_seeded"] = True
         self._canvas.load(rec)
 
     # ── Actions ─────────────────────────────────────────────────────────────────

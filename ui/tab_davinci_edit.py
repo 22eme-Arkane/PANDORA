@@ -1734,14 +1734,12 @@ class TabDavinciEdit(QScrollArea):
         creative_suffix = self._creative.get_creative_suffix()
         prompt = " ".join(p for p in [base_prompt, creative_suffix, self._style_suffix] if p)
 
-        # Draw-to-Video : consigne préfixée + image annotée envoyée comme référence.
+        # Draw-to-Video : l'image annotée (traits colorés) sert de GUIDE de repérage.
+        # Elle n'est PAS envoyée à Seedance (sinon les traits seraient reproduits dans
+        # la vidéo) : côté worker, Claude Vision la lit pour réécrire le prompt en
+        # décrivant OÙ appliquer l'effet, puis seuls le clip d'origine + ce prompt
+        # partent. → params["draw_guidance_path"] plus bas.
         _draw_img = self._draw_images.get(clip_idx, "")
-        if _draw_img and os.path.isfile(_draw_img):
-            prompt = (
-                "Remplace les dessins (marques colorées) tracés sur l'image de "
-                "référence par l'effet décrit, exactement aux endroits dessinés. "
-                + prompt
-            ).strip()
 
         seed = self._get_seed()
 
@@ -1765,6 +1763,10 @@ class TabDavinciEdit(QScrollArea):
             params["video_path"] = video_path
         if seed:
             params["seed"] = seed
+        # Draw-to-Video : image annotée transmise comme GUIDE (analysée par Claude
+        # Vision côté worker), JAMAIS uploadée comme référence à Seedance.
+        if _draw_img and os.path.isfile(_draw_img):
+            params["draw_guidance_path"] = _draw_img
 
         ref_images = []
         if self._global_ref_image and os.path.isfile(self._global_ref_image):
@@ -1772,9 +1774,9 @@ class TabDavinciEdit(QScrollArea):
         per_ref = self._per_clip_ref_images.get(clip_idx, "")
         if per_ref and os.path.isfile(per_ref) and per_ref not in ref_images:
             ref_images.append(per_ref)
-        # Image annotée Draw-to-Video → référence (guide l'effet)
-        if _draw_img and os.path.isfile(_draw_img) and _draw_img not in ref_images:
-            ref_images.append(_draw_img)
+        # NB : l'image annotée Draw-to-Video N'EST PAS ajoutée aux références
+        # (elle partirait sinon à Seedance → traits visibles). Elle est passée via
+        # params["draw_guidance_path"] et analysée par Claude Vision côté worker.
         if ref_images:
             params["ref_images"] = ref_images
 
