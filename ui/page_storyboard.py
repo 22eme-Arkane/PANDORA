@@ -2464,7 +2464,9 @@ class PageStoryboard(QWidget):
         if not self._all_shots:
             QMessageBox.information(self, "Sauvegarder", "Le storyboard est vide.")
             return
-        start = os.path.join(sb_api.saves_dir(), "Storyboard.json")
+        from core import context as _ctx
+        suggested = sb_api._safe_name(_ctx.get_project_name() or "Storyboard") + ".json"
+        start = os.path.join(sb_api.saves_dir(), suggested)
         path, _ = QFileDialog.getSaveFileName(
             self, translate("Sauvegarder le storyboard"), start,
             "Storyboard PANDORA (*.json)")
@@ -2640,8 +2642,10 @@ class PageStoryboard(QWidget):
             return
 
         from api.screenplay import GenerateStoryboardWorker
+        from core.ai_provider import ai_name_for_task
+        _eng = ai_name_for_task("storyboard_gen")
         self._btn_analyze.setEnabled(False)
-        self._ai_lbl.setText("Génération du découpage via Claude…")
+        self._ai_lbl.setText(translate("Génération du découpage via {ai}…").format(ai=_eng))
         self._worker = GenerateStoryboardWorker(text)
         sc_id = sc.get("id", "")
         self._worker.finished.connect(lambda shots: self._on_shots_generated(shots, sc_id))
@@ -2666,7 +2670,9 @@ class PageStoryboard(QWidget):
         lay.setContentsMargins(32, 28, 32, 28)
         lay.setSpacing(14)
 
-        title_lbl = QLabel(translate("Analyse du scénario via Claude IA"))
+        from core.ai_provider import ai_name_for_task
+        title_lbl = QLabel(translate("Analyse du scénario via {ai}").format(
+            ai=ai_name_for_task("storyboard_gen")))
         title_lbl.setStyleSheet(
             f"color:{CP['text_primary']};font-size:15px;font-weight:700;background:transparent;"
         )

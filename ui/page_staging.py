@@ -20,7 +20,7 @@ from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, QComboBox,
     QListWidget, QListWidgetItem, QInputDialog, QMenu, QMessageBox, QFileDialog,
 )
-from PyQt6.QtCore import Qt
+from PyQt6.QtCore import Qt, QTimer
 from PyQt6.QtGui import QShortcut, QKeySequence
 from ui.styles import CP
 from ui.widgets import HelpBlock
@@ -111,6 +111,13 @@ class PageStaging(QWidget):
         self._canvas.changed.connect(self._autosave)
         self._canvas.actor_context.connect(self._on_actor_context)
         self._canvas.light_context.connect(self._on_light_context)
+        # Auto-synchro INSTANTANÉE des sections du prompt — débouncée (250 ms) pour
+        # rester fluide pendant un glissé. Mise en scène → [🎭 MISE EN SCÈNE] + axe /
+        # placement caméra ; Plan de feu → [💡 PLAN DE FEU]. Plus besoin du menu.
+        self._sync_timer = QTimer(self)
+        self._sync_timer.setSingleShot(True)
+        self._sync_timer.setInterval(250)
+        self._sync_timer.timeout.connect(self._apply_current_to_storyboard)
         right.addLayout(self._build_toolbar())
         right.addWidget(self._canvas, 1)
         body.addLayout(right, 1)
@@ -441,8 +448,10 @@ class PageStaging(QWidget):
             changed = False
             if self._mode == "staging":
                 actors_txt = staging.staging_actors_summary(sid)
-                new = _build(action, actors_txt or sec.get("staging", ""),
-                             sec.get("lighting", ""), sec.get("sound", ""))
+                new = _build(action=action, staging=actors_txt or sec.get("staging", ""),
+                             ambiance=sec.get("ambiance", ""), decor=sec.get("decor", ""),
+                             lighting=sec.get("lighting", ""), technique=sec.get("technique", ""),
+                             sound=sec.get("sound", ""))
                 if new and new != cur:
                     s["seedance_prompt"] = new
                     changed = True
@@ -458,8 +467,10 @@ class PageStaging(QWidget):
                     changed = True
             else:
                 light_txt = staging.lighting_summary(sid)
-                new = _build(action, sec.get("staging", ""),
-                             light_txt or sec.get("lighting", ""), sec.get("sound", ""))
+                new = _build(action=action, staging=sec.get("staging", ""),
+                             ambiance=sec.get("ambiance", ""), decor=sec.get("decor", ""),
+                             lighting=light_txt or sec.get("lighting", ""),
+                             technique=sec.get("technique", ""), sound=sec.get("sound", ""))
                 if new and new != cur:
                     s["seedance_prompt"] = new
                     changed = True
@@ -509,16 +520,55 @@ class PageStaging(QWidget):
             return
         rec = self._canvas.commit()
         staging.save(self._shot["id"], rec)
-        # Mise en scène → axe caméra réécrit dans le storyboard (suivi en direct).
+        # Met à jour les sections du prompt du plan courant après une courte pause
+        # (débounce) → instantané du point de vue de l'utilisateur, sans thrash disque.
+        self._sync_timer.start()
+
+    def _apply_current_to_storyboard(self):
+        """Réécrit INSTANTANÉMENT la section concernée du prompt du plan COURANT
+        depuis le canevas, et sauvegarde le plan dans le storyboard :
+          · Mise en scène → section [🎭 MISE EN SCÈNE] + axe / placement caméra ;
+          · Plan de feu    → section [💡 PLAN DE FEU].
+        Les autres sections (Action, Ambiance, Décor, Technique, Sound) sont préservées."""
+        if not self._shot:
+            return
+        from core.prompt_sections import parse as _parse, build as _build
+        sid = self._shot["id"]
+        rec = staging.get(sid)
+        cur = self._shot.get("seedance_prompt", "") or ""
+        sec = _parse(cur)
+        changed = False
         if self._mode == "staging":
+            staging_txt = staging.staging_actors_summary(sid)
+            if staging_txt != sec.get("staging", ""):
+                sec["staging"] = staging_txt
+                changed = True
+            # Caméra → champs TECHNIQUES du plan (pas dans le texte de mise en scène)
             cam = rec.get("camera") or {}
-            axis = staging.axis_from_angle(cam.get("angle", 0))
-            if self._shot.get("camera_axis") != axis:
+            axis = staging.axis_from_angle(cam.get("angle", 0)) if cam else ""
+            zone = staging.camera_placement(sid)
+            if axis and self._shot.get("camera_axis") != axis:
                 self._shot["camera_axis"] = axis
-                try:
-                    sb_api.save_shot({k: v for k, v in self._shot.items() if not k.startswith("_")})
-                except Exception:
-                    pass
+                changed = True
+            if zone and self._shot.get("camera_placement") != zone:
+                self._shot["camera_placement"] = zone
+                changed = True
+        else:
+            light_txt = staging.lighting_summary(sid)
+            if light_txt != sec.get("lighting", ""):
+                sec["lighting"] = light_txt
+                changed = True
+        if not changed:
+            return
+        self._shot["seedance_prompt"] = _build(
+            action=sec.get("action") or cur, staging=sec.get("staging", ""),
+            ambiance=sec.get("ambiance", ""), decor=sec.get("decor", ""),
+            lighting=sec.get("lighting", ""), technique=sec.get("technique", ""),
+            sound=sec.get("sound", "") or (self._shot.get("sound_prompt") or ""))
+        try:
+            sb_api.save_shot({k: v for k, v in self._shot.items() if not k.startswith("_")})
+        except Exception:
+            pass
 
 
 class PageLighting(PageStaging):

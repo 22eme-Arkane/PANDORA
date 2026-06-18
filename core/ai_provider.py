@@ -164,6 +164,38 @@ def brand(text: str) -> str:
     return text if n == "Claude" else text.replace("Claude", n)
 
 
+def _engine_display_name(provider: str, creative_model: str) -> str:
+    """Nom d'affichage lisible d'un moteur résolu (provider + modèle créatif).
+    Pour Anthropic, distingue Opus / Sonnet / Haiku / Fable 5."""
+    if provider == "anthropic":
+        for e in ENGINES.values():
+            if e["provider"] == "anthropic" and e["creative_model"] == creative_model:
+                return e["name"]
+        cm = creative_model or _DEFAULT_CREATIVE
+        if "opus" in cm:
+            return "Claude Opus 4.8"
+        if "fable" in cm:
+            return "Fable 5"
+        if "haiku" in cm:
+            return "Claude Haiku 4.5"
+        return "Claude Sonnet 4.6"
+    if provider == "openai":
+        return ENGINES["gpt"]["name"]
+    if provider == "mistral":
+        return ENGINES["mistral"]["name"]
+    if provider == "ollama":
+        return ENGINES["ollama"]["name"]
+    return "Claude"
+
+
+def ai_name_for_task(task: str | None = None) -> str:
+    """Nom d'affichage PRÉCIS du moteur réellement utilisé pour une tâche : override
+    par tâche s'il existe, sinon moteur global. Sert aux libellés UI dynamiques pour
+    que l'utilisateur voie le modèle exact (ex. « Claude Opus 4.8 », « GPT-5.5 »)."""
+    provider, creative = _resolve_engine(task)
+    return _engine_display_name(provider, creative)
+
+
 def key_error(task: str | None = None) -> str | None:
     """Message d'erreur si la clé/connexion du fournisseur (de la tâche) manque."""
     provider, _ = _resolve_engine(task)

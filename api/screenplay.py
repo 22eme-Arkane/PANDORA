@@ -228,10 +228,10 @@ _GENERATE_STORYBOARD_TMPL = """\
 Tu es un assistant de découpage cinématographique. Ton rôle est de découper fidèlement le scénario en plans — tu ne réinventes rien, tu n'interprètes rien, tu retranscris.
 
 RÈGLES ABSOLUES :
-- Tout le contenu de "comments" et "seedance_prompt" doit être extrait directement du scénario.
-- Les dialogues présents dans le scénario DOIVENT apparaître mot pour mot dans "comments" et "seedance_prompt".
-- Aucune invention, aucune paraphrase libre, aucune interprétation créative.
-- Le découpage doit être identique au scénario : même personnages, même lieux, mêmes actions, mêmes mots.
+- Tout le contenu descriptif ("comments" et les champs de sections "action"/"staging"/"ambiance"/"decor"/"lighting"/"sound_prompt") doit être extrait directement du scénario.
+- Les dialogues présents dans le scénario DOIVENT apparaître mot pour mot dans "comments" ET dans le champ "action".
+- Aucune invention narrative, aucune paraphrase libre, aucune interprétation créative : mêmes personnages, mêmes lieux, mêmes actions, mêmes mots.
+- N'inclus dans un plan (et dans "character_names" / "staging") QUE les personnages réellement présents et visibles dans CE plan — JAMAIS un personnage hors champ, hors cadre, ou déjà sorti de la scène.
 
 Retourne UNIQUEMENT un tableau JSON valide. Chaque élément du tableau représente un plan et contient exactement ces clés :
 {
@@ -242,7 +242,7 @@ Retourne UNIQUEMENT un tableau JSON valide. Chaque élément du tableau représe
   "decor_name": <str — nom exact du décor / lieu tel qu'il apparaît dans le scénario>,
   "shot_time": <str — exactement une valeur parmi : "Jour", "Nuit", "Lever du soleil", "Coucher du soleil">,
   "duration": <float — durée estimée en secondes, STRICTEMENT entre 2.0 et 15.0>,
-  "character_names": <list[str] — noms exacts des personnages présents dans ce plan, tels qu'ils apparaissent dans le scénario>,
+  "character_names": <list[str] — noms exacts des personnages réellement présents ET visibles dans ce plan, tels qu'ils apparaissent dans le scénario. EXCLURE tout personnage hors champ / hors cadre / déjà sorti.>,
   "accessory_names": <list[str] — accessoires / props visibles dans ce plan, extraits du scénario>,
   "vehicle_names": <list[str] — véhicules présents dans ce plan, extraits du scénario>,
   "camera_movement": <str — exactement une valeur parmi : "Fixe", "Panoramique horizontal", "Panoramique vertical", "Travelling avant", "Travelling arrière", "Travelling latéral", "Zoom avant", "Zoom arrière", "Steadicam", "Grue / Drone", "Caméra portée", "Plongée", "Contre-plongée">,
@@ -253,8 +253,12 @@ Retourne UNIQUEMENT un tableau JSON valide. Chaque élément du tableau représe
   "optic": <str — "Sphérique" ou "Anamorphique">,
   "focal": <str — focale adaptée à la valeur de plan et à l'effet souhaité, ex: "24mm", "35mm", "50mm", "85mm", "100mm">,
   "comments": <str — description factuelle et fidèle de ce qui se passe dans ce plan, extraite du scénario. OBLIGATOIRE : si ce plan contient un dialogue, le citer intégralement entre guillemets avec le nom du personnage (ex : MARC : « Je t'ai toujours aimée. »). INTERDIT : technique caméra, mouvements de caméra, focale, optique — ces éléments sont déjà dans les champs dédiés. AUTORISÉ : qui fait quoi, ce qu'on voit, ce qu'on entend, les dialogues exacts, l'ambiance du moment telle qu'écrite dans le scénario.>,
-  "seedance_prompt": <str — DETAILED, dense video generation prompt in {PROMPT_LANG}. Seedance 2.0 yields far better results with RICH visual descriptions, so do NOT be brief. Mandatory structure, faithful to the screenplay: (1) characters present with their appearance/state as described in the screenplay, (2) exact location and environment description from the screenplay, (3) main action and — if dialogue present — the exact words spoken in quotes. THEN enrich the VISUAL rendering WITHOUT inventing any new story element: lighting (direction, quality, color temperature), color palette, textures and materials, mood and atmosphere, and quality cues such as cinematic, ultra-detailed, sharp, photorealistic. Write 3 to 5 rich sentences. NO camera technique (it lives in the dedicated fields); stay strictly faithful to what the screenplay describes.>,
-  "sound_prompt": <str — SOUND DESIGN / SFX prompt in {PROMPT_LANG} describing the shot's sound ambience: ambient textures, sound effects, room tone, materials and rhythm of the scene, ready for a sound-effects generator. NO speech, NO voice, NO music score, NO BPM (dialogue lives in seedance_prompt; this is ambience/SFX only). 1 to 2 concise sentences faithful to what the screenplay describes.>
+  "action": <str — {PROMPT_LANG}. L'ACTION concrète et visible du plan, fidèle au scénario : qui fait quoi, ce qu'on voit bouger. Si dialogue présent, citer la réplique EXACTE entre guillemets avec le nom du personnage. 1 à 3 phrases. Personnages cités par leur NOM (la cohérence visuelle est gérée par les images de référence).>,
+  "staging": <str — {PROMPT_LANG}. MISE EN SCÈNE : indique d'abord le nombre de personnages PRÉSENTS et visibles dans ce plan (JAMAIS un personnage hors champ), puis leur position approximative déduite du scénario (gauche/droite/centre, premier/arrière-plan) et qui fait face à qui. Reste général si le scénario ne précise pas le placement — n'invente pas une géométrie précise. Personnages par leur NOM.>,
+  "ambiance": <str — {PROMPT_LANG}. AMBIANCE : atmosphère, mood et émotion du plan tels que décrits ou impliqués par le scénario, suivis des repères de qualité : cinématographique, ultra-détaillé, photoréaliste.>,
+  "decor": <str — {PROMPT_LANG}. DÉCOR : description du lieu et de l'environnement visibles dans ce plan, fidèle au scénario (matières, époque, mobilier, palette, lumière naturelle du lieu).>,
+  "lighting": <str — {PROMPT_LANG}. PLAN DE FEU : INTENTION d'éclairage cohérente avec le scénario — direction de la lumière, qualité (douce/dure), température de couleur, contraste, sources pratiques motivées (lustre, fenêtre, bougie…). NE mentionne AUCUN projecteur ni appareil d'éclairage visible : c'est une intention de lumière, pas du matériel à l'image.>,
+  "sound_prompt": <str — SOUND DESIGN / SFX prompt in {PROMPT_LANG} describing the shot's sound ambience: ambient textures, sound effects, room tone, materials and rhythm of the scene, ready for a sound-effects generator. NO speech, NO voice, NO music score, NO BPM (dialogue lives in the "action" field; this is ambience/SFX only). You MAY place the main sound events approximately in time within the shot (e.g. "around 1s", "mid-shot"). 1 to 3 concise sentences faithful to what the screenplay describes.>
 }
 
 Contrainte absolue : duration ne peut jamais dépasser 15.0 secondes (limite de Seedance 2.0).
@@ -397,6 +401,11 @@ def _arrange_screenplay_prompt(lang: str) -> str:
 def _storyboard_prompt(lang: str) -> str:
     prompt_lang = "English" if lang == "en" else "French (français)"
     return _GENERATE_STORYBOARD_TMPL.replace("{PROMPT_LANG}", prompt_lang)
+
+
+# Section TECHNIQUE déterministe (champs caméra) — centralisée dans prompt_sections
+# pour être partagée par le découpage ET le dialogue de plan (mise à jour instantanée).
+from core.prompt_sections import technique_line as _technique_line  # noqa: E402
 
 
 _EXTRACT_CHARACTERS = """\
@@ -867,8 +876,11 @@ class GenerateStoryboardWorker(QThread):
         self._element_names = element_names or {}
 
     def run(self):
-        from core.ai_provider import complete as ai_complete, key_error, ai_name
-        err = key_error()
+        from core.ai_provider import (complete as ai_complete, key_error,
+                                      ai_name_for_task)
+        # Nom du moteur réellement choisi pour le découpage (Paramètres → par tâche)
+        ai_name = lambda: ai_name_for_task("storyboard_gen")
+        err = key_error("storyboard_gen")
         if err:
             self.failed.emit(err)
             return
@@ -958,11 +970,34 @@ class GenerateStoryboardWorker(QThread):
                 self.failed.emit(f"Aucun plan extrait — la réponse {ai_name()} était mal formée.")
                 return
 
+            # Assemble le prompt structuré en 7 sections étiquetées. L'IA renvoie
+            # des morceaux (action/staging/ambiance/decor/lighting + sound_prompt) ;
+            # Python construit le format exact ([🎬 ACTION]…). La TECHNIQUE vient des
+            # champs caméra. La MISE EN SCÈNE / le PLAN DE FEU sont un premier jet,
+            # raffinés ensuite par les pages dédiées (synchro).
+            from core.prompt_sections import build as _ps_build, LIGHTING_NOTE as _LN
             for s in shots:
                 s["duration"] = min(float(s.get("duration", 8.0)), 15.0)
                 s.setdefault("character_ids", [])
                 s.setdefault("accessory_ids", [])
                 s.setdefault("decor_id",      "")
+                # Repli : si l'IA a ignoré les champs de sections, récupérer l'ancien
+                # prompt à plat (ou les commentaires) comme ACTION.
+                _action = (s.get("action") or "").strip() \
+                    or (s.get("seedance_prompt") or "").strip() \
+                    or (s.get("comments") or "").strip()
+                _light = (s.get("lighting") or "").strip()
+                if _light:
+                    _light = f"{_light} {_LN}"
+                s["seedance_prompt"] = _ps_build(
+                    action=_action, staging=(s.get("staging") or "").strip(),
+                    ambiance=(s.get("ambiance") or "").strip(),
+                    decor=(s.get("decor") or "").strip(),
+                    lighting=_light, technique=_technique_line(s),
+                    sound=(s.get("sound_prompt") or "").strip(),
+                )
+                for _k in ("action", "staging", "ambiance", "decor", "lighting"):
+                    s.pop(_k, None)
 
             # Résolution automatique decor_name → decor_id
             try:
@@ -1410,7 +1445,10 @@ class SyncStoryboardWorker(QThread):
                 sound_txt   = sec.get("sound") or (shot.get("sound_prompt") or "").strip()
                 if not (staging_txt or light_txt):
                     continue
-                new = _build(action, staging_txt, light_txt, sound_txt)
+                new = _build(action=action, staging=staging_txt,
+                             ambiance=sec.get("ambiance", ""), decor=sec.get("decor", ""),
+                             lighting=light_txt, technique=sec.get("technique", ""),
+                             sound=sound_txt)
                 if new and new != cur:
                     shot["seedance_prompt"] = new
                     shot["_prompt_changed"] = True

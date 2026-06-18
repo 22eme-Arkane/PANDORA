@@ -465,34 +465,26 @@ class PageScenario(QWidget):
         self._editor_tabs.addTab(self._editor_text, translate("Scénario"))
 
         self._layout_view = QTextEdit()
-        self._layout_view.setReadOnly(True)
+        # Éditable : la mise en page PANDORA peut être retouchée à la main (les
+        # éditions sont persistées via autosave → champ layout_content).
+        self._layout_view.setReadOnly(False)
         self._layout_view.setFont(_tw_font)
         self._layout_view.setStyleSheet(
             f"QTextEdit{{background:{CP['bg0']};border:none;color:{CP['text_primary']};}}"
         )
-        self._layout_view.document().setDocumentMargin(48)
-        # Largeur de ligne limitée (lisibilité « page Word » : ~90 caractères) —
-        # sinon les phrases prennent toute la largeur de l'écran.
-        self._layout_view.setLineWrapMode(QTextEdit.LineWrapMode.FixedPixelWidth)
-        self._layout_view.setLineWrapColumnOrWidth(780)
+        # Même présentation que l'onglet Scénario : pleine largeur, marges DANS le
+        # document (72), texte CENTRÉ (même QTextOption que l'éditeur). Plus de
+        # colonne fixe 900 px collée à gauche — les deux onglets sont identiques.
+        self._layout_view.document().setDocumentMargin(72)
+        self._layout_view.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        self._layout_view.document().setDefaultTextOption(_opt)
         self._layout_view.setPlaceholderText(translate(
             "Clique « Mise en page PANDORA » (panneau de droite) pour générer ici la "
             "version optimisée pour les moteurs. Ton scénario, lui, reste intact "
             "dans l'onglet Scénario."
         ))
-        # « Page » CENTRÉE dans la largeur de l'éditeur (au lieu d'être collée à
-        # gauche) : largeur FIXE + ressorts de part et d'autre. Largeur fixe (et non
-        # « max ») = la page réclame réellement ses 900 px → plus de colonne écrasée
-        # à ~280 px qui tronquait le texte (wrap à 780 + 2×48 marge + ascenseur).
-        self._layout_view.setFixedWidth(900)
-        _layout_wrap = QWidget()
-        _lw = QHBoxLayout(_layout_wrap)
-        _lw.setContentsMargins(0, 0, 0, 0)
-        _lw.setSpacing(0)
-        _lw.addStretch(1)
-        _lw.addWidget(self._layout_view)
-        _lw.addStretch(1)
-        self._editor_tabs.addTab(_layout_wrap, translate("Mise en page PANDORA"))
+        self._layout_view.textChanged.connect(self._schedule_autosave)
+        self._editor_tabs.addTab(self._layout_view, translate("Mise en page PANDORA"))
         self._editor_tabs.setTabEnabled(1, False)   # grisé tant qu'aucune mise en page
 
         main.addWidget(self._editor_tabs, 1)
@@ -1161,8 +1153,10 @@ class PageScenario(QWidget):
         if not text and not title:
             QMessageBox.information(self, "Sauvegarder", "Le scénario est vide.")
             return
-        # Boîte de dialogue Windows : choisir où enregistrer (défaut = dossier Scénario).
-        suggested = scenario_api._safe_name(title or "Scénario") + ".json"
+        # Boîte de dialogue Windows : choisir où enregistrer (défaut = dossier
+        # Scénario, nom de fichier = nom du projet).
+        from core import context as _ctx
+        suggested = scenario_api._safe_name(_ctx.get_project_name() or title or "Scénario") + ".json"
         start = os.path.join(scenario_api.saves_dir(), suggested)
         path, _ = QFileDialog.getSaveFileName(
             self, translate("Sauvegarder le scénario"), start,

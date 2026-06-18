@@ -212,8 +212,12 @@ def prompts_moods_kontext():
 def prompts_cinema_detailles():
     """Cinéma : prompts storyboard + mise en page enrichis, fidèles au scénario."""
     import api.screenplay as s
-    assert "DETAILED, dense video generation prompt" in s._GENERATE_STORYBOARD_TMPL
-    assert "WITHOUT inventing any new story element" in s._GENERATE_STORYBOARD_TMPL
+    # Découpage en SECTIONS (code partagé) : l'IA renvoie des champs assemblés en
+    # [🎬 ACTION]… ; la Technique vient des champs caméra.
+    for k in ('"action"', '"staging"', '"ambiance"', '"decor"', '"lighting"'):
+        assert k in s._GENERATE_STORYBOARD_TMPL, f"champ de section {k}"
+    assert "hors champ" in s._GENERATE_STORYBOARD_TMPL, "personnages hors champ exclus"
+    assert hasattr(s, "_technique_line"), "section Technique déterministe"
     assert "TRÈS DÉTAILLÉ" in s._FORMAT_PANDORA and "FIDÈLE au scénario" in s._FORMAT_PANDORA
     assert "HIGHLY DETAILED" in s._FORMAT_PANDORA_EN
 

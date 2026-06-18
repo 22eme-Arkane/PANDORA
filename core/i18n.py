@@ -223,6 +223,10 @@ _FR_TO_EN: dict[str, str] = {
         "Write the outline of your performance first.",
     "Génération du découpage avec Claude…": "Generating the breakdown with Claude…",
     "Génération du découpage via Claude…":  "Generating the breakdown via Claude…",
+    # Gabarits dynamiques : {ai} = nom du moteur choisi pour la tâche storyboard_gen
+    "Génération du découpage via {ai}…":   "Generating the breakdown via {ai}…",
+    "Analyse du scénario via {ai}":        "Analyzing the screenplay via {ai}",
+    "Analyse du scénario via {ai}…":       "Analyzing the screenplay via {ai}…",
     "segments générés →":                  "segments generated →",
     "Mise en page du conducteur via Claude…": "Formatting the rundown via Claude…",
     "Mise en page PANDORA":                "PANDORA layout",

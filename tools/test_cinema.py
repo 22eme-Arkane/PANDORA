@@ -270,8 +270,15 @@ def studio_sound_design_upscaling():
 def prompts_storyboard_cinema():
     import api.screenplay as s
     t = s._GENERATE_STORYBOARD_TMPL
-    assert "DETAILED, dense video generation prompt" in t, "prompt vidéo détaillé"
-    assert "WITHOUT inventing any new story element" in t, "fidélité au scénario"
+    # Découpage en SECTIONS : l'IA renvoie des champs (action/staging/ambiance/
+    # decor/lighting) assemblés en [🎬 ACTION]… par prompt_sections.build().
+    for k in ('"action"', '"staging"', '"ambiance"', '"decor"', '"lighting"'):
+        assert k in t, f"champ de section {k} dans le découpage"
+    assert "hors champ" in t, "personnages hors champ exclus du découpage"
+    assert "INTENTION d'éclairage" in t and "AUCUN projecteur" in t, "plan de feu = intention, pas de matériel visible"
+    assert hasattr(s, "_technique_line"), "section Technique déterministe (champs caméra)"
+    assert "prompt_sections" in inspect.getsource(s.GenerateStoryboardWorker.run), \
+        "le worker assemble le prompt en sections"
     assert "duration" in t and "15.0" in t, "contrainte durée Seedance"
     # Sound design généré AVEC le storyboard (retour 2026-06-13, parité Live)
     assert '"sound_prompt"' in t, "le storyboard génère aussi un prompt sound design"
@@ -932,12 +939,25 @@ def staging_outils_projecteurs_sections():
     assert any("SkyPanel" in m for m in pr.models("led_panel"))
     assert any("Titan" in m for m in pr.models("tube"))
 
-    # Sections de prompt + strip du son
+    # Sections de prompt (7 sections, libellés crochets+emoji) + strip du son
     import core.prompt_sections as ps
-    full = ps.build("action X", "perso à gauche", "key SkyPanel", "pluie")
-    assert "[MISE EN SCÈNE]" in full and "[PLAN DE FEU]" in full and "[SOUND DESIGN]" in full
-    assert "[SOUND DESIGN]" not in ps.strip_for_video(full), "son non envoyé à la vidéo"
-    assert ps.parse(full)["action"] == "action X"
+    import api.screenplay as s_screenplay
+    full = ps.build(action="action X", staging="perso à gauche", ambiance="tendu",
+                    decor="salle à manger", lighting="key SkyPanel à droite",
+                    technique="plan moyen, caméra fixe", sound="pluie")
+    for lbl in ("ACTION", "MISE EN SCÈNE", "AMBIANCE", "DÉCOR", "PLAN DE FEU", "TECHNIQUE", "SOUND DESIGN"):
+        assert lbl in full, f"section {lbl} présente"
+    assert "🎬" in full and "🎵" in full, "emojis dans les libellés de sections"
+    assert "SOUND DESIGN" not in ps.strip_for_video(full), "son non envoyé à la vidéo"
+    assert ps.parse(full)["action"] == "action X" and ps.parse(full)["technique"] == "plan moyen, caméra fixe"
+    # Rétro-compatibilité : anciens libellés sans emoji toujours parsés
+    legacy = "[ACTION]\nvieux\n\n[SOUND DESIGN]\nbruit"
+    assert ps.parse(legacy)["action"] == "vieux" and ps.parse(legacy)["sound"] == "bruit"
+    # Technique déterministe depuis les champs caméra
+    tech = s_screenplay._technique_line({"shot_size": "PE", "camera_movement": "Travelling avant",
+                                         "focal": "35mm", "optic": "Anamorphique", "speed": "Ralenti"})
+    _tl = tech.lower()
+    assert "plan d'ensemble" in _tl and "35mm" in _tl and "ralenti" in _tl and "anamorphique" in _tl, tech
 
     # api/real strippe la section son avant envoi Seedance
     rsrc = inspect.getsource(__import__("api.real", fromlist=["_"]))
@@ -980,6 +1000,16 @@ def staging_outils_projecteurs_sections():
     assert "_on_save_staging" in psrc and "_on_open_staging" in psrc and "staging_saves_dir" in psrc, \
         "Sauvegarder/Ouvrir (dossier dédié Mise en scène / Plan de feu)"
     assert "ProjectorDialog" in psrc and "_on_light_context" in psrc and "_on_actor_context" in psrc
+    # Auto-synchro INSTANTANÉE (débouncée) des sections du prompt depuis le canevas —
+    # plus besoin du menu Synchronisation pour le plan courant.
+    assert "_apply_current_to_storyboard" in psrc and "_sync_timer" in psrc, \
+        "auto-synchro instantanée des sections du prompt"
+    assert "_sync_timer.start" in inspect.getsource(__import__("ui.page_staging", fromlist=["_"]).PageStaging._autosave), \
+        "l'autosave déclenche la synchro débouncée"
+    assert hasattr(ps, "technique_line"), "technique_line centralisée dans prompt_sections"
+    # Découpage : la section [🖼️ TECHNIQUE] se reconstruit depuis les champs caméra à la sauvegarde du plan
+    dsh = inspect.getsource(__import__("ui.dialog_shot", fromlist=["_"]).ShotDialog._on_save)
+    assert "technique_line" in dsh, "découpage : Technique reconstruite depuis les champs caméra"
     # « Tout supprimer » retire AUSSI le plan de décor assigné (B4)
     from ui.staging_canvas import StagingCanvas as _SC2
     _cp = _SC2(mode="staging")
@@ -1032,19 +1062,24 @@ def scenario_onglet_mise_en_page():
     p._apply_layout("MISE EN PAGE PANDORA")
     assert p._editor_text.toPlainText().strip() == "SCENARIO ORIGINAL", "scénario intact"
     assert "MISE EN PAGE" in p._layout_view.toPlainText()
-    # La « page » est centrée : largeur plafonnée + entourée de ressorts (pas collée à gauche)
-    assert p._layout_view.maximumWidth() <= 1000, "page mise en page centrée (largeur plafonnée)"
-    _lwrap = p._layout_view.parentWidget()
-    assert _lwrap.layout().count() == 3, "ressorts gauche/droite autour de la page"
+    # Même présentation que l'onglet Scénario : texte CENTRÉ (plus de colonne 900 px
+    # collée à gauche). Les deux QTextEdit partagent l'alignement centré horizontal.
+    from PyQt6.QtCore import Qt as _Qt
+    _ed_align = p._editor_text.document().defaultTextOption().alignment()
+    _lv_align = p._layout_view.document().defaultTextOption().alignment()
+    assert bool(_ed_align & _Qt.AlignmentFlag.AlignHCenter), "onglet Scénario centré"
+    assert bool(_lv_align & _Qt.AlignmentFlag.AlignHCenter), \
+        "onglet Mise en page centré comme Scénario"
     assert p._editor_tabs.isTabEnabled(1) and p._editor_tabs.currentIndex() == 1
     assert p._current.get("layout_content"), "mise en page persistée séparément"
     # La fenêtre de mise en page applique vers l'onglet (pas _set_editor_text)
     fw = inspect.getsource(PageScenario._open_format_window)
     assert "_apply_layout" in fw and "_set_editor_text" not in fw, \
         "la fenêtre Mise en page écrit dans l'onglet dédié"
-    # Largeur de ligne limitée (lisibilité « page Word »)
+    # Plus de colonne fixe 900 px collée à gauche : pleine largeur centrée comme l'éditeur
     be = inspect.getsource(PageScenario._build_editor)
-    assert "FixedPixelWidth" in be, "lignes de la mise en page limitées en largeur"
+    assert "setFixedWidth(900)" not in be, "plus de colonne 900 px collée à gauche"
+    assert "setDefaultTextOption(_opt)" in be, "même alignement centré que l'éditeur"
 
 
 @test
