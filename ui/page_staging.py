@@ -655,7 +655,37 @@ class PageStaging(QWidget):
             if t:
                 nm += f" — {t}"
             menu.addAction(nm, lambda _=False, src=s, tgt=target: self._copy_staging_from(src, tgt))
+
+        # Sous-menu : changer le plan du décor utilisé pour CE plan.
+        menu.addSeparator()
+        plan_menu = menu.addMenu(translate("Changer le plan du décor"))
+        _cur = staging.get(target["id"]).get("plan_decor_id", "")
+        for _did, _label in [("", translate("Auto (décor du plan)")),
+                             ("__none__", translate("Aucun plan (vide)"))]:
+            _a = plan_menu.addAction(("● " if _cur == _did else "   ") + _label)
+            _a.triggered.connect(lambda _=False, d=_did, tgt=target: self._set_plan_decor_for(tgt, d))
+        plan_menu.addSeparator()
+        try:
+            for d in decors_api.list_decors():
+                _did = d.get("id", "")
+                _nm = d.get("name") or translate("(décor sans nom)")
+                if d.get("floor_plan"):
+                    _nm = "◆ " + _nm
+                _a = plan_menu.addAction(("● " if _cur == _did else "   ") + _nm)
+                _a.triggered.connect(lambda _=False, dd=_did, tgt=target: self._set_plan_decor_for(tgt, dd))
+        except Exception:
+            pass
         menu.exec(self._list.mapToGlobal(pos))
+
+    def _set_plan_decor_for(self, tgt_shot: dict, decor_id: str):
+        """Change le plan de décor d'UN plan (clic droit) et recharge si courant."""
+        rec = staging.get(tgt_shot["id"])
+        rec["plan_decor_id"] = decor_id or ""
+        fp = self._resolve_floor_plan(tgt_shot, rec)
+        rec["plan_image"] = fp if (fp and os.path.isfile(fp)) else ""
+        staging.save(tgt_shot["id"], rec)
+        if self._shot and self._shot.get("id") == tgt_shot.get("id"):
+            self._reload_current()
 
     def _do_copy(self, src_shot: dict, tgt_shot: dict) -> str:
         """Copie (sans UI) la mise en scène (mode staging : caméra + acteurs +

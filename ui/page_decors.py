@@ -354,6 +354,14 @@ class PageDecors(QWidget):
                 Qt.TransformationMode.SmoothTransformation)
             pix = pix.copy((pix.width() - 132) // 2, (pix.height() - 78) // 2, 132, 78)
             thumb.setPixmap(pix)
+            # Clic → aperçu en grand dans une fenêtre.
+            thumb.setCursor(Qt.CursorShape.PointingHandCursor)
+            thumb.setToolTip(translate("Cliquer pour agrandir"))
+
+            def _click(e, _p=fp, _n=decor.get("name", "")):
+                if e.button() == Qt.MouseButton.LeftButton:
+                    self._open_plan_preview(_p, _n)
+            thumb.mousePressEvent = _click
         else:
             thumb.setText("▦\n" + translate("à générer"))
         cv.addWidget(thumb)
@@ -367,6 +375,32 @@ class PageDecors(QWidget):
         cv.addWidget(name)
         card.setToolTip(decor.get("name", ""))
         return card
+
+    def _open_plan_preview(self, path: str, name: str = ""):
+        """Aperçu du plan d'architecte en grand dans une fenêtre (clic sur la vignette)."""
+        if not (path and os.path.isfile(path)):
+            return
+        from PyQt6.QtWidgets import QDialog, QVBoxLayout, QLabel
+        from PyQt6.QtGui import QGuiApplication
+        dlg = QDialog(self)
+        dlg.setWindowTitle((f"{translate('Plan du décor')} — {name}") if name else translate("Plan du décor"))
+        dlg.setStyleSheet(f"background:{CP['bg1']};")
+        lay = QVBoxLayout(dlg)
+        lay.setContentsMargins(12, 12, 12, 12)
+        lbl = QLabel()
+        lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        lbl.setCursor(Qt.CursorShape.PointingHandCursor)
+        lbl.setToolTip(translate("Cliquer pour fermer"))
+        scr = QGuiApplication.primaryScreen().availableGeometry()
+        maxw, maxh = int(scr.width() * 0.82), int(scr.height() * 0.85)
+        pix = QPixmap(path)
+        if pix.width() > maxw or pix.height() > maxh:
+            pix = pix.scaled(maxw, maxh, Qt.AspectRatioMode.KeepAspectRatio,
+                             Qt.TransformationMode.SmoothTransformation)
+        lbl.setPixmap(pix)
+        lbl.mousePressEvent = lambda _e: dlg.accept()   # clic sur l'image = fermer
+        lay.addWidget(lbl)
+        dlg.exec()
 
     def _refresh_floor_plans(self):
         if not hasattr(self, "_fp_row"):

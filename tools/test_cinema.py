@@ -921,6 +921,14 @@ def decors_plan_auto_et_sync():
     assert "floor_plan_for_shot" in ps, "Mise en scène lit le plan du décor"
     assert "plan_decor_id" in ps, "sélecteur du plan de décor par plan"
     assert "_sync_decors" in ps, "synchro storyboard → plans (remplace Générer le plan)"
+    # Régénération du plan d'architecte quand le décor (prompt) CHANGE
+    assert "floor_plan_prompt" in dd, "régénère le plan si le décor change (prompt)"
+    # Clic sur le plan d'architecte (page Décors) → aperçu en grand dans une fenêtre
+    assert "_open_plan_preview" in pdsrc and "Cliquer pour agrandir" in pdsrc, \
+        "clic sur le plan → aperçu en grand"
+    # Clic droit sur un plan (liste gauche) → changer le plan du décor
+    assert "_set_plan_decor_for" in ps and "Changer le plan du décor" in ps, \
+        "clic droit liste → changer le plan du décor"
 
     # Plan de feu montre caméra + acteurs (référence non éditable)
     from ui.staging_canvas import StagingCanvas

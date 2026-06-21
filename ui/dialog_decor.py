@@ -1069,16 +1069,19 @@ class DecorDialog(QDialog):
         self._maybe_gen_floor_plan()   # plan vu de dessus EN MÊME TEMPS que le décor
 
     def _maybe_gen_floor_plan(self):
-        """Génère le PLAN vu de dessus EN MÊME TEMPS que le décor (si pas déjà un).
-        Worker en QThread, non bloquant ; "" en mock (pas de clé fal.ai). Le plan
-        est stocké sur self._item['floor_plan'] (persisté par _on_save)."""
-        existing = self._item.get("floor_plan", "")
-        if existing and os.path.isfile(existing):
-            return
+        """Génère le PLAN vu de dessus EN MÊME TEMPS que le décor. Régénère si AUCUN
+        plan OU si le prompt du décor a CHANGÉ depuis le dernier plan (changer le
+        décor → nouveau plan d'architecte). Worker en QThread, non bloquant ; "" en
+        mock. Stocké sur self._item['floor_plan'] (persisté par _on_save)."""
         prompt = self._prompt.toPlainText().strip()
         if not prompt:
             return
+        existing = self._item.get("floor_plan", "")
+        if (existing and os.path.isfile(existing)
+                and prompt == self._item.get("floor_plan_prompt", "")):
+            return   # plan déjà à jour pour ce décor (ex. simple variation)
         name = self._name.text().strip() or "decor"
+        self._fp_pending_prompt = prompt
         self._floor_plan_worker = GenerateFloorPlanWorker(prompt, name)
         self._floor_plan_worker.finished.connect(self._on_floor_plan_done)
         self._floor_plan_worker.failed.connect(lambda _e: None)   # non bloquant
@@ -1088,12 +1091,19 @@ class DecorDialog(QDialog):
         if not (path and os.path.isfile(path)):
             return   # mock / échec → pas de plan (la page Décors peut le générer plus tard)
         self._item["floor_plan"] = path
-        # Si le décor est déjà sauvegardé (édition), persiste tout de suite.
+        self._item["floor_plan_prompt"] = getattr(self, "_fp_pending_prompt", "")
+        # Si le décor est déjà sauvegardé (édition), persiste tout de suite (plan + prompt).
         _id = self._item.get("id")
         if _id:
             try:
                 import core.decors as _d
-                _d.set_floor_plan(_id, path)
+                _dec = _d.get_decor(_id)
+                if _dec is not None:
+                    _dec["floor_plan"] = path
+                    _dec["floor_plan_prompt"] = self._item["floor_plan_prompt"]
+                    _d.save_decor(_dec)
+                else:
+                    _d.set_floor_plan(_id, path)
             except Exception:
                 pass
 
