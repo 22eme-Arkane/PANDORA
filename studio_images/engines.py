@@ -40,6 +40,35 @@ ENGINES = {
         "output":   "raster",
         "refs":     {"max": 14, "hint": "✅ jusqu'à 14 références (sujet + style)"},
     },
+    "seedream5": {
+        "label":    "Seedream 5.0 Lite  ·  ByteDance · gén.+édition · 10 refs  ·  ~$0.035",
+        "endpoint": "fal-ai/bytedance/seedream/v5/lite/text-to-image",
+        "edit":     "fal-ai/bytedance/seedream/v5/lite/edit",
+        "kind":     "seedream",
+        "output":   "raster",
+        "refs":     {"max": 10, "hint": "✅ jusqu'à 10 références (édition multi-images)"},
+    },
+    "seedream45": {
+        "label":    "Seedream 4.5  ·  ByteDance · text-to-image  ·  ~$0.03",
+        "endpoint": "fal-ai/bytedance/seedream/v4.5/text-to-image",
+        "kind":     "imgsize",
+        "output":   "raster",
+        "refs":     {"max": 0, "hint": "❌ ce moteur ignore les images de référence"},
+    },
+    "zimage": {
+        "label":    "Z-Image Turbo  ·  Tongyi · photoréaliste rapide  ·  ~$0.005/MP",
+        "endpoint": "fal-ai/z-image/turbo",
+        "kind":     "imgsize",
+        "output":   "raster",
+        "refs":     {"max": 0, "hint": "❌ ce moteur ignore les images de référence"},
+    },
+    "qwen_image": {
+        "label":    "Qwen-Image  ·  rendu de texte complexe  ·  ~$0.02/MP",
+        "endpoint": "fal-ai/qwen-image",
+        "kind":     "imgsize",
+        "output":   "raster",
+        "refs":     {"max": 0, "hint": "❌ ce moteur ignore les images de référence"},
+    },
     "ideogram": {
         "label":    "Ideogram V3  ·  champion du TEXTE & logos  ·  ~$0.06",
         "endpoint": "fal-ai/ideogram/v3",
@@ -119,6 +148,19 @@ def build_request(engine_key: str, prompt: str, target: tuple,
         }
         if refs:
             return e["edit"], {**args, "image_urls": refs[:14]}, "raster"
+        return e["endpoint"], args, "raster"
+
+    if kind in ("seedream", "imgsize"):
+        # Modèles DiT (Seedream 5/4.5, Z-Image Turbo, Qwen-Image) : image_size en
+        # objet {width,height} + num_images. Seedream 5.0 Lite a un endpoint /edit
+        # qui accepte jusqu'à 10 images de référence. Schémas best-effort fal.ai.
+        args = {
+            "prompt":     prompt,
+            "num_images": 1,
+            "image_size": _size_obj(target),
+        }
+        if kind == "seedream" and refs and e.get("edit"):
+            return e["edit"], {**args, "image_urls": refs[:10]}, "raster"
         return e["endpoint"], args, "raster"
 
     if kind == "flux":

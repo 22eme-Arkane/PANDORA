@@ -25,7 +25,8 @@ from ui.widgets import section_label, HelpBlock, show_api_error
 from ui.icons import load_icon
 from api.tts import (
     ElevenLabsWorker, ELEVENLABS_VOICES, ELEVENLABS_VOICES_FR,
-    F5TTSWorker,
+    F5TTSWorker, IndexTTS2Worker,
+    FalSpeechWorker, SPEECH_ENGINES, SPEECH_ENGINE_ORDER,
 )
 
 
@@ -239,15 +240,22 @@ class PageDoublage(QWidget):
             "20 voix · multilingue FR/EN/ES… · sélection de voix\n$0.05 / 1000 caractères",
             CP["accent"], True,
         )
+        self._btn_mode_speech = self._make_mode_card(
+            "Voix IA — multi-moteurs",
+            "MiniMax 2.8 (FR) · Gemini · Inworld · Qwen3 · Maya1\nVoix de synthèse — pas d'échantillon requis",
+            CP["accent"], False,
+        )
         self._btn_mode_clone = self._make_mode_card(
-            "Clonage de voix — F5-TTS",
-            "Clone n'importe quelle voix · EN/ZH principalement · FR expérimental\nLangue détectée automatiquement depuis le texte",
+            "Clonage de voix",
+            "F5-TTS ou Index TTS 2 (FR) · clone depuis un échantillon\nLangue détectée / choisie selon le moteur",
             CP["accent2"], False,
         )
         self._btn_mode_eleven.clicked.connect(lambda: self._set_mode("elevenlabs"))
+        self._btn_mode_speech.clicked.connect(lambda: self._set_mode("speech"))
         self._btn_mode_clone.clicked.connect(lambda: self._set_mode("clone"))
 
         row.addWidget(self._btn_mode_eleven, 1)
+        row.addWidget(self._btn_mode_speech, 1)
         row.addWidget(self._btn_mode_clone, 1)
         self._content_lay.addLayout(row)
 
@@ -308,14 +316,19 @@ class PageDoublage(QWidget):
     def _set_mode(self, mode: str):
         self._mode = mode
         is_eleven = (mode == "elevenlabs")
+        is_speech = (mode == "speech")
         is_clone  = (mode == "clone")
         self._apply_mode_card_style(
             self._btn_mode_eleven, is_eleven, self._btn_mode_eleven.property("accent"))
         self._apply_mode_card_style(
+            self._btn_mode_speech, is_speech, self._btn_mode_speech.property("accent"))
+        self._apply_mode_card_style(
             self._btn_mode_clone, is_clone, self._btn_mode_clone.property("accent"))
         self._btn_mode_eleven.setChecked(is_eleven)
+        self._btn_mode_speech.setChecked(is_speech)
         self._btn_mode_clone.setChecked(is_clone)
         self._eleven_frame.setVisible(is_eleven)
+        self._speech_frame.setVisible(is_speech)
         self._clone_frame.setVisible(is_clone)
         self._btn_generate.setText("🎙  Générer l'audio")
 
@@ -404,12 +417,44 @@ class PageDoublage(QWidget):
         ef_lay.addWidget(note_el)
         lay.addWidget(self._eleven_frame)
 
+        # ── Config Voix IA multi-moteurs (text → speech) ─────────────────────
+        self._speech_frame = QWidget()
+        self._speech_frame.setVisible(False)
+        sp_lay = QVBoxLayout(self._speech_frame)
+        sp_lay.setContentsMargins(0, 0, 0, 0)
+        sp_lay.setSpacing(8)
+        sp_lay.addWidget(section_label("Moteur de voix IA"))
+        self._speech_combo = QComboBox()
+        self._speech_combo.setFixedHeight(34)
+        self._speech_combo.setStyleSheet(_combo_ss)
+        for _k in SPEECH_ENGINE_ORDER:
+            _spec = SPEECH_ENGINES.get(_k)
+            if _spec:
+                self._speech_combo.addItem(_spec["label"], _k)
+        sp_lay.addWidget(self._speech_combo)
+        note_sp = QLabel(
+            "Voix de synthèse — aucun échantillon requis. MiniMax 2.8 HD/Turbo gèrent bien le français."
+        )
+        note_sp.setStyleSheet(
+            f"color:{CP['text_dim']};font-size:9px;font-family:'Consolas',monospace;"
+            f"background:transparent;"
+        )
+        sp_lay.addWidget(note_sp)
+        lay.addWidget(self._speech_frame)
+
         # ── Config F5-TTS — Clonage voix multilingue ─────────────────────────
         self._clone_frame = QWidget()
         self._clone_frame.setVisible(False)
         cf_lay = QVBoxLayout(self._clone_frame)
         cf_lay.setContentsMargins(0, 0, 0, 0)
         cf_lay.setSpacing(8)
+        cf_lay.addWidget(section_label("Moteur de clonage"))
+        self._clone_engine_combo = QComboBox()
+        self._clone_engine_combo.setFixedHeight(34)
+        self._clone_engine_combo.setStyleSheet(_combo_ss)
+        self._clone_engine_combo.addItem("F5-TTS  ·  EN/ZH (FR expérimental)", "f5")
+        self._clone_engine_combo.addItem("Index TTS 2  ·  clonage multilingue FR", "indextts2")
+        cf_lay.addWidget(self._clone_engine_combo)
         cf_lay.addWidget(section_label("Échantillon vocal de référence"))
 
         sample_row = QHBoxLayout()
@@ -578,8 +623,26 @@ class PageDoublage(QWidget):
                 self._lbl_status.setVisible(False)
                 return
             label = os.path.splitext(os.path.basename(self._voice_sample_path))[0]
-            self._tts_worker = F5TTSWorker(text, self._voice_sample_path, label=label)
-            mode_label = "F5-TTS"
+            eng = self._clone_engine_combo.currentData() or "f5"
+            if eng == "indextts2":
+                self._tts_worker = IndexTTS2Worker(
+                    text, self._voice_sample_path, label=label, language="fr")
+                mode_label = "Index TTS 2"
+            else:
+                self._tts_worker = F5TTSWorker(text, self._voice_sample_path, label=label)
+                mode_label = "F5-TTS"
+
+        elif self._mode == "speech":
+            text = self._text_edit.toPlainText().strip()
+            if not text:
+                self._btn_generate.setEnabled(True)
+                self._progress.setVisible(False)
+                self._lbl_status.setVisible(False)
+                return
+            eng   = self._speech_combo.currentData() or "minimax-2.8-hd"
+            label = eng
+            self._tts_worker = FalSpeechWorker(eng, text, label=label)
+            mode_label = "Voix IA"
 
         else:  # elevenlabs
             text = self._text_edit.toPlainText().strip()

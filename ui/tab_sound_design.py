@@ -16,6 +16,7 @@ import os
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, QTextEdit,
     QDoubleSpinBox, QProgressBar, QStackedWidget, QScrollArea, QFileDialog,
+    QComboBox,
 )
 from PyQt6.QtCore import Qt, pyqtSignal, QUrl
 from PyQt6.QtGui import QDesktopServices
@@ -227,6 +228,23 @@ class TabSoundDesign(QScrollArea):
             f"border:1px solid {C['border']};border-radius:8px;padding:10px;font-size:12px;}}")
         lay.addWidget(self._txt_prompt_video)
 
+        eng_row = QHBoxLayout()
+        eng_row.setSpacing(8)
+        eng_lbl = QLabel(translate("Moteur"))
+        eng_lbl.setStyleSheet(
+            f"color:{C['text_secondary']};font-size:11px;background:transparent;border:none;")
+        self._video_engine_combo = QComboBox()
+        self._video_engine_combo.addItem(translate("SFX 1.6 (Mirelo)  ·  bande-son auto"), "sfx16")
+        self._video_engine_combo.addItem(translate("Foley Control  ·  SFX synchronisés (~$0.002/s)"), "foley")
+        self._video_engine_combo.setStyleSheet(
+            f"QComboBox{{background:{C['bg2']};color:{C['text_primary']};"
+            f"border:1px solid {C['border']};border-radius:6px;padding:4px 8px;font-size:11px;}}"
+            f"QComboBox QAbstractItemView{{background:{C['bg2']};color:{C['text_primary']};"
+            f"selection-background-color:{C['accent_dim']};}}")
+        eng_row.addWidget(eng_lbl)
+        eng_row.addWidget(self._video_engine_combo, 1)
+        lay.addLayout(eng_row)
+
         lay.addLayout(self._build_duration_row("video"))
         return w
 
@@ -301,10 +319,18 @@ class TabSoundDesign(QScrollArea):
             if not self._video_path or not os.path.isfile(self._video_path):
                 self._status.setText(translate("Choisis d'abord un clip vidéo."))
                 return
-            from api.tts import SFX1VideoWorker
-            self._worker = SFX1VideoWorker(
-                self._video_path, self._txt_prompt_video.toPlainText().strip(),
-                float(self._dur_video.value()), label="sfx_video")
+            _eng = getattr(self, "_video_engine_combo", None)
+            _eng_key = _eng.currentData() if _eng else "sfx16"
+            if _eng_key == "foley":
+                from api.tts import FoleyControlWorker
+                self._worker = FoleyControlWorker(
+                    self._video_path, self._txt_prompt_video.toPlainText().strip(),
+                    float(self._dur_video.value()), label="foley")
+            else:
+                from api.tts import SFX1VideoWorker
+                self._worker = SFX1VideoWorker(
+                    self._video_path, self._txt_prompt_video.toPlainText().strip(),
+                    float(self._dur_video.value()), label="sfx_video")
 
         self._set_busy(True)
         self._worker.progress.connect(self._on_progress)

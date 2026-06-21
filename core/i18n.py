@@ -2528,6 +2528,24 @@ _FR_TO_EN: dict[str, str] = {
     " caractères  ~$":              " characters  ~$",
     " caractères":                  " characters",
     "Échantillon vocal requis":     "Voice sample required",
+    # ── Doublage : voix IA multi-moteurs + moteur de clonage ──────────────────
+    "Voix IA — multi-moteurs":      "AI Voices — multi-engine",
+    "MiniMax 2.8 (FR) · Gemini · Inworld · Qwen3 · Maya1\nVoix de synthèse — pas d'échantillon requis":
+        "MiniMax 2.8 (FR) · Gemini · Inworld · Qwen3 · Maya1\nSynthetic voices — no sample required",
+    "Clonage de voix":              "Voice cloning",
+    "F5-TTS ou Index TTS 2 (FR) · clone depuis un échantillon\nLangue détectée / choisie selon le moteur":
+        "F5-TTS or Index TTS 2 (FR) · clone from a sample\nLanguage auto-detected / chosen per engine",
+    "Moteur de voix IA":            "AI voice engine",
+    "Voix de synthèse — aucun échantillon requis. MiniMax 2.8 HD/Turbo gèrent bien le français.":
+        "Synthetic voices — no sample required. MiniMax 2.8 HD/Turbo handle French well.",
+    "Moteur de clonage":            "Cloning engine",
+    "F5-TTS  ·  EN/ZH (FR expérimental)":   "F5-TTS  ·  EN/ZH (FR experimental)",
+    "Index TTS 2  ·  clonage multilingue FR":   "Index TTS 2  ·  multilingual FR cloning",
+    # ── Sound Design : moteur vidéo→son ───────────────────────────────────────
+    "Moteur":                       "Engine",
+    "SFX 1.6 (Mirelo)  ·  bande-son auto":  "SFX 1.6 (Mirelo)  ·  auto soundtrack",
+    "Foley Control  ·  SFX synchronisés (~$0.002/s)":
+        "Foley Control  ·  synced SFX (~$0.002/s)",
     "Chargez un fichier audio de référence pour utiliser le clonage de voix.":
         "Load a reference audio file to use voice cloning.",
     "La langue est détectée automatiquement depuis le texte saisi — écris en français, le rendu sera en français.":

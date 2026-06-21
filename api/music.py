@@ -6,7 +6,8 @@ qui bascule mock ↔ réel selon la présence de la clé fal.ai (`api_key` de co
 sur le même pattern que api/tts.py (SFX 1.6).
 
 Moteurs (cf. .claude/memory/reference_fal_ai_models.md → « Musique — Génération ») :
-  - lyria2          : fal-ai/lyria2                       — Google, instrumental tout style (DÉFAUT)
+  - lyria3          : fal-ai/lyria3/pro                   — Google, dernier modèle, ~3 min (DÉFAUT)
+  - lyria2          : fal-ai/lyria2                       — Google, instrumental tout style
   - cassette        : cassetteai/music-generator         — instrumental jusqu'à 3 min, le moins cher
   - ace-step        : fal-ai/ace-step                     — voix OU instrumental ([inst]), remix/extend
   - diffrhythm      : fal-ai/diffrhythm                   — chanson complète (chant) depuis paroles
@@ -33,6 +34,16 @@ from core.worker import humanize_api_error
 # max_dur       : durée max raisonnable (s) pour le spinbox
 # price         : indication tarifaire affichée
 MUSIC_ENGINES = {
+    "lyria3": {
+        "label":    "Lyria 3 Pro (Google)  ·  dernier modèle · jusqu'à ~3 min  ·  ~$0.08/audio",
+        "endpoint": "fal-ai/lyria3/pro",
+        "kind":     "lyria",
+        "vocals":   False,
+        "lyrics":   False,
+        "max_dur":  180,
+        "price":    "~$0.08 / audio",
+        "default":  True,
+    },
     "lyria2": {
         "label":    "Lyria 2 (Google)  ·  instrumental tout style  ·  ~$0.10/30 s",
         "endpoint": "fal-ai/lyria2",
@@ -41,7 +52,6 @@ MUSIC_ENGINES = {
         "lyrics":   False,
         "max_dur":  60,
         "price":    "~$0.10 / 30 s",
-        "default":  True,
     },
     "cassette": {
         "label":    "CassetteAI  ·  instrumental jusqu'à 3 min  ·  ~$0.02/min (éco)",
@@ -100,7 +110,7 @@ MUSIC_ENGINES = {
 }
 
 # Ordre d'affichage dans le sélecteur (le défaut en tête).
-ENGINE_ORDER = ["lyria2", "cassette", "ace-step", "diffrhythm",
+ENGINE_ORDER = ["lyria3", "lyria2", "cassette", "ace-step", "diffrhythm",
                 "minimax-music", "stable-audio-25", "elevenlabs"]
 
 
@@ -109,7 +119,7 @@ def default_engine() -> str:
     for k, spec in MUSIC_ENGINES.items():
         if spec.get("default"):
             return k
-    return "lyria2"
+    return "lyria3"
 
 
 def engine_spec(key: str) -> dict:

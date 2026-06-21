@@ -1307,6 +1307,63 @@ def draw_to_video():
     assert "addWidget(self._btn_generate, 1)" in src, "bouton file d'attente pleine largeur"
 
 
+@test
+def nouveaux_moteurs_fal_2026():
+    """Veille fal.ai (2026-06-21) intégrée : Lyria 3 Pro, Seedream 5/4.5 + Z-Image +
+    Qwen-Image, Seedance 1.5 Pro / LTX-2 / Wan 2.7 / Hailuo 2.3, TTS MiniMax 2.8 /
+    Gemini / Inworld / Qwen3 / Maya1, Foley Control."""
+    import importlib, inspect, os, sys
+
+    # — Musique : Lyria 3 Pro nouveau défaut —
+    import api.music as mu
+    assert mu.MUSIC_ENGINES["lyria3"]["endpoint"] == "fal-ai/lyria3/pro"
+    assert mu.default_engine() == "lyria3" and mu.ENGINE_ORDER[0] == "lyria3"
+
+    # — Image : Studio Images (Seedream 5/4.5, Z-Image, Qwen-Image) —
+    _sd = os.path.join(os.path.dirname(os.path.dirname(__file__)), "studio_images")
+    if _sd not in sys.path:
+        sys.path.insert(0, _sd)
+    eng = importlib.import_module("engines")
+    for k in ("seedream5", "seedream45", "zimage", "qwen_image"):
+        assert k in eng.ENGINES, f"moteur image {k} manquant"
+    ep, _a, _ = eng.build_request("seedream5", "x", (1024, 768), "1K", [])
+    assert ep == "fal-ai/bytedance/seedream/v5/lite/text-to-image"
+    ep2, a2, _ = eng.build_request("seedream5", "x", (1024, 768), "1K", ["data:img"])
+    assert ep2.endswith("/edit") and "image_urls" in a2, "Seedream 5 édition (refs)"
+
+    # — Vidéo : workers + endpoints exacts —
+    import api.video_engines as ve
+    assert ve.Seedance15Worker.ENDPOINT_T2V == "fal-ai/bytedance/seedance/v1.5/pro/text-to-video"
+    assert ve.Seedance15Worker.ENDPOINT_I2V.endswith("/image-to-video") and ve.Seedance15Worker.END_FRAME
+    assert ve.LTX2Worker.ENDPOINT_T2V == "fal-ai/ltx-2/text-to-video"
+    assert ve.Wan27Worker.ENDPOINT_T2V == "fal-ai/wan/v2.7/text-to-video"
+    assert ve.Hailuo23Worker.ENDPOINT_T2V == "fal-ai/minimax/hailuo-2.3/pro/text-to-video"
+
+    # — Onglet vidéo direct : 6 nouveaux moteurs + dispatch (Cinéma ET Live) —
+    for mod in ("ui.tab_video_engines", "ui.tab_video_engines_live"):
+        m = importlib.import_module(mod)
+        keys = [k for _, k, _ in m.TabVideoEngines._ENGINES]
+        for need in ("seedance15_t2v", "seedance15_i2v", "ltx2_t2v", "ltx2_i2v",
+                     "wan27_t2v", "hailuo23_t2v"):
+            assert need in keys, f"{mod}: moteur {need} manquant"
+        dsrc = inspect.getsource(m.TabVideoEngines._on_generate)
+        for w in ("Seedance15Worker", "LTX2Worker", "Wan27Worker", "Hailuo23Worker"):
+            assert w in dsrc, f"{mod}: dispatch {w} manquant"
+
+    # — TTS : registre + workers + page Doublage (3e mode + moteur de clonage) —
+    import api.tts as tts
+    assert len(tts.SPEECH_ENGINES) == 6 and "minimax-2.8-hd" in tts.SPEECH_ENGINES
+    assert hasattr(tts, "FalSpeechWorker") and hasattr(tts, "FoleyControlWorker")
+    psrc = inspect.getsource(importlib.import_module("ui.page_doublage"))
+    for tok in ("_speech_combo", "_clone_engine_combo", "FalSpeechWorker", "IndexTTS2Worker"):
+        assert tok in psrc, f"page_doublage : {tok} manquant"
+
+    # — Foley Control câblé dans les deux Sound Design —
+    for mod in ("ui.tab_sound_design", "ui.tab_sound_design_live"):
+        s = inspect.getsource(importlib.import_module(mod))
+        assert "FoleyControlWorker" in s and "_video_engine_combo" in s, f"{mod}: Foley non câblé"
+
+
 # ══════════════════════════════════════════════════════════════════════════════
 # Runner
 # ══════════════════════════════════════════════════════════════════════════════
