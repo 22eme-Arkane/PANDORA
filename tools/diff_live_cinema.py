@@ -87,6 +87,9 @@ EXPECTED_ONLY_CINEMA = {
     "ui/page_storyboard_live.py": {
         # Sauvegarder/Ouvrir le storyboard en fichier (dossier Storyboard) — Cinéma only.
         "_on_save_storyboard_file", "_on_open_storyboard_file",
+        # Clic droit sur un plan → Dupliquer (copie le plan + sa mise en scène) —
+        # Cinéma only pour l'instant (reportable au Live si besoin).
+        "_on_duplicate", "contextMenuEvent",
     },
     "ui/dialog_contact_live.py": {
         # Divergence LÉGÈRE voulue (2026-06-12) : le Live est une sous-classe

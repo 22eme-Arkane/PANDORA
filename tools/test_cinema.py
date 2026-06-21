@@ -496,6 +496,14 @@ def decor_sept_vues():
     assert "offer_room_views=True" in eg and "views_finished" in eg
     assert "room_views" in eg and "generated_images" in eg, \
         "depuis le scénario : les 7 vues fusionnées dans un seul décor"
+    # RÉSILIENCE des 6 faces (fix « seul le plan d'ensemble + le plan » sont générés) :
+    # édition NB2 désactivée dès le 1er échec + repli texte robuste (3 essais, backoff)
+    # + diagnostic des faces manquantes remonté au dialogue.
+    assert "edit_disabled" in nb and "range(3)" in nb, "repli texte robuste (3 essais)"
+    assert "_faces_ok" in nb and "_last_error" in nb, "worker remonte les faces manquantes"
+    assert hasattr(w, "_faces_ok") and hasattr(w, "_last_error"), "attributs de diagnostic présents"
+    assert "_room_warnings" in eg and "Vues manquantes" in eg, \
+        "dialogue : avertissement consolidé des faces manquantes"
     # Identifier+générer depuis le scénario : image unique (portrait), pas 5 vues.
     assert 'gen_mode="classic"' in eg and 'gen_mode="sheet_5views"' not in eg, \
         "personnages : portrait unique par défaut depuis le scénario"
@@ -938,6 +946,91 @@ def staging_outils_projecteurs_sections():
     assert pr.families() and pr.models("led_panel"), "catalogue famille → modèles"
     assert any("SkyPanel" in m for m in pr.models("led_panel"))
     assert any("Titan" in m for m in pr.models("tube"))
+    # Réglages du projecteur — capacités RÉELLES par modèle (d'après les specs)
+    assert pr.capabilities("led_panel", "ARRI SkyPanel S60-C")["color"] == "full"
+    assert pr.capabilities("cob", "Aputure LS 600d Pro")["color"] == "daylight"
+    assert pr.capabilities("cob", "Aputure LS 600x Pro")["color"] == "bicolor"
+    assert pr.capabilities("fresnel", "ARRI 650 (tungstène)")["color"] == "tungsten"
+    assert pr.capabilities("fresnel", "ARRI L7-C (LED)")["color"] == "full"
+    assert pr.capabilities("profile", "ETC Source Four 26°")["beam"] == (26, 26), "faisceau ellipsoïdale = degré du nom"
+    assert pr.GEL_PRESETS and hasattr(pr, "describe_settings") and hasattr(pr, "default_settings")
+    _d = pr.describe_settings({"family": "led_panel", "model": "ARRI SkyPanel S60-C",
+                               "settings": {"intensity": 80, "cct": 4300}})
+    assert "80 %" in _d and "4300 K" in _d, "réglages décrits pour le prompt"
+    # Hauteur · inclinaison · louver · on/off · effets dynamiques (LED couleur)
+    assert pr.capabilities("led_panel", "ARRI SkyPanel S60-C")["effects"] is True
+    assert pr.capabilities("fresnel", "ARRI 650 (tungstène)")["effects"] is False
+    assert pr.capabilities("practical", "Bougie / flamme")["louver"] is False
+    assert pr.EFFECTS and any(c == "police" for c, _, _ in pr.EFFECTS)
+    _ds = pr.default_settings("led_panel", "ARRI SkyPanel S60-C")
+    for k in ("on", "height", "tilt", "louver", "effect"):
+        assert k in _ds, f"réglage {k}"
+    _dfx = pr.describe_settings({"family": "led_panel", "model": "ARRI SkyPanel S60-C",
+                                 "settings": {"on": True, "effect": "police", "height": 3, "tilt": 45}})
+    assert "EFFET" in _dfx and "10000 K" not in _dfx, "un effet REMPLACE la couleur statique"
+    assert "3 m de haut" in _dfx and "plongée" in _dfx, "hauteur + inclinaison décrites"
+    assert pr.describe_settings({"settings": {"on": False}}).startswith("ÉTEINT"), "éteint = n'éclaire pas"
+    # Fenêtre de réglages adaptée aux capacités + menu clic droit + report prompt
+    from ui.dialog_projector_settings import ProjectorSettingsDialog
+    _ps = ProjectorSettingsDialog(light={"family": "led_panel", "model": "ARRI SkyPanel S60-C"})
+    assert _ps._sl_cct is not None and _ps._sl_hue is not None, "full = température + teinte"
+    assert _ps._sl_height is not None and _ps._sl_tilt is not None, "hauteur + inclinaison"
+    assert _ps._fx_combo is not None and _ps._louver_cb is not None, "effet + louver (SkyPanel)"
+    _pt = ProjectorSettingsDialog(light={"family": "fresnel", "model": "ARRI 650 (tungstène)"})
+    assert _pt._sl_cct is None and _pt._gel_combo is not None, "tungstène = gélatine, CCT fixe"
+    assert _pt._fx_combo is None, "pas d'effets sur un tungstène"
+    _pfx = ProjectorSettingsDialog(light={"family": "led_panel", "model": "ARRI SkyPanel S60-C",
+                                          "settings": {"effect": "candle"}})
+    assert _pfx._sl_cct is not None and not _pfx._sl_cct.isEnabled(), "couleur désactivée si effet actif"
+    _psrc0 = inspect.getsource(__import__("ui.page_staging", fromlist=["_"]))
+    assert "_settings_light" in _psrc0 and "Réglages du projecteur" in _psrc0, "clic droit → Réglages du projecteur"
+    assert "_toggle_light" in _psrc0 and "Éteindre le projecteur" in _psrc0, "clic droit → allumer/éteindre"
+    assert "_on_camera_context" in _psrc0 and "_camera_height" in _psrc0, "clic droit caméra → hauteur"
+    assert "camera_distance_m" in _psrc0, "déplacer la caméra écrit la distance (DIST.) dans le storyboard"
+    _cvsrc = inspect.getsource(__import__("ui.staging_canvas", fromlist=["_"]))
+    assert "camera_context" in _cvsrc and 'setOpacity(0.30)' in _cvsrc, "signal caméra + jeton éteint grisé"
+    assert "describe_settings" in inspect.getsource(
+        __import__("core.staging", fromlist=["_"]).lighting_summary), \
+        "les réglages partent dans la section [PLAN DE FEU]"
+    # Plan de feu RELATIF À L'AXE CAMÉRA + distances CHIFFRÉES (échelle RÉELLE du décor)
+    import core.staging as _stg
+    assert _stg.plan_span_m({}) == 10.0 and hasattr(_stg, "camera_distance_m"), "échelle réelle du plan"
+    _sid = "harness_light_axis"
+    _stg.save(_sid, {"camera": {"x": .5, "y": .15, "angle": 0.0},
+                     "actors": [{"name": "Sujet", "x": .5, "y": .55}], "props": [],
+                     "lights": [{"name": "Key", "type": "key", "family": "led_panel",
+                                 "model": "ARRI SkyPanel S60-C", "x": .25, "y": .5,
+                                 "settings": {"on": True, "intensity": 90, "cct": 5600}},
+                                {"name": "Off", "type": "fill", "family": "cob",
+                                 "model": "Aputure LS 600d Pro", "x": .75, "y": .5,
+                                 "settings": {"on": False}}]})
+    _lt_top = _stg.lighting_summary(_sid)
+    assert "côté caméra" in _lt_top and "m de Sujet" in _lt_top, "direction caméra + distance chiffrée"
+    assert "Key" in _lt_top and "Off" not in _lt_top, "projecteur éteint exclu du prompt"
+    assert _stg.camera_distance_m(_stg.get(_sid)) > 0, "distance caméra dérivée de l'échelle réelle"
+    _rec = _stg.get(_sid); _rec["camera"]["y"] = .9; _stg.save(_sid, _rec)
+    _lt_bot = _stg.lighting_summary(_sid)
+    import re as _re2
+    def _camside(t):
+        m = _re2.search(r"côté caméra (\w+)", t)
+        return m.group(1) if m else "-"
+    assert _camside(_lt_top) != _camside(_lt_bot), "le côté caméra s'inverse si la caméra change de côté"
+    # Clic droit sur la liste → copier le plan de feu / la mise en scène d'un autre plan
+    assert "_on_list_context" in _psrc0 and "_copy_staging_from" in _psrc0 and "_do_copy" in _psrc0, \
+        "copier d'un autre plan (scènes similaires)"
+    from ui.page_staging import PageLighting as _PL
+    _stg.save("cp_src", {"camera": {"x": .5, "y": .2}, "actors": [{"name": "A", "x": .5, "y": .5}],
+                         "props": [], "lights": [{"name": "K", "type": "key", "family": "led_panel",
+                                                  "model": "ARRI SkyPanel S60-C", "x": .3, "y": .5,
+                                                  "settings": {"on": True}}]})
+    _stg.save("cp_dst", {"camera": {"x": .5, "y": .2}, "actors": [], "props": [], "lights": []})
+    _pl = _PL()
+    _pl._shots = [{"id": "cp_src", "number": 1}, {"id": "cp_dst", "number": 2, "seedance_prompt": ""}]
+    _pl._shot = None
+    _pl._do_copy(_pl._shots[0], _pl._shots[1])
+    assert len(_stg.get("cp_dst")["lights"]) == 1 \
+        and _stg.get("cp_dst")["lights"][0]["model"] == "ARRI SkyPanel S60-C", \
+        "le plan de feu est copié vers le plan cible"
 
     # Sections de prompt (7 sections, libellés crochets+emoji) + strip du son
     import core.prompt_sections as ps
@@ -1010,6 +1103,23 @@ def staging_outils_projecteurs_sections():
     # Découpage : la section [🖼️ TECHNIQUE] se reconstruit depuis les champs caméra à la sauvegarde du plan
     dsh = inspect.getsource(__import__("ui.dialog_shot", fromlist=["_"]).ShotDialog._on_save)
     assert "technique_line" in dsh, "découpage : Technique reconstruite depuis les champs caméra"
+    # Édition INLINE focale/mouvement (etc.) dans le storyboard → [🖼️ TECHNIQUE] réécrite
+    sbsrc = inspect.getsource(__import__("ui.page_storyboard", fromlist=["_"]))
+    assert "_rebuild_technique" in sbsrc and "_CAM_FIELDS" in sbsrc, \
+        "storyboard : changer focale/mouvement réécrit la section Technique inline"
+    # Clic droit dans le storyboard → DUPLIQUER un plan (copie + mise en scène)
+    assert "duplicate_requested" in sbsrc and "_on_duplicate" in sbsrc \
+        and "Dupliquer le plan" in sbsrc, "clic droit storyboard → Dupliquer"
+    import core.storyboard as _sb2
+    assert hasattr(_sb2, "duplicate_shot"), "API duplicate_shot"
+    _src = _sb2.save_shot({"scene_title": "Plan original", "seedance_prompt": "[🎬 ACTION]\nx"})
+    _vid = _src.get("version_id")
+    _before = len(_sb2.list_shots(_vid))
+    _dup = _sb2.duplicate_shot(_src["id"])
+    assert _dup and _dup["id"] != _src["id"], "un nouveau plan est créé"
+    assert _dup.get("scene_title", "").endswith("(copie)"), "titre suffixé « (copie) »"
+    assert "ACTION" in _dup.get("seedance_prompt", ""), "contenu (prompt) copié"
+    assert len(_sb2.list_shots(_vid)) == _before + 1, "un plan de plus dans la version"
     # « Tout supprimer » retire AUSSI le plan de décor assigné (B4)
     from ui.staging_canvas import StagingCanvas as _SC2
     _cp = _SC2(mode="staging")

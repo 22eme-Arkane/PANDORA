@@ -70,6 +70,9 @@ class _Token(QGraphicsEllipseItem):
             self.setFlag(QGraphicsEllipseItem.GraphicsItemFlag.ItemIsSelectable, True)
             self.setFlag(QGraphicsEllipseItem.GraphicsItemFlag.ItemSendsGeometryChanges, True)
         self.setPos(model.get("x", 0.5) * _SIZE, model.get("y", 0.5) * _SIZE)
+        # Projecteur ÉTEINT → jeton grisé (toujours déplaçable / clic droit).
+        if kind == "light" and not (model.get("settings") or {}).get("on", True):
+            self.setOpacity(0.30)
         if model.get("name"):
             self.setToolTip(model.get("name"))
 
@@ -138,8 +141,9 @@ class StagingCanvas(QGraphicsView):
     (lumières). load(record) puis commit() pour relire les positions."""
     changed       = pyqtSignal()
     selection     = pyqtSignal()
-    actor_context = pyqtSignal(object)   # clic droit sur un acteur (model dict)
-    light_context = pyqtSignal(object)   # clic droit sur une lumière (model dict)
+    actor_context  = pyqtSignal(object)   # clic droit sur un acteur (model dict)
+    light_context  = pyqtSignal(object)   # clic droit sur une lumière (model dict)
+    camera_context = pyqtSignal(object)   # clic droit sur la caméra (model dict)
 
     def __init__(self, mode: str = "staging"):
         super().__init__()
@@ -212,7 +216,13 @@ class StagingCanvas(QGraphicsView):
     def contextMenuEvent(self, e):
         sp   = self.mapToScene(e.pos())
         tok  = self._token_at(self._scene.itemAt(sp, self.transform()))
-        if tok is None or tok.reference:
+        if tok is None:
+            return
+        # La caméra a un menu même en référence (Plan de feu) → régler sa hauteur.
+        if tok.kind == "camera":
+            self.camera_context.emit(tok.model)
+            return
+        if tok.reference:
             return
         if tok.kind == "actor":
             self.actor_context.emit(tok.model)

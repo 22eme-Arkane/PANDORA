@@ -102,6 +102,10 @@ class PageStaging(QWidget):
             f"QListWidget::item:selected{{background:{CP['accent_dim']};color:#07080f;}}"
         )
         self._list.currentRowChanged.connect(self._on_shot_changed)
+        # Clic droit sur un plan → copier la mise en scène / le plan de feu d'un
+        # autre plan (scènes similaires : ne pas tout recréer).
+        self._list.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
+        self._list.customContextMenuRequested.connect(self._on_list_context)
         left.addWidget(self._list, 1)
         body.addLayout(left)
 
@@ -111,6 +115,7 @@ class PageStaging(QWidget):
         self._canvas.changed.connect(self._autosave)
         self._canvas.actor_context.connect(self._on_actor_context)
         self._canvas.light_context.connect(self._on_light_context)
+        self._canvas.camera_context.connect(self._on_camera_context)
         # Auto-synchro INSTANTANÉE des sections du prompt — débouncée (250 ms) pour
         # rester fluide pendant un glissé. Mise en scène → [🎭 MISE EN SCÈNE] + axe /
         # placement caméra ; Plan de feu → [💡 PLAN DE FEU]. Plus besoin du menu.
@@ -376,9 +381,48 @@ class PageStaging(QWidget):
     def _on_light_context(self, model: dict):
         menu = QMenu(self)
         menu.addAction(translate("Modifier le projecteur"), lambda: self._edit_light(model))
+        menu.addAction(translate("Réglages du projecteur"), lambda: self._settings_light(model))
+        _on = (model.get("settings") or {}).get("on", True)
+        menu.addAction(translate("Éteindre le projecteur") if _on else translate("Allumer le projecteur"),
+                       lambda: self._toggle_light(model))
         menu.addSeparator()
         menu.addAction(translate("Supprimer"), lambda: self._canvas.remove_model(model))
         menu.exec(self.cursor().pos())
+
+    def _toggle_light(self, model: dict):
+        """Allume / éteint le projecteur : éteint → jeton grisé + exclu du prompt."""
+        import core.projectors as proj
+        s = model.setdefault("settings",
+                             proj.default_settings(model.get("family", ""), model.get("model", "")))
+        s["on"] = not s.get("on", True)
+        self._canvas.reload()
+        self._autosave()
+
+    def _on_camera_context(self, model: dict):
+        menu = QMenu(self)
+        menu.addAction(translate("Hauteur de la caméra"), lambda: self._camera_height(model))
+        menu.exec(self.cursor().pos())
+
+    def _camera_height(self, model: dict):
+        from PyQt6.QtWidgets import QInputDialog
+        cur = float(model.get("height", 1.5) or 1.5)
+        h, ok = QInputDialog.getDouble(self, translate("Hauteur de la caméra"),
+                                       translate("Hauteur (m) :"), cur, 0.0, 12.0, 1)
+        if ok:
+            model["height"] = h
+            self._autosave()
+
+    def _settings_light(self, model: dict):
+        """Réglages réalistes du projecteur (intensité, température, teinte, ±vert,
+        gélatine, faisceau) selon les capacités du modèle → écrits dans le prompt."""
+        from ui.dialog_projector_settings import ProjectorSettingsDialog
+        dlg = ProjectorSettingsDialog(self, light=model)
+        if dlg.exec() == ProjectorSettingsDialog.DialogCode.Accepted:
+            r = dlg.result_data()
+            if r is not None:
+                model["settings"] = r
+                self._canvas.reload()
+                self._autosave()   # → débounce → réécrit [💡 PLAN DE FEU] avec les réglages
 
     def _edit_light(self, model: dict):
         from ui.dialog_projector import ProjectorDialog
@@ -525,50 +569,121 @@ class PageStaging(QWidget):
         self._sync_timer.start()
 
     def _apply_current_to_storyboard(self):
-        """Réécrit INSTANTANÉMENT la section concernée du prompt du plan COURANT
-        depuis le canevas, et sauvegarde le plan dans le storyboard :
-          · Mise en scène → section [🎭 MISE EN SCÈNE] + axe / placement caméra ;
-          · Plan de feu    → section [💡 PLAN DE FEU].
+        """Réécrit INSTANTANÉMENT la(les) section(s) du prompt du plan COURANT."""
+        if self._shot:
+            self._write_sections(self._shot, staging.get(self._shot["id"]))
+
+    def _write_sections(self, shot: dict, rec: dict):
+        """Réécrit la(les) section(s) concernée(s) du prompt d'UN plan depuis son
+        record de mise en scène, et sauvegarde le plan dans le storyboard :
+          · Mise en scène → [🎭 MISE EN SCÈNE] + axe / placement / distance caméra ;
+          · Plan de feu    → [💡 PLAN DE FEU].
+        ⚠ Le PLAN DE FEU dépend de l'AXE CAMÉRA (direction relative de la lumière) :
+        il est donc recalculé AUSSI quand on déplace la caméra en Mise en scène.
         Les autres sections (Action, Ambiance, Décor, Technique, Sound) sont préservées."""
-        if not self._shot:
-            return
         from core.prompt_sections import parse as _parse, build as _build
-        sid = self._shot["id"]
-        rec = staging.get(sid)
-        cur = self._shot.get("seedance_prompt", "") or ""
+        sid = shot["id"]
+        cur = shot.get("seedance_prompt", "") or ""
         sec = _parse(cur)
         changed = False
+        # Plan de feu RELATIF À LA CAMÉRA → recalculé dans les 2 modes s'il y a des
+        # lumières (sinon on préserve l'intention de lumière éventuelle du découpage).
+        if rec.get("lights"):
+            light_txt = staging.lighting_summary(sid)
+            if light_txt != sec.get("lighting", ""):
+                sec["lighting"] = light_txt
+                changed = True
+        elif self._mode == "lighting" and sec.get("lighting"):
+            sec["lighting"] = ""   # plus aucune lumière en mode plan de feu → vider
+            changed = True
         if self._mode == "staging":
             staging_txt = staging.staging_actors_summary(sid)
             if staging_txt != sec.get("staging", ""):
                 sec["staging"] = staging_txt
                 changed = True
-            # Caméra → champs TECHNIQUES du plan (pas dans le texte de mise en scène)
+            # Caméra → champs TECHNIQUES du plan (axe + placement) ET distance RÉELLE
+            # (colonne DIST. du storyboard) dérivée de la position sur l'échelle du décor.
             cam = rec.get("camera") or {}
             axis = staging.axis_from_angle(cam.get("angle", 0)) if cam else ""
             zone = staging.camera_placement(sid)
-            if axis and self._shot.get("camera_axis") != axis:
-                self._shot["camera_axis"] = axis
+            if axis and shot.get("camera_axis") != axis:
+                shot["camera_axis"] = axis
                 changed = True
-            if zone and self._shot.get("camera_placement") != zone:
-                self._shot["camera_placement"] = zone
+            if zone and shot.get("camera_placement") != zone:
+                shot["camera_placement"] = zone
                 changed = True
-        else:
-            light_txt = staging.lighting_summary(sid)
-            if light_txt != sec.get("lighting", ""):
-                sec["lighting"] = light_txt
-                changed = True
+            dist_m = staging.camera_distance_m(rec)
+            if dist_m > 0:
+                dist_str = f"{dist_m:g}m"
+                if shot.get("camera_distance") != dist_str:
+                    shot["camera_distance"] = dist_str
+                    changed = True
         if not changed:
             return
-        self._shot["seedance_prompt"] = _build(
+        shot["seedance_prompt"] = _build(
             action=sec.get("action") or cur, staging=sec.get("staging", ""),
             ambiance=sec.get("ambiance", ""), decor=sec.get("decor", ""),
             lighting=sec.get("lighting", ""), technique=sec.get("technique", ""),
-            sound=sec.get("sound", "") or (self._shot.get("sound_prompt") or ""))
+            sound=sec.get("sound", "") or (shot.get("sound_prompt") or ""))
         try:
-            sb_api.save_shot({k: v for k, v in self._shot.items() if not k.startswith("_")})
+            sb_api.save_shot({k: v for k, v in shot.items() if not k.startswith("_")})
         except Exception:
             pass
+
+    # ── Clic droit sur la liste : copier d'un autre plan (scènes similaires) ─────
+
+    def _on_list_context(self, pos):
+        item = self._list.itemAt(pos)
+        if item is None:
+            return
+        row = self._list.row(item)
+        if row < 0 or row >= len(self._shots):
+            return
+        target = self._shots[row]
+        others = [(i, s) for i, s in enumerate(self._shots) if i != row]
+        menu = QMenu(self)
+        head = menu.addAction(
+            translate("Copier le plan de feu d'un autre plan") if self._mode == "lighting"
+            else translate("Copier la mise en scène d'un autre plan"))
+        head.setEnabled(False)
+        menu.addSeparator()
+        if not others:
+            menu.addAction(translate("(aucun autre plan)")).setEnabled(False)
+        for i, s in others:
+            nm = f"{translate('Plan')} {s.get('number', i + 1)}"
+            t = (s.get("scene_title") or s.get("seq_name") or "").strip()
+            if t:
+                nm += f" — {t}"
+            menu.addAction(nm, lambda _=False, src=s, tgt=target: self._copy_staging_from(src, tgt))
+        menu.exec(self._list.mapToGlobal(pos))
+
+    def _do_copy(self, src_shot: dict, tgt_shot: dict) -> str:
+        """Copie (sans UI) la mise en scène (mode staging : caméra + acteurs +
+        accessoires) ou le plan de feu (mode lighting : projecteurs) d'un plan SOURCE
+        vers un plan CIBLE. Réécrit le prompt du plan cible ; recharge si courant.
+        Renvoie le libellé du résultat."""
+        import copy as _copy
+        src = staging.get(src_shot["id"])
+        tgt = staging.get(tgt_shot["id"])
+        if self._mode == "staging":
+            tgt["camera"] = _copy.deepcopy(src.get("camera") or tgt.get("camera") or {})
+            tgt["actors"] = _copy.deepcopy(src.get("actors") or [])
+            tgt["props"]  = _copy.deepcopy(src.get("props") or [])
+            tgt["_actors_seeded"] = True   # ne pas re-semer depuis character_names
+            what = translate("Mise en scène copiée")
+        else:
+            tgt["lights"] = _copy.deepcopy(src.get("lights") or [])
+            what = translate("Plan de feu copié")
+        staging.save(tgt_shot["id"], tgt)
+        self._write_sections(tgt_shot, tgt)
+        if self._shot and self._shot.get("id") == tgt_shot.get("id"):
+            self._reload_current()
+        return what
+
+    def _copy_staging_from(self, src_shot: dict, tgt_shot: dict):
+        what = self._do_copy(src_shot, tgt_shot)
+        src_lbl = f"{translate('Plan')} {src_shot.get('number', '?')}"
+        QMessageBox.information(self, translate("Copier"), f"{what} ({src_lbl}).")
 
 
 class PageLighting(PageStaging):

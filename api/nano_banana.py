@@ -1810,6 +1810,10 @@ class GenerateRoomViewsWorker(QThread):
         self._name         = decor_name
         self._model_key    = model_key
         self._style_suffix = style_suffix
+        # Diagnostic lisible par le dialogue après views_finished.
+        self._faces_ok     = 0
+        self._faces_total  = 6
+        self._last_error   = ""
 
     def run(self):
         cfg = load_config()
@@ -1915,6 +1919,12 @@ class GenerateRoomViewsWorker(QThread):
                 "their RELATIVE POSITIONS. Strict spatial continuity with the references."
             )
             faces = build_six_view_prompts(base_en)
+            # ⚠ Si l'édition NB2 échoue UNE fois, on la désactive pour les faces
+            # suivantes : 6 appels edit qui échouent saturent l'API et font capoter
+            # les replis texte (symptôme « seul le plan d'ensemble + le plan »).
+            edit_disabled = not ref_urls
+            last_err = ""
+            n_faces_ok = 0
             for i, (label, code, fprompt) in enumerate(faces):
                 self.progress.emit(
                     30 + int(i / len(faces) * 66),
@@ -1924,27 +1934,41 @@ class GenerateRoomViewsWorker(QThread):
                 if self._style_suffix:
                     base_full = f"{base_full}, {self._style_suffix}"
                 data = None
-                if ref_urls:
+                # a) tentative edit (raccord) — best-effort, désactivée au 1er échec.
+                if not edit_disabled:
                     try:
                         data = _gen_edit(f"{base_full}\n\n{consistency}\n\n{_DECOR_LINE}",
                                          ref_urls, "16:9")
-                    except Exception:
+                    except Exception as e:
+                        last_err = str(e)
+                        edit_disabled = True
                         data = None
-                if data is None:   # repli : génération texte simple (sans injection)
-                    for _attempt in range(2):
+                # b) repli texte ROBUSTE (3 essais, backoff) — même génération que le
+                #    plan d'ensemble, donc fiable ; le backoff absorbe les limites de débit.
+                if data is None:
+                    for _attempt in range(3):
                         try:
                             data = _gen_text(f"{base_full}\n\n{_DECOR_LINE}", "16:9")
                             break
-                        except Exception:
+                        except Exception as e:
+                            last_err = str(e)
                             data = None
-                            time.sleep(3)   # transitoire (ex. limite de débit) → 1 réessai
+                            time.sleep(4 * (_attempt + 1))   # 4s, 8s, 12s
                     if data is None:
                         continue   # cette face échoue vraiment, on garde les autres
                 p = _save(data, code)
                 # Prompt PAR VUE renvoyé (cadrage compris) → régénération fidèle.
                 out.append({"label": label, "code": code, "path": p, "prompt": fprompt})
+                n_faces_ok += 1
 
-            self.progress.emit(100, "Pièce générée (plan + 7 vues raccord) !")
+            # Diagnostic remonté au dialogue (faces manquantes + dernière erreur API).
+            self._faces_ok    = n_faces_ok
+            self._faces_total = len(faces)
+            self._last_error  = last_err
+            if n_faces_ok < len(faces):
+                self.progress.emit(100, f"⚠ {n_faces_ok}/{len(faces)} faces générées — {last_err[:90]}")
+            else:
+                self.progress.emit(100, "Pièce générée (plan + 7 vues raccord) !")
             self.views_finished.emit(out)
         except Exception as e:
             self.failed.emit(humanize_api_error(f"Erreur Nano Banana : {e}"))

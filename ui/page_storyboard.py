@@ -578,11 +578,28 @@ class _WrapLabel(QLabel):
 # ── Ligne de plan ─────────────────────────────────────────────────────────────
 
 class _ShotRow(QFrame):
-    edit_requested   = pyqtSignal(dict)
-    delete_requested = pyqtSignal(str)
-    changed          = pyqtSignal()
+    edit_requested      = pyqtSignal(dict)
+    delete_requested    = pyqtSignal(str)
+    duplicate_requested = pyqtSignal(str)
+    changed             = pyqtSignal()
 
     _MIN_H = 72
+
+    def contextMenuEvent(self, e):
+        """Clic droit sur un plan : Éditer · Dupliquer · Supprimer."""
+        menu = QMenu(self)
+        menu.setStyleSheet(
+            f"QMenu{{background:{CP['bg2']};border:1px solid {CP['border_bright']};"
+            f"border-radius:8px;padding:4px 0;}}"
+            f"QMenu::item{{color:{CP['text_primary']};padding:7px 18px;font-size:11px;}}"
+            f"QMenu::item:selected{{background:{CP['accent_dim']};color:{CP['text_primary']};}}")
+        menu.addAction(translate("Éditer"), lambda: self.edit_requested.emit(self._data))
+        menu.addAction(translate("Dupliquer le plan"),
+                       lambda: self.duplicate_requested.emit(self._data.get("id", "")))
+        menu.addSeparator()
+        menu.addAction(translate("Supprimer"),
+                       lambda: self.delete_requested.emit(self._data.get("id", "")))
+        menu.exec(e.globalPos())
 
     def _content_height(self) -> int:
         from PyQt6.QtGui import QFont, QFontMetrics
@@ -679,13 +696,39 @@ class _ShotRow(QFrame):
             l.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Minimum)
             return l
 
+        # Champs caméra → alimentent la section [🖼️ TECHNIQUE] du prompt.
+        _CAM_FIELDS = ("camera_movement", "shot_size", "focal", "optic", "speed")
+
+        def _rebuild_technique():
+            """Réécrit INSTANTANÉMENT la section [🖼️ TECHNIQUE] du prompt depuis les
+            champs caméra (uniquement si le prompt est déjà structuré en sections)."""
+            try:
+                from core.prompt_sections import (is_structured as _isS, parse as _pp,
+                                                  build as _pb, technique_line as _tl)
+                p = self._data.get("seedance_prompt", "")
+                if not _isS(p):
+                    return
+                sec = _pp(p)
+                tech = _tl(self._data)
+                if tech != sec.get("technique", ""):
+                    self._data["seedance_prompt"] = _pb(
+                        action=sec["action"], staging=sec["staging"], ambiance=sec["ambiance"],
+                        decor=sec["decor"], lighting=sec["lighting"], technique=tech,
+                        sound=sec["sound"] or self._data.get("sound_prompt", ""))
+            except Exception:
+                pass
+
         def _save_field(key: str, value):
             self._data[key] = value
+            if key in _CAM_FIELDS:
+                _rebuild_technique()
             sb_api.save_shot(self._data)
             self.changed.emit()
 
         def _save_fields(updates: dict):
             self._data.update(updates)
+            if any(k in _CAM_FIELDS for k in updates):
+                _rebuild_technique()
             sb_api.save_shot(self._data)
             self.changed.emit()
 
@@ -2547,6 +2590,7 @@ class PageStoryboard(QWidget):
             row = _ShotRow(shot, decors_cache=decors_cache)
             row.edit_requested.connect(self._on_edit)
             row.delete_requested.connect(self._on_delete)
+            row.duplicate_requested.connect(self._on_duplicate)
             row.changed.connect(self.refresh)
             self._shot_rows[shot["id"]] = row
             self._list_lay.addWidget(row)
@@ -2592,6 +2636,24 @@ class PageStoryboard(QWidget):
         if reply == QMessageBox.StandardButton.Yes:
             sb_api.delete_shot(shot_id)
             self.refresh()
+
+    def _on_duplicate(self, shot_id: str):
+        """Duplique un plan (clic droit → Dupliquer) : copie le plan + sa mise en
+        scène / plan de feu, insérée juste après l'original."""
+        if not shot_id:
+            return
+        dup = sb_api.duplicate_shot(shot_id)
+        if not dup:
+            return
+        # Duplique aussi la mise en scène / le plan de feu (record staging) du plan.
+        try:
+            import core.staging as _stg, copy as _copy
+            rec = _stg.get(shot_id)
+            if rec:
+                _stg.save(dup["id"], _copy.deepcopy(rec))
+        except Exception:
+            pass
+        self.refresh()
 
     def _on_shot_dropped(self, shot_id: str, target_index: int):
         """Reorders shots after a drag-and-drop: moves shot_id to target_index."""

@@ -435,6 +435,31 @@ def delete_shot(shot_id: str):
     _save_index(index)
 
 
+def duplicate_shot(shot_id: str) -> dict | None:
+    """Duplique un plan : copie profonde insérée JUSTE APRÈS l'original, nouvel id,
+    titre suffixé « (copie) ». Renumérote la version. Renvoie le nouveau plan (ou None)."""
+    import copy
+    index = _load_index()
+    src = next((s for s in index if s.get("id") == shot_id), None)
+    if not src:
+        return None
+    now = datetime.now().isoformat()
+    dup = copy.deepcopy(src)
+    dup["id"]         = str(uuid.uuid4())
+    dup["created_at"] = now
+    dup["updated_at"] = now
+    if dup.get("scene_title"):
+        dup["scene_title"] = f"{dup['scene_title']} (copie)"
+    pos = index.index(src)
+    index.insert(pos + 1, dup)
+    _save_index(index)
+    # Renumérote la version pour une numérotation contiguë (la copie suit l'original).
+    vid = src.get("version_id", DEFAULT_VERSION_ID)
+    ordered = [s["id"] for s in index if s.get("version_id", DEFAULT_VERSION_ID) == vid]
+    reorder_shots(vid, ordered)
+    return dup
+
+
 # ── Column order ──────────────────────────────────────────────────────────────
 
 def load_col_order(n_cols: int, default: list | None = None) -> list:

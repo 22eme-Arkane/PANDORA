@@ -86,6 +86,7 @@ class ExtractGenerateDialog(QDialog):
         self._offer_room_views   = offer_room_views
         self._generate_images    = False          # set by user choice
         self._room_views         = False          # set by user choice (décors only)
+        self._room_warnings: list[str] = []       # décors dont des faces ont échoué
         self._saved_items: list[dict] = []
         self._item_rows:   list[_ItemRow] = []
         self._gen_idx      = 0
@@ -553,6 +554,15 @@ class ExtractGenerateDialog(QDialog):
             self._gen_lbl.setText(
                 f"Décor {self._gen_idx + 1}/{len(self._saved_items)} — "
                 f"{n_views} vue(s) générée(s)")
+            # Faces manquantes (échec API par vue) → avertissement consolidé en fin.
+            w = self._gen_worker
+            fo = getattr(w, "_faces_ok", None)
+            ft = getattr(w, "_faces_total", 6)
+            if fo is not None and fo < ft:
+                err = getattr(w, "_last_error", "") or ""
+                self._room_warnings.append(
+                    f"{base} : {fo}/{ft} faces générées"
+                    + (f" — {err[:140]}" if err else ""))
         else:
             row.set_state("NO_IMG")
 
@@ -581,6 +591,15 @@ class ExtractGenerateDialog(QDialog):
         self._status_lbl.setText(
             f"{total} élément(s) sauvegardé(s) · {done} image(s) générée(s)"
         )
+        if self._room_warnings:
+            from PyQt6.QtWidgets import QMessageBox
+            QMessageBox.warning(
+                self, translate("Vues manquantes"),
+                translate("Certaines faces de décor n'ont pas pu être générées par l'API :")
+                + "\n\n• " + "\n• ".join(self._room_warnings)
+                + "\n\n" + translate("Relancez la génération du décor — c'est souvent une "
+                                     "limite de débit temporaire de l'API d'images."))
+            self._room_warnings = []
         self._maybe_start_floor_plans()
 
     # ── Plans vus de dessus (Mise en scène / Plan de feu) ───────────────────────
