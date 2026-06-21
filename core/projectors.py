@@ -304,8 +304,10 @@ def kelvin_label(cct: int) -> str:
 
 
 def _hue_label(hue: int) -> str:
-    table = [(15, "rouge"), (45, "ambre/orange"), (70, "jaune"), (150, "vert"),
-             (200, "cyan"), (255, "bleu"), (310, "magenta/violet"), (360, "rose/rouge")]
+    # Libellés TRANCHÉS (une seule couleur, jamais « rose/rouge ») pour éviter
+    # toute imprécision dans le prompt.
+    table = [(15, "rouge"), (40, "orange"), (65, "jaune"), (155, "vert"),
+             (195, "cyan"), (255, "bleu"), (290, "violet"), (335, "magenta"), (360, "rouge")]
     for h, lbl in table:
         if hue <= h:
             return lbl
@@ -325,17 +327,22 @@ def describe_settings(light: dict) -> str:
         parts.append(f"intensité {inten} %")
     # Effet dynamique → REMPLACE la couleur statique (bougie, gyrophare…).
     eff = s.get("effect", "")
+    has_tint = cap["color"] == "full" and s.get("saturation", 0) > 0
     if eff and cap.get("effects"):
         parts.append(f"EFFET {effect_label(eff).lower()} ({effect_desc(eff)})")
+    elif has_tint:
+        # Une TEINTE colorée remplace la température : on n'écrit PAS le CCT, sinon
+        # « lumière rouge » + « tungstène » se contredisent. Lumière colorée nette.
+        parts.append(f"lumière colorée {_hue_label(s.get('hue', 0))} saturée à {s.get('saturation')} %")
+        gm = s.get("green_magenta", 0)
+        if gm:
+            parts.append(("correction verte" if gm > 0 else "correction magenta") + f" {abs(gm)} %")
     else:
         cct = s.get("cct") or cap["cct"][0]
         parts.append(f"{cct} K ({kelvin_label(cct)})")
-        if cap["color"] == "full" and s.get("saturation", 0) > 0:
-            parts.append(f"teinte {_hue_label(s.get('hue', 0))} (saturation {s.get('saturation')} %)")
         gm = s.get("green_magenta", 0)
         if gm:
-            parts.append(("correction verte" if gm > 0 else "correction magenta")
-                         + f" {abs(gm)} %")
+            parts.append(("correction verte" if gm > 0 else "correction magenta") + f" {abs(gm)} %")
         gel = s.get("gel", "")
         if gel:
             lbl = next((l for c, l in GEL_PRESETS if c == gel), gel)

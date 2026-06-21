@@ -3215,12 +3215,16 @@ class TabT2V(QScrollArea):
         fp = (context + user_text) if context else user_text
 
         if self._active_shot:
-            _focal = self._active_shot.get("focal", "")
-            if _focal:
-                from core.camera_data import focal_to_framing_prefix
-                _fr = focal_to_framing_prefix(_focal)
-                if _fr:
-                    fp = f"{_fr} — {fp}"
+            from core.camera_data import focal_to_framing_prefix, shot_movement_to_prompt
+            _cam_bits = []
+            _fr = focal_to_framing_prefix(self._active_shot.get("focal", ""))
+            if _fr:
+                _cam_bits.append(_fr)
+            _mov = shot_movement_to_prompt(self._active_shot.get("camera_movement", ""))
+            if _mov:
+                _cam_bits.append(_mov)
+            if _cam_bits:
+                fp = f"{', '.join(_cam_bits)} — {fp}"
 
         if (hasattr(self, "_dyn_cam_cb") and self._dyn_cam_cb
                 and self._dyn_cam_cb.isChecked() and not self._active_shot):
@@ -3760,14 +3764,20 @@ class TabT2V(QScrollArea):
         context     = self._casting.get_context()
         full_prompt = (context + prompt) if context else prompt
 
-        # Framing prefix from shot focal — must come first so Seedance obeys the frame type
+        # Framing (focale) + MOUVEMENT caméra du storyboard en tête — pour que
+        # Seedance respecte le cadrage ET le mouvement (« Fixe » = plan fixe, sinon
+        # le modèle dérive souvent en travelling/grue).
         if self._active_shot:
-            _focal = self._active_shot.get("focal", "")
-            if _focal:
-                from core.camera_data import focal_to_framing_prefix
-                _framing = focal_to_framing_prefix(_focal)
-                if _framing:
-                    full_prompt = f"{_framing} — {full_prompt}"
+            from core.camera_data import focal_to_framing_prefix, shot_movement_to_prompt
+            _cam_bits = []
+            _framing = focal_to_framing_prefix(self._active_shot.get("focal", ""))
+            if _framing:
+                _cam_bits.append(_framing)
+            _mov = shot_movement_to_prompt(self._active_shot.get("camera_movement", ""))
+            if _mov:
+                _cam_bits.append(_mov)
+            if _cam_bits:
+                full_prompt = f"{', '.join(_cam_bits)} — {full_prompt}"
 
         import core.style as style_api
         _style_ref_active = bool(

@@ -285,6 +285,31 @@ _MOVEMENT_EN: dict[str, str] = {
     "Panoramique": "pan shot",
 }
 
+# ── Mouvement caméra du STORYBOARD → directive EXPLICITE pour Seedance ───────────
+# « Fixe » formulé fortement : sans ça, le modèle dérive souvent en travelling/grue.
+_SHOT_MOVEMENT_EN: dict[str, str] = {
+    "Fixe":                   "locked-off static camera, fixed tripod shot, absolutely no camera movement, no pan, no tilt, no dolly, no zoom",
+    "Panoramique horizontal": "smooth horizontal panning camera movement",
+    "Panoramique vertical":   "smooth vertical tilting camera movement",
+    "Travelling avant":       "smooth dolly-in, camera tracking forward toward the subject",
+    "Travelling arrière":     "smooth dolly-out, camera tracking backward away from the subject",
+    "Travelling latéral":     "lateral tracking shot, camera dollying sideways",
+    "Zoom avant":             "slow zoom in",
+    "Zoom arrière":           "slow zoom out",
+    "Steadicam":              "smooth flowing steadicam camera movement",
+    "Grue / Drone":           "sweeping crane / drone aerial camera movement",
+    "Caméra portée":          "handheld camera, subtle organic shake",
+    "Plongée":                "high-angle shot looking down on the subject",
+    "Contre-plongée":         "low-angle shot looking up at the subject",
+}
+
+
+def shot_movement_to_prompt(movement: str) -> str:
+    """Mouvement caméra d'un plan storyboard → directive EXPLICITE (anglais) pour
+    Seedance. Renvoie "" si inconnu/vide. « Fixe » est formulé fortement pour que
+    le modèle ne dérive pas en mouvement de caméra."""
+    return _SHOT_MOVEMENT_EN.get((movement or "").strip(), "")
+
 # ── Helpers ────────────────────────────────────────────────────────────────────
 
 def all_camera_brands() -> list[str]:

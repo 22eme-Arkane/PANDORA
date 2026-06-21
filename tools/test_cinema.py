@@ -293,6 +293,16 @@ def prompts_storyboard_cinema():
     assert '"sound_prompt":      self._sound_prompt.toPlainText()' in src_ds, "sound_prompt sauvé"
     assert "self._btn_enhance_seedance = None" in src_ds, "Améliorer Seedance retiré"
     assert "_btn_enhance_action" in src_ds, "Améliorer Action conservé"
+    # Mouvement caméra du storyboard INJECTÉ dans le prompt Seedance (Fixe = plan fixe
+    # explicite, sinon le modèle dérive en travelling/grue).
+    import core.camera_data as _cd
+    assert hasattr(_cd, "shot_movement_to_prompt"), "mapping mouvement caméra → prompt"
+    _fx = _cd.shot_movement_to_prompt("Fixe").lower()
+    assert "static" in _fx and "no camera movement" in _fx, "Fixe = plan fixe explicite"
+    assert _cd.shot_movement_to_prompt("Grue / Drone") and not _cd.shot_movement_to_prompt(""), "mapping mouvements"
+    _t2v = inspect.getsource(__import__("ui.tab_t2v", fromlist=["_"]))
+    assert _t2v.count("shot_movement_to_prompt(self._active_shot") >= 2, \
+        "mouvement injecté dans l'envoi réel ET l'aperçu T2V"
 
 
 @test
@@ -970,6 +980,13 @@ def staging_outils_projecteurs_sections():
     assert "EFFET" in _dfx and "10000 K" not in _dfx, "un effet REMPLACE la couleur statique"
     assert "3 m de haut" in _dfx and "plongée" in _dfx, "hauteur + inclinaison décrites"
     assert pr.describe_settings({"settings": {"on": False}}).startswith("ÉTEINT"), "éteint = n'éclaire pas"
+    # Une TEINTE colorée REMPLACE la température (pas de « rouge » + « tungstène » contradictoires)
+    _dt = pr.describe_settings({"family": "led_panel", "model": "ARRI SkyPanel S60-C",
+                               "settings": {"on": True, "cct": 2800, "hue": 0, "saturation": 100}})
+    assert "rouge" in _dt and "2800 K" not in _dt and "tungst" not in _dt.lower(), \
+        "teinte colorée → pas de température contradictoire"
+    # Libellé de couleur TRANCHÉ (jamais « rose/rouge »)
+    assert "/" not in pr._hue_label(0) and pr._hue_label(0) == "rouge", "libellé couleur net et décisif"
     # Fenêtre de réglages adaptée aux capacités + menu clic droit + report prompt
     from ui.dialog_projector_settings import ProjectorSettingsDialog
     _ps = ProjectorSettingsDialog(light={"family": "led_panel", "model": "ARRI SkyPanel S60-C"})
