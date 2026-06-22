@@ -165,6 +165,68 @@ def _zone(item: dict) -> str:
     return f"{v}-{h}"
 
 
+def _cam_frame(rec):
+    """Repère caméra normalisé : origine = caméra, avant = vers le sujet,
+    droite = image-droite. Sans caméra : avant = bas de l'image, droite = x croissant."""
+    import math
+    cam = rec.get("camera") or {}
+    if cam:
+        cx, cy = cam.get("x", .5), cam.get("y", .5)
+        sx, sy = _subject_pos(rec)
+        fx, fy = sx - cx, sy - cy
+        fn = math.hypot(fx, fy) or 1e-6
+        fx, fy = fx / fn, fy / fn
+        return (cx, cy), (fx, fy), (-fy, fx)
+    return (0.5, 0.5), (0.0, 1.0), (1.0, 0.0)
+
+
+def _actor_placement_phrase(rec, actor) -> str:
+    """Placement d'un acteur EXPRIMÉ PAR RAPPORT à l'élément de décor le plus
+    proche et VU DE LA CAMÉRA (« à droite de la table », « devant le comptoir »,
+    « à la table, à gauche »). Sans élément posé : zone du cadre vue caméra
+    (« au premier plan à gauche »). Recalculé en direct si on déplace l'acteur,
+    l'élément OU la caméra → le prompt reflète exactement la mise en scène."""
+    import math
+    ax, ay = actor.get("x", .5), actor.get("y", .5)
+    (cx, cy), (fx, fy), (rx, ry) = _cam_frame(rec)
+
+    props = rec.get("props") or []
+    if props:
+        prop = min(props, key=lambda p: math.hypot(ax - p.get("x", .5), ay - p.get("y", .5)))
+        px, py = prop.get("x", .5), prop.get("y", .5)
+        name = (prop.get("name") or "l'élément").strip()
+        dist = math.hypot(ax - px, ay - py)
+        vx, vy = ax - px, ay - py                 # élément → acteur
+        lat = vx * rx + vy * ry                    # + = image-droite
+        dep = vx * fx + vy * fy                    # + = plus loin que l'élément (derrière)
+        side  = "à droite" if lat > 0.04 else ("à gauche" if lat < -0.04 else "")
+        depth = "devant" if dep < -0.04 else ("derrière" if dep > 0.04 else "")
+        if dist < 0.09:                            # collé à l'élément → « à la table »
+            return f"à {name}" + (f", {side}" if side else "")
+        side_p = f"{side} de {name}" if side else ""
+        if side_p and depth:
+            return f"{side_p}, {depth}"            # « à droite de la table, devant »
+        if side_p:
+            return side_p
+        if depth:
+            return f"{depth} {name}"               # « devant la table »
+        return f"près de {name}"
+
+    # Aucun élément posé → zone du cadre, vue caméra.
+    vx, vy = ax - cx, ay - cy
+    lat = vx * rx + vy * ry
+    h = "à gauche" if lat < -0.05 else ("à droite" if lat > 0.05 else "au centre")
+    dcam = math.hypot(vx, vy)
+    sx, sy = _subject_pos(rec)
+    dsub = math.hypot(sx - cx, sy - cy) or 1e-6
+    r = dcam / dsub
+    v = ("au premier plan" if r < 0.8
+         else ("à l'arrière-plan" if r > 1.25 else "au milieu du cadre"))
+    if v == "au milieu du cadre" and h == "au centre":
+        return "au centre du cadre"
+    return f"{v} {h}"
+
+
 def staging_summary(shot_id: str) -> str:
     """Résumé MISE EN SCÈNE seule (caméra + personnages + éléments) — pour la
     section [MISE EN SCÈNE] du prompt structuré."""
@@ -177,28 +239,30 @@ def staging_summary(shot_id: str) -> str:
     actors = rec.get("actors") or []
     if actors:
         parts.append("Personnages : " + ", ".join(
-            f"{a.get('name','?')} en {_zone(a)}" for a in actors) + ".")
+            f"{a.get('name','?')} {_actor_placement_phrase(rec, a)}" for a in actors) + ".")
     props = rec.get("props") or []
     if props:
-        parts.append("Éléments : " + ", ".join(
-            f"{p.get('name','?')} en {_zone(p)}" for p in props) + ".")
+        parts.append("Éléments du décor : " + ", ".join(
+            f"{p.get('name','?')} ({_zone(p)})" for p in props) + ".")
     return " ".join(parts)
 
 
 def staging_actors_summary(shot_id: str) -> str:
     """Placement des PERSONNAGES (+ éléments) SEUL — pour la section [MISE EN SCÈNE]
-    du prompt. La caméra, elle, part dans les champs TECHNIQUES du plan
-    (camera_axis / camera_placement) — cf. PageStaging._sync_to_storyboard."""
+    du prompt. Chaque personnage est situé PAR RAPPORT aux éléments du décor posés
+    sur le plan (« à droite de la table ») et vu de la caméra — pas en zone abstraite.
+    La caméra, elle, part dans les champs TECHNIQUES du plan (camera_axis /
+    camera_placement) — cf. PageStaging._sync_to_storyboard."""
     rec = get(shot_id)
     parts = []
     actors = rec.get("actors") or []
     if actors:
         parts.append("Personnages : " + ", ".join(
-            f"{a.get('name','?')} en {_zone(a)}" for a in actors) + ".")
+            f"{a.get('name','?')} {_actor_placement_phrase(rec, a)}" for a in actors) + ".")
     props = rec.get("props") or []
     if props:
-        parts.append("Éléments : " + ", ".join(
-            f"{p.get('name','?')} en {_zone(p)}" for p in props) + ".")
+        parts.append("Éléments du décor en place : "
+                     + ", ".join(p.get("name", "?") for p in props) + ".")
     return " ".join(parts)
 
 
@@ -348,6 +412,14 @@ def lighting_summary(shot_id: str) -> str:
             st = proj.describe_settings(l)
             if st:
                 desc += f" — {st}"
+            # AMBIANCE (mood) calquée sur le type de projecteur — en plus du
+            # technique, ce que Seedance doit ressentir (chaleur, douceur, couleur).
+            try:
+                amb = proj.ambiance_phrase(l)
+            except Exception:
+                amb = ""
+            if amb:
+                desc += f" — ambiance : {amb}"
         bits.append(desc)
     return ("Éclairage (placements RELATIFS À L'AXE CAMÉRA) : " + " ; ".join(bits) + ". "
             "IMPORTANT : les projecteurs / sources d'éclairage ne sont PAS visibles "

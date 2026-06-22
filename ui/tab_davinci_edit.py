@@ -852,7 +852,35 @@ class TabDavinciEdit(QScrollArea):
         self._per_clip_prompt.textChanged.connect(
             lambda: self._pc_counter.setText(str(len(self._per_clip_prompt.toPlainText())))
         )
-        _pc_lay.addWidget(self._per_clip_prompt)
+        # Draw-to-Video — MÊME logo, MÊME emplacement que le prompt global : bouton
+        # LOGO 60×60 à DROITE du rectangle de prompt (et plus dans l'en-tête).
+        self._btn_draw_pc = QPushButton()
+        self._btn_draw_pc.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._btn_draw_pc.setToolTip(translate("Dessiner sur la vidéo") + " — " + translate(
+            "Draw-to-Video : choisis un clip, dessine les zones de l'effet "
+            "(feu, fumée…), puis génère — l'effet est appliqué là où tu as dessiné."))
+        _pc_draw_pix = load_icon("draw_to_video.png", 56)
+        if not _pc_draw_pix.isNull():
+            self._btn_draw_pc.setIcon(QIcon(_pc_draw_pix))
+            self._btn_draw_pc.setIconSize(QSize(56, 56))
+            self._btn_draw_pc.setFixedSize(60, 60)
+            self._btn_draw_pc.setStyleSheet(
+                "QPushButton{background:transparent;border:none;border-radius:12px;padding:2px;}"
+                "QPushButton:hover{background:rgba(78,205,196,0.14);}")
+        else:
+            self._btn_draw_pc.setText("✏  " + translate("Dessiner sur la vidéo"))
+            self._btn_draw_pc.setFixedHeight(34)
+            self._btn_draw_pc.setStyleSheet(
+                f"QPushButton{{background:transparent;color:{C['accent']};"
+                f"border:1px solid {C['accent']};border-radius:8px;font-size:11px;font-weight:700;padding:0 14px;}}"
+                f"QPushButton:hover{{background:rgba(78,205,196,0.12);}}")
+        self._btn_draw_pc.clicked.connect(self._on_draw_to_video)
+        _pc_prompt_row = QHBoxLayout()
+        _pc_prompt_row.setContentsMargins(0, 0, 0, 0)
+        _pc_prompt_row.setSpacing(8)
+        _pc_prompt_row.addWidget(self._per_clip_prompt, 1)
+        _pc_prompt_row.addWidget(self._btn_draw_pc, 0, Qt.AlignmentFlag.AlignTop)
+        _pc_lay.addLayout(_pc_prompt_row)
 
         # Ref image — prompt par clip (carré Casting style)
         _pc_ref_hdr = QHBoxLayout()
@@ -1698,6 +1726,35 @@ class TabDavinciEdit(QScrollArea):
                 + "\n".join(f"  • {c}" for c in invalid_clips)
             )
             return
+
+        # Info CONVERSION : prévenir quand un clip sera transcodé avant l'envoi
+        # (format/codec non H.264, ou entrelacé → désentrelacé en progressif).
+        will_transcode = []
+        for clip_idx, _card in selected:
+            fp = self._clips_data[clip_idx].get("file_path", "")
+            try:
+                from core.video_utils import video_needs_transcode
+                why = video_needs_transcode(fp)
+            except Exception:
+                why = ""
+            if why:
+                nm = self._clips_data[clip_idx].get("name", f"Clip {clip_idx + 1}")
+                will_transcode.append(f"  • {nm} — {why}")
+        if will_transcode:
+            resp = QMessageBox.question(
+                self, translate("Conversion avant envoi"),
+                translate("Ce(s) clip(s) seront convertis en H.264 PROGRESSIF (1080p max) "
+                          "avant l'envoi au moteur — désentrelacés si besoin, pour éviter "
+                          "les problèmes de trames :") + "\n\n"
+                + "\n".join(will_transcode) + "\n\n"
+                + translate("Pour la MEILLEURE qualité, exporte plutôt tes clips depuis ton "
+                            "logiciel de montage en H.264 progressif, 1080p maximum — c'est le "
+                            "format adapté à tous les moteurs de génération.") + "\n\n"
+                + translate("Continuer avec la conversion automatique (FFmpeg) ?"),
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                QMessageBox.StandardButton.Yes)
+            if resp != QMessageBox.StandardButton.Yes:
+                return
 
         # Sauvegarde le prompt per-clip courant avant de lancer
         if self._rb_per_clip.isChecked() and self._active_clip_idx is not None:

@@ -367,3 +367,54 @@ def describe_settings(light: dict) -> str:
         kind = "serré" if beam <= 25 else ("large" if beam >= 45 else "moyen")
         parts.append(f"faisceau {beam}° ({kind})")
     return ", ".join(parts)
+
+
+# ── Ambiance / mood (en plus des termes techniques) ───────────────────────────
+# Qualité de lumière propre à CHAQUE famille de projecteur — ce que Seedance doit
+# « ressentir » (le modèle ne connaît pas les termes techniques type « SkyPanel S60 »,
+# mais comprend « lumière douce et enveloppante »).
+_FAMILY_QUALITY = {
+    "led_panel": "lumière douce et enveloppante (grand panneau)",
+    "mat":       "lumière très douce et diffuse, sans ombre dure",
+    "cob":       "lumière franche et directionnelle",
+    "fresnel":   "lumière modelée à la décroissance douce",
+    "tube":      "accent lumineux linéaire et précis",
+    "par_hmi":   "lumière vive et puissante, type lumière du jour",
+    "profile":   "faisceau net aux bords découpés",
+    "balloon":   "nappe de lumière douce tombant d'en haut",
+    "practical": "source d'appoint intégrée au décor",
+}
+
+
+def ambiance_phrase(light: dict) -> str:
+    """Phrase d'AMBIANCE (mood) calquée sur le TYPE de projecteur + ses réglages,
+    en complément des termes techniques de describe_settings. Décrit ce que la
+    lumière PRODUIT (chaleur, douceur/contraste, couleur), pas le matériel.
+    Vide si le projecteur est éteint."""
+    s = light.get("settings") or {}
+    if not s.get("on", True):
+        return ""
+    fam = (light.get("family") or "").strip()
+    cap = capabilities(fam, light.get("model", ""))
+    quality = _FAMILY_QUALITY.get(fam, "lumière")
+
+    eff = s.get("effect", "")
+    if eff and cap.get("effects"):
+        mood = f"ambiance {effect_label(eff).lower()}"
+    elif cap.get("color") == "full" and s.get("saturation", 0) > 0:
+        mood = f"ambiance colorée {_hue_label(s.get('hue', 0))}, atmosphère stylisée"
+    else:
+        cct = s.get("cct") or cap["cct"][0]
+        if cct <= 3500:
+            mood = "ambiance chaude et intime"
+        elif cct >= 5600:
+            mood = "ambiance froide, presque clinique"
+        else:
+            mood = "ambiance neutre et naturelle"
+
+    # Douceur des ombres : familles douces (panneau/mat/ballon) sans louver →
+    # ombres délicates ; sinon faisceau plus contrasté.
+    soft = (fam in ("led_panel", "mat", "balloon")) and not s.get("louver")
+    contrast = ("lumière douce aux ombres délicates" if soft
+                else "lumière plus contrastée aux ombres marquées")
+    return f"{mood}, {quality}, {contrast}"

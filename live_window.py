@@ -682,7 +682,8 @@ class LiveWindow(QMainWindow):
         )
         try:
             self._update_dl_btn.clicked.disconnect()
-        except RuntimeError:
+        except (TypeError, RuntimeError):
+            # PyQt6 lève TypeError si le signal n'a aucune connexion (1er appel).
             pass
         self._update_dl_btn.clicked.connect(lambda: self._open_url(url))
         self._update_banner.setVisible(True)

@@ -1136,9 +1136,23 @@ class DecorDialog(QDialog):
         self._decors_created = True
         self._load_preview(self._image_path)
         self._refresh_preview_nav()
-        self._status.setText(
-            "✓ 1 décor avec ses 7 vues — clique Enregistrer pour le conserver."
-        )
+        # Compte RÉEL des vues : on n'annonce « 7 vues » que si elles sont vraiment
+        # là (sinon l'utilisateur croyait avoir tout alors que les faces ont échoué).
+        n_views = len(view_entries)
+        if n_views >= 7:
+            self._status.setText(
+                "✓ 1 décor avec ses 7 vues — clique Enregistrer pour le conserver.")
+        else:
+            w = getattr(self, "_worker_gen", None)
+            err = (getattr(w, "_last_error", "") or "").strip()
+            n_faces = max(0, n_views - 1)   # hors plan d'ensemble
+            msg = (f"⚠ Seulement {n_views}/7 vues : plan d'ensemble + {n_faces}/6 face(s). "
+                   "Les faces manquantes ont échoué côté Nano Banana.")
+            if err:
+                msg += f"  Cause : {err[:140]}"
+            else:
+                msg += "  Vérifie tes crédits / limites de débit fal.ai, puis relance."
+            self._status.setText(msg)
 
     def _on_gen_fail(self, err):
         self._btn_gen.setEnabled(True)

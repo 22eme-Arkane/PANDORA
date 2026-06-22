@@ -123,7 +123,8 @@ def edition_cinema_only():
         assert f'"{mod}"' in spec, f".spec doit exclure {mod}"
     # Version bumpée
     from core.version import VERSION
-    assert VERSION == "1.2.0", f"version attendue 1.2.0, lue {VERSION}"
+    # Tolère un suffixe pré-release (« 1.2.0-bêta ») pour les builds de test.
+    assert VERSION.split("-")[0] == "1.2.0", f"version attendue 1.2.0[-suffixe], lue {VERSION}"
 
 
 @test
@@ -507,9 +508,11 @@ def decor_sept_vues():
     assert "room_views" in eg and "generated_images" in eg, \
         "depuis le scénario : les 7 vues fusionnées dans un seul décor"
     # RÉSILIENCE des 6 faces (fix « seul le plan d'ensemble + le plan » sont générés) :
-    # édition NB2 désactivée dès le 1er échec + repli texte robuste (3 essais, backoff)
-    # + diagnostic des faces manquantes remonté au dialogue.
-    assert "edit_disabled" in nb and "range(3)" in nb, "repli texte robuste (3 essais)"
+    # édition NB2 désactivée dès le 1er échec + repli texte robuste (4 essais, backoff
+    # adapté aux limites de débit) + journal de diagnostic + réfs d'édition allégées.
+    assert "edit_disabled" in nb and "range(4)" in nb, "repli texte robuste (4 essais)"
+    assert "pandora_decor.log" in nb, "journal de diagnostic des 7 vues"
+    assert "_VIEW_GAP_S" in nb, "génération ÉTAPE PAR ÉTAPE (vues espacées dans le temps)"
     assert "_faces_ok" in nb and "_last_error" in nb, "worker remonte les faces manquantes"
     assert hasattr(w, "_faces_ok") and hasattr(w, "_last_error"), "attributs de diagnostic présents"
     assert "_room_warnings" in eg and "Vues manquantes" in eg, \
@@ -1244,12 +1247,23 @@ def scenario_storyboard_save_open():
 def transcode_h264_et_starlight2():
     """Transcodage H.264 auto des clips avant envoi moteur + modèles Starlight 2
     dans l'Upscaling Topaz (Astra absent de fal.ai)."""
-    from core.video_utils import ensure_engine_video, is_engine_compatible
+    from core.video_utils import (ensure_engine_video, is_engine_compatible,
+                                   video_needs_transcode)
     assert ensure_engine_video("absent.mxf") == "absent.mxf", "no-op si fichier absent"
     assert is_engine_compatible("absent.mxf") is False
+    assert video_needs_transcode("absent.mxf") == "", "no-op si fichier absent"
+    # Transcode PROGRESSIF + plafond 1080p (anti-trames sur vidéo progressive).
+    import core.video_utils as vu
+    vsrc = inspect.getsource(vu.ensure_engine_video)
+    assert "yadif=deint=interlaced" in vsrc, "désentrelacement conditionnel (anti-trames)"
+    assert "min(1080,ih)" in vsrc, "plafond 1080p (tous moteurs)"
     # api/real transcode le clip source avant l'upload
     import api.real as r
     assert "ensure_engine_video" in inspect.getsource(r), "transcodage H.264 avant upload"
+    # Modifier des clips : message d'info AVANT conversion (conseil pré-export).
+    de = inspect.getsource(__import__("ui.tab_davinci_edit", fromlist=["_"]))
+    assert "video_needs_transcode" in de and "Conversion avant envoi" in de, \
+        "message de conversion + conseil pré-export"
     # Upscaling : Starlight 2 présents, Astra absent
     import api.upscale as up
     vals = [v for _, v in up.TOPAZ_MODELS]
@@ -1287,6 +1301,8 @@ def draw_to_video():
     t = TabDavinciEdit()
     assert hasattr(t, "_btn_draw") and hasattr(t, "_on_draw_to_video") and hasattr(t, "_draw_images")
     assert hasattr(t, "_draw_overlays") and hasattr(t, "_draw_frames"), "mémorisation pour ré-édition"
+    # Dessiner accessible AUSSI depuis le prompt par-clip (pas seulement le global).
+    assert hasattr(t, "_btn_draw_pc"), "bouton Dessiner présent dans le prompt par-clip"
     src = inspect.getsource(TabDavinciEdit)
     # L'image annotée n'est PAS envoyée comme référence (les traits seraient
     # reproduits) → passée comme GUIDE via draw_guidance_path ; Claude Vision côté
@@ -1362,6 +1378,116 @@ def nouveaux_moteurs_fal_2026():
     for mod in ("ui.tab_sound_design", "ui.tab_sound_design_live"):
         s = inspect.getsource(importlib.import_module(mod))
         assert "FoleyControlWorker" in s and "_video_engine_combo" in s, f"{mod}: Foley non câblé"
+
+
+@test
+def version_beta_et_update_check():
+    """Une VERSION suffixée « -bêta » ne doit ni faire croire l'app périmée
+    (parse robuste → numérique) ni crasher la bannière (disconnect gardé contre
+    TypeError, l'exception réellement levée par PyQt6 sur un signal non connecté)."""
+    import inspect
+    from api.update_check import _parse_version
+    import core.version as ver
+    assert _parse_version("1.2.0-bêta") == (1, 2, 0)
+    assert _parse_version("v1.2.0") == (1, 2, 0)
+    assert _parse_version("1.2.0-bêta") == _parse_version("1.2.0"), "bêta ≠ périmé"
+    assert _parse_version(ver.VERSION) and _parse_version(ver.VERSION)[0] >= 1, \
+        "VERSION du build doit parser en numérique (pas (0,))"
+    src = inspect.getsource(__import__("ui.pandora_window", fromlist=["_"]))
+    i = src.find("_update_dl_btn.clicked.disconnect()")
+    assert i != -1 and "TypeError" in src[i - 200:i + 200], \
+        "disconnect() de la bannière doit attraper TypeError"
+
+
+@test
+def sound_design_cinema_file_plans():
+    """Sound Design Cinéma : sélection de plans → file d'attente (porté du Live).
+    Sonorise chaque plan via sa section [🎵 SOUND DESIGN] (sound_prompt) ;
+    plans sans prompt ignorés ; assemblage bande-son calée optionnel."""
+    import inspect
+    from ui.tab_sound_design import TabSoundDesign
+    t = TabSoundDesign()
+    for attr in ("_storyboard", "_btn_load_plans", "_btn_cancel_queue", "_auto_mix_cb"):
+        assert hasattr(t, attr), f"Sound Design : {attr} manquant"
+    assert type(t._storyboard).__name__ == "StoryboardSelector"
+    # File triée par numéro de plan ; plans sans prompt son ignorés.
+    t._build_queue_from_shots([
+        {"number": 2, "scene_title": "B", "sound_prompt": "rain", "duration": 4},
+        {"number": 1, "scene_title": "A", "sound_prompt": "wind", "duration": 6},
+        {"number": 3, "scene_title": "C", "sound_prompt": "",     "duration": 5},
+    ])
+    assert [q["number"] for q in t._sfx_queue] == [1, 2], t._sfx_queue
+    # Commandes ffmpeg pures (conformation + assemblage durée exacte).
+    assert "atrim=0:4" in " ".join(TabSoundDesign._build_conform_cmd("ffmpeg", "a", "b", 4.0))
+    assert "concat=n=2" in " ".join(
+        TabSoundDesign._build_assemble_cmd("ffmpeg", ["a", "b"], [4.0, 6.0], "o"))
+    # Le conteneur rafraîchit le conducteur au changement d'onglet.
+    sw = inspect.getsource(__import__("ui.seedance_widget", fromlist=["_"]))
+    assert "self.tab_sound.refresh()" in sw, "refresh du conducteur non câblé"
+
+
+@test
+def assistant_ia_defaut_opus():
+    """Le sélecteur d'assistant IA présélectionne Claude Opus 4.8 quand la config
+    ne fixe pas de modèle — le fallback Sonnet affichait (et sauvait) Sonnet à tort."""
+    import core.config as _cfg
+    _orig = _cfg.load_config
+    _cfg.load_config = lambda: {}
+    try:
+        from ui.page_settings import SettingsPage
+        ps = SettingsPage()
+        assert ps.ai_combo.currentData() == ("anthropic", "claude-opus-4-8"), \
+            f"défaut attendu Opus 4.8, eu {ps.ai_combo.currentData()}"
+        import core.ai_provider as ap
+        assert ap.get_creative_model() == "claude-opus-4-8", ap.get_creative_model()
+    finally:
+        _cfg.load_config = _orig
+
+
+@test
+def mise_en_scene_placement_precis():
+    """Placement des personnages RELATIF aux éléments du décor (« à droite de la
+    table »), vu de la caméra (bascule si on bouge l'acteur OU la caméra) ;
+    + ambiance lumière calquée sur le type de projecteur (en plus du technique)."""
+    import inspect
+    import core.staging as st
+    import core.projectors as pr
+    # Sans caméra : table au centre, acteur à gauche puis à droite → bascule.
+    rec = {"actors": [{"name": "M", "x": 0.30, "y": 0.50}],
+           "props": [{"name": "la table", "x": 0.50, "y": 0.50}]}
+    assert "à gauche de la table" in st._actor_placement_phrase(rec, rec["actors"][0])
+    rec["actors"][0]["x"] = 0.70
+    assert "à droite de la table" in st._actor_placement_phrase(rec, rec["actors"][0])
+    rec["actors"][0].update(x=0.50, y=0.50)
+    assert st._actor_placement_phrase(rec, rec["actors"][0]) == "à la table"
+    # Caméra : le côté est relatif à l'axe caméra (2 persos de part et d'autre).
+    rec3 = {"camera": {"x": 0.5, "y": 0.95},
+            "actors": [{"name": "M", "x": 0.3, "y": 0.5}, {"name": "J", "x": 0.7, "y": 0.5}],
+            "props": [{"name": "la table", "x": 0.5, "y": 0.5}]}
+    a = st._actor_placement_phrase(rec3, rec3["actors"][0])
+    b = st._actor_placement_phrase(rec3, rec3["actors"][1])
+    assert "table" in a and "table" in b and a != b, (a, b)
+    # Ambiance lumière : chaud (panneau doux) vs coloré (tube), calqué sur le type.
+    warm = pr.ambiance_phrase({"family": "led_panel", "settings": {"on": True, "cct": 3200}})
+    assert "chaude" in warm and "douce" in warm, warm
+    col = pr.ambiance_phrase({"family": "tube", "settings": {"on": True, "saturation": 80, "hue": 255}})
+    assert "colorée" in col, col
+    # Le plan de feu injecte l'ambiance.
+    assert "ambiance_phrase" in inspect.getsource(st.lighting_summary)
+    # Analyse VISION du plan par Claude (placement précis vs mobilier visible),
+    # auto-débouncée — pas d'ajout d'accessoires.
+    ps = inspect.getsource(__import__("ui.page_staging", fromlist=["_"]))
+    assert "_run_vision" in ps and "StagingVisionWorker" in ps and "_vision_timer" in ps, \
+        "analyse vision du plan câblée en auto"
+    from api.staging_vision import _positions_text
+    pos = _positions_text([{"kind": "actor", "label": "Magalie", "x": 0.3, "y": 0.5},
+                           {"kind": "camera", "x": 0.5, "y": 0.95, "info": "axe Face"}])
+    assert "Magalie" in pos and "Caméra" in pos and "%" in pos, pos
+    # Clic droit sur le VIDE du canevas → ajout au point cliqué (acteur/caméra ;
+    # projecteur en Plan de feu).
+    sc = inspect.getsource(__import__("ui.staging_canvas", fromlist=["_"]))
+    assert "empty_context" in sc and "def place_camera" in sc, "clic droit vide + place_camera"
+    assert "_on_empty_context" in ps and "Créer un projecteur" in ps, "menu clic droit d'ajout câblé"
 
 
 # ══════════════════════════════════════════════════════════════════════════════

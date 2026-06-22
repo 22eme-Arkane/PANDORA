@@ -2204,6 +2204,20 @@ _FR_TO_EN: dict[str, str] = {
     "Sauvegarder le storyboard":                 "Save the storyboard",
     "Ouvrir un storyboard":                      "Open a storyboard",
     "Ajouter acteur":                            "Add actor",
+    "Ajouter un acteur":                         "Add an actor",
+    "Placer la caméra ici":                      "Place camera here",
+    "Créer un projecteur":                       "Create a light",
+    # ── Modifier des clips : message de conversion vidéo ──────────────────────
+    "Conversion avant envoi":                    "Conversion before sending",
+    "Ce(s) clip(s) seront convertis en H.264 PROGRESSIF (1080p max) avant l'envoi au moteur — désentrelacés si besoin, pour éviter les problèmes de trames :":
+        "This/these clip(s) will be converted to PROGRESSIVE H.264 (1080p max) before sending to the engine — deinterlaced if needed, to avoid field/frame issues:",
+    "Pour la MEILLEURE qualité, exporte plutôt tes clips depuis ton logiciel de montage en H.264 progressif, 1080p maximum — c'est le format adapté à tous les moteurs de génération.":
+        "For BEST quality, export your clips from your editing software in progressive H.264, 1080p maximum — that is the format suited to every generation engine.",
+    "Continuer avec la conversion automatique (FFmpeg) ?":
+        "Continue with automatic conversion (FFmpeg)?",
+    "Élément":                                   "Element",
+    "Élément du décor":                          "Set element",
+    "Nom :":                                     "Name:",
     "Pivoter à gauche":                          "Rotate left",
     "Pivoter à droite":                          "Rotate right",
     "Supprimer la sélection":                    "Delete selection",
@@ -2546,6 +2560,16 @@ _FR_TO_EN: dict[str, str] = {
     "SFX 1.6 (Mirelo)  ·  bande-son auto":  "SFX 1.6 (Mirelo)  ·  auto soundtrack",
     "Foley Control  ·  SFX synchronisés (~$0.002/s)":
         "Foley Control  ·  synced SFX (~$0.002/s)",
+    # ── Sound Design Cinéma : file d'attente « Depuis le storyboard » ──────────
+    "Depuis le storyboard — file d'attente":  "From the storyboard — queue",
+    "Charge les plans en file d'attente — la sélection du storyboard\nsi tu en as une (clic / Ctrl+clic / lasso), sinon tout le storyboard.":
+        "Loads shots into the queue — the storyboard selection\nif you have one (click / Ctrl+click / lasso), otherwise the whole storyboard.",
+    "À la fin de la file : une seule piste calée sur la vidéo — chaque plan garde sa durée exacte, micro-fondus aux jonctions (pas de coupes nettes).":
+        "At the end of the queue: a single track aligned to the video — each shot keeps its exact duration, micro-fades at the joins (no hard cuts).",
+    "Aucun plan avec prompt son dans ce storyboard — génère le découpage ou renseigne la section 🎵 SOUND DESIGN des plans.":
+        "No shot has a sound prompt in this storyboard — generate the breakdown or fill the 🎵 SOUND DESIGN section of the shots.",
+    "⚠ pas de prompt son sur ce plan (section 🎵 SOUND DESIGN)":
+        "⚠ no sound prompt on this shot (🎵 SOUND DESIGN section)",
     "Chargez un fichier audio de référence pour utiliser le clonage de voix.":
         "Load a reference audio file to use voice cloning.",
     "La langue est détectée automatiquement depuis le texte saisi — écris en français, le rendu sera en français.":

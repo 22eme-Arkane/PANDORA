@@ -116,6 +116,7 @@ class PageStaging(QWidget):
         self._canvas.actor_context.connect(self._on_actor_context)
         self._canvas.light_context.connect(self._on_light_context)
         self._canvas.camera_context.connect(self._on_camera_context)
+        self._canvas.empty_context.connect(self._on_empty_context)
         # Auto-synchro INSTANTANÉE des sections du prompt — débouncée (250 ms) pour
         # rester fluide pendant un glissé. Mise en scène → [🎭 MISE EN SCÈNE] + axe /
         # placement caméra ; Plan de feu → [💡 PLAN DE FEU]. Plus besoin du menu.
@@ -123,6 +124,15 @@ class PageStaging(QWidget):
         self._sync_timer.setSingleShot(True)
         self._sync_timer.setInterval(250)
         self._sync_timer.timeout.connect(self._apply_current_to_storyboard)
+        # Analyse VISION (Claude lit le plan du décor pour situer persos/caméra/
+        # lumière par rapport au mobilier visible) — débounce plus long, en plus du
+        # placement déterministe instantané. Démarrée par _autosave.
+        self._vision_timer = QTimer(self)
+        self._vision_timer.setSingleShot(True)
+        self._vision_timer.setInterval(1500)
+        self._vision_timer.timeout.connect(self._run_vision)
+        self._vision_worker = None
+        self._vision_shot_id = None
         right.addLayout(self._build_toolbar())
         right.addWidget(self._canvas, 1)
         body.addLayout(right, 1)
@@ -355,6 +365,46 @@ class PageStaging(QWidget):
                 self._canvas.add_light(r["name"], r["role"],
                                        r.get("family", ""), r.get("model", ""))
 
+    # ── Clic droit sur le VIDE du canevas → ajout au point cliqué ────────────────
+
+    def _on_empty_context(self, x: float, y: float):
+        menu = QMenu(self)
+        if self._mode == "staging":
+            chars = []
+            try:
+                import core.casting as casting
+                chars = [c.get("name", "") for c in casting.list_characters() if c.get("name")]
+            except Exception:
+                chars = []
+            for n in (self._shot or {}).get("character_names", []) or []:
+                if n and n not in chars:
+                    chars.append(n)
+            sub = menu.addMenu(translate("Ajouter un acteur"))
+            for n in chars:
+                sub.addAction(n, lambda _=False, nm=n: self._canvas.add_actor(nm, x, y))
+            if chars:
+                sub.addSeparator()
+            sub.addAction(translate("Autre…"), lambda: self._add_actor_free_at(x, y))
+            menu.addAction(translate("Placer la caméra ici"),
+                           lambda: self._canvas.place_camera(x, y))
+        else:
+            menu.addAction(translate("Créer un projecteur"), lambda: self._add_light_at(x, y))
+        menu.exec(self.cursor().pos())
+
+    def _add_actor_free_at(self, x: float, y: float):
+        name, ok = QInputDialog.getText(self, translate("Acteur"), translate("Nom :"))
+        if ok and name.strip():
+            self._canvas.add_actor(name.strip(), x, y)
+
+    def _add_light_at(self, x: float, y: float):
+        from ui.dialog_projector import ProjectorDialog
+        dlg = ProjectorDialog(self)
+        if dlg.exec() == ProjectorDialog.DialogCode.Accepted:
+            r = dlg.result_data()
+            if r:
+                self._canvas.add_light(r["name"], r["role"],
+                                       r.get("family", ""), r.get("model", ""), x, y)
+
     # ── Clic droit : changer l'acteur (Mise en scène) / le projecteur (Plan de feu) ──
 
     def _on_actor_context(self, model: dict):
@@ -567,6 +617,86 @@ class PageStaging(QWidget):
         # Met à jour les sections du prompt du plan courant après une courte pause
         # (débounce) → instantané du point de vue de l'utilisateur, sans thrash disque.
         self._sync_timer.start()
+        # … puis Claude analyse le plan (débounce plus long) pour préciser le
+        # placement par rapport au mobilier visible (« assise à la table »).
+        self._vision_timer.start()
+
+    # ── Analyse VISION du plan par Claude (placement précis vs mobilier visible) ──
+
+    def _run_vision(self):
+        """Lance Claude Vision sur le plan du décor (mobilier visible) + les positions
+        des jetons → description précise. Skippé sans clé Anthropic / sans plan /
+        si une analyse tourne déjà. Le placement déterministe reste affiché entre-temps."""
+        if not self._shot:
+            return
+        if self._vision_worker is not None and self._vision_worker.isRunning():
+            return
+        try:
+            from core.config import load_config
+            if not load_config().get("anthropic_key", "").strip():
+                return
+        except Exception:
+            return
+        rec = staging.get(self._shot["id"])
+        plan = rec.get("plan_image", "")
+        if not (plan and os.path.isfile(plan)):
+            return   # pas de plan (Kontext) → on garde le placement déterministe
+        tokens = []
+        cam = rec.get("camera") or {}
+        if cam:
+            tokens.append({"kind": "camera", "label": "caméra",
+                           "x": cam.get("x", .5), "y": cam.get("y", .5),
+                           "info": "axe " + staging.axis_from_angle(cam.get("angle", 0))})
+        for a in (rec.get("actors") or []):
+            tokens.append({"kind": "actor", "label": a.get("name", "?"),
+                           "x": a.get("x", .5), "y": a.get("y", .5)})
+        for l in (rec.get("lights") or []):
+            if (l.get("settings") or {}).get("on", True):
+                tokens.append({"kind": "light",
+                               "label": l.get("name", "") or l.get("type", ""),
+                               "x": l.get("x", .5), "y": l.get("y", .5),
+                               "info": (l.get("model", "") or l.get("type", ""))})
+        if not tokens:
+            return
+        decor_desc = self._shot.get("decor_name", "") or ""
+        from api.staging_vision import StagingVisionWorker
+        self._vision_shot_id = self._shot["id"]
+        self._vision_worker = StagingVisionWorker(plan, tokens, self._mode, decor_desc)
+        self._vision_worker.finished.connect(self._on_vision_done)
+        self._vision_worker.failed.connect(lambda _e: None)
+        self._vision_worker.start()
+
+    def _on_vision_done(self, txt: str):
+        # Le plan a pu changer pendant l'analyse → n'écrire que si c'est le même.
+        if (txt and self._shot
+                and self._shot.get("id") == getattr(self, "_vision_shot_id", None)):
+            self._apply_vision_text(txt)
+
+    def _apply_vision_text(self, txt: str):
+        """Écrit la description précise de Claude dans la bonne section du prompt :
+        staging → REMPLACE [MISE EN SCÈNE] (le placement déterministe était vague) ;
+        feu → AJOUTE l'origine/ambiance de la lumière au [PLAN DE FEU] déterministe
+        (on garde la direction relative caméra + les distances chiffrées)."""
+        from core.prompt_sections import parse as _parse, build as _build
+        s = self._shot
+        sec = _parse(s.get("seedance_prompt", "") or "")
+        if self._mode == "staging":
+            staging_txt = txt
+            lighting_txt = sec.get("lighting", "")
+        else:
+            staging_txt = sec.get("staging", "")
+            base = sec.get("lighting", "")
+            lighting_txt = (base + "  " + txt).strip() if base else txt
+        new = _build(action=sec.get("action", ""), staging=staging_txt,
+                     ambiance=sec.get("ambiance", ""), decor=sec.get("decor", ""),
+                     lighting=lighting_txt, technique=sec.get("technique", ""),
+                     sound=sec.get("sound", ""))
+        if new and new != (s.get("seedance_prompt", "") or ""):
+            s["seedance_prompt"] = new
+            try:
+                sb_api.save_shot({k: v for k, v in s.items() if not k.startswith("_")})
+            except Exception:
+                pass
 
     def _apply_current_to_storyboard(self):
         """Réécrit INSTANTANÉMENT la(les) section(s) du prompt du plan COURANT."""

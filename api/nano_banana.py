@@ -1788,6 +1788,11 @@ class GenerateItemWorker(QThread):
 
 # ── Les 6 vues d'une pièce (décor) ─────────────────────────────────────────────
 
+# Délai entre deux vues d'un décor (génération ÉTAPE PAR ÉTAPE) — espace les appels
+# pour ne pas saturer l'API (cause des faces qui échouaient quand tout partait vite).
+_VIEW_GAP_S = 2.0
+
+
 class GenerateRoomViewsWorker(QThread):
     """Génère les vues d'une pièce dans un ORDRE qui maximise le raccord :
       1. le PLAN D'ENSEMBLE (vue maîtresse 3/4) ;
@@ -1852,6 +1857,19 @@ class GenerateRoomViewsWorker(QThread):
             ts   = int(time.time())
             out: list[dict] = []
 
+            # Journal de diagnostic — chaque échec de vue y est tracé pour pouvoir
+            # comprendre « pourquoi je n'ai que le plan d'ensemble » (crédits / limite
+            # de débit / contenu refusé). Fichier partageable.
+            import tempfile
+            _logf = os.path.join(tempfile.gettempdir(), "pandora_decor.log")
+            def _log(m: str):
+                try:
+                    with open(_logf, "a", encoding="utf-8") as _lf:
+                        _lf.write(m + "\n")
+                except Exception:
+                    pass
+            _log(f"===== 7 vues « {self._name} » (modèle {get_image_endpoint(cfg)}) =====")
+
             def _save(data: bytes, code: str) -> str:
                 p = os.path.join(_project_images_dir("decors"), f"{safe}_{code}_{ts}.png")
                 with open(p, "wb") as f:
@@ -1859,9 +1877,21 @@ class GenerateRoomViewsWorker(QThread):
                 return p
 
             def _dataurl(path: str) -> str:
-                mime = mimetypes.guess_type(path)[0] or "image/png"
-                with open(path, "rb") as f:
-                    return f"data:{mime};base64,{base64.b64encode(f.read()).decode()}"
+                # Réfs d'édition ALLÉGÉES (≤1024 px, JPEG) : un PNG 1K en base64 fait
+                # ~2-3 Mo ; deux réfs saturaient l'édition NB2 (cause possible de
+                # l'échec systématique des faces). Repli brut si Pillow indisponible.
+                try:
+                    from PIL import Image
+                    import io as _io
+                    im = Image.open(path).convert("RGB")
+                    im.thumbnail((1024, 1024), Image.LANCZOS)
+                    buf = _io.BytesIO()
+                    im.save(buf, "JPEG", quality=85)
+                    return "data:image/jpeg;base64," + base64.b64encode(buf.getvalue()).decode()
+                except Exception:
+                    mime = mimetypes.guess_type(path)[0] or "image/png"
+                    with open(path, "rb") as f:
+                        return f"data:{mime};base64,{base64.b64encode(f.read()).decode()}"
 
             def _gen_text(prompt: str, aspect: str) -> bytes:
                 _ep, _args = _build_image_args(prompt, aspect, "1K", cfg, 1)
@@ -1894,8 +1924,9 @@ class GenerateRoomViewsWorker(QThread):
             try:
                 ov_path = _save(_gen_text(full_ov, "16:9"), ov_code)
                 out.append({"label": ov_label, "code": ov_code, "path": ov_path, "prompt": ov_prompt})
-            except Exception:
-                pass
+            except Exception as e:
+                _log(f"plan d'ensemble ÉCHEC: {str(e)[:160]}")
+            time.sleep(_VIEW_GAP_S)   # espacement entre vues (anti-saturation API)
 
             # 2) PLAN D'ARCHITECTURE vu de dessus (contexte : tous les éléments) ──
             self.progress.emit(20, "[2/8] Plan d'architecture (vue de dessus)…")
@@ -1905,24 +1936,20 @@ class GenerateRoomViewsWorker(QThread):
                 fp_path = _save(_gen_text(fp_prompt, "1:1"), "floorplan")
                 out.append({"label": "Plan (vue de dessus)", "code": "floorplan",
                             "path": fp_path, "prompt": fp_prompt, "is_floor_plan": True})
-            except Exception:
-                pass
+            except Exception as e:
+                _log(f"plan d'architecture ÉCHEC: {str(e)[:160]}")
+            time.sleep(_VIEW_GAP_S)
 
-            # 3) Les 6 FACES — en INJECTANT plan d'architecture + plan d'ensemble si
-            #    disponibles (NB2 edit, raccord). REPLI : génération texte simple si
-            #    l'édition échoue → on a TOUJOURS les 6 vues.
-            ref_urls = [_dataurl(p) for p in (fp_path, ov_path) if p and os.path.isfile(p)]
-            consistency = (
-                "CRITICAL CONSISTENCY: the provided images are a top-down architectural "
-                "floor plan and a wide establishing view of THIS exact room. Reproduce "
-                "the SAME room — same walls, furniture, props, materials, colors and "
-                "their RELATIVE POSITIONS. Strict spatial continuity with the references."
-            )
+            # 3) Les 6 FACES — générées ÉTAPE PAR ÉTAPE, une par une, en TEXTE simple
+            #    (même appel fiable que le plan d'ensemble), espacées dans le temps.
+            #    On N'envoie PAS le plan + l'ensemble en référence d'édition d'un coup
+            #    (« tout à envoyer en même temps » = cause des faces qui échouaient et
+            #    saturaient l'API). La cohérence vient des prompts très contraints.
+            consistency = ""   # plus de référence d'édition (génération texte autonome)
             faces = build_six_view_prompts(base_en)
-            # ⚠ Si l'édition NB2 échoue UNE fois, on la désactive pour les faces
-            # suivantes : 6 appels edit qui échouent saturent l'API et font capoter
-            # les replis texte (symptôme « seul le plan d'ensemble + le plan »).
-            edit_disabled = not ref_urls
+            ref_urls = []
+            # Édition désactivée : chaque face est une génération texte indépendante.
+            edit_disabled = True
             last_err = ""
             n_faces_ok = 0
             for i, (label, code, fprompt) in enumerate(faces):
@@ -1943,28 +1970,38 @@ class GenerateRoomViewsWorker(QThread):
                         last_err = str(e)
                         edit_disabled = True
                         data = None
-                # b) repli texte ROBUSTE (3 essais, backoff) — même génération que le
+                        _log(f"face '{label}' edit ÉCHEC → repli texte. {str(e)[:160]}")
+                # b) repli texte ROBUSTE (4 essais, backoff) — même génération que le
                 #    plan d'ensemble, donc fiable ; le backoff absorbe les limites de débit.
                 if data is None:
-                    for _attempt in range(3):
+                    for _attempt in range(4):
                         try:
                             data = _gen_text(f"{base_full}\n\n{_DECOR_LINE}", "16:9")
                             break
                         except Exception as e:
                             last_err = str(e)
                             data = None
-                            time.sleep(4 * (_attempt + 1))   # 4s, 8s, 12s
+                            _log(f"face '{label}' texte essai {_attempt + 1}/4 ÉCHEC: {str(e)[:160]}")
+                            # Backoff plus long si limite de débit / quota détectée.
+                            _rl = any(k in str(e).lower() for k in
+                                      ("rate", "limit", "429", "quota", "too many", "exhaust"))
+                            time.sleep((7 if _rl else 4) * (_attempt + 1))
                     if data is None:
+                        _log(f"face '{label}' ABANDONNÉE (tous les replis ont échoué)")
                         continue   # cette face échoue vraiment, on garde les autres
                 p = _save(data, code)
                 # Prompt PAR VUE renvoyé (cadrage compris) → régénération fidèle.
                 out.append({"label": label, "code": code, "path": p, "prompt": fprompt})
                 n_faces_ok += 1
+                if i < len(faces) - 1:
+                    time.sleep(_VIEW_GAP_S)   # espacement entre faces (anti-saturation)
 
             # Diagnostic remonté au dialogue (faces manquantes + dernière erreur API).
             self._faces_ok    = n_faces_ok
             self._faces_total = len(faces)
             self._last_error  = last_err
+            _log(f"BILAN: {n_faces_ok}/{len(faces)} faces OK · ensemble={'oui' if ov_path else 'NON'} "
+                 f"· plan={'oui' if fp_path else 'NON'} · dernière erreur: {last_err[:200] or 'aucune'}")
             if n_faces_ok < len(faces):
                 self.progress.emit(100, f"⚠ {n_faces_ok}/{len(faces)} faces générées — {last_err[:90]}")
             else:

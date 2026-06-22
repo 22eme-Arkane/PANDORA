@@ -200,6 +200,9 @@ class SeedanceWidget(QWidget):
             self.tab_davinci._ping_bridge()
         elif index == self._library_tab_index:
             self.tab_library.refresh()
+        elif self.tabs.widget(index) is self.tab_sound:
+            # Le conducteur du Sound Design suit le storyboard courant.
+            self.tab_sound.refresh()
 
     def _on_send_to_edit(self, paths: list):
         self.tab_davinci.add_clips_from_paths(paths)

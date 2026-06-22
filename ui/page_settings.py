@@ -255,8 +255,11 @@ class SettingsPage(QScrollArea):
         for label, prov, model in self._AI_CHOICES:
             self.ai_combo.addItem(label, (prov, model))
         _cur = (cfg.get("ai_provider", "anthropic"), cfg.get("ai_model_creative", ""))
+        # Défaut = Opus 4.8 (cf. core.ai_provider._DEFAULT_CREATIVE) : un modèle vide
+        # doit présélectionner Opus, sinon le combo affichait Sonnet à tort — et un
+        # Save aurait réellement rétrogradé l'assistant en Sonnet.
         for i, (_, prov, model) in enumerate(self._AI_CHOICES):
-            if prov == _cur[0] and (prov != "anthropic" or model == (_cur[1] or "claude-sonnet-4-6")):
+            if prov == _cur[0] and (prov != "anthropic" or model == (_cur[1] or "claude-opus-4-8")):
                 self.ai_combo.setCurrentIndex(i)
                 break
         self.ai_combo.currentIndexChanged.connect(self._on_ai_choice_changed)

@@ -16,13 +16,41 @@ import os
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, QTextEdit,
     QDoubleSpinBox, QProgressBar, QStackedWidget, QScrollArea, QFileDialog,
-    QComboBox,
+    QComboBox, QFrame, QCheckBox,
 )
-from PyQt6.QtCore import Qt, pyqtSignal, QUrl
+from PyQt6.QtCore import Qt, pyqtSignal, QUrl, QThread
 from PyQt6.QtGui import QDesktopServices
 
 from ui.styles import C, STYLESHEET
 from core.i18n import translate
+
+
+class _MixWorker(QThread):
+    """Exécute la commande ffmpeg d'assemblage de la bande-son en arrière-plan."""
+    finished = pyqtSignal(str)
+    failed   = pyqtSignal(str)
+
+    def __init__(self, cmd: list, out_path: str):
+        super().__init__()
+        self._cmd = cmd
+        self._out = out_path
+
+    def run(self):
+        import subprocess
+        try:
+            flags = 0x08000000 if os.name == "nt" else 0   # CREATE_NO_WINDOW
+            proc = subprocess.run(self._cmd, capture_output=True,
+                                  creationflags=flags, timeout=600)
+            if proc.returncode != 0 or not os.path.isfile(self._out):
+                err = (proc.stderr or b"").decode(errors="replace")[-300:]
+                self.failed.emit(f"ffmpeg : {err or 'échec du mixage'}")
+                return
+            self.finished.emit(self._out)
+        except FileNotFoundError:
+            self.failed.emit("ffmpeg introuvable — installez-le ou placez ffmpeg.exe "
+                             "à la racine de PANDORA.")
+        except Exception as e:
+            self.failed.emit(str(e)[:200])
 
 
 class TabSoundDesign(QScrollArea):
@@ -41,6 +69,13 @@ class TabSoundDesign(QScrollArea):
         self._mode = "text"          # "text" | "video"
         self._video_path = ""
         self._worker = None
+        # File d'attente « Depuis le storyboard » : sonorise chaque plan via sa
+        # section [🎵 SOUND DESIGN] (sound_prompt). {number,title,prompt,duration,status,out}
+        self._sfx_queue: list[dict] = []
+        self._sfx_running = False
+        self._sfx_cancelled = False
+        self._sfx_idx = -1
+        self._queue_worker = None
 
         _container = QWidget()
         self.setWidget(_container)
@@ -62,6 +97,101 @@ class TabSoundDesign(QScrollArea):
         sub.setStyleSheet(
             f"color:{C['text_dim']};font-size:11px;background:transparent;border:none;")
         root.addWidget(sub)
+
+        # ── Depuis le storyboard — file d'attente ─────────────────────────────
+        # Sélection visuelle des plans → sonorisation de chacun via sa section
+        # [🎵 SOUND DESIGN] (sound_prompt), comme « Générer depuis le storyboard ».
+        _seq_title = QLabel(translate("Depuis le storyboard — file d'attente"))
+        _seq_title.setStyleSheet(
+            f"color:{C['accent']};font-size:12px;font-weight:800;"
+            f"letter-spacing:0.5px;background:transparent;border:none;")
+        root.addWidget(_seq_title)
+
+        seq_row = QHBoxLayout()
+        seq_row.setSpacing(8)
+        self._btn_load_plans = QPushButton("⟳  " + translate("Charger les plans"))
+        self._btn_load_plans.setFixedHeight(30)
+        self._btn_load_plans.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._btn_load_plans.setToolTip(translate(
+            "Charge les plans en file d'attente — la sélection du storyboard\n"
+            "si tu en as une (clic / Ctrl+clic / lasso), sinon tout le storyboard."))
+        self._btn_load_plans.setStyleSheet(
+            f"QPushButton{{background:transparent;color:{C['text_secondary']};"
+            f"border:1px solid {C['border']};border-radius:7px;font-size:11px;"
+            f"font-weight:600;padding:0 12px;}}"
+            f"QPushButton:hover{{color:{C['text_primary']};border-color:{C['border_bright']};}}")
+        self._btn_load_plans.clicked.connect(self._load_plans)
+        seq_row.addWidget(self._btn_load_plans)
+        seq_row.addStretch()
+        root.addLayout(seq_row)
+
+        # Conducteur visuel des plans (même composant que « Générer depuis le
+        # storyboard ») — import local pour éviter un import circulaire au chargement.
+        from ui.tab_t2v import StoryboardSelector
+        self._storyboard = StoryboardSelector()
+        self._storyboard.shot_selected.connect(self._on_conductor_shot)
+        self._storyboard.shots_selected.connect(self._on_conductor_shots)
+        root.addWidget(self._storyboard)
+        try:
+            self._storyboard.refresh()
+        except Exception:
+            pass
+
+        # ── RENDU : assemblage d'une bande-son unique calée sur la timeline ────
+        rendu_box = QFrame()
+        rendu_box.setObjectName("sd_rendu")
+        rendu_box.setStyleSheet(
+            f"QFrame#sd_rendu{{background:{C['bg2']};border:1px solid {C['border']};"
+            f"border-radius:8px;padding:0px;}}")
+        rb_lay = QVBoxLayout(rendu_box)
+        rb_lay.setContentsMargins(0, 0, 0, 0)
+        rb_lay.setSpacing(1)
+        _rendu_header = QWidget()
+        _rendu_header.setStyleSheet("background:transparent;border:none;")
+        _rh_lay = QHBoxLayout(_rendu_header)
+        _rh_lay.setContentsMargins(14, 8, 14, 6)
+        _rendu_title = QLabel(translate("RENDU"))
+        _rendu_title.setStyleSheet(
+            f"color:{C['accent']};font-size:9px;letter-spacing:2px;"
+            f"font-family:'Consolas',monospace;font-weight:700;"
+            f"background:transparent;border:none;")
+        _rh_lay.addWidget(_rendu_title)
+        _rh_lay.addStretch()
+        rb_lay.addWidget(_rendu_header)
+
+        _mix_row = QFrame()
+        _mix_row.setStyleSheet(
+            f"QFrame{{background:transparent;border:none;border-top:1px solid {C['border']};"
+            f"border-radius:0px;padding:4px;}}"
+            f"QCheckBox{{color:{C['text_secondary']};background:transparent;border:none;}}"
+            f"QCheckBox::indicator{{width:16px;height:16px;"
+            f"border:1px solid {C['border_bright']};border-radius:4px;background:{C['bg3']};}}"
+            f"QCheckBox::indicator:checked{{background:{C['accent']};border-color:{C['accent']};}}"
+            f"QCheckBox::indicator:unchecked:hover{{border-color:{C['accent_dim']};}}")
+        _mr_lay = QHBoxLayout(_mix_row)
+        _mr_lay.setContentsMargins(14, 8, 14, 8)
+        _mr_col = QVBoxLayout()
+        _mr_col.setSpacing(2)
+        _mr_t = QLabel(translate("Assembler la bande-son (durée exacte)"))
+        _mr_t.setStyleSheet(f"color:{C['text_secondary']};font-size:12px;font-weight:600;border:none;")
+        _mr_col.addWidget(_mr_t)
+        _mr_s = QLabel(translate(
+            "À la fin de la file : une seule piste calée sur la vidéo — chaque plan "
+            "garde sa durée exacte, micro-fondus aux jonctions (pas de coupes nettes)."))
+        _mr_s.setWordWrap(True)
+        _mr_s.setStyleSheet(f"color:{C['text_dim']};font-size:10px;border:none;")
+        _mr_col.addWidget(_mr_s)
+        _mr_lay.addLayout(_mr_col, 1)
+        self._auto_mix_cb = QCheckBox()
+        self._auto_mix_cb.setChecked(True)
+        _mr_lay.addWidget(self._auto_mix_cb)
+        rb_lay.addWidget(_mix_row)
+        root.addWidget(rendu_box)
+
+        _sep = QFrame()
+        _sep.setFixedHeight(1)
+        _sep.setStyleSheet(f"background:{C['border']};")
+        root.addWidget(_sep)
 
         # ── Modes ─────────────────────────────────────────────────────────────
         mode_row = QHBoxLayout()
@@ -100,6 +230,21 @@ class TabSoundDesign(QScrollArea):
             f"QPushButton:disabled{{background:{C['bg3']};color:{C['text_dim']};}}")
         self._btn_generate.clicked.connect(self._on_generate)
         root.addWidget(self._btn_generate)
+
+        self._btn_cancel_queue = QPushButton("■  " + translate("Annuler la file"))
+        self._btn_cancel_queue.setFixedHeight(34)
+        self._btn_cancel_queue.setVisible(False)
+        self._btn_cancel_queue.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._btn_cancel_queue.setToolTip(translate(
+            "Arrête la file : le plan en cours est abandonné,\n"
+            "les plans restants sont conservés en attente."))
+        self._btn_cancel_queue.setStyleSheet(
+            f"QPushButton{{background:{C['bg3']};color:{C['red']};"
+            f"border:1px solid {C['red']};border-radius:8px;font-size:11px;"
+            f"font-weight:700;padding:0 14px;}}"
+            f"QPushButton:hover{{background:rgba(255,79,106,0.12);}}")
+        self._btn_cancel_queue.clicked.connect(self._on_cancel_queue)
+        root.addWidget(self._btn_cancel_queue)
 
         self._status = QLabel("")
         self._status.setStyleSheet(
@@ -307,6 +452,11 @@ class TabSoundDesign(QScrollArea):
                 f"color:{C['text_secondary']};font-size:10px;background:transparent;border:none;")
 
     def _on_generate(self):
+        # Bouton UNIQUE : une file chargée se génère en priorité ; sans file,
+        # c'est la génération manuelle (prompt ou clip vidéo).
+        if any(x["status"] == "pending" for x in self._sfx_queue):
+            self._on_run_queue()
+            return
         if self._mode == "text":
             prompt = self._txt_prompt.toPlainText().strip()
             if not prompt:
@@ -385,6 +535,287 @@ class TabSoundDesign(QScrollArea):
         rl.addWidget(btn_play)
         # insère en haut (avant le stretch final)
         self._results_lay.insertWidget(0, row)
+
+    # ── File d'attente depuis le storyboard ──────────────────────────────────
+
+    def refresh(self):
+        """Rafraîchit le conducteur visuel sur le storyboard courant (appelé au
+        changement d'onglet par seedance_widget)."""
+        if hasattr(self, "_storyboard"):
+            try:
+                self._storyboard.refresh()
+            except Exception:
+                pass
+
+    def _load_plans(self):
+        # Sélection du conducteur si présente (clic/Ctrl/Maj/lasso), sinon tout
+        # le storyboard. list_shots() lit toujours les données courantes.
+        shots = self._storyboard.get_selected_shots() if hasattr(self, "_storyboard") else []
+        if not shots:
+            try:
+                import core.storyboard as sb
+                shots = sb.list_shots()
+            except Exception:
+                shots = []
+        self._build_queue_from_shots(shots)
+
+    def _build_queue_from_shots(self, shots: list):
+        def _num(s):
+            try:
+                return int(s.get("number") or 0)
+            except (TypeError, ValueError):
+                return 0
+
+        self._sfx_queue = []
+        for s in sorted(shots, key=_num):
+            prompt = (s.get("sound_prompt", "") or "").strip()
+            if not prompt:
+                continue
+            try:
+                dur = float(s.get("duration", 5.0) or 5.0)
+            except (TypeError, ValueError):
+                dur = 5.0
+            self._sfx_queue.append({
+                "number":   s.get("number", 0),
+                "title":    s.get("scene_title", "") or "",
+                "prompt":   prompt,
+                "duration": max(1.0, min(60.0, dur)),
+                "status":   "pending",
+                "out":      "",
+            })
+        self._refresh_sfx_queue()
+        if not self._sfx_queue:
+            self._status.setText(translate(
+                "Aucun plan avec prompt son dans ce storyboard — génère le découpage "
+                "ou renseigne la section 🎵 SOUND DESIGN des plans."))
+        else:
+            self._status.setText(
+                f"{len(self._sfx_queue)} {translate('plan(s) chargé(s) — prêt à générer.')}")
+
+    def _on_conductor_shot(self, shot: dict):
+        """Un plan sélectionné → son PROMPT SON et sa DURÉE remplissent le
+        panneau manuel ; la file est remise à zéro (le plan prime)."""
+        if not shot:
+            return
+        prompt = (shot.get("sound_prompt", "") or "").strip()
+        try:
+            dur = float(shot.get("duration", 5.0) or 5.0)
+        except (TypeError, ValueError):
+            dur = 5.0
+        dur = max(1.0, min(60.0, dur))
+        self._set_mode("text")
+        self._txt_prompt.setPlainText(prompt)
+        self._dur_text.setValue(dur)
+        self._sfx_queue = []
+        self._refresh_sfx_queue()
+        n = shot.get("number", "?")
+        self._status.setText(
+            f"Plan {n} → {dur:g}s · "
+            + (translate("prompt son chargé ✓") if prompt
+               else translate("⚠ pas de prompt son sur ce plan (section 🎵 SOUND DESIGN)")))
+
+    def _on_conductor_shots(self, shots: list):
+        """Multi-sélection (Ctrl/Maj/lasso) → la file se construit aussitôt,
+        avec le prompt son et la durée de CHAQUE plan."""
+        self._build_queue_from_shots(shots or [])
+
+    def _refresh_sfx_queue(self):
+        """Pas de liste détaillée (la sélection se lit dans le conducteur) —
+        seul le bouton reflète la file."""
+        n_pending = sum(1 for x in self._sfx_queue if x["status"] == "pending")
+        self._btn_generate.setText(
+            "▶▶  " + translate("Lancer la file d'attente")
+            + (f"  ({n_pending})" if n_pending else ""))
+
+    def _on_run_queue(self):
+        if self._sfx_running or not self._sfx_queue:
+            return
+        for it in self._sfx_queue:
+            if it["status"] != "done":
+                it["status"] = "pending"
+        self._sfx_running = True
+        self._sfx_cancelled = False
+        self._btn_load_plans.setEnabled(False)
+        self._btn_cancel_queue.setVisible(True)
+        self._set_busy(True)
+        self._refresh_sfx_queue()
+        self._process_next_sfx()
+
+    def _on_cancel_queue(self):
+        """Arrêt de la file : plan en cours abandonné, restants conservés."""
+        if not self._sfx_running:
+            return
+        self._sfx_cancelled = True
+        if getattr(self, "_queue_worker", None) is not None:
+            from core.worker import abandon_thread
+            abandon_thread(self._queue_worker)
+            self._queue_worker = None
+        if 0 <= getattr(self, "_sfx_idx", -1) < len(self._sfx_queue):
+            it = self._sfx_queue[self._sfx_idx]
+            if it["status"] == "running":
+                it["status"] = "pending"
+        self._finish_sfx_queue()
+
+    def _process_next_sfx(self):
+        if getattr(self, "_sfx_cancelled", False):
+            self._finish_sfx_queue()
+            return
+        nxt = next((i for i, it in enumerate(self._sfx_queue)
+                    if it["status"] == "pending"), None)
+        if nxt is None:
+            self._finish_sfx_queue()
+            return
+        self._sfx_idx = nxt
+        it = self._sfx_queue[nxt]
+        it["status"] = "running"
+        self._refresh_sfx_queue()
+        done = sum(1 for x in self._sfx_queue if x["status"] == "done")
+        _snip = it["prompt"][:60] + ("…" if len(it["prompt"]) > 60 else "")
+        self._status.setText(
+            f"[{done + 1}/{len(self._sfx_queue)}] Plan {it['number']} "
+            f"({it['duration']:g}s) · {_snip}")
+        # Parquer le worker précédent avant de réassigner (anti-arrêt de chaîne).
+        if getattr(self, "_queue_worker", None) is not None:
+            from core.worker import abandon_thread
+            abandon_thread(self._queue_worker)
+        from api.tts import SFX1Worker
+        self._queue_worker = SFX1Worker(
+            it["prompt"], it["duration"],
+            label=f"plan{it['number']}_sfx", out_dir=self._sfx_out_dir())
+        self._queue_worker.progress.connect(self._on_progress)
+        self._queue_worker.finished.connect(self._on_sfx_item_done)
+        self._queue_worker.failed.connect(self._on_sfx_item_failed)
+        self._queue_worker.start()
+
+    def _on_sfx_item_done(self, path: str):
+        it = self._sfx_queue[self._sfx_idx]
+        it["status"] = "done"
+        if path:
+            path = self._conform_audio(path, it.get("duration") or 0.0)
+        it["out"] = path or ""
+        if path:
+            self._add_result(path)
+            self.generation_done.emit(path)
+        self._refresh_sfx_queue()
+        self._process_next_sfx()
+
+    def _on_sfx_item_failed(self, msg: str):
+        it = self._sfx_queue[self._sfx_idx]
+        it["status"] = "error"
+        it["error"]  = msg[:200]
+        self._status.setText(f"✗  Plan {it['number']} : {msg[:90]}")
+        self._refresh_sfx_queue()
+        self._process_next_sfx()
+
+    def _finish_sfx_queue(self):
+        self._sfx_running = False
+        self._set_busy(False)
+        self._btn_load_plans.setEnabled(True)
+        self._btn_cancel_queue.setVisible(False)
+        ok  = sum(1 for it in self._sfx_queue if it["status"] == "done")
+        err = sum(1 for it in self._sfx_queue if it["status"] == "error")
+        if getattr(self, "_sfx_cancelled", False):
+            rest = sum(1 for it in self._sfx_queue if it["status"] == "pending")
+            self._status.setText(
+                "■  " + translate("File annulée") + f" — {ok} "
+                + translate("ambiance(s) générée(s)") + f", {rest} "
+                + translate("en attente"))
+        else:
+            self._status.setText(
+                f"✓  {ok} {translate('ambiance(s) générée(s)')}"
+                + (f"  ·  {err} {translate('erreur(s)')}" if err else ""))
+        self._refresh_sfx_queue()
+        n_done = sum(1 for it in self._sfx_queue
+                     if it["status"] == "done" and it["out"])
+        if (not getattr(self, "_sfx_cancelled", False) and n_done >= 2
+                and self._auto_mix_cb.isChecked()):
+            self._on_export_mix()
+
+    # ── Bande-son CALÉE sur la vidéo (durée exacte, sans chevauchement) ───────
+
+    @staticmethod
+    def _build_conform_cmd(ffmpeg: str, src: str, dst: str, dur: float) -> list:
+        """Conforme UN fichier audio à la durée calée du plan. Pure (testable)."""
+        return [ffmpeg, "-y", "-i", src,
+                "-af", f"apad,atrim=0:{dur:g}", dst]
+
+    @staticmethod
+    def _build_assemble_cmd(ffmpeg: str, ins: list, durs: list, out: str,
+                            fade_s: float = 0.05) -> list:
+        """Concatène N fichiers, chacun conformé à SA durée calée, micro-fondus
+        aux jonctions SANS chevauchement (durée totale = somme exacte). Pure."""
+        cmd = [ffmpeg, "-y"]
+        for p in ins:
+            cmd += ["-i", p]
+        parts = []
+        for i, d in enumerate(durs):
+            st = max(0.0, d - fade_s)
+            parts.append(
+                f"[{i}:a]aresample=48000,aformat=channel_layouts=stereo,"
+                f"apad,atrim=0:{d:g},"
+                f"afade=t=in:d={fade_s:g},afade=t=out:st={st:g}:d={fade_s:g}[c{i}]")
+        parts.append("".join(f"[c{i}]" for i in range(len(ins)))
+                     + f"concat=n={len(ins)}:v=0:a=1[mix]")
+        cmd += ["-filter_complex", ";".join(parts), "-map", "[mix]", out]
+        return cmd
+
+    def _conform_audio(self, path: str, dur: float) -> str:
+        """Conforme le fichier généré à la durée du plan, EN PLACE. Silencieux
+        en cas d'échec (on garde le fichier brut plutôt que perdre la génération)."""
+        if not path or not os.path.isfile(path) or not dur:
+            return path
+        try:
+            from core.video_utils import get_ffmpeg_exe
+            ff = get_ffmpeg_exe()
+        except Exception:
+            ff = "ffmpeg"
+        tmp = path + ".cale.wav"
+        try:
+            import subprocess
+            flags = 0x08000000 if os.name == "nt" else 0   # CREATE_NO_WINDOW
+            proc = subprocess.run(self._build_conform_cmd(ff, path, tmp, dur),
+                                  capture_output=True, creationflags=flags, timeout=120)
+            if proc.returncode == 0 and os.path.isfile(tmp) and os.path.getsize(tmp) > 0:
+                os.replace(tmp, path)
+        except Exception:
+            pass
+        finally:
+            if os.path.isfile(tmp):
+                try:
+                    os.remove(tmp)
+                except OSError:
+                    pass
+        return path
+
+    def _on_export_mix(self):
+        import time as _time
+        pairs = [(it["out"], float(it["duration"])) for it in self._sfx_queue
+                 if it["status"] == "done" and it["out"] and os.path.isfile(it["out"])]
+        if len(pairs) < 2:
+            self._status.setText(translate("Il faut au moins 2 ambiances générées."))
+            return
+        try:
+            from core.video_utils import get_ffmpeg_exe
+            ff = get_ffmpeg_exe()
+        except Exception:
+            ff = "ffmpeg"
+        ins  = [p for p, _ in pairs]
+        durs = [d for _, d in pairs]
+        out = os.path.join(self._sfx_out_dir(), f"bande_son_{int(_time.time())}.wav")
+        cmd = self._build_assemble_cmd(ff, ins, durs, out)
+        self._status.setText(translate("Assemblage de la bande-son (durée exacte)…"))
+        self._mix_worker = _MixWorker(cmd, out)
+        self._mix_worker.finished.connect(self._on_mix_done)
+        self._mix_worker.failed.connect(self._on_mix_failed)
+        self._mix_worker.start()
+
+    def _on_mix_done(self, path: str):
+        self._status.setText(translate("Bande-son calée exportée ✓ (durée = somme des plans)"))
+        self._add_result(path)
+        self.generation_done.emit(path)
+
+    def _on_mix_failed(self, msg: str):
+        self._status.setText(f"✗  {msg[:120]}")
 
     def retranslate(self):
         pass

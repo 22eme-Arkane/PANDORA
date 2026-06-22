@@ -442,19 +442,59 @@ def is_engine_compatible(path: str) -> bool:
     return codec in ("", "h264")   # '' = ffprobe absent → on fait confiance au .mp4
 
 
-def ensure_engine_video(path: str, emit=None) -> str:
-    """Retourne un chemin vidéo H.264/mp4 exploitable par les moteurs IA.
+def _video_dims(path: str) -> tuple | None:
+    """(largeur, hauteur) de la 1re piste vidéo via ffprobe, ou None."""
+    try:
+        r = subprocess.run(
+            [get_ffprobe_exe(), "-v", "error", "-select_streams", "v:0",
+             "-show_entries", "stream=width,height", "-of", "csv=p=0", path],
+            capture_output=True, text=True, timeout=10, creationflags=_NO_WINDOW)
+        if r.returncode != 0:
+            return None
+        w, h = (int(x) for x in r.stdout.strip().split(",")[:2])
+        return (w, h)
+    except Exception:
+        return None
 
-    Transcode automatiquement si le format/codec n'est pas supporté (MXF, ProRes,
-    HEVC, conteneurs exotiques…), en CONSERVANT la résolution native (la plus
-    haute). Renvoie l'original si déjà compatible OU si ffmpeg est indisponible.
-    Résultat mis en cache (par chemin+taille+date) pour ne pas re-transcoder.
-    `emit(msg)` : callback optionnel de progression.
+
+# Hauteur max envoyée aux moteurs. Seedance, Kling, PixVerse, Wan, Hailuo, LTX,
+# Happy Horse, Veo, Sora… plafonnent tous à 1080p en entrée — au-delà = upload
+# inutilement lourd et risques de rejet. On redimensionne à la volée si besoin.
+ENGINE_MAX_HEIGHT = 1080
+
+
+def video_needs_transcode(path: str) -> str:
+    """'' si le clip part TEL QUEL aux moteurs ; sinon une RAISON courte et lisible
+    (pour PRÉVENIR l'utilisateur avant de générer) : « format/codec », « > 1080p »,
+    ou les deux."""
+    if not path or not os.path.isfile(path):
+        return ""
+    reasons = []
+    if not is_engine_compatible(path):
+        reasons.append("format/codec non supporté")
+    dims = _video_dims(path)
+    if dims and dims[1] > ENGINE_MAX_HEIGHT:
+        reasons.append(f"résolution {dims[0]}×{dims[1]} > 1080p")
+    return " · ".join(reasons)
+
+
+def ensure_engine_video(path: str, emit=None) -> str:
+    """Retourne un chemin vidéo H.264/mp4 PROGRESSIF ≤ 1080p exploitable par les
+    moteurs IA.
+
+    Transcode si le format/codec n'est pas supporté (MXF, ProRes, HEVC…) OU si la
+    résolution dépasse 1080p (downscale, AR conservé). Garantit une sortie
+    PROGRESSIVE : `yadif=deint=interlaced` ne désentrelace QUE les images marquées
+    entrelacées et laisse les images progressives intactes → on n'ajoute JAMAIS de
+    trames sur une vidéo progressive (le bug observé sur Draw-to-Video).
+    Renvoie l'original si déjà conforme OU si ffmpeg est indisponible.
+    Résultat mis en cache (chemin+taille+date). `emit(msg)` : progression optionnelle.
     """
     if not path or not os.path.isfile(path):
         return path
-    if is_engine_compatible(path):
-        return path
+    reason = video_needs_transcode(path)
+    if not reason:
+        return path   # déjà H.264/mp4 progressif ≤1080p → envoyé tel quel
     try:
         st = os.stat(path)
         sig = f"{os.path.splitext(os.path.basename(path))[0]}_{st.st_size}_{int(st.st_mtime)}"
@@ -466,14 +506,17 @@ def ensure_engine_video(path: str, emit=None) -> str:
         return out
     if emit:
         try:
-            emit("Conversion du clip en H.264…")
+            emit(f"Conversion du clip ({reason}) en H.264 progressif ≤ 1080p…")
         except Exception:
             pass
     try:
+        # yadif=deint=interlaced → anti-trames (progressif préservé) ;
+        # scale=-2:'min(1080,ih)' → plafonne à 1080p sans jamais agrandir, AR conservé.
+        vf = "yadif=deint=interlaced,scale=-2:'min(1080,ih)':flags=lanczos,format=yuv420p"
         cmd = [get_ffmpeg_exe(), "-y", "-i", path,
+               "-vf", vf,
                "-c:v", "libx264", "-preset", "veryfast", "-crf", "18",
-               "-pix_fmt", "yuv420p", "-movflags", "+faststart",
-               "-c:a", "aac", "-b:a", "192k", out]
+               "-movflags", "+faststart", "-c:a", "aac", "-b:a", "192k", out]
         r = subprocess.run(cmd, capture_output=True, timeout=1800, creationflags=_NO_WINDOW)
         if r.returncode == 0 and os.path.isfile(out) and os.path.getsize(out) > 0:
             return out

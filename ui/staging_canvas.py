@@ -144,6 +144,7 @@ class StagingCanvas(QGraphicsView):
     actor_context  = pyqtSignal(object)   # clic droit sur un acteur (model dict)
     light_context  = pyqtSignal(object)   # clic droit sur une lumière (model dict)
     camera_context = pyqtSignal(object)   # clic droit sur la caméra (model dict)
+    empty_context  = pyqtSignal(float, float)  # clic droit sur le vide (x, y normalisés)
 
     def __init__(self, mode: str = "staging"):
         super().__init__()
@@ -217,6 +218,11 @@ class StagingCanvas(QGraphicsView):
         sp   = self.mapToScene(e.pos())
         tok  = self._token_at(self._scene.itemAt(sp, self.transform()))
         if tok is None:
+            # Clic droit sur le VIDE → menu d'ajout (acteur/caméra ou projecteur),
+            # placé au point cliqué (coords normalisées 0..1).
+            x = max(0.0, min(1.0, sp.x() / float(_SIZE)))
+            y = max(0.0, min(1.0, sp.y() / float(_SIZE)))
+            self.empty_context.emit(x, y)
             return
         # La caméra a un menu même en référence (Plan de feu) → régler sa hauteur.
         if tok.kind == "camera":
@@ -295,23 +301,33 @@ class StagingCanvas(QGraphicsView):
                 return it
         return None
 
-    def add_actor(self, name: str):
-        a = {"name": name, "x": 0.35, "y": 0.5}
+    def add_actor(self, name: str, x: float = 0.35, y: float = 0.5):
+        a = {"name": name, "x": x, "y": y}
         self._record.setdefault("actors", []).append(a)
         self._scene.addItem(_Token(self, "actor", _initials(name), a, CP.get("green", "#3ddc97")))
         self.changed.emit()
 
-    def add_prop(self, name: str):
-        p = {"name": name, "x": 0.65, "y": 0.5}
+    def add_prop(self, name: str, x: float = 0.65, y: float = 0.5):
+        p = {"name": name, "x": x, "y": y}
         self._record.setdefault("props", []).append(p)
         self._scene.addItem(_Token(self, "prop", _initials(name), p, CP.get("text_dim", "#5a6a7a")))
         self.changed.emit()
 
-    def add_light(self, name: str, role: str, family: str = "", model: str = ""):
+    def add_light(self, name: str, role: str, family: str = "", model: str = "",
+                  x: float = 0.5, y: float = 0.3):
         l = {"name": name, "type": role, "family": family, "model": model,
-             "x": 0.5, "y": 0.3, "angle": 180.0}
+             "x": x, "y": y, "angle": 180.0}
         self._record.setdefault("lights", []).append(l)
         self._scene.addItem(_Token(self, "light", _initials(name), l, "#f5c518", has_dir=True))
+        self.changed.emit()
+
+    def place_camera(self, x: float, y: float):
+        """Place (ou crée) la caméra au point donné (coords normalisées)."""
+        if self._record is None:
+            return
+        cam = self._record.setdefault("camera", {"x": 0.5, "y": 0.9, "angle": 0.0})
+        cam["x"], cam["y"] = x, y
+        self.load(self._record)
         self.changed.emit()
 
     def reload(self):
