@@ -971,8 +971,9 @@ class DecorDialog(QDialog):
                 f"Cette option va générer le plan d'ensemble, le plan vu de dessus, "
                 f"puis les 6 faces de « {name} » :\n\n"
                 f"avant · arrière · gauche · droite · haut · bas · plan d'ensemble\n\n"
-                f"Les 7 vues sont regroupées dans la galerie de CE décor (même pièce) ; "
-                f"le plan vu de dessus sert à la Mise en scène / au Plan de feu.\n"
+                f"Les 7 vues deviennent 7 décors de la même pièce, regroupés dans un "
+                f"bandeau dépliable de la page Décors ; le plan vu de dessus sert à la "
+                f"Mise en scène / au Plan de feu.\n"
                 f"Chaque vue consomme des crédits.\n\nContinuer ?",
                 QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
                 QMessageBox.StandardButton.Yes,
@@ -1108,9 +1109,10 @@ class DecorDialog(QDialog):
                 pass
 
     def _on_room_decors_done(self, views: list):
-        """Les 7 vues → UN SEUL décor (la même pièce) : la galerie contient les 7
-        vues (avant, arrière, gauche, droite, haut, bas, vue d'ensemble) et le plan
-        d'architecture devient le plan vu de dessus (Mise en scène / Plan de feu)."""
+        """Les 7 vues → 7 DÉCORS distincts de la même pièce (regroupés dans un
+        bandeau dépliable, page Décors). CE décor devient la « vue d'ensemble » et
+        porte le plan d'architecture, partagé par les 7 vues (Mise en scène / Plan
+        de feu) ; chaque face est enregistrée comme un décor frère (room_group)."""
         self._btn_gen.setEnabled(True)
         self._progress.setVisible(False)
         all_views = [v for v in (views or []) if v.get("path") and os.path.isfile(v["path"])]
@@ -1121,18 +1123,35 @@ class DecorDialog(QDialog):
             return
         overview = next((v for v in view_entries if v.get("code") == "ensemble"),
                         view_entries[0])
-        self._generated_images = [v["path"] for v in view_entries]
+        base    = self._name.text().strip() or self._item.get("name", "Décor")
+        cat     = self._item.get("category", "Autre")
+        fp_path = fp_entry["path"] if fp_entry else ""
+        # CE décor = la vue d'ensemble (id conservé → reste assigné aux plans).
         self._image_path = overview["path"]
-        self._preview_idx = self._generated_images.index(overview["path"])
-        # Mémorise les libellés de vue + le plan vu de dessus sur l'item (persistés
-        # par _on_save qui copie self._item).
-        self._item["room_views"] = [
-            {"label": v.get("label", ""), "code": v.get("code", ""),
-             "path": v["path"], "prompt": v.get("prompt", "")}
-            for v in view_entries
-        ]
-        if fp_entry:
-            self._item["floor_plan"] = fp_entry["path"]
+        self._generated_images = [overview["path"]]
+        self._preview_idx = 0
+        self._item["room_group"] = base
+        self._item["room_view"]  = "Ensemble"
+        self._item["image_path"] = overview["path"]
+        self._item["generated_images"] = [overview["path"]]
+        if fp_path:
+            self._item["floor_plan"] = fp_path
+        decors_api.save_decor(self._item)   # persiste l'ensemble tout de suite
+        # Chaque face → un nouveau décor frère de la même pièce.
+        for v in view_entries:
+            if v is overview:
+                continue
+            label = v.get("label", "")
+            decors_api.save_decor({
+                "name":             f"{base} · {label}" if label else base,
+                "room_group":       base,
+                "room_view":        label,
+                "prompt":           v.get("prompt", "") or self._item.get("prompt", ""),
+                "category":         cat,
+                "image_path":       v["path"],
+                "generated_images": [v["path"]],
+                "floor_plan":       fp_path,
+            })
         self._decors_created = True
         self._load_preview(self._image_path)
         self._refresh_preview_nav()
@@ -1141,7 +1160,7 @@ class DecorDialog(QDialog):
         n_views = len(view_entries)
         if n_views >= 7:
             self._status.setText(
-                "✓ 1 décor avec ses 7 vues — clique Enregistrer pour le conserver.")
+                "✓ 7 vues → 7 décors de la pièce créés (regroupés dans la page Décors).")
         else:
             w = getattr(self, "_worker_gen", None)
             err = (getattr(w, "_last_error", "") or "").strip()

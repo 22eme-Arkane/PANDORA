@@ -61,13 +61,30 @@ class DecorCard(QWidget):
 
         # Category badge
         cat = data.get("category", "")
+        cat_w = 0
         if cat:
+            cat_w = min(self._W - 16, len(cat) * 7 + 14)
             badge = QLabel(cat, self._thumb)
-            badge.setGeometry(8, 8, min(self._W - 16, len(cat) * 7 + 14), 20)
+            badge.setGeometry(8, 8, cat_w, 20)
             badge.setAlignment(Qt.AlignmentFlag.AlignCenter)
             badge.setStyleSheet(
                 f"color:#07080f;background:{CP['green']};border-radius:4px;"
                 f"font-size:9px;font-weight:700;letter-spacing:0.5px;"
+            )
+
+        # Badge de FACE (rouge) — pour les vues d'une pièce (7 vues) : indique
+        # clairement de quelle face il s'agit (Avant/Arrière/Gauche/Droite/Sol/
+        # Plafond/Ensemble), à côté de la catégorie.
+        rv = data.get("room_view", "")
+        if rv:
+            _red = CP.get("red", "#ff4f6a")
+            fx = 8 + (cat_w + 5 if cat_w else 0)
+            fb = QLabel(rv.upper(), self._thumb)
+            fb.setGeometry(fx, 8, min(self._W - fx - 8, len(rv) * 7 + 14), 20)
+            fb.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            fb.setStyleSheet(
+                f"color:#ffffff;background:{_red};border-radius:4px;"
+                f"font-size:9px;font-weight:800;letter-spacing:0.5px;"
             )
 
         # Overlay hover
@@ -144,6 +161,7 @@ class PageDecors(QWidget):
         super().__init__()
         self.setStyleSheet(f"background:{CP['bg0']};")
         self._all_items: list[dict] = []
+        self._collapsed: dict[str, bool] = {}   # état replié des bandeaux par pièce
 
         root = QVBoxLayout(self)
         root.setContentsMargins(0, 0, 0, 0)
@@ -179,10 +197,12 @@ class PageDecors(QWidget):
 
         self._grid_container = QWidget()
         self._grid_container.setStyleSheet("background:transparent;")
-        self._grid = QGridLayout(self._grid_container)
-        self._grid.setSpacing(18)
-        self._grid.setAlignment(Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignLeft)
-        self._grid.setContentsMargins(32, 24, 32, 32)
+        # Pile verticale de sections : décors libres (grille simple) + un bandeau
+        # dépliable par pièce (room_group) regroupant ses 7 vues.
+        self._sections_lay = QVBoxLayout(self._grid_container)
+        self._sections_lay.setSpacing(14)
+        self._sections_lay.setAlignment(Qt.AlignmentFlag.AlignTop)
+        self._sections_lay.setContentsMargins(32, 18, 32, 28)
 
         scroll.setWidget(self._grid_container)
         root.addWidget(scroll, 1)
@@ -334,7 +354,8 @@ class PageDecors(QWidget):
         v.addWidget(hs, 1)
         return wrap
 
-    def _fp_card(self, decor: dict):
+    def _fp_card(self, decor: dict, display_name: str | None = None):
+        disp = display_name or decor.get("name", "—")
         card = QWidget()
         card.setFixedSize(132, 104)
         cv = QVBoxLayout(card)
@@ -358,14 +379,14 @@ class PageDecors(QWidget):
             thumb.setCursor(Qt.CursorShape.PointingHandCursor)
             thumb.setToolTip(translate("Cliquer pour agrandir"))
 
-            def _click(e, _p=fp, _n=decor.get("name", "")):
+            def _click(e, _p=fp, _n=disp):
                 if e.button() == Qt.MouseButton.LeftButton:
                     self._open_plan_preview(_p, _n)
             thumb.mousePressEvent = _click
         else:
             thumb.setText("▦\n" + translate("à générer"))
         cv.addWidget(thumb)
-        name = QLabel(decor.get("name", "—"))
+        name = QLabel(disp)
         name.setFixedHeight(26)
         name.setAlignment(Qt.AlignmentFlag.AlignCenter)
         name.setStyleSheet(
@@ -373,7 +394,7 @@ class PageDecors(QWidget):
             f"background:{CP['bg2']};border:1px solid {CP['border']};border-top:none;"
             f"border-radius:0 0 8px 8px;")
         cv.addWidget(name)
-        card.setToolTip(decor.get("name", ""))
+        card.setToolTip(disp)
         return card
 
     def _open_plan_preview(self, path: str, name: str = ""):
@@ -402,6 +423,19 @@ class PageDecors(QWidget):
         lay.addWidget(lbl)
         dlg.exec()
 
+    def _fp_representatives(self) -> list[dict]:
+        """Un plan par PIÈCE (room_group) + chaque décor libre — les 7 vues d'une
+        pièce partagent le même plan vu de dessus, on n'en affiche donc qu'un."""
+        seen, out = set(), []
+        for d in self._all_items:
+            g = d.get("room_group", "") or ""
+            key = ("g:" + g) if g else ("d:" + d.get("id", ""))
+            if key in seen:
+                continue
+            seen.add(key)
+            out.append(d)
+        return out
+
     def _refresh_floor_plans(self):
         if not hasattr(self, "_fp_row"):
             return
@@ -409,9 +443,11 @@ class PageDecors(QWidget):
             it = self._fp_row.takeAt(0)
             if it.widget():
                 it.widget().deleteLater()
-        for d in self._all_items:
-            self._fp_row.insertWidget(self._fp_row.count() - 1, self._fp_card(d))
-        missing = sum(1 for d in self._all_items
+        reps = self._fp_representatives()
+        for d in reps:
+            disp = d.get("room_group") or d.get("name", "—")
+            self._fp_row.insertWidget(self._fp_row.count() - 1, self._fp_card(d, disp))
+        missing = sum(1 for d in reps
                       if not (d.get("floor_plan") and os.path.isfile(d["floor_plan"])))
         if hasattr(self, "_fp_btn"):
             self._fp_btn.setEnabled(missing > 0 and (self._fp_worker is None
@@ -422,7 +458,7 @@ class PageDecors(QWidget):
     def _on_gen_missing_plans(self):
         if self._fp_worker is not None and self._fp_worker.isRunning():
             return
-        decors = [d for d in self._all_items
+        decors = [d for d in self._fp_representatives()
                   if not (d.get("floor_plan") and os.path.isfile(d["floor_plan"]))]
         if not decors:
             return
@@ -462,8 +498,9 @@ class PageDecors(QWidget):
         self._render(items)
 
     def _render(self, items: list[dict]):
-        while self._grid.count():
-            w = self._grid.takeAt(0)
+        # Vide les sections existantes.
+        while self._sections_lay.count():
+            w = self._sections_lay.takeAt(0)
             if w.widget():
                 w.widget().deleteLater()
 
@@ -473,15 +510,71 @@ class PageDecors(QWidget):
             empty.setStyleSheet(
                 f"color:{CP['text_dim']};font-size:13px;background:transparent;border:none;"
             )
-            self._grid.addWidget(empty, 0, 0, 1, 6)
+            self._sections_lay.addWidget(empty)
             return
 
-        cols = 6
+        # Décors libres (sans pièce) en grille simple ; chaque pièce (room_group)
+        # dans un bandeau dépliable regroupant ses vues.
+        for group, group_items in decors_api.group_by_room(items):
+            if group:
+                self._sections_lay.addWidget(self._group_section(group, group_items))
+            else:
+                self._sections_lay.addWidget(self._cards_grid(group_items))
+        self._sections_lay.addStretch(1)
+
+    def _make_card(self, item: dict) -> DecorCard:
+        card = DecorCard(item)
+        card.edit_requested.connect(self._on_edit)
+        card.delete_requested.connect(self._on_delete)
+        return card
+
+    def _cards_grid(self, items: list[dict], cols: int = 6) -> QWidget:
+        wrap = QWidget()
+        wrap.setStyleSheet("background:transparent;")
+        g = QGridLayout(wrap)
+        g.setSpacing(18)
+        g.setContentsMargins(0, 0, 0, 0)
+        g.setAlignment(Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignLeft)
         for i, item in enumerate(items):
-            card = DecorCard(item)
-            card.edit_requested.connect(self._on_edit)
-            card.delete_requested.connect(self._on_delete)
-            self._grid.addWidget(card, i // cols, i % cols)
+            g.addWidget(self._make_card(item), i // cols, i % cols)
+        return wrap
+
+    def _group_section(self, title: str, items: list[dict]) -> QWidget:
+        """Bandeau dépliable d'une pièce : en-tête « ▼ <pièce> · N vue(s) » qui
+        replie/déplie la grille de ses décors. L'état est mémorisé entre rafraîchis."""
+        sec = QWidget()
+        sec.setStyleSheet("background:transparent;")
+        v = QVBoxLayout(sec)
+        v.setContentsMargins(0, 0, 0, 0)
+        v.setSpacing(8)
+
+        collapsed = self._collapsed.get(title, False)
+        n = len(items)
+
+        def _label(open_: bool) -> str:
+            return ("▼  " if open_ else "▶  ") + f"{title}   ·   {n} vue(s)"
+
+        head = QPushButton(_label(not collapsed))
+        head.setCursor(Qt.CursorShape.PointingHandCursor)
+        head.setFixedHeight(34)
+        head.setStyleSheet(
+            f"QPushButton{{text-align:left;background:{CP['bg2']};color:{CP['text_primary']};"
+            f"border:1px solid {CP['border']};border-left:3px solid {CP['accent']};"
+            f"border-radius:8px;font-size:12px;font-weight:700;padding:0 14px;}}"
+            f"QPushButton:hover{{background:{CP['bg3']};}}")
+        v.addWidget(head)
+
+        body = self._cards_grid(items)
+        body.setVisible(not collapsed)
+        v.addWidget(body)
+
+        def _toggle(_=False):
+            new_collapsed = not self._collapsed.get(title, False)
+            self._collapsed[title] = new_collapsed
+            body.setVisible(not new_collapsed)
+            head.setText(_label(not new_collapsed))
+        head.clicked.connect(_toggle)
+        return sec
 
     def _on_delete_all(self):
         if not self._all_items:

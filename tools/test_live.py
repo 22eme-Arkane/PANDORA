@@ -620,8 +620,9 @@ def fenetre_live():
     assert (src_rp.index("addWidget(self._btn_generate_all)")
             < src_rp.index("ga_lay.addWidget(self._btn_reopen_window)")), \
         "Rouvrir la fenêtre sous Tout générer"
-    # Colonne droite permanente = largeur de la poignée IA fermée (symétrie)
-    assert w._right_spacer.maximumWidth() == w._assistant_toggle.maximumWidth() == 28
+    # Colonne droite permanente = largeur de la poignée Guide fermée (symétrie).
+    # 42 px : largeur des bandes Guide/IA (assez large pour « GUIDE » non tronqué).
+    assert w._right_spacer.maximumWidth() == w._assistant_toggle.maximumWidth() == 42
     assert _body_lay.indexOf(w._right_spacer) > _body_lay.indexOf(w._stack), \
         "colonne symétrique au bord droit"
     w._navigate("castings")   # alias Cinéma → Live, ne doit pas lever

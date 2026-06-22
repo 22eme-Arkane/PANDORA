@@ -59,26 +59,26 @@ class ChatInput(QTextEdit):
         super().keyPressEvent(e)
 
 
-# ── Poignée d'ouverture/fermeture de la discussion Claude (à gauche) ─────────
+# ── Poignée d'ouverture/fermeture de la discussion Claude (à droite) ─────────
 class _ChatToggleStrip(QWidget):
-    """Bande verticale pour ouvrir/fermer la discussion Claude — même principe
-    que le chat du Storyboard de PANDORA (poignée + flèche), placée à GAUCHE."""
+    """Bande verticale pour ouvrir/fermer la discussion Claude — IDENTIQUE au chat
+    du Storyboard de PANDORA (poignée + flèche), placée à DROITE (bord droit)."""
 
     def __init__(self, panel, start_open: bool = False):
         super().__init__()
         self._panel = panel
         self._open = start_open   # fermé par défaut (comme le chat Storyboard)
         panel.setVisible(start_open)
-        self.setFixedWidth(28)
+        self.setFixedWidth(42)
         self.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.setToolTip("Ouvrir / fermer la discussion")
+        self.setToolTip("Ouvrir / fermer l'IA (actions sur le projet)")
         self.setStyleSheet(f"background:{CP['bg1']};")
 
         lay = QVBoxLayout(self)
         lay.setContentsMargins(0, 0, 0, 0)
         lay.setSpacing(6)
         lay.addStretch()
-        self._lbl = QLabel("CHAT")
+        self._lbl = QLabel("IA")
         self._lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self._lbl.setStyleSheet(
             f"color:{CP['accent']};font-size:8px;font-weight:900;"
@@ -92,9 +92,9 @@ class _ChatToggleStrip(QWidget):
         lay.addStretch()
 
     def _arrow_char(self) -> str:
-        # Chat à GAUCHE : ouvert → on replie vers la droite (❯) ; fermé → on déplie
-        # vers la gauche (❮, là où le chat apparaît).
-        return "❯" if self._open else "❮"
+        # Chat à DROITE (identique au Storyboard) : ouvert → flèche ❮ (replier vers
+        # la droite) ; fermé → ❯ (déplier vers la gauche, là où le chat apparaît).
+        return "❮" if self._open else "❯"
 
     def mousePressEvent(self, e):
         if e.button() == Qt.MouseButton.LeftButton:
@@ -230,9 +230,9 @@ class StudioImagesPanel(QWidget):
         root.setContentsMargins(14, 12, 14, 12)
         root.setSpacing(10)
 
-        # Corps : discussion Claude repliable à GAUCHE (poignée + flèche, comme le
-        # chat du Storyboard) + génération RECENTRÉE (largeur plafonnée + centrée)
-        # dans un SCROLL vertical à droite.
+        # Corps : génération RECENTRÉE (largeur plafonnée + centrée) dans un SCROLL
+        # vertical à GAUCHE + discussion Claude repliable à DROITE (panneau + poignée
+        # au bord droit, comme le chat du Storyboard).
         # (Sauvegarder/Ouvrir ont migré à côté du « Moteur de génération ».)
         body = QHBoxLayout()
         body.setContentsMargins(0, 0, 0, 0)
@@ -259,14 +259,15 @@ class StudioImagesPanel(QWidget):
         left_scroll.setStyleSheet("QScrollArea{border:none;background:transparent;}")
         left_scroll.setWidget(left_wrap)
 
-        # Discussion Claude à GAUCHE (comme le chat du Storyboard), puis poignée,
-        # puis la génération (qui occupe le reste de la largeur).
+        # Génération à GAUCHE (reste de la largeur), puis le panneau de discussion
+        # Claude et SA poignée à l'EXTRÊME DROITE — disposition IDENTIQUE au chat du
+        # Storyboard de PANDORA (panneau puis poignée au bord droit).
         self._chat_panel = self._build_right()
         self._chat_panel.setFixedWidth(440)
         self._chat_toggle = _ChatToggleStrip(self._chat_panel)
+        body.addWidget(left_scroll, 1)
         body.addWidget(self._chat_panel)
         body.addWidget(self._chat_toggle)
-        body.addWidget(left_scroll, 1)
 
         root.addLayout(body, 1)
 
@@ -620,7 +621,7 @@ class StudioImagesPanel(QWidget):
         _ico = QLabel("✦")
         _ico.setStyleSheet(f"color:{CP['accent']};font-size:13px;background:transparent;border:none;")
         _chl.addWidget(_ico)
-        _ttl = QLabel("Discussion avec Claude")
+        _ttl = QLabel("IA")
         _ttl.setStyleSheet(
             f"color:{CP['text_primary']};font-size:12px;font-weight:700;background:transparent;border:none;")
         _chl.addWidget(_ttl)

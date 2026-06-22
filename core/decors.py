@@ -59,6 +59,21 @@ def list_decors() -> list[dict]:
     return index
 
 
+def group_by_room(decors: list[dict]) -> list[tuple]:
+    """Regroupe les décors par pièce (`room_group`) en conservant l'ordre d'arrivée.
+    Renvoie [(room_group, [décors]), …] ; les décors sans groupe sont réunis sous
+    la clé "" (groupe « libre », affiché sans bandeau dans la page Décors)."""
+    groups: dict[str, list] = {}
+    order: list[str] = []
+    for d in decors or []:
+        g = d.get("room_group", "") or ""
+        if g not in groups:
+            groups[g] = []
+            order.append(g)
+        groups[g].append(d)
+    return [(g, groups[g]) for g in order]
+
+
 def get_decor(decor_id: str) -> dict | None:
     index = _load_index()
     for decor in index:
@@ -85,8 +100,12 @@ def save_decor(data: dict) -> dict:
         data.setdefault("prompt", "")
         data.setdefault("image_path", "")
         data.setdefault("floor_plan", "")   # plan vu de dessus (Mise en scène / Plan de feu)
-        data.setdefault("generated_images", [])  # galerie (dont les 7 vues de la pièce)
-        data.setdefault("room_views", [])        # [{label, code, path, prompt}] des 7 vues
+        data.setdefault("generated_images", [])  # galerie d'images de CE décor
+        data.setdefault("room_views", [])        # (legacy) galerie 7 vues d'un décor unique
+        data.setdefault("room_view", "")         # face de la pièce (Avant/Arrière/…/Ensemble)
+        data.setdefault("room_group", "")        # pièce d'appartenance : les 7 vues d'une
+        #                                           même pièce partagent ce nom → regroupées
+        #                                           dans un bandeau dépliable (page Décors).
         data.setdefault("ref_paths", [])
         data.setdefault("assigned_to", [])
         data.setdefault("assigned_sequences", [])

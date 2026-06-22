@@ -488,29 +488,32 @@ def decor_sept_vues():
     from api.nano_banana import GenerateRoomViewsWorker
     w = GenerateRoomViewsWorker("salle à manger", "Salle à manger")
     assert hasattr(w, "views_finished"), "signal structuré (label/code/path) par vue"
-    # Les 7 vues vont dans UN SEUL décor (galerie), PAS 7 décors distincts.
+    # Les 7 vues deviennent 7 DÉCORS distincts d'une même pièce (room_group),
+    # regroupés dans un bandeau dépliable (page Décors) — voir aussi
+    # decors_sept_vues_groupees.
     import inspect
     src = inspect.getsource(__import__("ui.dialog_decor", fromlist=["_"]))
     assert '"seven_views"' in src and "GenerateRoomViewsWorker" in src
-    assert "_on_room_decors_done" in src and "generated_images" in src, \
-        "la fiche décor regroupe les 7 vues dans la galerie d'UN décor"
-    assert "room_views" in src, "les libellés de vue sont mémorisés (repérage)"
-    assert "_view_label_for" in src, "libellé de vue affiché dans l'aperçu"
+    assert "_on_room_decors_done" in src and "room_group" in src, \
+        "la fiche décor crée 7 décors frères marqués room_group"
     # Mode « Image unique » par défaut + confirmation avant les 7 vues.
     assert "setCurrentIndex(0)" in src, "mode image unique par défaut dans la fiche décor"
     assert "Générer les 7 vues de la pièce" in src, "confirmation avant les 7 vues"
     # Chaque vue stocke SON prompt (cadrage) → régénération fidèle.
     nb = inspect.getsource(GenerateRoomViewsWorker._real)
     assert '"prompt": fprompt' in nb, "le worker renvoie le prompt par vue"
-    # disponible aussi depuis le scénario (« Générer les décors ») → 1 décor / galerie
+    # Disponible aussi depuis le scénario (« Générer les décors ») → 7 décors frères.
     eg = inspect.getsource(__import__("ui.dialog_extract_generate", fromlist=["_"]))
     assert "offer_room_views=True" in eg and "views_finished" in eg
-    assert "room_views" in eg and "generated_images" in eg, \
-        "depuis le scénario : les 7 vues fusionnées dans un seul décor"
-    # RÉSILIENCE des 6 faces (fix « seul le plan d'ensemble + le plan » sont générés) :
-    # édition NB2 désactivée dès le 1er échec + repli texte robuste (4 essais, backoff
-    # adapté aux limites de débit) + journal de diagnostic + réfs d'édition allégées.
-    assert "edit_disabled" in nb and "range(4)" in nb, "repli texte robuste (4 essais)"
+    assert "room_group" in eg, \
+        "depuis le scénario : 7 vues → 7 décors d'une pièce (room_group)"
+    # COHÉRENCE des 6 faces : chaque face est une ÉDITION NB2 qui INJECTE le plan
+    # d'ensemble + le plan d'architecture comme RÉFÉRENCES (même pièce, angles
+    # différents) ; repli TEXTE robuste (4 essais, backoff) si l'édition échoue.
+    assert "ref_urls" in nb and "_gen_edit" in nb and "consistency" in nb, \
+        "faces générées par édition avec références (plan d'ensemble + plan d'archi)"
+    assert "ov_path" in nb and "fp_path" in nb, "réfs = plan d'ensemble + plan d'architecture"
+    assert "edit_off" in nb and "range(4)" in nb, "repli texte robuste (4 essais)"
     assert "pandora_decor.log" in nb, "journal de diagnostic des 7 vues"
     assert "_VIEW_GAP_S" in nb, "génération ÉTAPE PAR ÉTAPE (vues espacées dans le temps)"
     assert "_faces_ok" in nb and "_last_error" in nb, "worker remonte les faces manquantes"
@@ -1550,6 +1553,89 @@ def placement_auto_hauteur_et_doublage():
     pd = inspect.getsource(__import__("ui.page_doublage", fromlist=["_"]))
     assert ("StoryboardSelector" in pd and "_load_dialogues" in pd
             and "extract_dialogues" in pd), "Doublage : sélection plans → dialogues"
+
+
+@test
+def decors_sept_vues_groupees():
+    """7 vues d'une pièce → 7 DÉCORS distincts marqués `room_group`, regroupés en
+    bandeaux dépliables (page Décors) ; plan d'architecte dédupliqué par pièce."""
+    import inspect
+    import core.decors as dec
+    # Regroupement par pièce : ordre conservé, décors libres réunis sous "".
+    g = dec.group_by_room([
+        {"id": "1", "name": "Salon"},
+        {"id": "2", "name": "SAM", "room_group": "SAM"},
+        {"id": "3", "name": "SAM · Avant", "room_group": "SAM"},
+    ])
+    assert [k for k, _ in g] == ["", "SAM"] and len(g[1][1]) == 2
+    cd = inspect.getsource(dec)
+    assert 'setdefault("room_group"' in cd, "champ room_group au schéma"
+    assert 'setdefault("room_view"' in cd, "champ room_view (face) au schéma"
+    # Génération : les 2 flux créent des décors frères (room_group + face room_view).
+    sg = inspect.getsource(__import__("ui.dialog_extract_generate", fromlist=["_"]))
+    assert "room_group" in sg and "room_view" in sg and "_on_room_views_done" in sg
+    dd = inspect.getsource(__import__("ui.dialog_decor", fromlist=["_"]))
+    assert "room_group" in dd and "room_view" in dd and "_on_room_decors_done" in dd
+    # UI : bandeaux dépliables + plan dédupliqué par pièce + badge de FACE (room_view).
+    pd = inspect.getsource(__import__("ui.page_decors", fromlist=["_"]))
+    assert ("_group_section" in pd and "group_by_room" in pd
+            and "_fp_representatives" in pd and "_collapsed" in pd), "regroupement UI"
+    assert "room_view" in pd, "badge de face (Avant/Arrière/…) sur la carte décor"
+
+
+@test
+def image_ia_chat_a_droite():
+    """Onglet Image IA (panneau Studio Images partagé) : le chat Claude est à
+    DROITE, comme le Storyboard — génération à gauche, puis panneau chat, puis
+    poignée au bord droit ; flèche « ❮ » ouvert / « ❯ » fermé (identique au
+    StoryboardChatToggleStrip). Fige le sens après les allers-retours passés."""
+    root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    with open(os.path.join(root, "studio_images", "window.py"), encoding="utf-8") as f:
+        src = f.read()
+    i_gen    = src.find("body.addWidget(left_scroll, 1)")
+    i_panel  = src.find("body.addWidget(self._chat_panel)")
+    i_toggle = src.find("body.addWidget(self._chat_toggle)")
+    assert -1 < i_gen < i_panel < i_toggle, \
+        "Image IA : génération à gauche, puis chat + poignée à droite (comme Storyboard)"
+    assert 'return "❮" if self._open else "❯"' in src, "flèche identique au chat Storyboard"
+    # Référence : le Storyboard utilise bien la même convention de flèche.
+    with open(os.path.join(root, "ui", "storyboard_chat.py"), encoding="utf-8") as f:
+        assert 'return "❮" if self._open else "❯"' in f.read()
+
+
+@test
+def panneaux_guide_et_ia():
+    """Panneaux latéraux : GAUCHE = « Guide » (pédagogie / guide d'utilisation),
+    DROITE = « IA » (actions qui modifient le projet). Storyboard + Image IA +
+    Live (alias) cohérents ; i18n EN « IA » → « AI »."""
+    root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
+    def _src(rel):
+        with open(os.path.join(root, rel), encoding="utf-8") as f:
+            return f.read()
+
+    # GAUCHE = Guide (en-tête + poignée), plus « Assistant » / poignée « IA ».
+    ap = _src(os.path.join("ui", "assistant_panel.py"))
+    assert 'self._title_lbl = QLabel("Guide")' in ap, "en-tête gauche = Guide"
+    assert 'self._ia_lbl = QLabel("GUIDE")' in ap, "poignée gauche = GUIDE"
+    # Bouton double Guide / IA : en mode IA le guide est masqué (pas tronqué) et
+    # remplacé par un texte d'intro.
+    assert ("_btn_mode_guide" in ap and "_btn_mode_ia" in ap and "_set_mode" in ap
+            and "_ia_intro" in ap), "bouton double Guide/IA + intro IA"
+    # Live = simple alias de la classe Cinéma (un seul source à renommer).
+    al = _src(os.path.join("ui", "assistant_panel_live.py"))
+    assert "from ui.assistant_panel import AssistantPanel" in al, "Live = alias (pas de doublon)"
+    # DROITE = IA (en-tête + poignée) côté Storyboard, plus « CHAT » / « Chat Storyboard ».
+    sc = _src(os.path.join("ui", "storyboard_chat.py"))
+    assert 'translate("IA")' in sc and 'self._lbl = QLabel("IA")' in sc
+    assert 'QLabel("CHAT")' not in sc, "plus de poignée « CHAT » au Storyboard"
+    # DROITE = IA côté Image IA (panneau studio_images partagé).
+    wi = _src(os.path.join("studio_images", "window.py"))
+    assert 'self._lbl = QLabel("IA")' in wi and '_ttl = QLabel("IA")' in wi
+    assert 'QLabel("CHAT")' not in wi, "plus de poignée « CHAT » côté Image IA"
+    # i18n EN.
+    import core.i18n as i18n
+    assert i18n._FR_TO_EN.get("IA") == "AI"
 
 
 # ══════════════════════════════════════════════════════════════════════════════

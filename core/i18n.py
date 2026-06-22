@@ -1222,6 +1222,22 @@ _FR_TO_EN: dict[str, str] = {
     "Réessayer":                        "Retry",
     "Identifier et générer les 7 vues de la pièce": "Identify and generate the 7 room views",
     "Chat Storyboard":                  "Storyboard Chat",
+    # Panneaux latéraux : GAUCHE = « Guide » (pédagogie), DROITE = « IA » (actions projet).
+    "IA":                               "AI",
+    "Guide":                            "Guide",
+    "GUIDE":                            "GUIDE",
+    "Ouvrir / fermer le Guide (aide & pédagogie d'utilisation)":
+        "Open / close the Guide (help & usage tutorial)",
+    "Ouvrir / fermer l'IA (actions sur le projet)":
+        "Open / close the AI (project actions)",
+    "Guide hors-ligne — aide & pédagogie, sans IA":
+        "Offline guide — help & tutorial, no AI",
+    "Discuter avec l'IA au sujet du logiciel (utilise des crédits Anthropic)":
+        "Chat with the AI about the software (uses Anthropic credits)",
+    "Vous êtes désormais en discussion avec l'IA au sujet du logiciel.\n\n"
+    "Vous pouvez poser des questions pour la compréhension du logiciel.":
+        "You are now chatting with the AI about the software.\n\n"
+        "You can ask questions to understand how the program works.",
     "Discuter du storyboard avec l'IA…": "Chat about the storyboard with the AI…",
     "Envoyer":                          "Send",
     "Le chat IA est désactivé.":        "The AI chat is disabled.",

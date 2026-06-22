@@ -49,7 +49,7 @@ class StoryboardChatPanel(QWidget):
         ico = QLabel("✦")
         ico.setStyleSheet(f"color:{CP['accent']};font-size:14px;background:transparent;")
         hl.addWidget(ico)
-        title = QLabel(translate("Chat Storyboard"))
+        title = QLabel(translate("IA"))
         title.setStyleSheet(
             f"color:{CP['text_primary']};font-size:13px;font-weight:700;background:transparent;"
         )
@@ -281,9 +281,9 @@ class StoryboardChatToggleStrip(QWidget):
         super().__init__()
         self._panel = panel
         self._open  = panel.isVisible()
-        self.setFixedWidth(28)
+        self.setFixedWidth(42)
         self.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.setToolTip(translate("Ouvrir / fermer le chat storyboard"))
+        self.setToolTip(translate("Ouvrir / fermer l'IA (actions sur le projet)"))
         self.setStyleSheet(f"background:{CP['bg1']};")
 
         lay = QVBoxLayout(self)
@@ -291,10 +291,10 @@ class StoryboardChatToggleStrip(QWidget):
         lay.setSpacing(0)
         lay.addStretch()
 
-        self._lbl = QLabel("CHAT")
+        self._lbl = QLabel("IA")
         self._lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self._lbl.setFixedWidth(28)
-        # Texte vertical via retours ligne (CHAT court → on garde horizontal compact).
+        self._lbl.setFixedWidth(42)
+        # Libellé court → on garde horizontal compact.
         self._lbl.setStyleSheet(
             f"color:{CP['accent']};font-size:8px;font-weight:900;"
             f"letter-spacing:1px;background:transparent;"
@@ -304,7 +304,7 @@ class StoryboardChatToggleStrip(QWidget):
 
         self._arrow = QLabel(self._arrow_char())
         self._arrow.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self._arrow.setFixedWidth(28)
+        self._arrow.setFixedWidth(42)
         self._arrow.setStyleSheet(
             f"color:{CP['accent']};font-size:18px;font-weight:700;background:transparent;"
         )

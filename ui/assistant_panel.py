@@ -606,7 +606,7 @@ class AssistantPanel(QWidget):
         )
         hl.addWidget(ico)
 
-        self._title_lbl = QLabel("Assistant")
+        self._title_lbl = QLabel("Guide")
         self._title_lbl.setStyleSheet(
             f"color:{CP['text_primary']};font-size:13px;font-weight:700;"
             f"background:transparent;"
@@ -614,23 +614,24 @@ class AssistantPanel(QWidget):
         hl.addWidget(self._title_lbl)
         hl.addStretch()
 
-        self._btn_ai_toggle = QPushButton("IA ○")
-        self._btn_ai_toggle.setFixedHeight(22)
-        self._btn_ai_toggle.setMinimumWidth(46)
-        self._btn_ai_toggle.setCursor(Qt.CursorShape.PointingHandCursor)
-        self._btn_ai_toggle.setToolTip(
-            "Activer l'assistant IA — utilise des crédits Anthropic\n"
-            "(désactivé par défaut)"
-        )
-        self._btn_ai_toggle.setStyleSheet(
-            f"QPushButton{{background:transparent;color:{CP['text_dim']};"
-            f"border:1px solid {CP['border']};border-radius:5px;"
-            f"font-size:9px;font-weight:700;padding:0 6px;}}"
-            f"QPushButton:hover{{border-color:{CP['border_bright']};"
-            f"color:{CP['text_secondary']};}}"
-        )
-        self._btn_ai_toggle.clicked.connect(self._toggle_ai)
-        hl.addWidget(self._btn_ai_toggle)
+        # Bascule à deux états : « Guide » (manuel hors-ligne complet, sans IA) ou
+        # « IA » (discussion sur le logiciel). En mode IA, le guide est masqué et
+        # remplacé par un court texte d'intro — il reste consultable en mode Guide.
+        def _seg_btn(text):
+            b = QPushButton(text)
+            b.setFixedHeight(22)
+            b.setMinimumWidth(44)
+            b.setCursor(Qt.CursorShape.PointingHandCursor)
+            return b
+        self._btn_mode_guide = _seg_btn("Guide")
+        self._btn_mode_ia    = _seg_btn("IA")
+        self._btn_mode_guide.setToolTip("Guide hors-ligne — aide & pédagogie, sans IA")
+        self._btn_mode_ia.setToolTip(
+            "Discuter avec l'IA au sujet du logiciel (utilise des crédits Anthropic)")
+        self._btn_mode_guide.clicked.connect(lambda: self._set_mode(False))
+        self._btn_mode_ia.clicked.connect(lambda: self._set_mode(True))
+        hl.addWidget(self._btn_mode_guide)
+        hl.addWidget(self._btn_mode_ia)
 
         btn_clear = QPushButton("✕")
         btn_clear.setFixedSize(20, 20)
@@ -739,6 +740,18 @@ class AssistantPanel(QWidget):
         self._tips_outer.setMaximumHeight(16777215)
         lay.addWidget(self._tips_outer)
 
+        # Texte d'intro affiché À LA PLACE du guide en mode IA (le guide complet
+        # reste accessible en mode Guide — inutile de le tronquer/scroller ici).
+        self._ia_intro = QLabel(
+            "Vous êtes désormais en discussion avec l'IA au sujet du logiciel.\n\n"
+            "Vous pouvez poser des questions pour la compréhension du logiciel.")
+        self._ia_intro.setWordWrap(True)
+        self._ia_intro.setStyleSheet(
+            f"color:{CP['text_secondary']};font-size:11px;line-height:150%;"
+            f"padding:14px 14px 6px 14px;background:transparent;")
+        self._ia_intro.setVisible(False)
+        lay.addWidget(self._ia_intro)
+
         # ── Zone de chat ───────────────────────────────────────────────────────
         chat_scroll = QScrollArea()
         chat_scroll.setWidgetResizable(True)
@@ -824,25 +837,37 @@ class AssistantPanel(QWidget):
 
     # ── Activation IA ─────────────────────────────────────────────────────────
 
-    def _toggle_ai(self):
-        self._ai_enabled = not self._ai_enabled
+    def _seg_style(self, active: bool) -> str:
+        """Style d'un segment du bouton double Guide/IA (actif = accent plein)."""
+        if active:
+            return (f"QPushButton{{background:{CP['accent']};color:#07080f;"
+                    f"border:1px solid {CP['accent']};border-radius:5px;"
+                    f"font-size:9px;font-weight:800;padding:0 9px;}}")
+        return (f"QPushButton{{background:transparent;color:{CP['text_dim']};"
+                f"border:1px solid {CP['border']};border-radius:5px;"
+                f"font-size:9px;font-weight:700;padding:0 9px;}}"
+                f"QPushButton:hover{{color:{CP['accent']};border-color:{CP['accent_dim']};}}")
+
+    def _set_mode(self, ia: bool):
+        self._ai_enabled = ia
         self._apply_ai_state()
+
+    def _toggle_ai(self):   # compat : ancien point d'entrée éventuel
+        self._set_mode(not self._ai_enabled)
 
     def _apply_ai_state(self):
         on = self._ai_enabled
-        self._btn_ai_toggle.setText("IA ●" if on else "IA ○")
-        self._btn_ai_toggle.setStyleSheet(
-            f"QPushButton{{background:{'rgba(78,205,196,0.15)' if on else 'transparent'};"
-            f"color:{CP['accent'] if on else CP['text_dim']};"
-            f"border:1px solid {CP['accent'] if on else CP['border']};border-radius:5px;"
-            f"font-size:9px;font-weight:700;padding:0 6px;}}"
-            f"QPushButton:hover{{border-color:{CP['accent_dim']};color:{CP['accent']};}}"
-        )
-        self._disabled_notice.setVisible(not on)
+        self._btn_mode_guide.setStyleSheet(self._seg_style(not on))
+        self._btn_mode_ia.setStyleSheet(self._seg_style(on))
+        # Mode Guide : manuel complet visible (pas de troncature). Mode IA : guide
+        # masqué, remplacé par le texte d'intro + la zone de discussion.
+        self._tips_outer.setVisible(not on)
+        self._ia_intro.setVisible(on)
+        self._disabled_notice.setVisible(False)   # obsolète (bascule explicite)
+        self._input_frame.setVisible(on)
         self._input.setVisible(on)
         self._btn_ask.setVisible(on)
         self._chat_scroll.setVisible(on)
-        self._tips_outer.setMaximumHeight(260 if on else 16777215)
 
     # ── Collapsibles ──────────────────────────────────────────────────────────
 
@@ -960,9 +985,9 @@ class AssistantToggleStrip(QWidget):
         self._panel  = panel
         self._side   = "left" if side == "left" else "right"
         self._open   = panel.isVisible()
-        self.setFixedWidth(28)
+        self.setFixedWidth(42)
         self.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.setToolTip("Ouvrir / fermer l'assistant pédagogique")
+        self.setToolTip("Ouvrir / fermer le Guide (aide & pédagogie d'utilisation)")
         self.setStyleSheet(f"background:{CP['bg1']};")
 
         lay = QVBoxLayout(self)
@@ -970,12 +995,12 @@ class AssistantToggleStrip(QWidget):
         lay.setSpacing(0)
         lay.addStretch()
 
-        self._ia_lbl = QLabel("IA")
+        self._ia_lbl = QLabel("GUIDE")
         self._ia_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self._ia_lbl.setFixedWidth(28)
+        self._ia_lbl.setFixedWidth(42)
         self._ia_lbl.setStyleSheet(
-            f"color:{CP['accent']};font-size:9px;font-weight:900;"
-            f"letter-spacing:1px;background:transparent;"
+            f"color:{CP['accent']};font-size:7px;font-weight:900;"
+            f"letter-spacing:0.5px;background:transparent;"
         )
         lay.addWidget(self._ia_lbl)
 
@@ -983,7 +1008,7 @@ class AssistantToggleStrip(QWidget):
 
         self._arrow = QLabel(self._arrow_char())
         self._arrow.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self._arrow.setFixedWidth(28)
+        self._arrow.setFixedWidth(42)
         self._arrow.setStyleSheet(
             f"color:{CP['accent']};font-size:18px;font-weight:700;background:transparent;"
         )
@@ -1003,8 +1028,8 @@ class AssistantToggleStrip(QWidget):
 
     def enterEvent(self, e):
         self._ia_lbl.setStyleSheet(
-            f"color:#ffffff;font-size:9px;font-weight:900;"
-            f"letter-spacing:1px;background:transparent;"
+            f"color:#ffffff;font-size:7px;font-weight:900;"
+            f"letter-spacing:0.5px;background:transparent;"
         )
         self._arrow.setStyleSheet(
             f"color:#ffffff;font-size:18px;font-weight:700;background:transparent;"
@@ -1012,8 +1037,8 @@ class AssistantToggleStrip(QWidget):
 
     def leaveEvent(self, e):
         self._ia_lbl.setStyleSheet(
-            f"color:{CP['accent']};font-size:9px;font-weight:900;"
-            f"letter-spacing:1px;background:transparent;"
+            f"color:{CP['accent']};font-size:7px;font-weight:900;"
+            f"letter-spacing:0.5px;background:transparent;"
         )
         self._arrow.setStyleSheet(
             f"color:{CP['accent']};font-size:18px;font-weight:700;background:transparent;"

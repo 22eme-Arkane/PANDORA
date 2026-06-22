@@ -503,10 +503,11 @@ class ExtractGenerateDialog(QDialog):
         self._gen_lbl.setText(f"Décor {self._gen_idx + 1}/{n} — {msg}")
 
     def _on_room_views_done(self, views: list):
-        """7 vues générées pour une pièce → UN SEUL décor (la même pièce) dont la
-        galerie contient les 7 vues (avant, arrière, gauche, droite, haut, bas,
-        vue d'ensemble). Le plan d'architecture devient le plan vu de dessus du
-        décor (Mise en scène / Plan de feu)."""
+        """7 vues d'une pièce → 7 DÉCORS distincts, tous marqués `room_group` = nom
+        de la pièce (regroupés dans un bandeau dépliable, page Décors). Le décor
+        d'origine (déjà lié aux plans du storyboard) devient la « vue d'ensemble »
+        et porte le plan d'architecture, partagé par les 7 vues (Mise en scène /
+        Plan de feu)."""
         if self._cancelled:
             return
         item = self._saved_items[self._gen_idx]
@@ -521,39 +522,40 @@ class ExtractGenerateDialog(QDialog):
             base    = item.get("name", "Décor")
             bprompt = item.get("prompt") or item.get("description") or base
             cat     = item.get("category", "Autre")
+            fp_path = fp_entry.get("path") if fp_entry else ""
             overview = next((v for v in view_entries if v.get("code") == "ensemble"),
                             view_entries[0])
-            paths = [v["path"] for v in view_entries]
-            room_views = [{"label": v.get("label", ""), "code": v.get("code", ""),
-                           "path": v["path"], "prompt": v.get("prompt", "")}
-                          for v in view_entries]
-            # Met à jour LE décor d'origine (une seule pièce) avec sa galerie 7 vues.
-            d = decors_api.get_decor(item.get("id", "")) or {}
-            d.update({
-                "id":               item.get("id", ""),
-                "name":             base,
-                "prompt":           bprompt,
-                "category":         cat,
-                "image_path":       overview["path"],
-                "generated_images": paths,
-                "room_views":       room_views,
-            })
-            saved = decors_api.save_decor(d)
-            did = saved.get("id", item.get("id", ""))
-            fp_path = fp_entry.get("path") if fp_entry else ""
-            if fp_path and did:
-                try:
-                    decors_api.set_floor_plan(did, fp_path)
-                except Exception:
-                    pass
-            # Marque l'item comme « image générée » pour le décompte final (sinon
-            # « 0/1 » alors que la pièce + ses vues ont bien été produites).
+            # Vue d'ensemble = le décor d'origine (id conservé → reste assigné aux
+            # plans) ; chaque face devient un NOUVEAU décor frère de la même pièce.
+            ordered = [overview] + [v for v in view_entries if v is not overview]
+            for v in ordered:
+                is_overview = (v is overview)
+                label = v.get("label", "")
+                if is_overview:
+                    d = decors_api.get_decor(item.get("id", "")) or {}
+                    d["id"] = item.get("id", "")
+                    name = base
+                else:
+                    d = {}
+                    name = f"{base} · {label}" if label else base
+                d.update({
+                    "name":             name,
+                    "room_group":       base,
+                    "room_view":        "Ensemble" if is_overview else label,
+                    "prompt":           v.get("prompt", "") or bprompt,
+                    "category":         cat,
+                    "image_path":       v["path"],
+                    "generated_images": [v["path"]],
+                    "floor_plan":       fp_path,
+                })
+                decors_api.save_decor(d)
+            # Marque l'item comme « image générée » pour le décompte final.
             item["image_path"] = overview["path"]
-            n_views = len(view_entries) + (1 if fp_entry else 0)
+            n_dec = len(view_entries)
             row.set_state("DONE")
             self._gen_lbl.setText(
                 f"Décor {self._gen_idx + 1}/{len(self._saved_items)} — "
-                f"{n_views} vue(s) générée(s)")
+                f"{n_dec} vue(s) → {n_dec} décor(s)")
             # Faces manquantes (échec API par vue) → avertissement consolidé en fin.
             w = self._gen_worker
             fo = getattr(w, "_faces_ok", None)

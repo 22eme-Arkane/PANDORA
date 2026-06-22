@@ -1940,16 +1940,24 @@ class GenerateRoomViewsWorker(QThread):
                 _log(f"plan d'architecture ÉCHEC: {str(e)[:160]}")
             time.sleep(_VIEW_GAP_S)
 
-            # 3) Les 6 FACES — générées ÉTAPE PAR ÉTAPE, une par une, en TEXTE simple
-            #    (même appel fiable que le plan d'ensemble), espacées dans le temps.
-            #    On N'envoie PAS le plan + l'ensemble en référence d'édition d'un coup
-            #    (« tout à envoyer en même temps » = cause des faces qui échouaient et
-            #    saturaient l'API). La cohérence vient des prompts très contraints.
-            consistency = ""   # plus de référence d'édition (génération texte autonome)
+            # 3) Les 6 FACES — chacune générée par ÉDITION NB2 en INJECTANT comme
+            #    RÉFÉRENCES le plan d'ensemble (rendu maître de la pièce) + le plan
+            #    d'architecture vu de dessus. Objectif : MÊME pièce, mêmes matières,
+            #    couleurs, mobilier, lumière — seul l'angle de caméra change (une face
+            #    différente à chaque vue). Repli texte par face si l'édition échoue
+            #    (fiabilité préservée). Réfs allégées (1K JPEG) pour ne pas saturer.
             faces = build_six_view_prompts(base_en)
-            ref_urls = []
-            # Édition désactivée : chaque face est une génération texte indépendante.
-            edit_disabled = True
+            ref_urls = [_dataurl(p) for p in (ov_path, fp_path)
+                        if p and os.path.isfile(p)]
+            consistency = (
+                "Use the reference image(s) as the GROUND TRUTH of this EXACT room: "
+                "keep IDENTICAL architecture, wall materials, colours, furniture style "
+                "and lighting / ambience. ONLY the camera orientation changes — frame a "
+                "DIFFERENT wall of the SAME room. Do NOT repeat on this wall the objects "
+                "that belong to the other walls (each wall is distinct)."
+            )
+            edit_off   = not ref_urls   # aucune réf disponible → texte direct
+            edit_fails = 0
             last_err = ""
             n_faces_ok = 0
             for i, (label, code, fprompt) in enumerate(faces):
@@ -1961,16 +1969,20 @@ class GenerateRoomViewsWorker(QThread):
                 if self._style_suffix:
                     base_full = f"{base_full}, {self._style_suffix}"
                 data = None
-                # a) tentative edit (raccord) — best-effort, désactivée au 1er échec.
-                if not edit_disabled:
+                # a) ÉDITION avec références (raccord fidèle) — tant qu'elle répond ;
+                #    désactivée seulement après 2 échecs consécutifs (API durablement KO).
+                if not edit_off:
                     try:
                         data = _gen_edit(f"{base_full}\n\n{consistency}\n\n{_DECOR_LINE}",
                                          ref_urls, "16:9")
+                        edit_fails = 0
                     except Exception as e:
                         last_err = str(e)
-                        edit_disabled = True
                         data = None
-                        _log(f"face '{label}' edit ÉCHEC → repli texte. {str(e)[:160]}")
+                        edit_fails += 1
+                        _log(f"face '{label}' edit ÉCHEC ({edit_fails}) → repli texte. {str(e)[:160]}")
+                        if edit_fails >= 2:
+                            edit_off = True
                 # b) repli texte ROBUSTE (4 essais, backoff) — même génération que le
                 #    plan d'ensemble, donc fiable ; le backoff absorbe les limites de débit.
                 if data is None:
