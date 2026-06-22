@@ -280,13 +280,15 @@ class PageStaging(QWidget):
         fp = self._resolve_floor_plan(self._shot, rec)
         if fp and os.path.isfile(fp):
             rec["plan_image"] = fp
-        # Amorçage : acteurs depuis les personnages du plan, UNE SEULE FOIS.
+        # Amorçage : acteurs + CAMÉRA (selon l'axe du plan) depuis le storyboard, UNE
+        # SEULE FOIS — repli pour les storyboards créés avant le semis à la génération.
         # Le flag « _actors_seeded » évite de re-semer après un « Tout supprimer ».
         if self._mode == "staging":
-            if not rec.get("actors") and not rec.get("_actors_seeded"):
-                names = self._shot.get("character_names", []) or []
-                rec["actors"] = [{"name": n, "x": 0.3 + 0.15 * i, "y": 0.5}
-                                 for i, n in enumerate(names[:6])]
+            if not rec.get("_actors_seeded"):
+                seeded = staging.seed_record_for_shot(self._shot)
+                if not rec.get("actors"):
+                    rec["actors"] = seeded["actors"]
+                rec["camera"] = seeded["camera"]   # caméra placée selon camera_axis
             rec["_actors_seeded"] = True
         self._canvas.load(rec)
         self._refresh_plan_combo()
@@ -747,6 +749,14 @@ class PageStaging(QWidget):
                 dist_str = f"{dist_m:g}m"
                 if shot.get("camera_distance") != dist_str:
                     shot["camera_distance"] = dist_str
+                    changed = True
+            # Hauteur caméra (clic droit caméra → Hauteur) → champ du plan, à côté
+            # de la distance (colonne/dialog storyboard).
+            h_cam = cam.get("height")
+            if h_cam:
+                h_str = f"{float(h_cam):g} m"
+                if shot.get("camera_height") != h_str:
+                    shot["camera_height"] = h_str
                     changed = True
         if not changed:
             return

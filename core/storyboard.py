@@ -1,10 +1,30 @@
 import json
 import os
+import re
 import uuid
 from datetime import datetime
 
 from core.paths import APP_ROOT as _ROOT
 _FALLBACK_SB_DIR = os.path.join(_ROOT, "data", "storyboard")
+
+
+# Lignes de dialogue d'un plan = segments entre guillemets « » ou " " (la convention
+# du découpage ; ces guillemets sont aussi ceux protégés à la traduction). Sert au
+# Doublage : « exporter les dialogues » des plans sélectionnés.
+_DIALOGUE_RE = re.compile(r"«\s*(.+?)\s*»|“\s*(.+?)\s*”", re.S)
+
+
+def extract_dialogues(text: str) -> list:
+    """Renvoie les répliques (texte entre guillemets « » / " ") trouvées dans un
+    texte de plan, nettoyées et dédoublonnées en conservant l'ordre."""
+    out, seen = [], set()
+    for m in _DIALOGUE_RE.finditer(text or ""):
+        line = next((g for g in m.groups() if g), "")
+        line = " ".join(line.split())
+        if len(line) >= 2 and line not in seen:
+            seen.add(line)
+            out.append(line)
+    return out
 
 
 # Namespace du storyboard : permet à PANDORA | Live de réutiliser la même page

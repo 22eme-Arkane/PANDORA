@@ -83,6 +83,60 @@ def _default() -> dict:
     }
 
 
+# Angle caméra (sur le plan vu de dessus) dérivé de l'axe choisi au découpage.
+_AXIS_TO_CAMERA = {
+    "Face":            (0.5, 0.85,   0.0),   # bas, regarde vers le haut (face au sujet)
+    "3/4":             (0.78, 0.80,  35.0),
+    "Latéral 90°":     (0.85, 0.5,   90.0),
+    "Latéral":         (0.85, 0.5,   90.0),
+    "Dos":             (0.5, 0.15,  180.0),   # haut, regarde vers le bas (de dos)
+    "Plongée":         (0.5, 0.85,   0.0),    # vertical → la HAUTEUR gère le reste
+    "Contre-plongée":  (0.5, 0.85,   0.0),
+}
+
+
+def seed_record_for_shot(shot: dict) -> dict:
+    """Construit une mise en scène INITIALE pour un plan, depuis ses données du
+    storyboard (déjà extraites du scénario) : acteurs répartis + caméra placée selon
+    l'axe (camera_axis). L'utilisateur ajuste ensuite. Aucune lumière (Plan de feu
+    se règle à part), aucun élément (le placement précis vient de l'analyse vision)."""
+    rec = _default()
+    names = [n for n in (shot.get("character_names") or []) if n][:6]
+    n = len(names) or 1
+    # Acteurs répartis horizontalement, légèrement vers l'avant (y=0.55).
+    rec["actors"] = [
+        {"name": nm, "x": round(0.5 + (i - (n - 1) / 2) * 0.16, 3), "y": 0.55}
+        for i, nm in enumerate(names)
+    ]
+    axis = (shot.get("camera_axis") or "Face").strip()
+    cx, cy, ang = _AXIS_TO_CAMERA.get(axis, _AXIS_TO_CAMERA["Face"])
+    rec["camera"] = {"x": cx, "y": cy, "angle": ang}
+    # Hauteur caméra si déjà saisie sur le plan (« 1,7 m » → 1.7).
+    h = _parse_meters(shot.get("camera_height"))
+    if h > 0:
+        rec["camera"]["height"] = h
+    return rec
+
+
+def ensure_seeded(shots: list) -> int:
+    """À la génération du storyboard/décor : crée une mise en scène INITIALE (acteurs
+    + caméra) pour chaque plan qui n'en a pas encore. Ne touche jamais un plan déjà
+    mis en scène. Renvoie le nombre de plans semés."""
+    idx = _load()
+    n = 0
+    for s in shots or []:
+        sid = s.get("id")
+        if not sid or sid in idx:
+            continue
+        rec = seed_record_for_shot(s)
+        rec["_actors_seeded"] = True
+        idx[sid] = rec
+        n += 1
+    if n:
+        _save(idx)
+    return n
+
+
 def get(shot_id: str) -> dict:
     """Mise en scène d'un plan (dict complet, valeurs par défaut si absent)."""
     if not shot_id:

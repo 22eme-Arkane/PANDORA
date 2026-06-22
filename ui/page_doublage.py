@@ -223,11 +223,122 @@ class PageDoublage(QWidget):
             "▸ Les fichiers générés apparaissent en bas — clique ▶ pour écouter ou 📁 pour ouvrir le dossier.",
         ], CP))
 
+        self._build_storyboard_panel()
         self._build_mode_selector()
         self._build_input_panel()
         self._build_results_panel()
         self._build_voice_assign_panel()
         self._content_lay.addStretch()
+
+    # ── Depuis le storyboard : dialogues des plans ─────────────────────────────
+
+    def _build_storyboard_panel(self):
+        """Sélection de plans → extraction des lignes de dialogue des personnages,
+        à charger dans le champ texte pour les doubler (même principe que
+        « Générer depuis le storyboard »)."""
+        title = QLabel("Depuis le storyboard — dialogues à doubler")
+        title.setStyleSheet(
+            f"color:{CP['accent']};font-size:12px;font-weight:800;"
+            f"letter-spacing:0.5px;background:transparent;")
+        self._content_lay.addWidget(title)
+
+        row = QHBoxLayout()
+        row.setSpacing(8)
+        self._btn_load_dialogues = _btn("⟳  " + translate("Charger les dialogues"), CP["accent"])
+        self._btn_load_dialogues.setToolTip(translate(
+            "Extrait les répliques (entre guillemets) des plans sélectionnés —\n"
+            "sélection du conducteur si tu en as une, sinon tout le storyboard."))
+        self._btn_load_dialogues.clicked.connect(self._load_dialogues)
+        row.addWidget(self._btn_load_dialogues)
+        row.addStretch()
+        self._content_lay.addLayout(row)
+
+        from ui.tab_t2v import StoryboardSelector
+        self._sb_selector = StoryboardSelector()
+        self._content_lay.addWidget(self._sb_selector)
+        try:
+            self._sb_selector.refresh()
+        except Exception:
+            pass
+
+        self._dialogues_container = QVBoxLayout()
+        self._dialogues_container.setSpacing(6)
+        self._dialogues_container.setAlignment(Qt.AlignmentFlag.AlignTop)
+        self._lbl_no_dialogues = QLabel(
+            "Sélectionne des plans puis « Charger les dialogues ».")
+        self._lbl_no_dialogues.setStyleSheet(
+            f"color:{CP['text_dim']};font-size:11px;padding:6px;background:transparent;")
+        self._dialogues_container.addWidget(self._lbl_no_dialogues)
+        self._content_lay.addLayout(self._dialogues_container)
+
+    def _load_dialogues(self):
+        import core.storyboard as sb
+        shots = []
+        try:
+            shots = self._sb_selector.get_selected_shots()
+        except Exception:
+            shots = []
+        if not shots:
+            try:
+                shots = sb.list_shots()
+            except Exception:
+                shots = []
+        while self._dialogues_container.count():
+            it = self._dialogues_container.takeAt(0)
+            if it.widget():
+                it.widget().deleteLater()
+
+        def _num(s):
+            try:
+                return int(s.get("number") or 0)
+            except (TypeError, ValueError):
+                return 0
+
+        rows = 0
+        for s in sorted(shots, key=_num):
+            lines = sb.extract_dialogues(s.get("seedance_prompt", "") or "")
+            chars = ", ".join(s.get("character_names", []) or []) or "—"
+            for line in lines:
+                self._add_dialogue_row(s.get("number", "?"), chars, line)
+                rows += 1
+        if rows == 0:
+            lbl = QLabel("Aucun dialogue (entre guillemets « ») dans les plans sélectionnés.")
+            lbl.setWordWrap(True)
+            lbl.setStyleSheet(
+                f"color:{CP['text_dim']};font-size:11px;padding:6px;background:transparent;")
+            self._dialogues_container.addWidget(lbl)
+        else:
+            self._char_counter.setText(f"{rows} réplique(s) extraite(s)")
+
+    def _add_dialogue_row(self, num, chars: str, line: str):
+        card = QFrame()
+        card.setStyleSheet(
+            f"QFrame{{background:{CP['bg2']};border:1px solid {CP['border']};border-radius:8px;}}")
+        lay = QHBoxLayout(card)
+        lay.setContentsMargins(12, 8, 10, 8)
+        lay.setSpacing(10)
+        meta = QLabel(f"Plan {num} · {chars}")
+        meta.setFixedWidth(150)
+        meta.setWordWrap(True)
+        meta.setStyleSheet(
+            f"color:{CP['accent']};font-size:9px;font-weight:700;"
+            f"font-family:'Consolas',monospace;background:transparent;border:none;")
+        lay.addWidget(meta)
+        txt = QLabel("« " + line + " »")
+        txt.setWordWrap(True)
+        txt.setStyleSheet(
+            f"color:{CP['text_primary']};font-size:11px;background:transparent;border:none;")
+        lay.addWidget(txt, 1)
+        btn = _btn("→  " + translate("Texte"), CP["accent2"], h=28)
+        btn.setFixedWidth(96)
+        btn.setToolTip(translate("Charge cette réplique dans le champ texte pour la doubler."))
+        btn.clicked.connect(lambda _=False, l=line: self._use_dialogue(l))
+        lay.addWidget(btn)
+        self._dialogues_container.addWidget(card)
+
+    def _use_dialogue(self, line: str):
+        self._text_edit.setPlainText(line)
+        self._text_edit.setFocus()
 
     # ── Sélecteur de mode ─────────────────────────────────────────────────────
 
@@ -847,3 +958,8 @@ class PageDoublage(QWidget):
 
     def refresh(self):
         self._refresh_assign_panel()
+        if hasattr(self, "_sb_selector"):
+            try:
+                self._sb_selector.refresh()
+            except Exception:
+                pass

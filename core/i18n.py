@@ -2207,6 +2207,14 @@ _FR_TO_EN: dict[str, str] = {
     "Ajouter un acteur":                         "Add an actor",
     "Placer la caméra ici":                      "Place camera here",
     "Créer un projecteur":                       "Create a light",
+    "Hauteur cam.":                              "Cam. height",
+    # ── Doublage : dialogues depuis le storyboard ─────────────────────────────
+    "Depuis le storyboard — dialogues à doubler": "From the storyboard — lines to dub",
+    "Charger les dialogues":                     "Load dialogue lines",
+    "Sélectionne des plans puis « Charger les dialogues ».":
+        "Select shots then « Load dialogue lines ».",
+    "Charge cette réplique dans le champ texte pour la doubler.":
+        "Load this line into the text field to dub it.",
     # ── Modifier des clips : message de conversion vidéo ──────────────────────
     "Conversion avant envoi":                    "Conversion before sending",
     "Ce(s) clip(s) seront convertis en H.264 PROGRESSIF (1080p max) avant l'envoi au moteur — désentrelacés si besoin, pour éviter les problèmes de trames :":

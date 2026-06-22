@@ -1520,6 +1520,38 @@ def mise_en_scene_placement_precis():
     assert "_on_empty_context" in ps and "Créer un projecteur" in ps, "menu clic droit d'ajout câblé"
 
 
+@test
+def placement_auto_hauteur_et_doublage():
+    """3 finalisations : (1) mise en scène INITIALE auto à la génération (acteurs +
+    caméra selon l'axe) ; (2) hauteur caméra à côté de la distance (storyboard) ;
+    (3) Doublage depuis le storyboard (sélection de plans → dialogues extraits)."""
+    import inspect
+    import core.staging as st
+    import core.storyboard as sb
+    # (1) Semis acteurs + caméra depuis l'axe du plan.
+    rec = st.seed_record_for_shot({"character_names": ["Magalie", "Jean"],
+                                   "camera_axis": "Dos", "camera_height": "1,7 m"})
+    assert len(rec["actors"]) == 2 and rec["camera"]["angle"] == 180.0
+    assert rec["camera"].get("height") == 1.7, "hauteur reprise du plan"
+    assert st.seed_record_for_shot({"camera_axis": "Face"})["camera"]["angle"] == 0.0
+    assert st.ensure_seeded([]) == 0 and st.ensure_seeded([{"number": 1}]) == 0
+    # Branché à la génération du storyboard (les 2 flux) + repli à l'ouverture.
+    sc = inspect.getsource(__import__("ui.page_scenario", fromlist=["_"]))
+    assert sc.count("ensure_seeded") >= 2, "semis câblé aux 2 flux de génération"
+    pst = inspect.getsource(__import__("ui.page_staging", fromlist=["_"]))
+    assert "seed_record_for_shot" in pst, "repli semis à l'ouverture (caméra incluse)"
+    # (2) Hauteur caméra dans le storyboard (dialog + écriture depuis la mise en scène).
+    ds = inspect.getsource(__import__("ui.dialog_shot", fromlist=["_"]))
+    assert "_camera_height" in ds and "camera_height" in ds, "champ hauteur caméra"
+    assert "camera_height" in pst, "hauteur écrite depuis la Mise en scène"
+    # (3) Doublage depuis le storyboard.
+    assert sb.extract_dialogues('Elle dit « Bonjour » et “Salut”.') == ["Bonjour", "Salut"]
+    assert sb.extract_dialogues("rien") == []
+    pd = inspect.getsource(__import__("ui.page_doublage", fromlist=["_"]))
+    assert ("StoryboardSelector" in pd and "_load_dialogues" in pd
+            and "extract_dialogues" in pd), "Doublage : sélection plans → dialogues"
+
+
 # ══════════════════════════════════════════════════════════════════════════════
 # Runner
 # ══════════════════════════════════════════════════════════════════════════════

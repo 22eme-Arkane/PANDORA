@@ -268,6 +268,19 @@ class ShotDialog(QDialog):
             self._camera_distance.setCurrentText(_cur_dist)
         col_dist.addWidget(self._camera_distance)
 
+        # Hauteur de la caméra (à côté de la distance) — renseignée auto depuis la
+        # Mise en scène (clic droit caméra → Hauteur), éditable ici.
+        col_height = QVBoxLayout()
+        col_height.setSpacing(4)
+        col_height.addWidget(_lbl("Hauteur cam."))
+        self._camera_height = _combo(
+            ["0,5 m", "1 m", "1,5 m", "1,7 m", "2 m", "2,5 m", "3 m", "5 m"],
+            self._shot.get("camera_height", ""))
+        self._camera_height.setEditable(True)
+        self._camera_height.setInsertPolicy(QComboBox.InsertPolicy.NoInsert)
+        self._camera_height.setCurrentText(self._shot.get("camera_height", ""))
+        col_height.addWidget(self._camera_height)
+
         col_optic = QVBoxLayout()
         col_optic.setSpacing(4)
         col_optic.addWidget(_lbl("Optique"))
@@ -284,6 +297,7 @@ class ShotDialog(QDialog):
         row_cam.addLayout(col_size, 1)
         row_cam.addLayout(col_focal, 1)
         row_cam.addLayout(col_dist, 1)
+        row_cam.addLayout(col_height, 1)
         row_cam.addLayout(col_optic, 1)
         row_cam.addLayout(col_speed, 1)
         lay.addLayout(row_cam)
@@ -805,6 +819,7 @@ class ShotDialog(QDialog):
             "optic":            to_source(self._optic.currentText()),
             "focal":            to_source(self._focal.currentText()),
             "camera_distance":  to_source(self._camera_distance.currentText()),
+            "camera_height":    to_source(self._camera_height.currentText()),
             "shot_size":       self._shot_size.currentData() or "",
             "speed":           to_source(self._speed.currentText()),
             "comments":          self._comments.toPlainText().strip(),

@@ -1390,6 +1390,13 @@ class PageScenario(QWidget):
         dlg = StoryboardGenerateDialog(text, dur_secs, sc_id, parent=self)
         if dlg.exec() == StoryboardGenerateDialog.DialogCode.Accepted and dlg._shots:
             count = len(dlg._shots)
+            # Mise en scène INITIALE auto (acteurs + caméra depuis l'axe du plan) —
+            # l'utilisateur ajuste ensuite dans Mise en scène / Plan de feu.
+            try:
+                import core.staging as _stg
+                _stg.ensure_seeded(sb_api.list_shots(sb_api.DEFAULT_VERSION_ID))
+            except Exception:
+                pass
             self._ai_progress_lbl.setText(f"{count} {translate('plans importés dans le Storyboard ✓')}")
             self._btn_goto_storyboard.setVisible(True)
 
@@ -2828,6 +2835,12 @@ class PageScenario(QWidget):
         except Exception as e:
             self._gen_all_error_count += 1
             self._ai_progress_lbl.setText(f"Erreur storyboard : {str(e)[:80]}")
+        # Mise en scène INITIALE auto (acteurs + caméra) pour les plans générés.
+        try:
+            import core.staging as _stg
+            _stg.ensure_seeded(self._gen_all_shots)
+        except Exception:
+            pass
         self._gen_all_run_next()
 
     # ── Images ────────────────────────────────────────────────────────────────
