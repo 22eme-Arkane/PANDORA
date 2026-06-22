@@ -719,7 +719,7 @@ def selecteur_assistant_ia():
     from ui.page_live_settings import PageLiveSettings
     cin = SettingsPage()
     nc = cin.ai_combo.count()
-    assert nc == 9, "9 choix côté Cinéma (3 Claude, Fable 5, GPT-5.5, Mistral, Ollama, PANDORA optimisé, Personnalisé)"
+    assert nc == 8, "8 choix côté Cinéma (PANDORA optimisé défaut, Sonnet, Haiku, Fable 5, GPT-5.5, Mistral, Ollama, Personnalisé)"
     assert any("Fable 5" in cin.ai_combo.itemText(i) for i in range(nc)), "Fable 5 proposé"
     assert any("GPT-5.5" in cin.ai_combo.itemText(i) for i in range(nc)), "GPT-5.5 proposé"
     # Clés GPT + Mistral toujours présentes (menu déroulant facultatif)

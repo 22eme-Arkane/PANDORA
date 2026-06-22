@@ -71,9 +71,30 @@ TASKS: list[tuple[str, str]] = [
 # Modèle par défaut (créatif) — Opus 4.8.
 _DEFAULT_CREATIVE = "claude-opus-4-8"
 
-# Preset « PANDORA optimisé » : moteur conseillé par tâche. Opus 4.8 partout —
-# les appels du tier utilitaire restent automatiquement sur Haiku (rapide/économe).
-PANDORA_OPTIMIZED: dict[str, str] = {key: "opus" for key, _ in TASKS}
+# ── Moteur IDÉAL par tâche (profil « PANDORA optimisé » = DÉFAUT) ───────────────
+# Objectif : le MOINS de crédits possible, sans IA surdimensionnée. Seul le prompt
+# du storyboard reste sur Opus 4.8 (précision maximale exigée — découpage). Le reste
+# descend en Sonnet (équilibré) ou Haiku (économe). NB : les appels du tier utilitaire
+# (traduction, extractions courtes, chat) restent de toute façon sur Haiku via _model().
+TASK_DEFAULTS: dict[str, str] = {
+    "storyboard_gen":  "opus",    # découpage / prompts du storyboard — précision MAX
+    "screenplay":      "claude",  # scénario (mise en page, arrangement) — Sonnet 4.6
+    "sync":            "claude",  # synchronisation storyboard — Sonnet 4.6
+    "storyboard_chat": "haiku",   # chat storyboard — Haiku (tier utilitaire)
+    "extraction":      "haiku",   # extraction JSON (persos/décors…) — Haiku
+    "enhance":         "haiku",   # amélioration de prompt — Haiku
+    "assistant":       "haiku",   # guide / assistant — Haiku
+    "translate":       "haiku",   # traduction FR→EN/ZH — Haiku
+}
+
+# « PANDORA optimisé » = ce mapping (alias conservé pour les Paramètres).
+PANDORA_OPTIMIZED: dict[str, str] = dict(TASK_DEFAULTS)
+
+
+def recommended_engine_name(task: str) -> str:
+    """Nom du moteur conseillé pour une tâche (pour les libellés « Par défaut »)."""
+    e = ENGINES.get(TASK_DEFAULTS.get(task, ""))
+    return e["name"] if e else "Claude"
 
 _ANTHROPIC_UTILITY = "claude-haiku-4-5"
 _MISTRAL_MODELS = {"utility": "mistral-small-latest", "creative": "mistral-large-latest"}
@@ -100,8 +121,14 @@ def get_creative_model() -> str:
 
 
 def _resolve_engine(task: str | None = None) -> tuple[str, str]:
-    """Renvoie (provider, creative_model) pour une tâche — override si défini,
-    sinon le moteur global. Ne dégrade jamais le comportement par défaut."""
+    """Renvoie (provider, creative_model) pour une tâche.
+
+    Priorité : (1) override explicite par tâche (Choix personnalisé) ; (2) sinon, si
+    l'utilisateur est sur le profil PAR DÉFAUT (« PANDORA optimisé » : Anthropic + Opus,
+    ou provider « pandora »), on route chaque tâche vers son moteur IDÉAL (TASK_DEFAULTS)
+    → le moins de crédits, Opus seulement pour le storyboard ; (3) sinon, le moteur
+    GLOBAL choisi explicitement (Sonnet / Haiku / Fable 5 / GPT / Mistral / Ollama)
+    s'applique partout. Ne dégrade jamais un choix explicite de l'utilisateur."""
     cfg = _cfg()
     if task:
         eng_key = (cfg.get("ai_task_engines") or {}).get(task)
@@ -109,10 +136,16 @@ def _resolve_engine(task: str | None = None) -> tuple[str, str]:
             e = ENGINES[eng_key]
             return e["provider"], e["creative_model"]
     provider = (cfg.get("ai_provider") or "anthropic").strip().lower()
+    creative = (cfg.get("ai_model_creative") or "").strip()
+    # Profil par défaut = routage idéal par tâche (économe, Opus pour le storyboard).
+    _is_smart_default = (provider in ("pandora", "")
+                         or (provider == "anthropic" and creative in ("", _DEFAULT_CREATIVE)))
+    if _is_smart_default and task and task in TASK_DEFAULTS:
+        e = ENGINES[TASK_DEFAULTS[task]]
+        return e["provider"], e["creative_model"]
     if provider not in _PROVIDERS:
         provider = "anthropic"
-    creative = (cfg.get("ai_model_creative") or "").strip() or _DEFAULT_CREATIVE
-    return provider, creative
+    return provider, (creative or _DEFAULT_CREATIVE)
 
 
 def _model(tier: str, provider: str | None = None, creative_model: str = "") -> str:

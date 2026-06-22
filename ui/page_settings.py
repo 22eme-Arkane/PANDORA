@@ -232,14 +232,14 @@ class SettingsPage(QScrollArea):
 
         # (libellé, provider, modèle créatif)
         self._AI_CHOICES = [
-            ("Claude Opus 4.8 (Anthropic) — défaut",      "anthropic", "claude-opus-4-8"),
-            ("Claude Sonnet 4.6 (Anthropic) — équilibré", "anthropic", "claude-sonnet-4-6"),
-            ("Claude Haiku 4.5 (Anthropic) — rapide",     "anthropic", "claude-haiku-4-5"),
-            ("Fable 5 (Anthropic) — optimisé PANDORA",    "anthropic", "claude-fable-5"),
-            ("GPT-5.5 (OpenAI)",                          "openai",    ""),
-            ("Mistral — expérimental",                    "mistral",   ""),
-            ("Ollama local — expérimental",               "ollama",    ""),
-            ("PANDORA optimisé — moteur conseillé par tâche", "pandora", ""),
+            ("PANDORA optimisé — idéal par tâche · Opus pour le storyboard (défaut)",
+                                                          "anthropic", "claude-opus-4-8"),
+            ("Claude Sonnet 4.6 — tout en équilibré",     "anthropic", "claude-sonnet-4-6"),
+            ("Claude Haiku 4.5 — tout en rapide / économe", "anthropic", "claude-haiku-4-5"),
+            ("Fable 5 (Anthropic) — tout sur Fable 5",    "anthropic", "claude-fable-5"),
+            ("GPT-5.5 (OpenAI) — partout",                "openai",    ""),
+            ("Mistral — partout (expérimental)",          "mistral",   ""),
+            ("Ollama local — partout (expérimental)",     "ollama",    ""),
             ("Choix personnalisé — un moteur par tâche",  "custom",     ""),
         ]
         self.ai_combo = QComboBox()
@@ -317,10 +317,9 @@ class SettingsPage(QScrollArea):
         _adv_hint.setStyleSheet(f"color:{CP['text_dim']};font-size:10px;background:transparent;")
         adv_lay.addWidget(_adv_hint)
 
-        from core.ai_provider import TASKS, ENGINES, ENGINE_ORDER
-        _engine_items = [("Par défaut", "")] + [
-            (ENGINES[k]["name"], k) for k in ENGINE_ORDER
-        ]
+        from core.ai_provider import (TASKS, ENGINES, ENGINE_ORDER,
+                                       recommended_engine_name)
+        _engine_items = [(ENGINES[k]["name"], k) for k in ENGINE_ORDER]
         self._task_combos = {}
         _saved_tasks = cfg.get("ai_task_engines") or {}
         for task_key, task_label in TASKS:
@@ -342,11 +341,13 @@ class SettingsPage(QScrollArea):
                 f"border:1px solid {CP['border_bright']};color:{CP['text_primary']};"
                 f"selection-background-color:{CP['accent_dim']};}}"
             )
+            # 1er item = défaut intelligent (affiche le moteur recommandé pour la tâche).
+            combo.addItem(f"Par défaut · {recommended_engine_name(task_key)}", "")
             for name, key in _engine_items:
                 combo.addItem(name, key)
             _cur_eng = _saved_tasks.get(task_key, "")
-            for i, (_, key) in enumerate(_engine_items):
-                if key == _cur_eng:
+            for i in range(combo.count()):
+                if combo.itemData(i) == _cur_eng:
                     combo.setCurrentIndex(i)
                     break
             self._task_combos[task_key] = combo

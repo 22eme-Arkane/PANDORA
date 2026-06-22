@@ -57,9 +57,9 @@ def selecteur_ia_present():
     from ui.page_settings import SettingsPage
     p = SettingsPage()
     n = p.ai_combo.count()
-    assert n == 9, "9 choix (3 Claude, Fable 5, GPT-5.5, Mistral, Ollama, PANDORA optimisé, Personnalisé)"
+    assert n == 8, "8 choix (PANDORA optimisé défaut, Sonnet, Haiku, Fable 5, GPT-5.5, Mistral, Ollama, Personnalisé)"
     labels = [p.ai_combo.itemText(i) for i in range(n)]
-    assert "Opus 4.8" in labels[0] and "défaut" in labels[0], "Opus 4.8 = défaut (1er)"
+    assert "optimisé" in labels[0] and "défaut" in labels[0], "PANDORA optimisé = défaut (1er)"
     assert any("Fable 5" in x for x in labels), "Fable 5 proposé"
     assert any("GPT-5.5" in x for x in labels), "GPT-5.5 proposé"
     assert any("Choix personnalisé" in x for x in labels), "Choix personnalisé proposé"
@@ -664,8 +664,12 @@ def moteurs_ia_par_tache():
     assert set(ap.ENGINES) == {"claude", "opus", "haiku", "fable5", "gpt", "mistral", "ollama"}
     assert ap.ENGINES["gpt"]["provider"] == "openai"
     assert ap.ENGINES["opus"]["creative_model"] == "claude-opus-4-8"
-    # Preset PANDORA optimisé : Opus 4.8 par tâche (utilitaire reste Haiku via le tier)
-    assert ap.PANDORA_OPTIMIZED and all(v == "opus" for v in ap.PANDORA_OPTIMIZED.values())
+    # Profil PANDORA optimisé (défaut) : moteur IDÉAL par tâche — Opus UNIQUEMENT
+    # pour le storyboard, Sonnet pour scénario/sync, Haiku pour le reste (économe).
+    assert ap.PANDORA_OPTIMIZED["storyboard_gen"] == "opus", "storyboard = Opus"
+    assert ap.PANDORA_OPTIMIZED["extraction"] == "haiku", "extraction = Haiku (pas Opus)"
+    assert ap.PANDORA_OPTIMIZED["screenplay"] == "claude", "scénario = Sonnet"
+    assert not all(v == "opus" for v in ap.PANDORA_OPTIMIZED.values()), "plus Opus partout"
     keys = [t[0] for t in ap.TASKS]
     for k in ("enhance", "storyboard_chat", "assistant", "storyboard_gen",
               "screenplay", "extraction", "sync"):
@@ -1427,19 +1431,45 @@ def sound_design_cinema_file_plans():
 
 
 @test
-def assistant_ia_defaut_opus():
-    """Le sélecteur d'assistant IA présélectionne Claude Opus 4.8 quand la config
-    ne fixe pas de modèle — le fallback Sonnet affichait (et sauvait) Sonnet à tort."""
+def assistant_ia_routage_par_tache():
+    """Profil par DÉFAUT = routage IDÉAL par tâche (le moins de crédits, pas d'IA
+    surdimensionnée) : Opus 4.8 UNIQUEMENT pour le storyboard, Sonnet pour
+    scénario/sync, Haiku pour le reste. Un choix global explicite s'applique partout ;
+    un override par tâche prime sur tout."""
     import core.config as _cfg
+    import core.ai_provider as ap
     _orig = _cfg.load_config
-    _cfg.load_config = lambda: {}
+
+    def _mf(task, tier, conf):
+        _cfg.load_config = lambda: conf
+        p, m = ap._resolve_engine(task)
+        return ap._model(tier, p, m)
+
     try:
+        d = {"ai_provider": "anthropic", "ai_model_creative": "claude-opus-4-8",
+             "ai_task_engines": {}}
+        assert _mf("storyboard_gen", "creative", d) == "claude-opus-4-8", "storyboard = Opus"
+        assert _mf("extraction", "creative", d) == "claude-haiku-4-5", "extraction = Haiku"
+        assert _mf("screenplay", "creative", d) == "claude-sonnet-4-6", "scénario = Sonnet"
+        assert _mf("sync", "creative", d) == "claude-sonnet-4-6", "sync = Sonnet"
+        assert _mf("translate", "utility", d) == "claude-haiku-4-5", "traduction = Haiku"
+        # Config vide → même routage intelligent.
+        assert _mf("storyboard_gen", "creative", {}) == "claude-opus-4-8"
+        assert _mf("extraction", "creative", {}) == "claude-haiku-4-5"
+        # Global explicite → s'applique partout (Sonnet pour TOUTES les tâches).
+        g = {"ai_provider": "anthropic", "ai_model_creative": "claude-sonnet-4-6"}
+        assert _mf("storyboard_gen", "creative", g) == "claude-sonnet-4-6"
+        assert _mf("extraction", "creative", g) == "claude-sonnet-4-6"
+        # Override par tâche prioritaire.
+        o = {"ai_provider": "anthropic", "ai_model_creative": "claude-opus-4-8",
+             "ai_task_engines": {"storyboard_gen": "haiku"}}
+        assert _mf("storyboard_gen", "creative", o) == "claude-haiku-4-5"
+        # Paramètres : le combo présélectionne le profil optimisé (défaut).
+        _cfg.load_config = lambda: {}
         from ui.page_settings import SettingsPage
         ps = SettingsPage()
         assert ps.ai_combo.currentData() == ("anthropic", "claude-opus-4-8"), \
-            f"défaut attendu Opus 4.8, eu {ps.ai_combo.currentData()}"
-        import core.ai_provider as ap
-        assert ap.get_creative_model() == "claude-opus-4-8", ap.get_creative_model()
+            f"défaut attendu = profil optimisé, eu {ps.ai_combo.currentData()}"
     finally:
         _cfg.load_config = _orig
 
