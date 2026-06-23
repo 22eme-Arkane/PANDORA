@@ -15,7 +15,7 @@ import os
 from PyQt6.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, QTextEdit, QProgressBar,
 )
-from PyQt6.QtCore import Qt, pyqtSignal
+from PyQt6.QtCore import Qt, pyqtSignal, QThread
 
 from ui.styles import CP, PANDORA_STYLESHEET
 from core.i18n import translate
@@ -28,15 +28,37 @@ _CODE_TO_RV = {
 }
 
 
+class _PromptTranslateWorker(QThread):
+    """Traduit le prompt (anglais → français) pour l'affichage éditable, en tâche de
+    fond. Signal « done » (jamais « finished », qui masquerait le signal natif QThread)."""
+    done = pyqtSignal(str)
+
+    def __init__(self, text: str):
+        super().__init__()
+        self._text = text
+
+    def run(self):
+        try:
+            from core.lang import translate_to_french
+            self.done.emit(translate_to_french(self._text) or "")
+        except Exception:
+            self.done.emit("")
+
+
 class RoomVariationsDialog(QDialog):
     """Régénère toutes les vues d'une pièce avec un prompt édité (variations)."""
-    done = pyqtSignal()   # PAS « finished » : émis quand des variations ont été créées
+    # NB : surtout PAS « done » — done() est une méthode native de QDialog
+    # (appelée par reject()/la croix de fermeture) ; un signal du même nom la
+    # masquerait → « native Qt signal is not callable » à la fermeture.
+    created = pyqtSignal()   # émis quand des variations ont été créées
 
     def __init__(self, parent, room_group: str, decors: list):
         super().__init__(parent)
         self._room = room_group or "Décor"
         self._decors = list(decors or [])
         self._worker = None
+        self._tr_worker = None      # traduction du prompt (anglais → français)
+        self._orig_en = ""
         self._created = False
 
         self.setWindowTitle(f"{translate('Variations')} — {self._room}")
@@ -89,6 +111,10 @@ class RoomVariationsDialog(QDialog):
         self._status.setStyleSheet(f"color:{CP['text_dim']};font-size:10px;background:transparent;")
         lay.addWidget(self._status)
 
+        # Affiche le prompt en français (le prompt stocké est en anglais) — en tâche
+        # de fond pour ne pas bloquer l'ouverture.
+        self._maybe_translate_prompt()
+
         row = QHBoxLayout()
         row.addStretch()
         cancel = QPushButton(translate("Fermer"))
@@ -115,6 +141,43 @@ class RoomVariationsDialog(QDialog):
         ov = next((d for d in self._decors if d.get("room_view") == "Ensemble"), None)
         d = ov or (self._decors[0] if self._decors else {})
         return d.get("prompt", "") or d.get("description", "") or self._room
+
+    # ── Affichage français du prompt (anglais stocké → français éditable) ─────────
+
+    def _maybe_translate_prompt(self):
+        """En app française, affiche le prompt en français (il est stocké en anglais).
+        Traduction en tâche de fond → ouverture instantanée. La génération retraduit
+        en anglais (GenerateRoomViewsWorker.translate_to_english)."""
+        try:
+            from core.i18n import get_lang
+            if get_lang() != "fr":
+                return
+        except Exception:
+            return
+        base = self._prompt.toPlainText().strip()
+        if not base:
+            return
+        self._orig_en = base
+        self._status.setText(translate("Traduction du prompt en français…"))
+        self._tr_worker = _PromptTranslateWorker(base)
+        self._tr_worker.done.connect(self._on_prompt_translated)
+        self.finished.connect(self._abandon_tr_worker)
+        self._tr_worker.start()
+
+    def _on_prompt_translated(self, fr: str):
+        # Ne remplace QUE si l'utilisateur n'a rien modifié entre-temps (anti-clobber).
+        try:
+            if fr and self._prompt.toPlainText().strip() == self._orig_en:
+                self._prompt.setPlainText(fr)
+            self._status.setText("")
+        except RuntimeError:
+            pass   # dialogue déjà fermé
+
+    def _abandon_tr_worker(self, *_):
+        w = self._tr_worker
+        if w and w.isRunning():
+            from core.worker import abandon_thread
+            abandon_thread(w)
 
     # ── Génération ──────────────────────────────────────────────────────────────
 
@@ -171,7 +234,7 @@ class RoomVariationsDialog(QDialog):
             n += 1
         if n:
             self._created = True
-            self.done.emit()
+            self.created.emit()
             self._status.setText(translate("{n} vue(s) régénérée(s) en variations.").format(n=n))
         else:
             self._status.setText(

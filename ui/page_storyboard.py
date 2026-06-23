@@ -52,6 +52,7 @@ _COLS = [
     ("Langues",      120,  False),  # 16 dialogue_lang (traduit à l'envoi Seedance)
     ("Nom du plan",  150,  False),  # 17 scene_title (nom du plan) — affiché après « Plan »
     ("",              78,  False),  # 18 Boutons
+    ("Hauteur",       64,  False),  # 19 camera_height (à côté de Dist.)
 ]
 
 _HEURE_PRESETS = HEURE_PRESETS
@@ -63,7 +64,7 @@ _col_widths: list[int] = [w for _, w, _ in _COLS]
 # Index 0 (grip) reste en tête et la colonne Boutons (dernière) reste en queue ; le reste
 # est réordonnable. « Nom du plan » (logique 17) s'affiche par défaut juste après « Plan »
 # (logique 3). Loaded from project config in PageStoryboard._render().
-_DEFAULT_COL_ORDER: list[int] = [0, 1, 2, 3, 17, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 18]
+_DEFAULT_COL_ORDER: list[int] = [0, 1, 2, 3, 17, 4, 5, 6, 7, 8, 9, 19, 10, 11, 12, 13, 14, 15, 16, 18]
 _col_order: list[int] = list(_DEFAULT_COL_ORDER)
 
 
@@ -85,6 +86,19 @@ _SEQ_PALETTE = [
     ("rgba(50,200,100,0.08)",  "rgba(50,200,100,0.33)",  "#50c864"),  # green
     ("rgba(255,120,60,0.09)",  "rgba(255,120,60,0.35)",  "#ff9060"),  # orange
 ]
+
+
+def _contrast_text(hexc: str) -> str:
+    """Texte noir ou blanc selon la luminance d'une couleur hex — pour rester
+    lisible quand le libellé couleur remplit le fond de la cellule Séquence."""
+    h = (hexc or "").lstrip("#")
+    if len(h) != 6:
+        return "#ffffff"
+    try:
+        r, g, b = int(h[0:2], 16), int(h[2:4], 16), int(h[4:6], 16)
+    except ValueError:
+        return "#ffffff"
+    return "#07080f" if (0.299 * r + 0.587 * g + 0.114 * b) > 150 else "#ffffff"
 
 
 # ── Dialogue helpers ──────────────────────────────────────────────────────────
@@ -685,13 +699,13 @@ class _ShotRow(QFrame):
             pal_idx = 0
         row_bg, seq_bg, seq_color = _SEQ_PALETTE[pal_idx]
 
-        # Libellé couleur (repère manuel OU groupe de plans récurrents) → bande
-        # colorée à GAUCHE de la ligne.
+        # Libellé couleur ESTHÉTIQUE : appliqué en FOND de la cellule Séquence
+        # (cf. plus bas) — PLUS de bande à gauche (sans intérêt). Le flag « plan
+        # récurrent » reste un coin sur la vignette.
         _lc = (data.get("label_color") or "").strip()
-        _left = f"border-left:4px solid {_lc};" if _lc else ""
         self.setStyleSheet(
             f"QFrame{{background:{row_bg};border:none;"
-            f"border-top:1px solid {CP['border']};{_left}}}"
+            f"border-top:1px solid {CP['border']};}}"
         )
 
         outer = QHBoxLayout(self)
@@ -929,7 +943,10 @@ class _ShotRow(QFrame):
         seq_w = QWidget()
         seq_w.setFixedWidth(_col_widths[2])
         seq_w.setMinimumHeight(self._MIN_H)
-        seq_w.setStyleSheet(f"background:{seq_bg};")
+        # Fond de la cellule = libellé couleur esthétique s'il est défini, sinon la
+        # couleur de séquence par défaut. Texte contrasté pour rester lisible.
+        seq_w.setStyleSheet(f"background:{_lc or seq_bg};")
+        _seq_txt = _contrast_text(_lc) if _lc else seq_color
         seq_lay = QVBoxLayout(seq_w)
         seq_lay.setContentsMargins(6, 8, 6, 8)
         seq_lay.setSpacing(2)
@@ -940,7 +957,7 @@ class _ShotRow(QFrame):
             n = QLabel(f"S{sq}")
             n.setAlignment(Qt.AlignmentFlag.AlignCenter)
             n.setStyleSheet(
-                f"color:{seq_color};font-size:22px;font-weight:800;"
+                f"color:{_seq_txt};font-size:22px;font-weight:800;"
                 f"font-family:'Consolas',monospace;background:transparent;border:none;"
             )
             seq_lay.addWidget(n)
@@ -949,7 +966,7 @@ class _ShotRow(QFrame):
             s2.setAlignment(Qt.AlignmentFlag.AlignCenter)
             s2.setWordWrap(True)
             s2.setStyleSheet(
-                f"color:{seq_color};font-size:8px;font-weight:700;"
+                f"color:{_seq_txt};font-size:8px;font-weight:700;"
                 f"background:transparent;border:none;"
             )
             seq_lay.addWidget(s2)
@@ -1168,6 +1185,45 @@ class _ShotRow(QFrame):
 
         _clickable(dst_w, _dist_click)
         cells[9] = dst_w
+
+        # ── Hauteur caméra ────────────────────────────────────────────────────
+        hgt_w, hgt_l = _cell(_col_widths[19])
+        _cur_hgt = data.get("camera_height", "")
+        hgt_l.addWidget(_lbl(_cur_hgt or "—", CP["accent_dim"], 10, mono=True))
+
+        def _height_click(_w=hgt_w, _c=_cur_hgt):
+            menu = QMenu(self)
+            menu.setStyleSheet(
+                f"QMenu{{background:{CP['bg2']};border:1px solid {CP['border_bright']};"
+                f"border-radius:8px;padding:4px 0;}}"
+                f"QMenu::item{{color:{CP['text_primary']};padding:7px 18px;font-size:11px;}}"
+                f"QMenu::item:selected{{background:{CP['accent_dim']};color:{CP['text_primary']};}}"
+                f"QMenu::item:checked{{color:{CP['accent']};font-weight:700;}}"
+            )
+            for opt in ("", "0,5 m", "1 m", "1,2 m", "1,7 m", "2 m", "3 m", "5 m"):
+                label = opt if opt else "— Aucune —"
+                act = menu.addAction(translate(label))
+                act.setData(opt)
+                act.setCheckable(True)
+                act.setChecked(opt == _c)
+            menu.addSeparator()
+            free_act = menu.addAction(translate("✎  Saisir une valeur…"))
+            free_act.setData("__free__")
+            chosen = menu.exec(_w.mapToGlobal(_w.rect().bottomLeft()))
+            if not chosen:
+                return
+            if chosen.data() == "__free__":
+                text, ok = QInputDialog.getText(
+                    self, translate("Hauteur caméra"),
+                    translate("Hauteur (ex : 1,7 m) :"), text=_c
+                )
+                if ok and text.strip():
+                    _save_field("camera_height", text.strip())
+            else:
+                _save_field("camera_height", chosen.data())
+
+        _clickable(hgt_w, _height_click)
+        cells[19] = hgt_w
 
         # ── Vitesse ──────────────────────────────────────────────────────────
         spd_w, spd_l = _cell(_col_widths[10])
@@ -2062,6 +2118,11 @@ class PageStoryboard(QWidget):
         if dlg.exec() == StoryboardSyncDialog.DialogCode.Accepted:
             self._all_shots = sb_api.list_shots(self._active_version_id)
             self._render()
+            # Feedback explicite si un scénario a été reconstruit : sinon l'utilisateur
+            # ne sait pas où regarder (le scénario est dans l'onglet Scénario).
+            if getattr(dlg, "_scenario_text", ""):
+                self._ai_lbl.setText(translate(
+                    "✓ Scénario reconstruit enregistré — ouvre l'onglet Scénario pour le voir."))
 
     def _on_clear_shots(self):
         """Supprime tous les plans du découpage actuel pour permettre une régénération."""
@@ -2418,8 +2479,18 @@ class PageStoryboard(QWidget):
         lay.insertWidget(0, self._btn_batch_mood)
         lay.insertWidget(1, self._btn_sync)
         lay.insertWidget(2, self._btn_recurrent)
-        lay.insertWidget(3, self._btn_save_sb_file)
-        lay.insertWidget(4, self._btn_open_sb_file)
+
+        # Sauvegarder / Ouvrir : à droite de « Plans récurrents », séparés par un
+        # petit espace + une barre verticale.
+        _tb_sep = QWidget()
+        _tb_sep.setFixedWidth(1)
+        _tb_sep.setFixedHeight(24)
+        _tb_sep.setStyleSheet(f"background:{CP['border_bright']};")
+        lay.insertSpacing(3, 12)
+        lay.insertWidget(4, _tb_sep)
+        lay.insertSpacing(5, 12)
+        lay.insertWidget(6, self._btn_save_sb_file)
+        lay.insertWidget(7, self._btn_open_sb_file)
 
         btn_new = QPushButton("＋  Ajouter un plan")
         btn_new.setFixedHeight(34)
@@ -2960,8 +3031,17 @@ class PageStoryboard(QWidget):
         if not self._all_shots:
             return
 
-        # Dialog d'info (une seule fois, sauf si l'utilisateur a coché "Ne plus afficher")
+        # Garde-fou : sans clé fal.ai, la génération NB2 échoue silencieusement —
+        # on le dit clairement plutôt que d'afficher un faux « Moods générés ».
         from core.config import load_config, save_config
+        if not load_config().get("api_key", "").strip():
+            from PyQt6.QtWidgets import QMessageBox
+            QMessageBox.information(
+                self, translate("Générer les Moods"),
+                translate("Configure ta clé fal.ai dans Paramètres pour générer les moods."))
+            return
+
+        # Dialog d'info (une seule fois, sauf si l'utilisateur a coché "Ne plus afficher")
         cfg = load_config()
         if not cfg.get("mood_batch_info_shown"):
             info_dlg = _MoodInfoDialog(self)
@@ -2978,6 +3058,11 @@ class PageStoryboard(QWidget):
         selected = dlg.selected_shots()
         if not selected:
             return
+
+        # Compteurs de résultat (message final honnête : succès / échecs).
+        self._mood_ok = 0
+        self._mood_fail = 0
+        self._mood_last_err = ""
 
         from api.apercu import MoodBatchWorker
         self._batch_mood_worker = MoodBatchWorker(selected)
@@ -3005,16 +3090,30 @@ class PageStoryboard(QWidget):
         self._mood_progress.setValue(current)
 
     def _on_batch_mood_done(self, shot_id: str, image_path: str):
-        row = self._shot_rows.get(shot_id)
-        if row:
-            row._on_apercu_changed(shot_id, image_path)
+        # On ne compte un SUCCÈS que si une vraie image existe — sinon « done »
+        # sans image (échec silencieux) ne doit pas se faire passer pour un succès.
+        if image_path and os.path.isfile(image_path):
+            self._mood_ok = getattr(self, "_mood_ok", 0) + 1
+            row = self._shot_rows.get(shot_id)
+            if row:
+                row._on_apercu_changed(shot_id, image_path)
+        else:
+            self._mood_fail = getattr(self, "_mood_fail", 0) + 1
 
     def _on_batch_mood_failed(self, shot_id: str, err: str):
+        self._mood_fail = getattr(self, "_mood_fail", 0) + 1
+        self._mood_last_err = err or ""
         self._ai_lbl.setText(f"Erreur plan {shot_id[:8]}… : {err[:80]}")
 
     def _on_batch_mood_all_done(self):
-        was_cancelled = getattr(self._batch_mood_worker, "_was_cancelled", False)
+        # PARQUER le worker (abandon_thread) au lieu de « = None » à chaud : le nuller
+        # pendant que le thread termine encore peut le faire GC en plein vol → segfault
+        # (doctrine PyQt du projet). abandon_thread garde une référence anti-GC.
+        w = self._batch_mood_worker
+        was_cancelled = getattr(w, "_was_cancelled", False)
         self._batch_mood_worker = None
+        if w is not None:
+            abandon_thread(w)
         self._mood_progress.setVisible(False)
         self._btn_batch_mood.setText("✦  Générer les Moods")
         self._btn_batch_mood.setEnabled(True)
@@ -3026,7 +3125,19 @@ class PageStoryboard(QWidget):
             f"QPushButton:pressed{{background:rgba(78,205,196,0.22);}}"
             f"QPushButton:disabled{{color:{CP['text_dim']};border-color:{CP['border']};}}"
         )
-        self._ai_lbl.setText("Génération annulée" if was_cancelled else "✓ Moods générés")
+        ok   = getattr(self, "_mood_ok", 0)
+        fail = getattr(self, "_mood_fail", 0)
+        last = getattr(self, "_mood_last_err", "")
+        if was_cancelled:
+            self._ai_lbl.setText("Génération annulée")
+        elif ok and not fail:
+            self._ai_lbl.setText(f"✓ {ok} mood(s) généré(s)")
+        elif ok and fail:
+            self._ai_lbl.setText(f"✓ {ok} mood(s) · {fail} échec(s)"
+                                 + (f" — {last[:60]}" if last else ""))
+        else:
+            self._ai_lbl.setText(f"⚠ Aucun mood généré ({fail} échec(s))"
+                                 + (f" — {last[:90]}" if last else ""))
 
     def _on_col_reordered(self, new_order: list):
         _col_order[:] = new_order

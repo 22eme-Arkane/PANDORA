@@ -65,6 +65,11 @@ class PageScenario(QWidget):
         self._last_result_kind: str = ""   # "format" | "arrange" | "refs"
         self._last_ref_analysis: str = ""
         self._ref_images: list[str] = []
+        # Musiques du set (clip) — analysées (BPM/énergie/drops) pour caler le
+        # découpage, exactement comme dans PANDORA | Live (moteur partagé librosa).
+        self._music_tracks: list[dict] = []   # [{path,name,bpm,duration,energy,drops}]
+        self._music_worker = None
+        self._music_mode: str = "clip"        # "film" (moments clés) | "clip" (début→fin)
         self._autosave_timer = QTimer()
         self._autosave_timer.setSingleShot(True)
         self._autosave_timer.setInterval(3000)
@@ -580,7 +585,7 @@ class PageScenario(QWidget):
         # ── helper: ai_btn ────────────────────────────────────────────────────
         def _ai_btn(icon, label, sub, callback):
             btn = QPushButton()
-            btn.setFixedHeight(52)
+            btn.setFixedHeight(58)   # 2 lignes de description (word-wrap) sans troncature
             btn.setStyleSheet(
                 f"QPushButton{{background:{CP['bg2']};border:1px solid {CP['border']};"
                 f"border-radius:8px;text-align:left;padding:0 10px;}}"
@@ -606,6 +611,7 @@ class PageScenario(QWidget):
             title_row.addWidget(txt_lbl)
             title_row.addStretch()
             sub_lbl = QLabel(translate(sub))
+            sub_lbl.setWordWrap(True)   # 2 lignes au lieu de tronquer la description
             sub_lbl.setStyleSheet(
                 f"color:{CP['text_dim']};font-size:8px;background:transparent;border:none;"
             )
@@ -640,7 +646,9 @@ class PageScenario(QWidget):
             c = QWidget()
             c.setStyleSheet(f"background:{CP['bg1']};")
             lay = QVBoxLayout(c)
-            lay.setContentsMargins(16, 8, 16, 8)
+            # Marges horizontales à 0 : les cartes vont jusqu'au bord, alignées
+            # sur les en-têtes de section pleine largeur (pas de retrait de 16 px).
+            lay.setContentsMargins(0, 8, 0, 8)
             lay.setSpacing(6)
             return c, lay
 
@@ -698,6 +706,44 @@ class PageScenario(QWidget):
 
         self._refresh_refs_display()
 
+        # ── Section 0bis : Musiques du set (clip) ─────────────────────────────
+        # Comme dans PANDORA | Live : on ajoute des morceaux, librosa analyse
+        # BPM + énergie + drops → timeline injectée dans Claude pour caler le
+        # découpage du storyboard sur la musique (clips).
+        c_music, l_music = _section_container()
+
+        _music_scroll = QScrollArea()
+        _music_scroll.setFixedHeight(76)
+        _music_scroll.setWidgetResizable(True)
+        _music_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
+        _music_scroll.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        _music_scroll.setStyleSheet(
+            "QScrollArea{border:none;background:transparent;}"
+            f"QScrollBar:horizontal{{background:{CP['bg2']};height:3px;border-radius:2px;}}"
+            f"QScrollBar::handle:horizontal{{background:{CP['border_bright']};border-radius:2px;}}"
+            f"QScrollBar::add-line:horizontal, QScrollBar::sub-line:horizontal{{width:0;}}"
+        )
+        self._music_container_w = QWidget()
+        self._music_container_w.setStyleSheet(f"background:{CP['bg2']};border-radius:8px;")
+        self._music_hbox = QHBoxLayout(self._music_container_w)
+        self._music_hbox.setContentsMargins(8, 8, 8, 8)
+        self._music_hbox.setSpacing(8)
+        _music_scroll.setWidget(self._music_container_w)
+        l_music.addWidget(_music_scroll)
+
+        self._btn_analyze_music = _ai_btn(
+            "♫", "Analyser la musique (BPM + drops)",
+            "Cale le découpage sur la musique (tempo + temps forts)",
+            self._on_analyze_music,
+        )
+        l_music.addWidget(self._btn_analyze_music)
+
+        tog_music = _make_toggle("♫  Musique du film", c_music, expanded=False)
+        sc_lay.addWidget(tog_music)
+        sc_lay.addWidget(c_music)
+
+        self._refresh_music_display()
+
         # ── Section 1 : Claude IA ─────────────────────────────────────────────
         c_ia, l_ia = _section_container()
 
@@ -710,7 +756,7 @@ class PageScenario(QWidget):
         l_ia.addWidget(self._btn_arrange)
         l_ia.addWidget(self._btn_format)
 
-        tog_ia = _make_toggle("☁  Claude IA", c_ia, expanded=True)
+        tog_ia = _make_toggle("☁  Écriture assistée par IA", c_ia, expanded=True)
         sc_lay.addWidget(tog_ia)
         sc_lay.addWidget(c_ia)
 
@@ -776,7 +822,7 @@ class PageScenario(QWidget):
         bottom = QWidget()
         bottom.setStyleSheet(f"background:{CP['bg1']};")
         b_lay = QVBoxLayout(bottom)
-        b_lay.setContentsMargins(16, 8, 16, 12)
+        b_lay.setContentsMargins(0, 8, 0, 12)   # aligné bord à bord avec les sections
         b_lay.setSpacing(6)
 
         self._ai_progress_lbl = QLabel("")
@@ -858,7 +904,7 @@ class PageScenario(QWidget):
             f"background:{CP['bg1']};"
         )
         ga_lay = QVBoxLayout(gen_all_zone)
-        ga_lay.setContentsMargins(16, 10, 16, 12)
+        ga_lay.setContentsMargins(0, 10, 0, 12)   # « Tout générer » aligné bord à bord
         ga_lay.setSpacing(8)
 
         self._gen_all_progress_bar = QProgressBar()
@@ -1019,6 +1065,10 @@ class PageScenario(QWidget):
         film_style = sc.get("film_style", "")
         idx = self._film_style_combo.findData(film_style) if film_style else -1
         self._film_style_combo.setCurrentIndex(idx if idx > 0 else 0)
+        self._music_tracks = list(sc.get("music_tracks") or [])
+        self._music_mode = sc.get("music_mode") or "clip"
+        if hasattr(self, "_music_hbox"):
+            self._refresh_music_display()
         self._refresh_version_combo()
         self._go_editor()
 
@@ -1112,6 +1162,466 @@ class PageScenario(QWidget):
         else:
             self._dur_estimate_lbl.setText(f"{_est} ~{mins}m{secs:02d}")
 
+    # ── Musiques du set (clip) — analyse BPM/drops, comme PANDORA | Live ────────
+
+    def _refresh_music_display(self):
+        while self._music_hbox.count():
+            item = self._music_hbox.takeAt(0)
+            if item.widget():
+                item.widget().deleteLater()
+        btn_add = QPushButton("+")
+        btn_add.setFixedSize(60, 60)
+        btn_add.setCursor(Qt.CursorShape.PointingHandCursor)
+        btn_add.setToolTip(translate(
+            "Ajouter des morceaux (mp3/wav…)\nClaude calera le découpage sur leur BPM et leurs drops."))
+        btn_add.setStyleSheet(f"""
+            QPushButton{{
+                background:transparent;color:{CP['text_dim']};
+                border:1px dashed {CP['border_bright']};border-radius:8px;
+                font-size:24px;font-weight:300;padding:0;
+            }}
+            QPushButton:hover{{color:{CP['accent']};border-color:{CP['accent']};
+                background:rgba(78,205,196,0.08);}}
+            QPushButton:pressed{{background:rgba(78,205,196,0.16);}}
+        """)
+        btn_add.clicked.connect(self._on_add_music)
+        self._music_hbox.addWidget(btn_add)
+        for i, t in enumerate(self._music_tracks):
+            self._music_hbox.addWidget(self._make_music_chip(i, t))
+        self._music_hbox.addStretch()
+
+    def _make_music_chip(self, index: int, track: dict) -> QWidget:
+        container = QWidget()
+        container.setFixedSize(132, 60)
+        container.setStyleSheet(
+            f"background:{CP['bg3']};border:1px solid {CP['border']};border-radius:8px;")
+        lay = QVBoxLayout(container)
+        lay.setContentsMargins(8, 6, 8, 6)
+        lay.setSpacing(1)
+        name = track.get("name", "?")
+        short = name if len(name) <= 16 else name[:15] + "…"
+        name_lbl = QLabel("♫ " + short)
+        name_lbl.setToolTip(name)
+        name_lbl.setStyleSheet(
+            f"color:{CP['text_primary']};font-size:9px;font-weight:700;"
+            "background:transparent;border:none;")
+        bpm = track.get("bpm", 0)
+        if bpm:
+            info = f"{bpm:.0f} BPM · {int(track.get('duration',0)//60)}:{int(track.get('duration',0)%60):02d}  ✎"
+            info_color = CP["accent"]
+        else:
+            info = translate("non analysé") + "  ✎"
+            info_color = CP["text_dim"]
+        info_btn = QPushButton(info)
+        info_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        info_btn.setToolTip(translate("Corriger le BPM (tap-tempo, ÷2 / ×2)"))
+        info_btn.setStyleSheet(
+            f"QPushButton{{color:{info_color};font-size:8px;font-weight:700;"
+            f"background:transparent;border:none;text-align:left;padding:0;}}"
+            f"QPushButton:hover{{color:{CP['accent']};}}")
+        info_btn.clicked.connect(lambda checked=False, i=index: self._edit_bpm(i))
+        energy = track.get("energy", "")
+        en_lbl = QLabel(energy[:16] if energy else "")
+        en_lbl.setStyleSheet(
+            f"color:{CP['text_dim']};font-size:8px;background:transparent;border:none;")
+        lay.addWidget(name_lbl)
+        lay.addWidget(info_btn)
+        lay.addWidget(en_lbl)
+        btn_rm = QPushButton("✕", container)
+        btn_rm.setGeometry(114, 2, 16, 16)
+        btn_rm.setCursor(Qt.CursorShape.PointingHandCursor)
+        btn_rm.setStyleSheet(
+            f"QPushButton{{background:{CP['bg2']};color:{CP['text_primary']};"
+            f"border:1px solid {CP['border_bright']};border-radius:3px;"
+            f"font-size:9px;font-weight:700;padding:0;}}"
+            f"QPushButton:hover{{background:{CP['red']};color:#fff;border-color:{CP['red']};}}"
+        )
+        btn_rm.clicked.connect(lambda checked=False, i=index: self._remove_music(i))
+        return container
+
+    def _remove_music(self, index: int):
+        if 0 <= index < len(self._music_tracks):
+            self._music_tracks.pop(index)
+            self._refresh_music_display()
+            self._save(silent=True)
+
+    def _edit_bpm(self, index: int):
+        """Correction manuelle du BPM : spinbox + ÷2 / ×2 (erreurs d'octave) + tap-tempo.
+        librosa confond parfois 64↔128 BPM → indispensable pour caler le découpage."""
+        if not (0 <= index < len(self._music_tracks)):
+            return
+        import time
+        from PyQt6.QtWidgets import (
+            QDialog, QVBoxLayout, QHBoxLayout, QLabel, QDoubleSpinBox, QPushButton,
+        )
+        track = self._music_tracks[index]
+        dlg = QDialog(self)
+        dlg.setWindowTitle(translate("Corriger le BPM"))
+        dlg.setFixedWidth(360)
+        dlg.setStyleSheet(f"QDialog{{background:{CP['bg1']};}}")
+        lay = QVBoxLayout(dlg)
+        lay.setContentsMargins(20, 18, 20, 18)
+        lay.setSpacing(12)
+
+        head = QLabel("♫ " + track.get("name", "?"))
+        head.setStyleSheet(
+            f"color:{CP['text_primary']};font-size:12px;font-weight:700;background:transparent;")
+        head.setWordWrap(True)
+        lay.addWidget(head)
+
+        row = QHBoxLayout()
+        row.setSpacing(8)
+        spin = QDoubleSpinBox()
+        spin.setRange(30.0, 300.0)
+        spin.setDecimals(1)
+        spin.setSingleStep(0.5)
+        spin.setValue(float(track.get("bpm", 0) or 120.0))
+        spin.setSuffix(" BPM")
+        spin.setStyleSheet(
+            f"QDoubleSpinBox{{background:{CP['bg2']};color:{CP['text_primary']};"
+            f"border:1px solid {CP['border']};border-radius:6px;padding:6px 8px;font-size:13px;}}")
+        row.addWidget(spin, 1)
+
+        def _mk(txt, fn):
+            b = QPushButton(txt)
+            b.setFixedSize(44, 34)
+            b.setCursor(Qt.CursorShape.PointingHandCursor)
+            b.setStyleSheet(
+                f"QPushButton{{background:{CP['bg2']};color:{CP['text_secondary']};"
+                f"border:1px solid {CP['border']};border-radius:6px;font-size:11px;font-weight:700;}}"
+                f"QPushButton:hover{{background:{CP['bg3']};color:{CP['text_primary']};"
+                f"border-color:{CP['border_bright']};}}")
+            b.clicked.connect(fn)
+            return b
+        row.addWidget(_mk("÷2", lambda: spin.setValue(round(spin.value() / 2, 1))))
+        row.addWidget(_mk("×2", lambda: spin.setValue(round(spin.value() * 2, 1))))
+        lay.addLayout(row)
+
+        # ── Tap-tempo ─────────────────────────────────────────────────────────
+        taps: list = []
+        tap_lbl = QLabel(translate("Tape en rythme sur la musique…"))
+        tap_lbl.setStyleSheet(f"color:{CP['text_dim']};font-size:9px;background:transparent;")
+        btn_tap = QPushButton(translate("⊙  Tap tempo"))
+        btn_tap.setFixedHeight(40)
+        btn_tap.setCursor(Qt.CursorShape.PointingHandCursor)
+        btn_tap.setStyleSheet(
+            f"QPushButton{{background:transparent;color:{CP['accent']};"
+            f"border:1px solid {CP['accent_dim']};border-radius:7px;font-size:12px;font-weight:700;}}"
+            f"QPushButton:hover{{background:rgba(78,205,196,0.10);}}"
+            f"QPushButton:pressed{{background:rgba(78,205,196,0.20);}}")
+
+        def _on_tap():
+            t = time.perf_counter()
+            if taps and (t - taps[-1]) > 2.0:
+                taps.clear()   # pause trop longue → on repart
+            taps.append(t)
+            if len(taps) > 8:
+                del taps[0]
+            if len(taps) >= 2:
+                intervals = [taps[i + 1] - taps[i] for i in range(len(taps) - 1)]
+                avg = sum(intervals) / len(intervals)
+                if avg > 0:
+                    val = 60.0 / avg
+                    spin.setValue(round(val, 1))
+                    tap_lbl.setText(f"{len(taps)} taps → {val:.1f} BPM")
+            else:
+                tap_lbl.setText(translate("Continue à taper…"))
+        btn_tap.clicked.connect(_on_tap)
+        lay.addWidget(btn_tap)
+        lay.addWidget(tap_lbl)
+
+        brow = QHBoxLayout()
+        brow.setSpacing(8)
+        brow.addStretch()
+        btn_cancel = QPushButton(translate("Annuler"))
+        btn_cancel.setFixedHeight(34)
+        btn_cancel.setStyleSheet(
+            f"QPushButton{{background:transparent;color:{CP['text_secondary']};"
+            f"border:1px solid {CP['border']};border-radius:7px;font-size:11px;font-weight:700;padding:0 16px;}}"
+            f"QPushButton:hover{{background:{CP['bg2']};color:{CP['text_primary']};}}")
+        btn_cancel.clicked.connect(dlg.reject)
+        btn_ok = QPushButton(translate("Valider"))
+        btn_ok.setFixedHeight(34)
+        btn_ok.setStyleSheet(
+            f"QPushButton{{background:{CP['accent']};color:#07080f;border:none;"
+            f"border-radius:7px;font-size:11px;font-weight:700;padding:0 18px;}}"
+            f"QPushButton:hover{{background:#6eded6;}}")
+        btn_ok.clicked.connect(dlg.accept)
+        brow.addWidget(btn_cancel)
+        brow.addWidget(btn_ok)
+        lay.addLayout(brow)
+
+        if dlg.exec() == QDialog.DialogCode.Accepted:
+            track["bpm"] = round(spin.value(), 1)
+            self._refresh_music_display()
+            self._save(silent=True)
+            self._ai_progress_lbl.setText(
+                f"BPM ← {track['bpm']:.0f} — {track.get('name','')}")
+
+    def _on_add_music(self):
+        paths, _ = QFileDialog.getOpenFileNames(
+            self, translate("Ajouter des morceaux"), "",
+            "Audio (*.mp3 *.wav *.flac *.ogg *.m4a *.aac);;Tous les fichiers (*)",
+        )
+        existing = {t.get("path") for t in self._music_tracks}
+        added = 0
+        for p in paths:
+            if p and p not in existing:
+                self._music_tracks.append({
+                    "path": p, "name": os.path.basename(p),
+                    "bpm": 0, "duration": 0, "energy": "", "drops": [],
+                })
+                added += 1
+        if added:
+            self._refresh_music_display()
+            self._save(silent=True)
+            self._ai_progress_lbl.setText(translate(
+                "Morceau(x) ajouté(s) — clique « Analyser le set » pour détecter BPM et drops."))
+
+    def _choose_music_mode(self) -> str:
+        """Popup AVANT l'analyse : musique de FILM (intégrée à des moments clés)
+        ou de CLIP (du début à la fin du scénario). Renvoie "film" / "clip" / ""."""
+        from PyQt6.QtWidgets import QDialog, QVBoxLayout, QLabel, QPushButton
+        dlg = QDialog(self)
+        dlg.setWindowTitle(translate("Type de musique"))
+        dlg.setStyleSheet(f"QDialog{{background:{CP['bg1']};}}")
+        dlg.setFixedWidth(460)
+        lay = QVBoxLayout(dlg)
+        lay.setContentsMargins(22, 20, 22, 20)
+        lay.setSpacing(12)
+
+        title = QLabel("♫  " + translate("Comment intégrer cette musique ?"))
+        title.setStyleSheet(
+            f"color:{CP['text_primary']};font-size:14px;font-weight:700;background:transparent;")
+        lay.addWidget(title)
+
+        choice = {"v": "", "cur": getattr(self, "_music_mode", "clip")}
+
+        def _card(icon, name, desc, val):
+            b = QPushButton()
+            b.setAutoDefault(False)
+            b.setCursor(Qt.CursorShape.PointingHandCursor)
+            b.setMinimumHeight(66)
+            _hl = (val == choice["cur"])
+            b.setStyleSheet(
+                f"QPushButton{{background:{CP['bg2']};text-align:left;padding:8px 12px;"
+                f"border:1px solid {CP['accent'] if _hl else CP['border']};border-radius:8px;}}"
+                f"QPushButton:hover{{border-color:{CP['accent_dim']};background:{CP['bg3']};}}")
+            bl = QVBoxLayout(b)
+            bl.setContentsMargins(6, 6, 6, 6)
+            bl.setSpacing(2)
+            t = QLabel(f"{icon}  {translate(name)}")
+            t.setStyleSheet(
+                f"color:{CP['text_primary']};font-size:12px;font-weight:700;"
+                f"background:transparent;border:none;")
+            d = QLabel(translate(desc))
+            d.setWordWrap(True)
+            d.setStyleSheet(
+                f"color:{CP['text_dim']};font-size:10px;background:transparent;border:none;")
+            bl.addWidget(t)
+            bl.addWidget(d)
+            def _pick():
+                choice["v"] = val
+                dlg.accept()
+            b.clicked.connect(_pick)
+            return b
+
+        lay.addWidget(_card(
+            "🎬", "Musique de film",
+            "Intégrée à des MOMENTS CLÉS du film (climax, transitions) — pas en continu.",
+            "film"))
+        lay.addWidget(_card(
+            "🎞️", "Musique de clip",
+            "Couvre le scénario du DÉBUT À LA FIN — le découpage suit la musique.",
+            "clip"))
+
+        cancel = QPushButton(translate("Annuler"))
+        cancel.setAutoDefault(False)
+        cancel.setFixedHeight(32)
+        cancel.setStyleSheet(
+            f"QPushButton{{background:transparent;color:{CP['text_dim']};"
+            f"border:1px solid {CP['border']};border-radius:7px;font-size:11px;padding:0 16px;}}"
+            f"QPushButton:hover{{color:{CP['text_primary']};border-color:{CP['text_primary']};}}")
+        cancel.clicked.connect(dlg.reject)
+        lay.addWidget(cancel)
+
+        dlg.exec()
+        return choice["v"]
+
+    def _on_analyze_music(self):
+        if not self._music_tracks:
+            self._ai_progress_lbl.setText(translate(
+                "Ajoute d'abord des morceaux dans « Musique du film »."))
+            return
+        mode = self._choose_music_mode()
+        if not mode:
+            return   # annulé : on ne lance pas l'analyse
+        self._music_mode = mode
+        self._save(silent=True)
+        from core.music_analysis import AnalyzeMusicWorker
+        _kind = translate("film") if mode == "film" else translate("clip")
+        self._ai_progress_lbl.setText(
+            translate("Analyse audio en cours (BPM + drops)…") + f"  [{_kind}]")
+        self._music_worker = AnalyzeMusicWorker(self._music_tracks)
+        self._open_music_analysis_window(self._music_worker)
+
+    def _open_music_analysis_window(self, worker):
+        """Fenêtre d'analyse musicale (comme l'arrangement Claude) : progression
+        visible + prévisualisation de la timeline + choix Appliquer / Annuler."""
+        from PyQt6.QtWidgets import (
+            QDialog, QVBoxLayout, QHBoxLayout, QTextEdit, QProgressBar, QPushButton,
+        )
+        from core.worker import abandon_thread
+        dlg = QDialog(self)
+        dlg.setWindowTitle(translate("Analyse musicale du film"))
+        dlg.resize(720, 600)
+        dlg.setStyleSheet(
+            f"QDialog{{background:{CP['bg1']};}}"
+            f"QLabel{{background:transparent;color:{CP['text_primary']};}}")
+        lay = QVBoxLayout(dlg)
+        lay.setContentsMargins(22, 20, 22, 20)
+        lay.setSpacing(12)
+
+        hdr = QHBoxLayout()
+        title_lbl = QLabel("♫  " + translate("Analyse musicale du film"))
+        title_lbl.setStyleSheet(f"color:{CP['text_primary']};font-size:14px;font-weight:700;")
+        status_lbl = QLabel(translate("Analyse en cours…"))
+        status_lbl.setStyleSheet(
+            f"color:{CP['accent']};font-size:10px;font-family:'Consolas',monospace;")
+        hdr.addWidget(title_lbl)
+        hdr.addStretch()
+        hdr.addWidget(status_lbl)
+        lay.addLayout(hdr)
+
+        bar = QProgressBar()
+        bar.setRange(0, 0)   # indéterminé jusqu'au 1er morceau
+        bar.setTextVisible(False)
+        bar.setFixedHeight(5)
+        bar.setStyleSheet(
+            f"QProgressBar{{background:{CP['bg3']};border:none;border-radius:2px;}}"
+            f"QProgressBar::chunk{{background:{CP['accent']};border-radius:2px;}}")
+        lay.addWidget(bar)
+
+        te = QTextEdit()
+        te.setReadOnly(True)
+        te.setPlaceholderText(translate("L'analyse apparaît au fil de l'écoute…"))
+        te.setStyleSheet(
+            f"QTextEdit{{background:{CP['bg2']};border:1px solid {CP['border']};"
+            f"border-radius:8px;color:{CP['text_primary']};font-size:11px;"
+            f"font-family:'Consolas',monospace;padding:14px;}}")
+        lay.addWidget(te, 1)
+
+        btn_row = QHBoxLayout()
+        btn_row.setSpacing(8)
+        btn_cancel = QPushButton(translate("Annuler"))
+        btn_cancel.setFixedHeight(36)
+        btn_cancel.setStyleSheet(
+            f"QPushButton{{background:{CP['bg3']};color:{CP['red']};"
+            f"border:1px solid {CP['red']};border-radius:7px;font-size:11px;font-weight:600;padding:0 20px;}}"
+            f"QPushButton:hover{{background:rgba(255,79,106,0.12);}}")
+        btn_apply = QPushButton(translate("✓  Appliquer l'analyse"))
+        btn_apply.setFixedHeight(36)
+        btn_apply.setEnabled(False)
+        btn_apply.setStyleSheet(
+            f"QPushButton{{background:{CP['accent']};color:#07080f;border:none;"
+            f"border-radius:7px;font-size:11px;font-weight:700;padding:0 22px;}}"
+            f"QPushButton:hover{{background:#6eded6;}}"
+            f"QPushButton:disabled{{background:{CP['bg3']};color:{CP['text_dim']};"
+            f"border:1px solid {CP['border']};}}")
+        btn_row.addWidget(btn_cancel)
+        btn_row.addStretch()
+        btn_row.addWidget(btn_apply)
+        lay.addLayout(btn_row)
+
+        _pending = [None]
+        _active  = [True]
+
+        def _stop():
+            if _active[0]:
+                _active[0] = False
+                worker.quit()
+                abandon_thread(worker)
+
+        def _mmss(s):
+            s = max(0, int(s))
+            return f"{s // 60}:{s % 60:02d}"
+
+        def _on_prog(i, total, name):
+            if not _active[0]:
+                return
+            bar.setRange(0, total)
+            bar.setValue(i)
+            status_lbl.setText(f"{i}/{total}")
+            te.append(f"[{i}/{total}] {name} — {translate('analyse…')}")
+
+        def _on_done(tracks):
+            _active[0] = False
+            _pending[0] = tracks
+            bar.setRange(0, 100)
+            bar.setValue(100)
+            status_lbl.setText(translate("Analyse terminée"))
+            status_lbl.setStyleSheet(
+                f"color:{CP['green']};font-size:10px;font-family:'Consolas',monospace;")
+            from core.music_analysis import build_set_timeline
+            lines = []
+            for t in tracks:
+                if t.get("bpm"):
+                    lines.append(f"♫ {t.get('name','?')} — {t['bpm']:.0f} BPM · "
+                                 f"{_mmss(t.get('duration', 0))}")
+                    if t.get("energy"):
+                        lines.append(f"   {translate('énergie')} {t['energy']}")
+                    drops = t.get("drops", [])
+                    if drops:
+                        lines.append("   drops: " + ", ".join(_mmss(d) for d in drops))
+                else:
+                    lines.append(f"♫ {t.get('name','?')} — {translate('non analysé')}")
+                lines.append("")
+            tl = build_set_timeline(tracks)
+            te.setPlainText("\n".join(lines) + (("\n" + tl) if tl else ""))
+            btn_apply.setEnabled(True)
+            btn_apply.setFocus()
+
+        def _on_fail(msg):
+            _active[0] = False
+            status_lbl.setText(translate("Erreur"))
+            status_lbl.setStyleSheet(
+                f"color:{CP['red']};font-size:10px;font-family:'Consolas',monospace;")
+            bar.setRange(0, 100)
+            bar.setValue(0)
+            te.setPlainText(f"{translate('Erreur')} : {msg}")
+
+        def _apply():
+            if _pending[0] is not None:
+                self._music_tracks = _pending[0]
+                self._refresh_music_display()
+                self._save(silent=True)
+                n = sum(1 for t in _pending[0] if t.get("bpm"))
+                self._ai_progress_lbl.setText(
+                    f"{n} " + translate("morceau(x) analysé(s) — timeline musicale prête ✓"))
+            dlg.accept()
+
+        def _cancel():
+            _stop()
+            self._ai_progress_lbl.setText(translate("Analyse musicale annulée."))
+            dlg.reject()
+
+        btn_cancel.clicked.connect(_cancel)
+        btn_apply.clicked.connect(_apply)
+        dlg.rejected.connect(_stop)
+
+        worker.progress.connect(_on_prog)
+        worker.finished.connect(_on_done)
+        worker.failed.connect(_on_fail)
+        worker.start()
+        dlg.exec()
+
+    def _text_with_music(self) -> str:
+        """Scénario + timeline musicale (si analysée) à injecter dans Claude."""
+        text = self._get_text()
+        from core.music_analysis import build_set_timeline
+        timeline = build_set_timeline(self._music_tracks, mode=getattr(self, "_music_mode", "clip"))
+        return (timeline + "\n\n" + text) if timeline else text
+
     def _save(self, silent=False):
         text = self._editor_text.toPlainText().strip()
         title = self._title_edit.text().strip()
@@ -1129,6 +1639,8 @@ class PageScenario(QWidget):
             "duration_defined":  dur_defined,
             "film_style":        film_style_key if film_style_key not in ("", "__sep__") else "",
             "layout_content":    self._layout_view.toPlainText() if hasattr(self, "_layout_view") else "",
+            "music_tracks":      self._music_tracks,
+            "music_mode":        self._music_mode,
         })
         self._current = scenario_api.save_scenario(data)
         if not silent:
@@ -1388,7 +1900,9 @@ class PageScenario(QWidget):
         dur_secs = (self._dur_min.value() * 60 + self._dur_sec.value()) if self._dur_defined_check.isChecked() else 0
         sc_id = (self._current or {}).get("id", "")
         from ui.dialog_storyboard_generate import StoryboardGenerateDialog
-        dlg = StoryboardGenerateDialog(text, dur_secs, sc_id, parent=self)
+        # Timeline musicale injectée (si un set a été analysé) → découpage calé sur
+        # le BPM et les drops, comme dans PANDORA | Live.
+        dlg = StoryboardGenerateDialog(self._text_with_music(), dur_secs, sc_id, parent=self)
         if dlg.exec() == StoryboardGenerateDialog.DialogCode.Accepted and dlg._shots:
             count = len(dlg._shots)
             # Mise en scène INITIALE auto (acteurs + caméra depuis l'axe du plan) —
@@ -2821,7 +3335,7 @@ class PageScenario(QWidget):
             if vehs:  _el["vehicles"]    = vehs
         except Exception:
             pass
-        w = GenerateStoryboardWorker(self._get_text(), dur, _el or None)
+        w = GenerateStoryboardWorker(self._text_with_music(), dur, _el or None)
         w.finished.connect(self._gen_all_storyboard_done)
         w.failed.connect(lambda e: self._gen_all_step_error(e, "Storyboard"))
         self._gen_all_workers.append(w); w.start()
@@ -3005,3 +3519,28 @@ class PageScenario(QWidget):
         super().showEvent(e)
         if self._stack.currentIndex() == 0:
             self._refresh_recent()
+        else:
+            self._reload_if_empty_editor()
+
+    def _reload_if_empty_editor(self):
+        """Éditeur ouvert mais sans CONTENU → afficher un scénario qui a du contenu sur
+        disque (ex. scénario reconstruit par la synchro Storyboard, ou rempli pendant
+        que l'éditeur vide était affiché). On teste UNIQUEMENT le contenu, PAS le titre :
+        un éditeur intitulé « Scénario » mais vide doit quand même se recharger (c'était
+        le bug « rien dans Scénario après réécriture »). On ne recharge jamais si du
+        TEXTE est déjà saisi → aucune perte de saisie en cours."""
+        if self._editor_text.toPlainText().strip():
+            return
+        import core.scenario as scenario_api
+
+        def _has(sc):
+            return bool((sc.get("formatted_content") or sc.get("raw_content") or "").strip())
+
+        cur_id = (self._current or {}).get("id")
+        fresh = scenario_api.get_scenario(cur_id) if cur_id else None
+        if fresh and _has(fresh):
+            self._open_scenario(fresh)
+            return
+        scs = [s for s in scenario_api.list_scenarios() if _has(s)]
+        if scs:
+            self._open_scenario(scs[0])

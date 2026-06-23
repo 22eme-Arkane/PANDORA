@@ -58,8 +58,8 @@ class StoryboardSyncConfirmDialog(QDialog):
          False, False),
         ("rewrite_scenario",
          "Réécrire le scénario depuis le storyboard",
-         "Reconstitue un scénario littéraire à partir des plans. Enregistré comme "
-         "NOUVELLE version — le scénario actuel n'est jamais écrasé.",
+         "Reconstitue un scénario littéraire à partir des plans, visible dans l'onglet "
+         "Scénario. Le scénario actuel n'est jamais écrasé (fiche séparée si besoin).",
          False, True),
     ]
 
@@ -604,6 +604,25 @@ class StoryboardSyncDialog(QDialog):
             f"color:{CP['text_primary']};font-size:11px;font-weight:600;background:transparent;"
         )
         top.addWidget(title_lbl, 1)
+        # Bouton « Copier le texte » : copie le scénario reconstruit COMPLET dans le
+        # presse-papier — vérification + secours (coller dans l'éditeur Scénario).
+        copy_btn = QPushButton("📋  " + translate("Copier le texte"))
+        copy_btn.setFixedHeight(24)
+        copy_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        copy_btn.setStyleSheet(
+            f"QPushButton{{background:transparent;color:{CP.get('accent2', '#7c6bff')};"
+            f"border:1px solid {CP.get('accent2', '#7c6bff')};border-radius:5px;"
+            f"font-size:9px;font-weight:700;padding:0 10px;}}"
+            f"QPushButton:hover{{background:rgba(124,107,255,0.14);}}")
+
+        def _copy_scenario():
+            from PyQt6.QtGui import QGuiApplication
+            txt = self._scenario_text or ""
+            QGuiApplication.clipboard().setText(txt)
+            copy_btn.setText("✓  " + translate("Copié") + f" ({len(txt)} car.)")
+        copy_btn.clicked.connect(_copy_scenario)
+        top.addWidget(copy_btn)
+
         new_lbl = QLabel("nouvelle version")
         new_lbl.setStyleSheet(f"color:{CP['text_dim']};font-size:9px;background:transparent;")
         top.addWidget(new_lbl)
@@ -629,11 +648,13 @@ class StoryboardSyncDialog(QDialog):
     # ── Actions ────────────────────────────────────────────────────────────────
 
     def _on_confirm(self):
+        from PyQt6.QtWidgets import QMessageBox
         if not self._shots_out and not self._scenario_text:
             self.accept()
             return
         self._btn_confirm.setEnabled(False)
         self._btn_confirm.setText("Sauvegarde…")
+        saved = None
         try:
             import core.storyboard as sb_api
             for shot in self._shots_out:
@@ -641,33 +662,78 @@ class StoryboardSyncDialog(QDialog):
                     clean = {k: v for k, v in shot.items() if not k.startswith("_")}
                     sb_api.save_shot(clean)
             if self._scenario_text:
-                self._save_scenario_version(self._scenario_text)
+                saved = self._save_scenario_version(self._scenario_text)
         except Exception as e:
+            # Erreur VISIBLE (modale) — sinon l'utilisateur croit que « ça ne marche pas »
+            # sans savoir pourquoi.
+            QMessageBox.critical(
+                self, translate("Erreur d'enregistrement"),
+                translate("Le scénario n'a pas pu être enregistré :") + f"\n\n{e}")
             self._status_lbl.setText(f"⚠ Erreur sauvegarde : {e}")
             self._btn_confirm.setEnabled(True)
             self._btn_confirm.setText("Réessayer")
             return
+        # Confirmation VISIBLE quand un scénario a été enregistré → l'utilisateur sait
+        # que ça a marché et où regarder.
+        if self._scenario_text and saved is not None:
+            title = (saved.get("title") or "Scénario").strip()
+            QMessageBox.information(
+                self, translate("Scénario enregistré"),
+                "✓ " + translate("Scénario reconstruit enregistré")
+                + f" ({len(self._scenario_text)} " + translate("caractères") + ")\n"
+                + translate("sous") + f" « {title} ».\n\n"
+                + translate("Ouvre l'onglet Scénario pour le voir."))
         self.accept()
 
-    def _save_scenario_version(self, text: str):
-        """Enregistre le scénario reconstruit comme NOUVELLE version — sans jamais
-        écraser le contenu courant du scénario du projet."""
+    def _save_scenario_version(self, text: str) -> dict:
+        """Enregistre le scénario reconstruit depuis le storyboard et renvoie la fiche
+        enregistrée. Le résultat est TOUJOURS une fiche scénario VISIBLE dans l'onglet
+        Scénario (jamais enfouie dans une version cachée).
+
+        - Aucun scénario, ou scénario courant VIDE → le texte devient son contenu
+          courant (s'affiche directement dans l'éditeur).
+        - Scénario courant DÉJÀ rempli → on ne l'écrase pas : on enregistre une fiche
+          SÉPARÉE « Scénario (reconstruit du storyboard) », visible comme sa propre
+          carte. Robuste : la numérotation de version ne peut pas lever d'exception."""
         from datetime import datetime
         import core.scenario as scenario_api
 
-        scenarios = scenario_api.list_scenarios()
-        current = scenarios[0] if scenarios else {"title": "Scénario", "raw_content": ""}
+        def _with_version(sc: dict) -> dict:
+            sc = dict(sc)
+            versions = list(sc.get("versions", []))
+            try:
+                num = int(versions[-1].get("num", 0)) + 1 if versions else 1
+            except (TypeError, ValueError, AttributeError):
+                num = len(versions) + 1
+            versions.append({
+                "num":      num,
+                "name":     "Reconstruit depuis le storyboard",
+                "content":  text,
+                "saved_at": datetime.now().isoformat(timespec="seconds"),
+            })
+            sc["versions"] = versions
+            sc["raw_content"] = text
+            sc["formatted_content"] = text
+            return sc
 
-        versions = list(current.get("versions", []))
-        num = (versions[-1]["num"] + 1) if versions else 1
-        versions.append({
-            "num":      num,
-            "name":     "Reconstruit depuis le storyboard",
-            "content":  text,
-            "saved_at": datetime.now().isoformat(timespec="seconds"),
-        })
-        current["versions"] = versions
-        scenario_api.save_scenario(current)
+        scenarios = scenario_api.list_scenarios()
+        current = scenarios[0] if scenarios else None
+        has_content = bool(current and
+            (current.get("formatted_content") or current.get("raw_content") or "").strip())
+
+        if not has_content:
+            target = _with_version(current or {})
+            if not target.get("title"):
+                target["title"] = "Scénario"
+            return scenario_api.save_scenario(target)
+
+        # Scénario rempli existant → fiche séparée « reconstruit » (jamais écraser).
+        recon = next((s for s in scenarios
+                      if (s.get("title") or "").startswith("Scénario (reconstruit")), None)
+        if recon:
+            return scenario_api.save_scenario(_with_version(recon))
+        new_sc = _with_version({"title": "Scénario (reconstruit du storyboard)"})
+        return scenario_api.save_scenario(new_sc)
 
     def _on_cancel(self):
         for w in (self._worker, self._scenario_worker):

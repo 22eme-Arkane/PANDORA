@@ -87,12 +87,24 @@ def analyze_file(path: str) -> dict:
     }
 
 
-def build_set_timeline(tracks: list) -> str:
-    """Construit le bloc texte injecté dans Claude depuis les morceaux ANALYSÉS."""
+def build_set_timeline(tracks: list, mode: str | None = None) -> str:
+    """Construit le bloc texte injecté dans Claude depuis les morceaux ANALYSÉS.
+
+    `mode` (Cinéma) adapte la CONSIGNE de découpage :
+      - "film" : musique placée sur les MOMENTS CLÉS du film (pas en continu) ;
+      - "clip" : musique du DÉBUT À LA FIN du scénario (découpage calé dessus).
+    `mode=None` (défaut, PANDORA | Live) : comportement d'origine (set Resolume),
+    INCHANGÉ — la rétrocompatibilité garantit que le Live n'est pas affecté."""
     analyzed = [t for t in (tracks or []) if t.get("bpm")]
     if not analyzed:
         return ""
-    lines = ["[TIMELINE MUSICALE DU SET — cale le rythme du découpage sur ces données]"]
+    if mode == "film":
+        head = "[MUSIQUE DU FILM — à placer sur les MOMENTS CLÉS du découpage]"
+    elif mode == "clip":
+        head = "[MUSIQUE DU CLIP — couvre le scénario du début à la fin ; cale le découpage dessus]"
+    else:
+        head = "[TIMELINE MUSICALE DU SET — cale le rythme du découpage sur ces données]"
+    lines = [head]
     total = 0.0
     for i, t in enumerate(analyzed, 1):
         dur = float(t.get("duration", 0) or 0)
@@ -103,12 +115,27 @@ def build_set_timeline(tracks: list) -> str:
         if t.get("energy"):
             lines.append(f"  Énergie (début→fin): {t['energy']}")
         lines.append(f"  Temps forts (drops/montées): {drops}")
-    lines.append(f"Durée totale du set : {_mmss(total)} ({len(analyzed)} morceau(x)).")
-    lines.append(
-        "CONSIGNE : place les ruptures et les temps forts du découpage sur ces drops ; "
-        "dimensionne les loops en mesures sur le BPM (ex. 4 mesures à 128 BPM = 7,5 s) "
-        "pour rester synchronisable dans Resolume."
-    )
+    _set = "" if mode in ("film", "clip") else " du set"
+    lines.append(f"Durée totale{_set} : {_mmss(total)} ({len(analyzed)} morceau(x)).")
+    if mode == "film":
+        lines.append(
+            "CONSIGNE : cette musique n'accompagne PAS le film en continu — place-la sur "
+            "les MOMENTS CLÉS (climax, respirations, transitions émotionnelles). Là où elle "
+            "joue, cale les ruptures de plans sur les drops/temps forts ; ailleurs, le "
+            "découpage suit l'action du scénario."
+        )
+    elif mode == "clip":
+        lines.append(
+            "CONSIGNE : la musique couvre le scénario du DÉBUT À LA FIN (format clip). Cale "
+            "tout le rythme du découpage sur le BPM et place les ruptures de plans sur les "
+            "drops/temps forts, en continu, sur toute la durée."
+        )
+    else:
+        lines.append(
+            "CONSIGNE : place les ruptures et les temps forts du découpage sur ces drops ; "
+            "dimensionne les loops en mesures sur le BPM (ex. 4 mesures à 128 BPM = 7,5 s) "
+            "pour rester synchronisable dans Resolume."
+        )
     return "\n".join(lines)
 
 

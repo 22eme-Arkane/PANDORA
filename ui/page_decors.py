@@ -9,6 +9,7 @@ from ui.styles import CP
 from ui.icons import load_icon
 from ui.widgets import HelpBlock
 import core.decors as decors_api
+from ui.element_io_buttons import make_save_open_buttons, toolbar_separator
 from core.decors import CATEGORIES
 from core.i18n import translate, to_source
 from ui.dialog_decor import DecorDialog
@@ -280,6 +281,21 @@ class PageDecors(QWidget):
         )
         self._search.textChanged.connect(self._apply_filter)
         lay.addWidget(self._search, 1)
+
+        # Sauvegarder / Ouvrir un décor — à côté de la barre de recherche.
+        self._btn_save_file, self._btn_open_file = make_save_open_buttons(
+            self, kind="decors",
+            list_fn=decors_api.list_decors,
+            save_fn=decors_api.save_decor,
+            delete_fn=decors_api.delete_decor,
+            refresh_fn=self.refresh)
+        lay.addWidget(self._btn_save_file)
+        lay.addWidget(self._btn_open_file)
+
+        # Séparateur (espace + trait) entre le groupe fichier et « Créer ».
+        lay.addSpacing(6)
+        lay.addWidget(toolbar_separator())
+        lay.addSpacing(6)
 
         btn_new = QPushButton("✦  Créer un décor")
         btn_new.setFixedHeight(36)
@@ -601,7 +617,7 @@ class PageDecors(QWidget):
         avec un prompt éditable). Choisir la pièce = tout le groupe d'un coup."""
         from ui.dialog_room_variations import RoomVariationsDialog
         dlg = RoomVariationsDialog(self, room_group, items)
-        dlg.done.connect(self.refresh)
+        dlg.created.connect(self.refresh)
         dlg.exec()
         if getattr(dlg, "_created", False):
             self.refresh()

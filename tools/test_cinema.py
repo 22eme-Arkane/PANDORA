@@ -311,7 +311,8 @@ def colonne_langues_dialogues():
     """Colonne « Langues » (storyboard Cinéma) : choix par plan, défaut anglais ;
     dialogues traduits À L'ENVOI uniquement (pas dans le prompt affiché)."""
     import ui.page_storyboard as M
-    assert len(M._COLS) == 19, "Langues (16) + Nom du plan (17) + boutons (18) = 19 colonnes"
+    assert len(M._COLS) == 20, \
+        "Langues (16) + Nom du plan (17) + boutons (18) + Hauteur (19) = 20 colonnes"
     assert M._COLS[16][0] == "Langues" and M._COLS[17][0] == "Nom du plan" and M._COLS[18][0] == "", \
         "Langues en 16, Nom du plan en 17, boutons en 18"
     # « Nom du plan » (scene_title) s'affiche par défaut juste après « Plan » (logique 3)
@@ -1776,6 +1777,11 @@ def variations_decor_par_groupe():
         {"id": "a", "room_group": "SAM", "room_view": "Avant", "prompt": "x"},
     ]
     dlg = RoomVariationsDialog(None, "SAM", decors)
+    # Garde-fou anti-crash : le signal NE doit PAS s'appeler « done » (masquerait
+    # QDialog.done() → « native Qt signal is not callable » à la fermeture).
+    assert callable(dlg.done), "QDialog.done() doit rester callable (signal mal nommé)"
+    assert hasattr(dlg, "created"), "signal renommé en « created »"
+    dlg.reject()  # le geste qui plantait — ne doit pas lever
     assert dlg._prompt.toPlainText() == "base", "prompt pré-rempli depuis la vue d'ensemble"
     assert _CODE_TO_RV["ensemble"] == "Ensemble" and _CODE_TO_RV["sol"] == "Sol"
     assert hasattr(dlg, "_btn_gen")
@@ -1785,6 +1791,337 @@ def variations_decor_par_groupe():
     src = inspect.getsource(__import__("ui.dialog_room_variations", fromlist=["_"]))
     assert ("GenerateRoomViewsWorker" in src and "generated_images" in src), \
         "régénère via le moteur 7 vues + garde l'ancienne image en variante"
+
+
+@test
+def sauver_ouvrir_elements():
+    """Castings/Décors/Accessoires/HMC/Véhicules : deux boutons « Sauvegarder » /
+    « Ouvrir » à côté de la barre de recherche (même principe que le storyboard).
+    core.element_io fait l'aller-retour JSON ; l'ouverture REMPLACE les éléments
+    du projet courant (delete_fn ne touche que l'index, pas les images)."""
+    import inspect, os as _o, tempfile as _tf
+    import core.element_io as eio
+
+    # 1) Logique pure (fonctions en mémoire — aucun disque/config réel touché).
+    store = [{"id": "a", "name": "A", "project_id": "P"},
+             {"id": "b", "name": "B", "project_id": "P"}]
+
+    def _list(): return [dict(x) for x in store]
+
+    def _save(d):
+        d = dict(d)
+        if not d.get("id"):
+            d["id"] = "n%d" % (len(store) + 1)
+        store.append(d)
+        return d
+
+    def _del(iid): store[:] = [x for x in store if x.get("id") != iid]
+
+    path = _o.path.join(_tf.gettempdir(), "pandora_test_eio.json")
+    eio.export_items(path, "casting", _list())
+    store[:] = [{"id": "z", "name": "Z", "project_id": "P"}]   # remplace
+    n = eio.import_items(path, "casting", _list, _save, _del)
+    assert n == 2 and sorted(x["name"] for x in store) == ["A", "B"], (n, store)
+    # Garde-fou : un fichier « casting » refusé dans une page « decors ».
+    try:
+        eio.read_items(path, "decors")
+        assert False, "type incompatible non détecté"
+    except ValueError:
+        pass
+    assert eio.file_suffix("vehicles") == "vehicules"
+    # Dossier de sauvegarde DÉDIÉ par type (pas la racine du projet).
+    for _k, _folder in (("casting", "Casting"), ("decors", "Décors"),
+                        ("accessories", "Accessoires"), ("hmc", "HMC"),
+                        ("vehicles", "Véhicules")):
+        d = eio.saves_dir(_k)
+        assert d.rstrip("/\\").endswith(_folder) and _o.path.isdir(d), \
+            f"dossier dédié « {_folder} » absent"
+
+    # 2) Helper UI commun + branchement des 5 pages (inspection source : robuste).
+    from ui.element_io_buttons import make_save_open_buttons  # noqa: F401
+    expect = {
+        "ui.page_castings":    "casting",
+        "ui.page_decors":      "decors",
+        "ui.page_accessories": "accessories",
+        "ui.page_hmc":         "hmc",
+        "ui.page_vehicles":    "vehicles",
+    }
+    for mod, kind in expect.items():
+        src = inspect.getsource(__import__(mod, fromlist=["_"]))
+        assert "make_save_open_buttons" in src, f"boutons absents : {mod}"
+        assert f'kind="{kind}"' in src, f"kind {kind} manquant : {mod}"
+        assert "_btn_save_file" in src and "_btn_open_file" in src, mod
+
+    # 3) i18n FR+EN des nouveaux textes.
+    from core.i18n import _FR_TO_EN
+    for k in ("📂  Ouvrir", "Rien à sauvegarder.", "{n} élément(s) chargé(s).",
+              "Charger ce fichier ? Les éléments actuels seront remplacés."):
+        assert k in _FR_TO_EN, f"i18n manquante : {k}"
+
+
+@test
+def panneau_scenario_aligne_jusqu_au_bord():
+    """Panneau Scénario droit : les cartes/boutons vont jusqu'au bord (conteneurs
+    de section sans retrait horizontal, alignés sur les en-têtes pleine largeur)
+    et les descriptions passent à la ligne (word-wrap) au lieu d'être tronquées."""
+    import inspect
+    src = inspect.getsource(__import__("ui.page_scenario", fromlist=["_"]))
+    # Cartes jusqu'au bord : conteneur de section sans marge horizontale.
+    assert "lay.setContentsMargins(0, 8, 0, 8)" in src, "sections non alignées au bord"
+    assert "b_lay.setContentsMargins(0, 8, 0, 12)" in src, "zone basse non alignée"
+    assert "ga_lay.setContentsMargins(0, 10, 0, 12)" in src, "« Tout générer » non aligné"
+    # Descriptions sur 2 lignes + hauteur de bouton suffisante.
+    assert "sub_lbl.setWordWrap(True)" in src, "descriptions encore tronquées (pas de word-wrap)"
+    assert "btn.setFixedHeight(58)" in src, "hauteur de bouton non augmentée pour 2 lignes"
+    # Section « Claude IA » renommée « Écriture assistée par IA » (Cinéma).
+    assert '_make_toggle("☁  Écriture assistée par IA"' in src, "section IA non renommée"
+
+
+@test
+def plan_architecte_cale_sur_ensemble():
+    """7 vues : le plan d'architecte est généré par ÉDITION NB2 à partir de l'image
+    d'ensemble (donc calé dessus), avec repli texte robuste ; ensemble + plan ont un
+    retry (plus de « 1 décor + plan ») ; les 6 faces référencent le plan d'architecte
+    pour le raccord spatial. Worker partagé → Scénario, Variations et dialog Décor."""
+    import inspect
+    nb = inspect.getsource(__import__("api.nano_banana", fromlist=["_"]))
+    assert "fp_anchor" in nb and "_gen_edit(fp_anchor, ov_ref" in nb, \
+        "plan d'architecte non calé sur le plan d'ensemble (devrait être édité depuis l'ensemble)"
+    assert "ov_ref = [_dataurl(ov_path)]" in nb, "le plan n'utilise pas l'ensemble comme référence"
+    assert "_gen_text_robust" in nb and "_gen_text_robust(full_ov" in nb, \
+        "ensemble/plan sans repli robuste (retry)"
+    assert "TOP-DOWN architectural floor plan giving the exact layout" in nb, \
+        "les faces ne référencent pas explicitement le plan d'architecte"
+    # Les deux flux assignent bien le plan partagé (is_floor_plan) aux décors.
+    for mod, who in (("ui.dialog_extract_generate", "scénario"),
+                     ("ui.dialog_room_variations", "variations")):
+        src = inspect.getsource(__import__(mod, fromlist=["_"]))
+        assert "is_floor_plan" in src and "floor_plan" in src, f"plan non assigné ({who})"
+
+
+@test
+def analyse_musicale_scenario_cinema():
+    """Scénario Cinéma : section « Musiques du set » + analyse BPM/drops (moteur
+    librosa PARTAGÉ avec le Live), timeline injectée dans la génération du
+    storyboard (clip), persistance des morceaux, et librosa embarqué au build."""
+    import inspect, os as _os
+    from PyQt6.QtWidgets import QApplication
+    QApplication.instance() or QApplication([])
+    from ui.page_scenario import PageScenario
+    p = PageScenario()
+    for m in ("_refresh_music_display", "_make_music_chip", "_on_add_music",
+              "_on_analyze_music", "_open_music_analysis_window", "_edit_bpm",
+              "_remove_music", "_text_with_music"):
+        assert hasattr(p, m), "méthode musique manquante : " + m
+    assert hasattr(p, "_music_hbox") and hasattr(p, "_btn_analyze_music")
+    assert hasattr(p, "_choose_music_mode"), "popup de choix film/clip absent"
+    # Renommage Cinéma : « Musique du film » (et plus « Musiques du set »).
+    src = inspect.getsource(PageScenario)
+    assert "♫  Musique du film" in src, "section non renommée en « Musique du film »"
+    # Timeline injectée selon le MODE choisi avant l'analyse.
+    p._music_tracks = [{"name": "t", "bpm": 128, "duration": 200, "energy": "▁█", "drops": [8.0]}]
+    p._music_mode = "clip"
+    tw = p._text_with_music()
+    assert "MUSIQUE DU CLIP" in tw and "128 BPM" in tw, "mode clip non injecté"
+    p._music_mode = "film"
+    tf = p._text_with_music()
+    assert "MUSIQUE DU FILM" in tf and "MOMENTS CLÉS" in tf, "mode film non injecté"
+    # Non-régression Live : build_set_timeline sans mode = comportement d'origine.
+    from core.music_analysis import build_set_timeline
+    live_tl = build_set_timeline([{"name": "x", "bpm": 120, "duration": 100, "drops": []}])
+    assert "TIMELINE MUSICALE DU SET" in live_tl and "Resolume" in live_tl, "Live altéré"
+    # Persistance round-trip morceaux + mode.
+    p._open_scenario({"title": "T", "raw_content": "x",
+                      "music_tracks": [{"name": "a", "bpm": 90}], "music_mode": "film"})
+    assert p._music_tracks and p._music_tracks[0]["bpm"] == 90, "music_tracks non rechargé"
+    assert p._music_mode == "film", "music_mode non rechargé"
+    # Les DEUX chemins de génération du storyboard injectent la timeline.
+    src = inspect.getsource(PageScenario)
+    assert src.count("self._text_with_music()") >= 2, "timeline non injectée dans la génération"
+    # Build : librosa déclaré, numpy/scipy retirés des excludes.
+    with open(_os.path.join(_os.path.dirname(_os.path.dirname(__file__)), "pandora.spec"),
+              encoding="utf-8") as f:
+        spec = f.read()
+    assert '"librosa"' in spec, "librosa non déclaré au build Cinéma"
+    exc = spec.split("excludes=[")[1].split("]")[0]
+    assert '"numpy"' not in exc and '"scipy"' not in exc, "numpy/scipy encore exclus du build"
+
+
+@test
+def sync_storyboard_vers_mise_en_scene():
+    """Mise en scène : nouvelle synchro INVERSE storyboard → mise en scène. Après un
+    « Tout supprimer » (record vidé, _actors_seeded verrouillé, plan « __none__ »),
+    elle FORCE le re-semis (acteurs + caméra depuis le storyboard) et remet le plan
+    de décor en Auto → récupération de la mise en scène. Les deux sens coexistent."""
+    import inspect
+    from PyQt6.QtWidgets import QApplication, QMessageBox
+    QApplication.instance() or QApplication([])
+    import core.staging as stg
+    # Plan construit en direct (on isole du storyboard partagé du harnais).
+    shot = {"id": "sync_inv_shot", "number": "1", "scene_title": "T",
+            "character_names": ["Alice", "Bob"], "camera_axis": "Latéral 90°"}
+    sid = shot["id"]
+    # Simule « Tout supprimer » : record vidé + semis verrouillé + plan désactivé.
+    stg.save(sid, {"plan_image": "", "camera": {}, "actors": [], "props": [],
+                   "lights": [], "_actors_seeded": True, "plan_decor_id": "__none__"})
+    from ui.page_staging import PageStaging
+    p = PageStaging()
+    p._mode = "staging"
+    p._shots = [shot]
+    _exec, _info = QMessageBox.exec, QMessageBox.information
+    QMessageBox.exec = lambda self: QMessageBox.StandardButton.Yes
+    QMessageBox.information = staticmethod(lambda *a, **k: None)
+    try:
+        p._sync_from_storyboard()
+    finally:
+        QMessageBox.exec, QMessageBox.information = _exec, _info
+    rec = stg.get(sid)
+    assert [a["name"] for a in rec["actors"]] == ["Alice", "Bob"], rec["actors"]
+    assert rec["camera"].get("angle") == 90.0, rec["camera"]   # axe Latéral 90°
+    assert rec.get("plan_decor_id") == "", "plan de décor non remis en Auto"
+    src = inspect.getsource(PageStaging)
+    assert ("_sync_from_storyboard" in src and "_sync_to_storyboard" in src), "les deux sens absents"
+    assert "Synchroniser le storyboard → mise en scène" in src, "entrée de menu inverse absente"
+
+
+@test
+def storyboard_hauteur_libelle_moods():
+    """Storyboard Cinéma : colonne Hauteur (après Dist.), libellé couleur en FOND de
+    la cellule Séquence (plus de bande gauche), boutons Sauvegarder/Ouvrir déplacés
+    à droite (près de « Ajouter un plan »), message moods honnête (succès/échecs) +
+    garde-fou clé fal.ai. camera_height a un défaut côté core."""
+    import inspect
+    import ui.page_storyboard as P
+    assert P._COLS[19][0] == "Hauteur", "colonne Hauteur absente"
+    assert P._DEFAULT_COL_ORDER.index(19) == P._DEFAULT_COL_ORDER.index(9) + 1, \
+        "Hauteur n'est pas juste après Dist."
+    src = inspect.getsource(P)
+    assert "background:{_lc or seq_bg}" in src, "libellé couleur pas en fond de cellule Séquence"
+    assert "border-left:4px solid {_lc}" not in src, "la bande couleur à gauche subsiste"
+    assert "cells[19] = hgt_w" in src, "cellule Hauteur non assemblée"
+    assert ("self._btn_save_sb_file" in src and "self._btn_open_sb_file" in src), "boutons fichier absents"
+    assert "lay.addWidget(self._btn_save_sb_file)" not in src, "Sauvegarder ne doit plus être collé à droite"
+    assert "insertSpacing" in src, "espace/barre de séparation avant Sauvegarder/Ouvrir manquant"
+    assert ("Aucun mood généré" in src and "_mood_ok" in src and "_mood_fail" in src), \
+        "message moods non fiabilisé"
+    assert "Configure ta clé fal.ai dans Paramètres pour générer les moods." in src, \
+        "garde-fou clé fal.ai absent"
+    assert P._contrast_text("#ffc040") == "#07080f", "contraste texte incorrect"
+    import core.storyboard as _sb
+    assert 'data.setdefault("camera_height"' in inspect.getsource(_sb), "camera_height sans défaut"
+
+
+@test
+def sync_reecrit_scenario_projet_vierge():
+    """Storyboard → « Réécrire le scénario depuis le storyboard » : dans un projet
+    vierge (storyboard importé, aucun scénario), le texte reconstruit devient le
+    CONTENU COURANT (visible dans l'éditeur) et pas seulement une version cachée ;
+    si un scénario existe déjà, son contenu n'est jamais écrasé (nouvelle version)."""
+    from PyQt6.QtWidgets import QApplication
+    QApplication.instance() or QApplication([])
+    import core.scenario as scn
+    import core.context as ctx
+    from ui.dialog_storyboard_sync import StoryboardSyncDialog
+    dlg = StoryboardSyncDialog.__new__(StoryboardSyncDialog)   # sans __init__ (pas de worker)
+    _saved = ctx.get_project_id()
+    try:
+        ctx.set_project_id("sync_scn_vierge_test")
+        assert scn.list_scenarios() == [], "projet de test non vierge"
+        dlg._save_scenario_version("RECONSTRUIT depuis le storyboard")
+        scs = scn.list_scenarios()
+        assert scs and "RECONSTRUIT" in (scs[0].get("raw_content") or ""), \
+            "scénario reconstruit absent du contenu courant"
+        # Scénario existant rempli → on NE l'écrase PAS : fiche SÉPARÉE « reconstruit ».
+        scn.save_scenario({"id": scs[0]["id"], "project_id": "sync_scn_vierge_test",
+                           "raw_content": "ORIGINAL", "formatted_content": "ORIGINAL"})
+        saved = dlg._save_scenario_version("AUTRE RECONSTRUCTION")
+        assert scn.get_scenario(scs[0]["id"])["raw_content"] == "ORIGINAL", "scénario existant écrasé"
+        assert "AUTRE RECONSTRUCTION" in (saved.get("raw_content") or ""), "fiche reconstruite vide"
+        assert any("AUTRE RECONSTRUCTION" in (s.get("raw_content") or "")
+                   for s in scn.list_scenarios()), "fiche reconstruite absente de la liste"
+    finally:
+        ctx.set_project_id(_saved)
+
+
+@test
+def editeur_scenario_recharge_apres_sync():
+    """« Rien dans Scénario après réécriture » : un éditeur Scénario VIDE déjà ouvert
+    se recharge depuis le disque (showEvent) pour afficher le scénario reconstruit par
+    la synchro Storyboard — sans jamais écraser une saisie en cours."""
+    from PyQt6.QtWidgets import QApplication
+    QApplication.instance() or QApplication([])
+    import core.context as ctx
+    from ui.page_scenario import PageScenario
+    from ui.dialog_storyboard_sync import StoryboardSyncDialog
+    _saved = ctx.get_project_id()
+    try:
+        ctx.set_project_id("editor_reload_test")
+        pg = PageScenario()
+        # Cas réel : éditeur avec un TITRE « Scénario » mais SANS contenu (le titre ne
+        # doit PAS empêcher le rechargement — c'était le bug).
+        pg._open_scenario({"title": "Scénario"})
+        assert pg._stack.currentIndex() == 1, "éditeur non ouvert"
+        assert pg._title_edit.text().strip() == "Scénario" and not pg._editor_text.toPlainText().strip()
+        StoryboardSyncDialog.__new__(StoryboardSyncDialog)._save_scenario_version(
+            "INT. SALLE — NUIT\nLe scénario reconstruit depuis le storyboard.")
+        pg._reload_if_empty_editor()          # ce que déclenche showEvent
+        assert "reconstruit" in pg._editor_text.toPlainText(), "éditeur (titre mais vide) non rechargé"
+        # Saisie en cours JAMAIS écrasée (du TEXTE présent → pas de rechargement).
+        pg._open_scenario({"id": "keep", "title": "X", "raw_content": "TRAVAIL EN COURS"})
+        pg._reload_if_empty_editor()
+        assert pg._editor_text.toPlainText() == "TRAVAIL EN COURS", "saisie en cours écrasée"
+    finally:
+        ctx.set_project_id(_saved)
+
+
+@test
+def variations_prompt_francais():
+    """Variations de décor : le prompt (stocké en anglais) s'affiche en FRANÇAIS
+    (traduction Haiku en tâche de fond) ; la génération le retraduit en anglais. On
+    vérifie la logique de remplacement + l'anti-clobber, sans appel réseau."""
+    from PyQt6.QtWidgets import QApplication
+    QApplication.instance() or QApplication([])
+    from core.lang import translate_to_french
+    assert callable(translate_to_french), "translate_to_french absent"
+    import core.i18n as i18n
+    from ui.dialog_room_variations import RoomVariationsDialog, _PromptTranslateWorker
+    assert _PromptTranslateWorker is not None
+    _lang = i18n.get_lang()
+    try:
+        i18n.set_lang("en")   # app EN → pas de traduction auto à l'ouverture (zéro réseau)
+        decors = [{"id": "o", "room_group": "SAM", "room_view": "Ensemble",
+                   "prompt": "A dark wooden dining room"}]
+        dlg = RoomVariationsDialog(None, "SAM", decors)
+        assert dlg._prompt.toPlainText() == "A dark wooden dining room"
+        # Remplacement quand le champ n'a pas été modifié.
+        dlg._orig_en = dlg._prompt.toPlainText().strip()
+        dlg._on_prompt_translated("Une salle à manger sombre en bois")
+        assert dlg._prompt.toPlainText() == "Une salle à manger sombre en bois", \
+            "prompt non remplacé par la version française"
+        # Anti-clobber : saisie en cours jamais écrasée par la traduction tardive.
+        dlg._prompt.setPlainText("Ma variation à moi")
+        dlg._on_prompt_translated("Autre traduction")
+        assert dlg._prompt.toPlainText() == "Ma variation à moi", "saisie écrasée"
+    finally:
+        i18n.set_lang(_lang)
+
+
+@test
+def moods_nb2_cadrage_et_lifecycle():
+    """Moods NB2 : les références (persos + décor, souvent un plan d'ensemble) servent
+    à la COHÉRENCE, pas au cadrage → consigne imposant le plan prévu, depuis l'intérieur
+    du décor, persos placés dedans, sans recopier le plan d'ensemble. + worker batch
+    PARQUÉ (abandon_thread) au lieu de « = None » à chaud (anti-segfault)."""
+    import inspect
+    import api.apercu as ap_mod
+    d = ap_mod._MOOD_REF_DIRECTIVE   # valeur runtime (concaténée)
+    assert "FROM INSIDE this room" in d, "cadrage : « depuis l'intérieur du décor » manquant"
+    assert "Do NOT reproduce" in d and "overview" in d, "anti-recopie du plan d'ensemble manquant"
+    assert "place the character" in d, "placement des personnages dans le décor manquant"
+    ap = inspect.getsource(ap_mod)
+    assert ap.count("_MOOD_REF_DIRECTIVE") >= 2, "consigne de cadrage NB2 non injectée à l'édition"
+    sb = inspect.getsource(__import__("ui.page_storyboard", fromlist=["_"]))
+    assert "abandon_thread(w)" in sb, "worker mood non parqué (risque de segfault)"
 
 
 # ══════════════════════════════════════════════════════════════════════════════

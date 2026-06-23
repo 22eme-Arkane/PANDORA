@@ -151,6 +151,52 @@ def translate_to_english(text: str) -> str:
     return result
 
 
+def translate_to_french(text: str) -> str:
+    """Traduit le texte en français via Claude Haiku — pour AFFICHER en français un
+    prompt stocké en anglais (ex. édition d'une variation de décor). Protège les
+    dialogues (§D…§) comme translate_to_english. Retourne le texte original en cas
+    d'erreur / clé manquante / texte déjà français."""
+    if not text or not text.strip():
+        return text
+
+    from core.ai_provider import complete, key_error
+    if key_error():
+        return text
+
+    import re
+    protected: list[str] = []
+
+    def _protect(m: "re.Match") -> str:
+        idx = len(protected)
+        protected.append(m.group(0))
+        return f"§D{idx}§"
+
+    safe = re.sub(r"«[^»]*»", _protect, text)
+    safe = re.sub(r"“[^”]{1,300}”", _protect, safe)
+    safe = re.sub(r"‘[^’]{1,300}’", _protect, safe)
+
+    try:
+        result = complete(
+            (
+                "You are a translator specializing in AI video/image generation prompts. "
+                "Translate the input text into FRENCH (français), preserving all technical "
+                "details, descriptive adjectives, proper nouns and prompt structure exactly. "
+                "If the text is already in French, return it unchanged. "
+                "Tokens of the form §D0§, §D1§ … are protected placeholders — copy them "
+                "exactly as-is. Return ONLY the translated text. No explanation, no prefix."
+            ),
+            safe, tier="utility", max_tokens=800, task="translate",
+        ).strip()
+    except Exception:
+        return text
+
+    def _restore(m: "re.Match") -> str:
+        idx = int(m.group(1))
+        return protected[idx] if idx < len(protected) else m.group(0)
+
+    return re.sub(r"§D(\d+)§", _restore, result)
+
+
 def translate_to_chinese(text: str) -> str:
     """
     Traduit le texte en mandarin simplifié via Claude Haiku.

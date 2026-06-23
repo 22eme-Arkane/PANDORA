@@ -152,7 +152,7 @@ class PageStaging(QWidget):
             return [
                 "▸ Sélectionnez un plan, choisissez le plan de décor à utiliser, puis placez la caméra, les acteurs et les éléments.",
                 "▸ Glissez les jetons à la souris ; pivotez la caméra avec sa poignée ou ⟲ ⟳. L'axe caméra est réécrit dans le storyboard.",
-                "▸ « Synchronisation » : récupère les plans des décors, ou renvoie la mise en scène vers les prompts du storyboard.",
+                "▸ « Synchronisation » a DEUX sens : storyboard → mise en scène (reconstruit acteurs/caméra et récupère les plans de décor, ex. après « Tout supprimer ») ; mise en scène → storyboard (met à jour les prompts).",
             ]
         return [
             "▸ Reprend le plan de la Mise en scène : placez les projecteurs et choisissez leur type.",
@@ -502,6 +502,8 @@ class PageStaging(QWidget):
         if self._mode == "staging":
             menu.addAction(translate("Synchroniser la mise en scène → storyboard"),
                            self._sync_to_storyboard)
+            menu.addAction(translate("Synchroniser le storyboard → mise en scène"),
+                           self._sync_from_storyboard)
         else:
             menu.addAction(translate("Synchroniser le plan de feu → storyboard"),
                            self._sync_to_storyboard)
@@ -526,6 +528,47 @@ class PageStaging(QWidget):
         QMessageBox.information(
             self, translate("Synchronisation"),
             translate("Décors synchronisés depuis le storyboard.") + f"  ({n})")
+
+    def _sync_from_storyboard(self):
+        """storyboard → mise en scène (sens INVERSE) : reconstruit la mise en scène
+        (acteurs + caméra) de CHAQUE plan depuis ses données du storyboard (axe caméra
+        + personnages assignés) et remet le plan de décor en Auto. FORCE le re-semis
+        (contourne le flag _actors_seeded posé par « Tout supprimer ») → c'est ainsi
+        qu'on RÉCUPÈRE la mise en scène après l'avoir supprimée. Remplace les
+        placements manuels actuels, d'où la confirmation."""
+        if not self._shots:
+            QMessageBox.information(self, translate("Synchronisation"),
+                                   translate("Aucun plan dans le storyboard."))
+            return
+        box = QMessageBox(self)
+        box.setIcon(QMessageBox.Icon.Warning)
+        box.setWindowTitle(translate("Synchronisation"))
+        box.setText(translate(
+            "Reconstruire la mise en scène de tous les plans depuis le storyboard ?\n"
+            "Les placements actuels (acteurs, caméra) seront remplacés."))
+        box.setStandardButtons(QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
+        box.setDefaultButton(QMessageBox.StandardButton.No)
+        if box.exec() != QMessageBox.StandardButton.Yes:
+            return
+        n = 0
+        for s in self._shots:
+            sid = s.get("id")
+            if not sid:
+                continue
+            rec = staging.get(sid)
+            seeded = staging.seed_record_for_shot(s)
+            rec["actors"] = seeded["actors"]
+            rec["camera"] = seeded["camera"]
+            rec["_actors_seeded"] = True
+            rec["plan_decor_id"] = ""   # repasse en Auto → le plan de décor revient
+            fp = decors_api.floor_plan_for_shot(s)
+            rec["plan_image"] = fp if (fp and os.path.isfile(fp)) else ""
+            staging.save(sid, rec)
+            n += 1
+        self._reload_current()
+        QMessageBox.information(
+            self, translate("Synchronisation"),
+            translate("Mise en scène reconstruite depuis le storyboard.") + f"  ({n})")
 
     def _sync_to_storyboard(self):
         """mise en scène / plan de feu → storyboard : place les comédiens dans la

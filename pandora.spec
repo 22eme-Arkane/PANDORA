@@ -44,6 +44,20 @@ a = Analysis(
         "PIL.Image",
         "PIL.PngImagePlugin",
         "PIL.JpegImagePlugin",
+        # ── Analyse musicale (Scénario → « Musiques du set ») ──────────────────
+        # Moteur librosa PARTAGÉ avec PANDORA | Live, désormais embarqué dans le
+        # build Cinéma pour le travail en clip (BPM + drops → découpage calé).
+        # +~250 Mo assumés. numpy/scipy sont donc retirés des excludes ci-dessous.
+        # NB : numba peut nécessiter un ajustement au build (hook PyInstaller).
+        "numpy",
+        "scipy",
+        "scipy.signal",
+        "librosa",
+        "soundfile",
+        "audioread",
+        "lazy_loader",
+        "pooch",
+        "numba",
         # Réseau (anthropic / fal-client)
         "httpx",
         "httpcore",
@@ -81,8 +95,8 @@ a = Analysis(
     excludes=[
         "tkinter",
         "matplotlib",
-        "numpy",
-        "scipy",
+        # numpy / scipy NE SONT PLUS exclus : requis par librosa pour l'analyse
+        # musicale du Scénario (« Musiques du set »), feature partagée avec le Live.
         "pandas",
         "IPython",
         "jupyter",

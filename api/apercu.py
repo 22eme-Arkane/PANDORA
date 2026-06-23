@@ -390,6 +390,22 @@ def _shot_ref_images(shot: dict) -> list:
     return out[:14]
 
 
+# Consigne d'édition NB2 : les références (portraits persos + image décor, souvent un
+# PLAN D'ENSEMBLE) servent UNIQUEMENT à garder la même pièce et les mêmes personnages.
+# Elles ne doivent PAS dicter le cadrage : le mood doit être le PLAN PRÉVU, vu depuis
+# l'intérieur du décor, personnages placés dedans — pas une copie du plan d'ensemble.
+_MOOD_REF_DIRECTIVE = (
+    "IMPORTANT — the reference images are ONLY for consistency: keep the SAME room "
+    "(its architecture, materials, colours, furniture and lighting mood) and the SAME "
+    "characters (faces, hair, costumes). They are NOT a composition to copy. Generate "
+    "the SPECIFIC shot described above, taken FROM INSIDE this room: place the "
+    "character(s) within the set, interacting with it, and use the camera position, "
+    "angle and framing of the prompt (shot size, focal length, axis). Do NOT reproduce "
+    "the wide establishing / overview framing of the reference image — move the camera "
+    "into the scene and produce exactly the planned shot."
+)
+
+
 def run_generation_nb2(prompt: str, output_dir: str, api_key: str, progress_cb,
                        ref_images: list | None = None) -> str:
     """Mood via Nano Banana 2 : édition avec réfs (persos + décor) si disponibles,
@@ -402,8 +418,8 @@ def run_generation_nb2(prompt: str, output_dir: str, api_key: str, progress_cb,
         progress_cb(f"Nano Banana 2 — {len(refs)} référence(s) (persos + décor)…")
         urls = [fal_client.upload_file(r) for r in refs]
         result = fal_client.subscribe("fal-ai/nano-banana-2/edit", arguments={
-            "prompt": prompt, "image_urls": urls, "num_images": 1,
-            "aspect_ratio": "16:9", "resolution": "1K",
+            "prompt": prompt + "\n\n" + _MOOD_REF_DIRECTIVE, "image_urls": urls,
+            "num_images": 1, "aspect_ratio": "16:9", "resolution": "1K",
             "output_format": "png", "safety_tolerance": "6",
         })
     else:

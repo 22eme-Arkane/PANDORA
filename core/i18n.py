@@ -246,6 +246,20 @@ _FR_TO_EN: dict[str, str] = {
     "Arrangement du conducteur via Claude…":  "Arranging the rundown via Claude…",
     "Conducteur mis à jour par Claude ✓":  "Rundown updated by Claude ✓",
     "♫  Musiques du set":                  "♫  Set music",
+    # ── Cinéma : musique du film (renommage + choix film/clip) ─────────────────
+    "♫  Musique du film":                  "♫  Film music",
+    "Analyser la musique (BPM + drops)":   "Analyze music (BPM + drops)",
+    "Ajoute d'abord des morceaux dans « Musique du film ».":
+        "First add tracks in “Film music”.",
+    "Analyse musicale du film":            "Film music analysis",
+    "Type de musique":                     "Music type",
+    "Comment intégrer cette musique ?":    "How should this music be used?",
+    "Musique de film":                     "Film music",
+    "Intégrée à des MOMENTS CLÉS du film (climax, transitions) — pas en continu.":
+        "Placed at KEY MOMENTS of the film (climax, transitions) — not continuous.",
+    "Musique de clip":                     "Clip music",
+    "Couvre le scénario du DÉBUT À LA FIN — le découpage suit la musique.":
+        "Covers the script from START TO END — the breakdown follows the music.",
     "Analyser le set (BPM + drops)":       "Analyze set (BPM + drops)",
     "Cale le découpage sur la musique (tempo + temps forts)":
         "Sync the breakdown to the music (tempo + peaks)",
@@ -454,6 +468,8 @@ _FR_TO_EN: dict[str, str] = {
     "Écris d'abord un conducteur à découper.": "Write a rundown to break down first.",
     # Panneau Conducteur (Claude IA / Générer / Références)
     "☁  Claude IA":                        "☁  Claude AI",
+    # Scénario Cinéma : section « Claude IA » renommée « Écriture assistée par IA »
+    "☁  Écriture assistée par IA":         "☁  AI-assisted writing",
     "☁  Générer depuis le conducteur":     "☁  Generate from the rundown",
     "◎  Références visuelles":             "◎  Visual references",
     "Références visuelles":                "Visual references",
@@ -573,8 +589,29 @@ _FR_TO_EN: dict[str, str] = {
 
     # ── Communs ────────────────────────────────────────────────────────────────
     "Annuler":              "Cancel",
+    "↑  Importer des photos": "↑  Import photos",
+    "Copier le texte":      "Copy text",
+    "Copié":                "Copied",
+    "Traduction du prompt en français…":  "Translating prompt to French…",
+    "Erreur d'enregistrement":  "Save error",
+    "Le scénario n'a pas pu être enregistré :":
+        "The screenplay could not be saved:",
+    "Scénario enregistré":  "Screenplay saved",
+    "Scénario reconstruit enregistré":  "Reconstructed screenplay saved",
+    "caractères":           "characters",
+    "sous":                 "under",
+    "Ouvre l'onglet Scénario pour le voir.":  "Open the Screenplay tab to see it.",
     "Sauvegarder":          "Save",
     "💾  Sauvegarder":      "💾  Save",
+    "📂  Ouvrir":           "📂  Open",
+    "Ouvert":               "Opened",
+    "Sauvegardé.":          "Saved.",
+    "Sauvegarder dans un fichier":  "Save to a file",
+    "Ouvrir depuis un fichier":     "Open from a file",
+    "Rien à sauvegarder.":  "Nothing to save.",
+    "Charger ce fichier ? Les éléments actuels seront remplacés.":
+        "Load this file? The current items will be replaced.",
+    "{n} élément(s) chargé(s).":    "{n} item(s) loaded.",
     "Fermer":               "Close",
     "Supprimer":            "Delete",
     "Ajouter":              "Add",
@@ -1652,6 +1689,8 @@ _FR_TO_EN: dict[str, str] = {
     "＋  Ajouter un plan":              "＋  Add shot",
     "Suppr.":                           "Del.",
     "✦  Générer les Moods":             "✦  Generate Moods",
+    "✓ Scénario reconstruit enregistré — ouvre l'onglet Scénario pour le voir.":
+        "✓ Reconstructed screenplay saved — open the Screenplay tab to see it.",
     "⏹  Arrêter":                       "⏹  Stop",
     "Ouvrir →":                         "Open →",
     "＋ Créer un storyboard":           "＋ Create storyboard",
@@ -2216,6 +2255,10 @@ _FR_TO_EN: dict[str, str] = {
     "fixe":                                      "fixed",
     # ── Réglages projecteur : hauteur, inclinaison, louver, on/off, effets ─────
     "Hauteur":                                   "Height",
+    "Hauteur caméra":                            "Camera height",
+    "Hauteur (ex : 1,7 m) :":                    "Height (e.g. 1.7 m):",
+    "Configure ta clé fal.ai dans Paramètres pour générer les moods.":
+        "Set your fal.ai key in Settings to generate moods.",
     "Inclinaison":                               "Tilt",
     "Louver / nid d'abeille (faisceau resserré)": "Louver / egg-crate (tighter beam)",
     "Effet dynamique":                           "Dynamic effect",
@@ -2281,8 +2324,17 @@ _FR_TO_EN: dict[str, str] = {
         "Sync sets (storyboard → plans)",
     "Synchroniser la mise en scène → storyboard":
         "Sync staging → storyboard",
+    "Synchroniser le storyboard → mise en scène":
+        "Sync storyboard → staging",
     "Synchroniser le plan de feu → storyboard":
         "Sync lighting plan → storyboard",
+    "Aucun plan dans le storyboard.":            "No shot in the storyboard.",
+    "Reconstruire la mise en scène de tous les plans depuis le storyboard ?\n"
+    "Les placements actuels (acteurs, caméra) seront remplacés.":
+        "Rebuild the staging of every shot from the storyboard?\n"
+        "The current placements (actors, camera) will be replaced.",
+    "Mise en scène reconstruite depuis le storyboard.":
+        "Staging rebuilt from the storyboard.",
     "Décors synchronisés depuis le storyboard.":
         "Sets synced from the storyboard.",
     "Mise en scène synchronisée vers le storyboard.":

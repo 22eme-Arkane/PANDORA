@@ -86,6 +86,12 @@ EXPECTED_ONLY_CINEMA = {
         "_clear_layout", "_restore_layout",
         # Sauvegarder/Ouvrir le scénario en fichier (dossier Scénario) — Cinéma only.
         "_on_save_scenario_file", "_on_open_scenario_file",
+        # Musique du film : popup AVANT analyse pour choisir film (moments clés) /
+        # clip (début→fin). Notion propre au Cinéma — le Live cale en continu (set).
+        "_choose_music_mode",
+        # Rechargement de l'éditeur vide depuis le disque (affiche le scénario
+        # reconstruit par la synchro Storyboard) — Cinéma ; reportable au Live.
+        "_reload_if_empty_editor",
     },
     "ui/page_storyboard_live.py": {
         # Sauvegarder/Ouvrir le storyboard en fichier (dossier Storyboard) — Cinéma only.
@@ -98,6 +104,9 @@ EXPECTED_ONLY_CINEMA = {
         # feature Cinéma ; reportable au Live.
         "_set_label", "_set_recurrent",
         "_on_detect_recurrent", "_on_recurrent_done", "_on_recurrent_fail",
+        # Libellé couleur ESTHÉTIQUE en fond de la cellule Séquence (helper de
+        # contraste texte) — feature Cinéma ; reportable au Live si besoin.
+        "_contrast_text",
     },
     "ui/dialog_contact_live.py": {
         # Divergence LÉGÈRE voulue (2026-06-12) : le Live est une sous-classe

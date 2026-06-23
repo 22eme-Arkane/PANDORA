@@ -10,6 +10,7 @@ from ui.icons import load_icon
 from ui.widgets import HelpBlock
 import core.hmc as hmc_api
 import core.casting as casting_api
+from ui.element_io_buttons import make_save_open_buttons, toolbar_separator
 from core.hmc import TYPES
 from ui.dialog_hmc import HMCDialog
 
@@ -267,6 +268,21 @@ class PageHMC(QWidget):
         )
         self._search.textChanged.connect(self._apply_filter)
         lay.addWidget(self._search)
+
+        # Sauvegarder / Ouvrir le HMC — à côté de la barre de recherche.
+        self._btn_save_file, self._btn_open_file = make_save_open_buttons(
+            self, kind="hmc",
+            list_fn=hmc_api.list_hmc_items,
+            save_fn=hmc_api.save_hmc_item,
+            delete_fn=hmc_api.delete_hmc_item,
+            refresh_fn=self.refresh)
+        lay.addWidget(self._btn_save_file)
+        lay.addWidget(self._btn_open_file)
+
+        # Séparateur (espace + trait) entre le groupe fichier et « Créer ».
+        lay.addSpacing(6)
+        lay.addWidget(toolbar_separator())
+        lay.addSpacing(6)
 
         btn_new = QPushButton("✦  Créer un élément HMC")
         btn_new.setFixedHeight(36)

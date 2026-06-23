@@ -435,6 +435,7 @@ def save_shot(data: dict, version_id: str = DEFAULT_VERSION_ID) -> dict:
         data.setdefault("shot_size", "")
         data.setdefault("camera_axis", "")
         data.setdefault("camera_distance", "")
+        data.setdefault("camera_height", "")   # hauteur caméra (colonne storyboard)
         data.setdefault("speed", "Normale")
         data.setdefault("optic", "Sphérique")
         data.setdefault("focal", "35mm")

@@ -1910,6 +1910,22 @@ class GenerateRoomViewsWorker(QThread):
                 })
                 return requests.get(_extract_image_url(_res), timeout=120).content
 
+            def _gen_text_robust(prompt: str, aspect: str) -> bytes:
+                # Comme _gen_text mais 4 essais + backoff : le plan d'ensemble ET le
+                # plan d'architecture sont les RÉFÉRENCES de toutes les faces — un
+                # échec ici casse le raccord, on insiste (les faces avaient déjà ce
+                # repli, l'ensemble et le plan ne l'avaient pas → « 1 décor + plan »).
+                _err = ""
+                for _attempt in range(4):
+                    try:
+                        return _gen_text(prompt, aspect)
+                    except Exception as e:
+                        _err = str(e)
+                        _rl = any(k in str(e).lower() for k in
+                                  ("rate", "limit", "429", "quota", "too many", "exhaust"))
+                        time.sleep((7 if _rl else 4) * (_attempt + 1))
+                raise RuntimeError(_err or "génération image échouée")
+
             # ⚠ RÉSILIENCE : chaque vue est isolée. Une vue qui échoue ne doit PAS
             # faire perdre les autres (sinon on se retrouve avec « 1 décor + le plan »).
 
@@ -1922,18 +1938,38 @@ class GenerateRoomViewsWorker(QThread):
             full_ov = f"{full_ov}\n\n{_DECOR_LINE}"
             ov_path = ""
             try:
-                ov_path = _save(_gen_text(full_ov, "16:9"), ov_code)
+                ov_path = _save(_gen_text_robust(full_ov, "16:9"), ov_code)
                 out.append({"label": ov_label, "code": ov_code, "path": ov_path, "prompt": ov_prompt})
             except Exception as e:
                 _log(f"plan d'ensemble ÉCHEC: {str(e)[:160]}")
             time.sleep(_VIEW_GAP_S)   # espacement entre vues (anti-saturation API)
 
-            # 2) PLAN D'ARCHITECTURE vu de dessus (contexte : tous les éléments) ──
-            self.progress.emit(20, "[2/8] Plan d'architecture (vue de dessus)…")
+            # 2) PLAN D'ARCHITECTURE vu de dessus — CALÉ SUR LE PLAN D'ENSEMBLE :
+            #    généré par ÉDITION NB2 à partir de l'image d'ensemble → MÊME pièce,
+            #    MÊME disposition (murs, mobilier, ouvertures) vue de dessus. Sans
+            #    ensemble disponible (ou si l'édition échoue), repli texte robuste.
+            #    Indispensable : le plan sert ensuite de référence spatiale aux 6 faces.
+            self.progress.emit(20, "[2/8] Plan d'architecture (calé sur l'ensemble)…")
             fp_prompt = _floor_plan_prompt(base_en or "an interior room")
+            fp_anchor = (
+                "Draw the TOP-DOWN architectural floor plan (bird's eye view, seen from "
+                "directly above) of the EXACT room shown in the reference image: SAME "
+                "walls, SAME proportions, SAME furniture in the SAME positions, SAME "
+                "doors and windows. Schematic blueprint / architect plan style — simple "
+                "lines, flat tones, neutral background, no people, no camera, no text "
+                "labels. Square framing."
+            )
             fp_path = ""
+            ov_ref = [_dataurl(ov_path)] if (ov_path and os.path.isfile(ov_path)) else []
             try:
-                fp_path = _save(_gen_text(fp_prompt, "1:1"), "floorplan")
+                if ov_ref:
+                    try:
+                        fp_path = _save(_gen_edit(fp_anchor, ov_ref, "1:1"), "floorplan")
+                    except Exception as e:
+                        _log(f"plan édité depuis l'ensemble ÉCHEC → repli texte. {str(e)[:160]}")
+                        fp_path = _save(_gen_text_robust(fp_prompt, "1:1"), "floorplan")
+                else:
+                    fp_path = _save(_gen_text_robust(fp_prompt, "1:1"), "floorplan")
                 out.append({"label": "Plan (vue de dessus)", "code": "floorplan",
                             "path": fp_path, "prompt": fp_prompt, "is_floor_plan": True})
             except Exception as e:
@@ -1950,11 +1986,14 @@ class GenerateRoomViewsWorker(QThread):
             ref_urls = [_dataurl(p) for p in (ov_path, fp_path)
                         if p and os.path.isfile(p)]
             consistency = (
-                "Use the reference image(s) as the GROUND TRUTH of this EXACT room: "
-                "keep IDENTICAL architecture, wall materials, colours, furniture style "
-                "and lighting / ambience. ONLY the camera orientation changes — frame a "
-                "DIFFERENT wall of the SAME room. Do NOT repeat on this wall the objects "
-                "that belong to the other walls (each wall is distinct)."
+                "The reference images show ONE specific room: a 3/4 establishing view "
+                "AND a TOP-DOWN architectural floor plan giving the exact layout. Treat "
+                "them as the GROUND TRUTH: keep IDENTICAL architecture, wall materials, "
+                "colours, furniture style and lighting / ambience, and place every "
+                "element CONSISTENTLY with the floor-plan layout. ONLY the camera "
+                "orientation changes — frame a DIFFERENT wall of the SAME room. Do NOT "
+                "repeat on this wall the objects that belong to the other walls (each "
+                "wall is distinct)."
             )
             edit_off   = not ref_urls   # aucune réf disponible → texte direct
             edit_fails = 0
