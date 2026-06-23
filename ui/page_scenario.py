@@ -902,6 +902,7 @@ class PageScenario(QWidget):
             "Personnages · Décors · Accessoires · HMC · Véhicules"
             " · Storyboard · Images · Moods"
         )
+        _ga_btn_sub.setWordWrap(True)   # sinon tronqué (liste plus longue que le bouton)
         _ga_btn_sub.setStyleSheet(
             f"color:{CP['text_dim']};font-size:8px;background:transparent;border:none;"
         )
@@ -1395,6 +1396,13 @@ class PageScenario(QWidget):
             try:
                 import core.staging as _stg
                 _stg.ensure_seeded(sb_api.list_shots(sb_api.DEFAULT_VERSION_ID))
+            except Exception:
+                pass
+            # Coloration AUTO des plans récurrents (baseline déterministe ; l'analyse
+            # IA fine se relance depuis le bouton « Plans récurrents » du Storyboard).
+            try:
+                import core.recurrence as _rec
+                _rec.detect_and_apply(sb_api.DEFAULT_VERSION_ID)
             except Exception:
                 pass
             self._ai_progress_lbl.setText(f"{count} {translate('plans importés dans le Storyboard ✓')}")
@@ -2839,6 +2847,12 @@ class PageScenario(QWidget):
         try:
             import core.staging as _stg
             _stg.ensure_seeded(self._gen_all_shots)
+        except Exception:
+            pass
+        # Coloration AUTO des plans récurrents (baseline déterministe).
+        try:
+            import core.recurrence as _rec
+            _rec.detect_and_apply(sb_api.DEFAULT_VERSION_ID)
         except Exception:
             pass
         self._gen_all_run_next()

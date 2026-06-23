@@ -125,7 +125,7 @@ def _text_dialog(parent: QWidget, title: str, initial: str = "",
 
     btn_row = QHBoxLayout()
 
-    if enhance:
+    if False:   # bouton « ✦ Améliorer » RETIRÉ (fonction instable) — param `enhance` ignoré
         from PyQt6.QtGui import QIcon
         _wh = [None, None]  # [0]=worker, [1]=dialog-ref to prevent GC while worker runs
 

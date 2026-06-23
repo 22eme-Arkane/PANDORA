@@ -355,6 +355,48 @@ def get_shot(shot_id: str) -> dict | None:
     return None
 
 
+# Palette de libellés couleur — repères manuels ET groupes de plans récurrents.
+# Couleurs distinctes, lisibles sur le fond sombre PANDORA. (nom, hex)
+LABEL_COLORS = [
+    ("Rouge",  "#e0556b"),
+    ("Ambre",  "#e0a13a"),
+    ("Vert",   "#46c08a"),
+    ("Cyan",   "#3ab6c8"),
+    ("Bleu",   "#5b8cff"),
+    ("Violet", "#9b6bd6"),
+    ("Rose",   "#e06bb0"),
+    ("Olive",  "#9bb04a"),
+]
+
+
+def recurrent_color(index: int) -> str:
+    """Couleur distincte pour le n-ième groupe de plans récurrents (cyclique)."""
+    return LABEL_COLORS[index % len(LABEL_COLORS)][1]
+
+
+def set_label(shot_id: str, color: str = "", text: str = "",
+              version_id: str = DEFAULT_VERSION_ID) -> dict | None:
+    """Pose (color="" → retire) un libellé couleur ESTHÉTIQUE (bande) sur un plan."""
+    sh = get_shot(shot_id)
+    if not sh:
+        return None
+    sh["label_color"] = color or ""
+    sh["label_text"]  = text or ""
+    return save_shot(sh, sh.get("version_id", version_id))
+
+
+def set_recurrent(shot_id: str, color: str = "", text: str = "",
+                  version_id: str = DEFAULT_VERSION_ID) -> dict | None:
+    """Pose (color="" → retire) le FLAG « plan récurrent » d'un plan. La couleur =
+    clé de groupe pour la sélection « Rendu/Audio »."""
+    sh = get_shot(shot_id)
+    if not sh:
+        return None
+    sh["recurrent_color"] = color or ""
+    sh["recurrent_text"]  = text or ""
+    return save_shot(sh, sh.get("version_id", version_id))
+
+
 def save_shot(data: dict, version_id: str = DEFAULT_VERSION_ID) -> dict:
     from core.context import get_project_id
     _ensure()
@@ -411,6 +453,15 @@ def save_shot(data: dict, version_id: str = DEFAULT_VERSION_ID) -> dict:
         data.setdefault("sound_prompt", "")
         data.setdefault("dialogue_lang", "en")   # langue des dialogues (envoi Seedance)
         data.setdefault("last_frame_path", "")
+        # Libellé couleur ESTHÉTIQUE d'un plan (repère manuel libre) → bande colorée
+        # à gauche de la ligne. Distinct des plans récurrents ci-dessous.
+        data.setdefault("label_color", "")
+        data.setdefault("label_text", "")
+        # Plan RÉCURRENT (même config caméra) → FLAG coloré dans le coin de la vignette
+        # (façon DaVinci). recurrent_color sert de clé de groupe pour la sélection
+        # « Rendu/Audio ». recurrent_text = nom du groupe (ex. « Récurrent A »).
+        data.setdefault("recurrent_color", "")
+        data.setdefault("recurrent_text", "")
         index.append(data)
     else:
         data["updated_at"] = now

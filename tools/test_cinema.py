@@ -1547,6 +1547,11 @@ def placement_auto_hauteur_et_doublage():
     ds = inspect.getsource(__import__("ui.dialog_shot", fromlist=["_"]))
     assert "_camera_height" in ds and "camera_height" in ds, "champ hauteur caméra"
     assert "camera_height" in pst, "hauteur écrite depuis la Mise en scène"
+    # (2b) Axe caméra déduit de la POSITION : déplacer la caméra change l'axe du plan.
+    assert st.axis_from_placement({"camera": {"x": .5, "y": .9}, "actors": [{"x": .5, "y": .5}]}) == "Face"
+    assert st.axis_from_placement({"camera": {"x": .5, "y": .1}, "actors": [{"x": .5, "y": .5}]}) == "Dos"
+    assert st.axis_from_placement({"camera": {"x": .9, "y": .5}, "actors": [{"x": .5, "y": .5}]}) == "Latéral 90°"
+    assert "axis_from_placement" in pst, "l'axe du storyboard suit la position caméra"
     # (3) Doublage depuis le storyboard.
     assert sb.extract_dialogues('Elle dit « Bonjour » et “Salut”.') == ["Bonjour", "Salut"]
     assert sb.extract_dialogues("rien") == []
@@ -1636,6 +1641,150 @@ def panneaux_guide_et_ia():
     # i18n EN.
     import core.i18n as i18n
     assert i18n._FR_TO_EN.get("IA") == "AI"
+
+
+@test
+def plans_recurrents_libelles():
+    """Storyboard : libellé couleur manuel (clic droit) + détection des plans
+    RÉCURRENTS par séquence (cœur déterministe + worker IA Haiku, repli déterministe),
+    une couleur distincte par groupe, sélectionnable d'un bloc (Rendu/Audio)."""
+    import inspect
+    import core.storyboard as sb
+    import core.recurrence as rec
+    # Cœur déterministe : champ/contrechamp dans UNE séquence → 2 groupes ; plan
+    # unique ignoré ; autre séquence non mélangée.
+    shots = [
+        {"id": "a", "seq_num": 1, "decor_id": "d", "camera_axis": "Face",  "character_ids": ["j"]},
+        {"id": "b", "seq_num": 1, "decor_id": "d", "camera_axis": "Dos",   "character_ids": ["m"]},
+        {"id": "c", "seq_num": 1, "decor_id": "d", "camera_axis": "Face",  "character_ids": ["j"]},
+        {"id": "d", "seq_num": 1, "decor_id": "d", "camera_axis": "Dos",   "character_ids": ["m"]},
+        {"id": "e", "seq_num": 1, "decor_id": "d", "camera_axis": "Large", "character_ids": []},
+        {"id": "f", "seq_num": 2, "decor_id": "d", "camera_axis": "Face",  "character_ids": ["j"]},
+    ]
+    assert rec.group_recurrent(shots) == [["a", "c"], ["b", "d"]]
+    assert sb.recurrent_color(0) != sb.recurrent_color(1), "couleurs distinctes par groupe"
+    assert len(sb.LABEL_COLORS) >= 4 and hasattr(sb, "set_label") and hasattr(sb, "set_recurrent")
+    csb = inspect.getsource(sb)
+    assert 'setdefault("label_color"' in csb and 'setdefault("recurrent_color"' in csb, \
+        "champs séparés : libellé esthétique vs flag récurrent"
+    # Le flag récurrent (set_recurrent) est distinct du libellé esthétique (set_label).
+    assert "set_recurrent" in inspect.getsource(rec), "détection pose le FLAG récurrent"
+    # Worker IA : signal « done » (PAS « finished ») + repli déterministe.
+    scr = inspect.getsource(__import__("api.screenplay", fromlist=["_"]))
+    assert ("class AnalyzeRecurrentShotsWorker" in scr and "done   = pyqtSignal" in scr
+            and "group_recurrent" in scr), "worker IA récurrents + repli déterministe"
+    # UI Storyboard : 2 repères distincts (libellé esthétique + flag récurrent de coin).
+    ps = inspect.getsource(__import__("ui.page_storyboard", fromlist=["_"]))
+    assert ("Libellé couleur" in ps and "Plan récurrent" in ps and "_set_label" in ps
+            and "_set_recurrent" in ps and "recurrent_color" in ps
+            and "_on_detect_recurrent" in ps), "libellé esthétique + flag récurrent + bouton"
+    # Sélecteur Rendu/Audio : sélection par GROUPE récurrent (flag).
+    t2 = inspect.getsource(__import__("ui.tab_t2v", fromlist=["_"]))
+    assert ("_select_color_group" in t2 and "_rebuild_group_chips" in t2
+            and "recurrent_color" in t2), "sélection par groupe récurrent"
+    # Auto à la génération (baseline déterministe).
+    pg = inspect.getsource(__import__("ui.page_scenario", fromlist=["_"]))
+    assert "detect_and_apply" in pg, "coloration auto à la génération"
+
+
+@test
+def moods_nano_banana_cinema():
+    """Moods : CINÉMA → Nano Banana 2 (réfs portraits persos + image décor) ;
+    LIVE → Flux (inchangé). Distinction par le namespace storyboard, sans sélecteur."""
+    import inspect
+    import core.storyboard as sb
+    import api.apercu as ap
+    ns0 = sb.get_namespace()
+    try:
+        sb.set_namespace("storyboard")
+        assert ap._is_cinema_mood() is True, "Cinéma → NB2"
+        sb.set_namespace("live_seq_live")
+        assert ap._is_cinema_mood() is False, "Live → Flux"
+        # Routage run_mood (sans réseau) : capture le backend appelé.
+        calls = {}
+        _nb2, _flux = ap.run_generation_nb2, ap.run_generation
+        ap.run_generation_nb2 = lambda *a, **k: calls.setdefault("nb2", True) or ""
+        ap.run_generation     = lambda *a, **k: calls.setdefault("flux", True) or ""
+        try:
+            sb.set_namespace("storyboard")
+            ap.run_mood({}, "p", ".", "k", lambda *_: None)
+            assert calls == {"nb2": True}, calls
+            calls.clear()
+            sb.set_namespace("live_seq_live")
+            ap.run_mood({}, "p", ".", "k", lambda *_: None, building_ref="b")
+            assert calls == {"flux": True}, calls
+        finally:
+            ap.run_generation_nb2, ap.run_generation = _nb2, _flux
+        # NB2 = édition avec réfs persos + décor.
+        src = inspect.getsource(ap)
+        assert ("nano-banana-2/edit" in src and "_shot_ref_images" in src
+                and "image_urls" in src), "NB2 envoie les réfs persos + décor"
+    finally:
+        sb.set_namespace(ns0)
+
+
+@test
+def raccord_pas_injecte_dans_prompt():
+    """Cinéma : l'encart « Raccord automatique » n'injecte PLUS le raccord dans le
+    prompt du storyboard (il dégradait le découpage). Le raccord reste cochable dans
+    RENDU & AUDIO (_raccord_auto_cb → I2V dernière frame du plan précédent)."""
+    import inspect
+    from ui.tab_t2v import _ContinuityBar
+    bar = _ContinuityBar()
+    bar._prev_shot = {"decor_name": "X", "scene_title": "Y"}
+    try:
+        bar._cb.setChecked(True)
+    except Exception:
+        pass
+    assert bar.build_continuity_prefix() == "", "raccord ne s'injecte plus dans le prompt"
+    src = inspect.getsource(__import__("ui.tab_t2v", fromlist=["_"]))
+    assert "_ez_lay.addWidget(self._continuity_bar)" not in src, "encart retiré de l'UI"
+    assert "_raccord_auto_cb" in src, "raccord toujours cochable dans RENDU & AUDIO"
+
+
+@test
+def enhance_ameliorer_retire_partout():
+    """« Améliorer le prompt » (☁ / case auto) RETIRÉ partout : composant partagé
+    prompt_block (bouton + auto cachés) + dialogs casting/décor/HMC/accessoire/
+    véhicule/plan + onglets vidéo + pop-up prompt (param `enhance` ignoré)."""
+    import os as _os
+    from ui.widgets import prompt_block
+    _f, _ta, cloud, auto = prompt_block(placeholder="x")
+    assert cloud.isHidden() and not auto.isChecked(), "bouton Améliorer caché + auto désactivé"
+    root = _os.path.dirname(_os.path.dirname(_os.path.abspath(__file__)))
+    for rel in ("ui/dialog_character.py", "ui/dialog_decor.py", "ui/dialog_hmc.py",
+                "ui/dialog_accessory.py", "ui/dialog_vehicle.py", "ui/dialog_shot.py",
+                "ui/tab_video_engines.py", "ui/tab_davinci_edit.py", "ui/tab_reference.py"):
+        with open(_os.path.join(root, rel), encoding="utf-8") as f:
+            src = f.read()
+        assert 'QLabel("Améliorer le prompt")' not in src, f"libellé Améliorer encore actif : {rel}"
+    # Pop-up prompt : bloc « ✦ Améliorer » neutralisé.
+    with open(_os.path.join(root, "ui", "page_storyboard.py"), encoding="utf-8") as f:
+        assert "param `enhance` ignoré" in f.read(), "bouton Améliorer du pop-up prompt retiré"
+
+
+@test
+def variations_decor_par_groupe():
+    """« Créer des variations » sur une PIÈCE : depuis la page Décors, le bandeau de
+    pièce ouvre une fenêtre (prompt éditable) qui régénère TOUTES ses vues (groupe
+    entier) via le moteur 7 vues ; l'ancienne image de chaque vue est gardée en
+    variante."""
+    import inspect
+    from ui.dialog_room_variations import RoomVariationsDialog, _CODE_TO_RV
+    decors = [
+        {"id": "o", "room_group": "SAM", "room_view": "Ensemble", "prompt": "base"},
+        {"id": "a", "room_group": "SAM", "room_view": "Avant", "prompt": "x"},
+    ]
+    dlg = RoomVariationsDialog(None, "SAM", decors)
+    assert dlg._prompt.toPlainText() == "base", "prompt pré-rempli depuis la vue d'ensemble"
+    assert _CODE_TO_RV["ensemble"] == "Ensemble" and _CODE_TO_RV["sol"] == "Sol"
+    assert hasattr(dlg, "_btn_gen")
+    pd = inspect.getsource(__import__("ui.page_decors", fromlist=["_"]))
+    assert ("_on_room_variations" in pd and "RoomVariationsDialog" in pd
+            and "Variations" in pd), "bouton Variations sur le bandeau de pièce"
+    src = inspect.getsource(__import__("ui.dialog_room_variations", fromlist=["_"]))
+    assert ("GenerateRoomViewsWorker" in src and "generated_images" in src), \
+        "régénère via le moteur 7 vues + garde l'ancienne image en variante"
 
 
 # ══════════════════════════════════════════════════════════════════════════════

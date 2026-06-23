@@ -667,12 +667,8 @@ class TabDavinciEdit(QScrollArea):
         self._btn_enhance_global.clicked.connect(self._on_enhance_global)
         _pg_header.addWidget(self._pg_counter)
         _pg_header.addStretch()
-        _lbl_enh_g = QLabel("Améliorer le prompt")
-        _lbl_enh_g.setStyleSheet(
-            f"color:{C['text_dim']};font-size:10px;background:transparent;border:none;"
-        )
-        _pg_header.addWidget(_lbl_enh_g)
-        _pg_header.addWidget(self._btn_enhance_global)
+        # « Améliorer le prompt » (☁) RETIRÉ — fonction jugée inutile/instable.
+        self._btn_enhance_global.setVisible(False)
         _pg_lay.addLayout(_pg_header)
 
         _pg_sep = QFrame()
@@ -825,12 +821,8 @@ class TabDavinciEdit(QScrollArea):
         self._btn_enhance_per_clip.clicked.connect(self._on_enhance_per_clip)
         _pc_header.addWidget(self._pc_counter)
         _pc_header.addStretch()
-        _lbl_enh_pc = QLabel("Améliorer le prompt")
-        _lbl_enh_pc.setStyleSheet(
-            f"color:{C['text_dim']};font-size:10px;background:transparent;border:none;"
-        )
-        _pc_header.addWidget(_lbl_enh_pc)
-        _pc_header.addWidget(self._btn_enhance_per_clip)
+        # « Améliorer le prompt » (☁) RETIRÉ — fonction jugée inutile/instable.
+        self._btn_enhance_per_clip.setVisible(False)
         _pc_lay.addLayout(_pc_header)
 
         _pc_sep = QFrame()

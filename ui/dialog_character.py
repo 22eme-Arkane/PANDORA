@@ -837,12 +837,9 @@ class CharacterDialog(QDialog):
         else:
             self._btn_cloud.setText("☁")
         self._btn_cloud.clicked.connect(self._on_optimize)
-        _lbl_enh = QLabel("Améliorer le prompt")
-        _lbl_enh.setStyleSheet(
-            f"color:{CP['text_dim']};font-size:10px;background:transparent;border:none;"
-        )
-        prompt_header.addWidget(_lbl_enh)
-        prompt_header.addWidget(self._btn_cloud)
+        # « Améliorer le prompt » (☁) RETIRÉ — fonction jugée inutile/instable.
+        # _btn_cloud reste créé (non affiché) pour ne casser aucune autre référence.
+        self._btn_cloud.setVisible(False)
         lay.addLayout(prompt_header)
 
         self._prompt = QTextEdit()

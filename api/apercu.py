@@ -344,6 +344,98 @@ def run_generation(prompt: str, output_dir: str, api_key: str, progress_cb,
     return out
 
 
+# ── Génération mood NANO BANANA 2 (Cinéma) ────────────────────────────────────
+# En CINÉMA, les moods passent par Nano Banana 2 (cohérence de personnage, jusqu'à
+# 14 réfs) en envoyant les PORTRAITS des personnages assignés + l'IMAGE DU DÉCOR du
+# plan → rendu le plus proche du plan final. Le LIVE garde Flux (run_generation,
+# façade/mapping). Distinction par le namespace storyboard (« live_* » = Live).
+
+def _is_cinema_mood() -> bool:
+    try:
+        import core.storyboard as sb
+        return not (sb.get_namespace() or "").startswith("live")
+    except Exception:
+        return True
+
+
+def _shot_ref_images(shot: dict) -> list:
+    """Portraits des personnages assignés + image du décor du plan (réfs NB2)."""
+    refs: list = []
+    try:
+        import core.casting as cast
+        for cid in (shot.get("character_ids") or []):
+            c = cast.get_character(cid) or {}
+            cands = [c.get("image_path"), c.get("portrait_path"), c.get("portrait")]
+            cands += (c.get("generated_images") or [])[:1]
+            for p in cands:
+                if p and os.path.isfile(p):
+                    refs.append(p)
+                    break
+    except Exception:
+        pass
+    try:
+        import core.decors as dec
+        did = shot.get("decor_id")
+        if did:
+            p = (dec.get_decor(did) or {}).get("image_path") or ""
+            if p and os.path.isfile(p):
+                refs.append(p)
+    except Exception:
+        pass
+    seen, out = set(), []
+    for r in refs:
+        if r not in seen:
+            seen.add(r)
+            out.append(r)
+    return out[:14]
+
+
+def run_generation_nb2(prompt: str, output_dir: str, api_key: str, progress_cb,
+                       ref_images: list | None = None) -> str:
+    """Mood via Nano Banana 2 : édition avec réfs (persos + décor) si disponibles,
+    sinon génération texte NB2. Aspect 16:9, comme le mood Flux."""
+    import fal_client
+    os.environ["FAL_KEY"] = api_key
+    os.makedirs(output_dir, exist_ok=True)
+    refs = [r for r in (ref_images or []) if r and os.path.isfile(r)][:14]
+    if refs:
+        progress_cb(f"Nano Banana 2 — {len(refs)} référence(s) (persos + décor)…")
+        urls = [fal_client.upload_file(r) for r in refs]
+        result = fal_client.subscribe("fal-ai/nano-banana-2/edit", arguments={
+            "prompt": prompt, "image_urls": urls, "num_images": 1,
+            "aspect_ratio": "16:9", "resolution": "1K",
+            "output_format": "png", "safety_tolerance": "6",
+        })
+    else:
+        progress_cb("Nano Banana 2…")
+        result = fal_client.subscribe("fal-ai/nano-banana-2", arguments={
+            "prompt": prompt, "num_images": 1,
+            "aspect_ratio": "16:9", "resolution": "1K", "output_format": "png",
+        })
+    imgs = (result or {}).get("images") or []
+    image_url = (imgs[0].get("url") if imgs and isinstance(imgs[0], dict)
+                 else (imgs[0] if imgs else ""))
+    if not image_url:
+        raise RuntimeError("Nano Banana 2 : aucune image renvoyée")
+    progress_cb("Téléchargement de l'image…")
+    resp = requests.get(image_url, timeout=120)
+    out = os.path.join(output_dir, f"{uuid.uuid4().hex}.png")
+    with open(out, "wb") as f:
+        f.write(resp.content)
+    return out
+
+
+def run_mood(shot: dict, prompt: str, output_dir: str, api_key: str, progress_cb,
+             building_ref: str = "", inspiration_ref: str = "") -> str:
+    """Dispatcher mood : CINÉMA → Nano Banana 2 (réfs persos/décor) ; LIVE → Flux
+    (run_generation, façade/inspiration). Distinction par le namespace storyboard."""
+    if _is_cinema_mood():
+        return run_generation_nb2(prompt, output_dir, api_key, progress_cb,
+                                  _shot_ref_images(shot))
+    return run_generation(prompt, output_dir, api_key, progress_cb, building_ref,
+                          inspiration_ref=inspiration_ref)
+
+
 # ── Worker unitaire ───────────────────────────────────────────────────────────
 
 class MoodGenerationWorker(QThread):
@@ -371,9 +463,9 @@ class MoodGenerationWorker(QThread):
             else build_mood_prompt(self._shot, self._film_style)
         )
         try:
-            path = run_generation(prompt, self._out_dir, self._api_key,
-                                  self.progress.emit, self._building_ref,
-                                  inspiration_ref=self._inspiration)
+            path = run_mood(self._shot, prompt, self._out_dir, self._api_key,
+                            self.progress.emit, self._building_ref,
+                            inspiration_ref=self._inspiration)
             self.finished.emit(path)
         except Exception as e:
             self.failed.emit(humanize_api_error(str(e)))
@@ -422,8 +514,8 @@ class MoodBatchWorker(QThread):
                     def _prog(msg, _i=i, _t=total):
                         self.shot_progress.emit(_i + 1, _t, msg)
 
-                    path = run_generation(prompt, out_dir, self._api_key, _prog,
-                                          self._building_ref)
+                    path = run_mood(shot, prompt, out_dir, self._api_key, _prog,
+                                    self._building_ref)
 
                     if path and os.path.isfile(path):
                         existing = sb_api.load_apercus(shot["id"])

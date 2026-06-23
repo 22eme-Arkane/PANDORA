@@ -562,7 +562,27 @@ class PageDecors(QWidget):
             f"border:1px solid {CP['border']};border-left:3px solid {CP['accent']};"
             f"border-radius:8px;font-size:12px;font-weight:700;padding:0 14px;}}"
             f"QPushButton:hover{{background:{CP['bg3']};}}")
-        v.addWidget(head)
+
+        # Variations de TOUTE la pièce (toutes les vues du groupe), prompt éditable.
+        _acc2 = CP.get("accent2", "#7c6bff")
+        btn_var = QPushButton("🎲  " + translate("Variations"))
+        btn_var.setFixedHeight(34)
+        btn_var.setCursor(Qt.CursorShape.PointingHandCursor)
+        btn_var.setToolTip(translate(
+            "Créer des variations de TOUTE la pièce (toutes les vues), avec un prompt éditable"))
+        btn_var.setStyleSheet(
+            f"QPushButton{{background:transparent;color:{_acc2};"
+            f"border:1px solid {_acc2};border-radius:8px;font-size:11px;font-weight:700;padding:0 12px;}}"
+            f"QPushButton:hover{{background:rgba(124,107,255,0.12);}}")
+        btn_var.clicked.connect(
+            lambda _=False, t=title, it=list(items): self._on_room_variations(t, it))
+
+        head_row = QHBoxLayout()
+        head_row.setSpacing(8)
+        head_row.setContentsMargins(0, 0, 0, 0)
+        head_row.addWidget(head, 1)
+        head_row.addWidget(btn_var)
+        v.addLayout(head_row)
 
         body = self._cards_grid(items)
         body.setVisible(not collapsed)
@@ -575,6 +595,16 @@ class PageDecors(QWidget):
             head.setText(_label(not new_collapsed))
         head.clicked.connect(_toggle)
         return sec
+
+    def _on_room_variations(self, room_group: str, items: list):
+        """Ouvre la fenêtre de variations de la pièce (régénère toutes ses vues
+        avec un prompt éditable). Choisir la pièce = tout le groupe d'un coup."""
+        from ui.dialog_room_variations import RoomVariationsDialog
+        dlg = RoomVariationsDialog(self, room_group, items)
+        dlg.done.connect(self.refresh)
+        dlg.exec()
+        if getattr(dlg, "_created", False):
+            self.refresh()
 
     def _on_delete_all(self):
         if not self._all_items:

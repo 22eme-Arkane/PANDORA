@@ -40,6 +40,34 @@ def axis_from_angle(angle: float) -> str:
     return "Latéral 90°"
 
 
+def axis_from_placement(rec: dict) -> str:
+    """Axe caméra déduit de la POSITION de la caméra par rapport au centre des
+    acteurs (le « devant » du sujet = vers le bas du plan, comme la caméra Face par
+    défaut). DÉPLACER la caméra change donc l'axe — contrairement à axis_from_angle
+    qui ne dépend que de la rotation. Renvoie Face / 3/4 / Latéral 90° / Dos."""
+    import math
+    cam = rec.get("camera") or {}
+    actors = [a for a in (rec.get("actors") or []) if isinstance(a, dict)]
+    if actors:
+        cx = sum(a.get("x", 0.5) for a in actors) / len(actors)
+        cy = sum(a.get("y", 0.5) for a in actors) / len(actors)
+    else:
+        cx, cy = 0.5, 0.5
+    dx = cam.get("x", 0.5) - cx
+    dy = cam.get("y", 0.85) - cy
+    if abs(dx) < 1e-4 and abs(dy) < 1e-4:
+        return axis_from_angle(cam.get("angle", 0))
+    # 0° = caméra DEVANT le sujet (sous lui, dy>0) ; ±90° = de côté ; ±180° = derrière.
+    a = abs(math.degrees(math.atan2(dx, dy)))
+    if a <= 30:
+        return "Face"
+    if a >= 150:
+        return "Dos"
+    if 65 <= a <= 115:
+        return "Latéral 90°"
+    return "3/4"
+
+
 def _dir() -> str:
     from core.context import get_data_root
     d = os.path.join(get_data_root(), "staging")

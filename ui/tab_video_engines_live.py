@@ -1346,12 +1346,8 @@ class TabVideoEngines(QWidget):
         else:
             self._btn_enhance.setText("☁")
         self._btn_enhance.clicked.connect(self._on_enhance)
-        _lbl_enh = QLabel("Améliorer le prompt")
-        _lbl_enh.setStyleSheet(
-            f"color:{C['text_dim']};font-size:10px;background:transparent;border:none;"
-        )
-        _prompt_hdr.addWidget(_lbl_enh)
-        _prompt_hdr.addWidget(self._btn_enhance)
+        # « Améliorer le prompt » (☁) RETIRÉ — fonction jugée inutile/instable.
+        self._btn_enhance.setVisible(False)
         lay.addLayout(_prompt_hdr)
 
         # ── Formulaires empilés ────────────────────────────────────────────────

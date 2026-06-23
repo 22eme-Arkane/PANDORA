@@ -1124,6 +1124,17 @@ class StoryboardSelector(QWidget):
 
         lay.addWidget(section_label("Storyboard"))
 
+        # Pastilles de GROUPES (plans récurrents / libellés couleur) : un clic
+        # sélectionne d'un bloc tous les plans d'une même couleur → Rendu / Audio.
+        self._chips_row = QHBoxLayout()
+        self._chips_row.setContentsMargins(4, 0, 4, 0)
+        self._chips_row.setSpacing(6)
+        self._chips_row.setAlignment(Qt.AlignmentFlag.AlignLeft)
+        _chips_wrap = QWidget()
+        _chips_wrap.setStyleSheet("background:transparent;")
+        _chips_wrap.setLayout(self._chips_row)
+        lay.addWidget(_chips_wrap)
+
         self._inner = QWidget()
         self._inner.setStyleSheet("background:transparent;")
         self._hbox = QHBoxLayout(self._inner)
@@ -1268,6 +1279,51 @@ class StoryboardSelector(QWidget):
             self._shots_meta[shot["id"]] = shot
             self._hbox.addWidget(card)
         self._hbox.addStretch()
+        self._rebuild_group_chips()
+
+    def _rebuild_group_chips(self):
+        """Une pastille par GROUPE de plans RÉCURRENTS présent (flag récurrent).
+        Clic = sélectionner tous les plans de ce groupe (Rendu / Audio)."""
+        if not hasattr(self, "_chips_row"):
+            return
+        while self._chips_row.count():
+            it = self._chips_row.takeAt(0)
+            if it.widget():
+                it.widget().deleteLater()
+        seen, names = [], {}
+        for sid in self._shot_order():
+            s = self._shots_meta.get(sid, {})
+            c = (s.get("recurrent_color") or "").strip()
+            if c and c not in seen:
+                seen.append(c)
+                names[c] = s.get("recurrent_text") or ""
+        if not seen:
+            return
+        _hdr = QLabel(translate("Groupes :"))
+        _hdr.setStyleSheet(f"color:{C['text_dim']};font-size:10px;background:transparent;")
+        self._chips_row.addWidget(_hdr)
+        for c in seen:
+            chip = QPushButton(names.get(c) or "●")
+            chip.setCursor(Qt.CursorShape.PointingHandCursor)
+            chip.setFixedHeight(22)
+            chip.setToolTip(translate("Sélectionner tous les plans de ce groupe"))
+            chip.setStyleSheet(
+                f"QPushButton{{background:{c};color:#07080f;border:none;"
+                f"border-radius:11px;font-size:9px;font-weight:800;padding:0 11px;}}"
+                f"QPushButton:hover{{border:1px solid #ffffff;}}")
+            chip.clicked.connect(lambda _=False, col=c: self._select_color_group(col))
+            self._chips_row.addWidget(chip)
+        self._chips_row.addStretch()
+
+    def _select_color_group(self, color: str):
+        ids = {sid for sid, s in self._shots_meta.items()
+               if (s.get("recurrent_color") or "").strip() == color}
+        if not ids:
+            return
+        self._selected_shot_ids = ids
+        for sid, card in self._shot_cards.items():
+            card.set_selected(sid in ids)
+        self._emit_selection()
 
     def _on_shot_toggled(self, shot_id: str, selected: bool):
         from PyQt6.QtWidgets import QApplication
@@ -1585,7 +1641,12 @@ class _ContinuityBar(QFrame):
 
     def build_continuity_prefix(self) -> str:
         """Returns an English raccord context prefix for the Seedance prompt, or ''."""
-        if not self._cb.isChecked() or not self._prev_shot:
+        # Cinéma : le raccord N'EST PLUS injecté automatiquement dans le prompt (il
+        # dégradait le découpage du storyboard). Le raccord reste disponible via la
+        # section RENDU & AUDIO (« Raccord automatique » → I2V depuis la dernière
+        # frame du plan précédent), pas dans le texte du prompt.
+        return ""
+        if not self._cb.isChecked() or not self._prev_shot:   # noqa: code conservé
             return ""
         s = self._prev_shot
         lines = []
@@ -2505,9 +2566,14 @@ class TabT2V(QScrollArea):
         sep.setStyleSheet(f"background:{C['border']};")
         _ez_lay.addWidget(sep)
 
-        # ── Continuity / Raccord bar ──────────────────────────────────────────
+        # ── Continuity / Raccord ──────────────────────────────────────────────
+        # Encart « Raccord automatique » RETIRÉ de l'UI Cinéma (il injectait le
+        # raccord dans le prompt et dégradait le découpage). On GARDE l'objet, non
+        # affiché, pour ses données I2V (dernière frame du plan précédent) utilisées
+        # par RENDU & AUDIO → « Raccord automatique ». Le raccord ne va donc plus
+        # jamais dans le texte du prompt ; il reste cochable dans RENDU & AUDIO.
         self._continuity_bar = _ContinuityBar()
-        _ez_lay.addWidget(self._continuity_bar)
+        self._continuity_bar.setVisible(False)
 
         # ── Éléments récurrents (casting · accessoires · véhicules) — repliable
         #    comme dans Live (replié par défaut : gagne de la place) ───────────

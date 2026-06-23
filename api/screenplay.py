@@ -1141,6 +1141,102 @@ class ExtractVehiclesWorker(QThread):
             self.failed.emit(_fmt_err(e))
 
 
+_RECURRENT_SYSTEM = (
+    "Tu es un assistant de découpage cinéma. On te donne les plans d'un storyboard, "
+    "groupés par SÉQUENCE. Identifie les CONFIGURATIONS CAMÉRA RÉCURRENTES : des plans "
+    "qui reviennent sur EXACTEMENT le même cadrage — même décor, même axe caméra et "
+    "même acteur à la même position dans le cadre (typiquement un champ/contrechamp qui "
+    "alterne entre deux cadrages fixes, ou un plan de coupe qui revient). "
+    "Un GROUPE = au moins 2 plans de la MÊME séquence partageant cette configuration. "
+    "Ne groupe JAMAIS des plans de séquences différentes ; ignore les plans uniques. "
+    "Réponds UNIQUEMENT par du JSON, sans aucun texte autour : "
+    '{"groups": [[3,5,7],[4,6]]} où chaque sous-liste contient les NUMÉROS de plan '
+    "d'un même groupe récurrent."
+)
+
+
+class AnalyzeRecurrentShotsWorker(QThread):
+    """Analyse le storyboard (Claude Haiku) pour repérer les CONFIGURATIONS CAMÉRA
+    RÉCURRENTES par séquence (même décor + axe + acteur à la même position,
+    champ/contrechamp) et colorer chaque groupe d'une couleur distincte. Repli
+    déterministe (core.recurrence.group_recurrent) sans clé IA ou en cas d'échec."""
+    done   = pyqtSignal(int)     # nombre de groupes récurrents colorés (PAS « finished »)
+    failed = pyqtSignal(str)
+
+    def __init__(self, version_id: str | None = None):
+        super().__init__()
+        self._vid = version_id
+
+    def run(self):
+        try:
+            import core.storyboard as sb
+            import core.recurrence as rec
+            vid = self._vid or sb.DEFAULT_VERSION_ID
+            shots = sb.list_shots(vid)
+            groups = None
+            try:
+                groups = self._ai_groups(shots)
+            except Exception:
+                groups = None
+            if not groups:
+                groups = rec.group_recurrent(shots)   # repli déterministe
+            self.done.emit(rec.apply_groups(groups, vid))
+        except Exception as e:
+            self.failed.emit(_fmt_err(e))
+
+    def _ai_groups(self, shots: list):
+        from core.ai_provider import complete as ai_complete, key_error
+        if key_error():
+            return None
+        num2id, lines_by_seq, order = {}, {}, []
+        for s in shots:
+            try:
+                num = int(s.get("number") or 0)
+            except (TypeError, ValueError):
+                continue
+            if not num or not s.get("id"):
+                continue
+            num2id[num] = s["id"]
+            seq = s.get("seq_num", 1)
+            if seq not in lines_by_seq:
+                lines_by_seq[seq] = []
+                order.append(seq)
+            lines_by_seq[seq].append(
+                f"- Plan {num} | décor: {s.get('decor_name', '?') or '?'} "
+                f"| axe: {s.get('camera_axis', '?') or '?'} "
+                f"| valeur: {s.get('shot_size', '?') or '?'} "
+                f"| acteurs: {', '.join(s.get('character_names', []) or []) or '—'} "
+                f"| placement caméra: {s.get('camera_placement', '') or '—'} "
+                f"| placement acteurs: {s.get('actor_placement', '') or '—'}")
+        if not num2id:
+            return None
+        user = "\n\n".join(f"SÉQUENCE {seq}\n" + "\n".join(lines_by_seq[seq])
+                           for seq in order)
+        raw = ai_complete(_RECURRENT_SYSTEM, user, tier="creative",
+                          max_tokens=2048, task="extraction").strip()
+        start, end = raw.find("{"), raw.rfind("}") + 1
+        if start == -1 or end <= 0:
+            return None
+        data = json.loads(raw[start:end])
+        out = []
+        for grp in data.get("groups", []):
+            if not isinstance(grp, list):
+                continue
+            ids, seen = [], set()
+            for n in grp:
+                try:
+                    nn = int(n)
+                except (TypeError, ValueError):
+                    continue
+                sid = num2id.get(nn)
+                if sid and sid not in seen:
+                    seen.add(sid)
+                    ids.append(sid)
+            if len(ids) >= 2:
+                out.append(ids)
+        return out or None
+
+
 class AnalyzeReferencesWorker(QThread):
     """Analyse multimodale d'images de référence via Claude Sonnet.
     Retourne une description enrichie des personnages/décors/ambiances détectés."""

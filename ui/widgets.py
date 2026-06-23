@@ -371,14 +371,13 @@ def prompt_block(placeholder: str):
 
     header.addWidget(counter)
     header.addStretch()
-    _lbl_enh = QLabel("Améliorer le prompt")
-    _lbl_enh.setStyleSheet(
-        f"color:{C['text_dim']};font-size:10px;background:transparent;border:none;"
-    )
-    header.addWidget(_lbl_enh)
-    header.addWidget(loading_lbl)
-    header.addWidget(auto_cb)
-    header.addWidget(cloud)
+    # « Améliorer le prompt » RETIRÉ (Cinéma + Live) : la fonction dégradait les
+    # prompts (storyboard notamment) et n'était pas fiable. On ne l'ajoute plus au
+    # header. Les objets (cloud / auto_cb / loading) restent créés et CACHÉS pour ne
+    # casser aucun appelant qui les déballe encore (prompt_block renvoie 4 valeurs).
+    auto_cb.setChecked(False)
+    for _w in (loading_lbl, auto_cb, cloud):
+        _w.setVisible(False)
 
     sep = QFrame()
     sep.setFrameShape(QFrame.Shape.HLine)

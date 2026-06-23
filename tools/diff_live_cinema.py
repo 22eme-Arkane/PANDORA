@@ -74,6 +74,9 @@ EXPECTED_ONLY_CINEMA = {
         # DaVinci purgé côté Live (voulu)
         "_DaVinciBar", "_check_davinci_connection",
         "_on_davinci_connection_changed", "_refresh", "_on_connect",
+        # Sélection par GROUPE couleur (plans récurrents) dans le StoryboardSelector
+        # — feature Cinéma (Rendu/Audio) ; reportable au Live si besoin.
+        "_rebuild_group_chips", "_select_color_group",
     },
     "ui/page_scenario_live.py": {
         # Pas de Décors ni de HMC dans le Live (handlers supprimés, validé)
@@ -90,6 +93,11 @@ EXPECTED_ONLY_CINEMA = {
         # Clic droit sur un plan → Dupliquer (copie le plan + sa mise en scène) —
         # Cinéma only pour l'instant (reportable au Live si besoin).
         "_on_duplicate", "contextMenuEvent",
+        # Plans RÉCURRENTS : libellé couleur esthétique (_set_label) + FLAG récurrent
+        # (_set_recurrent) via clic droit + analyse IA (_on_detect_recurrent) —
+        # feature Cinéma ; reportable au Live.
+        "_set_label", "_set_recurrent",
+        "_on_detect_recurrent", "_on_recurrent_done", "_on_recurrent_fail",
     },
     "ui/dialog_contact_live.py": {
         # Divergence LÉGÈRE voulue (2026-06-12) : le Live est une sous-classe

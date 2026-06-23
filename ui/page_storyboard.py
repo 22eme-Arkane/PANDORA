@@ -95,7 +95,15 @@ def _text_dialog(parent: QWidget, title: str, initial: str = "",
     from ui.styles import PANDORA_STYLESHEET
     dlg = QDialog(parent)
     dlg.setWindowTitle(title)
-    dlg.setMinimumSize(540, 240)
+    # Redimensionnable (poignée) + taille par défaut CONFORTABLE, plafonnée à 85 %
+    # de l'écran disponible → jamais plus grand que l'affichage (pas de crop).
+    from PyQt6.QtGui import QGuiApplication
+    _scr = QGuiApplication.primaryScreen().availableGeometry()
+    _w = min(920, int(_scr.width() * 0.85))
+    _h = min(640, int(_scr.height() * 0.85))
+    dlg.setMinimumSize(min(480, _w), min(240, _h))
+    dlg.resize(_w, _h)
+    dlg.setSizeGripEnabled(True)
     dlg.setStyleSheet(PANDORA_STYLESHEET + f"QDialog{{background:{CP['bg1']};}}")
 
     lay = QVBoxLayout(dlg)
@@ -115,7 +123,7 @@ def _text_dialog(parent: QWidget, title: str, initial: str = "",
 
     btn_row = QHBoxLayout()
 
-    if enhance:
+    if False:   # bouton « ✦ Améliorer » RETIRÉ (fonction instable) — param `enhance` ignoré
         from PyQt6.QtGui import QIcon
         _wh = [None, None]  # [0]=worker, [1]=dialog-ref to prevent GC while worker runs
 
@@ -596,10 +604,40 @@ class _ShotRow(QFrame):
         menu.addAction(translate("Éditer"), lambda: self.edit_requested.emit(self._data))
         menu.addAction(translate("Dupliquer le plan"),
                        lambda: self.duplicate_requested.emit(self._data.get("id", "")))
+        import core.storyboard as _sb
+        from PyQt6.QtGui import QPixmap, QIcon, QColor
+
+        def _color_submenu(title, setter, none_label):
+            s = menu.addMenu(translate(title))
+            s.setStyleSheet(menu.styleSheet())
+            for cname, chex in _sb.LABEL_COLORS:
+                _pm = QPixmap(12, 12)
+                _pm.fill(QColor(chex))
+                a = s.addAction(QIcon(_pm), translate(cname))
+                a.triggered.connect(lambda _=False, c=chex: setter(c))
+            s.addSeparator()
+            s.addAction(translate(none_label), lambda: setter(""))
+
+        # Deux repères DISTINCTS : libellé couleur ESTHÉTIQUE (bande) ↔ FLAG « plan
+        # récurrent » (coin de la vignette, clé de groupe Rendu/Audio).
+        _color_submenu("Libellé couleur", self._set_label, "Aucun libellé")
+        _color_submenu("Plan récurrent", self._set_recurrent, "Pas récurrent")
         menu.addSeparator()
         menu.addAction(translate("Supprimer"),
                        lambda: self.delete_requested.emit(self._data.get("id", "")))
         menu.exec(e.globalPos())
+
+    def _set_label(self, color: str):
+        """Libellé couleur ESTHÉTIQUE (bande gauche) — clic droit → Libellé couleur."""
+        import core.storyboard as sb
+        sb.set_label(self._data.get("id", ""), color, "")
+        self.changed.emit()
+
+    def _set_recurrent(self, color: str):
+        """FLAG « plan récurrent » (coin) — clic droit → Plan récurrent."""
+        import core.storyboard as sb
+        sb.set_recurrent(self._data.get("id", ""), color, "")
+        self.changed.emit()
 
     def _content_height(self) -> int:
         from PyQt6.QtGui import QFont, QFontMetrics
@@ -647,8 +685,13 @@ class _ShotRow(QFrame):
             pal_idx = 0
         row_bg, seq_bg, seq_color = _SEQ_PALETTE[pal_idx]
 
+        # Libellé couleur (repère manuel OU groupe de plans récurrents) → bande
+        # colorée à GAUCHE de la ligne.
+        _lc = (data.get("label_color") or "").strip()
+        _left = f"border-left:4px solid {_lc};" if _lc else ""
         self.setStyleSheet(
-            f"QFrame{{background:{row_bg};border:none;border-top:1px solid {CP['border']};}}"
+            f"QFrame{{background:{row_bg};border:none;"
+            f"border-top:1px solid {CP['border']};{_left}}}"
         )
 
         outer = QHBoxLayout(self)
@@ -852,6 +895,19 @@ class _ShotRow(QFrame):
         img_lbl.setCursor(Qt.CursorShape.PointingHandCursor)
         img_lbl.setToolTip("Voir / générer le Mood de ce plan")
         self._apercu_lbl = img_lbl
+
+        # FLAG « plan récurrent » dans le coin haut-droit de la vignette (façon
+        # DaVinci) — couleur = groupe. Distinct du libellé couleur esthétique (bande).
+        _rc = (data.get("recurrent_color") or "").strip()
+        if _rc:
+            _flag = QLabel(img_lbl)
+            _flag.setFixedSize(14, 14)
+            _flag.move(86 - 14, 0)
+            _rtxt = data.get("recurrent_text", "") or ""
+            _flag.setToolTip(translate("Plan récurrent") + (f" · {_rtxt}" if _rtxt else ""))
+            _flag.setStyleSheet(
+                f"background:{_rc};border:1px solid #07080f;border-bottom-left-radius:9px;")
+            _flag.show()
 
         def _open_apercu(img_label=img_lbl, shot_data=data, row_self=self):
             from ui.dialog_apercu import MoodDialog
@@ -2313,6 +2369,25 @@ class PageStoryboard(QWidget):
             f"QPushButton:disabled{{color:{CP['text_dim']};border-color:{CP['border']};}}"
         )
         self._btn_batch_mood.clicked.connect(self._on_batch_mood)
+
+        # Plans récurrents : analyse IA des configurations caméra qui reviennent
+        # (champ/contrechamp…) → coloration par groupe.
+        self._btn_recurrent = QPushButton("✦  Plans récurrents")
+        self._btn_recurrent.setFixedHeight(34)
+        self._btn_recurrent.setToolTip(
+            "Analyse le storyboard (Claude) pour repérer les configurations caméra\n"
+            "RÉCURRENTES par séquence (champ/contrechamp, plans qui reviennent) et\n"
+            "colorer chaque groupe d'une couleur distincte. Sélectionnable ensuite\n"
+            "d'un bloc pour le Rendu / l'Audio.")
+        self._btn_recurrent.setStyleSheet(
+            f"QPushButton{{background:transparent;color:{_sync_accent};"
+            f"border:1px solid {_sync_accent};border-radius:8px;"
+            f"font-size:11px;font-weight:700;padding:0 14px;}}"
+            f"QPushButton:hover{{background:rgba(124,107,255,0.12);}}"
+            f"QPushButton:pressed{{background:rgba(124,107,255,0.22);}}"
+            f"QPushButton:disabled{{color:{CP['text_dim']};border-color:{CP['border']};}}"
+        )
+        self._btn_recurrent.clicked.connect(self._on_detect_recurrent)
         # Sauvegarder (jaune) / Ouvrir (bleu) — storyboard sauvegardé physiquement
         # dans <projet>/data/Storyboard/ (comme un projet à part).
         _yellow, _blue = "#f5c518", "#4aa3ff"
@@ -2342,8 +2417,9 @@ class PageStoryboard(QWidget):
         # (retour 2026-06-14) — avant le label/stretch qui pousse le reste à droite
         lay.insertWidget(0, self._btn_batch_mood)
         lay.insertWidget(1, self._btn_sync)
-        lay.insertWidget(2, self._btn_save_sb_file)
-        lay.insertWidget(3, self._btn_open_sb_file)
+        lay.insertWidget(2, self._btn_recurrent)
+        lay.insertWidget(3, self._btn_save_sb_file)
+        lay.insertWidget(4, self._btn_open_sb_file)
 
         btn_new = QPushButton("＋  Ajouter un plan")
         btn_new.setFixedHeight(34)
@@ -2598,6 +2674,35 @@ class PageStoryboard(QWidget):
 
         self._list_lay.addStretch()
         QTimer.singleShot(0, lambda: _col_hub.resized.emit(4, _col_widths[4]))
+
+    # ── Plans récurrents (analyse IA → coloration par groupe) ───────────────────
+
+    def _on_detect_recurrent(self):
+        if getattr(self, "_recurrent_worker", None) and self._recurrent_worker.isRunning():
+            return
+        from api.screenplay import AnalyzeRecurrentShotsWorker
+        self._btn_recurrent.setEnabled(False)
+        self._btn_recurrent.setText(translate("Analyse…"))
+        w = AnalyzeRecurrentShotsWorker(self._active_version_id)
+        w.done.connect(self._on_recurrent_done)
+        w.failed.connect(self._on_recurrent_fail)
+        self._recurrent_worker = w
+        w.start()
+
+    def _on_recurrent_done(self, n: int):
+        self._btn_recurrent.setEnabled(True)
+        self._btn_recurrent.setText("✦  " + translate("Plans récurrents"))
+        self.refresh()
+        QMessageBox.information(
+            self, translate("Plans récurrents"),
+            (translate("{n} groupe(s) de plans récurrents identifié(s) et colorés.")
+             .format(n=n)) if n else
+            translate("Aucun groupe de plans récurrents détecté dans ce storyboard."))
+
+    def _on_recurrent_fail(self, err: str):
+        self._btn_recurrent.setEnabled(True)
+        self._btn_recurrent.setText("✦  " + translate("Plans récurrents"))
+        QMessageBox.warning(self, translate("Plans récurrents"), str(err)[:300])
 
     # ── Actions ───────────────────────────────────────────────────────────────
 

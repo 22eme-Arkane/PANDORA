@@ -173,6 +173,7 @@ class PromptWithMentions(QFrame):
             font-size:10px;font-weight:700;padding:0 10px;letter-spacing:0px;}}
             QPushButton:hover{{background:rgba(124,107,255,0.28);}}
         """)
+        self.enhance_btn.setVisible(False)   # « ✦ Améliorer » retiré (fonction instable)
 
         footer = QHBoxLayout()
         footer.setContentsMargins(0, 0, 0, 0)

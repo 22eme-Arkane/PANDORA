@@ -202,12 +202,8 @@ class ShotDialog(QDialog):
         else:
             self._btn_enhance_action.setText("☁")
         self._btn_enhance_action.clicked.connect(self._on_enhance_action)
-        _lbl_enh_act = QLabel("Améliorer le prompt")
-        _lbl_enh_act.setStyleSheet(
-            f"color:{CP['text_dim']};font-size:10px;background:transparent;border:none;"
-        )
-        action_header.addWidget(_lbl_enh_act)
-        action_header.addWidget(self._btn_enhance_action)
+        # « Améliorer le prompt » (☁) RETIRÉ — fonction jugée inutile/instable.
+        self._btn_enhance_action.setVisible(False)
         col_action.addLayout(action_header)
         self._scene_title = QLineEdit(self._shot.get("scene_title", ""))
         self._scene_title.setPlaceholderText("Ex: Le chanteur est assis sur la banquette…")
@@ -568,12 +564,8 @@ class ShotDialog(QDialog):
         else:
             self._btn_enhance_seedance.setText("☁")
         self._btn_enhance_seedance.clicked.connect(self._on_enhance_seedance)
-        _lbl_enh_sd = QLabel("Améliorer le prompt")
-        _lbl_enh_sd.setStyleSheet(
-            f"color:{CP['text_dim']};font-size:10px;background:transparent;border:none;"
-        )
-        seedance_header.addWidget(_lbl_enh_sd)
-        seedance_header.addWidget(self._btn_enhance_seedance)
+        # « Améliorer le prompt » (☁) RETIRÉ — fonction jugée inutile/instable.
+        self._btn_enhance_seedance.setVisible(False)
         lay.addLayout(seedance_header)
         self._seedance_prompt = QTextEdit()
         self._seedance_prompt.setPlainText(self._shot.get("seedance_prompt", ""))

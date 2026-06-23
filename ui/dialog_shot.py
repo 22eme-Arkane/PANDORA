@@ -202,12 +202,9 @@ class ShotDialog(QDialog):
         else:
             self._btn_enhance_action.setText("☁")
         self._btn_enhance_action.clicked.connect(self._on_enhance_action)
-        _lbl_enh_act = QLabel("Améliorer le prompt")
-        _lbl_enh_act.setStyleSheet(
-            f"color:{CP['text_dim']};font-size:10px;background:transparent;border:none;"
-        )
-        action_header.addWidget(_lbl_enh_act)
-        action_header.addWidget(self._btn_enhance_action)
+        # « Améliorer le prompt » (☁) RETIRÉ — fonction jugée inutile/instable.
+        # _btn_enhance_action reste créé (non affiché) pour ne casser aucune référence.
+        self._btn_enhance_action.setVisible(False)
         col_action.addLayout(action_header)
         self._scene_title = QLineEdit(self._shot.get("scene_title", ""))
         self._scene_title.setPlaceholderText("Ex: Le chanteur est assis sur la banquette…")

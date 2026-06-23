@@ -1239,6 +1239,37 @@ _FR_TO_EN: dict[str, str] = {
         "You are now chatting with the AI about the software.\n\n"
         "You can ask questions to understand how the program works.",
     "Discuter du storyboard avec l'IA…": "Chat about the storyboard with the AI…",
+    # ── Libellés couleur + plans récurrents (Storyboard) ──────────────────────
+    "Libellé couleur":                  "Colour label",
+    "Aucun libellé":                    "No label",
+    "Plan récurrent":                   "Recurring shot",
+    "Pas récurrent":                    "Not recurring",
+    "Plans récurrents":                 "Recurring shots",
+    "Analyse…":                         "Analysing…",
+    "Groupes :":                        "Groups:",
+    "Sélectionner tous les plans de ce groupe": "Select all shots in this group",
+    "{n} groupe(s) de plans récurrents identifié(s) et colorés.":
+        "{n} recurring-shot group(s) identified and coloured.",
+    "Aucun groupe de plans récurrents détecté dans ce storyboard.":
+        "No recurring-shot group detected in this storyboard.",
+    "Rouge": "Red", "Ambre": "Amber", "Vert": "Green", "Cyan": "Cyan",
+    "Bleu": "Blue", "Violet": "Purple", "Rose": "Pink", "Olive": "Olive",
+    # ── Variations d'une pièce (décors) ───────────────────────────────────────
+    "Variations":                       "Variations",
+    "Créer des variations de la pièce": "Create room variations",
+    "Créer des variations de TOUTE la pièce (toutes les vues), avec un prompt éditable":
+        "Create variations of the WHOLE room (all views), with an editable prompt",
+    "Régénère EN BLOC toutes les vues de la pièce":
+        "Regenerates ALL the room's views at once",
+    "L'ancienne image de chaque vue est conservée en variante.":
+        "Each view's previous image is kept as a variant.",
+    "Prompt (éditable) :":              "Prompt (editable):",
+    "Générer les variations":           "Generate variations",
+    "Génération des variations…":       "Generating variations…",
+    "{n} vue(s) régénérée(s) en variations.": "{n} view(s) regenerated as variations.",
+    "Aucune vue régénérée (mode mock sans clé fal.ai, ou échec).":
+        "No view regenerated (mock mode without a fal.ai key, or failure).",
+    "Écris un prompt.":                 "Write a prompt.",
     "Envoyer":                          "Send",
     "Le chat IA est désactivé.":        "The AI chat is disabled.",
     "▶  Paramètres avancés — moteur IA par tâche": "▶  Advanced — AI engine per task",

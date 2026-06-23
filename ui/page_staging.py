@@ -551,9 +551,11 @@ class PageStaging(QWidget):
                 if new and new != cur:
                     s["seedance_prompt"] = new
                     changed = True
-                # Caméra → champs TECHNIQUES du plan (pas dans le texte de mise en scène)
+                # Caméra → champs TECHNIQUES du plan (pas dans le texte de mise en scène).
+                # Axe déduit de la POSITION caméra/acteurs → déplacer la caméra met à
+                # jour l'axe dans le storyboard.
                 cam = rec.get("camera") or {}
-                axis = staging.axis_from_angle(cam.get("angle", 0)) if cam else ""
+                axis = staging.axis_from_placement(rec) if cam else ""
                 zone = staging.camera_placement(sid)
                 if axis and s.get("camera_axis") != axis:
                     s["camera_axis"] = axis
@@ -648,7 +650,7 @@ class PageStaging(QWidget):
         if cam:
             tokens.append({"kind": "camera", "label": "caméra",
                            "x": cam.get("x", .5), "y": cam.get("y", .5),
-                           "info": "axe " + staging.axis_from_angle(cam.get("angle", 0))})
+                           "info": "axe " + staging.axis_from_placement(rec)})
         for a in (rec.get("actors") or []):
             tokens.append({"kind": "actor", "label": a.get("name", "?"),
                            "x": a.get("x", .5), "y": a.get("y", .5)})
@@ -736,7 +738,7 @@ class PageStaging(QWidget):
             # Caméra → champs TECHNIQUES du plan (axe + placement) ET distance RÉELLE
             # (colonne DIST. du storyboard) dérivée de la position sur l'échelle du décor.
             cam = rec.get("camera") or {}
-            axis = staging.axis_from_angle(cam.get("angle", 0)) if cam else ""
+            axis = staging.axis_from_placement(rec) if cam else ""
             zone = staging.camera_placement(sid)
             if axis and shot.get("camera_axis") != axis:
                 shot["camera_axis"] = axis
