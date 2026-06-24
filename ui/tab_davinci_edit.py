@@ -1116,6 +1116,10 @@ class TabDavinciEdit(QScrollArea):
         params_grid.setSpacing(12)
 
         self._cb_model = combo(_DAVINCI_ENGINES)
+        # Outils de retouche dédiés (Pixverse Swap) proposés comme MOTEURS — étiquetés
+        # « remplacer un visage / un fond ». Seedance 2.0 reste le défaut (1ʳᵉ entrée).
+        self._cb_model.addItem(translate("Pixverse Swap · remplacer un visage (≤720p)"), "pixverse_face")
+        self._cb_model.addItem(translate("Pixverse Swap · remplacer un fond (≤720p)"), "pixverse_bg")
         self._cb_model.currentIndexChanged.connect(self._on_engine_changed)
         self._cb_ratio = combo(["16:9 — Paysage", "9:16 — Portrait", "4:3", "3:4"])
         _def_key = self._cb_model.currentData() or "seedance-2.0"
@@ -1750,9 +1754,15 @@ class TabDavinciEdit(QScrollArea):
 
     def _on_engine_changed(self):
         key = self._get_model()
-        fixed_res = key in _FIXED_RES_ENGINES
-        self._cb_ratio.setEnabled(key not in _FIXED_RATIO_ENGINES)
-        options = _ENGINE_RESOLUTIONS.get(key, [("1080p", "1080p"), ("720p", "720p"), ("480p", "480p")])
+        if key in ("pixverse_face", "pixverse_bg"):
+            # Pixverse Swap : ≤720p, garde le cadrage source (ratio verrouillé).
+            fixed_res = False
+            self._cb_ratio.setEnabled(False)
+            options = [("720p", "720p"), ("540p", "540p"), ("360p", "360p")]
+        else:
+            fixed_res = key in _FIXED_RES_ENGINES
+            self._cb_ratio.setEnabled(key not in _FIXED_RATIO_ENGINES)
+            options = _ENGINE_RESOLUTIONS.get(key, [("1080p", "1080p"), ("720p", "720p"), ("480p", "480p")])
         prev = self._cb_res.currentData() or self._cb_res.currentText()
         self._cb_res.blockSignals(True)
         self._cb_res.clear()
@@ -1767,6 +1777,7 @@ class TabDavinciEdit(QScrollArea):
         self._cb_res.setEnabled(not fixed_res)
         if hasattr(self, "_ref_compat_banner"):
             self._ref_compat_banner.setVisible(key in _TEXT_FALLBACK_ENGINES)
+        self._refresh_engine_hint()
 
     def _get_aspect_ratio(self) -> str:
         return self._cb_ratio.currentText().split(" ")[0]
@@ -2005,46 +2016,41 @@ class TabDavinciEdit(QScrollArea):
         self._process_next()
 
     def _on_mod_template(self, idx: int):
-        """« Type de modification ». « Changer un visage » et « Changer le décor »
-        basculent sur un AUTRE moteur (Pixverse Swap) → mode PERSISTANT (routé dans
-        _process_next), sans template. Les autres entrées (étalonnage / tenue) insèrent
-        un modèle de prompt Seedance (action ponctuelle, non destructive ; le sélecteur
-        revient sur l'invite)."""
+        """« Type de modification » : insère un modèle de prompt prêt à l'emploi (Seedance)
+        pour le type choisi — visage / décor / étalonnage / tenue. Action ponctuelle, non
+        destructive (ajout à la suite ; le sélecteur revient sur l'invite). Le swap dédié
+        (Pixverse) est, lui, un MOTEUR de génération (sélecteur « Moteur de génération »)."""
         key = self._mod_combo.itemData(idx)
-        if key in ("face", "bg"):
-            self._refresh_modif_hint()   # mode Pixverse Swap actif, persistant
-            return
         if key:
             tpl = translate(_MOD_TEMPLATES.get(key, ""))
             if tpl:
                 cur = self._prompt_global.toPlainText().strip()
                 self._prompt_global.setPlainText((cur + "\n" + tpl) if cur else tpl)
             self._mod_combo.setCurrentIndex(0)
-        self._refresh_modif_hint()
 
-    def _pixverse_swap_mode(self) -> str:
-        """'person' si « Changer un visage », 'background' si « Changer le décor »,
-        '' sinon (= flux Seedance normal)."""
-        if getattr(self, "_mod_combo", None) is None:
-            return ""
-        return {"face": "person", "bg": "background"}.get(self._mod_combo.currentData(), "")
+    def _pixverse_engine_mode(self) -> str:
+        """'person' / 'background' si le MOTEUR sélectionné est un Pixverse Swap
+        (visage / fond) ; '' sinon (= flux Seedance / autre moteur normal)."""
+        return {"pixverse_face": "person",
+                "pixverse_bg": "background"}.get(self._get_model(), "")
 
-    def _refresh_modif_hint(self):
-        """Affiche l'indice « Pixverse Swap » quand un mode visage/décor est actif."""
+    def _refresh_engine_hint(self):
+        """Indice affiché quand le moteur Pixverse Swap (visage/fond) est sélectionné :
+        rappelle de fournir l'image de référence (le nouveau visage / fond)."""
         if not hasattr(self, "_modif_hint"):
             return
-        mode = self._pixverse_swap_mode()
+        mode = self._pixverse_engine_mode()
         self._modif_hint.setVisible(bool(mode))
         if mode == "person":
             self._modif_hint.setText(translate(
-                "Mode face-swap (Pixverse Swap) : l'image de référence remplace le visage "
-                "du clip SANS régénérer la scène. Ajoute le nouveau visage en « Image de "
-                "référence ». (Seedance non utilisé · 720p max · audio conservé.)"))
+                "Moteur Pixverse Swap (visage) : remplace le visage du clip par l'image de "
+                "référence SANS régénérer la scène. Ajoute le nouveau visage en « Image de "
+                "référence ». (720p max · audio conservé.)"))
         elif mode == "background":
             self._modif_hint.setText(translate(
-                "Mode remplacement de fond (Pixverse Swap) : l'image de référence remplace "
-                "le fond du clip SANS régénérer la scène. Ajoute le nouveau fond en « Image "
-                "de référence ». (Seedance non utilisé · 720p max · audio conservé.)"))
+                "Moteur Pixverse Swap (fond) : remplace le fond du clip par l'image de "
+                "référence SANS régénérer la scène. Ajoute le nouveau fond en « Image de "
+                "référence ». (720p max · audio conservé.)"))
 
     def _source_gen_duration(self, clip_idx: int) -> int:
         """Durée de régénération Seedance calée sur le clip SOURCE (sondée par ffprobe,
@@ -2150,9 +2156,9 @@ class TabDavinciEdit(QScrollArea):
         if ref_images:
             params["ref_images"] = ref_images
 
-        # ── « Changer un visage » / « Changer le décor » → AUTRE MOTEUR : Pixverse Swap
-        #    (chirurgical : garde la scène + l'audio) au lieu de régénérer via Seedance. ─
-        _swap = self._pixverse_swap_mode()
+        # ── Moteur Pixverse Swap sélectionné (visage / fond) → retouche chirurgicale
+        #    (garde la scène + l'audio) au lieu de régénérer via Seedance. ──────────────
+        _swap = self._pixverse_engine_mode()
         if _swap:
             if not has_video:
                 self._on_clip_failed("Pixverse Swap : ce clip n'a pas de vidéo source.",

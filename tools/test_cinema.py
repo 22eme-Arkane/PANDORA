@@ -2756,39 +2756,39 @@ def edit_clip_rendu_audio_et_modeles():
 
 
 @test
-def edit_clip_face_swap_pixverse():
-    """« Changer un visage » utilise un AUTRE moteur : Pixverse Swap (fal-ai/pixverse/swap)
-    — mode persistant (pas de template Seedance), routé dans _process_next, qui garde
-    la scène + l'audio au lieu de régénérer le plan."""
+def edit_clip_pixverse_engine():
+    """Pixverse Swap = MOTEUR de génération sélectionnable (visage / fond), étiqueté ;
+    Seedance 2.0 reste le DÉFAUT. Le menu « Type de modification » réinsère le prompt
+    Seedance auto (visage inclus). Routage dans _process_next par _pixverse_engine_mode()."""
     import inspect
     import api.face_swap as FS
     assert "fal-ai/pixverse/swap" in inspect.getsource(FS.PixverseSwapWorker.run), "endpoint Pixverse absent"
     w = FS.PixverseSwapWorker("v.mp4", "f.png", mode="person", resolution="1080p")
-    assert hasattr(w, "finished") and w._mode == "person"
-    assert w._res == "720p", "1080p doit être clampé à 720p"
+    assert w._mode == "person" and w._res == "720p", "1080p doit être clampé à 720p"
     from PyQt6.QtWidgets import QApplication
     QApplication.instance() or QApplication([])
     import ui.tab_davinci_edit as M
     tab = M.TabDavinciEdit()
-    # mode background aussi pris en charge (« Changer le décor » → Pixverse Swap)
-    wb = FS.PixverseSwapWorker("v.mp4", "b.png", mode="background")
-    assert wb._mode == "background"
-    keys = [tab._mod_combo.itemData(i) for i in range(tab._mod_combo.count())]
+    # Défaut = Seedance (pas de swap Pixverse)
+    assert tab._pixverse_engine_mode() == "", ("défaut ≠ Pixverse", tab._get_model())
+    # Les 2 moteurs Pixverse sont dans le SÉLECTEUR DE MOTEUR, étiquetés visage/fond
+    ekeys = [tab._cb_model.itemData(i) for i in range(tab._cb_model.count())]
+    assert "pixverse_face" in ekeys and "pixverse_bg" in ekeys, ekeys
+    tab._cb_model.setCurrentIndex(ekeys.index("pixverse_face"))
+    assert tab._pixverse_engine_mode() == "person", "moteur visage non détecté"
+    assert not tab._modif_hint.isHidden(), "indice moteur Pixverse non affiché"
+    tab._cb_model.setCurrentIndex(ekeys.index("pixverse_bg"))
+    assert tab._pixverse_engine_mode() == "background", "moteur fond non détecté"
+    # « Type de modification » → « Changer un visage » RÉINSÈRE le prompt Seedance auto
+    mkeys = [tab._mod_combo.itemData(i) for i in range(tab._mod_combo.count())]
     tab._prompt_global.setPlainText("")
-    # « Changer un visage » → mode persistant person, pas de template
-    tab._mod_combo.setCurrentIndex(keys.index("face"))
-    tab._on_mod_template(keys.index("face"))
-    assert tab._pixverse_swap_mode() == "person", "mode face-swap non actif"
-    assert tab._mod_combo.currentData() == "face", "le sélecteur doit RESTER sur « Changer un visage »"
-    assert tab._prompt_global.toPlainText() == "", "face-swap ne doit pas insérer de template Seedance"
-    assert not tab._modif_hint.isHidden(), "indice face-swap non affiché"   # isVisible() faux si fenêtre non montrée
-    # « Changer le décor » → mode persistant background
-    tab._mod_combo.setCurrentIndex(keys.index("bg"))
-    tab._on_mod_template(keys.index("bg"))
-    assert tab._pixverse_swap_mode() == "background", "mode décor non actif"
-    assert tab._prompt_global.toPlainText() == "", "décor (Pixverse) ne doit pas insérer de template Seedance"
+    tab._on_mod_template(mkeys.index("face"))
+    txt = tab._prompt_global.toPlainText().lower()
+    assert "@video1" in txt and "@image1" in txt and "visage" in txt, txt[:80]
+    assert tab._mod_combo.currentIndex() == 0, "le sélecteur revient sur l'invite"
+    # routage par MOTEUR dans _process_next
     src = inspect.getsource(M.TabDavinciEdit._process_next)
-    assert "_pixverse_swap_mode()" in src and "PixverseSwapWorker" in src, "routage Pixverse absent de _process_next"
+    assert "_pixverse_engine_mode()" in src and "PixverseSwapWorker" in src, "routage Pixverse (moteur) absent"
 
 
 @test
