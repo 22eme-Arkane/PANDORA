@@ -2511,6 +2511,37 @@ def davinci_edit_lancement_sans_nameerror():
     assert "len(checked)" not in src, "NameError : 'checked' non défini (utiliser `selected`)"
 
 
+@test
+def draw_to_video_vignette_remplace_popup():
+    """Draw-to-Video (Modifier depuis DaVinci) : le dessin est confirmé par une VIGNETTE
+    (croix pour la retirer) au lieu d'un pop-up ; le dessin reste un GUIDE (draw_guidance
+    via Claude Vision), jamais une ref littérale envoyée au modèle."""
+    import inspect, os, tempfile
+    from PyQt6.QtGui import QPixmap
+    import ui.tab_davinci_edit as M
+    tab = M.TabDavinciEdit()
+    assert hasattr(tab, "_draw_thumb_g") and hasattr(tab, "_draw_thumb_p")
+    assert tab._draw_thumb_g.isHidden() and tab._draw_thumb_p.isHidden()
+    # Plus de pop-up : le handler rafraîchit la vignette
+    oh = inspect.getsource(M.TabDavinciEdit._on_draw_to_video)
+    assert "_refresh_draw_thumb()" in oh, "vignette non rafraîchie après dessin"
+    assert "Dessin enregistré pour" not in oh, "pop-up de validation encore présent"
+    # Dessiner → vignette ; croix → retirée
+    d = tempfile.mkdtemp(); p = os.path.join(d, "a.png"); QPixmap(60, 60).save(p)
+    tab._active_clip_idx = 0
+    tab._draw_images[0] = p
+    tab._refresh_draw_thumb()
+    assert not tab._draw_thumb_g.isHidden() and not tab._draw_thumb_g_lbl.isHidden()
+    tab._on_clear_draw()
+    assert 0 not in tab._draw_images and tab._draw_thumb_g.isHidden()
+    # Le dessin reste un GUIDE (jamais une ref littérale)
+    pn = inspect.getsource(M.TabDavinciEdit._process_next)
+    assert 'params["draw_guidance_path"]' in pn, "draw_guidance non transmis"
+    # Aide explicative présente (i18n)
+    import core.i18n as i18n
+    assert any("Claude Vision" in k for k in i18n._FR_TO_EN), "texte d'aide Draw-to-Video absent"
+
+
 # ══════════════════════════════════════════════════════════════════════════════
 # Runner
 # ══════════════════════════════════════════════════════════════════════════════

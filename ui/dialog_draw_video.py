@@ -205,9 +205,13 @@ class DrawVideoDialog(QDialog):
         root.addWidget(title)
 
         hint = QLabel(translate(
-            "Choisis l'instant, puis dessine pour REPÉRER les zones (entoure ce qu'il "
-            "faut modifier, ou esquisse où ajouter un élément). Les traits servent "
-            "seulement de repère : ils n'apparaîtront PAS dans la vidéo finale."))
+            "Comment ça marche : choisis l'instant, puis dessine des repères (flèches, "
+            "cercles…) pour indiquer CE QUI change et OÙ. À la validation, l'IA (Claude "
+            "Vision) lit ton dessin ET ton texte, puis traduit ton intention en consigne "
+            "précise pour le moteur vidéo. Le clip part PROPRE : tes traits ne sont "
+            "jamais envoyés et n'apparaîtront pas dans la vidéo. Dans le prompt, décris "
+            "simplement ton intention en t'appuyant sur tes repères (ex. « les flèches "
+            "indiquent la nouvelle position des personnages »)."))
         hint.setWordWrap(True)
         hint.setStyleSheet(f"color:{CP['text_dim']};font-size:11px;background:transparent;")
         root.addWidget(hint)

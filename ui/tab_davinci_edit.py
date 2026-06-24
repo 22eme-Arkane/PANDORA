@@ -102,6 +102,46 @@ class _ThumbWorker(QThread):
 
 # ── Carré de référence visuelle (identique au widget Casting) ────────────────
 
+class _DrawThumb(QWidget):
+    """Vignette (lecture seule) de l'image annotée Draw-to-Video + croix pour la
+    retirer. L'image N'EST PAS envoyée au modèle vidéo : elle confirme visuellement
+    que le dessin sera pris en compte — Claude Vision le lit, décrit l'intention dans
+    le prompt, puis le clip part PROPRE (sans les traits)."""
+    removed = pyqtSignal()
+    _SZ = 60
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setFixedSize(self._SZ, self._SZ)
+        self.setVisible(False)
+        self.setToolTip(translate(
+            "Dessin Draw-to-Video — interprété par l'IA, jamais envoyé tel quel au modèle"))
+        self._thumb = QLabel(self)
+        self._thumb.setGeometry(0, 0, self._SZ, self._SZ)
+        self._thumb.setScaledContents(True)
+        self._thumb.setStyleSheet(f"border-radius:8px;border:1px solid {C['accent_dim']};")
+        self._x = QPushButton("×", self)
+        self._x.setFixedSize(16, 16)
+        self._x.move(self._SZ - 18, 2)
+        self._x.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._x.setStyleSheet(
+            f"QPushButton{{background:{C['bg2']};color:{C['text_dim']};"
+            f"border:1px solid {C['border']};border-radius:3px;font-size:9px;padding:0;}}"
+            f"QPushButton:hover{{color:{C['red']};border-color:{C['red']};background:{C['bg3']};}}")
+        self._x.clicked.connect(self.removed.emit)
+
+    def set_image(self, path: str):
+        if path and os.path.isfile(path):
+            self._thumb.setPixmap(QPixmap(path).scaled(
+                self._SZ, self._SZ,
+                Qt.AspectRatioMode.KeepAspectRatioByExpanding,
+                Qt.TransformationMode.SmoothTransformation))
+            self._x.raise_()
+            self.setVisible(True)
+        else:
+            self.setVisible(False)
+
+
 class _RefSquare(QWidget):
     """Carré 60×60 — affiche '+' vide ou la miniature de l'image chargée."""
     picked  = pyqtSignal(str)
@@ -740,6 +780,16 @@ class TabDavinciEdit(QScrollArea):
         self._global_ref_square.cleared.connect(lambda: setattr(self, '_global_ref_image', ''))
         _pg_ref_row.addWidget(self._global_ref_square)
         _pg_ref_row.addStretch()
+        # Vignette du dessin Draw-to-Video (à droite) — confirme que le dessin est pris
+        # en compte (croix pour le retirer). Non envoyé au modèle (lu par Claude Vision).
+        self._draw_thumb_g_lbl = QLabel(translate("Dessin Draw-to-Video"))
+        self._draw_thumb_g_lbl.setStyleSheet(
+            f"color:{C['text_dim']};font-size:10px;background:transparent;border:none;")
+        self._draw_thumb_g_lbl.setVisible(False)
+        _pg_ref_row.addWidget(self._draw_thumb_g_lbl, 0, Qt.AlignmentFlag.AlignVCenter)
+        self._draw_thumb_g = _DrawThumb()
+        self._draw_thumb_g.removed.connect(self._on_clear_draw)
+        _pg_ref_row.addWidget(self._draw_thumb_g)
         _pg_lay.addLayout(_pg_ref_row)
         body_prompt.addWidget(self._pg_frame)
 
@@ -892,6 +942,14 @@ class TabDavinciEdit(QScrollArea):
         self._per_clip_ref_square.cleared.connect(self._on_per_clip_ref_cleared)
         _pc_ref_row.addWidget(self._per_clip_ref_square)
         _pc_ref_row.addStretch()
+        self._draw_thumb_p_lbl = QLabel(translate("Dessin Draw-to-Video"))
+        self._draw_thumb_p_lbl.setStyleSheet(
+            f"color:{C['text_dim']};font-size:10px;background:transparent;border:none;")
+        self._draw_thumb_p_lbl.setVisible(False)
+        _pc_ref_row.addWidget(self._draw_thumb_p_lbl, 0, Qt.AlignmentFlag.AlignVCenter)
+        self._draw_thumb_p = _DrawThumb()
+        self._draw_thumb_p.removed.connect(self._on_clear_draw)
+        _pc_ref_row.addWidget(self._draw_thumb_p)
         _pc_lay.addLayout(_pc_ref_row)
         _pp_outer.addWidget(_pc_frame)
 
@@ -1332,6 +1390,31 @@ class TabDavinciEdit(QScrollArea):
     def _refresh_per_clip_ref_ui(self, idx: int):
         ref = self._per_clip_ref_images.get(idx, "")
         self._per_clip_ref_square.set_path(ref)
+        self._refresh_draw_thumb()
+
+    def _refresh_draw_thumb(self):
+        """Affiche/masque la vignette du dessin Draw-to-Video du clip ACTIF (les deux
+        modes de prompt). Le dessin n'est jamais envoyé tel quel au modèle."""
+        idx = self._active_clip_idx
+        p = self._draw_images.get(idx, "") if idx is not None else ""
+        for thumb, lbl in (
+            (getattr(self, "_draw_thumb_g", None), getattr(self, "_draw_thumb_g_lbl", None)),
+            (getattr(self, "_draw_thumb_p", None), getattr(self, "_draw_thumb_p_lbl", None)),
+        ):
+            if thumb is not None:
+                thumb.set_image(p)
+            if lbl is not None:
+                lbl.setVisible(bool(p))
+
+    def _on_clear_draw(self):
+        """Croix de la vignette : retire le dessin Draw-to-Video du clip actif."""
+        idx = self._active_clip_idx
+        if idx is None:
+            return
+        self._draw_images.pop(idx, None)
+        self._draw_overlays.pop(idx, None)
+        self._draw_frames.pop(idx, None)
+        self._refresh_draw_thumb()
 
     def _on_per_clip_prompt_changed(self):
         if self._active_clip_idx is not None:
@@ -1417,10 +1500,9 @@ class TabDavinciEdit(QScrollArea):
                 self._draw_images[idx] = rp
                 self._draw_overlays[idx] = dlg.overlay_path()
                 self._draw_frames[idx] = dlg.frame_index()
-                QMessageBox.information(
-                    self, "Draw-to-Video",
-                    f"Dessin enregistré pour « {clip.get('name', 'clip')} ».\n"
-                    "Lance la génération : l'effet sera appliqué aux zones dessinées.")
+                # Plus de pop-up : la vignette du dessin (à droite du prompt) confirme
+                # visuellement que l'opération est prise en compte.
+                self._refresh_draw_thumb()
 
     # ── Enhance Claude — prompt global ────────────────────────────────────────
 

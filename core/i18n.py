@@ -2393,13 +2393,23 @@ _FR_TO_EN: dict[str, str] = {
     # ── Draw-to-Video (Modifier des clips) ─────────────────────────────────────
     "Dessiner sur la vidéo":                     "Draw on the video",
     "Dessiner sur la vidéo — Draw-to-Video":     "Draw on the video — Draw-to-Video",
+    "Dessin Draw-to-Video":                      "Draw-to-Video sketch",
+    "Dessin Draw-to-Video — interprété par l'IA, jamais envoyé tel quel au modèle":
+        "Draw-to-Video sketch — interpreted by the AI, never sent as-is to the model",
     "Time Code :":                               "Timecode:",
-    "Choisis l'instant, puis dessine pour REPÉRER les zones (entoure ce qu'il "
-    "faut modifier, ou esquisse où ajouter un élément). Les traits servent "
-    "seulement de repère : ils n'apparaîtront PAS dans la vidéo finale.":
-        "Pick the moment, then draw to MARK the regions (circle what to change, or "
-        "sketch where to add an element). The strokes are guidance only — they will "
-        "NOT appear in the final video.",
+    "Comment ça marche : choisis l'instant, puis dessine des repères (flèches, "
+    "cercles…) pour indiquer CE QUI change et OÙ. À la validation, l'IA (Claude "
+    "Vision) lit ton dessin ET ton texte, puis traduit ton intention en consigne "
+    "précise pour le moteur vidéo. Le clip part PROPRE : tes traits ne sont "
+    "jamais envoyés et n'apparaîtront pas dans la vidéo. Dans le prompt, décris "
+    "simplement ton intention en t'appuyant sur tes repères (ex. « les flèches "
+    "indiquent la nouvelle position des personnages »).":
+        "How it works: pick the moment, then draw markers (arrows, circles…) to show "
+        "WHAT changes and WHERE. On confirm, the AI (Claude Vision) reads your sketch "
+        "AND your text, then turns your intent into a precise instruction for the video "
+        "engine. The clip is sent CLEAN: your strokes are never sent and won't appear "
+        "in the video. In the prompt, simply describe your intent using your markers "
+        "(e.g. \"the arrows show the characters' new positions\").",
     "Gomme":                                     "Eraser",
     "Effacer":                                   "Clear",
     "Choisir une référence visuelle":            "Choose a visual reference",
