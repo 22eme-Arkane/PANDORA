@@ -56,6 +56,15 @@ def get_ffmpeg_exe() -> str:
             _ffmpeg_exe_cache = bundled
             return bundled
 
+    # 1b. Racine du projet (mode DEV) — ffmpeg.exe y est posé par convention.
+    # ⚠ Vu en réel (2026-06-11) : seul le cas frozen était couvert → en dev,
+    # vignettes noires et conformation/mixages dépendants de fallbacks fragiles.
+    from core.paths import APP_ROOT
+    _root_exe = os.path.join(APP_ROOT, "ffmpeg.exe")
+    if os.path.isfile(_root_exe):
+        _ffmpeg_exe_cache = _root_exe
+        return _root_exe
+
     # 2. imageio-ffmpeg — ce package embarque son propre binaire
     try:
         import imageio_ffmpeg as _iio_ffmpeg  # type: ignore
@@ -88,6 +97,13 @@ def get_ffprobe_exe() -> str:
         if os.path.isfile(bundled):
             _ffprobe_exe_cache = bundled
             return bundled
+
+    # Racine du projet (mode DEV) — même convention que ffmpeg.exe
+    from core.paths import APP_ROOT
+    _root_probe = os.path.join(APP_ROOT, "ffprobe.exe")
+    if os.path.isfile(_root_probe):
+        _ffprobe_exe_cache = _root_probe
+        return _root_probe
 
     # DaVinci Resolve a ffprobe au même emplacement que ffmpeg
     dvr_dir = os.path.dirname(_find_davinci_ffmpeg() or "")
@@ -389,3 +405,138 @@ def extract_last_frame(video_path: str, output_path: str) -> bool:
         pass
 
     return False
+
+
+# ── Compatibilité moteurs : transcodage H.264 automatique ──────────────────────
+
+def _video_codec(path: str) -> str:
+    """Codec vidéo (ex. 'h264', 'hevc', 'prores') via ffprobe ; '' si indéterminé."""
+    try:
+        out = subprocess.run(
+            [get_ffprobe_exe(), "-v", "error", "-select_streams", "v:0",
+             "-show_entries", "stream=codec_name", "-of", "default=nw=1:nk=1", path],
+            capture_output=True, text=True, timeout=30, creationflags=_NO_WINDOW)
+        return (out.stdout or "").strip().lower()
+    except Exception:
+        return ""
+
+
+def _transcode_cache_dir() -> str:
+    try:
+        from core.context import get_data_root
+        d = os.path.join(get_data_root(), ".transcode")
+    except Exception:
+        import tempfile
+        d = os.path.join(tempfile.gettempdir(), "pandora_transcode")
+    os.makedirs(d, exist_ok=True)
+    return d
+
+
+def is_engine_compatible(path: str) -> bool:
+    """True si le fichier est directement exploitable par les moteurs (mp4 H.264)."""
+    if not path or not os.path.isfile(path):
+        return False
+    if os.path.splitext(path)[1].lower() != ".mp4":
+        return False
+    codec = _video_codec(path)
+    return codec in ("", "h264")   # '' = ffprobe absent → on fait confiance au .mp4
+
+
+def _video_dims(path: str) -> tuple | None:
+    """(largeur, hauteur) de la 1re piste vidéo via ffprobe, ou None."""
+    try:
+        r = subprocess.run(
+            [get_ffprobe_exe(), "-v", "error", "-select_streams", "v:0",
+             "-show_entries", "stream=width,height", "-of", "csv=p=0", path],
+            capture_output=True, text=True, timeout=10, creationflags=_NO_WINDOW)
+        if r.returncode != 0:
+            return None
+        w, h = (int(x) for x in r.stdout.strip().split(",")[:2])
+        return (w, h)
+    except Exception:
+        return None
+
+
+def video_duration_s(path: str) -> float:
+    """Durée en secondes d'un fichier vidéo via ffprobe (format=duration), ou 0.0
+    si indisponible (fichier absent, ffprobe absent, conteneur sans durée)."""
+    if not path or not os.path.isfile(path):
+        return 0.0
+    try:
+        r = subprocess.run(
+            [get_ffprobe_exe(), "-v", "error", "-show_entries", "format=duration",
+             "-of", "csv=p=0", path],
+            capture_output=True, text=True, timeout=10, creationflags=_NO_WINDOW)
+        if r.returncode != 0:
+            return 0.0
+        return float(r.stdout.strip().split(",")[0])
+    except Exception:
+        return 0.0
+
+
+# Hauteur max envoyée aux moteurs. Seedance, Kling, PixVerse, Wan, Hailuo, LTX,
+# Happy Horse, Veo, Sora… plafonnent tous à 1080p en entrée — au-delà = upload
+# inutilement lourd et risques de rejet. On redimensionne à la volée si besoin.
+ENGINE_MAX_HEIGHT = 1080
+
+
+def video_needs_transcode(path: str) -> str:
+    """'' si le clip part TEL QUEL aux moteurs ; sinon une RAISON courte et lisible
+    (pour PRÉVENIR l'utilisateur avant de générer) : « format/codec », « > 1080p »,
+    ou les deux."""
+    if not path or not os.path.isfile(path):
+        return ""
+    reasons = []
+    if not is_engine_compatible(path):
+        reasons.append("format/codec non supporté")
+    dims = _video_dims(path)
+    if dims and dims[1] > ENGINE_MAX_HEIGHT:
+        reasons.append(f"résolution {dims[0]}×{dims[1]} > 1080p")
+    return " · ".join(reasons)
+
+
+def ensure_engine_video(path: str, emit=None) -> str:
+    """Retourne un chemin vidéo H.264/mp4 PROGRESSIF ≤ 1080p exploitable par les
+    moteurs IA.
+
+    Transcode si le format/codec n'est pas supporté (MXF, ProRes, HEVC…) OU si la
+    résolution dépasse 1080p (downscale, AR conservé). Garantit une sortie
+    PROGRESSIVE : `yadif=deint=interlaced` ne désentrelace QUE les images marquées
+    entrelacées et laisse les images progressives intactes → on n'ajoute JAMAIS de
+    trames sur une vidéo progressive (le bug observé sur Draw-to-Video).
+    Renvoie l'original si déjà conforme OU si ffmpeg est indisponible.
+    Résultat mis en cache (chemin+taille+date). `emit(msg)` : progression optionnelle.
+    """
+    if not path or not os.path.isfile(path):
+        return path
+    reason = video_needs_transcode(path)
+    if not reason:
+        return path   # déjà H.264/mp4 progressif ≤1080p → envoyé tel quel
+    try:
+        st = os.stat(path)
+        sig = f"{os.path.splitext(os.path.basename(path))[0]}_{st.st_size}_{int(st.st_mtime)}"
+    except Exception:
+        sig = os.path.splitext(os.path.basename(path))[0]
+    safe = "".join(c for c in sig if c.isalnum() or c in "-_") or "clip"
+    out = os.path.join(_transcode_cache_dir(), safe + "_h264.mp4")
+    if os.path.isfile(out) and os.path.getsize(out) > 0:
+        return out
+    if emit:
+        try:
+            emit(f"Conversion du clip ({reason}) en H.264 progressif ≤ 1080p…")
+        except Exception:
+            pass
+    try:
+        # yadif=deint=interlaced → anti-trames (progressif préservé) ;
+        # scale=-2:'min(1080,ih)' → plafonne à 1080p sans jamais agrandir, AR conservé.
+        vf = "yadif=deint=interlaced,scale=-2:'min(1080,ih)':flags=lanczos,format=yuv420p"
+        cmd = [get_ffmpeg_exe(), "-y", "-i", path,
+               "-vf", vf,
+               "-c:v", "libx264", "-preset", "veryfast", "-crf", "18",
+               "-movflags", "+faststart", "-c:a", "aac", "-b:a", "192k", out]
+        r = subprocess.run(cmd, capture_output=True, timeout=1800, creationflags=_NO_WINDOW)
+        if r.returncode == 0 and os.path.isfile(out) and os.path.getsize(out) > 0:
+            return out
+    except Exception:
+        pass
+    return path   # repli : on tente l'original

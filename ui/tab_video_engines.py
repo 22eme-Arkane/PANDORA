@@ -477,8 +477,8 @@ class _SeedanceT2VForm(QWidget):
         self._dur_lbl.setStyleSheet(f"color:{C['text_secondary']};font-size:12px;background:transparent;")
         dur_col.addWidget(self._dur_lbl)
         self._dur_slider = QSlider(Qt.Orientation.Horizontal)
-        self._dur_slider.setMinimum(2)
-        self._dur_slider.setMaximum(10)
+        self._dur_slider.setMinimum(4)
+        self._dur_slider.setMaximum(15)
         self._dur_slider.setValue(5)
         self._dur_slider.setStyleSheet(_slider_style())
         self._dur_slider.valueChanged.connect(lambda v: self._dur_lbl.setText(f"Durée : {v} s"))
@@ -1009,6 +1009,123 @@ class _Sora2Form(QWidget):
 
 # ── Tab principal ──────────────────────────────────────────────────────────────
 
+class _NewEngineForm(QWidget):
+    """Formulaire générique des moteurs récents (Seedance 1.5 Pro, LTX-2, Wan 2.7,
+    Hailuo 2.3 Pro). Configuré par flags ; expose get_params()/error() comme les
+    autres formulaires. I2V (with_image) fournit image_path/end_image_path locaux —
+    uploadés par le worker via ensure_image_urls."""
+
+    def __init__(self, mode="t2v", *, with_image=False, with_end=False,
+                 with_audio=False, with_res=False, res_opts=None,
+                 dur=(4, 12, 5), note=""):
+        super().__init__()
+        self._mode       = mode
+        self._with_image = with_image
+        self._with_end   = with_end
+        self._with_audio = with_audio
+        self._with_res   = with_res
+        self.setStyleSheet("background:transparent;")
+        lay = QVBoxLayout(self)
+        lay.setContentsMargins(0, 0, 0, 0)
+        lay.setSpacing(12)
+
+        if note:
+            nlbl = QLabel(note)
+            nlbl.setStyleSheet(
+                f"color:{C['accent']};font-size:11px;font-weight:700;background:transparent;")
+            lay.addWidget(nlbl)
+
+        if with_image:
+            self._img = _ImagePicker("Image de départ (requis)")
+            lay.addWidget(self._img)
+            if with_end:
+                self._img_end = _ImagePicker("Image de fin (optionnel — raccord)")
+                lay.addWidget(self._img_end)
+
+        self._prompt = QTextEdit()
+        self._prompt.setPlaceholderText(
+            "Décrivez la scène… (FR accepté, traduit automatiquement en anglais)")
+        self._prompt.setMinimumHeight(90)
+        self._prompt.setMaximumHeight(150)
+        self._prompt.setStyleSheet(_prompt_style())
+        lay.addWidget(self._prompt)
+
+        params_row = QHBoxLayout()
+        params_row.setSpacing(16)
+        if with_res:
+            res_col = QVBoxLayout()
+            res_col.setSpacing(6)
+            rl = QLabel("Résolution :")
+            rl.setStyleSheet(f"color:{C['text_secondary']};font-size:12px;background:transparent;")
+            res_col.addWidget(rl)
+            self._res_combo = QComboBox()
+            self._res_combo.setStyleSheet(_combo_style())
+            for label, val in (res_opts or [("720p", "720p"), ("480p", "480p")]):
+                self._res_combo.addItem(label, val)
+            res_col.addWidget(self._res_combo)
+            params_row.addLayout(res_col, 1)
+
+        ratio_col = QVBoxLayout()
+        ratio_col.setSpacing(6)
+        rl2 = QLabel("Format :")
+        rl2.setStyleSheet(f"color:{C['text_secondary']};font-size:12px;background:transparent;")
+        ratio_col.addWidget(rl2)
+        self._ratio_combo = QComboBox()
+        self._ratio_combo.setStyleSheet(_combo_style())
+        for lbl2, val in [("16:9 — Paysage", "16:9"), ("9:16 — Portrait", "9:16"), ("1:1 — Carré", "1:1")]:
+            self._ratio_combo.addItem(lbl2, val)
+        ratio_col.addWidget(self._ratio_combo)
+        params_row.addLayout(ratio_col, 1)
+        lay.addLayout(params_row)
+
+        dmin, dmax, ddef = dur
+        dur_col = QVBoxLayout()
+        dur_col.setSpacing(6)
+        self._dur_lbl = QLabel(f"Durée : {ddef} s")
+        self._dur_lbl.setStyleSheet(f"color:{C['text_secondary']};font-size:12px;background:transparent;")
+        dur_col.addWidget(self._dur_lbl)
+        self._dur_slider = QSlider(Qt.Orientation.Horizontal)
+        self._dur_slider.setMinimum(dmin)
+        self._dur_slider.setMaximum(dmax)
+        self._dur_slider.setValue(ddef)
+        self._dur_slider.setStyleSheet(_slider_style())
+        self._dur_slider.valueChanged.connect(lambda v: self._dur_lbl.setText(f"Durée : {v} s"))
+        dur_col.addWidget(self._dur_slider)
+        lay.addLayout(dur_col)
+
+        if with_audio:
+            self._audio_chk = QCheckBox("Générer l'audio (recommandé)")
+            self._audio_chk.setChecked(True)
+            self._audio_chk.setStyleSheet(f"color:{C['text_primary']};font-size:12px;background:transparent;")
+            lay.addWidget(self._audio_chk)
+
+    def get_params(self) -> dict | None:
+        if self._with_image and not self._img.path():
+            return None
+        p: dict = {
+            "mode":         self._mode,
+            "prompt":       self._prompt.toPlainText().strip(),
+            "aspect_ratio": self._ratio_combo.currentData() or "16:9",
+            "duration":     self._dur_slider.value(),
+        }
+        if self._with_res:
+            p["resolution"] = self._res_combo.currentData() or "720p"
+        if self._with_audio:
+            p["generate_audio"] = self._audio_chk.isChecked()
+        if self._with_image:
+            p["image_path"] = self._img.path()
+            if self._with_end:
+                p["end_image_path"] = self._img_end.path()
+        return p
+
+    def error(self) -> str:
+        if not self._prompt.toPlainText().strip():
+            return "Le prompt est requis."
+        if self._with_image and not self._img.path():
+            return "Image de départ requise pour ce mode I2V."
+        return ""
+
+
 class TabVideoEngines(QWidget):
     """Onglet génération directe multi-moteurs."""
     generation_done = pyqtSignal(dict)
@@ -1016,6 +1133,12 @@ class TabVideoEngines(QWidget):
     _ENGINES = [
         ("Seedance 2.0 — T2V  (~$0.30/s)",            "seedance_t2v",      True),
         ("Seedance Fast — T2V  (~$0.09/s)",             "seedance_fast_t2v", True),
+        ("Seedance 1.5 Pro — T2V  (audio natif · ~$0.05/s) ★", "seedance15_t2v", True),
+        ("Seedance 1.5 Pro — I2V  (start/end frame · audio)",  "seedance15_i2v", True),
+        ("LTX-2 — T2V  (4K + audio · ~$0.04/s)",       "ltx2_t2v",          True),
+        ("LTX-2 — I2V  (4K + audio · ~$0.04/s)",       "ltx2_i2v",          True),
+        ("Wan 2.7 — T2V  (Alibaba · first/last frame)", "wan27_t2v",         True),
+        ("Hailuo 2.3 Pro — T2V  (MiniMax · ~$0.49/vidéo)", "hailuo23_t2v",   True),
         ("Happy Horse 1.0 — T2V  ($0.14-0.28/s) ★",   "happy_horse_t2v",   True),
         ("Happy Horse 1.0 — I2V  ($0.14-0.28/s)",      "happy_horse_i2v",   True),
         ("Kling O3 4K — T2V  (~$0.42/s)",              "kling_o3_t2v",      True),
@@ -1109,12 +1232,8 @@ class TabVideoEngines(QWidget):
         else:
             self._btn_enhance.setText("☁")
         self._btn_enhance.clicked.connect(self._on_enhance)
-        _lbl_enh = QLabel("Améliorer le prompt")
-        _lbl_enh.setStyleSheet(
-            f"color:{C['text_dim']};font-size:10px;background:transparent;border:none;"
-        )
-        _prompt_hdr.addWidget(_lbl_enh)
-        _prompt_hdr.addWidget(self._btn_enhance)
+        # « Améliorer le prompt » (☁) RETIRÉ — fonction jugée inutile/instable.
+        self._btn_enhance.setVisible(False)
         lay.addLayout(_prompt_hdr)
 
         # ── Formulaires empilés ────────────────────────────────────────────────
@@ -1122,6 +1241,16 @@ class TabVideoEngines(QWidget):
         self._forms = [
             _SeedanceT2VForm("seedance-2.0"),
             _SeedanceT2VForm("seedance-2.0-fast"),
+            _NewEngineForm("t2v", with_audio=True, with_res=True,
+                           res_opts=[("720p  (~$0.26 / 5 s)", "720p"), ("480p", "480p")],
+                           dur=(4, 12, 5), note="Seedance 1.5 Pro · audio natif"),
+            _NewEngineForm("i2v", with_image=True, with_end=True, with_audio=True, with_res=True,
+                           res_opts=[("720p", "720p"), ("480p", "480p")],
+                           dur=(4, 12, 5), note="Seedance 1.5 Pro · raccord start / end frame"),
+            _NewEngineForm("t2v", dur=(4, 10, 5), note="LTX-2 · 4K + audio stéréo"),
+            _NewEngineForm("i2v", with_image=True, dur=(4, 10, 5), note="LTX-2 · image-to-video"),
+            _NewEngineForm("t2v", dur=(4, 10, 5), note="Wan 2.7 · first / last frame"),
+            _NewEngineForm("t2v", dur=(6, 10, 6), note="Hailuo 2.3 Pro · prix fixe ~$0.49 / vidéo"),
             _HappyHorseForm("t2v"),
             _HappyHorseForm("i2v"),
             _KlingO3Form("t2v"),
@@ -1141,7 +1270,7 @@ class TabVideoEngines(QWidget):
         lay.addWidget(_divider())
 
         # ── Bouton génération ──────────────────────────────────────────────────
-        self._btn_generate = QPushButton("▶  Générer")
+        self._btn_generate = QPushButton("▶▶  Lancer la file d'attente")
         self._btn_generate.setMinimumHeight(46)
         self._btn_generate.setStyleSheet(_btn_accent_style())
         self._btn_generate.clicked.connect(self._on_generate)
@@ -1182,22 +1311,35 @@ class TabVideoEngines(QWidget):
         )
         self._result_lbl.setWordWrap(True)
         result_lay.addWidget(self._result_lbl)
-        result_btn_row = QHBoxLayout()
-        self._btn_open = QPushButton("Ouvrir le dossier")
+        self._btn_open = QPushButton(translate("Ouvrir le dossier"))
         self._btn_open.setFixedHeight(30)
-        self._btn_open.setEnabled(False)
+        # Toujours actif : ouvre le dossier de DESTINATION même avant de générer
+        self._btn_open.setToolTip(translate("Ouvre le dossier de destination des clips."))
         self._btn_open.setStyleSheet(_btn_ghost_style())
         self._btn_open.clicked.connect(self._on_open_folder)
-        result_btn_row.addWidget(self._btn_open)
-        result_btn_row.addStretch()
-        result_lay.addLayout(result_btn_row)
+        result_lay.addWidget(self._btn_open)
         lay.addWidget(self._result_card)
         lay.addStretch()
 
     # ── Changement moteur ──────────────────────────────────────────────────────
 
     def _on_engine_changed(self, idx: int):
+        # Chaque moteur a son propre formulaire (donc son propre champ prompt).
+        # On reporte le prompt du moteur précédent vers le nouveau pour ne pas
+        # « perdre » ce que l'utilisateur a écrit en changeant de moteur.
+        prev_idx = self._stack.currentIndex()
+        carried = ""
+        if 0 <= prev_idx < len(self._forms):
+            prev_prompt = getattr(self._forms[prev_idx], "_prompt", None)
+            if prev_prompt is not None:
+                carried = prev_prompt.toPlainText()
+
         self._stack.setCurrentIndex(idx)
+
+        if carried:
+            new_prompt = getattr(self._forms[idx], "_prompt", None)
+            if new_prompt is not None and not new_prompt.toPlainText().strip():
+                new_prompt.setPlainText(carried)
 
     # ── Amélioration Claude ────────────────────────────────────────────────────
 
@@ -1256,6 +1398,18 @@ class TabVideoEngines(QWidget):
         if key in ("seedance_t2v", "seedance_fast_t2v"):
             from core.worker import GenerationWorker
             self._worker = GenerationWorker(params)
+        elif key in ("seedance15_t2v", "seedance15_i2v"):
+            from api.video_engines import Seedance15Worker
+            self._worker = Seedance15Worker(params)
+        elif key in ("ltx2_t2v", "ltx2_i2v"):
+            from api.video_engines import LTX2Worker
+            self._worker = LTX2Worker(params)
+        elif key == "wan27_t2v":
+            from api.video_engines import Wan27Worker
+            self._worker = Wan27Worker(params)
+        elif key == "hailuo23_t2v":
+            from api.video_engines import Hailuo23Worker
+            self._worker = Hailuo23Worker(params)
         elif key in ("happy_horse_t2v", "happy_horse_i2v"):
             from api.video_engines import HappyHorseWorker
             self._worker = HappyHorseWorker(params)
@@ -1299,13 +1453,27 @@ class TabVideoEngines(QWidget):
 
     def _on_finished(self, result: dict):
         self._btn_generate.setEnabled(True)
-        self._btn_generate.setText("▶  Générer")
+        self._btn_generate.setText("▶▶  Lancer la file d'attente")
         self._progress.setValue(100)
 
         local = result.get("local_path", "")
         model = result.get("model", "")
         dur   = result.get("duration", 0)
         cost  = result.get("credits_used", 0)
+
+        # Seedance (run_real) renvoie video_url sans local_path : on télécharge le clip.
+        if not local and result.get("video_url"):
+            try:
+                from davinci.importer import import_result
+                from core.config import get_output_dir
+                ir = import_result(result, get_output_dir(), import_to_davinci=False)
+            except Exception as e:
+                ir = {"success": False, "mock": False, "local_path": "", "error": str(e)}
+            if ir.get("success") and not ir.get("mock"):
+                local = ir.get("local_path", "")
+                result = {**result, "local_path": local}
+            elif not ir.get("mock") and ir.get("error"):
+                self._status_lbl.setText(f"✗  {translate('Téléchargement échoué :')} {ir['error'][:100]}")
 
         if local:
             self._last_folder = os.path.dirname(local)
@@ -1316,22 +1484,27 @@ class TabVideoEngines(QWidget):
             self._result_lbl.setStyleSheet(
                 f"color:{C['accent']};font-size:12px;background:transparent;"
             )
-            self._btn_open.setEnabled(True)
             self.generation_done.emit(result)
         else:
-            self._status_lbl.setText("✓  Terminé (mode mock — aucune clé fal.ai)")
+            self._status_lbl.setText(translate("✓  Terminé (mode démo — aucune clé fal.ai)"))
 
     def _on_failed(self, err: str):
         self._btn_generate.setEnabled(True)
-        self._btn_generate.setText("▶  Générer")
+        self._btn_generate.setText("▶▶  Lancer la file d'attente")
         self._progress.setValue(0)
         self._status_lbl.setText(f"✗  {err[:120]}")
         show_api_error(self, err)
 
     def _on_open_folder(self):
-        if self._last_folder and os.path.isdir(self._last_folder):
-            try:
-                os.startfile(self._last_folder)
-            except AttributeError:
-                import subprocess
-                subprocess.Popen(["xdg-open", self._last_folder])
+        """Dernier dossier de sortie, sinon la DESTINATION par défaut — le
+        bouton fonctionne donc même avant toute génération."""
+        folder = self._last_folder
+        if not folder or not os.path.isdir(folder):
+            from core.config import get_output_dir
+            folder = get_output_dir()
+            os.makedirs(folder, exist_ok=True)
+        try:
+            os.startfile(folder)
+        except AttributeError:
+            import subprocess
+            subprocess.Popen(["xdg-open", folder])

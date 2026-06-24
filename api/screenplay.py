@@ -228,10 +228,10 @@ _GENERATE_STORYBOARD_TMPL = """\
 Tu es un assistant de découpage cinématographique. Ton rôle est de découper fidèlement le scénario en plans — tu ne réinventes rien, tu n'interprètes rien, tu retranscris.
 
 RÈGLES ABSOLUES :
-- Tout le contenu de "comments" et "seedance_prompt" doit être extrait directement du scénario.
-- Les dialogues présents dans le scénario DOIVENT apparaître mot pour mot dans "comments" et "seedance_prompt".
-- Aucune invention, aucune paraphrase libre, aucune interprétation créative.
-- Le découpage doit être identique au scénario : même personnages, même lieux, mêmes actions, mêmes mots.
+- Tout le contenu descriptif ("comments" et les champs de sections "action"/"staging"/"ambiance"/"decor"/"lighting"/"sound_prompt") doit être extrait directement du scénario.
+- Les dialogues présents dans le scénario DOIVENT apparaître mot pour mot dans "comments" ET dans le champ "action".
+- Aucune invention narrative, aucune paraphrase libre, aucune interprétation créative : mêmes personnages, mêmes lieux, mêmes actions, mêmes mots.
+- N'inclus dans un plan (et dans "character_names" / "staging") QUE les personnages réellement présents et visibles dans CE plan — JAMAIS un personnage hors champ, hors cadre, ou déjà sorti de la scène.
 
 Retourne UNIQUEMENT un tableau JSON valide. Chaque élément du tableau représente un plan et contient exactement ces clés :
 {
@@ -242,7 +242,7 @@ Retourne UNIQUEMENT un tableau JSON valide. Chaque élément du tableau représe
   "decor_name": <str — nom exact du décor / lieu tel qu'il apparaît dans le scénario>,
   "shot_time": <str — exactement une valeur parmi : "Jour", "Nuit", "Lever du soleil", "Coucher du soleil">,
   "duration": <float — durée estimée en secondes, STRICTEMENT entre 2.0 et 15.0>,
-  "character_names": <list[str] — noms exacts des personnages présents dans ce plan, tels qu'ils apparaissent dans le scénario>,
+  "character_names": <list[str] — noms exacts des personnages réellement présents ET visibles dans ce plan, tels qu'ils apparaissent dans le scénario. EXCLURE tout personnage hors champ / hors cadre / déjà sorti.>,
   "accessory_names": <list[str] — accessoires / props visibles dans ce plan, extraits du scénario>,
   "vehicle_names": <list[str] — véhicules présents dans ce plan, extraits du scénario>,
   "camera_movement": <str — exactement une valeur parmi : "Fixe", "Panoramique horizontal", "Panoramique vertical", "Travelling avant", "Travelling arrière", "Travelling latéral", "Zoom avant", "Zoom arrière", "Steadicam", "Grue / Drone", "Caméra portée", "Plongée", "Contre-plongée">,
@@ -253,7 +253,12 @@ Retourne UNIQUEMENT un tableau JSON valide. Chaque élément du tableau représe
   "optic": <str — "Sphérique" ou "Anamorphique">,
   "focal": <str — focale adaptée à la valeur de plan et à l'effet souhaité, ex: "24mm", "35mm", "50mm", "85mm", "100mm">,
   "comments": <str — description factuelle et fidèle de ce qui se passe dans ce plan, extraite du scénario. OBLIGATOIRE : si ce plan contient un dialogue, le citer intégralement entre guillemets avec le nom du personnage (ex : MARC : « Je t'ai toujours aimée. »). INTERDIT : technique caméra, mouvements de caméra, focale, optique — ces éléments sont déjà dans les champs dédiés. AUTORISÉ : qui fait quoi, ce qu'on voit, ce qu'on entend, les dialogues exacts, l'ambiance du moment telle qu'écrite dans le scénario.>,
-  "seedance_prompt": <str — video generation prompt in {PROMPT_LANG}. Mandatory structure: (1) characters present with their appearance/state as described in the screenplay, (2) exact location and environment description from the screenplay, (3) main action and — if dialogue present — the exact words spoken in quotes. NO camera technique, NO creative interpretation — only what is written in the screenplay.>
+  "action": <str — {PROMPT_LANG}. L'ACTION concrète et visible du plan, fidèle au scénario : qui fait quoi, ce qu'on voit bouger. Si dialogue présent, citer la réplique EXACTE entre guillemets avec le nom du personnage. 1 à 3 phrases. Personnages cités par leur NOM (la cohérence visuelle est gérée par les images de référence).>,
+  "staging": <str — {PROMPT_LANG}. MISE EN SCÈNE : indique d'abord le nombre de personnages PRÉSENTS et visibles dans ce plan (JAMAIS un personnage hors champ), puis leur position approximative déduite du scénario (gauche/droite/centre, premier/arrière-plan) et qui fait face à qui. Reste général si le scénario ne précise pas le placement — n'invente pas une géométrie précise. Personnages par leur NOM.>,
+  "ambiance": <str — {PROMPT_LANG}. AMBIANCE : atmosphère, mood et émotion du plan tels que décrits ou impliqués par le scénario. N'AJOUTE PAS de mots de qualité génériques (PAS de « cinématographique », « ultra-détaillé », « photoréaliste », « 4K », etc.) — le style visuel est géré séparément.>,
+  "decor": <str — {PROMPT_LANG}. DÉCOR : UNIQUEMENT le lieu et son environnement FIXE (architecture, matières, époque, mobilier fixe, murs/sol, végétation, palette). N'inclus NI personnage, NI véhicule, NI accessoire mobile, NI intention d'éclairage — chacun a sa propre section. Le décor seul.>,
+  "lighting": <str — {PROMPT_LANG}. PLAN DE FEU : INTENTION d'éclairage cohérente avec le scénario — direction de la lumière, qualité (douce/dure), température de couleur, contraste, sources pratiques motivées (lustre, fenêtre, bougie…). NE mentionne AUCUN projecteur ni appareil d'éclairage visible : c'est une intention de lumière, pas du matériel à l'image.>,
+  "sound_prompt": <str — SOUND DESIGN / SFX prompt in {PROMPT_LANG} describing the shot's sound ambience: ambient textures, sound effects, room tone, materials and rhythm of the scene, ready for a sound-effects generator. NO speech, NO voice, NO music score, NO BPM (dialogue lives in the "action" field; this is ambience/SFX only). You MAY place the main sound events approximately in time within the shot (e.g. "around 1s", "mid-shot"). 1 to 3 concise sentences faithful to what the screenplay describes.>
 }
 
 Contrainte absolue : duration ne peut jamais dépasser 15.0 secondes (limite de Seedance 2.0).
@@ -309,8 +314,10 @@ RÈGLES POUR LE PROMPT SEEDANCE (après →) :
 - Toujours en FRANÇAIS (traduction automatique gérée par Pandora avant envoi)
 - Jamais de technique caméra (déjà dans la ligne P01) — décrire uniquement sujet, décor, action, ambiance
 - Personnages cités par NOM uniquement — pas de description physique
-- Concis et évocateur : 1 à 3 phrases. Sensations, lumière, textures, rythme.
-- Structure recommandée : [personnage(s)] + [lieu/environnement] + [action] + [ambiance/lumière]
+- RICHE et TRÈS DÉTAILLÉ : Seedance 2.0 donne de bien meilleurs résultats avec des prompts denses — ne sois PAS bref. 3 à 5 phrases développées.
+- Décrire précisément : personnage(s) (par NOM), lieu/environnement, action, lumière (direction, qualité, température de couleur), palette de couleurs, textures & matières, atmosphère/mood. NE PAS ajouter de mots de qualité génériques (« cinématographique », « ultra-détaillé », « photoréaliste », « 4K »…) — le style visuel est géré séparément.
+- Rester FIDÈLE au scénario : enrichir le rendu visuel mais n'inventer aucun élément narratif (personnages, lieux, événements).
+- Structure recommandée : [personnage(s)] + [lieu/environnement] + [action] + [lumière/couleurs/textures/ambiance]
 - Si dialogue : inclure la réplique exacte entre guillemets dans le prompt
 
 RÈGLES GLOBALES :
@@ -368,8 +375,10 @@ RULES FOR THE SEEDANCE PROMPT (after →):
 - Always in ENGLISH
 - Never camera technique (already in the P01 line) — describe only subject, setting, action, mood
 - Characters referred to by NAME only — no physical description
-- Concise and evocative: 1 to 3 sentences. Sensations, light, textures, rhythm.
-- Recommended structure: [character(s)] + [location/environment] + [action] + [mood/light]
+- RICH and HIGHLY DETAILED: Seedance 2.0 yields far better results with dense prompts — do NOT be brief. 3 to 5 developed sentences.
+- Describe precisely: character(s) (by NAME), location/environment, action, lighting (direction, quality, color temperature), color palette, textures & materials, mood/atmosphere. Do NOT add generic quality words ("cinematic", "ultra-detailed", "photorealistic", "4K"…) — the visual style is handled separately.
+- Stay FAITHFUL to the screenplay: enrich the visual rendering but invent no new narrative element (characters, places, events).
+- Recommended structure: [character(s)] + [location/environment] + [action] + [light/color/textures/mood]
 - If dialogue: include the exact line in quotes within the prompt
 
 GLOBAL RULES:
@@ -392,6 +401,11 @@ def _arrange_screenplay_prompt(lang: str) -> str:
 def _storyboard_prompt(lang: str) -> str:
     prompt_lang = "English" if lang == "en" else "French (français)"
     return _GENERATE_STORYBOARD_TMPL.replace("{PROMPT_LANG}", prompt_lang)
+
+
+# Section TECHNIQUE déterministe (champs caméra) — centralisée dans prompt_sections
+# pour être partagée par le découpage ET le dialogue de plan (mise à jour instantanée).
+from core.prompt_sections import technique_line as _technique_line  # noqa: E402
 
 
 _EXTRACT_CHARACTERS = """\
@@ -423,7 +437,7 @@ Retourne UNIQUEMENT un tableau JSON valide. Chaque élément représente un déc
 {
   "name": <str — nom court du décor en français, ex: "Salle à manger", "Forêt enneigée">,
   "description": <str — description en FRANÇAIS de l'ambiance, de l'époque, du style visuel, 1-2 phrases>,
-  "prompt": <str — description visuelle ENRICHIE en français pour la génération d'image IA. Inclure OBLIGATOIREMENT : style architectural ou naturel précis (matériaux, époque, état dégradé/neuf), éclairage détaillé (heure du jour, source lumineuse, direction, intensité), palette de couleurs dominante, ambiance atmosphérique (météo, saison, humidité, fumée), détails de mise en scène caractéristiques (mobilier, végétation, objets), profondeur de champ suggérée. 4-6 phrases visuellement riches. Uniquement des descripteurs CONCRETS et VISUELS.>,
+  "prompt": <str — description visuelle ENRICHIE en français du LIEU SEUL pour la génération d'image IA. Inclure : style architectural ou naturel précis (matériaux, époque, état dégradé/neuf), palette de couleurs dominante, ambiance atmosphérique du lieu (météo, saison, humidité, fumée), mobilier FIXE et végétation, profondeur de champ suggérée. INTERDIT : AUCUNE intention d'éclairage (pas de projecteur, pas de direction ni d'intensité de lumière), AUCUN personnage ni figure humaine, AUCUN véhicule, aucun accessoire mobile — décor VIDE uniquement. 4-6 phrases, descripteurs CONCRETS et VISUELS du lieu.>,
   "category": <str — exactement une valeur parmi : "Intérieur", "Extérieur", "Studio", "Urbain", "Rural", "Aquatique", "Aérien", "Fantastique", "Industriel", "Historique", "Autre">,
   "scene_headers": <list[str] — liste des en-têtes de scène exacts (lignes INT./EXT.) du scénario où ce décor apparaît, ex: ["INT. SALLE À MANGER — JOUR", "INT. SALLE À MANGER — NUIT"]>
 }
@@ -586,25 +600,16 @@ class FormatScreenplayWorker(QThread):
         self._text = text
 
     def run(self):
-        cfg = load_config()
-        key = cfg.get("anthropic_key", "").strip()
-        if not key:
-            self.failed.emit("Clé API Anthropic manquante.\nConfigure-la dans Paramètres.")
+        from core.ai_provider import stream as ai_stream, key_error
+        err = key_error()
+        if err:
+            self.failed.emit(err)
             return
         try:
-            import anthropic
             lang = _get_lang()
-            client = anthropic.Anthropic(api_key=key)
-            full_text = ""
-            with client.messages.stream(
-                model=_MODEL,
-                max_tokens=8192,
-                system=_FORMAT_SCREENPLAY,
-                messages=[{"role": "user", "content": _lang_hint(lang) + self._text}],
-            ) as stream:
-                for text in stream.text_stream:
-                    full_text += text
-                    self.chunk.emit(text)
+            full_text = ai_stream(_FORMAT_SCREENPLAY, _lang_hint(lang) + self._text,
+                                  on_chunk=self.chunk.emit,
+                                  tier="creative", max_tokens=8192, task="screenplay")
             self.finished.emit(full_text.strip())
         except Exception as e:
             self.failed.emit(_fmt_err(e))
@@ -620,25 +625,17 @@ class FormatPandoraWorker(QThread):
         self._text = text
 
     def run(self):
-        cfg = load_config()
-        key = cfg.get("anthropic_key", "").strip()
-        if not key:
-            self.failed.emit("Clé API Anthropic manquante.\nConfigure-la dans Paramètres.")
+        from core.ai_provider import stream as ai_stream, key_error
+        err = key_error()
+        if err:
+            self.failed.emit(err)
             return
         try:
-            import anthropic
             lang = _get_lang()
-            client = anthropic.Anthropic(api_key=key)
-            full_text = ""
-            with client.messages.stream(
-                model=_MODEL,
-                max_tokens=16000,
-                system=_format_pandora_prompt(lang),
-                messages=[{"role": "user", "content": _lang_hint(lang) + self._text}],
-            ) as stream:
-                for text in stream.text_stream:
-                    full_text += text
-                    self.chunk.emit(text)
+            full_text = ai_stream(_format_pandora_prompt(lang),
+                                  _lang_hint(lang) + self._text,
+                                  on_chunk=self.chunk.emit,
+                                  tier="creative", max_tokens=16000, task="screenplay")
             self.finished.emit(full_text.strip())
         except Exception as e:
             self.failed.emit(_fmt_err(e))
@@ -751,15 +748,13 @@ class ArrangeScreenplayWorker(QThread):
         self._ref_analysis    = ref_analysis
 
     def run(self):
-        cfg = load_config()
-        key = cfg.get("anthropic_key", "").strip()
-        if not key:
-            self.failed.emit("Clé API Anthropic manquante.\nConfigure-la dans Paramètres.")
+        from core.ai_provider import stream as ai_stream, key_error
+        err = key_error()
+        if err:
+            self.failed.emit(err)
             return
         try:
-            import anthropic
             lang = _get_lang()
-            client = anthropic.Anthropic(api_key=key)
             prefixes = [_intensity_analyse_hint(self._intensity, lang)]
             if self._duration_secs > 0:
                 mins, secs = divmod(self._duration_secs, 60)
@@ -819,16 +814,9 @@ class ArrangeScreenplayWorker(QThread):
                     )
 
             user_content = _lang_hint(lang) + "\n\n".join(prefixes) + "\n\n" + self._text
-            full_text = ""
-            with client.messages.stream(
-                model=_MODEL,
-                max_tokens=4096,
-                system=_arrange_screenplay_prompt(lang),
-                messages=[{"role": "user", "content": user_content}],
-            ) as stream:
-                for text in stream.text_stream:
-                    full_text += text
-                    self.chunk.emit(text)
+            full_text = ai_stream(_arrange_screenplay_prompt(lang), user_content,
+                                  on_chunk=self.chunk.emit,
+                                  tier="creative", max_tokens=4096, task="screenplay")
             self.finished.emit(full_text)
         except Exception as e:
             self.failed.emit(_fmt_err(e))
@@ -847,15 +835,13 @@ class ApplyArrangeWorker(QThread):
         self._intensity   = max(1, min(10, intensity))
 
     def run(self):
-        cfg = load_config()
-        key = cfg.get("anthropic_key", "").strip()
-        if not key:
-            self.failed.emit("Clé API Anthropic manquante.\nConfigure-la dans Paramètres.")
+        from core.ai_provider import stream as ai_stream, key_error
+        err = key_error()
+        if err:
+            self.failed.emit(err)
             return
         try:
-            import anthropic
             lang = _get_lang()
-            client = anthropic.Anthropic(api_key=key)
             if lang == "en":
                 user_content = (
                     f"{_lang_hint(lang)}"
@@ -869,16 +855,9 @@ class ApplyArrangeWorker(QThread):
                     f"SCÉNARIO ORIGINAL :\n{self._text}\n\n"
                     f"SUGGESTIONS D'ARRANGEMENT :\n{self._suggestions}"
                 )
-            full_text = ""
-            with client.messages.stream(
-                model=_MODEL,
-                max_tokens=8192,
-                system=_APPLY_ARRANGE,
-                messages=[{"role": "user", "content": user_content}],
-            ) as stream:
-                for text in stream.text_stream:
-                    full_text += text
-                    self.chunk.emit(text)
+            full_text = ai_stream(_APPLY_ARRANGE, user_content,
+                                  on_chunk=self.chunk.emit,
+                                  tier="creative", max_tokens=8192, task="screenplay")
             self.finished.emit(full_text.strip())
         except Exception as e:
             self.failed.emit(_fmt_err(e))
@@ -897,15 +876,16 @@ class GenerateStoryboardWorker(QThread):
         self._element_names = element_names or {}
 
     def run(self):
-        cfg = load_config()
-        key = cfg.get("anthropic_key", "").strip()
-        if not key:
-            self.failed.emit("Clé API Anthropic manquante.\nConfigure-la dans Paramètres.")
+        from core.ai_provider import (complete as ai_complete, key_error,
+                                      ai_name_for_task)
+        # Nom du moteur réellement choisi pour le découpage (Paramètres → par tâche)
+        ai_name = lambda: ai_name_for_task("storyboard_gen")
+        err = key_error("storyboard_gen")
+        if err:
+            self.failed.emit(err)
             return
         try:
-            import anthropic
             lang = _get_lang()
-            client = anthropic.Anthropic(api_key=key)
 
             # Bloc noms exacts — injecté AVANT le scénario pour ancrer les noms
             names_block = ""
@@ -975,31 +955,49 @@ class GenerateStoryboardWorker(QThread):
                         f" plans plus longs pour les atmosphères et dialogues.]\n\n"
                     )
                 user_content = _lang_hint(lang) + names_block + budget_hint + self._text
-            msg = client.messages.create(
-                model=_MODEL_STORYBOARD,
-                max_tokens=16000,
-                system=_storyboard_prompt(lang),
-                messages=[{"role": "user", "content": user_content}],
-            )
-            raw = msg.content[0].text.strip()
+            raw = ai_complete(_storyboard_prompt(lang), user_content,
+                              tier="creative", max_tokens=16000, task="storyboard_gen").strip()
             start = raw.find("[")
             end   = raw.rfind("]") + 1
             if start == -1 or end == 0:
-                self.failed.emit("Réponse Claude invalide — pas de tableau JSON trouvé.")
+                self.failed.emit(f"Réponse {ai_name()} invalide — pas de tableau JSON trouvé.")
                 return
 
             json_str = raw[start:end]
             shots = _parse_shots_robust(json_str)
 
             if not shots:
-                self.failed.emit("Aucun plan extrait — la réponse Claude était mal formée.")
+                self.failed.emit(f"Aucun plan extrait — la réponse {ai_name()} était mal formée.")
                 return
 
+            # Assemble le prompt structuré en 7 sections étiquetées. L'IA renvoie
+            # des morceaux (action/staging/ambiance/decor/lighting + sound_prompt) ;
+            # Python construit le format exact ([🎬 ACTION]…). La TECHNIQUE vient des
+            # champs caméra. La MISE EN SCÈNE / le PLAN DE FEU sont un premier jet,
+            # raffinés ensuite par les pages dédiées (synchro).
+            from core.prompt_sections import build as _ps_build, LIGHTING_NOTE as _LN
             for s in shots:
                 s["duration"] = min(float(s.get("duration", 8.0)), 15.0)
                 s.setdefault("character_ids", [])
                 s.setdefault("accessory_ids", [])
                 s.setdefault("decor_id",      "")
+                # Repli : si l'IA a ignoré les champs de sections, récupérer l'ancien
+                # prompt à plat (ou les commentaires) comme ACTION.
+                _action = (s.get("action") or "").strip() \
+                    or (s.get("seedance_prompt") or "").strip() \
+                    or (s.get("comments") or "").strip()
+                _light = (s.get("lighting") or "").strip()
+                if _light:
+                    _light = f"{_light} {_LN}"
+                s["seedance_prompt"] = _ps_build(
+                    action=_action, staging=(s.get("staging") or "").strip(),
+                    ambiance=(s.get("ambiance") or "").strip(),
+                    decor=(s.get("decor") or "").strip(),
+                    lighting=_light, technique=_technique_line(s),
+                    sound=(s.get("sound_prompt") or "").strip(),
+                )
+                for _k in ("action", "staging", "ambiance", "decor", "lighting"):
+                    s.pop(_k, None)
 
             # Résolution automatique decor_name → decor_id
             try:
@@ -1043,21 +1041,14 @@ class GenerateStoryboardWorker(QThread):
 # ── Workers d'extraction ──────────────────────────────────────────────────────
 
 def _extract_worker(system_prompt: str, text: str, max_tokens: int = 4096) -> list:
-    """Shared extraction logic: call Claude, return parsed JSON list."""
-    cfg = load_config()
-    key = cfg.get("anthropic_key", "").strip()
-    if not key:
-        raise ValueError("Clé API Anthropic manquante.\nConfigure-la dans Paramètres.")
+    """Shared extraction logic: call the AI provider, return parsed JSON list."""
+    from core.ai_provider import complete as ai_complete, key_error
+    err = key_error()
+    if err:
+        raise ValueError(err)
     lang = _get_lang()
-    import anthropic
-    client = anthropic.Anthropic(api_key=key)
-    msg = client.messages.create(
-        model=_MODEL,
-        max_tokens=max_tokens,
-        system=system_prompt,
-        messages=[{"role": "user", "content": _lang_hint(lang) + text}],
-    )
-    raw = msg.content[0].text.strip()
+    raw = ai_complete(system_prompt, _lang_hint(lang) + text,
+                      tier="creative", max_tokens=max_tokens, task="extraction").strip()
     start = raw.find("[")
     end   = raw.rfind("]") + 1
     if start == -1 or end == 0:
@@ -1150,6 +1141,102 @@ class ExtractVehiclesWorker(QThread):
             self.failed.emit(_fmt_err(e))
 
 
+_RECURRENT_SYSTEM = (
+    "Tu es un assistant de découpage cinéma. On te donne les plans d'un storyboard, "
+    "groupés par SÉQUENCE. Identifie les CONFIGURATIONS CAMÉRA RÉCURRENTES : des plans "
+    "qui reviennent sur EXACTEMENT le même cadrage — même décor, même axe caméra et "
+    "même acteur à la même position dans le cadre (typiquement un champ/contrechamp qui "
+    "alterne entre deux cadrages fixes, ou un plan de coupe qui revient). "
+    "Un GROUPE = au moins 2 plans de la MÊME séquence partageant cette configuration. "
+    "Ne groupe JAMAIS des plans de séquences différentes ; ignore les plans uniques. "
+    "Réponds UNIQUEMENT par du JSON, sans aucun texte autour : "
+    '{"groups": [[3,5,7],[4,6]]} où chaque sous-liste contient les NUMÉROS de plan '
+    "d'un même groupe récurrent."
+)
+
+
+class AnalyzeRecurrentShotsWorker(QThread):
+    """Analyse le storyboard (Claude Haiku) pour repérer les CONFIGURATIONS CAMÉRA
+    RÉCURRENTES par séquence (même décor + axe + acteur à la même position,
+    champ/contrechamp) et colorer chaque groupe d'une couleur distincte. Repli
+    déterministe (core.recurrence.group_recurrent) sans clé IA ou en cas d'échec."""
+    done   = pyqtSignal(int)     # nombre de groupes récurrents colorés (PAS « finished »)
+    failed = pyqtSignal(str)
+
+    def __init__(self, version_id: str | None = None):
+        super().__init__()
+        self._vid = version_id
+
+    def run(self):
+        try:
+            import core.storyboard as sb
+            import core.recurrence as rec
+            vid = self._vid or sb.DEFAULT_VERSION_ID
+            shots = sb.list_shots(vid)
+            groups = None
+            try:
+                groups = self._ai_groups(shots)
+            except Exception:
+                groups = None
+            if not groups:
+                groups = rec.group_recurrent(shots)   # repli déterministe
+            self.done.emit(rec.apply_groups(groups, vid))
+        except Exception as e:
+            self.failed.emit(_fmt_err(e))
+
+    def _ai_groups(self, shots: list):
+        from core.ai_provider import complete as ai_complete, key_error
+        if key_error():
+            return None
+        num2id, lines_by_seq, order = {}, {}, []
+        for s in shots:
+            try:
+                num = int(s.get("number") or 0)
+            except (TypeError, ValueError):
+                continue
+            if not num or not s.get("id"):
+                continue
+            num2id[num] = s["id"]
+            seq = s.get("seq_num", 1)
+            if seq not in lines_by_seq:
+                lines_by_seq[seq] = []
+                order.append(seq)
+            lines_by_seq[seq].append(
+                f"- Plan {num} | décor: {s.get('decor_name', '?') or '?'} "
+                f"| axe: {s.get('camera_axis', '?') or '?'} "
+                f"| valeur: {s.get('shot_size', '?') or '?'} "
+                f"| acteurs: {', '.join(s.get('character_names', []) or []) or '—'} "
+                f"| placement caméra: {s.get('camera_placement', '') or '—'} "
+                f"| placement acteurs: {s.get('actor_placement', '') or '—'}")
+        if not num2id:
+            return None
+        user = "\n\n".join(f"SÉQUENCE {seq}\n" + "\n".join(lines_by_seq[seq])
+                           for seq in order)
+        raw = ai_complete(_RECURRENT_SYSTEM, user, tier="creative",
+                          max_tokens=2048, task="extraction").strip()
+        start, end = raw.find("{"), raw.rfind("}") + 1
+        if start == -1 or end <= 0:
+            return None
+        data = json.loads(raw[start:end])
+        out = []
+        for grp in data.get("groups", []):
+            if not isinstance(grp, list):
+                continue
+            ids, seen = [], set()
+            for n in grp:
+                try:
+                    nn = int(n)
+                except (TypeError, ValueError):
+                    continue
+                sid = num2id.get(nn)
+                if sid and sid not in seen:
+                    seen.add(sid)
+                    ids.append(sid)
+            if len(ids) >= 2:
+                out.append(ids)
+        return out or None
+
+
 class AnalyzeReferencesWorker(QThread):
     """Analyse multimodale d'images de référence via Claude Sonnet.
     Retourne une description enrichie des personnages/décors/ambiances détectés."""
@@ -1190,6 +1277,8 @@ class AnalyzeReferencesWorker(QThread):
             self.failed.emit("Clé API Anthropic manquante.\nConfigure-la dans Paramètres.")
             return
         try:
+            # VISION (images) : volontairement sur Anthropic, hors couche ai_provider —
+            # les autres fournisseurs gèrent la vision différemment (périmètre v1 = texte).
             import anthropic
             client = anthropic.Anthropic(api_key=key)
 
@@ -1197,11 +1286,10 @@ class AnalyzeReferencesWorker(QThread):
             for i, path in enumerate(self._paths):
                 if not __import__("os").path.isfile(path):
                     continue
-                mime, _ = mimetypes.guess_type(path)
-                if not mime or not mime.startswith("image/"):
-                    mime = "image/jpeg"
-                with open(path, "rb") as f:
-                    data = base64.standard_b64encode(f.read()).decode("utf-8")
+                # Redimensionne AVANT l'envoi (fix « 413 request_too_large » avec
+                # plusieurs photos pleine résolution) — voir core/image_payload.
+                from core.image_payload import encode_image_for_vision
+                mime, data = encode_image_for_vision(path)
                 if len(self._paths) > 1:
                     content.append({
                         "type": "text",
@@ -1358,6 +1446,47 @@ def _name_in_text(catalog_name: str, search_text: str) -> bool:
     return all(token in text_tokens for token in name_tokens)
 
 
+def _reassign_named(shot: dict, items: list, search_text: str,
+                    id_field: str, name_field: str, label: str) -> None:
+    """Ré-assigne une catégorie multi-éléments (accessoires / véhicules) d'un plan
+    par correspondance de nom : ajoute ceux cités dans le titre/prompt et corrige
+    les noms renommés. Les changements sont poussés dans shot['_reassigned'].
+    Symétrique de la logique personnages, factorisée pour accessoires + véhicules."""
+    existing = set(shot.get(id_field) or [])
+    for it in items:
+        name = it.get("name")
+        iid  = it.get("id")
+        if not name or not iid:
+            continue
+        if iid in existing:
+            # ID déjà présent — corriger le nom affiché si c'est un variant fuzzy.
+            cur = shot.get(name_field) or []
+            if name not in cur:
+                for i, old in enumerate(cur):
+                    if _same_name(old, name) and old != name:
+                        cur[i] = name
+                        shot["_reassigned"].append(f"{label} : {old} → {name}")
+                        break
+            continue
+        if _name_in_text(name, search_text):
+            shot.setdefault(id_field, [])
+            shot.setdefault(name_field, [])
+            if iid not in shot[id_field]:
+                shot[id_field].append(iid)
+                names = shot[name_field]
+                replaced = False
+                for i, old in enumerate(names):
+                    if _same_name(old, name) and old != name:
+                        names[i] = name
+                        shot["_reassigned"].append(f"{label} : {old} → {name}")
+                        replaced = True
+                        break
+                if not replaced:
+                    names.append(name)
+                    shot["_reassigned"].append(f"{label} : {name}")
+            existing.add(iid)
+
+
 # ── Synchronisation storyboard ↔ casting / décors / accessoires ───────────────
 
 _SYNC_STORYBOARD_SYSTEM = """\
@@ -1384,6 +1513,14 @@ doivent être cohérentes avec ce prompt de référence de séquence.
 - La lumière est une donnée de continuité : elle ne doit pas changer entre les plans \
 d'une même séquence sauf si une intention dramatique explicite l'impose.
 
+MISE EN SCÈNE & PLAN DE FEU :
+- Si un plan contient le champ "mise_en_scene" (non-vide), il décrit le placement réel
+  vu de dessus : axe caméra, position des acteurs (fond/milieu/avant × gauche/centre/droite)
+  et éclairage (lumières + type de projecteur).
+- Réécris alors le prompt pour COLLER à ce placement : qui est à gauche/droite/au fond,
+  l'axe caméra indiqué, et l'ambiance lumineuse décrite (direction et type des sources).
+- N'invente pas de positions absentes ; respecte exactement ce qui est fourni.
+
 - Réponds UNIQUEMENT en JSON valide, sans markdown, sans texte hors JSON
 
 FORMAT OBLIGATOIRE :
@@ -1407,15 +1544,59 @@ class SyncStoryboardWorker(QThread):
     finished = pyqtSignal(list)
     failed   = pyqtSignal(str)
 
-    def __init__(self, shots: list):
+    def __init__(self, shots: list, options: dict | None = None):
         super().__init__()
         self._shots = [dict(s) for s in shots]
+        # Options sélectionnées dans la fenêtre de synchronisation.
+        #   reassign        : ré-assignation noms (personnages / décors / accessoires)
+        #   resync_decors   : re-synchroniser les décors (assignation + nom à jour)
+        #   rewrite_prompts : réécriture IA des prompts incohérents
+        o = options or {}
+        self._opt_reassign  = o.get("reassign", True)
+        self._opt_decors    = o.get("resync_decors", True)
+        self._opt_prompts   = o.get("rewrite_prompts", True)
+        # Synchronisation par catégorie (parallèle à « re-synchroniser les décors »).
+        self._opt_casting     = o.get("sync_casting", False)
+        self._opt_accessories = o.get("sync_accessories", False)
+        self._opt_vehicles    = o.get("sync_vehicles", False)
+        # Sections structurées du prompt (mise en scène / plan de feu).
+        self._opt_staging   = o.get("sync_staging", False)
+        self._opt_lighting  = o.get("sync_lighting", False)
 
     def run(self):
         try:
             self._run()
         except Exception as e:
             self.failed.emit(f"Erreur synchronisation : {e}")
+
+    def _finish(self):
+        """Assemble (si demandé) le prompt en SECTIONS étiquetées — [ACTION] +
+        [MISE EN SCÈNE] + [PLAN DE FEU] + [SOUND DESIGN] — puis émet finished.
+        Déterministe : la mise en scène / le plan de feu viennent des données."""
+        if self._opt_staging or self._opt_lighting:
+            import core.staging as _staging
+            from core.prompt_sections import build as _build, parse as _parse
+            for shot in self._shots:
+                sid = shot.get("id", "")
+                cur = (shot.get("seedance_prompt") or "").strip()
+                sec = _parse(cur)                       # récupère l'action si déjà structuré
+                action = sec.get("action") or cur
+                staging_txt = _staging.staging_summary(sid) if self._opt_staging else sec.get("staging", "")
+                light_txt   = _staging.lighting_summary(sid) if self._opt_lighting else sec.get("lighting", "")
+                sound_txt   = sec.get("sound") or (shot.get("sound_prompt") or "").strip()
+                if not (staging_txt or light_txt):
+                    continue
+                new = _build(action=action, staging=staging_txt,
+                             ambiance=sec.get("ambiance", ""), decor=sec.get("decor", ""),
+                             lighting=light_txt, technique=sec.get("technique", ""),
+                             sound=sound_txt)
+                if new and new != cur:
+                    shot["seedance_prompt"] = new
+                    shot["_prompt_changed"] = True
+                    if not shot.get("_reason"):
+                        shot["_reason"] = "sections mise en scène / plan de feu"
+        self.progress.emit(100, "Synchronisation terminée")
+        self.finished.emit(self._shots)
 
     def _run(self):
         import core.casting as casting_api
@@ -1429,6 +1610,7 @@ class SyncStoryboardWorker(QThread):
         characters  = casting_api.list_characters()
         decors      = decors_api.list_decors()
         accessories = acc_api.list_accessories()
+        vehicles    = veh_api.list_vehicles()
 
         char_by_id   = {c["id"]: c for c in characters}
         char_by_name = {c["name"].lower(): c for c in characters if c.get("name")}
@@ -1436,19 +1618,58 @@ class SyncStoryboardWorker(QThread):
         decor_by_name = {d["name"].lower(): d for d in decors if d.get("name")}
         acc_by_name  = {a["name"].lower(): a for a in accessories if a.get("name")}
 
-        self.progress.emit(15, "Phase 1 — ré-assignation des éléments par nom…")
-
-        # ── Phase 1 : name matching ────────────────────────────────────────────
+        # Initialisation des champs meta sur tous les plans (toujours)
         for shot in self._shots:
             shot["_reassigned"]     = []
             shot["_prompt_changed"] = False
             shot["_old_prompt"]     = shot.get("seedance_prompt", "")
             shot["_reason"]         = ""
 
+        do_names  = self._opt_reassign or self._opt_casting
+        do_decors = self._opt_reassign or self._opt_decors
+        do_acc    = self._opt_reassign or self._opt_accessories
+        do_veh    = self._opt_vehicles  # véhicules : non couverts par « Réassigner les noms »
+
+        if do_names or do_decors or do_acc or do_veh:
+            self.progress.emit(15, "Phase 1 — ré-assignation des éléments par nom…")
+
+        # ── Phase 1 : name matching ────────────────────────────────────────────
+        for shot in self._shots:
             search_text = (
                 (shot.get("scene_title") or "") + " " +
                 (shot.get("seedance_prompt") or "")
             ).lower()
+
+            # ── Re-synchronisation des décors : rafraîchir le nom si la fiche a
+            #    été renommée (decor_id présent mais decor_name obsolète).
+            if self._opt_decors and shot.get("decor_id") in decor_by_id:
+                _d = decor_by_id[shot["decor_id"]]
+                if _d.get("name") and shot.get("decor_name") != _d["name"]:
+                    _old = shot.get("decor_name") or "—"
+                    shot["decor_name"] = _d["name"]
+                    shot["_reassigned"].append(f"décor : {_old} → {_d['name']}")
+
+            # Accessoires / véhicules : ré-assignation par nom — indépendante du
+            # casting/décor, donc traitée pour TOUS les plans (même si do_names off).
+            if do_acc:
+                _reassign_named(shot, accessories, search_text,
+                                "accessory_ids", "accessory_names", "accessoire")
+            if do_veh:
+                _reassign_named(shot, vehicles, search_text,
+                                "vehicle_ids", "vehicle_names", "véhicule")
+
+            if not do_names:
+                # Seuls les décors sont traités si la ré-assignation des noms est désactivée.
+                if do_decors and not shot.get("decor_id"):
+                    for decor in decors:
+                        if not decor.get("name"):
+                            continue
+                        if _name_in_text(decor["name"], search_text):
+                            shot["decor_id"]   = decor["id"]
+                            shot["decor_name"] = decor["name"]
+                            shot["_reassigned"].append(f"décor : {decor['name']}")
+                            break
+                continue
 
             existing_char_ids = set(shot.get("character_ids") or [])
             for char in characters:
@@ -1488,7 +1709,7 @@ class SyncStoryboardWorker(QThread):
                             old_names.append(canonical)
                             shot["_reassigned"].append(f"personnage : {canonical}")
 
-            if not shot.get("decor_id"):
+            if do_decors and not shot.get("decor_id"):
                 for decor in decors:
                     if not decor.get("name"):
                         continue
@@ -1497,6 +1718,11 @@ class SyncStoryboardWorker(QThread):
                         shot["decor_name"] = decor["name"]
                         shot["_reassigned"].append(f"décor : {decor['name']}")
                         break
+
+        # ── Phase 2 désactivée : on s'arrête après la ré-assignation ──────────
+        if not self._opt_prompts:
+            self._finish()   # assemble les sections (mise en scène / plan de feu) si demandé
+            return
 
         self.progress.emit(30, "Phase 2 — préparation des données pour Claude Haiku…")
 
@@ -1527,6 +1753,8 @@ class SyncStoryboardWorker(QThread):
                 if p:
                     seq_ref[sn] = p[:300]  # 300 chars suffisent pour la lumière
 
+        import core.staging as _staging
+
         shots_payload = []
         for shot in self._shots:
             chars = [_cdesc(cid) for cid in (shot.get("character_ids") or [])
@@ -1538,9 +1766,15 @@ class SyncStoryboardWorker(QThread):
                 if acc_by_name.get(n.lower(), {}).get("description")
             ]
 
+            try:
+                stg_summary = _staging.summary(shot.get("id", ""))
+            except Exception:
+                stg_summary = ""
+
             has_elements = bool(chars or decor_el or acc_els)
             prompt = (shot.get("seedance_prompt") or "").strip()
-            if not has_elements or not prompt:
+            # On traite le plan s'il a des éléments OU une mise en scène définie.
+            if (not has_elements and not stg_summary) or not prompt:
                 continue
 
             sn = str(shot.get("seq_num") or "").strip()
@@ -1556,33 +1790,27 @@ class SyncStoryboardWorker(QThread):
             }
             if sn and sn in seq_ref:
                 entry["seq_lighting_ref"] = seq_ref[sn]
+            if stg_summary:
+                entry["mise_en_scene"] = stg_summary
             shots_payload.append(entry)
 
         if not shots_payload:
-            self.progress.emit(100, "Aucun prompt à synchroniser (aucun élément assigné avec description)")
-            self.finished.emit(self._shots)
+            self.progress.emit(60, "Aucun prompt à réécrire — assemblage des sections…")
+            self._finish()
             return
 
-        cfg = load_config()
-        key = cfg.get("anthropic_key", "").strip()
-        if not key:
-            self.failed.emit("Clé API Anthropic manquante.\nConfigure-la dans Paramètres.")
+        from core.ai_provider import complete as ai_complete, key_error, ai_name
+        err = key_error()
+        if err:
+            self.failed.emit(err)
             return
 
-        import anthropic
-        client = anthropic.Anthropic(api_key=key)
         payload_str = json.dumps({"shots": shots_payload}, ensure_ascii=False, indent=2)
 
-        self.progress.emit(50, f"Claude Haiku analyse {len(shots_payload)} plan(s)…")
+        self.progress.emit(50, f"{ai_name()} analyse {len(shots_payload)} plan(s)…")
 
-        msg = client.messages.create(
-            model="claude-haiku-4-5",
-            max_tokens=8192,
-            system=_SYNC_STORYBOARD_SYSTEM,
-            messages=[{"role": "user", "content": payload_str}],
-        )
-
-        raw = msg.content[0].text.strip()
+        raw = ai_complete(_SYNC_STORYBOARD_SYSTEM, payload_str,
+                          tier="utility", max_tokens=8192, task="sync").strip()
         # Nettoyer le markdown si Claude en ajoute malgré les instructions
         if "```" in raw:
             parts = raw.split("```")
@@ -1610,8 +1838,231 @@ class SyncStoryboardWorker(QThread):
                 shot["_reason"]         = upd.get("reason", "")
                 shot["seedance_prompt"] = upd.get("prompt", shot.get("seedance_prompt", ""))
 
-        self.progress.emit(100, "Synchronisation terminée")
-        self.finished.emit(self._shots)
+        self.progress.emit(90, "Assemblage des sections…")
+        self._finish()
+
+
+# ── Réécriture du scénario depuis le storyboard ───────────────────────────────
+
+_REWRITE_SCENARIO_SYSTEM = """\
+Tu es un scénariste professionnel. On te fournit un découpage technique (storyboard) \
+sous forme de liste de plans, dans l'ordre, groupés par séquence. À partir de ces plans, \
+reconstitue un SCÉNARIO littéraire complet et cohérent, au format cinéma français standard.
+
+RÈGLES :
+- Respecte STRICTEMENT l'ordre des séquences et des plans fournis.
+- Pour chaque séquence, écris un en-tête de scène (ex. « SÉQUENCE 1 — INT. SALON — JOUR ») \
+en t'appuyant sur le décor et l'heure indiqués.
+- Transforme les actions, descriptions et intentions des plans en prose d'action fluide \
+(présent de narration), sans jargon technique (pas de « plan large », « travelling »…).
+- Si des dialogues sont présents (texte entre guillemets dans les prompts/commentaires), \
+intègre-les en format dialogue avec le nom du personnage en majuscules.
+- N'invente pas d'événements majeurs absents du storyboard, mais lie les plans entre eux \
+de façon naturelle et lisible.
+- Conserve les noms exacts des personnages et des lieux.
+- Écris en français.
+- Réponds UNIQUEMENT avec le texte du scénario, sans préambule, sans markdown, sans commentaire.
+"""
+
+
+class RewriteScreenplayFromStoryboardWorker(QThread):
+    """Reconstruit un scénario littéraire à partir du découpage storyboard (Claude).
+
+    Émet finished(str) avec le texte du scénario reconstruit. Ne touche à AUCUNE
+    donnée : la sauvegarde (en nouvelle version) est gérée par l'appelant.
+    """
+    progress = pyqtSignal(int, str)
+    finished = pyqtSignal(str)
+    failed   = pyqtSignal(str)
+
+    def __init__(self, shots: list):
+        super().__init__()
+        self._shots = [dict(s) for s in shots]
+
+    def run(self):
+        try:
+            self._run()
+        except Exception as e:
+            self.failed.emit(f"Erreur réécriture scénario : {e}")
+
+    def _run(self):
+        from core.ai_provider import complete as ai_complete, key_error, ai_name
+
+        err = key_error()
+        if err:
+            self.failed.emit(err)
+            return
+
+        self.progress.emit(10, "Lecture du storyboard…")
+
+        # Groupe les plans par séquence dans l'ordre rencontré.
+        seqs: list[dict] = []
+        seq_index: dict[str, dict] = {}
+        for shot in self._shots:
+            sn = str(shot.get("seq_num") or "1").strip() or "1"
+            if sn not in seq_index:
+                grp = {
+                    "seq_num":  sn,
+                    "seq_name": shot.get("seq_name", ""),
+                    "shots":    [],
+                }
+                seq_index[sn] = grp
+                seqs.append(grp)
+            seq_index[sn]["shots"].append({
+                "number":     shot.get("number", ""),
+                "action":     shot.get("scene_title", ""),
+                "decor":      shot.get("decor_name", ""),
+                "heure":      shot.get("shot_time", ""),
+                "personnages": shot.get("character_names", []),
+                "accessoires": shot.get("accessory_names", []),
+                "commentaire": shot.get("comments", ""),
+                "prompt":      shot.get("seedance_prompt", ""),
+            })
+
+        if not seqs:
+            self.failed.emit("Aucun plan dans le storyboard.")
+            return
+
+        payload = json.dumps({"sequences": seqs}, ensure_ascii=False, indent=2)
+
+        self.progress.emit(45, f"{ai_name()} réécrit le scénario…")
+
+        text = ai_complete(_REWRITE_SCENARIO_SYSTEM, payload,
+                           tier="creative", max_tokens=8192, task="sync").strip()
+
+        # Nettoyage d'un éventuel bloc markdown.
+        if text.startswith("```"):
+            parts = text.split("```")
+            text = max((p for p in parts), key=len).strip()
+            for pre in ("text", "txt", "markdown"):
+                if text.lower().startswith(pre):
+                    text = text[len(pre):].lstrip()
+
+        if not text:
+            self.failed.emit("Le scénario reconstruit est vide.")
+            return
+
+        self.progress.emit(100, "Scénario reconstruit")
+        self.finished.emit(text)
+
+
+# ── Chat Storyboard — modification du découpage par conversation ──────────────
+
+# Champs du plan que le chat est autorisé à modifier (liste blanche stricte).
+STORYBOARD_CHAT_FIELDS = [
+    "scene_title", "seedance_prompt", "sound_prompt",
+    "camera_movement", "shot_size", "focal", "speed",
+    "decor_name", "shot_time", "duration", "comments",
+    "camera_axis", "camera_placement", "actor_placement",
+    "character_names", "accessory_names", "dialogue_lang",
+]
+
+_STORYBOARD_CHAT_SYSTEM = """\
+Tu es l'assistant de découpage d'un réalisateur, branché en direct sur son STORYBOARD.
+Tu reçois le storyboard complet (liste de plans en JSON) et un message du réalisateur.
+
+TON RÔLE :
+- Si le réalisateur POSE UNE QUESTION ou demande une analyse → réponds en texte, AUCUNE modification.
+- Si le réalisateur DEMANDE UNE MODIFICATION → applique EXACTEMENT ce qu'il demande, RIEN DE PLUS.
+
+RÈGLE D'OR — CHIRURGIE STRICTE :
+- Ne modifie QUE ce qui est explicitement demandé. Si on te demande de changer une seule
+  phrase de dialogue dans le plan 3, tu ne touches QUE cette phrase, dans CE plan.
+- Tout le reste du champ (et tous les autres plans) est conservé MOT POUR MOT.
+- N'invente jamais une modification que le réalisateur n'a pas demandée.
+- Ne reformule pas, ne « améliore » pas, ne corrige pas hors de la zone ciblée.
+- En cas de doute sur le plan ou le champ visé, NE MODIFIE RIEN et demande une précision.
+
+IDENTIFICATION DES PLANS :
+- Réfère-toi aux plans par leur "number" (numéro affiché). Utilise "id" dans ta réponse JSON.
+
+CHAMPS MODIFIABLES (aucun autre) :
+%s
+
+FORMAT DE RÉPONSE — JSON STRICT, sans markdown, sans texte hors JSON :
+{
+  "reply": "<ta réponse en français au réalisateur, courte et claire>",
+  "edits": [
+    {"id": "<id du plan>", "number": "<numéro affiché>", "field": "<champ>",
+     "value": "<nouvelle valeur COMPLÈTE du champ>", "summary": "<résumé court FR de ce qui change>"}
+  ]
+}
+- "edits" est une liste VIDE [] si aucune modification n'est demandée.
+- "value" doit contenir la valeur ENTIÈRE du champ après modification (pas un fragment).
+- Garde la même langue que le contenu d'origine du champ.
+""" % ("\n".join(f"  - {f}" for f in STORYBOARD_CHAT_FIELDS))
+
+
+class StoryboardChatWorker(QThread):
+    """Chat connecté au storyboard : lit tout le découpage, répond au réalisateur
+    et renvoie des éditions CHIRURGICALES (uniquement ce qui est demandé).
+
+    finished(dict) → {"reply": str, "edits": [ {id, number, field, value, summary} ]}
+    """
+    finished = pyqtSignal(dict)
+    failed   = pyqtSignal(str)
+
+    def __init__(self, message: str, shots: list, history: list | None = None):
+        super().__init__()
+        self._message = message
+        self._shots   = [dict(s) for s in shots]
+        self._history = list(history or [])
+
+    def run(self):
+        try:
+            self._run()
+        except Exception as e:
+            self.failed.emit(f"Erreur chat storyboard : {e}")
+
+    def _run(self):
+        from core.ai_provider import chat as ai_chat, key_error
+        err = key_error("storyboard_chat")
+        if err:
+            self.failed.emit(err)
+            return
+
+        # Payload : uniquement les champs utiles + id/number pour cibler les plans.
+        payload_shots = []
+        for s in self._shots:
+            entry = {"id": s.get("id", ""), "number": s.get("number", "")}
+            for f in STORYBOARD_CHAT_FIELDS:
+                if f in s and s.get(f) not in (None, ""):
+                    entry[f] = s.get(f)
+            payload_shots.append(entry)
+
+        sb_json = json.dumps({"shots": payload_shots}, ensure_ascii=False)
+        user_msg = (
+            f"STORYBOARD ACTUEL :\n{sb_json}\n\n"
+            f"MESSAGE DU RÉALISATEUR :\n{self._message}"
+        )
+
+        messages = self._history + [{"role": "user", "content": user_msg}]
+        raw = ai_chat(_STORYBOARD_CHAT_SYSTEM, messages,
+                      tier="utility", max_tokens=4096, task="storyboard_chat").strip()
+
+        # Nettoyage markdown éventuel.
+        if "```" in raw:
+            for part in raw.split("```"):
+                cand = part.lstrip("json").strip()
+                if cand.startswith("{"):
+                    raw = cand
+                    break
+
+        try:
+            result = json.loads(raw)
+        except json.JSONDecodeError:
+            # Pas de JSON exploitable → on renvoie la réponse brute sans édition.
+            self.finished.emit({"reply": raw, "edits": []})
+            return
+
+        reply = str(result.get("reply", "")).strip()
+        edits = result.get("edits", []) or []
+        # Filtre les éditions sur la liste blanche des champs.
+        clean_edits = [
+            e for e in edits
+            if isinstance(e, dict) and e.get("field") in STORYBOARD_CHAT_FIELDS
+        ]
+        self.finished.emit({"reply": reply, "edits": clean_edits})
 
 
 # ── Session de chat interactif — co-écriture arrangement ──────────────────────
@@ -1711,15 +2162,13 @@ class ArrangeChatWorker(QThread):
 
     def run(self):
         try:
-            cfg = load_config()
-            key = cfg.get("anthropic_key", "").strip()
-            if not key:
-                self.failed.emit("Clé API Anthropic manquante — configure-la dans Paramètres.")
+            from core.ai_provider import chat as ai_chat, key_error
+            err = key_error()
+            if err:
+                self.failed.emit(err)
                 return
 
-            import anthropic
             lang = _get_lang()
-            client = anthropic.Anthropic(api_key=key)
 
             if lang == "en":
                 context_block = (
@@ -1775,13 +2224,22 @@ class ArrangeChatWorker(QThread):
                 else:
                     messages.append({"role": "user", "content": self._user_message})
 
-            response = client.messages.create(
-                model=_MODEL,
-                max_tokens=8192,
-                system=_arrange_chat_system(self._intensity),
-                messages=messages,
-            )
-            raw = response.content[0].text.strip()
+            if self._ref_images:
+                # VISION (images jointes) : direct Anthropic — hors couche ai_provider
+                # (les autres fournisseurs gèrent la vision différemment ; périmètre v1 = texte).
+                import anthropic
+                from core.config import load_config as _lc
+                client = anthropic.Anthropic(api_key=_lc().get("anthropic_key", "").strip())
+                response = client.messages.create(
+                    model=_MODEL,
+                    max_tokens=8192,
+                    system=_arrange_chat_system(self._intensity),
+                    messages=messages,
+                )
+                raw = response.content[0].text.strip()
+            else:
+                raw = ai_chat(_arrange_chat_system(self._intensity), messages,
+                              tier="creative", max_tokens=8192, task="screenplay").strip()
 
             # Split sur les marqueurs
             chat_msg   = ""

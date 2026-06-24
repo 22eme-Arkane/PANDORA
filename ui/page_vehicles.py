@@ -9,6 +9,7 @@ from ui.styles import CP
 from ui.icons import load_icon
 from ui.widgets import HelpBlock
 import core.vehicles as veh_api
+from ui.element_io_buttons import make_save_open_buttons, toolbar_separator
 from core.vehicles import CATEGORIES
 from ui.dialog_vehicle import VehicleDialog
 
@@ -255,6 +256,21 @@ class PageVehicles(QWidget):
         )
         self._search.textChanged.connect(self._apply_filter)
         lay.addWidget(self._search)
+
+        # Sauvegarder / Ouvrir des véhicules — à côté de la barre de recherche.
+        self._btn_save_file, self._btn_open_file = make_save_open_buttons(
+            self, kind="vehicles",
+            list_fn=veh_api.list_vehicles,
+            save_fn=veh_api.save_vehicle,
+            delete_fn=veh_api.delete_vehicle,
+            refresh_fn=self.refresh)
+        lay.addWidget(self._btn_save_file)
+        lay.addWidget(self._btn_open_file)
+
+        # Séparateur (espace + trait) entre le groupe fichier et « Créer ».
+        lay.addSpacing(6)
+        lay.addWidget(toolbar_separator())
+        lay.addSpacing(6)
 
         btn_new = QPushButton("✦  Créer un véhicule")
         btn_new.setFixedHeight(36)

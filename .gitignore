@@ -32,9 +32,34 @@ data/camera_prefs.json
 data/recent_projects.json
 data/migrated_*.flag
 data/Seedance/
+data/music/
+data/sound_design/
+data/staging/
+data/decor_sync/
+data/Storyboard/
+data/Scénario/
+data/Image IA/
+data/.transcode/
+data/upscaled/
+
+# Données PANDORA | Live générées
+data/live_seq_*/
+data/live_assets/
+data/live_sound_design/
+data/upscaled/
+data/live_building_ref.json
+data/facade_fond_noir.jpg
+data/live_ref_library/
+data/image_library/
 
 # Conserver uniquement le template vierge
 !data/config.clean.json
+
+# Studio Images — clés API + sorties + données perso (jamais commitées)
+studio_images/config.json
+studio_images/prompts.json
+studio_images/refs/
+studio_images/output/
 
 # ── Claude Code (fichiers internes) ──────────────────────────────────────────
 .claude/
@@ -77,3 +102,11 @@ PANDORA_DEVLOG.md
 # ── Test et debug ─────────────────────────────────────────────────────────────
 test_*.py
 debug_*.py
+# … mais les harnais de non-régression SONT versionnés
+!tools/test_live.py
+!tools/test_cinema.py
+
+# ── Binaires locaux (jamais commités) ────────────────────────────────────────
+ffmpeg.exe
+ffprobe.exe
+tools/audit_i18n_result.txt

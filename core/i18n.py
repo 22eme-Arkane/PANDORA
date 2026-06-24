@@ -19,12 +19,14 @@ _T: dict[str, dict[str, str]] = {
     "nav.projects":    {"fr": "Projets",         "en": "Projects"},
     "nav.scenario":    {"fr": "Scénario",         "en": "Screenplay"},
     "nav.storyboard":  {"fr": "Storyboard",       "en": "Storyboard"},
+    "nav.mise_en_scene": {"fr": "Mise en scène",  "en": "Staging"},
     "nav.castings":    {"fr": "Castings",          "en": "Cast"},
     "nav.decors":      {"fr": "Décors",            "en": "Locations"},
     "nav.accessories": {"fr": "Accessoires",       "en": "Props"},
     "nav.hmc":         {"fr": "HMC",               "en": "HMC"},
     "nav.vehicles":    {"fr": "Véhicules",         "en": "Vehicles"},
     "nav.camera":      {"fr": "Image & Son",       "en": "Camera & Sound"},
+    "nav.plan_de_feu": {"fr": "Plan de feu",       "en": "Lighting plan"},
     "nav.doublage":    {"fr": "Doublage",          "en": "Dubbing"},
     "nav.seedance":    {"fr": "Studio IA",          "en": "AI Studio"},
     "nav.settings":    {"fr": "Paramètres",        "en": "Settings"},
@@ -58,10 +60,558 @@ _T: dict[str, dict[str, str]] = {
 
 _FR_TO_EN: dict[str, str] = {
 
+    # ── PANDORA | Live ───────────────────────────────────────────────────────
+    # Sélecteur de module (chooser)
+    "Choisissez votre espace de travail":  "Choose your workspace",
+    "Cinéma":                              "Cinema",
+    "Live":                                "Live",
+    "Prochainement":                       "Coming soon",
+    "Pré-production IA\nScénario · Storyboard · DaVinci":
+        "AI pre-production\nScreenplay · Storyboard · DaVinci",
+    "Performance live\nVJ · Mapping":      "Live performance\nVJ · Mapping",
+    # Splash (mode Live)
+    "‹  Retour":                           "‹  Back",
+    "Performance live · Mapping · VJ":     "Live performance · Mapping · VJ",
+    "PROJETS RÉCENTS — LIVE":              "RECENT PROJECTS — LIVE",
+    "PROJETS RÉCENTS — CINÉMA":            "RECENT PROJECTS — CINEMA",
+    # Sidebar Live
+    "Styles VJ":                           "VJ Styles",
+    "Mapping":                             "Mapping",
+    "Resolume":                            "Resolume",
+    # Page Bibliothèque de styles VJ
+    "Bibliothèque de styles VJ":           "VJ Style Library",
+    "Presets visuels prêts à générer pour vos performances live.":
+        "Visual presets ready to generate for your live performances.",
+    "styles":                              "styles",
+    "Sélectionnez un style et cliquez Générer.":
+        "Select a style and click Generate.",
+    "Boucle":                              "Loop",
+    "Génération (démo) :":                 "Generation (demo):",
+    "câblage des moteurs vidéo à venir.":  "video engine wiring coming soon.",
+    # Page Mapping (placeholder)
+    "Mapping vidéo":                       "Video Mapping",
+    "Bientôt disponible":                  "Coming soon",
+    "Le mapping assistera la préparation de vos projections : import d'une "
+    "photo du lieu, détection automatique des zones, puis export vers votre "
+    "logiciel de mapping. Cette partie sera développée prochainement.":
+        "Mapping will assist the preparation of your projections: import a photo "
+        "of the venue, automatically detect zones, then export to your mapping "
+        "software. This part will be developed soon.",
+    # Assistant — corpus Live
+    "Styles VJ — Bibliothèque":            "VJ Styles — Library",
+    "Galerie de presets visuels pour le live et le VJing.":
+        "Gallery of visual presets for live and VJing.",
+    "Chaque carte est un style prêt à générer.":
+        "Each card is a style ready to generate.",
+    "La génération réutilisera les moteurs vidéo de PANDORA (Seedance, Kling…).":
+        "Generation will reuse PANDORA's video engines (Seedance, Kling…).",
+    "Les styles en boucle sont pensés pour tourner en continu.":
+        "Looping styles are designed to run continuously.",
+    "Mapping vidéo (à venir).":            "Video mapping (coming soon).",
+    "Préparation assistée du mapping de projection.":
+        "Assisted preparation of projection mapping.",
+    "Contrôle de composition Resolume — expérimental.":
+        "Resolume composition control — experimental.",
+    # Vidéothèque Live
+    "Vidéothèque":                         "Video library",
+    "Historique":                          "History",
+    "Lire":                                "Play",
+    "Vidéothèque Live — loops & vidéos générés":
+        "Live Library — generated loops & videos",
+    "▸ Retrouvez ici tous les loops et vidéos générés pour ce live.":
+        "▸ Find here all the loops and videos generated for this live set.",
+    "▸ ▶ Lire ouvre la vidéo dans votre lecteur par défaut.":
+        "▸ ▶ Play opens the video in your default player.",
+    "▸ ⤷ Modifier envoie le clip vers l'onglet « Modifier ».":
+        "▸ ⤷ Edit sends the clip to the “Edit” tab.",
+    "▸ → Resolume bascule vers l'onglet Resolume pour le charger dans un slot.":
+        "▸ → Resolume switches to the Resolume tab to load it into a slot.",
+    "Envoyer vers l'onglet Modifier (Live)":  "Send to the Edit tab (Live)",
+    "Charger ce clip dans Resolume":          "Load this clip into Resolume",
+    "Tri :":                               "Sort:",
+    "vidéo(s)":                            "video(s)",
+    "Aucune vidéo générée pour ce live.\nLancez une génération depuis « Génération directe ».":
+        "No video generated for this live set.\nStart a generation from “Direct generation”.",
+    # Onglet Modifier (Live)
+    "Modifier un clip (Live)":             "Edit a clip (Live)",
+    "▸ Envoyez un clip depuis la Vidéothèque (⤷ Modifier).":
+        "▸ Send a clip from the Library (⤷ Edit).",
+    "▸ Choisissez un style, écrivez la modification souhaitée, puis générez.":
+        "▸ Pick a style, write the desired change, then generate.",
+    "▸ Le clip source est utilisé comme référence — Seedance en produit une nouvelle version.":
+        "▸ The source clip is used as reference — Seedance produces a new version.",
+    "Clip à modifier":                     "Clip to edit",
+    "Aucun clip — envoyez-en un depuis la Vidéothèque.":
+        "No clip — send one from the Library.",
+    "Prompt de modification":              "Edit prompt",
+    "Décrivez la modification… (FR accepté, traduit automatiquement)":
+        "Describe the change… (FR accepted, auto-translated)",
+    "Moteur de génération":                "Generation engine",
+    "Durée : 5 s":                         "Duration: 5 s",
+    "Durée :":                             "Duration:",
+    "Générer la modification":             "Generate the edit",
+    "Génération en cours…":                "Generating…",
+    "Aucun clip":                          "No clip",
+    "Envoyez d'abord un clip depuis la Vidéothèque.":
+        "First send a clip from the Library.",
+    "Terminé (mode démo — aucune clé fal.ai)":
+        "Done (demo mode — no fal.ai key)",
+    "✓  Terminé (mode démo — aucune clé fal.ai)":
+        "✓  Done (demo mode — no fal.ai key)",
+    "Téléchargement échoué :":             "Download failed:",
+    "Ouvrir le dossier":                   "Open folder",
+    "Actualiser":                          "Refresh",
+    "Onglet conservé pour évaluation — non prioritaire.":
+        "Tab kept for evaluation — not a priority.",
+    "Paramètres du module Live.":          "Live module settings.",
+    # Studio IA / Séquences Live
+    "Template de style":                   "Style template",
+    "Aucun style":                         "No style",
+    "Images de référence":                 "Reference images",
+    "Ajouter une image de référence":      "Add a reference image",
+    "Mapping source":                      "Mapping source",
+    "Ajouter l'image à mapper":            "Add the image to map",
+    "Contexte injecté":                    "Injected context",
+    "prompt vide":                         "empty prompt",
+    "image(s) jointe(s) en référence":     "reference image(s) attached",
+    "dont mapping verrouillé":             "incl. locked mapping",
+    "traduction automatique en anglais avant envoi":
+        "automatic translation to English before sending",
+    "Image du lieu/objet à mapper — gardée identique (caméra fixe). "
+    "Seuls lumière, ambiance et fond peuvent changer via le prompt.":
+        "Image of the place/object to map — kept identical (locked camera). "
+        "Only lighting, atmosphere and background may change via the prompt.",
+    "Générer depuis Séquences":            "Generate from Sequences",
+    # Nav Live (nouvelles sections)
+    "Conducteur":                          "Rundown",
+    "Séquences Live":                      "Live Sequences",
+    "Séquences Mapping":                   "Mapping Sequences",
+    "Outils de mapping":                   "Mapping tools",
+    "Contrôleur Resolume":                 "Resolume controller",
+    # Pages Casting / Accessoires / Véhicules Live
+    "Ajouter un personnage":               "Add a character",
+    "Ajouter un accessoire":               "Add a prop",
+    "Ajouter un véhicule":                 "Add a vehicle",
+    "Nom du personnage":                   "Character name",
+    "Nom de l'accessoire":                 "Prop name",
+    "Nom du véhicule":                     "Vehicle name",
+    "Rôle / type":                         "Role / type",
+    "Catégorie":                           "Category",
+    "Apparence, costume, style visuel…":   "Appearance, costume, visual style…",
+    "Matière, couleur, état…":             "Material, color, condition…",
+    "Marque, modèle, couleur, état…":      "Make, model, color, condition…",
+    "Aucun élément. Cliquez « + » pour en créer un.":
+        "No item yet. Click “+” to create one.",
+    "Nouvel élément":                      "New item",
+    "Nom":                                 "Name",
+    "Générer une image":                   "Generate an image",
+    "Ajouter une image":                   "Add an image",
+    "Nom requis":                          "Name required",
+    "Donnez un nom à l'élément.":          "Give the item a name.",
+    "Donnez un nom avant d'ajouter des images.":
+        "Give a name before adding images.",
+    "Choisir une ou plusieurs images":     "Choose one or more images",
+    "Description requise":                 "Description required",
+    "Décrivez l'élément pour générer une image.":
+        "Describe the item to generate an image.",
+    # Conducteur
+    "Mode :":                              "Mode:",
+    "Conducteur enregistré.":              "Rundown saved.",
+    "Générer le découpage avec Claude":    "Generate the breakdown with Claude",
+    "Trame vide":                          "Empty outline",
+    "Écrivez la trame de votre performance d'abord.":
+        "Write the outline of your performance first.",
+    "Génération du découpage avec Claude…": "Generating the breakdown with Claude…",
+    "Génération du découpage via Claude…":  "Generating the breakdown via Claude…",
+    # Gabarits dynamiques : {ai} = nom du moteur choisi pour la tâche storyboard_gen
+    "Génération du découpage via {ai}…":   "Generating the breakdown via {ai}…",
+    "Analyse du scénario via {ai}":        "Analyzing the screenplay via {ai}",
+    "Analyse du scénario via {ai}…":       "Analyzing the screenplay via {ai}…",
+    # Décor 7 vues — avertissement faces manquantes
+    "Vues manquantes":                     "Missing views",
+    "Certaines faces de décor n'ont pas pu être générées par l'API :":
+        "Some set faces could not be generated by the API:",
+    "Relancez la génération du décor — c'est souvent une limite de débit temporaire de l'API d'images.":
+        "Re-run the set generation — this is often a temporary rate limit of the image API.",
+    "segments générés →":                  "segments generated →",
+    "Mise en page du conducteur via Claude…": "Formatting the rundown via Claude…",
+    "Mise en page PANDORA":                "PANDORA layout",
+    "Mise en page PANDORA générée ✓":      "PANDORA layout generated ✓",
+    "Clique « Mise en page PANDORA » (panneau de droite) pour générer ici la "
+    "version optimisée pour les moteurs : plans découpés + prompts prêts pour Seedance. "
+    "Ton conducteur, lui, reste intact dans l'onglet Conducteur.":
+        "Click “PANDORA layout” (right panel) to generate here the engine-optimized "
+        "version: broken-down shots + Seedance-ready prompts. Your rundown stays intact "
+        "in the Rundown tab.",
+    "Arrangement du conducteur via Claude…":  "Arranging the rundown via Claude…",
+    "Conducteur mis à jour par Claude ✓":  "Rundown updated by Claude ✓",
+    "♫  Musiques du set":                  "♫  Set music",
+    # ── Cinéma : musique du film (renommage + choix film/clip) ─────────────────
+    "♫  Musique du film":                  "♫  Film music",
+    "Analyser la musique (BPM + drops)":   "Analyze music (BPM + drops)",
+    "Ajoute d'abord des morceaux dans « Musique du film ».":
+        "First add tracks in “Film music”.",
+    "Analyse musicale du film":            "Film music analysis",
+    "Type de musique":                     "Music type",
+    "Comment intégrer cette musique ?":    "How should this music be used?",
+    "Musique de film":                     "Film music",
+    "Intégrée à des MOMENTS CLÉS du film (climax, transitions) — pas en continu.":
+        "Placed at KEY MOMENTS of the film (climax, transitions) — not continuous.",
+    "Musique de clip":                     "Clip music",
+    "Couvre le scénario du DÉBUT À LA FIN — le découpage suit la musique.":
+        "Covers the script from START TO END — the breakdown follows the music.",
+    "Analyser le set (BPM + drops)":       "Analyze set (BPM + drops)",
+    "Cale le découpage sur la musique (tempo + temps forts)":
+        "Sync the breakdown to the music (tempo + peaks)",
+    "Ajouter des morceaux (mp3/wav…)\nClaude calera le découpage sur leur BPM et leurs drops.":
+        "Add tracks (mp3/wav…)\nClaude will sync the breakdown to their BPM and drops.",
+    "non analysé":                         "not analyzed",
+    "Ajouter des morceaux":                "Add tracks",
+    "Morceau(x) ajouté(s) — clique « Analyser le set » pour détecter BPM et drops.":
+        "Track(s) added — click “Analyze set” to detect BPM and drops.",
+    "Ajoute d'abord des morceaux dans « Musiques du set ».":
+        "First add tracks in “Set music”.",
+    "Analyse audio en cours (BPM + drops)…":  "Analyzing audio (BPM + drops)…",
+    "Analyse":                             "Analyzing",
+    "morceau(x) analysé(s) — timeline musicale prête ✓":
+        "track(s) analyzed — music timeline ready ✓",
+    "Corriger le BPM (tap-tempo, ÷2 / ×2)":  "Fix BPM (tap-tempo, ÷2 / ×2)",
+    "Corriger le BPM":                     "Fix BPM",
+    "Tape en rythme sur la musique…":      "Tap along with the music…",
+    "Continue à taper…":                   "Keep tapping…",
+    "⊙  Tap tempo":                        "⊙  Tap tempo",
+    "Valider":                             "Apply",
+    "Analyse musicale du set":             "Set music analysis",
+    "L'analyse apparaît au fil de l'écoute…":  "The analysis appears as it listens…",
+    "✓  Appliquer l'analyse":              "✓  Apply analysis",
+    "Analyse musicale annulée.":           "Music analysis cancelled.",
+    "analyse…":                            "analyzing…",
+    "énergie":                             "energy",
+    "✓  Appliquer dans l'onglet":          "✓  Apply to the tab",
+    "Mode :":                              "Mode:",
+    "Acte":                                "Act",
+    "Musique":                             "Music",
+    "Notes / Repère":                      "Notes / Cue",
+    "Transition":                          "Transition",
+    "Fondu":                               "Fade",
+    "Prompt vidéo / son":                  "Video / sound prompt",
+    "Vidéo":                               "Video",
+    "Son":                                 "Sound",
+    "Prompt vidéo (Seedance)":             "Video prompt (Seedance)",
+    "Prompt sound design":                 "Sound design prompt",
+    "Ambiance / SFX du plan (anglais), sans voix — injecté dans Sound Design.":
+        "Shot ambience / SFX (English), no voice — fed into Sound Design.",
+    "▦  Référence bâtiment (façade)":      "▦  Building reference (facade)",
+    "Image de la façade projetée. En Séquence Mapping, les moods sont générés "
+    "SUR cette façade (sa géométrie est conservée).":
+        "Image of the projected facade. In the Mapping sequence, moods are generated "
+        "ON this facade (its geometry is preserved).",
+    "Choisir la façade":                   "Choose the facade",
+    "Choisir la façade du bâtiment":       "Choose the building facade",
+    "Façade enregistrée ✓":                "Facade saved ✓",
+    "Isoler sur fond noir":                "Isolate on black",
+    "Isoler (fond noir)":                  "Isolate (black bg)",
+    "Détoure le bâtiment (BiRefNet) et le place sur fond noir pur — "
+    "supprime les bâtiments et objets voisins.":
+        "Cuts out the building (BiRefNet) onto pure black — removes neighboring "
+        "buildings and objects.",
+    "Détourage de la façade (BiRefNet)…":  "Cutting out the facade (BiRefNet)…",
+    "Détourage indisponible (mode démo — renseigne la clé fal.ai).":
+        "Cutout unavailable (demo mode — set your fal.ai key).",
+    "Façade isolée sur fond noir ✓":       "Facade isolated on black ✓",
+    "Choisis la façade du bâtiment":       "Choose the building facade",
+    "Rendu de nuit automatique":           "Automatic night render",
+    "Soigne les prompts vidéo et son":     "Refine the video and sound prompts",
+    "Soigne le prompt vidéo":              "Refine the video prompt",
+    "Pense au prompt sound design":        "Mind the sound design prompt",
+    "Dans le Conducteur, renseigne la « Référence bâtiment » et isole-la "
+    "sur fond noir. Les Moods sont générés SUR cette façade, dont la "
+    "géométrie est conservée.":
+        "In the Rundown, set the « Building reference » and isolate it on black. "
+        "Moods are generated ON that facade, whose geometry is preserved.",
+    "Le mapping se projette de nuit : les Moods sont automatiquement "
+    "convertis en nuit (façade éclairée uniquement par la projection, "
+    "environnement en fond noir).":
+        "Mapping is projected at night: Moods are automatically converted to night "
+        "(facade lit only by the projection, surroundings on black).",
+    "Décris l'évolution sur la façade (lumière, effets, matières) dans le "
+    "« Prompt vidéo ». Ajoute un « Prompt sound design » pour l'ambiance "
+    "sonore du plan (injecté dans Sound Design).":
+        "Describe the evolution on the facade (light, effects, materials) in the "
+        "« Video prompt ». Add a « Sound design prompt » for the shot's ambience "
+        "(fed into Sound Design).",
+    "Le Mood teste l'ambiance du loop. Plus le « Prompt vidéo » du plan est "
+    "détaillé, plus l'image générée reflète le visuel VJ que tu veux obtenir.":
+        "The Mood tests the loop's mood. The more detailed the plan's « Video prompt », "
+        "the more the generated image reflects the VJ visual you want.",
+    "Chaque plan a aussi un « Prompt sound design » (SFX / ambiance, sans "
+    "voix) qui sera injecté dans l'onglet Sound Design.":
+        "Each shot also has a « Sound design prompt » (SFX / ambience, no voice) "
+        "that will be fed into the Sound Design tab.",
+    "Une fois les Moods satisfaisants, ils servent de référence visuelle "
+    "pour générer les loops (Seedance et autres moteurs). "
+    "Ce n'est pas une pré-visualisation fidèle.":
+        "Once the Moods are good, they serve as visual reference to generate the "
+        "loops (Seedance and other engines). It is not a faithful preview.",
+    "Découpage — Aperçu":                  "Breakdown — Preview",
+    "Découpage en cours…":                 "Generating breakdown…",
+    "Découpage terminé":                   "Breakdown complete",
+    "Découpage annulé.":                   "Breakdown cancelled.",
+    "Découpage vide.":                     "Empty breakdown.",
+    "Les plans découpés apparaissent ici…":  "The breakdown shots appear here…",
+    "✓  Appliquer le découpage":           "✓  Apply breakdown",
+    "Écrit les plans dans la séquence Live/Mapping.":
+        "Writes the shots into the Live/Mapping sequence.",
+    "Écrit la mise en page dans l'onglet « Mise en page PANDORA ». "
+    "Le Conducteur reste intact.":
+        "Writes the layout into the “PANDORA layout” tab. The Rundown stays intact.",
+    "Sound Design":                        "Sound Design",
+    "Sound Design — Mirelo SFX":           "Sound Design — Mirelo SFX",
+    "Sonorise ta performance : un prompt son → SFX, ou un loop vidéo → bande-son "
+    "synchronisée. Colle ici les PROMPT SON générés par « Mise en page PANDORA ».":
+        "Score your performance: a sound prompt → SFX, or a video loop → synced "
+        "soundtrack. Paste here the SOUND PROMPTS generated by “PANDORA layout”.",
+    "Prompt → SFX":                        "Prompt → SFX",
+    "Loop vidéo → bande-son":              "Video loop → soundtrack",
+    "⚡  Générer le son":                   "⚡  Generate sound",
+    "Fichiers générés":                    "Generated files",
+    "Décris l'ambiance / les effets sonores (en anglais de préférence). "
+    "Ex. « deep pulsing bass drone, glitchy risers, crowd energy, no vocals »":
+        "Describe the ambience / sound effects (English preferred). "
+        "E.g. “deep pulsing bass drone, glitchy risers, crowd energy, no vocals”",
+    "📁  Choisir un loop vidéo…":           "📁  Choose a video loop…",
+    "Aucun loop sélectionné":              "No loop selected",
+    "Prompt son optionnel (anglais) pour orienter la bande-son. "
+    "Laisse vide pour une sonorisation automatique du loop.":
+        "Optional sound prompt (English) to steer the soundtrack. "
+        "Leave empty for automatic scoring of the loop.",
+    "Choisir un loop vidéo":               "Choose a video loop",
+    "Écris d'abord un prompt son.":        "Write a sound prompt first.",
+    "Choisis d'abord un loop vidéo.":      "Choose a video loop first.",
+    "Mode mock — renseigne la clé fal.ai dans Paramètres.":
+        "Mock mode — set your fal.ai key in Settings.",
+    "Généré ✓":                            "Generated ✓",
+    "Envoyer vers Sound Design (Studio IA)":  "Send to Sound Design (AI Studio)",
+    "Remplacer le découpage ?":            "Replace the breakdown?",
+    "Caler sur la musique":                "Sync to music",
+    "Quantise les durées en MESURES (BPM du morceau assigné) et attire les cuts "
+    "sur les DROPS — calage exact, calculé localement (pas par l'IA).":
+        "Quantizes durations to BARS (BPM of the assigned track) and snaps cuts "
+        "to DROPS — exact sync, computed locally (not by the AI).",
+    "Musique non analysée":                "Music not analyzed",
+    "Aucun morceau analysé.\n\nDans le Conducteur, ajoute tes morceaux "
+    "dans « Musiques du set » puis clique « Analyser le set » "
+    "(BPM + drops) avant de caler le découpage.":
+        "No analyzed track.\n\nIn the Rundown, add your tracks in “Set music” then "
+        "click “Analyze set” (BPM + drops) before syncing the breakdown.",
+    "Déjà calé":                           "Already in sync",
+    "Toutes les durées sont déjà calées sur les mesures et les drops ✓":
+        "All durations are already snapped to bars and drops ✓",
+    "plan(s) ajusté(s) en mesures":        "shot(s) adjusted to bars",
+    "cut(s) sur un drop":                  "cut(s) on a drop",
+    "Durée totale :":                      "Total duration:",
+    "Appliquer ?":                         "Apply?",
+    "Sound design auto":                   "Auto sound design",
+    "Depuis les Séquences — file d'attente":  "From Sequences — queue",
+    "Charger les plans":                   "Load shots",
+    "Générer la file":                     "Generate queue",
+    "Exporter la bande-son (fondu 1s)":    "Export soundtrack (1s crossfade)",
+    "Concatène les SFX générés en UNE bande-son continue avec fondu enchaîné "
+    "entre les plans (pas de coupes nettes) — ffmpeg acrossfade.":
+        "Concatenates the generated SFX into ONE continuous soundtrack with "
+        "crossfades between shots (no hard cuts) — ffmpeg acrossfade.",
+    "Aucun plan avec prompt son dans cette séquence — génère le découpage "
+    "ou renseigne les champs 🔊 Son.":
+        "No shot with a sound prompt in this sequence — generate the breakdown "
+        "or fill in the 🔊 Sound fields.",
+    "plan(s) chargé(s) — prêt à générer.":  "shot(s) loaded — ready to generate.",
+    "ambiance(s) générée(s)":              "ambience(s) generated",
+    "Il faut au moins 2 ambiances générées.":  "At least 2 generated ambiences are needed.",
+    "Assemblage de la bande-son (durée exacte)…":
+        "Assembling the soundtrack (exact duration)…",
+    "Bande-son calée exportée ✓ (durée = somme des plans)":
+        "Aligned soundtrack exported ✓ (duration = sum of shots)",
+    "À la fin de chaque clip, génère aussi l'ambiance SFX du plan (prompt son, "
+    "Mirelo ~$0.01/s) — exportée dans data/live_sound_design":
+        "At the end of each clip, also generates the shot's SFX ambience (sound "
+        "prompt, Mirelo ~$0.01/s) — exported to data/live_sound_design",
+    "plan(s) existant(s) seront REMPLACÉS par le nouveau découpage.\n\nContinuer ?":
+        "existing shot(s) will be REPLACED by the new breakdown.\n\nContinue?",
+    "Upscaling":                           "Upscaling",
+    "Upscaling de la séquence (Live)":     "Sequence upscaling (Live)",
+    "▸ Ajoutez des clips, ou importez toute la Vidéothèque.":
+        "▸ Add clips, or import the whole library.",
+    "▸ Choisissez le moteur et le facteur (ex. ×2, ×4).":
+        "▸ Pick the engine and factor (e.g. ×2, ×4).",
+    "▸ « Upscaler toute la file » ressort tous les plans en haute résolution.":
+        "▸ “Upscale entire queue” re-renders all shots in high resolution.",
+    "Ajouter des clips":                   "Add clips",
+    "Importer la Vidéothèque":             "Import library",
+    "Vider":                               "Clear",
+    "File d'attente":                      "Queue",
+    "File vide — ajoutez des clips ou importez la Vidéothèque.":
+        "Empty queue — add clips or import the library.",
+    "Moteur d'upscaling":                  "Upscaling engine",
+    "Facteur":                             "Factor",
+    "Modèle Topaz":                        "Topaz model",
+    "Upscaler toute la file":              "Upscale entire queue",
+    "Vidéothèque indisponible.":           "Library unavailable.",
+    "clip(s) importé(s) depuis la Vidéothèque.":  "clip(s) imported from the library.",
+    "upscalé(s)":                          "upscaled",
+    "erreur(s)":                           "error(s)",
+    "Upscale":                             "Upscale",
+    "Envoyer vers l'onglet Upscaling (Live)":  "Send to the Upscaling tab (Live)",
+    "Découpe le conducteur en séquence (Live/Mapping)":
+        "Breaks the rundown into a sequence (Live/Mapping)",
+    "Écris d'abord un texte à mettre en page.": "Write a text to format first.",
+    "Écris d'abord un texte à analyser.":  "Write a text to analyze first.",
+    "Écris d'abord un conducteur à découper.": "Write a rundown to break down first.",
+    # Panneau Conducteur (Claude IA / Générer / Références)
+    "☁  Claude IA":                        "☁  Claude AI",
+    # Scénario Cinéma : section « Claude IA » renommée « Écriture assistée par IA »
+    "☁  Écriture assistée par IA":         "☁  AI-assisted writing",
+    "☁  Générer depuis le conducteur":     "☁  Generate from the rundown",
+    "◎  Références visuelles":             "◎  Visual references",
+    "Références visuelles":                "Visual references",
+    "Mise en page":                        "Layout",
+    "Met en forme la trame (typée Live/Mapping)": "Formats the outline (Live/Mapping-typed)",
+    "Proposer un arrangement":             "Propose an arrangement",
+    "Réécrit une version améliorée de la trame": "Rewrites an improved version of the outline",
+    "Générer le casting":                  "Generate the casting",
+    "Identifier les personnages depuis la trame": "Identify characters from the outline",
+    "Générer les accessoires":             "Generate the props",
+    "Identifier les accessoires depuis la trame": "Identify props from the outline",
+    "Générer les véhicules":               "Generate the vehicles",
+    "Identifier les véhicules depuis la trame": "Identify vehicles from the outline",
+    "Générer le découpage":                "Generate the breakdown",
+    "Découpe la trame en séquence (Live/Mapping)": "Breaks the outline into a sequence (Live/Mapping)",
+    "Tout générer":                        "Generate all",
+    "Casting + accessoires + véhicules + découpage": "Casting + props + vehicles + breakdown",
+    "Ajouter des images":                  "Add images",
+    "Photos de lieux, ambiances, références": "Photos of places, moods, references",
+    "Analyser avec Claude":                "Analyze with Claude",
+    "Enrichit la trame à partir des images": "Enriches the outline from the images",
+    "Mise en page en cours via Claude…":   "Formatting via Claude…",
+    "Arrangement en cours via Claude…":    "Arranging via Claude…",
+    "Trame mise à jour par Claude.":       "Outline updated by Claude.",
+    "Extraction en cours via Claude…":     "Extracting via Claude…",
+    "éléments ajoutés à":                  "items added to",
+    "Lancer l'extraction du casting, des accessoires, des véhicules et "
+    "le découpage depuis la trame ?":
+        "Run extraction of casting, props, vehicles and the breakdown from the outline?",
+    "Tout générer — en cours via Claude…": "Generate all — running via Claude…",
+    "Tout générer terminé.":               "Generate all finished.",
+    "Choisir des images de référence":     "Choose reference images",
+    "Ajoutez d'abord des images de référence.": "Add reference images first.",
+    "Analyse des références avec Claude…": "Analyzing references with Claude…",
+    "Trame enrichie depuis les références.": "Outline enriched from the references.",
+    "Écrivez la trame de votre performance… (ambiances, moments, montée, "
+    "ruptures, final). Claude la découpera en segments selon le mode choisi.":
+        "Write the outline of your performance… (moods, moments, build-up, breaks, "
+        "finale). Claude will break it into segments based on the chosen mode.",
+    "Mode Mapping : la trame sera découpée en une séquence CONTINUE projetée "
+    "sur une façade verrouillée (caméra fixe, raccord automatique).":
+        "Mapping mode: the outline will be broken into a CONTINUOUS sequence projected "
+        "onto a locked facade (static camera, automatic continuity).",
+    "Mode Live : la trame sera découpée en une suite de plans/loops pour "
+    "votre performance VJ (valeurs de plan, mouvements).":
+        "Live mode: the outline will be broken into a series of shots/loops for your "
+        "VJ performance (shot sizes, movements).",
+    # Séquences
+    "Source de mapping :":                 "Mapping source:",
+    "Choisir la façade…":                  "Choose facade…",
+    "Choisir la façade à mapper":          "Choose the facade to map",
+    "Raccord continu (un seul plan long)": "Continuous take (one long shot)",
+    "Ajouter un plan":                     "Add a shot",
+    "Aucun plan. Cliquez « + » ou générez le découpage depuis le Conducteur.":
+        "No shot yet. Click “+” or generate the breakdown from the Rundown.",
+    "(plan sans description)":             "(shot without description)",
+    "Aucun plan sélectionné":              "No shot selected",
+    "Valeur de plan":                      "Shot size",
+    "Mouvement":                           "Movement",
+    "Supprimer ce plan":                   "Delete this shot",
+    "Plan":                                "Shot",
+    "Écrivez la trame de votre performance. À la création, vous choisissez "
+    "Live ou Mapping : l'arrangement avec Claude et la mise en page PANDORA "
+    "sont alors calibrés pour produire un découpage adapté — séquence live "
+    "ou séquence à mapper. À venir.":
+        "Write the outline of your performance. When creating it, you choose Live or "
+        "Mapping: the Claude arrangement and the PANDORA layout are then calibrated to "
+        "produce a suitable breakdown — a live sequence or a sequence to map. Coming soon.",
+    "Personnages et performers de la performance, propres au module Live "
+    "(générés et stockés séparément du Cinéma). À venir.":
+        "Characters and performers of the show, specific to the Live module (generated "
+        "and stored separately from Cinema). Coming soon.",
+    "Objets et accessoires propres au Live, avec leurs images de référence. "
+    "À venir.":
+        "Objects and props specific to Live, with their reference images. Coming soon.",
+    "Véhicules propres au Live, avec leurs images de référence. À venir.":
+        "Vehicles specific to Live, with their reference images. Coming soon.",
+    "Séquence destinée à être mappée sur un bâtiment. On choisit la source "
+    "de mapping (façade), puis on construit une séquence continue où les plans "
+    "s'enchaînent via le raccord automatique — pour ne former qu'un seul plan "
+    "long. À venir.":
+        "A sequence meant to be mapped onto a building. You pick the mapping source "
+        "(facade), then build a continuous sequence where shots chain together via "
+        "auto-continuity — forming a single long take. Coming soon.",
+    "Cet onglet générera les loops directement à partir de vos séquences "
+    "(onglet Séquences) : choix du segment, du style et du moteur, puis envoi "
+    "vers Resolume. Disponible une fois les Séquences construites.":
+        "This tab will generate loops directly from your sequences (Sequences tab): "
+        "pick the segment, style and engine, then send to Resolume. Available once "
+        "Sequences are built.",
+    "Studio IA":                           "AI Studio",
+    "Séquences":                           "Sequences",
+    "Studio IA — Live":                    "AI Studio — Live",
+    "Génération de loops vidéo optimisés pour Resolume.":
+        "Generation of video loops optimized for Resolume.",
+    "Onglet « Génération directe » : choisissez un moteur et lancez un loop.":
+        "“Direct generation” tab: pick an engine and launch a loop.",
+    "Un sélecteur de 20 styles VJ sera intégré à la génération.":
+        "A selector of 20 VJ styles will be integrated into generation.",
+    "Mode loop Resolume : la première image rejoint la dernière (boucle parfaite).":
+        "Resolume loop mode: the first frame meets the last (perfect loop).",
+    "Sans clé fal.ai, la génération est simulée (mode démo).":
+        "Without a fal.ai key, generation is simulated (demo mode).",
+    "Enchaînements de loops pour le live (équivalent storyboard).":
+        "Loop sequences for live (storyboard equivalent).",
+    "Composez des séquences de loops par segment.":
+        "Build loop sequences segment by segment.",
+    "À venir : style par segment, durées, transitions, export Resolume.":
+        "Coming: per-segment style, durations, transitions, Resolume export.",
+    "Composez des enchaînements de loops optimisés pour Resolume — "
+    "l'équivalent du storyboard, pensé pour le live. Choix du style par "
+    "segment, durées et transitions, puis export vers votre composition. "
+    "Cette partie sera développée prochainement.":
+        "Build chains of loops optimized for Resolume — the storyboard equivalent, "
+        "designed for live. Per-segment style, durations and transitions, then export "
+        "to your composition. This part will be developed soon.",
+
     # ── Communs ────────────────────────────────────────────────────────────────
     "Annuler":              "Cancel",
+    "↑  Importer des photos": "↑  Import photos",
+    "Copier le texte":      "Copy text",
+    "Copié":                "Copied",
+    "Traduction du prompt en français…":  "Translating prompt to French…",
+    "Erreur d'enregistrement":  "Save error",
+    "Le scénario n'a pas pu être enregistré :":
+        "The screenplay could not be saved:",
+    "Scénario enregistré":  "Screenplay saved",
+    "Scénario reconstruit enregistré":  "Reconstructed screenplay saved",
+    "caractères":           "characters",
+    "sous":                 "under",
+    "Ouvre l'onglet Scénario pour le voir.":  "Open the Screenplay tab to see it.",
     "Sauvegarder":          "Save",
     "💾  Sauvegarder":      "💾  Save",
+    "📂  Ouvrir":           "📂  Open",
+    "Ouvert":               "Opened",
+    "Sauvegardé.":          "Saved.",
+    "Sauvegarder dans un fichier":  "Save to a file",
+    "Ouvrir depuis un fichier":     "Open from a file",
+    "Rien à sauvegarder.":  "Nothing to save.",
+    "Charger ce fichier ? Les éléments actuels seront remplacés.":
+        "Load this file? The current items will be replaced.",
+    "{n} élément(s) chargé(s).":    "{n} item(s) loaded.",
     "Fermer":               "Close",
     "Supprimer":            "Delete",
     "Ajouter":              "Add",
@@ -483,8 +1033,27 @@ _FR_TO_EN: dict[str, str] = {
 
     # ── Tab video engines (DaVinci Edit — LatentSync) ────────────────────────────
     "Resynchroniser les lèvres":     "Resync lips",
-    "Synchronisation labiale LatentSync — aligne les lèvres sur l'audio source du clip":
-        "LatentSync lip sync — aligns lips with the source audio",
+    "Synchronisation labiale LatentSync — ⚠ réencode (qualité moindre) + audio sur piste séparée":
+        "LatentSync lip sync — ⚠ re-encodes (lower quality) + audio on a separate track",
+    # ── Modifier un clip : « Type de modification » (modèles de prompt) ─────────
+    "Type de modification":          "Modification type",
+    "✎ Insérer un modèle…":          "✎ Insert a template…",
+    "Pixverse Swap · remplacer un visage (≤720p)": "Pixverse Swap · replace a face (≤720p)",
+    "Pixverse Swap · remplacer un fond (≤720p)":   "Pixverse Swap · replace a background (≤720p)",
+    "Moteur Pixverse Swap (visage) : remplace le visage du clip par l'image de référence SANS régénérer la scène. Ajoute le nouveau visage en « Image de référence ». (720p max · audio conservé.)":
+        "Pixverse Swap engine (face): replaces the clip's face with the reference image WITHOUT regenerating the scene. Add the new face under « Reference image ». (720p max · audio preserved.)",
+    "Moteur Pixverse Swap (fond) : remplace le fond du clip par l'image de référence SANS régénérer la scène. Ajoute le nouveau fond en « Image de référence ». (720p max · audio conservé.)":
+        "Pixverse Swap engine (background): replaces the clip's background with the reference image WITHOUT regenerating the scene. Add the new background under « Reference image ». (720p max · audio preserved.)",
+    "Mode face-swap (Pixverse Swap) : l'image de référence remplace le visage du clip SANS régénérer la scène. Ajoute le nouveau visage en « Image de référence ». (Seedance non utilisé · 720p max · audio conservé.)":
+        "Face-swap mode (Pixverse Swap): the reference image replaces the clip's face WITHOUT regenerating the scene. Add the new face under « Reference image ». (Seedance not used · 720p max · audio preserved.)",
+    "Mode remplacement de fond (Pixverse Swap) : l'image de référence remplace le fond du clip SANS régénérer la scène. Ajoute le nouveau fond en « Image de référence ». (Seedance non utilisé · 720p max · audio conservé.)":
+        "Background-replace mode (Pixverse Swap): the reference image replaces the clip's background WITHOUT regenerating the scene. Add the new background under « Reference image ». (Seedance not used · 720p max · audio preserved.)",
+    "Changer le décor (arrière-plan)": "Change the set (background)",
+    "Changer un visage":             "Change a face",
+    "Changer l'étalonnage (couleurs)": "Change the color grade",
+    "Changer la tenue (vêtements)":  "Change the outfit (clothing)",
+    "Insère un modèle de prompt (balises @Video1 = clip d'origine, @Image1 = image de référence) — à compléter ensuite.":
+        "Inserts a prompt template (tags @Video1 = source clip, @Image1 = reference image) — fill it in afterwards.",
 
     # ── Tab Kling & PixVerse ─────────────────────────────────────────────────────
     "Kling v3 Pro I2V":              "Kling v3 Pro I2V",
@@ -696,6 +1265,127 @@ _FR_TO_EN: dict[str, str] = {
     "Continuer":                        "Continue",
     "Continuer →":                      "Continue →",
     "Appliquer la synchronisation":     "Apply synchronization",
+    "Lancer la synchronisation":        "Run synchronization",
+    "Réassigner les noms":              "Reassign names",
+    "Réécrire les prompts":             "Rewrite prompts",
+    "Re-synchroniser les décors":       "Re-sync locations",
+    "Synchroniser le casting":          "Sync the cast",
+    "Synchroniser les accessoires":     "Sync the props",
+    "Synchroniser les véhicules":       "Sync the vehicles",
+    "Met à jour les noms de personnages renommés et ré-assigne aux plans les "
+    "personnages cités dans le titre ou le prompt.":
+        "Updates renamed character names and reassigns to each shot the characters "
+        "mentioned in its title or prompt.",
+    "Met à jour les accessoires renommés et ré-assigne aux plans les accessoires "
+    "cités dans le titre ou le prompt.":
+        "Updates renamed props and reassigns to each shot the props mentioned in its "
+        "title or prompt.",
+    "Met à jour les véhicules renommés et ré-assigne aux plans les véhicules "
+    "cités dans le titre ou le prompt.":
+        "Updates renamed vehicles and reassigns to each shot the vehicles mentioned in "
+        "its title or prompt.",
+    "Réécrire le scénario depuis le storyboard": "Rewrite screenplay from storyboard",
+    "Scénario":                         "Screenplay",
+    "Scénario reconstruit depuis le storyboard": "Screenplay rebuilt from storyboard",
+    "nouvelle version":                 "new version",
+    "Réécriture du scénario…":          "Rewriting screenplay…",
+    "Enregistrer le scénario":          "Save screenplay",
+    "Réessayer":                        "Retry",
+    "Identifier et générer les 7 vues de la pièce": "Identify and generate the 7 room views",
+    "Chat Storyboard":                  "Storyboard Chat",
+    # Panneaux latéraux : GAUCHE = « Guide » (pédagogie), DROITE = « IA » (actions projet).
+    "IA":                               "AI",
+    "Guide":                            "Guide",
+    "GUIDE":                            "GUIDE",
+    "Ouvrir / fermer le Guide (aide & pédagogie d'utilisation)":
+        "Open / close the Guide (help & usage tutorial)",
+    "Ouvrir / fermer l'IA (actions sur le projet)":
+        "Open / close the AI (project actions)",
+    "Guide hors-ligne — aide & pédagogie, sans IA":
+        "Offline guide — help & tutorial, no AI",
+    "Discuter avec l'IA au sujet du logiciel (utilise des crédits Anthropic)":
+        "Chat with the AI about the software (uses Anthropic credits)",
+    "Vous êtes désormais en discussion avec l'IA au sujet du logiciel.\n\n"
+    "Vous pouvez poser des questions pour la compréhension du logiciel.":
+        "You are now chatting with the AI about the software.\n\n"
+        "You can ask questions to understand how the program works.",
+    "Discuter du storyboard avec l'IA…": "Chat about the storyboard with the AI…",
+    # ── Libellés couleur + plans récurrents (Storyboard) ──────────────────────
+    "Libellé couleur":                  "Colour label",
+    "Aucun libellé":                    "No label",
+    "Plan récurrent":                   "Recurring shot",
+    "Pas récurrent":                    "Not recurring",
+    "Plans récurrents":                 "Recurring shots",
+    "Analyse…":                         "Analysing…",
+    "Groupes :":                        "Groups:",
+    "Sélectionner tous les plans de ce groupe": "Select all shots in this group",
+    "{n} groupe(s) de plans récurrents identifié(s) et colorés.":
+        "{n} recurring-shot group(s) identified and coloured.",
+    "Aucun groupe de plans récurrents détecté dans ce storyboard.":
+        "No recurring-shot group detected in this storyboard.",
+    "Rouge": "Red", "Ambre": "Amber", "Vert": "Green", "Cyan": "Cyan",
+    "Bleu": "Blue", "Violet": "Purple", "Rose": "Pink", "Olive": "Olive",
+    # ── Variations d'une pièce (décors) ───────────────────────────────────────
+    "Variations":                       "Variations",
+    "Créer des variations de la pièce": "Create room variations",
+    "Créer des variations de TOUTE la pièce (toutes les vues), avec un prompt éditable":
+        "Create variations of the WHOLE room (all views), with an editable prompt",
+    "Régénère EN BLOC toutes les vues de la pièce":
+        "Regenerates ALL the room's views at once",
+    "L'ancienne image de chaque vue est conservée en variante.":
+        "Each view's previous image is kept as a variant.",
+    "Prompt (éditable) :":              "Prompt (editable):",
+    "Générer les variations":           "Generate variations",
+    "Génération des variations…":       "Generating variations…",
+    "{n} vue(s) régénérée(s) en variations.": "{n} view(s) regenerated as variations.",
+    "Aucune vue régénérée (mode mock sans clé fal.ai, ou échec).":
+        "No view regenerated (mock mode without a fal.ai key, or failure).",
+    "Écris un prompt.":                 "Write a prompt.",
+    "Envoyer":                          "Send",
+    "Le chat IA est désactivé.":        "The AI chat is disabled.",
+    "▶  Paramètres avancés — moteur IA par tâche": "▶  Advanced — AI engine per task",
+    "▼  Paramètres avancés — moteur IA par tâche": "▼  Advanced — AI engine per task",
+    "Par défaut":                       "Default",
+    "Amélioration des prompts":         "Prompt enhancement",
+    "Chat du Storyboard":               "Storyboard chat",
+    "Assistant / guide complet":        "Assistant / full guide",
+    "Génération du storyboard":         "Storyboard generation",
+    "Scénario (mise en page, arrangement)": "Screenplay (formatting, arrangement)",
+    "Extraction d'éléments (personnages, décors…)": "Element extraction (characters, locations…)",
+    "Synchronisation du storyboard":    "Storyboard synchronization",
+    "✓  Tester API GPT-5.5":            "✓  Test GPT-5.5 API",
+    "✓  Tester API Mistral":            "✓  Test Mistral API",
+    "✓  Tester API Kimi":               "✓  Test Kimi API",
+    "⇗  Obtenir une clé OpenAI":        "⇗  Get an OpenAI key",
+    "⇗  Obtenir une clé Mistral":       "⇗  Get a Mistral key",
+    "⇗  Obtenir une clé Kimi":          "⇗  Get a Kimi key",
+    "OpenAI — GPT-5.5  (assistant texte, par moteur ou par tâche)":
+        "OpenAI — GPT-5.5  (text assistant, per engine or per task)",
+    "Mistral  (assistant texte, expérimental)":
+        "Mistral  (text assistant, experimental)",
+    "Kimi K2.7 (Moonshot)  (assistant texte — API ou local, expérimental)":
+        "Kimi K2.7 (Moonshot)  (text assistant — API or local, experimental)",
+    "Kimi K2.7 (Moonshot) — API ou local (expérimental)":
+        "Kimi K2.7 (Moonshot) — API or local (experimental)",
+    "URL Kimi (défaut : https://api.moonshot.ai/v1 — ou serveur local /v1)":
+        "Kimi URL (default: https://api.moonshot.ai/v1 — or local server /v1)",
+    "Modèle Kimi (défaut : kimi-k2.7-code)":
+        "Kimi model (default: kimi-k2.7-code)",
+    "sk-••••••••••••  (vide si serveur local)":
+        "sk-••••••••••••  (empty if local server)",
+    "Obligatoire":                      "Required",
+    "Facultatif":                       "Optional",
+    "▶  Clés API facultatives  (OpenAI, Mistral, autres à venir)":
+        "▶  Optional API keys  (OpenAI, Mistral, more to come)",
+    "▼  Clés API facultatives  (OpenAI, Mistral, autres à venir)":
+        "▼  Optional API keys  (OpenAI, Mistral, more to come)",
+    "Choix personnalisé — un moteur par tâche":
+        "Custom — one engine per task",
+    "PANDORA optimisé — moteur conseillé par tâche":
+        "PANDORA optimized — recommended engine per task",
+    "✓  Sauvegarde automatique — chaque modification est enregistrée.":
+        "✓  Auto-save — every change is saved.",
+    "✓  Enregistré automatiquement.":   "✓  Saved automatically.",
     "Tout est synchronisé":             "Everything is in sync",
     "Chargement du casting…":           "Loading cast…",
     "Sauvegarde…":                      "Saving…",
@@ -859,6 +1549,97 @@ _FR_TO_EN: dict[str, str] = {
     "plans importés dans le Storyboard ✓": "shots imported into the Storyboard ✓",
     "plans importés ✓": "shots imported ✓",
 
+    # ── Références visuelles Live — persistance, bibliothèque, chat DA ──
+    "Analyse des références disponible ✓": "Reference analysis available ✓",
+    "Discuter de la direction artistique avec": "Discuss the art direction with",
+    "Envoyer": "Send",
+    "Vous": "You",
+    "↻  Relancer l'analyse": "↻  Re-run analysis",
+    "Refait l'analyse complète des images (une requête par image).":
+        "Re-runs the full image analysis (one request per image).",
+    "Aucune image dans la section Références visuelles.":
+        "No image in the Visual references section.",
+    "Relancer l'analyse": "Re-run analysis",
+    "Relancer l'analyse complète ?": "Re-run the full analysis?",
+    "requête(s) IA": "AI request(s)",
+    "💾  Sauvegarder": "💾  Save",
+    "Sauvegarde cette analyse dans la bibliothèque globale\npour la réutiliser dans d'autres projets.":
+        "Saves this analysis to the global library\nto reuse it in other projects.",
+    "Sauvegarder l'analyse": "Save analysis",
+    "Nom de l'analyse :": "Analysis name:",
+    "Analyse sans titre": "Untitled analysis",
+    "Analyse sauvegardée dans la bibliothèque ✓": "Analysis saved to the library ✓",
+    "📂  Bibliothèque": "📂  Library",
+    "Charge une analyse sauvegardée — mêmes références visuelles,\nmême direction artistique, sans refaire l'analyse.":
+        "Loads a saved analysis — same visual references,\nsame art direction, without re-running the analysis.",
+    "Analyse chargée": "Analysis loaded",
+    "Charger une analyse": "Load an analysis",
+    "Recharge une analyse sauvegardée — réutilisable entre projets":
+        "Reloads a saved analysis — reusable across projects",
+    "Supprimer une analyse": "Delete an analysis",
+    "Aucune analyse sauvegardée": "No saved analysis",
+    "Analyse supprimée de la bibliothèque.": "Analysis deleted from the library.",
+
+    # ── Bibliothèque d'images globale (Cinéma + Live) ──
+    "Bibliothèque d'images": "Image library",
+    "📚  Bibliothèque d'images": "📚  Image library",
+    "Partagée entre tous les projets — Cinéma et Live":
+        "Shared across all projects — Cinema and Live",
+    "Nouvelle collection": "New collection",
+    "Renommer la collection": "Rename collection",
+    "Supprimer la collection": "Delete collection",
+    "Nom de la collection :": "Collection name:",
+    "Crée une collection (✚) puis ajoute-lui des images.":
+        "Create a collection (✚) then add images to it.",
+    "⬆  Ajouter des images": "⬆  Add images",
+    "Copie des images du disque dans cette collection\n(la bibliothèque garde sa propre copie).":
+        "Copies images from disk into this collection\n(the library keeps its own copy).",
+    "Retirer de la collection": "Remove from collection",
+    "💻  Parcourir le disque…": "💻  Browse disk…",
+    "Choisir des fichiers hors bibliothèque —\nPANDORA proposera de les ranger dans une collection.":
+        "Pick files outside the library —\nPANDORA will offer to file them into a collection.",
+    "✓  Utiliser la sélection": "✓  Use selection",
+    "Utiliser la sélection": "Use selection",
+    "Supprimer cette collection et ses images ?":
+        "Delete this collection and its images?",
+    "les copies de la bibliothèque seront effacées.":
+        "the library copies will be erased.",
+    "Ajouter des images à la collection": "Add images to the collection",
+    "Choisir des images sur le disque": "Pick images from disk",
+    "Ajouter aussi ces images à la collection courante ?":
+        "Also add these images to the current collection?",
+    "⬆  Importer une image": "⬆  Import an image",
+    "Utiliser une image à toi comme mood — choisie dans la\nbibliothèque ou sur le disque (copiée dans le plan).":
+        "Use one of your own images as the mood — picked from the\nlibrary or from disk (copied into the shot).",
+    "Image(s) importée(s) — clique « Activer » pour en faire le mood du plan.":
+        "Image(s) imported — click « Activate » to make it the shot's mood.",
+    "◎  Mood inspiré d'une image": "◎  Mood inspired by an image",
+    "Choisis une image d'inspiration (bibliothèque ou disque) :\nson univers — palette, lumière, matières, style — est transposé\nsur la façade (mapping) ou réinterprété pour le plan.\nL'image n'est jamais collée telle quelle.":
+        "Pick an inspiration image (library or disk):\nits universe — palette, light, materials, style — is transposed\nonto the facade (mapping) or reinterpreted for the shot.\nThe image is never pasted as-is.",
+    "Mood inspiré de l'image…": "Mood inspired by the image…",
+    "Envoi de la façade et de l'inspiration à fal.ai…":
+        "Sending facade and inspiration to fal.ai…",
+    "Mood inspiré sur la façade (Kontext multi)…":
+        "Inspired mood on the facade (Kontext multi)…",
+    "Envoi de l'image d'inspiration à fal.ai…":
+        "Sending inspiration image to fal.ai…",
+    "Mood inspiré de l'image (Kontext)…":
+        "Mood inspired by the image (Kontext)…",
+    "Co-écrire l'arrangement avec": "Co-write the arrangement with",
+    "plan(s) → colonnes Musique/BPM remplies": "shot(s) → Music/BPM columns filled",
+    "Aucun plan — génère le découpage depuis le Conducteur.":
+        "No shot — generate the breakdown from the Rundown.",
+    "Charge les plans en file d'attente — la sélection du Conducteur\nsi tu en as une (Ctrl+clic = multi), sinon toute la séquence.":
+        "Loads shots into the queue — the Rundown selection\nif you have one (Ctrl+click = multi), otherwise the whole sequence.",
+    "RENDU": "OUTPUT",
+    "Assembler la bande-son (durée exacte)":
+        "Assemble the soundtrack (exact duration)",
+    "À la fin de la file : une seule piste CALÉE sur la vidéo — chaque plan garde sa durée exacte, micro-fondus aux jonctions (pas de coupes nettes, pas de décalage).":
+        "When the queue ends: one single track ALIGNED with the video — every shot keeps its exact duration, micro-fades at junctions (no hard cuts, no drift).",
+    "prompt son chargé ✓": "sound prompt loaded ✓",
+    "⚠ pas de prompt son sur ce plan (champ 🔊 Son)":
+        "⚠ no sound prompt on this shot (🔊 Sound field)",
+
     # ── Lot 17 — co-écriture (accueil), génération en série, divers ──
     "J'ai analysé votre scénario et rédigé des suggestions détaillées (visibles dans l'onglet « Analyse initiale »).\n\nDites-moi ce que vous souhaitez modifier, affiner ou conserver — je produirai alors une version remaniée de votre scénario en direct. Nous pouvons itérer autant de fois que nécessaire.": "I've analyzed your screenplay and written detailed suggestions (visible in the « Initial analysis » tab).\n\nTell me what you'd like to change, refine or keep — I'll then produce a reworked version of your screenplay live. We can iterate as many times as needed.",
     "Génération en série": "Batch generation",
@@ -928,6 +1709,25 @@ _FR_TO_EN: dict[str, str] = {
     "Caméra · Optiques · Micro":        "Camera · Lenses · Mic",
     "Caméra dynamique":                 "Dynamic camera",
     "Audio natif":                      "Native audio",
+    "Seedance génère le son ambiant et les effets sonores du clip":
+        "Seedance generates the clip's ambient sound and sound effects",
+    "Se référer au mood":               "Refer to the mood",
+    "Envoie le mood validé du plan comme image de référence → cohésion exacte "
+    "(composition, cadrage, lumière, couleurs) avec le mood. Sans effet si le "
+    "plan n'a pas de mood.":
+        "Sends the shot's validated mood as a reference image → exact cohesion "
+        "(composition, framing, lighting, colors) with the mood. No effect if the "
+        "shot has no mood.",
+    "Resynchroniser les lèvres (lip-sync)": "Re-sync lips (lip-sync)",
+    "Après génération, recale les lèvres sur une voix : doublage/TTS auto depuis "
+    "le dialogue du plan, ou un audio attaché. Post-traitement payant (par minute).":
+        "After generation, re-aligns the lips to a voice: auto dubbing/TTS from the "
+        "shot's dialogue, or an attached audio. Paid post-processing (per minute).",
+    "Moteur lip-sync":                  "Lip-sync engine",
+    "Audio lip-sync (override)":        "Lip-sync audio (override)",
+    "Auto (TTS du dialogue) — ou attache un .wav / .mp3 pour ce plan":
+        "Auto (TTS from dialogue) — or attach a .wav / .mp3 for this shot",
+    "Audio lip-sync du plan":           "Shot lip-sync audio",
     "Sous-titres":                      "Subtitles",
     "Import auto · Media Pool":         "Auto import · Media Pool",
     "MODÈLE":                           "MODEL",
@@ -954,6 +1754,8 @@ _FR_TO_EN: dict[str, str] = {
     "＋  Ajouter un plan":              "＋  Add shot",
     "Suppr.":                           "Del.",
     "✦  Générer les Moods":             "✦  Generate Moods",
+    "✓ Scénario reconstruit enregistré — ouvre l'onglet Scénario pour le voir.":
+        "✓ Reconstructed screenplay saved — open the Screenplay tab to see it.",
     "⏹  Arrêter":                       "⏹  Stop",
     "Ouvrir →":                         "Open →",
     "＋ Créer un storyboard":           "＋ Create storyboard",
@@ -1099,6 +1901,7 @@ _FR_TO_EN: dict[str, str] = {
         "Auto import to DaVinci Media Pool after generation",
     "▶▶  Lancer la file d'attente":              "▶▶  Launch queue",
     "📁  Ouvrir le dossier des vidéos":          "📁  Open videos folder",
+    "Ouvrir le dossier des vidéos":              "Open videos folder",
     "Nombre de prises par clip (1–10)":          "Number of takes per clip (1–10)",
 
     # Dialog bridge non connecté
@@ -1407,6 +2210,10 @@ _FR_TO_EN: dict[str, str] = {
     "Aucun découpage pour ce projet.":           "No breakdown for this project.",
     "Génère un découpage depuis l'onglet Scénario.":
         "Generate a breakdown from the Screenplay tab.",
+    "Aucun découpage pour ce projet.\n\nGénère un découpage depuis le Conducteur.":
+        "No breakdown for this project.\n\nGenerate a breakdown from the Rundown.",
+    "Aucun plan dans ce découpage.\n\nClique ＋ Ajouter un plan pour créer un plan manuellement.":
+        "No shot in this breakdown.\n\nClick ＋ Add a shot to create one manually.",
 
     # ── Page Castings — manquants ─────────────────────────────────────────────
     "Aucun personnage.":                         "No characters.",
@@ -1449,7 +2256,195 @@ _FR_TO_EN: dict[str, str] = {
     "Générer depuis Storyboard":                 "Generate from Storyboard",
     "Modifier des clips":                        "Edit clips",
     "Vidéothèque":                               "Video Library",
+
+    # ── Studio IA — Musique IA + Image IA (2026-06-15) ────────────────────────
+    "Musique IA":                                "AI Music",
+    "Image IA":                                  "AI Image",
+    "Compose la musique de tes scènes : score instrumental ou chanson "
+    "avec paroles, via les meilleurs moteurs de fal.ai.":
+        "Compose the music for your scenes: instrumental score or song with "
+        "lyrics, via the best fal.ai engines.",
+    "MOTEUR DE GÉNÉRATION":                      "GENERATION ENGINE",
+    "STYLE / DESCRIPTION":                       "STYLE / DESCRIPTION",
+    "PAROLES (optionnel)":                       "LYRICS (optional)",
+    "Décris la musique (en anglais de préférence). "
+    "Ex. « epic orchestral score, slow build, strings and brass, cinematic, tense »":
+        "Describe the music (preferably in English). "
+        "E.g. « epic orchestral score, slow build, strings and brass, cinematic, tense »",
+    "Paroles à chanter. Laisse vide pour un morceau instrumental.":
+        "Lyrics to sing. Leave empty for an instrumental track.",
+    "Générer la musique":                        "Generate music",
+    "Décris d'abord la musique à générer.":      "Describe the music to generate first.",
+    "Ouvre le dossier des musiques générées.":   "Opens the generated music folder.",
+
+    # ── Plan des décors (vue de dessus, Mise en scène / Plan de feu) ───────────
+    "Plan des décors":                           "Set floor plans",
+    "— vus de dessus, synchronisés avec Mise en scène et Plan de feu":
+        "— top-down, synced with Staging and Lighting plan",
+    "Générer les plans manquants":               "Generate missing plans",
+    "à générer":                                 "to generate",
+    "Génération…":                               "Generating…",
+    "Cliquer pour agrandir et modifier le plan": "Click to enlarge and edit the plan",
+    "Créer une variation (calée sur l'ensemble)": "Create a variation (matched to the overview)",
+    "Importer une image":                        "Import an image",
+    "Importer un plan d'architecte":             "Import a floor plan",
+    "Variation du plan":                         "Floor plan variation",
+    "Variation du plan…":                        "Floor plan variation…",
+    "Configure ta clé fal.ai dans Paramètres pour générer une variation.":
+        "Set your fal.ai key in Settings to generate a variation.",
+    "La variation n'a pas pu être générée (clé fal.ai ? réseau ?).":
+        "The variation could not be generated (fal.ai key? network?).",
+
+    # ── Mise en scène / Plan de feu — outils & projecteurs (2026-06-16) ────────
+    "Déplacer":                                  "Move",
+    "Rotation":                                  "Rotate",
+    "Tout supprimer":                            "Delete all",
+    "Tout supprimer du plan ? Cette action est irréversible.":
+        "Clear everything from the plan? This cannot be undone.",
+    "Rien à supprimer sur ce plan.":             "Nothing to delete on this plan.",
+    "Raccourci : R":                             "Shortcut: R",
+    "Choisir un projecteur":                     "Choose a fixture",
+    "Famille":                                   "Family",
+    "Modèle":                                    "Model",
+    "Rôle :":                                    "Role:",
+    "Nom affiché (laisser vide = modèle)":       "Display name (empty = model)",
+    "Valider":                                   "Confirm",
+    "Synchroniser la mise en scène":             "Sync staging",
+    "Synchroniser le plan de feu":               "Sync lighting plan",
+    # ── Mise en scène / Plan de feu — sélecteur de plan + synchro (2026-06-17) ─
+    "Plan du décor :":                           "Set plan:",
+    "Auto (décor du plan)":                      "Auto (shot's set)",
+    "Aucun plan (vide)":                         "No plan (empty)",
+    "(décor sans nom)":                          "(unnamed set)",
+    "Modifier le projecteur":                    "Edit fixture",
+    # ── Réglages du projecteur (intensité, température, teinte…) ───────────────
+    "Réglages du projecteur":                    "Fixture settings",
+    "Projecteur":                                "Fixture",
+    "Intensité":                                 "Intensity",
+    "Température":                               "Color temperature",
+    "Teinte":                                    "Hue",
+    "Saturation":                                "Saturation",
+    "Correction vert / magenta":                 "Green / magenta correction",
+    "Gélatine":                                  "Gel",
+    "Faisceau":                                  "Beam",
+    "fixe":                                      "fixed",
+    # ── Réglages projecteur : hauteur, inclinaison, louver, on/off, effets ─────
+    "Hauteur":                                   "Height",
+    "Hauteur caméra":                            "Camera height",
+    "Hauteur (ex : 1,7 m) :":                    "Height (e.g. 1.7 m):",
+    "Configure ta clé fal.ai dans Paramètres pour générer les moods.":
+        "Set your fal.ai key in Settings to generate moods.",
+    "Inclinaison":                               "Tilt",
+    "Louver / nid d'abeille (faisceau resserré)": "Louver / egg-crate (tighter beam)",
+    "Effet dynamique":                           "Dynamic effect",
+    "Éteindre le projecteur":                    "Turn fixture off",
+    "Allumer le projecteur":                     "Turn fixture on",
+    "Hauteur de la caméra":                      "Camera height",
+    "Hauteur (m) :":                             "Height (m):",
+    # ── Copier la mise en scène / le plan de feu d'un autre plan ──────────────
+    "Copier le plan de feu d'un autre plan":     "Copy the lighting plan from another shot",
+    "Copier la mise en scène d'un autre plan":   "Copy the staging from another shot",
+    "(aucun autre plan)":                        "(no other shot)",
+    "Copier":                                    "Copy",
+    "Mise en scène copiée":                      "Staging copied",
+    "Plan de feu copié":                         "Lighting plan copied",
+    "Dupliquer le plan":                         "Duplicate shot",
+    "Changer le plan du décor":                  "Change the set plan",
+    "Cliquer pour agrandir":                     "Click to enlarge",
+    "Cliquer pour fermer":                       "Click to close",
+    "Aucun effet":                               "No effect",
+    "Bougie":                                    "Candle",
+    "Feu / flammes":                             "Fire / flames",
+    "Téléviseur":                                "Television",
+    "Orage / éclairs":                           "Storm / lightning",
+    "Gyrophare":                                 "Police beacon",
+    "Paparazzi":                                 "Paparazzi",
+    "Pulsation":                                 "Pulse",
+    "Club / disco":                              "Club / disco",
+    "Stroboscope":                               "Strobe",
+    "Feux d'artifice":                           "Fireworks",
+    "Enregistré ✓":                              "Saved ✓",
+    "Sauvegarder le scénario":                   "Save the screenplay",
+    "Ouvrir un scénario":                        "Open a screenplay",
+    "Sauvegarder le storyboard":                 "Save the storyboard",
+    "Ouvrir un storyboard":                      "Open a storyboard",
+    "Ajouter acteur":                            "Add actor",
+    "Ajouter un acteur":                         "Add an actor",
+    "Placer la caméra ici":                      "Place camera here",
+    "Créer un projecteur":                       "Create a light",
+    "Hauteur cam.":                              "Cam. height",
+    # ── Doublage : dialogues depuis le storyboard ─────────────────────────────
+    "Depuis le storyboard — dialogues à doubler": "From the storyboard — lines to dub",
+    "Charger les dialogues":                     "Load dialogue lines",
+    "Sélectionne des plans puis « Charger les dialogues ».":
+        "Select shots then « Load dialogue lines ».",
+    "Charge cette réplique dans le champ texte pour la doubler.":
+        "Load this line into the text field to dub it.",
+    # ── Modifier des clips : message de conversion vidéo ──────────────────────
+    "Conversion avant envoi":                    "Conversion before sending",
+    "Ce(s) clip(s) seront convertis en H.264 PROGRESSIF (1080p max) avant l'envoi au moteur — désentrelacés si besoin, pour éviter les problèmes de trames :":
+        "This/these clip(s) will be converted to PROGRESSIVE H.264 (1080p max) before sending to the engine — deinterlaced if needed, to avoid field/frame issues:",
+    "Pour la MEILLEURE qualité, exporte plutôt tes clips depuis ton logiciel de montage en H.264 progressif, 1080p maximum — c'est le format adapté à tous les moteurs de génération.":
+        "For BEST quality, export your clips from your editing software in progressive H.264, 1080p maximum — that is the format suited to every generation engine.",
+    "Continuer avec la conversion automatique (FFmpeg) ?":
+        "Continue with automatic conversion (FFmpeg)?",
+    "Élément":                                   "Element",
+    "Élément du décor":                          "Set element",
+    "Nom :":                                     "Name:",
+    "Pivoter à gauche":                          "Rotate left",
+    "Pivoter à droite":                          "Rotate right",
+    "Supprimer la sélection":                    "Delete selection",
+    "Synchronisation":                           "Synchronize",
+    "Synchroniser les décors (storyboard → plans)":
+        "Sync sets (storyboard → plans)",
+    "Synchroniser la mise en scène → storyboard":
+        "Sync staging → storyboard",
+    "Synchroniser le storyboard → mise en scène":
+        "Sync storyboard → staging",
+    "Synchroniser le plan de feu → storyboard":
+        "Sync lighting plan → storyboard",
+    "Aucun plan dans le storyboard.":            "No shot in the storyboard.",
+    "Reconstruire la mise en scène de tous les plans depuis le storyboard ?\n"
+    "Les placements actuels (acteurs, caméra) seront remplacés.":
+        "Rebuild the staging of every shot from the storyboard?\n"
+        "The current placements (actors, camera) will be replaced.",
+    "Mise en scène reconstruite depuis le storyboard.":
+        "Staging rebuilt from the storyboard.",
+    "Décors synchronisés depuis le storyboard.":
+        "Sets synced from the storyboard.",
+    "Mise en scène synchronisée vers le storyboard.":
+        "Staging synced to the storyboard.",
+    "Plan de feu synchronisé vers le storyboard.":
+        "Lighting plan synced to the storyboard.",
+    "Nom du plan":                               "Shot name",
+    "Générer les décors + plan":                 "Generate sets + plan",
+    "Mise en page PANDORA":                      "PANDORA layout",
+    "◈  Mettre dans « Mise en page PANDORA »":    "◈  Put into « PANDORA layout »",
+
+    # ── Draw-to-Video (Modifier des clips) ─────────────────────────────────────
+    "Dessiner sur la vidéo":                     "Draw on the video",
+    "Dessiner sur la vidéo — Draw-to-Video":     "Draw on the video — Draw-to-Video",
+    "Dessin Draw-to-Video":                      "Draw-to-Video sketch",
+    "Dessin Draw-to-Video — interprété par l'IA, jamais envoyé tel quel au modèle":
+        "Draw-to-Video sketch — interpreted by the AI, never sent as-is to the model",
+    "Time Code :":                               "Timecode:",
+    "Comment ça marche : choisis l'instant, puis dessine des repères (flèches, "
+    "cercles…) pour indiquer CE QUI change et OÙ. À la validation, l'IA (Claude "
+    "Vision) lit ton dessin ET ton texte, puis traduit ton intention en consigne "
+    "précise pour le moteur vidéo. Le clip part PROPRE : tes traits ne sont "
+    "jamais envoyés et n'apparaîtront pas dans la vidéo. Dans le prompt, décris "
+    "simplement ton intention en t'appuyant sur tes repères (ex. « les flèches "
+    "indiquent la nouvelle position des personnages »).":
+        "How it works: pick the moment, then draw markers (arrows, circles…) to show "
+        "WHAT changes and WHERE. On confirm, the AI (Claude Vision) reads your sketch "
+        "AND your text, then turns your intent into a precise instruction for the video "
+        "engine. The clip is sent CLEAN: your strokes are never sent and won't appear "
+        "in the video. In the prompt, simply describe your intent using your markers "
+        "(e.g. \"the arrows show the characters' new positions\").",
+    "Gomme":                                     "Eraser",
+    "Effacer":                                   "Clear",
     "Choisir une référence visuelle":            "Choose a visual reference",
+    "Ajouter des images de référence":           "Add reference images",
     "Générer depuis les images de référence":    "Generate from reference images",
     "Notice audio":                              "Audio notice",
     "Prise de vue réelle":                       "Real footage",
@@ -1595,6 +2590,8 @@ _FR_TO_EN: dict[str, str] = {
     # ── Dialog contact ────────────────────────────────────────────────────────
     "Communauté WhatsApp\nPANDORA | Cinéma":
         "WhatsApp Community\nPANDORA | Cinema",
+    "Communauté WhatsApp\nPANDORA | Live":
+        "WhatsApp Community\nPANDORA | Live",
     "Rejoignez les utilisateurs de PANDORA pour signaler des bugs, suivre les nouveautés et échanger avec la communauté.":
         "Join PANDORA users to report bugs, follow updates and connect with the community.",
 
@@ -1737,6 +2734,42 @@ _FR_TO_EN: dict[str, str] = {
     " caractères  ~$":              " characters  ~$",
     " caractères":                  " characters",
     "Échantillon vocal requis":     "Voice sample required",
+    # ── Doublage : voix IA multi-moteurs + moteur de clonage ──────────────────
+    "Voix IA — multi-moteurs":      "AI Voices — multi-engine",
+    "MiniMax 2.8 (FR) · Gemini · Inworld · Qwen3 · Maya1\nVoix de synthèse — pas d'échantillon requis":
+        "MiniMax 2.8 (FR) · Gemini · Inworld · Qwen3 · Maya1\nSynthetic voices — no sample required",
+    "Clonage de voix":              "Voice cloning",
+    "F5-TTS ou Index TTS 2 (FR) · clone depuis un échantillon\nLangue détectée / choisie selon le moteur":
+        "F5-TTS or Index TTS 2 (FR) · clone from a sample\nLanguage auto-detected / chosen per engine",
+    "Moteur de voix IA":            "AI voice engine",
+    "Voix de synthèse — aucun échantillon requis. MiniMax 2.8 HD/Turbo gèrent bien le français.":
+        "Synthetic voices — no sample required. MiniMax 2.8 HD/Turbo handle French well.",
+    "Moteur de clonage":            "Cloning engine",
+    "F5-TTS  ·  EN/ZH (FR expérimental)":   "F5-TTS  ·  EN/ZH (FR experimental)",
+    "Index TTS 2  ·  clonage multilingue FR":   "Index TTS 2  ·  multilingual FR cloning",
+    # ── Sound Design : moteur vidéo→son ───────────────────────────────────────
+    "Moteur":                       "Engine",
+    "SFX 1.6 (Mirelo)  ·  bande-son auto":  "SFX 1.6 (Mirelo)  ·  auto soundtrack",
+    "Foley Control  ·  SFX synchronisés (~$0.002/s)":
+        "Foley Control  ·  synced SFX (~$0.002/s)",
+    "MMAudio V2  ·  réf vidéo (~$0.001/s)": "MMAudio V2  ·  video ref (~$0.001/s)",
+    "Durée maximale du moteur : ":          "Engine max duration: ",
+    "ElevenLabs SFX V2  ·  texte → SFX (~$0.002/s)":
+        "ElevenLabs SFX V2  ·  text → SFX (~$0.002/s)",
+    "MMAudio V2  ·  texte → SFX (~$0.001/s)":
+        "MMAudio V2  ·  text → SFX (~$0.001/s)",
+    "SFX 1.6 (Mirelo)  ·  texte → SFX (~$0.01/s)":
+        "SFX 1.6 (Mirelo)  ·  text → SFX (~$0.01/s)",
+    # ── Sound Design Cinéma : file d'attente « Depuis le storyboard » ──────────
+    "Depuis le storyboard — file d'attente":  "From the storyboard — queue",
+    "Charge les plans en file d'attente — la sélection du storyboard\nsi tu en as une (clic / Ctrl+clic / lasso), sinon tout le storyboard.":
+        "Loads shots into the queue — the storyboard selection\nif you have one (click / Ctrl+click / lasso), otherwise the whole storyboard.",
+    "À la fin de la file : une seule piste calée sur la vidéo — chaque plan garde sa durée exacte, micro-fondus aux jonctions (pas de coupes nettes).":
+        "At the end of the queue: a single track aligned to the video — each shot keeps its exact duration, micro-fades at the joins (no hard cuts).",
+    "Aucun plan avec prompt son dans ce storyboard — génère le découpage ou renseigne la section 🎵 SOUND DESIGN des plans.":
+        "No shot has a sound prompt in this storyboard — generate the breakdown or fill the 🎵 SOUND DESIGN section of the shots.",
+    "⚠ pas de prompt son sur ce plan (section 🎵 SOUND DESIGN)":
+        "⚠ no sound prompt on this shot (🎵 SOUND DESIGN section)",
     "Chargez un fichier audio de référence pour utiliser le clonage de voix.":
         "Load a reference audio file to use voice cloning.",
     "La langue est détectée automatiquement depuis le texte saisi — écris en français, le rendu sera en français.":
@@ -1923,6 +2956,11 @@ _FR_TO_EN: dict[str, str] = {
         "🔒  Visual DNA locked — visual consistency enabled",
     "⊘  Ne pas envoyer les images de référence":
         "⊘  Do not send reference images",
+    "▦  Verrouiller les clips au masque de façade (noir hors silhouette)":
+        "▦  Lock clips to the facade mask (black outside the silhouette)",
+    "Après chaque génération Mapping : tout ce qui dépasse la silhouette du bâtiment est rendu noir pur dans le clip final (garanti à 100 %). Nécessite une façade isolée sur fond noir (BiRefNet).":
+        "After every Mapping generation: anything beyond the building silhouette is rendered pure black in the final clip (100% guaranteed). Requires a facade isolated on a black background (BiRefNet).",
+    "▦ Verrouillé au masque de façade": "▦ Locked to the facade mask",
     "Durée :":                      "Duration:",
     "0 plans sélectionnés":         "0 shots selected",
     " plans sélectionnés":          " shots selected",
@@ -2321,7 +3359,101 @@ _FR_TO_EN: dict[str, str] = {
     "Déconnecté · Clic gauche sur un slot = charger le clip sélectionné · Clic droit = déclencher (nécessite connexion)": "Disconnected · Left-click a slot = load the selected clip · Right-click = trigger (requires connection)",
     "Aucun clip trouvé\ndans ~/Videos/PANDORA/": "No clip found\nin ~/Videos/PANDORA/",
     "Configuration de la connexion Resolume et des clés API.": "Resolume connection and API keys configuration.",
-    "Resolume Arena ou Avenue doit être lancé avec Wire activé :\nPreferences → Wire → Enable REST API  (port par défaut : 8080)": "Resolume Arena or Avenue must be running with Wire enabled:\nPreferences → Wire → Enable REST API  (default port: 8080)",
+    "Resolume Arena ou Avenue doit être lancé avec le serveur web activé :\nPréférences → Webserver → « Enable Webserver & REST API »  (port : 8080)": "Resolume Arena or Avenue must be running with the web server enabled:\nPreferences → Webserver → \"Enable Webserver & REST API\"  (port: 8080)",
+    "Port Webserver :": "Webserver port:",
+    "Toute la bibliothèque": "Whole library",
+    "clip(s) reçus de la Vidéothèque": "clip(s) received from the Video library",
+    "Régler le BPM de la composition": "Set the composition BPM",
+    "Analyse d'abord le set dans le Conducteur (« Analyser le set »).":
+        "Analyze the set first in the Conductor (« Analyze the set »).",
+    "Envoyer vers Resolume": "Send to Resolume",
+    "Mode show (enchaînement auto, calé mesure)": "Show mode (auto-chain, bar-snapped)",
+    "Actualiser la bibliothèque": "Refresh library",
+    "Re-scanne les clips du projet.": "Re-scans the project's clips.",
+    "Affichage :": "View:",
+    "Détails": "Details",
+    "Grandes vignettes": "Large thumbnails",
+    "Vider la couche": "Clear layer",
+    "Vider TOUS les slots de la couche": "Clear ALL slots of layer",
+    "Vide TOUS les slots de la couche choisie\n(spin « Couche » de l'envoi en file).":
+        "Clears ALL slots of the chosen layer\n(the queue's « Layer » spin).",
+    "Une couche par acte (SQ1 → couche 1…)": "One layer per act (SQ1 → layer 1…)",
+    "Répartit les clips par acte : tous les SQ1 sur la 1re couche,\nles SQ2 sur la suivante, etc. (colonnes redémarrent à 1 par couche).\nDécoché : tout sur la couche choisie, colonnes consécutives.":
+        "Distributes clips by act: all SQ1 on the 1st layer,\nSQ2 on the next, etc. (columns restart at 1 per layer).\nUnchecked: everything on the chosen layer, consecutive columns.",
+    "Envoi : le clip sélectionné": "Sending: the selected clip",
+    "Envoi :": "Sending:",
+    "clips sélectionnés": "clips selected",
+    "glisser un clip sur un slot · clic droit : déclencher · Maj+clic : vider":
+        "drag a clip onto a slot · right click: trigger · Shift+click: clear",
+    "Annuler la file": "Cancel queue",
+    "Lancer la file d'attente": "Launch queue",
+    "Ouvre le dossier de destination des upscales.": "Opens the upscales destination folder.",
+    "Ouvre le dossier de destination du sound design.": "Opens the sound design destination folder.",
+    "Ouvre le dossier de destination des clips.": "Opens the clips destination folder.",
+    "Langues":                                   "Languages",
+    "📦  Les 6 vues de la pièce  (sol · plafond · gauche · droite · avant · arrière)":
+        "📦  The 6 views of the room  (floor · ceiling · left · right · front · back)",
+    "Génération des 6 vues de la pièce…":        "Generating the 6 room views…",
+    "Anglais  (recommandé)":                     "English  (recommended)",
+    "Langue des dialogues — traduite automatiquement à l'envoi vers Seedance.\nAnglais recommandé (meilleur lipsync). Le prompt à l'écran n'est pas modifié.":
+        "Dialogue language — translated automatically when sent to Seedance.\nEnglish recommended (best lipsync). The on-screen prompt is left unchanged.",
+    "▸  Choisir les références": "▸  Choose references",
+    "▾  Choisir les références": "▾  Choose references",
+    "▸  Éléments récurrents  ·  casting · accessoires · véhicules":
+        "▸  Recurring elements  ·  cast · props · vehicles",
+    "▾  Éléments récurrents  ·  casting · accessoires · véhicules":
+        "▾  Recurring elements  ·  cast · props · vehicles",
+
+    # ── Studio IA Cinéma : onglets Sound Design + Upscaling (portés du Live) ──
+    "Upscaling de vos clips": "Upscale your clips",
+    "▸ La sortie garde le MÊME NOM que la source → Relink Media direct dans DaVinci.":
+        "▸ The output keeps the SAME NAME as the source → direct Relink Media in DaVinci.",
+    "Sonorise tes plans : un prompt son → SFX/ambiance, ou un clip vidéo → bande-son synchronisée (Mirelo SFX 1.6, ~$0.01/s).":
+        "Add sound to your shots: a sound prompt → SFX/ambience, or a video clip → synchronized soundtrack (Mirelo SFX 1.6, ~$0.01/s).",
+    "Vidéo → bande-son": "Video → soundtrack",
+    "📁  Choisir un clip vidéo…": "📁  Choose a video clip…",
+    "Aucun clip sélectionné": "No clip selected",
+    "Choisir un clip vidéo": "Choose a video clip",
+    "Choisis d'abord un clip vidéo.": "Choose a video clip first.",
+    "Prompt son optionnel (anglais) pour orienter la bande-son. Laisse vide pour une sonorisation automatique du clip.":
+        "Optional sound prompt (English) to guide the soundtrack. Leave empty for automatic clip scoring.",
+    "Décris l'ambiance / les effets sonores (en anglais de préférence). Ex. « rain on a tin roof, distant thunder, no music, no vocals »":
+        "Describe the ambience / sound effects (preferably in English). E.g. \"rain on a tin roof, distant thunder, no music, no vocals\"",
+    "Statut": "Status",
+    "Double-clic : lire le clip upscalé": "Double-click: play the upscaled clip",
+    "Clic droit : retirer de la file": "Right click: remove from queue",
+    "Annuler l'envoi": "Cancel sending",
+    "Calage Resolume": "Resolume calibration",
+    "CONTRÔLEUR RESOLUME": "RESOLUME CONTROLLER",
+    "Connexion :": "Connection:",
+    "couches × colonnes — clic gauche : charger le clip sélectionné · clic droit : déclencher":
+        "layers × columns — left click: load selected clip · right click: trigger",
+    "Extrait automatiquement le polygone de la façade et génère :\n• un preset Advanced Output (menu Presets de Resolume)\n• une mire de calage PNG spécifique au bâtiment.\nLe calage manuel des points devient une simple vérification.":
+        "Automatically extracts the facade polygon and generates:\n• an Advanced Output preset (Resolume's Presets menu)\n• a building-specific PNG calibration card.\nManual point calibration becomes a simple check.",
+    "Choisis d'abord la façade du bâtiment.": "Pick the building facade first.",
+    "Choisis d'abord la façade du bâtiment (Conducteur → Référence bâtiment).":
+        "Pick the building facade first (Conductor → Building reference).",
+    "Façade non détectée — utilise « Isoler (fond noir) » d'abord.":
+        "Facade not detected — use « Isolate (black background) » first.",
+    "Calage généré": "Calibration generated",
+    "preset": "preset",
+    "mire": "calibration card",
+    "Resolume : Advanced Output → Presets": "Resolume: Advanced Output → Presets",
+    "Proteus  (polyvalent — recommandé)": "Proteus  (all-round — recommended)",
+    "Artemis HQ  (footage propre)": "Artemis HQ  (clean footage)",
+    "Artemis MQ  (footage moyen)": "Artemis MQ  (average footage)",
+    "Gaia HQ  (rendu naturel)": "Gaia HQ  (natural render)",
+    "Gaia CG  (rendu 3D / CG)": "Gaia CG  (3D / CG render)",
+    "Nyx  (réduction de bruit)": "Nyx  (noise reduction)",
+    "Starlight Mini  (qualité max, lent)": "Starlight Mini  (max quality, slow)",
+    "Arrête la file : le plan en cours est abandonné,\nles plans restants sont conservés en attente.":
+        "Stops the queue: the current shot is abandoned,\nremaining shots stay pending.",
+    "Arrête la file : le clip en cours est abandonné,\nles clips restants sont conservés en attente.":
+        "Stops the queue: the current clip is abandoned,\nremaining clips stay pending.",
+    "File annulée": "Queue cancelled",
+    "en attente": "pending",
+    "Chaque clip est réglé : Play Once & Hold (joue une fois, tient sa\ndernière frame), Beat Snap 1 mesure, Autopilot « clip suivant ».\nDéclenche le 1er clip : toute la séquence se joue seule, au tempo.":
+        "Each clip is set to: Play Once & Hold (plays once, holds its\nlast frame), Beat Snap 1 bar, Autopilot \"next clip\".\nTrigger the 1st clip: the whole sequence plays itself, on tempo.",
     "◈  Tester la connexion": "◈  Test connection",
     "La clé fal.ai est partagée avec PANDORA | Cinéma.\nElle est utilisée pour la génération de clips IA dans le module Live.": "The fal.ai key is shared with PANDORA | Cinéma.\nIt is used for AI clip generation in the Live module.",
     "Fonctionnalité optionnelle — ne fonctionne pas avec DaVinci Resolve (version gratuite/Lite). Requiert DaVinci Resolve Studio (version payante).": "Optional feature — does not work with DaVinci Resolve (free/Lite version). Requires DaVinci Resolve Studio (paid version).",
@@ -2334,7 +3466,7 @@ _FR_TO_EN: dict[str, str] = {
     "💰  Génération facturée via fal.ai (Seedance 2.0)  ·  Tarifs détaillés dans le Manuel d'utilisation": "💰  Generation billed via fal.ai (Seedance 2.0)  ·  Detailed pricing in the User Manual",
     "● Étape 2/3 — Synchronisation LatentSync…": "● Step 2/3 — LatentSync synchronization…",
     "● Étape 3/3 — Import DaVinci…": "● Step 3/3 — DaVinci import…",
-    "Après génération Seedance, resynchronise les lèvres de l'acteur\navec l'audio source du clip DaVinci (fal-ai/latentsync).\nImporte la vidéo lip-synced + la piste audio séparément dans DaVinci.": "After Seedance generation, resync the actor's lips\nwith the source audio of the DaVinci clip (fal-ai/latentsync).\nImports the lip-synced video + the audio track separately into DaVinci.",
+    "Après génération Seedance, resynchronise les lèvres de l'acteur\navec l'audio source du clip DaVinci (fal-ai/latentsync).\n⚠ Réencode via LatentSync → qualité moindre que le clip Seedance brut.\nImporte la vidéo lip-synced + la piste audio séparément dans DaVinci.\nDécoche pour garder le clip Seedance brut (un seul fichier, pleine qualité).": "After Seedance generation, resync the actor's lips\nwith the source audio of the DaVinci clip (fal-ai/latentsync).\n⚠ Re-encodes via LatentSync → lower quality than the raw Seedance clip.\nImports the lip-synced video + the audio track separately into DaVinci.\nUncheck to keep the raw Seedance clip (single file, full quality).",
     "Aucune clé API fal.ai n'est configurée.\n\nLa génération va tourner en mode simulation :\nles vidéos seront fictives et aucun fichier ne sera créé.\n\nPour générer de vraies vidéos, ajoutez votre clé fal.ai\ndans Paramètres, puis relancez.\n\nContinuer en mode simulation ?": "No fal.ai API key is configured.\n\nGeneration will run in simulation mode:\nvideos will be fake and no file will be created.\n\nTo generate real videos, add your fal.ai key\nin Settings, then try again.\n\nContinue in simulation mode?",
     "◎  Modifier un clip existant": "◎  Edit an existing clip",
     "Cet onglet permet de travailler sur un clip vidéo existant selon 3 modes :\n  • Générer un début  —  génère un nouveau clip à placer avant le clip source\n  • Générer une suite  —  génère un nouveau clip à placer après le clip source\n  • Nouveau rush  —  génère une nouvelle prise à partir du même clip\n\nPour utiliser un clip depuis DaVinci Resolve :\n  → Sélectionne le clip dans la timeline DaVinci\n  → Clique sur « Utiliser le clip DaVinci » ci-dessous\n  → Le nom du clip apparaît dans « Clip sélectionné »": "This tab lets you work on an existing video clip in 3 modes:\n  • Generate a beginning  —  generates a new clip to place before the source clip\n  • Generate a continuation  —  generates a new clip to place after the source clip\n  • New take  —  generates a new take from the same clip\n\nTo use a clip from DaVinci Resolve:\n  → Select the clip in the DaVinci timeline\n  → Click « Use DaVinci clip » below\n  → The clip name appears in « Selected clip »",
@@ -2899,6 +4031,14 @@ _FR_TO_EN: dict[str, str] = {
     'Génération automatique des Moods': 'Automatic Mood generation',
     'Sélectionne les plans pour lesquels générer un Mood. Les plans marqués ✓ ont déjà un Mood — ils sont décochés par défaut.': 'Select the shots to generate a Mood for. Shots marked ✓ already have a Mood — they are unchecked by default.',
     'Plans à générer :': 'Shots to generate:',
+    "Options de génération :":           "Generation options:",
+    "Moteur d'image :":                  "Image engine:",
+    "Nano Banana 2 (avec références)":   "Nano Banana 2 (with references)",
+    "Flux (depuis le prompt seul)":      "Flux (from the prompt only)",
+    "Envoyer les références des personnages": "Send character references",
+    "Envoyer la référence du décor":     "Send the location reference",
+    "Envoyer le plan d'architecte (repère d'agencement)":
+        "Send the floor plan (layout reference)",
     'Nouvelle version': 'New version',
     'Nom de la nouvelle version :': 'New version name:',
     'Ex: Découpage final, Version action, Avant-projet…': 'E.g.: Final breakdown, Action version, Draft…',
@@ -2935,10 +4075,21 @@ def tr(key: str) -> str:
 
 def translate(text: str) -> str:
     """Traduit une chaîne FR directe dans la langue courante.
-    Retourne le texte inchangé si pas de traduction ou si langue = FR."""
-    if _LANG == "fr" or not text:
+    Retourne le texte inchangé si pas de traduction ou si langue = FR.
+
+    Les libellés mentionnant l'assistant IA (« Claude ») sont automatiquement
+    rebaptisés au nom de l'assistant actif (Fable 5, Mistral, Ollama…) via
+    core.ai_provider.brand — « Analyser avec Claude » → « Analyser avec Mistral »."""
+    if not text:
         return text
-    return _FR_TO_EN.get(text, text)
+    out = text if _LANG == "fr" else _FR_TO_EN.get(text, text)
+    if "Claude" in out:
+        try:
+            from core.ai_provider import brand
+            out = brand(out)
+        except Exception:
+            pass
+    return out
 
 
 _EN_TO_FR: dict[str, str] | None = None

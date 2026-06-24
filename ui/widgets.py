@@ -90,6 +90,45 @@ class _WheelIgnoreFilter(QObject):
         return super().eventFilter(obj, event)
 
 
+class WheelHScroller(QObject):
+    """Molette → défilement HORIZONTAL d'un QScrollArea (bandes de miniatures).
+
+    Par défaut Qt route la molette vers le scroll vertical : sur une bande
+    horizontale, elle ne fait rien. Usage :
+        WheelHScroller.attach(scroll_area)
+    """
+    def __init__(self, area):
+        super().__init__(area)
+        self._area = area
+
+    def eventFilter(self, obj, event):
+        if event.type() == QEvent.Type.Wheel:
+            sb = self._area.horizontalScrollBar()
+            delta = event.angleDelta().y() or event.angleDelta().x()
+            sb.setValue(sb.value() - delta)
+            return True
+        return super().eventFilter(obj, event)
+
+    @classmethod
+    def attach(cls, area):
+        f = cls(area)
+        area.viewport().installEventFilter(f)
+        return f
+
+
+def disable_default_buttons(dlg) -> None:
+    """Neutralise les boutons « auto-default » d'un QDialog.
+
+    Par défaut Qt fait de chaque QPushButton un bouton par défaut potentiel :
+    appuyer sur Entrée dans un champ déclenche le premier bouton du dialogue
+    (Annuler, Appliquer…) au lieu d'envoyer le message. À appeler juste avant
+    dlg.exec() sur toute fenêtre contenant un champ de saisie + des boutons."""
+    from PyQt6.QtWidgets import QPushButton
+    for b in dlg.findChildren(QPushButton):
+        b.setAutoDefault(False)
+        b.setDefault(False)
+
+
 # ── Help block ─────────────────────────────────────────────────────────────────
 
 class HelpBlock(QFrame):
@@ -332,14 +371,13 @@ def prompt_block(placeholder: str):
 
     header.addWidget(counter)
     header.addStretch()
-    _lbl_enh = QLabel("Améliorer le prompt")
-    _lbl_enh.setStyleSheet(
-        f"color:{C['text_dim']};font-size:10px;background:transparent;border:none;"
-    )
-    header.addWidget(_lbl_enh)
-    header.addWidget(loading_lbl)
-    header.addWidget(auto_cb)
-    header.addWidget(cloud)
+    # « Améliorer le prompt » RETIRÉ (Cinéma + Live) : la fonction dégradait les
+    # prompts (storyboard notamment) et n'était pas fiable. On ne l'ajoute plus au
+    # header. Les objets (cloud / auto_cb / loading) restent créés et CACHÉS pour ne
+    # casser aucun appelant qui les déballe encore (prompt_block renvoie 4 valeurs).
+    auto_cb.setChecked(False)
+    for _w in (loading_lbl, auto_cb, cloud):
+        _w.setVisible(False)
 
     sep = QFrame()
     sep.setFrameShape(QFrame.Shape.HLine)

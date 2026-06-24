@@ -78,7 +78,7 @@ class ShotDialog(QDialog):
         seq = self._shot.get("seq_num", "")
         siq = self._shot.get("shot_in_seq", "")
         if seq and siq and shot:
-            self.setWindowTitle(f"SQ{seq} — P{siq}")
+            self.setWindowTitle(f"S{seq} — P{siq}")
         elif shot:
             self.setWindowTitle(f"P{self._shot.get('number', '?')}")
         else:
@@ -122,7 +122,7 @@ class ShotDialog(QDialog):
         _seq = self._shot.get("seq_num", "")
         _siq = self._shot.get("shot_in_seq", "")
         if _seq and _siq and not is_new:
-            header_text = f"SQ{_seq} — P{_siq}"
+            header_text = f"S{_seq} — P{_siq}"
         elif not is_new:
             header_text = f"P{self._shot.get('number', '?')}"
         else:
@@ -180,7 +180,7 @@ class ShotDialog(QDialog):
         col_action.setSpacing(4)
         action_header = QHBoxLayout()
         action_header.setSpacing(6)
-        action_header.addWidget(_lbl("Description de l'action"))
+        action_header.addWidget(_lbl("Nom du plan"))
         action_header.addStretch()
         self._btn_enhance_action = QPushButton()
         self._btn_enhance_action.setFixedSize(26, 26)
@@ -202,12 +202,9 @@ class ShotDialog(QDialog):
         else:
             self._btn_enhance_action.setText("☁")
         self._btn_enhance_action.clicked.connect(self._on_enhance_action)
-        _lbl_enh_act = QLabel("Améliorer le prompt")
-        _lbl_enh_act.setStyleSheet(
-            f"color:{CP['text_dim']};font-size:10px;background:transparent;border:none;"
-        )
-        action_header.addWidget(_lbl_enh_act)
-        action_header.addWidget(self._btn_enhance_action)
+        # « Améliorer le prompt » (☁) RETIRÉ — fonction jugée inutile/instable.
+        # _btn_enhance_action reste créé (non affiché) pour ne casser aucune référence.
+        self._btn_enhance_action.setVisible(False)
         col_action.addLayout(action_header)
         self._scene_title = QLineEdit(self._shot.get("scene_title", ""))
         self._scene_title.setPlaceholderText("Ex: Le chanteur est assis sur la banquette…")
@@ -268,6 +265,19 @@ class ShotDialog(QDialog):
             self._camera_distance.setCurrentText(_cur_dist)
         col_dist.addWidget(self._camera_distance)
 
+        # Hauteur de la caméra (à côté de la distance) — renseignée auto depuis la
+        # Mise en scène (clic droit caméra → Hauteur), éditable ici.
+        col_height = QVBoxLayout()
+        col_height.setSpacing(4)
+        col_height.addWidget(_lbl("Hauteur cam."))
+        self._camera_height = _combo(
+            ["0,5 m", "1 m", "1,5 m", "1,7 m", "2 m", "2,5 m", "3 m", "5 m"],
+            self._shot.get("camera_height", ""))
+        self._camera_height.setEditable(True)
+        self._camera_height.setInsertPolicy(QComboBox.InsertPolicy.NoInsert)
+        self._camera_height.setCurrentText(self._shot.get("camera_height", ""))
+        col_height.addWidget(self._camera_height)
+
         col_optic = QVBoxLayout()
         col_optic.setSpacing(4)
         col_optic.addWidget(_lbl("Optique"))
@@ -284,6 +294,7 @@ class ShotDialog(QDialog):
         row_cam.addLayout(col_size, 1)
         row_cam.addLayout(col_focal, 1)
         row_cam.addLayout(col_dist, 1)
+        row_cam.addLayout(col_height, 1)
         row_cam.addLayout(col_optic, 1)
         row_cam.addLayout(col_speed, 1)
         lay.addLayout(row_cam)
@@ -536,32 +547,10 @@ class ShotDialog(QDialog):
         seedance_header.setSpacing(6)
         seedance_header.addWidget(_lbl("Prompt Seedance 2.0"))
         seedance_header.addStretch()
-        self._btn_enhance_seedance = QPushButton()
-        self._btn_enhance_seedance.setFixedSize(26, 26)
-        self._btn_enhance_seedance.setToolTip(
-            "Améliorer avec Claude\n"
-            "Réécrit le prompt en anglais cinématographique optimisé Seedance 2.0 (<400 car.)"
-        )
-        self._btn_enhance_seedance.setCursor(Qt.CursorShape.PointingHandCursor)
-        self._btn_enhance_seedance.setStyleSheet("""
-            QPushButton{background:transparent;border:none;border-radius:5px;padding:0;}
-            QPushButton:hover{background:rgba(78,205,196,0.12);}
-            QPushButton:pressed{background:rgba(78,205,196,0.22);}
-            QPushButton:disabled{opacity:0.3;}
-        """)
-        _pix_n2 = claude_icon_pixmap(15, CP["text_dim"])
-        _pix_h2 = claude_icon_pixmap(15, CP["accent"])
-        if not _pix_n2.isNull():
-            install_hover_icon(self._btn_enhance_seedance, _pix_n2, _pix_h2, icon_size=15)
-        else:
-            self._btn_enhance_seedance.setText("☁")
-        self._btn_enhance_seedance.clicked.connect(self._on_enhance_seedance)
-        _lbl_enh_sd = QLabel("Améliorer le prompt")
-        _lbl_enh_sd.setStyleSheet(
-            f"color:{CP['text_dim']};font-size:10px;background:transparent;border:none;"
-        )
-        seedance_header.addWidget(_lbl_enh_sd)
-        seedance_header.addWidget(self._btn_enhance_seedance)
+        # « Améliorer le prompt » RETIRÉ provisoirement (2026-06-13) : l'enhance
+        # dégrade le prompt depuis le passage à Fable 5 — à réactiver au retour
+        # de Fable 5. Le handler _on_enhance_seedance est conservé (inutilisé).
+        self._btn_enhance_seedance = None
         lay.addLayout(seedance_header)
         self._seedance_prompt = QTextEdit()
         self._seedance_prompt.setPlainText(self._shot.get("seedance_prompt", ""))
@@ -570,6 +559,63 @@ class ShotDialog(QDialog):
             _TEXTAREA_STYLE.replace(CP["accent"], CP["accent2_dim"])
         )
         lay.addWidget(self._seedance_prompt)
+
+        # ── Prompt sound design (généré avec le storyboard → Sound Design) ────
+        lay.addWidget(_lbl("Prompt sound design"))
+        self._sound_prompt = QTextEdit()
+        self._sound_prompt.setPlainText(self._shot.get("sound_prompt", ""))
+        self._sound_prompt.setFixedHeight(60)
+        self._sound_prompt.setPlaceholderText(
+            "Ambiance / SFX du plan (anglais), sans voix — à utiliser dans l'onglet Sound Design."
+        )
+        self._sound_prompt.setStyleSheet(
+            _TEXTAREA_STYLE.replace(CP["accent"], CP.get("orange", CP["accent"]))
+        )
+        lay.addWidget(self._sound_prompt)
+
+        # ── Audio lip-sync (override par plan) ────────────────────────────────
+        # Vide = la voix est générée automatiquement (TTS depuis le dialogue) quand
+        # « Resynchroniser les lèvres » est actif dans le Studio IA. Un fichier ici
+        # FORCE cette voix pour ce plan (doublage pro / voix d'acteur).
+        lay.addWidget(_lbl("Audio lip-sync (override)"))
+        _ls_row = QHBoxLayout()
+        _ls_row.setSpacing(6)
+        self._lipsync_audio = QLineEdit(self._shot.get("lipsync_audio_path", ""))
+        self._lipsync_audio.setReadOnly(True)
+        self._lipsync_audio.setPlaceholderText(
+            "Auto (TTS du dialogue) — ou attache un .wav / .mp3 pour ce plan")
+        self._lipsync_audio.setStyleSheet(_FIELD_STYLE)
+        _ls_row.addWidget(self._lipsync_audio, 1)
+        _btn_ls_pick = QPushButton("Parcourir…")
+        _btn_ls_pick.setCursor(Qt.CursorShape.PointingHandCursor)
+        _btn_ls_pick.setStyleSheet(
+            f"QPushButton{{background:transparent;color:{CP['accent']};"
+            f"border:1px solid {CP['accent']};border-radius:6px;font-size:10px;"
+            f"font-weight:700;padding:0 10px;}}"
+            f"QPushButton:hover{{background:rgba(78,205,196,0.12);}}"
+        )
+
+        def _pick_ls_audio(*_a):
+            from PyQt6.QtWidgets import QFileDialog
+            from core.i18n import translate as _tr
+            p, _ = QFileDialog.getOpenFileName(
+                self, _tr("Audio lip-sync du plan"), "",
+                "Audio (*.wav *.mp3 *.m4a *.aac *.ogg)")
+            if p:
+                self._lipsync_audio.setText(p)
+        _btn_ls_pick.clicked.connect(_pick_ls_audio)
+        _ls_row.addWidget(_btn_ls_pick)
+        _btn_ls_clear = QPushButton("✕")
+        _btn_ls_clear.setFixedWidth(28)
+        _btn_ls_clear.setCursor(Qt.CursorShape.PointingHandCursor)
+        _btn_ls_clear.setStyleSheet(
+            f"QPushButton{{background:transparent;color:{CP['text_dim']};"
+            f"border:1px solid {CP['border']};border-radius:6px;font-size:11px;}}"
+            f"QPushButton:hover{{color:{CP['text_primary']};border-color:{CP['accent']};}}"
+        )
+        _btn_ls_clear.clicked.connect(lambda *_a: self._lipsync_audio.clear())
+        _ls_row.addWidget(_btn_ls_clear)
+        lay.addLayout(_ls_row)
 
         self._enhance_status = QLabel("")
         self._enhance_status.setWordWrap(True)
@@ -703,7 +749,8 @@ class ShotDialog(QDialog):
             self._enhance_status.setText("Écris une description avant d'améliorer.")
             return
         self._btn_enhance_action.setEnabled(False)
-        self._btn_enhance_seedance.setEnabled(False)
+        if self._btn_enhance_seedance:
+            self._btn_enhance_seedance.setEnabled(False)
         self._enhance_status.setText("Amélioration en cours…")
         self._worker_enhance_action = EnhanceShotActionWorker(text)
         self._worker_enhance_action.finished.connect(self._on_enhance_action_done)
@@ -713,7 +760,8 @@ class ShotDialog(QDialog):
     def _on_enhance_action_done(self, result: str):
         self._scene_title.setText(result)
         self._btn_enhance_action.setEnabled(True)
-        self._btn_enhance_seedance.setEnabled(True)
+        if self._btn_enhance_seedance:
+            self._btn_enhance_seedance.setEnabled(True)
         self._enhance_status.setText("Description améliorée ✓")
 
     def _on_enhance_seedance(self):
@@ -723,7 +771,8 @@ class ShotDialog(QDialog):
             self._enhance_status.setText("Écris un prompt avant d'améliorer.")
             return
         self._btn_enhance_action.setEnabled(False)
-        self._btn_enhance_seedance.setEnabled(False)
+        if self._btn_enhance_seedance:
+            self._btn_enhance_seedance.setEnabled(False)
         self._enhance_status.setText("Optimisation en cours…")
         self._worker_enhance_seedance = EnhanceWorker(text)
         self._worker_enhance_seedance.finished.connect(self._on_enhance_seedance_done)
@@ -733,12 +782,14 @@ class ShotDialog(QDialog):
     def _on_enhance_seedance_done(self, result: str):
         self._seedance_prompt.setPlainText(result)
         self._btn_enhance_action.setEnabled(True)
-        self._btn_enhance_seedance.setEnabled(True)
+        if self._btn_enhance_seedance:
+            self._btn_enhance_seedance.setEnabled(True)
         self._enhance_status.setText("Prompt optimisé ✓")
 
     def _on_enhance_fail(self, err: str):
         self._btn_enhance_action.setEnabled(True)
-        self._btn_enhance_seedance.setEnabled(True)
+        if self._btn_enhance_seedance:
+            self._btn_enhance_seedance.setEnabled(True)
         self._enhance_status.setText(f"Erreur : {err[:80]}")
 
     # ── Save ──────────────────────────────────────────────────────────────────
@@ -809,10 +860,13 @@ class ShotDialog(QDialog):
             "optic":            to_source(self._optic.currentText()),
             "focal":            to_source(self._focal.currentText()),
             "camera_distance":  to_source(self._camera_distance.currentText()),
+            "camera_height":    to_source(self._camera_height.currentText()),
             "shot_size":       self._shot_size.currentData() or "",
             "speed":           to_source(self._speed.currentText()),
             "comments":          self._comments.toPlainText().strip(),
             "seedance_prompt":   self._seedance_prompt.toPlainText().strip(),
+            "sound_prompt":      self._sound_prompt.toPlainText().strip(),
+            "lipsync_audio_path": self._lipsync_audio.text().strip(),
             "image_path":        self._shot.get("image_path", ""),
             "camera_axis":       to_source(self._camera_axis.currentText()) if self._camera_axis.currentText() != "—" else "",
             "camera_placement":  self._camera_placement.text().strip(),
@@ -821,6 +875,24 @@ class ShotDialog(QDialog):
             "chars_out":         self._chars_out.text().strip(),
             "mic_placement":     self._mic_placement.text().strip(),
         })
+        # Section [🖼️ TECHNIQUE] reconstruite INSTANTANÉMENT depuis les champs caméra
+        # (uniquement si le prompt est déjà structuré en sections — on ne convertit
+        # pas un ancien prompt à plat). Les autres sections sont préservées.
+        try:
+            from core.prompt_sections import (is_structured as _ps_is, parse as _ps_parse,
+                                              build as _ps_build, technique_line as _ps_tech)
+            _p = data.get("seedance_prompt", "")
+            if _ps_is(_p):
+                _sec = _ps_parse(_p)
+                _tech = _ps_tech(data)
+                if _tech != _sec.get("technique", ""):
+                    data["seedance_prompt"] = _ps_build(
+                        action=_sec["action"], staging=_sec["staging"],
+                        ambiance=_sec["ambiance"], decor=_sec["decor"],
+                        lighting=_sec["lighting"], technique=_tech,
+                        sound=_sec["sound"] or data.get("sound_prompt", ""))
+        except Exception:
+            pass
         self._saved_data = sb_api.save_shot(data)
         self.accept()
 

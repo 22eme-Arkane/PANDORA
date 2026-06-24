@@ -1,4 +1,4 @@
-﻿import os
+import os
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
     QTextEdit, QLineEdit, QFrame, QScrollArea, QFileDialog,
@@ -65,6 +65,11 @@ class PageScenario(QWidget):
         self._last_result_kind: str = ""   # "format" | "arrange" | "refs"
         self._last_ref_analysis: str = ""
         self._ref_images: list[str] = []
+        # Musiques du set (clip) — analysées (BPM/énergie/drops) pour caler le
+        # découpage, exactement comme dans PANDORA | Live (moteur partagé librosa).
+        self._music_tracks: list[dict] = []   # [{path,name,bpm,duration,energy,drops}]
+        self._music_worker = None
+        self._music_mode: str = "clip"        # "film" (moments clés) | "clip" (début→fin)
         self._autosave_timer = QTimer()
         self._autosave_timer.setSingleShot(True)
         self._autosave_timer.setInterval(3000)
@@ -292,7 +297,7 @@ class PageScenario(QWidget):
 
         # Top bar
         topbar = QWidget()
-        topbar.setFixedHeight(56)
+        topbar.setFixedHeight(60)   # hauteur STANDARD des bandeaux (alignement assistant)
         topbar.setStyleSheet(f"background:{CP['bg1']};")
         tl = QHBoxLayout(topbar)
         tl.setContentsMargins(16, 0, 16, 0)
@@ -321,61 +326,34 @@ class PageScenario(QWidget):
         self._title_edit.textChanged.connect(self._adjust_title_width)
         tl.addWidget(self._title_edit)
 
-        # ── Versions (top bar, juste à droite du titre) ───────────────────────
-        _ver_sep = QFrame()
-        _ver_sep.setFixedSize(1, 24)
-        _ver_sep.setStyleSheet(f"background:{CP['border']};")
-        tl.addWidget(_ver_sep)
+        # ── Sauvegarder / Ouvrir le scénario (fichiers physiques, dossier Scénario) ──
+        _scn_sep = QFrame()
+        _scn_sep.setFixedSize(1, 24)
+        _scn_sep.setStyleSheet(f"background:{CP['border']};")
+        tl.addWidget(_scn_sep)
 
-        self._version_combo = QComboBox()
-        self._version_combo.setFixedHeight(30)
-        self._version_combo.setMinimumWidth(150)
-        self._version_combo.setMaximumWidth(200)
-        self._version_combo.setPlaceholderText("Versions…")
-        self._version_combo.setStyleSheet(
-            f"QComboBox{{background:{CP['bg2']};border:1px solid {CP['border']};"
-            f"border-radius:6px;color:{CP['text_secondary']};font-size:10px;padding:0 8px;}}"
-            f"QComboBox:focus{{border-color:{CP['accent2_dim']};}}"
-            f"QComboBox::drop-down{{border:none;width:16px;}}"
-            f"QComboBox::down-arrow{{image:none;border-left:4px solid transparent;"
-            f"border-right:4px solid transparent;border-top:5px solid {CP['text_dim']};"
-            f"margin-right:4px;}}"
-            f"QComboBox QAbstractItemView{{background:{CP['bg2']};border:1px solid {CP['border_bright']};"
-            f"selection-background-color:{CP['accent2_dim']};color:{CP['text_primary']};"
-            f"font-size:10px;padding:4px;}}"
+        _yellow, _blue = "#f5c518", "#4aa3ff"
+        self._btn_scn_save = QPushButton("💾  Sauvegarder")
+        self._btn_scn_save.setFixedHeight(30)
+        self._btn_scn_save.setToolTip("Sauvegarder ce scénario sous un nom (dossier Scénario du projet)")
+        self._btn_scn_save.setStyleSheet(
+            f"QPushButton{{background:transparent;color:{_yellow};"
+            f"border:1px solid {_yellow};border-radius:6px;font-size:10px;font-weight:700;padding:0 12px;}}"
+            f"QPushButton:hover{{background:rgba(245,197,24,0.12);}}"
         )
-        self._version_combo.currentIndexChanged.connect(self._on_version_selected)
-        self._version_combo.activated.connect(self._on_version_activated)
-        tl.addWidget(self._version_combo)
+        self._btn_scn_save.clicked.connect(self._on_save_scenario_file)
+        tl.addWidget(self._btn_scn_save)
 
-        _ver_btn_ss = (
-            f"QPushButton{{background:transparent;color:{CP['text_dim']};"
-            f"border:1px solid {CP['border']};border-radius:6px;"
-            f"font-size:11px;font-weight:700;padding:0 8px;}}"
-            f"QPushButton:hover:enabled{{background:{CP['bg2']};color:{CP['text_primary']};"
-            f"border-color:{CP['border_bright']};}}"
-            f"QPushButton:disabled{{color:{CP['bg3']};border-color:{CP['bg3']};}}"
+        self._btn_scn_open = QPushButton("📂  Ouvrir")
+        self._btn_scn_open.setFixedHeight(30)
+        self._btn_scn_open.setToolTip("Ouvrir un scénario sauvegardé")
+        self._btn_scn_open.setStyleSheet(
+            f"QPushButton{{background:transparent;color:{_blue};"
+            f"border:1px solid {_blue};border-radius:6px;font-size:10px;font-weight:700;padding:0 12px;}}"
+            f"QPushButton:hover{{background:rgba(74,163,255,0.12);}}"
         )
-        self._btn_save_version = QPushButton("✚")
-        self._btn_save_version.setFixedSize(30, 30)
-        self._btn_save_version.setToolTip("Sauvegarder une version")
-        self._btn_save_version.setStyleSheet(_ver_btn_ss)
-        self._btn_save_version.clicked.connect(self._save_version)
-        tl.addWidget(self._btn_save_version)
-
-        # ⤓ button removed — selecting from the combo now loads the version directly
-
-        self._btn_del_version = QPushButton("✕")
-        self._btn_del_version.setFixedSize(30, 30)
-        self._btn_del_version.setToolTip("Supprimer la version sélectionnée")
-        self._btn_del_version.setEnabled(False)
-        self._btn_del_version.setStyleSheet(
-            _ver_btn_ss
-            + f"QPushButton:hover:enabled{{color:{CP['red']};border-color:{CP['red']};"
-            f"background:rgba(255,79,106,0.1);}}"
-        )
-        self._btn_del_version.clicked.connect(self._delete_version)
-        tl.addWidget(self._btn_del_version)
+        self._btn_scn_open.clicked.connect(self._on_open_scenario_file)
+        tl.addWidget(self._btn_scn_open)
 
         # ── Style visuel (top bar, après les boutons de version) ──────────────
         _style_sep_top = QFrame()
@@ -456,8 +434,11 @@ class PageScenario(QWidget):
         self._editor_text.setFont(_tw_font)
         self._editor_text.setStyleSheet(
             f"QTextEdit{{background:{CP['bg0']};border:none;"
-            f"color:{CP['text_primary']};padding:32px 120px;}}"
+            f"color:{CP['text_primary']};}}"
         )
+        # Marges DANS le document (pas en padding CSS : le padding repoussait la
+        # scrollbar à 120 px du bord — refonte 2026-06-12, portée depuis Live)
+        self._editor_text.document().setDocumentMargin(72)
         self._editor_text.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         # Alignement centré par défaut — style mise en page scénario cinéma
         from PyQt6.QtGui import QTextOption
@@ -466,7 +447,52 @@ class PageScenario(QWidget):
         self._editor_text.document().setDefaultTextOption(_opt)
         self._editor_text.textChanged.connect(self._schedule_autosave)
         self._editor_text.textChanged.connect(self._update_dur_estimate)
-        main.addWidget(self._editor_text, 1)
+
+        # ── Deux onglets : Scénario (édition) / Mise en page PANDORA (optimisé) ──
+        # Comme dans PANDORA | Live : la mise en page PANDORA s'écrit dans son
+        # propre onglet et NE touche JAMAIS au scénario.
+        from PyQt6.QtWidgets import QTabWidget
+        self._editor_tabs = QTabWidget()
+        # documentMode=False : sinon la barre d'onglets occupe toute la largeur et
+        # « alignment:center » n'a aucun effet (onglets collés à gauche).
+        self._editor_tabs.setDocumentMode(False)
+        self._editor_tabs.tabBar().setExpanding(False)
+        self._editor_tabs.setStyleSheet(
+            "QTabWidget::pane{border:none;}"
+            # Onglets CENTRÉS dans la fenêtre (esprit du dashboard du bas)
+            "QTabWidget::tab-bar{alignment:center;}"
+            f"QTabBar::tab{{background:{CP['bg1']};color:{CP['text_secondary']};"
+            f"padding:6px 18px;border:none;font-size:11px;font-weight:700;}}"
+            f"QTabBar::tab:selected{{color:{CP['accent']};"
+            f"border-bottom:2px solid {CP['accent']};}}"
+            f"QTabBar::tab:disabled{{color:{CP['text_dim']};}}"
+        )
+        self._editor_tabs.addTab(self._editor_text, translate("Scénario"))
+
+        self._layout_view = QTextEdit()
+        # Éditable : la mise en page PANDORA peut être retouchée à la main (les
+        # éditions sont persistées via autosave → champ layout_content).
+        self._layout_view.setReadOnly(False)
+        self._layout_view.setFont(_tw_font)
+        self._layout_view.setStyleSheet(
+            f"QTextEdit{{background:{CP['bg0']};border:none;color:{CP['text_primary']};}}"
+        )
+        # Même présentation que l'onglet Scénario : pleine largeur, marges DANS le
+        # document (72), texte CENTRÉ (même QTextOption que l'éditeur). Plus de
+        # colonne fixe 900 px collée à gauche — les deux onglets sont identiques.
+        self._layout_view.document().setDocumentMargin(72)
+        self._layout_view.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        self._layout_view.document().setDefaultTextOption(_opt)
+        self._layout_view.setPlaceholderText(translate(
+            "Clique « Mise en page PANDORA » (panneau de droite) pour générer ici la "
+            "version optimisée pour les moteurs. Ton scénario, lui, reste intact "
+            "dans l'onglet Scénario."
+        ))
+        self._layout_view.textChanged.connect(self._schedule_autosave)
+        self._editor_tabs.addTab(self._layout_view, translate("Mise en page PANDORA"))
+        self._editor_tabs.setTabEnabled(1, False)   # grisé tant qu'aucune mise en page
+
+        main.addWidget(self._editor_tabs, 1)
 
         # Right panel
         right_sep = QFrame()
@@ -559,7 +585,7 @@ class PageScenario(QWidget):
         # ── helper: ai_btn ────────────────────────────────────────────────────
         def _ai_btn(icon, label, sub, callback):
             btn = QPushButton()
-            btn.setFixedHeight(52)
+            btn.setFixedHeight(58)   # 2 lignes de description (word-wrap) sans troncature
             btn.setStyleSheet(
                 f"QPushButton{{background:{CP['bg2']};border:1px solid {CP['border']};"
                 f"border-radius:8px;text-align:left;padding:0 10px;}}"
@@ -576,7 +602,7 @@ class PageScenario(QWidget):
             ico_lbl.setStyleSheet(
                 f"color:{CP['accent2']};font-size:13px;background:transparent;border:none;"
             )
-            txt_lbl = QLabel(label)
+            txt_lbl = QLabel(translate(label))   # translate() rebaptise aussi « Claude »
             txt_lbl.setStyleSheet(
                 f"color:{CP['text_primary']};font-size:10px;font-weight:700;"
                 f"background:transparent;border:none;"
@@ -584,7 +610,8 @@ class PageScenario(QWidget):
             title_row.addWidget(ico_lbl)
             title_row.addWidget(txt_lbl)
             title_row.addStretch()
-            sub_lbl = QLabel(sub)
+            sub_lbl = QLabel(translate(sub))
+            sub_lbl.setWordWrap(True)   # 2 lignes au lieu de tronquer la description
             sub_lbl.setStyleSheet(
                 f"color:{CP['text_dim']};font-size:8px;background:transparent;border:none;"
             )
@@ -619,7 +646,9 @@ class PageScenario(QWidget):
             c = QWidget()
             c.setStyleSheet(f"background:{CP['bg1']};")
             lay = QVBoxLayout(c)
-            lay.setContentsMargins(16, 8, 16, 8)
+            # Marges horizontales à 0 : les cartes vont jusqu'au bord, alignées
+            # sur les en-têtes de section pleine largeur (pas de retrait de 16 px).
+            lay.setContentsMargins(0, 8, 0, 8)
             lay.setSpacing(6)
             return c, lay
 
@@ -677,6 +706,44 @@ class PageScenario(QWidget):
 
         self._refresh_refs_display()
 
+        # ── Section 0bis : Musiques du set (clip) ─────────────────────────────
+        # Comme dans PANDORA | Live : on ajoute des morceaux, librosa analyse
+        # BPM + énergie + drops → timeline injectée dans Claude pour caler le
+        # découpage du storyboard sur la musique (clips).
+        c_music, l_music = _section_container()
+
+        _music_scroll = QScrollArea()
+        _music_scroll.setFixedHeight(76)
+        _music_scroll.setWidgetResizable(True)
+        _music_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
+        _music_scroll.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        _music_scroll.setStyleSheet(
+            "QScrollArea{border:none;background:transparent;}"
+            f"QScrollBar:horizontal{{background:{CP['bg2']};height:3px;border-radius:2px;}}"
+            f"QScrollBar::handle:horizontal{{background:{CP['border_bright']};border-radius:2px;}}"
+            f"QScrollBar::add-line:horizontal, QScrollBar::sub-line:horizontal{{width:0;}}"
+        )
+        self._music_container_w = QWidget()
+        self._music_container_w.setStyleSheet(f"background:{CP['bg2']};border-radius:8px;")
+        self._music_hbox = QHBoxLayout(self._music_container_w)
+        self._music_hbox.setContentsMargins(8, 8, 8, 8)
+        self._music_hbox.setSpacing(8)
+        _music_scroll.setWidget(self._music_container_w)
+        l_music.addWidget(_music_scroll)
+
+        self._btn_analyze_music = _ai_btn(
+            "♫", "Analyser la musique (BPM + drops)",
+            "Cale le découpage sur la musique (tempo + temps forts)",
+            self._on_analyze_music,
+        )
+        l_music.addWidget(self._btn_analyze_music)
+
+        tog_music = _make_toggle("♫  Musique du film", c_music, expanded=False)
+        sc_lay.addWidget(tog_music)
+        sc_lay.addWidget(c_music)
+
+        self._refresh_music_display()
+
         # ── Section 1 : Claude IA ─────────────────────────────────────────────
         c_ia, l_ia = _section_container()
 
@@ -689,7 +756,7 @@ class PageScenario(QWidget):
         l_ia.addWidget(self._btn_arrange)
         l_ia.addWidget(self._btn_format)
 
-        tog_ia = _make_toggle("☁  Claude IA", c_ia, expanded=True)
+        tog_ia = _make_toggle("☁  Écriture assistée par IA", c_ia, expanded=True)
         sc_lay.addWidget(tog_ia)
         sc_lay.addWidget(c_ia)
 
@@ -701,7 +768,9 @@ class PageScenario(QWidget):
             self._on_gen_characters,
         )
         self._btn_gen_decors = _ai_btn(
-            "⌂", "Générer les décors", "Identifier les décors depuis le scénario",
+            "⌂", "Générer les décors + plan",
+            "Identifier les décors depuis le scénario et générer leur plan vu de dessus "
+            "(Mise en scène / Plan de feu)",
             self._on_gen_decors,
         )
         self._btn_gen_accessories = _ai_btn(
@@ -753,7 +822,7 @@ class PageScenario(QWidget):
         bottom = QWidget()
         bottom.setStyleSheet(f"background:{CP['bg1']};")
         b_lay = QVBoxLayout(bottom)
-        b_lay.setContentsMargins(16, 8, 16, 12)
+        b_lay.setContentsMargins(0, 8, 0, 12)   # aligné bord à bord avec les sections
         b_lay.setSpacing(6)
 
         self._ai_progress_lbl = QLabel("")
@@ -835,7 +904,7 @@ class PageScenario(QWidget):
             f"background:{CP['bg1']};"
         )
         ga_lay = QVBoxLayout(gen_all_zone)
-        ga_lay.setContentsMargins(16, 10, 16, 12)
+        ga_lay.setContentsMargins(0, 10, 0, 12)   # « Tout générer » aligné bord à bord
         ga_lay.setSpacing(8)
 
         self._gen_all_progress_bar = QProgressBar()
@@ -879,6 +948,7 @@ class PageScenario(QWidget):
             "Personnages · Décors · Accessoires · HMC · Véhicules"
             " · Storyboard · Images · Moods"
         )
+        _ga_btn_sub.setWordWrap(True)   # sinon tronqué (liste plus longue que le bouton)
         _ga_btn_sub.setStyleSheet(
             f"color:{CP['text_dim']};font-size:8px;background:transparent;border:none;"
         )
@@ -914,6 +984,35 @@ class PageScenario(QWidget):
         self._editor_text.setPlainText(text)
         self._apply_center_alignment()
 
+    def _apply_layout(self, text: str):
+        """Écrit la Mise en page PANDORA dans son onglet dédié — le Scénario
+        (onglet 1) reste INTACT. Active l'onglet et l'affiche."""
+        if not text:
+            return
+        self._layout_view.setPlainText(text)
+        if hasattr(self, "_editor_tabs"):
+            self._editor_tabs.setTabEnabled(1, True)
+            self._editor_tabs.setCurrentIndex(1)
+        if self._current is not None:
+            self._current["layout_content"] = text
+
+    def _clear_layout(self):
+        """Vide la Mise en page PANDORA et désactive son onglet."""
+        if hasattr(self, "_layout_view"):
+            self._layout_view.clear()
+        if hasattr(self, "_editor_tabs"):
+            self._editor_tabs.setTabEnabled(1, False)
+            self._editor_tabs.setCurrentIndex(0)
+
+    def _restore_layout(self, text: str):
+        """Recharge la Mise en page PANDORA depuis le scénario (onglet activé si présente)."""
+        if not hasattr(self, "_layout_view"):
+            return
+        self._layout_view.setPlainText(text or "")
+        if hasattr(self, "_editor_tabs"):
+            self._editor_tabs.setTabEnabled(1, bool((text or "").strip()))
+            self._editor_tabs.setCurrentIndex(0)
+
     def _apply_center_alignment(self):
         """Applique AlignHCenter à tous les blocs du document sans polluer le undo Qt."""
         from PyQt6.QtGui import QTextCursor, QTextBlockFormat
@@ -939,6 +1038,7 @@ class PageScenario(QWidget):
         self._redo_stack.clear()
         self._title_edit.setText(_pname)
         self._set_editor_text("")
+        self._clear_layout()
         self._dur_defined_check.setChecked(False)
         self._dur_min.setValue(90)
         self._dur_sec.setValue(0)
@@ -954,6 +1054,8 @@ class PageScenario(QWidget):
         self._title_edit.setText(sc.get("title", ""))
         content = sc.get("formatted_content") or sc.get("raw_content", "")
         self._set_editor_text(content)
+        # Mise en page PANDORA — restaurée dans son onglet dédié (scénario intact)
+        self._restore_layout(sc.get("layout_content", ""))
         dur         = sc.get("duration_secs", 0)
         dur_defined = sc.get("duration_defined", False) or dur > 0
         self._dur_defined_check.setChecked(dur_defined)
@@ -963,6 +1065,10 @@ class PageScenario(QWidget):
         film_style = sc.get("film_style", "")
         idx = self._film_style_combo.findData(film_style) if film_style else -1
         self._film_style_combo.setCurrentIndex(idx if idx > 0 else 0)
+        self._music_tracks = list(sc.get("music_tracks") or [])
+        self._music_mode = sc.get("music_mode") or "clip"
+        if hasattr(self, "_music_hbox"):
+            self._refresh_music_display()
         self._refresh_version_combo()
         self._go_editor()
 
@@ -1056,6 +1162,466 @@ class PageScenario(QWidget):
         else:
             self._dur_estimate_lbl.setText(f"{_est} ~{mins}m{secs:02d}")
 
+    # ── Musiques du set (clip) — analyse BPM/drops, comme PANDORA | Live ────────
+
+    def _refresh_music_display(self):
+        while self._music_hbox.count():
+            item = self._music_hbox.takeAt(0)
+            if item.widget():
+                item.widget().deleteLater()
+        btn_add = QPushButton("+")
+        btn_add.setFixedSize(60, 60)
+        btn_add.setCursor(Qt.CursorShape.PointingHandCursor)
+        btn_add.setToolTip(translate(
+            "Ajouter des morceaux (mp3/wav…)\nClaude calera le découpage sur leur BPM et leurs drops."))
+        btn_add.setStyleSheet(f"""
+            QPushButton{{
+                background:transparent;color:{CP['text_dim']};
+                border:1px dashed {CP['border_bright']};border-radius:8px;
+                font-size:24px;font-weight:300;padding:0;
+            }}
+            QPushButton:hover{{color:{CP['accent']};border-color:{CP['accent']};
+                background:rgba(78,205,196,0.08);}}
+            QPushButton:pressed{{background:rgba(78,205,196,0.16);}}
+        """)
+        btn_add.clicked.connect(self._on_add_music)
+        self._music_hbox.addWidget(btn_add)
+        for i, t in enumerate(self._music_tracks):
+            self._music_hbox.addWidget(self._make_music_chip(i, t))
+        self._music_hbox.addStretch()
+
+    def _make_music_chip(self, index: int, track: dict) -> QWidget:
+        container = QWidget()
+        container.setFixedSize(132, 60)
+        container.setStyleSheet(
+            f"background:{CP['bg3']};border:1px solid {CP['border']};border-radius:8px;")
+        lay = QVBoxLayout(container)
+        lay.setContentsMargins(8, 6, 8, 6)
+        lay.setSpacing(1)
+        name = track.get("name", "?")
+        short = name if len(name) <= 16 else name[:15] + "…"
+        name_lbl = QLabel("♫ " + short)
+        name_lbl.setToolTip(name)
+        name_lbl.setStyleSheet(
+            f"color:{CP['text_primary']};font-size:9px;font-weight:700;"
+            "background:transparent;border:none;")
+        bpm = track.get("bpm", 0)
+        if bpm:
+            info = f"{bpm:.0f} BPM · {int(track.get('duration',0)//60)}:{int(track.get('duration',0)%60):02d}  ✎"
+            info_color = CP["accent"]
+        else:
+            info = translate("non analysé") + "  ✎"
+            info_color = CP["text_dim"]
+        info_btn = QPushButton(info)
+        info_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        info_btn.setToolTip(translate("Corriger le BPM (tap-tempo, ÷2 / ×2)"))
+        info_btn.setStyleSheet(
+            f"QPushButton{{color:{info_color};font-size:8px;font-weight:700;"
+            f"background:transparent;border:none;text-align:left;padding:0;}}"
+            f"QPushButton:hover{{color:{CP['accent']};}}")
+        info_btn.clicked.connect(lambda checked=False, i=index: self._edit_bpm(i))
+        energy = track.get("energy", "")
+        en_lbl = QLabel(energy[:16] if energy else "")
+        en_lbl.setStyleSheet(
+            f"color:{CP['text_dim']};font-size:8px;background:transparent;border:none;")
+        lay.addWidget(name_lbl)
+        lay.addWidget(info_btn)
+        lay.addWidget(en_lbl)
+        btn_rm = QPushButton("✕", container)
+        btn_rm.setGeometry(114, 2, 16, 16)
+        btn_rm.setCursor(Qt.CursorShape.PointingHandCursor)
+        btn_rm.setStyleSheet(
+            f"QPushButton{{background:{CP['bg2']};color:{CP['text_primary']};"
+            f"border:1px solid {CP['border_bright']};border-radius:3px;"
+            f"font-size:9px;font-weight:700;padding:0;}}"
+            f"QPushButton:hover{{background:{CP['red']};color:#fff;border-color:{CP['red']};}}"
+        )
+        btn_rm.clicked.connect(lambda checked=False, i=index: self._remove_music(i))
+        return container
+
+    def _remove_music(self, index: int):
+        if 0 <= index < len(self._music_tracks):
+            self._music_tracks.pop(index)
+            self._refresh_music_display()
+            self._save(silent=True)
+
+    def _edit_bpm(self, index: int):
+        """Correction manuelle du BPM : spinbox + ÷2 / ×2 (erreurs d'octave) + tap-tempo.
+        librosa confond parfois 64↔128 BPM → indispensable pour caler le découpage."""
+        if not (0 <= index < len(self._music_tracks)):
+            return
+        import time
+        from PyQt6.QtWidgets import (
+            QDialog, QVBoxLayout, QHBoxLayout, QLabel, QDoubleSpinBox, QPushButton,
+        )
+        track = self._music_tracks[index]
+        dlg = QDialog(self)
+        dlg.setWindowTitle(translate("Corriger le BPM"))
+        dlg.setFixedWidth(360)
+        dlg.setStyleSheet(f"QDialog{{background:{CP['bg1']};}}")
+        lay = QVBoxLayout(dlg)
+        lay.setContentsMargins(20, 18, 20, 18)
+        lay.setSpacing(12)
+
+        head = QLabel("♫ " + track.get("name", "?"))
+        head.setStyleSheet(
+            f"color:{CP['text_primary']};font-size:12px;font-weight:700;background:transparent;")
+        head.setWordWrap(True)
+        lay.addWidget(head)
+
+        row = QHBoxLayout()
+        row.setSpacing(8)
+        spin = QDoubleSpinBox()
+        spin.setRange(30.0, 300.0)
+        spin.setDecimals(1)
+        spin.setSingleStep(0.5)
+        spin.setValue(float(track.get("bpm", 0) or 120.0))
+        spin.setSuffix(" BPM")
+        spin.setStyleSheet(
+            f"QDoubleSpinBox{{background:{CP['bg2']};color:{CP['text_primary']};"
+            f"border:1px solid {CP['border']};border-radius:6px;padding:6px 8px;font-size:13px;}}")
+        row.addWidget(spin, 1)
+
+        def _mk(txt, fn):
+            b = QPushButton(txt)
+            b.setFixedSize(44, 34)
+            b.setCursor(Qt.CursorShape.PointingHandCursor)
+            b.setStyleSheet(
+                f"QPushButton{{background:{CP['bg2']};color:{CP['text_secondary']};"
+                f"border:1px solid {CP['border']};border-radius:6px;font-size:11px;font-weight:700;}}"
+                f"QPushButton:hover{{background:{CP['bg3']};color:{CP['text_primary']};"
+                f"border-color:{CP['border_bright']};}}")
+            b.clicked.connect(fn)
+            return b
+        row.addWidget(_mk("÷2", lambda: spin.setValue(round(spin.value() / 2, 1))))
+        row.addWidget(_mk("×2", lambda: spin.setValue(round(spin.value() * 2, 1))))
+        lay.addLayout(row)
+
+        # ── Tap-tempo ─────────────────────────────────────────────────────────
+        taps: list = []
+        tap_lbl = QLabel(translate("Tape en rythme sur la musique…"))
+        tap_lbl.setStyleSheet(f"color:{CP['text_dim']};font-size:9px;background:transparent;")
+        btn_tap = QPushButton(translate("⊙  Tap tempo"))
+        btn_tap.setFixedHeight(40)
+        btn_tap.setCursor(Qt.CursorShape.PointingHandCursor)
+        btn_tap.setStyleSheet(
+            f"QPushButton{{background:transparent;color:{CP['accent']};"
+            f"border:1px solid {CP['accent_dim']};border-radius:7px;font-size:12px;font-weight:700;}}"
+            f"QPushButton:hover{{background:rgba(78,205,196,0.10);}}"
+            f"QPushButton:pressed{{background:rgba(78,205,196,0.20);}}")
+
+        def _on_tap():
+            t = time.perf_counter()
+            if taps and (t - taps[-1]) > 2.0:
+                taps.clear()   # pause trop longue → on repart
+            taps.append(t)
+            if len(taps) > 8:
+                del taps[0]
+            if len(taps) >= 2:
+                intervals = [taps[i + 1] - taps[i] for i in range(len(taps) - 1)]
+                avg = sum(intervals) / len(intervals)
+                if avg > 0:
+                    val = 60.0 / avg
+                    spin.setValue(round(val, 1))
+                    tap_lbl.setText(f"{len(taps)} taps → {val:.1f} BPM")
+            else:
+                tap_lbl.setText(translate("Continue à taper…"))
+        btn_tap.clicked.connect(_on_tap)
+        lay.addWidget(btn_tap)
+        lay.addWidget(tap_lbl)
+
+        brow = QHBoxLayout()
+        brow.setSpacing(8)
+        brow.addStretch()
+        btn_cancel = QPushButton(translate("Annuler"))
+        btn_cancel.setFixedHeight(34)
+        btn_cancel.setStyleSheet(
+            f"QPushButton{{background:transparent;color:{CP['text_secondary']};"
+            f"border:1px solid {CP['border']};border-radius:7px;font-size:11px;font-weight:700;padding:0 16px;}}"
+            f"QPushButton:hover{{background:{CP['bg2']};color:{CP['text_primary']};}}")
+        btn_cancel.clicked.connect(dlg.reject)
+        btn_ok = QPushButton(translate("Valider"))
+        btn_ok.setFixedHeight(34)
+        btn_ok.setStyleSheet(
+            f"QPushButton{{background:{CP['accent']};color:#07080f;border:none;"
+            f"border-radius:7px;font-size:11px;font-weight:700;padding:0 18px;}}"
+            f"QPushButton:hover{{background:#6eded6;}}")
+        btn_ok.clicked.connect(dlg.accept)
+        brow.addWidget(btn_cancel)
+        brow.addWidget(btn_ok)
+        lay.addLayout(brow)
+
+        if dlg.exec() == QDialog.DialogCode.Accepted:
+            track["bpm"] = round(spin.value(), 1)
+            self._refresh_music_display()
+            self._save(silent=True)
+            self._ai_progress_lbl.setText(
+                f"BPM ← {track['bpm']:.0f} — {track.get('name','')}")
+
+    def _on_add_music(self):
+        paths, _ = QFileDialog.getOpenFileNames(
+            self, translate("Ajouter des morceaux"), "",
+            "Audio (*.mp3 *.wav *.flac *.ogg *.m4a *.aac);;Tous les fichiers (*)",
+        )
+        existing = {t.get("path") for t in self._music_tracks}
+        added = 0
+        for p in paths:
+            if p and p not in existing:
+                self._music_tracks.append({
+                    "path": p, "name": os.path.basename(p),
+                    "bpm": 0, "duration": 0, "energy": "", "drops": [],
+                })
+                added += 1
+        if added:
+            self._refresh_music_display()
+            self._save(silent=True)
+            self._ai_progress_lbl.setText(translate(
+                "Morceau(x) ajouté(s) — clique « Analyser le set » pour détecter BPM et drops."))
+
+    def _choose_music_mode(self) -> str:
+        """Popup AVANT l'analyse : musique de FILM (intégrée à des moments clés)
+        ou de CLIP (du début à la fin du scénario). Renvoie "film" / "clip" / ""."""
+        from PyQt6.QtWidgets import QDialog, QVBoxLayout, QLabel, QPushButton
+        dlg = QDialog(self)
+        dlg.setWindowTitle(translate("Type de musique"))
+        dlg.setStyleSheet(f"QDialog{{background:{CP['bg1']};}}")
+        dlg.setFixedWidth(460)
+        lay = QVBoxLayout(dlg)
+        lay.setContentsMargins(22, 20, 22, 20)
+        lay.setSpacing(12)
+
+        title = QLabel("♫  " + translate("Comment intégrer cette musique ?"))
+        title.setStyleSheet(
+            f"color:{CP['text_primary']};font-size:14px;font-weight:700;background:transparent;")
+        lay.addWidget(title)
+
+        choice = {"v": "", "cur": getattr(self, "_music_mode", "clip")}
+
+        def _card(icon, name, desc, val):
+            b = QPushButton()
+            b.setAutoDefault(False)
+            b.setCursor(Qt.CursorShape.PointingHandCursor)
+            b.setMinimumHeight(66)
+            _hl = (val == choice["cur"])
+            b.setStyleSheet(
+                f"QPushButton{{background:{CP['bg2']};text-align:left;padding:8px 12px;"
+                f"border:1px solid {CP['accent'] if _hl else CP['border']};border-radius:8px;}}"
+                f"QPushButton:hover{{border-color:{CP['accent_dim']};background:{CP['bg3']};}}")
+            bl = QVBoxLayout(b)
+            bl.setContentsMargins(6, 6, 6, 6)
+            bl.setSpacing(2)
+            t = QLabel(f"{icon}  {translate(name)}")
+            t.setStyleSheet(
+                f"color:{CP['text_primary']};font-size:12px;font-weight:700;"
+                f"background:transparent;border:none;")
+            d = QLabel(translate(desc))
+            d.setWordWrap(True)
+            d.setStyleSheet(
+                f"color:{CP['text_dim']};font-size:10px;background:transparent;border:none;")
+            bl.addWidget(t)
+            bl.addWidget(d)
+            def _pick():
+                choice["v"] = val
+                dlg.accept()
+            b.clicked.connect(_pick)
+            return b
+
+        lay.addWidget(_card(
+            "🎬", "Musique de film",
+            "Intégrée à des MOMENTS CLÉS du film (climax, transitions) — pas en continu.",
+            "film"))
+        lay.addWidget(_card(
+            "🎞️", "Musique de clip",
+            "Couvre le scénario du DÉBUT À LA FIN — le découpage suit la musique.",
+            "clip"))
+
+        cancel = QPushButton(translate("Annuler"))
+        cancel.setAutoDefault(False)
+        cancel.setFixedHeight(32)
+        cancel.setStyleSheet(
+            f"QPushButton{{background:transparent;color:{CP['text_dim']};"
+            f"border:1px solid {CP['border']};border-radius:7px;font-size:11px;padding:0 16px;}}"
+            f"QPushButton:hover{{color:{CP['text_primary']};border-color:{CP['text_primary']};}}")
+        cancel.clicked.connect(dlg.reject)
+        lay.addWidget(cancel)
+
+        dlg.exec()
+        return choice["v"]
+
+    def _on_analyze_music(self):
+        if not self._music_tracks:
+            self._ai_progress_lbl.setText(translate(
+                "Ajoute d'abord des morceaux dans « Musique du film »."))
+            return
+        mode = self._choose_music_mode()
+        if not mode:
+            return   # annulé : on ne lance pas l'analyse
+        self._music_mode = mode
+        self._save(silent=True)
+        from core.music_analysis import AnalyzeMusicWorker
+        _kind = translate("film") if mode == "film" else translate("clip")
+        self._ai_progress_lbl.setText(
+            translate("Analyse audio en cours (BPM + drops)…") + f"  [{_kind}]")
+        self._music_worker = AnalyzeMusicWorker(self._music_tracks)
+        self._open_music_analysis_window(self._music_worker)
+
+    def _open_music_analysis_window(self, worker):
+        """Fenêtre d'analyse musicale (comme l'arrangement Claude) : progression
+        visible + prévisualisation de la timeline + choix Appliquer / Annuler."""
+        from PyQt6.QtWidgets import (
+            QDialog, QVBoxLayout, QHBoxLayout, QTextEdit, QProgressBar, QPushButton,
+        )
+        from core.worker import abandon_thread
+        dlg = QDialog(self)
+        dlg.setWindowTitle(translate("Analyse musicale du film"))
+        dlg.resize(720, 600)
+        dlg.setStyleSheet(
+            f"QDialog{{background:{CP['bg1']};}}"
+            f"QLabel{{background:transparent;color:{CP['text_primary']};}}")
+        lay = QVBoxLayout(dlg)
+        lay.setContentsMargins(22, 20, 22, 20)
+        lay.setSpacing(12)
+
+        hdr = QHBoxLayout()
+        title_lbl = QLabel("♫  " + translate("Analyse musicale du film"))
+        title_lbl.setStyleSheet(f"color:{CP['text_primary']};font-size:14px;font-weight:700;")
+        status_lbl = QLabel(translate("Analyse en cours…"))
+        status_lbl.setStyleSheet(
+            f"color:{CP['accent']};font-size:10px;font-family:'Consolas',monospace;")
+        hdr.addWidget(title_lbl)
+        hdr.addStretch()
+        hdr.addWidget(status_lbl)
+        lay.addLayout(hdr)
+
+        bar = QProgressBar()
+        bar.setRange(0, 0)   # indéterminé jusqu'au 1er morceau
+        bar.setTextVisible(False)
+        bar.setFixedHeight(5)
+        bar.setStyleSheet(
+            f"QProgressBar{{background:{CP['bg3']};border:none;border-radius:2px;}}"
+            f"QProgressBar::chunk{{background:{CP['accent']};border-radius:2px;}}")
+        lay.addWidget(bar)
+
+        te = QTextEdit()
+        te.setReadOnly(True)
+        te.setPlaceholderText(translate("L'analyse apparaît au fil de l'écoute…"))
+        te.setStyleSheet(
+            f"QTextEdit{{background:{CP['bg2']};border:1px solid {CP['border']};"
+            f"border-radius:8px;color:{CP['text_primary']};font-size:11px;"
+            f"font-family:'Consolas',monospace;padding:14px;}}")
+        lay.addWidget(te, 1)
+
+        btn_row = QHBoxLayout()
+        btn_row.setSpacing(8)
+        btn_cancel = QPushButton(translate("Annuler"))
+        btn_cancel.setFixedHeight(36)
+        btn_cancel.setStyleSheet(
+            f"QPushButton{{background:{CP['bg3']};color:{CP['red']};"
+            f"border:1px solid {CP['red']};border-radius:7px;font-size:11px;font-weight:600;padding:0 20px;}}"
+            f"QPushButton:hover{{background:rgba(255,79,106,0.12);}}")
+        btn_apply = QPushButton(translate("✓  Appliquer l'analyse"))
+        btn_apply.setFixedHeight(36)
+        btn_apply.setEnabled(False)
+        btn_apply.setStyleSheet(
+            f"QPushButton{{background:{CP['accent']};color:#07080f;border:none;"
+            f"border-radius:7px;font-size:11px;font-weight:700;padding:0 22px;}}"
+            f"QPushButton:hover{{background:#6eded6;}}"
+            f"QPushButton:disabled{{background:{CP['bg3']};color:{CP['text_dim']};"
+            f"border:1px solid {CP['border']};}}")
+        btn_row.addWidget(btn_cancel)
+        btn_row.addStretch()
+        btn_row.addWidget(btn_apply)
+        lay.addLayout(btn_row)
+
+        _pending = [None]
+        _active  = [True]
+
+        def _stop():
+            if _active[0]:
+                _active[0] = False
+                worker.quit()
+                abandon_thread(worker)
+
+        def _mmss(s):
+            s = max(0, int(s))
+            return f"{s // 60}:{s % 60:02d}"
+
+        def _on_prog(i, total, name):
+            if not _active[0]:
+                return
+            bar.setRange(0, total)
+            bar.setValue(i)
+            status_lbl.setText(f"{i}/{total}")
+            te.append(f"[{i}/{total}] {name} — {translate('analyse…')}")
+
+        def _on_done(tracks):
+            _active[0] = False
+            _pending[0] = tracks
+            bar.setRange(0, 100)
+            bar.setValue(100)
+            status_lbl.setText(translate("Analyse terminée"))
+            status_lbl.setStyleSheet(
+                f"color:{CP['green']};font-size:10px;font-family:'Consolas',monospace;")
+            from core.music_analysis import build_set_timeline
+            lines = []
+            for t in tracks:
+                if t.get("bpm"):
+                    lines.append(f"♫ {t.get('name','?')} — {t['bpm']:.0f} BPM · "
+                                 f"{_mmss(t.get('duration', 0))}")
+                    if t.get("energy"):
+                        lines.append(f"   {translate('énergie')} {t['energy']}")
+                    drops = t.get("drops", [])
+                    if drops:
+                        lines.append("   drops: " + ", ".join(_mmss(d) for d in drops))
+                else:
+                    lines.append(f"♫ {t.get('name','?')} — {translate('non analysé')}")
+                lines.append("")
+            tl = build_set_timeline(tracks)
+            te.setPlainText("\n".join(lines) + (("\n" + tl) if tl else ""))
+            btn_apply.setEnabled(True)
+            btn_apply.setFocus()
+
+        def _on_fail(msg):
+            _active[0] = False
+            status_lbl.setText(translate("Erreur"))
+            status_lbl.setStyleSheet(
+                f"color:{CP['red']};font-size:10px;font-family:'Consolas',monospace;")
+            bar.setRange(0, 100)
+            bar.setValue(0)
+            te.setPlainText(f"{translate('Erreur')} : {msg}")
+
+        def _apply():
+            if _pending[0] is not None:
+                self._music_tracks = _pending[0]
+                self._refresh_music_display()
+                self._save(silent=True)
+                n = sum(1 for t in _pending[0] if t.get("bpm"))
+                self._ai_progress_lbl.setText(
+                    f"{n} " + translate("morceau(x) analysé(s) — timeline musicale prête ✓"))
+            dlg.accept()
+
+        def _cancel():
+            _stop()
+            self._ai_progress_lbl.setText(translate("Analyse musicale annulée."))
+            dlg.reject()
+
+        btn_cancel.clicked.connect(_cancel)
+        btn_apply.clicked.connect(_apply)
+        dlg.rejected.connect(_stop)
+
+        worker.progress.connect(_on_prog)
+        worker.finished.connect(_on_done)
+        worker.failed.connect(_on_fail)
+        worker.start()
+        dlg.exec()
+
+    def _text_with_music(self) -> str:
+        """Scénario + timeline musicale (si analysée) à injecter dans Claude."""
+        text = self._get_text()
+        from core.music_analysis import build_set_timeline
+        timeline = build_set_timeline(self._music_tracks, mode=getattr(self, "_music_mode", "clip"))
+        return (timeline + "\n\n" + text) if timeline else text
+
     def _save(self, silent=False):
         text = self._editor_text.toPlainText().strip()
         title = self._title_edit.text().strip()
@@ -1072,6 +1638,9 @@ class PageScenario(QWidget):
             "duration_secs":     dur_secs,
             "duration_defined":  dur_defined,
             "film_style":        film_style_key if film_style_key not in ("", "__sep__") else "",
+            "layout_content":    self._layout_view.toPlainText() if hasattr(self, "_layout_view") else "",
+            "music_tracks":      self._music_tracks,
+            "music_mode":        self._music_mode,
         })
         self._current = scenario_api.save_scenario(data)
         if not silent:
@@ -1086,6 +1655,62 @@ class PageScenario(QWidget):
     def _get_text(self) -> str:
         return self._editor_text.toPlainText().strip()
 
+    # ── Sauvegarde / ouverture physique du scénario (dossier « Scénario ») ──────
+
+    def _on_save_scenario_file(self):
+        from PyQt6.QtWidgets import QFileDialog, QMessageBox
+        import core.scenario as scenario_api
+        import os
+        text  = self._get_text()
+        title = self._title_edit.text().strip()
+        if not text and not title:
+            QMessageBox.information(self, "Sauvegarder", "Le scénario est vide.")
+            return
+        # Boîte de dialogue Windows : choisir où enregistrer (défaut = dossier
+        # Scénario, nom de fichier = nom du projet).
+        from core import context as _ctx
+        suggested = scenario_api._safe_name(_ctx.get_project_name() or title or "Scénario") + ".json"
+        start = os.path.join(scenario_api.saves_dir(), suggested)
+        path, _ = QFileDialog.getSaveFileName(
+            self, translate("Sauvegarder le scénario"), start,
+            "Scénario PANDORA (*.json)")
+        if not path:
+            return
+        if not path.lower().endswith(".json"):
+            path += ".json"
+        dur_defined = self._dur_defined_check.isChecked()
+        dur_secs    = (self._dur_min.value() * 60 + self._dur_sec.value()) if dur_defined else 0
+        data = dict(self._current or {})
+        data.update({
+            "title":             title or os.path.splitext(os.path.basename(path))[0],
+            "raw_content":       text,
+            "formatted_content": text,
+            "layout_content":    self._layout_view.toPlainText() if hasattr(self, "_layout_view") else "",
+            "duration_secs":     dur_secs,
+            "duration_defined":  dur_defined,
+            "film_style":        self._film_style_combo.currentData() or "",
+        })
+        try:
+            scenario_api.export_scenario_to(path, data)
+            self._ai_progress_lbl.setText("Scénario sauvegardé ✓")
+        except Exception as e:
+            QMessageBox.critical(self, "Erreur", f"Échec de la sauvegarde : {e}")
+
+    def _on_open_scenario_file(self):
+        from PyQt6.QtWidgets import QFileDialog, QMessageBox
+        import core.scenario as scenario_api
+        path, _ = QFileDialog.getOpenFileName(
+            self, translate("Ouvrir un scénario"), scenario_api.saves_dir(),
+            "Scénario PANDORA (*.json)")
+        if not path:
+            return
+        data = scenario_api.import_scenario_from(path)
+        if not data:
+            QMessageBox.warning(self, "Ouvrir", "Fichier introuvable ou illisible.")
+            return
+        self._open_scenario(data)
+        self._ai_progress_lbl.setText("Scénario ouvert ✓")
+
     # ── Références visuelles ─────────────────────────────────────────────────
 
     def _refresh_refs_display(self):
@@ -1093,7 +1718,9 @@ class PageScenario(QWidget):
             item = self._refs_hbox.takeAt(0)
             if item.widget():
                 item.widget().deleteLater()
-        # Bouton "+" toujours en premier à gauche — pas besoin de scroller pour l'atteindre
+
+        # Bouton « + » TOUJOURS un carré 60×60 à gauche (raccord avec Live ;
+        # plus de long rectangle pleine largeur quand la zone est vide).
         btn_add = QPushButton("+")
         btn_add.setFixedSize(60, 60)
         btn_add.setCursor(Qt.CursorShape.PointingHandCursor)
@@ -1143,10 +1770,9 @@ class PageScenario(QWidget):
             self._refresh_refs_display()
 
     def _on_add_refs(self):
-        paths, _ = QFileDialog.getOpenFileNames(
-            self, "Ajouter des images de référence", "",
-            "Images (*.png *.jpg *.jpeg *.webp *.bmp);;Tous les fichiers (*)",
-        )
+        # Porte unique : bibliothèque globale (avec « Parcourir le disque… » intégré)
+        from ui.dialog_image_library import ImageLibraryDialog
+        paths = ImageLibraryDialog.pick(self)
         for p in paths:
             if p not in self._ref_images:
                 self._ref_images.append(p)
@@ -1274,9 +1900,25 @@ class PageScenario(QWidget):
         dur_secs = (self._dur_min.value() * 60 + self._dur_sec.value()) if self._dur_defined_check.isChecked() else 0
         sc_id = (self._current or {}).get("id", "")
         from ui.dialog_storyboard_generate import StoryboardGenerateDialog
-        dlg = StoryboardGenerateDialog(text, dur_secs, sc_id, parent=self)
+        # Timeline musicale injectée (si un set a été analysé) → découpage calé sur
+        # le BPM et les drops, comme dans PANDORA | Live.
+        dlg = StoryboardGenerateDialog(self._text_with_music(), dur_secs, sc_id, parent=self)
         if dlg.exec() == StoryboardGenerateDialog.DialogCode.Accepted and dlg._shots:
             count = len(dlg._shots)
+            # Mise en scène INITIALE auto (acteurs + caméra depuis l'axe du plan) —
+            # l'utilisateur ajuste ensuite dans Mise en scène / Plan de feu.
+            try:
+                import core.staging as _stg
+                _stg.ensure_seeded(sb_api.list_shots(sb_api.DEFAULT_VERSION_ID))
+            except Exception:
+                pass
+            # Coloration AUTO des plans récurrents (baseline déterministe ; l'analyse
+            # IA fine se relance depuis le bouton « Plans récurrents » du Storyboard).
+            try:
+                import core.recurrence as _rec
+                _rec.detect_and_apply(sb_api.DEFAULT_VERSION_ID)
+            except Exception:
+                pass
             self._ai_progress_lbl.setText(f"{count} {translate('plans importés dans le Storyboard ✓')}")
             self._btn_goto_storyboard.setVisible(True)
 
@@ -1449,7 +2091,7 @@ class PageScenario(QWidget):
         btn_close.clicked.connect(_on_close_btn)
         dlg.rejected.connect(_stop_worker)
 
-        btn_apply = QPushButton(translate("↩  Remplacer le texte"))
+        btn_apply = QPushButton(translate("◈  Mettre dans « Mise en page PANDORA »"))
         btn_apply.setFixedHeight(36)
         btn_apply.setEnabled(not streaming)
         btn_apply.setStyleSheet(
@@ -1466,12 +2108,9 @@ class PageScenario(QWidget):
             result = _final_text[0].strip()
             if not result:
                 return
-            self._push_undo()
-            self._set_editor_text(result)
-            if self._current is not None:
-                self._current["formatted_content"] = result
-            self._ai_progress_lbl.setText("Mise en page PANDORA appliquée ✓")
-            self._btn_undo_action.setVisible(True)
+            # La mise en page va dans son onglet dédié — le scénario reste intact.
+            self._apply_layout(result)
+            self._ai_progress_lbl.setText("Mise en page PANDORA générée ✓ (onglet dédié)")
             dlg.accept()
 
         btn_apply.clicked.connect(_do_apply)
@@ -1866,17 +2505,22 @@ class PageScenario(QWidget):
         # ── Thumbnails ───────────────────────────────────────────────────────
         if self._ref_images:
             thumb_scroll = QScrollArea()
-            thumb_scroll.setFixedHeight(92)
+            thumb_scroll.setFixedHeight(100)
             thumb_scroll.setWidgetResizable(True)
             thumb_scroll.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
             thumb_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
             thumb_scroll.setStyleSheet(
                 "QScrollArea{border:none;background:transparent;}"
-                f"QScrollBar:horizontal{{background:{CP['bg2']};height:3px;border-radius:2px;}}"
-                f"QScrollBar::handle:horizontal{{background:{CP['border_bright']};border-radius:2px;}}"
+                f"QScrollBar:horizontal{{background:{CP['bg2']};height:9px;border-radius:4px;}}"
+                f"QScrollBar::handle:horizontal{{background:{CP['border_bright']};"
+                f"border-radius:4px;min-width:40px;}}"
+                f"QScrollBar::handle:horizontal:hover{{background:{CP['accent']};}}"
                 f"QScrollBar::add-line:horizontal,QScrollBar::sub-line:horizontal{{width:0;}}"
             )
             thumb_scroll.setFrameStyle(0)
+            # Molette → défilement horizontal de la bande de miniatures
+            from ui.widgets import WheelHScroller
+            WheelHScroller.attach(thumb_scroll)
             thumb_ctn = QWidget()
             thumb_ctn.setStyleSheet("background:transparent;")
             thumb_hbox = QHBoxLayout(thumb_ctn)
@@ -2226,6 +2870,9 @@ class PageScenario(QWidget):
     # ── Versions ──────────────────────────────────────────────────────────────
 
     def _refresh_version_combo(self):
+        # Contrôles « Versions » remplacés par Sauvegarder/Ouvrir — no-op si absents.
+        if not hasattr(self, "_version_combo"):
+            return
         self._version_combo.blockSignals(True)
         self._version_combo.clear()
         versions = (self._current or {}).get("versions", [])
@@ -2688,7 +3335,7 @@ class PageScenario(QWidget):
             if vehs:  _el["vehicles"]    = vehs
         except Exception:
             pass
-        w = GenerateStoryboardWorker(self._get_text(), dur, _el or None)
+        w = GenerateStoryboardWorker(self._text_with_music(), dur, _el or None)
         w.finished.connect(self._gen_all_storyboard_done)
         w.failed.connect(lambda e: self._gen_all_step_error(e, "Storyboard"))
         self._gen_all_workers.append(w); w.start()
@@ -2710,6 +3357,18 @@ class PageScenario(QWidget):
         except Exception as e:
             self._gen_all_error_count += 1
             self._ai_progress_lbl.setText(f"Erreur storyboard : {str(e)[:80]}")
+        # Mise en scène INITIALE auto (acteurs + caméra) pour les plans générés.
+        try:
+            import core.staging as _stg
+            _stg.ensure_seeded(self._gen_all_shots)
+        except Exception:
+            pass
+        # Coloration AUTO des plans récurrents (baseline déterministe).
+        try:
+            import core.recurrence as _rec
+            _rec.detect_and_apply(sb_api.DEFAULT_VERSION_ID)
+        except Exception:
+            pass
         self._gen_all_run_next()
 
     # ── Images ────────────────────────────────────────────────────────────────
@@ -2860,3 +3519,28 @@ class PageScenario(QWidget):
         super().showEvent(e)
         if self._stack.currentIndex() == 0:
             self._refresh_recent()
+        else:
+            self._reload_if_empty_editor()
+
+    def _reload_if_empty_editor(self):
+        """Éditeur ouvert mais sans CONTENU → afficher un scénario qui a du contenu sur
+        disque (ex. scénario reconstruit par la synchro Storyboard, ou rempli pendant
+        que l'éditeur vide était affiché). On teste UNIQUEMENT le contenu, PAS le titre :
+        un éditeur intitulé « Scénario » mais vide doit quand même se recharger (c'était
+        le bug « rien dans Scénario après réécriture »). On ne recharge jamais si du
+        TEXTE est déjà saisi → aucune perte de saisie en cours."""
+        if self._editor_text.toPlainText().strip():
+            return
+        import core.scenario as scenario_api
+
+        def _has(sc):
+            return bool((sc.get("formatted_content") or sc.get("raw_content") or "").strip())
+
+        cur_id = (self._current or {}).get("id")
+        fresh = scenario_api.get_scenario(cur_id) if cur_id else None
+        if fresh and _has(fresh):
+            self._open_scenario(fresh)
+            return
+        scs = [s for s in scenario_api.list_scenarios() if _has(s)]
+        if scs:
+            self._open_scenario(scs[0])

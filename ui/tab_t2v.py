@@ -1042,6 +1042,19 @@ class CastingSelector(QWidget):
                 if meta:
                     decor_image_path = meta.get("image_path", "")
 
+            # Synchro décor (même axe) : si un fond a été figé pour ce (décor, axe),
+            # il REMPLACE l'image du décor → continuité d'un champ/contrechamp à l'autre.
+            if (getattr(self, "_decor_sync_cb", None) and self._decor_sync_cb.isChecked()
+                    and self._active_shot):
+                try:
+                    import core.decor_sync as _ds
+                    _dec_key = _mosaic_decor_id or self._active_shot.get("decor_name")
+                    _synced = _ds.get_synced_bg(_dec_key, self._active_shot.get("camera_axis"))
+                    if _synced:
+                        decor_image_path = _synced
+                except Exception:
+                    pass
+
         # HMC items are NOT sent to Seedance — they feed character generation only
         acc_only = set() if no_item else {
             iid for iid in self._selected_items
@@ -1111,6 +1124,17 @@ class StoryboardSelector(QWidget):
 
         lay.addWidget(section_label("Storyboard"))
 
+        # Pastilles de GROUPES (plans récurrents / libellés couleur) : un clic
+        # sélectionne d'un bloc tous les plans d'une même couleur → Rendu / Audio.
+        self._chips_row = QHBoxLayout()
+        self._chips_row.setContentsMargins(4, 0, 4, 0)
+        self._chips_row.setSpacing(6)
+        self._chips_row.setAlignment(Qt.AlignmentFlag.AlignLeft)
+        _chips_wrap = QWidget()
+        _chips_wrap.setStyleSheet("background:transparent;")
+        _chips_wrap.setLayout(self._chips_row)
+        lay.addWidget(_chips_wrap)
+
         self._inner = QWidget()
         self._inner.setStyleSheet("background:transparent;")
         self._hbox = QHBoxLayout(self._inner)
@@ -1137,7 +1161,76 @@ class StoryboardSelector(QWidget):
         )
         lay.addWidget(scroll)
 
+        # Lasso : cliquer-glisser sur le fond de la bande = sélection rectangle
+        from PyQt6.QtWidgets import QRubberBand
+        self._rubber = QRubberBand(QRubberBand.Shape.Rectangle, self._inner)
+        self._rubber_origin = None
+        self._last_clicked_id: str | None = None   # ancre du Maj+clic (plage)
+        self._inner.installEventFilter(self)
+
         self._load_shots()
+
+    def eventFilter(self, obj, ev):
+        from PyQt6.QtCore import QEvent, QRect
+        if obj is self._inner:
+            t = ev.type()
+            if (t == QEvent.Type.MouseButtonPress
+                    and ev.button() == Qt.MouseButton.LeftButton
+                    and self._inner.childAt(ev.position().toPoint()) is None):
+                self._rubber_origin = ev.position().toPoint()
+                self._rubber.setGeometry(QRect(self._rubber_origin, self._rubber_origin))
+                self._rubber.show()
+                return True
+            if t == QEvent.Type.MouseMove and self._rubber_origin is not None:
+                self._rubber.setGeometry(
+                    QRect(self._rubber_origin, ev.position().toPoint()).normalized())
+                return True
+            if t == QEvent.Type.MouseButtonRelease and self._rubber_origin is not None:
+                rect = self._rubber.geometry()
+                self._rubber.hide()
+                self._rubber_origin = None
+                self._apply_lasso(rect)
+                return True
+        return super().eventFilter(obj, ev)
+
+    def _apply_lasso(self, rect):
+        """Sélectionne tous les plans dont la vignette croise le rectangle."""
+        hits = [sid for sid, card in self._shot_cards.items()
+                if rect.intersects(card.geometry())]
+        if not hits:
+            return
+        self._selected_shot_ids = set(hits)
+        for sid, card in self._shot_cards.items():
+            card.set_selected(sid in self._selected_shot_ids)
+        self._emit_selection()
+
+    def _shot_order(self) -> list:
+        def _num(s):
+            try:
+                return int(s.get("number") or 0)
+            except (TypeError, ValueError):
+                return 0
+        return [s["id"] for s in sorted(self._shots_meta.values(), key=_num)]
+
+    def _emit_selection(self):
+        count = len(self._selected_shot_ids)
+        if count == 1:
+            self._selected_shot_id = next(iter(self._selected_shot_ids))
+            fresh = sb_api.get_shot(self._selected_shot_id)
+            if fresh:
+                self._shots_meta[self._selected_shot_id] = fresh
+            self.shot_selected.emit(self._shots_meta.get(self._selected_shot_id, {}))
+        elif count == 0:
+            self._selected_shot_id = None
+            self.shot_selected.emit({})
+        else:
+            self._selected_shot_id = None
+            shots_list = sorted(
+                [self._shots_meta.get(sid, {}) for sid in self._selected_shot_ids],
+                key=lambda s: int(s.get("number") or 0) if s.get("number") is not None else 0,
+            )
+            self.shot_selected.emit({})
+            self.shots_selected.emit(shots_list)
 
     def _load_shots(self):
         while self._hbox.count():
@@ -1186,42 +1279,79 @@ class StoryboardSelector(QWidget):
             self._shots_meta[shot["id"]] = shot
             self._hbox.addWidget(card)
         self._hbox.addStretch()
+        self._rebuild_group_chips()
+
+    def _rebuild_group_chips(self):
+        """Une pastille par GROUPE de plans RÉCURRENTS présent (flag récurrent).
+        Clic = sélectionner tous les plans de ce groupe (Rendu / Audio)."""
+        if not hasattr(self, "_chips_row"):
+            return
+        while self._chips_row.count():
+            it = self._chips_row.takeAt(0)
+            if it.widget():
+                it.widget().deleteLater()
+        seen, names = [], {}
+        for sid in self._shot_order():
+            s = self._shots_meta.get(sid, {})
+            c = (s.get("recurrent_color") or "").strip()
+            if c and c not in seen:
+                seen.append(c)
+                names[c] = s.get("recurrent_text") or ""
+        if not seen:
+            return
+        _hdr = QLabel(translate("Groupes :"))
+        _hdr.setStyleSheet(f"color:{C['text_dim']};font-size:10px;background:transparent;")
+        self._chips_row.addWidget(_hdr)
+        for c in seen:
+            chip = QPushButton(names.get(c) or "●")
+            chip.setCursor(Qt.CursorShape.PointingHandCursor)
+            chip.setFixedHeight(22)
+            chip.setToolTip(translate("Sélectionner tous les plans de ce groupe"))
+            chip.setStyleSheet(
+                f"QPushButton{{background:{c};color:#07080f;border:none;"
+                f"border-radius:11px;font-size:9px;font-weight:800;padding:0 11px;}}"
+                f"QPushButton:hover{{border:1px solid #ffffff;}}")
+            chip.clicked.connect(lambda _=False, col=c: self._select_color_group(col))
+            self._chips_row.addWidget(chip)
+        self._chips_row.addStretch()
+
+    def _select_color_group(self, color: str):
+        ids = {sid for sid, s in self._shots_meta.items()
+               if (s.get("recurrent_color") or "").strip() == color}
+        if not ids:
+            return
+        self._selected_shot_ids = ids
+        for sid, card in self._shot_cards.items():
+            card.set_selected(sid in ids)
+        self._emit_selection()
 
     def _on_shot_toggled(self, shot_id: str, selected: bool):
         from PyQt6.QtWidgets import QApplication
-        mods = QApplication.keyboardModifiers()
-        multi = bool(mods & (Qt.KeyboardModifier.ControlModifier | Qt.KeyboardModifier.ShiftModifier))
+        mods  = QApplication.keyboardModifiers()
+        shift = bool(mods & Qt.KeyboardModifier.ShiftModifier)
+        ctrl  = bool(mods & Qt.KeyboardModifier.ControlModifier)
 
-        if multi:
+        if shift and self._last_clicked_id in self._shots_meta:
+            # Maj+clic : sélectionne TOUTE LA PLAGE entre le dernier clic et ici
+            order = self._shot_order()
+            try:
+                i1, i2 = order.index(self._last_clicked_id), order.index(shot_id)
+            except ValueError:
+                i1 = i2 = order.index(shot_id) if shot_id in order else 0
+            self._selected_shot_ids |= set(order[min(i1, i2):max(i1, i2) + 1])
+        elif ctrl:
             if selected:
                 self._selected_shot_ids.add(shot_id)
             else:
                 self._selected_shot_ids.discard(shot_id)
+            self._last_clicked_id = shot_id
         else:
-            for sid, card in self._shot_cards.items():
-                if sid != shot_id:
-                    card.set_selected(False)
             self._selected_shot_ids = {shot_id} if selected else set()
+            self._last_clicked_id = shot_id
 
-        count = len(self._selected_shot_ids)
-        if count == 1:
-            self._selected_shot_id = next(iter(self._selected_shot_ids))
-            # Relit depuis le disque pour avoir le prompt et les champs les plus récents
-            fresh = sb_api.get_shot(self._selected_shot_id)
-            if fresh:
-                self._shots_meta[self._selected_shot_id] = fresh
-            self.shot_selected.emit(self._shots_meta.get(self._selected_shot_id, {}))
-        elif count == 0:
-            self._selected_shot_id = None
-            self.shot_selected.emit({})
-        else:
-            self._selected_shot_id = None
-            shots_list = sorted(
-                [self._shots_meta.get(sid, {}) for sid in self._selected_shot_ids],
-                key=lambda s: int(s.get("number") or 0) if s.get("number") is not None else 0,
-            )
-            self.shot_selected.emit({})
-            self.shots_selected.emit(shots_list)
+        for sid, card in self._shot_cards.items():
+            card.set_selected(sid in self._selected_shot_ids)
+        self._emit_selection()
 
     def get_selected_shot(self) -> dict | None:
         if self._selected_shot_id:
@@ -1507,11 +1637,21 @@ class _ContinuityBar(QFrame):
             self._i2v_thumb.setVisible(False)
             self._i2v_row_widget.setVisible(False)
 
-        self.setVisible(True)
+        # Cinéma : la barre « Raccord automatique » a été RETIRÉE de l'UI — l'objet
+        # est gardé sans parent ni layout, uniquement pour _prev_shot (toggle I2V
+        # « Raccord automatique » de RENDU & AUDIO + get_i2v_frame). On ne l'affiche
+        # JAMAIS : self.setVisible(True) sur un widget sans parent ouvrirait une
+        # fenêtre flottante parasite (bug observé pendant la génération en série).
+        self.setVisible(False)
 
     def build_continuity_prefix(self) -> str:
         """Returns an English raccord context prefix for the Seedance prompt, or ''."""
-        if not self._cb.isChecked() or not self._prev_shot:
+        # Cinéma : le raccord N'EST PLUS injecté automatiquement dans le prompt (il
+        # dégradait le découpage du storyboard). Le raccord reste disponible via la
+        # section RENDU & AUDIO (« Raccord automatique » → I2V depuis la dernière
+        # frame du plan précédent), pas dans le texte du prompt.
+        return ""
+        if not self._cb.isChecked() or not self._prev_shot:   # noqa: code conservé
             return ""
         s = self._prev_shot
         lines = []
@@ -2164,6 +2304,10 @@ class TabT2V(QScrollArea):
         self._enhance_worker = None
         self._active_shot_title: str = ""
         self._active_shot: dict | None = None
+        self._active_shot_apercus: list[str] = []
+        self._active_mood_path: str = ""   # mood actif du plan (réf « Se référer au mood »)
+        self._shot_lipsync_worker = None   # worker lip-sync post-génération (storyboard)
+        self._pending_advance = (None, "") # (result, davinci_msg) en attente après lip-sync
         self._batch_queue:   list[dict] = []
         self._batch_total:   int        = 0
         self._batch_idx:     int        = 0
@@ -2267,6 +2411,24 @@ class TabT2V(QScrollArea):
         _clear_row.addStretch()
         _fs_outer.addLayout(_clear_row)
 
+        # ── En-tête repliable (comme dans Live — replié par défaut) ──────────
+        self._film_style_frame.setVisible(False)
+        self._btn_style_toggle = QPushButton("▸  Choisir les références")
+        self._btn_style_toggle.setCheckable(True)
+        self._btn_style_toggle.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._btn_style_toggle.setStyleSheet(
+            f"QPushButton{{background:{C['bg2']};color:{C['text_secondary']};"
+            f"border:1px solid {C['border']};border-radius:8px;text-align:left;"
+            f"font-size:11px;font-weight:700;padding:8px 14px;}}"
+            f"QPushButton:hover{{background:{C['bg3']};color:{C['text_primary']};}}"
+            f"QPushButton:checked{{color:{C['accent']};border-color:{C['accent_dim']};}}")
+
+        def _toggle_style(checked):
+            self._film_style_frame.setVisible(checked)
+            self._btn_style_toggle.setText(
+                ("▾  " if checked else "▸  ") + "Choisir les références")
+        self._btn_style_toggle.toggled.connect(_toggle_style)
+        lay.addWidget(self._btn_style_toggle)
         lay.addWidget(self._film_style_frame)
 
         # ── Storyboard selector ───────────────────────────────────────────────
@@ -2413,13 +2575,37 @@ class TabT2V(QScrollArea):
         sep.setStyleSheet(f"background:{C['border']};")
         _ez_lay.addWidget(sep)
 
-        # ── Continuity / Raccord bar ──────────────────────────────────────────
+        # ── Continuity / Raccord ──────────────────────────────────────────────
+        # Encart « Raccord automatique » RETIRÉ de l'UI Cinéma (il injectait le
+        # raccord dans le prompt et dégradait le découpage). On GARDE l'objet, non
+        # affiché, pour ses données I2V (dernière frame du plan précédent) utilisées
+        # par RENDU & AUDIO → « Raccord automatique ». Le raccord ne va donc plus
+        # jamais dans le texte du prompt ; il reste cochable dans RENDU & AUDIO.
         self._continuity_bar = _ContinuityBar()
-        _ez_lay.addWidget(self._continuity_bar)
+        self._continuity_bar.setVisible(False)
 
-        # ── Casting selector ──────────────────────────────────────────────────
+        # ── Éléments récurrents (casting · accessoires · véhicules) — repliable
+        #    comme dans Live (replié par défaut : gagne de la place) ───────────
         self._casting = CastingSelector()
         self._casting.context_changed.connect(self._on_context_changed)
+        self._casting.setVisible(False)
+        self._btn_casting_toggle = QPushButton(
+            "▸  Éléments récurrents  ·  casting · accessoires · véhicules")
+        self._btn_casting_toggle.setCheckable(True)
+        self._btn_casting_toggle.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._btn_casting_toggle.setStyleSheet(
+            f"QPushButton{{background:transparent;color:{C['accent']};"
+            f"border:none;text-align:left;font-size:12px;font-weight:800;"
+            f"letter-spacing:0.5px;padding:4px 2px;}}"
+            f"QPushButton:hover{{color:{C['text_primary']};}}")
+
+        def _toggle_casting(checked):
+            self._casting.setVisible(checked)
+            self._btn_casting_toggle.setText(
+                ("▾  " if checked else "▸  ")
+                + "Éléments récurrents  ·  casting · accessoires · véhicules")
+        self._btn_casting_toggle.toggled.connect(_toggle_casting)
+        _ez_lay.addWidget(self._btn_casting_toggle)
         _ez_lay.addWidget(self._casting)
 
         sep2 = QFrame()
@@ -2481,19 +2667,36 @@ class TabT2V(QScrollArea):
         _raccords_lay.setContentsMargins(0, 0, 0, 0)
         _raccords_lay.setSpacing(1)
 
-        _raccords_header = QWidget()
-        _raccords_header.setStyleSheet("background:transparent;border:none;")
-        _raccords_header_lay = QHBoxLayout(_raccords_header)
-        _raccords_header_lay.setContentsMargins(14, 8, 14, 6)
-        _raccords_title = QLabel("RENDU & AUDIO")
-        _raccords_title.setStyleSheet(
-            f"color:{C['accent']};font-size:9px;letter-spacing:2px;"
-            f"font-family:'Consolas',monospace;font-weight:700;"
-            f"background:transparent;border:none;"
+        # En-tête repliable (menu déroulant) — beaucoup d'options sous RENDU & AUDIO.
+        self._raccords_open = False  # replié par défaut
+        self._raccords_toggle_btn = QPushButton("▶  RENDU & AUDIO")
+        self._raccords_toggle_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._raccords_toggle_btn.setStyleSheet(
+            f"QPushButton{{background:transparent;color:{C['accent']};border:none;"
+            f"text-align:left;font-size:9px;letter-spacing:2px;"
+            f"font-family:'Consolas',monospace;font-weight:700;padding:8px 14px 6px 14px;}}"
+            f"QPushButton:hover{{color:{C['accent_dim']};}}"
         )
-        _raccords_header_lay.addWidget(_raccords_title)
-        _raccords_header_lay.addStretch()
-        _raccords_lay.addWidget(_raccords_header)
+        _raccords_lay.addWidget(self._raccords_toggle_btn)
+
+        # Corps repliable : toutes les options vivent dedans.
+        self._raccords_body = QWidget()
+        self._raccords_body.setStyleSheet("background:transparent;border:none;")
+        _body_lay = QVBoxLayout(self._raccords_body)
+        _body_lay.setContentsMargins(0, 0, 0, 0)
+        _body_lay.setSpacing(1)
+        self._raccords_body.setVisible(False)
+        _raccords_lay.addWidget(self._raccords_body)
+
+        def _toggle_raccords(*_a):
+            self._raccords_open = not self._raccords_open
+            self._raccords_body.setVisible(self._raccords_open)
+            self._raccords_toggle_btn.setText(
+                ("▼" if self._raccords_open else "▶") + "  RENDU & AUDIO")
+        self._raccords_toggle_btn.clicked.connect(_toggle_raccords)
+
+        # À partir d'ici, toutes les options s'ajoutent dans le CORPS repliable.
+        _raccords_lay = _body_lay
 
         def _raccord_toggle(title, subtitle, checked):
             w = QFrame()
@@ -2574,6 +2777,94 @@ class TabT2V(QScrollArea):
         self._dyn_cam_toggle_row.setVisible(True)  # caché quand shot actif
         _raccords_lay.addWidget(self._dyn_cam_toggle_row)  # → RENDU & AUDIO, après Raccord automatique
 
+        self._decor_sync_toggle_row, _decor_sync_cb_inner = _raccord_toggle(
+            "Synchroniser le décor (même axe)",
+            "Réutilise le décor d'un plan déjà généré dans le même axe : on extrait le "
+            "fond du clip (personnage retiré par IA) comme référence — décor identique "
+            "d'un champ/contrechamp à l'autre",
+            False,
+        )
+        self._decor_sync_cb = _decor_sync_cb_inner
+        _raccords_lay.addWidget(self._decor_sync_toggle_row)
+
+        # Se référer au mood — envoie le mood validé du plan comme image de référence
+        # Seedance (rôle « mood ») pour une cohésion exacte avec le mood (composition,
+        # cadrage, lumière, couleurs). Comme côté Live, mais ici en référence d'image.
+        self._mood_ref_toggle_row, _mood_ref_cb_inner = _raccord_toggle(
+            "Se référer au mood",
+            "Envoie le mood validé du plan comme image de référence → cohésion exacte "
+            "(composition, cadrage, lumière, couleurs) avec le mood. Sans effet si le "
+            "plan n'a pas de mood.",
+            False,
+        )
+        self._mood_ref_cb = _mood_ref_cb_inner
+        self._mood_ref_cb.stateChanged.connect(self._refresh_prompt_preview)
+        _raccords_lay.addWidget(self._mood_ref_toggle_row)
+
+        # Synchronisation labiale (lip-sync) — post-traitement APRÈS génération :
+        # recale les lèvres sur une voix (doublage/TTS auto depuis le dialogue, ou
+        # un audio attaché au plan). Payant (par minute).
+        # Titre + case (SANS sous-titre — la description vient APRÈS le moteur).
+        self._lipsync_toggle_row, _lipsync_cb_inner = _raccord_toggle(
+            "Resynchroniser les lèvres (lip-sync)", "", False,
+        )
+        self._lipsync_cb = _lipsync_cb_inner
+        _raccords_lay.addWidget(self._lipsync_toggle_row)
+
+        # Moteur lip-sync (défaut Sync 2 Pro) — placé AVANT la description, aligné à 14.
+        from api.lipsync import (LIPSYNC_ENGINES as _LSE, LIPSYNC_ENGINE_ORDER as _LSO,
+                                 get_lipsync_engine as _get_ls)
+        _ls_row = QWidget()
+        _ls_row.setStyleSheet("background:transparent;border:none;")
+        _ls_lay = QHBoxLayout(_ls_row)
+        _ls_lay.setContentsMargins(14, 2, 14, 4)
+        _ls_lay.setSpacing(8)
+        _ls_lbl = QLabel("Moteur lip-sync")
+        _ls_lbl.setStyleSheet(f"color:{C['text_dim']};font-size:11px;border:none;")
+        _ls_lay.addWidget(_ls_lbl)
+        self._lipsync_engine_combo = QComboBox()
+        self._lipsync_engine_combo.setFixedHeight(28)
+        self._lipsync_engine_combo.setStyleSheet(
+            f"QComboBox{{background:{C['bg2']};border:1px solid {C['border']};"
+            f"border-radius:6px;color:{C['text_primary']};font-size:11px;padding:0 8px;}}"
+            f"QComboBox::drop-down{{border:none;width:20px;}}"
+            f"QComboBox QAbstractItemView{{background:{C['bg3']};"
+            f"border:1px solid {C['border_bright']};color:{C['text_primary']};"
+            f"selection-background-color:{C['accent_dim']};}}"
+        )
+        for _k in _LSO:
+            _e = _LSE[_k]
+            self._lipsync_engine_combo.addItem(f"{_e['name']} · {_e['price']}", _k)
+        _cur_ls = _get_ls()
+        for _i in range(self._lipsync_engine_combo.count()):
+            if self._lipsync_engine_combo.itemData(_i) == _cur_ls:
+                self._lipsync_engine_combo.setCurrentIndex(_i)
+                break
+
+        def _save_ls_engine(*_a):
+            from core.config import load_config, save_config
+            _c = load_config()
+            _c["lipsync_engine"] = self._lipsync_engine_combo.currentData() or "sync2pro"
+            save_config(_c)
+        self._lipsync_engine_combo.currentIndexChanged.connect(_save_ls_engine)
+        _ls_lay.addWidget(self._lipsync_engine_combo, 1)
+        _raccords_lay.addWidget(_ls_row)
+
+        # Description du lip-sync — APRÈS le moteur, alignée à 14 (comme le moteur).
+        _ls_desc_wrap = QWidget()
+        _ls_desc_wrap.setStyleSheet("background:transparent;border:none;")
+        _ls_desc_lay = QHBoxLayout(_ls_desc_wrap)
+        _ls_desc_lay.setContentsMargins(14, 0, 14, 8)
+        _ls_desc = QLabel(
+            "Après génération, recale les lèvres sur une voix : doublage/TTS auto depuis "
+            "le dialogue du plan, ou un audio attaché. Post-traitement payant (par minute).")
+        _ls_desc.setWordWrap(True)
+        _ls_desc.setStyleSheet(
+            f"color:{C['text_dim']};font-size:10px;font-family:'Consolas',monospace;"
+            f"border:none;background:transparent;")
+        _ls_desc_lay.addWidget(_ls_desc)
+        _raccords_lay.addWidget(_ls_desc_wrap)
+
         lay.addWidget(self._edit_zone)
 
         # ── Rendu & Audio (toujours visible, y compris multi-sélection) ───────
@@ -2586,7 +2877,15 @@ class TabT2V(QScrollArea):
         # ── Paramètres de génération (toujours visibles, y compris en multi-sélection) ──
         grid = QGridLayout()
         grid.setSpacing(12)
-        self.cb_model = combo(_DAVINCI_ENGINES)
+        # Moteurs ouverts à TOUS ceux compatibles avec le workflow storyboard —
+        # les t2v purs (Veo, Sora) sont écartés. use_keyframes=False : le Cinéma
+        # n'envoie JAMAIS de keyframes de moods (mécanisme Live/Mapping), les
+        # libellés n'affichent donc que raccord i2v + réfs. Seedance 2.0 marqué
+        # « recommandé » — les autres moteurs ne donnent pas encore d'aussi
+        # bons résultats sur ce workflow.
+        from core.engine_caps import sequence_engines
+        self.cb_model = combo(sequence_engines(_ENGINES, use_keyframes=False,
+                                               recommended=("seedance-2.0",)))
         self.cb_model.currentIndexChanged.connect(self._on_engine_changed)
         self.cb_ratio = combo(["16:9 — Paysage", "9:16 — Portrait", "4:3", "3:4"])
         # Résolutions initiales pour Seedance 2.0 (moteur par défaut)
@@ -2635,7 +2934,8 @@ class TabT2V(QScrollArea):
 
         self.btn_generate = QPushButton("▶▶  Lancer la file d'attente")
         self.btn_generate.setMinimumHeight(46)
-        self.btn_generate.clicked.connect(self._start_with_credit_check)
+        # Vérification du solde fal.ai retirée : on lance directement la file.
+        self.btn_generate.clicked.connect(self.start_generation)
         self._billing_worker = None
         self._balance_lbl = QLabel("")
         self._balance_lbl.setStyleSheet(
@@ -2687,6 +2987,12 @@ class TabT2V(QScrollArea):
         btn_row = QHBoxLayout()
         btn_row.setContentsMargins(0, 0, 0, 0)
         btn_row.setSpacing(8)
+        # Spacer symétrique du bloc « × N » (14 + 8 + 54) : le TEXTE du bouton
+        # reste centré avec le logo PANDORA (retour 2026-06-13)
+        _sym_spacer = QWidget()
+        _sym_spacer.setFixedWidth(76)
+        _sym_spacer.setStyleSheet("background:transparent;")
+        btn_row.addWidget(_sym_spacer)
         btn_row.addWidget(self.btn_generate, 1)
         btn_row.addWidget(_rep_lbl)
         btn_row.addWidget(self._spinbox_repeat)
@@ -2699,23 +3005,24 @@ class TabT2V(QScrollArea):
         balance_row.addWidget(self._balance_lbl)
         lay.addLayout(balance_row)
 
-        # ── Ouvrir le dossier des vidéos (toujours visible) ──────────────────
-        self._btn_open_folder = QPushButton("📁  Ouvrir le dossier des vidéos")
+        # ── Ouvrir le dossier des vidéos — pleine largeur, style « ghost »
+        #    uniforme (comme Live) ; la barre DaVinci passe DESSOUS ────────────
+        self._btn_open_folder = QPushButton(translate("Ouvrir le dossier des vidéos"))
+        self._btn_open_folder.setFixedHeight(30)
         self._btn_open_folder.setCursor(Qt.CursorShape.PointingHandCursor)
-        self._btn_open_folder.setStyleSheet(f"""
-            QPushButton{{background:transparent;color:{C['text_secondary']};
-            border:1px solid {C['border']};border-radius:8px;font-size:11px;
-            padding:6px 14px;}}
-            QPushButton:hover{{background:{C['bg3']};color:{C['text_primary']};}}
-        """)
+        self._btn_open_folder.setStyleSheet(
+            f"QPushButton{{background:transparent;color:{C['text_secondary']};"
+            f"border:1px solid {C['border']};border-radius:7px;"
+            f"font-size:11px;font-weight:700;padding:0 14px;}}"
+            f"QPushButton:hover{{background:{C['bg3']};color:{C['text_primary']};"
+            f"border-color:{C['border_bright']};}}"
+            f"QPushButton:pressed{{background:{C['bg3']};}}"
+        )
         self._btn_open_folder.clicked.connect(self._open_output_folder)
+        lay.addWidget(self._btn_open_folder)
 
-        _dav_row = QHBoxLayout()
-        _dav_row.setContentsMargins(0, 0, 0, 0)
-        _dav_row.setSpacing(10)
-        _dav_row.addWidget(self._davinci_bar, 1)
-        _dav_row.addWidget(self._btn_open_folder)
-        lay.addLayout(_dav_row)
+        # « DaVinci Resolve Studio connecté » SOUS le bouton (retour 2026-06-13)
+        lay.addWidget(self._davinci_bar)
         self._davinci_bar.connection_changed.connect(self._on_davinci_connection_changed)
 
         # ── Encart prix (sous la barre DaVinci) ───────────────────────────────
@@ -2854,9 +3161,14 @@ class TabT2V(QScrollArea):
 
         # Load aperçu/mood images for thumbnail strip
         _apercu_data = sb_api.load_apercus(shot.get("id", ""))
-        self._active_shot_apercus = [
-            p for p in _apercu_data.get("paths", []) if os.path.isfile(p)
-        ]
+        _all_apercus = _apercu_data.get("paths", [])
+        self._active_shot_apercus = [p for p in _all_apercus if os.path.isfile(p)]
+        # Mood ACTIF (sélectionné via active_idx) du plan — réf « Se référer au mood ».
+        _ai = _apercu_data.get("active_idx", 0)
+        _active_mood = _all_apercus[_ai] if 0 <= _ai < len(_all_apercus) else ""
+        if not (_active_mood and os.path.isfile(_active_mood)):
+            _active_mood = self._active_shot_apercus[0] if self._active_shot_apercus else ""
+        self._active_mood_path = _active_mood if (_active_mood and os.path.isfile(_active_mood)) else ""
 
         # Auto-select entities from shot
         self._casting.set_active_shot(shot)
@@ -3024,6 +3336,28 @@ class TabT2V(QScrollArea):
         self._refresh_prompt_preview()
         self._preview_translate_timer.start()
 
+    def _sync_film_anchor_with_style(self):
+        """En style « Film réaliste », la prise de vue réelle est déjà incluse dans le
+        rendu → on coche AUTOMATIQUEMENT le toggle « Prise de vue réelle » de RENDU &
+        AUDIO pour le signaler. On ne fait que cocher (jamais décocher) : hors de ce
+        style, le choix de l'utilisateur est laissé intact."""
+        cb = getattr(self, "_film_anchor_cb", None)
+        if cb is None:
+            return
+        try:
+            import core.style as _sa
+            realistic = _sa.get_style_key() in {"realistic"}
+        except Exception:
+            realistic = False
+        if realistic and not cb.isChecked():
+            cb.setChecked(True)   # déclenche _refresh_prompt_preview via stateChanged
+
+    def showEvent(self, e):
+        super().showEvent(e)
+        # À chaque retour sur l'onglet : si le style « Film réaliste » est actif, la
+        # prise de vue réelle est cochée d'office (le style peut avoir changé ailleurs).
+        self._sync_film_anchor_with_style()
+
     def _refresh_prompt_preview(self, *_):
         if not hasattr(self, "_preview_body") or not self._preview_expanded:
             return
@@ -3034,8 +3368,16 @@ class TabT2V(QScrollArea):
         prompt_fr = self.prompt_ta.toPlainText().strip()
         if not prompt_fr:
             return
-        if self._preview_translate_worker and self._preview_translate_worker.isRunning():
-            self._preview_translate_worker.quit()
+        # Anti-crash : un QThread basé sur run() n'a pas de boucle d'événements, donc
+        # quit() est INOPÉRANT. Réassigner la variable laissait l'ancien thread être
+        # collecté par le GC PENDANT qu'il tournait → « QThread: Destroyed while
+        # thread is still running » → plantage de l'app (typiquement en sélectionnant
+        # des plans coup sur coup). abandon_thread() le garde référencé + bloque ses
+        # signaux jusqu'à sa fin.
+        if self._preview_translate_worker is not None:
+            from core.worker import abandon_thread
+            abandon_thread(self._preview_translate_worker)
+            self._preview_translate_worker = None
         self._preview_spinner.setText("⟳  traduction…")
         self._preview_spinner.setVisible(True)
         self._preview_translate_worker = _PreviewTranslateWorker(prompt_fr)
@@ -3070,12 +3412,16 @@ class TabT2V(QScrollArea):
         fp = (context + user_text) if context else user_text
 
         if self._active_shot:
-            _focal = self._active_shot.get("focal", "")
-            if _focal:
-                from core.camera_data import focal_to_framing_prefix
-                _fr = focal_to_framing_prefix(_focal)
-                if _fr:
-                    fp = f"{_fr} — {fp}"
+            from core.camera_data import focal_to_framing_prefix, shot_movement_to_prompt
+            _cam_bits = []
+            _fr = focal_to_framing_prefix(self._active_shot.get("focal", ""))
+            if _fr:
+                _cam_bits.append(_fr)
+            _mov = shot_movement_to_prompt(self._active_shot.get("camera_movement", ""))
+            if _mov:
+                _cam_bits.append(_mov)
+            if _cam_bits:
+                fp = f"{', '.join(_cam_bits)} — {fp}"
 
         if (hasattr(self, "_dyn_cam_cb") and self._dyn_cam_cb
                 and self._dyn_cam_cb.isChecked() and not self._active_shot):
@@ -3229,6 +3575,15 @@ class TabT2V(QScrollArea):
         snd.append(f"Musique : {'✓' if music_on else '✗ → no background music injecté'}")
         snd.append(f"Sous-titres : {'✓' if subtitle_on else '✗ → no subtitles injecté'}")
         param_lines.append("Son : " + "  ·  ".join(snd))
+
+        # Référence mood (« Se référer au mood ») — retour honnête : si activé mais
+        # que le plan n'a pas de mood, on le signale (rien ne sera envoyé).
+        if getattr(self, "_mood_ref_cb", None) and self._mood_ref_cb.isChecked():
+            param_lines.append(
+                "Référence mood : ✓ mood envoyé comme image de référence"
+                if getattr(self, "_active_mood_path", "")
+                else "Référence mood : ⚠ activé, mais ce plan n'a pas de mood (rien envoyé)"
+            )
 
         # Template / style vidéo
         if vs:
@@ -3615,14 +3970,20 @@ class TabT2V(QScrollArea):
         context     = self._casting.get_context()
         full_prompt = (context + prompt) if context else prompt
 
-        # Framing prefix from shot focal — must come first so Seedance obeys the frame type
+        # Framing (focale) + MOUVEMENT caméra du storyboard en tête — pour que
+        # Seedance respecte le cadrage ET le mouvement (« Fixe » = plan fixe, sinon
+        # le modèle dérive souvent en travelling/grue).
         if self._active_shot:
-            _focal = self._active_shot.get("focal", "")
-            if _focal:
-                from core.camera_data import focal_to_framing_prefix
-                _framing = focal_to_framing_prefix(_focal)
-                if _framing:
-                    full_prompt = f"{_framing} — {full_prompt}"
+            from core.camera_data import focal_to_framing_prefix, shot_movement_to_prompt
+            _cam_bits = []
+            _framing = focal_to_framing_prefix(self._active_shot.get("focal", ""))
+            if _framing:
+                _cam_bits.append(_framing)
+            _mov = shot_movement_to_prompt(self._active_shot.get("camera_movement", ""))
+            if _mov:
+                _cam_bits.append(_mov)
+            if _cam_bits:
+                full_prompt = f"{', '.join(_cam_bits)} — {full_prompt}"
 
         import core.style as style_api
         _style_ref_active = bool(
@@ -3702,6 +4063,15 @@ class TabT2V(QScrollArea):
         if _is_seedance and hasattr(self, "_style_ref_path") and self._style_ref_path and os.path.isfile(self._style_ref_path):
             ref_images = ref_images + [self._style_ref_path]
             ref_image_roles = ref_image_roles + ["style"]
+        # Se référer au mood — le mood validé du plan part comme image de référence
+        # (rôle « mood ») pour une cohésion exacte. Seedance uniquement ; silencieux
+        # si le plan n'a pas de mood. Chaque plan de la file batch utilise le sien.
+        if (_is_seedance and getattr(self, "_mood_ref_cb", None)
+                and self._mood_ref_cb.isChecked()
+                and getattr(self, "_active_mood_path", "")
+                and os.path.isfile(self._active_mood_path)):
+            ref_images = ref_images + [self._active_mood_path]
+            ref_image_roles = ref_image_roles + ["mood"]
 
         # Quality suffix — always appended
         full_prompt = (
@@ -3755,6 +4125,9 @@ class TabT2V(QScrollArea):
             "resolution":     (self.cb_res.currentData() or self.cb_res.currentText()),
             "aspect_ratio":   self.cb_ratio.currentText().split(" ")[0],
             "shot_title":     self._active_shot_title,
+            # Langue des dialogues du plan (colonne « Langues ») — traduits à
+            # l'envoi vers Seedance ; défaut anglais (recommandé).
+            "dialogue_lang":  (self._active_shot or {}).get("dialogue_lang", "en"),
             "audio":          audio_on,
             "ref_images":      ref_images,
             "ref_image_roles": ref_image_roles,
@@ -3820,6 +4193,35 @@ class TabT2V(QScrollArea):
             self.progress.update(pct, f"[{current}/{repeat_total}] {msg}")
         else:
             self.progress.update(pct, msg)
+
+    def _maybe_capture_decor_bg(self, video_path: str, shot: dict):
+        """1er plan d'un (décor + axe) : extrait une frame, efface le personnage par
+        IA et fige le fond pour les plans suivants du même axe. Sans effet si un fond
+        existe déjà pour ce couple, ou si décor/axe manquent."""
+        try:
+            import core.decor_sync as ds
+            decor = shot.get("decor_id") or shot.get("decor_name")
+            axis  = shot.get("camera_axis")
+            if not decor or not axis or ds.get_synced_bg(decor, axis):
+                return
+            from core.video_utils import extract_first_frame
+            from core.context import get_data_root
+            tmp_dir = os.path.join(get_data_root(), "decor_sync", "_frames")
+            os.makedirs(tmp_dir, exist_ok=True)
+            frame = os.path.join(tmp_dir, f"frame_{shot.get('id', 'x')}.png")
+            if not extract_first_frame(video_path, frame):
+                return
+            from api.nano_banana import CleanBackgroundWorker
+            w = CleanBackgroundWorker(frame)
+            w.finished.connect(
+                lambda path, d=decor, a=axis: ds.set_synced_bg(d, a, path) if path else None)
+            w.failed.connect(lambda _e: None)
+            if not hasattr(self, "_bg_sync_workers"):
+                self._bg_sync_workers = []
+            self._bg_sync_workers.append(w)
+            w.start()
+        except Exception:
+            pass
 
     def on_finished(self, result: dict):
         self.progress.set_done()
@@ -3891,6 +4293,27 @@ class TabT2V(QScrollArea):
                 except Exception:
                     pass
 
+        # Synchro décor (même axe) : fige le fond du 1er plan d'un (décor + axe)
+        if (local_path and os.path.isfile(local_path) and self._active_shot
+                and getattr(self, "_decor_sync_cb", None) and self._decor_sync_cb.isChecked()):
+            self._maybe_capture_decor_bg(local_path, self._active_shot)
+
+        # Synchronisation labiale (lip-sync) — post-traitement AVANT d'avancer la file.
+        # Quand le toggle est actif et qu'on a une vraie URL fal (pas mock), on recale
+        # les lèvres sur la voix (doublage/TTS auto ou audio attaché), puis on avance
+        # depuis le callback. Sinon, on avance directement.
+        if (local_path and os.path.isfile(local_path) and self._active_shot
+                and getattr(self, "_lipsync_cb", None) and self._lipsync_cb.isChecked()):
+            _vurl = result.get("video_url", "")
+            if _vurl and _vurl.startswith("http") and "mock" not in _vurl:
+                self._pending_advance = (result, davinci_msg)
+                self._start_shot_lipsync(result, local_path)
+                return
+        self._advance_after_clip(result, davinci_msg)
+
+    def _advance_after_clip(self, result, davinci_msg):
+        """Avance la file batch / les répétitions / affiche le message de fin.
+        Appelé directement, ou après l'étape lip-sync (callbacks dédiés)."""
         if self._batch_queue:
             from PyQt6.QtCore import QTimer
             QTimer.singleShot(300, self._process_next_batch_shot)
@@ -3941,6 +4364,58 @@ class TabT2V(QScrollArea):
                 f"Crédits : {result['credits_used']}"
                 + davinci_msg
             )
+
+    def _start_shot_lipsync(self, result: dict, local_path: str):
+        """Lance la resynchronisation labiale du plan courant (worker dédié).
+        Audio = override manuel du plan, sinon TTS auto depuis le dialogue."""
+        from api.shot_lipsync import ShotLipSyncWorker
+        from core.worker import abandon_thread
+        # Parquer un worker précédent (anti-segfault) avant de réassigner.
+        _prev = getattr(self, "_shot_lipsync_worker", None)
+        if _prev is not None:
+            abandon_thread(_prev)
+            self._shot_lipsync_worker = None
+        engine = ""
+        if getattr(self, "_lipsync_engine_combo", None):
+            engine = self._lipsync_engine_combo.currentData() or ""
+        self.progress.setVisible(True)
+        self.progress.update(0, "Synchronisation labiale…")
+        self._shot_lipsync_worker = ShotLipSyncWorker(
+            shot=self._active_shot,
+            video_url=result.get("video_url", ""),
+            output_dir=get_output_dir(),
+            engine=engine,
+        )
+        self._shot_lipsync_worker.progress.connect(
+            lambda pct, msg: self.progress.update(pct, msg)
+        )
+        self._shot_lipsync_worker.done.connect(self._on_shot_lipsync_done)
+        self._shot_lipsync_worker.failed.connect(self._on_shot_lipsync_failed)
+        self._shot_lipsync_worker.start()
+
+    def _on_shot_lipsync_done(self, shot_id: str, video_path: str, audio_path: str):
+        """Clip lip-synced prêt (sauvé dans le dossier de sortie) → avance la file."""
+        from core.worker import abandon_thread
+        w = getattr(self, "_shot_lipsync_worker", None)
+        if w is not None:
+            abandon_thread(w)
+            self._shot_lipsync_worker = None
+        result, davinci_msg = getattr(self, "_pending_advance", (None, ""))
+        if video_path and os.path.isfile(video_path):
+            davinci_msg = f"{davinci_msg}\n\n👄 Lèvres synchronisées :\n{video_path}"
+        if result is not None:
+            self._advance_after_clip(result, davinci_msg)
+
+    def _on_shot_lipsync_failed(self, shot_id: str, error: str):
+        """Échec lip-sync : on garde le clip original et on avance quand même la file."""
+        from core.worker import abandon_thread
+        w = getattr(self, "_shot_lipsync_worker", None)
+        if w is not None:
+            abandon_thread(w)
+            self._shot_lipsync_worker = None
+        result, davinci_msg = getattr(self, "_pending_advance", (None, ""))
+        if result is not None:
+            self._advance_after_clip(result, f"{davinci_msg}\n\n⚠ Lip-sync échoué : {error}")
 
     def on_failed(self, error: str):
         self.progress.set_error(error)

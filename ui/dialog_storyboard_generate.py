@@ -140,7 +140,9 @@ class StoryboardGenerateDialog(QDialog):
         )
         root.addWidget(self._progress)
 
-        self._status_lbl = QLabel("Analyse du scénario via Claude Sonnet…")
+        from core.ai_provider import ai_name_for_task
+        self._status_lbl = QLabel(translate("Analyse du scénario via {ai}…").format(
+            ai=ai_name_for_task("storyboard_gen")))
         self._status_lbl.setStyleSheet(
             f"color:{CP['text_secondary']};font-size:11px;background:transparent;"
         )

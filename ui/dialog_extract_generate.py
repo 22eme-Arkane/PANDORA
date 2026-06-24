@@ -74,7 +74,7 @@ class ExtractGenerateDialog(QDialog):
     def __init__(self, parent, title: str, icon: str, scenario_text: str,
                  extract_worker_cls, save_fn, item_subdir: str,
                  is_characters: bool = False, post_save_fn=None,
-                 category_label: str = "éléments"):
+                 category_label: str = "éléments", offer_room_views: bool = False):
         super().__init__(parent)
         self._scenario_text      = scenario_text
         self._extract_cls        = extract_worker_cls
@@ -83,13 +83,22 @@ class ExtractGenerateDialog(QDialog):
         self._subdir             = item_subdir
         self._is_characters      = is_characters
         self._category_label     = category_label
+        self._offer_room_views   = offer_room_views
         self._generate_images    = False          # set by user choice
+        self._room_views         = False          # set by user choice (décors only)
+        self._room_warnings: list[str] = []       # décors dont des faces ont échoué
         self._saved_items: list[dict] = []
         self._item_rows:   list[_ItemRow] = []
         self._gen_idx      = 0
         self._extract_worker   = None
         self._gen_worker       = None
         self._cancelled        = False
+        # Auto-génération des plans vus de dessus (décors uniquement) — pour la
+        # Mise en scène et le Plan de feu. Activé par for_decors().
+        self._auto_floor_plans = False
+        self._floor_jobs: list[dict] = []   # {id, decor_ids[], prompt, name}
+        self._floor_map: dict = {}
+        self._floor_worker     = None
         self._page_key: str    = ""   # set by factory — page to navigate to after completion
         self._page_label: str  = ""   # label for the navigate button
 
@@ -165,6 +174,24 @@ class ExtractGenerateDialog(QDialog):
         btn_gen.setToolTip(translate("Extrait, sauvegarde, puis génère une image via Nano Banana pour chaque élément"))
         btn_gen.clicked.connect(lambda: self._start(generate=True))
         choice_lay.addWidget(btn_gen)
+
+        # ── 3e option (décors uniquement) : les 7 vues de chaque pièce ──────────
+        if self._offer_room_views:
+            btn_seven = QPushButton(
+                "  " + translate("Identifier et générer les 7 vues de la pièce"))
+            btn_seven.setFixedHeight(44)
+            btn_seven.setStyleSheet(
+                f"QPushButton{{background:transparent;color:{CP['text_primary']};"
+                f"border:1px solid {CP.get('accent2','#7c6bff')};border-radius:8px;"
+                f"font-size:12px;font-weight:700;text-align:left;padding-left:14px;}}"
+                f"QPushButton:hover{{background:{CP['bg3']};"
+                f"border-color:{CP.get('accent2','#7c6bff')};}}"
+            )
+            btn_seven.setToolTip(translate(
+                "Pour chaque décor : 6 faces (sol, plafond, 4 murs) + un plan "
+                "d'ensemble — 7 images par pièce, cohérence spatiale stricte"))
+            btn_seven.clicked.connect(lambda: self._start(generate=True, room_views=True))
+            choice_lay.addWidget(btn_seven)
 
         root.addWidget(self._choice_frame)
 
@@ -265,7 +292,7 @@ class ExtractGenerateDialog(QDialog):
 
     def reject(self):
         self._cancelled = True
-        for w in (self._extract_worker, self._gen_worker):
+        for w in (self._extract_worker, self._gen_worker, self._floor_worker):
             if w and w.isRunning():
                 try:
                     w.finished.disconnect()
@@ -295,10 +322,11 @@ class ExtractGenerateDialog(QDialog):
 
     # ── Mode selection ─────────────────────────────────────────────────────────
 
-    def _start(self, generate: bool):
+    def _start(self, generate: bool, room_views: bool = False):
         if self._cancelled:
             return
         self._generate_images = generate
+        self._room_views      = room_views
         self._choice_frame.setVisible(False)
         self._progress.setVisible(True)
         self._status_lbl.setVisible(True)
@@ -386,10 +414,7 @@ class ExtractGenerateDialog(QDialog):
         total = len(self._saved_items)
         self._status_lbl.setText(f"{total} élément(s) sauvegardé(s) — sans image")
         self._phase_lbl.setText("Terminé")
-        self._finish_state(show_navigate=True)
-        if getattr(self, "_auto_close", False):
-            from PyQt6.QtCore import QTimer
-            QTimer.singleShot(800, self.accept)
+        self._maybe_start_floor_plans()
 
     # ── Image generation phase ─────────────────────────────────────────────────
 
@@ -412,12 +437,28 @@ class ExtractGenerateDialog(QDialog):
         prompt = item.get("prompt") or item.get("description") or item.get("name", "")
         name   = item.get("name", "item")
 
+        if self._room_views:
+            # Décors : 7 vues par pièce (6 faces + plan d'ensemble).
+            from api.nano_banana import GenerateRoomViewsWorker
+            import core.style as style_api
+            w = GenerateRoomViewsWorker(
+                base_prompt=prompt, decor_name=name,
+                style_suffix=style_api.get_image_suffix(),
+            )
+            w.views_finished.connect(self._on_room_views_done)
+            w.progress.connect(self._on_room_progress)   # « [3/8] Vue gauche… »
+            w.failed.connect(self._on_img_failed)
+            self._gen_worker = w
+            w.start()
+            return
+
         if self._is_characters:
             from api.nano_banana import GeneratePortraitWorker
+            # Image unique (portrait) par défaut — pas le sheet 5 vues.
             w = GeneratePortraitWorker(
                 prompt=prompt,
                 char_name=name,
-                gen_mode="sheet_5views",
+                gen_mode="classic",
             )
             w.finished.connect(lambda p, s: self._on_img_done(p or s))
             w.failed.connect(self._on_img_failed)
@@ -454,6 +495,83 @@ class ExtractGenerateDialog(QDialog):
         self._gen_idx += 1
         self._gen_next()
 
+    def _on_room_progress(self, pct: int, msg: str):
+        """Progression PAR VUE d'un décor 7 vues (le worker émet « [i/8] … »)."""
+        if self._cancelled:
+            return
+        n = len(self._saved_items)
+        self._gen_lbl.setText(f"Décor {self._gen_idx + 1}/{n} — {msg}")
+
+    def _on_room_views_done(self, views: list):
+        """7 vues d'une pièce → 7 DÉCORS distincts, tous marqués `room_group` = nom
+        de la pièce (regroupés dans un bandeau dépliable, page Décors). Le décor
+        d'origine (déjà lié aux plans du storyboard) devient la « vue d'ensemble »
+        et porte le plan d'architecture, partagé par les 7 vues (Mise en scène /
+        Plan de feu)."""
+        if self._cancelled:
+            return
+        item = self._saved_items[self._gen_idx]
+        row  = self._item_rows[self._gen_idx]
+
+        all_views = [v for v in (views or [])
+                     if v.get("path") and os.path.isfile(v["path"])]
+        fp_entry = next((v for v in all_views if v.get("is_floor_plan")), None)
+        view_entries = [v for v in all_views if not v.get("is_floor_plan")]
+        if view_entries:
+            import core.decors as decors_api
+            base    = item.get("name", "Décor")
+            bprompt = item.get("prompt") or item.get("description") or base
+            cat     = item.get("category", "Autre")
+            fp_path = fp_entry.get("path") if fp_entry else ""
+            overview = next((v for v in view_entries if v.get("code") == "ensemble"),
+                            view_entries[0])
+            # Vue d'ensemble = le décor d'origine (id conservé → reste assigné aux
+            # plans) ; chaque face devient un NOUVEAU décor frère de la même pièce.
+            ordered = [overview] + [v for v in view_entries if v is not overview]
+            for v in ordered:
+                is_overview = (v is overview)
+                label = v.get("label", "")
+                if is_overview:
+                    d = decors_api.get_decor(item.get("id", "")) or {}
+                    d["id"] = item.get("id", "")
+                    name = base
+                else:
+                    d = {}
+                    name = f"{base} · {label}" if label else base
+                d.update({
+                    "name":             name,
+                    "room_group":       base,
+                    "room_view":        "Ensemble" if is_overview else label,
+                    "prompt":           v.get("prompt", "") or bprompt,
+                    "category":         cat,
+                    "image_path":       v["path"],
+                    "generated_images": [v["path"]],
+                    "floor_plan":       fp_path,
+                })
+                decors_api.save_decor(d)
+            # Marque l'item comme « image générée » pour le décompte final.
+            item["image_path"] = overview["path"]
+            n_dec = len(view_entries)
+            row.set_state("DONE")
+            self._gen_lbl.setText(
+                f"Décor {self._gen_idx + 1}/{len(self._saved_items)} — "
+                f"{n_dec} vue(s) → {n_dec} décor(s)")
+            # Faces manquantes (échec API par vue) → avertissement consolidé en fin.
+            w = self._gen_worker
+            fo = getattr(w, "_faces_ok", None)
+            ft = getattr(w, "_faces_total", 6)
+            if fo is not None and fo < ft:
+                err = getattr(w, "_last_error", "") or ""
+                self._room_warnings.append(
+                    f"{base} : {fo}/{ft} faces générées"
+                    + (f" — {err[:140]}" if err else ""))
+        else:
+            row.set_state("NO_IMG")
+
+        self._gen_progress.setValue(self._gen_idx + 1)
+        self._gen_idx += 1
+        self._gen_next()
+
     def _on_img_failed(self, err: str):
         if self._cancelled:
             return
@@ -475,10 +593,79 @@ class ExtractGenerateDialog(QDialog):
         self._status_lbl.setText(
             f"{total} élément(s) sauvegardé(s) · {done} image(s) générée(s)"
         )
+        if self._room_warnings:
+            from PyQt6.QtWidgets import QMessageBox
+            QMessageBox.warning(
+                self, translate("Vues manquantes"),
+                translate("Certaines faces de décor n'ont pas pu être générées par l'API :")
+                + "\n\n• " + "\n• ".join(self._room_warnings)
+                + "\n\n" + translate("Relancez la génération du décor — c'est souvent une "
+                                     "limite de débit temporaire de l'API d'images."))
+            self._room_warnings = []
+        self._maybe_start_floor_plans()
+
+    # ── Plans vus de dessus (Mise en scène / Plan de feu) ───────────────────────
+
+    def _maybe_start_floor_plans(self):
+        """Après création/identification des décors : génère automatiquement le
+        plan vu de dessus de chaque décor (un par décor ; un par pièce pour les
+        7 vues), enregistré sur le décor → réutilisé par Mise en scène & Plan de
+        feu. Sans clé fal.ai : aucun plan (cohérent avec le reste de l'app)."""
+        if self._cancelled or not self._auto_floor_plans:
+            self._truly_done()
+            return
+        # Flux standard : un plan par décor sauvegardé (les 7 vues ont déjà
+        # alimenté self._floor_jobs lors de _on_room_views_done).
+        if not self._room_views:
+            self._floor_jobs = []
+            for it in self._saved_items:
+                did = it.get("id")
+                if not did:
+                    continue
+                self._floor_jobs.append({
+                    "id": did, "decor_ids": [did],
+                    "prompt": it.get("prompt") or it.get("description") or it.get("name", ""),
+                    "name": it.get("name", "plan"),
+                })
+        jobs = [j for j in self._floor_jobs if j.get("decor_ids")]
+        if not jobs:
+            self._truly_done()
+            return
+        self._floor_map = {j["id"]: j["decor_ids"] for j in jobs}
+        self._phase_lbl.setText("Génération des plans vus de dessus…")
+        self._gen_lbl.setVisible(True)
+        self._gen_lbl.setText(f"Plans pour Mise en scène / Plan de feu ({len(jobs)})…")
+        from api.nano_banana import GenerateFloorPlansWorker
+        w = GenerateFloorPlansWorker(
+            [{"id": j["id"], "prompt": j["prompt"], "name": j["name"]} for j in jobs])
+        self._floor_worker = w
+        w.plan_done.connect(self._on_floor_plan_done)
+        w.finished.connect(self._on_floor_plans_finished)
+        w.start()
+
+    def _on_floor_plan_done(self, job_id: str, path: str):
+        if not path:
+            return
+        import core.decors as decors_api
+        for did in self._floor_map.get(job_id, []):
+            try:
+                decors_api.set_floor_plan(did, path)
+            except Exception:
+                pass
+
+    def _on_floor_plans_finished(self, n: int):
+        if n:
+            self._gen_lbl.setText(f"✓  {n} plan(s) vu(s) de dessus générés")
+            self._gen_lbl.setStyleSheet(
+                f"color:{CP['accent']};font-size:9px;"
+                f"font-family:'Consolas',monospace;background:transparent;")
+        self._truly_done()
+
+    def _truly_done(self):
         self._finish_state(show_navigate=True)
         if getattr(self, "_auto_close", False):
             from PyQt6.QtCore import QTimer
-            QTimer.singleShot(1200, self.accept)
+            QTimer.singleShot(1000, self.accept)
 
     # ── Factory methods ────────────────────────────────────────────────────────
 
@@ -564,7 +751,9 @@ class ExtractGenerateDialog(QDialog):
             item_subdir="decors",
             post_save_fn=post_save,
             category_label="décors",
+            offer_room_views=True,
         )
+        dlg._auto_floor_plans = True   # plan vu de dessus auto (Mise en scène / Plan de feu)
         dlg._page_key   = "decors"
         dlg._page_label = "Voir les Décors"
         return dlg

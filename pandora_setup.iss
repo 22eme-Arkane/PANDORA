@@ -1,4 +1,4 @@
-; pandora_setup.iss — Inno Setup script pour PANDORA v1.1.9
+; pandora_setup.iss — Inno Setup script pour PANDORA v1.2.1
 ;
 ; Prérequis :
 ;   - Inno Setup 6.x installé (https://jrsoftware.org/isinfo.php)
@@ -7,10 +7,10 @@
 ;
 ; Pour compiler :
 ;   iscc pandora_setup.iss
-; Produit : dist\PANDORA_Setup_1.1.9.exe
+; Produit : dist\PANDORA_Setup_1.2.1.exe
 
 #define MyAppName      "PANDORA"
-#define MyAppVersion   "1.1.9"
+#define MyAppVersion   "1.2.1"
 #define MyAppPublisher "22eme Arkane"
 #define MyAppURL       "https://github.com/22eme-arkane/pandora"
 #define MyAppExeName   "PANDORA.exe"

@@ -1,4 +1,5 @@
 import json
+import re
 import urllib.request
 
 from PyQt6.QtCore import QThread, pyqtSignal
@@ -7,11 +8,18 @@ from core.version import VERSION, GITHUB_RELEASES_URL
 
 
 def _parse_version(v: str) -> tuple[int, ...]:
-    v = v.lstrip("v")
-    try:
-        return tuple(int(x) for x in v.split("."))
-    except (ValueError, AttributeError):
-        return (0,)
+    """'v1.2.3' / '1.2.0-bêta' → (1, 2, 3) / (1, 2, 0).
+
+    Les suffixes pré-release (-bêta, -rc1, …) sont ignorés pour la comparaison :
+    une bêta de 1.2.0 reste la version 1.2.0 face au dépôt GitHub (sinon l'app se
+    croit périmée et déclenche à tort la bannière de mise à jour)."""
+    parts: list[int] = []
+    for chunk in (v or "").lstrip("vV").strip().split("."):
+        m = re.match(r"\d+", chunk)
+        if not m:
+            break
+        parts.append(int(m.group()))
+    return tuple(parts) if parts else (0,)
 
 
 class UpdateCheckWorker(QThread):

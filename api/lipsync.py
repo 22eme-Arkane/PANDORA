@@ -1,14 +1,22 @@
-"""Worker LatentSync — resynchronisation labiale post-Seedance.
+"""Worker de synchronisation labiale (lip-sync) post-Seedance — multi-moteurs fal.ai.
 
 Pipeline :
-  1. Extraction audio de la source DaVinci (ffmpeg) → .wav temporaire
-  2. Upload audio .wav vers fal.ai → audio_url
-  3. Appel fal-ai/latentsync (video_url Seedance + audio_url)
-  4. Téléchargement du résultat lip-synced
-  5. Démultiplexage ffmpeg → vidéo muette + piste audio .wav
+  1. Source audio : soit un audio CIBLE déjà prêt (TTS/doublage, fichier fourni),
+     soit extraction de la piste d'un clip source DaVinci (ffmpeg) → .wav.
+  2. Upload audio vers fal.ai → audio_url (robuste : non-ASCII + fallback data-URL).
+  3. Appel du moteur lip-sync choisi (Sync 2 Pro par défaut · Sync-3 · Sync 2 ·
+     LatentSync) — tous prennent la MÊME interface video_url + audio_url.
+  4. Téléchargement du résultat lip-synced.
+  5. Démultiplexage ffmpeg → vidéo muette + piste audio .wav.
   6. emit finished(video_path, audio_path)
 
 Prérequis : ffmpeg disponible dans le PATH.
+
+Moteurs (relevé fal.ai 2026-06-24) — interchangeables (video_url + audio_url) :
+  · Sync 2 Pro  fal-ai/sync-lipsync/v2/pro  $5/min  studio, gros plans, émotion (DÉFAUT)
+  · Sync-3      fal-ai/sync-lipsync/v3      $8/min  le + récent, frame-accurate
+  · Sync 2      fal-ai/sync-lipsync/v2      $3/min  conversationnel
+  · LatentSync  fal-ai/latentsync           éco     ByteDance, historique
 """
 
 import os
@@ -23,12 +31,59 @@ from core.video_utils import get_ffmpeg_exe
 _NO_WINDOW = subprocess.CREATE_NO_WINDOW if sys.platform == "win32" else 0
 
 
+# ── Catalogue des moteurs de synchronisation labiale ──────────────────────────
+LIPSYNC_ENGINES: dict[str, dict] = {
+    "sync2pro":   {"endpoint": "fal-ai/sync-lipsync/v2/pro", "name": "Sync 2 Pro", "price": "$5/min"},
+    "sync3":      {"endpoint": "fal-ai/sync-lipsync/v3",     "name": "Sync-3",     "price": "$8/min"},
+    "sync2":      {"endpoint": "fal-ai/sync-lipsync/v2",     "name": "Sync 2",     "price": "$3/min"},
+    "latentsync": {"endpoint": "fal-ai/latentsync",          "name": "LatentSync", "price": "éco"},
+}
+LIPSYNC_ENGINE_ORDER = ["sync2pro", "sync3", "sync2", "latentsync"]
+LIPSYNC_DEFAULT = "sync2pro"
+
+
+def lipsync_endpoint(engine: str) -> str:
+    """Endpoint fal.ai du moteur lip-sync (repli sur le défaut si inconnu)."""
+    e = LIPSYNC_ENGINES.get(engine) or LIPSYNC_ENGINES[LIPSYNC_DEFAULT]
+    return e["endpoint"]
+
+
+def get_lipsync_engine() -> str:
+    """Moteur lip-sync choisi (config.json → lipsync_engine) — défaut Sync 2 Pro."""
+    try:
+        from core.config import load_config
+        e = (load_config().get("lipsync_engine") or "").strip()
+        return e if e in LIPSYNC_ENGINES else LIPSYNC_DEFAULT
+    except Exception:
+        return LIPSYNC_DEFAULT
+
+
 def ffmpeg_available() -> bool:
     exe = get_ffmpeg_exe()
     if exe != "ffmpeg":
         return os.path.isfile(exe)
     import shutil
     return shutil.which("ffmpeg") is not None
+
+
+def _upload_audio_robust(fal_client, path: str) -> str:
+    """Upload audio vers fal.ai sans casser sur les chemins NON-ASCII (projets
+    accentués) ni sur un stockage refusé : upload en bytes, fallback data-URL.
+    Même logique éprouvée que api/apercu._upload_ref_robust (incident moods)."""
+    import io, base64, mimetypes
+    ct = mimetypes.guess_type(path)[0] or "audio/wav"
+    with open(path, "rb") as _f:
+        data = _f.read()
+    _cap = io.StringIO()
+    _old_out, _old_err = sys.stdout, sys.stderr
+    sys.stdout = sys.stderr = _cap
+    try:
+        try:
+            return fal_client.upload(data, content_type=ct)
+        except Exception:
+            return f"data:{ct};base64,{base64.b64encode(data).decode()}"
+    finally:
+        sys.stdout, sys.stderr = _old_out, _old_err
 
 
 def _run_ffmpeg(*args, timeout: int = 120) -> bool:
@@ -53,6 +108,21 @@ def extract_audio_wav(video_path: str, wav_out: str) -> bool:
     return ok and os.path.isfile(wav_out) and os.path.getsize(wav_out) > 0
 
 
+def conform_audio_duration(wav_in: str, wav_out: str, dur: float) -> bool:
+    """Cale un WAV à EXACTEMENT `dur` secondes : complète au silence si trop court
+    (`apad`), coupe si trop long (`atrim`) → l'audio adopte la durée de la vidéo
+    régénérée (son et image synchrones, durée de sortie nette)."""
+    if not dur or dur <= 0:
+        return False
+    ok = _run_ffmpeg(
+        "-i", wav_in,
+        "-af", f"apad,atrim=0:{dur:g}",
+        "-acodec", "pcm_s16le", "-ar", "44100", "-ac", "1",
+        wav_out,
+    )
+    return ok and os.path.isfile(wav_out) and os.path.getsize(wav_out) > 0
+
+
 def demux_video_audio(input_path: str, video_out: str, audio_out: str) -> bool:
     """Sépare vidéo muette + piste audio WAV depuis un MP4 lip-synced."""
     ok_v = _run_ffmpeg(
@@ -68,15 +138,19 @@ def demux_video_audio(input_path: str, video_out: str, audio_out: str) -> bool:
     return ok_v and ok_a
 
 
-class LatentSyncWorker(QThread):
+class LipSyncWorker(QThread):
     """
-    Worker asynchrone pour le pipeline LatentSync complet.
+    Worker asynchrone pour le pipeline de synchronisation labiale complet.
 
     Paramètres :
         video_url         — URL fal.ai de la vidéo générée par Seedance
-        source_video_path — Chemin local du clip DaVinci source (pour extraire l'audio)
+        source_video_path — Clip source dont EXTRAIRE l'audio (mode « Modifier depuis
+                            DaVinci ») — ignoré si audio_path est fourni
         output_dir        — Dossier de destination des fichiers finaux
         shot_name         — Nom du plan (pour nommer les fichiers)
+        engine            — Moteur lip-sync (clé LIPSYNC_ENGINES) ; "" → config/défaut
+        audio_path        — Audio CIBLE déjà prêt (TTS/doublage/fichier) ; prioritaire
+                            sur l'extraction depuis source_video_path
 
     Signaux :
         finished(video_path, audio_path) — vidéo muette + audio .wav (audio_path peut être "")
@@ -88,13 +162,20 @@ class LatentSyncWorker(QThread):
     failed   = pyqtSignal(str)
     progress = pyqtSignal(int, str)
 
-    def __init__(self, video_url: str, source_video_path: str,
-                 output_dir: str, shot_name: str = ""):
+    def __init__(self, video_url: str, source_video_path: str = "",
+                 output_dir: str = "", shot_name: str = "",
+                 engine: str = "", audio_path: str = "",
+                 target_duration: float = 0.0):
         super().__init__()
         self._video_url          = video_url
         self._source_video_path  = source_video_path
         self._output_dir         = output_dir
         self._shot_name          = shot_name or "lipsync"
+        self._engine             = engine or get_lipsync_engine()
+        self._audio_path         = audio_path
+        # Si > 0 : on cale l'audio à cette durée (= durée de la vidéo régénérée)
+        # avant le lip-sync → son et image synchrones, durée de sortie nette.
+        self._target_duration    = float(target_duration or 0.0)
 
     def run(self):
         tmp_dir = tempfile.mkdtemp(prefix="pandora_lipsync_")
@@ -122,32 +203,36 @@ class LatentSyncWorker(QThread):
         import fal_client
         fal_client.api_key = api_key
 
-        # ── 1. Extraction audio source ────────────────────────────────────────
-        self.progress.emit(5, "Extraction audio source…")
-        wav_src = os.path.join(tmp_dir, "source_audio.wav")
-        if not extract_audio_wav(self._source_video_path, wav_src):
-            self.failed.emit(
-                "Impossible d'extraire l'audio du clip source.\n"
-                "Vérifiez que ffmpeg est installé et que le clip contient une piste audio."
-            )
-            return
+        # ── 1. Audio cible : fichier prêt (TTS/doublage) OU extraction du source ─
+        if self._audio_path and os.path.isfile(self._audio_path):
+            self.progress.emit(5, "Audio cible fourni…")
+            wav_src = self._audio_path
+        else:
+            self.progress.emit(5, "Extraction audio source…")
+            wav_src = os.path.join(tmp_dir, "source_audio.wav")
+            if not extract_audio_wav(self._source_video_path, wav_src):
+                self.failed.emit(
+                    "Aucun audio à synchroniser : fournis une voix (doublage/TTS ou "
+                    "fichier), ou un clip source avec piste audio (+ ffmpeg installé)."
+                )
+                return
 
-        # ── 2. Upload audio vers fal.ai ────────────────────────────────────────
+        # ── 1b. Alignement durée : cale l'audio sur la durée de la vidéo régénérée
+        #        (son et image synchrones, durée de sortie nette). No-op si non demandé.
+        if self._target_duration and self._target_duration > 0:
+            wav_conf = os.path.join(tmp_dir, "audio_conformed.wav")
+            if conform_audio_duration(wav_src, wav_conf, self._target_duration):
+                wav_src = wav_conf
+
+        # ── 2. Upload audio vers fal.ai (robuste non-ASCII + fallback data-URL) ─
         self.progress.emit(20, "Upload audio vers fal.ai…")
-        import sys, io
-        _cap = io.StringIO()
-        _old_out, _old_err = sys.stdout, sys.stderr
-        sys.stdout = sys.stderr = _cap
-        try:
-            audio_url = fal_client.upload_file(wav_src)
-        finally:
-            sys.stdout = _old_out
-            sys.stderr = _old_err
+        audio_url = _upload_audio_robust(fal_client, wav_src)
 
-        # ── 3. Appel LatentSync ───────────────────────────────────────────────
-        self.progress.emit(35, "Synchronisation LatentSync…")
+        # ── 3. Appel du moteur lip-sync choisi ─────────────────────────────────
+        _eng = LIPSYNC_ENGINES.get(self._engine) or LIPSYNC_ENGINES[LIPSYNC_DEFAULT]
+        self.progress.emit(35, f"Synchronisation labiale ({_eng['name']})…")
         result = fal_client.subscribe(
-            "fal-ai/latentsync",
+            lipsync_endpoint(self._engine),
             arguments={
                 "video_url": self._video_url,
                 "audio_url": audio_url,
@@ -161,7 +246,7 @@ class LatentSyncWorker(QThread):
                 or result.get("video_url", "")
             )
         if not lipsync_url:
-            self.failed.emit(f"LatentSync : URL de sortie manquante — {result}")
+            self.failed.emit(f"Lip-sync ({_eng['name']}) : URL de sortie manquante — {result}")
             return
 
         # ── 4. Téléchargement résultat ────────────────────────────────────────
@@ -192,3 +277,7 @@ class LatentSyncWorker(QThread):
         else:
             # Fallback : on renvoie le fichier combiné (pas de piste audio séparée)
             self.finished.emit(lipsync_path, "")
+
+
+# Rétro-compat : l'ancien nom reste valide (« Modifier depuis DaVinci »).
+LatentSyncWorker = LipSyncWorker

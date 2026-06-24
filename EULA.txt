@@ -1,5 +1,5 @@
 CHARTE D'UTILISATION — LOGICIEL PANDORA
-Version 1.1.9 — Juin 2026
+Version 1.2.1 — Juin 2026
 22eme Arkane — Matthieu Terrien
 Contact : 22eme.arkane@gmail.com
 
@@ -217,4 +217,4 @@ ARTICLE 12 — DISPOSITIONS GÉNÉRALES
 ════════════════════════════════════════════════════════════════
 
 22eme Arkane — Matthieu Terrien
-Version 1.1.9 — Juin 2026
+Version 1.2.1 — Juin 2026

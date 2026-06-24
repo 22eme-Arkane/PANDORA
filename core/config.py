@@ -30,6 +30,15 @@ _DEFAULTS = {
     "eula_accepted":         False,
     # Guide de démarrage — True = afficher au premier lancement
     "show_api_guide":        True,
+    # ── Assistant IA texte (voir core/ai_provider.py) ──────────────────────────
+    "ai_provider":           "anthropic",          # anthropic | openai | mistral | ollama
+    "ai_model_creative":     "claude-opus-4-8",    # défaut Opus 4.8 (Sonnet 4.6 / Fable 5 en option)
+    "openai_key":            "",                   # clé OpenAI (GPT-5.5)
+    "openai_model":          "",                   # vide = défaut gpt-5.5
+    "mistral_key":           "",
+    "ollama_url":            "",                   # vide = http://localhost:11434
+    "ollama_model":          "",                   # vide = llama3.1
+    "ai_task_engines":       {},                   # {task_key: engine_key} — moteur par tâche
 }
 
 # ── Mapping modèle image → endpoint fal.ai ────────────────────────────────────
@@ -72,18 +81,54 @@ def get_output_dir(cfg: dict | None = None) -> str:
     from core.context import get_project_path
     project_path = get_project_path()
     if project_path:
-        path = os.path.join(project_path, "data", "Seedance")
-        os.makedirs(path, exist_ok=True)
-        return path
+        new    = os.path.join(project_path, "data", "Studio IA")
+        legacy = os.path.join(project_path, "data", "Seedance")
+        # Projet créé avant le renommage Seedance → Studio IA : on conserve son
+        # dossier « Seedance » existant pour ne pas perdre ses vidéos.
+        if not os.path.isdir(new) and os.path.isdir(legacy):
+            return legacy
+        os.makedirs(new, exist_ok=True)
+        return new
     from core.pandora_dirs import get_bin_dir
     return get_bin_dir("seedance", cfg)
+
+
+def project_video_dir() -> str:
+    """<projet>/data/Studio IA/ (ou « Seedance » legacy si présent) — dossier des
+    vidéos générées du projet courant, pour la Vidéothèque."""
+    from core.context import get_data_root
+    base   = get_data_root()
+    new    = os.path.join(base, "Studio IA")
+    legacy = os.path.join(base, "Seedance")
+    if not os.path.isdir(new) and os.path.isdir(legacy):
+        return legacy
+    return new
+
+
+def _migrate(cfg: dict) -> dict:
+    """Migrations légères, idempotentes (drapeau one-shot)."""
+    changed = False
+    # Bascule UNIQUE de l'ancien défaut Sonnet 4.6 → Opus 4.8. Le choix de version
+    # Claude est nouveau : personne n'avait choisi Sonnet délibérément avant.
+    if not cfg.get("_opus_default_done"):
+        if ((cfg.get("ai_model_creative") or "") in ("", "claude-sonnet-4-6")
+                and (cfg.get("ai_provider") or "anthropic") == "anthropic"):
+            cfg["ai_model_creative"] = "claude-opus-4-8"
+        cfg["_opus_default_done"] = True
+        changed = True
+    if changed:
+        try:
+            save_config(cfg)
+        except Exception:
+            pass
+    return cfg
 
 
 def load_config() -> dict:
     os.makedirs(_DATA_DIR, exist_ok=True)
     if os.path.exists(_CONFIG_FILE):
         with open(_CONFIG_FILE, "r") as f:
-            return json.load(f)
+            return _migrate(json.load(f))
     return dict(_DEFAULTS)
 
 

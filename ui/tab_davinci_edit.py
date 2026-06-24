@@ -12,8 +12,8 @@ import json
 import os
 import tempfile
 
-from PyQt6.QtCore import Qt, QFileSystemWatcher, QThread, pyqtSignal
-from PyQt6.QtGui import QPixmap, QColor, QPainter, QLinearGradient
+from PyQt6.QtCore import Qt, QFileSystemWatcher, QThread, QSize, pyqtSignal
+from PyQt6.QtGui import QPixmap, QColor, QPainter, QLinearGradient, QIcon
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
     QScrollArea, QTextEdit, QComboBox, QSpinBox, QButtonGroup,
@@ -24,8 +24,9 @@ from PyQt6.QtWidgets import (
 from ui.styles import C
 from ui.widgets import HelpBlock, section_label, combo, toggle_row
 from ui.creative_panel import SeedanceCreativePanel
-from ui.icons import claude_icon_pixmap, install_hover_icon
+from ui.icons import claude_icon_pixmap, install_hover_icon, load_icon
 from core.config import load_config, get_output_dir
+from core.i18n import translate
 from core.history import save_to_history
 from core.worker import GenerationWorker, abandon_thread
 from api.enhance import EnhanceWorker, _SYSTEM_DAVINCI_EDIT
@@ -40,6 +41,30 @@ from ui.tab_t2v import (
 
 
 _INBOX = os.path.join(os.environ.get("TEMP", tempfile.gettempdir()), "pandora_clips_inbox.json")
+
+
+# Modèles de prompt « Type de modification » (Modifier un clip). Cas les plus courants.
+# Balises Seedance : @Video1 = clip d'origine (ajouté auto), @Image1 = image de
+# référence. Structure « reprends tout de @Video1, ne change QUE X » → cible la
+# modification sans tout régénérer. Texte FR traduit à l'affichage (i18n) et à l'envoi.
+_MOD_TEMPLATES = {
+    "bg": ("Reprends exactement @Video1 — mêmes personnages, mouvements, cadrage et "
+           "lumière sur les sujets. Remplace UNIQUEMENT le décor / l'arrière-plan par "
+           "celui de @Image1. Garde la même intégration lumineuse et les mêmes ombres "
+           "sur les personnages. Ne change rien d'autre."),
+    "face": ("Reprends exactement @Video1 — mêmes mouvements, cadrage, lumière, décor, "
+             "vêtements et morphologie. Remplace UNIQUEMENT le visage et l'identité du "
+             "personnage par celui de @Image1. Garde la même expression, la même "
+             "direction du regard et le même éclairage sur le visage. Ne change rien d'autre."),
+    "grade": ("Reprends exactement @Video1 — même scène, mouvements, cadrage et sujets, "
+              "à l'identique. Change UNIQUEMENT l'étalonnage colorimétrique : [décris le "
+              "look, ex. teal & orange cinématographique / heure dorée chaude / désaturé "
+              "froid]. Ne modifie ni la composition ni les sujets."),
+    "outfit": ("Reprends exactement @Video1 — mêmes personnages, visages, mouvements, "
+               "cadrage, décor et lumière. Remplace UNIQUEMENT la tenue / les vêtements "
+               "du personnage par celle de @Image1 (ou décris la tenue voulue). Garde la "
+               "même morphologie et un tissu cohérent avec le mouvement. Ne change rien d'autre."),
+}
 
 
 # ── Placeholder coloré ────────────────────────────────────────────────────────
@@ -100,6 +125,46 @@ class _ThumbWorker(QThread):
 
 
 # ── Carré de référence visuelle (identique au widget Casting) ────────────────
+
+class _DrawThumb(QWidget):
+    """Vignette (lecture seule) de l'image annotée Draw-to-Video + croix pour la
+    retirer. L'image N'EST PAS envoyée au modèle vidéo : elle confirme visuellement
+    que le dessin sera pris en compte — Claude Vision le lit, décrit l'intention dans
+    le prompt, puis le clip part PROPRE (sans les traits)."""
+    removed = pyqtSignal()
+    _SZ = 60
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setFixedSize(self._SZ, self._SZ)
+        self.setVisible(False)
+        self.setToolTip(translate(
+            "Dessin Draw-to-Video — interprété par l'IA, jamais envoyé tel quel au modèle"))
+        self._thumb = QLabel(self)
+        self._thumb.setGeometry(0, 0, self._SZ, self._SZ)
+        self._thumb.setScaledContents(True)
+        self._thumb.setStyleSheet(f"border-radius:8px;border:1px solid {C['accent_dim']};")
+        self._x = QPushButton("×", self)
+        self._x.setFixedSize(16, 16)
+        self._x.move(self._SZ - 18, 2)
+        self._x.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._x.setStyleSheet(
+            f"QPushButton{{background:{C['bg2']};color:{C['text_dim']};"
+            f"border:1px solid {C['border']};border-radius:3px;font-size:9px;padding:0;}}"
+            f"QPushButton:hover{{color:{C['red']};border-color:{C['red']};background:{C['bg3']};}}")
+        self._x.clicked.connect(self.removed.emit)
+
+    def set_image(self, path: str):
+        if path and os.path.isfile(path):
+            self._thumb.setPixmap(QPixmap(path).scaled(
+                self._SZ, self._SZ,
+                Qt.AspectRatioMode.KeepAspectRatioByExpanding,
+                Qt.TransformationMode.SmoothTransformation))
+            self._x.raise_()
+            self.setVisible(True)
+        else:
+            self.setVisible(False)
+
 
 class _RefSquare(QWidget):
     """Carré 60×60 — affiche '+' vide ou la miniature de l'image chargée."""
@@ -193,9 +258,10 @@ class _RefSquare(QWidget):
 # ── Carte compacte d'un clip (style _ThumbCard de T2V) ───────────────────────
 
 class ClipCard(QFrame):
-    """Carte compacte — nom + checkbox include/exclude + badge index + statut génération."""
-    focused       = pyqtSignal(int)
-    check_changed = pyqtSignal(int, bool)  # index, checked
+    """Carte compacte — vignette + nom + badge index + statut génération.
+    Sélection par CLIC (contour lumineux) + Ctrl/Maj pour la multi-sélection,
+    comme dans « Générer depuis Storyboard » (plus de case à cocher)."""
+    focused = pyqtSignal(int)
 
     _W    = 112
     _TH_W = 100
@@ -203,9 +269,10 @@ class ClipCard(QFrame):
 
     def __init__(self, clip: dict, index: int, parent=None):
         super().__init__(parent)
-        self._clip   = clip
-        self._index  = index
-        self._active = False
+        self._clip     = clip
+        self._index    = index
+        self._active   = False
+        self._selected = False
 
         self.setFixedSize(self._W, self._TH_H + 36)  # ~92px total
         self.setCursor(Qt.CursorShape.PointingHandCursor)
@@ -242,21 +309,6 @@ class ClipCard(QFrame):
         self._badge.move(5, 5)
         self._badge.raise_()
 
-        # Overlay : checkbox include/exclude (top-right)
-        self.check = QCheckBox(self)
-        self.check.setChecked(True)
-        self.check.setFixedSize(18, 18)
-        self.check.move(self._W - 22, 4)
-        self.check.stateChanged.connect(
-            lambda state: self.check_changed.emit(self._index, bool(state))
-        )
-        self.check.setStyleSheet(
-            f"QCheckBox::indicator{{width:16px;height:16px;border-radius:4px;"
-            f"border:2px solid {C['accent']};background:{C['bg3']};}}"
-            f"QCheckBox::indicator:checked{{background:{C['accent']};border-color:{C['accent']};}}"
-        )
-        self.check.raise_()
-
         # Overlay : statut génération (bottom)
         self._status_ov = QLabel("", self)
         self._status_ov.setAlignment(Qt.AlignmentFlag.AlignCenter)
@@ -270,7 +322,7 @@ class ClipCard(QFrame):
         self._apply_style()
 
     def _apply_style(self):
-        if self._active:
+        if self._active or self._selected:
             self.setStyleSheet(
                 f"QFrame{{background:rgba(78,205,196,0.15);"
                 f"border:2px solid {C['accent']};border-radius:8px;}}"
@@ -291,6 +343,13 @@ class ClipCard(QFrame):
     def set_active(self, v: bool):
         self._active = v
         self._apply_style()
+
+    def set_selected(self, v: bool):
+        self._selected = v
+        self._apply_style()
+
+    def is_selected(self) -> bool:
+        return self._selected
 
     def mousePressEvent(self, e):
         if e.button() == Qt.MouseButton.LeftButton:
@@ -315,12 +374,6 @@ class ClipCard(QFrame):
     def clip(self) -> dict:
         return self._clip
 
-    def is_checked(self) -> bool:
-        return self.check.isChecked()
-
-    def set_checked(self, v: bool):
-        self.check.setChecked(v)
-
     def set_thumb_pixmap(self, pix: QPixmap):
         self._thumb.setPixmap(pix)
 
@@ -339,6 +392,8 @@ class TabDavinciEdit(QScrollArea):
         self._clips_data:       list[dict]               = []
         self._per_clip_prompts: dict[int, str]           = {}
         self._active_clip_idx:  int | None               = None
+        self._selected_clips:   set[int]                 = set()  # clips sélectionnés (clic+glow)
+        self._sel_anchor:       int | None               = None   # ancre pour Maj+clic
         self._worker:           GenerationWorker | None  = None
         self._ping_worker:      BridgePingWorker | None  = None
         self._lipsync_worker                             = None
@@ -353,6 +408,9 @@ class TabDavinciEdit(QScrollArea):
         self._last_seed:        int | None               = None
         self._global_ref_image: str                      = ""
         self._per_clip_ref_images: dict[int, str]        = {}
+        self._draw_images:      dict[int, str]           = {}   # Draw-to-Video : image annotée par clip
+        self._draw_overlays:    dict[int, str]           = {}   # calque de dessin seul (ré-édition)
+        self._draw_frames:      dict[int, int]           = {}   # index d'image dessinée (ré-édition)
         self._mock_count:       int                      = 0
         self._failed_clips:     list[tuple[int, str]]    = []
         self._thumb_workers:    list[_ThumbWorker]       = []
@@ -594,6 +652,24 @@ class TabDavinciEdit(QScrollArea):
         self._lbl_empty.setStyleSheet(f"color:{C['text_dim']};font-size:11px;padding:20px;")
         body_clips.addWidget(self._lbl_empty)
 
+        # ── En-tête repliable (comme Générer depuis Storyboard / Live) ────────
+        self._film_style_frame.setVisible(False)
+        self._btn_style_toggle = QPushButton("▸  Choisir les références")
+        self._btn_style_toggle.setCheckable(True)
+        self._btn_style_toggle.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._btn_style_toggle.setStyleSheet(
+            f"QPushButton{{background:{C['bg2']};color:{C['text_secondary']};"
+            f"border:1px solid {C['border']};border-radius:8px;text-align:left;"
+            f"font-size:11px;font-weight:700;padding:8px 14px;}}"
+            f"QPushButton:hover{{background:{C['bg3']};color:{C['text_primary']};}}"
+            f"QPushButton:checked{{color:{C['accent']};border-color:{C['accent_dim']};}}")
+
+        def _toggle_style(checked):
+            self._film_style_frame.setVisible(checked)
+            self._btn_style_toggle.setText(
+                ("▾  " if checked else "▸  ") + "Choisir les références")
+        self._btn_style_toggle.toggled.connect(_toggle_style)
+        lay.addWidget(self._btn_style_toggle)
         lay.addWidget(self._film_style_frame)
         lay.addWidget(sec_clips)
         lay.addLayout(_adn_row)
@@ -655,12 +731,8 @@ class TabDavinciEdit(QScrollArea):
         self._btn_enhance_global.clicked.connect(self._on_enhance_global)
         _pg_header.addWidget(self._pg_counter)
         _pg_header.addStretch()
-        _lbl_enh_g = QLabel("Améliorer le prompt")
-        _lbl_enh_g.setStyleSheet(
-            f"color:{C['text_dim']};font-size:10px;background:transparent;border:none;"
-        )
-        _pg_header.addWidget(_lbl_enh_g)
-        _pg_header.addWidget(self._btn_enhance_global)
+        # « Améliorer le prompt » (☁) RETIRÉ — fonction jugée inutile/instable.
+        self._btn_enhance_global.setVisible(False)
         _pg_lay.addLayout(_pg_header)
 
         _pg_sep = QFrame()
@@ -681,7 +753,72 @@ class TabDavinciEdit(QScrollArea):
         self._prompt_global.textChanged.connect(
             lambda: self._pg_counter.setText(str(len(self._prompt_global.toPlainText())))
         )
-        _pg_lay.addWidget(self._prompt_global)
+
+        # Draw-to-Video — bouton LOGO « Dessiner sur la vidéo » placé à DROITE du
+        # rectangle de prompt (badge couleur affiché tel quel, sans teinte ; repli
+        # texte si l'asset est introuvable). Le clic ouvre le dialogue Draw-to-Video.
+        self._btn_draw = QPushButton()
+        self._btn_draw.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._btn_draw.setToolTip(translate("Dessiner sur la vidéo") + " — " + translate(
+            "Draw-to-Video : choisis un clip, dessine les zones de l'effet "
+            "(feu, fumée…), puis génère — l'effet est appliqué là où tu as dessiné."))
+        _draw_pix = load_icon("draw_to_video.png", 56)   # badge couleur → pas de teinte
+        if not _draw_pix.isNull():
+            self._btn_draw.setIcon(QIcon(_draw_pix))
+            self._btn_draw.setIconSize(QSize(56, 56))
+            self._btn_draw.setFixedSize(60, 60)
+            self._btn_draw.setStyleSheet(
+                "QPushButton{background:transparent;border:none;border-radius:12px;padding:2px;}"
+                "QPushButton:hover{background:rgba(78,205,196,0.14);}")
+        else:
+            self._btn_draw.setText("✏  " + translate("Dessiner sur la vidéo"))
+            self._btn_draw.setFixedHeight(34)
+            self._btn_draw.setStyleSheet(
+                f"QPushButton{{background:transparent;color:{C['accent']};"
+                f"border:1px solid {C['accent']};border-radius:8px;font-size:11px;font-weight:700;padding:0 14px;}}"
+                f"QPushButton:hover{{background:rgba(78,205,196,0.12);}}")
+        self._btn_draw.clicked.connect(self._on_draw_to_video)
+
+        _pg_prompt_row = QHBoxLayout()
+        _pg_prompt_row.setContentsMargins(0, 0, 0, 0)
+        _pg_prompt_row.setSpacing(8)
+        _pg_prompt_row.addWidget(self._prompt_global, 1)
+        _pg_prompt_row.addWidget(self._btn_draw, 0, Qt.AlignmentFlag.AlignTop)
+        _pg_lay.addLayout(_pg_prompt_row)
+
+        # ── Type de modification : insère un modèle de prompt prêt à l'emploi ──
+        _mod_row = QHBoxLayout()
+        _mod_row.setContentsMargins(0, 10, 0, 0)
+        _mod_row.setSpacing(8)
+        _mod_lbl = QLabel(translate("Type de modification"))
+        _mod_lbl.setStyleSheet(
+            f"color:{C['text_secondary']};font-size:11px;background:transparent;border:none;")
+        self._mod_combo = QComboBox()
+        self._mod_combo.addItem(translate("✎ Insérer un modèle…"), "")
+        self._mod_combo.addItem(translate("Changer le décor (arrière-plan)"), "bg")
+        self._mod_combo.addItem(translate("Changer un visage"), "face")
+        self._mod_combo.addItem(translate("Changer l'étalonnage (couleurs)"), "grade")
+        self._mod_combo.addItem(translate("Changer la tenue (vêtements)"), "outfit")
+        self._mod_combo.setStyleSheet(
+            f"QComboBox{{background:{C['bg2']};color:{C['text_primary']};"
+            f"border:1px solid {C['border']};border-radius:6px;padding:4px 8px;font-size:11px;}}"
+            f"QComboBox QAbstractItemView{{background:{C['bg2']};color:{C['text_primary']};"
+            f"selection-background-color:{C['accent_dim']};}}")
+        self._mod_combo.setToolTip(translate(
+            "Insère un modèle de prompt (balises @Video1 = clip d'origine, "
+            "@Image1 = image de référence) — à compléter ensuite."))
+        self._mod_combo.activated.connect(self._on_mod_template)
+        _mod_row.addWidget(_mod_lbl)
+        _mod_row.addWidget(self._mod_combo, 1)
+        _pg_lay.addLayout(_mod_row)
+
+        # Indice affiché quand un mode « autre moteur » est actif (ex. face-swap Pixverse)
+        self._modif_hint = QLabel("")
+        self._modif_hint.setWordWrap(True)
+        self._modif_hint.setStyleSheet(
+            f"color:{C['accent']};font-size:10px;background:transparent;border:none;")
+        self._modif_hint.setVisible(False)
+        _pg_lay.addWidget(self._modif_hint)
 
         # Ref image — prompt global (carré Casting style)
         _pg_ref_hdr = QHBoxLayout()
@@ -701,6 +838,16 @@ class TabDavinciEdit(QScrollArea):
         self._global_ref_square.cleared.connect(lambda: setattr(self, '_global_ref_image', ''))
         _pg_ref_row.addWidget(self._global_ref_square)
         _pg_ref_row.addStretch()
+        # Vignette du dessin Draw-to-Video (à droite) — confirme que le dessin est pris
+        # en compte (croix pour le retirer). Non envoyé au modèle (lu par Claude Vision).
+        self._draw_thumb_g_lbl = QLabel(translate("Dessin Draw-to-Video"))
+        self._draw_thumb_g_lbl.setStyleSheet(
+            f"color:{C['text_dim']};font-size:10px;background:transparent;border:none;")
+        self._draw_thumb_g_lbl.setVisible(False)
+        _pg_ref_row.addWidget(self._draw_thumb_g_lbl, 0, Qt.AlignmentFlag.AlignVCenter)
+        self._draw_thumb_g = _DrawThumb()
+        self._draw_thumb_g.removed.connect(self._on_clear_draw)
+        _pg_ref_row.addWidget(self._draw_thumb_g)
         _pg_lay.addLayout(_pg_ref_row)
         body_prompt.addWidget(self._pg_frame)
 
@@ -782,12 +929,8 @@ class TabDavinciEdit(QScrollArea):
         self._btn_enhance_per_clip.clicked.connect(self._on_enhance_per_clip)
         _pc_header.addWidget(self._pc_counter)
         _pc_header.addStretch()
-        _lbl_enh_pc = QLabel("Améliorer le prompt")
-        _lbl_enh_pc.setStyleSheet(
-            f"color:{C['text_dim']};font-size:10px;background:transparent;border:none;"
-        )
-        _pc_header.addWidget(_lbl_enh_pc)
-        _pc_header.addWidget(self._btn_enhance_per_clip)
+        # « Améliorer le prompt » (☁) RETIRÉ — fonction jugée inutile/instable.
+        self._btn_enhance_per_clip.setVisible(False)
         _pc_lay.addLayout(_pc_header)
 
         _pc_sep = QFrame()
@@ -809,7 +952,35 @@ class TabDavinciEdit(QScrollArea):
         self._per_clip_prompt.textChanged.connect(
             lambda: self._pc_counter.setText(str(len(self._per_clip_prompt.toPlainText())))
         )
-        _pc_lay.addWidget(self._per_clip_prompt)
+        # Draw-to-Video — MÊME logo, MÊME emplacement que le prompt global : bouton
+        # LOGO 60×60 à DROITE du rectangle de prompt (et plus dans l'en-tête).
+        self._btn_draw_pc = QPushButton()
+        self._btn_draw_pc.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._btn_draw_pc.setToolTip(translate("Dessiner sur la vidéo") + " — " + translate(
+            "Draw-to-Video : choisis un clip, dessine les zones de l'effet "
+            "(feu, fumée…), puis génère — l'effet est appliqué là où tu as dessiné."))
+        _pc_draw_pix = load_icon("draw_to_video.png", 56)
+        if not _pc_draw_pix.isNull():
+            self._btn_draw_pc.setIcon(QIcon(_pc_draw_pix))
+            self._btn_draw_pc.setIconSize(QSize(56, 56))
+            self._btn_draw_pc.setFixedSize(60, 60)
+            self._btn_draw_pc.setStyleSheet(
+                "QPushButton{background:transparent;border:none;border-radius:12px;padding:2px;}"
+                "QPushButton:hover{background:rgba(78,205,196,0.14);}")
+        else:
+            self._btn_draw_pc.setText("✏  " + translate("Dessiner sur la vidéo"))
+            self._btn_draw_pc.setFixedHeight(34)
+            self._btn_draw_pc.setStyleSheet(
+                f"QPushButton{{background:transparent;color:{C['accent']};"
+                f"border:1px solid {C['accent']};border-radius:8px;font-size:11px;font-weight:700;padding:0 14px;}}"
+                f"QPushButton:hover{{background:rgba(78,205,196,0.12);}}")
+        self._btn_draw_pc.clicked.connect(self._on_draw_to_video)
+        _pc_prompt_row = QHBoxLayout()
+        _pc_prompt_row.setContentsMargins(0, 0, 0, 0)
+        _pc_prompt_row.setSpacing(8)
+        _pc_prompt_row.addWidget(self._per_clip_prompt, 1)
+        _pc_prompt_row.addWidget(self._btn_draw_pc, 0, Qt.AlignmentFlag.AlignTop)
+        _pc_lay.addLayout(_pc_prompt_row)
 
         # Ref image — prompt par clip (carré Casting style)
         _pc_ref_hdr = QHBoxLayout()
@@ -829,6 +1000,14 @@ class TabDavinciEdit(QScrollArea):
         self._per_clip_ref_square.cleared.connect(self._on_per_clip_ref_cleared)
         _pc_ref_row.addWidget(self._per_clip_ref_square)
         _pc_ref_row.addStretch()
+        self._draw_thumb_p_lbl = QLabel(translate("Dessin Draw-to-Video"))
+        self._draw_thumb_p_lbl.setStyleSheet(
+            f"color:{C['text_dim']};font-size:10px;background:transparent;border:none;")
+        self._draw_thumb_p_lbl.setVisible(False)
+        _pc_ref_row.addWidget(self._draw_thumb_p_lbl, 0, Qt.AlignmentFlag.AlignVCenter)
+        self._draw_thumb_p = _DrawThumb()
+        self._draw_thumb_p.removed.connect(self._on_clear_draw)
+        _pc_ref_row.addWidget(self._draw_thumb_p)
         _pc_lay.addLayout(_pc_ref_row)
         _pp_outer.addWidget(_pc_frame)
 
@@ -836,11 +1015,76 @@ class TabDavinciEdit(QScrollArea):
 
         lay.addWidget(sec_prompt)
 
-        # ── Resynchroniser les lèvres (LatentSync) ────────────────────────────
+        # ── RENDU & AUDIO (section repliable) ──────────────────────────────────
         from api.lipsync import ffmpeg_available as _ffmpeg_ok
+        self._ra_container = QFrame()
+        self._ra_container.setObjectName("ra_container")
+        self._ra_container.setStyleSheet(
+            f"QFrame#ra_container{{background:{C['bg2']};border:1px solid {C['border']};"
+            f"border-radius:8px;}}")
+        _ra_lay = QVBoxLayout(self._ra_container)
+        _ra_lay.setContentsMargins(0, 0, 0, 0)
+        _ra_lay.setSpacing(1)
+
+        self._ra_open = False   # replié par défaut
+        self._ra_toggle_btn = QPushButton("▶  RENDU & AUDIO")
+        self._ra_toggle_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._ra_toggle_btn.setStyleSheet(
+            f"QPushButton{{background:transparent;color:{C['accent']};border:none;"
+            f"text-align:left;font-size:9px;letter-spacing:2px;"
+            f"font-family:'Consolas',monospace;font-weight:700;padding:8px 14px 6px 14px;}}"
+            f"QPushButton:hover{{color:{C['accent_dim']};}}")
+        _ra_lay.addWidget(self._ra_toggle_btn)
+
+        self._ra_body = QWidget()
+        self._ra_body.setStyleSheet("background:transparent;border:none;")
+        _ra_body_lay = QVBoxLayout(self._ra_body)
+        _ra_body_lay.setContentsMargins(0, 0, 0, 0)
+        _ra_body_lay.setSpacing(1)
+        self._ra_body.setVisible(False)
+        _ra_lay.addWidget(self._ra_body)
+
+        def _toggle_ra(*_a):
+            self._ra_open = not self._ra_open
+            self._ra_body.setVisible(self._ra_open)
+            self._ra_toggle_btn.setText(("▼" if self._ra_open else "▶") + "  RENDU & AUDIO")
+        self._ra_toggle_btn.clicked.connect(_toggle_ra)
+
+        # Options RENDU & AUDIO — mêmes que « Générer depuis le storyboard » (libellés
+        # identiques → i18n partagée). Câblées dans _process_next (prompt + params).
+        self._audio_toggle_row = toggle_row(
+            "Audio natif", "Seedance génère le son ambiant et les effets sonores du clip", True)
+        self._audio_cb = self._audio_toggle_row.findChild(QCheckBox)
+        _ra_body_lay.addWidget(self._audio_toggle_row)
+
+        self._music_toggle_row = toggle_row(
+            "Musique générée",
+            "Coché → piste musicale présente · Décoché → « no background music » injecté", False)
+        self._music_cb = self._music_toggle_row.findChild(QCheckBox)
+        _ra_body_lay.addWidget(self._music_toggle_row)
+
+        self._subtitle_toggle_row = toggle_row(
+            "Sous-titres",
+            "Coché → sous-titres incrustés · Décoché → « no subtitles » injecté", False)
+        self._subtitle_cb = self._subtitle_toggle_row.findChild(QCheckBox)
+        _ra_body_lay.addWidget(self._subtitle_toggle_row)
+
+        self._film_anchor_toggle_row = toggle_row(
+            "Prise de vue réelle",
+            "Ancre le rendu dans le filmage réel — ARRI 35mm, grain argentique, peau naturelle, no CGI, no 3D  ·  Automatiquement ignoré si le style 'Film réaliste' ou 'Photoréaliste' est actif (déjà inclus)",
+            False)
+        self._film_anchor_cb = self._film_anchor_toggle_row.findChild(QCheckBox)
+        _ra_body_lay.addWidget(self._film_anchor_toggle_row)
+
+        self._dyn_cam_toggle_row = toggle_row(
+            "Caméra dynamique", "Changement d'angle toutes les 2 secondes", False)
+        self._dyn_cam_cb = self._dyn_cam_toggle_row.findChild(QCheckBox)
+        _ra_body_lay.addWidget(self._dyn_cam_toggle_row)
+
+        # Resynchroniser les lèvres (LatentSync) — DANS le corps de RENDU & AUDIO.
         self._lipsync_toggle_row = toggle_row(
             "Resynchroniser les lèvres",
-            "Synchronisation labiale LatentSync — aligne les lèvres sur l'audio source du clip",
+            "Synchronisation labiale LatentSync — ⚠ réencode (qualité moindre) + audio sur piste séparée",
             False,
         )
         self._cb_lipsync = self._lipsync_toggle_row.findChild(QCheckBox)
@@ -853,9 +1097,12 @@ class TabDavinciEdit(QScrollArea):
             self._lipsync_toggle_row.setToolTip(
                 "Après génération Seedance, resynchronise les lèvres de l'acteur\n"
                 "avec l'audio source du clip DaVinci (fal-ai/latentsync).\n"
-                "Importe la vidéo lip-synced + la piste audio séparément dans DaVinci."
+                "⚠ Réencode via LatentSync → qualité moindre que le clip Seedance brut.\n"
+                "Importe la vidéo lip-synced + la piste audio séparément dans DaVinci.\n"
+                "Décoche pour garder le clip Seedance brut (un seul fichier, pleine qualité)."
             )
-        lay.addWidget(self._lipsync_toggle_row)
+        _ra_body_lay.addWidget(self._lipsync_toggle_row)
+        lay.addWidget(self._ra_container)
 
         # ── Contrôles créatifs ────────────────────────────────────────────────
         self._creative = SeedanceCreativePanel()
@@ -869,6 +1116,10 @@ class TabDavinciEdit(QScrollArea):
         params_grid.setSpacing(12)
 
         self._cb_model = combo(_DAVINCI_ENGINES)
+        # Outils de retouche dédiés (Pixverse Swap) proposés comme MOTEURS — étiquetés
+        # « remplacer un visage / un fond ». Seedance 2.0 reste le défaut (1ʳᵉ entrée).
+        self._cb_model.addItem(translate("Pixverse Swap · remplacer un visage (≤720p)"), "pixverse_face")
+        self._cb_model.addItem(translate("Pixverse Swap · remplacer un fond (≤720p)"), "pixverse_bg")
         self._cb_model.currentIndexChanged.connect(self._on_engine_changed)
         self._cb_ratio = combo(["16:9 — Paysage", "9:16 — Portrait", "4:3", "3:4"])
         _def_key = self._cb_model.currentData() or "seedance-2.0"
@@ -997,31 +1248,33 @@ class TabDavinciEdit(QScrollArea):
         btn_row = QHBoxLayout()
         btn_row.setContentsMargins(0, 0, 0, 0)
         btn_row.setSpacing(8)
-        btn_row.addWidget(self._btn_generate)
+        # stretch=1 → le bouton prend toute la largeur disponible (aligné à gauche,
+        # le « ×N » et Annuler restent à droite) au lieu de se réduire à son texte.
+        btn_row.addWidget(self._btn_generate, 1)
         btn_row.addWidget(_x)
         btn_row.addWidget(self._spin_prises)
         btn_row.addWidget(self._btn_cancel)
         body_queue.addLayout(btn_row)
 
-        self._btn_open_folder = QPushButton("📁  Ouvrir le dossier des vidéos")
-        self._btn_open_folder.setVisible(True)
+        # ── Ouvrir le dossier — pleine largeur, style « ghost » uniforme ; la
+        #    barre DaVinci passe DESSOUS (comme Générer depuis Storyboard) ─────
+        self._btn_open_folder = QPushButton(translate("Ouvrir le dossier des vidéos"))
+        self._btn_open_folder.setFixedHeight(30)
         self._btn_open_folder.setCursor(Qt.CursorShape.PointingHandCursor)
-        self._btn_open_folder.setStyleSheet(f"""
-            QPushButton{{background:transparent;color:{C['text_secondary']};
-            border:1px solid {C['border']};border-radius:8px;font-size:11px;
-            padding:6px 14px;}}
-            QPushButton:hover{{background:{C['bg3']};color:{C['text_primary']};}}
-        """)
+        self._btn_open_folder.setToolTip(translate("Ouvre le dossier de destination des clips."))
+        self._btn_open_folder.setStyleSheet(
+            f"QPushButton{{background:transparent;color:{C['text_secondary']};"
+            f"border:1px solid {C['border']};border-radius:7px;"
+            f"font-size:11px;font-weight:700;padding:0 14px;}}"
+            f"QPushButton:hover{{background:{C['bg3']};color:{C['text_primary']};"
+            f"border-color:{C['border_bright']};}}"
+            f"QPushButton:pressed{{background:{C['bg3']};}}"
+        )
         self._btn_open_folder.clicked.connect(self._open_output_folder)
+        body_queue.addWidget(self._btn_open_folder)
 
         self._davinci_bar = _DaVinciBar()
-
-        _dav_row = QHBoxLayout()
-        _dav_row.setContentsMargins(0, 0, 0, 0)
-        _dav_row.setSpacing(10)
-        _dav_row.addWidget(self._davinci_bar, 1)
-        _dav_row.addWidget(self._btn_open_folder)
-        body_queue.addLayout(_dav_row)
+        body_queue.addWidget(self._davinci_bar)
         lay.addWidget(sec_queue)
 
         # ── Encart prix (même que "Générer depuis Storyboard") ────────────────
@@ -1110,6 +1363,14 @@ class TabDavinciEdit(QScrollArea):
     # ── Chargement des clips ──────────────────────────────────────────────────
 
     def _load_clips(self, clips: list):
+        # Les images Draw-to-Video sont indexées par position : la liste de clips
+        # change → on repart à zéro (indices obsolètes).
+        self._draw_images = {}
+        self._draw_overlays = {}
+        self._draw_frames = {}
+        # Durée de régénération calée sur le clip source (par index), réutilisée par
+        # le lip-sync pour aligner l'audio sur la vidéo.
+        self._gen_durations = {}
         # Déconnecte les workers de miniatures précédents pour éviter les callbacks périmés
         for w in self._thumb_workers:
             try:
@@ -1144,8 +1405,7 @@ class TabDavinciEdit(QScrollArea):
 
         for i, clip in enumerate(clips):
             card = ClipCard(clip, i)
-            card.focused.connect(self._on_card_focused)
-            card.check_changed.connect(self._on_card_check_changed)
+            card.focused.connect(self._on_card_selected)
             if i > 0:
                 sep = QFrame()
                 sep.setFixedSize(1, ClipCard._TH_H)
@@ -1173,6 +1433,12 @@ class TabDavinciEdit(QScrollArea):
 
         self._clips_hbox.addStretch()
         self._pc_hbox.addStretch()
+
+        # Tous les clips SÉLECTIONNÉS par défaut (contour lumineux) — « générer tout ».
+        self._selected_clips = set(range(len(self._clip_cards)))
+        self._sel_anchor = None
+        for c in self._clip_cards:
+            c.set_selected(True)
 
         # Verrouille l'ADN visuel par défaut si plusieurs clips
         self._update_seed_lock_default()
@@ -1202,23 +1468,50 @@ class TabDavinciEdit(QScrollArea):
 
     # ── Per-clip prompt ───────────────────────────────────────────────────────
 
+    def _on_card_selected(self, idx: int):
+        """Clic sur une vignette : sélection avec contour lumineux + Ctrl/Maj pour la
+        multi-sélection (comme « Générer depuis Storyboard »). Le clip cliqué devient
+        aussi l'actif (aperçu per-clip + cible du dessin)."""
+        from PyQt6.QtWidgets import QApplication
+        mods  = QApplication.keyboardModifiers()
+        shift = bool(mods & Qt.KeyboardModifier.ShiftModifier)
+        ctrl  = bool(mods & Qt.KeyboardModifier.ControlModifier)
+        n = len(self._clip_cards)
+        if shift and self._sel_anchor is not None and 0 <= self._sel_anchor < n:
+            lo, hi = sorted((self._sel_anchor, idx))
+            self._selected_clips |= set(range(lo, hi + 1))
+        elif ctrl:
+            if idx in self._selected_clips:
+                self._selected_clips.discard(idx)
+            else:
+                self._selected_clips.add(idx)
+            self._sel_anchor = idx
+        else:
+            self._selected_clips = {idx}
+            self._sel_anchor = idx
+        for i, card in enumerate(self._clip_cards):
+            card.set_selected(i in self._selected_clips)
+        self._on_card_focused(idx)          # actif (aperçu per-clip + dessin)
+        self._update_seed_lock_default()
+
     def _on_card_focused(self, idx: int):
-        if not self._rb_per_clip.isChecked():
-            return
-        # Sauvegarde le prompt courant
-        if self._active_clip_idx is not None:
+        # Sauvegarde le prompt du clip actif AVANT de changer (mode per-clip).
+        if self._rb_per_clip.isChecked() and self._active_clip_idx is not None:
             self._per_clip_prompts[self._active_clip_idx] = (
                 self._per_clip_prompt.toPlainText()
             )
-        # Désactive la carte précédente dans le panneau per-clip
+        # Glow « actif » sur la carte du panneau per-clip (ancienne → nouvelle).
         pc_cards = self._get_pc_cards()
         if self._active_clip_idx is not None and self._active_clip_idx < len(pc_cards):
             pc_cards[self._active_clip_idx].set_active(False)
-        # Active la nouvelle carte
+        # L'ACTIF est TOUJOURS mis à jour — nécessaire au dessin (Draw-to-Video),
+        # même en mode prompt global (avant, l'actif restait None → dessin refusé).
         self._active_clip_idx = idx
         if idx < len(pc_cards):
             pc_cards[idx].set_active(True)
-        # Mise à jour label + textarea
+        if not self._rb_per_clip.isChecked():
+            return
+        # Mise à jour label + textarea (mode prompt per-clip)
         if idx < len(self._clip_cards):
             name = self._clip_cards[idx].clip().get("name", f"Clip {idx + 1}")
             self._per_clip_title.setText(f"▸  Prompt pour : {name}")
@@ -1230,6 +1523,31 @@ class TabDavinciEdit(QScrollArea):
     def _refresh_per_clip_ref_ui(self, idx: int):
         ref = self._per_clip_ref_images.get(idx, "")
         self._per_clip_ref_square.set_path(ref)
+        self._refresh_draw_thumb()
+
+    def _refresh_draw_thumb(self):
+        """Affiche/masque la vignette du dessin Draw-to-Video du clip ACTIF (les deux
+        modes de prompt). Le dessin n'est jamais envoyé tel quel au modèle."""
+        idx = self._active_clip_idx
+        p = self._draw_images.get(idx, "") if idx is not None else ""
+        for thumb, lbl in (
+            (getattr(self, "_draw_thumb_g", None), getattr(self, "_draw_thumb_g_lbl", None)),
+            (getattr(self, "_draw_thumb_p", None), getattr(self, "_draw_thumb_p_lbl", None)),
+        ):
+            if thumb is not None:
+                thumb.set_image(p)
+            if lbl is not None:
+                lbl.setVisible(bool(p))
+
+    def _on_clear_draw(self):
+        """Croix de la vignette : retire le dessin Draw-to-Video du clip actif."""
+        idx = self._active_clip_idx
+        if idx is None:
+            return
+        self._draw_images.pop(idx, None)
+        self._draw_overlays.pop(idx, None)
+        self._draw_frames.pop(idx, None)
+        self._refresh_draw_thumb()
 
     def _on_per_clip_prompt_changed(self):
         if self._active_clip_idx is not None:
@@ -1275,6 +1593,53 @@ class TabDavinciEdit(QScrollArea):
     def _on_per_clip_ref_cleared(self):
         if self._active_clip_idx is not None:
             self._per_clip_ref_images.pop(self._active_clip_idx, None)
+
+    # ── Draw-to-Video ─────────────────────────────────────────────────────────
+
+    def _draw_dir(self) -> str:
+        try:
+            from core.context import get_data_root
+            d = os.path.join(get_data_root(), "draw_to_video")
+        except Exception:
+            from core.pandora_dirs import get_bin_dir
+            d = get_bin_dir("draw_to_video")
+        os.makedirs(d, exist_ok=True)
+        return d
+
+    def _on_draw_to_video(self):
+        idx = self._active_clip_idx
+        if idx is None and len(self._clips_data) == 1:
+            idx = 0
+        if idx is None or idx >= len(self._clips_data):
+            QMessageBox.information(
+                self, "Draw-to-Video",
+                "Sélectionne d'abord un clip (clique sur sa vignette).")
+            return
+        clip = self._clips_data[idx]
+        path = clip.get("file_path", "")
+        if not (path and os.path.isfile(path)):
+            QMessageBox.warning(self, "Draw-to-Video", "Clip introuvable sur le disque.")
+            return
+        from ui.dialog_draw_video import DrawVideoDialog
+        # Ré-édition : si ce clip a déjà un dessin, on le rouvre éditable (calque +
+        # time code mémorisés) au lieu de repartir d'un schéma vierge.
+        dlg = DrawVideoDialog(
+            path, self._draw_dir(), self,
+            prev_overlay=self._draw_overlays.get(idx, ""),
+            prev_frame=self._draw_frames.get(idx, 0))
+        if dlg.exec() == DrawVideoDialog.DialogCode.Accepted:
+            rp = dlg.result_path()
+            if rp and os.path.isfile(rp):
+                self._draw_images[idx] = rp
+                self._draw_overlays[idx] = dlg.overlay_path()
+                self._draw_frames[idx] = dlg.frame_index()
+                # Le clip dessiné devient ACTIF — sinon, en mono-clip non explicitement
+                # sélectionné, `idx` venait du repli (=0) mais `_active_clip_idx` restait
+                # None → la vignette (qui suit _active_clip_idx) ne s'affichait pas.
+                self._active_clip_idx = idx
+                # Plus de pop-up : la vignette du dessin (à droite du prompt) confirme
+                # visuellement que l'opération est prise en compte.
+                self._refresh_draw_thumb()
 
     # ── Enhance Claude — prompt global ────────────────────────────────────────
 
@@ -1330,8 +1695,12 @@ class TabDavinciEdit(QScrollArea):
     # ── Sélection ─────────────────────────────────────────────────────────────
 
     def _set_all_checked(self, state: bool):
+        # « Tout sélectionner » / « Tout désélectionner » (contour lumineux).
+        self._selected_clips = set(range(len(self._clip_cards))) if state else set()
+        self._sel_anchor = None
         for card in self._clip_cards:
-            card.set_checked(state)
+            card.set_selected(state)
+        self._update_seed_lock_default()
 
     def _clear_clips(self):
         self._load_clips([])
@@ -1385,9 +1754,15 @@ class TabDavinciEdit(QScrollArea):
 
     def _on_engine_changed(self):
         key = self._get_model()
-        fixed_res = key in _FIXED_RES_ENGINES
-        self._cb_ratio.setEnabled(key not in _FIXED_RATIO_ENGINES)
-        options = _ENGINE_RESOLUTIONS.get(key, [("1080p", "1080p"), ("720p", "720p"), ("480p", "480p")])
+        if key in ("pixverse_face", "pixverse_bg"):
+            # Pixverse Swap : ≤720p, garde le cadrage source (ratio verrouillé).
+            fixed_res = False
+            self._cb_ratio.setEnabled(False)
+            options = [("720p", "720p"), ("540p", "540p"), ("360p", "360p")]
+        else:
+            fixed_res = key in _FIXED_RES_ENGINES
+            self._cb_ratio.setEnabled(key not in _FIXED_RATIO_ENGINES)
+            options = _ENGINE_RESOLUTIONS.get(key, [("1080p", "1080p"), ("720p", "720p"), ("480p", "480p")])
         prev = self._cb_res.currentData() or self._cb_res.currentText()
         self._cb_res.blockSignals(True)
         self._cb_res.clear()
@@ -1402,6 +1777,7 @@ class TabDavinciEdit(QScrollArea):
         self._cb_res.setEnabled(not fixed_res)
         if hasattr(self, "_ref_compat_banner"):
             self._ref_compat_banner.setVisible(key in _TEXT_FALLBACK_ENGINES)
+        self._refresh_engine_hint()
 
     def _get_aspect_ratio(self) -> str:
         return self._cb_ratio.currentText().split(" ")[0]
@@ -1410,12 +1786,8 @@ class TabDavinciEdit(QScrollArea):
 
     def _update_seed_lock_default(self):
         """Coche le verrou ADN si plusieurs clips sont sélectionnés."""
-        n_checked = sum(1 for c in self._clip_cards if c.is_checked())
-        if n_checked > 1 and not self._seed_lock_btn.isChecked():
+        if len(self._selected_clips) > 1 and not self._seed_lock_btn.isChecked():
             self._seed_lock_btn.setChecked(True)
-
-    def _on_card_check_changed(self, _index: int, _checked: bool):
-        self._update_seed_lock_default()
 
     def _on_seed_toggle(self, checked: bool):
         if checked:
@@ -1531,15 +1903,18 @@ class TabDavinciEdit(QScrollArea):
                                 "Une génération est déjà en cours. Attendez qu'elle se termine.")
             return
 
-        checked = [(i, card) for i, card in enumerate(self._clip_cards) if card.is_checked()]
-        if not checked:
-            QMessageBox.warning(self, "Aucun clip sélectionné",
-                                "Cochez au moins un clip avant de lancer la file d'attente.")
+        selected = [(i, card) for i, card in enumerate(self._clip_cards)
+                    if i in self._selected_clips]
+        if not selected:   # aucune sélection explicite → on prend tous les clips
+            selected = list(enumerate(self._clip_cards))
+        if not selected:
+            QMessageBox.warning(self, "Aucun clip",
+                                "Importez et sélectionnez au moins un clip avant de lancer la file.")
             return
 
         # Validation du format : H.264 720p, fichier < 50 MB
         invalid_clips = []
-        for clip_idx, _card in checked:
+        for clip_idx, _card in selected:
             clip = self._clips_data[clip_idx]
             fp = clip.get("file_path", "")
             name = clip.get("name", f"Clip {clip_idx + 1}")
@@ -1570,6 +1945,35 @@ class TabDavinciEdit(QScrollArea):
             )
             return
 
+        # Info CONVERSION : prévenir quand un clip sera transcodé avant l'envoi
+        # (format/codec non H.264, ou entrelacé → désentrelacé en progressif).
+        will_transcode = []
+        for clip_idx, _card in selected:
+            fp = self._clips_data[clip_idx].get("file_path", "")
+            try:
+                from core.video_utils import video_needs_transcode
+                why = video_needs_transcode(fp)
+            except Exception:
+                why = ""
+            if why:
+                nm = self._clips_data[clip_idx].get("name", f"Clip {clip_idx + 1}")
+                will_transcode.append(f"  • {nm} — {why}")
+        if will_transcode:
+            resp = QMessageBox.question(
+                self, translate("Conversion avant envoi"),
+                translate("Ce(s) clip(s) seront convertis en H.264 PROGRESSIF (1080p max) "
+                          "avant l'envoi au moteur — désentrelacés si besoin, pour éviter "
+                          "les problèmes de trames :") + "\n\n"
+                + "\n".join(will_transcode) + "\n\n"
+                + translate("Pour la MEILLEURE qualité, exporte plutôt tes clips depuis ton "
+                            "logiciel de montage en H.264 progressif, 1080p maximum — c'est le "
+                            "format adapté à tous les moteurs de génération.") + "\n\n"
+                + translate("Continuer avec la conversion automatique (FFmpeg) ?"),
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                QMessageBox.StandardButton.Yes)
+            if resp != QMessageBox.StandardButton.Yes:
+                return
+
         # Sauvegarde le prompt per-clip courant avant de lancer
         if self._rb_per_clip.isChecked() and self._active_clip_idx is not None:
             self._per_clip_prompts[self._active_clip_idx] = (
@@ -1578,7 +1982,7 @@ class TabDavinciEdit(QScrollArea):
 
         n_prises = self._spin_prises.value()
         self._queue = []
-        for (clip_idx, _card) in checked:
+        for (clip_idx, _card) in selected:
             for p in range(n_prises):
                 self._queue.append((clip_idx, p))
 
@@ -1595,7 +1999,7 @@ class TabDavinciEdit(QScrollArea):
             self._last_seed = None
 
         total = len(self._queue)
-        n_clips = len(checked)
+        n_clips = len(selected)
         n_prises = self._spin_prises.value()
         self._lbl_queue_info.setText(
             f"File d'attente : {n_clips} clip(s) × {n_prises} prise(s) = {total} génération(s)  —  "
@@ -1610,6 +2014,56 @@ class TabDavinciEdit(QScrollArea):
             card.set_status("")
 
         self._process_next()
+
+    def _on_mod_template(self, idx: int):
+        """« Type de modification » : insère un modèle de prompt prêt à l'emploi (Seedance)
+        pour le type choisi — visage / décor / étalonnage / tenue. Action ponctuelle, non
+        destructive (ajout à la suite ; le sélecteur revient sur l'invite). Le swap dédié
+        (Pixverse) est, lui, un MOTEUR de génération (sélecteur « Moteur de génération »)."""
+        key = self._mod_combo.itemData(idx)
+        if key:
+            tpl = translate(_MOD_TEMPLATES.get(key, ""))
+            if tpl:
+                cur = self._prompt_global.toPlainText().strip()
+                self._prompt_global.setPlainText((cur + "\n" + tpl) if cur else tpl)
+            self._mod_combo.setCurrentIndex(0)
+
+    def _pixverse_engine_mode(self) -> str:
+        """'person' / 'background' si le MOTEUR sélectionné est un Pixverse Swap
+        (visage / fond) ; '' sinon (= flux Seedance / autre moteur normal)."""
+        return {"pixverse_face": "person",
+                "pixverse_bg": "background"}.get(self._get_model(), "")
+
+    def _refresh_engine_hint(self):
+        """Indice affiché quand le moteur Pixverse Swap (visage/fond) est sélectionné :
+        rappelle de fournir l'image de référence (le nouveau visage / fond)."""
+        if not hasattr(self, "_modif_hint"):
+            return
+        mode = self._pixverse_engine_mode()
+        self._modif_hint.setVisible(bool(mode))
+        if mode == "person":
+            self._modif_hint.setText(translate(
+                "Moteur Pixverse Swap (visage) : remplace le visage du clip par l'image de "
+                "référence SANS régénérer la scène. Ajoute le nouveau visage en « Image de "
+                "référence ». (720p max · audio conservé.)"))
+        elif mode == "background":
+            self._modif_hint.setText(translate(
+                "Moteur Pixverse Swap (fond) : remplace le fond du clip par l'image de "
+                "référence SANS régénérer la scène. Ajoute le nouveau fond en « Image de "
+                "référence ». (720p max · audio conservé.)"))
+
+    def _source_gen_duration(self, clip_idx: int) -> int:
+        """Durée de régénération Seedance calée sur le clip SOURCE (sondée par ffprobe,
+        bornée 4–15 s — contrainte API). Repli 5 s si la durée est introuvable."""
+        try:
+            clip = self._clips_data[clip_idx]
+            from core.video_utils import video_duration_s
+            d = video_duration_s(clip.get("file_path", ""))
+            if d and d > 0:
+                return max(4, min(15, round(d)))
+        except Exception:
+            pass
+        return 5
 
     def _process_next(self):
         if self._queue_pos >= len(self._queue):
@@ -1630,6 +2084,13 @@ class TabDavinciEdit(QScrollArea):
         creative_suffix = self._creative.get_creative_suffix()
         prompt = " ".join(p for p in [base_prompt, creative_suffix, self._style_suffix] if p)
 
+        # Draw-to-Video : l'image annotée (traits colorés) sert de GUIDE de repérage.
+        # Elle n'est PAS envoyée à Seedance (sinon les traits seraient reproduits dans
+        # la vidéo) : côté worker, Claude Vision la lit pour réécrire le prompt en
+        # décrivant OÙ appliquer l'effet, puis seuls le clip d'origine + ce prompt
+        # partent. → params["draw_guidance_path"] plus bas.
+        _draw_img = self._draw_images.get(clip_idx, "")
+
         seed = self._get_seed()
 
         video_path = clip.get("file_path", "")
@@ -1639,12 +2100,38 @@ class TabDavinciEdit(QScrollArea):
         if has_video and "@Video1" not in prompt:
             prompt = f"@Video1 {prompt}" if prompt else "@Video1"
 
+        # ── RENDU & AUDIO : injections de prompt (mêmes options que le storyboard) ─
+        if getattr(self, "_dyn_cam_cb", None) and self._dyn_cam_cb.isChecked():
+            prompt = (f"{prompt}, change the camera angle every 2 seconds "
+                      "alternating between several types of shots")
+        if getattr(self, "_film_anchor_cb", None) and self._film_anchor_cb.isChecked():
+            import core.style as _style_api
+            if _style_api.get_style_key() not in {"realistic"}:   # déjà inclus si réaliste
+                prompt = (f"{prompt}, shot on ARRI Alexa 35mm film, photorealistic live action footage, "
+                          "real human actors, authentic film grain, natural skin texture and pores, "
+                          "no CGI, no 3D render, no computer animation, no digital art, "
+                          "organic depth of field, natural practical lighting")
+        if getattr(self, "_subtitle_cb", None) and not self._subtitle_cb.isChecked():
+            prompt = f"{prompt}, no subtitles"
+
+        # Durée calée sur le clip SOURCE (Seedance n'accepte que 4–15 s) → la version
+        # régénérée respecte la longueur de l'original au lieu d'un 5 s figé.
+        gen_dur = self._source_gen_duration(clip_idx)
+        self._gen_durations[clip_idx] = gen_dur
+
         params = {
             "mode":         "ext" if has_video else "t2v",
             "direction":    "new_take",
             "prompt":       prompt,
             "model":        self._get_model(),
-            "duration":     5,
+            "duration":     gen_dur,
+            # RENDU & AUDIO : son natif + « no music » (suffixe ajouté après traduction)
+            "audio":        (self._audio_cb.isChecked()
+                             if getattr(self, "_audio_cb", None) else True),
+            "no_music_suffix": ("" if (getattr(self, "_music_cb", None)
+                                       and self._music_cb.isChecked())
+                                else "no music, no background music, no soundtrack, "
+                                     "no musical score, natural ambient sound only"),
             "resolution":   (self._cb_res.currentData() or self._cb_res.currentText().split()[0]),
             "aspect_ratio": self._get_aspect_ratio(),
         }
@@ -1652,6 +2139,10 @@ class TabDavinciEdit(QScrollArea):
             params["video_path"] = video_path
         if seed:
             params["seed"] = seed
+        # Draw-to-Video : image annotée transmise comme GUIDE (analysée par Claude
+        # Vision côté worker), JAMAIS uploadée comme référence à Seedance.
+        if _draw_img and os.path.isfile(_draw_img):
+            params["draw_guidance_path"] = _draw_img
 
         ref_images = []
         if self._global_ref_image and os.path.isfile(self._global_ref_image):
@@ -1659,8 +2150,48 @@ class TabDavinciEdit(QScrollArea):
         per_ref = self._per_clip_ref_images.get(clip_idx, "")
         if per_ref and os.path.isfile(per_ref) and per_ref not in ref_images:
             ref_images.append(per_ref)
+        # NB : l'image annotée Draw-to-Video N'EST PAS ajoutée aux références
+        # (elle partirait sinon à Seedance → traits visibles). Elle est passée via
+        # params["draw_guidance_path"] et analysée par Claude Vision côté worker.
         if ref_images:
             params["ref_images"] = ref_images
+
+        # ── Moteur Pixverse Swap sélectionné (visage / fond) → retouche chirurgicale
+        #    (garde la scène + l'audio) au lieu de régénérer via Seedance. ──────────────
+        _swap = self._pixverse_engine_mode()
+        if _swap:
+            if not has_video:
+                self._on_clip_failed("Pixverse Swap : ce clip n'a pas de vidéo source.",
+                                     clip_idx, prise_idx)
+                return
+            _ref = ref_images[0] if ref_images else ""
+            if not (_ref and os.path.isfile(_ref)):
+                _what = "du nouveau visage" if _swap == "person" else "du nouveau fond"
+                self._on_clip_failed(
+                    f"Pixverse Swap : ajoute l'image {_what} en « Image de référence ».",
+                    clip_idx, prise_idx)
+                return
+            _res_raw = (self._cb_res.currentData() or self._cb_res.currentText().split()[0])
+            _px_res = _res_raw if _res_raw in ("360p", "540p", "720p") else "720p"
+            from api.face_swap import PixverseSwapWorker
+            prev = getattr(self, "_worker", None)
+            if prev is not None:
+                abandon_thread(prev)
+            self._worker = PixverseSwapWorker(
+                video_path, _ref, mode=_swap, resolution=_px_res,
+                keep_audio=True, prompt=prompt)
+            self._worker.finished.connect(
+                lambda r, ci=clip_idx, pi=prise_idx: self._on_clip_done(r, ci, pi))
+            self._worker.progress.connect(self._on_progress)
+            self._worker.failed.connect(
+                lambda e, ci=clip_idx, pi=prise_idx: self._on_clip_failed(e, ci, pi))
+            self._worker.start()
+            _lbl = "face-swap" if _swap == "person" else "remplacement fond"
+            total = len(self._queue)
+            self._progress.setValue(int(self._queue_pos / total * 100))
+            self._lbl_progress.setText(
+                f"[{self._queue_pos + 1}/{total}]  {clip.get('name', '?')}  — {_lbl} (Pixverse)")
+            return
 
         _model_key = self._get_model()
         if _model_key in _SEEDANCE_ENGINES:
@@ -1735,6 +2266,9 @@ class TabDavinciEdit(QScrollArea):
             source_video_path = self._clips_data[clip_idx].get("file_path", ""),
             output_dir        = get_output_dir(),
             shot_name         = clip_name,
+            # Cale l'audio sur la durée EXACTE de la vidéo régénérée (= durée du clip
+            # source, bornée 4–15 s) → son et image synchrones, durée de sortie nette.
+            target_duration   = self._gen_durations.get(clip_idx, 0.0),
         )
         self._lipsync_worker.progress.connect(self._on_lipsync_progress)
         self._lipsync_worker.finished.connect(

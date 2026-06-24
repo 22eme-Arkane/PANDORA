@@ -109,6 +109,73 @@ def delete_scenario(scenario_id: str):
     _save_index(index)
 
 
+# ── Sauvegarde / ouverture PHYSIQUE (fichiers nommés, dossier « Scénario ») ─────
+# Le scénario est déjà dans le dossier du projet → pas de sous-dossier projet.
+
+def _saves_dir() -> str:
+    from core.context import get_data_root
+    d = os.path.join(get_data_root(), "Scénario")
+    os.makedirs(d, exist_ok=True)
+    return d
+
+
+def _safe_name(name: str) -> str:
+    s = "".join(c for c in (name or "") if c.isalnum() or c in " -_").strip()
+    return s[:80] or "scenario"
+
+
+def list_saved() -> list[str]:
+    """Noms des scénarios sauvegardés (fichiers .json du dossier Scénario)."""
+    try:
+        return sorted(f[:-5] for f in os.listdir(_saves_dir()) if f.endswith(".json"))
+    except Exception:
+        return []
+
+
+def export_scenario_file(name: str, data: dict) -> str:
+    """Sauvegarde physique du scénario sous <projet>/data/Scénario/<nom>.json."""
+    payload = dict(data or {})
+    payload["saved_name"] = name
+    payload["saved_at"] = datetime.now().isoformat(timespec="seconds")
+    path = os.path.join(_saves_dir(), _safe_name(name) + ".json")
+    with open(path, "w", encoding="utf-8") as f:
+        json.dump(payload, f, ensure_ascii=False, indent=2)
+    return path
+
+
+def import_scenario_file(name: str) -> dict | None:
+    """Recharge un scénario sauvegardé par son nom."""
+    path = os.path.join(_saves_dir(), _safe_name(name) + ".json")
+    if not os.path.isfile(path):
+        return None
+    with open(path, "r", encoding="utf-8") as f:
+        return json.load(f)
+
+
+def saves_dir() -> str:
+    """Dossier par défaut des scénarios sauvegardés (pour la boîte de dialogue)."""
+    return _saves_dir()
+
+
+def export_scenario_to(path: str, data: dict) -> str:
+    """Sauvegarde le scénario vers un fichier CHOISI par l'utilisateur (boîte de
+    dialogue Windows). Chargeable depuis n'importe quel projet."""
+    payload = dict(data or {})
+    payload.setdefault("saved_name", os.path.splitext(os.path.basename(path))[0])
+    payload["saved_at"] = datetime.now().isoformat(timespec="seconds")
+    with open(path, "w", encoding="utf-8") as f:
+        json.dump(payload, f, ensure_ascii=False, indent=2)
+    return path
+
+
+def import_scenario_from(path: str) -> dict | None:
+    """Recharge un scénario depuis un fichier CHOISI (boîte de dialogue Windows)."""
+    if not path or not os.path.isfile(path):
+        return None
+    with open(path, "r", encoding="utf-8") as f:
+        return json.load(f)
+
+
 def read_file(path: str) -> str:
     ext = os.path.splitext(path)[1].lower()
 

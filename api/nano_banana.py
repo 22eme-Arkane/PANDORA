@@ -133,6 +133,8 @@ def _project_images_dir(subdir: str) -> str:
             import core.vehicles as m; return m.images_dir()
         if subdir == "decors":
             import core.decors as m; return m.images_dir()
+        if subdir in ("live_castings", "live_accessories", "live_vehicles"):
+            import core.live_assets as m; return m.images_dir_for_subdir(subdir)
     except Exception:
         pass
     return get_bin_dir(subdir)
@@ -494,7 +496,11 @@ _INDIVIDUAL_PORTRAIT_SUFFIX = (
 _ITEM_LINE = (
     "Isolated product shot on a pure white seamless background. "
     "No person, no face, no character, no model. "
-    "No scene, no environment, no backdrop."
+    "No scene, no environment, no backdrop. "
+    "If the item is a garment, costume or wig, display it in ghost-mannequin style — "
+    "worn three-dimensional shape with no visible person. "
+    "Professional studio product photography, soft diffused lighting, "
+    "true-to-life materials and colors, ultra-detailed textures, sharp focus."
 )
 
 _VEHICLE_LINE = (
@@ -511,7 +517,8 @@ _DECOR_LINE = (
     "Rich atmospheric lighting, depth and mood. "
     "No people, no characters, no figures anywhere in the frame. "
     "Professional film/TV location reference quality. "
-    "NOT a product shot — NOT a white background — this is a real place, real light, real atmosphere."
+    "NOT a product shot — NOT a white background — this is a real place, real light, real atmosphere. "
+    "Ultra-detailed, sharp focus, high dynamic range, photorealistic."
 )
 _DECOR_SHEET_SUFFIX = (
     "Film production location reference sheet — ONE single image divided into 4 panels "
@@ -805,6 +812,8 @@ class OptimizeStyleReferenceWorker(OptimizeWithReferencesWorker):
 _CLASSIC_PORTRAIT_SUFFIX = (
     "Single character portrait. White seamless studio background. "
     "Professional film/TV casting photograph. Head-and-shoulders or full-body framing. "
+    "Natural skin texture, soft professional studio lighting, "
+    "ultra-detailed, sharp focus. "
     "No text, no labels, no watermarks."
 )
 
@@ -818,6 +827,7 @@ _EDITORIAL_PORTRAIT_SUFFIX = (
 _ACTION_POSE_SUFFIX = (
     "Full-body dynamic action pose. Expressive movement, mid-action. "
     "White seamless studio background, professional film production reference. "
+    "Crisp motion, natural fabric and skin texture, ultra-detailed, sharp focus. "
     "No text, no labels."
 )
 
@@ -825,6 +835,7 @@ _DUO_PORTRAIT_SUFFIX = (
     "Two characters side by side, full-body front view. "
     "White seamless studio background. Both characters fully visible, equal framing. "
     "Professional film/TV casting reference. "
+    "Natural skin texture, soft studio lighting, ultra-detailed, sharp focus. "
     "No text, no labels."
 )
 
@@ -1775,6 +1786,282 @@ class GenerateItemWorker(QThread):
             self.failed.emit(humanize_api_error(f"Erreur Nano Banana : {e}"))
 
 
+# ── Les 6 vues d'une pièce (décor) ─────────────────────────────────────────────
+
+# Délai entre deux vues d'un décor (génération ÉTAPE PAR ÉTAPE) — espace les appels
+# pour ne pas saturer l'API (cause des faces qui échouaient quand tout partait vite).
+_VIEW_GAP_S = 2.0
+
+
+class GenerateRoomViewsWorker(QThread):
+    """Génère les vues d'une pièce dans un ORDRE qui maximise le raccord :
+      1. le PLAN D'ENSEMBLE (vue maîtresse 3/4) ;
+      2. le PLAN D'ARCHITECTURE vu de dessus (contexte : tous les éléments) ;
+      3. les 6 FACES (avant · arrière · gauche · droite · sol · plafond), générées
+         en INJECTANT le plan d'architecture + le plan d'ensemble comme références
+         (NB2 edit) → mêmes objets, mêmes positions d'une vue à l'autre.
+
+    Émet views_finished avec [{"label","code","path","prompt"[, "is_floor_plan"]}].
+    Les 7 vues (ensemble + 6 faces) deviennent des DÉCORS ; l'entrée
+    `is_floor_plan` (le plan vu de dessus) sert de plan partagé (decor.floor_plan)."""
+    progress       = pyqtSignal(int, str)
+    views_finished = pyqtSignal(list)   # [{"label","code","path"}, …] (7 vues)
+    failed         = pyqtSignal(str)
+
+    def __init__(self, base_prompt: str, decor_name: str,
+                 model_key: str | None = None, style_suffix: str = ""):
+        super().__init__()
+        self._base         = base_prompt
+        self._name         = decor_name
+        self._model_key    = model_key
+        self._style_suffix = style_suffix
+        # Diagnostic lisible par le dialogue après views_finished.
+        self._faces_ok     = 0
+        self._faces_total  = 6
+        self._last_error   = ""
+
+    def run(self):
+        cfg = load_config()
+        key = cfg.get("api_key", "").strip()
+        if not key:
+            self._mock()
+        else:
+            self._real(key)
+
+    def _mock(self):
+        from core.room_views import build_seven_view_prompts
+        views = build_seven_view_prompts("")
+        for i, (label, _c, _d) in enumerate(views):
+            self.progress.emit(int((i + 1) / len(views) * 100),
+                               f"[{i+1}/7] {label} (mode mock)…")
+            time.sleep(0.3)
+        self.views_finished.emit([])
+
+    def _real(self, key: str):
+        try:
+            import fal_client
+            import requests
+            import base64, mimetypes
+            from core.lang import translate_to_english
+            from core.room_views import build_six_view_prompts, build_overview_prompt
+
+            os.environ["FAL_KEY"] = key
+            cfg = load_config()
+            if self._model_key:
+                cfg = dict(cfg)
+                cfg["image_model"] = self._model_key
+            price = get_image_price(cfg)
+            base_en = translate_to_english(self._base) if self._base else ""
+
+            safe = "".join(c for c in self._name if c.isalnum() or c in " -_").strip() or "decor"
+            ts   = int(time.time())
+            out: list[dict] = []
+
+            # Journal de diagnostic — chaque échec de vue y est tracé pour pouvoir
+            # comprendre « pourquoi je n'ai que le plan d'ensemble » (crédits / limite
+            # de débit / contenu refusé). Fichier partageable.
+            import tempfile
+            _logf = os.path.join(tempfile.gettempdir(), "pandora_decor.log")
+            def _log(m: str):
+                try:
+                    with open(_logf, "a", encoding="utf-8") as _lf:
+                        _lf.write(m + "\n")
+                except Exception:
+                    pass
+            _log(f"===== 7 vues « {self._name} » (modèle {get_image_endpoint(cfg)}) =====")
+
+            def _save(data: bytes, code: str) -> str:
+                p = os.path.join(_project_images_dir("decors"), f"{safe}_{code}_{ts}.png")
+                with open(p, "wb") as f:
+                    f.write(data)
+                return p
+
+            def _dataurl(path: str) -> str:
+                # Réfs d'édition ALLÉGÉES (≤1024 px, JPEG) : un PNG 1K en base64 fait
+                # ~2-3 Mo ; deux réfs saturaient l'édition NB2 (cause possible de
+                # l'échec systématique des faces). Repli brut si Pillow indisponible.
+                try:
+                    from PIL import Image
+                    import io as _io
+                    im = Image.open(path).convert("RGB")
+                    im.thumbnail((1024, 1024), Image.LANCZOS)
+                    buf = _io.BytesIO()
+                    im.save(buf, "JPEG", quality=85)
+                    return "data:image/jpeg;base64," + base64.b64encode(buf.getvalue()).decode()
+                except Exception:
+                    mime = mimetypes.guess_type(path)[0] or "image/png"
+                    with open(path, "rb") as f:
+                        return f"data:{mime};base64,{base64.b64encode(f.read()).decode()}"
+
+            def _gen_text(prompt: str, aspect: str) -> bytes:
+                _ep, _args = _build_image_args(prompt, aspect, "1K", cfg, 1)
+                _res = fal_client.subscribe(_ep, arguments=_args)
+                return requests.get(_extract_image_url(_res), timeout=120).content
+
+            def _gen_edit(prompt: str, ref_urls: list, aspect: str) -> bytes:
+                _res = fal_client.subscribe("fal-ai/nano-banana-2/edit", arguments={
+                    "prompt":           prompt,
+                    "image_urls":       ref_urls,
+                    "num_images":       1,
+                    "aspect_ratio":     aspect,
+                    "resolution":       "1K",
+                    "output_format":    "png",
+                    "safety_tolerance": "6",
+                })
+                return requests.get(_extract_image_url(_res), timeout=120).content
+
+            def _gen_text_robust(prompt: str, aspect: str) -> bytes:
+                # Comme _gen_text mais 4 essais + backoff : le plan d'ensemble ET le
+                # plan d'architecture sont les RÉFÉRENCES de toutes les faces — un
+                # échec ici casse le raccord, on insiste (les faces avaient déjà ce
+                # repli, l'ensemble et le plan ne l'avaient pas → « 1 décor + plan »).
+                _err = ""
+                for _attempt in range(4):
+                    try:
+                        return _gen_text(prompt, aspect)
+                    except Exception as e:
+                        _err = str(e)
+                        _rl = any(k in str(e).lower() for k in
+                                  ("rate", "limit", "429", "quota", "too many", "exhaust"))
+                        time.sleep((7 if _rl else 4) * (_attempt + 1))
+                raise RuntimeError(_err or "génération image échouée")
+
+            # ⚠ RÉSILIENCE : chaque vue est isolée. Une vue qui échoue ne doit PAS
+            # faire perdre les autres (sinon on se retrouve avec « 1 décor + le plan »).
+
+            # 1) PLAN D'ENSEMBLE d'abord (vue maîtresse) ─────────────────────────
+            self.progress.emit(8, f"[1/8] Plan d'ensemble…  ({price})")
+            ov_label, ov_code, ov_prompt = build_overview_prompt(base_en)
+            full_ov = ov_prompt
+            if self._style_suffix:
+                full_ov = f"{full_ov}, {self._style_suffix}"
+            full_ov = f"{full_ov}\n\n{_DECOR_LINE}"
+            ov_path = ""
+            try:
+                ov_path = _save(_gen_text_robust(full_ov, "16:9"), ov_code)
+                out.append({"label": ov_label, "code": ov_code, "path": ov_path, "prompt": ov_prompt})
+            except Exception as e:
+                _log(f"plan d'ensemble ÉCHEC: {str(e)[:160]}")
+            time.sleep(_VIEW_GAP_S)   # espacement entre vues (anti-saturation API)
+
+            # 2) PLAN D'ARCHITECTURE vu de dessus — CALÉ SUR LE PLAN D'ENSEMBLE :
+            #    généré par ÉDITION NB2 à partir de l'image d'ensemble → MÊME pièce,
+            #    MÊME disposition (murs, mobilier, ouvertures) vue de dessus. Sans
+            #    ensemble disponible (ou si l'édition échoue), repli texte robuste.
+            #    Indispensable : le plan sert ensuite de référence spatiale aux 6 faces.
+            self.progress.emit(20, "[2/8] Plan d'architecture (calé sur l'ensemble)…")
+            fp_prompt = _floor_plan_prompt(base_en or "an interior room")
+            fp_anchor = (
+                "Draw the TOP-DOWN architectural floor plan (bird's eye view, seen from "
+                "directly above) of the EXACT room shown in the reference image: SAME "
+                "walls, SAME proportions, SAME furniture in the SAME positions, SAME "
+                "doors and windows. Schematic blueprint / architect plan style — simple "
+                "lines, flat tones, neutral background, no people, no camera, no text "
+                "labels. Square framing."
+            )
+            fp_path = ""
+            ov_ref = [_dataurl(ov_path)] if (ov_path and os.path.isfile(ov_path)) else []
+            try:
+                if ov_ref:
+                    try:
+                        fp_path = _save(_gen_edit(fp_anchor, ov_ref, "1:1"), "floorplan")
+                    except Exception as e:
+                        _log(f"plan édité depuis l'ensemble ÉCHEC → repli texte. {str(e)[:160]}")
+                        fp_path = _save(_gen_text_robust(fp_prompt, "1:1"), "floorplan")
+                else:
+                    fp_path = _save(_gen_text_robust(fp_prompt, "1:1"), "floorplan")
+                out.append({"label": "Plan (vue de dessus)", "code": "floorplan",
+                            "path": fp_path, "prompt": fp_prompt, "is_floor_plan": True})
+            except Exception as e:
+                _log(f"plan d'architecture ÉCHEC: {str(e)[:160]}")
+            time.sleep(_VIEW_GAP_S)
+
+            # 3) Les 6 FACES — chacune générée par ÉDITION NB2 en INJECTANT comme
+            #    RÉFÉRENCES le plan d'ensemble (rendu maître de la pièce) + le plan
+            #    d'architecture vu de dessus. Objectif : MÊME pièce, mêmes matières,
+            #    couleurs, mobilier, lumière — seul l'angle de caméra change (une face
+            #    différente à chaque vue). Repli texte par face si l'édition échoue
+            #    (fiabilité préservée). Réfs allégées (1K JPEG) pour ne pas saturer.
+            faces = build_six_view_prompts(base_en)
+            ref_urls = [_dataurl(p) for p in (ov_path, fp_path)
+                        if p and os.path.isfile(p)]
+            consistency = (
+                "The reference images show ONE specific room: a 3/4 establishing view "
+                "AND a TOP-DOWN architectural floor plan giving the exact layout. Treat "
+                "them as the GROUND TRUTH: keep IDENTICAL architecture, wall materials, "
+                "colours, furniture style and lighting / ambience, and place every "
+                "element CONSISTENTLY with the floor-plan layout. ONLY the camera "
+                "orientation changes — frame a DIFFERENT wall of the SAME room. Do NOT "
+                "repeat on this wall the objects that belong to the other walls (each "
+                "wall is distinct)."
+            )
+            edit_off   = not ref_urls   # aucune réf disponible → texte direct
+            edit_fails = 0
+            last_err = ""
+            n_faces_ok = 0
+            for i, (label, code, fprompt) in enumerate(faces):
+                self.progress.emit(
+                    30 + int(i / len(faces) * 66),
+                    f"[{i+3}/8] Vue « {label} »…  ({price})"
+                )
+                base_full = fprompt
+                if self._style_suffix:
+                    base_full = f"{base_full}, {self._style_suffix}"
+                data = None
+                # a) ÉDITION avec références (raccord fidèle) — tant qu'elle répond ;
+                #    désactivée seulement après 2 échecs consécutifs (API durablement KO).
+                if not edit_off:
+                    try:
+                        data = _gen_edit(f"{base_full}\n\n{consistency}\n\n{_DECOR_LINE}",
+                                         ref_urls, "16:9")
+                        edit_fails = 0
+                    except Exception as e:
+                        last_err = str(e)
+                        data = None
+                        edit_fails += 1
+                        _log(f"face '{label}' edit ÉCHEC ({edit_fails}) → repli texte. {str(e)[:160]}")
+                        if edit_fails >= 2:
+                            edit_off = True
+                # b) repli texte ROBUSTE (4 essais, backoff) — même génération que le
+                #    plan d'ensemble, donc fiable ; le backoff absorbe les limites de débit.
+                if data is None:
+                    for _attempt in range(4):
+                        try:
+                            data = _gen_text(f"{base_full}\n\n{_DECOR_LINE}", "16:9")
+                            break
+                        except Exception as e:
+                            last_err = str(e)
+                            data = None
+                            _log(f"face '{label}' texte essai {_attempt + 1}/4 ÉCHEC: {str(e)[:160]}")
+                            # Backoff plus long si limite de débit / quota détectée.
+                            _rl = any(k in str(e).lower() for k in
+                                      ("rate", "limit", "429", "quota", "too many", "exhaust"))
+                            time.sleep((7 if _rl else 4) * (_attempt + 1))
+                    if data is None:
+                        _log(f"face '{label}' ABANDONNÉE (tous les replis ont échoué)")
+                        continue   # cette face échoue vraiment, on garde les autres
+                p = _save(data, code)
+                # Prompt PAR VUE renvoyé (cadrage compris) → régénération fidèle.
+                out.append({"label": label, "code": code, "path": p, "prompt": fprompt})
+                n_faces_ok += 1
+                if i < len(faces) - 1:
+                    time.sleep(_VIEW_GAP_S)   # espacement entre faces (anti-saturation)
+
+            # Diagnostic remonté au dialogue (faces manquantes + dernière erreur API).
+            self._faces_ok    = n_faces_ok
+            self._faces_total = len(faces)
+            self._last_error  = last_err
+            _log(f"BILAN: {n_faces_ok}/{len(faces)} faces OK · ensemble={'oui' if ov_path else 'NON'} "
+                 f"· plan={'oui' if fp_path else 'NON'} · dernière erreur: {last_err[:200] or 'aucune'}")
+            if n_faces_ok < len(faces):
+                self.progress.emit(100, f"⚠ {n_faces_ok}/{len(faces)} faces générées — {last_err[:90]}")
+            else:
+                self.progress.emit(100, "Pièce générée (plan + 7 vues raccord) !")
+            self.views_finished.emit(out)
+        except Exception as e:
+            self.failed.emit(humanize_api_error(f"Erreur Nano Banana : {e}"))
+
+
 # ── NB2 Edit — Portrait avec photo de référence ───────────────────────────────
 
 class GeneratePortraitNB2EditWorker(QThread):
@@ -1881,3 +2168,247 @@ class GeneratePortraitNB2EditWorker(QThread):
 
         except Exception as e:
             self.failed.emit(humanize_api_error(f"Erreur NB2 Edit : {e}"))
+
+
+# ── Nettoyage de fond — efface les personnes, garde le décor (continuité d'axe) ──
+
+class CleanBackgroundWorker(QThread):
+    """À partir d'une frame d'un plan généré, efface les personnages et reconstruit
+    la pièce vide via NB2 edit (Gemini). Sert de fond de référence réutilisable pour
+    les plans du même décor + même axe (voir core/decor_sync). finished("") en mock."""
+    progress = pyqtSignal(int, str)
+    finished = pyqtSignal(str)
+    failed   = pyqtSignal(str)
+
+    def __init__(self, frame_path: str, out_dir: str = ""):
+        super().__init__()
+        self._frame   = frame_path
+        self._out_dir = out_dir
+
+    def run(self):
+        cfg = load_config()
+        key = cfg.get("api_key", "").strip()
+        if not key or not self._frame or not os.path.isfile(self._frame):
+            self.finished.emit("")   # mock / pas de clé → pas de fond synchronisé
+            return
+        try:
+            import fal_client
+            import requests
+            import base64
+
+            os.environ["FAL_KEY"] = key
+            self.progress.emit(20, "Nettoyage du fond (suppression du personnage)…")
+            with open(self._frame, "rb") as f:
+                b64 = base64.b64encode(f.read()).decode()
+            data_url = f"data:image/png;base64,{b64}"
+            prompt = (
+                "Remove ALL people and characters from this image. Reconstruct the "
+                "empty room/background exactly as it is — identical architecture, "
+                "furniture, materials, colors, lighting and camera angle. "
+                "Photorealistic, no people, no characters, empty location."
+            )
+            result = fal_client.subscribe(
+                "fal-ai/nano-banana-2/edit",
+                arguments={
+                    "prompt":        prompt,
+                    "image_urls":    [data_url],
+                    "num_images":    1,
+                    "resolution":    "1K",
+                    "output_format": "png",
+                },
+            )
+            url  = _extract_image_url(result)
+            data = requests.get(url, timeout=180).content
+            out_dir = self._out_dir or _project_images_dir("decors")
+            path = os.path.join(out_dir, f"bg_clean_{int(time.time())}.png")
+            with open(path, "wb") as f:
+                f.write(data)
+            self.progress.emit(100, "Fond synchronisé prêt ✓")
+            self.finished.emit(path)
+        except Exception as e:
+            self.failed.emit(humanize_api_error(f"Erreur nettoyage fond : {e}"))
+
+
+# ── Plan d'architecte vu de dessus — base de la Mise en scène ────────────────────
+
+class GenerateFloorPlanWorker(QThread):
+    """Génère un PLAN VU DE DESSUS (style plan d'architecte) du décor — base sur
+    laquelle on place caméra, personnages, éléments (et lumières pour le Plan de
+    feu). finished(path) ; "" en mock."""
+    progress = pyqtSignal(int, str)
+    finished = pyqtSignal(str)
+    failed   = pyqtSignal(str)
+
+    def __init__(self, decor_prompt: str, decor_name: str = "plan"):
+        super().__init__()
+        self._prompt = decor_prompt
+        self._name   = decor_name
+
+    def run(self):
+        cfg = load_config()
+        key = cfg.get("api_key", "").strip()
+        if not key:
+            self.finished.emit("")   # mock → canvas vierge éditable
+            return
+        try:
+            import fal_client
+            import requests
+            from core.lang import translate_to_english
+            from core.staging import images_dir
+
+            os.environ["FAL_KEY"] = key
+            self.progress.emit(15, "Génération du plan vu de dessus…")
+            base_en = translate_to_english(self._prompt) if self._prompt else "an interior room"
+            prompt = (
+                f"TOP-DOWN architectural floor plan (bird's eye view, seen from directly "
+                f"above) of: {base_en}. Clean schematic blueprint / architect plan style: "
+                f"walls, doors, windows and furniture drawn from above with simple lines and "
+                f"flat tones, neutral background, clear and uncluttered, no people, no camera, "
+                f"no text labels. Square framing."
+            )
+            ep, args = _build_image_args(prompt, "1:1", "1K", cfg, 1)
+            result = fal_client.subscribe(ep, arguments=args)
+            url  = _extract_image_url(result)
+            data = requests.get(url, timeout=180).content
+            safe = "".join(c for c in self._name if c.isalnum() or c in " -_").strip() or "plan"
+            path = os.path.join(images_dir(), f"{safe}_floorplan_{int(time.time())}.png")
+            with open(path, "wb") as f:
+                f.write(data)
+            self.progress.emit(100, "Plan généré ✓")
+            self.finished.emit(path)
+        except Exception as e:
+            self.failed.emit(humanize_api_error(f"Erreur plan vu de dessus : {e}"))
+
+
+def _floor_plan_prompt(base_en: str) -> str:
+    """Prompt commun (plan d'architecte vu de dessus)."""
+    return (
+        f"TOP-DOWN architectural floor plan (bird's eye view, seen from directly "
+        f"above) of: {base_en}. Clean schematic blueprint / architect plan style: "
+        f"walls, doors, windows and furniture drawn from above with simple lines and "
+        f"flat tones, neutral background, clear and uncluttered, no people, no camera, "
+        f"no text labels. Square framing."
+    )
+
+
+class GenerateFloorPlansWorker(QThread):
+    """Génère EN LOT les plans vus de dessus (un par job). Sert à l'automatisation
+    lors de la génération/identification des décors depuis le scénario.
+
+    jobs : liste de {"id": <opaque>, "prompt": str, "name": str}.
+    Émet plan_done(job_id, path) pour chaque job (path="" si mock/échec), puis
+    finished(n) avec le nombre de plans réellement générés.
+    """
+    progress  = pyqtSignal(int, str)
+    plan_done = pyqtSignal(str, str)   # job_id, path ("" si non généré)
+    finished  = pyqtSignal(int)
+
+    def __init__(self, jobs: list):
+        super().__init__()
+        self._jobs = list(jobs or [])
+
+    def run(self):
+        cfg = load_config()
+        key = cfg.get("api_key", "").strip()
+        n = len(self._jobs)
+        if not key:
+            # Mode mock : aucun plan généré (cohérent avec le reste de l'app).
+            for j in self._jobs:
+                self.plan_done.emit(str(j.get("id", "")), "")
+            self.finished.emit(0)
+            return
+        try:
+            import fal_client
+            import requests
+            from core.lang import translate_to_english
+            from core.staging import images_dir
+            os.environ["FAL_KEY"] = key
+        except Exception as e:
+            self.failed_safe(e, n)
+            return
+
+        made = 0
+        for i, j in enumerate(self._jobs):
+            jid = str(j.get("id", ""))
+            try:
+                self.progress.emit(int((i / max(1, n)) * 100),
+                                   f"Plan {i + 1}/{n} — {j.get('name', '')}")
+                base = j.get("prompt") or j.get("name") or "an interior room"
+                base_en = translate_to_english(base) if base else "an interior room"
+                ep, args = _build_image_args(_floor_plan_prompt(base_en), "1:1", "1K", cfg, 1)
+                result = fal_client.subscribe(ep, arguments=args)
+                url  = _extract_image_url(result)
+                data = requests.get(url, timeout=180).content
+                safe = "".join(c for c in j.get("name", "plan")
+                               if c.isalnum() or c in " -_").strip() or "plan"
+                path = os.path.join(images_dir(), f"{safe}_floorplan_{int(time.time())}_{i}.png")
+                with open(path, "wb") as f:
+                    f.write(data)
+                made += 1
+                self.plan_done.emit(jid, path)
+            except Exception:
+                self.plan_done.emit(jid, "")
+        self.progress.emit(100, "Plans terminés")
+        self.finished.emit(made)
+
+
+class GenerateFloorPlanVariationWorker(QThread):
+    """Génère UNE variation du plan d'architecte d'un décor, CALÉE sur le plan
+    d'ensemble : édition NB2 à partir de l'image d'ensemble (même pièce, même
+    disposition, vue de dessus). Repli texte si pas d'ensemble ou édition échouée.
+    Émet done(decor_id, path) — path="" si mock/échec."""
+    progress = pyqtSignal(int, str)
+    done     = pyqtSignal(str, str)   # (decor_id, path)
+
+    def __init__(self, decor_id: str, overview_path: str = "", base_prompt: str = ""):
+        super().__init__()
+        self._id   = decor_id
+        self._ov   = overview_path
+        self._base = base_prompt
+
+    def run(self):
+        cfg = load_config()
+        key = cfg.get("api_key", "").strip()
+        if not key:
+            self.done.emit(self._id, "")
+            return
+        try:
+            import fal_client
+            import requests
+            from core.lang import translate_to_english
+            from core.staging import images_dir
+            os.environ["FAL_KEY"] = key
+            self.progress.emit(20, "Variation du plan (calée sur l'ensemble)…")
+            base_en = translate_to_english(self._base) if self._base else "an interior room"
+            fp_anchor = (
+                "Draw the TOP-DOWN architectural floor plan (bird's eye view, seen from "
+                "directly above) of the EXACT room shown in the reference image: SAME "
+                "walls, SAME proportions, SAME furniture in the SAME positions, SAME "
+                "doors and windows. Schematic blueprint / architect plan style — simple "
+                "lines, flat tones, neutral background, no people, no camera, no text "
+                "labels. Square framing."
+            )
+            if self._ov and os.path.isfile(self._ov):
+                from api.apercu import _upload_ref_robust
+                url = _upload_ref_robust(fal_client, self._ov)
+                result = fal_client.subscribe("fal-ai/nano-banana-2/edit", arguments={
+                    "prompt": fp_anchor, "image_urls": [url], "num_images": 1,
+                    "aspect_ratio": "1:1", "resolution": "1K",
+                    "output_format": "png", "safety_tolerance": "6"})
+            else:
+                ep, args = _build_image_args(_floor_plan_prompt(base_en), "1:1", "1K", cfg, 1)
+                result = fal_client.subscribe(ep, arguments=args)
+            u = _extract_image_url(result)
+            data = requests.get(u, timeout=180).content
+            path = os.path.join(images_dir(), f"floorplan_var_{int(time.time())}.png")
+            with open(path, "wb") as f:
+                f.write(data)
+            self.progress.emit(100, "Variation prête")
+            self.done.emit(self._id, path)
+        except Exception:
+            self.done.emit(self._id, "")
+
+    def failed_safe(self, e, n):
+        for j in self._jobs:
+            self.plan_done.emit(str(j.get("id", "")), "")
+        self.finished.emit(0)

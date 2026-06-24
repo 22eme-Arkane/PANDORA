@@ -1,5 +1,143 @@
 # CLAUDE.md — Pandora × Seedance 2.0
 
+# BOUCLE DE TRAVAIL — auto-vérification et auto-correction (à appliquer systématiquement)
+
+> Directive permanente pour Claude Code sur PANDORA. S'applique à CHAQUE tâche de code,
+> sans qu'on ait à la redemander. Objectif : ne jamais rendre la main sur un travail non
+> vérifié. Travailler comme un ingénieur qui relit, teste, REGARDE et corrige son propre
+> code avant de le livrer — la rigueur d'auto-vérification, pas la précipitation.
+
+## 1. AVANT d'agir — planifier
+- Reformuler la tâche en une phrase pour confirmer la compréhension.
+- Décomposer en étapes explicites. Si une étape est ambiguë ou entre en conflit avec
+  une règle du projet, DEMANDER avant de coder — ne pas supposer.
+- Identifier les fichiers concernés ET le périmètre : Cinéma OU Live (jamais les deux
+  par erreur — voir séparation ci-dessous).
+- Vérifier le contexte de session AVANT de lire des fichiers : si une donnée a déjà été
+  produite/affichée dans la conversation courante, l'utiliser directement (ne pas relire
+  les JSON pour la retrouver).
+
+## 2. PENDANT — coder par petits incréments
+- Une modification cohérente à la fois, pas un gros bloc non vérifiable.
+- Après chaque modification, RELIRE son propre diff comme le code d'un autre : fautes,
+  imports manquants, effets de bord, régressions.
+- Architecture modulaire : toute nouvelle fonctionnalité = nouveau fichier/module dédié.
+  Jamais de code monolithique.
+
+## 3. APRÈS chaque modification — VÉRIFIER (obligatoire, jamais sauté)
+- Compiler : `python -c "import compileall; compileall.compile_dir('.')"`.
+- Test headless : instancier la fenêtre/page concernée dans un QApplication et imprimer
+  un état. JAMAIS relancer l'app de façon interactive (`pythonw main.py`) sauf demande
+  explicite de l'utilisateur (règle stricte : il reste maître du lancement).
+- Lancer les harnais pertinents : `tools/test_cinema.py` + `tools/test_live.py` + le
+  RADAR de divergence Cinéma/Live. Un harnais rouge ou une divergence non assumée =
+  CORRIGER avant de continuer. Ne jamais rendre la main sur un harnais rouge.
+
+## 4. VÉRIFICATION VISUELLE — quand le rendu UI compte
+- Pour toute modification d'apparence (layout, couleurs, position, nouveau widget) :
+  produire un RENDU HEADLESS en image (`widget.grab()` → PNG, ou rendu offscreen), PUIS
+  RELIRE ce PNG pour juger le résultat visuel réel.
+- Cette capture hors-écran NE viole PAS « pas de relance auto » : aucune fenêtre
+  interactive n'est ouverte. C'est la façon de « voir » son travail sans lancer l'app.
+- Critiquer le rendu : alignements, marges, lisibilité, cohérence, ET conformité couleurs
+  (voir doctrine couleurs). Si insatisfaisant : corriger et re-rendre, en boucle, AVANT de
+  livrer.
+
+## 5. AUTO-CRITIQUE — avant de rendre la main
+Se poser explicitement, à chaque fin de tâche :
+- « Qu'est-ce qui pourrait être cassé que je n'ai pas testé ? »
+- « Ai-je introduit une régression dans l'autre page / l'autre module (Cinéma↔Live) ? »
+- « Le texte UI ajouté est-il traduit FR + EN dans _FR_TO_EN ? »
+- « Un test a-t-il pu toucher la vraie config / les vraies clés ? »
+- « Ai-je respecté toutes les doctrines techniques ci-dessous ? »
+Si un doute subsiste, le VÉRIFIER, ne pas l'ignorer.
+
+## 6. RENDRE LA MAIN — rapport de vérification
+- Ne pas dire seulement « c'est fait ». Dire « c'est fait ET voici ce que j'ai vérifié » :
+  harnais passés (chiffres Cinéma/Live/radar), rendu visuel contrôlé, points restants.
+- Signaler honnêtement tout ce qui n'a PAS pu être vérifié.
+- Références temporelles NEUTRES (« plus tôt dans la session », « il y a quelques
+  commits ») — jamais « ce matin/ce soir » sans vérifier `Get-Date`. Dates absolues dans
+  les mémoires/devlog.
+
+---
+
+## GARDE-FOUS — la boucle d'autonomie ne doit JAMAIS les violer
+
+L'auto-vérification autorise à RELIRE, TESTER, RENDRE EN IMAGE et CORRIGER. Elle
+n'autorise PAS à franchir les limites suivantes, qui priment sur tout :
+
+### Git / publication
+- **Jamais** `git push`, `git reset --hard`, `git clean`, `rm`, `Remove-Item`, ni
+  publication `gh` sans demande explicite. Commit + `git add` locaux OK.
+  (Le garde-fou `.claude/settings.local.json` `permissions.ask` le fait redemander —
+  ne JAMAIS remettre `bypassPermissions`.)
+- **Build / push = Cinéma UNIQUEMENT.** Ne jamais embarquer le Live. Le `main` local
+  CONTIENT le Live → ne PAS faire un simple `git push origin main`. Pousser = cherry-pick
+  / branche basée sur `origin/main` (0ca8a99), diff vérifié SANS aucun fichier ni
+  plomberie Live. **RAPPELER ce point proactivement au prochain push Cinéma.**
+- **Jamais `git push --tags`** : les tags locaux pointent sur d'anciens SHAs d'avant
+  réécriture d'historique → restaurerait le Live public.
+- Fichiers de contexte Claude (PANDORA_CONTEXT/COMMS/DEVLOG) = locaux, gitignorés,
+  jamais poussés.
+
+### Tests / config (CRITIQUE — risque aggravé par une boucle d'auto-test renforcée)
+- **Ne JAMAIS écrire dans le vrai `data/config.json` pendant un test.** Il contient les
+  clés API réelles ET les préférences IA (`ai_provider`, `ai_model_creative`,
+  `ai_task_engines`) ; il est gitignoré donc NON restaurable. Un test de `save_config()`
+  l'a déjà corrompu (incident 2026-06-18 : `ai_provider="mistral"` laissé en place).
+- Tout test touchant la config DOIT l'isoler : monkeypatch `load_config`/`save_config`,
+  OU `_ROOT` sur dossier temporaire, OU lire→sauver en variable→restaurer en `finally`.
+  Jamais `save_config()` sur la vraie config dans un script jetable.
+- Pièges packaging à revérifier à CHAQUE build : déclarer `studio_images/` dans
+  `pandora.spec` (pathex + hiddenimports) ; ne JAMAIS bundler `studio_images/config.json`
+  ni `refs/` (vraies clés) ; ne pas exclure `api.tts`/`api.upscale` du build Cinéma
+  (partagés Sound Design + Upscaling).
+
+### Séparation Cinéma / Live (ABSOLUE)
+- Modifier le Live = éditer uniquement les copies `*_live.py` / `live_window.py` / etc.
+  Modifier le Cinéma = fichiers d'origine. Ne JAMAIS toucher l'autre côté par effet de
+  bord. Le radar de divergence vérifie l'alignement — le garder à 0.
+- `librosa` = build Live uniquement (+250 Mo) — jamais dans le requirements/build Cinéma.
+
+### Threads / workers PyQt6 (anti-crash, causes de segfaults C réels)
+- Signaux workers = `done` (JAMAIS `finished` — masque le signal natif QThread).
+- **JAMAIS `QThread.terminate()`** → état Qt/Python corrompu → segfault sur le worker
+  suivant. Toujours `core.worker.abandon_thread(w)` (blockSignals + requestInterruption +
+  quit + référence anti-GC).
+- Dans les chaînes de file (`_process_next_*`), PARQUER le worker précédent
+  (`abandon_thread`) AVANT de réassigner `self._worker` — sinon la file s'arrête au 1er
+  élément. Jamais `worker_ref = None` à chaud.
+- Toute exception non gérée dans un slot/handler PyQt6 fait ABORT toute l'app → try/except
+  dans les handlers ; garder le filet `sys.excepthook` + `faulthandler` de `main.py`.
+
+### UI / style
+- `disable_default_buttons(dlg)` sur toute fenêtre champ + boutons (sinon Entrée
+  déclenche Annuler/Appliquer).
+- Fond = `PANDORA_STYLESHEET`, CP['bg1'] = #0c0e1a (bleu-violet), JAMAIS noir #000000.
+- JAMAIS de suffixe hex-opacity (`{color}12/33/44`) sur fond sombre (rend « vert caca de
+  bois ») → style outline (`border: 1px solid {accent}`, fond transparent) ou `rgba()`
+  explicite.
+- Listes de lignes dynamiques → toujours dans une zone scrollable bornée.
+- Plafonds anti-troncature : sortie complète = 16000 tokens ; chat/synthèse = 8192.
+
+### i18n
+- Tout texte UI ajouté = traduit FR + EN dans `core/i18n.py → _FR_TO_EN`. Exceptions :
+  systèmes bilingues dédiés (manuel `_BUILDERS_EN`, gros blocs « guide » assistant) — ne
+  PAS les mettre dans `_FR_TO_EN`.
+
+### Mapping (Live)
+- Critère de confinement façade = VISIBILITÉ sur la photo de référence, JAMAIS une liste
+  noire d'éléments. Le harnais vérifie l'absence de liste noire dans `_SYSTEM_MAPPING`.
+
+## Esprit de la directive
+La vitesse vient de la fiabilité, pas de la précipitation : une tâche vérifiée et juste
+vaut mieux que trois tâches rendues vite et fausses. Le but n'est pas que l'outil fasse
+plus à la place de Matthieu, mais qu'il produise un travail juste, vérifié et cohérent
+avec un projet qu'il maîtrise.
+
+---
+
 ## Vue d'ensemble
 
 **Pandora** est un plugin de pré-production cinéma pour DaVinci Resolve. Il permet de gérer l'intégralité de la pré-production (scénario, storyboard, casting, décors, accessoires, HMC, véhicules, image & son) et de générer des vidéos IA via Seedance 2.0 (ByteDance/fal.ai) directement depuis l'interface de montage.

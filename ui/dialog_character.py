@@ -837,12 +837,9 @@ class CharacterDialog(QDialog):
         else:
             self._btn_cloud.setText("☁")
         self._btn_cloud.clicked.connect(self._on_optimize)
-        _lbl_enh = QLabel("Améliorer le prompt")
-        _lbl_enh.setStyleSheet(
-            f"color:{CP['text_dim']};font-size:10px;background:transparent;border:none;"
-        )
-        prompt_header.addWidget(_lbl_enh)
-        prompt_header.addWidget(self._btn_cloud)
+        # « Améliorer le prompt » (☁) RETIRÉ — fonction jugée inutile/instable.
+        # _btn_cloud reste créé (non affiché) pour ne casser aucune autre référence.
+        self._btn_cloud.setVisible(False)
         lay.addLayout(prompt_header)
 
         self._prompt = QTextEdit()
@@ -1002,9 +999,12 @@ class CharacterDialog(QDialog):
         _gen_mode_lbl.setFixedWidth(150)
         _gen_mode_row.addWidget(_gen_mode_lbl)
         self._gen_mode_combo = QComboBox()
+        # Portrait classique EN PREMIER = défaut (retour 2026-06-13) : à
+        # l'ouverture de la création de personnage, on génère un portrait,
+        # pas un character sheet 5 vues.
         _GEN_MODES = [
-            ("🎬  Character Sheet 5 vues", "sheet_5views"),
             ("📷  Portrait classique",     "classic"),
+            ("🎬  Character Sheet 5 vues", "sheet_5views"),
         ]
         for _label, _key in _GEN_MODES:
             self._gen_mode_combo.addItem(_label, _key)
@@ -1095,7 +1095,7 @@ class CharacterDialog(QDialog):
         _cfg  = _lc()
         _price = get_image_price(_cfg)
         price_lbl = QLabel(
-            f"Génération du character sheet  ·  {_price} / image"
+            f"Génération d'image  ·  {_price} / image"
             f"  ·  Voir le Manuel d'utilisation pour tous les tarifs"
         )
         price_lbl.setWordWrap(True)
@@ -1600,10 +1600,8 @@ class CharacterDialog(QDialog):
             self._refs_hint_lbl.setText(hints.get(usage, ""))
 
     def _on_add_refs(self):
-        paths, _ = QFileDialog.getOpenFileNames(
-            self, "Sélectionner des images de référence", "",
-            "Images (*.png *.jpg *.jpeg *.webp *.bmp)"
-        )
+        from ui.dialog_image_library import ImageLibraryDialog
+        paths = ImageLibraryDialog.pick(self)
         if not paths:
             return
 
@@ -1997,6 +1995,12 @@ class CharacterDialog(QDialog):
             self._status.setText("Fond supprimé (mode mock)")
             return
         self._image_path = path
+        # Le détourage s'applique au PORTRAIT : la planche 4 vues (sheet_path) garde,
+        # elle, le fond d'origine. Si on la laisse comme référence principale, c'est
+        # ELLE (avec le fond) qui part vers Seedance — la mosaïque préfère sheet_path.
+        # On la retire donc comme référence (elle reste dans la galerie) → c'est bien
+        # l'image détourée (image_path) qui sera envoyée.
+        self._sheet_path = ""
         self._generated_images.append({"portrait": path, "sheet": ""})
         self._preview_idx = len(self._generated_images) - 1
         self._load_preview(path)

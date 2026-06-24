@@ -207,4 +207,32 @@ QInputDialog QLineEdit {{
     background: {CP['bg3']}; border: 1px solid {CP['border_bright']};
     border-radius: 6px; color: {CP['text_primary']}; padding: 8px 12px;
 }}
+/* Dialogue de fichiers NON-NATIF (forcé pour éviter les crashs COM Windows) :
+   neutralise le QPushButton global trop épais (padding 13px → boutons Open/Cancel
+   tronqués) et donne un rendu propre aux champs/listes du dialogue. */
+QFileDialog {{ background: {CP['bg2']}; }}
+QFileDialog QLabel {{ color: {CP['text_primary']}; background: transparent; }}
+QFileDialog QPushButton {{
+    background-color: {CP['bg3']}; color: {CP['text_primary']};
+    border: 1px solid {CP['border_bright']}; border-radius: 6px;
+    font-size: 12px; font-weight: 600; padding: 6px 16px; min-width: 84px;
+}}
+QFileDialog QPushButton:hover {{ border-color: {CP['accent']}; }}
+QFileDialog QPushButton:default {{
+    background-color: {CP['accent']}; color: #07080f; border: none;
+}}
+QFileDialog QPushButton:default:hover {{ background-color: {CP['accent_dim']}; color: #ffffff; }}
+QFileDialog QComboBox {{
+    background: {CP['bg3']}; border: 1px solid {CP['border']};
+    border-radius: 6px; color: {CP['text_primary']}; padding: 4px 8px;
+}}
+QFileDialog QLineEdit {{
+    background: {CP['bg3']}; border: 1px solid {CP['border']};
+    border-radius: 6px; color: {CP['text_primary']}; padding: 6px 10px;
+}}
+QFileDialog QListView, QFileDialog QTreeView {{
+    background: {CP['bg1']}; border: 1px solid {CP['border']}; color: {CP['text_primary']};
+}}
+QFileDialog QToolButton {{ background: transparent; border: none; padding: 4px; border-radius: 4px; }}
+QFileDialog QToolButton:hover {{ background: {CP['bg3']}; }}
 """

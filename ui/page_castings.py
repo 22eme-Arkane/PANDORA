@@ -10,6 +10,7 @@ from ui.styles import CP
 from ui.icons import load_icon
 from ui.widgets import HelpBlock
 import core.casting as casting_api
+from ui.element_io_buttons import make_save_open_buttons, toolbar_separator
 from ui.dialog_character import CharacterDialog
 import shutil, time as _time
 
@@ -229,10 +230,25 @@ class PageCastings(QWidget):
         self._search.textChanged.connect(self._filter)
         lay.addWidget(self._search, 1)
 
-        lay.addStretch()
+        # Sauvegarder / Ouvrir un casting — à côté de la barre de recherche
+        # (même principe que le storyboard).
+        self._btn_save_file, self._btn_open_file = make_save_open_buttons(
+            self, kind="casting",
+            list_fn=casting_api.list_characters,
+            save_fn=casting_api.save_character,
+            delete_fn=casting_api.delete_character,
+            refresh_fn=self.refresh)
+        lay.addWidget(self._btn_save_file)
+        lay.addWidget(self._btn_open_file)
 
-        # Import
-        btn_import = QPushButton("↑  Import")
+        # Séparateur (espace + trait) : groupe FICHIER | actions de CRÉATION.
+        lay.addSpacing(6)
+        lay.addWidget(toolbar_separator())
+        lay.addSpacing(6)
+
+        # Importer des photos = créer un personnage par image (≠ « Ouvrir » qui
+        # recharge un casting sauvegardé). Regroupé avec les actions de création.
+        btn_import = QPushButton("↑  Importer des photos")
         btn_import.setFixedHeight(36)
         btn_import.setStyleSheet(
             f"QPushButton{{background:transparent;color:{CP['text_secondary']};"

@@ -53,9 +53,32 @@ def _fal_upload(fal_client, path: str) -> str:
         sys.stderr = _old_err
 
 
+def ensure_image_urls(fal_client, params: dict, emit_progress=None) -> None:
+    """Adapte les params du workflow séquences/storyboard aux workers externes.
+
+    Le workflow PANDORA fournit des CHEMINS LOCAUX (image_path = mood keyframe ou
+    dernière frame de raccord, end_image_path = mood du plan suivant) ; les moteurs
+    externes attendent des URLs. Uploade et bascule en i2v. Modifie params EN PLACE.
+    """
+    img = params.get("image_path", "")
+    if img and os.path.isfile(img) and not params.get("image_url"):
+        if emit_progress:
+            emit_progress(6, "Upload de l'image de départ…")
+        params["image_url"] = _fal_upload(fal_client, img)
+        params["mode"] = "i2v"
+    end = params.get("end_image_path", "")
+    if end and os.path.isfile(end) and not params.get("end_image_url"):
+        if emit_progress:
+            emit_progress(8, "Upload de l'image de fin (keyframe)…")
+        params["end_image_url"] = _fal_upload(fal_client, end)
+
+
 def _analyze_style_ref(image_path: str) -> str:
     """Claude Haiku Vision → extrait les mots-clés de style d'une image.
     Retourne une chaîne EN (~12 mots) ou '' en cas d'erreur.
+
+    VISION : volontairement sur Anthropic, hors couche core/ai_provider
+    (le sélecteur d'assistant IA ne couvre que le texte en v1).
     """
     try:
         import base64, anthropic as _anthropic, mimetypes
@@ -215,6 +238,8 @@ class KlingWorker(_CancellableWorker):
             from core.lang import translate_to_english
 
             os.environ["FAL_KEY"] = key
+            # Workflow séquences : image_path/end_image_path locaux → URLs i2v
+            ensure_image_urls(fal_client, self.params, self.progress.emit)
 
             mode      = self.params.get("mode", "i2v")
             dur       = int(self.params.get("duration", 5))
@@ -574,6 +599,8 @@ class HappyHorseWorker(_CancellableWorker):
             from core.lang import translate_to_english
 
             os.environ["FAL_KEY"] = key
+            # Workflow séquences : image_path/end_image_path locaux → URLs i2v
+            ensure_image_urls(fal_client, self.params, self.progress.emit)
 
             mode     = self.params.get("mode", "t2v")
             dur      = int(self.params.get("duration", 5))
@@ -764,6 +791,8 @@ class KlingO3Worker(_CancellableWorker):
             from core.lang import translate_to_english
 
             os.environ["FAL_KEY"] = key
+            # Workflow séquences : image_path/end_image_path locaux → URLs i2v
+            ensure_image_urls(fal_client, self.params, self.progress.emit)
 
             mode       = self.params.get("mode", "t2v")
             dur        = int(self.params.get("duration", 5))
@@ -897,6 +926,8 @@ class PixVerseV6Worker(_CancellableWorker):
             from core.lang import translate_to_english
 
             os.environ["FAL_KEY"] = key
+            # Workflow séquences : image_path/end_image_path locaux → URLs i2v
+            ensure_image_urls(fal_client, self.params, self.progress.emit)
 
             dur      = int(self.params.get("duration", 5))
             res      = self.params.get("resolution", "720p")
@@ -1020,6 +1051,202 @@ class PixVerseV6Worker(_CancellableWorker):
 
 
 # ── Worker Sora 2 ─────────────────────────────────────────────────────────────
+
+def _style_prefix_from_refs(params: dict) -> str:
+    """Préfixe de style EN extrait d'une image de référence (vision Claude), ou ''."""
+    ref_images = [p for p in params.get("ref_images", []) if p and os.path.isfile(p)]
+    ref_roles  = params.get("ref_image_roles", [])
+    if not ref_images:
+        return ""
+    style_path = next(
+        (p for p, r in zip(ref_images, ref_roles + [""] * 9) if r == "style"),
+        ref_images[0],
+    )
+    return _analyze_style_ref(style_path)
+
+
+def _extract_video_url(result) -> str:
+    """Extrait l'URL vidéo d'une réponse fal.ai (formes variables selon moteur)."""
+    if not isinstance(result, dict):
+        return ""
+    v = result.get("video")
+    if isinstance(v, dict):
+        return v.get("url", "")
+    if isinstance(v, list) and v:
+        first = v[0]
+        return (first.get("url", "") if isinstance(first, dict)
+                else first if isinstance(first, str) else "")
+    return result.get("url", "") or result.get("video_url", "")
+
+
+class _SimpleFalVideoWorker(_CancellableWorker):
+    """Base générique pour les moteurs vidéo fal.ai « standards » (T2V + I2V option).
+
+    Gère : bascule mock/réel, traduction du prompt, préfixe de style depuis une
+    image de référence, upload des images de départ/fin (ensure_image_urls →
+    image_url/end_image_url), construction d'args minimale pilotée par flags pour
+    éviter les erreurs de paramètres inconnus, téléchargement et émission du dict.
+
+    Les sous-classes ne déclarent que des attributs de classe.
+    """
+    progress = pyqtSignal(int, str)
+    finished = pyqtSignal(dict)
+    failed   = pyqtSignal(str)
+
+    ENDPOINT_T2V    = ""
+    ENDPOINT_I2V    = ""      # "" → moteur text-to-video uniquement
+    MODEL           = "video"
+    PRICE_PER_S     = 0.0     # $/s estimé (0 → utilise FLAT_PRICE)
+    FLAT_PRICE      = 0.0     # $/vidéo (modèles à prix fixe, ex. Hailuo)
+    AUDIO           = False   # envoie generate_audio
+    END_FRAME       = False   # supporte end_image_url (raccords / keyframes)
+    SEND_RESOLUTION = False
+    SEND_RATIO      = False
+    SEND_DURATION   = False
+    DUR_STR         = True    # duration en str (famille ByteDance) sinon int
+    DEFAULT_DUR     = 5
+
+    def __init__(self, params: dict):
+        super().__init__()
+        self.params = params
+
+    def run(self):
+        key = load_config().get("api_key", "").strip()
+        if not key:
+            self._mock()
+        else:
+            self._real(key)
+
+    def _mock(self):
+        dur = self.params.get("duration", self.DEFAULT_DUR)
+        for pct, msg in [
+            (12, f"{self.MODEL} — mode mock…"),
+            (55, "Génération vidéo (simulation)…"),
+            (100, "Terminé — mode mock (aucune clé fal.ai)"),
+        ]:
+            self.progress.emit(pct, msg)
+            time.sleep(0.4)
+        self.finished.emit({"url": "", "duration": dur, "model": self.MODEL, "credits_used": 0})
+
+    def _real(self, key: str):
+        try:
+            import fal_client
+            import requests
+            from core.lang import translate_to_english
+
+            os.environ["FAL_KEY"] = key
+            # Workflow / formulaire I2V : image_path/end_image_path locaux → URLs.
+            ensure_image_urls(fal_client, self.params, self.progress.emit)
+
+            mode = self.params.get("mode", "t2v")
+            if mode == "i2v" and not self.ENDPOINT_I2V:
+                mode = "t2v"
+            endpoint = self.ENDPOINT_I2V if (mode == "i2v" and self.ENDPOINT_I2V) else self.ENDPOINT_T2V
+
+            try:
+                dur = int(self.params.get("duration", self.DEFAULT_DUR) or self.DEFAULT_DUR)
+            except (TypeError, ValueError):
+                dur = self.DEFAULT_DUR
+
+            prompt_raw = self.params.get("prompt", "")
+            prompt_en  = translate_to_english(prompt_raw) if prompt_raw else ""
+            style_kw   = _style_prefix_from_refs(self.params)
+            if style_kw:
+                prompt_en = f"{style_kw}, {prompt_en}" if prompt_en else style_kw
+
+            args: dict = {"prompt": prompt_en}
+            if self.SEND_RESOLUTION:
+                res = (self.params.get("resolution", "720p") or "720p").split()[0]
+                args["resolution"] = res
+            if self.SEND_RATIO:
+                args["aspect_ratio"] = self.params.get("aspect_ratio", "16:9")
+            if self.SEND_DURATION:
+                args["duration"] = str(dur) if self.DUR_STR else dur
+            if self.AUDIO:
+                args["generate_audio"] = self.params.get("generate_audio", True)
+            if mode == "i2v":
+                img_url = self.params.get("image_url", "")
+                if not img_url:
+                    raise ValueError(f"{self.MODEL} I2V : image de départ requise.")
+                args["image_url"] = img_url
+                if self.END_FRAME and self.params.get("end_image_url"):
+                    args["end_image_url"] = self.params["end_image_url"]
+
+            cost = dur * self.PRICE_PER_S if self.PRICE_PER_S else self.FLAT_PRICE
+            self.progress.emit(15, f"{self.MODEL} {mode.upper()} (peut prendre 1-3 min)…")
+
+            result = fal_client.subscribe(endpoint, arguments=args)
+            url = _extract_video_url(result)
+            if not url:
+                raise RuntimeError(f"URL vidéo manquante : {str(result)[:200]}")
+
+            self.progress.emit(80, "Téléchargement de la vidéo…")
+            data = requests.get(url, timeout=600).content
+
+            out_dir = _video_output_dir()
+            ts      = int(time.time())
+            safe    = "".join(c for c in self.MODEL if c.isalnum() or c in "-_") or "video"
+            local   = os.path.join(out_dir, f"{safe}_{mode}_{dur}s_{ts}.mp4")
+            with open(local, "wb") as f:
+                f.write(data)
+
+            self.progress.emit(100, f"{self.MODEL} ✓  {dur}s · ~${cost:.2f}")
+            if not self._cancelled:
+                self.finished.emit({
+                    "url":          url,
+                    "local_path":   local,
+                    "duration":     dur,
+                    "resolution":   self.params.get("resolution", "720p"),
+                    "model":        f"{self.MODEL}-{mode}",
+                    "credits_used": cost,
+                })
+
+        except Exception as e:
+            if not self._cancelled:
+                self.failed.emit(humanize_api_error(f"Erreur {self.MODEL} : {e}"))
+
+
+class Seedance15Worker(_SimpleFalVideoWorker):
+    """Seedance 1.5 Pro (ByteDance) — audio natif + start/end frame. T2V + I2V.
+    ⚠ Préfixe `fal-ai/bytedance/...` (≠ Seedance 2.0 en `bytedance/...`). 720p, 4-12 s."""
+    ENDPOINT_T2V    = "fal-ai/bytedance/seedance/v1.5/pro/text-to-video"
+    ENDPOINT_I2V    = "fal-ai/bytedance/seedance/v1.5/pro/image-to-video"
+    MODEL           = "seedance-1.5-pro"
+    PRICE_PER_S     = 0.052
+    AUDIO           = True
+    END_FRAME       = True
+    SEND_RESOLUTION = True
+    SEND_RATIO      = True
+    SEND_DURATION   = True
+    DUR_STR         = True
+    DEFAULT_DUR     = 5
+
+
+class LTX2Worker(_SimpleFalVideoWorker):
+    """LTX-2 (Lightricks) — 4K natif + audio stéréo. T2V + I2V."""
+    ENDPOINT_T2V = "fal-ai/ltx-2/text-to-video"
+    ENDPOINT_I2V = "fal-ai/ltx-2/image-to-video"
+    MODEL        = "ltx-2"
+    PRICE_PER_S  = 0.04
+    SEND_RATIO   = True
+    DEFAULT_DUR  = 5
+
+
+class Wan27Worker(_SimpleFalVideoWorker):
+    """Wan 2.7 (Alibaba) — first/last frame, leader Wan-Bench. T2V."""
+    ENDPOINT_T2V = "fal-ai/wan/v2.7/text-to-video"
+    MODEL        = "wan-2.7"
+    SEND_RATIO   = True
+    DEFAULT_DUR  = 5
+
+
+class Hailuo23Worker(_SimpleFalVideoWorker):
+    """MiniMax Hailuo 2.3 Pro — audio natif, prix fixe ~$0.49/vidéo. T2V."""
+    ENDPOINT_T2V = "fal-ai/minimax/hailuo-2.3/pro/text-to-video"
+    MODEL        = "hailuo-2.3-pro"
+    FLAT_PRICE   = 0.49
+    DEFAULT_DUR  = 6
+
 
 class Sora2Worker(_CancellableWorker):
     """

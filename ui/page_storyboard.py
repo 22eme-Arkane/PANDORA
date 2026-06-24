@@ -1,4 +1,4 @@
-﻿import os
+import os
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, QSizePolicy,
     QScrollArea, QFrame, QMessageBox, QProgressBar, QDialog,
@@ -49,7 +49,10 @@ _COLS = [
     ("Accessoires",  102,  False),  # 13
     ("Acteurs",       96,  False),  # 14
     ("Durée",         52,  False),  # 15
-    ("",              78,  False),  # 16 Boutons
+    ("Langues",      120,  False),  # 16 dialogue_lang (traduit à l'envoi Seedance)
+    ("Nom du plan",  150,  False),  # 17 scene_title (nom du plan) — affiché après « Plan »
+    ("",              78,  False),  # 18 Boutons
+    ("Hauteur",       64,  False),  # 19 camera_height (à côté de Dist.)
 ]
 
 _HEURE_PRESETS = HEURE_PRESETS
@@ -58,9 +61,11 @@ _HEURE_PRESETS = HEURE_PRESETS
 _col_widths: list[int] = [w for _, w, _ in _COLS]
 
 # Mutable column visual order — list of logical column indices in left→right display order.
-# Indices 0 (grip) and 16 (buttons) always stay at first/last; the rest are reorderable.
-# Loaded from project config in PageStoryboard._render().
-_col_order: list[int] = list(range(len(_COLS)))
+# Index 0 (grip) reste en tête et la colonne Boutons (dernière) reste en queue ; le reste
+# est réordonnable. « Nom du plan » (logique 17) s'affiche par défaut juste après « Plan »
+# (logique 3). Loaded from project config in PageStoryboard._render().
+_DEFAULT_COL_ORDER: list[int] = [0, 1, 2, 3, 17, 4, 5, 6, 7, 8, 9, 19, 10, 11, 12, 13, 14, 15, 16, 18]
+_col_order: list[int] = list(_DEFAULT_COL_ORDER)
 
 
 class _ColHub(QObject):
@@ -83,6 +88,19 @@ _SEQ_PALETTE = [
 ]
 
 
+def _contrast_text(hexc: str) -> str:
+    """Texte noir ou blanc selon la luminance d'une couleur hex — pour rester
+    lisible quand le libellé couleur remplit le fond de la cellule Séquence."""
+    h = (hexc or "").lstrip("#")
+    if len(h) != 6:
+        return "#ffffff"
+    try:
+        r, g, b = int(h[0:2], 16), int(h[2:4], 16), int(h[4:6], 16)
+    except ValueError:
+        return "#ffffff"
+    return "#07080f" if (0.299 * r + 0.587 * g + 0.114 * b) > 150 else "#ffffff"
+
+
 # ── Dialogue helpers ──────────────────────────────────────────────────────────
 
 def _text_dialog(parent: QWidget, title: str, initial: str = "",
@@ -91,7 +109,15 @@ def _text_dialog(parent: QWidget, title: str, initial: str = "",
     from ui.styles import PANDORA_STYLESHEET
     dlg = QDialog(parent)
     dlg.setWindowTitle(title)
-    dlg.setMinimumSize(540, 240)
+    # Redimensionnable (poignée) + taille par défaut CONFORTABLE, plafonnée à 85 %
+    # de l'écran disponible → jamais plus grand que l'affichage (pas de crop).
+    from PyQt6.QtGui import QGuiApplication
+    _scr = QGuiApplication.primaryScreen().availableGeometry()
+    _w = min(920, int(_scr.width() * 0.85))
+    _h = min(640, int(_scr.height() * 0.85))
+    dlg.setMinimumSize(min(480, _w), min(240, _h))
+    dlg.resize(_w, _h)
+    dlg.setSizeGripEnabled(True)
     dlg.setStyleSheet(PANDORA_STYLESHEET + f"QDialog{{background:{CP['bg1']};}}")
 
     lay = QVBoxLayout(dlg)
@@ -111,7 +137,7 @@ def _text_dialog(parent: QWidget, title: str, initial: str = "",
 
     btn_row = QHBoxLayout()
 
-    if enhance:
+    if False:   # bouton « ✦ Améliorer » RETIRÉ (fonction instable) — param `enhance` ignoré
         from PyQt6.QtGui import QIcon
         _wh = [None, None]  # [0]=worker, [1]=dialog-ref to prevent GC while worker runs
 
@@ -574,11 +600,58 @@ class _WrapLabel(QLabel):
 # ── Ligne de plan ─────────────────────────────────────────────────────────────
 
 class _ShotRow(QFrame):
-    edit_requested   = pyqtSignal(dict)
-    delete_requested = pyqtSignal(str)
-    changed          = pyqtSignal()
+    edit_requested      = pyqtSignal(dict)
+    delete_requested    = pyqtSignal(str)
+    duplicate_requested = pyqtSignal(str)
+    changed             = pyqtSignal()
 
     _MIN_H = 72
+
+    def contextMenuEvent(self, e):
+        """Clic droit sur un plan : Éditer · Dupliquer · Supprimer."""
+        menu = QMenu(self)
+        menu.setStyleSheet(
+            f"QMenu{{background:{CP['bg2']};border:1px solid {CP['border_bright']};"
+            f"border-radius:8px;padding:4px 0;}}"
+            f"QMenu::item{{color:{CP['text_primary']};padding:7px 18px;font-size:11px;}}"
+            f"QMenu::item:selected{{background:{CP['accent_dim']};color:{CP['text_primary']};}}")
+        menu.addAction(translate("Éditer"), lambda: self.edit_requested.emit(self._data))
+        menu.addAction(translate("Dupliquer le plan"),
+                       lambda: self.duplicate_requested.emit(self._data.get("id", "")))
+        import core.storyboard as _sb
+        from PyQt6.QtGui import QPixmap, QIcon, QColor
+
+        def _color_submenu(title, setter, none_label):
+            s = menu.addMenu(translate(title))
+            s.setStyleSheet(menu.styleSheet())
+            for cname, chex in _sb.LABEL_COLORS:
+                _pm = QPixmap(12, 12)
+                _pm.fill(QColor(chex))
+                a = s.addAction(QIcon(_pm), translate(cname))
+                a.triggered.connect(lambda _=False, c=chex: setter(c))
+            s.addSeparator()
+            s.addAction(translate(none_label), lambda: setter(""))
+
+        # Deux repères DISTINCTS : libellé couleur ESTHÉTIQUE (bande) ↔ FLAG « plan
+        # récurrent » (coin de la vignette, clé de groupe Rendu/Audio).
+        _color_submenu("Libellé couleur", self._set_label, "Aucun libellé")
+        _color_submenu("Plan récurrent", self._set_recurrent, "Pas récurrent")
+        menu.addSeparator()
+        menu.addAction(translate("Supprimer"),
+                       lambda: self.delete_requested.emit(self._data.get("id", "")))
+        menu.exec(e.globalPos())
+
+    def _set_label(self, color: str):
+        """Libellé couleur ESTHÉTIQUE (bande gauche) — clic droit → Libellé couleur."""
+        import core.storyboard as sb
+        sb.set_label(self._data.get("id", ""), color, "")
+        self.changed.emit()
+
+    def _set_recurrent(self, color: str):
+        """FLAG « plan récurrent » (coin) — clic droit → Plan récurrent."""
+        import core.storyboard as sb
+        sb.set_recurrent(self._data.get("id", ""), color, "")
+        self.changed.emit()
 
     def _content_height(self) -> int:
         from PyQt6.QtGui import QFont, QFontMetrics
@@ -601,6 +674,7 @@ class _ShotRow(QFrame):
         return max(
             self._MIN_H,
             _h((self._data.get("seedance_prompt", "") or "")[:300], 4, 9),
+            _h(self._data.get("scene_title", "") or "", 17, 10),
             _h(", ".join(self._data.get("accessory_names", []) or []), 12, 9),
             _h(", ".join(self._data.get("character_names", []) or []), 13, 10),
         )
@@ -625,8 +699,13 @@ class _ShotRow(QFrame):
             pal_idx = 0
         row_bg, seq_bg, seq_color = _SEQ_PALETTE[pal_idx]
 
+        # Libellé couleur ESTHÉTIQUE : appliqué en FOND de la cellule Séquence
+        # (cf. plus bas) — PLUS de bande à gauche (sans intérêt). Le flag « plan
+        # récurrent » reste un coin sur la vignette.
+        _lc = (data.get("label_color") or "").strip()
         self.setStyleSheet(
-            f"QFrame{{background:{row_bg};border:none;border-top:1px solid {CP['border']};}}"
+            f"QFrame{{background:{row_bg};border:none;"
+            f"border-top:1px solid {CP['border']};}}"
         )
 
         outer = QHBoxLayout(self)
@@ -674,13 +753,39 @@ class _ShotRow(QFrame):
             l.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Minimum)
             return l
 
+        # Champs caméra → alimentent la section [🖼️ TECHNIQUE] du prompt.
+        _CAM_FIELDS = ("camera_movement", "shot_size", "focal", "optic", "speed")
+
+        def _rebuild_technique():
+            """Réécrit INSTANTANÉMENT la section [🖼️ TECHNIQUE] du prompt depuis les
+            champs caméra (uniquement si le prompt est déjà structuré en sections)."""
+            try:
+                from core.prompt_sections import (is_structured as _isS, parse as _pp,
+                                                  build as _pb, technique_line as _tl)
+                p = self._data.get("seedance_prompt", "")
+                if not _isS(p):
+                    return
+                sec = _pp(p)
+                tech = _tl(self._data)
+                if tech != sec.get("technique", ""):
+                    self._data["seedance_prompt"] = _pb(
+                        action=sec["action"], staging=sec["staging"], ambiance=sec["ambiance"],
+                        decor=sec["decor"], lighting=sec["lighting"], technique=tech,
+                        sound=sec["sound"] or self._data.get("sound_prompt", ""))
+            except Exception:
+                pass
+
         def _save_field(key: str, value):
             self._data[key] = value
+            if key in _CAM_FIELDS:
+                _rebuild_technique()
             sb_api.save_shot(self._data)
             self.changed.emit()
 
         def _save_fields(updates: dict):
             self._data.update(updates)
+            if any(k in _CAM_FIELDS for k in updates):
+                _rebuild_technique()
             sb_api.save_shot(self._data)
             self.changed.emit()
 
@@ -805,6 +910,19 @@ class _ShotRow(QFrame):
         img_lbl.setToolTip("Voir / générer le Mood de ce plan")
         self._apercu_lbl = img_lbl
 
+        # FLAG « plan récurrent » dans le coin haut-droit de la vignette (façon
+        # DaVinci) — couleur = groupe. Distinct du libellé couleur esthétique (bande).
+        _rc = (data.get("recurrent_color") or "").strip()
+        if _rc:
+            _flag = QLabel(img_lbl)
+            _flag.setFixedSize(14, 14)
+            _flag.move(86 - 14, 0)
+            _rtxt = data.get("recurrent_text", "") or ""
+            _flag.setToolTip(translate("Plan récurrent") + (f" · {_rtxt}" if _rtxt else ""))
+            _flag.setStyleSheet(
+                f"background:{_rc};border:1px solid #07080f;border-bottom-left-radius:9px;")
+            _flag.show()
+
         def _open_apercu(img_label=img_lbl, shot_data=data, row_self=self):
             from ui.dialog_apercu import MoodDialog
             dlg = MoodDialog(row_self.window(), shot_data)
@@ -825,7 +943,10 @@ class _ShotRow(QFrame):
         seq_w = QWidget()
         seq_w.setFixedWidth(_col_widths[2])
         seq_w.setMinimumHeight(self._MIN_H)
-        seq_w.setStyleSheet(f"background:{seq_bg};")
+        # Fond de la cellule = libellé couleur esthétique s'il est défini, sinon la
+        # couleur de séquence par défaut. Texte contrasté pour rester lisible.
+        seq_w.setStyleSheet(f"background:{_lc or seq_bg};")
+        _seq_txt = _contrast_text(_lc) if _lc else seq_color
         seq_lay = QVBoxLayout(seq_w)
         seq_lay.setContentsMargins(6, 8, 6, 8)
         seq_lay.setSpacing(2)
@@ -833,10 +954,10 @@ class _ShotRow(QFrame):
         sq = data.get("seq_num", "")
         sn = data.get("seq_name", "")
         if sq is not None and str(sq):
-            n = QLabel(f"SQ{sq}")
+            n = QLabel(f"S{sq}")
             n.setAlignment(Qt.AlignmentFlag.AlignCenter)
             n.setStyleSheet(
-                f"color:{seq_color};font-size:22px;font-weight:800;"
+                f"color:{_seq_txt};font-size:22px;font-weight:800;"
                 f"font-family:'Consolas',monospace;background:transparent;border:none;"
             )
             seq_lay.addWidget(n)
@@ -845,7 +966,7 @@ class _ShotRow(QFrame):
             s2.setAlignment(Qt.AlignmentFlag.AlignCenter)
             s2.setWordWrap(True)
             s2.setStyleSheet(
-                f"color:{seq_color};font-size:8px;font-weight:700;"
+                f"color:{_seq_txt};font-size:8px;font-weight:700;"
                 f"background:transparent;border:none;"
             )
             seq_lay.addWidget(s2)
@@ -934,6 +1055,21 @@ class _ShotRow(QFrame):
         )
         plan_l.addWidget(pn)
         cells[3] = plan_w
+
+        # ── Nom du plan (scene_title) ─────────────────────────────────────────
+        nom_w, nom_l = _cell(_col_widths[17], fill=True)
+        nom_l.setAlignment(Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignLeft)
+        _nom_full = data.get("scene_title", "") or ""
+        _nom_lbl = _lbl(_nom_full or "—", size=10)
+        if _nom_full:
+            _nom_lbl.setToolTip(_nom_full)
+        nom_l.addWidget(_nom_lbl)
+        def _edit_nom():
+            v = _text_dialog(self, "Nom du plan", data.get("scene_title", ""))
+            if v is not None:
+                _save_field("scene_title", v)
+        _clickable(nom_w, _edit_nom)
+        cells[17] = nom_w
 
         # ── Prompt Seedance ───────────────────────────────────────────────────
         pmt_w = QWidget()
@@ -1049,6 +1185,45 @@ class _ShotRow(QFrame):
 
         _clickable(dst_w, _dist_click)
         cells[9] = dst_w
+
+        # ── Hauteur caméra ────────────────────────────────────────────────────
+        hgt_w, hgt_l = _cell(_col_widths[19])
+        _cur_hgt = data.get("camera_height", "")
+        hgt_l.addWidget(_lbl(_cur_hgt or "—", CP["accent_dim"], 10, mono=True))
+
+        def _height_click(_w=hgt_w, _c=_cur_hgt):
+            menu = QMenu(self)
+            menu.setStyleSheet(
+                f"QMenu{{background:{CP['bg2']};border:1px solid {CP['border_bright']};"
+                f"border-radius:8px;padding:4px 0;}}"
+                f"QMenu::item{{color:{CP['text_primary']};padding:7px 18px;font-size:11px;}}"
+                f"QMenu::item:selected{{background:{CP['accent_dim']};color:{CP['text_primary']};}}"
+                f"QMenu::item:checked{{color:{CP['accent']};font-weight:700;}}"
+            )
+            for opt in ("", "0,5 m", "1 m", "1,2 m", "1,7 m", "2 m", "3 m", "5 m"):
+                label = opt if opt else "— Aucune —"
+                act = menu.addAction(translate(label))
+                act.setData(opt)
+                act.setCheckable(True)
+                act.setChecked(opt == _c)
+            menu.addSeparator()
+            free_act = menu.addAction(translate("✎  Saisir une valeur…"))
+            free_act.setData("__free__")
+            chosen = menu.exec(_w.mapToGlobal(_w.rect().bottomLeft()))
+            if not chosen:
+                return
+            if chosen.data() == "__free__":
+                text, ok = QInputDialog.getText(
+                    self, translate("Hauteur caméra"),
+                    translate("Hauteur (ex : 1,7 m) :"), text=_c
+                )
+                if ok and text.strip():
+                    _save_field("camera_height", text.strip())
+            else:
+                _save_field("camera_height", chosen.data())
+
+        _clickable(hgt_w, _height_click)
+        cells[19] = hgt_w
 
         # ── Vitesse ──────────────────────────────────────────────────────────
         spd_w, spd_l = _cell(_col_widths[10])
@@ -1201,9 +1376,44 @@ class _ShotRow(QFrame):
         _clickable(dur_w, _edit_duration)
         cells[15] = dur_w
 
+        # ── Langues (dialogue_lang) — traduit à l'ENVOI vers Seedance ─────────
+        from core.lang import DIALOGUE_LANGS, lang_label
+        lang_w, lang_l = _cell(_col_widths[16])
+        _cur_lang = data.get("dialogue_lang", "en") or "en"
+        _lang_lbl = _lbl(lang_label(_cur_lang), size=10)
+        if _cur_lang == "en":
+            _lang_lbl.setStyleSheet(
+                f"color:{CP['accent']};font-size:10px;background:transparent;border:none;")
+        lang_l.addWidget(_lang_lbl)
+        lang_w.setToolTip(translate(
+            "Langue des dialogues — traduite automatiquement à l'envoi vers Seedance.\n"
+            "Anglais recommandé (meilleur lipsync). Le prompt à l'écran n'est pas modifié."))
+
+        def _pick_lang(anchor=lang_w):
+            menu = QMenu(self)
+            menu.setStyleSheet(
+                f"QMenu{{background:{CP['bg2']};border:1px solid {CP['border_bright']};"
+                f"border-radius:8px;padding:4px 0;}}"
+                f"QMenu::item{{color:{CP['text_primary']};padding:7px 18px;font-size:11px;}}"
+                f"QMenu::item:selected{{background:{CP['accent_dim']};color:{CP['text_primary']};}}"
+                f"QMenu::item:checked{{color:{CP['accent']};font-weight:700;}}"
+            )
+            cur = data.get("dialogue_lang", "en") or "en"
+            for _label, _code in DIALOGUE_LANGS:
+                act = menu.addAction(_label)
+                act.setData(_code)
+                act.setCheckable(True)
+                act.setChecked(_code == cur)
+            chosen = menu.exec(anchor.mapToGlobal(anchor.rect().bottomLeft()))
+            if chosen:
+                _save_field("dialogue_lang", chosen.data())
+
+        _clickable(lang_w, _pick_lang)
+        cells[16] = lang_w
+
         # ── Boutons ──────────────────────────────────────────────────────────
         btns_w = QWidget()
-        btns_w.setFixedWidth(_col_widths[16])
+        btns_w.setFixedWidth(_col_widths[18])
         btns_w.setMinimumHeight(self._MIN_H)
         btns_w.setStyleSheet("background:transparent;")
         bl = QVBoxLayout(btns_w)
@@ -1234,7 +1444,7 @@ class _ShotRow(QFrame):
         )
         btn_del.clicked.connect(lambda: self.delete_requested.emit(self._data["id"]))
         bl.addWidget(btn_del)
-        cells[16] = btns_w
+        cells[18] = btns_w
 
         # ── Assemblage des colonnes dans l'ordre visuel (_col_order) ─────────
         for i, col_logical in enumerate(_col_order):
@@ -1605,7 +1815,7 @@ class _MoodBatchDialog(QDialog):
         super().__init__(parent)
         from ui.styles import PANDORA_STYLESHEET
         self.setWindowTitle(translate("✦ Génération des Moods"))
-        self.setMinimumSize(480, 480)
+        self.setMinimumSize(480, 600)
         self.setStyleSheet(PANDORA_STYLESHEET + f"QDialog{{background:{CP['bg1']};}}")
         self._shots = shots
         self._has_mood: set[str] = set()
@@ -1680,6 +1890,58 @@ class _MoodBatchDialog(QDialog):
             f"color:{CP['text_dim']};font-size:10px;background:transparent;"
         )
         lay.addWidget(self._count_lbl)
+
+        # ── Options de génération (moteur + références à envoyer) ──────────────
+        lay.addWidget(_sep())
+        opt_lbl = QLabel(translate("Options de génération :"))
+        opt_lbl.setStyleSheet(
+            f"color:{CP['text_primary']};font-size:11px;font-weight:600;background:transparent;"
+        )
+        lay.addWidget(opt_lbl)
+
+        eng_row = QHBoxLayout()
+        eng_row.setSpacing(8)
+        _eng_lbl = QLabel(translate("Moteur d'image :"))
+        _eng_lbl.setStyleSheet(f"color:{CP['text_dim']};font-size:11px;background:transparent;")
+        eng_row.addWidget(_eng_lbl)
+        self._opt_engine = QComboBox()
+        self._opt_engine.addItem(translate("Nano Banana 2 (avec références)"), "nb2")
+        self._opt_engine.addItem(translate("Flux (depuis le prompt seul)"), "flux")
+        self._opt_engine.setFixedHeight(28)
+        self._opt_engine.setStyleSheet(
+            f"QComboBox{{background:{CP['bg2']};border:1px solid {CP['border']};"
+            f"border-radius:6px;color:{CP['text_primary']};font-size:11px;padding:0 8px;}}"
+            f"QComboBox::drop-down{{border:none;width:20px;}}"
+            f"QComboBox QAbstractItemView{{background:{CP['bg3']};"
+            f"border:1px solid {CP['border_bright']};color:{CP['text_primary']};"
+            f"selection-background-color:{CP['accent_dim']};}}"
+        )
+        eng_row.addWidget(self._opt_engine, 1)
+        lay.addLayout(eng_row)
+
+        _cb_style = (
+            f"QCheckBox{{color:{CP['text_secondary']};font-size:11px;"
+            f"background:transparent;spacing:7px;}}"
+            f"QCheckBox::indicator{{width:15px;height:15px;border:1px solid {CP['border_bright']};"
+            f"border-radius:4px;background:{CP['bg0']};}}"
+            f"QCheckBox::indicator:checked{{background:{CP['accent']};border-color:{CP['accent']};}}"
+            f"QCheckBox:disabled{{color:{CP['text_dim']};}}"
+        )
+        self._opt_chars = QCheckBox(translate("Envoyer les références des personnages"))
+        self._opt_decor = QCheckBox(translate("Envoyer la référence du décor"))
+        self._opt_floor = QCheckBox(translate("Envoyer le plan d'architecte (repère d'agencement)"))
+        for _cb in (self._opt_chars, self._opt_decor, self._opt_floor):
+            _cb.setChecked(True)
+            _cb.setStyleSheet(_cb_style)
+            lay.addWidget(_cb)
+
+        def _sync_engine_opts(*_a):
+            # Les références ne concernent que Nano Banana 2 — grisées pour Flux.
+            _nb2 = (self._opt_engine.currentData() == "nb2")
+            for _c in (self._opt_chars, self._opt_decor, self._opt_floor):
+                _c.setEnabled(_nb2)
+        self._opt_engine.currentIndexChanged.connect(_sync_engine_opts)
+        _sync_engine_opts()
 
         lay.addWidget(_sep())
 
@@ -1891,6 +2153,11 @@ class PageStoryboard(QWidget):
             self._refresh_snap_combo()
             self._render()
 
+    def _on_chat_applied(self):
+        """Le chat storyboard a appliqué des modifications → recharge et réaffiche."""
+        self._all_shots = sb_api.list_shots(self._active_version_id)
+        self._render()
+
     def _on_sync(self):
         if not self._all_shots:
             return
@@ -1898,10 +2165,16 @@ class PageStoryboard(QWidget):
         confirm = StoryboardSyncConfirmDialog(len(self._all_shots), parent=self)
         if confirm.exec() != StoryboardSyncConfirmDialog.DialogCode.Accepted:
             return
-        dlg = StoryboardSyncDialog(self._all_shots, parent=self)
+        options = confirm.selected_options()
+        dlg = StoryboardSyncDialog(self._all_shots, options, parent=self)
         if dlg.exec() == StoryboardSyncDialog.DialogCode.Accepted:
             self._all_shots = sb_api.list_shots(self._active_version_id)
             self._render()
+            # Feedback explicite si un scénario a été reconstruit : sinon l'utilisateur
+            # ne sait pas où regarder (le scénario est dans l'onglet Scénario).
+            if getattr(dlg, "_scenario_text", ""):
+                self._ai_lbl.setText(translate(
+                    "✓ Scénario reconstruit enregistré — ouvre l'onglet Scénario pour le voir."))
 
     def _on_clear_shots(self):
         """Supprime tous les plans du découpage actuel pour permettre une régénération."""
@@ -2012,7 +2285,7 @@ class PageStoryboard(QWidget):
 
     def _build_shots_topbar(self) -> QWidget:
         bar = QWidget()
-        bar.setFixedHeight(56)
+        bar.setFixedHeight(60)   # hauteur STANDARD des bandeaux (alignement assistant)
         bar.setStyleSheet(f"background:{CP['bg1']};")
         lay = QHBoxLayout(bar)
         lay.setContentsMargins(20, 0, 20, 0)
@@ -2197,7 +2470,6 @@ class PageStoryboard(QWidget):
             f"QPushButton:disabled{{color:{CP['text_dim']};border-color:{CP['border']};}}"
         )
         self._btn_sync.clicked.connect(self._on_sync)
-        lay.addWidget(self._btn_sync)
 
         self._btn_batch_mood = QPushButton("✦  Générer les Moods")
         self._btn_batch_mood.setFixedHeight(34)
@@ -2210,7 +2482,67 @@ class PageStoryboard(QWidget):
             f"QPushButton:disabled{{color:{CP['text_dim']};border-color:{CP['border']};}}"
         )
         self._btn_batch_mood.clicked.connect(self._on_batch_mood)
-        lay.addWidget(self._btn_batch_mood)
+
+        # Plans récurrents : analyse IA des configurations caméra qui reviennent
+        # (champ/contrechamp…) → coloration par groupe.
+        self._btn_recurrent = QPushButton("✦  Plans récurrents")
+        self._btn_recurrent.setFixedHeight(34)
+        self._btn_recurrent.setToolTip(
+            "Analyse le storyboard (Claude) pour repérer les configurations caméra\n"
+            "RÉCURRENTES par séquence (champ/contrechamp, plans qui reviennent) et\n"
+            "colorer chaque groupe d'une couleur distincte. Sélectionnable ensuite\n"
+            "d'un bloc pour le Rendu / l'Audio.")
+        self._btn_recurrent.setStyleSheet(
+            f"QPushButton{{background:transparent;color:{_sync_accent};"
+            f"border:1px solid {_sync_accent};border-radius:8px;"
+            f"font-size:11px;font-weight:700;padding:0 14px;}}"
+            f"QPushButton:hover{{background:rgba(124,107,255,0.12);}}"
+            f"QPushButton:pressed{{background:rgba(124,107,255,0.22);}}"
+            f"QPushButton:disabled{{color:{CP['text_dim']};border-color:{CP['border']};}}"
+        )
+        self._btn_recurrent.clicked.connect(self._on_detect_recurrent)
+        # Sauvegarder (jaune) / Ouvrir (bleu) — storyboard sauvegardé physiquement
+        # dans <projet>/data/Storyboard/ (comme un projet à part).
+        _yellow, _blue = "#f5c518", "#4aa3ff"
+        self._btn_save_sb_file = QPushButton("💾  Sauvegarder")
+        self._btn_save_sb_file.setFixedHeight(34)
+        self._btn_save_sb_file.setToolTip("Sauvegarder ce storyboard sous un nom (dossier Storyboard du projet)")
+        self._btn_save_sb_file.setStyleSheet(
+            f"QPushButton{{background:transparent;color:{_yellow};"
+            f"border:1px solid {_yellow};border-radius:8px;font-size:11px;font-weight:700;padding:0 14px;}}"
+            f"QPushButton:hover{{background:rgba(245,197,24,0.12);}}"
+            f"QPushButton:pressed{{background:rgba(245,197,24,0.22);}}"
+        )
+        self._btn_save_sb_file.clicked.connect(self._on_save_storyboard_file)
+
+        self._btn_open_sb_file = QPushButton("📂  Ouvrir")
+        self._btn_open_sb_file.setFixedHeight(34)
+        self._btn_open_sb_file.setToolTip("Ouvrir un storyboard sauvegardé")
+        self._btn_open_sb_file.setStyleSheet(
+            f"QPushButton{{background:transparent;color:{_blue};"
+            f"border:1px solid {_blue};border-radius:8px;font-size:11px;font-weight:700;padding:0 14px;}}"
+            f"QPushButton:hover{{background:rgba(74,163,255,0.12);}}"
+            f"QPushButton:pressed{{background:rgba(74,163,255,0.22);}}"
+        )
+        self._btn_open_sb_file.clicked.connect(self._on_open_storyboard_file)
+
+        # « Générer les Moods » tout à gauche, « Synchronisation » à sa droite
+        # (retour 2026-06-14) — avant le label/stretch qui pousse le reste à droite
+        lay.insertWidget(0, self._btn_batch_mood)
+        lay.insertWidget(1, self._btn_sync)
+        lay.insertWidget(2, self._btn_recurrent)
+
+        # Sauvegarder / Ouvrir : à droite de « Plans récurrents », séparés par un
+        # petit espace + une barre verticale.
+        _tb_sep = QWidget()
+        _tb_sep.setFixedWidth(1)
+        _tb_sep.setFixedHeight(24)
+        _tb_sep.setStyleSheet(f"background:{CP['border_bright']};")
+        lay.insertSpacing(3, 12)
+        lay.insertWidget(4, _tb_sep)
+        lay.insertSpacing(5, 12)
+        lay.insertWidget(6, self._btn_save_sb_file)
+        lay.insertWidget(7, self._btn_open_sb_file)
 
         btn_new = QPushButton("＋  Ajouter un plan")
         btn_new.setFixedHeight(34)
@@ -2366,6 +2698,50 @@ class PageStoryboard(QWidget):
         self._refresh_snap_combo()
         self._render()
 
+    # ── Sauvegarde / ouverture physique du storyboard ───────────────────────────
+
+    def _on_save_storyboard_file(self):
+        from PyQt6.QtWidgets import QFileDialog, QMessageBox
+        import os
+        if not self._all_shots:
+            QMessageBox.information(self, "Sauvegarder", "Le storyboard est vide.")
+            return
+        from core import context as _ctx
+        suggested = sb_api._safe_name(_ctx.get_project_name() or "Storyboard") + ".json"
+        start = os.path.join(sb_api.saves_dir(), suggested)
+        path, _ = QFileDialog.getSaveFileName(
+            self, translate("Sauvegarder le storyboard"), start,
+            "Storyboard PANDORA (*.json)")
+        if not path:
+            return
+        if not path.lower().endswith(".json"):
+            path += ".json"
+        try:
+            sb_api.export_storyboard_to(path, self._active_version_id)
+            QMessageBox.information(self, "Sauvegardé", "Storyboard sauvegardé.")
+        except Exception as e:
+            QMessageBox.critical(self, "Erreur", f"Échec de la sauvegarde : {e}")
+
+    def _on_open_storyboard_file(self):
+        from PyQt6.QtWidgets import QFileDialog, QMessageBox
+        path, _ = QFileDialog.getOpenFileName(
+            self, translate("Ouvrir un storyboard"), sb_api.saves_dir(),
+            "Storyboard PANDORA (*.json)")
+        if not path:
+            return
+        if QMessageBox.question(
+                self, "Ouvrir",
+                "Charger ce storyboard ? Les plans actuels de cette version seront remplacés.",
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
+        ) != QMessageBox.StandardButton.Yes:
+            return
+        try:
+            n = sb_api.import_storyboard_from(path, self._active_version_id)
+            self.refresh()
+            QMessageBox.information(self, "Ouvert", f"{n} plan(s) chargé(s).")
+        except Exception as e:
+            QMessageBox.critical(self, "Erreur", f"Échec de l'ouverture : {e}")
+
     def _on_col_width_changed(self, col_idx: int, new_w: int):
         total = sum(_col_widths) + len(_col_widths) - 1
         self._list_container.setMinimumWidth(total)
@@ -2373,7 +2749,7 @@ class PageStoryboard(QWidget):
 
     def _render(self):
         # Reload column order from project config
-        order = sb_api.load_col_order(len(_COLS))
+        order = sb_api.load_col_order(len(_COLS), _DEFAULT_COL_ORDER)
         _col_order[:] = order
 
         while self._list_lay.count():
@@ -2413,6 +2789,7 @@ class PageStoryboard(QWidget):
             row = _ShotRow(shot, decors_cache=decors_cache)
             row.edit_requested.connect(self._on_edit)
             row.delete_requested.connect(self._on_delete)
+            row.duplicate_requested.connect(self._on_duplicate)
             row.changed.connect(self.refresh)
             self._shot_rows[shot["id"]] = row
             self._list_lay.addWidget(row)
@@ -2420,6 +2797,35 @@ class PageStoryboard(QWidget):
 
         self._list_lay.addStretch()
         QTimer.singleShot(0, lambda: _col_hub.resized.emit(4, _col_widths[4]))
+
+    # ── Plans récurrents (analyse IA → coloration par groupe) ───────────────────
+
+    def _on_detect_recurrent(self):
+        if getattr(self, "_recurrent_worker", None) and self._recurrent_worker.isRunning():
+            return
+        from api.screenplay import AnalyzeRecurrentShotsWorker
+        self._btn_recurrent.setEnabled(False)
+        self._btn_recurrent.setText(translate("Analyse…"))
+        w = AnalyzeRecurrentShotsWorker(self._active_version_id)
+        w.done.connect(self._on_recurrent_done)
+        w.failed.connect(self._on_recurrent_fail)
+        self._recurrent_worker = w
+        w.start()
+
+    def _on_recurrent_done(self, n: int):
+        self._btn_recurrent.setEnabled(True)
+        self._btn_recurrent.setText("✦  " + translate("Plans récurrents"))
+        self.refresh()
+        QMessageBox.information(
+            self, translate("Plans récurrents"),
+            (translate("{n} groupe(s) de plans récurrents identifié(s) et colorés.")
+             .format(n=n)) if n else
+            translate("Aucun groupe de plans récurrents détecté dans ce storyboard."))
+
+    def _on_recurrent_fail(self, err: str):
+        self._btn_recurrent.setEnabled(True)
+        self._btn_recurrent.setText("✦  " + translate("Plans récurrents"))
+        QMessageBox.warning(self, translate("Plans récurrents"), str(err)[:300])
 
     # ── Actions ───────────────────────────────────────────────────────────────
 
@@ -2458,6 +2864,24 @@ class PageStoryboard(QWidget):
         if reply == QMessageBox.StandardButton.Yes:
             sb_api.delete_shot(shot_id)
             self.refresh()
+
+    def _on_duplicate(self, shot_id: str):
+        """Duplique un plan (clic droit → Dupliquer) : copie le plan + sa mise en
+        scène / plan de feu, insérée juste après l'original."""
+        if not shot_id:
+            return
+        dup = sb_api.duplicate_shot(shot_id)
+        if not dup:
+            return
+        # Duplique aussi la mise en scène / le plan de feu (record staging) du plan.
+        try:
+            import core.staging as _stg, copy as _copy
+            rec = _stg.get(shot_id)
+            if rec:
+                _stg.save(dup["id"], _copy.deepcopy(rec))
+        except Exception:
+            pass
+        self.refresh()
 
     def _on_shot_dropped(self, shot_id: str, target_index: int):
         """Reorders shots after a drag-and-drop: moves shot_id to target_index."""
@@ -2508,8 +2932,10 @@ class PageStoryboard(QWidget):
             return
 
         from api.screenplay import GenerateStoryboardWorker
+        from core.ai_provider import ai_name_for_task
+        _eng = ai_name_for_task("storyboard_gen")
         self._btn_analyze.setEnabled(False)
-        self._ai_lbl.setText("Génération du découpage via Claude…")
+        self._ai_lbl.setText(translate("Génération du découpage via {ai}…").format(ai=_eng))
         self._worker = GenerateStoryboardWorker(text)
         sc_id = sc.get("id", "")
         self._worker.finished.connect(lambda shots: self._on_shots_generated(shots, sc_id))
@@ -2534,7 +2960,9 @@ class PageStoryboard(QWidget):
         lay.setContentsMargins(32, 28, 32, 28)
         lay.setSpacing(14)
 
-        title_lbl = QLabel(translate("Analyse du scénario via Claude IA"))
+        from core.ai_provider import ai_name_for_task
+        title_lbl = QLabel(translate("Analyse du scénario via {ai}").format(
+            ai=ai_name_for_task("storyboard_gen")))
         title_lbl.setStyleSheet(
             f"color:{CP['text_primary']};font-size:15px;font-weight:700;background:transparent;"
         )
@@ -2655,8 +3083,17 @@ class PageStoryboard(QWidget):
         if not self._all_shots:
             return
 
-        # Dialog d'info (une seule fois, sauf si l'utilisateur a coché "Ne plus afficher")
+        # Garde-fou : sans clé fal.ai, la génération NB2 échoue silencieusement —
+        # on le dit clairement plutôt que d'afficher un faux « Moods générés ».
         from core.config import load_config, save_config
+        if not load_config().get("api_key", "").strip():
+            from PyQt6.QtWidgets import QMessageBox
+            QMessageBox.information(
+                self, translate("Générer les Moods"),
+                translate("Configure ta clé fal.ai dans Paramètres pour générer les moods."))
+            return
+
+        # Dialog d'info (une seule fois, sauf si l'utilisateur a coché "Ne plus afficher")
         cfg = load_config()
         if not cfg.get("mood_batch_info_shown"):
             info_dlg = _MoodInfoDialog(self)
@@ -2674,8 +3111,21 @@ class PageStoryboard(QWidget):
         if not selected:
             return
 
+        # Options cochées dans la fenêtre (moteur + références à envoyer).
+        _mood_opts = {
+            "engine":     dlg._opt_engine.currentData() or "nb2",
+            "chars":      dlg._opt_chars.isChecked(),
+            "decor":      dlg._opt_decor.isChecked(),
+            "floor_plan": dlg._opt_floor.isChecked(),
+        }
+
+        # Compteurs de résultat (message final honnête : succès / échecs).
+        self._mood_ok = 0
+        self._mood_fail = 0
+        self._mood_last_err = ""
+
         from api.apercu import MoodBatchWorker
-        self._batch_mood_worker = MoodBatchWorker(selected)
+        self._batch_mood_worker = MoodBatchWorker(selected, options=_mood_opts)
         self._batch_mood_worker.shot_progress.connect(self._on_batch_mood_progress)
         self._batch_mood_worker.shot_done.connect(self._on_batch_mood_done)
         self._batch_mood_worker.shot_failed.connect(self._on_batch_mood_failed)
@@ -2700,16 +3150,30 @@ class PageStoryboard(QWidget):
         self._mood_progress.setValue(current)
 
     def _on_batch_mood_done(self, shot_id: str, image_path: str):
-        row = self._shot_rows.get(shot_id)
-        if row:
-            row._on_apercu_changed(shot_id, image_path)
+        # On ne compte un SUCCÈS que si une vraie image existe — sinon « done »
+        # sans image (échec silencieux) ne doit pas se faire passer pour un succès.
+        if image_path and os.path.isfile(image_path):
+            self._mood_ok = getattr(self, "_mood_ok", 0) + 1
+            row = self._shot_rows.get(shot_id)
+            if row:
+                row._on_apercu_changed(shot_id, image_path)
+        else:
+            self._mood_fail = getattr(self, "_mood_fail", 0) + 1
 
     def _on_batch_mood_failed(self, shot_id: str, err: str):
+        self._mood_fail = getattr(self, "_mood_fail", 0) + 1
+        self._mood_last_err = err or ""
         self._ai_lbl.setText(f"Erreur plan {shot_id[:8]}… : {err[:80]}")
 
     def _on_batch_mood_all_done(self):
-        was_cancelled = getattr(self._batch_mood_worker, "_was_cancelled", False)
+        # PARQUER le worker (abandon_thread) au lieu de « = None » à chaud : le nuller
+        # pendant que le thread termine encore peut le faire GC en plein vol → segfault
+        # (doctrine PyQt du projet). abandon_thread garde une référence anti-GC.
+        w = self._batch_mood_worker
+        was_cancelled = getattr(w, "_was_cancelled", False)
         self._batch_mood_worker = None
+        if w is not None:
+            abandon_thread(w)
         self._mood_progress.setVisible(False)
         self._btn_batch_mood.setText("✦  Générer les Moods")
         self._btn_batch_mood.setEnabled(True)
@@ -2721,7 +3185,19 @@ class PageStoryboard(QWidget):
             f"QPushButton:pressed{{background:rgba(78,205,196,0.22);}}"
             f"QPushButton:disabled{{color:{CP['text_dim']};border-color:{CP['border']};}}"
         )
-        self._ai_lbl.setText("Génération annulée" if was_cancelled else "✓ Moods générés")
+        ok   = getattr(self, "_mood_ok", 0)
+        fail = getattr(self, "_mood_fail", 0)
+        last = getattr(self, "_mood_last_err", "")
+        if was_cancelled:
+            self._ai_lbl.setText("Génération annulée")
+        elif ok and not fail:
+            self._ai_lbl.setText(f"✓ {ok} mood(s) généré(s)")
+        elif ok and fail:
+            self._ai_lbl.setText(f"✓ {ok} mood(s) · {fail} échec(s)"
+                                 + (f" — {last[:60]}" if last else ""))
+        else:
+            self._ai_lbl.setText(f"⚠ Aucun mood généré ({fail} échec(s))"
+                                 + (f" — {last[:90]}" if last else ""))
 
     def _on_col_reordered(self, new_order: list):
         _col_order[:] = new_order

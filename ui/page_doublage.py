@@ -25,7 +25,8 @@ from ui.widgets import section_label, HelpBlock, show_api_error
 from ui.icons import load_icon
 from api.tts import (
     ElevenLabsWorker, ELEVENLABS_VOICES, ELEVENLABS_VOICES_FR,
-    F5TTSWorker,
+    F5TTSWorker, IndexTTS2Worker,
+    FalSpeechWorker, SPEECH_ENGINES, SPEECH_ENGINE_ORDER,
 )
 
 
@@ -214,42 +215,6 @@ class PageDoublage(QWidget):
         scroll.setWidget(content)
         root.addWidget(scroll, 1)
 
-        # ── Banner "Prochainement" — intégration audio moteurs ───────────────────
-        coming_soon = QFrame()
-        coming_soon.setStyleSheet(
-            f"QFrame{{background:rgba(255,140,66,0.10);"
-            f"border:1px solid rgba(255,140,66,0.40);border-radius:10px;}}"
-        )
-        cs_lay = QVBoxLayout(coming_soon)
-        cs_lay.setContentsMargins(18, 14, 18, 14)
-        cs_lay.setSpacing(8)
-
-        cs_title = QLabel("🔜  Prochainement — Intégration audio multi-personnages")
-        cs_title.setStyleSheet(
-            f"color:{CP['orange']};font-size:13px;font-weight:700;"
-            f"background:transparent;border:none;"
-        )
-        cs_lay.addWidget(cs_title)
-
-        cs_body = QLabel(
-            "Les moteurs de génération vidéo (Seedance, Kling, Veo…) ne permettent pas encore "
-            "d'incorporer un audio personnalisé par personnage directement dans la génération. "
-            "L'injection multi-personnages avec timecodes — \"personnage A parle de T1 à T2, "
-            "personnage B de T3 à T4\" — est prévue dans une prochaine version de PANDORA.\n\n"
-            "En attendant : les outils de synthèse vocale ci-dessous restent pleinement "
-            "fonctionnels pour générer et prévisualiser les voix de vos personnages. "
-            "L'audio produit peut ensuite être appliqué manuellement via LatentSync "
-            "(onglet Modifier depuis DaVinci Resolve) ou intégré dans DaVinci Resolve."
-        )
-        cs_body.setWordWrap(True)
-        cs_body.setStyleSheet(
-            f"color:{CP['text_secondary']};font-size:11px;line-height:1.5;"
-            f"background:transparent;border:none;"
-        )
-        cs_lay.addWidget(cs_body)
-
-        self._content_lay.addWidget(coming_soon)
-
         self._content_lay.addWidget(HelpBlock("Doublage & Synthèse vocale IA", [
             "▸ ElevenLabs Turbo v2.5 : synthèse vocale avec sélection de voix — principalement anglais, résultats variables en français.",
             "▸ F5-TTS Clonage : clone une voix depuis un échantillon audio — langue détectée depuis le texte. Entraîné principalement sur l'anglais et le chinois : le français peut sonner avec un accent.",
@@ -258,11 +223,122 @@ class PageDoublage(QWidget):
             "▸ Les fichiers générés apparaissent en bas — clique ▶ pour écouter ou 📁 pour ouvrir le dossier.",
         ], CP))
 
+        self._build_storyboard_panel()
         self._build_mode_selector()
         self._build_input_panel()
         self._build_results_panel()
         self._build_voice_assign_panel()
         self._content_lay.addStretch()
+
+    # ── Depuis le storyboard : dialogues des plans ─────────────────────────────
+
+    def _build_storyboard_panel(self):
+        """Sélection de plans → extraction des lignes de dialogue des personnages,
+        à charger dans le champ texte pour les doubler (même principe que
+        « Générer depuis le storyboard »)."""
+        title = QLabel("Depuis le storyboard — dialogues à doubler")
+        title.setStyleSheet(
+            f"color:{CP['accent']};font-size:12px;font-weight:800;"
+            f"letter-spacing:0.5px;background:transparent;")
+        self._content_lay.addWidget(title)
+
+        row = QHBoxLayout()
+        row.setSpacing(8)
+        self._btn_load_dialogues = _btn("⟳  " + translate("Charger les dialogues"), CP["accent"])
+        self._btn_load_dialogues.setToolTip(translate(
+            "Extrait les répliques (entre guillemets) des plans sélectionnés —\n"
+            "sélection du conducteur si tu en as une, sinon tout le storyboard."))
+        self._btn_load_dialogues.clicked.connect(self._load_dialogues)
+        row.addWidget(self._btn_load_dialogues)
+        row.addStretch()
+        self._content_lay.addLayout(row)
+
+        from ui.tab_t2v import StoryboardSelector
+        self._sb_selector = StoryboardSelector()
+        self._content_lay.addWidget(self._sb_selector)
+        try:
+            self._sb_selector.refresh()
+        except Exception:
+            pass
+
+        self._dialogues_container = QVBoxLayout()
+        self._dialogues_container.setSpacing(6)
+        self._dialogues_container.setAlignment(Qt.AlignmentFlag.AlignTop)
+        self._lbl_no_dialogues = QLabel(
+            "Sélectionne des plans puis « Charger les dialogues ».")
+        self._lbl_no_dialogues.setStyleSheet(
+            f"color:{CP['text_dim']};font-size:11px;padding:6px;background:transparent;")
+        self._dialogues_container.addWidget(self._lbl_no_dialogues)
+        self._content_lay.addLayout(self._dialogues_container)
+
+    def _load_dialogues(self):
+        import core.storyboard as sb
+        shots = []
+        try:
+            shots = self._sb_selector.get_selected_shots()
+        except Exception:
+            shots = []
+        if not shots:
+            try:
+                shots = sb.list_shots()
+            except Exception:
+                shots = []
+        while self._dialogues_container.count():
+            it = self._dialogues_container.takeAt(0)
+            if it.widget():
+                it.widget().deleteLater()
+
+        def _num(s):
+            try:
+                return int(s.get("number") or 0)
+            except (TypeError, ValueError):
+                return 0
+
+        rows = 0
+        for s in sorted(shots, key=_num):
+            lines = sb.extract_dialogues(s.get("seedance_prompt", "") or "")
+            chars = ", ".join(s.get("character_names", []) or []) or "—"
+            for line in lines:
+                self._add_dialogue_row(s.get("number", "?"), chars, line)
+                rows += 1
+        if rows == 0:
+            lbl = QLabel("Aucun dialogue (entre guillemets « ») dans les plans sélectionnés.")
+            lbl.setWordWrap(True)
+            lbl.setStyleSheet(
+                f"color:{CP['text_dim']};font-size:11px;padding:6px;background:transparent;")
+            self._dialogues_container.addWidget(lbl)
+        else:
+            self._char_counter.setText(f"{rows} réplique(s) extraite(s)")
+
+    def _add_dialogue_row(self, num, chars: str, line: str):
+        card = QFrame()
+        card.setStyleSheet(
+            f"QFrame{{background:{CP['bg2']};border:1px solid {CP['border']};border-radius:8px;}}")
+        lay = QHBoxLayout(card)
+        lay.setContentsMargins(12, 8, 10, 8)
+        lay.setSpacing(10)
+        meta = QLabel(f"Plan {num} · {chars}")
+        meta.setFixedWidth(150)
+        meta.setWordWrap(True)
+        meta.setStyleSheet(
+            f"color:{CP['accent']};font-size:9px;font-weight:700;"
+            f"font-family:'Consolas',monospace;background:transparent;border:none;")
+        lay.addWidget(meta)
+        txt = QLabel("« " + line + " »")
+        txt.setWordWrap(True)
+        txt.setStyleSheet(
+            f"color:{CP['text_primary']};font-size:11px;background:transparent;border:none;")
+        lay.addWidget(txt, 1)
+        btn = _btn("→  " + translate("Texte"), CP["accent2"], h=28)
+        btn.setFixedWidth(96)
+        btn.setToolTip(translate("Charge cette réplique dans le champ texte pour la doubler."))
+        btn.clicked.connect(lambda _=False, l=line: self._use_dialogue(l))
+        lay.addWidget(btn)
+        self._dialogues_container.addWidget(card)
+
+    def _use_dialogue(self, line: str):
+        self._text_edit.setPlainText(line)
+        self._text_edit.setFocus()
 
     # ── Sélecteur de mode ─────────────────────────────────────────────────────
 
@@ -275,15 +351,22 @@ class PageDoublage(QWidget):
             "20 voix · multilingue FR/EN/ES… · sélection de voix\n$0.05 / 1000 caractères",
             CP["accent"], True,
         )
+        self._btn_mode_speech = self._make_mode_card(
+            "Voix IA — multi-moteurs",
+            "MiniMax 2.8 (FR) · Gemini · Inworld · Qwen3 · Maya1\nVoix de synthèse — pas d'échantillon requis",
+            CP["accent"], False,
+        )
         self._btn_mode_clone = self._make_mode_card(
-            "Clonage de voix — F5-TTS",
-            "Clone n'importe quelle voix · EN/ZH principalement · FR expérimental\nLangue détectée automatiquement depuis le texte",
+            "Clonage de voix",
+            "F5-TTS ou Index TTS 2 (FR) · clone depuis un échantillon\nLangue détectée / choisie selon le moteur",
             CP["accent2"], False,
         )
         self._btn_mode_eleven.clicked.connect(lambda: self._set_mode("elevenlabs"))
+        self._btn_mode_speech.clicked.connect(lambda: self._set_mode("speech"))
         self._btn_mode_clone.clicked.connect(lambda: self._set_mode("clone"))
 
         row.addWidget(self._btn_mode_eleven, 1)
+        row.addWidget(self._btn_mode_speech, 1)
         row.addWidget(self._btn_mode_clone, 1)
         self._content_lay.addLayout(row)
 
@@ -344,14 +427,19 @@ class PageDoublage(QWidget):
     def _set_mode(self, mode: str):
         self._mode = mode
         is_eleven = (mode == "elevenlabs")
+        is_speech = (mode == "speech")
         is_clone  = (mode == "clone")
         self._apply_mode_card_style(
             self._btn_mode_eleven, is_eleven, self._btn_mode_eleven.property("accent"))
         self._apply_mode_card_style(
+            self._btn_mode_speech, is_speech, self._btn_mode_speech.property("accent"))
+        self._apply_mode_card_style(
             self._btn_mode_clone, is_clone, self._btn_mode_clone.property("accent"))
         self._btn_mode_eleven.setChecked(is_eleven)
+        self._btn_mode_speech.setChecked(is_speech)
         self._btn_mode_clone.setChecked(is_clone)
         self._eleven_frame.setVisible(is_eleven)
+        self._speech_frame.setVisible(is_speech)
         self._clone_frame.setVisible(is_clone)
         self._btn_generate.setText("🎙  Générer l'audio")
 
@@ -440,12 +528,44 @@ class PageDoublage(QWidget):
         ef_lay.addWidget(note_el)
         lay.addWidget(self._eleven_frame)
 
+        # ── Config Voix IA multi-moteurs (text → speech) ─────────────────────
+        self._speech_frame = QWidget()
+        self._speech_frame.setVisible(False)
+        sp_lay = QVBoxLayout(self._speech_frame)
+        sp_lay.setContentsMargins(0, 0, 0, 0)
+        sp_lay.setSpacing(8)
+        sp_lay.addWidget(section_label("Moteur de voix IA"))
+        self._speech_combo = QComboBox()
+        self._speech_combo.setFixedHeight(34)
+        self._speech_combo.setStyleSheet(_combo_ss)
+        for _k in SPEECH_ENGINE_ORDER:
+            _spec = SPEECH_ENGINES.get(_k)
+            if _spec:
+                self._speech_combo.addItem(_spec["label"], _k)
+        sp_lay.addWidget(self._speech_combo)
+        note_sp = QLabel(
+            "Voix de synthèse — aucun échantillon requis. MiniMax 2.8 HD/Turbo gèrent bien le français."
+        )
+        note_sp.setStyleSheet(
+            f"color:{CP['text_dim']};font-size:9px;font-family:'Consolas',monospace;"
+            f"background:transparent;"
+        )
+        sp_lay.addWidget(note_sp)
+        lay.addWidget(self._speech_frame)
+
         # ── Config F5-TTS — Clonage voix multilingue ─────────────────────────
         self._clone_frame = QWidget()
         self._clone_frame.setVisible(False)
         cf_lay = QVBoxLayout(self._clone_frame)
         cf_lay.setContentsMargins(0, 0, 0, 0)
         cf_lay.setSpacing(8)
+        cf_lay.addWidget(section_label("Moteur de clonage"))
+        self._clone_engine_combo = QComboBox()
+        self._clone_engine_combo.setFixedHeight(34)
+        self._clone_engine_combo.setStyleSheet(_combo_ss)
+        self._clone_engine_combo.addItem("F5-TTS  ·  EN/ZH (FR expérimental)", "f5")
+        self._clone_engine_combo.addItem("Index TTS 2  ·  clonage multilingue FR", "indextts2")
+        cf_lay.addWidget(self._clone_engine_combo)
         cf_lay.addWidget(section_label("Échantillon vocal de référence"))
 
         sample_row = QHBoxLayout()
@@ -614,8 +734,26 @@ class PageDoublage(QWidget):
                 self._lbl_status.setVisible(False)
                 return
             label = os.path.splitext(os.path.basename(self._voice_sample_path))[0]
-            self._tts_worker = F5TTSWorker(text, self._voice_sample_path, label=label)
-            mode_label = "F5-TTS"
+            eng = self._clone_engine_combo.currentData() or "f5"
+            if eng == "indextts2":
+                self._tts_worker = IndexTTS2Worker(
+                    text, self._voice_sample_path, label=label, language="fr")
+                mode_label = "Index TTS 2"
+            else:
+                self._tts_worker = F5TTSWorker(text, self._voice_sample_path, label=label)
+                mode_label = "F5-TTS"
+
+        elif self._mode == "speech":
+            text = self._text_edit.toPlainText().strip()
+            if not text:
+                self._btn_generate.setEnabled(True)
+                self._progress.setVisible(False)
+                self._lbl_status.setVisible(False)
+                return
+            eng   = self._speech_combo.currentData() or "minimax-2.8-hd"
+            label = eng
+            self._tts_worker = FalSpeechWorker(eng, text, label=label)
+            mode_label = "Voix IA"
 
         else:  # elevenlabs
             text = self._text_edit.toPlainText().strip()
@@ -820,3 +958,8 @@ class PageDoublage(QWidget):
 
     def refresh(self):
         self._refresh_assign_panel()
+        if hasattr(self, "_sb_selector"):
+            try:
+                self._sb_selector.refresh()
+            except Exception:
+                pass

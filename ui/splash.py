@@ -354,7 +354,7 @@ class _LeftPanel(QWidget):
     lang_changed  = pyqtSignal(str)
     back_requested = pyqtSignal()
 
-    def __init__(self, mode: str = "cinema"):
+    def __init__(self, mode: str = "cinema", show_back: bool = True):
         super().__init__()
         self._mode = mode
         self.setFixedWidth(390)
@@ -363,6 +363,29 @@ class _LeftPanel(QWidget):
         lay = QVBoxLayout(self)
         lay.setContentsMargins(0, 0, 0, 0)
         lay.setSpacing(0)
+
+        # ── Bouton retour au sélecteur de module (Cinéma / Live) ──────────────
+        # Masqué en édition Cinéma seule : aucun sélecteur derrière (build 1.2.0).
+        if show_back:
+            back_row = QWidget()
+            back_row.setStyleSheet("background:transparent;")
+            br = QHBoxLayout(back_row)
+            br.setContentsMargins(16, 14, 16, 0)
+            br.setSpacing(0)
+            btn_back = QPushButton("‹  Retour")
+            btn_back.setCursor(Qt.CursorShape.PointingHandCursor)
+            btn_back.setFixedHeight(28)
+            btn_back.setStyleSheet(
+                f"QPushButton{{background:transparent;color:{CP['text_dim']};"
+                f"border:1px solid {CP['border']};border-radius:6px;"
+                f"font-size:10px;font-weight:700;padding:0 12px;}}"
+                f"QPushButton:hover{{background:{CP['bg3']};color:{CP['text_primary']};"
+                f"border-color:{CP['border_bright']};}}"
+            )
+            btn_back.clicked.connect(self.back_requested)
+            br.addWidget(btn_back)
+            br.addStretch()
+            lay.addWidget(back_row)
 
         # ── Logo ──────────────────────────────────────────────────────────────
         logo_area = QWidget()
@@ -763,7 +786,7 @@ class SplashWindow(QWidget):
     project_selected = pyqtSignal(dict)
     back_requested   = pyqtSignal()
 
-    def __init__(self, mode: str = "cinema"):
+    def __init__(self, mode: str = "cinema", show_back: bool = True):
         super().__init__()
         self._mode = mode
         self.setWindowTitle("PANDORA — by 22eme ARKANE")
@@ -774,7 +797,7 @@ class SplashWindow(QWidget):
         lay.setContentsMargins(0, 0, 0, 0)
         lay.setSpacing(0)
 
-        self._left  = _LeftPanel(mode)
+        self._left  = _LeftPanel(mode, show_back=show_back)
         self._right = _RightPanel(mode)
 
         sep = QFrame()

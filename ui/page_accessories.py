@@ -9,6 +9,7 @@ from ui.styles import CP
 from ui.icons import load_icon
 from ui.widgets import HelpBlock
 import core.accessories as acc_api
+from ui.element_io_buttons import make_save_open_buttons, toolbar_separator
 from ui.dialog_accessory import AccessoryDialog
 
 
@@ -210,7 +211,21 @@ class PageAccessories(QWidget):
         )
         self._search.textChanged.connect(self._filter)
         lay.addWidget(self._search, 1)
-        lay.addStretch()
+
+        # Sauvegarder / Ouvrir des accessoires — à côté de la barre de recherche.
+        self._btn_save_file, self._btn_open_file = make_save_open_buttons(
+            self, kind="accessories",
+            list_fn=acc_api.list_accessories,
+            save_fn=acc_api.save_accessory,
+            delete_fn=acc_api.delete_accessory,
+            refresh_fn=self.refresh)
+        lay.addWidget(self._btn_save_file)
+        lay.addWidget(self._btn_open_file)
+
+        # Séparateur (espace + trait) entre le groupe fichier et « Créer ».
+        lay.addSpacing(6)
+        lay.addWidget(toolbar_separator())
+        lay.addSpacing(6)
 
         btn_new = QPushButton("✦  Créer un accessoire")
         btn_new.setFixedHeight(36)

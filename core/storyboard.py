@@ -1,5 +1,6 @@
 import json
 import os
+import re
 import uuid
 from datetime import datetime
 
@@ -7,9 +8,40 @@ from core.paths import APP_ROOT as _ROOT
 _FALLBACK_SB_DIR = os.path.join(_ROOT, "data", "storyboard")
 
 
+# Lignes de dialogue d'un plan = segments entre guillemets « » ou " " (la convention
+# du découpage ; ces guillemets sont aussi ceux protégés à la traduction). Sert au
+# Doublage : « exporter les dialogues » des plans sélectionnés.
+_DIALOGUE_RE = re.compile(r"«\s*(.+?)\s*»|“\s*(.+?)\s*”", re.S)
+
+
+def extract_dialogues(text: str) -> list:
+    """Renvoie les répliques (texte entre guillemets « » / " ") trouvées dans un
+    texte de plan, nettoyées et dédoublonnées en conservant l'ordre."""
+    out, seen = [], set()
+    for m in _DIALOGUE_RE.finditer(text or ""):
+        line = next((g for g in m.groups() if g), "")
+        line = " ".join(line.split())
+        if len(line) >= 2 and line not in seen:
+            seen.add(line)
+            out.append(line)
+    return out
+
+
+# Namespace du storyboard : permet à PANDORA | Live de réutiliser la même page
+# Storyboard avec des données séparées (live_seq_live / live_seq_mapping) sans
+# toucher au comportement Cinéma (défaut "storyboard").
+_NAMESPACE = "storyboard"
+
+def set_namespace(ns: str):
+    global _NAMESPACE
+    _NAMESPACE = ns or "storyboard"
+
+def get_namespace() -> str:
+    return _NAMESPACE
+
 def _sb_dir() -> str:
     from core.context import get_data_root
-    return os.path.join(get_data_root(), "storyboard")
+    return os.path.join(get_data_root(), _NAMESPACE)
 
 DEFAULT_VERSION_ID = "default"
 
@@ -323,6 +355,48 @@ def get_shot(shot_id: str) -> dict | None:
     return None
 
 
+# Palette de libellés couleur — repères manuels ET groupes de plans récurrents.
+# Couleurs distinctes, lisibles sur le fond sombre PANDORA. (nom, hex)
+LABEL_COLORS = [
+    ("Rouge",  "#e0556b"),
+    ("Ambre",  "#e0a13a"),
+    ("Vert",   "#46c08a"),
+    ("Cyan",   "#3ab6c8"),
+    ("Bleu",   "#5b8cff"),
+    ("Violet", "#9b6bd6"),
+    ("Rose",   "#e06bb0"),
+    ("Olive",  "#9bb04a"),
+]
+
+
+def recurrent_color(index: int) -> str:
+    """Couleur distincte pour le n-ième groupe de plans récurrents (cyclique)."""
+    return LABEL_COLORS[index % len(LABEL_COLORS)][1]
+
+
+def set_label(shot_id: str, color: str = "", text: str = "",
+              version_id: str = DEFAULT_VERSION_ID) -> dict | None:
+    """Pose (color="" → retire) un libellé couleur ESTHÉTIQUE (bande) sur un plan."""
+    sh = get_shot(shot_id)
+    if not sh:
+        return None
+    sh["label_color"] = color or ""
+    sh["label_text"]  = text or ""
+    return save_shot(sh, sh.get("version_id", version_id))
+
+
+def set_recurrent(shot_id: str, color: str = "", text: str = "",
+                  version_id: str = DEFAULT_VERSION_ID) -> dict | None:
+    """Pose (color="" → retire) le FLAG « plan récurrent » d'un plan. La couleur =
+    clé de groupe pour la sélection « Rendu/Audio »."""
+    sh = get_shot(shot_id)
+    if not sh:
+        return None
+    sh["recurrent_color"] = color or ""
+    sh["recurrent_text"]  = text or ""
+    return save_shot(sh, sh.get("version_id", version_id))
+
+
 def save_shot(data: dict, version_id: str = DEFAULT_VERSION_ID) -> dict:
     from core.context import get_project_id
     _ensure()
@@ -361,6 +435,7 @@ def save_shot(data: dict, version_id: str = DEFAULT_VERSION_ID) -> dict:
         data.setdefault("shot_size", "")
         data.setdefault("camera_axis", "")
         data.setdefault("camera_distance", "")
+        data.setdefault("camera_height", "")   # hauteur caméra (colonne storyboard)
         data.setdefault("speed", "Normale")
         data.setdefault("optic", "Sphérique")
         data.setdefault("focal", "35mm")
@@ -376,7 +451,19 @@ def save_shot(data: dict, version_id: str = DEFAULT_VERSION_ID) -> dict:
         data.setdefault("shot_time", "")
         data.setdefault("image_path", "")
         data.setdefault("seedance_prompt", "")
+        data.setdefault("sound_prompt", "")
+        data.setdefault("dialogue_lang", "en")   # langue des dialogues (envoi Seedance)
+        data.setdefault("lipsync_audio_path", "")  # audio cible lip-sync (override manuel)
         data.setdefault("last_frame_path", "")
+        # Libellé couleur ESTHÉTIQUE d'un plan (repère manuel libre) → bande colorée
+        # à gauche de la ligne. Distinct des plans récurrents ci-dessous.
+        data.setdefault("label_color", "")
+        data.setdefault("label_text", "")
+        # Plan RÉCURRENT (même config caméra) → FLAG coloré dans le coin de la vignette
+        # (façon DaVinci). recurrent_color sert de clé de groupe pour la sélection
+        # « Rendu/Audio ». recurrent_text = nom du groupe (ex. « Récurrent A »).
+        data.setdefault("recurrent_color", "")
+        data.setdefault("recurrent_text", "")
         index.append(data)
     else:
         data["updated_at"] = now
@@ -421,23 +508,52 @@ def delete_shot(shot_id: str):
     _save_index(index)
 
 
+def duplicate_shot(shot_id: str) -> dict | None:
+    """Duplique un plan : copie profonde insérée JUSTE APRÈS l'original, nouvel id,
+    titre suffixé « (copie) ». Renumérote la version. Renvoie le nouveau plan (ou None)."""
+    import copy
+    index = _load_index()
+    src = next((s for s in index if s.get("id") == shot_id), None)
+    if not src:
+        return None
+    now = datetime.now().isoformat()
+    dup = copy.deepcopy(src)
+    dup["id"]         = str(uuid.uuid4())
+    dup["created_at"] = now
+    dup["updated_at"] = now
+    if dup.get("scene_title"):
+        dup["scene_title"] = f"{dup['scene_title']} (copie)"
+    pos = index.index(src)
+    index.insert(pos + 1, dup)
+    _save_index(index)
+    # Renumérote la version pour une numérotation contiguë (la copie suit l'original).
+    vid = src.get("version_id", DEFAULT_VERSION_ID)
+    ordered = [s["id"] for s in index if s.get("version_id", DEFAULT_VERSION_ID) == vid]
+    reorder_shots(vid, ordered)
+    return dup
+
+
 # ── Column order ──────────────────────────────────────────────────────────────
 
-def load_col_order(n_cols: int) -> list:
-    """Load column visual order from project config. Falls back to default."""
+def load_col_order(n_cols: int, default: list | None = None) -> list:
+    """Load column visual order from project config. Falls back to `default`
+    (or the natural 0..n-1 order). A saved order is only accepted if it contains
+    exactly the same set of indices as `default` — sinon on retombe sur le défaut
+    (gère l'ajout d'une colonne : un ordre enregistré plus court est ignoré)."""
     _ensure()
     path = os.path.join(_sb_dir(), "col_order.json")
-    default = list(range(n_cols))
+    if default is None:
+        default = list(range(n_cols))
     if not os.path.exists(path):
-        return default
+        return list(default)
     try:
         with open(path, encoding="utf-8") as f:
             order = json.load(f)
-        if isinstance(order, list) and sorted(order) == default:
+        if isinstance(order, list) and sorted(order) == sorted(default):
             return order
     except Exception:
         pass
-    return default
+    return list(default)
 
 
 def save_col_order(order: list) -> None:
@@ -471,3 +587,116 @@ def save_apercus(shot_id: str, paths: list, active_idx: int) -> None:
     os.makedirs(d, exist_ok=True)
     with open(os.path.join(d, "apercus.json"), "w", encoding="utf-8") as f:
         json.dump({"paths": paths, "active_idx": active_idx}, f, indent=2)
+
+
+# ── Sauvegarde / ouverture PHYSIQUE (fichiers nommés, dossier « Storyboard ») ───
+# Déjà dans le dossier du projet → pas de sous-dossier projet.
+
+def _saves_dir() -> str:
+    from core.context import get_data_root
+    d = os.path.join(get_data_root(), "Storyboard")
+    os.makedirs(d, exist_ok=True)
+    return d
+
+
+def _safe_name(name: str) -> str:
+    s = "".join(c for c in (name or "") if c.isalnum() or c in " -_").strip()
+    return s[:80] or "storyboard"
+
+
+def list_saved() -> list[str]:
+    """Noms des storyboards sauvegardés (fichiers .json du dossier Storyboard)."""
+    try:
+        return sorted(f[:-5] for f in os.listdir(_saves_dir()) if f.endswith(".json"))
+    except Exception:
+        return []
+
+
+def export_storyboard(name: str, version_id: str = DEFAULT_VERSION_ID) -> str:
+    """Sauvegarde physique des plans (version courante) sous
+    <projet>/data/Storyboard/<nom>.json."""
+    shots = [{k: v for k, v in s.items() if not k.startswith("_")}
+             for s in list_shots(version_id)]
+    payload = {
+        "saved_name": name,
+        "saved_at": datetime.now().isoformat(timespec="seconds"),
+        "shots": shots,
+    }
+    path = os.path.join(_saves_dir(), _safe_name(name) + ".json")
+    with open(path, "w", encoding="utf-8") as f:
+        json.dump(payload, f, ensure_ascii=False, indent=2)
+    return path
+
+
+def import_storyboard(name: str, version_id: str = DEFAULT_VERSION_ID) -> int:
+    """Recharge un storyboard sauvegardé : REMPLACE les plans de la version
+    courante du projet. Retourne le nombre de plans importés."""
+    from core.context import get_project_id
+    path = os.path.join(_saves_dir(), _safe_name(name) + ".json")
+    if not os.path.isfile(path):
+        return 0
+    with open(path, "r", encoding="utf-8") as f:
+        data = json.load(f)
+    shots = data.get("shots", []) or []
+    pid = get_project_id()
+    index = _load_index()
+    # Retire les plans de cette version (pour ce projet)
+    index = [s for s in index if not (
+        s.get("version_id", DEFAULT_VERSION_ID) == version_id
+        and (not pid or s.get("project_id") == pid))]
+    for s in shots:
+        s = dict(s)
+        s["version_id"] = version_id
+        if pid:
+            s["project_id"] = pid
+        if not s.get("id"):
+            s["id"] = str(uuid.uuid4())
+        index.append(s)
+    _save_index(index)
+    return len(shots)
+
+
+def saves_dir() -> str:
+    """Dossier par défaut des storyboards sauvegardés (pour la boîte de dialogue)."""
+    return _saves_dir()
+
+
+def export_storyboard_to(path: str, version_id: str = DEFAULT_VERSION_ID) -> str:
+    """Sauvegarde les plans (version courante) vers un fichier CHOISI par
+    l'utilisateur (boîte de dialogue Windows). Chargeable depuis tout projet."""
+    shots = [{k: v for k, v in s.items() if not k.startswith("_")}
+             for s in list_shots(version_id)]
+    payload = {
+        "saved_name": os.path.splitext(os.path.basename(path))[0],
+        "saved_at": datetime.now().isoformat(timespec="seconds"),
+        "shots": shots,
+    }
+    with open(path, "w", encoding="utf-8") as f:
+        json.dump(payload, f, ensure_ascii=False, indent=2)
+    return path
+
+
+def import_storyboard_from(path: str, version_id: str = DEFAULT_VERSION_ID) -> int:
+    """Recharge un storyboard depuis un fichier CHOISI : REMPLACE les plans de la
+    version courante. Retourne le nombre de plans importés."""
+    from core.context import get_project_id
+    if not path or not os.path.isfile(path):
+        return 0
+    with open(path, "r", encoding="utf-8") as f:
+        data = json.load(f)
+    shots = data.get("shots", []) or []
+    pid = get_project_id()
+    index = _load_index()
+    index = [s for s in index if not (
+        s.get("version_id", DEFAULT_VERSION_ID) == version_id
+        and (not pid or s.get("project_id") == pid))]
+    for s in shots:
+        s = dict(s)
+        s["version_id"] = version_id
+        if pid:
+            s["project_id"] = pid
+        if not s.get("id"):
+            s["id"] = str(uuid.uuid4())
+        index.append(s)
+    _save_index(index)
+    return len(shots)

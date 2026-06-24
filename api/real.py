@@ -102,6 +102,63 @@ def _analyze_style_ref(image_path: str, anthropic_key: str) -> str:
         return ""
 
 
+def _analyze_draw_guidance(image_path: str, user_instruction: str, anthropic_key: str) -> str:
+    """Draw-to-Video : Claude Haiku Vision lit une image annotée (traits colorés
+    tracés par l'utilisateur pour REPÉRER des zones) + son instruction, et renvoie
+    UNE instruction d'édition vidéo claire en anglais qui nomme les objets/zones
+    marqués par leur position réelle, SANS mentionner les traits (qui ne sont JAMAIS
+    envoyés au modèle vidéo → ils n'apparaissent pas). Retourne "" en cas d'erreur.
+    """
+    try:
+        import base64
+        import anthropic as _anthropic
+
+        _ext = os.path.splitext(image_path)[1].lower()
+        _mime_map = {
+            ".jpg": "image/jpeg", ".jpeg": "image/jpeg",
+            ".png": "image/png",  ".webp": "image/webp",
+        }
+        _media_type = _mime_map.get(_ext, "image/png")
+        with open(image_path, "rb") as _f:
+            _img_b64 = base64.standard_b64encode(_f.read()).decode("utf-8")
+
+        _client = _anthropic.Anthropic(api_key=anthropic_key)
+        _msg = _client.messages.create(
+            model="claude-haiku-4-5",
+            max_tokens=300,
+            messages=[{
+                "role": "user",
+                "content": [
+                    {
+                        "type": "image",
+                        "source": {"type": "base64", "media_type": _media_type, "data": _img_b64},
+                    },
+                    {
+                        "type": "text",
+                        "text": (
+                            "A user drew colored marks (e.g. red strokes) on this video "
+                            "frame to indicate WHERE to apply an edit. Their instruction "
+                            f"(may be in French): \"{user_instruction}\".\n\n"
+                            "Rewrite their instruction as ONE precise, self-contained "
+                            "English video-editing prompt that:\n"
+                            "- names the exact objects/regions the marks cover, using their "
+                            "real position in the frame (e.g. 'the two white plates on the "
+                            "center-right of the table'), or — if the user sketched a new "
+                            "element — describes that element and where to place it;\n"
+                            "- does NOT mention the marks, strokes, drawings or their colors "
+                            "(they will NOT be visible to the video model and must not appear);\n"
+                            "- keeps the rest of the scene unchanged.\n"
+                            "Output ONLY the rewritten instruction, no preamble."
+                        ),
+                    },
+                ],
+            }],
+        )
+        return _msg.content[0].text.strip()
+    except Exception:
+        return ""
+
+
 def run_real(params: dict, emit_progress, is_cancelled) -> dict:
     import fal_client
 
@@ -143,13 +200,31 @@ def run_real(params: dict, emit_progress, is_cancelled) -> dict:
     ref_images = ref_images[:4]
     ref_roles  = ref_roles[:4]
 
+    # ── Clip source : transcodage H.264 automatique si format non supporté ──────
+    # (ex. MXF/ProRes/HEVC/4K exotique) → évite les rejets des moteurs. Conserve
+    # la résolution native. No-op si déjà mp4/H.264 ou ffmpeg absent.
+    _vp = params.get("video_path", "")
+    if _vp and os.path.isfile(_vp):
+        try:
+            from core.video_utils import ensure_engine_video
+            _vp2 = ensure_engine_video(_vp, emit=lambda m: emit_progress(2, m))
+            if _vp2 and _vp2 != _vp:
+                params = dict(params)
+                params["video_path"] = _vp2
+        except Exception:
+            pass
+
     _auto_ref = mode == "t2v" and bool(ref_images)  # track auto-switch to restore on upload failure
     if _auto_ref:
         mode = "ref"
         endpoint = endpoints["ref"]
 
     _ref_images_sent      = 0   # count of successfully uploaded reference images
-    _ref_images_attempted = len(ref_images)
+    # Compteur d'alerte UI : rempli UNIQUEMENT par le mode "ref", le seul qui
+    # consomme ref_images. En i2v (keyframes mapping) la liste est ignorée —
+    # compter ici déclenchait une fausse alerte « non transmises » alors que
+    # les images i2v partent par image_url/end_image_url.
+    _ref_images_attempted = 0
     _gcs_blocked          = False  # set True if ALL uploads fail (no images transmitted)
     _gcs_error_detail     = ""    # first upload error message for diagnostics
 
@@ -169,6 +244,23 @@ def run_real(params: dict, emit_progress, is_cancelled) -> dict:
     _has_anthropic = bool(_cfg.get("anthropic_key", "").strip())
     _anthropic_key = _cfg.get("anthropic_key", "").strip()
     _raw_prompt = params.get("prompt", "")
+    # Prompt structuré en sections : le bloc [SOUND DESIGN] n'est PAS envoyé au
+    # modèle vidéo (séparation image/son). Les autres sections sont conservées.
+    try:
+        from core.prompt_sections import strip_for_video as _strip_sound_section
+        _raw_prompt = _strip_sound_section(_raw_prompt)
+    except Exception:
+        pass
+    # Draw-to-Video : si une image annotée (traits de repérage) est fournie, Claude
+    # Vision la lit pour RÉÉCRIRE l'instruction en décrivant les zones/objets marqués
+    # SANS les traits. L'image annotée n'est JAMAIS envoyée à Seedance → les traits
+    # n'apparaissent pas ; seul le clip d'origine + ce prompt partent.
+    _draw_guidance = params.get("draw_guidance_path", "")
+    if _draw_guidance and os.path.isfile(_draw_guidance) and _anthropic_key:
+        emit_progress(4, "Analyse du dessin (repérage des zones)…")
+        _drawn = _analyze_draw_guidance(_draw_guidance, _raw_prompt, _anthropic_key)
+        if _drawn:
+            _raw_prompt = _drawn
     if _raw_prompt and not _has_anthropic:
         emit_progress(3, "⚠ Clé Anthropic manquante — prompt envoyé sans traduction")
     else:
@@ -181,6 +273,16 @@ def run_real(params: dict, emit_progress, is_cancelled) -> dict:
         _prompt_zh = translate_to_chinese(_prompt_en)
         if _prompt_zh and len(_prompt_zh) < len(_prompt_en):
             _prompt_en = _prompt_zh
+
+    # Langue des dialogues (colonne « Langues » du storyboard) : à l'ENVOI
+    # uniquement, on traduit les dialogues entre guillemets vers la langue
+    # choisie pour ce plan (par défaut anglais). Le prompt à l'écran reste tel quel.
+    _dialogue_lang = (params.get("dialogue_lang", "en") or "en")
+    _has_quotes = any(q in _prompt_en for q in ('"', "«", "“", "‘", "'"))
+    if _prompt_en and _has_anthropic and _has_quotes:
+        from core.lang import translate_dialogues_to
+        emit_progress(5, "Traduction des dialogues…")
+        _prompt_en = translate_dialogues_to(_prompt_en, _dialogue_lang)
 
     # ── Vision analysis of style reference image ───────────────────────────────
     # Claude Haiku reads the style image and extracts visual style keywords
@@ -267,6 +369,7 @@ def run_real(params: dict, emit_progress, is_cancelled) -> dict:
                     pass
 
     elif mode == "ref":
+        _ref_images_attempted = len(ref_images)
         image_path = params.get("image_path", "")
         video_path = params.get("video_path", "")
         audio_path = params.get("audio_path", "")
@@ -358,6 +461,14 @@ def run_real(params: dict, emit_progress, is_cancelled) -> dict:
                     _prompt_additions.append(
                         f"@Image{_idx} shows props and accessories — "
                         f"include them in the scene reinterpreted in the film's visual style."
+                    )
+                elif _role == "mood":
+                    _prompt_additions.append(
+                        f"MOOD / LOOK REFERENCE @Image{_idx}: This is the VALIDATED mood "
+                        f"frame for this exact shot. Match its composition, framing, camera "
+                        f"angle, subject placement, lighting and color grade as closely as "
+                        f"possible — animate this precise image into motion. Highest-priority "
+                        f"directive for visual cohesion with the planned shot."
                     )
 
             if _prompt_additions:

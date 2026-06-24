@@ -76,6 +76,24 @@ def _set_palette(app: QApplication):
     app.setPalette(palette)
 
 
+def _force_qt_file_dialogs():
+    """Dialogues de fichiers Qt NON-NATIFS + VIGNETTES d'images (voir ui/file_dialogs).
+
+    Non-natif : le dialogue NATIF Windows passe par le shell COM/OLE ; sur certaines
+    configs cela plante (vu dans %TEMP%\\pandora_fault.log :
+    RPC_E_CANTCALLOUT_ININPUTSYNCCALL 0x8001010d / RPC_E_DISCONNECTED 0x80010108) à
+    l'ouverture d'un import de fichiers. Le dialogue Qt n'utilise pas COM → plus de
+    crash. Vignettes : un QFileIconProvider affiche l'aperçu des images dans
+    l'explorateur (plus pratique pour choisir une image de référence). Les 3 méthodes
+    statiques de QFileDialog sont remplacées par des versions instance — reste inchangé.
+    """
+    try:
+        from ui.file_dialogs import install_thumbnail_file_dialogs
+        install_thumbnail_file_dialogs()
+    except Exception:
+        pass
+
+
 if __name__ == "__main__":
     _install_excepthook()
 
@@ -96,6 +114,7 @@ if __name__ == "__main__":
     qInstallMessageHandler(_qt_msg_handler)
     app = QApplication(sys.argv)
     app.setStyle("Fusion")
+    _force_qt_file_dialogs()   # dialogues Qt non-natifs → évite les crashs COM Windows
     _set_palette(app)
 
     from ui.icons import app_icon
@@ -114,36 +133,50 @@ if __name__ == "__main__":
         _cfg["eula_accepted"] = True
         save_config(_cfg)
 
-    splash = SplashWindow("cinema")
-    if not icon.isNull():
-        splash.setWindowIcon(icon)
-    if get_lang() != "fr":
-        retranslate_widget(splash)
+    # ── Flux de démarrage ──────────────────────────────────────────────────────
+    #   Édition CINÉMA (build distribué) : pas de sélecteur de module, pas de
+    #   Live — SplashWindow("cinema") direct → PandoraWindow.
+    #   Édition COMPLÈTE (dev) : Chooser (Cinéma | Live) → SplashWindow(mode) →
+    #   PandoraWindow ou LiveWindow ; le bouton « retour » du splash y ramène.
+    from core.edition import is_cinema_only
+    _CINEMA_ONLY = is_cinema_only()
 
-    _project_opening = [False]
+    state = {"chooser": None, "splash": None, "window": None, "opening": False}
 
-    def _on_project(data: dict):
-        if _project_opening[0]:
+    def _show_chooser():
+        ch = state["chooser"]
+        if ch is not None:
+            ch.show()
+            ch.raise_()
+            ch.activateWindow()
+
+    def _open_project(data: dict):
+        if state["opening"]:
             return
-        _project_opening[0] = True
-        try:
-            splash.project_selected.disconnect(_on_project)
-        except (RuntimeError, TypeError):
-            pass
-        splash.setEnabled(False)
-        splash.hide()
-        win = PandoraWindow(data)
-        if not icon.isNull():
-            win.setWindowIcon(icon)
-        # _project_opening stays True — blocks any queued splash clicks still in the event queue
+        state["opening"] = True
+        sp = state["splash"]
+        if sp is not None:
+            sp.setEnabled(False)
+            sp.hide()
+
+        mode = data.get("mode", "cinema")
+        if mode == "live" and not _CINEMA_ONLY:
+            from live_window import LiveWindow
+            win = LiveWindow(data)
+        else:
+            win = PandoraWindow(data)
 
         def _on_switch(new_data: dict):
             win.hide()
             win.deleteLater()
-            _project_opening[0] = False  # allow re-entry only for explicit project switch
-            _on_project(new_data)
+            state["opening"] = False  # ré-entrée autorisée seulement sur changement explicite
+            _open_project(new_data)
 
         win.switch_requested.connect(_on_switch)
+
+        if not icon.isNull():
+            win.setWindowIcon(icon)
+        state["window"] = win
         win.showMaximized()
         # Force taskbar icon refresh — Windows sometimes ignores the icon set before show()
         from PyQt6.QtCore import QTimer
@@ -152,16 +185,55 @@ if __name__ == "__main__":
             retranslate_widget(win)
         app._pandora = win
 
-    splash.back_requested.connect(lambda: sys.exit(0))
-    splash.project_selected.connect(_on_project)
-    splash.show()
-    app._splash = splash
+    def _show_splash(mode: str):
+        ch = state["chooser"]
+        if ch is not None:
+            ch.hide()
+        # En édition Cinéma : pas de bouton « retour » (aucun sélecteur derrière)
+        sp = SplashWindow(mode, show_back=not _CINEMA_ONLY)
+        if not icon.isNull():
+            sp.setWindowIcon(icon)
+        if get_lang() != "fr":
+            retranslate_widget(sp)
+        state["splash"] = sp
+        state["opening"] = False
+
+        def _back():
+            sp.hide()
+            sp.deleteLater()
+            state["splash"] = None
+            _show_chooser()
+
+        sp.back_requested.connect(_back)
+        sp.project_selected.connect(_open_project)
+        sp.show()
+        sp.raise_()
+        sp.activateWindow()
+
+    if _CINEMA_ONLY:
+        # Édition Cinéma : splash Cinéma direct, sans jamais importer le
+        # sélecteur de module ni le Live.
+        _show_splash("cinema")
+    else:
+        from ui.chooser import ChooserWindow
+        chooser = ChooserWindow()
+        if not icon.isNull():
+            chooser.setWindowIcon(icon)
+        if get_lang() != "fr":
+            retranslate_widget(chooser)
+        chooser.cinema_requested.connect(lambda: _show_splash("cinema"))
+        chooser.live_requested.connect(lambda: _show_splash("live"))
+        chooser.lang_changed.connect(lambda _c: retranslate_widget(chooser))
+        state["chooser"] = chooser
+        chooser.show()
+        app._chooser = chooser
 
     from api.update_check import UpdateCheckWorker
     from ui.splash import UpdateDialog
 
     def _on_update_available(version: str, url: str):
-        dlg = UpdateDialog(version, url, splash)
+        parent = state["window"] or state["splash"] or state["chooser"]
+        dlg = UpdateDialog(version, url, parent)
         dlg.exec()
 
     _upd = UpdateCheckWorker()

@@ -35,3 +35,29 @@ def get_data_root() -> str:
     if p:
         return os.path.join(p, "data")
     return os.path.join(_PLUGIN_ROOT, "data")
+
+
+def get_project_name() -> str:
+    """Nom lisible du projet courant (depuis son descripteur racine, sans effet de
+    bord), ou "" si aucun projet n'est ouvert. Repli sur le nom du dossier."""
+    p = _project_path
+    if not p or not os.path.isdir(p):
+        return ""
+    import json
+    try:
+        for fname in sorted(os.listdir(p)):
+            if not fname.endswith(".json"):
+                continue
+            fpath = os.path.join(p, fname)
+            if not os.path.isfile(fpath):
+                continue
+            try:
+                with open(fpath, "r", encoding="utf-8") as f:
+                    data = json.load(f)
+            except Exception:
+                continue
+            if isinstance(data, dict) and data.get("id") and data.get("name"):
+                return str(data["name"]).strip()
+    except OSError:
+        pass
+    return os.path.basename(os.path.normpath(p))
