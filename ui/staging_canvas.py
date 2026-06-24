@@ -157,7 +157,18 @@ class StagingCanvas(QGraphicsView):
         self.setRenderHint(QPainter.RenderHint.Antialiasing, True)
         self.setStyleSheet(f"background:{CP['bg2']};border:1px solid {CP['border']};border-radius:8px;")
         self.setMinimumHeight(420)
-        self.scene().selectionChanged.connect(self.selection.emit)
+        # NB : on relaie via une vraie méthode liée (PAS self.selection.emit
+        # directement). Qt déconnecte automatiquement les slots-méthodes quand
+        # leur QObject receveur est détruit ; connecter le .emit nu laissait la
+        # scène émettre sur un StagingCanvas à moitié détruit à la fermeture de
+        # l'app → AttributeError "does not have a signal selection()".
+        self.scene().selectionChanged.connect(self._relay_selection)
+
+    def _relay_selection(self):
+        try:
+            self.selection.emit()
+        except RuntimeError:
+            pass  # objet en cours de destruction (teardown app) — sans effet
 
     def set_tool(self, tool: str):
         self._tool = "rotate" if tool == "rotate" else "move"
