@@ -3336,6 +3336,28 @@ class TabT2V(QScrollArea):
         self._refresh_prompt_preview()
         self._preview_translate_timer.start()
 
+    def _sync_film_anchor_with_style(self):
+        """En style « Film réaliste », la prise de vue réelle est déjà incluse dans le
+        rendu → on coche AUTOMATIQUEMENT le toggle « Prise de vue réelle » de RENDU &
+        AUDIO pour le signaler. On ne fait que cocher (jamais décocher) : hors de ce
+        style, le choix de l'utilisateur est laissé intact."""
+        cb = getattr(self, "_film_anchor_cb", None)
+        if cb is None:
+            return
+        try:
+            import core.style as _sa
+            realistic = _sa.get_style_key() in {"realistic"}
+        except Exception:
+            realistic = False
+        if realistic and not cb.isChecked():
+            cb.setChecked(True)   # déclenche _refresh_prompt_preview via stateChanged
+
+    def showEvent(self, e):
+        super().showEvent(e)
+        # À chaque retour sur l'onglet : si le style « Film réaliste » est actif, la
+        # prise de vue réelle est cochée d'office (le style peut avoir changé ailleurs).
+        self._sync_film_anchor_with_style()
+
     def _refresh_prompt_preview(self, *_):
         if not hasattr(self, "_preview_body") or not self._preview_expanded:
             return

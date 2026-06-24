@@ -2580,6 +2580,39 @@ def plan_decor_variation_import_resync():
     assert "Créer une variation (calée sur l'ensemble)" in i18n._FR_TO_EN
 
 
+@test
+def film_reel_auto_coche_en_style_realiste():
+    """RENDU & AUDIO : en style « Film réaliste » (key 'realistic'), le toggle
+    « Prise de vue réelle » se coche automatiquement. On ne décoche jamais hors
+    de ce style (choix de l'utilisateur préservé). showEvent déclenche la synchro."""
+    import inspect
+    import core.style as style
+    from PyQt6.QtWidgets import QApplication, QCheckBox
+    QApplication.instance() or QApplication([])
+    import ui.tab_t2v as T
+
+    class _Stub:
+        pass
+    s = _Stub()
+    s._film_anchor_cb = QCheckBox()
+    _orig = style.get_style_key
+    try:
+        style.get_style_key = lambda: "realistic"
+        T.TabT2V._sync_film_anchor_with_style(s)
+        assert s._film_anchor_cb.isChecked(), "non coché en style réaliste"
+        # Hors style réaliste : on ne décoche PAS ce qui est coché.
+        style.get_style_key = lambda: "noir"
+        T.TabT2V._sync_film_anchor_with_style(s)
+        assert s._film_anchor_cb.isChecked(), "ne doit pas décocher hors réaliste"
+        # Décoché + style non réaliste → reste décoché.
+        s._film_anchor_cb.setChecked(False)
+        T.TabT2V._sync_film_anchor_with_style(s)
+        assert not s._film_anchor_cb.isChecked(), "ne doit pas cocher hors réaliste"
+    finally:
+        style.get_style_key = _orig
+    assert "_sync_film_anchor_with_style" in inspect.getsource(T.TabT2V.showEvent)
+
+
 # ══════════════════════════════════════════════════════════════════════════════
 # Runner
 # ══════════════════════════════════════════════════════════════════════════════
