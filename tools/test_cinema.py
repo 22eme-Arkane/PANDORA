@@ -2482,6 +2482,25 @@ def sync_storyboard_casting_accessoires_vehicules():
         assert lab in i18n._FR_TO_EN, lab
 
 
+@test
+def file_dialogs_non_natifs_anti_crash_com():
+    """Crash Windows à l'import de fichiers (« Importer des fichiers audio », etc.) :
+    les dialogues NATIFS passent par le shell COM → RPC_E_CANTCALLOUT_ININPUTSYNCCALL
+    (0x8001010d) / RPC_E_DISCONNECTED (0x80010108) dans pandora_fault.log. main.py force
+    les dialogues Qt NON-NATIFS (DontUseNativeDialog) au démarrage."""
+    import os
+    root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    with open(os.path.join(root, "main.py"), encoding="utf-8") as f:
+        src = f.read()
+    assert "def _force_qt_file_dialogs" in src, "patch dialogues non-natifs absent"
+    assert "DontUseNativeDialog" in src, "option non-native manquante"
+    assert "_force_qt_file_dialogs()   # dialogues Qt non-natifs" in src, \
+        "patch non appelé au démarrage"
+    # Couvre ouverture (simple + multiple) ET sauvegarde
+    for m in ("getOpenFileName", "getOpenFileNames", "getSaveFileName"):
+        assert m in src, "méthode non couverte : " + m
+
+
 # ══════════════════════════════════════════════════════════════════════════════
 # Runner
 # ══════════════════════════════════════════════════════════════════════════════
