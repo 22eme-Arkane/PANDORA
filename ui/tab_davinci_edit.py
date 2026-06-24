@@ -1500,6 +1500,10 @@ class TabDavinciEdit(QScrollArea):
                 self._draw_images[idx] = rp
                 self._draw_overlays[idx] = dlg.overlay_path()
                 self._draw_frames[idx] = dlg.frame_index()
+                # Le clip dessiné devient ACTIF — sinon, en mono-clip non explicitement
+                # sélectionné, `idx` venait du repli (=0) mais `_active_clip_idx` restait
+                # None → la vignette (qui suit _active_clip_idx) ne s'affichait pas.
+                self._active_clip_idx = idx
                 # Plus de pop-up : la vignette du dessin (à droite du prompt) confirme
                 # visuellement que l'opération est prise en compte.
                 self._refresh_draw_thumb()

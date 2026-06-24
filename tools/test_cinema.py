@@ -2526,6 +2526,8 @@ def draw_to_video_vignette_remplace_popup():
     oh = inspect.getsource(M.TabDavinciEdit._on_draw_to_video)
     assert "_refresh_draw_thumb()" in oh, "vignette non rafraîchie après dessin"
     assert "Dessin enregistré pour" not in oh, "pop-up de validation encore présent"
+    # Le clip dessiné devient ACTIF (sinon, mono-clip non sélectionné → vignette invisible)
+    assert "self._active_clip_idx = idx" in oh, "clip dessiné non marqué actif (vignette KO)"
     # Dessiner → vignette ; croix → retirée
     d = tempfile.mkdtemp(); p = os.path.join(d, "a.png"); QPixmap(60, 60).save(p)
     tab._active_clip_idx = 0
