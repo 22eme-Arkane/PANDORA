@@ -2713,6 +2713,35 @@ def edit_clip_duree_calee_sur_source():
     assert "target_duration" in inspect.getsource(M.TabDavinciEdit._start_lipsync)
 
 
+@test
+def edit_clip_rendu_audio_et_modeles():
+    """Modifier un clip : section repliable RENDU & AUDIO contenant le lip-sync, et
+    menu déroulant « Type de modification » qui insère un modèle de prompt (décor /
+    visage / étalonnage / tenue) dans le prompt global."""
+    from PyQt6.QtWidgets import QApplication
+    QApplication.instance() or QApplication([])
+    import ui.tab_davinci_edit as M
+    tab = M.TabDavinciEdit()
+    # 1) RENDU & AUDIO repliable + lip-sync à l'intérieur
+    assert hasattr(tab, "_ra_container") and hasattr(tab, "_ra_body"), "section RENDU & AUDIO absente"
+    assert tab._cb_lipsync is not None, "lip-sync absent"
+    assert tab._ra_body.isAncestorOf(tab._lipsync_toggle_row), "lip-sync hors de RENDU & AUDIO"
+    assert not tab._ra_body.isVisible(), "RENDU & AUDIO doit être replié par défaut"
+    # 2) menu déroulant des 4 modèles + invite
+    keys = [tab._mod_combo.itemData(i) for i in range(tab._mod_combo.count())]
+    assert keys[0] == "" and set(keys) >= {"bg", "face", "grade", "outfit"}, keys
+    # 3) insertion d'un modèle dans le prompt global + reset du sélecteur
+    tab._prompt_global.setPlainText("")
+    tab._on_mod_template(keys.index("face"))
+    txt = tab._prompt_global.toPlainText().lower()
+    assert "@video1" in txt and "@image1" in txt and "visage" in txt, txt[:80]
+    assert tab._mod_combo.currentIndex() == 0, "le sélecteur doit revenir sur l'invite"
+    # non destructif : 2e insertion à la suite
+    tab._on_mod_template(keys.index("bg"))
+    full = tab._prompt_global.toPlainText().lower()
+    assert "visage" in full and "arrière-plan" in full, "insertion non cumulative"
+
+
 # ══════════════════════════════════════════════════════════════════════════════
 # Runner
 # ══════════════════════════════════════════════════════════════════════════════

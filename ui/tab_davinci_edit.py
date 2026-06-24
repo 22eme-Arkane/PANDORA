@@ -43,6 +43,30 @@ from ui.tab_t2v import (
 _INBOX = os.path.join(os.environ.get("TEMP", tempfile.gettempdir()), "pandora_clips_inbox.json")
 
 
+# Modèles de prompt « Type de modification » (Modifier un clip). Cas les plus courants.
+# Balises Seedance : @Video1 = clip d'origine (ajouté auto), @Image1 = image de
+# référence. Structure « reprends tout de @Video1, ne change QUE X » → cible la
+# modification sans tout régénérer. Texte FR traduit à l'affichage (i18n) et à l'envoi.
+_MOD_TEMPLATES = {
+    "bg": ("Reprends exactement @Video1 — mêmes personnages, mouvements, cadrage et "
+           "lumière sur les sujets. Remplace UNIQUEMENT le décor / l'arrière-plan par "
+           "celui de @Image1. Garde la même intégration lumineuse et les mêmes ombres "
+           "sur les personnages. Ne change rien d'autre."),
+    "face": ("Reprends exactement @Video1 — mêmes mouvements, cadrage, lumière, décor, "
+             "vêtements et morphologie. Remplace UNIQUEMENT le visage et l'identité du "
+             "personnage par celui de @Image1. Garde la même expression, la même "
+             "direction du regard et le même éclairage sur le visage. Ne change rien d'autre."),
+    "grade": ("Reprends exactement @Video1 — même scène, mouvements, cadrage et sujets, "
+              "à l'identique. Change UNIQUEMENT l'étalonnage colorimétrique : [décris le "
+              "look, ex. teal & orange cinématographique / heure dorée chaude / désaturé "
+              "froid]. Ne modifie ni la composition ni les sujets."),
+    "outfit": ("Reprends exactement @Video1 — mêmes personnages, visages, mouvements, "
+               "cadrage, décor et lumière. Remplace UNIQUEMENT la tenue / les vêtements "
+               "du personnage par celle de @Image1 (ou décris la tenue voulue). Garde la "
+               "même morphologie et un tissu cohérent avec le mouvement. Ne change rien d'autre."),
+}
+
+
 # ── Placeholder coloré ────────────────────────────────────────────────────────
 
 _THUMB_COLORS = [
@@ -762,6 +786,32 @@ class TabDavinciEdit(QScrollArea):
         _pg_prompt_row.addWidget(self._btn_draw, 0, Qt.AlignmentFlag.AlignTop)
         _pg_lay.addLayout(_pg_prompt_row)
 
+        # ── Type de modification : insère un modèle de prompt prêt à l'emploi ──
+        _mod_row = QHBoxLayout()
+        _mod_row.setContentsMargins(0, 10, 0, 0)
+        _mod_row.setSpacing(8)
+        _mod_lbl = QLabel(translate("Type de modification"))
+        _mod_lbl.setStyleSheet(
+            f"color:{C['text_secondary']};font-size:11px;background:transparent;border:none;")
+        self._mod_combo = QComboBox()
+        self._mod_combo.addItem(translate("✎ Insérer un modèle…"), "")
+        self._mod_combo.addItem(translate("Changer le décor (arrière-plan)"), "bg")
+        self._mod_combo.addItem(translate("Changer un visage"), "face")
+        self._mod_combo.addItem(translate("Changer l'étalonnage (couleurs)"), "grade")
+        self._mod_combo.addItem(translate("Changer la tenue (vêtements)"), "outfit")
+        self._mod_combo.setStyleSheet(
+            f"QComboBox{{background:{C['bg2']};color:{C['text_primary']};"
+            f"border:1px solid {C['border']};border-radius:6px;padding:4px 8px;font-size:11px;}}"
+            f"QComboBox QAbstractItemView{{background:{C['bg2']};color:{C['text_primary']};"
+            f"selection-background-color:{C['accent_dim']};}}")
+        self._mod_combo.setToolTip(translate(
+            "Insère un modèle de prompt (balises @Video1 = clip d'origine, "
+            "@Image1 = image de référence) — à compléter ensuite."))
+        self._mod_combo.activated.connect(self._on_mod_template)
+        _mod_row.addWidget(_mod_lbl)
+        _mod_row.addWidget(self._mod_combo, 1)
+        _pg_lay.addLayout(_mod_row)
+
         # Ref image — prompt global (carré Casting style)
         _pg_ref_hdr = QHBoxLayout()
         _pg_ref_hdr.setContentsMargins(0, 8, 0, 4)
@@ -957,8 +1007,42 @@ class TabDavinciEdit(QScrollArea):
 
         lay.addWidget(sec_prompt)
 
-        # ── Resynchroniser les lèvres (LatentSync) ────────────────────────────
+        # ── RENDU & AUDIO (section repliable) ──────────────────────────────────
         from api.lipsync import ffmpeg_available as _ffmpeg_ok
+        self._ra_container = QFrame()
+        self._ra_container.setObjectName("ra_container")
+        self._ra_container.setStyleSheet(
+            f"QFrame#ra_container{{background:{C['bg2']};border:1px solid {C['border']};"
+            f"border-radius:8px;}}")
+        _ra_lay = QVBoxLayout(self._ra_container)
+        _ra_lay.setContentsMargins(0, 0, 0, 0)
+        _ra_lay.setSpacing(1)
+
+        self._ra_open = False   # replié par défaut
+        self._ra_toggle_btn = QPushButton("▶  RENDU & AUDIO")
+        self._ra_toggle_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._ra_toggle_btn.setStyleSheet(
+            f"QPushButton{{background:transparent;color:{C['accent']};border:none;"
+            f"text-align:left;font-size:9px;letter-spacing:2px;"
+            f"font-family:'Consolas',monospace;font-weight:700;padding:8px 14px 6px 14px;}}"
+            f"QPushButton:hover{{color:{C['accent_dim']};}}")
+        _ra_lay.addWidget(self._ra_toggle_btn)
+
+        self._ra_body = QWidget()
+        self._ra_body.setStyleSheet("background:transparent;border:none;")
+        _ra_body_lay = QVBoxLayout(self._ra_body)
+        _ra_body_lay.setContentsMargins(0, 0, 0, 0)
+        _ra_body_lay.setSpacing(1)
+        self._ra_body.setVisible(False)
+        _ra_lay.addWidget(self._ra_body)
+
+        def _toggle_ra(*_a):
+            self._ra_open = not self._ra_open
+            self._ra_body.setVisible(self._ra_open)
+            self._ra_toggle_btn.setText(("▼" if self._ra_open else "▶") + "  RENDU & AUDIO")
+        self._ra_toggle_btn.clicked.connect(_toggle_ra)
+
+        # Resynchroniser les lèvres (LatentSync) — DANS le corps de RENDU & AUDIO.
         self._lipsync_toggle_row = toggle_row(
             "Resynchroniser les lèvres",
             "Synchronisation labiale LatentSync — ⚠ réencode (qualité moindre) + audio sur piste séparée",
@@ -978,7 +1062,8 @@ class TabDavinciEdit(QScrollArea):
                 "Importe la vidéo lip-synced + la piste audio séparément dans DaVinci.\n"
                 "Décoche pour garder le clip Seedance brut (un seul fichier, pleine qualité)."
             )
-        lay.addWidget(self._lipsync_toggle_row)
+        _ra_body_lay.addWidget(self._lipsync_toggle_row)
+        lay.addWidget(self._ra_container)
 
         # ── Contrôles créatifs ────────────────────────────────────────────────
         self._creative = SeedanceCreativePanel()
@@ -1879,6 +1964,20 @@ class TabDavinciEdit(QScrollArea):
             card.set_status("")
 
         self._process_next()
+
+    def _on_mod_template(self, idx: int):
+        """Insère le modèle de prompt « Type de modification » choisi dans le prompt
+        global (action : le sélecteur revient ensuite sur l'invite). Non destructif :
+        ajoute à la suite du texte existant. Balises Seedance @Video1/@Image1."""
+        key = self._mod_combo.itemData(idx)
+        if not key:
+            return
+        tpl = translate(_MOD_TEMPLATES.get(key, ""))
+        if not tpl:
+            return
+        cur = self._prompt_global.toPlainText().strip()
+        self._prompt_global.setPlainText((cur + "\n" + tpl) if cur else tpl)
+        self._mod_combo.setCurrentIndex(0)
 
     def _source_gen_duration(self, clip_idx: int) -> int:
         """Durée de régénération Seedance calée sur le clip SOURCE (sondée par ffprobe,

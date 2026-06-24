@@ -1035,6 +1035,15 @@ _FR_TO_EN: dict[str, str] = {
     "Resynchroniser les lèvres":     "Resync lips",
     "Synchronisation labiale LatentSync — ⚠ réencode (qualité moindre) + audio sur piste séparée":
         "LatentSync lip sync — ⚠ re-encodes (lower quality) + audio on a separate track",
+    # ── Modifier un clip : « Type de modification » (modèles de prompt) ─────────
+    "Type de modification":          "Modification type",
+    "✎ Insérer un modèle…":          "✎ Insert a template…",
+    "Changer le décor (arrière-plan)": "Change the set (background)",
+    "Changer un visage":             "Change a face",
+    "Changer l'étalonnage (couleurs)": "Change the color grade",
+    "Changer la tenue (vêtements)":  "Change the outfit (clothing)",
+    "Insère un modèle de prompt (balises @Video1 = clip d'origine, @Image1 = image de référence) — à compléter ensuite.":
+        "Inserts a prompt template (tags @Video1 = source clip, @Image1 = reference image) — fill it in afterwards.",
 
     # ── Tab Kling & PixVerse ─────────────────────────────────────────────────────
     "Kling v3 Pro I2V":              "Kling v3 Pro I2V",
