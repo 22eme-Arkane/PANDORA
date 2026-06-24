@@ -1773,7 +1773,7 @@ class TabDavinciEdit(QScrollArea):
             self._last_seed = None
 
         total = len(self._queue)
-        n_clips = len(checked)
+        n_clips = len(selected)
         n_prises = self._spin_prises.value()
         self._lbl_queue_info.setText(
             f"File d'attente : {n_clips} clip(s) × {n_prises} prise(s) = {total} génération(s)  —  "

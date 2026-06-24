@@ -2501,6 +2501,16 @@ def file_dialogs_non_natifs_anti_crash_com():
         assert m in src, "méthode non couverte : " + m
 
 
+@test
+def davinci_edit_lancement_sans_nameerror():
+    """« Modifier depuis DaVinci » : le lancement de la file ne référence aucune variable
+    inexistante (régression NameError « name 'checked' is not defined » au clic
+    « Lancer la file d'attente » — la liste des clips s'appelle `selected`)."""
+    import inspect
+    src = inspect.getsource(__import__("ui.tab_davinci_edit", fromlist=["_"]))
+    assert "len(checked)" not in src, "NameError : 'checked' non défini (utiliser `selected`)"
+
+
 # ══════════════════════════════════════════════════════════════════════════════
 # Runner
 # ══════════════════════════════════════════════════════════════════════════════
