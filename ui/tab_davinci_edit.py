@@ -1238,6 +1238,9 @@ class TabDavinciEdit(QScrollArea):
         self._draw_images = {}
         self._draw_overlays = {}
         self._draw_frames = {}
+        # Durée de régénération calée sur le clip source (par index), réutilisée par
+        # le lip-sync pour aligner l'audio sur la vidéo.
+        self._gen_durations = {}
         # Déconnecte les workers de miniatures précédents pour éviter les callbacks périmés
         for w in self._thumb_workers:
             try:
@@ -1875,6 +1878,19 @@ class TabDavinciEdit(QScrollArea):
 
         self._process_next()
 
+    def _source_gen_duration(self, clip_idx: int) -> int:
+        """Durée de régénération Seedance calée sur le clip SOURCE (sondée par ffprobe,
+        bornée 4–15 s — contrainte API). Repli 5 s si la durée est introuvable."""
+        try:
+            clip = self._clips_data[clip_idx]
+            from core.video_utils import video_duration_s
+            d = video_duration_s(clip.get("file_path", ""))
+            if d and d > 0:
+                return max(4, min(15, round(d)))
+        except Exception:
+            pass
+        return 5
+
     def _process_next(self):
         if self._queue_pos >= len(self._queue):
             self._on_queue_done()
@@ -1910,12 +1926,17 @@ class TabDavinciEdit(QScrollArea):
         if has_video and "@Video1" not in prompt:
             prompt = f"@Video1 {prompt}" if prompt else "@Video1"
 
+        # Durée calée sur le clip SOURCE (Seedance n'accepte que 4–15 s) → la version
+        # régénérée respecte la longueur de l'original au lieu d'un 5 s figé.
+        gen_dur = self._source_gen_duration(clip_idx)
+        self._gen_durations[clip_idx] = gen_dur
+
         params = {
             "mode":         "ext" if has_video else "t2v",
             "direction":    "new_take",
             "prompt":       prompt,
             "model":        self._get_model(),
-            "duration":     5,
+            "duration":     gen_dur,
             "resolution":   (self._cb_res.currentData() or self._cb_res.currentText().split()[0]),
             "aspect_ratio": self._get_aspect_ratio(),
         }
@@ -2013,6 +2034,9 @@ class TabDavinciEdit(QScrollArea):
             source_video_path = self._clips_data[clip_idx].get("file_path", ""),
             output_dir        = get_output_dir(),
             shot_name         = clip_name,
+            # Cale l'audio sur la durée EXACTE de la vidéo régénérée (= durée du clip
+            # source, bornée 4–15 s) → son et image synchrones, durée de sortie nette.
+            target_duration   = self._gen_durations.get(clip_idx, 0.0),
         )
         self._lipsync_worker.progress.connect(self._on_lipsync_progress)
         self._lipsync_worker.finished.connect(

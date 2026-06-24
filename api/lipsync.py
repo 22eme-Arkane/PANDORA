@@ -108,6 +108,21 @@ def extract_audio_wav(video_path: str, wav_out: str) -> bool:
     return ok and os.path.isfile(wav_out) and os.path.getsize(wav_out) > 0
 
 
+def conform_audio_duration(wav_in: str, wav_out: str, dur: float) -> bool:
+    """Cale un WAV à EXACTEMENT `dur` secondes : complète au silence si trop court
+    (`apad`), coupe si trop long (`atrim`) → l'audio adopte la durée de la vidéo
+    régénérée (son et image synchrones, durée de sortie nette)."""
+    if not dur or dur <= 0:
+        return False
+    ok = _run_ffmpeg(
+        "-i", wav_in,
+        "-af", f"apad,atrim=0:{dur:g}",
+        "-acodec", "pcm_s16le", "-ar", "44100", "-ac", "1",
+        wav_out,
+    )
+    return ok and os.path.isfile(wav_out) and os.path.getsize(wav_out) > 0
+
+
 def demux_video_audio(input_path: str, video_out: str, audio_out: str) -> bool:
     """Sépare vidéo muette + piste audio WAV depuis un MP4 lip-synced."""
     ok_v = _run_ffmpeg(
@@ -149,7 +164,8 @@ class LipSyncWorker(QThread):
 
     def __init__(self, video_url: str, source_video_path: str = "",
                  output_dir: str = "", shot_name: str = "",
-                 engine: str = "", audio_path: str = ""):
+                 engine: str = "", audio_path: str = "",
+                 target_duration: float = 0.0):
         super().__init__()
         self._video_url          = video_url
         self._source_video_path  = source_video_path
@@ -157,6 +173,9 @@ class LipSyncWorker(QThread):
         self._shot_name          = shot_name or "lipsync"
         self._engine             = engine or get_lipsync_engine()
         self._audio_path         = audio_path
+        # Si > 0 : on cale l'audio à cette durée (= durée de la vidéo régénérée)
+        # avant le lip-sync → son et image synchrones, durée de sortie nette.
+        self._target_duration    = float(target_duration or 0.0)
 
     def run(self):
         tmp_dir = tempfile.mkdtemp(prefix="pandora_lipsync_")
@@ -197,6 +216,13 @@ class LipSyncWorker(QThread):
                     "fichier), ou un clip source avec piste audio (+ ffmpeg installé)."
                 )
                 return
+
+        # ── 1b. Alignement durée : cale l'audio sur la durée de la vidéo régénérée
+        #        (son et image synchrones, durée de sortie nette). No-op si non demandé.
+        if self._target_duration and self._target_duration > 0:
+            wav_conf = os.path.join(tmp_dir, "audio_conformed.wav")
+            if conform_audio_duration(wav_src, wav_conf, self._target_duration):
+                wav_src = wav_conf
 
         # ── 2. Upload audio vers fal.ai (robuste non-ASCII + fallback data-URL) ─
         self.progress.emit(20, "Upload audio vers fal.ai…")

@@ -2676,6 +2676,43 @@ def file_dialog_vignettes_images():
         assert f"QFileDialog.{m}" in src, f"static {m} non remplacée"
 
 
+@test
+def edit_clip_duree_calee_sur_source():
+    """« Modifier un clip » : la durée de régénération est calée sur le clip SOURCE
+    (ffprobe, bornée 4–15 s) au lieu d'un 5 s figé. En lip-sync, l'audio est aligné
+    sur cette durée (conform_audio_duration + target_duration au worker)."""
+    import inspect
+    import core.video_utils as vu
+    import ui.tab_davinci_edit as M
+
+    class _Stub:
+        pass
+    s = _Stub()
+    s._clips_data = [{"file_path": "x.mp4"}]
+    _orig = vu.video_duration_s
+    try:
+        vu.video_duration_s = lambda p: 8.4
+        assert M.TabDavinciEdit._source_gen_duration(s, 0) == 8, "arrondi"
+        vu.video_duration_s = lambda p: 2.0
+        assert M.TabDavinciEdit._source_gen_duration(s, 0) == 4, "borne min 4 s"
+        vu.video_duration_s = lambda p: 40.0
+        assert M.TabDavinciEdit._source_gen_duration(s, 0) == 15, "borne max 15 s"
+        vu.video_duration_s = lambda p: 0.0
+        assert M.TabDavinciEdit._source_gen_duration(s, 0) == 5, "repli 5 s"
+    finally:
+        vu.video_duration_s = _orig
+    # Plus de durée figée : _process_next utilise la durée calée + la mémorise.
+    src_pn = inspect.getsource(M.TabDavinciEdit._process_next)
+    assert "_source_gen_duration(clip_idx)" in src_pn, "durée non calée sur la source"
+    assert '"duration":     gen_dur' in src_pn, "params['duration'] encore figé"
+    # Lip-sync : worker accepte target_duration + cale l'audio.
+    import api.lipsync as LS
+    assert hasattr(LS, "conform_audio_duration"), "helper d'alignement audio absent"
+    assert "target_duration" in inspect.signature(LS.LipSyncWorker.__init__).parameters
+    assert "conform_audio_duration" in inspect.getsource(LS.LipSyncWorker._run)
+    assert "target_duration" in inspect.getsource(M.TabDavinciEdit._start_lipsync)
+
+
 # ══════════════════════════════════════════════════════════════════════════════
 # Runner
 # ══════════════════════════════════════════════════════════════════════════════

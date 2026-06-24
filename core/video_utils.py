@@ -457,6 +457,23 @@ def _video_dims(path: str) -> tuple | None:
         return None
 
 
+def video_duration_s(path: str) -> float:
+    """Durée en secondes d'un fichier vidéo via ffprobe (format=duration), ou 0.0
+    si indisponible (fichier absent, ffprobe absent, conteneur sans durée)."""
+    if not path or not os.path.isfile(path):
+        return 0.0
+    try:
+        r = subprocess.run(
+            [get_ffprobe_exe(), "-v", "error", "-show_entries", "format=duration",
+             "-of", "csv=p=0", path],
+            capture_output=True, text=True, timeout=10, creationflags=_NO_WINDOW)
+        if r.returncode != 0:
+            return 0.0
+        return float(r.stdout.strip().split(",")[0])
+    except Exception:
+        return 0.0
+
+
 # Hauteur max envoyée aux moteurs. Seedance, Kling, PixVerse, Wan, Hailuo, LTX,
 # Happy Horse, Veo, Sora… plafonnent tous à 1080p en entrée — au-delà = upload
 # inutilement lourd et risques de rejet. On redimensionne à la volée si besoin.
