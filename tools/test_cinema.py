@@ -2750,10 +2750,10 @@ def edit_clip_rendu_audio_et_modeles():
     txt = tab._prompt_global.toPlainText().lower()
     assert "@video1" in txt and "étalonnage" in txt, txt[:80]
     assert tab._mod_combo.currentIndex() == 0, "le sélecteur doit revenir sur l'invite (modèle Seedance)"
-    # non destructif : 2e insertion à la suite
-    tab._on_mod_template(keys.index("bg"))
+    # non destructif : 2e insertion à la suite (tenue = modèle Seedance ponctuel)
+    tab._on_mod_template(keys.index("outfit"))
     full = tab._prompt_global.toPlainText().lower()
-    assert "étalonnage" in full and "arrière-plan" in full, "insertion non cumulative"
+    assert "étalonnage" in full and "tenue" in full, "insertion non cumulative"
 
 
 @test
@@ -2771,17 +2771,25 @@ def edit_clip_face_swap_pixverse():
     QApplication.instance() or QApplication([])
     import ui.tab_davinci_edit as M
     tab = M.TabDavinciEdit()
+    # mode background aussi pris en charge (« Changer le décor » → Pixverse Swap)
+    wb = FS.PixverseSwapWorker("v.mp4", "b.png", mode="background")
+    assert wb._mode == "background"
     keys = [tab._mod_combo.itemData(i) for i in range(tab._mod_combo.count())]
-    fidx = keys.index("face")
     tab._prompt_global.setPlainText("")
-    tab._mod_combo.setCurrentIndex(fidx)
-    tab._on_mod_template(fidx)
-    assert tab._is_face_swap_mode(), "mode face-swap non actif"
+    # « Changer un visage » → mode persistant person, pas de template
+    tab._mod_combo.setCurrentIndex(keys.index("face"))
+    tab._on_mod_template(keys.index("face"))
+    assert tab._pixverse_swap_mode() == "person", "mode face-swap non actif"
     assert tab._mod_combo.currentData() == "face", "le sélecteur doit RESTER sur « Changer un visage »"
     assert tab._prompt_global.toPlainText() == "", "face-swap ne doit pas insérer de template Seedance"
     assert not tab._modif_hint.isHidden(), "indice face-swap non affiché"   # isVisible() faux si fenêtre non montrée
+    # « Changer le décor » → mode persistant background
+    tab._mod_combo.setCurrentIndex(keys.index("bg"))
+    tab._on_mod_template(keys.index("bg"))
+    assert tab._pixverse_swap_mode() == "background", "mode décor non actif"
+    assert tab._prompt_global.toPlainText() == "", "décor (Pixverse) ne doit pas insérer de template Seedance"
     src = inspect.getsource(M.TabDavinciEdit._process_next)
-    assert "_is_face_swap_mode()" in src and "PixverseSwapWorker" in src, "routage Pixverse absent de _process_next"
+    assert "_pixverse_swap_mode()" in src and "PixverseSwapWorker" in src, "routage Pixverse absent de _process_next"
 
 
 # ══════════════════════════════════════════════════════════════════════════════

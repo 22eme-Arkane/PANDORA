@@ -2005,13 +2005,14 @@ class TabDavinciEdit(QScrollArea):
         self._process_next()
 
     def _on_mod_template(self, idx: int):
-        """« Type de modification ». « Changer un visage » bascule sur un AUTRE moteur
-        (Pixverse Swap) → mode PERSISTANT (routé dans _process_next), sans template.
-        Les autres entrées insèrent un modèle de prompt Seedance (action ponctuelle,
-        non destructive — ajoutée à la suite ; le sélecteur revient sur l'invite)."""
+        """« Type de modification ». « Changer un visage » et « Changer le décor »
+        basculent sur un AUTRE moteur (Pixverse Swap) → mode PERSISTANT (routé dans
+        _process_next), sans template. Les autres entrées (étalonnage / tenue) insèrent
+        un modèle de prompt Seedance (action ponctuelle, non destructive ; le sélecteur
+        revient sur l'invite)."""
         key = self._mod_combo.itemData(idx)
-        if key == "face":
-            self._refresh_modif_hint()   # mode face-swap actif, persistant
+        if key in ("face", "bg"):
+            self._refresh_modif_hint()   # mode Pixverse Swap actif, persistant
             return
         if key:
             tpl = translate(_MOD_TEMPLATES.get(key, ""))
@@ -2021,22 +2022,29 @@ class TabDavinciEdit(QScrollArea):
             self._mod_combo.setCurrentIndex(0)
         self._refresh_modif_hint()
 
+    def _pixverse_swap_mode(self) -> str:
+        """'person' si « Changer un visage », 'background' si « Changer le décor »,
+        '' sinon (= flux Seedance normal)."""
+        if getattr(self, "_mod_combo", None) is None:
+            return ""
+        return {"face": "person", "bg": "background"}.get(self._mod_combo.currentData(), "")
+
     def _refresh_modif_hint(self):
-        """Affiche l'indice « face-swap » quand le mode « Changer un visage » est actif."""
+        """Affiche l'indice « Pixverse Swap » quand un mode visage/décor est actif."""
         if not hasattr(self, "_modif_hint"):
             return
-        face = (getattr(self, "_mod_combo", None) is not None
-                and self._mod_combo.currentData() == "face")
-        self._modif_hint.setVisible(face)
-        if face:
+        mode = self._pixverse_swap_mode()
+        self._modif_hint.setVisible(bool(mode))
+        if mode == "person":
             self._modif_hint.setText(translate(
                 "Mode face-swap (Pixverse Swap) : l'image de référence remplace le visage "
                 "du clip SANS régénérer la scène. Ajoute le nouveau visage en « Image de "
                 "référence ». (Seedance non utilisé · 720p max · audio conservé.)"))
-
-    def _is_face_swap_mode(self) -> bool:
-        return (getattr(self, "_mod_combo", None) is not None
-                and self._mod_combo.currentData() == "face")
+        elif mode == "background":
+            self._modif_hint.setText(translate(
+                "Mode remplacement de fond (Pixverse Swap) : l'image de référence remplace "
+                "le fond du clip SANS régénérer la scène. Ajoute le nouveau fond en « Image "
+                "de référence ». (Seedance non utilisé · 720p max · audio conservé.)"))
 
     def _source_gen_duration(self, clip_idx: int) -> int:
         """Durée de régénération Seedance calée sur le clip SOURCE (sondée par ffprobe,
@@ -2142,17 +2150,19 @@ class TabDavinciEdit(QScrollArea):
         if ref_images:
             params["ref_images"] = ref_images
 
-        # ── « Changer un visage » → AUTRE MOTEUR : Pixverse Swap (face-swap chirurgical,
-        #    garde la scène + l'audio) au lieu de régénérer le plan via Seedance. ───────
-        if self._is_face_swap_mode():
+        # ── « Changer un visage » / « Changer le décor » → AUTRE MOTEUR : Pixverse Swap
+        #    (chirurgical : garde la scène + l'audio) au lieu de régénérer via Seedance. ─
+        _swap = self._pixverse_swap_mode()
+        if _swap:
             if not has_video:
-                self._on_clip_failed("Face-swap : ce clip n'a pas de vidéo source.",
+                self._on_clip_failed("Pixverse Swap : ce clip n'a pas de vidéo source.",
                                      clip_idx, prise_idx)
                 return
-            _face = ref_images[0] if ref_images else ""
-            if not (_face and os.path.isfile(_face)):
+            _ref = ref_images[0] if ref_images else ""
+            if not (_ref and os.path.isfile(_ref)):
+                _what = "du nouveau visage" if _swap == "person" else "du nouveau fond"
                 self._on_clip_failed(
-                    "Face-swap : ajoute l'image du nouveau visage en « Image de référence ».",
+                    f"Pixverse Swap : ajoute l'image {_what} en « Image de référence ».",
                     clip_idx, prise_idx)
                 return
             _res_raw = (self._cb_res.currentData() or self._cb_res.currentText().split()[0])
@@ -2162,7 +2172,7 @@ class TabDavinciEdit(QScrollArea):
             if prev is not None:
                 abandon_thread(prev)
             self._worker = PixverseSwapWorker(
-                video_path, _face, mode="person", resolution=_px_res,
+                video_path, _ref, mode=_swap, resolution=_px_res,
                 keep_audio=True, prompt=prompt)
             self._worker.finished.connect(
                 lambda r, ci=clip_idx, pi=prise_idx: self._on_clip_done(r, ci, pi))
@@ -2170,10 +2180,11 @@ class TabDavinciEdit(QScrollArea):
             self._worker.failed.connect(
                 lambda e, ci=clip_idx, pi=prise_idx: self._on_clip_failed(e, ci, pi))
             self._worker.start()
+            _lbl = "face-swap" if _swap == "person" else "remplacement fond"
             total = len(self._queue)
             self._progress.setValue(int(self._queue_pos / total * 100))
             self._lbl_progress.setText(
-                f"[{self._queue_pos + 1}/{total}]  {clip.get('name', '?')}  — face-swap (Pixverse)")
+                f"[{self._queue_pos + 1}/{total}]  {clip.get('name', '?')}  — {_lbl} (Pixverse)")
             return
 
         _model_key = self._get_model()
