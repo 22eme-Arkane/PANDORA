@@ -336,6 +336,27 @@ class TabSoundDesign(QScrollArea):
             f"border:1px solid {C['border']};border-radius:8px;padding:10px;font-size:12px;}}")
         lay.addWidget(self._txt_prompt)
 
+        teng_row = QHBoxLayout()
+        teng_row.setSpacing(8)
+        teng_lbl = QLabel(translate("Moteur"))
+        teng_lbl.setStyleSheet(
+            f"color:{C['text_secondary']};font-size:11px;background:transparent;border:none;")
+        self._text_engine_combo = QComboBox()
+        self._text_engine_combo.addItem(
+            translate("ElevenLabs SFX V2  ·  texte → SFX (~$0.002/s)"), "elevenlabs")
+        self._text_engine_combo.addItem(
+            translate("MMAudio V2  ·  texte → SFX (~$0.001/s)"), "mmaudio")
+        self._text_engine_combo.addItem(
+            translate("SFX 1.6 (Mirelo)  ·  texte → SFX (~$0.01/s)"), "sfx16")
+        self._text_engine_combo.setStyleSheet(
+            f"QComboBox{{background:{C['bg2']};color:{C['text_primary']};"
+            f"border:1px solid {C['border']};border-radius:6px;padding:4px 8px;font-size:11px;}}"
+            f"QComboBox QAbstractItemView{{background:{C['bg2']};color:{C['text_primary']};"
+            f"selection-background-color:{C['accent_dim']};}}")
+        teng_row.addWidget(teng_lbl)
+        teng_row.addWidget(self._text_engine_combo, 1)
+        lay.addLayout(teng_row)
+
         lay.addLayout(self._build_duration_row("text"))
         return w
 
@@ -381,6 +402,7 @@ class TabSoundDesign(QScrollArea):
         self._video_engine_combo = QComboBox()
         self._video_engine_combo.addItem(translate("SFX 1.6 (Mirelo)  ·  bande-son auto"), "sfx16")
         self._video_engine_combo.addItem(translate("Foley Control  ·  SFX synchronisés (~$0.002/s)"), "foley")
+        self._video_engine_combo.addItem(translate("MMAudio V2  ·  réf vidéo (~$0.001/s)"), "mmaudio")
         self._video_engine_combo.setStyleSheet(
             f"QComboBox{{background:{C['bg2']};color:{C['text_primary']};"
             f"border:1px solid {C['border']};border-radius:6px;padding:4px 8px;font-size:11px;}}"
@@ -451,6 +473,22 @@ class TabSoundDesign(QScrollArea):
             self._lbl_video.setStyleSheet(
                 f"color:{C['text_secondary']};font-size:10px;background:transparent;border:none;")
 
+    def _make_text_worker(self, prompt: str, duration: float, label: str):
+        """Construit le worker SFX texte→audio selon le moteur choisi (ElevenLabs SFX
+        V2 par défaut · MMAudio V2 · Mirelo SFX 1.6). Partagé par la génération
+        manuelle ET la file par plan."""
+        eng = getattr(self, "_text_engine_combo", None)
+        key = eng.currentData() if eng else "elevenlabs"
+        out = self._sfx_out_dir()
+        if key == "sfx16":
+            from api.tts import SFX1Worker
+            return SFX1Worker(prompt, duration, label=label, out_dir=out)
+        if key == "mmaudio":
+            from api.tts import MMAudioTextWorker
+            return MMAudioTextWorker(prompt, duration, label=label, out_dir=out)
+        from api.tts import ElevenLabsSFXWorker
+        return ElevenLabsSFXWorker(prompt, duration, label=label, out_dir=out)
+
     def _on_generate(self):
         # Bouton UNIQUE : une file chargée se génère en priorité ; sans file,
         # c'est la génération manuelle (prompt ou clip vidéo).
@@ -462,9 +500,8 @@ class TabSoundDesign(QScrollArea):
             if not prompt:
                 self._status.setText(translate("Écris d'abord un prompt son."))
                 return
-            from api.tts import SFX1Worker
-            self._worker = SFX1Worker(prompt, float(self._dur_text.value()),
-                                      label="sfx", out_dir=self._sfx_out_dir())
+            self._worker = self._make_text_worker(
+                prompt, float(self._dur_text.value()), "sfx")
         else:
             if not self._video_path or not os.path.isfile(self._video_path):
                 self._status.setText(translate("Choisis d'abord un clip vidéo."))
@@ -476,6 +513,11 @@ class TabSoundDesign(QScrollArea):
                 self._worker = FoleyControlWorker(
                     self._video_path, self._txt_prompt_video.toPlainText().strip(),
                     float(self._dur_video.value()), label="foley")
+            elif _eng_key == "mmaudio":
+                from api.tts import MMAudioVideoWorker
+                self._worker = MMAudioVideoWorker(
+                    self._video_path, self._txt_prompt_video.toPlainText().strip(),
+                    float(self._dur_video.value()), label="mmaudio_video")
             else:
                 from api.tts import SFX1VideoWorker
                 self._worker = SFX1VideoWorker(
@@ -678,10 +720,8 @@ class TabSoundDesign(QScrollArea):
         if getattr(self, "_queue_worker", None) is not None:
             from core.worker import abandon_thread
             abandon_thread(self._queue_worker)
-        from api.tts import SFX1Worker
-        self._queue_worker = SFX1Worker(
-            it["prompt"], it["duration"],
-            label=f"plan{it['number']}_sfx", out_dir=self._sfx_out_dir())
+        self._queue_worker = self._make_text_worker(
+            it["prompt"], it["duration"], f"plan{it['number']}_sfx")
         self._queue_worker.progress.connect(self._on_progress)
         self._queue_worker.finished.connect(self._on_sfx_item_done)
         self._queue_worker.failed.connect(self._on_sfx_item_failed)

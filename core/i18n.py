@@ -2731,6 +2731,13 @@ _FR_TO_EN: dict[str, str] = {
     "SFX 1.6 (Mirelo)  ·  bande-son auto":  "SFX 1.6 (Mirelo)  ·  auto soundtrack",
     "Foley Control  ·  SFX synchronisés (~$0.002/s)":
         "Foley Control  ·  synced SFX (~$0.002/s)",
+    "MMAudio V2  ·  réf vidéo (~$0.001/s)": "MMAudio V2  ·  video ref (~$0.001/s)",
+    "ElevenLabs SFX V2  ·  texte → SFX (~$0.002/s)":
+        "ElevenLabs SFX V2  ·  text → SFX (~$0.002/s)",
+    "MMAudio V2  ·  texte → SFX (~$0.001/s)":
+        "MMAudio V2  ·  text → SFX (~$0.001/s)",
+    "SFX 1.6 (Mirelo)  ·  texte → SFX (~$0.01/s)":
+        "SFX 1.6 (Mirelo)  ·  text → SFX (~$0.01/s)",
     # ── Sound Design Cinéma : file d'attente « Depuis le storyboard » ──────────
     "Depuis le storyboard — file d'attente":  "From the storyboard — queue",
     "Charge les plans en file d'attente — la sélection du storyboard\nsi tu en as une (clic / Ctrl+clic / lasso), sinon tout le storyboard.":

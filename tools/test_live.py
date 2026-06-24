@@ -920,8 +920,8 @@ def sound_design_file_et_crossfade():
     assert "abandon_thread(self._queue_worker)" in src_next, \
         "chaîne protégée (la file s'arrêtait au 1er clip)"
     assert 'it["prompt"][:60]' in src_next, "prompt du plan affiché au statut"
-    assert 'SFX1Worker(\n            it["prompt"]' in src_next, \
-        "chaque clip part avec le prompt de SON plan"
+    assert '_make_text_worker(\n            it["prompt"]' in src_next, \
+        "chaque clip part avec le prompt de SON plan (moteur choisi)"
     # Ordre des contrôles : progression AU-DESSUS de Générer, Annuler EN DESSOUS
     init_src = _i.getsource(TabSoundDesignLive.__init__)
     assert (init_src.index("root.addWidget(self._progress)")
@@ -1653,6 +1653,28 @@ def film_reel_auto_coche_en_style_realiste_live():
     finally:
         style.get_style_key = _orig
     assert "_sync_film_anchor_with_style" in inspect.getsource(T.TabT2V.showEvent)
+
+
+@test
+def sound_design_moteurs_multiples_live():
+    """Sound Design Live : même sélecteur multi-moteurs (ElevenLabs SFX V2 défaut /
+    MMAudio / Mirelo en texte ; MMAudio ajouté en réf vidéo). Parité Cinéma."""
+    import tempfile
+    import api.tts as tts
+    from PyQt6.QtWidgets import QApplication
+    QApplication.instance() or QApplication([])
+    import ui.tab_sound_design_live as SD
+    tab = SD.TabSoundDesignLive()
+    tkeys = [tab._text_engine_combo.itemData(i) for i in range(tab._text_engine_combo.count())]
+    assert tkeys[0] == "elevenlabs", ("ElevenLabs doit être le défaut", tkeys)
+    assert set(tkeys) >= {"elevenlabs", "mmaudio", "sfx16"}, tkeys
+    vkeys = [tab._video_engine_combo.itemData(i) for i in range(tab._video_engine_combo.count())]
+    assert set(vkeys) >= {"sfx16", "foley", "mmaudio"}, vkeys
+    tab._sfx_out_dir = lambda: tempfile.mkdtemp()
+    tab._text_engine_combo.setCurrentIndex(tkeys.index("mmaudio"))
+    assert isinstance(tab._make_text_worker("x", 5.0, "t"), tts.MMAudioTextWorker)
+    tab._text_engine_combo.setCurrentIndex(tkeys.index("elevenlabs"))
+    assert isinstance(tab._make_text_worker("x", 5.0, "t"), tts.ElevenLabsSFXWorker)
 
 
 # ══════════════════════════════════════════════════════════════════════════════

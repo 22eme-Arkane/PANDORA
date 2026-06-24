@@ -1054,3 +1054,237 @@ class SFX1VideoWorker(QThread):
 
         except Exception as e:
             self.failed.emit(humanize_api_error(f"Erreur SFX 1.6 vidéo : {e}"))
+
+
+# ── Moteurs de sound design supplémentaires (2026-06-24) ──────────────────────
+#    ElevenLabs SFX V2 + MMAudio V2 — alternatives à Mirelo (qualité / synchro).
+
+def _first_media_url(result, kind: str = "audio") -> str:
+    """Extrait l'URL d'un média (audio/video) d'une réponse fal.ai, robuste aux
+    schémas rencontrés selon les modèles (liste / dict / chaîne)."""
+    if isinstance(result, str):
+        return result
+    if not isinstance(result, dict):
+        return ""
+    m = result.get(kind)
+    if isinstance(m, list) and m:
+        first = m[0]
+        if isinstance(first, dict):
+            return first.get("url", "")
+        if isinstance(first, str):
+            return first
+    elif isinstance(m, dict):
+        return m.get("url", "") or m.get("ref", "")
+    elif isinstance(m, str):
+        return m
+    return (result.get("url", "") or result.get(f"{kind}_url", "")
+            or result.get("ref", ""))
+
+
+def _media_ext(url: str, default: str) -> str:
+    base = url.lower().split("?")[0]
+    for ext in (".mp3", ".wav", ".flac", ".ogg", ".m4a", ".mp4", ".webm", ".mov"):
+        if base.endswith(ext):
+            return ext
+    return default
+
+
+class ElevenLabsSFXWorker(QThread):
+    """ElevenLabs Sound Effects V2 (fal-ai/elevenlabs/sound-effects/v2) : texte → SFX
+    haute fidélité. ~$0.002/s. Drop-in de SFX1Worker (mêmes signaux / signature).
+      Entrée  : text (requis), duration_seconds (0.5–22)
+      Sortie  : { "audio": { "url": ... } }
+    """
+    progress = pyqtSignal(int, str)
+    finished = pyqtSignal(str)
+    failed   = pyqtSignal(str)
+
+    def __init__(self, text: str, duration: float = 10.0, label: str = "",
+                 out_dir: str = ""):
+        super().__init__()
+        self._text     = text
+        self._duration = float(duration)
+        self._label    = label or "sfx"
+        self._out_dir  = out_dir
+
+    def run(self):
+        cfg = load_config()
+        key = cfg.get("api_key", "").strip()
+        if not key:
+            self._mock()
+        else:
+            self._real(key)
+
+    def _mock(self):
+        for pct, msg in [
+            (20, "ElevenLabs SFX (mode mock)…"),
+            (60, "Création sonore…"),
+            (100, "Terminé — mode mock (aucune clé fal.ai)"),
+        ]:
+            self.progress.emit(pct, msg)
+            time.sleep(0.4)
+        self.finished.emit("")
+
+    def _real(self, key: str):
+        try:
+            import fal_client
+            import requests
+            os.environ["FAL_KEY"] = key
+            cost_est = self._duration * 0.002
+            self.progress.emit(10, f"ElevenLabs SFX — {self._duration:g}s (~${cost_est:.3f})…")
+            dur = max(0.5, min(22.0, self._duration))   # borne API ElevenLabs : 0.5–22 s
+            result = fal_client.subscribe(
+                "fal-ai/elevenlabs/sound-effects/v2",
+                arguments={"text": self._text, "duration_seconds": dur},
+            )
+            audio_url = _first_media_url(result, "audio")
+            if not audio_url:
+                raise RuntimeError(f"URL audio manquante : {str(result)[:200]}")
+            self.progress.emit(70, "Téléchargement de l'ambiance…")
+            data = requests.get(audio_url, timeout=120).content
+            safe = "".join(c for c in self._label if c.isalnum() or c in " -_").strip() or "sfx"
+            ts   = int(time.time())
+            out_dir = self._out_dir or _audio_output_dir()
+            os.makedirs(out_dir, exist_ok=True)
+            path = os.path.join(out_dir, f"{safe}_{ts}{_media_ext(audio_url, '.mp3')}")
+            with open(path, "wb") as f:
+                f.write(data)
+            self.progress.emit(100, f"Ambiance générée ✓  {self._duration:g}s · ~${cost_est:.3f}")
+            self.finished.emit(path)
+        except Exception as e:
+            self.failed.emit(humanize_api_error(f"Erreur ElevenLabs SFX : {e}"))
+
+
+class MMAudioTextWorker(QThread):
+    """MMAudio V2 text-to-audio (fal-ai/mmaudio-v2/text-to-audio) : texte → audio.
+    ~$0.001/s. Drop-in de SFX1Worker.
+      Entrée  : prompt (requis), duration (défaut 8)
+      Sortie  : { "audio": { "url": ... } }
+    """
+    progress = pyqtSignal(int, str)
+    finished = pyqtSignal(str)
+    failed   = pyqtSignal(str)
+
+    def __init__(self, text: str, duration: float = 10.0, label: str = "",
+                 out_dir: str = ""):
+        super().__init__()
+        self._text     = text
+        self._duration = float(duration)
+        self._label    = label or "sfx"
+        self._out_dir  = out_dir
+
+    def run(self):
+        cfg = load_config()
+        key = cfg.get("api_key", "").strip()
+        if not key:
+            self._mock()
+        else:
+            self._real(key)
+
+    def _mock(self):
+        for pct, msg in [
+            (20, "MMAudio (mode mock)…"),
+            (60, "Création sonore…"),
+            (100, "Terminé — mode mock (aucune clé fal.ai)"),
+        ]:
+            self.progress.emit(pct, msg)
+            time.sleep(0.4)
+        self.finished.emit("")
+
+    def _real(self, key: str):
+        try:
+            import fal_client
+            import requests
+            os.environ["FAL_KEY"] = key
+            cost_est = self._duration * 0.001
+            self.progress.emit(10, f"MMAudio — {self._duration:g}s (~${cost_est:.3f})…")
+            result = fal_client.subscribe(
+                "fal-ai/mmaudio-v2/text-to-audio",
+                arguments={"prompt": self._text, "duration": self._duration},
+            )
+            audio_url = _first_media_url(result, "audio")
+            if not audio_url:
+                raise RuntimeError(f"URL audio manquante : {str(result)[:200]}")
+            self.progress.emit(70, "Téléchargement de l'ambiance…")
+            data = requests.get(audio_url, timeout=120).content
+            safe = "".join(c for c in self._label if c.isalnum() or c in " -_").strip() or "sfx"
+            ts   = int(time.time())
+            out_dir = self._out_dir or _audio_output_dir()
+            os.makedirs(out_dir, exist_ok=True)
+            path = os.path.join(out_dir, f"{safe}_{ts}{_media_ext(audio_url, '.flac')}")
+            with open(path, "wb") as f:
+                f.write(data)
+            self.progress.emit(100, f"Ambiance générée ✓  {self._duration:g}s · ~${cost_est:.3f}")
+            self.finished.emit(path)
+        except Exception as e:
+            self.failed.emit(humanize_api_error(f"Erreur MMAudio : {e}"))
+
+
+class MMAudioVideoWorker(QThread):
+    """MMAudio V2 video-to-audio (fal-ai/mmaudio-v2) : SFX synchronisés sur l'action
+    de la vidéo, guidés par prompt. Renvoie la vidéo DÉJÀ sonorisée (mux côté fal) →
+    drop-in de SFX1VideoWorker / FoleyControlWorker (sortie MP4). ~$0.001/s.
+      Entrée  : video_url (requis), prompt (requis), duration (défaut 8)
+      Sortie  : { "video": { "url": ... } }
+    """
+    progress = pyqtSignal(int, str)
+    finished = pyqtSignal(str)
+    failed   = pyqtSignal(str)
+
+    def __init__(self, video_path: str, text_prompt: str = "",
+                 duration: float = 10.0, label: str = ""):
+        super().__init__()
+        self._video    = video_path
+        self._prompt   = text_prompt or ""
+        self._duration = float(duration)
+        self._label    = label or "mmaudio_video"
+
+    def run(self):
+        cfg = load_config()
+        key = cfg.get("api_key", "").strip()
+        if not key:
+            self._mock()
+        else:
+            self._real(key)
+
+    def _mock(self):
+        for pct, msg in [
+            (20, "MMAudio vidéo (mode mock)…"),
+            (60, "Synthèse SFX synchronisés…"),
+            (100, "Terminé — mode mock (aucune clé fal.ai)"),
+        ]:
+            self.progress.emit(pct, msg)
+            time.sleep(0.4)
+        self.finished.emit("")
+
+    def _real(self, key: str):
+        try:
+            import fal_client
+            import requests
+            if not self._video or not os.path.isfile(self._video):
+                raise RuntimeError("Vidéo introuvable.")
+            os.environ["FAL_KEY"] = key
+            cost_est = self._duration * 0.001
+            self.progress.emit(8, "Envoi de la vidéo à fal.ai…")
+            video_url = fal_client.upload_file(self._video)
+            self.progress.emit(25, f"MMAudio vidéo — {self._duration:g}s (~${cost_est:.3f})…")
+            # MMAudio exige un prompt non vide → défaut générique si l'utilisateur
+            # n'en a pas saisi (sonorisation automatique calée sur l'image).
+            prompt = self._prompt.strip() or (
+                "natural ambient sound and sound effects matching the on-screen action")
+            args = {"video_url": video_url, "duration": self._duration, "prompt": prompt}
+            result = fal_client.subscribe("fal-ai/mmaudio-v2", arguments=args)
+            out_url = _first_media_url(result, "video")
+            if not out_url:
+                raise RuntimeError(f"URL vidéo manquante : {str(result)[:200]}")
+            self.progress.emit(75, "Téléchargement de la vidéo sonorisée…")
+            data = requests.get(out_url, timeout=300).content
+            safe = "".join(c for c in self._label if c.isalnum() or c in " -_").strip() or "mmaudio_video"
+            ts   = int(time.time())
+            path = os.path.join(_sfx_output_dir(), f"{safe}_{ts}.mp4")
+            with open(path, "wb") as f:
+                f.write(data)
+            self.progress.emit(100, f"Bande-son générée ✓  ~${cost_est:.3f}")
+            self.finished.emit(path)
+        except Exception as e:
+            self.failed.emit(humanize_api_error(f"Erreur MMAudio vidéo : {e}"))

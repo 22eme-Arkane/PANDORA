@@ -2613,6 +2613,33 @@ def film_reel_auto_coche_en_style_realiste():
     assert "_sync_film_anchor_with_style" in inspect.getsource(T.TabT2V.showEvent)
 
 
+@test
+def sound_design_moteurs_multiples():
+    """Sound Design : sélecteur de moteur sur le panneau TEXTE (ElevenLabs SFX V2 par
+    défaut · MMAudio V2 · Mirelo) + MMAudio ajouté au panneau VIDÉO (réf vidéo).
+    _make_text_worker route le bon worker (partagé manuel + file par plan)."""
+    import inspect, tempfile
+    import api.tts as tts
+    # Workers + endpoints fal vérifiés
+    assert "fal-ai/elevenlabs/sound-effects/v2" in inspect.getsource(tts.ElevenLabsSFXWorker._real)
+    assert "fal-ai/mmaudio-v2/text-to-audio" in inspect.getsource(tts.MMAudioTextWorker._real)
+    assert "fal-ai/mmaudio-v2" in inspect.getsource(tts.MMAudioVideoWorker._real)
+    from PyQt6.QtWidgets import QApplication
+    QApplication.instance() or QApplication([])
+    import ui.tab_sound_design as SD
+    tab = SD.TabSoundDesign()
+    tkeys = [tab._text_engine_combo.itemData(i) for i in range(tab._text_engine_combo.count())]
+    assert tkeys[0] == "elevenlabs", ("ElevenLabs doit être le défaut", tkeys)
+    assert set(tkeys) >= {"elevenlabs", "mmaudio", "sfx16"}, tkeys
+    vkeys = [tab._video_engine_combo.itemData(i) for i in range(tab._video_engine_combo.count())]
+    assert set(vkeys) >= {"sfx16", "foley", "mmaudio"}, vkeys
+    tab._sfx_out_dir = lambda: tempfile.mkdtemp()
+    tab._text_engine_combo.setCurrentIndex(tkeys.index("mmaudio"))
+    assert isinstance(tab._make_text_worker("x", 5.0, "t"), tts.MMAudioTextWorker)
+    tab._text_engine_combo.setCurrentIndex(tkeys.index("elevenlabs"))
+    assert isinstance(tab._make_text_worker("x", 5.0, "t"), tts.ElevenLabsSFXWorker)
+
+
 # ══════════════════════════════════════════════════════════════════════════════
 # Runner
 # ══════════════════════════════════════════════════════════════════════════════
