@@ -2263,6 +2263,16 @@ _FR_TO_EN: dict[str, str] = {
     "Générer les plans manquants":               "Generate missing plans",
     "à générer":                                 "to generate",
     "Génération…":                               "Generating…",
+    "Cliquer pour agrandir et modifier le plan": "Click to enlarge and edit the plan",
+    "Créer une variation (calée sur l'ensemble)": "Create a variation (matched to the overview)",
+    "Importer une image":                        "Import an image",
+    "Importer un plan d'architecte":             "Import a floor plan",
+    "Variation du plan":                         "Floor plan variation",
+    "Variation du plan…":                        "Floor plan variation…",
+    "Configure ta clé fal.ai dans Paramètres pour générer une variation.":
+        "Set your fal.ai key in Settings to generate a variation.",
+    "La variation n'a pas pu être générée (clé fal.ai ? réseau ?).":
+        "The variation could not be generated (fal.ai key? network?).",
 
     # ── Mise en scène / Plan de feu — outils & projecteurs (2026-06-16) ────────
     "Déplacer":                                  "Move",

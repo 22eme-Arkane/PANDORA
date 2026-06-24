@@ -2544,6 +2544,42 @@ def draw_to_video_vignette_remplace_popup():
     assert any("Claude Vision" in k for k in i18n._FR_TO_EN), "texte d'aide Draw-to-Video absent"
 
 
+@test
+def plan_decor_variation_import_resync():
+    """Plan des décors : l'aperçu du plan d'architecte propose « créer une variation
+    (calée sur l'ensemble) » + « importer une image ». Le changement affecte le décor
+    ET ses frères de pièce (room_group) → Mise en scène / Plan de feu lisent en direct."""
+    import inspect, os, tempfile
+    import ui.page_decors as PD
+    import core.decors as dec
+    # UI : aperçu avec les 2 options
+    src = inspect.getsource(PD.PageDecors._open_plan_preview)
+    assert "Créer une variation" in src and "Importer une image" in src
+    assert "_on_plan_variation" in src and "_on_plan_import" in src
+    # Worker de variation calé sur l'ensemble (overview en référence)
+    from api.nano_banana import GenerateFloorPlanVariationWorker
+    w = GenerateFloorPlanVariationWorker("a", "/ov.png", "salon")
+    assert hasattr(w, "done") and w._ov == "/ov.png"
+    # Propagation room_group + resync (set_floor_plan sur tous les frères)
+    page = PD.PageDecors()
+    calls, _orig = [], dec.set_floor_plan
+    dec.set_floor_plan = lambda did, p: calls.append(did)
+    try:
+        d = tempfile.mkdtemp(); p = os.path.join(d, "fp.png"); open(p, "wb").write(b"x")
+        page._all_items = [{"id": "a", "room_group": "Salon"},
+                           {"id": "b", "room_group": "Salon"}, {"id": "c"}]
+        page.refresh = lambda: None   # éviter le rechargement disque pendant le test
+        page._apply_floor_plan_by_id("a", p)
+        assert sorted(calls) == ["a", "b"], ("propagation room_group", calls)
+        calls.clear()
+        page._apply_floor_plan_by_id("c", p)   # décor libre → lui seul
+        assert calls == ["c"], calls
+    finally:
+        dec.set_floor_plan = _orig
+    import core.i18n as i18n
+    assert "Créer une variation (calée sur l'ensemble)" in i18n._FR_TO_EN
+
+
 # ══════════════════════════════════════════════════════════════════════════════
 # Runner
 # ══════════════════════════════════════════════════════════════════════════════

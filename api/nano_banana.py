@@ -2351,6 +2351,63 @@ class GenerateFloorPlansWorker(QThread):
         self.progress.emit(100, "Plans terminés")
         self.finished.emit(made)
 
+
+class GenerateFloorPlanVariationWorker(QThread):
+    """Génère UNE variation du plan d'architecte d'un décor, CALÉE sur le plan
+    d'ensemble : édition NB2 à partir de l'image d'ensemble (même pièce, même
+    disposition, vue de dessus). Repli texte si pas d'ensemble ou édition échouée.
+    Émet done(decor_id, path) — path="" si mock/échec."""
+    progress = pyqtSignal(int, str)
+    done     = pyqtSignal(str, str)   # (decor_id, path)
+
+    def __init__(self, decor_id: str, overview_path: str = "", base_prompt: str = ""):
+        super().__init__()
+        self._id   = decor_id
+        self._ov   = overview_path
+        self._base = base_prompt
+
+    def run(self):
+        cfg = load_config()
+        key = cfg.get("api_key", "").strip()
+        if not key:
+            self.done.emit(self._id, "")
+            return
+        try:
+            import fal_client
+            import requests
+            from core.lang import translate_to_english
+            from core.staging import images_dir
+            os.environ["FAL_KEY"] = key
+            self.progress.emit(20, "Variation du plan (calée sur l'ensemble)…")
+            base_en = translate_to_english(self._base) if self._base else "an interior room"
+            fp_anchor = (
+                "Draw the TOP-DOWN architectural floor plan (bird's eye view, seen from "
+                "directly above) of the EXACT room shown in the reference image: SAME "
+                "walls, SAME proportions, SAME furniture in the SAME positions, SAME "
+                "doors and windows. Schematic blueprint / architect plan style — simple "
+                "lines, flat tones, neutral background, no people, no camera, no text "
+                "labels. Square framing."
+            )
+            if self._ov and os.path.isfile(self._ov):
+                from api.apercu import _upload_ref_robust
+                url = _upload_ref_robust(fal_client, self._ov)
+                result = fal_client.subscribe("fal-ai/nano-banana-2/edit", arguments={
+                    "prompt": fp_anchor, "image_urls": [url], "num_images": 1,
+                    "aspect_ratio": "1:1", "resolution": "1K",
+                    "output_format": "png", "safety_tolerance": "6"})
+            else:
+                ep, args = _build_image_args(_floor_plan_prompt(base_en), "1:1", "1K", cfg, 1)
+                result = fal_client.subscribe(ep, arguments=args)
+            u = _extract_image_url(result)
+            data = requests.get(u, timeout=180).content
+            path = os.path.join(images_dir(), f"floorplan_var_{int(time.time())}.png")
+            with open(path, "wb") as f:
+                f.write(data)
+            self.progress.emit(100, "Variation prête")
+            self.done.emit(self._id, path)
+        except Exception:
+            self.done.emit(self._id, "")
+
     def failed_safe(self, e, n):
         for j in self._jobs:
             self.plan_done.emit(str(j.get("id", "")), "")

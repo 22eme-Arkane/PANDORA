@@ -391,13 +391,13 @@ class PageDecors(QWidget):
                 Qt.TransformationMode.SmoothTransformation)
             pix = pix.copy((pix.width() - 132) // 2, (pix.height() - 78) // 2, 132, 78)
             thumb.setPixmap(pix)
-            # Clic → aperçu en grand dans une fenêtre.
+            # Clic → aperçu en grand + options (variation / import).
             thumb.setCursor(Qt.CursorShape.PointingHandCursor)
-            thumb.setToolTip(translate("Cliquer pour agrandir"))
+            thumb.setToolTip(translate("Cliquer pour agrandir et modifier le plan"))
 
-            def _click(e, _p=fp, _n=disp):
+            def _click(e, _d=decor):
                 if e.button() == Qt.MouseButton.LeftButton:
-                    self._open_plan_preview(_p, _n)
+                    self._open_plan_preview(_d)
             thumb.mousePressEvent = _click
         else:
             thumb.setText("▦\n" + translate("à générer"))
@@ -413,31 +413,141 @@ class PageDecors(QWidget):
         card.setToolTip(disp)
         return card
 
-    def _open_plan_preview(self, path: str, name: str = ""):
-        """Aperçu du plan d'architecte en grand dans une fenêtre (clic sur la vignette)."""
+    def _open_plan_preview(self, decor: dict):
+        """Aperçu du plan d'architecte + OPTIONS : créer une variation (calée sur le
+        plan d'ensemble) ou importer une image (ex. retouche Photoshop). Tout
+        changement est resynchronisé : la Mise en scène et le Plan de feu lisent
+        `decor.floor_plan` en direct → ils utilisent le nouveau plan."""
+        path = decor.get("floor_plan", "")
+        name = decor.get("room_group") or decor.get("name", "")
         if not (path and os.path.isfile(path)):
             return
-        from PyQt6.QtWidgets import QDialog, QVBoxLayout, QLabel
+        from PyQt6.QtWidgets import QDialog, QVBoxLayout, QHBoxLayout, QLabel, QPushButton
         from PyQt6.QtGui import QGuiApplication
         dlg = QDialog(self)
         dlg.setWindowTitle((f"{translate('Plan du décor')} — {name}") if name else translate("Plan du décor"))
         dlg.setStyleSheet(f"background:{CP['bg1']};")
         lay = QVBoxLayout(dlg)
         lay.setContentsMargins(12, 12, 12, 12)
+        lay.setSpacing(10)
         lbl = QLabel()
         lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        lbl.setCursor(Qt.CursorShape.PointingHandCursor)
-        lbl.setToolTip(translate("Cliquer pour fermer"))
         scr = QGuiApplication.primaryScreen().availableGeometry()
-        maxw, maxh = int(scr.width() * 0.82), int(scr.height() * 0.85)
+        maxw, maxh = int(scr.width() * 0.78), int(scr.height() * 0.72)
         pix = QPixmap(path)
         if pix.width() > maxw or pix.height() > maxh:
             pix = pix.scaled(maxw, maxh, Qt.AspectRatioMode.KeepAspectRatio,
                              Qt.TransformationMode.SmoothTransformation)
         lbl.setPixmap(pix)
-        lbl.mousePressEvent = lambda _e: dlg.accept()   # clic sur l'image = fermer
         lay.addWidget(lbl)
+
+        def _action_btn(text, accent=False):
+            b = QPushButton(text)
+            b.setFixedHeight(34)
+            b.setCursor(Qt.CursorShape.PointingHandCursor)
+            if accent:
+                b.setStyleSheet(
+                    f"QPushButton{{background:{CP['accent']};color:#07080f;border:none;"
+                    f"border-radius:8px;font-size:11px;font-weight:700;padding:0 16px;}}"
+                    f"QPushButton:hover{{background:#6eded6;}}")
+            else:
+                b.setStyleSheet(
+                    f"QPushButton{{background:transparent;color:{CP['text_secondary']};"
+                    f"border:1px solid {CP['border']};border-radius:8px;font-size:11px;padding:0 16px;}}"
+                    f"QPushButton:hover{{color:{CP['text_primary']};border-color:{CP['accent']};}}")
+            return b
+
+        row = QHBoxLayout()
+        row.setSpacing(10)
+        btn_var = _action_btn("🎲  " + translate("Créer une variation (calée sur l'ensemble)"), accent=True)
+        btn_var.clicked.connect(lambda: (dlg.accept(), self._on_plan_variation(decor)))
+        btn_imp = _action_btn("📂  " + translate("Importer une image"))
+        btn_imp.clicked.connect(lambda: (dlg.accept(), self._on_plan_import(decor)))
+        btn_close = _action_btn(translate("Fermer"))
+        btn_close.clicked.connect(dlg.accept)
+        row.addWidget(btn_var)
+        row.addWidget(btn_imp)
+        row.addStretch()
+        row.addWidget(btn_close)
+        lay.addLayout(row)
         dlg.exec()
+
+    def _apply_floor_plan_by_id(self, decor_id: str, path: str):
+        """Affecte le plan au décor ET à tous ses frères de pièce (room_group), puis
+        rafraîchit. La Mise en scène / le Plan de feu lisent ce plan en direct."""
+        if not (decor_id and path and os.path.isfile(path)):
+            return
+        target = next((d for d in self._all_items if d.get("id") == decor_id), None)
+        group = (target or {}).get("room_group", "") if target else ""
+        ids = ([d.get("id") for d in self._all_items
+                if d.get("room_group", "") == group and d.get("id")]
+               if group else [decor_id])
+        for did in ids:
+            try:
+                decors_api.set_floor_plan(did, path)
+            except Exception:
+                pass
+        self.refresh()
+
+    def _on_plan_import(self, decor: dict):
+        """Importer une image comme plan d'architecte (ex. retouche Photoshop)."""
+        from PyQt6.QtWidgets import QFileDialog
+        p, _ = QFileDialog.getOpenFileName(
+            self, translate("Importer un plan d'architecte"), "",
+            "Images (*.png *.jpg *.jpeg *.webp)")
+        if not p:
+            return
+        dst = p
+        try:
+            import time as _t
+            import shutil as _sh
+            from core.staging import images_dir
+            dst = os.path.join(images_dir(),
+                               f"floorplan_import_{int(_t.time())}{os.path.splitext(p)[1].lower()}")
+            _sh.copy2(p, dst)
+        except Exception:
+            dst = p
+        self._apply_floor_plan_by_id(decor.get("id", ""), dst)
+
+    def _on_plan_variation(self, decor: dict):
+        """Créer une variation du plan, calée sur le plan d'ensemble (image du décor)."""
+        from core.config import load_config
+        if self._fp_worker is not None and self._fp_worker.isRunning():
+            return
+        if getattr(self, "_fp_var_worker", None) and self._fp_var_worker.isRunning():
+            return
+        if not load_config().get("api_key", "").strip():
+            QMessageBox.information(
+                self, translate("Variation du plan"),
+                translate("Configure ta clé fal.ai dans Paramètres pour générer une variation."))
+            return
+        from api.nano_banana import GenerateFloorPlanVariationWorker
+        from core.worker import abandon_thread
+        prev = getattr(self, "_fp_var_worker", None)
+        if prev is not None:
+            abandon_thread(prev)
+        self._fp_var_worker = GenerateFloorPlanVariationWorker(
+            decor.get("id", ""), decor.get("image_path", ""),
+            decor.get("prompt") or decor.get("name", ""))
+        self._fp_var_worker.done.connect(self._on_plan_variation_done)
+        self._fp_var_worker.start()
+        if hasattr(self, "_fp_btn"):
+            self._fp_btn.setEnabled(False)
+            self._fp_btn.setText("✦  " + translate("Variation du plan…"))
+
+    def _on_plan_variation_done(self, decor_id: str, path: str):
+        from core.worker import abandon_thread
+        w = getattr(self, "_fp_var_worker", None)
+        if w is not None:
+            abandon_thread(w)
+            self._fp_var_worker = None
+        if path and os.path.isfile(path):
+            self._apply_floor_plan_by_id(decor_id, path)
+        else:
+            QMessageBox.warning(
+                self, translate("Variation du plan"),
+                translate("La variation n'a pas pu être générée (clé fal.ai ? réseau ?)."))
+            self._refresh_floor_plans()
 
     def _fp_representatives(self) -> list[dict]:
         """Un plan par PIÈCE (room_group) + chaque décor libre — les 7 vues d'une
