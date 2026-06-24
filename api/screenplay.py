@@ -1446,6 +1446,47 @@ def _name_in_text(catalog_name: str, search_text: str) -> bool:
     return all(token in text_tokens for token in name_tokens)
 
 
+def _reassign_named(shot: dict, items: list, search_text: str,
+                    id_field: str, name_field: str, label: str) -> None:
+    """Ré-assigne une catégorie multi-éléments (accessoires / véhicules) d'un plan
+    par correspondance de nom : ajoute ceux cités dans le titre/prompt et corrige
+    les noms renommés. Les changements sont poussés dans shot['_reassigned'].
+    Symétrique de la logique personnages, factorisée pour accessoires + véhicules."""
+    existing = set(shot.get(id_field) or [])
+    for it in items:
+        name = it.get("name")
+        iid  = it.get("id")
+        if not name or not iid:
+            continue
+        if iid in existing:
+            # ID déjà présent — corriger le nom affiché si c'est un variant fuzzy.
+            cur = shot.get(name_field) or []
+            if name not in cur:
+                for i, old in enumerate(cur):
+                    if _same_name(old, name) and old != name:
+                        cur[i] = name
+                        shot["_reassigned"].append(f"{label} : {old} → {name}")
+                        break
+            continue
+        if _name_in_text(name, search_text):
+            shot.setdefault(id_field, [])
+            shot.setdefault(name_field, [])
+            if iid not in shot[id_field]:
+                shot[id_field].append(iid)
+                names = shot[name_field]
+                replaced = False
+                for i, old in enumerate(names):
+                    if _same_name(old, name) and old != name:
+                        names[i] = name
+                        shot["_reassigned"].append(f"{label} : {old} → {name}")
+                        replaced = True
+                        break
+                if not replaced:
+                    names.append(name)
+                    shot["_reassigned"].append(f"{label} : {name}")
+            existing.add(iid)
+
+
 # ── Synchronisation storyboard ↔ casting / décors / accessoires ───────────────
 
 _SYNC_STORYBOARD_SYSTEM = """\
@@ -1514,6 +1555,10 @@ class SyncStoryboardWorker(QThread):
         self._opt_reassign  = o.get("reassign", True)
         self._opt_decors    = o.get("resync_decors", True)
         self._opt_prompts   = o.get("rewrite_prompts", True)
+        # Synchronisation par catégorie (parallèle à « re-synchroniser les décors »).
+        self._opt_casting     = o.get("sync_casting", False)
+        self._opt_accessories = o.get("sync_accessories", False)
+        self._opt_vehicles    = o.get("sync_vehicles", False)
         # Sections structurées du prompt (mise en scène / plan de feu).
         self._opt_staging   = o.get("sync_staging", False)
         self._opt_lighting  = o.get("sync_lighting", False)
@@ -1565,6 +1610,7 @@ class SyncStoryboardWorker(QThread):
         characters  = casting_api.list_characters()
         decors      = decors_api.list_decors()
         accessories = acc_api.list_accessories()
+        vehicles    = veh_api.list_vehicles()
 
         char_by_id   = {c["id"]: c for c in characters}
         char_by_name = {c["name"].lower(): c for c in characters if c.get("name")}
@@ -1579,10 +1625,12 @@ class SyncStoryboardWorker(QThread):
             shot["_old_prompt"]     = shot.get("seedance_prompt", "")
             shot["_reason"]         = ""
 
-        do_names  = self._opt_reassign
+        do_names  = self._opt_reassign or self._opt_casting
         do_decors = self._opt_reassign or self._opt_decors
+        do_acc    = self._opt_reassign or self._opt_accessories
+        do_veh    = self._opt_vehicles  # véhicules : non couverts par « Réassigner les noms »
 
-        if do_names or do_decors:
+        if do_names or do_decors or do_acc or do_veh:
             self.progress.emit(15, "Phase 1 — ré-assignation des éléments par nom…")
 
         # ── Phase 1 : name matching ────────────────────────────────────────────
@@ -1600,6 +1648,15 @@ class SyncStoryboardWorker(QThread):
                     _old = shot.get("decor_name") or "—"
                     shot["decor_name"] = _d["name"]
                     shot["_reassigned"].append(f"décor : {_old} → {_d['name']}")
+
+            # Accessoires / véhicules : ré-assignation par nom — indépendante du
+            # casting/décor, donc traitée pour TOUS les plans (même si do_names off).
+            if do_acc:
+                _reassign_named(shot, accessories, search_text,
+                                "accessory_ids", "accessory_names", "accessoire")
+            if do_veh:
+                _reassign_named(shot, vehicles, search_text,
+                                "vehicle_ids", "vehicle_names", "véhicule")
 
             if not do_names:
                 # Seuls les décors sont traités si la ré-assignation des noms est désactivée.

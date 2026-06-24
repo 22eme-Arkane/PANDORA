@@ -1250,6 +1250,21 @@ _FR_TO_EN: dict[str, str] = {
     "Réassigner les noms":              "Reassign names",
     "Réécrire les prompts":             "Rewrite prompts",
     "Re-synchroniser les décors":       "Re-sync locations",
+    "Synchroniser le casting":          "Sync the cast",
+    "Synchroniser les accessoires":     "Sync the props",
+    "Synchroniser les véhicules":       "Sync the vehicles",
+    "Met à jour les noms de personnages renommés et ré-assigne aux plans les "
+    "personnages cités dans le titre ou le prompt.":
+        "Updates renamed character names and reassigns to each shot the characters "
+        "mentioned in its title or prompt.",
+    "Met à jour les accessoires renommés et ré-assigne aux plans les accessoires "
+    "cités dans le titre ou le prompt.":
+        "Updates renamed props and reassigns to each shot the props mentioned in its "
+        "title or prompt.",
+    "Met à jour les véhicules renommés et ré-assigne aux plans les véhicules "
+    "cités dans le titre ou le prompt.":
+        "Updates renamed vehicles and reassigns to each shot the vehicles mentioned in "
+        "its title or prompt.",
     "Réécrire le scénario depuis le storyboard": "Rewrite screenplay from storyboard",
     "Scénario":                         "Screenplay",
     "Scénario reconstruit depuis le storyboard": "Screenplay rebuilt from storyboard",

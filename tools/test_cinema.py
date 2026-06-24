@@ -582,8 +582,11 @@ def synchronisation_multi_options():
     dlg = StoryboardSyncConfirmDialog(3)
     opts = dlg.selected_options()
     assert set(opts) == {"reassign", "rewrite_prompts", "resync_decors", "rewrite_scenario",
-                         "sync_staging", "sync_lighting"}, \
-        "options de synchronisation (dont mise en scène + plan de feu)"
+                         "sync_staging", "sync_lighting",
+                         "sync_casting", "sync_accessories", "sync_vehicles"}, \
+        "options de synchronisation (dont casting / accessoires / véhicules)"
+    assert not opts["sync_casting"] and not opts["sync_accessories"] \
+        and not opts["sync_vehicles"], "casting / accessoires / véhicules décochés par défaut"
     assert opts["reassign"] and opts["rewrite_prompts"], "réassigner + prompts cochés par défaut"
     assert not opts["resync_decors"] and not opts["rewrite_scenario"], \
         "décors + scénario décochés par défaut"
@@ -2435,6 +2438,48 @@ def rendu_audio_repliable_lipsync_ordre():
     src = inspect.getsource(M.TabT2V)
     assert src.index("addWidget(_ls_row)") < src.index("addWidget(_ls_desc_wrap)"), \
         "« Moteur lip-sync » doit précéder la description"
+
+
+@test
+def sync_storyboard_casting_accessoires_vehicules():
+    """Fenêtre Synchronisation du storyboard : 3 nouvelles options (casting, accessoires,
+    véhicules) qui ré-assignent par nom les éléments cités dans le titre/prompt de chaque plan."""
+    from ui.dialog_storyboard_sync import StoryboardSyncConfirmDialog
+    keys = [o[0] for o in StoryboardSyncConfirmDialog._OPTIONS]
+    for k in ("sync_casting", "sync_accessories", "sync_vehicles"):
+        assert k in keys, "option absente : " + k
+    # Réassignation effective (worker, sans IA)
+    import api.screenplay as sp
+    import core.casting as cast, core.decors as dec
+    import core.accessories as acc, core.vehicles as veh
+    _orig = (cast.list_characters, dec.list_decors, acc.list_accessories, veh.list_vehicles)
+    try:
+        cast.list_characters = lambda: [{"id": "c1", "name": "Raoul"}]
+        dec.list_decors      = lambda: []
+        acc.list_accessories = lambda: [{"id": "a1", "name": "Katana", "description": ""}]
+        veh.list_vehicles    = lambda: [{"id": "v1", "name": "Mustang"}]
+        shots = [{"id": "s1", "number": 1,
+                  "scene_title": "Raoul dégaine son Katana près de la Mustang",
+                  "seedance_prompt": "x", "character_ids": [], "character_names": [],
+                  "accessory_ids": [], "accessory_names": [],
+                  "vehicle_ids": [], "vehicle_names": []}]
+        w = sp.SyncStoryboardWorker(shots, {
+            "sync_casting": True, "sync_accessories": True, "sync_vehicles": True,
+            "reassign": False, "resync_decors": False, "rewrite_prompts": False})
+        out = {}
+        w.finished.connect(lambda s: out.update(shots=s))
+        w._run()
+        s = out["shots"][0]
+        assert "c1" in s["character_ids"] and "Raoul" in s["character_names"], s
+        assert "a1" in s["accessory_ids"] and "Katana" in s["accessory_names"], s
+        assert "v1" in s["vehicle_ids"] and "Mustang" in s["vehicle_names"], s
+    finally:
+        cast.list_characters, dec.list_decors, acc.list_accessories, veh.list_vehicles = _orig
+    # i18n
+    import core.i18n as i18n
+    for lab in ("Synchroniser le casting", "Synchroniser les accessoires",
+                "Synchroniser les véhicules"):
+        assert lab in i18n._FR_TO_EN, lab
 
 
 # ══════════════════════════════════════════════════════════════════════════════

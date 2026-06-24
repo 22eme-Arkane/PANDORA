@@ -56,6 +56,21 @@ class StoryboardSyncConfirmDialog(QDialog):
          "Met à jour le nom des décors renommés et ré-assigne les plans sans décor "
          "d'après le titre et le prompt.",
          False, False),
+        ("sync_casting",
+         "Synchroniser le casting",
+         "Met à jour les noms de personnages renommés et ré-assigne aux plans les "
+         "personnages cités dans le titre ou le prompt.",
+         False, False),
+        ("sync_accessories",
+         "Synchroniser les accessoires",
+         "Met à jour les accessoires renommés et ré-assigne aux plans les accessoires "
+         "cités dans le titre ou le prompt.",
+         False, False),
+        ("sync_vehicles",
+         "Synchroniser les véhicules",
+         "Met à jour les véhicules renommés et ré-assigne aux plans les véhicules "
+         "cités dans le titre ou le prompt.",
+         False, False),
         ("rewrite_scenario",
          "Réécrire le scénario depuis le storyboard",
          "Reconstitue un scénario littéraire à partir des plans, visible dans l'onglet "
@@ -110,7 +125,15 @@ class StoryboardSyncConfirmDialog(QDialog):
         sep.setStyleSheet(f"background:{CP['border']};")
         root.addWidget(sep)
 
-        # ── Options (cases à cocher) ─────────────────────────────────────────
+        # ── Options (cases à cocher) — zone scrollable bornée (liste qui grandit) ─
+        _opts_scroll = QScrollArea()
+        _opts_scroll.setWidgetResizable(True)
+        _opts_scroll.setStyleSheet("QScrollArea{background:transparent;border:none;}")
+        _opts_inner = QWidget()
+        _opts_inner.setStyleSheet("background:transparent;")
+        _opts_lay = QVBoxLayout(_opts_inner)
+        _opts_lay.setContentsMargins(0, 0, 2, 0)
+        _opts_lay.setSpacing(10)
         for key, label, detail, default_on, is_ai in self._OPTIONS:
             card = QFrame()
             card.setStyleSheet(
@@ -154,7 +177,13 @@ class StoryboardSyncConfirmDialog(QDialog):
             d_lbl.setWordWrap(True)
             card_lay.addWidget(d_lbl)
 
-            root.addWidget(card)
+            _opts_lay.addWidget(card)
+
+        _opts_lay.addStretch()
+        _opts_scroll.setWidget(_opts_inner)
+        _opts_scroll.setMinimumHeight(300)
+        _opts_scroll.setMaximumHeight(460)
+        root.addWidget(_opts_scroll, 1)
 
         # ── Note finale ──────────────────────────────────────────────────────
         note = QLabel(
@@ -328,6 +357,7 @@ class StoryboardSyncDialog(QDialog):
             "reassign": True, "rewrite_prompts": True,
             "resync_decors": True, "rewrite_scenario": False,
             "sync_staging": False, "sync_lighting": False,
+            "sync_casting": False, "sync_accessories": False, "sync_vehicles": False,
         }
         self._scenario_text   = ""   # texte du scénario reconstruit (si demandé)
         self._scenario_worker = None
@@ -460,7 +490,8 @@ class StoryboardSyncDialog(QDialog):
         # Y a-t-il au moins une opération qui touche les plans ?
         shot_ops = any(self._options.get(k) for k in
                        ("reassign", "rewrite_prompts", "resync_decors",
-                        "sync_staging", "sync_lighting"))
+                        "sync_staging", "sync_lighting",
+                        "sync_casting", "sync_accessories", "sync_vehicles"))
         if shot_ops:
             from api.screenplay import SyncStoryboardWorker
             w = SyncStoryboardWorker(self._shots_in, self._options)
@@ -521,7 +552,8 @@ class StoryboardSyncDialog(QDialog):
 
         shot_ops = any(self._options.get(k) for k in
                        ("reassign", "rewrite_prompts", "resync_decors",
-                        "sync_staging", "sync_lighting"))
+                        "sync_staging", "sync_lighting",
+                        "sync_casting", "sync_accessories", "sync_vehicles"))
 
         # Changed first, then unchanged — uniquement si une opération sur les plans
         # a réellement tourné (sinon mode « scénario seul »).
