@@ -2727,6 +2727,19 @@ def edit_clip_rendu_audio_et_modeles():
     assert tab._cb_lipsync is not None, "lip-sync absent"
     assert tab._ra_body.isAncestorOf(tab._lipsync_toggle_row), "lip-sync hors de RENDU & AUDIO"
     assert not tab._ra_body.isVisible(), "RENDU & AUDIO doit être replié par défaut"
+    # 1b) mêmes options que le storyboard (les 5 applicables), DANS la section + câblées
+    for _attr, _row in (("_audio_cb", "_audio_toggle_row"), ("_music_cb", "_music_toggle_row"),
+                        ("_subtitle_cb", "_subtitle_toggle_row"),
+                        ("_film_anchor_cb", "_film_anchor_toggle_row"),
+                        ("_dyn_cam_cb", "_dyn_cam_toggle_row")):
+        assert getattr(tab, _attr, None) is not None, f"{_attr} absent"
+        assert tab._ra_body.isAncestorOf(getattr(tab, _row)), f"{_row} hors de RENDU & AUDIO"
+    assert tab._audio_cb.isChecked(), "Audio natif coché par défaut (comme storyboard)"
+    import inspect as _insp
+    src_pn = _insp.getsource(M.TabDavinciEdit._process_next)
+    assert '"audio":' in src_pn and "no_music_suffix" in src_pn, "audio/musique non câblés"
+    assert "no subtitles" in src_pn and "ARRI Alexa 35mm" in src_pn, "sous-titres/film non câblés"
+    assert "change the camera angle every 2 seconds" in src_pn, "caméra dynamique non câblée"
     # 2) menu déroulant des 4 modèles + invite
     keys = [tab._mod_combo.itemData(i) for i in range(tab._mod_combo.count())]
     assert keys[0] == "" and set(keys) >= {"bg", "face", "grade", "outfit"}, keys

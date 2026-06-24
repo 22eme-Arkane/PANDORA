@@ -1699,6 +1699,8 @@ _FR_TO_EN: dict[str, str] = {
     "Caméra · Optiques · Micro":        "Camera · Lenses · Mic",
     "Caméra dynamique":                 "Dynamic camera",
     "Audio natif":                      "Native audio",
+    "Seedance génère le son ambiant et les effets sonores du clip":
+        "Seedance generates the clip's ambient sound and sound effects",
     "Se référer au mood":               "Refer to the mood",
     "Envoie le mood validé du plan comme image de référence → cohésion exacte "
     "(composition, cadrage, lumière, couleurs) avec le mood. Sans effet si le "

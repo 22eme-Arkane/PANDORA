@@ -1042,6 +1042,37 @@ class TabDavinciEdit(QScrollArea):
             self._ra_toggle_btn.setText(("▼" if self._ra_open else "▶") + "  RENDU & AUDIO")
         self._ra_toggle_btn.clicked.connect(_toggle_ra)
 
+        # Options RENDU & AUDIO — mêmes que « Générer depuis le storyboard » (libellés
+        # identiques → i18n partagée). Câblées dans _process_next (prompt + params).
+        self._audio_toggle_row = toggle_row(
+            "Audio natif", "Seedance génère le son ambiant et les effets sonores du clip", True)
+        self._audio_cb = self._audio_toggle_row.findChild(QCheckBox)
+        _ra_body_lay.addWidget(self._audio_toggle_row)
+
+        self._music_toggle_row = toggle_row(
+            "Musique générée",
+            "Coché → piste musicale présente · Décoché → « no background music » injecté", False)
+        self._music_cb = self._music_toggle_row.findChild(QCheckBox)
+        _ra_body_lay.addWidget(self._music_toggle_row)
+
+        self._subtitle_toggle_row = toggle_row(
+            "Sous-titres",
+            "Coché → sous-titres incrustés · Décoché → « no subtitles » injecté", False)
+        self._subtitle_cb = self._subtitle_toggle_row.findChild(QCheckBox)
+        _ra_body_lay.addWidget(self._subtitle_toggle_row)
+
+        self._film_anchor_toggle_row = toggle_row(
+            "Prise de vue réelle",
+            "Ancre le rendu dans le filmage réel — ARRI 35mm, grain argentique, peau naturelle, no CGI, no 3D  ·  Automatiquement ignoré si le style 'Film réaliste' ou 'Photoréaliste' est actif (déjà inclus)",
+            False)
+        self._film_anchor_cb = self._film_anchor_toggle_row.findChild(QCheckBox)
+        _ra_body_lay.addWidget(self._film_anchor_toggle_row)
+
+        self._dyn_cam_toggle_row = toggle_row(
+            "Caméra dynamique", "Changement d'angle toutes les 2 secondes", False)
+        self._dyn_cam_cb = self._dyn_cam_toggle_row.findChild(QCheckBox)
+        _ra_body_lay.addWidget(self._dyn_cam_toggle_row)
+
         # Resynchroniser les lèvres (LatentSync) — DANS le corps de RENDU & AUDIO.
         self._lipsync_toggle_row = toggle_row(
             "Resynchroniser les lèvres",
@@ -2027,6 +2058,20 @@ class TabDavinciEdit(QScrollArea):
         if has_video and "@Video1" not in prompt:
             prompt = f"@Video1 {prompt}" if prompt else "@Video1"
 
+        # ── RENDU & AUDIO : injections de prompt (mêmes options que le storyboard) ─
+        if getattr(self, "_dyn_cam_cb", None) and self._dyn_cam_cb.isChecked():
+            prompt = (f"{prompt}, change the camera angle every 2 seconds "
+                      "alternating between several types of shots")
+        if getattr(self, "_film_anchor_cb", None) and self._film_anchor_cb.isChecked():
+            import core.style as _style_api
+            if _style_api.get_style_key() not in {"realistic"}:   # déjà inclus si réaliste
+                prompt = (f"{prompt}, shot on ARRI Alexa 35mm film, photorealistic live action footage, "
+                          "real human actors, authentic film grain, natural skin texture and pores, "
+                          "no CGI, no 3D render, no computer animation, no digital art, "
+                          "organic depth of field, natural practical lighting")
+        if getattr(self, "_subtitle_cb", None) and not self._subtitle_cb.isChecked():
+            prompt = f"{prompt}, no subtitles"
+
         # Durée calée sur le clip SOURCE (Seedance n'accepte que 4–15 s) → la version
         # régénérée respecte la longueur de l'original au lieu d'un 5 s figé.
         gen_dur = self._source_gen_duration(clip_idx)
@@ -2038,6 +2083,13 @@ class TabDavinciEdit(QScrollArea):
             "prompt":       prompt,
             "model":        self._get_model(),
             "duration":     gen_dur,
+            # RENDU & AUDIO : son natif + « no music » (suffixe ajouté après traduction)
+            "audio":        (self._audio_cb.isChecked()
+                             if getattr(self, "_audio_cb", None) else True),
+            "no_music_suffix": ("" if (getattr(self, "_music_cb", None)
+                                       and self._music_cb.isChecked())
+                                else "no music, no background music, no soundtrack, "
+                                     "no musical score, natural ambient sound only"),
             "resolution":   (self._cb_res.currentData() or self._cb_res.currentText().split()[0]),
             "aspect_ratio": self._get_aspect_ratio(),
         }
