@@ -77,30 +77,19 @@ def _set_palette(app: QApplication):
 
 
 def _force_qt_file_dialogs():
-    """Force des dialogues de fichiers NON-NATIFS (dialogue Qt pur).
+    """Dialogues de fichiers Qt NON-NATIFS + VIGNETTES d'images (voir ui/file_dialogs).
 
-    Les dialogues NATIFS Windows passent par le shell COM/OLE ; sur certaines configs
-    cela plante (vu dans %TEMP%\\pandora_fault.log : RPC_E_CANTCALLOUT_ININPUTSYNCCALL
-    0x8001010d / RPC_E_DISCONNECTED 0x80010108) à l'ouverture d'un import de fichiers
-    (ex. « Importer des fichiers audio »). Le dialogue Qt n'utilise pas COM → plus de
-    crash. On injecte l'option DontUseNativeDialog dans les méthodes statiques de
-    QFileDialog (ouverture/sauvegarde) — un seul point, tout le reste du code inchangé.
+    Non-natif : le dialogue NATIF Windows passe par le shell COM/OLE ; sur certaines
+    configs cela plante (vu dans %TEMP%\\pandora_fault.log :
+    RPC_E_CANTCALLOUT_ININPUTSYNCCALL 0x8001010d / RPC_E_DISCONNECTED 0x80010108) à
+    l'ouverture d'un import de fichiers. Le dialogue Qt n'utilise pas COM → plus de
+    crash. Vignettes : un QFileIconProvider affiche l'aperçu des images dans
+    l'explorateur (plus pratique pour choisir une image de référence). Les 3 méthodes
+    statiques de QFileDialog sont remplacées par des versions instance — reste inchangé.
     """
     try:
-        from PyQt6.QtWidgets import QFileDialog
-        _OPT = QFileDialog.Option.DontUseNativeDialog
-        for _name in ("getOpenFileName", "getOpenFileNames", "getSaveFileName"):
-            _orig = getattr(QFileDialog, _name)
-
-            def _wrap(*a, __orig=_orig, **kw):
-                try:
-                    kw["options"] = kw.get("options") or QFileDialog.Option(0)
-                    kw["options"] |= _OPT
-                except Exception:
-                    pass
-                return __orig(*a, **kw)
-
-            setattr(QFileDialog, _name, staticmethod(_wrap))
+        from ui.file_dialogs import install_thumbnail_file_dialogs
+        install_thumbnail_file_dialogs()
     except Exception:
         pass
 

@@ -2491,14 +2491,17 @@ def file_dialogs_non_natifs_anti_crash_com():
     import os
     root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     with open(os.path.join(root, "main.py"), encoding="utf-8") as f:
-        src = f.read()
-    assert "def _force_qt_file_dialogs" in src, "patch dialogues non-natifs absent"
-    assert "DontUseNativeDialog" in src, "option non-native manquante"
-    assert "_force_qt_file_dialogs()   # dialogues Qt non-natifs" in src, \
+        src_main = f.read()
+    assert "def _force_qt_file_dialogs" in src_main, "patch dialogues non-natifs absent"
+    assert "_force_qt_file_dialogs()   # dialogues Qt non-natifs" in src_main, \
         "patch non appelé au démarrage"
+    # La logique non-native + remplacement des statics vit dans ui/file_dialogs.py.
+    with open(os.path.join(root, "ui", "file_dialogs.py"), encoding="utf-8") as f:
+        src_fd = f.read()
+    assert "DontUseNativeDialog" in src_fd, "option non-native manquante"
     # Couvre ouverture (simple + multiple) ET sauvegarde
     for m in ("getOpenFileName", "getOpenFileNames", "getSaveFileName"):
-        assert m in src, "méthode non couverte : " + m
+        assert f"QFileDialog.{m}" in src_fd, "méthode non couverte : " + m
 
 
 @test
@@ -2638,6 +2641,39 @@ def sound_design_moteurs_multiples():
     assert isinstance(tab._make_text_worker("x", 5.0, "t"), tts.MMAudioTextWorker)
     tab._text_engine_combo.setCurrentIndex(tkeys.index("elevenlabs"))
     assert isinstance(tab._make_text_worker("x", 5.0, "t"), tts.ElevenLabsSFXWorker)
+
+
+@test
+def file_dialog_vignettes_images():
+    """Dialogues de fichiers : vignettes d'images dans l'explorateur (QFileIconProvider)
+    + non-natif (anti-crash COM) + iconSize agrandi. Les statics QFileDialog sont
+    remplacées par des versions instance (format de retour conservé)."""
+    import os, inspect, tempfile
+    from PyQt6.QtWidgets import QApplication, QFileDialog, QListView
+    from PyQt6.QtCore import QFileInfo
+    from PyQt6.QtGui import QPixmap
+    QApplication.instance() or QApplication([])
+    import ui.file_dialogs as FD
+    # 1) vignette générée pour une image + mise en cache
+    d = tempfile.mkdtemp()
+    img = os.path.join(d, "x.png")
+    QPixmap(80, 80).save(img)
+    prov = FD.ThumbnailIconProvider()
+    ic = prov.icon(QFileInfo(img))
+    assert not ic.isNull(), "vignette image absente"
+    assert QFileInfo(img).absoluteFilePath() in prov._cache, "vignette non mise en cache"
+    # 2) apply_thumbnails : non-natif + provider + iconSize agrandi
+    dlg = QFileDialog()
+    FD.apply_thumbnails(dlg)
+    assert dlg.testOption(QFileDialog.Option.DontUseNativeDialog), "dialogue natif (risque COM)"
+    assert dlg.iconProvider() is FD._shared_provider(), "icon provider non posé"
+    sizes = [lv.iconSize().width() for lv in dlg.findChildren(QListView)]
+    assert sizes and max(sizes) >= 48, ("iconSize non agrandi", sizes)
+    dlg.deleteLater()
+    # 3) install remplace bien les 3 statics (sans les exécuter — source)
+    src = inspect.getsource(FD.install_thumbnail_file_dialogs)
+    for m in ("getOpenFileName", "getOpenFileNames", "getSaveFileName"):
+        assert f"QFileDialog.{m}" in src, f"static {m} non remplacée"
 
 
 # ══════════════════════════════════════════════════════════════════════════════
