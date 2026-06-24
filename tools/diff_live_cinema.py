@@ -82,10 +82,6 @@ EXPECTED_ONLY_CINEMA = {
         # (le Live a son propre lip-sync par keyframes/mapping). Reportable si besoin.
         "_advance_after_clip", "_start_shot_lipsync",
         "_on_shot_lipsync_done", "_on_shot_lipsync_failed",
-        # Auto-cochage « Prise de vue réelle » quand le style « Film réaliste » est
-        # actif (RENDU & AUDIO) + showEvent qui le déclenche — feature Cinéma.
-        # Reportable au Live si besoin.
-        "_sync_film_anchor_with_style", "showEvent",
     },
     "ui/page_scenario_live.py": {
         # Pas de Décors ni de HMC dans le Live (handlers supprimés, validé)
