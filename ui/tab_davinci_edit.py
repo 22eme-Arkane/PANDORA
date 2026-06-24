@@ -961,7 +961,7 @@ class TabDavinciEdit(QScrollArea):
         from api.lipsync import ffmpeg_available as _ffmpeg_ok
         self._lipsync_toggle_row = toggle_row(
             "Resynchroniser les lèvres",
-            "Synchronisation labiale LatentSync — aligne les lèvres sur l'audio source du clip",
+            "Synchronisation labiale LatentSync — ⚠ réencode (qualité moindre) + audio sur piste séparée",
             False,
         )
         self._cb_lipsync = self._lipsync_toggle_row.findChild(QCheckBox)
@@ -974,7 +974,9 @@ class TabDavinciEdit(QScrollArea):
             self._lipsync_toggle_row.setToolTip(
                 "Après génération Seedance, resynchronise les lèvres de l'acteur\n"
                 "avec l'audio source du clip DaVinci (fal-ai/latentsync).\n"
-                "Importe la vidéo lip-synced + la piste audio séparément dans DaVinci."
+                "⚠ Réencode via LatentSync → qualité moindre que le clip Seedance brut.\n"
+                "Importe la vidéo lip-synced + la piste audio séparément dans DaVinci.\n"
+                "Décoche pour garder le clip Seedance brut (un seul fichier, pleine qualité)."
             )
         lay.addWidget(self._lipsync_toggle_row)
 

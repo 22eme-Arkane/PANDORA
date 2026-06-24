@@ -1033,8 +1033,8 @@ _FR_TO_EN: dict[str, str] = {
 
     # ── Tab video engines (DaVinci Edit — LatentSync) ────────────────────────────
     "Resynchroniser les lèvres":     "Resync lips",
-    "Synchronisation labiale LatentSync — aligne les lèvres sur l'audio source du clip":
-        "LatentSync lip sync — aligns lips with the source audio",
+    "Synchronisation labiale LatentSync — ⚠ réencode (qualité moindre) + audio sur piste séparée":
+        "LatentSync lip sync — ⚠ re-encodes (lower quality) + audio on a separate track",
 
     # ── Tab Kling & PixVerse ─────────────────────────────────────────────────────
     "Kling v3 Pro I2V":              "Kling v3 Pro I2V",
@@ -3444,7 +3444,7 @@ _FR_TO_EN: dict[str, str] = {
     "💰  Génération facturée via fal.ai (Seedance 2.0)  ·  Tarifs détaillés dans le Manuel d'utilisation": "💰  Generation billed via fal.ai (Seedance 2.0)  ·  Detailed pricing in the User Manual",
     "● Étape 2/3 — Synchronisation LatentSync…": "● Step 2/3 — LatentSync synchronization…",
     "● Étape 3/3 — Import DaVinci…": "● Step 3/3 — DaVinci import…",
-    "Après génération Seedance, resynchronise les lèvres de l'acteur\navec l'audio source du clip DaVinci (fal-ai/latentsync).\nImporte la vidéo lip-synced + la piste audio séparément dans DaVinci.": "After Seedance generation, resync the actor's lips\nwith the source audio of the DaVinci clip (fal-ai/latentsync).\nImports the lip-synced video + the audio track separately into DaVinci.",
+    "Après génération Seedance, resynchronise les lèvres de l'acteur\navec l'audio source du clip DaVinci (fal-ai/latentsync).\n⚠ Réencode via LatentSync → qualité moindre que le clip Seedance brut.\nImporte la vidéo lip-synced + la piste audio séparément dans DaVinci.\nDécoche pour garder le clip Seedance brut (un seul fichier, pleine qualité).": "After Seedance generation, resync the actor's lips\nwith the source audio of the DaVinci clip (fal-ai/latentsync).\n⚠ Re-encodes via LatentSync → lower quality than the raw Seedance clip.\nImports the lip-synced video + the audio track separately into DaVinci.\nUncheck to keep the raw Seedance clip (single file, full quality).",
     "Aucune clé API fal.ai n'est configurée.\n\nLa génération va tourner en mode simulation :\nles vidéos seront fictives et aucun fichier ne sera créé.\n\nPour générer de vraies vidéos, ajoutez votre clé fal.ai\ndans Paramètres, puis relancez.\n\nContinuer en mode simulation ?": "No fal.ai API key is configured.\n\nGeneration will run in simulation mode:\nvideos will be fake and no file will be created.\n\nTo generate real videos, add your fal.ai key\nin Settings, then try again.\n\nContinue in simulation mode?",
     "◎  Modifier un clip existant": "◎  Edit an existing clip",
     "Cet onglet permet de travailler sur un clip vidéo existant selon 3 modes :\n  • Générer un début  —  génère un nouveau clip à placer avant le clip source\n  • Générer une suite  —  génère un nouveau clip à placer après le clip source\n  • Nouveau rush  —  génère une nouvelle prise à partir du même clip\n\nPour utiliser un clip depuis DaVinci Resolve :\n  → Sélectionne le clip dans la timeline DaVinci\n  → Clique sur « Utiliser le clip DaVinci » ci-dessous\n  → Le nom du clip apparaît dans « Clip sélectionné »": "This tab lets you work on an existing video clip in 3 modes:\n  • Generate a beginning  —  generates a new clip to place before the source clip\n  • Generate a continuation  —  generates a new clip to place after the source clip\n  • New take  —  generates a new take from the same clip\n\nTo use a clip from DaVinci Resolve:\n  → Select the clip in the DaVinci timeline\n  → Click « Use DaVinci clip » below\n  → The clip name appears in « Selected clip »",
