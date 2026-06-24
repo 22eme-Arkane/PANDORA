@@ -248,6 +248,7 @@ class PageLiveSettings(QWidget):
             ("Claude (Anthropic) — défaut",       "anthropic", "claude-sonnet-4-6"),
             ("Fable 5 (Anthropic) — qualité max", "anthropic", "claude-fable-5"),
             ("Mistral — expérimental",            "mistral",   ""),
+            ("Kimi K2.7 (Moonshot) — API ou local", "kimi",    ""),
             ("Ollama local — expérimental",       "ollama",    ""),
         ]
         self._ai_combo = QComboBox()
@@ -285,12 +286,40 @@ class PageLiveSettings(QWidget):
                                     self._ollama_url_input, self._ollama_model_input)
         ac.addLayout(oll_row)
 
+        # Kimi (Moonshot) — clé facultative (vide en local) + URL/modèle. L'URL de base
+        # sert d'aiguillage API cloud ↔ serveur local OpenAI-compatible (mêmes clés de
+        # config que Cinéma : kimi_key / kimi_url / kimi_model).
+        kim_row = QHBoxLayout()
+        kim_row.setSpacing(12)
+        kim_row.addWidget(_key_label("Clé Kimi (Moonshot) :"))
+        self._kimi_input = _input("sk-••••  (vide si serveur local)", 0)
+        self._kimi_input.setEchoMode(QLineEdit.EchoMode.Password)
+        kim_row.addWidget(self._kimi_input, 1)
+        kim_row.addWidget(_link_btn("⇗  Clés", "https://platform.moonshot.ai/console/api-keys"))
+        self._kimi_key_row_widgets = (kim_row.itemAt(0).widget(), self._kimi_input)
+        ac.addLayout(kim_row)
+
+        kimu_row = QHBoxLayout()
+        kimu_row.setSpacing(12)
+        kimu_row.addWidget(_key_label("Kimi (URL · modèle) :"))
+        self._kimi_url_input = _input("https://api.moonshot.ai/v1  (ou local /v1)", 0)
+        self._kimi_model_input = _input("kimi-k2.7-code", 0)
+        kimu_row.addWidget(self._kimi_url_input, 1)
+        kimu_row.addWidget(self._kimi_model_input, 1)
+        self._kimi_row_widgets = (kimu_row.itemAt(0).widget(),
+                                  self._kimi_url_input, self._kimi_model_input)
+        ac.addLayout(kimu_row)
+
         def _on_ai_changed(*_):
             prov = (self._ai_combo.currentData() or ("anthropic", ""))[0]
             for wdg in self._mistral_row_widgets:
                 wdg.setVisible(prov == "mistral")
             for wdg in self._ollama_row_widgets:
                 wdg.setVisible(prov == "ollama")
+            for wdg in self._kimi_key_row_widgets:
+                wdg.setVisible(prov == "kimi")
+            for wdg in self._kimi_row_widgets:
+                wdg.setVisible(prov == "kimi")
         self._ai_combo.currentIndexChanged.connect(_on_ai_changed)
         self._on_ai_changed = _on_ai_changed
 
@@ -332,6 +361,9 @@ class PageLiveSettings(QWidget):
         self._mistral_input.setText(cfg.get("mistral_key", ""))
         self._ollama_url_input.setText(cfg.get("ollama_url", ""))
         self._ollama_model_input.setText(cfg.get("ollama_model", ""))
+        self._kimi_input.setText(cfg.get("kimi_key", ""))
+        self._kimi_url_input.setText(cfg.get("kimi_url", ""))
+        self._kimi_model_input.setText(cfg.get("kimi_model", ""))
         self._on_ai_changed()
         host = cfg.get("resolume_host", "localhost")
         port = cfg.get("resolume_port", 8080)
@@ -349,6 +381,9 @@ class PageLiveSettings(QWidget):
         cfg["mistral_key"]       = self._mistral_input.text().strip()
         cfg["ollama_url"]        = self._ollama_url_input.text().strip()
         cfg["ollama_model"]      = self._ollama_model_input.text().strip()
+        cfg["kimi_key"]          = self._kimi_input.text().strip()
+        cfg["kimi_url"]          = self._kimi_url_input.text().strip()
+        cfg["kimi_model"]        = self._kimi_model_input.text().strip()
         cfg["resolume_host"] = self._host_input.text().strip() or "localhost"
         cfg["resolume_port"] = self._port_spin.value()
         save_config(cfg)

@@ -57,7 +57,7 @@ def selecteur_ia_present():
     from ui.page_settings import SettingsPage
     p = SettingsPage()
     n = p.ai_combo.count()
-    assert n == 8, "8 choix (PANDORA optimisé défaut, Sonnet, Haiku, Fable 5, GPT-5.5, Mistral, Ollama, Personnalisé)"
+    assert n == 9, "9 choix (PANDORA optimisé défaut, Sonnet, Haiku, Fable 5, GPT-5.5, Mistral, Kimi K2.7, Ollama, Personnalisé)"
     labels = [p.ai_combo.itemText(i) for i in range(n)]
     assert "optimisé" in labels[0] and "défaut" in labels[0], "PANDORA optimisé = défaut (1er)"
     assert any("Fable 5" in x for x in labels), "Fable 5 proposé"
@@ -65,6 +65,7 @@ def selecteur_ia_present():
     assert any("Choix personnalisé" in x for x in labels), "Choix personnalisé proposé"
     assert any("PANDORA optimisé" in x for x in labels), "PANDORA optimisé proposé"
     assert any("Mistral" in x for x in labels) and any("Ollama" in x for x in labels)
+    assert any("Kimi" in x for x in labels), "Kimi K2.7 proposé"
     # Clés GPT + Mistral présentes (menu déroulant facultatif)
     assert hasattr(p, "openai_input") and hasattr(p, "mistral_input")
     assert hasattr(p, "_opt_keys_box") and hasattr(p, "_btn_opt_keys"), "menu clés facultatives"
@@ -665,7 +666,8 @@ def moteurs_ia_par_tache():
     PAR TÂCHE sans dégrader le défaut ; appels câblés avec task=."""
     import core.ai_provider as ap
     assert "openai" in ap._PROVIDERS
-    assert set(ap.ENGINES) == {"claude", "opus", "haiku", "fable5", "gpt", "mistral", "ollama"}
+    assert set(ap.ENGINES) == {"claude", "opus", "haiku", "fable5", "gpt",
+                               "mistral", "kimi", "ollama"}
     assert ap.ENGINES["gpt"]["provider"] == "openai"
     assert ap.ENGINES["opus"]["creative_model"] == "claude-opus-4-8"
     # Profil PANDORA optimisé (défaut) : moteur IDÉAL par tâche — Opus UNIQUEMENT
@@ -717,6 +719,66 @@ def moteurs_ia_par_tache():
     assert "optimisé avec Fable 5" in src_pg
     # Choix personnalisé câblé sur le moteur par tâche
     assert '"custom"' in src_pg and "_set_advanced" in src_pg
+
+
+@test
+def moteur_kimi_api_ou_local():
+    """Kimi K2.7 (Moonshot) : moteur compatible OpenAI, URL de base éditable qui sert
+    d'aiguillage API cloud ↔ serveur local ; clé exigée seulement en cloud ; modèle
+    défaut kimi-k2.7-code ; câblé dans Paramètres Cinéma (sélecteur + clé + testeur)."""
+    import core.ai_provider as ap
+    assert "kimi" in ap._PROVIDERS
+    assert ap.ENGINES["kimi"]["provider"] == "kimi"
+    assert ap.ENGINES["kimi"]["name"] == "Kimi K2.7"
+    assert "kimi" in ap.ENGINE_ORDER
+    assert ap._KIMI_DEFAULT_MODEL == "kimi-k2.7-code"
+    assert ap._KIMI_DEFAULT_URL == "https://api.moonshot.ai/v1"
+    orig = ap._cfg
+    try:
+        # Routage par tâche → provider kimi
+        ap._cfg = lambda: {"ai_task_engines": {"screenplay": "kimi"}}
+        assert ap._resolve_engine("screenplay")[0] == "kimi"
+        # Modèle : défaut + override
+        ap._cfg = lambda: {}
+        assert ap._model("creative", "kimi", "") == "kimi-k2.7-code"
+        ap._cfg = lambda: {"kimi_model": "kimi-k2.6"}
+        assert ap._model("utility", "kimi", "") == "kimi-k2.6"
+        # key_error : cloud SANS clé → erreur ; AVEC clé → None ; local → None
+        ap._cfg = lambda: {"ai_task_engines": {"sync": "kimi"}}
+        assert ap.key_error("sync") and "Kimi" in ap.key_error("sync")
+        ap._cfg = lambda: {"ai_task_engines": {"sync": "kimi"}, "kimi_key": "sk-x"}
+        assert ap.key_error("sync") is None
+        ap._cfg = lambda: {"ai_task_engines": {"sync": "kimi"},
+                           "kimi_url": "http://localhost:11434/v1"}
+        assert ap.key_error("sync") is None, "local ne doit pas exiger de clé"
+        # Payload OpenAI-compatible : URL /chat/completions, modèle, Bearer
+        ap._cfg = lambda: {"kimi_key": "sk-xyz"}
+        url, payload, headers = ap._kimi_payload("S", [{"role": "user", "content": "h"}],
+                                                 "kimi-k2.7-code", 99, False)
+        assert url == "https://api.moonshot.ai/v1/chat/completions"
+        assert payload["model"] == "kimi-k2.7-code" and payload["max_tokens"] == 99
+        assert headers["Authorization"] == "Bearer sk-xyz"
+        # Local sans clé → Bearer factice 'local' + URL repointée
+        ap._cfg = lambda: {"kimi_url": "http://localhost:11434/v1"}
+        url2, _, h2 = ap._kimi_payload("", [{"role": "user", "content": "x"}], "m", 1, True)
+        assert url2 == "http://localhost:11434/v1/chat/completions"
+        assert h2["Authorization"] == "Bearer local"
+        # Dispatch : provider kimi routé vers les adaptateurs Kimi
+        ds = inspect.getsource(ap._dispatch_complete) + inspect.getsource(ap._dispatch_stream)
+        assert ds.count('provider == "kimi"') == 2
+        # Nom d'affichage
+        assert ap._engine_display_name("kimi", "") == "Kimi K2.7"
+    finally:
+        ap._cfg = orig
+    # Paramètres Cinéma : sélecteur Kimi + champs URL/modèle + clé + testeur
+    src_pg = inspect.getsource(__import__("ui.page_settings", fromlist=["_"]))
+    assert '"kimi"' in src_pg and "kimi_url_input" in src_pg and "kimi_model_input" in src_pg
+    assert "self.kimi_input" in src_pg and "test_kimi_connection" in src_pg
+    assert '"kimi_key"' in src_pg and '"kimi_url"' in src_pg and '"kimi_model"' in src_pg
+    # i18n : libellés Kimi traduits FR→EN
+    import core.i18n as i18n
+    assert "✓  Tester API Kimi" in i18n._FR_TO_EN
+    assert "Modèle Kimi (défaut : kimi-k2.7-code)" in i18n._FR_TO_EN
 
 
 @test
@@ -2122,6 +2184,198 @@ def moods_nb2_cadrage_et_lifecycle():
     assert ap.count("_MOOD_REF_DIRECTIVE") >= 2, "consigne de cadrage NB2 non injectée à l'édition"
     sb = inspect.getsource(__import__("ui.page_storyboard", fromlist=["_"]))
     assert "abandon_thread(w)" in sb, "worker mood non parqué (risque de segfault)"
+    # Upload des réfs robuste : pas de fal_client.upload_file brut dans le chemin NB2
+    # (échoue sur chemins non-ASCII + erreur « Invalid storage type »). Fallback data-URL.
+    nb2_src = inspect.getsource(ap_mod.run_generation_nb2)
+    assert "upload_file" not in nb2_src, "moods NB2 : upload_file brut (fragile non-ASCII/stockage)"
+    assert "_upload_ref_robust" in nb2_src, "moods NB2 : upload robuste non utilisé"
+    rob = inspect.getsource(ap_mod._upload_ref_robust)
+    assert "data:" in rob and "b64encode" in rob, "fallback data-URL stockage manquant"
+
+
+@test
+def mood_reference_dans_rendu_audio():
+    """Studio IA Cinéma → RENDU & AUDIO : toggle « Se référer au mood ». Activé, il
+    envoie le mood ACTIF du plan comme image de référence Seedance (rôle « mood »)
+    pour une cohésion exacte. Mood actif = paths[active_idx]. Le rôle « mood » porte
+    une consigne @ImageN forte côté api/real.py."""
+    import inspect
+    t2v = inspect.getsource(__import__("ui.tab_t2v", fromlist=["_"]))
+    # Toggle présent dans RENDU & AUDIO
+    assert '"Se référer au mood"' in t2v, "toggle « Se référer au mood » absent"
+    assert "self._mood_ref_cb" in t2v, "checkbox mood ref absente"
+    # Injection : le mood part comme réf avec le rôle « mood »
+    assert 'ref_image_roles + ["mood"]' in t2v, "rôle « mood » non ajouté aux réfs"
+    assert "self._active_mood_path" in t2v, "chemin du mood actif non suivi"
+    # Mood ACTIF = active_idx (pas juste le premier)
+    assert 'active_idx' in t2v and "_active_mood_path = " in t2v, "active_idx non pris en compte"
+    # Gardes : Seedance uniquement + toggle coché + fichier existant
+    assert "_mood_ref_cb.isChecked()" in t2v
+    # Consigne @ImageN « mood » côté API réelle (cohésion composition/lumière/couleur)
+    real = inspect.getsource(__import__("api.real", fromlist=["_"]))
+    assert '_role == "mood"' in real, "branche rôle « mood » absente d'api/real.py"
+    assert "MOOD / LOOK REFERENCE" in real, "consigne cohésion mood absente"
+    # i18n FR→EN du libellé
+    import core.i18n as i18n
+    assert "Se référer au mood" in i18n._FR_TO_EN
+
+
+@test
+def lipsync_rendu_audio_storyboard():
+    """Synchro labiale dans RENDU & AUDIO (Générer depuis le storyboard) : moteurs
+    fal.ai sélectionnables (défaut Sync 2 Pro), audio = TTS auto du dialogue OU
+    fichier attaché par plan, worker dédié parqué (anti-segfault)."""
+    import inspect
+    # ── Catalogue de moteurs (api/lipsync) ──────────────────────────────────
+    import api.lipsync as ls
+    assert ls.LIPSYNC_DEFAULT == "sync2pro"
+    assert ls.LIPSYNC_ENGINE_ORDER[0] == "sync2pro"
+    assert ls.lipsync_endpoint("sync2pro") == "fal-ai/sync-lipsync/v2/pro"
+    assert ls.lipsync_endpoint("sync3") == "fal-ai/sync-lipsync/v3"
+    assert ls.lipsync_endpoint("zzz") == "fal-ai/sync-lipsync/v2/pro"  # repli
+    assert set(ls.LIPSYNC_ENGINES) == {"sync2pro", "sync3", "sync2", "latentsync"}
+    assert ls.LipSyncWorker is ls.LatentSyncWorker  # rétro-compat « Modifier depuis DaVinci »
+    # Upload audio robuste (non-ASCII + fallback data-URL) présent
+    rob = inspect.getsource(ls._upload_audio_robust)
+    assert "b64encode" in rob and "data:" in rob
+
+    # ── Extraction de dialogue (core/dialogue) ──────────────────────────────
+    from core.dialogue import extract_shot_dialogue
+    assert extract_shot_dialogue({"seedance_prompt": 'Il dit «Bonjour».'}) == "Bonjour"
+    assert extract_shot_dialogue({"dialogue": "Salut"}) == "Salut"
+    assert extract_shot_dialogue({"seedance_prompt": "pas de dialogue"}) == ""
+
+    # ── Worker par plan (api/shot_lipsync) ──────────────────────────────────
+    import api.shot_lipsync as sl
+    w = sl.ShotLipSyncWorker({"id": "s1", "lipsync_audio_path": "C:/x.wav"},
+                             "http://v", "out", engine="sync3")
+    assert w._audio_path == "C:/x.wav" and w._engine == "sync3"
+    assert hasattr(w, "done") and hasattr(w, "failed") and hasattr(w, "progress")
+
+    # ── UI tab_t2v : toggle + sélecteur + file lip-sync ─────────────────────
+    t2v = inspect.getsource(__import__("ui.tab_t2v", fromlist=["_"]))
+    assert '"Resynchroniser les lèvres (lip-sync)"' in t2v
+    assert "self._lipsync_cb" in t2v and "self._lipsync_engine_combo" in t2v
+    assert "_start_shot_lipsync" in t2v and "_advance_after_clip" in t2v
+    assert "ShotLipSyncWorker" in t2v
+    assert "abandon_thread" in t2v, "worker lip-sync non parqué (anti-segfault)"
+    assert 'self._pending_advance' in t2v
+    # Override manuel par plan (dialog_shot) + persistance
+    ds = inspect.getsource(__import__("ui.dialog_shot", fromlist=["_"]))
+    assert "self._lipsync_audio" in ds and '"lipsync_audio_path"' in ds
+    # Schéma plan : champ persité
+    import core.storyboard as sb
+    assert 'lipsync_audio_path' in inspect.getsource(sb)
+    # i18n
+    import core.i18n as i18n
+    assert "Resynchroniser les lèvres (lip-sync)" in i18n._FR_TO_EN
+    assert "Moteur lip-sync" in i18n._FR_TO_EN
+
+
+@test
+def raccord_bar_jamais_fenetre_flottante():
+    """La barre « Raccord automatique » est RETIRÉE de l'UI Cinéma : objet gardé SANS
+    parent ni layout, uniquement pour _prev_shot (toggle I2V + get_i2v_frame). Régression :
+    update_shot ne doit JAMAIS l'afficher — sinon une fenêtre flottante parasite s'ouvre
+    pendant la génération en série (chaque plan appelle _on_shot_selected → update_shot)."""
+    import inspect
+    import ui.tab_t2v as M
+    tab = M.TabT2V()
+    bar = tab._continuity_bar
+    assert bar.parent() is None, "barre sans parent → l'afficher = fenêtre flottante"
+    # Chemin succès (plan courant AVEC plan précédent)
+    bar.update_shot({"number": 2}, [{"number": 1, "decor_name": "X"}, {"number": 2}])
+    assert bar._prev_shot is not None, "raccord I2V cassé (_prev_shot perdu)"
+    assert not bar.isVisible(), "barre raccord visible → fenêtre flottante parasite"
+    # Idem sans plan précédent (early-return) : reste cachée
+    bar.update_shot({"number": 1}, [{"number": 1}])
+    assert not bar.isVisible(), "barre raccord visible (early-return)"
+
+
+@test
+def detourage_personnage_envoye_a_seedance():
+    """Quand on supprime le fond d'un portrait, c'est l'image DÉTOURÉE qui part vers
+    Seedance — pas l'ancien fond. Deux causes corrigées :
+      1. la planche 4 vues (sheet_path, AVEC fond) était préférée → on l'efface au
+         détourage pour que image_path (détouré) serve de référence ;
+      2. la mosaïque aplatissait l'alpha (.convert RGB) → le fond d'origine sous les
+         pixels transparents réapparaissait → on compose désormais via le masque alpha."""
+    import inspect, os, tempfile
+    # ── 1. Détourage efface sheet_path ──────────────────────────────────────
+    import ui.dialog_character as DC
+    cls = next(c for n, c in vars(DC).items()
+               if isinstance(c, type) and "Dialog" in n and hasattr(c, "_on_bg_removed"))
+    assert 'self._sheet_path = ""' in inspect.getsource(cls._on_bg_removed), \
+        "le détourage doit retirer la planche 4 vues comme référence"
+    # ── 2. Mosaïque : alpha respecté (cutout → fond neutre, pas le fond d'origine) ─
+    try:
+        from PIL import Image
+    except ImportError:
+        return  # PIL absent : la mosaïque retombe sur les images brutes (ok)
+    import core.mosaic as mo
+    d = tempfile.mkdtemp(prefix="t_mos_")
+    cut = os.path.join(d, "cut.png")
+    Image.new("RGBA", (200, 200), (255, 0, 0, 0)).save(cut)  # rouge mais transparent
+    out = os.path.join(d, "m.png")
+    assert mo._composite([(cut, "Perso")], out), "composite mosaïque échoué"
+    cx, cy = mo._CELL_W // 2, (mo._CELL_H - mo._LABEL_H) // 2
+    r, g, b = Image.open(out).convert("RGB").getpixel((cx, cy))
+    assert r < 60 and g < 60 and b < 70, f"fond d'origine réapparu sous l'alpha : {(r, g, b)}"
+    # Source : compositing via masque alpha présent
+    cs = inspect.getsource(mo._composite)
+    assert "canvas.paste(img, (px, py), img)" in cs, "paste avec masque alpha manquant"
+    # ── 3. Préférence rétroactive : un portrait détouré PRIME sur la planche ─────
+    op_sheet = os.path.join(d, "sheet_op.png")
+    Image.new("RGB", (200, 200), (0, 0, 255)).save(op_sheet)          # planche opaque
+    transp = os.path.join(d, "cut2.png")
+    Image.new("RGBA", (200, 200), (0, 255, 0, 0)).save(transp)        # portrait détouré
+    # Détouré présent → on prend le détouré, pas la planche (fond d'origine)
+    assert mo._pick_char_ref({"sheet_path": op_sheet, "image_path": transp}) == transp
+    # Pas de détourage → planche (multi-vues) conservée
+    op_port = os.path.join(d, "port_op.png")
+    Image.new("RGB", (200, 200), (200, 200, 200)).save(op_port)
+    assert mo._pick_char_ref({"sheet_path": op_sheet, "image_path": op_port}) == op_sheet
+
+
+@test
+def moods_plan_architecte_repere():
+    """Moods NB2 : le plan d'architecte (vue de dessus) du décor est envoyé EN PLUS,
+    en DERNIÈRE référence, avec une consigne dédiée (repère d'agencement de la pièce,
+    pas une image à reproduire). Le dispatcher le récupère via floor_plan_for_shot."""
+    import inspect, sys, types, os, tempfile
+    import api.apercu as A
+    # Consigne dédiée présente + cible « la dernière image »
+    d = A._FLOOR_PLAN_DIRECTIVE
+    assert "FLOOR PLAN" in d and "LAST reference image" in d
+    assert "Do NOT" in d and ("geometry" in d or "layout" in d)
+    # run_mood passe le plan d'architecte du décor
+    rm = inspect.getsource(A.run_mood)
+    assert "floor_plan_for_shot" in rm and "floor_plan=" in rm
+    # Comportement : plan envoyé EN DERNIER + 2 consignes (stub fal_client)
+    fake = types.ModuleType("fal_client")
+    cap = {}
+    fake.subscribe = lambda endpoint, arguments=None, **k: (
+        cap.update(args=arguments) or {"images": [{"url": "http://o.png"}]})
+    fake.upload = lambda data, content_type=None: "U" + str(len(data))
+    sys.modules["fal_client"] = fake
+    import requests
+    _orig_get = requests.get
+    requests.get = lambda url, timeout=120: types.SimpleNamespace(content=b"PNG")
+    try:
+        td = tempfile.mkdtemp(prefix="t_moodfp_")
+        def _mk(n, sz):
+            p = os.path.join(td, n); open(p, "wb").write(b"x" * sz); return p
+        perso, decor, plan = _mk("p.png", 10), _mk("d.png", 20), _mk("fp.png", 30)
+        A.run_generation_nb2("PR", td, "k", lambda m: None, [perso, decor], floor_plan=plan)
+        urls = cap["args"]["image_urls"]
+        assert urls[-1] == "U30", "le plan d'architecte doit être la DERNIÈRE référence"
+        assert "FLOOR PLAN" in cap["args"]["prompt"], "consigne plan d'architecte absente"
+        # Sans plan : pas de consigne plan
+        cap.clear()
+        A.run_generation_nb2("PR", td, "k", lambda m: None, [perso], floor_plan="")
+        assert "FLOOR PLAN" not in cap["args"]["prompt"]
+    finally:
+        requests.get = _orig_get
 
 
 # ══════════════════════════════════════════════════════════════════════════════

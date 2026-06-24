@@ -573,6 +573,50 @@ class ShotDialog(QDialog):
         )
         lay.addWidget(self._sound_prompt)
 
+        # ── Audio lip-sync (override par plan) ────────────────────────────────
+        # Vide = la voix est générée automatiquement (TTS depuis le dialogue) quand
+        # « Resynchroniser les lèvres » est actif dans le Studio IA. Un fichier ici
+        # FORCE cette voix pour ce plan (doublage pro / voix d'acteur).
+        lay.addWidget(_lbl("Audio lip-sync (override)"))
+        _ls_row = QHBoxLayout()
+        _ls_row.setSpacing(6)
+        self._lipsync_audio = QLineEdit(self._shot.get("lipsync_audio_path", ""))
+        self._lipsync_audio.setReadOnly(True)
+        self._lipsync_audio.setPlaceholderText(
+            "Auto (TTS du dialogue) — ou attache un .wav / .mp3 pour ce plan")
+        self._lipsync_audio.setStyleSheet(_FIELD_STYLE)
+        _ls_row.addWidget(self._lipsync_audio, 1)
+        _btn_ls_pick = QPushButton("Parcourir…")
+        _btn_ls_pick.setCursor(Qt.CursorShape.PointingHandCursor)
+        _btn_ls_pick.setStyleSheet(
+            f"QPushButton{{background:transparent;color:{CP['accent']};"
+            f"border:1px solid {CP['accent']};border-radius:6px;font-size:10px;"
+            f"font-weight:700;padding:0 10px;}}"
+            f"QPushButton:hover{{background:rgba(78,205,196,0.12);}}"
+        )
+
+        def _pick_ls_audio(*_a):
+            from PyQt6.QtWidgets import QFileDialog
+            from core.i18n import translate as _tr
+            p, _ = QFileDialog.getOpenFileName(
+                self, _tr("Audio lip-sync du plan"), "",
+                "Audio (*.wav *.mp3 *.m4a *.aac *.ogg)")
+            if p:
+                self._lipsync_audio.setText(p)
+        _btn_ls_pick.clicked.connect(_pick_ls_audio)
+        _ls_row.addWidget(_btn_ls_pick)
+        _btn_ls_clear = QPushButton("✕")
+        _btn_ls_clear.setFixedWidth(28)
+        _btn_ls_clear.setCursor(Qt.CursorShape.PointingHandCursor)
+        _btn_ls_clear.setStyleSheet(
+            f"QPushButton{{background:transparent;color:{CP['text_dim']};"
+            f"border:1px solid {CP['border']};border-radius:6px;font-size:11px;}}"
+            f"QPushButton:hover{{color:{CP['text_primary']};border-color:{CP['accent']};}}"
+        )
+        _btn_ls_clear.clicked.connect(lambda *_a: self._lipsync_audio.clear())
+        _ls_row.addWidget(_btn_ls_clear)
+        lay.addLayout(_ls_row)
+
         self._enhance_status = QLabel("")
         self._enhance_status.setWordWrap(True)
         self._enhance_status.setStyleSheet(
@@ -822,6 +866,7 @@ class ShotDialog(QDialog):
             "comments":          self._comments.toPlainText().strip(),
             "seedance_prompt":   self._seedance_prompt.toPlainText().strip(),
             "sound_prompt":      self._sound_prompt.toPlainText().strip(),
+            "lipsync_audio_path": self._lipsync_audio.text().strip(),
             "image_path":        self._shot.get("image_path", ""),
             "camera_axis":       to_source(self._camera_axis.currentText()) if self._camera_axis.currentText() != "—" else "",
             "camera_placement":  self._camera_placement.text().strip(),

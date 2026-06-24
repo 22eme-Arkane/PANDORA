@@ -15,6 +15,7 @@ _FAL_KEYS_URL       = "https://fal.ai/dashboard/keys"
 _ANTHROPIC_KEYS_URL = "https://console.anthropic.com/settings/keys"
 _OPENAI_KEYS_URL    = "https://platform.openai.com/api-keys"
 _MISTRAL_KEYS_URL   = "https://console.mistral.ai/api-keys"
+_KIMI_KEYS_URL      = "https://platform.moonshot.ai/console/api-keys"
 
 
 def _section(text: str) -> QLabel:
@@ -239,6 +240,7 @@ class SettingsPage(QScrollArea):
             ("Fable 5 (Anthropic) — tout sur Fable 5",    "anthropic", "claude-fable-5"),
             ("GPT-5.5 (OpenAI) — partout",                "openai",    ""),
             ("Mistral — partout (expérimental)",          "mistral",   ""),
+            ("Kimi K2.7 (Moonshot) — API ou local (expérimental)", "kimi", ""),
             ("Ollama local — partout (expérimental)",     "ollama",    ""),
             ("Choix personnalisé — un moteur par tâche",  "custom",     ""),
         ]
@@ -279,6 +281,22 @@ class SettingsPage(QScrollArea):
         self.ollama_model_input.setText(cfg.get("ollama_model", ""))
         self.ollama_model_input.setStyleSheet(_field_style())
         lay.addWidget(self.ollama_model_input)
+
+        # Champs Kimi (Moonshot) — visibles quand le moteur Kimi est choisi. L'URL de
+        # base sert d'aiguillage API↔local : cloud Moonshot par défaut, ou un serveur
+        # local OpenAI-compatible (ex. http://localhost:11434/v1 pour Ollama).
+        self.kimi_url_input = QLineEdit()
+        self.kimi_url_input.setPlaceholderText(
+            "URL Kimi (défaut : https://api.moonshot.ai/v1 — ou serveur local /v1)")
+        self.kimi_url_input.setText(cfg.get("kimi_url", ""))
+        self.kimi_url_input.setStyleSheet(_field_style())
+        lay.addWidget(self.kimi_url_input)
+
+        self.kimi_model_input = QLineEdit()
+        self.kimi_model_input.setPlaceholderText("Modèle Kimi (défaut : kimi-k2.7-code)")
+        self.kimi_model_input.setText(cfg.get("kimi_model", ""))
+        self.kimi_model_input.setStyleSheet(_field_style())
+        lay.addWidget(self.kimi_model_input)
 
         self._lbl_ai_restart = QLabel(
             "Le nom de l'assistant dans l'interface se met à jour au prochain démarrage."
@@ -478,6 +496,26 @@ class SettingsPage(QScrollArea):
         self.mistral_input.setStyleSheet(_field_style())
         opt_lay.addWidget(self.mistral_input)
 
+        # Kimi (Moonshot) — clé facultative (inutile en local)
+        km_lbl_row = QHBoxLayout()
+        km_lbl_row.setSpacing(8)
+        lbl_km = QLabel("Kimi K2.7 (Moonshot)  (assistant texte — API ou local, expérimental)")
+        lbl_km.setStyleSheet(
+            f"color:{CP['text_secondary']};font-size:12px;background:transparent;"
+        )
+        km_lbl_row.addWidget(lbl_km, 1)
+        km_lbl_row.addWidget(_badge("Facultatif", "opt"))
+        km_lbl_row.addWidget(_test_btn("✓  Tester API Kimi", self.test_kimi_connection))
+        km_lbl_row.addWidget(_link_btn("⇗  Obtenir une clé Kimi", _KIMI_KEYS_URL))
+        opt_lay.addLayout(km_lbl_row)
+
+        self.kimi_input = QLineEdit()
+        self.kimi_input.setPlaceholderText("sk-••••••••••••  (vide si serveur local)")
+        self.kimi_input.setText(cfg.get("kimi_key", ""))
+        self.kimi_input.setEchoMode(QLineEdit.EchoMode.Password)
+        self.kimi_input.setStyleSheet(_field_style())
+        opt_lay.addWidget(self.kimi_input)
+
         lay.addWidget(self._opt_keys_box)
         lay.addWidget(_divider())
 
@@ -571,6 +609,8 @@ class SettingsPage(QScrollArea):
         prov = (self.ai_combo.currentData() or ("anthropic", ""))[0]
         self.ollama_url_input.setVisible(prov == "ollama")
         self.ollama_model_input.setVisible(prov == "ollama")
+        self.kimi_url_input.setVisible(prov == "kimi")
+        self.kimi_model_input.setVisible(prov == "kimi")
         # « Choix personnalisé » et « PANDORA optimisé » déplient le moteur par tâche
         if prov in ("custom", "pandora") and not self._adv_open:
             self._set_advanced(True)
@@ -614,6 +654,9 @@ class SettingsPage(QScrollArea):
             "ai_provider":       prov,
             "ai_model_creative": model,
             "mistral_key":       self.mistral_input.text(),
+            "kimi_key":          self.kimi_input.text(),
+            "kimi_url":          self.kimi_url_input.text(),
+            "kimi_model":        self.kimi_model_input.text(),
             "ollama_url":        self.ollama_url_input.text(),
             "ollama_model":      self.ollama_model_input.text(),
             "ai_task_engines":   task_engines,
@@ -629,7 +672,8 @@ class SettingsPage(QScrollArea):
         """Sauvegarde automatique : tout changement de champ persiste aussitôt."""
         self.ai_combo.currentIndexChanged.connect(self.save)
         for w in (self.api_input, self.anthropic_input, self.openai_input,
-                  self.mistral_input, self.ollama_url_input, self.ollama_model_input):
+                  self.mistral_input, self.kimi_input, self.kimi_url_input,
+                  self.kimi_model_input, self.ollama_url_input, self.ollama_model_input):
             w.textChanged.connect(self.save)
         for combo in getattr(self, "_task_combos", {}).values():
             combo.currentIndexChanged.connect(self.save)
@@ -713,6 +757,36 @@ class SettingsPage(QScrollArea):
                     f"Code {r.status_code}. La clé sera testée à la première génération.")
         except Exception as e:
             QMessageBox.critical(self, "Erreur Mistral", f"Erreur : {str(e)[:200]}")
+
+    def test_kimi_connection(self):
+        # URL de base éditable (cloud Moonshot par défaut ou serveur local /v1).
+        base = (self.kimi_url_input.text().strip()
+                or "https://api.moonshot.ai/v1").rstrip("/")
+        key = self.kimi_input.text().strip()
+        is_local = ("localhost" in base.lower()) or ("127.0.0.1" in base.lower())
+        if not key and not is_local:
+            QMessageBox.warning(
+                self, "Clé manquante",
+                "Entre ta clé API Kimi (Moonshot) d'abord — ou pointe l'URL vers un "
+                "serveur local.")
+            return
+        try:
+            import requests
+            headers = {"Authorization": f"Bearer {key or 'local'}"}
+            r = requests.get(f"{base}/models", headers=headers, timeout=20)
+            if r.status_code == 200:
+                QMessageBox.information(
+                    self, "✓ Connexion OK",
+                    f"Kimi joignable sur {base} — clé/endpoint valides !")
+            elif r.status_code in (401, 403):
+                QMessageBox.critical(self, "Clé invalide",
+                                     "La clé API Kimi (Moonshot) est incorrecte.")
+            else:
+                QMessageBox.information(
+                    self, "Réponse Kimi",
+                    f"Code {r.status_code}. L'endpoint sera testé à la première génération.")
+        except Exception as e:
+            QMessageBox.critical(self, "Erreur Kimi", f"Erreur : {str(e)[:200]}")
 
     def test_connection(self):
         key = self.api_input.text().strip()

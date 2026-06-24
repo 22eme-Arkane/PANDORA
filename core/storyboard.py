@@ -453,6 +453,7 @@ def save_shot(data: dict, version_id: str = DEFAULT_VERSION_ID) -> dict:
         data.setdefault("seedance_prompt", "")
         data.setdefault("sound_prompt", "")
         data.setdefault("dialogue_lang", "en")   # langue des dialogues (envoi Seedance)
+        data.setdefault("lipsync_audio_path", "")  # audio cible lip-sync (override manuel)
         data.setdefault("last_frame_path", "")
         # Libellé couleur ESTHÉTIQUE d'un plan (repère manuel libre) → bande colorée
         # à gauche de la ligne. Distinct des plans récurrents ci-dessous.

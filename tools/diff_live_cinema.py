@@ -77,6 +77,11 @@ EXPECTED_ONLY_CINEMA = {
         # Sélection par GROUPE couleur (plans récurrents) dans le StoryboardSelector
         # — feature Cinéma (Rendu/Audio) ; reportable au Live si besoin.
         "_rebuild_group_chips", "_select_color_group",
+        # Synchronisation labiale (lip-sync) en post-traitement dans RENDU & AUDIO —
+        # toggle + sélecteur de moteur (Sync 2 Pro défaut) + file ; feature Cinéma
+        # (le Live a son propre lip-sync par keyframes/mapping). Reportable si besoin.
+        "_advance_after_clip", "_start_shot_lipsync",
+        "_on_shot_lipsync_done", "_on_shot_lipsync_failed",
     },
     "ui/page_scenario_live.py": {
         # Pas de Décors ni de HMC dans le Live (handlers supprimés, validé)

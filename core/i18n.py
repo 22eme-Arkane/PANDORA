@@ -1321,12 +1321,24 @@ _FR_TO_EN: dict[str, str] = {
     "Synchronisation du storyboard":    "Storyboard synchronization",
     "✓  Tester API GPT-5.5":            "✓  Test GPT-5.5 API",
     "✓  Tester API Mistral":            "✓  Test Mistral API",
+    "✓  Tester API Kimi":               "✓  Test Kimi API",
     "⇗  Obtenir une clé OpenAI":        "⇗  Get an OpenAI key",
     "⇗  Obtenir une clé Mistral":       "⇗  Get a Mistral key",
+    "⇗  Obtenir une clé Kimi":          "⇗  Get a Kimi key",
     "OpenAI — GPT-5.5  (assistant texte, par moteur ou par tâche)":
         "OpenAI — GPT-5.5  (text assistant, per engine or per task)",
     "Mistral  (assistant texte, expérimental)":
         "Mistral  (text assistant, experimental)",
+    "Kimi K2.7 (Moonshot)  (assistant texte — API ou local, expérimental)":
+        "Kimi K2.7 (Moonshot)  (text assistant — API or local, experimental)",
+    "Kimi K2.7 (Moonshot) — API ou local (expérimental)":
+        "Kimi K2.7 (Moonshot) — API or local (experimental)",
+    "URL Kimi (défaut : https://api.moonshot.ai/v1 — ou serveur local /v1)":
+        "Kimi URL (default: https://api.moonshot.ai/v1 — or local server /v1)",
+    "Modèle Kimi (défaut : kimi-k2.7-code)":
+        "Kimi model (default: kimi-k2.7-code)",
+    "sk-••••••••••••  (vide si serveur local)":
+        "sk-••••••••••••  (empty if local server)",
     "Obligatoire":                      "Required",
     "Facultatif":                       "Optional",
     "▶  Clés API facultatives  (OpenAI, Mistral, autres à venir)":
@@ -1663,6 +1675,23 @@ _FR_TO_EN: dict[str, str] = {
     "Caméra · Optiques · Micro":        "Camera · Lenses · Mic",
     "Caméra dynamique":                 "Dynamic camera",
     "Audio natif":                      "Native audio",
+    "Se référer au mood":               "Refer to the mood",
+    "Envoie le mood validé du plan comme image de référence → cohésion exacte "
+    "(composition, cadrage, lumière, couleurs) avec le mood. Sans effet si le "
+    "plan n'a pas de mood.":
+        "Sends the shot's validated mood as a reference image → exact cohesion "
+        "(composition, framing, lighting, colors) with the mood. No effect if the "
+        "shot has no mood.",
+    "Resynchroniser les lèvres (lip-sync)": "Re-sync lips (lip-sync)",
+    "Après génération, recale les lèvres sur une voix : doublage/TTS auto depuis "
+    "le dialogue du plan, ou un audio attaché. Post-traitement payant (par minute).":
+        "After generation, re-aligns the lips to a voice: auto dubbing/TTS from the "
+        "shot's dialogue, or an attached audio. Paid post-processing (per minute).",
+    "Moteur lip-sync":                  "Lip-sync engine",
+    "Audio lip-sync (override)":        "Lip-sync audio (override)",
+    "Auto (TTS du dialogue) — ou attache un .wav / .mp3 pour ce plan":
+        "Auto (TTS from dialogue) — or attach a .wav / .mp3 for this shot",
+    "Audio lip-sync du plan":           "Shot lip-sync audio",
     "Sous-titres":                      "Subtitles",
     "Import auto · Media Pool":         "Auto import · Media Pool",
     "MODÈLE":                           "MODEL",

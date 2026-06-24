@@ -462,6 +462,14 @@ def run_real(params: dict, emit_progress, is_cancelled) -> dict:
                         f"@Image{_idx} shows props and accessories — "
                         f"include them in the scene reinterpreted in the film's visual style."
                     )
+                elif _role == "mood":
+                    _prompt_additions.append(
+                        f"MOOD / LOOK REFERENCE @Image{_idx}: This is the VALIDATED mood "
+                        f"frame for this exact shot. Match its composition, framing, camera "
+                        f"angle, subject placement, lighting and color grade as closely as "
+                        f"possible — animate this precise image into motion. Highest-priority "
+                        f"directive for visual cohesion with the planned shot."
+                    )
 
             if _prompt_additions:
                 args["prompt"] = args["prompt"] + ". " + " ".join(_prompt_additions)

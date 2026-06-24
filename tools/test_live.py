@@ -720,7 +720,7 @@ def selecteur_assistant_ia():
     from ui.page_live_settings import PageLiveSettings
     cin = SettingsPage()
     nc = cin.ai_combo.count()
-    assert nc == 8, "8 choix côté Cinéma (PANDORA optimisé défaut, Sonnet, Haiku, Fable 5, GPT-5.5, Mistral, Ollama, Personnalisé)"
+    assert nc == 9, "9 choix côté Cinéma (PANDORA optimisé défaut, Sonnet, Haiku, Fable 5, GPT-5.5, Mistral, Kimi K2.7, Ollama, Personnalisé)"
     assert any("Fable 5" in cin.ai_combo.itemText(i) for i in range(nc)), "Fable 5 proposé"
     assert any("GPT-5.5" in cin.ai_combo.itemText(i) for i in range(nc)), "GPT-5.5 proposé"
     # Clés GPT + Mistral toujours présentes (menu déroulant facultatif)
@@ -735,9 +735,19 @@ def selecteur_assistant_ia():
     cin.ai_combo.setCurrentIndex(0)
     assert cin.ollama_url_input.isHidden(), "champs Ollama cachés sur Claude"
     liv = PageLiveSettings()
-    assert liv._ai_combo.count() == 4, "4 choix côté Live"
-    liv._ai_combo.setCurrentIndex(3)  # Ollama
+    assert liv._ai_combo.count() == 5, "5 choix côté Live (+ Kimi K2.7)"
+    # Ollama : trouvé par donnée (robuste au décalage d'index après ajout Kimi)
+    _oll_i = next(i for i in range(liv._ai_combo.count())
+                  if (liv._ai_combo.itemData(i) or ("", ""))[0] == "ollama")
+    liv._ai_combo.setCurrentIndex(_oll_i)
     assert not liv._ollama_url_input.isHidden(), "champs Ollama visibles côté Live"
+    # Kimi : sélection → champs clé + URL/modèle visibles, Ollama caché
+    _km_i = next(i for i in range(liv._ai_combo.count())
+                 if (liv._ai_combo.itemData(i) or ("", ""))[0] == "kimi")
+    liv._ai_combo.setCurrentIndex(_km_i)
+    assert not liv._kimi_input.isHidden(), "clé Kimi visible côté Live quand Kimi choisi"
+    assert not liv._kimi_url_input.isHidden() and not liv._kimi_model_input.isHidden()
+    assert liv._ollama_url_input.isHidden(), "champs Ollama cachés quand Kimi choisi"
 
 
 @test

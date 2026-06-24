@@ -1637,7 +1637,12 @@ class _ContinuityBar(QFrame):
             self._i2v_thumb.setVisible(False)
             self._i2v_row_widget.setVisible(False)
 
-        self.setVisible(True)
+        # Cinéma : la barre « Raccord automatique » a été RETIRÉE de l'UI — l'objet
+        # est gardé sans parent ni layout, uniquement pour _prev_shot (toggle I2V
+        # « Raccord automatique » de RENDU & AUDIO + get_i2v_frame). On ne l'affiche
+        # JAMAIS : self.setVisible(True) sur un widget sans parent ouvrirait une
+        # fenêtre flottante parasite (bug observé pendant la génération en série).
+        self.setVisible(False)
 
     def build_continuity_prefix(self) -> str:
         """Returns an English raccord context prefix for the Seedance prompt, or ''."""
@@ -2299,6 +2304,10 @@ class TabT2V(QScrollArea):
         self._enhance_worker = None
         self._active_shot_title: str = ""
         self._active_shot: dict | None = None
+        self._active_shot_apercus: list[str] = []
+        self._active_mood_path: str = ""   # mood actif du plan (réf « Se référer au mood »)
+        self._shot_lipsync_worker = None   # worker lip-sync post-génération (storyboard)
+        self._pending_advance = (None, "") # (result, davinci_msg) en attente après lip-sync
         self._batch_queue:   list[dict] = []
         self._batch_total:   int        = 0
         self._batch_idx:     int        = 0
@@ -2761,6 +2770,71 @@ class TabT2V(QScrollArea):
         self._decor_sync_cb = _decor_sync_cb_inner
         _raccords_lay.addWidget(self._decor_sync_toggle_row)
 
+        # Se référer au mood — envoie le mood validé du plan comme image de référence
+        # Seedance (rôle « mood ») pour une cohésion exacte avec le mood (composition,
+        # cadrage, lumière, couleurs). Comme côté Live, mais ici en référence d'image.
+        self._mood_ref_toggle_row, _mood_ref_cb_inner = _raccord_toggle(
+            "Se référer au mood",
+            "Envoie le mood validé du plan comme image de référence → cohésion exacte "
+            "(composition, cadrage, lumière, couleurs) avec le mood. Sans effet si le "
+            "plan n'a pas de mood.",
+            False,
+        )
+        self._mood_ref_cb = _mood_ref_cb_inner
+        self._mood_ref_cb.stateChanged.connect(self._refresh_prompt_preview)
+        _raccords_lay.addWidget(self._mood_ref_toggle_row)
+
+        # Synchronisation labiale (lip-sync) — post-traitement APRÈS génération :
+        # recale les lèvres sur une voix (doublage/TTS auto depuis le dialogue, ou
+        # un audio attaché au plan). Payant (par minute).
+        self._lipsync_toggle_row, _lipsync_cb_inner = _raccord_toggle(
+            "Resynchroniser les lèvres (lip-sync)",
+            "Après génération, recale les lèvres sur une voix : doublage/TTS auto depuis "
+            "le dialogue du plan, ou un audio attaché. Post-traitement payant (par minute).",
+            False,
+        )
+        self._lipsync_cb = _lipsync_cb_inner
+        _raccords_lay.addWidget(self._lipsync_toggle_row)
+
+        # Sélecteur de moteur lip-sync (défaut Sync 2 Pro) — persisté en config.
+        from api.lipsync import (LIPSYNC_ENGINES as _LSE, LIPSYNC_ENGINE_ORDER as _LSO,
+                                 get_lipsync_engine as _get_ls)
+        _ls_row = QWidget()
+        _ls_row.setStyleSheet("background:transparent;border:none;")
+        _ls_lay = QHBoxLayout(_ls_row)
+        _ls_lay.setContentsMargins(14, 0, 14, 8)
+        _ls_lay.setSpacing(8)
+        _ls_lbl = QLabel("Moteur lip-sync")
+        _ls_lbl.setStyleSheet(f"color:{C['text_dim']};font-size:11px;border:none;")
+        _ls_lay.addWidget(_ls_lbl)
+        self._lipsync_engine_combo = QComboBox()
+        self._lipsync_engine_combo.setFixedHeight(28)
+        self._lipsync_engine_combo.setStyleSheet(
+            f"QComboBox{{background:{C['bg2']};border:1px solid {C['border']};"
+            f"border-radius:6px;color:{C['text_primary']};font-size:11px;padding:0 8px;}}"
+            f"QComboBox::drop-down{{border:none;width:20px;}}"
+            f"QComboBox QAbstractItemView{{background:{C['bg3']};"
+            f"border:1px solid {C['border_bright']};color:{C['text_primary']};"
+            f"selection-background-color:{C['accent_dim']};}}"
+        )
+        for _k in _LSO:
+            _e = _LSE[_k]
+            self._lipsync_engine_combo.addItem(f"{_e['name']} · {_e['price']}", _k)
+        _cur_ls = _get_ls()
+        for _i in range(self._lipsync_engine_combo.count()):
+            if self._lipsync_engine_combo.itemData(_i) == _cur_ls:
+                self._lipsync_engine_combo.setCurrentIndex(_i)
+                break
+
+        def _save_ls_engine(*_a):
+            from core.config import load_config, save_config
+            _c = load_config()
+            _c["lipsync_engine"] = self._lipsync_engine_combo.currentData() or "sync2pro"
+            save_config(_c)
+        self._lipsync_engine_combo.currentIndexChanged.connect(_save_ls_engine)
+        _ls_lay.addWidget(self._lipsync_engine_combo, 1)
+        _raccords_lay.addWidget(_ls_row)
+
         lay.addWidget(self._edit_zone)
 
         # ── Rendu & Audio (toujours visible, y compris multi-sélection) ───────
@@ -3057,9 +3131,14 @@ class TabT2V(QScrollArea):
 
         # Load aperçu/mood images for thumbnail strip
         _apercu_data = sb_api.load_apercus(shot.get("id", ""))
-        self._active_shot_apercus = [
-            p for p in _apercu_data.get("paths", []) if os.path.isfile(p)
-        ]
+        _all_apercus = _apercu_data.get("paths", [])
+        self._active_shot_apercus = [p for p in _all_apercus if os.path.isfile(p)]
+        # Mood ACTIF (sélectionné via active_idx) du plan — réf « Se référer au mood ».
+        _ai = _apercu_data.get("active_idx", 0)
+        _active_mood = _all_apercus[_ai] if 0 <= _ai < len(_all_apercus) else ""
+        if not (_active_mood and os.path.isfile(_active_mood)):
+            _active_mood = self._active_shot_apercus[0] if self._active_shot_apercus else ""
+        self._active_mood_path = _active_mood if (_active_mood and os.path.isfile(_active_mood)) else ""
 
         # Auto-select entities from shot
         self._casting.set_active_shot(shot)
@@ -3444,6 +3523,15 @@ class TabT2V(QScrollArea):
         snd.append(f"Musique : {'✓' if music_on else '✗ → no background music injecté'}")
         snd.append(f"Sous-titres : {'✓' if subtitle_on else '✗ → no subtitles injecté'}")
         param_lines.append("Son : " + "  ·  ".join(snd))
+
+        # Référence mood (« Se référer au mood ») — retour honnête : si activé mais
+        # que le plan n'a pas de mood, on le signale (rien ne sera envoyé).
+        if getattr(self, "_mood_ref_cb", None) and self._mood_ref_cb.isChecked():
+            param_lines.append(
+                "Référence mood : ✓ mood envoyé comme image de référence"
+                if getattr(self, "_active_mood_path", "")
+                else "Référence mood : ⚠ activé, mais ce plan n'a pas de mood (rien envoyé)"
+            )
 
         # Template / style vidéo
         if vs:
@@ -3923,6 +4011,15 @@ class TabT2V(QScrollArea):
         if _is_seedance and hasattr(self, "_style_ref_path") and self._style_ref_path and os.path.isfile(self._style_ref_path):
             ref_images = ref_images + [self._style_ref_path]
             ref_image_roles = ref_image_roles + ["style"]
+        # Se référer au mood — le mood validé du plan part comme image de référence
+        # (rôle « mood ») pour une cohésion exacte. Seedance uniquement ; silencieux
+        # si le plan n'a pas de mood. Chaque plan de la file batch utilise le sien.
+        if (_is_seedance and getattr(self, "_mood_ref_cb", None)
+                and self._mood_ref_cb.isChecked()
+                and getattr(self, "_active_mood_path", "")
+                and os.path.isfile(self._active_mood_path)):
+            ref_images = ref_images + [self._active_mood_path]
+            ref_image_roles = ref_image_roles + ["mood"]
 
         # Quality suffix — always appended
         full_prompt = (
@@ -4149,6 +4246,22 @@ class TabT2V(QScrollArea):
                 and getattr(self, "_decor_sync_cb", None) and self._decor_sync_cb.isChecked()):
             self._maybe_capture_decor_bg(local_path, self._active_shot)
 
+        # Synchronisation labiale (lip-sync) — post-traitement AVANT d'avancer la file.
+        # Quand le toggle est actif et qu'on a une vraie URL fal (pas mock), on recale
+        # les lèvres sur la voix (doublage/TTS auto ou audio attaché), puis on avance
+        # depuis le callback. Sinon, on avance directement.
+        if (local_path and os.path.isfile(local_path) and self._active_shot
+                and getattr(self, "_lipsync_cb", None) and self._lipsync_cb.isChecked()):
+            _vurl = result.get("video_url", "")
+            if _vurl and _vurl.startswith("http") and "mock" not in _vurl:
+                self._pending_advance = (result, davinci_msg)
+                self._start_shot_lipsync(result, local_path)
+                return
+        self._advance_after_clip(result, davinci_msg)
+
+    def _advance_after_clip(self, result, davinci_msg):
+        """Avance la file batch / les répétitions / affiche le message de fin.
+        Appelé directement, ou après l'étape lip-sync (callbacks dédiés)."""
         if self._batch_queue:
             from PyQt6.QtCore import QTimer
             QTimer.singleShot(300, self._process_next_batch_shot)
@@ -4199,6 +4312,58 @@ class TabT2V(QScrollArea):
                 f"Crédits : {result['credits_used']}"
                 + davinci_msg
             )
+
+    def _start_shot_lipsync(self, result: dict, local_path: str):
+        """Lance la resynchronisation labiale du plan courant (worker dédié).
+        Audio = override manuel du plan, sinon TTS auto depuis le dialogue."""
+        from api.shot_lipsync import ShotLipSyncWorker
+        from core.worker import abandon_thread
+        # Parquer un worker précédent (anti-segfault) avant de réassigner.
+        _prev = getattr(self, "_shot_lipsync_worker", None)
+        if _prev is not None:
+            abandon_thread(_prev)
+            self._shot_lipsync_worker = None
+        engine = ""
+        if getattr(self, "_lipsync_engine_combo", None):
+            engine = self._lipsync_engine_combo.currentData() or ""
+        self.progress.setVisible(True)
+        self.progress.update(0, "Synchronisation labiale…")
+        self._shot_lipsync_worker = ShotLipSyncWorker(
+            shot=self._active_shot,
+            video_url=result.get("video_url", ""),
+            output_dir=get_output_dir(),
+            engine=engine,
+        )
+        self._shot_lipsync_worker.progress.connect(
+            lambda pct, msg: self.progress.update(pct, msg)
+        )
+        self._shot_lipsync_worker.done.connect(self._on_shot_lipsync_done)
+        self._shot_lipsync_worker.failed.connect(self._on_shot_lipsync_failed)
+        self._shot_lipsync_worker.start()
+
+    def _on_shot_lipsync_done(self, shot_id: str, video_path: str, audio_path: str):
+        """Clip lip-synced prêt (sauvé dans le dossier de sortie) → avance la file."""
+        from core.worker import abandon_thread
+        w = getattr(self, "_shot_lipsync_worker", None)
+        if w is not None:
+            abandon_thread(w)
+            self._shot_lipsync_worker = None
+        result, davinci_msg = getattr(self, "_pending_advance", (None, ""))
+        if video_path and os.path.isfile(video_path):
+            davinci_msg = f"{davinci_msg}\n\n👄 Lèvres synchronisées :\n{video_path}"
+        if result is not None:
+            self._advance_after_clip(result, davinci_msg)
+
+    def _on_shot_lipsync_failed(self, shot_id: str, error: str):
+        """Échec lip-sync : on garde le clip original et on avance quand même la file."""
+        from core.worker import abandon_thread
+        w = getattr(self, "_shot_lipsync_worker", None)
+        if w is not None:
+            abandon_thread(w)
+            self._shot_lipsync_worker = None
+        result, davinci_msg = getattr(self, "_pending_advance", (None, ""))
+        if result is not None:
+            self._advance_after_clip(result, f"{davinci_msg}\n\n⚠ Lip-sync échoué : {error}")
 
     def on_failed(self, error: str):
         self.progress.set_error(error)

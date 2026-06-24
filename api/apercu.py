@@ -274,8 +274,8 @@ def run_generation(prompt: str, output_dir: str, api_key: str, progress_cb,
             + _night_lock
         )
         progress_cb("Envoi de la façade et de l'inspiration à fal.ai…")
-        urls = [fal_client.upload_file(building_ref),
-                fal_client.upload_file(inspiration_ref)]
+        urls = [_upload_ref_robust(fal_client, building_ref),
+                _upload_ref_robust(fal_client, inspiration_ref)]
         progress_cb("Mood inspiré sur la façade (Kontext multi)…")
         result = fal_client.subscribe(
             "fal-ai/flux-pro/kontext/max/multi",
@@ -290,7 +290,7 @@ def run_generation(prompt: str, output_dir: str, api_key: str, progress_cb,
         # Mapping : on édite la façade (géométrie conservée) via Flux Kontext.
         kontext_prompt = prompt + _night_lock
         progress_cb("Envoi de la façade à fal.ai…")
-        facade_url = fal_client.upload_file(building_ref)
+        facade_url = _upload_ref_robust(fal_client, building_ref)
         progress_cb("Génération du Mood nocturne sur la façade (Kontext)…")
         result = fal_client.subscribe(
             "fal-ai/flux-pro/kontext",
@@ -311,7 +311,7 @@ def run_generation(prompt: str, output_dir: str, api_key: str, progress_cb,
             "and rendering style. Do not keep its literal content unless it serves the scene."
         )
         progress_cb("Envoi de l'image d'inspiration à fal.ai…")
-        inspi_url = fal_client.upload_file(inspiration_ref)
+        inspi_url = _upload_ref_robust(fal_client, inspiration_ref)
         progress_cb("Mood inspiré de l'image (Kontext)…")
         result = fal_client.subscribe(
             "fal-ai/flux-pro/kontext",
@@ -405,20 +405,69 @@ _MOOD_REF_DIRECTIVE = (
     "into the scene and produce exactly the planned shot."
 )
 
+# Consigne spécifique au PLAN D'ARCHITECTE (vue de dessus) envoyé en DERNIÈRE référence :
+# c'est un repère d'agencement (géométrie de la pièce), pas une image à reproduire.
+_FLOOR_PLAN_DIRECTIVE = (
+    "ADDITIONAL — the LAST reference image is a TOP-DOWN ARCHITECTURAL FLOOR PLAN of "
+    "this room (a 2D schematic seen from above, NOT a photo). Use it ONLY as a spatial "
+    "guide: respect the room's layout and proportions, the position of the walls, doors, "
+    "windows and main furniture shown in the plan, so the generated room stays faithful "
+    "to this architecture. Do NOT draw, render or include the floor plan itself in the "
+    "image — it is a geometry reference only."
+)
+
+
+def _upload_ref_robust(fal_client, path: str) -> str:
+    """Upload une image de référence pour NB2, de façon robuste.
+
+    `fal_client.upload_file()` échoue sur deux cas réels rencontrés :
+      • chemins NON-ASCII (ex. projet « Un zombie à table ») → codec interne ;
+      • backend de stockage indisponible → erreur « Invalid storage type » / GCS
+        (déjà contourné par data-URL dans api/tts.py pour BiRefNet).
+
+    On tente d'abord l'upload en BYTES (gère le non-ASCII), puis on bascule sur une
+    DATA-URL base64 si le stockage refuse. Les avertissements bruyants de fal_client
+    ('Upload failed to fal_v3, falling back to cdn') sont capturés.
+    """
+    import sys, io, base64, mimetypes
+    ct = mimetypes.guess_type(path)[0] or "image/png"
+    with open(path, "rb") as _f:
+        data = _f.read()
+    _cap = io.StringIO()
+    _old_out, _old_err = sys.stdout, sys.stderr
+    sys.stdout = sys.stderr = _cap
+    try:
+        try:
+            return fal_client.upload(data, content_type=ct)
+        except Exception:
+            # Stockage fal refusé (Invalid storage type / GCS) → data-URL inline.
+            return f"data:{ct};base64,{base64.b64encode(data).decode()}"
+    finally:
+        sys.stdout, sys.stderr = _old_out, _old_err
+
 
 def run_generation_nb2(prompt: str, output_dir: str, api_key: str, progress_cb,
-                       ref_images: list | None = None) -> str:
+                       ref_images: list | None = None, floor_plan: str = "") -> str:
     """Mood via Nano Banana 2 : édition avec réfs (persos + décor) si disponibles,
-    sinon génération texte NB2. Aspect 16:9, comme le mood Flux."""
+    sinon génération texte NB2. Aspect 16:9, comme le mood Flux.
+
+    Si `floor_plan` (plan d'architecte vu de dessus) est fourni, il est envoyé EN
+    DERNIÈRE référence avec une consigne dédiée : repère d'agencement de la pièce,
+    pas une image à reproduire."""
     import fal_client
     os.environ["FAL_KEY"] = api_key
     os.makedirs(output_dir, exist_ok=True)
-    refs = [r for r in (ref_images or []) if r and os.path.isfile(r)][:14]
+    refs = [r for r in (ref_images or []) if r and os.path.isfile(r)]
+    _fp = floor_plan if (floor_plan and os.path.isfile(floor_plan)) else ""
+    # Le plan d'architecte part EN DERNIER (la consigne cible « la dernière image »).
+    refs = (refs[:13] + [_fp]) if _fp else refs[:14]
     if refs:
-        progress_cb(f"Nano Banana 2 — {len(refs)} référence(s) (persos + décor)…")
-        urls = [fal_client.upload_file(r) for r in refs]
+        progress_cb(f"Nano Banana 2 — {len(refs)} référence(s)"
+                    + (" + plan d'architecte" if _fp else " (persos + décor)") + "…")
+        urls = [_upload_ref_robust(fal_client, r) for r in refs]
+        directive = _MOOD_REF_DIRECTIVE + (("\n\n" + _FLOOR_PLAN_DIRECTIVE) if _fp else "")
         result = fal_client.subscribe("fal-ai/nano-banana-2/edit", arguments={
-            "prompt": prompt + "\n\n" + _MOOD_REF_DIRECTIVE, "image_urls": urls,
+            "prompt": prompt + "\n\n" + directive, "image_urls": urls,
             "num_images": 1, "aspect_ratio": "16:9", "resolution": "1K",
             "output_format": "png", "safety_tolerance": "6",
         })
@@ -446,8 +495,15 @@ def run_mood(shot: dict, prompt: str, output_dir: str, api_key: str, progress_cb
     """Dispatcher mood : CINÉMA → Nano Banana 2 (réfs persos/décor) ; LIVE → Flux
     (run_generation, façade/inspiration). Distinction par le namespace storyboard."""
     if _is_cinema_mood():
+        # Plan d'architecte (vue de dessus) du décor → repère d'agencement de la pièce.
+        _fp = ""
+        try:
+            from core.decors import floor_plan_for_shot
+            _fp = floor_plan_for_shot(shot) or ""
+        except Exception:
+            _fp = ""
         return run_generation_nb2(prompt, output_dir, api_key, progress_cb,
-                                  _shot_ref_images(shot))
+                                  _shot_ref_images(shot), floor_plan=_fp)
     return run_generation(prompt, output_dir, api_key, progress_cb, building_ref,
                           inspiration_ref=inspiration_ref)
 

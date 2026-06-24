@@ -22,6 +22,35 @@ _TEXT    = (215, 215, 225)
 _PLACEHOLDER = (40, 40, 48)
 
 
+def _has_real_transparency(path: str) -> bool:
+    """True si l'image a une transparence RÉELLE (au moins un pixel alpha < 255) —
+    c.-à-d. un portrait DÉTOURÉ. Un RGBA opaque (alpha plein) renvoie False."""
+    try:
+        from PIL import Image
+        with Image.open(path) as im:
+            if im.mode == "P" and "transparency" in im.info:
+                return True
+            if im.mode in ("RGBA", "LA"):
+                return im.getchannel("A").getextrema()[0] < 255
+            return False
+    except Exception:
+        return False
+
+
+def _pick_char_ref(char: dict) -> str:
+    """Image de référence d'un personnage. Un portrait DÉTOURÉ (PNG transparent) PRIME
+    sur la planche 4 vues (sheet_path), car celle-ci garde le fond d'origine — sinon
+    Seedance reçoit l'ancien fond. À défaut de détourage, on garde la planche
+    (multi-vues = meilleure cohérence), puis le portrait simple."""
+    img   = char.get("image_path", "")
+    sheet = char.get("sheet_path", "")
+    if img and os.path.isfile(img) and _has_real_transparency(img):
+        return img
+    if sheet and os.path.isfile(sheet):
+        return sheet
+    return img if (img and os.path.isfile(img)) else ""
+
+
 def _load_font(size: int = 14):
     try:
         from PIL import ImageFont
@@ -71,11 +100,24 @@ def _composite(images_and_names: list[tuple[str, str]], output_path: str) -> boo
         cy  = row * _CELL_H
 
         try:
-            img = Image.open(img_path).convert("RGB")
-            img.thumbnail((_CELL_W - 4, img_area_h - 4))
-            px = cx + (_CELL_W - img.width)  // 2
-            py = cy + (img_area_h - img.height) // 2
-            canvas.paste(img, (px, py))
+            img = Image.open(img_path)
+            # Détourage (PNG transparent) : composer SUR le fond neutre via le masque
+            # alpha. Sans ça, .convert("RGB") laisserait réapparaître les pixels du
+            # fond d'origine restés sous l'alpha (bug : « même fond qu'avant détourage »).
+            _has_alpha = img.mode in ("RGBA", "LA") or (
+                img.mode == "P" and "transparency" in img.info)
+            if _has_alpha:
+                img = img.convert("RGBA")
+                img.thumbnail((_CELL_W - 4, img_area_h - 4))
+                px = cx + (_CELL_W - img.width)  // 2
+                py = cy + (img_area_h - img.height) // 2
+                canvas.paste(img, (px, py), img)   # 3e arg = masque alpha
+            else:
+                img = img.convert("RGB")
+                img.thumbnail((_CELL_W - 4, img_area_h - 4))
+                px = cx + (_CELL_W - img.width)  // 2
+                py = cy + (img_area_h - img.height) // 2
+                canvas.paste(img, (px, py))
         except Exception:
             draw.rectangle(
                 [cx + 2, cy + 2, cx + _CELL_W - 3, cy + img_area_h - 3],
@@ -124,7 +166,7 @@ def build_ref_mosaics(
     # ── Slot 0 : Characters ───────────────────────────────────────────────────
     char_cells = []
     for char in char_data_map.values():
-        p = char.get("sheet_path", "") or char.get("image_path", "")
+        p = _pick_char_ref(char)   # détourage prioritaire sur la planche (fond d'origine)
         if p and os.path.isfile(p):
             char_cells.append((p, char.get("name", "?")))
 

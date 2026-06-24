@@ -1995,6 +1995,12 @@ class CharacterDialog(QDialog):
             self._status.setText("Fond supprimé (mode mock)")
             return
         self._image_path = path
+        # Le détourage s'applique au PORTRAIT : la planche 4 vues (sheet_path) garde,
+        # elle, le fond d'origine. Si on la laisse comme référence principale, c'est
+        # ELLE (avec le fond) qui part vers Seedance — la mosaïque préfère sheet_path.
+        # On la retire donc comme référence (elle reste dans la galerie) → c'est bien
+        # l'image détourée (image_path) qui sera envoyée.
+        self._sheet_path = ""
         self._generated_images.append({"portrait": path, "sheet": ""})
         self._preview_idx = len(self._generated_images) - 1
         self._load_preview(path)
