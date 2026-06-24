@@ -2378,6 +2378,65 @@ def moods_plan_architecte_repere():
         requests.get = _orig_get
 
 
+@test
+def moods_fenetre_options():
+    """Fenêtre « Générer les Moods » : options cochables (moteur NB2/Flux, réfs persos,
+    réf décor, plan d'architecte). Les réfs ne concernent que NB2 (grisées en Flux) ;
+    les options sont transmises au worker, et run_mood les applique."""
+    import inspect
+    import ui.page_storyboard as PS
+    PS.sb_api.load_apercus = lambda sid: {"paths": [], "active_idx": 0}
+    from PyQt6.QtWidgets import QWidget
+    _par = QWidget()
+    dlg = PS._MoodBatchDialog(_par, [{"id": "a", "number": 1, "scene_title": "T"}])
+    for a in ("_opt_engine", "_opt_chars", "_opt_decor", "_opt_floor"):
+        assert hasattr(dlg, a), "option manquante : " + a
+    assert [dlg._opt_engine.itemData(i) for i in range(dlg._opt_engine.count())] == ["nb2", "flux"]
+    assert dlg._opt_chars.isChecked() and dlg._opt_decor.isChecked() and dlg._opt_floor.isChecked()
+    # Flux → références grisées (elles ne valent que pour NB2)
+    _fi = next(k for k in range(dlg._opt_engine.count()) if dlg._opt_engine.itemData(k) == "flux")
+    dlg._opt_engine.setCurrentIndex(_fi)
+    assert not (dlg._opt_chars.isEnabled() or dlg._opt_decor.isEnabled() or dlg._opt_floor.isEnabled())
+    # Le handler lit les options et les passe au worker
+    cls = next(c for n, c in vars(PS).items()
+               if isinstance(c, type) and hasattr(c, "_on_batch_mood"))
+    obm = inspect.getsource(cls._on_batch_mood)
+    assert "dlg._opt_engine.currentData()" in obm and "options=_mood_opts" in obm
+    # run_mood : routage moteur + _shot_ref_images à toggles ; worker accepte options
+    import api.apercu as A
+    rm = inspect.getsource(A.run_mood)
+    assert 'engine == "nb2"' in rm and "run_generation_nb2(" in rm and "run_generation(" in rm
+    assert A._shot_ref_images({"character_ids": [], "decor_id": ""},
+                              include_chars=False, include_decor=False) == []
+    assert "options" in inspect.signature(A.MoodBatchWorker.__init__).parameters
+
+
+@test
+def rendu_audio_repliable_lipsync_ordre():
+    """RENDU & AUDIO est un menu déroulant (replié par défaut). Bloc lip-sync :
+    « Moteur lip-sync » AVANT la description, alignés."""
+    import inspect
+    from PyQt6.QtWidgets import QLabel
+    import ui.tab_t2v as M
+    tab = M.TabT2V()
+    # Repliable
+    assert hasattr(tab, "_raccords_toggle_btn") and hasattr(tab, "_raccords_body")
+    assert tab._raccords_body.isHidden(), "RENDU & AUDIO doit être replié par défaut"
+    tab._raccords_toggle_btn.click()
+    assert not tab._raccords_body.isHidden(), "clic = déplier"
+    tab._raccords_toggle_btn.click()
+    assert tab._raccords_body.isHidden(), "re-clic = replier"
+    # Lip-sync : la description n'est plus dans le toggle ; moteur + description dans le corps
+    tlbls = [l.text() for l in tab._lipsync_toggle_row.findChildren(QLabel)]
+    assert not any("Après génération" in t for t in tlbls), "description encore dans le toggle"
+    blbls = [l.text() for l in tab._raccords_body.findChildren(QLabel)]
+    assert any("Moteur lip-sync" in t for t in blbls) and any("Après génération" in t for t in blbls)
+    # Moteur AVANT description (ordre dans le code)
+    src = inspect.getsource(M.TabT2V)
+    assert src.index("addWidget(_ls_row)") < src.index("addWidget(_ls_desc_wrap)"), \
+        "« Moteur lip-sync » doit précéder la description"
+
+
 # ══════════════════════════════════════════════════════════════════════════════
 # Runner
 # ══════════════════════════════════════════════════════════════════════════════

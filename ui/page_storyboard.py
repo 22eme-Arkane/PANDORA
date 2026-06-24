@@ -1815,7 +1815,7 @@ class _MoodBatchDialog(QDialog):
         super().__init__(parent)
         from ui.styles import PANDORA_STYLESHEET
         self.setWindowTitle(translate("✦ Génération des Moods"))
-        self.setMinimumSize(480, 480)
+        self.setMinimumSize(480, 600)
         self.setStyleSheet(PANDORA_STYLESHEET + f"QDialog{{background:{CP['bg1']};}}")
         self._shots = shots
         self._has_mood: set[str] = set()
@@ -1890,6 +1890,58 @@ class _MoodBatchDialog(QDialog):
             f"color:{CP['text_dim']};font-size:10px;background:transparent;"
         )
         lay.addWidget(self._count_lbl)
+
+        # ── Options de génération (moteur + références à envoyer) ──────────────
+        lay.addWidget(_sep())
+        opt_lbl = QLabel(translate("Options de génération :"))
+        opt_lbl.setStyleSheet(
+            f"color:{CP['text_primary']};font-size:11px;font-weight:600;background:transparent;"
+        )
+        lay.addWidget(opt_lbl)
+
+        eng_row = QHBoxLayout()
+        eng_row.setSpacing(8)
+        _eng_lbl = QLabel(translate("Moteur d'image :"))
+        _eng_lbl.setStyleSheet(f"color:{CP['text_dim']};font-size:11px;background:transparent;")
+        eng_row.addWidget(_eng_lbl)
+        self._opt_engine = QComboBox()
+        self._opt_engine.addItem(translate("Nano Banana 2 (avec références)"), "nb2")
+        self._opt_engine.addItem(translate("Flux (depuis le prompt seul)"), "flux")
+        self._opt_engine.setFixedHeight(28)
+        self._opt_engine.setStyleSheet(
+            f"QComboBox{{background:{CP['bg2']};border:1px solid {CP['border']};"
+            f"border-radius:6px;color:{CP['text_primary']};font-size:11px;padding:0 8px;}}"
+            f"QComboBox::drop-down{{border:none;width:20px;}}"
+            f"QComboBox QAbstractItemView{{background:{CP['bg3']};"
+            f"border:1px solid {CP['border_bright']};color:{CP['text_primary']};"
+            f"selection-background-color:{CP['accent_dim']};}}"
+        )
+        eng_row.addWidget(self._opt_engine, 1)
+        lay.addLayout(eng_row)
+
+        _cb_style = (
+            f"QCheckBox{{color:{CP['text_secondary']};font-size:11px;"
+            f"background:transparent;spacing:7px;}}"
+            f"QCheckBox::indicator{{width:15px;height:15px;border:1px solid {CP['border_bright']};"
+            f"border-radius:4px;background:{CP['bg0']};}}"
+            f"QCheckBox::indicator:checked{{background:{CP['accent']};border-color:{CP['accent']};}}"
+            f"QCheckBox:disabled{{color:{CP['text_dim']};}}"
+        )
+        self._opt_chars = QCheckBox(translate("Envoyer les références des personnages"))
+        self._opt_decor = QCheckBox(translate("Envoyer la référence du décor"))
+        self._opt_floor = QCheckBox(translate("Envoyer le plan d'architecte (repère d'agencement)"))
+        for _cb in (self._opt_chars, self._opt_decor, self._opt_floor):
+            _cb.setChecked(True)
+            _cb.setStyleSheet(_cb_style)
+            lay.addWidget(_cb)
+
+        def _sync_engine_opts(*_a):
+            # Les références ne concernent que Nano Banana 2 — grisées pour Flux.
+            _nb2 = (self._opt_engine.currentData() == "nb2")
+            for _c in (self._opt_chars, self._opt_decor, self._opt_floor):
+                _c.setEnabled(_nb2)
+        self._opt_engine.currentIndexChanged.connect(_sync_engine_opts)
+        _sync_engine_opts()
 
         lay.addWidget(_sep())
 
@@ -3059,13 +3111,21 @@ class PageStoryboard(QWidget):
         if not selected:
             return
 
+        # Options cochées dans la fenêtre (moteur + références à envoyer).
+        _mood_opts = {
+            "engine":     dlg._opt_engine.currentData() or "nb2",
+            "chars":      dlg._opt_chars.isChecked(),
+            "decor":      dlg._opt_decor.isChecked(),
+            "floor_plan": dlg._opt_floor.isChecked(),
+        }
+
         # Compteurs de résultat (message final honnête : succès / échecs).
         self._mood_ok = 0
         self._mood_fail = 0
         self._mood_last_err = ""
 
         from api.apercu import MoodBatchWorker
-        self._batch_mood_worker = MoodBatchWorker(selected)
+        self._batch_mood_worker = MoodBatchWorker(selected, options=_mood_opts)
         self._batch_mood_worker.shot_progress.connect(self._on_batch_mood_progress)
         self._batch_mood_worker.shot_done.connect(self._on_batch_mood_done)
         self._batch_mood_worker.shot_failed.connect(self._on_batch_mood_failed)

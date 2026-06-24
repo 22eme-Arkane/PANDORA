@@ -358,30 +358,35 @@ def _is_cinema_mood() -> bool:
         return True
 
 
-def _shot_ref_images(shot: dict) -> list:
-    """Portraits des personnages assignés + image du décor du plan (réfs NB2)."""
+def _shot_ref_images(shot: dict, include_chars: bool = True,
+                     include_decor: bool = True) -> list:
+    """Portraits des personnages assignés + image du décor du plan (réfs NB2).
+    `include_chars` / `include_decor` permettent d'exclure une catégorie (options
+    de la fenêtre « Générer les Moods »)."""
     refs: list = []
-    try:
-        import core.casting as cast
-        for cid in (shot.get("character_ids") or []):
-            c = cast.get_character(cid) or {}
-            cands = [c.get("image_path"), c.get("portrait_path"), c.get("portrait")]
-            cands += (c.get("generated_images") or [])[:1]
-            for p in cands:
+    if include_chars:
+        try:
+            import core.casting as cast
+            for cid in (shot.get("character_ids") or []):
+                c = cast.get_character(cid) or {}
+                cands = [c.get("image_path"), c.get("portrait_path"), c.get("portrait")]
+                cands += (c.get("generated_images") or [])[:1]
+                for p in cands:
+                    if p and os.path.isfile(p):
+                        refs.append(p)
+                        break
+        except Exception:
+            pass
+    if include_decor:
+        try:
+            import core.decors as dec
+            did = shot.get("decor_id")
+            if did:
+                p = (dec.get_decor(did) or {}).get("image_path") or ""
                 if p and os.path.isfile(p):
                     refs.append(p)
-                    break
-    except Exception:
-        pass
-    try:
-        import core.decors as dec
-        did = shot.get("decor_id")
-        if did:
-            p = (dec.get_decor(did) or {}).get("image_path") or ""
-            if p and os.path.isfile(p):
-                refs.append(p)
-    except Exception:
-        pass
+        except Exception:
+            pass
     seen, out = set(), []
     for r in refs:
         if r not in seen:
@@ -491,19 +496,33 @@ def run_generation_nb2(prompt: str, output_dir: str, api_key: str, progress_cb,
 
 
 def run_mood(shot: dict, prompt: str, output_dir: str, api_key: str, progress_cb,
-             building_ref: str = "", inspiration_ref: str = "") -> str:
-    """Dispatcher mood : CINÉMA → Nano Banana 2 (réfs persos/décor) ; LIVE → Flux
-    (run_generation, façade/inspiration). Distinction par le namespace storyboard."""
-    if _is_cinema_mood():
-        # Plan d'architecte (vue de dessus) du décor → repère d'agencement de la pièce.
+             building_ref: str = "", inspiration_ref: str = "",
+             options: dict | None = None) -> str:
+    """Dispatcher mood. `options` (fenêtre « Générer les Moods ») :
+        engine     : "nb2" | "flux"  (défaut : NB2 en Cinéma, Flux en Live)
+        chars      : envoyer les réfs personnages (NB2)
+        decor      : envoyer la réf décor (NB2)
+        floor_plan : envoyer le plan d'architecte (NB2)
+    NB2 = réfs persos/décor + plan d'architecte ; Flux = t2i depuis le prompt."""
+    opts = options or {}
+    engine = (opts.get("engine") or "").strip().lower()
+    if engine not in ("nb2", "flux"):
+        engine = "nb2" if _is_cinema_mood() else "flux"
+
+    if engine == "nb2":
+        refs = _shot_ref_images(shot,
+                                include_chars=opts.get("chars", True),
+                                include_decor=opts.get("decor", True))
         _fp = ""
-        try:
-            from core.decors import floor_plan_for_shot
-            _fp = floor_plan_for_shot(shot) or ""
-        except Exception:
-            _fp = ""
-        return run_generation_nb2(prompt, output_dir, api_key, progress_cb,
-                                  _shot_ref_images(shot), floor_plan=_fp)
+        if opts.get("floor_plan", True):
+            try:
+                from core.decors import floor_plan_for_shot
+                _fp = floor_plan_for_shot(shot) or ""
+            except Exception:
+                _fp = ""
+        return run_generation_nb2(prompt, output_dir, api_key, progress_cb, refs,
+                                  floor_plan=_fp)
+    # Flux : mood t2i depuis le prompt (façade/inspiration seulement si fournies — Live).
     return run_generation(prompt, output_dir, api_key, progress_cb, building_ref,
                           inspiration_ref=inspiration_ref)
 
@@ -551,9 +570,10 @@ class MoodBatchWorker(QThread):
     shot_failed   = pyqtSignal(str, str)         # (shot_id, error)
     all_done      = pyqtSignal()
 
-    def __init__(self, shots: list):
+    def __init__(self, shots: list, options: dict | None = None):
         super().__init__()
         self._shots      = shots
+        self._options    = options or {}
         self._cancelled  = False
         self._was_cancelled = False
         from core.config import load_config
@@ -587,7 +607,7 @@ class MoodBatchWorker(QThread):
                         self.shot_progress.emit(_i + 1, _t, msg)
 
                     path = run_mood(shot, prompt, out_dir, self._api_key, _prog,
-                                    self._building_ref)
+                                    self._building_ref, options=self._options)
 
                     if path and os.path.isfile(path):
                         existing = sb_api.load_apercus(shot["id"])

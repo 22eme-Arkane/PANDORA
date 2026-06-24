@@ -2667,19 +2667,36 @@ class TabT2V(QScrollArea):
         _raccords_lay.setContentsMargins(0, 0, 0, 0)
         _raccords_lay.setSpacing(1)
 
-        _raccords_header = QWidget()
-        _raccords_header.setStyleSheet("background:transparent;border:none;")
-        _raccords_header_lay = QHBoxLayout(_raccords_header)
-        _raccords_header_lay.setContentsMargins(14, 8, 14, 6)
-        _raccords_title = QLabel("RENDU & AUDIO")
-        _raccords_title.setStyleSheet(
-            f"color:{C['accent']};font-size:9px;letter-spacing:2px;"
-            f"font-family:'Consolas',monospace;font-weight:700;"
-            f"background:transparent;border:none;"
+        # En-tête repliable (menu déroulant) — beaucoup d'options sous RENDU & AUDIO.
+        self._raccords_open = False  # replié par défaut
+        self._raccords_toggle_btn = QPushButton("▶  RENDU & AUDIO")
+        self._raccords_toggle_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._raccords_toggle_btn.setStyleSheet(
+            f"QPushButton{{background:transparent;color:{C['accent']};border:none;"
+            f"text-align:left;font-size:9px;letter-spacing:2px;"
+            f"font-family:'Consolas',monospace;font-weight:700;padding:8px 14px 6px 14px;}}"
+            f"QPushButton:hover{{color:{C['accent_dim']};}}"
         )
-        _raccords_header_lay.addWidget(_raccords_title)
-        _raccords_header_lay.addStretch()
-        _raccords_lay.addWidget(_raccords_header)
+        _raccords_lay.addWidget(self._raccords_toggle_btn)
+
+        # Corps repliable : toutes les options vivent dedans.
+        self._raccords_body = QWidget()
+        self._raccords_body.setStyleSheet("background:transparent;border:none;")
+        _body_lay = QVBoxLayout(self._raccords_body)
+        _body_lay.setContentsMargins(0, 0, 0, 0)
+        _body_lay.setSpacing(1)
+        self._raccords_body.setVisible(False)
+        _raccords_lay.addWidget(self._raccords_body)
+
+        def _toggle_raccords(*_a):
+            self._raccords_open = not self._raccords_open
+            self._raccords_body.setVisible(self._raccords_open)
+            self._raccords_toggle_btn.setText(
+                ("▼" if self._raccords_open else "▶") + "  RENDU & AUDIO")
+        self._raccords_toggle_btn.clicked.connect(_toggle_raccords)
+
+        # À partir d'ici, toutes les options s'ajoutent dans le CORPS repliable.
+        _raccords_lay = _body_lay
 
         def _raccord_toggle(title, subtitle, checked):
             w = QFrame()
@@ -2787,22 +2804,20 @@ class TabT2V(QScrollArea):
         # Synchronisation labiale (lip-sync) — post-traitement APRÈS génération :
         # recale les lèvres sur une voix (doublage/TTS auto depuis le dialogue, ou
         # un audio attaché au plan). Payant (par minute).
+        # Titre + case (SANS sous-titre — la description vient APRÈS le moteur).
         self._lipsync_toggle_row, _lipsync_cb_inner = _raccord_toggle(
-            "Resynchroniser les lèvres (lip-sync)",
-            "Après génération, recale les lèvres sur une voix : doublage/TTS auto depuis "
-            "le dialogue du plan, ou un audio attaché. Post-traitement payant (par minute).",
-            False,
+            "Resynchroniser les lèvres (lip-sync)", "", False,
         )
         self._lipsync_cb = _lipsync_cb_inner
         _raccords_lay.addWidget(self._lipsync_toggle_row)
 
-        # Sélecteur de moteur lip-sync (défaut Sync 2 Pro) — persisté en config.
+        # Moteur lip-sync (défaut Sync 2 Pro) — placé AVANT la description, aligné à 14.
         from api.lipsync import (LIPSYNC_ENGINES as _LSE, LIPSYNC_ENGINE_ORDER as _LSO,
                                  get_lipsync_engine as _get_ls)
         _ls_row = QWidget()
         _ls_row.setStyleSheet("background:transparent;border:none;")
         _ls_lay = QHBoxLayout(_ls_row)
-        _ls_lay.setContentsMargins(14, 0, 14, 8)
+        _ls_lay.setContentsMargins(14, 2, 14, 4)
         _ls_lay.setSpacing(8)
         _ls_lbl = QLabel("Moteur lip-sync")
         _ls_lbl.setStyleSheet(f"color:{C['text_dim']};font-size:11px;border:none;")
@@ -2834,6 +2849,21 @@ class TabT2V(QScrollArea):
         self._lipsync_engine_combo.currentIndexChanged.connect(_save_ls_engine)
         _ls_lay.addWidget(self._lipsync_engine_combo, 1)
         _raccords_lay.addWidget(_ls_row)
+
+        # Description du lip-sync — APRÈS le moteur, alignée à 14 (comme le moteur).
+        _ls_desc_wrap = QWidget()
+        _ls_desc_wrap.setStyleSheet("background:transparent;border:none;")
+        _ls_desc_lay = QHBoxLayout(_ls_desc_wrap)
+        _ls_desc_lay.setContentsMargins(14, 0, 14, 8)
+        _ls_desc = QLabel(
+            "Après génération, recale les lèvres sur une voix : doublage/TTS auto depuis "
+            "le dialogue du plan, ou un audio attaché. Post-traitement payant (par minute).")
+        _ls_desc.setWordWrap(True)
+        _ls_desc.setStyleSheet(
+            f"color:{C['text_dim']};font-size:10px;font-family:'Consolas',monospace;"
+            f"border:none;background:transparent;")
+        _ls_desc_lay.addWidget(_ls_desc)
+        _raccords_lay.addWidget(_ls_desc_wrap)
 
         lay.addWidget(self._edit_zone)
 
