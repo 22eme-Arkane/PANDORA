@@ -2792,6 +2792,31 @@ def edit_clip_face_swap_pixverse():
     assert "_pixverse_swap_mode()" in src and "PixverseSwapWorker" in src, "routage Pixverse absent de _process_next"
 
 
+@test
+def sound_design_tirette_duree_et_traduction():
+    """Sound Design : (1) le prompt est TRADUIT en anglais avant l'envoi (workers SFX) ;
+    (2) la durée est une TIRETTE dont le max s'adapte au moteur (ElevenLabs 22 s, autres 30 s)."""
+    import inspect
+    import api.tts as tts
+    for cls in (tts.ElevenLabsSFXWorker, tts.SFX1Worker, tts.MMAudioTextWorker):
+        assert "_sfx_prompt_en(self._text)" in inspect.getsource(cls._real), (cls.__name__, "non traduit")
+    from PyQt6.QtWidgets import QApplication, QSlider
+    QApplication.instance() or QApplication([])
+    import ui.tab_sound_design as SD
+    tab = SD.TabSoundDesign()
+    assert isinstance(tab._dur_text, QSlider) and isinstance(tab._dur_video, QSlider), "la durée doit être une tirette"
+    tk = [tab._text_engine_combo.itemData(i) for i in range(tab._text_engine_combo.count())]
+    tab._text_engine_combo.setCurrentIndex(tk.index("elevenlabs"))
+    assert tab._dur_text.maximum() == 22, ("ElevenLabs = 22 s", tab._dur_text.maximum())
+    tab._dur_text.setValue(22)
+    tab._text_engine_combo.setCurrentIndex(tk.index("mmaudio"))
+    assert tab._dur_text.maximum() == 30, ("MMAudio = 30 s", tab._dur_text.maximum())
+    # clamp : repasser sur ElevenLabs (22) ramène une valeur de 30 → 22
+    tab._dur_text.setValue(30)
+    tab._text_engine_combo.setCurrentIndex(tk.index("elevenlabs"))
+    assert tab._dur_text.value() <= 22, ("durée ramenée au max moteur", tab._dur_text.value())
+
+
 # ══════════════════════════════════════════════════════════════════════════════
 # Runner
 # ══════════════════════════════════════════════════════════════════════════════

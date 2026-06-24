@@ -758,6 +758,20 @@ class F5TTSWorker(QThread):
 
 # ── SFX 1.6 — Ambiances sonores ──────────────────────────────────────────────
 
+def _sfx_prompt_en(text: str) -> str:
+    """Traduit le prompt SFX en anglais avant l'envoi (les moteurs SFX — Mirelo,
+    ElevenLabs, MMAudio — sont entraînés en anglais). No-op si vide ; tolérant aux
+    erreurs réseau (renvoie l'original)."""
+    t = (text or "").strip()
+    if not t:
+        return t
+    try:
+        from core.lang import translate_to_english
+        return translate_to_english(t) or t
+    except Exception:
+        return t
+
+
 class SFX1Worker(QThread):
     """
     Génère des ambiances sonores depuis un texte via SFX 1.6 (Mirelo AI).
@@ -805,7 +819,7 @@ class SFX1Worker(QThread):
             result = fal_client.subscribe(
                 "mirelo-ai/sfx1.6/text-to-audio",
                 arguments={
-                    "text_prompt": self._text,
+                    "text_prompt": _sfx_prompt_en(self._text),
                     "duration":    self._duration,
                 },
             )
@@ -902,7 +916,7 @@ class FoleyControlWorker(QThread):
             self.progress.emit(25, f"Foley Control — SFX synchronisés (~${cost_est:.3f})…")
             args = {"video_url": video_url}
             if self._prompt.strip():
-                args["prompt"] = self._prompt.strip()
+                args["prompt"] = _sfx_prompt_en(self._prompt)
             result = fal_client.subscribe("fal-ai/controlfoley", arguments=args)
 
             audio_url = ""
@@ -1023,7 +1037,7 @@ class SFX1VideoWorker(QThread):
             self.progress.emit(25, f"SFX 1.6 vidéo — {self._duration:.0f}s (~${cost_est:.2f})…")
             args = {"video_url": video_url, "duration": self._duration}
             if self._prompt.strip():
-                args["text_prompt"] = self._prompt.strip()
+                args["text_prompt"] = _sfx_prompt_en(self._prompt)
             result = fal_client.subscribe("mirelo-ai/sfx1.6/video-to-video", arguments=args)
 
             out_url = ""
@@ -1135,7 +1149,7 @@ class ElevenLabsSFXWorker(QThread):
             dur = max(0.5, min(22.0, self._duration))   # borne API ElevenLabs : 0.5–22 s
             result = fal_client.subscribe(
                 "fal-ai/elevenlabs/sound-effects/v2",
-                arguments={"text": self._text, "duration_seconds": dur},
+                arguments={"text": _sfx_prompt_en(self._text), "duration_seconds": dur},
             )
             audio_url = _first_media_url(result, "audio")
             if not audio_url:
@@ -1200,7 +1214,7 @@ class MMAudioTextWorker(QThread):
             self.progress.emit(10, f"MMAudio — {self._duration:g}s (~${cost_est:.3f})…")
             result = fal_client.subscribe(
                 "fal-ai/mmaudio-v2/text-to-audio",
-                arguments={"prompt": self._text, "duration": self._duration},
+                arguments={"prompt": _sfx_prompt_en(self._text), "duration": self._duration},
             )
             audio_url = _first_media_url(result, "audio")
             if not audio_url:
@@ -1270,7 +1284,7 @@ class MMAudioVideoWorker(QThread):
             self.progress.emit(25, f"MMAudio vidéo — {self._duration:g}s (~${cost_est:.3f})…")
             # MMAudio exige un prompt non vide → défaut générique si l'utilisateur
             # n'en a pas saisi (sonorisation automatique calée sur l'image).
-            prompt = self._prompt.strip() or (
+            prompt = _sfx_prompt_en(self._prompt) or (
                 "natural ambient sound and sound effects matching the on-screen action")
             args = {"video_url": video_url, "duration": self._duration, "prompt": prompt}
             result = fal_client.subscribe("fal-ai/mmaudio-v2", arguments=args)

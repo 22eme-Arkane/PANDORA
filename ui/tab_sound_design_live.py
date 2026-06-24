@@ -15,9 +15,14 @@ import os
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, QTextEdit,
     QDoubleSpinBox, QProgressBar, QStackedWidget, QScrollArea, QFileDialog, QFrame,
-    QComboBox,
+    QComboBox, QSlider, QCheckBox,
 )
 from PyQt6.QtCore import Qt, pyqtSignal, QUrl, QThread
+
+# Durée max (s) par moteur SFX. ElevenLabs SFX V2 = 22 s confirmé (API) ; les autres
+# moteurs n'exposent pas de max documenté → plafond raisonnable de 30 s (best-effort).
+_SFX_TEXT_MAX  = {"elevenlabs": 22, "mmaudio": 30, "sfx16": 30}
+_SFX_VIDEO_MAX = {"sfx16": 30, "foley": 30, "mmaudio": 30}
 from PyQt6.QtGui import QDesktopServices
 
 from ui.styles import C, STYLESHEET
@@ -373,6 +378,8 @@ class TabSoundDesignLive(QScrollArea):
         lay.addLayout(teng_row)
 
         lay.addLayout(self._build_duration_row("text"))
+        self._text_engine_combo.currentIndexChanged.connect(self._update_text_dur_max)
+        self._update_text_dur_max()   # cale la tirette sur le moteur par défaut (ElevenLabs : 22 s)
         return w
 
     def _build_video_panel(self) -> QWidget:
@@ -428,6 +435,8 @@ class TabSoundDesignLive(QScrollArea):
         lay.addLayout(eng_row)
 
         lay.addLayout(self._build_duration_row("video"))
+        self._video_engine_combo.currentIndexChanged.connect(self._update_video_dur_max)
+        self._update_video_dur_max()
         return w
 
     def _build_duration_row(self, which: str):
@@ -436,22 +445,53 @@ class TabSoundDesignLive(QScrollArea):
         lbl = QLabel(translate("Durée"))
         lbl.setStyleSheet(
             f"color:{C['text_secondary']};font-size:11px;background:transparent;border:none;")
-        spin = QDoubleSpinBox()
-        spin.setRange(1.0, 60.0)
-        spin.setDecimals(0)
-        spin.setValue(10)
-        spin.setSuffix(" s")
-        spin.setStyleSheet(
-            f"QDoubleSpinBox{{background:{C['bg2']};color:{C['text_primary']};"
-            f"border:1px solid {C['border']};border-radius:6px;padding:5px 8px;font-size:12px;}}")
+        sld = QSlider(Qt.Orientation.Horizontal)
+        sld.setMinimum(1)
+        sld.setMaximum(22)      # ajusté au moteur via _update_*_dur_max()
+        sld.setValue(10)
+        sld.setStyleSheet(
+            f"QSlider::groove:horizontal{{height:4px;background:{C['bg3']};border-radius:2px;}}"
+            f"QSlider::handle:horizontal{{width:14px;height:14px;margin:-6px 0;border-radius:7px;"
+            f"background:{C['accent']};}}"
+            f"QSlider::sub-page:horizontal{{background:{C['accent_dim']};border-radius:2px;}}")
+        val = QLabel("10 s")
+        val.setFixedWidth(46)
+        val.setStyleSheet(
+            f"color:{C['text_primary']};font-size:11px;font-weight:700;"
+            f"background:transparent;border:none;")
+        sld.valueChanged.connect(lambda v, _l=val: _l.setText(f"{v} s"))
         row.addWidget(lbl)
-        row.addWidget(spin)
-        row.addStretch()
+        row.addWidget(sld, 1)
+        row.addWidget(val)
         if which == "text":
-            self._dur_text = spin
+            self._dur_text = sld
+            self._dur_text_lbl = val
         else:
-            self._dur_video = spin
+            self._dur_video = sld
+            self._dur_video_lbl = val
         return row
+
+    def _update_text_dur_max(self, *_):
+        """Cale le maximum de la tirette de durée (texte) sur le moteur SFX choisi."""
+        eng = (self._text_engine_combo.currentData()
+               if getattr(self, "_text_engine_combo", None) else "elevenlabs")
+        mx = _SFX_TEXT_MAX.get(eng, 30)
+        self._dur_text.setMaximum(mx)
+        if self._dur_text.value() > mx:
+            self._dur_text.setValue(mx)
+        self._dur_text_lbl.setText(f"{self._dur_text.value()} s")
+        self._dur_text.setToolTip(translate("Durée maximale du moteur : ") + f"{mx} s")
+
+    def _update_video_dur_max(self, *_):
+        """Cale le maximum de la tirette de durée (vidéo) sur le moteur choisi."""
+        eng = (self._video_engine_combo.currentData()
+               if getattr(self, "_video_engine_combo", None) else "sfx16")
+        mx = _SFX_VIDEO_MAX.get(eng, 30)
+        self._dur_video.setMaximum(mx)
+        if self._dur_video.value() > mx:
+            self._dur_video.setValue(mx)
+        self._dur_video_lbl.setText(f"{self._dur_video.value()} s")
+        self._dur_video.setToolTip(translate("Durée maximale du moteur : ") + f"{mx} s")
 
     # ── Génération ────────────────────────────────────────────────────────────
 
@@ -461,7 +501,8 @@ class TabSoundDesignLive(QScrollArea):
         self._set_mode("text")
         self._txt_prompt.setPlainText(prompt or "")
         try:
-            self._dur_text.setValue(max(1.0, min(60.0, float(duration or 10.0))))
+            self._dur_text.setValue(
+                int(max(1, min(self._dur_text.maximum(), round(float(duration or 10.0))))))
         except (TypeError, ValueError):
             pass
 
@@ -553,10 +594,9 @@ class TabSoundDesignLive(QScrollArea):
             dur = float(shot.get("duration", 5.0) or 5.0)
         except (TypeError, ValueError):
             dur = 5.0
-        dur = max(1.0, min(60.0, dur))
         self._set_mode("text")
         self._txt_prompt.setPlainText(prompt)
-        self._dur_text.setValue(dur)
+        self._dur_text.setValue(int(max(1, min(self._dur_text.maximum(), round(dur)))))
         self._sfx_queue = []
         self._refresh_sfx_queue()
         n = shot.get("number", "?")

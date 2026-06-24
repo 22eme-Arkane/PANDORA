@@ -1677,6 +1677,22 @@ def sound_design_moteurs_multiples_live():
     assert isinstance(tab._make_text_worker("x", 5.0, "t"), tts.ElevenLabsSFXWorker)
 
 
+@test
+def sound_design_tirette_duree_live():
+    """Sound Design Live : durée = tirette adaptée au moteur (ElevenLabs 22 s, autres 30 s).
+    Parité Cinéma. (La traduction du prompt vit dans api/tts — testée côté Cinéma.)"""
+    from PyQt6.QtWidgets import QApplication, QSlider
+    QApplication.instance() or QApplication([])
+    import ui.tab_sound_design_live as SD
+    tab = SD.TabSoundDesignLive()
+    assert isinstance(tab._dur_text, QSlider) and isinstance(tab._dur_video, QSlider), "durée = tirette"
+    tk = [tab._text_engine_combo.itemData(i) for i in range(tab._text_engine_combo.count())]
+    tab._text_engine_combo.setCurrentIndex(tk.index("elevenlabs"))
+    assert tab._dur_text.maximum() == 22, ("ElevenLabs = 22 s", tab._dur_text.maximum())
+    tab._text_engine_combo.setCurrentIndex(tk.index("mmaudio"))
+    assert tab._dur_text.maximum() == 30, ("MMAudio = 30 s", tab._dur_text.maximum())
+
+
 # ══════════════════════════════════════════════════════════════════════════════
 # Runner
 # ══════════════════════════════════════════════════════════════════════════════

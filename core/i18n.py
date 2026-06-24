@@ -2747,6 +2747,7 @@ _FR_TO_EN: dict[str, str] = {
     "Foley Control  ·  SFX synchronisés (~$0.002/s)":
         "Foley Control  ·  synced SFX (~$0.002/s)",
     "MMAudio V2  ·  réf vidéo (~$0.001/s)": "MMAudio V2  ·  video ref (~$0.001/s)",
+    "Durée maximale du moteur : ":          "Engine max duration: ",
     "ElevenLabs SFX V2  ·  texte → SFX (~$0.002/s)":
         "ElevenLabs SFX V2  ·  text → SFX (~$0.002/s)",
     "MMAudio V2  ·  texte → SFX (~$0.001/s)":
