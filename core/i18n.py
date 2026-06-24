@@ -1038,6 +1038,8 @@ _FR_TO_EN: dict[str, str] = {
     # ── Modifier un clip : « Type de modification » (modèles de prompt) ─────────
     "Type de modification":          "Modification type",
     "✎ Insérer un modèle…":          "✎ Insert a template…",
+    "Mode face-swap (Pixverse Swap) : l'image de référence remplace le visage du clip SANS régénérer la scène. Ajoute le nouveau visage en « Image de référence ». (Seedance non utilisé · 720p max · audio conservé.)":
+        "Face-swap mode (Pixverse Swap): the reference image replaces the clip's face WITHOUT regenerating the scene. Add the new face under « Reference image ». (Seedance not used · 720p max · audio preserved.)",
     "Changer le décor (arrière-plan)": "Change the set (background)",
     "Changer un visage":             "Change a face",
     "Changer l'étalonnage (couleurs)": "Change the color grade",

@@ -812,6 +812,14 @@ class TabDavinciEdit(QScrollArea):
         _mod_row.addWidget(self._mod_combo, 1)
         _pg_lay.addLayout(_mod_row)
 
+        # Indice affiché quand un mode « autre moteur » est actif (ex. face-swap Pixverse)
+        self._modif_hint = QLabel("")
+        self._modif_hint.setWordWrap(True)
+        self._modif_hint.setStyleSheet(
+            f"color:{C['accent']};font-size:10px;background:transparent;border:none;")
+        self._modif_hint.setVisible(False)
+        _pg_lay.addWidget(self._modif_hint)
+
         # Ref image — prompt global (carré Casting style)
         _pg_ref_hdr = QHBoxLayout()
         _pg_ref_hdr.setContentsMargins(0, 8, 0, 4)
@@ -1997,18 +2005,38 @@ class TabDavinciEdit(QScrollArea):
         self._process_next()
 
     def _on_mod_template(self, idx: int):
-        """Insère le modèle de prompt « Type de modification » choisi dans le prompt
-        global (action : le sélecteur revient ensuite sur l'invite). Non destructif :
-        ajoute à la suite du texte existant. Balises Seedance @Video1/@Image1."""
+        """« Type de modification ». « Changer un visage » bascule sur un AUTRE moteur
+        (Pixverse Swap) → mode PERSISTANT (routé dans _process_next), sans template.
+        Les autres entrées insèrent un modèle de prompt Seedance (action ponctuelle,
+        non destructive — ajoutée à la suite ; le sélecteur revient sur l'invite)."""
         key = self._mod_combo.itemData(idx)
-        if not key:
+        if key == "face":
+            self._refresh_modif_hint()   # mode face-swap actif, persistant
             return
-        tpl = translate(_MOD_TEMPLATES.get(key, ""))
-        if not tpl:
+        if key:
+            tpl = translate(_MOD_TEMPLATES.get(key, ""))
+            if tpl:
+                cur = self._prompt_global.toPlainText().strip()
+                self._prompt_global.setPlainText((cur + "\n" + tpl) if cur else tpl)
+            self._mod_combo.setCurrentIndex(0)
+        self._refresh_modif_hint()
+
+    def _refresh_modif_hint(self):
+        """Affiche l'indice « face-swap » quand le mode « Changer un visage » est actif."""
+        if not hasattr(self, "_modif_hint"):
             return
-        cur = self._prompt_global.toPlainText().strip()
-        self._prompt_global.setPlainText((cur + "\n" + tpl) if cur else tpl)
-        self._mod_combo.setCurrentIndex(0)
+        face = (getattr(self, "_mod_combo", None) is not None
+                and self._mod_combo.currentData() == "face")
+        self._modif_hint.setVisible(face)
+        if face:
+            self._modif_hint.setText(translate(
+                "Mode face-swap (Pixverse Swap) : l'image de référence remplace le visage "
+                "du clip SANS régénérer la scène. Ajoute le nouveau visage en « Image de "
+                "référence ». (Seedance non utilisé · 720p max · audio conservé.)"))
+
+    def _is_face_swap_mode(self) -> bool:
+        return (getattr(self, "_mod_combo", None) is not None
+                and self._mod_combo.currentData() == "face")
 
     def _source_gen_duration(self, clip_idx: int) -> int:
         """Durée de régénération Seedance calée sur le clip SOURCE (sondée par ffprobe,
@@ -2113,6 +2141,40 @@ class TabDavinciEdit(QScrollArea):
         # params["draw_guidance_path"] et analysée par Claude Vision côté worker.
         if ref_images:
             params["ref_images"] = ref_images
+
+        # ── « Changer un visage » → AUTRE MOTEUR : Pixverse Swap (face-swap chirurgical,
+        #    garde la scène + l'audio) au lieu de régénérer le plan via Seedance. ───────
+        if self._is_face_swap_mode():
+            if not has_video:
+                self._on_clip_failed("Face-swap : ce clip n'a pas de vidéo source.",
+                                     clip_idx, prise_idx)
+                return
+            _face = ref_images[0] if ref_images else ""
+            if not (_face and os.path.isfile(_face)):
+                self._on_clip_failed(
+                    "Face-swap : ajoute l'image du nouveau visage en « Image de référence ».",
+                    clip_idx, prise_idx)
+                return
+            _res_raw = (self._cb_res.currentData() or self._cb_res.currentText().split()[0])
+            _px_res = _res_raw if _res_raw in ("360p", "540p", "720p") else "720p"
+            from api.face_swap import PixverseSwapWorker
+            prev = getattr(self, "_worker", None)
+            if prev is not None:
+                abandon_thread(prev)
+            self._worker = PixverseSwapWorker(
+                video_path, _face, mode="person", resolution=_px_res,
+                keep_audio=True, prompt=prompt)
+            self._worker.finished.connect(
+                lambda r, ci=clip_idx, pi=prise_idx: self._on_clip_done(r, ci, pi))
+            self._worker.progress.connect(self._on_progress)
+            self._worker.failed.connect(
+                lambda e, ci=clip_idx, pi=prise_idx: self._on_clip_failed(e, ci, pi))
+            self._worker.start()
+            total = len(self._queue)
+            self._progress.setValue(int(self._queue_pos / total * 100))
+            self._lbl_progress.setText(
+                f"[{self._queue_pos + 1}/{total}]  {clip.get('name', '?')}  — face-swap (Pixverse)")
+            return
 
         _model_key = self._get_model()
         if _model_key in _SEEDANCE_ENGINES:
