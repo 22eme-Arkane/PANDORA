@@ -1,6 +1,6 @@
 # -*- mode: python ; coding: utf-8 -*-
 #
-# pandora.spec — PyInstaller build spec for PANDORA v1.2.0 (Cinéma)
+# pandora.spec — PyInstaller build spec for PANDORA v1.2.1 (Cinéma)
 #
 # Prérequis :
 #   python tools/make_ico.py     # génère assets/pandora_badge.ico
@@ -79,6 +79,12 @@ a = Analysis(
         "anthropic._streaming",
         # PyQt6
         "PyQt6.sip",
+        # ── Modules importés LAZY (dans des fonctions) → invisibles à l'analyse
+        #    statique de PyInstaller. À déclarer pour le build Cinéma (aucun n'importe
+        #    de module Live). ──────────────────────────────────────────────────────
+        "api.lipsync", "api.shot_lipsync", "core.dialogue",   # lip-sync Studio IA + DaVinci
+        "api.face_swap",     # « Changer un visage / le décor » → Pixverse Swap
+        "ui.file_dialogs",   # dialogues fichiers non-natifs + vignettes d'images
         # ── Studio Images (onglet « Image IA ») ───────────────────────────────
         # Modules importés à plat au runtime via sys.path.insert dans
         # ui/tab_image.py → invisibles à l'analyse statique de PyInstaller.

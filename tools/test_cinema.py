@@ -122,10 +122,9 @@ def edition_cinema_only():
     for mod in ("live_window", "ui.chooser", "resolume", "core.live_mapping",
                 "api.resolume_push", "ui.tab_t2v_live"):
         assert f'"{mod}"' in spec, f".spec doit exclure {mod}"
-    # Version bumpée
+    # Version bumpée — build 1.2.1 (release, plus de suffixe « -bêta »).
     from core.version import VERSION
-    # Tolère un suffixe pré-release (« 1.2.0-bêta ») pour les builds de test.
-    assert VERSION.split("-")[0] == "1.2.0", f"version attendue 1.2.0[-suffixe], lue {VERSION}"
+    assert VERSION.split("-")[0] == "1.2.1", f"version attendue 1.2.1[-suffixe], lue {VERSION}"
 
 
 @test
