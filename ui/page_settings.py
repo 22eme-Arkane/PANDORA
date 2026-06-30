@@ -235,7 +235,7 @@ class SettingsPage(QScrollArea):
         self._AI_CHOICES = [
             ("PANDORA optimisé — idéal par tâche · Opus pour le storyboard (défaut)",
                                                           "anthropic", "claude-opus-4-8"),
-            ("Claude Sonnet 4.6 — tout en équilibré",     "anthropic", "claude-sonnet-4-6"),
+            ("Claude Sonnet 5 — tout en équilibré",       "anthropic", "claude-sonnet-5"),
             ("Claude Haiku 4.5 — tout en rapide / économe", "anthropic", "claude-haiku-4-5"),
             ("Fable 5 (Anthropic) — tout sur Fable 5",    "anthropic", "claude-fable-5"),
             ("GPT-5.5 (OpenAI) — partout",                "openai",    ""),

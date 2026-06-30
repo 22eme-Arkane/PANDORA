@@ -56,6 +56,7 @@ CAMERA_MOVEMENTS = [
     "Zoom arrière",
     "Steadicam",
     "Grue / Drone",
+    "Drone FPV",
     "Caméra portée",
     "Plongée",
     "Contre-plongée",

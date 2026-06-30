@@ -82,6 +82,10 @@ EXPECTED_ONLY_CINEMA = {
         # (le Live a son propre lip-sync par keyframes/mapping). Reportable si besoin.
         "_advance_after_clip", "_start_shot_lipsync",
         "_on_shot_lipsync_done", "_on_shot_lipsync_failed",
+        # Enchaînement des moods (RENDU & AUDIO) : résout le mood actif d'un plan
+        # pour l'image de fin (mood i+1). Le Live a son propre mécanisme de
+        # keyframes mapping (_get_mapping_keyframes) → Cinéma-only.
+        "_mood_path_for_shot",
     },
     "ui/page_scenario_live.py": {
         # Pas de Décors ni de HMC dans le Live (handlers supprimés, validé)

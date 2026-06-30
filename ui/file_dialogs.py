@@ -20,8 +20,38 @@ l'identique → AUCUN appelant à modifier.
 import os
 
 from PyQt6.QtWidgets import QFileDialog, QFileIconProvider, QListView, QTreeView
-from PyQt6.QtCore import QFileInfo, QSize, Qt
-from PyQt6.QtGui import QIcon, QPixmap
+from PyQt6.QtCore import QFileInfo, QSize, Qt, QObject, QEvent
+from PyQt6.QtGui import QIcon, QPixmap, QKeySequence, QGuiApplication
+
+
+class _PathPasteFilter(QObject):
+    """Coller un chemin (Ctrl+V) n'importe où dans le dialogue pour y naviguer.
+
+    L'explorateur Qt non-natif n'a pas de barre d'adresse éditable (le « Look in »
+    est un menu déroulant). Ce filtre rattrape le Ctrl+V qui n'est pas consommé par
+    un champ (liste, vue, dialogue) : si le presse-papier contient un CHEMIN, on s'y
+    place (dossier) ou on le présélectionne (fichier). Le champ « File name » garde
+    son collage normal. Retour bêta-test Pierre (2026-06-25)."""
+
+    def __init__(self, dlg: QFileDialog):
+        super().__init__(dlg)
+        self._dlg = dlg
+
+    def eventFilter(self, obj, ev):
+        if (ev.type() == QEvent.Type.KeyPress
+                and ev.matches(QKeySequence.StandardKey.Paste)):
+            text = (QGuiApplication.clipboard().text() or "").strip().strip('"')
+            if text:
+                if os.path.isdir(text):
+                    self._dlg.setDirectory(text)
+                    return True
+                if os.path.isfile(text):
+                    parent = os.path.dirname(text)
+                    if parent:
+                        self._dlg.setDirectory(parent)
+                    self._dlg.selectFile(text)
+                    return True
+        return False
 
 _IMG_EXT   = {"png", "jpg", "jpeg", "webp", "bmp", "gif"}
 _THUMB     = QSize(72, 72)   # vignettes en mode liste/grille
@@ -91,6 +121,9 @@ def apply_thumbnails(dlg: QFileDialog) -> QFileDialog:
         lv.setIconSize(_THUMB)
     for tv in dlg.findChildren(QTreeView):
         tv.setIconSize(_THUMB_ROW)
+    # Coller un chemin (Ctrl+V) pour y naviguer — pallie l'absence de barre
+    # d'adresse éditable du dialogue non-natif (retour Pierre).
+    dlg.installEventFilter(_PathPasteFilter(dlg))
     return dlg
 
 

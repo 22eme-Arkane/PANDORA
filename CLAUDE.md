@@ -606,7 +606,7 @@ mic_placement     # Placement du micro
 - `core.context.get_data_root()` retourne `<projet>/data/` si un projet est ouvert, sinon `data/` local
 - Les sections collapsibles du panneau droit utilisent le pattern `_make_toggle(title, container, expanded)`
 - L'undo/redo du scénario est manuel (liste Python) — pas `QTextEdit.undo()` qui est vidé par `setPlainText()`
-- Sonnet (`claude-sonnet-4-6`) pour les sorties JSON longues (storyboard), Haiku (`claude-haiku-4-5`) pour tout le reste
+- Sonnet (`claude-sonnet-5`) pour les sorties JSON longues (storyboard), Haiku (`claude-haiku-4-5`) pour tout le reste
 - Les dialogs éléments (Décor/Accessoire/HMC/Véhicule) partagent les patterns style combo + variation buttons
 
 ---

@@ -13,8 +13,11 @@ import unicodedata
 from PyQt6.QtCore import QThread, pyqtSignal
 from core.config import load_config
 
-_MODEL            = "claude-sonnet-4-6"   # Sonnet pour format/arrange/apply — qualité créative
-_MODEL_STORYBOARD = "claude-sonnet-4-6"   # Sonnet pour fiabilité JSON sur découpage long
+_MODEL            = "claude-sonnet-5"     # Sonnet 5 — format/arrange/apply + analyses vision
+_MODEL_STORYBOARD = "claude-sonnet-5"     # Sonnet 5 (storyboard JSON ; routage réel via ai_provider task)
+# Sonnet 5 active la réflexion adaptative si `thinking` est omis → on la désactive sur
+# les appels DIRECTS (vision) pour ne pas rogner la sortie (max_tokens serrés).
+_NO_THINK = {"type": "disabled"}
 
 
 def _get_lang() -> str:
@@ -1316,6 +1319,7 @@ class AnalyzeReferencesWorker(QThread):
             with client.messages.stream(
                 model=_MODEL,
                 max_tokens=2048,
+                thinking=_NO_THINK,
                 system=self._SYSTEM,
                 messages=[{"role": "user", "content": content}],
             ) as stream:
@@ -1388,6 +1392,7 @@ et que le scénario se déroule dans un lieu similaire, enrichis ce lieu avec ce
             with client.messages.stream(
                 model=_MODEL,
                 max_tokens=4096,
+                thinking=_NO_THINK,
                 system=self._SYSTEM,
                 messages=[{"role": "user", "content": user_content}],
             ) as stream:
@@ -2038,7 +2043,7 @@ class StoryboardChatWorker(QThread):
 
         messages = self._history + [{"role": "user", "content": user_msg}]
         raw = ai_chat(_STORYBOARD_CHAT_SYSTEM, messages,
-                      tier="utility", max_tokens=4096, task="storyboard_chat").strip()
+                      tier="creative", max_tokens=4096, task="storyboard_chat").strip()
 
         # Nettoyage markdown éventuel.
         if "```" in raw:
@@ -2233,6 +2238,7 @@ class ArrangeChatWorker(QThread):
                 response = client.messages.create(
                     model=_MODEL,
                     max_tokens=8192,
+                    thinking=_NO_THINK,
                     system=_arrange_chat_system(self._intensity),
                     messages=messages,
                 )

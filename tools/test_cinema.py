@@ -439,15 +439,18 @@ def prompt_mood_cinema_inchange():
 @test
 def moteurs_storyboard_filtres():
     """Générer depuis Storyboard : combo ouvert aux moteurs compatibles, t2v purs
-    écartés ; libellés SANS « keyframes » (les keyframes de moods sont un
-    mécanisme Live/Mapping — vérifié : aucun end_image_path en Cinéma) et
-    Seedance 2.0 marqué « recommandé » (retour Matthieu 2026-06-13)."""
+    écartés ; libellés du combo SANS « keyframes » par défaut, Seedance 2.0
+    « recommandé ». Depuis 2026-06-25, l'enchaînement des moods (mood i en début →
+    mood i+1 en fin) est POSSIBLE en Cinéma via le toggle RENDU & AUDIO
+    « Enchaîner les moods » — mais SANS reprendre le mécanisme Live
+    `_get_mapping_keyframes`."""
     import ui.tab_t2v as t2v
     src = inspect.getsource(t2v)
-    assert "use_keyframes=False" in src, "combo filtré, libellés sans keyframes"
+    assert "use_keyframes=False" in src, "libellés du combo sans keyframes par défaut"
     assert 'recommended=("seedance-2.0",)' in src, "Seedance 2.0 recommandé"
-    assert "end_image_path" not in src and "_get_mapping_keyframes" not in src, \
-        "le Cinéma n'envoie JAMAIS de keyframes de moods"
+    assert "_get_mapping_keyframes" not in src, "pas le mécanisme keyframes Live"
+    assert "_mood_chain_cb" in src and "end_image_path" in src, \
+        "enchaînement des moods (début/fin) disponible via RENDU & AUDIO"
     from core.engine_caps import sequence_engines
     pairs = sequence_engines(t2v._ENGINES, use_keyframes=False,
                              recommended=("seedance-2.0",))
@@ -462,6 +465,26 @@ def moteurs_storyboard_filtres():
     # Le Live, lui, garde l'affichage keyframes (raccords par moods)
     live_labels = dict((k, l) for l, k in sequence_engines(t2v._ENGINES))
     assert "keyframes" in live_labels["seedance-2.0"], "Live conserve keyframes"
+
+
+@test
+def drone_fpv_et_moods_keyframes():
+    """Drone FPV (mouvement storyboard + prompt typé distinct) + Seedance 1.5 / LTX-2
+    ouverts à « Générer depuis le storyboard » + enchaînement des moods (mood i en
+    début → mood i+1 en fin) réservé aux moteurs « image de fin » (2026-06-25)."""
+    from core.storyboard import CAMERA_MOVEMENTS
+    from core.camera_data import shot_movement_to_prompt
+    assert "Drone FPV" in CAMERA_MOVEMENTS, "mouvement Drone FPV présent au storyboard"
+    fpv = shot_movement_to_prompt("Drone FPV")
+    assert "FPV" in fpv and fpv != shot_movement_to_prompt("Grue / Drone"), \
+        "prompt Drone FPV typé et distinct du drone classique"
+    from core.engine_caps import ENGINE_CAPS, workflow_compatible
+    assert ENGINE_CAPS["seedance-1.5-pro"]["end_frame"], "Seedance 1.5 = image de fin"
+    assert not ENGINE_CAPS["ltx-2"]["end_frame"], "LTX-2 = i2v sans image de fin"
+    assert workflow_compatible("seedance-1.5-pro") and workflow_compatible("ltx-2")
+    import ui.tab_t2v as t2v
+    keys = [k for _, k in t2v._ENGINES]
+    assert "seedance-1.5-pro" in keys and "ltx-2" in keys, "moteurs ajoutés au menu"
 
 
 @test
@@ -675,7 +698,7 @@ def moteurs_ia_par_tache():
     # Profil PANDORA optimisé (défaut) : moteur IDÉAL par tâche — Opus UNIQUEMENT
     # pour le storyboard, Sonnet pour scénario/sync, Haiku pour le reste (économe).
     assert ap.PANDORA_OPTIMIZED["storyboard_gen"] == "opus", "storyboard = Opus"
-    assert ap.PANDORA_OPTIMIZED["extraction"] == "haiku", "extraction = Haiku (pas Opus)"
+    assert ap.PANDORA_OPTIMIZED["extraction"] == "claude", "extraction = Sonnet 5 (pas Opus)"
     assert ap.PANDORA_OPTIMIZED["screenplay"] == "claude", "scénario = Sonnet"
     assert not all(v == "opus" for v in ap.PANDORA_OPTIMIZED.values()), "plus Opus partout"
     keys = [t[0] for t in ap.TASKS]
@@ -686,12 +709,12 @@ def moteurs_ia_par_tache():
     assert ap._resolve_engine() == ("anthropic", "claude-opus-4-8")
     # Override par tâche
     orig = ap._cfg
-    ap._cfg = lambda: {"ai_provider": "anthropic", "ai_model_creative": "claude-sonnet-4-6",
+    ap._cfg = lambda: {"ai_provider": "anthropic", "ai_model_creative": "claude-sonnet-5",
                        "ai_task_engines": {"enhance": "gpt", "storyboard_chat": "fable5"}}
     try:
         assert ap._resolve_engine("enhance") == ("openai", "")
         assert ap._resolve_engine("storyboard_chat") == ("anthropic", "claude-fable-5")
-        assert ap._resolve_engine("assistant") == ("anthropic", "claude-sonnet-4-6")
+        assert ap._resolve_engine("assistant") == ("anthropic", "claude-sonnet-5")
         assert ap._model("creative", "openai") == "gpt-5.5"
     finally:
         ap._cfg = orig
@@ -1517,17 +1540,17 @@ def assistant_ia_routage_par_tache():
         d = {"ai_provider": "anthropic", "ai_model_creative": "claude-opus-4-8",
              "ai_task_engines": {}}
         assert _mf("storyboard_gen", "creative", d) == "claude-opus-4-8", "storyboard = Opus"
-        assert _mf("extraction", "creative", d) == "claude-haiku-4-5", "extraction = Haiku"
-        assert _mf("screenplay", "creative", d) == "claude-sonnet-4-6", "scénario = Sonnet"
-        assert _mf("sync", "creative", d) == "claude-sonnet-4-6", "sync = Sonnet"
+        assert _mf("extraction", "creative", d) == "claude-sonnet-5", "extraction = Sonnet 5"
+        assert _mf("screenplay", "creative", d) == "claude-sonnet-5", "scénario = Sonnet"
+        assert _mf("sync", "creative", d) == "claude-sonnet-5", "sync = Sonnet"
         assert _mf("translate", "utility", d) == "claude-haiku-4-5", "traduction = Haiku"
         # Config vide → même routage intelligent.
         assert _mf("storyboard_gen", "creative", {}) == "claude-opus-4-8"
-        assert _mf("extraction", "creative", {}) == "claude-haiku-4-5"
+        assert _mf("extraction", "creative", {}) == "claude-sonnet-5"
         # Global explicite → s'applique partout (Sonnet pour TOUTES les tâches).
-        g = {"ai_provider": "anthropic", "ai_model_creative": "claude-sonnet-4-6"}
-        assert _mf("storyboard_gen", "creative", g) == "claude-sonnet-4-6"
-        assert _mf("extraction", "creative", g) == "claude-sonnet-4-6"
+        g = {"ai_provider": "anthropic", "ai_model_creative": "claude-sonnet-5"}
+        assert _mf("storyboard_gen", "creative", g) == "claude-sonnet-5"
+        assert _mf("extraction", "creative", g) == "claude-sonnet-5"
         # Override par tâche prioritaire.
         o = {"ai_provider": "anthropic", "ai_model_creative": "claude-opus-4-8",
              "ai_task_engines": {"storyboard_gen": "haiku"}}

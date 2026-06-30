@@ -245,7 +245,7 @@ class PageLiveSettings(QWidget):
         ai_row.setSpacing(12)
         ai_row.addWidget(_key_label("Assistant IA (texte) :"))
         self._AI_CHOICES = [
-            ("Claude (Anthropic) — défaut",       "anthropic", "claude-sonnet-4-6"),
+            ("Claude (Anthropic) — défaut",       "anthropic", "claude-sonnet-5"),
             ("Fable 5 (Anthropic) — qualité max", "anthropic", "claude-fable-5"),
             ("Mistral — expérimental",            "mistral",   ""),
             ("Kimi K2.7 (Moonshot) — API ou local", "kimi",    ""),
@@ -355,7 +355,7 @@ class PageLiveSettings(QWidget):
         # Assistant IA (texte)
         _cur = (cfg.get("ai_provider", "anthropic"), cfg.get("ai_model_creative", ""))
         for i, (_, prov, model) in enumerate(self._AI_CHOICES):
-            if prov == _cur[0] and (prov != "anthropic" or model == (_cur[1] or "claude-sonnet-4-6")):
+            if prov == _cur[0] and (prov != "anthropic" or model == (_cur[1] or "claude-sonnet-5")):
                 self._ai_combo.setCurrentIndex(i)
                 break
         self._mistral_input.setText(cfg.get("mistral_key", ""))

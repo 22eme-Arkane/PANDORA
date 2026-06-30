@@ -3199,6 +3199,15 @@ _FR_TO_EN: dict[str, str] = {
     "Travelling latéral":           "Lateral tracking",
     "Zoom arrière":                 "Zoom out",
     "Caméra portée":                "Handheld camera",
+    "Drone FPV":                    "FPV Drone",
+    "Enchaîner les moods (image de début → fin)":
+        "Chain moods (start → end frame)",
+    "Plan i : le mood du plan en image de début, le mood du plan SUIVANT en "
+    "image de fin → transitions fluides entre plans. ⚠ Fonctionne uniquement "
+    "avec les moteurs gérant l'image de fin (Seedance 2.0 / 1.5 Pro, Kling v3 Pro).":
+        "Shot i: the shot's mood as the start frame, the NEXT shot's mood as the "
+        "end frame → smooth transitions between shots. ⚠ Works only with engines "
+        "that support an end frame (Seedance 2.0 / 1.5 Pro, Kling v3 Pro).",
     "Génération du Mood via Flux…": "Generating Mood via Flux…",
     "Téléchargement de l'image…":   "Downloading image…",
     "Simulation (pas de clé fal.ai)…":

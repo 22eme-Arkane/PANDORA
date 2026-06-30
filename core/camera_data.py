@@ -298,6 +298,7 @@ _SHOT_MOVEMENT_EN: dict[str, str] = {
     "Zoom arrière":           "slow zoom out",
     "Steadicam":              "smooth flowing steadicam camera movement",
     "Grue / Drone":           "sweeping crane / drone aerial camera movement",
+    "Drone FPV":              "immersive FPV drone shot, first-person-view racing drone flight, fast and agile with rapid acceleration, swooping dives, rolls and tight banking turns, low-altitude proximity fly-through weaving close to subjects and obstacles, continuous momentum and speed, ultra-wide action-camera perspective, dynamic and visceral",
     "Caméra portée":          "handheld camera, subtle organic shake",
     "Plongée":                "high-angle shot looking down on the subject",
     "Contre-plongée":         "low-angle shot looking up at the subject",

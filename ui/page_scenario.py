@@ -621,12 +621,18 @@ class PageScenario(QWidget):
             return btn
 
         # ── helper: section toggle header ─────────────────────────────────────
+        # En-têtes de SECTION (« menu ») nettement distincts des sous-items
+        # (« sous-menu ») : fond plus sombre + barre d'accent à gauche + texte teal
+        # en MAJUSCULES — pour qu'on distingue d'un coup d'œil le niveau section du
+        # niveau action (retour bêta-test Pierre 2026-06-25).
         _toggle_ss = (
-            f"QPushButton{{background:{CP['bg2']};color:{CP['text_secondary']};"
-            f"border:none;border-bottom:1px solid {CP['border']};"
-            f"font-size:10px;font-weight:700;text-align:left;"
-            f"padding:7px 16px;letter-spacing:0.4px;}}"
-            f"QPushButton:hover{{background:{CP['bg3']};color:{CP['text_primary']};}}"
+            f"QPushButton{{background:{CP['bg3']};color:{CP['accent']};"
+            f"border:none;border-left:3px solid {CP['accent']};"
+            f"border-top:1px solid {CP['border']};border-bottom:1px solid {CP['border']};"
+            f"font-size:11px;font-weight:800;text-align:left;"
+            f"padding:9px 16px;letter-spacing:0.8px;}}"
+            f"QPushButton:hover{{background:{CP['bg4']};color:{CP['text_primary']};}}"
+            f"QPushButton:checked{{background:{CP['bg3']};color:{CP['accent']};}}"
         )
 
         def _make_toggle(title: str, container: QWidget, expanded: bool = True):

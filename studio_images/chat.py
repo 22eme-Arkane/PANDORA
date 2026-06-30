@@ -11,8 +11,11 @@ import time
 
 from PyQt6.QtCore import QThread, pyqtSignal
 
-_CHAT_MODEL  = "claude-sonnet-4-6"
-_SYNTH_MODEL = "claude-sonnet-4-6"
+_CHAT_MODEL  = "claude-sonnet-5"
+_SYNTH_MODEL = "claude-sonnet-5"
+# Sonnet 5 active la réflexion adaptative si `thinking` est omis → désactivée ici
+# (max_tokens courts : 500-700) pour ne pas rogner la réponse.
+_NO_THINK = {"type": "disabled"}
 
 # Nombre de tours utilisateur récents pour lesquels on renvoie les images en pleine
 # résolution. Au-delà, les images deviennent un simple marqueur texte (économie de
@@ -183,6 +186,7 @@ class ChatWorker(QThread):
                 msg = client.messages.create(
                     model=_CHAT_MODEL,
                     max_tokens=700,
+                    thinking=_NO_THINK,
                     system=_CHAT_SYSTEM,
                     messages=messages,
                 )
@@ -231,6 +235,7 @@ class SynthPromptWorker(QThread):
                     msg = client.messages.create(
                         model=_SYNTH_MODEL,
                         max_tokens=500,
+                        thinking=_NO_THINK,
                         system=_SYNTH_SYSTEM,
                         messages=[{"role": "user", "content": user_msg}],
                     )

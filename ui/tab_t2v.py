@@ -33,13 +33,16 @@ _ENGINES = [
     ("Sora 2  (prochainement)",          "sora-2"),          # OpenAI — 1080p
     ("PixVerse v6  (prochainement)",     "pixverse-v6"),     # PixVerse — flexible
     ("Seedance 2.0 Fast",               "seedance-2.0-fast"), # Rapide — qualité réduite
+    ("Seedance 1.5 Pro",                "seedance-1.5-pro"),  # début+fin + audio natif
+    ("LTX-2  (4K natif)",               "ltx-2"),             # Lightricks — i2v 4K
 ]
 
 _SEEDANCE_ENGINES    = {"seedance-2.0", "seedance-2.0-fast"}
 _FIXED_RES_ENGINES   = {"veo-3.1", "kling-v3-pro", "kling-o3-4k", "sora-2"}
 _FIXED_RATIO_ENGINES = {"veo-3.1", "kling-v3-pro", "kling-o3-4k"}
 # Moteurs sans support natif d'images de référence (fallback texte uniquement)
-_TEXT_FALLBACK_ENGINES = {"kling-v3-pro", "kling-o3-4k", "veo-3.1", "sora-2"}
+_TEXT_FALLBACK_ENGINES = {"kling-v3-pro", "kling-o3-4k", "veo-3.1", "sora-2",
+                          "seedance-1.5-pro", "ltx-2"}
 _ENGINE_RES_FORCED   = {
     "veo-3.1":      "1080p",
     "kling-v3-pro": "1080p",
@@ -56,6 +59,8 @@ _ENGINE_RESOLUTIONS = {
     "sora-2":            [("1080p", "1080p")],
     "pixverse-v6":       [("1080p  (~$0.115/s)", "1080p"), ("720p  (~$0.075/s)", "720p"), ("480p  (~$0.025/s)", "480p")],
     "happy-horse-1.0":   [("1080p  (~$0.28/s)", "1080p"),  ("720p  (~$0.14/s)", "720p")],
+    "seedance-1.5-pro":  [("720p  (~$0.05/s)", "720p"), ("1080p", "1080p")],
+    "ltx-2":             [("4K  (natif)", "4K")],
 }
 # Moteurs disponibles dans le tab DaVinci Edit (workflow testé et validé uniquement)
 _DAVINCI_ENGINES = [e for e in _ENGINES if e[1] in _SEEDANCE_ENGINES]
@@ -65,16 +70,19 @@ def _make_ext_worker(model: str, params: dict):
     from api.video_engines import (
         Veo3Worker, KlingWorker, KlingO3Worker,
         HappyHorseWorker, PixVerseV6Worker, Sora2Worker,
+        Seedance15Worker, LTX2Worker,
     )
     p = dict(params)
     p.setdefault("mode", "t2v")
     mapping = {
-        "veo-3.1":         Veo3Worker,
-        "kling-v3-pro":    KlingWorker,
-        "kling-o3-4k":     KlingO3Worker,
-        "happy-horse-1.0": HappyHorseWorker,
-        "pixverse-v6":     PixVerseV6Worker,
-        "sora-2":          Sora2Worker,
+        "veo-3.1":          Veo3Worker,
+        "kling-v3-pro":     KlingWorker,
+        "kling-o3-4k":      KlingO3Worker,
+        "happy-horse-1.0":  HappyHorseWorker,
+        "pixverse-v6":      PixVerseV6Worker,
+        "sora-2":           Sora2Worker,
+        "seedance-1.5-pro": Seedance15Worker,
+        "ltx-2":            LTX2Worker,
     }
     cls = mapping.get(model)
     return cls(p) if cls else None
@@ -2801,6 +2809,19 @@ class TabT2V(QScrollArea):
         self._mood_ref_cb.stateChanged.connect(self._refresh_prompt_preview)
         _raccords_lay.addWidget(self._mood_ref_toggle_row)
 
+        # Enchaîner les moods (image de début → fin) — plan i : mood du plan en image
+        # de début, mood du plan SUIVANT (file batch) en image de fin → transitions
+        # fluides. N'agit QUE sur les moteurs gérant l'image de fin (end-frame).
+        self._mood_chain_toggle_row, _mood_chain_cb_inner = _raccord_toggle(
+            "Enchaîner les moods (image de début → fin)",
+            "Plan i : le mood du plan en image de début, le mood du plan SUIVANT en "
+            "image de fin → transitions fluides entre plans. ⚠ Fonctionne uniquement "
+            "avec les moteurs gérant l'image de fin (Seedance 2.0 / 1.5 Pro, Kling v3 Pro).",
+            False,
+        )
+        self._mood_chain_cb = _mood_chain_cb_inner
+        _raccords_lay.addWidget(self._mood_chain_toggle_row)
+
         # Synchronisation labiale (lip-sync) — post-traitement APRÈS génération :
         # recale les lèvres sur une voix (doublage/TTS auto depuis le dialogue, ou
         # un audio attaché au plan). Payant (par minute).
@@ -3907,6 +3928,24 @@ class TabT2V(QScrollArea):
             self._import_cb.setChecked(True)
             self._import_cb.setToolTip("")
 
+    def _mood_path_for_shot(self, shot: dict) -> str:
+        """Chemin du mood ACTIF d'un plan (même logique que _on_shot_selected) —
+        utilisé comme image de FIN (mood du plan suivant) de l'enchaînement des moods."""
+        import core.storyboard as _sb
+        try:
+            data = _sb.load_apercus(shot.get("id", ""))
+        except Exception:
+            return ""
+        all_paths = data.get("paths", []) or []
+        ai = data.get("active_idx", 0)
+        cand = all_paths[ai] if 0 <= ai < len(all_paths) else ""
+        if cand and os.path.isfile(cand):
+            return cand
+        for p in all_paths:
+            if p and os.path.isfile(p):
+                return p
+        return ""
+
     def _start_batch_generation(self, shots: list):
         count = len(shots)
         dlg = QMessageBox(self)
@@ -4111,6 +4150,21 @@ class TabT2V(QScrollArea):
                 if _prev_frame and os.path.isfile(_prev_frame):
                     i2v_frame = _prev_frame
 
+        # Enchaînement des moods (RENDU & AUDIO) — UNIQUEMENT moteurs « image de fin » :
+        # plan i = mood i en image de début, mood i+1 (plan suivant de la file) en fin.
+        # Le dernier plan n'a pas de suivant → image de début seule.
+        mood_end_path = ""
+        if getattr(self, "_mood_chain_cb", None) and self._mood_chain_cb.isChecked():
+            from core.engine_caps import ENGINE_CAPS as _CAPS
+            if _CAPS.get(self._get_model(), {}).get("end_frame"):
+                _cur_mood = getattr(self, "_active_mood_path", "")
+                if _cur_mood and os.path.isfile(_cur_mood):
+                    i2v_frame = _cur_mood   # le mood du plan devient l'image de début
+                if self._is_batch_mode and self._batch_queue:
+                    _nm = self._mood_path_for_shot(self._batch_queue[0])
+                    if _nm and os.path.isfile(_nm):
+                        mood_end_path = _nm
+
         params = {
             "mode":                    "i2v" if i2v_frame else "t2v",
             "prompt":                  full_prompt,
@@ -4138,6 +4192,8 @@ class TabT2V(QScrollArea):
             params["seed"] = seed
         if i2v_frame:
             params["image_path"] = i2v_frame
+        if mood_end_path:
+            params["end_image_path"] = mood_end_path
 
         self.btn_generate.setEnabled(False)
         self.btn_cancel.setVisible(True)

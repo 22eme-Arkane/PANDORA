@@ -20,10 +20,12 @@ ENGINE_CAPS = {
     #                      i2v    end_frame  refs
     "seedance-2.0":      {"i2v": True,  "end_frame": True,  "refs": "full"},
     "seedance-2.0-fast": {"i2v": True,  "end_frame": True,  "refs": "full"},
+    "seedance-1.5-pro":  {"i2v": True,  "end_frame": True,  "refs": "none"},
     "kling-v3-pro":      {"i2v": True,  "end_frame": True,  "refs": "style"},
     "kling-o3-4k":       {"i2v": True,  "end_frame": False, "refs": "none"},
     "happy-horse-1.0":   {"i2v": True,  "end_frame": False, "refs": "full"},
     "pixverse-v6":       {"i2v": True,  "end_frame": False, "refs": "style"},
+    "ltx-2":             {"i2v": True,  "end_frame": False, "refs": "none"},
     # ÉCARTÉS du workflow séquences : text-to-video pur dans notre intégration
     # (aucune image acceptée → ni raccords ni keyframes ni façade possibles).
     "veo-3.1":           {"i2v": False, "end_frame": False, "refs": "none"},

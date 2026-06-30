@@ -8,7 +8,7 @@ Anthropic — les autres fournisseurs gèrent la vision différemment (hors pér
 
 Config (config.json) :
     "ai_provider"        : "anthropic" (défaut) | "openai" | "mistral" | "kimi" | "ollama"
-    "ai_model_creative"  : modèle du tier créatif Anthropic (défaut "claude-sonnet-4-6" ;
+    "ai_model_creative"  : modèle du tier créatif Anthropic (défaut "claude-opus-4-8" ; Sonnet 5 = "claude-sonnet-5" ;
                            "claude-fable-5" pour Fable 5)
     "anthropic_key"      : clé API Anthropic (Claude / Fable 5)
     "openai_key"         : clé API OpenAI (GPT-5.5)
@@ -52,7 +52,7 @@ _PROVIDERS = ("anthropic", "openai", "mistral", "kimi", "ollama")
 # Moteur = (fournisseur, modèle créatif, nom d'affichage). Permet de choisir
 # Claude vs Fable 5 (même fournisseur Anthropic, modèles différents) par tâche.
 ENGINES: dict[str, dict] = {
-    "claude":  {"provider": "anthropic", "creative_model": "claude-sonnet-4-6", "name": "Claude Sonnet 4.6"},
+    "claude":  {"provider": "anthropic", "creative_model": "claude-sonnet-5",   "name": "Claude Sonnet 5"},
     "opus":    {"provider": "anthropic", "creative_model": "claude-opus-4-8",   "name": "Claude Opus 4.8"},
     "haiku":   {"provider": "anthropic", "creative_model": "claude-haiku-4-5",  "name": "Claude Haiku 4.5"},
     "fable5":  {"provider": "anthropic", "creative_model": "claude-fable-5",    "name": "Fable 5"},
@@ -88,13 +88,13 @@ _DEFAULT_CREATIVE = "claude-opus-4-8"
 # (traduction, extractions courtes, chat) restent de toute façon sur Haiku via _model().
 TASK_DEFAULTS: dict[str, str] = {
     "storyboard_gen":  "opus",    # découpage / prompts du storyboard — précision MAX
-    "screenplay":      "claude",  # scénario (mise en page, arrangement) — Sonnet 4.6
-    "sync":            "claude",  # synchronisation storyboard — Sonnet 4.6
-    "storyboard_chat": "haiku",   # chat storyboard — Haiku (tier utilitaire)
-    "extraction":      "haiku",   # extraction JSON (persos/décors…) — Haiku
-    "enhance":         "haiku",   # amélioration de prompt — Haiku
-    "assistant":       "haiku",   # guide / assistant — Haiku
-    "translate":       "haiku",   # traduction FR→EN/ZH — Haiku
+    "screenplay":      "claude",  # scénario (mise en page, arrangement) — Sonnet 5
+    "sync":            "claude",  # synchronisation storyboard — Sonnet 5
+    "storyboard_chat": "claude",  # chat storyboard — Sonnet 5 (éditions JSON fiables)
+    "extraction":      "claude",  # extraction JSON (persos/décors…) — Sonnet 5 (précision)
+    "enhance":         "haiku",   # amélioration de prompt — Haiku (économe)
+    "assistant":       "claude",  # guide / assistant — Sonnet 5 (qualité des réponses)
+    "translate":       "haiku",   # traduction FR→EN/ZH — Haiku (économe)
 }
 
 # « PANDORA optimisé » = ce mapping (alias conservé pour les Paramètres).
@@ -227,7 +227,7 @@ def _engine_display_name(provider: str, creative_model: str) -> str:
             return "Fable 5"
         if "haiku" in cm:
             return "Claude Haiku 4.5"
-        return "Claude Sonnet 4.6"
+        return "Claude Sonnet 5"
     if provider == "openai":
         return ENGINES["gpt"]["name"]
     if provider == "mistral":
@@ -284,9 +284,22 @@ def _anthropic_client():
     return anthropic.Anthropic(api_key=_cfg().get("anthropic_key", "").strip())
 
 
+def _anthropic_extra(model: str) -> dict:
+    """Sonnet 5 active la réflexion ADAPTATIVE quand `thinking` est OMIS (≠ Sonnet 4.6,
+    qui ne réfléchissait pas) — cela rognerait les sorties à max_tokens serré
+    (storyboard / scénario JSON). On la désactive donc explicitement pour préserver le
+    comportement. EXCEPTION : Fable 5 / Mythos refusent `thinking:{disabled}` (400) →
+    on omet le champ pour eux (réflexion toujours active)."""
+    m = (model or "").lower()
+    if "fable" in m or "mythos" in m:
+        return {}
+    return {"thinking": {"type": "disabled"}}
+
+
 def _anthropic_complete(system, messages, model, max_tokens) -> str:
     msg = _anthropic_client().messages.create(
         model=model, max_tokens=max_tokens, system=system, messages=messages,
+        **_anthropic_extra(model),
     )
     return "".join(b.text for b in msg.content if getattr(b, "type", "") == "text")
 
@@ -295,6 +308,7 @@ def _anthropic_stream(system, messages, on_chunk, model, max_tokens) -> str:
     full = ""
     with _anthropic_client().messages.stream(
         model=model, max_tokens=max_tokens, system=system, messages=messages,
+        **_anthropic_extra(model),
     ) as st:
         for t in st.text_stream:
             full += t

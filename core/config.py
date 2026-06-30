@@ -32,7 +32,7 @@ _DEFAULTS = {
     "show_api_guide":        True,
     # ── Assistant IA texte (voir core/ai_provider.py) ──────────────────────────
     "ai_provider":           "anthropic",          # anthropic | openai | mistral | ollama
-    "ai_model_creative":     "claude-opus-4-8",    # défaut Opus 4.8 (Sonnet 4.6 / Fable 5 en option)
+    "ai_model_creative":     "claude-opus-4-8",    # défaut Opus 4.8 (Sonnet 5 / Fable 5 en option)
     "openai_key":            "",                   # clé OpenAI (GPT-5.5)
     "openai_model":          "",                   # vide = défaut gpt-5.5
     "mistral_key":           "",

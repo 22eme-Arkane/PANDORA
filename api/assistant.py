@@ -41,7 +41,7 @@ class AssistantWorker(QThread):
                     "pratiques et directes, sans formules d'introduction. "
                     f"Contexte de la page active : {self._page_context}"
                 ),
-                recent, tier="utility", max_tokens=250, task="assistant",
+                recent, tier="creative", max_tokens=250, task="assistant",
             )
             self.finished.emit(out.strip())
         except Exception as e:
