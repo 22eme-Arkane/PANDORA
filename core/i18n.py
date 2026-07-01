@@ -2818,8 +2818,11 @@ _FR_TO_EN: dict[str, str] = {
     "Aucun plan à présenter — générez d'abord un storyboard.":
         "No shots to present — generate a storyboard first.",
     "Échec de l'export :":          "Export failed:",
-    "Dossier de présentation exporté ✓\n\nL'ouvrir dans le navigateur ?":
-        "Pitch deck exported ✓\n\nOpen it in the browser?",
+    "Dossier de présentation exporté ✓": "Pitch deck exported ✓",
+    "Images PNG (*.png)":           "PNG images (*.png)",
+    "Présentation HTML (*.html)":   "HTML presentation (*.html)",
+    "Ouvrir le dossier des images ?": "Open the images folder?",
+    "L'ouvrir ?":                   "Open it?",
     "↑  Vérifier les mises à jour": "↑  Check for updates",
     "Vérification…":                "Checking…",
     "Mise à jour disponible":       "Update available",

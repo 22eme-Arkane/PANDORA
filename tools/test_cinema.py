@@ -266,6 +266,17 @@ def pitch_deck_export_l2():
     pd.export_pitch_deck(out, project={"name": "T"}, shots=shots,
                          characters=chars, decors=decors, lang="fr")
     assert os.path.isfile(out) and os.path.getsize(out) > 500
+    # Export PDF (QPdfWriter) + images PNG (QImage) — rendu Qt natif, sans dep externe
+    from PyQt6.QtWidgets import QApplication
+    QApplication.instance() or QApplication([])
+    pdf = pd.export_pitch_deck_pdf(os.path.join(_TMP, "deck.pdf"),
+                                   project={"name": "T"}, shots=shots,
+                                   characters=chars, decors=decors, lang="fr")
+    assert os.path.isfile(pdf) and os.path.getsize(pdf) > 1000, "PDF non généré"
+    imgs = pd.export_pitch_deck_images(os.path.join(_TMP, "deck"),
+                                       project={"name": "T"}, shots=shots,
+                                       characters=chars, decors=decors, lang="fr")
+    assert len(imgs) >= 3 and all(os.path.isfile(p) for p in imgs), "PNG non générés"
     from ui.page_storyboard import PageStoryboard as _PS
     assert hasattr(_PS, "_on_export_pitch_deck"), "handler export dans la page"
     assert "_btn_pitch_deck" in inspect.getsource(_PS._build_shots_toolbar), \

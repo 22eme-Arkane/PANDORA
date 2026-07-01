@@ -252,21 +252,15 @@ def build_pitch_deck_html(project: dict, shots: list, characters: list,
     return "".join(parts)
 
 
-def export_pitch_deck(out_path: str, project: dict | None = None,
-                      shots: list | None = None, characters: list | None = None,
-                      decors: list | None = None, lang: str | None = None,
-                      date_str: str = "") -> str:
-    """Rassemble les données du projet courant (si non fournies), construit le
-    deck et l'écrit dans out_path (.html). Retourne le chemin écrit.
-
-    Les paramètres explicites priment (utile pour les tests headless)."""
+def _gather_deck_data(project, shots, characters, decors, lang):
+    """Complète les données manquantes depuis le projet courant. Retourne
+    (project, shots, characters, decors, lang)."""
     if lang is None:
         try:
             from core.i18n import get_lang
             lang = get_lang()
         except Exception:
             lang = "fr"
-
     if project is None:
         try:
             import core.context as _ctx
@@ -291,9 +285,234 @@ def export_pitch_deck(out_path: str, project: dict | None = None,
             decors = _dc.list_decors()
         except Exception:
             decors = []
+    return project, shots, characters, decors, (lang or "fr")
 
+
+def export_pitch_deck(out_path: str, project: dict | None = None,
+                      shots: list | None = None, characters: list | None = None,
+                      decors: list | None = None, lang: str | None = None,
+                      date_str: str = "") -> str:
+    """Rassemble les données du projet courant (si non fournies), construit le
+    deck et l'écrit dans out_path (.html). Retourne le chemin écrit.
+
+    Les paramètres explicites priment (utile pour les tests headless)."""
+    project, shots, characters, decors, lang = _gather_deck_data(
+        project, shots, characters, decors, lang)
     html_str = build_pitch_deck_html(project, shots, characters, decors,
-                                     lang=lang or "fr", date_str=date_str)
+                                     lang=lang, date_str=date_str)
     with open(out_path, "w", encoding="utf-8") as f:
         f.write(html_str)
     return out_path
+
+
+# ── Rendu Qt natif : PDF + images PNG (aucune dépendance externe) ─────────────
+# QPainter dessine chaque page dans un repère LOGIQUE 16:9 (1600×900) ; le même
+# code de dessin sert au PDF (QPdfWriter, via setWindow/setViewport) et aux PNG
+# (QImage). Pas de moteur HTML requis (reportlab/WebEngine absents du build).
+
+_PAGE_W, _PAGE_H = 1600, 900
+_C_BG, _C_CARD, _C_ACCENT = "#0c0e1a", "#14162b", "#7c6bff"
+_C_TEXT, _C_SUB, _C_DIM    = "#e8e9f2", "#a9abc4", "#8a8dab"
+
+
+def _scaled_pixmap(path: str, w: int, h: int):
+    """QPixmap rognée pour remplir w×h (cover), ou None si illisible."""
+    from PyQt6.QtGui import QPixmap
+    from PyQt6.QtCore import Qt
+    if not path or not os.path.isfile(path):
+        return None
+    pm = QPixmap(path)
+    if pm.isNull():
+        return None
+    return pm.scaled(w, h, Qt.AspectRatioMode.KeepAspectRatioByExpanding,
+                     Qt.TransformationMode.SmoothTransformation)
+
+
+def _draw_card(painter, x, y, w, h, img_path, title, subtitle, img_ratio=0.62):
+    """Dessine une carte (image en haut + libellés) dans un rect logique."""
+    from PyQt6.QtGui import QColor, QFont, QFontMetrics, QPen
+    from PyQt6.QtCore import Qt, QRect, QRectF
+    painter.setPen(Qt.PenStyle.NoPen)
+    painter.setBrush(QColor(_C_CARD))
+    painter.drawRoundedRect(QRectF(x, y, w, h), 12, 12)
+    img_h = int(h * img_ratio)
+    pm = _scaled_pixmap(img_path, w - 2, img_h - 2)
+    if pm is not None:
+        painter.save()
+        clip = QRectF(x + 1, y + 1, w - 2, img_h - 2)
+        path_clip = None
+        painter.setClipRect(clip)
+        sx = x + 1 + (w - 2 - pm.width()) / 2
+        sy = y + 1 + (img_h - 2 - pm.height()) / 2
+        painter.drawPixmap(int(sx), int(sy), pm)
+        painter.restore()
+    else:
+        painter.setBrush(QColor("#0a0b16"))
+        painter.drawRect(QRect(x + 1, y + 1, w - 2, img_h - 2))
+        painter.setPen(QColor(_C_DIM))
+        painter.setFont(QFont("Segoe UI", 20))
+        painter.drawText(QRect(x, y, w, img_h), Qt.AlignmentFlag.AlignCenter, "—")
+    # Textes
+    tx, tw = x + 14, w - 28
+    ty = y + img_h + 10
+    painter.setPen(QColor(_C_TEXT))
+    f = QFont("Segoe UI", 13); f.setBold(True); painter.setFont(f)
+    fm = QFontMetrics(f)
+    painter.drawText(QRect(tx, ty, tw, 22),
+                     Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter,
+                     fm.elidedText(title or "", Qt.TextElideMode.ElideRight, tw))
+    if subtitle:
+        painter.setPen(QColor(_C_DIM))
+        f2 = QFont("Segoe UI", 10); painter.setFont(f2)
+        fm2 = QFontMetrics(f2)
+        painter.drawText(QRect(tx, ty + 24, tw, 40), Qt.TextFlag.TextWordWrap,
+                         fm2.elidedText(subtitle, Qt.TextElideMode.ElideRight, tw * 2))
+
+
+def _page_section(title, count_label, items):
+    """Retourne un callable draw(painter) pour une page grille (4 col)."""
+    from PyQt6.QtGui import QColor, QFont
+    from PyQt6.QtCore import Qt, QRect
+
+    def draw(painter):
+        painter.setPen(QColor(_C_TEXT))
+        f = QFont("Segoe UI", 26); f.setBold(True); painter.setFont(f)
+        painter.drawText(QRect(56, 40, _PAGE_W - 300, 46),
+                         Qt.AlignmentFlag.AlignLeft, title)
+        if count_label:
+            painter.setPen(QColor(_C_ACCENT))
+            painter.setFont(QFont("Consolas", 13))
+            painter.drawText(QRect(_PAGE_W - 260, 40, 204, 46),
+                             Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter,
+                             count_label)
+        cols = 4
+        gap, mx, top = 24, 56, 110
+        cw = (_PAGE_W - 2 * mx - (cols - 1) * gap) // cols
+        ch = int(cw * 1.05)
+        for i, it in enumerate(items):
+            r, c = divmod(i, cols)
+            x = mx + c * (cw + gap)
+            y = top + r * (ch + gap)
+            _draw_card(painter, x, y, cw, ch,
+                       it.get("img", ""), it.get("title", ""), it.get("sub", ""))
+    return draw
+
+
+def _deck_pages(project, shots, characters, decors, lang, date_str):
+    """Liste de callables draw(painter) — une par page (couverture + grilles)."""
+    from PyQt6.QtGui import QColor, QFont
+    from PyQt6.QtCore import Qt, QRect
+    t = _L.get(lang, _L["fr"])
+    title = (project or {}).get("name") or (project or {}).get("title") or t["no_title"]
+    total = sum(float(s.get("duration", 0) or 0) for s in (shots or []))
+    pages = []
+
+    # Couverture
+    def _cover(painter):
+        painter.setPen(QColor(_C_ACCENT))
+        f = QFont("Segoe UI", 13); f.setBold(True); painter.setFont(f)
+        painter.drawText(QRect(0, 210, _PAGE_W, 30),
+                         Qt.AlignmentFlag.AlignHCenter, "P A N D O R A")
+        painter.setPen(QColor(_C_TEXT))
+        f2 = QFont("Segoe UI", 48); f2.setBold(True); painter.setFont(f2)
+        painter.drawText(QRect(100, 300, _PAGE_W - 200, 120),
+                         Qt.AlignmentFlag.AlignHCenter | Qt.TextFlag.TextWordWrap, title)
+        painter.setPen(QColor(_C_SUB))
+        painter.setFont(QFont("Segoe UI", 16))
+        painter.drawText(QRect(0, 470, _PAGE_W, 34),
+                         Qt.AlignmentFlag.AlignHCenter, t["deck"])
+        painter.setPen(QColor(_C_DIM))
+        painter.setFont(QFont("Consolas", 12))
+        meta = f"{len(shots or [])} {t['shots']}   ·   {t['total']} {_fmt_duration(total)}"
+        if date_str:
+            meta += f"   ·   {date_str}"
+        painter.drawText(QRect(0, 540, _PAGE_W, 26),
+                         Qt.AlignmentFlag.AlignHCenter, meta)
+    pages.append(_cover)
+
+    def _chunk(seq, n):
+        return [seq[i:i + n] for i in range(0, len(seq), n)]
+
+    if characters:
+        items = [{"img": c.get("image_path", ""), "title": c.get("name", ""),
+                  "sub": c.get("role", "")} for c in characters]
+        for k, part in enumerate(_chunk(items, 8)):
+            lbl = f"{len(characters)}" if k == 0 else ""
+            pages.append(_page_section(t["casting"], lbl, part))
+    if decors:
+        items = [{"img": d.get("image_path", ""), "title": d.get("name", ""), "sub": ""}
+                 for d in decors]
+        for k, part in enumerate(_chunk(items, 8)):
+            lbl = f"{len(decors)}" if k == 0 else ""
+            pages.append(_page_section(t["decors"], lbl, part))
+    if shots:
+        items = []
+        for s in shots:
+            chars = ", ".join(s.get("character_names", []) or [])
+            sub = f"P{s.get('number','?')} · {float(s.get('duration',0) or 0):.0f}s"
+            if s.get("decor_name"):
+                sub += f" · {s.get('decor_name')}"
+            items.append({"img": s.get("image_path", ""),
+                          "title": s.get("scene_title", "") or f"P{s.get('number','?')}",
+                          "sub": (sub + (f"\n{chars}" if chars else ""))})
+        for k, part in enumerate(_chunk(items, 8)):
+            lbl = f"{len(shots)} {t['shots']}" if k == 0 else ""
+            pages.append(_page_section(t["breakdown"], lbl, part))
+    return pages
+
+
+def export_pitch_deck_pdf(out_path: str, project: dict | None = None,
+                          shots: list | None = None, characters: list | None = None,
+                          decors: list | None = None, lang: str | None = None,
+                          date_str: str = "") -> str:
+    """Exporte le deck en PDF (16:9) via QPdfWriter + QPainter. Retourne out_path."""
+    from PyQt6.QtGui import QPdfWriter, QPainter, QColor, QPageSize, QPageLayout
+    from PyQt6.QtCore import QSizeF, QMarginsF, QRect
+    project, shots, characters, decors, lang = _gather_deck_data(
+        project, shots, characters, decors, lang)
+    pages = _deck_pages(project, shots, characters, decors, lang, date_str)
+    writer = QPdfWriter(out_path)
+    writer.setResolution(150)
+    writer.setPageSize(QPageSize(QSizeF(320, 180), QPageSize.Unit.Millimeter,
+                                 "deck", QPageSize.SizeMatchPolicy.ExactMatch))
+    writer.setPageMargins(QMarginsF(0, 0, 0, 0), QPageLayout.Unit.Millimeter)
+    painter = QPainter(writer)
+    # Repère logique 1600×900 mappé sur toute la page.
+    painter.setWindow(0, 0, _PAGE_W, _PAGE_H)
+    painter.setViewport(0, 0, writer.width(), writer.height())
+    try:
+        for i, draw in enumerate(pages):
+            if i:
+                writer.newPage()
+            painter.fillRect(QRect(0, 0, _PAGE_W, _PAGE_H), QColor(_C_BG))
+            draw(painter)
+    finally:
+        painter.end()
+    return out_path
+
+
+def export_pitch_deck_images(prefix_path: str, project: dict | None = None,
+                             shots: list | None = None, characters: list | None = None,
+                             decors: list | None = None, lang: str | None = None,
+                             date_str: str = "") -> list:
+    """Exporte le deck en une suite d'images PNG (une par page). prefix_path sans
+    extension (ou .png) → <prefix>_1.png, <prefix>_2.png… Retourne la liste écrite."""
+    from PyQt6.QtGui import QImage, QPainter, QColor
+    from PyQt6.QtCore import QRect
+    project, shots, characters, decors, lang = _gather_deck_data(
+        project, shots, characters, decors, lang)
+    pages = _deck_pages(project, shots, characters, decors, lang, date_str)
+    base = prefix_path[:-4] if prefix_path.lower().endswith(".png") else prefix_path
+    out = []
+    for i, draw in enumerate(pages):
+        img = QImage(_PAGE_W, _PAGE_H, QImage.Format.Format_RGB32)
+        img.fill(QColor(_C_BG))
+        painter = QPainter(img)
+        try:
+            draw(painter)
+        finally:
+            painter.end()
+        path = f"{base}_{i + 1}.png"
+        img.save(path)
+        out.append(path)
+    return out

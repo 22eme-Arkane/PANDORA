@@ -2531,7 +2531,7 @@ class PageStoryboard(QWidget):
         self._btn_pitch_deck = QPushButton("🎬  Pitch deck")
         self._btn_pitch_deck.setFixedHeight(34)
         self._btn_pitch_deck.setToolTip(
-            "Exporter un dossier de présentation (couverture, casting, décors, découpage) — HTML imprimable en PDF")
+            "Exporter un dossier de présentation (couverture, casting, décors, découpage) — PDF, images PNG ou HTML")
         self._btn_pitch_deck.setStyleSheet(
             f"QPushButton{{background:transparent;color:{_green};"
             f"border:1px solid {_green};border-radius:8px;font-size:11px;font-weight:700;padding:0 14px;}}"
@@ -2758,8 +2758,8 @@ class PageStoryboard(QWidget):
             QMessageBox.critical(self, "Erreur", f"Échec de l'ouverture : {e}")
 
     def _on_export_pitch_deck(self):
-        """L2 — exporte un dossier de présentation (HTML autonome, imprimable en
-        PDF) depuis les plans de la version courante + casting + décors du projet."""
+        """L2 — exporte un dossier de présentation depuis les plans de la version
+        courante + casting + décors, au choix en PDF, images PNG ou HTML."""
         from PyQt6.QtWidgets import QFileDialog, QMessageBox
         shots = [s for s in (self._all_shots or [])]
         if not shots:
@@ -2767,45 +2767,64 @@ class PageStoryboard(QWidget):
                 self, translate("Pitch deck"),
                 translate("Aucun plan à présenter — générez d'abord un storyboard."))
             return
-        # Nom de fichier par défaut basé sur le projet.
         try:
             import core.context as _ctx
             proj_name = _ctx.get_project_name() if hasattr(_ctx, "get_project_name") else ""
         except Exception:
             proj_name = ""
         safe = "".join(c for c in (proj_name or "PANDORA") if c.isalnum() or c in " -_").strip() or "PANDORA"
-        default_path = os.path.join(os.path.expanduser("~"), f"{safe} - pitch deck.html")
-        path, _ = QFileDialog.getSaveFileName(
+        default_path = os.path.join(os.path.expanduser("~"), f"{safe} - pitch deck.pdf")
+        _F_PDF  = "PDF (*.pdf)"
+        _F_PNG  = translate("Images PNG (*.png)")
+        _F_HTML = translate("Présentation HTML (*.html)")
+        path, sel = QFileDialog.getSaveFileName(
             self, translate("Exporter le pitch deck"), default_path,
-            "Présentation HTML (*.html)")
+            f"{_F_PDF};;{_F_PNG};;{_F_HTML}")
         if not path:
             return
-        if not path.lower().endswith(".html"):
-            path += ".html"
+        # Format déduit de l'extension saisie, sinon du filtre choisi.
+        low = path.lower()
+        if   low.endswith(".pdf"):  fmt = "pdf"
+        elif low.endswith(".png"):  fmt = "png"
+        elif low.endswith(".html") or low.endswith(".htm"): fmt = "html"
+        elif sel == _F_PNG:  fmt = "png"
+        elif sel == _F_HTML: fmt = "html"
+        else:                fmt = "pdf"
+        if not (low.endswith(".pdf") or low.endswith(".png")
+                or low.endswith(".html") or low.endswith(".htm")):
+            path += {"pdf": ".pdf", "png": ".png", "html": ".html"}[fmt]
+
+        kwargs = {}
         try:
             import core.casting as _ca, core.decors as _dc
-            from core.pitch_deck import export_pitch_deck
-            export_pitch_deck(
-                path,
-                project={"name": proj_name} if proj_name else {},
-                shots=shots,
-                characters=_ca.list_characters(),
-                decors=_dc.list_decors(),
-            )
+            import core.pitch_deck as pdk
+            kwargs = dict(project={"name": proj_name} if proj_name else {},
+                          shots=shots, characters=_ca.list_characters(),
+                          decors=_dc.list_decors())
+            if fmt == "pdf":
+                written = pdk.export_pitch_deck_pdf(path, **kwargs)
+            elif fmt == "png":
+                imgs = pdk.export_pitch_deck_images(path, **kwargs)
+                written = imgs[0] if imgs else path
+            else:
+                written = pdk.export_pitch_deck(path, **kwargs)
         except Exception as e:
             _msg = translate("Échec de l'export :")
             QMessageBox.critical(self, translate("Erreur"), f"{_msg} {e}")
             return
-        # Proposer d'ouvrir le deck dans le navigateur.
+        # Proposer d'ouvrir le résultat (le fichier, ou le dossier pour les PNG).
+        _open_lbl = (translate("Ouvrir le dossier des images ?") if fmt == "png"
+                     else translate("L'ouvrir ?"))
         if QMessageBox.question(
                 self, translate("Pitch deck"),
-                translate("Dossier de présentation exporté ✓\n\nL'ouvrir dans le navigateur ?"),
+                translate("Dossier de présentation exporté ✓") + f"\n\n{_open_lbl}",
                 QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
         ) == QMessageBox.StandardButton.Yes:
             try:
                 from PyQt6.QtGui import QDesktopServices
                 from PyQt6.QtCore import QUrl
-                QDesktopServices.openUrl(QUrl.fromLocalFile(path))
+                target = os.path.dirname(written) if fmt == "png" else written
+                QDesktopServices.openUrl(QUrl.fromLocalFile(target))
             except Exception:
                 pass
 
