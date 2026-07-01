@@ -249,6 +249,19 @@ def facade_resolution_par_namespace():
 # ══════════════════════════════════════════════════════════════════════════════
 
 @test
+def storyboard_boutons_portes_du_cinema():
+    """Portés du Cinéma (2026-07-01) : Sauvegarder / Ouvrir un storyboard + Pitch
+    deck (PDF/PNG/HTML) dans la barre d'outils du storyboard Live."""
+    import inspect
+    import ui.page_storyboard_live as M
+    for m in ("_on_save_storyboard_file", "_on_open_storyboard_file", "_on_export_pitch_deck"):
+        assert hasattr(M.PageStoryboard, m), f"méthode portée manquante : {m}"
+    src = inspect.getsource(M.PageStoryboard._build_shots_toolbar)
+    for tok in ("_btn_save_sb_file", "_btn_open_sb_file", "_btn_pitch_deck"):
+        assert tok in src, f"bouton porté manquant dans la barre : {tok}"
+
+
+@test
 def colonnes_sequences():
     """22 colonnes, masquages Live {6,11,12} / Mapping {5..12}, ordre conducteur."""
     import core.storyboard as sb

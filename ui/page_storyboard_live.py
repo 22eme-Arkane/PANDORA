@@ -2433,6 +2433,45 @@ class PageStoryboard(QWidget):
         lay.addWidget(self._mood_progress)
         lay.addWidget(self._ai_lbl, 1)
 
+        # Sauvegarder / Ouvrir un storyboard + Pitch deck (portés du Cinéma).
+        _yellow, _blue, _green = "#f5c518", "#4aa3ff", "#37d366"
+        self._btn_save_sb_file = QPushButton("💾  Sauvegarder")
+        self._btn_save_sb_file.setFixedHeight(34)
+        self._btn_save_sb_file.setToolTip("Sauvegarder ce storyboard sous un nom (dossier Storyboard du projet)")
+        self._btn_save_sb_file.setStyleSheet(
+            f"QPushButton{{background:transparent;color:{_yellow};"
+            f"border:1px solid {_yellow};border-radius:8px;font-size:11px;font-weight:700;padding:0 14px;}}"
+            f"QPushButton:hover{{background:rgba(245,197,24,0.12);}}"
+            f"QPushButton:pressed{{background:rgba(245,197,24,0.22);}}"
+        )
+        self._btn_save_sb_file.clicked.connect(self._on_save_storyboard_file)
+        lay.addWidget(self._btn_save_sb_file)
+
+        self._btn_open_sb_file = QPushButton("📂  Ouvrir")
+        self._btn_open_sb_file.setFixedHeight(34)
+        self._btn_open_sb_file.setToolTip("Ouvrir un storyboard sauvegardé")
+        self._btn_open_sb_file.setStyleSheet(
+            f"QPushButton{{background:transparent;color:{_blue};"
+            f"border:1px solid {_blue};border-radius:8px;font-size:11px;font-weight:700;padding:0 14px;}}"
+            f"QPushButton:hover{{background:rgba(74,163,255,0.12);}}"
+            f"QPushButton:pressed{{background:rgba(74,163,255,0.22);}}"
+        )
+        self._btn_open_sb_file.clicked.connect(self._on_open_storyboard_file)
+        lay.addWidget(self._btn_open_sb_file)
+
+        self._btn_pitch_deck = QPushButton("🎬  Pitch deck")
+        self._btn_pitch_deck.setFixedHeight(34)
+        self._btn_pitch_deck.setToolTip(
+            "Exporter un dossier de présentation (couverture, casting, découpage) — PDF, images PNG ou HTML")
+        self._btn_pitch_deck.setStyleSheet(
+            f"QPushButton{{background:transparent;color:{_green};"
+            f"border:1px solid {_green};border-radius:8px;font-size:11px;font-weight:700;padding:0 14px;}}"
+            f"QPushButton:hover{{background:rgba(55,211,102,0.12);}}"
+            f"QPushButton:pressed{{background:rgba(55,211,102,0.22);}}"
+        )
+        self._btn_pitch_deck.clicked.connect(self._on_export_pitch_deck)
+        lay.addWidget(self._btn_pitch_deck)
+
         btn_new = QPushButton("＋  Ajouter un plan")
         btn_new.setFixedHeight(34)
         btn_new.setStyleSheet(
@@ -2547,6 +2586,118 @@ class PageStoryboard(QWidget):
         sb_api.restore_snapshot(snap_id, self._active_version_id)
         self._all_shots = sb_api.list_shots(self._active_version_id)
         self._render()
+
+    def _on_save_storyboard_file(self):
+        """Sauvegarder le storyboard sous un nom (porté du Cinéma)."""
+        from PyQt6.QtWidgets import QFileDialog, QMessageBox
+        import os
+        if not self._all_shots:
+            QMessageBox.information(self, "Sauvegarder", "Le storyboard est vide.")
+            return
+        from core import context as _ctx
+        suggested = sb_api._safe_name(_ctx.get_project_name() or "Storyboard") + ".json"
+        start = os.path.join(sb_api.saves_dir(), suggested)
+        path, _ = QFileDialog.getSaveFileName(
+            self, translate("Sauvegarder le storyboard"), start,
+            "Storyboard PANDORA (*.json)")
+        if not path:
+            return
+        if not path.lower().endswith(".json"):
+            path += ".json"
+        try:
+            sb_api.export_storyboard_to(path, self._active_version_id)
+            QMessageBox.information(self, "Sauvegardé", "Storyboard sauvegardé.")
+        except Exception as e:
+            QMessageBox.critical(self, "Erreur", f"Échec de la sauvegarde : {e}")
+
+    def _on_open_storyboard_file(self):
+        """Ouvrir un storyboard sauvegardé (porté du Cinéma)."""
+        from PyQt6.QtWidgets import QFileDialog, QMessageBox
+        path, _ = QFileDialog.getOpenFileName(
+            self, translate("Ouvrir un storyboard"), sb_api.saves_dir(),
+            "Storyboard PANDORA (*.json)")
+        if not path:
+            return
+        if QMessageBox.question(
+                self, "Ouvrir",
+                "Charger ce storyboard ? Les plans actuels de cette version seront remplacés.",
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
+        ) != QMessageBox.StandardButton.Yes:
+            return
+        try:
+            n = sb_api.import_storyboard_from(path, self._active_version_id)
+            self.refresh()
+            QMessageBox.information(self, "Ouvert", f"{n} plan(s) chargé(s).")
+        except Exception as e:
+            QMessageBox.critical(self, "Erreur", f"Échec de l'ouverture : {e}")
+
+    def _on_export_pitch_deck(self):
+        """Exporter un dossier de présentation (PDF / PNG / HTML) — porté du Cinéma.
+        Côté Live, la section Décors est simplement omise (pas de page Décors)."""
+        from PyQt6.QtWidgets import QFileDialog, QMessageBox
+        import os
+        shots = [s for s in (self._all_shots or [])]
+        if not shots:
+            QMessageBox.information(
+                self, translate("Pitch deck"),
+                translate("Aucun plan à présenter — générez d'abord un storyboard."))
+            return
+        try:
+            import core.context as _ctx
+            proj_name = _ctx.get_project_name() if hasattr(_ctx, "get_project_name") else ""
+        except Exception:
+            proj_name = ""
+        safe = "".join(c for c in (proj_name or "PANDORA") if c.isalnum() or c in " -_").strip() or "PANDORA"
+        default_path = os.path.join(os.path.expanduser("~"), f"{safe} - pitch deck.pdf")
+        _F_PDF  = "PDF (*.pdf)"
+        _F_PNG  = translate("Images PNG (*.png)")
+        _F_HTML = translate("Présentation HTML (*.html)")
+        path, sel = QFileDialog.getSaveFileName(
+            self, translate("Exporter le pitch deck"), default_path,
+            f"{_F_PDF};;{_F_PNG};;{_F_HTML}")
+        if not path:
+            return
+        low = path.lower()
+        if   low.endswith(".pdf"):  fmt = "pdf"
+        elif low.endswith(".png"):  fmt = "png"
+        elif low.endswith(".html") or low.endswith(".htm"): fmt = "html"
+        elif sel == _F_PNG:  fmt = "png"
+        elif sel == _F_HTML: fmt = "html"
+        else:                fmt = "pdf"
+        if not (low.endswith(".pdf") or low.endswith(".png")
+                or low.endswith(".html") or low.endswith(".htm")):
+            path += {"pdf": ".pdf", "png": ".png", "html": ".html"}[fmt]
+        try:
+            import core.casting as _ca, core.decors as _dc
+            import core.pitch_deck as pdk
+            kwargs = dict(project={"name": proj_name} if proj_name else {},
+                          shots=shots, characters=_ca.list_characters(),
+                          decors=_dc.list_decors())
+            if fmt == "pdf":
+                written = pdk.export_pitch_deck_pdf(path, **kwargs)
+            elif fmt == "png":
+                imgs = pdk.export_pitch_deck_images(path, **kwargs)
+                written = imgs[0] if imgs else path
+            else:
+                written = pdk.export_pitch_deck(path, **kwargs)
+        except Exception as e:
+            _msg = translate("Échec de l'export :")
+            QMessageBox.critical(self, translate("Erreur"), f"{_msg} {e}")
+            return
+        _open_lbl = (translate("Ouvrir le dossier des images ?") if fmt == "png"
+                     else translate("L'ouvrir ?"))
+        if QMessageBox.question(
+                self, translate("Pitch deck"),
+                translate("Dossier de présentation exporté ✓") + f"\n\n{_open_lbl}",
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
+        ) == QMessageBox.StandardButton.Yes:
+            try:
+                from PyQt6.QtGui import QDesktopServices
+                from PyQt6.QtCore import QUrl
+                target = os.path.dirname(written) if fmt == "png" else written
+                QDesktopServices.openUrl(QUrl.fromLocalFile(target))
+            except Exception:
+                pass
 
     def _on_save_snapshot(self):
         name, ok = QInputDialog.getText(

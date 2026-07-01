@@ -103,11 +103,8 @@ EXPECTED_ONLY_CINEMA = {
         "_reload_if_empty_editor",
     },
     "ui/page_storyboard_live.py": {
-        # Sauvegarder/Ouvrir le storyboard en fichier (dossier Storyboard) — Cinéma only.
-        "_on_save_storyboard_file", "_on_open_storyboard_file",
-        # Export pitch deck (L2) — dossier de présentation depuis le storyboard —
-        # Cinéma only (le Live n'a pas de casting/décors à présenter). Reportable.
-        "_on_export_pitch_deck",
+        # Sauvegarder/Ouvrir le storyboard + Pitch deck : PORTÉS au Live le 2026-07-01
+        # (retour Matthieu « tout lancer ») → désormais présents des DEUX côtés.
         # Clic droit sur un plan → Dupliquer (copie le plan + sa mise en scène) —
         # Cinéma only pour l'instant (reportable au Live si besoin).
         "_on_duplicate", "contextMenuEvent",
