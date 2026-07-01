@@ -2466,12 +2466,15 @@ class PageStoryboard(QWidget):
         self._btn_music_align.clicked.connect(self._on_music_align)
         lay.addWidget(self._btn_music_align)
 
-        # Boutons d'IA (Moods / Caler) à GAUCHE — la progression et le statut
-        # les suivent, puis l'espace extensible pousse les actions à droite.
-        lay.addWidget(self._mood_progress)
-        lay.addWidget(self._ai_lbl, 1)
-
-        # Sauvegarder / Ouvrir un storyboard + Pitch deck (portés du Cinéma).
+        # Sauvegarder / Ouvrir un storyboard + Pitch deck (portés du Cinéma) — à
+        # GAUCHE, après « Caler », séparés par une barre verticale (placement Cinéma).
+        _tb_sep = QWidget()
+        _tb_sep.setFixedWidth(1)
+        _tb_sep.setFixedHeight(24)
+        _tb_sep.setStyleSheet(f"background:{CP['border_bright']};")
+        lay.addSpacing(6)
+        lay.addWidget(_tb_sep)
+        lay.addSpacing(6)
         _yellow, _blue, _green = "#f5c518", "#4aa3ff", "#37d366"
         self._btn_save_sb_file = QPushButton("💾  Sauvegarder")
         self._btn_save_sb_file.setFixedHeight(34)
@@ -2509,6 +2512,10 @@ class PageStoryboard(QWidget):
         )
         self._btn_pitch_deck.clicked.connect(self._on_export_pitch_deck)
         lay.addWidget(self._btn_pitch_deck)
+
+        # Progression + statut, puis l'espace extensible pousse les actions à droite.
+        lay.addWidget(self._mood_progress)
+        lay.addWidget(self._ai_lbl, 1)
 
         btn_new = QPushButton("＋  Ajouter un plan")
         btn_new.setFixedHeight(34)

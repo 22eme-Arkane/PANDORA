@@ -464,9 +464,14 @@ class PageScenario(QWidget):
 
         # ── Deux onglets : Conducteur (édition) / Mise en page PANDORA (optimisé moteurs) ──
         self._editor_tabs = QTabWidget()
-        self._editor_tabs.setDocumentMode(True)
+        # Onglets CENTRÉS comme le Cinéma (documentMode=False + alignment:center +
+        # setExpanding(False)), et non plus collés à gauche.
+        self._editor_tabs.setDocumentMode(False)
+        self._editor_tabs.tabBar().setExpanding(False)
+        self._editor_tabs.tabBar().setDrawBase(False)
         self._editor_tabs.setStyleSheet(
             "QTabWidget::pane{border:none;}"
+            "QTabWidget::tab-bar{alignment:center;}"
             f"QTabBar::tab{{background:{CP['bg1']};color:{CP['text_secondary']};"
             f"padding:6px 18px;border:none;font-size:11px;font-weight:700;}}"
             f"QTabBar::tab:selected{{color:{CP['accent2']};"

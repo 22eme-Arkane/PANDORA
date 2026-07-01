@@ -113,10 +113,15 @@ class LiveStudioWidget(QWidget):
         root.setSpacing(0)
 
         self.tabs = QTabWidget()
-        self.tabs.setDocumentMode(True)
-        # Un seul trait en haut (celui de la topbar) : le documentMode dessine
-        # sa propre ligne de base sous la barre d'onglets → trait DOUBLÉ (retour
-        # 2026-06-12). On supprime la ligne native, l'accent par onglet suffit.
+        # Onglets CENTRÉS comme le Studio IA Cinéma : documentMode=False (sinon la
+        # barre occupe toute la largeur et « alignment:center » n'a aucun effet) +
+        # alignment center + setExpanding(False).
+        self.tabs.setDocumentMode(False)
+        self.tabs.setStyleSheet(
+            self.tabs.styleSheet() + "QTabWidget::pane{border:none;}"
+            "QTabWidget::tab-bar{alignment:center;}")
+        self.tabs.tabBar().setExpanding(False)
+        # Un seul trait en haut (celui de la topbar) : pas de ligne de base native.
         self.tabs.tabBar().setDrawBase(False)
 
         # 1. Génération directe (version Live : outils VJ/Mapping activés dans __init__)
