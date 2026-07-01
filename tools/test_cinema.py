@@ -235,6 +235,36 @@ def double_ecran_deuxieme_fenetre():
 
 
 @test
+def pitch_deck_export_l2():
+    """L2 — export d'un dossier de présentation (deck HTML autonome) depuis le
+    storyboard : module PUR build_pitch_deck_html + bouton/handler dans la page."""
+    import core.pitch_deck as pd
+    shots = [
+        {"number": 1, "scene_title": "Ouverture", "seq_name": "ACTE 1",
+         "decor_name": "Rue", "character_names": ["Marc"], "duration": 6},
+        {"number": 2, "scene_title": "Rencontre", "seq_name": "ACTE 1",
+         "decor_name": "Café", "character_names": ["Marc", "Léa"], "duration": 8},
+    ]
+    chars  = [{"name": "Marc", "role": "Héros"}, {"name": "Léa", "role": ""}]
+    decors = [{"name": "Rue"}, {"name": "Café"}]
+    html_fr = pd.build_pitch_deck_html({"name": "Mon Film"}, shots, chars, decors, lang="fr")
+    assert "Mon Film" in html_fr and "Dossier de présentation" in html_fr
+    assert "Casting" in html_fr and "Décors" in html_fr and "Découpage" in html_fr
+    assert "P1" in html_fr and "P2" in html_fr and "ACTE 1" in html_fr
+    html_en = pd.build_pitch_deck_html({"name": "My Film"}, shots, chars, decors, lang="en")
+    assert "Pitch deck" in html_en and "Cast" in html_en and "Shot breakdown" in html_en
+    # Écriture réelle dans le dossier TEMPORAIRE du harnais (jamais la vraie config)
+    out = os.path.join(_TMP, "deck.html")
+    pd.export_pitch_deck(out, project={"name": "T"}, shots=shots,
+                         characters=chars, decors=decors, lang="fr")
+    assert os.path.isfile(out) and os.path.getsize(out) > 500
+    from ui.page_storyboard import PageStoryboard as _PS
+    assert hasattr(_PS, "_on_export_pitch_deck"), "handler export dans la page"
+    assert "_btn_pitch_deck" in inspect.getsource(_PS._build_shots_toolbar), \
+        "bouton Pitch deck dans la barre d'outils du storyboard"
+
+
+@test
 def studio_sound_design_upscaling():
     """Studio IA Cinéma : onglets Sound Design + Upscaling (portés du Live) —
     ordre après Génération directe, Vidéothèque branchée, AUCUN import Live."""

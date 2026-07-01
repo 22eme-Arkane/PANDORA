@@ -2810,6 +2810,15 @@ _FR_TO_EN: dict[str, str] = {
     "Séparer en plans distincts":   "Split into separate shots",
     "Nouveau découpage — sans fusion…": "New breakdown — no merging…",
     "Séparation des plans en cours…":   "Splitting shots…",
+    # L2 — export pitch deck
+    "🎬  Pitch deck":               "🎬  Pitch deck",
+    "Pitch deck":                   "Pitch deck",
+    "Exporter le pitch deck":       "Export the pitch deck",
+    "Aucun plan à présenter — générez d'abord un storyboard.":
+        "No shots to present — generate a storyboard first.",
+    "Échec de l'export :":          "Export failed:",
+    "Dossier de présentation exporté ✓\n\nL'ouvrir dans le navigateur ?":
+        "Pitch deck exported ✓\n\nOpen it in the browser?",
     "↑  Vérifier les mises à jour": "↑  Check for updates",
     "Vérification…":                "Checking…",
     "Mise à jour disponible":       "Update available",
