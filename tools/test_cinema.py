@@ -210,6 +210,31 @@ def refonte_interface():
 
 
 @test
+def double_ecran_deuxieme_fenetre():
+    """P5 — 2ᵉ fenêtre PANDORA (2 écrans) : bouton dans Paramètres (section
+    Apparence, près du thème), méthode open_secondary_window sur la fenêtre,
+    fenêtre secondaire qui saute l'onboarding et se ferme sans quitter l'app."""
+    import ui.pandora_window as PW
+    # 1) API de la fenêtre : param is_secondary + méthode d'ouverture
+    src_init = inspect.getsource(PW.PandoraWindow.__init__)
+    assert "is_secondary" in src_init, "PandoraWindow accepte is_secondary"
+    assert "if not self._is_secondary" in src_init, "onboarding sauté en secondaire"
+    assert hasattr(PW.PandoraWindow, "open_secondary_window"), "méthode d'ouverture"
+    src_open = inspect.getsource(PW.PandoraWindow.open_secondary_window)
+    assert "is_secondary=True" in src_open and "screens()" in src_open, \
+        "ouvre une 2ᵉ fenêtre placée sur le 2ᵉ écran"
+    # 2) La fermeture de la secondaire NE propose PAS de quitter le programme
+    src_close = inspect.getsource(PW.PandoraWindow.closeEvent)
+    assert "_is_secondary" in src_close and "e.accept()" in src_close, \
+        "la 2ᵉ fenêtre se ferme sans dialogue de sortie"
+    # 3) Le bouton d'activation est dans Paramètres (même section que le thème)
+    from ui.page_settings import SettingsPage
+    ps = SettingsPage()
+    assert hasattr(ps, "_btn_second_window"), "bouton 2ᵉ fenêtre dans Paramètres"
+    assert hasattr(ps, "_open_second_window"), "handler d'ouverture dans Paramètres"
+
+
+@test
 def studio_sound_design_upscaling():
     """Studio IA Cinéma : onglets Sound Design + Upscaling (portés du Live) —
     ordre après Génération directe, Vidéothèque branchée, AUCUN import Live."""

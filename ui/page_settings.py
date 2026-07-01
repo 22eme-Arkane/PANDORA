@@ -215,6 +215,30 @@ class SettingsPage(QScrollArea):
             f"color:{CP['text_dim']};font-size:10px;font-style:italic;background:transparent;"
         )
         lay.addWidget(_lbl_light_note)
+
+        # ── Double écran (P5) — ouvrir une 2ᵉ fenêtre déplaçable ──────────────
+        _screen_row = QHBoxLayout()
+        _screen_row.setSpacing(8)
+        self._btn_second_window = QPushButton("🖥  Ouvrir une 2ᵉ fenêtre (2 écrans)")
+        self._btn_second_window.setFixedHeight(36)
+        self._btn_second_window.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._btn_second_window.setStyleSheet(_ss_theme_inactive)
+        self._btn_second_window.clicked.connect(self._open_second_window)
+        _screen_row.addWidget(self._btn_second_window)
+        _screen_row.addStretch()
+        lay.addLayout(_screen_row)
+
+        _lbl_screen = QLabel(
+            "Ouvre une copie de PANDORA sur le même projet, à déplacer sur un 2ᵉ écran. "
+            "Chaque fenêtre a sa propre navigation (ex. Storyboard à droite pendant "
+            "l'écriture du Scénario à gauche). Évitez de modifier la même page dans les "
+            "deux fenêtres en même temps."
+        )
+        _lbl_screen.setWordWrap(True)
+        _lbl_screen.setStyleSheet(
+            f"color:{CP['text_dim']};font-size:10px;background:transparent;"
+        )
+        lay.addWidget(_lbl_screen)
         lay.addWidget(_divider())
 
         cfg = load_config()
@@ -593,6 +617,19 @@ class SettingsPage(QScrollArea):
             )
         else:
             QMessageBox.warning(self, "Erreur", msg)
+
+    # ── Double écran (P5) ──────────────────────────────────────────────────────
+
+    def _open_second_window(self):
+        """Demande à la fenêtre PANDORA parente d'ouvrir une 2ᵉ fenêtre (2 écrans)."""
+        win = self.window()
+        if win is not None and hasattr(win, "open_secondary_window"):
+            win.open_secondary_window()
+        else:
+            QMessageBox.information(
+                self, "Indisponible",
+                "La 2ᵉ fenêtre ne peut être ouverte que depuis la fenêtre principale."
+            )
 
     # ── Dialogues d'aide ─────────────────────────────────────────────────────
 

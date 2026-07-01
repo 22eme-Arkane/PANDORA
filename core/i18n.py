@@ -2780,6 +2780,19 @@ _FR_TO_EN: dict[str, str] = {
     # ── Page Paramètres ───────────────────────────────────────────────────────
     "Le changement de thème est appliqué au prochain démarrage.":
         "The theme change will be applied on the next startup.",
+    "🖥  Ouvrir une 2ᵉ fenêtre (2 écrans)":
+        "🖥  Open a 2nd window (dual screen)",
+    "Ouvre une copie de PANDORA sur le même projet, à déplacer sur un 2ᵉ écran. "
+    "Chaque fenêtre a sa propre navigation (ex. Storyboard à droite pendant "
+    "l'écriture du Scénario à gauche). Évitez de modifier la même page dans les "
+    "deux fenêtres en même temps.":
+        "Opens a copy of PANDORA on the same project, to move onto a 2nd screen. "
+        "Each window has its own navigation (e.g. Storyboard on the right while "
+        "writing the Screenplay on the left). Avoid editing the same page in both "
+        "windows at the same time.",
+    "La 2ᵉ fenêtre ne peut être ouverte que depuis la fenêtre principale.":
+        "The 2nd window can only be opened from the main window.",
+    "Indisponible":                 "Unavailable",
     "↑  Vérifier les mises à jour": "↑  Check for updates",
     "Vérification…":                "Checking…",
     "Mise à jour disponible":       "Update available",

@@ -296,9 +296,14 @@ class _Sidebar(QWidget):
 class PandoraWindow(QMainWindow):
     switch_requested = pyqtSignal(dict)   # émis quand l'utilisateur change de projet
 
-    def __init__(self, project: dict):
+    def __init__(self, project: dict, is_secondary: bool = False):
         super().__init__()
         self._project = project
+        # Fenêtre secondaire (P5 « 2 écrans ») : copie de PANDORA sur le même projet,
+        # navigation indépendante. Elle NE relance PAS l'onboarding / le check MAJ et
+        # sa fermeture ne propose PAS de quitter le programme (elle se ferme seule).
+        self._is_secondary   = is_secondary
+        self._secondary_wins: list = []
 
         # Set project context before any page loads data
         import core.context as _ctx
@@ -311,7 +316,8 @@ class PandoraWindow(QMainWindow):
         import core.storyboard as _sb_ns
         _sb_ns.set_namespace("storyboard")
 
-        self.setWindowTitle(f"PANDORA — {project.get('name', 'Projet')}")
+        _title_suffix = "   ·   Écran 2" if is_secondary else ""
+        self.setWindowTitle(f"PANDORA — {project.get('name', 'Projet')}{_title_suffix}")
         self.setMinimumSize(1100, 720)
         self.setStyleSheet(PANDORA_STYLESHEET)
 
@@ -386,10 +392,38 @@ class PandoraWindow(QMainWindow):
         self._navigate("scenario")
 
         from PyQt6.QtCore import QTimer
-        QTimer.singleShot(900, self._maybe_show_onboarding)
+        if not self._is_secondary:
+            QTimer.singleShot(900, self._maybe_show_onboarding)
 
         _sc = QShortcut(QKeySequence("Ctrl+S"), self)
         _sc.activated.connect(self._on_global_save_click)
+
+    def open_secondary_window(self):
+        """P5 — ouvre une 2ᵉ fenêtre PANDORA (même projet, navigation indépendante),
+        placée sur le 2ᵉ écran s'il existe. Utile pour travailler le Storyboard à
+        droite pendant qu'on écrit le Scénario à gauche. Appelée depuis Paramètres."""
+        from PyQt6.QtWidgets import QApplication
+        win = PandoraWindow(self._project, is_secondary=True)
+        self._secondary_wins.append(win)
+        # Nettoyage de la référence anti-GC à la fermeture de la 2ᵉ fenêtre.
+        win.destroyed.connect(
+            lambda *_a, w=win: self._secondary_wins.remove(w)
+            if w in self._secondary_wins else None
+        )
+        screens = QApplication.screens()
+        primary = self.screen()
+        target  = next((s for s in screens if s is not primary), None)
+        if target is not None:
+            geo = target.availableGeometry()
+            win.move(geo.left() + 40, geo.top() + 40)
+            win.resize(min(1400, geo.width() - 80), min(900, geo.height() - 80))
+        else:
+            # Un seul écran : décalage pour ne pas recouvrir la 1ʳᵉ fenêtre.
+            win.move(self.x() + 60, self.y() + 60)
+        win.show()
+        win.raise_()
+        win.activateWindow()
+        return win
 
     def _build_pages(self):
         scenario = PageScenario()
@@ -760,6 +794,11 @@ class PandoraWindow(QMainWindow):
             seedance.refresh()   # syncs T2V film_style_combo via _refresh_style_badge
 
     def closeEvent(self, e):
+        # Fenêtre secondaire (P5) : elle se ferme seule, sans proposer de quitter
+        # tout le programme ni resauvegarder (la fenêtre principale s'en charge).
+        if getattr(self, "_is_secondary", False):
+            e.accept()
+            return
         from PyQt6.QtWidgets import QDialog, QVBoxLayout, QHBoxLayout, QLabel, QPushButton
         dlg = QDialog(self)
         dlg.setWindowTitle("Quitter PANDORA")
