@@ -263,6 +263,17 @@ def storyboard_boutons_portes_du_cinema():
     import ui.tab_modify_live as MM
     assert "retake" in MM._MOD_TEMPLATES and "@Video1" in MM._MOD_TEMPLATES["retake"]
     assert hasattr(MM.TabModifyLive, "_on_mod_type"), "handler Retake Live manquant"
+    # « Modifier des clips » Live en mode LOT (parité Cinéma) :
+    t = MM.TabModifyLive()
+    for a in ("_rb_global", "_rb_per_clip", "_process_next", "_build_params",
+              "_global_ref", "_pc_ref", "_audio_chk", "_res_combo", "_clip_list"):
+        assert hasattr(t, a), f"batch modify : {a} manquant"
+    _real = os.path.abspath(__file__)
+    t.add_clips_from_paths([_real])
+    assert t._clip_list.count() == 1, "liste de clips cochable"
+    _p = t._build_params(0, _real)
+    assert _p["mode"] == "ext" and "generate_audio" in _p and "resolution" in _p
+    assert "@Video1" in _p["prompt"] and _p["video_path"] == _real
     # P5 — 2ᵉ fenêtre (2 écrans) portée au Live
     import live_window as LW
     src_i = inspect.getsource(LW.LiveWindow.__init__)

@@ -1051,6 +1051,28 @@ _FR_TO_EN: dict[str, str] = {
     "Corriger un défaut précis (Retake)": "Fix a specific flaw (Retake)",
     "Insère un modèle de prompt (@Video1 = clip d'origine) — à compléter ensuite.":
         "Inserts a prompt template (@Video1 = original clip) — fill it in afterwards.",
+    # « Modifier des clips » Live en mode LOT (2026-07-01)
+    "Modifier des clips (Live)":    "Modify clips (Live)",
+    "▸ Ajoutez des clips (fichiers ou Vidéothèque). Cochez ceux à régénérer.":
+        "▸ Add clips (files or Video library). Check the ones to regenerate.",
+    "▸ Prompt GLOBAL (même consigne pour tout le lot) ou PAR CLIP.":
+        "▸ GLOBAL prompt (same instruction for the whole batch) or PER CLIP.",
+    "▸ Le clip source sert de référence (@Video1) — Seedance en produit une nouvelle version.":
+        "▸ The source clip is used as reference (@Video1) — Seedance produces a new version.",
+    "Clips à modifier":             "Clips to modify",
+    "Aucun clip — ajoutez-en ou importez la Vidéothèque.":
+        "No clip — add some or import the Video library.",
+    "Tout cocher":                  "Check all",
+    "Générer l'audio (son natif)":  "Generate audio (native sound)",
+    "Image de référence globale":   "Global reference image",
+    "Image de référence de ce clip": "Reference image for this clip",
+    "← Sélectionnez un clip dans la liste pour écrire son prompt.":
+        "← Select a clip in the list to write its prompt.",
+    "Prompt de CE clip… (FR accepté, traduit automatiquement)":
+        "Prompt for THIS clip… (FR accepted, auto-translated)",
+    "Prompt du clip :":             "Clip prompt:",
+    "File terminée.":               "Queue finished.",
+    "Cochez au moins un clip à modifier.": "Check at least one clip to modify.",
     "Changer le décor (arrière-plan)": "Change the set (background)",
     "Changer un visage":             "Change a face",
     "Changer l'étalonnage (couleurs)": "Change the color grade",
