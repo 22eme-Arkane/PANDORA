@@ -1435,12 +1435,20 @@ def nouveaux_moteurs_fal_2026():
     if _sd not in sys.path:
         sys.path.insert(0, _sd)
     eng = importlib.import_module("engines")
-    for k in ("seedream5", "seedream45", "zimage", "qwen_image"):
+    for k in ("seedream5", "seedream45", "zimage", "qwen_image", "nb2_lite", "ideogram4"):
         assert k in eng.ENGINES, f"moteur image {k} manquant"
     ep, _a, _ = eng.build_request("seedream5", "x", (1024, 768), "1K", [])
     assert ep == "fal-ai/bytedance/seedream/v5/lite/text-to-image"
     ep2, a2, _ = eng.build_request("seedream5", "x", (1024, 768), "1K", ["data:img"])
     assert ep2.endswith("/edit") and "image_urls" in a2, "Seedream 5 édition (refs)"
+    # Nano Banana 2 Lite : endpoint owner-préfixé + 1024² fixe (pas de 'resolution')
+    epl, al, _ = eng.build_request("nb2_lite", "x", (1024, 1024), "1K", [])
+    assert epl == "google/nano-banana-2-lite" and "resolution" not in al
+    epl2, al2, _ = eng.build_request("nb2_lite", "x", (1024, 1024), "1K", ["data:img"])
+    assert epl2 == "google/nano-banana-lite/edit" and "image_urls" in al2
+    # Ideogram v4 : slug owner-préfixé + schéma ideogram (rendering_speed)
+    epi, ai, _ = eng.build_request("ideogram4", "x", (1024, 768), "1K", [])
+    assert epi == "ideogram/v4" and ai.get("rendering_speed") == "QUALITY"
 
     # — Vidéo : workers + endpoints exacts —
     import api.video_engines as ve
@@ -1458,12 +1466,16 @@ def nouveaux_moteurs_fal_2026():
                      "wan27_t2v", "hailuo23_t2v"):
             assert need in keys, f"{mod}: moteur {need} manquant"
         dsrc = inspect.getsource(m.TabVideoEngines._on_generate)
-        for w in ("Seedance15Worker", "LTX2Worker", "Wan27Worker", "Hailuo23Worker"):
+        for w in ("Seedance15Worker", "LTX2Worker", "Wan27Worker", "Hailuo23Worker",
+                  "Seedance20MiniWorker", "GeminiOmniFlashWorker", "GrokVideoWorker"):
             assert w in dsrc, f"{mod}: dispatch {w} manquant"
 
     # — TTS : registre + workers + page Doublage (3e mode + moteur de clonage) —
     import api.tts as tts
-    assert len(tts.SPEECH_ENGINES) == 6 and "minimax-2.8-hd" in tts.SPEECH_ENGINES
+    assert len(tts.SPEECH_ENGINES) == 7 and "minimax-2.8-hd" in tts.SPEECH_ENGINES
+    # ElevenLabs Eleven v3 (FR natif) + language_code='fr' forcé via 'extra'
+    assert "elevenlabs-v3" in tts.SPEECH_ENGINES
+    assert tts.SPEECH_ENGINES["elevenlabs-v3"].get("extra", {}).get("language_code") == "fr"
     assert hasattr(tts, "FalSpeechWorker") and hasattr(tts, "FoleyControlWorker")
     psrc = inspect.getsource(importlib.import_module("ui.page_doublage"))
     for tok in ("_speech_combo", "_clone_engine_combo", "FalSpeechWorker", "IndexTTS2Worker"):

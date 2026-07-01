@@ -40,6 +40,14 @@ ENGINES = {
         "output":   "raster",
         "refs":     {"max": 14, "hint": "✅ jusqu'à 14 références (sujet + style)"},
     },
+    "nb2_lite": {
+        "label":    "Nano Banana 2 Lite  ·  Google · rapide <2 s · 1024²  ·  ~$0.02",
+        "endpoint": "google/nano-banana-2-lite",
+        "edit":     "google/nano-banana-lite/edit",
+        "kind":     "nano_lite",
+        "output":   "raster",
+        "refs":     {"max": 6, "hint": "✅ références via édition (sujet + style)"},
+    },
     "seedream5": {
         "label":    "Seedream 5.0 Lite  ·  ByteDance · gén.+édition · 10 refs  ·  ~$0.035",
         "endpoint": "fal-ai/bytedance/seedream/v5/lite/text-to-image",
@@ -72,6 +80,13 @@ ENGINES = {
     "ideogram": {
         "label":    "Ideogram V3  ·  champion du TEXTE & logos  ·  ~$0.06",
         "endpoint": "fal-ai/ideogram/v3",
+        "kind":     "ideogram",
+        "output":   "raster",
+        "refs":     {"max": 3, "hint": "⚠️ références de STYLE uniquement (pas le sujet)"},
+    },
+    "ideogram4": {
+        "label":    "Ideogram V4  ·  texte net · affiches & logos  ·  ~$0.0075–0.025/MP",
+        "endpoint": "ideogram/v4",
         "kind":     "ideogram",
         "output":   "raster",
         "refs":     {"max": 3, "hint": "⚠️ références de STYLE uniquement (pas le sujet)"},
@@ -148,6 +163,19 @@ def build_request(engine_key: str, prompt: str, target: tuple,
         }
         if refs:
             return e["edit"], {**args, "image_urls": refs[:14]}, "raster"
+        return e["endpoint"], args, "raster"
+
+    if kind == "nano_lite":
+        # Nano Banana 2 Lite : 1024² fixe, 14 ratios, <2 s. Schéma minimal
+        # (pas de 'resolution' — anti-400) ; refs via endpoint /edit.
+        args = {
+            "prompt":        prompt,
+            "num_images":    1,
+            "aspect_ratio":  _nearest_aspect(target, NANO_ASPECTS),
+            "output_format": "png",
+        }
+        if refs and e.get("edit"):
+            return e["edit"], {**args, "image_urls": refs[:6]}, "raster"
         return e["endpoint"], args, "raster"
 
     if kind in ("seedream", "imgsize"):

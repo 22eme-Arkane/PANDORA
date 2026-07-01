@@ -1248,6 +1248,49 @@ class Hailuo23Worker(_SimpleFalVideoWorker):
     DEFAULT_DUR  = 6
 
 
+class GeminiOmniFlashWorker(_SimpleFalVideoWorker):
+    """Gemini Omni Flash (Google) — audio natif, physique améliorée. T2V + I2V.
+    Params : prompt, aspect_ratio, duration. ~$0.125/s @720p."""
+    ENDPOINT_T2V  = "google/gemini-omni-flash"
+    ENDPOINT_I2V  = "google/gemini-omni-flash/image-to-video"
+    MODEL         = "gemini-omni-flash"
+    PRICE_PER_S   = 0.125
+    AUDIO         = True
+    SEND_RATIO    = True
+    SEND_DURATION = True
+    DUR_STR       = False
+    DEFAULT_DUR   = 5
+
+
+class Seedance20MiniWorker(_SimpleFalVideoWorker):
+    """Seedance 2.0 Mini (ByteDance) — i2v + end_image_url (raccords/keyframes de
+    moods) + audio natif. T2V + I2V. ⚠ préfixe `bytedance/...`. 480p/720p, ~$0.155/s @720p."""
+    ENDPOINT_T2V    = "bytedance/seedance-2.0/mini/text-to-video"
+    ENDPOINT_I2V    = "bytedance/seedance-2.0/mini/image-to-video"
+    MODEL           = "seedance-2.0-mini"
+    PRICE_PER_S     = 0.155
+    AUDIO           = True
+    END_FRAME       = True
+    SEND_RESOLUTION = True
+    SEND_DURATION   = True
+    DUR_STR         = True
+    DEFAULT_DUR     = 5
+
+
+class GrokVideoWorker(_SimpleFalVideoWorker):
+    """Grok Imagine Video (xAI) — audio, résolutions 480p/720p. T2V + I2V.
+    Params : prompt, image_url, duration, resolution. $0.05/s 480p, $0.07/s 720p."""
+    ENDPOINT_T2V    = "xai/grok-imagine-video/text-to-video"
+    ENDPOINT_I2V    = "xai/grok-imagine-video/image-to-video"
+    MODEL           = "grok-video"
+    PRICE_PER_S     = 0.07
+    AUDIO           = True
+    SEND_RESOLUTION = True
+    SEND_DURATION   = True
+    DUR_STR         = False
+    DEFAULT_DUR     = 5
+
+
 class Sora2Worker(_CancellableWorker):
     """
     Génère une vidéo via Sora 2 (OpenAI / fal.ai).

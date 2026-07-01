@@ -1139,6 +1139,12 @@ class TabVideoEngines(QWidget):
         ("LTX-2 — I2V  (4K + audio · ~$0.04/s)",       "ltx2_i2v",          True),
         ("Wan 2.7 — T2V  (Alibaba · first/last frame)", "wan27_t2v",         True),
         ("Hailuo 2.3 Pro — T2V  (MiniMax · ~$0.49/vidéo)", "hailuo23_t2v",   True),
+        ("Seedance 2.0 Mini — T2V  (éco · audio · ~$0.155/s)", "seedance20mini_t2v", True),
+        ("Seedance 2.0 Mini — I2V  (start/end frame · audio)", "seedance20mini_i2v", True),
+        ("Gemini Omni Flash — T2V  (Google · audio natif · ~$0.125/s)", "gemini_omni_t2v", True),
+        ("Gemini Omni Flash — I2V  (Google · audio natif)", "gemini_omni_i2v", True),
+        ("Grok Video — T2V  (xAI · audio · ~$0.07/s)", "grok_t2v",          True),
+        ("Grok Video — I2V  (xAI · audio)",            "grok_i2v",          True),
         ("Happy Horse 1.0 — T2V  ($0.14-0.28/s) ★",   "happy_horse_t2v",   True),
         ("Happy Horse 1.0 — I2V  ($0.14-0.28/s)",      "happy_horse_i2v",   True),
         ("Kling O3 4K — T2V  (~$0.42/s)",              "kling_o3_t2v",      True),
@@ -1251,6 +1257,22 @@ class TabVideoEngines(QWidget):
             _NewEngineForm("i2v", with_image=True, dur=(4, 10, 5), note="LTX-2 · image-to-video"),
             _NewEngineForm("t2v", dur=(4, 10, 5), note="Wan 2.7 · first / last frame"),
             _NewEngineForm("t2v", dur=(6, 10, 6), note="Hailuo 2.3 Pro · prix fixe ~$0.49 / vidéo"),
+            _NewEngineForm("t2v", with_audio=True, with_res=True,
+                           res_opts=[("480p  (~$0.072/s)", "480p"), ("720p  (~$0.155/s)", "720p")],
+                           dur=(4, 12, 5), note="Seedance 2.0 Mini · éco + audio"),
+            _NewEngineForm("i2v", with_image=True, with_end=True, with_audio=True, with_res=True,
+                           res_opts=[("480p  (~$0.072/s)", "480p"), ("720p  (~$0.155/s)", "720p")],
+                           dur=(4, 12, 5), note="Seedance 2.0 Mini · raccord start / end frame"),
+            _NewEngineForm("t2v", with_audio=True, dur=(4, 10, 5),
+                           note="Gemini Omni Flash · audio natif"),
+            _NewEngineForm("i2v", with_image=True, with_audio=True, dur=(4, 10, 5),
+                           note="Gemini Omni Flash · image-to-video + audio"),
+            _NewEngineForm("t2v", with_audio=True, with_res=True,
+                           res_opts=[("720p  (~$0.07/s)", "720p"), ("480p  (~$0.05/s)", "480p")],
+                           dur=(4, 10, 5), note="Grok Video · xAI + audio"),
+            _NewEngineForm("i2v", with_image=True, with_audio=True, with_res=True,
+                           res_opts=[("720p  (~$0.07/s)", "720p"), ("480p  (~$0.05/s)", "480p")],
+                           dur=(4, 10, 5), note="Grok Video · image-to-video + audio"),
             _HappyHorseForm("t2v"),
             _HappyHorseForm("i2v"),
             _KlingO3Form("t2v"),
@@ -1410,6 +1432,15 @@ class TabVideoEngines(QWidget):
         elif key == "hailuo23_t2v":
             from api.video_engines import Hailuo23Worker
             self._worker = Hailuo23Worker(params)
+        elif key in ("seedance20mini_t2v", "seedance20mini_i2v"):
+            from api.video_engines import Seedance20MiniWorker
+            self._worker = Seedance20MiniWorker(params)
+        elif key in ("gemini_omni_t2v", "gemini_omni_i2v"):
+            from api.video_engines import GeminiOmniFlashWorker
+            self._worker = GeminiOmniFlashWorker(params)
+        elif key in ("grok_t2v", "grok_i2v"):
+            from api.video_engines import GrokVideoWorker
+            self._worker = GrokVideoWorker(params)
         elif key in ("happy_horse_t2v", "happy_horse_i2v"):
             from api.video_engines import HappyHorseWorker
             self._worker = HappyHorseWorker(params)

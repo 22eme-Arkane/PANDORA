@@ -20,7 +20,10 @@ ENGINE_CAPS = {
     #                      i2v    end_frame  refs
     "seedance-2.0":      {"i2v": True,  "end_frame": True,  "refs": "full"},
     "seedance-2.0-fast": {"i2v": True,  "end_frame": True,  "refs": "full"},
+    "seedance-2.0-mini": {"i2v": True,  "end_frame": True,  "refs": "none"},
     "seedance-1.5-pro":  {"i2v": True,  "end_frame": True,  "refs": "none"},
+    "gemini-omni-flash": {"i2v": True,  "end_frame": False, "refs": "none"},
+    "grok-video":        {"i2v": True,  "end_frame": False, "refs": "none"},
     "kling-v3-pro":      {"i2v": True,  "end_frame": True,  "refs": "style"},
     "kling-o3-4k":       {"i2v": True,  "end_frame": False, "refs": "none"},
     "happy-horse-1.0":   {"i2v": True,  "end_frame": False, "refs": "full"},

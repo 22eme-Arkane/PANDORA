@@ -33,7 +33,10 @@ _ENGINES = [
     ("Sora 2  (prochainement)",          "sora-2"),          # OpenAI — 1080p
     ("PixVerse v6  (prochainement)",     "pixverse-v6"),     # PixVerse — flexible
     ("Seedance 2.0 Fast",               "seedance-2.0-fast"), # Rapide — qualité réduite
+    ("Seedance 2.0 Mini",               "seedance-2.0-mini"), # éco — début+fin + audio
     ("Seedance 1.5 Pro",                "seedance-1.5-pro"),  # début+fin + audio natif
+    ("Gemini Omni Flash",               "gemini-omni-flash"), # Google — audio natif
+    ("Grok Video",                      "grok-video"),        # xAI — audio
     ("LTX-2  (4K natif)",               "ltx-2"),             # Lightricks — i2v 4K
 ]
 
@@ -42,7 +45,8 @@ _FIXED_RES_ENGINES   = {"veo-3.1", "kling-v3-pro", "kling-o3-4k", "sora-2"}
 _FIXED_RATIO_ENGINES = {"veo-3.1", "kling-v3-pro", "kling-o3-4k"}
 # Moteurs sans support natif d'images de référence (fallback texte uniquement)
 _TEXT_FALLBACK_ENGINES = {"kling-v3-pro", "kling-o3-4k", "veo-3.1", "sora-2",
-                          "seedance-1.5-pro", "ltx-2"}
+                          "seedance-1.5-pro", "ltx-2",
+                          "seedance-2.0-mini", "gemini-omni-flash", "grok-video"}
 _ENGINE_RES_FORCED   = {
     "veo-3.1":      "1080p",
     "kling-v3-pro": "1080p",
@@ -60,6 +64,9 @@ _ENGINE_RESOLUTIONS = {
     "pixverse-v6":       [("1080p  (~$0.115/s)", "1080p"), ("720p  (~$0.075/s)", "720p"), ("480p  (~$0.025/s)", "480p")],
     "happy-horse-1.0":   [("1080p  (~$0.28/s)", "1080p"),  ("720p  (~$0.14/s)", "720p")],
     "seedance-1.5-pro":  [("720p  (~$0.05/s)", "720p"), ("1080p", "1080p")],
+    "seedance-2.0-mini": [("480p  (~$0.072/s)", "480p"), ("720p  (~$0.155/s)", "720p")],
+    "gemini-omni-flash": [("720p  (~$0.125/s)", "720p"), ("1080p", "1080p")],
+    "grok-video":        [("480p  (~$0.05/s)", "480p"), ("720p  (~$0.07/s)", "720p")],
     "ltx-2":             [("4K  (natif)", "4K")],
 }
 # Moteurs disponibles dans le tab DaVinci Edit (workflow testé et validé uniquement)
@@ -71,18 +78,22 @@ def _make_ext_worker(model: str, params: dict):
         Veo3Worker, KlingWorker, KlingO3Worker,
         HappyHorseWorker, PixVerseV6Worker, Sora2Worker,
         Seedance15Worker, LTX2Worker,
+        GeminiOmniFlashWorker, Seedance20MiniWorker, GrokVideoWorker,
     )
     p = dict(params)
     p.setdefault("mode", "t2v")
     mapping = {
-        "veo-3.1":          Veo3Worker,
-        "kling-v3-pro":     KlingWorker,
-        "kling-o3-4k":      KlingO3Worker,
-        "happy-horse-1.0":  HappyHorseWorker,
-        "pixverse-v6":      PixVerseV6Worker,
-        "sora-2":           Sora2Worker,
-        "seedance-1.5-pro": Seedance15Worker,
-        "ltx-2":            LTX2Worker,
+        "veo-3.1":           Veo3Worker,
+        "kling-v3-pro":      KlingWorker,
+        "kling-o3-4k":       KlingO3Worker,
+        "happy-horse-1.0":   HappyHorseWorker,
+        "pixverse-v6":       PixVerseV6Worker,
+        "sora-2":            Sora2Worker,
+        "seedance-1.5-pro":  Seedance15Worker,
+        "ltx-2":             LTX2Worker,
+        "gemini-omni-flash": GeminiOmniFlashWorker,
+        "seedance-2.0-mini": Seedance20MiniWorker,
+        "grok-video":        GrokVideoWorker,
     }
     cls = mapping.get(model)
     return cls(p) if cls else None

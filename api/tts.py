@@ -548,6 +548,13 @@ class IndexTTS2Worker(QThread):
 # (voix par défaut du moteur) pour éviter les erreurs de paramètres.
 
 SPEECH_ENGINES = {
+    "elevenlabs-v3": {
+        "label":    "ElevenLabs Eleven v3  ·  FR natif · recommandé  ·  ~$0.10/1000c",
+        "endpoint": "fal-ai/elevenlabs/tts/eleven-v3",
+        "price":    "~$0.10 / 1000 c",
+        # language_code='fr' forcé → règle l'accent anglais d'Index TTS 2 sur du FR.
+        "extra":    {"language_code": "fr"},
+    },
     "minimax-2.8-hd": {
         "label":    "MiniMax Speech 2.8 HD  ·  FR · 300+ voix · qualité  ·  ~$0.05/1000c",
         "endpoint": "fal-ai/minimax/speech-2.8-hd",
@@ -580,8 +587,8 @@ SPEECH_ENGINES = {
     },
 }
 
-SPEECH_ENGINE_ORDER = ["minimax-2.8-hd", "minimax-2.8-turbo", "gemini-tts",
-                       "inworld", "qwen3", "maya1"]
+SPEECH_ENGINE_ORDER = ["elevenlabs-v3", "minimax-2.8-hd", "minimax-2.8-turbo",
+                       "gemini-tts", "inworld", "qwen3", "maya1"]
 
 
 def speech_engine_spec(key: str) -> dict:
@@ -628,7 +635,9 @@ class FalSpeechWorker(QThread):
             spec = speech_engine_spec(self._engine)
             self.progress.emit(15, f"Synthèse — {spec['label'].split('·')[0].strip()}…")
 
-            result = fal_client.subscribe(spec["endpoint"], arguments={"text": self._text})
+            args = {"text": self._text}
+            args.update(spec.get("extra", {}))   # ex. eleven-v3 → language_code='fr'
+            result = fal_client.subscribe(spec["endpoint"], arguments=args)
 
             audio_url = ""
             if isinstance(result, dict):
