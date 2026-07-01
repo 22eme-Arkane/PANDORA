@@ -404,6 +404,11 @@ class PandoraWindow(QMainWindow):
         droite pendant qu'on écrit le Scénario à gauche. Appelée depuis Paramètres."""
         from PyQt6.QtWidgets import QApplication
         win = PandoraWindow(self._project, is_secondary=True)
+        # Fenêtre INDÉPENDANTE et NON modale : elle ne doit jamais bloquer l'autre
+        # écran ni faire sonner l'alerte « une fenêtre est ouverte ». Top-level sans
+        # parent + modalité explicitement désactivée.
+        win.setWindowModality(Qt.WindowModality.NonModal)
+        win.setWindowFlag(Qt.WindowType.Window, True)
         self._secondary_wins.append(win)
         # Nettoyage de la référence anti-GC à la fermeture de la 2ᵉ fenêtre.
         win.destroyed.connect(
@@ -734,6 +739,7 @@ class PandoraWindow(QMainWindow):
         )
 
     def _navigate(self, key: str, extra: str = ""):
+        self._current_nav = key   # mémorisé pour le rafraîchissement au retour de focus
         page = self._pages.get(key)
         if page:
             # Paramètres vit dans son conteneur centré
@@ -748,6 +754,29 @@ class PandoraWindow(QMainWindow):
         self._sidebar.set_active(key)
         self._assistant.set_context(key)
         self._update_sb_chat(key)
+
+    def changeEvent(self, event):
+        # P5 — 2 fenêtres sur le même projet (données fichier PARTAGÉES) : quand une
+        # fenêtre reprend le focus, on recharge la page visible depuis le disque pour
+        # refléter ce qui a été fait dans l'autre fenêtre (ex. storyboard généré à
+        # gauche → visible en cliquant sur la fenêtre de droite), sans changer d'onglet.
+        from PyQt6.QtCore import QEvent
+        super().changeEvent(event)
+        if event.type() == QEvent.Type.ActivationChange and self.isActiveWindow():
+            self._refresh_on_focus()
+
+    def _refresh_on_focus(self):
+        key = getattr(self, "_current_nav", None)
+        if not key:
+            return
+        # Contexte projet GLOBAL partagé : le réaffirmer avant de recharger (l'autre
+        # fenêtre a pu le laisser cohérent — même projet — mais on sécurise).
+        page = self._pages.get(key)
+        if page is not None and hasattr(page, "refresh"):
+            try:
+                page.refresh()
+            except Exception:
+                pass
 
     # ── Chat Storyboard (à droite, miroir de l'assistant) ─────────────────────────
 

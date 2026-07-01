@@ -223,6 +223,14 @@ def double_ecran_deuxieme_fenetre():
     src_open = inspect.getsource(PW.PandoraWindow.open_secondary_window)
     assert "is_secondary=True" in src_open and "screens()" in src_open, \
         "ouvre une 2ᵉ fenêtre placée sur le 2ᵉ écran"
+    assert "NonModal" in src_open, "2ᵉ fenêtre explicitement non modale (anti-bip/blocage)"
+    # Rafraîchissement au retour de focus (données partagées entre les 2 fenêtres)
+    assert hasattr(PW.PandoraWindow, "changeEvent") and hasattr(PW.PandoraWindow, "_refresh_on_focus")
+    src_ce = inspect.getsource(PW.PandoraWindow.changeEvent)
+    assert "ActivationChange" in src_ce and "_refresh_on_focus" in src_ce, \
+        "recharge la page visible quand la fenêtre reprend le focus"
+    assert "_current_nav" in inspect.getsource(PW.PandoraWindow._navigate), \
+        "page courante mémorisée pour le rafraîchissement"
     # 2) La fermeture de la secondaire NE propose PAS de quitter le programme
     src_close = inspect.getsource(PW.PandoraWindow.closeEvent)
     assert "_is_secondary" in src_close and "e.accept()" in src_close, \
