@@ -357,6 +357,19 @@ class LiveWindow(QMainWindow):
         # Assistant IA à GAUCHE (poignée au bord, panneau, puis les pages) ;
         # à DROITE, une colonne permanente de la largeur de la poignée fermée
         # — symétrie demandée (retour 2026-06-12).
+        # À DROITE : Chat Storyboard (IA) en miroir de l'assistant — visible
+        # uniquement sur les pages Séquences (porté du Cinéma). Ailleurs, un spacer
+        # permanent de la largeur de la poignée préserve la symétrie.
+        from ui.storyboard_chat import StoryboardChatPanel, StoryboardChatToggleStrip
+        self._sb_chat_panel = StoryboardChatPanel(
+            shots_provider=self._sb_chat_shots,
+            on_applied=self._sb_chat_applied,
+            header_height=60,
+        )
+        self._sb_chat_panel.setVisible(False)
+        self._sb_chat_toggle = StoryboardChatToggleStrip(self._sb_chat_panel)
+        self._sb_chat_toggle.setVisible(False)
+
         self._right_spacer = QWidget()
         # même largeur que la poignée IA (fixée à 28 px) — symétrie exacte
         self._right_spacer.setFixedWidth(self._assistant_toggle.maximumWidth())
@@ -364,6 +377,8 @@ class LiveWindow(QMainWindow):
         body_lay.addWidget(self._assistant_toggle)
         body_lay.addWidget(self._assistant)
         body_lay.addWidget(self._stack, 1)
+        body_lay.addWidget(self._sb_chat_panel)
+        body_lay.addWidget(self._sb_chat_toggle)
         body_lay.addWidget(self._right_spacer)
         outer.addWidget(body, 1)
         outer.addWidget(self._sidebar)
@@ -843,6 +858,29 @@ class LiveWindow(QMainWindow):
         ctx = self._ASSIST_CTX.get(key)
         if ctx and hasattr(self._assistant, "set_context"):
             self._assistant.set_context(ctx)
+        self._update_sb_chat(key)
+
+    # ── Chat Storyboard (IA, à droite) — porté du Cinéma ──────────────────────────
+
+    def _sb_chat_shots(self) -> list:
+        page = self._pages.get(getattr(self, "_current_nav", ""))
+        return list(getattr(page, "_all_shots", []) or [])
+
+    def _sb_chat_applied(self):
+        page = self._pages.get(getattr(self, "_current_nav", ""))
+        if page and hasattr(page, "_on_chat_applied"):
+            page._on_chat_applied()
+
+    def _update_sb_chat(self, key: str):
+        """Le chat storyboard n'est actif que sur les pages Séquences ; ailleurs on
+        rend le spacer pour garder la symétrie avec la poignée IA de gauche."""
+        is_seq = key in ("seq_live", "seq_mapping")
+        self._sb_chat_toggle.setVisible(is_seq)
+        if not is_seq:
+            self._sb_chat_panel.setVisible(False)
+            self._sb_chat_toggle._open = False
+            self._sb_chat_toggle._arrow.setText(self._sb_chat_toggle._arrow_char())
+        self._right_spacer.setVisible(not is_seq)
 
     # ── Handlers ────────────────────────────────────────────────────────────────
 

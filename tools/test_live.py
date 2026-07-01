@@ -282,6 +282,11 @@ def storyboard_boutons_portes_du_cinema():
     src_o = inspect.getsource(LW.LiveWindow.open_secondary_window)
     assert "is_secondary=True" in src_o and "NonModal" in src_o and "screens()" in src_o
     assert "_is_secondary" in inspect.getsource(LW.LiveWindow.closeEvent)
+    # Chat Storyboard (IA) à droite sur les pages Séquences (porté du Cinéma)
+    for m in ("_sb_chat_shots", "_sb_chat_applied", "_update_sb_chat"):
+        assert hasattr(LW.LiveWindow, m), f"chat storyboard : {m} manquant"
+    assert "_update_sb_chat(key)" in inspect.getsource(LW.LiveWindow._navigate)
+    assert "seq_live" in inspect.getsource(LW.LiveWindow._update_sb_chat)
     from ui.page_live_settings import PageLiveSettings
     ps = PageLiveSettings()
     assert hasattr(ps, "_btn_second_window") and hasattr(ps, "_open_second_window")
