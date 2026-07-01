@@ -97,8 +97,8 @@ EXPECTED_ONLY_CINEMA = {
         # Onglet « Mise en page PANDORA » Cinéma : helpers de persistance/reset
         # (le Live gère sa mise en page inline dans _open_scenario) — voulu.
         "_clear_layout", "_restore_layout",
-        # Sauvegarder/Ouvrir le scénario en fichier (dossier Scénario) — Cinéma only.
-        "_on_save_scenario_file", "_on_open_scenario_file",
+        # (Sauvegarder/Ouvrir le conducteur en fichier PORTÉS au Live le 2026-07-01 →
+        #  désormais des DEUX côtés, retirés d'ici.)
         # Musique du film : popup AVANT analyse pour choisir film (moments clés) /
         # clip (début→fin). Notion propre au Cinéma — le Live cale en continu (set).
         "_choose_music_mode",

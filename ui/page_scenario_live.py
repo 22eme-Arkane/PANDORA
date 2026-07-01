@@ -379,6 +379,34 @@ class PageScenario(QWidget):
         self._btn_del_version.clicked.connect(self._delete_version)
         tl.addWidget(self._btn_del_version)
 
+        # ── Sauvegarder / Ouvrir le conducteur (fichiers, dossier Scénario) — porté
+        #    du Cinéma : après les versions, séparé par une barre verticale. ──────
+        _scn_sep = QFrame()
+        _scn_sep.setFixedSize(1, 24)
+        _scn_sep.setStyleSheet(f"background:{CP['border']};")
+        tl.addWidget(_scn_sep)
+        _yellow, _blue = "#f5c518", "#4aa3ff"
+        self._btn_scn_save = QPushButton("💾  " + translate("Sauvegarder"))
+        self._btn_scn_save.setFixedHeight(30)
+        self._btn_scn_save.setToolTip("Sauvegarder ce conducteur sous un nom (dossier Scénario du projet)")
+        self._btn_scn_save.setStyleSheet(
+            f"QPushButton{{background:transparent;color:{_yellow};"
+            f"border:1px solid {_yellow};border-radius:6px;font-size:10px;font-weight:700;padding:0 12px;}}"
+            f"QPushButton:hover{{background:rgba(245,197,24,0.12);}}"
+        )
+        self._btn_scn_save.clicked.connect(self._on_save_scenario_file)
+        tl.addWidget(self._btn_scn_save)
+        self._btn_scn_open = QPushButton("📂  " + translate("Ouvrir"))
+        self._btn_scn_open.setFixedHeight(30)
+        self._btn_scn_open.setToolTip("Ouvrir un conducteur sauvegardé")
+        self._btn_scn_open.setStyleSheet(
+            f"QPushButton{{background:transparent;color:{_blue};"
+            f"border:1px solid {_blue};border-radius:6px;font-size:10px;font-weight:700;padding:0 12px;}}"
+            f"QPushButton:hover{{background:rgba(74,163,255,0.12);}}"
+        )
+        self._btn_scn_open.clicked.connect(self._on_open_scenario_file)
+        tl.addWidget(self._btn_scn_open)
+
         # ── Style visuel (top bar, après les boutons de version) ──────────────
         _style_sep_top = QFrame()
         _style_sep_top.setFixedSize(1, 24)
@@ -1247,6 +1275,60 @@ class PageScenario(QWidget):
 
     def _get_text(self) -> str:
         return self._editor_text.toPlainText().strip()
+
+    # ── Sauvegarder / Ouvrir le conducteur en fichier (porté du Cinéma) ──────────
+
+    def _on_save_scenario_file(self):
+        from PyQt6.QtWidgets import QFileDialog, QMessageBox
+        import core.scenario as scenario_api
+        import os
+        text  = self._get_text()
+        title = self._title_edit.text().strip()
+        if not text and not title:
+            QMessageBox.information(self, "Sauvegarder", "Le conducteur est vide.")
+            return
+        from core import context as _ctx
+        suggested = scenario_api._safe_name(_ctx.get_project_name() or title or "Conducteur") + ".json"
+        start = os.path.join(scenario_api.saves_dir(), suggested)
+        path, _ = QFileDialog.getSaveFileName(
+            self, translate("Sauvegarder le conducteur"), start,
+            "Conducteur PANDORA (*.json)")
+        if not path:
+            return
+        if not path.lower().endswith(".json"):
+            path += ".json"
+        dur_defined = self._dur_defined_check.isChecked()
+        dur_secs    = (self._dur_min.value() * 60 + self._dur_sec.value()) if dur_defined else 0
+        data = dict(self._current or {})
+        data.update({
+            "title":             title or os.path.splitext(os.path.basename(path))[0],
+            "raw_content":       text,
+            "formatted_content": text,
+            "layout_content":    self._layout_view.toPlainText() if hasattr(self, "_layout_view") else "",
+            "duration_secs":     dur_secs,
+            "duration_defined":  dur_defined,
+            "film_style":        self._film_style_combo.currentData() or "",
+        })
+        try:
+            scenario_api.export_scenario_to(path, data)
+            self._ai_progress_lbl.setText("Conducteur sauvegardé ✓")
+        except Exception as e:
+            QMessageBox.critical(self, "Erreur", f"Échec de la sauvegarde : {e}")
+
+    def _on_open_scenario_file(self):
+        from PyQt6.QtWidgets import QFileDialog, QMessageBox
+        import core.scenario as scenario_api
+        path, _ = QFileDialog.getOpenFileName(
+            self, translate("Ouvrir un conducteur"), scenario_api.saves_dir(),
+            "Conducteur PANDORA (*.json)")
+        if not path:
+            return
+        data = scenario_api.import_scenario_from(path)
+        if not data:
+            QMessageBox.warning(self, "Ouvrir", "Fichier introuvable ou illisible.")
+            return
+        self._open_scenario(data)
+        self._ai_progress_lbl.setText("Conducteur ouvert ✓")
 
     # ── Références visuelles ─────────────────────────────────────────────────
 

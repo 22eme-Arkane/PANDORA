@@ -1073,6 +1073,9 @@ _FR_TO_EN: dict[str, str] = {
     "Prompt du clip :":             "Clip prompt:",
     "File terminée.":               "Queue finished.",
     "Cochez au moins un clip à modifier.": "Check at least one clip to modify.",
+    # Sauvegarder / Ouvrir le conducteur (Live)
+    "Sauvegarder le conducteur":    "Save the conductor",
+    "Ouvrir un conducteur":         "Open a conductor",
     "Changer le décor (arrière-plan)": "Change the set (background)",
     "Changer un visage":             "Change a face",
     "Changer l'étalonnage (couleurs)": "Change the color grade",
