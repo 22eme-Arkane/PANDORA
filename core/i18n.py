@@ -2793,6 +2793,23 @@ _FR_TO_EN: dict[str, str] = {
     "La 2ᵉ fenêtre ne peut être ouverte que depuis la fenêtre principale.":
         "The 2nd window can only be opened from the main window.",
     "Indisponible":                 "Unavailable",
+    # P2 — storyboard : fusion de plans déclarée
+    "fusionné":                     "merged",
+    "Ce plan regroupe plusieurs moments du scénario.":
+        "This shot merges several moments of the screenplay.",
+    "Plans fusionnés":              "Merged shots",
+    "L'IA a regroupé plusieurs moments du scénario en":
+        "The AI grouped several moments of the screenplay into",
+    "plan(s) fusionné(s)":          "merged shot(s)",
+    "plans au total":               "shots total",
+    "Voulez-vous garder ce découpage fusionné, ou séparer chaque moment en "
+    "plans distincts ?":
+        "Do you want to keep this merged breakdown, or split each moment into "
+        "separate shots?",
+    "Garder fusionné":              "Keep merged",
+    "Séparer en plans distincts":   "Split into separate shots",
+    "Nouveau découpage — sans fusion…": "New breakdown — no merging…",
+    "Séparation des plans en cours…":   "Splitting shots…",
     "↑  Vérifier les mises à jour": "↑  Check for updates",
     "Vérification…":                "Checking…",
     "Mise à jour disponible":       "Update available",

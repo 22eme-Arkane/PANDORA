@@ -235,7 +235,9 @@ RÈGLES ABSOLUES :
 - Les dialogues présents dans le scénario DOIVENT apparaître mot pour mot dans "comments" ET dans le champ "action".
 - Aucune invention narrative, aucune paraphrase libre, aucune interprétation créative : mêmes personnages, mêmes lieux, mêmes actions, mêmes mots.
 - N'inclus dans un plan (et dans "character_names" / "staging") QUE les personnages réellement présents et visibles dans CE plan — JAMAIS un personnage hors champ, hors cadre, ou déjà sorti de la scène.
-
+- DÉCOUPAGE FIDÈLE : crée UN plan par BEAT D'ACTION distinct (un changement d'action, de cadre, d'intention ou de réplique de dialogue = un nouveau plan). Respecte le nombre de moments distincts que contient le scénario — ne réduis JAMAIS arbitrairement le nombre de plans.
+- FUSION INTERDITE EN SILENCE : ne regroupe JAMAIS plusieurs beats distincts dans un seul plan sans le signaler. Si — et seulement si — deux beats forment une action strictement continue dans le même cadre et qu'un seul plan est réellement justifié, tu DOIS marquer ce plan avec "merged": true et "merged_note" décrivant brièvement ce qui a été fusionné. Par défaut "merged": false.
+{MERGE_POLICY}
 Retourne UNIQUEMENT un tableau JSON valide. Chaque élément du tableau représente un plan et contient exactement ces clés :
 {
   "number": <int — numéro séquentiel du plan>,
@@ -261,7 +263,9 @@ Retourne UNIQUEMENT un tableau JSON valide. Chaque élément du tableau représe
   "ambiance": <str — {PROMPT_LANG}. AMBIANCE : atmosphère, mood et émotion du plan tels que décrits ou impliqués par le scénario. N'AJOUTE PAS de mots de qualité génériques (PAS de « cinématographique », « ultra-détaillé », « photoréaliste », « 4K », etc.) — le style visuel est géré séparément.>,
   "decor": <str — {PROMPT_LANG}. DÉCOR : UNIQUEMENT le lieu et son environnement FIXE (architecture, matières, époque, mobilier fixe, murs/sol, végétation, palette). N'inclus NI personnage, NI véhicule, NI accessoire mobile, NI intention d'éclairage — chacun a sa propre section. Le décor seul.>,
   "lighting": <str — {PROMPT_LANG}. PLAN DE FEU : INTENTION d'éclairage cohérente avec le scénario — direction de la lumière, qualité (douce/dure), température de couleur, contraste, sources pratiques motivées (lustre, fenêtre, bougie…). NE mentionne AUCUN projecteur ni appareil d'éclairage visible : c'est une intention de lumière, pas du matériel à l'image.>,
-  "sound_prompt": <str — SOUND DESIGN / SFX prompt in {PROMPT_LANG} describing the shot's sound ambience: ambient textures, sound effects, room tone, materials and rhythm of the scene, ready for a sound-effects generator. NO speech, NO voice, NO music score, NO BPM (dialogue lives in the "action" field; this is ambience/SFX only). You MAY place the main sound events approximately in time within the shot (e.g. "around 1s", "mid-shot"). 1 to 3 concise sentences faithful to what the screenplay describes.>
+  "sound_prompt": <str — SOUND DESIGN / SFX prompt in {PROMPT_LANG} describing the shot's sound ambience: ambient textures, sound effects, room tone, materials and rhythm of the scene, ready for a sound-effects generator. NO speech, NO voice, NO music score, NO BPM (dialogue lives in the "action" field; this is ambience/SFX only). You MAY place the main sound events approximately in time within the shot (e.g. "around 1s", "mid-shot"). 1 to 3 concise sentences faithful to what the screenplay describes.>,
+  "merged": <bool — true UNIQUEMENT si ce plan regroupe plusieurs beats d'action distincts du scénario (voir RÈGLES ABSOLUES). false par défaut>,
+  "merged_note": <str — si merged=true, description COURTE des beats fusionnés et de la raison ; sinon chaîne vide "">
 }
 
 Contrainte absolue : duration ne peut jamais dépasser 15.0 secondes (limite de Seedance 2.0).
@@ -401,9 +405,20 @@ def _arrange_screenplay_prompt(lang: str) -> str:
     return _ARRANGE_SCREENPLAY_TMPL.replace("{LANG_INSTRUCTION}", lang_instruction)
 
 
-def _storyboard_prompt(lang: str) -> str:
+def _storyboard_prompt(lang: str, strict_no_merge: bool = False) -> str:
     prompt_lang = "English" if lang == "en" else "French (français)"
-    return _GENERATE_STORYBOARD_TMPL.replace("{PROMPT_LANG}", prompt_lang)
+    if strict_no_merge:
+        merge_policy = (
+            "- MODE STRICT ACTIVÉ (demande de l'utilisateur) : INTERDICTION TOTALE DE "
+            "FUSIONNER des plans. Chaque beat d'action distinct DOIT devenir un plan "
+            "séparé, même si l'action est continue. Ne produis AUCUN plan avec "
+            'merged=true — sépare tout ce qui peut l\'être.'
+        )
+    else:
+        merge_policy = ""
+    return (_GENERATE_STORYBOARD_TMPL
+            .replace("{PROMPT_LANG}", prompt_lang)
+            .replace("{MERGE_POLICY}", merge_policy))
 
 
 # Section TECHNIQUE déterministe (champs caméra) — centralisée dans prompt_sections
@@ -872,11 +887,13 @@ class GenerateStoryboardWorker(QThread):
     failed   = pyqtSignal(str)
 
     def __init__(self, text: str, duration_secs: int = 0,
-                 element_names: dict | None = None):
+                 element_names: dict | None = None, strict_no_merge: bool = False):
         super().__init__()
-        self._text          = text
-        self._duration_secs = duration_secs
-        self._element_names = element_names or {}
+        self._text            = text
+        self._duration_secs   = duration_secs
+        self._element_names   = element_names or {}
+        # P2 : relance en mode « séparer » quand l'utilisateur refuse une fusion.
+        self._strict_no_merge = strict_no_merge
 
     def run(self):
         from core.ai_provider import (complete as ai_complete, key_error,
@@ -958,7 +975,7 @@ class GenerateStoryboardWorker(QThread):
                         f" plans plus longs pour les atmosphères et dialogues.]\n\n"
                     )
                 user_content = _lang_hint(lang) + names_block + budget_hint + self._text
-            raw = ai_complete(_storyboard_prompt(lang), user_content,
+            raw = ai_complete(_storyboard_prompt(lang, self._strict_no_merge), user_content,
                               tier="creative", max_tokens=16000, task="storyboard_gen").strip()
             start = raw.find("[")
             end   = raw.rfind("]") + 1
@@ -984,6 +1001,10 @@ class GenerateStoryboardWorker(QThread):
                 s.setdefault("character_ids", [])
                 s.setdefault("accessory_ids", [])
                 s.setdefault("decor_id",      "")
+                # P2 : conserve le drapeau de fusion pour que l'UI puisse demander
+                # confirmation (« Garder fusionné / Séparer »). Défaut = non fusionné.
+                s["merged"]      = bool(s.get("merged", False))
+                s["merged_note"] = (s.get("merged_note") or "").strip()
                 # Repli : si l'IA a ignoré les champs de sections, récupérer l'ancien
                 # prompt à plat (ou les commentaires) comme ACTION.
                 _action = (s.get("action") or "").strip() \

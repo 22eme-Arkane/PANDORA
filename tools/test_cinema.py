@@ -309,6 +309,19 @@ def prompts_storyboard_cinema():
     # Sound design généré AVEC le storyboard (retour 2026-06-13, parité Live)
     assert '"sound_prompt"' in t, "le storyboard génère aussi un prompt sound design"
     assert "NO speech" in t and "SFX" in t, "sound_prompt = ambiance/SFX sans voix"
+    # P2 — respecter le nb de plans (un par beat) + JAMAIS de fusion silencieuse
+    assert "{MERGE_POLICY}" in t and '"merged"' in t, "P2 : champ merged + placeholder strict"
+    assert "beat" in t.lower() and "FUSION INTERDITE EN SILENCE" in t, \
+        "P2 : un plan par beat + fusion déclarée"
+    assert "strict_no_merge" in inspect.signature(s.GenerateStoryboardWorker.__init__).parameters, \
+        "P2 : worker accepte strict_no_merge"
+    assert "MODE STRICT" in s._storyboard_prompt("fr", True), "P2 : mode strict actif"
+    assert "MODE STRICT" not in s._storyboard_prompt("fr", False), "P2 : normal sans mode strict"
+    from ui.dialog_storyboard_generate import StoryboardGenerateDialog as _SGD
+    for _m in ("_ask_merge_decision", "_reset_for_retry"):
+        assert hasattr(_SGD, _m), f"P2 : dialogue {_m}"
+    assert "strict_no_merge=True" in inspect.getsource(_SGD._on_done), \
+        "P2 : « Séparer » relance en mode strict"
     # Persisté + champ dans le dialogue de plan ; bouton « Améliorer » Seedance
     # RETIRÉ provisoirement (Fable 5 dégrade), prompt Action conservé
     import core.storyboard as sb

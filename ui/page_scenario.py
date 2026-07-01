@@ -3356,6 +3356,8 @@ class PageScenario(QWidget):
                 try:
                     shot["scenario_id"] = sc_id
                     shot["version_id"] = vid
+                    shot.pop("merged", None)       # champs de travail P2 (non persistés)
+                    shot.pop("merged_note", None)
                     saved = sb_api.save_shot(shot)
                     self._gen_all_shots.append(saved)
                 except Exception:

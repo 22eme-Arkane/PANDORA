@@ -43,6 +43,19 @@ class _ShotRow(QWidget):
                             title.sizePolicy().verticalPolicy())
         lay.addWidget(title, 1)
 
+        # P2 : marque visuellement un plan qui fusionne plusieurs beats du scénario.
+        if shot.get("merged"):
+            merged_badge = QLabel("⛓ " + translate("fusionné"))
+            merged_badge.setToolTip(shot.get("merged_note", "") or translate(
+                "Ce plan regroupe plusieurs moments du scénario."))
+            merged_badge.setStyleSheet(
+                f"color:{CP.get('warning', '#f5c518')};background:transparent;"
+                f"border:1px solid {CP.get('warning', '#f5c518')};border-radius:3px;"
+                f"font-size:8px;font-weight:700;padding:1px 6px;"
+            )
+            merged_badge.setFixedHeight(17)
+            lay.addWidget(merged_badge)
+
         move = shot.get("camera_movement", "")
         size = shot.get("shot_size", "")
         cam_info = " · ".join(filter(None, [move, size]))
@@ -81,6 +94,7 @@ class StoryboardGenerateDialog(QDialog):
         self._scenario_id    = scenario_id
         self._shots: list[dict] = []
         self._worker = None
+        self._strict_retry = False   # P2 : évite de re-demander après « Séparer »
 
         self.setWindowTitle("Générer le Storyboard")
         self.setMinimumWidth(540)
@@ -216,7 +230,7 @@ class StoryboardGenerateDialog(QDialog):
 
     # ── Generation ────────────────────────────────────────────────────────────
 
-    def _start(self):
+    def _start(self, strict_no_merge: bool = False):
         from api.screenplay import GenerateStoryboardWorker
 
         # Charge les noms exacts des éléments pour que Claude les réutilise à l'identique
@@ -244,6 +258,7 @@ class StoryboardGenerateDialog(QDialog):
         w = GenerateStoryboardWorker(
             self._scenario_text, self._duration_secs,
             element_names=element_names or None,
+            strict_no_merge=strict_no_merge,
         )
         self._worker = w
         w.finished.connect(self._on_done)
@@ -260,6 +275,18 @@ class StoryboardGenerateDialog(QDialog):
             self._status_lbl.setText(translate("Aucun plan généré — le scénario est peut-être trop court."))
             self._btn_cancel.setText(translate("Fermer"))
             return
+
+        # P2 — l'IA a-t-elle fusionné des plans ? Ne JAMAIS fusionner en silence :
+        # on le signale et l'utilisateur décide (« Garder fusionné / Séparer »).
+        merged = [s for s in shots if s.get("merged")]
+        if merged and not self._strict_retry:
+            if self._ask_merge_decision(merged, len(shots)):
+                # « Séparer » → relance en mode strict (aucune fusion autorisée).
+                self._strict_retry = True
+                self._reset_for_retry()
+                self._start(strict_no_merge=True)
+                return
+            # « Garder fusionné » → on continue avec le découpage tel quel.
 
         # Build rows
         self._list_frame.setVisible(True)
@@ -286,6 +313,49 @@ class StoryboardGenerateDialog(QDialog):
         self._btn_confirm.setVisible(True)
         self._btn_cancel.setText(translate("Annuler"))
 
+    def _ask_merge_decision(self, merged: list, total: int) -> bool:
+        """Prévient que l'IA a fusionné des plans. Retourne True si l'utilisateur
+        veut SÉPARER (relancer sans fusion), False pour GARDER le découpage."""
+        from PyQt6.QtWidgets import QMessageBox
+        n = len(merged)
+        details = "\n".join(
+            f"  • {translate('Plan')} {s.get('number', '?')} : {s.get('merged_note', '') or s.get('scene_title', '')}"
+            for s in merged[:6]
+        )
+        if n > 6:
+            details += f"\n  … (+{n - 6})"
+        box = QMessageBox(self)
+        box.setWindowTitle(translate("Plans fusionnés"))
+        box.setIcon(QMessageBox.Icon.Question)
+        _lead    = translate("L'IA a regroupé plusieurs moments du scénario en")
+        _merged  = translate("plan(s) fusionné(s)")
+        _total   = translate("plans au total")
+        box.setText(
+            f"{_lead} {n} {_merged} ({total} {_total}).\n\n" + details
+        )
+        box.setInformativeText(translate(
+            "Voulez-vous garder ce découpage fusionné, ou séparer chaque moment en "
+            "plans distincts ?"))
+        btn_keep = box.addButton(translate("Garder fusionné"), QMessageBox.ButtonRole.AcceptRole)
+        btn_split = box.addButton(translate("Séparer en plans distincts"), QMessageBox.ButtonRole.RejectRole)
+        box.setDefaultButton(btn_split)
+        box.exec()
+        return box.clickedButton() is btn_split
+
+    def _reset_for_retry(self):
+        """Vide la liste + réaffiche la barre de progression pour une 2ᵉ génération."""
+        while self._list_lay.count():
+            item = self._list_lay.takeAt(0)
+            w = item.widget()
+            if w is not None:
+                w.deleteLater()
+        self._list_frame.setVisible(False)
+        self._summary_lbl.setVisible(False)
+        self._btn_confirm.setVisible(False)
+        self._progress.setRange(0, 0)
+        self._phase_lbl.setText(translate("Nouveau découpage — sans fusion…"))
+        self._status_lbl.setText(translate("Séparation des plans en cours…"))
+
     def _on_failed(self, err: str):
         self._progress.setRange(0, 1)
         self._progress.setValue(0)
@@ -308,6 +378,9 @@ class StoryboardGenerateDialog(QDialog):
             for shot in self._shots:
                 shot["scenario_id"] = self._scenario_id
                 shot["version_id"]  = vid
+                # Champs de travail P2 : ne pas persister dans le storyboard.
+                shot.pop("merged", None)
+                shot.pop("merged_note", None)
                 sb_api.save_shot(shot)
         except Exception as e:
             self._status_lbl.setText(f"⚠ {translate('Erreur sauvegarde :')} {e}")

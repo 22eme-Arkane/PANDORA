@@ -3061,6 +3061,8 @@ class PageStoryboard(QWidget):
             shot["version_id"]  = self._active_version_id
             if shot.get("decor_name") and not shot.get("decor_id"):
                 shot["decor_id"] = decor_by_name.get(shot["decor_name"].strip().lower(), "")
+            shot.pop("merged", None)          # champs de travail P2 (non persistés)
+            shot.pop("merged_note", None)
             sb_api.save_shot(shot)
         self._ai_lbl.setText(f"{len(shots)} {translate('plans importés ✓')}")
         self.refresh()
