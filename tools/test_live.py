@@ -263,6 +263,17 @@ def storyboard_boutons_portes_du_cinema():
     import ui.tab_modify_live as MM
     assert "retake" in MM._MOD_TEMPLATES and "@Video1" in MM._MOD_TEMPLATES["retake"]
     assert hasattr(MM.TabModifyLive, "_on_mod_type"), "handler Retake Live manquant"
+    # P5 — 2ᵉ fenêtre (2 écrans) portée au Live
+    import live_window as LW
+    src_i = inspect.getsource(LW.LiveWindow.__init__)
+    assert "is_secondary" in src_i and "if not self._is_secondary" in src_i
+    assert hasattr(LW.LiveWindow, "open_secondary_window")
+    src_o = inspect.getsource(LW.LiveWindow.open_secondary_window)
+    assert "is_secondary=True" in src_o and "NonModal" in src_o and "screens()" in src_o
+    assert "_is_secondary" in inspect.getsource(LW.LiveWindow.closeEvent)
+    from ui.page_live_settings import PageLiveSettings
+    ps = PageLiveSettings()
+    assert hasattr(ps, "_btn_second_window") and hasattr(ps, "_open_second_window")
 
 
 @test

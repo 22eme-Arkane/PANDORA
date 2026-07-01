@@ -295,9 +295,13 @@ class LiveWindow(QMainWindow):
         "settings":    "live_settings",
     }
 
-    def __init__(self, project: dict | None = None):
+    def __init__(self, project: dict | None = None, is_secondary: bool = False):
         super().__init__()
         self._project = project or {}
+        # Fenêtre secondaire (P5 « 2 écrans ») : copie du Live sur le même projet,
+        # navigation indépendante ; NE relance PAS le check MAJ et se ferme seule.
+        self._is_secondary = is_secondary
+        self._secondary_wins: list = []
 
         # Contexte projet (si un projet Live est ouvert)
         try:
@@ -309,7 +313,9 @@ class LiveWindow(QMainWindow):
             pass
 
         _name = self._project.get("name", "")
-        self.setWindowTitle(f"PANDORA | Live — {_name}" if _name else "PANDORA | Live")
+        _suffix = "   ·   Écran 2" if is_secondary else ""
+        self.setWindowTitle(
+            (f"PANDORA | Live — {_name}" if _name else "PANDORA | Live") + _suffix)
         self.setMinimumSize(1100, 720)
         self.setStyleSheet(PANDORA_STYLESHEET)
 
@@ -376,7 +382,49 @@ class LiveWindow(QMainWindow):
         _sc.activated.connect(self._on_global_save_click)
 
         from PyQt6.QtCore import QTimer
-        QTimer.singleShot(900, self._start_update_check)
+        if not self._is_secondary:
+            QTimer.singleShot(900, self._start_update_check)
+
+    def open_secondary_window(self):
+        """P5 — ouvre une 2ᵉ fenêtre Live (même projet, navigation indépendante),
+        placée sur le 2ᵉ écran s'il existe (ex. contrôleur d'un côté, mapping de
+        l'autre). Appelée depuis Paramètres Live."""
+        from PyQt6.QtWidgets import QApplication
+        from PyQt6.QtCore import Qt
+        win = LiveWindow(self._project, is_secondary=True)
+        win.setWindowModality(Qt.WindowModality.NonModal)
+        win.setWindowFlag(Qt.WindowType.Window, True)
+        self._secondary_wins.append(win)
+        win.destroyed.connect(
+            lambda *_a, w=win: self._secondary_wins.remove(w)
+            if w in self._secondary_wins else None
+        )
+        screens = QApplication.screens()
+        primary = self.screen()
+        target  = next((s for s in screens if s is not primary), None)
+        if target is not None:
+            geo = target.availableGeometry()
+            win.move(geo.left() + 40, geo.top() + 40)
+            win.resize(min(1400, geo.width() - 80), min(900, geo.height() - 80))
+        else:
+            win.move(self.x() + 60, self.y() + 60)
+        win.show()
+        win.raise_()
+        win.activateWindow()
+        return win
+
+    def changeEvent(self, event):
+        # P5 — au retour de focus, recharge la page visible (données fichier partagées
+        # entre les 2 fenêtres) via _navigate (qui rétablit aussi le namespace storyboard).
+        from PyQt6.QtCore import QEvent
+        super().changeEvent(event)
+        if event.type() == QEvent.Type.ActivationChange and self.isActiveWindow():
+            key = getattr(self, "_current_nav", None)
+            if key:
+                try:
+                    self._navigate(key)
+                except Exception:
+                    pass
 
     # ── Topbar globale (logo + Soutenir / Mises à jour / Sauvegarder) ────────────
 
@@ -774,6 +822,7 @@ class LiveWindow(QMainWindow):
         key = self._NAV_ALIASES.get(key, key)
         if key not in self._pages:
             return
+        self._current_nav = key   # mémorisé pour le rafraîchissement au retour de focus
         page = self._pages[key]
         # Storyboard partagé : bascule le namespace selon la séquence (Live/Mapping),
         # ou revient au namespace par défaut "storyboard" pour les autres pages.
@@ -824,5 +873,10 @@ class LiveWindow(QMainWindow):
                 page.retranslate()
 
     def closeEvent(self, e):
+        # Fenêtre secondaire (P5) : se ferme seule, sans émettre `closed`
+        # (qui gère la fermeture globale / retour au sélecteur côté fenêtre principale).
+        if getattr(self, "_is_secondary", False):
+            e.accept()
+            return
         self.closed.emit()
         e.accept()

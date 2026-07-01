@@ -89,6 +89,32 @@ class PageLiveSettings(QWidget):
         lay.addWidget(sub)
         lay.addSpacing(32)
 
+        # ── Affichage : 2ᵉ fenêtre / 2 écrans (P5, porté du Cinéma) ─────────────
+        lay.addWidget(_section_title("AFFICHAGE"))
+        lay.addSpacing(10)
+        self._btn_second_window = QPushButton("🖥  Ouvrir une 2ᵉ fenêtre (2 écrans)")
+        self._btn_second_window.setFixedHeight(36)
+        self._btn_second_window.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._btn_second_window.setStyleSheet(
+            f"QPushButton{{background:transparent;color:{CP['text_secondary']};"
+            f"border:1px solid {CP['border']};border-radius:7px;font-size:12px;"
+            f"font-weight:600;padding:0 18px;}}"
+            f"QPushButton:hover{{background:{CP['bg3']};color:{CP['text_primary']};}}"
+        )
+        self._btn_second_window.clicked.connect(self._open_second_window)
+        lay.addWidget(self._btn_second_window)
+        _scr_note = QLabel(
+            "Ouvre une copie de PANDORA | Live sur le même projet, à déplacer sur un "
+            "2ᵉ écran (ex. contrôleur d'un côté, mapping/preview de l'autre). Navigation "
+            "indépendante ; évitez de modifier la même page dans les deux fenêtres."
+        )
+        _scr_note.setWordWrap(True)
+        _scr_note.setStyleSheet(
+            f"color:{CP['text_dim']};font-size:10px;background:transparent;border:none;")
+        lay.addSpacing(6)
+        lay.addWidget(_scr_note)
+        lay.addSpacing(28)
+
         # ── Section Resolume ────────────────────────────────────────────────────
         lay.addWidget(_section_title("CONNEXION RESOLUME"))
         lay.addSpacing(14)
@@ -342,6 +368,17 @@ class PageLiveSettings(QWidget):
         root.addWidget(content, 1)
 
         self._load_settings()
+
+    def _open_second_window(self):
+        """Demande à la fenêtre Live parente d'ouvrir une 2ᵉ fenêtre (2 écrans)."""
+        from PyQt6.QtWidgets import QMessageBox
+        win = self.window()
+        if win is not None and hasattr(win, "open_secondary_window"):
+            win.open_secondary_window()
+        else:
+            QMessageBox.information(
+                self, translate("Indisponible"),
+                translate("La 2ᵉ fenêtre ne peut être ouverte que depuis la fenêtre principale."))
 
     def _load_settings(self):
         from core.config import load_config

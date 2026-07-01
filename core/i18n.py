@@ -2796,6 +2796,13 @@ _FR_TO_EN: dict[str, str] = {
     "La 2ᵉ fenêtre ne peut être ouverte que depuis la fenêtre principale.":
         "The 2nd window can only be opened from the main window.",
     "Indisponible":                 "Unavailable",
+    "Ouvre une copie de PANDORA | Live sur le même projet, à déplacer sur un "
+    "2ᵉ écran (ex. contrôleur d'un côté, mapping/preview de l'autre). Navigation "
+    "indépendante ; évitez de modifier la même page dans les deux fenêtres.":
+        "Opens a copy of PANDORA | Live on the same project, to move onto a 2nd "
+        "screen (e.g. controller on one side, mapping/preview on the other). "
+        "Independent navigation; avoid editing the same page in both windows.",
+    "AFFICHAGE":                    "DISPLAY",
     # P2 — storyboard : fusion de plans déclarée
     "fusionné":                     "merged",
     "Ce plan regroupe plusieurs moments du scénario.":
