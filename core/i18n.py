@@ -1049,6 +1049,8 @@ _FR_TO_EN: dict[str, str] = {
     "Mode remplacement de fond (Pixverse Swap) : l'image de référence remplace le fond du clip SANS régénérer la scène. Ajoute le nouveau fond en « Image de référence ». (Seedance non utilisé · 720p max · audio conservé.)":
         "Background-replace mode (Pixverse Swap): the reference image replaces the clip's background WITHOUT regenerating the scene. Add the new background under « Reference image ». (Seedance not used · 720p max · audio preserved.)",
     "Corriger un défaut précis (Retake)": "Fix a specific flaw (Retake)",
+    "Insère un modèle de prompt (@Video1 = clip d'origine) — à compléter ensuite.":
+        "Inserts a prompt template (@Video1 = original clip) — fill it in afterwards.",
     "Changer le décor (arrière-plan)": "Change the set (background)",
     "Changer un visage":             "Change a face",
     "Changer l'étalonnage (couleurs)": "Change the color grade",

@@ -259,6 +259,10 @@ def storyboard_boutons_portes_du_cinema():
     src = inspect.getsource(M.PageStoryboard._build_shots_toolbar)
     for tok in ("_btn_save_sb_file", "_btn_open_sb_file", "_btn_pitch_deck"):
         assert tok in src, f"bouton porté manquant dans la barre : {tok}"
+    # L4 Retake porté dans « Modifier un clip » (Live)
+    import ui.tab_modify_live as MM
+    assert "retake" in MM._MOD_TEMPLATES and "@Video1" in MM._MOD_TEMPLATES["retake"]
+    assert hasattr(MM.TabModifyLive, "_on_mod_type"), "handler Retake Live manquant"
 
 
 @test

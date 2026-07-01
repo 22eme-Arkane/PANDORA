@@ -30,6 +30,23 @@ from ui.tab_video_engines_live import (
 )
 
 
+# Modèles de prompt « Type de modification » — portés du Cinéma (@Video1 = clip
+# d'origine). Reprend tout à l'identique et ne change QUE la cible → reprise ciblée
+# sans tout régénérer. Texte FR traduit à l'affichage/envoi.
+_MOD_TEMPLATES = {
+    "retake": ("Reprends exactement @Video1 à l'identique — mêmes mouvements, cadrage, "
+               "lumière, couleurs et contenu. Corrige UNIQUEMENT le défaut suivant : "
+               "[décris précisément la zone et le problème]. Ne change RIEN d'autre : "
+               "c'est une reprise ciblée (retake) du même clip."),
+    "grade": ("Reprends exactement @Video1 — même image, mouvements et contenu, à "
+              "l'identique. Change UNIQUEMENT l'étalonnage colorimétrique : [décris le "
+              "look voulu]. Ne modifie ni la composition ni les sujets."),
+    "bg": ("Reprends exactement @Video1 — mêmes sujets, mouvements, cadrage et lumière. "
+           "Remplace UNIQUEMENT le décor / l'arrière-plan. Garde la même intégration "
+           "lumineuse et les mêmes ombres. Ne change rien d'autre."),
+}
+
+
 class TabModifyLive(QScrollArea):
     """Modifier un clip déjà généré (Live) — génération réelle via Seedance."""
 
@@ -124,6 +141,19 @@ class TabModifyLive(QScrollArea):
         self._prompt.setMaximumHeight(150)
         self._prompt.setStyleSheet(_prompt_style())
         lay.addWidget(self._prompt)
+
+        # ── Type de modification (Retake…) — porté du Cinéma ──────────────────
+        self._mod_combo = QComboBox()
+        self._mod_combo.setMinimumHeight(30)
+        self._mod_combo.setStyleSheet(_combo_style())
+        self._mod_combo.addItem(translate("✎ Insérer un modèle…"), "")
+        self._mod_combo.addItem(translate("Corriger un défaut précis (Retake)"), "retake")
+        self._mod_combo.addItem(translate("Changer l'étalonnage (couleurs)"), "grade")
+        self._mod_combo.addItem(translate("Changer le décor (arrière-plan)"), "bg")
+        self._mod_combo.setToolTip(translate(
+            "Insère un modèle de prompt (@Video1 = clip d'origine) — à compléter ensuite."))
+        self._mod_combo.currentIndexChanged.connect(self._on_mod_type)
+        lay.addWidget(self._mod_combo)
 
         # ── Moteur + durée ────────────────────────────────────────────────────
         row = QHBoxLayout()
@@ -256,6 +286,18 @@ class TabModifyLive(QScrollArea):
         st = vj.get_style(key)
         if st:
             self._prompt.setPlainText(st["prompt"])
+
+    def _on_mod_type(self, _idx: int):
+        """Insère un modèle « Type de modification » (Retake…) dans le prompt."""
+        key = self._mod_combo.currentData()
+        if key:
+            tpl = translate(_MOD_TEMPLATES.get(key, ""))
+            if tpl:
+                self._prompt.setPlainText(tpl)
+        # Revenir au libellé « Insérer un modèle… » sans re-déclencher.
+        self._mod_combo.blockSignals(True)
+        self._mod_combo.setCurrentIndex(0)
+        self._mod_combo.blockSignals(False)
 
     # ── Génération ──────────────────────────────────────────────────────────
 
