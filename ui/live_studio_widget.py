@@ -30,6 +30,9 @@ from ui.tab_modify_live import TabModifyLive
 from ui.tab_sound_design_live import TabSoundDesignLive
 from ui.tab_upscale_live import TabUpscaleLive
 from ui.tab_t2v_live import TabT2V as FromSequencesTabLive
+# Onglets génériques réutilisés tels quels (portés du Studio IA Cinéma) :
+from ui.tab_music import TabMusic
+from ui.tab_image import TabImage
 
 
 # ── Onglet « Générer depuis Séquences » (placeholder) ──────────────────────────
@@ -132,6 +135,11 @@ class LiveStudioWidget(QWidget):
         # 5. Sound Design (Live) — Mirelo SFX (texte→audio + vidéo→bande-son synchro)
         self.tab_sound = TabSoundDesignLive()
 
+        # 5b/5c. Musique IA + Image IA (portés du Cinéma — onglets génériques) :
+        #   Musique IA sonorise un set ; Image IA crée des visuels VJ.
+        self.tab_music = TabMusic()
+        self.tab_image = TabImage()
+
         # 6. Upscaling (Live) — Topaz / SeedVR2, en lot depuis la Vidéothèque
         self.tab_upscale = TabUpscaleLive()
         self.tab_upscale.set_library_provider(self.tab_library.list_all_clips)
@@ -145,7 +153,7 @@ class LiveStudioWidget(QWidget):
         # le fond remplit les côtés. La Vidéothèque et l'Historique (galeries /
         # listes) gardent la pleine largeur.
         for _t in (self.tab_sequences, self.tab_engines, self.tab_modify,
-                   self.tab_sound, self.tab_upscale):
+                   self.tab_sound, self.tab_music, self.tab_upscale):
             self._clamp_content_width(_t)
 
         # Ordre validé : Séquences d'abord (le cœur du workflow), puis production.
@@ -153,6 +161,8 @@ class LiveStudioWidget(QWidget):
         self.tabs.addTab(self.tab_engines,   translate("Génération directe"))
         self.tabs.addTab(self.tab_modify,    translate("Modifier des clips"))
         self.tabs.addTab(self.tab_sound,     translate("Sound Design"))
+        self.tabs.addTab(self.tab_music,     translate("Musique IA"))
+        self.tabs.addTab(self.tab_image,     translate("Image IA"))
         self.tabs.addTab(self.tab_upscale,   translate("Upscaling"))
         self.tabs.addTab(self.tab_library,   translate("Vidéothèque"))
         self.tabs.addTab(self.tab_history,   translate("Historique"))

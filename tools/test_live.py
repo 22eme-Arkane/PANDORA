@@ -536,12 +536,14 @@ def t2v_live_anticrash_threads():
 
 @test
 def studio_onglets():
-    """7 onglets, Sound Design + Upscaling présents et câblés à la Vidéothèque."""
+    """9 onglets (+ Musique IA & Image IA portés du Cinéma), Sound Design + Upscaling
+    présents et câblés à la Vidéothèque."""
     from ui.live_studio_widget import LiveStudioWidget
     s = LiveStudioWidget()
     titres = [s.tabs.tabText(i) for i in range(s.tabs.count())]
-    assert len(titres) == 7, f"7 onglets attendus, {len(titres)} trouvés"
-    for attendu in ("Sound Design", "Upscaling", "Vidéothèque", "Historique"):
+    assert len(titres) == 9, f"9 onglets attendus, {len(titres)} trouvés"
+    for attendu in ("Sound Design", "Musique IA", "Image IA", "Upscaling",
+                    "Vidéothèque", "Historique"):
         assert any(attendu in x for x in titres), f"onglet {attendu} manquant"
     assert s.tab_upscale._library_provider is not None, "Upscaling relié à la Vidéothèque"
     # file d'attente upscaling : ajout + dédoublonnage
