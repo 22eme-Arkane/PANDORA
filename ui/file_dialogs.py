@@ -19,7 +19,8 @@ l'identique → AUCUN appelant à modifier.
 """
 import os
 
-from PyQt6.QtWidgets import QFileDialog, QFileIconProvider, QListView, QTreeView
+from PyQt6.QtWidgets import (QFileDialog, QFileIconProvider, QListView, QTreeView,
+                             QDialogButtonBox)
 from PyQt6.QtCore import QFileInfo, QSize, Qt, QObject, QEvent
 from PyQt6.QtGui import QIcon, QPixmap, QKeySequence, QGuiApplication
 
@@ -112,6 +113,35 @@ def _set_location(dlg: QFileDialog, directory: str):
         dlg.selectFile(directory)
 
 
+def _style_dialog_buttons(dlg: QFileDialog):
+    """Rend les boutons Ouvrir / Enregistrer / Annuler LISIBLES sur fond sombre.
+    Le dialogue non-natif hérite d'un style peu contrasté → retour bêta-test
+    Pierre : le bouton « Ouvrir » (au-dessus d'« Annuler ») paraissait invisible.
+    Le bouton d'acceptation passe en accent plein ; les autres en contour lisible."""
+    try:
+        from ui.styles import CP
+    except Exception:
+        return
+    accept_ss = (
+        f"QPushButton{{background:{CP['accent']};color:#07080f;border:none;"
+        f"border-radius:7px;font-size:12px;font-weight:700;padding:6px 20px;min-width:96px;}}"
+        f"QPushButton:hover{{background:{CP.get('accent_dim', CP['accent'])};color:#fff;}}"
+        f"QPushButton:disabled{{background:{CP['bg3']};color:{CP.get('text_dim', '#6f7290')};}}"
+    )
+    other_ss = (
+        f"QPushButton{{background:transparent;color:{CP['text_secondary']};"
+        f"border:1px solid {CP['border']};border-radius:7px;font-size:12px;"
+        f"font-weight:600;padding:6px 18px;min-width:88px;}}"
+        f"QPushButton:hover{{background:{CP['bg3']};color:{CP['text_primary']};}}"
+    )
+    for bb in dlg.findChildren(QDialogButtonBox):
+        for b in bb.buttons():
+            if bb.buttonRole(b) == QDialogButtonBox.ButtonRole.AcceptRole:
+                b.setStyleSheet(accept_ss)   # Ouvrir / Enregistrer
+            else:
+                b.setStyleSheet(other_ss)     # Annuler (et autres)
+
+
 def apply_thumbnails(dlg: QFileDialog) -> QFileDialog:
     """Configure un QFileDialog : non-natif + vignettes d'images + iconSize agrandi
     sur les vues internes (liste + détail)."""
@@ -121,6 +151,7 @@ def apply_thumbnails(dlg: QFileDialog) -> QFileDialog:
         lv.setIconSize(_THUMB)
     for tv in dlg.findChildren(QTreeView):
         tv.setIconSize(_THUMB_ROW)
+    _style_dialog_buttons(dlg)   # P4 — boutons Ouvrir/Annuler lisibles (fond sombre)
     # Coller un chemin (Ctrl+V) pour y naviguer — pallie l'absence de barre
     # d'adresse éditable du dialogue non-natif (retour Pierre).
     dlg.installEventFilter(_PathPasteFilter(dlg))

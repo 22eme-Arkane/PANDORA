@@ -2771,6 +2771,14 @@ def file_dialog_vignettes_images():
     assert dlg.iconProvider() is FD._shared_provider(), "icon provider non posé"
     sizes = [lv.iconSize().width() for lv in dlg.findChildren(QListView)]
     assert sizes and max(sizes) >= 48, ("iconSize non agrandi", sizes)
+    # P4 — boutons Ouvrir/Annuler stylés pour la lisibilité sur fond sombre (retour Pierre)
+    from PyQt6.QtWidgets import QDialogButtonBox
+    assert hasattr(FD, "_style_dialog_buttons"), "helper de style des boutons absent"
+    _accept_styled = any(
+        bb.buttonRole(b) == QDialogButtonBox.ButtonRole.AcceptRole and b.styleSheet()
+        for bb in dlg.findChildren(QDialogButtonBox) for b in bb.buttons()
+    )
+    assert _accept_styled, "bouton Ouvrir non stylé (P4 lisibilité)"
     dlg.deleteLater()
     # 3) install remplace bien les 3 statics (sans les exécuter — source)
     src = inspect.getsource(FD.install_thumbnail_file_dialogs)
