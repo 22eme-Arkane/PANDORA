@@ -2055,8 +2055,10 @@ def panneau_scenario_aligne_jusqu_au_bord():
     et les descriptions passent à la ligne (word-wrap) au lieu d'être tronquées."""
     import inspect
     src = inspect.getsource(__import__("ui.page_scenario", fromlist=["_"]))
-    # Cartes jusqu'au bord : conteneur de section sans marge horizontale.
-    assert "lay.setContentsMargins(0, 8, 0, 8)" in src, "sections non alignées au bord"
+    # Cartes jusqu'au bord : conteneur de section sans marge HORIZONTALE (0 …, 0 …).
+    # Marges verticales resserrées à 4 (retour Matthieu : trop d'espace) — l'alignement
+    # au bord (horizontal = 0) reste l'invariant.
+    assert "lay.setContentsMargins(0, 4, 0, 4)" in src, "sections non alignées au bord"
     assert "b_lay.setContentsMargins(0, 8, 0, 12)" in src, "zone basse non alignée"
     assert "ga_lay.setContentsMargins(0, 10, 0, 12)" in src, "« Tout générer » non aligné"
     # Descriptions sur 2 lignes + hauteur de bouton suffisante.

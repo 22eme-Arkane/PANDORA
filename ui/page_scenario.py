@@ -654,8 +654,10 @@ class PageScenario(QWidget):
             lay = QVBoxLayout(c)
             # Marges horizontales à 0 : les cartes vont jusqu'au bord, alignées
             # sur les en-têtes de section pleine largeur (pas de retrait de 16 px).
-            lay.setContentsMargins(0, 8, 0, 8)
-            lay.setSpacing(6)
+            # Marges verticales resserrées (retour Matthieu : trop d'espace entre
+            # l'ajout de morceau, l'analyse et les en-têtes de section).
+            lay.setContentsMargins(0, 4, 0, 4)
+            lay.setSpacing(4)
             return c, lay
 
         # ══════════════════════════════════════════════════════════════════════
@@ -681,7 +683,7 @@ class PageScenario(QWidget):
         c_refs, l_refs = _section_container()
 
         _refs_scroll = QScrollArea()
-        _refs_scroll.setFixedHeight(76)
+        _refs_scroll.setFixedHeight(68)
         _refs_scroll.setWidgetResizable(True)
         _refs_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
         _refs_scroll.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
@@ -694,7 +696,7 @@ class PageScenario(QWidget):
         self._refs_container_w = QWidget()
         self._refs_container_w.setStyleSheet(f"background:{CP['bg2']};border-radius:8px;")
         self._refs_hbox = QHBoxLayout(self._refs_container_w)
-        self._refs_hbox.setContentsMargins(8, 8, 8, 8)
+        self._refs_hbox.setContentsMargins(8, 4, 8, 4)
         self._refs_hbox.setSpacing(8)
         _refs_scroll.setWidget(self._refs_container_w)
         l_refs.addWidget(_refs_scroll)
@@ -719,7 +721,7 @@ class PageScenario(QWidget):
         c_music, l_music = _section_container()
 
         _music_scroll = QScrollArea()
-        _music_scroll.setFixedHeight(76)
+        _music_scroll.setFixedHeight(68)
         _music_scroll.setWidgetResizable(True)
         _music_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
         _music_scroll.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
@@ -732,7 +734,7 @@ class PageScenario(QWidget):
         self._music_container_w = QWidget()
         self._music_container_w.setStyleSheet(f"background:{CP['bg2']};border-radius:8px;")
         self._music_hbox = QHBoxLayout(self._music_container_w)
-        self._music_hbox.setContentsMargins(8, 8, 8, 8)
+        self._music_hbox.setContentsMargins(8, 4, 8, 4)
         self._music_hbox.setSpacing(8)
         _music_scroll.setWidget(self._music_container_w)
         l_music.addWidget(_music_scroll)
