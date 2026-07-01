@@ -48,6 +48,11 @@ _INBOX = os.path.join(os.environ.get("TEMP", tempfile.gettempdir()), "pandora_cl
 # référence. Structure « reprends tout de @Video1, ne change QUE X » → cible la
 # modification sans tout régénérer. Texte FR traduit à l'affichage (i18n) et à l'envoi.
 _MOD_TEMPLATES = {
+    "retake": ("Reprends exactement @Video1 à l'identique — mêmes personnages, "
+               "mouvements, cadrage, décor, lumière et étalonnage. Corrige UNIQUEMENT "
+               "le défaut suivant : [décris précisément la zone et le problème — ex. "
+               "main déformée, doigt en trop, œil raté, artefact en haut à droite]. "
+               "Ne change RIEN d'autre : c'est une reprise ciblée (retake) du même plan."),
     "bg": ("Reprends exactement @Video1 — mêmes personnages, mouvements, cadrage et "
            "lumière sur les sujets. Remplace UNIQUEMENT le décor / l'arrière-plan par "
            "celui de @Image1. Garde la même intégration lumineuse et les mêmes ombres "
@@ -795,6 +800,7 @@ class TabDavinciEdit(QScrollArea):
             f"color:{C['text_secondary']};font-size:11px;background:transparent;border:none;")
         self._mod_combo = QComboBox()
         self._mod_combo.addItem(translate("✎ Insérer un modèle…"), "")
+        self._mod_combo.addItem(translate("Corriger un défaut précis (Retake)"), "retake")
         self._mod_combo.addItem(translate("Changer le décor (arrière-plan)"), "bg")
         self._mod_combo.addItem(translate("Changer un visage"), "face")
         self._mod_combo.addItem(translate("Changer l'étalonnage (couleurs)"), "grade")

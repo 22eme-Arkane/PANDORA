@@ -265,6 +265,20 @@ def pitch_deck_export_l2():
 
 
 @test
+def retake_cible_l4():
+    """L4 — reprise ciblée « Retake » : modèle de prompt dédié dans « Modifier un
+    clip » (reprend @Video1 à l'identique, corrige UNIQUEMENT le défaut décrit) +
+    option dans le sélecteur « Type de modification »."""
+    import ui.tab_davinci_edit as M
+    assert "retake" in M._MOD_TEMPLATES, "modèle Retake absent de _MOD_TEMPLATES"
+    tpl = M._MOD_TEMPLATES["retake"]
+    assert "@Video1" in tpl and "UNIQUEMENT" in tpl, \
+        "Retake : reprend @Video1 + corrige seulement le défaut"
+    assert '"retake"' in inspect.getsource(M.TabDavinciEdit._build_ui), \
+        "option Retake absente du sélecteur « Type de modification »"
+
+
+@test
 def studio_sound_design_upscaling():
     """Studio IA Cinéma : onglets Sound Design + Upscaling (portés du Live) —
     ordre après Génération directe, Vidéothèque branchée, AUCUN import Live."""
