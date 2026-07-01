@@ -67,6 +67,10 @@ EXPECTED_ONLY_LIVE = {
     },
     "ui/page_storyboard_live.py": {
         "_visible_order", "_load_conductor_tracks", "_on_music_align",
+        # P2 « fusion » : côté Cinéma la fenêtre « Garder/Séparer » vit dans le
+        # dialogue dédié (StoryboardGenerateDialog) ; côté Live la génération est
+        # inline dans la page → l'ask est une méthode de page (Live uniquement).
+        "_ask_merge_decision",
     },
 }
 EXPECTED_ONLY_CINEMA = {
@@ -103,18 +107,13 @@ EXPECTED_ONLY_CINEMA = {
         "_reload_if_empty_editor",
     },
     "ui/page_storyboard_live.py": {
-        # Sauvegarder/Ouvrir le storyboard + Pitch deck : PORTÉS au Live le 2026-07-01
-        # (retour Matthieu « tout lancer ») → désormais présents des DEUX côtés.
-        # Clic droit sur un plan → Dupliquer (copie le plan + sa mise en scène) —
-        # Cinéma only pour l'instant (reportable au Live si besoin).
-        "_on_duplicate", "contextMenuEvent",
-        # Plans RÉCURRENTS : libellé couleur esthétique (_set_label) + FLAG récurrent
-        # (_set_recurrent) via clic droit + analyse IA (_on_detect_recurrent) —
-        # feature Cinéma ; reportable au Live.
-        "_set_label", "_set_recurrent",
+        # PORTÉS au Live le 2026-07-01 (« tout lancer ») → désormais des DEUX côtés :
+        # Sauvegarder/Ouvrir storyboard + Pitch deck ; clic droit Dupliquer +
+        # Libellé couleur (contextMenuEvent, _on_duplicate, _set_label).
+        # RESTENT Cinéma-only (validé : « plans récurrents » sans objet en live) :
+        # FLAG récurrent + analyse IA récurrence + helper de contraste texte.
+        "_set_recurrent",
         "_on_detect_recurrent", "_on_recurrent_done", "_on_recurrent_fail",
-        # Libellé couleur ESTHÉTIQUE en fond de la cellule Séquence (helper de
-        # contraste texte) — feature Cinéma ; reportable au Live si besoin.
         "_contrast_text",
     },
     "ui/dialog_contact_live.py": {

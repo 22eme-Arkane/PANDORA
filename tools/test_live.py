@@ -274,6 +274,17 @@ def storyboard_boutons_portes_du_cinema():
     from ui.page_live_settings import PageLiveSettings
     ps = PageLiveSettings()
     assert hasattr(ps, "_btn_second_window") and hasattr(ps, "_open_second_window")
+    # Clic droit storyboard : Dupliquer + Libellé couleur (pas de « récurrent » en live)
+    assert hasattr(M._ShotRow, "contextMenuEvent") and hasattr(M._ShotRow, "_set_label")
+    assert hasattr(M._ShotRow, "duplicate_requested")
+    assert hasattr(M.PageStoryboard, "_on_duplicate"), "handler Dupliquer manquant"
+    csrc = inspect.getsource(M._ShotRow.contextMenuEvent)
+    assert "Dupliquer" in csrc and "Libellé couleur" in csrc
+    assert "_set_recurrent" not in csrc, "pas de « plan récurrent » en live (sans objet)"
+    # P2 fusion déclarée côté Live (dialogue + relance stricte)
+    assert hasattr(M.PageStoryboard, "_ask_merge_decision")
+    gsrc = inspect.getsource(M.PageStoryboard._on_shots_generated)
+    assert "strict_no_merge=True" in gsrc and 'pop("merged"' in gsrc
 
 
 @test

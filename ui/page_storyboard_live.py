@@ -597,10 +597,11 @@ class _WrapLabel(QLabel):
 # ── Ligne de plan ─────────────────────────────────────────────────────────────
 
 class _ShotRow(QFrame):
-    edit_requested   = pyqtSignal(dict)
-    delete_requested = pyqtSignal(str)
-    changed          = pyqtSignal()
-    sound_requested  = pyqtSignal(str, float)   # (sound_prompt, durée) → Sound Design
+    edit_requested      = pyqtSignal(dict)
+    delete_requested    = pyqtSignal(str)
+    duplicate_requested = pyqtSignal(str)       # (porté du Cinéma) clic droit → Dupliquer
+    changed             = pyqtSignal()
+    sound_requested     = pyqtSignal(str, float)   # (sound_prompt, durée) → Sound Design
 
     _MIN_H = 72
 
@@ -640,6 +641,40 @@ class _ShotRow(QFrame):
         from PyQt6.QtCore import QSize
         return QSize(max(self.minimumWidth(), 100), self._content_height())
 
+    def contextMenuEvent(self, e):
+        """Clic droit sur un plan : Éditer · Dupliquer · Libellé couleur · Supprimer
+        (porté du Cinéma ; pas de « plan récurrent » — sans objet en live)."""
+        menu = QMenu(self)
+        menu.setStyleSheet(
+            f"QMenu{{background:{CP['bg2']};border:1px solid {CP['border_bright']};"
+            f"border-radius:8px;padding:4px 0;}}"
+            f"QMenu::item{{color:{CP['text_primary']};padding:7px 18px;font-size:11px;}}"
+            f"QMenu::item:selected{{background:{CP['accent_dim']};color:{CP['text_primary']};}}")
+        menu.addAction(translate("Éditer"), lambda: self.edit_requested.emit(self._data))
+        menu.addAction(translate("Dupliquer le plan"),
+                       lambda: self.duplicate_requested.emit(self._data.get("id", "")))
+        import core.storyboard as _sb
+        from PyQt6.QtGui import QIcon, QColor
+        sub = menu.addMenu(translate("Libellé couleur"))
+        sub.setStyleSheet(menu.styleSheet())
+        for cname, chex in _sb.LABEL_COLORS:
+            _pm = QPixmap(12, 12)
+            _pm.fill(QColor(chex))
+            a = sub.addAction(QIcon(_pm), translate(cname))
+            a.triggered.connect(lambda _=False, c=chex: self._set_label(c))
+        sub.addSeparator()
+        sub.addAction(translate("Aucun libellé"), lambda: self._set_label(""))
+        menu.addSeparator()
+        menu.addAction(translate("Supprimer"),
+                       lambda: self.delete_requested.emit(self._data.get("id", "")))
+        menu.exec(e.globalPos())
+
+    def _set_label(self, color: str):
+        """Libellé couleur ESTHÉTIQUE (bande gauche) — clic droit → Libellé couleur."""
+        import core.storyboard as sb
+        sb.set_label(self._data.get("id", ""), color, "")
+        self.changed.emit()
+
     def __init__(self, data: dict, decors_cache: dict | None = None,
                  start_tc: str = "", avail_tracks: list | None = None):
         super().__init__()
@@ -655,8 +690,11 @@ class _ShotRow(QFrame):
             pal_idx = 0
         row_bg, seq_bg, seq_color = _SEQ_PALETTE[pal_idx]
 
+        # Libellé couleur ESTHÉTIQUE (porté du Cinéma) : bande à gauche de la ligne.
+        _lc = (data.get("label_color") or "").strip()
+        _left = f"border-left:4px solid {_lc};" if _lc else ""
         self.setStyleSheet(
-            f"QFrame{{background:{row_bg};border:none;border-top:1px solid {CP['border']};}}"
+            f"QFrame{{background:{row_bg};border:none;border-top:1px solid {CP['border']};{_left}}}"
         )
 
         outer = QHBoxLayout(self)
@@ -2889,6 +2927,7 @@ class PageStoryboard(QWidget):
                 _cum += 5.0
             row.edit_requested.connect(self._on_edit)
             row.delete_requested.connect(self._on_delete)
+            row.duplicate_requested.connect(self._on_duplicate)
             row.changed.connect(self.refresh)
             row.sound_requested.connect(self.sound_to_studio)
             self._shot_rows[shot["id"]] = row
@@ -2935,6 +2974,23 @@ class PageStoryboard(QWidget):
         if reply == QMessageBox.StandardButton.Yes:
             sb_api.delete_shot(shot_id)
             self.refresh()
+
+    def _on_duplicate(self, shot_id: str):
+        """Duplique un plan (clic droit → Dupliquer) — porté du Cinéma : copie le
+        plan + sa mise en scène / plan de feu, insérée juste après l'original."""
+        if not shot_id:
+            return
+        dup = sb_api.duplicate_shot(shot_id)
+        if not dup:
+            return
+        try:
+            import core.staging as _stg, copy as _copy
+            rec = _stg.get(shot_id)
+            if rec:
+                _stg.save(dup["id"], _copy.deepcopy(rec))
+        except Exception:
+            pass
+        self.refresh()
 
     def _on_shot_dropped(self, shot_id: str, target_index: int):
         """Reorders shots after a drag-and-drop: moves shot_id to target_index."""
@@ -2987,6 +3043,9 @@ class PageStoryboard(QWidget):
         from api.screenplay import GenerateStoryboardWorker
         self._btn_analyze.setEnabled(False)
         self._ai_lbl.setText("Génération du découpage via Claude…")
+        # P2 — mémorise le texte pour une éventuelle relance « Séparer » (sans fusion).
+        self._gen_text = text
+        self._strict_retry = False
         self._worker = GenerateStoryboardWorker(text)
         sc_id = sc.get("id", "")
         self._worker.finished.connect(lambda shots: self._on_shots_generated(shots, sc_id))
@@ -3102,6 +3161,21 @@ class PageStoryboard(QWidget):
     def _on_shots_generated(self, shots: list, sc_id: str):
         if hasattr(self, "_analysis_dlg") and self._analysis_dlg:
             self._analysis_dlg.accept()
+        # P2 — l'IA a-t-elle fusionné des plans ? Ne jamais fusionner en silence :
+        # on le signale et l'utilisateur décide (« Garder fusionné / Séparer »).
+        merged = [s for s in shots if s.get("merged")]
+        if merged and not getattr(self, "_strict_retry", False):
+            if self._ask_merge_decision(merged, len(shots)):
+                self._strict_retry = True
+                from api.screenplay import GenerateStoryboardWorker
+                self._ai_lbl.setText(translate("Séparation des plans en cours…"))
+                self._worker = GenerateStoryboardWorker(
+                    getattr(self, "_gen_text", ""), strict_no_merge=True)
+                self._worker.finished.connect(
+                    lambda sh, _s=sc_id: self._on_shots_generated(sh, _s))
+                self._worker.failed.connect(self._on_ai_fail)
+                self._worker.start()
+                return
         self._btn_analyze.setEnabled(True)
         decors = dec_api.list_decors()
         decor_by_name = {d["name"].strip().lower(): d["id"] for d in decors}
@@ -3110,9 +3184,38 @@ class PageStoryboard(QWidget):
             shot["version_id"]  = self._active_version_id
             if shot.get("decor_name") and not shot.get("decor_id"):
                 shot["decor_id"] = decor_by_name.get(shot["decor_name"].strip().lower(), "")
+            shot.pop("merged", None)          # champs de travail P2 (non persistés)
+            shot.pop("merged_note", None)
             sb_api.save_shot(shot)
         self._ai_lbl.setText(f"{len(shots)} {translate('plans importés ✓')}")
         self.refresh()
+
+    def _ask_merge_decision(self, merged: list, total: int) -> bool:
+        """P2 (porté du Cinéma) — prévient que l'IA a fusionné des plans. True si
+        l'utilisateur veut SÉPARER (relance sans fusion), False pour garder."""
+        n = len(merged)
+        details = "\n".join(
+            f"  • {translate('Plan')} {s.get('number', '?')} : "
+            f"{s.get('merged_note', '') or s.get('scene_title', '')}"
+            for s in merged[:6]
+        )
+        if n > 6:
+            details += f"\n  … (+{n - 6})"
+        box = QMessageBox(self)
+        box.setWindowTitle(translate("Plans fusionnés"))
+        box.setIcon(QMessageBox.Icon.Question)
+        _lead   = translate("L'IA a regroupé plusieurs moments du scénario en")
+        _mrg    = translate("plan(s) fusionné(s)")
+        _tot    = translate("plans au total")
+        box.setText(f"{_lead} {n} {_mrg} ({total} {_tot}).\n\n" + details)
+        box.setInformativeText(translate(
+            "Voulez-vous garder ce découpage fusionné, ou séparer chaque moment en "
+            "plans distincts ?"))
+        btn_keep  = box.addButton(translate("Garder fusionné"), QMessageBox.ButtonRole.AcceptRole)
+        btn_split = box.addButton(translate("Séparer en plans distincts"), QMessageBox.ButtonRole.RejectRole)
+        box.setDefaultButton(btn_split)
+        box.exec()
+        return box.clickedButton() is btn_split
 
     def _on_ai_fail(self, err: str):
         if hasattr(self, "_analysis_dlg") and self._analysis_dlg:
