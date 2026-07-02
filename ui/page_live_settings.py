@@ -349,18 +349,13 @@ class PageLiveSettings(QWidget):
         self._ai_combo.currentIndexChanged.connect(_on_ai_changed)
         self._on_ai_changed = _on_ai_changed
 
-        # Harmonisé avec Cinéma (retour 2026-06-13) : « Sauvegarder », pleine largeur
-        btn_save = QPushButton("Sauvegarder")
-        btn_save.setMinimumHeight(42)
-        btn_save.setCursor(Qt.CursorShape.PointingHandCursor)
-        btn_save.setStyleSheet(
-            f"QPushButton{{background:{CP['accent']};color:#07080f;border:none;"
-            f"border-radius:9px;font-size:13px;font-weight:800;letter-spacing:0.5px;}}"
-            f"QPushButton:hover{{background:#6eded6;}}"
-            f"QPushButton:pressed{{background:{CP['accent_dim']};color:#fff;}}"
+        # ── Sauvegarde AUTOMATIQUE (plus de bouton — tout changement est
+        #    enregistré, comme le Cinéma) ───────────────────────────────────────
+        self._autosave_lbl = QLabel("✓  Sauvegarde automatique — chaque modification est enregistrée.")
+        self._autosave_lbl.setStyleSheet(
+            f"color:{CP['text_dim']};font-size:11px;font-style:italic;background:transparent;"
         )
-        btn_save.clicked.connect(self._save_api_key)
-        ac.addWidget(btn_save)
+        ac.addWidget(self._autosave_lbl)
 
         lay.addWidget(api_card)
         lay.addStretch()
@@ -368,6 +363,19 @@ class PageLiveSettings(QWidget):
         root.addWidget(content, 1)
 
         self._load_settings()
+        # Branché APRÈS le chargement : les setText de _load_settings ne
+        # déclenchent pas de re-sauvegarde des valeurs fraîchement lues.
+        self._wire_autosave()
+
+    def _wire_autosave(self):
+        """Sauvegarde automatique : tout changement de champ persiste aussitôt (parité Cinéma)."""
+        self._ai_combo.currentIndexChanged.connect(self._save_api_key)
+        for w in (self._api_key_input, self._anthropic_input, self._mistral_input,
+                  self._ollama_url_input, self._ollama_model_input,
+                  self._kimi_input, self._kimi_url_input, self._kimi_model_input,
+                  self._host_input):
+            w.textChanged.connect(self._save_api_key)
+        self._port_spin.valueChanged.connect(self._save_api_key)
 
     def _open_second_window(self):
         """Demande à la fenêtre Live parente d'ouvrir une 2ᵉ fenêtre (2 écrans)."""
@@ -426,10 +434,9 @@ class PageLiveSettings(QWidget):
         save_config(cfg)
         from core.ai_provider import refresh_name_cache
         refresh_name_cache()   # le nom de l'assistant change → libellés au prochain démarrage
-        self._test_lbl.setText("✓  Paramètres enregistrés.")
-        self._test_lbl.setStyleSheet(
-            f"color:{CP['accent']};font-size:11px;background:transparent;border:none;"
-        )
+        # Sauvegarde automatique : retour discret (pas de pop-up à chaque frappe)
+        if hasattr(self, "_autosave_lbl"):
+            self._autosave_lbl.setText("✓  Enregistré automatiquement.")
 
     def _test_connection(self):
         host = self._host_input.text().strip() or "localhost"

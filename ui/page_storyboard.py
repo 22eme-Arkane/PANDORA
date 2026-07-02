@@ -2862,8 +2862,9 @@ class PageStoryboard(QWidget):
         total_dur = sum(float(s.get("duration", 5.0)) for s in self._all_shots)
         mins = int(total_dur) // 60
         secs = int(total_dur) % 60
+        _n = len(self._all_shots)
         self._dur_lbl.setText(
-            f"{len(self._all_shots)} plans  ·  {total_dur:.1f}s total"
+            f"{_n} plan{'s' if _n > 1 else ''}  ·  {total_dur:.1f}s total"
             + (f"  ·  ≈{mins}m{secs:02d}s" if mins else "")
         )
 

@@ -2162,11 +2162,13 @@ class PageStoryboard(QWidget):
         _hl = QVBoxLayout(_hw)
         _hl.setContentsMargins(20, 8, 20, 4)
         _hl.setSpacing(0)
-        _hl.addWidget(HelpBlock("Storyboard — Découpage plan par plan", [
-            "▸ Chaque ligne représente un plan : numéro, mouvement caméra, valeur, focale, vitesse, décor, acteurs.",
+        # Wording Live : la page s'appelle « Séquences » (pas « Storyboard ») et
+        # les colonnes n'ont ni décor ni mouvement caméra (masqués en Live).
+        _hl.addWidget(HelpBlock("Séquences — Découpage plan par plan", [
+            "▸ Chaque ligne représente un plan : numéro, TC, prompt vidéo/son, musique, BPM, durée, acteurs.",
             "▸ Cliquez sur une cellule pour modifier en ligne, ou sur Éditer pour ouvrir la fiche complète du plan.",
             "▸ Glissez-déposez les plans (⠿) pour réorganiser le découpage.",
-            "▸ Mood IA : générez automatiquement le prompt Seedance de chaque plan depuis la description de la scène.",
+            "▸ Mood IA : générez automatiquement le prompt Seedance de chaque plan depuis la description de la séquence.",
             "▸ Bouton Générer (▶) sur chaque plan : envoie directement le plan vers Seedance 2.0 pour la génération.",
             "▸ Versions : gérez plusieurs versions du découpage (découpage final, alternatives, montage court…).",
         ], CP))
@@ -2912,8 +2914,9 @@ class PageStoryboard(QWidget):
         total_dur = sum(float(s.get("duration", 5.0)) for s in self._all_shots)
         mins = int(total_dur) // 60
         secs = int(total_dur) % 60
+        _n = len(self._all_shots)
         self._dur_lbl.setText(
-            f"{len(self._all_shots)} plans  ·  {total_dur:.1f}s total"
+            f"{_n} plan{'s' if _n > 1 else ''}  ·  {total_dur:.1f}s total"
             + (f"  ·  ≈{mins}m{secs:02d}s" if mins else "")
         )
 

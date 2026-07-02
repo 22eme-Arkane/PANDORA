@@ -323,64 +323,11 @@ class PageScenario(QWidget):
         self._title_edit.textChanged.connect(self._adjust_title_width)
         tl.addWidget(self._title_edit)
 
-        # ── Versions (top bar, juste à droite du titre) ───────────────────────
-        _ver_sep = QFrame()
-        _ver_sep.setFixedSize(1, 24)
-        _ver_sep.setStyleSheet(f"background:{CP['border']};")
-        tl.addWidget(_ver_sep)
-
-        self._version_combo = QComboBox()
-        self._version_combo.setFixedHeight(30)
-        self._version_combo.setMinimumWidth(150)
-        self._version_combo.setMaximumWidth(200)
-        self._version_combo.setPlaceholderText("Versions…")
-        self._version_combo.setStyleSheet(
-            f"QComboBox{{background:{CP['bg2']};border:1px solid {CP['border']};"
-            f"border-radius:6px;color:{CP['text_secondary']};font-size:10px;padding:0 8px;}}"
-            f"QComboBox:focus{{border-color:{CP['accent2_dim']};}}"
-            f"QComboBox::drop-down{{border:none;width:16px;}}"
-            f"QComboBox::down-arrow{{image:none;border-left:4px solid transparent;"
-            f"border-right:4px solid transparent;border-top:5px solid {CP['text_dim']};"
-            f"margin-right:4px;}}"
-            f"QComboBox QAbstractItemView{{background:{CP['bg2']};border:1px solid {CP['border_bright']};"
-            f"selection-background-color:{CP['accent2_dim']};color:{CP['text_primary']};"
-            f"font-size:10px;padding:4px;}}"
-        )
-        self._version_combo.currentIndexChanged.connect(self._on_version_selected)
-        self._version_combo.activated.connect(self._on_version_activated)
-        tl.addWidget(self._version_combo)
-
-        _ver_btn_ss = (
-            f"QPushButton{{background:transparent;color:{CP['text_dim']};"
-            f"border:1px solid {CP['border']};border-radius:6px;"
-            f"font-size:11px;font-weight:700;padding:0 8px;}}"
-            f"QPushButton:hover:enabled{{background:{CP['bg2']};color:{CP['text_primary']};"
-            f"border-color:{CP['border_bright']};}}"
-            f"QPushButton:disabled{{color:{CP['bg3']};border-color:{CP['bg3']};}}"
-        )
-        self._btn_save_version = QPushButton("✚")
-        self._btn_save_version.setFixedSize(30, 30)
-        self._btn_save_version.setToolTip("Sauvegarder une version")
-        self._btn_save_version.setStyleSheet(_ver_btn_ss)
-        self._btn_save_version.clicked.connect(self._save_version)
-        tl.addWidget(self._btn_save_version)
-
-        # ⤓ button removed — selecting from the combo now loads the version directly
-
-        self._btn_del_version = QPushButton("✕")
-        self._btn_del_version.setFixedSize(30, 30)
-        self._btn_del_version.setToolTip("Supprimer la version sélectionnée")
-        self._btn_del_version.setEnabled(False)
-        self._btn_del_version.setStyleSheet(
-            _ver_btn_ss
-            + f"QPushButton:hover:enabled{{color:{CP['red']};border-color:{CP['red']};"
-            f"background:rgba(255,79,106,0.1);}}"
-        )
-        self._btn_del_version.clicked.connect(self._delete_version)
-        tl.addWidget(self._btn_del_version)
+        # Contrôles « Versions » (combo + ✚ + ✕) REMPLACÉS par Sauvegarder/Ouvrir,
+        # comme le Cinéma (les méthodes de versions restent, gardées par hasattr).
 
         # ── Sauvegarder / Ouvrir le conducteur (fichiers, dossier Scénario) — porté
-        #    du Cinéma : après les versions, séparé par une barre verticale. ──────
+        #    du Cinéma : juste après le titre, séparé par une barre verticale. ─────
         _scn_sep = QFrame()
         _scn_sep.setFixedSize(1, 24)
         _scn_sep.setStyleSheet(f"background:{CP['border']};")
@@ -3625,6 +3572,9 @@ class PageScenario(QWidget):
     # ── Versions ──────────────────────────────────────────────────────────────
 
     def _refresh_version_combo(self):
+        # Contrôles « Versions » remplacés par Sauvegarder/Ouvrir — no-op si absents.
+        if not hasattr(self, "_version_combo"):
+            return
         self._version_combo.blockSignals(True)
         self._version_combo.clear()
         versions = (self._current or {}).get("versions", [])

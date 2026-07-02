@@ -1976,6 +1976,8 @@ _FR_TO_EN: dict[str, str] = {
         "Screenplay — Editor and Claude AI assistant",
     "Storyboard — Découpage plan par plan":
         "Storyboard — Shot-by-shot breakdown",
+    "Séquences — Découpage plan par plan":
+        "Sequences — Shot-by-shot breakdown",
     "Castings — Personnages du film":
         "Cast — Film characters",
     "Décors — Lieux de tournage":
@@ -2018,12 +2020,16 @@ _FR_TO_EN: dict[str, str] = {
     # ── HelpBlock — page Storyboard ───────────────────────────────────────────
     "▸ Chaque ligne représente un plan : numéro, mouvement caméra, valeur, focale, vitesse, décor, acteurs.":
         "▸ Each row represents a shot: number, camera movement, size, focal, speed, location, actors.",
+    "▸ Chaque ligne représente un plan : numéro, TC, prompt vidéo/son, musique, BPM, durée, acteurs.":
+        "▸ Each row represents a shot: number, TC, video/sound prompt, music, BPM, duration, actors.",
     "▸ Cliquez sur une cellule pour modifier en ligne, ou sur Éditer pour ouvrir la fiche complète du plan.":
         "▸ Click a cell to edit inline, or click Edit to open the full shot card.",
     "▸ Glissez-déposez les plans (⠿) pour réorganiser le découpage.":
         "▸ Drag and drop shots (⠿) to reorder the breakdown.",
     "▸ Mood IA : générez automatiquement le prompt Seedance de chaque plan depuis la description de la scène.":
         "▸ AI Mood: automatically generate the Seedance prompt for each shot from the scene description.",
+    "▸ Mood IA : générez automatiquement le prompt Seedance de chaque plan depuis la description de la séquence.":
+        "▸ AI Mood: automatically generate the Seedance prompt for each shot from the sequence description.",
     "▸ Bouton Générer (▶) sur chaque plan : envoie directement le plan vers Seedance 2.0 pour la génération.":
         "▸ Generate button (▶) on each shot: sends the shot directly to Seedance 2.0 for generation.",
     "▸ Versions : gérez plusieurs versions du découpage (découpage final, alternatives, montage court…).":
