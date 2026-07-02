@@ -1399,6 +1399,13 @@ _FR_TO_EN: dict[str, str] = {
         "Kimi URL (default: https://api.moonshot.ai/v1 — or local server /v1)",
     "Modèle Kimi (défaut : kimi-k2.7-code)":
         "Kimi model (default: kimi-k2.7-code)",
+    # ── Draw-to-Video : timeline de monteur (2026-07-02) ──────────────────────
+    "Timeline : cliquer = sauter, glisser = naviguer":
+        "Timeline: click to jump, drag to scrub",
+    "Flèches : ±1 image · Maj+flèches : ±1 s · molette : ±1 image":
+        "Arrows: ±1 frame · Shift+arrows: ±1 s · wheel: ±1 frame",
+    "Aperçu du trait":                  "Stroke preview",
+    "Taille":                           "Size",
     # ── GLM 4.7 (Zhipu) — moteur texte API ou local (2026-07-02) ──────────────
     "✓  Tester API GLM":                "✓  Test GLM API",
     "⇗  Obtenir une clé GLM":           "⇗  Get a GLM key",

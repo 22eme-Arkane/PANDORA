@@ -1,25 +1,37 @@
 """
 ui/dialog_draw_video.py — « Draw-to-Video » : dessiner sur une image du clip.
 
-L'utilisateur choisit un instant du clip (curseur), dessine des marques colorées
-(zones où appliquer un effet : feu, fumée…), puis valide. L'image annotée est
-renvoyée et utilisée comme RÉFÉRENCE pour la génération ; le prompt est préfixé
+L'utilisateur choisit un instant du clip sur une TIMELINE de monteur (playhead
+saisissable à la souris, clic n'importe où = saut direct, molette/flèches =
+±1 image, Maj+flèches = ±1 s), dessine des marques colorées (zones où
+appliquer un effet : feu, fumée…), puis valide. L'image annotée est renvoyée
+et utilisée comme RÉFÉRENCE/GUIDE pour la génération ; le prompt est préfixé
 d'une consigne demandant au moteur de remplacer les dessins par l'effet décrit.
 
-Approximation du « Draw-to-Video » (pas d'endpoint scribble natif sur fal/Seedance) :
-l'image annotée guide le moteur sur l'emplacement et la nature de l'effet.
+Réactivité du scrub : un worker QThread pré-extrait en tâche de fond un cache
+de vignettes basse résolution (~1 image/s, plafonné à 120, hauteur 360 px).
+Pendant le drag, la vignette la plus proche s'affiche INSTANTANÉMENT ; après
+un débounce de 150 ms (et au relâchement), la frame PLEINE résolution exacte
+est extraite pour dessiner dessus.
+
+Approximation du « Draw-to-Video » (pas d'endpoint scribble natif sur
+fal/Seedance) : l'image annotée guide le moteur sur l'emplacement et la nature
+de l'effet.
 """
 
 import os
 import time
+import hashlib
 import subprocess
 
 from PyQt6.QtWidgets import (
-    QDialog, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, QSlider, QSpinBox,
+    QDialog, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, QSpinBox,
     QWidget,
 )
-from PyQt6.QtCore import Qt, QPoint
-from PyQt6.QtGui import QImage, QPixmap, QPainter, QPen, QColor
+from PyQt6.QtCore import Qt, QPoint, QPointF, QRectF, QTimer, QThread, pyqtSignal
+from PyQt6.QtGui import (
+    QImage, QPixmap, QPainter, QPen, QColor, QCursor, QPolygonF,
+)
 
 from ui.styles import CP
 from core.i18n import translate
@@ -29,6 +41,16 @@ from core.video_utils import get_ffmpeg_exe, get_ffprobe_exe, _NO_WINDOW
 # Palette de dessin (couleurs vives = repères clairs pour le moteur)
 _COLORS = ["#ff3b30", "#ff9500", "#ffcc00", "#34c759", "#0a84ff", "#bf5af2", "#ffffff", "#000000"]
 _DISPLAY_W = 760   # largeur d'affichage/export de l'image annotée
+
+_THUMB_H = 360       # hauteur des vignettes du cache de scrub (basse résolution)
+_THUMB_MAX = 120     # plafond de vignettes pré-extraites (~1 image/s)
+_DEBOUNCE_MS = 150   # délai avant extraction de la frame pleine résolution
+
+
+def _rgba(hex_color: str, alpha: float) -> str:
+    """#rrggbb → chaîne CSS rgba() (JAMAIS de suffixe hex-opacity sur fond sombre)."""
+    h = hex_color.lstrip("#")
+    return f"rgba({int(h[0:2], 16)},{int(h[2:4], 16)},{int(h[4:6], 16)},{alpha})"
 
 
 def _probe_duration(path: str) -> float:
@@ -80,12 +102,340 @@ def _format_tc(frame: int, fps: float) -> str:
     return f"{hh:02d}:{mm:02d}:{ss:02d}:{ff:02d}"
 
 
+# ── Cache de vignettes (worker) ────────────────────────────────────────────────
+
+class _ThumbCacheWorker(QThread):
+    """Pré-extrait N vignettes basse résolution réparties sur la durée du clip.
+
+    Une seule passe ffmpeg (filtre fps) écrit les fichiers séquentiellement :
+    le fichier i est considéré complet dès que le fichier i+1 existe, ce qui
+    permet d'émettre les vignettes au fil de l'eau — la timeline devient
+    réactive sans attendre la fin du cache.
+
+    Signal de fin = `done` (JAMAIS `finished`, signal natif de QThread).
+    Jamais terminate() : le dialogue le parque via core.worker.abandon_thread
+    (blockSignals + requestInterruption + quit + référence anti-GC).
+    """
+
+    thumb_ready = pyqtSignal(int, str)   # (index de vignette, chemin du .jpg)
+    done = pyqtSignal()
+
+    def __init__(self, clip_path: str, duration: float, cache_dir: str, count: int):
+        super().__init__()
+        self._clip = clip_path
+        self._dur = max(0.001, float(duration))
+        self._dir = cache_dir
+        self._count = max(1, int(count))
+
+    def _path(self, i: int) -> str:
+        return os.path.join(self._dir, f"thumb_{i + 1:04d}.jpg")
+
+    def run(self):
+        try:
+            cmd = [get_ffmpeg_exe(), "-y", "-i", self._clip, "-an", "-sn",
+                   "-vf", f"fps={self._count}/{self._dur:.6f},scale=-2:{_THUMB_H}",
+                   "-frames:v", str(self._count), "-q:v", "5",
+                   os.path.join(self._dir, "thumb_%04d.jpg")]
+            proc = subprocess.Popen(cmd, stdout=subprocess.DEVNULL,
+                                    stderr=subprocess.DEVNULL, creationflags=_NO_WINDOW)
+        except Exception:
+            self.done.emit()
+            return
+        emitted = -1
+        try:
+            while True:
+                if self.isInterruptionRequested():
+                    try:
+                        proc.kill()
+                    except Exception:
+                        pass
+                    return
+                rc = proc.poll()
+                j = emitted + 1
+                # i complet quand i+1 existe (écriture séquentielle de ffmpeg)
+                while j < self._count and os.path.isfile(self._path(j + 1)):
+                    self.thumb_ready.emit(j, self._path(j))
+                    emitted = j
+                    j += 1
+                if rc is not None:
+                    break
+                self.msleep(60)
+        except Exception:
+            pass
+        # Fin du process : tout fichier présent est complet.
+        j = emitted + 1
+        while j < self._count and os.path.isfile(self._path(j)):
+            self.thumb_ready.emit(j, self._path(j))
+            j += 1
+        self.done.emit()
+
+
+# ── Timeline de monteur ────────────────────────────────────────────────────────
+
+_TICK_STEPS = [0.2, 0.5, 1, 2, 5, 10, 15, 30, 60, 120, 300, 600, 1800, 3600]
+
+
+def _fmt_tick(t: float, step: float) -> str:
+    if step < 1.0:
+        return f"{t:.1f}"
+    m, s = divmod(int(round(t)), 60)
+    return f"{m:d}:{s:02d}"
+
+
+class _TimelineBar(QWidget):
+    """Timeline de monteur : règle graduée + playhead que l'on SAISIT à la souris.
+    Clic n'importe où = saut direct ; glisser = scrub continu (vignettes cache)."""
+
+    frame_changed = pyqtSignal(int)    # scrub utilisateur (continu, pendant le drag)
+    scrub_released = pyqtSignal(int)   # relâchement du playhead
+
+    _PAD = 12       # marge horizontale (le playhead reste dans le widget)
+    _RULER_H = 18   # zone des graduations (haut)
+
+    def __init__(self, total_frames: int, fps: float, parent=None):
+        super().__init__(parent)
+        self._total = max(0, int(total_frames))
+        self._fps = fps if fps > 0 else 25.0
+        self._frame = 0
+        self._dragging = False
+        self._hover_x = -1.0
+        self._cache_done = 0
+        self._cache_total = 0
+        self.setFixedHeight(58)
+        self.setMinimumWidth(320)
+        self.setMouseTracking(True)
+        self.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
+        self.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.setToolTip(translate("Timeline : cliquer = sauter, glisser = naviguer"))
+
+    # — API —
+    def frame(self) -> int:
+        return self._frame
+
+    def set_frame(self, f: int):
+        """Positionne le playhead SANS émettre (mise à jour programmatique)."""
+        self._frame = max(0, min(int(f), self._total))
+        self.update()
+
+    def is_scrubbing(self) -> bool:
+        return self._dragging
+
+    def set_cache_progress(self, done: int, total: int):
+        self._cache_done, self._cache_total = done, total
+        self.update()
+
+    # — Géométrie —
+    def _span(self) -> float:
+        return max(1.0, self.width() - 2.0 * self._PAD)
+
+    def _frame_to_x(self, f: int) -> float:
+        if self._total <= 0:
+            return float(self._PAD)
+        return self._PAD + (f / self._total) * self._span()
+
+    def _x_to_frame(self, x: float) -> int:
+        if self._total <= 0:
+            return 0
+        rel = max(0.0, min(1.0, (x - self._PAD) / self._span()))
+        return int(round(rel * self._total))
+
+    # — Interaction —
+    def _scrub(self, x: float):
+        f = self._x_to_frame(x)
+        if f != self._frame:
+            self._frame = f
+            self.frame_changed.emit(f)
+        self.update()
+
+    def mousePressEvent(self, e):
+        if e.button() == Qt.MouseButton.LeftButton:
+            self.setFocus()
+            self._dragging = True
+            self._scrub(e.position().x())
+
+    def mouseMoveEvent(self, e):
+        if self._dragging:
+            self._scrub(e.position().x())
+        else:
+            self._hover_x = e.position().x()
+            self.update()
+
+    def mouseReleaseEvent(self, e):
+        if e.button() == Qt.MouseButton.LeftButton and self._dragging:
+            self._dragging = False
+            self.scrub_released.emit(self._frame)
+            self.update()
+
+    def leaveEvent(self, e):
+        self._hover_x = -1.0
+        self.update()
+        super().leaveEvent(e)
+
+    # — Rendu —
+    def paintEvent(self, e):
+        w, h = float(self.width()), float(self.height())
+        p = QPainter(self)
+        p.setRenderHint(QPainter.RenderHint.Antialiasing, True)
+        # Panneau
+        p.setPen(QPen(QColor(CP["border"]), 1))
+        p.setBrush(QColor(CP["bg2"]))
+        p.drawRoundedRect(QRectF(0.5, 0.5, w - 1.0, h - 1.0), 8, 8)
+        pad = float(self._PAD)
+        track = QRectF(pad, self._RULER_H + 4.0, w - 2.0 * pad, h - self._RULER_H - 12.0)
+        # Piste
+        p.setPen(QPen(QColor(CP["border_bright"]), 1))
+        p.setBrush(QColor(CP["bg0"]))
+        p.drawRoundedRect(track, 4, 4)
+        # Partie écoulée
+        px = self._frame_to_x(self._frame)
+        if px > track.left() + 2.0:
+            fill = QColor(CP["accent"])
+            fill.setAlpha(48)
+            p.setPen(Qt.PenStyle.NoPen)
+            p.setBrush(fill)
+            p.drawRoundedRect(
+                QRectF(track.left() + 1.0, track.top() + 1.0,
+                       px - track.left() - 2.0, track.height() - 2.0), 3, 3)
+        # Graduations temporelles
+        total_t = self._total / self._fps if self._fps > 0 else 0.0
+        if total_t > 0:
+            pps = self._span() / total_t
+            step = next((s for s in _TICK_STEPS if s * pps >= 56.0), 3600.0)
+            f = p.font()
+            f.setPixelSize(9)
+            p.setFont(f)
+            minor = step / 5.0 if (step / 5.0) * pps >= 8.0 else 0.0
+            if minor:
+                p.setPen(QPen(QColor(CP["border_bright"]), 1))
+                t = 0.0
+                while t <= total_t + 1e-6:
+                    x = pad + t * pps
+                    p.drawLine(QPointF(x, self._RULER_H - 3.0), QPointF(x, self._RULER_H + 1.0))
+                    t += minor
+            t = 0.0
+            while t <= total_t + 1e-6:
+                x = pad + t * pps
+                p.setPen(QPen(QColor(CP["border_bright"]), 1))
+                p.drawLine(QPointF(x, self._RULER_H - 7.0), QPointF(x, self._RULER_H + 2.0))
+                p.setPen(QColor(CP["text_secondary"]))
+                r = QRectF(x - 30.0, 1.0, 60.0, self._RULER_H - 8.0)
+                if r.left() < 2.0:
+                    r.moveLeft(2.0)
+                if r.right() > w - 2.0:
+                    r.moveRight(w - 2.0)
+                p.drawText(r, Qt.AlignmentFlag.AlignHCenter | Qt.AlignmentFlag.AlignBottom,
+                           _fmt_tick(t, step))
+                t += step
+        # Progression du cache de vignettes (fine bande en bas de piste)
+        if 0 < self._cache_done < self._cache_total:
+            frac = self._cache_done / self._cache_total
+            strip = QColor(CP["accent2"])
+            strip.setAlpha(150)
+            p.setPen(Qt.PenStyle.NoPen)
+            p.setBrush(strip)
+            p.drawRect(QRectF(track.left() + 1.0, track.bottom() - 2.5,
+                              (track.width() - 2.0) * frac, 2.0))
+        # Survol : repère fin sous la souris
+        if self._hover_x >= 0 and not self._dragging:
+            hx = max(track.left(), min(track.right(), self._hover_x))
+            p.setPen(QPen(QColor(CP["border_bright"]), 1))
+            p.drawLine(QPointF(hx, track.top() + 1.0), QPointF(hx, track.bottom() - 1.0))
+        # Playhead : trait accent + poignée triangulaire
+        p.setPen(QPen(QColor(CP["accent"]), 2))
+        p.drawLine(QPointF(px, self._RULER_H - 2.0), QPointF(px, track.bottom() - 1.0))
+        handle = QPolygonF([QPointF(px - 5.5, 3.0), QPointF(px + 5.5, 3.0),
+                            QPointF(px, self._RULER_H - 2.0)])
+        p.setPen(Qt.PenStyle.NoPen)
+        p.setBrush(QColor(CP["accent"]))
+        p.drawPolygon(handle)
+        p.end()
+
+
+# ── Outils de dessin (feedback visuel) ─────────────────────────────────────────
+
+class _ColorSwatch(QPushButton):
+    """Pastille de couleur : état sélectionné ÉVIDENT (anneau accent épais +
+    léger agrandissement de la pastille active). Un seul outil actif à la fois."""
+
+    def __init__(self, color: str, on_pick):
+        super().__init__()
+        self._color = color
+        self.setCheckable(True)
+        self.setFixedSize(28, 28)
+        self.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.setStyleSheet("QPushButton{background:transparent;border:none;}")
+        self.setToolTip(color)
+        self.clicked.connect(lambda _=False: on_pick(self))
+
+    def color(self) -> str:
+        return self._color
+
+    def enterEvent(self, e):
+        self.update()
+        super().enterEvent(e)
+
+    def leaveEvent(self, e):
+        self.update()
+        super().leaveEvent(e)
+
+    def paintEvent(self, e):
+        p = QPainter(self)
+        p.setRenderHint(QPainter.RenderHint.Antialiasing, True)
+        c = QPointF(14.0, 14.0)
+        sel = self.isChecked()
+        if sel:
+            p.setPen(QPen(QColor(CP["accent"]), 2.4))
+            p.setBrush(Qt.BrushStyle.NoBrush)
+            p.drawEllipse(c, 12.2, 12.2)
+        elif self.underMouse():
+            p.setPen(QPen(QColor(CP["border_bright"]), 1.6))
+            p.setBrush(Qt.BrushStyle.NoBrush)
+            p.drawEllipse(c, 11.0, 11.0)
+        radius = 11.0 if sel else 8.0    # pastille active légèrement agrandie
+        p.setPen(QPen(QColor(CP["border_bright"]), 1))
+        p.setBrush(QColor(self._color))
+        p.drawEllipse(c, radius, radius)
+        p.end()
+
+
+class _BrushPreview(QWidget):
+    """Aperçu vivant du trait : montre couleur + taille courantes (anneau si gomme)."""
+
+    def __init__(self, canvas):
+        super().__init__()
+        self._canvas = canvas
+        self.setFixedSize(30, 30)
+        self.setToolTip(translate("Aperçu du trait"))
+
+    def paintEvent(self, e):
+        p = QPainter(self)
+        p.setRenderHint(QPainter.RenderHint.Antialiasing, True)
+        p.setPen(QPen(QColor(CP["border"]), 1))
+        p.setBrush(QColor(CP["bg0"]))
+        p.drawRoundedRect(QRectF(0.5, 0.5, 29.0, 29.0), 6, 6)
+        c = QPointF(15.0, 15.0)
+        if self._canvas.eraser:
+            d = max(6.0, min(22.0, float(self._canvas.pen_width * 2)))
+            p.setPen(QPen(QColor(CP["text_primary"]), 1.6))
+            p.setBrush(Qt.BrushStyle.NoBrush)
+            p.drawEllipse(c, d / 2.0, d / 2.0)
+        else:
+            d = max(3.0, min(22.0, float(self._canvas.pen_width)))
+            p.setPen(QPen(QColor(CP["border_bright"]), 1))
+            p.setBrush(QColor(self._canvas.pen_color))
+            p.drawEllipse(c, d / 2.0, d / 2.0)
+        p.end()
+
+
+# ── Canevas de dessin ──────────────────────────────────────────────────────────
+
 class _DrawCanvas(QWidget):
     """Image de fond + calque de dessin transparent (trait libre)."""
 
     def __init__(self):
         super().__init__()
         self._base: QPixmap | None = None
+        self._fallback = False           # base = repli gris (pas une vraie frame)
         self._overlay: QImage | None = None
         self._last: QPoint | None = None
         self.pen_color = QColor(_COLORS[0])
@@ -93,10 +443,21 @@ class _DrawCanvas(QWidget):
         self.eraser = False
         self.setMinimumSize(_DISPLAY_W, int(_DISPLAY_W * 9 / 16))
         self.setStyleSheet(f"background:{CP['bg0']};border:1px solid {CP['border']};border-radius:8px;")
+        self.update_tool_cursor()
 
-    def set_base(self, pixmap: QPixmap):
-        scaled = pixmap.scaledToWidth(_DISPLAY_W, Qt.TransformationMode.SmoothTransformation)
+    def set_base(self, pixmap: QPixmap, fallback: bool = False):
+        # Les vignettes du cache (basse résolution) et les frames pleine
+        # résolution doivent donner EXACTEMENT la même taille affichée, sinon
+        # le calque de dessin serait réinitialisé à chaque scrub → on force la
+        # taille de la 1re vraie image.
+        if self._base is not None and not self._fallback and self._base.width() > 0:
+            scaled = pixmap.scaled(self._base.size(),
+                                   Qt.AspectRatioMode.IgnoreAspectRatio,
+                                   Qt.TransformationMode.SmoothTransformation)
+        else:
+            scaled = pixmap.scaledToWidth(_DISPLAY_W, Qt.TransformationMode.SmoothTransformation)
         self._base = scaled
+        self._fallback = fallback
         # On PRÉSERVE le dessin en cours tant que la taille ne change pas (scrub
         # entre images d'un même clip). Calque neuf seulement à la 1re image ou si
         # la taille diffère.
@@ -127,6 +488,24 @@ class _DrawCanvas(QWidget):
     def has_base(self) -> bool:
         return self._base is not None
 
+    def update_tool_cursor(self):
+        """Curseur = cercle à la taille du trait (couleur du pinceau, blanc = gomme)."""
+        d = self.pen_width * 2 if self.eraser else self.pen_width
+        d = max(8, min(64, int(d)))
+        pm = QPixmap(d + 6, d + 6)
+        pm.fill(Qt.GlobalColor.transparent)
+        p = QPainter(pm)
+        p.setRenderHint(QPainter.RenderHint.Antialiasing, True)
+        rect = QRectF(3.0, 3.0, float(d), float(d))
+        p.setBrush(Qt.BrushStyle.NoBrush)
+        p.setPen(QPen(QColor(0, 0, 0, 200), 3))
+        p.drawEllipse(rect)
+        ring = QColor("#ffffff") if self.eraser else QColor(self.pen_color)
+        p.setPen(QPen(ring, 1.6))
+        p.drawEllipse(rect)
+        p.end()
+        self.setCursor(QCursor(pm, pm.width() // 2, pm.height() // 2))
+
     def paintEvent(self, e):
         p = QPainter(self)
         if self._base is not None:
@@ -135,14 +514,9 @@ class _DrawCanvas(QWidget):
             p.drawImage(0, 0, self._overlay)
         p.end()
 
-    def mousePressEvent(self, e):
-        if self._overlay is not None and e.button() == Qt.MouseButton.LeftButton:
-            self._last = e.position().toPoint()
-
-    def mouseMoveEvent(self, e):
+    def _stroke_to(self, cur: QPoint):
         if self._overlay is None or self._last is None:
             return
-        cur = e.position().toPoint()
         p = QPainter(self._overlay)
         p.setRenderHint(QPainter.RenderHint.Antialiasing, True)
         if self.eraser:
@@ -157,6 +531,16 @@ class _DrawCanvas(QWidget):
         p.end()
         self._last = cur
         self.update()
+
+    def mousePressEvent(self, e):
+        if self._overlay is not None and e.button() == Qt.MouseButton.LeftButton:
+            self._last = e.position().toPoint()
+            self._stroke_to(self._last)   # un simple clic pose un point
+
+    def mouseMoveEvent(self, e):
+        if self._overlay is None or self._last is None:
+            return
+        self._stroke_to(e.position().toPoint())
 
     def mouseReleaseEvent(self, e):
         self._last = None
@@ -178,6 +562,8 @@ class _DrawCanvas(QWidget):
         return self._overlay.save(out_path, "PNG")
 
 
+# ── Dialogue ───────────────────────────────────────────────────────────────────
+
 class DrawVideoDialog(QDialog):
     """Dialogue Draw-to-Video. result_path() = image annotée (ou '')."""
 
@@ -191,7 +577,9 @@ class DrawVideoDialog(QDialog):
         self._prev_overlay = prev_overlay or ""
         self._dur = _probe_duration(clip_path)
         self._fps = _probe_fps(clip_path) or 25.0
-        self._frame = max(0, int(prev_frame))
+        self._total_frames = max(0, int(round(self._dur * self._fps)) - 1)   # index image
+        self._frame = max(0, min(int(prev_frame), self._total_frames))
+        self._exact_loaded = -1              # index de la frame pleine résolution affichée
         self.setWindowTitle(translate("Dessiner sur la vidéo — Draw-to-Video"))
         self.setStyleSheet(f"background:{CP['bg1']};")
         self.setMinimumWidth(_DISPLAY_W + 60)
@@ -216,26 +604,39 @@ class DrawVideoDialog(QDialog):
         hint.setStyleSheet(f"color:{CP['text_dim']};font-size:11px;background:transparent;")
         root.addWidget(hint)
 
-        # ── Curseur d'instant ───────────────────────────────────────────────────
+        # ── Time code + timeline de monteur ────────────────────────────────────
         tl = QHBoxLayout()
         tl.setSpacing(8)
         tlbl = QLabel(translate("Time Code :"))
         tlbl.setStyleSheet(f"color:{CP['text_secondary']};font-size:11px;background:transparent;")
         tl.addWidget(tlbl)
-        self._slider = QSlider(Qt.Orientation.Horizontal)
-        _total_frames = max(0, int(round(self._dur * self._fps)) - 1)   # index image
-        self._slider.setRange(0, _total_frames)
-        self._slider.setValue(min(self._frame, _total_frames))
-        self._slider.sliderReleased.connect(self._reload_frame)
-        tl.addWidget(self._slider, 1)
-        self._time_lbl = QLabel(_format_tc(self._slider.value(), self._fps))
+        self._time_lbl = QLabel(_format_tc(self._frame, self._fps))
         self._time_lbl.setStyleSheet(
+            f"color:{CP['accent']};font-size:14px;font-weight:700;"
+            f"font-family:Consolas,monospace;background:transparent;")
+        tl.addWidget(self._time_lbl)
+        self._dur_lbl = QLabel("/  " + _format_tc(self._total_frames, self._fps))
+        self._dur_lbl.setStyleSheet(
             f"color:{CP['text_dim']};font-size:11px;font-family:Consolas,monospace;"
             f"background:transparent;")
-        self._slider.valueChanged.connect(
-            lambda v: self._time_lbl.setText(_format_tc(v, self._fps)))
-        tl.addWidget(self._time_lbl)
+        tl.addWidget(self._dur_lbl)
+        tl.addStretch()
+        keys = QLabel(translate("Flèches : ±1 image · Maj+flèches : ±1 s · molette : ±1 image"))
+        keys.setStyleSheet(f"color:{CP['text_dim']};font-size:10px;background:transparent;")
+        tl.addWidget(keys)
         root.addLayout(tl)
+
+        self._timeline = _TimelineBar(self._total_frames, self._fps)
+        self._timeline.set_frame(self._frame)
+        self._timeline.frame_changed.connect(self._apply_scrub)
+        self._timeline.scrub_released.connect(self._apply_scrub)
+        root.addWidget(self._timeline)
+
+        # Débounce : la frame pleine résolution n'est extraite qu'à l'arrêt du scrub
+        self._debounce = QTimer(self)
+        self._debounce.setSingleShot(True)
+        self._debounce.setInterval(_DEBOUNCE_MS)
+        self._debounce.timeout.connect(self._load_exact_frame)
 
         # ── Canevas de dessin ───────────────────────────────────────────────────
         self._canvas = _DrawCanvas()
@@ -245,21 +646,28 @@ class DrawVideoDialog(QDialog):
 
         # ── Outils : couleurs, taille, gomme, effacer ───────────────────────────
         tools = QHBoxLayout()
-        tools.setSpacing(6)
+        tools.setSpacing(4)
+        self._swatches: list[_ColorSwatch] = []
         for c in _COLORS:
-            b = QPushButton()
-            b.setFixedSize(22, 22)
-            b.setCursor(Qt.CursorShape.PointingHandCursor)
-            b.setStyleSheet(f"QPushButton{{background:{c};border:1px solid {CP['border_bright']};border-radius:11px;}}")
-            b.clicked.connect(lambda _=False, col=c: self._set_color(col))
+            b = _ColorSwatch(c, self._pick_swatch)
+            self._swatches.append(b)
             tools.addWidget(b)
-        tools.addSpacing(10)
+        self._swatches[0].setChecked(True)   # outil actif au départ = 1re couleur
+        tools.addSpacing(12)
         tools.addWidget(self._tlabel(translate("Taille")))
         self._size = QSpinBox()
         self._size.setRange(2, 60)
         self._size.setValue(8)
-        self._size.valueChanged.connect(lambda v: setattr(self._canvas, "pen_width", v))
+        self._size.setMinimumWidth(56)
+        self._size.setStyleSheet(
+            f"QSpinBox{{background:{CP['bg3']};color:{CP['text_primary']};"
+            f"border:1px solid {CP['border']};border-radius:6px;"
+            f"padding:3px 6px;font-size:11px;}}")
+        self._size.valueChanged.connect(self._on_size_changed)
         tools.addWidget(self._size)
+        self._brush_prev = _BrushPreview(self._canvas)
+        tools.addWidget(self._brush_prev)
+        tools.addSpacing(12)
         self._btn_eraser = QPushButton(translate("Gomme"))
         self._btn_eraser.setCheckable(True)
         self._btn_eraser.setStyleSheet(self._tool_btn_ss())
@@ -291,11 +699,145 @@ class DrawVideoDialog(QDialog):
         btns.addWidget(ok)
         root.addLayout(btns)
 
-        self._reload_frame()   # charge l'image du time code courant
+        # ── Cache de vignettes (scrub instantané) ───────────────────────────────
+        self._thumbs: dict[int, str] = {}       # index → chemin .jpg
+        self._thumb_pix: dict[int, QPixmap] = {}  # memoïsation des pixmaps
+        self._thumb_count = 0
+        self._thumb_worker: _ThumbCacheWorker | None = None
+        self._setup_thumb_cache()
+
+        self._reload_frame()   # charge l'image du time code courant (pleine résolution)
         # Ré-édition : si un dessin existait déjà pour ce clip, on le restaure sur
         # le calque (éditable) au lieu d'ouvrir un schéma vierge.
         if self._prev_overlay:
             self._canvas.set_overlay(self._prev_overlay)
+
+        from ui.widgets import disable_default_buttons
+        disable_default_buttons(self)   # Entrée ne déclenche pas Annuler/Valider
+
+    # ── Cache de vignettes ─────────────────────────────────────────────────────
+
+    def _thumb_path(self, i: int) -> str:
+        return os.path.join(self._thumb_dir, f"thumb_{i + 1:04d}.jpg")
+
+    def _setup_thumb_cache(self):
+        if not (self._clip and os.path.isfile(self._clip)) or self._dur <= 0.05:
+            return
+        n = int(round(self._dur))                       # ~1 vignette/seconde
+        n = max(8, min(_THUMB_MAX, n if n > 0 else 8))  # plancher 8, plafond 120
+        n = min(n, self._total_frames + 1)
+        if n <= 0:
+            return
+        self._thumb_count = n
+        try:
+            sig = f"{self._clip}|{os.path.getmtime(self._clip)}|{os.path.getsize(self._clip)}|{n}|{_THUMB_H}"
+        except Exception:
+            sig = f"{self._clip}|{n}|{_THUMB_H}"
+        h = hashlib.md5(sig.encode("utf-8", "replace")).hexdigest()[:12]
+        cache_root = os.path.join(self._out_dir, "_thumb_cache")
+        self._thumb_dir = os.path.join(cache_root, h)
+        try:
+            os.makedirs(self._thumb_dir, exist_ok=True)
+            self._prune_cache(cache_root, keep=h)
+        except Exception:
+            return
+        existing = [i for i in range(n) if os.path.isfile(self._thumb_path(i))]
+        if len(existing) >= n:
+            # Cache complet d'une session précédente → réutilisé instantanément.
+            for i in existing:
+                self._thumbs[i] = self._thumb_path(i)
+            self._timeline.set_cache_progress(n, n)
+            return
+        self._timeline.set_cache_progress(0, n)
+        self._thumb_worker = _ThumbCacheWorker(self._clip, self._dur, self._thumb_dir, n)
+        self._thumb_worker.thumb_ready.connect(self._on_thumb_ready)
+        self._thumb_worker.done.connect(self._on_thumbs_done)
+        self._thumb_worker.start()
+
+    @staticmethod
+    def _prune_cache(cache_root: str, keep: str, max_dirs: int = 10):
+        """Borne le nombre de caches de clips conservés (les plus anciens partent)."""
+        try:
+            subs = [d for d in os.listdir(cache_root)
+                    if d != keep and os.path.isdir(os.path.join(cache_root, d))]
+            if len(subs) <= max_dirs:
+                return
+            subs.sort(key=lambda d: os.path.getmtime(os.path.join(cache_root, d)))
+            import shutil
+            for d in subs[:len(subs) - max_dirs]:
+                shutil.rmtree(os.path.join(cache_root, d), ignore_errors=True)
+        except Exception:
+            pass
+
+    def _on_thumb_ready(self, i: int, path: str):
+        self._thumbs[i] = path
+        self._timeline.set_cache_progress(len(self._thumbs), self._thumb_count)
+
+    def _on_thumbs_done(self):
+        self._timeline.set_cache_progress(self._thumb_count, self._thumb_count)
+
+    def _show_cached_thumb(self, f: int):
+        """Affiche INSTANTANÉMENT la vignette cache la plus proche (drag fluide)."""
+        if not self._thumbs or self._dur <= 0 or self._thumb_count <= 0:
+            return
+        t = f / (self._fps or 25.0)
+        ideal = min(self._thumb_count - 1, max(0, int(t * self._thumb_count / self._dur)))
+        if ideal in self._thumbs:
+            idx = ideal
+        else:
+            idx = min(self._thumbs.keys(), key=lambda k: abs(k - ideal))
+        pm = self._thumb_pix.get(idx)
+        if pm is None:
+            pm = QPixmap(self._thumbs[idx])
+            if pm.isNull():
+                return
+            self._thumb_pix[idx] = pm
+        self._canvas.set_base(pm)
+
+    # ── Navigation temporelle ──────────────────────────────────────────────────
+
+    def _apply_scrub(self, f: int):
+        """Position changée (drag, clic, clavier, molette) : TC + vignette + débounce."""
+        f = max(0, min(int(f), self._total_frames))
+        self._frame = f
+        self._time_lbl.setText(_format_tc(f, self._fps))
+        if f == self._exact_loaded:
+            return   # la frame exacte est déjà affichée
+        self._show_cached_thumb(f)
+        self._debounce.start()
+
+    def _user_seek(self, f: int):
+        """Saut clavier/molette : synchronise le playhead puis applique."""
+        f = max(0, min(int(f), self._total_frames))
+        self._timeline.set_frame(f)
+        self._apply_scrub(f)
+
+    def _load_exact_frame(self):
+        if self._timeline.is_scrubbing():
+            self._debounce.start()   # toujours en train de glisser → on repousse
+            return
+        self._reload_frame()
+
+    def keyPressEvent(self, e):
+        if e.key() in (Qt.Key.Key_Left, Qt.Key.Key_Right):
+            step = 1
+            if e.modifiers() & Qt.KeyboardModifier.ShiftModifier:
+                step = max(1, int(round(self._fps)))     # Maj = ±1 seconde
+            delta = step if e.key() == Qt.Key.Key_Right else -step
+            self._user_seek(self._frame + delta)
+            e.accept()
+            return
+        super().keyPressEvent(e)
+
+    def wheelEvent(self, e):
+        delta = e.angleDelta().y()
+        if delta:
+            self._user_seek(self._frame + (1 if delta < 0 else -1))
+            e.accept()
+            return
+        super().wheelEvent(e)
+
+    # ── Outils ─────────────────────────────────────────────────────────────────
 
     def _tlabel(self, text):
         l = QLabel(text)
@@ -306,32 +848,75 @@ class DrawVideoDialog(QDialog):
         return (
             f"QPushButton{{background:{CP['bg3']};color:{CP['text_secondary']};"
             f"border:1px solid {CP['border']};border-radius:6px;font-size:11px;padding:4px 12px;}}"
-            f"QPushButton:checked{{background:rgba(78,205,196,0.16);color:{CP['accent']};"
-            f"border-color:{CP['accent']};}}"
+            f"QPushButton:checked{{background:{_rgba(CP['accent'], 0.16)};color:{CP['accent']};"
+            f"border:2px solid {CP['accent']};font-weight:700;}}"
             f"QPushButton:hover{{border-color:{CP['accent_dim']};}}")
 
-    def _set_color(self, c: str):
-        self._canvas.pen_color = QColor(c)
+    def _pick_swatch(self, btn: "_ColorSwatch"):
+        """Sélection d'une couleur : exclusif (une pastille OU la gomme)."""
+        for b in self._swatches:
+            b.setChecked(b is btn)
+        self._canvas.pen_color = QColor(btn.color())
         self._canvas.eraser = False
         self._btn_eraser.setChecked(False)
+        self._canvas.update_tool_cursor()
+        self._brush_prev.update()
 
     def _toggle_eraser(self):
-        self._canvas.eraser = self._btn_eraser.isChecked()
+        on = self._btn_eraser.isChecked()
+        self._canvas.eraser = on
+        if on:
+            for b in self._swatches:
+                b.setChecked(False)          # gomme active = aucune pastille cochée
+        else:
+            for b in self._swatches:         # retour au pinceau : re-coche la couleur
+                b.setChecked(QColor(b.color()) == self._canvas.pen_color)
+        self._canvas.update_tool_cursor()
+        self._brush_prev.update()
+
+    def _on_size_changed(self, v: int):
+        self._canvas.pen_width = v
+        self._canvas.update_tool_cursor()
+        self._brush_prev.update()
+
+    # ── Frame pleine résolution ────────────────────────────────────────────────
 
     def _reload_frame(self):
-        t = self._slider.value() / (self._fps or 25.0)
+        t = self._frame / (self._fps or 25.0)
         tmp = os.path.join(self._out_dir, "_frame_tmp.png")
         os.makedirs(self._out_dir, exist_ok=True)
         if _extract_frame(self._clip, t, tmp):
             pm = QPixmap(tmp)
             if not pm.isNull():
                 self._canvas.set_base(pm)
+                self._exact_loaded = self._frame
                 return
         # Repli : pas de frame (ffmpeg absent) → canevas vide gris
         if not self._canvas.has_base():
             blank = QPixmap(_DISPLAY_W, int(_DISPLAY_W * 9 / 16))
             blank.fill(QColor(CP['bg0']))
-            self._canvas.set_base(blank)
+            self._canvas.set_base(blank, fallback=True)
+
+    # ── Cycle de vie ───────────────────────────────────────────────────────────
+
+    def _park_worker(self):
+        # Parque le worker de cache SANS terminate() (anti-segfault) :
+        # blockSignals + requestInterruption + quit + référence anti-GC.
+        if self._thumb_worker is not None:
+            try:
+                from core.worker import abandon_thread
+                abandon_thread(self._thumb_worker)
+            except Exception:
+                pass
+            self._thumb_worker = None
+
+    def done(self, code):
+        self._park_worker()          # accept() / reject() / Échap
+        super().done(code)
+
+    def closeEvent(self, e):
+        self._park_worker()          # fermeture par la croix ou close() direct
+        super().closeEvent(e)
 
     def _accept(self):
         ts = int(time.time())
@@ -341,7 +926,7 @@ class DrawVideoDialog(QDialog):
         ov = os.path.join(self._out_dir, f"drawoverlay_{ts}.png")
         if self._canvas.export_overlay(ov):                # calque seul (ré-édition)
             self._overlay_path = ov
-        self._frame = self._slider.value()
+        self._frame = self._timeline.frame()
         self.accept()
 
     def result_path(self) -> str:
