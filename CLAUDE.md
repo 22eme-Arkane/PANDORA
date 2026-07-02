@@ -6,6 +6,14 @@
 > sans qu'on ait à la redemander. Objectif : ne jamais rendre la main sur un travail non
 > vérifié. Travailler comme un ingénieur qui relit, teste, REGARDE et corrige son propre
 > code avant de le livrer — la rigueur d'auto-vérification, pas la précipitation.
+>
+> ⚠ PORTÉE (précisé par Matthieu le 2026-07-02) : cette MÉTHODE (sections 1-6) a été
+> écrite avec Claude Chat pour donner à **Claude Opus 4.8** une façon de travailler
+> proche de Fable 5. **Fable 5 l'applique nativement** — s'il tourne sur PANDORA, il
+> n'a pas à la relire comme une consigne supplémentaire ; elle reste la référence
+> commune du « travail bien rendu ». Les **GARDE-FOUS plus bas ne sont PAS une
+> méthode** : ce sont des règles du projet, contraignantes pour TOUS les modèles,
+> Fable 5 inclus, sans exception.
 
 ## 1. AVANT d'agir — planifier
 - Reformuler la tâche en une phrase pour confirmer la compréhension.
