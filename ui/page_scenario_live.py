@@ -778,7 +778,7 @@ class PageScenario(QWidget):
         c_ia, l_ia = _section_container()
 
         self._btn_arrange = _ai_btn(
-            "⊞", "Proposer un arrangement", "Analyse structure + suggestions", self._on_arrange,
+            "⊞", "Analyse & co-écriture", "Analyse structure + session de co-écriture", self._on_arrange,
         )
         self._btn_format = _ai_btn(
             "◈", "Mise en page PANDORA", "Structure le conducteur en blocs plans optimisés pour PANDORA", self._on_format,
@@ -1071,6 +1071,12 @@ class PageScenario(QWidget):
         self._ref_images = ([p for p in _ri if isinstance(p, str) and os.path.isfile(p)]
                             if isinstance(_ri, list) else [])
         self._refresh_refs_display()
+        # Analyse d'arrangement persistée → « Analyse & co-écriture » la rouvrira
+        # sans nouvel appel API (et le bouton Rouvrir refonctionne au redémarrage).
+        saved_analysis = (sc.get("arrange_analysis") or "").strip()
+        if saved_analysis:
+            self._last_analysis = saved_analysis
+            self._last_result_kind = "arrange"
         self._last_ref_analysis = sc.get("ref_analysis", "") or ""
         if self._last_ref_analysis:
             self._last_result_kind = "refs"
@@ -2043,6 +2049,23 @@ class PageScenario(QWidget):
         if not text:
             self._ai_progress_lbl.setText(translate("Écris d'abord un texte à analyser."))
             return
+        # Analyse déjà faite et SAUVEGARDÉE → on la rouvre telle quelle : aucun
+        # nouvel appel API, aucun crédit consommé. « Relancer l'analyse » vit
+        # dans la fenêtre pour qui veut vraiment refaire une passe.
+        saved = ((self._current or {}).get("arrange_analysis") or "").strip()
+        if saved:
+            self._last_analysis = saved
+            self._last_result_kind = "arrange"
+            self._btn_reopen_window.setVisible(True)
+            self._open_arrange_window(analysis=saved)
+            return
+        self._start_arrange_analysis()
+
+    def _start_arrange_analysis(self):
+        """Lance une NOUVELLE analyse (appel API) et ouvre la fenêtre en streaming."""
+        text = self._get_text()
+        if not text:
+            return
         # Conducteur Live : on garde la FENÊTRE de co-écriture (comme Cinéma),
         # calibrée Live/Mapping via le worker streaming.
         from api.live_screenplay import ArrangeConducteurStreamWorker
@@ -2067,7 +2090,7 @@ class PageScenario(QWidget):
             self._ai_progress_lbl.setText("Aucun texte à modifier.")
             return
         if not suggestions:
-            self._ai_progress_lbl.setText("Lance d'abord « Proposer un arrangement ».")
+            self._ai_progress_lbl.setText("Lance d'abord « Analyse & co-écriture ».")
             return
         # Worker CONDUCTEUR (le worker Cinéma réécrivait au format scénario INT./EXT.)
         from api.live_screenplay import ApplyArrangeConducteurWorker
@@ -2582,14 +2605,8 @@ class PageScenario(QWidget):
         )
         _streaming_active = [streaming]
         _apply_worker = [None]      # worker de phase 2 (ApplyArrangeWorker)
-        _chat_worker  = [None]      # tour de co-écriture en cours
-        _chat_msgs: list = []       # historique de la co-écriture [{role, content}]
 
         def _stop_worker():
-            if _chat_worker[0] is not None:
-                _chat_worker[0].quit()
-                abandon_thread(_chat_worker[0])
-                _chat_worker[0] = None
             if _streaming_active[0]:
                 _streaming_active[0] = False
                 if worker is not None:
@@ -2655,12 +2672,28 @@ class PageScenario(QWidget):
             f"border:1px solid {CP['border']};}}"
         )
 
+        # ↻ Relancer : refaire une VRAIE analyse (appel API) — visible seulement
+        # quand on a rouvert une analyse sauvegardée (pas pendant un streaming).
+        btn_relaunch = QPushButton(translate("↻  Relancer l'analyse"))
+        btn_relaunch.setFixedHeight(36)
+        btn_relaunch.setVisible(not streaming)
+        btn_relaunch.setToolTip(translate(
+            "Refait une analyse complète (consomme des crédits API)."))
+        btn_relaunch.setStyleSheet(_ghost_ss)
+
+        def _do_relaunch():
+            dlg.accept()
+            self._start_arrange_analysis()
+
+        btn_relaunch.clicked.connect(_do_relaunch)
+
         btn_row.addWidget(btn_close)
+        btn_row.addWidget(btn_relaunch)
         btn_row.addStretch()
+        # Session de co-écriture RÉACTIVÉE (parité Cinéma) : elle passe désormais
+        # par le studio Live calibré CONDUCTEUR (dialog_arrange_session_live),
+        # plus jamais par la réécriture au format scénario INT./EXT.
         btn_row.addWidget(btn_session)
-        # Héritage Cinéma retiré (validé) : la session de co-écriture réécrit au
-        # format SCÉNARIO (INT./EXT.) — sans objet pour un conducteur.
-        btn_session.setVisible(False)
         btn_row.addWidget(btn_direct)
         btn_row.addWidget(btn_update)
         lay.addLayout(btn_row)
@@ -2668,100 +2701,9 @@ class PageScenario(QWidget):
         _final_analysis = [analysis]
         _rewritten      = [""]
 
-        # ── Co-écriture : affiner les suggestions en dialoguant ──────────────
-        # (remplace la « Session de co-écriture » Cinéma, qui réécrivait au
-        # format scénario INT./EXT. — ici on reste en langage conducteur)
-        chat_view = QTextEdit()
-        chat_view.setReadOnly(True)
-        chat_view.setVisible(False)
-        chat_view.setFixedHeight(170)
-        chat_view.setStyleSheet(
-            f"QTextEdit{{background:{CP['bg3']};border:1px solid {CP['border']};"
-            f"border-radius:8px;color:{CP['text_primary']};font-size:11px;padding:12px;}}"
-        )
-        lay.insertWidget(2, chat_view)
-
-        chat_row = QHBoxLayout()
-        chat_row.setSpacing(8)
-        chat_in = QLineEdit()
-        chat_in.setFixedHeight(34)
-        from core.ai_provider import ai_name as _ai_name
-        _chat_ph = translate("Co-écrire l'arrangement avec")
-        chat_in.setPlaceholderText(f"{_chat_ph} {_ai_name()}…")
-        chat_in.setStyleSheet(
-            f"QLineEdit{{background:{CP['bg2']};border:1px solid {CP['border']};"
-            f"border-radius:7px;color:{CP['text_primary']};font-size:11px;padding:0 12px;}}"
-            f"QLineEdit:focus{{border-color:{CP['accent']};}}"
-            f"QLineEdit:disabled{{color:{CP['text_dim']};}}"
-        )
-        btn_send = QPushButton(translate("Envoyer"))
-        btn_send.setFixedHeight(34)
-        btn_send.setStyleSheet(
-            f"QPushButton{{background:{CP['accent']};color:#07080f;"
-            f"border:none;border-radius:7px;font-size:11px;font-weight:700;padding:0 20px;}}"
-            f"QPushButton:hover{{background:#6eded6;}}"
-            f"QPushButton:disabled{{background:{CP['bg3']};color:{CP['text_dim']};"
-            f"border:1px solid {CP['border']};}}"
-        )
-        chat_row.addWidget(chat_in, 1)
-        chat_row.addWidget(btn_send)
-        lay.insertLayout(3, chat_row)
-
-        def _set_chat_enabled(on: bool):
-            chat_in.setEnabled(on)
-            btn_send.setEnabled(on)
-
-        _set_chat_enabled(not streaming and bool(_final_analysis[0]))
-
-        def _append_chat(text: str):
-            cursor = chat_view.textCursor()
-            cursor.movePosition(cursor.MoveOperation.End)
-            cursor.insertText(text)
-            chat_view.setTextCursor(cursor)
-            chat_view.ensureCursorVisible()
-
-        def _send_chat():
-            q = chat_in.text().strip()
-            if not q or _chat_worker[0] is not None or not _final_analysis[0]:
-                return
-            chat_view.setVisible(True)
-            _append_chat(("\n" if _chat_msgs else "")
-                         + f"▶ {translate('Vous')} — {q}\n\n◆ {_ai_name()} :\n")
-            chat_in.clear()
-            _set_chat_enabled(False)
-            _chat_msgs.append({"role": "user", "content": q})
-            from api.live_screenplay import ArrangeChatConducteurWorker
-            w = ArrangeChatConducteurWorker(
-                _chat_msgs, self._get_text(), _final_analysis[0],
-                self._live_mode, refs_analysis=self._last_ref_analysis)
-            _chat_worker[0] = w
-
-            def _chat_done(result: str):
-                _chat_msgs.append({"role": "assistant", "content": result})
-                _append_chat("\n")
-                abandon_thread(_chat_worker[0])   # parqué, jamais déréférencé à chaud
-                _chat_worker[0] = None
-                _set_chat_enabled(True)
-                chat_in.setFocus()
-
-            def _chat_failed(msg: str):
-                if _chat_msgs and _chat_msgs[-1].get("role") == "user":
-                    _chat_msgs.pop()
-                _append_chat(f"\n⚠ {msg}\n")
-                abandon_thread(_chat_worker[0])
-                _chat_worker[0] = None
-                _set_chat_enabled(True)
-
-            w.chunk.connect(_append_chat)
-            w.done.connect(_chat_done)
-            w.failed.connect(_chat_failed)
-            w.start()
-
-        btn_send.clicked.connect(_send_chat)
-        chat_in.returnPressed.connect(_send_chat)
-
-        # Entrée dans le champ = ENVOYER le message — jamais Annuler/Appliquer
-        # (Qt fait du 1er bouton du dialogue le bouton par défaut sinon).
+        # (Le mini-chat inline de co-écriture a été REMPLACÉ par le studio de
+        # co-écriture complet, comme au Cinéma — bouton « Session de co-écriture »
+        # → dialog_arrange_session_live, calibré conducteur.)
         from ui.widgets import disable_default_buttons
         disable_default_buttons(dlg)
 
@@ -2773,15 +2715,6 @@ class PageScenario(QWidget):
             original     = self._get_text()
             if not analysis_txt or not original:
                 return
-            # La co-écriture fait partie des suggestions : les décisions du
-            # dialogue priment sur les propositions initiales.
-            if _chat_msgs:
-                transcript = "\n".join(
-                    f"{'RÉALISATEUR' if m['role'] == 'user' else 'IA'} : {m['content']}"
-                    for m in _chat_msgs)
-                analysis_txt += ("\n\nDISCUSSION DE CO-ÉCRITURE (les décisions les plus "
-                                 "récentes PRIMENT sur les suggestions initiales) :\n"
-                                 + transcript)
             intensity = self._arrange_intensity_value
             w = ApplyArrangeConducteurWorker(
                 original, analysis_txt, intensity,
@@ -2805,10 +2738,7 @@ class PageScenario(QWidget):
             btn_direct.setVisible(False)
             btn_session.setEnabled(False)
             btn_session.setVisible(False)
-            _set_chat_enabled(False)
-            chat_view.setVisible(False)
-            chat_in.setVisible(False)
-            btn_send.setVisible(False)
+            btn_relaunch.setVisible(False)
             self._set_ai_busy(True)
 
             def _on_apply_chunk(chunk: str):
@@ -2837,6 +2767,8 @@ class PageScenario(QWidget):
                 btn_update.setVisible(True)
 
             def _on_apply_failed(msg: str):
+                from core.ai_provider import humanize_ai_error
+                msg = humanize_ai_error(msg)
                 _streaming_active[0] = False
                 _apply_worker[0] = None
                 btn_close.setText(translate("Fermer"))
@@ -2891,6 +2823,12 @@ class PageScenario(QWidget):
                 self._set_ai_busy(False)
                 self._last_analysis = result
                 self._last_result_kind = "arrange"
+                # Analyse PERSISTÉE avec le conducteur : re-cliquer sur le bouton
+                # la rouvrira sans nouvel appel API (crédits préservés).
+                if self._current is not None:
+                    self._current["arrange_analysis"] = result
+                    self._save(silent=True)
+                btn_relaunch.setVisible(True)
                 self._btn_reopen_window.setVisible(True)
                 text = self._editor_text.toPlainText()
                 mins, secs = self._estimate_duration(text)
@@ -2905,9 +2843,10 @@ class PageScenario(QWidget):
                 )
                 btn_session.setEnabled(True)
                 btn_direct.setEnabled(True)
-                _set_chat_enabled(True)
 
             def _on_failed(msg: str):
+                from core.ai_provider import humanize_ai_error
+                msg = humanize_ai_error(msg)
                 _streaming_active[0] = False
                 btn_close.setText(translate("Fermer"))
                 btn_close.setStyleSheet(_ghost_ss)
@@ -2927,11 +2866,14 @@ class PageScenario(QWidget):
         dlg.exec()
 
     def _open_arrange_session(self, analysis_text: str):
-        """Ouvre le studio de co-écriture interactif Claude × Réalisateur."""
-        from ui.dialog_arrange_session import ArrangeSessionDialog
+        """Ouvre le studio de co-écriture interactif — version CONDUCTEUR
+        (dialog_arrange_session_live, jamais le format scénario INT./EXT.)."""
+        from ui.dialog_arrange_session_live import ArrangeSessionDialog
         original   = self._get_text()
         intensity  = self._arrange_intensity_value
-        dlg = ArrangeSessionDialog(self, original, analysis_text, intensity)
+        dlg = ArrangeSessionDialog(self, original, analysis_text, intensity,
+                                   mode=self._live_mode,
+                                   refs_analysis=self._last_ref_analysis)
         dlg.exec()
         if dlg.was_applied():
             final = dlg.final_screenplay()

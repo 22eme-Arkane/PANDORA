@@ -213,6 +213,29 @@ def brand(text: str) -> str:
     return text if n == "Claude" else text.replace("Claude", n)
 
 
+def humanize_ai_error(msg: str) -> str:
+    """Message d'erreur API TEXTE (Anthropic/OpenAI…) lisible pour l'utilisateur.
+
+    Les erreurs brutes (JSON) sont opaques ; les cas fréquents — crédits
+    épuisés, quota, clé invalide — méritent une phrase claire. Retourne le
+    message d'origine si le cas n'est pas reconnu.
+    (Pendant fal.ai : core.worker.humanize_api_error — ne pas fusionner, les
+    consignes de recharge diffèrent.)"""
+    from core.i18n import translate as _tr
+    low = (msg or "").lower()
+    if ("credit balance" in low or "insufficient credit" in low
+            or ("billing" in low and "credit" in low)):
+        return _tr("Crédits API épuisés — recharge ton compte "
+                   "(console.anthropic.com → Billing) puis relance. "
+                   "La dernière analyse sauvegardée reste disponible.")
+    if "rate limit" in low or "429" in low or "overloaded" in low or "529" in low:
+        return _tr("Service IA saturé ou limite de débit atteinte — "
+                   "réessaie dans quelques instants.")
+    if "401" in low or "authentication" in low or "invalid x-api-key" in low:
+        return _tr("Clé API invalide — vérifie-la dans Paramètres → Clés API.")
+    return msg
+
+
 def _engine_display_name(provider: str, creative_model: str) -> str:
     """Nom d'affichage lisible d'un moteur résolu (provider + modèle créatif).
     Pour Anthropic, distingue Opus / Sonnet / Haiku / Fable 5."""

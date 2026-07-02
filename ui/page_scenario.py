@@ -759,7 +759,7 @@ class PageScenario(QWidget):
         c_ia, l_ia = _section_container()
 
         self._btn_arrange = _ai_btn(
-            "⊞", "Proposer un arrangement", "Analyse structure + suggestions", self._on_arrange,
+            "⊞", "Analyse & co-écriture", "Analyse structure + session de co-écriture", self._on_arrange,
         )
         self._btn_format = _ai_btn(
             "◈", "Mise en page PANDORA", "Structure le scénario en blocs plans optimisés pour PANDORA", self._on_format,
@@ -1080,6 +1080,12 @@ class PageScenario(QWidget):
         self._music_mode = sc.get("music_mode") or "clip"
         if hasattr(self, "_music_hbox"):
             self._refresh_music_display()
+        # Analyse d'arrangement persistée → « Analyse & co-écriture » la rouvrira
+        # sans nouvel appel API (et le bouton Rouvrir refonctionne au redémarrage).
+        saved_analysis = (sc.get("arrange_analysis") or "").strip()
+        if saved_analysis:
+            self._last_analysis = saved_analysis
+            self._last_result_kind = "arrange"
         self._refresh_version_combo()
         self._go_editor()
 
@@ -1849,6 +1855,23 @@ class PageScenario(QWidget):
         if not text:
             self._ai_progress_lbl.setText("Écris d'abord un texte à analyser.")
             return
+        # Analyse déjà faite et SAUVEGARDÉE → on la rouvre telle quelle : aucun
+        # nouvel appel API, aucun crédit consommé. « Relancer l'analyse » vit
+        # dans la fenêtre pour qui veut vraiment refaire une passe.
+        saved = ((self._current or {}).get("arrange_analysis") or "").strip()
+        if saved:
+            self._last_analysis = saved
+            self._last_result_kind = "arrange"
+            self._btn_reopen_window.setVisible(True)
+            self._open_arrange_window(analysis=saved)
+            return
+        self._start_arrange_analysis()
+
+    def _start_arrange_analysis(self):
+        """Lance une NOUVELLE analyse (appel API) et ouvre la fenêtre en streaming."""
+        text = self._get_text()
+        if not text:
+            return
         from api.screenplay import ArrangeScreenplayWorker
         from core.casting import list_characters
         from core.decors import list_decors
@@ -1876,7 +1899,7 @@ class PageScenario(QWidget):
             self._ai_progress_lbl.setText("Aucun texte à modifier.")
             return
         if not suggestions:
-            self._ai_progress_lbl.setText("Lance d'abord « Proposer un arrangement ».")
+            self._ai_progress_lbl.setText("Lance d'abord « Analyse & co-écriture ».")
             return
         from api.screenplay import ApplyArrangeWorker
         self._set_ai_busy(True)
@@ -2307,7 +2330,23 @@ class PageScenario(QWidget):
             f"border:1px solid {CP['border']};}}"
         )
 
+        # ↻ Relancer : refaire une VRAIE analyse (appel API) — visible seulement
+        # quand on a rouvert une analyse sauvegardée (pas pendant un streaming).
+        btn_relaunch = QPushButton(translate("↻  Relancer l'analyse"))
+        btn_relaunch.setFixedHeight(36)
+        btn_relaunch.setVisible(not streaming)
+        btn_relaunch.setToolTip(translate(
+            "Refait une analyse complète (consomme des crédits API)."))
+        btn_relaunch.setStyleSheet(_ghost_ss)
+
+        def _do_relaunch():
+            dlg.accept()
+            self._start_arrange_analysis()
+
+        btn_relaunch.clicked.connect(_do_relaunch)
+
         btn_row.addWidget(btn_close)
+        btn_row.addWidget(btn_relaunch)
         btn_row.addStretch()
         btn_row.addWidget(btn_session)
         btn_row.addWidget(btn_direct)
@@ -2373,6 +2412,8 @@ class PageScenario(QWidget):
                 btn_update.setVisible(True)
 
             def _on_apply_failed(msg: str):
+                from core.ai_provider import humanize_ai_error
+                msg = humanize_ai_error(msg)
                 _streaming_active[0] = False
                 _apply_worker[0] = None
                 btn_close.setText(translate("Fermer"))
@@ -2427,6 +2468,12 @@ class PageScenario(QWidget):
                 self._set_ai_busy(False)
                 self._last_analysis = result
                 self._last_result_kind = "arrange"
+                # Analyse PERSISTÉE avec le scénario : re-cliquer sur le bouton
+                # la rouvrira sans nouvel appel API (crédits préservés).
+                if self._current is not None:
+                    self._current["arrange_analysis"] = result
+                    self._save(silent=True)
+                btn_relaunch.setVisible(True)
                 self._btn_reopen_window.setVisible(True)
                 text = self._editor_text.toPlainText()
                 mins, secs = self._estimate_duration(text)
@@ -2443,6 +2490,8 @@ class PageScenario(QWidget):
                 btn_direct.setEnabled(True)
 
             def _on_failed(msg: str):
+                from core.ai_provider import humanize_ai_error
+                msg = humanize_ai_error(msg)
                 _streaming_active[0] = False
                 btn_close.setText(translate("Fermer"))
                 btn_close.setStyleSheet(_ghost_ss)

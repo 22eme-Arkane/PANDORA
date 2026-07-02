@@ -3,7 +3,7 @@ ui/page_live_conducteur.py — Page « Conducteur » de PANDORA | Live.
 
 Équivalent Live du scénario : éditeur de trame à gauche, panneau Claude à droite
 (même arborescence que le Scénario Cinéma, mais typé Live / Mapping) :
-  - ☁ Claude IA : Mise en page · Proposer un arrangement
+  - ☁ Claude IA : Mise en page · Analyse & co-écriture
   - ☁ Générer depuis le conducteur : Casting · Accessoires · Véhicules · Découpage · Tout générer
   - ◎ Références visuelles : ajout d'images + analyse Claude
 
@@ -153,7 +153,7 @@ class PageLiveConducteur(QWidget):
         # ── Claude IA ──────────────────────────────────────────────────────────
         body_ia, lay_ia = self._make_section("☁  Claude IA", True)
         lay_ia.addWidget(self._action("◈", "Mise en page", "Met en forme la trame (typée Live/Mapping)", self._on_format))
-        lay_ia.addWidget(self._action("⊞", "Proposer un arrangement", "Réécrit une version améliorée de la trame", self._on_arrange))
+        lay_ia.addWidget(self._action("⊞", "Analyse & co-écriture", "Réécrit une version améliorée de la trame", self._on_arrange))
         lay.addWidget(body_ia)
 
         # ── Générer depuis le conducteur ───────────────────────────────────────

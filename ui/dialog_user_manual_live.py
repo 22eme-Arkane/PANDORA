@@ -80,7 +80,7 @@ def _l_conducteur() -> str:
             "de masque de confinement et de base au <b>calage Resolume</b>",
             "<b>Musiques du set</b> — ajoutez vos morceaux : BPM, énergie et drops sont "
             "analysés et injectés dans l'IA",
-            "<b>Proposer un arrangement</b> — analyse + suggestions, affinables en co-écriture",
+            "<b>Analyse & co-écriture</b> — analyse + suggestions, affinables en co-écriture",
             "<b>Mise en page PANDORA</b> — structure le conducteur en actes et plans avec "
             "PROMPT VIDÉO et PROMPT SON par plan",
             "<b>Générer le découpage</b> — crée la séquence (Live ou Mapping) plan par plan",
@@ -295,7 +295,7 @@ def _le_conducteur() -> str:
             "and the basis of the <b>Resolume calibration</b>",
             "<b>Set music</b> — add your tracks: BPM, energy and drops are analysed and "
             "injected into the AI",
-            "<b>Suggest an arrangement</b> — analysis + suggestions, refinable in co-writing",
+            "<b>Analysis & co-writing</b> — analysis + suggestions, refinable in co-writing",
             "<b>PANDORA layout</b> — structures the rundown into acts and shots with a "
             "VIDEO PROMPT and a SOUND PROMPT per shot",
             "<b>Generate the breakdown</b> — creates the sequence (Live or Mapping) shot by shot",

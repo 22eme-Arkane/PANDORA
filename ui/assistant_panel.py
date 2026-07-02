@@ -48,7 +48,7 @@ CORPUS: dict[str, dict] = {
         "tips": [
             "Injectez des références visuelles — Claude les analyse et enrichit votre scénario.",
             "'Mise en page PANDORA' structure le texte en blocs plans optimisés pour Seedance.",
-            "'Proposer un arrangement' ouvre le Studio de co-écriture interactif avec Claude.",
+            "'Analyse & co-écriture' ouvre le Studio de co-écriture interactif avec Claude.",
             "'Tout Générer' crée personnages, décors, accessoires, HMC, véhicules en une passe.",
             "Versions nommées (✚/✕) et undo/redo (↩/↪) pour revenir à n'importe quel état.",
         ],
@@ -66,7 +66,7 @@ CORPUS: dict[str, dict] = {
             "par Seedance : en-têtes INT./EXT., titres de séquences, descriptions d'action. "
             "Format pensé pour la génération IA, pas pour le format Hollywood classique.\n\n"
             "Co-écriture avec Claude\n"
-            "'⊞ Proposer un arrangement' ouvre le Studio de co-écriture. Ajustez l'intensité "
+            "'⊞ Analyse & co-écriture' ouvre le Studio de co-écriture. Ajustez l'intensité "
             "(1-10) pour des suggestions légères ou profondes. Claude ne touche que ce que "
             "vous lui demandez — le reste de votre texte est préservé. Vous pouvez joindre "
             "des images à vos messages pour guider les suggestions.\n\n"
@@ -390,7 +390,7 @@ CORPUS: dict[str, dict] = {
             "La photo de la façade isolée sur fond noir sert de canevas aux moods, "
             "de masque de confinement et de base au calage Resolume.\n\n"
             "Générer\n"
-            "« Proposer un arrangement » (analyse + co-écriture), « Mise en page "
+            "« Analyse & co-écriture » (analyse + suggestions affinables), « Mise en page "
             "PANDORA » (actes/plans + prompts), « Générer le découpage » (séquence "
             "Live ou Mapping), ou « ⚡ Tout générer » pour enchaîner."
         ),

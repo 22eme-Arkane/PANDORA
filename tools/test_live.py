@@ -802,9 +802,13 @@ def couche_ai_provider():
     # Les workers TEXTE ne doivent plus importer anthropic en direct
     # (seuls les appels VISION y ont droit, marqués d'un commentaire).
     import api.enhance, api.assistant, core.lang, api.live_extract, api.live_screenplay
-    for mod in (api.enhance, api.assistant, core.lang, api.live_extract, api.live_screenplay):
+    for mod in (api.enhance, api.assistant, core.lang, api.live_extract):
         src = inspect.getsource(mod)
         assert "anthropic.Anthropic(" not in src, f"{mod.__name__} : appel anthropic direct restant"
+    src = inspect.getsource(api.live_screenplay)
+    assert src.count("anthropic.Anthropic(") == 1, \
+        "live_screenplay : seul le site VISION du studio de co-écriture (images jointes)"
+    assert "ai_chat" in src, "live_screenplay routé via ai_provider (texte)"
     import api.screenplay
     src = inspect.getsource(api.screenplay)
     assert src.count("anthropic.Anthropic(") == 2, "screenplay : seuls les 2 sites VISION restent"
@@ -1228,30 +1232,58 @@ def bibliotheque_images_globale():
 
 @test
 def coecriture_arrangement():
-    """La co-écriture vit DANS la fenêtre d'arrangement, en langage conducteur
-    (remplace la Session de co-écriture Cinéma au format scénario, retirée)."""
+    """« Analyse & co-écriture » Live : le mini-chat inline est REMPLACÉ par le
+    studio de co-écriture complet (parité Cinéma), calibré CONDUCTEUR."""
     import inspect
-    from api.live_screenplay import ArrangeChatConducteurWorker, _ARRANGE_CHAT
-    w = ArrangeChatConducteurWorker([{"role": "user", "content": "?"}],
-                                    "cond", "sugg", "mapping", refs_analysis="DA")
-    assert hasattr(w, "chunk") and hasattr(w, "done") and hasattr(w, "failed")
-    assert w._refs == "DA", "la co-écriture voit la direction artistique"
-    assert "chat_stream" in inspect.getsource(ArrangeChatConducteurWorker.run)
-    assert "ACTES" in _ARRANGE_CHAT and "SUGGESTION RÉVISÉE" in _ARRANGE_CHAT
-    assert "INT./EXT." in _ARRANGE_CHAT, "format scénario interdit"
+    # Studio de co-écriture Live : worker dédié conducteur (jamais INT./EXT.)
+    from api.live_screenplay import ArrangeSessionChatConducteurWorker
+    w = ArrangeSessionChatConducteurWorker(
+        "cond", "sugg", [], "?", intensity=5, mode="mapping", refs_analysis="DA")
+    assert hasattr(w, "message_ready") and hasattr(w, "screenplay_ready") \
+        and hasattr(w, "failed"), "mêmes signaux que le studio Cinéma"
+    from api.live_screenplay import _arrange_session_chat_system
+    _sys = _arrange_session_chat_system(5, "mapping")
+    assert "« INT. »" in _sys, "format scénario explicitement interdit"
+    assert "visible" in _sys and "façade" in _sys, \
+        "mode mapping : confinement par visibilité (jamais de liste noire)"
     from ui.page_scenario_live import PageScenario
     src = inspect.getsource(PageScenario._open_arrange_window)
-    assert "ArrangeChatConducteurWorker" in src, "chat branché dans la fenêtre"
-    assert "DISCUSSION DE CO-ÉCRITURE" in src, \
-        "l'application intègre la discussion (les décisions priment)"
-    assert "abandon_thread(_chat_worker[0])" in src, "anti-crash : worker parqué"
-    # Entrée dans le champ = envoyer — jamais le bouton par défaut Qt
-    # (vu en réel : Entrée déclenchait Annuler/Appliquer dans les fenêtres à chat)
+    assert "ArrangeChatConducteurWorker" not in src, "mini-chat inline retiré"
+    assert "btn_session" in src, "Session de co-écriture réactivée (parité Cinéma)"
     assert "disable_default_buttons" in src, "arrangement : boutons par défaut neutralisés"
+    src_sess = inspect.getsource(PageScenario._open_arrange_session)
+    assert "dialog_arrange_session_live" in src_sess, "studio calibré conducteur"
     assert "disable_default_buttons" in inspect.getsource(PageScenario._open_refs_window), \
         "refs : boutons par défaut neutralisés"
     from ui.widgets import disable_default_buttons
     assert callable(disable_default_buttons)
+
+
+@test
+def analyse_arrangement_sauvegardee_live():
+    """« Analyse & co-écriture » Live : l'analyse est PERSISTÉE avec le conducteur
+    et ROUVERTE sans nouvel appel API (crédits préservés) ; « Relancer » dans la fenêtre."""
+    import inspect
+    import ui.page_scenario_live as _m
+    src = inspect.getsource(_m)
+    assert "Analyse & co-écriture" in src, "bouton renommé"
+    assert "_start_arrange_analysis" in src, "relance = méthode dédiée"
+    assert "arrange_analysis" in src, "analyse persistée avec le conducteur"
+    assert "Relancer l'analyse" in src, "bouton Relancer dans la fenêtre"
+    from ui.page_scenario_live import PageScenario
+    p = PageScenario()
+    p._set_editor_text("EXT. FACADE - NUIT\nSequence mapping.")
+    p._current = {"arrange_analysis": "ANALYSE LIVE PERSISTÉE"}
+    calls = []
+    p._open_arrange_window = lambda analysis="", worker=None: calls.append((analysis, worker))
+    p._on_arrange()
+    assert calls == [("ANALYSE LIVE PERSISTÉE", None)], \
+        "réouverture SANS worker (aucun crédit consommé)"
+    assert p._last_analysis == "ANALYSE LIVE PERSISTÉE"
+    # Erreur « crédits épuisés » → message clair
+    from core.ai_provider import humanize_ai_error
+    assert "console.anthropic.com" in humanize_ai_error("Your credit balance is too low")
+    assert humanize_ai_error("autre erreur") == "autre erreur"
 
 
 @test

@@ -437,3 +437,260 @@ class ArrangeConducteurStreamWorker(QThread):
         except Exception as e:
             from core.worker import humanize_api_error
             self.failed.emit(humanize_api_error(str(e)))
+
+
+# ── Studio de co-écriture — session interactive (fenêtre dédiée) ──────────────
+# Équivalent Live de ArrangeChatWorker (api/screenplay.py) : même protocole à
+# MARQUEURS (MESSAGE / document réécrit), calibré CONDUCTEUR live/mapping —
+# jamais de format scénario cinéma (INT./EXT., dialogues screenplay).
+
+# Vision (images jointes) : appel DIRECT Anthropic — hors couche ai_provider
+# (aligné sur api/screenplay.py : les autres fournisseurs gèrent la vision
+# différemment ; périmètre v1 = texte). Réflexion désactivée pour ne pas
+# rogner la sortie.
+_VISION_MODEL    = "claude-sonnet-5"
+_VISION_NO_THINK = {"type": "disabled"}
+
+# Confinement façade pour la co-écriture d'un conducteur de MAPPING — critère
+# de VISIBILITÉ sur la photo de référence (jamais de liste noire d'éléments),
+# même règle que _APPLY_ARRANGE_CONDUCTEUR.
+_SESSION_FACADE_RULE = (
+    "CONDUCTEUR DE MAPPING : toute action reste STRICTEMENT sur la façade "
+    "mappée (la photo de référence, plan frontal) — jamais d'action reposant "
+    "sur un élément non visible sur cette photo ; si une demande l'exige, "
+    "transpose l'action sur un élément visible de la façade (portes, "
+    "fenêtres, arêtes, bords du cadre).\n\n"
+)
+
+
+def _arrange_session_chat_system(intensity: int, mode: str) -> str:
+    """Prompt système de la co-écriture interactive du CONDUCTEUR.
+
+    Adapté de api/screenplay.py → _arrange_chat_system (Cinéma) : mêmes
+    paliers d'intensité et même format de réponse à marqueurs, mais l'IA
+    co-écrit un CONDUCTEUR de performance live/mapping (actes, tableaux,
+    ambiances, musiques/BPM) — jamais un scénario de film."""
+    intensity = max(1, min(10, intensity))
+    if intensity <= 2:
+        rule = (
+            f"━━━ INTENSITÉ MINIMALE ({intensity}/10) — MODIFICATION CHIRURGICALE STRICTE ━━━\n"
+            "Modifie UNIQUEMENT ce que le réalisateur demande, mot pour mot.\n"
+            "Si la demande cible un plan ou un moment, seul ce passage change — rien avant, rien après.\n"
+            "Tout le reste est copié CARACTÈRE PAR CARACTÈRE depuis la version précédente.\n"
+            "Aucune amélioration, aucune correction, aucune retouche hors de la zone ciblée."
+        )
+    elif intensity <= 4:
+        rule = (
+            f"━━━ INTENSITÉ PRÉCISE ({intensity}/10) — CHIRURGIE CIBLÉE ━━━\n"
+            "Tu ne modifies QUE ce que le réalisateur demande EXPLICITEMENT.\n"
+            "Tout le reste du conducteur est copié MOT POUR MOT — sans reformulation, sans retouche.\n"
+            "Tu peux uniquement harmoniser la ponctuation dans la phrase ciblée pour la cohérence."
+        )
+    elif intensity <= 6:
+        rule = (
+            f"━━━ INTENSITÉ CIBLÉE ({intensity}/10) — MODIFICATION PRÉCISE ━━━\n"
+            "Tu modifies les zones que le réalisateur demande. Tout le reste est conservé.\n"
+            "Tu peux légèrement affiner le style dans la zone ciblée pour assurer la cohérence de ton.\n"
+            "Ne retouche pas les passages non mentionnés, même si tu penses pouvoir les améliorer."
+        )
+    elif intensity <= 8:
+        rule = (
+            f"━━━ INTENSITÉ CRÉATIVE ({intensity}/10) — RÉÉCRITURE DES ZONES CIBLÉES ━━━\n"
+            "Tu modifies les zones demandées avec liberté créative : reformule, enrichis, améliore le rythme.\n"
+            "Tu peux retoucher les passages adjacents pour assurer la fluidité dramatique.\n"
+            "Les zones non mentionnées sont conservées, avec d'éventuelles harmonisations stylistiques légères."
+        )
+    else:
+        rule = (
+            f"━━━ INTENSITÉ LIBRE ({intensity}/10) — CO-ÉCRITURE COMPLÈTE ━━━\n"
+            "Tu réécris dans l'esprit des instructions du réalisateur, avec pleine liberté créative.\n"
+            "Tu peux transformer le style, le rythme, les ambiances et la structure dans l'ensemble du conducteur.\n"
+            "Respecte scrupuleusement ce que le réalisateur demande de conserver explicitement."
+        )
+    ctx = ("performance de MAPPING vidéo projetée sur la façade d'un bâtiment "
+           "(façade verrouillée, caméra fixe, continuité)"
+           if mode == "mapping"
+           else "performance LIVE / VJ (loops visuels projetés)")
+    facade = _SESSION_FACADE_RULE if mode == "mapping" else ""
+    return (
+        "Tu es un co-auteur travaillant dans Pandora, un outil de création de "
+        "performances visuelles live. Tu dialogues avec le réalisateur pour "
+        f"affiner le CONDUCTEUR de sa {ctx}.\n\n"
+        f"{rule}\n\n"
+        "IMPORTANT — c'est un CONDUCTEUR de performance, PAS un scénario de film. "
+        "N'introduis JAMAIS de format ni de vocabulaire scénario : INTERDIT "
+        "« INT. » / « EXT. », en-têtes de scène, numéros de scène, « séquence », "
+        "« scène », dialogues au format screenplay (noms de personnages en "
+        "MAJUSCULES avant des répliques). Tu CONSERVES la STRUCTURE du conducteur "
+        "original (déroulé en actes / moments / tableaux, ambiances, musiques/BPM) "
+        "et la voix de l'auteur. Raisonne en ACTES et en PLANS / loops visuels.\n\n"
+        f"{facade}"
+        "RÉFÉRENCES VISUELLES : Si des images sont jointes, intègre leurs détails visuels "
+        "UNIQUEMENT dans les parties que le réalisateur demande de modifier. Si une "
+        "DIRECTION ARTISTIQUE (analyse de références) est fournie, appuie-toi dessus — "
+        "inspiration à transposer, jamais à copier.\n\n"
+        "FORMAT DE RÉPONSE OBLIGATOIRE :\n"
+        "Ta réponse doit contenir EXACTEMENT deux parties séparées par ces marqueurs :\n\n"
+        "══════════ MESSAGE ══════════\n"
+        "[Message conversationnel : indique précisément CE QUE TU AS CHANGÉ et où — "
+        "2 à 4 lignes max, ton direct et collaboratif. Si la portée est ambiguë, pose une question.]\n"
+        "══════════ CONDUCTEUR ══════════\n"
+        "[Le conducteur complet réécrit, dans la MÊME forme que l'original.]\n\n"
+        "RÈGLES :\n"
+        "- « Ne touche pas X » ou « garde X intact » → X est copié mot pour mot, sans exception\n"
+        "- « Développe Y » → ajoute du contenu cohérent UNIQUEMENT dans Y\n"
+        "- « Coupe Z » → supprime Z proprement, le reste est intact\n"
+        "- Les noms d'actes et de moments restent IDENTIQUES sauf demande contraire\n"
+        "- N'invente rien qui ne soit pas dans l'original ou explicitement demandé"
+    )
+
+
+class ArrangeSessionChatConducteurWorker(QThread):
+    """Co-écriture interactive du CONDUCTEUR avec l'IA — fenêtre Studio de
+    co-écriture (ui/dialog_arrange_session_live.py).
+
+    Équivalent Live de ArrangeChatWorker (api/screenplay.py) : même protocole
+    à marqueurs, calibré conducteur live/mapping.
+
+    Signaux :
+        message_ready(str)    — réponse conversationnelle (à afficher dans le chat)
+        screenplay_ready(str) — conducteur remanié complet (prévisualisation)
+        failed(str)           — message d'erreur
+    """
+    message_ready    = pyqtSignal(str)
+    screenplay_ready = pyqtSignal(str)
+    failed           = pyqtSignal(str)
+
+    _MARKER_MSG = "══════════ MESSAGE ══════════"
+    _MARKER_DOC = "══════════ CONDUCTEUR ══════════"
+
+    def __init__(
+        self,
+        original: str,
+        analysis: str,
+        history: list,
+        user_message: str,
+        intensity: int = 5,
+        ref_images: list | None = None,
+        mode: str = "live",
+        refs_analysis: str = "",
+    ):
+        super().__init__()
+        self._original     = original or ""       # le CONDUCTEUR complet
+        self._analysis     = analysis or ""
+        self._history      = list(history or [])  # [{"role": "user"/"assistant", "content": str}]
+        self._user_message = user_message
+        self._intensity    = intensity
+        self._ref_images   = ref_images or []
+        self._mode         = mode if mode in ("live", "mapping") else "live"
+        self._refs         = refs_analysis or ""
+
+    def run(self):
+        try:
+            from core.ai_provider import chat as ai_chat, key_error
+            err = key_error()
+            if err:
+                self.failed.emit(err)
+                return
+
+            context_block = (
+                f"CONDUCTEUR ORIGINAL :\n{self._original}\n\n"
+                f"ANALYSE INITIALE (intensité {self._intensity}/10) :\n{self._analysis}"
+            )
+            if self._refs.strip():
+                context_block += (
+                    "\n\n[DIRECTION ARTISTIQUE — issue de l'analyse des images "
+                    "de référence. Inspiration à transposer, jamais à copier : "
+                    "ancre les ambiances, matières et lumières du conducteur "
+                    "dans cette direction.]\n" + self._refs.strip()
+                )
+
+            # Construction des messages : contexte injecté dans le 1er message user
+            messages = []
+            for i, msg in enumerate(self._history):
+                if i == 0 and msg["role"] == "user":
+                    messages.append({
+                        "role": "user",
+                        "content": context_block + "\n\n" + msg["content"],
+                    })
+                else:
+                    messages.append(msg)
+
+            # Message courant — multimodal si images jointes
+            if self._ref_images:
+                import base64, os as _os
+                _MT = {"jpg": "image/jpeg", "jpeg": "image/jpeg", "png": "image/png",
+                       "webp": "image/webp", "gif": "image/gif"}
+                cur_content: list = []
+                for path in self._ref_images[:4]:
+                    try:
+                        with open(path, "rb") as fh:
+                            data = base64.b64encode(fh.read()).decode()
+                        ext = _os.path.splitext(path)[1].lower().lstrip(".")
+                        mt  = _MT.get(ext, "image/jpeg")
+                        cur_content.append({"type": "image",
+                                            "source": {"type": "base64",
+                                                       "media_type": mt,
+                                                       "data": data}})
+                    except Exception:
+                        pass
+                text_prefix = context_block + "\n\n" if not messages else ""
+                cur_content.append({"type": "text",
+                                    "text": text_prefix + self._user_message})
+                messages.append({"role": "user", "content": cur_content})
+            else:
+                if not messages:
+                    messages.append({
+                        "role": "user",
+                        "content": context_block + "\n\n" + self._user_message,
+                    })
+                else:
+                    messages.append({"role": "user", "content": self._user_message})
+
+            system = _arrange_session_chat_system(self._intensity, self._mode)
+
+            # 16000 : la sortie contient le conducteur COMPLET réécrit —
+            # même plafond que ApplyArrangeConducteurWorker (8192 tronquait).
+            if self._ref_images:
+                # VISION (images jointes) : direct Anthropic — hors couche ai_provider.
+                import anthropic
+                from core.config import load_config as _lc
+                client = anthropic.Anthropic(api_key=_lc().get("anthropic_key", "").strip())
+                response = client.messages.create(
+                    model=_VISION_MODEL,
+                    max_tokens=16000,
+                    thinking=_VISION_NO_THINK,
+                    system=system,
+                    messages=messages,
+                )
+                raw = response.content[0].text.strip()
+            else:
+                raw = ai_chat(system, messages,
+                              tier="creative", max_tokens=16000).strip()
+
+            # Split sur les marqueurs
+            chat_msg   = ""
+            conducteur = ""
+            if self._MARKER_DOC in raw:
+                parts      = raw.split(self._MARKER_DOC, 1)
+                conducteur = parts[1].strip()
+                # Extraire le message du premier bloc
+                first      = parts[0]
+                if self._MARKER_MSG in first:
+                    chat_msg = first.split(self._MARKER_MSG, 1)[1].strip()
+                else:
+                    chat_msg = first.strip()
+            elif self._MARKER_MSG in raw:
+                chat_msg = raw.split(self._MARKER_MSG, 1)[1].strip()
+            else:
+                # Réponse sans format — tout considéré comme message
+                chat_msg = raw
+
+            if chat_msg:
+                self.message_ready.emit(chat_msg)
+            if conducteur:
+                self.screenplay_ready.emit(conducteur)
+
+        except Exception as e:
+            from core.worker import humanize_api_error
+            self.failed.emit(humanize_api_error(str(e)))

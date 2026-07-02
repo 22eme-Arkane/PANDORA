@@ -2978,6 +2978,38 @@ def sound_design_tirette_duree_et_traduction():
     assert tab._dur_text.value() <= 22, ("durée ramenée au max moteur", tab._dur_text.value())
 
 
+@test
+def analyse_arrangement_sauvegardee():
+    """« Analyse & co-écriture » (ex-Proposer un arrangement) : l'analyse est
+    PERSISTÉE avec le scénario et ROUVERTE sans nouvel appel API (crédits
+    préservés) ; « Relancer l'analyse » vit dans la fenêtre."""
+    import inspect
+    import core.storyboard as sb
+    sb.set_namespace("storyboard")
+    import ui.page_scenario as _m
+    src = inspect.getsource(_m)
+    assert "Analyse & co-écriture" in src, "bouton renommé"
+    assert "_start_arrange_analysis" in src, "relance = méthode dédiée"
+    assert "arrange_analysis" in src, "analyse persistée avec le scénario"
+    assert "Relancer l'analyse" in src, "bouton Relancer dans la fenêtre"
+    from ui.page_scenario import PageScenario
+    p = PageScenario()
+    p._set_editor_text("INT. CUISINE - NUIT\nUne scène de test.")
+    p._current = {"arrange_analysis": "ANALYSE PERSISTÉE"}
+    calls = []
+    p._open_arrange_window = lambda analysis="", worker=None: calls.append((analysis, worker))
+    p._on_arrange()
+    assert calls == [("ANALYSE PERSISTÉE", None)], \
+        "réouverture SANS worker (aucun crédit consommé)"
+    assert p._last_analysis == "ANALYSE PERSISTÉE"
+    # Erreur « crédits épuisés » → message clair (API texte ; fal.ai a le sien
+    # dans core.worker.humanize_api_error)
+    from core.ai_provider import humanize_ai_error
+    assert "console.anthropic.com" in humanize_ai_error("Your credit balance is too low")
+    assert "réessaie" in humanize_ai_error("Error 429: rate limit exceeded")
+    assert humanize_ai_error("autre erreur") == "autre erreur"
+
+
 # ══════════════════════════════════════════════════════════════════════════════
 # Runner
 # ══════════════════════════════════════════════════════════════════════════════

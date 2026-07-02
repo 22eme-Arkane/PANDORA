@@ -242,10 +242,10 @@ def _s_scenario() -> str:
         _tip("La mise en page PANDORA n'est pas le format Hollywood standard. Elle est conçue pour que chaque ligne d'action puisse devenir un prompt Seedance efficace : descriptions visuelles précises, mouvements concrets, ambiances détaillées."),
 
         _sep_html(),
-        _h("⊞ Proposer un arrangement"),
+        _h("⊞ Analyse & co-écriture"),
         _p("Claude analyse la structure de votre scénario et propose des améliorations ciblées. L'analyse s'ouvre en fenêtre streaming. Deux chemins disponibles après l'analyse."),
         _ul(
-            "Cliquez <b>⊞ Proposer un arrangement</b> — l'analyse s'affiche en temps réel",
+            "Cliquez <b>⊞ Analyse & co-écriture</b> — l'analyse s'affiche en temps réel",
             "La fenêtre Studio de création s'ouvre — réglez l'<b>intensité</b> (1 à 10) directement dans le panneau dialogue :",
             "→ <b>1-2</b> : Corrections orthographiques et de ponctuation uniquement",
             "→ <b>3-4</b> : Restructuration douce, rythme de lecture amélioré",
