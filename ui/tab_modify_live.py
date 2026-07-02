@@ -270,7 +270,8 @@ class TabModifyLive(QScrollArea):
 
         # ── RENDU & AUDIO (repliable) ────────────────────────────────────────
         self._ra_open = False
-        self._ra_toggle = QPushButton("▶  " + translate("RENDU & AUDIO"))
+        # .replace : « & » nu = mnémonique Qt sur un QPushButton (caractère avalé)
+        self._ra_toggle = QPushButton("▶  " + translate("RENDU & AUDIO").replace("&", "&&"))
         self._ra_toggle.setMinimumHeight(30)
         self._ra_toggle.setCursor(Qt.CursorShape.PointingHandCursor)
         self._ra_toggle.setStyleSheet(
@@ -496,7 +497,9 @@ class TabModifyLive(QScrollArea):
     def _toggle_rendu_audio(self):
         self._ra_open = not self._ra_open
         self._ra_body.setVisible(self._ra_open)
-        self._ra_toggle.setText(("▼" if self._ra_open else "▶") + "  " + translate("RENDU & AUDIO"))
+        self._ra_toggle.setText(
+            ("▼" if self._ra_open else "▶") + "  "
+            + translate("RENDU & AUDIO").replace("&", "&&"))
 
     # ── Génération en LOT ──────────────────────────────────────────────────────
 

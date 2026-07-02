@@ -2764,8 +2764,8 @@ _FR_TO_EN: dict[str, str] = {
     "Échantillon vocal requis":     "Voice sample required",
     # ── Doublage : voix IA multi-moteurs + moteur de clonage ──────────────────
     "Voix IA — multi-moteurs":      "AI Voices — multi-engine",
-    "MiniMax 2.8 (FR) · Gemini · Inworld · Qwen3 · Maya1\nVoix de synthèse — pas d'échantillon requis":
-        "MiniMax 2.8 (FR) · Gemini · Inworld · Qwen3 · Maya1\nSynthetic voices — no sample required",
+    "ElevenLabs Eleven v3 (FR, défaut) · MiniMax 2.8 · Gemini · Inworld · Qwen3 · Maya1\nVoix de synthèse — pas d'échantillon requis":
+        "ElevenLabs Eleven v3 (FR, default) · MiniMax 2.8 · Gemini · Inworld · Qwen3 · Maya1\nSynthetic voices — no sample required",
     "Clonage de voix":              "Voice cloning",
     "F5-TTS ou Index TTS 2 (FR) · clone depuis un échantillon\nLangue détectée / choisie selon le moteur":
         "F5-TTS or Index TTS 2 (FR) · clone from a sample\nLanguage auto-detected / chosen per engine",

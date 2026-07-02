@@ -458,10 +458,13 @@ class PageScenario(QWidget):
         self._editor_tabs.setDocumentMode(False)
         self._editor_tabs.tabBar().setExpanding(False)
         self._editor_tabs.setStyleSheet(
-            "QTabWidget::pane{border:none;}"
+            # Ligne de base sous la barre d'onglets sur TOUTE la largeur : les
+            # onglets centrés « reposent » dessus au lieu de flotter au milieu.
+            f"QTabWidget::pane{{border:none;border-top:1px solid {CP['border']};}}"
             # Onglets CENTRÉS dans la fenêtre (esprit du dashboard du bas)
             "QTabWidget::tab-bar{alignment:center;}"
-            f"QTabBar::tab{{background:{CP['bg1']};color:{CP['text_secondary']};"
+            # Fond transparent : pas de pastille grise isolée sur le bg0.
+            f"QTabBar::tab{{background:transparent;color:{CP['text_secondary']};"
             f"padding:6px 18px;border:none;font-size:11px;font-weight:700;}}"
             f"QTabBar::tab:selected{{color:{CP['accent']};"
             f"border-bottom:2px solid {CP['accent']};}}"

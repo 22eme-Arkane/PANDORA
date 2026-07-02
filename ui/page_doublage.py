@@ -353,7 +353,7 @@ class PageDoublage(QWidget):
         )
         self._btn_mode_speech = self._make_mode_card(
             "Voix IA — multi-moteurs",
-            "MiniMax 2.8 (FR) · Gemini · Inworld · Qwen3 · Maya1\nVoix de synthèse — pas d'échantillon requis",
+            "ElevenLabs Eleven v3 (FR, défaut) · MiniMax 2.8 · Gemini · Inworld · Qwen3 · Maya1\nVoix de synthèse — pas d'échantillon requis",
             CP["accent"], False,
         )
         self._btn_mode_clone = self._make_mode_card(

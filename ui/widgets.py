@@ -153,7 +153,9 @@ class HelpBlock(QFrame):
             from core.i18n import translate as _tr
         except ImportError:
             def _tr(x): return x
-        self._btn = QPushButton(f"ℹ  {_tr(title)}    ▶")
+        # « & » nu = mnémonique Qt sur un QPushButton (caractère avalé + soulignement)
+        _t = _tr(title).replace("&", "&&")
+        self._btn = QPushButton(f"ℹ  {_t}    ▶")
         self._btn.setFixedHeight(28)
         self._btn.setCursor(Qt.CursorShape.PointingHandCursor)
         self._btn.setStyleSheet(
@@ -197,7 +199,8 @@ class HelpBlock(QFrame):
         expanded = not self._body.isVisible()
         self._body.setVisible(expanded)
         arrow = "▼" if expanded else "▶"
-        self._btn.setText(f"ℹ  {_tr(self._title)}    {arrow}")
+        _t = _tr(self._title).replace("&", "&&")
+        self._btn.setText(f"ℹ  {_t}    {arrow}")
 
 
 def section_label(text: str) -> QLabel:

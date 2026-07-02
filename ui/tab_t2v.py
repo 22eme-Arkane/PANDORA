@@ -2688,7 +2688,7 @@ class TabT2V(QScrollArea):
 
         # En-tête repliable (menu déroulant) — beaucoup d'options sous RENDU & AUDIO.
         self._raccords_open = False  # replié par défaut
-        self._raccords_toggle_btn = QPushButton("▶  RENDU & AUDIO")
+        self._raccords_toggle_btn = QPushButton("▶  RENDU && AUDIO")
         self._raccords_toggle_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         self._raccords_toggle_btn.setStyleSheet(
             f"QPushButton{{background:transparent;color:{C['accent']};border:none;"
@@ -2711,7 +2711,7 @@ class TabT2V(QScrollArea):
             self._raccords_open = not self._raccords_open
             self._raccords_body.setVisible(self._raccords_open)
             self._raccords_toggle_btn.setText(
-                ("▼" if self._raccords_open else "▶") + "  RENDU & AUDIO")
+                ("▼" if self._raccords_open else "▶") + "  RENDU && AUDIO")
         self._raccords_toggle_btn.clicked.connect(_toggle_raccords)
 
         # À partir d'ici, toutes les options s'ajoutent dans le CORPS repliable.

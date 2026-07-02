@@ -1033,7 +1033,7 @@ class TabDavinciEdit(QScrollArea):
         _ra_lay.setSpacing(1)
 
         self._ra_open = False   # replié par défaut
-        self._ra_toggle_btn = QPushButton("▶  RENDU & AUDIO")
+        self._ra_toggle_btn = QPushButton("▶  RENDU && AUDIO")
         self._ra_toggle_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         self._ra_toggle_btn.setStyleSheet(
             f"QPushButton{{background:transparent;color:{C['accent']};border:none;"
@@ -1053,7 +1053,7 @@ class TabDavinciEdit(QScrollArea):
         def _toggle_ra(*_a):
             self._ra_open = not self._ra_open
             self._ra_body.setVisible(self._ra_open)
-            self._ra_toggle_btn.setText(("▼" if self._ra_open else "▶") + "  RENDU & AUDIO")
+            self._ra_toggle_btn.setText(("▼" if self._ra_open else "▶") + "  RENDU && AUDIO")
         self._ra_toggle_btn.clicked.connect(_toggle_ra)
 
         # Options RENDU & AUDIO — mêmes que « Générer depuis le storyboard » (libellés
