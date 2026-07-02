@@ -17,6 +17,12 @@ on:
   release:
     types: [published]
 
+# Nécessaire pour que « gh release upload » (attache des artefacts) fonctionne :
+# le GITHUB_TOKEN par défaut est en lecture seule (vu au 1er run : tout le build
+# mac a réussi, seule l'attache à la Release a été refusée).
+permissions:
+  contents: write
+
 jobs:
   windows:
     runs-on: windows-latest
