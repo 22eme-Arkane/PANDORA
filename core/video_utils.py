@@ -409,16 +409,25 @@ def extract_last_frame(video_path: str, output_path: str) -> bool:
 
 # ── Compatibilité moteurs : transcodage H.264 automatique ──────────────────────
 
-def _video_codec(path: str) -> str:
-    """Codec vidéo (ex. 'h264', 'hevc', 'prores') via ffprobe ; '' si indéterminé."""
+def _video_stream_info(path: str) -> dict:
+    """Infos de la 1re piste vidéo via ffprobe (codec_name, width, height, pix_fmt,
+    field_order). Dict vide si ffprobe indisponible ou fichier illisible."""
     try:
-        out = subprocess.run(
+        r = subprocess.run(
             [get_ffprobe_exe(), "-v", "error", "-select_streams", "v:0",
-             "-show_entries", "stream=codec_name", "-of", "default=nw=1:nk=1", path],
+             "-show_entries", "stream=codec_name,width,height,pix_fmt,field_order",
+             "-of", "default=nw=1", path],
             capture_output=True, text=True, timeout=30, creationflags=_NO_WINDOW)
-        return (out.stdout or "").strip().lower()
+        if r.returncode != 0:
+            return {}
+        info = {}
+        for line in (r.stdout or "").splitlines():
+            if "=" in line:
+                k, v = line.split("=", 1)
+                info[k.strip()] = v.strip()
+        return info
     except Exception:
-        return ""
+        return {}
 
 
 def _transcode_cache_dir() -> str:
@@ -433,13 +442,85 @@ def _transcode_cache_dir() -> str:
 
 
 def is_engine_compatible(path: str) -> bool:
-    """True si le fichier est directement exploitable par les moteurs (mp4 H.264)."""
+    """True si le fichier est directement exploitable par les moteurs
+    (conteneur mp4, codec H.264, pixels 8 bits yuv420p)."""
     if not path or not os.path.isfile(path):
         return False
     if os.path.splitext(path)[1].lower() != ".mp4":
         return False
-    codec = _video_codec(path)
-    return codec in ("", "h264")   # '' = ffprobe absent → on fait confiance au .mp4
+    info = _video_stream_info(path)
+    codec = (info.get("codec_name") or "").lower()
+    pix = (info.get("pix_fmt") or "").lower()
+    if codec not in ("", "h264"):   # '' = ffprobe absent → on fait confiance au .mp4
+        return False
+    return pix in ("", "yuv420p", "yuvj420p")
+
+
+# ── Détection FIABLE de l'entrelacement ─────────────────────────────────────────
+# Le flag `field_order`/`interlaced_frame` du codec MENT parfois : des exports
+# progressifs (DaVinci notamment) peuvent être codés « interlaced » → un yadif
+# appliqué sur la foi du flag interpole des images progressives et CRÉE des
+# trames/lignes. Inversement, du contenu peigné non flagué passait sans
+# désentrelacement. D'où la double vérification métadonnées + analyse idet.
+
+_INTERLACED_ORDERS = ("tt", "bb", "tb", "bt")
+_interlace_cache: dict = {}
+
+
+def _idet_counts(path: str, frames: int = 200) -> tuple | None:
+    """Analyse RÉELLE du contenu via le filtre idet sur les `frames` premières
+    images → (nb entrelacées, nb progressives), ou None si ffmpeg indisponible."""
+    try:
+        r = subprocess.run(
+            [get_ffmpeg_exe(), "-hide_banner", "-i", path, "-an",
+             "-frames:v", str(frames), "-filter:v", "idet", "-f", "null", "-"],
+            capture_output=True, text=True, timeout=300, creationflags=_NO_WINDOW)
+        lines = [l for l in (r.stderr or "").splitlines()
+                 if "Multi frame detection" in l]
+        if not lines:
+            return None
+        import re
+        m = re.search(r"TFF:\s*(\d+)\s*BFF:\s*(\d+)\s*Progressive:\s*(\d+)",
+                      lines[-1])
+        if not m:
+            return None
+        tff, bff, prog = (int(x) for x in m.groups())
+        return (tff + bff, prog)
+    except Exception:
+        return None
+
+
+def video_is_interlaced(path: str) -> bool:
+    """True UNIQUEMENT si la vidéo est RÉELLEMENT entrelacée (peigne/trames).
+
+    1. ffprobe `field_order` : 'progressive'/'unknown'/'' → False — une vidéo
+       progressive ne passe JAMAIS par yadif.
+    2. field_order entrelacé (tt/bb/tb/bt) → CONFIRMATION par une passe idet
+       (analyse du contenu image par image) : les exports progressifs marqués
+       « interlaced » par le codec (flag menteur) sont écartés. Si idet est
+       indisponible, on suit les métadonnées.
+    Résultat mémoïsé par (chemin, taille, mtime).
+    """
+    if not path or not os.path.isfile(path):
+        return False
+    try:
+        st = os.stat(path)
+        key = (path, st.st_size, int(st.st_mtime))
+    except OSError:
+        key = (path, 0, 0)
+    if key in _interlace_cache:
+        return _interlace_cache[key]
+    result = False
+    field_order = (_video_stream_info(path).get("field_order") or "").lower()
+    if field_order in _INTERLACED_ORDERS:
+        counts = _idet_counts(path)
+        if counts is None:
+            result = True            # idet indisponible → on suit les métadonnées
+        else:
+            inter, prog = counts
+            result = inter > prog    # contenu majoritairement peigné = entrelacé
+    _interlace_cache[key] = result
+    return result
 
 
 def _video_dims(path: str) -> tuple | None:
@@ -483,7 +564,7 @@ ENGINE_MAX_HEIGHT = 1080
 def video_needs_transcode(path: str) -> str:
     """'' si le clip part TEL QUEL aux moteurs ; sinon une RAISON courte et lisible
     (pour PRÉVENIR l'utilisateur avant de générer) : « format/codec », « > 1080p »,
-    ou les deux."""
+    « entrelacée », ou une combinaison."""
     if not path or not os.path.isfile(path):
         return ""
     reasons = []
@@ -492,6 +573,8 @@ def video_needs_transcode(path: str) -> str:
     dims = _video_dims(path)
     if dims and dims[1] > ENGINE_MAX_HEIGHT:
         reasons.append(f"résolution {dims[0]}×{dims[1]} > 1080p")
+    if video_is_interlaced(path):
+        reasons.append("vidéo entrelacée (trames)")
     return " · ".join(reasons)
 
 
@@ -499,11 +582,20 @@ def ensure_engine_video(path: str, emit=None) -> str:
     """Retourne un chemin vidéo H.264/mp4 PROGRESSIF ≤ 1080p exploitable par les
     moteurs IA.
 
-    Transcode si le format/codec n'est pas supporté (MXF, ProRes, HEVC…) OU si la
-    résolution dépasse 1080p (downscale, AR conservé). Garantit une sortie
-    PROGRESSIVE : `yadif=deint=interlaced` ne désentrelace QUE les images marquées
-    entrelacées et laisse les images progressives intactes → on n'ajoute JAMAIS de
-    trames sur une vidéo progressive (le bug observé sur Draw-to-Video).
+    - BYPASS TOTAL (chemin d'origine, zéro ré-encodage) si le clip est déjà
+      conforme : mp4/H.264, yuv420p, ≤ 1080p, progressif — le cas le plus
+      fréquent ; tout ré-encodage systématique dégraderait l'image pour rien.
+    - Désentrelace (yadif) UNIQUEMENT si la source est RÉELLEMENT entrelacée
+      (`video_is_interlaced` : field_order ffprobe CONFIRMÉ par une passe idet).
+      L'ancien filtre `yadif=deint=interlaced` appliqué à chaque transcodage se
+      fiait au flag du codec : des exports progressifs marqués « interlaced »
+      (flag menteur, vu sur des sorties DaVinci) étaient interpolés à tort →
+      trames/lignes sur l'image (bug Draw-to-Video / Modifier des clips) ; et
+      une vraie 1080i en mp4/H.264 partait telle quelle, peigne compris.
+    - Ré-encodage inévitable (codec/format non supporté, > 1080p, entrelacée) →
+      qualité élevée : libx264 -crf 18 -preset slow, downscale lanczos
+      scale=-2:'min(1080,ih)' (jamais d'upscale, AR conservé), cadence source
+      préservée, sortie yuv420p.
     Renvoie l'original si déjà conforme OU si ffmpeg est indisponible.
     Résultat mis en cache (chemin+taille+date). `emit(msg)` : progression optionnelle.
     """
@@ -511,14 +603,16 @@ def ensure_engine_video(path: str, emit=None) -> str:
         return path
     reason = video_needs_transcode(path)
     if not reason:
-        return path   # déjà H.264/mp4 progressif ≤1080p → envoyé tel quel
+        return path   # déjà H.264/mp4 yuv420p progressif ≤1080p → envoyé tel quel
     try:
         st = os.stat(path)
         sig = f"{os.path.splitext(os.path.basename(path))[0]}_{st.st_size}_{int(st.st_mtime)}"
     except Exception:
         sig = os.path.splitext(os.path.basename(path))[0]
     safe = "".join(c for c in sig if c.isalnum() or c in "-_") or "clip"
-    out = os.path.join(_transcode_cache_dir(), safe + "_h264.mp4")
+    # Suffixe _h264p2 : invalide l'ancien cache _h264 (produit avec le yadif
+    # systématique + preset veryfast → fichiers potentiellement dégradés).
+    out = os.path.join(_transcode_cache_dir(), safe + "_h264p2.mp4")
     if os.path.isfile(out) and os.path.getsize(out) > 0:
         return out
     if emit:
@@ -527,12 +621,15 @@ def ensure_engine_video(path: str, emit=None) -> str:
         except Exception:
             pass
     try:
-        # yadif=deint=interlaced → anti-trames (progressif préservé) ;
+        vf_parts = []
+        if video_is_interlaced(path):
+            vf_parts.append("yadif")   # source réellement entrelacée UNIQUEMENT
         # scale=-2:'min(1080,ih)' → plafonne à 1080p sans jamais agrandir, AR conservé.
-        vf = "yadif=deint=interlaced,scale=-2:'min(1080,ih)':flags=lanczos,format=yuv420p"
+        vf_parts.append("scale=-2:'min(1080,ih)':flags=lanczos")
+        vf_parts.append("format=yuv420p")
         cmd = [get_ffmpeg_exe(), "-y", "-i", path,
-               "-vf", vf,
-               "-c:v", "libx264", "-preset", "veryfast", "-crf", "18",
+               "-vf", ",".join(vf_parts),
+               "-c:v", "libx264", "-preset", "slow", "-crf", "18",
                "-movflags", "+faststart", "-c:a", "aac", "-b:a", "192k", out]
         r = subprocess.run(cmd, capture_output=True, timeout=1800, creationflags=_NO_WINDOW)
         if r.returncode == 0 and os.path.isfile(out) and os.path.getsize(out) > 0:

@@ -200,9 +200,10 @@ def run_real(params: dict, emit_progress, is_cancelled) -> dict:
     ref_images = ref_images[:4]
     ref_roles  = ref_roles[:4]
 
-    # ── Clip source : transcodage H.264 automatique si format non supporté ──────
-    # (ex. MXF/ProRes/HEVC/4K exotique) → évite les rejets des moteurs. Conserve
-    # la résolution native. No-op si déjà mp4/H.264 ou ffmpeg absent.
+    # ── Clip source : transcodage H.264 automatique si nécessaire ───────────────
+    # (MXF/ProRes/HEVC → H.264 ; > 1080p → downscale lanczos ; RÉELLEMENT
+    # entrelacée → yadif). No-op TOTAL si déjà mp4/H.264 yuv420p progressif
+    # ≤ 1080p, ou si ffmpeg est absent — jamais de ré-encodage inutile.
     _vp = params.get("video_path", "")
     if _vp and os.path.isfile(_vp):
         try:
