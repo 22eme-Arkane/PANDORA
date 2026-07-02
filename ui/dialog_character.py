@@ -844,14 +844,15 @@ class CharacterDialog(QDialog):
 
         self._prompt = QTextEdit()
         self._prompt.setPlaceholderText(
-            "Décris le personnage ou écris directement le prompt…\n"
+            "Décris UNIQUEMENT le physique du personnage : traits, âge, corpulence, "
+            "visage, coiffure, tenue…\n"
             "Ex : Middle-aged man, dark hair, strong jaw, Mediterranean features, "
             "navy suit, confident expression.\n\n"
-            "Clique sur ☁ pour optimiser via Claude."
+            "Jamais l'histoire ni la psychologie — uniquement ce qui se voit."
         )
-        self._prompt.setPlainText(
-            self._char.get("prompt", "") or self._char.get("description", "")
-        )
+        # PAS de repli sur la description : elle peut contenir du narratif
+        # (« influencée par son père »…) qui polluerait le prompt d'image.
+        self._prompt.setPlainText(self._char.get("prompt", ""))
         self._prompt.setFixedHeight(130)
         self._prompt.setStyleSheet(
             f"QTextEdit{{background:{CP['bg3']};border:1px solid {CP['border']};"
@@ -2018,7 +2019,8 @@ class CharacterDialog(QDialog):
         if hasattr(self, "_nb2edit_worker") and self._nb2edit_worker and self._nb2edit_worker.isRunning():
             return
         name   = self._char.get("name", "") or "personnage"
-        prompt = self._char.get("prompt", "") or self._char.get("description", "") or name
+        # PAS de repli sur la description (risque de narratif dans le prompt d'image).
+        prompt = self._char.get("prompt", "") or name
         self._nb2edit_worker = GeneratePortraitNB2EditWorker([path], prompt, name)
         self._nb2edit_worker.progress.connect(self._on_nb2edit_progress)
         self._nb2edit_worker.finished.connect(self._on_nb2edit_done)

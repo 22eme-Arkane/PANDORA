@@ -1399,6 +1399,11 @@ _FR_TO_EN: dict[str, str] = {
         "Kimi URL (default: https://api.moonshot.ai/v1 — or local server /v1)",
     "Modèle Kimi (défaut : kimi-k2.7-code)":
         "Kimi model (default: kimi-k2.7-code)",
+    # ── Mise en scène / Plan de feu : échelle réelle du plan (2026-07-02) ─────
+    "Échelle du plan (largeur en mètres)…":  "Plan scale (width in meters)…",
+    "Échelle du plan":                        "Plan scale",
+    "Largeur réelle du décor sur le plan (mètres) :":
+        "Real width of the set on the plan (meters):",
     # ── Draw-to-Video : timeline de monteur (2026-07-02) ──────────────────────
     "Timeline : cliquer = sauter, glisser = naviguer":
         "Timeline: click to jump, drag to scrub",

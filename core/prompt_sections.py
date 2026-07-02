@@ -109,7 +109,11 @@ def parse(prompt: str) -> dict:
     for i, (m, key) in enumerate(tags):
         start = m.end()
         end = tags[i + 1][0].start() if i + 1 < len(tags) else len(prompt)
-        out[key] = prompt[start:end].strip()
+        seg = prompt[start:end].strip()
+        # FUSIONNER au lieu d'écraser : le texte AVANT la 1re étiquette (contexte
+        # casting [COHÉRENCE VISUELLE], préfixes cadrage/mouvement/continuité) était
+        # PERDU dès qu'une section [ACTION] existait — il reste désormais en tête.
+        out[key] = f"{out[key]}\n{seg}".strip() if (out[key] and seg) else (out[key] or seg)
     return out
 
 

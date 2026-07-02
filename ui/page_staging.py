@@ -586,7 +586,13 @@ class PageStaging(QWidget):
             action = sec.get("action") or cur
             changed = False
             if self._mode == "staging":
-                actors_txt = staging.staging_actors_summary(sid)
+                # Vision fraîche (ancrée au mobilier) prioritaire sur le déterministe —
+                # ce menu réécrivait TOUTES les sections vision du projet en résumés vagues.
+                _sv = rec.get("vision_staging", "")
+                if _sv and rec.get("vision_staging_sig") == staging.positions_sig(rec, "staging"):
+                    actors_txt = _sv
+                else:
+                    actors_txt = staging.staging_actors_summary(sid)
                 new = _build(action=action, staging=actors_txt or sec.get("staging", ""),
                              ambiance=sec.get("ambiance", ""), decor=sec.get("decor", ""),
                              lighting=sec.get("lighting", ""), technique=sec.get("technique", ""),
@@ -608,6 +614,9 @@ class PageStaging(QWidget):
                     changed = True
             else:
                 light_txt = staging.lighting_summary(sid)
+                _lv = rec.get("vision_lighting", "")
+                if light_txt and _lv and rec.get("vision_lighting_sig") == staging.positions_sig(rec, "lighting"):
+                    light_txt = f"{light_txt}  {_lv}".strip()
                 new = _build(action=action, staging=sec.get("staging", ""),
                              ambiance=sec.get("ambiance", ""), decor=sec.get("decor", ""),
                              lighting=light_txt or sec.get("lighting", ""),
@@ -677,6 +686,10 @@ class PageStaging(QWidget):
         if not self._shot:
             return
         if self._vision_worker is not None and self._vision_worker.isRunning():
+            # Une analyse tourne déjà : se RÉARMER au lieu d'abandonner — sinon les
+            # dernières positions ne seraient jamais analysées et une vision périmée
+            # resterait la seule disponible.
+            self._vision_timer.start()
             return
         try:
             from core.config import load_config
@@ -708,16 +721,34 @@ class PageStaging(QWidget):
         decor_desc = self._shot.get("decor_name", "") or ""
         from api.staging_vision import StagingVisionWorker
         self._vision_shot_id = self._shot["id"]
+        # Signature des positions AU LANCEMENT — le résultat ne sera appliqué que
+        # si les positions n'ont pas bougé entre-temps (sinon vision périmée).
+        self._vision_sig = staging.positions_sig(rec, self._mode)
         self._vision_worker = StagingVisionWorker(plan, tokens, self._mode, decor_desc)
         self._vision_worker.finished.connect(self._on_vision_done)
         self._vision_worker.failed.connect(lambda _e: None)
         self._vision_worker.start()
 
     def _on_vision_done(self, txt: str):
-        # Le plan a pu changer pendant l'analyse → n'écrire que si c'est le même.
-        if (txt and self._shot
+        # Le plan OU les positions ont pu changer pendant l'analyse → n'écrire que
+        # si c'est le même plan ET les mêmes positions (jamais de vision périmée).
+        if not (txt and self._shot
                 and self._shot.get("id") == getattr(self, "_vision_shot_id", None)):
-            self._apply_vision_text(txt)
+            return
+        rec = staging.get(self._shot["id"])
+        sig = staging.positions_sig(rec, self._mode)
+        if sig != getattr(self, "_vision_sig", None):
+            return   # les jetons ont bougé depuis le lancement → résultat obsolète
+        # PERSISTER la description vision dans le record : c'est elle qui PRIME sur
+        # le résumé déterministe tant que les positions n'ont pas changé
+        # (cf. _write_sections / _sync_to_storyboard) — avant ce correctif elle
+        # était écrasée au premier déplacement de jeton et perdue à jamais.
+        if self._mode == "staging":
+            rec["vision_staging"], rec["vision_staging_sig"] = txt, sig
+        else:
+            rec["vision_lighting"], rec["vision_lighting_sig"] = txt, sig
+        staging.save(self._shot["id"], rec)
+        self._apply_vision_text(txt)
 
     def _apply_vision_text(self, txt: str):
         """Écrit la description précise de Claude dans la bonne section du prompt :
@@ -767,6 +798,11 @@ class PageStaging(QWidget):
         # lumières (sinon on préserve l'intention de lumière éventuelle du découpage).
         if rec.get("lights"):
             light_txt = staging.lighting_summary(sid)
+            # Description VISION du plan de feu (origine de la lumière vs mobilier)
+            # encore valable → AJOUTÉE au résumé déterministe (directions + distances).
+            _lv = rec.get("vision_lighting", "")
+            if _lv and rec.get("vision_lighting_sig") == staging.positions_sig(rec, "lighting"):
+                light_txt = f"{light_txt}  {_lv}".strip()
             if light_txt != sec.get("lighting", ""):
                 sec["lighting"] = light_txt
                 changed = True
@@ -774,7 +810,14 @@ class PageStaging(QWidget):
             sec["lighting"] = ""   # plus aucune lumière en mode plan de feu → vider
             changed = True
         if self._mode == "staging":
-            staging_txt = staging.staging_actors_summary(sid)
+            # La description VISION (ancrée au mobilier réellement visible : « assise
+            # à la table, côté gauche ») PRIME sur le résumé déterministe tant que
+            # les positions n'ont pas changé — elle n'est plus jamais écrasée par lui.
+            _sv = rec.get("vision_staging", "")
+            if _sv and rec.get("vision_staging_sig") == staging.positions_sig(rec, "staging"):
+                staging_txt = _sv
+            else:
+                staging_txt = staging.staging_actors_summary(sid)
             if staging_txt != sec.get("staging", ""):
                 sec["staging"] = staging_txt
                 changed = True
@@ -860,7 +903,38 @@ class PageStaging(QWidget):
                 _a.triggered.connect(lambda _=False, dd=_did, tgt=target: self._set_plan_decor_for(tgt, dd))
         except Exception:
             pass
+
+        # Échelle RÉELLE du plan (largeur du décor en mètres) : fiabilise les
+        # distances chiffrées écrites dans les prompts — tant qu'elle n'est pas
+        # renseignée, elles sont précédées de « environ » (10 m supposés).
+        menu.addSeparator()
+        _span = staging.get(target["id"]).get("plan_span_m") or 0
+        _span_lbl = translate("Échelle du plan (largeur en mètres)…")
+        if _span:
+            _span_lbl += f"  [{_span:g} m]"
+        menu.addAction(_span_lbl, lambda _=False, tgt=target: self._set_plan_span_for(tgt))
         menu.exec(self._list.mapToGlobal(pos))
+
+    def _set_plan_span_for(self, tgt_shot: dict):
+        """Échelle RÉELLE du plan d'UN plan : largeur du décor en mètres
+        (rec["plan_span_m"]). Toutes les distances (plan de feu, colonne DIST.)
+        en découlent ; une fois renseignée, le « environ » disparaît des prompts."""
+        rec = staging.get(tgt_shot["id"])
+        try:
+            cur = float(rec.get("plan_span_m") or staging.DEFAULT_PLAN_SPAN_M)
+        except (TypeError, ValueError):
+            cur = staging.DEFAULT_PLAN_SPAN_M
+        val, ok = QInputDialog.getDouble(
+            self, translate("Échelle du plan"),
+            translate("Largeur réelle du décor sur le plan (mètres) :"),
+            cur, 1.0, 500.0, 1)
+        if not ok:
+            return
+        rec["plan_span_m"] = round(val, 1)
+        staging.save(tgt_shot["id"], rec)
+        self._write_sections(tgt_shot, rec)   # distances des prompts recalculées
+        if self._shot and self._shot.get("id") == tgt_shot.get("id"):
+            self._reload_current()
 
     def _set_plan_decor_for(self, tgt_shot: dict, decor_id: str):
         """Change le plan de décor d'UN plan (clic droit) et recharge si courant."""

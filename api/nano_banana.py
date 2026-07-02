@@ -2281,13 +2281,18 @@ class GenerateFloorPlanWorker(QThread):
 
 
 def _floor_plan_prompt(base_en: str) -> str:
-    """Prompt commun (plan d'architecte vu de dessus)."""
+    """Prompt commun (plan d'architecte vu de dessus). La description du décor
+    (base_en) peut contenir de l'atmosphère photographique (météo, humidité,
+    profondeur de champ…) qui contredit le style schématique → consigne explicite
+    d'ignorer tout sauf l'agencement spatial."""
     return (
         f"TOP-DOWN architectural floor plan (bird's eye view, seen from directly "
         f"above) of: {base_en}. Clean schematic blueprint / architect plan style: "
         f"walls, doors, windows and furniture drawn from above with simple lines and "
         f"flat tones, neutral background, clear and uncluttered, no people, no camera, "
-        f"no text labels. Square framing."
+        f"no text labels. Ignore any lighting, weather, atmosphere, mood or "
+        f"depth-of-field wording in the description above — draw ONLY the spatial "
+        f"layout: walls, openings and furniture positions. Square framing."
     )
 
 

@@ -55,8 +55,12 @@ def translate_dialogues_to(text: str, lang: str) -> str:
         return text
 
     import re
+    # Apostrophes : une ' collée à une lettre (contraction anglaise « It's »,
+    # élision française « l'arme ») n'ouvre/ferme PAS un dialogue — sinon
+    # « It's dark. The killer's knife » devenait une fausse réplique traduite.
     pat = re.compile(
-        r"«[^»]*»|“[^”]{1,300}”|‘[^’]{1,300}’|\"[^\"]{1,300}\"|'[^']{1,300}'"
+        r"«[^»]*»|“[^”]{1,300}”|‘[^’]{1,300}’|\"[^\"]{1,300}\""
+        r"|(?<![A-Za-zÀ-ÿ])'[^']{1,300}'(?![A-Za-zÀ-ÿ])"
     )
     memo: dict[str, str] = {}
 

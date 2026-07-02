@@ -163,10 +163,21 @@ def build_mood_prompt(shot: dict, film_style: str = "") -> str:
     if axis and axis in _CAMERA_AXIS_EN:
         parts.append(_CAMERA_AXIS_EN[axis])
 
-    # Prompt Seedance — core content
+    # Prompt Seedance — core content. Prompt structuré : on APLATIT les sections
+    # (étiquettes françaises + emojis = bruit pour un modèle t2i) et on EXCLUT
+    # [🎵 SOUND DESIGN] — le son n'a pas sa place dans une image fixe.
     seedance = (shot.get("seedance_prompt") or "").strip()
     if seedance:
-        parts.append(seedance)
+        try:
+            from core.prompt_sections import is_structured as _ps_is, parse as _ps_parse
+            if _ps_is(seedance):
+                _sec = _ps_parse(seedance)
+                seedance = ". ".join(v.strip().rstrip(".")
+                                     for k, v in _sec.items() if k != "sound" and v)
+        except Exception:
+            pass
+        if seedance:
+            parts.append(seedance)
 
     # Description de l'action
     scene_title = (shot.get("scene_title") or "").strip()
@@ -185,11 +196,10 @@ def build_mood_prompt(shot: dict, film_style: str = "") -> str:
     if movement and movement != "Fixe" and movement in _MOVEMENT_EN:
         parts.append(_MOVEMENT_EN[movement])
 
-    # Qualité
-    parts.append(
-        "cinematic still frame, 4K, sharp focus, film grain, "
-        "professional cinematography, high quality"
-    )
+    # Qualité — SANS mots de qualité génériques (« 4K », « high quality »… sont
+    # interdits par la doctrine des prompts) ni « film grain » imposé (il
+    # contredirait les styles non photoréalistes ; le style du projet le porte).
+    parts.append("cinematic still frame, sharp focus")
 
     return ". ".join(p for p in parts if p)
 

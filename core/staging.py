@@ -262,11 +262,57 @@ def _cam_frame(rec):
     return (0.5, 0.5), (0.0, 1.0), (1.0, 0.0)
 
 
+def positions_sig(rec, mode: str = "staging") -> str:
+    """Signature stable des positions d'un record — sert à savoir si une analyse
+    VISION (Claude lit le mobilier du plan) est encore valable pour l'état courant.
+    mode « staging » : caméra + acteurs + éléments ; mode « lighting » : + lumières."""
+    import json as _json
+    keys = (("camera", "actors", "props") if mode == "staging"
+            else ("camera", "actors", "props", "lights"))
+    return _json.dumps({k: rec.get(k) for k in keys}, sort_keys=True, ensure_ascii=False)
+
+
+def _depth_vs_camera(rec, ax, ay) -> str:
+    """Profondeur VUE CAMÉRA d'un point (« au premier plan » / « au deuxième
+    plan » / « à l'arrière-plan »), relative à la distance caméra → sujet."""
+    import math
+    (cx, cy), _f, _r = _cam_frame(rec)
+    sx, sy = _subject_pos(rec)
+    dsub = math.hypot(sx - cx, sy - cy) or 1e-6
+    r = math.hypot(ax - cx, ay - cy) / dsub
+    if r < 0.8:
+        return "au premier plan"
+    if r > 1.25:
+        return "à l'arrière-plan"
+    return "au deuxième plan"
+
+
+def _frame_zone_phrase(rec, ax, ay) -> str:
+    """Zone du cadre vue caméra (latéral + PROFONDEUR) — utilisée quand aucun
+    élément de décor n'est assez proche pour servir d'ancrage."""
+    (cx, cy), (fx, fy), (rx, ry) = _cam_frame(rec)
+    vx, vy = ax - cx, ay - cy
+    lat = vx * rx + vy * ry
+    h = "à gauche" if lat < -0.05 else ("à droite" if lat > 0.05 else "au centre")
+    v = _depth_vs_camera(rec, ax, ay)
+    if v == "au deuxième plan" and h == "au centre":
+        return "au centre du cadre, au deuxième plan (vu caméra)"
+    return f"{v} {h} (vu caméra)"
+
+
+# Distance normalisée au-delà de laquelle un élément de décor n'est plus un
+# ancrage pertinent (« à droite de la table » n'a pas de sens si la table est
+# à l'autre bout de la pièce) → repli sur la zone du cadre vue caméra.
+_PROP_ANCHOR_MAX = 0.25
+
+
 def _actor_placement_phrase(rec, actor) -> str:
     """Placement d'un acteur EXPRIMÉ PAR RAPPORT à l'élément de décor le plus
-    proche et VU DE LA CAMÉRA (« à droite de la table », « devant le comptoir »,
-    « à la table, à gauche »). Sans élément posé : zone du cadre vue caméra
-    (« au premier plan à gauche »). Recalculé en direct si on déplace l'acteur,
+    proche — s'il est assez proche pour servir d'ancrage — ET TOUJOURS en
+    profondeur vue caméra (« à gauche de « table », au deuxième plan (vu
+    caméra) »). Le nom de l'élément est mis entre guillemets « » : pas d'article
+    à deviner, et le traducteur le préserve tel quel. Sans élément pertinent :
+    zone du cadre vue caméra. Recalculé en direct si on déplace l'acteur,
     l'élément OU la caméra → le prompt reflète exactement la mise en scène."""
     import math
     ax, ay = actor.get("x", .5), actor.get("y", .5)
@@ -278,35 +324,32 @@ def _actor_placement_phrase(rec, actor) -> str:
         px, py = prop.get("x", .5), prop.get("y", .5)
         name = (prop.get("name") or "l'élément").strip()
         dist = math.hypot(ax - px, ay - py)
+        if dist > _PROP_ANCHOR_MAX:                # élément trop loin → pas un ancrage
+            return _frame_zone_phrase(rec, ax, ay)
+        # Profondeur TOUJOURS exprimée — mais uniquement si une caméra est posée
+        # (sans caméra, « vu caméra » serait une profondeur fabriquée).
+        depth_cam = _depth_vs_camera(rec, ax, ay) if rec.get("camera") else ""
         vx, vy = ax - px, ay - py                 # élément → acteur
         lat = vx * rx + vy * ry                    # + = image-droite
         dep = vx * fx + vy * fy                    # + = plus loin que l'élément (derrière)
         side  = "à droite" if lat > 0.04 else ("à gauche" if lat < -0.04 else "")
         depth = "devant" if dep < -0.04 else ("derrière" if dep > 0.04 else "")
-        if dist < 0.09:                            # collé à l'élément → « à la table »
-            return f"à {name}" + (f", {side}" if side else "")
-        side_p = f"{side} de {name}" if side else ""
-        if side_p and depth:
-            return f"{side_p}, {depth}"            # « à droite de la table, devant »
-        if side_p:
-            return side_p
-        if depth:
-            return f"{depth} {name}"               # « devant la table »
-        return f"près de {name}"
+        if dist < 0.09:                            # collé à l'élément
+            base = f"tout contre « {name} »" + (f", {side}" if side else "")
+        else:
+            side_p = f"{side} de « {name} »" if side else ""
+            if side_p and depth:
+                base = f"{side_p}, {depth}"        # « à droite de « table », devant »
+            elif side_p:
+                base = side_p
+            elif depth:
+                base = f"{depth} « {name} »"       # « devant « table » »
+            else:
+                base = f"près de « {name} »"
+        return f"{base}, {depth_cam} (vu caméra)" if depth_cam else base
 
-    # Aucun élément posé → zone du cadre, vue caméra.
-    vx, vy = ax - cx, ay - cy
-    lat = vx * rx + vy * ry
-    h = "à gauche" if lat < -0.05 else ("à droite" if lat > 0.05 else "au centre")
-    dcam = math.hypot(vx, vy)
-    sx, sy = _subject_pos(rec)
-    dsub = math.hypot(sx - cx, sy - cy) or 1e-6
-    r = dcam / dsub
-    v = ("au premier plan" if r < 0.8
-         else ("à l'arrière-plan" if r > 1.25 else "au milieu du cadre"))
-    if v == "au milieu du cadre" and h == "au centre":
-        return "au centre du cadre"
-    return f"{v} {h}"
+    # Aucun élément posé → zone du cadre, vue caméra (profondeur incluse).
+    return _frame_zone_phrase(rec, ax, ay)
 
 
 def staging_summary(shot_id: str) -> str:
@@ -471,6 +514,10 @@ def lighting_summary(shot_id: str) -> str:
     def _fmt_m(v):
         return f"{v:.1f}".rstrip("0").rstrip(".").replace(".", ",") + " m"
 
+    # Échelle réelle RENSEIGNÉE par l'utilisateur → distances exactes ; sinon le
+    # plan est supposé large de 10 m → « environ » (ne pas induire en erreur).
+    approx = "" if rec.get("plan_span_m") else "environ "
+
     bits = []
     for l in lights:
         lp   = (l.get("x", .5), l.get("y", .5))
@@ -484,10 +531,10 @@ def lighting_summary(shot_id: str) -> str:
         named = [(a.get("name", ""), (a.get("x", .5), a.get("y", .5)))
                  for a in actors if a.get("name")]
         if named:
-            desc += ", à " + ", ".join(f"{_fmt_m(_dist_m(lp, ap))} de {nm}"
+            desc += ", à " + ", ".join(f"{approx}{_fmt_m(_dist_m(lp, ap))} de {nm}"
                                        for nm, ap in named[:3])
         else:
-            desc += f", à {_fmt_m(_dist_m(lp, subject))} du sujet"
+            desc += f", à {approx}{_fmt_m(_dist_m(lp, subject))} du sujet"
         # Réglages réalistes du projecteur (intensité, température, teinte, ±vert,
         # gélatine, faisceau) selon ses capacités → injectés dans le prompt.
         if proj:

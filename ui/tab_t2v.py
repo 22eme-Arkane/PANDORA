@@ -3481,8 +3481,8 @@ class TabT2V(QScrollArea):
                 and self._subtitle_cb.isChecked()):
             fp = f"{fp}, no subtitles"
 
-        fp = (f"{fp}, 4K ultra HD, rich detail, sharp clarity, "
-              "cinematic textures, stable picture")
+        # (suffixe qualité « 4K ultra HD… » RETIRÉ — mots de qualité génériques
+        # interdits par la doctrine des prompts : ils poussent vers un rendu CGI.)
 
         _SHOT_TIME_EN = {
             "Jour":            "strict daylight, natural midday sun, bright neutral light, no golden hour, no sunset",
@@ -4017,6 +4017,12 @@ class TabT2V(QScrollArea):
             if not self._check_davinci_connection():
                 return
 
+        # Retirer [🎵 SOUND DESIGN] AVANT l'assemblage : les suffixes ajoutés en
+        # queue (« no subtitles »…) tombaient DANS la section son puis étaient
+        # supprimés avec elle par api/real.strip_for_video (qui reste en filet).
+        from core.prompt_sections import strip_for_video as _strip_sound
+        prompt = _strip_sound(prompt) or prompt
+
         context     = self._casting.get_context()
         full_prompt = (context + prompt) if context else prompt
 
@@ -4123,11 +4129,9 @@ class TabT2V(QScrollArea):
             ref_images = ref_images + [self._active_mood_path]
             ref_image_roles = ref_image_roles + ["mood"]
 
-        # Quality suffix — always appended
-        full_prompt = (
-            f"{full_prompt}, 4K ultra HD, rich detail, sharp clarity, "
-            "cinematic textures, stable picture"
-        )
+        # (suffixe qualité « 4K ultra HD, rich detail… » RETIRÉ : mots de qualité
+        # génériques interdits par la doctrine des prompts — poussent vers un rendu
+        # CGI plastique ; le style vidéo du projet et l'ancrage film suffisent.)
         # Heure du plan → suffixe d'éclairage en anglais, ajouté APRÈS traduction
         # pour que les mots-clés Seedance ne soient pas altérés par Claude Haiku
         _SHOT_TIME_EN = {

@@ -548,7 +548,9 @@ def prompt_mood_cinema_inchange():
     p = build_mood_prompt({"seedance_prompt": "a forest", "focal": "35mm",
                            "shot_size": "PL", "scene_title": "Marche en forêt"}, "")
     assert "35mm" in p and "wide shot" in p, "termes caméra Cinéma présents"
-    assert "film grain" in p, "suffixe qualité Cinéma présent"
+    # Audit prompts 2026-07-02 : plus de mots qualité génériques interdits
+    # (« 4K/film grain/high quality » poussaient un rendu contradictoire).
+    assert "cinematic still frame" in p and "4K" not in p, "suffixe mood assaini"
     assert "Marche en forêt" in p, "description d'action présente"
     assert "OPENING state" not in p, "pas de consigne keyframe Live côté Cinéma"
 
@@ -1709,11 +1711,13 @@ def mise_en_scene_placement_precis():
     # Sans caméra : table au centre, acteur à gauche puis à droite → bascule.
     rec = {"actors": [{"name": "M", "x": 0.30, "y": 0.50}],
            "props": [{"name": "la table", "x": 0.50, "y": 0.50}]}
-    assert "à gauche de la table" in st._actor_placement_phrase(rec, rec["actors"][0])
+    # Audit prompts 2026-07-02 : noms d'éléments entre « » (robuste traduction).
+    assert "à gauche de « la table »" in st._actor_placement_phrase(rec, rec["actors"][0])
     rec["actors"][0]["x"] = 0.70
-    assert "à droite de la table" in st._actor_placement_phrase(rec, rec["actors"][0])
+    assert "à droite de « la table »" in st._actor_placement_phrase(rec, rec["actors"][0])
     rec["actors"][0].update(x=0.50, y=0.50)
-    assert st._actor_placement_phrase(rec, rec["actors"][0]) == "à la table"
+    assert st._actor_placement_phrase(rec, rec["actors"][0]).startswith(
+        "tout contre « la table »")
     # Caméra : le côté est relatif à l'axe caméra (2 persos de part et d'autre).
     rec3 = {"camera": {"x": 0.5, "y": 0.95},
             "actors": [{"name": "M", "x": 0.3, "y": 0.5}, {"name": "J", "x": 0.7, "y": 0.5}],

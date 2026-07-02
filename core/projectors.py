@@ -396,7 +396,9 @@ def ambiance_phrase(light: dict) -> str:
         return ""
     fam = (light.get("family") or "").strip()
     cap = capabilities(fam, light.get("model", ""))
-    quality = _FAMILY_QUALITY.get(fam, "lumière")
+    # Famille inconnue → PAS de qualité (le mot orphelin « lumière » polluait le
+    # prompt : « ambiance chaude, lumière, lumière plus contrastée… »).
+    quality = _FAMILY_QUALITY.get(fam, "")
 
     eff = s.get("effect", "")
     if eff and cap.get("effects"):
@@ -417,4 +419,4 @@ def ambiance_phrase(light: dict) -> str:
     soft = (fam in ("led_panel", "mat", "balloon")) and not s.get("louver")
     contrast = ("lumière douce aux ombres délicates" if soft
                 else "lumière plus contrastée aux ombres marquées")
-    return f"{mood}, {quality}, {contrast}"
+    return ", ".join(x for x in (mood, quality, contrast) if x)

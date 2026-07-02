@@ -279,7 +279,11 @@ def run_real(params: dict, emit_progress, is_cancelled) -> dict:
     # uniquement, on traduit les dialogues entre guillemets vers la langue
     # choisie pour ce plan (par défaut anglais). Le prompt à l'écran reste tel quel.
     _dialogue_lang = (params.get("dialogue_lang", "en") or "en")
-    _has_quotes = any(q in _prompt_en for q in ('"', "«", "“", "‘", "'"))
+    # ' n'est un guillemet de dialogue que détaché des lettres (pas « It's »).
+    import re as _re
+    _has_quotes = (any(q in _prompt_en for q in ('"', "«", "“", "‘"))
+                   or bool(_re.search(r"(?<![A-Za-zÀ-ÿ])'[^']{1,300}'(?![A-Za-zÀ-ÿ])",
+                                      _prompt_en)))
     if _prompt_en and _has_anthropic and _has_quotes:
         from core.lang import translate_dialogues_to
         emit_progress(5, "Traduction des dialogues…")

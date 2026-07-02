@@ -678,6 +678,9 @@ class ExtractGenerateDialog(QDialog):
             d = {
                 "name":          it.get("name", ""),
                 "description":   it.get("description", ""),
+                # Caractère/relations extraits À PART : jamais dans un prompt d'image
+                # (sert au jeu d'acteur et au doublage).
+                "personality":   it.get("personality", ""),
                 "prompt":        it.get("prompt") or it.get("description", ""),
                 "role":          it.get("role", "Secondaire"),
                 "image_path":    it.get("image_path", ""),
