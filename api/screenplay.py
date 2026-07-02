@@ -619,7 +619,7 @@ class FormatScreenplayWorker(QThread):
 
     def run(self):
         from core.ai_provider import stream as ai_stream, key_error
-        err = key_error()
+        err = key_error("screenplay")
         if err:
             self.failed.emit(err)
             return
@@ -644,7 +644,7 @@ class FormatPandoraWorker(QThread):
 
     def run(self):
         from core.ai_provider import stream as ai_stream, key_error
-        err = key_error()
+        err = key_error("screenplay")
         if err:
             self.failed.emit(err)
             return
@@ -767,7 +767,7 @@ class ArrangeScreenplayWorker(QThread):
 
     def run(self):
         from core.ai_provider import stream as ai_stream, key_error
-        err = key_error()
+        err = key_error("screenplay")
         if err:
             self.failed.emit(err)
             return
@@ -854,7 +854,7 @@ class ApplyArrangeWorker(QThread):
 
     def run(self):
         from core.ai_provider import stream as ai_stream, key_error
-        err = key_error()
+        err = key_error("screenplay")
         if err:
             self.failed.emit(err)
             return
@@ -1067,7 +1067,7 @@ class GenerateStoryboardWorker(QThread):
 def _extract_worker(system_prompt: str, text: str, max_tokens: int = 4096) -> list:
     """Shared extraction logic: call the AI provider, return parsed JSON list."""
     from core.ai_provider import complete as ai_complete, key_error
-    err = key_error()
+    err = key_error("extraction")
     if err:
         raise ValueError(err)
     lang = _get_lang()
@@ -1210,7 +1210,7 @@ class AnalyzeRecurrentShotsWorker(QThread):
 
     def _ai_groups(self, shots: list):
         from core.ai_provider import complete as ai_complete, key_error
-        if key_error():
+        if key_error("extraction"):
             return None
         num2id, lines_by_seq, order = {}, {}, []
         for s in shots:
@@ -1826,7 +1826,7 @@ class SyncStoryboardWorker(QThread):
             return
 
         from core.ai_provider import complete as ai_complete, key_error, ai_name
-        err = key_error()
+        err = key_error("sync")
         if err:
             self.failed.emit(err)
             return
@@ -1914,7 +1914,7 @@ class RewriteScreenplayFromStoryboardWorker(QThread):
     def _run(self):
         from core.ai_provider import complete as ai_complete, key_error, ai_name
 
-        err = key_error()
+        err = key_error("sync")
         if err:
             self.failed.emit(err)
             return
@@ -2189,7 +2189,7 @@ class ArrangeChatWorker(QThread):
     def run(self):
         try:
             from core.ai_provider import chat as ai_chat, key_error
-            err = key_error()
+            err = key_error("screenplay")
             if err:
                 self.failed.emit(err)
                 return

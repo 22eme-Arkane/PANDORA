@@ -18,17 +18,30 @@ Config (config.json) :
     "kimi_url"           : URL de base OpenAI-compatible (défaut https://api.moonshot.ai/v1 ;
                            pour du LOCAL, pointer vers ex. http://localhost:11434/v1)
     "kimi_model"         : modèle Kimi (défaut "kimi-k2.7-code")
+    "glm_key"            : clé API GLM / Zhipu — facultative si URL locale
+    "glm_url"            : URL de base OpenAI-compatible (défaut
+                           https://open.bigmodel.cn/api/paas/v4 ; pour du LOCAL,
+                           pointer vers ex. http://localhost:11434/v1)
+    "glm_model"          : modèle GLM (défaut "glm-4.7")
     "ollama_url"         : URL du serveur Ollama (défaut http://localhost:11434)
     "ollama_model"       : modèle Ollama (défaut "llama3.1")
     "ai_task_engines"    : {task_key: engine_key} — moteur par tâche (override du défaut)
 
 Moteurs (engine_key) — granularité du choix par tâche :
-    "claude" · "fable5" · "gpt" · "mistral" · "kimi" · "ollama"
+    "claude" · "fable5" · "gpt" · "mistral" · "kimi" · "glm" · "ollama"
 
 Kimi K2.7 (Moonshot AI) — API officielle compatible OpenAI (base /v1, Bearer key).
 Modèle par défaut "kimi-k2.7-code". L'URL de base étant éditable, le MÊME moteur
 sert l'API cloud (Moonshot) OU un serveur local OpenAI-compatible (Ollama /v1,
 llama.cpp, LM Studio) — d'où « API ou local » sans deux moteurs distincts.
+
+GLM 4.7 (Zhipu AI) — même modèle d'intégration que Kimi : API OpenAI-compatible
+(défaut cloud Zhipu https://open.bigmodel.cn/api/paas/v4), URL de base éditable
+→ le même moteur sert l'API cloud OU un serveur local (vLLM, Ollama /v1…).
+
+Prompts système PAR MOTEUR : core/engine_prompts.adapt_system est appliqué au
+point central (chat / chat_stream / stream) — identité pour Anthropic, préambule
+de discipline (format JSON brut, marqueurs, langue) pour les autres moteurs.
 
 Tiers de modèles :
     "utility"  — tâches rapides / peu chères : traduction, extractions JSON courtes
@@ -47,7 +60,7 @@ from __future__ import annotations
 
 # ── Fournisseurs & moteurs ──────────────────────────────────────────────────────
 
-_PROVIDERS = ("anthropic", "openai", "mistral", "kimi", "ollama")
+_PROVIDERS = ("anthropic", "openai", "mistral", "kimi", "glm", "ollama")
 
 # Moteur = (fournisseur, modèle créatif, nom d'affichage). Permet de choisir
 # Claude vs Fable 5 (même fournisseur Anthropic, modèles différents) par tâche.
@@ -59,11 +72,12 @@ ENGINES: dict[str, dict] = {
     "gpt":     {"provider": "openai",    "creative_model": "",                  "name": "GPT-5.5"},
     "mistral": {"provider": "mistral",   "creative_model": "",                  "name": "Mistral"},
     "kimi":    {"provider": "kimi",      "creative_model": "",                  "name": "Kimi K2.7"},
+    "glm":     {"provider": "glm",       "creative_model": "",                  "name": "GLM 4.7"},
     "ollama":  {"provider": "ollama",    "creative_model": "",                  "name": "Ollama"},
 }
 
 # Ordre d'affichage des moteurs dans les menus (Paramètres avancés).
-ENGINE_ORDER = ["claude", "opus", "haiku", "fable5", "gpt", "mistral", "kimi", "ollama"]
+ENGINE_ORDER = ["claude", "opus", "haiku", "fable5", "gpt", "mistral", "kimi", "glm", "ollama"]
 
 # Tâches IA paramétrables individuellement (Paramètres → Assistant IA → avancés).
 # (clé, libellé FR). Chaque appelant passe task=<clé> ; sans override → moteur global.
@@ -112,6 +126,9 @@ _OPENAI_MODELS  = {"utility": "gpt-5.5", "creative": "gpt-5.5"}
 # Kimi K2.7 (Moonshot) — un seul modèle pour les deux tiers (comme GPT/Ollama).
 _KIMI_DEFAULT_MODEL = "kimi-k2.7-code"
 _KIMI_DEFAULT_URL   = "https://api.moonshot.ai/v1"
+# GLM 4.7 (Zhipu) — même schéma que Kimi : OpenAI-compatible, URL éditable (cloud ou local).
+_GLM_DEFAULT_MODEL = "glm-4.7"
+_GLM_DEFAULT_URL   = "https://open.bigmodel.cn/api/paas/v4"
 
 
 # ── Config ────────────────────────────────────────────────────────────────────
@@ -151,7 +168,9 @@ def _resolve_engine(task: str | None = None) -> tuple[str, str]:
     provider = (cfg.get("ai_provider") or "anthropic").strip().lower()
     creative = (cfg.get("ai_model_creative") or "").strip()
     # Profil par défaut = routage idéal par tâche (économe, Opus pour le storyboard).
-    _is_smart_default = (provider in ("pandora", "")
+    # « custom » (Choix personnalisé) : les tâches SANS override affichent
+    # « Par défaut · X » dans les Paramètres → elles doivent résoudre pareil.
+    _is_smart_default = (provider in ("pandora", "custom", "")
                          or (provider == "anthropic" and creative in ("", _DEFAULT_CREATIVE)))
     if _is_smart_default and task and task in TASK_DEFAULTS:
         e = ENGINES[TASK_DEFAULTS[task]]
@@ -175,6 +194,9 @@ def _model(tier: str, provider: str | None = None, creative_model: str = "") -> 
     if provider == "kimi":
         m = (_cfg().get("kimi_model") or "").strip()
         return m or _KIMI_DEFAULT_MODEL
+    if provider == "glm":
+        m = (_cfg().get("glm_model") or "").strip()
+        return m or _GLM_DEFAULT_MODEL
     if provider == "ollama":
         return (_cfg().get("ollama_model") or "llama3.1").strip() or "llama3.1"
     return creative_model or _DEFAULT_CREATIVE
@@ -197,6 +219,7 @@ def ai_name() -> str:
             _NAME_CACHE = "GPT-5.5"
         else:
             _NAME_CACHE = {"mistral": "Mistral", "kimi": "Kimi K2.7",
+                           "glm": "GLM 4.7",
                            "ollama": "Ollama"}.get(provider, provider.capitalize())
     return _NAME_CACHE
 
@@ -257,6 +280,8 @@ def _engine_display_name(provider: str, creative_model: str) -> str:
         return ENGINES["mistral"]["name"]
     if provider == "kimi":
         return ENGINES["kimi"]["name"]
+    if provider == "glm":
+        return ENGINES["glm"]["name"]
     if provider == "ollama":
         return ENGINES["ollama"]["name"]
     return "Claude"
@@ -294,6 +319,15 @@ def key_error(task: str | None = None) -> str | None:
         if not is_local and not cfg.get("kimi_key", "").strip():
             return ("Clé Kimi (Moonshot) manquante — renseignez-la dans Paramètres "
                     "(ou pointez l'URL Kimi vers un serveur local).")
+        return None
+    if provider == "glm":
+        # Même logique que Kimi : clé exigée seulement pour l'API cloud Zhipu ;
+        # une URL locale (vLLM, Ollama /v1…) ne demande pas de clé.
+        url = (cfg.get("glm_url") or _GLM_DEFAULT_URL).strip().lower()
+        is_local = ("localhost" in url) or ("127.0.0.1" in url)
+        if not is_local and not cfg.get("glm_key", "").strip():
+            return ("Clé GLM (Zhipu) manquante — renseignez-la dans Paramètres "
+                    "(ou pointez l'URL GLM vers un serveur local).")
         return None
     if provider == "ollama":
         return None   # serveur local, pas de clé ; l'erreur réseau parlera d'elle-même
@@ -474,6 +508,59 @@ def _kimi_stream(system, messages, on_chunk, model, max_tokens) -> str:
     return full
 
 
+def _glm_base_url() -> str:
+    """URL de base OpenAI-compatible de GLM (cloud Zhipu par défaut, ou local)."""
+    return ((_cfg().get("glm_url") or _GLM_DEFAULT_URL).strip().rstrip("/"))
+
+
+def _glm_payload(system, messages, model, max_tokens, stream_flag) -> tuple:
+    msgs = [{"role": "system", "content": system}] if system else []
+    msgs += [{"role": m["role"], "content": m["content"]} for m in messages]
+    # Bearer 'local' = jeton factice pour les serveurs locaux qui ignorent l'auth
+    # (même convention que Kimi).
+    key = _cfg().get("glm_key", "").strip() or "local"
+    return (f"{_glm_base_url()}/chat/completions", {
+        "model": model, "max_tokens": max_tokens,
+        "messages": msgs, "stream": stream_flag,
+    }, {"Authorization": f"Bearer {key}", "Content-Type": "application/json"})
+
+
+def _glm_complete(system, messages, model, max_tokens) -> str:
+    # RÉUTILISE le chemin OpenAI-compatible de Kimi : seul le payload
+    # (URL de base + clé glm_*) diffère.
+    import requests
+    url, payload, headers = _glm_payload(system, messages, model, max_tokens, False)
+    r = requests.post(url, json=payload, headers=headers, timeout=300)
+    r.raise_for_status()
+    return r.json()["choices"][0]["message"]["content"]
+
+
+def _glm_stream(system, messages, on_chunk, model, max_tokens) -> str:
+    import json as _json
+    import requests
+    url, payload, headers = _glm_payload(system, messages, model, max_tokens, True)
+    full = ""
+    with requests.post(url, json=payload, headers=headers, timeout=300, stream=True) as r:
+        r.raise_for_status()
+        for line in r.iter_lines():
+            if not line or not line.startswith(b"data:"):
+                continue
+            data = line[5:].strip()
+            if data == b"[DONE]":
+                break
+            try:
+                # GLM 4.7 est un modèle « thinking » (comme Kimi K2.7) : on ne garde
+                # que 'content' (la réflexion 'reasoning_content' est ignorée).
+                delta = _json.loads(data)["choices"][0]["delta"].get("content", "")
+            except Exception:
+                continue
+            if delta:
+                full += delta
+                if on_chunk:
+                    on_chunk(delta)
+    return full
+
+
 def _ollama_url() -> str:
     return ((_cfg().get("ollama_url") or "http://localhost:11434").strip().rstrip("/"))
 
@@ -525,6 +612,8 @@ def _dispatch_complete(provider, system, messages, model, max_tokens) -> str:
         return _mistral_complete(system, messages, model, max_tokens)
     if provider == "kimi":
         return _kimi_complete(system, messages, model, max_tokens)
+    if provider == "glm":
+        return _glm_complete(system, messages, model, max_tokens)
     if provider == "ollama":
         return _ollama_complete(system, messages, model, max_tokens)
     return _anthropic_complete(system, messages, model, max_tokens)
@@ -537,6 +626,8 @@ def _dispatch_stream(provider, system, messages, on_chunk, model, max_tokens) ->
         return _mistral_stream(system, messages, on_chunk, model, max_tokens)
     if provider == "kimi":
         return _kimi_stream(system, messages, on_chunk, model, max_tokens)
+    if provider == "glm":
+        return _glm_stream(system, messages, on_chunk, model, max_tokens)
     if provider == "ollama":
         return _ollama_stream(system, messages, on_chunk, model, max_tokens)
     return _anthropic_stream(system, messages, on_chunk, model, max_tokens)
@@ -544,20 +635,33 @@ def _dispatch_stream(provider, system, messages, on_chunk, model, max_tokens) ->
 
 # ── API publique ──────────────────────────────────────────────────────────────
 
+def _adapt(system: str, task: str | None, provider: str, model: str) -> str:
+    """Prompt système adapté au moteur (core/engine_prompts) — POINT CENTRAL.
+    Anthropic → identité (zéro régression). Jamais bloquant : en cas d'erreur
+    du module d'adaptation, le system d'origine part tel quel."""
+    try:
+        from core.engine_prompts import adapt_system
+        return adapt_system(system, task=task, provider=provider, model=model)
+    except Exception:
+        return system
+
+
 def chat(system: str, messages: list, tier: str = "creative",
          max_tokens: int = 2048, task: str | None = None) -> str:
     """Conversation multi-tours : messages = [{"role": "user"|"assistant", "content": str}]."""
     provider, creative = _resolve_engine(task)
-    return _dispatch_complete(provider, system, messages,
-                              _model(tier, provider, creative), max_tokens)
+    model = _model(tier, provider, creative)
+    return _dispatch_complete(provider, _adapt(system, task, provider, model),
+                              messages, model, max_tokens)
 
 
 def chat_stream(system: str, messages: list, on_chunk=None, tier: str = "creative",
                 max_tokens: int = 2048, task: str | None = None) -> str:
     """Conversation multi-tours en streaming : on_chunk(str) à chaque fragment."""
     provider, creative = _resolve_engine(task)
-    return _dispatch_stream(provider, system, messages, on_chunk,
-                            _model(tier, provider, creative), max_tokens)
+    model = _model(tier, provider, creative)
+    return _dispatch_stream(provider, _adapt(system, task, provider, model),
+                            messages, on_chunk, model, max_tokens)
 
 
 def complete(system: str, user: str, tier: str = "utility",
@@ -570,5 +674,7 @@ def stream(system: str, user: str, on_chunk=None, tier: str = "creative",
            max_tokens: int = 4096, task: str | None = None) -> str:
     """Appel en streaming : on_chunk(str) à chaque fragment ; renvoie le texte complet."""
     provider, creative = _resolve_engine(task)
-    return _dispatch_stream(provider, system, [{"role": "user", "content": user}],
-                            on_chunk, _model(tier, provider, creative), max_tokens)
+    model = _model(tier, provider, creative)
+    return _dispatch_stream(provider, _adapt(system, task, provider, model),
+                            [{"role": "user", "content": user}],
+                            on_chunk, model, max_tokens)

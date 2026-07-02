@@ -270,12 +270,18 @@ class PageLiveSettings(QWidget):
         ai_row = QHBoxLayout()
         ai_row.setSpacing(12)
         ai_row.addWidget(_key_label("Assistant IA (texte) :"))
+        # 1er choix = profil PAR DÉFAUT (routage idéal par tâche — cf.
+        # core.ai_provider.TASK_DEFAULTS) : même sémantique que le combo Cinéma.
+        # ⚠ Un modèle vide en config doit présélectionner CE choix (Opus), sinon
+        # l'auto-save rétrograderait silencieusement le profil en Sonnet partout.
         self._AI_CHOICES = [
-            ("Claude (Anthropic) — défaut",       "anthropic", "claude-sonnet-5"),
-            ("Fable 5 (Anthropic) — qualité max", "anthropic", "claude-fable-5"),
-            ("Mistral — expérimental",            "mistral",   ""),
-            ("Kimi K2.7 (Moonshot) — API ou local", "kimi",    ""),
-            ("Ollama local — expérimental",       "ollama",    ""),
+            ("PANDORA optimisé — idéal par tâche (défaut)", "anthropic", "claude-opus-4-8"),
+            ("Claude Sonnet 5 — tout en équilibré", "anthropic", "claude-sonnet-5"),
+            ("Fable 5 (Anthropic) — qualité max",  "anthropic", "claude-fable-5"),
+            ("Mistral — expérimental",             "mistral",   ""),
+            ("Kimi K2.7 (Moonshot) — API ou local", "kimi",     ""),
+            ("GLM 4.7 (Zhipu) — API ou local",     "glm",       ""),
+            ("Ollama local — expérimental",        "ollama",    ""),
         ]
         self._ai_combo = QComboBox()
         self._ai_combo.setFixedHeight(34)
@@ -336,6 +342,30 @@ class PageLiveSettings(QWidget):
                                   self._kimi_url_input, self._kimi_model_input)
         ac.addLayout(kimu_row)
 
+        # GLM (Zhipu) — même schéma que Kimi : clé facultative (vide en local) +
+        # URL/modèle, l'URL de base aiguillant API cloud ↔ serveur local
+        # OpenAI-compatible (mêmes clés de config que Cinéma : glm_key/glm_url/glm_model).
+        glk_row = QHBoxLayout()
+        glk_row.setSpacing(12)
+        glk_row.addWidget(_key_label("Clé GLM (Zhipu) :"))
+        self._glm_input = _input("Clé API GLM  (vide si serveur local)", 0)
+        self._glm_input.setEchoMode(QLineEdit.EchoMode.Password)
+        glk_row.addWidget(self._glm_input, 1)
+        glk_row.addWidget(_link_btn("⇗  Clés", "https://bigmodel.cn/usercenter/apikeys"))
+        self._glm_key_row_widgets = (glk_row.itemAt(0).widget(), self._glm_input)
+        ac.addLayout(glk_row)
+
+        glu_row = QHBoxLayout()
+        glu_row.setSpacing(12)
+        glu_row.addWidget(_key_label("GLM (URL · modèle) :"))
+        self._glm_url_input = _input("https://open.bigmodel.cn/api/paas/v4  (ou local /v1)", 0)
+        self._glm_model_input = _input("glm-4.7", 0)
+        glu_row.addWidget(self._glm_url_input, 1)
+        glu_row.addWidget(self._glm_model_input, 1)
+        self._glm_row_widgets = (glu_row.itemAt(0).widget(),
+                                 self._glm_url_input, self._glm_model_input)
+        ac.addLayout(glu_row)
+
         def _on_ai_changed(*_):
             prov = (self._ai_combo.currentData() or ("anthropic", ""))[0]
             for wdg in self._mistral_row_widgets:
@@ -346,6 +376,10 @@ class PageLiveSettings(QWidget):
                 wdg.setVisible(prov == "kimi")
             for wdg in self._kimi_row_widgets:
                 wdg.setVisible(prov == "kimi")
+            for wdg in self._glm_key_row_widgets:
+                wdg.setVisible(prov == "glm")
+            for wdg in self._glm_row_widgets:
+                wdg.setVisible(prov == "glm")
         self._ai_combo.currentIndexChanged.connect(_on_ai_changed)
         self._on_ai_changed = _on_ai_changed
 
@@ -373,6 +407,7 @@ class PageLiveSettings(QWidget):
         for w in (self._api_key_input, self._anthropic_input, self._mistral_input,
                   self._ollama_url_input, self._ollama_model_input,
                   self._kimi_input, self._kimi_url_input, self._kimi_model_input,
+                  self._glm_input, self._glm_url_input, self._glm_model_input,
                   self._host_input):
             w.textChanged.connect(self._save_api_key)
         self._port_spin.valueChanged.connect(self._save_api_key)
@@ -397,10 +432,13 @@ class PageLiveSettings(QWidget):
         ant = cfg.get("anthropic_key", "")
         if ant:
             self._anthropic_input.setText(ant)
-        # Assistant IA (texte)
+        # Assistant IA (texte). Défaut = Opus 4.8 (cf. core.ai_provider._DEFAULT_CREATIVE) :
+        # un modèle vide doit présélectionner « PANDORA optimisé », sinon le combo
+        # affichait Sonnet à tort — et l'auto-save aurait réellement rétrogradé
+        # l'assistant en Sonnet partout (perte du routage par tâche).
         _cur = (cfg.get("ai_provider", "anthropic"), cfg.get("ai_model_creative", ""))
         for i, (_, prov, model) in enumerate(self._AI_CHOICES):
-            if prov == _cur[0] and (prov != "anthropic" or model == (_cur[1] or "claude-sonnet-5")):
+            if prov == _cur[0] and (prov != "anthropic" or model == (_cur[1] or "claude-opus-4-8")):
                 self._ai_combo.setCurrentIndex(i)
                 break
         self._mistral_input.setText(cfg.get("mistral_key", ""))
@@ -409,6 +447,9 @@ class PageLiveSettings(QWidget):
         self._kimi_input.setText(cfg.get("kimi_key", ""))
         self._kimi_url_input.setText(cfg.get("kimi_url", ""))
         self._kimi_model_input.setText(cfg.get("kimi_model", ""))
+        self._glm_input.setText(cfg.get("glm_key", ""))
+        self._glm_url_input.setText(cfg.get("glm_url", ""))
+        self._glm_model_input.setText(cfg.get("glm_model", ""))
         self._on_ai_changed()
         host = cfg.get("resolume_host", "localhost")
         port = cfg.get("resolume_port", 8080)
@@ -429,6 +470,9 @@ class PageLiveSettings(QWidget):
         cfg["kimi_key"]          = self._kimi_input.text().strip()
         cfg["kimi_url"]          = self._kimi_url_input.text().strip()
         cfg["kimi_model"]        = self._kimi_model_input.text().strip()
+        cfg["glm_key"]           = self._glm_input.text().strip()
+        cfg["glm_url"]           = self._glm_url_input.text().strip()
+        cfg["glm_model"]         = self._glm_model_input.text().strip()
         cfg["resolume_host"] = self._host_input.text().strip() or "localhost"
         cfg["resolume_port"] = self._port_spin.value()
         save_config(cfg)

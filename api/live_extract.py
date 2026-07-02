@@ -26,13 +26,15 @@ def _mode_ctx(mode: str) -> str:
             "ou installation).")
 
 
-def _claude(system: str, user: str) -> str:
-    """Appel IA texte (tier utilitaire) via la couche d'abstraction — voir core/ai_provider."""
+def _claude(system: str, user: str, task: str | None = None) -> str:
+    """Appel IA texte via la couche d'abstraction — voir core/ai_provider.
+    `task` route vers le moteur adapté (Paramètres → moteur par tâche) ; tier
+    créatif pour router comme les équivalents Cinéma (extraction → Sonnet…)."""
     from core.ai_provider import complete, key_error
-    err = key_error()
+    err = key_error(task)
     if err:
         raise RuntimeError(err)
-    return complete(system, user, tier="utility", max_tokens=4096)
+    return complete(system, user, tier="creative", max_tokens=4096, task=task)
 
 
 def _fmt_err(e) -> str:
@@ -60,7 +62,9 @@ class FormatConducteurWorker(QThread):
             self.failed.emit("La trame est vide.")
             return
         from core.ai_provider import stream as ai_stream, key_error
-        err = key_error()
+        # Mise en page du conducteur = équivalent Live de FormatPandoraWorker
+        # (Cinéma) → même tâche « screenplay » (routage/défauts par tâche).
+        err = key_error("screenplay")
         if err:
             self.failed.emit(err)
             return
@@ -121,7 +125,7 @@ class FormatConducteurWorker(QThread):
             # Seedance 2.0. 16000 tokens — un conducteur complet mis en page
             # dépassait 8000 (tronqué en réel le 2026-06-11) ; aligné sur Cinéma.
             full = ai_stream(system, user, on_chunk=self.chunk.emit,
-                             tier="creative", max_tokens=16000)
+                             tier="creative", max_tokens=16000, task="screenplay")
             self.finished.emit(full.strip())
         except Exception as e:
             self.failed.emit(_fmt_err(e))
@@ -150,7 +154,8 @@ class ArrangeConducteurWorker(QThread):
                 "bien placés. Garde le français et l'esprit de l'auteur. "
                 "Réponds UNIQUEMENT avec la trame réarrangée."
             )
-            self.finished.emit(_claude(system, self._text).strip())
+            # Arrangement = tâche « screenplay » (comme ArrangeScreenplayWorker Cinéma).
+            self.finished.emit(_claude(system, self._text, task="screenplay").strip())
         except Exception as e:
             self.failed.emit(_fmt_err(e))
 
@@ -175,7 +180,8 @@ def extract_live_assets(kind: str, text: str, mode: str) -> list:
         "Réponds UNIQUEMENT avec un tableau JSON d'objets (aucun texte autour). "
         "Si aucun élément pertinent, renvoie []."
     )
-    out = _claude(system, text)
+    # Extraction JSON = tâche « extraction » (comme les extracteurs Cinéma).
+    out = _claude(system, text, task="extraction")
     items = []
     for it in _extract_json_array(out):
         if isinstance(it, dict) and it.get("name"):

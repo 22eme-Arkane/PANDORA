@@ -1399,6 +1399,26 @@ _FR_TO_EN: dict[str, str] = {
         "Kimi URL (default: https://api.moonshot.ai/v1 — or local server /v1)",
     "Modèle Kimi (défaut : kimi-k2.7-code)":
         "Kimi model (default: kimi-k2.7-code)",
+    # ── GLM 4.7 (Zhipu) — moteur texte API ou local (2026-07-02) ──────────────
+    "✓  Tester API GLM":                "✓  Test GLM API",
+    "⇗  Obtenir une clé GLM":           "⇗  Get a GLM key",
+    "GLM 4.7 (Zhipu)  (assistant texte — API ou local, expérimental)":
+        "GLM 4.7 (Zhipu)  (text assistant — API or local, experimental)",
+    "GLM 4.7 (Zhipu) — API ou local (expérimental)":
+        "GLM 4.7 (Zhipu) — API or local (experimental)",
+    "GLM 4.7 (Zhipu) — API ou local":   "GLM 4.7 (Zhipu) — API or local",
+    "URL GLM (défaut : https://open.bigmodel.cn/api/paas/v4 — ou serveur local /v1)":
+        "GLM URL (default: https://open.bigmodel.cn/api/paas/v4 — or local server /v1)",
+    "Modèle GLM (défaut : glm-4.7)":    "GLM model (default: glm-4.7)",
+    "Clé API GLM  (vide si serveur local)":
+        "GLM API key  (empty if local server)",
+    "PANDORA optimisé — idéal par tâche (défaut)":
+        "PANDORA optimized — ideal per task (default)",
+    # Libellés des Paramètres Live (parité EN — Kimi n'y avait jamais été ajouté)
+    "Clé GLM (Zhipu) :":                "GLM key (Zhipu):",
+    "GLM (URL · modèle) :":             "GLM (URL · model):",
+    "Clé Kimi (Moonshot) :":            "Kimi key (Moonshot):",
+    "Kimi (URL · modèle) :":            "Kimi (URL · model):",
     "sk-••••••••••••  (vide si serveur local)":
         "sk-••••••••••••  (empty if local server)",
     "Obligatoire":                      "Required",

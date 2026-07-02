@@ -204,20 +204,24 @@ class GenerateDecoupageWorker(QThread):
             self.failed.emit("La trame est vide — écrivez votre conducteur d'abord.")
             return
         try:
-            from core.ai_provider import complete, key_error, ai_name
-            err = key_error()
+            from core.ai_provider import complete, key_error, ai_name_for_task
+            # Découpage du conducteur = équivalent Live de la génération du
+            # storyboard Cinéma → même tâche « storyboard_gen » (routage/défauts).
+            err = key_error("storyboard_gen")
             if err:
                 self.failed.emit(err)
                 return
             system = _SYSTEM_MAPPING if self._mode == "mapping" else _SYSTEM_LIVE
             # 16000 : un découpage dense (beaucoup de plans × prompts détaillés)
             # atteignait le plafond de 8000 → JSON tronqué
-            out = complete(system, text, tier="creative", max_tokens=16000)
+            out = complete(system, text, tier="creative", max_tokens=16000,
+                           task="storyboard_gen")
             segments = [_normalize(s, self._mode) for s in _extract_json_array(out) if isinstance(s, dict)]
             if not segments:
                 snippet = (out or "").strip()[:200].replace("\n", " ")
                 self.failed.emit(
-                    f"Découpage vide — réponse {ai_name()} non exploitable. Réessayez.\n\n"
+                    f"Découpage vide — réponse {ai_name_for_task('storyboard_gen')} "
+                    f"non exploitable. Réessayez.\n\n"
                     f"Début de la réponse : {snippet}")
                 return
             self.finished.emit(segments)
@@ -305,7 +309,8 @@ class ApplyArrangeConducteurWorker(QThread):
 
     def run(self):
         from core.ai_provider import stream, key_error
-        err = key_error()
+        # Même tâche que l'application d'arrangement Cinéma (ApplyArrangeWorker).
+        err = key_error("screenplay")
         if err:
             self.failed.emit(err)
             return
@@ -323,7 +328,7 @@ class ApplyArrangeConducteurWorker(QThread):
                          "réécrit dans cette direction.]\n" + self._refs.strip())
             # 16000 : sortie = conducteur COMPLET réécrit — 8192 tronquait les longs
             full = stream(_APPLY_ARRANGE_CONDUCTEUR, user, on_chunk=self.chunk.emit,
-                          tier="creative", max_tokens=16000)
+                          tier="creative", max_tokens=16000, task="screenplay")
             self.finished.emit(full.strip())
         except Exception as e:
             from core.worker import humanize_api_error
@@ -366,7 +371,8 @@ class ArrangeChatConducteurWorker(QThread):
 
     def run(self):
         from core.ai_provider import chat_stream, key_error
-        err = key_error()
+        # Même tâche que la co-écriture d'arrangement Cinéma (ArrangeChatWorker).
+        err = key_error("screenplay")
         if err:
             self.failed.emit(err)
             return
@@ -390,7 +396,7 @@ class ArrangeChatConducteurWorker(QThread):
                            "content": f"{doc}\n\n---\n\n{first['content']}"}
             full = chat_stream(_ARRANGE_CHAT.format(ctx=ctx), messages,
                                on_chunk=self.chunk.emit,
-                               tier="creative", max_tokens=8192)
+                               tier="creative", max_tokens=8192, task="screenplay")
             self.done.emit(full.strip())
         except Exception as e:
             from core.worker import humanize_api_error
@@ -414,7 +420,8 @@ class ArrangeConducteurStreamWorker(QThread):
 
     def run(self):
         from core.ai_provider import stream, key_error
-        err = key_error()
+        # Même tâche que l'arrangement Cinéma (ArrangeScreenplayWorker).
+        err = key_error("screenplay")
         if err:
             self.failed.emit(err)
             return
@@ -432,7 +439,7 @@ class ArrangeConducteurStreamWorker(QThread):
                            "copier : appuie tes suggestions dessus quand c'est "
                            "pertinent.]\n" + self._refs.strip() + "\n\n")
             full = stream(system, prefix + self._text, on_chunk=self.chunk.emit,
-                          tier="creative", max_tokens=8192)
+                          tier="creative", max_tokens=8192, task="screenplay")
             self.finished.emit(full)
         except Exception as e:
             from core.worker import humanize_api_error
@@ -588,7 +595,8 @@ class ArrangeSessionChatConducteurWorker(QThread):
     def run(self):
         try:
             from core.ai_provider import chat as ai_chat, key_error
-            err = key_error()
+            # Même tâche que la co-écriture Cinéma (ArrangeChatWorker → screenplay).
+            err = key_error("screenplay")
             if err:
                 self.failed.emit(err)
                 return
@@ -666,7 +674,8 @@ class ArrangeSessionChatConducteurWorker(QThread):
                 raw = response.content[0].text.strip()
             else:
                 raw = ai_chat(system, messages,
-                              tier="creative", max_tokens=16000).strip()
+                              tier="creative", max_tokens=16000,
+                              task="screenplay").strip()
 
             # Split sur les marqueurs
             chat_msg   = ""

@@ -73,7 +73,7 @@ def selecteur_ia_present():
     from ui.page_settings import SettingsPage
     p = SettingsPage()
     n = p.ai_combo.count()
-    assert n == 9, "9 choix (PANDORA optimisé défaut, Sonnet, Haiku, Fable 5, GPT-5.5, Mistral, Kimi K2.7, Ollama, Personnalisé)"
+    assert n == 10, "10 choix (PANDORA optimisé défaut, Sonnet, Haiku, Fable 5, GPT-5.5, Mistral, Kimi K2.7, GLM 4.7, Ollama, Personnalisé)"
     labels = [p.ai_combo.itemText(i) for i in range(n)]
     assert "optimisé" in labels[0] and "défaut" in labels[0], "PANDORA optimisé = défaut (1er)"
     assert any("Fable 5" in x for x in labels), "Fable 5 proposé"
@@ -809,7 +809,8 @@ def moteurs_ia_par_tache():
     import core.ai_provider as ap
     assert "openai" in ap._PROVIDERS
     assert set(ap.ENGINES) == {"claude", "opus", "haiku", "fable5", "gpt",
-                               "mistral", "kimi", "ollama"}
+                               "mistral", "kimi", "glm", "ollama"}
+    assert ap.ENGINES["glm"]["provider"] == "glm", "GLM (Zhipu) — API ou local"
     assert ap.ENGINES["gpt"]["provider"] == "openai"
     assert ap.ENGINES["opus"]["creative_model"] == "claude-opus-4-8"
     # Profil PANDORA optimisé (défaut) : moteur IDÉAL par tâche — Opus UNIQUEMENT
@@ -1467,8 +1468,11 @@ def transcode_h264_et_starlight2():
     # Transcode PROGRESSIF + plafond 1080p (anti-trames sur vidéo progressive).
     import core.video_utils as vu
     vsrc = inspect.getsource(vu.ensure_engine_video)
-    assert "yadif=deint=interlaced" in vsrc, "désentrelacement conditionnel (anti-trames)"
+    # Anti-trames v2 : yadif SEULEMENT si la vidéo est RÉELLEMENT entrelacée
+    # (field_order + confirmation idet) — jamais sur du progressif mal flagué.
+    assert "video_is_interlaced" in vsrc, "désentrelacement conditionnel (détection réelle)"
     assert "min(1080,ih)" in vsrc, "plafond 1080p (tous moteurs)"
+    assert callable(getattr(vu, "video_is_interlaced", None)), "détection d'entrelacement exposée"
     # api/real transcode le clip source avant l'upload
     import api.real as r
     assert "ensure_engine_video" in inspect.getsource(r), "transcodage H.264 avant upload"

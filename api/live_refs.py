@@ -151,9 +151,10 @@ class AnalyzeRefsConducteurWorker(QThread):
             else:
                 user += "\n\n(Pas de conducteur fourni — fais la direction globale et les suggestions.)"
             # 8192 tokens : la synthèse croise N analyses × actes — 4096 tronquait
+            # Synthèse DA du conducteur = tâche « screenplay » (analyse/écriture).
             synthesis = stream(_SYNTHESIS_SYSTEM.format(ctx=ctx), user,
                                on_chunk=self.chunk.emit,
-                               tier="creative", max_tokens=8192)
+                               tier="creative", max_tokens=8192, task="screenplay")
 
             full = ("\n\n".join(analyses)
                     + "\n\n═══ SYNTHÈSE — DIRECTION VISUELLE ═══\n" + synthesis.strip())
@@ -198,7 +199,8 @@ class RefsChatWorker(QThread):
 
     def run(self):
         from core.ai_provider import chat_stream, key_error
-        err = key_error()
+        # Chat de conseil DA = tâche « assistant » (dialogue conseil, Sonnet par défaut).
+        err = key_error("assistant")
         if err:
             self.failed.emit(err)
             return
@@ -219,7 +221,7 @@ class RefsChatWorker(QThread):
             # (vu en réel : coupure nette en plein acte 7).
             full = chat_stream(_CHAT_SYSTEM.format(ctx=_mode_ctx(self._mode)),
                                messages, on_chunk=self.chunk.emit,
-                               tier="creative", max_tokens=8192)
+                               tier="creative", max_tokens=8192, task="assistant")
             self.done.emit(full.strip())
         except Exception as e:
             from core.worker import humanize_api_error
@@ -242,7 +244,8 @@ class EnrichConducteurWithRefsWorker(QThread):
 
     def run(self):
         from core.ai_provider import stream, key_error
-        err = key_error()
+        # Réécriture du conducteur = tâche « screenplay » (comme l'enrichissement Cinéma).
+        err = key_error("screenplay")
         if err:
             self.failed.emit(err)
             return
@@ -252,7 +255,7 @@ class EnrichConducteurWithRefsWorker(QThread):
             # 16000 : sortie = conducteur COMPLET enrichi — 8192 tronquait les longs
             full = stream(_ENRICH_SYSTEM.format(ctx=_mode_ctx(self._mode)), user,
                           on_chunk=self.chunk.emit,
-                          tier="creative", max_tokens=16000)
+                          tier="creative", max_tokens=16000, task="screenplay")
             self.done.emit(full.strip())
         except Exception as e:
             from core.worker import humanize_api_error

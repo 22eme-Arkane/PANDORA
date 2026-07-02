@@ -796,7 +796,7 @@ def workers_construction():
 def couche_ai_provider():
     """Couche d'abstraction IA : défauts, tiers, nom d'affichage, sites routés."""
     import core.ai_provider as ap
-    assert ap.get_provider() in ("anthropic", "mistral", "ollama")
+    assert ap.get_provider() in ("anthropic", "openai", "mistral", "kimi", "glm", "ollama")
     assert ap._model("utility") and ap._model("creative"), "modèles des deux tiers"
     assert ap.ai_name(), "nom d'affichage"
     # Les workers TEXTE ne doivent plus importer anthropic en direct
@@ -822,7 +822,7 @@ def selecteur_assistant_ia():
     from ui.page_live_settings import PageLiveSettings
     cin = SettingsPage()
     nc = cin.ai_combo.count()
-    assert nc == 9, "9 choix côté Cinéma (PANDORA optimisé défaut, Sonnet, Haiku, Fable 5, GPT-5.5, Mistral, Kimi K2.7, Ollama, Personnalisé)"
+    assert nc == 10, "10 choix côté Cinéma (PANDORA optimisé défaut, Sonnet, Haiku, Fable 5, GPT-5.5, Mistral, Kimi K2.7, GLM 4.7, Ollama, Personnalisé)"
     assert any("Fable 5" in cin.ai_combo.itemText(i) for i in range(nc)), "Fable 5 proposé"
     assert any("GPT-5.5" in cin.ai_combo.itemText(i) for i in range(nc)), "GPT-5.5 proposé"
     # Clés GPT + Mistral toujours présentes (menu déroulant facultatif)
@@ -837,7 +837,8 @@ def selecteur_assistant_ia():
     cin.ai_combo.setCurrentIndex(0)
     assert cin.ollama_url_input.isHidden(), "champs Ollama cachés sur Claude"
     liv = PageLiveSettings()
-    assert liv._ai_combo.count() == 5, "5 choix côté Live (+ Kimi K2.7)"
+    assert liv._ai_combo.count() == 7, \
+        "7 choix côté Live (PANDORA optimisé, Sonnet, Fable 5, Mistral, Kimi, GLM, Ollama)"
     # Ollama : trouvé par donnée (robuste au décalage d'index après ajout Kimi)
     _oll_i = next(i for i in range(liv._ai_combo.count())
                   if (liv._ai_combo.itemData(i) or ("", ""))[0] == "ollama")

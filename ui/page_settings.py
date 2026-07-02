@@ -16,6 +16,7 @@ _ANTHROPIC_KEYS_URL = "https://console.anthropic.com/settings/keys"
 _OPENAI_KEYS_URL    = "https://platform.openai.com/api-keys"
 _MISTRAL_KEYS_URL   = "https://console.mistral.ai/api-keys"
 _KIMI_KEYS_URL      = "https://platform.moonshot.ai/console/api-keys"
+_GLM_KEYS_URL       = "https://bigmodel.cn/usercenter/apikeys"
 
 
 def _section(text: str) -> QLabel:
@@ -265,6 +266,7 @@ class SettingsPage(QScrollArea):
             ("GPT-5.5 (OpenAI) — partout",                "openai",    ""),
             ("Mistral — partout (expérimental)",          "mistral",   ""),
             ("Kimi K2.7 (Moonshot) — API ou local (expérimental)", "kimi", ""),
+            ("GLM 4.7 (Zhipu) — API ou local (expérimental)", "glm", ""),
             ("Ollama local — partout (expérimental)",     "ollama",    ""),
             ("Choix personnalisé — un moteur par tâche",  "custom",     ""),
         ]
@@ -321,6 +323,22 @@ class SettingsPage(QScrollArea):
         self.kimi_model_input.setText(cfg.get("kimi_model", ""))
         self.kimi_model_input.setStyleSheet(_field_style())
         lay.addWidget(self.kimi_model_input)
+
+        # Champs GLM (Zhipu) — visibles quand le moteur GLM est choisi. Même schéma
+        # que Kimi : l'URL de base aiguille API cloud ↔ serveur local OpenAI-compatible
+        # (ex. http://localhost:11434/v1 pour Ollama, ou un vLLM local).
+        self.glm_url_input = QLineEdit()
+        self.glm_url_input.setPlaceholderText(
+            "URL GLM (défaut : https://open.bigmodel.cn/api/paas/v4 — ou serveur local /v1)")
+        self.glm_url_input.setText(cfg.get("glm_url", ""))
+        self.glm_url_input.setStyleSheet(_field_style())
+        lay.addWidget(self.glm_url_input)
+
+        self.glm_model_input = QLineEdit()
+        self.glm_model_input.setPlaceholderText("Modèle GLM (défaut : glm-4.7)")
+        self.glm_model_input.setText(cfg.get("glm_model", ""))
+        self.glm_model_input.setStyleSheet(_field_style())
+        lay.addWidget(self.glm_model_input)
 
         self._lbl_ai_restart = QLabel(
             "Le nom de l'assistant dans l'interface se met à jour au prochain démarrage."
@@ -540,6 +558,26 @@ class SettingsPage(QScrollArea):
         self.kimi_input.setStyleSheet(_field_style())
         opt_lay.addWidget(self.kimi_input)
 
+        # GLM (Zhipu) — clé facultative (inutile en local)
+        gl_lbl_row = QHBoxLayout()
+        gl_lbl_row.setSpacing(8)
+        lbl_gl = QLabel("GLM 4.7 (Zhipu)  (assistant texte — API ou local, expérimental)")
+        lbl_gl.setStyleSheet(
+            f"color:{CP['text_secondary']};font-size:12px;background:transparent;"
+        )
+        gl_lbl_row.addWidget(lbl_gl, 1)
+        gl_lbl_row.addWidget(_badge("Facultatif", "opt"))
+        gl_lbl_row.addWidget(_test_btn("✓  Tester API GLM", self.test_glm_connection))
+        gl_lbl_row.addWidget(_link_btn("⇗  Obtenir une clé GLM", _GLM_KEYS_URL))
+        opt_lay.addLayout(gl_lbl_row)
+
+        self.glm_input = QLineEdit()
+        self.glm_input.setPlaceholderText("Clé API GLM  (vide si serveur local)")
+        self.glm_input.setText(cfg.get("glm_key", ""))
+        self.glm_input.setEchoMode(QLineEdit.EchoMode.Password)
+        self.glm_input.setStyleSheet(_field_style())
+        opt_lay.addWidget(self.glm_input)
+
         lay.addWidget(self._opt_keys_box)
         lay.addWidget(_divider())
 
@@ -648,6 +686,8 @@ class SettingsPage(QScrollArea):
         self.ollama_model_input.setVisible(prov == "ollama")
         self.kimi_url_input.setVisible(prov == "kimi")
         self.kimi_model_input.setVisible(prov == "kimi")
+        self.glm_url_input.setVisible(prov == "glm")
+        self.glm_model_input.setVisible(prov == "glm")
         # « Choix personnalisé » et « PANDORA optimisé » déplient le moteur par tâche
         if prov in ("custom", "pandora") and not self._adv_open:
             self._set_advanced(True)
@@ -694,6 +734,9 @@ class SettingsPage(QScrollArea):
             "kimi_key":          self.kimi_input.text(),
             "kimi_url":          self.kimi_url_input.text(),
             "kimi_model":        self.kimi_model_input.text(),
+            "glm_key":           self.glm_input.text(),
+            "glm_url":           self.glm_url_input.text(),
+            "glm_model":         self.glm_model_input.text(),
             "ollama_url":        self.ollama_url_input.text(),
             "ollama_model":      self.ollama_model_input.text(),
             "ai_task_engines":   task_engines,
@@ -710,7 +753,8 @@ class SettingsPage(QScrollArea):
         self.ai_combo.currentIndexChanged.connect(self.save)
         for w in (self.api_input, self.anthropic_input, self.openai_input,
                   self.mistral_input, self.kimi_input, self.kimi_url_input,
-                  self.kimi_model_input, self.ollama_url_input, self.ollama_model_input):
+                  self.kimi_model_input, self.glm_input, self.glm_url_input,
+                  self.glm_model_input, self.ollama_url_input, self.ollama_model_input):
             w.textChanged.connect(self.save)
         for combo in getattr(self, "_task_combos", {}).values():
             combo.currentIndexChanged.connect(self.save)
@@ -824,6 +868,37 @@ class SettingsPage(QScrollArea):
                     f"Code {r.status_code}. L'endpoint sera testé à la première génération.")
         except Exception as e:
             QMessageBox.critical(self, "Erreur Kimi", f"Erreur : {str(e)[:200]}")
+
+    def test_glm_connection(self):
+        # URL de base éditable (cloud Zhipu par défaut ou serveur local /v1) —
+        # même schéma de testeur que Kimi.
+        base = (self.glm_url_input.text().strip()
+                or "https://open.bigmodel.cn/api/paas/v4").rstrip("/")
+        key = self.glm_input.text().strip()
+        is_local = ("localhost" in base.lower()) or ("127.0.0.1" in base.lower())
+        if not key and not is_local:
+            QMessageBox.warning(
+                self, "Clé manquante",
+                "Entre ta clé API GLM (Zhipu) d'abord — ou pointe l'URL vers un "
+                "serveur local.")
+            return
+        try:
+            import requests
+            headers = {"Authorization": f"Bearer {key or 'local'}"}
+            r = requests.get(f"{base}/models", headers=headers, timeout=20)
+            if r.status_code == 200:
+                QMessageBox.information(
+                    self, "✓ Connexion OK",
+                    f"GLM joignable sur {base} — clé/endpoint valides !")
+            elif r.status_code in (401, 403):
+                QMessageBox.critical(self, "Clé invalide",
+                                     "La clé API GLM (Zhipu) est incorrecte.")
+            else:
+                QMessageBox.information(
+                    self, "Réponse GLM",
+                    f"Code {r.status_code}. L'endpoint sera testé à la première génération.")
+        except Exception as e:
+            QMessageBox.critical(self, "Erreur GLM", f"Erreur : {str(e)[:200]}")
 
     def test_connection(self):
         key = self.api_input.text().strip()
