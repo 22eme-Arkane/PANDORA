@@ -110,3 +110,4 @@ debug_*.py
 ffmpeg.exe
 ffprobe.exe
 tools/audit_i18n_result.txt
+data/file_dialog_prefs.json
