@@ -49,14 +49,16 @@ EXPECTED_ONLY_LIVE = {
         "_get_mapping_keyframes",
     },
     "ui/page_scenario_live.py": {
-        # Musique du set, façade, mode Live/Mapping, fenêtres dédiées…
-        "_refresh_music_display", "_make_music_chip", "_remove_music",
-        "_edit_bpm", "_on_add_music", "_on_analyze_music",
-        "_open_music_analysis_window", "_text_with_music",
+        # (Musique : _refresh_music_display/_make_music_chip/_remove_music/
+        #  _edit_bpm/_on_add_music/_on_analyze_music/_open_music_analysis_window/
+        #  _text_with_music + _apply_layout PORTÉS au Cinéma → désormais des DEUX
+        #  côtés, purgés d'ici le 2026-07-02 : une entrée périmée masquerait une
+        #  future régression Cinéma.)
+        # Façade, mode Live/Mapping, fenêtres dédiées…
         "_refresh_building_display", "_on_pick_building", "_on_clear_building",
         "_on_isolate_building", "_on_isolate_done", "_on_isolate_failed",
         "_make_mode_btn", "_set_live_mode", "_apply_mode_style",
-        "_apply_layout", "_apply_decoupage", "_open_decoupage_window",
+        "_apply_decoupage", "_open_decoupage_window",
         # Extraction calibrée Live (remplace les extracteurs Cinéma)
         "_live_extract_dialog",
         # Refs visuelles 2026-06-11 : persistance + bibliothèque + chat DA
@@ -75,9 +77,11 @@ EXPECTED_ONLY_LIVE = {
 }
 EXPECTED_ONLY_CINEMA = {
     "ui/tab_t2v_live.py": {
-        # DaVinci purgé côté Live (voulu)
+        # DaVinci purgé côté Live (voulu). « _DaVinciBar » (nom de classe) couvre
+        # déjà toutes ses méthodes, dont _refresh — pas d'entrée « _refresh » nue,
+        # trop générique (whitelisterait silencieusement toute future _refresh).
         "_DaVinciBar", "_check_davinci_connection",
-        "_on_davinci_connection_changed", "_refresh", "_on_connect",
+        "_on_davinci_connection_changed", "_on_connect",
         # Sélection par GROUPE couleur (plans récurrents) dans le StoryboardSelector
         # — feature Cinéma (Rendu/Audio) ; reportable au Live si besoin.
         "_rebuild_group_chips", "_select_color_group",

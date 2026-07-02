@@ -39,6 +39,22 @@ _TMP = tempfile.mkdtemp(prefix="pandora_cinema_test_")
 ctx.set_project_path(_TMP)
 ctx.set_project_id("test_cinema")
 
+# ── GARDE-FOU config (incident 2026-07-02) : les pages Paramètres sauvent
+#    AUTOMATIQUEMENT au moindre changement de champ/combo → un test qui manipule
+#    un combo écrirait la VRAIE data/config.json (clés API réelles, gitignorée
+#    donc non restaurable). save_config est neutralisé pour TOUTE la session de
+#    test, y compris les copies liées au niveau module (page_settings,
+#    tab_settings). Un test qui veut vérifier une écriture doit monkeypatcher
+#    localement vers un fichier temporaire.
+import core.config as _cfg_mod
+_cfg_mod.save_config = lambda cfg: None
+for _mod_name in ("ui.page_settings", "ui.tab_settings"):
+    try:
+        _m = __import__(_mod_name, fromlist=["save_config"])
+        _m.save_config = _cfg_mod.save_config
+    except Exception:
+        pass
+
 _TESTS = []
 
 

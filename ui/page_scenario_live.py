@@ -1543,6 +1543,11 @@ class PageScenario(QWidget):
         brow.addWidget(btn_ok)
         lay.addLayout(brow)
 
+        # Sans ça, Entrée dans le spinbox clique « ÷2 » (1er bouton autoDefault)
+        # → le BPM saisi est silencieusement divisé par 2.
+        from ui.widgets import disable_default_buttons
+        disable_default_buttons(dlg)
+
         if dlg.exec() == QDialog.DialogCode.Accepted:
             track["bpm"] = round(spin.value(), 1)
             self._refresh_music_display()

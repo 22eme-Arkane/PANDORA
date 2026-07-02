@@ -580,9 +580,9 @@ class TabModifyLive(QScrollArea):
         local = result.get("local_path", "")
         if not local and result.get("video_url"):
             try:
-                from davinci.importer import import_result
+                from core.download import download_result
                 from core.config import get_output_dir
-                ir = import_result(result, get_output_dir(), import_to_davinci=False)
+                ir = download_result(result, get_output_dir())
             except Exception as e:
                 ir = {"success": False, "mock": False, "local_path": "", "error": str(e)}
             if ir.get("success") and not ir.get("mock"):

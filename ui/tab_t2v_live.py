@@ -14,9 +14,10 @@ from core.config import get_output_dir
 from core.worker import GenerationWorker, abandon_thread
 from core.i18n import translate
 from api.enhance import EnhanceWorker
-# Live : import_result sert UNIQUEMENT au téléchargement local du clip généré
-# (import_to_davinci toujours False — le pont scène du Live est Resolume).
-from davinci.importer import import_result
+# Live : téléchargement local du clip généré via le module NEUTRE core.download
+# (jamais davinci.* ici — sinon tout le pont DaVinci entre dans le graphe
+# d'import du Live ; le pont scène du Live est Resolume).
+from core.download import download_result
 import core.casting as casting_api
 import core.accessories as acc_api
 import core.vehicles as veh_api
@@ -4050,8 +4051,7 @@ class TabT2V(QScrollArea):
         # via la Vidéothèque) — jamais d'import DaVinci.
         self.progress.update(100, "Sauvegarde du clip…")
         shot_title = result.get("shot_title") or self._active_shot_title
-        ir = import_result(result, get_output_dir(), shot_title=shot_title,
-                           import_to_davinci=False)
+        ir = download_result(result, get_output_dir(), shot_title=shot_title)
         if ir["mock"]:
             pass
         elif ir["success"]:

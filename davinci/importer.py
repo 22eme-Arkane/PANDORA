@@ -2,6 +2,9 @@ import os
 from datetime import datetime
 
 from davinci.bridge import resolve
+# Téléchargement local = module neutre partagé (le Live l'utilise SANS passer
+# par ce fichier, pour ne pas tirer davinci.bridge dans son graphe d'import).
+from core.download import download_video, download_result, is_mock_url  # noqa: F401
 
 _IMAGE_EXTS = {".png", ".jpg", ".jpeg", ".webp", ".bmp", ".tiff", ".tif"}
 _VIDEO_EXTS = {".mp4", ".mov", ".mxf", ".avi", ".mkv"}
@@ -54,26 +57,6 @@ def sync_project_to_davinci() -> tuple[int, int]:
     return imported, errors
 
 
-def _is_mock_url(url: str) -> bool:
-    return not url or "mock" in url or not url.startswith("http")
-
-
-def download_video(url: str, dest_dir: str, filename: str | None = None) -> str:
-    """Télécharge une vidéo depuis url vers dest_dir. Retourne le chemin local."""
-    import requests
-    os.makedirs(dest_dir, exist_ok=True)
-    if filename is None:
-        ts = datetime.now().strftime("%Y%m%d_%H%M%S")
-        filename = f"seedance_{ts}.mp4"
-    dest = os.path.join(dest_dir, filename)
-    r = requests.get(url, stream=True, timeout=120)
-    r.raise_for_status()
-    with open(dest, "wb") as f:
-        for chunk in r.iter_content(chunk_size=65536):
-            f.write(chunk)
-    return dest
-
-
 def import_image_to_bin(image_path: str, sub_bin: str) -> bool:
     """
     Importe une image locale dans PANDORA > sub_bin du Media Pool DaVinci.
@@ -116,37 +99,13 @@ def import_result(result: dict, dest_dir: str, shot_title: str = "",
     Retourne :
         {"success": bool, "local_path": str, "mock": bool, "error": str, "davinci_imported": bool}
     """
-    url = result.get("video_url", "")
-
-    # Mode mock : pas de vrai fichier à télécharger
-    if _is_mock_url(url):
-        return {"success": True, "local_path": "", "mock": True, "error": ""}
-
-    try:
-        mode = result.get("mode", "clip")
-        if filename:
-            os.makedirs(dest_dir, exist_ok=True)
-            name = filename
-        elif shot_title:
-            os.makedirs(dest_dir, exist_ok=True)
-            import glob
-            existing = [
-                f for f in glob.glob(os.path.join(dest_dir, f"{shot_title}_*.mp4"))
-                if not f.endswith(".lb.mp4")
-            ]
-            gen_idx = len(existing) + 1
-            name = f"{shot_title}_{gen_idx:02d}.mp4"
-        else:
-            ts   = datetime.now().strftime("%Y%m%d_%H%M%S")
-            name = f"seedance_{mode}_{ts}.mp4"
-        local_path = download_video(url, dest_dir, name)
-    except Exception as e:
-        return {"success": False, "local_path": "", "mock": False, "error": str(e)}
+    # Téléchargement local = core.download (partagé avec le Live)
+    ir = download_result(result, dest_dir, shot_title=shot_title, filename=filename)
+    if not ir["success"] or ir["mock"]:
+        return ir
 
     # Import DaVinci — directement dans le bin PANDORA (sans sous-dossier)
-    ok = False
     if import_to_davinci and resolve.is_connected():
-        ok = resolve.import_media_to_bin(local_path, "")
+        ir["davinci_imported"] = resolve.import_media_to_bin(ir["local_path"], "")
 
-    return {"success": True, "local_path": local_path, "mock": False,
-            "davinci_imported": ok, "error": ""}
+    return ir

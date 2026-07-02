@@ -44,6 +44,22 @@ _TMP = tempfile.mkdtemp(prefix="pandora_test_")
 ctx.set_project_path(_TMP)
 ctx.set_project_id("test_harness")
 
+# ── GARDE-FOU config (incident 2026-07-02) : les pages Paramètres sauvent
+#    AUTOMATIQUEMENT au moindre changement de champ/combo → un test qui manipule
+#    un combo écrirait la VRAIE data/config.json (clés API réelles, gitignorée
+#    donc non restaurable). save_config est neutralisé pour TOUTE la session de
+#    test, y compris les copies liées au niveau module (page_settings,
+#    tab_settings). Un test qui veut vérifier une écriture doit monkeypatcher
+#    localement vers un fichier temporaire.
+import core.config as _cfg_mod
+_cfg_mod.save_config = lambda cfg: None
+for _mod_name in ("ui.page_settings", "ui.tab_settings"):
+    try:
+        _m = __import__(_mod_name, fromlist=["save_config"])
+        _m.save_config = _cfg_mod.save_config
+    except Exception:
+        pass
+
 _TESTS = []
 
 
@@ -467,12 +483,37 @@ def t2v_live_selecteur_et_options():
     import ui.tab_t2v_live as _m
     _src = inspect.getsource(_m)
     assert "davinci.bridge" not in _src, "plus d'import du bridge DaVinci"
-    assert "import_to_davinci=False" in _src, "téléchargement local uniquement"
+    assert "from core.download import" in _src, "téléchargement local via core.download (neutre)"
     assert t._casting.isHidden(), "Éléments récurrents replié par défaut"
     assert t._film_style_frame.isHidden(), "Choisir les références replié par défaut"
     assert not t._casting._decor_toggle.isVisible(), "section Décors masquée"
     assert hasattr(t, "_bref_row"), "sélecteur façade présent"
     sb.set_namespace("storyboard")
+
+
+@test
+def live_sans_import_davinci():
+    """Séparation Cinéma/Live : AUCUN fichier Live n'importe davinci.* (même en
+    lazy) — sinon tout le pont DaVinci entre dans le graphe d'import du Live.
+    Le téléchargement local passe par le module NEUTRE core/download.py."""
+    import glob as _glob
+    import re as _re
+    _root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    pat = _re.compile(r"^\s*(from|import)\s+davinci", _re.M)
+    files = (_glob.glob(os.path.join(_root, "ui", "*_live.py"))
+             + _glob.glob(os.path.join(_root, "ui", "live_*.py"))
+             + _glob.glob(os.path.join(_root, "ui", "page_live*.py"))
+             + [os.path.join(_root, "live_window.py")])
+    assert len(files) > 10, "liste de fichiers Live vraisemblable"
+    bad = []
+    for f in files:
+        with open(f, encoding="utf-8") as fh:
+            if pat.search(fh.read()):
+                bad.append(os.path.basename(f))
+    assert not bad, f"import davinci.* dans fichier(s) Live : {bad}"
+    # core/download.py doit rester neutre (aucun import davinci)
+    with open(os.path.join(_root, "core", "download.py"), encoding="utf-8") as fh:
+        assert not pat.search(fh.read()), "core/download.py doit rester neutre"
 
 
 @test

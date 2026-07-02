@@ -1372,15 +1372,23 @@ class StudioImagesPanel(QWidget):
         self._chat_busy.setVisible(busy)
 
     def _cancel_work(self):
-        """Annule le travail en cours (génération image / discussion / synthèse)."""
+        """Annule le travail en cours (génération image / discussion / synthèse).
+
+        JAMAIS QThread.terminate() (état Qt/Python corrompu → segfault sur le
+        worker suivant) : on PARQUE le thread — signaux coupés, demande
+        d'interruption, référence anti-GC conservée — et on rend la main."""
+        if not hasattr(self, "_abandoned_workers"):
+            self._abandoned_workers = []
         for w in (self._img_worker, self._chat_worker, self._synth_worker):
             if w and w.isRunning():
                 try:
                     w.blockSignals(True)
-                    w.terminate()
-                    w.wait(300)
+                    w.requestInterruption()
+                    w.quit()
+                    self._abandoned_workers.append(w)
                 except Exception:
                     pass
+        self._img_worker = self._chat_worker = self._synth_worker = None
         self._set_busy(False, "Travail annulé.")
         self._set_chat_busy(False)
         self._gen_btn.setEnabled(True)
