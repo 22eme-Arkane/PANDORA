@@ -1,23 +1,32 @@
 # -*- mode: python ; coding: utf-8 -*-
 #
-# pandora.spec — PyInstaller build spec for PANDORA v1.2.1 (Cinéma)
+# pandora.spec — PyInstaller build spec for PANDORA v1.3.0 (Cinéma + Live)
+#
+# Multi-plateforme : Windows (build.ps1) et macOS (.app via BUNDLE, compilé sur
+# un runner GitHub Actions — PyInstaller ne cross-compile pas).
 #
 # Prérequis :
-#   python tools/make_ico.py     # génère assets/pandora_badge.ico
+#   python tools/make_ico.py     # Windows : génère assets/pandora_badge.ico
+#   python tools/make_icns.py    # macOS   : génère assets/pandora_badge.icns
 #   pip install pyinstaller
-#   pyinstaller pandora.spec     # produit dist/PANDORA/
+#   pyinstaller pandora.spec     # produit dist/PANDORA/ (+ dist/PANDORA.app sur mac)
 
 import os
+import sys
 
 block_cipher = None
 
-_ICO = os.path.join("assets", "pandora_badge.ico")
+_IS_MAC = sys.platform == "darwin"
+_ICO  = os.path.join("assets", "pandora_badge.ico")
+_ICNS = os.path.join("assets", "pandora_badge.icns")
 
 # Binaires ffmpeg — inclus s'ils sont présents dans le dossier racine du projet.
-# build.ps1 les télécharge automatiquement avant de lancer PyInstaller.
+# build.ps1 (Windows) / le workflow GitHub Actions (mac) les téléchargent avant
+# de lancer PyInstaller. Sur mac les binaires n'ont pas d'extension .exe.
+_FFMPEG_NAMES = ("ffmpeg", "ffprobe") if _IS_MAC else ("ffmpeg.exe", "ffprobe.exe")
 _FFMPEG_BINS = [
     (exe, ".")
-    for exe in ("ffmpeg.exe", "ffprobe.exe")
+    for exe in _FFMPEG_NAMES
     if os.path.isfile(exe)
 ]
 
@@ -108,31 +117,12 @@ a = Analysis(
         "jupyter",
         "pytest",
         "setuptools",
-        # ── PANDORA | Live — JAMAIS dans le build Cinéma (v1.2.0) ──────────────
-        # Aucun module Live n'est packagé : main.py détecte l'absence de
-        # live_window (core.edition.is_cinema_only) et saute le sélecteur de
-        # module. Les rares imports Live dans des fichiers partagés (main.py,
-        # api/apercu.py) sont conditionnels et jamais atteints en Cinéma.
-        "live_window",
-        "ui.chooser",
-        "ui.live_pages", "ui.live_studio_widget",
-        "ui.page_live", "ui.page_live_assets", "ui.page_live_conducteur",
-        "ui.page_live_placeholder", "ui.page_live_sequence",
-        "ui.page_live_sequences", "ui.page_live_settings",
-        "ui.page_scenario_live", "ui.page_storyboard_live",
-        "ui.page_castings_live", "ui.page_accessories_live",
-        "ui.page_vehicles_live", "ui.page_projects_live",
-        "ui.tab_t2v_live", "ui.tab_video_engines_live", "ui.tab_history_live",
-        "ui.tab_video_library_live", "ui.tab_modify_live",
-        "ui.tab_sound_design_live", "ui.tab_upscale_live",
-        "ui.assistant_panel_live", "ui.dialog_user_manual_live",
-        "ui.dialog_contact_live", "ui.dialog_shot_live",
-        "core.live_assets", "core.live_building", "core.live_conducteur",
-        "core.live_mapping", "core.live_sequences", "core.music_align",
-        "core.vj_styles",
-        "api.live_extract", "api.live_refs", "api.live_screenplay",
-        "api.resolume_push",
-        "resolume", "resolume.client",
+        # ── PANDORA | Live : INCLUS depuis la v1.3.0 (décision Matthieu
+        #    2026-07-02 — « on enlève la séparation, le Live est prêt »).
+        #    main.py détecte la présence de live_window (core.edition) et
+        #    affiche le sélecteur Cinéma | Live au démarrage. Les modules Live
+        #    sont atteints par imports littéraux depuis main.py → analyse
+        #    statique PyInstaller suffisante, pas de hiddenimports requis. ──
     ],
     win_no_prefer_redirects=False,
     win_private_assemblies=False,
@@ -157,7 +147,8 @@ exe = EXE(
     target_arch=None,
     codesign_identity=None,
     entitlements_file=None,
-    icon=_ICO if os.path.isfile(_ICO) else None,
+    icon=(_ICNS if (_IS_MAC and os.path.isfile(_ICNS))
+          else (_ICO if os.path.isfile(_ICO) else None)),
     version_file=None,
 )
 
@@ -171,3 +162,18 @@ coll = COLLECT(
     upx_exclude=["vcruntime*.dll", "api-ms-*.dll"],
     name="PANDORA",
 )
+
+# macOS : paquet applicatif .app (le workflow GitHub Actions le met en DMG).
+if _IS_MAC:
+    app = BUNDLE(
+        coll,
+        name="PANDORA.app",
+        icon=_ICNS if os.path.isfile(_ICNS) else None,
+        bundle_identifier="com.arkane22eme.pandora",
+        info_plist={
+            "CFBundleShortVersionString": "1.3.0",
+            "CFBundleVersion": "1.3.0",
+            "NSHighResolutionCapable": True,
+            "LSMinimumSystemVersion": "12.0",
+        },
+    )

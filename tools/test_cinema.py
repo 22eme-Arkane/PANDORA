@@ -117,30 +117,32 @@ def selecteur_ia_present():
 
 @test
 def edition_cinema_only():
-    """Build v1.2.0 : édition Cinéma seule détectée par core.edition ; main.py
-    saute le sélecteur ; le splash masque « Retour » ; le .spec exclut le Live."""
+    """Build v1.3.0 DOUBLE ÉDITION : le .spec n'exclut PLUS le Live (décision
+    2026-07-02) ; le mécanisme is_cinema_only reste (détection dynamique) et
+    main.py garde sa branche conditionnelle pour un éventuel build Cinéma seul."""
     import core.edition as ed
-    # En dev (live_window présent), l'édition complète reste active → chooser
+    # En dev (live_window présent), l'édition complète est active → chooser
     assert ed.is_cinema_only() is False, "dev = édition complète (Live présent)"
-    # main.py : démarrage conditionnel, sans import statique du Live/chooser
-    # hors de la branche dev
+    # main.py : démarrage conditionnel conservé (robustesse si Live absent)
     src_main = open("main.py", encoding="utf-8").read()
     assert "from core.edition import is_cinema_only" in src_main
-    assert "if _CINEMA_ONLY:" in src_main, "branche Cinéma directe"
-    assert 'mode == "live" and not _CINEMA_ONLY' in src_main, "Live jamais ouvert en Cinéma"
-    # Splash : bouton Retour optionnel (masqué en Cinéma seule)
+    assert "if _CINEMA_ONLY:" in src_main, "branche Cinéma directe conservée"
+    assert 'mode == "live" and not _CINEMA_ONLY' in src_main
+    # Splash : bouton Retour optionnel (affiché en double édition)
     from PyQt6.QtWidgets import QApplication
     from ui.splash import SplashWindow
     assert "show_back" in inspect.getsource(SplashWindow.__init__)
     SplashWindow("cinema", show_back=False)   # ne doit pas lever
-    # Le .spec exclut explicitement le Live (aucun module Live dans le build)
+    # Le .spec n'exclut AUCUN module Live (double édition) + BUNDLE mac présent
     spec = open("pandora.spec", encoding="utf-8").read()
+    exc = spec.split("excludes=[")[1].split("]")[0]
     for mod in ("live_window", "ui.chooser", "resolume", "core.live_mapping",
                 "api.resolume_push", "ui.tab_t2v_live"):
-        assert f'"{mod}"' in spec, f".spec doit exclure {mod}"
-    # Version bumpée — build 1.2.1 (release, plus de suffixe « -bêta »).
+        assert f'"{mod}"' not in exc, f".spec ne doit PLUS exclure {mod} (v1.3.0)"
+    assert "BUNDLE(" in spec and "PANDORA.app" in spec, "cible macOS présente"
+    # Version bumpée — build 1.3.0 (Cinéma + Live, Windows + macOS).
     from core.version import VERSION
-    assert VERSION.split("-")[0] == "1.2.1", f"version attendue 1.2.1[-suffixe], lue {VERSION}"
+    assert VERSION.split("-")[0] == "1.3.0", f"version attendue 1.3.0[-suffixe], lue {VERSION}"
 
 
 @test

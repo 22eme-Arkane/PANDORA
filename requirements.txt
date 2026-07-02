@@ -1,0 +1,19 @@
+# PANDORA — dépendances d'exécution (Cinéma + Live, v1.3.0)
+# Install : pip install -r requirements.txt
+# Build   : pip install -r requirements.txt pyinstaller
+
+PyQt6>=6.11.0
+anthropic
+fal-client
+requests
+Pillow
+
+# Analyse musicale (« Musiques du set » / calage) — Cinéma ET Live
+librosa
+soundfile
+audioread
+
+# Réseau (anthropic / fal-client s'appuient dessus, versions résolues par pip)
+httpx
+websockets
+aiofiles

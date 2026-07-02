@@ -68,6 +68,24 @@ Si un doute subsiste, le VÉRIFIER, ne pas l'ignorer.
   commits ») — jamais « ce matin/ce soir » sans vérifier `Get-Date`. Dates absolues dans
   les mémoires/devlog.
 
+## 7. PIÈGES VÉCUS — mise à jour de la méthode (2026-07-02, session Fable 5)
+Détail complet : mémoire `passation_methode_pour_opus48.md`. Les 6 plus mordants :
+- Pages Paramètres = AUTO-SAVE → tout smoke qui touche un combo écrirait la vraie
+  config ; garde-fou `save_config` neutralisé dans les 2 harnais (NE PAS retirer) ;
+  harnais ×2 de suite après tout travail sur ces pages.
+- Le radar ignore les méthodes MODIFIÉES et le style inline → les divergences fines
+  Cinéma↔Live se trouvent par rendus PNG écran par écran ; purger la whitelist à
+  chaque portage (entrée périmée = angle mort).
+- Rendus offscreen : `QT_QPA_FONTDIR=C:\Windows\Fonts` + stylesheet app + basculer
+  les QStackedWidget sur la bonne vue ; graisse 800 = fausse serif (artefact).
+- Qt : « & » nu dans un bouton = mnémonique avalé (→ `&&`) ; l'oubli de
+  `disable_default_buttons` a réellement produit « Entrée divise le BPM par 2 ».
+- PowerShell : jamais `2>&1` sur un exécutable natif (a tué build.ps1 sur une ligne
+  INFO) ; jamais de backtick dans `git commit -m`.
+- Appels IA : TOUJOURS `task=` (sinon moteur global coûteux) ; erreurs affichées via
+  humanize_ai_error/humanize_api_error ; analyses coûteuses PERSISTÉES et rouvertes
+  au re-clic (« Relancer » explicite dans la fenêtre).
+
 ---
 
 ## GARDE-FOUS — la boucle d'autonomie ne doit JAMAIS les violer
@@ -80,10 +98,12 @@ n'autorise PAS à franchir les limites suivantes, qui priment sur tout :
   publication `gh` sans demande explicite. Commit + `git add` locaux OK.
   (Le garde-fou `.claude/settings.local.json` `permissions.ask` le fait redemander —
   ne JAMAIS remettre `bypassPermissions`.)
-- **Build / push = Cinéma UNIQUEMENT.** Ne jamais embarquer le Live. Le `main` local
-  CONTIENT le Live → ne PAS faire un simple `git push origin main`. Pousser = cherry-pick
-  / branche basée sur `origin/main` (0ca8a99), diff vérifié SANS aucun fichier ni
-  plomberie Live. **RAPPELER ce point proactivement au prochain push Cinéma.**
+- **Build & repo = DOUBLE ÉDITION depuis la v1.3.0** (décision Matthieu 2026-07-02 :
+  « on enlève la séparation, le Live est prêt ») : les builds Windows/macOS embarquent
+  Cinéma ET Live (chooser au démarrage), et le repo public recevra le Live au prochain
+  push. ⚠ CE PUSH SERA PARTICULIER : `origin/main` (historique scrubbé Cinéma-only) et
+  le `main` local ont des HISTOIRES DIVERGENTES → il faudra un `--force-with-lease`
+  préparé et confirmé explicitement avec Matthieu (jamais un simple push).
 - **Jamais `git push --tags`** : les tags locaux pointent sur d'anciens SHAs d'avant
   réécriture d'historique → restaurerait le Live public.
 - Fichiers de contexte Claude (PANDORA_CONTEXT/COMMS/DEVLOG) = locaux, gitignorés,
@@ -106,7 +126,10 @@ n'autorise PAS à franchir les limites suivantes, qui priment sur tout :
 - Modifier le Live = éditer uniquement les copies `*_live.py` / `live_window.py` / etc.
   Modifier le Cinéma = fichiers d'origine. Ne JAMAIS toucher l'autre côté par effet de
   bord. Le radar de divergence vérifie l'alignement — le garder à 0.
-- `librosa` = build Live uniquement (+250 Mo) — jamais dans le requirements/build Cinéma.
+  (Cette séparation de CODE reste en vigueur même depuis que les BUILDS embarquent les
+  deux éditions — c'est elle qui permet de travailler sur l'une sans casser l'autre.)
+- `librosa` est désormais dans le build COMMUN (analyse musicale du Scénario Cinéma +
+  calage Live) — la règle « Live uniquement » est PÉRIMÉE depuis la 1.2.x.
 
 ### Threads / workers PyQt6 (anti-crash, causes de segfaults C réels)
 - Signaux workers = `done` (JAMAIS `finished` — masque le signal natif QThread).

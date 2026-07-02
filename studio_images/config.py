@@ -22,9 +22,13 @@ def user_data_dir() -> str:
       studio_images/ lui-même, comme avant.
     """
     if getattr(sys, "frozen", False):
-        base = os.path.join(
-            os.environ.get("LOCALAPPDATA", os.path.expanduser("~")),
-            "PANDORA", "studio_images")
+        if sys.platform == "darwin":
+            base = os.path.expanduser(
+                "~/Library/Application Support/PANDORA/studio_images")
+        else:
+            base = os.path.join(
+                os.environ.get("LOCALAPPDATA", os.path.expanduser("~")),
+                "PANDORA", "studio_images")
     else:
         base = os.path.dirname(os.path.abspath(__file__))
     try:
@@ -38,6 +42,9 @@ def _pandora_config_path() -> str:
     """config.json de PANDORA — emplacement réel selon dev vs. gelé.
     Sert à pré-remplir les clés API au premier lancement."""
     if getattr(sys, "frozen", False):
+        if sys.platform == "darwin":
+            return os.path.expanduser(
+                "~/Library/Application Support/PANDORA/data/config.json")
         return os.path.join(
             os.environ.get("LOCALAPPDATA", os.path.expanduser("~")),
             "PANDORA", "data", "config.json")

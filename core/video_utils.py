@@ -8,6 +8,10 @@ _ffprobe_exe_cache: str | None = None
 # Suppress console window for ffmpeg/ffprobe on Windows GUI builds
 _NO_WINDOW = subprocess.CREATE_NO_WINDOW if sys.platform == "win32" else 0
 
+# Nom des binaires selon la plateforme (macOS/Linux : pas d'extension .exe)
+_FFMPEG_BIN  = "ffmpeg.exe"  if sys.platform == "win32" else "ffmpeg"
+_FFPROBE_BIN = "ffprobe.exe" if sys.platform == "win32" else "ffprobe"
+
 
 def _find_davinci_ffmpeg() -> str | None:
     """Cherche ffmpeg.exe bundlé avec DaVinci Resolve (registre + chemins communs)."""
@@ -51,16 +55,16 @@ def get_ffmpeg_exe() -> str:
 
     # 1. Bundlé avec l'EXE PyInstaller
     if getattr(sys, "frozen", False):
-        bundled = os.path.join(os.path.dirname(sys.executable), "ffmpeg.exe")
+        bundled = os.path.join(os.path.dirname(sys.executable), _FFMPEG_BIN)
         if os.path.isfile(bundled):
             _ffmpeg_exe_cache = bundled
             return bundled
 
-    # 1b. Racine du projet (mode DEV) — ffmpeg.exe y est posé par convention.
+    # 1b. Racine du projet (mode DEV) — ffmpeg y est posé par convention.
     # ⚠ Vu en réel (2026-06-11) : seul le cas frozen était couvert → en dev,
     # vignettes noires et conformation/mixages dépendants de fallbacks fragiles.
     from core.paths import APP_ROOT
-    _root_exe = os.path.join(APP_ROOT, "ffmpeg.exe")
+    _root_exe = os.path.join(APP_ROOT, _FFMPEG_BIN)
     if os.path.isfile(_root_exe):
         _ffmpeg_exe_cache = _root_exe
         return _root_exe
@@ -93,14 +97,14 @@ def get_ffprobe_exe() -> str:
         return _ffprobe_exe_cache
 
     if getattr(sys, "frozen", False):
-        bundled = os.path.join(os.path.dirname(sys.executable), "ffprobe.exe")
+        bundled = os.path.join(os.path.dirname(sys.executable), _FFPROBE_BIN)
         if os.path.isfile(bundled):
             _ffprobe_exe_cache = bundled
             return bundled
 
-    # Racine du projet (mode DEV) — même convention que ffmpeg.exe
+    # Racine du projet (mode DEV) — même convention que ffmpeg
     from core.paths import APP_ROOT
-    _root_probe = os.path.join(APP_ROOT, "ffprobe.exe")
+    _root_probe = os.path.join(APP_ROOT, _FFPROBE_BIN)
     if os.path.isfile(_root_probe):
         _ffprobe_exe_cache = _root_probe
         return _root_probe
@@ -108,7 +112,7 @@ def get_ffprobe_exe() -> str:
     # DaVinci Resolve a ffprobe au même emplacement que ffmpeg
     dvr_dir = os.path.dirname(_find_davinci_ffmpeg() or "")
     if dvr_dir:
-        candidate = os.path.join(dvr_dir, "ffprobe.exe")
+        candidate = os.path.join(dvr_dir, _FFPROBE_BIN)
         if os.path.isfile(candidate):
             _ffprobe_exe_cache = candidate
             return candidate
