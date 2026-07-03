@@ -134,6 +134,20 @@ jobs:
           [ -d "$REFS2" ] && find "$REFS2" -type f -delete
           true
 
+      - name: Re-signature ad-hoc du .app
+        # Toute modification du bundle APRÈS la signature posée par PyInstaller
+        # (ex. le nettoyage ci-dessus s'il retire un fichier) invalide le sceau
+        # → app réellement « endommagée » sur Apple Silicon. On re-signe donc
+        # systématiquement, puis on vérifie strictement (échec = build rouge).
+        # NB : même signée, l'app non NOTARISÉE (pas de compte Apple Developer)
+        # affichera « PANDORA est endommagé » après téléchargement (quarantaine
+        # Gatekeeper) — contournement une fois : xattr -cr /Applications/PANDORA.app
+        # (documenté dans le README et la page de Release).
+        run: |
+          xattr -cr dist/PANDORA.app
+          codesign --force --deep -s - dist/PANDORA.app
+          codesign --verify --deep --strict dist/PANDORA.app && echo "signature OK"
+
       - name: DMG
         run: |
           VER=$(python -c "from core.version import VERSION; print(VERSION)")

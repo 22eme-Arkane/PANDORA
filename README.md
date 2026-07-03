@@ -47,7 +47,7 @@ All versions: [Releases](../../releases)
 
 ## Requirements
 
-- **Windows 10/11** 64-bit
+- **Windows 10/11** 64-bit, or **macOS** (Apple Silicon)
 - **DaVinci Resolve Studio** (optional — only for Media Pool integration)
 - API keys (optional — the software runs in simulation mode without them):
   - [fal.ai](https://fal.ai) — AI video & image generation (Seedance 2.0, portraits, elements…)
@@ -57,9 +57,28 @@ All versions: [Releases](../../releases)
 
 ## Installation
 
-1. Download `PANDORA_Setup_1.1.9.exe` from the link above
+### Windows
+
+1. Download `PANDORA_Setup_1.3.0.exe` from the link above
 2. Run the installer and accept the Terms of Use
 3. Launch **PANDORA** from the Start menu or desktop shortcut
+4. Enter your API keys in **Settings** (optional)
+
+### macOS
+
+1. Download `PANDORA_1.3.0.dmg` from the link above
+2. Open the DMG and drag **PANDORA** into **Applications**
+3. **First launch only** — macOS will claim that *"PANDORA is damaged and can't
+   be opened"*. The app is **not** damaged: this is the standard Gatekeeper
+   message for apps that are not notarized by Apple (PANDORA is signed ad-hoc,
+   without an Apple Developer account). Clear the quarantine flag once, in
+   Terminal:
+
+   ```bash
+   xattr -cr /Applications/PANDORA.app
+   ```
+
+   Then launch PANDORA normally (double-click).
 4. Enter your API keys in **Settings** (optional)
 
 ---
