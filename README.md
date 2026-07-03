@@ -67,18 +67,18 @@ All versions: [Releases](../../releases)
 ### macOS
 
 1. Download `PANDORA_1.3.0.dmg` from the link above
-2. Open the DMG and drag **PANDORA** into **Applications**
-3. **First launch only** — macOS will claim that *"PANDORA is damaged and can't
-   be opened"*. The app is **not** damaged: this is the standard Gatekeeper
-   message for apps that are not notarized by Apple (PANDORA is signed ad-hoc,
-   without an Apple Developer account). Clear the quarantine flag once, in
-   Terminal:
+2. Open the DMG and drag **PANDORA** into **Applications** (as usual)
+3. **First launch** — macOS will claim that *"PANDORA is damaged and can't be
+   opened"*. **This is normal, the app is not damaged** — macOS blocks apps
+   that are not registered with Apple. To unblock it (one time only):
+   - Open **Terminal** (Cmd+Space, type "Terminal")
+   - Paste this line and press Enter:
 
-   ```bash
-   xattr -cr /Applications/PANDORA.app
-   ```
+     ```bash
+     xattr -cr /Applications/PANDORA.app
+     ```
 
-   Then launch PANDORA normally (double-click).
+   - Launch PANDORA normally by double-clicking — it won't ask again.
 4. Enter your API keys in **Settings** (optional)
 
 ---
