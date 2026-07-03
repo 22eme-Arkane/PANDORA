@@ -284,6 +284,10 @@ class StoryboardChatToggleStrip(QWidget):
         self.setFixedWidth(42)
         self.setCursor(Qt.CursorShape.PointingHandCursor)
         self.setToolTip(translate("Ouvrir / fermer l'IA (actions sur le projet)"))
+        # QWidget custom : sans WA_StyledBackground, le « background » du
+        # stylesheet n'est jamais peint → la bande prenait la couleur du parent
+        # (raccord garanti partout — unification poignées IA du 2026-07-03).
+        self.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
         self.setStyleSheet(f"background:{CP['bg1']};")
 
         lay = QVBoxLayout(self)

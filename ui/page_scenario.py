@@ -624,13 +624,14 @@ class PageScenario(QWidget):
             return btn
 
         # ── helper: section toggle header ─────────────────────────────────────
-        # En-têtes de SECTION (« menu ») nettement distincts des sous-items
-        # (« sous-menu ») : fond plus sombre + barre d'accent à gauche + texte teal
-        # en MAJUSCULES — pour qu'on distingue d'un coup d'œil le niveau section du
-        # niveau action (retour bêta-test Pierre 2026-06-25).
+        # En-têtes de SECTION (« menu ») distincts des sous-items (« sous-menu »)
+        # par la COULEUR SEULE : fond plus sombre + texte teal en MAJUSCULES.
+        # (Barre d'accent gauche RETIRÉE le 2026-07-03 — demande Matthieu : les
+        # « crochets » sur le bord faisaient brouillon ; la distinction voulue
+        # était un simple changement de couleur.)
         _toggle_ss = (
             f"QPushButton{{background:{CP['bg3']};color:{CP['accent']};"
-            f"border:none;border-left:3px solid {CP['accent']};"
+            f"border:none;"
             f"border-top:1px solid {CP['border']};border-bottom:1px solid {CP['border']};"
             f"font-size:11px;font-weight:800;text-align:left;"
             f"padding:9px 16px;letter-spacing:0.8px;}}"

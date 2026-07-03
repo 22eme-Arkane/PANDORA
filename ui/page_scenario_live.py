@@ -621,11 +621,12 @@ class PageScenario(QWidget):
             return btn
 
         # ── helper: section toggle header ─────────────────────────────────────
-        # En-têtes de section = style Cinéma (P3) : fond bg3 + accent + barre d'accent
-        # à gauche, nettement distincts des sous-items.
+        # En-têtes de section = style Cinéma : fond bg3 + texte accent, distinction
+        # par la COULEUR SEULE (barre d'accent gauche retirée le 2026-07-03,
+        # demande Matthieu — parité avec page_scenario.py).
         _toggle_ss = (
             f"QPushButton{{background:{CP['bg3']};color:{CP['accent']};"
-            f"border:none;border-left:3px solid {CP['accent']};"
+            f"border:none;"
             f"border-top:1px solid {CP['border']};border-bottom:1px solid {CP['border']};"
             f"font-size:11px;font-weight:800;text-align:left;"
             f"padding:9px 16px;letter-spacing:0.8px;}}"
