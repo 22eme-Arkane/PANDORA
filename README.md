@@ -1,8 +1,8 @@
-# PANDORA — Cinema Pre-Production Plugin × Seedance 2.0
+# PANDORA — Standalone AI Cinema Pre-Production Studio × Seedance 2.0
 
 [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](https://www.gnu.org/licenses/gpl-3.0)
 
-**PANDORA** is a free, open-source cinema pre-production software for Windows that integrates AI video generation (Seedance 2.0 / ByteDance via fal.ai) into a complete workflow: screenplay, storyboard, casting, sets, props, costumes & makeup, and vehicles.
+**PANDORA** is a free, open-source, **standalone** cinema pre-production studio for Windows and macOS that integrates AI video generation (Seedance 2.0 / ByteDance via fal.ai) into a complete workflow: screenplay, storyboard, casting, sets, props, costumes & makeup, and vehicles. It runs entirely on its own — DaVinci Resolve integration (automatic clip import into the Media Pool) is available as an **option**, not a requirement.
 
 ---
 
@@ -18,13 +18,11 @@
 
 ## Download
 
-**[⬇ Download PANDORA v1.1.9](https://github.com/22eme-Arkane/PANDORA/releases/download/v1.1.9/PANDORA_Setup_1.1.9.exe)**
+**[⬇ Download PANDORA v1.3.0 for Windows](https://github.com/22eme-Arkane/PANDORA/releases/download/v1.3.0/PANDORA_Setup_1.3.0.exe)**
+
+**[⬇ Download PANDORA v1.3.0 for macOS](https://github.com/22eme-Arkane/PANDORA/releases/download/v1.3.0/PANDORA_1.3.0.dmg)** *(Apple Silicon — see [Installation](#installation) for the first launch)*
 
 All versions: [Releases](../../releases)
-
-> **Windows note:** on first install, Windows may show a SmartScreen warning ("Unknown app").
-> Click **"More info"** then **"Run anyway"**. This warning will disappear in a future version
-> (code signing certificate in progress).
 
 ---
 
@@ -37,11 +35,11 @@ All versions: [Releases](../../releases)
 | **Castings** | Character sheets + AI portrait generation |
 | **Sets** | Location sheets + multi-angle AI image generation |
 | **Props / Costumes / Vehicles** | Element sheets + AI image generation |
-| **AI Studio** | 13 video engines — Seedance 2.0, Kling, PixVerse, Veo 3.1, Happy Horse, Sora 2… |
+| **AI Studio** | 20+ video engines — Seedance 2.0/Mini, Kling, LTX-2, PixVerse, Veo 3.1, Sora 2… + AI Music, AI Images, Sound Design |
 | **"Generate All"** | One-click extraction + image generation for all screenplay elements |
 | **Dubbing** | Text-to-speech synthesis + background removal (BiRefNet) |
 | **Image & Sound** | Camera and optics preferences |
-| **DaVinci Resolve** | Automatic clip import into Media Pool (DaVinci Studio required) |
+| **DaVinci Resolve** *(optional)* | Automatic clip import into Media Pool (DaVinci Studio required) |
 
 ---
 
@@ -59,10 +57,14 @@ All versions: [Releases](../../releases)
 
 ### Windows
 
-1. Download `PANDORA_Setup_1.3.0.exe` from the link above
-2. Run the installer and accept the Terms of Use
-3. Launch **PANDORA** from the Start menu or desktop shortcut
-4. Enter your API keys in **Settings** (optional)
+1. Download `PANDORA_Setup_1.3.0.exe` from the link above and run it
+2. If Windows shows *"Windows protected your PC"* (SmartScreen), click
+   **More info** then **Run anyway** — the app is not code-signed yet
+   (certificate in progress), this is the Windows equivalent of the macOS
+   notice below
+3. Follow the installer and accept the Terms of Use
+4. Launch **PANDORA** from the Start menu or desktop shortcut
+5. Enter your API keys in **Settings** (optional)
 
 ### macOS
 
