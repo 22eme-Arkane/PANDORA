@@ -60,6 +60,12 @@ _T: dict[str, dict[str, str]] = {
 
 _FR_TO_EN: dict[str, str] = {
 
+    # ── Historique → Reprendre en HD (régénération par graine) ────────────────
+    "Reprendre ce plan (même graine) pour le régénérer en résolution supérieure":
+        "Reuse this shot (same seed) to regenerate it at a higher resolution",
+    "Plan repris — graine verrouillée. Choisis une résolution supérieure (1080p ou 4K) puis relance. La composition sera proche, pas identique.":
+        "Shot reloaded — seed locked. Pick a higher resolution (1080p or 4K) then generate. The composition will be close, not identical.",
+
     # ── PANDORA | Live ───────────────────────────────────────────────────────
     # Sélecteur de module (chooser)
     "Choisissez votre espace de travail":  "Choose your workspace",

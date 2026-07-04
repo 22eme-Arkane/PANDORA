@@ -177,6 +177,10 @@ class LiveStudioWidget(QWidget):
         self.tab_modify.generation_done.connect(self.tab_history.add_entry)
         self.tab_sequences.generation_done.connect(self.tab_history.add_entry)
 
+        # Historique → « Reprendre en HD » : pré-remplit « Générer depuis Séquences »
+        # (prompt + graine verrouillée) et bascule dessus pour régénérer en + haute déf.
+        self.tab_history.reprendre_plan.connect(self._on_reprendre_plan)
+
         # Pont Vidéothèque → Modifier (Live)
         self.tab_library.send_to_modify.connect(self._on_send_to_modify)
         # Vidéothèque → Resolume (connexion REST gérée par l'onglet Resolume / page_live.py)
@@ -209,6 +213,10 @@ class LiveStudioWidget(QWidget):
     def _on_send_to_modify(self, paths):
         self.tab_modify.add_clips_from_paths(paths)
         self.tabs.setCurrentWidget(self.tab_modify)
+
+    def _on_reprendre_plan(self, entry: dict):
+        self.tab_sequences.prefill_from_seed(entry)
+        self.tabs.setCurrentWidget(self.tab_sequences)
 
     def _on_send_to_resolume(self, _paths):
         # Bascule vers l'onglet Resolume (connexion REST + chargement dans les slots).

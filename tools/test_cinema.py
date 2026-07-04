@@ -3041,5 +3041,35 @@ def main() -> int:
     return 1 if ko else 0
 
 
+@test
+def seed_reprise_et_4k():
+    """4K best-effort dans Seedance 2.0 (essai, défaut 1080p conservé) + reprise
+    d'un plan validé par sa GRAINE depuis l'Historique (prompt + graine verrouillée
+    → onglet « Générer depuis Storyboard »). Fige les 2 chantiers 2026-07-04."""
+    import ui.tab_t2v as t2v
+    vals = [v for _, v in t2v._ENGINE_RESOLUTIONS["seedance-2.0"]]
+    assert vals[0] == "1080p", "le défaut Seedance doit rester 1080p"
+    assert "4k" in vals, "4K (valeur API 'k' minuscule) absent des résolutions Seedance 2.0"
+    entry = {"prompt": "plan nuit neons", "seed": 424242, "status": "done"}
+    w = t2v.TabT2V()
+    w.prefill_from_seed(dict(entry))
+    assert "plan nuit neons" in w.prompt_ta.toPlainText(), "prompt non réinjecté"
+    assert w._last_seed == 424242 and w._get_seed() == 424242, "graine non verrouillée"
+    # Historique : signal + bouton « ↑ HD » conditionnel (done + seed>0 seulement)
+    import ui.tab_history as th
+    from PyQt6.QtWidgets import QPushButton
+    assert hasattr(th.TabHistory, "reprendre_plan"), "signal reprendre_plan manquant"
+    hist = th.TabHistory()
+    assert hist._make_item(dict(entry)).findChildren(QPushButton), "bouton HD absent (done+seed)"
+    assert not hist._make_item({**entry, "seed": 0}).findChildren(QPushButton), "bouton sans graine"
+    assert not hist._make_item({**entry, "status": "error"}).findChildren(QPushButton), "bouton sur erreur"
+    # Câblage bout-en-bout : reprise → pré-remplit T2V + bascule
+    from ui.seedance_widget import SeedanceWidget
+    sw = SeedanceWidget()
+    sw.tab_history.reprendre_plan.emit(dict(entry))
+    assert sw.tabs.currentWidget() is sw.tab_t2v, "bascule onglet T2V manquante"
+    assert "plan nuit neons" in sw.tab_t2v.prompt_ta.toPlainText(), "prompt non transmis au widget"
+
+
 if __name__ == "__main__":
     sys.exit(main())

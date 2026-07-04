@@ -1,13 +1,19 @@
 from PyQt6.QtWidgets import (
-    QScrollArea, QWidget, QVBoxLayout, QHBoxLayout, QFrame, QLabel,
+    QScrollArea, QWidget, QVBoxLayout, QHBoxLayout, QFrame, QLabel, QPushButton,
 )
-from PyQt6.QtCore import Qt
+from PyQt6.QtCore import Qt, pyqtSignal
 from ui.styles import C
 from ui.widgets import section_label, HelpBlock
 from core.history import load_history
+from core.i18n import translate
 
 
 class TabHistory(QScrollArea):
+    # Émis quand on clique « Reprendre en HD » sur un plan : l'assembleur Studio IA
+    # (seedance_widget / live_studio_widget) pré-remplit l'onglet de génération avec
+    # le prompt + la graine du plan pour le régénérer en résolution supérieure.
+    reprendre_plan = pyqtSignal(dict)
+
     def __init__(self):
         super().__init__()
         self.setWidgetResizable(True)
@@ -112,4 +118,27 @@ class TabHistory(QScrollArea):
         row.addWidget(thumb)
         row.addLayout(info, 1)
         row.addWidget(badge)
+
+        # « Reprendre en HD » — seulement si le plan est réussi ET a une graine
+        # exploitable (les mock/anciennes entrées ont seed=0). Réinjecte prompt +
+        # graine dans l'onglet de génération pour régénérer en résolution supérieure.
+        try:
+            _seed = int(entry.get("seed") or 0)
+        except (TypeError, ValueError):
+            _seed = 0
+        if status == "done" and _seed > 0:
+            btn = QPushButton("↑ HD")
+            btn.setCursor(Qt.CursorShape.PointingHandCursor)
+            btn.setFixedHeight(28)
+            btn.setToolTip(translate(
+                "Reprendre ce plan (même graine) pour le régénérer en résolution supérieure"
+            ))
+            btn.setStyleSheet(
+                f"QPushButton{{background:transparent;border:1px solid {C['accent']};"
+                f"border-radius:6px;color:{C['accent']};font-size:10px;font-weight:700;"
+                f"padding:0 10px;}}"
+                f"QPushButton:hover{{background:rgba(124,107,255,0.15);}}"
+            )
+            btn.clicked.connect(lambda _=False, e=dict(entry): self.reprendre_plan.emit(e))
+            row.addWidget(btn)
         return item

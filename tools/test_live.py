@@ -1845,5 +1845,27 @@ def main() -> int:
     return 1 if ko else 0
 
 
+@test
+def seed_reprise_et_4k_live():
+    """4K best-effort Seedance 2.0 (défaut 1080p conservé) + reprise par GRAINE côté
+    Live : Historique → « Générer depuis Séquences » (prompt + graine verrouillée).
+    Fige les 2 chantiers 2026-07-04, parité avec le Cinéma."""
+    import ui.tab_t2v_live as t2vl
+    vals = [v for _, v in t2vl._ENGINE_RESOLUTIONS["seedance-2.0"]]
+    assert vals[0] == "1080p", "le défaut Seedance doit rester 1080p"
+    assert "4k" in vals, "4K (valeur API 'k' minuscule) absent des résolutions Seedance 2.0"
+    entry = {"prompt": "loop mapping facade", "seed": 999, "status": "done"}
+    w = t2vl.TabT2V()
+    w.prefill_from_seed(dict(entry))
+    assert "loop mapping facade" in w.prompt_ta.toPlainText(), "prompt non réinjecté"
+    assert w._last_seed == 999 and w._get_seed() == 999, "graine non verrouillée"
+    # Câblage bout-en-bout : reprise → pré-remplit « Générer depuis Séquences » + bascule
+    from ui.live_studio_widget import LiveStudioWidget
+    lw = LiveStudioWidget()
+    lw.tab_history.reprendre_plan.emit(dict(entry))
+    assert lw.tabs.currentWidget() is lw.tab_sequences, "bascule onglet Séquences manquante"
+    assert "loop mapping facade" in lw.tab_sequences.prompt_ta.toPlainText(), "prompt non transmis"
+
+
 if __name__ == "__main__":
     sys.exit(main())

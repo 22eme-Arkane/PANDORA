@@ -173,6 +173,10 @@ class SeedanceWidget(QWidget):
         self.tab_t2v.generation_done.connect(self.tab_history.add_entry)
         self.tab_davinci.generation_done.connect(self.tab_history.add_entry)
 
+        # Historique → « Reprendre en HD » : pré-remplit « Générer depuis Storyboard »
+        # (prompt + graine verrouillée) et bascule dessus pour régénérer en + haute déf.
+        self.tab_history.reprendre_plan.connect(self._on_reprendre_plan)
+
         # Vidéothèque → Modifier depuis DaVinci
         self.tab_library.send_to_davinci_edit.connect(self._on_send_to_edit)
 
@@ -207,6 +211,10 @@ class SeedanceWidget(QWidget):
     def _on_send_to_edit(self, paths: list):
         self.tab_davinci.add_clips_from_paths(paths)
         self.tabs.setCurrentWidget(self.tab_davinci)
+
+    def _on_reprendre_plan(self, entry: dict):
+        self.tab_t2v.prefill_from_seed(entry)
+        self.tabs.setCurrentWidget(self.tab_t2v)
 
     def refresh(self):
         self.tab_t2v.refresh()

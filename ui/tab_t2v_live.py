@@ -50,7 +50,10 @@ _ENGINE_RES_FORCED   = {
 }
 # Résolutions disponibles par moteur — (label affiché, valeur API), premier = défaut
 _ENGINE_RESOLUTIONS = {
-    "seedance-2.0":      [("1080p  (~$0.60/s)", "1080p"), ("720p  (~$0.30/s)", "720p"), ("480p  (~$0.16/s)", "480p")],
+    # 4K en essai : fal.ai annonce le 4K natif Seedance 2.0 (page seedance-2.0-4k) mais
+    # le schéma exact varie selon l'endpoint (ref-to-video documenté ≤1080p). Valeur API
+    # "4k" (minuscule, cf. schéma text-to-video). Repli propre via humanize_api_error si refus.
+    "seedance-2.0":      [("1080p  (~$0.60/s)", "1080p"), ("720p  (~$0.30/s)", "720p"), ("480p  (~$0.16/s)", "480p"), ("4K  (natif · essai)", "4k")],
     "seedance-2.0-fast": [("480p  (~$0.09/s)", "480p"),  ("720p  (~$0.18/s)", "720p")],
     "kling-v3-pro":      [("1080p", "1080p")],
     "kling-o3-4k":       [("4K",    "4K")],
@@ -2205,6 +2208,17 @@ class TabT2V(QScrollArea):
             "▸ Mode mock : sans clé fal.ai, la génération est simulée localement (aucun crédit consommé).",
         ], C))
 
+        # Bandeau « plan repris » (Historique → « ↑ HD ») — non-modal, masqué par
+        # défaut, rempli par prefill_from_seed().
+        self._reprise_banner = QLabel("")
+        self._reprise_banner.setWordWrap(True)
+        self._reprise_banner.setVisible(False)
+        self._reprise_banner.setStyleSheet(
+            f"QLabel{{background:rgba(124,107,255,0.12);border:1px solid {C['accent']};"
+            f"border-radius:8px;color:{C['text_primary']};font-size:11px;padding:8px 12px;}}"
+        )
+        lay.addWidget(self._reprise_banner)
+
         # ── Référence visuelle (template de style) ────────────────────────────
         self._film_style_frame = QFrame()
         self._film_style_frame.setStyleSheet(
@@ -3527,6 +3541,34 @@ class TabT2V(QScrollArea):
         if not self._seed_lock_btn.isChecked():
             return None
         return self._last_seed
+
+    def prefill_from_seed(self, entry: dict):
+        """Reprend un plan validé (depuis l'Historique) : réinjecte son prompt et
+        VERROUILLE sa graine pour le régénérer en résolution supérieure. Rappel :
+        la graine garde la composition PROCHE, pas un rendu strictement identique
+        (limite Seedance) ; les références du plan d'origine ne sont pas restaurées
+        ici — ré-ajoute-les si besoin."""
+        if not isinstance(entry, dict):
+            return
+        prompt = (entry.get("prompt") or "").strip()
+        if prompt:
+            self.prompt_ta.setPlainText(prompt)
+        try:
+            seed = int(entry.get("seed") or 0)
+        except (TypeError, ValueError):
+            seed = 0
+        if seed > 0:
+            self._last_seed = seed
+            if not self._seed_lock_btn.isChecked():
+                self._seed_lock_btn.setChecked(True)   # → _on_seed_toggle (conserve _last_seed)
+            else:
+                self._update_injection_banner()
+        if hasattr(self, "_reprise_banner"):
+            self._reprise_banner.setText(translate(
+                "Plan repris — graine verrouillée. Choisis une résolution supérieure "
+                "(1080p ou 4K) puis relance. La composition sera proche, pas identique."
+            ))
+            self._reprise_banner.setVisible(True)
 
 
     # ── Garde-fou crédit fal.ai ───────────────────────────────────────────────
