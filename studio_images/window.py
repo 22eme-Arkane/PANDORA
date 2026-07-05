@@ -614,7 +614,15 @@ class StudioImagesPanel(QWidget):
 
     # ── Panneau droit : chat ─────────────────────────────────────────────────
     def _build_right(self):
+        # Le fond du Studio IA est NOIR (bg0, comme Conducteur/Scénario) ; le
+        # panneau IA (chat), lui, reste BLEU MARINE (bg1) — demande Matthieu
+        # 2026-07-05 (« le reste noir, l'onglet IA reste bleu marine »). Sélecteur
+        # par objectName + WA_StyledBackground = seul le panneau prend bg1, pas ses
+        # enfants (qui gardent leurs fonds), et le fond est peint de façon fiable.
         panel = QWidget()
+        panel.setObjectName("iaChatPanel")
+        panel.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
+        panel.setStyleSheet(f"QWidget#iaChatPanel{{background:{CP['bg1']};}}")
         lay = QVBoxLayout(panel)
         lay.setContentsMargins(6, 0, 0, 0)
         lay.setSpacing(8)
@@ -649,6 +657,10 @@ class StudioImagesPanel(QWidget):
         self._chat_scroll = QScrollArea()
         self._chat_scroll.setWidgetResizable(True)
         chat_wrap = QWidget()
+        # Zone de défilement du chat = BLEU MARINE (bg1) elle aussi (sinon le
+        # viewport reste noir et seul le pourtour du panneau est marine).
+        chat_wrap.setObjectName("iaChatWrap")
+        chat_wrap.setStyleSheet(f"QWidget#iaChatWrap{{background:{CP['bg1']};}}")
         self._chat_layout = QVBoxLayout(chat_wrap)
         self._chat_layout.setContentsMargins(2, 2, 8, 2)
         self._chat_layout.setSpacing(8)

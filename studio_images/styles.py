@@ -39,7 +39,7 @@ BUBBLE_AI = f"""
 
 STYLESHEET = f"""
 QMainWindow, QWidget {{
-    background-color: {CP['bg1']};
+    background-color: {CP['bg0']};
     color: {CP['text_primary']};
     font-family: 'Segoe UI', sans-serif;
 }}

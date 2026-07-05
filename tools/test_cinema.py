@@ -1833,13 +1833,13 @@ def image_ia_chat_a_droite():
     # Référence : le Storyboard utilise bien la même convention de flèche.
     with open(os.path.join(root, "ui", "storyboard_chat.py"), encoding="utf-8") as f:
         assert 'return "❮" if self._open else "❯"' in f.read()
-    # RACCORD avec le Storyboard (retour Matthieu 2026-07-05) : fond du panneau =
-    # bg1 (#0c0e1a) comme PANDORA, JAMAIS bg0 (#07080f noir) ; poignée COLLÉE au
-    # bord droit (marge droite du root = 0, comme le body de PandoraWindow).
+    # HABILLAGE comme Conducteur/Scénario (retour Matthieu 2026-07-05) : fond du
+    # Studio IA = NOIR (bg0), le panneau IA (chat) reste BLEU MARINE (bg1, via
+    # objectName iaChatPanel), poignée COLLÉE au bord droit (marge droite = 0).
     with open(os.path.join(root, "studio_images", "styles.py"), encoding="utf-8") as f:
         ss = f.read()
-    assert "background-color: {CP['bg1']}" in ss, "fond Studio Images doit être bg1 (raccord PANDORA)"
-    assert "background-color: {CP['bg0']}" not in ss, "fond bg0 (noir) = régression du raccord Image IA"
+    assert "background-color: {CP['bg0']}" in ss, "fond Studio Images = bg0 (noir), comme Conducteur/Scénario"
+    assert "iaChatPanel" in src, "panneau IA doit rester bleu marine (bg1, objectName iaChatPanel)"
     assert "root.setContentsMargins(14, 12, 0, 12)" in src, "poignée non collée au bord (marge droite ≠ 0)"
 
 
