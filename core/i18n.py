@@ -60,6 +60,14 @@ _T: dict[str, dict[str, str]] = {
 
 _FR_TO_EN: dict[str, str] = {
 
+    # ── Analyse des références visuelles — « Nouvelle analyse » ────────────────
+    "✚  Nouvelle analyse":                    "✚  New analysis",
+    "Nouvelle analyse":                       "New analysis",
+    "Vide les images ET l'analyse pour repartir de zéro.":
+        "Clears the images AND the analysis to start fresh.",
+    "Vider les images et l'analyse pour repartir de zéro ?":
+        "Clear the images and the analysis to start fresh?",
+
     # ── Colonne « Référence » (images d'inspiration par plan) ──────────────────
     "Référence":                              "Reference",
     "Images de référence (inspiration)":      "Reference images (inspiration)",

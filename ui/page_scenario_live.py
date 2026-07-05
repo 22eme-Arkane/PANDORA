@@ -3260,6 +3260,30 @@ class PageScenario(QWidget):
 
         btn_relaunch.clicked.connect(_do_relaunch)
 
+        # Nouvelle analyse : vide les images ET l'analyse pour repartir de zéro
+        # (le « Relancer » ci-dessus garde les MÊMES images). Retour Matthieu 2026-07-05.
+        btn_new = QPushButton(translate("✚  Nouvelle analyse"))
+        btn_new.setFixedHeight(36)
+        btn_new.setStyleSheet(_ghost_btn_ss)
+        btn_new.setToolTip(translate("Vide les images ET l'analyse pour repartir de zéro."))
+        btn_new.setEnabled(not streaming)
+
+        def _do_new_analysis():
+            reply = QMessageBox.question(
+                dlg, translate("Nouvelle analyse"),
+                translate("Vider les images et l'analyse pour repartir de zéro ?"),
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            )
+            if reply != QMessageBox.StandardButton.Yes:
+                return
+            self._ref_images = []
+            self._last_ref_analysis = ""
+            self._refresh_refs_display()
+            self._schedule_autosave()
+            dlg.accept()
+
+        btn_new.clicked.connect(_do_new_analysis)
+
         btn_save_lib = QPushButton(translate("💾  Sauvegarder"))
         btn_save_lib.setFixedHeight(36)
         btn_save_lib.setStyleSheet(_ghost_btn_ss)
@@ -3353,6 +3377,7 @@ class PageScenario(QWidget):
 
         btn_row.addWidget(btn_close)
         btn_row.addWidget(btn_relaunch)
+        btn_row.addWidget(btn_new)
         btn_row.addWidget(btn_save_lib)
         btn_row.addWidget(btn_lib)
         btn_row.addStretch()
