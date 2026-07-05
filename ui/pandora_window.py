@@ -798,7 +798,11 @@ class PandoraWindow(QMainWindow):
             self._sb_chat_panel.setVisible(False)
             self._sb_chat_toggle._open = False
             self._sb_chat_toggle._arrow.setText(self._sb_chat_toggle._arrow_char())
-        self._right_spacer.setVisible(not is_sb)
+        # Le Studio IA (« seedance ») a sa PROPRE poignée droite (chat Image IA) :
+        # on masque le spacer sur cette page pour que la poignée « IA » soit COLLÉE
+        # au bord droit, exactement comme la poignée « GUIDE » l'est à gauche
+        # (retour Matthieu 2026-07-05).
+        self._right_spacer.setVisible(not is_sb and key != "seedance")
 
     def _refresh_project_page(self):
         """Reconstruit la page Projets après un renommage du projet courant."""

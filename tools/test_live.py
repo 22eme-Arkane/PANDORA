@@ -1869,5 +1869,15 @@ def seed_reprise_et_4k_live():
     assert "loop mapping facade" in lw.tab_sequences.prompt_ta.toPlainText(), "prompt non transmis"
 
 
+@test
+def studio_ia_poignee_ia_au_bord_live():
+    """Studio IA Live : la poignée « IA » est collée au bord droit — le spacer de
+    droite est masqué sur la page « studio » (sinon il la décale). Retour Matthieu
+    2026-07-05 ; parité avec le garde « seedance » côté Cinéma."""
+    root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    with open(os.path.join(root, "live_window.py"), encoding="utf-8") as f:
+        assert 'key != "studio"' in f.read(), "spacer non masqué sur Studio IA Live → poignée IA décalée"
+
+
 if __name__ == "__main__":
     sys.exit(main())

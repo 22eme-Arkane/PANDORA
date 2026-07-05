@@ -1841,6 +1841,12 @@ def image_ia_chat_a_droite():
     assert "background-color: {CP['bg0']}" in ss, "fond Studio Images = bg0 (noir), comme Conducteur/Scénario"
     assert "iaChatPanel" in src, "panneau IA doit rester bleu marine (bg1, objectName iaChatPanel)"
     assert "root.setContentsMargins(14, 12, 0, 12)" in src, "poignée non collée au bord (marge droite ≠ 0)"
+    # Panneau chat ENTIÈREMENT marine — viewport du scroll peint aussi (sinon bande
+    # noire en haut) ; poignée « IA » collée au bord (spacer masqué sur la page
+    # « seedance »). Retour Matthieu 2026-07-05.
+    assert "viewport().setStyleSheet" in src, "viewport du chat non peint → bande noire résiduelle"
+    with open(os.path.join(root, "ui", "pandora_window.py"), encoding="utf-8") as f:
+        assert 'key != "seedance"' in f.read(), "spacer non masqué sur Studio IA → poignée IA décalée"
 
 
 @test

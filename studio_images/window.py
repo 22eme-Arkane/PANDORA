@@ -622,7 +622,11 @@ class StudioImagesPanel(QWidget):
         panel = QWidget()
         panel.setObjectName("iaChatPanel")
         panel.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
-        panel.setStyleSheet(f"QWidget#iaChatPanel{{background:{CP['bg1']};}}")
+        # bg1 sur le panneau ET ses conteneurs directs (barre pièces jointes, indicateur
+        # « Claude réfléchit »…) : sinon le global QWidget{bg0} les laisse NOIRS entre
+        # les éléments stylés (retour Matthieu 2026-07-05 : « du noir sous les textes »).
+        panel.setStyleSheet(
+            f"QWidget#iaChatPanel, QWidget#iaChatPanel > QWidget {{background:{CP['bg1']};}}")
         lay = QVBoxLayout(panel)
         lay.setContentsMargins(6, 0, 0, 0)
         lay.setSpacing(8)
@@ -660,12 +664,16 @@ class StudioImagesPanel(QWidget):
         # Zone de défilement du chat = BLEU MARINE (bg1) elle aussi (sinon le
         # viewport reste noir et seul le pourtour du panneau est marine).
         chat_wrap.setObjectName("iaChatWrap")
+        chat_wrap.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
         chat_wrap.setStyleSheet(f"QWidget#iaChatWrap{{background:{CP['bg1']};}}")
         self._chat_layout = QVBoxLayout(chat_wrap)
         self._chat_layout.setContentsMargins(2, 2, 8, 2)
         self._chat_layout.setSpacing(8)
         self._chat_layout.addStretch(1)
         self._chat_scroll.setWidget(chat_wrap)
+        # Le VIEWPORT du scroll aussi en marine (sinon une bande noire subsiste en
+        # haut, à droite de la bulle — le viewport interne garde le bg0 global).
+        self._chat_scroll.viewport().setStyleSheet(f"background:{CP['bg1']};")
         lay.addWidget(self._chat_scroll, 1)
 
         self._greeting = (
