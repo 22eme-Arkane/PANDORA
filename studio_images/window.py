@@ -232,7 +232,10 @@ class StudioImagesPanel(QWidget):
         self._img_worker = None
 
         root = QVBoxLayout(self)
-        root.setContentsMargins(14, 12, 14, 12)
+        # Marge DROITE = 0 : la poignée du chat (dernier widget du body) doit être
+        # COLLÉE au bord droit, exactement comme la poignée du Storyboard (gérée au
+        # niveau fenêtre PandoraWindow, body à marge 0). Sinon elle paraît décalée.
+        root.setContentsMargins(14, 12, 0, 12)
         root.setSpacing(10)
 
         # Corps : génération RECENTRÉE (largeur plafonnée + centrée) dans un SCROLL
