@@ -2663,12 +2663,9 @@ class TabT2V(QScrollArea):
         self._music_cb.stateChanged.connect(self._refresh_prompt_preview)
         _raccords_lay.addWidget(self._music_toggle_row)
 
-        self._subtitle_toggle_row, _subtitle_cb_inner = _raccord_toggle(
-            "Sous-titres", "Coché → sous-titres incrustés · Décoché → « no subtitles » injecté", False
-        )
-        self._subtitle_cb = _subtitle_cb_inner
-        self._subtitle_cb.stateChanged.connect(self._refresh_prompt_preview)
-        _raccords_lay.addWidget(self._subtitle_toggle_row)
+        # « Sous-titres » RETIRÉ de l'UI Live (demande Matthieu 2026-07-05) : sans la
+        # case, les gardes hasattr(_subtitle_cb) du prompt retombent sur « no
+        # subtitles » injecté (comportement Live voulu).
 
         self._film_anchor_toggle_row, _film_anchor_cb_inner = _raccord_toggle(
             "Prise de vue réelle",
@@ -2697,25 +2694,11 @@ class TabT2V(QScrollArea):
         _raccords_lay.addWidget(self._sfx_auto_toggle_row)
         self._sfx_workers: list = []   # refs anti-GC des workers SFX en cours
 
-        self._dyn_cam_toggle_row = toggle_row(
-            "Caméra dynamique",
-            "Changement d'angle toutes les 2 secondes",
-            False,
-        )
-        self._dyn_cam_cb = self._dyn_cam_toggle_row.findChild(QCheckBox)
-        self._dyn_cam_cb.stateChanged.connect(self._refresh_prompt_preview)
-        self._dyn_cam_toggle_row.setVisible(True)  # caché quand shot actif
-        _raccords_lay.addWidget(self._dyn_cam_toggle_row)  # → RENDU & AUDIO, après Raccord automatique
-
-        self._decor_sync_toggle_row, _decor_sync_cb_inner = _raccord_toggle(
-            "Synchroniser le décor (même axe)",
-            "Réutilise le décor d'un plan déjà généré dans le même axe : on extrait le "
-            "fond du clip (personnage retiré par IA) comme référence — décor identique "
-            "d'un champ/contrechamp à l'autre",
-            False,
-        )
-        self._decor_sync_cb = _decor_sync_cb_inner
-        _raccords_lay.addWidget(self._decor_sync_toggle_row)
+        # « Caméra dynamique » et « Synchroniser le décor » RETIRÉS de l'UI Live
+        # (demande Matthieu 2026-07-05). Les cases ne sont plus créées : tous leurs
+        # usages (aperçu, prompt, affichage conditionnel) sont gardés par
+        # hasattr(_dyn_cam_cb)/getattr(_decor_sync_cb, None) → comportement neutre
+        # (pas de mouvement caméra ajouté, pas de synchro décor).
 
         lay.addWidget(self._edit_zone)
         # Encart « contexte injecté » : hors _edit_zone → visible aussi en multi-sélection.

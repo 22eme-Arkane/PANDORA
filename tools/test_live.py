@@ -468,9 +468,13 @@ def t2v_live_selecteur_et_options():
     t._set_seq_mode("mapping")
     assert sb.get_namespace() == "live_seq_mapping"
     assert t._raccord_auto_cb.isChecked(), "raccord auto coché en Mapping"
-    assert t._dyn_cam_toggle_row.isHidden(), "caméra dynamique retirée en Mapping"
+    # « Sous-titres », « Caméra dynamique » et « Synchroniser le décor » RETIRÉS de
+    # l'UI Live (demande Matthieu 2026-07-05) : plus créés du tout, comportement
+    # neutre via les gardes hasattr/getattr du prompt et de l'aperçu.
+    for _gone in ("_subtitle_cb", "_dyn_cam_cb", "_decor_sync_cb",
+                  "_dyn_cam_toggle_row", "_decor_sync_toggle_row", "_subtitle_toggle_row"):
+        assert not hasattr(t, _gone), f"{_gone} devrait être retiré de l'UI Live"
     t._set_seq_mode("live")
-    assert not t._dyn_cam_toggle_row.isHidden(), "caméra dynamique de retour en Live"
     # refresh recale le namespace même changé ailleurs
     sb.set_namespace("storyboard")
     t._seq_mode = "mapping"
