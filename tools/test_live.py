@@ -325,20 +325,23 @@ def colonnes_sequences():
     import core.storyboard as sb
     import ui.page_storyboard_live as M
     from ui.live_pages import SequenceLivePage, SequenceMappingPage, _LIVE_DEFAULT_ORDER
-    assert len(M._COLS) == 22, "22 colonnes"
+    assert len(M._COLS) == 23, "22 colonnes + Référence (inspiration)"
     assert M._COLS[2][0] == "Acte" and M._COLS[4][0] == "Prompt vidéo / son"
     assert M._COLS[16][0] == "TC" and M._COLS[17][0] == "Musique"
     assert M._COLS[18][0] == "BPM" and M._COLS[19][0] == "Transition"
-    assert sorted(_LIVE_DEFAULT_ORDER) == list(range(22)), "ordre défaut = permutation valide"
+    assert M._COLS[22][0] == "Référence", "colonne Référence (inspiration) en logique 22"
+    assert sorted(_LIVE_DEFAULT_ORDER) == list(range(23)), "ordre défaut = permutation valide"
+    assert _LIVE_DEFAULT_ORDER.index(22) == _LIVE_DEFAULT_ORDER.index(1) + 1, \
+        "Référence affichée juste après Mood"
     mp = SequenceMappingPage(); mp.refresh()
     vis = M._visible_order()
     assert all(c not in vis for c in (5, 6, 7, 8, 9, 11, 12)), "masquage Mapping (+Mouvement)"
     assert all(c in vis for c in (16, 17, 18, 19, 20)), "colonnes conducteur visibles"
-    # Ordre par défaut VALIDÉ (capture Matthieu 2026-06-10) : Mood · Acte · Plan ·
-    # TC · Prompt · Musique · BPM · Vitesse · Durée · Notes · Transition ·
-    # Acteurs · Accessoires
-    assert vis == [0, 1, 2, 3, 16, 4, 17, 18, 10, 15, 20, 19, 14, 13, 21], \
-        "ordre par défaut Mapping = capture validée"
+    # Ordre par défaut VALIDÉ (capture Matthieu 2026-06-10) : Mood · Référence · Acte ·
+    # Plan · TC · Prompt · Musique · BPM · Vitesse · Durée · Notes · Transition ·
+    # Acteurs · Accessoires (Référence 22 insérée juste après Mood le 2026-07-05).
+    assert vis == [0, 1, 22, 2, 3, 16, 4, 17, 18, 10, 15, 20, 19, 14, 13, 21], \
+        "ordre par défaut Mapping = capture validée + Référence après Mood"
     live = SequenceLivePage(); live.refresh()
     vis_l = M._visible_order()
     assert all(c not in vis_l for c in (6, 11, 12)), "Live masque Mouvement/Décor/Heure"

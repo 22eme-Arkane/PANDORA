@@ -60,6 +60,21 @@ _T: dict[str, dict[str, str]] = {
 
 _FR_TO_EN: dict[str, str] = {
 
+    # ── Colonne « Référence » (images d'inspiration par plan) ──────────────────
+    "Référence":                              "Reference",
+    "Images de référence (inspiration)":      "Reference images (inspiration)",
+    "Image de référence (inspiration)":       "Reference image (inspiration)",
+    "Ajouter des images de référence (inspiration)": "Add reference images (inspiration)",
+    "Images de référence — inspiration du plan": "Reference images — shot inspiration",
+    "Jusqu'à 3 images. Seedance s'en INSPIRE (ambiance, composition) pour ce plan — ce n'est PAS un rendu à l'identique. Ex. : une photo d'escalier infini pour guider l'esprit du plan.":
+        "Up to 3 images. Seedance draws INSPIRATION from them (atmosphere, composition) for this shot — it is NOT a like-for-like render. E.g. a photo of an infinite staircase to guide the shot's spirit.",
+    "Aucune image de référence.":             "No reference image.",
+    "Choisir des images de référence":        "Choose reference images",
+    "＋ Fichier…":                            "＋ File…",
+    "＋ Bibliothèque":                        "＋ Library",
+    "＋ Réf":                                 "＋ Ref",
+    "✕ Retirer":                              "✕ Remove",
+
     # ── Historique → Reprendre en HD (régénération par graine) ────────────────
     "Reprendre ce plan (même graine) pour le régénérer en résolution supérieure":
         "Reuse this shot (same seed) to regenerate it at a higher resolution",

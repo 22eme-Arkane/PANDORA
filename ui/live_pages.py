@@ -46,7 +46,8 @@ from ui.page_storyboard_live    import PageStoryboard   as _PageStoryboardLive
 # Durée · Notes/Repère · Transition · Acteurs · Accessoires ·
 # (colonnes caméra/décor, masquées selon la page) · boutons.
 # Drag toujours possible ensuite (l'ordre personnalisé du projet prime).
-_LIVE_DEFAULT_ORDER = [0, 1, 2, 3, 16, 4, 17, 18, 10, 15, 20, 19, 14, 13,
+# « Référence » (logique 22) affichée juste après « Mood » (logique 1), comme au Cinéma.
+_LIVE_DEFAULT_ORDER = [0, 1, 22, 2, 3, 16, 4, 17, 18, 10, 15, 20, 19, 14, 13,
                        5, 6, 7, 8, 9, 11, 12, 21]
 
 

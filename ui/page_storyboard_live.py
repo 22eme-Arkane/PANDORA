@@ -55,6 +55,7 @@ _COLS = [
     ("Transition",    96,  False),  # 19 transition
     ("Notes / Repère", 150, False), # 20 cue_note
     ("",              78,  False),  # 21 Boutons
+    ("Référence",    100,  False),  # 22 reference_images — inspiration → rôle « reference »
 ]
 
 _HEURE_PRESETS = HEURE_PRESETS
@@ -65,7 +66,9 @@ _col_widths: list[int] = [w for _, w, _ in _COLS]
 # Mutable column visual order — list of logical column indices in left→right display order.
 # Indices 0 (grip) and 16 (buttons) always stay at first/last; the rest are reorderable.
 # Loaded from project config in PageStoryboard._render().
-_col_order: list[int] = list(range(len(_COLS)))
+# « Référence » (logique 22, ajoutée en fin de _COLS) s'affiche juste après « Mood »
+# (logique 1) ; le reste garde l'ordre naturel, boutons (21) en queue.
+_col_order: list[int] = [0, 1, 22] + list(range(2, 22))
 
 # Colonnes masquées pour la page courante (Mapping en masque plusieurs).
 # Défini par PageStoryboard._render() selon le mode (via self._hidden_cols).
@@ -888,6 +891,52 @@ class _ShotRow(QFrame):
 
         mood_l.addWidget(img_lbl)
         cells[1] = mood_w
+
+        # ── Référence (col 22) — images d'INSPIRATION injectées en génération ──
+        ref_w = QWidget()
+        ref_w.setFixedWidth(_col_widths[22])
+        ref_w.setMinimumHeight(self._MIN_H)
+        ref_w.setStyleSheet("background:transparent;")
+        ref_l = QVBoxLayout(ref_w)
+        ref_l.setContentsMargins(3, 4, 3, 4)
+        ref_l.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        ref_lbl = QLabel()
+        ref_lbl.setFixedSize(86, 58)
+        ref_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        ref_lbl.setWordWrap(True)
+
+        def _render_ref(lbl=ref_lbl, shot_data=data):
+            _rps = [p for p in (shot_data.get("reference_images") or []) if os.path.isfile(p)]
+            if _rps:
+                pix = QPixmap(_rps[0]).scaled(
+                    86, 58, Qt.AspectRatioMode.KeepAspectRatioByExpanding,
+                    Qt.TransformationMode.SmoothTransformation)
+                pix = pix.copy((pix.width()-86)//2, (pix.height()-58)//2, 86, 58)
+                lbl.setPixmap(pix)
+                lbl.setText("")
+                lbl.setStyleSheet(f"background:{CP['bg3']};border:none;")
+                lbl.setToolTip(translate("Images de référence (inspiration)")
+                               + (f" · {len(_rps)}" if len(_rps) > 1 else ""))
+            else:
+                lbl.setPixmap(QPixmap())
+                lbl.setStyleSheet(
+                    f"background:{CP['bg3']};border:1px dashed {CP['border_bright']};"
+                    f"color:{CP['accent_dim']};font-size:8px;padding:4px;")
+                lbl.setText(translate("＋ Réf"))
+                lbl.setToolTip(translate("Ajouter des images de référence (inspiration)"))
+        _render_ref()
+        ref_lbl.setCursor(Qt.CursorShape.PointingHandCursor)
+
+        def _open_refs(lbl=ref_lbl, shot_data=data, row_self=self):
+            from ui.dialog_reference_images import ReferenceImagesDialog
+            dlg = ReferenceImagesDialog(shot_data.get("reference_images", []), row_self.window())
+            if dlg.exec():
+                shot_data["reference_images"] = dlg.result_paths()
+                sb_api.save_shot(shot_data)
+                _render_ref(lbl, shot_data)
+        _clickable(ref_lbl, _open_refs)
+        ref_l.addWidget(ref_lbl)
+        cells[22] = ref_w
 
         # ── Séq ──────────────────────────────────────────────────────────────
         seq_w = QWidget()

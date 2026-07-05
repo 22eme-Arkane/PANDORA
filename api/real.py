@@ -197,8 +197,11 @@ def run_real(params: dict, emit_progress, is_cancelled) -> dict:
         if _p and os.path.isfile(_p):
             ref_images.append(_p)
             ref_roles.append("")
-    ref_images = ref_images[:4]
-    ref_roles  = ref_roles[:4]
+    # Seedance reference-to-video accepte jusqu'à 9 images (image_urls). On passe de
+    # 4 à 9 pour laisser la place aux images de RÉFÉRENCE (inspiration) par plan, en
+    # plus des mosaïques (personnages/décor/accessoires) + style + mood.
+    ref_images = ref_images[:9]
+    ref_roles  = ref_roles[:9]
 
     # ── Clip source : transcodage H.264 automatique si nécessaire ───────────────
     # (MXF/ProRes/HEVC → H.264 ; > 1080p → downscale lanczos ; RÉELLEMENT
@@ -474,6 +477,14 @@ def run_real(params: dict, emit_progress, is_cancelled) -> dict:
                         f"angle, subject placement, lighting and color grade as closely as "
                         f"possible — animate this precise image into motion. Highest-priority "
                         f"directive for visual cohesion with the planned shot."
+                    )
+                elif _role == "reference":
+                    _prompt_additions.append(
+                        f"INSPIRATION REFERENCE @Image{_idx}: Loosely draw inspiration from "
+                        f"this image — its atmosphere, mood, composition, shapes and overall "
+                        f"design language. Do NOT copy it literally, do NOT reproduce it "
+                        f"exactly; reinterpret its spirit freely within this shot's own action, "
+                        f"framing and visual style."
                     )
 
             if _prompt_additions:

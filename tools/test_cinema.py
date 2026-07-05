@@ -430,8 +430,11 @@ def colonne_langues_dialogues():
     """Colonne « Langues » (storyboard Cinéma) : choix par plan, défaut anglais ;
     dialogues traduits À L'ENVOI uniquement (pas dans le prompt affiché)."""
     import ui.page_storyboard as M
-    assert len(M._COLS) == 20, \
-        "Langues (16) + Nom du plan (17) + boutons (18) + Hauteur (19) = 20 colonnes"
+    assert len(M._COLS) == 21, \
+        "Langues (16) · Nom du plan (17) · boutons (18) · Hauteur (19) · Référence (20) = 21 colonnes"
+    assert M._COLS[20][0] == "Référence", "colonne Référence (inspiration) en logique 20"
+    assert M._DEFAULT_COL_ORDER.index(20) == M._DEFAULT_COL_ORDER.index(1) + 1, \
+        "Référence affichée juste après Mood"
     assert M._COLS[16][0] == "Langues" and M._COLS[17][0] == "Nom du plan" and M._COLS[18][0] == "", \
         "Langues en 16, Nom du plan en 17, boutons en 18"
     # « Nom du plan » (scene_title) s'affiche par défaut juste après « Plan » (logique 3)
@@ -3085,6 +3088,27 @@ def seed_reprise_et_4k():
     sw.tab_history.reprendre_plan.emit(dict(entry))
     assert sw.tabs.currentWidget() is sw.tab_t2v, "bascule onglet T2V manquante"
     assert "plan nuit neons" in sw.tab_t2v.prompt_ta.toPlainText(), "prompt non transmis au widget"
+
+
+@test
+def references_inspiration_par_plan():
+    """Colonne « Référence » (2026-07-05) : images d'inspiration par plan → injectées
+    en Seedance avec le rôle « reference » (« s'inspirer de », PAS un rendu identique).
+    Modèle partagé Cinéma/Live (core.storyboard) ; limite refs montée 4→9 ; dialogue
+    max 3 images (fichier + bibliothèque)."""
+    import core.storyboard as sb
+    s = sb.save_shot({"scene_title": "escalier infini", "number": 1})
+    assert "reference_images" in s and isinstance(s["reference_images"], list), "champ modèle absent"
+    rsrc = inspect.getsource(__import__("api.real", fromlist=["x"]))
+    assert 'elif _role == "reference":' in rsrc and "INSPIRATION REFERENCE" in rsrc, "rôle reference manquant"
+    assert "Loosely draw inspiration" in rsrc and "Do NOT copy it literally" in rsrc, "ton inspiration"
+    assert "ref_images[:9]" in rsrc, "limite refs non montée à 9"
+    # Injection dans la génération, Cinéma ET Live
+    for mod in ("ui.tab_t2v", "ui.tab_t2v_live"):
+        msrc = inspect.getsource(__import__(mod, fromlist=["x"]))
+        assert 'ref_image_roles + ["reference"]' in msrc, f"{mod} : reference_images non injectées"
+    from ui.dialog_reference_images import ReferenceImagesDialog, MAX_REFS
+    assert MAX_REFS == 3, "dialogue max 3 images"
 
 
 if __name__ == "__main__":

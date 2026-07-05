@@ -465,6 +465,11 @@ def save_shot(data: dict, version_id: str = DEFAULT_VERSION_ID) -> dict:
         # « Rendu/Audio ». recurrent_text = nom du groupe (ex. « Récurrent A »).
         data.setdefault("recurrent_color", "")
         data.setdefault("recurrent_text", "")
+        # Images de RÉFÉRENCE (inspiration) du plan — injectées en génération Seedance
+        # comme « s'inspirer de » (ambiance/composition), PAS un rendu identique
+        # (rôle « reference » dans api/real.py). Liste de chemins, max 3. Couvre le
+        # Storyboard (Cinéma) ET les Séquences Live/Mapping (mêmes shots, namespace).
+        data.setdefault("reference_images", [])
         index.append(data)
     else:
         data["updated_at"] = now

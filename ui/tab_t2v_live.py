@@ -3881,6 +3881,14 @@ class TabT2V(QScrollArea):
             if _facade and os.path.isfile(_facade):
                 ref_images = ref_images + [_facade]
                 ref_image_roles = ref_image_roles + ["facade"]
+        # Images de RÉFÉRENCE (inspiration) du plan → rôle « reference » : Seedance
+        # s'en inspire (ambiance / composition / design) SANS les copier. Max 3,
+        # Seedance uniquement ; silencieux si le plan n'en a pas.
+        if _is_seedance and self._active_shot:
+            for _rp in (self._active_shot.get("reference_images") or [])[:3]:
+                if _rp and os.path.isfile(_rp):
+                    ref_images = ref_images + [_rp]
+                    ref_image_roles = ref_image_roles + ["reference"]
 
         # (suffixe qualité « 4K ultra HD, rich detail… » RETIRÉ : mots de qualité
         # génériques interdits par la doctrine des prompts — poussent vers un rendu

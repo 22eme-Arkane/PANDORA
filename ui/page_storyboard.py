@@ -53,6 +53,7 @@ _COLS = [
     ("Nom du plan",  150,  False),  # 17 scene_title (nom du plan) — affiché après « Plan »
     ("",              78,  False),  # 18 Boutons
     ("Hauteur",       64,  False),  # 19 camera_height (à côté de Dist.)
+    ("Référence",    100,  False),  # 20 reference_images — inspiration → rôle « reference »
 ]
 
 _HEURE_PRESETS = HEURE_PRESETS
@@ -64,7 +65,7 @@ _col_widths: list[int] = [w for _, w, _ in _COLS]
 # Index 0 (grip) reste en tête et la colonne Boutons (dernière) reste en queue ; le reste
 # est réordonnable. « Nom du plan » (logique 17) s'affiche par défaut juste après « Plan »
 # (logique 3). Loaded from project config in PageStoryboard._render().
-_DEFAULT_COL_ORDER: list[int] = [0, 1, 2, 3, 17, 4, 5, 6, 7, 8, 9, 19, 10, 11, 12, 13, 14, 15, 16, 18]
+_DEFAULT_COL_ORDER: list[int] = [0, 1, 20, 2, 3, 17, 4, 5, 6, 7, 8, 9, 19, 10, 11, 12, 13, 14, 15, 16, 18]
 _col_order: list[int] = list(_DEFAULT_COL_ORDER)
 
 
@@ -938,6 +939,52 @@ class _ShotRow(QFrame):
 
         mood_l.addWidget(img_lbl)
         cells[1] = mood_w
+
+        # ── Référence (col 20) — images d'INSPIRATION injectées en génération ──
+        ref_w = QWidget()
+        ref_w.setFixedWidth(_col_widths[20])
+        ref_w.setMinimumHeight(self._MIN_H)
+        ref_w.setStyleSheet("background:transparent;")
+        ref_l = QVBoxLayout(ref_w)
+        ref_l.setContentsMargins(3, 4, 3, 4)
+        ref_l.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        ref_lbl = QLabel()
+        ref_lbl.setFixedSize(86, 58)
+        ref_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        ref_lbl.setWordWrap(True)
+
+        def _render_ref(lbl=ref_lbl, shot_data=data):
+            _rps = [p for p in (shot_data.get("reference_images") or []) if os.path.isfile(p)]
+            if _rps:
+                pix = QPixmap(_rps[0]).scaled(
+                    86, 58, Qt.AspectRatioMode.KeepAspectRatioByExpanding,
+                    Qt.TransformationMode.SmoothTransformation)
+                pix = pix.copy((pix.width()-86)//2, (pix.height()-58)//2, 86, 58)
+                lbl.setPixmap(pix)
+                lbl.setText("")
+                lbl.setStyleSheet(f"background:{CP['bg3']};border:none;")
+                lbl.setToolTip(translate("Images de référence (inspiration)")
+                               + (f" · {len(_rps)}" if len(_rps) > 1 else ""))
+            else:
+                lbl.setPixmap(QPixmap())
+                lbl.setStyleSheet(
+                    f"background:{CP['bg3']};border:1px dashed {CP['border_bright']};"
+                    f"color:{CP['accent_dim']};font-size:8px;padding:4px;")
+                lbl.setText(translate("＋ Réf"))
+                lbl.setToolTip(translate("Ajouter des images de référence (inspiration)"))
+        _render_ref()
+        ref_lbl.setCursor(Qt.CursorShape.PointingHandCursor)
+
+        def _open_refs(lbl=ref_lbl, shot_data=data, row_self=self):
+            from ui.dialog_reference_images import ReferenceImagesDialog
+            dlg = ReferenceImagesDialog(shot_data.get("reference_images", []), row_self.window())
+            if dlg.exec():
+                shot_data["reference_images"] = dlg.result_paths()
+                sb_api.save_shot(shot_data)
+                _render_ref(lbl, shot_data)
+        _clickable(ref_lbl, _open_refs)
+        ref_l.addWidget(ref_lbl)
+        cells[20] = ref_w
 
         # ── Séq ──────────────────────────────────────────────────────────────
         seq_w = QWidget()

@@ -75,6 +75,7 @@ def new_segment(number: int = 1) -> dict:
         "duration": 5,
         "prompt": "",
         "image_path": "",
+        "reference_images": [],   # images d'inspiration (rôle « reference » Seedance)
     }
 
 
