@@ -1852,10 +1852,12 @@ def seed_reprise_et_4k_live():
     Fige les 2 chantiers 2026-07-04, parité avec le Cinéma."""
     import ui.tab_t2v_live as t2vl
     vals = [v for _, v in t2vl._ENGINE_RESOLUTIONS["seedance-2.0"]]
-    assert vals[0] == "1080p", "le défaut Seedance doit rester 1080p"
-    assert "4k" in vals, "4K (valeur API 'k' minuscule) absent des résolutions Seedance 2.0"
+    assert vals[0] == "4k", "le 4K (validé) doit être EN TÊTE de la liste Seedance 2.0"
+    assert t2vl._ENGINE_DEFAULT_RES.get("seedance-2.0") == "720p", "défaut Seedance = 720p"
     entry = {"prompt": "loop mapping facade", "seed": 999, "status": "done"}
     w = t2vl.TabT2V()
+    assert w.cb_res.currentData() == "720p", \
+        f"le combo résolution doit présélectionner 720p, pas {w.cb_res.currentData()}"
     w.prefill_from_seed(dict(entry))
     assert "loop mapping facade" in w.prompt_ta.toPlainText(), "prompt non réinjecté"
     assert w._last_seed == 999 and w._get_seed() == 999, "graine non verrouillée"

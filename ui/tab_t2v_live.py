@@ -50,10 +50,10 @@ _ENGINE_RES_FORCED   = {
 }
 # Résolutions disponibles par moteur — (label affiché, valeur API), premier = défaut
 _ENGINE_RESOLUTIONS = {
-    # 4K en essai : fal.ai annonce le 4K natif Seedance 2.0 (page seedance-2.0-4k) mais
-    # le schéma exact varie selon l'endpoint (ref-to-video documenté ≤1080p). Valeur API
-    # "4k" (minuscule, cf. schéma text-to-video). Repli propre via humanize_api_error si refus.
-    "seedance-2.0":      [("1080p  (~$0.60/s)", "1080p"), ("720p  (~$0.30/s)", "720p"), ("480p  (~$0.16/s)", "480p"), ("4K  (natif · essai)", "4k")],
+    # 4K natif Seedance 2.0 VALIDÉ en réel (Matthieu 2026-07-05) → EN TÊTE de liste.
+    # Valeur API "4k" (minuscule). Tarif = formule fal.ai (H×W×durée×24/1024 tokens
+    # × $0.008/1000) ≈ $1.55/s en 3840×2160. Défaut = 720p (voir _ENGINE_DEFAULT_RES).
+    "seedance-2.0":      [("4K  (~$1.55/s)", "4k"), ("1080p  (~$0.60/s)", "1080p"), ("720p  (~$0.30/s)", "720p"), ("480p  (~$0.16/s)", "480p")],
     "seedance-2.0-fast": [("480p  (~$0.09/s)", "480p"),  ("720p  (~$0.18/s)", "720p")],
     "kling-v3-pro":      [("1080p", "1080p")],
     "kling-o3-4k":       [("4K",    "4K")],
@@ -62,6 +62,9 @@ _ENGINE_RESOLUTIONS = {
     "pixverse-v6":       [("1080p  (~$0.115/s)", "1080p"), ("720p  (~$0.075/s)", "720p"), ("480p  (~$0.025/s)", "480p")],
     "happy-horse-1.0":   [("1080p  (~$0.28/s)", "1080p"),  ("720p  (~$0.14/s)", "720p")],
 }
+# Résolution par défaut par moteur (sinon = 1er item du menu). Seedance : 720p par
+# défaut même si le 4K est désormais en tête (Matthieu sort rarement en 1080p/4K).
+_ENGINE_DEFAULT_RES = {"seedance-2.0": "720p"}
 # Moteurs disponibles dans le tab DaVinci Edit (workflow testé et validé uniquement)
 _DAVINCI_ENGINES = [e for e in _ENGINES if e[1] in _SEEDANCE_ENGINES]
 
@@ -2738,6 +2741,12 @@ class TabT2V(QScrollArea):
         _default_key = self.cb_model.currentData() or "seedance-2.0"
         _default_res = _ENGINE_RESOLUTIONS.get(_default_key, ["1080p", "720p", "480p"])
         self.cb_res = combo(_default_res)
+        # Défaut par moteur (ex. Seedance = 720p) même si un autre item est en tête.
+        _def_res = _ENGINE_DEFAULT_RES.get(_default_key)
+        if _def_res:
+            _di = self.cb_res.findData(_def_res)
+            if _di >= 0:
+                self.cb_res.setCurrentIndex(_di)
 
         for (row, col), lbl, widget in [
             ((0, 0), "Moteur de génération", self.cb_model),
@@ -3521,8 +3530,11 @@ class TabT2V(QScrollArea):
                 self.cb_res.addItem(r[0], r[1])
             else:
                 self.cb_res.addItem(r, r)
-        # Restaurer la sélection précédente (par valeur API), sinon premier item
+        # Restaurer la sélection précédente (par valeur API) ; sinon le défaut du
+        # moteur (_ENGINE_DEFAULT_RES, ex. Seedance = 720p), sinon le premier item.
         idx = self.cb_res.findData(prev)
+        if idx < 0:
+            idx = self.cb_res.findData(_ENGINE_DEFAULT_RES.get(key, ""))
         self.cb_res.setCurrentIndex(max(0, idx))
         self.cb_res.blockSignals(False)
         self.cb_res.setEnabled(not fixed_res)

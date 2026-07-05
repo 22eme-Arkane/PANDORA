@@ -3056,10 +3056,12 @@ def seed_reprise_et_4k():
     → onglet « Générer depuis Storyboard »). Fige les 2 chantiers 2026-07-04."""
     import ui.tab_t2v as t2v
     vals = [v for _, v in t2v._ENGINE_RESOLUTIONS["seedance-2.0"]]
-    assert vals[0] == "1080p", "le défaut Seedance doit rester 1080p"
-    assert "4k" in vals, "4K (valeur API 'k' minuscule) absent des résolutions Seedance 2.0"
+    assert vals[0] == "4k", "le 4K (validé) doit être EN TÊTE de la liste Seedance 2.0"
+    assert t2v._ENGINE_DEFAULT_RES.get("seedance-2.0") == "720p", "défaut Seedance = 720p"
     entry = {"prompt": "plan nuit neons", "seed": 424242, "status": "done"}
     w = t2v.TabT2V()
+    assert w.cb_res.currentData() == "720p", \
+        f"le combo résolution doit présélectionner 720p, pas {w.cb_res.currentData()}"
     w.prefill_from_seed(dict(entry))
     assert "plan nuit neons" in w.prompt_ta.toPlainText(), "prompt non réinjecté"
     assert w._last_seed == 424242 and w._get_seed() == 424242, "graine non verrouillée"
