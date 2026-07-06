@@ -3141,8 +3141,7 @@ class PageScenario(QWidget):
             )
             te.clear()
             te.setPlaceholderText(translate("Le conducteur enrichi apparaît ici au fil de la génération…"))
-            btn_enrich.setEnabled(False)
-            btn_enrich.setVisible(False)
+            btn_enrich.setEnabled(False)   # grisé pendant le traitement — mais JAMAIS masqué
 
             _enriched = [""]
 
@@ -3166,6 +3165,7 @@ class PageScenario(QWidget):
                         f"color:{CP['green']};font-size:10px;font-family:'Consolas',monospace;")
                     btn_apply.setEnabled(True)
                     btn_apply.setVisible(True)
+                    btn_enrich.setEnabled(True)   # reste visible — on peut ré-enrichir
                 else:
                     # Aucun passage localisé → on remet l'analyse + le bouton « Enrichir »
                     # pour réessayer (sinon le bouton disparaissait — dead-end).

@@ -2241,10 +2241,10 @@ def enrichissement_refs_chirurgical():
     from ui.page_scenario import PageScenario
     _refsrc = inspect.getsource(PageScenario._open_refs_window)
     assert "apply_find_replace_edits" in _refsrc, "UI Cinéma n'applique pas les édits chirurgicaux"
-    # Le bouton « Enrichir » doit revenir si aucun passage localisé OU en cas d'échec
-    # (retour Matthieu : le bouton disparaissait = dead-end).
-    assert _refsrc.count("btn_enrich.setVisible(True)") >= 2, \
-        "bouton « Enrichir » non remis si échec / aucun passage (dead-end)"
+    # Le bouton « Enrichir » ne doit JAMAIS être masqué au clic — seulement grisé
+    # pendant le traitement, puis réactivé (retour Matthieu : il disparaissait).
+    assert "btn_enrich.setVisible(False)" not in _refsrc, \
+        "bouton « Enrichir » masqué au clic (il doit rester visible, juste grisé)"
 
 
 @test
