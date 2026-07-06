@@ -2168,6 +2168,23 @@ def studio_ia_onglets_style_conducteur():
 
 
 @test
+def fleches_dialogue_fichier_en_blanc():
+    """Flèches de navigation (précédent/parent/vue) du dialogue de fichiers non-natif
+    recolorées en clair — invisibles sinon sur fond sombre (retour Matthieu 2026-07-06)."""
+    import inspect
+    import ui.file_dialogs as fd
+    src = inspect.getsource(fd)
+    assert "def _whiten_nav_icons" in src and "CompositionMode_SourceIn" in src, \
+        "recolorisation des icônes du dialogue de fichiers absente"
+    assert "_whiten_nav_icons(dlg)" in src, "_whiten_nav_icons non appelé dans apply_thumbnails"
+    from PyQt6.QtWidgets import QFileDialog
+    dlg = QFileDialog()
+    dlg.setNameFilter("Images (*.png *.jpg)")
+    fd.apply_thumbnails(dlg)     # ne doit pas planter + recolore les icônes
+    dlg.deleteLater()
+
+
+@test
 def plan_architecte_cale_sur_ensemble():
     """7 vues : le plan d'architecte est généré par ÉDITION NB2 à partir de l'image
     d'ensemble (donc calé dessus), avec repli texte robuste ; ensemble + plan ont un

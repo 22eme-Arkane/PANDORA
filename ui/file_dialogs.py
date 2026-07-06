@@ -37,11 +37,11 @@ import os
 import re
 
 from PyQt6.QtWidgets import (QFileDialog, QFileIconProvider, QListView, QTreeView,
-                             QDialogButtonBox, QComboBox, QCompleter)
+                             QDialogButtonBox, QComboBox, QCompleter, QToolButton)
 from PyQt6.QtCore import (QDir, QEvent, QFileInfo, QObject, QSize, QStandardPaths,
                           Qt, QTimer, QUrl)
-from PyQt6.QtGui import (QFileSystemModel, QGuiApplication, QIcon, QImageReader,
-                         QKeySequence, QPixmap)
+from PyQt6.QtGui import (QColor, QFileSystemModel, QGuiApplication, QIcon,
+                         QImageReader, QKeySequence, QPainter, QPixmap)
 
 
 # ── Préférences persistées (data/file_dialog_prefs.json) ─────────────────────
@@ -503,6 +503,37 @@ def _style_dialog_buttons(dlg: QFileDialog):
                 b.setStyleSheet(other_ss)     # Annuler (et autres)
 
 
+def _whiten_nav_icons(dlg: QFileDialog):
+    """Les flèches de navigation (précédent / suivant / dossier parent) et les
+    boutons de vue du dialogue non-natif sont des ICÔNES sombres, quasi invisibles
+    sur le fond sombre (visibles seulement au survol). Le QSS « color » ne teinte
+    PAS une icône (pixmap) → on repeint le pixmap en clair. Retour Matthieu 2026-07-06."""
+    try:
+        from ui.styles import CP
+        tint = QColor(CP.get("text_primary", "#e8eaf2"))
+    except Exception:
+        tint = QColor("#e8eaf2")
+    for btn in dlg.findChildren(QToolButton):
+        ic = btn.icon()
+        if ic is None or ic.isNull():
+            continue
+        sz = btn.iconSize()
+        if not sz.isValid() or sz.isEmpty():
+            sz = QSize(20, 20)
+        src = ic.pixmap(sz)
+        if src.isNull():
+            continue
+        tinted = QPixmap(src.size())
+        tinted.fill(Qt.GlobalColor.transparent)
+        p = QPainter(tinted)
+        p.drawPixmap(0, 0, src)
+        # SourceIn : on garde l'alpha de l'icône, on remplace la couleur par le tint.
+        p.setCompositionMode(QPainter.CompositionMode.CompositionMode_SourceIn)
+        p.fillRect(tinted.rect(), tint)
+        p.end()
+        btn.setIcon(QIcon(tinted))
+
+
 # ── Libellés FR (le dialogue Qt est anglophone par défaut) ────────────────────
 # Bilingue GÉRÉ ICI via core.i18n.get_lang() (dialogue recréé à chaque appel) —
 # ces chaînes ne passent PAS par _FR_TO_EN (système bilingue dédié, cf. manuel).
@@ -617,6 +648,7 @@ def apply_thumbnails(dlg: QFileDialog) -> QFileDialog:
     except Exception:
         pass
     _make_path_bar_editable(dlg)
+    _whiten_nav_icons(dlg)       # flèches précédent/parent/vue visibles (fond sombre)
     # Coller un chemin (Ctrl+V) pour naviguer — retour Pierre.
     dlg.installEventFilter(_PathPasteFilter(dlg))
     dlg.finished.connect(lambda _r, d=dlg: _remember_geometry(d))
