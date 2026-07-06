@@ -770,6 +770,10 @@ _FR_TO_EN: dict[str, str] = {
     "{n} passage(s) enrichi(s) ✓":          "{n} passage(s) enriched ✓",
     " · {n} non localisé(s)":               " · {n} not located",
     "Aucun passage à enrichir localisé":    "No passage to enrich was located",
+    "✓  Conducteur déjà enrichi":           "✓  Rundown already enriched",
+    "✓  Scénario déjà enrichi":             "✓  Screenplay already enriched",
+    "Déjà enrichi avec l'analyse courante — clique pour ré-enrichir.":
+        "Already enriched with the current analysis — click to re-enrich.",
     "Générer depuis le conducteur":        "Generate from the rundown",
     "Générer depuis le scénario":          "Generate from the screenplay",
     "Analyse la structure du conducteur (rythme, séquences)":

@@ -2220,6 +2220,20 @@ def enrichissement_refs_chirurgical():
 
 
 @test
+def refs_indicateur_deja_enrichi():
+    """Indicateur « scénario déjà enrichi » (2026-07-06) : flag en mémoire (refs Cinéma
+    non persistées), remis à zéro à chaque analyse, petit signe sur le bouton Enrichir."""
+    import inspect
+    from ui.page_scenario import PageScenario
+    p = PageScenario()
+    assert hasattr(p, "_ref_enriched") and p._ref_enriched is False, "flag initialisé à False"
+    rw = inspect.getsource(PageScenario._open_refs_window)
+    assert "self._ref_enriched = True" in rw, "flag posé à l'application"
+    assert "self._ref_enriched = False" in rw, "flag remis à zéro (nouvelle analyse)"
+    assert "déjà enrichi" in rw, "petit signe « déjà enrichi » sur le bouton"
+
+
+@test
 def plan_architecte_cale_sur_ensemble():
     """7 vues : le plan d'architecte est généré par ÉDITION NB2 à partir de l'image
     d'ensemble (donc calé dessus), avec repli texte robuste ; ensemble + plan ont un

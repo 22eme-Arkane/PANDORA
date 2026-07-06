@@ -65,6 +65,7 @@ class PageScenario(QWidget):
         self._last_result_kind: str = ""   # "format" | "arrange" | "refs"
         self._last_ref_analysis: str = ""
         self._ref_images: list[str] = []
+        self._ref_enriched: bool = False   # scénario déjà enrichi avec l'analyse courante ?
         # Musiques du set (clip) — analysées (BPM/énergie/drops) pour caler le
         # découpage, exactement comme dans PANDORA | Live (moteur partagé librosa).
         self._music_tracks: list[dict] = []   # [{path,name,bpm,duration,energy,drops}]
@@ -2720,6 +2721,18 @@ class PageScenario(QWidget):
             "les descriptions correspondantes (personnages, décors, ambiances)."
         )
         btn_enrich.setStyleSheet(_accent_btn_ss)
+        # Petit signe « déjà enrichi » (retour Matthieu 2026-07-06) : si le scénario a
+        # déjà été enrichi avec l'analyse courante, on le montre sur le bouton — on peut
+        # toujours cliquer pour ré-enrichir. Réinitialisé à chaque nouvelle analyse.
+        if getattr(self, "_ref_enriched", False) and not streaming:
+            btn_enrich.setText(translate("✓  Scénario déjà enrichi"))
+            btn_enrich.setToolTip(translate(
+                "Déjà enrichi avec l'analyse courante — clique pour ré-enrichir."))
+            btn_enrich.setStyleSheet(
+                f"QPushButton{{background:{CP['bg3']};color:{CP['green']};"
+                f"border:1px solid {CP['green']};border-radius:7px;font-size:11px;"
+                f"font-weight:600;padding:0 20px;}}"
+                f"QPushButton:hover{{background:{CP['bg4']};}}")
 
         btn_apply = QPushButton("✓  Appliquer au scénario")
         btn_apply.setFixedHeight(36)
@@ -2808,6 +2821,7 @@ class PageScenario(QWidget):
                     return
                 self._push_undo()
                 self._set_editor_text(result)
+                self._ref_enriched = True    # marqueur « déjà enrichi »
                 if self._current is not None:
                     self._current["formatted_content"] = result
                 self._ai_progress_lbl.setText("Scénario enrichi par les références visuelles ✓")
@@ -2848,6 +2862,7 @@ class PageScenario(QWidget):
                 self._set_ai_busy(False)
                 self._last_result_kind = "refs"
                 self._last_ref_analysis = result
+                self._ref_enriched = False    # nouvelle analyse → scénario pas encore enrichi avec
                 n = len(self._ref_images)
                 self._ai_progress_lbl.setText(f"Analyse terminée — {n} image(s).")
                 self._btn_reopen_window.setVisible(True)

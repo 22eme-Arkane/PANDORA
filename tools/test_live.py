@@ -1169,6 +1169,22 @@ def refs_conducteur_file_et_fond():
 
 
 @test
+def refs_indicateur_deja_enrichi():
+    """Indicateur « conducteur déjà enrichi » (2026-07-06) : flag PERSISTANT, remis à
+    zéro à chaque nouvelle analyse, petit signe sur le bouton « Enrichir »."""
+    import inspect
+    from ui.page_scenario_live import PageScenario
+    p = PageScenario()
+    assert hasattr(p, "_ref_enriched") and p._ref_enriched is False, "flag initialisé à False"
+    assert '"ref_enriched"' in inspect.getsource(PageScenario._save), "flag non persisté (_save)"
+    assert "ref_enriched" in inspect.getsource(PageScenario._open_scenario), "flag non restauré (_open)"
+    rw = inspect.getsource(PageScenario._open_refs_window)
+    assert "self._ref_enriched = True" in rw, "flag posé à l'application de l'enrichissement"
+    assert "self._ref_enriched = False" in rw, "flag remis à zéro (nouvelle analyse/relance)"
+    assert "déjà enrichi" in rw, "petit signe « déjà enrichi » sur le bouton"
+
+
+@test
 def refs_persistance_bibliotheque_chat():
     """Refs visuelles 2026-06-11 : persistance projet, bibliothèque globale, chat DA."""
     import inspect
