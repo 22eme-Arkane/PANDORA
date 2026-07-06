@@ -467,6 +467,11 @@ class PageScenario(QWidget):
             f"color:{CP['text_primary']};}}"
         )
         self._layout_view.document().setDocumentMargin(48)   # scrollbar au bord
+        # Texte CENTRÉ comme le Conducteur (retour Matthieu 2026-07-05) : même
+        # QTextOption AlignHCenter que _editor_text — paragraphes au milieu, pas à gauche.
+        _opt_layout = QTextOption()
+        _opt_layout.setAlignment(Qt.AlignmentFlag.AlignHCenter)
+        self._layout_view.document().setDefaultTextOption(_opt_layout)
         self._layout_view.setPlaceholderText(translate(
             "Clique « Mise en page PANDORA » (panneau de droite) pour générer ici la "
             "version optimisée pour les moteurs : plans découpés + prompts prêts pour Seedance. "
