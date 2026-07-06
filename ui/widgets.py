@@ -24,6 +24,46 @@ def fit_dialog_to_screen(dlg, w_pct: float = 0.75, h_pct: float = 0.85,
     dlg.move(geo.x() + (avail_w - w) // 2, geo.y() + (avail_h - h) // 2)
 
 
+class _ReadingColumnFilter(QObject):
+    """Garde le texte d'un QTextEdit dans une COLONNE de lecture centrée de largeur
+    MAX lisible : marges de document dynamiques (recalculées au redimensionnement)
+    → sur un large éditeur, les lignes ne traversent plus tout l'écran, mise en page
+    classique et lisible (le bloc reste centré sur la page)."""
+
+    def __init__(self, te, max_width: int = 820, min_margin: int = 28):
+        super().__init__(te)
+        self._te = te
+        self._max = max_width
+        self._min = min_margin
+        self._sync()
+
+    def _sync(self):
+        try:
+            vw = self._te.viewport().width()
+            m = max(self._min, (vw - self._max) // 2)
+            if abs(int(self._te.document().documentMargin()) - m) > 1:
+                self._te.document().setDocumentMargin(m)
+        except Exception:
+            pass
+
+    def eventFilter(self, obj, ev):
+        if ev.type() == QEvent.Type.Resize:
+            self._sync()
+        return False
+
+
+def install_reading_column(te, max_width: int = 820, min_margin: int = 28):
+    """Contraint un QTextEdit à une colonne de lecture centrée (largeur max lisible).
+
+    Le texte reste aligné à GAUCHE dans une colonne centrée sur la page (mise en
+    page classique) au lieu de laisser les lignes traverser tout l'écran.
+    """
+    f = _ReadingColumnFilter(te, max_width, min_margin)
+    te.installEventFilter(f)
+    te._reading_column_filter = f    # référence anti-GC
+    return f
+
+
 def show_api_error(parent, message: str):
     """Affiche une fenêtre d'erreur. Si c'est une erreur de crédit fal.ai, dialog dédié."""
     from core.worker import is_credit_error

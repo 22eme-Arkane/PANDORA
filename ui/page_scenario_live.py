@@ -427,13 +427,13 @@ class PageScenario(QWidget):
         # Marges DANS le document (pas en padding CSS : le padding repoussait la
         # scrollbar à 120 px du bord — retour 2026-06-12, elle colle désormais
         # au panneau de droite)
-        self._editor_text.document().setDocumentMargin(72)
+        self._editor_text.document().setDocumentMargin(48)
         self._editor_text.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
-        # Alignement centré par défaut — style mise en page conducteur cinéma
-        from PyQt6.QtGui import QTextOption
-        _opt = QTextOption()
-        _opt.setAlignment(Qt.AlignmentFlag.AlignHCenter)
-        self._editor_text.document().setDefaultTextOption(_opt)
+        # Colonne de lecture centrée (largeur max) : texte aligné à GAUCHE dans une
+        # colonne centrée sur la page → lignes lisibles au lieu de traverser tout
+        # l'écran (retour Matthieu 2026-07-06 : « bloc indigeste, lignes trop longues »).
+        from ui.widgets import install_reading_column
+        install_reading_column(self._editor_text, max_width=820)
         self._editor_text.textChanged.connect(self._schedule_autosave)
         self._editor_text.textChanged.connect(self._update_dur_estimate)
 
@@ -467,11 +467,9 @@ class PageScenario(QWidget):
             f"color:{CP['text_primary']};}}"
         )
         self._layout_view.document().setDocumentMargin(48)   # scrollbar au bord
-        # Texte CENTRÉ comme le Conducteur (retour Matthieu 2026-07-05) : même
-        # QTextOption AlignHCenter que _editor_text — paragraphes au milieu, pas à gauche.
-        _opt_layout = QTextOption()
-        _opt_layout.setAlignment(Qt.AlignmentFlag.AlignHCenter)
-        self._layout_view.document().setDefaultTextOption(_opt_layout)
+        # Même colonne de lecture centrée que le Conducteur : texte aligné à gauche,
+        # colonne centrée sur la page → mise en page classique et lisible.
+        install_reading_column(self._layout_view, max_width=820)
         self._layout_view.setPlaceholderText(translate(
             "Clique « Mise en page PANDORA » (panneau de droite) pour générer ici la "
             "version optimisée pour les moteurs : plans découpés + prompts prêts pour Seedance. "
@@ -1025,24 +1023,8 @@ class PageScenario(QWidget):
         self._stack.setCurrentIndex(1)
 
     def _set_editor_text(self, text: str):
-        """setPlainText + re-applique l'alignement centré sur tous les blocs."""
+        """Écrit le texte dans l'éditeur (colonne de lecture centrée, aligné à gauche)."""
         self._editor_text.setPlainText(text)
-        self._apply_center_alignment()
-
-    def _apply_center_alignment(self):
-        """Applique AlignHCenter à tous les blocs du document sans polluer le undo Qt."""
-        from PyQt6.QtGui import QTextCursor, QTextBlockFormat
-        doc = self._editor_text.document()
-        doc.setUndoRedoEnabled(False)
-        cursor = self._editor_text.textCursor()
-        cursor.select(QTextCursor.SelectionType.Document)
-        fmt = QTextBlockFormat()
-        fmt.setAlignment(Qt.AlignmentFlag.AlignHCenter)
-        cursor.mergeBlockFormat(fmt)
-        cursor.clearSelection()
-        cursor.movePosition(QTextCursor.MoveOperation.Start)
-        self._editor_text.setTextCursor(cursor)
-        doc.setUndoRedoEnabled(True)
 
     def _new_scenario(self):
         from core import context as _ctx

@@ -1420,24 +1420,26 @@ def scenario_onglet_mise_en_page():
     p._apply_layout("MISE EN PAGE PANDORA")
     assert p._editor_text.toPlainText().strip() == "SCENARIO ORIGINAL", "scénario intact"
     assert "MISE EN PAGE" in p._layout_view.toPlainText()
-    # Même présentation que l'onglet Scénario : texte CENTRÉ (plus de colonne 900 px
-    # collée à gauche). Les deux QTextEdit partagent l'alignement centré horizontal.
+    # Colonne de lecture centrée (2026-07-06) : texte aligné à GAUCHE dans une colonne
+    # centrée (lisible) — plus de centrage ligne par ligne (« bloc indigeste »).
     from PyQt6.QtCore import Qt as _Qt
     _ed_align = p._editor_text.document().defaultTextOption().alignment()
     _lv_align = p._layout_view.document().defaultTextOption().alignment()
-    assert bool(_ed_align & _Qt.AlignmentFlag.AlignHCenter), "onglet Scénario centré"
-    assert bool(_lv_align & _Qt.AlignmentFlag.AlignHCenter), \
-        "onglet Mise en page centré comme Scénario"
+    assert not (_ed_align & _Qt.AlignmentFlag.AlignHCenter), "Scénario aligné à gauche (colonne lisible)"
+    assert not (_lv_align & _Qt.AlignmentFlag.AlignHCenter), "Mise en page alignée à gauche"
+    assert hasattr(p._editor_text, "_reading_column_filter") \
+        and hasattr(p._layout_view, "_reading_column_filter"), \
+        "colonne de lecture centrée installée sur les 2 onglets"
     assert p._editor_tabs.isTabEnabled(1) and p._editor_tabs.currentIndex() == 1
     assert p._current.get("layout_content"), "mise en page persistée séparément"
     # La fenêtre de mise en page applique vers l'onglet (pas _set_editor_text)
     fw = inspect.getsource(PageScenario._open_format_window)
     assert "_apply_layout" in fw and "_set_editor_text" not in fw, \
         "la fenêtre Mise en page écrit dans l'onglet dédié"
-    # Plus de colonne fixe 900 px collée à gauche : pleine largeur centrée comme l'éditeur
+    # Plus de colonne fixe 900 px collée à gauche : colonne de lecture centrée
     be = inspect.getsource(PageScenario._build_editor)
     assert "setFixedWidth(900)" not in be, "plus de colonne 900 px collée à gauche"
-    assert "setDefaultTextOption(_opt)" in be, "même alignement centré que l'éditeur"
+    assert "install_reading_column" in be, "colonne de lecture centrée (lignes lisibles)"
 
 
 @test
