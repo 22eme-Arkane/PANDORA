@@ -19,8 +19,9 @@ Différences avec le Studio Cinéma :
 Cinéma n'est pas modifié : ce widget est un composant séparé.
 """
 
-from PyQt6.QtWidgets import QWidget, QVBoxLayout, QLabel, QTabWidget, QScrollArea
-from PyQt6.QtCore import Qt, pyqtSignal
+from PyQt6.QtWidgets import QWidget, QVBoxLayout, QLabel, QTabWidget, QTabBar, QScrollArea
+from PyQt6.QtCore import Qt, pyqtSignal, QRect
+from PyQt6.QtGui import QPainter, QColor
 
 from ui.styles import C, STYLESHEET
 from core.i18n import translate
@@ -33,6 +34,40 @@ from ui.tab_t2v_live import TabT2V as FromSequencesTabLive
 # Onglets génériques réutilisés tels quels (portés du Studio IA Cinéma) :
 from ui.tab_music import TabMusic
 from ui.tab_image import TabImage
+
+
+# ── Barre d'onglets groupée (trait vertical en fin de groupe) ──────────────────
+# Copie identique de _GroupedTabBar du Studio Cinéma (ui/seedance_widget.py) —
+# séparation de CODE Cinéma/Live oblige, on duplique plutôt que d'importer.
+class _GroupedTabBar(QTabBar):
+    """Barre d'onglets qui peint un TRAIT vertical en fin de groupe — même
+    logique de séparation que le dashboard du bas (groupes séparés par un trait).
+    """
+
+    def __init__(self):
+        super().__init__()
+        self._group_ends: set[int] = set()   # index du DERNIER onglet de chaque groupe
+
+    def set_group_ends(self, ends):
+        self._group_ends = {i for i in ends if i >= 0}
+        self.update()
+
+    def paintEvent(self, e):
+        super().paintEvent(e)
+        if not self._group_ends:
+            return
+        p = QPainter(self)
+        col = QColor(255, 255, 255, 28)   # discret, comme les _vsep du dashboard
+        for i in self._group_ends:
+            if i >= self.count() - 1 or i >= self.count():
+                continue   # pas de trait après le tout dernier onglet
+            r = self.tabRect(i)
+            if not r.isValid():
+                continue
+            h = int(r.height() * 0.5)
+            y = r.center().y() - h // 2
+            p.fillRect(QRect(r.right() + 4, y, 1, h), col)
+        p.end()
 
 
 # ── Onglet « Générer depuis Séquences » (placeholder) ──────────────────────────
@@ -117,9 +152,20 @@ class LiveStudioWidget(QWidget):
         # barre occupe toute la largeur et « alignment:center » n'a aucun effet) +
         # alignment center + setExpanding(False).
         self.tabs.setDocumentMode(False)
+        # Onglets façon Conducteur (demande Matthieu 2026-07-06) : barre sur fond
+        # NOIR (bg0) + filet en haut ET en bas (encadrement), onglets transparents,
+        # actif souligné accent. Séparateurs de groupe peints par _GroupedTabBar.
         self.tabs.setStyleSheet(
-            self.tabs.styleSheet() + "QTabWidget::pane{border:none;}"
-            "QTabWidget::tab-bar{alignment:center;}")
+            self.tabs.styleSheet()
+            + "QTabWidget::pane{border:none;}"
+            + "QTabWidget::tab-bar{alignment:center;}"
+            + f"QTabBar{{background:{C['bg0']};"
+            + f"border-top:1px solid {C['border']};"
+            + f"border-bottom:1px solid {C['border']};}}"
+            + f"QTabBar::tab{{background:transparent;color:{C['text_secondary']};}}"
+            + f"QTabBar::tab:hover{{background:transparent;color:{C['text_primary']};}}")
+        # Barre GROUPÉE (parité Cinéma : trait vertical entre groupes).
+        self.tabs.setTabBar(_GroupedTabBar())
         self.tabs.tabBar().setExpanding(False)
         # Un seul trait en haut (celui de la topbar) : pas de ligne de base native.
         self.tabs.tabBar().setDrawBase(False)
@@ -171,6 +217,11 @@ class LiveStudioWidget(QWidget):
         self.tabs.addTab(self.tab_upscale,   translate("Upscaling"))
         self.tabs.addTab(self.tab_library,   translate("Vidéothèque"))
         self.tabs.addTab(self.tab_history,   translate("Historique"))
+
+        # Séparateurs de groupe (parité Cinéma) : vidéo (Séquences · Génération
+        # directe · Modifier) | audio (Sound Design · Musique IA) | image & post
+        # (Image IA · Upscaling) | archive (Vidéothèque · Historique).
+        self.tabs.tabBar().set_group_ends({2, 4, 6})
 
         # Générations → historique
         self.tab_engines.generation_done.connect(self.tab_history.add_entry)

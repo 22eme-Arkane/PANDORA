@@ -2150,6 +2150,24 @@ def coecriture_des_plans_cinema():
 
 
 @test
+def studio_ia_onglets_style_conducteur():
+    """Onglets Studio IA Cinéma façon Conducteur (2026-07-06) : barre fond bg0 +
+    filet haut/bas, séparateurs de groupe conservés ; bouton « Envoyer à Claude »
+    dans le chat Image IA (studio_images)."""
+    import inspect
+    sw = inspect.getsource(__import__("ui.seedance_widget", fromlist=["_"]))
+    assert "QTabBar{{background:{C['bg0']}" in sw, "barre d'onglets Studio IA Cinéma pas sur fond noir"
+    assert "border-top:1px solid" in sw and "border-bottom:1px solid" in sw, \
+        "encadrement haut/bas absent (Studio IA Cinéma)"
+    assert "_GroupedTabBar" in sw and "set_group_ends({3, 5, 6})" in sw, \
+        "séparateurs de groupe Cinéma cassés"
+    with open("studio_images/window.py", encoding="utf-8") as f:
+        win = f.read()
+    assert "Envoyer à Claude" in win and "self._send_chat" in win, \
+        "bouton « Envoyer à Claude » absent du chat Image IA"
+
+
+@test
 def plan_architecte_cale_sur_ensemble():
     """7 vues : le plan d'architecte est généré par ÉDITION NB2 à partir de l'image
     d'ensemble (donc calé dessus), avec repli texte robuste ; ensemble + plan ont un

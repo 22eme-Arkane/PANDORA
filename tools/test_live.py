@@ -407,6 +407,19 @@ def coecriture_et_finalisation_live():
 
 
 @test
+def studio_ia_onglets_style_conducteur_live():
+    """Onglets Studio IA Live façon Conducteur (2026-07-06) : barre fond bg0 +
+    filet haut/bas + barre GROUPÉE ajoutée pour parité Cinéma (séparateurs 2,4,6)."""
+    import inspect
+    sw = inspect.getsource(__import__("ui.live_studio_widget", fromlist=["_"]))
+    assert "QTabBar{{background:{C['bg0']}" in sw, "barre d'onglets Studio IA Live pas sur fond noir"
+    assert "border-top:1px solid" in sw and "border-bottom:1px solid" in sw, \
+        "encadrement haut/bas absent (Studio IA Live)"
+    assert "class _GroupedTabBar" in sw and "set_group_ends({2, 4, 6})" in sw, \
+        "barre groupée Live absente"
+
+
+@test
 def reorg_colonnes_et_heritages():
     """Drag de colonnes correct avec colonnes masquées + héritages Cinéma retirés."""
     import inspect

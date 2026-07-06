@@ -114,9 +114,19 @@ class SeedanceWidget(QWidget):
         # « alignment:center » n'a aucun effet (onglets collés à gauche).
         self.tabs.setDocumentMode(False)
         # Onglets CENTRÉS dans la fenêtre (esprit du dashboard du bas)
+        # Onglets façon Conducteur (demande Matthieu 2026-07-06) : barre sur fond
+        # NOIR (bg0) + filet en haut ET en bas (encadrement), onglets transparents,
+        # actif souligné accent. Les séparateurs de groupe (_GroupedTabBar) restent
+        # peints par-dessus.
         self.tabs.setStyleSheet(
-            self.tabs.styleSheet() + "QTabWidget::pane{border:none;}"
-            "QTabWidget::tab-bar{alignment:center;}")
+            self.tabs.styleSheet()
+            + "QTabWidget::pane{border:none;}"
+            + "QTabWidget::tab-bar{alignment:center;}"
+            + f"QTabBar{{background:{C['bg0']};"
+            + f"border-top:1px solid {C['border']};"
+            + f"border-bottom:1px solid {C['border']};}}"
+            + f"QTabBar::tab{{background:transparent;color:{C['text_secondary']};}}"
+            + f"QTabBar::tab:hover{{background:transparent;color:{C['text_primary']};}}")
         # Barre d'onglets GROUPÉE (trait vertical entre groupes, façon dashboard).
         self.tabs.setTabBar(_GroupedTabBar())
         self.tabs.tabBar().setExpanding(False)

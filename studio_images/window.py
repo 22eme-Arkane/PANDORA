@@ -724,6 +724,12 @@ class StudioImagesPanel(QWidget):
         self._input.submit.connect(self._send_chat)
         lay.addWidget(self._input)
 
+        # Bouton d'envoi explicite, au-dessus de « Générer le prompt… » (l'envoi
+        # ne se faisait plus qu'avec Entrée) — demande Matthieu 2026-07-06.
+        send_btn = QPushButton("☁  Envoyer à Claude")
+        send_btn.clicked.connect(lambda: self._send_chat())
+        lay.addWidget(send_btn)
+
         synth = QPushButton("✨ Générer le prompt depuis la discussion")
         synth.setObjectName("secondary")
         synth.clicked.connect(self._synth_prompt)
