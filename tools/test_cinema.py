@@ -2211,8 +2211,12 @@ def enrichissement_refs_chirurgical():
     assert len(applied) == 1 and not missed
     # UI : application via apply_find_replace_edits (plus de remplacement total streamé).
     from ui.page_scenario import PageScenario
-    assert "apply_find_replace_edits" in inspect.getsource(PageScenario._open_refs_window), \
-        "UI Cinéma n'applique pas les édits chirurgicaux"
+    _refsrc = inspect.getsource(PageScenario._open_refs_window)
+    assert "apply_find_replace_edits" in _refsrc, "UI Cinéma n'applique pas les édits chirurgicaux"
+    # Le bouton « Enrichir » doit revenir si aucun passage localisé OU en cas d'échec
+    # (retour Matthieu : le bouton disparaissait = dead-end).
+    assert _refsrc.count("btn_enrich.setVisible(True)") >= 2, \
+        "bouton « Enrichir » non remis si échec / aucun passage (dead-end)"
 
 
 @test

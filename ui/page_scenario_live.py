@@ -3137,9 +3137,9 @@ class PageScenario(QWidget):
                 from core.text_edits import apply_find_replace_edits
                 edits = (res or {}).get("edits", [])
                 new_text, applied, missed = apply_find_replace_edits(scenario_text, edits)
-                _enriched[0] = new_text
-                te.setPlainText(new_text)
                 if applied:
+                    _enriched[0] = new_text
+                    te.setPlainText(new_text)
                     msg = translate("{n} passage(s) enrichi(s) ✓").format(n=len(applied))
                     if missed:
                         msg += translate(" · {n} non localisé(s)").format(n=len(missed))
@@ -3149,9 +3149,14 @@ class PageScenario(QWidget):
                     btn_apply.setEnabled(True)
                     btn_apply.setVisible(True)
                 else:
+                    # Aucun passage localisé → on remet l'analyse + le bouton « Enrichir »
+                    # pour réessayer (sinon le bouton disparaissait — dead-end).
+                    te.setPlainText(txt)
                     self._refs_status_lbl.setText(translate("Aucun passage à enrichir localisé"))
                     self._refs_status_lbl.setStyleSheet(
                         f"color:{CP['text_dim']};font-size:10px;font-family:'Consolas',monospace;")
+                    btn_enrich.setEnabled(True)
+                    btn_enrich.setVisible(True)
 
             def _on_enrich_failed(msg: str):
                 _refs_streaming_active[0] = False
@@ -3162,6 +3167,9 @@ class PageScenario(QWidget):
                 self._refs_status_lbl.setStyleSheet(
                     f"color:{CP['red']};font-size:10px;font-family:'Consolas',monospace;"
                 )
+                # Erreur → on remet le bouton « Enrichir » pour réessayer.
+                btn_enrich.setEnabled(True)
+                btn_enrich.setVisible(True)
 
             def _do_apply():
                 result = _enriched[0].strip()
@@ -3175,6 +3183,11 @@ class PageScenario(QWidget):
                 self._btn_undo_action.setVisible(True)
                 dlg.accept()
 
+            try:
+                btn_apply.clicked.disconnect()   # évite un double « Appliquer » si on ré-enrichit
+            except Exception:
+                pass
+            btn_apply.setVisible(False)
             btn_apply.clicked.connect(_do_apply)
             w.done.connect(_on_enrich_done)
             w.failed.connect(_on_enrich_failed)
