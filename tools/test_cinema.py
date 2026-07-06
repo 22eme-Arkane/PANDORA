@@ -2118,8 +2118,35 @@ def panneau_scenario_aligne_jusqu_au_bord():
     # Descriptions sur 2 lignes + hauteur de bouton suffisante.
     assert "sub_lbl.setWordWrap(True)" in src, "descriptions encore tronquées (pas de word-wrap)"
     assert "btn.setFixedHeight(58)" in src, "hauteur de bouton non augmentée pour 2 lignes"
-    # Section « Claude IA » renommée « Écriture assistée par IA » (Cinéma).
-    assert '_make_toggle("☁  Écriture assistée par IA"' in src, "section IA non renommée"
+    # Réorg 2026-07-06 : « Écriture assistée par IA » scindée en « Scénario »
+    # (Analyse + Co-écriture) et « Finalisation » (Mise en page + Co-écriture des plans).
+    assert '_make_toggle("☁  Scénario"' in src, "section Scénario (ex-IA) absente"
+    assert '_make_toggle("◈  Finalisation"' in src, "section Finalisation absente"
+    assert '"Co-écriture des plans"' in src and "def _on_plan_coedit" in src, \
+        "bouton/handler Co-écriture des plans absent (Cinéma)"
+    # Ordre du panneau : Scénario avant Finalisation avant Générer.
+    assert src.index("(tog_scen,") < src.index("(tog_final,") < src.index("(tog_gen,"), \
+        "ordre du panneau droit incorrect (Scénario, Finalisation, …, Générer)"
+
+
+@test
+def coecriture_des_plans_cinema():
+    """Finalisation Cinéma : parseur de plans « P01 | … » + fenêtre de co-écriture
+    plan par plan (chirurgical), worker/dialog partagés calibrés « cinema »."""
+    import core.plan_layout as pl
+    cine = ("—— SÉQUENCE 1 ——\n\nP01 | Plan large | Fixe | Face | ~6s\nEXT. RUE — NUIT\nA.\n"
+            "→ SEEDANCE: a.\n\nP02 | Gros plan | Fixe | 3/4 | ~5s\nINT. — NUIT\nB.\n→ SEEDANCE: b.\n")
+    plans = pl.split_plans(cine)
+    assert len(plans) == 2, "parseur Cinéma : 2 plans attendus"
+    out = pl.replace_plan(cine, 0, "P01 | Insert | Fixe | Face | ~4s\nX")
+    assert ("P02 | Gros plan" in out and "SÉQUENCE 1" in out
+            and "→ SEEDANCE: a." not in out), \
+        "replace_plan chirurgical (plan 2 + en-tête conservés, plan 0 remplacé)"
+    from ui.dialog_plan_coedit import PlanCoEditDialog
+    from api.plan_coedit import PlanCoEditWorker, _plan_coedit_system
+    assert "P<NN> |" in _plan_coedit_system("cinema"), "format Cinéma non calibré dans le prompt"
+    dlg = PlanCoEditDialog(None, cine, edition="cinema")
+    assert not dlg.was_applied() and dlg.result_layout() == cine
 
 
 @test

@@ -713,8 +713,6 @@ class PageScenario(QWidget):
         l_refs.addWidget(self._btn_analyze_refs)
 
         tog_refs = _make_toggle("◎  Références visuelles", c_refs, expanded=False)
-        sc_lay.addWidget(tog_refs)
-        sc_lay.addWidget(c_refs)
 
         self._refresh_refs_display()
 
@@ -751,26 +749,37 @@ class PageScenario(QWidget):
         l_music.addWidget(self._btn_analyze_music)
 
         tog_music = _make_toggle("♫  Musique du film", c_music, expanded=False)
-        sc_lay.addWidget(tog_music)
-        sc_lay.addWidget(c_music)
 
         self._refresh_music_display()
 
-        # ── Section 1 : Claude IA ─────────────────────────────────────────────
-        c_ia, l_ia = _section_container()
+        # ── Section : Scénario (analyse + co-écriture du scénario) ─────────────
+        c_scen, l_scen = _section_container()
 
         self._btn_arrange = _ai_btn(
-            "⊞", "Analyse & co-écriture", "Analyse structure + session de co-écriture", self._on_arrange,
+            "⊞", "Analyse", "Analyse la structure narrative du scénario", self._on_arrange,
         )
+        self._btn_coecriture = _ai_btn(
+            "☁", "Co-écriture", "Dialogue avec l'assistant pour réécrire le scénario", self._on_coecriture,
+        )
+        l_scen.addWidget(self._btn_arrange)
+        l_scen.addWidget(self._btn_coecriture)
+        tog_scen = _make_toggle("☁  Scénario", c_scen, expanded=True)
+
+        # ── Section : Finalisation (mise en page + co-écriture des plans) ──────
+        # Étape à ne pas sauter : préparer/optimiser les plans AVANT de générer le
+        # storyboard. « Mise en page PANDORA » structure le scénario en plans ;
+        # « Co-écriture des plans » les réécrit un par un (fenêtre dédiée).
+        c_final, l_final = _section_container()
+
         self._btn_format = _ai_btn(
             "◈", "Mise en page PANDORA", "Structure le scénario en blocs plans optimisés pour PANDORA", self._on_format,
         )
-        l_ia.addWidget(self._btn_arrange)
-        l_ia.addWidget(self._btn_format)
-
-        tog_ia = _make_toggle("☁  Écriture assistée par IA", c_ia, expanded=True)
-        sc_lay.addWidget(tog_ia)
-        sc_lay.addWidget(c_ia)
+        self._btn_plan_coedit = _ai_btn(
+            "✍", "Co-écriture des plans", "Réécrire/enrichir chaque plan un par un avant le storyboard", self._on_plan_coedit,
+        )
+        l_final.addWidget(self._btn_format)
+        l_final.addWidget(self._btn_plan_coedit)
+        tog_final = _make_toggle("◈  Finalisation", c_final, expanded=True)
 
         # ── Section 2 : Générer depuis le scénario (repliée par défaut) ───────
         c_gen, l_gen = _section_container()
@@ -821,8 +830,18 @@ class PageScenario(QWidget):
         )
         self._btn_generate_all.clicked.connect(self._on_generate_all)
         tog_gen = _make_toggle("☁  Générer depuis le scénario", c_gen, expanded=True)
-        sc_lay.addWidget(tog_gen)
-        sc_lay.addWidget(c_gen)
+
+        # ── Ordre visuel du panneau droit (haut → bas), demande Matthieu 2026-07-06 :
+        # Scénario, Finalisation, Musique, Références, Générer (bas).
+        for _tog, _cont in (
+            (tog_scen,  c_scen),
+            (tog_final, c_final),
+            (tog_music, c_music),
+            (tog_refs,  c_refs),
+            (tog_gen,   c_gen),
+        ):
+            sc_lay.addWidget(_tog)
+            sc_lay.addWidget(_cont)
 
         sc_lay.addStretch()
         scroll.setWidget(scroll_content)
@@ -1827,7 +1846,8 @@ class PageScenario(QWidget):
 
     def _set_ai_busy(self, busy: bool):
         for btn in (
-            self._btn_format, self._btn_arrange, self._btn_storyboard,
+            self._btn_format, self._btn_arrange, self._btn_coecriture,
+            self._btn_plan_coedit, self._btn_storyboard,
             self._btn_gen_characters, self._btn_gen_decors,
             self._btn_gen_accessories, self._btn_gen_hmc, self._btn_gen_vehicles,
             self._btn_generate_all, self._btn_analyze_refs,
@@ -1850,6 +1870,30 @@ class PageScenario(QWidget):
         self._worker = FormatPandoraWorker(text)
         self._worker.failed.connect(self._on_ai_fail)
         self._open_format_window(worker=self._worker)
+
+    def _on_coecriture(self):
+        """Co-écriture du SCÉNARIO — ouvre directement le studio de co-écriture."""
+        text = self._get_text()
+        if not text:
+            self._ai_progress_lbl.setText("Écris d'abord un scénario à co-écrire.")
+            return
+        analysis = (getattr(self, "_last_analysis", "")
+                    or ((self._current or {}).get("arrange_analysis") or "")).strip()
+        self._open_arrange_session(analysis)
+
+    def _on_plan_coedit(self):
+        """Co-écriture des PLANS — réécrire/enrichir la mise en page plan par plan."""
+        layout = self._layout_view.toPlainText().strip() if hasattr(self, "_layout_view") else ""
+        if not layout:
+            self._ai_progress_lbl.setText(
+                "Génère d'abord « Mise en page PANDORA », puis co-écris les plans.")
+            return
+        from ui.dialog_plan_coedit import PlanCoEditDialog
+        dlg = PlanCoEditDialog(self, layout, edition="cinema")
+        dlg.exec()
+        if dlg.was_applied():
+            self._apply_layout(dlg.result_layout())
+            self._ai_progress_lbl.setText("Plans co-écrits appliqués à la mise en page ✓")
 
     def _on_arrange(self):
         text = self._get_text()

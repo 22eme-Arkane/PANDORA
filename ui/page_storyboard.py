@@ -2892,17 +2892,38 @@ class PageStoryboard(QWidget):
 
         if not self._all_shots:
             no_version = not self._active_version_id or self._active_version_id == DEFAULT_VERSION_ID
-            msg = (
-                "Aucun découpage pour ce projet.\n\nGénère un découpage depuis l'onglet Scénario."
-                if no_version else
-                "Aucun plan dans ce découpage.\n\nClique ＋ Ajouter un plan pour créer un plan manuellement."
-            )
-            empty = QLabel(msg)
-            empty.setAlignment(Qt.AlignmentFlag.AlignCenter)
-            empty.setStyleSheet(
-                f"color:{CP['text_dim']};font-size:13px;background:transparent;border:none;"
-            )
-            self._list_lay.addWidget(empty)
+            if no_version:
+                # Aucun découpage encore généré → bouton de génération en un clic
+                # à la place du simple texte (demande Matthieu 2026-07-06).
+                empty = QWidget()
+                empty.setStyleSheet("background:transparent;")
+                _el = QVBoxLayout(empty)
+                _el.setContentsMargins(0, 48, 0, 0)
+                _el.setSpacing(18)
+                _el.setAlignment(Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignHCenter)
+                _lbl = QLabel(translate("Aucun découpage pour ce projet."))
+                _lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
+                _lbl.setStyleSheet(
+                    f"color:{CP['text_dim']};font-size:13px;background:transparent;border:none;")
+                _el.addWidget(_lbl, 0, Qt.AlignmentFlag.AlignHCenter)
+                _btn_gen = QPushButton("⊕  " + translate("Générer depuis le scénario"))
+                _btn_gen.setCursor(Qt.CursorShape.PointingHandCursor)
+                _btn_gen.setFixedHeight(42)
+                _btn_gen.setStyleSheet(
+                    f"QPushButton{{background:{CP['accent2']};color:#fff;border:none;"
+                    f"border-radius:8px;font-size:12px;font-weight:700;padding:0 28px;}}"
+                    f"QPushButton:hover{{background:#9d8fff;}}"
+                    f"QPushButton:pressed{{background:#6a5acd;}}")
+                _btn_gen.clicked.connect(self._on_analyze)
+                _el.addWidget(_btn_gen, 0, Qt.AlignmentFlag.AlignHCenter)
+                self._list_lay.addWidget(empty)
+            else:
+                empty = QLabel(translate(
+                    "Aucun plan dans ce découpage.\n\nClique ＋ Ajouter un plan pour créer un plan manuellement."))
+                empty.setAlignment(Qt.AlignmentFlag.AlignCenter)
+                empty.setStyleSheet(
+                    f"color:{CP['text_dim']};font-size:13px;background:transparent;border:none;")
+                self._list_lay.addWidget(empty)
             self._dur_lbl.setText("")
             return
 

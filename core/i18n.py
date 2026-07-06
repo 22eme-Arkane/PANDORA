@@ -762,6 +762,58 @@ _FR_TO_EN: dict[str, str] = {
     "Analyse":              "Analysis",
     "Scénario":             "Screenplay",
 
+    # ── Réorg panneau droit : Conducteur/Scénario + Finalisation (2026-07-06) ──
+    "Co-écriture":                         "Co-writing",
+    "Finalisation":                        "Finalization",
+    "Co-écriture des plans":               "Shot-by-shot co-writing",
+    "Générer depuis le conducteur":        "Generate from the rundown",
+    "Générer depuis le scénario":          "Generate from the screenplay",
+    "Analyse la structure du conducteur (rythme, séquences)":
+        "Analyzes the rundown structure (pacing, sequences)",
+    "Dialogue avec l'assistant pour réécrire le conducteur":
+        "Chat with the assistant to rewrite the rundown",
+    "Analyse la structure narrative du scénario":
+        "Analyzes the screenplay's narrative structure",
+    "Dialogue avec l'assistant pour réécrire le scénario":
+        "Chat with the assistant to rewrite the screenplay",
+    "Réécrire/enrichir chaque plan un par un avant le découpage":
+        "Rewrite/enrich each shot one by one before the breakdown",
+    "Réécrire/enrichir chaque plan un par un avant le storyboard":
+        "Rewrite/enrich each shot one by one before the storyboard",
+    "Écris d'abord un conducteur à co-écrire.":
+        "Write a rundown to co-write first.",
+    "Écris d'abord un scénario à co-écrire.":
+        "Write a screenplay to co-write first.",
+    "Génère d'abord « Mise en page PANDORA », puis co-écris les plans.":
+        "Generate “PANDORA layout” first, then co-write the shots.",
+    "Plans co-écrits appliqués à la mise en page ✓":
+        "Co-written shots applied to the layout ✓",
+    # ── Fenêtre de co-écriture des plans ──────────────────────────────────────
+    "☁  Co-écriture des plans — Finalisation":  "☁  Shot co-writing — Finalization",
+    "☁  Co-écriture des plans":                 "☁  Shot co-writing",
+    "Choisis un plan, dialogue avec l'assistant pour le réécrire et l'enrichir, puis applique-le. Le reste de la mise en page reste intact.":
+        "Pick a shot, chat with the assistant to rewrite and enrich it, then apply it. The rest of the layout stays untouched.",
+    "PLANS":                                    "SHOTS",
+    "APERÇU DU PLAN":                           "SHOT PREVIEW",
+    "DIALOGUE":                                 "DIALOGUE",
+    "Aucun plan détecté. Génère d'abord « Mise en page PANDORA », puis reviens co-écrire les plans un par un.":
+        "No shot detected. Generate “PANDORA layout” first, then come back to co-write the shots one by one.",
+    "Ex : « Rends ce plan plus intime, lumière tamisée, caméra plus proche… »":
+        "E.g. “Make this shot more intimate, dim light, closer camera…”",
+    "Décris à l'assistant comment retravailler ce plan.":
+        "Describe to the assistant how to rework this shot.",
+    "Toi":                                      "You",
+    "Assistant":                                "Assistant",
+    "{n} plan(s)":                              "{n} shot(s)",
+    "☁  Envoyer à l'assistant":                 "☁  Send to the assistant",
+    "Rédaction en cours…":                      "Writing…",
+    "Proposition prête — relis, ajuste, puis « Appliquer ce plan ».":
+        "Proposal ready — review, adjust, then “Apply this shot”.",
+    "Plan appliqué à la mise en page ✓":        "Shot applied to the layout ✓",
+    "Ajouter des images d'inspiration (bibliothèque ou fichier, max 4)":
+        "Add inspiration images (library or file, max 4)",
+    "✓  Appliquer ce plan":                     "✓  Apply this shot",
+
     # ── Page Storyboard ────────────────────────────────────────────────────────
     "✚ Nouveau plan":           "✚ New shot",
     "✚  Ajouter un plan":       "✚  Add shot",

@@ -364,17 +364,46 @@ def colonnes_sequences():
     # est masquée ENTIÈREMENT quand il n'y a pas de plans, et le message vit
     # dans un label dédié hors du scroll — plus aucun caprice de QScrollArea
     assert "_table_wrap.setVisible(False)" in src_render, "vide → zone tableau masquée"
-    assert "_empty_lbl.setVisible(True)" in src_render, "vide → label dédié affiché"
+    assert "_empty_wrap.setVisible(True)" in src_render, "vide → bloc dédié affiché"
     assert "_table_wrap.setVisible(True)" in src_render, "tableau → zone rétablie"
-    assert "depuis le Conducteur" in src_render, "message Live (pas « onglet Scénario »)"
+    # Aucun découpage → bouton « Générer depuis le conducteur » (demande 2026-07-06).
+    assert "Générer depuis le conducteur" in src_render, "bouton Générer depuis le conducteur (Live)"
     for pg in (live, mp):
-        assert hasattr(pg, "_empty_lbl") and hasattr(pg, "_table_wrap"), \
-            "label vide + zone tableau présents (Live ET Mapping)"
+        assert (hasattr(pg, "_empty_wrap") and hasattr(pg, "_empty_gen_btn")
+                and hasattr(pg, "_table_wrap")), \
+            "bloc vide (message + bouton) + zone tableau présents (Live ET Mapping)"
         _tlay = pg._btn_batch_mood.parentWidget().layout()
         assert (_tlay.indexOf(pg._btn_batch_mood) < _tlay.indexOf(pg._btn_music_align)
                 < _tlay.indexOf(pg._ai_lbl) < _tlay.indexOf(pg._btn_clear_shots)), \
             "Moods et Caler à gauche, actions à droite"
     sb.set_namespace("storyboard")
+
+
+@test
+def coecriture_et_finalisation_live():
+    """Réorg 2026-07-06 : « Conducteur » (Analyse + Co-écriture) et « Finalisation »
+    (Mise en page + Co-écriture des plans) ; parseur de plans « PLAN n — » chirurgical."""
+    import inspect
+    src = inspect.getsource(__import__("ui.page_scenario_live", fromlist=["_"]))
+    assert '_make_toggle("☁  Conducteur"' in src, "section Conducteur (ex-Claude IA) absente"
+    assert '_make_toggle("◈  Finalisation"' in src, "section Finalisation absente"
+    assert '"Co-écriture des plans"' in src and "def _on_plan_coedit" in src, \
+        "bouton/handler Co-écriture des plans absent (Live)"
+    assert src.index("(tog_cond,") < src.index("(tog_final,") < src.index("(tog_gen,"), \
+        "ordre du panneau droit incorrect (Conducteur, Finalisation, …, Générer)"
+    import core.plan_layout as pl
+    live = ("=== ACTE 1 ===\nPLAN 1 — A\nDurée : 8s\nPROMPT VIDÉO : \"a\"\n\n"
+            "PLAN 2 — B\nDurée : 6s\nPROMPT VIDÉO : \"b\"\n")
+    plans = pl.split_plans(live)
+    assert len(plans) == 2, "parseur Live : 2 plans attendus"
+    out = pl.replace_plan(live, 1, "PLAN 2 — B2\nDurée : 5s")
+    assert "PLAN 1 — A" in out and "ACTE 1" in out and '"b"' not in out, \
+        "replace_plan chirurgical Live"
+    from ui.dialog_plan_coedit import PlanCoEditDialog
+    from api.plan_coedit import _plan_coedit_system
+    assert "PLAN <n> —" in _plan_coedit_system("live", "mapping"), "format Live non calibré"
+    dlg = PlanCoEditDialog(None, live, edition="live", mode="live")
+    assert not dlg.was_applied()
 
 
 @test

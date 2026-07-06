@@ -716,8 +716,6 @@ class PageScenario(QWidget):
         l_refs.addWidget(self._btn_load_analysis)
 
         tog_refs = _make_toggle("◎  Références visuelles", c_refs, expanded=False)
-        sc_lay.addWidget(tog_refs)
-        sc_lay.addWidget(c_refs)
 
         self._refresh_refs_display()
 
@@ -738,8 +736,6 @@ class PageScenario(QWidget):
         l_bld.addWidget(_bld_hint)
 
         tog_bld = _make_toggle("▦  Référence bâtiment (façade)", c_bld, expanded=False)
-        sc_lay.addWidget(tog_bld)
-        sc_lay.addWidget(c_bld)
 
         self._refresh_building_display()
 
@@ -775,26 +771,37 @@ class PageScenario(QWidget):
         l_music.addWidget(self._btn_analyze_music)
 
         tog_music = _make_toggle("♫  Musiques du set", c_music, expanded=False)
-        sc_lay.addWidget(tog_music)
-        sc_lay.addWidget(c_music)
 
         self._refresh_music_display()
 
-        # ── Section 1 : Claude IA ─────────────────────────────────────────────
-        c_ia, l_ia = _section_container()
+        # ── Section : Conducteur (analyse + co-écriture du conducteur) ─────────
+        c_cond, l_cond = _section_container()
 
         self._btn_arrange = _ai_btn(
-            "⊞", "Analyse & co-écriture", "Analyse structure + session de co-écriture", self._on_arrange,
+            "⊞", "Analyse", "Analyse la structure du conducteur (rythme, séquences)", self._on_arrange,
         )
+        self._btn_coecriture = _ai_btn(
+            "☁", "Co-écriture", "Dialogue avec l'assistant pour réécrire le conducteur", self._on_coecriture,
+        )
+        l_cond.addWidget(self._btn_arrange)
+        l_cond.addWidget(self._btn_coecriture)
+        tog_cond = _make_toggle("☁  Conducteur", c_cond, expanded=True)
+
+        # ── Section : Finalisation (mise en page + co-écriture des plans) ──────
+        # Étape à ne pas sauter : préparer/optimiser les plans AVANT de générer le
+        # découpage. « Mise en page PANDORA » structure le conducteur en plans ;
+        # « Co-écriture des plans » les réécrit un par un (fenêtre dédiée).
+        c_final, l_final = _section_container()
+
         self._btn_format = _ai_btn(
             "◈", "Mise en page PANDORA", "Structure le conducteur en blocs plans optimisés pour PANDORA", self._on_format,
         )
-        l_ia.addWidget(self._btn_arrange)
-        l_ia.addWidget(self._btn_format)
-
-        tog_ia = _make_toggle("☁  Claude IA", c_ia, expanded=True)
-        sc_lay.addWidget(tog_ia)
-        sc_lay.addWidget(c_ia)
+        self._btn_plan_coedit = _ai_btn(
+            "✍", "Co-écriture des plans", "Réécrire/enrichir chaque plan un par un avant le découpage", self._on_plan_coedit,
+        )
+        l_final.addWidget(self._btn_format)
+        l_final.addWidget(self._btn_plan_coedit)
+        tog_final = _make_toggle("◈  Finalisation", c_final, expanded=True)
 
         # ── Section 2 : Générer depuis le conducteur (repliée par défaut) ───────
         c_gen, l_gen = _section_container()
@@ -835,8 +842,19 @@ class PageScenario(QWidget):
         )
         self._btn_generate_all.clicked.connect(self._on_generate_all)
         tog_gen = _make_toggle("☁  Générer depuis le conducteur", c_gen, expanded=True)
-        sc_lay.addWidget(tog_gen)
-        sc_lay.addWidget(c_gen)
+
+        # ── Ordre visuel du panneau droit (haut → bas), demande Matthieu 2026-07-06 :
+        # Conducteur, Finalisation, Musiques, Façade, Références, Générer (bas).
+        for _tog, _cont in (
+            (tog_cond,  c_cond),
+            (tog_final, c_final),
+            (tog_music, c_music),
+            (tog_bld,   c_bld),
+            (tog_refs,  c_refs),
+            (tog_gen,   c_gen),
+        ):
+            sc_lay.addWidget(_tog)
+            sc_lay.addWidget(_cont)
 
         sc_lay.addStretch()
         scroll.setWidget(scroll_content)
@@ -2013,7 +2031,8 @@ class PageScenario(QWidget):
 
     def _set_ai_busy(self, busy: bool):
         for btn in (
-            self._btn_format, self._btn_arrange, self._btn_storyboard,
+            self._btn_format, self._btn_arrange, self._btn_coecriture,
+            self._btn_plan_coedit, self._btn_storyboard,
             self._btn_gen_characters,
             self._btn_gen_accessories, self._btn_gen_vehicles,
             self._btn_generate_all, self._btn_analyze_refs,
@@ -2036,6 +2055,30 @@ class PageScenario(QWidget):
         self._worker = FormatConducteurWorker(self._text_with_music(), self._live_mode, dur_secs)
         self._worker.failed.connect(self._on_ai_fail)
         self._open_format_window(worker=self._worker)
+
+    def _on_coecriture(self):
+        """Co-écriture du CONDUCTEUR — ouvre directement le studio de co-écriture."""
+        text = self._get_text()
+        if not text:
+            self._ai_progress_lbl.setText(translate("Écris d'abord un conducteur à co-écrire."))
+            return
+        analysis = (getattr(self, "_last_analysis", "")
+                    or ((self._current or {}).get("arrange_analysis") or "")).strip()
+        self._open_arrange_session(analysis)
+
+    def _on_plan_coedit(self):
+        """Co-écriture des PLANS — réécrire/enrichir la mise en page plan par plan."""
+        layout = self._layout_view.toPlainText().strip() if hasattr(self, "_layout_view") else ""
+        if not layout:
+            self._ai_progress_lbl.setText(translate(
+                "Génère d'abord « Mise en page PANDORA », puis co-écris les plans."))
+            return
+        from ui.dialog_plan_coedit import PlanCoEditDialog
+        dlg = PlanCoEditDialog(self, layout, edition="live", mode=self._live_mode)
+        dlg.exec()
+        if dlg.was_applied():
+            self._apply_layout(dlg.result_layout())
+            self._ai_progress_lbl.setText(translate("Plans co-écrits appliqués à la mise en page ✓"))
 
     def _apply_layout(self, layout_text: str):
         """Écrit la mise en page dans l'onglet dédié (le Conducteur reste intact)."""

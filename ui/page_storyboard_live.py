@@ -2275,14 +2275,35 @@ class PageStoryboard(QWidget):
         # Message « tableau vide » HORS du scroll : centré dans la fenêtre de
         # façon déterministe (le conteneur de colonnes gardait sa largeur même
         # vide — vu deux fois en réel malgré sizeHint/minimumWidth neutralisés)
+        # Zone « aucun découpage » : message + bouton de génération (centrés).
+        self._empty_wrap = QWidget()
+        self._empty_wrap.setStyleSheet("background:transparent;")
+        _ew = QVBoxLayout(self._empty_wrap)
+        _ew.setContentsMargins(0, 0, 0, 0)
+        _ew.setSpacing(18)
+        _ew.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self._empty_lbl = QLabel("")
         self._empty_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self._empty_lbl.setWordWrap(True)
         self._empty_lbl.setStyleSheet(
             f"color:{CP['text_dim']};font-size:13px;background:transparent;border:none;"
         )
-        self._empty_lbl.setVisible(False)
-        lay.addWidget(self._empty_lbl, 1)
+        _ew.addWidget(self._empty_lbl, 0, Qt.AlignmentFlag.AlignHCenter)
+        # Bouton « Générer depuis le conducteur » — visible seulement si aucun
+        # découpage encore généré (demande Matthieu 2026-07-06).
+        self._empty_gen_btn = QPushButton("")
+        self._empty_gen_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._empty_gen_btn.setFixedHeight(42)
+        self._empty_gen_btn.setStyleSheet(
+            f"QPushButton{{background:{CP['accent2']};color:#fff;border:none;"
+            f"border-radius:8px;font-size:12px;font-weight:700;padding:0 28px;}}"
+            f"QPushButton:hover{{background:#9d8fff;}}"
+            f"QPushButton:pressed{{background:#6a5acd;}}")
+        self._empty_gen_btn.clicked.connect(self._on_analyze)
+        self._empty_gen_btn.setVisible(False)
+        _ew.addWidget(self._empty_gen_btn, 0, Qt.AlignmentFlag.AlignHCenter)
+        self._empty_wrap.setVisible(False)
+        lay.addWidget(self._empty_wrap, 1)
 
         # Synchroniser la scrollbar du haut avec la scrollbar interne du QScrollArea
         h_bar = scroll.horizontalScrollBar()
@@ -2938,19 +2959,22 @@ class PageStoryboard(QWidget):
 
         if not self._all_shots:
             no_version = not self._active_version_id or self._active_version_id == DEFAULT_VERSION_ID
-            msg = (
-                "Aucun découpage pour ce projet.\n\nGénère un découpage depuis le Conducteur."
-                if no_version else
-                "Aucun plan dans ce découpage.\n\nClique ＋ Ajouter un plan pour créer un plan manuellement."
-            )
             # Pas de tableau → on masque ENTIÈREMENT la zone tableau (scroll +
-            # scrollbar) et on affiche le message dans un label dédié, centré
-            # dans la fenêtre de façon déterministe
+            # scrollbar) et on affiche le message dans un bloc dédié, centré
+            # dans la fenêtre de façon déterministe. Si aucun découpage encore
+            # généré : bouton « Générer depuis le conducteur ».
             self._list_container._empty_mode = True
             self._list_container.setMinimumWidth(0)
-            self._empty_lbl.setText(translate(msg))
+            if no_version:
+                self._empty_lbl.setText(translate("Aucun découpage pour ce projet."))
+                self._empty_gen_btn.setText("⊕  " + translate("Générer depuis le conducteur"))
+                self._empty_gen_btn.setVisible(True)
+            else:
+                self._empty_lbl.setText(translate(
+                    "Aucun plan dans ce découpage.\n\nClique ＋ Ajouter un plan pour créer un plan manuellement."))
+                self._empty_gen_btn.setVisible(False)
             self._table_wrap.setVisible(False)
-            self._empty_lbl.setVisible(True)
+            self._empty_wrap.setVisible(True)
             self._dur_lbl.setText("")
             return
 
