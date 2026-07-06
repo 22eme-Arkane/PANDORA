@@ -72,19 +72,32 @@ _SYNTHESIS_SYSTEM = (
     "en ACTES et en PLANS projetés."
 )
 
-_ENRICH_SYSTEM = (
-    "Tu reçois un CONDUCTEUR de {ctx} et la SYNTHÈSE de direction visuelle issue "
-    "des images de référence. Réécris le conducteur en l'ENRICHISSANT : intègre "
-    "les codes décodés — style d'image et rendu, vocabulaire architectural, "
-    "traitement des figures, palette, lumière, matières — et les correspondances "
-    "par acte là où ils renforcent le propos, sans changer la structure, les "
-    "intentions ni la voix de l'auteur. La direction artistique est une "
-    "inspiration transposée, pas une copie des images.\n"
-    "IMPORTANT — c'est un CONDUCTEUR, PAS un scénario : INTERDIT « INT. » / "
-    "« EXT. », en-têtes de scène, « séquence », « scène ». Garde la forme du "
-    "conducteur original et le français.\n"
-    "Réponds UNIQUEMENT avec le conducteur enrichi (aucun commentaire autour)."
-)
+def _enrich_system(ctx: str) -> str:
+    # Enrichissement CHIRURGICAL : le modèle ne renvoie QUE les passages modifiés
+    # sous forme d'édits {find, replace} → moins de tokens, le reste intact.
+    return (
+        f"Tu reçois un CONDUCTEUR de {ctx} et la SYNTHÈSE de direction visuelle "
+        "issue des images de référence. Ta mission : ENRICHIR le conducteur en y "
+        "intégrant les codes décodés — style d'image et rendu, vocabulaire "
+        "architectural, traitement des figures, palette, lumière, matières — LÀ OÙ "
+        "ils renforcent le propos, sans changer la structure, les intentions ni la "
+        "voix de l'auteur. La direction artistique est une inspiration transposée, "
+        "pas une copie des images.\n"
+        "CHIRURGIE STRICTE : n'enrichis QUE les passages qui ont un équivalent dans "
+        "les références ; ne renvoie QUE ces passages. Tout ce que tu ne renvoies "
+        "pas reste MOT POUR MOT.\n"
+        "IMPORTANT — c'est un CONDUCTEUR, PAS un scénario : INTERDIT « INT. » / "
+        "« EXT. », en-têtes de scène, « séquence », « scène ». Garde la forme du "
+        "conducteur original et le français.\n"
+        "FORMAT DE RÉPONSE — JSON STRICT, sans markdown, sans texte hors JSON :\n"
+        '{ "edits": [ {"find": "<extrait EXACT et VERBATIM du conducteur original, '
+        "copié caractère pour caractère, assez long pour être unique — une phrase "
+        'ou un paragraphe entier>", "replace": "<ce même passage réécrit, enrichi>", '
+        '"summary": "<résumé court en français de ce qui change>"} ] }\n'
+        "- « find » doit exister TEL QUEL dans le conducteur (ne le reformule pas, "
+        "ne corrige pas les espaces). « replace » contient le passage entier réécrit.\n"
+        "- « edits » est une liste VIDE [] s'il n'y a rien à enrichir."
+    )
 
 
 class AnalyzeRefsConducteurWorker(QThread):
@@ -229,10 +242,11 @@ class RefsChatWorker(QThread):
 
 
 class EnrichConducteurWithRefsWorker(QThread):
-    """Réécrit le CONDUCTEUR en intégrant la direction visuelle (streaming).
-    Signaux chunk/done/failed — compatibles avec le bouton « Enrichir » existant.
-    Remplace EnrichScenarioWithRefsWorker (Cinéma) qui réécrivait en scénario."""
-    done   = pyqtSignal(str)
+    """Enrichit le CONDUCTEUR de façon CHIRURGICALE : ne renvoie que les passages
+    modifiés (édits {find, replace}) au lieu de tout réécrire — moins de tokens en
+    sortie, et le reste du conducteur reste MOT POUR MOT.
+    Signaux : done(dict) → {"edits": [...], "raw": str} ; failed(str) ; chunk(str)."""
+    done   = pyqtSignal(dict)
     failed = pyqtSignal(str)
     chunk  = pyqtSignal(str)
 
@@ -244,7 +258,7 @@ class EnrichConducteurWithRefsWorker(QThread):
 
     def run(self):
         from core.ai_provider import stream, key_error
-        # Réécriture du conducteur = tâche « screenplay » (comme l'enrichissement Cinéma).
+        # Enrichissement du conducteur = tâche « screenplay » (comme le Cinéma).
         err = key_error("screenplay")
         if err:
             self.failed.emit(err)
@@ -252,11 +266,13 @@ class EnrichConducteurWithRefsWorker(QThread):
         try:
             user = (f"CONDUCTEUR ORIGINAL :\n{self._text}\n\n"
                     f"DIRECTION VISUELLE (références) :\n{self._analysis}")
-            # 16000 : sortie = conducteur COMPLET enrichi — 8192 tronquait les longs
-            full = stream(_ENRICH_SYSTEM.format(ctx=_mode_ctx(self._mode)), user,
+            # 16000 : marge large, mais la sortie ne contient que les passages
+            # enrichis (JSON d'édits) — bien plus court qu'un conducteur complet.
+            full = stream(_enrich_system(_mode_ctx(self._mode)), user,
                           on_chunk=self.chunk.emit,
                           tier="creative", max_tokens=16000, task="screenplay")
-            self.done.emit(full.strip())
+            from core.text_edits import parse_edits
+            self.done.emit({"edits": parse_edits(full), "raw": full.strip()})
         except Exception as e:
             from core.worker import humanize_api_error
             self.failed.emit(humanize_api_error(str(e)))

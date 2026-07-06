@@ -2775,24 +2775,30 @@ class PageScenario(QWidget):
 
             _enriched = [""]
 
-            def _on_enrich_chunk(text: str):
-                cursor = te.textCursor()
-                cursor.movePosition(cursor.MoveOperation.End)
-                cursor.insertText(text)
-                te.setTextCursor(cursor)
-                _enriched[0] += text
-
-            def _on_enrich_done(result: str):
+            def _on_enrich_done(res: dict):
                 _refs_streaming_active[0] = False
                 btn_close.setText(translate("Fermer"))
                 btn_close.setStyleSheet(_refs_ghost_ss)
-                _enriched[0] = result
-                self._refs_status_lbl.setText("Enrichissement terminé ✓")
-                self._refs_status_lbl.setStyleSheet(
-                    f"color:{CP['green']};font-size:10px;font-family:'Consolas',monospace;"
-                )
-                btn_apply.setEnabled(True)
-                btn_apply.setVisible(True)
+                # Édition CHIRURGICALE : on n'applique que les passages renvoyés
+                # ({find, replace}) ; tout le reste du scénario reste MOT POUR MOT.
+                from core.text_edits import apply_find_replace_edits
+                edits = (res or {}).get("edits", [])
+                new_text, applied, missed = apply_find_replace_edits(scenario_text, edits)
+                _enriched[0] = new_text
+                te.setPlainText(new_text)
+                if applied:
+                    msg = translate("{n} passage(s) enrichi(s) ✓").format(n=len(applied))
+                    if missed:
+                        msg += translate(" · {n} non localisé(s)").format(n=len(missed))
+                    self._refs_status_lbl.setText(msg)
+                    self._refs_status_lbl.setStyleSheet(
+                        f"color:{CP['green']};font-size:10px;font-family:'Consolas',monospace;")
+                    btn_apply.setEnabled(True)
+                    btn_apply.setVisible(True)
+                else:
+                    self._refs_status_lbl.setText(translate("Aucun passage à enrichir localisé"))
+                    self._refs_status_lbl.setStyleSheet(
+                        f"color:{CP['text_dim']};font-size:10px;font-family:'Consolas',monospace;")
 
             def _on_enrich_failed(msg: str):
                 _refs_streaming_active[0] = False
@@ -2817,7 +2823,6 @@ class PageScenario(QWidget):
                 dlg.accept()
 
             btn_apply.clicked.connect(_do_apply)
-            w.chunk.connect(_on_enrich_chunk)
             w.done.connect(_on_enrich_done)
             w.failed.connect(_on_enrich_failed)
             w.start()

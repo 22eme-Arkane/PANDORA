@@ -766,6 +766,10 @@ _FR_TO_EN: dict[str, str] = {
     "Co-écriture":                         "Co-writing",
     "Finalisation":                        "Finalization",
     "Co-écriture des plans":               "Shot-by-shot co-writing",
+    # ── Enrichissement chirurgical (Références visuelles) ─────────────────────
+    "{n} passage(s) enrichi(s) ✓":          "{n} passage(s) enriched ✓",
+    " · {n} non localisé(s)":               " · {n} not located",
+    "Aucun passage à enrichir localisé":    "No passage to enrich was located",
     "Générer depuis le conducteur":        "Generate from the rundown",
     "Générer depuis le scénario":          "Generate from the screenplay",
     "Analyse la structure du conducteur (rythme, séquences)":

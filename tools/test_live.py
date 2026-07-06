@@ -1149,8 +1149,15 @@ def refs_conducteur_file_et_fond():
     assert "SYNTHÈSE" in src, "synthèse de direction visuelle"
     e = EnrichConducteurWithRefsWorker("c", "a", "live")
     assert hasattr(e, "done") and hasattr(e, "chunk"), "contrat fenêtre (chunk/done)"
-    from api.live_refs import _ENRICH_SYSTEM, _PER_IMAGE_SYSTEM, _SYNTHESIS_SYSTEM
-    assert "INT." in _ENRICH_SYSTEM, "interdiction format scénario"
+    from api.live_refs import _enrich_system, _PER_IMAGE_SYSTEM, _SYNTHESIS_SYSTEM
+    _es = _enrich_system("live")
+    assert "INT." in _es, "interdiction format scénario"
+    # Enrichissement CHIRURGICAL (2026-07-06) : sortie = édits {find, replace},
+    # pas tout le conducteur réécrit → moins de tokens, reste intact.
+    assert '"find"' in _es and '"replace"' in _es and '"edits"' in _es, \
+        "enrichissement chirurgical (édits find/replace)"
+    assert "parse_edits" in inspect.getsource(EnrichConducteurWithRefsWorker.run), \
+        "run() parse les édits (chirurgical)"
     # Doctrine 2026-06-11 : décodage COMPLET de direction artistique (pas que palette)
     for kw in ("Architecture", "Personnages & figures", "Style d'image", "INSPIRATION"):
         assert kw in _PER_IMAGE_SYSTEM, f"décodage DA complet : {kw}"

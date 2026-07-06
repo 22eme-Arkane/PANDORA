@@ -1360,7 +1360,7 @@ class EnrichScenarioWithRefsWorker(QThread):
     uniquement les passages du scénario qui ont un équivalent dans les images analysées.
     """
     chunk  = pyqtSignal(str)
-    done   = pyqtSignal(str)
+    done   = pyqtSignal(dict)
     failed = pyqtSignal(str)
 
     _SYSTEM = """\
@@ -1371,21 +1371,27 @@ Tu reçois :
 1. Un scénario existant
 2. Une analyse visuelle d'images de référence (personnages, décors, ambiances, lumières, textures)
 
-Ta mission : enrichir le scénario en intégrant les détails visuels des références \
+Ta mission : ENRICHIR le scénario en intégrant les détails visuels des références \
 là où ils correspondent à des éléments déjà présents dans le texte.
 
-Règles strictes :
-- Ne réécris PAS le scénario de zéro — tu enrichis uniquement ce qui est déjà là
-- Identifie les correspondances : si une référence montre un samouraï et que le scénario \
-mentionne un samouraï, enrichis la description de ce personnage avec les détails visuels \
-(armure, texture, couleurs, posture, éclairage)
-- Idem pour les décors : si une référence montre une architecture symétrique et infinie \
-et que le scénario se déroule dans un lieu similaire, enrichis ce lieu avec ces détails visuels
-- Conserve rigoureusement la structure narrative, le rythme, le ton et les événements du scénario
-- Intègre les détails visuels de façon naturelle dans le flux du texte existant \
-(pas de liste, pas de bloc séparé)
-- Si un élément du scénario n'a aucune correspondance dans les références, laisse-le intact
-- Retourne UNIQUEMENT le scénario enrichi, sans commentaire ni explication préalable
+CHIRURGIE STRICTE :
+- Ne réécris PAS le scénario de zéro — n'enrichis QUE les passages qui ont un \
+équivalent dans les références.
+- Ne renvoie QUE les passages modifiés (édits ciblés). Tout ce que tu ne renvoies \
+pas reste MOT POUR MOT.
+- Conserve rigoureusement la structure narrative, le rythme, le ton, les événements \
+et les en-têtes de scène (INT./EXT.).
+- Intègre les détails de façon naturelle dans le flux du texte (pas de liste, pas de bloc séparé).
+- Garde le français.
+
+FORMAT DE RÉPONSE — JSON STRICT, sans markdown, sans texte hors JSON :
+{ "edits": [ {"find": "<extrait EXACT et VERBATIM du scénario original, copié \
+caractère pour caractère, assez long pour être unique — une phrase ou un paragraphe \
+entier>", "replace": "<ce même passage réécrit, enrichi>", "summary": "<résumé court \
+en français de ce qui change>"} ] }
+- « find » doit exister TEL QUEL dans le scénario (ne le reformule pas, ne corrige \
+pas les espaces). « replace » contient le passage entier réécrit.
+- « edits » est une liste VIDE [] s'il n'y a rien à enrichir.
 """
 
     def __init__(self, scenario_text: str, ref_analysis: str):
@@ -1413,7 +1419,7 @@ et que le scénario se déroule dans un lieu similaire, enrichis ce lieu avec ce
             full_text = ""
             with client.messages.stream(
                 model=_MODEL,
-                max_tokens=4096,
+                max_tokens=8192,
                 thinking=_NO_THINK,
                 system=self._SYSTEM,
                 messages=[{"role": "user", "content": user_content}],
@@ -1421,7 +1427,8 @@ et que le scénario se déroule dans un lieu similaire, enrichis ce lieu avec ce
                 for text in stream.text_stream:
                     full_text += text
                     self.chunk.emit(text)
-            self.done.emit(full_text.strip())
+            from core.text_edits import parse_edits
+            self.done.emit({"edits": parse_edits(full_text), "raw": full_text.strip()})
         except Exception as e:
             self.failed.emit(_fmt_err(e))
 

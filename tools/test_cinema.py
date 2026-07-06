@@ -2185,6 +2185,35 @@ def fleches_dialogue_fichier_en_blanc():
 
 
 @test
+def enrichissement_refs_chirurgical():
+    """Enrichissement « Références visuelles » CHIRURGICAL (2026-07-06) : le worker
+    renvoie des édits {find, replace} (moins de tokens) au lieu de tout réécrire ;
+    core.text_edits les applique en gardant le reste MOT POUR MOT."""
+    import inspect
+    from api.screenplay import EnrichScenarioWithRefsWorker
+    sysp = EnrichScenarioWithRefsWorker._SYSTEM
+    assert '"find"' in sysp and '"replace"' in sysp and '"edits"' in sysp, \
+        "prompt enrichissement Cinéma : format édits JSON absent"
+    assert "parse_edits" in inspect.getsource(EnrichScenarioWithRefsWorker.run), \
+        "run() ne parse pas les édits"
+    # Parseur + application chirurgicale (core partagé).
+    import core.text_edits as tx
+    orig = "ACTE 1\nUne rue vide sous la pluie.\nUn homme attend.\nACTE 2\nFin."
+    edits = tx.parse_edits(
+        '{"edits":[{"find":"Une rue vide sous la pluie.",'
+        '"replace":"Une rue néon, reflets cyan, sous la pluie.","summary":"palette"}]}')
+    assert len(edits) == 1, "parseur d'édits"
+    new, applied, missed = tx.apply_find_replace_edits(orig, edits)
+    assert "néon, reflets cyan" in new and "Un homme attend." in new and "ACTE 2" in new, \
+        "application chirurgicale : passage remplacé, reste intact"
+    assert len(applied) == 1 and not missed
+    # UI : application via apply_find_replace_edits (plus de remplacement total streamé).
+    from ui.page_scenario import PageScenario
+    assert "apply_find_replace_edits" in inspect.getsource(PageScenario._open_refs_window), \
+        "UI Cinéma n'applique pas les édits chirurgicaux"
+
+
+@test
 def plan_architecte_cale_sur_ensemble():
     """7 vues : le plan d'architecte est généré par ÉDITION NB2 à partir de l'image
     d'ensemble (donc calé dessus), avec repli texte robuste ; ensemble + plan ont un
