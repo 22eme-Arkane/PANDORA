@@ -2,7 +2,7 @@ from PyQt6.QtWidgets import (
     QLabel, QFrame, QComboBox, QWidget, QVBoxLayout, QHBoxLayout,
     QTextEdit, QPushButton, QCheckBox, QProgressBar, QDialog, QDialogButtonBox,
 )
-from PyQt6.QtCore import Qt, QObject, QEvent
+from PyQt6.QtCore import Qt, QObject, QEvent, QTimer
 from ui.styles import C, CP
 from ui.icons import claude_icon_pixmap, install_hover_icon
 
@@ -26,42 +26,83 @@ def fit_dialog_to_screen(dlg, w_pct: float = 0.75, h_pct: float = 0.85,
 
 class _ReadingColumnFilter(QObject):
     """Garde le texte d'un QTextEdit dans une COLONNE de lecture centrée de largeur
-    MAX lisible : marges de document dynamiques (recalculées au redimensionnement)
+    MAX lisible : marges HORIZONTALES dynamiques (recalculées au redimensionnement)
     → sur un large éditeur, les lignes ne traversent plus tout l'écran, mise en page
-    classique et lisible (le bloc reste centré sur la page)."""
+    classique et lisible (le bloc reste centré sur la page).
 
-    def __init__(self, te, max_width: int = 820, min_margin: int = 28):
+    ⚠ Deux pièges corrigés (2026-07-06) :
+    1. Le recalcul est DIFFÉRÉ (QTimer.singleShot 0) : un filtre d'événement voit le
+       Resize AVANT que Qt n'ait redimensionné le viewport → lire viewport().width()
+       tout de suite renvoie l'ANCIENNE largeur (colonne restée pleine largeur collée
+       à gauche sur grand écran).
+    2. On utilise les marges GAUCHE/DROITE du frame racine — PAS setDocumentMargin()
+       qui s'applique aussi en HAUT/BAS (le texte descendait de 387 px sous le titre).
+       La marge verticale reste petite (documentMargin fixe)."""
+
+    def __init__(self, te, max_width: int = 820, vertical: int = 18):
         super().__init__(te)
         self._te = te
         self._max = max_width
-        self._min = min_margin
-        self._sync()
+        self._vpad = vertical
+        te.document().setDocumentMargin(vertical)   # petite marge haut/bas/base
+        QTimer.singleShot(0, self._sync)            # après le premier layout
 
     def _sync(self):
         try:
+            doc = self._te.document()
             vw = self._te.viewport().width()
-            m = max(self._min, (vw - self._max) // 2)
-            if abs(int(self._te.document().documentMargin()) - m) > 1:
-                self._te.document().setDocumentMargin(m)
+            if vw <= 1:
+                return
+            # Marge latérale du frame racine = ce qu'il faut pour centrer une colonne
+            # de largeur `_max` (en tenant compte de la marge de document déjà posée).
+            side = max(0, (vw - self._max) // 2 - self._vpad)
+            root = doc.rootFrame()
+            fmt = root.frameFormat()
+            if abs(int(fmt.leftMargin()) - side) > 1:
+                doc.setUndoRedoEnabled(False)       # pas de pollution de l'undo Qt
+                fmt.setLeftMargin(side)
+                fmt.setRightMargin(side)
+                root.setFrameFormat(fmt)
+                doc.setUndoRedoEnabled(True)
         except Exception:
             pass
 
     def eventFilter(self, obj, ev):
-        if ev.type() == QEvent.Type.Resize:
-            self._sync()
+        if ev.type() in (QEvent.Type.Resize, QEvent.Type.Show):
+            QTimer.singleShot(0, self._sync)   # après le redim. réel du viewport
         return False
 
 
-def install_reading_column(te, max_width: int = 820, min_margin: int = 28):
+def install_reading_column(te, max_width: int = 820, vertical: int = 18):
     """Contraint un QTextEdit à une colonne de lecture centrée (largeur max lisible).
 
     Le texte reste aligné à GAUCHE dans une colonne centrée sur la page (mise en
-    page classique) au lieu de laisser les lignes traverser tout l'écran.
+    page classique) au lieu de laisser les lignes traverser tout l'écran. Marges
+    latérales dynamiques (frame racine) ; marge haut/bas = `vertical` (petite).
     """
-    f = _ReadingColumnFilter(te, max_width, min_margin)
+    f = _ReadingColumnFilter(te, max_width, vertical)
     te.installEventFilter(f)
     te._reading_column_filter = f    # référence anti-GC
     return f
+
+
+def apply_paragraph_spacing(te, px: int = 10):
+    """Ajoute une petite RESPIRATION sous chaque paragraphe (bloc) d'un QTextEdit —
+    « retour à la ligne » visuel entre les paragraphes, sans polluer l'undo Qt ni
+    déplacer le curseur de l'utilisateur. Les blocs saisis ensuite héritent du format.
+    À appeler après avoir écrit le texte (setPlainText)."""
+    try:
+        from PyQt6.QtGui import QTextCursor, QTextBlockFormat
+        doc = te.document()
+        doc.setUndoRedoEnabled(False)
+        cur = QTextCursor(doc)                     # curseur détaché : ne bouge pas celui de l'UI
+        cur.select(QTextCursor.SelectionType.Document)
+        bf = QTextBlockFormat()
+        bf.setBottomMargin(px)                     # ne touche QUE la marge basse (align. préservé)
+        cur.mergeBlockFormat(bf)
+        doc.setUndoRedoEnabled(True)
+    except Exception:
+        pass
 
 
 def show_api_error(parent, message: str):

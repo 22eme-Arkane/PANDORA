@@ -1012,8 +1012,11 @@ class PageScenario(QWidget):
         self._stack.setCurrentIndex(1)
 
     def _set_editor_text(self, text: str):
-        """Écrit le texte dans l'éditeur (colonne de lecture centrée, aligné à gauche)."""
+        """Écrit le texte dans l'éditeur (colonne de lecture centrée, aligné à gauche,
+        respiration entre paragraphes)."""
         self._editor_text.setPlainText(text)
+        from ui.widgets import apply_paragraph_spacing
+        apply_paragraph_spacing(self._editor_text)
 
     def _apply_layout(self, text: str):
         """Écrit la Mise en page PANDORA dans son onglet dédié — le Scénario

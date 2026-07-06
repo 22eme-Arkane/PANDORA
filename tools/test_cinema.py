@@ -1443,6 +1443,34 @@ def scenario_onglet_mise_en_page():
 
 
 @test
+def colonne_lecture_largeur_limitee():
+    """Colonne de lecture (2026-07-06) : sur un large éditeur, largeur LIMITÉE (~820 px)
+    et CENTRÉE via les marges LATÉRALES du frame (pas verticales → le texte reste en
+    haut) ; petite respiration entre paragraphes (marge basse de bloc)."""
+    from PyQt6.QtWidgets import QMainWindow, QTextEdit, QApplication
+    from ui.widgets import install_reading_column, apply_paragraph_spacing
+    win = QMainWindow(); te = QTextEdit()
+    install_reading_column(te, max_width=820)
+    te.setPlainText("Bloc A.\nBloc B un peu plus long pour la démonstration de la colonne.")
+    apply_paragraph_spacing(te, 10)
+    win.setCentralWidget(te); win.resize(1600, 600); win.show()
+    for _ in range(6):
+        QApplication.processEvents()
+    doc = te.document()
+    vw = te.viewport().width()
+    if vw > 1200:   # si le WM headless donne bien une large fenêtre
+        side = int(doc.rootFrame().frameFormat().leftMargin())
+        col = vw - 2 * side - 2 * int(doc.documentMargin())
+        assert side > 150, f"colonne pas centrée (marge latérale {side})"
+        assert 760 <= col <= 880, f"colonne pas ~820 px (={col})"
+    # Marge verticale PETITE (le texte ne descend pas de 387 px sous le titre).
+    assert int(doc.documentMargin()) <= 40, "marge verticale trop grande (setDocumentMargin ?)"
+    # Respiration entre paragraphes appliquée.
+    assert doc.firstBlock().blockFormat().bottomMargin() >= 8, "pas de respiration entre paragraphes"
+    win.close()
+
+
+@test
 def scenario_storyboard_save_open():
     """Sauvegarde / ouverture PHYSIQUE du scénario (dossier Scénario) et du
     storyboard (dossier Storyboard) — fichiers nommés dans le dossier du projet."""
