@@ -77,6 +77,8 @@ class PlanCoEditDialog(QDialog):
         self._redo_stack: list[str] = []        # rétablissement (Ctrl+Y)
         self._pending_plan = None               # index du plan envoyé à l'assistant
         self._suppress_commit = False           # bloque l'auto-commit pendant _set_preview
+        self._all_mode  = False                 # « Tous les plans » : correctif global
+        self._pending_all = False               # une modif « tous les plans » est en cours
         # Mapping : la façade RÉELLE du bâtiment est jointe à l'assistant pour qu'il
         # respecte fenêtres/portes réelles au lieu d'en inventer.
         self._facade_path = ""
@@ -106,6 +108,7 @@ class PlanCoEditDialog(QDialog):
             self._input.setEnabled(False)
             self._btn_send.setEnabled(False)
             self._btn_modify.setEnabled(False)
+            self._btn_all.setEnabled(False)
             self._btn_apply.setEnabled(False)
 
         try:
@@ -161,6 +164,25 @@ class PlanCoEditDialog(QDialog):
             f"color:{CP['accent']};font-size:10px;font-weight:800;"
             "letter-spacing:1px;background:transparent;")
         ll.addWidget(_lbl_plans)
+
+        # ◆ Tous les plans : sélection globale pour un correctif appliqué à TOUS les
+        # plans en une fois (façon « en-tête » de la liste).
+        self._btn_all = QPushButton(translate("◆  Tous les plans"))
+        self._btn_all.setCheckable(True)
+        self._btn_all.setFixedHeight(30)
+        self._btn_all.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._btn_all.setToolTip(translate(
+            "Appliquer un correctif à TOUS les plans en une fois (ex. « corrige tous les "
+            "plans pour n'utiliser qu'une seule fenêtre »)."))
+        self._btn_all.setStyleSheet(
+            f"QPushButton{{background:{CP['bg2']};color:{CP['text_secondary']};"
+            f"border:1px solid {CP['border']};border-radius:6px;font-size:11px;"
+            f"font-weight:700;text-align:left;padding:0 10px;}}"
+            f"QPushButton:hover{{background:{CP['bg3']};color:{CP['text_primary']};}}"
+            f"QPushButton:checked{{background:{CP['accent2']};color:#fff;"
+            f"border-color:{CP['accent2']};}}")
+        self._btn_all.toggled.connect(self._on_toggle_all)
+        ll.addWidget(self._btn_all)
 
         self._plan_list = _PlanListWidget()
         self._plan_list.setFixedHeight(150)
@@ -348,8 +370,63 @@ class PlanCoEditDialog(QDialog):
         self._set_preview(self._plans[index]["text"])
         self._render_chat()
 
+    # ── « Tous les plans » (correctif global) ────────────────────────────────
+    def _on_toggle_all(self, checked: bool):
+        self._all_mode = checked
+        if hasattr(self, "_btn_modify"):
+            self._btn_modify.setText(translate("✏️  Modifier tous les plans") if checked
+                                     else translate("✏️  Modifier le plan"))
+        if checked:
+            self._commit_current_preview()          # fige l'édition en cours avant de basculer
+            self._plan_list.blockSignals(True)
+            self._plan_list.setCurrentRow(-1)         # dé-sélectionne le plan courant
+            self._plan_list.blockSignals(False)
+            self._set_preview_summary_all()
+        else:
+            self._plan_preview.setReadOnly(False)
+            if self._plans:
+                idx = max(0, min(self._cur, len(self._plans) - 1))
+                self._plan_list.blockSignals(True)
+                self._plan_list.setCurrentRow(idx)
+                self._plan_list.blockSignals(False)
+                self._set_preview(self._plans[idx]["text"])
+        self._render_chat()
+
+    def _exit_all_mode(self):
+        """Sort du mode « tous les plans » sans re-sélectionner (l'appelant gère la vue)."""
+        if not self._all_mode:
+            return
+        self._all_mode = False
+        self._btn_all.blockSignals(True)
+        self._btn_all.setChecked(False)
+        self._btn_all.blockSignals(False)
+        if hasattr(self, "_btn_modify"):
+            self._btn_modify.setText(translate("✏️  Modifier le plan"))
+        self._plan_preview.setReadOnly(False)
+
+    def _set_preview_summary_all(self):
+        """Aperçu en mode « tous les plans » : un résumé (non éditable, pas un plan)."""
+        self._suppress_commit = True
+        try:
+            self._plan_preview.setPlainText(translate(
+                "◆ TOUS LES PLANS sélectionnés ({n} plans).\n\n"
+                "Écris une consigne puis « Modifier tous les plans » pour l'appliquer à "
+                "l'ENSEMBLE des plans en une fois (ex. « corrige tous les plans pour "
+                "n'utiliser qu'une seule fenêtre »).\n"
+                "« Envoyer à l'assistant » discute du correctif sans rien appliquer.\n\n"
+                "Tout reste enregistré automatiquement — Ctrl+Z pour annuler."
+            ).format(n=len(self._plans)))
+        finally:
+            self._suppress_commit = False
+        self._plan_preview.setReadOnly(True)
+
     def _on_row_changed(self, row: int):
-        if row < 0 or row >= len(self._plans) or row == self._cur:
+        if row < 0 or row >= len(self._plans):
+            return
+        was_all = self._all_mode
+        if was_all:
+            self._exit_all_mode()   # cliquer un plan sort du correctif global
+        if row == self._cur and not was_all:
             return
         # Sauve l'édition manuelle du plan qu'on QUITTE dans la mise en page (état de
         # travail) — pour qu'« Appliquer les modifications » n'oublie AUCUN plan.
@@ -402,6 +479,8 @@ class PlanCoEditDialog(QDialog):
         page de travail via _commit_layout (auto-save immédiat), SANS changer la
         structure. No-op si rien n'a changé."""
         self._preview_timer.stop()
+        if self._all_mode:
+            return   # l'aperçu « tous les plans » est un résumé, pas un plan
         if not self._plans or not (0 <= self._cur < len(self._plans)):
             return
         txt = self._plan_preview.toPlainText().strip()
@@ -420,6 +499,7 @@ class PlanCoEditDialog(QDialog):
         séparée pour une lecture facile — plus de bloc compact illisible."""
         # Remplissage PROGRAMMATIQUE : ne pas déclencher l'auto-commit débouncé.
         self._suppress_commit = True
+        self._plan_preview.setReadOnly(False)   # aperçu par-plan = éditable
         try:
             self._plan_preview.setPlainText(text)
             try:
@@ -450,7 +530,8 @@ class PlanCoEditDialog(QDialog):
             return
         # Réactive la saisie si on repart d'un état « aucun plan ».
         for w in (getattr(self, "_input", None), getattr(self, "_btn_send", None),
-                  getattr(self, "_btn_modify", None), getattr(self, "_btn_apply", None)):
+                  getattr(self, "_btn_modify", None), getattr(self, "_btn_all", None),
+                  getattr(self, "_btn_apply", None)):
             if w is not None:
                 w.setEnabled(True)
         self._plan_preview.setReadOnly(False)
@@ -508,7 +589,7 @@ class PlanCoEditDialog(QDialog):
 
     # ── Chat ─────────────────────────────────────────────────────────────────
     def _render_chat(self):
-        hist = self._histories.get(self._cur, [])
+        hist = self._histories.get(-1 if self._all_mode else self._cur, [])
         if not hist:
             self._chat.setHtml(
                 f"<div style='color:{CP['text_dim']};font-size:11px;'>"
@@ -533,18 +614,20 @@ class PlanCoEditDialog(QDialog):
 
     def _on_send(self):
         """« Envoyer à l'assistant » : DISCUSSION seule — l'assistant conseille sans
-        modifier le plan. On applique ensuite via « Modifier le plan »."""
+        modifier le(s) plan(s). On applique ensuite via « Modifier »."""
         msg = self._input.toPlainText().strip()
         if not msg:
             return
         self._launch(msg, discuss_only=True)
 
     def _on_modify_plan(self):
-        """« Modifier le plan » : l'assistant réécrit le plan (en tenant compte de la
-        discussion) et la modification est appliquée (auto-save). Sans consigne saisie,
-        applique ce qui vient d'être discuté."""
-        msg = self._input.toPlainText().strip() or translate(
-            "Réécris le plan en appliquant ce qu'on vient de discuter.")
+        """« Modifier le plan » (ou « Modifier tous les plans » en mode global) :
+        l'assistant réécrit et la modification est appliquée (auto-save). Sans consigne
+        saisie, applique ce qui vient d'être discuté."""
+        msg = self._input.toPlainText().strip() or (
+            translate("Applique ce qu'on vient de discuter à TOUS les plans concernés.")
+            if self._all_mode else
+            translate("Réécris le plan en appliquant ce qu'on vient de discuter."))
         self._launch(msg, discuss_only=False)
 
     def _launch(self, msg: str, discuss_only: bool):
@@ -552,12 +635,20 @@ class PlanCoEditDialog(QDialog):
             return
         if self._worker and self._worker.isRunning():
             return
-        # Le plan courant part de l'aperçu (édits manuels pris en compte) — committé
-        # d'abord (auto-save). En MODIFICATION, on retient le plan cible (course worker).
-        cur_plan = self._plan_preview.toPlainText().strip()
-        self._commit_current_preview()
-        self._pending_plan = None if discuss_only else self._cur
-        hist = self._histories.setdefault(self._cur, [])
+        _all = self._all_mode
+        # En MODIFICATION par-plan, le plan courant part de l'aperçu (édits manuels) et
+        # est committé d'abord (auto-save) ; on retient le plan cible (course worker).
+        if _all:
+            cur_plan, plan_label = "", ""
+            self._pending_plan = None
+        else:
+            cur_plan = self._plan_preview.toPlainText().strip()
+            self._commit_current_preview()
+            self._pending_plan = None if discuss_only else self._cur
+            plan_label = self._plans[self._cur]["label"]
+        self._pending_all = _all and not discuss_only
+        _key = -1 if _all else self._cur
+        hist = self._histories.setdefault(_key, [])
         hist.append({"role": "user", "content": msg})
         self._render_chat()
         self._input.clear()
@@ -567,7 +658,7 @@ class PlanCoEditDialog(QDialog):
         self._worker = PlanCoEditWorker(
             layout_text=self._layout,
             plan_text=cur_plan,
-            plan_label=self._plans[self._cur]["label"],
+            plan_label=plan_label,
             history=hist[:-1],
             user_message=msg,
             edition=self._edition,
@@ -575,6 +666,7 @@ class PlanCoEditDialog(QDialog):
             ref_images=list(self._ref_images),
             facade_path=self._facade_path,
             discuss_only=discuss_only,
+            all_plans=_all,
         )
         self._worker.message_ready.connect(self._on_message_ready)
         self._worker.plan_ready.connect(self._on_plan_ready)   # non émis en discussion
@@ -585,13 +677,31 @@ class PlanCoEditDialog(QDialog):
         self._worker.start()
 
     def _on_message_ready(self, reply: str):
-        self._histories.setdefault(self._cur, []).append(
+        self._histories.setdefault(-1 if self._all_mode else self._cur, []).append(
             {"role": "assistant", "content": reply})
         self._render_chat()
 
     def _on_plan_ready(self, plan: str):
         self._set_busy(False)
         plan = (plan or "").strip()
+        # ── CORRECTIF GLOBAL : la réponse est la mise en page COMPLÈTE corrigée ──
+        if self._pending_all:
+            self._pending_all = False
+            if plan and pl.plan_count(plan) >= 1:
+                _n_new, _n_old = pl.plan_count(plan), len(self._plans)
+                self._exit_all_mode()
+                self._structural_change(plan, 0)   # remplace tout + renumérote + auto-save
+                if _n_new < _n_old:
+                    self._status.setText(translate(
+                        "Correctif appliqué — ⚠ {a}/{b} plans (réponse peut-être tronquée, "
+                        "Ctrl+Z pour annuler)").format(a=_n_new, b=_n_old))
+                else:
+                    self._status.setText(translate(
+                        "Tous les plans corrigés ✓ (Ctrl+Z pour annuler)"))
+            else:
+                self._status.setText(translate(
+                    "Réponse inattendue — aucun plan reconnu (rien appliqué)"))
+            return
         # Le rewrite est rattaché au plan ENVOYÉ (pas au plan actuellement affiché —
         # l'utilisateur a pu naviguer pendant la rédaction).
         target = self._pending_plan if self._pending_plan is not None else self._cur
@@ -629,6 +739,8 @@ class PlanCoEditDialog(QDialog):
         self._btn_send.setEnabled(not busy)
         if hasattr(self, "_btn_modify"):
             self._btn_modify.setEnabled(not busy)
+        if hasattr(self, "_btn_all"):
+            self._btn_all.setEnabled(not busy)
         self._input.setEnabled(not busy)
         if busy:
             self._status.setText(translate("Rédaction en cours…"))
@@ -682,7 +794,8 @@ class PlanCoEditDialog(QDialog):
             self._plan_list.clear()
             self._set_preview("")
             self._count_lbl.setText(translate("{n} plan(s)").format(n=0))
-            for w in (self._input, self._btn_send, self._btn_modify, self._btn_apply):
+            for w in (self._input, self._btn_send, self._btn_modify, self._btn_all,
+                      self._btn_apply):
                 w.setEnabled(False)
             return
         for w in (self._input, self._btn_send, self._btn_apply):

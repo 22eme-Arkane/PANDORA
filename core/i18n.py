@@ -818,6 +818,20 @@ _FR_TO_EN: dict[str, str] = {
     "{n} plan(s)":                              "{n} shot(s)",
     "💬  Envoyer à l'assistant":                "💬  Send to the assistant",
     "✏️  Modifier le plan":                     "✏️  Modify the shot",
+    "◆  Tous les plans":                        "◆  All shots",
+    "✏️  Modifier tous les plans":              "✏️  Modify all shots",
+    "Appliquer un correctif à TOUS les plans en une fois (ex. « corrige tous les plans pour n'utiliser qu'une seule fenêtre »).":
+        "Apply a fix to ALL shots at once (e.g. “fix every shot to use only one window”).",
+    "◆ TOUS LES PLANS sélectionnés ({n} plans).\n\nÉcris une consigne puis « Modifier tous les plans » pour l'appliquer à l'ENSEMBLE des plans en une fois (ex. « corrige tous les plans pour n'utiliser qu'une seule fenêtre »).\n« Envoyer à l'assistant » discute du correctif sans rien appliquer.\n\nTout reste enregistré automatiquement — Ctrl+Z pour annuler.":
+        "◆ ALL SHOTS selected ({n} shots).\n\nType an instruction then “Modify all shots” to apply it to EVERY shot at once (e.g. “fix every shot to use only one window”).\n“Send to the assistant” discusses the fix without applying anything.\n\nEverything is saved automatically — Ctrl+Z to undo.",
+    "Applique ce qu'on vient de discuter à TOUS les plans concernés.":
+        "Apply what we just discussed to ALL relevant shots.",
+    "Tous les plans corrigés ✓ (Ctrl+Z pour annuler)":
+        "All shots fixed ✓ (Ctrl+Z to undo)",
+    "Correctif appliqué — ⚠ {a}/{b} plans (réponse peut-être tronquée, Ctrl+Z pour annuler)":
+        "Fix applied — ⚠ {a}/{b} shots (response may be truncated, Ctrl+Z to undo)",
+    "Réponse inattendue — aucun plan reconnu (rien appliqué)":
+        "Unexpected response — no shot recognized (nothing applied)",
     "Réécris le plan en appliquant ce qu'on vient de discuter.":
         "Rewrite the shot applying what we just discussed.",
     "Plan modifié ✓ (enregistré automatiquement)":  "Shot modified ✓ (saved automatically)",

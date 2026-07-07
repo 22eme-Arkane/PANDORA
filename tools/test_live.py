@@ -354,6 +354,22 @@ def facade_injectee_workers_texte_mapping():
     _dd._on_message_ready("conseil"); _dd._on_worker_finished()
     assert _dd._input.isEnabled() and _dd._btn_send.isEnabled(), \
         "co-écriture : UI reste bloquée après une réponse de DISCUSSION"
+    # ── « Tous les plans » : correctif global appliqué à TOUS les plans (2026-07-07) ──
+    import core.plan_layout as pl
+    assert "CORRECTIF GLOBAL" in _pcs("live", "mapping", discuss_only=False, all_plans=True), \
+        "system : mode correctif global absent"
+    assert "all_plans" in inspect.signature(_PCW.__init__).parameters, "worker : all_plans absent"
+    _da = _PCD(None, "PLAN 1 — A\nx\n\nPLAN 2 — B\ny\n", edition="live", mode="live")
+    for _m in ("_btn_all", "_on_toggle_all", "_exit_all_mode"):
+        assert hasattr(_da, _m), f"co-écriture : {_m} absent (Tous les plans)"
+    _da._btn_all.setChecked(True)
+    assert _da._all_mode and _da._plan_preview.isReadOnly() \
+        and "Modifier tous les plans" in _da._btn_modify.text(), "activation « Tous les plans » KO"
+    _da._pending_all = True
+    _da._on_plan_ready("PLAN 1 — A2\nx\n\nPLAN 2 — B2\ny\n")   # mise en page COMPLÈTE corrigée
+    assert not _da._all_mode and "A2" in _da.result_layout() and "B2" in _da.result_layout() \
+        and pl.plan_count(_da.result_layout()) == 2, \
+        "correctif global : mise en page non remplacée ou all-mode pas ressorti"
     # Page live : façade passée UNIQUEMENT aux 2 workers, gate mapping.
     _psrc = inspect.getsource(__import__("ui.page_scenario_live", fromlist=["_"]))
     assert "_facade_for_mapping" in _psrc and \

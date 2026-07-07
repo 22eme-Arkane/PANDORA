@@ -2263,6 +2263,17 @@ def coecriture_des_plans_cinema():
     for _m in ("_btn_modify", "_on_modify_plan", "_launch"):
         assert hasattr(d3, _m), f"co-écriture : {_m} absent (bouton « Modifier le plan »)"
     assert "Modifier le plan" in d3._btn_modify.text(), "bouton « Modifier le plan » absent"
+    # ── « Tous les plans » : correctif global (Cinéma, 2026-07-07) ──
+    assert "CORRECTIF GLOBAL" in _plan_coedit_system("cinema", discuss_only=False, all_plans=True), \
+        "system Cinéma : mode correctif global absent"
+    for _m in ("_btn_all", "_on_toggle_all"):
+        assert hasattr(d3, _m), f"co-écriture Cinéma : {_m} absent (Tous les plans)"
+    d3._btn_all.setChecked(True)
+    assert d3._all_mode and "Modifier tous les plans" in d3._btn_modify.text(), "activation « Tous les plans » KO (Cinéma)"
+    d3._pending_all = True
+    d3._on_plan_ready("P01 | A | Fixe | Face | ~5s\nX\nA2\n\nP02 | B | Fixe | Face | ~4s\nY\nB2")
+    assert not d3._all_mode and "A2" in d3.result_layout() and "B2" in d3.result_layout(), \
+        "correctif global Cinéma : mise en page non remplacée"
 
 
 @test
