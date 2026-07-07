@@ -78,6 +78,17 @@ class FormatConducteurWorker(QThread):
                      "PROMPT VIDÉO doit COMMENCER par l'état de la façade dans ce plan.\n"
                      + _FACADE_FRAME_RULE
                      if self._mode == "mapping" else "")
+            # Langue de TRAVAIL (fr/en) : la mise en page reste dans la langue de
+            # l'utilisateur — la traduction en anglais est faite au moment de l'ENVOI
+            # aux moteurs (translate_to_english : api/real.py, video_engines.py, tts.py).
+            # On garde donc PROMPT VIDÉO / PROMPT SON lisibles et éditables à la main.
+            from core.i18n import get_lang
+            _is_en   = (get_lang() == "en")
+            _pl      = "anglais" if _is_en else "français"
+            _quality = ("cinematic, ultra-detailed, sharp, 4K" if _is_en
+                        else "cinématographique, ultra-détaillé, net, 4K")
+            _beats   = ("'opening:', 'then', 'in the final moment'" if _is_en
+                        else "« ouverture : », « puis », « dans le dernier instant »")
             system = (
                 "Tu es superviseur de génération vidéo IA ET sound designer pour PANDORA | Live. "
                 + _mode_ctx(self._mode) + " " + _lock +
@@ -98,18 +109,17 @@ class FormatConducteurWorker(QThread):
                 "=== ACTE {n} — {nom court de l'acte} ===\n"
                 "PLAN {n} — {titre court en français}\n"
                 "Durée : {x}s · Valeur de plan : {…} · Mouvement : {…}\n"
-                "PROMPT VIDÉO (Seedance 2.0, anglais) : \"{prompt visuel TRÈS DÉTAILLÉ et "
+                "PROMPT VIDÉO (Seedance 2.0, " + _pl + ") : \"{prompt visuel TRÈS DÉTAILLÉ et "
                 "dense — Seedance 2.0 exploite un MAXIMUM de détails, ne sois donc PAS bref. "
                 "Décris précisément : SUJET + ACTION, DÉCOR / environnement, COMPOSITION & "
                 "cadrage, LUMIÈRE (direction, qualité, température de couleur), PALETTE de "
                 "couleurs, TEXTURES & matières, MOUVEMENT (ce qui bouge et comment), "
-                "ATMOSPHÈRE / mood, STYLE visuel, et repères de QUALITÉ (cinematic, "
-                "ultra-detailed, sharp, 4K). Structure l'évolution en BEATS RELATIFS "
-                "('opening:', 'then', 'in the final moment') — JAMAIS de timecode absolu, "
+                "ATMOSPHÈRE / mood, STYLE visuel, et repères de QUALITÉ (" + _quality + "). "
+                "Structure l'évolution en BEATS RELATIFS (" + _beats + ") — JAMAIS de timecode absolu, "
                 "le moteur ne les respecte pas ; les impacts musicaux exacts vont sur les "
                 "CUTS entre plans. 3 à 5 phrases riches, autonome, prêt tel quel ; "
                 "AUCUN terme audio ni BPM}\"\n"
-                "PROMPT SON (sound design / SFX, anglais) : \"{prompt audio décrivant l'ambiance "
+                "PROMPT SON (sound design / SFX, " + _pl + ") : \"{prompt audio décrivant l'ambiance "
                 "sonore, les effets, textures et rythme du plan, prêt pour un générateur de SFX. "
                 "AUCUNE parole ni voix. C'est ICI que le BPM et les drops sont pris en compte}\"\n\n"
                 "Réponds UNIQUEMENT avec les actes et leurs plans (aucun texte autour)."

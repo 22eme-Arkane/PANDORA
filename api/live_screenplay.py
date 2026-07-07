@@ -15,7 +15,19 @@ import re
 from PyQt6.QtCore import QThread, pyqtSignal
 
 
-_SYSTEM_LIVE = """\
+def _decoupage_live_system(lang: str = "fr") -> str:
+    """Système du découpage VJ Live. Les champs "prompt"/"sound_prompt" sont produits
+    dans la LANGUE DE TRAVAIL (fr/en) — la traduction anglaise est faite à l'ENVOI aux
+    moteurs (translate_to_english). Les amorces calibrées moteur suivent la même langue."""
+    en    = (lang == "en")
+    pl    = "ANGLAIS" if en else "FRANÇAIS"
+    loop  = '"Seamless VJ loop, "' if en else "« Boucle VJ fluide, »"
+    beats = ('"opening:", "then", "building up", "in the final moment"' if en
+             else "« ouverture : », « puis », « montée », « dans le dernier instant »")
+    absol = '"at 3 seconds"' if en else "« à 3 secondes »"
+    qual  = ("cinematic, ultra-detailed, sharp, 4K" if en
+             else "cinématographique, ultra-détaillé, net, 4K")
+    return f"""\
 Tu es un directeur artistique VJ. À partir du CONDUCTEUR fourni, produis le DÉCOUPAGE
 d'une performance vidéo live (VJing), organisée en ACTES (grandes sections du
 conducteur), chaque acte regroupant plusieurs PLANS / loops visuels.
@@ -27,18 +39,18 @@ Pour CHAQUE plan, donne un objet JSON avec :
 - "shot_size": valeur de plan (ex: "Plan d'ensemble", "Plan large", "Plan moyen", "Gros plan", "Très gros plan") ou "".
 - "camera_movement": mouvement (ex: "Fixe", "Panoramique", "Travelling", "Zoom avant", "Zoom arrière") ou "".
 - "duration": durée en secondes (entier entre 4 et 15).
-- "prompt": prompt VIDÉO en ANGLAIS pour un loop VJ, TRÈS DÉTAILLÉ et dense (Seedance 2.0
-  exploite un MAXIMUM de détails — ne sois PAS bref). Commence par "Seamless VJ loop, " puis
+- "prompt": prompt VIDÉO en {pl} pour un loop VJ, TRÈS DÉTAILLÉ et dense (Seedance 2.0
+  exploite un MAXIMUM de détails — ne sois PAS bref). Commence par {loop} puis
   décris précisément : sujet + action, décor/environnement, composition & cadrage, lumière
   (direction, qualité, température), palette de couleurs, textures & matières, mouvement
-  (ce qui bouge et comment), atmosphère/mood, style visuel, repères de qualité (cinematic,
-  ultra-detailed, sharp, 4K). STRUCTURE TEMPORELLE EN BEATS RELATIFS : décris l'évolution
-  dans l'ordre avec "opening:", "then", "building up", "in the final moment" — JAMAIS de
-  timecode absolu ("at 3 seconds") : le moteur ne respecte pas les horodatages ; les impacts
+  (ce qui bouge et comment), atmosphère/mood, style visuel, repères de qualité ({qual}).
+  STRUCTURE TEMPORELLE EN BEATS RELATIFS : décris l'évolution
+  dans l'ordre avec {beats} — JAMAIS de
+  timecode absolu ({absol}) : le moteur ne respecte pas les horodatages ; les impacts
   musicaux exacts sont gérés par les CUTS entre plans, pas à l'intérieur du clip.
   3 à 5 phrases riches. VISUEL UNIQUEMENT — INTERDIT d'y mettre
   le BPM, un tempo, des chiffres musicaux, des instruments ou tout terme audio.
-- "sound_prompt": prompt SOUND DESIGN en ANGLAIS (SFX / ambiance, AUCUNE voix ni parole).
+- "sound_prompt": prompt SOUND DESIGN en {pl} (SFX / ambiance, AUCUNE voix ni parole).
   C'est ICI — et seulement ici — que le BPM et les temps forts sont pris en compte.
 
 Réponds UNIQUEMENT avec un tableau JSON de plans (aucun texte autour).
@@ -69,7 +81,32 @@ _FACADE_FRAME_RULE = """\
   mais dès que son architecture se montre, elle est à sa place exacte.
 """
 
-_SYSTEM_MAPPING = """\
+def _decoupage_mapping_system(lang: str = "fr") -> str:
+    """Système du découpage Mapping. Comme le Live : "prompt"/"sound_prompt" dans la
+    LANGUE DE TRAVAIL (traduction anglaise à l'ENVOI aux moteurs). Amorces + exemples
+    d'état de façade + glose de confinement suivent la même langue."""
+    en    = (lang == "en")
+    pl    = "ANGLAIS" if en else "FRANÇAIS"
+    beats = ('"opening:", "then", "building up", "in the final moment"' if en
+             else "« ouverture : », « puis », « montée », « dans le dernier instant »")
+    absol = '"at 3 seconds"' if en else "« à 3 secondes »"
+    qual  = ("cinematic, ultra-detailed, sharp, 4K" if en
+             else "cinématographique, ultra-détaillé, net, 4K")
+    states = ('(ex: "the facade is fully covered by…", "the facade dissolves into '
+              'darkness while…", "only the window frames glow…", "the building '
+              'reappears, rebuilt out of…")' if en else
+              "(ex : « la façade est entièrement recouverte par… », « la façade se "
+              "dissout dans le noir tandis que… », « seuls les encadrements de "
+              "fenêtres s'illuminent… », « le bâtiment réapparaît, reconstruit en… »)")
+    zone   = ("(only architecture actually visible in the reference facade image) — "
+              "jamais d'élément supposé hors champ ; entries and exits happen through "
+              "the frame edges or through the facade's own visible elements (doors, "
+              "windows, edges)." if en else
+              "(uniquement l'architecture réellement visible sur la photo de référence "
+              "de la façade) — jamais d'élément supposé hors champ ; les entrées et "
+              "sorties se font par les bords du cadre ou par les éléments visibles de "
+              "la façade (portes, fenêtres, arêtes).")
+    return f"""\
 Tu es un concepteur de mapping vidéo (projection sur façade de bâtiment). À partir du
 CONDUCTEUR fourni, produis le DÉCOUPAGE d'une séquence de mapping projetée sur une
 façade VERROUILLÉE, organisée en ACTES (grandes sections), chaque acte regroupant
@@ -88,8 +125,7 @@ Contraintes IMPÉRATIVES :
   * RECOUVREMENT — le contenu projeté la remplace totalement : un autre monde plein cadre ;
   * JEU ARCHITECTURAL — seules certaines parties s'illuminent (fenêtres, corniches, colonnes).
 - Alterne ces modes d'un plan à l'autre pour créer des surprises et des respirations.
-""" + _FACADE_FRAME_RULE + """\
-
+{_FACADE_FRAME_RULE}
 Pour CHAQUE plan, donne un objet JSON avec :
 - "act": numéro de l'acte auquel ce plan appartient (entier, commence à 1).
 - "act_name": nom court de l'acte, en français (ex: "Apparition", "Transformation", "Apogée", "Final").
@@ -97,29 +133,30 @@ Pour CHAQUE plan, donne un objet JSON avec :
 - "shot_size": "" (non pertinent en mapping).
 - "camera_movement": "Fixe".
 - "duration": durée en secondes (entier entre 4 et 15).
-- "prompt": prompt VIDÉO en ANGLAIS décrivant l'évolution projetée (sans mouvement de
+- "prompt": prompt VIDÉO en {pl} décrivant l'évolution projetée (sans mouvement de
   caméra), TRÈS DÉTAILLÉ et dense (Seedance 2.0 exploite un MAXIMUM de détails — ne sois PAS
-  bref). COMMENCE par déclarer l'ÉTAT DE LA FAÇADE dans ce plan (ex: "the facade is fully
-  covered by…", "the facade dissolves into darkness while…", "only the window frames glow…",
-  "the building reappears, rebuilt out of…"). Puis décris précisément : l'effet/visuel
-  projeté, la lumière (direction, qualité, couleur), la palette, les textures & matières,
-  ce qui évolue et comment, l'atmosphère/mood, le style, et des repères de qualité
-  (cinematic, ultra-detailed, sharp, 4K). STRUCTURE TEMPORELLE EN BEATS RELATIFS :
-  décris l'évolution dans l'ordre avec "opening:", "then", "building up", "in the final
-  moment" — JAMAIS de timecode absolu ("at 3 seconds") : le moteur ne respecte pas les
-  horodatages ; les impacts musicaux exacts sont gérés par les CUTS entre plans.
+  bref). COMMENCE par déclarer l'ÉTAT DE LA FAÇADE dans ce plan {states}. Puis décris
+  précisément : l'effet/visuel projeté, la lumière (direction, qualité, couleur), la palette,
+  les textures & matières, ce qui évolue et comment, l'atmosphère/mood, le style, et des
+  repères de qualité ({qual}). STRUCTURE TEMPORELLE EN BEATS RELATIFS :
+  décris l'évolution dans l'ordre avec {beats} — JAMAIS de timecode absolu ({absol}) : le
+  moteur ne respecte pas les horodatages ; les impacts musicaux exacts sont gérés par les
+  CUTS entre plans.
   3 à 5 phrases riches. VISUEL UNIQUEMENT —
   INTERDIT d'y mettre le BPM, un tempo, des chiffres musicaux, des instruments ou tout
   terme audio. RESTE DANS LA ZONE : le prompt ne s'appuie QUE sur l'architecture
-  réellement VISIBLE sur la photo de référence de la façade (only architecture
-  actually visible in the reference facade image) — jamais d'élément supposé hors
-  champ ; entries and exits happen through the frame edges or through the facade's
-  own visible elements (doors, windows, edges).
-- "sound_prompt": prompt SOUND DESIGN en ANGLAIS (SFX / ambiance, AUCUNE voix ni parole).
+  réellement VISIBLE sur la photo de référence de la façade {zone}
+- "sound_prompt": prompt SOUND DESIGN en {pl} (SFX / ambiance, AUCUNE voix ni parole).
   C'est ICI — et seulement ici — que le BPM et les temps forts sont pris en compte.
 
 Réponds UNIQUEMENT avec un tableau JSON de plans (aucun texte autour).
 """
+
+
+# Constantes = version LANGUE DE TRAVAIL PAR DÉFAUT (fr). Le worker reconstruit selon
+# get_lang() à l'exécution ; ces constantes restent la référence (imports, tests).
+_SYSTEM_LIVE    = _decoupage_live_system("fr")
+_SYSTEM_MAPPING = _decoupage_mapping_system("fr")
 
 
 def _extract_json_array(text: str) -> list:
@@ -211,7 +248,13 @@ class GenerateDecoupageWorker(QThread):
             if err:
                 self.failed.emit(err)
                 return
-            system = _SYSTEM_MAPPING if self._mode == "mapping" else _SYSTEM_LIVE
+            # Découpage produit dans la LANGUE DE TRAVAIL (fr/en) — traduction anglaise
+            # faite à l'ENVOI aux moteurs (translate_to_english), pas ici, pour rester
+            # lisible et éditable dans le tableau Séquences.
+            from core.i18n import get_lang
+            _lang  = get_lang()
+            system = (_decoupage_mapping_system(_lang) if self._mode == "mapping"
+                      else _decoupage_live_system(_lang))
             # 16000 : un découpage dense (beaucoup de plans × prompts détaillés)
             # atteignait le plafond de 8000 → JSON tronqué
             out = complete(system, text, tier="creative", max_tokens=16000,

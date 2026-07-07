@@ -138,6 +138,13 @@ def prompts_decoupage_mapping():
     assert "ÉTAT DE LA FAÇADE" in t, "prompt commence par l'état de la façade"
     assert "sound_prompt" in t and "BPM" in t, "séparation vidéo/son"
     assert "TOTALEMENT FIXE" in t, "caméra fixe"
+    # Découpage produit dans la LANGUE DE TRAVAIL (français par défaut) — plus
+    # d'anglais figé : la traduction vers l'anglais est faite à l'ENVOI aux moteurs.
+    assert "prompt VIDÉO en FRANÇAIS" in t and "prompt VIDÉO en ANGLAIS" not in t, \
+        "PROMPT VIDÉO du découpage mapping en langue de travail (fr par défaut)"
+    assert "en ANGLAIS" not in t, "aucun champ figé en anglais dans le découpage mapping"
+    _lg = ls._decoupage_mapping_system("en")
+    assert "prompt VIDÉO en ANGLAIS" in _lg, "langue de travail EN → découpage en anglais"
 
 
 @test
@@ -165,6 +172,10 @@ def prompts_mise_en_page():
     assert "PROMPT SON" in src and "PROMPT VIDÉO" in src, "deux prompts par plan"
     assert "DURÉE CIBLE" in src, "durée cible injectée"
     assert "INTERDIT d'y mettre le BPM" in src, "BPM banni du prompt vidéo"
+    # La mise en page reste dans la LANGUE DE TRAVAIL (français par défaut) — plus
+    # d'anglais figé : la traduction vers l'anglais est faite à l'ENVOI aux moteurs.
+    assert "get_lang" in src, "langue de la mise en page = langue de travail (get_lang)"
+    assert "Seedance 2.0, anglais)" not in src, "PROMPT VIDÉO ne doit plus être figé en anglais"
 
 
 @test
@@ -401,7 +412,12 @@ def coecriture_et_finalisation_live():
         "replace_plan chirurgical Live"
     from ui.dialog_plan_coedit import PlanCoEditDialog
     from api.plan_coedit import _plan_coedit_system
-    assert "PLAN <n> —" in _plan_coedit_system("live", "mapping"), "format Live non calibré"
+    _syslive = _plan_coedit_system("live", "mapping")
+    assert "PLAN <n> —" in _syslive, "format Live non calibré"
+    # Co-écriture : le plan réécrit reste dans la LANGUE DE TRAVAIL (français par
+    # défaut), plus d'anglais forcé (la traduction est faite à l'envoi aux moteurs).
+    assert "reste en ANGLAIS" not in _syslive, "co-écriture Live : plus d'anglais forcé"
+    assert "Seedance 2.0, français)" in _syslive, "co-écriture Live en langue de travail (fr)"
     dlg = PlanCoEditDialog(None, live, edition="live", mode="live")
     assert not dlg.was_applied()
 
@@ -1002,6 +1018,9 @@ def prompts_beats_relatifs():
         tt = " ".join(t.split())   # neutralise les retours à la ligne
         assert "BEATS RELATIFS" in tt and "JAMAIS de timecode absolu" in tt, "beats relatifs"
         assert "CUTS" in tt, "les impacts musicaux vont sur les cuts"
+        # Découpage en LANGUE DE TRAVAIL (fr par défaut) : plus d'anglais figé.
+        assert "en FRANÇAIS" in tt and "en ANGLAIS" not in tt, \
+            "PROMPT VIDÉO/SON du découpage en langue de travail (fr par défaut)"
     src = " ".join(inspect.getsource(le.FormatConducteurWorker.run).split())
     assert "BEATS RELATIFS" in src and "JAMAIS de timecode absolu" in src
 
@@ -1550,8 +1569,8 @@ def confinement_facade():
         "pas de liste noire d'éléments (une vraie cheminée mappée doit rester possible)"
     assert _FACADE_FRAME_RULE in _SYSTEM_MAPPING, "découpage confiné"
     assert _FACADE_FRAME_RULE in _ARRANGE_MAPPING, "arrangement confiné"
-    assert "actually visible in the reference facade image" in _SYSTEM_MAPPING, \
-        "prompt vidéo anglais confiné par VISIBILITÉ"
+    assert "réellement VISIBLE sur la photo de référence" in _SYSTEM_MAPPING, \
+        "prompt vidéo confiné par VISIBILITÉ (glose en langue de travail)"
     assert "non visible" in _APPLY_ARRANGE_CONDUCTEUR, "application d'arrangement confinée"
     assert _FACADE_FRAME_RULE not in _SYSTEM_LIVE, "le mode Live reste libre"
     assert "transpose" in inspect.getsource(ArrangeChatConducteurWorker.run), \

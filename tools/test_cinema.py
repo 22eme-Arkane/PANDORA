@@ -2174,7 +2174,11 @@ def coecriture_des_plans_cinema():
         "replace_plan chirurgical (plan 2 + en-tête conservés, plan 0 remplacé)"
     from ui.dialog_plan_coedit import PlanCoEditDialog
     from api.plan_coedit import PlanCoEditWorker, _plan_coedit_system
-    assert "P<NN> |" in _plan_coedit_system("cinema"), "format Cinéma non calibré dans le prompt"
+    _syscine = _plan_coedit_system("cinema")
+    assert "P<NN> |" in _syscine, "format Cinéma non calibré dans le prompt"
+    # Le plan réécrit reste dans la LANGUE DE TRAVAIL (français par défaut) —
+    # la traduction vers l'anglais est faite à l'ENVOI aux moteurs.
+    assert "sensoriel, en français." in _syscine, "co-écriture Cinéma en langue de travail (fr)"
     dlg = PlanCoEditDialog(None, cine, edition="cinema")
     assert not dlg.was_applied() and dlg.result_layout() == cine
 

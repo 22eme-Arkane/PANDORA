@@ -22,13 +22,20 @@ _MARKER_PLAN = "══════════ PLAN ═════════�
 
 
 def _plan_coedit_system(edition: str, mode: str = "live") -> str:
+    # Le plan réécrit reste dans la LANGUE DE TRAVAIL (fr/en) : la traduction en
+    # anglais est faite au moment de l'ENVOI aux moteurs (translate_to_english) —
+    # on garde donc le plan lisible et éditable dans la langue de l'utilisateur.
+    from core.i18n import get_lang
+    _is_en = (get_lang() == "en")
+    _pl    = "anglais" if _is_en else "français"
+    _PL    = _pl.upper()
     if edition == "cinema":
         fmt = (
             "FORMAT DU PLAN RÉÉCRIT (respecte-le À L'IDENTIQUE) :\n"
             "P<NN> | Valeur de plan | Mouvement de caméra | Axe | ~Durée\n"
             "INT./EXT. LIEU PRÉCIS — MOMENT\n"
             "Description de l'action au présent, concrète et visuelle.\n"
-            "→ SEEDANCE: prompt vidéo court, descriptif, sensoriel, en français.\n\n"
+            f"→ SEEDANCE: prompt vidéo court, descriptif, sensoriel, en {_pl}.\n\n"
             "- Garde le MÊME numéro de plan (P<NN>) que l'original.\n"
             "- Valeurs de plan / mouvements / axes : reprends la nomenclature PANDORA.\n"
             "- Durée : notation ~Xs, maximum absolu ~15s."
@@ -41,11 +48,11 @@ def _plan_coedit_system(edition: str, mode: str = "live") -> str:
             "FORMAT DU PLAN RÉÉCRIT (respecte-le À L'IDENTIQUE) :\n"
             "PLAN <n> — Titre court en français\n"
             "Durée : <x>s · Valeur de plan : … · Mouvement : …\n"
-            "PROMPT VIDÉO (Seedance 2.0, anglais) : \"…\"\n"
-            "PROMPT SON (sound design / SFX, anglais) : \"…\"\n\n"
+            f"PROMPT VIDÉO (Seedance 2.0, {_pl}) : \"…\"\n"
+            f"PROMPT SON (sound design / SFX, {_pl}) : \"…\"\n\n"
             "- Garde le MÊME numéro de plan (PLAN <n>) que l'original.\n"
-            "- Le PROMPT VIDÉO reste en ANGLAIS, très détaillé (beats début/milieu/fin).\n"
-            "- Le PROMPT SON reste en ANGLAIS (SFX/ambiance uniquement, aucune voix).\n"
+            f"- Le PROMPT VIDÉO reste en {_PL}, très détaillé (beats début/milieu/fin).\n"
+            f"- Le PROMPT SON reste en {_PL} (SFX/ambiance uniquement, aucune voix).\n"
             "- Durée entière entre 4 et 15 secondes."
         )
     return (
