@@ -2842,40 +2842,41 @@ class TabT2V(QScrollArea):
         self._btn_open_folder.clicked.connect(self._open_output_folder)
         lay.addWidget(self._btn_open_folder)
 
-        # ── Encart prix (sous la barre DaVinci) ───────────────────────────────
+        # ── Encart ESTIMATION DE PRIX (rouge) — remplace l'ancien message tarifs ──
+        # Calcule un ordre de grandeur AVANT génération : nb de plans × durée × prix/s
+        # du moteur ET de la résolution choisis. Rappel : prix indicatif (voir fal.ai).
         price_frame = QFrame()
         price_frame.setStyleSheet(
-            f"QFrame{{background:rgba(245,197,24,0.05);"
-            f"border:1px solid rgba(245,197,24,0.18);border-radius:8px;}}"
+            f"QFrame{{background:rgba(255,79,106,0.06);"
+            f"border:1px solid rgba(255,79,106,0.28);border-radius:8px;}}"
         )
         price_h = QHBoxLayout(price_frame)
         price_h.setContentsMargins(14, 8, 14, 8)
         price_h.setSpacing(12)
-        price_lbl = QLabel(
-            "💰  Génération facturée via fal.ai (Seedance 2.0)"
-            "  ·  Tarifs détaillés dans le Manuel d'utilisation"
-        )
-        price_lbl.setWordWrap(True)
-        price_lbl.setStyleSheet(
-            f"color:{C['text_dim']};font-size:9px;"
+        self._price_lbl = QLabel("")
+        self._price_lbl.setWordWrap(True)
+        self._price_lbl.setStyleSheet(
+            f"color:{C.get('red', '#ff4f6a')};font-size:9px;font-weight:700;"
             f"font-family:'Consolas',monospace;background:transparent;"
         )
-        price_h.addWidget(price_lbl, 1)
-        btn_tarifs = QPushButton("📖  Tarifs")
-        btn_tarifs.setFixedSize(72, 24)
-        btn_tarifs.setCursor(Qt.CursorShape.PointingHandCursor)
-        btn_tarifs.setStyleSheet(
-            f"QPushButton{{background:transparent;color:{C['text_secondary']};"
-            f"border:1px solid {C['border_bright']};border-radius:5px;"
-            f"font-size:9px;font-weight:700;padding:0;}}"
-            f"QPushButton:hover{{background:rgba(245,197,24,0.12);"
-            f"color:#f5c518;border-color:rgba(245,197,24,0.50);}}"
-        )
-        btn_tarifs.clicked.connect(self._open_manual_tarifs)
-        # Héritage Cinéma retiré (validé) : ouvrait le manuel CINÉMA depuis le Live.
-        btn_tarifs.setVisible(False)
-        price_h.addWidget(btn_tarifs)
+        price_h.addWidget(self._price_lbl, 1)
         lay.addWidget(price_frame)
+        # Mise à jour vive : changement de moteur, de résolution ou de sélection de plans.
+        for _sig in (
+            getattr(self, "cb_model", None), getattr(self, "cb_res", None),
+            getattr(self, "cb_dur", None),
+        ):
+            try:
+                if _sig is not None:
+                    _sig.currentIndexChanged.connect(self._refresh_price_estimate)
+            except Exception:
+                pass
+        try:
+            self._storyboard.shots_selected.connect(lambda *_: self._refresh_price_estimate())
+            self._storyboard.shot_selected.connect(lambda *_: self._refresh_price_estimate())
+        except Exception:
+            pass
+        self._refresh_price_estimate()
 
         lay.addStretch()
 
@@ -3757,6 +3758,43 @@ class TabT2V(QScrollArea):
         )
         from PyQt6.QtCore import QTimer
         QTimer.singleShot(120, self.start_generation)
+
+    def _refresh_price_estimate(self, *args):
+        """Met à jour l'estimation de PRIX (rouge) : nb de plans sélectionnés × durée
+        × prix/s du moteur ET de la résolution. Repli 1 plan (durée courante) si aucune
+        sélection. Toujours indicatif — voir fal.ai."""
+        if not hasattr(self, "_price_lbl"):
+            return
+        try:
+            from core import pricing
+            sel = []
+            try:
+                sel = self._storyboard.get_selected_shots() or []
+            except Exception:
+                sel = []
+            if sel:
+                n = len(sel)
+                total = 0.0
+                for s in sel:
+                    try:
+                        total += float(s.get("duration") or 0) or 0.0
+                    except (TypeError, ValueError):
+                        pass
+                if total <= 0:
+                    total = n * 5.0
+            else:
+                n = 1
+                try:
+                    total = float(self._get_duration() or 5.0)
+                except Exception:
+                    total = 5.0
+            engine_key = self.cb_model.currentData() or self.cb_model.currentText()
+            engine_lbl = self.cb_model.currentText()
+            res = self.cb_res.currentData() or self.cb_res.currentText()
+            self._price_lbl.setText(
+                pricing.format_estimate(engine_lbl, engine_key, res, total, n))
+        except Exception:
+            pass
 
     def start_generation(self):
         if not self._is_batch_mode:

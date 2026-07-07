@@ -477,17 +477,37 @@ def reorg_colonnes_et_heritages():
     assert "INT." in _APPLY_ARRANGE_CONDUCTEUR, "interdiction INT./EXT. énoncée"
     w = ApplyArrangeConducteurWorker("a", "b", 5)
     assert hasattr(w, "chunk"), "streaming"
-    # Focale + Tarifs masqués dans Générer depuis Séquences
+    # Focale masquée ; l'ancien encart « Tarifs » est remplacé par une ESTIMATION
+    # de prix rouge (nb plans × durée × moteur × résolution), 2026-07-07.
     from ui.tab_t2v_live import TabT2V
     src_tv = inspect.getsource(TabT2V)
     assert "self._camera_picker.setVisible(False)" in src_tv
-    assert "btn_tarifs.setVisible(False)" in src_tv
+    assert "_refresh_price_estimate" in src_tv and "self._price_lbl" in src_tv, \
+        "estimation de prix (rouge) absente de « Générer depuis Séquences »"
     # Dialogue Éditer : Optique/Décor/Heure/Micro masqués
     import ui.dialog_shot_live as ds
     src_ds = inspect.getsource(ds)
     for marker in ("_hide_col(col_optic)", "_hide_col(col_decor)",
                    "_hide_col(col_time)", "_hide_col(col_mic)"):
         assert marker in src_ds, f"dialogue Live : {marker}"
+
+
+@test
+def estimation_prix_generation():
+    """core/pricing : estimation INDICATIVE = nb plans × durée × prix/s (moteur +
+    résolution) ; moteurs à durée fixe facturés au clip ; rappel « voir fal.ai »."""
+    from core import pricing
+    # Seedance 720p : $0.30/s → 10 plans × 5 s = 50 s = $15.
+    cost, mode = pricing.estimate("seedance-2.0", "720p", 50.0, 10)
+    assert abs(cost - 15.0) < 0.01 and mode == "s", f"720p ×50s = $15 attendu ({cost})"
+    # 4K bien plus cher.
+    assert pricing.estimate("seedance-2.0", "4k", 50.0, 10)[0] > 50, "4K > 1080p/720p"
+    # Veo : facturé au CLIP (durée non prise en compte).
+    c_veo, m_veo = pricing.estimate("veo-3.1", "1080p", 40.0, 5)
+    assert m_veo == "clip" and abs(c_veo - 5.0) < 0.01, "Veo 5 clips × $1 = $5"
+    # Le message contient le montant + le rappel fal.ai.
+    msg = pricing.format_estimate("Seedance 2.0", "seedance-2.0", "720p", 50.0, 10)
+    assert "$15.00" in msg and "10 plans" in msg and "fal.ai" in msg, msg
 
 
 @test
