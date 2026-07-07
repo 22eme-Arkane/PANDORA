@@ -164,21 +164,21 @@ class PlanCoEditWorker(QThread):
 
             # Message courant — multimodal si images (façade réelle + inspirations)
             if _imgs:
-                import base64
-                _MT = {"jpg": "image/jpeg", "jpeg": "image/jpeg", "png": "image/png",
-                       "webp": "image/webp", "gif": "image/gif", "bmp": "image/bmp"}
+                from core.image_payload import encode_image_for_vision
                 cur: list = []
                 for path in _imgs:
+                    # Redimensionne/compresse : une photo de façade pleine résolution
+                    # dépasse la limite 10 Mo de Claude (erreur 400). ≤1568 px JPEG →
+                    # toujours largement sous la limite.
+                    if not (path and _os.path.isfile(path)):
+                        continue
                     try:
-                        with open(path, "rb") as fh:
-                            data = base64.b64encode(fh.read()).decode()
-                        ext = _os.path.splitext(path)[1].lower().lstrip(".")
-                        cur.append({"type": "image",
-                                    "source": {"type": "base64",
-                                               "media_type": _MT.get(ext, "image/jpeg"),
-                                               "data": data}})
+                        mime, data = encode_image_for_vision(path)
                     except Exception:
-                        pass
+                        continue
+                    cur.append({"type": "image",
+                                "source": {"type": "base64",
+                                           "media_type": mime, "data": data}})
                 _note = ""
                 if _facade_ok:
                     _note = ("[IMAGE 1 = FAÇADE RÉELLE du bâtiment, à RESPECTER strictement "

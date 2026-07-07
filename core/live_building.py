@@ -76,14 +76,12 @@ def describe_facade(image_path: str = "", *, cache: bool = True) -> str:
     if not key:
         return ""
     try:
-        import base64
         import anthropic as _anthropic
         from core.i18n import get_lang
-        _ext  = os.path.splitext(path)[1].lower()
-        _mime = {".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".png": "image/png",
-                 ".webp": "image/webp", ".bmp": "image/bmp"}.get(_ext, "image/jpeg")
-        with open(path, "rb") as f:
-            b64 = base64.standard_b64encode(f.read()).decode("utf-8")
+        from core.image_payload import encode_image_for_vision
+        # Redimensionne/compresse : une photo de façade pleine résolution dépasse la
+        # limite 10 Mo de Claude → ≤1568 px JPEG, largement sous la limite.
+        _mime, b64 = encode_image_for_vision(path)
         if get_lang() == "en":
             q = ("This is the FACADE of a real building used for projection mapping. "
                  "Describe ONLY what is actually visible on this frontal photo, factually "

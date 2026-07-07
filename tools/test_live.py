@@ -322,6 +322,18 @@ def facade_injectee_workers_texte_mapping():
         "découpage : façade non injectée"
     assert "FAÇADE RÉELLE" in inspect.getsource(PlanCoEditWorker.run), \
         "co-écriture : façade non jointe à l'assistant"
+    # ── Images redimensionnées avant Claude (sinon erreur 400 « exceeds 10 MB ») ──
+    from core.image_payload import encode_image_for_vision
+    from PIL import Image as _PILImage
+    _big = os.path.join(_TMP, "_grosse_facade.png")
+    _PILImage.new("RGB", (5000, 3500), (60, 60, 60)).save(_big)
+    _mt, _b64 = encode_image_for_vision(_big)
+    assert len(_b64.encode()) < 4_000_000, "image vision non redimensionnée sous la limite Claude"
+    # La façade et les refs passent par le redimensionnement (pas d'envoi brut).
+    assert "encode_image_for_vision" in inspect.getsource(PlanCoEditWorker.run), \
+        "co-écriture : image façade/réf envoyée sans redimensionnement (risque erreur 400 > 10 MB)"
+    assert "encode_image_for_vision" in inspect.getsource(lb.describe_facade), \
+        "describe_facade : façade envoyée sans redimensionnement"
     # Page live : façade passée UNIQUEMENT aux 2 workers, gate mapping.
     _psrc = inspect.getsource(__import__("ui.page_scenario_live", fromlist=["_"]))
     assert "_facade_for_mapping" in _psrc and \

@@ -53,18 +53,10 @@ def _analyze_style_ref(image_path: str, anthropic_key: str) -> str:
     Returns "" on any error.
     """
     try:
-        import base64
         import anthropic as _anthropic
+        from core.image_payload import encode_image_for_vision
 
-        _ext = os.path.splitext(image_path)[1].lower()
-        _mime_map = {
-            ".jpg": "image/jpeg", ".jpeg": "image/jpeg",
-            ".png": "image/png",  ".webp": "image/webp",
-        }
-        _media_type = _mime_map.get(_ext, "image/jpeg")
-
-        with open(image_path, "rb") as _f:
-            _img_b64 = base64.standard_b64encode(_f.read()).decode("utf-8")
+        _media_type, _img_b64 = encode_image_for_vision(image_path)
 
         _client = _anthropic.Anthropic(api_key=anthropic_key)
         _msg = _client.messages.create(
@@ -110,17 +102,10 @@ def _analyze_draw_guidance(image_path: str, user_instruction: str, anthropic_key
     envoyés au modèle vidéo → ils n'apparaissent pas). Retourne "" en cas d'erreur.
     """
     try:
-        import base64
         import anthropic as _anthropic
+        from core.image_payload import encode_image_for_vision
 
-        _ext = os.path.splitext(image_path)[1].lower()
-        _mime_map = {
-            ".jpg": "image/jpeg", ".jpeg": "image/jpeg",
-            ".png": "image/png",  ".webp": "image/webp",
-        }
-        _media_type = _mime_map.get(_ext, "image/png")
-        with open(image_path, "rb") as _f:
-            _img_b64 = base64.standard_b64encode(_f.read()).decode("utf-8")
+        _media_type, _img_b64 = encode_image_for_vision(image_path)
 
         _client = _anthropic.Anthropic(api_key=anthropic_key)
         _msg = _client.messages.create(
@@ -171,25 +156,20 @@ def _analyze_reference_refs(paths: list, anthropic_key: str) -> str:
     le prompt est enrichi, les images de départ/fin ne sont jamais altérées.
     Retourne "" en cas d'erreur (jamais bloquant)."""
     try:
-        import base64
         import anthropic as _anthropic
+        from core.image_payload import encode_image_for_vision
 
-        _mime_map = {
-            ".jpg": "image/jpeg", ".jpeg": "image/jpeg",
-            ".png": "image/png",  ".webp": "image/webp",
-        }
         _content = []
         for _p in list(paths)[:3]:
             if not (_p and os.path.isfile(_p)):
                 continue
-            _ext = os.path.splitext(_p)[1].lower()
-            with open(_p, "rb") as _f:
-                _b64 = base64.standard_b64encode(_f.read()).decode("utf-8")
+            try:
+                _mt, _b64 = encode_image_for_vision(_p)   # redimensionne sous la limite
+            except Exception:
+                continue
             _content.append({
                 "type": "image",
-                "source": {"type": "base64",
-                           "media_type": _mime_map.get(_ext, "image/jpeg"),
-                           "data": _b64},
+                "source": {"type": "base64", "media_type": _mt, "data": _b64},
             })
         if not _content:
             return ""
