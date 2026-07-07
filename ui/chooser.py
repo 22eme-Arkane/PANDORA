@@ -10,7 +10,7 @@ from PyQt6.QtWidgets import (
 from PyQt6.QtCore import Qt, pyqtSignal, QSize
 from PyQt6.QtGui import QColor, QIcon, QPixmap
 from ui.styles import CP, PANDORA_STYLESHEET
-from ui.icons import badge_pixmap, load_icon
+from ui.icons import badge_pixmap, load_icon, app_icon
 from core.i18n import get_lang, set_lang
 
 _ASSETS = (os.path.join(sys._MEIPASS, "assets") if getattr(sys, "frozen", False)
@@ -163,7 +163,10 @@ class ChooserWindow(QWidget):
         ll.setSpacing(4)
         ll.setAlignment(Qt.AlignmentFlag.AlignCenter)
 
-        pix_badge = badge_pixmap(52)
+        # Logo PANDORA officiel (app_icon = pandora_badge.ico) — le MÊME que le splash,
+        # la fenêtre principale et l'icône Windows (le chooser utilisait encore l'ancien
+        # badge « P » brut de pandora_badge.png).
+        pix_badge = app_icon().pixmap(52, 52)
         badge_lbl = QLabel()
         badge_lbl.setFixedSize(52, 52)
         badge_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
