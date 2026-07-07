@@ -7,7 +7,9 @@ calibre le Live (live / mapping).
 
 Boucle : on choisit un plan (colonne gauche) → on dialogue avec l'assistant
 (colonne droite, images de référence facultatives) → l'aperçu du plan se met à
-jour → « Appliquer ce plan » le réinjecte dans la mise en page (chirurgical).
+jour. « Appliquer les modifications » réinjecte EN UNE FOIS tous les plans
+édités / réordonnés / ajoutés / supprimés dans la « Mise en page PANDORA », puis
+ferme la fenêtre. « Fermer » abandonne les changements (avec confirmation).
 """
 from PyQt6.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, QTextEdit,
@@ -38,8 +40,10 @@ class _PlanListWidget(QListWidget):
 class PlanCoEditDialog(QDialog):
     """Co-écriture plan par plan de la mise en page PANDORA.
 
-    Après ``exec()`` : ``was_applied()`` dit si au moins un plan a été appliqué,
-    ``result_layout()`` retourne la mise en page mise à jour à réécrire dans
+    Après ``exec()`` : ``was_applied()`` n'est vrai QUE si l'utilisateur a cliqué
+    « Appliquer les modifications » (ou confirmé « Appliquer et fermer ») —
+    les édits/réordos/ajouts vivent dans l'état de la fenêtre jusque-là.
+    ``result_layout()`` retourne la mise en page complète à réécrire dans
     l'onglet « Mise en page PANDORA ».
     """
 
@@ -49,6 +53,7 @@ class PlanCoEditDialog(QDialog):
         self._edition = "cinema" if edition == "cinema" else "live"
         self._mode    = mode if mode in ("live", "mapping") else "live"
         self._layout  = layout_text or ""
+        self._orig_layout = self._layout      # référence pour détecter les changements
         self._plans   = pl.split_plans(self._layout)
         self._cur     = 0
         self._applied = False
@@ -103,8 +108,8 @@ class PlanCoEditDialog(QDialog):
         root.addLayout(hdr)
 
         sub = QLabel(translate(
-            "Choisis un plan, dialogue avec l'assistant pour le réécrire et l'enrichir, "
-            "puis applique-le. Le reste de la mise en page reste intact."))
+            "Réécris chaque plan avec l'assistant, réordonne-les, ajoute ou supprime — "
+            "puis « Appliquer les modifications » écrit tout dans la mise en page en une fois."))
         sub.setWordWrap(True)
         sub.setStyleSheet(f"color:{CP['text_dim']};font-size:10px;background:transparent;")
         root.addWidget(sub)
@@ -234,9 +239,9 @@ class PlanCoEditDialog(QDialog):
             f"border:1px solid {CP['border']};border-radius:7px;font-size:11px;"
             f"font-weight:600;padding:0 22px;}}"
             f"QPushButton:hover{{background:{CP['bg4']};color:{CP['text_primary']};}}")
-        btn_close.clicked.connect(self.accept)
+        btn_close.clicked.connect(self._on_close_requested)
 
-        self._btn_apply = QPushButton(translate("✓  Appliquer ce plan"))
+        self._btn_apply = QPushButton(translate("✓  Appliquer les modifications"))
         self._btn_apply.setFixedHeight(36)
         self._btn_apply.setCursor(Qt.CursorShape.PointingHandCursor)
         self._btn_apply.setStyleSheet(
@@ -244,7 +249,7 @@ class PlanCoEditDialog(QDialog):
             f"border-radius:7px;font-size:11px;font-weight:800;padding:0 22px;}}"
             f"QPushButton:hover{{background:{CP['accent_dim']};color:#fff;}}"
             f"QPushButton:disabled{{background:{CP['bg3']};color:{CP['text_dim']};}}")
-        self._btn_apply.clicked.connect(self._on_apply_plan)
+        self._btn_apply.clicked.connect(self._on_apply_all)
 
         bottom.addWidget(btn_close)
         bottom.addStretch()
@@ -277,9 +282,26 @@ class PlanCoEditDialog(QDialog):
     def _on_row_changed(self, row: int):
         if row < 0 or row >= len(self._plans) or row == self._cur:
             return
+        # Sauve l'édition manuelle du plan qu'on QUITTE dans la mise en page (état de
+        # travail) — pour qu'« Appliquer les modifications » n'oublie AUCUN plan.
+        self._commit_current_preview()
         self._cur = row
         self._set_preview(self._plans[row]["text"])
         self._render_chat()
+
+    def _commit_current_preview(self):
+        """Réinjecte l'aperçu courant (édits manuels / proposition de l'assistant) dans
+        la mise en page de travail, SANS changer la structure ni fermer. No-op si rien
+        n'a été édité (préserve les glisser-déposer sans risque)."""
+        if not self._plans or not (0 <= self._cur < len(self._plans)):
+            return
+        txt = self._plan_preview.toPlainText().strip()
+        if not txt or txt == self._plans[self._cur]["text"].strip():
+            return
+        new_layout = pl.replace_plan(self._layout, self._cur, txt)
+        if new_layout != self._layout:
+            self._layout = new_layout
+            self._plans = pl.split_plans(self._layout)
 
     def _set_preview(self, text: str):
         """Écrit l'aperçu du plan avec une RESPIRATION entre les paragraphes (comme la
@@ -294,13 +316,13 @@ class PlanCoEditDialog(QDialog):
 
     # ── Réordonner (glisser-déposer) / menu clic droit (ajout/dup/suppr) ──────
     def _structural_change(self, new_layout: str, select_index: int):
-        """Applique un changement STRUCTUREL (ordre / ajout / dup / suppression) : met à
-        jour la mise en page, re-parse, marque « appliqué » et sélectionne le plan voulu.
-        Le chat par plan est réinitialisé (les index changent)."""
+        """Applique un changement STRUCTUREL (ordre / ajout / dup / suppression) à l'état
+        de TRAVAIL : met à jour la mise en page, re-parse et sélectionne le plan voulu.
+        Ne marque PAS « appliqué » — seul « Appliquer les modifications » valide et écrit
+        dans la « Mise en page PANDORA ». Le chat par plan est réinitialisé (index changés)."""
         self._layout = new_layout
         self._plans = pl.split_plans(self._layout)
         self._histories.clear()
-        self._applied = True
         if not self._plans:
             self._plan_list.clear()
             self._set_preview("")
@@ -317,6 +339,7 @@ class PlanCoEditDialog(QDialog):
     def _on_plans_reordered(self):
         """Après un glisser-déposer : recompose la mise en page selon le nouvel ordre
         visuel (index d'origine stockés en UserRole), renumérote, resélectionne."""
+        self._commit_current_preview()   # ne pas perdre l'édition en cours
         order = []
         for i in range(self._plan_list.count()):
             d = self._plan_list.item(i).data(Qt.ItemDataRole.UserRole)
@@ -427,7 +450,8 @@ class PlanCoEditDialog(QDialog):
         self._set_busy(False)
         self._set_preview(plan.strip())
         self._status.setText(translate(
-            "Proposition prête — relis, ajuste, puis « Appliquer ce plan »."))
+            "Proposition prête — relis, ajuste, passe à un autre plan si besoin, "
+            "puis « Appliquer les modifications »."))
 
     def _on_failed(self, err: str):
         self._set_busy(False)
@@ -438,19 +462,51 @@ class PlanCoEditDialog(QDialog):
         self._input.setEnabled(not busy)
         self._status.setText(translate("Rédaction en cours…") if busy else "")
 
-    # ── Application chirurgicale ─────────────────────────────────────────────
-    def _on_apply_plan(self):
-        if not self._plans:
-            return
-        new_text = self._plan_preview.toPlainText().strip()
-        if not new_text:
-            return
-        self._layout = pl.replace_plan(self._layout, self._cur, new_text)
-        self._plans = pl.split_plans(self._layout)
+    # ── Application globale ──────────────────────────────────────────────────
+    def _on_apply_all(self):
+        """Applique TOUTES les modifications (édits de chaque plan + réordos + ajouts +
+        suppressions) à la « Mise en page PANDORA » en une fois, puis ferme."""
+        self._commit_current_preview()   # n'oublie pas l'édition du plan affiché
         self._applied = True
-        idx = min(self._cur, len(self._plans) - 1) if self._plans else 0
-        self._select_plan(idx)
-        self._status.setText(translate("Plan appliqué à la mise en page ✓"))
+        self.accept()
+
+    def _has_pending(self) -> bool:
+        """Y a-t-il des modifications non encore validées ? (structure/ordre changés,
+        ou édition manuelle en cours dans l'aperçu)."""
+        if self._layout != self._orig_layout:
+            return True
+        if self._plans and 0 <= self._cur < len(self._plans):
+            cur = self._plan_preview.toPlainText().strip()
+            if cur and cur != self._plans[self._cur]["text"].strip():
+                return True
+        return False
+
+    def _on_close_requested(self):
+        """« Fermer » : si des modifications sont en attente, propose de les appliquer
+        avant de fermer (garde-fou anti-perte). Sinon, ferme sans rien écrire."""
+        if not self._has_pending():
+            self.reject()
+            return
+        from PyQt6.QtWidgets import QMessageBox
+        box = QMessageBox(self)
+        box.setWindowTitle(translate("Modifications non appliquées"))
+        box.setText(translate(
+            "Des modifications n'ont pas été appliquées à la mise en page. Que veux-tu faire ?"))
+        b_apply   = box.addButton(translate("Appliquer et fermer"),
+                                   QMessageBox.ButtonRole.AcceptRole)
+        box.addButton(translate("Fermer sans appliquer"),
+                      QMessageBox.ButtonRole.DestructiveRole)
+        b_cancel  = box.addButton(translate("Annuler"),
+                                   QMessageBox.ButtonRole.RejectRole)
+        box.setDefaultButton(b_apply)
+        box.exec()
+        clicked = box.clickedButton()
+        if clicked is b_apply:
+            self._on_apply_all()
+        elif clicked is b_cancel:
+            return   # reste ouvert
+        else:
+            self.reject()   # « Fermer sans appliquer » → abandon
 
     # ── Images de référence ──────────────────────────────────────────────────
     def _on_add_refs(self):

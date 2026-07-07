@@ -2199,8 +2199,40 @@ def coecriture_des_plans_cinema():
     assert pl.plan_count(_add) == 3 and "P02 | Plan moyen" in _add, "add gabarit Cinéma + renum"
     assert pl.plan_count(pl.duplicate_plan(cine, 0)) == 3, "dup Cinéma"
     assert pl.plan_count(pl.delete_plan(cine, 0)) == 1, "delete Cinéma"
-    for _m in ("_on_plans_reordered", "_plan_context_menu", "_duplicate_plan", "_delete_plan_at", "_add_plan"):
+    for _m in ("_on_plans_reordered", "_plan_context_menu", "_duplicate_plan", "_delete_plan_at",
+               "_add_plan", "_on_apply_all", "_commit_current_preview", "_has_pending"):
         assert hasattr(dlg, _m), f"handler {_m} absent du dialogue co-écriture Cinéma"
+    # « Appliquer les modifications » : applique TOUT (édits + réordos + ajouts) en une
+    # fois ; le structurel reste en état de TRAVAIL jusqu'au clic (2026-07-07).
+    assert "Appliquer les modifications" in dlg._btn_apply.text(), "bouton non renommé (Cinéma)"
+    dlg._duplicate_plan(0)
+    assert not dlg.was_applied() and dlg._has_pending(), "Cinéma : structurel = travail, pas encore appliqué"
+    dlg._on_apply_all()
+    assert dlg.was_applied() and pl.plan_count(dlg.result_layout()) == 3, \
+        "Cinéma : « Appliquer les modifications » valide + renumérote"
+
+
+@test
+def refs_inspiration_completent_le_prompt_sans_alterer_keyframes():
+    """Images de RÉFÉRENCE ajoutées + mode i2v (keyframes verrouillées, ex. mapping) :
+    l'endpoint image-to-video n'accepte pas d'images de référence en plus, et on ne
+    doit JAMAIS altérer l'image de départ/fin. real.py décrit alors l'inspiration en
+    TEXTE (Claude Vision) et l'AJOUTE au prompt — jamais aux keyframes (2026-07-07)."""
+    import inspect
+    import api.real as _real
+    # Helper vision offline-safe : pas de clé / mauvais chemins → "" (jamais bloquant).
+    assert _real._analyze_reference_refs([], "") == "", "vision refs : vide sûr sans image"
+    assert _real._analyze_reference_refs(["/pas/un/fichier.png"], "") == "", "vision refs : chemin invalide sûr"
+    _src = inspect.getsource(_real.run_real)
+    # En i2v, les refs rôle « reference » sont analysées puis AJOUTÉES au prompt…
+    assert 'r == "reference"' in _src and "_analyze_reference_refs(" in _src, \
+        "i2v : refs d'inspiration non branchées sur le prompt"
+    # …avec la consigne explicite de ne pas toucher aux images de départ/fin.
+    assert "do NOT alter the first or last frame" in _src, \
+        "i2v : consigne de préservation des keyframes absente"
+    # Les keyframes partent bien par image_url (départ) / end_image_url (fin).
+    assert 'args["image_url"]' in _src and 'args["end_image_url"]' in _src, \
+        "keyframes départ/fin non transmises comme images verrouillées"
 
 
 @test

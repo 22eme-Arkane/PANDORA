@@ -447,12 +447,21 @@ def coecriture_et_finalisation_live():
     assert pl.plan_count(pl.delete_plan(L3, 1)) == 2 and "PLAN 2 — C" in pl.delete_plan(L3, 1), "delete + renum"
     assert pl.plan_count(pl.add_plan(L3, 0, "live")) == 4 and "PLAN 2 — Nouveau plan" in pl.add_plan(L3, 0, "live"), "add + renum"
     dlg2 = PlanCoEditDialog(None, L3, edition="live", mode="live")
-    for _m in ("_on_plans_reordered", "_plan_context_menu", "_duplicate_plan", "_delete_plan_at", "_add_plan"):
+    for _m in ("_on_plans_reordered", "_plan_context_menu", "_duplicate_plan", "_delete_plan_at",
+               "_add_plan", "_on_apply_all", "_commit_current_preview", "_has_pending"):
         assert hasattr(dlg2, _m), f"handler {_m} absent du dialogue co-écriture"
     from PyQt6.QtWidgets import QAbstractItemView
     assert dlg2._plan_list.dragDropMode() == QAbstractItemView.DragDropMode.InternalMove, "glisser-déposer non activé"
+    # Bouton renommé « Appliquer les modifications » (applique TOUT en une fois, 2026-07-07).
+    assert "Appliquer les modifications" in dlg2._btn_apply.text(), "bouton non renommé"
     dlg2._duplicate_plan(0)
-    assert dlg2.was_applied() and pl.plan_count(dlg2.result_layout()) == 4, "dialogue : dup applique + renumérote"
+    # Les changements STRUCTURELS vivent dans l'état de TRAVAIL ; « appliqué » reste FAUX
+    # tant qu'« Appliquer les modifications » n'a pas été validé.
+    assert not dlg2.was_applied() and dlg2._has_pending(), "structurel = travail, pas encore appliqué"
+    assert pl.plan_count(dlg2.result_layout()) == 4, "dup reflétée dans l'état de travail + renum"
+    dlg2._on_apply_all()
+    assert dlg2.was_applied() and pl.plan_count(dlg2.result_layout()) == 4, \
+        "« Appliquer les modifications » valide tous les plans"
 
 
 @test

@@ -159,6 +159,61 @@ def _analyze_draw_guidance(image_path: str, user_instruction: str, anthropic_key
         return ""
 
 
+def _analyze_reference_refs(paths: list, anthropic_key: str) -> str:
+    """Claude Haiku Vision : décrit en TEXTE l'INSPIRATION d'images de référence
+    ajoutées à un plan (ambiance, palette, lumière, composition, matières), en une
+    courte phrase anglaise à AJOUTER au prompt.
+
+    Sert au mode i2v (raccord / mapping à keyframes) : les images de DÉPART et de
+    FIN y sont VERROUILLÉES (image_url / end_image_url) et l'endpoint image-to-video
+    n'accepte pas d'images de référence supplémentaires. Plutôt que de les ignorer
+    (ancien comportement) ou d'écraser les keyframes, on décrit leur ESPRIT en mots :
+    le prompt est enrichi, les images de départ/fin ne sont jamais altérées.
+    Retourne "" en cas d'erreur (jamais bloquant)."""
+    try:
+        import base64
+        import anthropic as _anthropic
+
+        _mime_map = {
+            ".jpg": "image/jpeg", ".jpeg": "image/jpeg",
+            ".png": "image/png",  ".webp": "image/webp",
+        }
+        _content = []
+        for _p in list(paths)[:3]:
+            if not (_p and os.path.isfile(_p)):
+                continue
+            _ext = os.path.splitext(_p)[1].lower()
+            with open(_p, "rb") as _f:
+                _b64 = base64.standard_b64encode(_f.read()).decode("utf-8")
+            _content.append({
+                "type": "image",
+                "source": {"type": "base64",
+                           "media_type": _mime_map.get(_ext, "image/jpeg"),
+                           "data": _b64},
+            })
+        if not _content:
+            return ""
+        _content.append({
+            "type": "text",
+            "text": (
+                "These are visual INSPIRATION references for a video shot. In 12-20 "
+                "English words, capture ONLY their shared mood, atmosphere, color "
+                "palette, lighting and compositional feel — as a prompt suffix. Do NOT "
+                "describe specific objects to copy or reproduce. Output ONLY the "
+                "keywords, comma-separated, no ending punctuation, no explanation."
+            ),
+        })
+        _client = _anthropic.Anthropic(api_key=anthropic_key)
+        _msg = _client.messages.create(
+            model="claude-haiku-4-5",
+            max_tokens=90,
+            messages=[{"role": "user", "content": _content}],
+        )
+        return _msg.content[0].text.strip().rstrip(".")
+    except Exception:
+        return ""
+
+
 def run_real(params: dict, emit_progress, is_cancelled) -> dict:
     import fal_client
 
@@ -375,6 +430,22 @@ def run_real(params: dict, emit_progress, is_cancelled) -> dict:
                     args["end_image_url"] = _fal_upload(fal_client,end_path)
                 except Exception:
                     pass
+            # Images de RÉFÉRENCE (inspiration) ajoutées au plan : en i2v, les images de
+            # DÉPART et de FIN sont VERROUILLÉES (keyframes) — l'endpoint n'accepte pas
+            # d'images de référence en plus, et on ne veut SURTOUT PAS les altérer. On
+            # décrit donc l'inspiration en TEXTE (Claude Vision) et on l'AJOUTE au prompt :
+            # le prompt est complété, les keyframes restent intactes. (En mode « ref »,
+            # sans keyframes, ces images partent normalement comme références visuelles.)
+            _ref_inspo = [p for p, r in zip(ref_images, ref_roles) if r == "reference"]
+            if _ref_inspo and _anthropic_key:
+                emit_progress(11, "Analyse des références (inspiration)…")
+                _inspo_txt = _analyze_reference_refs(_ref_inspo, _anthropic_key)
+                if _inspo_txt:
+                    args["prompt"] = (
+                        args["prompt"].rstrip(" .")
+                        + ". Additional inspiration (mood, atmosphere, palette and "
+                        "composition only — do NOT alter the first or last frame): "
+                        + _inspo_txt)
 
     elif mode == "ref":
         _ref_images_attempted = len(ref_images)

@@ -818,12 +818,19 @@ _FR_TO_EN: dict[str, str] = {
     "{n} plan(s)":                              "{n} shot(s)",
     "☁  Envoyer à l'assistant":                 "☁  Send to the assistant",
     "Rédaction en cours…":                      "Writing…",
-    "Proposition prête — relis, ajuste, puis « Appliquer ce plan ».":
-        "Proposal ready — review, adjust, then “Apply this shot”.",
+    "Proposition prête — relis, ajuste, passe à un autre plan si besoin, puis « Appliquer les modifications ».":
+        "Proposal ready — review, adjust, move to another shot if needed, then “Apply changes”.",
     "Plan appliqué à la mise en page ✓":        "Shot applied to the layout ✓",
     "Ajouter des images d'inspiration (bibliothèque ou fichier, max 4)":
         "Add inspiration images (library or file, max 4)",
-    "✓  Appliquer ce plan":                     "✓  Apply this shot",
+    "✓  Appliquer les modifications":           "✓  Apply changes",
+    "Réécris chaque plan avec l'assistant, réordonne-les, ajoute ou supprime — puis « Appliquer les modifications » écrit tout dans la mise en page en une fois.":
+        "Rewrite each shot with the assistant, reorder them, add or delete — then “Apply changes” writes everything into the layout at once.",
+    "Modifications non appliquées":             "Unapplied changes",
+    "Des modifications n'ont pas été appliquées à la mise en page. Que veux-tu faire ?":
+        "Some changes have not been applied to the layout. What do you want to do?",
+    "Appliquer et fermer":                      "Apply and close",
+    "Fermer sans appliquer":                    "Close without applying",
     "Supprimer ce plan":                        "Delete this shot",
     "Dupliquer ce plan":                        "Duplicate this shot",
     "＋  Ajouter un plan":                       "＋  Add a shot",
