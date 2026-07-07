@@ -284,6 +284,51 @@ def facade_resolution_par_namespace():
         sb.set_namespace("storyboard")
 
 
+@test
+def facade_injectee_workers_texte_mapping():
+    """Mapping : la FAÇADE RÉELLE est décrite (Vision) et injectée dans les prompts
+    système des workers TEXTE (mise en page / découpage / co-écriture) pour que l'IA
+    respecte le bâtiment au lieu d'inventer fenêtres/portes (2026-07-07)."""
+    import inspect
+    import core.live_building as lb
+    b_fr = lb.facade_context_block("MA_DESC", "fr")
+    b_en = lb.facade_context_block("MA_DESC", "en")
+    assert "MA_DESC" in b_fr and "N'INVENTE" in b_fr.upper(), "bloc FR : consigne stricte absente"
+    assert "MA_DESC" in b_en and "do not invent" in b_en.lower(), "bloc EN : consigne stricte absente"
+    assert lb.facade_context_block("", "fr") == "", "bloc vide si desc vide"
+    # describe_facade : sans clé Anthropic → "" (AUCUN appel réseau) ; sans fichier → ""
+    import core.config as _cfg
+    _orig = _cfg.load_config
+    _cfg.load_config = lambda: {"anthropic_key": ""}
+    try:
+        from PIL import Image
+        _img = os.path.join(_TMP, "_facade_desc.jpg")
+        Image.new("RGB", (40, 24), (70, 70, 70)).save(_img)
+        assert lb.describe_facade(_img) == "", "describe_facade sans clé doit renvoyer '' (aucun réseau)"
+        assert lb.describe_facade("/pas/un/fichier.png") == "", "describe_facade sans fichier → ''"
+    finally:
+        _cfg.load_config = _orig
+    # Signatures rétro-compat : facade_path="" ajouté EN DERNIER (aucun appelant cassé).
+    from api.live_extract import FormatConducteurWorker
+    from api.live_screenplay import GenerateDecoupageWorker
+    from api.plan_coedit import PlanCoEditWorker
+    for _c in (FormatConducteurWorker, GenerateDecoupageWorker, PlanCoEditWorker):
+        _p = inspect.signature(_c.__init__).parameters
+        assert "facade_path" in _p and _p["facade_path"].default == "", \
+            f"{_c.__name__} : facade_path manquant ou défaut ≠ ''"
+    assert "facade_context_block" in inspect.getsource(FormatConducteurWorker.run), \
+        "mise en page : façade non injectée"
+    assert "facade_context_block" in inspect.getsource(GenerateDecoupageWorker.run), \
+        "découpage : façade non injectée"
+    assert "FAÇADE RÉELLE" in inspect.getsource(PlanCoEditWorker.run), \
+        "co-écriture : façade non jointe à l'assistant"
+    # Page live : façade passée UNIQUEMENT aux 2 workers, gate mapping.
+    _psrc = inspect.getsource(__import__("ui.page_scenario_live", fromlist=["_"]))
+    assert "_facade_for_mapping" in _psrc and \
+        _psrc.count("facade_path=self._facade_for_mapping()") == 2, \
+        "page live : façade non passée aux workers (mise en page + découpage)"
+
+
 # ══════════════════════════════════════════════════════════════════════════════
 # Tableau Séquences (colonnes, masquage Mapping, conducteur)
 # ══════════════════════════════════════════════════════════════════════════════

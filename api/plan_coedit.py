@@ -117,6 +117,7 @@ class PlanCoEditWorker(QThread):
         edition: str = "cinema",
         mode: str = "live",
         ref_images: list | None = None,
+        facade_path: str = "",
     ):
         super().__init__()
         self._layout  = layout_text or ""
@@ -127,6 +128,7 @@ class PlanCoEditWorker(QThread):
         self._edition = "cinema" if edition == "cinema" else "live"
         self._mode    = mode if mode in ("live", "mapping") else "live"
         self._refs    = list(ref_images or [])
+        self._facade  = facade_path or ""     # façade réelle (mapping) : image à RESPECTER
 
     def run(self):
         try:
@@ -151,13 +153,22 @@ class PlanCoEditWorker(QThread):
                 else:
                     messages.append(msg)
 
-            # Message courant — multimodal si images de référence
-            if self._refs:
-                import base64, os as _os
+            # Façade réelle (mapping) : jointe en 1ʳᵉ image, à RESPECTER (pas une
+            # inspiration). Les refs utilisateur suivent comme inspirations.
+            import os as _os
+            _facade_ok = (self._mode == "mapping" and self._facade
+                          and _os.path.isfile(self._facade))
+            _imgs = ([self._facade] if _facade_ok else []) \
+                + [p for p in self._refs if p != self._facade]
+            _imgs = _imgs[:_MAX_REF_IMAGES]
+
+            # Message courant — multimodal si images (façade réelle + inspirations)
+            if _imgs:
+                import base64
                 _MT = {"jpg": "image/jpeg", "jpeg": "image/jpeg", "png": "image/png",
-                       "webp": "image/webp", "gif": "image/gif"}
+                       "webp": "image/webp", "gif": "image/gif", "bmp": "image/bmp"}
                 cur: list = []
-                for path in self._refs[:_MAX_REF_IMAGES]:
+                for path in _imgs:
                     try:
                         with open(path, "rb") as fh:
                             data = base64.b64encode(fh.read()).decode()
@@ -168,7 +179,12 @@ class PlanCoEditWorker(QThread):
                                                "data": data}})
                     except Exception:
                         pass
-                prefix = context_block + "\n\n" if not messages else ""
+                _note = ""
+                if _facade_ok:
+                    _note = ("[IMAGE 1 = FAÇADE RÉELLE du bâtiment, à RESPECTER strictement "
+                             "(fenêtres, portes, étages réels — n'invente pas d'ouvertures). "
+                             "Les images suivantes sont des inspirations à transposer.]\n\n")
+                prefix = (context_block + "\n\n" if not messages else "") + _note
                 cur.append({"type": "text", "text": prefix + self._user})
                 messages.append({"role": "user", "content": cur})
             else:
@@ -179,8 +195,13 @@ class PlanCoEditWorker(QThread):
                     messages.append({"role": "user", "content": self._user})
 
             system = _plan_coedit_system(self._edition, self._mode)
+            if _facade_ok:
+                system = system + (
+                    "\n\nCONTRAINTE FAÇADE (mapping) : l'IMAGE 1 jointe est la FAÇADE RÉELLE "
+                    "du bâtiment. Respecte STRICTEMENT sa géométrie (fenêtres, portes, "
+                    "étages, silhouette) — N'INVENTE PAS d'ouvertures ni d'éléments absents.")
 
-            if self._refs:
+            if _imgs:
                 # VISION (images jointes) : direct Anthropic — hors couche ai_provider.
                 import anthropic
                 from core.config import load_config as _lc

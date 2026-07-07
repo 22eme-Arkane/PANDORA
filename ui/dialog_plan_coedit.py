@@ -77,6 +77,15 @@ class PlanCoEditDialog(QDialog):
         self._redo_stack: list[str] = []        # rétablissement (Ctrl+Y)
         self._pending_plan = None               # index du plan envoyé à l'assistant
         self._suppress_commit = False           # bloque l'auto-commit pendant _set_preview
+        # Mapping : la façade RÉELLE du bâtiment est jointe à l'assistant pour qu'il
+        # respecte fenêtres/portes réelles au lieu d'en inventer.
+        self._facade_path = ""
+        if self._mode == "mapping":
+            try:
+                from core.live_building import get_building_ref
+                self._facade_path = get_building_ref()
+            except Exception:
+                self._facade_path = ""
 
         self.setWindowTitle(translate("☁  Co-écriture des plans — Finalisation"))
         self.setStyleSheet(f"QDialog{{background:{CP['bg0']};}}")
@@ -533,6 +542,7 @@ class PlanCoEditDialog(QDialog):
             edition=self._edition,
             mode=self._mode,
             ref_images=list(self._ref_images),
+            facade_path=self._facade_path,
         )
         self._worker.message_ready.connect(self._on_message_ready)
         self._worker.plan_ready.connect(self._on_plan_ready)

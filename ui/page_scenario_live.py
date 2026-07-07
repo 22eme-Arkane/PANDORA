@@ -2047,7 +2047,8 @@ class PageScenario(QWidget):
         dur_secs = (self._dur_min.value() * 60 + self._dur_sec.value()) if self._dur_defined_check.isChecked() else 0
         # Fenêtre d'aperçu en streaming (comme l'arrangement) ; l'« Appliquer »
         # écrit le résultat dans l'onglet « Mise en page PANDORA » (Conducteur intact).
-        self._worker = FormatConducteurWorker(self._text_with_music(), self._live_mode, dur_secs)
+        self._worker = FormatConducteurWorker(self._text_with_music(), self._live_mode,
+                                              dur_secs, facade_path=self._facade_for_mapping())
         self._worker.failed.connect(self._on_ai_fail)
         self._open_format_window(worker=self._worker)
 
@@ -2093,6 +2094,18 @@ class PageScenario(QWidget):
             self._save(silent=True)
         except Exception:
             pass
+
+    def _facade_for_mapping(self) -> str:
+        """Chemin de la façade réelle SI on est en mode mapping (sinon "") — injecté
+        dans les workers texte (mise en page / découpage / co-écriture) pour qu'ils
+        respectent le bâtiment RÉEL au lieu d'inventer fenêtres et portes."""
+        if getattr(self, "_live_mode", "live") != "mapping":
+            return ""
+        try:
+            from core.live_building import get_building_ref
+            return get_building_ref()
+        except Exception:
+            return ""
 
     def _apply_layout(self, layout_text: str):
         """Écrit la mise en page dans l'onglet dédié (le Conducteur reste intact)."""
@@ -2190,7 +2203,8 @@ class PageScenario(QWidget):
         self._set_ai_busy(True)
         self._ai_progress_lbl.setText(translate("Génération du découpage via Claude…"))
         self._btn_reopen_window.setVisible(False)
-        self._worker = GenerateDecoupageWorker(self._text_with_music(), self._live_mode)
+        self._worker = GenerateDecoupageWorker(self._text_with_music(), self._live_mode,
+                                               facade_path=self._facade_for_mapping())
         self._open_decoupage_window(self._worker)
 
     def _apply_decoupage(self, segments: list) -> bool:

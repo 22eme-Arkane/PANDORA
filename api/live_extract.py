@@ -51,11 +51,12 @@ class FormatConducteurWorker(QThread):
     failed   = pyqtSignal(str)
     chunk    = pyqtSignal(str)
 
-    def __init__(self, text: str, mode: str, duration_secs: int = 0):
+    def __init__(self, text: str, mode: str, duration_secs: int = 0, facade_path: str = ""):
         super().__init__()
-        self._text = text
-        self._mode = mode
-        self._dur  = duration_secs
+        self._text   = text
+        self._mode   = mode
+        self._dur    = duration_secs
+        self._facade = facade_path or ""   # image façade réelle (mapping) → Vision → texte
 
     def run(self):
         if not self._text.strip():
@@ -124,6 +125,16 @@ class FormatConducteurWorker(QThread):
                 "AUCUNE parole ni voix. C'est ICI que le BPM et les drops sont pris en compte}\"\n\n"
                 "Réponds UNIQUEMENT avec les actes et leurs plans (aucun texte autour)."
             )
+            # Mapping : injecte la description de la FAÇADE RÉELLE (Vision) pour que l'IA
+            # respecte le bâtiment (fenêtres/portes réelles) au lieu d'en inventer.
+            if self._mode == "mapping" and self._facade:
+                try:
+                    from core.live_building import describe_facade, facade_context_block
+                    _fdesc = describe_facade(self._facade)
+                    if _fdesc:
+                        system = system + facade_context_block(_fdesc, "en" if _is_en else "fr")
+                except Exception:
+                    pass
             user = self._text
             if self._dur and self._dur > 0:
                 mins, secs = divmod(int(self._dur), 60)

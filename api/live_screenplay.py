@@ -237,10 +237,11 @@ class GenerateDecoupageWorker(QThread):
     finished = pyqtSignal(list)   # list[dict] de segments
     failed   = pyqtSignal(str)
 
-    def __init__(self, text: str, mode: str):
+    def __init__(self, text: str, mode: str, facade_path: str = ""):
         super().__init__()
-        self._text = text
-        self._mode = mode if mode in ("live", "mapping") else "live"
+        self._text   = text
+        self._mode   = mode if mode in ("live", "mapping") else "live"
+        self._facade = facade_path or ""   # image façade réelle (mapping) → Vision → texte
 
     def run(self):
         text = (self._text or "").strip()
@@ -262,6 +263,16 @@ class GenerateDecoupageWorker(QThread):
             _lang  = get_lang()
             system = (_decoupage_mapping_system(_lang) if self._mode == "mapping"
                       else _decoupage_live_system(_lang))
+            # Mapping : injecte la description de la FAÇADE RÉELLE (Vision) → l'IA
+            # respecte les fenêtres/portes réelles au lieu d'en inventer.
+            if self._mode == "mapping" and self._facade:
+                try:
+                    from core.live_building import describe_facade, facade_context_block
+                    _fdesc = describe_facade(self._facade)
+                    if _fdesc:
+                        system = system + facade_context_block(_fdesc, _lang)
+                except Exception:
+                    pass
             # 16000 : un découpage dense (beaucoup de plans × prompts détaillés)
             # atteignait le plafond de 8000 → JSON tronqué
             out = complete(system, text, tier="creative", max_tokens=16000,
