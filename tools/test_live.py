@@ -439,6 +439,20 @@ def coecriture_et_finalisation_live():
     assert "Seedance 2.0, français)" in _syslive, "co-écriture Live en langue de travail (fr)"
     dlg = PlanCoEditDialog(None, live, edition="live", mode="live")
     assert not dlg.was_applied()
+    # Réordonner / ajouter / supprimer des plans + renumérotation (2026-07-07).
+    L3 = "PLAN 1 — A\nx\n\nPLAN 2 — B\ny\n\nPLAN 3 — C\nz\n"
+    _mv = pl.move_plan(L3, 0, 1)
+    assert [p["label"] for p in pl.split_plans(_mv)][:2] == ["PLAN 1 — B", "PLAN 2 — A"], "move + renum"
+    assert pl.plan_count(pl.delete_plan(L3, 1)) == 2 and "PLAN 2 — C" in pl.delete_plan(L3, 1), "delete + renum"
+    _add = pl.add_plan(L3, 0, "live")
+    assert pl.plan_count(_add) == 4 and "PLAN 2 — Nouveau plan" in _add, "add + renum"
+    assert pl.move_plan(L3, 0, -1) == L3, "move hors borne = inchangé"
+    dlg2 = PlanCoEditDialog(None, L3, edition="live", mode="live")
+    for _b in ("_btn_move_up", "_btn_move_down", "_btn_add_plan", "_btn_del_plan"):
+        assert hasattr(dlg2, _b), f"bouton {_b} absent du dialogue co-écriture"
+    dlg2._cur = 0
+    dlg2._move_plan(1)
+    assert dlg2.was_applied() and dlg2._plans[0]["label"] == "PLAN 1 — B", "dialogue : move applique + renumérote"
 
 
 @test

@@ -64,6 +64,7 @@ class PlanCoEditDialog(QDialog):
             self._input.setEnabled(False)
             self._btn_send.setEnabled(False)
             self._btn_apply.setEnabled(False)
+            self._update_plan_tools()   # ↑↓✕ désactivés, « ＋ Plan » reste actif
 
         try:
             from ui.widgets import disable_default_buttons
@@ -125,6 +126,36 @@ class PlanCoEditDialog(QDialog):
             f"QListWidget::item:hover{{background:{CP['bg3']};}}")
         self._plan_list.currentRowChanged.connect(self._on_row_changed)
         ll.addWidget(self._plan_list)
+
+        # ── Réordonner / ajouter / supprimer des plans ─────────────────────────
+        _plan_tools = QHBoxLayout()
+        _plan_tools.setContentsMargins(0, 0, 0, 0)
+        _plan_tools.setSpacing(5)
+
+        def _mini_btn(txt, tip, fn, danger=False):
+            b = QPushButton(translate(txt))
+            b.setCursor(Qt.CursorShape.PointingHandCursor)
+            b.setToolTip(translate(tip))
+            b.setFixedHeight(26)
+            _c = CP.get("red", "#ff4f6a") if danger else CP["accent2"]
+            b.setStyleSheet(
+                f"QPushButton{{background:transparent;border:1px solid {CP['border']};"
+                f"border-radius:6px;color:{CP['text_secondary']};font-size:11px;"
+                f"font-weight:700;padding:0 8px;}}"
+                f"QPushButton:hover{{border-color:{_c};color:{_c};}}"
+                f"QPushButton:disabled{{opacity:0.35;}}")
+            b.clicked.connect(fn)
+            return b
+
+        self._btn_move_up   = _mini_btn("↑", "Monter ce plan", lambda: self._move_plan(-1))
+        self._btn_move_down = _mini_btn("↓", "Descendre ce plan", lambda: self._move_plan(1))
+        self._btn_add_plan  = _mini_btn("＋ Plan", "Ajouter un plan après celui-ci", self._add_plan)
+        self._btn_del_plan  = _mini_btn("×  Suppr.", "Supprimer ce plan", self._delete_plan, danger=True)
+        _plan_tools.addWidget(self._btn_move_up)
+        _plan_tools.addWidget(self._btn_move_down)
+        _plan_tools.addWidget(self._btn_add_plan, 1)
+        _plan_tools.addWidget(self._btn_del_plan)
+        ll.addLayout(_plan_tools)
 
         _lbl_prev = QLabel(translate("APERÇU DU PLAN"))
         _lbl_prev.setStyleSheet(
@@ -246,6 +277,7 @@ class PlanCoEditDialog(QDialog):
         self._plan_list.setCurrentRow(index)
         self._set_preview(self._plans[index]["text"])
         self._render_chat()
+        self._update_plan_tools()
 
     def _on_row_changed(self, row: int):
         if row < 0 or row >= len(self._plans) or row == self._cur:
@@ -253,6 +285,7 @@ class PlanCoEditDialog(QDialog):
         self._cur = row
         self._set_preview(self._plans[row]["text"])
         self._render_chat()
+        self._update_plan_tools()
 
     def _set_preview(self, text: str):
         """Écrit l'aperçu du plan avec une RESPIRATION entre les paragraphes (comme la
@@ -264,6 +297,58 @@ class PlanCoEditDialog(QDialog):
             apply_paragraph_spacing(self._plan_preview, px=10)
         except Exception:
             pass
+
+    # ── Réordonner / ajouter / supprimer des plans ───────────────────────────
+    def _update_plan_tools(self):
+        """Active/désactive ↑ ↓ ✕ selon la position et le nombre de plans."""
+        if not hasattr(self, "_btn_move_up"):
+            return
+        n = len(self._plans)
+        self._btn_move_up.setEnabled(0 < self._cur < n)
+        self._btn_move_down.setEnabled(0 <= self._cur < n - 1)
+        self._btn_del_plan.setEnabled(n > 0)
+
+    def _structural_change(self, new_layout: str, select_index: int):
+        """Applique un changement STRUCTUREL (ordre / ajout / suppression) : met à jour
+        la mise en page, re-parse, marque « appliqué » et sélectionne le plan voulu.
+        Le chat par plan est réinitialisé (les index changent)."""
+        self._layout = new_layout
+        self._plans = pl.split_plans(self._layout)
+        self._histories.clear()
+        self._applied = True
+        if not self._plans:
+            self._plan_list.clear()
+            self._set_preview("")
+            self._count_lbl.setText(translate("{n} plan(s)").format(n=0))
+            self._update_plan_tools()
+            return
+        # Réactive la saisie si on repart d'un état « aucun plan ».
+        for w in (getattr(self, "_input", None), getattr(self, "_btn_send", None),
+                  getattr(self, "_btn_apply", None)):
+            if w is not None:
+                w.setEnabled(True)
+        self._plan_preview.setReadOnly(False)
+        self._select_plan(max(0, min(select_index, len(self._plans) - 1)))
+
+    def _move_plan(self, delta: int):
+        if not self._plans or not (0 <= self._cur + delta < len(self._plans)):
+            return
+        self._structural_change(pl.move_plan(self._layout, self._cur, delta),
+                                self._cur + delta)
+        self._status.setText(translate("Plan déplacé ✓"))
+
+    def _add_plan(self):
+        idx = self._cur if self._plans else -1
+        self._structural_change(pl.add_plan(self._layout, idx, self._edition),
+                                (idx + 1) if self._plans else 0)
+        self._status.setText(translate("Plan ajouté ✓"))
+
+    def _delete_plan(self):
+        if not self._plans:
+            return
+        self._structural_change(pl.delete_plan(self._layout, self._cur),
+                                min(self._cur, len(self._plans) - 2))
+        self._status.setText(translate("Plan supprimé ✓"))
 
     # ── Chat ─────────────────────────────────────────────────────────────────
     def _render_chat(self):

@@ -75,3 +75,79 @@ def replace_plan(layout_text: str, plan_index: int, new_plan_text: str) -> str:
     # faisaient partie du bloc courant, retirées par strip()).
     tail = "" if not after.strip() else "\n\n" + after.lstrip("\n")
     return before + block + tail
+
+
+# ── Réordonner / ajouter / supprimer des plans ───────────────────────────────
+# Le NUMÉRO d'en-tête est renuméroté séquentiellement après chaque opération, dans
+# le format détecté : « P01 | … » (Cinéma) ou « PLAN 1 — … » (Live).
+
+def _head_and_blocks(layout_text: str):
+    """(head, [blocs]) : head = tout ce qui précède le 1er plan (titres/séquences),
+    chaque bloc = le texte d'un plan (jusqu'au plan suivant)."""
+    plans = split_plans(layout_text)
+    if not plans:
+        return layout_text, []
+    head = layout_text[:plans[0]["start"]]
+    return head, [p["text"] for p in plans]
+
+
+def _renumber_block(block: str, n: int) -> str:
+    """Renumérote l'en-tête d'un bloc plan : « P0X | » → « P{n:02d} | » (Cinéma) ou
+    « PLAN X » → « PLAN n » (Live). Bloc non reconnu : renvoyé inchangé."""
+    if re.match(r"^\s*P\d{1,3}\s*\|", block):
+        return re.sub(r"^(\s*)P\d{1,3}(\s*\|)", rf"\g<1>P{n:02d}\g<2>", block, count=1)
+    if re.match(r"^\s*PLAN\s+\d{1,3}\b", block):
+        return re.sub(r"^(\s*)PLAN\s+\d{1,3}\b", rf"\g<1>PLAN {n}", block, count=1)
+    return block
+
+
+def _rebuild(head: str, blocks: list) -> str:
+    """Recompose la mise en page (head + plans renumérotés séparés par une ligne vide)."""
+    numbered = [_renumber_block(b.strip(), i) for i, b in enumerate(blocks, 1) if b.strip()]
+    body = "\n\n".join(numbered)
+    head = head.rstrip()
+    if head and body:
+        return head + "\n\n" + body + "\n"
+    return (head or body) + ("\n" if body else "")
+
+
+def _blank_plan(edition: str) -> str:
+    """Gabarit de plan VIERGE (le numéro sera réattribué par la renumérotation)."""
+    if edition == "cinema":
+        return ("P01 | Plan moyen | Fixe | Face | ~5s\n"
+                "INT./EXT. LIEU PRÉCIS — MOMENT\n"
+                "Description de l'action, au présent, concrète et visuelle.\n"
+                "→ SEEDANCE: à décrire…")
+    return ("PLAN 1 — Nouveau plan\n"
+            "Durée : 5s · Valeur de plan : … · Mouvement : …\n"
+            "PROMPT VIDÉO (Seedance 2.0, français) : « à décrire… »\n"
+            "PROMPT SON (sound design / SFX, français) : « à décrire… »")
+
+
+def move_plan(layout_text: str, index: int, delta: int) -> str:
+    """Déplace le plan ``index`` de ``delta`` positions (−1 = monter, +1 = descendre).
+    Renumérote. Renvoie le texte inchangé si le mouvement sort des bornes."""
+    head, blocks = _head_and_blocks(layout_text)
+    j = index + delta
+    if not blocks or not (0 <= index < len(blocks)) or not (0 <= j < len(blocks)):
+        return layout_text
+    blocks[index], blocks[j] = blocks[j], blocks[index]
+    return _rebuild(head, blocks)
+
+
+def delete_plan(layout_text: str, index: int) -> str:
+    """Supprime le plan ``index`` et renumérote le reste."""
+    head, blocks = _head_and_blocks(layout_text)
+    if not blocks or not (0 <= index < len(blocks)):
+        return layout_text
+    blocks.pop(index)
+    return _rebuild(head, blocks)
+
+
+def add_plan(layout_text: str, index: int, edition: str = "live") -> str:
+    """Insère un plan VIERGE juste APRÈS ``index`` (ou en tête si index < 0 / aucun
+    plan). Renumérote. ``edition`` : « cinema » ou « live »."""
+    head, blocks = _head_and_blocks(layout_text)
+    pos = 0 if (index < 0 or not blocks) else min(len(blocks), index + 1)
+    blocks.insert(pos, _blank_plan("cinema" if edition == "cinema" else "live"))
+    return _rebuild(head, blocks)

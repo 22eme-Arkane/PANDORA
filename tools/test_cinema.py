@@ -2191,6 +2191,15 @@ def coecriture_des_plans_cinema():
     assert "sensoriel, en français." in _syscine, "co-écriture Cinéma en langue de travail (fr)"
     dlg = PlanCoEditDialog(None, cine, edition="cinema")
     assert not dlg.was_applied() and dlg.result_layout() == cine
+    # Réordonner / ajouter / supprimer + renumérotation P0N (Cinéma, 2026-07-07).
+    _mv = pl.move_plan(cine, 0, 1)
+    _lbls = [p["label"] for p in pl.split_plans(_mv)]
+    assert _lbls[0].startswith("P01 | Gros plan") and _lbls[1].startswith("P02 | Plan large"), "move + renum P0N"
+    _add = pl.add_plan(cine, 0, "cinema")
+    assert pl.plan_count(_add) == 3 and "P02 | Plan moyen" in _add, "add gabarit Cinéma + renum"
+    assert pl.plan_count(pl.delete_plan(cine, 0)) == 1, "delete Cinéma"
+    for _b in ("_btn_move_up", "_btn_move_down", "_btn_add_plan", "_btn_del_plan"):
+        assert hasattr(dlg, _b), f"bouton {_b} absent du dialogue co-écriture Cinéma"
 
 
 @test
