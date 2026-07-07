@@ -821,8 +821,8 @@ _FR_TO_EN: dict[str, str] = {
     "Proposition prête — relis, ajuste, passe à un autre plan si besoin, puis « Appliquer les modifications ».":
         "Proposal ready — review, adjust, move to another shot if needed, then “Apply changes”.",
     "Plan appliqué à la mise en page ✓":        "Shot applied to the layout ✓",
-    "Ajouter des images d'inspiration (bibliothèque ou fichier, max 4)":
-        "Add inspiration images (library or file, max 4)",
+    "Ajouter des images d'inspiration (bibliothèque ou fichier, max {n})":
+        "Add inspiration images (library or file, max {n})",
     "✓  Appliquer les modifications":           "✓  Apply changes",
     "Réécris chaque plan avec l'assistant, réordonne-les, ajoute ou supprime — puis « Appliquer les modifications » écrit tout dans la mise en page en une fois.":
         "Rewrite each shot with the assistant, reorder them, add or delete — then “Apply changes” writes everything into the layout at once.",

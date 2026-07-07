@@ -2244,6 +2244,14 @@ def coecriture_des_plans_cinema():
     _psrc = _inspect.getsource(__import__("ui.page_scenario", fromlist=["_"]))
     assert "layout_committed.connect" in _psrc and "_on_plan_coedit_autosave" in _psrc, \
         "Cinéma : auto-save de la co-écriture non branché sur la page"
+    # ── Plus d'images de référence (12) + cap UI == cap worker + ruban scrollable ──
+    from api.plan_coedit import _MAX_REF_IMAGES as _MRI
+    from ui.dialog_plan_coedit import _MAX_REFS as _DLG_MRI
+    assert _MRI >= 12 and _DLG_MRI == _MRI, "co-écriture : cap images < 12 ou UI≠worker"
+    assert "self._refs[:4]" not in _inspect.getsource(__import__("api.plan_coedit", fromlist=["_"])), \
+        "co-écriture worker : cap figé [:4] encore présent"
+    assert "QScrollArea" in _inspect.getsource(__import__("ui.dialog_plan_coedit", fromlist=["_"])), \
+        "co-écriture : ruban de références non scrollable"
 
 
 @test

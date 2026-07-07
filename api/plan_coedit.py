@@ -17,6 +17,11 @@ from PyQt6.QtCore import QThread, pyqtSignal
 _VISION_MODEL    = "claude-sonnet-5"
 _VISION_NO_THINK = {"type": "disabled"}
 
+# Nombre max d'images de référence envoyées à l'assistant (source de vérité UNIQUE —
+# le dialogue l'importe pour ne pas plafonner l'UI en-dessous). Large marge sous la
+# limite API Anthropic (100 images/requête).
+_MAX_REF_IMAGES = 12
+
 _MARKER_MSG  = "══════════ MESSAGE ══════════"
 _MARKER_PLAN = "══════════ PLAN ══════════"
 
@@ -152,7 +157,7 @@ class PlanCoEditWorker(QThread):
                 _MT = {"jpg": "image/jpeg", "jpeg": "image/jpeg", "png": "image/png",
                        "webp": "image/webp", "gif": "image/gif"}
                 cur: list = []
-                for path in self._refs[:4]:
+                for path in self._refs[:_MAX_REF_IMAGES]:
                     try:
                         with open(path, "rb") as fh:
                             data = base64.b64encode(fh.read()).decode()

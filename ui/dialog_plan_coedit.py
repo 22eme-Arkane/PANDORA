@@ -14,7 +14,7 @@ ferme la fenêtre. « Fermer » abandonne les changements (avec confirmation).
 from PyQt6.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, QTextEdit,
     QListWidget, QListWidgetItem, QWidget, QSplitter, QFrame, QMenu,
-    QAbstractItemView,
+    QAbstractItemView, QScrollArea,
 )
 from PyQt6.QtGui import QPixmap, QKeySequence, QShortcut
 from PyQt6.QtCore import Qt, pyqtSignal, QTimer
@@ -24,7 +24,12 @@ from ui.styles import CP
 from core.worker import abandon_thread
 import core.plan_layout as pl
 
-_MAX_REFS = 4
+# Plafond d'images de référence : source de vérité côté worker (importée ici pour que
+# l'UI et l'envoi soient TOUJOURS d'accord — sinon relever l'UI ne servirait à rien).
+try:
+    from api.plan_coedit import _MAX_REF_IMAGES as _MAX_REFS
+except Exception:
+    _MAX_REFS = 12
 
 
 class _PlanListWidget(QListWidget):
@@ -214,13 +219,27 @@ class PlanCoEditDialog(QDialog):
             f"border-radius:8px;color:{CP['text_primary']};font-size:11px;padding:10px;}}")
         rl.addWidget(self._chat, 1)
 
-        # Bande d'images de référence (bibliothèque + fichier, max 4)
+        # Bande d'images de référence (bibliothèque + fichier) — SCROLLABLE à
+        # l'horizontale pour absorber jusqu'à _MAX_REFS vignettes sans déborder.
         self._refs_hbox = QHBoxLayout()
         self._refs_hbox.setSpacing(6)
+        self._refs_hbox.setContentsMargins(0, 0, 0, 0)
         _refs_wrap = QWidget()
         _refs_wrap.setStyleSheet("background:transparent;")
         _refs_wrap.setLayout(self._refs_hbox)
-        rl.addWidget(_refs_wrap)
+        _refs_scroll = QScrollArea()
+        _refs_scroll.setWidgetResizable(True)
+        _refs_scroll.setWidget(_refs_wrap)
+        _refs_scroll.setFixedHeight(58)
+        _refs_scroll.setFrameShape(QFrame.Shape.NoFrame)
+        _refs_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
+        _refs_scroll.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        _refs_scroll.setStyleSheet(
+            "QScrollArea{background:transparent;border:none;}"
+            f"QScrollBar:horizontal{{background:{CP['bg2']};height:7px;border-radius:3px;margin:0;}}"
+            f"QScrollBar::handle:horizontal{{background:{CP['border_bright']};border-radius:3px;min-width:24px;}}"
+            "QScrollBar::add-line:horizontal,QScrollBar::sub-line:horizontal{width:0;}")
+        rl.addWidget(_refs_scroll)
 
         self._input = QTextEdit()
         self._input.setFixedHeight(64)
@@ -672,7 +691,8 @@ class PlanCoEditDialog(QDialog):
         btn_add = QPushButton("＋")
         btn_add.setFixedSize(44, 44)
         btn_add.setCursor(Qt.CursorShape.PointingHandCursor)
-        btn_add.setToolTip(translate("Ajouter des images d'inspiration (bibliothèque ou fichier, max 4)"))
+        btn_add.setToolTip(translate(
+            "Ajouter des images d'inspiration (bibliothèque ou fichier, max {n})").format(n=_MAX_REFS))
         btn_add.setEnabled(len(self._ref_images) < _MAX_REFS)
         btn_add.setStyleSheet(
             f"QPushButton{{background:{CP['bg2']};color:{CP['text_dim']};"
@@ -708,8 +728,8 @@ class PlanCoEditDialog(QDialog):
                 f"QPushButton:hover{{background:{CP['red']};color:#fff;border-color:{CP['red']};}}")
             btn_rm.clicked.connect(lambda _=False, p=path: self._remove_ref(p))
             self._refs_hbox.addWidget(cell)
-
-        self._refs_hbox.addStretch()
+        # Pas de addStretch() : la largeur du ruban = celle de ses vignettes → la
+        # QScrollArea peut défiler horizontalement au-delà de la largeur du panneau.
 
     # ── Résultat ─────────────────────────────────────────────────────────────
     def was_applied(self) -> bool:
