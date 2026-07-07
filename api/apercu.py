@@ -108,7 +108,10 @@ def _build_mood_prompt_live(shot: dict) -> str:
       - le prompt vidéo est temporel (« Opening… Then… final moment ») mais le mood
         est une IMAGE FIXE servant de KEYFRAME DE DÉBUT du plan → on demande
         explicitement l'état d'OUVERTURE."""
-    seedance = (shot.get("seedance_prompt") or "").strip()
+    # UN seul prompt à sections : ne garder que la VIDÉO (retirer [🎵 SOUND DESIGN]) —
+    # le son n'a aucune place dans une image fixe Flux.
+    from core.prompt_sections import video_of as _video_of
+    seedance = _video_of((shot.get("seedance_prompt") or "").strip())
     parts = []
     if seedance:
         parts.append(seedance)

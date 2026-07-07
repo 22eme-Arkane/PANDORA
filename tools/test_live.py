@@ -203,7 +203,11 @@ def prompt_mood_live_propre():
     pas de français, pas de film grain, état d'OUVERTURE demandé (keyframe)."""
     import core.storyboard as sb
     from api.apercu import build_mood_prompt
-    shot = {"seedance_prompt": "Opening: blue ocean. Then a whale. In the final moment dark.",
+    from core.prompt_sections import video_with_sound
+    # UN seul prompt à sections : le prompt du plan contient une section son.
+    shot = {"seedance_prompt": video_with_sound(
+                "Opening: blue ocean. Then a whale. In the final moment dark.",
+                "Deep abyssal drone at 129 BPM, whale moans, subby thumps"),
             "scene_title": "Les baleines disparaissent",
             "focal": "35mm", "shot_size": "PL", "camera_axis": "Face",
             "camera_distance": "4m", "camera_movement": "Travelling avant",
@@ -217,6 +221,9 @@ def prompt_mood_live_propre():
     assert "film grain" not in p_live, "pas de grain (noirs purs)"
     assert "Les baleines" not in p_live, "pas de titre français collé"
     assert "OPENING state" in p_live, "état d'ouverture demandé (keyframe de début)"
+    # UN seul prompt à sections : la section son NE POLLUE PAS l'image fixe.
+    assert "SOUND DESIGN" not in p_live and "129 BPM" not in p_live, \
+        "le son est retiré du prompt mood (image fixe)"
     assert "dolly push in" not in p_live, "pas de mouvement caméra"
     # Cinéma : focale + titre conservés ; suffixe qualité assaini (audit 2026-07-02)
     assert "35mm" in p_cine and "cinematic still frame" in p_cine and "Les baleines" in p_cine
