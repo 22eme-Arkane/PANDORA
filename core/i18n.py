@@ -333,7 +333,7 @@ _FR_TO_EN: dict[str, str] = {
     "Prompt sound design":                 "Sound design prompt",
     "Ambiance / SFX du plan (anglais), sans voix — injecté dans Sound Design.":
         "Shot ambience / SFX (English), no voice — fed into Sound Design.",
-    "▦  Référence bâtiment (façade)":      "▦  Building reference (facade)",
+    "🏢  Référence bâtiment (façade)":      "🏢  Building reference (facade)",
     "Image de la façade projetée. En Séquence Mapping, les moods sont générés "
     "SUR cette façade (sa géométrie est conservée).":
         "Image of the projected facade. In the Mapping sequence, moods are generated "
@@ -502,8 +502,8 @@ _FR_TO_EN: dict[str, str] = {
     "☁  Claude IA":                        "☁  Claude AI",
     # Scénario Cinéma : section « Claude IA » renommée « Écriture assistée par IA »
     "☁  Écriture assistée par IA":         "☁  AI-assisted writing",
-    "☁  Générer depuis le conducteur":     "☁  Generate from the rundown",
-    "◎  Références visuelles":             "◎  Visual references",
+    "⚡  Générer depuis le conducteur":     "⚡  Generate from the rundown",
+    "🎨  Références visuelles":             "🎨  Visual references",
     "Références visuelles":                "Visual references",
     "Mise en page":                        "Layout",
     "Met en forme la trame (typée Live/Mapping)": "Formats the outline (Live/Mapping-typed)",
@@ -3998,9 +3998,9 @@ _FR_TO_EN: dict[str, str] = {
     "Ces paramètres s'injectent automatiquement dans les prompts de génération vidéo pour reproduire le rendu d'un équipement spécifique — corps de caméra, gamme d'optiques, filtres et microphone du tournage.": "These settings are automatically injected into the video generation prompts to reproduce the look of specific equipment — camera body, lens range, filters and production microphone.",
 
     # ── Lot 9 — panneau Scénario + barre Storyboard (captures 2026-06) ──
-    "◎  Références visuelles": "◎  Visual references",
+    "🎨  Références visuelles": "🎨  Visual references",
     "☁  Claude IA": "☁  Claude AI",
-    "☁  Générer depuis le scénario": "☁  Generate from the screenplay",
+    "⚡  Générer depuis le scénario": "⚡  Generate from the screenplay",
     "Analyse structure + suggestions": "Structure analysis + suggestions",
     # ── Analyse & co-écriture (ex-« Proposer un arrangement », 2026-07-02) ──
     "Analyse & co-écriture": "Analysis & co-writing",

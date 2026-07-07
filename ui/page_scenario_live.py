@@ -701,7 +701,7 @@ class PageScenario(QWidget):
         l_refs.addWidget(_refs_scroll)
 
         self._btn_analyze_refs = _ai_btn(
-            "◈", "Analyser avec Claude",
+            "🔍", "Analyser avec Claude",
             "Décrypte les images pour enrichir le conducteur",
             self._on_analyze_refs,
         )
@@ -714,7 +714,7 @@ class PageScenario(QWidget):
         )
         l_refs.addWidget(self._btn_load_analysis)
 
-        tog_refs = _make_toggle("◎  Références visuelles", c_refs, expanded=False)
+        tog_refs = _make_toggle("🎨  Références visuelles", c_refs, expanded=False)
 
         self._refresh_refs_display()
 
@@ -734,7 +734,7 @@ class PageScenario(QWidget):
             f"color:{CP['text_dim']};font-size:9px;background:transparent;border:none;")
         l_bld.addWidget(_bld_hint)
 
-        tog_bld = _make_toggle("▦  Référence bâtiment (façade)", c_bld, expanded=False)
+        tog_bld = _make_toggle("🏢  Référence bâtiment (façade)", c_bld, expanded=False)
 
         self._refresh_building_display()
 
@@ -777,14 +777,14 @@ class PageScenario(QWidget):
         c_cond, l_cond = _section_container()
 
         self._btn_arrange = _ai_btn(
-            "⊞", "Analyse", "Analyse la structure du conducteur (rythme, séquences)", self._on_arrange,
+            "🔎", "Analyse", "Analyse la structure du conducteur (rythme, séquences)", self._on_arrange,
         )
         self._btn_coecriture = _ai_btn(
-            "☁", "Co-écriture", "Dialogue avec l'assistant pour réécrire le conducteur", self._on_coecriture,
+            "💬", "Co-écriture", "Dialogue avec l'assistant pour réécrire le conducteur", self._on_coecriture,
         )
         l_cond.addWidget(self._btn_arrange)
         l_cond.addWidget(self._btn_coecriture)
-        tog_cond = _make_toggle("☁  Conducteur", c_cond, expanded=True)
+        tog_cond = _make_toggle("📖  Conducteur", c_cond, expanded=True)
 
         # ── Section : Finalisation (mise en page + co-écriture des plans) ──────
         # Étape à ne pas sauter : préparer/optimiser les plans AVANT de générer le
@@ -793,24 +793,24 @@ class PageScenario(QWidget):
         c_final, l_final = _section_container()
 
         self._btn_format = _ai_btn(
-            "◈", "Mise en page PANDORA", "Structure le conducteur en blocs plans optimisés pour PANDORA", self._on_format,
+            "📝", "Mise en page PANDORA", "Structure le conducteur en blocs plans optimisés pour PANDORA", self._on_format,
         )
         self._btn_plan_coedit = _ai_btn(
             "✍", "Co-écriture des plans", "Réécrire/enrichir chaque plan un par un avant le découpage", self._on_plan_coedit,
         )
         l_final.addWidget(self._btn_format)
         l_final.addWidget(self._btn_plan_coedit)
-        tog_final = _make_toggle("◈  Finalisation", c_final, expanded=True)
+        tog_final = _make_toggle("🎯  Finalisation", c_final, expanded=True)
 
         # ── Section 2 : Générer depuis le conducteur (repliée par défaut) ───────
         c_gen, l_gen = _section_container()
 
         self._btn_gen_characters = _ai_btn(
-            "◎", "Générer les personnages", "Identifier les personnages depuis le conducteur",
+            "🎭", "Générer les personnages", "Identifier les personnages depuis le conducteur",
             self._on_gen_characters,
         )
         self._btn_gen_accessories = _ai_btn(
-            "⊡", "Générer les accessoires", "Identifier les accessoires depuis le conducteur",
+            "🧰", "Générer les accessoires", "Identifier les accessoires depuis le conducteur",
             self._on_gen_accessories,
         )
         self._btn_gen_vehicles = _ai_btn(
@@ -818,7 +818,7 @@ class PageScenario(QWidget):
             self._on_gen_vehicles,
         )
         self._btn_storyboard = _ai_btn(
-            "⊕", "Générer le découpage", "Découpe le conducteur en séquence (Live/Mapping)",
+            "🎬", "Générer le découpage", "Découpe le conducteur en séquence (Live/Mapping)",
             self._on_storyboard,
         )
         for _b in (
@@ -840,7 +840,7 @@ class PageScenario(QWidget):
             f"QPushButton:disabled{{opacity:0.35;border-color:{CP['border']};}}"
         )
         self._btn_generate_all.clicked.connect(self._on_generate_all)
-        tog_gen = _make_toggle("☁  Générer depuis le conducteur", c_gen, expanded=True)
+        tog_gen = _make_toggle("⚡  Générer depuis le conducteur", c_gen, expanded=True)
 
         # ── Ordre visuel du panneau droit (haut → bas), demande Matthieu 2026-07-06 :
         # Conducteur, Finalisation, Musiques, Façade, Références, Générer (bas).

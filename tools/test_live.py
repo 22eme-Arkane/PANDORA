@@ -413,8 +413,8 @@ def coecriture_et_finalisation_live():
     (Mise en page + Co-écriture des plans) ; parseur de plans « PLAN n — » chirurgical."""
     import inspect
     src = inspect.getsource(__import__("ui.page_scenario_live", fromlist=["_"]))
-    assert '_make_toggle("☁  Conducteur"' in src, "section Conducteur (ex-Claude IA) absente"
-    assert '_make_toggle("◈  Finalisation"' in src, "section Finalisation absente"
+    assert '_make_toggle("📖  Conducteur"' in src, "section Conducteur (ex-Claude IA) absente"
+    assert '_make_toggle("🎯  Finalisation"' in src, "section Finalisation absente"
     assert '"Co-écriture des plans"' in src and "def _on_plan_coedit" in src, \
         "bouton/handler Co-écriture des plans absent (Live)"
     assert src.index("(tog_cond,") < src.index("(tog_final,") < src.index("(tog_gen,"), \
@@ -1871,7 +1871,7 @@ def i18n_cles_live():
     from core.i18n import _FR_TO_EN
     for key in ("Mise en page PANDORA", "Acte", "Prompt (vidéo + son)",
                 "Sound Design", "Upscaling", "♫  Musiques du set",
-                "▦  Référence bâtiment (façade)", "Corriger le BPM",
+                "🏢  Référence bâtiment (façade)", "Corriger le BPM",
                 "✓  Appliquer le découpage", "Musique", "Notes / Repère"):
         assert key in _FR_TO_EN, f"i18n manquante : {key}"
 

@@ -707,13 +707,13 @@ class PageScenario(QWidget):
         l_refs.addWidget(_refs_scroll)
 
         self._btn_analyze_refs = _ai_btn(
-            "◈", "Analyser avec Claude",
+            "🔍", "Analyser avec Claude",
             "Décrypte les images pour enrichir le scénario",
             self._on_analyze_refs,
         )
         l_refs.addWidget(self._btn_analyze_refs)
 
-        tog_refs = _make_toggle("◎  Références visuelles", c_refs, expanded=False)
+        tog_refs = _make_toggle("🎨  Références visuelles", c_refs, expanded=False)
 
         self._refresh_refs_display()
 
@@ -757,14 +757,14 @@ class PageScenario(QWidget):
         c_scen, l_scen = _section_container()
 
         self._btn_arrange = _ai_btn(
-            "⊞", "Analyse", "Analyse la structure narrative du scénario", self._on_arrange,
+            "🔎", "Analyse", "Analyse la structure narrative du scénario", self._on_arrange,
         )
         self._btn_coecriture = _ai_btn(
-            "☁", "Co-écriture", "Dialogue avec l'assistant pour réécrire le scénario", self._on_coecriture,
+            "💬", "Co-écriture", "Dialogue avec l'assistant pour réécrire le scénario", self._on_coecriture,
         )
         l_scen.addWidget(self._btn_arrange)
         l_scen.addWidget(self._btn_coecriture)
-        tog_scen = _make_toggle("☁  Scénario", c_scen, expanded=True)
+        tog_scen = _make_toggle("📖  Scénario", c_scen, expanded=True)
 
         # ── Section : Finalisation (mise en page + co-écriture des plans) ──────
         # Étape à ne pas sauter : préparer/optimiser les plans AVANT de générer le
@@ -773,34 +773,34 @@ class PageScenario(QWidget):
         c_final, l_final = _section_container()
 
         self._btn_format = _ai_btn(
-            "◈", "Mise en page PANDORA", "Structure le scénario en blocs plans optimisés pour PANDORA", self._on_format,
+            "📝", "Mise en page PANDORA", "Structure le scénario en blocs plans optimisés pour PANDORA", self._on_format,
         )
         self._btn_plan_coedit = _ai_btn(
             "✍", "Co-écriture des plans", "Réécrire/enrichir chaque plan un par un avant le storyboard", self._on_plan_coedit,
         )
         l_final.addWidget(self._btn_format)
         l_final.addWidget(self._btn_plan_coedit)
-        tog_final = _make_toggle("◈  Finalisation", c_final, expanded=True)
+        tog_final = _make_toggle("🎯  Finalisation", c_final, expanded=True)
 
         # ── Section 2 : Générer depuis le scénario (repliée par défaut) ───────
         c_gen, l_gen = _section_container()
 
         self._btn_gen_characters = _ai_btn(
-            "◎", "Générer les personnages", "Identifier les personnages depuis le scénario",
+            "🎭", "Générer les personnages", "Identifier les personnages depuis le scénario",
             self._on_gen_characters,
         )
         self._btn_gen_decors = _ai_btn(
-            "⌂", "Générer les décors + plan",
+            "🏠", "Générer les décors + plan",
             "Identifier les décors depuis le scénario et générer leur plan vu de dessus "
             "(Mise en scène / Plan de feu)",
             self._on_gen_decors,
         )
         self._btn_gen_accessories = _ai_btn(
-            "⊡", "Générer les accessoires", "Identifier les accessoires depuis le scénario",
+            "🧰", "Générer les accessoires", "Identifier les accessoires depuis le scénario",
             self._on_gen_accessories,
         )
         self._btn_gen_hmc = _ai_btn(
-            "✂", "Générer le HMC", "Identifier les éléments HMC depuis le scénario",
+            "💄", "Générer le HMC", "Identifier les éléments HMC depuis le scénario",
             self._on_gen_hmc,
         )
         self._btn_gen_vehicles = _ai_btn(
@@ -808,7 +808,7 @@ class PageScenario(QWidget):
             self._on_gen_vehicles,
         )
         self._btn_storyboard = _ai_btn(
-            "⊕", "Générer le storyboard", "Importe les plans dans Storyboard",
+            "🎬", "Générer le storyboard", "Importe les plans dans Storyboard",
             self._on_storyboard,
         )
         for _b in (
@@ -830,7 +830,7 @@ class PageScenario(QWidget):
             f"QPushButton:disabled{{opacity:0.35;border-color:{CP['border']};}}"
         )
         self._btn_generate_all.clicked.connect(self._on_generate_all)
-        tog_gen = _make_toggle("☁  Générer depuis le scénario", c_gen, expanded=True)
+        tog_gen = _make_toggle("⚡  Générer depuis le scénario", c_gen, expanded=True)
 
         # ── Ordre visuel du panneau droit (haut → bas), demande Matthieu 2026-07-06 :
         # Scénario, Finalisation, Musique, Références, Générer (bas).

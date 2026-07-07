@@ -2158,8 +2158,8 @@ def panneau_scenario_aligne_jusqu_au_bord():
     assert "btn.setFixedHeight(58)" in src, "hauteur de bouton non augmentée pour 2 lignes"
     # Réorg 2026-07-06 : « Écriture assistée par IA » scindée en « Scénario »
     # (Analyse + Co-écriture) et « Finalisation » (Mise en page + Co-écriture des plans).
-    assert '_make_toggle("☁  Scénario"' in src, "section Scénario (ex-IA) absente"
-    assert '_make_toggle("◈  Finalisation"' in src, "section Finalisation absente"
+    assert '_make_toggle("📖  Scénario"' in src, "section Scénario (ex-IA) absente"
+    assert '_make_toggle("🎯  Finalisation"' in src, "section Finalisation absente"
     assert '"Co-écriture des plans"' in src and "def _on_plan_coedit" in src, \
         "bouton/handler Co-écriture des plans absent (Cinéma)"
     # Ordre du panneau : Scénario avant Finalisation avant Générer.
