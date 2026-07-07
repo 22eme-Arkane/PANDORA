@@ -439,20 +439,20 @@ def coecriture_et_finalisation_live():
     assert "Seedance 2.0, français)" in _syslive, "co-écriture Live en langue de travail (fr)"
     dlg = PlanCoEditDialog(None, live, edition="live", mode="live")
     assert not dlg.was_applied()
-    # Réordonner / ajouter / supprimer des plans + renumérotation (2026-07-07).
+    # Réordonner (glisser-déposer) / ajouter / dupliquer / supprimer + renum (2026-07-07).
     L3 = "PLAN 1 — A\nx\n\nPLAN 2 — B\ny\n\nPLAN 3 — C\nz\n"
-    _mv = pl.move_plan(L3, 0, 1)
-    assert [p["label"] for p in pl.split_plans(_mv)][:2] == ["PLAN 1 — B", "PLAN 2 — A"], "move + renum"
+    assert pl.reorder(L3, [2, 0, 1]).startswith("PLAN 1 — C"), "reorder + renum"
+    assert pl.reorder(L3, [0, 1]) == L3, "reorder ordre invalide = inchangé"
+    assert "PLAN 2 — A" in pl.duplicate_plan(L3, 0) and pl.plan_count(pl.duplicate_plan(L3, 0)) == 4, "dup + renum"
     assert pl.plan_count(pl.delete_plan(L3, 1)) == 2 and "PLAN 2 — C" in pl.delete_plan(L3, 1), "delete + renum"
-    _add = pl.add_plan(L3, 0, "live")
-    assert pl.plan_count(_add) == 4 and "PLAN 2 — Nouveau plan" in _add, "add + renum"
-    assert pl.move_plan(L3, 0, -1) == L3, "move hors borne = inchangé"
+    assert pl.plan_count(pl.add_plan(L3, 0, "live")) == 4 and "PLAN 2 — Nouveau plan" in pl.add_plan(L3, 0, "live"), "add + renum"
     dlg2 = PlanCoEditDialog(None, L3, edition="live", mode="live")
-    for _b in ("_btn_move_up", "_btn_move_down", "_btn_add_plan", "_btn_del_plan"):
-        assert hasattr(dlg2, _b), f"bouton {_b} absent du dialogue co-écriture"
-    dlg2._cur = 0
-    dlg2._move_plan(1)
-    assert dlg2.was_applied() and dlg2._plans[0]["label"] == "PLAN 1 — B", "dialogue : move applique + renumérote"
+    for _m in ("_on_plans_reordered", "_plan_context_menu", "_duplicate_plan", "_delete_plan_at", "_add_plan"):
+        assert hasattr(dlg2, _m), f"handler {_m} absent du dialogue co-écriture"
+    from PyQt6.QtWidgets import QAbstractItemView
+    assert dlg2._plan_list.dragDropMode() == QAbstractItemView.DragDropMode.InternalMove, "glisser-déposer non activé"
+    dlg2._duplicate_plan(0)
+    assert dlg2.was_applied() and pl.plan_count(dlg2.result_layout()) == 4, "dialogue : dup applique + renumérote"
 
 
 @test

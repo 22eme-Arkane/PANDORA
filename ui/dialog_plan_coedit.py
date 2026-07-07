@@ -11,10 +11,11 @@ jour → « Appliquer ce plan » le réinjecte dans la mise en page (chirurgical
 """
 from PyQt6.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, QTextEdit,
-    QListWidget, QListWidgetItem, QWidget, QSplitter, QFrame,
+    QListWidget, QListWidgetItem, QWidget, QSplitter, QFrame, QMenu,
+    QAbstractItemView,
 )
 from PyQt6.QtGui import QPixmap
-from PyQt6.QtCore import Qt
+from PyQt6.QtCore import Qt, pyqtSignal
 
 from core.i18n import translate
 from ui.styles import CP
@@ -22,6 +23,16 @@ from core.worker import abandon_thread
 import core.plan_layout as pl
 
 _MAX_REFS = 4
+
+
+class _PlanListWidget(QListWidget):
+    """Liste des plans avec réordonnancement par GLISSER-DÉPOSER (comme le storyboard).
+    Émet ``reordered`` après un déplacement interne."""
+    reordered = pyqtSignal()
+
+    def dropEvent(self, event):
+        super().dropEvent(event)
+        self.reordered.emit()
 
 
 class PlanCoEditDialog(QDialog):
@@ -64,7 +75,6 @@ class PlanCoEditDialog(QDialog):
             self._input.setEnabled(False)
             self._btn_send.setEnabled(False)
             self._btn_apply.setEnabled(False)
-            self._update_plan_tools()   # ↑↓✕ désactivés, « ＋ Plan » reste actif
 
         try:
             from ui.widgets import disable_default_buttons
@@ -116,7 +126,7 @@ class PlanCoEditDialog(QDialog):
             "letter-spacing:1px;background:transparent;")
         ll.addWidget(_lbl_plans)
 
-        self._plan_list = QListWidget()
+        self._plan_list = _PlanListWidget()
         self._plan_list.setFixedHeight(150)
         self._plan_list.setStyleSheet(
             f"QListWidget{{background:{CP['bg2']};border:1px solid {CP['border']};"
@@ -124,38 +134,23 @@ class PlanCoEditDialog(QDialog):
             f"QListWidget::item{{padding:5px 6px;border-radius:5px;}}"
             f"QListWidget::item:selected{{background:{CP['accent2']};color:#fff;}}"
             f"QListWidget::item:hover{{background:{CP['bg3']};}}")
+        # Glisser-déposer pour réordonner (comme le storyboard) + menu clic droit
+        # (ajouter / dupliquer / supprimer un plan).
+        self._plan_list.setDragDropMode(QAbstractItemView.DragDropMode.InternalMove)
+        self._plan_list.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
+        self._plan_list.setDefaultDropAction(Qt.DropAction.MoveAction)
+        self._plan_list.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
+        self._plan_list.customContextMenuRequested.connect(self._plan_context_menu)
+        self._plan_list.reordered.connect(self._on_plans_reordered)
         self._plan_list.currentRowChanged.connect(self._on_row_changed)
         ll.addWidget(self._plan_list)
 
-        # ── Réordonner / ajouter / supprimer des plans ─────────────────────────
-        _plan_tools = QHBoxLayout()
-        _plan_tools.setContentsMargins(0, 0, 0, 0)
-        _plan_tools.setSpacing(5)
-
-        def _mini_btn(txt, tip, fn, danger=False):
-            b = QPushButton(translate(txt))
-            b.setCursor(Qt.CursorShape.PointingHandCursor)
-            b.setToolTip(translate(tip))
-            b.setFixedHeight(26)
-            _c = CP.get("red", "#ff4f6a") if danger else CP["accent2"]
-            b.setStyleSheet(
-                f"QPushButton{{background:transparent;border:1px solid {CP['border']};"
-                f"border-radius:6px;color:{CP['text_secondary']};font-size:11px;"
-                f"font-weight:700;padding:0 8px;}}"
-                f"QPushButton:hover{{border-color:{_c};color:{_c};}}"
-                f"QPushButton:disabled{{opacity:0.35;}}")
-            b.clicked.connect(fn)
-            return b
-
-        self._btn_move_up   = _mini_btn("↑", "Monter ce plan", lambda: self._move_plan(-1))
-        self._btn_move_down = _mini_btn("↓", "Descendre ce plan", lambda: self._move_plan(1))
-        self._btn_add_plan  = _mini_btn("＋ Plan", "Ajouter un plan après celui-ci", self._add_plan)
-        self._btn_del_plan  = _mini_btn("×  Suppr.", "Supprimer ce plan", self._delete_plan, danger=True)
-        _plan_tools.addWidget(self._btn_move_up)
-        _plan_tools.addWidget(self._btn_move_down)
-        _plan_tools.addWidget(self._btn_add_plan, 1)
-        _plan_tools.addWidget(self._btn_del_plan)
-        ll.addLayout(_plan_tools)
+        _hint = QLabel(translate(
+            "Glisse un plan pour le déplacer · clic droit : ajouter / dupliquer / supprimer"))
+        _hint.setWordWrap(True)
+        _hint.setStyleSheet(
+            f"color:{CP['text_dim']};font-size:8px;background:transparent;")
+        ll.addWidget(_hint)
 
         _lbl_prev = QLabel(translate("APERÇU DU PLAN"))
         _lbl_prev.setStyleSheet(
@@ -262,8 +257,9 @@ class PlanCoEditDialog(QDialog):
     def _reload_list(self):
         self._plan_list.blockSignals(True)
         self._plan_list.clear()
-        for p in self._plans:
-            QListWidgetItem(p["label"], self._plan_list)
+        for i, p in enumerate(self._plans):
+            it = QListWidgetItem(p["label"], self._plan_list)
+            it.setData(Qt.ItemDataRole.UserRole, i)   # index d'origine (glisser-déposer)
         self._count_lbl.setText(
             translate("{n} plan(s)").format(n=len(self._plans)))
         self._plan_list.blockSignals(False)
@@ -277,7 +273,6 @@ class PlanCoEditDialog(QDialog):
         self._plan_list.setCurrentRow(index)
         self._set_preview(self._plans[index]["text"])
         self._render_chat()
-        self._update_plan_tools()
 
     def _on_row_changed(self, row: int):
         if row < 0 or row >= len(self._plans) or row == self._cur:
@@ -285,7 +280,6 @@ class PlanCoEditDialog(QDialog):
         self._cur = row
         self._set_preview(self._plans[row]["text"])
         self._render_chat()
-        self._update_plan_tools()
 
     def _set_preview(self, text: str):
         """Écrit l'aperçu du plan avec une RESPIRATION entre les paragraphes (comme la
@@ -298,19 +292,10 @@ class PlanCoEditDialog(QDialog):
         except Exception:
             pass
 
-    # ── Réordonner / ajouter / supprimer des plans ───────────────────────────
-    def _update_plan_tools(self):
-        """Active/désactive ↑ ↓ ✕ selon la position et le nombre de plans."""
-        if not hasattr(self, "_btn_move_up"):
-            return
-        n = len(self._plans)
-        self._btn_move_up.setEnabled(0 < self._cur < n)
-        self._btn_move_down.setEnabled(0 <= self._cur < n - 1)
-        self._btn_del_plan.setEnabled(n > 0)
-
+    # ── Réordonner (glisser-déposer) / menu clic droit (ajout/dup/suppr) ──────
     def _structural_change(self, new_layout: str, select_index: int):
-        """Applique un changement STRUCTUREL (ordre / ajout / suppression) : met à jour
-        la mise en page, re-parse, marque « appliqué » et sélectionne le plan voulu.
+        """Applique un changement STRUCTUREL (ordre / ajout / dup / suppression) : met à
+        jour la mise en page, re-parse, marque « appliqué » et sélectionne le plan voulu.
         Le chat par plan est réinitialisé (les index changent)."""
         self._layout = new_layout
         self._plans = pl.split_plans(self._layout)
@@ -320,7 +305,6 @@ class PlanCoEditDialog(QDialog):
             self._plan_list.clear()
             self._set_preview("")
             self._count_lbl.setText(translate("{n} plan(s)").format(n=0))
-            self._update_plan_tools()
             return
         # Réactive la saisie si on repart d'un état « aucun plan ».
         for w in (getattr(self, "_input", None), getattr(self, "_btn_send", None),
@@ -330,12 +314,32 @@ class PlanCoEditDialog(QDialog):
         self._plan_preview.setReadOnly(False)
         self._select_plan(max(0, min(select_index, len(self._plans) - 1)))
 
-    def _move_plan(self, delta: int):
-        if not self._plans or not (0 <= self._cur + delta < len(self._plans)):
-            return
-        self._structural_change(pl.move_plan(self._layout, self._cur, delta),
-                                self._cur + delta)
+    def _on_plans_reordered(self):
+        """Après un glisser-déposer : recompose la mise en page selon le nouvel ordre
+        visuel (index d'origine stockés en UserRole), renumérote, resélectionne."""
+        order = []
+        for i in range(self._plan_list.count()):
+            d = self._plan_list.item(i).data(Qt.ItemDataRole.UserRole)
+            if d is not None:
+                order.append(int(d))
+        if sorted(order) != list(range(len(self._plans))):
+            return   # ordre incohérent → on ne touche à rien
+        new_row = max(0, self._plan_list.currentRow())
+        self._structural_change(pl.reorder(self._layout, order), new_row)
         self._status.setText(translate("Plan déplacé ✓"))
+
+    def _plan_context_menu(self, pos):
+        """Clic droit : sur un plan → dupliquer / supprimer ; dans le vide → ajouter."""
+        item = self._plan_list.itemAt(pos)
+        menu = QMenu(self)
+        if item is not None:
+            row = self._plan_list.row(item)
+            menu.addAction(translate("Dupliquer ce plan"), lambda: self._duplicate_plan(row))
+            menu.addSeparator()
+            menu.addAction(translate("Supprimer ce plan"), lambda: self._delete_plan_at(row))
+        else:
+            menu.addAction(translate("＋  Ajouter un plan"), self._add_plan)
+        menu.exec(self._plan_list.mapToGlobal(pos))
 
     def _add_plan(self):
         idx = self._cur if self._plans else -1
@@ -343,11 +347,17 @@ class PlanCoEditDialog(QDialog):
                                 (idx + 1) if self._plans else 0)
         self._status.setText(translate("Plan ajouté ✓"))
 
-    def _delete_plan(self):
-        if not self._plans:
+    def _duplicate_plan(self, row: int):
+        if not (0 <= row < len(self._plans)):
             return
-        self._structural_change(pl.delete_plan(self._layout, self._cur),
-                                min(self._cur, len(self._plans) - 2))
+        self._structural_change(pl.duplicate_plan(self._layout, row), row + 1)
+        self._status.setText(translate("Plan dupliqué ✓"))
+
+    def _delete_plan_at(self, row: int):
+        if not (0 <= row < len(self._plans)):
+            return
+        self._structural_change(pl.delete_plan(self._layout, row),
+                                min(row, len(self._plans) - 2))
         self._status.setText(translate("Plan supprimé ✓"))
 
     # ── Chat ─────────────────────────────────────────────────────────────────

@@ -151,3 +151,25 @@ def add_plan(layout_text: str, index: int, edition: str = "live") -> str:
     pos = 0 if (index < 0 or not blocks) else min(len(blocks), index + 1)
     blocks.insert(pos, _blank_plan("cinema" if edition == "cinema" else "live"))
     return _rebuild(head, blocks)
+
+
+def duplicate_plan(layout_text: str, index: int) -> str:
+    """Duplique le plan ``index`` (copie insérée juste après) et renumérote."""
+    head, blocks = _head_and_blocks(layout_text)
+    if not blocks or not (0 <= index < len(blocks)):
+        return layout_text
+    blocks.insert(index + 1, blocks[index])
+    return _rebuild(head, blocks)
+
+
+def reorder(layout_text: str, new_order: list) -> str:
+    """Réordonne les plans selon ``new_order`` (liste des index d'ORIGINE dans le
+    nouvel ordre) et renumérote. Ordre invalide → texte inchangé."""
+    head, blocks = _head_and_blocks(layout_text)
+    try:
+        order = [int(k) for k in new_order]
+    except (TypeError, ValueError):
+        return layout_text
+    if sorted(order) != list(range(len(blocks))):
+        return layout_text
+    return _rebuild(head, [blocks[k] for k in order])

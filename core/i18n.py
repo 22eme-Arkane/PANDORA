@@ -824,14 +824,14 @@ _FR_TO_EN: dict[str, str] = {
     "Ajouter des images d'inspiration (bibliothèque ou fichier, max 4)":
         "Add inspiration images (library or file, max 4)",
     "✓  Appliquer ce plan":                     "✓  Apply this shot",
-    "＋ Plan":                                   "＋ Shot",
-    "×  Suppr.":                                 "×  Delete",
-    "Monter ce plan":                           "Move this shot up",
-    "Descendre ce plan":                        "Move this shot down",
-    "Ajouter un plan après celui-ci":           "Add a shot after this one",
     "Supprimer ce plan":                        "Delete this shot",
+    "Dupliquer ce plan":                        "Duplicate this shot",
+    "＋  Ajouter un plan":                       "＋  Add a shot",
+    "Glisse un plan pour le déplacer · clic droit : ajouter / dupliquer / supprimer":
+        "Drag a shot to move it · right-click: add / duplicate / delete",
     "Plan déplacé ✓":                           "Shot moved ✓",
     "Plan ajouté ✓":                            "Shot added ✓",
+    "Plan dupliqué ✓":                          "Shot duplicated ✓",
     "Plan supprimé ✓":                          "Shot deleted ✓",
 
     # ── Page Storyboard ────────────────────────────────────────────────────────
