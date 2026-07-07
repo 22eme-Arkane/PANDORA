@@ -396,6 +396,10 @@ def colonnes_sequences():
         assert (hasattr(pg, "_empty_wrap") and hasattr(pg, "_empty_gen_btn")
                 and hasattr(pg, "_table_wrap")), \
             "bloc vide (message + bouton) + zone tableau présents (Live ET Mapping)"
+        # Message « aucun découpage » : largeur DÉFINIE (sinon le QLabel wordWrap
+        # centré était tronqué au-dessus du bouton, 2026-07-07).
+        assert pg._empty_lbl.maximumWidth() < 16000 and pg._empty_lbl.minimumWidth() >= 400, \
+            "label 'aucun découpage' à largeur fixe (anti-troncature)"
         _tlay = pg._btn_batch_mood.parentWidget().layout()
         assert (_tlay.indexOf(pg._btn_batch_mood) < _tlay.indexOf(pg._btn_music_align)
                 < _tlay.indexOf(pg._ai_lbl) < _tlay.indexOf(pg._btn_clear_shots)), \
@@ -437,13 +441,15 @@ def coecriture_et_finalisation_live():
 
 @test
 def studio_ia_onglets_style_conducteur_live():
-    """Onglets Studio IA Live façon Conducteur (2026-07-06) : barre fond bg0 +
-    filet haut/bas + barre GROUPÉE ajoutée pour parité Cinéma (séparateurs 2,4,6)."""
+    """Onglets Studio IA Live façon Conducteur : barre fond bg0 + filet sous la barre
+    sur TOUTE la largeur (bord haut du PANE, pas du QTabBar → plus de ligne doublée
+    ni tronquée, 2026-07-07) + barre GROUPÉE (séparateurs 2,4,6)."""
     import inspect
     sw = inspect.getsource(__import__("ui.live_studio_widget", fromlist=["_"]))
-    assert "QTabBar{{background:{C['bg0']}" in sw, "barre d'onglets Studio IA Live pas sur fond noir"
-    assert "border-top:1px solid" in sw and "border-bottom:1px solid" in sw, \
-        "encadrement haut/bas absent (Studio IA Live)"
+    assert "QTabBar{{background:{C['bg0']};border:none;}}" in sw, \
+        "barre d'onglets Studio IA Live : fond noir + AUCUNE bordure (sinon ligne doublée/tronquée)"
+    assert "QTabWidget::pane{{border:none;border-top:1px solid" in sw, \
+        "filet pleine largeur sous la barre (bord haut du pane, façon Conducteur)"
     assert "class _GroupedTabBar" in sw and "set_group_ends({2, 4, 6})" in sw, \
         "barre groupée Live absente"
 

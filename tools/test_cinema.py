@@ -2198,9 +2198,10 @@ def studio_ia_onglets_style_conducteur():
     dans le chat Image IA (studio_images)."""
     import inspect
     sw = inspect.getsource(__import__("ui.seedance_widget", fromlist=["_"]))
-    assert "QTabBar{{background:{C['bg0']}" in sw, "barre d'onglets Studio IA Cinéma pas sur fond noir"
-    assert "border-top:1px solid" in sw and "border-bottom:1px solid" in sw, \
-        "encadrement haut/bas absent (Studio IA Cinéma)"
+    assert "QTabBar{{background:{C['bg0']};border:none;}}" in sw, \
+        "barre d'onglets Studio IA Cinéma : fond noir + AUCUNE bordure (sinon ligne doublée/tronquée)"
+    assert "QTabWidget::pane{{border:none;border-top:1px solid" in sw, \
+        "filet pleine largeur sous la barre (bord haut du pane, façon Conducteur)"
     assert "_GroupedTabBar" in sw and "set_group_ends({3, 5, 6})" in sw, \
         "séparateurs de groupe Cinéma cassés"
     with open("studio_images/window.py", encoding="utf-8") as f:

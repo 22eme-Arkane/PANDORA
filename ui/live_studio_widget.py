@@ -157,11 +157,12 @@ class LiveStudioWidget(QWidget):
         # actif souligné accent. Séparateurs de groupe peints par _GroupedTabBar.
         self.tabs.setStyleSheet(
             self.tabs.styleSheet()
-            + "QTabWidget::pane{border:none;}"
+            # Filet sous la barre sur TOUTE la largeur (comme le Conducteur) : bord HAUT
+            # du PANE, pas un bord du QTabBar (centré → ne touchait pas les bords et se
+            # doublait avec le filet de la topbar au-dessus).
+            + f"QTabWidget::pane{{border:none;border-top:1px solid {C['border']};}}"
             + "QTabWidget::tab-bar{alignment:center;}"
-            + f"QTabBar{{background:{C['bg0']};"
-            + f"border-top:1px solid {C['border']};"
-            + f"border-bottom:1px solid {C['border']};}}"
+            + f"QTabBar{{background:{C['bg0']};border:none;}}"
             + f"QTabBar::tab{{background:transparent;color:{C['text_secondary']};}}"
             + f"QTabBar::tab:hover{{background:transparent;color:{C['text_primary']};}}")
         # Barre GROUPÉE (parité Cinéma : trait vertical entre groupes).

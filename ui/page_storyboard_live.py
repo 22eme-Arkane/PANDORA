@@ -2278,6 +2278,11 @@ class PageStoryboard(QWidget):
         self._empty_lbl = QLabel("")
         self._empty_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self._empty_lbl.setWordWrap(True)
+        # Largeur DÉFINIE : un QLabel wordWrap centré (AlignHCenter, non-expanding)
+        # recevait une largeur ambiguë (~137 px) → il croyait tenir sur 1 ligne mais
+        # le texte en demandait 2 → texte TRONQUÉ au-dessus du bouton. Une largeur
+        # fixe rend heightForWidth déterministe (le texte s'affiche en entier).
+        self._empty_lbl.setFixedWidth(460)
         self._empty_lbl.setStyleSheet(
             f"color:{CP['text_dim']};font-size:13px;background:transparent;border:none;"
         )

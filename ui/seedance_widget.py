@@ -120,11 +120,13 @@ class SeedanceWidget(QWidget):
         # peints par-dessus.
         self.tabs.setStyleSheet(
             self.tabs.styleSheet()
-            + "QTabWidget::pane{border:none;}"
+            # Filet sous la barre sur TOUTE la largeur (comme le Conducteur) : c'est le
+            # bord HAUT du PANE, pas un bord du QTabBar. Le QTabBar est centré (largeur
+            # des onglets) → ses bordures ne touchaient pas les bords du cadre ET se
+            # doublaient visuellement avec le filet de la topbar juste au-dessus.
+            + f"QTabWidget::pane{{border:none;border-top:1px solid {C['border']};}}"
             + "QTabWidget::tab-bar{alignment:center;}"
-            + f"QTabBar{{background:{C['bg0']};"
-            + f"border-top:1px solid {C['border']};"
-            + f"border-bottom:1px solid {C['border']};}}"
+            + f"QTabBar{{background:{C['bg0']};border:none;}}"
             + f"QTabBar::tab{{background:transparent;color:{C['text_secondary']};}}"
             + f"QTabBar::tab:hover{{background:transparent;color:{C['text_primary']};}}")
         # Barre d'onglets GROUPÉE (trait vertical entre groupes, façon dashboard).
