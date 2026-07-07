@@ -334,6 +334,18 @@ def facade_injectee_workers_texte_mapping():
         "co-écriture : image façade/réf envoyée sans redimensionnement (risque erreur 400 > 10 MB)"
     assert "encode_image_for_vision" in inspect.getsource(lb.describe_facade), \
         "describe_facade : façade envoyée sans redimensionnement"
+    # ── Discuter (chat pur) vs Modifier le plan (applique) — façon Image IA (2026-07-07) ──
+    from api.plan_coedit import _plan_coedit_system as _pcs, PlanCoEditWorker as _PCW
+    _sd = _pcs("live", "mapping", discuss_only=True)
+    assert "DISCUTES" in _sd and "RÉPONDS TOUJOURS EN DEUX BLOCS" not in _sd, \
+        "co-écriture Live : mode discussion conversationnel (pas de bloc plan forcé)"
+    assert "RÉPONDS TOUJOURS EN DEUX BLOCS" in _pcs("live", "mapping", discuss_only=False), \
+        "co-écriture Live : mode modification demande le bloc plan"
+    assert "discuss_only" in inspect.signature(_PCW.__init__).parameters, "worker : discuss_only absent"
+    from ui.dialog_plan_coedit import PlanCoEditDialog as _PCD
+    _dd = _PCD(None, "PLAN 1 — A\nx\n", edition="live", mode="live")
+    for _m in ("_btn_modify", "_on_modify_plan", "_launch"):
+        assert hasattr(_dd, _m), f"co-écriture : {_m} absent (bouton « Modifier le plan »)"
     # Page live : façade passée UNIQUEMENT aux 2 workers, gate mapping.
     _psrc = inspect.getsource(__import__("ui.page_scenario_live", fromlist=["_"]))
     assert "_facade_for_mapping" in _psrc and \

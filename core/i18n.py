@@ -816,7 +816,15 @@ _FR_TO_EN: dict[str, str] = {
     "Toi":                                      "You",
     "Assistant":                                "Assistant",
     "{n} plan(s)":                              "{n} shot(s)",
-    "☁  Envoyer à l'assistant":                 "☁  Send to the assistant",
+    "💬  Envoyer à l'assistant":                "💬  Send to the assistant",
+    "✏️  Modifier le plan":                     "✏️  Modify the shot",
+    "Réécris le plan en appliquant ce qu'on vient de discuter.":
+        "Rewrite the shot applying what we just discussed.",
+    "Plan modifié ✓ (enregistré automatiquement)":  "Shot modified ✓ (saved automatically)",
+    "Discuter du plan avec l'assistant (conseils, idées) — SANS modifier le plan.":
+        "Discuss the shot with the assistant (advice, ideas) — WITHOUT modifying it.",
+    "Appliquer une modification au plan : l'assistant le réécrit en tenant compte de la discussion.":
+        "Apply a change to the shot: the assistant rewrites it taking the discussion into account.",
     "Rédaction en cours…":                      "Writing…",
     "Proposition prête — relis, ajuste, passe à un autre plan si besoin, puis « Appliquer les modifications ».":
         "Proposal ready — review, adjust, move to another shot if needed, then “Apply changes”.",

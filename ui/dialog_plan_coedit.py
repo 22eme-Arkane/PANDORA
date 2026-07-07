@@ -105,6 +105,7 @@ class PlanCoEditDialog(QDialog):
             self._plan_preview.setReadOnly(True)
             self._input.setEnabled(False)
             self._btn_send.setEnabled(False)
+            self._btn_modify.setEnabled(False)
             self._btn_apply.setEnabled(False)
 
         try:
@@ -265,7 +266,7 @@ class PlanCoEditDialog(QDialog):
             "font-family:'Consolas',monospace;")
         rl.addWidget(self._status)
 
-        self._btn_send = QPushButton(translate("☁  Envoyer à l'assistant"))
+        self._btn_send = QPushButton(translate("💬  Envoyer à l'assistant"))
         self._btn_send.setFixedHeight(38)
         self._btn_send.setCursor(Qt.CursorShape.PointingHandCursor)
         self._btn_send.setStyleSheet(
@@ -273,8 +274,25 @@ class PlanCoEditDialog(QDialog):
             f"border-radius:8px;font-size:11px;font-weight:700;padding:0 18px;}}"
             f"QPushButton:hover{{background:#9d8fff;}}"
             f"QPushButton:disabled{{background:{CP['bg3']};color:{CP['text_dim']};}}")
+        self._btn_send.setToolTip(translate(
+            "Discuter du plan avec l'assistant (conseils, idées) — SANS modifier le plan."))
         self._btn_send.clicked.connect(self._on_send)
         rl.addWidget(self._btn_send)
+
+        # « Modifier le plan » : action DÉCIDÉE — l'assistant réécrit et applique.
+        self._btn_modify = QPushButton(translate("✏️  Modifier le plan"))
+        self._btn_modify.setFixedHeight(38)
+        self._btn_modify.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._btn_modify.setStyleSheet(
+            f"QPushButton{{background:{CP['accent']};color:{CP['bg0']};border:none;"
+            f"border-radius:8px;font-size:11px;font-weight:800;padding:0 18px;}}"
+            f"QPushButton:hover{{background:{CP['accent_dim']};color:#fff;}}"
+            f"QPushButton:disabled{{background:{CP['bg3']};color:{CP['text_dim']};}}")
+        self._btn_modify.setToolTip(translate(
+            "Appliquer une modification au plan : l'assistant le réécrit en tenant "
+            "compte de la discussion."))
+        self._btn_modify.clicked.connect(self._on_modify_plan)
+        rl.addWidget(self._btn_modify)
         split.addWidget(right)
 
         split.setSizes([420, 520])
@@ -432,7 +450,7 @@ class PlanCoEditDialog(QDialog):
             return
         # Réactive la saisie si on repart d'un état « aucun plan ».
         for w in (getattr(self, "_input", None), getattr(self, "_btn_send", None),
-                  getattr(self, "_btn_apply", None)):
+                  getattr(self, "_btn_modify", None), getattr(self, "_btn_apply", None)):
             if w is not None:
                 w.setEnabled(True)
         self._plan_preview.setReadOnly(False)
@@ -514,18 +532,31 @@ class PlanCoEditDialog(QDialog):
             self._chat.verticalScrollBar().maximum())
 
     def _on_send(self):
-        if not self._plans:
-            return
+        """« Envoyer à l'assistant » : DISCUSSION seule — l'assistant conseille sans
+        modifier le plan. On applique ensuite via « Modifier le plan »."""
         msg = self._input.toPlainText().strip()
         if not msg:
+            return
+        self._launch(msg, discuss_only=True)
+
+    def _on_modify_plan(self):
+        """« Modifier le plan » : l'assistant réécrit le plan (en tenant compte de la
+        discussion) et la modification est appliquée (auto-save). Sans consigne saisie,
+        applique ce qui vient d'être discuté."""
+        msg = self._input.toPlainText().strip() or translate(
+            "Réécris le plan en appliquant ce qu'on vient de discuter.")
+        self._launch(msg, discuss_only=False)
+
+    def _launch(self, msg: str, discuss_only: bool):
+        if not self._plans:
             return
         if self._worker and self._worker.isRunning():
             return
         # Le plan courant part de l'aperçu (édits manuels pris en compte) — committé
-        # d'abord (auto-save), et on RETIENT quel plan a été envoyé (course du worker).
+        # d'abord (auto-save). En MODIFICATION, on retient le plan cible (course worker).
         cur_plan = self._plan_preview.toPlainText().strip()
         self._commit_current_preview()
-        self._pending_plan = self._cur
+        self._pending_plan = None if discuss_only else self._cur
         hist = self._histories.setdefault(self._cur, [])
         hist.append({"role": "user", "content": msg})
         self._render_chat()
@@ -543,9 +574,10 @@ class PlanCoEditDialog(QDialog):
             mode=self._mode,
             ref_images=list(self._ref_images),
             facade_path=self._facade_path,
+            discuss_only=discuss_only,
         )
         self._worker.message_ready.connect(self._on_message_ready)
-        self._worker.plan_ready.connect(self._on_plan_ready)
+        self._worker.plan_ready.connect(self._on_plan_ready)   # non émis en discussion
         self._worker.failed.connect(self._on_failed)
         self._worker.start()
 
@@ -579,9 +611,7 @@ class PlanCoEditDialog(QDialog):
             # Le plan affiché est bien celui envoyé → aperçu + commit (auto-save).
             self._set_preview(plan)
             self._commit_current_preview()
-            self._status.setText(translate(
-                "Proposition prête — relis, ajuste, passe à un autre plan si besoin, "
-                "puis « Appliquer les modifications »."))
+            self._status.setText(translate("Plan modifié ✓ (enregistré automatiquement)"))
         else:
             # L'utilisateur a changé de plan pendant la rédaction : écris DIRECTEMENT
             # dans le plan cible, sans toucher l'aperçu courant (anti-corruption).
@@ -594,6 +624,8 @@ class PlanCoEditDialog(QDialog):
 
     def _set_busy(self, busy: bool):
         self._btn_send.setEnabled(not busy)
+        if hasattr(self, "_btn_modify"):
+            self._btn_modify.setEnabled(not busy)
         self._input.setEnabled(not busy)
         self._status.setText(translate("Rédaction en cours…") if busy else "")
 
@@ -637,7 +669,7 @@ class PlanCoEditDialog(QDialog):
             self._plan_list.clear()
             self._set_preview("")
             self._count_lbl.setText(translate("{n} plan(s)").format(n=0))
-            for w in (self._input, self._btn_send, self._btn_apply):
+            for w in (self._input, self._btn_send, self._btn_modify, self._btn_apply):
                 w.setEnabled(False)
             return
         for w in (self._input, self._btn_send, self._btn_apply):

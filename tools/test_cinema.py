@@ -2252,6 +2252,17 @@ def coecriture_des_plans_cinema():
         "co-écriture worker : cap figé [:4] encore présent"
     assert "QScrollArea" in _inspect.getsource(__import__("ui.dialog_plan_coedit", fromlist=["_"])), \
         "co-écriture : ruban de références non scrollable"
+    # ── Discuter (chat pur) vs Modifier le plan (applique) — façon Image IA (2026-07-07) ──
+    _sd = _plan_coedit_system("cinema", discuss_only=True)
+    assert "DISCUTES" in _sd and "RÉPONDS TOUJOURS EN DEUX BLOCS" not in _sd, \
+        "co-écriture : le mode discussion doit être conversationnel (pas de bloc plan forcé)"
+    assert "RÉPONDS TOUJOURS EN DEUX BLOCS" in _plan_coedit_system("cinema", discuss_only=False), \
+        "co-écriture : le mode modification doit demander le bloc plan"
+    assert "discuss_only" in _inspect.signature(PlanCoEditWorker.__init__).parameters, \
+        "worker co-écriture : param discuss_only absent"
+    for _m in ("_btn_modify", "_on_modify_plan", "_launch"):
+        assert hasattr(d3, _m), f"co-écriture : {_m} absent (bouton « Modifier le plan »)"
+    assert "Modifier le plan" in d3._btn_modify.text(), "bouton « Modifier le plan » absent"
 
 
 @test
