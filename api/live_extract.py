@@ -110,7 +110,7 @@ class FormatConducteurWorker(QThread):
                 "=== ACTE {n} — {nom court de l'acte} ===\n"
                 "PLAN {n} — {titre court en français}\n"
                 "Durée : {x}s · Valeur de plan : {…} · Mouvement : {…}\n"
-                "PROMPT VIDÉO (Seedance 2.0, " + _pl + ") : \"{prompt visuel TRÈS DÉTAILLÉ et "
+                "PROMPT VIDÉO (" + _pl + ") : \"{prompt visuel TRÈS DÉTAILLÉ et "
                 "dense — Seedance 2.0 exploite un MAXIMUM de détails, ne sois donc PAS bref. "
                 "Décris précisément : SUJET + ACTION, DÉCOR / environnement, COMPOSITION & "
                 "cadrage, LUMIÈRE (direction, qualité, température de couleur), PALETTE de "

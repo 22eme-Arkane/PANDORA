@@ -181,7 +181,10 @@ def prompts_mise_en_page():
     # La mise en page reste dans la LANGUE DE TRAVAIL (français par défaut) — plus
     # d'anglais figé : la traduction vers l'anglais est faite à l'ENVOI aux moteurs.
     assert "get_lang" in src, "langue de la mise en page = langue de travail (get_lang)"
-    assert "Seedance 2.0, anglais)" not in src, "PROMPT VIDÉO ne doit plus être figé en anglais"
+    # PROMPT VIDÉO : plus de mention du moteur « Seedance 2.0 » (rendu multi-moteurs) ;
+    # la LANGUE de travail reste annotée. (2026-07-07)
+    assert "PROMPT VIDÉO (Seedance 2.0" not in src, "annotation moteur retirée du PROMPT VIDÉO"
+    assert 'PROMPT VIDÉO (" + _pl + ")' in src, "langue de travail conservée dans l'annotation PROMPT VIDÉO"
 
 
 @test
@@ -529,7 +532,8 @@ def coecriture_et_finalisation_live():
     # Co-écriture : le plan réécrit reste dans la LANGUE DE TRAVAIL (français par
     # défaut), plus d'anglais forcé (la traduction est faite à l'envoi aux moteurs).
     assert "reste en ANGLAIS" not in _syslive, "co-écriture Live : plus d'anglais forcé"
-    assert "Seedance 2.0, français)" in _syslive, "co-écriture Live en langue de travail (fr)"
+    assert "PROMPT VIDÉO (français)" in _syslive and "PROMPT VIDÉO (Seedance 2.0" not in _syslive, \
+        "co-écriture Live : langue de travail conservée, annotation moteur « Seedance 2.0 » retirée"
     dlg = PlanCoEditDialog(None, live, edition="live", mode="live")
     assert not dlg.was_applied()
     # Réordonner (glisser-déposer) / ajouter / dupliquer / supprimer + renum (2026-07-07).

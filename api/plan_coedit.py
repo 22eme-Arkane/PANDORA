@@ -59,7 +59,7 @@ def _plan_coedit_system(edition: str, mode: str = "live", discuss_only: bool = F
             "FORMAT DU PLAN RÉÉCRIT (respecte-le À L'IDENTIQUE) :\n"
             "PLAN <n> — Titre court en français\n"
             "Durée : <x>s · Valeur de plan : … · Mouvement : …\n"
-            f"PROMPT VIDÉO (Seedance 2.0, {_pl}) : \"…\"\n"
+            f"PROMPT VIDÉO ({_pl}) : \"…\"\n"
             f"PROMPT SON (sound design / SFX, {_pl}) : \"…\"\n\n"
             "- Pour le plan RETRAVAILLÉ, garde son numéro (PLAN <n>) ; pour un plan AJOUTÉ, "
             "mets un numéro placeholder au bon format (il sera réattribué automatiquement).\n"

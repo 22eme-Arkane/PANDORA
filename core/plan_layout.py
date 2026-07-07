@@ -128,7 +128,7 @@ def _blank_plan(edition: str) -> str:
                 "→ SEEDANCE: à décrire…")
     return ("PLAN 1 — Nouveau plan\n"
             "Durée : 5s · Valeur de plan : … · Mouvement : …\n"
-            "PROMPT VIDÉO (Seedance 2.0, français) : « à décrire… »\n"
+            "PROMPT VIDÉO (français) : « à décrire… »\n"
             "PROMPT SON (sound design / SFX, français) : « à décrire… »")
 
 
