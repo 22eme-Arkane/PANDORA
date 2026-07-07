@@ -445,7 +445,7 @@ class PageScenario(QWidget):
         # colonne centrée sur la page → lignes lisibles au lieu de traverser tout
         # l'écran (retour Matthieu 2026-07-06 : « bloc indigeste, lignes trop longues »).
         from ui.widgets import install_reading_column
-        install_reading_column(self._editor_text, max_width=820)
+        install_reading_column(self._editor_text, max_width=820, center=True)
         self._editor_text.textChanged.connect(self._schedule_autosave)
         self._editor_text.textChanged.connect(self._update_dur_estimate)
 
@@ -486,7 +486,7 @@ class PageScenario(QWidget):
         # sont identiques et lisibles.
         self._layout_view.document().setDocumentMargin(48)
         self._layout_view.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
-        install_reading_column(self._layout_view, max_width=820)
+        install_reading_column(self._layout_view, max_width=820, center=True)
         self._layout_view.setPlaceholderText(translate(
             "Clique « Mise en page PANDORA » (panneau de droite) pour générer ici la "
             "version optimisée pour les moteurs. Ton scénario, lui, reste intact "
@@ -1012,8 +1012,8 @@ class PageScenario(QWidget):
         self._stack.setCurrentIndex(1)
 
     def _set_editor_text(self, text: str):
-        """Écrit le texte dans l'éditeur (colonne de lecture centrée, aligné à gauche,
-        respiration entre paragraphes)."""
+        """Écrit le texte dans l'éditeur (colonne de lecture bornée, texte CENTRÉ façon
+        Word, respiration entre paragraphes)."""
         self._editor_text.setPlainText(text)
         from ui.widgets import apply_paragraph_spacing
         apply_paragraph_spacing(self._editor_text)
@@ -1024,6 +1024,8 @@ class PageScenario(QWidget):
         if not text:
             return
         self._layout_view.setPlainText(text)
+        from ui.widgets import apply_paragraph_spacing
+        apply_paragraph_spacing(self._layout_view)   # centré + respiration (façon Word)
         if hasattr(self, "_editor_tabs"):
             self._editor_tabs.setTabEnabled(1, True)
             self._editor_tabs.setCurrentIndex(1)
@@ -1043,6 +1045,8 @@ class PageScenario(QWidget):
         if not hasattr(self, "_layout_view"):
             return
         self._layout_view.setPlainText(text or "")
+        from ui.widgets import apply_paragraph_spacing
+        apply_paragraph_spacing(self._layout_view)   # centré + respiration (façon Word)
         if hasattr(self, "_editor_tabs"):
             self._editor_tabs.setTabEnabled(1, bool((text or "").strip()))
             self._editor_tabs.setCurrentIndex(0)

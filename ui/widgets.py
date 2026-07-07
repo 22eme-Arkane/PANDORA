@@ -73,34 +73,61 @@ class _ReadingColumnFilter(QObject):
         return False
 
 
-def install_reading_column(te, max_width: int = 820, vertical: int = 18):
+def _set_reading_center(te, center: bool):
+    """Aligne (ou non) le texte au CENTRE de la colonne de lecture — via l'option de
+    texte par défaut du document, qui s'applique aussi au texte saisi ensuite et
+    survit à setPlainText. Marqueur `_reading_center` lu par apply_paragraph_spacing."""
+    try:
+        from PyQt6.QtGui import QTextOption
+        opt = te.document().defaultTextOption()
+        opt.setAlignment(Qt.AlignmentFlag.AlignHCenter if center
+                         else Qt.AlignmentFlag.AlignLeft)
+        te.document().setDefaultTextOption(opt)
+        te._reading_center = bool(center)
+    except Exception:
+        pass
+
+
+def install_reading_column(te, max_width: int = 820, vertical: int = 18,
+                           center: bool = False):
     """Contraint un QTextEdit à une colonne de lecture centrée (largeur max lisible).
 
-    Le texte reste aligné à GAUCHE dans une colonne centrée sur la page (mise en
-    page classique) au lieu de laisser les lignes traverser tout l'écran. Marges
-    latérales dynamiques (frame racine) ; marge haut/bas = `vertical` (petite).
+    Le texte est cadré dans une colonne centrée sur la page (au lieu de laisser les
+    lignes traverser tout l'écran). `center=True` : le texte est en plus aligné au
+    CENTRE de cette colonne (mise en page façon Word) ; sinon il reste à GAUCHE.
+    Marges latérales dynamiques (frame racine) ; marge haut/bas = `vertical` (petite).
     """
     f = _ReadingColumnFilter(te, max_width, vertical)
     te.installEventFilter(f)
     te._reading_column_filter = f    # référence anti-GC
+    _set_reading_center(te, center)
     return f
 
 
-def apply_paragraph_spacing(te, px: int = 10):
-    """Ajoute une petite RESPIRATION sous chaque paragraphe (bloc) d'un QTextEdit —
-    « retour à la ligne » visuel entre les paragraphes, sans polluer l'undo Qt ni
-    déplacer le curseur de l'utilisateur. Les blocs saisis ensuite héritent du format.
+def apply_paragraph_spacing(te, px: int = 12, center=None):
+    """Ajoute une RESPIRATION sous chaque paragraphe (bloc) d'un QTextEdit — « retour
+    à la ligne » visuel entre les paragraphes, sans polluer l'undo Qt ni déplacer le
+    curseur de l'utilisateur. Les blocs saisis ensuite héritent du format.
+    `center` : None = déduit du marqueur `_reading_center` posé par install_reading_column
+    (colonne centrée → texte centré) ; True/False force l'alignement.
     À appeler après avoir écrit le texte (setPlainText)."""
     try:
         from PyQt6.QtGui import QTextCursor, QTextBlockFormat
+        if center is None:
+            center = bool(getattr(te, "_reading_center", False))
         doc = te.document()
         doc.setUndoRedoEnabled(False)
         cur = QTextCursor(doc)                     # curseur détaché : ne bouge pas celui de l'UI
         cur.select(QTextCursor.SelectionType.Document)
         bf = QTextBlockFormat()
-        bf.setBottomMargin(px)                     # ne touche QUE la marge basse (align. préservé)
+        bf.setBottomMargin(px)                     # respiration entre paragraphes
+        bf.setAlignment(Qt.AlignmentFlag.AlignHCenter if center
+                        else Qt.AlignmentFlag.AlignLeft)
         cur.mergeBlockFormat(bf)
         doc.setUndoRedoEnabled(True)
+        # Le texte tapé ENSUITE hérite aussi de l'alignement voulu.
+        if center:
+            te.setAlignment(Qt.AlignmentFlag.AlignHCenter)
     except Exception:
         pass
 

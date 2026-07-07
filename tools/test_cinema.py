@@ -1420,13 +1420,13 @@ def scenario_onglet_mise_en_page():
     p._apply_layout("MISE EN PAGE PANDORA")
     assert p._editor_text.toPlainText().strip() == "SCENARIO ORIGINAL", "scénario intact"
     assert "MISE EN PAGE" in p._layout_view.toPlainText()
-    # Colonne de lecture centrée (2026-07-06) : texte aligné à GAUCHE dans une colonne
-    # centrée (lisible) — plus de centrage ligne par ligne (« bloc indigeste »).
+    # Mise en forme façon Word (2026-07-07) : texte CENTRÉ dans la colonne de lecture
+    # bornée (lisible car largeur limitée — PAS le centrage pleine largeur illisible).
     from PyQt6.QtCore import Qt as _Qt
     _ed_align = p._editor_text.document().defaultTextOption().alignment()
     _lv_align = p._layout_view.document().defaultTextOption().alignment()
-    assert not (_ed_align & _Qt.AlignmentFlag.AlignHCenter), "Scénario aligné à gauche (colonne lisible)"
-    assert not (_lv_align & _Qt.AlignmentFlag.AlignHCenter), "Mise en page alignée à gauche"
+    assert _ed_align & _Qt.AlignmentFlag.AlignHCenter, "Scénario centré dans la colonne (façon Word)"
+    assert _lv_align & _Qt.AlignmentFlag.AlignHCenter, "Mise en page centrée dans la colonne"
     assert hasattr(p._editor_text, "_reading_column_filter") \
         and hasattr(p._layout_view, "_reading_column_filter"), \
         "colonne de lecture centrée installée sur les 2 onglets"
@@ -1463,6 +1463,14 @@ def colonne_lecture_largeur_limitee():
         col = vw - 2 * side - 2 * int(doc.documentMargin())
         assert side > 150, f"colonne pas centrée (marge latérale {side})"
         assert 760 <= col <= 880, f"colonne pas ~820 px (={col})"
+    # center=True → texte centré dans la colonne (façon Word, 2026-07-07).
+    from PyQt6.QtCore import Qt as _QtC
+    te2 = QTextEdit()
+    install_reading_column(te2, max_width=820, center=True)
+    te2.setPlainText("Centré A.\nCentré B.")
+    apply_paragraph_spacing(te2)   # center déduit du marqueur _reading_center
+    assert te2.document().defaultTextOption().alignment() & _QtC.AlignmentFlag.AlignHCenter, \
+        "install_reading_column(center=True) → texte centré"
     # Marge verticale PETITE (le texte ne descend pas de 387 px sous le titre).
     assert int(doc.documentMargin()) <= 40, "marge verticale trop grande (setDocumentMargin ?)"
     # Respiration entre paragraphes appliquée.
