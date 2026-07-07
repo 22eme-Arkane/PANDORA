@@ -556,9 +556,13 @@ class TabSoundDesignLive(QScrollArea):
             except (TypeError, ValueError):
                 return 0
 
+        from core.prompt_sections import sound_of as _sound_of
         self._sfx_queue = []
         for s in sorted(shots, key=_num):
-            prompt = (s.get("sound_prompt", "") or "").strip()
+            # UN seul prompt à sections : la section [🎵 SOUND DESIGN] prime ; repli
+            # sur l'ancien champ sound_prompt (projets antérieurs).
+            prompt = (_sound_of(s.get("seedance_prompt", "") or "")
+                      or (s.get("sound_prompt", "") or "")).strip()
             if not prompt:
                 continue
             try:
@@ -589,7 +593,9 @@ class TabSoundDesignLive(QScrollArea):
         panneau manuel ; la file est remise à zéro (le plan prime)."""
         if not shot:
             return
-        prompt = (shot.get("sound_prompt", "") or "").strip()
+        from core.prompt_sections import sound_of as _sound_of
+        prompt = (_sound_of(shot.get("seedance_prompt", "") or "")
+                  or (shot.get("sound_prompt", "") or "")).strip()
         try:
             dur = float(shot.get("duration", 5.0) or 5.0)
         except (TypeError, ValueError):

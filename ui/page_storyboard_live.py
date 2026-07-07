@@ -37,7 +37,7 @@ _COLS = [
     ("Mood",          92,  False),  # 1  mood/aperçu storyboard
     ("Acte",          78,  False),  # 2  seq_num / seq_name (acte du conducteur)
     ("Plan",          52,  False),  # 3
-    ("Prompt vidéo / son", 300, False),  # 4  seedance_prompt + sound_prompt
+    ("Prompt",        300,  False),  # 4  seedance_prompt (UN seul prompt à sections : vidéo + [🎵 SOUND DESIGN])
     ("Axe Caméra",    120, False),  # 5  camera_axis + chars_in + chars_out
     ("Mouvement",     96,  False),  # 6
     ("Valeur",        72,  False),  # 7  Shot size
@@ -626,9 +626,8 @@ class _ShotRow(QFrame):
             )
             return r.height() + 14  # 8+6 = cell top+bottom padding
 
-        # Colonne 4 = deux prompts empilés (vidéo + son) → on cumule leurs hauteurs.
-        _pmt_h = (_h((self._data.get("seedance_prompt", "") or "")[:300], 4, 9)
-                  + _h((self._data.get("sound_prompt", "") or "")[:300], 4, 9))
+        # Colonne 4 = UN seul prompt à sections (vidéo + [🎵 SOUND DESIGN]).
+        _pmt_h = _h((self._data.get("seedance_prompt", "") or "")[:600], 4, 9)
         return max(
             self._MIN_H,
             _pmt_h,
@@ -1108,32 +1107,26 @@ class _ShotRow(QFrame):
             _clickable(box, edit_fn)
             return box, body
 
-        def _edit_video():
-            v = _text_dialog(self, translate("Prompt vidéo (Seedance)"),
+        # UN seul prompt à sections (vidéo + [🎵 SOUND DESIGN]), comme en Cinéma :
+        # on l'édite d'un bloc ; « ➤ SFX » n'envoie QUE la section son (sound_of).
+        def _edit_prompt():
+            v = _text_dialog(self, translate("Prompt (vidéo + son)"),
                              data.get("seedance_prompt", ""), enhance=True)
             if v is not None:
                 _save_field("seedance_prompt", v)
 
-        def _edit_sound():
-            v = _text_dialog(self, translate("Prompt sound design"),
-                             data.get("sound_prompt", ""), enhance=False)
-            if v is not None:
-                _save_field("sound_prompt", v)
+        def _send_sound():
+            from core.prompt_sections import sound_of
+            _snd = (sound_of(self._data.get("seedance_prompt", "") or "")
+                    or (self._data.get("sound_prompt", "") or ""))
+            self.sound_requested.emit(
+                _snd, float(self._data.get("duration", 5.0) or 5.0))
 
         _vid_box, _pmt_lbl = _prompt_field(
-            "🎬 " + translate("Vidéo"), CP["accent"],
-            data.get("seedance_prompt", "") or "", _edit_video)
-        def _send_sound():
-            self.sound_requested.emit(
-                self._data.get("sound_prompt", "") or "",
-                float(self._data.get("duration", 5.0) or 5.0))
-
-        _snd_box, _snd_lbl = _prompt_field(
-            "🔊 " + translate("Son"), CP.get("orange", CP["accent"]),
-            data.get("sound_prompt", "") or "", _edit_sound,
-            action=("➤ SFX", translate("Envoyer vers Sound Design (Studio IA)"), _send_sound))
+            "🎬 " + translate("Prompt"), CP["accent"],
+            data.get("seedance_prompt", "") or "", _edit_prompt,
+            action=("➤ SFX", translate("Envoyer le son vers Sound Design (Studio IA)"), _send_sound))
         pmt_l.addWidget(_vid_box)
-        pmt_l.addWidget(_snd_box)
         self._pmt_lbl = _pmt_lbl
         cells[4] = pmt_w
 

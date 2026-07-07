@@ -213,13 +213,20 @@ def _normalize(seg: dict, mode: str) -> dict:
         act = int(seg.get("act", 1))
     except (TypeError, ValueError):
         act = 1
+    from core.prompt_sections import video_with_sound
+    _video = str(seg.get("prompt", "")).strip()
+    _sound = str(seg.get("sound_prompt", "")).strip()
     return {
         "action":          str(seg.get("action", "")).strip(),
         "shot_size":       "" if mode == "mapping" else str(seg.get("shot_size", "")).strip(),
         "camera_movement": "Fixe" if mode == "mapping" else str(mv).strip(),
         "duration":        dur,
-        "prompt":          str(seg.get("prompt", "")).strip(),
-        "sound_prompt":    str(seg.get("sound_prompt", "")).strip(),
+        "prompt":          _video,
+        "sound_prompt":    _sound,
+        # UN seul prompt à SECTIONS (comme Cinéma) : vidéo + [🎵 SOUND DESIGN]. Le son
+        # reste extrait par sound_of() (Sound Design) et retiré par video_of() (moteur
+        # vidéo). `prompt`/`sound_prompt` restent fournis en repli (rétro-compat).
+        "seedance_prompt": video_with_sound(_video, _sound),
         "act":             max(1, act),
         "act_name":        str(seg.get("act_name", "")).strip(),
         "image_path":      "",

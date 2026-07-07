@@ -3776,11 +3776,12 @@ class TabT2V(QScrollArea):
             QMessageBox.warning(self, "Prompt vide", "Écris un prompt avant de générer !")
             return
 
-        # Retirer [🎵 SOUND DESIGN] AVANT l'assemblage : les suffixes ajoutés en
-        # queue (« no subtitles »…) tombaient DANS la section son puis étaient
-        # supprimés avec elle par api/real.strip_for_video (qui reste en filet).
-        from core.prompt_sections import strip_for_video as _strip_sound
-        prompt = _strip_sound(prompt) or prompt
+        # UN seul prompt à sections : on n'envoie au moteur vidéo QUE la partie VIDÉO
+        # (tout ce qui précède [🎵 SOUND DESIGN]). Le son part au Sound Design. On le
+        # retire AVANT l'assemblage des suffixes (« no subtitles »…) — sinon ils
+        # tombaient dans la section son. api/real.strip_for_video reste en filet.
+        from core.prompt_sections import video_of as _video_of
+        prompt = _video_of(prompt) or prompt
 
         context     = self._casting.get_context()
         full_prompt = (context + prompt) if context else prompt
@@ -4147,7 +4148,9 @@ class TabT2V(QScrollArea):
         # ── Sound design auto : génère l'ambiance SFX du plan en parallèle ────
         if (getattr(self, "_sfx_auto_cb", None) and self._sfx_auto_cb.isChecked()
                 and self._active_shot):
-            _sp = (self._active_shot.get("sound_prompt", "") or "").strip()
+            from core.prompt_sections import sound_of as _sound_of
+            _sp = (_sound_of(self._active_shot.get("seedance_prompt", "") or "")
+                   or (self._active_shot.get("sound_prompt", "") or "")).strip()
             if _sp:
                 try:
                     from api.tts import SFX1Worker

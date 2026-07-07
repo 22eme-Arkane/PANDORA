@@ -86,13 +86,19 @@ def json_parser_robuste():
 
 @test
 def normalize_decoupage():
-    """_normalize produit act/act_name/sound_prompt, clamp durée, Fixe en mapping."""
+    """_normalize produit act/act_name/sound_prompt + seedance_prompt SECTIONNÉ
+    (vidéo + [🎵 SOUND DESIGN]), clamp durée, Fixe en mapping."""
     from api.live_screenplay import _normalize
+    from core.prompt_sections import sound_of, video_of
     n = _normalize({"action": "a", "prompt": "v", "sound_prompt": "s",
                     "act": 2, "act_name": "Drop", "duration": 99,
                     "camera_movement": "Travelling"}, "mapping")
     assert n["act"] == 2 and n["act_name"] == "Drop", "act/act_name"
-    assert n["sound_prompt"] == "s", "sound_prompt"
+    assert n["sound_prompt"] == "s", "sound_prompt (repli)"
+    # UN seul prompt à sections : vidéo + son réunis, chacun ré-extractible.
+    assert "[🎵 SOUND DESIGN]" in n["seedance_prompt"], "section son dans le prompt"
+    assert sound_of(n["seedance_prompt"]) == "s", "son extractible (Sound Design)"
+    assert video_of(n["seedance_prompt"]) == "v", "vidéo extractible (moteur vidéo)"
     assert n["duration"] == 15, "clamp durée 15"
     assert n["camera_movement"] == "Fixe", "mapping force Fixe"
     n2 = _normalize({"action": "a", "duration": 1}, "live")
@@ -337,7 +343,7 @@ def colonnes_sequences():
     import ui.page_storyboard_live as M
     from ui.live_pages import SequenceLivePage, SequenceMappingPage, _LIVE_DEFAULT_ORDER
     assert len(M._COLS) == 23, "22 colonnes + Référence (inspiration)"
-    assert M._COLS[2][0] == "Acte" and M._COLS[4][0] == "Prompt vidéo / son"
+    assert M._COLS[2][0] == "Acte" and M._COLS[4][0] == "Prompt"   # UN seul prompt à sections
     assert M._COLS[16][0] == "TC" and M._COLS[17][0] == "Musique"
     assert M._COLS[18][0] == "BPM" and M._COLS[19][0] == "Transition"
     assert M._COLS[22][0] == "Référence", "colonne Référence (inspiration) en logique 22"
@@ -471,19 +477,25 @@ def reorg_colonnes_et_heritages():
 
 @test
 def decoupage_routage_et_champs():
-    """_apply_decoupage : namespace live_seq_{mode}, act→seq, sound_prompt sauvé."""
+    """_apply_decoupage : namespace live_seq_{mode}, act→seq, seedance_prompt SECTIONNÉ
+    (vidéo + son), sound_prompt en repli."""
     import core.storyboard as sb
     from ui.page_scenario_live import PageScenario
+    from api.live_screenplay import _normalize
+    from core.prompt_sections import sound_of
     p = PageScenario()
     navs = []
     p.navigate_requested.connect(lambda k, e="": navs.append(k))
-    segs = [{"action": "a", "duration": 6, "prompt": "v", "sound_prompt": "s",
-             "act": 2, "act_name": "Drop"}]
+    # segments passés par _normalize (comme le vrai flux) → seedance_prompt sectionné
+    segs = [_normalize({"action": "a", "duration": 6, "prompt": "v", "sound_prompt": "s",
+                        "act": 2, "act_name": "Drop"}, "mapping")]
     p._live_mode = "mapping"
     p._apply_decoupage(segs)
     assert sb.get_namespace() == "live_seq_mapping" and navs[-1] == "seq_mapping"
     shots = sb.list_shots()
-    assert shots and shots[0]["sound_prompt"] == "s" and shots[0]["seq_num"] == 2
+    assert shots and shots[0]["seq_num"] == 2
+    assert sound_of(shots[0]["seedance_prompt"]) == "s", "son dans le prompt sectionné"
+    assert shots[0]["sound_prompt"] == "s", "sound_prompt en repli"
     p._live_mode = "live"
     p._apply_decoupage(segs)
     assert sb.get_namespace() == "live_seq_live" and navs[-1] == "seq_live"
@@ -491,12 +503,17 @@ def decoupage_routage_et_champs():
 
 
 @test
-def dialog_plan_live_sound_prompt():
-    """ShotDialog Live a le champ sound design (le Cinéma l'a AUSSI depuis
-    2026-06-13 — parité voulue) ; la page Live ouvre bien la copie Live."""
+def dialog_plan_live_prompt_sectionne():
+    """ShotDialog Live : UN seul prompt à SECTIONS (vidéo + [🎵 SOUND DESIGN]) comme en
+    Cinéma — plus de champ « son » séparé ; le son reste extractible (Sound Design)."""
     from ui.dialog_shot_live import ShotDialog as LiveDlg
-    d = LiveDlg(shot={"id": "s1", "number": 1, "sound_prompt": "boom"})
-    assert hasattr(d, "_sound_prompt") and d._sound_prompt.toPlainText() == "boom"
+    from core.prompt_sections import video_with_sound, sound_of
+    _p = video_with_sound("blue ocean", "boom")
+    d = LiveDlg(shot={"id": "s1", "number": 1, "seedance_prompt": _p})
+    assert hasattr(d, "_seedance_prompt"), "champ prompt unique présent"
+    assert not hasattr(d, "_sound_prompt"), "plus de champ « son » séparé"
+    assert d._seedance_prompt.toPlainText() == _p, "prompt sectionné chargé"
+    assert sound_of(d._seedance_prompt.toPlainText()) == "boom", "son extractible"
     import ui.page_storyboard_live as M
     assert M.ShotDialog.__module__ == "ui.dialog_shot_live", "la page Live ouvre la copie Live"
 
@@ -1839,7 +1856,7 @@ def libelles_dynamiques_ia():
 def i18n_cles_live():
     """Les chaînes Live clés ont leur traduction EN dans _FR_TO_EN."""
     from core.i18n import _FR_TO_EN
-    for key in ("Mise en page PANDORA", "Acte", "Prompt vidéo / son",
+    for key in ("Mise en page PANDORA", "Acte", "Prompt (vidéo + son)",
                 "Sound Design", "Upscaling", "♫  Musiques du set",
                 "▦  Référence bâtiment (façade)", "Corriger le BPM",
                 "✓  Appliquer le découpage", "Musique", "Notes / Repère"):

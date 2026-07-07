@@ -2206,7 +2206,8 @@ class PageScenario(QWidget):
                 "shot_size":       seg.get("shot_size", ""),
                 "camera_movement": seg.get("camera_movement", ""),
                 "duration":        seg.get("duration", 5),
-                "seedance_prompt": seg.get("prompt", ""),
+                # UN seul prompt à sections (vidéo + [🎵 SOUND DESIGN]) ; sound_prompt en repli.
+                "seedance_prompt": seg.get("seedance_prompt") or seg.get("prompt", ""),
                 "sound_prompt":    seg.get("sound_prompt", ""),
                 "seq_num":         seg.get("act", 1),
                 "seq_name":        seg.get("act_name", ""),

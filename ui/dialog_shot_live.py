@@ -542,7 +542,7 @@ class ShotDialog(QDialog):
 
         seedance_header = QHBoxLayout()
         seedance_header.setSpacing(6)
-        seedance_header.addWidget(_lbl("Prompt vidéo (Seedance)"))
+        seedance_header.addWidget(_lbl("Prompt (vidéo + son)"))
         seedance_header.addStretch()
         self._btn_enhance_seedance = QPushButton()
         self._btn_enhance_seedance.setFixedSize(26, 26)
@@ -567,26 +567,19 @@ class ShotDialog(QDialog):
         # « Améliorer le prompt » (☁) RETIRÉ — fonction jugée inutile/instable.
         self._btn_enhance_seedance.setVisible(False)
         lay.addLayout(seedance_header)
+        # UN seul prompt à sections (vidéo + [🎵 SOUND DESIGN]), comme en Cinéma : la
+        # section son est extraite pour le Sound Design et retirée du prompt vidéo.
         self._seedance_prompt = QTextEdit()
         self._seedance_prompt.setPlainText(self._shot.get("seedance_prompt", ""))
-        self._seedance_prompt.setFixedHeight(68)
+        self._seedance_prompt.setFixedHeight(132)
+        self._seedance_prompt.setPlaceholderText(
+            "Prompt vidéo du plan. Ajoute (optionnel) une section [🎵 SOUND DESIGN] "
+            "avec l'ambiance sonore : elle part au Sound Design, jamais au moteur vidéo."
+        )
         self._seedance_prompt.setStyleSheet(
             _TEXTAREA_STYLE.replace(CP["accent"], CP["accent2_dim"])
         )
         lay.addWidget(self._seedance_prompt)
-
-        # ── Prompt sound design (→ Sound Design / Mirelo SFX) ─────────────────
-        lay.addWidget(_lbl("Prompt sound design"))
-        self._sound_prompt = QTextEdit()
-        self._sound_prompt.setPlainText(self._shot.get("sound_prompt", ""))
-        self._sound_prompt.setFixedHeight(60)
-        self._sound_prompt.setPlaceholderText(
-            "Ambiance / SFX du plan (anglais), sans voix — injecté dans Sound Design."
-        )
-        self._sound_prompt.setStyleSheet(
-            _TEXTAREA_STYLE.replace(CP["accent"], CP.get("orange", CP["accent"]))
-        )
-        lay.addWidget(self._sound_prompt)
 
         self._enhance_status = QLabel("")
         self._enhance_status.setWordWrap(True)
@@ -805,6 +798,10 @@ class ShotDialog(QDialog):
 
         duration = self._dur_slider.value() / 10.0
 
+        # UN seul prompt à sections : sound_prompt est DÉRIVÉ de la section [🎵 SOUND
+        # DESIGN] du prompt (repli rétro-compat pour les anciens consommateurs).
+        from core.prompt_sections import sound_of as _sound_of
+        _sdp = self._seedance_prompt.toPlainText().strip()
         data = dict(self._shot)
         data.update({
             "number":          self._shot.get("number", 0),
@@ -829,8 +826,8 @@ class ShotDialog(QDialog):
             "shot_size":       self._shot_size.currentData() or "",
             "speed":           to_source(self._speed.currentText()),
             "comments":          self._comments.toPlainText().strip(),
-            "seedance_prompt":   self._seedance_prompt.toPlainText().strip(),
-            "sound_prompt":      self._sound_prompt.toPlainText().strip(),
+            "seedance_prompt":   _sdp,
+            "sound_prompt":      _sound_of(_sdp),
             "image_path":        self._shot.get("image_path", ""),
             "camera_axis":       to_source(self._camera_axis.currentText()) if self._camera_axis.currentText() != "—" else "",
             "camera_placement":  self._camera_placement.text().strip(),

@@ -133,6 +133,27 @@ def sound_of(prompt: str) -> str:
     return parse(prompt).get("sound", "") if is_structured(prompt) else ""
 
 
+def video_with_sound(video: str, sound: str) -> str:
+    """Compose UN prompt Live unique : la VIDÉO (corps) suivie d'une section
+    [🎵 SOUND DESIGN] si `sound` non vide. Sans son → renvoie la vidéo telle quelle.
+    Le son reste extractible par sound_of() et retiré du prompt vidéo par video_of()
+    (le moteur vidéo ne reçoit jamais le son : séparation image/son)."""
+    video = (video or "").strip()
+    sound = (sound or "").strip()
+    if not sound:
+        return video
+    return f"{video}\n\n{_LABELS['sound']}\n{sound}"
+
+
+def video_of(prompt: str) -> str:
+    """Partie VIDÉO d'un prompt Live composé (le corps AVANT [🎵 SOUND DESIGN]).
+    Prompt non structuré → renvoyé inchangé. Sert à n'envoyer QUE le visuel au
+    moteur vidéo (le son part au Sound Design)."""
+    if not is_structured(prompt):
+        return prompt
+    return parse(prompt).get("action", "").strip()
+
+
 # ── Section TECHNIQUE déterministe (depuis les champs caméra d'un plan) ──────────
 
 # Valeurs de plan (codes JSON) → libellés lisibles pour la section [🖼️ TECHNIQUE].

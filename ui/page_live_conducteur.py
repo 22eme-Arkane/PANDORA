@@ -337,7 +337,9 @@ class PageLiveConducteur(QWidget):
                 "shot_size":       seg.get("shot_size", ""),
                 "camera_movement": seg.get("camera_movement", ""),
                 "duration":        seg.get("duration", 5),
-                "seedance_prompt": seg.get("prompt", ""),
+                # UN seul prompt à sections (vidéo + [🎵 SOUND DESIGN]) ; sound_prompt en repli.
+                "seedance_prompt": seg.get("seedance_prompt") or seg.get("prompt", ""),
+                "sound_prompt":    seg.get("sound_prompt", ""),
             }, _sb.DEFAULT_VERSION_ID)
         target = "seq_mapping" if self._mode == "mapping" else "seq_live"
         seq_name = translate("Séquences Mapping") if self._mode == "mapping" else translate("Séquences Live")
