@@ -1988,6 +1988,16 @@ def seed_reprise_et_4k_live():
     lw.tab_history.reprendre_plan.emit(dict(entry))
     assert lw.tabs.currentWidget() is lw.tab_sequences, "bascule onglet Séquences manquante"
     assert "loop mapping facade" in lw.tab_sequences.prompt_ta.toPlainText(), "prompt non transmis"
+    # Vidéothèque « ↑ HD » : MÊME reprise par la graine que l'Historique (2026-07-07).
+    from ui.tab_video_library_live import _LiveVideoCard, TabVideoLibraryLive
+    import core.history as _H
+    assert hasattr(_LiveVideoCard, "reprise_requested") and hasattr(TabVideoLibraryLive, "send_to_reprise")
+    assert callable(getattr(_H, "find_entry_by_path", None)), "find_entry_by_path absent"
+    lw.tab_sequences.prompt_ta.setPlainText("")
+    lw.tabs.setCurrentWidget(lw.tab_library)
+    lw.tab_library.send_to_reprise.emit({"prompt": "reprise videotheque", "seed": 777, "status": "done"})
+    assert lw.tabs.currentWidget() is lw.tab_sequences, "Vidéothèque HD → bascule Séquences (comme Historique)"
+    assert "reprise videotheque" in lw.tab_sequences.prompt_ta.toPlainText(), "Vidéothèque HD : prompt non transmis"
 
 
 @test

@@ -239,6 +239,9 @@ class LiveStudioWidget(QWidget):
         self.tab_library.send_to_resolume.connect(self._on_send_to_resolume)
         # Vidéothèque → Upscaling (Live)
         self.tab_library.send_to_upscale.connect(self._on_send_to_upscale)
+        # Vidéothèque → « ↑ HD » : reprise par la graine (comme l'Historique) →
+        # Générer depuis Séquences (prefill_from_seed), pour régénérer un plan.
+        self.tab_library.send_to_reprise.connect(self._on_reprendre_plan)
 
         self._library_tab_index   = self.tabs.indexOf(self.tab_library)
         self._sequences_tab_index  = self.tabs.indexOf(self.tab_sequences)

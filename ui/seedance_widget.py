@@ -191,6 +191,9 @@ class SeedanceWidget(QWidget):
 
         # Vidéothèque → Modifier depuis DaVinci
         self.tab_library.send_to_davinci_edit.connect(self._on_send_to_edit)
+        # Vidéothèque → « ↑ HD » : reprise par la graine (comme l'Historique) →
+        # Générer depuis Storyboard (prefill_from_seed), pour régénérer un plan.
+        self.tab_library.send_to_reprise.connect(self._on_reprendre_plan)
 
         # Ping bridge quand l'onglet "Modifier depuis DaVinci" devient actif
         # Refresh vidéothèque quand on clique sur l'onglet

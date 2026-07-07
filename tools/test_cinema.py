@@ -3240,6 +3240,16 @@ def seed_reprise_et_4k():
     sw.tab_history.reprendre_plan.emit(dict(entry))
     assert sw.tabs.currentWidget() is sw.tab_t2v, "bascule onglet T2V manquante"
     assert "plan nuit neons" in sw.tab_t2v.prompt_ta.toPlainText(), "prompt non transmis au widget"
+    # Vidéothèque « ↑ HD » : MÊME reprise par la graine que l'Historique (2026-07-07).
+    from ui.tab_video_library import _VideoCard, TabVideoLibrary
+    import core.history as _H
+    assert hasattr(_VideoCard, "reprise_requested") and hasattr(TabVideoLibrary, "send_to_reprise")
+    assert callable(getattr(_H, "find_entry_by_path", None)), "find_entry_by_path absent"
+    sw.tab_t2v.prompt_ta.setPlainText("")
+    sw.tabs.setCurrentWidget(sw.tab_library)
+    sw.tab_library.send_to_reprise.emit({"prompt": "reprise videotheque cine", "seed": 555, "status": "done"})
+    assert sw.tabs.currentWidget() is sw.tab_t2v, "Vidéothèque HD → bascule T2V (comme Historique)"
+    assert "reprise videotheque cine" in sw.tab_t2v.prompt_ta.toPlainText(), "Vidéothèque HD : prompt non transmis"
 
 
 @test

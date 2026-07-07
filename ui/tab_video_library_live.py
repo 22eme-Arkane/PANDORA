@@ -73,6 +73,7 @@ class _LiveVideoCard(QFrame):
     modify_requested   = pyqtSignal(str)
     resolume_requested = pyqtSignal(str)
     upscale_requested  = pyqtSignal(str)
+    reprise_requested  = pyqtSignal(dict)   # « ↑ HD » : reprise par la GRAINE (comme l'Historique)
 
     _TH_W = 160
     _TH_H = 90
@@ -178,6 +179,28 @@ class _LiveVideoCard(QFrame):
         row2.addWidget(btn_up)
         lay.addLayout(row2)
 
+        # « ↑ HD » — reprise par la GRAINE (comme l'Historique) : régénère un plan à
+        # partir de ce clip (même prompt + même graine) vers « Générer depuis Séquences ».
+        # Visible seulement si une entrée d'historique avec graine correspond au clip.
+        from core.history import find_entry_by_path as _find_entry
+        _reprise = _find_entry(self._path)
+        if _reprise:
+            row3 = QHBoxLayout()
+            row3.setContentsMargins(0, 0, 0, 0)
+            row3.setSpacing(4)
+            btn_hd = QPushButton("↑ HD")
+            btn_hd.setCursor(Qt.CursorShape.PointingHandCursor)
+            btn_hd.setToolTip(translate(
+                "Reprendre ce plan (même graine) pour le régénérer en résolution supérieure"))
+            btn_hd.setStyleSheet(
+                f"QPushButton{{background:transparent;border:1px solid {C['accent']};"
+                f"border-radius:6px;color:{C['accent']};font-size:11px;font-weight:700;"
+                f"padding:4px 10px;}}"
+                f"QPushButton:hover{{background:rgba(124,107,255,0.15);}}")
+            btn_hd.clicked.connect(lambda _=False, e=dict(_reprise): self.reprise_requested.emit(e))
+            row3.addWidget(btn_hd)
+            lay.addLayout(row3)
+
     def set_thumb_pixmap(self, pix: QPixmap):
         self._thumb.setPixmap(pix)
 
@@ -188,6 +211,7 @@ class TabVideoLibraryLive(QScrollArea):
     send_to_modify   = pyqtSignal(list)  # list[str]
     send_to_resolume = pyqtSignal(list)  # list[str]
     send_to_upscale  = pyqtSignal(list)  # list[str]
+    send_to_reprise  = pyqtSignal(dict)  # « ↑ HD » : reprise par la graine (→ Générer depuis Séquences)
 
     _SORT_OPTIONS = [
         ("Date (récent → ancien)",   "date_desc"),
@@ -331,6 +355,7 @@ class TabVideoLibraryLive(QScrollArea):
             card.modify_requested.connect(lambda p: self.send_to_modify.emit([p]))
             card.resolume_requested.connect(lambda p: self.send_to_resolume.emit([p]))
             card.upscale_requested.connect(lambda p: self.send_to_upscale.emit([p]))
+            card.reprise_requested.connect(self.send_to_reprise)
             self._cards[path] = card
             row, col = divmod(i, _COLS)
             self._grid.addWidget(card, row, col)

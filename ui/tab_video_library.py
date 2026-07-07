@@ -50,6 +50,7 @@ class _LibThumbWorker(QThread):
 class _VideoCard(QFrame):
     play_requested = pyqtSignal(str)
     edit_requested = pyqtSignal(str)
+    reprise_requested = pyqtSignal(dict)   # « ↑ HD » : reprise par la GRAINE (comme l'Historique)
 
     _TH_W = 160
     _TH_H = 90
@@ -144,6 +145,24 @@ class _VideoCard(QFrame):
 
         lay.addLayout(btn_row)
 
+        # « ↑ HD » — reprise par la GRAINE (comme l'Historique) : régénère un plan à
+        # partir de ce clip (même prompt + même graine) vers « Générer depuis Storyboard ».
+        # Visible seulement si une entrée d'historique avec graine correspond au clip.
+        from core.history import find_entry_by_path as _find_entry
+        _reprise = _find_entry(self._path)
+        if _reprise:
+            btn_hd = QPushButton("↑ HD")
+            btn_hd.setCursor(Qt.CursorShape.PointingHandCursor)
+            btn_hd.setToolTip(
+                "Reprendre ce plan (même graine) pour le régénérer en résolution supérieure")
+            btn_hd.setStyleSheet(
+                f"QPushButton{{background:transparent;border:1px solid {C['accent']};"
+                f"border-radius:6px;color:{C['accent']};font-size:11px;font-weight:700;"
+                f"padding:4px 10px;}}"
+                f"QPushButton:hover{{background:rgba(124,107,255,0.15);}}")
+            btn_hd.clicked.connect(lambda _=False, e=dict(_reprise): self.reprise_requested.emit(e))
+            lay.addWidget(btn_hd)
+
     def set_thumb_pixmap(self, pix: QPixmap):
         self._thumb.setPixmap(pix)
 
@@ -152,6 +171,7 @@ class _VideoCard(QFrame):
 
 class TabVideoLibrary(QScrollArea):
     send_to_davinci_edit = pyqtSignal(list)  # list[str]
+    send_to_reprise      = pyqtSignal(dict)  # « ↑ HD » : reprise par la graine (→ Générer depuis Storyboard)
 
     _SORT_OPTIONS = [
         ("Date (récent → ancien)",    "date_desc"),
@@ -328,6 +348,7 @@ class TabVideoLibrary(QScrollArea):
             card = _VideoCard(path)
             card.play_requested.connect(self._on_play)
             card.edit_requested.connect(self._on_send_to_edit)
+            card.reprise_requested.connect(self.send_to_reprise)
             self._cards[path] = card
             row, col = divmod(i, _COLS)
             self._grid.addWidget(card, row, col)
