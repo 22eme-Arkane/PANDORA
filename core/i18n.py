@@ -840,6 +840,15 @@ _FR_TO_EN: dict[str, str] = {
     "Plan ajouté ✓":                            "Shot added ✓",
     "Plan dupliqué ✓":                          "Shot duplicated ✓",
     "Plan supprimé ✓":                          "Shot deleted ✓",
+    "Réécris chaque plan avec l'assistant, réordonne, ajoute ou supprime. Tout s'enregistre AUTOMATIQUEMENT dans la mise en page (Ctrl+Z pour annuler).":
+        "Rewrite each shot with the assistant, reorder, add or delete. Everything is saved AUTOMATICALLY into the layout (Ctrl+Z to undo).",
+    "Nouveau(x) plan(s) créé(s) — plans renumérotés. Relis, ajuste, puis « Appliquer les modifications ».":
+        "New shot(s) created — shots renumbered. Review, adjust, then “Apply changes”.",
+    "Plan {n} mis à jour ✓":                    "Shot {n} updated ✓",
+    "Rien à annuler":                           "Nothing to undo",
+    "Annulé ✓ (Ctrl+Y pour rétablir)":          "Undone ✓ (Ctrl+Y to redo)",
+    "Rien à rétablir":                          "Nothing to redo",
+    "Rétabli ✓":                                "Redone ✓",
 
     # ── Page Storyboard ────────────────────────────────────────────────────────
     "✚ Nouveau plan":           "✚ New shot",

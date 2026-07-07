@@ -16,8 +16,8 @@ from PyQt6.QtWidgets import (
     QListWidget, QListWidgetItem, QWidget, QSplitter, QFrame, QMenu,
     QAbstractItemView,
 )
-from PyQt6.QtGui import QPixmap
-from PyQt6.QtCore import Qt, pyqtSignal
+from PyQt6.QtGui import QPixmap, QKeySequence, QShortcut
+from PyQt6.QtCore import Qt, pyqtSignal, QTimer
 
 from core.i18n import translate
 from ui.styles import CP
@@ -45,7 +45,15 @@ class PlanCoEditDialog(QDialog):
     les édits/réordos/ajouts vivent dans l'état de la fenêtre jusque-là.
     ``result_layout()`` retourne la mise en page complète à réécrire dans
     l'onglet « Mise en page PANDORA ».
+
+    ⚠ AUTO-SAVE : à CHAQUE modification (réécriture IA, édition manuelle, réordo,
+    ajout, suppression), ``layout_committed(str)`` est émis → le parent réécrit et
+    persiste la Mise en page en DIRECT. Plus aucune perte possible, même en fermant.
+    Ctrl+Z / Ctrl+Y annulent / rétablissent.
     """
+
+    # Émis à chaque modification de la mise en page → auto-save immédiat côté parent.
+    layout_committed = pyqtSignal(str)
 
     def __init__(self, parent, layout_text: str,
                  edition: str = "cinema", mode: str = "live"):
@@ -60,6 +68,10 @@ class PlanCoEditDialog(QDialog):
         self._worker  = None
         self._ref_images: list[str] = []
         self._histories: dict[int, list] = {}   # index → [{role, content}]
+        self._undo_stack: list[str] = []        # annulation (Ctrl+Z) : layouts précédents
+        self._redo_stack: list[str] = []        # rétablissement (Ctrl+Y)
+        self._pending_plan = None               # index du plan envoyé à l'assistant
+        self._suppress_commit = False           # bloque l'auto-commit pendant _set_preview
 
         self.setWindowTitle(translate("☁  Co-écriture des plans — Finalisation"))
         self.setStyleSheet(f"QDialog{{background:{CP['bg0']};}}")
@@ -87,6 +99,10 @@ class PlanCoEditDialog(QDialog):
         except Exception:
             pass
 
+        # Annuler / Rétablir (Ctrl+Z / Ctrl+Y, ⌘Z / ⌘⇧Z sur Mac).
+        QShortcut(QKeySequence.StandardKey.Undo, self, activated=self._undo)
+        QShortcut(QKeySequence.StandardKey.Redo, self, activated=self._redo)
+
     # ── Construction UI ──────────────────────────────────────────────────────
     def _build_ui(self):
         root = QVBoxLayout(self)
@@ -108,8 +124,8 @@ class PlanCoEditDialog(QDialog):
         root.addLayout(hdr)
 
         sub = QLabel(translate(
-            "Réécris chaque plan avec l'assistant, réordonne-les, ajoute ou supprime — "
-            "puis « Appliquer les modifications » écrit tout dans la mise en page en une fois."))
+            "Réécris chaque plan avec l'assistant, réordonne, ajoute ou supprime. "
+            "Tout s'enregistre AUTOMATIQUEMENT dans la mise en page (Ctrl+Z pour annuler)."))
         sub.setWordWrap(True)
         sub.setStyleSheet(f"color:{CP['text_dim']};font-size:10px;background:transparent;")
         root.addWidget(sub)
@@ -168,6 +184,13 @@ class PlanCoEditDialog(QDialog):
             f"QTextEdit{{background:{CP['bg2']};border:1px solid {CP['border']};"
             f"border-radius:8px;color:{CP['text_primary']};font-size:11px;"
             "font-family:'Consolas',monospace;padding:10px;}}")
+        # Auto-save de l'édition MANUELLE : débounce ~600 ms (coalesce une rafale de
+        # frappe en UN seul commit → un pas d'annulation par pause, pas par touche).
+        self._preview_timer = QTimer(self)
+        self._preview_timer.setSingleShot(True)
+        self._preview_timer.setInterval(600)
+        self._preview_timer.timeout.connect(self._commit_current_preview)
+        self._plan_preview.textChanged.connect(self._on_preview_edited)
         ll.addWidget(self._plan_preview, 1)
         split.addWidget(left)
 
@@ -289,30 +312,77 @@ class PlanCoEditDialog(QDialog):
         self._set_preview(self._plans[row]["text"])
         self._render_chat()
 
+    # ── Source de vérité unique + auto-save + annulation ─────────────────────
+    def _commit_layout(self, new_layout: str, *, push_undo: bool = True, emit: bool = True):
+        """SEUL point d'écriture dans self._layout (source de vérité). (a) empile
+        l'ANCIEN layout pour l'annulation ; (b) met à jour layout + plans ; (c) émet
+        ``layout_committed`` → le parent réécrit et PERSISTE la Mise en page en direct
+        (auto-save). No-op si le layout n'a pas changé."""
+        if new_layout == self._layout:
+            return
+        if push_undo:
+            self._undo_stack.append(self._layout)
+            if len(self._undo_stack) > 100:
+                self._undo_stack.pop(0)
+            self._redo_stack.clear()
+        self._layout = new_layout
+        self._plans = pl.split_plans(self._layout)
+        if emit:
+            self.layout_committed.emit(self._layout)
+
+    def _ensure_plan_header(self, plan_text: str, index: int) -> str:
+        """Garantit que ``plan_text`` commence par un en-tête de plan (« PLAN n » /
+        « P0N »). Si l'IA l'a oublié, ré-applique l'en-tête d'origine du plan ``index``
+        — sinon split_plans fusionnerait ce bloc au précédent et un plan disparaîtrait."""
+        t = (plan_text or "").strip()
+        if not t or pl.has_header(t):
+            return t
+        real = pl.split_plans(self._layout)
+        if 0 <= index < len(real):
+            first = real[index]["text"].strip().splitlines()
+            if first and pl.has_header(first[0]):
+                return first[0] + "\n" + t
+        return t
+
+    def _on_preview_edited(self):
+        """Frappe manuelle dans l'aperçu → auto-commit débouncé (sauf pendant un
+        remplissage programmatique via _set_preview)."""
+        if self._suppress_commit:
+            return
+        self._preview_timer.start()
+
     def _commit_current_preview(self):
-        """Réinjecte l'aperçu courant (édits manuels / proposition de l'assistant) dans
-        la mise en page de travail, SANS changer la structure ni fermer. No-op si rien
-        n'a été édité (préserve les glisser-déposer sans risque)."""
+        """Réinjecte l'aperçu courant (édits manuels / proposition IA) dans la mise en
+        page de travail via _commit_layout (auto-save immédiat), SANS changer la
+        structure. No-op si rien n'a changé."""
+        self._preview_timer.stop()
         if not self._plans or not (0 <= self._cur < len(self._plans)):
             return
         txt = self._plan_preview.toPlainText().strip()
-        if not txt or txt == self._plans[self._cur]["text"].strip():
+        if not txt:
             return
-        new_layout = pl.replace_plan(self._layout, self._cur, txt)
-        if new_layout != self._layout:
-            self._layout = new_layout
-            self._plans = pl.split_plans(self._layout)
+        # Compare au bloc RÉEL de self._layout (pas à self._plans, qui a pu être muté).
+        real = pl.split_plans(self._layout)
+        if self._cur < len(real) and txt == real[self._cur]["text"].strip():
+            return
+        txt = self._ensure_plan_header(txt, self._cur)
+        self._commit_layout(pl.replace_plan(self._layout, self._cur, txt))
 
     def _set_preview(self, text: str):
         """Écrit l'aperçu du plan avec une RESPIRATION entre les paragraphes (comme la
         Mise en page PANDORA) : chaque ligne (Durée, PROMPT VIDÉO, PROMPT SON…) est
         séparée pour une lecture facile — plus de bloc compact illisible."""
-        self._plan_preview.setPlainText(text)
+        # Remplissage PROGRAMMATIQUE : ne pas déclencher l'auto-commit débouncé.
+        self._suppress_commit = True
         try:
-            from ui.widgets import apply_paragraph_spacing
-            apply_paragraph_spacing(self._plan_preview, px=10)
-        except Exception:
-            pass
+            self._plan_preview.setPlainText(text)
+            try:
+                from ui.widgets import apply_paragraph_spacing
+                apply_paragraph_spacing(self._plan_preview, px=10)
+            except Exception:
+                pass
+        finally:
+            self._suppress_commit = False
 
     # ── Réordonner (glisser-déposer) / menu clic droit (ajout/dup/suppr) ──────
     def _structural_change(self, new_layout: str, select_index: int):
@@ -320,13 +390,17 @@ class PlanCoEditDialog(QDialog):
         de TRAVAIL : met à jour la mise en page, re-parse et sélectionne le plan voulu.
         Ne marque PAS « appliqué » — seul « Appliquer les modifications » valide et écrit
         dans la « Mise en page PANDORA ». Le chat par plan est réinitialisé (index changés)."""
-        self._layout = new_layout
-        self._plans = pl.split_plans(self._layout)
+        self._commit_layout(new_layout)   # écrit + empile undo + auto-save parent
         self._histories.clear()
         if not self._plans:
             self._plan_list.clear()
             self._set_preview("")
             self._count_lbl.setText(translate("{n} plan(s)").format(n=0))
+            # Plus aucun plan : désactive Envoyer/Appliquer (évite d'appliquer du vide).
+            for w in (getattr(self, "_input", None), getattr(self, "_btn_send", None),
+                      getattr(self, "_btn_apply", None)):
+                if w is not None:
+                    w.setEnabled(False)
             return
         # Réactive la saisie si on repart d'un état « aucun plan ».
         for w in (getattr(self, "_input", None), getattr(self, "_btn_send", None),
@@ -365,6 +439,7 @@ class PlanCoEditDialog(QDialog):
         menu.exec(self._plan_list.mapToGlobal(pos))
 
     def _add_plan(self):
+        self._commit_current_preview()   # flush l'aperçu AVANT de re-structurer (anti-perte)
         idx = self._cur if self._plans else -1
         self._structural_change(pl.add_plan(self._layout, idx, self._edition),
                                 (idx + 1) if self._plans else 0)
@@ -373,12 +448,14 @@ class PlanCoEditDialog(QDialog):
     def _duplicate_plan(self, row: int):
         if not (0 <= row < len(self._plans)):
             return
+        self._commit_current_preview()   # flush l'aperçu AVANT de re-structurer (anti-perte)
         self._structural_change(pl.duplicate_plan(self._layout, row), row + 1)
         self._status.setText(translate("Plan dupliqué ✓"))
 
     def _delete_plan_at(self, row: int):
         if not (0 <= row < len(self._plans)):
             return
+        self._commit_current_preview()   # flush l'aperçu AVANT de re-structurer (anti-perte)
         self._structural_change(pl.delete_plan(self._layout, row),
                                 min(row, len(self._plans) - 2))
         self._status.setText(translate("Plan supprimé ✓"))
@@ -416,9 +493,11 @@ class PlanCoEditDialog(QDialog):
             return
         if self._worker and self._worker.isRunning():
             return
-        # Le plan courant part de l'aperçu (édits manuels pris en compte).
+        # Le plan courant part de l'aperçu (édits manuels pris en compte) — committé
+        # d'abord (auto-save), et on RETIENT quel plan a été envoyé (course du worker).
         cur_plan = self._plan_preview.toPlainText().strip()
-        self._plans[self._cur]["text"] = cur_plan
+        self._commit_current_preview()
+        self._pending_plan = self._cur
         hist = self._histories.setdefault(self._cur, [])
         hist.append({"role": "user", "content": msg})
         self._render_chat()
@@ -448,10 +527,37 @@ class PlanCoEditDialog(QDialog):
 
     def _on_plan_ready(self, plan: str):
         self._set_busy(False)
-        self._set_preview(plan.strip())
-        self._status.setText(translate(
-            "Proposition prête — relis, ajuste, passe à un autre plan si besoin, "
-            "puis « Appliquer les modifications »."))
+        plan = (plan or "").strip()
+        # Le rewrite est rattaché au plan ENVOYÉ (pas au plan actuellement affiché —
+        # l'utilisateur a pu naviguer pendant la rédaction).
+        target = self._pending_plan if self._pending_plan is not None else self._cur
+        self._pending_plan = None
+        if not plan or not self._plans or not (0 <= target < len(self._plans)):
+            return
+        # Le chat a-t-il créé un/des NOUVEAUX plans (plusieurs blocs) ? → splice + renum
+        # de toute la mise en page (décale les plans suivants), changement structurel.
+        if pl.plan_count(plan) > 1:
+            new_layout = pl.replace_plan_multi(self._layout, target, plan)
+            if new_layout != self._layout:
+                self._structural_change(new_layout, target)
+                self._status.setText(translate(
+                    "Nouveau(x) plan(s) créé(s) — plans renumérotés. "
+                    "Relis, ajuste, puis « Appliquer les modifications »."))
+            return
+        # Plan unique : garantir l'en-tête (sinon fusion → plan perdu).
+        plan = self._ensure_plan_header(plan, target)
+        if target == self._cur:
+            # Le plan affiché est bien celui envoyé → aperçu + commit (auto-save).
+            self._set_preview(plan)
+            self._commit_current_preview()
+            self._status.setText(translate(
+                "Proposition prête — relis, ajuste, passe à un autre plan si besoin, "
+                "puis « Appliquer les modifications »."))
+        else:
+            # L'utilisateur a changé de plan pendant la rédaction : écris DIRECTEMENT
+            # dans le plan cible, sans toucher l'aperçu courant (anti-corruption).
+            self._commit_layout(pl.replace_plan(self._layout, target, plan))
+            self._status.setText(translate("Plan {n} mis à jour ✓").format(n=target + 1))
 
     def _on_failed(self, err: str):
         self._set_busy(False)
@@ -461,6 +567,54 @@ class PlanCoEditDialog(QDialog):
         self._btn_send.setEnabled(not busy)
         self._input.setEnabled(not busy)
         self._status.setText(translate("Rédaction en cours…") if busy else "")
+
+    # ── Annuler / Rétablir (Ctrl+Z / Ctrl+Y) ─────────────────────────────────
+    def _undo(self):
+        """Ctrl+Z : revient à l'état précédent (annule la dernière modification —
+        réécriture IA, édition, réordo, ajout, suppression). Ré-émet vers le parent."""
+        self._commit_current_preview()   # fige l'édition en cours pour qu'elle soit annulable
+        if not self._undo_stack:
+            self._status.setText(translate("Rien à annuler"))
+            return
+        if self._worker is not None and self._worker.isRunning():
+            try:
+                abandon_thread(self._worker)
+            except Exception:
+                pass
+            self._worker = None
+            self._set_busy(False)
+        self._pending_plan = None
+        self._redo_stack.append(self._layout)
+        self._apply_history_state(self._undo_stack.pop())
+        self._status.setText(translate("Annulé ✓ (Ctrl+Y pour rétablir)"))
+
+    def _redo(self):
+        """Ctrl+Y : rétablit la modification annulée."""
+        if not self._redo_stack:
+            self._status.setText(translate("Rien à rétablir"))
+            return
+        self._undo_stack.append(self._layout)
+        self._apply_history_state(self._redo_stack.pop())
+        self._status.setText(translate("Rétabli ✓"))
+
+    def _apply_history_state(self, layout_text: str):
+        """Restaure un layout depuis l'historique : met à jour l'état, ré-émet vers le
+        parent (auto-save) SANS re-empiler d'annulation, et rafraîchit la vue."""
+        self._layout = layout_text
+        self._plans = pl.split_plans(self._layout)
+        self._histories.clear()
+        self.layout_committed.emit(self._layout)   # le parent se réaligne
+        if not self._plans:
+            self._plan_list.clear()
+            self._set_preview("")
+            self._count_lbl.setText(translate("{n} plan(s)").format(n=0))
+            for w in (self._input, self._btn_send, self._btn_apply):
+                w.setEnabled(False)
+            return
+        for w in (self._input, self._btn_send, self._btn_apply):
+            w.setEnabled(True)
+        self._plan_preview.setReadOnly(False)
+        self._select_plan(max(0, min(self._cur, len(self._plans) - 1)))
 
     # ── Application globale ──────────────────────────────────────────────────
     def _on_apply_all(self):
@@ -482,31 +636,11 @@ class PlanCoEditDialog(QDialog):
         return False
 
     def _on_close_requested(self):
-        """« Fermer » : si des modifications sont en attente, propose de les appliquer
-        avant de fermer (garde-fou anti-perte). Sinon, ferme sans rien écrire."""
-        if not self._has_pending():
-            self.reject()
-            return
-        from PyQt6.QtWidgets import QMessageBox
-        box = QMessageBox(self)
-        box.setWindowTitle(translate("Modifications non appliquées"))
-        box.setText(translate(
-            "Des modifications n'ont pas été appliquées à la mise en page. Que veux-tu faire ?"))
-        b_apply   = box.addButton(translate("Appliquer et fermer"),
-                                   QMessageBox.ButtonRole.AcceptRole)
-        box.addButton(translate("Fermer sans appliquer"),
-                      QMessageBox.ButtonRole.DestructiveRole)
-        b_cancel  = box.addButton(translate("Annuler"),
-                                   QMessageBox.ButtonRole.RejectRole)
-        box.setDefaultButton(b_apply)
-        box.exec()
-        clicked = box.clickedButton()
-        if clicked is b_apply:
-            self._on_apply_all()
-        elif clicked is b_cancel:
-            return   # reste ouvert
-        else:
-            self.reject()   # « Fermer sans appliquer » → abandon
+        """« Fermer » : ferme la fenêtre. AUCUNE perte possible — chaque modification a
+        déjà été enregistrée automatiquement dans la « Mise en page PANDORA » (auto-save).
+        On fige juste l'édition en cours par sécurité avant de fermer."""
+        self._commit_current_preview()
+        self.reject()
 
     # ── Images de référence ──────────────────────────────────────────────────
     def _on_add_refs(self):
@@ -585,6 +719,11 @@ class PlanCoEditDialog(QDialog):
         return self._layout
 
     def closeEvent(self, ev):
+        # Fermeture par la croix : fige l'édition en cours (auto-save) — jamais de perte.
+        try:
+            self._commit_current_preview()
+        except Exception:
+            pass
         if self._worker is not None:
             try:
                 abandon_thread(self._worker)

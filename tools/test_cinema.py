@@ -2211,6 +2211,40 @@ def coecriture_des_plans_cinema():
     assert dlg.was_applied() and pl.plan_count(dlg.result_layout()) == 3, \
         "Cinéma : « Appliquer les modifications » valide + renumérote"
 
+    # ── Anti-perte + auto-save + undo + le chat crée un vrai plan (2026-07-07) ──
+    import inspect as _inspect
+    assert hasattr(type(dlg), "layout_committed"), "signal auto-save layout_committed absent"
+    for _m in ("_commit_layout", "_ensure_plan_header", "_undo", "_redo", "_on_preview_edited"):
+        assert hasattr(dlg, _m), f"co-écriture : méthode anti-perte {_m} absente"
+    # plan_layout : helpers en-tête / multi-plan
+    assert pl.has_header("P01 | x | y | z | ~5s") and not pl.has_header("juste du texte")
+    _mc = pl.replace_plan_multi(cine, 0, "P01 | A | Fixe | Face | ~5s\nX\n\nP02 | B | Fixe | Face | ~4s\nY")
+    assert pl.plan_count(_mc) == 3 and "P03 | Gros plan" in _mc, "replace_plan_multi Cinéma : +1 + renum décale"
+    assert pl.plan_count(pl.renumber_all(cine)) == 2, "renumber_all Cinéma conserve le nombre de plans"
+    assert "CRÉER UN NOUVEAU PLAN" in _syscine, "prompt co-écriture : clause création de plan absente"
+    # Dialogue — BUG A : une op structurelle NE jette PLUS la réécriture non committée.
+    d2 = PlanCoEditDialog(None, cine, edition="cinema")
+    _saved = []
+    d2.layout_committed.connect(lambda t: _saved.append(t))
+    d2._select_plan(0)
+    d2._pending_plan = 0
+    d2._on_plan_ready("P01 | Insert | Fixe | Face | ~4s\nINT. — NUIT\nMODIF_CINE.\n→ SEEDANCE: z.")
+    d2._add_plan()
+    assert "MODIF_CINE" in d2.result_layout() and _saved, \
+        "Cinéma BUG A : op structurelle a jeté la réécriture / pas d'auto-save"
+    # Undo revient à l'état d'avant l'ajout.
+    _c = pl.plan_count(d2._layout); d2._undo()
+    assert pl.plan_count(d2._layout) == _c - 1, "Cinéma : Ctrl+Z n'annule pas l'ajout"
+    # Le chat crée un VRAI nouveau plan (multi-bloc) + renumérote.
+    d3 = PlanCoEditDialog(None, cine, edition="cinema"); d3._select_plan(0); d3._pending_plan = 0
+    d3._on_plan_ready("P01 | A | Fixe | Face | ~5s\nX\nA2\n→ SEEDANCE: a.\n\n"
+                      "P02 | NEW | Fixe | Face | ~3s\nY\nnouveau\n→ SEEDANCE: n.")
+    assert pl.plan_count(d3.result_layout()) == 3, "Cinéma : le chat ne crée pas de nouveau plan (multi)"
+    # Parent : auto-save branché AVANT exec + slot silencieux.
+    _psrc = _inspect.getsource(__import__("ui.page_scenario", fromlist=["_"]))
+    assert "layout_committed.connect" in _psrc and "_on_plan_coedit_autosave" in _psrc, \
+        "Cinéma : auto-save de la co-écriture non branché sur la page"
+
 
 @test
 def refs_inspiration_completent_le_prompt_sans_alterer_keyframes():

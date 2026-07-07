@@ -463,6 +463,45 @@ def coecriture_et_finalisation_live():
     assert dlg2.was_applied() and pl.plan_count(dlg2.result_layout()) == 4, \
         "« Appliquer les modifications » valide tous les plans"
 
+    # ── Anti-perte + auto-save + undo + le chat crée un vrai plan (2026-07-07) ──
+    import inspect as _inspect
+    assert hasattr(type(dlg2), "layout_committed"), "signal auto-save layout_committed absent"
+    for _m in ("_commit_layout", "_ensure_plan_header", "_undo", "_redo", "_on_preview_edited"):
+        assert hasattr(dlg2, _m), f"co-écriture : méthode anti-perte {_m} absente"
+    assert pl.has_header("PLAN 7 — Titre") and not pl.has_header("juste du texte")
+    _ml = pl.replace_plan_multi(L3, 0, "PLAN 1 — A retravaillé\nx2\n\nPLAN 2 — Intercalé\nnew")
+    assert pl.plan_count(_ml) == 4 and "PLAN 3 — B" in _ml and _ml.count("PLAN 2 —") == 1, \
+        "replace_plan_multi Live : +1 plan, suivants décalés, aucun numéro dupliqué"
+    assert pl.plan_count(pl.renumber_all(L3)) == 3, "renumber_all Live conserve le nombre de plans"
+    assert "CRÉER UN NOUVEAU PLAN" in _syslive, "prompt co-écriture Live : clause création de plan absente"
+    # Dialogue — BUG A : une op structurelle NE jette PLUS la réécriture non committée.
+    d2 = PlanCoEditDialog(None, L3, edition="live", mode="live")
+    _saved = []
+    d2.layout_committed.connect(lambda t: _saved.append(t))
+    d2._select_plan(0); d2._pending_plan = 0
+    d2._on_plan_ready("PLAN 1 — A MODIF_LIVE\nDurée : 8s\nPROMPT VIDÉO : \"rw\"")
+    d2._add_plan()
+    assert "MODIF_LIVE" in d2.result_layout() and _saved, \
+        "Live BUG A : op structurelle a jeté la réécriture / pas d'auto-save"
+    # BUG B : rewrite tardif atterrit dans le plan ENVOYÉ, pas l'affiché.
+    d4 = PlanCoEditDialog(None, L3, edition="live", mode="live")
+    d4._select_plan(0); d4._pending_plan = 0; d4._select_plan(1)
+    d4._on_plan_ready("PLAN 1 — A REWRITE0\ny")
+    _pp = pl.split_plans(d4.result_layout())
+    assert "REWRITE0" in _pp[0]["text"] and "REWRITE0" not in _pp[1]["text"], \
+        "Live BUG B : le rewrite n'atterrit pas dans le plan envoyé"
+    # Undo revient à l'état d'avant l'ajout.
+    _c = pl.plan_count(d2._layout); d2._undo()
+    assert pl.plan_count(d2._layout) == _c - 1, "Live : Ctrl+Z n'annule pas l'ajout"
+    # Le chat crée un VRAI nouveau plan (multi-bloc).
+    d3 = PlanCoEditDialog(None, L3, edition="live", mode="live"); d3._select_plan(0); d3._pending_plan = 0
+    d3._on_plan_ready("PLAN 1 — A2\nx\n\nPLAN 2 — Nouveau\nnew")
+    assert pl.plan_count(d3.result_layout()) == 4, "Live : le chat ne crée pas de nouveau plan (multi)"
+    # Parent : auto-save branché AVANT exec + slot silencieux.
+    _psrc = _inspect.getsource(__import__("ui.page_scenario_live", fromlist=["_"]))
+    assert "layout_committed.connect" in _psrc and "_on_plan_coedit_autosave" in _psrc, \
+        "Live : auto-save de la co-écriture non branché sur la page"
+
 
 @test
 def studio_ia_onglets_style_conducteur_live():

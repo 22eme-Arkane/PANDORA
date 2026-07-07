@@ -77,6 +77,14 @@ def replace_plan(layout_text: str, plan_index: int, new_plan_text: str) -> str:
     return before + block + tail
 
 
+def has_header(text: str) -> bool:
+    """Vrai si ``text`` commence par un en-tête de plan reconnaissable
+    (« P0N | … » Cinéma ou « PLAN n — … » Live). Sert à garantir qu'un plan réécrit
+    par l'IA garde son en-tête — sinon ``split_plans`` le fusionnerait au plan
+    précédent et un plan disparaîtrait."""
+    return bool(_PLAN_RE.match((text or "").lstrip()))
+
+
 # ── Réordonner / ajouter / supprimer des plans ───────────────────────────────
 # Le NUMÉRO d'en-tête est renuméroté séquentiellement après chaque opération, dans
 # le format détecté : « P01 | … » (Cinéma) ou « PLAN 1 — … » (Live).
@@ -173,3 +181,23 @@ def reorder(layout_text: str, new_order: list) -> str:
     if sorted(order) != list(range(len(blocks))):
         return layout_text
     return _rebuild(head, [blocks[k] for k in order])
+
+
+def renumber_all(layout_text: str) -> str:
+    """Renumérote séquentiellement TOUS les plans (P01..P0N / PLAN 1..n) sans changer
+    leur ordre ni leur contenu (le head — titres/séquences — est préservé)."""
+    head, blocks = _head_and_blocks(layout_text)
+    if not blocks:
+        return layout_text
+    return _rebuild(head, blocks)
+
+
+def replace_plan_multi(layout_text: str, plan_index: int, multi_text: str) -> str:
+    """Remplace le plan ``plan_index`` par UN OU PLUSIEURS blocs de plan (``multi_text``
+    peut contenir plusieurs en-têtes), PUIS renumérote TOUTE la mise en page pour
+    décaler les plans suivants (27 → 28…). Sert à la co-écriture quand le chat crée un
+    nouveau plan. Texte vide / index hors bornes : comportement de ``replace_plan``."""
+    if not multi_text or not multi_text.strip():
+        return layout_text
+    spliced = replace_plan(layout_text, plan_index, multi_text)
+    return renumber_all(spliced)

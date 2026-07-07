@@ -2070,10 +2070,29 @@ class PageScenario(QWidget):
             return
         from ui.dialog_plan_coedit import PlanCoEditDialog
         dlg = PlanCoEditDialog(self, layout, edition="live", mode=self._live_mode)
+        # AUTO-SAVE : chaque modification est écrite en DIRECT dans la Mise en page —
+        # plus aucune perte possible, même en fermant. (Connecté AVANT exec().)
+        dlg.layout_committed.connect(self._on_plan_coedit_autosave)
         dlg.exec()
         if dlg.was_applied():
             self._apply_layout(dlg.result_layout())
             self._ai_progress_lbl.setText(translate("Plans co-écrits appliqués à la mise en page ✓"))
+
+    def _on_plan_coedit_autosave(self, layout_text: str):
+        """Auto-save de la co-écriture : réécrit et persiste la « Mise en page PANDORA »
+        à CHAQUE modification du dialogue. Silencieux (pas de bascule d'onglet)."""
+        if not layout_text or not hasattr(self, "_layout_view"):
+            return
+        self._layout_view.setPlainText(layout_text)
+        try:
+            from ui.widgets import apply_paragraph_spacing
+            apply_paragraph_spacing(self._layout_view)
+        except Exception:
+            pass
+        try:
+            self._save(silent=True)
+        except Exception:
+            pass
 
     def _apply_layout(self, layout_text: str):
         """Écrit la mise en page dans l'onglet dédié (le Conducteur reste intact)."""
