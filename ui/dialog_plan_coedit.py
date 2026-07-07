@@ -579,6 +579,9 @@ class PlanCoEditDialog(QDialog):
         self._worker.message_ready.connect(self._on_message_ready)
         self._worker.plan_ready.connect(self._on_plan_ready)   # non émis en discussion
         self._worker.failed.connect(self._on_failed)
+        # Signal NATIF QThread : réactive l'UI dès la fin de run() (indispensable en
+        # DISCUSSION où aucun plan_ready ne vient lever le « busy »).
+        self._worker.finished.connect(self._on_worker_finished)
         self._worker.start()
 
     def _on_message_ready(self, reply: str):
@@ -627,7 +630,17 @@ class PlanCoEditDialog(QDialog):
         if hasattr(self, "_btn_modify"):
             self._btn_modify.setEnabled(not busy)
         self._input.setEnabled(not busy)
-        self._status.setText(translate("Rédaction en cours…") if busy else "")
+        if busy:
+            self._status.setText(translate("Rédaction en cours…"))
+        elif self._status.text() == translate("Rédaction en cours…"):
+            # Ne pas effacer un statut utile déjà posé (ex. « Plan modifié ✓ »).
+            self._status.setText("")
+
+    def _on_worker_finished(self):
+        """Filet de sécurité : la FIN du worker (discussion, modification OU réponse
+        vide) réactive TOUJOURS l'UI. En DISCUSSION le worker n'émet que message_ready
+        (pas plan_ready) — sans ce filet, « Rédaction en cours » resterait bloqué."""
+        self._set_busy(False)
 
     # ── Annuler / Rétablir (Ctrl+Z / Ctrl+Y) ─────────────────────────────────
     def _undo(self):

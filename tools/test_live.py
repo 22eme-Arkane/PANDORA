@@ -344,8 +344,16 @@ def facade_injectee_workers_texte_mapping():
     assert "discuss_only" in inspect.signature(_PCW.__init__).parameters, "worker : discuss_only absent"
     from ui.dialog_plan_coedit import PlanCoEditDialog as _PCD
     _dd = _PCD(None, "PLAN 1 — A\nx\n", edition="live", mode="live")
-    for _m in ("_btn_modify", "_on_modify_plan", "_launch"):
+    for _m in ("_btn_modify", "_on_modify_plan", "_launch", "_on_worker_finished"):
         assert hasattr(_dd, _m), f"co-écriture : {_m} absent (bouton « Modifier le plan »)"
+    # En DISCUSSION, le worker n'émet pas plan_ready → la fin doit lever le « busy »
+    # via le signal natif finished (sinon chat + boutons bloqués sur « Rédaction en cours »).
+    assert "self._worker.finished.connect" in inspect.getsource(_PCD._launch), \
+        "co-écriture : signal natif finished non connecté (UI bloquée en discussion)"
+    _dd._select_plan(0); _dd._set_busy(True)
+    _dd._on_message_ready("conseil"); _dd._on_worker_finished()
+    assert _dd._input.isEnabled() and _dd._btn_send.isEnabled(), \
+        "co-écriture : UI reste bloquée après une réponse de DISCUSSION"
     # Page live : façade passée UNIQUEMENT aux 2 workers, gate mapping.
     _psrc = inspect.getsource(__import__("ui.page_scenario_live", fromlist=["_"]))
     assert "_facade_for_mapping" in _psrc and \
