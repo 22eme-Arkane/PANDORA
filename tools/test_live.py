@@ -415,6 +415,8 @@ def coecriture_et_finalisation_live():
     src = inspect.getsource(__import__("ui.page_scenario_live", fromlist=["_"]))
     assert '_make_toggle("📖  Conducteur"' in src, "section Conducteur (ex-Claude IA) absente"
     assert '_make_toggle("🎯  Finalisation"' in src, "section Finalisation absente"
+    # Bouton « Générer le découpage » MIS EN AVANT (cadre vert, façon « Tout générer »).
+    assert 'self._on_storyboard, color=CP["green"]' in src, "« Générer le découpage » pas mis en avant (cadre coloré)"
     assert '"Co-écriture des plans"' in src and "def _on_plan_coedit" in src, \
         "bouton/handler Co-écriture des plans absent (Live)"
     assert src.index("(tog_cond,") < src.index("(tog_final,") < src.index("(tog_gen,"), \

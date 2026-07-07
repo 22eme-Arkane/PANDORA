@@ -587,13 +587,17 @@ class PageScenario(QWidget):
         root_lay.setSpacing(0)
 
         # ── helper: ai_btn ────────────────────────────────────────────────────
-        def _ai_btn(icon, label, sub, callback):
+        def _ai_btn(icon, label, sub, callback, color=None):
+            # color → bouton MIS EN AVANT (cadre + icône + libellé colorés), façon
+            # « Tout générer » mais dans une AUTRE couleur.
             btn = QPushButton()
-            btn.setFixedHeight(58)   # 2 lignes de description (word-wrap) sans troncature
+            btn.setFixedHeight(62 if color else 58)   # 2 lignes de description sans troncature
+            _bd  = color or CP['border']
+            _hov = color or CP['accent2_dim']
             btn.setStyleSheet(
-                f"QPushButton{{background:{CP['bg2']};border:1px solid {CP['border']};"
+                f"QPushButton{{background:{CP['bg2']};border:{'1.5px' if color else '1px'} solid {_bd};"
                 f"border-radius:8px;text-align:left;padding:0 10px;}}"
-                f"QPushButton:hover{{border-color:{CP['accent2_dim']};background:{CP['bg3']};}}"
+                f"QPushButton:hover{{border-color:{_hov};background:{CP['bg3']};}}"
                 f"QPushButton:pressed{{background:{CP['bg4']};}}"
                 f"QPushButton:disabled{{opacity:0.4;}}"
             )
@@ -604,11 +608,12 @@ class PageScenario(QWidget):
             title_row.setSpacing(6)
             ico_lbl = QLabel(icon)
             ico_lbl.setStyleSheet(
-                f"color:{CP['accent2']};font-size:13px;background:transparent;border:none;"
+                f"color:{color or CP['accent2']};font-size:{'14px' if color else '13px'};"
+                f"background:transparent;border:none;"
             )
             txt_lbl = QLabel(translate(label))   # translate() rebaptise aussi « Claude »
             txt_lbl.setStyleSheet(
-                f"color:{CP['text_primary']};font-size:10px;font-weight:700;"
+                f"color:{color or CP['text_primary']};font-size:10px;font-weight:700;"
                 f"background:transparent;border:none;"
             )
             title_row.addWidget(ico_lbl)
@@ -809,7 +814,7 @@ class PageScenario(QWidget):
         )
         self._btn_storyboard = _ai_btn(
             "🎬", "Générer le storyboard", "Importe les plans dans Storyboard",
-            self._on_storyboard,
+            self._on_storyboard, color=CP["green"],
         )
         for _b in (
             self._btn_gen_characters, self._btn_gen_decors, self._btn_gen_accessories,

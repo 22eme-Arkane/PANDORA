@@ -244,15 +244,26 @@ class PlanCoEditDialog(QDialog):
         self._cur = index
         self._reload_list()
         self._plan_list.setCurrentRow(index)
-        self._plan_preview.setPlainText(self._plans[index]["text"])
+        self._set_preview(self._plans[index]["text"])
         self._render_chat()
 
     def _on_row_changed(self, row: int):
         if row < 0 or row >= len(self._plans) or row == self._cur:
             return
         self._cur = row
-        self._plan_preview.setPlainText(self._plans[row]["text"])
+        self._set_preview(self._plans[row]["text"])
         self._render_chat()
+
+    def _set_preview(self, text: str):
+        """Écrit l'aperçu du plan avec une RESPIRATION entre les paragraphes (comme la
+        Mise en page PANDORA) : chaque ligne (Durée, PROMPT VIDÉO, PROMPT SON…) est
+        séparée pour une lecture facile — plus de bloc compact illisible."""
+        self._plan_preview.setPlainText(text)
+        try:
+            from ui.widgets import apply_paragraph_spacing
+            apply_paragraph_spacing(self._plan_preview, px=10)
+        except Exception:
+            pass
 
     # ── Chat ─────────────────────────────────────────────────────────────────
     def _render_chat(self):
@@ -319,7 +330,7 @@ class PlanCoEditDialog(QDialog):
 
     def _on_plan_ready(self, plan: str):
         self._set_busy(False)
-        self._plan_preview.setPlainText(plan.strip())
+        self._set_preview(plan.strip())
         self._status.setText(translate(
             "Proposition prête — relis, ajuste, puis « Appliquer ce plan »."))
 

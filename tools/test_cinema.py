@@ -2155,7 +2155,9 @@ def panneau_scenario_aligne_jusqu_au_bord():
     assert "ga_lay.setContentsMargins(0, 10, 0, 12)" in src, "« Tout générer » non aligné"
     # Descriptions sur 2 lignes + hauteur de bouton suffisante.
     assert "sub_lbl.setWordWrap(True)" in src, "descriptions encore tronquées (pas de word-wrap)"
-    assert "btn.setFixedHeight(58)" in src, "hauteur de bouton non augmentée pour 2 lignes"
+    assert "else 58)" in src, "hauteur de bouton non augmentée pour 2 lignes (58 par défaut)"
+    # Bouton « Générer le storyboard » MIS EN AVANT (cadre vert, façon « Tout générer »).
+    assert 'self._on_storyboard, color=CP["green"]' in src, "« Générer le storyboard » pas mis en avant (cadre coloré)"
     # Réorg 2026-07-06 : « Écriture assistée par IA » scindée en « Scénario »
     # (Analyse + Co-écriture) et « Finalisation » (Mise en page + Co-écriture des plans).
     assert '_make_toggle("📖  Scénario"' in src, "section Scénario (ex-IA) absente"
