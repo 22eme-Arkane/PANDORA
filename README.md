@@ -18,11 +18,13 @@
 
 ## Download
 
-**[⬇ Download PANDORA v1.3.0 for Windows](https://github.com/22eme-Arkane/PANDORA/releases/download/v1.3.0/PANDORA_Setup_1.3.0.exe)**
+**[⬇ Download PANDORA v1.3.1 for Windows](https://github.com/22eme-Arkane/PANDORA/releases/download/v1.3.1/PANDORA_Setup_1.3.1.exe)**
 
-**[⬇ Download PANDORA v1.3.0 for macOS](https://github.com/22eme-Arkane/PANDORA/releases/download/v1.3.0/PANDORA_1.3.0.dmg)** *(Apple Silicon — see [Installation](#installation) for the first launch)*
+**[⬇ Download PANDORA v1.3.1 for macOS](https://github.com/22eme-Arkane/PANDORA/releases/download/v1.3.1/PANDORA_1.3.1.dmg)** *(Apple Silicon — see [Installation](#installation) for the first launch)*
 
 All versions: [Releases](../../releases)
+
+🌐 **Official 22eme ARKANE website: [22eme-arkane.com](https://22eme-arkane.com)**
 
 ---
 
