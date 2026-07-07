@@ -2106,6 +2106,23 @@ def sound_design_tirette_duree_live():
     assert tab._dur_text.maximum() == 30, ("MMAudio = 30 s", tab._dur_text.maximum())
 
 
+@test
+def fermeture_live_demande_sauvegarde():
+    """LiveWindow demande de SAUVEGARDER à la fermeture (comme le Cinéma), via le helper
+    PARTAGÉ ui.quit_dialog.confirm_quit — la régression « plus de message » ne revient
+    pas (2026-07-07)."""
+    import inspect
+    import live_window as lw
+    from ui.quit_dialog import confirm_quit
+    assert callable(confirm_quit), "helper confirm_quit absent"
+    src = inspect.getsource(lw.LiveWindow.closeEvent)
+    assert "confirm_quit" in src, "LiveWindow : aucune confirmation de fermeture"
+    assert "_on_global_save" in src, "LiveWindow : « Sauvegarder et quitter » ne sauve pas le conducteur"
+    assert "self.closed.emit()" in src, "LiveWindow : signal closed perdu"
+    # Fenêtre secondaire (2 écrans) : se ferme sans confirmation (inchangé).
+    assert '_is_secondary' in src, "LiveWindow : garde fenêtre secondaire perdue"
+
+
 # ══════════════════════════════════════════════════════════════════════════════
 # Runner
 # ══════════════════════════════════════════════════════════════════════════════

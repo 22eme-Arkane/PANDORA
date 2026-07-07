@@ -919,5 +919,16 @@ class LiveWindow(QMainWindow):
         if getattr(self, "_is_secondary", False):
             e.accept()
             return
+        # Confirmation de fermeture PARTAGÉE avec le Cinéma (demande de sauvegarde).
+        from ui.quit_dialog import confirm_quit
+        result = confirm_quit(self)
+        if result == 0:          # Annuler → rester ouvert
+            e.ignore()
+            return
+        if result == 1:          # Sauvegarder et quitter
+            try:
+                self._on_global_save()
+            except Exception:
+                pass
         self.closed.emit()
         e.accept()
