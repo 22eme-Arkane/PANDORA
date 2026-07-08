@@ -1,4 +1,4 @@
-# PANDORA — dépendances d'exécution (Cinéma + Live, v1.3.1)
+# PANDORA — dépendances d'exécution (Cinéma + Live, v1.3.2)
 # Install : pip install -r requirements.txt
 # Build   : pip install -r requirements.txt pyinstaller
 
