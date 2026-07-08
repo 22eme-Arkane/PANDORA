@@ -832,6 +832,24 @@ _FR_TO_EN: dict[str, str] = {
         "Fix applied — ⚠ {a}/{b} shots (response may be truncated, Ctrl+Z to undo)",
     "Réponse inattendue — aucun plan reconnu (rien appliqué)":
         "Unexpected response — no shot recognized (nothing applied)",
+    "Correctif en cours… {p} plans":            "Fixing… {p} shots",
+    "⚠ Correctif NON appliqué ({a}/{b} plans reçus) — aucun plan perdu. Réessaie.":
+        "⚠ Fix NOT applied ({a}/{b} shots received) — no shot lost. Try again.",
+    "Aucun plan à corriger.":                   "No shot to fix.",
+    "Correctif interrompu (réponse incomplète) — RIEN n'a été appliqué pour ne perdre aucun plan. Réessaie.":
+        "Fix interrupted (incomplete response) — NOTHING was applied so no shot is lost. Try again.",
+    "💾  Sauvegarder":                          "💾  Save",
+    "📂  Ouvrir":                               "📂  Open",
+    "Enregistrer la co-écriture dans un fichier (copie de sécurité avant d'appliquer).":
+        "Save the co-writing to a file (safety copy before applying).",
+    "Charger une co-écriture enregistrée (remplace la mise en page ; Ctrl+Z pour annuler).":
+        "Load a saved co-writing (replaces the layout; Ctrl+Z to undo).",
+    "Rien à sauvegarder.":                      "Nothing to save.",
+    "Sauvegarder la co-écriture":               "Save the co-writing",
+    "Co-écriture sauvegardée ✓":                "Co-writing saved ✓",
+    "Ouvrir une co-écriture":                   "Open a co-writing",
+    "Fichier sans plan reconnu — non chargé.":  "File with no recognized shot — not loaded.",
+    "Co-écriture chargée ✓ (Ctrl+Z pour annuler)":  "Co-writing loaded ✓ (Ctrl+Z to undo)",
     "Réécris le plan en appliquant ce qu'on vient de discuter.":
         "Rewrite the shot applying what we just discussed.",
     "Plan modifié ✓ (enregistré automatiquement)":  "Shot modified ✓ (saved automatically)",

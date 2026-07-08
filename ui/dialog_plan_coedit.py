@@ -332,6 +332,28 @@ class PlanCoEditDialog(QDialog):
             f"QPushButton:hover{{background:{CP['bg4']};color:{CP['text_primary']};}}")
         btn_close.clicked.connect(self._on_close_requested)
 
+        # Sauvegarde de sécurité : exporter / recharger la co-écriture dans un fichier
+        # (permet de garder une copie AVANT d'appliquer un gros correctif).
+        _ss_ghost = (
+            f"QPushButton{{background:{CP['bg3']};color:{CP['text_secondary']};"
+            f"border:1px solid {CP['border']};border-radius:7px;font-size:11px;"
+            f"font-weight:600;padding:0 14px;}}"
+            f"QPushButton:hover{{background:{CP['bg4']};color:{CP['text_primary']};}}")
+        self._btn_save_file = QPushButton(translate("💾  Sauvegarder"))
+        self._btn_save_file.setFixedHeight(36)
+        self._btn_save_file.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._btn_save_file.setToolTip(translate(
+            "Enregistrer la co-écriture dans un fichier (copie de sécurité avant d'appliquer)."))
+        self._btn_save_file.setStyleSheet(_ss_ghost)
+        self._btn_save_file.clicked.connect(self._on_save_file)
+        self._btn_open_file = QPushButton(translate("📂  Ouvrir"))
+        self._btn_open_file.setFixedHeight(36)
+        self._btn_open_file.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._btn_open_file.setToolTip(translate(
+            "Charger une co-écriture enregistrée (remplace la mise en page ; Ctrl+Z pour annuler)."))
+        self._btn_open_file.setStyleSheet(_ss_ghost)
+        self._btn_open_file.clicked.connect(self._on_open_file)
+
         self._btn_apply = QPushButton(translate("✓  Appliquer les modifications"))
         self._btn_apply.setFixedHeight(36)
         self._btn_apply.setCursor(Qt.CursorShape.PointingHandCursor)
@@ -343,6 +365,9 @@ class PlanCoEditDialog(QDialog):
         self._btn_apply.clicked.connect(self._on_apply_all)
 
         bottom.addWidget(btn_close)
+        bottom.addSpacing(4)
+        bottom.addWidget(self._btn_save_file)
+        bottom.addWidget(self._btn_open_file)
         bottom.addStretch()
         bottom.addWidget(self._btn_apply)
         root.addLayout(bottom)
@@ -671,6 +696,7 @@ class PlanCoEditDialog(QDialog):
         self._worker.message_ready.connect(self._on_message_ready)
         self._worker.plan_ready.connect(self._on_plan_ready)   # non émis en discussion
         self._worker.failed.connect(self._on_failed)
+        self._worker.progress.connect(self._on_progress)       # correctif global par lots
         # Signal NATIF QThread : réactive l'UI dès la fin de run() (indispensable en
         # DISCUSSION où aucun plan_ready ne vient lever le « busy »).
         self._worker.finished.connect(self._on_worker_finished)
@@ -687,20 +713,18 @@ class PlanCoEditDialog(QDialog):
         # ── CORRECTIF GLOBAL : la réponse est la mise en page COMPLÈTE corrigée ──
         if self._pending_all:
             self._pending_all = False
-            if plan and pl.plan_count(plan) >= 1:
-                _n_new, _n_old = pl.plan_count(plan), len(self._plans)
+            _n_new, _n_old = pl.plan_count(plan), len(self._plans)
+            if plan and _n_new >= _n_old:
                 self._exit_all_mode()
                 self._structural_change(plan, 0)   # remplace tout + renumérote + auto-save
-                if _n_new < _n_old:
-                    self._status.setText(translate(
-                        "Correctif appliqué — ⚠ {a}/{b} plans (réponse peut-être tronquée, "
-                        "Ctrl+Z pour annuler)").format(a=_n_new, b=_n_old))
-                else:
-                    self._status.setText(translate(
-                        "Tous les plans corrigés ✓ (Ctrl+Z pour annuler)"))
-            else:
                 self._status.setText(translate(
-                    "Réponse inattendue — aucun plan reconnu (rien appliqué)"))
+                    "Tous les plans corrigés ✓ (Ctrl+Z pour annuler)"))
+            else:
+                # ⚠ SÉCURITÉ ANTI-PERTE : la réponse a MOINS de plans que l'original —
+                # on N'APPLIQUE RIEN (les plans restent tous intacts).
+                self._status.setText(translate(
+                    "⚠ Correctif NON appliqué ({a}/{b} plans reçus) — aucun plan perdu. Réessaie.")
+                    .format(a=_n_new, b=_n_old))
             return
         # Le rewrite est rattaché au plan ENVOYÉ (pas au plan actuellement affiché —
         # l'utilisateur a pu naviguer pendant la rédaction).
@@ -741,6 +765,9 @@ class PlanCoEditDialog(QDialog):
             self._btn_modify.setEnabled(not busy)
         if hasattr(self, "_btn_all"):
             self._btn_all.setEnabled(not busy)
+        for _b in ("_btn_save_file", "_btn_open_file"):
+            if hasattr(self, _b):
+                getattr(self, _b).setEnabled(not busy)
         self._input.setEnabled(not busy)
         if busy:
             self._status.setText(translate("Rédaction en cours…"))
@@ -753,6 +780,10 @@ class PlanCoEditDialog(QDialog):
         vide) réactive TOUJOURS l'UI. En DISCUSSION le worker n'émet que message_ready
         (pas plan_ready) — sans ce filet, « Rédaction en cours » resterait bloqué."""
         self._set_busy(False)
+
+    def _on_progress(self, txt: str):
+        """Avancement du correctif global par lots (ex. « 12/29 »)."""
+        self._status.setText(translate("Correctif en cours… {p} plans").format(p=txt))
 
     # ── Annuler / Rétablir (Ctrl+Z / Ctrl+Y) ─────────────────────────────────
     def _undo(self):
@@ -828,6 +859,50 @@ class PlanCoEditDialog(QDialog):
         On fige juste l'édition en cours par sécurité avant de fermer."""
         self._commit_current_preview()
         self.reject()
+
+    # ── Sauvegarde de sécurité (fichier) ─────────────────────────────────────
+    def _on_save_file(self):
+        """Exporte la co-écriture (mise en page complète) dans un .txt — copie de
+        sécurité à faire AVANT un gros correctif « Tous les plans »."""
+        self._commit_current_preview()
+        if not (self._layout or "").strip():
+            self._status.setText(translate("Rien à sauvegarder."))
+            return
+        from PyQt6.QtWidgets import QFileDialog
+        path, _ = QFileDialog.getSaveFileName(
+            self, translate("Sauvegarder la co-écriture"),
+            "co-ecriture.txt", "Texte (*.txt)")
+        if not path:
+            return
+        if not path.lower().endswith(".txt"):
+            path += ".txt"
+        try:
+            with open(path, "w", encoding="utf-8") as f:
+                f.write(self._layout)
+            self._status.setText(translate("Co-écriture sauvegardée ✓"))
+        except Exception as e:
+            self._status.setText("⚠ " + str(e)[:150])
+
+    def _on_open_file(self):
+        """Charge une co-écriture enregistrée (.txt) → remplace la mise en page de
+        travail (auto-save + Ctrl+Z pour revenir en arrière)."""
+        from PyQt6.QtWidgets import QFileDialog
+        path, _ = QFileDialog.getOpenFileName(
+            self, translate("Ouvrir une co-écriture"), "", "Texte (*.txt)")
+        if not path:
+            return
+        try:
+            with open(path, encoding="utf-8") as f:
+                txt = f.read().strip()
+        except Exception as e:
+            self._status.setText("⚠ " + str(e)[:150])
+            return
+        if not txt or pl.plan_count(txt) < 1:
+            self._status.setText(translate("Fichier sans plan reconnu — non chargé."))
+            return
+        self._exit_all_mode()
+        self._structural_change(txt, 0)
+        self._status.setText(translate("Co-écriture chargée ✓ (Ctrl+Z pour annuler)"))
 
     # ── Images de référence ──────────────────────────────────────────────────
     def _on_add_refs(self):

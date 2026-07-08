@@ -373,6 +373,33 @@ def facade_injectee_workers_texte_mapping():
     assert not _da._all_mode and "A2" in _da.result_layout() and "B2" in _da.result_layout() \
         and pl.plan_count(_da.result_layout()) == 2, \
         "correctif global : mise en page non remplacée ou all-mode pas ressorti"
+    # ⚠ ANTI-PERTE (bug 12/29 du 2026-07-08) : un correctif renvoyant MOINS de plans que
+    # l'original est REJETÉ — on ne perd JAMAIS un plan, on reste en mode « tous ».
+    _da2 = _PCD(None, "\n\n".join(f"PLAN {i} — T{i}\nx{i}" for i in range(1, 6)),
+                edition="live", mode="live")
+    _da2._btn_all.setChecked(True); _da2._pending_all = True
+    _da2._on_plan_ready("PLAN 1 — SEUL\nz")   # 1 plan << 5
+    assert _da2._all_mode and pl.plan_count(_da2._layout) == 5 and "SEUL" not in _da2.result_layout(), \
+        "correctif tronqué : DOIT être rejeté sans perte (Live)"
+    # Le worker applique le correctif PAR LOTS et ne rend jamais moins de plans que
+    # l'original, même si chaque lot est tronqué par le modèle (fusion défensive).
+    assert hasattr(_PCW, "_run_all_batched") and hasattr(_PCW, "progress"), \
+        "worker : batching correctif global absent (_run_all_batched / progress)"
+    _L15 = "\n\n".join(f"PLAN {i} — Titre{i}\nDurée : 5s\nPROMPT VIDÉO : \"p{i}\"" for i in range(1, 16))
+    _w = _PCW(layout_text=_L15, plan_text="", plan_label="", history=[],
+              user_message="corrige", edition="live", mode="live", all_plans=True)
+    _res = {}
+    _w.plan_ready.connect(lambda p: _res.__setitem__("plan", p))
+    _w.failed.connect(lambda e: _res.__setitem__("fail", e))
+    def _trunc_chat(system, messages, **kw):
+        _b = pl.split_plans(messages[-1]["content"])
+        return "\n\n".join(x["text"] for x in _b[:3])   # ne renvoie que 3 plans / lot
+    _w._run_all_batched(_trunc_chat)
+    assert "fail" not in _res and pl.plan_count(_res["plan"]) == 15, \
+        "worker correctif global : lots tronqués → PERTE de plans (doit tout conserver)"
+    # Sauvegarder / Ouvrir la co-écriture (sauvegarde de secours avant d'appliquer).
+    for _m in ("_btn_save_file", "_btn_open_file", "_on_save_file", "_on_open_file", "_on_progress"):
+        assert hasattr(_da2, _m), f"co-écriture : {_m} absent (Sauvegarder/Ouvrir)"
     # Page live : façade passée UNIQUEMENT aux 2 workers, gate mapping.
     _psrc = inspect.getsource(__import__("ui.page_scenario_live", fromlist=["_"]))
     assert "_facade_for_mapping" in _psrc and \

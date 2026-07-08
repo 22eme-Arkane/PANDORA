@@ -2270,10 +2270,40 @@ def coecriture_des_plans_cinema():
         assert hasattr(d3, _m), f"co-écriture Cinéma : {_m} absent (Tous les plans)"
     d3._btn_all.setChecked(True)
     assert d3._all_mode and "Modifier tous les plans" in d3._btn_modify.text(), "activation « Tous les plans » KO (Cinéma)"
+    # ⚠ ANTI-PERTE (bug 12/29 du 2026-07-08) : un correctif global qui renvoie MOINS de
+    # plans que l'original est REJETÉ — aucun plan n'est perdu, on reste en mode « tous ».
+    _n_avant = pl.plan_count(d3._layout)
     d3._pending_all = True
-    d3._on_plan_ready("P01 | A | Fixe | Face | ~5s\nX\nA2\n\nP02 | B | Fixe | Face | ~4s\nY\nB2")
-    assert not d3._all_mode and "A2" in d3.result_layout() and "B2" in d3.result_layout(), \
-        "correctif global Cinéma : mise en page non remplacée"
+    d3._on_plan_ready("P01 | Tronqué | Fixe | Face | ~5s\nX\nZ2")   # 1 plan << _n_avant
+    assert d3._all_mode and pl.plan_count(d3._layout) == _n_avant and "Z2" not in d3.result_layout(), \
+        "correctif global tronqué : DOIT être rejeté sans rien perdre (Cinéma)"
+    # Correctif complet (au moins autant de plans qu'à l'origine) → appliqué.
+    _full = "\n\n".join(f"P0{i + 1} | Corr{i} | Fixe | Face | ~5s\nX{i}\nCORR{i}"
+                        for i in range(_n_avant))
+    d3._pending_all = True
+    d3._on_plan_ready(_full)
+    assert (not d3._all_mode and "CORR0" in d3.result_layout()
+            and pl.plan_count(d3.result_layout()) == _n_avant), \
+        "correctif global complet Cinéma : mise en page non appliquée"
+    # Worker : correctif global PAR LOTS — lots tronqués par le modèle → fusion défensive,
+    # jamais moins de plans qu'à l'origine (sinon échec explicite, aucune application).
+    assert hasattr(PlanCoEditWorker, "_run_all_batched") and hasattr(PlanCoEditWorker, "progress"), \
+        "worker : batching correctif global absent (_run_all_batched / progress)"
+    _L12 = "\n\n".join(f"P{i:02d} | T{i} | Fixe | Face | ~5s\nX{i}\nB{i}" for i in range(1, 13))
+    _wc = PlanCoEditWorker(layout_text=_L12, plan_text="", plan_label="", history=[],
+                           user_message="corrige", edition="cinema", mode="cinema", all_plans=True)
+    _rc = {}
+    _wc.plan_ready.connect(lambda p: _rc.__setitem__("plan", p))
+    _wc.failed.connect(lambda e: _rc.__setitem__("fail", e))
+    def _tc(system, messages, **kw):
+        _b = pl.split_plans(messages[-1]["content"])
+        return "\n\n".join(x["text"] for x in _b[:2])   # ne renvoie que 2 plans / lot
+    _wc._run_all_batched(_tc)
+    assert "fail" not in _rc and pl.plan_count(_rc["plan"]) == 12, \
+        "worker correctif global Cinéma : lots tronqués → PERTE (doit tout conserver)"
+    # Sauvegarder / Ouvrir la co-écriture (sauvegarde de secours avant d'appliquer).
+    for _m in ("_btn_save_file", "_btn_open_file", "_on_save_file", "_on_open_file", "_on_progress"):
+        assert hasattr(d3, _m), f"co-écriture : {_m} absent (Sauvegarder/Ouvrir)"
 
 
 @test

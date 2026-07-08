@@ -26,6 +26,58 @@ _MARKER_MSG  = "══════════ MESSAGE ════════�
 _MARKER_PLAN = "══════════ PLAN ══════════"
 
 
+def _fmt_block(edition: str, mode: str, _pl: str, _PL: str) -> str:
+    """Bloc « FORMAT DU PLAN » (Cinéma « P0N | … » / Live « PLAN n — … »), partagé par
+    la co-écriture d'un plan ET le correctif global par lots."""
+    if edition == "cinema":
+        return (
+            "FORMAT DU PLAN RÉÉCRIT (respecte-le À L'IDENTIQUE) :\n"
+            "P<NN> | Valeur de plan | Mouvement de caméra | Axe | ~Durée\n"
+            "INT./EXT. LIEU PRÉCIS — MOMENT\n"
+            "Description de l'action au présent, concrète et visuelle.\n"
+            f"→ SEEDANCE: prompt vidéo court, descriptif, sensoriel, en {_pl}.\n\n"
+            "- Pour le plan RETRAVAILLÉ, garde son numéro (P<NN>) ; pour un plan AJOUTÉ, "
+            "mets un numéro placeholder au bon format (il sera réattribué automatiquement).\n"
+            "- Valeurs de plan / mouvements / axes : reprends la nomenclature PANDORA.\n"
+            "- Durée : notation ~Xs, maximum absolu ~15s."
+        )
+    _m = ("vidéo-mapping projeté sur une façade (géométrie du bâtiment conservée)"
+          if mode == "mapping" else "set live / VJ")
+    return (
+        f"CONTEXTE : conducteur d'un {_m}.\n"
+        "FORMAT DU PLAN RÉÉCRIT (respecte-le À L'IDENTIQUE) :\n"
+        "PLAN <n> — Titre court en français\n"
+        "Durée : <x>s · Valeur de plan : … · Mouvement : …\n"
+        f"PROMPT VIDÉO ({_pl}) : \"…\"\n"
+        f"PROMPT SON (sound design / SFX, {_pl}) : \"…\"\n\n"
+        "- Pour le plan RETRAVAILLÉ, garde son numéro (PLAN <n>) ; pour un plan AJOUTÉ, "
+        "mets un numéro placeholder au bon format (il sera réattribué automatiquement).\n"
+        f"- Le PROMPT VIDÉO reste en {_PL}, très détaillé (beats début/milieu/fin).\n"
+        f"- Le PROMPT SON reste en {_PL} (SFX/ambiance uniquement, aucune voix).\n"
+        "- Durée entière entre 4 et 15 secondes."
+    )
+
+
+def _plan_coedit_batch_system(edition: str, mode: str = "live") -> str:
+    """CORRECTIF GLOBAL par LOTS : applique une consigne à un SOUS-ENSEMBLE de plans et
+    les renvoie TOUS corrigés (sans marqueur) — évite toute troncature sur une longue
+    mise en page (la cause de la perte de plans)."""
+    from core.i18n import get_lang
+    _is_en = (get_lang() == "en")
+    _pl = "anglais" if _is_en else "français"
+    _PL = _pl.upper()
+    return (
+        "Tu es directeur de la photographie sur PANDORA. On te fournit un SOUS-ENSEMBLE de "
+        "plans d'une mise en page et UNE consigne de correction à appliquer à CHACUN.\n\n"
+        "Applique la correction à TOUS les plans fournis. Renvoie-les TOUS, corrigés, dans "
+        "le MÊME ORDRE et le MÊME FORMAT, en conservant toute ligne d'en-tête d'acte "
+        "« === ACTE … === » présente. Ne change QUE ce que la consigne implique ; garde le "
+        "reste MOT POUR MOT. AUCUN marqueur, AUCUNE phrase autour — renvoie UNIQUEMENT les "
+        "plans, chacun commençant par sa PROPRE ligne d'en-tête.\n\n"
+        + _fmt_block(edition, mode, _pl, _PL)
+    )
+
+
 def _plan_coedit_system(edition: str, mode: str = "live", discuss_only: bool = False,
                         all_plans: bool = False) -> str:
     # Le plan réécrit reste dans la LANGUE DE TRAVAIL (fr/en) : la traduction en
@@ -39,34 +91,7 @@ def _plan_coedit_system(edition: str, mode: str = "live", discuss_only: bool = F
     _is_en = (get_lang() == "en")
     _pl    = "anglais" if _is_en else "français"
     _PL    = _pl.upper()
-    if edition == "cinema":
-        fmt = (
-            "FORMAT DU PLAN RÉÉCRIT (respecte-le À L'IDENTIQUE) :\n"
-            "P<NN> | Valeur de plan | Mouvement de caméra | Axe | ~Durée\n"
-            "INT./EXT. LIEU PRÉCIS — MOMENT\n"
-            "Description de l'action au présent, concrète et visuelle.\n"
-            f"→ SEEDANCE: prompt vidéo court, descriptif, sensoriel, en {_pl}.\n\n"
-            "- Pour le plan RETRAVAILLÉ, garde son numéro (P<NN>) ; pour un plan AJOUTÉ, "
-            "mets un numéro placeholder au bon format (il sera réattribué automatiquement).\n"
-            "- Valeurs de plan / mouvements / axes : reprends la nomenclature PANDORA.\n"
-            "- Durée : notation ~Xs, maximum absolu ~15s."
-        )
-    else:
-        _m = ("vidéo-mapping projeté sur une façade (géométrie du bâtiment conservée)"
-              if mode == "mapping" else "set live / VJ")
-        fmt = (
-            f"CONTEXTE : conducteur d'un {_m}.\n"
-            "FORMAT DU PLAN RÉÉCRIT (respecte-le À L'IDENTIQUE) :\n"
-            "PLAN <n> — Titre court en français\n"
-            "Durée : <x>s · Valeur de plan : … · Mouvement : …\n"
-            f"PROMPT VIDÉO ({_pl}) : \"…\"\n"
-            f"PROMPT SON (sound design / SFX, {_pl}) : \"…\"\n\n"
-            "- Pour le plan RETRAVAILLÉ, garde son numéro (PLAN <n>) ; pour un plan AJOUTÉ, "
-            "mets un numéro placeholder au bon format (il sera réattribué automatiquement).\n"
-            f"- Le PROMPT VIDÉO reste en {_PL}, très détaillé (beats début/milieu/fin).\n"
-            f"- Le PROMPT SON reste en {_PL} (SFX/ambiance uniquement, aucune voix).\n"
-            "- Durée entière entre 4 et 15 secondes."
-        )
+    fmt = _fmt_block(edition, mode, _pl, _PL)
     _intro = (
         "Tu es directeur de la photographie et superviseur de production sur PANDORA "
         "(pré-production IA, génération vidéo via Seedance 2.0). Tu travailles avec le "
@@ -148,6 +173,7 @@ class PlanCoEditWorker(QThread):
     message_ready = pyqtSignal(str)
     plan_ready    = pyqtSignal(str)
     failed        = pyqtSignal(str)
+    progress      = pyqtSignal(str)   # avancement du correctif global par lots
 
     def __init__(
         self,
@@ -182,6 +208,12 @@ class PlanCoEditWorker(QThread):
             err = key_error("screenplay")
             if err:
                 self.failed.emit(err)
+                return
+
+            # CORRECTIF GLOBAL (modif) : traité par LOTS pour ne JAMAIS tronquer (donc
+            # ne jamais perdre de plans sur une longue mise en page).
+            if self._all and not self._discuss:
+                self._run_all_batched(ai_chat)
                 return
 
             if self._all:
@@ -299,3 +331,71 @@ class PlanCoEditWorker(QThread):
         except Exception as e:
             from core.worker import humanize_api_error
             self.failed.emit(humanize_api_error(str(e)))
+
+    # ── CORRECTIF GLOBAL par LOTS (anti-troncature / anti-perte) ──────────────
+    def _run_all_batched(self, ai_chat):
+        """Applique la consigne à TOUS les plans par petits LOTS (≤ _BATCH), puis
+        réassemble et renumérote. Chaque lot est court → aucune troncature. GARDE-FOU
+        ANTI-PERTE : si un lot renvoie moins de plans que demandé, on conserve les
+        ORIGINAUX pour les manquants ; et si le total final < total initial, on N'APPLIQUE
+        RIEN (échec) plutôt que de perdre des plans. Émet progress() puis plan_ready()."""
+        import core.plan_layout as pl
+        _BATCH = 6
+        plans = pl.split_plans(self._layout)
+        total = len(plans)
+        if total == 0:
+            from core.i18n import translate
+            self.failed.emit(translate("Aucun plan à corriger."))
+            return
+        head = self._layout[:plans[0]["start"]]
+        # Façade (mapping) : décrite en TEXTE une seule fois et injectée dans le système
+        # (pas d'image par lot → plus léger, pas de limite 10 Mo, pas de vision répétée).
+        facade_block = ""
+        if self._mode == "mapping" and self._facade:
+            try:
+                from core.live_building import describe_facade, facade_context_block
+                from core.i18n import get_lang
+                _d = describe_facade(self._facade)
+                if _d:
+                    facade_block = facade_context_block(_d, "en" if get_lang() == "en" else "fr")
+            except Exception:
+                facade_block = ""
+        system = _plan_coedit_batch_system(self._edition, self._mode) + facade_block
+
+        out_blocks: list = []
+        try:
+            for i in range(0, total, _BATCH):
+                batch = plans[i:i + _BATCH]
+                n = len(batch)
+                batch_text = "\n\n".join(b["text"] for b in batch)
+                user = ("CONSIGNE à appliquer à CHAQUE plan ci-dessous :\n"
+                        f"{self._user}\n\n"
+                        "PLANS À CORRIGER (renvoie-les TOUS, corrigés, même ordre et "
+                        f"format, et RIEN d'autre) :\n{batch_text}")
+                raw = ai_chat(system, [{"role": "user", "content": user}],
+                              tier="creative", max_tokens=8000, task="screenplay").strip()
+                got = pl.split_plans(raw)
+                if len(got) >= n:
+                    out_blocks.extend(g["text"] for g in got[:n])
+                else:
+                    # Lot incomplet → on garde les ORIGINAUX pour les plans manquants.
+                    out_blocks.extend(g["text"] for g in got)
+                    out_blocks.extend(b["text"] for b in batch[len(got):])
+                self.progress.emit(f"{min(i + n, total)}/{total}")
+        except Exception as e:
+            from core.worker import humanize_api_error
+            self.failed.emit(humanize_api_error(str(e)))
+            return
+
+        combined = "\n\n".join(out_blocks)
+        if head.strip():
+            combined = head.rstrip() + "\n\n" + combined
+        full = pl.renumber_all(combined)
+        # GARDE-FOU ULTIME : jamais moins de plans qu'au départ → sinon on n'applique rien.
+        if pl.plan_count(full) < total:
+            from core.i18n import translate
+            self.failed.emit(translate(
+                "Correctif interrompu (réponse incomplète) — RIEN n'a été appliqué pour "
+                "ne perdre aucun plan. Réessaie."))
+            return
+        self.plan_ready.emit(full)
