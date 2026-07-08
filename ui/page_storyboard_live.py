@@ -108,7 +108,16 @@ def _text_dialog(parent: QWidget, title: str, initial: str = "",
     from ui.styles import PANDORA_STYLESHEET
     dlg = QDialog(parent)
     dlg.setWindowTitle(title)
-    dlg.setMinimumSize(540, 240)
+    # Redimensionnable (poignée) + taille par défaut CONFORTABLE, plafonnée à 85 %
+    # de l'écran disponible → jamais plus grand que l'affichage (pas de crop).
+    # (Aligné sur le _text_dialog Cinéma — le prompt s'ouvrait auparavant minuscule.)
+    from PyQt6.QtGui import QGuiApplication
+    _scr = QGuiApplication.primaryScreen().availableGeometry()
+    _w = min(920, int(_scr.width() * 0.85))
+    _h = min(640, int(_scr.height() * 0.85))
+    dlg.setMinimumSize(min(480, _w), min(240, _h))
+    dlg.resize(_w, _h)
+    dlg.setSizeGripEnabled(True)
     dlg.setStyleSheet(PANDORA_STYLESHEET + f"QDialog{{background:{CP['bg1']};}}")
 
     lay = QVBoxLayout(dlg)

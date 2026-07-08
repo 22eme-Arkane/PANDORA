@@ -1056,6 +1056,31 @@ def conducteur_ui():
     p._apply_layout("PLAN 1 — test")
     assert p._editor_tabs.isTabEnabled(1), "onglet Mise en page activé"
     assert p._editor_text.toPlainText() == "Mon conducteur", "conducteur intact"
+    # ── Découpage basé sur la « Mise en page PANDORA » sinon le conducteur (2026-07-08) ──
+    import inspect
+    assert p._decoupage_base() == "PLAN 1 — test", \
+        "le découpage doit partir de la Mise en page PANDORA quand elle existe"
+    assert "PLAN 1 — test" in p._text_with_music() and "Mon conducteur" not in p._text_with_music(), \
+        "_text_with_music doit injecter la mise en page, pas le conducteur brut"
+    p._layout_view.setPlainText("")
+    assert p._decoupage_base() == "Mon conducteur", \
+        "sans mise en page, le découpage doit repartir du conducteur"
+    assert "self._decoupage_base()" in inspect.getsource(PageScenario._on_storyboard), \
+        "garde-fou _on_storyboard basé sur la source choisie (pas le conducteur seul)"
+
+
+@test
+def prompt_dialog_agrandi_live():
+    """La fenêtre d'édition du prompt (clic colonne Prompt) s'ouvre CONFORTABLE (resize +
+    poignée + plafond écran), comme en Cinéma — fini la petite fenêtre 540×240 qu'il
+    fallait agrandir à la main (2026-07-08)."""
+    import inspect
+    import ui.page_storyboard_live as PSL
+    src = inspect.getsource(PSL._text_dialog)
+    assert "dlg.resize(" in src and "QGuiApplication" in src and "setSizeGripEnabled" in src, \
+        "_text_dialog Live : taille confortable non appliquée (resize / écran / poignée)"
+    assert "min(920" in src and "min(640" in src, \
+        "_text_dialog Live : dimensions confortables (920×640 plafonnées) absentes"
 
 
 @test

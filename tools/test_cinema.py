@@ -1432,6 +1432,20 @@ def scenario_onglet_mise_en_page():
         "colonne de lecture centrée installée sur les 2 onglets"
     assert p._editor_tabs.isTabEnabled(1) and p._editor_tabs.currentIndex() == 1
     assert p._current.get("layout_content"), "mise en page persistée séparément"
+    # ── Découpage basé sur la « Mise en page PANDORA » sinon le scénario (2026-07-08) ──
+    # Source du découpage = mise en page si présente…
+    assert p._decoupage_base() == "MISE EN PAGE PANDORA", \
+        "le découpage doit partir de la Mise en page PANDORA quand elle existe"
+    assert "MISE EN PAGE PANDORA" in p._text_with_music() \
+        and "SCENARIO ORIGINAL" not in p._text_with_music(), \
+        "_text_with_music doit injecter la mise en page, pas le scénario brut"
+    # …et RETOMBE sur le scénario quand il n'y a pas de mise en page.
+    p._layout_view.setPlainText("")
+    assert p._decoupage_base() == "SCENARIO ORIGINAL", \
+        "sans mise en page, le découpage doit repartir du scénario"
+    # Le garde-fou d'entrée de _on_storyboard teste la SOURCE choisie (pas _get_text seul).
+    _obs = inspect.getsource(PageScenario._on_storyboard)
+    assert "self._decoupage_base()" in _obs, "garde-fou _on_storyboard basé sur la source choisie"
     # La fenêtre de mise en page applique vers l'onglet (pas _set_editor_text)
     fw = inspect.getsource(PageScenario._open_format_window)
     assert "_apply_layout" in fw and "_set_editor_text" not in fw, \
@@ -2847,6 +2861,53 @@ def moods_plan_architecte_repere():
         cap.clear()
         A.run_generation_nb2("PR", td, "k", lambda m: None, [perso], floor_plan="")
         assert "FLOOR PLAN" not in cap["args"]["prompt"]
+    finally:
+        requests.get = _orig_get
+
+
+@test
+def moods_reference_images_inspiration():
+    """Colonne « Référence » du storyboard → injectée au Mood comme INSPIRATION (2026-07-08).
+    Cinéma/NB2 : les images de référence NE reçoivent PAS la consigne de cohérence
+    (« même pièce / mêmes persos ») — sinon l'IA les recopierait — mais une consigne
+    d'inspiration DÉDIÉE. run_mood les lit depuis shot['reference_images']."""
+    import inspect, types, tempfile, os, sys
+    import api.apercu as A
+    assert "inspiration_refs" in inspect.signature(A.run_generation_nb2).parameters, \
+        "run_generation_nb2 : param inspiration_refs absent"
+    d = A._INSPIRATION_REF_DIRECTIVE
+    assert "INSPIRATION" in d and "NOT" in d and ("copied" in d or "reproduced" in d), \
+        "directive d'inspiration dédiée absente / mal formulée"
+    rm = inspect.getsource(A.run_mood)
+    assert 'shot.get("reference_images")' in rm and "inspiration_refs=_inspo" in rm, \
+        "run_mood n'injecte pas reference_images en NB2"
+    assert "inspiration_ref = _inspo[0]" in rm, "run_mood : repli inspiration Flux absent"
+    fake = types.ModuleType("fal_client"); cap = {}
+    fake.subscribe = lambda endpoint, arguments=None, **k: (
+        cap.update(args=arguments) or {"images": [{"url": "http://o.png"}]})
+    fake.upload = lambda data, content_type=None: "U" + str(len(data))
+    sys.modules["fal_client"] = fake
+    import requests
+    _orig_get = requests.get
+    requests.get = lambda url, timeout=120: types.SimpleNamespace(content=b"PNG")
+    try:
+        td = tempfile.mkdtemp(prefix="t_moodinsp_")
+        def _mk(n, sz): p = os.path.join(td, n); open(p, "wb").write(b"x" * sz); return p
+        insp, perso = _mk("i.png", 40), _mk("p.png", 10)
+        # Inspiration SEULE : consigne inspiration présente, JAMAIS « même pièce »
+        A.run_generation_nb2("PR", td, "k", lambda m: None, [], inspiration_refs=[insp])
+        pr = cap["args"]["prompt"]
+        assert "ARTISTIC INSPIRATION" in pr, "consigne inspiration absente"
+        assert "the SAME room" not in pr, \
+            "PIÈGE : consigne de cohérence appliquée à une image d'inspiration seule"
+        assert cap["args"]["image_urls"] == ["U40"], "image d'inspiration non envoyée"
+        # Cohérence + inspiration : préambule d'ordre + les DEUX consignes distinctes
+        cap.clear()
+        A.run_generation_nb2("PR", td, "k", lambda m: None, [perso], inspiration_refs=[insp])
+        pr = cap["args"]["prompt"]
+        assert "IMAGE ORDER" in pr and "the SAME room" in pr and "ARTISTIC INSPIRATION" in pr, \
+            "mélange cohérence+inspiration : préambule/consignes manquants"
+        assert cap["args"]["image_urls"] == ["U10", "U40"], "ordre cohérence puis inspiration"
     finally:
         requests.get = _orig_get
 

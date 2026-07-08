@@ -1655,8 +1655,9 @@ class PageScenario(QWidget):
         dlg.exec()
 
     def _text_with_music(self) -> str:
-        """Scénario + timeline musicale (si analysée) à injecter dans Claude."""
-        text = self._get_text()
+        """Source du découpage (Mise en page PANDORA sinon scénario) + timeline musicale
+        (si analysée) à injecter dans Claude."""
+        text = self._decoupage_base()
         from core.music_analysis import build_set_timeline
         timeline = build_set_timeline(self._music_tracks, mode=getattr(self, "_music_mode", "clip"))
         return (timeline + "\n\n" + text) if timeline else text
@@ -1693,6 +1694,14 @@ class PageScenario(QWidget):
 
     def _get_text(self) -> str:
         return self._editor_text.toPlainText().strip()
+
+    def _decoupage_base(self) -> str:
+        """Source du découpage : la « Mise en page PANDORA » (layout_content) si elle
+        existe, sinon le scénario/conducteur brut (demande Matthieu 2026-07-08). Le
+        découpage part ainsi de la version structurée plan par plan quand elle a été
+        générée ; à défaut il retombe sur le texte source."""
+        layout = self._layout_view.toPlainText().strip() if hasattr(self, "_layout_view") else ""
+        return layout or self._get_text()
 
     # ── Sauvegarde / ouverture physique du scénario (dossier « Scénario ») ──────
 
@@ -1984,7 +1993,9 @@ class PageScenario(QWidget):
         self._btn_undo_action.setVisible(True)
 
     def _on_storyboard(self):
-        text = self._get_text()
+        # Le découpage part de la « Mise en page PANDORA » si elle existe, sinon du
+        # scénario brut (le garde-fou d'entrée teste donc la source réellement utilisée).
+        text = self._decoupage_base()
         if not text:
             self._ai_progress_lbl.setText("Écris d'abord un scénario à découper.")
             return

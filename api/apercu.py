@@ -434,6 +434,18 @@ _FLOOR_PLAN_DIRECTIVE = (
     "image — it is a geometry reference only."
 )
 
+# Consigne dédiée aux images de RÉFÉRENCE ajoutées PAR PLAN (colonne « Référence » du
+# storyboard). Sémantique OPPOSÉE à _MOOD_REF_DIRECTIVE : ce ne sont NI la pièce NI les
+# personnages à reproduire, seulement une inspiration artistique lâche (ambiance, palette,
+# lumière, composition). Miroir du rôle « reference » de la génération vidéo (api/real.py).
+_INSPIRATION_REF_DIRECTIVE = (
+    "ARTISTIC INSPIRATION — the artistic-inspiration reference image(s) provided are NOT "
+    "the room and NOT the characters, and must NOT be reproduced or copied literally. Draw "
+    "only LOOSE inspiration from them: overall mood, colour palette, lighting, texture and "
+    "compositional energy. The actual scene, room and characters come from the prompt (and "
+    "from the consistency references, if any) — never from these inspiration images."
+)
+
 
 def _upload_ref_robust(fal_client, path: str) -> str:
     """Upload une image de référence pour NB2, de façon robuste.
@@ -465,27 +477,53 @@ def _upload_ref_robust(fal_client, path: str) -> str:
 
 
 def run_generation_nb2(prompt: str, output_dir: str, api_key: str, progress_cb,
-                       ref_images: list | None = None, floor_plan: str = "") -> str:
-    """Mood via Nano Banana 2 : édition avec réfs (persos + décor) si disponibles,
-    sinon génération texte NB2. Aspect 16:9, comme le mood Flux.
+                       ref_images: list | None = None, floor_plan: str = "",
+                       inspiration_refs: list | None = None) -> str:
+    """Mood via Nano Banana 2 : édition avec réfs si disponibles, sinon génération
+    texte NB2. Aspect 16:9, comme le mood Flux.
 
-    Si `floor_plan` (plan d'architecte vu de dessus) est fourni, il est envoyé EN
-    DERNIÈRE référence avec une consigne dédiée : repère d'agencement de la pièce,
-    pas une image à reproduire."""
+    Trois familles de références, dans CET ordre d'envoi (NB2 ne numérote pas les
+    images → l'ordre + les consignes désignent chaque plage) :
+      1. `ref_images`      : cohérence (portraits persos + image décor) → même pièce / persos ;
+      2. `inspiration_refs`: images de RÉFÉRENCE du plan (colonne « Référence ») →
+         inspiration artistique lâche, JAMAIS à recopier (consigne opposée à la cohérence) ;
+      3. `floor_plan`      : plan d'architecte vu de dessus, EN DERNIER (repère d'agencement).
+    Les consignes sont assemblées CONDITIONNELLEMENT : une famille absente n'ajoute pas
+    sa directive (ne jamais appliquer « garde la même pièce » à une image d'inspiration)."""
     import fal_client
     os.environ["FAL_KEY"] = api_key
     os.makedirs(output_dir, exist_ok=True)
-    refs = [r for r in (ref_images or []) if r and os.path.isfile(r)]
+    consistency = [r for r in (ref_images or []) if r and os.path.isfile(r)]
+    inspiration = [r for r in (inspiration_refs or []) if r and os.path.isfile(r)]
     _fp = floor_plan if (floor_plan and os.path.isfile(floor_plan)) else ""
-    # Le plan d'architecte part EN DERNIER (la consigne cible « la dernière image »).
-    refs = (refs[:13] + [_fp]) if _fp else refs[:14]
+    # Cap total 14 : le plan d'architecte garde toujours le dernier slot s'il est présent.
+    _budget = 14 - (1 if _fp else 0)
+    _ordered = (consistency + inspiration)[:_budget]
+    n_cons = min(len(consistency), _budget)
+    n_insp = max(0, len(_ordered) - n_cons)
+    refs = _ordered + ([_fp] if _fp else [])
     if refs:
-        progress_cb(f"Nano Banana 2 — {len(refs)} référence(s)"
-                    + (" + plan d'architecte" if _fp else " (persos + décor)") + "…")
+        _tags = []
+        if n_cons: _tags.append("persos/décor")
+        if n_insp: _tags.append("inspiration")
+        if _fp:    _tags.append("plan d'architecte")
+        progress_cb(f"Nano Banana 2 — {len(refs)} référence(s) (" + ", ".join(_tags) + ")…")
         urls = [_upload_ref_robust(fal_client, r) for r in refs]
-        directive = _MOOD_REF_DIRECTIVE + (("\n\n" + _FLOOR_PLAN_DIRECTIVE) if _fp else "")
+        # Directives conditionnelles + préambule d'ORDRE seulement si plusieurs familles
+        # coexistent (sinon prompt identique à l'existant → aucun changement de rendu).
+        _parts = []
+        if (1 if n_cons else 0) + (1 if n_insp else 0) + (1 if _fp else 0) > 1:
+            _seg = []
+            if n_cons: _seg.append(f"the first {n_cons} reference image(s) are for CONSISTENCY (room/characters)")
+            if n_insp: _seg.append(f"the next {n_insp} are ARTISTIC INSPIRATION only")
+            if _fp:    _seg.append("the LAST image is a top-down floor plan")
+            _parts.append("IMAGE ORDER — " + "; ".join(_seg) + ".")
+        if n_cons: _parts.append(_MOOD_REF_DIRECTIVE)
+        if n_insp: _parts.append(_INSPIRATION_REF_DIRECTIVE)
+        if _fp:    _parts.append(_FLOOR_PLAN_DIRECTIVE)
+        directive = "\n\n".join(_parts)
         result = fal_client.subscribe("fal-ai/nano-banana-2/edit", arguments={
-            "prompt": prompt + "\n\n" + directive, "image_urls": urls,
+            "prompt": prompt + (("\n\n" + directive) if directive else ""), "image_urls": urls,
             "num_images": 1, "aspect_ratio": "16:9", "resolution": "1K",
             "output_format": "png", "safety_tolerance": "6",
         })
@@ -522,6 +560,11 @@ def run_mood(shot: dict, prompt: str, output_dir: str, api_key: str, progress_cb
     if engine not in ("nb2", "flux"):
         engine = "nb2" if _is_cinema_mood() else "flux"
 
+    # Images de RÉFÉRENCE du plan (colonne « Référence », shot["reference_images"]) :
+    # inspiration artistique propre au plan, injectée AUTOMATIQUEMENT au Mood — unitaire
+    # ET batch, Cinéma (NB2) ET Live (Flux), sans toggle (le batch Live n'a pas d'options).
+    _inspo = [p for p in (shot.get("reference_images") or []) if p and os.path.isfile(p)]
+
     if engine == "nb2":
         refs = _shot_ref_images(shot,
                                 include_chars=opts.get("chars", True),
@@ -534,8 +577,12 @@ def run_mood(shot: dict, prompt: str, output_dir: str, api_key: str, progress_cb
             except Exception:
                 _fp = ""
         return run_generation_nb2(prompt, output_dir, api_key, progress_cb, refs,
-                                  floor_plan=_fp)
+                                  floor_plan=_fp, inspiration_refs=_inspo)
     # Flux : mood t2i depuis le prompt (façade/inspiration seulement si fournies — Live).
+    # À défaut d'inspiration EXPLICITE (bouton « Mood inspiré d'une image », prioritaire),
+    # on retombe sur la 1ʳᵉ image de référence du plan — Flux/Kontext ne prend qu'UNE image.
+    if not inspiration_ref and _inspo:
+        inspiration_ref = _inspo[0]
     return run_generation(prompt, output_dir, api_key, progress_cb, building_ref,
                           inspiration_ref=inspiration_ref)
 
