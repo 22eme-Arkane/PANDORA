@@ -1256,11 +1256,16 @@ class PageScenario(QWidget):
         return self._editor_text.toPlainText().strip()
 
     def _decoupage_base(self) -> str:
-        """Source du découpage : la « Mise en page PANDORA » (layout_content) si elle
-        existe, sinon le scénario/conducteur brut (demande Matthieu 2026-07-08). Le
-        découpage part ainsi de la version structurée plan par plan quand elle a été
-        générée ; à défaut il retombe sur le texte source."""
+        """Source du découpage. Si un choix EXPLICITE a été fait (fenêtre « Générer le
+        découpage » → self._decoupage_choice) on le respecte : « source » = conducteur brut,
+        « layout » = Mise en page PANDORA. Sinon (ex. « Tout générer ») repli AUTOMATIQUE :
+        la Mise en page PANDORA si elle existe, sinon le conducteur brut."""
         layout = self._layout_view.toPlainText().strip() if hasattr(self, "_layout_view") else ""
+        choice = getattr(self, "_decoupage_choice", None)
+        if choice == "source":
+            return self._get_text()
+        if choice == "layout":
+            return layout or self._get_text()
         return layout or self._get_text()
 
     # ── Sauvegarder / Ouvrir le conducteur en fichier (porté du Cinéma) ──────────
@@ -2204,17 +2209,27 @@ class PageScenario(QWidget):
     def _on_storyboard(self):
         # Conducteur Live : « Générer le découpage » → fenêtre d'aperçu, puis
         # « Appliquer » écrit les plans dans la séquence (namespace live_seq_*).
-        # Le découpage part de la « Mise en page PANDORA » si elle existe, sinon du
-        # conducteur brut (le garde-fou d'entrée teste la source réellement utilisée).
-        text = self._decoupage_base()
-        if not text:
+        _src = self._get_text()
+        _lay = self._layout_view.toPlainText().strip() if hasattr(self, "_layout_view") else ""
+        if not _src and not _lay:
             self._ai_progress_lbl.setText(translate("Écris d'abord un conducteur à découper."))
+            return
+        # Choix EXPLICITE de la source AVANT de lancer (conducteur vs Mise en page PANDORA)
+        # — lève tout doute sur ce qui sera découpé (demande Matthieu 2026-07-08).
+        from ui.decoupage_source_dialog import choose_decoupage_source
+        _choice = choose_decoupage_source(
+            self, source_label=translate("🎬  Depuis le conducteur"),
+            source_text=_src, layout_text=_lay)
+        if not _choice:
             return
         from api.live_screenplay import GenerateDecoupageWorker
         self._set_ai_busy(True)
         self._ai_progress_lbl.setText(translate("Génération du découpage via Claude…"))
         self._btn_reopen_window.setVisible(False)
-        self._worker = GenerateDecoupageWorker(self._text_with_music(), self._live_mode,
+        self._decoupage_choice = _choice
+        _src_text = self._text_with_music()
+        self._decoupage_choice = None
+        self._worker = GenerateDecoupageWorker(_src_text, self._live_mode,
                                                facade_path=self._facade_for_mapping())
         self._open_decoupage_window(self._worker)
 

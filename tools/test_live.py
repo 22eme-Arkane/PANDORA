@@ -1056,17 +1056,23 @@ def conducteur_ui():
     p._apply_layout("PLAN 1 — test")
     assert p._editor_tabs.isTabEnabled(1), "onglet Mise en page activé"
     assert p._editor_text.toPlainText() == "Mon conducteur", "conducteur intact"
-    # ── Découpage basé sur la « Mise en page PANDORA » sinon le conducteur (2026-07-08) ──
+    # ── Découpage : repli AUTO (aucun choix) + choix EXPLICITE de la source (2026-07-08) ──
     import inspect
     assert p._decoupage_base() == "PLAN 1 — test", \
-        "le découpage doit partir de la Mise en page PANDORA quand elle existe"
+        "auto : le découpage part de la Mise en page PANDORA quand elle existe"
     assert "PLAN 1 — test" in p._text_with_music() and "Mon conducteur" not in p._text_with_music(), \
-        "_text_with_music doit injecter la mise en page, pas le conducteur brut"
+        "_text_with_music (auto) doit injecter la mise en page, pas le conducteur brut"
     p._layout_view.setPlainText("")
-    assert p._decoupage_base() == "Mon conducteur", \
-        "sans mise en page, le découpage doit repartir du conducteur"
-    assert "self._decoupage_base()" in inspect.getsource(PageScenario._on_storyboard), \
-        "garde-fou _on_storyboard basé sur la source choisie (pas le conducteur seul)"
+    assert p._decoupage_base() == "Mon conducteur", "auto sans mise en page → conducteur"
+    # Choix EXPLICITE (fenêtre « Générer le découpage ») : force la source demandée.
+    p._layout_view.setPlainText("PLAN 1 — test")
+    p._decoupage_choice = "source"
+    assert p._decoupage_base() == "Mon conducteur", "choix « conducteur » ignore la mise en page"
+    p._decoupage_choice = "layout"
+    assert p._decoupage_base() == "PLAN 1 — test", "choix « mise en page » force le layout"
+    p._decoupage_choice = None
+    assert "choose_decoupage_source" in inspect.getsource(PageScenario._on_storyboard), \
+        "_on_storyboard doit proposer le choix de la source avant de lancer"
 
 
 @test

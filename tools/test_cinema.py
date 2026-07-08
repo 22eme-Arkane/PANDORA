@@ -1432,20 +1432,25 @@ def scenario_onglet_mise_en_page():
         "colonne de lecture centrée installée sur les 2 onglets"
     assert p._editor_tabs.isTabEnabled(1) and p._editor_tabs.currentIndex() == 1
     assert p._current.get("layout_content"), "mise en page persistée séparément"
-    # ── Découpage basé sur la « Mise en page PANDORA » sinon le scénario (2026-07-08) ──
-    # Source du découpage = mise en page si présente…
+    # ── Découpage : repli AUTO (aucun choix) + choix EXPLICITE de la source (2026-07-08) ──
+    # Auto (ex. « Tout générer ») : mise en page si présente…
     assert p._decoupage_base() == "MISE EN PAGE PANDORA", \
-        "le découpage doit partir de la Mise en page PANDORA quand elle existe"
+        "auto : le découpage part de la Mise en page PANDORA quand elle existe"
     assert "MISE EN PAGE PANDORA" in p._text_with_music() \
         and "SCENARIO ORIGINAL" not in p._text_with_music(), \
-        "_text_with_music doit injecter la mise en page, pas le scénario brut"
-    # …et RETOMBE sur le scénario quand il n'y a pas de mise en page.
+        "_text_with_music (auto) doit injecter la mise en page, pas le scénario brut"
+    # …sinon le scénario.
     p._layout_view.setPlainText("")
-    assert p._decoupage_base() == "SCENARIO ORIGINAL", \
-        "sans mise en page, le découpage doit repartir du scénario"
-    # Le garde-fou d'entrée de _on_storyboard teste la SOURCE choisie (pas _get_text seul).
-    _obs = inspect.getsource(PageScenario._on_storyboard)
-    assert "self._decoupage_base()" in _obs, "garde-fou _on_storyboard basé sur la source choisie"
+    assert p._decoupage_base() == "SCENARIO ORIGINAL", "auto sans mise en page → scénario"
+    # Choix EXPLICITE (fenêtre « Générer le découpage ») : force la source demandée.
+    p._layout_view.setPlainText("MISE EN PAGE PANDORA")
+    p._decoupage_choice = "source"
+    assert p._decoupage_base() == "SCENARIO ORIGINAL", "choix « scénario » ignore la mise en page"
+    p._decoupage_choice = "layout"
+    assert p._decoupage_base() == "MISE EN PAGE PANDORA", "choix « mise en page » force le layout"
+    p._decoupage_choice = None
+    assert "choose_decoupage_source" in inspect.getsource(PageScenario._on_storyboard), \
+        "_on_storyboard doit proposer le choix de la source avant de lancer"
     # La fenêtre de mise en page applique vers l'onglet (pas _set_editor_text)
     fw = inspect.getsource(PageScenario._open_format_window)
     assert "_apply_layout" in fw and "_set_editor_text" not in fw, \
@@ -1454,6 +1459,28 @@ def scenario_onglet_mise_en_page():
     be = inspect.getsource(PageScenario._build_editor)
     assert "setFixedWidth(900)" not in be, "plus de colonne 900 px collée à gauche"
     assert "install_reading_column" in be, "colonne de lecture centrée (lignes lisibles)"
+
+
+@test
+def decoupage_source_choix_fenetre():
+    """Fenêtre de choix de la SOURCE du découpage (partagée Cinéma/Live, 2026-07-08) :
+    options activées selon la présence de texte, clic → choix mémorisé."""
+    import inspect
+    from ui.decoupage_source_dialog import _DecoupageSourceDialog, choose_decoupage_source
+    # Deux sources présentes → 2 options actives, aucun choix au départ
+    d = _DecoupageSourceDialog(None, "📄  Depuis le scénario", "du texte", "une mise en page")
+    assert d.choice is None
+    assert d._btn_source.isEnabled() and d._btn_layout.isEnabled(), "2 sources dispo → 2 options actives"
+    d._btn_layout.click()
+    assert d.choice == "layout", "clic « mise en page » → choix layout"
+    # Mise en page vide → option proposée mais GRISÉE (visible, indisponible → « éviter le doute »)
+    d2 = _DecoupageSourceDialog(None, "🎬  Depuis le conducteur", "du texte", "")
+    assert d2._btn_source.isEnabled() and not d2._btn_layout.isEnabled(), \
+        "mise en page vide → option grisée"
+    d2._btn_source.click()
+    assert d2.choice == "source", "clic source → choix source"
+    _pars = set(inspect.signature(choose_decoupage_source).parameters)
+    assert {"source_label", "source_text", "layout_text"} <= _pars, "signature helper attendue"
 
 
 @test
