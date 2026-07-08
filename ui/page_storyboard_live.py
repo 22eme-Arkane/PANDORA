@@ -2976,10 +2976,14 @@ class PageStoryboard(QWidget):
             self._dur_lbl.setText("")
             return
 
-        # Tableau présent → zone tableau rétablie, message masqué
+        # Tableau présent → zone tableau rétablie, placeholder ENTIÈREMENT masqué
+        # (message ET bouton « Générer depuis le conducteur » — sinon le bouton
+        # restait flottant sous le tableau une fois le découpage généré).
         self._list_container._empty_mode = False
         self._list_container.setMinimumWidth(sum(_col_widths) + len(_col_widths) - 1)
         self._empty_lbl.setVisible(False)
+        self._empty_gen_btn.setVisible(False)
+        self._empty_wrap.setVisible(False)
         self._table_wrap.setVisible(True)
 
         total_dur = sum(float(s.get("duration", 5.0)) for s in self._all_shots)

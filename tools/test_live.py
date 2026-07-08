@@ -2151,6 +2151,27 @@ def fermeture_live_demande_sauvegarde():
     assert '_is_secondary' in src, "LiveWindow : garde fenêtre secondaire perdue"
 
 
+@test
+def bouton_generer_depuis_conducteur_seulement_si_vide():
+    """Séquences Live/Mapping : « ⊕ Générer depuis le conducteur » (placeholder de
+    découpage vide) ne reste PAS affiché une fois le découpage généré (2026-07-07)."""
+    from ui.live_pages import SequenceMappingPage
+    p = SequenceMappingPage()
+    # Découpage VIDE, aucune version → placeholder + bouton visibles.
+    p._all_shots = []
+    p._active_version_id = None
+    p._render()
+    assert not p._empty_gen_btn.isHidden() and not p._empty_wrap.isHidden(), \
+        "découpage vide : le bouton « Générer depuis » devrait être visible"
+    # Découpage GÉNÉRÉ → placeholder ET bouton masqués, tableau visible.
+    p._all_shots = [{"id": "a", "number": "P1", "duration": 15.0, "seedance_prompt": "x"},
+                    {"id": "b", "number": "P2", "duration": 15.0, "seedance_prompt": "y"}]
+    p._render()
+    assert p._empty_gen_btn.isHidden() and p._empty_wrap.isHidden(), \
+        "découpage généré : le bouton « Générer depuis » ne doit PLUS être affiché"
+    assert not p._table_wrap.isHidden(), "découpage généré : le tableau doit être visible"
+
+
 # ══════════════════════════════════════════════════════════════════════════════
 # Runner
 # ══════════════════════════════════════════════════════════════════════════════
