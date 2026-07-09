@@ -312,6 +312,10 @@ def prompts_moods_kontext():
     assert "projection CANVAS" in src, "canvas"
     assert "lit ONLY" not in src, "ancienne consigne retirée"
     assert "PURE BLACK #000000" in src, "fond noir"
+    # Visibilité pilotée par le PROMPT, pas la photo : un élément de façade (porte/fenêtre/
+    # structure) que le prompt dit NON visible doit passer en NOIR (fix 2026-07-09).
+    assert "VISIBILITY IS DRIVEN BY THE PROMPT" in src and "MUST be rendered as PURE BLACK" in src, \
+        "consigne d'exclusion (éléments non visibles → noir) absente"
     assert "fal-ai/flux-pro/kontext" in src, "Kontext quand façade fournie"
     # Image(s) de RÉFÉRENCE + façade : la FAÇADE reste la PRIORITÉ ABSOLUE / canvas
     # obligatoire ; la réf n'enrichit que l'inspiration, jamais copiée ni substituée à la
