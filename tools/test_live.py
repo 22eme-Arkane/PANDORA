@@ -1049,6 +1049,24 @@ def conducteur_derniere_frame_croix():
     assert _fresh.get("image_path", "") == "", "1re frame (vignette) vidée → plus d'image"
     assert not hasattr(sel._shot_cards[s1["id"]], "_clear_btn"), \
         "après effacement, la croix disparaît (refresh)"
+    # RÉCUPÉRATION PAR CONVENTION (auto-réparation) : un plan au CHAMP vide mais dont
+    # le fichier {id}_last_frame.png existe sur disque → la vignette + la croix
+    # apparaissent quand même (cas réel : champ perdu par une édition/re-découpage).
+    from core.context import get_data_root
+    from ui.tab_t2v_live import _shot_frame_path
+    _fdir = os.path.join(get_data_root(), "storyboard", "frames")
+    os.makedirs(_fdir, exist_ok=True)
+    s3 = sb.save_shot({"number": 3, "scene_title": "P3"}, sb.DEFAULT_VERSION_ID)  # champ vide
+    _conv = os.path.join(_fdir, f"{s3['id']}_last_frame.png")
+    Image.new("RGB", (48, 27), (60, 60, 20)).save(_conv)
+    assert _shot_frame_path(s3, "last") == _conv, "frame retrouvée par convention (champ vide)"
+    sel2 = StoryboardSelector()
+    assert hasattr(sel2._shot_cards[s3["id"]], "_clear_btn"), \
+        "convention → croix présente même sans champ persisté"
+    sel2._clear_last_frame(s3["id"])
+    assert not os.path.isfile(_conv), "la croix supprime le fichier de frame (convention)"
+    assert not hasattr(sel2._shot_cards[s3["id"]], "_clear_btn"), \
+        "après effacement (fichier supprimé), la croix disparaît"
     # La bande DOIT être rafraîchie après chaque export, sinon les dernières frames
     # (et leur croix) restent invisibles jusqu'à un rechargement manuel.
     from ui.tab_t2v_live import TabT2V

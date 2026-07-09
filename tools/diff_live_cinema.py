@@ -51,6 +51,10 @@ EXPECTED_ONLY_LIVE = {
         # (casse la dérive du raccord au plan choisi) — besoin propre au workflow
         # séquence continue Live/Mapping (2026-07-09). Reportable au Cinéma si besoin.
         "_clear_last_frame",
+        # Résolution d'une frame rendue par CHAMP ou CONVENTION {id}_{kind}_frame.png
+        # (auto-réparation quand le champ last_frame_path/image_path a été perdu) —
+        # Live/Mapping (2026-07-09). Reportable au Cinéma si besoin.
+        "_shot_frame_path",
     },
     "ui/page_scenario_live.py": {
         # (Musique : _refresh_music_display/_make_music_chip/_remove_music/

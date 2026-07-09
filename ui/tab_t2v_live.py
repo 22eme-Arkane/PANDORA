@@ -98,6 +98,29 @@ def _norm_ext_result(r: dict, prompt: str = "") -> dict:
     out.setdefault("ref_images_sent", 0)
     out.setdefault("gcs_blocked", False)
     return out
+
+
+def _shot_frame_path(shot: dict, kind: str = "last") -> str:
+    """Chemin d'une frame RENDUE d'un plan (kind = 'last' | 'first').
+
+    Priorité au champ persisté (last_frame_path / image_path) ; à défaut, on
+    retrouve le fichier par CONVENTION de nom {id}_{kind}_frame.png dans
+    <data_root>/storyboard/frames/. Auto-réparation : si une édition/re-découpage
+    a effacé le champ du plan, la frame sur disque reste la source fiable — la
+    vignette et le raccord la retrouvent quand même. Renvoie "" si rien."""
+    field = "last_frame_path" if kind == "last" else "image_path"
+    p = shot.get(field, "") or ""
+    if p and os.path.isfile(p):
+        return p
+    try:
+        from core.context import get_data_root
+        c = os.path.join(get_data_root(), "storyboard", "frames",
+                         f"{shot.get('id', '')}_{kind}_frame.png")
+        return c if os.path.isfile(c) else ""
+    except Exception:
+        return ""
+
+
 import core.decors as dec_api
 import core.camera_prefs as cam_prefs
 from core.camera_data import build_camera_prompt_suffix
@@ -1291,16 +1314,17 @@ class StoryboardSelector(QWidget):
             title = shot.get("scene_title", "") or shot.get("decor_name", "")
             badge = f"#{num}"
 
-            # Shot image: own first, then décor fallback
-            img_path = shot.get("image_path", "")
-            if not img_path:
-                img_path = decor_imgs.get(shot.get("decor_id", ""), "")
+            # Vignette : 1re frame rendue (champ OU convention) → décor en repli.
+            # Dernière frame rendue (champ OU convention) → prime dans _ThumbCard.
+            img_path = (_shot_frame_path(shot, "first")
+                        or decor_imgs.get(shot.get("decor_id", ""), ""))
+            last_fp  = _shot_frame_path(shot, "last")
 
             overlay = f"Plan {num}\n{i + 1} sur {total}"
 
             card = _ThumbCard(shot["id"], title or badge, img_path, badge,
                               overlay_text=overlay,
-                              last_frame_path=shot.get("last_frame_path", ""),
+                              last_frame_path=last_fp,
                               on_clear_frame=self._clear_last_frame)
             card.toggled.connect(
                 lambda sel, sid=shot["id"]: self._on_shot_toggled(sid, sel)
@@ -1365,16 +1389,27 @@ class StoryboardSelector(QWidget):
         """Croix rouge sur la vignette : VIDE les frames rendues du plan (dernière ET
         première) → la vignette repasse au badge « plus d'image » et le raccord ne
         réutilise plus RIEN (le plan suivant repart de son mood à la régénération,
-        ce qui casse la dérive cumulative). On ne supprime PAS les fichiers (réécrits
-        à la prochaine génération) — on retire juste les références du plan."""
+        ce qui casse la dérive cumulative). Retire les références du plan ET supprime
+        les fichiers de frames — sinon la récupération par convention les rappellerait
+        aussitôt. Les frames sont réécrites à la prochaine génération du plan."""
         shot = sb_api.get_shot(shot_id) or self._shots_meta.get(shot_id)
-        if not shot or not (shot.get("last_frame_path") or shot.get("image_path")):
-            return
-        shot = dict(shot)
-        shot["last_frame_path"] = ""   # tampon du raccord (dernière frame)
-        shot["image_path"]      = ""   # vignette (1re frame) → « plus d'image »
-        sb_api.save_shot(shot)
-        self._shots_meta[shot_id] = shot
+        # Peut exister par convention même si les champs sont vides → on tente quand même.
+        if shot:
+            shot = dict(shot)
+            shot["last_frame_path"] = ""
+            shot["image_path"]      = ""
+            sb_api.save_shot(shot)
+            self._shots_meta[shot_id] = shot
+        # Suppression des fichiers de frames (convention) — la seule vraie source.
+        try:
+            from core.context import get_data_root
+            _fd = os.path.join(get_data_root(), "storyboard", "frames")
+            for _k in ("last", "first"):
+                _p = os.path.join(_fd, f"{shot_id}_{_k}_frame.png")
+                if os.path.isfile(_p):
+                    os.remove(_p)
+        except OSError:
+            pass
         self.refresh()   # la vignette repasse au badge #N, la croix disparaît
 
 
@@ -4054,8 +4089,8 @@ class TabT2V(QScrollArea):
         if not i2v_frame and getattr(self, "_raccord_auto_cb", None) and self._raccord_auto_cb.isChecked():
             _prev = getattr(self._continuity_bar, "_prev_shot", None)
             if _prev:
-                _prev_frame = _prev.get("last_frame_path", "")
-                if _prev_frame and os.path.isfile(_prev_frame):
+                _prev_frame = _shot_frame_path(_prev, "last")  # champ OU convention
+                if _prev_frame:
                     i2v_frame = _prev_frame
 
         # Mapping : raccord par KEYFRAMES — les moods Kontext (fiables sur la façade)
