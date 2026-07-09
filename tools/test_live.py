@@ -357,6 +357,16 @@ def mood_batch_choix_moteur_live():
     _obm = inspect.getsource(PSL.PageStoryboard._on_batch_mood)
     assert 'options={"engine"' in _obm and "dlg" in _obm, \
         "_on_batch_mood ne transmet pas le moteur choisi au MoodBatchWorker"
+    # VARIATION d'un mood existant (MoodDialog) : même choix Flux / Nano Banana 2.
+    import api.apercu as _A
+    assert "options" in inspect.signature(_A.MoodGenerationWorker.__init__).parameters, \
+        "worker unitaire : param options (moteur) absent"
+    assert "options=self._options" in inspect.getsource(_A.MoodGenerationWorker.run), \
+        "worker unitaire : moteur non transmis à run_mood"
+    from ui.dialog_apercu import MoodDialog, choose_mood_engine
+    assert callable(choose_mood_engine)
+    _gsrc = inspect.getsource(MoodDialog._generate)
+    assert "choose_mood_engine" in _gsrc, "variation de mood : pas de choix Flux/NB2"
 
 
 @test

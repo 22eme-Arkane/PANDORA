@@ -646,12 +646,13 @@ class MoodGenerationWorker(QThread):
     failed   = pyqtSignal(str)
 
     def __init__(self, shot: dict, output_dir: str, custom_prompt: str = "",
-                 inspiration_ref: str = ""):
+                 inspiration_ref: str = "", options: dict | None = None):
         super().__init__()
         self._shot          = shot
         self._out_dir       = output_dir
         self._custom_prompt = custom_prompt
         self._inspiration   = inspiration_ref
+        self._options       = options or {}   # {"engine": "flux"|"nb2"} — choix du moteur
         from core.config import load_config
         import core.style as style_api
         self._api_key    = load_config().get("api_key", "").strip()
@@ -667,7 +668,7 @@ class MoodGenerationWorker(QThread):
         try:
             path = run_mood(self._shot, prompt, self._out_dir, self._api_key,
                             self.progress.emit, self._building_ref,
-                            inspiration_ref=self._inspiration)
+                            inspiration_ref=self._inspiration, options=self._options)
             self.finished.emit(path)
         except Exception as e:
             self.failed.emit(humanize_api_error(str(e)))

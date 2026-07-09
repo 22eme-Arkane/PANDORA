@@ -41,6 +41,68 @@ def _btn(text: str, accent: bool = False, danger: bool = False) -> QPushButton:
     return b
 
 
+def choose_mood_engine(parent) -> str | None:
+    """Fenêtre de choix du MOTEUR pour générer/varier un Mood : « Flux » ou « Nano
+    Banana 2 ». Les deux reçoivent les MÊMES consignes (façade = canvas prioritaire en
+    mapping) → comparer les rendus. Renvoie "flux" | "nb2" | None (annulé)."""
+    dlg = QDialog(parent)
+    dlg.setWindowTitle(translate("Moteur du Mood"))
+    dlg.setMinimumWidth(400)
+    dlg.setStyleSheet(PANDORA_STYLESHEET + f"QDialog{{background:{CP['bg1']};}}")
+    lay = QVBoxLayout(dlg)
+    lay.setContentsMargins(22, 20, 22, 18)
+    lay.setSpacing(12)
+    q = QLabel(translate("Avec quel moteur générer ce Mood ?"))
+    q.setWordWrap(True)
+    q.setStyleSheet(
+        f"color:{CP['text_primary']};font-size:13px;font-weight:700;background:transparent;")
+    lay.addWidget(q)
+    _help = QLabel(translate(
+        "Flux et Nano Banana 2 reçoivent les MÊMES consignes (façade = canvas prioritaire "
+        "en mapping). Teste les deux pour comparer le rendu."))
+    _help.setWordWrap(True)
+    _help.setStyleSheet(f"color:{CP['text_dim']};font-size:10px;background:transparent;")
+    lay.addWidget(_help)
+    lay.addSpacing(4)
+
+    _res = {"engine": None}
+
+    def _pick(engine):
+        _res["engine"] = engine
+        dlg.accept()
+
+    row = QHBoxLayout()
+    row.addStretch()
+    cancel = QPushButton(translate("Annuler"))
+    cancel.setFixedHeight(34)
+    cancel.setStyleSheet(
+        f"QPushButton{{background:transparent;color:{CP['text_secondary']};"
+        f"border:1px solid {CP['border']};border-radius:8px;font-size:11px;font-weight:700;"
+        f"padding:0 16px;}}QPushButton:hover{{background:{CP['bg3']};}}")
+    cancel.clicked.connect(dlg.reject)
+    b_flux = QPushButton(translate("✦  Flux"))
+    b_nb2  = QPushButton(translate("◇  Nano Banana 2"))
+    for _b, _bg in ((b_flux, CP['accent']), (b_nb2, CP.get('accent2', CP['accent']))):
+        _b.setFixedHeight(34)
+        _b.setStyleSheet(
+            f"QPushButton{{background:{_bg};color:#07080f;border:none;border-radius:8px;"
+            f"font-size:11px;font-weight:700;padding:0 18px;}}QPushButton:hover{{background:#6eded6;}}")
+    b_flux.clicked.connect(lambda: _pick("flux"))
+    b_nb2.clicked.connect(lambda: _pick("nb2"))
+    row.addWidget(cancel)
+    row.addWidget(b_flux)
+    row.addWidget(b_nb2)
+    lay.addLayout(row)
+    try:
+        from ui.widgets import disable_default_buttons
+        disable_default_buttons(dlg)
+    except Exception:
+        pass
+    if dlg.exec() == QDialog.DialogCode.Accepted:
+        return _res["engine"]
+    return None
+
+
 class MoodDialog(QDialog):
     apercu_changed = pyqtSignal(str, str)   # shot_id, active_image_path
 
@@ -496,7 +558,11 @@ class MoodDialog(QDialog):
         self._refresh()
 
     def _generate(self):
-        self._start_generation()
+        # Choix du moteur (Flux / Nano Banana 2) avant la variation → comparer les rendus.
+        engine = choose_mood_engine(self)
+        if not engine:
+            return
+        self._start_generation(engine=engine)
 
     def _generate_from_image(self):
         """Mood inspiré : l'image choisie sert de DA (transposée, jamais collée)."""
@@ -504,16 +570,20 @@ class MoodDialog(QDialog):
         paths = ImageLibraryDialog.pick(self)
         if not paths:
             return
-        self._start_generation(inspiration_ref=paths[0])
+        engine = choose_mood_engine(self)
+        if not engine:
+            return
+        self._start_generation(inspiration_ref=paths[0], engine=engine)
 
-    def _start_generation(self, inspiration_ref: str = ""):
+    def _start_generation(self, inspiration_ref: str = "", engine: str = ""):
         from api.apercu import MoodGenerationWorker
         apercu_dir  = sb_api.get_apercu_dir(self._shot["id"])
         custom_prompt = self._prompt_edit.toPlainText().strip()
         self._disconnect_worker()
         self._worker = MoodGenerationWorker(self._shot, apercu_dir,
                                             custom_prompt=custom_prompt,
-                                            inspiration_ref=inspiration_ref)
+                                            inspiration_ref=inspiration_ref,
+                                            options={"engine": engine} if engine else None)
         self._worker.progress.connect(self._on_progress)
         self._worker.finished.connect(self._on_generated)
         self._worker.failed.connect(self._on_failed)

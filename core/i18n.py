@@ -259,6 +259,12 @@ _FR_TO_EN: dict[str, str] = {
         "canvas). Try both to compare the result.",
     "✦  Flux":                              "✦  Flux",
     "◇  Nano Banana 2":                     "◇  Nano Banana 2",
+    "Moteur du Mood":                       "Mood engine",
+    "Avec quel moteur générer ce Mood ?":   "Which engine to generate this Mood with?",
+    "Flux et Nano Banana 2 reçoivent les MÊMES consignes (façade = canvas prioritaire "
+    "en mapping). Teste les deux pour comparer le rendu.":
+        "Flux and Nano Banana 2 receive the SAME instructions (facade = priority canvas "
+        "in mapping). Try both to compare the result.",
     "{n} plan(s) sélectionné(s)":           "{n} shot(s) selected",
     # Gabarits dynamiques : {ai} = nom du moteur choisi pour la tâche storyboard_gen
     "Génération du découpage via {ai}…":   "Generating the breakdown via {ai}…",
