@@ -140,9 +140,9 @@ def edition_cinema_only():
                 "api.resolume_push", "ui.tab_t2v_live"):
         assert f'"{mod}"' not in exc, f".spec ne doit PLUS exclure {mod} (v1.3.0)"
     assert "BUNDLE(" in spec and "PANDORA.app" in spec, "cible macOS présente"
-    # Version bumpée — build 1.3.2 (Cinéma + Live, Windows + macOS).
+    # Version bumpée — build 1.3.3 (Cinéma + Live, Windows + macOS).
     from core.version import VERSION
-    assert VERSION.split("-")[0] == "1.3.2", f"version attendue 1.3.2[-suffixe], lue {VERSION}"
+    assert VERSION.split("-")[0] == "1.3.3", f"version attendue 1.3.3[-suffixe], lue {VERSION}"
 
 
 @test
