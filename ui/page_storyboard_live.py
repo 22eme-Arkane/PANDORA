@@ -3120,19 +3120,21 @@ class PageStoryboard(QWidget):
             if not sc:
                 return
 
-        text = sc.get("formatted_content") or sc.get("raw_content", "")
-        if not text:
+        _source = sc.get("formatted_content") or sc.get("raw_content", "")
+        _layout = sc.get("layout_content", "")
+        if not _source.strip() and not _layout.strip():
             QMessageBox.warning(self, "Scénario vide", "Le scénario sélectionné est vide.")
             return
-
-        reply = QMessageBox.question(
-            self, "Générer le storyboard",
-            f"Générer un découpage depuis « {sc.get('title', 'Scénario sans titre')} » ?\n"
-            "Les nouveaux plans seront ajoutés à cette version.",
-            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
-        )
-        if reply != QMessageBox.StandardButton.Yes:
+        # Choix EXPLICITE de la source du découpage (Mise en page PANDORA sinon conducteur),
+        # comme « Générer le découpage » de la page Conducteur (demande Matthieu 2026-07-09).
+        # Remplace l'ancienne confirmation Oui/Non (le placeholder n'apparaît que si vide).
+        from ui.decoupage_source_dialog import choose_decoupage_source
+        _choice = choose_decoupage_source(
+            self, source_label=translate("🎬  Depuis le conducteur"),
+            source_text=_source, layout_text=_layout)
+        if not _choice:
             return
+        text = _layout if _choice == "layout" else _source
 
         from api.screenplay import GenerateStoryboardWorker
         self._btn_analyze.setEnabled(False)

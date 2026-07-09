@@ -1484,6 +1484,24 @@ def decoupage_source_choix_fenetre():
 
 
 @test
+def placeholder_decoupage_source_cinema():
+    """Placeholder « ⊕ Générer depuis le scénario » (Storyboard Cinéma, découpage vide) :
+    propose la SOURCE du découpage (Mise en page PANDORA sinon scénario), comme
+    « Générer le découpage » de la page Scénario (2026-07-09)."""
+    import inspect
+    from ui.page_storyboard import PageStoryboard
+    _oa = inspect.getsource(PageStoryboard._on_analyze)
+    assert "choose_decoupage_source" in _oa and 'sc.get("layout_content"' in _oa, \
+        "placeholder Cinéma : choix de source du découpage non branché"
+    assert '_choice == "layout"' in _oa, \
+        "placeholder Cinéma : le choix « layout » doit sélectionner la Mise en page PANDORA"
+    # Le bouton placeholder « ⊕ Générer depuis le scénario » est bien relié à _on_analyze.
+    _mod = inspect.getsource(__import__("ui.page_storyboard", fromlist=["_"]))
+    assert "Générer depuis le scénario" in _mod and "self._on_analyze" in _mod, \
+        "bouton placeholder Cinéma non relié à _on_analyze"
+
+
+@test
 def colonne_lecture_largeur_limitee():
     """Colonne de lecture (2026-07-06) : sur un large éditeur, largeur LIMITÉE (~820 px)
     et CENTRÉE via les marges LATÉRALES du frame (pas verticales → le texte reste en

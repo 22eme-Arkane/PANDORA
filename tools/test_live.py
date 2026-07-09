@@ -2228,6 +2228,14 @@ def bouton_generer_depuis_conducteur_seulement_si_vide():
     assert p._empty_gen_btn.isHidden() and p._empty_wrap.isHidden(), \
         "découpage généré : le bouton « Générer depuis » ne doit PLUS être affiché"
     assert not p._table_wrap.isHidden(), "découpage généré : le tableau doit être visible"
+    # Le placeholder « Générer depuis le conducteur » propose la SOURCE du découpage
+    # (Mise en page PANDORA sinon conducteur), comme « Générer le découpage » (2026-07-09).
+    import inspect
+    _oa = inspect.getsource(type(p)._on_analyze)
+    assert "choose_decoupage_source" in _oa and 'sc.get("layout_content"' in _oa, \
+        "placeholder Live : choix de source du découpage non branché"
+    assert '_choice == "layout"' in _oa, \
+        "placeholder Live : le choix « layout » doit sélectionner la Mise en page PANDORA"
 
 
 # ══════════════════════════════════════════════════════════════════════════════
