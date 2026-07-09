@@ -3512,5 +3512,22 @@ def references_inspiration_par_plan():
     assert MAX_REFS == 3, "dialogue max 3 images"
 
 
+@test
+def reference_image_visible_au_1er_ajout():
+    """Ajouter une image de référence l'affiche DÈS le 1er ajout (bug « il fallait le
+    faire 2 fois », 2026-07-09) : le handler sauve PUIS émet changed → la ligne se
+    reconstruit depuis les données persistées, l'affichage n'est plus tributaire d'un
+    widget local invalidé entre-temps."""
+    import inspect
+    from ui.page_storyboard import _ShotRow
+    src = inspect.getsource(_ShotRow.__init__)
+    i = src.find("def _open_refs")
+    assert i != -1, "_open_refs (colonne Référence) introuvable"
+    j = src.find("_clickable(ref_lbl", i)
+    block = src[i:j if j != -1 else i + 1400]
+    assert "save_shot" in block and "changed.emit" in block, \
+        "l'ajout de référence doit émettre changed (refresh fiable dès le 1er ajout)"
+
+
 if __name__ == "__main__":
     sys.exit(main())

@@ -941,7 +941,12 @@ class _ShotRow(QFrame):
             if dlg.exec():
                 shot_data["reference_images"] = dlg.result_paths()
                 sb_api.save_shot(shot_data)
-                _render_ref(lbl, shot_data)
+                _render_ref(lbl, shot_data)     # aperçu immédiat de la vignette…
+                # …+ reconstruction propre de la ligne depuis les données PERSISTÉES :
+                # garantit l'affichage dès le 1er ajout même si le widget local a été
+                # invalidé entre-temps (bug « la réf n'apparaît qu'au 2e essai »,
+                # 2026-07-09). Même pattern que _set_label / _set_recurrent.
+                row_self.changed.emit()
         _clickable(ref_lbl, _open_refs)
         ref_l.addWidget(ref_lbl)
         cells[22] = ref_w

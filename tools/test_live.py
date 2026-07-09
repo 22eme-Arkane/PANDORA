@@ -536,6 +536,15 @@ def storyboard_boutons_portes_du_cinema():
     assert hasattr(M.PageStoryboard, "_ask_merge_decision")
     gsrc = inspect.getsource(M.PageStoryboard._on_shots_generated)
     assert "strict_no_merge=True" in gsrc and 'pop("merged"' in gsrc
+    # Ajouter une image de référence l'affiche DÈS le 1er ajout (bug « 2 fois »,
+    # 2026-07-09) : le handler sauve PUIS émet changed → reconstruction de la ligne
+    # depuis les données persistées (affichage non tributaire d'un widget invalidé).
+    _rsrc = inspect.getsource(M._ShotRow.__init__)
+    _i = _rsrc.find("def _open_refs")
+    _j = _rsrc.find("_clickable(ref_lbl", _i)
+    _blk = _rsrc[_i:_j if _j != -1 else _i + 1400]
+    assert _i != -1 and "save_shot" in _blk and "changed.emit" in _blk, \
+        "Live : l'ajout de référence doit émettre changed (refresh fiable dès le 1er ajout)"
 
 
 @test
