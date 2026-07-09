@@ -994,19 +994,28 @@ def t2v_live_keyframes_mapping():
     assert 'elif mode == "ref":\n        _ref_images_attempted = len(ref_images)' in src_r, \
         "attempted rempli uniquement dans la branche ref"
     # Option « Utiliser les images du Mood » (RENDU & AUDIO) : cochée par défaut →
-    # les moods servent d'images-clés ; décochée → génération depuis la seule façade
+    # les moods servent d'ancrage ; décochée → génération depuis la seule façade
     # (respect strict) sans keyframes moods.
     assert hasattr(t, "_use_mood_cb"), "case « Utiliser les images du Mood » absente"
     assert t._use_mood_cb.isChecked(), "case Mood cochée par défaut (comportement inchangé)"
     _sg = inspect.getsource(TabT2V.start_generation)
     assert '_use_mood = (not hasattr(self, "_use_mood_cb")) or self._use_mood_cb.isChecked()' in _sg, \
         "lecture de la case Mood dans start_generation"
-    assert "and self._active_shot and _use_mood:" in _sg, \
-        "bloc keyframes-moods conditionné à la case (décoché → pas de moods)"
     assert "REFERENCE FACADE IMAGE is the exact canvas" in _sg and "NO zoom, NO crop" in _sg, \
         "consigne de respect strict de la façade quand la case est décochée"
     assert 'ref_image_roles + ["facade"]' in _sg, \
         "façade toujours envoyée en référence (rôle facade) en mapping"
+    # RACCORD « dernière image réelle » (choix Matthieu 2026-07-09) : le mood n'ancre
+    # QUE le 1er plan (garde « and not i2v_frame ») — sinon le plan reprend la
+    # dernière frame rendue du plan précédent. Plus d'end_image_url (Seedance 2.0
+    # ne l'exploite pas).
+    assert "and _use_mood and not i2v_frame" in _sg, \
+        "le mood n'ancre que le 1er plan : le raccord dernière-frame a priorité"
+    assert "end_frame = kf_end" not in _sg, \
+        "end_image_url retiré du mapping (Seedance 2.0 i2v ne l'exploite pas)"
+    # Anti-dérive de proportions renforcée dans le prompt mapping (_mapping_dna).
+    assert "no anamorphic stretch" in _sg and "width-to-height ratio" in _sg, \
+        "consigne anti-changement de proportions de la façade"
     sb.set_namespace("storyboard")
 
 

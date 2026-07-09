@@ -3967,7 +3967,11 @@ class TabT2V(QScrollArea):
                 "or slides — whenever the facade or its windows, doors and edges are "
                 "visible, they stay at their exact reference position and scale, perfectly "
                 "registered with the real building (the facade as a whole never shrinks, "
-                "grows or zooms); the building is a projection CANVAS, not a subject: "
+                "grows, zooms, stretches or changes proportions); the facade keeps the "
+                "EXACT same width-to-height ratio, aspect and proportions in every single "
+                "frame — no anamorphic stretch, no squash, no perspective breathing, its "
+                "outline stays pixel-locked to its reference position; the building is a "
+                "projection CANVAS, not a subject: "
                 "the projected content may fully cover, hide, dissolve or transform the "
                 "facade — it may appear, vanish into total darkness, or be completely "
                 "replaced by the projected world, exactly as the shot describes; bold "
@@ -4025,22 +4029,28 @@ class TabT2V(QScrollArea):
             time_suffix = (time_suffix + _facade_strict) if time_suffix else _facade_strict.lstrip(", ")
 
         end_frame = ""
-        if getattr(self, "_seq_mode", "live") == "mapping" and self._active_shot and _use_mood:
-            kf_start, kf_end = self._get_mapping_keyframes(self._active_shot)
-            # Confinement façade : keyframes MASQUÉES avant l'envoi (noir pur
-            # hors silhouette) — Seedance suit sa première frame, le contenu
-            # reste dans la façade. Copies en cache, les moods restent intacts.
-            if kf_start or kf_end:
+        # Mapping : RACCORD « dernière image réelle » (choix Matthieu 2026-07-09).
+        # Le plan reprend EXACTEMENT la dernière frame RENDUE du plan précédent —
+        # déjà positionnée dans i2v_frame par le « Raccord automatique » ci-dessus —
+        # → vraie continuité visuelle d'un plan à l'autre. Le mood ne sert donc
+        # d'ancrage que pour le TOUT PREMIER plan (aucune frame précédente).
+        # Pas d'end_image_url : Seedance 2.0 image-to-video ne l'exploite pas
+        # (start+end frame = feature Seedance 1.5 Pro) ; l'envoyer ne faisait rien
+        # et écrasait le raccord. Le plan s'écoule librement depuis sa frame de départ.
+        if (getattr(self, "_seq_mode", "live") == "mapping" and self._active_shot
+                and _use_mood and not i2v_frame):
+            kf_start, _ = self._get_mapping_keyframes(self._active_shot)
+            if kf_start:
+                # Confinement façade : mood masqué (noir pur hors silhouette) avant
+                # l'envoi — Seedance suit sa première frame. Copie en cache, le mood
+                # reste intact à l'écran.
                 from core.live_mapping import masked_keyframe
                 from core.live_building import get_building_ref
                 from core.context import get_data_root
                 _bref = get_building_ref()
                 if _bref:
                     kf_start = masked_keyframe(kf_start, _bref, get_data_root())
-                    kf_end   = masked_keyframe(kf_end, _bref, get_data_root())
-            if kf_start:
-                i2v_frame = kf_start   # prime sur le raccord dernière-frame
-                end_frame = kf_end
+                i2v_frame = kf_start   # ancrage du 1er plan uniquement
 
         params = {
             "mode":                    "i2v" if i2v_frame else "t2v",
