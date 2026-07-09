@@ -154,6 +154,51 @@ def prompts_decoupage_mapping():
 
 
 @test
+def decoupage_depuis_mise_en_page_zero_perte():
+    """Découpage depuis la Mise en page PANDORA : conversion DÉTERMINISTE (1 plan = 1
+    segment, prompts co-écrits REPRIS) — plus de troncature IA (bug 29 plans → 17,
+    2026-07-09). Le conducteur BRUT (sans « PLAN n ») garde le découpage IA."""
+    import inspect
+    import core.decoupage_layout as dl
+    from api.live_screenplay import GenerateDecoupageWorker
+    layout = "\n".join(
+        ["TIMELINE MUSICALE : 128 BPM", "=== ACTE 1 — Intro ==="] +
+        sum(([f"PLAN {n} — Titre {n}",
+              f"Durée : {5 + n % 8}s · Valeur de plan : Plan large · Mouvement : Fixe",
+              f'PROMPT VIDÉO (français) : "vidéo {n} détaillée"',
+              f'PROMPT SON (sound design / SFX, français) : "son {n}"']
+             for n in range(1, 30)), []))
+    # Détection : mise en page structurée vs conducteur brut.
+    assert dl.is_structured_layout(layout) and not dl.is_structured_layout("un conducteur brut"), \
+        "détection mise en page (« PLAN n ») vs conducteur brut"
+    segs = dl.parse_layout_segments(layout)
+    assert len(segs) == 29, f"parseur : {len(segs)}/29 (perte)"
+    assert segs[0]["action"] == "Titre 1" and segs[0]["duration"] == 5 + 1 % 8
+    assert "vidéo 1" in segs[0]["prompt"] and '"' not in segs[0]["prompt"] and segs[0]["sound_prompt"] == "son 1"
+    # Worker : source structurée → 29 segments SANS appel IA (aucune clé requise).
+    w = GenerateDecoupageWorker(layout, "mapping"); cap = {}
+    w.finished.connect(lambda s: cap.__setitem__("s", s))
+    w.failed.connect(lambda e: cap.__setitem__("f", e))
+    w.run()
+    assert "f" not in cap and len(cap.get("s", [])) == 29, \
+        f"worker : la mise en page 29 plans doit donner 29 segments (obtenu {len(cap.get('s', []))})"
+    assert "is_structured_layout" in inspect.getsource(GenerateDecoupageWorker.run), \
+        "worker : conversion déterministe de la mise en page non branchée"
+    # ── Robustesse (cas trouvés par revue adversariale 2026-07-09) ──
+    # (a) prompt multi-paragraphes (ligne vide au milieu) → texte CONSERVÉ, pas tronqué.
+    _mp = dl.parse_layout_segments('PLAN 1 — X\nPROMPT VIDÉO (français) : "para un.\n\npara deux."\n')
+    assert "para un" in _mp[0]["prompt"] and "para deux" in _mp[0]["prompt"], "prompt multi-paragraphes tronqué"
+    # (b) en-tête d'acte SANS numéro → acte auto-incrémenté, jamais avalé dans le prompt son.
+    _na = dl.parse_layout_segments(
+        '=== ACTE 1 — A ===\nPLAN 1 — X\nPROMPT SON (français) : "s1"\n'
+        '=== FINAL ===\nPLAN 2 — Y\nPROMPT VIDÉO (français) : "v2"\n')
+    assert len(_na) == 2 and _na[1]["act"] == 2 and _na[0]["sound_prompt"] == "s1", "acte sans numéro mal géré"
+    # (c) conducteur BRUT vaguement numéroté → NON structuré (le découpage IA reste utilisé).
+    assert not dl.is_structured_layout("Plan 1 : intro\nPlan 2 : montée\nPlan 3 : drop"), \
+        "faux positif : conducteur brut pris pour une mise en page"
+
+
+@test
 def prompts_arrangement_conducteur():
     """Arrangement : vocabulaire conducteur (actes), pas de vocabulaire scénario."""
     import api.live_screenplay as ls

@@ -248,6 +248,20 @@ class GenerateDecoupageWorker(QThread):
         if not text:
             self.failed.emit("La trame est vide — écrivez votre conducteur d'abord.")
             return
+        # Source DÉJÀ découpée en plans (Mise en page PANDORA, « PLAN n — … ») → conversion
+        # DÉTERMINISTE : 1 plan = 1 segment, prompts co-écrits REPRIS tels quels. Aucun appel
+        # IA → aucune troncature (bug 29 plans réduits à 17) ni perte du travail de co-écriture.
+        # Le conducteur BRUT (pas de « PLAN n ») garde le découpage IA classique ci-dessous.
+        try:
+            from core.decoupage_layout import is_structured_layout, parse_layout_segments
+            if is_structured_layout(text):
+                segments = [_normalize(s, self._mode)
+                            for s in parse_layout_segments(text) if isinstance(s, dict)]
+                if segments:
+                    self.finished.emit(segments)
+                    return
+        except Exception:
+            pass   # repli : découpage IA classique ci-dessous
         try:
             from core.ai_provider import complete, key_error, ai_name_for_task
             # Découpage du conducteur = équivalent Live de la génération du
