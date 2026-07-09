@@ -35,21 +35,13 @@ _ENGINES = [
     ("Sora 2  (prochainement)",          "sora-2"),          # OpenAI — 1080p
     ("PixVerse v6  (prochainement)",     "pixverse-v6"),     # PixVerse — flexible
     ("Seedance 2.0 Fast",               "seedance-2.0-fast"), # Rapide — qualité réduite
-    ("Seedance 1.5 Pro",                "seedance-1.5-pro"),  # début+fin exploités + audio natif
 ]
 
 _SEEDANCE_ENGINES    = {"seedance-2.0", "seedance-2.0-fast"}
 _FIXED_RES_ENGINES   = {"veo-3.1", "kling-v3-pro", "kling-o3-4k", "sora-2"}
 _FIXED_RATIO_ENGINES = {"veo-3.1", "kling-v3-pro", "kling-o3-4k"}
 # Moteurs sans support natif d'images de référence (fallback texte uniquement)
-_TEXT_FALLBACK_ENGINES = {"kling-v3-pro", "kling-o3-4k", "veo-3.1", "sora-2",
-                          "seedance-1.5-pro"}
-# Mapping — moteurs dont l'API EXPLOITE réellement l'image de FIN → raccord par
-# KEYFRAMES mood→mood (début = mood du plan, fin = mood du plan suivant, les deux
-# calés sur la façade). Seedance 2.0/fast EXCLUS : l'endpoint accepte end_image_url
-# mais ne l'honore PAS en pratique (retour terrain Matthieu 2026-07-09) → pour eux,
-# raccord par DERNIÈRE IMAGE RÉELLE du plan précédent.
-_KEYFRAME_END_ENGINES = {"seedance-1.5-pro", "seedance-2.0-mini", "kling-v3-pro"}
+_TEXT_FALLBACK_ENGINES = {"kling-v3-pro", "kling-o3-4k", "veo-3.1", "sora-2"}
 _ENGINE_RES_FORCED   = {
     "veo-3.1":      "1080p",
     "kling-v3-pro": "1080p",
@@ -69,7 +61,6 @@ _ENGINE_RESOLUTIONS = {
     "sora-2":            [("1080p", "1080p")],
     "pixverse-v6":       [("1080p  (~$0.115/s)", "1080p"), ("720p  (~$0.075/s)", "720p"), ("480p  (~$0.025/s)", "480p")],
     "happy-horse-1.0":   [("1080p  (~$0.28/s)", "1080p"),  ("720p  (~$0.14/s)", "720p")],
-    "seedance-1.5-pro":  [("720p  (~$0.05/s)", "720p"), ("1080p", "1080p")],
 }
 # Résolution par défaut par moteur (sinon = 1er item du menu). Seedance : 720p par
 # défaut même si le 4K est désormais en tête (Matthieu sort rarement en 1080p/4K).
@@ -82,18 +73,16 @@ def _make_ext_worker(model: str, params: dict):
     from api.video_engines import (
         Veo3Worker, KlingWorker, KlingO3Worker,
         HappyHorseWorker, PixVerseV6Worker, Sora2Worker,
-        Seedance15Worker,
     )
     p = dict(params)
     p.setdefault("mode", "t2v")
     mapping = {
-        "veo-3.1":          Veo3Worker,
-        "kling-v3-pro":     KlingWorker,
-        "kling-o3-4k":      KlingO3Worker,
-        "happy-horse-1.0":  HappyHorseWorker,
-        "pixverse-v6":      PixVerseV6Worker,
-        "sora-2":           Sora2Worker,
-        "seedance-1.5-pro": Seedance15Worker,
+        "veo-3.1":         Veo3Worker,
+        "kling-v3-pro":    KlingWorker,
+        "kling-o3-4k":     KlingO3Worker,
+        "happy-horse-1.0": HappyHorseWorker,
+        "pixverse-v6":     PixVerseV6Worker,
+        "sora-2":          Sora2Worker,
     }
     cls = mapping.get(model)
     return cls(p) if cls else None
@@ -3545,43 +3534,8 @@ class TabT2V(QScrollArea):
         self.cb_res.setCurrentIndex(max(0, idx))
         self.cb_res.blockSignals(False)
         self.cb_res.setEnabled(not fixed_res)
-        self._refresh_ref_compat_banner()
-
-    def _refresh_ref_compat_banner(self):
-        """Bandeau de compatibilité des références — ADAPTÉ AU MODE.
-
-        En MAPPING, aucune référence casting/décor n'est utilisée : la façade et les
-        moods partent comme IMAGES-CLÉS (début → fin), exploitées NATIVEMENT en i2v
-        par tous les moteurs listés → message rassurant (pas de conversion en texte,
-        pas de réinterprétation de la façade). En LIVE, les moteurs sans support natif
-        des références gardent l'avertissement (casting/décor → mots-clés de style)."""
-        if not hasattr(self, "_ref_compat_banner") or not hasattr(self, "cb_model"):
-            return
-        if self._get_model() not in _TEXT_FALLBACK_ENGINES:
-            self._ref_compat_banner.setVisible(False)
-            return
-        if getattr(self, "_seq_mode", "live") == "mapping":
-            self._ref_compat_banner.setText(translate(
-                "ℹ  En mapping, la façade et les moods partent comme images-clés "
-                "(début → fin) : ce moteur les exploite nativement en i2v, sans "
-                "conversion en texte ni réinterprétation de la façade. Les références "
-                "de casting/décor ne s'appliquent pas au mapping."))
-            self._ref_compat_banner.setStyleSheet(
-                "background:rgba(78,205,196,0.10);"
-                f"color:{C['text_secondary']};"
-                "border:1px solid rgba(78,205,196,0.40);"
-                "border-radius:6px;padding:8px 12px;font-size:11px;font-weight:600;")
-        else:
-            self._ref_compat_banner.setText(translate(
-                "⚠  Ce moteur ne supporte pas les images de référence nativement. "
-                "Vos personnages, décors et accessoires seront convertis en mots-clés de style "
-                "via Claude Vision et ajoutés au prompt texte."))
-            self._ref_compat_banner.setStyleSheet(
-                "background:rgba(255,79,106,0.12);"
-                f"color:{C['red']};"
-                "border:1px solid rgba(255,79,106,0.45);"
-                "border-radius:6px;padding:8px 12px;font-size:11px;font-weight:600;")
-        self._ref_compat_banner.setVisible(True)
+        if hasattr(self, "_ref_compat_banner"):
+            self._ref_compat_banner.setVisible(key in _TEXT_FALLBACK_ENGINES)
 
     def _on_seed_toggle(self, checked: bool):
         if checked:
@@ -4075,37 +4029,28 @@ class TabT2V(QScrollArea):
             time_suffix = (time_suffix + _facade_strict) if time_suffix else _facade_strict.lstrip(", ")
 
         end_frame = ""
-        # Mapping : DEUX stratégies de raccord selon ce que le moteur exploite.
-        #  • Moteur qui EXPLOITE l'image de FIN (Seedance 1.5 Pro, Kling v3… →
-        #    _KEYFRAME_END_ENGINES) : raccord par KEYFRAMES mood→mood. Début = mood
-        #    du plan, fin = mood du plan SUIVANT, les DEUX calés sur la façade
-        #    (aucune dérive cumulative, jonction exacte par construction : le clip N
-        #    finit sur l'image où le clip N+1 commence).
-        #  • Sinon (Seedance 2.0 : end_image_url accepté mais NON exploité, retour
-        #    terrain 2026-07-09) : raccord par DERNIÈRE IMAGE RÉELLE — i2v_frame est
-        #    déjà la dernière frame rendue du plan précédent (Raccord automatique) ;
-        #    le mood n'ancre que le TOUT PREMIER plan, pas d'image de fin.
-        if getattr(self, "_seq_mode", "live") == "mapping" and self._active_shot and _use_mood:
-            _end_kf = self._get_model() in _KEYFRAME_END_ENGINES
-            if _end_kf or not i2v_frame:
-                kf_start, kf_end = self._get_mapping_keyframes(self._active_shot)
-                if kf_start:
-                    # Confinement façade : keyframes masquées (noir pur hors
-                    # silhouette) avant l'envoi. Copies en cache, moods intacts.
-                    from core.live_mapping import masked_keyframe
-                    from core.live_building import get_building_ref
-                    from core.context import get_data_root
-                    _bref = get_building_ref()
-                    if _bref:
-                        kf_start = masked_keyframe(kf_start, _bref, get_data_root())
-                    if _end_kf:
-                        # mood→mood : début = mood du plan, fin = mood du suivant.
-                        if _bref and kf_end:
-                            kf_end = masked_keyframe(kf_end, _bref, get_data_root())
-                        i2v_frame = kf_start
-                        end_frame = kf_end
-                    else:
-                        i2v_frame = kf_start   # ancrage du 1er plan uniquement
+        # Mapping : RACCORD « dernière image réelle » (choix Matthieu 2026-07-09).
+        # Le plan reprend EXACTEMENT la dernière frame RENDUE du plan précédent —
+        # déjà positionnée dans i2v_frame par le « Raccord automatique » ci-dessus —
+        # → vraie continuité visuelle d'un plan à l'autre. Le mood ne sert donc
+        # d'ancrage que pour le TOUT PREMIER plan (aucune frame précédente).
+        # Pas d'end_image_url : Seedance 2.0 image-to-video ne l'exploite pas
+        # (start+end frame = feature Seedance 1.5 Pro) ; l'envoyer ne faisait rien
+        # et écrasait le raccord. Le plan s'écoule librement depuis sa frame de départ.
+        if (getattr(self, "_seq_mode", "live") == "mapping" and self._active_shot
+                and _use_mood and not i2v_frame):
+            kf_start, _ = self._get_mapping_keyframes(self._active_shot)
+            if kf_start:
+                # Confinement façade : mood masqué (noir pur hors silhouette) avant
+                # l'envoi — Seedance suit sa première frame. Copie en cache, le mood
+                # reste intact à l'écran.
+                from core.live_mapping import masked_keyframe
+                from core.live_building import get_building_ref
+                from core.context import get_data_root
+                _bref = get_building_ref()
+                if _bref:
+                    kf_start = masked_keyframe(kf_start, _bref, get_data_root())
+                i2v_frame = kf_start   # ancrage du 1er plan uniquement
 
         params = {
             "mode":                    "i2v" if i2v_frame else "t2v",
@@ -4494,9 +4439,6 @@ class TabT2V(QScrollArea):
             self._storyboard.refresh()
         if hasattr(self, "_ref_mode_banner"):
             self._update_injection_banner()
-        # Le message de compatibilité des références dépend du mode (mapping =
-        # façade/moods en images-clés → pas d'avertissement casting/décor).
-        self._refresh_ref_compat_banner()
         # Mapping = séquence continue → on active le raccord automatique par défaut
         # (la dernière frame d'un plan devient la 1re du suivant). Décochable pour
         # des loops indépendants.

@@ -1005,48 +1005,17 @@ def t2v_live_keyframes_mapping():
         "consigne de respect strict de la façade quand la case est décochée"
     assert 'ref_image_roles + ["facade"]' in _sg, \
         "façade toujours envoyée en référence (rôle facade) en mapping"
-    # Raccord mapping CONSCIENT DU MOTEUR (Matthieu 2026-07-09) :
-    #  • moteur exploitant l'image de fin (Seedance 1.5 Pro…) → keyframes mood→mood ;
-    #  • Seedance 2.0 → dernière image réelle (le mood n'ancre que le 1er plan).
-    assert "_end_kf = self._get_model() in _KEYFRAME_END_ENGINES" in _sg, \
-        "branche selon la capacité end-frame RÉELLE du moteur"
-    assert "if _end_kf or not i2v_frame:" in _sg, \
-        "entrée du bloc : moteur à image de fin OU 1er plan sans raccord"
-    assert "end_frame = kf_end" in _sg, \
-        "mood→mood (image de fin) restauré pour les moteurs qui l'exploitent"
+    # RACCORD « dernière image réelle » (choix Matthieu 2026-07-09) : le mood n'ancre
+    # QUE le 1er plan (garde « and not i2v_frame ») — sinon le plan reprend la
+    # dernière frame rendue du plan précédent. Plus d'end_image_url (Seedance 2.0
+    # ne l'exploite pas).
+    assert "and _use_mood and not i2v_frame" in _sg, \
+        "le mood n'ancre que le 1er plan : le raccord dernière-frame a priorité"
+    assert "end_frame = kf_end" not in _sg, \
+        "end_image_url retiré du mapping (Seedance 2.0 i2v ne l'exploite pas)"
     # Anti-dérive de proportions renforcée dans le prompt mapping (_mapping_dna).
     assert "no anamorphic stretch" in _sg and "width-to-height ratio" in _sg, \
         "consigne anti-changement de proportions de la façade"
-    # Seedance 1.5 Pro exposé dans le Studio IA Live (Générer depuis Séquences) et
-    # câblé sur le worker qui envoie bien start + end frame.
-    import ui.tab_t2v_live as _m
-    assert any(k == "seedance-1.5-pro" for _, k in _m._ENGINES), \
-        "Seedance 1.5 Pro dans le combo moteurs Live"
-    assert "seedance-1.5-pro" in _m._KEYFRAME_END_ENGINES, \
-        "Seedance 1.5 Pro = raccord mood→mood (image de fin exploitée)"
-    assert "seedance-1.5-pro" in _m._ENGINE_RESOLUTIONS, "résolutions 1.5 Pro déclarées"
-    from api.video_engines import Seedance15Worker
-    _w15 = _m._make_ext_worker("seedance-1.5-pro", {"prompt": "x"})
-    assert isinstance(_w15, Seedance15Worker), "worker Seedance 1.5 Pro câblé"
-    assert Seedance15Worker.END_FRAME is True, "le worker transmet l'image de fin (end_image_url)"
-    assert "v1.5/pro/image-to-video" in Seedance15Worker.ENDPOINT_I2V, "endpoint i2v Seedance 1.5 Pro"
-    # Bandeau compatibilité références ADAPTÉ AU MODE (Matthieu 2026-07-09) : 1.5 Pro
-    # est dans _TEXT_FALLBACK_ENGINES (pas de réfs natives) MAIS en mapping la façade
-    # et les moods voyagent par les IMAGES-CLÉS (i2v) → message rassurant, pas
-    # l'avertissement « casting/décor convertis en texte » (trompeur en mapping).
-    _ck = [t.cb_model.itemData(i) for i in range(t.cb_model.count())]
-    t.cb_model.setCurrentIndex(_ck.index("seedance-1.5-pro"))
-    assert not t._ref_compat_banner.isHidden(), "bandeau réfs visible pour 1.5 Pro"
-    _bt_map = t._ref_compat_banner.text()
-    assert ("images-clés" in _bt_map) or ("keyframes" in _bt_map), \
-        "mapping : bandeau RASSURANT (façade/moods en images-clés)"
-    assert ("mots-clés de style" not in _bt_map) and ("style keywords" not in _bt_map), \
-        "mapping : pas d'avertissement casting/décor trompeur"
-    t._set_seq_mode("live")
-    _bt_live = t._ref_compat_banner.text()
-    assert ("mots-clés de style" in _bt_live) or ("style keywords" in _bt_live), \
-        "live : avertissement casting/décor conservé"
-    t._set_seq_mode("mapping")
     sb.set_namespace("storyboard")
 
 
