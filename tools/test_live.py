@@ -1031,20 +1031,22 @@ def conducteur_derniere_frame_croix():
     sb.set_namespace("live_seq_mapping")
     sb.clear_version_shots(sb.DEFAULT_VERSION_ID)
     _tmp = _tf.mkdtemp()
-    lf = os.path.join(_tmp, "p1_last.png")
-    Image.new("RGB", (48, 27), (20, 30, 40)).save(lf)
-    s1 = sb.save_shot({"number": 1, "scene_title": "P1", "last_frame_path": lf},
-                      sb.DEFAULT_VERSION_ID)
+    lf = os.path.join(_tmp, "p1_last.png");  Image.new("RGB", (48, 27), (20, 30, 40)).save(lf)
+    ff = os.path.join(_tmp, "p1_first.png"); Image.new("RGB", (48, 27), (40, 20, 30)).save(ff)
+    s1 = sb.save_shot({"number": 1, "scene_title": "P1",
+                       "last_frame_path": lf, "image_path": ff}, sb.DEFAULT_VERSION_ID)
     s2 = sb.save_shot({"number": 2, "scene_title": "P2"}, sb.DEFAULT_VERSION_ID)
     sel = StoryboardSelector()
     assert hasattr(sel._shot_cards[s1["id"]], "_clear_btn"), \
         "plan avec dernière frame → croix de suppression présente"
     assert not hasattr(sel._shot_cards[s2["id"]], "_clear_btn"), \
         "plan sans dernière frame → pas de croix"
-    # Effacement : la référence est vidée (fichier laissé) et la croix disparaît.
+    # Croix = VIDE les DEUX frames (dernière + première) → « plus d'image », pas de
+    # repli sur une autre image ; la croix disparaît. Fichiers laissés sur le disque.
     sel._clear_last_frame(s1["id"])
-    assert (sb.get_shot(s1["id"]) or {}).get("last_frame_path", "") == "", \
-        "dernière frame effacée (référence last_frame_path vidée)"
+    _fresh = sb.get_shot(s1["id"]) or {}
+    assert _fresh.get("last_frame_path", "") == "", "dernière frame (raccord) vidée"
+    assert _fresh.get("image_path", "") == "", "1re frame (vignette) vidée → plus d'image"
     assert not hasattr(sel._shot_cards[s1["id"]], "_clear_btn"), \
         "après effacement, la croix disparaît (refresh)"
     # La bande DOIT être rafraîchie après chaque export, sinon les dernières frames

@@ -1362,18 +1362,20 @@ class StoryboardSelector(QWidget):
             self._selected_shot_id = next(iter(self._selected_shot_ids))
 
     def _clear_last_frame(self, shot_id: str):
-        """Efface la DERNIÈRE frame rendue d'un plan (croix rouge sur la vignette) :
-        le raccord ne s'appuiera plus dessus → le plan suivant repart de son mood à
-        la régénération, ce qui casse la dérive cumulative. On ne supprime PAS le
-        fichier (réécrit à la prochaine génération) — on retire juste la référence."""
+        """Croix rouge sur la vignette : VIDE les frames rendues du plan (dernière ET
+        première) → la vignette repasse au badge « plus d'image » et le raccord ne
+        réutilise plus RIEN (le plan suivant repart de son mood à la régénération,
+        ce qui casse la dérive cumulative). On ne supprime PAS les fichiers (réécrits
+        à la prochaine génération) — on retire juste les références du plan."""
         shot = sb_api.get_shot(shot_id) or self._shots_meta.get(shot_id)
-        if not shot or not shot.get("last_frame_path"):
+        if not shot or not (shot.get("last_frame_path") or shot.get("image_path")):
             return
         shot = dict(shot)
-        shot["last_frame_path"] = ""
+        shot["last_frame_path"] = ""   # tampon du raccord (dernière frame)
+        shot["image_path"]      = ""   # vignette (1re frame) → « plus d'image »
         sb_api.save_shot(shot)
         self._shots_meta[shot_id] = shot
-        self.refresh()   # la vignette repasse sur la 1re frame/décor, la croix disparaît
+        self.refresh()   # la vignette repasse au badge #N, la croix disparaît
 
 
 # (Live : pas de barre DaVinci — le pont scène du Live est Resolume, pas DaVinci.)
