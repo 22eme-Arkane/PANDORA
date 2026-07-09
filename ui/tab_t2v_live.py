@@ -3231,6 +3231,16 @@ class TabT2V(QScrollArea):
         # À chaque retour sur l'onglet : si le style « Film réaliste » est actif, la
         # prise de vue réelle est cochée d'office (le style peut avoir changé ailleurs).
         self._sync_film_anchor_with_style()
+        # Charge/rafraîchit la bande Conducteur à CHAQUE affichage (ouverture du
+        # projet, retour sur la page) → les vignettes (dernière frame rendue + croix)
+        # apparaissent sans action manuelle. On recale le namespace sur la séquence
+        # courante avant lecture, sinon _load_shots lirait la mauvaise séquence.
+        try:
+            import core.storyboard as _sb
+            _sb.set_namespace(f"live_seq_{getattr(self, '_seq_mode', 'live')}")
+            self._storyboard.refresh()
+        except Exception:
+            pass
 
     def _refresh_prompt_preview(self, *_):
         if not hasattr(self, "_preview_body") or not self._preview_expanded:

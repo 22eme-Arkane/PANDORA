@@ -1055,6 +1055,11 @@ def conducteur_derniere_frame_croix():
     _of = inspect.getsource(TabT2V.on_finished)
     assert "self._storyboard.refresh()" in _of, \
         "on_finished rafraîchit le Conducteur (dernière frame visible dès l'export)"
+    # showEvent recharge la bande à CHAQUE affichage → les vignettes se chargent à
+    # l'ouverture du projet sans action manuelle (demande Matthieu 2026-07-09).
+    _se = inspect.getsource(TabT2V.showEvent)
+    assert "self._storyboard.refresh()" in _se and "set_namespace" in _se, \
+        "showEvent recale le namespace + recharge le Conducteur (chargement au lancement)"
     sb.set_namespace("storyboard")
 
 
