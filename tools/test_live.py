@@ -545,6 +545,12 @@ def storyboard_boutons_portes_du_cinema():
     _blk = _rsrc[_i:_j if _j != -1 else _i + 1400]
     assert _i != -1 and "save_shot" in _blk and "changed.emit" in _blk, \
         "Live : l'ajout de référence doit émettre changed (refresh fiable dès le 1er ajout)"
+    # Aperçu : N images côte à côte et ENTIÈRES (helper build_reference_thumb, 2026-07-09).
+    _rr_i = _rsrc.find("def _render_ref")
+    _rr_j = _rsrc.find("_render_ref()", _rr_i)
+    _rr = _rsrc[_rr_i:_rr_j if _rr_j != -1 else _rr_i + 900]
+    assert "build_reference_thumb" in _rr and "KeepAspectRatioByExpanding" not in _rr, \
+        "Live : _render_ref n'utilise pas la vignette composite non recadrée"
 
 
 @test

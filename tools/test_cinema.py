@@ -3527,6 +3527,18 @@ def reference_image_visible_au_1er_ajout():
     block = src[i:j if j != -1 else i + 1400]
     assert "save_shot" in block and "changed.emit" in block, \
         "l'ajout de référence doit émettre changed (refresh fiable dès le 1er ajout)"
+    # Aperçu (2026-07-09) : les N images côte à côte et ENTIÈRES (fit inside), pas la 1re
+    # seule recadrée. Le rendu passe par build_reference_thumb (helper partagé).
+    from ui.dialog_reference_images import build_reference_thumb
+    _bsrc = inspect.getsource(build_reference_thumb)
+    assert "KeepAspectRatio" in _bsrc and "KeepAspectRatioByExpanding" not in _bsrc, \
+        "vignette réf : images recadrées (doivent être fit-inside, non tronquées)"
+    _rr_i = src.find("def _render_ref")
+    _rr_j = src.find("_render_ref()", _rr_i)
+    _rr = src[_rr_i:_rr_j if _rr_j != -1 else _rr_i + 900]
+    assert "build_reference_thumb" in _rr and "KeepAspectRatioByExpanding" not in _rr, \
+        "_render_ref Cinéma n'utilise pas la vignette composite non recadrée"
+    assert build_reference_thumb([], 100, 58).isNull(), "aucune image → pas de vignette"
 
 
 if __name__ == "__main__":

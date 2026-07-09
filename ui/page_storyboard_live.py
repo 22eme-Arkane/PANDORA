@@ -55,7 +55,7 @@ _COLS = [
     ("Transition",    96,  False),  # 19 transition
     ("Notes / Repère", 150, False), # 20 cue_note
     ("",              78,  False),  # 21 Boutons
-    ("Référence",    100,  False),  # 22 reference_images — inspiration → rôle « reference »
+    ("Référence",    132,  False),  # 22 reference_images — inspiration → rôle « reference » (3 vignettes côte à côte)
 ]
 
 _HEURE_PRESETS = HEURE_PRESETS
@@ -909,18 +909,16 @@ class _ShotRow(QFrame):
         ref_l.setContentsMargins(3, 4, 3, 4)
         ref_l.setAlignment(Qt.AlignmentFlag.AlignCenter)
         ref_lbl = QLabel()
-        ref_lbl.setFixedSize(86, 58)
+        ref_lbl.setFixedSize(max(86, _col_widths[22] - 8), 58)
         ref_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
         ref_lbl.setWordWrap(True)
 
         def _render_ref(lbl=ref_lbl, shot_data=data):
             _rps = [p for p in (shot_data.get("reference_images") or []) if os.path.isfile(p)]
             if _rps:
-                pix = QPixmap(_rps[0]).scaled(
-                    86, 58, Qt.AspectRatioMode.KeepAspectRatioByExpanding,
-                    Qt.TransformationMode.SmoothTransformation)
-                pix = pix.copy((pix.width()-86)//2, (pix.height()-58)//2, 86, 58)
-                lbl.setPixmap(pix)
+                # Toutes les images côte à côte, ENTIÈRES (jamais recadrées/tronquées).
+                from ui.dialog_reference_images import build_reference_thumb
+                lbl.setPixmap(build_reference_thumb(_rps, lbl.width(), lbl.height(), CP['bg3']))
                 lbl.setText("")
                 lbl.setStyleSheet(f"background:{CP['bg3']};border:none;")
                 lbl.setToolTip(translate("Images de référence (inspiration)")

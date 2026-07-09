@@ -23,6 +23,36 @@ MAX_REFS = 3
 _IMG_FILTER = "Images (*.png *.jpg *.jpeg *.webp *.bmp)"
 
 
+def build_reference_thumb(paths, width: int = 100, height: int = 58, bg: str = "#0c0e1a"):
+    """Aperçu composite des images de référence d'un plan pour la cellule « Référence »
+    du storyboard : les N images (max 3) côte à côte et ENTIÈRES (fit inside, jamais
+    recadrées/tronquées). Renvoie un QPixmap width×height (vide si aucune image valide).
+    Partagé Storyboard Cinéma + Séquences Live."""
+    from PyQt6.QtGui import QPixmap, QPainter, QColor
+    valid = [p for p in (paths or []) if p and os.path.isfile(p)][:MAX_REFS]
+    if not valid:
+        return QPixmap()
+    n = len(valid)
+    gap = 3 if n > 1 else 0
+    cw = max(1, (width - gap * (n - 1)) // n)
+    canvas = QPixmap(width, height)
+    canvas.fill(QColor(bg))
+    painter = QPainter(canvas)
+    try:
+        for i, path in enumerate(valid):
+            src = QPixmap(path)
+            if src.isNull():
+                continue
+            sc = src.scaled(cw, height, Qt.AspectRatioMode.KeepAspectRatio,
+                            Qt.TransformationMode.SmoothTransformation)
+            x = i * (cw + gap) + (cw - sc.width()) // 2
+            y = (height - sc.height()) // 2
+            painter.drawPixmap(x, y, sc)
+    finally:
+        painter.end()
+    return canvas
+
+
 class ReferenceImagesDialog(QDialog):
     """Édite la liste `reference_images` (chemins) d'un plan. `result_paths()` après
     exec() renvoie la liste finale (vide si Annuler)."""
