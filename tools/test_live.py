@@ -1030,6 +1030,23 @@ def t2v_live_keyframes_mapping():
     assert isinstance(_w15, Seedance15Worker), "worker Seedance 1.5 Pro câblé"
     assert Seedance15Worker.END_FRAME is True, "le worker transmet l'image de fin (end_image_url)"
     assert "v1.5/pro/image-to-video" in Seedance15Worker.ENDPOINT_I2V, "endpoint i2v Seedance 1.5 Pro"
+    # Bandeau compatibilité références ADAPTÉ AU MODE (Matthieu 2026-07-09) : 1.5 Pro
+    # est dans _TEXT_FALLBACK_ENGINES (pas de réfs natives) MAIS en mapping la façade
+    # et les moods voyagent par les IMAGES-CLÉS (i2v) → message rassurant, pas
+    # l'avertissement « casting/décor convertis en texte » (trompeur en mapping).
+    _ck = [t.cb_model.itemData(i) for i in range(t.cb_model.count())]
+    t.cb_model.setCurrentIndex(_ck.index("seedance-1.5-pro"))
+    assert not t._ref_compat_banner.isHidden(), "bandeau réfs visible pour 1.5 Pro"
+    _bt_map = t._ref_compat_banner.text()
+    assert ("images-clés" in _bt_map) or ("keyframes" in _bt_map), \
+        "mapping : bandeau RASSURANT (façade/moods en images-clés)"
+    assert ("mots-clés de style" not in _bt_map) and ("style keywords" not in _bt_map), \
+        "mapping : pas d'avertissement casting/décor trompeur"
+    t._set_seq_mode("live")
+    _bt_live = t._ref_compat_banner.text()
+    assert ("mots-clés de style" in _bt_live) or ("style keywords" in _bt_live), \
+        "live : avertissement casting/décor conservé"
+    t._set_seq_mode("mapping")
     sb.set_namespace("storyboard")
 
 

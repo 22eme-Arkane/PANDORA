@@ -3545,8 +3545,43 @@ class TabT2V(QScrollArea):
         self.cb_res.setCurrentIndex(max(0, idx))
         self.cb_res.blockSignals(False)
         self.cb_res.setEnabled(not fixed_res)
-        if hasattr(self, "_ref_compat_banner"):
-            self._ref_compat_banner.setVisible(key in _TEXT_FALLBACK_ENGINES)
+        self._refresh_ref_compat_banner()
+
+    def _refresh_ref_compat_banner(self):
+        """Bandeau de compatibilité des références — ADAPTÉ AU MODE.
+
+        En MAPPING, aucune référence casting/décor n'est utilisée : la façade et les
+        moods partent comme IMAGES-CLÉS (début → fin), exploitées NATIVEMENT en i2v
+        par tous les moteurs listés → message rassurant (pas de conversion en texte,
+        pas de réinterprétation de la façade). En LIVE, les moteurs sans support natif
+        des références gardent l'avertissement (casting/décor → mots-clés de style)."""
+        if not hasattr(self, "_ref_compat_banner") or not hasattr(self, "cb_model"):
+            return
+        if self._get_model() not in _TEXT_FALLBACK_ENGINES:
+            self._ref_compat_banner.setVisible(False)
+            return
+        if getattr(self, "_seq_mode", "live") == "mapping":
+            self._ref_compat_banner.setText(translate(
+                "ℹ  En mapping, la façade et les moods partent comme images-clés "
+                "(début → fin) : ce moteur les exploite nativement en i2v, sans "
+                "conversion en texte ni réinterprétation de la façade. Les références "
+                "de casting/décor ne s'appliquent pas au mapping."))
+            self._ref_compat_banner.setStyleSheet(
+                "background:rgba(78,205,196,0.10);"
+                f"color:{C['text_secondary']};"
+                "border:1px solid rgba(78,205,196,0.40);"
+                "border-radius:6px;padding:8px 12px;font-size:11px;font-weight:600;")
+        else:
+            self._ref_compat_banner.setText(translate(
+                "⚠  Ce moteur ne supporte pas les images de référence nativement. "
+                "Vos personnages, décors et accessoires seront convertis en mots-clés de style "
+                "via Claude Vision et ajoutés au prompt texte."))
+            self._ref_compat_banner.setStyleSheet(
+                "background:rgba(255,79,106,0.12);"
+                f"color:{C['red']};"
+                "border:1px solid rgba(255,79,106,0.45);"
+                "border-radius:6px;padding:8px 12px;font-size:11px;font-weight:600;")
+        self._ref_compat_banner.setVisible(True)
 
     def _on_seed_toggle(self, checked: bool):
         if checked:
@@ -4459,6 +4494,9 @@ class TabT2V(QScrollArea):
             self._storyboard.refresh()
         if hasattr(self, "_ref_mode_banner"):
             self._update_injection_banner()
+        # Le message de compatibilité des références dépend du mode (mapping =
+        # façade/moods en images-clés → pas d'avertissement casting/décor).
+        self._refresh_ref_compat_banner()
         # Mapping = séquence continue → on active le raccord automatique par défaut
         # (la dernière frame d'un plan devient la 1re du suivant). Décochable pour
         # des loops indépendants.

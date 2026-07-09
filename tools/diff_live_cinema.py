@@ -47,6 +47,11 @@ EXPECTED_ONLY_LIVE = {
         "_make_seq_btn", "_apply_seq_style", "_set_seq_mode",
         "_refresh_bref", "_on_pick_bref", "_on_clear_bref",
         "_get_mapping_keyframes",
+        # Bandeau compat. réfs ADAPTÉ AU MODE (2026-07-09) : en mapping (Live only),
+        # la façade/moods voyagent en images-clés → message rassurant au lieu de
+        # l'avertissement casting/décor. Le Cinéma n'a pas de mode mapping → garde
+        # la logique inline simple (banner = warning quand moteur sans réfs natives).
+        "_refresh_ref_compat_banner",
     },
     "ui/page_scenario_live.py": {
         # (Musique : _refresh_music_display/_make_music_chip/_remove_music/

@@ -1210,6 +1210,14 @@ _FR_TO_EN: dict[str, str] = {
         "⚠  This engine does not natively support reference images. "
         "Your characters, sets and props will be converted to style keywords "
         "via Claude Vision and added to the text prompt.",
+    "ℹ  En mapping, la façade et les moods partent comme images-clés "
+    "(début → fin) : ce moteur les exploite nativement en i2v, sans "
+    "conversion en texte ni réinterprétation de la façade. Les références "
+    "de casting/décor ne s'appliquent pas au mapping.":
+        "ℹ  In mapping, the facade and moods are sent as keyframes "
+        "(start → end): this engine handles them natively in i2v, with no "
+        "text conversion and no reinterpretation of the facade. Cast/set "
+        "references do not apply to mapping.",
     "Créer un nouveau clip":         "Create a new clip",
     "Sélectionner une image":        "Select an image",
     "Choisir une image…":            "Choose an image…",
