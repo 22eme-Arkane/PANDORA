@@ -362,13 +362,30 @@ class PlanCoEditWorker(QThread):
                 facade_block = ""
         system = _plan_coedit_batch_system(self._edition, self._mode) + facade_block
 
+        # CONTEXTE DE LA DISCUSSION : le correctif global peut avoir été préparé via
+        # « Envoyer à l'assistant » (chat en mode « tous »). Chaque lot étant un appel
+        # indépendant, on condense les derniers échanges dans la consigne — sinon le
+        # message par défaut « Applique ce qu'on vient de discuter » référence une
+        # discussion que le modèle n'a jamais vue (audit 2026-07-09).
+        history_block = ""
+        _hist = [h for h in (self._history or [])
+                 if isinstance(h, dict) and (h.get("content") or "").strip()]
+        if _hist:
+            _lines = []
+            for h in _hist[-8:]:   # les 8 derniers échanges suffisent à porter le contexte
+                _who = "UTILISATEUR" if h.get("role") == "user" else "ASSISTANT"
+                _lines.append(f"{_who} : {h['content'].strip()}")
+            history_block = ("CONTEXTE — DISCUSSION PRÉALABLE (le correctif ci-dessous "
+                             "s'appuie dessus) :\n" + "\n".join(_lines) + "\n\n")
+
         out_blocks: list = []
         try:
             for i in range(0, total, _BATCH):
                 batch = plans[i:i + _BATCH]
                 n = len(batch)
                 batch_text = "\n\n".join(b["text"] for b in batch)
-                user = ("CONSIGNE à appliquer à CHAQUE plan ci-dessous :\n"
+                user = (history_block +
+                        "CONSIGNE à appliquer à CHAQUE plan ci-dessous :\n"
                         f"{self._user}\n\n"
                         "PLANS À CORRIGER (renvoie-les TOUS, corrigés, même ordre et "
                         f"format, et RIEN d'autre) :\n{batch_text}")

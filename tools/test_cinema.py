@@ -1432,25 +1432,24 @@ def scenario_onglet_mise_en_page():
         "colonne de lecture centrée installée sur les 2 onglets"
     assert p._editor_tabs.isTabEnabled(1) and p._editor_tabs.currentIndex() == 1
     assert p._current.get("layout_content"), "mise en page persistée séparément"
-    # ── Découpage : repli AUTO (aucun choix) + choix EXPLICITE de la source (2026-07-08) ──
-    # Auto (ex. « Tout générer ») : mise en page si présente…
+    # ── Source du découpage AUTOMATIQUE (règle 2026-07-09, aucun choix manuel) ──
+    # Mise en page PANDORA si présente…
     assert p._decoupage_base() == "MISE EN PAGE PANDORA", \
-        "auto : le découpage part de la Mise en page PANDORA quand elle existe"
+        "le découpage part de la Mise en page PANDORA quand elle existe"
     assert "MISE EN PAGE PANDORA" in p._text_with_music() \
         and "SCENARIO ORIGINAL" not in p._text_with_music(), \
-        "_text_with_music (auto) doit injecter la mise en page, pas le scénario brut"
+        "_text_with_music doit injecter la mise en page, pas le scénario brut"
     # …sinon le scénario.
     p._layout_view.setPlainText("")
-    assert p._decoupage_base() == "SCENARIO ORIGINAL", "auto sans mise en page → scénario"
-    # Choix EXPLICITE (fenêtre « Générer le découpage ») : force la source demandée.
+    assert p._decoupage_base() == "SCENARIO ORIGINAL", "sans mise en page → scénario"
     p._layout_view.setPlainText("MISE EN PAGE PANDORA")
-    p._decoupage_choice = "source"
-    assert p._decoupage_base() == "SCENARIO ORIGINAL", "choix « scénario » ignore la mise en page"
-    p._decoupage_choice = "layout"
-    assert p._decoupage_base() == "MISE EN PAGE PANDORA", "choix « mise en page » force le layout"
-    p._decoupage_choice = None
-    assert "choose_decoupage_source" in inspect.getsource(PageScenario._on_storyboard), \
-        "_on_storyboard doit proposer le choix de la source avant de lancer"
+    # En Cinéma la génération passe par l'IA (qui REFORMULE) → si une mise en page
+    # existe, _on_storyboard AVERTIT (confirm_prompt_rewrite) ; plus AUCUN choix manuel.
+    _obs = inspect.getsource(PageScenario._on_storyboard)
+    assert "confirm_prompt_rewrite" in _obs, \
+        "_on_storyboard Cinéma : avertissement de réécriture absent"
+    assert "choose_decoupage_source" not in _obs, \
+        "_on_storyboard Cinéma : l'ancienne fenêtre de choix doit avoir disparu"
     # La fenêtre de mise en page applique vers l'onglet (pas _set_editor_text)
     fw = inspect.getsource(PageScenario._open_format_window)
     assert "_apply_layout" in fw and "_set_editor_text" not in fw, \
@@ -1462,39 +1461,35 @@ def scenario_onglet_mise_en_page():
 
 
 @test
-def decoupage_source_choix_fenetre():
-    """Fenêtre de choix de la SOURCE du découpage (partagée Cinéma/Live, 2026-07-08) :
-    options activées selon la présence de texte, clic → choix mémorisé."""
-    import inspect
-    from ui.decoupage_source_dialog import _DecoupageSourceDialog, choose_decoupage_source
-    # Deux sources présentes → 2 options actives, aucun choix au départ
-    d = _DecoupageSourceDialog(None, "📄  Depuis le scénario", "du texte", "une mise en page")
-    assert d.choice is None
-    assert d._btn_source.isEnabled() and d._btn_layout.isEnabled(), "2 sources dispo → 2 options actives"
-    d._btn_layout.click()
-    assert d.choice == "layout", "clic « mise en page » → choix layout"
-    # Mise en page vide → option proposée mais GRISÉE (visible, indisponible → « éviter le doute »)
-    d2 = _DecoupageSourceDialog(None, "🎬  Depuis le conducteur", "du texte", "")
-    assert d2._btn_source.isEnabled() and not d2._btn_layout.isEnabled(), \
-        "mise en page vide → option grisée"
-    d2._btn_source.click()
-    assert d2.choice == "source", "clic source → choix source"
-    _pars = set(inspect.signature(choose_decoupage_source).parameters)
-    assert {"source_label", "source_text", "layout_text"} <= _pars, "signature helper attendue"
+def avertissement_reecriture_dialog():
+    """Dialogue d'avertissement de réécriture (ui/decoupage_dialogs, partagé Cin/Live,
+    2026-07-09) : défaut = NE PAS continuer ; « Continuer » → ok=True ; l'ancienne
+    fenêtre de CHOIX de source a disparu (source AUTOMATIQUE : mise en page sinon brut)."""
+    from ui.decoupage_dialogs import _RewriteWarningDialog, confirm_prompt_rewrite
+    d = _RewriteWarningDialog(None)
+    assert d.ok is False, "défaut : ne pas continuer"
+    d._btn_cont.click()
+    assert d.ok is True, "« Continuer » doit valider"
+    assert callable(confirm_prompt_rewrite)
+    import ui.decoupage_dialogs as _dd
+    assert not hasattr(_dd, "choose_decoupage_source"), \
+        "l'ancienne fenêtre de choix de source doit avoir disparu (source automatique)"
 
 
 @test
 def placeholder_decoupage_source_cinema():
     """Placeholder « ⊕ Générer depuis le scénario » (Storyboard Cinéma, découpage vide) :
-    propose la SOURCE du découpage (Mise en page PANDORA sinon scénario), comme
-    « Générer le découpage » de la page Scénario (2026-07-09)."""
+    source AUTOMATIQUE (Mise en page PANDORA sinon scénario) + AVERTISSEMENT de
+    réécriture si une mise en page existe (l'IA reformule) — règle 2026-07-09."""
     import inspect
     from ui.page_storyboard import PageStoryboard
     _oa = inspect.getsource(PageStoryboard._on_analyze)
-    assert "choose_decoupage_source" in _oa and 'sc.get("layout_content"' in _oa, \
-        "placeholder Cinéma : choix de source du découpage non branché"
-    assert '_choice == "layout"' in _oa, \
-        "placeholder Cinéma : le choix « layout » doit sélectionner la Mise en page PANDORA"
+    assert 'sc.get("layout_content"' in _oa and "_layout or _source" in _oa, \
+        "placeholder Cinéma : source automatique (layout sinon scénario) non branchée"
+    assert "confirm_prompt_rewrite" in _oa, \
+        "placeholder Cinéma : avertissement de réécriture absent"
+    assert "choose_decoupage_source" not in _oa, \
+        "placeholder Cinéma : l'ancienne fenêtre de choix doit avoir disparu"
     # Le bouton placeholder « ⊕ Générer depuis le scénario » est bien relié à _on_analyze.
     _mod = inspect.getsource(__import__("ui.page_storyboard", fromlist=["_"]))
     assert "Générer depuis le scénario" in _mod and "self._on_analyze" in _mod, \

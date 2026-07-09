@@ -517,24 +517,17 @@ _FR_TO_EN: dict[str, str] = {
     "Identifier les véhicules depuis la trame": "Identify vehicles from the outline",
     "Générer le découpage":                "Generate the breakdown",
     "Découpe la trame en séquence (Live/Mapping)": "Breaks the outline into a sequence (Live/Mapping)",
-    "Depuis quelle source générer le découpage ?": "Which source should the breakdown be generated from?",
-    "📄  Depuis le scénario":               "📄  From the screenplay",
-    "🎬  Depuis le conducteur":             "🎬  From the running order",
-    "📝  Depuis la Mise en page PANDORA":   "📝  From the PANDORA layout",
-    "(aucune mise en page générée)":        "(no layout generated yet)",
+    "Conducteur vide":                      "Empty running order",
+    "Le conducteur sélectionné est vide.":  "The selected running order is empty.",
     "Réécriture des prompts":               "Prompt rewrite",
-    "⚠  Générer le découpage depuis {src} va RÉÉCRIRE les prompts.":
-        "⚠  Generating the breakdown from {src} will REWRITE the prompts.",
-    "Votre Mise en page PANDORA (co-écrite plan par plan) NE SERA PAS utilisée : l'IA "
-    "génèrera de nouveaux prompts. Pour repartir de vos plans existants sans rien "
-    "réécrire, relancez et choisissez « Depuis la Mise en page PANDORA ».\n\n"
+    "⚠  Cette génération va RÉÉCRIRE les prompts.":
+        "⚠  This generation will REWRITE the prompts.",
+    "La Mise en page PANDORA sert de source, mais l'IA reformule chaque plan pour "
+    "produire le découpage : vos prompts co-écrits seront réécrits.\n\n"
     "Continuer quand même ?":
-        "Your PANDORA layout (co-written shot by shot) will NOT be used: the AI will "
-        "generate new prompts. To start from your existing shots without rewriting "
-        "anything, relaunch and choose « From the PANDORA layout ».\n\n"
+        "The PANDORA layout is used as the source, but the AI rephrases every shot to "
+        "produce the breakdown: your co-written prompts will be rewritten.\n\n"
         "Continue anyway?",
-    "le conducteur":                        "the running order",
-    "le scénario":                          "the screenplay",
     "Continuer":                            "Continue",
     "Tout générer":                        "Generate all",
     "Casting + accessoires + véhicules + découpage": "Casting + props + vehicles + breakdown",
@@ -876,7 +869,8 @@ _FR_TO_EN: dict[str, str] = {
         "Discuss the shot with the assistant (advice, ideas) — WITHOUT modifying it.",
     "Appliquer une modification au plan : l'assistant le réécrit en tenant compte de la discussion.":
         "Apply a change to the shot: the assistant rewrites it taking the discussion into account.",
-    "Rédaction en cours…":                      "Writing…",
+    # (« Rédaction en cours… » : clé déjà traduite plus bas dans le bloc arrangement —
+    #  ne PAS la dupliquer ici, un dict Python garde la dernière valeur.)
     "Proposition prête — relis, ajuste, passe à un autre plan si besoin, puis « Appliquer les modifications ».":
         "Proposal ready — review, adjust, move to another shot if needed, then “Apply changes”.",
     "Plan appliqué à la mise en page ✓":        "Shot applied to the layout ✓",

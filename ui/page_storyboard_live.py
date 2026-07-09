@@ -3121,24 +3121,67 @@ class PageStoryboard(QWidget):
                 return
 
         _source = sc.get("formatted_content") or sc.get("raw_content", "")
-        _layout = sc.get("layout_content", "")
-        if not _source.strip() and not _layout.strip():
-            QMessageBox.warning(self, "Scénario vide", "Le scénario sélectionné est vide.")
+        _layout = (sc.get("layout_content", "") or "").strip()
+        if not _source.strip() and not _layout:
+            QMessageBox.warning(self, translate("Conducteur vide"),
+                                translate("Le conducteur sélectionné est vide."))
             return
-        # Choix EXPLICITE de la source du découpage (Mise en page PANDORA sinon conducteur),
-        # comme « Générer le découpage » de la page Conducteur (demande Matthieu 2026-07-09).
-        # Remplace l'ancienne confirmation Oui/Non (le placeholder n'apparaît que si vide).
-        from ui.decoupage_source_dialog import choose_decoupage_source
-        _choice = choose_decoupage_source(
-            self, source_label=translate("🎬  Depuis le conducteur"),
-            source_text=_source, layout_text=_layout)
-        if not _choice:
-            return
-        text = _layout if _choice == "layout" else _source
+        # Source AUTOMATIQUE (règle 2026-07-09) : Mise en page PANDORA si elle existe,
+        # sinon le conducteur. Mise en page STRUCTURÉE (« PLAN n ») → conversion
+        # DÉTERMINISTE 1 plan = 1 segment, prompts co-écrits REPRIS tels quels (même
+        # garantie zéro-perte que « Générer le découpage » de la page Conducteur) —
+        # aucune réécriture, aucun avertissement.
+        if _layout:
+            try:
+                from core.decoupage_layout import is_structured_layout, parse_layout_segments
+                if is_structured_layout(_layout):
+                    from api.live_screenplay import _normalize
+                    import core.storyboard as _sbm
+                    _mode = "mapping" if _sbm.get_namespace() == "live_seq_mapping" else "live"
+                    _segs = [_normalize(s, _mode)
+                             for s in parse_layout_segments(_layout) if isinstance(s, dict)]
+                    if _segs:
+                        # Musique du conducteur (si analysée) : mêmes colonnes que
+                        # _apply_decoupage de la page Conducteur.
+                        _music = {}
+                        try:
+                            from core.music_align import assign_tracks_to_shots
+                            _tracks = sc.get("music_tracks") or []
+                            _pseudo = [{"id": str(i), "number": i,
+                                        "duration": s.get("duration", 5)}
+                                       for i, s in enumerate(_segs, 1)]
+                            _music = {a["id"]: a["track"]
+                                      for a in assign_tracks_to_shots(_pseudo, _tracks)}
+                        except Exception:
+                            _music = {}
+                        shots = [{
+                            "number":          i,
+                            "scene_title":     s.get("action", ""),
+                            "shot_size":       s.get("shot_size", ""),
+                            "camera_movement": s.get("camera_movement", ""),
+                            "duration":        s.get("duration", 5),
+                            "seedance_prompt": s.get("seedance_prompt", ""),
+                            "sound_prompt":    s.get("sound_prompt", ""),
+                            "seq_num":         s.get("act", 1),
+                            "seq_name":        s.get("act_name", ""),
+                            "music_track":     _music.get(str(i), ""),
+                        } for i, s in enumerate(_segs, 1)]
+                        self._on_shots_generated(shots, sc.get("id", ""))
+                        return
+            except Exception:
+                pass   # repli : génération IA ci-dessous
+            # Mise en page présente mais NON parsable → l'IA va la re-découper et
+            # RÉÉCRIRE les prompts → avertir (pas de surprise).
+            from ui.decoupage_dialogs import confirm_prompt_rewrite
+            if not confirm_prompt_rewrite(self):
+                return
+        text = _layout or _source
 
         from api.screenplay import GenerateStoryboardWorker
+        from core.ai_provider import ai_name_for_task
         self._btn_analyze.setEnabled(False)
-        self._ai_lbl.setText("Génération du découpage via Claude…")
+        self._ai_lbl.setText(translate("Génération du découpage via {ai}…")
+                             .format(ai=ai_name_for_task("storyboard_gen")))
         # P2 — mémorise le texte pour une éventuelle relance « Séparer » (sans fusion).
         self._gen_text = text
         self._strict_retry = False
@@ -3203,6 +3246,10 @@ class PageStoryboard(QWidget):
         )
         btn_cancel.clicked.connect(self._cancel_analysis)
         lay.addWidget(btn_cancel, alignment=Qt.AlignmentFlag.AlignRight)
+
+        # Entrée ne doit PAS annuler la génération en cours (doctrine PANDORA).
+        from ui.widgets import disable_default_buttons
+        disable_default_buttons(self._analysis_dlg)
 
         self._analysis_dlg.exec()
 

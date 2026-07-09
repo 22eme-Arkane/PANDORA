@@ -3073,20 +3073,18 @@ class PageStoryboard(QWidget):
                 return
 
         _source = sc.get("formatted_content") or sc.get("raw_content", "")
-        _layout = sc.get("layout_content", "")
-        if not _source.strip() and not _layout.strip():
+        _layout = (sc.get("layout_content", "") or "").strip()
+        if not _source.strip() and not _layout:
             QMessageBox.warning(self, "Scénario vide", "Le scénario sélectionné est vide.")
             return
-        # Choix EXPLICITE de la source du découpage (Mise en page PANDORA sinon scénario),
-        # comme « Générer le découpage » de la page Scénario (demande Matthieu 2026-07-09).
-        # Remplace l'ancienne confirmation Oui/Non (le placeholder n'apparaît que si vide).
-        from ui.decoupage_source_dialog import choose_decoupage_source
-        _choice = choose_decoupage_source(
-            self, source_label=translate("📄  Depuis le scénario"),
-            source_text=_source, layout_text=_layout)
-        if not _choice:
-            return
-        text = _layout if _choice == "layout" else _source
+        # Source AUTOMATIQUE (règle 2026-07-09) : Mise en page PANDORA si elle existe,
+        # sinon le scénario. En Cinéma la génération passe par l'IA (qui REFORMULE les
+        # prompts) → si une mise en page co-écrite existe, AVERTIR avant (pas de surprise).
+        if _layout:
+            from ui.decoupage_dialogs import confirm_prompt_rewrite
+            if not confirm_prompt_rewrite(self):
+                return
+        text = _layout or _source
 
         from api.screenplay import GenerateStoryboardWorker
         from core.ai_provider import ai_name_for_task
@@ -3156,6 +3154,10 @@ class PageStoryboard(QWidget):
         )
         btn_cancel.clicked.connect(self._cancel_analysis)
         lay.addWidget(btn_cancel, alignment=Qt.AlignmentFlag.AlignRight)
+
+        # Entrée ne doit PAS annuler la génération en cours (doctrine PANDORA).
+        from ui.widgets import disable_default_buttons
+        disable_default_buttons(self._analysis_dlg)
 
         self._analysis_dlg.exec()
 

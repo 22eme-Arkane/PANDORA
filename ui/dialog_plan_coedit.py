@@ -455,7 +455,11 @@ class PlanCoEditDialog(QDialog):
             return
         # Sauve l'édition manuelle du plan qu'on QUITTE dans la mise en page (état de
         # travail) — pour qu'« Appliquer les modifications » n'oublie AUCUN plan.
-        self._commit_current_preview()
+        # ⚠ SAUF en sortie du mode « tous » : l'aperçu affiche alors le RÉSUMÉ (pas un
+        # plan) — le commiter écraserait le plan courant avec ce résumé et l'auto-save
+        # persisterait la corruption (bug confirmé par audit 2026-07-09).
+        if not was_all:
+            self._commit_current_preview()
         self._cur = row
         self._set_preview(self._plans[row]["text"])
         self._render_chat()
@@ -506,6 +510,10 @@ class PlanCoEditDialog(QDialog):
         self._preview_timer.stop()
         if self._all_mode:
             return   # l'aperçu « tous les plans » est un résumé, pas un plan
+        # Défense en profondeur : ne JAMAIS commiter le texte du RÉSUMÉ « tous les
+        # plans » comme contenu d'un plan (même si _all_mode vient d'être désactivé).
+        if self._plan_preview.toPlainText().lstrip().startswith("◆"):
+            return
         if not self._plans or not (0 <= self._cur < len(self._plans)):
             return
         txt = self._plan_preview.toPlainText().strip()

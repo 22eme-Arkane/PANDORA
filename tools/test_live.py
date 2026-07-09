@@ -199,23 +199,30 @@ def decoupage_depuis_mise_en_page_zero_perte():
 
 
 @test
-def avertissement_reecriture_si_mise_en_page():
-    """Générer le découpage depuis le CONDUCTEUR (l'IA réécrit) alors qu'une Mise en page
-    PANDORA existe → fenêtre d'avertissement Continuer/Annuler (2026-07-09). Depuis la Mise
-    en page (« layout »), conversion déterministe → PAS d'avertissement (pas de réécriture)."""
+def avertissement_reecriture_regle_2026_07_09():
+    """Règle 2026-07-09 : source du découpage AUTOMATIQUE (Mise en page PANDORA sinon
+    conducteur), et l'avertissement de réécriture n'apparaît QUE si le chemin repasse
+    par l'IA. En Live « Générer le découpage » : mise en page → conversion DÉTERMINISTE
+    (prompts repris) et conducteur → création — AUCUN avertissement, AUCUN choix."""
     import inspect
     from ui.page_scenario_live import PageScenario
-    from ui.decoupage_source_dialog import _RewriteWarningDialog, confirm_prompt_rewrite
+    from ui.decoupage_dialogs import _RewriteWarningDialog, confirm_prompt_rewrite
     # Dialogue : défaut = ne rien réécrire ; « Continuer » l'autorise explicitement.
-    d = _RewriteWarningDialog(None, "le conducteur")
+    d = _RewriteWarningDialog(None)
     assert d.ok is False, "défaut = ne réécrit pas (choix sûr)"
     d._btn_cont.click()
     assert d.ok is True, "clic « Continuer » → autorise la réécriture"
     assert callable(confirm_prompt_rewrite)
-    # Branchement : _on_storyboard Live avertit UNIQUEMENT si choix « conducteur » ET mise en page.
+    # Chemin principal Live : ni choix, ni avertissement (déterministe / création).
     src = inspect.getsource(PageScenario._on_storyboard)
-    assert "confirm_prompt_rewrite" in src and '_choice == "source"' in src and "_lay" in src, \
-        "avertissement non conditionné (choix conducteur + mise en page existante)"
+    assert "self._decoupage_base()" in src, "_on_storyboard Live : source automatique absente"
+    assert "choose_decoupage_source" not in src and "confirm_prompt_rewrite" not in src, \
+        "_on_storyboard Live : ni fenêtre de choix ni avertissement (chemin fidèle)"
+    # Placeholder Live (Séquences) : avertit seulement si mise en page NON parsable (IA).
+    from ui.page_storyboard_live import PageStoryboard as _PSL
+    _oa = inspect.getsource(_PSL._on_analyze)
+    assert "confirm_prompt_rewrite" in _oa and "is_structured_layout" in _oa, \
+        "placeholder Live : déterministe si parsable, avertissement sinon"
 
 
 @test
@@ -1121,23 +1128,17 @@ def conducteur_ui():
     p._apply_layout("PLAN 1 — test")
     assert p._editor_tabs.isTabEnabled(1), "onglet Mise en page activé"
     assert p._editor_text.toPlainText() == "Mon conducteur", "conducteur intact"
-    # ── Découpage : repli AUTO (aucun choix) + choix EXPLICITE de la source (2026-07-08) ──
+    # ── Source du découpage AUTOMATIQUE (règle 2026-07-09, aucun choix manuel) ──
     import inspect
     assert p._decoupage_base() == "PLAN 1 — test", \
-        "auto : le découpage part de la Mise en page PANDORA quand elle existe"
+        "le découpage part de la Mise en page PANDORA quand elle existe"
     assert "PLAN 1 — test" in p._text_with_music() and "Mon conducteur" not in p._text_with_music(), \
-        "_text_with_music (auto) doit injecter la mise en page, pas le conducteur brut"
+        "_text_with_music doit injecter la mise en page, pas le conducteur brut"
     p._layout_view.setPlainText("")
-    assert p._decoupage_base() == "Mon conducteur", "auto sans mise en page → conducteur"
-    # Choix EXPLICITE (fenêtre « Générer le découpage ») : force la source demandée.
-    p._layout_view.setPlainText("PLAN 1 — test")
-    p._decoupage_choice = "source"
-    assert p._decoupage_base() == "Mon conducteur", "choix « conducteur » ignore la mise en page"
-    p._decoupage_choice = "layout"
-    assert p._decoupage_base() == "PLAN 1 — test", "choix « mise en page » force le layout"
-    p._decoupage_choice = None
-    assert "choose_decoupage_source" in inspect.getsource(PageScenario._on_storyboard), \
-        "_on_storyboard doit proposer le choix de la source avant de lancer"
+    assert p._decoupage_base() == "Mon conducteur", "sans mise en page → conducteur"
+    assert "self._decoupage_base()" in inspect.getsource(PageScenario._on_storyboard) \
+        and "choose_decoupage_source" not in inspect.getsource(PageScenario._on_storyboard), \
+        "_on_storyboard Live : source automatique, plus de fenêtre de choix"
 
 
 @test
@@ -2293,14 +2294,42 @@ def bouton_generer_depuis_conducteur_seulement_si_vide():
     assert p._empty_gen_btn.isHidden() and p._empty_wrap.isHidden(), \
         "découpage généré : le bouton « Générer depuis » ne doit PLUS être affiché"
     assert not p._table_wrap.isHidden(), "découpage généré : le tableau doit être visible"
-    # Le placeholder « Générer depuis le conducteur » propose la SOURCE du découpage
-    # (Mise en page PANDORA sinon conducteur), comme « Générer le découpage » (2026-07-09).
+    # Le placeholder utilise la source AUTOMATIQUE (Mise en page PANDORA sinon conducteur,
+    # règle 2026-07-09) : mise en page STRUCTURÉE → conversion DÉTERMINISTE 1 plan = 1
+    # segment via _on_shots_generated (prompts co-écrits repris, zéro IA, zéro perte).
     import inspect
     _oa = inspect.getsource(type(p)._on_analyze)
-    assert "choose_decoupage_source" in _oa and 'sc.get("layout_content"' in _oa, \
-        "placeholder Live : choix de source du découpage non branché"
-    assert '_choice == "layout"' in _oa, \
-        "placeholder Live : le choix « layout » doit sélectionner la Mise en page PANDORA"
+    assert 'sc.get("layout_content"' in _oa and "_layout or _source" in _oa, \
+        "placeholder Live : source automatique (layout sinon conducteur) non branchée"
+    assert "is_structured_layout" in _oa and "parse_layout_segments" in _oa \
+        and "_on_shots_generated" in _oa, \
+        "placeholder Live : conversion déterministe de la mise en page non branchée"
+    assert "choose_decoupage_source" not in _oa, \
+        "placeholder Live : l'ancienne fenêtre de choix doit avoir disparu"
+    # Preuve fonctionnelle : mise en page structurée de 5 plans → 5 shots écrits SANS
+    # appel IA (save_shot stubé), prompts repris tels quels.
+    import core.storyboard as _sbm, core.scenario as _scn
+    _layout5 = "\n".join(
+        ["=== ACTE 1 — Intro ==="] +
+        sum(([f"PLAN {n} — Titre {n}",
+              f"Durée : {5 + n}s · Valeur de plan :  · Mouvement : Fixe",
+              f'PROMPT VIDÉO (français) : "vidéo co-écrite {n}"',
+              f'PROMPT SON (sound design / SFX, français) : "son {n}"']
+             for n in range(1, 6)), []))
+    _orig_list = _scn.list_scenarios
+    _scn.list_scenarios = lambda: [{"id": "s1", "title": "T", "formatted_content": "brut",
+                                    "raw_content": "brut", "layout_content": _layout5}]
+    _saved = []
+    _orig_save = _sbm.save_shot
+    _sbm.save_shot = lambda shot, *a, **k: _saved.append(dict(shot))
+    try:
+        p._on_analyze()
+    finally:
+        _sbm.save_shot = _orig_save
+        _scn.list_scenarios = _orig_list
+    assert len(_saved) == 5, f"placeholder déterministe : {len(_saved)}/5 plans écrits"
+    assert "vidéo co-écrite 1" in _saved[0]["seedance_prompt"], "prompt co-écrit non repris"
+    assert _saved[0]["scene_title"] == "Titre 1" and _saved[0]["seq_name"] == "Intro"
 
 
 # ══════════════════════════════════════════════════════════════════════════════

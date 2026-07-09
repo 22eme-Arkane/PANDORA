@@ -566,6 +566,11 @@ def run_mood(shot: dict, prompt: str, output_dir: str, api_key: str, progress_cb
     _inspo = [p for p in (shot.get("reference_images") or []) if p and os.path.isfile(p)]
 
     if engine == "nb2":
+        # « ◎ Mood inspiré d'une image » (choix explicite) : en NB2 aussi, l'image part
+        # comme INSPIRATION — en TÊTE, prioritaire (elle était silencieusement ignorée
+        # dans cette branche : la fonctionnalité ne faisait rien en Cinéma).
+        if inspiration_ref and os.path.isfile(inspiration_ref):
+            _inspo = [inspiration_ref] + [p for p in _inspo if p != inspiration_ref]
         refs = _shot_ref_images(shot,
                                 include_chars=opts.get("chars", True),
                                 include_decor=opts.get("decor", True))

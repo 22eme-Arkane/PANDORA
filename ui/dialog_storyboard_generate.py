@@ -225,6 +225,14 @@ class StoryboardGenerateDialog(QDialog):
 
         retranslate_widget(self)
 
+        # Entrée ne doit PAS déclencher un bouton par défaut (sinon « Annuler » peut
+        # interrompre la génération en cours — doctrine PANDORA).
+        try:
+            from ui.widgets import disable_default_buttons
+            disable_default_buttons(self)
+        except Exception:
+            pass
+
         # Start generation immediately
         self._start()
 

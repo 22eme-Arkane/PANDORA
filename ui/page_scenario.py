@@ -1696,16 +1696,10 @@ class PageScenario(QWidget):
         return self._editor_text.toPlainText().strip()
 
     def _decoupage_base(self) -> str:
-        """Source du découpage. Si un choix EXPLICITE a été fait (fenêtre « Générer le
-        découpage » → self._decoupage_choice) on le respecte : « source » = scénario brut,
-        « layout » = Mise en page PANDORA. Sinon (ex. « Tout générer ») repli AUTOMATIQUE :
-        la Mise en page PANDORA si elle existe, sinon le scénario/conducteur brut."""
+        """Source du découpage (règle 2026-07-09, AUTOMATIQUE — aucun choix manuel) :
+        la « Mise en page PANDORA » (layout_content) si elle existe, sinon le scénario/
+        conducteur brut. Vaut pour TOUS les points de lancement (page + « Tout générer »)."""
         layout = self._layout_view.toPlainText().strip() if hasattr(self, "_layout_view") else ""
-        choice = getattr(self, "_decoupage_choice", None)
-        if choice == "source":
-            return self._get_text()
-        if choice == "layout":
-            return layout or self._get_text()
         return layout or self._get_text()
 
     # ── Sauvegarde / ouverture physique du scénario (dossier « Scénario ») ──────
@@ -2003,14 +1997,13 @@ class PageScenario(QWidget):
         if not _src and not _lay:
             self._ai_progress_lbl.setText("Écris d'abord un scénario à découper.")
             return
-        # Choix EXPLICITE de la source AVANT de lancer (scénario vs Mise en page PANDORA)
-        # — lève tout doute sur ce qui sera découpé (demande Matthieu 2026-07-08).
-        from ui.decoupage_source_dialog import choose_decoupage_source
-        _choice = choose_decoupage_source(
-            self, source_label=translate("📄  Depuis le scénario"),
-            source_text=_src, layout_text=_lay)
-        if not _choice:
-            return
+        # Source AUTOMATIQUE (règle 2026-07-09) : Mise en page PANDORA si elle existe,
+        # sinon le scénario. En Cinéma la génération passe par l'IA (qui REFORMULE les
+        # prompts) → si une mise en page co-écrite existe, AVERTIR avant (pas de surprise).
+        if _lay:
+            from ui.decoupage_dialogs import confirm_prompt_rewrite
+            if not confirm_prompt_rewrite(self):
+                return
         import core.storyboard as sb_api
         existing = sb_api.list_shots(sb_api.DEFAULT_VERSION_ID)
         if existing:
@@ -2026,12 +2019,9 @@ class PageScenario(QWidget):
         sc_id = (self._current or {}).get("id", "")
         from ui.dialog_storyboard_generate import StoryboardGenerateDialog
         # Timeline musicale injectée (si un set a été analysé) → découpage calé sur
-        # le BPM et les drops, comme dans PANDORA | Live. La source suit le choix
-        # explicite ci-dessus (capturé le temps de composer le texte, puis réinitialisé).
-        self._decoupage_choice = _choice
-        _src_text = self._text_with_music()
-        self._decoupage_choice = None
-        dlg = StoryboardGenerateDialog(_src_text, dur_secs, sc_id, parent=self)
+        # le BPM et les drops, comme dans PANDORA | Live. Source via _decoupage_base()
+        # (mise en page si présente, sinon scénario).
+        dlg = StoryboardGenerateDialog(self._text_with_music(), dur_secs, sc_id, parent=self)
         if dlg.exec() == StoryboardGenerateDialog.DialogCode.Accepted and dlg._shots:
             count = len(dlg._shots)
             # Mise en scène INITIALE auto (acteurs + caméra depuis l'axe du plan) —
