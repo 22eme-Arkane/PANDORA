@@ -2684,6 +2684,18 @@ class TabT2V(QScrollArea):
         self._raccord_auto_cb = _raccord_auto_cb_inner
         _raccords_lay.addWidget(self._raccord_auto_toggle_row)
 
+        # Utiliser les images du Mood comme images-clés (mapping) — coché par défaut.
+        # Décoché → Seedance génère depuis la SEULE façade (envoyée en référence) avec
+        # une consigne de RESPECT STRICT (ni zoom, ni déplacement, mêmes proportions).
+        self._use_mood_toggle_row, _use_mood_cb_inner = _raccord_toggle(
+            "Utiliser les images du Mood",
+            "Coché → le Mood du plan (et du suivant) sert d'images-clés · Décoché → "
+            "génération depuis la seule façade (respect strict : ni zoom ni déplacement)",
+            True,
+        )
+        self._use_mood_cb = _use_mood_cb_inner
+        _raccords_lay.addWidget(self._use_mood_toggle_row)
+
         self._sfx_auto_toggle_row, _sfx_auto_cb_inner = _raccord_toggle(
             "Sound design auto",
             "À la fin de chaque clip, génère aussi l'ambiance SFX du plan (prompt son, "
@@ -3994,8 +4006,26 @@ class TabT2V(QScrollArea):
         # SUIVANT : le clip N se termine exactement sur l'image où le clip N+1
         # commence (raccord exact par construction), et chaque keyframe est générée
         # depuis la MÊME façade d'origine (aucune dérive cumulative).
+        # Option « Utiliser les images du Mood » (RENDU & AUDIO, cochée par défaut).
+        # Décochée → on N'UTILISE PAS les moods comme images-clés : Seedance génère
+        # depuis la seule façade (envoyée en référence, rôle « facade ») avec une
+        # consigne de RESPECT STRICT (façade reproduite à l'identique, ni zoom, ni
+        # déplacement, mêmes proportions, éléments au même endroit — visibles ou non).
+        _use_mood = (not hasattr(self, "_use_mood_cb")) or self._use_mood_cb.isChecked()
+        if (getattr(self, "_seq_mode", "live") == "mapping" and not _use_mood):
+            _facade_strict = (
+                ", the REFERENCE FACADE IMAGE is the exact canvas: reproduce that building "
+                "facade IDENTICALLY — same position, same framing, same scale and "
+                "proportions, every architectural element (windows, doors, metal structure, "
+                "stage) at the EXACT same place as in the reference; NO zoom, NO crop, NO "
+                "shift, NO reframing of the facade; only the projected light/content changes "
+                "— facade elements may be lit or unlit but are NEVER moved, resized or "
+                "repositioned"
+            )
+            time_suffix = (time_suffix + _facade_strict) if time_suffix else _facade_strict.lstrip(", ")
+
         end_frame = ""
-        if getattr(self, "_seq_mode", "live") == "mapping" and self._active_shot:
+        if getattr(self, "_seq_mode", "live") == "mapping" and self._active_shot and _use_mood:
             kf_start, kf_end = self._get_mapping_keyframes(self._active_shot)
             # Confinement façade : keyframes MASQUÉES avant l'envoi (noir pur
             # hors silhouette) — Seedance suit sa première frame, le contenu

@@ -1956,6 +1956,11 @@ _FR_TO_EN: dict[str, str] = {
     "Audio natif":                      "Native audio",
     "Seedance génère le son ambiant et les effets sonores du clip":
         "Seedance generates the clip's ambient sound and sound effects",
+    "Utiliser les images du Mood":      "Use the Mood images",
+    "Coché → le Mood du plan (et du suivant) sert d'images-clés · Décoché → "
+    "génération depuis la seule façade (respect strict : ni zoom ni déplacement)":
+        "Checked → the shot's Mood (and the next one's) is used as keyframes · Unchecked → "
+        "generate from the facade only (strict lock: no zoom, no shift)",
     "Se référer au mood":               "Refer to the mood",
     "Envoie le mood validé du plan comme image de référence → cohésion exacte "
     "(composition, cadrage, lumière, couleurs) avec le mood. Sans effet si le "
