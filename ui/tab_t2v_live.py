@@ -112,7 +112,7 @@ class _ThumbCard(QFrame):
     _IMG = 56
 
     def __init__(self, item_id: str, name: str, image_path: str = "", badge: str = "?",
-                 overlay_text: str = ""):
+                 overlay_text: str = "", last_frame_path: str = "", on_clear_frame=None):
         super().__init__()
         self._id       = item_id
         self._selected = False
@@ -124,11 +124,17 @@ class _ThumbCard(QFrame):
         lay.setSpacing(3)
         lay.setAlignment(Qt.AlignmentFlag.AlignCenter)
 
+        # Vignette : la DERNIÈRE frame rendue (raccord) prime sur la 1re frame /
+        # décor quand elle existe → on voit dans le Conducteur le résultat réel du
+        # plan exporté (et on peut repérer un plan qui a dérivé pour l'effacer).
+        _has_last = bool(last_frame_path and os.path.isfile(last_frame_path))
+        _img_src  = last_frame_path if _has_last else image_path
+
         self._img = QLabel()
         self._img.setFixedSize(self._IMG, self._IMG)
         self._img.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        if image_path and os.path.isfile(image_path):
-            pix = QPixmap(image_path).scaled(
+        if _img_src and os.path.isfile(_img_src):
+            pix = QPixmap(_img_src).scaled(
                 self._IMG, self._IMG,
                 Qt.AspectRatioMode.KeepAspectRatioByExpanding,
                 Qt.TransformationMode.SmoothTransformation,
@@ -165,6 +171,25 @@ class _ThumbCard(QFrame):
             ov.adjustSize()
             ov.move(4, 4)
             ov.raise_()
+
+        # Croix (rectangle rouge, haut-droite) : n'apparaît que si le plan a une
+        # dernière frame rendue. Cliquer = effacer cette frame → le plan suivant
+        # repart de son mood à la régénération (casse la dérive du raccord). Le
+        # QPushButton capte le clic → ne déclenche PAS la sélection de la carte.
+        if _has_last and callable(on_clear_frame):
+            self._clear_btn = QPushButton("✕", self)
+            self._clear_btn.setFixedSize(16, 16)
+            self._clear_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+            self._clear_btn.setToolTip(translate(
+                "Supprimer la dernière frame de ce plan "
+                "(repart du mood à la régénération)"))
+            self._clear_btn.setStyleSheet(
+                "QPushButton{background:rgba(255,79,106,0.88);color:#fff;border:none;"
+                "border-radius:4px;font-size:10px;font-weight:900;padding:0;}"
+                f"QPushButton:hover{{background:{C['red']};}}")
+            self._clear_btn.clicked.connect(lambda: on_clear_frame(self._id))
+            self._clear_btn.move(self._SZ - 19, 3)
+            self._clear_btn.raise_()
 
         self._apply_style()
 
@@ -1274,7 +1299,9 @@ class StoryboardSelector(QWidget):
             overlay = f"Plan {num}\n{i + 1} sur {total}"
 
             card = _ThumbCard(shot["id"], title or badge, img_path, badge,
-                              overlay_text=overlay)
+                              overlay_text=overlay,
+                              last_frame_path=shot.get("last_frame_path", ""),
+                              on_clear_frame=self._clear_last_frame)
             card.toggled.connect(
                 lambda sel, sid=shot["id"]: self._on_shot_toggled(sid, sel)
             )
@@ -1333,6 +1360,20 @@ class StoryboardSelector(QWidget):
                 self._selected_shot_ids.add(sid)
         if len(self._selected_shot_ids) == 1:
             self._selected_shot_id = next(iter(self._selected_shot_ids))
+
+    def _clear_last_frame(self, shot_id: str):
+        """Efface la DERNIÈRE frame rendue d'un plan (croix rouge sur la vignette) :
+        le raccord ne s'appuiera plus dessus → le plan suivant repart de son mood à
+        la régénération, ce qui casse la dérive cumulative. On ne supprime PAS le
+        fichier (réécrit à la prochaine génération) — on retire juste la référence."""
+        shot = sb_api.get_shot(shot_id) or self._shots_meta.get(shot_id)
+        if not shot or not shot.get("last_frame_path"):
+            return
+        shot = dict(shot)
+        shot["last_frame_path"] = ""
+        sb_api.save_shot(shot)
+        self._shots_meta[shot_id] = shot
+        self.refresh()   # la vignette repasse sur la 1re frame/décor, la croix disparaît
 
 
 # (Live : pas de barre DaVinci — le pont scène du Live est Resolume, pas DaVinci.)

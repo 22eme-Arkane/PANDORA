@@ -47,6 +47,10 @@ EXPECTED_ONLY_LIVE = {
         "_make_seq_btn", "_apply_seq_style", "_set_seq_mode",
         "_refresh_bref", "_on_pick_bref", "_on_clear_bref",
         "_get_mapping_keyframes",
+        # Vignettes Conducteur = dernière frame rendue + croix pour l'effacer
+        # (casse la dérive du raccord au plan choisi) — besoin propre au workflow
+        # séquence continue Live/Mapping (2026-07-09). Reportable au Cinéma si besoin.
+        "_clear_last_frame",
     },
     "ui/page_scenario_live.py": {
         # (Musique : _refresh_music_display/_make_music_chip/_remove_music/

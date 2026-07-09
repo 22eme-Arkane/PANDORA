@@ -1204,6 +1204,8 @@ _FR_TO_EN: dict[str, str] = {
     "Générer l'audio":               "Generate audio",
     "Moteur vidéo":                  "Video engine",
     "Moteur de génération":          "Generation engine",
+    "Supprimer la dernière frame de ce plan (repart du mood à la régénération)":
+        "Delete this shot's last frame (regenerating restarts from the mood)",
     "⚠  Ce moteur ne supporte pas les images de référence nativement. "
     "Vos personnages, décors et accessoires seront convertis en mots-clés de style "
     "via Claude Vision et ajoutés au prompt texte.":

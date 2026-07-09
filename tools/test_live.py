@@ -1020,6 +1020,37 @@ def t2v_live_keyframes_mapping():
 
 
 @test
+def conducteur_derniere_frame_croix():
+    """Vignettes Conducteur : la DERNIÈRE frame rendue s'affiche + une croix
+    permet de l'effacer (casse le raccord → le plan suivant repart de son mood).
+    Demande Matthieu 2026-07-09 (contre la dérive cumulative du raccord)."""
+    import tempfile as _tf
+    import core.storyboard as sb
+    from PIL import Image
+    from ui.tab_t2v_live import StoryboardSelector
+    sb.set_namespace("live_seq_mapping")
+    sb.clear_version_shots(sb.DEFAULT_VERSION_ID)
+    _tmp = _tf.mkdtemp()
+    lf = os.path.join(_tmp, "p1_last.png")
+    Image.new("RGB", (48, 27), (20, 30, 40)).save(lf)
+    s1 = sb.save_shot({"number": 1, "scene_title": "P1", "last_frame_path": lf},
+                      sb.DEFAULT_VERSION_ID)
+    s2 = sb.save_shot({"number": 2, "scene_title": "P2"}, sb.DEFAULT_VERSION_ID)
+    sel = StoryboardSelector()
+    assert hasattr(sel._shot_cards[s1["id"]], "_clear_btn"), \
+        "plan avec dernière frame → croix de suppression présente"
+    assert not hasattr(sel._shot_cards[s2["id"]], "_clear_btn"), \
+        "plan sans dernière frame → pas de croix"
+    # Effacement : la référence est vidée (fichier laissé) et la croix disparaît.
+    sel._clear_last_frame(s1["id"])
+    assert (sb.get_shot(s1["id"]) or {}).get("last_frame_path", "") == "", \
+        "dernière frame effacée (référence last_frame_path vidée)"
+    assert not hasattr(sel._shot_cards[s1["id"]], "_clear_btn"), \
+        "après effacement, la croix disparaît (refresh)"
+    sb.set_namespace("storyboard")
+
+
+@test
 def moteurs_filtres_workflow():
     """Seuls les moteurs compatibles workflow (i2v/keyframes/réfs) sont proposés."""
     from core.engine_caps import workflow_compatible, sequence_engines, ENGINE_CAPS
