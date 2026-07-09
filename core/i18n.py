@@ -522,6 +522,20 @@ _FR_TO_EN: dict[str, str] = {
     "🎬  Depuis le conducteur":             "🎬  From the running order",
     "📝  Depuis la Mise en page PANDORA":   "📝  From the PANDORA layout",
     "(aucune mise en page générée)":        "(no layout generated yet)",
+    "Réécriture des prompts":               "Prompt rewrite",
+    "⚠  Générer le découpage depuis {src} va RÉÉCRIRE les prompts.":
+        "⚠  Generating the breakdown from {src} will REWRITE the prompts.",
+    "Votre Mise en page PANDORA (co-écrite plan par plan) NE SERA PAS utilisée : l'IA "
+    "génèrera de nouveaux prompts. Pour repartir de vos plans existants sans rien "
+    "réécrire, relancez et choisissez « Depuis la Mise en page PANDORA ».\n\n"
+    "Continuer quand même ?":
+        "Your PANDORA layout (co-written shot by shot) will NOT be used: the AI will "
+        "generate new prompts. To start from your existing shots without rewriting "
+        "anything, relaunch and choose « From the PANDORA layout ».\n\n"
+        "Continue anyway?",
+    "le conducteur":                        "the running order",
+    "le scénario":                          "the screenplay",
+    "Continuer":                            "Continue",
     "Tout générer":                        "Generate all",
     "Casting + accessoires + véhicules + découpage": "Casting + props + vehicles + breakdown",
     "Ajouter des images":                  "Add images",

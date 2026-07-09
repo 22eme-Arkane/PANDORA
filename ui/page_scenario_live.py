@@ -2222,6 +2222,13 @@ class PageScenario(QWidget):
             source_text=_src, layout_text=_lay)
         if not _choice:
             return
+        # Générer depuis le CONDUCTEUR (l'IA réécrit les prompts) alors qu'une Mise en page
+        # PANDORA co-écrite existe → AVERTIR (elle ne sera pas utilisée). Depuis la Mise en
+        # page (« layout ») : conversion déterministe, prompts repris → aucune réécriture.
+        if _choice == "source" and _lay:
+            from ui.decoupage_source_dialog import confirm_prompt_rewrite
+            if not confirm_prompt_rewrite(self, translate("le conducteur")):
+                return
         from api.live_screenplay import GenerateDecoupageWorker
         self._set_ai_busy(True)
         self._ai_progress_lbl.setText(translate("Génération du découpage via Claude…"))

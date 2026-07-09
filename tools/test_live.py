@@ -199,6 +199,26 @@ def decoupage_depuis_mise_en_page_zero_perte():
 
 
 @test
+def avertissement_reecriture_si_mise_en_page():
+    """Générer le découpage depuis le CONDUCTEUR (l'IA réécrit) alors qu'une Mise en page
+    PANDORA existe → fenêtre d'avertissement Continuer/Annuler (2026-07-09). Depuis la Mise
+    en page (« layout »), conversion déterministe → PAS d'avertissement (pas de réécriture)."""
+    import inspect
+    from ui.page_scenario_live import PageScenario
+    from ui.decoupage_source_dialog import _RewriteWarningDialog, confirm_prompt_rewrite
+    # Dialogue : défaut = ne rien réécrire ; « Continuer » l'autorise explicitement.
+    d = _RewriteWarningDialog(None, "le conducteur")
+    assert d.ok is False, "défaut = ne réécrit pas (choix sûr)"
+    d._btn_cont.click()
+    assert d.ok is True, "clic « Continuer » → autorise la réécriture"
+    assert callable(confirm_prompt_rewrite)
+    # Branchement : _on_storyboard Live avertit UNIQUEMENT si choix « conducteur » ET mise en page.
+    src = inspect.getsource(PageScenario._on_storyboard)
+    assert "confirm_prompt_rewrite" in src and '_choice == "source"' in src and "_lay" in src, \
+        "avertissement non conditionné (choix conducteur + mise en page existante)"
+
+
+@test
 def prompts_arrangement_conducteur():
     """Arrangement : vocabulaire conducteur (actes), pas de vocabulaire scénario."""
     import api.live_screenplay as ls

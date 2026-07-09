@@ -105,3 +105,77 @@ def choose_decoupage_source(parent, *, source_label: str,
     if dlg.exec() == QDialog.DialogCode.Accepted:
         return dlg.choice
     return None
+
+
+class _RewriteWarningDialog(QDialog):
+    """Avertissement (fond sombre PANDORA) avant une génération qui RÉÉCRIRAIT les prompts
+    alors qu'une Mise en page PANDORA co-écrite existe. ``ok`` = True si « Continuer »."""
+
+    def __init__(self, parent, source_label: str):
+        super().__init__(parent)
+        self.ok = False
+        self.setWindowTitle(translate("Réécriture des prompts"))
+        self.setMinimumWidth(460)
+        self.setStyleSheet(PANDORA_STYLESHEET + f"QDialog{{background:{CP['bg1']};}}")
+
+        lay = QVBoxLayout(self)
+        lay.setContentsMargins(22, 20, 22, 18)
+        lay.setSpacing(12)
+
+        title = QLabel(translate("⚠  Générer le découpage depuis {src} va RÉÉCRIRE les prompts.")
+                       .format(src=source_label))
+        title.setWordWrap(True)
+        title.setStyleSheet(
+            f"color:{CP['text_primary']};font-size:13px;font-weight:700;background:transparent;")
+        lay.addWidget(title)
+
+        body = QLabel(translate(
+            "Votre Mise en page PANDORA (co-écrite plan par plan) NE SERA PAS utilisée : l'IA "
+            "génèrera de nouveaux prompts. Pour repartir de vos plans existants sans rien "
+            "réécrire, relancez et choisissez « Depuis la Mise en page PANDORA ».\n\n"
+            "Continuer quand même ?"))
+        body.setWordWrap(True)
+        body.setStyleSheet(f"color:{CP['text_secondary']};font-size:12px;background:transparent;")
+        lay.addWidget(body)
+
+        lay.addSpacing(4)
+        row = QHBoxLayout()
+        row.addStretch()
+        btn_cancel = QPushButton(translate("Annuler"))
+        btn_cancel.setFixedHeight(34)
+        btn_cancel.setStyleSheet(
+            f"QPushButton{{background:transparent;color:{CP['text_secondary']};"
+            f"border:1px solid {CP['border']};border-radius:8px;"
+            f"font-size:11px;font-weight:700;padding:0 16px;}}"
+            f"QPushButton:hover{{background:{CP['bg3']};}}")
+        btn_cancel.clicked.connect(self.reject)
+        self._btn_cont = QPushButton(translate("Continuer"))
+        self._btn_cont.setFixedHeight(34)
+        self._btn_cont.setStyleSheet(
+            f"QPushButton{{background:{CP['accent']};color:#07080f;border:none;"
+            f"border-radius:8px;font-size:11px;font-weight:700;padding:0 18px;}}"
+            f"QPushButton:hover{{background:#6eded6;}}")
+        self._btn_cont.clicked.connect(self._on_continue)
+        row.addWidget(btn_cancel)
+        row.addSpacing(8)
+        row.addWidget(self._btn_cont)
+        lay.addLayout(row)
+
+        # Entrée ne doit PAS déclencher « Continuer » (le choix SÛR reste de ne rien réécrire).
+        try:
+            from ui.widgets import disable_default_buttons
+            disable_default_buttons(self)
+        except Exception:
+            pass
+
+    def _on_continue(self):
+        self.ok = True
+        self.accept()
+
+
+def confirm_prompt_rewrite(parent, source_label: str) -> bool:
+    """Ouvre l'avertissement de réécriture et renvoie True (continuer) / False (annuler).
+    `source_label` : d'où part la génération (« le conducteur » / « le scénario »)."""
+    dlg = _RewriteWarningDialog(parent, source_label)
+    dlg.exec()
+    return bool(dlg.ok)
