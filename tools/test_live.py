@@ -306,31 +306,57 @@ def prompt_mood_live_propre():
 
 @test
 def prompts_moods_kontext():
-    """Moods Kontext : canvas (peut recouvrir/cacher la façade), nuit, fond noir."""
+    """Moods mapping : consignes PARTAGÉES Flux ↔ Nano Banana 2 (constantes module) —
+    canvas de nuit, fond noir, visibilité pilotée par le prompt, priorité façade."""
     import api.apercu as A
-    src = inspect.getsource(A.run_generation)
-    assert "projection CANVAS" in src, "canvas"
-    assert "lit ONLY" not in src, "ancienne consigne retirée"
-    assert "PURE BLACK #000000" in src, "fond noir"
+    src  = inspect.getsource(A.run_generation)
+    lock = A._MAPPING_NIGHT_LOCK          # valeur (chaîne concaténée → fragments contigus)
+    prio = A._FACADE_PRIORITY_DIRECTIVE
+    assert "projection CANVAS" in lock, "canvas"
+    assert "lit ONLY" not in lock, "ancienne consigne retirée"
+    assert "PURE BLACK #000000" in lock, "fond noir"
     # Visibilité pilotée par le PROMPT, pas la photo : un élément de façade (porte/fenêtre/
     # structure) que le prompt dit NON visible doit passer en NOIR (fix 2026-07-09).
-    assert "VISIBILITY IS DRIVEN BY THE PROMPT" in src and "MUST be rendered as PURE BLACK" in src, \
+    assert "VISIBILITY IS DRIVEN BY THE PROMPT" in lock and "MUST be rendered as PURE BLACK" in lock, \
         "consigne d'exclusion (éléments non visibles → noir) absente"
     assert "fal-ai/flux-pro/kontext" in src, "Kontext quand façade fournie"
-    # Image(s) de RÉFÉRENCE + façade : la FAÇADE reste la PRIORITÉ ABSOLUE / canvas
-    # obligatoire ; la réf n'enrichit que l'inspiration, jamais copiée ni substituée à la
-    # façade (fix 2026-07-09 : le mood se créait DEPUIS la réf au lieu de la façade).
     assert "kontext/max/multi" in src, "Kontext multi quand façade + inspiration"
-    # (fragments choisis contigus : inspect.getsource garde les coupures de concaténation)
-    assert "ABSOLUTE PRIORITY" in src and "MANDATORY projection canvas" in src, \
-        "façade non priorisée dans le mood façade+inspiration"
-    assert "loose ARTISTIC" in src and "replace the facade" in src and "MUST NOT be pasted" in src, \
-        "réf non cantonnée à l'inspiration / façade pas prioritaire"
+    # FAÇADE = priorité absolue ; réf = inspiration lâche, jamais copiée/substituée.
+    assert "ABSOLUTE PRIORITY" in prio and "MANDATORY projection canvas" in prio, "façade non priorisée"
+    assert "loose ARTISTIC INSPIRATION" in prio and "MUST NOT replace the facade" in prio \
+        and "MUST NOT be pasted" in prio, "réf non cantonnée à l'inspiration"
+    # Les MÊMES consignes mapping s'appliquent à Nano Banana 2 (mode façade partagé).
+    nb2 = inspect.getsource(A.run_generation_nb2)
+    assert "_MAPPING_NIGHT_LOCK" in nb2 and "_FACADE_PRIORITY_DIRECTIVE" in nb2 and "facade_ref" in nb2, \
+        "NB2 n'utilise pas les mêmes consignes mapping / le mode façade"
+    assert "facade_ref" in inspect.signature(A.run_generation_nb2).parameters, "NB2 : param facade_ref absent"
     import inspect as _i
     assert "inspiration_ref" in _i.signature(A.MoodGenerationWorker.__init__).parameters
     from ui.dialog_apercu import MoodDialog
     src_d = inspect.getsource(MoodDialog._generate_from_image)
     assert "ImageLibraryDialog" in src_d, "inspiration choisie via la bibliothèque"
+
+
+@test
+def mood_batch_choix_moteur_live():
+    """« Générer les Moods » (Live) : la fenêtre propose Flux OU Nano Banana 2 avant de
+    lancer (comparer les rendus) ; le clic mémorise le moteur et _on_batch_mood le passe
+    au worker via options={engine} (2026-07-09)."""
+    import ui.page_storyboard_live as PSL
+    _orig_la = PSL.sb_api.load_apercus
+    PSL.sb_api.load_apercus = lambda sid: {"paths": [], "active_idx": 0}
+    try:
+        d = PSL._MoodBatchDialog(None, [{"id": "a", "number": 1, "scene_title": "T"}])
+    finally:
+        PSL.sb_api.load_apercus = _orig_la   # ne PAS fuiter sur les tests suivants (chaînage mood)
+    assert d.engine == "flux", "moteur par défaut = Flux"
+    assert hasattr(d, "_btn_flux") and hasattr(d, "_btn_nb2"), "2 boutons moteur absents"
+    d._btn_nb2.click()
+    assert d.engine == "nb2", "clic « Nano Banana 2 » → engine=nb2"
+    # Le handler passe le moteur choisi au worker.
+    _obm = inspect.getsource(PSL.PageStoryboard._on_batch_mood)
+    assert 'options={"engine"' in _obm and "dlg" in _obm, \
+        "_on_batch_mood ne transmet pas le moteur choisi au MoodBatchWorker"
 
 
 @test

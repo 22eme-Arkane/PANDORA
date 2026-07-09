@@ -252,6 +252,14 @@ _FR_TO_EN: dict[str, str] = {
         "Write the outline of your performance first.",
     "Génération du découpage avec Claude…": "Generating the breakdown with Claude…",
     "Génération du découpage via Claude…":  "Generating the breakdown via Claude…",
+    # Fenêtre « Générer les Moods » : choix du moteur Flux / Nano Banana 2 (mêmes consignes)
+    "Moteur : Flux et Nano Banana 2 reçoivent les MÊMES consignes (façade = canvas "
+    "prioritaire). Teste les deux pour comparer le rendu.":
+        "Engine: Flux and Nano Banana 2 receive the SAME instructions (facade = priority "
+        "canvas). Try both to compare the result.",
+    "✦  Flux":                              "✦  Flux",
+    "◇  Nano Banana 2":                     "◇  Nano Banana 2",
+    "{n} plan(s) sélectionné(s)":           "{n} shot(s) selected",
     # Gabarits dynamiques : {ai} = nom du moteur choisi pour la tâche storyboard_gen
     "Génération du découpage via {ai}…":   "Generating the breakdown via {ai}…",
     "Analyse du scénario via {ai}":        "Analyzing the screenplay via {ai}",

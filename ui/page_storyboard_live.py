@@ -1868,6 +1868,7 @@ class _MoodBatchDialog(QDialog):
         self.setMinimumSize(480, 480)
         self.setStyleSheet(PANDORA_STYLESHEET + f"QDialog{{background:{CP['bg1']};}}")
         self._shots = shots
+        self.engine = "flux"   # moteur choisi (bouton Flux / Nano Banana 2)
         self._has_mood: set[str] = set()
         for shot in shots:
             sid  = shot.get("id", "")
@@ -1954,18 +1955,35 @@ class _MoodBatchDialog(QDialog):
             f"QPushButton:hover{{color:{CP['text_primary']};border-color:{CP['text_primary']};}}"
         )
         cancel_btn.clicked.connect(self.reject)
-        self._gen_btn = QPushButton(translate("✦  Générer"))
-        self._gen_btn.setFixedHeight(36)
-        self._gen_btn.setStyleSheet(
-            f"QPushButton{{background:{CP['accent']};color:#07080f;"
-            f"border:none;border-radius:8px;font-size:12px;font-weight:700;padding:0 24px;}}"
-            f"QPushButton:hover{{background:#6eded6;}}"
-            f"QPushButton:disabled{{background:{CP['border']};color:{CP['text_dim']};}}"
-        )
-        self._gen_btn.clicked.connect(self.accept)
+        # Choix du MOTEUR : Flux (édite la façade) OU Nano Banana 2 (autre modèle). Les
+        # deux reçoivent les MÊMES consignes mapping (façade = canvas prioritaire) → on
+        # clique sur l'un ou l'autre pour comparer le rendu (demande Matthieu 2026-07-09).
+        eng_help = QLabel(translate(
+            "Moteur : Flux et Nano Banana 2 reçoivent les MÊMES consignes (façade = canvas "
+            "prioritaire). Teste les deux pour comparer le rendu."))
+        eng_help.setWordWrap(True)
+        eng_help.setStyleSheet(f"color:{CP['text_dim']};font-size:10px;background:transparent;")
+        lay.addWidget(eng_help)
+
+        def _pick(engine):
+            self.engine = engine
+            self.accept()
+
+        self._btn_flux = QPushButton(translate("✦  Flux"))
+        self._btn_nb2  = QPushButton(translate("◇  Nano Banana 2"))
+        for _b, _bg in ((self._btn_flux, CP['accent']), (self._btn_nb2, CP['accent2'])):
+            _b.setFixedHeight(36)
+            _b.setStyleSheet(
+                f"QPushButton{{background:{_bg};color:#07080f;border:none;border-radius:8px;"
+                f"font-size:12px;font-weight:700;padding:0 20px;}}"
+                f"QPushButton:hover{{background:#6eded6;}}"
+                f"QPushButton:disabled{{background:{CP['border']};color:{CP['text_dim']};}}")
+        self._btn_flux.clicked.connect(lambda: _pick("flux"))
+        self._btn_nb2.clicked.connect(lambda: _pick("nb2"))
         btns.addStretch()
         btns.addWidget(cancel_btn)
-        btns.addWidget(self._gen_btn)
+        btns.addWidget(self._btn_flux)
+        btns.addWidget(self._btn_nb2)
         lay.addLayout(btns)
 
     def _populate(self):
@@ -1994,8 +2012,9 @@ class _MoodBatchDialog(QDialog):
             1 for i in range(self._list.count())
             if self._list.item(i).checkState() == Qt.CheckState.Checked
         )
-        self._gen_btn.setText(f"✦  Générer {n} plan{'s' if n != 1 else ''}")
-        self._gen_btn.setEnabled(n > 0)
+        self._count_lbl.setText(translate("{n} plan(s) sélectionné(s)").format(n=n))
+        for _b in (self._btn_flux, self._btn_nb2):
+            _b.setEnabled(n > 0)
         self._count_lbl.setText(
             f"{n} plan{'s' if n != 1 else ''} sélectionné{'s' if n != 1 else ''}"
         )
@@ -3401,7 +3420,8 @@ class PageStoryboard(QWidget):
             return
 
         from api.apercu import MoodBatchWorker
-        self._batch_mood_worker = MoodBatchWorker(selected)
+        self._batch_mood_worker = MoodBatchWorker(
+            selected, options={"engine": getattr(dlg, "engine", "flux")})
         self._batch_mood_worker.shot_progress.connect(self._on_batch_mood_progress)
         self._batch_mood_worker.shot_done.connect(self._on_batch_mood_done)
         self._batch_mood_worker.shot_failed.connect(self._on_batch_mood_failed)

@@ -221,6 +221,44 @@ def _resolve_building_ref() -> str:
     return ""
 
 
+# ── Consignes MAPPING partagées Flux ↔ Nano Banana 2 ──────────────────────────
+# Mêmes directives quel que soit le moteur choisi pour le Mood (façade = canvas de nuit,
+# fond noir, visibilité pilotée par le prompt) → rendus comparables Flux vs NB2.
+_MAPPING_NIGHT_LOCK = (
+    " | NIGHT projection mapping render: convert the scene to deep night — "
+    "pitch-black night sky, NO daylight, no sun; same framing, scale and viewpoint "
+    "as the source photo. The building is a projection CANVAS: render the projected "
+    "content described above ON it — the content may light up only parts of it, "
+    "transform its material, or completely cover and hide the facade, exactly as "
+    "described. Unlit areas fall to pure black. "
+    "CRITICAL — VISIBILITY IS DRIVEN BY THE PROMPT, NOT BY THE SOURCE PHOTO: only "
+    "what the prompt describes as lit or projected is visible. ANY facade element "
+    "the prompt describes as hidden, off, unlit, dark or NOT visible (for example a "
+    "door, a window, a metal structure, a stage) MUST be rendered as PURE BLACK "
+    "#000000 and MUST NOT appear in the image, even though it is present in the "
+    "source photo. Do NOT preserve architectural details the prompt excludes — the "
+    "prompt's darkness overrides the source image; when in doubt, an element that "
+    "is not explicitly lit stays pure black. "
+    "Remove every surrounding element "
+    "(other buildings, street objects, trees, people, ground, sky) and replace the "
+    "entire background with PURE BLACK #000000."
+)
+
+# Priorité façade quand une/des image(s) de RÉFÉRENCE accompagne(nt) la façade (la
+# façade est TOUJOURS la 1ʳᵉ image ; les réfs n'enrichissent que l'inspiration).
+_FACADE_PRIORITY_DIRECTIVE = (
+    " | ABSOLUTE PRIORITY: the FIRST image is the building facade and it is the "
+    "MANDATORY projection canvas. Keep its EXACT geometry, framing, scale, "
+    "perspective and viewpoint — the output MUST be THIS facade with the content "
+    "projected onto it. The following reference image(s) are ONLY a loose ARTISTIC "
+    "INSPIRATION to enrich the projected content: draw from their palette, light, "
+    "materials, mood and motifs, but they MUST NOT become the subject, MUST NOT "
+    "replace the facade, MUST NOT change the framing, and MUST NOT be pasted, "
+    "collaged or copied. The facade always stays the base; the references only "
+    "flavour what is projected onto it."
+)
+
+
 def run_generation(prompt: str, output_dir: str, api_key: str, progress_cb,
                    building_ref: str = "", inspiration_ref: str = "") -> str:
     """Génère une image et retourne son chemin. Lève une exception si erreur.
@@ -261,48 +299,14 @@ def run_generation(prompt: str, output_dir: str, api_key: str, progress_cb,
     _has_facade = building_ref and os.path.isfile(building_ref)
     _has_inspi  = inspiration_ref and os.path.isfile(inspiration_ref)
 
-    # Directive impérative mapping : conversion NUIT + isolation sur FOND NOIR PUR
-    # (le mapping se projette de nuit ; la photo de façade est prise de jour).
-    _night_lock = (
-        " | NIGHT projection mapping render: convert the scene to deep night — "
-        "pitch-black night sky, NO daylight, no sun; same framing, scale and viewpoint "
-        "as the source photo. The building is a projection CANVAS: render the projected "
-        "content described above ON it — the content may light up only parts of it, "
-        "transform its material, or completely cover and hide the facade, exactly as "
-        "described. Unlit areas fall to pure black. "
-        "CRITICAL — VISIBILITY IS DRIVEN BY THE PROMPT, NOT BY THE SOURCE PHOTO: only "
-        "what the prompt describes as lit or projected is visible. ANY facade element "
-        "the prompt describes as hidden, off, unlit, dark or NOT visible (for example a "
-        "door, a window, a metal structure, a stage) MUST be rendered as PURE BLACK "
-        "#000000 and MUST NOT appear in the image, even though it is present in the "
-        "source photo. Do NOT preserve architectural details the prompt excludes — the "
-        "prompt's darkness overrides the source image; when in doubt, an element that "
-        "is not explicitly lit stays pure black. "
-        "Remove every surrounding element "
-        "(other buildings, street objects, trees, people, ground, sky) and replace the "
-        "entire background with PURE BLACK #000000."
-    )
+    # Directive impérative mapping (nuit + fond noir + exclusion) : constante PARTAGÉE
+    # avec Nano Banana 2 → mêmes consignes quel que soit le moteur.
+    _night_lock = _MAPPING_NIGHT_LOCK
 
     if _has_facade and _has_inspi:
         # Mapping + image(s) de référence : Kontext multi-images. ⚠ La FAÇADE (1ʳᵉ image)
-        # est la PRIORITÉ ABSOLUE et le canvas OBLIGATOIRE ; la/les référence(s) servent
-        # UNIQUEMENT à enrichir l'inspiration (palette, lumière, matières, ambiance) — elles
-        # ne remplacent JAMAIS la façade ni le cadre, ne deviennent jamais le sujet et ne
-        # sont jamais copiées (fix « le mood se crée depuis la réf au lieu de la façade »,
-        # signalé 2026-07-09 : la façade doit rester la base).
-        kontext_prompt = (
-            prompt
-            + " | ABSOLUTE PRIORITY: the FIRST image is the building facade and it is the "
-            "MANDATORY projection canvas. Keep its EXACT geometry, framing, scale, "
-            "perspective and viewpoint — the output MUST be THIS facade with the content "
-            "projected onto it. The following reference image(s) are ONLY a loose ARTISTIC "
-            "INSPIRATION to enrich the projected content: draw from their palette, light, "
-            "materials, mood and motifs, but they MUST NOT become the subject, MUST NOT "
-            "replace the facade, MUST NOT change the framing, and MUST NOT be pasted, "
-            "collaged or copied. The facade always stays the base; the references only "
-            "flavour what is projected onto it."
-            + _night_lock
-        )
+        # est la PRIORITÉ ABSOLUE ; la/les référence(s) n'enrichissent que l'inspiration.
+        kontext_prompt = prompt + _FACADE_PRIORITY_DIRECTIVE + _night_lock
         progress_cb("Envoi de la façade et de l'inspiration à fal.ai…")
         urls = [_upload_ref_robust(fal_client, building_ref),
                 _upload_ref_robust(fal_client, inspiration_ref)]
@@ -495,61 +499,79 @@ def _upload_ref_robust(fal_client, path: str) -> str:
 
 def run_generation_nb2(prompt: str, output_dir: str, api_key: str, progress_cb,
                        ref_images: list | None = None, floor_plan: str = "",
-                       inspiration_refs: list | None = None) -> str:
+                       inspiration_refs: list | None = None, facade_ref: str = "") -> str:
     """Mood via Nano Banana 2 : édition avec réfs si disponibles, sinon génération
     texte NB2. Aspect 16:9, comme le mood Flux.
 
-    Trois familles de références, dans CET ordre d'envoi (NB2 ne numérote pas les
-    images → l'ordre + les consignes désignent chaque plage) :
-      1. `ref_images`      : cohérence (portraits persos + image décor) → même pièce / persos ;
-      2. `inspiration_refs`: images de RÉFÉRENCE du plan (colonne « Référence ») →
-         inspiration artistique lâche, JAMAIS à recopier (consigne opposée à la cohérence) ;
-      3. `floor_plan`      : plan d'architecte vu de dessus, EN DERNIER (repère d'agencement).
-    Les consignes sont assemblées CONDITIONNELLEMENT : une famille absente n'ajoute pas
-    sa directive (ne jamais appliquer « garde la même pièce » à une image d'inspiration)."""
+    - `facade_ref` (MAPPING) : si fourni, la FAÇADE est le canvas (1ʳᵉ image) et NB2
+      reçoit EXACTEMENT les mêmes consignes mapping que Flux (nuit, fond noir, visibilité
+      pilotée par le prompt) ; les `inspiration_refs` enrichissent l'inspiration. Les
+      familles cohérence/plan d'architecte (Cinéma) sont ignorées dans ce mode.
+    - Sinon (CINÉMA), trois familles dans CET ordre (NB2 ne numérote pas les images →
+      l'ordre + les consignes désignent chaque plage) :
+      1. `ref_images`      : cohérence (portraits persos + image décor) → même pièce/persos ;
+      2. `inspiration_refs`: images de RÉFÉRENCE du plan → inspiration lâche, jamais copiée ;
+      3. `floor_plan`      : plan d'architecte vu de dessus, EN DERNIER."""
     import fal_client
     os.environ["FAL_KEY"] = api_key
     os.makedirs(output_dir, exist_ok=True)
-    consistency = [r for r in (ref_images or []) if r and os.path.isfile(r)]
     inspiration = [r for r in (inspiration_refs or []) if r and os.path.isfile(r)]
-    _fp = floor_plan if (floor_plan and os.path.isfile(floor_plan)) else ""
-    # Cap total 14 : le plan d'architecte garde toujours le dernier slot s'il est présent.
-    _budget = 14 - (1 if _fp else 0)
-    _ordered = (consistency + inspiration)[:_budget]
-    n_cons = min(len(consistency), _budget)
-    n_insp = max(0, len(_ordered) - n_cons)
-    refs = _ordered + ([_fp] if _fp else [])
-    if refs:
-        _tags = []
-        if n_cons: _tags.append("persos/décor")
-        if n_insp: _tags.append("inspiration")
-        if _fp:    _tags.append("plan d'architecte")
-        progress_cb(f"Nano Banana 2 — {len(refs)} référence(s) (" + ", ".join(_tags) + ")…")
+    _facade = facade_ref if (facade_ref and os.path.isfile(facade_ref)) else ""
+
+    if _facade:
+        # ── MODE MAPPING : la FAÇADE est le canvas prioritaire (1ʳᵉ image) ; MÊMES
+        # consignes que Flux (façade = base, réfs = inspiration lâche, nuit/fond noir).
+        refs = [_facade] + inspiration[:13]
+        _tag = "façade" + (f" + {len(inspiration)} inspiration(s)" if inspiration else "")
+        progress_cb(f"Nano Banana 2 — {_tag} (mapping)…")
         urls = [_upload_ref_robust(fal_client, r) for r in refs]
-        # Directives conditionnelles + préambule d'ORDRE seulement si plusieurs familles
-        # coexistent (sinon prompt identique à l'existant → aucun changement de rendu).
-        _parts = []
-        if (1 if n_cons else 0) + (1 if n_insp else 0) + (1 if _fp else 0) > 1:
-            _seg = []
-            if n_cons: _seg.append(f"the first {n_cons} reference image(s) are for CONSISTENCY (room/characters)")
-            if n_insp: _seg.append(f"the next {n_insp} are ARTISTIC INSPIRATION only")
-            if _fp:    _seg.append("the LAST image is a top-down floor plan")
-            _parts.append("IMAGE ORDER — " + "; ".join(_seg) + ".")
-        if n_cons: _parts.append(_MOOD_REF_DIRECTIVE)
-        if n_insp: _parts.append(_INSPIRATION_REF_DIRECTIVE)
-        if _fp:    _parts.append(_FLOOR_PLAN_DIRECTIVE)
-        directive = "\n\n".join(_parts)
+        directive = (_FACADE_PRIORITY_DIRECTIVE if inspiration else "") + _MAPPING_NIGHT_LOCK
         result = fal_client.subscribe("fal-ai/nano-banana-2/edit", arguments={
-            "prompt": prompt + (("\n\n" + directive) if directive else ""), "image_urls": urls,
+            "prompt": prompt + directive, "image_urls": urls,
             "num_images": 1, "aspect_ratio": "16:9", "resolution": "1K",
             "output_format": "png", "safety_tolerance": "6",
         })
     else:
-        progress_cb("Nano Banana 2…")
-        result = fal_client.subscribe("fal-ai/nano-banana-2", arguments={
-            "prompt": prompt, "num_images": 1,
-            "aspect_ratio": "16:9", "resolution": "1K", "output_format": "png",
-        })
+        # ── MODE CINÉMA : cohérence (persos/décor) + inspiration + plan d'architecte ──
+        consistency = [r for r in (ref_images or []) if r and os.path.isfile(r)]
+        _fp = floor_plan if (floor_plan and os.path.isfile(floor_plan)) else ""
+        # Cap total 14 : le plan d'architecte garde toujours le dernier slot s'il est présent.
+        _budget = 14 - (1 if _fp else 0)
+        _ordered = (consistency + inspiration)[:_budget]
+        n_cons = min(len(consistency), _budget)
+        n_insp = max(0, len(_ordered) - n_cons)
+        refs = _ordered + ([_fp] if _fp else [])
+        if refs:
+            _tags = []
+            if n_cons: _tags.append("persos/décor")
+            if n_insp: _tags.append("inspiration")
+            if _fp:    _tags.append("plan d'architecte")
+            progress_cb(f"Nano Banana 2 — {len(refs)} référence(s) (" + ", ".join(_tags) + ")…")
+            urls = [_upload_ref_robust(fal_client, r) for r in refs]
+            # Directives conditionnelles + préambule d'ORDRE seulement si plusieurs familles
+            # coexistent (sinon prompt identique à l'existant → aucun changement de rendu).
+            _parts = []
+            if (1 if n_cons else 0) + (1 if n_insp else 0) + (1 if _fp else 0) > 1:
+                _seg = []
+                if n_cons: _seg.append(f"the first {n_cons} reference image(s) are for CONSISTENCY (room/characters)")
+                if n_insp: _seg.append(f"the next {n_insp} are ARTISTIC INSPIRATION only")
+                if _fp:    _seg.append("the LAST image is a top-down floor plan")
+                _parts.append("IMAGE ORDER — " + "; ".join(_seg) + ".")
+            if n_cons: _parts.append(_MOOD_REF_DIRECTIVE)
+            if n_insp: _parts.append(_INSPIRATION_REF_DIRECTIVE)
+            if _fp:    _parts.append(_FLOOR_PLAN_DIRECTIVE)
+            directive = "\n\n".join(_parts)
+            result = fal_client.subscribe("fal-ai/nano-banana-2/edit", arguments={
+                "prompt": prompt + (("\n\n" + directive) if directive else ""), "image_urls": urls,
+                "num_images": 1, "aspect_ratio": "16:9", "resolution": "1K",
+                "output_format": "png", "safety_tolerance": "6",
+            })
+        else:
+            progress_cb("Nano Banana 2…")
+            result = fal_client.subscribe("fal-ai/nano-banana-2", arguments={
+                "prompt": prompt, "num_images": 1,
+                "aspect_ratio": "16:9", "resolution": "1K", "output_format": "png",
+            })
     imgs = (result or {}).get("images") or []
     image_url = (imgs[0].get("url") if imgs and isinstance(imgs[0], dict)
                  else (imgs[0] if imgs else ""))
@@ -588,6 +610,13 @@ def run_mood(shot: dict, prompt: str, output_dir: str, api_key: str, progress_cb
         # dans cette branche : la fonctionnalité ne faisait rien en Cinéma).
         if inspiration_ref and os.path.isfile(inspiration_ref):
             _inspo = [inspiration_ref] + [p for p in _inspo if p != inspiration_ref]
+        # MAPPING (façade présente) : NB2 génère SUR la façade avec EXACTEMENT les mêmes
+        # consignes que Flux (façade = canvas prioritaire, réfs = inspiration lâche, nuit,
+        # visibilité pilotée par le prompt) → on peut comparer les deux moteurs à armes égales.
+        if building_ref and os.path.isfile(building_ref):
+            return run_generation_nb2(prompt, output_dir, api_key, progress_cb,
+                                      inspiration_refs=_inspo, facade_ref=building_ref)
+        # CINÉMA : cohérence persos/décor + plan d'architecte.
         refs = _shot_ref_images(shot,
                                 include_chars=opts.get("chars", True),
                                 include_decor=opts.get("decor", True))
