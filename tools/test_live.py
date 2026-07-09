@@ -1047,6 +1047,12 @@ def conducteur_derniere_frame_croix():
         "dernière frame effacée (référence last_frame_path vidée)"
     assert not hasattr(sel._shot_cards[s1["id"]], "_clear_btn"), \
         "après effacement, la croix disparaît (refresh)"
+    # La bande DOIT être rafraîchie après chaque export, sinon les dernières frames
+    # (et leur croix) restent invisibles jusqu'à un rechargement manuel.
+    from ui.tab_t2v_live import TabT2V
+    _of = inspect.getsource(TabT2V.on_finished)
+    assert "self._storyboard.refresh()" in _of, \
+        "on_finished rafraîchit le Conducteur (dernière frame visible dès l'export)"
     sb.set_namespace("storyboard")
 
 

@@ -4327,6 +4327,14 @@ class TabT2V(QScrollArea):
                 except Exception:
                     pass
 
+        # Rafraîchit la bande Conducteur → la DERNIÈRE frame rendue (et sa croix
+        # d'effacement) apparaît dès la fin de l'export. Sans ça, les vignettes
+        # restaient sur les badges #N tant qu'on ne rechargeait pas la page.
+        try:
+            self._storyboard.refresh()
+        except Exception:
+            pass
+
         # Synchro décor (même axe) : fige le fond du 1er plan d'un (décor + axe)
         if (local_path and os.path.isfile(local_path) and self._active_shot
                 and getattr(self, "_decor_sync_cb", None) and self._decor_sync_cb.isChecked()):
