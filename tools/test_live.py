@@ -313,9 +313,15 @@ def prompts_moods_kontext():
     assert "lit ONLY" not in src, "ancienne consigne retirée"
     assert "PURE BLACK #000000" in src, "fond noir"
     assert "fal-ai/flux-pro/kontext" in src, "Kontext quand façade fournie"
-    # Image d'INSPIRATION (2026-06-11) : transposée sur la façade, jamais collée
+    # Image(s) de RÉFÉRENCE + façade : la FAÇADE reste la PRIORITÉ ABSOLUE / canvas
+    # obligatoire ; la réf n'enrichit que l'inspiration, jamais copiée ni substituée à la
+    # façade (fix 2026-07-09 : le mood se créait DEPUIS la réf au lieu de la façade).
     assert "kontext/max/multi" in src, "Kontext multi quand façade + inspiration"
-    assert "INSPIRATION" in src and "Do NOT paste" in src, "DA transposée, pas collée"
+    # (fragments choisis contigus : inspect.getsource garde les coupures de concaténation)
+    assert "ABSOLUTE PRIORITY" in src and "MANDATORY projection canvas" in src, \
+        "façade non priorisée dans le mood façade+inspiration"
+    assert "loose ARTISTIC" in src and "replace the facade" in src and "MUST NOT be pasted" in src, \
+        "réf non cantonnée à l'inspiration / façade pas prioritaire"
     import inspect as _i
     assert "inspiration_ref" in _i.signature(A.MoodGenerationWorker.__init__).parameters
     from ui.dialog_apercu import MoodDialog

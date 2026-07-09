@@ -275,15 +275,23 @@ def run_generation(prompt: str, output_dir: str, api_key: str, progress_cb,
     )
 
     if _has_facade and _has_inspi:
-        # Mapping + image d'inspiration : Kontext multi-images — l'univers de la
-        # 2ᵉ image (DA) est TRANSPOSÉ en visuels projetés sur la 1ʳᵉ (façade).
+        # Mapping + image(s) de référence : Kontext multi-images. ⚠ La FAÇADE (1ʳᵉ image)
+        # est la PRIORITÉ ABSOLUE et le canvas OBLIGATOIRE ; la/les référence(s) servent
+        # UNIQUEMENT à enrichir l'inspiration (palette, lumière, matières, ambiance) — elles
+        # ne remplacent JAMAIS la façade ni le cadre, ne deviennent jamais le sujet et ne
+        # sont jamais copiées (fix « le mood se crée depuis la réf au lieu de la façade »,
+        # signalé 2026-07-09 : la façade doit rester la base).
         kontext_prompt = (
             prompt
-            + " | The FIRST image is the building facade — the projection canvas: keep its "
-            "exact framing, scale and viewpoint. Use the SECOND image purely as artistic "
-            "INSPIRATION: transpose its universe — palette, light, materials, motifs, "
-            "figures, rendering style — into the projected visuals. Do NOT paste, collage "
-            "or copy the second image literally."
+            + " | ABSOLUTE PRIORITY: the FIRST image is the building facade and it is the "
+            "MANDATORY projection canvas. Keep its EXACT geometry, framing, scale, "
+            "perspective and viewpoint — the output MUST be THIS facade with the content "
+            "projected onto it. The following reference image(s) are ONLY a loose ARTISTIC "
+            "INSPIRATION to enrich the projected content: draw from their palette, light, "
+            "materials, mood and motifs, but they MUST NOT become the subject, MUST NOT "
+            "replace the facade, MUST NOT change the framing, and MUST NOT be pasted, "
+            "collaged or copied. The facade always stays the base; the references only "
+            "flavour what is projected onto it."
             + _night_lock
         )
         progress_cb("Envoi de la façade et de l'inspiration à fal.ai…")
