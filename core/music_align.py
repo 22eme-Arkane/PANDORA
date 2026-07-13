@@ -152,3 +152,73 @@ def align_shots_to_music(shots: list, tracks: list,
         })
         cum += new
     return out
+
+
+def set_duration_seconds(tracks: list) -> float:
+    """Durée totale du set = somme des durées des morceaux du conducteur."""
+    total = 0.0
+    for t in (tracks or []):
+        try:
+            total += float(t.get("duration", 0) or 0)
+        except (TypeError, ValueError):
+            pass
+    return total
+
+
+def conform_durations_to_set(segments: list, set_duration: float,
+                             min_s: int = 2, max_s: int = 15,
+                             tolerance_s: float = 2.0) -> dict:
+    """Conforme la SOMME des durées des plans à la durée du set — répartition au
+    PRORATA en secondes entières, bornes [min_s, max_s] respectées. Modifie les
+    segments EN PLACE. Retourne {"adjusted", "old_sum", "new_sum", "target"}.
+
+    Pourquoi : la mise en page co-écrite écrit des durées plausibles plan par plan,
+    mais un LLM n'additionne pas juste — constat « Mapping Nicolas » (2026-07-13) :
+    29 plans totalisaient 3:55 pour un set de 4:28 → 33 s manquaient à l'export.
+    La consigne au modèle réduit l'écart ; CETTE conformation le supprime."""
+    segs = [s for s in (segments or []) if isinstance(s, dict)]
+    res = {"adjusted": False, "old_sum": 0.0, "new_sum": 0.0, "target": 0}
+    if not segs or not set_duration or set_duration <= 0:
+        return res
+    durs = []
+    for s in segs:
+        try:
+            durs.append(max(0.0, float(s.get("duration", 0) or 0)))
+        except (TypeError, ValueError):
+            durs.append(0.0)
+    old_sum = sum(durs)
+    res["old_sum"] = round(old_sum, 2)
+    res["new_sum"] = res["old_sum"]
+    n = len(segs)
+    # Cible atteignable : bornée par n×min et n×max (sinon on fait au plus près).
+    target = int(round(set_duration))
+    target = max(n * min_s, min(target, n * max_s))
+    res["target"] = target
+    if old_sum <= 0 or abs(old_sum - target) <= tolerance_s:
+        return res
+    factor = target / old_sum
+    scaled = [min(max(d * factor, float(min_s)), float(max_s)) for d in durs]
+    base = [int(x) for x in scaled]   # plancher entier
+    rest = target - sum(base)
+    # +1 s aux plus grands restes fractionnaires (avec marge), −1 s aux plus petits.
+    order_up   = sorted(range(n), key=lambda i: scaled[i] - base[i], reverse=True)
+    order_down = sorted(range(n), key=lambda i: scaled[i] - base[i])
+    k = 0
+    while rest > 0 and k < 10 * n:
+        i = order_up[k % n]
+        if base[i] < max_s:
+            base[i] += 1
+            rest -= 1
+        k += 1
+    k = 0
+    while rest < 0 and k < 10 * n:
+        i = order_down[k % n]
+        if base[i] > min_s:
+            base[i] -= 1
+            rest += 1
+        k += 1
+    for s, d in zip(segs, base):
+        s["duration"] = int(d)
+    res["adjusted"] = True
+    res["new_sum"] = float(sum(base))
+    return res

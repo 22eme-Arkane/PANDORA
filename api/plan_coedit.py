@@ -54,7 +54,9 @@ def _fmt_block(edition: str, mode: str, _pl: str, _PL: str) -> str:
         "mets un numéro placeholder au bon format (il sera réattribué automatiquement).\n"
         f"- Le PROMPT VIDÉO reste en {_PL}, très détaillé (beats début/milieu/fin).\n"
         f"- Le PROMPT SON reste en {_PL} (SFX/ambiance uniquement, aucune voix).\n"
-        "- Durée entière entre 4 et 15 secondes."
+        "- Durée entière entre 4 et 15 secondes. Si tu CHANGES une durée (ou ajoutes/"
+        "supprimes un plan), COMPENSE sur les plans voisins : la SOMME des durées de la "
+        "mise en page doit rester ÉGALE à la durée totale du set (±2 s)."
     )
 
 

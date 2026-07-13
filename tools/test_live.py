@@ -226,6 +226,48 @@ def avertissement_reecriture_regle_2026_07_09():
 
 
 @test
+def somme_durees_conformee_au_set():
+    """Constat « Mapping Nicolas » 2026-07-13 : la mise en page co-écrite totalisait
+    3:55 pour un set de 4:28 (un LLM n'additionne pas juste) → 33 s manquaient à
+    l'export. La somme des durées est désormais CONFORMÉE à la durée du set à
+    l'écriture du découpage (prorata, secondes entières, bornes) et la consigne
+    d'arithmétique est dans tous les prompts qui écrivent des durées."""
+    import inspect
+    from core.music_align import conform_durations_to_set, set_duration_seconds
+    assert abs(set_duration_seconds([{"duration": 267.97}]) - 267.97) < 1e-6
+    # Cas RÉEL (durées du projet, ~3:56) → conformés à 268 s exactement, bornes OK.
+    _real = (4, 6, 4, 5, 9, 6, 11, 6, 6, 9, 7, 8, 4, 6, 7, 6, 9, 9, 8, 14, 6, 15,
+             4, 12, 4, 12, 12, 12, 15)
+    segs = [{"duration": d} for d in _real]
+    assert sum(s["duration"] for s in segs) == 236
+    r = conform_durations_to_set(segs, 267.97)
+    assert r["adjusted"] and r["target"] == 268, r
+    assert sum(s["duration"] for s in segs) == 268 == r["new_sum"], "somme ≠ set"
+    assert all(2 <= s["duration"] <= 15 for s in segs), "bornes 2-15 violées"
+    # Tolérance ±2 s : on ne touche à rien (durées co-écrites respectées).
+    segs2 = [{"duration": 10}, {"duration": 10}]
+    assert not conform_durations_to_set(segs2, 21.0)["adjusted"] and segs2[0]["duration"] == 10
+    # Cible inatteignable → au plus près (n × max), jamais d'explosion.
+    segs3 = [{"duration": 5}, {"duration": 5}]
+    r3 = conform_durations_to_set(segs3, 120)
+    assert r3["adjusted"] and sum(s["duration"] for s in segs3) == 30
+    # Pas de set → no-op.
+    assert not conform_durations_to_set([{"duration": 5}], 0)["adjusted"]
+    # Branché dans l'écriture du découpage (couvre Appliquer ET Tout générer).
+    from ui.page_scenario_live import PageScenario
+    src = inspect.getsource(PageScenario._write_decoupage_segments)
+    assert "conform_durations_to_set" in src and "set_duration_seconds" in src, \
+        "conformation de la somme non branchée à l'écriture du découpage"
+    # Consigne d'arithmétique là où les durées s'écrivent : mise en page,
+    # découpage IA (live + mapping), co-écriture des plans.
+    import api.live_screenplay as LS, api.live_extract as LE, api.plan_coedit as PC
+    assert "ARITHMÉTIQUE" in LS._decoupage_live_system("fr")
+    assert "ARITHMÉTIQUE" in LS._decoupage_mapping_system("fr")
+    assert "ARITHMÉTIQUE OBLIGATOIRE" in inspect.getsource(LE), "mise en page : consigne absente"
+    assert "la SOMME des durées de la" in inspect.getsource(PC), "co-écriture plans : consigne absente"
+
+
+@test
 def tout_generer_source_mise_en_page():
     """Règle 2026-07-13 : « Tout générer » utilise la MÊME source (Mise en page PANDORA
     si présente, sinon conducteur) et le MÊME moteur (worker Live calibré mode+façade)

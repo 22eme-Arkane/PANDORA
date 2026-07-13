@@ -2403,6 +2403,8 @@ _FR_TO_EN: dict[str, str] = {
     "▸ Dossier de sortie : répertoire local où sont sauvegardés les clips générés.":
         "▸ Output folder: local directory where generated clips are saved.",
 
+    "(durées calées sur le set)":       "(durations conformed to the set)",
+
     # ── Onboarding / Guide de démarrage ──────────────────────────────────────
     # (Refonte 2026-07-13 : 3 étapes par service, chips de rassurance, vraies
     #  captures via _shot quand assets/onboarding/*.png existent.)

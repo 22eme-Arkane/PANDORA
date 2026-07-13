@@ -38,7 +38,9 @@ Pour CHAQUE plan, donne un objet JSON avec :
 - "action": description courte du visuel, en français (1 phrase).
 - "shot_size": valeur de plan (ex: "Plan d'ensemble", "Plan large", "Plan moyen", "Gros plan", "Très gros plan") ou "".
 - "camera_movement": mouvement (ex: "Fixe", "Panoramique", "Travelling", "Zoom avant", "Zoom arrière") ou "".
-- "duration": durée en secondes (entier entre 4 et 15).
+- "duration": durée en secondes (entier entre 4 et 15). ARITHMÉTIQUE OBLIGATOIRE :
+  la SOMME des durées de tous les plans doit ÉGALER la durée totale du set (±2 s)
+  quand la timeline musicale est fournie — additionne avant de répondre.
 - "prompt": prompt VIDÉO en {pl} pour un loop VJ, TRÈS DÉTAILLÉ et dense (Seedance 2.0
   exploite un MAXIMUM de détails — ne sois PAS bref). Commence par {loop} puis
   décris précisément : sujet + action, décor/environnement, composition & cadrage, lumière
@@ -132,7 +134,9 @@ Pour CHAQUE plan, donne un objet JSON avec :
 - "action": ce qui se passe sur la façade pendant ce plan, en français (1 phrase).
 - "shot_size": "" (non pertinent en mapping).
 - "camera_movement": "Fixe".
-- "duration": durée en secondes (entier entre 4 et 15).
+- "duration": durée en secondes (entier entre 4 et 15). ARITHMÉTIQUE OBLIGATOIRE :
+  la SOMME des durées de tous les plans doit ÉGALER la durée totale du set (±2 s)
+  quand la timeline musicale est fournie — additionne avant de répondre.
 - "prompt": prompt VIDÉO en {pl} décrivant l'évolution projetée (sans mouvement de
   caméra), TRÈS DÉTAILLÉ et dense (Seedance 2.0 exploite un MAXIMUM de détails — ne sois PAS
   bref). COMMENCE par déclarer l'ÉTAT DE LA FAÇADE dans ce plan {states}. Puis décris

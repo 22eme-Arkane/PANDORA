@@ -2222,15 +2222,21 @@ class PageScenario(QWidget):
 
     def _write_decoupage_segments(self, segments: list) -> list:
         """Écrit les segments dans la séquence Live/Mapping courante (namespace posé,
-        version vidée, musique auto-assignée) et retourne les plans sauvés.
-        Cœur commun « Appliquer » (_apply_decoupage) et « Tout générer »."""
+        version vidée, somme CONFORMÉE au set, musique auto-assignée) et retourne
+        les plans sauvés. Cœur commun « Appliquer » (_apply_decoupage) et
+        « Tout générer »."""
         import core.storyboard as _sb
         _sb.set_namespace(f"live_seq_{self._live_mode}")
         _sb.clear_version_shots(_sb.DEFAULT_VERSION_ID)
         sc_id = (self._current or {}).get("id", "")
-        # Colonnes Musique/BPM remplies d'office : chaque plan reçoit le morceau
-        # couvrant sa position dans le set (le BPM de la ligne en dérive).
-        from core.music_align import assign_tracks_to_shots
+        # Somme des durées CONFORMÉE à la durée du set (répartition au prorata,
+        # secondes entières) — constat « Mapping Nicolas » 2026-07-13 : la mise en
+        # page co-écrite totalisait 3:55 pour un set de 4:28, 33 s manquaient à
+        # l'export. La consigne au modèle limite l'écart ; ici on le SUPPRIME.
+        from core.music_align import (assign_tracks_to_shots,
+                                      conform_durations_to_set, set_duration_seconds)
+        self._last_set_conform = conform_durations_to_set(
+            segments, set_duration_seconds(self._music_tracks))
         _pseudo = [{"id": str(i), "number": i, "duration": seg.get("duration", 5)}
                    for i, seg in enumerate(segments, 1)]
         _auto_music = {a["id"]: a["track"]
@@ -2275,7 +2281,14 @@ class PageScenario(QWidget):
                 return False
         self._write_decoupage_segments(segments)
         seq_name = translate("Séquences Mapping") if self._live_mode == "mapping" else translate("Séquences Live")
-        self._ai_progress_lbl.setText(f"✓  {len(segments)} " + translate("segments générés →") + f" {seq_name}")
+        _msg = f"✓  {len(segments)} " + translate("segments générés →") + f" {seq_name}"
+        # Rendre l'ajustement VISIBLE : « Σ 3:55 → 4:28 (calé sur le set) ».
+        _cf = getattr(self, "_last_set_conform", None) or {}
+        if _cf.get("adjusted"):
+            _f = lambda s: f"{int(s) // 60}:{int(s) % 60:02d}"
+            _msg += (f"  ·  Σ {_f(_cf['old_sum'])} → {_f(_cf['target'])} "
+                     + translate("(durées calées sur le set)"))
+        self._ai_progress_lbl.setText(_msg)
         self.navigate_requested.emit(
             "seq_mapping" if self._live_mode == "mapping" else "seq_live", "")
         return True
