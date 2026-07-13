@@ -2274,12 +2274,18 @@ def _arrange_chat_surgical_system(intensity: int) -> str:
         "caractère, assez long pour être unique). Ne le reformule pas, ne corrige pas ses "
         "espaces. « replace » = ce même passage réécrit.\n"
         f"- {creativity}\n"
-        "- Respecte « ne touche pas à X » / « garde X » sans exception.\n\n"
+        "- Respecte « ne touche pas à X » / « garde X » sans exception.\n"
+        "- IMPÉRATIF : si le réalisateur demande un changement, renvoie les éditions "
+        "correspondantes dans « edits » DANS CETTE RÉPONSE. Ne dis JAMAIS que tu as "
+        "modifié (ou que tu vas modifier) sans renvoyer l'édition — pas de promesse "
+        "pour plus tard.\n\n"
         "RÉFÉRENCES VISUELLES : si des images sont jointes, intègre leurs détails "
         "UNIQUEMENT dans les passages demandés.\n\n"
         "FORMAT — JSON STRICT, sans markdown, sans texte hors JSON :\n"
-        '{ "message": "<2-4 lignes : ce que tu as changé et où, ou ta réponse ; ton '
-        'direct ; pose une question si la portée est ambiguë>", '
+        '{ "message": "<ta réponse, claire et AÉRÉE : phrases courtes, paragraphes '
+        "séparés par une ligne vide (\\n\\n), liste à puces si utile ; pour une simple "
+        'confirmation d\'édition, 1-3 lignes suffisent ; pose une question si la '
+        'portée est ambiguë>", '
         '"edits": [ {"find": "<extrait exact>", "replace": "<réécrit>", '
         '"summary": "<résumé court>"} ] }'
     )
@@ -2431,7 +2437,9 @@ class ArrangeChatWorker(QThread):
 
             _sys    = (_arrange_chat_surgical_system(self._intensity) if self._surgical
                        else _arrange_chat_system(self._intensity))
-            _maxtok = 4096 if self._surgical else 8192
+            # CHIRURGICAL : 8192 — 4096 TRONQUAIT le JSON dès que plusieurs passages
+            # longs étaient réécrits → 0 édition récupérée (constat Matthieu 2026-07-13).
+            _maxtok = 8192
             if self._ref_images:
                 # VISION (images jointes) : direct Anthropic — hors couche ai_provider
                 # (les autres fournisseurs gèrent la vision différemment ; périmètre v1 = texte).

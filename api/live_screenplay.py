@@ -651,10 +651,16 @@ def _arrange_session_chat_surgical_system(intensity: int, mode: str) -> str:
         "caractère, assez long pour être unique). Ne le reformule pas. « replace » = ce "
         "même passage réécrit.\n"
         f"- {creativity}\n"
-        "- Respecte « ne touche pas à X » / « garde X » sans exception.\n\n"
+        "- Respecte « ne touche pas à X » / « garde X » sans exception.\n"
+        "- IMPÉRATIF : si le réalisateur demande un changement, renvoie les éditions "
+        "correspondantes dans « edits » DANS CETTE RÉPONSE. Ne dis JAMAIS que tu as "
+        "modifié (ou que tu vas modifier) sans renvoyer l'édition — pas de promesse "
+        "pour plus tard.\n\n"
         "FORMAT — JSON STRICT, sans markdown, sans texte hors JSON :\n"
-        '{ "message": "<2-4 lignes : ce que tu as changé et où, ou ta réponse ; pose une '
-        'question si la portée est ambiguë>", "edits": [ {"find": "<extrait exact>", '
+        '{ "message": "<ta réponse, claire et AÉRÉE : phrases courtes, paragraphes '
+        "séparés par une ligne vide (\\n\\n), liste à puces si utile ; pour une simple "
+        'confirmation d\'édition, 1-3 lignes suffisent ; pose une question si la '
+        'portée est ambiguë>", "edits": [ {"find": "<extrait exact>", '
         '"replace": "<réécrit>", "summary": "<résumé court>"} ] }'
     )
 
@@ -771,9 +777,10 @@ class ArrangeSessionChatConducteurWorker(QThread):
             system = (_arrange_session_chat_surgical_system(self._intensity, self._mode)
                       if self._surgical
                       else _arrange_session_chat_system(self._intensity, self._mode))
-            # 16000 : réécriture COMPLÈTE (8192 tronquait). CHIRURGICAL : 4096 suffisent
-            # (on ne renvoie que les passages modifiés).
-            _maxtok = 4096 if self._surgical else 16000
+            # 16000 : réécriture COMPLÈTE (8192 tronquait). CHIRURGICAL : 8192 —
+            # 4096 TRONQUAIT le JSON dès que plusieurs passages longs étaient
+            # réécrits → 0 édition récupérée (constat Matthieu 2026-07-13).
+            _maxtok = 8192 if self._surgical else 16000
 
             if self._ref_images:
                 # VISION (images jointes) : direct Anthropic — hors couche ai_provider.

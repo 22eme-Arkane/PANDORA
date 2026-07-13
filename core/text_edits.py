@@ -52,13 +52,58 @@ def parse_edits(raw: str) -> list[dict]:
     return out
 
 
+# Caractères typographiques équivalents : le scénario est saisi avec les signes
+# français (' « » – …) mais le modèle renvoie souvent leurs variantes droites
+# (' " - ...) — cause RÉELLE de « passage non retrouvé » (constat 2026-07-13).
+_EQUIV = {
+    "'": "['’‘‛`]", "’": "['’‘‛`]", "‘": "['’‘‛`]", "‛": "['’‘‛`]",
+    "-": "[-–—]", "–": "[-–—]", "—": "[-–—]",
+    "…": r"(?:…|\.\.\.)",
+}
+_DQUOTES = '"“”«»„'   # guillemets doubles — « » s'écrivent AVEC espaces intérieures
+
+
+def _tolerant_pattern(find: str) -> str:
+    """Regex du `find` tolérante aux espaces (y c. insécables) ET aux variantes
+    typographiques (apostrophes, guillemets, tirets, points de suspension).
+    Les espaces voisines d'un guillemet deviennent OPTIONNELLES : « Adieu » ↔ "Adieu"
+    doivent se retrouver dans les deux sens."""
+    units, i, n = [], 0, len(find)
+    while i < n:
+        ch = find[i]
+        if ch.isspace():
+            while i < n and find[i].isspace():
+                i += 1
+            units.append((r"\s+", "ws"))
+            continue
+        if find.startswith("...", i):             # ... écrit par le modèle ↔ … du texte
+            units.append((r"(?:…|\.\.\.)", "ch"))
+            i += 3
+            continue
+        if ch in _DQUOTES:
+            units.append((r'(?:\s*["“”«»„]\s*)', "q"))
+            i += 1
+            continue
+        units.append((_EQUIV.get(ch) or re.escape(ch), "ch"))
+        i += 1
+    out = []
+    for k, (pat, typ) in enumerate(units):
+        if typ == "ws":
+            near_q = ((k > 0 and units[k - 1][1] == "q")
+                      or (k + 1 < len(units) and units[k + 1][1] == "q"))
+            out.append(r"\s*" if near_q else r"\s+")
+        else:
+            out.append(pat)
+    return "".join(out)
+
+
 def apply_find_replace_edits(text: str, edits: list[dict]):
     """Applique les édits ``{find, replace}`` au texte (1re occurrence de chaque `find`).
 
-    Tolérant aux espaces : si le `find` exact est introuvable, on retente en
-    autorisant n'importe quelle suite d'espaces entre les mots (le modèle
-    reproduit parfois les blancs différemment). Retourne
-    ``(nouveau_texte, appliqués, non_localisés)``.
+    Deux niveaux : correspondance exacte, puis repli TOLÉRANT — n'importe quelle
+    suite d'espaces entre les mots ET variantes typographiques équivalentes
+    (' ↔ ', « » ↔ ", – ↔ -, … ↔ ...) : le modèle reproduit rarement ces signes
+    à l'identique. Retourne ``(nouveau_texte, appliqués, non_localisés)``.
     """
     applied, missed = [], []
     for e in edits:
@@ -71,13 +116,12 @@ def apply_find_replace_edits(text: str, edits: list[dict]):
             text = text[:idx] + repl + text[idx + len(find):]
             applied.append(e)
             continue
-        # Repli tolérant aux espaces : mots du `find` reliés par \s+.
+        # Repli tolérant (espaces + typographie).
         toks = find.split()
         if not toks:
             missed.append(e)
             continue
-        pat = r"\s+".join(re.escape(t) for t in toks)
-        m = re.search(pat, text)
+        m = re.search(_tolerant_pattern(find), text)
         if m:
             text = text[:m.start()] + repl + text[m.end():]
             applied.append(e)

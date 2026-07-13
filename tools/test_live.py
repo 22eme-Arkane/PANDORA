@@ -1122,6 +1122,19 @@ def coecriture_conducteur_chirurgicale():
         "chat chirurgical par défaut"
     assert "surgical=False" in inspect.getsource(dlg._on_generate_full), \
         "le bouton « Générer » fait la réécriture complète"
+    # ── Fixes 2026-07-13 (retour Matthieu : « parfois ça n'écrit plus les modifs ») ──
+    # ANTI-TRONCATURE : 4096 coupait le JSON chirurgical → 0 édition ; plafond 8192.
+    _wsrc = inspect.getsource(ArrangeSessionChatConducteurWorker.run)
+    assert "8192 if self._surgical" in _wsrc, "chirurgical Live : plafond 8192 requis"
+    # PROMPT : jamais « je vais modifier » sans édition ; réponses AÉRÉES (paragraphes).
+    from api.live_screenplay import _arrange_session_chat_surgical_system
+    _p = _arrange_session_chat_surgical_system(5, "live")
+    assert "IMPÉRATIF" in _p and "AÉRÉE" in _p, \
+        "prompt chirurgical Live : règle anti-promesse + réponses aérées"
+    # Bulles : interligne aéré.
+    import ui.dialog_arrange_session_live as _dasl
+    _bh = inspect.getsource(_dasl._bubble_html)
+    assert "line-height" in _bh and "<br>" in _bh, "bulle de chat Live : interligne"
 
 
 @test

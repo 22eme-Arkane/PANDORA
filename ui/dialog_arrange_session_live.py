@@ -128,7 +128,8 @@ def _bubble_html(text: str, role: str) -> str:
         f'<div style="text-align:{align};{margin}margin-bottom:14px;">'
         f'<span style="font-size:9px;font-weight:700;color:{lbl_col};">{label}</span><br>'
         f'<span style="display:inline-block;background:{bg};border:1px solid {border};'
-        f'border-radius:10px;padding:10px 14px;font-size:12px;color:{CP["text_primary"]};">'
+        f'border-radius:10px;padding:10px 14px;font-size:12px;line-height:1.55;'
+        f'color:{CP["text_primary"]};">'
         f'{text_esc}</span></div>'
     )
 

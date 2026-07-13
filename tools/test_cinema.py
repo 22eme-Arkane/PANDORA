@@ -3682,6 +3682,22 @@ def coecriture_scenario_chirurgicale():
     assert len(e) == 1 and e[0]["find"] == "AAA", "édition ciblée extraite"
     new, applied, missed = apply_find_replace_edits("xx AAA yy", e)
     assert new == "xx BBB yy" and len(applied) == 1 and not missed, "find/replace chirurgical"
+    # ── Fixes 2026-07-13 (retour Matthieu : « parfois ça n'écrit plus les modifs ») ──
+    # (a) TYPOGRAPHIE : le texte utilise ' « » – … mais le modèle renvoie ' " - ...
+    #     → le repli doit matcher malgré les variantes typographiques.
+    _txt = "Il l’observe… puis sort — « Adieu »."
+    _ed  = [{"find": "Il l'observe... puis sort - \"Adieu\".", "replace": "OK", "summary": ""}]
+    _new, _ap, _mi = apply_find_replace_edits(_txt, _ed)
+    assert _new == "OK" and _ap and not _mi, \
+        f"variantes typographiques non tolérées (obtenu : {_new!r})"
+    # (b) ANTI-TRONCATURE : 4096 coupait le JSON (plusieurs passages longs → 0 édition).
+    _wsrc = inspect.getsource(ArrangeChatWorker.run)
+    assert "_maxtok = 8192" in _wsrc, "chirurgical : plafond 8192 requis"
+    # (c) PROMPT : jamais « je vais modifier » sans édition ; réponses AÉRÉES (paragraphes).
+    from api.screenplay import _arrange_chat_surgical_system
+    _p = _arrange_chat_surgical_system(5)
+    assert "IMPÉRATIF" in _p and "AÉRÉE" in _p, \
+        "prompt chirurgical : règle anti-promesse + réponses aérées"
     # Dialog : chat chirurgical par défaut + bouton de réécriture complète.
     from ui.dialog_arrange_session import ArrangeSessionDialog
     dlg = ArrangeSessionDialog(None, "INT. MAISON — JOUR\nLIA\nBonjour.", "analyse", 5)
@@ -3691,6 +3707,11 @@ def coecriture_scenario_chirurgicale():
         "chat chirurgical par défaut"
     assert "surgical=False" in inspect.getsource(dlg._on_generate_full), \
         "le bouton « Générer » fait la réécriture complète"
+    # Bulles : interligne aéré (les \n du message deviennent des <br> lisibles).
+    import ui.dialog_arrange_session as _das
+    _bh = inspect.getsource(_das._bubble_html)
+    assert "line-height" in _bh and "<br>" in _bh, \
+        "bulle de chat : sauts de ligne + interligne"
 
 
 @test
