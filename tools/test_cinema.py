@@ -3513,6 +3513,23 @@ def references_inspiration_par_plan():
 
 
 @test
+def sheet_casting_visage_gros_plan_seulement():
+    """Sheet casting : SEUL le gros plan (bust) porte le visage ; les vues de corps
+    (face/3-4/profil/dos) sont recadrées SANS visage (tête hors champ) → Seedance ne
+    reçoit qu'UN visage de référence (Matthieu 2026-07-13, évite la confusion)."""
+    from api.nano_banana import _VIEW_DEFS, _SHEET_SUFFIX
+    by = {k: (instr, pulid) for k, instr, pulid in _VIEW_DEFS}
+    for k in ("front", "34", "profile"):
+        instr, pulid = by[k]
+        assert "CROPPED OUT" in instr and "NO head" in instr, f"{k} : tête hors champ"
+        assert pulid is False, f"{k} : injection d'identité coupée (aucun visage)"
+    assert by["bust"][1] is True, "le gros plan (bust) porte le visage"
+    assert ("head CROPPED OUT" in _SHEET_SUFFIX
+            and "ONLY view showing the face" in _SHEET_SUFFIX), \
+        "sheet 1-image : visage uniquement sur le gros plan"
+
+
+@test
 def coecriture_scenario_chirurgicale():
     """Co-écriture Cinéma : le chat de scénario est CHIRURGICAL (répond aux questions
     OU applique des éditions ciblées find/replace — jamais de réécriture totale), et

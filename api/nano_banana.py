@@ -453,27 +453,32 @@ _VIEW_DEFS = [
     # Ancrage "bords du cadre" renforcé (Gemini IMPROVEMENT_3) :
     #   pieds visibles en bas du cadre + vaste environnement au-dessus → force Flux à dézoomer
     #   avant que PuLID ne "tire" la caméra vers le visage.
+    # Vues de CORPS sans visage (choix Matthieu 2026-07-13) : la tête est recadrée
+    # HORS CHAMP (cou vers le bas), le corps/costume est net, AUCUN visage. Seul le
+    # gros plan « bust » porte le visage → Seedance reçoit UN seul visage de référence
+    # (plus de confusion multi-visages). use_pulid=False : sans visage dans le cadre,
+    # l'injection d'identité est inutile (et forcerait un visage) → flux/dev.
     ("front",
-     "Change the angle to a full-body FRONT VIEW. "
-     "Camera is positioned at a distance. "
-     "Subject's feet are visibly touching the ground at the bottom of the frame, "
-     "vast environment visible above and around. "
-     "Entire body from head to feet, standing pose, arms relaxed.",
-     True),
+     "Change the angle to a full-body FRONT VIEW, framed from the BASE OF THE NECK "
+     "DOWN to the feet — the head and face are CROPPED OUT above the top of the frame "
+     "and are NOT visible anywhere. Camera at a distance; feet visibly touching the "
+     "ground at the bottom of the frame. Show the entire body, full costume and "
+     "footwear, standing pose, arms relaxed. Absolutely NO head, NO face in the image.",
+     False),
     ("34",
-     "Change the angle to a full-body THREE-QUARTER VIEW (45° left turn). "
-     "Camera is positioned at a distance. "
-     "Subject's feet are visibly touching the ground at the bottom of the frame, "
-     "vast environment visible above and around. "
-     "Entire body from head to feet, slight turn to the left.",
-     True),
+     "Change the angle to a full-body THREE-QUARTER VIEW (45° left turn), framed from "
+     "the BASE OF THE NECK DOWN to the feet — the head and face are CROPPED OUT above "
+     "the top of the frame and are NOT visible. Camera at a distance; feet visibly "
+     "touching the ground at the bottom of the frame. Entire body, full costume and "
+     "footwear, slight turn to the left. Absolutely NO head, NO face in the image.",
+     False),
     ("profile",
-     "Change the angle to a full-body SIDE PROFILE VIEW (90° left). "
-     "Camera is positioned at a distance. "
-     "Subject's feet are visibly touching the ground at the bottom of the frame, "
-     "vast environment visible above and around. "
-     "Entire body from head to feet, pure side angle.",
-     True),
+     "Change the angle to a full-body SIDE PROFILE VIEW (90° left), framed from the "
+     "BASE OF THE NECK DOWN to the feet — the head and face are CROPPED OUT above the "
+     "top of the frame and are NOT visible. Camera at a distance; feet visibly touching "
+     "the ground at the bottom of the frame. Entire body, full costume and footwear, "
+     "pure side angle. Absolutely NO head, NO face in the image.",
+     False),
     ("back",
      "Change the angle to a full-body BACK VIEW. "
      "Camera is positioned at a distance. "
@@ -541,11 +546,15 @@ _SHEET_SUFFIX = (
     "Character reference turnaround sheet — ONE single image containing 5 views "
     "of THE EXACT SAME PERSON.\n"
     "Top row (left to right): "
-    "full-body front view · full-body back view · "
-    "full-body three-quarter left view · full-body three-quarter right view.\n"
-    "Bottom center: close-up head-and-shoulders portrait.\n"
-    "CRITICAL: All 5 views MUST show the IDENTICAL character — "
-    "same face, same hair color and style, same costume, same body proportions. "
+    "full-body front view (head CROPPED OUT, face NOT visible) · full-body back view · "
+    "full-body three-quarter left view (head CROPPED OUT) · "
+    "full-body three-quarter right view (head CROPPED OUT).\n"
+    "Bottom center: the ONLY view showing the face — close-up head-and-shoulders portrait.\n"
+    "CRITICAL — ONE SINGLE FACE: the face appears ONLY in the bottom close-up. The four "
+    "full-body views are framed from the base of the neck DOWN (head and face out of "
+    "frame, never visible) — this avoids multiple competing faces.\n"
+    "CRITICAL: All views MUST show the IDENTICAL character — "
+    "same hair color and style, same costume, same body proportions. "
     "Zero variation in appearance between views.\n"
     "White seamless studio background throughout. "
     "Professional film/TV casting turnaround sheet.\n"
