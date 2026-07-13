@@ -14,12 +14,13 @@ from PyQt6.QtGui import QDesktopServices
 from ui.styles import CP, PANDORA_STYLESHEET
 from core.i18n import translate
 
-_FAL_SIGNUP   = "https://fal.ai/signup"
+_FAL_SIGNUP   = "https://fal.ai"
 _FAL_KEYS     = "https://fal.ai/dashboard/keys"
 _FAL_BILLING  = "https://fal.ai/dashboard/billing"
-_ANT_SIGNUP   = "https://console.anthropic.com"
-_ANT_KEYS     = "https://console.anthropic.com/settings/keys"
-_ANT_BILLING  = "https://console.anthropic.com/settings/billing"
+# console.anthropic.com redirige désormais vers platform.claude.com (vérifié 2026-07-13)
+_ANT_SIGNUP   = "https://platform.claude.com"
+_ANT_KEYS     = "https://platform.claude.com/settings/keys"
+_ANT_BILLING  = "https://platform.claude.com/settings/billing"
 
 
 # ── Helpers visuels ────────────────────────────────────────────────────────────
@@ -157,6 +158,28 @@ def _mock_browser(url_text: str, content_html: str,
     return outer
 
 
+def _shot(filename: str, fallback: QFrame) -> QWidget:
+    """VRAIE capture d'écran si assets/onboarding/<filename> existe (déposée plus
+    tard), sinon la maquette `fallback`. Chemin frozen-aware (PyInstaller)."""
+    import os, sys
+    base = getattr(sys, "_MEIPASS",
+                   os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    path = os.path.join(base, "assets", "onboarding", filename)
+    if os.path.isfile(path):
+        from PyQt6.QtGui import QPixmap
+        pix = QPixmap(path)
+        if not pix.isNull():
+            lbl = QLabel()
+            lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            lbl.setPixmap(pix.scaledToWidth(
+                640, Qt.TransformationMode.SmoothTransformation))
+            lbl.setStyleSheet(
+                f"background:#0d0f1c;border:1px solid {CP['border_bright']};"
+                f"border-radius:10px;padding:4px;")
+            return lbl
+    return fallback
+
+
 def _info_box(text: str, color: str = None) -> QFrame:
     c = color or CP["accent"]
     f = QFrame()
@@ -225,13 +248,23 @@ def _page_welcome() -> QWidget:
 
     lay.addWidget(_sep())
 
-    intro = _p(
-        "PANDORA utilise deux services d'intelligence artificielle pour fonctionner. "
-        "Ce guide va t'accompagner étape par étape pour les configurer — "
-        "même si tu n'as jamais utilisé d'API auparavant."
-    )
+    intro = _p("Deux clés, cinq minutes : c'est tout ce qu'il faut pour débloquer la génération.")
     intro.setAlignment(Qt.AlignmentFlag.AlignCenter)
     lay.addWidget(intro)
+
+    # Rassurance en un coup d'œil (retour Matthieu 2026-07-13 : ne pas faire peur)
+    chips = QHBoxLayout()
+    chips.setSpacing(8)
+    chips.addStretch()
+    for txt in ("🔑  2 clés", "⏱  ≈ 5 minutes", "🧘  aucune connaissance technique"):
+        c = QLabel(translate(txt))
+        c.setStyleSheet(
+            f"color:{CP['text_secondary']};font-size:10px;font-weight:600;"
+            f"background:{CP['bg2']};border:1px solid {CP['border']};"
+            f"border-radius:11px;padding:4px 12px;")
+        chips.addWidget(c)
+    chips.addStretch()
+    lay.addLayout(chips)
 
     # Carte fal.ai
     fal_card = QFrame()
@@ -407,87 +440,46 @@ def _page_fal() -> QWidget:
 
     lay.addWidget(_sep())
 
-    # ─ Étape 1
-    lay.addWidget(_section_title("ÉTAPE 1 — CRÉER UN COMPTE"))
-    lay.addLayout(_step_row(1, "Clique sur le bouton ci-dessous pour ouvrir fal.ai dans ton navigateur.", "#9C3FE4"))
-    lay.addLayout(_step_row(2, "Clique sur <b>Sign Up</b> (en haut à droite) et crée ton compte avec ton e-mail.", "#9C3FE4"))
+    # 3 étapes, une phrase chacune — l'essentiel sans noyer l'utilisateur
+    # (retour Matthieu 2026-07-13 : trop d'informations faisait peur).
+    lay.addWidget(_p("3 petites étapes — environ 3 minutes. Chaque bouton ouvre la bonne page dans ton navigateur."))
 
-    lay.addWidget(_mock_browser(
-        "fal.ai/signup",
-        "<b style='color:#c0c0d0'>fal.ai</b>"
-        "<span style='color:#555'>  ·  Create your account</span><br><br>"
-        "<span style='color:#888'>Email&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</span> "
-        "<span style='color:#ccc'>[ ton-email@exemple.com        ]</span><br>"
-        "<span style='color:#888'>Password&nbsp;</span> "
-        "<span style='color:#ccc'>[ ••••••••••••••               ]</span>",
-        "👆  Clique sur  [ Create account ]  puis vérifie ton e-mail",
-        "#9C3FE4"
-    ))
-
+    lay.addWidget(_section_title("1 — LE COMPTE"))
+    lay.addLayout(_step_row(1,
+        "Ouvre <b>fal.ai</b> et clique sur <b>Get started</b> (en haut à droite) — "
+        "connexion avec Google ou GitHub en 30 secondes.", "#9C3FE4"))
     btn_row = QHBoxLayout()
-    btn_row.addWidget(_link_btn("🌐  Ouvrir fal.ai/signup →", _FAL_SIGNUP, "#9C3FE4"))
+    btn_row.addWidget(_link_btn("🌐  Ouvrir fal.ai →", _FAL_SIGNUP, "#9C3FE4"))
     btn_row.addStretch()
     lay.addLayout(btn_row)
 
-    lay.addWidget(_sep())
-
-    # ─ Étape 2 — Clé API
-    lay.addWidget(_section_title("ÉTAPE 2 — CRÉER UNE CLÉ API"))
-    lay.addLayout(_step_row(1, "Une fois connecté, clique sur ton avatar (en haut à droite) → <b>Dashboard</b>.", "#9C3FE4"))
-    lay.addLayout(_step_row(2, "Dans le menu de gauche, clique sur <b>Keys</b>.", "#9C3FE4"))
-    lay.addLayout(_step_row(3, "Clique sur <b>+ Add key</b>, donne-lui le nom <b>PANDORA</b>, puis clique <b>Create</b>.", "#9C3FE4"))
-
-    lay.addWidget(_mock_browser(
+    lay.addWidget(_section_title("2 — LA CLÉ API"))
+    lay.addLayout(_step_row(2,
+        "Sur la page <b>Keys</b> : clique <b>+ Add key</b> → nomme-la <b>PANDORA</b> → "
+        "<b>Create</b>, puis copie la clé <b>fal_key_…</b> "
+        "(⚠️ affichée une seule fois).", "#9C3FE4"))
+    lay.addWidget(_shot("fal_keys.png", _mock_browser(
         "fal.ai/dashboard/keys",
         "<b style='color:#c0c0d0'>API Keys</b><br><br>"
-        "<span style='color:#888'>Aucune clé pour l'instant...</span>",
-        "👆  Clique sur  [ + Add key ]  →  Nom : PANDORA  →  [ Create ]",
+        "<span style='color:#888'>Aucune clé pour l'instant…</span>",
+        "👆  [ + Add key ]  →  Nom : PANDORA  →  [ Create ]  →  copie  fal_key_…",
         "#9C3FE4"
-    ))
-
-    lay.addLayout(_step_row(4,
-        "La clé générée ressemble à : <b>fal_key_xxxxxxxxxxxxxxxx</b><br>"
-        "⚠️  Copie-la maintenant — elle ne sera affichée qu'une seule fois !",
-        "#9C3FE4"
-    ))
-
-    lay.addWidget(_mock_browser(
-        "fal.ai/dashboard/keys",
-        "<b style='color:#c0c0d0'>API Keys</b><br><br>"
-        "<span style='color:#888'>PANDORA</span>",
-        "👆  Clique sur l'icône  📋  pour copier ta clé  fal_key_xxxx…",
-        "#9C3FE4"
-    ))
-
+    )))
     btn_row2 = QHBoxLayout()
-    btn_row2.addWidget(_link_btn("🔑  Ouvrir fal.ai/dashboard/keys →", _FAL_KEYS, "#9C3FE4"))
+    btn_row2.addWidget(_link_btn("🔑  Ouvrir la page Keys →", _FAL_KEYS, "#9C3FE4"))
     btn_row2.addStretch()
     lay.addLayout(btn_row2)
 
-    lay.addWidget(_sep())
-
-    # ─ Étape 3 — Crédits
-    lay.addWidget(_section_title("ÉTAPE 3 — AJOUTER DES CRÉDITS"))
-    lay.addLayout(_step_row(1, "Dans le menu de gauche, clique sur <b>Billing</b>.", "#9C3FE4"))
-    lay.addLayout(_step_row(2, "Clique sur <b>Add credits</b> et ajoute <b>au minimum $10</b> pour bien démarrer.", "#9C3FE4"))
-
-    lay.addWidget(_mock_browser(
-        "fal.ai/dashboard/billing",
-        "<b style='color:#c0c0d0'>Billing</b><br><br>"
-        "<span style='color:#888'>Current balance :</span> "
-        "<span style='color:#9C3FE4'>$0.00</span>",
-        "👆  Clique sur  [ Add credits ]  →  Recommandé : $10 minimum",
-        "#9C3FE4"
-    ))
-
+    lay.addWidget(_section_title("3 — LES CRÉDITS"))
+    lay.addLayout(_step_row(3,
+        "Sur la page <b>Billing</b> : clique <b>Add credits</b> — <b>$10</b> suffisent "
+        "pour bien démarrer.", "#9C3FE4"))
     lay.addWidget(_info_box(
-        "💡  <b>Coût moyen :</b> environ $0.20–$0.50 par vidéo Seedance 2.0 (10 secondes). "
-        "Avec $10, tu peux générer environ 20 à 50 vidéos.",
+        "💡  <b>$10 ≈ 20 à 50 vidéos</b> Seedance 2.0 (environ $0.20–$0.50 la vidéo de 10 s).",
         "#9C3FE4"
     ))
-
     btn_row3 = QHBoxLayout()
-    btn_row3.addWidget(_link_btn("💳  Ouvrir fal.ai/dashboard/billing →", _FAL_BILLING, "#9C3FE4"))
+    btn_row3.addWidget(_link_btn("💳  Ouvrir la page Billing →", _FAL_BILLING, "#9C3FE4"))
     btn_row3.addStretch()
     lay.addLayout(btn_row3)
 
@@ -536,105 +528,57 @@ def _page_anthropic() -> QWidget:
 
     lay.addWidget(_sep())
 
-    # ─ Étape 1
-    lay.addWidget(_section_title("ÉTAPE 1 — CRÉER UN COMPTE"))
+    lay.addWidget(_p("3 petites étapes — environ 3 minutes. Chaque bouton ouvre la bonne page dans ton navigateur."))
+
+    lay.addWidget(_section_title("1 — LE COMPTE"))
     lay.addLayout(_step_row(1,
-        "Clique sur le bouton ci-dessous pour ouvrir la console Anthropic dans ton navigateur.",
+        "Ouvre <b>platform.claude.com</b> et clique sur <b>Continuer avec Google</b> "
+        "(ou avec ton adresse e-mail) — la page est en français.",
         CP["accent2"]
     ))
-    lay.addLayout(_step_row(2,
-        "Clique sur <b>Sign up</b> et crée ton compte avec ton e-mail ou ton compte Google.",
+    lay.addWidget(_shot("claude_login.png", _mock_browser(
+        "platform.claude.com",
+        "<b style='color:#c0c0d0'>Claude Platform</b><br><br>"
+        "<span style='color:#888'>Développer sur la plateforme Claude</span>",
+        "👆  [ Continuer avec Google ]  ou  [ Continuer avec l'adresse e-mail ]",
         CP["accent2"]
-    ))
-
-    lay.addWidget(_mock_browser(
-        "console.anthropic.com",
-        "<b style='color:#c0c0d0'>Anthropic Console</b><br><br>"
-        "<span style='color:#888'>Welcome to Claude</span>",
-        "👆  Clique sur  [ Sign up ]  ou  [ Continue with Google ]",
-        CP["accent2"]
-    ))
-
+    )))
     btn_row = QHBoxLayout()
-    btn_row.addWidget(_link_btn("🌐  Ouvrir console.anthropic.com →", _ANT_SIGNUP, CP["accent2"]))
+    btn_row.addWidget(_link_btn("🌐  Ouvrir platform.claude.com →", _ANT_SIGNUP, CP["accent2"]))
     btn_row.addStretch()
     lay.addLayout(btn_row)
 
-    lay.addWidget(_sep())
-
-    # ─ Étape 2 — Clé API
-    lay.addWidget(_section_title("ÉTAPE 2 — CRÉER UNE CLÉ API"))
-    lay.addLayout(_step_row(1,
-        "Une fois connecté, clique sur <b>Settings</b> dans le menu de gauche.",
-        CP["accent2"]
-    ))
+    lay.addWidget(_section_title("2 — LA CLÉ API"))
     lay.addLayout(_step_row(2,
-        "Dans Settings, clique sur <b>API Keys</b>.",
+        "Sur la page <b>API Keys</b> : clique <b>Create Key</b> → nomme-la <b>PANDORA</b> → "
+        "<b>Create Key</b>, puis copie la clé <b>sk-ant-…</b> (⚠️ affichée une seule fois).",
         CP["accent2"]
     ))
-    lay.addLayout(_step_row(3,
-        "Clique sur <b>Create Key</b>, donne-lui le nom <b>PANDORA</b>, puis clique <b>Create Key</b>.",
-        CP["accent2"]
-    ))
-
-    lay.addWidget(_mock_browser(
-        "console.anthropic.com/settings/keys",
+    lay.addWidget(_shot("claude_keys.png", _mock_browser(
+        "platform.claude.com/settings/keys",
         "<b style='color:#c0c0d0'>Settings  ›  API Keys</b><br><br>"
         "<span style='color:#888'>No API keys yet.</span>",
-        "👆  Clique sur  [ Create Key ]  →  Nom : PANDORA  →  [ Create Key ]",
+        "👆  [ Create Key ]  →  Nom : PANDORA  →  [ Create Key ]  →  copie  sk-ant-…",
         CP["accent2"]
-    ))
-
-    lay.addLayout(_step_row(4,
-        "La clé générée ressemble à : <b>sk-ant-api03-xxxxxxxxxxxxxxxx</b><br>"
-        "⚠️  Copie-la maintenant — elle ne sera affichée qu'une seule fois !",
-        CP["accent2"]
-    ))
-
-    lay.addWidget(_mock_browser(
-        "console.anthropic.com/settings/keys",
-        "<b style='color:#c0c0d0'>API Keys</b><br><br>"
-        "<span style='color:#888'>PANDORA  ·  Créée maintenant</span>",
-        "👆  Clique sur l'icône  📋  pour copier ta clé  sk-ant-api03-xxxx…",
-        CP["accent2"]
-    ))
-
+    )))
     btn_row2 = QHBoxLayout()
-    btn_row2.addWidget(_link_btn("🔑  Ouvrir API Keys →", _ANT_KEYS, CP["accent2"]))
+    btn_row2.addWidget(_link_btn("🔑  Ouvrir la page API Keys →", _ANT_KEYS, CP["accent2"]))
     btn_row2.addStretch()
     lay.addLayout(btn_row2)
 
-    lay.addWidget(_sep())
-
-    # ─ Étape 3 — Crédits
-    lay.addWidget(_section_title("ÉTAPE 3 — AJOUTER DES CRÉDITS"))
-    lay.addLayout(_step_row(1,
-        "Dans Settings, clique sur <b>Billing</b>.",
+    lay.addWidget(_section_title("3 — LES CRÉDITS"))
+    lay.addLayout(_step_row(3,
+        "Sur la page <b>Billing</b> : clique <b>Add to credit balance</b> — <b>$5</b> "
+        "suffisent largement pour commencer.",
         CP["accent2"]
     ))
-    lay.addLayout(_step_row(2,
-        "Clique sur <b>Add to credit balance</b> et ajoute <b>au minimum $5</b>.",
-        CP["accent2"]
-    ))
-
-    lay.addWidget(_mock_browser(
-        "console.anthropic.com/settings/billing",
-        "<b style='color:#c0c0d0'>Billing</b><br><br>"
-        "<span style='color:#888'>Credit balance :</span> "
-        "<span style='color:#7c3aed'>$0.00</span>",
-        "👆  Clique sur  [ Add to credit balance ]  →  Recommandé : $5 minimum",
-        CP["accent2"]
-    ))
-
     lay.addWidget(_info_box(
-        "💡  <b>Coût moyen :</b> environ $0.01–$0.05 par opération Claude "
-        "(formatage, génération storyboard, extraction d'éléments). "
-        "Avec $5, tu as des centaines d'opérations disponibles.",
+        "💡  <b>$5 = des centaines d'opérations</b> Claude (scénario, storyboard, "
+        "extraction — environ $0.01–$0.05 l'opération).",
         CP["accent2"]
     ))
-
     btn_row3 = QHBoxLayout()
-    btn_row3.addWidget(_link_btn("💳  Ouvrir Billing →", _ANT_BILLING, CP["accent2"]))
+    btn_row3.addWidget(_link_btn("💳  Ouvrir la page Billing →", _ANT_BILLING, CP["accent2"]))
     btn_row3.addStretch()
     lay.addLayout(btn_row3)
 

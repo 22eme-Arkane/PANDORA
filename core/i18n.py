@@ -2404,6 +2404,45 @@ _FR_TO_EN: dict[str, str] = {
         "▸ Output folder: local directory where generated clips are saved.",
 
     # ── Onboarding / Guide de démarrage ──────────────────────────────────────
+    # (Refonte 2026-07-13 : 3 étapes par service, chips de rassurance, vraies
+    #  captures via _shot quand assets/onboarding/*.png existent.)
+    "Deux clés, cinq minutes : c'est tout ce qu'il faut pour débloquer la génération.":
+        "Two keys, five minutes: that's all it takes to unlock generation.",
+    "🔑  2 clés":                                "🔑  2 keys",
+    "⏱  ≈ 5 minutes":                           "⏱  ≈ 5 minutes",
+    "🧘  aucune connaissance technique":         "🧘  no technical knowledge",
+    "3 petites étapes — environ 3 minutes. Chaque bouton ouvre la bonne page dans ton navigateur.":
+        "3 small steps — about 3 minutes. Each button opens the right page in your browser.",
+    "1 — LE COMPTE":                             "1 — THE ACCOUNT",
+    "2 — LA CLÉ API":                            "2 — THE API KEY",
+    "3 — LES CRÉDITS":                           "3 — THE CREDITS",
+    "Ouvre <b>fal.ai</b> et clique sur <b>Get started</b> (en haut à droite) — connexion avec Google ou GitHub en 30 secondes.":
+        "Open <b>fal.ai</b> and click <b>Get started</b> (top right) — sign in with Google or GitHub in 30 seconds.",
+    "Sur la page <b>Keys</b> : clique <b>+ Add key</b> → nomme-la <b>PANDORA</b> → <b>Create</b>, puis copie la clé <b>fal_key_…</b> (⚠️ affichée une seule fois).":
+        "On the <b>Keys</b> page: click <b>+ Add key</b> → name it <b>PANDORA</b> → <b>Create</b>, then copy the <b>fal_key_…</b> key (⚠️ shown only once).",
+    "Sur la page <b>Billing</b> : clique <b>Add credits</b> — <b>$10</b> suffisent pour bien démarrer.":
+        "On the <b>Billing</b> page: click <b>Add credits</b> — <b>$10</b> is plenty to get started.",
+    "💡  <b>$10 ≈ 20 à 50 vidéos</b> Seedance 2.0 (environ $0.20–$0.50 la vidéo de 10 s).":
+        "💡  <b>$10 ≈ 20 to 50 videos</b> with Seedance 2.0 (about $0.20–$0.50 per 10-second video).",
+    "🌐  Ouvrir fal.ai →":                       "🌐  Open fal.ai →",
+    "🔑  Ouvrir la page Keys →":                 "🔑  Open the Keys page →",
+    "💳  Ouvrir la page Billing →":              "💳  Open the Billing page →",
+    "👆  [ + Add key ]  →  Nom : PANDORA  →  [ Create ]  →  copie  fal_key_…":
+        "👆  [ + Add key ]  →  Name: PANDORA  →  [ Create ]  →  copy  fal_key_…",
+    "Ouvre <b>platform.claude.com</b> et clique sur <b>Continuer avec Google</b> (ou avec ton adresse e-mail) — la page est en français.":
+        "Open <b>platform.claude.com</b> and click <b>Continue with Google</b> (or with your email address).",
+    "Sur la page <b>API Keys</b> : clique <b>Create Key</b> → nomme-la <b>PANDORA</b> → <b>Create Key</b>, puis copie la clé <b>sk-ant-…</b> (⚠️ affichée une seule fois).":
+        "On the <b>API Keys</b> page: click <b>Create Key</b> → name it <b>PANDORA</b> → <b>Create Key</b>, then copy the <b>sk-ant-…</b> key (⚠️ shown only once).",
+    "Sur la page <b>Billing</b> : clique <b>Add to credit balance</b> — <b>$5</b> suffisent largement pour commencer.":
+        "On the <b>Billing</b> page: click <b>Add to credit balance</b> — <b>$5</b> is more than enough to start.",
+    "💡  <b>$5 = des centaines d'opérations</b> Claude (scénario, storyboard, extraction — environ $0.01–$0.05 l'opération).":
+        "💡  <b>$5 = hundreds of Claude operations</b> (screenplay, storyboard, extraction — about $0.01–$0.05 each).",
+    "🌐  Ouvrir platform.claude.com →":          "🌐  Open platform.claude.com →",
+    "🔑  Ouvrir la page API Keys →":             "🔑  Open the API Keys page →",
+    "👆  [ Continuer avec Google ]  ou  [ Continuer avec l'adresse e-mail ]":
+        "👆  [ Continue with Google ]  or  [ Continue with email ]",
+    "👆  [ Create Key ]  →  Nom : PANDORA  →  [ Create Key ]  →  copie  sk-ant-…":
+        "👆  [ Create Key ]  →  Name: PANDORA  →  [ Create Key ]  →  copy  sk-ant-…",
     "Guide de démarrage - PANDORA":              "Getting Started - PANDORA",
     "Passer":                                    "Skip",
     "Guide de configuration des services IA":   "AI Services Configuration Guide",
