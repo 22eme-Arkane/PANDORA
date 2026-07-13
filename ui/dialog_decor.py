@@ -378,11 +378,12 @@ class DecorDialog(QDialog):
         _m_lbl.setFixedWidth(60)
         _m_row.addWidget(_m_lbl)
         self._model_combo = QComboBox()
-        self._model_combo.addItem("Nano Banana 2  —  rapide  ·  $0.08", "nb2")
-        self._model_combo.addItem("Nano Banana Pro  —  qualité  ·  $0.15", "nb_pro")
-        from core.config import load_config as _lc_m
-        if _lc_m().get("image_model", "nb2") == "nb_pro":
-            self._model_combo.setCurrentIndex(1)
+        from core.config import IMAGE_MODEL_LABELS, load_config as _lc_m
+        for _mk, _mlbl in IMAGE_MODEL_LABELS.items():
+            self._model_combo.addItem(_mlbl, _mk)
+        _mi = self._model_combo.findData(_lc_m().get("image_model", "nb2"))
+        if _mi >= 0:
+            self._model_combo.setCurrentIndex(_mi)
         self._model_combo.setFixedHeight(30)
         self._model_combo.setStyleSheet(
             f"QComboBox{{background:{CP['bg3']};border:1px solid {CP['border']};"

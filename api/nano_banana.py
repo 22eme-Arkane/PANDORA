@@ -399,21 +399,56 @@ def _apply_lang_to_system(system: str, lang: str) -> str:
     return result
 
 
+def _ar_to_image_size(aspect_ratio: str) -> str:
+    """Mappe un aspect_ratio PANDORA vers l'enum `image_size` de fal.ai (GPT Image 2,
+    FLUX.2 pro, Seedream 4.5, Recraft utilisent image_size, pas aspect_ratio)."""
+    return {
+        "1:1":  "square_hd",
+        "2:3":  "portrait_4_3",  "3:4": "portrait_4_3",
+        "9:16": "portrait_16_9",
+        "4:3":  "landscape_4_3",
+        "16:9": "landscape_16_9",
+    }.get(aspect_ratio, "square_hd")
+
+
 def _build_image_args(prompt: str, aspect_ratio: str = "1:1",
                       resolution: str = "1K", cfg: dict | None = None,
                       num_images: int = 1) -> tuple[str, dict]:
-    """Construit l'endpoint et les arguments API NB2/NB-Pro. Retourne (endpoint_id, args_dict)."""
+    """Construit (endpoint_id, args_dict) selon le modèle d'image sélectionné.
+
+    Nano Banana 2 / Pro : couple aspect_ratio + resolution. Les autres modèles
+    (GPT Image 2, FLUX.2 pro, Seedream 4.5, Recraft) attendent `image_size` (enum) →
+    on traduit l'aspect_ratio et on n'envoie QUE les paramètres reconnus par chacun."""
     if cfg is None:
         cfg = load_config()
+    from core.config import IMAGE_SIZE_MODELS
+    model    = cfg.get("image_model", "nb2")
     endpoint = get_image_endpoint(cfg)
-    args = {
-        "prompt":           prompt,
-        "num_images":       max(1, num_images),
-        "aspect_ratio":     aspect_ratio,
-        "resolution":       resolution,
-        "output_format":    "png",
-        "safety_tolerance": "6",
-    }
+
+    if model not in IMAGE_SIZE_MODELS:
+        # Nano Banana 2 / Pro (comportement historique).
+        return endpoint, {
+            "prompt":           prompt,
+            "num_images":       max(1, num_images),
+            "aspect_ratio":     aspect_ratio,
+            "resolution":       resolution,
+            "output_format":    "png",
+            "safety_tolerance": "6",
+        }
+
+    # Modèles à `image_size` — on n'envoie que les params reconnus (évite les erreurs
+    # « unknown field »). num_images seulement là où c'est supporté (GPT Image 2 / Seedream).
+    args: dict = {"prompt": prompt, "image_size": _ar_to_image_size(aspect_ratio)}
+    if model == "gpt2":
+        args["num_images"]    = max(1, num_images)
+        args["quality"]       = "high"
+        args["output_format"] = "png"
+    elif model == "flux2":
+        args["output_format"]    = "png"
+        args["safety_tolerance"] = "5"
+    elif model == "seedream45":
+        args["num_images"] = max(1, num_images)
+    # recraft : {prompt, image_size} seulement (pas d'output_format ni num_images).
     return endpoint, args
 
 
@@ -1617,9 +1652,9 @@ class GenerateDecorSheetWorker(QThread):
 
             cfg   = load_config()
             price = get_image_price(cfg)
-            _decor_model    = self._model_key or cfg.get("image_model", "nb2")
-            from core.config import IMAGE_MODEL_ENDPOINTS
-            _decor_endpoint = IMAGE_MODEL_ENDPOINTS.get(_decor_model, "fal-ai/nano-banana-2")
+            # Respecte l'éventuel modèle imposé au worker (_model_key) → args par-modèle
+            # via le helper central (image_size pour GPT/Flux2/Seedream/Recraft).
+            _decor_cfg = {**cfg, "image_model": (self._model_key or cfg.get("image_model", "nb2"))}
             dest = _project_images_dir("decors")
             safe = "".join(c for c in self._name if c.isalnum() or c in " -_").strip() or "decor"
 
@@ -1628,17 +1663,9 @@ class GenerateDecorSheetWorker(QThread):
                 pct_start = 10 + i * (65 // self._num_images)
                 self.progress.emit(pct_start,
                                    f"Sheet {i+1}/{self._num_images}…  ({price})")
-                result = fal_client.subscribe(
-                    _decor_endpoint,
-                    arguments={
-                        "prompt":           full_prompt,
-                        "num_images":       1,
-                        "aspect_ratio":     "1:1",
-                        "resolution":       "1K",
-                        "output_format":    "png",
-                        "safety_tolerance": "6",
-                    },
-                )
+                _decor_endpoint, _decor_args = _build_image_args(
+                    full_prompt, "1:1", "1K", _decor_cfg, 1)
+                result = fal_client.subscribe(_decor_endpoint, arguments=_decor_args)
                 url  = _extract_image_url(result)
                 self.progress.emit(pct_start + 20, f"Téléchargement sheet {i+1}…")
                 data = requests.get(url, timeout=120).content

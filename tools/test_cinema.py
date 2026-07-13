@@ -3513,6 +3513,34 @@ def references_inspiration_par_plan():
 
 
 @test
+def moteurs_image_multi():
+    """Moteurs d'image : GPT Image 2 / FLUX.2 pro / Seedream 4.5 / Recraft ajoutés au
+    registre + câblés (params image_size) ; combos casting/décor peuplés depuis le
+    registre (Matthieu 2026-07-13)."""
+    from core.config import IMAGE_MODEL_ENDPOINTS, IMAGE_MODEL_LABELS, IMAGE_SIZE_MODELS
+    from api.nano_banana import _build_image_args
+    for k in ("gpt2", "flux2", "seedream45", "recraft"):
+        assert k in IMAGE_MODEL_ENDPOINTS and k in IMAGE_MODEL_LABELS, f"{k} au registre"
+        assert k in IMAGE_SIZE_MODELS, f"{k} utilise image_size"
+    assert IMAGE_MODEL_ENDPOINTS["gpt2"] == "openai/gpt-image-2"
+    assert IMAGE_MODEL_ENDPOINTS["flux2"] == "fal-ai/flux-2-pro"
+    # Args par modèle : Nano Banana garde aspect_ratio ; les nouveaux passent en image_size.
+    _, a_nb = _build_image_args("p", "2:3", "1K", {"image_model": "nb2"}, 1)
+    assert "aspect_ratio" in a_nb and "image_size" not in a_nb, "NB : aspect_ratio conservé"
+    _, a_gpt = _build_image_args("p", "16:9", "1K", {"image_model": "gpt2"}, 1)
+    assert a_gpt.get("image_size") == "landscape_16_9" and "aspect_ratio" not in a_gpt, \
+        "GPT Image 2 : aspect_ratio → image_size"
+    _, a_rc = _build_image_args("p", "1:1", "1K", {"image_model": "recraft"}, 1)
+    assert set(a_rc) == {"prompt", "image_size"}, "recraft : params minimaux (pas d'unknown field)"
+    # Combos peuplés depuis le registre → les 6 modèles apparaissent.
+    from ui.dialog_character import CharacterDialog
+    dlg = CharacterDialog(None)
+    keys = {dlg._model_combo.itemData(i) for i in range(dlg._model_combo.count())}
+    assert {"nb2", "nb_pro", "gpt2", "flux2", "seedream45", "recraft"} <= keys, \
+        "combo casting peuplé depuis le registre (6 modèles)"
+
+
+@test
 def sheet_casting_visage_gros_plan_seulement():
     """Sheet casting : SEUL le gros plan (bust) porte le visage ; les vues de corps
     (face/3-4/profil/dos) sont recadrées SANS visage (tête hors champ) → Seedance ne

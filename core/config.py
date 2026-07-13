@@ -42,19 +42,35 @@ _DEFAULTS = {
 }
 
 # ── Mapping modèle image → endpoint fal.ai ────────────────────────────────────
+# Modèles à paramètre `image_size` (enum square_hd/portrait_4_3/…) plutôt que le
+# couple `aspect_ratio`/`resolution` des Nano Banana → câblage dans nano_banana._build_image_args.
+IMAGE_SIZE_MODELS = {"gpt2", "flux2", "seedream45", "recraft"}
+
 IMAGE_MODEL_ENDPOINTS = {
-    "nb2":    "fal-ai/nano-banana-2",
-    "nb_pro": "fal-ai/nano-banana-pro",
+    "nb2":        "fal-ai/nano-banana-2",
+    "nb_pro":     "fal-ai/nano-banana-pro",
+    "gpt2":       "openai/gpt-image-2",
+    "flux2":      "fal-ai/flux-2-pro",
+    "seedream45": "fal-ai/bytedance/seedream/v4.5/text-to-image",
+    "recraft":    "fal-ai/recraft/v4.1/text-to-image",
 }
 
 IMAGE_MODEL_LABELS = {
-    "nb2":    "Nano Banana 2  —  Gemini 3.1 Flash  ·  $0.08/img",
-    "nb_pro": "Nano Banana Pro  —  Gemini 3 Pro  ·  $0.15/img",
+    "nb2":        "Nano Banana 2  —  Gemini 3.1 Flash  ·  $0.08/img",
+    "nb_pro":     "Nano Banana Pro  —  Gemini 3 Pro  ·  $0.15/img",
+    "gpt2":       "GPT Image 2  —  OpenAI · suivi de prompt + texte  ·  ~$0.04/img",
+    "flux2":      "FLUX.2 [pro]  —  photoréalisme  ·  ~$0.03/img",
+    "seedream45": "Seedream 4.5  —  ByteDance · photoréalisme  ·  $0.04/img",
+    "recraft":    "Recraft V4.1  —  texte / typo / logos  ·  $0.04/img",
 }
 
 IMAGE_MODEL_PRICES = {
-    "nb2":    "$0.08",
-    "nb_pro": "$0.15",
+    "nb2":        "$0.08",
+    "nb_pro":     "$0.15",
+    "gpt2":       "$0.04",
+    "flux2":      "$0.03",
+    "seedream45": "$0.04",
+    "recraft":    "$0.04",
 }
 
 
