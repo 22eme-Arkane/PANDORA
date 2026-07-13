@@ -897,6 +897,21 @@ class GenerateStoryboardWorker(QThread):
         self._strict_no_merge = strict_no_merge
 
     def run(self):
+        # Source DÉJÀ découpée en plans (Mise en page PANDORA co-écrite, « PLAN n — … »)
+        # → conversion DÉTERMINISTE : 1 plan = 1 plan, prompts co-écrits REPRIS tels
+        # quels. Aucun appel IA → aucune reformulation ni troncature (règle Live
+        # 2026-07-09, portée au Cinéma le 2026-07-13). Le scénario BRUT (pas de
+        # « PLAN n ») garde le découpage IA classique ci-dessous.
+        try:
+            from core.decoupage_layout import (is_structured_layout,
+                                               layout_segments_to_cinema_shots)
+            if is_structured_layout(self._text):
+                shots = layout_segments_to_cinema_shots(self._text)
+                if shots:
+                    self.finished.emit(shots)
+                    return
+        except Exception:
+            pass   # repli : découpage IA classique ci-dessous
         from core.ai_provider import (complete as ai_complete, key_error,
                                       ai_name_for_task)
         # Nom du moteur réellement choisi pour le découpage (Paramètres → par tâche)

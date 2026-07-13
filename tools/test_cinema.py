@@ -426,6 +426,54 @@ def prompts_storyboard_cinema():
 
 
 @test
+def decoupage_cinema_deterministe_depuis_mise_en_page():
+    """Règle portée du Live (2026-07-13) : une Mise en page PANDORA structurée
+    (« PLAN n — … ») se convertit en plans storyboard SANS appel IA — prompts
+    co-écrits repris TELS QUELS, zéro perte, zéro reformulation. L'avertissement de
+    réécriture n'apparaît QUE si le chemin repasse réellement par l'IA."""
+    import core.decoupage_layout as dl
+    from api.screenplay import GenerateStoryboardWorker
+    layout = "\n".join(
+        ["=== ACTE 1 — Ouverture ==="] +
+        sum(([f"PLAN {n} — Titre {n}",
+              f"Durée : {4 + n % 9}s · Valeur de plan : Plan moyen · Mouvement : Panoramique",
+              f'PROMPT VIDÉO (français) : "vidéo {n} co-écrite"',
+              f'PROMPT SON (sound design / SFX, français) : "son {n}"']
+             for n in range(1, 24)), []))
+    shots = dl.layout_segments_to_cinema_shots(layout)
+    assert len(shots) == 23, f"convertisseur : {len(shots)}/23 (perte)"
+    s0 = shots[0]
+    assert s0["scene_title"] == "Titre 1" and s0["seedance_prompt"] == "vidéo 1 co-écrite" \
+        and s0["sound_prompt"] == "son 1" and s0["shot_size"] == "Plan moyen" \
+        and s0["camera_movement"] == "Panoramique" and s0["seq_num"] == 1, \
+        "champs du plan non repris de la mise en page"
+    assert s0["character_ids"] == [] and s0["decor_id"] == "" and s0["merged"] is False, \
+        "défauts sûrs attendus pour les champs non couverts"
+    # Worker : source structurée → plans SANS appel IA (aucune clé requise, branche
+    # AVANT key_error — c'est ce qui prouve le zéro-coût).
+    w = GenerateStoryboardWorker(layout); cap = {}
+    w.finished.connect(lambda s: cap.__setitem__("s", s))
+    w.failed.connect(lambda e: cap.__setitem__("f", e))
+    w.run()
+    assert "f" not in cap and len(cap.get("s", [])) == 23, \
+        f"worker : mise en page 23 plans → 23 plans sans IA (obtenu {len(cap.get('s', []))})"
+    assert cap["s"][4]["seedance_prompt"] == "vidéo 5 co-écrite", "prompt co-écrit reformulé !"
+    # Durée : plafond Seedance 15 s conservé même sur une mise en page trop longue.
+    _long = dl.layout_segments_to_cinema_shots(
+        'PLAN 1 — X\nDurée : 40s · Valeur de plan : Large\nPROMPT VIDÉO (français) : "v"')
+    assert _long and _long[0]["duration"] == 15.0, "durée non plafonnée à 15 s"
+    # Les 2 pages n'avertissent QUE si la mise en page n'est PAS parsable (chemin IA).
+    from ui.page_scenario import PageScenario as _PS
+    _src = inspect.getsource(_PS._on_storyboard)
+    assert "is_structured_layout" in _src and "confirm_prompt_rewrite" in _src, \
+        "page Scénario : avertissement non conditionné au chemin IA"
+    from ui.page_storyboard import PageStoryboard as _PSB
+    _oa = inspect.getsource(_PSB._on_analyze)
+    assert "is_structured_layout" in _oa and "confirm_prompt_rewrite" in _oa, \
+        "page Storyboard : avertissement non conditionné au chemin IA"
+
+
+@test
 def colonne_langues_dialogues():
     """Colonne « Langues » (storyboard Cinéma) : choix par plan, défaut anglais ;
     dialogues traduits À L'ENVOI uniquement (pas dans le prompt affiché)."""

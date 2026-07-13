@@ -1998,12 +1998,16 @@ class PageScenario(QWidget):
             self._ai_progress_lbl.setText("Écris d'abord un scénario à découper.")
             return
         # Source AUTOMATIQUE (règle 2026-07-09) : Mise en page PANDORA si elle existe,
-        # sinon le scénario. En Cinéma la génération passe par l'IA (qui REFORMULE les
-        # prompts) → si une mise en page co-écrite existe, AVERTIR avant (pas de surprise).
+        # sinon le scénario. Mise en page STRUCTURÉE (« PLAN n — … ») → conversion
+        # DÉTERMINISTE dans le worker (prompts co-écrits repris tels quels, zéro IA) :
+        # aucun avertissement. On n'avertit QUE si la mise en page n'est pas parsable
+        # et repasserait donc par l'IA qui REFORMULE (règle portée du Live 2026-07-13).
         if _lay:
-            from ui.decoupage_dialogs import confirm_prompt_rewrite
-            if not confirm_prompt_rewrite(self):
-                return
+            from core.decoupage_layout import is_structured_layout
+            if not is_structured_layout(_lay):
+                from ui.decoupage_dialogs import confirm_prompt_rewrite
+                if not confirm_prompt_rewrite(self):
+                    return
         import core.storyboard as sb_api
         existing = sb_api.list_shots(sb_api.DEFAULT_VERSION_ID)
         if existing:

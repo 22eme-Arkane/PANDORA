@@ -146,3 +146,36 @@ def parse_layout_segments(layout_text: str) -> list:
         if not seg["prompt"]:
             seg["prompt"] = seg["action"]
     return segs
+
+
+def layout_segments_to_cinema_shots(layout_text: str) -> list:
+    """Segments de la Mise en page PANDORA → plans STORYBOARD Cinéma (mêmes clés que
+    le découpage IA de api.screenplay.GenerateStoryboardWorker). Prompts co-écrits
+    repris TELS QUELS — c'est tout l'intérêt du chemin déterministe. Les champs
+    caméra que la mise en page ne porte pas (focale, décor, acteurs, axe, heure…)
+    restent vides : ils se complètent dans le Storyboard et les pages Mise en scène."""
+    shots = []
+    for i, seg in enumerate(parse_layout_segments(layout_text), 1):
+        if not isinstance(seg, dict):
+            continue
+        try:
+            _dur = min(float(seg.get("duration") or 8.0), 15.0)   # plafond Seedance
+        except (TypeError, ValueError):
+            _dur = 8.0
+        shots.append({
+            "number":          i,
+            "scene_title":     seg.get("action", ""),
+            "shot_size":       seg.get("shot_size", ""),
+            "camera_movement": seg.get("camera_movement", ""),
+            "duration":        _dur,
+            "seedance_prompt": seg.get("prompt", ""),
+            "sound_prompt":    seg.get("sound_prompt", ""),
+            "seq_num":         seg.get("act", 1),
+            "seq_name":        seg.get("act_name", ""),
+            "character_ids":   [],
+            "accessory_ids":   [],
+            "decor_id":        "",
+            "merged":          False,
+            "merged_note":     "",
+        })
+    return shots
