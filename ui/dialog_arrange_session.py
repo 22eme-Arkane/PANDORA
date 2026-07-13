@@ -138,6 +138,7 @@ class ArrangeSessionDialog(QDialog):
         original_screenplay: str,
         analysis_result: str,
         intensity: int = 5,
+        refs_analysis: str = "",
     ):
         super().__init__(parent)
         self.setWindowTitle("☁  Studio de Création — Co-écriture avec Claude")
@@ -148,6 +149,9 @@ class ArrangeSessionDialog(QDialog):
         self._original    = original_screenplay
         self._analysis    = analysis_result
         self._intensity   = intensity
+        # Direction artistique (analyse des références visuelles) — injectée dans
+        # chaque tour de co-écriture si présente (parité Live 2026-07-13).
+        self._refs_analysis = refs_analysis or ""
         self._history: list[dict] = []
         self._worker      = None
         self._screenplay  = ""          # version remaniée courante
@@ -690,6 +694,7 @@ class ArrangeSessionDialog(QDialog):
             user_message=user_message,
             intensity=self._intensity,
             ref_images=ref_images or [],
+            refs_analysis=self._refs_analysis,
             surgical=surgical,
         )
         self._worker.message_ready.connect(self._on_message_ready)

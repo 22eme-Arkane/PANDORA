@@ -718,6 +718,13 @@ class PageScenario(QWidget):
         )
         l_refs.addWidget(self._btn_analyze_refs)
 
+        self._btn_load_analysis = _ai_btn(
+            "📂", "Charger une analyse",
+            "Recharge une analyse sauvegardée — réutilisable entre projets",
+            self._on_load_saved_analysis,
+        )
+        l_refs.addWidget(self._btn_load_analysis)
+
         tog_refs = _make_toggle("🎨  Références visuelles", c_refs, expanded=False)
 
         self._refresh_refs_display()
@@ -1105,6 +1112,18 @@ class PageScenario(QWidget):
             self._last_result_kind = "arrange"
         self._refresh_version_combo()
         self._go_editor()
+        # Références visuelles : restaurées avec le projet (après _go_editor,
+        # qui remet _last_result_kind/_btn_reopen_window à zéro) — parité Live.
+        _ri = sc.get("ref_images", [])
+        self._ref_images = ([p for p in _ri if isinstance(p, str) and os.path.isfile(p)]
+                            if isinstance(_ri, list) else [])
+        self._refresh_refs_display()
+        self._last_ref_analysis = sc.get("ref_analysis", "") or ""
+        self._ref_enriched = bool(sc.get("ref_enriched", False)) and bool(self._last_ref_analysis)
+        if self._last_ref_analysis:
+            self._last_result_kind = "refs"
+            self._btn_reopen_window.setVisible(True)
+            self._ai_progress_lbl.setText(translate("Analyse des références disponible ✓"))
 
     def _import_scenario(self):
         path, _ = QFileDialog.getOpenFileName(
@@ -1681,6 +1700,9 @@ class PageScenario(QWidget):
             "layout_content":    self._layout_view.toPlainText() if hasattr(self, "_layout_view") else "",
             "music_tracks":      self._music_tracks,
             "music_mode":        self._music_mode,
+            "ref_images":        [p for p in self._ref_images if os.path.isfile(p)],
+            "ref_analysis":      self._last_ref_analysis,
+            "ref_enriched":      self._ref_enriched,
         })
         self._current = scenario_api.save_scenario(data)
         if not silent:
@@ -1830,6 +1852,14 @@ class PageScenario(QWidget):
             )
 
     def _on_analyze_refs(self):
+        # Une analyse existe déjà → on la rouvre (avec chat + bouton Relancer),
+        # plutôt que de relancer une requête par image sans prévenir.
+        if self._last_ref_analysis:
+            self._open_refs_window(self._last_ref_analysis)
+            return
+        self._start_refs_analysis()
+
+    def _start_refs_analysis(self):
         if not self._ref_images:
             self._ai_progress_lbl.setText("Ajoute d'abord des images dans la section Références visuelles.")
             return
@@ -1848,6 +1878,47 @@ class PageScenario(QWidget):
     def _on_refs_failed(self, msg: str):
         self._set_ai_busy(False)
         self._ai_progress_lbl.setText(f"Erreur : {msg}")
+
+    def _on_load_saved_analysis(self):
+        """Menu des analyses sauvegardées (bibliothèque globale, entre projets)."""
+        from PyQt6.QtWidgets import QMenu
+        from core import ref_library
+        entries = ref_library.list_analyses()
+        menu = QMenu(self)
+        menu.setStyleSheet(
+            f"QMenu{{background:{CP['bg2']};color:{CP['text_primary']};"
+            f"border:1px solid {CP['border_bright']};border-radius:6px;padding:4px;}}"
+            f"QMenu::item{{padding:6px 14px;border-radius:4px;}}"
+            f"QMenu::item:selected{{background:{CP['bg4']};}}"
+        )
+        if not entries:
+            act = menu.addAction(translate("Aucune analyse sauvegardée"))
+            act.setEnabled(False)
+        for e in entries:
+            lbl = (f"{e.get('name', '?')}  —  {e.get('mode', 'cinema')} · "
+                   f"{len(e.get('images', []))} img · {e.get('date', '')}")
+            act = menu.addAction(lbl)
+            act.triggered.connect(lambda checked=False, ee=e: self._apply_saved_analysis(ee))
+        btn = self._btn_load_analysis
+        menu.exec(btn.mapToGlobal(btn.rect().bottomLeft()))
+
+    def _apply_saved_analysis(self, e: dict):
+        """Recharge une analyse : état + persistance projet + fenêtre (avec chat)."""
+        txt = e.get("analysis", "")
+        if not txt:
+            return
+        self._last_ref_analysis = txt
+        self._last_result_kind = "refs"
+        self._btn_reopen_window.setVisible(True)
+        imgs = [p for p in e.get("images", [])
+                if isinstance(p, str) and os.path.isfile(p)]
+        if imgs:
+            self._ref_images = imgs
+            self._refresh_refs_display()
+        if self._current is not None:
+            self._save(silent=True)
+        self._ai_progress_lbl.setText(f"{translate('Analyse chargée')} : {e.get('name', '')} ✓")
+        self._open_refs_window(txt)
 
     def _set_ai_busy(self, busy: bool):
         for btn in (
@@ -1977,7 +2048,9 @@ class PageScenario(QWidget):
         self._ai_progress_lbl.setText("Application des suggestions via Claude…")
         self._btn_undo_action.setVisible(False)
         intensity = self._arrange_intensity_value
-        self._worker = ApplyArrangeWorker(original, suggestions, intensity)
+        # La direction artistique (analyse des refs) nourrit l'application si présente
+        self._worker = ApplyArrangeWorker(original, suggestions, intensity,
+                                          refs_analysis=self._last_ref_analysis)
         self._worker.finished.connect(self._on_modify_done)
         self._worker.failed.connect(self._on_ai_fail)
         self._worker.start()
@@ -2599,7 +2672,8 @@ class PageScenario(QWidget):
         from ui.dialog_arrange_session import ArrangeSessionDialog
         original   = self._get_text()
         intensity  = self._arrange_intensity_value
-        dlg = ArrangeSessionDialog(self, original, analysis_text, intensity)
+        dlg = ArrangeSessionDialog(self, original, analysis_text, intensity,
+                                   refs_analysis=self._last_ref_analysis)
         dlg.exec()
         if dlg.was_applied():
             final = dlg.final_screenplay()
@@ -2618,7 +2692,9 @@ class PageScenario(QWidget):
           - worker fourni  → streaming en temps réel (ouverture immédiate)
           - analysis fourni → ré-ouverture avec texte complet (bouton Rouvrir)
         """
-        from PyQt6.QtWidgets import QDialog, QVBoxLayout, QHBoxLayout, QTextEdit, QScrollArea
+        from PyQt6.QtWidgets import (QDialog, QVBoxLayout, QHBoxLayout, QTextEdit,
+                                     QScrollArea, QLineEdit, QMenu, QInputDialog)
+        from core.ai_provider import ai_name
 
         streaming = worker is not None
 
@@ -2725,6 +2801,10 @@ class PageScenario(QWidget):
         _refs_streaming_active = [streaming]
 
         def _stop_refs_worker():
+            if _chat_worker[0] is not None:
+                _chat_worker[0].quit()
+                abandon_thread(_chat_worker[0])
+                _chat_worker[0] = None
             if _refs_streaming_active[0]:
                 _refs_streaming_active[0] = False
                 if worker is not None:
@@ -2797,6 +2877,8 @@ class PageScenario(QWidget):
 
         _final_analysis = [analysis]   # analyse visuelle complète
         _enrich_worker  = [None]        # worker d'enrichissement en cours
+        _chat_worker    = [None]        # tour de dialogue DA en cours
+        _chat_msgs: list = []           # historique du dialogue [{role, content}]
 
         def _do_enrich():
             txt = _final_analysis[0]
@@ -2894,7 +2976,240 @@ class PageScenario(QWidget):
 
         btn_enrich.clicked.connect(_do_enrich)
 
+        # ── Dialogue direction artistique ─────────────────────────────────────
+        chat_view = QTextEdit()
+        chat_view.setReadOnly(True)
+        chat_view.setVisible(False)
+        chat_view.setFixedHeight(170)
+        chat_view.setStyleSheet(
+            f"QTextEdit{{background:{CP['bg3']};border:1px solid {CP['border']};"
+            f"border-radius:8px;color:{CP['text_primary']};font-size:11px;padding:12px;}}"
+        )
+        lay.addWidget(chat_view)
+
+        chat_row = QHBoxLayout()
+        chat_row.setSpacing(8)
+        chat_in = QLineEdit()
+        chat_in.setFixedHeight(34)
+        chat_in.setPlaceholderText(
+            f"{translate('Discuter de la direction artistique avec')} {ai_name()}…")
+        chat_in.setStyleSheet(
+            f"QLineEdit{{background:{CP['bg2']};border:1px solid {CP['border']};"
+            f"border-radius:7px;color:{CP['text_primary']};font-size:11px;padding:0 12px;}}"
+            f"QLineEdit:focus{{border-color:{CP['accent']};}}"
+            f"QLineEdit:disabled{{color:{CP['text_dim']};}}"
+        )
+        btn_send = QPushButton(translate("Envoyer"))
+        btn_send.setFixedHeight(34)
+        btn_send.setStyleSheet(_accent_btn_ss)
+        chat_row.addWidget(chat_in, 1)
+        chat_row.addWidget(btn_send)
+        lay.addLayout(chat_row)
+
+        def _set_chat_enabled(on: bool):
+            chat_in.setEnabled(on)
+            btn_send.setEnabled(on)
+
+        _set_chat_enabled(not streaming and bool(_final_analysis[0]))
+
+        def _append_chat(text: str):
+            cursor = chat_view.textCursor()
+            cursor.movePosition(cursor.MoveOperation.End)
+            cursor.insertText(text)
+            chat_view.setTextCursor(cursor)
+            chat_view.ensureCursorVisible()
+
+        def _send_chat():
+            q = chat_in.text().strip()
+            if not q or _chat_worker[0] is not None or not _final_analysis[0]:
+                return
+            chat_view.setVisible(True)
+            _append_chat(("\n" if _chat_msgs else "")
+                         + f"▶ {translate('Vous')} — {q}\n\n◆ {ai_name()} :\n")
+            chat_in.clear()
+            _set_chat_enabled(False)
+            _chat_msgs.append({"role": "user", "content": q})
+            from api.screenplay import RefsChatWorker
+            w = RefsChatWorker(_chat_msgs, _final_analysis[0],
+                               self._get_text() if self._current else "")
+            _chat_worker[0] = w
+
+            def _chat_done(result: str):
+                _chat_msgs.append({"role": "assistant", "content": result})
+                _append_chat("\n")
+                # ANTI-CRASH : ne jamais lâcher la dernière référence d'un QThread
+                # qui se termine encore — on le parque jusqu'à extinction réelle.
+                abandon_thread(_chat_worker[0])
+                _chat_worker[0] = None
+                _set_chat_enabled(True)
+                chat_in.setFocus()
+
+            def _chat_failed(msg: str):
+                if _chat_msgs and _chat_msgs[-1].get("role") == "user":
+                    _chat_msgs.pop()   # la question peut être renvoyée telle quelle
+                _append_chat(f"\n⚠ {msg}\n")
+                abandon_thread(_chat_worker[0])
+                _chat_worker[0] = None
+                _set_chat_enabled(True)
+
+            w.chunk.connect(_append_chat)
+            w.done.connect(_chat_done)
+            w.failed.connect(_chat_failed)
+            w.start()
+
+        btn_send.clicked.connect(_send_chat)
+        chat_in.returnPressed.connect(_send_chat)
+
+        # ── Relancer / Bibliothèque ───────────────────────────────────────────
+        btn_relaunch = QPushButton(translate("↻  Relancer l'analyse"))
+        btn_relaunch.setFixedHeight(36)
+        btn_relaunch.setStyleSheet(_ghost_btn_ss)
+        btn_relaunch.setToolTip(translate(
+            "Refait l'analyse complète des images (une requête par image)."))
+        btn_relaunch.setEnabled(not streaming and bool(self._ref_images))
+
+        def _do_relaunch():
+            n = len(self._ref_images)
+            if not n:
+                self._refs_status_lbl.setText(translate(
+                    "Aucune image dans la section Références visuelles."))
+                return
+            _q = translate("Relancer l'analyse complète ?")
+            reply = QMessageBox.question(
+                dlg, translate("Relancer l'analyse"),
+                f"{_q}\n{n} image(s) → {n} {translate('requête(s) IA')}.",
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            )
+            if reply != QMessageBox.StandardButton.Yes:
+                return
+            self._last_ref_analysis = ""
+            self._ref_enriched = False
+            dlg.accept()
+            self._start_refs_analysis()
+
+        btn_relaunch.clicked.connect(_do_relaunch)
+
+        # Nouvelle analyse : vide les images ET l'analyse pour repartir de zéro
+        # (le « Relancer » ci-dessus garde les MÊMES images).
+        btn_new = QPushButton(translate("✚  Nouvelle analyse"))
+        btn_new.setFixedHeight(36)
+        btn_new.setStyleSheet(_ghost_btn_ss)
+        btn_new.setToolTip(translate("Vide les images ET l'analyse pour repartir de zéro."))
+        btn_new.setEnabled(not streaming)
+
+        def _do_new_analysis():
+            reply = QMessageBox.question(
+                dlg, translate("Nouvelle analyse"),
+                translate("Vider les images et l'analyse pour repartir de zéro ?"),
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            )
+            if reply != QMessageBox.StandardButton.Yes:
+                return
+            self._ref_images = []
+            self._last_ref_analysis = ""
+            self._ref_enriched = False
+            self._refresh_refs_display()
+            self._schedule_autosave()
+            dlg.accept()
+
+        btn_new.clicked.connect(_do_new_analysis)
+
+        btn_save_lib = QPushButton(translate("💾  Sauvegarder"))
+        btn_save_lib.setFixedHeight(36)
+        btn_save_lib.setStyleSheet(_ghost_btn_ss)
+        btn_save_lib.setToolTip(translate(
+            "Sauvegarde cette analyse dans la bibliothèque globale\n"
+            "pour la réutiliser dans d'autres projets."))
+        btn_save_lib.setEnabled(not streaming and bool(_final_analysis[0]))
+
+        def _do_save_lib():
+            txt = _final_analysis[0]
+            if not txt:
+                return
+            default = self._title_edit.text().strip() or translate("Analyse sans titre")
+            name, ok = QInputDialog.getText(
+                dlg, translate("Sauvegarder l'analyse"),
+                translate("Nom de l'analyse :"), text=default)
+            if not ok or not name.strip():
+                return
+            from core import ref_library
+            ref_library.save_analysis(name.strip(), txt, self._ref_images, "cinema")
+            self._refs_status_lbl.setText(translate("Analyse sauvegardée dans la bibliothèque ✓"))
+
+        btn_save_lib.clicked.connect(_do_save_lib)
+
+        btn_lib = QPushButton(translate("📂  Bibliothèque"))
+        btn_lib.setFixedHeight(36)
+        btn_lib.setStyleSheet(_ghost_btn_ss)
+        btn_lib.setToolTip(translate(
+            "Charge une analyse sauvegardée — mêmes références visuelles,\n"
+            "même direction artistique, sans refaire l'analyse."))
+        btn_lib.setEnabled(not streaming)
+
+        def _load_lib_entry(e: dict):
+            txt = e.get("analysis", "")
+            if not txt:
+                return
+            _final_analysis[0] = txt
+            te.setPlainText(txt)
+            self._last_ref_analysis = txt
+            self._last_result_kind = "refs"
+            self._btn_reopen_window.setVisible(True)
+            imgs = [p for p in e.get("images", [])
+                    if isinstance(p, str) and os.path.isfile(p)]
+            if imgs:
+                self._ref_images = imgs
+                self._refresh_refs_display()
+            btn_enrich.setEnabled(True)
+            btn_enrich.setVisible(True)
+            btn_save_lib.setEnabled(True)
+            btn_relaunch.setEnabled(bool(self._ref_images))
+            _set_chat_enabled(True)
+            if self._current is not None:
+                self._save(silent=True)
+            self._refs_status_lbl.setText(
+                f"{translate('Analyse chargée')} : {e.get('name', '')} ✓")
+            self._refs_status_lbl.setStyleSheet(
+                f"color:{CP['green']};font-size:10px;font-family:'Consolas',monospace;")
+
+        def _delete_lib_entry(e: dict):
+            from core import ref_library
+            if ref_library.delete_analysis(e.get("_file", "")):
+                self._refs_status_lbl.setText(translate("Analyse supprimée de la bibliothèque."))
+
+        def _open_lib_menu():
+            from core import ref_library
+            entries = ref_library.list_analyses()
+            menu = QMenu(dlg)
+            menu.setStyleSheet(
+                f"QMenu{{background:{CP['bg2']};color:{CP['text_primary']};"
+                f"border:1px solid {CP['border_bright']};border-radius:6px;padding:4px;}}"
+                f"QMenu::item{{padding:6px 14px;border-radius:4px;}}"
+                f"QMenu::item:selected{{background:{CP['bg4']};}}"
+            )
+            if not entries:
+                act = menu.addAction(translate("Aucune analyse sauvegardée"))
+                act.setEnabled(False)
+            for e in entries:
+                lbl = (f"{e.get('name', '?')}  —  {e.get('mode', 'cinema')} · "
+                       f"{len(e.get('images', []))} img · {e.get('date', '')}")
+                act = menu.addAction(lbl)
+                act.triggered.connect(lambda checked=False, ee=e: _load_lib_entry(ee))
+            if entries:
+                menu.addSeparator()
+                sub = menu.addMenu(translate("Supprimer une analyse"))
+                for e in entries:
+                    act = sub.addAction(e.get("name", "?"))
+                    act.triggered.connect(lambda checked=False, ee=e: _delete_lib_entry(ee))
+            menu.exec(btn_lib.mapToGlobal(btn_lib.rect().bottomLeft()))
+
+        btn_lib.clicked.connect(_open_lib_menu)
+
         btn_row.addWidget(btn_close)
+        btn_row.addWidget(btn_relaunch)
+        btn_row.addWidget(btn_new)
+        btn_row.addWidget(btn_save_lib)
+        btn_row.addWidget(btn_lib)
         btn_row.addStretch()
         btn_row.addWidget(btn_enrich)
         btn_row.addWidget(btn_apply)
@@ -2925,6 +3240,13 @@ class PageScenario(QWidget):
                     f"color:{CP['text_dim']};font-size:10px;font-family:'Consolas',monospace;"
                 )
                 btn_enrich.setEnabled(True)
+                btn_relaunch.setEnabled(bool(self._ref_images))
+                btn_save_lib.setEnabled(True)
+                btn_lib.setEnabled(True)
+                _set_chat_enabled(True)
+                # Persistance immédiate : l'analyse (et les refs) survivent à la fermeture
+                if self._current is not None:
+                    self._save(silent=True)
 
             def _on_failed(msg: str):
                 _refs_streaming_active[0] = False
@@ -2943,6 +3265,9 @@ class PageScenario(QWidget):
             worker.failed.connect(_on_failed)
             worker.start()  # démarre après connexion des signaux — aucun chunk ne peut être perdu
 
+        # Entrée dans le champ de chat = ENVOYER — jamais le bouton par défaut Qt
+        from ui.widgets import disable_default_buttons
+        disable_default_buttons(dlg)
         dlg.exec()
 
     def _open_simple_result_window(self, text: str):

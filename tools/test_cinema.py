@@ -426,6 +426,62 @@ def prompts_storyboard_cinema():
 
 
 @test
+def refs_visuelles_persistance_bibliotheque_chat_cinema():
+    """Portage Live→Cinéma 2026-07-13 : refs visuelles persistées avec le scénario,
+    bouton Analyser qui ROUVRE l'analyse existante, bibliothèque d'analyses
+    inter-projets, chat direction artistique dans la fenêtre, DA injectée dans
+    l'application des suggestions et la session de co-écriture."""
+    from ui.page_scenario import PageScenario
+    # 1. Persistance projet : refs + analyse écrites et restaurées avec le scénario
+    src_save = inspect.getsource(PageScenario._save)
+    assert "ref_images" in src_save and "ref_analysis" in src_save and "ref_enriched" in src_save, \
+        "refs + analyse sauvegardées avec le scénario"
+    src_open = inspect.getsource(PageScenario._open_scenario)
+    assert "ref_images" in src_open and "ref_analysis" in src_open, \
+        "refs + analyse restaurées à l'ouverture du projet"
+    # 2. Le bouton Analyser rouvre l'analyse existante (pas de relance silencieuse)
+    src_an = inspect.getsource(PageScenario._on_analyze_refs)
+    assert "_open_refs_window" in src_an and "_start_refs_analysis" in src_an, \
+        "analyse existante rouverte ; relance via _start_refs_analysis"
+    # 3. Fenêtre : Relancer / Nouvelle / Sauvegarder / Bibliothèque / chat DA + persistance
+    src_w = inspect.getsource(PageScenario._open_refs_window)
+    for token in ("Relancer l'analyse", "Nouvelle analyse", "ref_library", "RefsChatWorker",
+                  "_save(silent=True)", "Supprimer une analyse", "disable_default_buttons"):
+        assert token in src_w, f"fenêtre refs : {token} absent"
+    # ANTI-CRASH chat : worker fini PARQUE via abandon_thread (jamais déréférencé à chaud)
+    assert src_w.count("abandon_thread(_chat_worker[0])") >= 2, "chat : worker non parqué"
+    # 3b. Bouton « Charger une analyse » dans la section (accessible sans images)
+    src_load = inspect.getsource(PageScenario._on_load_saved_analysis)
+    assert "ref_library" in src_load and "_apply_saved_analysis" in src_load
+    src_apply = inspect.getsource(PageScenario._apply_saved_analysis)
+    assert "_open_refs_window" in src_apply and "_save(silent=True)" in src_apply, \
+        "chargement → persistance projet + fenêtre (chat inclus)"
+    # 4. Chat DA Cinéma : worker streaming dédié (calibré film, anti-troncature)
+    from api.screenplay import RefsChatWorker, _REFS_CHAT_SYSTEM
+    w = RefsChatWorker([{"role": "user", "content": "?"}], "analyse", "scénario")
+    assert hasattr(w, "chunk") and hasattr(w, "done") and hasattr(w, "failed")
+    _run = inspect.getsource(RefsChatWorker.run)
+    assert "chat_stream" in _run and "max_tokens=8192" in _run, "chat : streaming + 8192 tokens"
+    assert "jamais à copier" in _REFS_CHAT_SYSTEM and "FILM" in _REFS_CHAT_SYSTEM
+    # 5. DA injectée : application des suggestions + session de co-écriture (l'arrangement
+    # l'avait déjà via ref_analysis=). Le dialog la passe à chaque tour de chat.
+    from api.screenplay import ApplyArrangeWorker, ArrangeChatWorker
+    assert "refs_analysis" in inspect.signature(ApplyArrangeWorker.__init__).parameters, \
+        "ApplyArrangeWorker : DA injectable"
+    assert "refs_analysis" in inspect.signature(ArrangeChatWorker.__init__).parameters, \
+        "ArrangeChatWorker : DA injectable"
+    from ui.dialog_arrange_session import ArrangeSessionDialog
+    assert "refs_analysis" in inspect.signature(ArrangeSessionDialog.__init__).parameters, \
+        "session de co-écriture : DA injectable"
+    src_page = inspect.getsource(__import__("ui.page_scenario", fromlist=["_"]))
+    assert src_page.count("refs_analysis=self._last_ref_analysis") >= 2, \
+        "page : DA passée à l'application ET à la session de co-écriture"
+    src_dlg = inspect.getsource(__import__("ui.dialog_arrange_session", fromlist=["_"]))
+    assert "refs_analysis=self._refs_analysis" in src_dlg, \
+        "dialog : DA passée au worker de chat"
+
+
+@test
 def decoupage_cinema_deterministe_depuis_mise_en_page():
     """Règle portée du Live (2026-07-13) : une Mise en page PANDORA structurée
     (« PLAN n — … ») se convertit en plans storyboard SANS appel IA — prompts

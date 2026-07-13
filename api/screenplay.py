@@ -847,11 +847,13 @@ class ApplyArrangeWorker(QThread):
     finished = pyqtSignal(str)
     failed   = pyqtSignal(str)
 
-    def __init__(self, original_text: str, suggestions: str, intensity: int = 5):
+    def __init__(self, original_text: str, suggestions: str, intensity: int = 5,
+                 refs_analysis: str = ""):
         super().__init__()
         self._text        = original_text
         self._suggestions = suggestions
         self._intensity   = max(1, min(10, intensity))
+        self._refs        = refs_analysis or ""
 
     def run(self):
         from core.ai_provider import stream as ai_stream, key_error
@@ -873,6 +875,13 @@ class ApplyArrangeWorker(QThread):
                     f"{_intensity_apply_hint(self._intensity, lang)}\n\n"
                     f"SCÉNARIO ORIGINAL :\n{self._text}\n\n"
                     f"SUGGESTIONS D'ARRANGEMENT :\n{self._suggestions}"
+                )
+            # La direction artistique (analyse des références visuelles) nourrit
+            # l'application des suggestions si présente — parité Live 2026-07-13.
+            if self._refs.strip():
+                user_content += (
+                    "\n\nDIRECTION ARTISTIQUE (références visuelles — inspiration "
+                    "à transposer, jamais à copier) :\n" + self._refs.strip()
                 )
             full_text = ai_stream(_APPLY_ARRANGE, user_content,
                                   on_chunk=self.chunk.emit,
@@ -1446,6 +1455,66 @@ pas les espaces). « replace » contient le passage entier réécrit.
             self.done.emit({"edits": parse_edits(full_text), "raw": full_text.strip()})
         except Exception as e:
             self.failed.emit(_fmt_err(e))
+
+
+_REFS_CHAT_SYSTEM = (
+    "Tu es conseiller en direction artistique pour un FILM. "
+    "Tu disposes de l'ANALYSE du moodboard de référence (décodage complet : "
+    "composition, style d'image, lumière, palette, matières) et du SCÉNARIO "
+    "du film. L'utilisateur dialogue avec toi pour décider comment TRANSPOSER "
+    "cette direction artistique dans son scénario, son storyboard et ses plans.\n"
+    "Règles :\n"
+    "• Réponds en français, concret et actionnable — propose des formulations "
+    "prêtes à coller dans le scénario ou dans les prompts quand c'est utile ;\n"
+    "• La DA est une inspiration à transposer, jamais à copier ;\n"
+    "• Raisonne en séquences et en plans de cinéma (valeurs de plan, focales, "
+    "lumière, palette) ;\n"
+    "• Reste dans ton rôle : direction artistique et image."
+)
+
+
+class RefsChatWorker(QThread):
+    """Un tour de dialogue direction artistique (streaming) dans la fenêtre
+    Références visuelles — équivalent Cinéma de api.live_refs.RefsChatWorker.
+    messages = historique [{role, content}] complet, dernier message = question
+    de l'utilisateur. Signaux : chunk/done/failed (« done », jamais « finished »)."""
+    done   = pyqtSignal(str)
+    failed = pyqtSignal(str)
+    chunk  = pyqtSignal(str)
+
+    def __init__(self, messages: list, analysis: str, scenario_text: str = ""):
+        super().__init__()
+        self._messages = list(messages or [])
+        self._analysis = analysis or ""
+        self._text     = scenario_text or ""
+
+    def run(self):
+        from core.ai_provider import chat_stream, key_error
+        # Chat de conseil DA = tâche « assistant » (dialogue conseil), comme en Live.
+        err = key_error("assistant")
+        if err:
+            self.failed.emit(err)
+            return
+        if not self._messages:
+            self.failed.emit("Aucun message à envoyer.")
+            return
+        try:
+            ctx_doc = f"ANALYSE DES RÉFÉRENCES (direction artistique) :\n{self._analysis}"
+            if self._text.strip():
+                ctx_doc += f"\n\nSCÉNARIO ACTUEL :\n{self._text.strip()}"
+            # Le contexte documentaire est préfixé au premier message utilisateur
+            # (les providers locaux n'aiment pas les très longs system prompts).
+            messages = [dict(m) for m in self._messages]
+            first = messages[0]
+            messages[0] = {"role": first["role"],
+                           "content": f"{ctx_doc}\n\n---\n\n{first['content']}"}
+            # 8192 tokens : une réponse séquence par séquence dépasse largement 2048.
+            full = chat_stream(_REFS_CHAT_SYSTEM, messages, on_chunk=self.chunk.emit,
+                               tier="creative", max_tokens=8192, task="assistant")
+            self.done.emit(full.strip())
+        except Exception as e:
+            from core.worker import humanize_api_error
+            self.failed.emit(humanize_api_error(str(e)))
 
 
 # ── Helpers correspondance de noms (fuzzy / normalisé) ───────────────────────
@@ -2276,6 +2345,7 @@ class ArrangeChatWorker(QThread):
         user_message: str,
         intensity: int = 5,
         ref_images: list | None = None,
+        refs_analysis: str = "",
         surgical: bool = False,
     ):
         super().__init__()
@@ -2285,6 +2355,7 @@ class ArrangeChatWorker(QThread):
         self._user_message = user_message
         self._intensity    = intensity
         self._ref_images   = ref_images or []
+        self._refs         = refs_analysis or ""
         self._surgical     = surgical
 
     def run(self):
@@ -2307,6 +2378,13 @@ class ArrangeChatWorker(QThread):
                 context_block = (
                     f"SCÉNARIO ORIGINAL :\n{self._original}\n\n"
                     f"ANALYSE INITIALE (intensité {self._intensity}/10) :\n{self._analysis}"
+                )
+            if self._refs.strip():
+                context_block += (
+                    "\n\n[DIRECTION ARTISTIQUE — issue de l'analyse des images "
+                    "de référence. Inspiration à transposer, jamais à copier : "
+                    "ancre les ambiances, matières et lumières du scénario "
+                    "dans cette direction.]\n" + self._refs.strip()
                 )
 
             # Construction des messages : on insère le contexte dans le premier message user
