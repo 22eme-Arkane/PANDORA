@@ -535,12 +535,8 @@ class ArrangeSessionDialog(QDialog):
         self._btn_send.clicked.connect(self._on_send)
         send_row.addWidget(self._btn_send, 1)
 
-        self._btn_reset = _btn("✕ Effacer", "ghost", 38)
-        self._btn_reset.setFixedWidth(80)
-        self._btn_reset.setToolTip("Efface le champ de saisie")
-        self._btn_reset.clicked.connect(lambda: self._input_edit.clear())
-        send_row.addWidget(self._btn_reset)
-
+        # (Bouton « ✕ Effacer » retiré le 2026-07-13 — reliquat : le champ se vide
+        # déjà tout seul à l'envoi, le bouton prêtait à confusion.)
         lay.addLayout(send_row)
 
         # Bouton « Générer le conducteur » : réécriture COMPLÈTE volontaire. Le chat

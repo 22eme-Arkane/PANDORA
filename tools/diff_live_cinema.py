@@ -141,6 +141,9 @@ EXPECTED_ONLY_CINEMA = {
         # tout le corps du dialogue reste hérité de Cinéma, d'où ces méthodes
         # « uniquement Cinéma » aux yeux du radar.
         "__init__", "_copy_email", "_open_eula", "_open_whatsapp",
+        # Formulaire d'envoi direct avis/bugs → Supabase (2026-07-13) — défini
+        # dans la classe Cinéma, HÉRITÉ tel quel par le Live (aucune copie).
+        "_build_report_form", "_on_send_report", "_on_report_sent", "_on_report_failed",
     },
 }
 

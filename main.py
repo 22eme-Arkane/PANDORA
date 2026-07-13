@@ -50,13 +50,39 @@ def _install_excepthook():
         try:
             from PyQt6.QtWidgets import QApplication as _QA, QMessageBox
             if _QA.instance() is not None:
-                QMessageBox.critical(
-                    None, "PANDORA — Erreur",
+                box = QMessageBox(
+                    QMessageBox.Icon.Critical, "PANDORA — Erreur",
                     "Une erreur inattendue s'est produite.\n"
                     "L'application reste ouverte — vous pouvez continuer ou la redémarrer.\n\n"
                     f"{exc_type.__name__}: {exc}\n\n"
                     f"Détails enregistrés dans :\n{log_path}",
                 )
+                box.setDetailedText(text)   # « Afficher les détails » = la trace complète
+                box.addButton("Fermer", QMessageBox.ButtonRole.RejectRole)
+                # Envoi du rapport à 22eme ARKANE (Supabase, insertion seule) — bouton
+                # présent seulement si le serveur est configuré. Appel BLOQUANT court :
+                # au crash, démarrer un QThread n'est plus fiable.
+                btn_send = None
+                try:
+                    from core.support_backend import is_configured as _sb_ok
+                    if _sb_ok():
+                        btn_send = box.addButton("✉  Envoyer le rapport",
+                                                 QMessageBox.ButtonRole.AcceptRole)
+                except Exception:
+                    pass
+                box.exec()
+                if btn_send is not None and box.clickedButton() is btn_send:
+                    try:
+                        from core.support_backend import submit_report
+                        submit_report("crash", f"{exc_type.__name__}: {exc}", log=text)
+                        QMessageBox.information(
+                            None, "PANDORA — Rapport envoyé",
+                            "Merci ! Le rapport de crash a été transmis à 22eme ARKANE.")
+                    except Exception as send_err:
+                        QMessageBox.warning(
+                            None, "PANDORA — Envoi impossible",
+                            f"Le rapport n'a pas pu être envoyé :\n{send_err}\n\n"
+                            f"Le log reste disponible ici :\n{log_path}")
         except Exception:
             pass
 

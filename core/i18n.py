@@ -1684,6 +1684,23 @@ _FR_TO_EN: dict[str, str] = {
         "Feature request — subject: Feature",
     "Nous contacter":                   "Contact us",
 
+    # ── Envoi direct avis/bugs (Supabase) — fenêtre Nous contacter ────────────
+    "💬  Donner votre avis / Signaler un bug":
+        "💬  Share feedback / Report a bug",
+    "Envoyé directement à 22eme ARKANE — aucune boîte mail requise.":
+        "Sent directly to 22eme ARKANE — no email account needed.",
+    "💬  Avis / suggestion":            "💬  Feedback / suggestion",
+    "🐛  Bug":                          "🐛  Bug",
+    "Votre e-mail (optionnel, pour une réponse)":
+        "Your email (optional, for a reply)",
+    "Décrivez votre avis ou le problème rencontré (étapes pour le reproduire)…":
+        "Describe your feedback or the issue you hit (steps to reproduce)…",
+    "✉  Envoyer":                       "✉  Send",
+    "Écrivez d'abord votre message.":   "Write your message first.",
+    "Envoi en cours…":                  "Sending…",
+    "Envoyé — merci pour votre retour ! ✓":
+        "Sent — thank you for your feedback! ✓",
+
     # ── Api help dialog ───────────────────────────────────────────────────────
     "fal.ai — Seedance 2.0 & Nano Banana": "fal.ai — Seedance 2.0 & Nano Banana",
     "Vidéo  ·  Images IA":             "Video  ·  AI Images",

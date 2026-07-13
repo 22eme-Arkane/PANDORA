@@ -426,6 +426,46 @@ def prompts_storyboard_cinema():
 
 
 @test
+def rapports_supabase_table_seule():
+    """Envoi d'avis/bugs/crashs vers Supabase (2026-07-13, « table seule ») : backend
+    pur DÉSACTIVÉ tant que l'URL/clé ne sont pas renseignées (aucune requête), payload
+    borné, worker done/failed, formulaire Contact présent SSI configuré, bouton
+    « Envoyer le rapport » branché dans l'excepthook de crash."""
+    import core.support_backend as sb
+    # Payload : bornes + contexte (version/OS) — pur, aucune requête réseau.
+    p = sb.build_payload("bug", "m" * 20000, "e" * 500, "l" * 50000)
+    assert len(p["message"]) == sb._MAX_MESSAGE and len(p["email"]) == sb._MAX_EMAIL
+    assert len(p["log"]) == sb._MAX_LOG, "le log doit garder sa FIN, borné"
+    from core.version import VERSION
+    assert p["app_version"] == VERSION and p["kind"] == "bug" and p["os"]
+    assert sb.build_payload("inconnu", "x")["kind"] == "avis", "kind inconnu → avis"
+    # Non configuré → submit_report REFUSE (jamais de requête vers une URL vide).
+    if not sb.is_configured():
+        try:
+            sb.submit_report("avis", "test")
+            assert False, "submit_report doit refuser sans configuration"
+        except RuntimeError:
+            pass
+    # Worker : signaux done/failed (jamais « finished » — doctrine projet).
+    from api.report import SendReportWorker
+    w = SendReportWorker("avis", "x")
+    assert hasattr(w, "done") and hasattr(w, "failed") and "finished" not in (
+        n for n in ("done", "failed"))
+    # Fenêtre Contact : formulaire construit SEULEMENT si configuré (repli e-mail sinon).
+    from ui.dialog_contact import ContactDialog
+    src = inspect.getsource(ContactDialog)
+    assert "_build_report_form" in src and "is_configured" in src
+    dlg = ContactDialog(None)
+    assert hasattr(dlg, "_report_msg") == sb.is_configured(), \
+        "formulaire présent ssi serveur configuré"
+    # Crash : bouton « Envoyer le rapport » dans l'excepthook (appel bloquant court).
+    import main as _main
+    _hsrc = inspect.getsource(_main._install_excepthook)
+    assert "submit_report" in _hsrc and "Envoyer le rapport" in _hsrc \
+        and "is_configured" in _hsrc, "excepthook : envoi du rapport de crash absent"
+
+
+@test
 def refs_visuelles_persistance_bibliotheque_chat_cinema():
     """Portage Live→Cinéma 2026-07-13 : refs visuelles persistées avec le scénario,
     bouton Analyser qui ROUVRE l'analyse existante, bibliothèque d'analyses

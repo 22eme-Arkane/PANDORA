@@ -194,6 +194,14 @@ class ContactDialog(QDialog):
         ))
         lay.addWidget(inst_frame)
 
+        # ── Envoi DIRECT (Supabase) — sans passer par une boîte mail ──────────
+        # Visible seulement si le serveur est configuré (core/support_backend) ;
+        # sinon on garde les instructions e-mail ci-dessus (repli complet).
+        from core.support_backend import is_configured as _sb_ok
+        if _sb_ok():
+            inst_frame.setVisible(False)
+            self._build_report_form(lay)
+
         lay.addStretch()
 
         # ── Footer : charte + fermer ──────────────────────────────────────────
@@ -226,6 +234,128 @@ class ContactDialog(QDialog):
 
         from core.i18n import retranslate_widget
         retranslate_widget(self)
+
+    # ── Formulaire d'envoi direct (avis / bug → table Supabase) ───────────────
+
+    def _build_report_form(self, lay):
+        from PyQt6.QtWidgets import QComboBox, QTextEdit, QLineEdit
+
+        form = QFrame()
+        form.setStyleSheet(
+            f"QFrame{{background:rgba(78,205,196,0.05);"
+            f"border:1px solid rgba(78,205,196,0.15);border-radius:10px;}}"
+        )
+        fl = QVBoxLayout(form)
+        fl.setContentsMargins(16, 14, 16, 14)
+        fl.setSpacing(10)
+
+        head = QLabel("💬  Donner votre avis / Signaler un bug")
+        head.setStyleSheet(
+            f"color:{CP['text_primary']};font-size:12px;font-weight:700;"
+            f"background:transparent;border:none;"
+        )
+        fl.addWidget(head)
+
+        sub = QLabel("Envoyé directement à 22eme ARKANE — aucune boîte mail requise.")
+        sub.setWordWrap(True)
+        sub.setStyleSheet(
+            f"color:{CP['text_dim']};font-size:10px;background:transparent;border:none;"
+        )
+        fl.addWidget(sub)
+
+        row = QHBoxLayout()
+        row.setSpacing(8)
+        self._report_kind = QComboBox()
+        self._report_kind.addItem("💬  Avis / suggestion", "avis")
+        self._report_kind.addItem("🐛  Bug", "bug")
+        self._report_kind.setFixedHeight(32)
+        row.addWidget(self._report_kind, 1)
+        self._report_email = QLineEdit()
+        self._report_email.setFixedHeight(32)
+        self._report_email.setPlaceholderText("Votre e-mail (optionnel, pour une réponse)")
+        row.addWidget(self._report_email, 2)
+        fl.addLayout(row)
+
+        self._report_msg = QTextEdit()
+        self._report_msg.setFixedHeight(96)
+        self._report_msg.setPlaceholderText(
+            "Décrivez votre avis ou le problème rencontré (étapes pour le reproduire)…")
+        self._report_msg.setStyleSheet(
+            f"QTextEdit{{background:{CP['bg2']};border:1px solid {CP['border']};"
+            f"border-radius:8px;color:{CP['text_primary']};font-size:11px;padding:8px;}}"
+        )
+        fl.addWidget(self._report_msg)
+
+        send_row = QHBoxLayout()
+        send_row.setSpacing(10)
+        self._report_status = QLabel("")
+        self._report_status.setWordWrap(True)
+        self._report_status.setStyleSheet(
+            f"color:{CP['text_dim']};font-size:10px;background:transparent;border:none;"
+        )
+        send_row.addWidget(self._report_status, 1)
+        self._btn_report_send = QPushButton("✉  Envoyer")
+        self._btn_report_send.setFixedHeight(34)
+        self._btn_report_send.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._btn_report_send.setStyleSheet(
+            f"QPushButton{{background:{CP['accent']};color:#07080f;"
+            f"border:none;border-radius:8px;font-size:11px;font-weight:700;padding:0 20px;}}"
+            f"QPushButton:hover{{background:#6eded6;}}"
+            f"QPushButton:disabled{{background:{CP['bg3']};color:{CP['text_dim']};"
+            f"border:1px solid {CP['border']};}}"
+        )
+        self._btn_report_send.clicked.connect(self._on_send_report)
+        send_row.addWidget(self._btn_report_send)
+        fl.addLayout(send_row)
+
+        lay.addWidget(form)
+
+    def _on_send_report(self):
+        msg = self._report_msg.toPlainText().strip()
+        if not msg:
+            self._report_status.setText("Écrivez d'abord votre message.")
+            return
+        kind = self._report_kind.currentData() or "avis"
+        # Pour un BUG, on joint la queue du log de crash (contexte précieux).
+        log = ""
+        if kind == "bug":
+            try:
+                import tempfile, os as _os
+                _lp = _os.path.join(tempfile.gettempdir(), "pandora_crash.log")
+                if _os.path.isfile(_lp):
+                    with open(_lp, encoding="utf-8", errors="replace") as f:
+                        log = f.read()
+            except Exception:
+                pass
+        from api.report import SendReportWorker
+        self._btn_report_send.setEnabled(False)
+        self._report_status.setText("Envoi en cours…")
+        self._report_worker = SendReportWorker(
+            kind, msg, self._report_email.text().strip(), log)
+        self._report_worker.done.connect(self._on_report_sent)
+        self._report_worker.failed.connect(self._on_report_failed)
+        self._report_worker.start()
+
+    def _on_report_sent(self):
+        from core.worker import abandon_thread
+        abandon_thread(self._report_worker)
+        self._report_worker = None
+        self._btn_report_send.setEnabled(True)
+        self._report_msg.clear()
+        self._report_status.setText("Envoyé — merci pour votre retour ! ✓")
+        self._report_status.setStyleSheet(
+            f"color:{CP['green']};font-size:10px;background:transparent;border:none;"
+        )
+
+    def _on_report_failed(self, msg: str):
+        from core.worker import abandon_thread
+        abandon_thread(self._report_worker)
+        self._report_worker = None
+        self._btn_report_send.setEnabled(True)
+        self._report_status.setText(f"Échec de l'envoi : {msg}")
+        self._report_status.setStyleSheet(
+            f"color:{CP['red']};font-size:10px;background:transparent;border:none;"
+        )
 
     def _open_whatsapp(self):
         import webbrowser
