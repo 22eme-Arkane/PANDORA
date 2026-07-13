@@ -627,20 +627,56 @@ def _arrange_session_chat_system(intensity: int, mode: str) -> str:
     )
 
 
+def _arrange_session_chat_surgical_system(intensity: int, mode: str) -> str:
+    """Version CHIRURGICALE du prompt conducteur : l'IA RÉPOND et renvoie des ÉDITIONS
+    ciblées (find/replace) au lieu de réécrire tout le conducteur → tokens économisés,
+    pas de réécriture surprise. Question/discussion sans changement → « edits » : []."""
+    if intensity <= 4:
+        creativity = "Dans « replace », ne change que ce qui est demandé, garde le style d'origine."
+    elif intensity <= 8:
+        creativity = "Tu peux reformuler/enrichir le passage ciblé, sans déborder hors de la zone demandée."
+    else:
+        creativity = "Pleine liberté créative sur les passages ciblés uniquement."
+    return (
+        "Tu es un co-auteur dans Pandora. Tu dialogues avec le réalisateur pour affiner "
+        "un CONDUCTEUR existant (découpage plan par plan), SANS jamais le réécrire en "
+        "entier.\n\n"
+        "CHIRURGIE STRICTE :\n"
+        "- QUESTION ou discussion (aucun changement demandé) → réponds dans « message » "
+        "et renvoie « edits » : [].\n"
+        "- DEMANDE de modification → ne renvoie QUE les passages à changer, en éditions "
+        "find/replace. Tout ce que tu ne renvoies pas reste MOT POUR MOT. Ne réécris "
+        "JAMAIS le conducteur complet.\n"
+        "- « find » = extrait EXACT et VERBATIM du conducteur actuel (caractère pour "
+        "caractère, assez long pour être unique). Ne le reformule pas. « replace » = ce "
+        "même passage réécrit.\n"
+        f"- {creativity}\n"
+        "- Respecte « ne touche pas à X » / « garde X » sans exception.\n\n"
+        "FORMAT — JSON STRICT, sans markdown, sans texte hors JSON :\n"
+        '{ "message": "<2-4 lignes : ce que tu as changé et où, ou ta réponse ; pose une '
+        'question si la portée est ambiguë>", "edits": [ {"find": "<extrait exact>", '
+        '"replace": "<réécrit>", "summary": "<résumé court>"} ] }'
+    )
+
+
 class ArrangeSessionChatConducteurWorker(QThread):
     """Co-écriture interactive du CONDUCTEUR avec l'IA — fenêtre Studio de
     co-écriture (ui/dialog_arrange_session_live.py).
 
-    Équivalent Live de ArrangeChatWorker (api/screenplay.py) : même protocole
-    à marqueurs, calibré conducteur live/mapping.
+    Équivalent Live de ArrangeChatWorker (api/screenplay.py) : même protocole,
+    calibré conducteur live/mapping. Deux modes : surgical=False → réécriture
+    COMPLÈTE (message_ready + screenplay_ready) ; surgical=True → chat CHIRURGICAL
+    (message_ready + edits_ready : éditions find/replace ciblées, pas de réécriture).
 
     Signaux :
         message_ready(str)    — réponse conversationnelle (à afficher dans le chat)
-        screenplay_ready(str) — conducteur remanié complet (prévisualisation)
+        screenplay_ready(str) — conducteur remanié complet (mode non chirurgical)
+        edits_ready(list)     — éditions ciblées [{find, replace, summary}] (chirurgical)
         failed(str)           — message d'erreur
     """
     message_ready    = pyqtSignal(str)
     screenplay_ready = pyqtSignal(str)
+    edits_ready      = pyqtSignal(list)
     failed           = pyqtSignal(str)
 
     _MARKER_MSG = "══════════ MESSAGE ══════════"
@@ -656,6 +692,7 @@ class ArrangeSessionChatConducteurWorker(QThread):
         ref_images: list | None = None,
         mode: str = "live",
         refs_analysis: str = "",
+        surgical: bool = False,
     ):
         super().__init__()
         self._original     = original or ""       # le CONDUCTEUR complet
@@ -666,6 +703,7 @@ class ArrangeSessionChatConducteurWorker(QThread):
         self._ref_images   = ref_images or []
         self._mode         = mode if mode in ("live", "mapping") else "live"
         self._refs         = refs_analysis or ""
+        self._surgical     = surgical
 
     def run(self):
         try:
@@ -730,10 +768,13 @@ class ArrangeSessionChatConducteurWorker(QThread):
                 else:
                     messages.append({"role": "user", "content": self._user_message})
 
-            system = _arrange_session_chat_system(self._intensity, self._mode)
+            system = (_arrange_session_chat_surgical_system(self._intensity, self._mode)
+                      if self._surgical
+                      else _arrange_session_chat_system(self._intensity, self._mode))
+            # 16000 : réécriture COMPLÈTE (8192 tronquait). CHIRURGICAL : 4096 suffisent
+            # (on ne renvoie que les passages modifiés).
+            _maxtok = 4096 if self._surgical else 16000
 
-            # 16000 : la sortie contient le conducteur COMPLET réécrit —
-            # même plafond que ApplyArrangeConducteurWorker (8192 tronquait).
             if self._ref_images:
                 # VISION (images jointes) : direct Anthropic — hors couche ai_provider.
                 import anthropic
@@ -741,7 +782,7 @@ class ArrangeSessionChatConducteurWorker(QThread):
                 client = anthropic.Anthropic(api_key=_lc().get("anthropic_key", "").strip())
                 response = client.messages.create(
                     model=_VISION_MODEL,
-                    max_tokens=16000,
+                    max_tokens=_maxtok,
                     thinking=_VISION_NO_THINK,
                     system=system,
                     messages=messages,
@@ -749,10 +790,20 @@ class ArrangeSessionChatConducteurWorker(QThread):
                 raw = response.content[0].text.strip()
             else:
                 raw = ai_chat(system, messages,
-                              tier="creative", max_tokens=16000,
+                              tier="creative", max_tokens=_maxtok,
                               task="screenplay").strip()
 
-            # Split sur les marqueurs
+            # ── Mode CHIRURGICAL : message + ÉDITIONS ciblées (aucune réécriture totale) ──
+            if self._surgical:
+                from api.screenplay import _parse_surgical_reply
+                message, edits = _parse_surgical_reply(raw)
+                if not message:
+                    message = "Modifications proposées." if edits else (raw.strip() or "…")
+                self.message_ready.emit(message)
+                self.edits_ready.emit(edits)
+                return
+
+            # ── Mode COMPLET : message + conducteur réécrit entier (marqueurs) ──
             chat_msg   = ""
             conducteur = ""
             if self._MARKER_DOC in raw:

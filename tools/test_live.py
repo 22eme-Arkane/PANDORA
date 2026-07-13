@@ -1082,6 +1082,27 @@ def conducteur_derniere_frame_croix():
 
 
 @test
+def coecriture_conducteur_chirurgicale():
+    """Co-écriture Live : le chat du CONDUCTEUR est CHIRURGICAL (Q&R OU éditions
+    ciblées, jamais de réécriture totale) + bouton « Générer le conducteur » pour la
+    réécriture complète volontaire. Portage du Cinéma (Matthieu 2026-07-13)."""
+    import inspect
+    from api.live_screenplay import ArrangeSessionChatConducteurWorker
+    assert "surgical" in inspect.signature(
+        ArrangeSessionChatConducteurWorker.__init__).parameters, "worker accepte surgical="
+    assert hasattr(ArrangeSessionChatConducteurWorker, "edits_ready"), "signal edits_ready"
+    from ui.dialog_arrange_session_live import ArrangeSessionDialog
+    dlg = ArrangeSessionDialog(None, "=== ACTE 1 ===\nPLAN 1 — Ouverture", "analyse", 5,
+                               mode="live")
+    assert hasattr(dlg, "_btn_generate"), "bouton « Générer le conducteur » présent"
+    assert hasattr(dlg, "_on_edits_ready"), "handler d'application chirurgicale"
+    assert "surgical: bool = True" in inspect.getsource(dlg._start_worker), \
+        "chat chirurgical par défaut"
+    assert "surgical=False" in inspect.getsource(dlg._on_generate_full), \
+        "le bouton « Générer » fait la réécriture complète"
+
+
+@test
 def moteurs_filtres_workflow():
     """Seuls les moteurs compatibles workflow (i2v/keyframes/réfs) sont proposés."""
     from core.engine_caps import workflow_compatible, sequence_engines, ENGINE_CAPS

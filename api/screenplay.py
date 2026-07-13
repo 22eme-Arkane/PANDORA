@@ -2162,16 +2162,92 @@ def _arrange_chat_system(intensity: int) -> str:
     )
 
 
+def _arrange_chat_surgical_system(intensity: int) -> str:
+    """System prompt de co-écriture CHIRURGICALE : l'IA RÉPOND au réalisateur ET
+    renvoie des ÉDITIONS CIBLÉES (find/replace) — jamais le scénario complet. On ne
+    renvoie que ce qui change → tokens économisés, pas de réécriture surprise.
+    Question/discussion sans changement → « edits » : []."""
+    if intensity <= 4:
+        creativity = ("Reste au plus près du texte : dans « replace », ne change que ce "
+                      "qui est demandé, garde le style et la ponctuation d'origine.")
+    elif intensity <= 8:
+        creativity = ("Tu peux reformuler et enrichir le passage ciblé dans « replace », "
+                      "sans déborder hors de la zone demandée.")
+    else:
+        creativity = ("Pleine liberté créative sur les passages ciblés dans « replace » "
+                      "— mais uniquement là où c'est demandé.")
+    return (
+        "Tu es un co-auteur dans Pandora, un outil de pré-production IA. Tu dialogues "
+        "avec le réalisateur pour affiner un scénario EXISTANT, SANS jamais le réécrire "
+        "en entier.\n\n"
+        "CHIRURGIE STRICTE :\n"
+        "- QUESTION ou discussion (aucun changement demandé) → réponds dans « message » "
+        "et renvoie « edits » : [].\n"
+        "- DEMANDE de modification → ne renvoie QUE les passages à changer, en éditions "
+        "find/replace. Tout ce que tu ne renvoies pas reste MOT POUR MOT. Ne réécris "
+        "JAMAIS le scénario complet.\n"
+        "- « find » = extrait EXACT et VERBATIM du scénario actuel (caractère pour "
+        "caractère, assez long pour être unique). Ne le reformule pas, ne corrige pas ses "
+        "espaces. « replace » = ce même passage réécrit.\n"
+        f"- {creativity}\n"
+        "- Respecte « ne touche pas à X » / « garde X » sans exception.\n\n"
+        "RÉFÉRENCES VISUELLES : si des images sont jointes, intègre leurs détails "
+        "UNIQUEMENT dans les passages demandés.\n\n"
+        "FORMAT — JSON STRICT, sans markdown, sans texte hors JSON :\n"
+        '{ "message": "<2-4 lignes : ce que tu as changé et où, ou ta réponse ; ton '
+        'direct ; pose une question si la portée est ambiguë>", '
+        '"edits": [ {"find": "<extrait exact>", "replace": "<réécrit>", '
+        '"summary": "<résumé court>"} ] }'
+    )
+
+
+def _parse_surgical_reply(raw: str) -> tuple[str, list]:
+    """Extrait (message, edits) d'une réponse chirurgicale JSON {message, edits}.
+    Tolérant au markdown / JSON partiel ; « edits » via parse_edits (robuste)."""
+    import json as _json, re as _re
+    from core.text_edits import parse_edits
+    edits = parse_edits(raw)
+    message = ""
+    s = (raw or "").strip()
+    if "```" in s:
+        for part in s.split("```"):
+            cand = part.lstrip("json").strip()
+            if cand.startswith("{"):
+                s = cand
+                break
+    try:
+        obj = _json.loads(s)
+        if isinstance(obj, dict):
+            message = str(obj.get("message", "")).strip()
+    except Exception:
+        m = _re.search(r'"message"\s*:\s*"((?:[^"\\]|\\.)*)"', s)
+        if m:
+            try:
+                message = _json.loads('"' + m.group(1) + '"')
+            except Exception:
+                message = m.group(1).strip()
+    return message, edits
+
+
 class ArrangeChatWorker(QThread):
     """Co-écriture interactive du scénario avec Claude.
 
+    Deux modes :
+      - surgical=False (défaut) : réécriture COMPLÈTE — émet message_ready + screenplay_ready
+        (utilisé par le bouton « Générer le scénario »).
+      - surgical=True : chat CHIRURGICAL — émet message_ready + edits_ready(list) : l'IA
+        répond et ne renvoie que des éditions find/replace ciblées (pas de réécriture
+        totale → tokens économisés).
+
     Signals :
-        message_ready(str)   — réponse conversationnelle de Claude (à afficher dans le chat)
-        screenplay_ready(str) — scénario remanié complet (à afficher dans la prévisualisation)
+        message_ready(str)    — réponse conversationnelle de Claude
+        screenplay_ready(str) — scénario remanié complet (mode non chirurgical)
+        edits_ready(list)     — éditions ciblées [{find, replace, summary}] (mode chirurgical)
         failed(str)           — message d'erreur
     """
     message_ready    = pyqtSignal(str)
     screenplay_ready = pyqtSignal(str)
+    edits_ready      = pyqtSignal(list)
     failed           = pyqtSignal(str)
 
     _MARKER_MSG  = "══════════ MESSAGE ══════════"
@@ -2185,6 +2261,7 @@ class ArrangeChatWorker(QThread):
         user_message: str,
         intensity: int = 5,
         ref_images: list | None = None,
+        surgical: bool = False,
     ):
         super().__init__()
         self._original     = original
@@ -2193,6 +2270,7 @@ class ArrangeChatWorker(QThread):
         self._user_message = user_message
         self._intensity    = intensity
         self._ref_images   = ref_images or []
+        self._surgical     = surgical
 
     def run(self):
         try:
@@ -2258,6 +2336,9 @@ class ArrangeChatWorker(QThread):
                 else:
                     messages.append({"role": "user", "content": self._user_message})
 
+            _sys    = (_arrange_chat_surgical_system(self._intensity) if self._surgical
+                       else _arrange_chat_system(self._intensity))
+            _maxtok = 4096 if self._surgical else 8192
             if self._ref_images:
                 # VISION (images jointes) : direct Anthropic — hors couche ai_provider
                 # (les autres fournisseurs gèrent la vision différemment ; périmètre v1 = texte).
@@ -2266,17 +2347,26 @@ class ArrangeChatWorker(QThread):
                 client = anthropic.Anthropic(api_key=_lc().get("anthropic_key", "").strip())
                 response = client.messages.create(
                     model=_MODEL,
-                    max_tokens=8192,
+                    max_tokens=_maxtok,
                     thinking=_NO_THINK,
-                    system=_arrange_chat_system(self._intensity),
+                    system=_sys,
                     messages=messages,
                 )
                 raw = response.content[0].text.strip()
             else:
-                raw = ai_chat(_arrange_chat_system(self._intensity), messages,
-                              tier="creative", max_tokens=8192, task="screenplay").strip()
+                raw = ai_chat(_sys, messages,
+                              tier="creative", max_tokens=_maxtok, task="screenplay").strip()
 
-            # Split sur les marqueurs
+            # ── Mode CHIRURGICAL : message + ÉDITIONS ciblées (aucune réécriture totale) ──
+            if self._surgical:
+                message, edits = _parse_surgical_reply(raw)
+                if not message:
+                    message = "Modifications proposées." if edits else (raw.strip() or "…")
+                self.message_ready.emit(message)
+                self.edits_ready.emit(edits)
+                return
+
+            # ── Mode COMPLET : message + scénario réécrit entier (marqueurs) ──
             chat_msg   = ""
             screenplay = ""
             if self._MARKER_SCR in raw:

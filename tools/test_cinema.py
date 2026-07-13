@@ -3513,6 +3513,38 @@ def references_inspiration_par_plan():
 
 
 @test
+def coecriture_scenario_chirurgicale():
+    """Co-écriture Cinéma : le chat de scénario est CHIRURGICAL (répond aux questions
+    OU applique des éditions ciblées find/replace — jamais de réécriture totale), et
+    un bouton « Générer le scénario » fait la réécriture complète volontaire.
+    Demande Matthieu 2026-07-13 (ne pas dépenser tous les tokens sur du Q&R)."""
+    import inspect
+    from api.screenplay import ArrangeChatWorker, _parse_surgical_reply
+    from core.text_edits import apply_find_replace_edits
+    # Worker : mode chirurgical disponible + signal edits_ready.
+    assert "surgical" in inspect.signature(ArrangeChatWorker.__init__).parameters, \
+        "ArrangeChatWorker accepte surgical="
+    assert hasattr(ArrangeChatWorker, "edits_ready"), "signal edits_ready(list)"
+    # Parsing : question → 0 édit (aucune réécriture) ; demande → find/replace.
+    m, e = _parse_surgical_reply('{"message":"réponse à la question","edits":[]}')
+    assert m == "réponse à la question" and e == [], "Q&R pure → aucune édition"
+    m, e = _parse_surgical_reply(
+        '{"message":"ok","edits":[{"find":"AAA","replace":"BBB","summary":"s"}]}')
+    assert len(e) == 1 and e[0]["find"] == "AAA", "édition ciblée extraite"
+    new, applied, missed = apply_find_replace_edits("xx AAA yy", e)
+    assert new == "xx BBB yy" and len(applied) == 1 and not missed, "find/replace chirurgical"
+    # Dialog : chat chirurgical par défaut + bouton de réécriture complète.
+    from ui.dialog_arrange_session import ArrangeSessionDialog
+    dlg = ArrangeSessionDialog(None, "INT. MAISON — JOUR\nLIA\nBonjour.", "analyse", 5)
+    assert hasattr(dlg, "_btn_generate"), "bouton « Générer le scénario » présent"
+    assert hasattr(dlg, "_on_edits_ready"), "handler d'application chirurgicale"
+    assert "surgical: bool = True" in inspect.getsource(dlg._start_worker), \
+        "chat chirurgical par défaut"
+    assert "surgical=False" in inspect.getsource(dlg._on_generate_full), \
+        "le bouton « Générer » fait la réécriture complète"
+
+
+@test
 def reference_image_visible_au_1er_ajout():
     """Ajouter une image de référence l'affiche DÈS le 1er ajout (bug « il fallait le
     faire 2 fois », 2026-07-09) : le handler sauve PUIS émet changed → la ligne se

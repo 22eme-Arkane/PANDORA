@@ -532,6 +532,16 @@ class ArrangeSessionDialog(QDialog):
 
         lay.addLayout(send_row)
 
+        # Bouton « Générer le scénario » : réécriture COMPLÈTE volontaire. Le chat
+        # ci-dessus reste CHIRURGICAL (il n'édite que les passages concernés) → ce
+        # bouton est le SEUL à réécrire tout le scénario, quand on le décide.
+        self._btn_generate = _btn("✎  Générer le scénario", "ghost", 34)
+        self._btn_generate.setToolTip(
+            "Réécrit le scénario COMPLET en intégrant toute la discussion "
+            "(coûteux en tokens — le chat ne modifie que les passages demandés).")
+        self._btn_generate.clicked.connect(self._on_generate_full)
+        lay.addWidget(self._btn_generate)
+
         # Raccourci info
         shortcut_lbl = QLabel("Ctrl+↵ pour envoyer")
         shortcut_lbl.setStyleSheet(
@@ -661,24 +671,32 @@ class ArrangeSessionDialog(QDialog):
         self._refresh_refs_strip()
         self._start_worker(msg, ref_images=images)
 
-    def _start_worker(self, user_message: str, ref_images: list | None = None):
+    def _start_worker(self, user_message: str, ref_images: list | None = None,
+                      surgical: bool = True):
         from api.screenplay import ArrangeChatWorker
 
         if self._worker and self._worker.isRunning():
             self._worker.quit()
 
-        self._set_busy(True, "Rédaction en cours…")
+        self._set_busy(True, "Rédaction en cours…" if surgical else "Génération complète…")
 
+        # Le chat CHIRURGICAL édite la version COURANTE (dernière obtenue) — pas
+        # l'original figé : les modifs s'enchaînent.
+        base = self._screenplay or self._original
         self._worker = ArrangeChatWorker(
-            original=self._original,
+            original=base,
             analysis=self._analysis,
-            history=self._history[:-1],  # sans le dernier (courant)
+            history=self._history[:-1] if surgical else list(self._history),
             user_message=user_message,
             intensity=self._intensity,
             ref_images=ref_images or [],
+            surgical=surgical,
         )
         self._worker.message_ready.connect(self._on_message_ready)
-        self._worker.screenplay_ready.connect(self._on_screenplay_ready)
+        if surgical:
+            self._worker.edits_ready.connect(self._on_edits_ready)
+        else:
+            self._worker.screenplay_ready.connect(self._on_screenplay_ready)
         self._worker.failed.connect(self._on_failed)
         self._worker.start()
 
@@ -686,6 +704,41 @@ class ArrangeSessionDialog(QDialog):
         self._append_chat_bubble(text, "claude")
         self._history.append({"role": "assistant", "content": text})
         self._set_busy(False, "")
+
+    def _on_edits_ready(self, edits: list):
+        """Chat CHIRURGICAL : applique les éditions ciblées à la version courante
+        (aucune réécriture totale). Liste vide = simple question/réponse."""
+        self._set_busy(False, "")
+        if not edits:
+            return   # pure Q&R : le message a déjà été affiché par _on_message_ready
+        from core.text_edits import apply_find_replace_edits
+        base = self._screenplay or self._original
+        new_text, applied, missed = apply_find_replace_edits(base, edits)
+        if not applied:
+            self._append_chat_bubble(
+                "⚠ Aucune modification appliquée : le passage visé n'a pas été "
+                "retrouvé tel quel dans le scénario.", "claude")
+            return
+        self._on_screenplay_ready(new_text)   # nouvelle version + prévisualisation
+        summary = "✎ " + " · ".join((a.get("summary") or "passage modifié") for a in applied)
+        if missed:
+            summary += f"  ({len(missed)} passage(s) non retrouvé(s))"
+        self._append_chat_bubble(summary, "claude")
+
+    def _on_generate_full(self):
+        """Bouton « Générer le scénario » : réécriture COMPLÈTE volontaire, qui intègre
+        toute la discussion. Coûteux en tokens → action délibérée, distincte du chat."""
+        if not (self._screenplay or self._original).strip():
+            return
+        if self._worker and self._worker.isRunning():
+            return
+        self._append_chat_bubble("↻ Génération du scénario complet (intègre la discussion)…",
+                                 "user")
+        instruction = (
+            "Produis maintenant la version COMPLÈTE du scénario en intégrant toutes les "
+            "modifications qu'on a discutées jusqu'ici. Conserve la mise en page Pandora "
+            "(séquences, en-têtes INT./EXT., noms de personnages en MAJUSCULES).")
+        self._start_worker(instruction, surgical=False)
 
     def _on_screenplay_ready(self, text: str):
         # Tronquer l'historique forward si on est revenu en arrière

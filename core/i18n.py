@@ -1204,6 +1204,16 @@ _FR_TO_EN: dict[str, str] = {
     "Générer l'audio":               "Generate audio",
     "Moteur vidéo":                  "Video engine",
     "Moteur de génération":          "Generation engine",
+    "✎  Générer le scénario":        "✎  Generate the screenplay",
+    "✎  Générer le conducteur":      "✎  Generate the rundown",
+    "Réécrit le scénario COMPLET en intégrant toute la discussion "
+    "(coûteux en tokens — le chat ne modifie que les passages demandés).":
+        "Rewrites the FULL screenplay, incorporating the whole discussion "
+        "(token-heavy — the chat only edits the requested passages).",
+    "Réécrit le conducteur COMPLET en intégrant toute la discussion "
+    "(coûteux en tokens — le chat ne modifie que les passages demandés).":
+        "Rewrites the FULL rundown, incorporating the whole discussion "
+        "(token-heavy — the chat only edits the requested passages).",
     "Supprimer la dernière frame de ce plan (repart du mood à la régénération)":
         "Delete this shot's last frame (regenerating restarts from the mood)",
     "⚠  Ce moteur ne supporte pas les images de référence nativement. "
