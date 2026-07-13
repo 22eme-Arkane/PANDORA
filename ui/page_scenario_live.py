@@ -2220,6 +2220,39 @@ class PageScenario(QWidget):
                                                facade_path=self._facade_for_mapping())
         self._open_decoupage_window(self._worker)
 
+    def _write_decoupage_segments(self, segments: list) -> list:
+        """Écrit les segments dans la séquence Live/Mapping courante (namespace posé,
+        version vidée, musique auto-assignée) et retourne les plans sauvés.
+        Cœur commun « Appliquer » (_apply_decoupage) et « Tout générer »."""
+        import core.storyboard as _sb
+        _sb.set_namespace(f"live_seq_{self._live_mode}")
+        _sb.clear_version_shots(_sb.DEFAULT_VERSION_ID)
+        sc_id = (self._current or {}).get("id", "")
+        # Colonnes Musique/BPM remplies d'office : chaque plan reçoit le morceau
+        # couvrant sa position dans le set (le BPM de la ligne en dérive).
+        from core.music_align import assign_tracks_to_shots
+        _pseudo = [{"id": str(i), "number": i, "duration": seg.get("duration", 5)}
+                   for i, seg in enumerate(segments, 1)]
+        _auto_music = {a["id"]: a["track"]
+                       for a in assign_tracks_to_shots(_pseudo, self._music_tracks)}
+        saved = []
+        for i, seg in enumerate(segments, 1):
+            saved.append(_sb.save_shot({
+                "number":          i,
+                "scenario_id":     sc_id,
+                "scene_title":     seg.get("action", ""),
+                "shot_size":       seg.get("shot_size", ""),
+                "camera_movement": seg.get("camera_movement", ""),
+                "duration":        seg.get("duration", 5),
+                # UN seul prompt à sections (vidéo + [🎵 SOUND DESIGN]) ; sound_prompt en repli.
+                "seedance_prompt": seg.get("seedance_prompt") or seg.get("prompt", ""),
+                "sound_prompt":    seg.get("sound_prompt", ""),
+                "seq_num":         seg.get("act", 1),
+                "seq_name":        seg.get("act_name", ""),
+                "music_track":     _auto_music.get(str(i), ""),
+            }, _sb.DEFAULT_VERSION_ID))
+        return saved
+
     def _apply_decoupage(self, segments: list) -> bool:
         """Écrit les segments dans la séquence Live/Mapping et y navigue.
         Demande confirmation si un découpage existe déjà (il serait écrasé)."""
@@ -2240,30 +2273,7 @@ class PageScenario(QWidget):
             )
             if reply != QMessageBox.StandardButton.Yes:
                 return False
-        _sb.clear_version_shots(_sb.DEFAULT_VERSION_ID)
-        sc_id = (self._current or {}).get("id", "")
-        # Colonnes Musique/BPM remplies d'office : chaque plan reçoit le morceau
-        # couvrant sa position dans le set (le BPM de la ligne en dérive).
-        from core.music_align import assign_tracks_to_shots
-        _pseudo = [{"id": str(i), "number": i, "duration": seg.get("duration", 5)}
-                   for i, seg in enumerate(segments, 1)]
-        _auto_music = {a["id"]: a["track"]
-                       for a in assign_tracks_to_shots(_pseudo, self._music_tracks)}
-        for i, seg in enumerate(segments, 1):
-            _sb.save_shot({
-                "number":          i,
-                "scenario_id":     sc_id,
-                "scene_title":     seg.get("action", ""),
-                "shot_size":       seg.get("shot_size", ""),
-                "camera_movement": seg.get("camera_movement", ""),
-                "duration":        seg.get("duration", 5),
-                # UN seul prompt à sections (vidéo + [🎵 SOUND DESIGN]) ; sound_prompt en repli.
-                "seedance_prompt": seg.get("seedance_prompt") or seg.get("prompt", ""),
-                "sound_prompt":    seg.get("sound_prompt", ""),
-                "seq_num":         seg.get("act", 1),
-                "seq_name":        seg.get("act_name", ""),
-                "music_track":     _auto_music.get(str(i), ""),
-            }, _sb.DEFAULT_VERSION_ID)
+        self._write_decoupage_segments(segments)
         seq_name = translate("Séquences Mapping") if self._live_mode == "mapping" else translate("Séquences Live")
         self._ai_progress_lbl.setText(f"✓  {len(segments)} " + translate("segments générés →") + f" {seq_name}")
         self.navigate_requested.emit(
@@ -4123,44 +4133,24 @@ class PageScenario(QWidget):
         self._gen_all_run_next()
 
     def _gen_all_step_storyboard(self):
-        from api.screenplay import GenerateStoryboardWorker
+        # Même source et même moteur que le bouton « Générer le découpage » (règle
+        # 2026-07-13) : Mise en page PANDORA si présente (conversion DÉTERMINISTE,
+        # prompts co-écrits repris tels quels) sinon conducteur ; worker Live calibré
+        # (mode + façade réelle) — PAS le worker Cinéma qui réécrirait tout.
+        from api.live_screenplay import GenerateDecoupageWorker
         self._ai_progress_lbl.setText("Génération complète [6/8] — Storyboard…")
-        dur = (
-            self._dur_min.value() * 60 + self._dur_sec.value()
-        ) if self._dur_defined_check.isChecked() else 0
-        _el: dict = {}
-        try:
-            import core.casting as _ca_sb, core.decors as _dc_sb
-            import core.accessories as _ac_sb, core.vehicles as _ve_sb
-            chars = [c["name"] for c in _ca_sb.list_characters() if c.get("name")]
-            decs  = [d["name"] for d in _dc_sb.list_decors()     if d.get("name")]
-            accs  = [a["name"] for a in _ac_sb.list_accessories() if a.get("name")]
-            vehs  = [v["name"] for v in _ve_sb.list_vehicles()    if v.get("name")]
-            if chars: _el["characters"]  = chars
-            if decs:  _el["decors"]      = decs
-            _el["accessories"] = accs   # toujours transmis (liste vide = contrainte explicite)
-            if vehs:  _el["vehicles"]    = vehs
-        except Exception:
-            pass
-        w = GenerateStoryboardWorker(self._get_text(), dur, _el or None)
+        w = GenerateDecoupageWorker(self._text_with_music(), self._live_mode,
+                                    facade_path=self._facade_for_mapping())
         w.finished.connect(self._gen_all_storyboard_done)
         w.failed.connect(lambda e: self._gen_all_step_error(e, "Storyboard"))
         self._gen_all_workers.append(w); w.start()
 
-    def _gen_all_storyboard_done(self, shots: list):
+    def _gen_all_storyboard_done(self, segments: list):
         try:
-            import core.storyboard as sb_api
-            sc_id = (self._current or {}).get("id", "")
-            vid = sb_api.DEFAULT_VERSION_ID
-            sb_api.clear_version_shots(vid)
-            for shot in shots:
-                try:
-                    shot["scenario_id"] = sc_id
-                    shot["version_id"] = vid
-                    saved = sb_api.save_shot(shot)
-                    self._gen_all_shots.append(saved)
-                except Exception:
-                    self._gen_all_error_count += 1
+            # Écriture partagée avec « Appliquer » : namespace live_seq_* posé,
+            # version vidée, musique auto-assignée (le « Tout générer » écrivait
+            # avant dans le namespace COURANT, potentiellement le mauvais).
+            self._gen_all_shots.extend(self._write_decoupage_segments(segments))
         except Exception as e:
             self._gen_all_error_count += 1
             self._ai_progress_lbl.setText(f"Erreur storyboard : {str(e)[:80]}")

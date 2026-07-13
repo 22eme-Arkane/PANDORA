@@ -226,6 +226,27 @@ def avertissement_reecriture_regle_2026_07_09():
 
 
 @test
+def tout_generer_source_mise_en_page():
+    """Règle 2026-07-13 : « Tout générer » utilise la MÊME source (Mise en page PANDORA
+    si présente, sinon conducteur) et le MÊME moteur (worker Live calibré mode+façade)
+    que le bouton « Générer le découpage » — plus de worker Cinéma sur le conducteur
+    brut, et l'écriture passe par le helper commun (namespace live_seq_* garanti)."""
+    import inspect
+    from ui.page_scenario_live import PageScenario
+    src = inspect.getsource(PageScenario._gen_all_step_storyboard)
+    assert "GenerateDecoupageWorker" in src and "_text_with_music" in src, \
+        "gen_all storyboard : worker Live + source mise en page attendus"
+    assert "GenerateStoryboardWorker" not in src and "_get_text" not in src, \
+        "gen_all storyboard : worker Cinéma / conducteur brut encore utilisés"
+    done = inspect.getsource(PageScenario._gen_all_storyboard_done)
+    assert "_write_decoupage_segments" in done, \
+        "gen_all storyboard : écriture hors helper commun (namespace non garanti)"
+    apply_src = inspect.getsource(PageScenario._apply_decoupage)
+    assert "_write_decoupage_segments" in apply_src, \
+        "_apply_decoupage : doit passer par le helper commun"
+
+
+@test
 def prompts_arrangement_conducteur():
     """Arrangement : vocabulaire conducteur (actes), pas de vocabulaire scénario."""
     import api.live_screenplay as ls
@@ -518,11 +539,12 @@ def facade_injectee_workers_texte_mapping():
     # Sauvegarder / Ouvrir la co-écriture (sauvegarde de secours avant d'appliquer).
     for _m in ("_btn_save_file", "_btn_open_file", "_on_save_file", "_on_open_file", "_on_progress"):
         assert hasattr(_da2, _m), f"co-écriture : {_m} absent (Sauvegarder/Ouvrir)"
-    # Page live : façade passée UNIQUEMENT aux 2 workers, gate mapping.
+    # Page live : façade passée aux 3 workers (mise en page + découpage + « Tout
+    # générer », aligné le 2026-07-13), gate mapping.
     _psrc = inspect.getsource(__import__("ui.page_scenario_live", fromlist=["_"]))
     assert "_facade_for_mapping" in _psrc and \
-        _psrc.count("facade_path=self._facade_for_mapping()") == 2, \
-        "page live : façade non passée aux workers (mise en page + découpage)"
+        _psrc.count("facade_path=self._facade_for_mapping()") == 3, \
+        "page live : façade non passée aux workers (mise en page + découpage + tout générer)"
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -1468,7 +1490,9 @@ def calage_musical_deterministe():
     # Branchements : découpage (création) + Caler la musique (page Séquences)
     import inspect
     from ui.page_scenario_live import PageScenario
-    assert "assign_tracks_to_shots" in inspect.getsource(PageScenario._apply_decoupage), \
+    # (le calage vit dans le helper commun _write_decoupage_segments depuis le
+    # 2026-07-13 — « Appliquer » ET « Tout générer » y passent tous les deux)
+    assert "assign_tracks_to_shots" in inspect.getsource(PageScenario._write_decoupage_segments), \
         "les plans naissent avec leur morceau"
     import ui.page_storyboard_live as M
     assert "assign_tracks_to_shots" in inspect.getsource(M.PageStoryboard._on_music_align), \

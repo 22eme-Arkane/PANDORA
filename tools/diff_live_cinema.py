@@ -77,6 +77,10 @@ EXPECTED_ONLY_LIVE = {
         # Façade réelle injectée en Vision dans les workers texte (2026-07-07) — le
         # Cinéma n'a pas de façade de bâtiment.
         "_facade_for_mapping",
+        # Écriture des segments de découpage (namespace live_seq_* + musique auto) —
+        # helper commun « Appliquer »/« Tout générer » (2026-07-13). Le Cinéma écrit
+        # ses plans via StoryboardGenerateDialog (pas de namespace à poser).
+        "_write_decoupage_segments",
     },
     "ui/page_storyboard_live.py": {
         "_visible_order", "_load_conductor_tracks", "_on_music_align",
