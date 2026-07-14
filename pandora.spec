@@ -171,8 +171,8 @@ if _IS_MAC:
         icon=_ICNS if os.path.isfile(_ICNS) else None,
         bundle_identifier="com.arkane22eme.pandora",
         info_plist={
-            "CFBundleShortVersionString": "1.3.3",
-            "CFBundleVersion": "1.3.3",
+            "CFBundleShortVersionString": "1.3.4",
+            "CFBundleVersion": "1.3.4",
             "NSHighResolutionCapable": True,
             "LSMinimumSystemVersion": "12.0",
         },
