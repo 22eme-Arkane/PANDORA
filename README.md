@@ -18,9 +18,9 @@
 
 ## Download
 
-**[⬇ Download PANDORA v1.3.3 for Windows](https://github.com/22eme-Arkane/PANDORA/releases/download/v1.3.3/PANDORA_Setup_1.3.3.exe)**
+**[⬇ Download PANDORA v1.3.4 for Windows](https://github.com/22eme-Arkane/PANDORA/releases/download/v1.3.4/PANDORA_Setup_1.3.4.exe)**
 
-**[⬇ Download PANDORA v1.3.3 for macOS](https://github.com/22eme-Arkane/PANDORA/releases/download/v1.3.3/PANDORA_1.3.3.dmg)** *(Apple Silicon — see [Installation](#installation) for the first launch)*
+**[⬇ Download PANDORA v1.3.4 for macOS](https://github.com/22eme-Arkane/PANDORA/releases/download/v1.3.4/PANDORA_1.3.4.dmg)** *(Apple Silicon — see [Installation](#installation) for the first launch)*
 
 All versions: [Releases](../../releases)
 
@@ -28,9 +28,37 @@ All versions: [Releases](../../releases)
 
 ---
 
-## What's new in v1.3.3
+## What's new in v1.3.4
 
-This update focuses on the **Live / Mapping "Generate from Sequences" workflow** and the **conductor strip**, plus screenplay-to-storyboard découpage and reference images.
+This update makes **AI co-writing actually apply your edits**, gets **Live/Mapping timings to match the music**, and turns the intimidating API setup screen into a short guided walkthrough.
+
+**Co-writing — edits now land every time**
+- **Typography tolerance**: your text uses `'` `« »` `…` while the AI writes back `'` `"` `...` — the passage to edit was no longer found. Both forms now match, in both directions.
+- **No more truncation**: past a few long passages the reply was cut off and *no* edit came through. The ceiling was doubled.
+- **No more empty promises**: the AI sometimes said "I'll change X" without returning the edit. Any requested change now ships in the same reply.
+- Replies are **airier** — paragraphs and lists instead of one dense block.
+
+**Live / Mapping — timings finally match the track**
+- On a 4:28 set, the découpage produced shots totalling 3:55 — **a full minute missing at export**. Shot durations are now **automatically conformed to the set length** (pro-rata), and the arithmetic instruction was hardened in every prompt that writes durations.
+- **"Generate all"** now starts from the *PANDORA layout* when it exists (like the découpage button) — your co-written prompts are no longer rewritten.
+
+**Cinéma — the layout becomes a real découpage, with no AI pass**
+- When the PANDORA layout is co-written shot by shot, the storyboard is derived **directly**: prompts kept verbatim, zero loss, zero AI call (so zero cost). The rewrite warning only appears when the AI actually steps in.
+
+**Visual references — the Live feature set comes to Cinéma**
+- Images and analysis **saved with the project** (no longer lost on close)
+- "Analyze" **reopens** the existing analysis instead of paying for it again
+- **Analysis library**, reusable across projects
+- **Art-direction chat** inside the analysis window
+- The art direction now feeds both the arrangement *and* the co-writing
+
+**Four new image engines** — **GPT Image 2**, **FLUX.2 [pro]**, **Seedream 4.5** and **Recraft** join Nano Banana for characters, sets, props, costumes and vehicles.
+
+**Character sheets — a single face** — body views (front, 3/4, profile) are now cropped **without the face**; only the close-up shows it, so Seedance is no longer confused by several faces.
+
+**Getting started, simplified** — the API setup screen now fits in **3 steps per service** (account → key → credits), with clear cues ("2 keys, ≈ 5 minutes, no technical knowledge") and **up-to-date URLs** (the Anthropic console is now `platform.claude.com`).
+
+**Report a bug without an email client** — a feedback / bug form lands in *Contact us*, and the error dialog offers to send the crash report in one click *(server-side activation coming soon)*.
 
 **PANDORA | Live — Mapping & Sequences**
 - **Conductor thumbnails now show each shot's last rendered frame**, with a red ✕ to clear it — spot a drifted shot at a glance and reset it so the next generation restarts clean. Thumbnails load automatically when you open a project, and **self-repair** if a frame link was lost.
@@ -82,7 +110,7 @@ This update focuses on the **Live / Mapping "Generate from Sequences" workflow**
 
 ### Windows
 
-1. Download `PANDORA_Setup_1.3.3.exe` from the link above and run it
+1. Download `PANDORA_Setup_1.3.4.exe` from the link above and run it
 2. If Windows shows *"Windows protected your PC"* (SmartScreen), click
    **More info** then **Run anyway** — the app is not code-signed yet
    (certificate in progress), this is the Windows equivalent of the macOS
@@ -93,7 +121,7 @@ This update focuses on the **Live / Mapping "Generate from Sequences" workflow**
 
 ### macOS
 
-1. Download `PANDORA_1.3.3.dmg` from the link above
+1. Download `PANDORA_1.3.4.dmg` from the link above
 2. Open the DMG and drag **PANDORA** into **Applications** (as usual)
 3. **First launch** — macOS will claim that *"PANDORA is damaged and can't be
    opened"*. **This is normal, the app is not damaged** — macOS blocks apps
