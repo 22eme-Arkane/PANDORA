@@ -1488,9 +1488,14 @@ def selecteur_assistant_ia():
     assert not cin.ollama_url_input.isHidden(), "champs Ollama visibles quand Ollama choisi"
     cin.ai_combo.setCurrentIndex(0)
     assert cin.ollama_url_input.isHidden(), "champs Ollama cachés sur Claude"
+    # PARITÉ Cinéma↔Live (demande Matthieu 2026-07-14) : mêmes 10 choix (mêmes
+    # providers), hors DaVinci qui reste Cinéma-only.
     liv = PageLiveSettings()
-    assert liv._ai_combo.count() == 7, \
-        "7 choix côté Live (PANDORA optimisé, Sonnet, Fable 5, Mistral, Kimi, GLM, Ollama)"
+    assert liv._ai_combo.count() == nc == 10, \
+        "parité : le combo Live doit proposer les MÊMES 10 choix que le Cinéma"
+    _provs = lambda combo: [(combo.itemData(i) or ("", ""))[0] for i in range(combo.count())]
+    assert _provs(liv._ai_combo) == _provs(cin.ai_combo), \
+        "parité : mêmes providers, même ordre, des deux côtés"
     # Ollama : trouvé par donnée (robuste au décalage d'index après ajout Kimi)
     _oll_i = next(i for i in range(liv._ai_combo.count())
                   if (liv._ai_combo.itemData(i) or ("", ""))[0] == "ollama")
@@ -1503,6 +1508,44 @@ def selecteur_assistant_ia():
     assert not liv._kimi_input.isHidden(), "clé Kimi visible côté Live quand Kimi choisi"
     assert not liv._kimi_url_input.isHidden() and not liv._kimi_model_input.isHidden()
     assert liv._ollama_url_input.isHidden(), "champs Ollama cachés quand Kimi choisi"
+
+
+@test
+def parametres_live_parite_cinema():
+    """Parité Paramètres Live↔Cinéma (2026-07-14, hors DaVinci) : thème, clé OpenAI,
+    moteur IA PAR TÂCHE réglable, testeurs de clés, aide API. Le Live UTILISAIT le
+    routage ai_task_engines sans pouvoir le régler."""
+    import inspect
+    from ui.page_live_settings import PageLiveSettings
+    from ui.page_settings import SettingsPage
+    liv = PageLiveSettings()
+    # Thème Sombre/Clair (même clé config « theme »)
+    assert hasattr(liv, "_btn_dark") and hasattr(liv, "_btn_light"), "boutons thème"
+    # Clé OpenAI + moteur par tâche (mêmes tâches que le Cinéma)
+    assert hasattr(liv, "_openai_input"), "clé OpenAI réglable côté Live"
+    cin = SettingsPage()
+    assert set(liv._task_combos.keys()) == set(cin._task_combos.keys()) and liv._task_combos, \
+        "moteur PAR TÂCHE : mêmes tâches des deux côtés"
+    # Testeurs de clés + aide API (parité)
+    for m in ("test_connection", "test_anthropic_connection", "test_openai_connection",
+              "test_mistral_connection", "test_kimi_connection", "test_glm_connection",
+              "_show_api_help", "_toggle_advanced"):
+        assert hasattr(liv, m), f"parité Paramètres : {m} manquant côté Live"
+    # « Choix personnalisé » déplie les avancés et laisse TOUTES les clés saisissables
+    _cu_i = next(i for i in range(liv._ai_combo.count())
+                 if (liv._ai_combo.itemData(i) or ("", ""))[0] == "custom")
+    liv._ai_combo.setCurrentIndex(_cu_i)
+    assert liv._adv_open, "custom → avancés dépliés"
+    assert not liv._openai_input.isHidden() and not liv._mistral_input.isHidden() \
+        and not liv._kimi_input.isHidden() and not liv._glm_input.isHidden(), \
+        "custom → toutes les clés visibles (routage par tâche)"
+    # La sauvegarde écrit openai_key + ai_task_engines (comme le Cinéma)
+    _sv = inspect.getsource(PageLiveSettings._save_api_key)
+    assert "openai_key" in _sv and "ai_task_engines" in _sv, \
+        "sauvegarde Live : openai_key + ai_task_engines absents"
+    # DaVinci reste Cinéma-only (exclusion voulue par Matthieu)
+    _liv_src = inspect.getsource(__import__("ui.page_live_settings", fromlist=["_"]))
+    assert "DaVinci" not in _liv_src, "DaVinci ne doit PAS apparaître dans les Paramètres Live"
 
 
 @test
