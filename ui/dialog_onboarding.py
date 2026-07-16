@@ -2,15 +2,19 @@
 ui/dialog_onboarding.py — Wizard de démarrage pour les novices.
 
 Affiché au premier lancement (ou tant que show_api_guide=True dans la config).
-Guide pas-à-pas : fal.ai + Anthropic Claude → coller les clés dans PANDORA.
+Refonte 2026-07-16 (maquette validée par Matthieu) : une idée par écran —
+grande icône lumineuse, titre, description précise, UN bouton d'action.
+8 écrans : Bienvenue → fal.ai (compte/clé/crédits) → Claude (compte/clé/
+crédits) → Coller les clés. Les vraies captures assets/onboarding/*.png
+s'affichent quand elles existent (sinon rien — pas de fausse maquette).
 """
-import webbrowser
 from PyQt6.QtWidgets import (
     QApplication, QDialog, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
     QFrame, QScrollArea, QWidget, QCheckBox, QStackedWidget,
+    QGraphicsDropShadowEffect,
 )
 from PyQt6.QtCore import Qt, QUrl
-from PyQt6.QtGui import QDesktopServices
+from PyQt6.QtGui import QDesktopServices, QColor
 from ui.styles import CP, PANDORA_STYLESHEET
 from core.i18n import translate
 
@@ -22,6 +26,10 @@ _ANT_SIGNUP   = "https://platform.claude.com"
 _ANT_KEYS     = "https://platform.claude.com/settings/keys"
 _ANT_BILLING  = "https://platform.claude.com/settings/billing"
 
+_TUTO_URL     = "https://www.youtube.com/watch?v=SC3pRI5bR1Q"
+
+_FAL_COLOR    = "#9C3FE4"     # violet fal.ai (couleur de marque)
+
 
 # ── Helpers visuels ────────────────────────────────────────────────────────────
 
@@ -29,138 +37,112 @@ def _open(url):
     QDesktopServices.openUrl(QUrl(url))
 
 
-def _h(text: str, size: int = 15, color: str | None = None) -> QLabel:
+def _rgba(hex_color: str, alpha: float) -> str:
+    """'#9C3FE4', 0.12 → 'rgba(156,63,228,0.12)' (doctrine : jamais de suffixe
+    hex-opacity sur fond sombre)."""
+    c = QColor(hex_color)
+    return f"rgba({c.red()},{c.green()},{c.blue()},{alpha})"
+
+
+def _glow(widget: QWidget, color: str, radius: int = 32):
+    fx = QGraphicsDropShadowEffect()
+    fx.setBlurRadius(radius)
+    fx.setColor(QColor(color))
+    fx.setOffset(0, 0)
+    widget.setGraphicsEffect(fx)
+
+
+def _icon_chip(char: str, color: str, size: int = 84) -> QLabel:
+    """Grande icône lumineuse centrale (style maquette : glyphe + halo)."""
+    ico = QLabel(char)
+    ico.setFixedSize(size, size)
+    ico.setAlignment(Qt.AlignmentFlag.AlignCenter)
+    ico.setStyleSheet(
+        f"background:{_rgba(color, 0.10)};color:{color};"
+        f"border:1px solid {_rgba(color, 0.35)};border-radius:{size * 22 // 84}px;"
+        f"font-size:{size * 36 // 84}px;"
+    )
+    _glow(ico, color, 44)
+    return ico
+
+
+def _kicker(text: str) -> QLabel:
     lbl = QLabel(translate(text))
+    lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
     lbl.setStyleSheet(
-        f"color:{color or CP['text_primary']};font-size:{size}px;font-weight:700;"
+        f"color:{CP['text_dim']};font-size:9px;font-weight:700;"
+        f"font-family:'Consolas',monospace;letter-spacing:3px;background:transparent;"
+    )
+    return lbl
+
+
+def _title(text: str) -> QLabel:
+    lbl = QLabel(translate(text))
+    lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
+    lbl.setWordWrap(True)
+    lbl.setStyleSheet(
+        f"color:{CP['text_primary']};font-size:21px;font-weight:800;"
         f"background:transparent;"
     )
-    lbl.setWordWrap(True)
     return lbl
 
 
-def _p(text: str, size: int = 12, color: str | None = None) -> QLabel:
+def _subtitle(text: str) -> QLabel:
     lbl = QLabel(translate(text))
+    lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
     lbl.setWordWrap(True)
+    lbl.setTextFormat(Qt.TextFormat.RichText)
     lbl.setStyleSheet(
-        f"color:{color or CP['text_secondary']};font-size:{size}px;background:transparent;"
+        f"color:{CP['text_secondary']};font-size:12px;background:transparent;"
     )
     return lbl
 
 
-def _sep() -> QFrame:
+def _detail_box(text: str, color: str) -> QFrame:
+    """Encadré « comment faire, précisément » — noms de boutons exacts."""
     f = QFrame()
-    f.setFixedHeight(1)
-    f.setStyleSheet(f"background:{CP['border']};")
+    f.setStyleSheet(
+        f"QFrame{{background:{_rgba(color, 0.07)};"
+        f"border:1px solid {_rgba(color, 0.30)};border-radius:10px;}}"
+    )
+    lay = QVBoxLayout(f)
+    lay.setContentsMargins(16, 12, 16, 12)
+    lbl = QLabel(translate(text))
+    lbl.setWordWrap(True)
+    lbl.setTextFormat(Qt.TextFormat.RichText)
+    lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
+    lbl.setStyleSheet(
+        f"color:{CP['text_secondary']};font-size:11.5px;background:transparent;border:none;"
+    )
+    lay.addWidget(lbl)
     return f
 
 
-def _link_btn(label: str, url: str, color: str = None) -> QPushButton:
-    c = color or CP["accent"]
+def _cta(label: str, color: str, on_click) -> QPushButton:
+    """Gros bouton d'action lumineux (style maquette)."""
+    c = QColor(color)
+    bright = QColor(color).lighter(122).name()
+    lum = 0.299 * c.red() + 0.587 * c.green() + 0.114 * c.blue()
+    fg = "#07080f" if lum > 150 else "#ffffff"
     btn = QPushButton(translate(label))
-    btn.setFixedHeight(34)
+    btn.setFixedHeight(46)
+    btn.setMinimumWidth(260)
     btn.setCursor(Qt.CursorShape.PointingHandCursor)
     btn.setStyleSheet(
-        f"QPushButton{{background:transparent;color:{c};"
-        f"border:1px solid {c};border-radius:8px;"
-        f"font-size:11px;font-weight:700;padding:0 14px;}}"
-        f"QPushButton:hover{{background:{c};color:#07080f;}}"
+        f"QPushButton{{background:qlineargradient(x1:0,y1:0,x2:1,y2:0,"
+        f"stop:0 {color},stop:1 {bright});color:{fg};"
+        f"border:none;border-radius:12px;font-size:13px;font-weight:700;padding:0 28px;}}"
+        f"QPushButton:hover{{background:{bright};}}"
     )
-    btn.clicked.connect(lambda: _open(url))
+    _glow(btn, color, 30)
+    btn.clicked.connect(on_click)
     return btn
 
 
-def _step_row(num: int, text: str, accent: str = None) -> QHBoxLayout:
-    a = accent or CP["accent"]
-    row = QHBoxLayout()
-    row.setSpacing(12)
-    row.setAlignment(Qt.AlignmentFlag.AlignTop)
-    badge = QLabel(str(num))
-    badge.setFixedSize(28, 28)
-    badge.setAlignment(Qt.AlignmentFlag.AlignCenter)
-    badge.setStyleSheet(
-        f"background:{a};color:#07080f;border-radius:14px;"
-        f"font-size:12px;font-weight:800;border:none;"
-    )
-    lbl = QLabel(translate(text))
-    lbl.setWordWrap(True)
-    lbl.setStyleSheet(
-        f"color:{CP['text_secondary']};font-size:12px;background:transparent;border:none;"
-    )
-    row.addWidget(badge)
-    row.addWidget(lbl, 1)
-    return row
-
-
-def _mock_browser(url_text: str, content_html: str,
-                  highlight_text: str = "", accent: str = None) -> QFrame:
-    """Crée un cadre qui ressemble à une capture d'écran de navigateur."""
-    a = accent or CP["accent"]
-    outer = QFrame()
-    outer.setStyleSheet(
-        f"QFrame{{background:#0d0f1c;border:1px solid {CP['border_bright']};"
-        f"border-radius:10px;}}"
-    )
-    v = QVBoxLayout(outer)
-    v.setContentsMargins(0, 0, 0, 0)
-    v.setSpacing(0)
-
-    # Barre URL
-    bar = QWidget()
-    bar.setFixedHeight(32)
-    bar.setStyleSheet(
-        f"background:#141629;border-bottom:1px solid {CP['border']};"
-        f"border-radius:10px 10px 0 0;"
-    )
-    bar_lay = QHBoxLayout(bar)
-    bar_lay.setContentsMargins(10, 0, 10, 0)
-    bar_lay.setSpacing(6)
-    for c in ["#ff5f57", "#febc2e", "#28c840"]:
-        dot = QLabel("●")
-        dot.setFixedWidth(10)
-        dot.setStyleSheet(f"color:{c};font-size:8px;background:transparent;")
-        bar_lay.addWidget(dot)
-    bar_lay.addSpacing(8)
-    url_lbl = QLabel(f"🔒  {url_text}")
-    url_lbl.setStyleSheet(
-        f"color:{CP['text_dim']};font-size:10px;font-family:'Consolas',monospace;"
-        f"background:#1c1f35;border:1px solid {CP['border']};border-radius:4px;"
-        f"padding:2px 8px;"
-    )
-    bar_lay.addWidget(url_lbl, 1)
-    v.addWidget(bar)
-
-    # Contenu simulé
-    body = QWidget()
-    body.setStyleSheet(f"background:#0d0f1c;border-radius:0 0 10px 10px;")
-    b = QVBoxLayout(body)
-    b.setContentsMargins(16, 12, 16, 12)
-    b.setSpacing(6)
-
-    content = QLabel(translate(content_html))
-    content.setWordWrap(True)
-    content.setTextFormat(Qt.TextFormat.RichText)
-    content.setStyleSheet(f"color:{CP['text_secondary']};font-size:11px;background:transparent;")
-    b.addWidget(content)
-
-    if highlight_text:
-        hl = QLabel(translate(highlight_text))
-        hl.setWordWrap(True)
-        hl.setTextFormat(Qt.TextFormat.RichText)
-        hl.setStyleSheet(
-            f"color:{a};font-size:11px;font-weight:700;"
-            f"background:rgba(78,205,196,0.08);border:1px solid {a}55;"
-            f"border-radius:6px;padding:6px 10px;"
-        )
-        b.addWidget(hl)
-
-    v.addWidget(body)
-    return outer
-
-
-def _shot(filename: str, fallback: QFrame) -> QWidget:
-    """VRAIE capture d'écran si assets/onboarding/<filename> existe (déposée plus
-    tard), sinon la maquette `fallback`. Chemin frozen-aware (PyInstaller)."""
+def _shot(filename: str) -> QWidget | None:
+    """VRAIE capture d'écran si assets/onboarding/<filename> existe (déposée
+    plus tard), sinon None — l'écran reste épuré, sans fausse maquette.
+    Chemin frozen-aware (PyInstaller)."""
     import os, sys
     base = getattr(sys, "_MEIPASS",
                    os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -172,43 +154,19 @@ def _shot(filename: str, fallback: QFrame) -> QWidget:
             lbl = QLabel()
             lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
             lbl.setPixmap(pix.scaledToWidth(
-                640, Qt.TransformationMode.SmoothTransformation))
+                480, Qt.TransformationMode.SmoothTransformation))
             lbl.setStyleSheet(
-                f"background:#0d0f1c;border:1px solid {CP['border_bright']};"
+                f"background:{CP['bg2']};border:1px solid {CP['border_bright']};"
                 f"border-radius:10px;padding:4px;")
             return lbl
-    return fallback
+    return None
 
 
-def _info_box(text: str, color: str = None) -> QFrame:
-    c = color or CP["accent"]
-    f = QFrame()
-    f.setStyleSheet(
-        f"QFrame{{background:rgba(78,205,196,0.07);"
-        f"border:1px solid {c}44;border-radius:8px;}}"
-    )
-    lay = QVBoxLayout(f)
-    lay.setContentsMargins(14, 10, 14, 10)
-    lbl = QLabel(translate(text))
-    lbl.setWordWrap(True)
-    lbl.setTextFormat(Qt.TextFormat.RichText)
-    lbl.setStyleSheet(f"color:{c};font-size:11px;background:transparent;border:none;")
-    lay.addWidget(lbl)
-    return f
-
-
-def _section_title(text: str, color: str = None) -> QLabel:
-    lbl = QLabel(translate(text))
-    lbl.setStyleSheet(
-        f"color:{color or CP['text_dim']};font-size:9px;font-weight:700;"
-        f"letter-spacing:2px;background:transparent;"
-    )
-    return lbl
-
-
-# ── Pages du wizard ────────────────────────────────────────────────────────────
-
-def _page_welcome() -> QWidget:
+def _step_page(icon_char: str, color: str, kicker: str, title: str,
+               subtitle: str, detail: str = "", cta_label: str = "",
+               cta_action=None, shot_file: str = "", note: str = "",
+               note_color: str = "") -> QWidget:
+    """Un écran du wizard : icône lumineuse, titre, description, UN bouton."""
     w = QScrollArea()
     w.setWidgetResizable(True)
     w.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
@@ -219,460 +177,53 @@ def _page_welcome() -> QWidget:
     )
     inner = QWidget()
     inner.setStyleSheet("background:transparent;")
-    lay = QVBoxLayout(inner)
-    lay.setContentsMargins(32, 28, 32, 28)
-    lay.setSpacing(18)
+    outer_lay = QHBoxLayout(inner)
+    outer_lay.setContentsMargins(48, 24, 48, 24)
 
-    # Icône centrale
-    ico = QLabel("✦")
-    ico.setAlignment(Qt.AlignmentFlag.AlignCenter)
-    ico.setStyleSheet(
-        f"color:{CP['accent']};font-size:40px;background:transparent;"
-    )
-    lay.addWidget(ico)
+    col_w = QWidget()
+    col_w.setMaximumWidth(560)
+    col_w.setStyleSheet("background:transparent;")
+    lay = QVBoxLayout(col_w)
+    lay.setContentsMargins(0, 0, 0, 0)
+    lay.setSpacing(0)
 
-    title = QLabel(translate("Bienvenue dans PANDORA"))
-    title.setAlignment(Qt.AlignmentFlag.AlignCenter)
-    title.setStyleSheet(
-        f"color:{CP['text_primary']};font-size:20px;font-weight:800;background:transparent;"
-    )
-    lay.addWidget(title)
-
-    sub = QLabel(translate("Guide de configuration des services IA"))
-    sub.setAlignment(Qt.AlignmentFlag.AlignCenter)
-    sub.setStyleSheet(
-        f"color:{CP['text_dim']};font-size:11px;font-family:'Consolas',monospace;"
-        f"letter-spacing:1px;background:transparent;"
-    )
-    lay.addWidget(sub)
-
-    lay.addWidget(_sep())
-
-    intro = _p("Deux clés, cinq minutes : c'est tout ce qu'il faut pour débloquer la génération.")
-    intro.setAlignment(Qt.AlignmentFlag.AlignCenter)
-    lay.addWidget(intro)
-
-    # Rassurance en un coup d'œil (retour Matthieu 2026-07-13 : ne pas faire peur)
-    chips = QHBoxLayout()
-    chips.setSpacing(8)
-    chips.addStretch()
-    for txt in ("🔑  2 clés", "⏱  ≈ 5 minutes", "🧘  aucune connaissance technique"):
-        c = QLabel(translate(txt))
-        c.setStyleSheet(
-            f"color:{CP['text_secondary']};font-size:10px;font-weight:600;"
-            f"background:{CP['bg2']};border:1px solid {CP['border']};"
-            f"border-radius:11px;padding:4px 12px;")
-        chips.addWidget(c)
-    chips.addStretch()
-    lay.addLayout(chips)
-
-    # Carte fal.ai
-    fal_card = QFrame()
-    fal_card.setStyleSheet(
-        f"QFrame{{background:{CP['bg2']};border:1px solid {CP['border']};"
-        f"border-radius:10px;}}"
-    )
-    fc = QHBoxLayout(fal_card)
-    fc.setContentsMargins(18, 14, 18, 14)
-    fc.setSpacing(14)
-    fal_ico = QLabel("▶")
-    fal_ico.setFixedSize(40, 40)
-    fal_ico.setAlignment(Qt.AlignmentFlag.AlignCenter)
-    fal_ico.setStyleSheet(
-        "background:#9C3FE4;color:#fff;border-radius:10px;"
-        "font-size:16px;font-weight:900;border:none;"
-    )
-    fc.addWidget(fal_ico)
-    fal_txt = QVBoxLayout()
-    fal_txt.setSpacing(3)
-    fal_name = QLabel("fal.ai")
-    fal_name.setWordWrap(True)
-    fal_name.setStyleSheet(
-        f"color:{CP['text_primary']};font-size:14px;font-weight:700;background:transparent;"
-    )
-    fal_desc = QLabel(translate(
-        "Génère les vidéos (Seedance, Kling, Veo…) et les images de référence (portraits, décors…)"
-    ))
-    fal_desc.setWordWrap(True)
-    fal_desc.setStyleSheet(
-        f"color:{CP['text_dim']};font-size:11px;background:transparent;"
-    )
-    fal_price = QLabel(translate("Crédits à la consommation — commence avec $10"))
-    fal_price.setWordWrap(True)
-    fal_price.setStyleSheet(
-        f"color:#9C3FE4;font-size:10px;font-weight:600;background:transparent;"
-    )
-    fal_txt.addWidget(fal_name)
-    fal_txt.addWidget(fal_desc)
-    fal_txt.addWidget(fal_price)
-    fc.addLayout(fal_txt, 1)
-    lay.addWidget(fal_card)
-
-    # Carte Anthropic
-    ant_card = QFrame()
-    ant_card.setStyleSheet(
-        f"QFrame{{background:{CP['bg2']};border:1px solid {CP['border']};"
-        f"border-radius:10px;}}"
-    )
-    ac = QHBoxLayout(ant_card)
-    ac.setContentsMargins(18, 14, 18, 14)
-    ac.setSpacing(14)
-    ant_ico = QLabel("☁")
-    ant_ico.setFixedSize(40, 40)
-    ant_ico.setAlignment(Qt.AlignmentFlag.AlignCenter)
-    ant_ico.setStyleSheet(
-        f"background:{CP['accent2']};color:#fff;border-radius:10px;"
-        "font-size:18px;font-weight:900;border:none;"
-    )
-    ac.addWidget(ant_ico)
-    ant_txt = QVBoxLayout()
-    ant_txt.setSpacing(3)
-    ant_name = QLabel("Anthropic — Claude")
-    ant_name.setWordWrap(True)
-    ant_name.setStyleSheet(
-        f"color:{CP['text_primary']};font-size:14px;font-weight:700;background:transparent;"
-    )
-    ant_desc = QLabel(translate(
-        "Assiste la rédaction du scénario, génère le storyboard et optimise les prompts vidéo"
-    ))
-    ant_desc.setWordWrap(True)
-    ant_desc.setStyleSheet(
-        f"color:{CP['text_dim']};font-size:11px;background:transparent;"
-    )
-    ant_price = QLabel(translate("Crédits à la consommation — commence avec $5"))
-    ant_price.setWordWrap(True)
-    ant_price.setStyleSheet(
-        f"color:{CP['accent2']};font-size:10px;font-weight:600;background:transparent;"
-    )
-    ant_txt.addWidget(ant_name)
-    ant_txt.addWidget(ant_desc)
-    ant_txt.addWidget(ant_price)
-    ac.addLayout(ant_txt, 1)
-    lay.addWidget(ant_card)
-
-    lay.addWidget(_info_box(
-        "💡  <b>Aucune clé requise pour essayer PANDORA</b> — le logiciel fonctionne en mode "
-        "simulation sans clé. Tu peux explorer toutes les pages et revenir configurer "
-        "les clés plus tard depuis <b>Paramètres</b>.",
-        CP["accent"]
-    ))
-
-    lay.addWidget(_sep())
-
-    tuto_row = QHBoxLayout()
-    tuto_row.setSpacing(14)
-    tuto_icon = QLabel("▶")
-    tuto_icon.setFixedSize(36, 36)
-    tuto_icon.setAlignment(Qt.AlignmentFlag.AlignCenter)
-    tuto_icon.setStyleSheet(
-        "background:#ff0000;color:#fff;border-radius:8px;"
-        "font-size:13px;font-weight:900;border:none;"
-    )
-    tuto_row.addWidget(tuto_icon)
-    tuto_col = QVBoxLayout()
-    tuto_col.setSpacing(3)
-    tuto_title = QLabel(translate("Tutoriel complet PANDORA"))
-    tuto_title.setStyleSheet(
-        f"color:{CP['text_primary']};font-size:13px;font-weight:700;background:transparent;"
-    )
-    tuto_sub = QLabel(translate("Découvrez toutes les fonctionnalités en vidéo — YouTube"))
-    tuto_sub.setStyleSheet(
-        f"color:{CP['text_dim']};font-size:10px;background:transparent;"
-    )
-    tuto_col.addWidget(tuto_title)
-    tuto_col.addWidget(tuto_sub)
-    tuto_row.addLayout(tuto_col, 1)
-    btn_tuto = QPushButton(translate("▶  Voir le tutoriel →"))
-    btn_tuto.setFixedHeight(34)
-    btn_tuto.setCursor(Qt.CursorShape.PointingHandCursor)
-    btn_tuto.setStyleSheet(
-        "QPushButton{background:#ff0000;color:#fff;"
-        "border:none;border-radius:8px;"
-        "font-size:11px;font-weight:700;padding:0 14px;}"
-        "QPushButton:hover{background:#cc0000;}"
-    )
-    btn_tuto.clicked.connect(lambda: _open("https://www.youtube.com/watch?v=SC3pRI5bR1Q"))
-    tuto_row.addWidget(btn_tuto)
-    lay.addLayout(tuto_row)
-
+    # Espacement FIXE en haut (pas de stretch) : dans un QScrollArea, la hauteur
+    # des labels repliés est surestimée → un stretch haut pousserait le bas du
+    # contenu sous la ligne de flottaison (vécu au rendu offscreen).
+    lay.addSpacing(34)
+    lay.addWidget(_kicker(kicker), 0, Qt.AlignmentFlag.AlignCenter)
+    lay.addSpacing(20)
+    lay.addWidget(_icon_chip(icon_char, color), 0, Qt.AlignmentFlag.AlignCenter)
+    lay.addSpacing(20)
+    lay.addWidget(_title(title))
+    lay.addSpacing(10)
+    lay.addWidget(_subtitle(subtitle))
+    if detail:
+        lay.addSpacing(16)
+        lay.addWidget(_detail_box(detail, color))
+    if shot_file:
+        shot = _shot(shot_file)
+        if shot is not None:
+            lay.addSpacing(14)
+            lay.addWidget(shot, 0, Qt.AlignmentFlag.AlignCenter)
+    if note:
+        lay.addSpacing(12)
+        n = QLabel(translate(note))
+        n.setWordWrap(True)
+        n.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        n.setStyleSheet(
+            f"color:{note_color or CP['orange']};font-size:10.5px;background:transparent;"
+        )
+        lay.addWidget(n)
+    if cta_label:
+        lay.addSpacing(24)
+        lay.addWidget(_cta(cta_label, color, cta_action or (lambda: None)),
+                      0, Qt.AlignmentFlag.AlignCenter)
     lay.addStretch()
-    w.setWidget(inner)
-    return w
 
-
-def _page_fal() -> QWidget:
-    w = QScrollArea()
-    w.setWidgetResizable(True)
-    w.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
-    w.setStyleSheet(
-        f"QScrollArea{{background:transparent;border:none;}}"
-        f"QScrollBar:vertical{{width:4px;background:{CP['bg2']};}}"
-        f"QScrollBar::handle:vertical{{background:{CP['border_bright']};border-radius:2px;}}"
-    )
-    inner = QWidget()
-    inner.setStyleSheet("background:transparent;")
-    lay = QVBoxLayout(inner)
-    lay.setContentsMargins(32, 24, 32, 24)
-    lay.setSpacing(20)
-
-    # En-tête
-    hrow = QHBoxLayout()
-    hrow.setSpacing(12)
-    ico = QLabel("▶")
-    ico.setFixedSize(38, 38)
-    ico.setAlignment(Qt.AlignmentFlag.AlignCenter)
-    ico.setStyleSheet(
-        "background:#9C3FE4;color:#fff;border-radius:9px;"
-        "font-size:15px;font-weight:900;border:none;"
-    )
-    hrow.addWidget(ico)
-    col = QVBoxLayout()
-    col.setSpacing(2)
-    col.addWidget(_h("fal.ai — Vidéos & Images IA", 16))
-    sub = QLabel("Seedance 2.0  ·  Kling  ·  Veo  ·  Flux  ·  Nano Banana")
-    sub.setStyleSheet(
-        f"color:#9C3FE4;font-size:9px;font-family:'Consolas',monospace;"
-        f"letter-spacing:1px;background:transparent;"
-    )
-    col.addWidget(sub)
-    hrow.addLayout(col, 1)
-    lay.addLayout(hrow)
-
-    lay.addWidget(_sep())
-
-    # 3 étapes, une phrase chacune — l'essentiel sans noyer l'utilisateur
-    # (retour Matthieu 2026-07-13 : trop d'informations faisait peur).
-    lay.addWidget(_p("3 petites étapes — environ 3 minutes. Chaque bouton ouvre la bonne page dans ton navigateur."))
-
-    lay.addWidget(_section_title("1 — LE COMPTE"))
-    lay.addLayout(_step_row(1,
-        "Ouvre <b>fal.ai</b> et clique sur <b>Get started</b> (en haut à droite) — "
-        "connexion avec Google ou GitHub en 30 secondes.", "#9C3FE4"))
-    btn_row = QHBoxLayout()
-    btn_row.addWidget(_link_btn("🌐  Ouvrir fal.ai →", _FAL_SIGNUP, "#9C3FE4"))
-    btn_row.addStretch()
-    lay.addLayout(btn_row)
-
-    lay.addWidget(_section_title("2 — LA CLÉ API"))
-    lay.addLayout(_step_row(2,
-        "Sur la page <b>Keys</b> : clique <b>+ Add key</b> → nomme-la <b>PANDORA</b> → "
-        "<b>Create</b>, puis copie la clé <b>fal_key_…</b> "
-        "(⚠️ affichée une seule fois).", "#9C3FE4"))
-    lay.addWidget(_shot("fal_keys.png", _mock_browser(
-        "fal.ai/dashboard/keys",
-        "<b style='color:#c0c0d0'>API Keys</b><br><br>"
-        "<span style='color:#888'>Aucune clé pour l'instant…</span>",
-        "👆  [ + Add key ]  →  Nom : PANDORA  →  [ Create ]  →  copie  fal_key_…",
-        "#9C3FE4"
-    )))
-    btn_row2 = QHBoxLayout()
-    btn_row2.addWidget(_link_btn("🔑  Ouvrir la page Keys →", _FAL_KEYS, "#9C3FE4"))
-    btn_row2.addStretch()
-    lay.addLayout(btn_row2)
-
-    lay.addWidget(_section_title("3 — LES CRÉDITS"))
-    lay.addLayout(_step_row(3,
-        "Sur la page <b>Billing</b> : clique <b>Add credits</b> — <b>$10</b> suffisent "
-        "pour bien démarrer.", "#9C3FE4"))
-    lay.addWidget(_info_box(
-        "💡  <b>$10 ≈ 20 à 50 vidéos</b> Seedance 2.0 (environ $0.20–$0.50 la vidéo de 10 s).",
-        "#9C3FE4"
-    ))
-    btn_row3 = QHBoxLayout()
-    btn_row3.addWidget(_link_btn("💳  Ouvrir la page Billing →", _FAL_BILLING, "#9C3FE4"))
-    btn_row3.addStretch()
-    lay.addLayout(btn_row3)
-
-    lay.addStretch()
-    w.setWidget(inner)
-    return w
-
-
-def _page_anthropic() -> QWidget:
-    w = QScrollArea()
-    w.setWidgetResizable(True)
-    w.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
-    w.setStyleSheet(
-        f"QScrollArea{{background:transparent;border:none;}}"
-        f"QScrollBar:vertical{{width:4px;background:{CP['bg2']};}}"
-        f"QScrollBar::handle:vertical{{background:{CP['border_bright']};border-radius:2px;}}"
-    )
-    inner = QWidget()
-    inner.setStyleSheet("background:transparent;")
-    lay = QVBoxLayout(inner)
-    lay.setContentsMargins(32, 24, 32, 24)
-    lay.setSpacing(20)
-
-    # En-tête
-    hrow = QHBoxLayout()
-    hrow.setSpacing(12)
-    ico = QLabel("☁")
-    ico.setFixedSize(38, 38)
-    ico.setAlignment(Qt.AlignmentFlag.AlignCenter)
-    ico.setStyleSheet(
-        f"background:{CP['accent2']};color:#fff;border-radius:9px;"
-        "font-size:18px;font-weight:900;border:none;"
-    )
-    hrow.addWidget(ico)
-    col = QVBoxLayout()
-    col.setSpacing(2)
-    col.addWidget(_h("Anthropic — Claude IA", 16))
-    sub = QLabel(translate("Scénario  ·  Storyboard  ·  Prompts  ·  Extraction d'éléments"))
-    sub.setStyleSheet(
-        f"color:{CP['accent2']};font-size:9px;font-family:'Consolas',monospace;"
-        f"letter-spacing:1px;background:transparent;"
-    )
-    col.addWidget(sub)
-    hrow.addLayout(col, 1)
-    lay.addLayout(hrow)
-
-    lay.addWidget(_sep())
-
-    lay.addWidget(_p("3 petites étapes — environ 3 minutes. Chaque bouton ouvre la bonne page dans ton navigateur."))
-
-    lay.addWidget(_section_title("1 — LE COMPTE"))
-    lay.addLayout(_step_row(1,
-        "Ouvre <b>platform.claude.com</b> et clique sur <b>Continuer avec Google</b> "
-        "(ou avec ton adresse e-mail) — la page est en français.",
-        CP["accent2"]
-    ))
-    lay.addWidget(_shot("claude_login.png", _mock_browser(
-        "platform.claude.com",
-        "<b style='color:#c0c0d0'>Claude Platform</b><br><br>"
-        "<span style='color:#888'>Développer sur la plateforme Claude</span>",
-        "👆  [ Continuer avec Google ]  ou  [ Continuer avec l'adresse e-mail ]",
-        CP["accent2"]
-    )))
-    btn_row = QHBoxLayout()
-    btn_row.addWidget(_link_btn("🌐  Ouvrir platform.claude.com →", _ANT_SIGNUP, CP["accent2"]))
-    btn_row.addStretch()
-    lay.addLayout(btn_row)
-
-    lay.addWidget(_section_title("2 — LA CLÉ API"))
-    lay.addLayout(_step_row(2,
-        "Sur la page <b>API Keys</b> : clique <b>Create Key</b> → nomme-la <b>PANDORA</b> → "
-        "<b>Create Key</b>, puis copie la clé <b>sk-ant-…</b> (⚠️ affichée une seule fois).",
-        CP["accent2"]
-    ))
-    lay.addWidget(_shot("claude_keys.png", _mock_browser(
-        "platform.claude.com/settings/keys",
-        "<b style='color:#c0c0d0'>Settings  ›  API Keys</b><br><br>"
-        "<span style='color:#888'>No API keys yet.</span>",
-        "👆  [ Create Key ]  →  Nom : PANDORA  →  [ Create Key ]  →  copie  sk-ant-…",
-        CP["accent2"]
-    )))
-    btn_row2 = QHBoxLayout()
-    btn_row2.addWidget(_link_btn("🔑  Ouvrir la page API Keys →", _ANT_KEYS, CP["accent2"]))
-    btn_row2.addStretch()
-    lay.addLayout(btn_row2)
-
-    lay.addWidget(_section_title("3 — LES CRÉDITS"))
-    lay.addLayout(_step_row(3,
-        "Sur la page <b>Billing</b> : clique <b>Add to credit balance</b> — <b>$5</b> "
-        "suffisent largement pour commencer.",
-        CP["accent2"]
-    ))
-    lay.addWidget(_info_box(
-        "💡  <b>$5 = des centaines d'opérations</b> Claude (scénario, storyboard, "
-        "extraction — environ $0.01–$0.05 l'opération).",
-        CP["accent2"]
-    ))
-    btn_row3 = QHBoxLayout()
-    btn_row3.addWidget(_link_btn("💳  Ouvrir la page Billing →", _ANT_BILLING, CP["accent2"]))
-    btn_row3.addStretch()
-    lay.addLayout(btn_row3)
-
-    lay.addWidget(_info_box(
-        "🔒  <b>VPN :</b> si Claude ne répond pas, désactivez votre VPN — "
-        "certains serveurs VPN sont bloqués par l'API Anthropic.",
-        CP["orange"]
-    ))
-
-    lay.addStretch()
-    w.setWidget(inner)
-    return w
-
-
-def _page_finish(navigate_to_settings_fn) -> QWidget:
-    w = QScrollArea()
-    w.setWidgetResizable(True)
-    w.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
-    w.setStyleSheet(
-        f"QScrollArea{{background:transparent;border:none;}}"
-        f"QScrollBar:vertical{{width:4px;background:{CP['bg2']};}}"
-        f"QScrollBar::handle:vertical{{background:{CP['border_bright']};border-radius:2px;}}"
-    )
-    inner = QWidget()
-    inner.setStyleSheet("background:transparent;")
-    lay = QVBoxLayout(inner)
-    lay.setContentsMargins(32, 28, 32, 28)
-    lay.setSpacing(18)
-
-    ico = QLabel("⚙")
-    ico.setAlignment(Qt.AlignmentFlag.AlignCenter)
-    ico.setStyleSheet(
-        f"color:{CP['accent']};font-size:36px;background:transparent;"
-    )
-    lay.addWidget(ico)
-
-    lay.addWidget(_h("Coller les clés dans PANDORA", 16, CP["text_primary"]))
-    lay.addWidget(_p(
-        "Tu as maintenant tes deux clés API. Il ne reste plus qu'à les coller "
-        "dans la page <b>Paramètres</b> de PANDORA.",
-        color=CP["text_secondary"]
-    ))
-
-    lay.addWidget(_sep())
-
-    # Maquette page Paramètres PANDORA
-    lay.addWidget(_section_title("DANS PANDORA — PAGE PARAMÈTRES"))
-
-    lay.addWidget(_mock_browser(
-        "PANDORA  ›  Paramètres",
-        "<b style='color:#c0c0d0'>Clé fal.ai</b><br>"
-        "<span style='color:#888'>[ fal_key_…</span>"
-        "<span style='color:#555'>                            ]</span><br><br>"
-        "<b style='color:#c0c0d0'>Clé Anthropic</b><br>"
-        "<span style='color:#888'>[ sk-ant-api03-…</span>"
-        "<span style='color:#555'>                     ]</span>",
-        "👆  Colle tes clés ici et clique  [ Enregistrer ]",
-        CP["accent"]
-    ))
-
-    # Bouton aller aux paramètres
-    btn_settings = QPushButton(translate("⚙  Aller aux Paramètres →"))
-    btn_settings.setMinimumHeight(44)
-    btn_settings.setCursor(Qt.CursorShape.PointingHandCursor)
-    btn_settings.setStyleSheet(
-        f"QPushButton{{background:{CP['accent']};color:#07080f;"
-        f"border:none;border-radius:10px;font-size:13px;font-weight:700;padding:0 24px;}}"
-        f"QPushButton:hover{{background:#6eded6;}}"
-    )
-    btn_settings.clicked.connect(navigate_to_settings_fn)
-    lay.addWidget(btn_settings)
-
-    lay.addWidget(_sep())
-
-    # Récap
-    recap = QFrame()
-    recap.setStyleSheet(
-        f"QFrame{{background:{CP['bg2']};border:1px solid {CP['border']};border-radius:10px;}}"
-    )
-    rc = QVBoxLayout(recap)
-    rc.setContentsMargins(18, 14, 18, 14)
-    rc.setSpacing(8)
-    rc.addLayout(_step_row(1, "Colle ta clé <b>fal.ai</b> dans le champ « Clé fal.ai »", "#9C3FE4"))
-    rc.addLayout(_step_row(2, "Colle ta clé <b>Anthropic</b> dans le champ « Clé Anthropic »", CP["accent2"]))
-    rc.addLayout(_step_row(3, "Clique sur <b>Enregistrer</b> — c'est tout !", CP["accent"]))
-    lay.addWidget(recap)
-
-    lay.addWidget(_info_box(
-        "✅  <b>Prêt à créer !</b> Une fois tes clés enregistrées, reviens sur la page "
-        "<b>Scénario</b> pour commencer ton projet. Tu peux retrouver ce guide à tout moment "
-        "depuis la page <b>Paramètres → Aide API</b>."
-    ))
-
-    lay.addStretch()
+    outer_lay.addStretch()
+    outer_lay.addWidget(col_w, 1)
+    outer_lay.addStretch()
     w.setWidget(inner)
     return w
 
@@ -680,13 +231,6 @@ def _page_finish(navigate_to_settings_fn) -> QWidget:
 # ── Dialog principal ───────────────────────────────────────────────────────────
 
 class OnboardingDialog(QDialog):
-
-    _PAGE_TITLES = [
-        "Bienvenue",
-        "Configurer fal.ai",
-        "Configurer Anthropic",
-        "Coller les clés",
-    ]
 
     def __init__(self, navigate_to_settings_fn=None, parent=None):
         super().__init__(parent)
@@ -696,69 +240,159 @@ class OnboardingDialog(QDialog):
         self.setWindowModality(Qt.WindowModality.ApplicationModal)
         self.setStyleSheet(PANDORA_STYLESHEET + f"QDialog{{background:{CP['bg1']};}}")
         from ui.widgets import fit_dialog_to_screen
-        fit_dialog_to_screen(self, 0.45, 0.88, 560, 540)
+        fit_dialog_to_screen(self, 0.45, 0.88, 620, 600)
 
         outer = QVBoxLayout(self)
         outer.setContentsMargins(0, 0, 0, 0)
         outer.setSpacing(0)
 
-        # ── Header ─────────────────────────────────────────────────────────────
-        self._header = QWidget()
-        self._header.setFixedHeight(68)
-        self._header.setStyleSheet(
-            f"background:{CP['bg0']};border-bottom:1px solid {CP['border']};"
-        )
-        hl = QHBoxLayout(self._header)
-        hl.setContentsMargins(28, 0, 28, 0)
-        hl.setSpacing(14)
+        # ── Header : PANDORA — stepper — Passer (style maquette) ───────────────
+        header = QWidget()
+        header.setFixedHeight(58)
+        header.setStyleSheet(f"background:{CP['bg1']};border:none;")
+        hl = QHBoxLayout(header)
+        hl.setContentsMargins(24, 0, 24, 0)
+        hl.setSpacing(12)
 
-        self._step_badge = QLabel("1")
-        self._step_badge.setFixedSize(38, 38)
-        self._step_badge.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self._step_badge.setStyleSheet(
-            f"background:{CP['accent']};color:#07080f;border-radius:10px;"
-            f"font-size:16px;font-weight:800;border:none;"
+        wordmark = QLabel("PANDORA")
+        wordmark.setStyleSheet(
+            f"color:{CP['text_primary']};font-size:13px;font-weight:800;"
+            f"letter-spacing:3px;background:transparent;"
         )
-        hl.addWidget(self._step_badge)
-
-        title_col = QVBoxLayout()
-        title_col.setSpacing(2)
-        self._page_title = QLabel(translate(self._PAGE_TITLES[0]))
-        self._page_title.setStyleSheet(
-            f"color:{CP['text_primary']};font-size:16px;font-weight:800;background:transparent;"
-        )
-        self._dots_lbl = QLabel(self._make_dots(0))
-        self._dots_lbl.setStyleSheet(
-            f"color:{CP['text_dim']};font-size:11px;background:transparent;"
-            f"letter-spacing:4px;"
-        )
-        title_col.addWidget(self._page_title)
-        title_col.addWidget(self._dots_lbl)
-        hl.addLayout(title_col)
+        hl.addWidget(wordmark)
         hl.addStretch()
 
-        btn_skip = QPushButton(translate("Passer ✕"))
-        btn_skip.setFixedHeight(30)
+        btn_skip = QPushButton(translate("Passer"))
+        btn_skip.setFixedHeight(28)
         btn_skip.setCursor(Qt.CursorShape.PointingHandCursor)
         btn_skip.setStyleSheet(
             f"QPushButton{{background:transparent;color:{CP['text_dim']};"
-            f"border:1px solid {CP['border']};border-radius:6px;"
-            f"font-size:10px;font-weight:700;padding:0 12px;}}"
+            f"border:1px solid {CP['border']};border-radius:8px;"
+            f"font-size:10px;font-weight:700;padding:0 14px;}}"
             f"QPushButton:hover{{color:{CP['text_secondary']};border-color:{CP['border_bright']};}}"
         )
         btn_skip.clicked.connect(self.accept)
         hl.addWidget(btn_skip)
-        outer.addWidget(self._header)
+        outer.addWidget(header)
 
-        # ── Stack de pages ─────────────────────────────────────────────────────
+        # ── Stepper centré (points reliés, étape courante = badge numéroté) ────
+        self._colors = [
+            CP["accent"],                     # 1 Bienvenue
+            _FAL_COLOR, _FAL_COLOR, _FAL_COLOR,   # 2-4 fal.ai
+            CP["accent2"], CP["accent2"], CP["accent2"],  # 5-7 Claude
+            CP["green"],                      # 8 Finale
+        ]
+        n = len(self._colors)
+        strip = QWidget()
+        strip.setFixedHeight(34)
+        strip.setStyleSheet("background:transparent;")
+        sl = QHBoxLayout(strip)
+        sl.setContentsMargins(0, 0, 0, 0)
+        sl.setSpacing(6)
+        sl.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self._step_dots: list[QLabel] = []
+        self._step_lines: list[QFrame] = []
+        for i in range(n):
+            if i:
+                line = QFrame()
+                line.setFixedSize(16, 2)
+                sl.addWidget(line)
+                self._step_lines.append(line)
+            dot = QLabel()
+            dot.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            sl.addWidget(dot)
+            self._step_dots.append(dot)
+        outer.addWidget(strip)
+
+        # ── Pages ──────────────────────────────────────────────────────────────
         self._stack = QStackedWidget()
         self._stack.setStyleSheet(f"background:{CP['bg1']};")
 
+        A, A2, F, G = CP["accent"], CP["accent2"], _FAL_COLOR, CP["green"]
         self._pages = [
-            _page_welcome(),
-            _page_fal(),
-            _page_anthropic(),
-            _page_finish(self._go_settings),
+            self._page_welcome(),
+            _step_page(
+                "🔌", F, "FAL.AI · VIDÉOS & IMAGES — 1 SUR 3",
+                "Créons ton compte fal.ai",
+                "fal.ai est le service qui génère tes <b>vidéos</b> (Seedance, Kling, Veo…) "
+                "et tes <b>images</b> (portraits, décors, storyboards).",
+                detail="Sur la page d'accueil, clique sur <b>« Get started »</b> en haut à "
+                       "droite — connexion avec <b>Google</b> ou <b>GitHub</b>, 30 secondes.",
+                cta_label="🌐  Ouvrir fal.ai →",
+                cta_action=lambda: _open(_FAL_SIGNUP),
+            ),
+            _step_page(
+                "🔑", F, "FAL.AI · VIDÉOS & IMAGES — 2 SUR 3",
+                "Copie ta clé fal.ai",
+                "La clé API est ton <b>badge d'accès personnel</b> : PANDORA l'utilise "
+                "pour lancer les générations en ton nom.",
+                detail="Sur la page <b>Keys</b> : clique <b>« + Add key »</b> → nomme-la "
+                       "<b>PANDORA</b> → <b>« Create »</b> → copie la clé <b>fal_key_…</b>",
+                note="⚠️  La clé ne s'affiche qu'une seule fois — copie-la tout de suite.",
+                shot_file="fal_keys.png",
+                cta_label="🔑  Ouvrir la page Keys →",
+                cta_action=lambda: _open(_FAL_KEYS),
+            ),
+            _step_page(
+                "💳", F, "FAL.AI · VIDÉOS & IMAGES — 3 SUR 3",
+                "Ajoute quelques crédits",
+                "fal.ai fonctionne <b>à la consommation, sans abonnement</b> : "
+                "tu ne paies que ce que tu génères.",
+                detail="Sur la page <b>Billing</b> : clique <b>« Add credits »</b> — "
+                       "<b>$10</b> suffisent pour bien démarrer : environ <b>20 à 50 vidéos</b> "
+                       "Seedance 2.0 ($0.20–$0.50 la vidéo de 10 s).",
+                cta_label="💳  Ouvrir la page Billing →",
+                cta_action=lambda: _open(_FAL_BILLING),
+            ),
+            # NB glyphes : rester sur des emoji à présentation emoji par défaut
+            # (🔌🔑💳🧠✨✅…) — les glyphes « texte » (✦ ☁ 🗝 ✓ ⚙) sortent en
+            # carré vide (tofu) hors Windows/GDI (vérifié au rendu offscreen).
+            _step_page(
+                "🧠", A2, "CLAUDE · SCÉNARIO & STORYBOARD — 1 SUR 3",
+                "Créons ton compte Claude",
+                "Claude est l'IA qui t'assiste sur le <b>scénario</b>, génère le "
+                "<b>storyboard</b> et optimise tes <b>prompts vidéo</b>.",
+                detail="Sur <b>platform.claude.com</b> : clique <b>« Continuer avec Google »</b> "
+                       "(ou avec ton adresse e-mail) — la page est en français.",
+                shot_file="claude_login.png",
+                cta_label="🌐  Ouvrir platform.claude.com →",
+                cta_action=lambda: _open(_ANT_SIGNUP),
+            ),
+            _step_page(
+                "🔑", A2, "CLAUDE · SCÉNARIO & STORYBOARD — 2 SUR 3",
+                "Copie ta clé Claude",
+                "Comme pour fal.ai : une clé personnelle, que tu colleras dans "
+                "PANDORA à la dernière étape.",
+                detail="Sur la page <b>API Keys</b> : clique <b>« Create Key »</b> → nomme-la "
+                       "<b>PANDORA</b> → <b>« Create Key »</b> → copie la clé <b>sk-ant-…</b>",
+                note="⚠️  La clé ne s'affiche qu'une seule fois — copie-la tout de suite.",
+                shot_file="claude_keys.png",
+                cta_label="🔑  Ouvrir la page API Keys →",
+                cta_action=lambda: _open(_ANT_KEYS),
+            ),
+            _step_page(
+                "💳", A2, "CLAUDE · SCÉNARIO & STORYBOARD — 3 SUR 3",
+                "Ajoute quelques crédits",
+                "Même principe que fal.ai : <b>à la consommation, sans abonnement</b>.",
+                detail="Sur la page <b>Billing</b> : clique <b>« Add to credit balance »</b> — "
+                       "<b>$5</b> suffisent largement : des <b>centaines d'opérations</b> "
+                       "(scénario, storyboard — $0.01 à $0.05 l'opération).",
+                note="🔒  Si Claude ne répond pas : désactive ton VPN — certains serveurs "
+                     "VPN sont bloqués par l'API.",
+                cta_label="💳  Ouvrir la page Billing →",
+                cta_action=lambda: _open(_ANT_BILLING),
+            ),
+            _step_page(
+                "✅", G, "DERNIÈRE ÉTAPE",
+                "Colle tes deux clés dans PANDORA",
+                "Direction la page <b>Paramètres</b> : colle la clé <b>fal_key_…</b> et la "
+                "clé <b>sk-ant-…</b> dans leurs champs, puis clique sur <b>« Enregistrer »</b>.",
+                detail="✅  Tu pourras rouvrir ce guide à tout moment depuis "
+                       "<b>Paramètres → Aide API</b>. Et sans clés, PANDORA reste "
+                       "entièrement explorable en mode simulation.",
+                cta_label="Aller aux Paramètres →",
+                cta_action=self._go_settings,
+            ),
         ]
         for p in self._pages:
             self._stack.addWidget(p)
@@ -771,7 +405,7 @@ class OnboardingDialog(QDialog):
             f"background:{CP['bg0']};border-top:1px solid {CP['border']};"
         )
         fl = QHBoxLayout(footer)
-        fl.setContentsMargins(28, 0, 28, 0)
+        fl.setContentsMargins(24, 0, 24, 0)
         fl.setSpacing(12)
 
         self._cb_no_show = QCheckBox(translate("Ne plus afficher ce message"))
@@ -782,6 +416,18 @@ class OnboardingDialog(QDialog):
             f"QCheckBox::indicator:checked{{background:{CP['accent']};border-color:{CP['accent']};}}"
         )
         fl.addWidget(self._cb_no_show)
+
+        btn_tuto = QPushButton(translate("▶  Tutoriel vidéo"))
+        btn_tuto.setFixedHeight(28)
+        btn_tuto.setCursor(Qt.CursorShape.PointingHandCursor)
+        btn_tuto.setToolTip("YouTube")
+        btn_tuto.setStyleSheet(
+            f"QPushButton{{background:transparent;color:{CP['text_dim']};"
+            f"border:none;font-size:10px;font-weight:600;padding:0 10px;}}"
+            f"QPushButton:hover{{color:{CP['text_secondary']};}}"
+        )
+        btn_tuto.clicked.connect(lambda: _open(_TUTO_URL))
+        fl.addWidget(btn_tuto)
         fl.addStretch()
 
         self._btn_prev = QPushButton(translate("← Précédent"))
@@ -811,21 +457,116 @@ class OnboardingDialog(QDialog):
 
         outer.addWidget(footer)
 
+        from ui.widgets import disable_default_buttons
+        disable_default_buttons(self)
+
         self._idx = 0
         self._update_ui()
 
-    # ── Navigation ─────────────────────────────────────────────────────────────
+    # ── Page Bienvenue (spécifique : chips + tutoriel) ─────────────────────────
 
-    def _make_dots(self, current: int) -> str:
-        return "  ".join("●" if i == current else "○" for i in range(len(self._PAGE_TITLES)))
+    def _page_welcome(self) -> QWidget:
+        w = QScrollArea()
+        w.setWidgetResizable(True)
+        w.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        w.setStyleSheet(
+            f"QScrollArea{{background:transparent;border:none;}}"
+            f"QScrollBar:vertical{{width:4px;background:{CP['bg2']};}}"
+            f"QScrollBar::handle:vertical{{background:{CP['border_bright']};border-radius:2px;}}"
+        )
+        inner = QWidget()
+        inner.setStyleSheet("background:transparent;")
+        outer_lay = QHBoxLayout(inner)
+        outer_lay.setContentsMargins(48, 12, 48, 12)
+
+        col_w = QWidget()
+        col_w.setMaximumWidth(560)
+        col_w.setStyleSheet("background:transparent;")
+        lay = QVBoxLayout(col_w)
+        lay.setContentsMargins(0, 0, 0, 0)
+        lay.setSpacing(0)
+
+        lay.addSpacing(34)   # fixe, pas de stretch haut (voir _step_page)
+        lay.addWidget(_kicker("GUIDE DE CONFIGURATION DES SERVICES IA"),
+                      0, Qt.AlignmentFlag.AlignCenter)
+        lay.addSpacing(14)
+        lay.addWidget(_icon_chip("✨", CP["accent"], 68),
+                      0, Qt.AlignmentFlag.AlignCenter)
+        lay.addSpacing(14)
+        lay.addWidget(_title("Bienvenue dans PANDORA"))
+        lay.addSpacing(8)
+        lay.addWidget(_subtitle(
+            "Deux clés, cinq minutes : c'est tout ce qu'il faut pour débloquer la génération."
+        ))
+
+        lay.addSpacing(12)
+        chips = QHBoxLayout()
+        chips.setSpacing(8)
+        chips.addStretch()
+        for txt in ("🔑  2 clés", "⏳  ≈ 5 minutes", "👌  aucune connaissance technique"):
+            c = QLabel(translate(txt))
+            c.setStyleSheet(
+                f"color:{CP['text_secondary']};font-size:10px;font-weight:600;"
+                f"background:{CP['bg2']};border:1px solid {CP['border']};"
+                f"border-radius:11px;padding:4px 12px;")
+            chips.addWidget(c)
+        chips.addStretch()
+        lay.addLayout(chips)
+
+        lay.addSpacing(12)
+        lay.addWidget(_detail_box(
+            "💡  <b>Aucune clé requise pour essayer</b> — PANDORA fonctionne en mode "
+            "simulation sans clé. Tu peux tout explorer et revenir configurer les "
+            "clés plus tard depuis <b>Paramètres</b>.",
+            CP["accent"]
+        ))
+
+        lay.addSpacing(18)
+        lay.addWidget(_cta("Commencer la configuration →", CP["accent"], self._next),
+                      0, Qt.AlignmentFlag.AlignCenter)
+        lay.addStretch()
+
+        outer_lay.addStretch()
+        outer_lay.addWidget(col_w, 1)
+        outer_lay.addStretch()
+        w.setWidget(inner)
+        return w
+
+    # ── Navigation ─────────────────────────────────────────────────────────────
 
     def _update_ui(self):
         i = self._idx
-        n = len(self._PAGE_TITLES)
+        n = len(self._pages)
         self._stack.setCurrentIndex(i)
-        self._page_title.setText(translate(self._PAGE_TITLES[i]))
-        self._step_badge.setText(str(i + 1))
-        self._dots_lbl.setText(self._make_dots(i))
+        accent = self._colors[i]
+        # Stepper : étape courante = badge numéroté coloré, faites = points
+        # pleins, à venir = points creux ; segments parcourus colorés.
+        for j, dot in enumerate(self._step_dots):
+            if j == i:
+                dot.setFixedSize(24, 24)
+                dot.setText(str(j + 1))
+                dot.setStyleSheet(
+                    f"background:{accent};color:#07080f;border-radius:7px;"
+                    f"font-size:11px;font-weight:800;border:none;"
+                )
+            elif j < i:
+                dot.setFixedSize(10, 10)
+                dot.setText("")
+                dot.setStyleSheet(
+                    f"background:{self._colors[j]};border-radius:5px;border:none;"
+                )
+            else:
+                dot.setFixedSize(10, 10)
+                dot.setText("")
+                dot.setStyleSheet(
+                    f"background:{CP['bg3']};border:1px solid {CP['border_bright']};"
+                    f"border-radius:5px;"
+                )
+        for j, line in enumerate(self._step_lines):
+            done = j < i
+            line.setStyleSheet(
+                f"background:{self._colors[j] if done else CP['border']};border:none;"
+            )
         self._btn_prev.setEnabled(i > 0)
         self._btn_next.setText(translate("Terminer") if i == n - 1 else translate("Suivant →"))
 
@@ -835,7 +576,7 @@ class OnboardingDialog(QDialog):
             self._update_ui()
 
     def _next(self):
-        if self._idx < len(self._PAGE_TITLES) - 1:
+        if self._idx < len(self._pages) - 1:
             self._idx += 1
             self._update_ui()
         else:
