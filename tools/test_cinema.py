@@ -3880,5 +3880,37 @@ def distributeur_video_piapi():
     assert "distribution_mode_combo" in _ssrc and '"distribution_mode"' in _ssrc
 
 
+@test
+def accessoire_import_photo_detourage():
+    """Accessoires (demande utilisateur 2026-07-16) : importer une PHOTO plutôt
+    que générer (parité personnages), avec proposition de SUPPRIMER LE FOND
+    (BiRefNet) à l'import. L'image importée/détourée rejoint la galerie et
+    devient l'image active de l'accessoire."""
+    import inspect, tempfile
+    from PyQt6.QtWidgets import QApplication
+    from PyQt6.QtGui import QPixmap
+    QApplication.instance() or QApplication([])
+    import ui.dialog_accessory as DA
+    # Le flux : bouton import → question « Supprimer le fond ? » → BiRefNet
+    _src = inspect.getsource(DA.AccessoryDialog._import_photo)
+    assert "getOpenFileName" in _src and "Supprimer le fond ?" in _src
+    assert "_remove_bg_on" in _src, "le Oui doit lancer le détourage"
+    assert "RemoveBackgroundWorker" in inspect.getsource(DA.AccessoryDialog._remove_bg_on)
+    # Headless : l'import ajoute à la galerie et active l'image ; le retour
+    # BiRefNet ajoute l'image détourée ; le mock ne casse rien.
+    d = tempfile.mkdtemp()
+    img1 = os.path.join(d, "prop.png");   QPixmap(60, 60).save(img1)
+    img2 = os.path.join(d, "prop_nobg.png"); QPixmap(60, 60).save(img2)
+    dlg = DA.AccessoryDialog()
+    dlg._add_gallery_image(img1, "Photo importée ✓")
+    assert dlg._image_path == img1 and img1 in dlg._generated_images
+    dlg._on_bg_removed(img2)
+    assert dlg._image_path == img2 and img2 in dlg._generated_images
+    assert len(dlg._generated_images) == 2, "la photo d'origine reste en galerie"
+    dlg._on_bg_removed("")   # mode mock → statut, pas d'ajout ni de crash
+    assert len(dlg._generated_images) == 2
+    assert hasattr(dlg, "_btn_import_photo"), "bouton d'import absent"
+
+
 if __name__ == "__main__":
     sys.exit(main())

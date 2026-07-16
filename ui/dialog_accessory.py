@@ -438,6 +438,26 @@ class AccessoryDialog(QDialog):
         _action_lay.setContentsMargins(28, 10, 24, 4)
         _action_lay.setSpacing(6)
         _action_lay.addLayout(_gen_row)
+
+        # Import direct d'une photo (sans génération) — parité avec les
+        # personnages (demande utilisateur 2026-07-16). À l'import, on PROPOSE
+        # de supprimer le fond (BiRefNet) : un accessoire détouré s'intègre
+        # mieux aux références envoyées à Seedance.
+        self._btn_import_photo = QPushButton("📁  Importer une photo")
+        self._btn_import_photo.setFixedHeight(32)
+        self._btn_import_photo.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._btn_import_photo.setStyleSheet(
+            f"QPushButton{{background:transparent;color:{CP['text_secondary']};"
+            f"border:1px solid {CP['border']};border-radius:8px;"
+            f"font-size:11px;font-weight:700;}}"
+            f"QPushButton:hover{{background:{CP['bg3']};color:{CP['text_primary']};"
+            f"border-color:{CP['border_bright']};}}"
+        )
+        self._btn_import_photo.setToolTip(translate(
+            "Utiliser une photo existante de l'accessoire plutôt que de le générer"))
+        self._btn_import_photo.clicked.connect(self._import_photo)
+        _action_lay.addWidget(self._btn_import_photo)
+
         _action_lay.addWidget(price_lbl)
         _action_lay.addWidget(self._progress)
         _action_lay.addWidget(self._status)
@@ -794,6 +814,61 @@ class AccessoryDialog(QDialog):
             cam_str = ', '.join(cam_parts)
             sfx = f"{sfx}\n{cam_str}" if sfx else cam_str
         self._suffix_edit.setPlainText(sfx)
+
+    # ── Import direct d'une photo + suppression du fond (BiRefNet) ────────────
+
+    def _import_photo(self):
+        # QFileDialog.getOpenFileName est remplacé globalement par l'explorateur
+        # PANDORA (ui/file_dialogs, vignettes + non-natif anti-crash COM).
+        path, _ = QFileDialog.getOpenFileName(
+            self, translate("Importer une photo d'accessoire"), "",
+            "Images (*.png *.jpg *.jpeg *.webp *.bmp)")
+        if not path or not os.path.isfile(path):
+            return
+        self._add_gallery_image(path, "Photo importée ✓")
+        rep = QMessageBox.question(
+            self, translate("Supprimer le fond ?"),
+            translate("Supprimer le fond de la photo importée ?\n\n"
+                      "Recommandé : l'accessoire détouré s'intègre mieux aux "
+                      "références envoyées à Seedance.\n"
+                      "(BiRefNet via fal.ai — quelques secondes ; sans clé "
+                      "fal.ai : simulation.)"),
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.Yes)
+        if rep == QMessageBox.StandardButton.Yes:
+            self._remove_bg_on(path)
+
+    def _add_gallery_image(self, path: str, status_msg: str):
+        """Ajoute une image à la galerie du dialogue et l'active (aperçu + nav)."""
+        self._image_path = path
+        if path not in self._generated_images:
+            self._generated_images.append(path)
+        self._preview_idx = self._generated_images.index(path)
+        self._load_preview(path)
+        self._refresh_preview_nav()
+        self._status.setText(translate(status_msg))
+
+    def _remove_bg_on(self, path: str):
+        if getattr(self, "_biref_worker", None) and self._biref_worker.isRunning():
+            return
+        from api.tts import RemoveBackgroundWorker
+        self._biref_worker = RemoveBackgroundWorker(path, os.path.dirname(path))
+        self._biref_worker.progress.connect(
+            lambda pct, msg: self._status.setText(translate(msg)))
+        self._biref_worker.finished.connect(self._on_bg_removed)
+        self._biref_worker.failed.connect(
+            lambda e: QMessageBox.critical(self, translate("Erreur BiRefNet"), e))
+        self._biref_worker.start()
+        self._status.setText(translate("Suppression du fond en cours…"))
+
+    def _on_bg_removed(self, path: str):
+        try:
+            if not path or not os.path.isfile(path):
+                self._status.setText(translate("Fond supprimé (mode mock)"))
+                return
+            self._add_gallery_image(path, "Fond supprimé ✓")
+        except Exception:
+            pass
 
     def _on_generate(self):
         prompt = self._prompt.toPlainText().strip()

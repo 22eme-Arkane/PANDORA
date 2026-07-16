@@ -95,6 +95,17 @@ _FR_TO_EN: dict[str, str] = {
     "Cinéma":                              "Cinema",
     "Live":                                "Live",
     "Prochainement":                       "Coming soon",
+    # ── Accessoires : import de photo + détourage (2026-07-16) ────────────────
+    "📁  Importer une photo":                    "📁  Import a photo",
+    "Importer une photo d'accessoire":           "Import an accessory photo",
+    "Utiliser une photo existante de l'accessoire plutôt que de le générer":
+        "Use an existing photo of the prop instead of generating it",
+    "Supprimer le fond ?":                       "Remove the background?",
+    "Supprimer le fond de la photo importée ?\n\nRecommandé : l'accessoire détouré s'intègre mieux aux références envoyées à Seedance.\n(BiRefNet via fal.ai — quelques secondes ; sans clé fal.ai : simulation.)":
+        "Remove the background of the imported photo?\n\nRecommended: a cut-out prop blends better into the references sent to Seedance.\n(BiRefNet via fal.ai — a few seconds; without a fal.ai key: simulation.)",
+    "Photo importée ✓":                          "Photo imported ✓",
+    "Erreur BiRefNet":                           "BiRefNet error",
+
     # ── Distribution des générations (distributeurs alternatifs, 2026-07-16) ──
     "Distribution des générations vidéo":        "Video generation distribution",
     "Mode de distribution":                      "Distribution mode",
