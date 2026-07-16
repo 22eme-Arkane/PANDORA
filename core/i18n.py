@@ -95,9 +95,10 @@ _FR_TO_EN: dict[str, str] = {
     "Cinéma":                              "Cinema",
     "Live":                                "Live",
     "Prochainement":                       "Coming soon",
-    "Pré-production IA\nScénario · Storyboard · DaVinci":
-        "AI pre-production\nScreenplay · Storyboard · DaVinci",
-    "Performance live\nVJ · Mapping":      "Live performance\nVJ · Mapping",
+    "Préparez votre film de A à Z :\nscénario, storyboard, castings…\net plans générés en vidéo IA":
+        "Prepare your film from A to Z:\nscript, storyboard, casting…\nand AI-generated video shots",
+    "Créez les visuels d'un concert\nou d'une projection sur façade,\nclips IA calés sur la musique":
+        "Create visuals for a concert\nor a facade projection show,\nAI clips synced to the music",
     # Splash (mode Live)
     "‹  Retour":                           "‹  Back",
     "Performance live · Mapping · VJ":     "Live performance · Mapping · VJ",
@@ -3569,11 +3570,6 @@ _FR_TO_EN: dict[str, str] = {
         "Enable AI assistant — uses Anthropic credits\n(disabled by default)",
     "L'assistant IA est désactivé.\nActivez-le via « IA ○ » pour poser des questions.\n(Utilise des crédits Anthropic)":
         "The AI assistant is disabled.\nEnable it via 'AI ○' to ask questions.\n(Uses Anthropic credits)",
-
-    # ── Chooser (module Live / Cinéma) ────────────────────────────────────────
-    "Cinéma":                       "Cinema",
-    "Pré-production IA\nScénario · Storyboard · DaVinci":
-        "AI Pre-production\nScreenplay · Storyboard · DaVinci",
 
     # ── API mock — messages de progression ───────────────────────────────────
     "Initialisation de la requête...":  "Initializing request...",
