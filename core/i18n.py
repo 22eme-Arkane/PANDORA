@@ -95,10 +95,10 @@ _FR_TO_EN: dict[str, str] = {
     "Cinéma":                              "Cinema",
     "Live":                                "Live",
     "Prochainement":                       "Coming soon",
-    "Préparez votre film de A à Z :\nscénario, storyboard, castings…\net plans générés en vidéo IA":
-        "Prepare your film from A to Z:\nscript, storyboard, casting…\nand AI-generated video shots",
-    "Créez les visuels d'un concert\nou d'une projection sur façade,\nclips IA calés sur la musique":
-        "Create visuals for a concert\nor a facade projection show,\nAI clips synced to the music",
+    "Du scénario aux plans\nen vidéo IA":
+        "From screenplay to shots\nin AI video",
+    "Des visuels de concert\ncalés sur la musique":
+        "Concert visuals\nsynced to the music",
     # Splash (mode Live)
     "‹  Retour":                           "‹  Back",
     "Performance live · Mapping · VJ":     "Live performance · Mapping · VJ",

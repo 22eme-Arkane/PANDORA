@@ -215,19 +215,19 @@ class ChooserWindow(QWidget):
         btns_row.setSpacing(36)
         btns_row.setAlignment(Qt.AlignmentFlag.AlignCenter)
 
-        # Sous-titres = description de ce que chaque espace PERMET DE FAIRE,
-        # sans nom d'outil tiers (retour testeur 2026-07-16 : « Pré-production »
-        # et « VJ · Mapping » ne parlaient pas à un nouvel utilisateur).
+        # Sous-titres = UNE ligne courte qui dit ce que l'espace PERMET, sans
+        # jargon ni nom d'outil tiers (retours testeur 2026-07-16 : d'abord
+        # « Pré-production/VJ » opaques, puis version 3 lignes trop bavarde).
         self._btn_cinema = _ModuleBtn(
             "🎬", "Cinéma",
-            "Préparez votre film de A à Z :\nscénario, storyboard, castings…\net plans générés en vidéo IA",
+            "Du scénario aux plans\nen vidéo IA",
             CP["accent"],
             img_normal="Cinéma_désactiver.png",
             img_active="cinéma.png",
         )
         self._btn_live = _ModuleBtn(
             "◈", "Live",
-            "Créez les visuels d'un concert\nou d'une projection sur façade,\nclips IA calés sur la musique",
+            "Des visuels de concert\ncalés sur la musique",
             CP["accent2"],
             img_normal="live_desactiver.png",
             img_active="Live.png",
