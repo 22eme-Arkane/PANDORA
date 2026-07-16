@@ -463,6 +463,24 @@ class DecorDialog(QDialog):
         _action_lay.setContentsMargins(28, 10, 24, 4)
         _action_lay.setSpacing(6)
         _action_lay.addLayout(_gen_row)
+
+        # Import direct d'une photo (sans génération) — parité avec les
+        # personnages et les accessoires (demande utilisateur 2026-07-16). Pas de détourage ici :
+        # un décor (lieu) se garde avec son fond.
+        self._btn_import_photo = QPushButton("📁  Importer une photo")
+        self._btn_import_photo.setFixedHeight(32)
+        self._btn_import_photo.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._btn_import_photo.setStyleSheet(
+            f"QPushButton{{background:transparent;color:{CP['text_secondary']};"
+            f"border:1px solid {CP['border']};border-radius:8px;"
+            f"font-size:11px;font-weight:700;}}"
+            f"QPushButton:hover{{background:{CP['bg3']};color:{CP['text_primary']};"
+            f"border-color:{CP['border_bright']};}}"
+        )
+        self._btn_import_photo.setToolTip(translate("Utiliser une photo existante du décor plutôt que de le générer"))
+        self._btn_import_photo.clicked.connect(self._import_photo)
+        _action_lay.addWidget(self._btn_import_photo)
+
         _action_lay.addWidget(price_lbl)
         _action_lay.addWidget(self._progress)
         _action_lay.addWidget(self._status)
@@ -946,6 +964,29 @@ class DecorDialog(QDialog):
             cam_str = ', '.join(cam_parts)
             sfx = f"{sfx}\n{cam_str}" if sfx else cam_str
         self._suffix_edit.setPlainText(sfx)
+
+    # ── Import direct d'une photo (SANS détourage : un décor se garde avec
+    #    son fond — retour Matthieu 2026-07-16) ───────────────────────────────
+
+    def _import_photo(self):
+        # QFileDialog.getOpenFileName est remplacé globalement par l'explorateur
+        # PANDORA (ui/file_dialogs, vignettes + non-natif anti-crash COM).
+        path, _ = QFileDialog.getOpenFileName(
+            self, translate("Importer une photo de décor"), "",
+            "Images (*.png *.jpg *.jpeg *.webp *.bmp)")
+        if not path or not os.path.isfile(path):
+            return
+        self._add_gallery_image(path, "Photo importée ✓")
+
+    def _add_gallery_image(self, path: str, status_msg: str):
+        """Ajoute une image à la galerie du dialogue et l'active (aperçu + nav)."""
+        self._image_path = path
+        if path not in self._generated_images:
+            self._generated_images.append(path)
+        self._preview_idx = self._generated_images.index(path)
+        self._load_preview(path)
+        self._refresh_preview_nav()
+        self._status.setText(translate(status_msg))
 
     def _on_generate(self):
         prompt = self._prompt.toPlainText().strip()

@@ -3882,20 +3882,30 @@ def distributeur_video_piapi():
 
 @test
 def accessoire_import_photo_detourage():
-    """Accessoires (demande utilisateur 2026-07-16) : importer une PHOTO plutôt
-    que générer (parité personnages), avec proposition de SUPPRIMER LE FOND
-    (BiRefNet) à l'import. L'image importée/détourée rejoint la galerie et
-    devient l'image active de l'accessoire."""
+    """Éléments (demande utilisateur 2026-07-16) : importer une PHOTO plutôt que
+    générer (parité personnages) dans les 4 dialogs Accessoire/HMC/Véhicule/
+    Décor, avec proposition de SUPPRIMER LE FOND (BiRefNet) à l'import —
+    SAUF pour le Décor (un lieu se garde avec son fond). L'image importée/
+    détourée rejoint la galerie et devient l'image active."""
     import inspect, tempfile
     from PyQt6.QtWidgets import QApplication
     from PyQt6.QtGui import QPixmap
     QApplication.instance() or QApplication([])
     import ui.dialog_accessory as DA
-    # Le flux : bouton import → question « Supprimer le fond ? » → BiRefNet
-    _src = inspect.getsource(DA.AccessoryDialog._import_photo)
-    assert "getOpenFileName" in _src and "Supprimer le fond ?" in _src
-    assert "_remove_bg_on" in _src, "le Oui doit lancer le détourage"
-    assert "RemoveBackgroundWorker" in inspect.getsource(DA.AccessoryDialog._remove_bg_on)
+    import ui.dialog_hmc as DH
+    import ui.dialog_vehicle as DV
+    import ui.dialog_decor as DD
+    # Avec détourage proposé : Accessoire, HMC, Véhicule
+    for _cls in (DA.AccessoryDialog, DH.HMCDialog, DV.VehicleDialog):
+        _src = inspect.getsource(_cls._import_photo)
+        assert "getOpenFileName" in _src and "Supprimer le fond ?" in _src, _cls
+        assert "_remove_bg_on" in _src, (_cls, "le Oui doit lancer le détourage")
+        assert "RemoveBackgroundWorker" in inspect.getsource(_cls._remove_bg_on), _cls
+    # SANS détourage : Décor (import direct)
+    _dsrc = inspect.getsource(DD.DecorDialog._import_photo)
+    assert "getOpenFileName" in _dsrc and "Supprimer le fond ?" not in _dsrc, \
+        "le Décor ne doit PAS proposer le détourage"
+    assert not hasattr(DD.DecorDialog, "_remove_bg_on"), "pas de BiRefNet côté Décor"
     # Headless : l'import ajoute à la galerie et active l'image ; le retour
     # BiRefNet ajoute l'image détourée ; le mock ne casse rien.
     d = tempfile.mkdtemp()
@@ -3910,6 +3920,14 @@ def accessoire_import_photo_detourage():
     dlg._on_bg_removed("")   # mode mock → statut, pas d'ajout ni de crash
     assert len(dlg._generated_images) == 2
     assert hasattr(dlg, "_btn_import_photo"), "bouton d'import absent"
+    # Les 4 dialogs ont le bouton, avec un style aux VRAIES couleurs CP
+    for _cls in (DA.AccessoryDialog, DH.HMCDialog, DV.VehicleDialog, DD.DecorDialog):
+        _d = _cls()
+        assert hasattr(_d, "_btn_import_photo"), (_cls, "bouton d'import absent")
+        _ss = _d._btn_import_photo.styleSheet()
+        from ui.styles import CP as _CP
+        assert _CP["text_secondary"] in _ss and "{0}" not in _ss, \
+            (_cls, "style du bouton import mal interpolé")
 
 
 if __name__ == "__main__":

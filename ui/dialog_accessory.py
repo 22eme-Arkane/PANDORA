@@ -829,7 +829,7 @@ class AccessoryDialog(QDialog):
         rep = QMessageBox.question(
             self, translate("Supprimer le fond ?"),
             translate("Supprimer le fond de la photo importée ?\n\n"
-                      "Recommandé : l'accessoire détouré s'intègre mieux aux "
+                      "Recommandé : l'élément détouré s'intègre mieux aux "
                       "références envoyées à Seedance.\n"
                       "(BiRefNet via fal.ai — quelques secondes ; sans clé "
                       "fal.ai : simulation.)"),
