@@ -1,0 +1,116 @@
+﻿=====================================================================
+  PANDORA — Instructions d'installation  /  Installation instructions
+  by 22eme ARKANE — https://github.com/22eme-Arkane/PANDORA
+=====================================================================
+
+
+FRANÇAIS
+========
+
+WINDOWS
+-------
+1. Téléchargez PANDORA_Setup_x.y.z.exe et lancez-le.
+
+2. Si Windows affiche « Windows a protégé votre ordinateur »
+   (SmartScreen) : cliquez sur « Informations complémentaires »
+   puis « Exécuter quand même ».
+   -> L'application n'est pas encore signée numériquement
+      (certificat en cours d'acquisition). C'est l'équivalent
+      Windows de l'avertissement macOS ci-dessous.
+
+3. Suivez l'installeur et acceptez les conditions d'utilisation.
+
+4. Lancez PANDORA depuis le menu Démarrer ou le raccourci bureau.
+
+
+MACOS
+-----
+1. Téléchargez PANDORA_x.y.z.dmg et ouvrez-le.
+
+2. Glissez PANDORA dans le dossier Applications (comme d'habitude).
+
+3. PREMIER LANCEMENT — macOS affichera :
+   « PANDORA est endommagé et ne peut pas être ouvert. »
+
+   C'EST NORMAL : l'application n'est PAS endommagée. macOS bloque
+   simplement les applications qui ne sont pas enregistrées auprès
+   d'Apple (99 $/an — en cours).
+
+   Pour la débloquer (une seule fois) :
+   a. Ouvrez le Terminal (Cmd+Espace, tapez « Terminal »)
+   b. Collez cette ligne puis validez avec Entrée :
+
+        xattr -cr /Applications/PANDORA.app
+
+   c. Lancez PANDORA normalement (double-clic) — macOS ne
+      demandera plus rien.
+
+
+PREMIÈRE CONFIGURATION
+----------------------
+- Au premier lancement, un guide pas-à-pas vous accompagne pour
+  créer vos clés API (fal.ai et Claude) et les coller directement
+  dans PANDORA. Comptez 5 minutes, aucune connaissance technique.
+- Aucune clé n'est requise pour essayer : sans clé, PANDORA
+  fonctionne entièrement en mode simulation.
+- Le guide est rouvrable à tout moment : Paramètres -> Aide API.
+
+
+=====================================================================
+
+
+ENGLISH
+=======
+
+WINDOWS
+-------
+1. Download PANDORA_Setup_x.y.z.exe and run it.
+
+2. If Windows shows "Windows protected your PC" (SmartScreen):
+   click "More info" then "Run anyway".
+   -> The app is not code-signed yet (certificate in progress).
+      This is the Windows equivalent of the macOS notice below.
+
+3. Follow the installer and accept the Terms of Use.
+
+4. Launch PANDORA from the Start menu or the desktop shortcut.
+
+
+MACOS
+-----
+1. Download PANDORA_x.y.z.dmg and open it.
+
+2. Drag PANDORA into the Applications folder (as usual).
+
+3. FIRST LAUNCH — macOS will claim:
+   "PANDORA is damaged and can't be opened."
+
+   THIS IS NORMAL: the app is NOT damaged. macOS simply blocks
+   applications that are not registered with Apple ($99/year —
+   in progress).
+
+   To unblock it (one time only):
+   a. Open Terminal (Cmd+Space, type "Terminal")
+   b. Paste this line and press Enter:
+
+        xattr -cr /Applications/PANDORA.app
+
+   c. Launch PANDORA normally (double-click) — macOS won't
+      ask again.
+
+
+FIRST-TIME SETUP
+----------------
+- On first launch, a step-by-step guide helps you create your API
+  keys (fal.ai and Claude) and paste them directly into PANDORA.
+  About 5 minutes, no technical knowledge required.
+- No key is required to try it out: without keys, PANDORA runs
+  fully in simulation mode.
+- Reopen the guide at any time: Settings -> API Help.
+
+
+=====================================================================
+  Support : 22eme.arkane@gmail.com
+  Téléchargements / Downloads :
+  https://github.com/22eme-Arkane/PANDORA/releases
+=====================================================================

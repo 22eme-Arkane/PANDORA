@@ -85,7 +85,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         shell: pwsh
-        run: gh release upload "${{ github.event.release.tag_name }}" (Get-Item dist/PANDORA_Setup_*.exe).FullName --clobber
+        run: gh release upload "${{ github.event.release.tag_name }}" (Get-Item dist/PANDORA_Setup_*.exe).FullName INSTALLATION.txt --clobber
 
   macos:
     runs-on: macos-14
@@ -154,6 +154,9 @@ jobs:
           mkdir -p dmg_root
           cp -R dist/PANDORA.app dmg_root/
           ln -s /Applications dmg_root/Applications
+          # Instructions d'installation visibles à côté de l'app dans le DMG
+          # (bilingue FR/EN — contournement Gatekeeper « endommagé » inclus)
+          cp INSTALLATION.txt dmg_root/
           hdiutil create -volname "PANDORA $VER" -srcfolder dmg_root -ov -format UDZO "dist/PANDORA_$VER.dmg"
 
       - name: Artefact (DMG)

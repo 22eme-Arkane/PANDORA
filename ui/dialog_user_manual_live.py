@@ -216,6 +216,8 @@ def _l_settings() -> str:
             "<b>Connexion Resolume</b> — hôte (localhost) et port (8080) + test de connexion",
             "<b>Clés API</b> — partagées avec PANDORA | Cinéma : fal.ai (vidéo, SFX, upscale), "
             "Anthropic (assistant, traduction, découpage)",
+            "<b>Aide API</b> — rouvre le <b>guide de démarrage</b> pas-à-pas "
+            "(création des comptes fal.ai / Claude, collage direct des clés)",
             "<b>Assistant IA</b> — Claude, Fable 5, Mistral ou Ollama local",
             "<b>Sauvegarder</b> applique le tout",
         ),
@@ -429,6 +431,8 @@ def _le_settings() -> str:
             "<b>Resolume connection</b> — host (localhost) and port (8080) + connection test",
             "<b>API keys</b> — shared with PANDORA | Cinéma: fal.ai (video, SFX, upscale), "
             "Anthropic (assistant, translation, breakdown)",
+            "<b>API Help</b> — reopens the step-by-step <b>startup guide</b> "
+            "(fal.ai / Claude account creation, paste keys directly)",
             "<b>AI assistant</b> — Claude, Fable 5, Mistral or local Ollama",
             "<b>Save</b> applies everything",
         ),

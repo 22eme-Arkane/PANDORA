@@ -141,13 +141,26 @@ def _s_welcome() -> str:
             "<b>7.</b> Lancez la génération vidéo depuis le storyboard ou le Studio IA",
             "<b>8.</b> Sonorisez (Sound Design) et montez en résolution (Upscaling) au besoin",
         ),
-        _tip("PANDORA fonctionne sans aucune clé API en <b>mode démo (mock)</b> : les vidéos et portraits sont simulés localement. Ajoutez vos clés API dans Paramètres pour les générations réelles."),
+        _tip("PANDORA fonctionne sans aucune clé API en <b>mode démo (mock)</b> : les vidéos et portraits sont simulés localement. Le <b>guide de démarrage</b> (au premier lancement, puis <b>Paramètres → Aide API</b>) vous accompagne pas-à-pas pour créer et coller vos clés."),
         _sep_html(),
         _h("Clés API nécessaires"),
         _ul(
             "<b>fal.ai</b> — Seedance 2.0 (génération vidéo)",
             "<b>Anthropic</b> — Claude IA (scénario, storyboard, extraction d'éléments)",
             "<b>Nano Banana</b> — Génération de portraits de personnages",
+        ),
+        _sep_html(),
+        _h("Installer PANDORA (rappel)"),
+        _p("Utile pour installer sur une autre machine ou aider un collègue :"),
+        _ul(
+            "<b>Windows</b> — lancez <code>PANDORA_Setup_x.y.z.exe</code>. Si SmartScreen affiche "
+            "« Windows a protégé votre ordinateur » : cliquez <b>Informations complémentaires</b> "
+            "puis <b>Exécuter quand même</b> (application pas encore signée, certificat en cours)",
+            "<b>macOS</b> — ouvrez le <code>.dmg</code> et glissez PANDORA dans <b>Applications</b>. "
+            "Au premier lancement, macOS affiche « PANDORA est endommagé » : <b>c'est normal</b> "
+            "(application non enregistrée auprès d'Apple, pas endommagée). Déblocage une seule fois : "
+            "ouvrez le <b>Terminal</b> et collez <code>xattr -cr /Applications/PANDORA.app</code>",
+            "Un fichier <b>INSTALLATION.txt</b> avec ces instructions accompagne chaque téléchargement",
         ),
     ])
 
@@ -917,20 +930,25 @@ def _s_settings() -> str:
     return "".join([
         _h("Paramètres — Configuration de PANDORA", 1),
         _p("La page Paramètres centralise toutes les clés API, les préférences de sortie et la configuration de l'intégration DaVinci Resolve."),
+        _tip("Le plus simple pour configurer les clés : le <b>guide de démarrage</b> "
+             "(écrans illustrés pas-à-pas) s'ouvre au premier lancement et permet de "
+             "<b>coller les clés directement</b>, sans revenir ici. Rouvrez-le à tout "
+             "moment via le bouton <b>Aide API</b> de cette page."),
         _sep_html(),
-        _h("Clé API fal.ai — Seedance 2.0"),
+        _h("Clé API fal.ai — vidéos & images"),
         _ul(
-            "Créez un compte sur <b>fal.ai</b>",
-            "Allez dans votre espace personnel → API Keys → Create new key",
-            "Copiez la clé générée et collez-la dans le champ <b>Clé fal.ai</b>",
-            "Cliquez <b>Enregistrer</b>",
+            "Créez un compte sur <b>fal.ai</b> — « Get started » en haut à droite (connexion Google ou GitHub)",
+            "Page <b>Keys</b> : « + Add key » → nommez-la <b>PANDORA</b> → « Create » → copiez la clé <b>fal_key_…</b> (affichée une seule fois)",
+            "Collez-la dans le champ <b>Clé fal.ai</b> (ou directement dans le guide de démarrage)",
+            "Page <b>Billing</b> : « Add credits » — <b>$10</b> suffisent pour démarrer (≈ 20 à 50 vidéos Seedance 2.0)",
             "Sans cette clé : mode mock (simulation locale, aucune vidéo réelle générée)",
         ),
         _h("Clé API Anthropic — Claude IA"),
         _ul(
-            "Créez un compte sur <b>console.anthropic.com</b>",
-            "API Keys → Create Key — donnez-lui un nom",
-            "Collez la clé dans le champ <b>Clé Anthropic</b>",
+            "Créez un compte sur <b>platform.claude.com</b> — « Continuer avec Google » ou votre e-mail",
+            "Page <b>API Keys</b> : « Create Key » → nommez-la <b>PANDORA</b> → copiez la clé <b>sk-ant-…</b> (affichée une seule fois)",
+            "Collez-la dans le champ <b>Clé Anthropic</b> (ou directement dans le guide de démarrage)",
+            "Page <b>Billing</b> : « Add to credit balance » — <b>$5</b> suffisent largement (des centaines d'opérations)",
             "Sans cette clé : toutes les fonctions Claude IA sont désactivées (formatage scénario, arrangement, génération storyboard, extraction d'éléments)",
         ),
         _h("Clé API Nano Banana — Portraits IA"),
@@ -1086,13 +1104,26 @@ def _e_welcome() -> str:
             "<b>7.</b> Launch video generation from the storyboard or the AI Studio",
             "<b>8.</b> Add sound (Sound Design) and upscale (Upscaling) as needed",
         ),
-        _tip("PANDORA works without any API key in <b>demo (mock) mode</b>: videos and portraits are simulated locally. Add your API keys in Settings for real generations."),
+        _tip("PANDORA works without any API key in <b>demo (mock) mode</b>: videos and portraits are simulated locally. The <b>startup guide</b> (on first launch, then <b>Settings → API Help</b>) walks you through creating and pasting your keys."),
         _sep_html(),
         _h("Required API keys"),
         _ul(
             "<b>fal.ai</b> — Seedance 2.0 (video generation)",
             "<b>Anthropic</b> — Claude AI (screenplay, storyboard, element extraction)",
             "<b>Nano Banana</b> — AI character portrait generation",
+        ),
+        _sep_html(),
+        _h("Installing PANDORA (reminder)"),
+        _p("Useful when installing on another machine or helping a colleague:"),
+        _ul(
+            "<b>Windows</b> — run <code>PANDORA_Setup_x.y.z.exe</code>. If SmartScreen shows "
+            "\"Windows protected your PC\": click <b>More info</b> then <b>Run anyway</b> "
+            "(app not code-signed yet, certificate in progress)",
+            "<b>macOS</b> — open the <code>.dmg</code> and drag PANDORA into <b>Applications</b>. "
+            "On first launch, macOS claims \"PANDORA is damaged\": <b>this is normal</b> "
+            "(the app is not registered with Apple, not damaged). One-time unlock: "
+            "open <b>Terminal</b> and paste <code>xattr -cr /Applications/PANDORA.app</code>",
+            "An <b>INSTALLATION.txt</b> file with these instructions ships with every download",
         ),
     ])
 
@@ -1835,20 +1866,25 @@ def _e_settings() -> str:
     return "".join([
         _h("Settings — PANDORA configuration", 1),
         _p("The Settings page centralises all API keys, output preferences and DaVinci Resolve integration configuration."),
+        _tip("The easiest way to set up your keys: the <b>startup guide</b> "
+             "(illustrated step-by-step screens) opens on first launch and lets you "
+             "<b>paste the keys directly</b>, without coming back here. Reopen it at "
+             "any time via the <b>API Help</b> button on this page."),
         _sep_html(),
-        _h("fal.ai API key — Seedance 2.0"),
+        _h("fal.ai API key — videos & images"),
         _ul(
-            "Create an account on <b>fal.ai</b>",
-            "Go to your personal space → API Keys → Create new key",
-            "Copy the generated key and paste it in the <b>fal.ai key</b> field",
-            "Click <b>Save</b>",
+            "Create an account on <b>fal.ai</b> — \"Get started\" (top right), sign in with Google or GitHub",
+            "<b>Keys</b> page: \"+ Add key\" → name it <b>PANDORA</b> → \"Create\" → copy the <b>fal_key_…</b> key (shown only once)",
+            "Paste it in the <b>fal.ai key</b> field (or directly in the startup guide)",
+            "<b>Billing</b> page: \"Add credits\" — <b>$10</b> is plenty to start (≈ 20 to 50 Seedance 2.0 videos)",
             "Without this key: mock mode (local simulation, no real video generated)",
         ),
         _h("Anthropic API key — Claude AI"),
         _ul(
-            "Create an account on <b>console.anthropic.com</b>",
-            "API Keys → Create Key — give it a name",
-            "Paste the key in the <b>Anthropic key</b> field",
+            "Create an account on <b>platform.claude.com</b> — \"Continue with Google\" or your email",
+            "<b>API Keys</b> page: \"Create Key\" → name it <b>PANDORA</b> → copy the <b>sk-ant-…</b> key (shown only once)",
+            "Paste it in the <b>Anthropic key</b> field (or directly in the startup guide)",
+            "<b>Billing</b> page: \"Add to credit balance\" — <b>$5</b> is more than enough (hundreds of operations)",
             "Without this key: all Claude AI functions are disabled (screenplay formatting, arrangement, storyboard generation, element extraction)",
         ),
         _h("Nano Banana API key — AI portraits"),
