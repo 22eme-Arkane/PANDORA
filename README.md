@@ -18,9 +18,9 @@
 
 ## Download
 
-**[⬇ Download PANDORA v1.3.4 for Windows](https://github.com/22eme-Arkane/PANDORA/releases/download/v1.3.4/PANDORA_Setup_1.3.4.exe)**
+**[⬇ Download PANDORA v1.3.5 for Windows](https://github.com/22eme-Arkane/PANDORA/releases/download/v1.3.5/PANDORA_Setup_1.3.5.exe)**
 
-**[⬇ Download PANDORA v1.3.4 for macOS](https://github.com/22eme-Arkane/PANDORA/releases/download/v1.3.4/PANDORA_1.3.4.dmg)** *(Apple Silicon — see [Installation](#installation) for the first launch)*
+**[⬇ Download PANDORA v1.3.5 for macOS](https://github.com/22eme-Arkane/PANDORA/releases/download/v1.3.5/PANDORA_1.3.5.dmg)** *(Apple Silicon — see [Installation](#installation) for the first launch)*
 
 All versions: [Releases](../../releases)
 
@@ -28,39 +28,30 @@ All versions: [Releases](../../releases)
 
 ---
 
-## What's new in v1.3.4
+## What's new in v1.3.5
 
-This update makes **AI co-writing actually apply your edits**, gets **Live/Mapping timings to match the music**, and turns the intimidating API setup screen into a short guided walkthrough.
+This update lets you **cut your video generation costs** with an alternative provider, **import your own photos** into element sheets, and makes the very first launch friendlier.
 
-**Co-writing — edits now land every time**
-- **Typography tolerance**: your text uses `'` `« »` `…` while the AI writes back `'` `"` `...` — the passage to edit was no longer found. Both forms now match, in both directions.
-- **No more truncation**: past a few long passages the reply was cut off and *no* edit came through. The ceiling was doubled.
-- **No more empty promises**: the AI sometimes said "I'll change X" without returning the edit. Any requested change now ships in the same reply.
-- Replies are **airier** — paragraphs and lists instead of one dense block.
+**Choose your video provider — generate for less**
+- **fal.ai** remains the default, and you can now plug in **PiAPI** as a low-cost alternative for Seedance 2.0 (up to ~35 % cheaper per second).
+- Displayed prices **adapt automatically** to the selected provider, and a **fixed cost estimate** stays visible at the bottom of the AI Studio when you select several shots.
+- **Mono or multi-provider mode**: in mono mode, services the provider doesn't cover are greyed out with an explanation instead of failing.
 
-**Live / Mapping — timings finally match the track**
-- On a 4:28 set, the découpage produced shots totalling 3:55 — **a full minute missing at export**. Shot durations are now **automatically conformed to the set length** (pro-rata), and the arithmetic instruction was hardened in every prompt that writes durations.
-- **"Generate all"** now starts from the *PANDORA layout* when it exists (like the découpage button) — your co-written prompts are no longer rewritten.
+**Import your own photos**
+- Props, costumes (HMC), vehicles and sets: **import a real photo** instead of generating one, with optional **automatic background removal** (BiRefNet) for objects.
 
-**Cinéma — the layout becomes a real découpage, with no AI pass**
-- When the PANDORA layout is co-written shot by shot, the storyboard is derived **directly**: prompts kept verbatim, zero loss, zero AI call (so zero cost). The rewrite warning only appears when the AI actually steps in.
+**"Exact fidelity" is now exact**
+- The reference photo is now **actually sent to the image engine** (Nano Banana 2 Edit) — your real objects are reproduced faithfully, materials and details included. Previously only a text description was passed along.
 
-**Visual references — the Live feature set comes to Cinéma**
-- Images and analysis **saved with the project** (no longer lost on close)
-- "Analyze" **reopens** the existing analysis instead of paying for it again
-- **Analysis library**, reusable across projects
-- **Art-direction chat** inside the analysis window
-- The art direction now feeds both the arrangement *and* the co-writing
+**A friendlier first launch**
+- The welcome screen now says plainly what each space does: *Cinéma — create an AI-generated film or video* · *Live — create an AI-generated video show or mapping*.
+- The startup guide was rebuilt as an **8-screen walkthrough** — one idea per screen, one button per action — and you can **paste your API keys directly in the guide**. Reopen it anytime from *Settings → API Help*.
+- An **INSTALLATION.txt** (FR/EN) now ships with every download, covering the Windows SmartScreen and macOS unblocking steps.
 
-**Four new image engines** — **GPT Image 2**, **FLUX.2 [pro]**, **Seedream 4.5** and **Recraft** join Nano Banana for characters, sets, props, costumes and vehicles.
+**Settings, tidied up**
+- Optional API keys (PiAPI, OpenAI, Mistral…) grouped in one collapsible section, identical between the Cinéma and Live editions.
 
-**Character sheets — a single face** — body views (front, 3/4, profile) are now cropped **without the face**; only the close-up shows it, so Seedance is no longer confused by several faces.
-
-**Getting started, simplified** — the API setup screen now fits in **3 steps per service** (account → key → credits), with clear cues ("2 keys, ≈ 5 minutes, no technical knowledge") and **up-to-date URLs** (the Anthropic console is now `platform.claude.com`).
-
-**Report a bug without an email client** — a feedback / bug form lands in *Contact us*, and the error dialog offers to send the crash report in one click *(server-side activation coming soon)*.
-
-> Previous release (v1.3.3): conductor thumbnails with last rendered frame, shot-to-shot continuity in mapping, mood engine choice (Flux / Nano Banana 2). Full history: [Releases](../../releases).
+> Previous release (v1.3.4): reliable co-writing edits, Live/Mapping timings conformed to the track, layout-to-storyboard with zero AI cost, visual references in Cinéma, four new image engines. Full history: [Releases](../../releases).
 
 ---
 
@@ -95,7 +86,7 @@ This update makes **AI co-writing actually apply your edits**, gets **Live/Mappi
 
 ### Windows
 
-1. Download `PANDORA_Setup_1.3.4.exe` from the link above and run it
+1. Download `PANDORA_Setup_1.3.5.exe` from the link above and run it
 2. If Windows shows *"Windows protected your PC"* (SmartScreen), click
    **More info** then **Run anyway** — the app is not code-signed yet
    (certificate in progress), this is the Windows equivalent of the macOS
@@ -106,7 +97,7 @@ This update makes **AI co-writing actually apply your edits**, gets **Live/Mappi
 
 ### macOS
 
-1. Download `PANDORA_1.3.4.dmg` from the link above
+1. Download `PANDORA_1.3.5.dmg` from the link above
 2. Open the DMG and drag **PANDORA** into **Applications** (as usual)
 3. **First launch** — macOS will claim that *"PANDORA is damaged and can't be
    opened"*. **This is normal, the app is not damaged** — macOS blocks apps
