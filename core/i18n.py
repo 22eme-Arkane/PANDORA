@@ -1688,6 +1688,9 @@ _FR_TO_EN: dict[str, str] = {
         "PiAPI — Seedance 2.0 low cost  (video distributor, see advanced)",
     "La clé PiAPI se renseigne dans « Clés API facultatives » ci-dessous.":
         "The PiAPI key goes in \"Optional API keys\" below.",
+    "La clé PiAPI se renseigne dans « Clés API facultatives » ci-dessus.":
+        "The PiAPI key goes in \"Optional API keys\" above.",
+    "Clé PiAPI (distributeur) :":                "PiAPI key (distributor):",
     "Non requises pour faire fonctionner PANDORA — distributeur vidéo low cost (PiAPI) ou moteurs d'assistant texte (global ou par tâche).":
         "Not required to run PANDORA — low-cost video distributor (PiAPI) or text assistant engines (global or per task).",
     "Choix personnalisé — un moteur par tâche":

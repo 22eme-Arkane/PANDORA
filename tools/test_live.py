@@ -2696,8 +2696,7 @@ def distributeur_video_piapi_live():
     # Paramètres Live : mêmes éléments que le Cinéma (combo, clé, test, visibilité)
     import ui.page_live_settings as PLS
     _src = inspect.getsource(PLS)
-    for _needle in ("video_provider_combo", '"piapi_key"', "test_piapi_connection",
-                    "_refresh_piapi_visibility"):
+    for _needle in ("video_provider_combo", '"piapi_key"', "test_piapi_connection"):
         assert _needle in _src, f"parité distributeurs : {_needle} manquant côté Live"
     # Studio Live : bandeau prix fixe sous les onglets + signal T2V Live
     import ui.live_studio_widget as LSW
@@ -2718,6 +2717,14 @@ def distributeur_video_piapi_live():
     # actif ; retour en multi → tout se réactive (parité Cinéma).
     for _n in ("distribution_mode_combo", '"distribution_mode"'):
         assert _n in _src, f"parité mono/multi : {_n} manquant côté Live"
+    # Section « Clés API facultatives » repliable, PiAPI en tête (parité Cinéma
+    # 2026-07-16) ; les rangées de CLÉS y restent toujours visibles.
+    for _n in ("_toggle_opt_keys", "_btn_opt_keys",
+               "Clés API facultatives  (PiAPI, OpenAI, Mistral…)",
+               "Clé PiAPI (distributeur) :"):
+        assert _n in _src, f"parité clés facultatives : {_n} manquant côté Live"
+    assert "_refresh_piapi_visibility" not in _src, \
+        "ancien mécanisme de visibilité PiAPI encore présent"
     import core.media_provider as mp
     _orig_lc = mp.load_config
     try:

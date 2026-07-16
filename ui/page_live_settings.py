@@ -171,87 +171,6 @@ class PageLiveSettings(QWidget):
         lay.addWidget(_scr_note)
         lay.addSpacing(28)
 
-        # ── Section Resolume ────────────────────────────────────────────────────
-        lay.addWidget(_section_title("CONNEXION RESOLUME"))
-        lay.addSpacing(14)
-
-        resolume_card = QFrame()
-        resolume_card.setStyleSheet(
-            f"QFrame{{background:{CP['bg2']};border:1px solid {CP['border']};"
-            f"border-radius:12px;}}"
-        )
-        rc = QVBoxLayout(resolume_card)
-        rc.setContentsMargins(24, 20, 24, 20)
-        rc.setSpacing(14)
-
-        info = QLabel(
-            "Resolume Arena ou Avenue doit être lancé avec le serveur web activé :\n"
-            "Préférences → Webserver → « Enable Webserver & REST API »  (port : 8080)"
-        )
-        info.setWordWrap(True)
-        info.setStyleSheet(
-            f"color:{CP['text_secondary']};font-size:11px;"
-            f"background:transparent;border:none;"
-        )
-        rc.addWidget(info)
-
-        rc.addWidget(_separator())
-
-        # Adresse hôte
-        host_row = QHBoxLayout()
-        host_row.setSpacing(12)
-        host_row.addWidget(_label("Adresse IP / hôte :"))
-        self._host_input = _input("localhost", 200)
-        self._host_input.setText("localhost")
-        host_row.addWidget(self._host_input)
-        host_row.addStretch()
-        rc.addLayout(host_row)
-
-        # Port
-        port_row = QHBoxLayout()
-        port_row.setSpacing(12)
-        port_row.addWidget(_label("Port Webserver :"))
-        self._port_spin = QSpinBox()
-        self._port_spin.setRange(1024, 65535)
-        self._port_spin.setValue(8080)
-        self._port_spin.setFixedSize(100, 36)
-        self._port_spin.setStyleSheet(
-            f"QSpinBox{{background:{CP['bg3']};border:1px solid {CP['border']};"
-            f"border-radius:6px;color:{CP['text_primary']};font-size:12px;padding:0 8px;}}"
-            f"QSpinBox:focus{{border-color:{CP['accent2']};}}"
-        )
-        port_row.addWidget(self._port_spin)
-        port_row.addStretch()
-        rc.addLayout(port_row)
-
-        # Bouton tester
-        btn_test = QPushButton("◈  Tester la connexion")
-        btn_test.setFixedHeight(38)
-        btn_test.setFixedWidth(220)
-        btn_test.setCursor(Qt.CursorShape.PointingHandCursor)
-        btn_test.setStyleSheet(
-            f"QPushButton{{background:transparent;color:{CP['accent2']};"
-            f"border:1.5px solid {CP['accent2']};border-radius:8px;"
-            f"font-size:12px;font-weight:700;padding:0 16px;}}"
-            f"QPushButton:hover{{background:rgba(124,107,255,0.12);}}"
-            f"QPushButton:pressed{{background:rgba(124,107,255,0.22);}}"
-        )
-        btn_test.clicked.connect(self._test_connection)
-
-        self._test_lbl = QLabel("")
-        self._test_lbl.setStyleSheet(
-            f"color:{CP['text_dim']};font-size:11px;background:transparent;border:none;"
-        )
-
-        test_row = QHBoxLayout()
-        test_row.setSpacing(14)
-        test_row.addWidget(btn_test)
-        test_row.addWidget(self._test_lbl, 1)
-        rc.addLayout(test_row)
-
-        lay.addWidget(resolume_card)
-        lay.addSpacing(28)
-
         # ── Section Clés API ────────────────────────────────────────────────────
         _api_head = QHBoxLayout()
         _api_head.setSpacing(10)
@@ -387,6 +306,37 @@ class PageLiveSettings(QWidget):
         ai_row.addWidget(self._ai_combo, 1)
         ac.addLayout(ai_row)
 
+        # ── Clés API facultatives (repliable — MÊME section que le Cinéma) ────
+        self._opt_keys_open = False
+        self._btn_opt_keys = QPushButton(
+            "▶  Clés API facultatives  (PiAPI, OpenAI, Mistral…)")
+        self._btn_opt_keys.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._btn_opt_keys.setStyleSheet(
+            f"QPushButton{{background:transparent;color:{CP['accent2']};"
+            f"border:none;text-align:left;font-size:11px;font-weight:700;padding:4px 0;}}"
+            f"QPushButton:hover{{color:#9d8fff;}}"
+        )
+        self._btn_opt_keys.clicked.connect(self._toggle_opt_keys)
+        ac.addWidget(self._btn_opt_keys)
+
+        self._opt_keys_box = QWidget()
+        self._opt_keys_box.setVisible(False)
+        self._opt_keys_box.setStyleSheet("background:transparent;")
+        opt_lay = QVBoxLayout(self._opt_keys_box)
+        opt_lay.setContentsMargins(2, 2, 2, 4)
+        opt_lay.setSpacing(14)
+
+        # PiAPI — distributeur vidéo low cost, EN PREMIER (parité Cinéma)
+        piapi_row = QHBoxLayout()
+        piapi_row.setSpacing(12)
+        piapi_row.addWidget(_key_label("Clé PiAPI (distributeur) :"))
+        self._piapi_input = _input("Clé PiAPI (X-API-Key)", 0)
+        self._piapi_input.setEchoMode(QLineEdit.EchoMode.Password)
+        piapi_row.addWidget(self._piapi_input, 1)
+        piapi_row.addWidget(_test_btn("✓  Tester API PiAPI", self.test_piapi_connection))
+        piapi_row.addWidget(_link_btn("⇗  Clés", "https://piapi.ai/workspace"))
+        opt_lay.addLayout(piapi_row)
+
         # OpenAI (GPT-5.5) — clé visible quand le moteur OpenAI (ou « Choix
         # personnalisé ») est sélectionné ; même clé de config que Cinéma.
         oa_row = QHBoxLayout()
@@ -401,7 +351,7 @@ class PageLiveSettings(QWidget):
         oa_row.addWidget(_oa_link)
         self._openai_row_widgets = (oa_row.itemAt(0).widget(), self._openai_input,
                                     _oa_test, _oa_link)
-        ac.addLayout(oa_row)
+        opt_lay.addLayout(oa_row)
 
         mis_row = QHBoxLayout()
         mis_row.setSpacing(12)
@@ -413,7 +363,7 @@ class PageLiveSettings(QWidget):
         mis_row.addWidget(_ms_test)
         self._mistral_row_widgets = (mis_row.itemAt(0).widget(), self._mistral_input,
                                      _ms_test)
-        ac.addLayout(mis_row)
+        opt_lay.addLayout(mis_row)
 
         oll_row = QHBoxLayout()
         oll_row.setSpacing(12)
@@ -424,7 +374,7 @@ class PageLiveSettings(QWidget):
         oll_row.addWidget(self._ollama_model_input, 1)
         self._ollama_row_widgets = (oll_row.itemAt(0).widget(),
                                     self._ollama_url_input, self._ollama_model_input)
-        ac.addLayout(oll_row)
+        opt_lay.addLayout(oll_row)
 
         # Kimi (Moonshot) — clé facultative (vide en local) + URL/modèle. L'URL de base
         # sert d'aiguillage API cloud ↔ serveur local OpenAI-compatible (mêmes clés de
@@ -441,7 +391,7 @@ class PageLiveSettings(QWidget):
         kim_row.addWidget(_km_link)
         self._kimi_key_row_widgets = (kim_row.itemAt(0).widget(), self._kimi_input,
                                       _km_test, _km_link)
-        ac.addLayout(kim_row)
+        opt_lay.addLayout(kim_row)
 
         kimu_row = QHBoxLayout()
         kimu_row.setSpacing(12)
@@ -452,7 +402,7 @@ class PageLiveSettings(QWidget):
         kimu_row.addWidget(self._kimi_model_input, 1)
         self._kimi_row_widgets = (kimu_row.itemAt(0).widget(),
                                   self._kimi_url_input, self._kimi_model_input)
-        ac.addLayout(kimu_row)
+        opt_lay.addLayout(kimu_row)
 
         # GLM (Zhipu) — même schéma que Kimi : clé facultative (vide en local) +
         # URL/modèle, l'URL de base aiguillant API cloud ↔ serveur local
@@ -469,7 +419,7 @@ class PageLiveSettings(QWidget):
         glk_row.addWidget(_gl_link)
         self._glm_key_row_widgets = (glk_row.itemAt(0).widget(), self._glm_input,
                                      _gl_test, _gl_link)
-        ac.addLayout(glk_row)
+        opt_lay.addLayout(glk_row)
 
         glu_row = QHBoxLayout()
         glu_row.setSpacing(12)
@@ -480,7 +430,8 @@ class PageLiveSettings(QWidget):
         glu_row.addWidget(self._glm_model_input, 1)
         self._glm_row_widgets = (glu_row.itemAt(0).widget(),
                                  self._glm_url_input, self._glm_model_input)
-        ac.addLayout(glu_row)
+        opt_lay.addLayout(glu_row)
+        ac.addWidget(self._opt_keys_box)
 
         # ── Paramètres avancés : moteur IA PAR TÂCHE (repliable, parité Cinéma) ──
         # Le Live UTILISE le routage ai_task_engines (task=) mais ne pouvait pas le
@@ -620,31 +571,13 @@ class PageLiveSettings(QWidget):
         prov_row.addWidget(self.video_provider_combo)
         adv_lay.addLayout(prov_row)
 
-        piapi_lbl_row = QHBoxLayout()
-        piapi_lbl_row.setSpacing(8)
-        self._piapi_lbl = QLabel("Clé PiAPI — Seedance 2.0 low cost")
-        self._piapi_lbl.setStyleSheet(
-            f"color:{CP['text_secondary']};font-size:11px;background:transparent;")
-        piapi_lbl_row.addWidget(self._piapi_lbl, 1)
-        self._piapi_test_btn = _test_btn("✓  Tester API PiAPI", self.test_piapi_connection)
-        piapi_lbl_row.addWidget(self._piapi_test_btn)
-        self._piapi_link_btn = _link_btn("⇗  Obtenir une clé PiAPI",
-                                         "https://piapi.ai/workspace")
-        piapi_lbl_row.addWidget(self._piapi_link_btn)
-        adv_lay.addLayout(piapi_lbl_row)
-        self._piapi_input = QLineEdit()
-        self._piapi_input.setPlaceholderText("Clé PiAPI (X-API-Key)")
-        self._piapi_input.setEchoMode(QLineEdit.EchoMode.Password)
-        self._piapi_input.setStyleSheet(
-            f"QLineEdit{{background:{CP['bg2']};border:1px solid {CP['border']};"
-            f"border-radius:6px;color:{CP['text_primary']};font-size:11px;"
-            f"padding:0 10px;min-height:28px;}}"
-            f"QLineEdit:focus{{border:1px solid {CP['accent']};}}"
+        _piapi_hint = QLabel(
+            "La clé PiAPI se renseigne dans « Clés API facultatives » ci-dessus."
         )
-        adv_lay.addWidget(self._piapi_input)
-        self.video_provider_combo.currentIndexChanged.connect(
-            self._refresh_piapi_visibility)
-        self._refresh_piapi_visibility()
+        _piapi_hint.setWordWrap(True)
+        _piapi_hint.setStyleSheet(
+            f"color:{CP['text_dim']};font-size:10px;background:transparent;")
+        adv_lay.addWidget(_piapi_hint)
         ac.addWidget(self._adv_box)
 
         def _on_ai_changed(*_):
@@ -652,18 +585,16 @@ class PageLiveSettings(QWidget):
             # « Choix personnalisé » : toutes les clés restent saisissables (le
             # routage par tâche peut viser n'importe quel moteur) + avancés dépliés.
             _all = prov == "custom"
-            for wdg in self._openai_row_widgets:
-                wdg.setVisible(_all or prov == "openai")
-            for wdg in self._mistral_row_widgets:
-                wdg.setVisible(_all or prov == "mistral")
+            # Les rangées de CLÉS vivent dans « Clés API facultatives » et y
+            # restent TOUJOURS visibles (parité Cinéma) ; seuls les champs
+            # URL/modèle (serveurs locaux) suivent le choix d'assistant.
+            for wdg in (self._openai_row_widgets + self._mistral_row_widgets
+                        + self._kimi_key_row_widgets + self._glm_key_row_widgets):
+                wdg.setVisible(True)
             for wdg in self._ollama_row_widgets:
                 wdg.setVisible(_all or prov == "ollama")
-            for wdg in self._kimi_key_row_widgets:
-                wdg.setVisible(_all or prov == "kimi")
             for wdg in self._kimi_row_widgets:
                 wdg.setVisible(_all or prov == "kimi")
-            for wdg in self._glm_key_row_widgets:
-                wdg.setVisible(_all or prov == "glm")
             for wdg in self._glm_row_widgets:
                 wdg.setVisible(_all or prov == "glm")
             if _all and not self._adv_open:
@@ -680,6 +611,89 @@ class PageLiveSettings(QWidget):
         ac.addWidget(self._autosave_lbl)
 
         lay.addWidget(api_card)
+        lay.addSpacing(28)
+
+        # ── Section Resolume ────────────────────────────────────────────────────
+        lay.addWidget(_section_title("CONNEXION RESOLUME"))
+        lay.addSpacing(14)
+
+        resolume_card = QFrame()
+        resolume_card.setStyleSheet(
+            f"QFrame{{background:{CP['bg2']};border:1px solid {CP['border']};"
+            f"border-radius:12px;}}"
+        )
+        rc = QVBoxLayout(resolume_card)
+        rc.setContentsMargins(24, 20, 24, 20)
+        rc.setSpacing(14)
+
+        info = QLabel(
+            "Resolume Arena ou Avenue doit être lancé avec le serveur web activé :\n"
+            "Préférences → Webserver → « Enable Webserver & REST API »  (port : 8080)"
+        )
+        info.setWordWrap(True)
+        info.setStyleSheet(
+            f"color:{CP['text_secondary']};font-size:11px;"
+            f"background:transparent;border:none;"
+        )
+        rc.addWidget(info)
+
+        rc.addWidget(_separator())
+
+        # Adresse hôte
+        host_row = QHBoxLayout()
+        host_row.setSpacing(12)
+        host_row.addWidget(_label("Adresse IP / hôte :"))
+        self._host_input = _input("localhost", 200)
+        self._host_input.setText("localhost")
+        host_row.addWidget(self._host_input)
+        host_row.addStretch()
+        rc.addLayout(host_row)
+
+        # Port
+        port_row = QHBoxLayout()
+        port_row.setSpacing(12)
+        port_row.addWidget(_label("Port Webserver :"))
+        self._port_spin = QSpinBox()
+        self._port_spin.setRange(1024, 65535)
+        self._port_spin.setValue(8080)
+        self._port_spin.setFixedSize(100, 36)
+        self._port_spin.setStyleSheet(
+            f"QSpinBox{{background:{CP['bg3']};border:1px solid {CP['border']};"
+            f"border-radius:6px;color:{CP['text_primary']};font-size:12px;padding:0 8px;}}"
+            f"QSpinBox:focus{{border-color:{CP['accent2']};}}"
+        )
+        port_row.addWidget(self._port_spin)
+        port_row.addStretch()
+        rc.addLayout(port_row)
+
+        # Bouton tester
+        btn_test = QPushButton("◈  Tester la connexion")
+        btn_test.setFixedHeight(38)
+        btn_test.setFixedWidth(220)
+        btn_test.setCursor(Qt.CursorShape.PointingHandCursor)
+        btn_test.setStyleSheet(
+            f"QPushButton{{background:transparent;color:{CP['accent2']};"
+            f"border:1.5px solid {CP['accent2']};border-radius:8px;"
+            f"font-size:12px;font-weight:700;padding:0 16px;}}"
+            f"QPushButton:hover{{background:rgba(124,107,255,0.12);}}"
+            f"QPushButton:pressed{{background:rgba(124,107,255,0.22);}}"
+        )
+        btn_test.clicked.connect(self._test_connection)
+
+        self._test_lbl = QLabel("")
+        self._test_lbl.setStyleSheet(
+            f"color:{CP['text_dim']};font-size:11px;background:transparent;border:none;"
+        )
+
+        test_row = QHBoxLayout()
+        test_row.setSpacing(14)
+        test_row.addWidget(btn_test)
+        test_row.addWidget(self._test_lbl, 1)
+        rc.addLayout(test_row)
+
+        lay.addWidget(resolume_card)
+        lay.addSpacing(28)
+
         lay.addStretch()
 
         root.addWidget(content, 1)
@@ -714,12 +728,13 @@ class PageLiveSettings(QWidget):
     def _toggle_advanced(self):
         self._set_advanced(not self._adv_open)
 
-    def _refresh_piapi_visibility(self, *_):
-        """La ligne clé PiAPI reste TOUJOURS visible (retour Matthieu 2026-07-16,
-        parité Cinéma) — cohérent avec les clés facultatives toujours affichées."""
-        for w in (self._piapi_lbl, self._piapi_test_btn,
-                  self._piapi_link_btn, self._piapi_input):
-            w.setVisible(True)
+    def _toggle_opt_keys(self):
+        self._opt_keys_open = not self._opt_keys_open
+        self._opt_keys_box.setVisible(self._opt_keys_open)
+        self._btn_opt_keys.setText(
+            ("▼" if self._opt_keys_open else "▶")
+            + "  Clés API facultatives  (PiAPI, OpenAI, Mistral…)"
+        )
 
     def test_piapi_connection(self):
         from PyQt6.QtWidgets import QMessageBox
@@ -789,7 +804,6 @@ class PageLiveSettings(QWidget):
                 break
         if cfg.get("distribution_mode", "multi") == "mono":
             self.distribution_mode_combo.setCurrentIndex(1)
-        self._refresh_piapi_visibility()
         host = cfg.get("resolume_host", "localhost")
         port = cfg.get("resolume_port", 8080)
         self._host_input.setText(str(host))
