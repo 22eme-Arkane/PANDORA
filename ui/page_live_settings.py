@@ -617,8 +617,10 @@ class PageLiveSettings(QWidget):
         self._set_advanced(not self._adv_open)
 
     def _show_api_help(self):
-        from ui.dialog_api_help import ApiHelpDialog
-        ApiHelpDialog(self).exec()
+        # Rouvre le guide de démarrage (promis par son écran final) — remplace
+        # l'ancienne ApiHelpDialog depuis la refonte 2026-07-16 (parité Cinéma).
+        from ui.dialog_onboarding import OnboardingDialog
+        OnboardingDialog(parent=self).exec()
 
     def _open_second_window(self):
         """Demande à la fenêtre Live parente d'ouvrir une 2ᵉ fenêtre (2 écrans)."""

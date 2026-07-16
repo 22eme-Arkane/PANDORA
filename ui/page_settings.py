@@ -676,8 +676,10 @@ class SettingsPage(QScrollArea):
         DaVinciHelpDialog(self).exec()
 
     def _show_api_help(self):
-        from ui.dialog_api_help import ApiHelpDialog
-        ApiHelpDialog(self).exec()
+        # Rouvre le guide de démarrage (promis par son écran final) — remplace
+        # l'ancienne ApiHelpDialog depuis la refonte 2026-07-16.
+        from ui.dialog_onboarding import OnboardingDialog
+        OnboardingDialog(parent=self).exec()
 
     def _on_ai_choice_changed(self, *_):
         """Champs Ollama conditionnels + « Choix personnalisé » ouvre les avancés."""
