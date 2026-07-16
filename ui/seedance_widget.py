@@ -128,7 +128,9 @@ class SeedanceWidget(QWidget):
             + "QTabWidget::tab-bar{alignment:center;}"
             + f"QTabBar{{background:{C['bg0']};border:none;}}"
             + f"QTabBar::tab{{background:transparent;color:{C['text_secondary']};}}"
-            + f"QTabBar::tab:hover{{background:transparent;color:{C['text_primary']};}}")
+            + f"QTabBar::tab:hover{{background:transparent;color:{C['text_primary']};}}"
+            # Mode mono-distributeur : onglets non couverts nettement grisés
+            + f"QTabBar::tab:disabled{{background:transparent;color:{C['text_dim']};}}")
         # Barre d'onglets GROUPÉE (trait vertical entre groupes, façon dashboard).
         self.tabs.setTabBar(_GroupedTabBar())
         self.tabs.tabBar().setExpanding(False)
@@ -220,6 +222,34 @@ class SeedanceWidget(QWidget):
         self._price_footer.setVisible(False)
         root.addWidget(self._price_footer)
         self.tab_t2v.price_estimate_changed.connect(self._on_price_estimate)
+
+        self._apply_distribution_mode()
+
+    def _apply_distribution_mode(self):
+        """Mode MONO-distributeur (Paramètres → avancés) : grise les onglets des
+        services que le distributeur choisi ne couvre pas (ils sont servis par
+        fal.ai), avec un tooltip qui explique comment les réactiver. En multi :
+        tout reste actif. Réappliqué à chaque affichage (la config a pu changer)."""
+        from core.media_provider import service_available
+        from core.i18n import translate as _tr
+        for tab, service in (
+            (self.tab_davinci, "edit_clips"),
+            (self.tab_engines, "video_engines"),
+            (self.tab_upscale, "upscale"),
+            (self.tab_sound,   "sound"),
+            (self.tab_music,   "music"),
+            (self.tab_image,   "images"),
+        ):
+            ok, msg = service_available(service)
+            idx = self.tabs.indexOf(tab)
+            if idx < 0:
+                continue
+            self.tabs.setTabEnabled(idx, ok)
+            self.tabs.setTabToolTip(idx, "" if ok else _tr(msg))
+
+    def showEvent(self, event):
+        super().showEvent(event)
+        self._apply_distribution_mode()
 
     def _on_price_estimate(self, text: str):
         self._price_footer.setText(text)

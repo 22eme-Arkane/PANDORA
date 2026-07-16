@@ -571,6 +571,40 @@ class PageLiveSettings(QWidget):
         adv_lay.addWidget(_dist_hint)
 
         from core.media_provider import PROVIDERS as _MEDIA_PROVIDERS
+        _combo_style = (
+            f"QComboBox{{background:{CP['bg2']};border:1px solid {CP['border']};"
+            f"border-radius:6px;color:{CP['text_primary']};font-size:11px;padding:0 8px;}}"
+            f"QComboBox::drop-down{{border:none;width:20px;}}"
+            f"QComboBox QAbstractItemView{{background:{CP['bg3']};"
+            f"border:1px solid {CP['border_bright']};color:{CP['text_primary']};"
+            f"selection-background-color:{CP['accent_dim']};}}"
+        )
+        mode_row = QHBoxLayout()
+        mode_row.setSpacing(8)
+        _mode_lbl = QLabel("Mode de distribution")
+        _mode_lbl.setStyleSheet(
+            f"color:{CP['text_secondary']};font-size:11px;background:transparent;")
+        mode_row.addWidget(_mode_lbl, 1)
+        self.distribution_mode_combo = QComboBox()
+        self.distribution_mode_combo.setFixedHeight(28)
+        self.distribution_mode_combo.setMinimumWidth(160)
+        self.distribution_mode_combo.setStyleSheet(_combo_style)
+        self.distribution_mode_combo.addItem(
+            "Multi-distributeurs (recommandé)", "multi")
+        self.distribution_mode_combo.addItem(
+            "Mono-distributeur (uniquement celui choisi)", "mono")
+        mode_row.addWidget(self.distribution_mode_combo)
+        adv_lay.addLayout(mode_row)
+        _mode_hint = QLabel(
+            "Mono-distributeur : les services que le distributeur choisi ne couvre "
+            "pas (Sound Design, Musique IA, Image IA, Upscaling…) sont grisés dans "
+            "le Studio au lieu de repasser par fal.ai."
+        )
+        _mode_hint.setWordWrap(True)
+        _mode_hint.setStyleSheet(
+            f"color:{CP['text_dim']};font-size:10px;background:transparent;")
+        adv_lay.addWidget(_mode_hint)
+
         prov_row = QHBoxLayout()
         prov_row.setSpacing(8)
         _prov_lbl = QLabel("Distributeur vidéo")
@@ -580,14 +614,7 @@ class PageLiveSettings(QWidget):
         self.video_provider_combo = QComboBox()
         self.video_provider_combo.setFixedHeight(28)
         self.video_provider_combo.setMinimumWidth(160)
-        self.video_provider_combo.setStyleSheet(
-            f"QComboBox{{background:{CP['bg2']};border:1px solid {CP['border']};"
-            f"border-radius:6px;color:{CP['text_primary']};font-size:11px;padding:0 8px;}}"
-            f"QComboBox::drop-down{{border:none;width:20px;}}"
-            f"QComboBox QAbstractItemView{{background:{CP['bg3']};"
-            f"border:1px solid {CP['border_bright']};color:{CP['text_primary']};"
-            f"selection-background-color:{CP['accent_dim']};}}"
-        )
+        self.video_provider_combo.setStyleSheet(_combo_style)
         for _pid, _pmeta in _MEDIA_PROVIDERS.items():
             self.video_provider_combo.addItem(_pmeta["label"], _pid)
         prov_row.addWidget(self.video_provider_combo)
@@ -676,6 +703,7 @@ class PageLiveSettings(QWidget):
         for combo in getattr(self, "_task_combos", {}).values():
             combo.currentIndexChanged.connect(self._save_api_key)
         self.video_provider_combo.currentIndexChanged.connect(self._save_api_key)
+        self.distribution_mode_combo.currentIndexChanged.connect(self._save_api_key)
 
     def _set_advanced(self, open_: bool):
         self._adv_open = open_
@@ -759,6 +787,8 @@ class PageLiveSettings(QWidget):
             if self.video_provider_combo.itemData(i) == _cur_prov:
                 self.video_provider_combo.setCurrentIndex(i)
                 break
+        if cfg.get("distribution_mode", "multi") == "mono":
+            self.distribution_mode_combo.setCurrentIndex(1)
         self._refresh_piapi_visibility()
         host = cfg.get("resolume_host", "localhost")
         port = cfg.get("resolume_port", 8080)
@@ -792,6 +822,7 @@ class PageLiveSettings(QWidget):
         cfg["glm_model"]         = self._glm_model_input.text().strip()
         cfg["video_provider"]    = self.video_provider_combo.currentData() or "fal"
         cfg["piapi_key"]         = self._piapi_input.text().strip()
+        cfg["distribution_mode"] = self.distribution_mode_combo.currentData() or "multi"
         cfg["resolume_host"] = self._host_input.text().strip() or "localhost"
         cfg["resolume_port"] = self._port_spin.value()
         save_config(cfg)

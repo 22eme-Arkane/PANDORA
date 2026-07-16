@@ -52,12 +52,74 @@ _PER_SECOND: dict[str, dict] = {
 }
 
 
+# ── Services PANDORA par distributeur (pour le mode MONO) ────────────────────
+# Un « service » = une intégration réelle de PANDORA (onglet du Studio, page).
+# fal couvre tout ; les alternatifs ne couvrent que ce que NOS backends savent
+# leur envoyer aujourd'hui. Sert au grisage des onglets en mono-distributeur.
+SERVICES: dict[str, str] = {
+    "video_seedance": "Générer depuis Storyboard/Séquences (Seedance 2.0)",
+    "video_engines":  "Génération directe (moteurs multiples)",
+    "edit_clips":     "Modifier des clips",
+    "upscale":        "Upscaling",
+    "sound":          "Sound Design (ElevenLabs, Mirelo, MMAudio…)",
+    "music":          "Musique IA",
+    "images":         "Image IA / portraits / moods",
+}
+
+_PROVIDER_SERVICES: dict[str, set] = {
+    "fal":   set(SERVICES),
+    "piapi": {"video_seedance"},
+}
+
+
 # ── Sélection ─────────────────────────────────────────────────────────────────
 
 def get_video_provider() -> str:
     """Distributeur vidéo CHOISI dans la config ("fal" par défaut)."""
     pid = (load_config().get("video_provider") or _DEFAULT).strip().lower()
     return pid if pid in PROVIDERS else _DEFAULT
+
+
+def get_distribution_mode() -> str:
+    """"multi" (défaut) : fal.ai + alternatifs, repli automatique.
+    "mono" : le distributeur choisi est le SEUL utilisé — les services qu'il
+    ne couvre pas sont INDISPONIBLES (grisés) au lieu de replier sur fal."""
+    m = (load_config().get("distribution_mode") or "multi").strip().lower()
+    return m if m in ("multi", "mono") else "multi"
+
+
+def service_available(service: str) -> tuple[bool, str]:
+    """(disponible, message_ui). Toujours disponible en multi. En mono, dépend
+    de la couverture du distributeur choisi ; le message explique le grisage."""
+    if get_distribution_mode() == "multi":
+        return True, ""
+    pid = get_video_provider()
+    if service in _PROVIDER_SERVICES.get(pid, set()):
+        return True, ""
+    return False, (
+        f"Indisponible en mono-distributeur ({provider_label(pid)}) : ce service "
+        f"est servi par fal.ai. Repassez en « Multi-distributeurs » dans "
+        f"Paramètres → avancés pour le réactiver."
+    )
+
+
+def mono_blocked_engine(engine: str) -> str:
+    """En mode MONO : message d'erreur si ce MOTEUR vidéo ne peut pas être servi
+    par le distributeur choisi (non couvert, ou clé manquante) ; "" sinon.
+    En multi : jamais bloqué (repli fal). Appelé par api/real.py AVANT l'appel."""
+    if get_distribution_mode() != "mono":
+        return ""
+    pid = get_video_provider()
+    if pid == "fal":
+        return ""
+    if not provider_covers(pid, engine):
+        return (f"Moteur « {engine} » indisponible chez {provider_label(pid)} "
+                f"(mode mono-distributeur). Choisis Seedance 2.0, ou repasse en "
+                f"« Multi-distributeurs » dans Paramètres → avancés.")
+    if not provider_key(pid):
+        return (f"Clé {provider_label(pid)} manquante — renseigne-la dans "
+                f"Paramètres → avancés, ou repasse en « Multi-distributeurs ».")
+    return ""
 
 
 def provider_covers(provider_id: str, engine: str) -> bool:
@@ -67,11 +129,17 @@ def provider_covers(provider_id: str, engine: str) -> bool:
 
 
 def active_video_provider(engine: str = "seedance-2.0") -> str:
-    """Distributeur EFFECTIF pour ce moteur : le choix utilisateur s'il couvre
-    le moteur ET que sa clé est renseignée, sinon repli fal."""
+    """Distributeur EFFECTIF pour ce moteur.
+
+    Multi (défaut) : le choix utilisateur s'il couvre le moteur ET que sa clé
+    est renseignée, sinon repli fal. Mono : TOUJOURS le distributeur choisi —
+    le blocage précis (moteur non couvert, clé absente) est porté par
+    mono_blocked_engine(), jamais par un repli silencieux."""
     pid = get_video_provider()
     if pid == "fal":
         return "fal"
+    if get_distribution_mode() == "mono":
+        return pid
     if not provider_covers(pid, engine):
         return "fal"
     if not provider_key(pid):

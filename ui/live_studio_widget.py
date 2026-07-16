@@ -164,7 +164,9 @@ class LiveStudioWidget(QWidget):
             + "QTabWidget::tab-bar{alignment:center;}"
             + f"QTabBar{{background:{C['bg0']};border:none;}}"
             + f"QTabBar::tab{{background:transparent;color:{C['text_secondary']};}}"
-            + f"QTabBar::tab:hover{{background:transparent;color:{C['text_primary']};}}")
+            + f"QTabBar::tab:hover{{background:transparent;color:{C['text_primary']};}}"
+            # Mode mono-distributeur : onglets non couverts nettement grisés
+            + f"QTabBar::tab:disabled{{background:transparent;color:{C['text_dim']};}}")
         # Barre GROUPÉE (parité Cinéma : trait vertical entre groupes).
         self.tabs.setTabBar(_GroupedTabBar())
         self.tabs.tabBar().setExpanding(False)
@@ -265,6 +267,32 @@ class LiveStudioWidget(QWidget):
         self._price_footer.setVisible(False)
         root.addWidget(self._price_footer)
         self.tab_sequences.price_estimate_changed.connect(self._on_price_estimate)
+
+        self._apply_distribution_mode()
+
+    def _apply_distribution_mode(self):
+        """Mode MONO-distributeur (parité Cinéma) : grise les onglets des services
+        que le distributeur choisi ne couvre pas (servis par fal.ai), avec un
+        tooltip explicatif. Réappliqué à chaque affichage."""
+        from core.media_provider import service_available
+        for tab, service in (
+            (self.tab_engines, "video_engines"),
+            (self.tab_modify,  "edit_clips"),
+            (self.tab_upscale, "upscale"),
+            (self.tab_sound,   "sound"),
+            (self.tab_music,   "music"),
+            (self.tab_image,   "images"),
+        ):
+            ok, msg = service_available(service)
+            idx = self.tabs.indexOf(tab)
+            if idx < 0:
+                continue
+            self.tabs.setTabEnabled(idx, ok)
+            self.tabs.setTabToolTip(idx, "" if ok else translate(msg))
+
+    def showEvent(self, event):
+        super().showEvent(event)
+        self._apply_distribution_mode()
 
     def _on_price_estimate(self, text: str):
         self._price_footer.setText(text)

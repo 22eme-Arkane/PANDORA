@@ -97,6 +97,12 @@ _FR_TO_EN: dict[str, str] = {
     "Prochainement":                       "Coming soon",
     # ── Distribution des générations (distributeurs alternatifs, 2026-07-16) ──
     "Distribution des générations vidéo":        "Video generation distribution",
+    "Mode de distribution":                      "Distribution mode",
+    "Multi-distributeurs (recommandé)":          "Multi-distributor (recommended)",
+    "Mono-distributeur (uniquement celui choisi)":
+        "Mono-distributor (only the chosen one)",
+    "Mono-distributeur : les services que le distributeur choisi ne couvre pas (Sound Design, Musique IA, Image IA, Upscaling…) sont grisés dans le Studio au lieu de repasser par fal.ai.":
+        "Mono-distributor: services the chosen distributor does not cover (Sound Design, AI Music, AI Image, Upscaling…) are greyed out in the Studio instead of falling back to fal.ai.",
     "Distributeur vidéo":                        "Video distributor",
     "fal.ai (par défaut)":                       "fal.ai (default)",
     "Clé PiAPI — Seedance 2.0 low cost":         "PiAPI key — Seedance 2.0 low cost",

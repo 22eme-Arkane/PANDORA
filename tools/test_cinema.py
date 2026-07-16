@@ -3849,6 +3849,36 @@ def distributeur_video_piapi():
     import ui.tab_t2v as T
     assert "price_estimate_changed" in inspect.getsource(T.TabT2V._refresh_price_estimate)
 
+    # ── Mode MONO-distributeur : pas de repli + services grisés ──────────────
+    _orig_lc2 = mp.load_config
+    try:
+        # Multi (défaut) : tout disponible, jamais bloqué
+        mp.load_config = lambda: {}
+        assert mp.get_distribution_mode() == "multi"
+        assert mp.service_available("sound") == (True, "")
+        assert mp.mono_blocked_engine("kling-v3-pro") == ""
+        # Mono + PiAPI : Sound/Musique/Image/Upscale indisponibles avec message,
+        # Seedance disponible ; moteur non couvert → BLOQUÉ (pas de repli fal)
+        mp.load_config = lambda: {"video_provider": "piapi", "piapi_key": "k",
+                                  "distribution_mode": "mono"}
+        ok, msg = mp.service_available("sound")
+        assert not ok and "fal.ai" in msg and "Multi-distributeurs" in msg
+        assert mp.service_available("video_seedance") == (True, "")
+        assert "indisponible" in mp.mono_blocked_engine("kling-v3-pro").lower()
+        assert mp.mono_blocked_engine("seedance-2.0") == ""
+        assert mp.active_video_provider("seedance-2.0") == "piapi"
+        # Mono + PiAPI SANS clé : Seedance bloqué avec message « clé manquante »
+        mp.load_config = lambda: {"video_provider": "piapi",
+                                  "distribution_mode": "mono"}
+        assert "manquante" in mp.mono_blocked_engine("seedance-2.0")
+    finally:
+        mp.load_config = _orig_lc2
+    # run_real bloque AVANT l'appel ; le Studio grise les onglets (tooltip)
+    assert "mono_blocked_engine" in _src
+    assert "_apply_distribution_mode" in _wsrc and "setTabEnabled" in _wsrc
+    # Paramètres : combo mode persisté
+    assert "distribution_mode_combo" in _ssrc and '"distribution_mode"' in _ssrc
+
 
 if __name__ == "__main__":
     sys.exit(main())

@@ -435,6 +435,42 @@ class SettingsPage(QScrollArea):
         adv_lay.addWidget(_dist_hint)
 
         from core.media_provider import PROVIDERS as _MEDIA_PROVIDERS
+        _combo_style = (
+            f"QComboBox{{background:{CP['bg2']};border:1px solid {CP['border']};"
+            f"border-radius:6px;color:{CP['text_primary']};font-size:11px;padding:0 8px;}}"
+            f"QComboBox::drop-down{{border:none;width:20px;}}"
+            f"QComboBox QAbstractItemView{{background:{CP['bg3']};"
+            f"border:1px solid {CP['border_bright']};color:{CP['text_primary']};"
+            f"selection-background-color:{CP['accent_dim']};}}"
+        )
+        mode_row = QHBoxLayout()
+        mode_row.setSpacing(8)
+        _mode_lbl = QLabel("Mode de distribution")
+        _mode_lbl.setStyleSheet(
+            f"color:{CP['text_secondary']};font-size:11px;background:transparent;")
+        mode_row.addWidget(_mode_lbl, 1)
+        self.distribution_mode_combo = QComboBox()
+        self.distribution_mode_combo.setFixedHeight(28)
+        self.distribution_mode_combo.setMinimumWidth(160)
+        self.distribution_mode_combo.setStyleSheet(_combo_style)
+        self.distribution_mode_combo.addItem(
+            "Multi-distributeurs (recommandé)", "multi")
+        self.distribution_mode_combo.addItem(
+            "Mono-distributeur (uniquement celui choisi)", "mono")
+        if cfg.get("distribution_mode", "multi") == "mono":
+            self.distribution_mode_combo.setCurrentIndex(1)
+        mode_row.addWidget(self.distribution_mode_combo)
+        adv_lay.addLayout(mode_row)
+        _mode_hint = QLabel(
+            "Mono-distributeur : les services que le distributeur choisi ne couvre "
+            "pas (Sound Design, Musique IA, Image IA, Upscaling…) sont grisés dans "
+            "le Studio au lieu de repasser par fal.ai."
+        )
+        _mode_hint.setWordWrap(True)
+        _mode_hint.setStyleSheet(
+            f"color:{CP['text_dim']};font-size:10px;background:transparent;")
+        adv_lay.addWidget(_mode_hint)
+
         prov_row = QHBoxLayout()
         prov_row.setSpacing(8)
         _prov_lbl = QLabel("Distributeur vidéo")
@@ -833,6 +869,7 @@ class SettingsPage(QScrollArea):
             "ai_task_engines":   task_engines,
             "video_provider":    self.video_provider_combo.currentData() or "fal",
             "piapi_key":         self.piapi_input.text(),
+            "distribution_mode": self.distribution_mode_combo.currentData() or "multi",
         })
         save_config(cfg)
         from core.ai_provider import refresh_name_cache
@@ -853,6 +890,7 @@ class SettingsPage(QScrollArea):
         for combo in getattr(self, "_task_combos", {}).values():
             combo.currentIndexChanged.connect(self.save)
         self.video_provider_combo.currentIndexChanged.connect(self.save)
+        self.distribution_mode_combo.currentIndexChanged.connect(self.save)
 
     def _apply_pandora_preset(self):
         """Renseigne les combos « moteur par tâche » avec le preset PANDORA optimisé."""

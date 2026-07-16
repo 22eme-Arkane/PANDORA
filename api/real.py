@@ -626,7 +626,13 @@ def run_real(params: dict, emit_progress, is_cancelled) -> dict:
     # fal.ai = socle ; si un distributeur alternatif couvert est choisi (PiAPI),
     # seul l'APPEL FINAL change — toute la préparation ci-dessus (traduction,
     # analyses vision, suffixes, uploads CDN fal → URLs publiques) est commune.
-    from core.media_provider import active_video_provider, provider_key as _pkey
+    # Mode MONO-distributeur : pas de repli — moteur non couvert ou clé absente
+    # = erreur claire AVANT l'appel (jamais de bascule fal non voulue).
+    from core.media_provider import (active_video_provider, mono_blocked_engine,
+                                     provider_key as _pkey)
+    _blocked = mono_blocked_engine(model)
+    if _blocked:
+        raise RuntimeError(_blocked)
     _provider = active_video_provider(model)
     if _provider == "piapi":
         from api.piapi import run_piapi

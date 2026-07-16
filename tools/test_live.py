@@ -2714,6 +2714,28 @@ def distributeur_video_piapi_live():
     assert lw._price_footer.isVisibleTo(lw), "bandeau masqué sur l'onglet Séquences"
     lw.tabs.setCurrentWidget(lw.tab_library)
     assert not lw._price_footer.isVisibleTo(lw), "bandeau visible hors Séquences"
+    # Mode MONO-distributeur : les onglets fal-only sont GRISÉS, Séquences reste
+    # actif ; retour en multi → tout se réactive (parité Cinéma).
+    for _n in ("distribution_mode_combo", '"distribution_mode"'):
+        assert _n in _src, f"parité mono/multi : {_n} manquant côté Live"
+    import core.media_provider as mp
+    _orig_lc = mp.load_config
+    try:
+        mp.load_config = lambda: {"video_provider": "piapi", "piapi_key": "k",
+                                  "distribution_mode": "mono"}
+        lw._apply_distribution_mode()
+        for _tab in (lw.tab_sound, lw.tab_music, lw.tab_image, lw.tab_upscale):
+            _i = lw.tabs.indexOf(_tab)
+            assert not lw.tabs.isTabEnabled(_i), "onglet fal-only actif en mono"
+            assert lw.tabs.tabToolTip(_i), "tooltip d'explication manquant"
+        assert lw.tabs.isTabEnabled(lw.tabs.indexOf(lw.tab_sequences)), \
+            "Séquences (Seedance) doit rester actif en mono-PiAPI"
+        mp.load_config = lambda: {}
+        lw._apply_distribution_mode()
+        assert lw.tabs.isTabEnabled(lw.tabs.indexOf(lw.tab_sound)), \
+            "retour multi : onglets non réactivés"
+    finally:
+        mp.load_config = _orig_lc
 
 
 if __name__ == "__main__":
