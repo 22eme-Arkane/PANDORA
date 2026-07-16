@@ -715,11 +715,11 @@ class PageLiveSettings(QWidget):
         self._set_advanced(not self._adv_open)
 
     def _refresh_piapi_visibility(self, *_):
-        """Champ + boutons PiAPI visibles seulement quand PiAPI est choisi (parité Cinéma)."""
-        _is_piapi = (self.video_provider_combo.currentData() == "piapi")
+        """La ligne clé PiAPI reste TOUJOURS visible (retour Matthieu 2026-07-16,
+        parité Cinéma) — cohérent avec les clés facultatives toujours affichées."""
         for w in (self._piapi_lbl, self._piapi_test_btn,
                   self._piapi_link_btn, self._piapi_input):
-            w.setVisible(_is_piapi)
+            w.setVisible(True)
 
     def test_piapi_connection(self):
         from PyQt6.QtWidgets import QMessageBox
