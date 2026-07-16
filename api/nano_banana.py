@@ -1754,7 +1754,22 @@ class GenerateItemWorker(QThread):
 
             # ── Analyse Vision selon le mode d'usage des références ──────────────
             _ref_path = self._style_ref_path
+            _fidelity_image_url = ""   # data-URL envoyée AU MOTEUR en mode fidélité
             if _ref_path and os.path.isfile(_ref_path):
+                if self._ref_usage == "fidelity":
+                    # FIX 2026-07-16 (retour Matthieu : « Fidélité exacte » ne
+                    # reproduisait PAS l'objet) : une description Claude de 60 mots
+                    # ne peut pas porter une reproduction — la photo de référence
+                    # part désormais AU MOTEUR (fal-ai/nano-banana-2/edit,
+                    # image_urls). L'analyse Claude ci-dessous reste un simple
+                    # complément d'ancrage quand la clé Anthropic est présente.
+                    import base64 as _b64mod
+                    import mimetypes as _mtypes
+                    _mime = _mtypes.guess_type(_ref_path)[0] or "image/png"
+                    with open(_ref_path, "rb") as _f:
+                        _fidelity_image_url = (
+                            f"data:{_mime};base64,"
+                            + _b64mod.b64encode(_f.read()).decode())
                 _nb_cfg = load_config()
                 _nb_key = _nb_cfg.get("anthropic_key", "").strip()
                 if _nb_key:
@@ -1784,6 +1799,29 @@ class GenerateItemWorker(QThread):
             safe = "".join(c for c in self._name if c.isalnum() or c in " -_").strip() or "item"
             ts   = int(time.time())
 
+            def _subscribe_once(_prompt_full):
+                """Un appel image. En mode FIDÉLITÉ avec référence, la photo part
+                au moteur (NB2 Edit, image_urls) → reproduction réelle ; sinon
+                text-to-image du modèle choisi."""
+                if _fidelity_image_url:
+                    return fal_client.subscribe(
+                        "fal-ai/nano-banana-2/edit",
+                        arguments={
+                            "prompt": (
+                                "Recreate the EXACT subject shown in the reference "
+                                "image — identical materials, colors, proportions "
+                                "and distinctive details. New presentation: "
+                                + _prompt_full),
+                            "image_urls":       [_fidelity_image_url],
+                            "num_images":       1,
+                            "aspect_ratio":     aspect_ratio,
+                            "resolution":       "1K",
+                            "output_format":    "png",
+                            "safety_tolerance": "6",
+                        })
+                _ep, _args = _build_image_args(_prompt_full, aspect_ratio, "1K", cfg, 1)
+                return fal_client.subscribe(_ep, arguments=_args)
+
             if n > 1:
                 # N separate calls (num_images=1 each) — avoids API limit on batch size
                 paths = []
@@ -1792,8 +1830,7 @@ class GenerateItemWorker(QThread):
                         10 + int(i / n * 80),
                         f"[{i+1}/{n}] Génération de l'image…  ({price})"
                     )
-                    _ep, _args = _build_image_args(full_prompt, aspect_ratio, "1K", cfg, 1)
-                    _result = fal_client.subscribe(_ep, arguments=_args)
+                    _result = _subscribe_once(full_prompt)
                     _url = _extract_image_url(_result)
                     self.progress.emit(10 + int((i + 0.7) / n * 80),
                                        f"Téléchargement {i+1}/{n}…")
@@ -1807,8 +1844,7 @@ class GenerateItemWorker(QThread):
             else:
                 msg_gen = "Génération de l'image…"
                 self.progress.emit(10, f"{msg_gen}  ({price})")
-                _ep, _args = _build_image_args(full_prompt, aspect_ratio, "1K", cfg, 1)
-                result = fal_client.subscribe(_ep, arguments=_args)
+                result = _subscribe_once(full_prompt)
                 url  = _extract_image_url(result)
                 self.progress.emit(70, "Téléchargement de l'image…")
                 data = requests.get(url, timeout=120).content

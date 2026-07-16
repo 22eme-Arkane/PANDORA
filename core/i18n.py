@@ -4065,10 +4065,13 @@ _FR_TO_EN: dict[str, str] = {
     '🌟  Inspiration  —  Claude enrichit le prompt': '🌟  Inspiration  —  Claude enriches the prompt',
     '🎨  Style pictural  —  extrait et applique le style visuel': '🎨  Pictorial style  —  extracts and applies the visual style',
     '🧑  Référence de visage  —  génère le portrait avec ce visage': '🧑  Face reference  —  generates the portrait with this face',
-    '🎯  Fidélité exacte  —  reproduit le sujet précisément': '🎯  Exact fidelity  —  reproduces the subject precisely',
-    "🎯  Fidélité exacte  —  reproduit l'objet précisément": '🎯  Exact fidelity  —  reproduces the object precisely',
-    '🎯  Fidélité exacte  —  reproduit le look précisément': '🎯  Exact fidelity  —  reproduces the look precisely',
-    '🎯  Fidélité exacte  —  reproduit le véhicule précisément': '🎯  Exact fidelity  —  reproduces the vehicle precisely',
+    # Fidélité exacte (fix 2026-07-16) : la photo part réellement au moteur
+    "🎯  Fidélité exacte  —  la photo part au moteur (NB2 Edit)":
+        "🎯  Exact fidelity  —  the photo is sent to the engine (NB2 Edit)",
+    "1re image → envoyée au moteur (NB2 Edit)":
+        "1st image → sent to the engine (NB2 Edit)",
+    "Fidélité exacte — la photo sera envoyée au moteur ✓":
+        "Exact fidelity — the photo will be sent to the engine ✓",
     "Voir le Manuel d'utilisation pour tous les tarifs": 'See the User Manual for all pricing',
     'Aucun portrait\ngénéré': 'No portrait\ngenerated',
     '✓  Activer': '✓  Activate',

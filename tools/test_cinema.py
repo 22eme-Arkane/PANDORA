@@ -3930,5 +3930,39 @@ def accessoire_import_photo_detourage():
             (_cls, "style du bouton import mal interpolé")
 
 
+@test
+def fidelite_exacte_photo_au_moteur():
+    """« Fidélité exacte » (fix 2026-07-16, retour Matthieu : ne reproduisait pas
+    l'objet) : la photo de référence part désormais AU MOTEUR (NB2 Edit,
+    image_urls en data-URL) au lieu d'une simple description Claude de 60 mots.
+    Les libellés des 4 dialogs disent le vrai fonctionnement."""
+    import inspect
+    from PyQt6.QtWidgets import QApplication
+    QApplication.instance() or QApplication([])
+    import api.nano_banana as NB
+    _src = inspect.getsource(NB.GenerateItemWorker._real)
+    assert "_fidelity_image_url" in _src, "data-URL fidélité absente"
+    assert "nano-banana-2/edit" in _src, "l'image doit partir via NB2 Edit"
+    assert "Recreate the EXACT subject" in _src, "prompt d'édition fidélité absent"
+    # La data-URL se prépare SANS dépendre de la clé Anthropic (l'analyse Claude
+    # n'est qu'un complément) : préparation AVANT le bloc `if _nb_key:`.
+    _i_url = _src.find("_fidelity_image_url = (")
+    _i_key = _src.find("if _nb_key:")
+    assert -1 < _i_url < _i_key, "la photo doit partir même sans clé Anthropic"
+    # Libellés honnêtes dans les 4 dialogs
+    import ui.dialog_accessory as DA
+    import ui.dialog_hmc as DH
+    import ui.dialog_vehicle as DV
+    import ui.dialog_decor as DD
+    for _cls in (DA.AccessoryDialog, DH.HMCDialog, DV.VehicleDialog, DD.DecorDialog):
+        _d = _cls()
+        _items = [_d._ref_usage_combo.itemText(i)
+                  for i in range(_d._ref_usage_combo.count())]
+        assert any("photo part au moteur" in t for t in _items), \
+            (_cls, "libellé Fidélité exacte non mis à jour", _items)
+        assert not any("reproduit l" in t or "reproduit le" in t for t in _items), \
+            (_cls, "ancien libellé mensonger encore présent", _items)
+
+
 if __name__ == "__main__":
     sys.exit(main())

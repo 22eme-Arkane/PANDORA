@@ -251,7 +251,7 @@ class HMCDialog(QDialog):
         self._ref_usage_combo = QComboBox()
         self._ref_usage_combo.addItem("🌟  Inspiration  —  Claude enrichit le prompt", "inspiration")
         self._ref_usage_combo.addItem("🎨  Style pictural  —  extrait et applique le style visuel", "style")
-        self._ref_usage_combo.addItem("🎯  Fidélité exacte  —  reproduit le look précisément", "fidelity")
+        self._ref_usage_combo.addItem("🎯  Fidélité exacte  —  la photo part au moteur (NB2 Edit)", "fidelity")
         self._ref_usage_combo.setFixedHeight(30)
         self._ref_usage_combo.setStyleSheet(_combo_ss())
         _saved_usage = self._item.get("ref_usage_key", "inspiration")
@@ -753,7 +753,7 @@ class HMCDialog(QDialog):
             hints = {
                 "inspiration": "Claude enrichit le prompt",
                 "style":       "1re image → style visuel extrait par IA",
-                "fidelity":    "1re image → look décrit pour reproduction fidèle",
+                "fidelity":    "1re image → envoyée au moteur (NB2 Edit)",
             }
             self._refs_hint_lbl.setText(hints.get(usage, ""))
 
@@ -792,7 +792,7 @@ class HMCDialog(QDialog):
         usage = self._ref_usage_combo.currentData() if hasattr(self, "_ref_usage_combo") else "inspiration"
         if usage != "inspiration":
             _hints = {"style": "Style pictural — analysé à la génération ✓",
-                      "fidelity": "Fidélité exacte — analysée à la génération ✓"}
+                      "fidelity": "Fidélité exacte — la photo sera envoyée au moteur ✓"}
             self._status.setText(_hints.get(usage, f"{len(self._ref_paths)} référence(s) ajoutée(s)."))
             return
         from core.config import load_config
