@@ -437,13 +437,19 @@ class VehicleDialog(QDialog):
         self._btn_import_photo.setStyleSheet(
             f"QPushButton{{background:transparent;color:{CP['text_secondary']};"
             f"border:1px solid {CP['border']};border-radius:8px;"
-            f"font-size:11px;font-weight:700;}}"
+            f"font-size:11px;font-weight:700;padding:0 14px;}}"
             f"QPushButton:hover{{background:{CP['bg3']};color:{CP['text_primary']};"
             f"border-color:{CP['border_bright']};}}"
         )
         self._btn_import_photo.setToolTip(translate("Utiliser une photo existante du véhicule plutôt que de le générer"))
         self._btn_import_photo.clicked.connect(self._import_photo)
-        _action_lay.addWidget(self._btn_import_photo)
+        # Aligné sur « Générer l'image » : on réserve à droite la largeur du
+        # « × » (14) + spinbox (50) + leurs espacements (8+8) = 80 px.
+        _import_row = QHBoxLayout()
+        _import_row.setSpacing(0)
+        _import_row.addWidget(self._btn_import_photo, 1)
+        _import_row.addSpacing(80)
+        _action_lay.addLayout(_import_row)
 
         _action_lay.addWidget(price_lbl)
         _action_lay.addWidget(self._progress)
