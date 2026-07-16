@@ -296,7 +296,6 @@ pandora/
 │   ├── dialog_style_gallery.py    # StyleGalleryDialog — sélection de template de style pour T2V
 │   ├── dialog_contact.py      # Dialogue contact
 │   ├── dialog_funding.py      # Dialogue financement
-│   ├── dialog_api_help.py     # Aide configuration API
 │   └── dialog_davinci_help.py # Aide intégration DaVinci
 │
 ├── davinci/                   # Pont DaVinci Resolve

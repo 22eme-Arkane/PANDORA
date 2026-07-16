@@ -1715,7 +1715,6 @@ _FR_TO_EN: dict[str, str] = {
     "Générer une variation":            "Generate a variation",
     "Générer à nouveau":                "Generate again",
     "Générer avec HMC":                 "Generate with HMC",
-    "Configurer les clés API":          "Configure API keys",
     "Choisir un portrait":              "Choose a portrait",
     "Choisir une image":                "Choose an image",
     "Comment obtenir les clés API":     "How to get API keys",
@@ -1760,10 +1759,6 @@ _FR_TO_EN: dict[str, str] = {
         "Sent — thank you for your feedback! ✓",
 
     # ── Api help dialog ───────────────────────────────────────────────────────
-    "fal.ai — Seedance 2.0 & Nano Banana": "fal.ai — Seedance 2.0 & Nano Banana",
-    "Vidéo  ·  Images IA":             "Video  ·  AI Images",
-    "⇗  Ouvrir fal.ai/dashboard/keys": "⇗  Open fal.ai/dashboard/keys",
-    "⇗  Ouvrir console.anthropic.com": "⇗  Open console.anthropic.com",
 
     # ── DaVinci help dialog ───────────────────────────────────────────────────
     "Connexion DaVinci Resolve":        "DaVinci Resolve Connection",
@@ -4361,15 +4356,6 @@ _FR_TO_EN: dict[str, str] = {
     "Claude réécrit le scénario en appliquant directement les suggestions.\nLe résultat apparaît ici pour prévisualisation avant d'être appliqué.": "Claude rewrites the screenplay applying the suggestions directly.\nThe result appears here for preview before being applied.",
 
     # ── Lot 8 — Aide API, Projets, divers ──
-    'Optimisation de prompts  ·  Scénario  ·  Storyboard': 'Prompt optimization  ·  Screenplay  ·  Storyboard',
-    "💡  <b>Utilisation :</b> fal.ai et Anthropic sont des services payants à l'usage. Chaque génération consomme des crédits. Les deux plateformes offrent des crédits de démarrage gratuits pour tester.": '💡  <b>Usage:</b> fal.ai and Anthropic are pay-as-you-go services. Each generation consumes credits. Both platforms offer free starter credits to try them out.',
-    "🔒  <b>VPN :</b> si Claude ne répond pas ou génère des erreurs, désactivez votre VPN — certains serveurs VPN sont bloqués par l'API Anthropic.": '🔒  <b>VPN:</b> if Claude does not respond or returns errors, disable your VPN — some VPN servers are blocked by the Anthropic API.',
-    'Va sur <b>fal.ai</b> et crée un compte gratuit (ou connecte-toi).': 'Go to <b>fal.ai</b> and create a free account (or log in).',
-    'Copie la clé (commence par <code>fal_</code>) et colle-la dans PANDORA.': 'Copy the key (starts with <code>fal_</code>) and paste it into PANDORA.',
-    'Recharge ton compte fal.ai pour générer des vidéos et portraits.': 'Top up your fal.ai account to generate videos and portraits.',
-    'Va sur <b>console.anthropic.com</b> et crée un compte (ou connecte-toi).': 'Go to <b>console.anthropic.com</b> and create an account (or log in).',
-    'Copie la clé (commence par <code>sk-ant-</code>) et colle-la dans PANDORA.': 'Copy the key (starts with <code>sk-ant-</code>) and paste it into PANDORA.',
-    'Claude est utilisé pour optimiser les prompts ☁, formater le scénario et générer le storyboard.': 'Claude is used to optimize prompts ☁, format the screenplay and generate the storyboard.',
     'Tout générer': 'Generate all',
     '✎  Renommer ce projet…': '✎  Rename this project…',
     'Renommer le projet': 'Rename project',
