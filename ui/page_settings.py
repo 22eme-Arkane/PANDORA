@@ -498,27 +498,13 @@ class SettingsPage(QScrollArea):
         prov_row.addWidget(self.video_provider_combo)
         adv_lay.addLayout(prov_row)
 
-        piapi_lbl_row = QHBoxLayout()
-        piapi_lbl_row.setSpacing(8)
-        self._piapi_lbl = QLabel("Clé PiAPI — Seedance 2.0 low cost")
-        self._piapi_lbl.setStyleSheet(
-            f"color:{CP['text_secondary']};font-size:11px;background:transparent;")
-        piapi_lbl_row.addWidget(self._piapi_lbl, 1)
-        self._piapi_test_btn = _test_btn("✓  Tester API PiAPI", self.test_piapi_connection)
-        piapi_lbl_row.addWidget(self._piapi_test_btn)
-        self._piapi_link_btn = _link_btn("⇗  Obtenir une clé PiAPI",
-                                         "https://piapi.ai/workspace")
-        piapi_lbl_row.addWidget(self._piapi_link_btn)
-        adv_lay.addLayout(piapi_lbl_row)
-        self.piapi_input = QLineEdit()
-        self.piapi_input.setPlaceholderText("Clé PiAPI (X-API-Key)")
-        self.piapi_input.setText(cfg.get("piapi_key", ""))
-        self.piapi_input.setEchoMode(QLineEdit.EchoMode.Password)
-        self.piapi_input.setStyleSheet(_field_style())
-        adv_lay.addWidget(self.piapi_input)
-        self.video_provider_combo.currentIndexChanged.connect(
-            self._refresh_piapi_visibility)
-        self._refresh_piapi_visibility()
+        _piapi_hint = QLabel(
+            "La clé PiAPI se renseigne dans « Clés API facultatives » ci-dessous."
+        )
+        _piapi_hint.setWordWrap(True)
+        _piapi_hint.setStyleSheet(
+            f"color:{CP['text_dim']};font-size:10px;background:transparent;")
+        adv_lay.addWidget(_piapi_hint)
         lay.addWidget(self._adv_box)
 
         self._on_ai_choice_changed()
@@ -580,7 +566,7 @@ class SettingsPage(QScrollArea):
         # ── Clés FACULTATIVES (menu déroulant : OpenAI, Mistral, à venir) ──────
         self._opt_keys_open = False
         self._btn_opt_keys = QPushButton(
-            "▶  Clés API facultatives  (OpenAI, Mistral, autres à venir)")
+            "▶  Clés API facultatives  (PiAPI, OpenAI, Mistral…)")
         self._btn_opt_keys.setCursor(Qt.CursorShape.PointingHandCursor)
         self._btn_opt_keys.setStyleSheet(
             f"QPushButton{{background:transparent;color:{CP['accent2']};"
@@ -597,12 +583,36 @@ class SettingsPage(QScrollArea):
         opt_lay.setContentsMargins(2, 2, 2, 4)
         opt_lay.setSpacing(8)
         _opt_hint = QLabel(
-            "Non requises pour faire fonctionner PANDORA — uniquement si vous "
-            "voulez utiliser ces moteurs comme assistant texte (global ou par tâche)."
+            "Non requises pour faire fonctionner PANDORA — distributeur vidéo "
+            "low cost (PiAPI) ou moteurs d'assistant texte (global ou par tâche)."
         )
         _opt_hint.setWordWrap(True)
         _opt_hint.setStyleSheet(f"color:{CP['text_dim']};font-size:10px;background:transparent;")
         opt_lay.addWidget(_opt_hint)
+
+        # PiAPI — distributeur vidéo low cost (en PREMIER, demande Matthieu
+        # 2026-07-16 ; le combo « Distributeur vidéo » reste dans les avancés)
+        piapi_lbl_row = QHBoxLayout()
+        piapi_lbl_row.setSpacing(8)
+        self._piapi_lbl = QLabel(
+            "PiAPI — Seedance 2.0 low cost  (distributeur vidéo, voir avancés)")
+        self._piapi_lbl.setStyleSheet(
+            f"color:{CP['text_secondary']};font-size:12px;background:transparent;")
+        piapi_lbl_row.addWidget(self._piapi_lbl, 1)
+        piapi_lbl_row.addWidget(_badge("Facultatif", "opt"))
+        self._piapi_test_btn = _test_btn("✓  Tester API PiAPI", self.test_piapi_connection)
+        piapi_lbl_row.addWidget(self._piapi_test_btn)
+        self._piapi_link_btn = _link_btn("⇗  Obtenir une clé PiAPI",
+                                         "https://piapi.ai/workspace")
+        piapi_lbl_row.addWidget(self._piapi_link_btn)
+        opt_lay.addLayout(piapi_lbl_row)
+
+        self.piapi_input = QLineEdit()
+        self.piapi_input.setPlaceholderText("Clé PiAPI (X-API-Key)")
+        self.piapi_input.setText(cfg.get("piapi_key", ""))
+        self.piapi_input.setEchoMode(QLineEdit.EchoMode.Password)
+        self.piapi_input.setStyleSheet(_field_style())
+        opt_lay.addWidget(self.piapi_input)
 
         # OpenAI (GPT-5.5)
         oa_lbl_row = QHBoxLayout()
@@ -813,14 +823,6 @@ class SettingsPage(QScrollArea):
     def _toggle_advanced(self):
         self._set_advanced(not self._adv_open)
 
-    def _refresh_piapi_visibility(self, *_):
-        """La ligne clé PiAPI reste TOUJOURS visible (retour Matthieu 2026-07-16 :
-        cachée tant que fal était sélectionné, elle était introuvable) — cohérent
-        avec les clés facultatives OpenAI/Mistral, affichées même non utilisées."""
-        for w in (self._piapi_lbl, self._piapi_test_btn,
-                  self._piapi_link_btn, self.piapi_input):
-            w.setVisible(True)
-
     def test_piapi_connection(self):
         key = self.piapi_input.text().strip()
         if not key:
@@ -838,7 +840,7 @@ class SettingsPage(QScrollArea):
         self._opt_keys_box.setVisible(self._opt_keys_open)
         self._btn_opt_keys.setText(
             ("▼" if self._opt_keys_open else "▶")
-            + "  Clés API facultatives  (OpenAI, Mistral, autres à venir)"
+            + "  Clés API facultatives  (PiAPI, OpenAI, Mistral…)"
         )
 
     # ── Sauvegarde ────────────────────────────────────────────────────────────

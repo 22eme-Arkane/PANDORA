@@ -1680,10 +1680,16 @@ _FR_TO_EN: dict[str, str] = {
         "sk-••••••••••••  (empty if local server)",
     "Obligatoire":                      "Required",
     "Facultatif":                       "Optional",
-    "▶  Clés API facultatives  (OpenAI, Mistral, autres à venir)":
-        "▶  Optional API keys  (OpenAI, Mistral, more to come)",
-    "▼  Clés API facultatives  (OpenAI, Mistral, autres à venir)":
-        "▼  Optional API keys  (OpenAI, Mistral, more to come)",
+    "▶  Clés API facultatives  (PiAPI, OpenAI, Mistral…)":
+        "▶  Optional API keys  (PiAPI, OpenAI, Mistral…)",
+    "▼  Clés API facultatives  (PiAPI, OpenAI, Mistral…)":
+        "▼  Optional API keys  (PiAPI, OpenAI, Mistral…)",
+    "PiAPI — Seedance 2.0 low cost  (distributeur vidéo, voir avancés)":
+        "PiAPI — Seedance 2.0 low cost  (video distributor, see advanced)",
+    "La clé PiAPI se renseigne dans « Clés API facultatives » ci-dessous.":
+        "The PiAPI key goes in \"Optional API keys\" below.",
+    "Non requises pour faire fonctionner PANDORA — distributeur vidéo low cost (PiAPI) ou moteurs d'assistant texte (global ou par tâche).":
+        "Not required to run PANDORA — low-cost video distributor (PiAPI) or text assistant engines (global or per task).",
     "Choix personnalisé — un moteur par tâche":
         "Custom — one engine per task",
     "PANDORA optimisé — moteur conseillé par tâche":
