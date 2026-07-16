@@ -95,6 +95,22 @@ _FR_TO_EN: dict[str, str] = {
     "Cinéma":                              "Cinema",
     "Live":                                "Live",
     "Prochainement":                       "Coming soon",
+    # ── Distribution des générations (distributeurs alternatifs, 2026-07-16) ──
+    "Distribution des générations vidéo":        "Video generation distribution",
+    "Distributeur vidéo":                        "Video distributor",
+    "fal.ai (par défaut)":                       "fal.ai (default)",
+    "Clé PiAPI — Seedance 2.0 low cost":         "PiAPI key — Seedance 2.0 low cost",
+    "✓  Tester API PiAPI":                       "✓  Test PiAPI API",
+    "⇗  Obtenir une clé PiAPI":                  "⇗  Get a PiAPI key",
+    "Clé PiAPI (X-API-Key)":                     "PiAPI key (X-API-Key)",
+    "Erreur PiAPI":                              "PiAPI error",
+    "Entre ta clé PiAPI d'abord !":              "Enter your PiAPI key first!",
+    "Connexion PiAPI OK — clé acceptée.":        "PiAPI connection OK — key accepted.",
+    "Clé PiAPI refusée (401/403) — vérifie la clé.":
+        "PiAPI key rejected (401/403) — check the key.",
+    "fal.ai reste le distributeur par défaut et le repli automatique. Un distributeur low cost peut servir les mêmes générations Seedance 2.0 moins cher — les prix affichés dans le Studio s'adaptent. ⚠ Les images de référence transitent toujours par fal.ai (clé fal requise dès qu'un plan envoie des images).":
+        "fal.ai remains the default distributor and the automatic fallback. A low-cost distributor can serve the same Seedance 2.0 generations for less — prices shown in the Studio adapt. ⚠ Reference images still transit through fal.ai (fal key required whenever a shot sends images).",
+
     "Créez un film ou une vidéo\ngénérés par IA":
         "Create an AI-generated\nfilm or video",
     "Créez un live vidéo ou\nun mapping générés par IA":

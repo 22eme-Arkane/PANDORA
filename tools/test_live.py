@@ -2686,5 +2686,35 @@ def studio_ia_poignee_ia_au_bord_live():
         assert 'key != "studio"' in f.read(), "spacer non masqué sur Studio IA Live → poignée IA décalée"
 
 
+@test
+def distributeur_video_piapi_live():
+    """Distributeurs vidéo côté Live (parité Cinéma, 2026-07-16) : Paramètres Live
+    proposent le combo distributeur + clé PiAPI (auto-save), et le Studio Live
+    affiche l'estimation de prix dans un bandeau FIXE sous les onglets, branché
+    sur le signal de « Générer depuis Séquences »."""
+    import inspect
+    # Paramètres Live : mêmes éléments que le Cinéma (combo, clé, test, visibilité)
+    import ui.page_live_settings as PLS
+    _src = inspect.getsource(PLS)
+    for _needle in ("video_provider_combo", '"piapi_key"', "test_piapi_connection",
+                    "_refresh_piapi_visibility"):
+        assert _needle in _src, f"parité distributeurs : {_needle} manquant côté Live"
+    # Studio Live : bandeau prix fixe sous les onglets + signal T2V Live
+    import ui.live_studio_widget as LSW
+    _wsrc = inspect.getsource(LSW.LiveStudioWidget)
+    assert "_price_footer" in _wsrc and "price_estimate_changed" in _wsrc
+    import ui.tab_t2v_live as T
+    assert "price_estimate_changed" in inspect.getsource(T.TabT2V._refresh_price_estimate)
+    # Le bandeau ne s'affiche que sur l'onglet Séquences, avec un texte non vide
+    from PyQt6.QtWidgets import QApplication
+    QApplication.instance() or QApplication([])
+    lw = LSW.LiveStudioWidget()
+    lw.tabs.setCurrentWidget(lw.tab_sequences)
+    lw._on_price_estimate("💰 ≈ $2.00 · 4 plans")
+    assert lw._price_footer.isVisibleTo(lw), "bandeau masqué sur l'onglet Séquences"
+    lw.tabs.setCurrentWidget(lw.tab_library)
+    assert not lw._price_footer.isVisibleTo(lw), "bandeau visible hors Séquences"
+
+
 if __name__ == "__main__":
     sys.exit(main())

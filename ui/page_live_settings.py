@@ -549,6 +549,75 @@ class PageLiveSettings(QWidget):
             self._task_combos[task_key] = combo
             row.addWidget(combo)
             adv_lay.addLayout(row)
+
+        # ── Distribution des générations VIDÉO (parité Cinéma) ────────────────
+        adv_lay.addSpacing(12)
+        _dist_title = QLabel("Distribution des générations vidéo")
+        _dist_title.setStyleSheet(
+            f"color:{CP['text_secondary']};font-size:11px;font-weight:700;"
+            f"background:transparent;"
+        )
+        adv_lay.addWidget(_dist_title)
+        _dist_hint = QLabel(
+            "fal.ai reste le distributeur par défaut et le repli automatique. "
+            "Un distributeur low cost peut servir les mêmes générations Seedance 2.0 "
+            "moins cher — les prix affichés dans le Studio s'adaptent. "
+            "⚠ Les images de référence transitent toujours par fal.ai (clé fal "
+            "requise dès qu'un plan envoie des images)."
+        )
+        _dist_hint.setWordWrap(True)
+        _dist_hint.setStyleSheet(
+            f"color:{CP['text_dim']};font-size:10px;background:transparent;")
+        adv_lay.addWidget(_dist_hint)
+
+        from core.media_provider import PROVIDERS as _MEDIA_PROVIDERS
+        prov_row = QHBoxLayout()
+        prov_row.setSpacing(8)
+        _prov_lbl = QLabel("Distributeur vidéo")
+        _prov_lbl.setStyleSheet(
+            f"color:{CP['text_secondary']};font-size:11px;background:transparent;")
+        prov_row.addWidget(_prov_lbl, 1)
+        self.video_provider_combo = QComboBox()
+        self.video_provider_combo.setFixedHeight(28)
+        self.video_provider_combo.setMinimumWidth(160)
+        self.video_provider_combo.setStyleSheet(
+            f"QComboBox{{background:{CP['bg2']};border:1px solid {CP['border']};"
+            f"border-radius:6px;color:{CP['text_primary']};font-size:11px;padding:0 8px;}}"
+            f"QComboBox::drop-down{{border:none;width:20px;}}"
+            f"QComboBox QAbstractItemView{{background:{CP['bg3']};"
+            f"border:1px solid {CP['border_bright']};color:{CP['text_primary']};"
+            f"selection-background-color:{CP['accent_dim']};}}"
+        )
+        for _pid, _pmeta in _MEDIA_PROVIDERS.items():
+            self.video_provider_combo.addItem(_pmeta["label"], _pid)
+        prov_row.addWidget(self.video_provider_combo)
+        adv_lay.addLayout(prov_row)
+
+        piapi_lbl_row = QHBoxLayout()
+        piapi_lbl_row.setSpacing(8)
+        self._piapi_lbl = QLabel("Clé PiAPI — Seedance 2.0 low cost")
+        self._piapi_lbl.setStyleSheet(
+            f"color:{CP['text_secondary']};font-size:11px;background:transparent;")
+        piapi_lbl_row.addWidget(self._piapi_lbl, 1)
+        self._piapi_test_btn = _test_btn("✓  Tester API PiAPI", self.test_piapi_connection)
+        piapi_lbl_row.addWidget(self._piapi_test_btn)
+        self._piapi_link_btn = _link_btn("⇗  Obtenir une clé PiAPI",
+                                         "https://piapi.ai/workspace")
+        piapi_lbl_row.addWidget(self._piapi_link_btn)
+        adv_lay.addLayout(piapi_lbl_row)
+        self._piapi_input = QLineEdit()
+        self._piapi_input.setPlaceholderText("Clé PiAPI (X-API-Key)")
+        self._piapi_input.setEchoMode(QLineEdit.EchoMode.Password)
+        self._piapi_input.setStyleSheet(
+            f"QLineEdit{{background:{CP['bg2']};border:1px solid {CP['border']};"
+            f"border-radius:6px;color:{CP['text_primary']};font-size:11px;"
+            f"padding:0 10px;min-height:28px;}}"
+            f"QLineEdit:focus{{border:1px solid {CP['accent']};}}"
+        )
+        adv_lay.addWidget(self._piapi_input)
+        self.video_provider_combo.currentIndexChanged.connect(
+            self._refresh_piapi_visibility)
+        self._refresh_piapi_visibility()
         ac.addWidget(self._adv_box)
 
         def _on_ai_changed(*_):
@@ -601,11 +670,12 @@ class PageLiveSettings(QWidget):
                   self._ollama_url_input, self._ollama_model_input,
                   self._kimi_input, self._kimi_url_input, self._kimi_model_input,
                   self._glm_input, self._glm_url_input, self._glm_model_input,
-                  self._host_input):
+                  self._piapi_input, self._host_input):
             w.textChanged.connect(self._save_api_key)
         self._port_spin.valueChanged.connect(self._save_api_key)
         for combo in getattr(self, "_task_combos", {}).values():
             combo.currentIndexChanged.connect(self._save_api_key)
+        self.video_provider_combo.currentIndexChanged.connect(self._save_api_key)
 
     def _set_advanced(self, open_: bool):
         self._adv_open = open_
@@ -615,6 +685,27 @@ class PageLiveSettings(QWidget):
 
     def _toggle_advanced(self):
         self._set_advanced(not self._adv_open)
+
+    def _refresh_piapi_visibility(self, *_):
+        """Champ + boutons PiAPI visibles seulement quand PiAPI est choisi (parité Cinéma)."""
+        _is_piapi = (self.video_provider_combo.currentData() == "piapi")
+        for w in (self._piapi_lbl, self._piapi_test_btn,
+                  self._piapi_link_btn, self._piapi_input):
+            w.setVisible(_is_piapi)
+
+    def test_piapi_connection(self):
+        from PyQt6.QtWidgets import QMessageBox
+        key = self._piapi_input.text().strip()
+        if not key:
+            QMessageBox.warning(self, translate("Clé manquante"),
+                                translate("Entre ta clé PiAPI d'abord !"))
+            return
+        from api.piapi import test_key
+        ok, msg = test_key(key)
+        if ok:
+            QMessageBox.information(self, translate("✓ Connexion OK"), translate(msg))
+        else:
+            QMessageBox.critical(self, translate("Erreur PiAPI"), translate(msg))
 
     def _show_api_help(self):
         # Rouvre le guide de démarrage (promis par son écran final) — remplace
@@ -662,6 +753,13 @@ class PageLiveSettings(QWidget):
         self._glm_url_input.setText(cfg.get("glm_url", ""))
         self._glm_model_input.setText(cfg.get("glm_model", ""))
         self._on_ai_changed()
+        self._piapi_input.setText(cfg.get("piapi_key", ""))
+        _cur_prov = cfg.get("video_provider", "fal")
+        for i in range(self.video_provider_combo.count()):
+            if self.video_provider_combo.itemData(i) == _cur_prov:
+                self.video_provider_combo.setCurrentIndex(i)
+                break
+        self._refresh_piapi_visibility()
         host = cfg.get("resolume_host", "localhost")
         port = cfg.get("resolume_port", 8080)
         self._host_input.setText(str(host))
@@ -692,6 +790,8 @@ class PageLiveSettings(QWidget):
         cfg["glm_key"]           = self._glm_input.text().strip()
         cfg["glm_url"]           = self._glm_url_input.text().strip()
         cfg["glm_model"]         = self._glm_model_input.text().strip()
+        cfg["video_provider"]    = self.video_provider_combo.currentData() or "fal"
+        cfg["piapi_key"]         = self._piapi_input.text().strip()
         cfg["resolume_host"] = self._host_input.text().strip() or "localhost"
         cfg["resolume_port"] = self._port_spin.value()
         save_config(cfg)

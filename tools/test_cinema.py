@@ -3783,5 +3783,72 @@ def reference_image_visible_au_1er_ajout():
     assert build_reference_thumb([], 100, 58).isNull(), "aucune image → pas de vignette"
 
 
+@test
+def distributeur_video_piapi():
+    """Distributeurs de génération vidéo (2026-07-16) : fal.ai = socle + repli,
+    PiAPI = alternatif low cost choisi dans Paramètres → avancés. Les PRIX
+    (pricing.estimate/format_estimate) suivent la grille du distributeur actif,
+    et le Studio affiche l'estimation dans un bandeau FIXE sous les onglets."""
+    import inspect
+    import core.media_provider as mp
+    from core import pricing
+
+    # Registre : fal + piapi, fal par défaut sans config
+    assert set(mp.PROVIDERS) >= {"fal", "piapi"}
+    _orig_lc = mp.load_config
+    try:
+        mp.load_config = lambda: {}
+        assert mp.get_video_provider() == "fal", "défaut = fal"
+        assert mp.active_video_provider("seedance-2.0") == "fal"
+        # PiAPI choisi SANS clé → repli fal (jamais d'appel sans clé)
+        mp.load_config = lambda: {"video_provider": "piapi"}
+        assert mp.active_video_provider("seedance-2.0") == "fal", "sans clé → fal"
+        # PiAPI choisi AVEC clé → actif pour Seedance, repli fal pour un moteur non couvert
+        mp.load_config = lambda: {"video_provider": "piapi", "piapi_key": "k"}
+        assert mp.active_video_provider("seedance-2.0") == "piapi"
+        assert mp.active_video_provider("seedance-2.0-fast") == "piapi"
+        assert mp.active_video_provider("kling-v3-pro") == "fal", "non couvert → fal"
+        # Prix : grille PiAPI (0.20 $/s en 720p) vs fal (0.30 $/s)
+        cost, mode = pricing.estimate("seedance-2.0", "720p", 10.0, 1)
+        assert mode == "s" and abs(cost - 2.0) < 1e-6, ("prix PiAPI attendu 2.0", cost)
+        msg = pricing.format_estimate("Seedance 2.0", "seedance-2.0", "720p", 10.0, 2)
+        assert "piapi.ai" in msg, "le rappel doit citer le distributeur actif"
+        # Retour à fal → grille fal restaurée
+        mp.load_config = lambda: {}
+        cost_fal, _ = pricing.estimate("seedance-2.0", "720p", 10.0, 1)
+        assert abs(cost_fal - 3.0) < 1e-6, ("prix fal attendu 3.0", cost_fal)
+        assert "fal.ai" in pricing.format_estimate("S", "seedance-2.0", "720p", 10, 1)
+    finally:
+        mp.load_config = _orig_lc
+
+    # Backend PiAPI : mapping des modes + durée clampée, AUCUN appel réseau ici
+    from api import piapi
+    inp = piapi.build_input("t2v", {"prompt": "p", "resolution": "720p",
+                                    "duration": 99, "generate_audio": True})
+    assert inp["mode"] == "text_to_video" and inp["duration"] == 15
+    inp = piapi.build_input("i2v", {"image_url": "u1", "end_image_url": "u2",
+                                    "duration": 8})
+    assert inp["mode"] == "first_last_frames" and inp["image_urls"] == ["u1", "u2"]
+    inp = piapi.build_input("ref", {"image_urls": ["a"], "video_urls": ["v"],
+                                    "duration": 8})
+    assert inp["mode"] == "omni_reference" and inp["image_urls"] == ["a"]
+    # Routage dans run_real : préparation commune, bascule sur l'appel final
+    import api.real as real
+    _src = inspect.getsource(real.run_real)
+    assert "active_video_provider" in _src and "run_piapi" in _src
+    # Paramètres : combo distributeur + clé PiAPI persistés (auto-save)
+    import ui.page_settings as PS
+    _ssrc = inspect.getsource(PS.SettingsPage) if hasattr(PS, "SettingsPage") else \
+        inspect.getsource(PS)
+    assert "video_provider_combo" in _ssrc and '"piapi_key"' in _ssrc
+    assert "test_piapi_connection" in _ssrc
+    # Studio : bandeau prix fixe sous les onglets, branché sur le signal T2V
+    import ui.seedance_widget as SW
+    _wsrc = inspect.getsource(SW.SeedanceWidget)
+    assert "_price_footer" in _wsrc and "price_estimate_changed" in _wsrc
+    import ui.tab_t2v as T
+    assert "price_estimate_changed" in inspect.getsource(T.TabT2V._refresh_price_estimate)
+
+
 if __name__ == "__main__":
     sys.exit(main())

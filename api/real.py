@@ -622,7 +622,38 @@ def run_real(params: dict, emit_progress, is_cancelled) -> dict:
             if uploaded_refs:
                 args["image_urls"] = uploaded_refs
 
-    # ── Appel API avec callbacks de progression ───────────────────────────────
+    # ── Distributeur (Paramètres → avancés) ───────────────────────────────────
+    # fal.ai = socle ; si un distributeur alternatif couvert est choisi (PiAPI),
+    # seul l'APPEL FINAL change — toute la préparation ci-dessus (traduction,
+    # analyses vision, suffixes, uploads CDN fal → URLs publiques) est commune.
+    from core.media_provider import active_video_provider, provider_key as _pkey
+    _provider = active_video_provider(model)
+    if _provider == "piapi":
+        from api.piapi import run_piapi
+        result = run_piapi(mode, fast, args, _pkey("piapi"),
+                           emit_progress, is_cancelled)
+        if is_cancelled() or not result:
+            return {}
+        emit_progress(98, "Finalisation…")
+        return {
+            "request_id":            result.get("request_id", ""),
+            "video_url":             result.get("video", {}).get("url", ""),
+            "duration":              duration,
+            "resolution":            params.get("resolution", "720p"),
+            "model":                 model,
+            "prompt":                params.get("prompt", ""),
+            "mode":                  mode,
+            "provider":              "piapi",
+            "generated_at":          datetime.now().isoformat(),
+            "credits_used":          0,
+            "seed":                  result.get("seed", 0),
+            "ref_images_attempted":  _ref_images_attempted,
+            "ref_images_sent":       _ref_images_sent,
+            "gcs_blocked":           _gcs_blocked,
+            "gcs_error_detail":      _gcs_error_detail,
+        }
+
+    # ── Appel API fal.ai avec callbacks de progression ────────────────────────
     emit_progress(12, "Envoi à l'API Seedance 2.0…")
     _pct = [12]
 
@@ -697,6 +728,7 @@ def run_real(params: dict, emit_progress, is_cancelled) -> dict:
         "model":                 model,
         "prompt":                params.get("prompt", ""),
         "mode":                  mode,
+        "provider":              "fal",
         "generated_at":          datetime.now().isoformat(),
         "credits_used":          0,
         "seed":                  result.get("seed", 0),

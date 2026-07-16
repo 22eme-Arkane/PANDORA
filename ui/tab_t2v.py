@@ -2320,6 +2320,10 @@ class _PreviewTranslateWorker(QThread):
 
 class TabT2V(QScrollArea):
     generation_done = pyqtSignal(dict)
+    # Texte d'estimation de prix (sélection × durée × grille du distributeur) —
+    # relayé par SeedanceWidget dans le bandeau fixe SOUS les onglets, toujours
+    # visible sans scroller (demande Matthieu 2026-07-16).
+    price_estimate_changed = pyqtSignal(str)
 
     def __init__(self):
         super().__init__()
@@ -4083,8 +4087,9 @@ class TabT2V(QScrollArea):
             engine_key = self.cb_model.currentData() or self.cb_model.currentText()
             engine_lbl = self.cb_model.currentText()
             res = self.cb_res.currentData() or self.cb_res.currentText()
-            self._price_lbl.setText(
-                pricing.format_estimate(engine_lbl, engine_key, res, total, n))
+            _txt = pricing.format_estimate(engine_lbl, engine_key, res, total, n)
+            self._price_lbl.setText(_txt)
+            self.price_estimate_changed.emit(_txt)
         except Exception:
             pass
 

@@ -203,6 +203,33 @@ class SeedanceWidget(QWidget):
 
         root.addWidget(self.tabs)
 
+        # ── Bandeau ESTIMATION DE PRIX fixe sous les onglets ──────────────────
+        # Toujours visible (jamais dans le scroll) : sélection de plans × durée ×
+        # grille du DISTRIBUTEUR actif (fal.ai ou alternatif choisi dans
+        # Paramètres → avancés). Alimenté par TabT2V.price_estimate_changed ;
+        # affiché uniquement sur l'onglet « Générer depuis Storyboard ».
+        self._price_footer = QLabel("")
+        self._price_footer.setWordWrap(True)
+        self._price_footer.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self._price_footer.setStyleSheet(
+            f"QLabel{{background:rgba(255,79,106,0.08);"
+            f"border-top:1px solid rgba(255,79,106,0.30);"
+            f"color:{C.get('red', '#ff4f6a')};font-size:10px;font-weight:700;"
+            f"font-family:'Consolas',monospace;padding:6px 16px;}}"
+        )
+        self._price_footer.setVisible(False)
+        root.addWidget(self._price_footer)
+        self.tab_t2v.price_estimate_changed.connect(self._on_price_estimate)
+
+    def _on_price_estimate(self, text: str):
+        self._price_footer.setText(text)
+        self._refresh_price_footer_visibility()
+
+    def _refresh_price_footer_visibility(self):
+        self._price_footer.setVisible(
+            bool(self._price_footer.text())
+            and self.tabs.currentWidget() is self.tab_t2v)
+
     @staticmethod
     def _clamp_content_width(tab: QWidget, max_w: int = 1360):
         """Plafonne la largeur du CONTENU d'un onglet formulaire et le centre
@@ -222,6 +249,8 @@ class SeedanceWidget(QWidget):
         elif self.tabs.widget(index) is self.tab_sound:
             # Le conducteur du Sound Design suit le storyboard courant.
             self.tab_sound.refresh()
+        # Bandeau prix : visible seulement sur « Générer depuis Storyboard »
+        self._refresh_price_footer_visibility()
 
     def _on_send_to_edit(self, paths: list):
         self.tab_davinci.add_clips_from_paths(paths)

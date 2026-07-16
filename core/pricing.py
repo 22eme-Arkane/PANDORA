@@ -44,6 +44,10 @@ def estimate(engine: str, resolution: str, total_seconds: float,
              n_clips: int = 1) -> tuple[float, str]:
     """Coût INDICATIF total (USD) + mode de facturation.
 
+    Tient compte du DISTRIBUTEUR choisi (Paramètres avancés) : si un
+    distributeur alternatif (PiAPI…) couvre le moteur, c'est SA grille
+    qui est utilisée — sinon la grille fal.ai ci-dessus.
+
     Retour : (coût_usd, mode) avec mode ∈ {"s", "clip", "approx"}.
       - "s"      : facturé à la seconde (prix connu) ;
       - "clip"   : facturé à la vidéo (durée fixe) ;
@@ -54,6 +58,15 @@ def estimate(engine: str, resolution: str, total_seconds: float,
     total_seconds = max(0.0, float(total_seconds or 0.0))
     if engine in _PER_VIDEO:
         return _PER_VIDEO[engine] * n_clips, "clip"
+    # Grille du distributeur actif (import paresseux — pas de cycle au chargement)
+    try:
+        from core import media_provider as _mp
+        if _mp.active_video_provider(engine) != "fal":
+            _rate, _pid = _mp.price_per_second(engine, resolution)
+            if _pid != "fal" and _rate is not None:
+                return _rate * total_seconds, "s"
+    except Exception:
+        pass
     rates = _PER_SECOND.get(engine)
     if rates:
         res = (resolution or "").strip()
@@ -62,19 +75,32 @@ def estimate(engine: str, resolution: str, total_seconds: float,
     return _DEFAULT_PER_S * total_seconds, "approx"
 
 
+def _active_site(engine: str) -> str:
+    """Nom du site du distributeur EFFECTIF pour ce moteur (mention du rappel)."""
+    try:
+        from core import media_provider as _mp
+        return _mp.provider_site(_mp.active_video_provider(engine))
+    except Exception:
+        return "fal.ai"
+
+
 def format_estimate(engine_label: str, engine_key: str, resolution: str,
                     total_seconds: float, n_clips: int = 1) -> str:
     """Message d'estimation prêt à afficher (français). Toujours accompagné du
-    rappel : prix INDICATIF, vérifier sur fal.ai (les tarifs peuvent évoluer)."""
+    rappel : prix INDICATIF, vérifier sur le site du distributeur ACTIF
+    (les tarifs peuvent évoluer)."""
     cost, mode = estimate(engine_key, resolution, total_seconds, n_clips)
     plan_word = "plan" if n_clips <= 1 else "plans"
     eng = (engine_label or engine_key or "moteur").strip()
     res = (resolution or "").strip()
+    site = _active_site(engine_key)
     head = f"💰  ≈ ${cost:.2f}  ·  {n_clips} {plan_word}"
     if mode != "clip":
         head += f" (~{total_seconds:.0f}s)"
     head += f"  ·  {eng}"
     if res:
         head += f" · {res}"
-    return (head + "  —  estimation INDICATIVE : vérifie le prix réel sur "
-            "fal.ai (les tarifs peuvent évoluer).")
+    if site != "fal.ai":
+        head += f" · via {site}"
+    return (head + f"  —  estimation INDICATIVE : vérifie le prix réel sur "
+            f"{site} (les tarifs peuvent évoluer).")

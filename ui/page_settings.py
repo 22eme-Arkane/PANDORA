@@ -413,6 +413,76 @@ class SettingsPage(QScrollArea):
             self._task_combos[task_key] = combo
             row.addWidget(combo)
             adv_lay.addLayout(row)
+
+        # ── Distribution des générations VIDÉO (distributeur alternatif) ──────
+        adv_lay.addSpacing(12)
+        _dist_title = QLabel("Distribution des générations vidéo")
+        _dist_title.setStyleSheet(
+            f"color:{CP['text_secondary']};font-size:11px;font-weight:700;"
+            f"background:transparent;"
+        )
+        adv_lay.addWidget(_dist_title)
+        _dist_hint = QLabel(
+            "fal.ai reste le distributeur par défaut et le repli automatique. "
+            "Un distributeur low cost peut servir les mêmes générations Seedance 2.0 "
+            "moins cher — les prix affichés dans le Studio s'adaptent. "
+            "⚠ Les images de référence transitent toujours par fal.ai (clé fal "
+            "requise dès qu'un plan envoie des images)."
+        )
+        _dist_hint.setWordWrap(True)
+        _dist_hint.setStyleSheet(
+            f"color:{CP['text_dim']};font-size:10px;background:transparent;")
+        adv_lay.addWidget(_dist_hint)
+
+        from core.media_provider import PROVIDERS as _MEDIA_PROVIDERS
+        prov_row = QHBoxLayout()
+        prov_row.setSpacing(8)
+        _prov_lbl = QLabel("Distributeur vidéo")
+        _prov_lbl.setStyleSheet(
+            f"color:{CP['text_secondary']};font-size:11px;background:transparent;")
+        prov_row.addWidget(_prov_lbl, 1)
+        self.video_provider_combo = QComboBox()
+        self.video_provider_combo.setFixedHeight(28)
+        self.video_provider_combo.setMinimumWidth(160)
+        self.video_provider_combo.setStyleSheet(
+            f"QComboBox{{background:{CP['bg2']};border:1px solid {CP['border']};"
+            f"border-radius:6px;color:{CP['text_primary']};font-size:11px;padding:0 8px;}}"
+            f"QComboBox::drop-down{{border:none;width:20px;}}"
+            f"QComboBox QAbstractItemView{{background:{CP['bg3']};"
+            f"border:1px solid {CP['border_bright']};color:{CP['text_primary']};"
+            f"selection-background-color:{CP['accent_dim']};}}"
+        )
+        for _pid, _pmeta in _MEDIA_PROVIDERS.items():
+            self.video_provider_combo.addItem(_pmeta["label"], _pid)
+        _cur_prov = cfg.get("video_provider", "fal")
+        for i in range(self.video_provider_combo.count()):
+            if self.video_provider_combo.itemData(i) == _cur_prov:
+                self.video_provider_combo.setCurrentIndex(i)
+                break
+        prov_row.addWidget(self.video_provider_combo)
+        adv_lay.addLayout(prov_row)
+
+        piapi_lbl_row = QHBoxLayout()
+        piapi_lbl_row.setSpacing(8)
+        self._piapi_lbl = QLabel("Clé PiAPI — Seedance 2.0 low cost")
+        self._piapi_lbl.setStyleSheet(
+            f"color:{CP['text_secondary']};font-size:11px;background:transparent;")
+        piapi_lbl_row.addWidget(self._piapi_lbl, 1)
+        self._piapi_test_btn = _test_btn("✓  Tester API PiAPI", self.test_piapi_connection)
+        piapi_lbl_row.addWidget(self._piapi_test_btn)
+        self._piapi_link_btn = _link_btn("⇗  Obtenir une clé PiAPI",
+                                         "https://piapi.ai/workspace")
+        piapi_lbl_row.addWidget(self._piapi_link_btn)
+        adv_lay.addLayout(piapi_lbl_row)
+        self.piapi_input = QLineEdit()
+        self.piapi_input.setPlaceholderText("Clé PiAPI (X-API-Key)")
+        self.piapi_input.setText(cfg.get("piapi_key", ""))
+        self.piapi_input.setEchoMode(QLineEdit.EchoMode.Password)
+        self.piapi_input.setStyleSheet(_field_style())
+        adv_lay.addWidget(self.piapi_input)
+        self.video_provider_combo.currentIndexChanged.connect(
+            self._refresh_piapi_visibility)
+        self._refresh_piapi_visibility()
         lay.addWidget(self._adv_box)
 
         self._on_ai_choice_changed()
@@ -707,6 +777,25 @@ class SettingsPage(QScrollArea):
     def _toggle_advanced(self):
         self._set_advanced(not self._adv_open)
 
+    def _refresh_piapi_visibility(self, *_):
+        """Champ + boutons PiAPI visibles seulement quand PiAPI est choisi."""
+        _is_piapi = (self.video_provider_combo.currentData() == "piapi")
+        for w in (self._piapi_lbl, self._piapi_test_btn,
+                  self._piapi_link_btn, self.piapi_input):
+            w.setVisible(_is_piapi)
+
+    def test_piapi_connection(self):
+        key = self.piapi_input.text().strip()
+        if not key:
+            QMessageBox.warning(self, "Clé manquante", "Entre ta clé PiAPI d'abord !")
+            return
+        from api.piapi import test_key
+        ok, msg = test_key(key)
+        if ok:
+            QMessageBox.information(self, "✓ Connexion OK", msg)
+        else:
+            QMessageBox.critical(self, "Erreur PiAPI", msg)
+
     def _toggle_opt_keys(self):
         self._opt_keys_open = not self._opt_keys_open
         self._opt_keys_box.setVisible(self._opt_keys_open)
@@ -742,6 +831,8 @@ class SettingsPage(QScrollArea):
             "ollama_url":        self.ollama_url_input.text(),
             "ollama_model":      self.ollama_model_input.text(),
             "ai_task_engines":   task_engines,
+            "video_provider":    self.video_provider_combo.currentData() or "fal",
+            "piapi_key":         self.piapi_input.text(),
         })
         save_config(cfg)
         from core.ai_provider import refresh_name_cache
@@ -756,10 +847,12 @@ class SettingsPage(QScrollArea):
         for w in (self.api_input, self.anthropic_input, self.openai_input,
                   self.mistral_input, self.kimi_input, self.kimi_url_input,
                   self.kimi_model_input, self.glm_input, self.glm_url_input,
-                  self.glm_model_input, self.ollama_url_input, self.ollama_model_input):
+                  self.glm_model_input, self.ollama_url_input, self.ollama_model_input,
+                  self.piapi_input):
             w.textChanged.connect(self.save)
         for combo in getattr(self, "_task_combos", {}).values():
             combo.currentIndexChanged.connect(self.save)
+        self.video_provider_combo.currentIndexChanged.connect(self.save)
 
     def _apply_pandora_preset(self):
         """Renseigne les combos « moteur par tâche » avec le preset PANDORA optimisé."""
