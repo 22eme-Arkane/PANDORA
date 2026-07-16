@@ -11,7 +11,7 @@ s'affichent quand elles existent (sinon rien — pas de fausse maquette).
 from PyQt6.QtWidgets import (
     QApplication, QDialog, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
     QFrame, QScrollArea, QWidget, QCheckBox, QStackedWidget,
-    QGraphicsDropShadowEffect,
+    QGraphicsDropShadowEffect, QLineEdit,
 )
 from PyQt6.QtCore import Qt, QUrl
 from PyQt6.QtGui import QDesktopServices, QColor
@@ -162,10 +162,102 @@ def _shot(filename: str) -> QWidget | None:
     return None
 
 
+def _key_row(cfg_key: str, placeholder: str, color: str,
+             expect_prefix: str = "") -> QWidget:
+    """Champ « colle ta clé ICI » : enregistre directement dans la config,
+    sans obliger à passer par la page Paramètres (demande Matthieu 2026-07-16).
+    Champ masqué (EchoMode.Password) comme dans Paramètres ; le bouton
+    « Coller » lit le presse-papiers, remplit le champ ET enregistre."""
+    box = QWidget()
+    box.setStyleSheet("background:transparent;")
+    v = QVBoxLayout(box)
+    v.setContentsMargins(0, 0, 0, 0)
+    v.setSpacing(6)
+
+    row = QHBoxLayout()
+    row.setSpacing(8)
+    field = QLineEdit()
+    field.setPlaceholderText(translate(placeholder))
+    field.setFixedHeight(38)
+    field.setEchoMode(QLineEdit.EchoMode.Password)
+    field.setStyleSheet(
+        f"QLineEdit{{background:{CP['bg2']};color:{CP['text_primary']};"
+        f"border:1px solid {CP['border_bright']};border-radius:10px;"
+        f"font-size:12px;padding:0 12px;}}"
+        f"QLineEdit:focus{{border:1px solid {color};}}"
+    )
+    row.addWidget(field, 1)
+
+    btn = QPushButton(translate("📋  Coller"))
+    btn.setFixedHeight(38)
+    btn.setCursor(Qt.CursorShape.PointingHandCursor)
+    btn.setStyleSheet(
+        f"QPushButton{{background:transparent;color:{color};"
+        f"border:1px solid {color};border-radius:10px;"
+        f"font-size:11px;font-weight:700;padding:0 16px;}}"
+        f"QPushButton:hover{{background:{_rgba(color, 0.12)};}}"
+    )
+    row.addWidget(btn)
+    v.addLayout(row)
+
+    status = QLabel("")
+    status.setWordWrap(True)
+    status.setAlignment(Qt.AlignmentFlag.AlignCenter)
+    status.setStyleSheet(
+        f"color:{CP['text_dim']};font-size:10.5px;background:transparent;"
+    )
+    v.addWidget(status)
+
+    def _set_status(text: str, col: str):
+        status.setText(translate(text))
+        status.setStyleSheet(f"color:{col};font-size:10.5px;background:transparent;")
+
+    def _save():
+        val = field.text().strip()
+        if not val:
+            _set_status("Le champ est vide — copie d'abord la clé, puis colle-la ici.",
+                        CP["orange"])
+            return
+        from core.config import load_config, save_config
+        cfg = load_config()
+        cfg[cfg_key] = val
+        save_config(cfg)
+        if expect_prefix and not val.startswith(expect_prefix):
+            _set_status("⚠️  Clé enregistrée — mais elle ne ressemble pas à une clé "
+                        "attendue, vérifie au besoin.", CP["orange"])
+        else:
+            _set_status("✅  Clé enregistrée — tu peux passer à l'étape suivante.",
+                        CP["green"])
+
+    def _paste():
+        txt = (QApplication.clipboard().text() or "").strip()
+        if not txt:
+            _set_status("Le presse-papiers est vide — copie d'abord la clé sur la "
+                        "page ouverte, puis reviens cliquer ici.", CP["orange"])
+            return
+        field.setText(txt)
+        _save()
+
+    btn.clicked.connect(_paste)
+    field.returnPressed.connect(_save)
+
+    # Pré-remplissage si la clé existe déjà (guide rouvert)
+    try:
+        from core.config import load_config
+        _existing = (load_config().get(cfg_key) or "").strip()
+        if _existing:
+            field.setText(_existing)
+            _set_status("✅  Une clé est déjà enregistrée pour ce service.", CP["green"])
+    except Exception:
+        pass
+    return box
+
+
 def _step_page(icon_char: str, color: str, kicker: str, title: str,
                subtitle: str, detail: str = "", cta_label: str = "",
                cta_action=None, shot_file: str = "", note: str = "",
-               note_color: str = "") -> QWidget:
+               note_color: str = "", key_cfg: str = "",
+               key_placeholder: str = "", key_prefix: str = "") -> QWidget:
     """Un écran du wizard : icône lumineuse, titre, description, UN bouton."""
     w = QScrollArea()
     w.setWidgetResizable(True)
@@ -216,9 +308,19 @@ def _step_page(icon_char: str, color: str, kicker: str, title: str,
         )
         lay.addWidget(n)
     if cta_label:
-        lay.addSpacing(24)
+        lay.addSpacing(20)
         lay.addWidget(_cta(cta_label, color, cta_action or (lambda: None)),
                       0, Qt.AlignmentFlag.AlignCenter)
+    if key_cfg:
+        lay.addSpacing(16)
+        then = QLabel(translate("… puis colle la clé copiée ici :"))
+        then.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        then.setStyleSheet(
+            f"color:{CP['text_secondary']};font-size:11px;background:transparent;"
+        )
+        lay.addWidget(then)
+        lay.addSpacing(8)
+        lay.addWidget(_key_row(key_cfg, key_placeholder, color, key_prefix))
     lay.addStretch()
 
     outer_lay.addStretch()
@@ -332,6 +434,8 @@ class OnboardingDialog(QDialog):
                 shot_file="fal_keys.png",
                 cta_label="🔑  Ouvrir la page Keys →",
                 cta_action=lambda: _open(_FAL_KEYS),
+                key_cfg="api_key",
+                key_placeholder="Colle ici ta clé fal.ai (fal_key_…)",
             ),
             _step_page(
                 "💳", F, "FAL.AI · VIDÉOS & IMAGES — 3 SUR 3",
@@ -361,14 +465,17 @@ class OnboardingDialog(QDialog):
             _step_page(
                 "🔑", A2, "CLAUDE · SCÉNARIO & STORYBOARD — 2 SUR 3",
                 "Copie ta clé Claude",
-                "Comme pour fal.ai : une clé personnelle, que tu colleras dans "
-                "PANDORA à la dernière étape.",
+                "Comme pour fal.ai : une clé personnelle — colle-la ci-dessous, "
+                "PANDORA s'en souviendra.",
                 detail="Sur la page <b>API Keys</b> : clique <b>« Create Key »</b> → nomme-la "
                        "<b>PANDORA</b> → <b>« Create Key »</b> → copie la clé <b>sk-ant-…</b>",
                 note="⚠️  La clé ne s'affiche qu'une seule fois — copie-la tout de suite.",
                 shot_file="claude_keys.png",
                 cta_label="🔑  Ouvrir la page API Keys →",
                 cta_action=lambda: _open(_ANT_KEYS),
+                key_cfg="anthropic_key",
+                key_placeholder="Colle ici ta clé Claude (sk-ant-…)",
+                key_prefix="sk-ant",
             ),
             _step_page(
                 "💳", A2, "CLAUDE · SCÉNARIO & STORYBOARD — 3 SUR 3",
@@ -382,17 +489,7 @@ class OnboardingDialog(QDialog):
                 cta_label="💳  Ouvrir la page Billing →",
                 cta_action=lambda: _open(_ANT_BILLING),
             ),
-            _step_page(
-                "✅", G, "DERNIÈRE ÉTAPE",
-                "Colle tes deux clés dans PANDORA",
-                "Direction la page <b>Paramètres</b> : colle la clé <b>fal_key_…</b> et la "
-                "clé <b>sk-ant-…</b> dans leurs champs, puis clique sur <b>« Enregistrer »</b>.",
-                detail="✅  Tu pourras rouvrir ce guide à tout moment depuis "
-                       "<b>Paramètres → Aide API</b>. Et sans clés, PANDORA reste "
-                       "entièrement explorable en mode simulation.",
-                cta_label="Aller aux Paramètres →",
-                cta_action=self._go_settings,
-            ),
+            self._page_finish(),
         ]
         for p in self._pages:
             self._stack.addWidget(p)
@@ -532,6 +629,107 @@ class OnboardingDialog(QDialog):
         w.setWidget(inner)
         return w
 
+    # ── Page finale : état des clés + accès Paramètres ─────────────────────────
+
+    def _page_finish(self) -> QWidget:
+        w = QScrollArea()
+        w.setWidgetResizable(True)
+        w.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        w.setStyleSheet(
+            f"QScrollArea{{background:transparent;border:none;}}"
+            f"QScrollBar:vertical{{width:4px;background:{CP['bg2']};}}"
+            f"QScrollBar::handle:vertical{{background:{CP['border_bright']};border-radius:2px;}}"
+        )
+        inner = QWidget()
+        inner.setStyleSheet("background:transparent;")
+        outer_lay = QHBoxLayout(inner)
+        outer_lay.setContentsMargins(48, 12, 48, 12)
+
+        col_w = QWidget()
+        col_w.setMaximumWidth(560)
+        col_w.setStyleSheet("background:transparent;")
+        lay = QVBoxLayout(col_w)
+        lay.setContentsMargins(0, 0, 0, 0)
+        lay.setSpacing(0)
+
+        G = CP["green"]
+        lay.addSpacing(34)
+        lay.addWidget(_kicker("DERNIÈRE ÉTAPE"), 0, Qt.AlignmentFlag.AlignCenter)
+        lay.addSpacing(20)
+        lay.addWidget(_icon_chip("✅", G), 0, Qt.AlignmentFlag.AlignCenter)
+        lay.addSpacing(20)
+        lay.addWidget(_title("Dernière vérification"))
+        lay.addSpacing(10)
+        lay.addWidget(_subtitle(
+            "Si tu as collé tes deux clés aux étapes précédentes, tout est prêt — "
+            "vérifie ci-dessous. Tu peux aussi les gérer à tout moment depuis la "
+            "page <b>Paramètres</b>."
+        ))
+
+        # État des clés (rafraîchi à l'arrivée sur la page)
+        lay.addSpacing(16)
+        status_box = QFrame()
+        status_box.setStyleSheet(
+            f"QFrame{{background:{CP['bg2']};border:1px solid {CP['border']};"
+            f"border-radius:10px;}}"
+        )
+        sb = QVBoxLayout(status_box)
+        sb.setContentsMargins(18, 12, 18, 12)
+        sb.setSpacing(6)
+        self._status_fal = QLabel("")
+        self._status_ant = QLabel("")
+        for lbl in (self._status_fal, self._status_ant):
+            lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            lbl.setStyleSheet(
+                f"color:{CP['text_secondary']};font-size:12px;"
+                f"background:transparent;border:none;"
+            )
+            sb.addWidget(lbl)
+        lay.addWidget(status_box)
+
+        lay.addSpacing(12)
+        lay.addWidget(_detail_box(
+            "✅  Tu pourras rouvrir ce guide à tout moment depuis "
+            "<b>Paramètres → Aide API</b>. Et sans clés, PANDORA reste "
+            "entièrement explorable en mode simulation.",
+            G
+        ))
+        lay.addSpacing(20)
+        lay.addWidget(_cta("Aller aux Paramètres →", G, self._go_settings),
+                      0, Qt.AlignmentFlag.AlignCenter)
+        lay.addStretch()
+
+        outer_lay.addStretch()
+        outer_lay.addWidget(col_w, 1)
+        outer_lay.addStretch()
+        w.setWidget(inner)
+        return w
+
+    def _refresh_key_status(self):
+        try:
+            from core.config import load_config
+            cfg = load_config()
+        except Exception:
+            cfg = {}
+        for lbl, cfg_key, ok_txt, miss_txt in (
+            (self._status_fal, "api_key",
+             "✅  Clé fal.ai enregistrée",
+             "○  Clé fal.ai manquante — reviens à l'étape 3"),
+            (self._status_ant, "anthropic_key",
+             "✅  Clé Claude enregistrée",
+             "○  Clé Claude manquante — reviens à l'étape 6"),
+        ):
+            if (cfg.get(cfg_key) or "").strip():
+                lbl.setText(translate(ok_txt))
+                lbl.setStyleSheet(
+                    f"color:{CP['green']};font-size:12px;font-weight:600;"
+                    f"background:transparent;border:none;")
+            else:
+                lbl.setText(translate(miss_txt))
+                lbl.setStyleSheet(
+                    f"color:{CP['orange']};font-size:12px;"
+                    f"background:transparent;border:none;")
+
     # ── Navigation ─────────────────────────────────────────────────────────────
 
     def _update_ui(self):
@@ -569,6 +767,8 @@ class OnboardingDialog(QDialog):
             )
         self._btn_prev.setEnabled(i > 0)
         self._btn_next.setText(translate("Terminer") if i == n - 1 else translate("Suivant →"))
+        if i == n - 1:
+            self._refresh_key_status()
 
     def _prev(self):
         if self._idx > 0:

@@ -2434,7 +2434,6 @@ _FR_TO_EN: dict[str, str] = {
     "Ajoute quelques crédits":                   "Add some credits",
     "Créons ton compte Claude":                  "Let's create your Claude account",
     "Copie ta clé Claude":                       "Copy your Claude key",
-    "Colle tes deux clés dans PANDORA":          "Paste your two keys into PANDORA",
     "fal.ai est le service qui génère tes <b>vidéos</b> (Seedance, Kling, Veo…) et tes <b>images</b> (portraits, décors, storyboards).":
         "fal.ai is the service that generates your <b>videos</b> (Seedance, Kling, Veo…) and your <b>images</b> (portraits, sets, storyboards).",
     "La clé API est ton <b>badge d'accès personnel</b> : PANDORA l'utilise pour lancer les générations en ton nom.":
@@ -2443,12 +2442,33 @@ _FR_TO_EN: dict[str, str] = {
         "fal.ai is <b>pay-as-you-go, no subscription</b>: you only pay for what you generate.",
     "Claude est l'IA qui t'assiste sur le <b>scénario</b>, génère le <b>storyboard</b> et optimise tes <b>prompts vidéo</b>.":
         "Claude is the AI that assists you with the <b>screenplay</b>, generates the <b>storyboard</b> and optimizes your <b>video prompts</b>.",
-    "Comme pour fal.ai : une clé personnelle, que tu colleras dans PANDORA à la dernière étape.":
-        "Same as fal.ai: a personal key, which you'll paste into PANDORA at the final step.",
+    "Comme pour fal.ai : une clé personnelle — colle-la ci-dessous, PANDORA s'en souviendra.":
+        "Same as fal.ai: a personal key — paste it below, PANDORA will remember it.",
     "Même principe que fal.ai : <b>à la consommation, sans abonnement</b>.":
         "Same principle as fal.ai: <b>pay-as-you-go, no subscription</b>.",
-    "Direction la page <b>Paramètres</b> : colle la clé <b>fal_key_…</b> et la clé <b>sk-ant-…</b> dans leurs champs, puis clique sur <b>« Enregistrer »</b>.":
-        "Head to the <b>Settings</b> page: paste the <b>fal_key_…</b> key and the <b>sk-ant-…</b> key into their fields, then click <b>\"Save\"</b>.",
+    "Dernière vérification":                     "Final check",
+    "Si tu as collé tes deux clés aux étapes précédentes, tout est prêt — vérifie ci-dessous. Tu peux aussi les gérer à tout moment depuis la page <b>Paramètres</b>.":
+        "If you pasted your two keys in the previous steps, everything is ready — check below. You can also manage them at any time from the <b>Settings</b> page.",
+    "… puis colle la clé copiée ici :":          "… then paste the copied key here:",
+    "📋  Coller":                                "📋  Paste",
+    "Colle ici ta clé fal.ai (fal_key_…)":       "Paste your fal.ai key here (fal_key_…)",
+    "Colle ici ta clé Claude (sk-ant-…)":        "Paste your Claude key here (sk-ant-…)",
+    "✅  Clé enregistrée — tu peux passer à l'étape suivante.":
+        "✅  Key saved — you can move on to the next step.",
+    "✅  Une clé est déjà enregistrée pour ce service.":
+        "✅  A key is already saved for this service.",
+    "⚠️  Clé enregistrée — mais elle ne ressemble pas à une clé attendue, vérifie au besoin.":
+        "⚠️  Key saved — but it doesn't look like an expected key, double-check if needed.",
+    "Le champ est vide — copie d'abord la clé, puis colle-la ici.":
+        "The field is empty — copy the key first, then paste it here.",
+    "Le presse-papiers est vide — copie d'abord la clé sur la page ouverte, puis reviens cliquer ici.":
+        "The clipboard is empty — copy the key on the opened page first, then come back and click here.",
+    "✅  Clé fal.ai enregistrée":                "✅  fal.ai key saved",
+    "○  Clé fal.ai manquante — reviens à l'étape 3":
+        "○  fal.ai key missing — go back to step 3",
+    "✅  Clé Claude enregistrée":                "✅  Claude key saved",
+    "○  Clé Claude manquante — reviens à l'étape 6":
+        "○  Claude key missing — go back to step 6",
     "Sur la page d'accueil, clique sur <b>« Get started »</b> en haut à droite — connexion avec <b>Google</b> ou <b>GitHub</b>, 30 secondes.":
         "On the home page, click <b>\"Get started\"</b> (top right) — sign in with <b>Google</b> or <b>GitHub</b>, 30 seconds.",
     "Sur la page <b>Keys</b> : clique <b>« + Add key »</b> → nomme-la <b>PANDORA</b> → <b>« Create »</b> → copie la clé <b>fal_key_…</b>":
