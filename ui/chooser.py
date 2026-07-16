@@ -215,19 +215,18 @@ class ChooserWindow(QWidget):
         btns_row.setSpacing(36)
         btns_row.setAlignment(Qt.AlignmentFlag.AlignCenter)
 
-        # Sous-titres = UNE ligne courte qui dit ce que l'espace PERMET, sans
-        # jargon ni nom d'outil tiers (retours testeur 2026-07-16 : d'abord
-        # « Pré-production/VJ » opaques, puis version 3 lignes trop bavarde).
+        # Sous-titres courts — formulations de Matthieu (2026-07-16), après
+        # deux itérations : « Créez un film/une vidéo » vs « live/mapping ».
         self._btn_cinema = _ModuleBtn(
             "🎬", "Cinéma",
-            "Du scénario aux plans\nen vidéo IA",
+            "Créez un film ou une vidéo\ngénérés par IA",
             CP["accent"],
             img_normal="Cinéma_désactiver.png",
             img_active="cinéma.png",
         )
         self._btn_live = _ModuleBtn(
             "◈", "Live",
-            "Des visuels de concert\ncalés sur la musique",
+            "Créez un live vidéo ou\nun mapping générés par IA",
             CP["accent2"],
             img_normal="live_desactiver.png",
             img_active="Live.png",
