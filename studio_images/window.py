@@ -8,10 +8,10 @@ Droite  : dialogue avec Claude + bouton de synthèse du prompt.
 import os
 import time
 
-from PyQt6.QtCore import Qt, QPoint, QUrl, pyqtSignal
-from PyQt6.QtGui import QDesktopServices, QPixmap
+from PyQt6.QtCore import Qt, QPoint, QSize, QUrl, pyqtSignal
+from PyQt6.QtGui import QDesktopServices, QImageReader, QPixmap
 from PyQt6.QtWidgets import (
-    QAbstractSpinBox, QComboBox, QDialog, QFileDialog, QFormLayout, QHBoxLayout,
+    QAbstractSpinBox, QApplication, QComboBox, QDialog, QFileDialog, QFormLayout, QHBoxLayout,
     QInputDialog, QLabel, QLineEdit, QMainWindow, QMessageBox, QProgressBar,
     QPushButton, QScrollArea, QSpinBox, QSplitter, QTextEdit, QVBoxLayout, QWidget,
 )
@@ -230,6 +230,14 @@ class StudioImagesPanel(QWidget):
         self._chat_worker = None
         self._synth_worker = None
         self._img_worker = None
+        self._abandoned_workers = []  # threads parqués (référence anti-GC)
+
+        # Quitter l'app pendant une génération/discussion détruisait le QThread
+        # encore vivant → abort C sans traceback. On parque tout à la fermeture
+        # (couvre l'onglet Image IA de PANDORA ET l'app autonome).
+        _app = QApplication.instance()
+        if _app is not None:
+            _app.aboutToQuit.connect(self._park_all)
 
         root = QVBoxLayout(self)
         # Marge DROITE = 0 : la poignée du chat (dernier widget du body) doit être
@@ -460,10 +468,14 @@ class StudioImagesPanel(QWidget):
         self._format.currentIndexChanged.connect(self._on_format_changed)
 
         self._count = QSpinBox()
-        self._count.setRange(1, 4)
+        self._count.setRange(1, 10)
         self._count.setValue(int(self.cfg.get("count", 1)))
         self._count.setPrefix("×")
-        self._count.setToolTip("Nombre d'images à générer (variations)")
+        self._count.setToolTip(
+            "Nombre d'images à générer (variations).\n"
+            "Le lot part en file d'attente : les images sont générées une par une, "
+            "l'aperçu affiche la progression, et « Annuler » interrompt le reste du lot.\n"
+            "⚠ Chaque image du lot est facturée séparément par le moteur.")
         self._count.setStyleSheet(
             f"background:{CP['bg2']}; border:1px solid {CP['border']}; "
             f"border-radius:6px; padding:7px; color:{CP['text_primary']}; font-weight:600;")
@@ -542,6 +554,27 @@ class StudioImagesPanel(QWidget):
         self._gen_btn = QPushButton("⚡  GÉNÉRER L'IMAGE")
         self._gen_btn.clicked.connect(self._generate)
         lay.addWidget(self._gen_btn)
+
+        # Balayage comparatif : une image par MOTEUR (un seul par famille).
+        # Style contour (jamais de suffixe hex-opacity sur fond sombre).
+        self._gen_all_btn = QPushButton("🧪  Générer avec tous les moteurs")
+        self._gen_all_btn.setObjectName("secondary")
+        self._gen_all_btn.setStyleSheet(
+            f"QPushButton{{background: transparent; color: {CP['accent']}; "
+            f"border: 1px solid {CP['accent_dim']}; border-radius: 8px; "
+            f"font-weight: 700; padding: 6px;}}"
+            f"QPushButton:hover{{background: rgba(78,205,196,0.10); "
+            f"border-color: {CP['accent']};}}"
+            f"QPushButton:disabled{{color: {CP['text_dim']}; "
+            f"border-color: {CP['border']};}}")
+        self._gen_all_btn.setToolTip(
+            "Génère UNE image par moteur, à la suite, avec le même prompt — "
+            "pour comparer les rendus.\n"
+            "Un seul moteur par famille (pas toutes les versions), et le nom du "
+            "moteur est ajouté à la fin de chaque fichier.\n"
+            "⚠ Chaque moteur est facturé séparément ; « Annuler » interrompt la file.")
+        self._gen_all_btn.clicked.connect(self._generate_all_engines)
+        lay.addWidget(self._gen_all_btn)
 
         # Annuler — visible uniquement pendant un travail en cours
         self._cancel_btn = QPushButton("✕  Annuler")
@@ -769,7 +802,7 @@ class StudioImagesPanel(QWidget):
                 thumbs.addStretch(1)
             for p in images:
                 t = QLabel()
-                pm = self._load_pixmap(p)
+                pm = self._thumb_pixmap(p, 54)
                 if pm is not None and not pm.isNull():
                     t.setPixmap(pm.scaled(54, 54, Qt.AspectRatioMode.KeepAspectRatioByExpanding,
                                           Qt.TransformationMode.SmoothTransformation))
@@ -842,7 +875,7 @@ class StudioImagesPanel(QWidget):
     # ── Tuiles d'image réutilisables (style PANDORA) ─────────────────────────
     def _thumb_tile(self, path, on_remove):
         t = QLabel()
-        pm = self._load_pixmap(path)
+        pm = self._thumb_pixmap(path, 56)
         if pm is not None and not pm.isNull():
             t.setPixmap(pm.scaled(56, 56, Qt.AspectRatioMode.KeepAspectRatioByExpanding,
                                   Qt.TransformationMode.SmoothTransformation))
@@ -1099,8 +1132,9 @@ class StudioImagesPanel(QWidget):
         self._history.append({"role": "user", "content": content})
 
         self._set_chat_busy(True, "Claude réfléchit…")
+        self._park_worker(self._chat_worker)   # jamais écraser un thread vivant
         self._chat_worker = ChatWorker(self.cfg.get("anthropic_key", ""), list(self._history))
-        self._chat_worker.finished.connect(self._on_chat_done)
+        self._chat_worker.done.connect(self._on_chat_done)
         self._chat_worker.failed.connect(self._on_chat_error)
         self._chat_worker.notice.connect(lambda m: self._set_chat_busy(True, m))
         self._chat_worker.start()
@@ -1125,9 +1159,10 @@ class StudioImagesPanel(QWidget):
             return
         self._set_busy(True, "Synthèse du prompt…")
         fmt_label = self._format.currentText()
+        self._park_worker(self._synth_worker)   # jamais écraser un thread vivant
         self._synth_worker = SynthPromptWorker(
             self.cfg.get("anthropic_key", ""), list(self._history), fmt_label)
-        self._synth_worker.finished.connect(self._on_synth_done)
+        self._synth_worker.done.connect(self._on_synth_done)
         self._synth_worker.failed.connect(self._on_worker_error)
         self._synth_worker.start()
 
@@ -1239,20 +1274,54 @@ class StudioImagesPanel(QWidget):
             self._persist_refs()
 
     # ── Génération image ─────────────────────────────────────────────────────
-    def _generate(self):
+    def _prompt_or_warn(self):
+        """Retourne le prompt saisi, ou None (avec message) s'il est vide."""
         prompt = self._prompt.toPlainText().strip()
         if not prompt:
             QMessageBox.information(
                 self, "Studio Images",
                 "Le prompt est vide. Écris-le ou clique « ✨ Générer le prompt ».")
+            return None
+        return prompt
+
+    def _generate(self):
+        prompt = self._prompt_or_warn()
+        if prompt:
+            self._launch_image_worker(prompt, count=self._count.value(),
+                                      busy_msg="Génération…")
+
+    def _generate_all_engines(self):
+        """Balayage comparatif : UNE image par moteur, un seul moteur par famille.
+
+        Le même prompt est envoyé à chaque moteur, à la suite (file d'attente),
+        et le nom du moteur termine le nom de chaque fichier produit."""
+        prompt = self._prompt_or_warn()
+        if not prompt:
             return
+        keys = engines.sweep_engines()
+        liste = "\n".join(f"  • {engines.short_label(k)}" for k in keys)
+        if QMessageBox.question(
+                self, "Générer avec tous les moteurs",
+                f"{len(keys)} images vont être générées, une par moteur :\n\n{liste}\n\n"
+                "Un seul moteur par famille (pas toutes les versions).\n"
+                "Chaque moteur est facturé séparément.\n"
+                "« Annuler » interrompt la file : les moteurs restants ne sont pas "
+                "appelés, donc pas facturés.\n\n"
+                "Lancer le balayage ?") != QMessageBox.StandardButton.Yes:
+            return
+        self._launch_image_worker(prompt, engine_keys=keys,
+                                  busy_msg=f"Balayage de {len(keys)} moteurs…")
+
+    def _launch_image_worker(self, prompt, count=1, engine_keys=None,
+                             busy_msg="Génération…"):
+        """Lance la file de génération (lot d'un moteur, ou balayage multi-moteurs)."""
         self._persist_cfg()
         target = self._target_size()
         out_dir = projects.project_dir(self._project_id) if self._project_id \
             else self.cfg.get("output_dir", "")
 
-        self._set_busy(True, "Génération…")
-        self._gen_btn.setEnabled(False)
+        self._set_busy(True, busy_msg)
+        self._park_worker(self._img_worker)   # jamais écraser un thread vivant
         self._img_worker = ImageWorker(
             fal_key=self.cfg.get("fal_key", ""),
             engine_key=self._model.currentData(),
@@ -1261,10 +1330,11 @@ class StudioImagesPanel(QWidget):
             ref_paths=self._ref_paths,
             out_dir=out_dir,
             target_size=target,
-            count=self._count.value(),
+            count=count,
+            engine_keys=engine_keys,
         )
         self._img_worker.progress.connect(self._on_img_progress)
-        self._img_worker.finished.connect(self._on_img_done)
+        self._img_worker.done.connect(self._on_img_done)
         self._img_worker.failed.connect(self._on_img_error)
         self._img_worker.start()
 
@@ -1349,9 +1419,37 @@ class StudioImagesPanel(QWidget):
                 return None
         return QPixmap(path)
 
+    def _thumb_pixmap(self, path, px):
+        """Charge une VIGNETTE sans décoder l'image en pleine résolution.
+
+        QPixmap(path) décode toute l'image sur le thread principal : une photo de
+        téléphone (~12 Mpx) rien que pour afficher 56 px fige l'interface à chaque
+        pièce jointe et à chaque bulle du chat. QImageReader.setScaledSize décode
+        directement à la taille utile. Repli sur _load_pixmap si la lecture échoue
+        (SVG, format exotique) — l'aperçu principal, lui, reste en pleine résolution."""
+        if path.lower().endswith(".svg"):
+            return self._load_pixmap(path)
+        try:
+            reader = QImageReader(path)
+            reader.setAutoTransform(True)          # respecte l'orientation EXIF
+            size = reader.size()
+            if size.isValid() and size.width() > 0 and size.height() > 0:
+                # « cover » : la plus PETITE dimension atteint px (les appels
+                # scaled() en aval utilisent KeepAspectRatioByExpanding)
+                scale = max(px / size.width(), px / size.height())
+                if scale < 1.0:
+                    reader.setScaledSize(QSize(max(1, round(size.width() * scale)),
+                                               max(1, round(size.height() * scale))))
+            img = reader.read()
+            if img.isNull():
+                return self._load_pixmap(path)
+            return QPixmap.fromImage(img)
+        except Exception:
+            return self._load_pixmap(path)
+
     def _add_history(self, path):
         thumb = QLabel()
-        pm = self._load_pixmap(path)
+        pm = self._thumb_pixmap(path, 110)
         if pm is not None and not pm.isNull():
             thumb.setPixmap(pm.scaled(110, 62, Qt.AspectRatioMode.KeepAspectRatioByExpanding,
                                       Qt.TransformationMode.SmoothTransformation))
@@ -1395,6 +1493,8 @@ class StudioImagesPanel(QWidget):
         self._progress.setVisible(busy)
         self._cancel_btn.setVisible(busy)
         self._gen_btn.setEnabled(not busy)
+        if hasattr(self, "_gen_all_btn"):
+            self._gen_all_btn.setEnabled(not busy)
         if busy:
             self._progress.setRange(0, 0)  # indéterminé
         else:
@@ -1405,23 +1505,55 @@ class StudioImagesPanel(QWidget):
         self._chat_status.setText(msg)
         self._chat_busy.setVisible(busy)
 
-    def _cancel_work(self):
-        """Annule le travail en cours (génération image / discussion / synthèse).
+    # ── Cycle de vie des workers (anti-segfault) ─────────────────────────────
+    @staticmethod
+    def _is_running(w) -> bool:
+        try:
+            return w is not None and w.isRunning()
+        except Exception:
+            return False
 
-        JAMAIS QThread.terminate() (état Qt/Python corrompu → segfault sur le
-        worker suivant) : on PARQUE le thread — signaux coupés, demande
-        d'interruption, référence anti-GC conservée — et on rend la main."""
+    def _park_worker(self, w):
+        """Parque un QThread encore actif AVANT de réassigner sa variable.
+
+        Réassigner self._x_worker sans parquer l'ancien lâche sa DERNIÈRE
+        référence Python : si le thread tourne encore, le GC détruit un QThread
+        vivant → « QThread: Destroyed while thread is still running » → abort au
+        niveau C, sans traceback (donc sans pandora_crash.log).
+        JAMAIS QThread.terminate() : on coupe les signaux (résultat tardif
+        ignoré), on demande l'interruption, et on garde la référence le temps que
+        le thread se termine seul. Équivalent local de core.worker.abandon_thread,
+        recopié ici car studio_images tourne aussi en autonome (sans core)."""
+        if not self._is_running(w):
+            return  # None ou déjà terminé : le GC peut le libérer sans risque
         if not hasattr(self, "_abandoned_workers"):
             self._abandoned_workers = []
-        for w in (self._img_worker, self._chat_worker, self._synth_worker):
-            if w and w.isRunning():
-                try:
-                    w.blockSignals(True)
-                    w.requestInterruption()
-                    w.quit()
-                    self._abandoned_workers.append(w)
-                except Exception:
-                    pass
+        for action in (lambda: w.blockSignals(True), w.requestInterruption, w.quit):
+            try:
+                action()
+            except Exception:
+                pass
+        self._abandoned_workers.append(w)
+        # Libère ceux qui se sont réellement terminés depuis
+        self._abandoned_workers[:] = [t for t in self._abandoned_workers
+                                      if self._is_running(t)]
+
+    def _park_all(self):
+        """Parque les trois workers (annulation, fermeture de l'app).
+
+        Branché sur QApplication.aboutToQuit : une exception non gérée dans un
+        slot fait ABORT toute l'app — d'où le filet ci-dessous."""
+        try:
+            for w in (getattr(self, "_img_worker", None),
+                      getattr(self, "_chat_worker", None),
+                      getattr(self, "_synth_worker", None)):
+                self._park_worker(w)
+        except Exception:
+            pass
+
+    def _cancel_work(self):
+        """Annule le travail en cours (génération image / discussion / synthèse)."""
+        self._park_all()
         self._img_worker = self._chat_worker = self._synth_worker = None
         self._set_busy(False, "Travail annulé.")
         self._set_chat_busy(False)
@@ -1460,3 +1592,11 @@ class StudioWindow(QMainWindow):
         self.resize(1320, 860)
         self.panel = StudioImagesPanel()
         self.setCentralWidget(self.panel)
+
+    def closeEvent(self, e):
+        # Fermer pendant une génération/discussion détruirait un QThread vivant.
+        try:
+            self.panel._park_all()
+        except Exception:
+            pass
+        super().closeEvent(e)

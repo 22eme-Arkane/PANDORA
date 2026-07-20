@@ -38,8 +38,8 @@ import re
 
 from PyQt6.QtWidgets import (QFileDialog, QFileIconProvider, QListView, QTreeView,
                              QDialogButtonBox, QComboBox, QCompleter, QToolButton)
-from PyQt6.QtCore import (QDir, QEvent, QFileInfo, QObject, QSize, QStandardPaths,
-                          Qt, QTimer, QUrl)
+from PyQt6.QtCore import (QDir, QEvent, QFileInfo, QMutex, QObject, QRunnable,
+                          QSize, QStandardPaths, Qt, QThreadPool, QTimer, QUrl)
 from PyQt6.QtGui import (QColor, QFileSystemModel, QGuiApplication, QIcon,
                          QImageReader, QKeySequence, QPainter, QPixmap)
 
@@ -224,30 +224,79 @@ _THUMB     = QSize(96, 96)   # vignettes en mode liste/grille (un cran plus gran
 _THUMB_ROW = QSize(48, 48)   # vignettes en mode détail (lignes)
 _MAX_THUMB_BYTES = 48 * 1024 * 1024   # au-delà : icône générique (pas de décodage)
 _MAX_CACHE = 4000                     # garde-fou mémoire (≈ quelques Mo d'icônes)
+# Décodage des vignettes en fond. Borné : on laisse des cœurs à l'app (une
+# génération d'image peut tourner en même temps) et on évite de saturer le disque.
+_THUMB_THREADS = max(2, min(4, (os.cpu_count() or 4) - 2))
+
+
+class _ThumbTask(QRunnable):
+    """Décode UNE vignette hors du thread UI et dépose le résultat.
+
+    Produit un QImage et JAMAIS un QPixmap/QIcon : ces deux-là ne sont pas
+    utilisables hors du thread GUI. La conversion se fait côté principal (elle
+    est quasi gratuite — c'est le décodage qui coûte)."""
+
+    def __init__(self, path: str, mtime: float, sink):
+        super().__init__()
+        self._path, self._mtime, self._sink = path, mtime, sink
+
+    def run(self):
+        img = None
+        try:
+            reader = QImageReader(self._path)
+            reader.setAutoTransform(True)   # respecte l'orientation EXIF
+            src = reader.size()             # en-tête seul, sans décoder
+            if src.isValid() and (src.width() > _THUMB.width()
+                                  or src.height() > _THUMB.height()):
+                reader.setScaledSize(src.scaled(
+                    _THUMB, Qt.AspectRatioMode.KeepAspectRatio))
+            img = reader.read()
+            if img.isNull():
+                img = None
+        except Exception:
+            img = None
+        try:
+            self._sink(self._path, self._mtime, img)
+        except Exception:
+            pass
 
 
 class ThumbnailIconProvider(QFileIconProvider):
-    """Renvoie une vignette pour les fichiers image, l'icône standard sinon.
+    """Vignette pour les fichiers image, icône standard sinon — SANS bloquer l'UI.
 
-    Le décodage se fait DIRECTEMENT à la taille de la vignette via
-    QImageReader.setScaledSize (JPEG : décodage DCT réduit — bien plus rapide
-    qu'un QPixmap plein format redimensionné ensuite). Les vignettes sont mises
-    en cache (clé = chemin absolu) et invalidées si le fichier change (mtime).
-    Le modèle de fichiers ne demande les icônes que des lignes VISIBLES → le
-    remplissage reste paresseux, pas de gel UI sur un gros dossier."""
+    ⚠ Historique : cette classe décodait la vignette DANS icon(), en pariant sur
+    QImageReader.setScaledSize. Ce pari ne tient que pour le JPEG (décodage DCT
+    réduit) : un PNG doit être décodé ENTIÈREMENT avant d'être réduit. Mesuré le
+    2026-07-20 sur un dossier réel (217 PNG, 16,7 Mo médians, 8,3 Mpx) :
+    354 ms par vignette, 277 appels à icon() **tous sur le thread principal**,
+    soit 157 s de gel — le « (Ne répond pas) » du sélecteur.
+
+    Désormais : icon() ne décode JAMAIS. Il rend le cache s'il est chaud, sinon
+    l'icône générique immédiatement, et programme le décodage dans un pool de
+    threads. Un timer draine les résultats, convertit en QIcon (thread GUI) et
+    demande aux vues de se repeindre → la vignette apparaît quand elle est prête."""
 
     def __init__(self):
         super().__init__()
         self._cache: dict[str, QIcon] = {}
         self._mtimes: dict[str, float] = {}
+        self._queued: set[str] = set()      # décodages en cours (anti-doublon)
+        self._done: list = []               # rempli par les threads de décodage
+        self._lock = QMutex()
+        self._pool = QThreadPool()
+        self._pool.setMaxThreadCount(_THUMB_THREADS)
+        self._views: list = []              # vues à repeindre quand ça arrive
+        self._timer = QTimer()
+        self._timer.setInterval(200)
+        self._timer.timeout.connect(self._drain)
 
+    # ── Appelé par Qt sur le thread UI : doit rendre la main IMMÉDIATEMENT ────
     def icon(self, info):
         # Surcharge QFileInfo → vignette ; l'autre surcharge (IconType) tombe au super.
         if isinstance(info, QFileInfo):
             try:
-                if info.isFile() and info.suffix().lower() in _IMG_EXT:
-                    if info.size() > _MAX_THUMB_BYTES:
-                        return super().icon(info)
+                if (info.isFile() and info.suffix().lower() in _IMG_EXT
+                        and info.size() <= _MAX_THUMB_BYTES):
                     path = info.absoluteFilePath()
                     try:
                         mtime = float(info.lastModified().toSecsSinceEpoch())
@@ -256,31 +305,74 @@ class ThumbnailIconProvider(QFileIconProvider):
                     ic = self._cache.get(path)
                     if ic is not None and self._mtimes.get(path) == mtime:
                         return ic
-                    ic = self._make_thumb(path)
-                    if ic is not None:
-                        if len(self._cache) >= _MAX_CACHE:
-                            self._cache.clear()
-                            self._mtimes.clear()
-                        self._cache[path] = ic
-                        self._mtimes[path] = mtime
-                        return ic
+                    self._schedule(path, mtime)   # décodage EN FOND
             except Exception:
                 pass
         return super().icon(info)
 
-    @staticmethod
-    def _make_thumb(path: str) -> QIcon | None:
-        reader = QImageReader(path)
-        reader.setAutoTransform(True)   # respecte l'orientation EXIF
-        src = reader.size()             # lu dans l'en-tête, sans décoder l'image
-        if src.isValid() and (src.width() > _THUMB.width()
-                              or src.height() > _THUMB.height()):
-            reader.setScaledSize(src.scaled(
-                _THUMB, Qt.AspectRatioMode.KeepAspectRatio))
-        img = reader.read()
-        if img.isNull():
-            return None
-        return QIcon(QPixmap.fromImage(img))
+    def register_view(self, view) -> None:
+        """Vue à repeindre dès que de nouvelles vignettes sont prêtes."""
+        self._prune_views()
+        if view is not None and view not in self._views:
+            self._views.append(view)
+
+    # ── Interne ───────────────────────────────────────────────────────────────
+    def _schedule(self, path: str, mtime: float) -> None:
+        if path in self._queued:
+            return
+        self._queued.add(path)
+        self._pool.start(_ThumbTask(path, mtime, self._collect))
+        if not self._timer.isActive():
+            self._timer.start()
+
+    def _collect(self, path: str, mtime: float, img) -> None:
+        """Appelé depuis un thread de décodage — on ne touche QUE la liste."""
+        self._lock.lock()
+        try:
+            self._done.append((path, mtime, img))
+        finally:
+            self._lock.unlock()
+
+    def _drain(self) -> None:
+        """Thread UI : intègre les vignettes prêtes et repeint les vues."""
+        self._lock.lock()
+        try:
+            batch, self._done = self._done, []
+        finally:
+            self._lock.unlock()
+        for path, mtime, img in batch:
+            self._queued.discard(path)
+            if img is None or img.isNull():
+                continue
+            if len(self._cache) >= _MAX_CACHE:
+                self._cache.clear()
+                self._mtimes.clear()
+            self._cache[path] = QIcon(QPixmap.fromImage(img))   # thread GUI
+            self._mtimes[path] = mtime
+        if batch:
+            self._refresh_views()
+        if not self._queued:
+            self._timer.stop()
+
+    def _prune_views(self) -> None:
+        alive = []
+        for v in self._views:
+            try:
+                v.objectName()          # lève si l'objet C++ est détruit
+                alive.append(v)
+            except Exception:
+                pass
+        self._views = alive
+
+    def _refresh_views(self) -> None:
+        self._prune_views()
+        for v in self._views:
+            try:
+                vp = v.viewport()
+                if vp is not None:
+                    vp.update()
+            except Exception:
+                pass
 
 
 _provider: ThumbnailIconProvider | None = None
@@ -623,15 +715,21 @@ def apply_thumbnails(dlg: QFileDialog) -> QFileDialog:
     de raccourcis + barre d'adresse éditable + taille/mode mémorisés + style
     PANDORA. (Nom historique — c'est le point d'entrée unique du module.)"""
     dlg.setOption(QFileDialog.Option.DontUseNativeDialog, True)
-    dlg.setIconProvider(_shared_provider())
+    _prov = _shared_provider()
+    dlg.setIconProvider(_prov)
     for lv in dlg.findChildren(QListView):
         if lv.objectName() == "sidebar":
             lv.setIconSize(QSize(16, 16))   # la barre latérale garde des icônes fines
         else:
             lv.setIconSize(_THUMB)
             lv.setSpacing(2)                # espacement propre entre vignettes
+            # Les vignettes arrivent en différé (décodage en fond) : la vue doit
+            # être repeinte quand elles sont prêtes, sinon elles n'apparaîtraient
+            # qu'au prochain défilement.
+            _prov.register_view(lv)
     for tv in dlg.findChildren(QTreeView):
         tv.setIconSize(_THUMB_ROW)
+        _prov.register_view(tv)
         try:   # tri par nom par défaut (dossiers d'abord sous Windows)
             tv.sortByColumn(0, Qt.SortOrder.AscendingOrder)
         except Exception:

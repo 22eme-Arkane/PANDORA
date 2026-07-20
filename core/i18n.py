@@ -1481,6 +1481,28 @@ _FR_TO_EN: dict[str, str] = {
     "LIEU & TEMPS":                     "PLACE & TIME",
     "NOTES & PROMPT":                   "NOTES & PROMPT",
     "Nombre d'images à générer (1–4)":  "Number of images to generate (1–4)",
+    # Studio Images / onglet Image IA — balayage « tous les moteurs »
+    "🧪  Générer avec tous les moteurs": "🧪  Generate with every engine",
+    "Générer avec tous les moteurs":     "Generate with every engine",
+    "Génère UNE image par moteur, à la suite, avec le même prompt — "
+    "pour comparer les rendus.\n"
+    "Un seul moteur par famille (pas toutes les versions), et le nom du "
+    "moteur est ajouté à la fin de chaque fichier.\n"
+    "⚠ Chaque moteur est facturé séparément ; « Annuler » interrompt la file.":
+        "Generates ONE image per engine, one after another, from the same prompt — "
+        "to compare their output.\n"
+        "One engine per family (not every version), and the engine name is "
+        "appended to the end of each file.\n"
+        "⚠ Each engine is billed separately; « Cancel » stops the queue.",
+    # Studio Images / onglet Image IA — lot jusqu'à 10 images en file d'attente
+    "Nombre d'images à générer (variations).\n"
+    "Le lot part en file d'attente : les images sont générées une par une, "
+    "l'aperçu affiche la progression, et « Annuler » interrompt le reste du lot.\n"
+    "⚠ Chaque image du lot est facturée séparément par le moteur.":
+        "Number of images to generate (variations).\n"
+        "The batch is queued: images are generated one by one, the preview shows "
+        "progress, and « Cancel » stops the rest of the batch.\n"
+        "⚠ Each image in the batch is billed separately by the engine.",
     "Assigner à des personnages":       "Assign to characters",
     "Sélectionne les personnages":      "Select characters",
     "Personnages assignés":             "Assigned characters",

@@ -90,7 +90,7 @@ _DEFAULTS = {
     "format":        "thumbnail",  # clé de FORMATS
     "custom_w":      1024,
     "custom_h":      1024,
-    "count":         1,            # nombre d'images générées par lot (1-4)
+    "count":         1,            # nombre d'images générées par lot (1-10)
     "output_dir":    "",           # vide → ~/Pictures/Studio Images
 }
 

@@ -62,11 +62,13 @@ def _export_resized(src_path: str, out_path: str, target: tuple) -> str:
 
 class ImageWorker(QThread):
     progress = pyqtSignal(int, str)
-    finished = pyqtSignal(list)   # liste des fichiers générés (PNG taille exacte, ou SVG)
+    # « done » et JAMAIS « finished » : un signal nommé finished masque le signal
+    # natif QThread.finished (état Qt incohérent → segfault sur le worker suivant).
+    done     = pyqtSignal(list)   # liste des fichiers générés (PNG taille exacte, ou SVG)
     failed   = pyqtSignal(str)
 
     def __init__(self, fal_key, engine_key, prompt, resolution,
-                 ref_paths, out_dir, target_size, count=1):
+                 ref_paths, out_dir, target_size, count=1, engine_keys=None):
         super().__init__()
         self._key     = (fal_key or "").strip()
         self._engine  = engine_key
@@ -75,7 +77,12 @@ class ImageWorker(QThread):
         self._refs    = [p for p in (ref_paths or []) if p and os.path.isfile(p)][:14]
         self._out_dir = out_dir
         self._target  = target_size
-        self._count   = max(1, int(count))
+        # FILE D'ATTENTE : une entrée = une image, générée avec CE moteur.
+        #   engine_keys → balayage « tous les moteurs » (un moteur par entrée) ;
+        #   sinon        → lot classique de `count` images sur le moteur choisi.
+        self._jobs    = ([k for k in engine_keys if k] if engine_keys
+                         else [engine_key] * max(1, int(count)))
+        self._count   = len(self._jobs)
 
     def run(self):
         os.makedirs(self._out_dir, exist_ok=True)
@@ -90,29 +97,35 @@ class ImageWorker(QThread):
         paths = []
         try:
             from PIL import Image, ImageDraw
-            for i in range(self._count):
-                self.progress.emit(20 + int((i + 1) / self._count * 70),
-                                   f"[{i + 1}/{self._count}] placeholder…")
+            n = len(self._jobs)
+            for i, ekey in enumerate(self._jobs):
+                if self.isInterruptionRequested():
+                    break
+                name = engines.short_label(ekey)
+                self.progress.emit(20 + int((i + 1) / n * 70),
+                                   f"[{i + 1}/{n}] {name} — placeholder…")
                 time.sleep(0.2)
                 tw, th = self._target
                 img = Image.new("RGB", (tw, th), (24, 27, 44))
                 d = ImageDraw.Draw(img)
                 d.rectangle([8, 8, tw - 8, th - 8], outline=(78, 205, 196), width=4)
-                head = f"MOCK {i + 1}/{self._count} · {engines.ENGINES.get(self._engine, {}).get('kind', '')}"
-                d.text((40, 40), head, fill=(78, 205, 196))
+                d.text((40, 40), f"MOCK {i + 1}/{n} · {name}", fill=(78, 205, 196))
                 d.text((40, 70), (self._prompt or "(prompt vide)")[:240], fill=(230, 236, 245))
-                p = os.path.join(self._out_dir, f"studio_{int(time.time())}_{i}_mock.png")
+                # Nom du moteur EN FIN de nom de fichier
+                p = os.path.join(
+                    self._out_dir,
+                    f"studio_{int(time.time())}_{i}_mock_{engines.slug_for(ekey)}.png")
                 img.save(p, "PNG")
                 paths.append(p)
         except Exception as e:
             self.failed.emit(f"Pillow indisponible pour le mock : {e}")
             return
         self.progress.emit(100, f"{len(paths)} placeholder(s) (mock).")
-        self.finished.emit(paths)
+        self.done.emit(paths)
 
     # ── Réel ──────────────────────────────────────────────────────────────────
     def _real(self):
-        paths = []
+        paths, errors = [], []
         try:
             import fal_client
             import requests
@@ -123,43 +136,57 @@ class ImageWorker(QThread):
             if self._refs:
                 self.progress.emit(6, "Encodage des images de référence…")
                 ref_urls = [_data_url(p) for p in self._refs]
+        except Exception as e:
+            self.failed.emit(f"Erreur fal.ai : {e}")
+            return
 
-            n = self._count
-            for i in range(n):
-                base = 8 + int(i / n * 84)
-                self.progress.emit(base, f"[{i + 1}/{n}] envoi à fal.ai…")
-
+        n = len(self._jobs)
+        for i, ekey in enumerate(self._jobs):
+            # « Annuler » interrompt la FILE : les images restantes ne sont pas
+            # demandées — donc pas facturées. Sans ce test, annuler un lot de 10
+            # laissait partir les 10 appels payants.
+            if self.isInterruptionRequested():
+                break
+            name = engines.short_label(ekey)
+            base = 8 + int(i / n * 84)
+            self.progress.emit(base, f"[{i + 1}/{n}] {name} — envoi à fal.ai…")
+            try:
                 endpoint, args, out_kind = engines.build_request(
-                    self._engine, self._prompt, self._target, self._res, ref_urls)
+                    ekey, self._prompt, self._target, self._res, ref_urls)
                 result = fal_client.subscribe(endpoint, arguments=args)
 
                 self.progress.emit(base + int(84 / n * 0.6),
-                                   f"[{i + 1}/{n}] téléchargement…")
+                                   f"[{i + 1}/{n}] {name} — téléchargement…")
                 url = _extract_image_url(result)
                 data = requests.get(url, timeout=180).content
 
-                ts = int(time.time())
+                ts   = int(time.time())
+                slug = engines.slug_for(ekey)   # nom du moteur EN FIN de fichier
                 if out_kind == "svg":
-                    final = os.path.join(self._out_dir, f"studio_{ts}_{i}_logo.svg")
+                    final = os.path.join(self._out_dir, f"studio_{ts}_{i}_{slug}.svg")
                     with open(final, "wb") as f:
                         f.write(data)
                 else:
-                    raw = os.path.join(self._out_dir, f"studio_{ts}_{i}_raw.png")
+                    raw = os.path.join(self._out_dir, f"studio_{ts}_{i}_raw_{slug}.png")
                     with open(raw, "wb") as f:
                         f.write(data)
-                    final = os.path.join(self._out_dir, f"studio_{ts}_{i}.png")
+                    final = os.path.join(self._out_dir, f"studio_{ts}_{i}_{slug}.png")
                     final = _export_resized(raw, final, self._target)
                 paths.append(final)
+            except Exception as e:
+                # Un moteur en échec ne doit PAS annuler la file : sur un balayage,
+                # les autres moteurs doivent aboutir malgré un endpoint capricieux.
+                errors.append(f"{name} : {e}")
+                self.progress.emit(base, f"[{i + 1}/{n}] {name} — échec, on continue…")
+                continue
 
-            if not paths:
-                self.failed.emit("Aucune image générée.")
-                return
+        if not paths:
+            detail = ("\n\n" + "\n".join(errors)) if errors else ""
+            self.failed.emit("Aucune image générée." + detail)
+            return
+        if errors:
+            recale = ", ".join(e.split(" : ")[0] for e in errors)
+            self.progress.emit(100, f"{len(paths)} image(s) · en échec : {recale}")
+        else:
             self.progress.emit(100, f"{len(paths)} image(s) générée(s) !")
-            self.finished.emit(paths)
-        except Exception as e:
-            # Si au moins une image a été produite avant l'erreur, on la renvoie
-            if paths:
-                self.progress.emit(100, f"{len(paths)} image(s) — interrompu : {e}")
-                self.finished.emit(paths)
-            else:
-                self.failed.emit(f"Erreur fal.ai : {e}")
+        self.done.emit(paths)

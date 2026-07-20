@@ -164,7 +164,8 @@ englobant l'ensemble.\
 
 
 class ChatWorker(QThread):
-    finished = pyqtSignal(str)
+    # « done » et JAMAIS « finished » (masquerait le signal natif QThread.finished).
+    done     = pyqtSignal(str)
     failed   = pyqtSignal(str)
     notice   = pyqtSignal(str)   # message d'attente (ex. nouvelle tentative)
 
@@ -190,7 +191,7 @@ class ChatWorker(QThread):
                     system=_CHAT_SYSTEM,
                     messages=messages,
                 )
-                self.finished.emit(msg.content[0].text.strip())
+                self.done.emit(msg.content[0].text.strip())
                 return
             except Exception as e:
                 is_rate = "rate_limit" in str(e) or "429" in str(e)
@@ -204,7 +205,8 @@ class ChatWorker(QThread):
 
 
 class SynthPromptWorker(QThread):
-    finished = pyqtSignal(str)
+    # « done » et JAMAIS « finished » (masquerait le signal natif QThread.finished).
+    done     = pyqtSignal(str)
     failed   = pyqtSignal(str)
 
     def __init__(self, api_key: str, history: list, format_label: str):
@@ -239,7 +241,7 @@ class SynthPromptWorker(QThread):
                         system=_SYNTH_SYSTEM,
                         messages=[{"role": "user", "content": user_msg}],
                     )
-                    self.finished.emit(msg.content[0].text.strip())
+                    self.done.emit(msg.content[0].text.strip())
                     return
                 except Exception as e:
                     if ("rate_limit" in str(e) or "429" in str(e)) and attempt < 2:

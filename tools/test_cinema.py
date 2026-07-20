@@ -1221,7 +1221,12 @@ def studio_musique_ia_et_image_ia():
     assert "_set_chat_busy" in inspect.getsource(type(pn)._do_send), "le chat charge dans le chat"
     assert "_set_busy(True" not in inspect.getsource(type(pn)._do_send), \
         "le chat ne déclenche PAS la barre gauche"
-    assert "_set_busy(True" in inspect.getsource(type(pn)._generate), "génération image → barre gauche"
+    # _generate ET _generate_all_engines délèguent à _launch_image_worker (file
+    # commune, depuis le balayage multi-moteurs) : c'est LUI qui allume la barre.
+    assert "_launch_image_worker" in inspect.getsource(type(pn)._generate), \
+        "génération image → file commune _launch_image_worker"
+    assert "_set_busy(True" in inspect.getsource(type(pn)._launch_image_worker), \
+        "génération image → barre gauche"
     assert "_set_busy(True" in inspect.getsource(type(pn)._synth_prompt), "génération prompt → barre gauche"
     # Sauvegarder/Ouvrir déplacés À CÔTÉ du « Moteur de génération » (barre du haut
     # supprimée) + colonne de génération SCROLLABLE (plus rien de cropé).
@@ -1813,6 +1818,23 @@ def nouveaux_moteurs_fal_2026():
     # Ideogram v4 : slug owner-préfixé + schéma ideogram (rendering_speed)
     epi, ai, _ = eng.build_request("ideogram4", "x", (1024, 768), "1K", [])
     assert epi == "ideogram/v4" and ai.get("rendering_speed") == "QUALITY"
+    # Seedream 5.0 Pro (2026-07-20) — ⚠ PIÈGE DE PRÉFIXE : Pro est exposé SANS
+    # « fal-ai/ », la version Lite l'exige. Les deux conventions coexistent chez
+    # ByteDance : figé ici pour qu'une « uniformisation » ne casse pas l'appel.
+    assert "seedream5_pro" in eng.ENGINES, "Seedream 5.0 Pro manquant"
+    epp, _ap, _ = eng.build_request("seedream5_pro", "x", (1024, 768), "1K", [])
+    assert epp == "bytedance/seedream/v5/pro/text-to-image", (epp, "préfixe Pro")
+    epp2, ap2, _ = eng.build_request("seedream5_pro", "x", (1024, 768), "1K", ["data:img"])
+    assert epp2 == "bytedance/seedream/v5/pro/edit" and "image_urls" in ap2, \
+        "Seedream 5 Pro édition (refs)"
+    # Pro = famille DISTINCTE de Lite (choix Matthieu) → les DEUX au balayage
+    assert eng.family_of("seedream5_pro") != eng.family_of("seedream5"), \
+        "Seedream Pro doit être une famille distincte"
+    _sweep = eng.sweep_engines()
+    assert {"seedream5_pro", "seedream5"} <= set(_sweep), \
+        "Pro ET Lite attendus dans le balayage multi-moteurs"
+    assert len(_sweep) == len({eng.family_of(k) for k in _sweep}), \
+        "le balayage ne doit garder QU'UN moteur par famille"
 
     # — Vidéo : workers + endpoints exacts —
     import api.video_engines as ve
@@ -3363,25 +3385,39 @@ def file_dialog_vignettes_images():
     """Dialogues de fichiers : vignettes d'images dans l'explorateur (QFileIconProvider)
     + non-natif (anti-crash COM) + iconSize agrandi. Les statics QFileDialog sont
     remplacées par des versions instance (format de retour conservé)."""
-    import os, inspect, tempfile
+    import os, inspect, tempfile, time
     from PyQt6.QtWidgets import QApplication, QFileDialog, QListView
     from PyQt6.QtCore import QFileInfo
     from PyQt6.QtGui import QPixmap
     QApplication.instance() or QApplication([])
     import ui.file_dialogs as FD
-    # 1) vignette générée pour une image + mise en cache
+    # 1) icon() ne doit JAMAIS décoder sur le thread UI. Mesuré le 2026-07-20 sur
+    #    un dossier réel (217 PNG de 16,7 Mo) : 354 ms par vignette, 100 % sur le
+    #    thread principal → 157 s de gel (« Ne répond pas »). Le décodage part
+    #    donc en fond ; icon() rend la main tout de suite et la vignette arrive
+    #    ensuite dans le cache.
     d = tempfile.mkdtemp()
     img = os.path.join(d, "x.png")
     QPixmap(80, 80).save(img)
     prov = FD.ThumbnailIconProvider()
+    _t0 = time.perf_counter()
     ic = prov.icon(QFileInfo(img))
-    assert not ic.isNull(), "vignette image absente"
-    assert QFileInfo(img).absoluteFilePath() in prov._cache, "vignette non mise en cache"
+    _dt_ms = (time.perf_counter() - _t0) * 1000
+    assert not ic.isNull(), "icône absente"
+    assert _dt_ms < 50, f"icon() doit rendre la main immédiatement ({_dt_ms:.0f} ms)"
+    _p = QFileInfo(img).absoluteFilePath()
+    assert _p in prov._queued or _p in prov._cache, "décodage de fond non programmé"
+    assert prov._pool.waitForDone(10000), "décodage de fond non terminé"
+    prov._drain()                      # normalement déclenché par le timer
+    assert _p in prov._cache, "vignette absente du cache après décodage de fond"
+    assert not prov.icon(QFileInfo(img)).isNull(), "vignette non servie depuis le cache"
     # 2) apply_thumbnails : non-natif + provider + iconSize agrandi
     dlg = QFileDialog()
     FD.apply_thumbnails(dlg)
     assert dlg.testOption(QFileDialog.Option.DontUseNativeDialog), "dialogue natif (risque COM)"
     assert dlg.iconProvider() is FD._shared_provider(), "icon provider non posé"
+    # Les vignettes arrivant en différé, les vues doivent être repeintes
+    assert FD._shared_provider()._views, "vues non enregistrées pour le rafraîchissement"
     sizes = [lv.iconSize().width() for lv in dlg.findChildren(QListView)]
     assert sizes and max(sizes) >= 48, ("iconSize non agrandi", sizes)
     # P4 — boutons Ouvrir/Annuler stylés pour la lisibilité sur fond sombre (retour Pierre)
@@ -3962,6 +3998,85 @@ def fidelite_exacte_photo_au_moteur():
             (_cls, "libellé Fidélité exacte non mis à jour", _items)
         assert not any("reproduit l" in t or "reproduit le" in t for t in _items), \
             (_cls, "ancien libellé mensonger encore présent", _items)
+
+
+@test
+def studio_ia_file_attente_et_balayage_moteurs():
+    """Studio IA / Image IA — chantier 2026-07-20 :
+    1) anti-crash : workers en signal `done`, worker précédent PARQUÉ avant
+       réassignation, parking des threads à la fermeture de l'app ;
+    2) anti-gel : vignettes décodées à la taille utile (plus de pleine résolution
+       sur le thread principal), aperçu principal inchangé ;
+    3) lot jusqu'à 10 images, « Annuler » interrompt AVANT l'appel facturé ;
+    4) balayage « tous les moteurs » : un seul moteur par famille, nom du moteur
+       en fin de nom de fichier."""
+    import os as _os
+    import sys as _sys
+    _studio = _os.path.join(
+        _os.path.dirname(_os.path.dirname(_os.path.abspath(__file__))), "studio_images")
+    if _studio not in _sys.path:
+        _sys.path.insert(0, _studio)
+    from PyQt6.QtCore import QThread
+    import chat as CH
+    import engines as E
+    import imagegen as IG
+
+    # ── 1. Anti-crash ────────────────────────────────────────────────────────
+    for cls in (IG.ImageWorker, CH.ChatWorker, CH.SynthPromptWorker):
+        assert hasattr(cls, "done"), f"{cls.__name__}.done attendu"
+        assert "finished" not in cls.__dict__, \
+            f"{cls.__name__} masque QThread.finished (cause de segfault)"
+        assert cls.finished is QThread.finished, f"{cls.__name__} : finished natif intact"
+
+    from ui.tab_image import TabImage
+    _ti = TabImage()          # référence gardée : sinon le GC détruit les widgets C++
+    pn = _ti.panel
+    assert hasattr(pn, "_park_worker") and hasattr(pn, "_park_all"), "parking des threads"
+    assert "aboutToQuit" in inspect.getsource(type(pn).__init__), \
+        "threads parqués à la fermeture de l'app"
+    for _m in ("_launch_image_worker", "_do_send", "_synth_prompt"):
+        assert "_park_worker(" in inspect.getsource(getattr(type(pn), _m)), \
+            f"{_m} : parquer le worker précédent AVANT de réassigner (anti-GC)"
+
+    # ── 2. Anti-gel des vignettes ────────────────────────────────────────────
+    assert "setScaledSize" in inspect.getsource(type(pn)._thumb_pixmap), \
+        "vignettes décodées à la taille utile (QImageReader)"
+    for _m in ("_thumb_tile", "_add_bubble", "_add_history"):
+        assert "_thumb_pixmap(" in inspect.getsource(getattr(type(pn), _m)), \
+            f"{_m} doit passer par _thumb_pixmap"
+    assert "_load_pixmap(" in inspect.getsource(type(pn)._show_preview), \
+        "l'aperçu principal reste en pleine résolution"
+
+    # ── 3. Lot de 1 à 10 + annulation non facturée ───────────────────────────
+    assert (pn._count.minimum(), pn._count.maximum()) == (1, 10), "lot de 1 à 10 images"
+    _real = inspect.getsource(IG.ImageWorker._real)
+    assert "isInterruptionRequested()" in _real, "« Annuler » doit interrompre la file"
+    assert _real.index("isInterruptionRequested()") < _real.index("fal_client.subscribe"), \
+        "interrompre AVANT l'appel facturé (sinon le reste du lot est payé)"
+
+    # ── 4. Balayage multi-moteurs ────────────────────────────────────────────
+    for _k, _e in E.ENGINES.items():
+        assert _e.get("family") and _e.get("slug"), f"{_k} : famille + slug requis"
+    _slugs = [_e["slug"] for _e in E.ENGINES.values()]
+    assert len(_slugs) == len(set(_slugs)), "slugs de moteurs uniques"
+    _sweep = E.sweep_engines()
+    _fams = [E.family_of(_k) for _k in _sweep]
+    assert len(_fams) == len(set(_fams)), "un seul moteur par famille (pas les versions)"
+    assert set(_fams) == {_e["family"] for _e in E.ENGINES.values()}, \
+        "toutes les familles du catalogue sont balayées"
+    assert "recraft_vector" not in _sweep, "pas de sortie SVG dans un balayage d'images"
+    for _k in _sweep:
+        E.build_request(_k, "test", (1024, 1024), "1K", [])   # aucun schéma cassé
+    assert hasattr(pn, "_gen_all_btn") and hasattr(pn, "_generate_all_engines"), \
+        "bouton « Générer avec tous les moteurs »"
+    assert "engine_keys=" in inspect.getsource(type(pn)._generate_all_engines), \
+        "le balayage transmet la liste de moteurs à la file"
+    assert "slug_for(" in _real, "nom du moteur ajouté à la fin du fichier généré"
+
+    # i18n du nouveau bouton (FR + EN)
+    from core.i18n import _FR_TO_EN
+    assert pn._gen_all_btn.text() in _FR_TO_EN, "libellé du balayage traduit"
+    assert pn._gen_all_btn.toolTip() in _FR_TO_EN, "infobulle du balayage traduite"
 
 
 if __name__ == "__main__":
