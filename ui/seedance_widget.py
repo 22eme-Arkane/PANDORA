@@ -250,6 +250,13 @@ class SeedanceWidget(QWidget):
     def showEvent(self, event):
         super().showEvent(event)
         self._apply_distribution_mode()
+        # Recompute le prix avec le DISTRIBUTEUR ACTIF (il a pu changer dans
+        # Paramètres → avancés) → le footer reflète PiAPI/fal AVANT la file, pas
+        # seulement au lancement (retour Matthieu 2026-07-20).
+        try:
+            self.tab_t2v._refresh_price_estimate()
+        except Exception:
+            pass
 
     def _on_price_estimate(self, text: str):
         self._price_footer.setText(text)
@@ -279,6 +286,12 @@ class SeedanceWidget(QWidget):
         elif self.tabs.widget(index) is self.tab_sound:
             # Le conducteur du Sound Design suit le storyboard courant.
             self.tab_sound.refresh()
+        if self.tabs.widget(index) is self.tab_t2v:
+            # Recompute avec le distributeur actif à l'entrée dans l'onglet.
+            try:
+                self.tab_t2v._refresh_price_estimate()
+            except Exception:
+                pass
         # Bandeau prix : visible seulement sur « Générer depuis Storyboard »
         self._refresh_price_footer_visibility()
 

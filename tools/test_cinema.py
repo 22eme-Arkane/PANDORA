@@ -523,10 +523,11 @@ def refs_visuelles_persistance_bibliotheque_chat_cinema():
 
 @test
 def decoupage_cinema_deterministe_depuis_mise_en_page():
-    """Règle portée du Live (2026-07-13) : une Mise en page PANDORA structurée
-    (« PLAN n — … ») se convertit en plans storyboard SANS appel IA — prompts
-    co-écrits repris TELS QUELS, zéro perte, zéro reformulation. L'avertissement de
-    réécriture n'apparaît QUE si le chemin repasse réellement par l'IA."""
+    """Règle portée du Live (2026-07-13) : une Mise en page PANDORA structurée se
+    convertit en plans storyboard SANS appel IA — prompts co-écrits repris TELS
+    QUELS, zéro perte, zéro reformulation. L'avertissement de réécriture n'apparaît
+    QUE si le chemin repasse réellement par l'IA. Couvre LES DEUX formats : Live
+    (« PLAN n — … » + « PROMPT VIDÉO ») ET Cinéma (« P01 | … » + « → SEEDANCE: »)."""
     import core.decoupage_layout as dl
     from api.screenplay import GenerateStoryboardWorker
     layout = "\n".join(
@@ -558,6 +559,35 @@ def decoupage_cinema_deterministe_depuis_mise_en_page():
     _long = dl.layout_segments_to_cinema_shots(
         'PLAN 1 — X\nDurée : 40s · Valeur de plan : Large\nPROMPT VIDÉO (français) : "v"')
     assert _long and _long[0]["duration"] == 15.0, "durée non plafonnée à 15 s"
+    # ── Format CINÉMA RÉEL (« P01 | … | ~Durée » + « → SEEDANCE: … ») ──────────────
+    # Jamais couvert avant → la mise en page Cinéma repartait en RÉÉCRITURE IA au lieu
+    # d'être reprise plan par plan (retour Matthieu 2026-07-20 : « il veut réécrire »).
+    cine = (
+        "—— SÉQUENCE 1 — ARRIVÉE ——\n"
+        "P01 | Plan large | Travelling avant | Face | ~6s\n"
+        "EXT. RUE — NUIT\n"
+        "Une silhouette avance sous la pluie.\n"
+        "→ SEEDANCE: Rue déserte la nuit, silhouette sous la pluie, néons.\n\n"
+        "P02 | Gros plan | Fixe | 3/4 | ~4s\n"
+        "INT. VOITURE — NUIT\n"
+        "                VIKTOR\n"
+        "        Ils sont là.\n"
+        "→ SEEDANCE: Gros plan sur Viktor tendu,\nlumières de la ville floues.\n")
+    assert dl.is_structured_layout(cine), "format Cinéma (« P01 | … » / « → SEEDANCE: ») non reconnu"
+    cshots = dl.layout_segments_to_cinema_shots(cine)
+    assert len(cshots) == 2, f"Cinéma : {len(cshots)}/2 plans"
+    c0 = cshots[0]
+    assert (c0["seedance_prompt"].startswith("Rue déserte") and c0["shot_size"] == "Plan large"
+            and c0["camera_movement"] == "Travelling avant" and c0["camera_axis"] == "Face"
+            and c0["duration"] == 6.0 and c0["seq_name"] == "ARRIVÉE"), \
+        "champs Cinéma non repris du format « P01 | … »"
+    # Prompt multi-lignes recollé, dialogue exclu du prompt, nom perso pas pris en titre.
+    assert "floues" in cshots[1]["seedance_prompt"] and "Ils sont là" not in cshots[1]["seedance_prompt"]
+    assert cshots[1]["scene_title"] != "VIKTOR", "nom de personnage pris comme titre du plan"
+    # Le worker prend AUSSI le chemin déterministe sur le format Cinéma (zéro IA).
+    wc = GenerateStoryboardWorker(cine); capc = {}
+    wc.finished.connect(lambda s: capc.__setitem__("s", s)); wc.run()
+    assert len(capc.get("s", [])) == 2, "worker Cinéma : format « P01 | … » non déterministe"
     # Les 2 pages n'avertissent QUE si la mise en page n'est PAS parsable (chemin IA).
     from ui.page_scenario import PageScenario as _PS
     _src = inspect.getsource(_PS._on_storyboard)
@@ -3087,7 +3117,7 @@ def moods_reference_images_inspiration():
     rm = inspect.getsource(A.run_mood)
     assert 'shot.get("reference_images")' in rm and "inspiration_refs=_inspo" in rm, \
         "run_mood n'injecte pas reference_images en NB2"
-    assert "inspiration_ref = _inspo[0]" in rm, "run_mood : repli inspiration Flux absent"
+    assert "_inspo[0]" in rm, "run_mood : repli inspiration Flux absent"
     fake = types.ModuleType("fal_client"); cap = {}
     fake.subscribe = lambda endpoint, arguments=None, **k: (
         cap.update(args=arguments) or {"images": [{"url": "http://o.png"}]})
@@ -3120,32 +3150,40 @@ def moods_reference_images_inspiration():
 
 @test
 def moods_fenetre_options():
-    """Fenêtre « Générer les Moods » : options cochables (moteur NB2/Flux, réfs persos,
-    réf décor, plan d'architecte). Les réfs ne concernent que NB2 (grisées en Flux) ;
-    les options sont transmises au worker, et run_mood les applique."""
+    """Fenêtre « Générer les Moods » : moteur = TOUT le catalogue image de PANDORA
+    (14 raster, nb2 en tête, pas de « flux » en Cinéma non-mapping) + réfs persos/
+    décor/plan d'architecte. Les réfs de cohérence ne servent qu'aux moteurs qui
+    ÉDITENT une image (grisées pour ceux qui les ignorent — Recraft) ; les options
+    sont transmises au worker, et run_mood route par moteur."""
     import inspect
     import ui.page_storyboard as PS
+    from core import image_engines as IE
     PS.sb_api.load_apercus = lambda sid: {"paths": [], "active_idx": 0}
     from PyQt6.QtWidgets import QWidget
     _par = QWidget()
     dlg = PS._MoodBatchDialog(_par, [{"id": "a", "number": 1, "scene_title": "T"}])
     for a in ("_opt_engine", "_opt_chars", "_opt_decor", "_opt_floor"):
         assert hasattr(dlg, a), "option manquante : " + a
-    assert [dlg._opt_engine.itemData(i) for i in range(dlg._opt_engine.count())] == ["nb2", "flux"]
+    _keys = [dlg._opt_engine.itemData(i) for i in range(dlg._opt_engine.count())]
+    assert _keys == IE.raster_engines(), "combo moteur ≠ catalogue image complet"
+    assert _keys[0] == "nb2" and "flux" not in _keys and len(_keys) >= 14
     assert dlg._opt_chars.isChecked() and dlg._opt_decor.isChecked() and dlg._opt_floor.isChecked()
-    # Flux → références grisées (elles ne valent que pour NB2)
-    _fi = next(k for k in range(dlg._opt_engine.count()) if dlg._opt_engine.itemData(k) == "flux")
-    dlg._opt_engine.setCurrentIndex(_fi)
+    # Moteur SANS référence (Recraft) → réfs de cohérence grisées ; moteur à réfs (nb2) → actives.
+    dlg._opt_engine.setCurrentIndex(_keys.index("recraft"))
     assert not (dlg._opt_chars.isEnabled() or dlg._opt_decor.isEnabled() or dlg._opt_floor.isEnabled())
+    dlg._opt_engine.setCurrentIndex(_keys.index("nb2"))
+    assert dlg._opt_chars.isEnabled() and dlg._opt_decor.isEnabled() and dlg._opt_floor.isEnabled()
     # Le handler lit les options et les passe au worker
     cls = next(c for n, c in vars(PS).items()
                if isinstance(c, type) and hasattr(c, "_on_batch_mood"))
     obm = inspect.getsource(cls._on_batch_mood)
     assert "dlg._opt_engine.currentData()" in obm and "options=_mood_opts" in obm
-    # run_mood : routage moteur + _shot_ref_images à toggles ; worker accepte options
+    # run_mood : routage moteur (famille NB, flux héritage, générique) ; worker accepte options
     import api.apercu as A
     rm = inspect.getsource(A.run_mood)
-    assert 'engine == "nb2"' in rm and "run_generation_nb2(" in rm and "run_generation(" in rm
+    assert 'engine in ("nb2", "nb_pro")' in rm and "run_generation_nb2(" in rm
+    assert 'engine == "flux"' in rm and "run_generation(" in rm
+    assert "run_generation_engine(" in rm, "run_mood : chemin générique multi-moteurs absent"
     assert A._shot_ref_images({"character_ids": [], "decor_id": ""},
                               include_chars=False, include_decor=False) == []
     assert "options" in inspect.signature(A.MoodBatchWorker.__init__).parameters
@@ -3721,6 +3759,106 @@ def moteurs_image_multi():
 
 
 @test
+def moteurs_image_catalogue_unifie():
+    """Catalogue image UNIFIÉ (core/image_engines) — élargissement 2026-07-20 : TOUS
+    les moteurs image de PANDORA sont proposés dans les Moods ET les 5 dialogs
+    d'éléments (avant : Moods = nb2/flux ; éléments = 6 modèles). Source unique =
+    studio_images/engines.py + réintégration GPT Image 2 / FLUX.2 (sans régression),
+    vecteur SVG exclu. `_build_image_args` câble chaque moteur élargi."""
+    import os
+    from core import image_engines as IE
+    from api.nano_banana import _build_image_args
+    # 1) Catalogue : union raster, vecteur exclu, GPT/FLUX.2 réintégrés.
+    keys = IE.raster_engines()
+    assert keys[0] == "nb2" and len(keys) >= 14, "catalogue raster incomplet"
+    assert "recraft_vector" not in keys, "vecteur SVG doit rester réservé au Studio IA"
+    for k in ("gpt2", "flux2", "recraft", "zimage", "qwen_image", "ideogram",
+              "flux_ultra", "seedream5", "seedream5_pro", "nb2_lite"):
+        assert k in keys, f"{k} absent du catalogue unifié"
+    # 2) Mapping : SEULS les moteurs éditeurs de référence (endpoint /edit).
+    assert set(IE.edit_capable_engines()) == {"nb2", "nb_pro", "nb2_lite",
+                                              "seedream5_pro", "seedream5"}, \
+        "éditeurs de référence (mapping) ≠ Nano Banana + Seedream 5"
+    assert not IE.is_edit_capable("recraft") and not IE.is_edit_capable("zimage")
+    # 3) _build_image_args câble les moteurs ÉLARGIS via le catalogue (endpoints réels),
+    #    et les 6 historiques gardent LEUR câblage (zéro régression).
+    assert _build_image_args("p", "16:9", "1K", {"image_model": "zimage"}, 1)[0] == \
+        "fal-ai/z-image/turbo"
+    assert _build_image_args("p", "16:9", "1K", {"image_model": "seedream5_pro"}, 1)[0] == \
+        "bytedance/seedream/v5/pro/text-to-image"
+    assert _build_image_args("p", "16:9", "1K", {"image_model": "flux_ultra"}, 1)[0] == \
+        "fal-ai/flux-pro/v1.1-ultra"
+    _, a_nb = _build_image_args("p", "2:3", "1K", {"image_model": "nb2"}, 1)
+    assert a_nb.get("safety_tolerance") == "6" and "aspect_ratio" in a_nb, "nb2 câblage historique"
+    # 4) Les 5 dialogs d'éléments peuplent LEUR combo depuis le catalogue COMPLET.
+    from ui.dialog_character import CharacterDialog
+    d = CharacterDialog(None)
+    combo_keys = [d._model_combo.itemData(i) for i in range(d._model_combo.count())]
+    assert combo_keys == keys, "combo casting ≠ catalogue image complet"
+    for _f in ("dialog_character", "dialog_decor", "dialog_accessory",
+               "dialog_hmc", "dialog_vehicle"):
+        with open(os.path.join("ui", _f + ".py"), encoding="utf-8") as fh:
+            src = fh.read()
+        assert "engine_choices" in src and "IMAGE_MODEL_LABELS" not in src, \
+            f"{_f} : combo moteur pas basculé sur le catalogue complet"
+    # 5) get_image_price / endpoint résolus pour les moteurs élargis.
+    from core.config import get_image_price, get_image_endpoint
+    assert get_image_endpoint({"image_model": "seedream5"}).endswith("/text-to-image")
+    assert "$" in get_image_price({"image_model": "flux_ultra"})
+
+
+@test
+def chat_ia_elements():
+    """Chat « direction artistique » dans les 5 dialogs d'éléments (2026-07-20) :
+    panneau repliable à droite (comme le Studio Images) pour améliorer le prompt,
+    avec import d'images de référence. Workers anti-crash (signal `done`), prompt
+    synthétisé INJECTÉ dans le champ « Prompt » de l'hôte."""
+    import inspect
+    from PyQt6.QtWidgets import QApplication
+    QApplication.instance() or QApplication([])
+    from PyQt6.QtCore import QThread
+    # 1) Workers : done (jamais finished), brief par type distinct, sortie française.
+    import api.element_chat as EC
+    for cls in (EC.ElementChatWorker, EC.ElementSynthWorker):
+        assert hasattr(cls, "done") and "finished" not in cls.__dict__, \
+            f"{cls.__name__} : signal done, jamais finished"
+        assert cls.finished is QThread.finished
+    kinds = ("character", "decor", "accessory", "hmc", "vehicle")
+    briefs = {k: EC._chat_system(k) for k in kinds}
+    assert len(set(briefs.values())) == len(kinds), "un brief distinct par type d'élément"
+    assert "PORTRAIT" in briefs["character"] and "DÉCOR" in briefs["decor"]
+    assert "FRANÇAIS" in EC._synth_system("decor"), "le prompt synthétisé sort en français"
+    # 2) Panneau réutilisable : repli/expansion + injection + parking anti-crash.
+    from ui.element_chat_panel import ElementChatPanel
+    box = {}
+    p = ElementChatPanel("accessory", lambda s: box.__setitem__("p", s), None)
+    assert hasattr(p, "_expand") and hasattr(p, "_collapse") and hasattr(p, "shutdown")
+    assert p.width() == p._W_STRIP, "replié par défaut (poignée fine)"
+    p._expand(); assert p.width() == p._W_FULL, "déplié = panneau large"
+    p._collapse(); assert p.width() == p._W_STRIP, "repliable"
+    p._on_synth("Un prompt de test")
+    assert box.get("p") == "Un prompt de test", "la synthèse est injectée via le callback"
+    assert "_park(" in inspect.getsource(ElementChatPanel._send), \
+        "worker précédent parqué avant réassignation (anti-segfault)"
+    # 3) Les 5 dialogs embarquent le panneau, du bon type, câblé sur self._prompt.
+    import ui.dialog_character as DC, ui.dialog_decor as DD, ui.dialog_accessory as DA2
+    import ui.dialog_hmc as DH, ui.dialog_vehicle as DV
+    specs = [(DC.CharacterDialog, "character"), (DD.DecorDialog, "decor"),
+             (DA2.AccessoryDialog, "accessory"), (DH.HMCDialog, "hmc"),
+             (DV.VehicleDialog, "vehicle")]
+    for _Dlg, _kind in specs:
+        d = _Dlg(None)
+        assert getattr(d, "_chat_panel", None) is not None \
+            and d._chat_panel._kind == _kind, (_Dlg.__name__, "chat panel absent/mauvais type")
+        d._chat_panel._on_synth("PROMPT INJECTÉ")
+        assert d._prompt.toPlainText() == "PROMPT INJECTÉ", (_Dlg.__name__, "injection prompt KO")
+    # 4) i18n du panneau (FR + EN).
+    from core.i18n import _FR_TO_EN
+    for _t in ("☁  Améliorer avec l'IA", "📎  Joindre une image", "✍️  Mettre à jour le prompt"):
+        assert _t in _FR_TO_EN, ("i18n manquant", _t)
+
+
+@test
 def sheet_casting_visage_gros_plan_seulement():
     """Sheet casting : SEUL le gros plan (bust) porte le visage ; les vues de corps
     (face/3-4/profil/dos) sont recadrées SANS visage (tête hors champ) → Seedance ne
@@ -3735,6 +3873,76 @@ def sheet_casting_visage_gros_plan_seulement():
     assert ("head CROPPED OUT" in _SHEET_SUFFIX
             and "ONLY view showing the face" in _SHEET_SUFFIX), \
         "sheet 1-image : visage uniquement sur le gros plan"
+
+
+@test
+def coecriture_session_persistee():
+    """Co-écriture Cinéma : la SESSION (conversation Claude + scénario remanié +
+    versions) est persistée à CHAQUE tour et REPRISE à la réouverture — plus de
+    perte après « Appliquer » (retour Matthieu 2026-07-20). Le worker Claude est
+    parqué à la fermeture (crash vécu à l'apply)."""
+    import inspect
+    from PyQt6.QtWidgets import QApplication
+    QApplication.instance() or QApplication([])
+    from ui.dialog_arrange_session import ArrangeSessionDialog
+    assert hasattr(ArrangeSessionDialog, "session_committed"), "signal session_committed"
+    assert "session_state" in inspect.signature(ArrangeSessionDialog.__init__).parameters, \
+        "param session_state (reprise)"
+    st = {"history": [{"role": "user", "content": "plus tendu"},
+                      {"role": "assistant", "content": "voici"}],
+          "screenplay": "SCENARIO V2", "versions": ["SCENARIO V2"], "version_idx": 0}
+    d = ArrangeSessionDialog(None, "ORIG", "ANALYSE", 5, session_state=st)
+    assert len(d._history) == 2 and d._screenplay == "SCENARIO V2", "session non reprise"
+    assert d._screenplay_edit.toPlainText() == "SCENARIO V2" and d._tabs.isTabEnabled(1)
+    assert d._btn_apply.isEnabled(), "Appliquer actif à la reprise"
+    assert d.session_state()["history"] == st["history"], "round-trip de l'état"
+    got = {}
+    d.session_committed.connect(lambda s: got.update(s))
+    d._on_message_ready("nouvelle réponse")
+    assert got.get("history", [{}])[-1].get("content") == "nouvelle réponse", "commit à chaque tour"
+    assert "abandon_thread" in inspect.getsource(ArrangeSessionDialog.done), \
+        "worker parqué à la fermeture (done)"
+    import ui.page_scenario as PS
+    _cls = next(c for _n, c in vars(PS).items()
+                if isinstance(c, type) and hasattr(c, "_open_arrange_session")
+                and hasattr(c, "_on_arrange_session_autosave"))
+    _src = inspect.getsource(_cls._open_arrange_session)
+    assert "session_state=" in _src and "session_committed.connect" in _src, \
+        "page : reprise + autosave branchés"
+    _asrc = inspect.getsource(_cls._on_arrange_session_autosave)
+    assert "arrange_session" in _asrc and "self._save(" in _asrc, "autosave persiste la session"
+    assert "self._save(silent=True)" in _src, "page : sauvegarde immédiate à l'application"
+
+
+@test
+def coecriture_reecriture_ciblee():
+    """Co-écriture Cinéma (retour Matthieu 2026-07-20) : la réécriture COMPLÈTE est
+    remontée à 16000 tokens (8192 perdait la FIN des longs scénarios) ; un bouton
+    « Réécrire selon la co-écriture » (édits ciblés sur les seuls passages travaillés,
+    sans troncature) est AU-DESSUS de « Générer tout le scénario » (renommé) ; un
+    garde-fou avertit si une réécriture complète semble tronquée."""
+    import inspect
+    from PyQt6.QtWidgets import QApplication
+    QApplication.instance() or QApplication([])
+    from api.screenplay import ArrangeChatWorker
+    _wsrc = inspect.getsource(ArrangeChatWorker.run)
+    assert "8192 if self._surgical else 16000" in _wsrc, \
+        "réécriture complète : 16000 tokens (anti-troncature de la fin)"
+    from ui.dialog_arrange_session import ArrangeSessionDialog
+    d = ArrangeSessionDialog(None, "ORIG", "ANALYSE", 5)
+    assert hasattr(d, "_btn_rewrite_coedit"), "bouton « Réécrire selon la co-écriture »"
+    assert d._btn_generate.text() == "✎  Générer tout le scénario", "bouton complet renommé"
+    _cap = {}
+    d._start_worker = lambda instr, surgical=True, **k: _cap.update(instr=instr, surgical=surgical)
+    d._screenplay = "X"
+    d._on_rewrite_coedit()
+    assert _cap.get("surgical") is True, "réécriture ciblée = mode chirurgical (jamais tout réécrire)"
+    assert "SEULS passages" in _cap.get("instr", ""), "instruction : uniquement les passages travaillés"
+    assert "0.55" in inspect.getsource(ArrangeSessionDialog._on_screenplay_ready), \
+        "garde-fou anti-troncature (avertissement si réécriture trop courte)"
+    from core.i18n import _FR_TO_EN as T
+    for _t in ("✦  Réécrire selon la co-écriture", "✎  Générer tout le scénario"):
+        assert _t in T, ("i18n manquant", _t)
 
 
 @test
@@ -3884,6 +4092,16 @@ def distributeur_video_piapi():
     assert "_price_footer" in _wsrc and "price_estimate_changed" in _wsrc
     import ui.tab_t2v as T
     assert "price_estimate_changed" in inspect.getsource(T.TabT2V._refresh_price_estimate)
+    # UN SEUL bandeau (2026-07-20) : le doublon in-tab est retiré → seul le footer
+    # fixe affiche l'estimation (l'onglet n'ajoute plus price_frame à son layout).
+    assert "lay.addWidget(price_frame)" not in inspect.getsource(T.TabT2V), \
+        "doublon d'estimation : l'onglet ne doit plus afficher son propre bandeau"
+    # L'estimation reflète le DISTRIBUTEUR ACTIF AVANT la file : recompute à
+    # l'affichage du Studio et à l'entrée dans l'onglet « Générer depuis Storyboard ».
+    assert "_refresh_price_estimate" in inspect.getsource(SW.SeedanceWidget.showEvent), \
+        "prix non recomputé à l'affichage (distributeur PiAPI/fal pas à jour avant la file)"
+    assert "_refresh_price_estimate" in inspect.getsource(SW.SeedanceWidget._on_tab_changed), \
+        "prix non recomputé à l'entrée dans l'onglet"
 
     # ── Mode MONO-distributeur : pas de repli + services grisés ──────────────
     _orig_lc2 = mp.load_config
@@ -4008,8 +4226,8 @@ def studio_ia_file_attente_et_balayage_moteurs():
     2) anti-gel : vignettes décodées à la taille utile (plus de pleine résolution
        sur le thread principal), aperçu principal inchangé ;
     3) lot jusqu'à 10 images, « Annuler » interrompt AVANT l'appel facturé ;
-    4) balayage « tous les moteurs » : un seul moteur par famille, nom du moteur
-       en fin de nom de fichier."""
+    4) comparatif « plusieurs moteurs » : multi-sélection (défaut = un moteur par
+       famille), nom du moteur en fin de nom de fichier."""
     import os as _os
     import sys as _sys
     _studio = _os.path.join(
@@ -4068,9 +4286,13 @@ def studio_ia_file_attente_et_balayage_moteurs():
     for _k in _sweep:
         E.build_request(_k, "test", (1024, 1024), "1K", [])   # aucun schéma cassé
     assert hasattr(pn, "_gen_all_btn") and hasattr(pn, "_generate_all_engines"), \
-        "bouton « Générer avec tous les moteurs »"
-    assert "engine_keys=" in inspect.getsource(type(pn)._generate_all_engines), \
-        "le balayage transmet la liste de moteurs à la file"
+        "bouton « Générer avec plusieurs moteurs »"
+    _gae = inspect.getsource(type(pn)._generate_all_engines)
+    assert "_choose_engines(" in _gae and "engine_keys=" in _gae, \
+        "multi-sélection : choisir les moteurs PUIS lancer la file"
+    assert hasattr(pn, "_choose_engines"), "fenêtre de sélection multiple des moteurs"
+    assert "engines.ENGINES" in inspect.getsource(type(pn)._choose_engines), \
+        "la sélection multiple liste TOUT le catalogue de moteurs"
     assert "slug_for(" in _real, "nom du moteur ajouté à la fin du fichier généré"
 
     # i18n du nouveau bouton (FR + EN)

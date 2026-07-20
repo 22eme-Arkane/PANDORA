@@ -3084,25 +3084,18 @@ class TabT2V(QScrollArea):
         lay.addWidget(self._davinci_bar)
         self._davinci_bar.connection_changed.connect(self._on_davinci_connection_changed)
 
-        # ── Encart ESTIMATION DE PRIX (rouge) — remplace l'ancien message tarifs ──
-        # Ordre de grandeur AVANT génération : nb de plans × durée × prix/s du moteur
-        # ET de la résolution choisis. Rappel : prix indicatif (voir fal.ai).
+        # ── Source de l'ESTIMATION DE PRIX ────────────────────────────────────
+        # Le bandeau d'estimation n'est PLUS affiché DANS l'onglet (doublon retiré
+        # 2026-07-20) : seul le footer fixe de SeedanceWidget l'affiche, alimenté par
+        # le signal price_estimate_changed. On GARDE `_price_lbl` (référencé, non
+        # ajouté au layout) comme simple porteur du texte émis.
         price_frame = QFrame()
-        price_frame.setStyleSheet(
-            f"QFrame{{background:rgba(255,79,106,0.06);"
-            f"border:1px solid rgba(255,79,106,0.28);border-radius:8px;}}"
-        )
         price_h = QHBoxLayout(price_frame)
-        price_h.setContentsMargins(14, 8, 14, 8)
-        price_h.setSpacing(12)
+        price_h.setContentsMargins(0, 0, 0, 0)
         self._price_lbl = QLabel("")
         self._price_lbl.setWordWrap(True)
-        self._price_lbl.setStyleSheet(
-            f"color:{C.get('red', '#ff4f6a')};font-size:9px;font-weight:700;"
-            f"font-family:'Consolas',monospace;background:transparent;"
-        )
         price_h.addWidget(self._price_lbl, 1)
-        lay.addWidget(price_frame)
+        self._price_frame = price_frame   # anti-GC (parent de _price_lbl) — NON affiché
         for _sig in (
             getattr(self, "cb_model", None), getattr(self, "cb_res", None),
             getattr(self, "cb_dur", None),

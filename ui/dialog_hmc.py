@@ -93,6 +93,12 @@ class HMCDialog(QDialog):
 
         root.addWidget(self._build_preview(), 0)
 
+        # Chat DA repliable (améliorer le prompt + réfs) — panneau droit partagé.
+        from ui.element_chat_panel import ElementChatPanel
+        self._chat_panel = ElementChatPanel(
+            "hmc", lambda p: self._prompt.setPlainText(p), self)
+        root.addWidget(self._chat_panel, 0)
+
         from core.i18n import retranslate_widget
         retranslate_widget(self)
 
@@ -346,8 +352,11 @@ class HMCDialog(QDialog):
         _m_lbl.setFixedWidth(60)
         _m_row.addWidget(_m_lbl)
         self._model_combo = QComboBox()
-        from core.config import IMAGE_MODEL_LABELS, load_config as _lc_m
-        for _mk, _mlbl in IMAGE_MODEL_LABELS.items():
+        from core.config import load_config as _lc_m
+        from core.image_engines import engine_choices as _eng_choices
+        # Catalogue COMPLET des moteurs image de PANDORA (14 raster) — même liste
+        # partout : dialogs d'éléments, Moods, Studio IA (core/image_engines.py).
+        for _mk, _mlbl in _eng_choices():
             self._model_combo.addItem(_mlbl, _mk)
         _mi = self._model_combo.findData(_lc_m().get("image_model", "nb2"))
         if _mi >= 0:

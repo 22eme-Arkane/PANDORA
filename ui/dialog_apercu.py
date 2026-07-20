@@ -42,12 +42,20 @@ def _btn(text: str, accent: bool = False, danger: bool = False) -> QPushButton:
 
 
 def choose_mood_engine(parent) -> str | None:
-    """Fenêtre de choix du MOTEUR pour générer/varier un Mood : « Flux » ou « Nano
-    Banana 2 ». Les deux reçoivent les MÊMES consignes (façade = canvas prioritaire en
-    mapping) → comparer les rendus. Renvoie "flux" | "nb2" | None (annulé)."""
+    """Fenêtre de choix du MOTEUR pour générer/varier un Mood. Propose TOUT le
+    catalogue image de PANDORA (Nano Banana 2/Pro/Lite, Seedream 5/4.5, Recraft,
+    Z-Image, Qwen, Ideogram, FLUX…). En séquence MAPPING FAÇADE, la liste se
+    restreint aux moteurs qui savent éditer une image de référence (géométrie
+    préservée). Renvoie la clé du moteur (« nb2 », « recraft », …, « flux ») ou
+    None (annulé)."""
+    from PyQt6.QtWidgets import QComboBox
+    from api.apercu import mood_engine_choices, current_mood_is_mapping
+    _is_map = current_mood_is_mapping()
+    choices = mood_engine_choices(_is_map)
+
     dlg = QDialog(parent)
     dlg.setWindowTitle(translate("Moteur du Mood"))
-    dlg.setMinimumWidth(400)
+    dlg.setMinimumWidth(470)
     dlg.setStyleSheet(PANDORA_STYLESHEET + f"QDialog{{background:{CP['bg1']};}}")
     lay = QVBoxLayout(dlg)
     lay.setContentsMargins(22, 20, 22, 18)
@@ -58,17 +66,34 @@ def choose_mood_engine(parent) -> str | None:
         f"color:{CP['text_primary']};font-size:13px;font-weight:700;background:transparent;")
     lay.addWidget(q)
     _help = QLabel(translate(
-        "Flux et Nano Banana 2 reçoivent les MÊMES consignes (façade = canvas prioritaire "
-        "en mapping). Teste les deux pour comparer le rendu."))
+        "Mapping façade : seuls les moteurs qui éditent une image de référence "
+        "(géométrie du bâtiment préservée) sont proposés."
+        if _is_map else
+        "Tous les moteurs image de PANDORA sont disponibles — teste-les pour comparer le rendu."))
     _help.setWordWrap(True)
     _help.setStyleSheet(f"color:{CP['text_dim']};font-size:10px;background:transparent;")
     lay.addWidget(_help)
+
+    combo = QComboBox()
+    for _k, _lbl in choices:
+        combo.addItem(_lbl, _k)
+    _di = combo.findData("nb2")
+    combo.setCurrentIndex(_di if _di >= 0 else 0)
+    combo.setFixedHeight(32)
+    combo.setStyleSheet(
+        f"QComboBox{{background:{CP['bg3']};border:1px solid {CP['border']};"
+        f"border-radius:6px;color:{CP['text_primary']};font-size:11px;padding:0 10px;}}"
+        f"QComboBox::drop-down{{border:none;width:22px;}}"
+        f"QComboBox QAbstractItemView{{background:{CP['bg3']};border:1px solid {CP['border_bright']};"
+        f"color:{CP['text_primary']};selection-background-color:{CP['accent_dim']};}}"
+    )
+    lay.addWidget(combo)
     lay.addSpacing(4)
 
     _res = {"engine": None}
 
-    def _pick(engine):
-        _res["engine"] = engine
+    def _accept():
+        _res["engine"] = combo.currentData()
         dlg.accept()
 
     row = QHBoxLayout()
@@ -80,18 +105,14 @@ def choose_mood_engine(parent) -> str | None:
         f"border:1px solid {CP['border']};border-radius:8px;font-size:11px;font-weight:700;"
         f"padding:0 16px;}}QPushButton:hover{{background:{CP['bg3']};}}")
     cancel.clicked.connect(dlg.reject)
-    b_flux = QPushButton(translate("✦  Flux"))
-    b_nb2  = QPushButton(translate("◇  Nano Banana 2"))
-    for _b, _bg in ((b_flux, CP['accent']), (b_nb2, CP.get('accent2', CP['accent']))):
-        _b.setFixedHeight(34)
-        _b.setStyleSheet(
-            f"QPushButton{{background:{_bg};color:#07080f;border:none;border-radius:8px;"
-            f"font-size:11px;font-weight:700;padding:0 18px;}}QPushButton:hover{{background:#6eded6;}}")
-    b_flux.clicked.connect(lambda: _pick("flux"))
-    b_nb2.clicked.connect(lambda: _pick("nb2"))
+    b_gen = QPushButton(translate("✦  Générer"))
+    b_gen.setFixedHeight(34)
+    b_gen.setStyleSheet(
+        f"QPushButton{{background:{CP['accent']};color:#07080f;border:none;border-radius:8px;"
+        f"font-size:11px;font-weight:700;padding:0 20px;}}QPushButton:hover{{background:#6eded6;}}")
+    b_gen.clicked.connect(_accept)
     row.addWidget(cancel)
-    row.addWidget(b_flux)
-    row.addWidget(b_nb2)
+    row.addWidget(b_gen)
     lay.addLayout(row)
     try:
         from ui.widgets import disable_default_buttons

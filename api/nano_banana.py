@@ -423,6 +423,18 @@ def _build_image_args(prompt: str, aspect_ratio: str = "1:1",
         cfg = load_config()
     from core.config import IMAGE_SIZE_MODELS
     model    = cfg.get("image_model", "nb2")
+
+    # Moteurs AU-DELÀ des 6 historiques (Nano Banana Lite, Seedream 5 Pro/Lite,
+    # Z-Image, Qwen, Ideogram V3/V4, FLUX 1.1 Ultra…) → catalogue canonique unifié
+    # (core/image_engines.build_request façonne les arguments par moteur). Les 6
+    # d'origine gardent leur câblage historique ci-dessous (zéro régression).
+    _NATIVE = {"nb2", "nb_pro", "gpt2", "flux2", "seedream45", "recraft"}
+    if model not in _NATIVE:
+        from core import image_engines as _ie
+        _ep, _args, _ = _ie.build_request(
+            model, prompt, _ie.ar_to_target(aspect_ratio), resolution, [])
+        return _ep, _args
+
     endpoint = get_image_endpoint(cfg)
 
     if model not in IMAGE_SIZE_MODELS:

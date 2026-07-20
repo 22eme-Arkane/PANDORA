@@ -308,6 +308,35 @@ _FR_TO_EN: dict[str, str] = {
     "en mapping). Teste les deux pour comparer le rendu.":
         "Flux and Nano Banana 2 receive the SAME instructions (facade = priority canvas "
         "in mapping). Try both to compare the result.",
+    "Tous les moteurs image de PANDORA sont disponibles — teste-les pour comparer le rendu.":
+        "Every PANDORA image engine is available — try them to compare the result.",
+    "Mapping façade : seuls les moteurs qui éditent une image de référence "
+    "(géométrie du bâtiment préservée) sont proposés.":
+        "Facade mapping: only engines that edit a reference image "
+        "(building geometry preserved) are offered.",
+    # Chat DA des dialogs d'éléments (ui/element_chat_panel.py)
+    "☁  Améliorer avec l'IA":                "☁  Improve with AI",
+    "Améliorer avec l'IA — chat de direction artistique":
+        "Improve with AI — art-direction chat",
+    "Replier":                               "Collapse",
+    "Décris ton idée, pose une question…":   "Describe your idea, ask a question…",
+    "📎  Joindre une image":                 "📎  Attach an image",
+    "☁  Envoyer":                            "☁  Send",
+    "✍️  Mettre à jour le prompt":           "✍️  Update the prompt",
+    "Synthétise la discussion en un prompt et le place dans le champ « Prompt ».":
+        "Synthesizes the discussion into a prompt and places it in the « Prompt » field.",
+    "Décris l'élément que tu veux créer — ou joins une image de référence. "
+    "Je t'aide à préciser l'idée, puis « Mettre à jour le prompt » l'écrit "
+    "dans le champ Prompt.":
+        "Describe the element you want to create — or attach a reference image. "
+        "I help you refine the idea, then « Update the prompt » writes it into the "
+        "Prompt field.",
+    "Discute d'abord un peu de ce que tu veux, puis je pourrai rédiger le prompt.":
+        "Chat a bit about what you want first, then I can write the prompt.",
+    "✓ Prompt mis à jour dans le champ « Prompt ».":
+        "✓ Prompt updated in the « Prompt » field.",
+    "Claude réfléchit…":                     "Claude is thinking…",
+    "Rédaction du prompt…":                  "Writing the prompt…",
     "{n} plan(s) sélectionné(s)":           "{n} shot(s) selected",
     # Gabarits dynamiques : {ai} = nom du moteur choisi pour la tâche storyboard_gen
     "Génération du découpage via {ai}…":   "Generating the breakdown via {ai}…",
@@ -1257,6 +1286,28 @@ _FR_TO_EN: dict[str, str] = {
     "(coûteux en tokens — le chat ne modifie que les passages demandés).":
         "Rewrites the FULL rundown, incorporating the whole discussion "
         "(token-heavy — the chat only edits the requested passages).",
+    # Co-écriture — bouton ciblé « Réécrire selon la co-écriture » + « Générer tout … »
+    "✦  Réécrire selon la co-écriture":  "✦  Rewrite from the co-writing",
+    "✎  Générer tout le scénario":       "✎  Generate the whole screenplay",
+    "✎  Générer tout le conducteur":     "✎  Generate the whole rundown",
+    "Applique les modifications discutées, mais SEULEMENT sur les passages "
+    "travaillés dans le chat — le reste du scénario est conservé tel quel "
+    "(sans risque de troncature).":
+        "Applies the discussed changes, but ONLY to the passages worked on in the "
+        "chat — the rest of the screenplay is kept as is (no truncation risk).",
+    "Applique les modifications discutées, mais SEULEMENT sur les passages "
+    "travaillés dans le chat — le reste du conducteur est conservé tel quel "
+    "(sans risque de troncature).":
+        "Applies the discussed changes, but ONLY to the passages worked on in the "
+        "chat — the rest of the rundown is kept as is (no truncation risk).",
+    "Réécrit le scénario ENTIER en intégrant toute la discussion, y compris "
+    "les passages non abordés (coûteux en tokens).":
+        "Rewrites the WHOLE screenplay, incorporating the entire discussion, "
+        "including passages not addressed (token-heavy).",
+    "Réécrit le conducteur ENTIER en intégrant toute la discussion, y compris "
+    "les passages non abordés (coûteux en tokens).":
+        "Rewrites the WHOLE rundown, incorporating the entire discussion, "
+        "including passages not addressed (token-heavy).",
     "Supprimer la dernière frame de ce plan (repart du mood à la régénération)":
         "Delete this shot's last frame (regenerating restarts from the mood)",
     "⚠  Ce moteur ne supporte pas les images de référence nativement. "
@@ -1481,18 +1532,16 @@ _FR_TO_EN: dict[str, str] = {
     "LIEU & TEMPS":                     "PLACE & TIME",
     "NOTES & PROMPT":                   "NOTES & PROMPT",
     "Nombre d'images à générer (1–4)":  "Number of images to generate (1–4)",
-    # Studio Images / onglet Image IA — balayage « tous les moteurs »
-    "🧪  Générer avec tous les moteurs": "🧪  Generate with every engine",
-    "Générer avec tous les moteurs":     "Generate with every engine",
-    "Génère UNE image par moteur, à la suite, avec le même prompt — "
-    "pour comparer les rendus.\n"
-    "Un seul moteur par famille (pas toutes les versions), et le nom du "
-    "moteur est ajouté à la fin de chaque fichier.\n"
+    # Studio Images / onglet Image IA — comparatif « plusieurs moteurs » (multi-sélection)
+    "🧪  Générer avec plusieurs moteurs": "🧪  Generate with several engines",
+    "Générer avec plusieurs moteurs":     "Generate with several engines",
+    "Choisis PLUSIEURS moteurs, puis génère UNE image par moteur sélectionné, "
+    "à la suite, avec le même prompt — pour comparer les rendus.\n"
+    "Le nom du moteur est ajouté à la fin de chaque fichier.\n"
     "⚠ Chaque moteur est facturé séparément ; « Annuler » interrompt la file.":
-        "Generates ONE image per engine, one after another, from the same prompt — "
-        "to compare their output.\n"
-        "One engine per family (not every version), and the engine name is "
-        "appended to the end of each file.\n"
+        "Pick SEVERAL engines, then generate ONE image per selected engine, one after "
+        "another, from the same prompt — to compare their output.\n"
+        "The engine name is appended to the end of each file.\n"
         "⚠ Each engine is billed separately; « Cancel » stops the queue.",
     # Studio Images / onglet Image IA — lot jusqu'à 10 images en file d'attente
     "Nombre d'images à générer (variations).\n"

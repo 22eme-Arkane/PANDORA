@@ -2939,22 +2939,16 @@ class TabT2V(QScrollArea):
         # ── Encart ESTIMATION DE PRIX (rouge) — remplace l'ancien message tarifs ──
         # Calcule un ordre de grandeur AVANT génération : nb de plans × durée × prix/s
         # du moteur ET de la résolution choisis. Rappel : prix indicatif (voir fal.ai).
+        # Bandeau d'estimation NON affiché dans l'onglet (doublon retiré 2026-07-20) :
+        # seul le footer fixe de LiveStudioWidget l'affiche, via price_estimate_changed.
+        # `_price_lbl` conservé (référencé, non ajouté au layout) = porteur du texte.
         price_frame = QFrame()
-        price_frame.setStyleSheet(
-            f"QFrame{{background:rgba(255,79,106,0.06);"
-            f"border:1px solid rgba(255,79,106,0.28);border-radius:8px;}}"
-        )
         price_h = QHBoxLayout(price_frame)
-        price_h.setContentsMargins(14, 8, 14, 8)
-        price_h.setSpacing(12)
+        price_h.setContentsMargins(0, 0, 0, 0)
         self._price_lbl = QLabel("")
         self._price_lbl.setWordWrap(True)
-        self._price_lbl.setStyleSheet(
-            f"color:{C.get('red', '#ff4f6a')};font-size:9px;font-weight:700;"
-            f"font-family:'Consolas',monospace;background:transparent;"
-        )
         price_h.addWidget(self._price_lbl, 1)
-        lay.addWidget(price_frame)
+        self._price_frame = price_frame   # anti-GC (parent de _price_lbl) — NON affiché
         # Mise à jour vive : changement de moteur, de résolution ou de sélection de plans.
         for _sig in (
             getattr(self, "cb_model", None), getattr(self, "cb_res", None),

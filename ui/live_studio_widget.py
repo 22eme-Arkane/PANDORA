@@ -293,6 +293,12 @@ class LiveStudioWidget(QWidget):
     def showEvent(self, event):
         super().showEvent(event)
         self._apply_distribution_mode()
+        # Recompute le prix avec le DISTRIBUTEUR ACTIF (il a pu changer dans
+        # Paramètres → avancés) → footer à jour AVANT la file (retour Matthieu 2026-07-20).
+        try:
+            self.tab_sequences._refresh_price_estimate()
+        except Exception:
+            pass
 
     def _on_price_estimate(self, text: str):
         self._price_footer.setText(text)
@@ -318,6 +324,10 @@ class LiveStudioWidget(QWidget):
         elif index == self._sequences_tab_index:
             # Recale le namespace sur la séquence sélectionnée + recharge les plans.
             self.tab_sequences.refresh()
+            try:
+                self.tab_sequences._refresh_price_estimate()   # prix = distributeur actif
+            except Exception:
+                pass
         # Bandeau prix : visible seulement sur « Générer depuis Séquences »
         self._refresh_price_footer_visibility()
 

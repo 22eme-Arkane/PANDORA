@@ -392,6 +392,31 @@ def _is_cinema_mood() -> bool:
         return True
 
 
+def current_mood_is_mapping() -> bool:
+    """True si le contexte courant est une séquence MAPPING FAÇADE (une façade de
+    projet est résolue) → le sélecteur de moteur doit se restreindre aux moteurs
+    capables d'éditer une image de référence (préservation de géométrie)."""
+    return bool(_resolve_building_ref())
+
+
+def mood_engine_choices(is_mapping: bool | None = None) -> list:
+    """[(key, label)] des moteurs proposables pour un Mood dans le contexte courant.
+
+    - Mapping façade → UNIQUEMENT les moteurs qui ÉDITENT une image de référence
+      (préservent la géométrie du bâtiment) : Flux Kontext + famille Nano Banana +
+      Seedream 5 Pro/Lite (choix Matthieu 2026-07-20) ;
+    - sinon → tout le catalogue image raster de PANDORA (core/image_engines).
+    « flux » = chemin Flux historique (Kontext en mapping, t2i sinon)."""
+    from core import image_engines as _ie
+    if is_mapping is None:
+        is_mapping = current_mood_is_mapping()
+    if is_mapping:
+        out = [("flux", "Flux Kontext  ·  édite la façade (géométrie gardée)")]
+        out += [(k, _ie.label_for(k)) for k in _ie.edit_capable_engines()]
+        return out
+    return [(k, _ie.label_for(k)) for k in _ie.raster_engines()]
+
+
 def _shot_ref_images(shot: dict, include_chars: bool = True,
                      include_decor: bool = True) -> list:
     """Portraits des personnages assignés + image du décor du plan (réfs NB2).
@@ -499,9 +524,14 @@ def _upload_ref_robust(fal_client, path: str) -> str:
 
 def run_generation_nb2(prompt: str, output_dir: str, api_key: str, progress_cb,
                        ref_images: list | None = None, floor_plan: str = "",
-                       inspiration_refs: list | None = None, facade_ref: str = "") -> str:
-    """Mood via Nano Banana 2 : édition avec réfs si disponibles, sinon génération
-    texte NB2. Aspect 16:9, comme le mood Flux.
+                       inspiration_refs: list | None = None, facade_ref: str = "",
+                       engine_key: str = "nb2") -> str:
+    """Mood via la famille Nano Banana : édition avec réfs si disponibles, sinon
+    génération texte. Aspect 16:9, comme le mood Flux.
+
+    `engine_key` : « nb2 » (défaut) ou « nb_pro » — mêmes consignes/args, seul
+    l'endpoint change (Nano Banana 2 ↔ Nano Banana Pro). Nano Banana 2 Lite a un
+    schéma d'args différent (anti-400) → routé par le chemin générique, pas ici.
 
     - `facade_ref` (MAPPING) : si fourni, la FAÇADE est le canvas (1ʳᵉ image) et NB2
       reçoit EXACTEMENT les mêmes consignes mapping que Flux (nuit, fond noir, visibilité
@@ -517,6 +547,12 @@ def run_generation_nb2(prompt: str, output_dir: str, api_key: str, progress_cb,
     os.makedirs(output_dir, exist_ok=True)
     inspiration = [r for r in (inspiration_refs or []) if r and os.path.isfile(r)]
     _facade = facade_ref if (facade_ref and os.path.isfile(facade_ref)) else ""
+    # Endpoints selon le moteur Nano Banana choisi (nb2 / nb_pro) — mêmes args.
+    try:
+        from core.image_engines import nano_endpoints as _ne
+        _ep_text, _ep_edit = _ne(engine_key)
+    except Exception:
+        _ep_text, _ep_edit = "fal-ai/nano-banana-2", "fal-ai/nano-banana-2/edit"
 
     if _facade:
         # ── MODE MAPPING : la FAÇADE est le canvas prioritaire (1ʳᵉ image) ; MÊMES
@@ -526,7 +562,7 @@ def run_generation_nb2(prompt: str, output_dir: str, api_key: str, progress_cb,
         progress_cb(f"Nano Banana 2 — {_tag} (mapping)…")
         urls = [_upload_ref_robust(fal_client, r) for r in refs]
         directive = (_FACADE_PRIORITY_DIRECTIVE if inspiration else "") + _MAPPING_NIGHT_LOCK
-        result = fal_client.subscribe("fal-ai/nano-banana-2/edit", arguments={
+        result = fal_client.subscribe(_ep_edit, arguments={
             "prompt": prompt + directive, "image_urls": urls,
             "num_images": 1, "aspect_ratio": "16:9", "resolution": "1K",
             "output_format": "png", "safety_tolerance": "6",
@@ -561,14 +597,14 @@ def run_generation_nb2(prompt: str, output_dir: str, api_key: str, progress_cb,
             if n_insp: _parts.append(_INSPIRATION_REF_DIRECTIVE)
             if _fp:    _parts.append(_FLOOR_PLAN_DIRECTIVE)
             directive = "\n\n".join(_parts)
-            result = fal_client.subscribe("fal-ai/nano-banana-2/edit", arguments={
+            result = fal_client.subscribe(_ep_edit, arguments={
                 "prompt": prompt + (("\n\n" + directive) if directive else ""), "image_urls": urls,
                 "num_images": 1, "aspect_ratio": "16:9", "resolution": "1K",
                 "output_format": "png", "safety_tolerance": "6",
             })
         else:
             progress_cb("Nano Banana 2…")
-            result = fal_client.subscribe("fal-ai/nano-banana-2", arguments={
+            result = fal_client.subscribe(_ep_text, arguments={
                 "prompt": prompt, "num_images": 1,
                 "aspect_ratio": "16:9", "resolution": "1K", "output_format": "png",
             })
@@ -585,57 +621,150 @@ def run_generation_nb2(prompt: str, output_dir: str, api_key: str, progress_cb,
     return out
 
 
+# ── Génération mood GÉNÉRIQUE — n'importe quel moteur du catalogue ─────────────
+# Tout moteur image de PANDORA (Recraft, Z-Image, Qwen, Ideogram, FLUX 1.1 Ultra,
+# Seedream 5 Pro/Lite, GPT Image 2, FLUX.2…) via core/image_engines.build_request.
+# Les moteurs qui savent éditer une image reçoivent les références disponibles
+# (façade en mapping ; cohérence persos/décor + inspiration + plan d'architecte en
+# Cinéma) ; ceux qui les ignorent génèrent depuis le prompt seul (+ style du film).
+
+def run_generation_engine(engine_key: str, prompt: str, output_dir: str,
+                          api_key: str, progress_cb,
+                          ref_images: list | None = None, facade_ref: str = "",
+                          inspiration_refs: list | None = None,
+                          floor_plan: str = "", is_mapping: bool = False) -> str:
+    from core import image_engines as _ie
+    os.makedirs(output_dir, exist_ok=True)
+    label = _ie.short_label(engine_key)
+
+    # ── Mock (pas de clé fal.ai) : vignette de simulation, comme le mood Flux ──
+    if not api_key:
+        import time
+        progress_cb(f"Simulation {label} (pas de clé fal.ai)…")
+        time.sleep(1.0)
+        try:
+            from PIL import Image, ImageDraw
+            import random
+            bg  = (random.randint(20, 50), random.randint(25, 55), random.randint(35, 70))
+            img = Image.new("RGB", (896, 504), color=bg)
+            d = ImageDraw.Draw(img)
+            d.rectangle([0, 0, 895, 503], outline=(80, 80, 80), width=2)
+            d.text((20, 20), f"MOOD — SIMULATION ({label})", fill=(200, 200, 200))
+            d.text((20, 50), prompt[:120], fill=(140, 140, 140))
+            out = os.path.join(output_dir, f"{uuid.uuid4().hex}.png")
+            img.save(out, "PNG")
+            return out
+        except Exception:
+            return ""
+
+    import fal_client
+    os.environ["FAL_KEY"] = api_key
+
+    max_refs = _ie.ref_support(engine_key).get("max", 0)
+    ref_paths, directive = [], ""
+
+    if max_refs > 0:
+        if is_mapping and facade_ref and os.path.isfile(facade_ref):
+            insp = [r for r in (inspiration_refs or []) if r and os.path.isfile(r)]
+            ref_paths = [facade_ref] + insp
+            directive = (_FACADE_PRIORITY_DIRECTIVE if insp else "") + _MAPPING_NIGHT_LOCK
+        else:
+            cons = [r for r in (ref_images or []) if r and os.path.isfile(r)]
+            insp = [r for r in (inspiration_refs or []) if r and os.path.isfile(r)]
+            fp   = [floor_plan] if (floor_plan and os.path.isfile(floor_plan)) else []
+            ref_paths = cons + insp + fp
+            _parts = []
+            if cons: _parts.append(_MOOD_REF_DIRECTIVE)
+            if insp: _parts.append(_INSPIRATION_REF_DIRECTIVE)
+            if fp:   _parts.append(_FLOOR_PLAN_DIRECTIVE)
+            directive = "\n\n".join(_parts)
+        ref_paths = ref_paths[:max_refs]
+    elif is_mapping:
+        # Moteur sans référence en mapping (le sélecteur filtre déjà, mais on
+        # force au moins le rendu nocturne fond noir par sécurité).
+        directive = _MAPPING_NIGHT_LOCK
+
+    ref_urls    = [_upload_ref_robust(fal_client, p) for p in ref_paths]
+    full_prompt = prompt + (("\n\n" + directive) if directive else "")
+
+    progress_cb(f"Génération du Mood via {label}"
+                + (f" ({len(ref_urls)} réf.)" if ref_urls else "") + "…")
+    endpoint, args, _kind = _ie.build_request(
+        engine_key, full_prompt, _ie.ar_to_target("16:9"), "1K", ref_urls)
+    result = fal_client.subscribe(endpoint, arguments=args)
+
+    imgs = (result or {}).get("images") or []
+    image_url = (imgs[0].get("url") if imgs and isinstance(imgs[0], dict)
+                 else (imgs[0] if imgs else ""))
+    if not image_url:
+        raise RuntimeError(f"{label} : aucune image renvoyée")
+    progress_cb("Téléchargement de l'image…")
+    resp = requests.get(image_url, timeout=120)
+    out = os.path.join(output_dir, f"{uuid.uuid4().hex}.png")
+    with open(out, "wb") as f:
+        f.write(resp.content)
+    return out
+
+
 def run_mood(shot: dict, prompt: str, output_dir: str, api_key: str, progress_cb,
              building_ref: str = "", inspiration_ref: str = "",
              options: dict | None = None) -> str:
-    """Dispatcher mood. `options` (fenêtre « Générer les Moods ») :
-        engine     : "nb2" | "flux"  (défaut : NB2 en Cinéma, Flux en Live)
-        chars      : envoyer les réfs personnages (NB2)
-        decor      : envoyer la réf décor (NB2)
-        floor_plan : envoyer le plan d'architecte (NB2)
-    NB2 = réfs persos/décor + plan d'architecte ; Flux = t2i depuis le prompt."""
+    """Dispatcher mood. `options["engine"]` = clé du catalogue image PANDORA
+    (core/image_engines). Routage :
+      - famille Nano Banana (nb2 / nb_pro) → chemin réglé (réfs persos/décor, façade
+        mapping, plan d'architecte) ;
+      - « flux » (héritage) → Flux Kontext (mapping) / t2i ;
+      - tout autre moteur → chemin générique (build_request + réfs si le moteur les
+        gère : Recraft/Z-Image/Qwen/Ideogram/FLUX Ultra/Seedream 5…).
+    `options` aussi : chars / decor / floor_plan (réfs envoyées aux moteurs à réfs)."""
     opts = options or {}
     engine = (opts.get("engine") or "").strip().lower()
-    if engine not in ("nb2", "flux"):
+    if not engine:
         engine = "nb2" if _is_cinema_mood() else "flux"
+    _is_mapping = bool(building_ref and os.path.isfile(building_ref))
 
-    # Images de RÉFÉRENCE du plan (colonne « Référence », shot["reference_images"]) :
-    # inspiration artistique propre au plan, injectée AUTOMATIQUEMENT au Mood — unitaire
-    # ET batch, Cinéma (NB2) ET Live (Flux), sans toggle (le batch Live n'a pas d'options).
+    # Images de RÉFÉRENCE du plan (colonne « Référence ») : inspiration auto au Mood.
+    # « ◎ Mood inspiré d'une image » (inspiration_ref) passe en TÊTE, prioritaire.
     _inspo = [p for p in (shot.get("reference_images") or []) if p and os.path.isfile(p)]
+    if inspiration_ref and os.path.isfile(inspiration_ref):
+        _inspo = [inspiration_ref] + [p for p in _inspo if p != inspiration_ref]
 
-    if engine == "nb2":
-        # « ◎ Mood inspiré d'une image » (choix explicite) : en NB2 aussi, l'image part
-        # comme INSPIRATION — en TÊTE, prioritaire (elle était silencieusement ignorée
-        # dans cette branche : la fonctionnalité ne faisait rien en Cinéma).
-        if inspiration_ref and os.path.isfile(inspiration_ref):
-            _inspo = [inspiration_ref] + [p for p in _inspo if p != inspiration_ref]
-        # MAPPING (façade présente) : NB2 génère SUR la façade avec EXACTEMENT les mêmes
-        # consignes que Flux (façade = canvas prioritaire, réfs = inspiration lâche, nuit,
-        # visibilité pilotée par le prompt) → on peut comparer les deux moteurs à armes égales.
-        if building_ref and os.path.isfile(building_ref):
-            return run_generation_nb2(prompt, output_dir, api_key, progress_cb,
-                                      inspiration_refs=_inspo, facade_ref=building_ref)
-        # CINÉMA : cohérence persos/décor + plan d'architecte.
-        refs = _shot_ref_images(shot,
+    # Cohérence Cinéma (persos/décor) + plan d'architecte — utiles aux moteurs à réfs.
+    def _consistency():
+        return _shot_ref_images(shot,
                                 include_chars=opts.get("chars", True),
                                 include_decor=opts.get("decor", True))
-        _fp = ""
-        if opts.get("floor_plan", True):
-            try:
-                from core.decors import floor_plan_for_shot
-                _fp = floor_plan_for_shot(shot) or ""
-            except Exception:
-                _fp = ""
-        return run_generation_nb2(prompt, output_dir, api_key, progress_cb, refs,
-                                  floor_plan=_fp, inspiration_refs=_inspo)
-    # Flux : mood t2i depuis le prompt (façade/inspiration seulement si fournies — Live).
-    # À défaut d'inspiration EXPLICITE (bouton « Mood inspiré d'une image », prioritaire),
-    # on retombe sur la 1ʳᵉ image de référence du plan — Flux/Kontext ne prend qu'UNE image.
-    if not inspiration_ref and _inspo:
-        inspiration_ref = _inspo[0]
-    return run_generation(prompt, output_dir, api_key, progress_cb, building_ref,
-                          inspiration_ref=inspiration_ref)
+
+    def _floor():
+        if not opts.get("floor_plan", True):
+            return ""
+        try:
+            from core.decors import floor_plan_for_shot
+            return floor_plan_for_shot(shot) or ""
+        except Exception:
+            return ""
+
+    # ── Famille Nano Banana (nb2 / nb_pro) : chemin réglé (réfs riches) ──────────
+    if engine in ("nb2", "nb_pro"):
+        if _is_mapping:
+            return run_generation_nb2(prompt, output_dir, api_key, progress_cb,
+                                      inspiration_refs=_inspo, facade_ref=building_ref,
+                                      engine_key=engine)
+        return run_generation_nb2(prompt, output_dir, api_key, progress_cb,
+                                  _consistency(), floor_plan=_floor(),
+                                  inspiration_refs=_inspo, engine_key=engine)
+
+    # ── Flux héritage (Kontext mapping / t2i depuis le prompt) ──────────────────
+    if engine == "flux":
+        _insp = _inspo[0] if _inspo else ""
+        return run_generation(prompt, output_dir, api_key, progress_cb, building_ref,
+                              inspiration_ref=_insp)
+
+    # ── Tout autre moteur du catalogue → chemin générique ───────────────────────
+    return run_generation_engine(
+        engine, prompt, output_dir, api_key, progress_cb,
+        ref_images=_consistency(), facade_ref=building_ref,
+        inspiration_refs=_inspo, floor_plan=_floor(), is_mapping=_is_mapping)
 
 
 # ── Worker unitaire ───────────────────────────────────────────────────────────

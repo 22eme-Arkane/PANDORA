@@ -1955,8 +1955,10 @@ class _MoodBatchDialog(QDialog):
         _eng_lbl.setStyleSheet(f"color:{CP['text_dim']};font-size:11px;background:transparent;")
         eng_row.addWidget(_eng_lbl)
         self._opt_engine = QComboBox()
-        self._opt_engine.addItem(translate("Nano Banana 2 (avec références)"), "nb2")
-        self._opt_engine.addItem(translate("Flux (depuis le prompt seul)"), "flux")
+        # Tout le catalogue image de PANDORA (le batch Cinéma n'est jamais en mapping).
+        from api.apercu import mood_engine_choices as _mec
+        for _ek, _elbl in _mec(is_mapping=False):
+            self._opt_engine.addItem(_elbl, _ek)
         self._opt_engine.setFixedHeight(28)
         self._opt_engine.setStyleSheet(
             f"QComboBox{{background:{CP['bg2']};border:1px solid {CP['border']};"
@@ -1986,10 +1988,15 @@ class _MoodBatchDialog(QDialog):
             lay.addWidget(_cb)
 
         def _sync_engine_opts(*_a):
-            # Les références ne concernent que Nano Banana 2 — grisées pour Flux.
-            _nb2 = (self._opt_engine.currentData() == "nb2")
+            # Les références de cohérence (persos/décor/plan) ne servent qu'aux moteurs
+            # qui savent ÉDITER une image — grisées pour ceux qui les ignorent.
+            try:
+                from core.image_engines import ref_support as _rs
+                _has_ref = _rs(self._opt_engine.currentData() or "nb2").get("max", 0) > 0
+            except Exception:
+                _has_ref = True
             for _c in (self._opt_chars, self._opt_decor, self._opt_floor):
-                _c.setEnabled(_nb2)
+                _c.setEnabled(_has_ref)
         self._opt_engine.currentIndexChanged.connect(_sync_engine_opts)
         _sync_engine_opts()
 

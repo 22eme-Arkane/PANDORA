@@ -32,7 +32,7 @@ from PyQt6.QtWidgets import (
     QTextEdit, QSplitter, QTabWidget, QWidget, QProgressBar,
     QFrame, QScrollArea, QApplication, QFileDialog, QSlider,
 )
-from PyQt6.QtCore import Qt, QTimer
+from PyQt6.QtCore import Qt, QTimer, pyqtSignal
 from PyQt6.QtGui import QFont, QColor, QTextCursor, QPixmap
 from ui.styles import CP
 from core.i18n import translate
@@ -139,6 +139,10 @@ def _bubble_html(text: str, role: str) -> str:
 class ArrangeSessionDialog(QDialog):
     """Studio de co-écriture interactif Claude × Réalisateur (Live — conducteur)."""
 
+    # Émis après CHAQUE tour → l'appelant persiste la session dans le conducteur,
+    # pour la REPRENDRE plus tard là où on s'est arrêté (crash-proof).
+    session_committed = pyqtSignal(dict)
+
     def __init__(
         self,
         parent,
@@ -147,6 +151,7 @@ class ArrangeSessionDialog(QDialog):
         intensity: int = 5,
         mode: str = "live",
         refs_analysis: str = "",
+        session_state: dict | None = None,
     ):
         super().__init__(parent)
         self.setWindowTitle("☁  Studio de Création — Co-écriture avec Claude")
@@ -166,9 +171,12 @@ class ArrangeSessionDialog(QDialog):
         self._ref_images: list[str] = []
         self._screenplay_versions: list[str] = []
         self._version_idx: int = -1
+        self._restore_state = session_state or {}
 
         self._build_ui()
         self._show_initial_analysis()
+        if self._restore_state:
+            self._restore_session()
 
         from core.i18n import retranslate_widget
         retranslate_widget(self)
@@ -539,13 +547,23 @@ class ArrangeSessionDialog(QDialog):
         # déjà tout seul à l'envoi, le bouton prêtait à confusion.)
         lay.addLayout(send_row)
 
-        # Bouton « Générer le conducteur » : réécriture COMPLÈTE volontaire. Le chat
-        # ci-dessus reste CHIRURGICAL (il n'édite que les passages concernés) → ce
-        # bouton est le SEUL à réécrire tout le conducteur, quand on le décide.
-        self._btn_generate = _btn("✎  Générer le conducteur", "ghost", 34)
+        # Bouton « Réécrire selon la co-écriture » : applique les modifications
+        # discutées UNIQUEMENT sur les passages travaillés (éditions ciblées) → le
+        # reste du conducteur est PRÉSERVÉ, aucune troncature (demande Matthieu 2026-07-20).
+        self._btn_rewrite_coedit = _btn("✦  Réécrire selon la co-écriture", "accent", 34)
+        self._btn_rewrite_coedit.setToolTip(
+            "Applique les modifications discutées, mais SEULEMENT sur les passages "
+            "travaillés dans le chat — le reste du conducteur est conservé tel quel "
+            "(sans risque de troncature).")
+        self._btn_rewrite_coedit.clicked.connect(self._on_rewrite_coedit)
+        lay.addWidget(self._btn_rewrite_coedit)
+
+        # Bouton « Générer tout le conducteur » : réécriture COMPLÈTE volontaire (y
+        # compris les passages non discutés). Le chat reste CHIRURGICAL par ailleurs.
+        self._btn_generate = _btn("✎  Générer tout le conducteur", "ghost", 34)
         self._btn_generate.setToolTip(
-            "Réécrit le conducteur COMPLET en intégrant toute la discussion "
-            "(coûteux en tokens — le chat ne modifie que les passages demandés).")
+            "Réécrit le conducteur ENTIER en intégrant toute la discussion, y compris "
+            "les passages non abordés (coûteux en tokens).")
         self._btn_generate.clicked.connect(self._on_generate_full)
         lay.addWidget(self._btn_generate)
 
@@ -712,6 +730,7 @@ class ArrangeSessionDialog(QDialog):
         self._append_chat_bubble(text, "claude")
         self._history.append({"role": "assistant", "content": text})
         self._set_busy(False, "")
+        self._commit_session()
 
     def _on_edits_ready(self, edits: list):
         """Chat CHIRURGICAL : applique les éditions ciblées à la version courante
@@ -733,8 +752,26 @@ class ArrangeSessionDialog(QDialog):
             summary += f"  ({len(missed)} passage(s) non retrouvé(s))"
         self._append_chat_bubble(summary, "claude")
 
+    def _on_rewrite_coedit(self):
+        """Bouton « Réécrire selon la co-écriture » : applique TOUTES les modifications
+        discutées, mais UNIQUEMENT sur les passages travaillés (éditions ciblées
+        find/replace) — le reste du conducteur est préservé, aucune troncature."""
+        if not (self._screenplay or self._original).strip():
+            return
+        if self._worker and self._worker.isRunning():
+            return
+        instruction = (
+            "Applique maintenant TOUTES les modifications qu'on a discutées jusqu'ici, "
+            "sous forme d'éditions CIBLÉES (find/replace) sur les SEULS passages concernés. "
+            "Ne réécris PAS le reste du conducteur ; ne touche à aucun passage qui n'a pas "
+            "été abordé dans la discussion.")
+        self._append_chat_bubble(
+            "✦ Réécriture des passages travaillés (selon la co-écriture)…", "user")
+        self._history.append({"role": "user", "content": instruction})
+        self._start_worker(instruction, surgical=True)
+
     def _on_generate_full(self):
-        """Bouton « Générer le conducteur » : réécriture COMPLÈTE volontaire, qui
+        """Bouton « Générer tout le conducteur » : réécriture COMPLÈTE volontaire, qui
         intègre toute la discussion. Coûteux en tokens → action délibérée."""
         if not (self._screenplay or self._original).strip():
             return
@@ -769,6 +806,15 @@ class ArrangeSessionDialog(QDialog):
         # Activer les boutons d'action
         self._btn_apply.setEnabled(True)
         self._btn_copy.setEnabled(True)
+        self._commit_session()
+
+        # Garde-fou anti-troncature : une réécriture COMPLÈTE nettement plus courte
+        # que l'original a probablement été coupée (limite de longueur).
+        if self._original and len(text) < 0.55 * len(self._original):
+            self._append_chat_bubble(
+                "⚠ La réécriture complète semble tronquée (limite de longueur). "
+                "Préfère « Réécrire selon la co-écriture » : elle ne touche que les "
+                "passages travaillés, sans couper le reste.", "claude")
 
     def _nav_version_prev(self):
         if self._version_idx > 0:
@@ -813,6 +859,9 @@ class ArrangeSessionDialog(QDialog):
     def _set_busy(self, busy: bool, status: str = ""):
         self._btn_send.setEnabled(not busy)
         self._btn_apply.setEnabled(not busy and bool(self._screenplay))
+        for _b in ("_btn_rewrite_coedit", "_btn_generate"):
+            if hasattr(self, _b):
+                getattr(self, _b).setEnabled(not busy)
         self._progress_bar.setVisible(busy)
         self._status_lbl.setText(status)
         if busy:
@@ -850,6 +899,63 @@ class ArrangeSessionDialog(QDialog):
 
     def was_applied(self) -> bool:
         return self._applied
+
+    # ── Persistance de la session (reprendre là où on s'est arrêté) ───────────
+    def session_state(self) -> dict:
+        """État complet de la session, sérialisable JSON, pour reprise ultérieure."""
+        return {
+            "history":     list(self._history),
+            "screenplay":  self._screenplay,
+            "versions":    list(self._screenplay_versions),
+            "version_idx": self._version_idx,
+        }
+
+    def _commit_session(self):
+        """Notifie l'appelant pour qu'il persiste la session (à chaque tour)."""
+        try:
+            self.session_committed.emit(self.session_state())
+        except Exception:
+            pass
+
+    def _restore_session(self):
+        """Rejoue une session sauvegardée : conversation + conducteur remanié + versions,
+        pour reprendre EXACTEMENT là où on s'était arrêté."""
+        st = self._restore_state or {}
+        history = st.get("history") or []
+        if history:
+            self._chat_hint.hide()
+            for m in history:
+                role = "user" if m.get("role") == "user" else "claude"
+                self._append_chat_bubble(m.get("content", ""), role)
+            self._history = [dict(m) for m in history]
+        versions = [v for v in (st.get("versions") or []) if isinstance(v, str)]
+        screenplay = st.get("screenplay") or (versions[-1] if versions else "")
+        if screenplay:
+            self._screenplay = screenplay
+            self._screenplay_versions = versions or [screenplay]
+            vi = st.get("version_idx", len(self._screenplay_versions) - 1)
+            self._version_idx = (vi if isinstance(vi, int)
+                                 and 0 <= vi < len(self._screenplay_versions)
+                                 else len(self._screenplay_versions) - 1)
+            self._screenplay_edit.blockSignals(True)
+            self._screenplay_edit.setPlainText(self._screenplay_versions[self._version_idx])
+            self._screenplay_edit.blockSignals(False)
+            self._manual_edit_lbl.hide()
+            self._update_version_nav()
+            self._tabs.setTabEnabled(1, True)
+            self._btn_apply.setEnabled(True)
+            self._btn_copy.setEnabled(True)
+
+    def done(self, result):
+        """accept()/reject()/close() passent tous par done() : on PARQUE le worker
+        Claude encore actif AVANT que la fenêtre (et le QThread) soient détruits."""
+        try:
+            from core.worker import abandon_thread
+            abandon_thread(self._worker)
+            self._worker = None
+        except Exception:
+            pass
+        super().done(result)
 
     # ── Keyboard shortcut Ctrl+Enter ─────────────────────────────────────────
 

@@ -2439,7 +2439,9 @@ class ArrangeChatWorker(QThread):
                        else _arrange_chat_system(self._intensity))
             # CHIRURGICAL : 8192 — 4096 TRONQUAIT le JSON dès que plusieurs passages
             # longs étaient réécrits → 0 édition récupérée (constat Matthieu 2026-07-13).
-            _maxtok = 8192
+            # COMPLET : 16000 — 8192 TRONQUAIT la FIN des longs scénarios (constat
+            # Matthieu 2026-07-20 : « toute la fin était perdue ») ; parité avec le Live.
+            _maxtok = 8192 if self._surgical else 16000
             if self._ref_images:
                 # VISION (images jointes) : direct Anthropic — hors couche ai_provider
                 # (les autres fournisseurs gèrent la vision différemment ; périmètre v1 = texte).

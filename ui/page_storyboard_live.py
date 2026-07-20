@@ -1868,7 +1868,7 @@ class _MoodBatchDialog(QDialog):
         self.setMinimumSize(480, 480)
         self.setStyleSheet(PANDORA_STYLESHEET + f"QDialog{{background:{CP['bg1']};}}")
         self._shots = shots
-        self.engine = "flux"   # moteur choisi (bouton Flux / Nano Banana 2)
+        self.engine = "nb2"    # moteur choisi (combo — catalogue image complet)
         self._has_mood: set[str] = set()
         for shot in shots:
             sid  = shot.get("id", "")
@@ -1955,35 +1955,51 @@ class _MoodBatchDialog(QDialog):
             f"QPushButton:hover{{color:{CP['text_primary']};border-color:{CP['text_primary']};}}"
         )
         cancel_btn.clicked.connect(self.reject)
-        # Choix du MOTEUR : Flux (édite la façade) OU Nano Banana 2 (autre modèle). Les
-        # deux reçoivent les MÊMES consignes mapping (façade = canvas prioritaire) → on
-        # clique sur l'un ou l'autre pour comparer le rendu (demande Matthieu 2026-07-09).
+        # Choix du MOTEUR : tout le catalogue image de PANDORA. En séquence MAPPING
+        # FAÇADE, la liste se restreint aux moteurs qui savent éditer une image de
+        # référence (géométrie du bâtiment préservée) — cf. api.apercu.mood_engine_choices
+        # (élargi 2026-07-20, remplace le choix binaire Flux/Nano Banana 2).
+        from PyQt6.QtWidgets import QComboBox as _QComboBox
+        from api.apercu import mood_engine_choices as _mec, current_mood_is_mapping as _cmm
+        _is_map = _cmm()
         eng_help = QLabel(translate(
-            "Moteur : Flux et Nano Banana 2 reçoivent les MÊMES consignes (façade = canvas "
-            "prioritaire). Teste les deux pour comparer le rendu."))
+            "Mapping façade : seuls les moteurs qui éditent une image de référence "
+            "(géométrie du bâtiment préservée) sont proposés."
+            if _is_map else
+            "Tous les moteurs image de PANDORA sont disponibles — teste-les pour comparer le rendu."))
         eng_help.setWordWrap(True)
         eng_help.setStyleSheet(f"color:{CP['text_dim']};font-size:10px;background:transparent;")
         lay.addWidget(eng_help)
 
-        def _pick(engine):
-            self.engine = engine
+        self._opt_engine = _QComboBox()
+        for _ek, _elbl in _mec(_is_map):
+            self._opt_engine.addItem(_elbl, _ek)
+        _di = self._opt_engine.findData("nb2")
+        self._opt_engine.setCurrentIndex(_di if _di >= 0 else 0)
+        self._opt_engine.setFixedHeight(30)
+        self._opt_engine.setStyleSheet(
+            f"QComboBox{{background:{CP['bg2']};border:1px solid {CP['border']};"
+            f"border-radius:6px;color:{CP['text_primary']};font-size:11px;padding:0 8px;}}"
+            f"QComboBox::drop-down{{border:none;width:20px;}}"
+            f"QComboBox QAbstractItemView{{background:{CP['bg3']};"
+            f"border:1px solid {CP['border_bright']};color:{CP['text_primary']};"
+            f"selection-background-color:{CP['accent_dim']};}}")
+        lay.addWidget(self._opt_engine)
+
+        def _accept_batch():
+            self.engine = self._opt_engine.currentData() or "nb2"
             self.accept()
 
-        self._btn_flux = QPushButton(translate("✦  Flux"))
-        self._btn_nb2  = QPushButton(translate("◇  Nano Banana 2"))
-        for _b, _bg in ((self._btn_flux, CP['accent']), (self._btn_nb2, CP['accent2'])):
-            _b.setFixedHeight(36)
-            _b.setStyleSheet(
-                f"QPushButton{{background:{_bg};color:#07080f;border:none;border-radius:8px;"
-                f"font-size:12px;font-weight:700;padding:0 20px;}}"
-                f"QPushButton:hover{{background:#6eded6;}}"
-                f"QPushButton:disabled{{background:{CP['border']};color:{CP['text_dim']};}}")
-        self._btn_flux.clicked.connect(lambda: _pick("flux"))
-        self._btn_nb2.clicked.connect(lambda: _pick("nb2"))
+        self._btn_gen = QPushButton(translate("✦  Générer les Moods"))
+        self._btn_gen.setFixedHeight(36)
+        self._btn_gen.setStyleSheet(
+            f"QPushButton{{background:{CP['accent']};color:#07080f;border:none;border-radius:8px;"
+            f"font-size:12px;font-weight:700;padding:0 20px;}}"
+            f"QPushButton:hover{{background:#6eded6;}}")
+        self._btn_gen.clicked.connect(_accept_batch)
         btns.addStretch()
         btns.addWidget(cancel_btn)
-        btns.addWidget(self._btn_flux)
-        btns.addWidget(self._btn_nb2)
+        btns.addWidget(self._btn_gen)
         lay.addLayout(btns)
 
     def _populate(self):
@@ -2012,9 +2028,7 @@ class _MoodBatchDialog(QDialog):
             1 for i in range(self._list.count())
             if self._list.item(i).checkState() == Qt.CheckState.Checked
         )
-        self._count_lbl.setText(translate("{n} plan(s) sélectionné(s)").format(n=n))
-        for _b in (self._btn_flux, self._btn_nb2):
-            _b.setEnabled(n > 0)
+        self._btn_gen.setEnabled(n > 0)
         self._count_lbl.setText(
             f"{n} plan{'s' if n != 1 else ''} sélectionné{'s' if n != 1 else ''}"
         )

@@ -11,7 +11,7 @@ import time
 from PyQt6.QtCore import Qt, QPoint, QSize, QUrl, pyqtSignal
 from PyQt6.QtGui import QDesktopServices, QImageReader, QPixmap
 from PyQt6.QtWidgets import (
-    QAbstractSpinBox, QApplication, QComboBox, QDialog, QFileDialog, QFormLayout, QHBoxLayout,
+    QAbstractSpinBox, QApplication, QCheckBox, QComboBox, QDialog, QFileDialog, QFormLayout, QHBoxLayout,
     QInputDialog, QLabel, QLineEdit, QMainWindow, QMessageBox, QProgressBar,
     QPushButton, QScrollArea, QSpinBox, QSplitter, QTextEdit, QVBoxLayout, QWidget,
 )
@@ -555,9 +555,9 @@ class StudioImagesPanel(QWidget):
         self._gen_btn.clicked.connect(self._generate)
         lay.addWidget(self._gen_btn)
 
-        # Balayage comparatif : une image par MOTEUR (un seul par famille).
+        # Comparatif multi-moteurs : une image par MOTEUR CHOISI (multi-sélection).
         # Style contour (jamais de suffixe hex-opacity sur fond sombre).
-        self._gen_all_btn = QPushButton("🧪  Générer avec tous les moteurs")
+        self._gen_all_btn = QPushButton("🧪  Générer avec plusieurs moteurs")
         self._gen_all_btn.setObjectName("secondary")
         self._gen_all_btn.setStyleSheet(
             f"QPushButton{{background: transparent; color: {CP['accent']}; "
@@ -568,10 +568,9 @@ class StudioImagesPanel(QWidget):
             f"QPushButton:disabled{{color: {CP['text_dim']}; "
             f"border-color: {CP['border']};}}")
         self._gen_all_btn.setToolTip(
-            "Génère UNE image par moteur, à la suite, avec le même prompt — "
-            "pour comparer les rendus.\n"
-            "Un seul moteur par famille (pas toutes les versions), et le nom du "
-            "moteur est ajouté à la fin de chaque fichier.\n"
+            "Choisis PLUSIEURS moteurs, puis génère UNE image par moteur sélectionné, "
+            "à la suite, avec le même prompt — pour comparer les rendus.\n"
+            "Le nom du moteur est ajouté à la fin de chaque fichier.\n"
             "⚠ Chaque moteur est facturé séparément ; « Annuler » interrompt la file.")
         self._gen_all_btn.clicked.connect(self._generate_all_engines)
         lay.addWidget(self._gen_all_btn)
@@ -1291,26 +1290,119 @@ class StudioImagesPanel(QWidget):
                                       busy_msg="Génération…")
 
     def _generate_all_engines(self):
-        """Balayage comparatif : UNE image par moteur, un seul moteur par famille.
+        """Génère UNE image par moteur SÉLECTIONNÉ (multi-choix).
 
-        Le même prompt est envoyé à chaque moteur, à la suite (file d'attente),
+        Le même prompt est envoyé à chaque moteur coché, à la suite (file d'attente),
         et le nom du moteur termine le nom de chaque fichier produit."""
         prompt = self._prompt_or_warn()
         if not prompt:
             return
-        keys = engines.sweep_engines()
-        liste = "\n".join(f"  • {engines.short_label(k)}" for k in keys)
-        if QMessageBox.question(
-                self, "Générer avec tous les moteurs",
-                f"{len(keys)} images vont être générées, une par moteur :\n\n{liste}\n\n"
-                "Un seul moteur par famille (pas toutes les versions).\n"
-                "Chaque moteur est facturé séparément.\n"
-                "« Annuler » interrompt la file : les moteurs restants ne sont pas "
-                "appelés, donc pas facturés.\n\n"
-                "Lancer le balayage ?") != QMessageBox.StandardButton.Yes:
+        keys = self._choose_engines(engines.sweep_engines())
+        if not keys:
             return
         self._launch_image_worker(prompt, engine_keys=keys,
-                                  busy_msg=f"Balayage de {len(keys)} moteurs…")
+                                  busy_msg=f"Génération sur {len(keys)} moteur(s)…")
+
+    def _choose_engines(self, preselected):
+        """Fenêtre de SÉLECTION MULTIPLE des moteurs de génération. Retourne la liste
+        des clés cochées (ordre du catalogue) ou None si annulé. `preselected` = clés
+        cochées au départ (défaut : un moteur par famille)."""
+        pre = set(preselected or [])
+        dlg = QDialog(self)
+        dlg.setWindowTitle("Générer avec plusieurs moteurs")
+        dlg.setMinimumWidth(470)
+        dlg.setStyleSheet(f"QDialog{{background:{CP['bg1']};}}")
+        lay = QVBoxLayout(dlg)
+        lay.setContentsMargins(20, 18, 20, 16)
+        lay.setSpacing(10)
+
+        title = QLabel("Choisis les moteurs de génération")
+        title.setStyleSheet(
+            f"color:{CP['text_primary']};font-size:13px;font-weight:700;background:transparent;")
+        lay.addWidget(title)
+        help_lbl = QLabel(
+            "Une image est générée par moteur coché, à la suite. Le nom du moteur "
+            "termine chaque fichier. ⚠ Chaque moteur est facturé séparément.")
+        help_lbl.setWordWrap(True)
+        help_lbl.setStyleSheet(f"color:{CP['text_dim']};font-size:10px;background:transparent;")
+        lay.addWidget(help_lbl)
+
+        _mini = (f"QPushButton{{background:transparent;color:{CP['text_secondary']};"
+                 f"border:1px solid {CP['border_bright']};border-radius:6px;"
+                 f"font-size:10px;padding:3px 10px;}}"
+                 f"QPushButton:hover{{color:{CP['text_primary']};border-color:{CP['accent']};}}")
+        quick = QHBoxLayout()
+        b_all  = QPushButton("Tout");  b_none = QPushButton("Aucun")
+        b_fam  = QPushButton("Un par famille")
+        for _b in (b_all, b_none, b_fam):
+            _b.setStyleSheet(_mini)
+            _b.setCursor(Qt.CursorShape.PointingHandCursor)
+        quick.addWidget(b_all); quick.addWidget(b_none); quick.addWidget(b_fam)
+        quick.addStretch(1)
+        lay.addLayout(quick)
+
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setFixedHeight(300)
+        scroll.setStyleSheet(f"QScrollArea{{background:{CP['bg2']};border:1px solid {CP['border']};"
+                             f"border-radius:8px;}}")
+        inner = QWidget()
+        inner.setStyleSheet("background:transparent;")
+        il = QVBoxLayout(inner)
+        il.setContentsMargins(10, 8, 10, 8)
+        il.setSpacing(5)
+        _cb_ss = (f"QCheckBox{{color:{CP['text_primary']};font-size:11px;background:transparent;spacing:8px;}}"
+                  f"QCheckBox::indicator{{width:15px;height:15px;border:1px solid {CP['border_bright']};"
+                  f"border-radius:4px;background:{CP['bg0']};}}"
+                  f"QCheckBox::indicator:checked{{background:{CP['accent']};border-color:{CP['accent']};}}")
+        boxes = {}
+        for k in engines.ENGINES:
+            cb = QCheckBox(engines.label_for(k))
+            cb.setChecked(k in pre)
+            cb.setStyleSheet(_cb_ss)
+            cb.setCursor(Qt.CursorShape.PointingHandCursor)
+            il.addWidget(cb)
+            boxes[k] = cb
+        il.addStretch(1)
+        scroll.setWidget(inner)
+        lay.addWidget(scroll)
+
+        count_lbl = QLabel("")
+        count_lbl.setStyleSheet(f"color:{CP['text_dim']};font-size:10px;background:transparent;")
+        lay.addWidget(count_lbl)
+
+        row = QHBoxLayout()
+        row.addStretch(1)
+        cancel = QPushButton("Annuler")
+        cancel.setStyleSheet(_mini)
+        cancel.setCursor(Qt.CursorShape.PointingHandCursor)
+        cancel.clicked.connect(dlg.reject)
+        gen_btn = QPushButton("✦  Générer")
+        gen_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        gen_btn.setStyleSheet(
+            f"QPushButton{{background:{CP['accent']};color:#07080f;border:none;border-radius:8px;"
+            f"font-size:11px;font-weight:700;padding:6px 20px;}}"
+            f"QPushButton:hover{{background:#6eded6;}}"
+            f"QPushButton:disabled{{background:{CP['bg3']};color:{CP['text_dim']};}}")
+        gen_btn.clicked.connect(dlg.accept)
+        row.addWidget(cancel); row.addWidget(gen_btn)
+        lay.addLayout(row)
+
+        def _upd():
+            n = sum(1 for cb in boxes.values() if cb.isChecked())
+            count_lbl.setText(f"{n} moteur(s) sélectionné(s)")
+            gen_btn.setEnabled(n > 0)
+        for cb in boxes.values():
+            cb.toggled.connect(_upd)
+        b_all.clicked.connect(lambda: [cb.setChecked(True) for cb in boxes.values()])
+        b_none.clicked.connect(lambda: [cb.setChecked(False) for cb in boxes.values()])
+        b_fam.clicked.connect(
+            lambda: [cb.setChecked(k in set(engines.sweep_engines())) for k, cb in boxes.items()])
+        _upd()
+
+        if dlg.exec() != QDialog.DialogCode.Accepted:
+            return None
+        return [k for k in engines.ENGINES if boxes[k].isChecked()]
 
     def _launch_image_worker(self, prompt, count=1, engine_keys=None,
                              busy_msg="Génération…"):

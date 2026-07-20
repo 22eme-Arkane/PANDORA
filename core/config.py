@@ -75,17 +75,36 @@ IMAGE_MODEL_PRICES = {
 
 
 def get_image_endpoint(cfg: dict | None = None) -> str:
-    """Retourne l'endpoint fal.ai du modèle image sélectionné dans la config."""
+    """Retourne l'endpoint fal.ai du modèle image sélectionné dans la config.
+
+    Les 6 modèles historiques sont mappés ici ; pour les moteurs élargis (catalogue
+    complet PANDORA), on interroge core/image_engines (source unique)."""
     if cfg is None:
         cfg = load_config()
-    return IMAGE_MODEL_ENDPOINTS.get(cfg.get("image_model", "nb2"), IMAGE_MODEL_ENDPOINTS["nb2"])
+    model = cfg.get("image_model", "nb2")
+    if model in IMAGE_MODEL_ENDPOINTS:
+        return IMAGE_MODEL_ENDPOINTS[model]
+    try:
+        from core import image_engines as _ie
+        if model in _ie.ENGINES:
+            return _ie.ENGINES[model].get("endpoint", IMAGE_MODEL_ENDPOINTS["nb2"])
+    except Exception:
+        pass
+    return IMAGE_MODEL_ENDPOINTS["nb2"]
 
 
 def get_image_price(cfg: dict | None = None) -> str:
-    """Retourne le prix formaté du modèle image sélectionné."""
+    """Retourne le prix formaté du modèle image sélectionné (catalogue complet)."""
     if cfg is None:
         cfg = load_config()
-    return IMAGE_MODEL_PRICES.get(cfg.get("image_model", "nb2"), "$0.08")
+    model = cfg.get("image_model", "nb2")
+    if model in IMAGE_MODEL_PRICES:
+        return IMAGE_MODEL_PRICES[model]
+    try:
+        from core import image_engines as _ie
+        return _ie.price_hint(model) or "$0.08"
+    except Exception:
+        return "$0.08"
 
 
 def get_output_dir(cfg: dict | None = None) -> str:

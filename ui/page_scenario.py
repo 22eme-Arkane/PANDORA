@@ -2668,12 +2668,18 @@ class PageScenario(QWidget):
         dlg.exec()
 
     def _open_arrange_session(self, analysis_text: str):
-        """Ouvre le studio de co-écriture interactif Claude × Réalisateur."""
+        """Ouvre le studio de co-écriture — REPREND la session persistée si elle existe."""
         from ui.dialog_arrange_session import ArrangeSessionDialog
         original   = self._get_text()
         intensity  = self._arrange_intensity_value
+        saved = (self._current or {}).get("arrange_session") or None
         dlg = ArrangeSessionDialog(self, original, analysis_text, intensity,
-                                   refs_analysis=self._last_ref_analysis)
+                                   refs_analysis=self._last_ref_analysis,
+                                   session_state=saved)
+        # Autosave crash-proof : la session (conversation + scénario remanié) est
+        # persistée dans le projet à CHAQUE tour — connecté AVANT exec() → plus
+        # aucune perte, même si l'app plante ; réouverture = reprise à l'identique.
+        dlg.session_committed.connect(self._on_arrange_session_autosave)
         dlg.exec()
         if dlg.was_applied():
             final = dlg.final_screenplay()
@@ -2682,8 +2688,15 @@ class PageScenario(QWidget):
                 self._set_editor_text(final)
                 if self._current is not None:
                     self._current["formatted_content"] = final
+                    self._save(silent=True)   # « Appliquer » → sauvegarde immédiate
                 self._ai_progress_lbl.setText("Scénario co-écrit appliqué ✓")
                 self._btn_undo_action.setVisible(True)
+
+    def _on_arrange_session_autosave(self, state: dict):
+        """Persiste la session de co-écriture dans le projet (reprise ultérieure)."""
+        if self._current is not None:
+            self._current["arrange_session"] = state
+            self._save(silent=True)
 
     def _open_refs_window(self, analysis: str = "", worker=None):
         """Fenêtre d'analyse des références visuelles.

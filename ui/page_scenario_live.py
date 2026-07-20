@@ -2988,13 +2988,19 @@ class PageScenario(QWidget):
 
     def _open_arrange_session(self, analysis_text: str):
         """Ouvre le studio de co-écriture interactif — version CONDUCTEUR
-        (dialog_arrange_session_live, jamais le format scénario INT./EXT.)."""
+        (dialog_arrange_session_live, jamais le format scénario INT./EXT.).
+        REPREND la session persistée si elle existe."""
         from ui.dialog_arrange_session_live import ArrangeSessionDialog
         original   = self._get_text()
         intensity  = self._arrange_intensity_value
+        saved = (self._current or {}).get("arrange_session") or None
         dlg = ArrangeSessionDialog(self, original, analysis_text, intensity,
                                    mode=self._live_mode,
-                                   refs_analysis=self._last_ref_analysis)
+                                   refs_analysis=self._last_ref_analysis,
+                                   session_state=saved)
+        # Autosave crash-proof : la session (conversation + conducteur remanié) est
+        # persistée à CHAQUE tour — connecté AVANT exec() → réouverture = reprise.
+        dlg.session_committed.connect(self._on_arrange_session_autosave)
         dlg.exec()
         if dlg.was_applied():
             final = dlg.final_screenplay()
@@ -3003,8 +3009,15 @@ class PageScenario(QWidget):
                 self._set_editor_text(final)
                 if self._current is not None:
                     self._current["formatted_content"] = final
+                    self._save(silent=True)   # « Appliquer » → sauvegarde immédiate
                 self._ai_progress_lbl.setText("Conducteur co-écrit appliqué ✓")
                 self._btn_undo_action.setVisible(True)
+
+    def _on_arrange_session_autosave(self, state: dict):
+        """Persiste la session de co-écriture dans le conducteur (reprise ultérieure)."""
+        if self._current is not None:
+            self._current["arrange_session"] = state
+            self._save(silent=True)
 
     def _open_refs_window(self, analysis: str = "", worker=None):
         """Fenêtre d'analyse des références visuelles.

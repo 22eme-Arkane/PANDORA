@@ -402,26 +402,36 @@ def prompts_moods_kontext():
 
 @test
 def mood_batch_choix_moteur_live():
-    """« Générer les Moods » (Live) : la fenêtre propose Flux OU Nano Banana 2 avant de
-    lancer (comparer les rendus) ; le clic mémorise le moteur et _on_batch_mood le passe
-    au worker via options={engine} (2026-07-09)."""
+    """« Générer les Moods » (Live) : la fenêtre propose TOUT le catalogue image de
+    PANDORA via un combo (élargi 2026-07-20 ; remplace le choix binaire Flux/NB2).
+    En séquence MAPPING FAÇADE, la liste se restreint aux moteurs qui ÉDITENT une
+    image de référence. Le choix mémorise la clé et _on_batch_mood le passe au
+    worker via options={engine}."""
     import ui.page_storyboard_live as PSL
+    import api.apercu as _A
+    from core import image_engines as IE
     _orig_la = PSL.sb_api.load_apercus
     PSL.sb_api.load_apercus = lambda sid: {"paths": [], "active_idx": 0}
     try:
         d = PSL._MoodBatchDialog(None, [{"id": "a", "number": 1, "scene_title": "T"}])
     finally:
         PSL.sb_api.load_apercus = _orig_la   # ne PAS fuiter sur les tests suivants (chaînage mood)
-    assert d.engine == "flux", "moteur par défaut = Flux"
-    assert hasattr(d, "_btn_flux") and hasattr(d, "_btn_nb2"), "2 boutons moteur absents"
-    d._btn_nb2.click()
-    assert d.engine == "nb2", "clic « Nano Banana 2 » → engine=nb2"
+    assert hasattr(d, "_opt_engine"), "combo moteur absent (remplace les 2 boutons)"
+    _keys = [d._opt_engine.itemData(i) for i in range(d._opt_engine.count())]
+    # Contexte non-mapping ici (aucune façade résolue) → tout le catalogue raster.
+    assert _keys == IE.raster_engines(), "combo moteur Live ≠ catalogue image complet"
+    d._opt_engine.setCurrentIndex(_keys.index("recraft"))
+    d._btn_gen.click()
+    assert d.engine == "recraft", "clic « Générer » → engine = moteur du combo"
     # Le handler passe le moteur choisi au worker.
     _obm = inspect.getsource(PSL.PageStoryboard._on_batch_mood)
     assert 'options={"engine"' in _obm and "dlg" in _obm, \
         "_on_batch_mood ne transmet pas le moteur choisi au MoodBatchWorker"
-    # VARIATION d'un mood existant (MoodDialog) : même choix Flux / Nano Banana 2.
-    import api.apercu as _A
+    # Filtre MAPPING : Flux Kontext + moteurs éditeurs de référence UNIQUEMENT.
+    _map = [k for k, _ in _A.mood_engine_choices(is_mapping=True)]
+    assert _map[0] == "flux" and set(_map[1:]) == set(IE.edit_capable_engines()), \
+        "mapping : liste moteurs ≠ (Flux + éditeurs de référence)"
+    # VARIATION d'un mood existant (MoodDialog) : combo moteur complet.
     assert "options" in inspect.signature(_A.MoodGenerationWorker.__init__).parameters, \
         "worker unitaire : param options (moteur) absent"
     assert "options=self._options" in inspect.getsource(_A.MoodGenerationWorker.run), \
@@ -429,7 +439,7 @@ def mood_batch_choix_moteur_live():
     from ui.dialog_apercu import MoodDialog, choose_mood_engine
     assert callable(choose_mood_engine)
     _gsrc = inspect.getsource(MoodDialog._generate)
-    assert "choose_mood_engine" in _gsrc, "variation de mood : pas de choix Flux/NB2"
+    assert "choose_mood_engine" in _gsrc, "variation de mood : pas de choix de moteur"
 
 
 @test
@@ -2704,6 +2714,14 @@ def distributeur_video_piapi_live():
     assert "_price_footer" in _wsrc and "price_estimate_changed" in _wsrc
     import ui.tab_t2v_live as T
     assert "price_estimate_changed" in inspect.getsource(T.TabT2V._refresh_price_estimate)
+    # UN SEUL bandeau (2026-07-20, parité Cinéma) : doublon in-tab retiré.
+    assert "lay.addWidget(price_frame)" not in inspect.getsource(T.TabT2V), \
+        "doublon d'estimation : l'onglet ne doit plus afficher son propre bandeau"
+    # Prix recomputé avec le distributeur actif AVANT la file (affichage + onglet).
+    assert "_refresh_price_estimate" in inspect.getsource(LSW.LiveStudioWidget.showEvent), \
+        "prix non recomputé à l'affichage"
+    assert "_refresh_price_estimate" in inspect.getsource(LSW.LiveStudioWidget._on_tab_changed), \
+        "prix non recomputé à l'entrée dans l'onglet"
     # Le bandeau ne s'affiche que sur l'onglet Séquences, avec un texte non vide
     from PyQt6.QtWidgets import QApplication
     QApplication.instance() or QApplication([])
@@ -2743,6 +2761,66 @@ def distributeur_video_piapi_live():
             "retour multi : onglets non réactivés"
     finally:
         mp.load_config = _orig_lc
+
+
+@test
+def coecriture_session_persistee_live():
+    """Co-écriture Conducteur (Live) : la SESSION (conversation + conducteur remanié
+    + versions) est persistée à chaque tour et REPRISE à la réouverture ; worker
+    parqué à la fermeture. Parité avec le Cinéma (retour Matthieu 2026-07-20)."""
+    import inspect
+    from PyQt6.QtWidgets import QApplication
+    QApplication.instance() or QApplication([])
+    from ui.dialog_arrange_session_live import ArrangeSessionDialog
+    assert hasattr(ArrangeSessionDialog, "session_committed"), "signal session_committed"
+    assert "session_state" in inspect.signature(ArrangeSessionDialog.__init__).parameters
+    st = {"history": [{"role": "user", "content": "acte plus sombre"},
+                      {"role": "assistant", "content": "voici"}],
+          "screenplay": "CONDUCTEUR V2", "versions": ["CONDUCTEUR V2"], "version_idx": 0}
+    d = ArrangeSessionDialog(None, "ORIG", "ANALYSE", 5, session_state=st)
+    assert len(d._history) == 2 and d._screenplay == "CONDUCTEUR V2", "session non reprise"
+    assert d._screenplay_edit.toPlainText() == "CONDUCTEUR V2" and d._btn_apply.isEnabled()
+    got = {}
+    d.session_committed.connect(lambda s: got.update(s))
+    d._on_message_ready("réponse")
+    assert got.get("history", [{}])[-1].get("content") == "réponse", "commit à chaque tour"
+    assert "abandon_thread" in inspect.getsource(ArrangeSessionDialog.done), "worker parqué (done)"
+    import ui.page_scenario_live as PSL
+    _cls = next(c for _n, c in vars(PSL).items()
+                if isinstance(c, type) and hasattr(c, "_open_arrange_session")
+                and hasattr(c, "_on_arrange_session_autosave"))
+    _src = inspect.getsource(_cls._open_arrange_session)
+    assert "session_state=" in _src and "session_committed.connect" in _src, "reprise + autosave"
+    assert "self._save(silent=True)" in _src, "sauvegarde immédiate à l'application"
+
+
+@test
+def coecriture_reecriture_ciblee_live():
+    """Co-écriture Conducteur (Live) : bouton « Réécrire selon la co-écriture » (édits
+    ciblés sur les passages travaillés, sans troncature) au-dessus de « Générer tout
+    le conducteur » (renommé) ; réécriture COMPLÈTE à 16000 tokens ; garde-fou
+    anti-troncature. Parité avec le Cinéma (retour Matthieu 2026-07-20)."""
+    import inspect
+    from PyQt6.QtWidgets import QApplication
+    QApplication.instance() or QApplication([])
+    from api.live_screenplay import ArrangeSessionChatConducteurWorker
+    assert "8192 if self._surgical else 16000" in inspect.getsource(
+        ArrangeSessionChatConducteurWorker.run), "réécriture complète : 16000 tokens"
+    from ui.dialog_arrange_session_live import ArrangeSessionDialog
+    d = ArrangeSessionDialog(None, "ORIG", "ANALYSE", 5)
+    assert hasattr(d, "_btn_rewrite_coedit"), "bouton « Réécrire selon la co-écriture »"
+    assert d._btn_generate.text() == "✎  Générer tout le conducteur", "bouton complet renommé"
+    _cap = {}
+    d._start_worker = lambda instr, surgical=True, **k: _cap.update(instr=instr, surgical=surgical)
+    d._screenplay = "X"
+    d._on_rewrite_coedit()
+    assert _cap.get("surgical") is True and "SEULS passages" in _cap.get("instr", ""), \
+        "réécriture ciblée = chirurgical, passages travaillés seulement"
+    assert "0.55" in inspect.getsource(ArrangeSessionDialog._on_screenplay_ready), \
+        "garde-fou anti-troncature"
+    from core.i18n import _FR_TO_EN as T
+    for _t in ("✦  Réécrire selon la co-écriture", "✎  Générer tout le conducteur"):
+        assert _t in T, ("i18n manquant", _t)
 
 
 if __name__ == "__main__":
