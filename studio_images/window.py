@@ -44,6 +44,43 @@ from imagegen import ImageWorker
 from styles import CP, BUBBLE_AI, BUBBLE_USER
 
 
+# ── Zone de dépôt d'images (drag & drop, demande Matthieu 2026-07-23) ────────
+_DROP_IMG_EXTS = (".png", ".jpg", ".jpeg", ".webp", ".bmp")
+
+
+class _ImageDropZone(QWidget):
+    """Conteneur qui accepte le glisser-déposer de fichiers image et transmet la
+    liste des chemins valides à ``on_files``."""
+
+    def __init__(self, on_files, parent=None):
+        super().__init__(parent)
+        self._on_files = on_files
+        self.setAcceptDrops(True)
+
+    @staticmethod
+    def _image_files(mime) -> list:
+        return [u.toLocalFile() for u in mime.urls()
+                if u.isLocalFile()
+                and u.toLocalFile().lower().endswith(_DROP_IMG_EXTS)
+                and os.path.isfile(u.toLocalFile())]
+
+    def dragEnterEvent(self, e):
+        if self._image_files(e.mimeData()):
+            e.acceptProposedAction()
+
+    def dragMoveEvent(self, e):
+        e.acceptProposedAction()
+
+    def dropEvent(self, e):
+        files = self._image_files(e.mimeData())
+        if files:
+            try:
+                self._on_files(files)
+            except Exception:
+                pass
+            e.acceptProposedAction()
+
+
 # ── Champ de saisie chat : Ctrl+Entrée pour envoyer ──────────────────────────
 class ChatInput(QTextEdit):
     submit = pyqtSignal()
@@ -444,7 +481,7 @@ class StudioImagesPanel(QWidget):
         self._model = DownComboBox()
         for key, spec in engines.ENGINES.items():
             self._model.addItem(spec["label"], key)
-        self._select_data(self._model, self.cfg.get("image_model", "nb_pro"))
+        self._select_data(self._model, self.cfg.get("image_model", engines.DEFAULT_ENGINE))
         self._model.currentIndexChanged.connect(self._on_engine_changed)
         # En-tête : libellé à gauche + Sauvegarder/Ouvrir (session) à droite.
         _eng_head = QHBoxLayout()
@@ -472,21 +509,9 @@ class StudioImagesPanel(QWidget):
         # les Largeur/Hauteur restaurés de la config.
         self._format.currentIndexChanged.connect(self._on_format_changed)
 
-        self._count = QSpinBox()
-        self._count.setRange(1, 10)
-        self._count.setValue(int(self.cfg.get("count", 1)))
-        self._count.setPrefix("×")
-        self._count.setToolTip(
-            "Nombre d'images à générer (variations).\n"
-            "Le lot part en file d'attente : les images sont générées une par une, "
-            "l'aperçu affiche la progression, et « Annuler » interrompt le reste du lot.\n"
-            "⚠ Chaque image du lot est facturée séparément par le moteur.")
-        self._count.setStyleSheet(
-            f"background:{CP['bg2']}; border:1px solid {CP['border']}; "
-            f"border-radius:6px; padding:7px; color:{CP['text_primary']}; font-weight:600;")
-
+        # Le compteur ×N vit désormais À CÔTÉ de « Générer l'image » (demande
+        # Matthieu 2026-07-23) — voir plus bas.
         row.addWidget(self._format, 1)
-        row.addWidget(self._count)
         lay.addLayout(row)
 
         # Largeur × Hauteur — TOUJOURS visibles, saisie directe au clavier (pas de
@@ -507,11 +532,13 @@ class StudioImagesPanel(QWidget):
         prompt_head = QHBoxLayout()
         prompt_head.addWidget(self._section_label("PROMPT"))
         prompt_head.addStretch(1)
-        self._prompt_lib = DownComboBox()
+        # « Prompts enregistrés » RETIRÉ de l'affichage (demande Matthieu
+        # 2026-07-23) — combo vivant (bibliothèque réactivable d'un mot).
+        self._prompt_lib = DownComboBox(self)
         self._prompt_lib.setMinimumWidth(150)
         self._prompt_lib.setToolTip("Prompts enregistrés — sélectionne pour charger")
         self._prompt_lib.activated.connect(self._on_prompt_selected)
-        prompt_head.addWidget(self._prompt_lib)
+        self._prompt_lib.hide()
         # Boutons 💾/🗑 RETIRÉS de l'affichage (demande Matthieu 2026-07-23) —
         # widgets vivants et branchés pour les réactiver d'un mot.
         save_p = QPushButton("💾", self)
@@ -547,20 +574,37 @@ class StudioImagesPanel(QWidget):
         lay.addWidget(self._refs_hint)
 
         self._refs_row = QHBoxLayout()
+        # Marges 0 : les marges par défaut (~11 px) coupaient le bas des tuiles
+        # 56 px dans le conteneur à hauteur fixe (retour Matthieu 2026-07-23).
+        self._refs_row.setContentsMargins(0, 0, 0, 0)
         self._refs_row.setSpacing(6)
         self._refs_row.addStretch(1)
-        refs_wrap = QWidget()
+        # Zone de DÉPÔT : glisser-déposer des images directement en référence.
+        refs_wrap = _ImageDropZone(self._add_ref_files)
         refs_wrap.setLayout(self._refs_row)
-        refs_wrap.setFixedHeight(72)
+        refs_wrap.setFixedHeight(64)
+        refs_wrap.setToolTip("Glisser-déposer des images ici pour les ajouter en référence")
         lay.addWidget(refs_wrap)
 
         self._on_engine_changed()  # initialise le hint
         self._refresh_refs()       # construit les slots + tuile « + »
 
-        # Génération
+        # Génération — compteur ×N accolé au bouton (flèches ▲/▼ latérales,
+        # même pattern que le dialogue personnage — demande Matthieu 2026-07-23).
         self._gen_btn = QPushButton("⚡  GÉNÉRER L'IMAGE")
         self._gen_btn.clicked.connect(self._generate)
-        lay.addWidget(self._gen_btn)
+        _cw, self._count = self._count_spin(
+            int(self.cfg.get("count", 1)),
+            tooltip=("Nombre d'images à générer (variations).\n"
+                     "Le lot part en file d'attente ; « Annuler » interrompt le reste.\n"
+                     "⚠ Chaque image du lot est facturée séparément par le moteur."))
+        self._count.valueChanged.connect(self._on_count_changed)
+        _gen_row = QHBoxLayout()
+        _gen_row.setContentsMargins(0, 0, 0, 0)
+        _gen_row.setSpacing(6)
+        _gen_row.addWidget(self._gen_btn, 1)
+        _gen_row.addWidget(_cw)
+        lay.addLayout(_gen_row)
 
         # Comparatif multi-moteurs : une image par MOTEUR CHOISI (multi-sélection).
         # Style contour (jamais de suffixe hex-opacity sur fond sombre).
@@ -575,12 +619,22 @@ class StudioImagesPanel(QWidget):
             f"QPushButton:disabled{{color: {CP['text_dim']}; "
             f"border-color: {CP['border']};}}")
         self._gen_all_btn.setToolTip(
-            "Choisis PLUSIEURS moteurs, puis génère UNE image par moteur sélectionné, "
+            "Choisis PLUSIEURS moteurs, puis génère ×N images par moteur sélectionné, "
             "à la suite, avec le même prompt — pour comparer les rendus.\n"
             "Le nom du moteur est ajouté à la fin de chaque fichier.\n"
-            "⚠ Chaque moteur est facturé séparément ; « Annuler » interrompt la file.")
+            "⚠ Chaque image est facturée séparément ; « Annuler » interrompt la file.")
         self._gen_all_btn.clicked.connect(self._generate_all_engines)
-        lay.addWidget(self._gen_all_btn)
+        _caw, self._count_all = self._count_spin(
+            int(self.cfg.get("count_all", 1)),
+            tooltip=("Nombre d'images générées PAR MOTEUR sélectionné.\n"
+                     "⚠ Chaque image est facturée séparément."))
+        self._count_all.valueChanged.connect(self._on_count_all_changed)
+        _ga_row = QHBoxLayout()
+        _ga_row.setContentsMargins(0, 0, 0, 0)
+        _ga_row.setSpacing(6)
+        _ga_row.addWidget(self._gen_all_btn, 1)
+        _ga_row.addWidget(_caw)
+        lay.addLayout(_ga_row)
 
         # Annuler — visible uniquement pendant un travail en cours
         self._cancel_btn = QPushButton("✕  Annuler")
@@ -622,6 +676,18 @@ class StudioImagesPanel(QWidget):
         actions.addWidget(self._discuss_btn, 1)
         actions.addWidget(self._open_dir_btn, 1)
         lay.addLayout(actions)
+
+        # Outpaint FLUX.2 (2026-07-23) : étendre l'image AFFICHÉE vers un autre
+        # format (marges générées par l'IA) — actif dès qu'une image existe.
+        self._outpaint_btn = QPushButton("⤢  Étendre l'image (Outpaint)")
+        self._outpaint_btn.setObjectName("secondary")
+        self._outpaint_btn.setToolTip(
+            "FLUX.2 [pro] Outpaint : étend l'image affichée au-delà de ses bords "
+            "vers le format choisi (ex. 16:9 → 21:9), sans recadrer.\n"
+            "~$0.03 le 1er Mpx de sortie + $0.015/Mpx supplémentaire.")
+        self._outpaint_btn.clicked.connect(self._on_outpaint)
+        self._outpaint_btn.setEnabled(False)
+        lay.addWidget(self._outpaint_btn)
 
         # Aperçu : MASQUÉ tant qu'aucune image (plus de rectangle « En attente
         # d'aperçu », demande Matthieu 2026-07-23) ; dimensionné EXACTEMENT à
@@ -754,11 +820,15 @@ class StudioImagesPanel(QWidget):
         lay.addLayout(attach_head)
 
         self._attach_row = QHBoxLayout()
+        # Marges 0 : les marges par défaut coupaient le bas des tuiles 56 px
+        # (boutons de pièces jointes tronqués — retour Matthieu 2026-07-23).
+        self._attach_row.setContentsMargins(0, 0, 0, 0)
         self._attach_row.setSpacing(6)
         self._attach_row.addStretch(1)
-        attach_wrap = QWidget()
+        attach_wrap = _ImageDropZone(self._add_attach_files)
         attach_wrap.setLayout(self._attach_row)
-        attach_wrap.setFixedHeight(62)
+        attach_wrap.setFixedHeight(64)
+        attach_wrap.setToolTip("Glisser-déposer des images ici pour les joindre à la discussion")
         lay.addWidget(attach_wrap)
         self._refresh_attach()
 
@@ -899,6 +969,50 @@ class StudioImagesPanel(QWidget):
         t.setCursor(Qt.CursorShape.PointingHandCursor)
         t.mousePressEvent = lambda e, p=path: on_remove(p)
         return t
+
+    def _count_spin(self, initial: int, tooltip: str = ""):
+        """(widget, QSpinBox) : compteur « ×N » compact avec deux vraies flèches
+        ▲/▼ latérales — les boutons natifs du QSpinBox sont invisibles sur le
+        style sombre (même solution que le dialogue personnage, 2026-07-23)."""
+        spin = QSpinBox()
+        spin.setRange(1, 10)
+        spin.setValue(max(1, min(10, initial)))
+        spin.setPrefix("×")
+        spin.setButtonSymbols(QSpinBox.ButtonSymbols.NoButtons)
+        spin.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        spin.setFixedSize(52, 40)
+        spin.setToolTip(tooltip)
+        spin.setStyleSheet(
+            f"background:{CP['bg2']};border:1px solid {CP['border']};border-radius:6px;"
+            f"padding:0 4px;color:{CP['text_primary']};font-weight:600;")
+        wrap = QWidget()
+        h = QHBoxLayout(wrap)
+        h.setContentsMargins(0, 0, 0, 0)
+        h.setSpacing(3)
+        h.addWidget(spin)
+        col = QVBoxLayout()
+        col.setContentsMargins(0, 0, 0, 0)
+        col.setSpacing(2)
+        for _sym, _fn in (("▲", spin.stepUp), ("▼", spin.stepDown)):
+            b = QPushButton(_sym)
+            b.setFixedSize(20, 19)
+            b.setCursor(Qt.CursorShape.PointingHandCursor)
+            b.clicked.connect(_fn)
+            b.setStyleSheet(
+                f"QPushButton{{background:{CP['bg4']};border:none;border-radius:3px;"
+                f"color:{CP['text_secondary']};font-size:8px;padding:0;}}"
+                f"QPushButton:hover{{color:{CP['text_primary']};background:{CP['bg3']};}}")
+            col.addWidget(b)
+        h.addLayout(col)
+        return wrap, spin
+
+    def _on_count_changed(self, v: int):
+        self.cfg["count"] = int(v)
+        cfg_mod.save_config(self.cfg)
+
+    def _on_count_all_changed(self, v: int):
+        self.cfg["count_all"] = int(v)
+        cfg_mod.save_config(self.cfg)
 
     def _add_tile(self, on_add, tooltip=""):
         t = QLabel("＋")
@@ -1088,8 +1202,12 @@ class StudioImagesPanel(QWidget):
         files, _ = QFileDialog.getOpenFileNames(
             self, "Joindre à la discussion", "",
             "Images (*.png *.jpg *.jpeg *.webp *.bmp)")
+        self._add_attach_files(files)
+
+    def _add_attach_files(self, files):
+        """Joint des fichiers image à la discussion (dialogue OU glisser-déposer)."""
         for f in files:
-            if f and f not in self._chat_attachments:
+            if f and f not in self._chat_attachments and len(self._chat_attachments) < 6:
                 self._chat_attachments.append(f)
         self._refresh_attach()
 
@@ -1253,6 +1371,13 @@ class StudioImagesPanel(QWidget):
         files, _ = QFileDialog.getOpenFileNames(
             self, "Images de référence", "",
             "Images (*.png *.jpg *.jpeg *.webp *.bmp)")
+        self._add_ref_files(files)
+
+    def _add_ref_files(self, files):
+        """Ajoute des fichiers image en référence (dialogue OU glisser-déposer)."""
+        cap = engines.ref_support(self._model.currentData()).get("max", 0)
+        if cap <= 0:
+            return
         for f in files:
             if not f or len(self._ref_paths) >= cap:
                 continue
@@ -1312,8 +1437,14 @@ class StudioImagesPanel(QWidget):
         keys = self._choose_engines(engines.sweep_engines())
         if not keys:
             return
-        self._launch_image_worker(prompt, engine_keys=keys,
-                                  busy_msg=f"Génération sur {len(keys)} moteur(s)…")
+        # ×N images PAR moteur (compteur à côté du bouton, 2026-07-23) : chaque
+        # clé est répétée N fois dans la file.
+        n = self._count_all.value() if hasattr(self, "_count_all") else 1
+        run_keys = [k for k in keys for _ in range(n)]
+        self._launch_image_worker(
+            prompt, engine_keys=run_keys,
+            busy_msg=f"Génération sur {len(keys)} moteur(s)"
+                     + (f" × {n}" if n > 1 else "") + "…")
 
     def _choose_engines(self, preselected):
         """Fenêtre de SÉLECTION MULTIPLE des moteurs de génération. Retourne la liste
@@ -1442,6 +1573,81 @@ class StudioImagesPanel(QWidget):
         self._img_worker.failed.connect(self._on_img_error)
         self._img_worker.start()
 
+    # ── Outpaint FLUX.2 (2026-07-23) ─────────────────────────────────────────
+
+    _OUTPAINT_RATIOS = [
+        ("21:9 (ultra-large)", 21 / 9), ("2.39:1 (Scope)", 2.39),
+        ("16:9", 16 / 9), ("4:3", 4 / 3), ("1:1 (carré)", 1.0),
+        ("4:5 (portrait)", 4 / 5), ("9:16 (vertical)", 9 / 16),
+    ]
+
+    def _on_outpaint(self):
+        """Étend l'image AFFICHÉE vers un ratio cible : les marges nécessaires
+        (centrées) sont calculées ici, l'IA remplit le nouveau canvas."""
+        path = self._current_path
+        if not path or not os.path.isfile(path):
+            return
+        from PyQt6.QtGui import QImageReader
+        reader = QImageReader(path)
+        size = reader.size()
+        if not size.isValid():
+            QMessageBox.warning(self, "Outpaint", "Impossible de lire l'image affichée.")
+            return
+        w, h = size.width(), size.height()
+
+        dlg = QDialog(self)
+        dlg.setWindowTitle("Étendre l'image (Outpaint)")
+        dlg.setStyleSheet(f"QDialog{{background:{CP['bg1']};}}")
+        lay = QVBoxLayout(dlg)
+        lay.setContentsMargins(20, 18, 20, 16)
+        lay.setSpacing(10)
+        lbl = QLabel(f"Image actuelle : {w} × {h} px.\nChoisis le format cible — "
+                     "l'IA prolonge l'image dans les marges ajoutées (centrées).")
+        lbl.setWordWrap(True)
+        lay.addWidget(lbl)
+        combo = DownComboBox()
+        for name, ratio in self._OUTPAINT_RATIOS:
+            combo.addItem(name, ratio)
+        lay.addWidget(combo)
+        row = QHBoxLayout()
+        ok = QPushButton("⤢  Étendre")
+        cancel = QPushButton("Annuler")
+        cancel.setObjectName("secondary")
+        ok.clicked.connect(dlg.accept)
+        cancel.clicked.connect(dlg.reject)
+        row.addWidget(cancel)
+        row.addWidget(ok, 1)
+        lay.addLayout(row)
+        if dlg.exec() != QDialog.DialogCode.Accepted:
+            return
+
+        target = float(combo.currentData())
+        cur = w / h
+        expands = {}
+        if abs(target - cur) < 0.01:
+            QMessageBox.information(self, "Outpaint",
+                                    "L'image est déjà à ce format.")
+            return
+        if target > cur:      # élargir : marges gauche/droite
+            delta = int(round(h * target)) - w
+            expands = {"expand_left": delta // 2, "expand_right": delta - delta // 2}
+        else:                 # rehausser : marges haut/bas
+            delta = int(round(w / target)) - h
+            expands = {"expand_top": delta // 2, "expand_bottom": delta - delta // 2}
+
+        from imagegen import OutpaintWorker
+        out_dir = projects.project_dir(self._project_id) if self._project_id \
+            else self.cfg.get("output_dir", "")
+        self._set_busy(True, "Outpaint FLUX.2…")
+        self._park_worker(self._img_worker)
+        self._img_worker = OutpaintWorker(
+            fal_key=self.cfg.get("fal_key", ""),
+            image_path=path, expands=expands, out_dir=out_dir)
+        self._img_worker.progress.connect(self._on_img_progress)
+        self._img_worker.done.connect(self._on_img_done)
+        self._img_worker.failed.connect(self._on_img_error)
+        self._img_worker.start()
+
     def _on_img_progress(self, pct, msg):
         self._progress.setValue(pct)
         self._status.setText(msg)
@@ -1487,6 +1693,8 @@ class StudioImagesPanel(QWidget):
         self._current_path = path
         self._pending_images = [path]
         self._discuss_btn.setEnabled(True)
+        if hasattr(self, "_outpaint_btn"):
+            self._outpaint_btn.setEnabled(not path.lower().endswith(".svg"))
         self._preview.setVisible(True)
         pm = self._load_pixmap(path)
         if pm is None or pm.isNull():

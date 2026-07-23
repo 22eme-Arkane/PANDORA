@@ -981,6 +981,119 @@ class FoleyControlWorker(QThread):
             self.failed.emit(humanize_api_error(f"Erreur Foley Control : {e}"))
 
 
+class SoniloVideoWorker(QThread):
+    """
+    Sonilo v1.1 (sonilo/v1.1/video-to-sound-effects) : sound design AUTOMATIQUE
+    synchronisé sur l'action de la vidéo (auto-caption si prompt vide), puis MUX
+    de l'audio sur la vidéo source (ffmpeg) → sortie MP4 sonorisée. Drop-in de
+    SFX1VideoWorker / FoleyControlWorker (même signature / signaux). ~$0.009/s.
+      Entrée  : video_url (requis), prompt (optionnel), audio_format
+      Sortie  : { "audio": { "url": … } } → piste audio seule, muxée ici
+    (Intégration 2026-07-23 — schéma API vérifié sur fal.ai le même jour.)
+    """
+    progress = pyqtSignal(int, str)
+    finished = pyqtSignal(str)
+    failed   = pyqtSignal(str)
+
+    def __init__(self, video_path: str, text_prompt: str = "",
+                 duration: float = 10.0, label: str = ""):
+        super().__init__()
+        self._video    = video_path
+        self._prompt   = text_prompt or ""
+        self._duration = float(duration)
+        self._label    = label or "sonilo"
+
+    def run(self):
+        cfg = load_config()
+        key = cfg.get("api_key", "").strip()
+        if not key:
+            self._mock()
+        else:
+            self._real(key)
+
+    def _mock(self):
+        for pct, msg in [
+            (20, "Sonilo v1.1 (mode mock)…"),
+            (60, "Sound design auto-synchronisé…"),
+            (100, "Terminé — mode mock (aucune clé fal.ai)"),
+        ]:
+            self.progress.emit(pct, msg)
+            time.sleep(0.4)
+        self.finished.emit("")
+
+    def _real(self, key: str):
+        try:
+            import fal_client
+            import requests
+
+            if not self._video or not os.path.isfile(self._video):
+                raise RuntimeError("Vidéo introuvable.")
+            os.environ["FAL_KEY"] = key
+            cost_est = self._duration * 0.009
+
+            self.progress.emit(8, "Envoi de la vidéo à fal.ai…")
+            video_url = fal_client.upload_file(self._video)
+
+            self.progress.emit(25, f"Sonilo v1.1 — sound design auto (~${cost_est:.3f})…")
+            args = {"video_url": video_url, "audio_format": "wav"}
+            # Prompt OPTIONNEL : sans lui, Sonilo auto-captionne la vidéo.
+            if self._prompt.strip():
+                args["prompt"] = _sfx_prompt_en(self._prompt)
+            result = fal_client.subscribe("sonilo/v1.1/video-to-sound-effects",
+                                          arguments=args)
+
+            audio_url = ""
+            if isinstance(result, dict):
+                audio = result.get("audio")
+                if isinstance(audio, dict):
+                    audio_url = audio.get("url", "")
+                elif isinstance(audio, list) and audio:
+                    first = audio[0]
+                    audio_url = (first.get("url", "") if isinstance(first, dict)
+                                 else first if isinstance(first, str) else "")
+                elif isinstance(audio, str):
+                    audio_url = audio
+                if not audio_url:
+                    audio_url = result.get("url", "") or result.get("audio_url", "")
+            if not audio_url:
+                raise RuntimeError(f"URL audio manquante : {str(result)[:200]}")
+
+            self.progress.emit(70, "Téléchargement du sound design…")
+            data = requests.get(audio_url, timeout=300).content
+
+            out_dir = _sfx_output_dir()
+            ts      = int(time.time())
+            safe    = "".join(c for c in self._label if c.isalnum() or c in " -_").strip() or "sonilo"
+            audio_ext = ".mp3" if audio_url.lower().split("?")[0].endswith(".mp3") else ".wav"
+            audio_tmp = os.path.join(out_dir, f"{safe}_{ts}_sfx{audio_ext}")
+            with open(audio_tmp, "wb") as f:
+                f.write(data)
+
+            # Mux SFX → vidéo source (ffmpeg). Si ffmpeg absent : audio seul.
+            out_path = os.path.join(out_dir, f"{safe}_{ts}.mp4")
+            muxed = False
+            try:
+                import subprocess
+                from core.video_utils import get_ffmpeg_exe
+                _NO_WINDOW = subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0
+                self.progress.emit(88, "Mux du sound design sur la vidéo (ffmpeg)…")
+                r = subprocess.run(
+                    [get_ffmpeg_exe(), "-y", "-i", self._video, "-i", audio_tmp,
+                     "-c:v", "copy", "-map", "0:v:0", "-map", "1:a:0", "-shortest", out_path],
+                    capture_output=True, creationflags=_NO_WINDOW,
+                )
+                muxed = r.returncode == 0 and os.path.isfile(out_path)
+            except Exception:
+                muxed = False
+
+            final = out_path if muxed else audio_tmp
+            self.progress.emit(100, f"Sonilo v1.1 ✓  ~${cost_est:.3f}")
+            self.finished.emit(final)
+
+        except Exception as e:
+            self.failed.emit(humanize_api_error(f"Erreur Sonilo : {e}"))
+
+
 def _sfx_output_dir() -> str:
     """Dossier de sortie du sound design Live (vidéos sonorisées)."""
     try:

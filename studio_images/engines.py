@@ -158,6 +158,17 @@ ENGINES = {
     },
 }
 
+# ── Ordre du menu (demande Matthieu 2026-07-23) ──────────────────────────────
+# Seedream 5 Pro EN TÊTE (moteur par défaut — celui qui marche le mieux), puis
+# Recraft, puis Nano Banana 2 ; le reste garde l'ordre historique.
+_TOP_ENGINES = ["seedream5_pro", "recraft", "nb2"]
+ENGINES = {k: ENGINES[k] for k in
+           (_TOP_ENGINES + [k for k in ENGINES if k not in _TOP_ENGINES])}
+
+# Moteur par défaut d'une nouvelle installation (la préférence sauvegardée de
+# l'utilisateur prime toujours).
+DEFAULT_ENGINE = "seedream5_pro"
+
 
 def label_for(key: str) -> str:
     return ENGINES.get(key, ENGINES["nb2"])["label"]

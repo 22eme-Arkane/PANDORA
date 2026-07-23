@@ -190,3 +190,83 @@ class ImageWorker(QThread):
         else:
             self.progress.emit(100, f"{len(paths)} image(s) générée(s) !")
         self.done.emit(paths)
+
+
+class OutpaintWorker(QThread):
+    """FLUX.2 [pro] Outpaint (fal-ai/flux-2-pro/outpaint) : ÉTEND une image
+    au-delà de ses bords (marges en pixels par direction) — ex. passer un visuel
+    en ratio cinéma sans recadrer. Outil IMAGE uniquement (l'édition de clips
+    vidéo est un autre sujet). ~$0.03 le 1er Mpx de sortie + $0.015/Mpx suivant.
+    Même contrat que ImageWorker : done(list[str]) / failed(str) / progress.
+    (Intégration 2026-07-23 — schéma API fal.ai vérifié le même jour :
+    image_url + expand_top/bottom/left/right, mode high|fast, output_format.)"""
+    progress = pyqtSignal(int, str)
+    done     = pyqtSignal(list)
+    failed   = pyqtSignal(str)
+
+    def __init__(self, fal_key, image_path, expands: dict, out_dir):
+        super().__init__()
+        self._key     = (fal_key or "").strip()
+        self._image   = image_path
+        self._expands = {k: int(v) for k, v in (expands or {}).items() if int(v) > 0}
+        self._out_dir = out_dir
+
+    def run(self):
+        os.makedirs(self._out_dir, exist_ok=True)
+        if not self._image or not os.path.isfile(self._image):
+            self.failed.emit("Image source introuvable.")
+            return
+        if not self._expands:
+            self.failed.emit("Aucune extension demandée (l'image est déjà au format cible).")
+            return
+        if not self._key:
+            self._mock()
+        else:
+            self._real()
+
+    def _mock(self):
+        """Hors ligne : canvas étendu rempli par le bord répliqué (aperçu du cadrage)."""
+        try:
+            from PIL import Image
+            self.progress.emit(30, "Outpaint (mode mock) — extension du canvas…")
+            src = Image.open(self._image).convert("RGB")
+            l = self._expands.get("expand_left", 0)
+            r = self._expands.get("expand_right", 0)
+            t = self._expands.get("expand_top", 0)
+            b = self._expands.get("expand_bottom", 0)
+            w, h = src.size
+            canvas = src.resize((w + l + r, h + t + b))
+            canvas.paste(src, (l, t))
+            p = os.path.join(self._out_dir,
+                             f"studio_{int(time.time())}_outpaint_mock.png")
+            canvas.save(p, "PNG")
+            self.progress.emit(100, "Outpaint mock (aucune clé fal.ai) — cadrage indicatif.")
+            self.done.emit([p])
+        except Exception as e:
+            self.failed.emit(f"Pillow indisponible pour le mock : {e}")
+
+    def _real(self):
+        try:
+            import fal_client
+            import requests
+
+            os.environ["FAL_KEY"] = self._key
+            self.progress.emit(10, "Envoi de l'image à fal.ai…")
+            image_url = fal_client.upload_file(self._image)
+
+            self.progress.emit(35, "FLUX.2 Outpaint — extension de l'image…")
+            args = {"image_url": image_url, "mode": "high",
+                    "output_format": "png", **self._expands}
+            result = fal_client.subscribe("fal-ai/flux-2-pro/outpaint", arguments=args)
+
+            url = _extract_image_url(result)
+            self.progress.emit(75, "Téléchargement de l'image étendue…")
+            data = requests.get(url, timeout=180).content
+            p = os.path.join(self._out_dir,
+                             f"studio_{int(time.time())}_outpaint_flux-2-pro.png")
+            with open(p, "wb") as f:
+                f.write(data)
+            self.progress.emit(100, "Image étendue ✓")
+            self.done.emit([p])
+        except Exception as e:
+            self.failed.emit(f"Erreur Outpaint : {e}")

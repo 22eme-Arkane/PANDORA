@@ -22,7 +22,7 @@ from PyQt6.QtCore import Qt, pyqtSignal, QUrl, QThread
 # Durée max (s) par moteur SFX. ElevenLabs SFX V2 = 22 s confirmé (API) ; les autres
 # moteurs n'exposent pas de max documenté → plafond raisonnable de 30 s (best-effort).
 _SFX_TEXT_MAX  = {"elevenlabs": 22, "mmaudio": 30, "sfx16": 30}
-_SFX_VIDEO_MAX = {"sfx16": 30, "foley": 30, "mmaudio": 30}
+_SFX_VIDEO_MAX = {"sfx16": 30, "foley": 30, "mmaudio": 30, "sonilo": 30}
 from PyQt6.QtGui import QDesktopServices
 
 from ui.styles import C, STYLESHEET
@@ -423,6 +423,7 @@ class TabSoundDesignLive(QScrollArea):
             f"color:{C['text_secondary']};font-size:11px;background:transparent;border:none;")
         self._video_engine_combo = QComboBox()
         self._video_engine_combo.addItem(translate("SFX 1.6 (Mirelo)  ·  bande-son auto"), "sfx16")
+        self._video_engine_combo.addItem(translate("Sonilo v1.1  ·  sound design auto-synchronisé (~$0.009/s)"), "sonilo")
         self._video_engine_combo.addItem(translate("Foley Control  ·  SFX synchronisés (~$0.002/s)"), "foley")
         self._video_engine_combo.addItem(translate("MMAudio V2  ·  réf vidéo (~$0.001/s)"), "mmaudio")
         self._video_engine_combo.setStyleSheet(
@@ -888,7 +889,12 @@ class TabSoundDesignLive(QScrollArea):
                 return
             _eng = getattr(self, "_video_engine_combo", None)
             _eng_key = _eng.currentData() if _eng else "sfx16"
-            if _eng_key == "foley":
+            if _eng_key == "sonilo":
+                from api.tts import SoniloVideoWorker
+                self._worker = SoniloVideoWorker(
+                    self._video_path, self._txt_prompt_video.toPlainText().strip(),
+                    float(self._dur_video.value()), label="live_sonilo")
+            elif _eng_key == "foley":
                 from api.tts import FoleyControlWorker
                 self._worker = FoleyControlWorker(
                     self._video_path, self._txt_prompt_video.toPlainText().strip(),

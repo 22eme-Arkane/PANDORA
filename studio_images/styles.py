@@ -23,6 +23,17 @@ CP = {
     "text_dim":      "#3d4460",
 }
 
+# Flèche des menus déroulants (2026-07-23) — même image que l'app principale :
+# le triangle en bordures CSS rendait un petit carré sur ce build Qt.
+import os as _os
+import sys as _sys
+if getattr(_sys, "frozen", False):
+    _ICONS_DIR = _os.path.join(_sys._MEIPASS, "assets", "icons")
+else:
+    _ICONS_DIR = _os.path.join(
+        _os.path.dirname(_os.path.dirname(_os.path.abspath(__file__))), "assets", "icons")
+COMBO_ARROW_URL = _os.path.join(_ICONS_DIR, "combo_arrow.png").replace("\\", "/")
+
 # Bulles de chat
 BUBBLE_USER = f"""
     background-color: {CP['bg4']};
@@ -64,8 +75,7 @@ QComboBox {{
 QComboBox:focus {{ border-color: {CP['accent_dim']}; }}
 QComboBox::drop-down {{ border: none; width: 22px; }}
 QComboBox::down-arrow {{
-    border-left: 4px solid transparent; border-right: 4px solid transparent;
-    border-top: 5px solid {CP['text_dim']}; margin-right: 8px;
+    image: url("{COMBO_ARROW_URL}"); width: 10px; height: 6px; margin-right: 8px;
 }}
 QComboBox QAbstractItemView {{
     background-color: {CP['bg3']}; border: 1px solid {CP['border_bright']};

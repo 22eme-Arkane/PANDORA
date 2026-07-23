@@ -7,7 +7,7 @@ from PyQt6.QtWidgets import (
 )
 from PyQt6.QtCore import Qt, pyqtSignal, QObject, QTimer
 from PyQt6.QtGui import QPixmap
-from ui.styles import CP
+from ui.styles import CP, COMBO_ARROW_URL as _ARROW_URL
 from ui.widgets import HelpBlock
 from ui.icons import load_icon, claude_icon_pixmap
 import core.storyboard as sb_api
@@ -2384,8 +2384,7 @@ class PageStoryboard(QWidget):
             f"font-weight:600;padding:0 10px;}}"
             f"QComboBox:focus{{border-color:{CP['accent_dim']};}}"
             f"QComboBox::drop-down{{border:none;width:20px;}}"
-            f"QComboBox::down-arrow{{image:none;border-left:4px solid transparent;"
-            f"border-right:4px solid transparent;border-top:5px solid {CP['text_dim']};"
+            f'QComboBox::down-arrow{{image:url("{_ARROW_URL}");width:10px;height:6px;'
             f"margin-right:6px;}}"
             f"QComboBox QAbstractItemView{{background:{CP['bg2']};border:1px solid {CP['border_bright']};"
             f"selection-background-color:{CP['accent_dim']};color:{CP['text_primary']};"
@@ -2436,8 +2435,7 @@ class PageStoryboard(QWidget):
             f"border-radius:6px;color:{CP['text_secondary']};font-size:10px;padding:0 8px;}}"
             f"QComboBox:focus{{border-color:{CP['accent2_dim']};}}"
             f"QComboBox::drop-down{{border:none;width:16px;}}"
-            f"QComboBox::down-arrow{{image:none;border-left:4px solid transparent;"
-            f"border-right:4px solid transparent;border-top:5px solid {CP['text_dim']};"
+            f'QComboBox::down-arrow{{image:url("{_ARROW_URL}");width:10px;height:6px;'
             f"margin-right:4px;}}"
             f"QComboBox QAbstractItemView{{background:{CP['bg2']};border:1px solid {CP['border_bright']};"
             f"selection-background-color:{CP['accent2_dim']};color:{CP['text_primary']};"

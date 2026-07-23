@@ -312,8 +312,10 @@ class _ModeCard(QWidget):
         self.setCursor(Qt.CursorShape.PointingHandCursor)
         self.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
         self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
-        self.setMinimumHeight(248)
-        self.setMaximumHeight(420)
+        # Cartes AGRANDIES (maquette Matthieu 2026-07-23) : visuel plus haut,
+        # les deux rectangles deviennent le cœur de la page.
+        self.setMinimumHeight(300)
+        self.setMaximumHeight(460)
         self.setAccessibleName("Cinéma" if mode == "cinema" else "Live")
 
         layout = QVBoxLayout(self)
@@ -328,7 +330,7 @@ class _ModeCard(QWidget):
             # DROITE (astronaute conservé), le visuel Live des DEUX côtés (centré).
             focus_x=0.5 if mode == "live" else 0.0,
         )
-        self._image.setMinimumHeight(145)
+        self._image.setMinimumHeight(190)
         layout.addWidget(self._image, 5)
 
         info = QWidget()
@@ -770,8 +772,12 @@ class StartPage(_Background):
         actions.hide()
         recent_panel.hide()
         bottom_separator.hide()
-        root.addLayout(grid)
+        # Maquette Matthieu 2026-07-23 : titre EN HAUT, cartes CENTRÉES sur le
+        # milieu de la fenêtre (ressort court au-dessus, long en dessous —
+        # ratio 1:4 relevé sur la maquette).
         root.addStretch(1)
+        root.addLayout(grid)
+        root.addStretch(4)
 
         footer = QHBoxLayout()
         footer.setSpacing(4)
@@ -791,6 +797,11 @@ class StartPage(_Background):
 
         self.retranslate()
         self.set_mode("cinema")
+        # AUCUNE carte présélectionnée (demande Matthieu 2026-07-23) : le cadre
+        # ne s'affiche qu'au survol/clic — les deux cartes ont la même animation
+        # d'accueil. Le clic resélectionne via _launch_mode → set_mode.
+        self._cinema.set_selected(False)
+        self._live.set_selected(False)
 
     def resizeEvent(self, event):
         super().resizeEvent(event)

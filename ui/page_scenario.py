@@ -1,4 +1,4 @@
-import os
+﻿import os
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
     QTextEdit, QLineEdit, QFrame, QScrollArea, QFileDialog,
@@ -9,7 +9,7 @@ from PyQt6.QtCore import Qt, QTimer, pyqtSignal
 from core.i18n import translate
 from core.worker import abandon_thread
 from PyQt6.QtGui import QPixmap, QFont, QColor
-from ui.styles import CP
+from ui.styles import CP, COMBO_ARROW_URL as _ARROW_URL
 from ui.widgets import HelpBlock
 import core.scenario as scenario_api
 from ui.icons import load_icon, claude_icon_pixmap, install_hover_icon
@@ -610,8 +610,7 @@ class PageScenario(QWidget):
             f"QFontComboBox{{background:{CP['bg2']};border:1px solid {CP['border']};"
             f"border-radius:5px;color:{CP['text_primary']};font-size:10px;padding:0 6px;}}"
             f"QFontComboBox::drop-down{{border:none;width:16px;}}"
-            f"QFontComboBox::down-arrow{{image:none;border-left:4px solid transparent;"
-            f"border-right:4px solid transparent;border-top:5px solid {CP['text_dim']};"
+            f'QFontComboBox::down-arrow{{image:url("{_ARROW_URL}");width:10px;height:6px;'
             f"margin-right:4px;}}"
             f"QFontComboBox QAbstractItemView{{background:{CP['bg2']};color:{CP['text_primary']};"
             f"selection-background-color:{CP.get('accent2_dim', CP['bg3'])};border:1px solid {CP['border']};}}"

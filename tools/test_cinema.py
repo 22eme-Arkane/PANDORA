@@ -3349,7 +3349,8 @@ def moods_fenetre_options():
         assert hasattr(dlg, a), "option manquante : " + a
     _keys = [dlg._opt_engine.itemData(i) for i in range(dlg._opt_engine.count())]
     assert _keys == IE.raster_engines(), "combo moteur ≠ catalogue image complet"
-    assert _keys[0] == "nb2" and "flux" not in _keys and len(_keys) >= 14
+    # 2026-07-23 : Seedream 5 Pro en TÊTE du catalogue (décision Matthieu).
+    assert _keys[0] == "seedream5_pro" and "flux" not in _keys and len(_keys) >= 14
     assert dlg._opt_chars.isChecked() and dlg._opt_decor.isChecked() and dlg._opt_floor.isChecked()
     # Moteur SANS référence (Recraft) → réfs de cohérence grisées ; moteur à réfs (nb2) → actives.
     dlg._opt_engine.setCurrentIndex(_keys.index("recraft"))
@@ -4015,7 +4016,9 @@ def moteurs_image_catalogue_unifie():
     from api.nano_banana import _build_image_args
     # 1) Catalogue : union raster, vecteur exclu, GPT/FLUX.2 réintégrés.
     keys = IE.raster_engines()
-    assert keys[0] == "nb2" and len(keys) >= 14, "catalogue raster incomplet"
+    # 2026-07-23 : Seedream 5 Pro par défaut et en tête, puis Recraft, puis nb2.
+    assert keys[0] == "seedream5_pro" and keys[1] == "recraft" and keys[2] == "nb2" \
+        and len(keys) >= 14, "catalogue raster incomplet ou mal ordonné"
     assert "recraft_vector" not in keys, "vecteur SVG doit rester réservé au Studio IA"
     for k in ("gpt2", "flux2", "recraft", "zimage", "qwen_image", "ideogram",
               "flux_ultra", "seedream5", "seedream5_pro", "nb2_lite"):

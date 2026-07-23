@@ -243,8 +243,14 @@ class _Sidebar(QWidget):
         # retirés (demande Matthieu 2026-07-23) — la barre reprend une hauteur
         # compacte, seuls les pictogrammes + libellés restent.
         self.setFixedHeight(64)
+        # Sélecteur CIBLÉ obligatoire : une règle sans sélecteur se propage aux
+        # ENFANTS stylés → chaque groupe repeignait le border-top, d'où les
+        # « traits au-dessus des logos » (retour Matthieu 2026-07-23).
+        self.setObjectName("PandoraBottomBar")
+        self.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
         self.setStyleSheet(
-            f"background:{CP['sidebar']};border-top:1px solid {CP['border']};"
+            f"QWidget#PandoraBottomBar{{background:{CP['sidebar']};"
+            f"border-top:1px solid {CP['border']};}}"
         )
 
         lay = QHBoxLayout(self)

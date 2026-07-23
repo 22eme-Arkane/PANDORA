@@ -1614,14 +1614,14 @@ _FR_TO_EN: dict[str, str] = {
     # Studio Images / onglet Image IA — comparatif « plusieurs moteurs » (multi-sélection)
     "🧪  Générer avec plusieurs moteurs": "🧪  Generate with several engines",
     "Générer avec plusieurs moteurs":     "Generate with several engines",
-    "Choisis PLUSIEURS moteurs, puis génère UNE image par moteur sélectionné, "
+    "Choisis PLUSIEURS moteurs, puis génère ×N images par moteur sélectionné, "
     "à la suite, avec le même prompt — pour comparer les rendus.\n"
     "Le nom du moteur est ajouté à la fin de chaque fichier.\n"
-    "⚠ Chaque moteur est facturé séparément ; « Annuler » interrompt la file.":
-        "Pick SEVERAL engines, then generate ONE image per selected engine, one after "
+    "⚠ Chaque image est facturée séparément ; « Annuler » interrompt la file.":
+        "Pick SEVERAL engines, then generate ×N images per selected engine, one after "
         "another, from the same prompt — to compare their output.\n"
         "The engine name is appended to the end of each file.\n"
-        "⚠ Each engine is billed separately; « Cancel » stops the queue.",
+        "⚠ Each image is billed separately; « Cancel » stops the queue.",
     # Studio Images / onglet Image IA — lot jusqu'à 10 images en file d'attente
     "Nombre d'images à générer (variations).\n"
     "Le lot part en file d'attente : les images sont générées une par une, "
@@ -4473,6 +4473,19 @@ _FR_TO_EN: dict[str, str] = {
     "Aucun scénario": "No screenplay",
     "ARRI Alexa 65 grand format — grade chaud/froid, grain 35mm, key art sci-fi haut de gamme":
         "ARRI Alexa 65 large format — warm/cool grade, 35mm grain, high-end sci-fi key art",
+    # ── Page Projets refondue (2026-07-23) ──
+    "Ouvrir un projet…": "Open a project…",
+    "Rechercher un projet": "Search for a project",
+    "Aucun projet récent.\nCrée ton premier projet avec « ＋ Nouveau projet ».":
+        "No recent project.\nCreate your first project with “＋ New project”.",
+    "Ouvrir un projet PANDORA": "Open a PANDORA project",
+    "Dossier invalide": "Invalid folder",
+    "Ce dossier ne contient pas de projet PANDORA valide.":
+        "This folder does not contain a valid PANDORA project.",
+    "Renommer le projet": "Rename the project",
+    "Nouveau nom :": "New name:",
+    "Sonilo v1.1  ·  sound design auto-synchronisé (~$0.009/s)":
+        "Sonilo v1.1  ·  auto-synced sound design (~$0.009/s)",
     "⚡  Générer": "⚡  Generate",
     "Ouvrir ou fermer le panneau": "Open or close the panel",
     "Analyser la nouvelle image ?": "Analyze the new image?",

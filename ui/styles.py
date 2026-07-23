@@ -57,6 +57,18 @@ def _load_theme_cp() -> dict:
 
 CP = _load_theme_cp()
 
+# ── Flèche des menus déroulants (2026-07-23) ─────────────────────────────────
+# Le triangle en bordures CSS rendait un PETIT CARRÉ sur ce build Qt (retour
+# Matthieu) → vraie image de chevron, utilisée par TOUS les QComboBox.
+import os as _os
+import sys as _sys
+if getattr(_sys, "frozen", False):
+    _ICONS_DIR = _os.path.join(_sys._MEIPASS, "assets", "icons")
+else:
+    _ICONS_DIR = _os.path.join(
+        _os.path.dirname(_os.path.dirname(_os.path.abspath(__file__))), "assets", "icons")
+COMBO_ARROW_URL = _os.path.join(_ICONS_DIR, "combo_arrow.png").replace("\\", "/")
+
 # ── Seedance Palette (fond raccord PANDORA, accent purple) ────────────────────
 C = {
     "bg0":           CP["bg0"],
@@ -107,8 +119,7 @@ QComboBox {{
 QComboBox:focus {{ border-color: {C['accent_dim']}; }}
 QComboBox::drop-down {{ border: none; width: 24px; }}
 QComboBox::down-arrow {{
-    border-left: 4px solid transparent; border-right: 4px solid transparent;
-    border-top: 5px solid {C['text_dim']}; margin-right: 8px;
+    image: url("{COMBO_ARROW_URL}"); width: 10px; height: 6px; margin-right: 8px;
 }}
 QComboBox QAbstractItemView {{
     background-color: {C['bg3']}; border: 1px solid {C['border_bright']};

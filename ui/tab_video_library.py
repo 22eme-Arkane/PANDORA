@@ -10,7 +10,7 @@ from PyQt6.QtWidgets import (
     QPushButton, QScrollArea, QVBoxLayout, QWidget,
 )
 
-from ui.styles import C
+from ui.styles import C, COMBO_ARROW_URL as _ARROW_URL
 from ui.widgets import HelpBlock
 
 _VIDEO_EXTS = {".mp4", ".mov", ".avi", ".mkv", ".webm"}
@@ -221,9 +221,8 @@ class TabVideoLibrary(QScrollArea):
             f"border-radius:5px;color:{C['text_primary']};font-size:11px;"
             f"padding:3px 8px;min-height:0;}}"
             f"QComboBox::drop-down{{border:none;width:18px;}}"
-            f"QComboBox::down-arrow{{border-left:3px solid transparent;"
-            f"border-right:3px solid transparent;"
-            f"border-top:4px solid {C['text_dim']};margin-right:6px;}}"
+            f'QComboBox::down-arrow{{image:url("{_ARROW_URL}");width:10px;height:6px;'
+            f"margin-right:6px;}}"
             f"QComboBox QAbstractItemView{{background:{C['bg3']};"
             f"border:1px solid {C['border_bright']};color:{C['text_primary']};"
             f"selection-background-color:{C['accent_dim']};}}"

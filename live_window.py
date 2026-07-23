@@ -208,8 +208,12 @@ class _LiveSidebar(QWidget):
     def __init__(self):
         super().__init__()
         self.setFixedHeight(64)
+        # Sélecteur CIBLÉ : une règle sans sélecteur se propage aux enfants
+        # stylés → traits au-dessus des groupes (retour Matthieu 2026-07-23).
+        self.setObjectName("LiveBottomBar")
+        self.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
         self.setStyleSheet(
-            f"background:{CP['sidebar']};border-top:1px solid {CP['border']};"
+            f"QWidget#LiveBottomBar{{background:{CP['sidebar']};border-top:1px solid {CP['border']};}}"
         )
 
         lay = QHBoxLayout(self)
