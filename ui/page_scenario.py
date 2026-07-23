@@ -1405,7 +1405,7 @@ class PageScenario(QWidget):
             return
         from core.decoupage_layout import canonicalize_layout
         text = canonicalize_layout(text)
-        self._layout_view.setPlainText(text)
+        self._layout_view.setPlainText(self._layout_to_display(text))
         from ui.widgets import apply_paragraph_spacing
         apply_paragraph_spacing(self._layout_view)   # centré + respiration (façon Word)
         if hasattr(self, "_editor_tabs"):
@@ -1429,13 +1429,61 @@ class PageScenario(QWidget):
         """Recharge le Découpage PANDORA (onglet activé lorsqu'il existe)."""
         if not hasattr(self, "_layout_view"):
             return
-        self._layout_view.setPlainText(text or "")
+        self._layout_view.setPlainText(self._layout_to_display(text or ""))
         from ui.widgets import apply_paragraph_spacing
         apply_paragraph_spacing(self._layout_view)   # centré + respiration (façon Word)
         if hasattr(self, "_editor_tabs"):
             self._editor_tabs.setTabEnabled(2, bool((text or "").strip()))
             self._editor_tabs.setCurrentIndex(0)
         self._refresh_pipeline_status()
+
+    # ── Découpage : titre affiché ↔ marqueur technique ──────────────────────────
+    # L'en-tête technique « DÉCOUPAGE PANDORA 2 » (VERSION_MARKER) est OBLIGATOIRE en
+    # tête du document pour la détection/validation du format v2, mais l'utilisateur
+    # veut voir le TITRE DE SON PROJET (demande Matthieu 2026-07-24). On échange donc
+    # la 1re ligne à l'affichage, et on la reconvertit vers le marqueur à CHAQUE
+    # lecture destinée au stockage ou au parsing (via _read_layout()).
+    _LAYOUT_MARKER = "DÉCOUPAGE PANDORA 2"
+
+    def _layout_heading(self) -> str:
+        from core.context import get_project_name
+        name = (get_project_name() or "").strip()
+        return name.upper() if name else self._LAYOUT_MARKER
+
+    def _layout_to_display(self, text: str) -> str:
+        """Marqueur technique en 1re ligne → titre du projet (pour l'onglet)."""
+        if not text:
+            return text
+        lines = text.split("\n")
+        for i, l in enumerate(lines):
+            if l.strip():
+                if l.strip().upper() == self._LAYOUT_MARKER:
+                    lines[i] = self._layout_heading()
+                break
+        return "\n".join(lines)
+
+    def _layout_to_storage(self, text: str) -> str:
+        """Inverse : garantit le marqueur technique en 1re ligne (détection v2).
+        Ne touche QUE les documents à structure v2 (PLAN + PROMPT VISUEL) qui ont
+        perdu le marqueur au profit du titre affiché — les autres restent intacts."""
+        if not text or self._LAYOUT_MARKER in text.upper():
+            return text
+        import re as _re
+        if (_re.search(r"^PLAN\s+0*\d{1,3}\s*$", text, _re.I | _re.M)
+                and _re.search(r"^(?:PROMPT VISUEL|VISUAL PROMPT)\s*:", text, _re.I | _re.M)):
+            lines = text.split("\n")
+            for i, l in enumerate(lines):
+                if l.strip():
+                    lines[i] = self._LAYOUT_MARKER
+                    return "\n".join(lines)
+        return text
+
+    def _read_layout(self) -> str:
+        """Découpage en forme STOCKAGE (marqueur en 1re ligne). À utiliser pour toute
+        sauvegarde/parsing — jamais _layout_view.toPlainText() brut."""
+        if not hasattr(self, "_layout_view"):
+            return ""
+        return self._layout_to_storage(self._layout_view.toPlainText())
 
     def _refresh_pipeline_status(self):
         if not hasattr(self, "_pipeline_status_lbl"):
@@ -1446,7 +1494,7 @@ class PageScenario(QWidget):
         if hasattr(self, "_direction_note_edit"):
             data["direction_note"] = self._direction_note_edit.toPlainText()
         if hasattr(self, "_layout_view"):
-            data["decoupage_content"] = self._layout_view.toPlainText()
+            data["decoupage_content"] = self._read_layout()
         from core.editorial_pipeline import status
         labels = {
             "screenplay_empty":  ("Scénario à écrire", CP["text_dim"]),
@@ -2117,8 +2165,8 @@ class PageScenario(QWidget):
             "duration_defined":  dur_defined,
             "film_style":        film_style_key if film_style_key not in ("", "__sep__") else "",
             "direction_note":    self._direction_note_edit.toPlainText() if hasattr(self, "_direction_note_edit") else "",
-            "decoupage_content": self._layout_view.toPlainText() if hasattr(self, "_layout_view") else "",
-            "layout_content":    self._layout_view.toPlainText() if hasattr(self, "_layout_view") else "",
+            "decoupage_content": self._read_layout(),
+            "layout_content":    self._read_layout(),
             "music_tracks":      self._music_tracks,
             "music_mode":        self._music_mode,
             "ref_images":        [p for p in self._ref_images if os.path.isfile(p)],
@@ -2146,7 +2194,7 @@ class PageScenario(QWidget):
         """Source du découpage (règle 2026-07-09, AUTOMATIQUE — aucun choix manuel) :
         le « Découpage PANDORA » (decoupage_content) s'il existe, sinon le scénario/
         conducteur brut. Vaut pour TOUS les points de lancement (page + « Tout générer »)."""
-        layout = self._layout_view.toPlainText().strip() if hasattr(self, "_layout_view") else ""
+        layout = self._read_layout().strip()
         return layout or self._get_text()
 
     # ── Sauvegarde / ouverture physique du scénario (dossier « Scénario ») ──────
@@ -2180,8 +2228,8 @@ class PageScenario(QWidget):
             "raw_content":       text,
             "formatted_content": text,
             "direction_note":    self._direction_note_edit.toPlainText() if hasattr(self, "_direction_note_edit") else "",
-            "decoupage_content": self._layout_view.toPlainText() if hasattr(self, "_layout_view") else "",
-            "layout_content":    self._layout_view.toPlainText() if hasattr(self, "_layout_view") else "",
+            "decoupage_content": self._read_layout(),
+            "layout_content":    self._read_layout(),
             "duration_secs":     dur_secs,
             "duration_defined":  dur_defined,
             "film_style":        self._film_style_combo.currentData() or "",
@@ -2392,7 +2440,7 @@ class PageScenario(QWidget):
 
     def _on_plan_coedit(self):
         """Co-écriture des PLANS — affiner le découpage plan par plan."""
-        layout = self._layout_view.toPlainText().strip() if hasattr(self, "_layout_view") else ""
+        layout = self._read_layout().strip()
         if not layout:
             self._ai_progress_lbl.setText(
                 "Crée d'abord le Découpage PANDORA, puis affine les plans.")
@@ -2532,7 +2580,7 @@ class PageScenario(QWidget):
 
     def _on_storyboard(self):
         _src = self._get_text()
-        _lay = self._layout_view.toPlainText().strip() if hasattr(self, "_layout_view") else ""
+        _lay = self._read_layout().strip()
         if not _src and not _lay:
             self._ai_progress_lbl.setText("Écris d'abord un scénario à découper.")
             return

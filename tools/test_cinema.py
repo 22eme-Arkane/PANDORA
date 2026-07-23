@@ -2646,6 +2646,42 @@ def ecriteau_moteur_ia_du_storyboard():
 
 
 @test
+def decoupage_affiche_titre_projet():
+    """Onglet Découpage : la 1re ligne affiche le TITRE DU PROJET, pas le marqueur
+    technique « DÉCOUPAGE PANDORA 2 » (demande Matthieu 2026-07-24). Le marqueur est
+    reconstitué en tête à CHAQUE lecture destinée au stockage/parsing → détection v2
+    intacte, même après édition du titre par l'utilisateur."""
+    import core.context as _ctx
+    from ui.page_scenario import PageScenario
+    from core.decoupage_document import is_v2_document
+    _op, _oi = _ctx.get_project_path(), _ctx.get_project_id()
+    try:
+        import tempfile, os, json
+        d = tempfile.mkdtemp(prefix="pandora_t_")
+        json.dump({"name": "FIGHTER", "id": "p1"}, open(os.path.join(d, "project.json"), "w", encoding="utf-8"))
+        _ctx.set_project_path(d); _ctx.set_project_id("p1")
+        MARK = "DÉCOUPAGE PANDORA 2"
+        doc = (f"{MARK}\n\nSÉQUENCE 1 — X\n\nPLAN 01\nSOURCE SCÉNARIO : a.\n"
+               "PROMPT VISUEL : gros plan.\nDURÉE : 8s\n")
+        assert is_v2_document(doc)
+        p = PageScenario()
+        p._restore_layout(doc)
+        shown = p._layout_view.toPlainText()
+        assert next(l for l in shown.split("\n") if l.strip()) == "FIGHTER", "titre projet affiché"
+        assert MARK not in shown, "marqueur technique masqué à l'affichage"
+        stored = p._read_layout()
+        assert next(l for l in stored.split("\n") if l.strip()) == MARK, "marqueur reconstitué au stockage"
+        assert is_v2_document(stored), "v2 détecté après lecture stockage"
+        # Édition du titre par l'utilisateur → le marqueur revient quand même.
+        p._layout_view.setPlainText(shown.replace("FIGHTER", "PERSO"))
+        assert is_v2_document(p._read_layout()), "v2 préservé même après édition du titre"
+        # Doc non-v2 (Live/texte libre) : jamais modifié.
+        assert p._layout_to_storage("texte libre") == "texte libre", "non-v2 intact"
+    finally:
+        _ctx.set_project_path(_op); _ctx.set_project_id(_oi)
+
+
+@test
 def style_visuel_section_storyboard():
     """Le style visuel est CAPTURÉ dans le prompt du storyboard (dernière section
     [🎨 STYLE VISUEL] = style d'image projet + section « STYLE VISUEL » de la note),
