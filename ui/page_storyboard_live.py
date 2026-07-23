@@ -2489,7 +2489,15 @@ class PageStoryboard(QWidget):
         # latéraux et sur la barre d'outils du Conducteur (parité Cinéma
         # 2026-07-23 — les lignes tombent au même endroit).
         bar.setFixedHeight(40)
-        bar.setStyleSheet(f"background:{CP['bg0']};border-bottom:1px solid {CP['border']};")
+        # Sélecteur CIBLÉ + WA_StyledBackground (parité Cinéma 2026-07-24) : sans
+        # sélecteur, « border-bottom » se propageait aux enfants et traçait une
+        # SECONDE ligne parasite au-dessus des en-têtes du tableau.
+        bar.setObjectName("StoryboardToolbarLive")
+        bar.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
+        bar.setStyleSheet(
+            f"QWidget#StoryboardToolbarLive{{background:{CP['bg0']};"
+            f"border-bottom:1px solid {CP['border']};}}"
+        )
         lay = QHBoxLayout(bar)
         lay.setContentsMargins(20, 2, 20, 2)
         lay.setSpacing(10)

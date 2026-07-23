@@ -2526,7 +2526,17 @@ class PageStoryboard(QWidget):
         # latéraux et sur la barre d'outils du Scénario (demande Matthieu
         # 2026-07-23 — les lignes tombent au même endroit).
         bar.setFixedHeight(40)
-        bar.setStyleSheet(f"background:{CP['bg0']};border-bottom:1px solid {CP['border']};")
+        # Sélecteur CIBLÉ + WA_StyledBackground : une règle « border-bottom » SANS
+        # sélecteur se propage aux enfants et dessinait une SECONDE ligne parasite
+        # juste au-dessus de la ligne basse de la barre (double ligne au-dessus des
+        # en-têtes du tableau — retour Matthieu 2026-07-24, même piège Qt que le
+        # panneau Scénario / le dashboard).
+        bar.setObjectName("StoryboardToolbar")
+        bar.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
+        bar.setStyleSheet(
+            f"QWidget#StoryboardToolbar{{background:{CP['bg0']};"
+            f"border-bottom:1px solid {CP['border']};}}"
+        )
         lay = QHBoxLayout(bar)
         lay.setContentsMargins(20, 3, 20, 3)
         lay.setSpacing(10)
