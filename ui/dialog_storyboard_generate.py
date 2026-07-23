@@ -92,6 +92,8 @@ class StoryboardGenerateDialog(QDialog):
         self._scenario_text  = scenario_text
         self._duration_secs  = duration_secs
         self._scenario_id    = scenario_id
+        from core.decoupage_layout import is_structured_layout
+        self._deterministic  = is_structured_layout(scenario_text)
         self._shots: list[dict] = []
         self._worker = None
         self._strict_retry = False   # P2 : évite de re-demander après « Séparer »
@@ -119,7 +121,9 @@ class StoryboardGenerateDialog(QDialog):
             f"color:{CP['text_primary']};font-size:16px;font-weight:700;background:transparent;"
         )
         _col.addWidget(_t)
-        self._phase_lbl = QLabel("Claude génère le découpage technique…")
+        self._phase_lbl = QLabel(
+            "Conversion du découpage validé…" if self._deterministic
+            else "Création du découpage technique…")
         self._phase_lbl.setStyleSheet(
             f"color:{CP['text_dim']};font-size:10px;background:transparent;"
         )
@@ -134,9 +138,9 @@ class StoryboardGenerateDialog(QDialog):
 
         # ── Warning label ───────────────────────────────────────────────────────
         warn = QLabel(
-            "⏳  La génération peut prendre du temps selon la longueur du scénario.\n"
-            "Si vous utilisez un VPN, désactivez-le — il peut bloquer la connexion avec Claude."
-        )
+            "✓  Import déterministe : un plan du Découpage devient un plan du Storyboard, sans réécriture IA."
+            if self._deterministic else
+            "⏳  La génération peut prendre du temps selon la longueur du scénario.")
         warn.setWordWrap(True)
         warn.setStyleSheet(
             f"color:{CP['text_dim']};font-size:9px;font-style:italic;background:transparent;"
@@ -154,9 +158,13 @@ class StoryboardGenerateDialog(QDialog):
         )
         root.addWidget(self._progress)
 
-        from core.ai_provider import ai_name_for_task
-        self._status_lbl = QLabel(translate("Analyse du scénario via {ai}…").format(
-            ai=ai_name_for_task("storyboard_gen")))
+        if self._deterministic:
+            _status = "Validation des plans, durées, axes et prompts…"
+        else:
+            from core.ai_provider import ai_name_for_task
+            _status = translate("Analyse du scénario via {ai}…").format(
+                ai=ai_name_for_task("storyboard_gen"))
+        self._status_lbl = QLabel(_status)
         self._status_lbl.setStyleSheet(
             f"color:{CP['text_secondary']};font-size:11px;background:transparent;"
         )

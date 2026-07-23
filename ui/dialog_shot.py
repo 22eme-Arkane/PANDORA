@@ -560,6 +560,26 @@ class ShotDialog(QDialog):
         )
         lay.addWidget(self._seedance_prompt)
 
+        # Les descriptions d'identité restent hors du texte d'action éditable :
+        # elles sont recompilées depuis l'image active à chaque envoi vidéo.
+        from core.visual_context import identity_lock_text
+        _identity_text = identity_lock_text(self._shot)
+        self._identity_lock = QTextEdit()
+        self._identity_lock.setReadOnly(True)
+        self._identity_lock.setFixedHeight(86 if _identity_text else 48)
+        self._identity_lock.setPlainText(
+            _identity_text or "Aucune identité visuelle vérifiée n'est encore liée à ce plan."
+        )
+        self._identity_lock.setToolTip(
+            "Ces descriptions sont ajoutées automatiquement au prompt final avec les images de référence."
+        )
+        self._identity_lock.setStyleSheet(
+            f"QTextEdit{{background:{CP['bg1']};color:{CP['text_dim']};"
+            f"border:1px solid {CP['border']};border-radius:6px;padding:6px;font-size:9px;}}"
+        )
+        lay.addWidget(_lbl("🔒 Identités visuelles injectées au prompt final", 10, CP["accent"]))
+        lay.addWidget(self._identity_lock)
+
         # ── Prompt sound design (généré avec le storyboard → Sound Design) ────
         lay.addWidget(_lbl("Prompt sound design"))
         self._sound_prompt = QTextEdit()

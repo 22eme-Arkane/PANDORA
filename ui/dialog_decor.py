@@ -57,6 +57,8 @@ class DecorDialog(QDialog):
     def __init__(self, parent=None, item: dict | None = None):
         super().__init__(parent)
         self._item            = item or {}
+        from ui.visual_identity import prepare_owner
+        prepare_owner(self, "decor", self._item)
         self._image_path      = self._item.get("image_path", "")
         self._ref_paths       = list(self._item.get("ref_paths", []))
         self._assigned_shots  = list(self._item.get("assigned_shots", []))
@@ -98,6 +100,9 @@ class DecorDialog(QDialog):
 
         from core.i18n import retranslate_widget
         retranslate_widget(self)
+        if self._image_path:
+            from ui.visual_identity import analyze_active_image
+            analyze_active_image(self, self._image_path)
 
     # ── Formulaire ────────────────────────────────────────────────────────────
 
@@ -346,6 +351,66 @@ class DecorDialog(QDialog):
         )
         mode_row.addWidget(self._gen_mode, 1)
         lay.addLayout(mode_row)
+
+        # Deux choix explicites pour le workflow « 7 vues » : le premier moteur
+        # crée l'image maîtresse ; le second doit savoir ÉDITER des références et
+        # produit le plan d'architecture puis les six vues raccordées.
+        from core.config import load_config as _lc_m
+        from core.image_engines import engine_choices as _eng_choices
+        from core.image_engines import reference_engine_choices as _ref_eng_choices
+
+        _m_row = QHBoxLayout()
+        _m_row.setSpacing(8)
+        _m_lbl = _lbl("Image de départ")
+        _m_lbl.setFixedWidth(130)
+        _m_row.addWidget(_m_lbl)
+        self._model_combo = QComboBox()
+        for _mk, _mlbl in _eng_choices():
+            self._model_combo.addItem(_mlbl, _mk)
+        _mi = self._model_combo.findData(
+            self._item.get("image_model_key") or _lc_m().get("image_model", "nb2"))
+        if _mi >= 0:
+            self._model_combo.setCurrentIndex(_mi)
+        self._model_combo.setFixedHeight(30)
+        self._model_combo.setStyleSheet(_combo_ss())
+        _m_row.addWidget(self._model_combo, 1)
+        lay.addLayout(_m_row)
+
+        self._reference_model_row = QWidget()
+        self._reference_model_row.setStyleSheet("background:transparent;")
+        _rm_row = QHBoxLayout(self._reference_model_row)
+        _rm_row.setContentsMargins(0, 0, 0, 0)
+        _rm_row.setSpacing(8)
+        _rm_lbl = _lbl("Plan + raccords")
+        _rm_lbl.setFixedWidth(130)
+        _rm_row.addWidget(_rm_lbl)
+        self._reference_model_combo = QComboBox()
+        for _mk, _mlbl in _ref_eng_choices():
+            self._reference_model_combo.addItem(_mlbl, _mk)
+        _ri = self._reference_model_combo.findData(
+            self._item.get("room_reference_model") or "nb2")
+        if _ri >= 0:
+            self._reference_model_combo.setCurrentIndex(_ri)
+        self._reference_model_combo.setFixedHeight(30)
+        self._reference_model_combo.setStyleSheet(_combo_ss())
+        self._reference_model_combo.setToolTip(
+            "Uniquement les moteurs fal.ai dotés d'un endpoint d'édition : "
+            "ils reprennent l'image maîtresse, puis le plan d'architecture."
+        )
+        _rm_row.addWidget(self._reference_model_combo, 1)
+        lay.addWidget(self._reference_model_row)
+
+        self._reference_model_hint = QLabel(
+            "Le premier moteur crée le plan d'ensemble. Le second reprend cette "
+            "image pour le plan vu de dessus, puis reprend les deux références "
+            "pour conserver la même pièce dans les 6 vues."
+        )
+        self._reference_model_hint.setWordWrap(True)
+        self._reference_model_hint.setStyleSheet(
+            f"color:{CP['text_dim']};font-size:9px;background:transparent;border:none;"
+        )
+        lay.addWidget(self._reference_model_hint)
+        self._gen_mode.currentIndexChanged.connect(self._on_generation_mode_changed)
         self._style_combo.currentIndexChanged.connect(self._update_suffix_edit)
         _sfx_lbl = QLabel("↓  Suffix de style injecté (modifiable) :")
         _sfx_lbl.setStyleSheet(
@@ -376,33 +441,6 @@ class DecorDialog(QDialog):
         lay.addWidget(sep_c)
         self._creative = NanoBananaControlsPanel()
         lay.addWidget(self._creative)
-
-        # Modèle Nano Banana
-        _m_row = QHBoxLayout()
-        _m_row.setSpacing(8)
-        _m_lbl = _lbl("Modèle")
-        _m_lbl.setFixedWidth(60)
-        _m_row.addWidget(_m_lbl)
-        self._model_combo = QComboBox()
-        from core.config import load_config as _lc_m
-        from core.image_engines import engine_choices as _eng_choices
-        # Catalogue COMPLET des moteurs image de PANDORA (14 raster) — même liste
-        # partout : dialogs d'éléments, Moods, Studio IA (core/image_engines.py).
-        for _mk, _mlbl in _eng_choices():
-            self._model_combo.addItem(_mlbl, _mk)
-        _mi = self._model_combo.findData(_lc_m().get("image_model", "nb2"))
-        if _mi >= 0:
-            self._model_combo.setCurrentIndex(_mi)
-        self._model_combo.setFixedHeight(30)
-        self._model_combo.setStyleSheet(
-            f"QComboBox{{background:{CP['bg3']};border:1px solid {CP['border']};"
-            f"border-radius:6px;color:{CP['text_primary']};font-size:11px;padding:0 8px;}}"
-            f"QComboBox::drop-down{{border:none;width:20px;}}"
-            f"QComboBox QAbstractItemView{{background:{CP['bg3']};border:1px solid {CP['border_bright']};"
-            f"color:{CP['text_primary']};selection-background-color:{CP['accent_dim']};}}"
-        )
-        _m_row.addWidget(self._model_combo, 1)
-        lay.addLayout(_m_row)
 
         _gen_row = QHBoxLayout()
         _gen_row.setSpacing(8)
@@ -435,6 +473,7 @@ class DecorDialog(QDialog):
             f"background:{CP['bg4']};border-radius:3px;}}"
         )
         _gen_row.addWidget(self._spinbox_count)
+        self._on_generation_mode_changed()
 
         from core.config import get_image_price, load_config as _lc
         _price = get_image_price(_lc())
@@ -499,6 +538,8 @@ class DecorDialog(QDialog):
         _action_lay.addWidget(price_lbl)
         _action_lay.addWidget(self._progress)
         _action_lay.addWidget(self._status)
+        from ui.visual_identity import make_identity_button
+        _action_lay.addWidget(make_identity_button(self))
         outer_lay.addWidget(_action)
 
         # ── Boutons fixes en bas (hors scroll) ────────────────────────────────
@@ -1002,6 +1043,17 @@ class DecorDialog(QDialog):
         self._load_preview(path)
         self._refresh_preview_nav()
         self._status.setText(translate(status_msg))
+        from ui.visual_identity import analyze_active_image
+        source = "imported" if "import" in status_msg.lower() else "generated"
+        analyze_active_image(self, path, source=source)
+
+    def _on_generation_mode_changed(self, *_):
+        """N'affiche le moteur de raccord que lorsqu'il participe au workflow."""
+        seven = (self._gen_mode.currentData() == "seven_views")
+        if hasattr(self, "_reference_model_row"):
+            self._reference_model_row.setVisible(seven)
+        if hasattr(self, "_reference_model_hint"):
+            self._reference_model_hint.setVisible(seven)
 
     def _on_generate(self):
         prompt = self._prompt.toPlainText().strip()
@@ -1014,12 +1066,15 @@ class DecorDialog(QDialog):
         mode = self._gen_mode.currentData() if hasattr(self, "_gen_mode") else "single"
 
         _mk    = self._model_combo.currentData() if hasattr(self, "_model_combo") else None
+        _rk    = (self._reference_model_combo.currentData()
+                  if hasattr(self, "_reference_model_combo") else "nb2")
         _num   = self._spinbox_count.value() if hasattr(self, "_spinbox_count") else 1
         _usage = self._ref_usage_combo.currentData() if hasattr(self, "_ref_usage_combo") else "inspiration"
         _valid_refs = [p for p in self._ref_paths if p and os.path.isfile(p)]
         _style_ref  = _valid_refs[0] if _valid_refs else ""
 
         if mode == "seven_views":
+            from core.image_engines import short_label
             reply = QMessageBox.question(
                 self, "Générer les 7 vues de la pièce",
                 f"Cette option va générer le plan d'ensemble, le plan vu de dessus, "
@@ -1028,6 +1083,8 @@ class DecorDialog(QDialog):
                 f"Les 7 vues deviennent 7 décors de la même pièce, regroupés dans un "
                 f"bandeau dépliable de la page Décors ; le plan vu de dessus sert à la "
                 f"Mise en scène / au Plan de feu.\n"
+                f"\nImage de départ : {short_label(_mk or 'nb2')}"
+                f"\nPlan + raccords : {short_label(_rk or 'nb2')}\n"
                 f"Chaque vue consomme des crédits.\n\nContinuer ?",
                 QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
                 QMessageBox.StandardButton.Yes,
@@ -1045,8 +1102,12 @@ class DecorDialog(QDialog):
             from api.nano_banana import GenerateRoomViewsWorker
             self._seven_base_name = name
             self._seven_base_prompt = prompt
+            self._item["image_model_key"] = _mk or "nb2"
+            self._item["room_reference_model"] = _rk or "nb2"
             self._worker_gen = GenerateRoomViewsWorker(
-                prompt, name, model_key=_mk, style_suffix=suffix)
+                prompt, name, model_key=_mk, style_suffix=suffix,
+                reference_model_key=_rk,
+                category=self._cat.currentText())
             self._worker_gen.progress.connect(
                 lambda pct, msg: (self._progress.setValue(pct),
                                   self._status.setText(translate(msg))))
@@ -1100,6 +1161,8 @@ class DecorDialog(QDialog):
         self._load_preview(path)
         self._refresh_preview_nav()
         self._status.setText(translate("Image ajoutée ✓"))
+        from ui.visual_identity import analyze_active_image
+        analyze_active_image(self, path, source="generated")
         self._maybe_gen_floor_plan()   # plan vu de dessus EN MÊME TEMPS que le décor
 
     def _on_multi_gen_done(self, paths: list):
@@ -1114,6 +1177,8 @@ class DecorDialog(QDialog):
                 self._generated_images.append(p)
         self._preview_idx = self._generated_images.index(valid[0])
         self._image_path  = valid[0]
+        from ui.visual_identity import analyze_active_image
+        analyze_active_image(self, self._image_path, source="generated")
         self._load_preview(valid[0])
         self._refresh_preview_nav()
         n = len(valid)
@@ -1178,18 +1243,28 @@ class DecorDialog(QDialog):
         overview = next((v for v in view_entries if v.get("code") == "ensemble"),
                         view_entries[0])
         base    = self._name.text().strip() or self._item.get("name", "Décor")
-        cat     = self._item.get("category", "Autre")
+        cat     = self._cat.currentText() or self._item.get("category", "Autre")
+        self._item["category"] = cat
         fp_path = fp_entry["path"] if fp_entry else ""
+        fp_thumb = fp_entry.get("thumbnail_path", "") if fp_entry else ""
         # CE décor = la vue d'ensemble (id conservé → reste assigné aux plans).
         self._image_path = overview["path"]
         self._generated_images = [overview["path"]]
         self._preview_idx = 0
         self._item["room_group"] = base
         self._item["room_view"]  = "Ensemble"
+        self._item["room_base_prompt"] = self._seven_base_prompt
         self._item["image_path"] = overview["path"]
+        self._item["thumbnail_path"] = overview.get("thumbnail_path", "")
         self._item["generated_images"] = [overview["path"]]
+        self._item["image_model_key"] = (
+            self._model_combo.currentData() if hasattr(self, "_model_combo") else "nb2")
+        self._item["room_reference_model"] = (
+            self._reference_model_combo.currentData()
+            if hasattr(self, "_reference_model_combo") else "nb2")
         if fp_path:
             self._item["floor_plan"] = fp_path
+            self._item["floor_plan_thumbnail"] = fp_thumb
         decors_api.save_decor(self._item)   # persiste l'ensemble tout de suite
         # Chaque face → un nouveau décor frère de la même pièce.
         for v in view_entries:
@@ -1201,10 +1276,15 @@ class DecorDialog(QDialog):
                 "room_group":       base,
                 "room_view":        label,
                 "prompt":           v.get("prompt", "") or self._item.get("prompt", ""),
+                "room_base_prompt": self._seven_base_prompt,
                 "category":         cat,
                 "image_path":       v["path"],
+                "thumbnail_path":   v.get("thumbnail_path", ""),
                 "generated_images": [v["path"]],
                 "floor_plan":       fp_path,
+                "floor_plan_thumbnail": fp_thumb,
+                "image_model_key":  self._item.get("image_model_key", "nb2"),
+                "room_reference_model": self._item.get("room_reference_model", "nb2"),
             })
         self._decors_created = True
         self._load_preview(self._image_path)
@@ -1302,6 +1382,8 @@ class DecorDialog(QDialog):
         self._load_preview(path)
         self._refresh_preview_nav()
         self._status.setText("Image active ✓")
+        from ui.visual_identity import analyze_active_image
+        analyze_active_image(self, path, source="selected")
 
     def _view_label_for(self, path: str) -> str:
         """Libellé de la vue (ex. « Vue d'ensemble ») pour une image de la galerie,
@@ -1473,8 +1555,17 @@ class DecorDialog(QDialog):
             "assigned_shots":     self._assigned_shots,
             "decor_style_key":    self._style_combo.currentData() if hasattr(self, "_style_combo") else "",
             "ref_usage_key":      self._ref_usage_combo.currentData() if hasattr(self, "_ref_usage_combo") else "inspiration",
+            "image_model_key":    self._model_combo.currentData() if hasattr(self, "_model_combo") else "nb2",
+            "room_reference_model": self._reference_model_combo.currentData() if hasattr(self, "_reference_model_combo") else "nb2",
         })
+        from core.visual_identity import prepare_identity_for_save
+        data["visual_identity"] = prepare_identity_for_save(
+            getattr(self, "_visual_identity", {}), self._image_path
+        )
         self._saved_data = decors_api.save_decor(data)
+        from ui.visual_identity import offer_analysis_after_save
+        offer_analysis_after_save(self, "decor", self._saved_data or data,
+                                  decors_api.save_decor)
 
         # Propagate decor image + name to assigned storyboard shots
         if self._assigned_shots and self._image_path:

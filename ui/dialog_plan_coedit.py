@@ -1,14 +1,14 @@
-"""Studio de co-écriture des plans — réécrire/enrichir la « Mise en page PANDORA »
-un plan à la fois, en dialoguant avec l'assistant, avant la génération du découpage.
+"""Studio de co-écriture du Découpage PANDORA, une fiche de plan à la fois.
 
-Fenêtre PARTAGÉE Cinéma ↔ Live (nouvelle fonctionnalité) : le paramètre ``edition``
-calibre le worker (format « P01 | … » Cinéma vs « PLAN n — … » Live) et ``mode``
-calibre le Live (live / mapping).
+Pour Cinéma, le format courant est « DÉCOUPAGE PANDORA 2 » avec des fiches
+« PLAN 01 ». Le parseur historique reste uniquement capable d'ouvrir les anciens
+projets ; aucune nouvelle génération ne demande le format compact « P01 | … ».
+Le paramètre ``mode`` calibre le Live (live / mapping).
 
 Boucle : on choisit un plan (colonne gauche) → on dialogue avec l'assistant
 (colonne droite, images de référence facultatives) → l'aperçu du plan se met à
 jour. « Appliquer les modifications » réinjecte EN UNE FOIS tous les plans
-édités / réordonnés / ajoutés / supprimés dans la « Mise en page PANDORA », puis
+édités / réordonnés / ajoutés / supprimés dans le Découpage PANDORA, puis
 ferme la fenêtre. « Fermer » abandonne les changements (avec confirmation).
 """
 from PyQt6.QtWidgets import (
@@ -43,7 +43,7 @@ class _PlanListWidget(QListWidget):
 
 
 class PlanCoEditDialog(QDialog):
-    """Co-écriture plan par plan de la mise en page PANDORA.
+    """Co-écriture plan par plan du Découpage PANDORA.
 
     Après ``exec()`` : ``was_applied()`` n'est vrai QUE si l'utilisateur a cliqué
     « Appliquer les modifications » (ou confirmé « Appliquer et fermer ») —
@@ -53,7 +53,7 @@ class PlanCoEditDialog(QDialog):
 
     ⚠ AUTO-SAVE : à CHAQUE modification (réécriture IA, édition manuelle, réordo,
     ajout, suppression), ``layout_committed(str)`` est émis → le parent réécrit et
-    persiste la Mise en page en DIRECT. Plus aucune perte possible, même en fermant.
+    persiste le découpage en DIRECT. Plus aucune perte possible, même en fermant.
     Ctrl+Z / Ctrl+Y annulent / rétablissent.
     """
 
@@ -89,7 +89,7 @@ class PlanCoEditDialog(QDialog):
             except Exception:
                 self._facade_path = ""
 
-        self.setWindowTitle(translate("☁  Co-écriture des plans — Finalisation"))
+        self.setWindowTitle(translate("☁  Affiner le Découpage PANDORA"))
         self.setStyleSheet(f"QDialog{{background:{CP['bg0']};}}")
         try:
             from ui.widgets import fit_dialog_to_screen
@@ -102,7 +102,7 @@ class PlanCoEditDialog(QDialog):
             self._select_plan(0)
         else:
             self._plan_preview.setPlainText(translate(
-                "Aucun plan détecté. Génère d'abord « Mise en page PANDORA », "
+                "Aucun plan détecté. Crée d'abord le « Découpage PANDORA », "
                 "puis reviens co-écrire les plans un par un."))
             self._plan_preview.setReadOnly(True)
             self._input.setEnabled(False)
@@ -129,7 +129,7 @@ class PlanCoEditDialog(QDialog):
 
         # En-tête
         hdr = QHBoxLayout()
-        title = QLabel(translate("☁  Co-écriture des plans"))
+        title = QLabel(translate("☁  Affiner le découpage plan par plan"))
         title.setStyleSheet(
             f"color:{CP['text_primary']};font-size:15px;font-weight:800;background:transparent;")
         self._count_lbl = QLabel("")
@@ -143,7 +143,7 @@ class PlanCoEditDialog(QDialog):
 
         sub = QLabel(translate(
             "Réécris chaque plan avec l'assistant, réordonne, ajoute ou supprime. "
-            "Tout s'enregistre AUTOMATIQUEMENT dans la mise en page (Ctrl+Z pour annuler)."))
+            "Tout s'enregistre AUTOMATIQUEMENT dans le découpage (Ctrl+Z pour annuler)."))
         sub.setWordWrap(True)
         sub.setStyleSheet(f"color:{CP['text_dim']};font-size:10px;background:transparent;")
         root.addWidget(sub)
@@ -350,7 +350,7 @@ class PlanCoEditDialog(QDialog):
         self._btn_open_file.setFixedHeight(36)
         self._btn_open_file.setCursor(Qt.CursorShape.PointingHandCursor)
         self._btn_open_file.setToolTip(translate(
-            "Charger une co-écriture enregistrée (remplace la mise en page ; Ctrl+Z pour annuler)."))
+            "Charger un découpage enregistré (remplace le document actuel ; Ctrl+Z pour annuler)."))
         self._btn_open_file.setStyleSheet(_ss_ghost)
         self._btn_open_file.clicked.connect(self._on_open_file)
 

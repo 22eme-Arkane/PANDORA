@@ -74,36 +74,32 @@ def ensure_image_urls(fal_client, params: dict, emit_progress=None) -> None:
 
 
 def _analyze_style_ref(image_path: str) -> str:
-    """Claude Haiku Vision → extrait les mots-clés de style d'une image.
+    """Le moteur de vision sélectionné extrait les mots-clés de style d'une image.
     Retourne une chaîne EN (~12 mots) ou '' en cas d'erreur.
 
-    VISION : volontairement sur Anthropic, hors couche core/ai_provider
-    (le sélecteur d'assistant IA ne couvre que le texte en v1).
+    Les blocs multimodaux passent par ``core.ai_provider`` : le profil ChatGPT
+    n'effectue donc aucun appel Anthropic.
     """
     try:
-        import base64, anthropic as _anthropic, mimetypes
-        from core.config import load_config as _lc
-        key = _lc().get("anthropic_key", "").strip()
-        if not key:
+        import base64
+        from core.ai_provider import chat, key_error
+        if key_error(task="vision"):
             return ""
         ext = os.path.splitext(image_path)[1].lower()
         mime = {".jpg": "image/jpeg", ".jpeg": "image/jpeg",
                 ".png": "image/png",  ".webp": "image/webp"}.get(ext, "image/jpeg")
         with open(image_path, "rb") as f:
             b64 = base64.standard_b64encode(f.read()).decode()
-        client = _anthropic.Anthropic(api_key=key)
-        msg = client.messages.create(
-            model="claude-haiku-4-5", max_tokens=80,
-            messages=[{"role": "user", "content": [
+        text = chat(
+            "", [{"role": "user", "content": [
                 {"type": "image", "source": {"type": "base64", "media_type": mime, "data": b64}},
                 {"type": "text", "text": (
                     "Describe the visual style of this image in exactly 10-15 English words "
                     "as a video generation prompt prefix. Include: rendering medium, color treatment, "
                     "and film genre style. Output ONLY comma-separated keywords, no explanation."
                 )},
-            ]}],
-        )
-        return msg.content[0].text.strip().rstrip(".")
+            ]}], tier="utility", max_tokens=80, task="vision")
+        return text.strip().rstrip(".")
     except Exception:
         return ""
 

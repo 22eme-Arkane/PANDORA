@@ -99,7 +99,9 @@ def save_decor(data: dict) -> dict:
         data.setdefault("category", "Autre")
         data.setdefault("prompt", "")
         data.setdefault("image_path", "")
+        data.setdefault("thumbnail_path", "")  # aperçu léger préparé pendant la génération
         data.setdefault("floor_plan", "")   # plan vu de dessus (Mise en scène / Plan de feu)
+        data.setdefault("floor_plan_thumbnail", "")
         data.setdefault("generated_images", [])  # galerie d'images de CE décor
         data.setdefault("room_views", [])        # (legacy) galerie 7 vues d'un décor unique
         data.setdefault("room_view", "")         # face de la pièce (Avant/Arrière/…/Ensemble)
@@ -147,10 +149,54 @@ def set_floor_plan(decor_id: str, path: str) -> bool:
 
 
 def floor_plan_for_shot(shot: dict) -> str:
-    """Plan vu de dessus à utiliser pour un plan du storyboard : celui de son
-    décor assigné (decor_id), sinon vide."""
-    did = (shot or {}).get("decor_id")
-    if not did:
-        return ""
-    dec = get_decor(did)
-    return (dec or {}).get("floor_plan", "") if dec else ""
+    """Résout le plan vu de dessus d'un plan du storyboard.
+
+    Les anciens storyboards n'ont pas toujours ``decor_id`` renseigné, même si
+    le décor et son plan d'architecte ont déjà été générés. On tente donc, dans
+    l'ordre : identifiant explicite, nom du décor, assignation plan/séquence, puis
+    décor unique du projet. Cette fonction ne modifie jamais les données.
+    """
+    shot = shot or {}
+    decors = list_decors()
+
+    did = str(shot.get("decor_id") or "").strip()
+    if did:
+        dec = next((d for d in decors if d.get("id") == did), None)
+        if dec and dec.get("floor_plan"):
+            return dec["floor_plan"]
+
+    def norm(value) -> str:
+        import unicodedata
+        text = unicodedata.normalize("NFKD", str(value or ""))
+        return " ".join("".join(c for c in text if not unicodedata.combining(c)).casefold().split())
+
+    decor_name = norm(shot.get("decor_name") or shot.get("location") or shot.get("decor"))
+    if decor_name:
+        named = [d for d in decors if d.get("floor_plan") and
+                 (norm(d.get("name")) == decor_name or decor_name in norm(d.get("name"))
+                  or norm(d.get("name")) in decor_name)]
+        if len(named) == 1:
+            return named[0]["floor_plan"]
+
+    shot_id = str(shot.get("id") or "")
+    seq_values = {norm(shot.get("seq_num")), norm(shot.get("sequence")),
+                  norm(shot.get("seq_name")), norm(shot.get("scene_title"))}
+    seq_values.discard("")
+    assigned = []
+    for decor in decors:
+        if not decor.get("floor_plan"):
+            continue
+        if shot_id and shot_id in (decor.get("assigned_shots") or []):
+            assigned.append(decor)
+            continue
+        decor_sequences = {norm(v) for v in (decor.get("assigned_sequences") or [])}
+        if seq_values.intersection(decor_sequences):
+            assigned.append(decor)
+    if len(assigned) == 1:
+        return assigned[0]["floor_plan"]
+
+    with_plan = [d for d in decors if d.get("floor_plan")]
+    groups = {d.get("room_group") or d.get("group_id") or d.get("id") for d in with_plan}
+    if with_plan and len(groups) == 1:
+        return with_plan[0]["floor_plan"]
+    return ""

@@ -64,6 +64,9 @@ studio_images/output/
 # ── Claude Code (fichiers internes) ──────────────────────────────────────────
 .claude/
 
+# Instructions locales Codex — mémoire de travail privée, jamais publiée
+AGENTS.md
+
 # ── Projets utilisateur (données personnelles) ────────────────────────────────
 data/projects/
 
@@ -102,9 +105,12 @@ PANDORA_DEVLOG.md
 # ── Test et debug ─────────────────────────────────────────────────────────────
 test_*.py
 debug_*.py
+# Itérations de maquettes UI (artefacts de travail, jamais publiés)
+design/
 # … mais les harnais de non-régression SONT versionnés
 !tools/test_live.py
 !tools/test_cinema.py
+!tools/test_ai_routing_seedance.py
 
 # ── Binaires locaux (jamais commités) ────────────────────────────────────────
 ffmpeg.exe

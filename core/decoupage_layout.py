@@ -1,11 +1,9 @@
-"""Conversion DÉTERMINISTE d'une « Mise en page PANDORA » (déjà découpée en plans) en
-segments de découpage, SANS repasser par l'IA.
+"""Conversion déterministe d'un Découpage PANDORA en plans Storyboard.
 
-Quand l'utilisateur génère le découpage depuis la Mise en page PANDORA, celle-ci contient
-DÉJÀ N plans co-écrits (« PLAN n — … » + PROMPT VIDÉO / PROMPT SON). Les re-soumettre à
-Claude (a) TRONQUAIT la sortie (16000 tokens → 29 plans réduits à 17) et (b) jetait le
-travail de co-écriture en re-générant les prompts. On parse donc directement la mise en
-page : 1 plan = 1 segment, prompts REPRIS tels quels, zéro perte, zéro coût IA.
+Le format courant est le contrat éditorial « DÉCOUPAGE PANDORA 2 » défini dans
+``core.decoupage_document``. Les anciens formats Cinéma et Live restent importables
+uniquement pour ne pas casser les projets existants ; ils ne doivent plus servir de
+consigne de génération.
 
 Format produit par api.live_extract.FormatConducteurWorker (mise en page Live/Mapping) :
 
@@ -17,6 +15,12 @@ Format produit par api.live_extract.FormatConducteurWorker (mise en page Live/Ma
 """
 
 import re
+
+from core.decoupage_document import (
+    is_v2_document,
+    parse_v2_document,
+    validate_v2_document,
+)
 
 _ACTE_RE     = re.compile(r"^=+\s*(.*?)\s*=+\s*$")   # toute ligne « === … === » = frontière d'acte
 _ACTE_NUM_RE = re.compile(r"^ACTE\s+(\d+)\s*[—–:.\-]?\s*(.*)$", re.IGNORECASE)
@@ -43,31 +47,32 @@ def _strip_quotes(s: str) -> str:
     return s.strip()
 
 
-# ── Format CINÉMA (FormatPandoraWorker / _FORMAT_PANDORA) ─────────────────────
-# Deux formats de Mise en page PANDORA coexistent (cf. core/plan_layout.py) :
-#   - Live   : « PLAN 1 — Titre » + « PROMPT VIDÉO … » (géré par les regex ci-dessus) ;
-#   - Cinéma : « P01 | Valeur | Mouvement | Axe | ~Durée » + « → SEEDANCE: … ».
-# Le déterministe (1 plan = 1 plan, prompts co-écrits REPRIS tels quels) doit marcher
-# pour LES DEUX — sinon la mise en page Cinéma repart en réécriture IA (perte du travail).
+# ── Lecteur de migration du format CINÉMA historique ──────────────────────────
+# Le format compact ci-dessous n'est plus produit ni demandé. Il est reconnu une seule
+# fois au chargement afin de convertir sans perte les anciens projets en fiches v2.
 _CINE_PLAN_RE = re.compile(r"^P\s*0*(\d{1,3})\s*\|(.*)$", re.IGNORECASE)
-_CINE_SEED_RE = re.compile(r"^[\s→>»«\-–—]*SEEDANCE\s*:\s*(.*)$", re.IGNORECASE)
+# Les anciens projets utilisent « SEEDANCE ». Les nouveaux documents emploient
+# le terme moteur-agnostique « PROMPT » ; les deux restent lisibles.
+_CINE_PROMPT_RE = re.compile(
+    r"^[\s→>»«\-–—]*(?:PROMPT(?:\s+VID[EÉ]O)?|SEEDANCE)\s*:\s*(.*)$",
+    re.IGNORECASE,
+)
+_CINE_SEED_RE = _CINE_PROMPT_RE  # compatibilité pour les imports/tests historiques
 _CINE_SEQ_RE  = re.compile(
     r"^[\s—–\-]*S[EÉ]QUENCE\s+(\d+)\s*[—–:.\-]?\s*(.*?)\s*[—–\-]*$", re.IGNORECASE)
 _CINE_DUR_RE  = re.compile(r"~?\s*(\d+)\s*s", re.IGNORECASE)
 
 
 def _is_cinema_layout(text: str) -> bool:
-    """Mise en page au format CINÉMA (« P01 | … » + « → SEEDANCE: … ») ?"""
+    """Ancien découpage Cinéma convertible en fiches v2 ?"""
     lines = [l.strip() for l in (text or "").splitlines()]
     if not any(_CINE_PLAN_RE.match(l) for l in lines):
         return False
-    return any(_CINE_SEED_RE.match(l) for l in lines)
+    return any(_CINE_PROMPT_RE.match(l) for l in lines)
 
 
 def _parse_cinema_segments(text: str) -> list:
-    """Parse une Mise en page PANDORA au format CINÉMA en segments bruts (mêmes clés
-    que le parseur Live + `camera_axis`). Prompt vidéo = ligne « → SEEDANCE: … »
-    (multi-lignes tolérées), repris tel quel — c'est tout l'intérêt du déterministe."""
+    """Lit un ancien document Cinéma pour sa migration, sans appel IA."""
     segs: list = []
     cur = None
     act, act_name = 1, ""
@@ -99,6 +104,7 @@ def _parse_cinema_segments(text: str) -> list:
                 if md:
                     dur = int(md.group(1))
             cur = {"act": act, "act_name": act_name, "action": "",
+                   "number": int(mp.group(1)),
                    "duration": dur,
                    "shot_size":       parts[0] if len(parts) > 0 else "",
                    "camera_movement": parts[1] if len(parts) > 1 else "",
@@ -108,7 +114,7 @@ def _parse_cinema_segments(text: str) -> list:
             continue
         if cur is None:
             continue
-        ms = _CINE_SEED_RE.match(s)
+        ms = _CINE_PROMPT_RE.match(s)
         if ms:
             cur["prompt"] = ms.group(1).strip()
             collecting = "seedance"
@@ -126,6 +132,7 @@ def _parse_cinema_segments(text: str) -> list:
         # INT./EXT., ni un NOM PERSONNAGE tout-majuscules de dialogue) ; à défaut
         # l'INT./EXT. ; jamais vide.
         lines = seg.pop("_lines", [])
+        seg["source"] = "\n".join(lines).strip()
         _is_loc = lambda l: bool(re.match(r"^(INT\.|EXT\.)", l, re.IGNORECASE))
         _is_speaker = lambda l: l.isupper() and len(l) <= 40
         desc = [l for l in lines if not _is_loc(l) and not _is_speaker(l)]
@@ -137,16 +144,60 @@ def _parse_cinema_segments(text: str) -> list:
     return segs
 
 
-def is_structured_layout(text: str) -> bool:
-    """La source est-elle déjà une Mise en page PANDORA découpée en plans (Live OU
-    Cinéma) ?
+def _legacy_cinema_to_v2(text: str) -> str:
+    """Migre un ancien découpage Cinéma vers les fiches éditoriales v2.
 
-    Live : au moins un « PLAN n » ET un marqueur CORROBORANT (« PROMPT VIDÉO » ou une
-    ligne technique « Durée : … »). Cinéma : au moins un « P01 | … » ET un « → SEEDANCE: ».
+    Le lecteur historique n'est utilisé qu'ici afin de préserver les projets
+    existants. Aucune de ces anciennes conventions n'est renvoyée au modèle IA.
+    """
+    segments = _parse_cinema_segments(text)
+    if not segments:
+        return (text or "").strip()
+    lines = ["DÉCOUPAGE PANDORA 2"]
+    previous_sequence = None
+    for index, segment in enumerate(segments, 1):
+        sequence = int(segment.get("act") or 1)
+        if sequence != previous_sequence:
+            title = str(segment.get("act_name") or "").strip()
+            lines.extend(["", f"SÉQUENCE {sequence}" + (f" — {title}" if title else "")])
+            previous_sequence = sequence
+        duration = float(segment.get("duration") or 5)
+        duration_label = str(int(duration)) if duration.is_integer() else str(duration).replace(".", ",")
+        source = str(segment.get("source") or segment.get("action") or "").strip()
+        prompt = str(segment.get("prompt") or source).strip()
+        lines.extend([
+            "",
+            f"PLAN {index:02d}",
+            f"SOURCE SCÉNARIO : {source}",
+            "INTENTION : À préciser dans la coécriture du découpage.",
+            "RYTHME : À préciser.",
+            f"DURÉE : {duration_label}s",
+            f"PROMPT VISUEL : {prompt}",
+            "PERSONNAGES : —",
+            "DÉCOR : —",
+            "ACCESSOIRES : —",
+            "VÉHICULES : —",
+            "HMC : —",
+            f"VALEUR PROPOSÉE : {segment.get('shot_size') or '—'}",
+            f"AXE PROPOSÉ : {segment.get('camera_axis') or '—'}",
+            f"MOUVEMENT PROPOSÉ : {segment.get('camera_movement') or '—'}",
+            "FOCALE PROPOSÉE : —",
+            "MOOD : À CRÉER",
+        ])
+    return "\n".join(lines).strip()
+
+
+def is_structured_layout(text: str) -> bool:
+    """La source est-elle déjà un Découpage PANDORA structuré ?
+
+    Live : au moins un « PLAN n » ET un marqueur corroborant. Un ancien document
+    Cinéma complet est encore reconnu le temps de sa migration automatique.
     Un conducteur brut vaguement numéroté (« Plan 1 : intro ») N'EST PAS une mise en
     page co-écrite → il garde le découpage IA, pas le parsing."""
     if not text:
         return False
+    if is_v2_document(text):
+        return True
     if _is_cinema_layout(text):
         return True
     lines = [l.strip() for l in text.splitlines()]
@@ -156,13 +207,59 @@ def is_structured_layout(text: str) -> bool:
     return any(_VID_RE.match(l) or _TECH_RE.match(l) for l in lines)
 
 
+def canonicalize_layout(text: str) -> str:
+    """Normalise le format courant et migre les anciens découpages Cinéma.
+
+    Le format v2 reste strictement intact. Un ancien format Cinéma complet est converti
+    en fiches v2 ; les autres documents (notamment Live) restent inchangés, avec le seul
+    nom d'un ancien fournisseur remplacé par le terme neutre PROMPT.
+    """
+    value = (text or "").strip()
+    if is_v2_document(value):
+        return value
+    if _is_cinema_layout(value):
+        return _legacy_cinema_to_v2(value)
+    out = []
+    for raw in value.splitlines():
+        match = _CINE_PROMPT_RE.match(raw.strip())
+        if match:
+            out.append("→ PROMPT: " + match.group(1).strip())
+        else:
+            out.append(raw.rstrip())
+    return "\n".join(out).strip()
+
+
+def validate_layout(text: str) -> list[str]:
+    """Retourne les erreurs bloquantes d'un découpage structuré."""
+    if is_v2_document(text):
+        return validate_v2_document(text)
+    if not is_structured_layout(text):
+        return ["structure_non_reconnue"]
+    segments = parse_layout_segments(text)
+    if not segments:
+        return ["aucun_plan"]
+    errors: list[str] = []
+    for index, segment in enumerate(segments, 1):
+        try:
+            duration = float(segment.get("duration") or 0)
+        except (TypeError, ValueError):
+            duration = 0
+        if duration < 2 or duration > 15:
+            errors.append(f"P{index:02d}:duree")
+        if not str(segment.get("prompt") or "").strip():
+            errors.append(f"P{index:02d}:prompt")
+    return errors
+
+
 def parse_layout_segments(layout_text: str) -> list:
-    """Parse une Mise en page PANDORA en segments BRUTS (à passer ensuite à _normalize).
+    """Parse un Découpage PANDORA en segments bruts (à passer ensuite à _normalize).
 
     Chaque segment : {act, act_name, action, duration, shot_size, camera_movement,
     prompt, sound_prompt} (+ camera_axis en Cinéma). Robuste aux prompts multi-lignes,
     à un préfixe éventuel (timeline musicale) et aux petites variations de casse/
-    ponctuation. Dispatch automatique Cinéma (« P01 | … ») / Live (« PLAN n — … »)."""
+    ponctuation. Le format compact Cinéma n'est accepté que pour migrer un ancien projet."""
+    if is_v2_document(layout_text):
+        return parse_v2_document(layout_text)
     if _is_cinema_layout(layout_text):
         return _parse_cinema_segments(layout_text)
     segs: list = []
@@ -256,6 +353,12 @@ def layout_segments_to_cinema_shots(layout_text: str) -> list:
     caméra que la mise en page ne porte pas (focale, décor, acteurs, axe, heure…)
     restent vides : ils se complètent dans le Storyboard et les pages Mise en scène."""
     shots = []
+    try:
+        from core.visual_context import load_catalogs
+        _catalogs = load_catalogs()
+    except Exception:
+        _catalogs = {"characters": [], "decors": [], "accessories": [],
+                     "hmc": [], "vehicles": []}
     for i, seg in enumerate(parse_layout_segments(layout_text), 1):
         if not isinstance(seg, dict):
             continue
@@ -263,21 +366,60 @@ def layout_segments_to_cinema_shots(layout_text: str) -> list:
             _dur = min(float(seg.get("duration") or 8.0), 15.0)   # plafond Seedance
         except (TypeError, ValueError):
             _dur = 8.0
-        shots.append({
+        shot = {
             "number":          i,
-            "scene_title":     seg.get("action", ""),
+            "scene_title":     seg.get("intention") or seg.get("action", ""),
             "shot_size":       seg.get("shot_size", ""),
             "camera_movement": seg.get("camera_movement", ""),
             "camera_axis":     seg.get("camera_axis", ""),
+            "focal":           seg.get("focal", ""),
             "duration":        _dur,
             "seedance_prompt": seg.get("prompt", ""),
             "sound_prompt":    seg.get("sound_prompt", ""),
             "seq_num":         seg.get("act", 1),
             "seq_name":        seg.get("act_name", ""),
             "character_ids":   [],
+            "character_names": list(seg.get("character_names") or []),
             "accessory_ids":   [],
+            "accessory_names": list(seg.get("accessory_names") or []),
             "decor_id":        "",
+            "decor_name":      seg.get("decor_name", ""),
+            "vehicle_ids":     [],
+            "vehicle_names":   list(seg.get("vehicle_names") or []),
+            "hmc_ids":         [],
+            "hmc_names":       list(seg.get("hmc_names") or []),
             "merged":          False,
             "merged_note":     "",
-        })
+            # Transport narratif (2026-07-23) : l'extrait exact du scénario, le
+            # rythme et l'intention de la fiche survivent désormais jusqu'au
+            # composeur de prompt (bloc « narrative » de la bible visuelle).
+            "source_excerpt":  seg.get("source", ""),
+            "rhythm":          seg.get("rhythm", ""),
+            "intention":       seg.get("intention", ""),
+        }
+        try:
+            from core.visual_context import enrich_shot_entities
+            enrich_shot_entities(shot, _catalogs)
+        except Exception:
+            pass
+        # Le texte co-écrit reste intact dans ACTION. Les sections supplémentaires
+        # sont exclusivement déterministes : titre/entités et champs caméra. Elles
+        # permettent au composeur Seedance de reconnaître aussi ce chemin de découpage.
+        try:
+            from core.prompt_sections import (build as _build_sections,
+                                               is_structured as _is_structured_prompt,
+                                               technique_line)
+            if not _is_structured_prompt(shot["seedance_prompt"]):
+                entities = ", ".join(shot.get("character_names") or [])
+                staging = (f"Personnages visibles : {entities}." if entities
+                           else (shot.get("scene_title") or "Action du plan inchangée."))
+                decor = shot.get("decor_name", "")
+                technique = technique_line(shot) or f"Durée prévue : {_dur:g} secondes."
+                shot["seedance_prompt"] = _build_sections(
+                    action=seg.get("prompt", ""), staging=staging,
+                    decor=decor, technique=technique,
+                    sound=seg.get("sound_prompt", ""))
+        except Exception:
+            pass
+        shots.append(shot)
     return shots

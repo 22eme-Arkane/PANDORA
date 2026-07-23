@@ -68,7 +68,7 @@ class SeedanceHeader(QWidget):
 
         col = QVBoxLayout()
         col.setSpacing(1)
-        name = QLabel("STUDIO IA")
+        name = QLabel("VIDÉO IA")
         name.setStyleSheet(
             f"color:{C['text_primary']};font-size:13px;font-weight:700;letter-spacing:1px;"
         )
@@ -142,14 +142,12 @@ class SeedanceWidget(QWidget):
         from ui.tab_sound_design import TabSoundDesign
         from ui.tab_upscale import TabUpscale
         from ui.tab_music import TabMusic
-        from ui.tab_image import TabImage
 
         self.tab_t2v      = TabT2V()
         self.tab_davinci  = TabDavinciEdit()
         self.tab_engines  = TabVideoEngines()
         self.tab_sound    = TabSoundDesign()
         self.tab_music    = TabMusic()
-        self.tab_image    = TabImage()
         self.tab_upscale  = TabUpscale()
         self.tab_history  = TabHistory()
         self.tab_library  = TabVideoLibrary()
@@ -169,20 +167,21 @@ class SeedanceWidget(QWidget):
         # comme le dashboard du bas :
         #   1. VIDÉO    : Storyboard · Modifier · Génération directe · Upscaling
         #   2. AUDIO    : Sound Design · Musique IA
-        #   3. IMAGE    : Image IA
-        #   4. ARCHIVES : Vidéothèque · Historique
+        #   3. ARCHIVES : Vidéothèque · Historique
+        #
+        # Image IA est désormais une page globale du dashboard inférieur. Elle
+        # ne doit plus être imbriquée dans Vidéo IA.
         self.tabs.addTab(self.tab_t2v,     "Générer depuis Storyboard")   # 0
         self.tabs.addTab(self.tab_davinci, "Modifier des clips")          # 1
         self.tabs.addTab(self.tab_engines, "Génération directe")          # 2
         self.tabs.addTab(self.tab_upscale, "Upscaling")                   # 3 ─ fin G1
         self.tabs.addTab(self.tab_sound,   "Sound Design")                # 4
         self.tabs.addTab(self.tab_music,   "Musique IA")                  # 5 ─ fin G2
-        self.tabs.addTab(self.tab_image,   "Image IA")                    # 6 ─ fin G3
-        self.tabs.addTab(self.tab_library, "Vidéothèque")                 # 7
-        self.tabs.addTab(self.tab_history, "Historique")                  # 8
+        self.tabs.addTab(self.tab_library, "Vidéothèque")                 # 6
+        self.tabs.addTab(self.tab_history, "Historique")                  # 7
 
-        # Traits de groupe après Upscaling (3), Musique IA (5) et Image IA (6)
-        self.tabs.tabBar().set_group_ends({3, 5, 6})
+        # Traits de groupe après Upscaling (3) et Musique IA (5).
+        self.tabs.tabBar().set_group_ends({3, 5})
 
         self.tab_t2v.generation_done.connect(self.tab_history.add_entry)
         self.tab_davinci.generation_done.connect(self.tab_history.add_entry)
@@ -238,7 +237,6 @@ class SeedanceWidget(QWidget):
             (self.tab_upscale, "upscale"),
             (self.tab_sound,   "sound"),
             (self.tab_music,   "music"),
-            (self.tab_image,   "images"),
         ):
             ok, msg = service_available(service)
             idx = self.tabs.indexOf(tab)

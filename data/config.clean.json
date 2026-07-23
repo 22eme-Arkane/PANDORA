@@ -8,5 +8,19 @@
   "nano_banana_key": "",
   "last_project_location": "",
   "ui_language": "fr",
-  "eula_accepted": false
+  "eula_accepted": false,
+  "ai_provider": "anthropic",
+  "ai_profile": "anthropic_optimized",
+  "ai_engine": "",
+  "ai_model_creative": "claude-opus-4-8",
+  "openai_key": "",
+  "openai_model": "",
+  "mistral_key": "",
+  "ollama_url": "",
+  "ollama_model": "",
+  "custom_key": "",
+  "custom_url": "",
+  "custom_model": "",
+  "ai_available_models": {},
+  "ai_task_engines": {}
 }

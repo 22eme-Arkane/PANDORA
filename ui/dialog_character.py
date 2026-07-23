@@ -689,6 +689,8 @@ class CharacterDialog(QDialog):
             self._char = fresh if fresh else character
         else:
             self._char = character or {}
+        from ui.visual_identity import prepare_owner
+        prepare_owner(self, "character", self._char)
         self._image_path  = self._char.get("image_path", "")
         self._sheet_path  = self._char.get("sheet_path", "")
         self._ref_paths   = list(self._char.get("ref_paths", []))
@@ -735,6 +737,9 @@ class CharacterDialog(QDialog):
 
         from core.i18n import retranslate_widget
         retranslate_widget(self)
+        if self._image_path:
+            from ui.visual_identity import analyze_active_image
+            QTimer.singleShot(0, lambda: analyze_active_image(self, self._image_path))
 
     # ── Panneau gauche (formulaire) ───────────────────────────────────────────
 
@@ -1147,6 +1152,8 @@ class CharacterDialog(QDialog):
         _action_lay.addWidget(price_lbl)
         _action_lay.addWidget(self._progress)
         _action_lay.addWidget(self._status)
+        from ui.visual_identity import make_identity_button
+        _action_lay.addWidget(make_identity_button(self))
         outer_lay.addWidget(_action)
 
         btn_bar = QWidget()
@@ -1791,6 +1798,8 @@ class CharacterDialog(QDialog):
                 self._load_preview(preview)
             self._refresh_preview_nav()
             self._status.setText(translate("Portrait ajouté ✓"))
+            from ui.visual_identity import analyze_active_image
+            analyze_active_image(self, self._image_path, source="generated")
             self._set_nav(0)
         else:
             self._status.setText("Image non utilisée — clique Générer pour réessayer.")
@@ -1810,6 +1819,8 @@ class CharacterDialog(QDialog):
         self._preview_idx = first_new
         self._sheet_path  = valid[0]
         self._image_path  = valid[0]
+        from ui.visual_identity import analyze_active_image
+        analyze_active_image(self, self._image_path, source="generated")
         self._refresh_gallery_tab()
         self._load_preview(valid[0])
         self._refresh_preview_nav()
@@ -1967,6 +1978,8 @@ class CharacterDialog(QDialog):
         self._refresh_preview_nav()
         self._refresh_gallery_tab()
         self._status.setText("Photo importée comme personnage ✓")
+        from ui.visual_identity import analyze_active_image
+        analyze_active_image(self, path, source="imported")
         # Active les boutons qui dépendent d'une image existante
         if hasattr(self, "_btn_remove_bg"):
             self._btn_remove_bg.setEnabled(True)
@@ -2780,7 +2793,17 @@ class CharacterDialog(QDialog):
             "hmc_ids":          list(self._active_hmc_ids),
             "ref_usage_key":    self._ref_usage_combo.currentData() if hasattr(self, "_ref_usage_combo") else "inspiration",
         })
+        from core.visual_identity import prepare_identity_for_save
+        data["visual_identity"] = prepare_identity_for_save(
+            getattr(self, "_visual_identity", {}), self._image_path
+        )
         self._saved_data = casting_api.save_character(data)
+
+        # Nouvelle image active non analysée → propose l'analyse (prompts du
+        # Storyboard adaptés partout où le personnage apparaît, 2026-07-23).
+        from ui.visual_identity import offer_analysis_after_save
+        offer_analysis_after_save(self, "character", self._saved_data or data,
+                                  casting_api.save_character)
 
         self.accept()
 

@@ -240,13 +240,24 @@ def disable_default_buttons(dlg) -> None:
 # ── Help block ─────────────────────────────────────────────────────────────────
 
 class HelpBlock(QFrame):
-    """Collapsible contextual help strip — collapsed by default, discreet 28 px bar."""
+    """Collapsible contextual help strip — collapsed by default, discreet 28 px bar.
+
+    RETIRÉ DE L'AFFICHAGE le 2026-07-23 (demande Matthieu) : le guide complet du
+    panneau GUIDE remplace ces bandeaux dans tous les onglets. Le composant et
+    ses textes restent en place — remettre ``_HELP_STRIPS_VISIBLE = True`` pour
+    les réafficher.
+    """
+
+    _HELP_STRIPS_VISIBLE = False
 
     def __init__(self, title: str, lines: list[str], colors: dict | None = None):
         super().__init__()
         clr = colors or C
         self._title = title
         self.setObjectName("help_block")
+        if not HelpBlock._HELP_STRIPS_VISIBLE:
+            self.setVisible(False)
+            self.setMaximumHeight(0)
         self.setStyleSheet(
             "QFrame#help_block{"
             "background:rgba(255,255,255,0.02);"
@@ -584,3 +595,80 @@ class ProgressBlock(QFrame):
             f"color:{C['red']};font-size:11px;font-weight:700;letter-spacing:1px;border:none;"
         )
         self.status.setText(f"› {msg}")
+
+
+def make_actions_menu_button(bar, entries, red_entry=None, label="Action"):
+    """Bouton « ☰ Action » + menu déroulant reprenant des boutons EXISTANTS
+    (principe introduit sur le Storyboard le 2026-07-22).
+
+    Les boutons sources sont reparentés à ``bar`` et cachés : toute la logique
+    d'état existante (setEnabled/setText) continue d'écrire dedans, et le menu se
+    recale sur leur texte/état/infobulle à chaque ouverture. ``red_entry`` est un
+    bouton destructif affiché en ROUGE (via QWidgetAction, seule façon de colorer
+    une entrée individuelle de QMenu).
+    """
+    from PyQt6.QtWidgets import QMenu, QWidgetAction, QPushButton
+    from core.i18n import translate as _tr
+
+    sources = list(entries) + ([red_entry] if red_entry is not None else [])
+    for _b in sources:
+        _b.setParent(bar)
+        _b.hide()
+
+    btn = QPushButton("☰  " + _tr(label))
+    btn.setFixedHeight(36)
+    btn.setStyleSheet(
+        f"QPushButton{{background:transparent;color:{CP['accent']};"
+        f"border:1px solid {CP['accent']};border-radius:8px;"
+        f"font-size:11px;font-weight:700;padding:0 14px;}}"
+        f"QPushButton:hover{{background:rgba(78,205,196,0.12);}}"
+        f"QPushButton:pressed{{background:rgba(78,205,196,0.22);}}"
+        f"QPushButton::menu-indicator{{image:none;width:0;}}"
+    )
+    menu = QMenu(btn)
+    menu.setStyleSheet(
+        f"QMenu{{background:{CP['bg2']};border:1px solid {CP['border_bright']};"
+        f"border-radius:8px;padding:6px;}}"
+        f"QMenu::item{{color:{CP['text_primary']};padding:7px 18px;font-size:11px;}}"
+        f"QMenu::item:selected{{background:{CP.get('accent_dim', CP['bg3'])};color:{CP['text_primary']};}}"
+        f"QMenu::item:disabled{{color:{CP['text_dim']};}}"
+    )
+    menu.setToolTipsVisible(True)
+    pairs = [(menu.addAction(""), _src) for _src in entries]
+    for _act, _src in pairs:
+        _act.triggered.connect(_src.click)   # .click() respecte l'état désactivé
+
+    del_btn = None
+    if red_entry is not None:
+        _wa = QWidgetAction(menu)
+        del_btn = QPushButton()
+        del_btn.setFlat(True)
+        del_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        del_btn.setStyleSheet(
+            f"QPushButton{{background:transparent;color:{CP['red']};border:none;"
+            f"border-radius:0px;padding:7px 18px;font-size:11px;text-align:left;}}"
+            f"QPushButton:hover{{background:rgba(255,79,106,0.12);}}"
+            f"QPushButton:disabled{{color:{CP['text_dim']};}}"
+        )
+
+        def _red_clicked():
+            menu.close()
+            red_entry.click()
+
+        del_btn.clicked.connect(_red_clicked)
+        _wa.setDefaultWidget(del_btn)
+        menu.addAction(_wa)
+
+    def _sync():
+        for _act, _src in pairs:
+            _act.setText(_src.text())
+            _act.setToolTip(_src.toolTip())
+            _act.setEnabled(_src.isEnabled())
+        if del_btn is not None:
+            del_btn.setText(red_entry.text())
+            del_btn.setToolTip(red_entry.toolTip())
+            del_btn.setEnabled(red_entry.isEnabled())
+
+    menu.aboutToShow.connect(_sync)
+    btn.setMenu(menu)
+    return btn

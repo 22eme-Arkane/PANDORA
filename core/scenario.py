@@ -6,6 +6,44 @@ from datetime import datetime
 from core.paths import APP_ROOT as _ROOT
 
 
+def normalize_scenario(data: dict | None) -> dict:
+    """Migration douce Scénario → Note de réalisation → Découpage.
+
+    ``layout_content`` reste écrit comme alias pour les versions 1.3.x, tandis que
+    ``decoupage_content`` devient le nom canonique. Aucun ancien projet n'est perdu.
+    """
+    out = dict(data or {})
+    decoupage = out.get("decoupage_content")
+    if decoupage is None:
+        decoupage = out.get("layout_content", "")
+    try:
+        from core.decoupage_layout import canonicalize_layout
+        decoupage = canonicalize_layout(str(decoupage or ""))
+    except Exception:
+        decoupage = str(decoupage or "")
+    out["decoupage_content"] = decoupage
+    out["layout_content"] = out["decoupage_content"]
+    try:
+        from core.decoupage_document import is_v2_document
+        out["decoupage_format_version"] = 2 if is_v2_document(decoupage) else (0 if not decoupage else 1)
+    except Exception:
+        out["decoupage_format_version"] = int(out.get("decoupage_format_version") or 0)
+    from core.direction_note import normalize_note
+    out["direction_note"] = normalize_note(out.get("direction_note", ""))
+    out.setdefault("workflow_version", 2)
+    from core.editorial_pipeline import ensure_metadata
+    return ensure_metadata(out)
+
+
+def mark_storyboard_synced(scenario_id: str) -> dict | None:
+    """Mémorise que le storyboard courant provient du découpage courant."""
+    scenario = get_scenario(scenario_id)
+    if not scenario:
+        return None
+    from core.editorial_pipeline import mark_storyboard_built
+    return save_scenario(mark_storyboard_built(scenario))
+
+
 def _sce_dir() -> str:
     from core.context import get_data_root
     return os.path.join(get_data_root(), "scenarios")
@@ -38,20 +76,21 @@ def list_scenarios() -> list[dict]:
     pid = get_project_id()
     index = _load_index()
     if pid:
-        return [s for s in index if s.get("project_id") == pid]
-    return index
+        return [normalize_scenario(s) for s in index if s.get("project_id") == pid]
+    return [normalize_scenario(s) for s in index]
 
 
 def get_scenario(scenario_id: str) -> dict | None:
     index = _load_index()
     for scenario in index:
         if scenario.get("id") == scenario_id:
-            return scenario
+            return normalize_scenario(scenario)
     return None
 
 
 def save_scenario(data: dict) -> dict:
     from core.context import get_project_id
+    data = normalize_scenario(data)
     _ensure()
     index = _load_index()
     now = datetime.now().isoformat()
@@ -66,6 +105,9 @@ def save_scenario(data: dict) -> dict:
         data.setdefault("title", "")
         data.setdefault("raw_content", "")
         data.setdefault("formatted_content", "")
+        data.setdefault("direction_note", "")
+        data.setdefault("decoupage_content", "")
+        data.setdefault("layout_content", "")
         data.setdefault("file_path", "")
         index.insert(0, data)
     else:
@@ -134,7 +176,7 @@ def list_saved() -> list[str]:
 
 def export_scenario_file(name: str, data: dict) -> str:
     """Sauvegarde physique du scénario sous <projet>/data/Scénario/<nom>.json."""
-    payload = dict(data or {})
+    payload = normalize_scenario(data)
     payload["saved_name"] = name
     payload["saved_at"] = datetime.now().isoformat(timespec="seconds")
     path = os.path.join(_saves_dir(), _safe_name(name) + ".json")
@@ -149,7 +191,7 @@ def import_scenario_file(name: str) -> dict | None:
     if not os.path.isfile(path):
         return None
     with open(path, "r", encoding="utf-8") as f:
-        return json.load(f)
+        return normalize_scenario(json.load(f))
 
 
 def saves_dir() -> str:
@@ -160,7 +202,7 @@ def saves_dir() -> str:
 def export_scenario_to(path: str, data: dict) -> str:
     """Sauvegarde le scénario vers un fichier CHOISI par l'utilisateur (boîte de
     dialogue Windows). Chargeable depuis n'importe quel projet."""
-    payload = dict(data or {})
+    payload = normalize_scenario(data)
     payload.setdefault("saved_name", os.path.splitext(os.path.basename(path))[0])
     payload["saved_at"] = datetime.now().isoformat(timespec="seconds")
     with open(path, "w", encoding="utf-8") as f:
@@ -173,7 +215,7 @@ def import_scenario_from(path: str) -> dict | None:
     if not path or not os.path.isfile(path):
         return None
     with open(path, "r", encoding="utf-8") as f:
-        return json.load(f)
+        return normalize_scenario(json.load(f))
 
 
 def read_file(path: str) -> str:

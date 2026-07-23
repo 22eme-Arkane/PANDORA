@@ -62,6 +62,8 @@ class VehicleDialog(QDialog):
     def __init__(self, parent=None, item: dict | None = None):
         super().__init__(parent)
         self._item             = item or {}
+        from ui.visual_identity import prepare_owner
+        prepare_owner(self, "vehicle", self._item)
         self._image_path       = self._item.get("image_path", "")
         self._ref_paths        = list(self._item.get("ref_paths", []))
         self._assigned_shots   = list(self._item.get("assigned_shots", []))
@@ -104,6 +106,9 @@ class VehicleDialog(QDialog):
 
         from core.i18n import retranslate_widget
         retranslate_widget(self)
+        if self._image_path:
+            from ui.visual_identity import analyze_active_image
+            analyze_active_image(self, self._image_path)
 
     def _build_form(self):
         outer = QWidget()
@@ -463,6 +468,8 @@ class VehicleDialog(QDialog):
         _action_lay.addWidget(price_lbl)
         _action_lay.addWidget(self._progress)
         _action_lay.addWidget(self._status)
+        from ui.visual_identity import make_identity_button
+        _action_lay.addWidget(make_identity_button(self))
         outer_lay.addWidget(_action)
 
         btn_bar = QWidget()
@@ -839,6 +846,9 @@ class VehicleDialog(QDialog):
         self._load_preview(path)
         self._refresh_preview_nav()
         self._status.setText(translate(status_msg))
+        from ui.visual_identity import analyze_active_image
+        source = "imported" if "import" in status_msg.lower() else "generated"
+        analyze_active_image(self, path, source=source)
 
     def _remove_bg_on(self, path: str):
         if getattr(self, "_biref_worker", None) and self._biref_worker.isRunning():
@@ -966,6 +976,8 @@ class VehicleDialog(QDialog):
         self._load_preview(path)
         self._refresh_preview_nav()
         self._status.setText("Image active ✓")
+        from ui.visual_identity import analyze_active_image
+        analyze_active_image(self, path, source="selected")
 
     def _on_gen_done(self, path):
         self._btn_gen.setEnabled(True)
@@ -980,6 +992,8 @@ class VehicleDialog(QDialog):
         self._load_preview(path)
         self._refresh_preview_nav()
         self._status.setText(translate("Image importée ✓"))
+        from ui.visual_identity import analyze_active_image
+        analyze_active_image(self, path, source="generated")
 
     def _on_multi_gen_done(self, paths: list):
         self._btn_gen.setEnabled(True)
@@ -993,6 +1007,8 @@ class VehicleDialog(QDialog):
                 self._generated_images.append(p)
         self._preview_idx = self._generated_images.index(valid[0])
         self._image_path = valid[0]
+        from ui.visual_identity import analyze_active_image
+        analyze_active_image(self, self._image_path, source="generated")
         self._load_preview(valid[0])
         self._refresh_preview_nav()
         n = len(valid)
@@ -1153,7 +1169,14 @@ class VehicleDialog(QDialog):
             "vehicle_style_key":  self._style_combo.currentData() if hasattr(self, "_style_combo") else "",
             "ref_usage_key":      self._ref_usage_combo.currentData() if hasattr(self, "_ref_usage_combo") else "inspiration",
         })
+        from core.visual_identity import prepare_identity_for_save
+        data["visual_identity"] = prepare_identity_for_save(
+            getattr(self, "_visual_identity", {}), self._image_path
+        )
         self._saved_data = veh_api.save_vehicle(data)
+        from ui.visual_identity import offer_analysis_after_save
+        offer_analysis_after_save(self, "vehicle", self._saved_data or data,
+                                  veh_api.save_vehicle)
 
         self.accept()
 

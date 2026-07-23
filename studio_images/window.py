@@ -240,10 +240,12 @@ class StudioImagesPanel(QWidget):
             _app.aboutToQuit.connect(self._park_all)
 
         root = QVBoxLayout(self)
-        # Marge DROITE = 0 : la poignée du chat (dernier widget du body) doit être
-        # COLLÉE au bord droit, exactement comme la poignée du Storyboard (gérée au
-        # niveau fenêtre PandoraWindow, body à marge 0). Sinon elle paraît décalée.
-        root.setContentsMargins(14, 12, 0, 12)
+        # Marges DROITE et VERTICALES = 0 : la poignée du chat (et le panneau
+        # ouvert) doivent toucher les bords haut/bas et droit, comme la poignée du
+        # Storyboard — les marges verticales laissaient deux bandes noires
+        # au-dessus/au-dessous (retour Matthieu 2026-07-22). Le confort vertical du
+        # contenu de gauche est reporté sur left_wrap ci-dessous.
+        root.setContentsMargins(14, 0, 0, 0)
         root.setSpacing(10)
 
         # Corps : génération RECENTRÉE (largeur plafonnée + centrée) dans un SCROLL
@@ -261,7 +263,7 @@ class StudioImagesPanel(QWidget):
         left.setMaximumWidth(860)
         left_wrap = QWidget()
         lw = QHBoxLayout(left_wrap)
-        lw.setContentsMargins(0, 0, 0, 0)
+        lw.setContentsMargins(0, 12, 0, 12)   # respiration reprise du root (2026-07-22)
         lw.setSpacing(0)
         lw.addStretch(1)
         lw.addWidget(left)
@@ -279,7 +281,7 @@ class StudioImagesPanel(QWidget):
         # Claude et SA poignée à l'EXTRÊME DROITE — disposition IDENTIQUE au chat du
         # Storyboard de PANDORA (panneau puis poignée au bord droit).
         self._chat_panel = self._build_right()
-        self._chat_panel.setFixedWidth(440)
+        self._chat_panel.setFixedWidth(400)   # 440 → 400 : panneau moins large (2026-07-22)
         self._chat_toggle = _ChatToggleStrip(self._chat_panel)
         body.addWidget(left_scroll, 1)
         body.addWidget(self._chat_panel)
@@ -735,7 +737,9 @@ class StudioImagesPanel(QWidget):
 
         # Pièces jointes de discussion (n'entrent PAS dans la génération)
         attach_head = QHBoxLayout()
-        lbl = QLabel("📎 Joindre à la discussion (pas à la génération)")
+        lbl = QLabel("📎 Joindre à la discussion")
+        lbl.setToolTip("Ces images accompagnent la discussion avec l'assistant — "
+                       "elles ne servent pas de références de génération.")
         lbl.setStyleSheet(f"color: {CP['text_dim']}; font-size: 10px; font-weight: 600;")
         attach_head.addWidget(lbl)
         attach_head.addStretch(1)

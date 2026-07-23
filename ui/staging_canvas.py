@@ -12,10 +12,10 @@ import math
 from PyQt6.QtWidgets import (
     QGraphicsView, QGraphicsScene, QGraphicsEllipseItem,
     QGraphicsSimpleTextItem, QGraphicsLineItem, QGraphicsRectItem,
-    QGraphicsPixmapItem,
+    QGraphicsPixmapItem, QGraphicsPolygonItem,
 )
-from PyQt6.QtCore import Qt, QRectF, pyqtSignal
-from PyQt6.QtGui import QPen, QBrush, QColor, QPixmap, QPainter
+from PyQt6.QtCore import Qt, QRectF, QPointF, pyqtSignal
+from PyQt6.QtGui import QPen, QBrush, QColor, QPixmap, QPainter, QPolygonF, QCursor, QFont
 from ui.styles import CP
 from ui.icons import load_icon
 import core.projectors as _proj
@@ -32,10 +32,52 @@ def _token_icon_file(kind: str, model: dict) -> str:
     if kind == "camera":
         return "camera_mise en scene.png"
     if kind == "actor":
-        return "Acteur.png"
+        return ""
+    if kind == "prop":
+        return "accesoires.png"
     if kind == "light":
         return _proj.family_icon((model or {}).get("family", ""))
     return ""
+
+
+def _actor_icon(model: dict, size: int) -> QPixmap:
+    """Silhouette vectorielle lisible sur plan, différenciée homme/femme."""
+    pix = QPixmap(size, size)
+    pix.fill(Qt.GlobalColor.transparent)
+    p = QPainter(pix)
+    p.setRenderHint(QPainter.RenderHint.Antialiasing, True)
+    gender = str((model or {}).get("gender") or "").casefold()
+    color = QColor("#91a7ff" if gender in ("male", "homme", "m") else
+                   "#d59cff" if gender in ("female", "femme", "f") else "#8be4d9")
+    p.setPen(QPen(color, max(2, size // 18)))
+    p.setBrush(QBrush(QColor("#111827")))
+    p.drawEllipse(QRectF(size * .36, size * .12, size * .28, size * .28))
+    if gender in ("female", "femme", "f"):
+        body = QPolygonF([QPointF(size*.50, size*.39), QPointF(size*.27, size*.83),
+                          QPointF(size*.73, size*.83)])
+    else:
+        body = QPolygonF([QPointF(size*.32, size*.43), QPointF(size*.68, size*.43),
+                          QPointF(size*.76, size*.82), QPointF(size*.24, size*.82)])
+    p.drawPolygon(body)
+    p.end()
+    return pix
+
+
+def _tool_cursor(glyph: str) -> QCursor:
+    """Curseur haute définition reprenant exactement le glyphe de l'outil."""
+    pix = QPixmap(34, 34)
+    pix.fill(Qt.GlobalColor.transparent)
+    p = QPainter(pix)
+    p.setRenderHint(QPainter.RenderHint.Antialiasing, True)
+    p.setBrush(QBrush(QColor("#09121f")))
+    p.setPen(QPen(QColor("#4ecdc4"), 1.5))
+    p.drawEllipse(QRectF(1.5, 1.5, 30, 30))
+    f = QFont("Segoe UI Symbol", 16)
+    f.setBold(True)
+    p.setFont(f)
+    p.drawText(QRectF(1, 0, 31, 32), Qt.AlignmentFlag.AlignCenter, glyph)
+    p.end()
+    return QCursor(pix, 16, 16)
 
 
 class _RotKnob(QGraphicsEllipseItem):
@@ -80,7 +122,8 @@ class _Token(QGraphicsEllipseItem):
         # les initiales ; l'ellipse devient un ANNEAU coloré (identité + sélection).
         # Repli (élément, ou famille sans icône) : pastille colorée + initiales.
         icon_file = _token_icon_file(kind, model)
-        pix = load_icon(icon_file, size=int(2 * _R)) if icon_file else None
+        pix = (_actor_icon(model, int(2 * _R)) if kind == "actor" else
+               (load_icon(icon_file, size=int(2 * _R)) if icon_file else None))
         if pix is not None and not pix.isNull():
             self.setBrush(QBrush(QColor(Qt.GlobalColor.transparent)))
             self.setPen(QPen(QColor(color), 2))
@@ -107,6 +150,25 @@ class _Token(QGraphicsEllipseItem):
         self._arrow = None
         self._knob  = None
         if has_dir:
+            # Cône de cadrage / faisceau : il matérialise immédiatement ce que
+            # l'optique ou le projecteur couvre sur le plateau. La largeur du
+            # projecteur suit son angle de faisceau réel quand il est réglable.
+            if kind == "light":
+                beam = _proj.effective_beam(model)
+                length = 270.0
+            else:
+                beam = float(model.get("fov") or 44.0)
+                length = 330.0
+            half = max(3.0, min(84.0, beam / 2.0))
+            spread = min(800.0, math.tan(math.radians(half)) * length)
+            cone = QGraphicsPolygonItem(
+                QPolygonF([QPointF(0, 0), QPointF(-spread, -length),
+                           QPointF(spread, -length)]), self)
+            fill = QColor(color); fill.setAlpha(35 if reference else 48)
+            edge = QColor(color); edge.setAlpha(120 if reference else 175)
+            cone.setBrush(QBrush(fill))
+            cone.setPen(QPen(edge, 1.5, Qt.PenStyle.DashLine))
+            cone.setZValue(-2)
             self._arrow = QGraphicsLineItem(0, 0, 0, -_ARM, self)
             self._arrow.setPen(QPen(QColor(color), 4))
             self._arrow.setZValue(9)
@@ -150,13 +212,19 @@ class StagingCanvas(QGraphicsView):
         super().__init__()
         self._mode   = mode
         self._record = None
-        self._tool   = "move"            # "move" | "rotate"
+        self._tool   = "move"            # "move" | "rotate" | "pan"
+        self._panning = False
+        self._pan_last = None
+        self._grid_visible = True
         self._rotating = None            # _Token en cours de rotation
         self._scene  = QGraphicsScene(0, 0, _SIZE, _SIZE)
         self.setScene(self._scene)
         self.setRenderHint(QPainter.RenderHint.Antialiasing, True)
         self.setStyleSheet(f"background:{CP['bg2']};border:1px solid {CP['border']};border-radius:8px;")
         self.setMinimumHeight(420)
+        self.setTransformationAnchor(QGraphicsView.ViewportAnchor.AnchorUnderMouse)
+        self.setResizeAnchor(QGraphicsView.ViewportAnchor.AnchorViewCenter)
+        self.set_tool("move")
         # NB : on relaie via une vraie méthode liée (PAS self.selection.emit
         # directement). Qt déconnecte automatiquement les slots-méthodes quand
         # leur QObject receveur est détruit ; connecter le .emit nu laissait la
@@ -171,11 +239,37 @@ class StagingCanvas(QGraphicsView):
             pass  # objet en cours de destruction (teardown app) — sans effet
 
     def set_tool(self, tool: str):
-        self._tool = "rotate" if tool == "rotate" else "move"
+        self._tool = tool if tool in ("move", "rotate", "pan") else "move"
+        self.setDragMode(QGraphicsView.DragMode.NoDrag)
+        cursors = {"move": "↖", "pan": "✥", "rotate": "↻"}
+        self.viewport().setCursor(_tool_cursor(cursors[self._tool]))
 
     def resizeEvent(self, e):
         super().resizeEvent(e)
         self.fitInView(self._scene.sceneRect(), Qt.AspectRatioMode.KeepAspectRatio)
+
+    def wheelEvent(self, e):
+        """Zoom centré sous la souris, borné pour éviter de perdre le plan."""
+        factor = 1.16 if e.angleDelta().y() > 0 else 0.86
+        current = self.transform().m11()
+        target = current * factor
+        if 0.35 <= target <= 8.0:
+            self.scale(factor, factor)
+        e.accept()
+
+    def fit_scene(self):
+        self.fitInView(self._scene.sceneRect(), Qt.AspectRatioMode.KeepAspectRatio)
+
+    def zoom_by(self, factor: float):
+        current = self.transform().m11()
+        target = current * float(factor)
+        if 0.35 <= target <= 8.0:
+            self.scale(float(factor), float(factor))
+
+    def set_grid_visible(self, visible: bool):
+        self._grid_visible = bool(visible)
+        if self._record is not None:
+            self.load(self._record)
 
     # ── Rotation directe (poignée) + mode Rotation (glisser sur le jeton) ───────
 
@@ -186,6 +280,11 @@ class StagingCanvas(QGraphicsView):
         return item
 
     def mousePressEvent(self, e):
+        if e.button() == Qt.MouseButton.LeftButton and self._tool == "pan":
+            self._panning = True
+            self._pan_last = e.position().toPoint()
+            e.accept()
+            return
         if e.button() == Qt.MouseButton.LeftButton:
             sp   = self.mapToScene(e.pos())
             item = self._scene.itemAt(sp, self.transform())
@@ -201,6 +300,14 @@ class StagingCanvas(QGraphicsView):
         super().mousePressEvent(e)
 
     def mouseMoveEvent(self, e):
+        if self._panning and self._pan_last is not None:
+            pos = e.position().toPoint()
+            delta = pos - self._pan_last
+            self._pan_last = pos
+            self.horizontalScrollBar().setValue(self.horizontalScrollBar().value() - delta.x())
+            self.verticalScrollBar().setValue(self.verticalScrollBar().value() - delta.y())
+            e.accept()
+            return
         if self._rotating is not None:
             self._apply_rotation(self.mapToScene(e.pos()))
             e.accept()
@@ -208,6 +315,11 @@ class StagingCanvas(QGraphicsView):
         super().mouseMoveEvent(e)
 
     def mouseReleaseEvent(self, e):
+        if self._panning:
+            self._panning = False
+            self._pan_last = None
+            e.accept()
+            return
         if self._rotating is not None:
             self._rotating = None
             e.accept()
@@ -259,10 +371,12 @@ class StagingCanvas(QGraphicsView):
                 int(_SIZE), int(_SIZE), Qt.AspectRatioMode.IgnoreAspectRatio,
                 Qt.TransformationMode.SmoothTransformation))
             item.setZValue(0)
+            if self._grid_visible:
+                self._draw_grid(background=False)
         else:
-            self._draw_grid()
+            self._draw_grid(background=True)
         # Jetons
-        if self._mode == "staging":
+        if self._mode in ("staging", "combined"):
             self._scene.addItem(_Token(self, "camera", "CAM", record["camera"],
                                        CP["accent"], has_dir=True))
             for a in record.get("actors", []):
@@ -271,6 +385,10 @@ class StagingCanvas(QGraphicsView):
             for p in record.get("props", []):
                 self._scene.addItem(_Token(self, "prop", _initials(p.get("name", "?")),
                                            p, CP.get("text_dim", "#5a6a7a")))
+            if self._mode == "combined":
+                for l in record.get("lights", []):
+                    self._scene.addItem(_Token(self, "light", _initials(l.get("name", "L")),
+                                               l, "#f5c518", has_dir=True))
         else:
             # Plan de feu : on AFFICHE la caméra et les acteurs placés en Mise en
             # scène (référence non éditable, estompée) pour éclairer juste.
@@ -290,16 +408,21 @@ class StagingCanvas(QGraphicsView):
                                            l, "#f5c518", has_dir=True))
         self.fitInView(self._scene.sceneRect(), Qt.AspectRatioMode.KeepAspectRatio)
 
-    def _draw_grid(self):
-        bg = QGraphicsRectItem(0, 0, _SIZE, _SIZE)
-        bg.setBrush(QBrush(QColor(CP["bg3"])))
-        bg.setPen(QPen(QColor(CP["border"]), 2))
-        bg.setZValue(0)
-        self._scene.addItem(bg)
-        pen = QPen(QColor(CP["border"]), 1)
-        for i in range(1, 4):
-            self._scene.addLine(i * _SIZE / 4, 0, i * _SIZE / 4, _SIZE, pen)
-            self._scene.addLine(0, i * _SIZE / 4, _SIZE, i * _SIZE / 4, pen)
+    def _draw_grid(self, background: bool = True):
+        if background:
+            bg = QGraphicsRectItem(0, 0, _SIZE, _SIZE)
+            bg.setBrush(QBrush(QColor(CP["bg3"])))
+            bg.setPen(QPen(QColor(CP["border"]), 2))
+            bg.setZValue(0)
+            self._scene.addItem(bg)
+        fine = QColor(CP["border"]); fine.setAlpha(80 if background else 55)
+        strong = QColor(CP["accent_dim"]); strong.setAlpha(95 if background else 65)
+        for i in range(1, 12):
+            major = i % 3 == 0
+            pen = QPen(strong if major else fine, 1.2 if major else 0.7)
+            line_v = self._scene.addLine(i * _SIZE / 12, 0, i * _SIZE / 12, _SIZE, pen)
+            line_h = self._scene.addLine(0, i * _SIZE / 12, _SIZE, i * _SIZE / 12, pen)
+            line_v.setZValue(1); line_h.setZValue(1)
 
     def commit(self) -> dict:
         return self._record
@@ -312,8 +435,8 @@ class StagingCanvas(QGraphicsView):
                 return it
         return None
 
-    def add_actor(self, name: str, x: float = 0.35, y: float = 0.5):
-        a = {"name": name, "x": x, "y": y}
+    def add_actor(self, name: str, x: float = 0.35, y: float = 0.5, gender: str = ""):
+        a = {"name": name, "x": x, "y": y, "gender": gender}
         self._record.setdefault("actors", []).append(a)
         self._scene.addItem(_Token(self, "actor", _initials(name), a, CP.get("green", "#3ddc97")))
         self.changed.emit()
@@ -326,8 +449,9 @@ class StagingCanvas(QGraphicsView):
 
     def add_light(self, name: str, role: str, family: str = "", model: str = "",
                   x: float = 0.5, y: float = 0.3):
+        settings = _proj.default_settings(family, model)
         l = {"name": name, "type": role, "family": family, "model": model,
-             "x": x, "y": y, "angle": 180.0}
+             "x": x, "y": y, "angle": 180.0, "settings": settings}
         self._record.setdefault("lights", []).append(l)
         self._scene.addItem(_Token(self, "light", _initials(name), l, "#f5c518", has_dir=True))
         self.changed.emit()
@@ -347,6 +471,8 @@ class StagingCanvas(QGraphicsView):
             self.load(self._record)
 
     def _clearable_keys(self):
+        if self._mode == "combined":
+            return ("actors", "props", "lights")
         return ("actors", "props") if self._mode == "staging" else ("lights",)
 
     def has_clearable(self) -> bool:

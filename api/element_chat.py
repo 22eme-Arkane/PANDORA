@@ -180,10 +180,6 @@ def _retry_after(e, default=20) -> int:
     return default
 
 
-def _anthropic_key() -> str:
-    return load_config().get("anthropic_key", "").strip()
-
-
 # ── Worker : un tour de conversation ──────────────────────────────────────────
 
 class ElementChatWorker(QThread):
@@ -195,29 +191,20 @@ class ElementChatWorker(QThread):
         super().__init__()
         self._history = history
         self._kind = kind
-        self._key = _anthropic_key()
 
     def run(self):
-        if not self._key:
-            self.failed.emit("Clé API Anthropic manquante.\nRenseigne-la dans Paramètres.")
+        from core.ai_provider import (ai_name_for_task, chat, humanize_ai_error,
+                                      key_error)
+        err = key_error(task="element_chat")
+        if err:
+            self.failed.emit(err)
             return
-        try:
-            import anthropic
-        except Exception as e:
-            self.failed.emit(f"Module anthropic indisponible : {e}")
-            return
-        client = anthropic.Anthropic(api_key=self._key)
         messages = _to_api_messages(self._history)
         for attempt in range(3):
             try:
-                msg = client.messages.create(
-                    model=_CHAT_MODEL,
-                    max_tokens=700,
-                    thinking=_NO_THINK,
-                    system=_chat_system(self._kind),
-                    messages=messages,
-                )
-                self.done.emit(msg.content[0].text.strip())
+                text = chat(_chat_system(self._kind), messages, tier="creative",
+                            max_tokens=700, task="element_chat")
+                self.done.emit(text.strip())
                 return
             except Exception as e:
                 if ("rate_limit" in str(e) or "429" in str(e)) and attempt < 2:
@@ -225,7 +212,8 @@ class ElementChatWorker(QThread):
                     self.notice.emit(f"Limite de débit — nouvelle tentative dans {wait}s…")
                     time.sleep(wait)
                     continue
-                self.failed.emit(_friendly_error(e))
+                self.failed.emit(humanize_ai_error(
+                    f"Erreur {ai_name_for_task('element_chat')} : {e}"))
                 return
 
 
@@ -239,30 +227,26 @@ class ElementSynthWorker(QThread):
         super().__init__()
         self._history = history
         self._kind = kind
-        self._key = _anthropic_key()
 
     def run(self):
-        if not self._key:
-            self.failed.emit("Clé API Anthropic manquante.\nRenseigne-la dans Paramètres.")
+        from core.ai_provider import (ai_name_for_task, complete, humanize_ai_error,
+                                      key_error)
+        err = key_error(task="element_chat")
+        if err:
+            self.failed.emit(err)
             return
         try:
-            import anthropic
-            client = anthropic.Anthropic(api_key=self._key)
             convo = "\n\n".join(
-                f"{'UTILISATEUR' if m['role'] == 'user' else 'CLAUDE'} : {text_of(m['content'])}"
+                f"{'UTILISATEUR' if m['role'] == 'user' else 'ASSISTANT'} : {text_of(m['content'])}"
                 for m in self._history)
             user_msg = (f"Conversation :\n{convo}\n\n"
                         "Produis maintenant le prompt image final en français.")
             for attempt in range(3):
                 try:
-                    msg = client.messages.create(
-                        model=_SYNTH_MODEL,
-                        max_tokens=500,
-                        thinking=_NO_THINK,
-                        system=_synth_system(self._kind),
-                        messages=[{"role": "user", "content": user_msg}],
-                    )
-                    self.done.emit(msg.content[0].text.strip())
+                    text = complete(_synth_system(self._kind), user_msg,
+                                    tier="creative", max_tokens=500,
+                                    task="element_chat")
+                    self.done.emit(text.strip())
                     return
                 except Exception as e:
                     if ("rate_limit" in str(e) or "429" in str(e)) and attempt < 2:
@@ -270,4 +254,5 @@ class ElementSynthWorker(QThread):
                         continue
                     raise
         except Exception as e:
-            self.failed.emit(_friendly_error(e))
+            self.failed.emit(humanize_ai_error(
+                f"Erreur {ai_name_for_task('element_chat')} : {e}"))

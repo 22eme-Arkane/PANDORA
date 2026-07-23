@@ -432,6 +432,14 @@ def save_shot(data: dict, version_id: str = DEFAULT_VERSION_ID) -> dict:
         data.setdefault("accessory_names", [])
         data.setdefault("vehicle_ids", [])
         data.setdefault("vehicle_names", [])
+        data.setdefault("hmc_ids", [])
+        data.setdefault("hmc_names", [])
+        # Transport narratif du Découpage (2026-07-23) — voir bloc « narrative »
+        # de la bible visuelle (core.visual_context.build_visual_context).
+        data.setdefault("source_excerpt", "")
+        data.setdefault("rhythm", "")
+        data.setdefault("intention", "")
+        data.setdefault("visual_context_version", 1)
         data.setdefault("camera_movement", "Fixe")
         data.setdefault("shot_size", "")
         data.setdefault("camera_axis", "")

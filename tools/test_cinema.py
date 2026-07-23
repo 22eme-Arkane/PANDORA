@@ -69,17 +69,17 @@ def test(fn):
 
 @test
 def selecteur_ia_present():
-    """Paramètres Cinéma : sélecteur d'assistant IA (Claude/Fable 5/GPT-5.5/Mistral/Ollama)."""
+    """Paramètres Cinéma : groupes Anthropic/OpenAI/expérimental + profils."""
     from ui.page_settings import SettingsPage
     p = SettingsPage()
     n = p.ai_combo.count()
-    assert n == 10, "10 choix (PANDORA optimisé défaut, Sonnet, Haiku, Fable 5, GPT-5.5, Mistral, Kimi K2.7, GLM 4.7, Ollama, Personnalisé)"
+    assert n >= 18, "groupes, profils et moteurs statiques absents"
     labels = [p.ai_combo.itemText(i) for i in range(n)]
-    assert "optimisé" in labels[0] and "défaut" in labels[0], "PANDORA optimisé = défaut (1er)"
+    assert any("Anthropic optimisé" in x for x in labels)
+    assert any("ChatGPT optimisé" in x for x in labels)
     assert any("Fable 5" in x for x in labels), "Fable 5 proposé"
     assert any("GPT-5.5" in x for x in labels), "GPT-5.5 proposé"
-    assert any("Choix personnalisé" in x for x in labels), "Choix personnalisé proposé"
-    assert any("PANDORA optimisé" in x for x in labels), "PANDORA optimisé proposé"
+    assert any("Fournisseur personnalisé" in x for x in labels), "fournisseur personnalisé proposé"
     assert any("Mistral" in x for x in labels) and any("Ollama" in x for x in labels)
     assert any("Kimi" in x for x in labels), "Kimi K2.7 proposé"
     # Clés GPT + Mistral présentes (menu déroulant facultatif)
@@ -87,8 +87,8 @@ def selecteur_ia_present():
     assert hasattr(p, "_opt_keys_box") and hasattr(p, "_btn_opt_keys"), "menu clés facultatives"
     # La sauvegarde écrit bien les clés de config IA + moteur par tâche
     src = inspect.getsource(SettingsPage.save)
-    for key in ("ai_provider", "ai_model_creative", "openai_key", "mistral_key",
-                "ollama_url", "ai_task_engines"):
+    for key in ("openai_key", "mistral_key", "ollama_url", "custom_url",
+                "custom_model", "custom_key", "ai_task_engines"):
         assert key in src, f"save() persiste {key}"
     # Réorganisation 2026-06-13 : Apparence → Assistant IA → Clés API →
     # Sauvegarder → DaVinci tout en bas ; testeurs en bleu à côté des liens
@@ -101,8 +101,8 @@ def selecteur_ia_present():
     # Sauvegarde AUTOMATIQUE : plus de bouton « Sauvegarder »
     assert 'QPushButton("Sauvegarder")' not in src_pg, "bouton Sauvegarder retiré"
     assert "_wire_autosave" in src_pg and "Sauvegarde automatique" in src_pg, "auto-save branché"
-    # Défaut Opus 4.8 + preset PANDORA optimisé + bridge auto (bouton retiré)
-    assert '"claude-opus-4-8"' in src_pg and "_apply_pandora_preset" in src_pg
+    # Profils optimisés groupés + bridge auto (bouton retiré).
+    assert "anthropic_optimized" in src_pg and "openai_optimized" in src_pg
     src_dv = inspect.getsource(__import__("ui.davinci_panel", fromlist=["_"]))
     assert "Installer le bridge" not in src_dv, "bouton Installer le bridge retiré (auto à l'install)"
     assert '_test_btn("✓  Tester API fal.ai"' in src_pg, "testeur fal.ai inline"
@@ -119,14 +119,14 @@ def selecteur_ia_present():
 def edition_cinema_only():
     """Build v1.3.0 DOUBLE ÉDITION : le .spec n'exclut PLUS le Live (décision
     2026-07-02) ; le mécanisme is_cinema_only reste (détection dynamique) et
-    main.py garde sa branche conditionnelle pour un éventuel build Cinéma seul."""
+    main.py garde le sélecteur unifié et masque Live dans un éventuel build Cinéma seul."""
     import core.edition as ed
     # En dev (live_window présent), l'édition complète est active → chooser
     assert ed.is_cinema_only() is False, "dev = édition complète (Live présent)"
-    # main.py : démarrage conditionnel conservé (robustesse si Live absent)
+    # main.py : page unifiée, le mode Live reste protégé si le module est absent.
     src_main = open("main.py", encoding="utf-8").read()
     assert "from core.edition import is_cinema_only" in src_main
-    assert "if _CINEMA_ONLY:" in src_main, "branche Cinéma directe conservée"
+    assert "allow_live=not _CINEMA_ONLY" in src_main, "sélecteur unifié protégé"
     assert 'mode == "live" and not _CINEMA_ONLY' in src_main
     # Splash : bouton Retour optionnel (affiché en double édition)
     from PyQt6.QtWidgets import QApplication
@@ -147,12 +147,13 @@ def edition_cinema_only():
 
 @test
 def workers_cinema_routes_via_provider():
-    """api/screenplay.py : tout le TEXTE passe par core.ai_provider (VISION = 2 sites)."""
+    """Texte et vision passent par core.ai_provider, sans appel Anthropic direct."""
     import api.screenplay as s
     src = inspect.getsource(s)
     assert "core.ai_provider" in src, "screenplay routé via la couche IA"
-    assert src.count("anthropic.Anthropic(") == 2, "seuls les 2 sites VISION restent directs"
-    for mod_name in ("api.enhance", "api.assistant", "core.lang"):
+    assert "anthropic.Anthropic(" not in src
+    for mod_name in ("api.enhance", "api.assistant", "core.lang", "api.nano_banana",
+                     "api.real", "api.staging_vision", "api.video_engines"):
         mod = __import__(mod_name, fromlist=["_"])
         assert "anthropic.Anthropic(" not in inspect.getsource(mod), \
             f"{mod_name} : appel anthropic direct interdit"
@@ -176,10 +177,11 @@ def branding_libelles_partage():
 @test
 def refonte_interface():
     """Refonte UI 2026-06-12 (portée depuis Live) : nav en BARRE BASSE façon
-    DaVinci, assistant à GAUCHE + colonne symétrique, Manuel/Contact en topbar,
+    DaVinci, assistant à GAUCHE + colonne symétrique, Contact en topbar,
     Paramètres centré, Studio IA sans trait doublé, bandeaux alignés 60 px."""
     import ui.pandora_window as PW
     src_sb = inspect.getsource(PW._Sidebar.__init__)
+    # 64 px depuis le 2026-07-23 (intitulés de groupe retirés — barre compacte).
     assert "setFixedHeight(64)" in src_sb and "border-top" in src_sb, \
         "nav en barre basse (taskbar), plus de colonne latérale"
     assert "setFixedWidth(268)" not in inspect.getsource(PW), "colonne 268px retirée"
@@ -188,12 +190,16 @@ def refonte_interface():
     src_init = inspect.getsource(PW.PandoraWindow.__init__)
     assert 'side="left"' in src_init, "assistant IA à gauche"
     assert "_right_spacer" in src_init, "colonne symétrique au bord droit"
-    assert "header_height=60" in src_init, "en-tête assistant aligné sur les bandeaux"
+    # 40 px depuis le 2026-07-23 : aligné sur la première rangée des pages
+    # (barres d'outils Scénario/Storyboard à 40 px, bandeaux 60 px disparus).
+    assert "header_height=40" in src_init, "en-tête assistant aligné sur la 1re rangée"
     src_top = inspect.getsource(PW.PandoraWindow._build_global_topbar)
-    assert "_btn_manual_top" in src_top and "_btn_contact_top" in src_top, \
-        "Manuel + Nous contacter en haut à gauche"
-    assert "255,79,106" in src_top and "37,211,102" in src_top, \
-        "Manuel en ROUGE, Nous contacter en VERT"
+    assert "_btn_manual_top" not in src_top and "_btn_contact_top" in src_top, \
+        "Nous contacter seul en haut à gauche"
+    assert "37,211,102" in src_top and "_btn_update_header" not in src_top, \
+        "Contact en VERT et bouton Mise à jour retiré"
+    from ui.page_settings import SettingsPage as _SettingsPage
+    assert hasattr(_SettingsPage, "manual_requested"), "Manuel déplacé dans Paramètres"
     # Éditeur scénario : scrollbar au bord (marges document, pas padding CSS)
     from ui.page_scenario import PageScenario as _PSC
     src_ed = inspect.getsource(_PSC._build_editor)
@@ -211,9 +217,14 @@ def refonte_interface():
     import ui.tab_video_engines as _VE
     assert "▶  Générer" not in inspect.getsource(_VE), \
         "Génération directe : « Lancer la file d'attente »"
+    # Paramètres pleine largeur depuis le 2026-07-22 : la barre de défilement est
+    # collée au bord droit ; le centrage (max 1360) vit DANS SettingsPage.
     src_pages = inspect.getsource(PW.PandoraWindow._build_pages)
-    assert "setMaximumWidth(1360)" in src_pages and "_settings_wrap" in src_pages, \
-        "Paramètres centré comme le Studio IA"
+    assert "_settings_wrap" in src_pages, "page Paramètres absente de la pile"
+    from ui.page_settings import SettingsPage as _SP
+    _sp_src = inspect.getsource(_SP.__init__)
+    assert "setMaximumWidth(1360)" in _sp_src and "addStretch(1)" in _sp_src, \
+        "contenu Paramètres non centré à l'intérieur du scroll"
     assert "_settings_wrap" in inspect.getsource(PW.PandoraWindow._navigate)
     # Studio IA : trait unique + onglets formulaire plafonnés/centrés
     from ui.seedance_widget import SeedanceWidget
@@ -222,9 +233,12 @@ def refonte_interface():
     assert "_clamp_content_width" in src_sw, "onglets formulaire plafonnés"
     assert "self.tab_t2v, self.tab_davinci, self.tab_engines" in src_sw, \
         "plafonnés : formulaires seulement (Vidéothèque/Historique pleine largeur)"
-    # Bandeaux des pages au STANDARD 60 px (alignés avec l'assistant)
+    # Bandeau titre « Storyboard » RETIRÉ (2026-07-22) : ses contrôles (versions,
+    # snapshots, durée) sont intégrés à la barre d'outils des plans.
     from ui.page_storyboard import PageStoryboard as _PSB
-    assert "setFixedHeight(60)" in inspect.getsource(_PSB._build_shots_topbar)
+    assert not hasattr(_PSB, "_build_shots_topbar"), "bandeau titre censé être retiré"
+    assert "_build_topbar_controls" in inspect.getsource(_PSB._build_shots_toolbar), \
+        "contrôles de l'ex-bandeau non intégrés à la barre d'outils"
 
 
 @test
@@ -540,21 +554,34 @@ def decoupage_cinema_deterministe_depuis_mise_en_page():
     shots = dl.layout_segments_to_cinema_shots(layout)
     assert len(shots) == 23, f"convertisseur : {len(shots)}/23 (perte)"
     s0 = shots[0]
-    assert s0["scene_title"] == "Titre 1" and s0["seedance_prompt"] == "vidéo 1 co-écrite" \
+    from core.prompt_sections import is_structured, parse
+    assert s0["scene_title"] == "Titre 1" and is_structured(s0["seedance_prompt"]) \
+        and parse(s0["seedance_prompt"])["action"] == "vidéo 1 co-écrite" \
         and s0["sound_prompt"] == "son 1" and s0["shot_size"] == "Plan moyen" \
         and s0["camera_movement"] == "Panoramique" and s0["seq_num"] == 1, \
         "champs du plan non repris de la mise en page"
     assert s0["character_ids"] == [] and s0["decor_id"] == "" and s0["merged"] is False, \
         "défauts sûrs attendus pour les champs non couverts"
-    # Worker : source structurée → plans SANS appel IA (aucune clé requise, branche
-    # AVANT key_error — c'est ce qui prouve le zéro-coût).
-    w = GenerateStoryboardWorker(layout); cap = {}
-    w.finished.connect(lambda s: cap.__setitem__("s", s))
-    w.failed.connect(lambda e: cap.__setitem__("f", e))
-    w.run()
+    # Worker : depuis le 2026-07-23 le chemin structuré REPASSE par l'IA (remise en
+    # case des champs), avec REPLI déterministe si l'IA échoue. Le harnais NE DOIT
+    # JAMAIS toucher le réseau → on force l'échec de l'appel IA et on vérifie que
+    # le repli livre bien les 23 plans co-écrits, prompts intacts.
+    import core.ai_provider as _aip_mod
+    _orig_complete = _aip_mod.complete
+    _aip_mod.complete = lambda *a, **k: (_ for _ in ()).throw(RuntimeError("offline"))
+    try:
+        w = GenerateStoryboardWorker(layout); cap = {}
+        w.finished.connect(lambda s: cap.__setitem__("s", s))
+        w.failed.connect(lambda e: cap.__setitem__("f", e))
+        w.run()
+    finally:
+        _aip_mod.complete = _orig_complete
     assert "f" not in cap and len(cap.get("s", [])) == 23, \
-        f"worker : mise en page 23 plans → 23 plans sans IA (obtenu {len(cap.get('s', []))})"
-    assert cap["s"][4]["seedance_prompt"] == "vidéo 5 co-écrite", "prompt co-écrit reformulé !"
+        f"worker : mise en page 23 plans → repli déterministe 23 plans (obtenu {len(cap.get('s', []))})"
+    assert parse(cap["s"][4]["seedance_prompt"])["action"] == "vidéo 5 co-écrite", \
+        "prompt co-écrit reformulé !"
+    assert "_structured_fallback" in inspect.getsource(GenerateStoryboardWorker.run), \
+        "repli déterministe absent du worker (filet anti-perte)"
     # Durée : plafond Seedance 15 s conservé même sur une mise en page trop longue.
     _long = dl.layout_segments_to_cinema_shots(
         'PLAN 1 — X\nDurée : 40s · Valeur de plan : Large\nPROMPT VIDÉO (français) : "v"')
@@ -577,26 +604,33 @@ def decoupage_cinema_deterministe_depuis_mise_en_page():
     cshots = dl.layout_segments_to_cinema_shots(cine)
     assert len(cshots) == 2, f"Cinéma : {len(cshots)}/2 plans"
     c0 = cshots[0]
-    assert (c0["seedance_prompt"].startswith("Rue déserte") and c0["shot_size"] == "Plan large"
+    assert (parse(c0["seedance_prompt"])["action"].startswith("Rue déserte")
+            and c0["shot_size"] == "Plan large"
             and c0["camera_movement"] == "Travelling avant" and c0["camera_axis"] == "Face"
             and c0["duration"] == 6.0 and c0["seq_name"] == "ARRIVÉE"), \
         "champs Cinéma non repris du format « P01 | … »"
     # Prompt multi-lignes recollé, dialogue exclu du prompt, nom perso pas pris en titre.
-    assert "floues" in cshots[1]["seedance_prompt"] and "Ils sont là" not in cshots[1]["seedance_prompt"]
+    c1_action = parse(cshots[1]["seedance_prompt"])["action"]
+    assert "floues" in c1_action and "Ils sont là" not in c1_action
     assert cshots[1]["scene_title"] != "VIKTOR", "nom de personnage pris comme titre du plan"
-    # Le worker prend AUSSI le chemin déterministe sur le format Cinéma (zéro IA).
-    wc = GenerateStoryboardWorker(cine); capc = {}
-    wc.finished.connect(lambda s: capc.__setitem__("s", s)); wc.run()
-    assert len(capc.get("s", [])) == 2, "worker Cinéma : format « P01 | … » non déterministe"
-    # Les 2 pages n'avertissent QUE si la mise en page n'est PAS parsable (chemin IA).
+    # Le worker garde le repli déterministe sur le format Cinéma (harnais OFFLINE :
+    # l'appel IA est forcé en échec, le filet doit livrer les 2 plans).
+    _aip_mod.complete = lambda *a, **k: (_ for _ in ()).throw(RuntimeError("offline"))
+    try:
+        wc = GenerateStoryboardWorker(cine); capc = {}
+        wc.finished.connect(lambda s: capc.__setitem__("s", s)); wc.run()
+    finally:
+        _aip_mod.complete = _orig_complete
+    assert len(capc.get("s", [])) == 2, "worker Cinéma : repli « P01 | … » non déterministe"
+    # Depuis le 2026-07-23 : source non structurée → CONFIRMATION explicite (plus de refus).
     from ui.page_scenario import PageScenario as _PS
     _src = inspect.getsource(_PS._on_storyboard)
-    assert "is_structured_layout" in _src and "confirm_prompt_rewrite" in _src, \
-        "page Scénario : avertissement non conditionné au chemin IA"
+    assert "is_structured_layout" in _src and "Découpage non structuré" in _src, \
+        "page Scénario : confirmation du découpage non structuré absente"
     from ui.page_storyboard import PageStoryboard as _PSB
     _oa = inspect.getsource(_PSB._on_analyze)
-    assert "is_structured_layout" in _oa and "confirm_prompt_rewrite" in _oa, \
-        "page Storyboard : avertissement non conditionné au chemin IA"
+    assert "validate_layout" in _oa and "Aucune réécriture IA automatique" in _oa, \
+        "page Storyboard : import strict du découpage validé absent"
 
 
 @test
@@ -644,10 +678,10 @@ def colonne_langues_dialogues():
 @test
 def prompts_mise_en_page_cinema():
     import api.screenplay as s
-    assert "TRÈS DÉTAILLÉ" in s._FORMAT_PANDORA and "FIDÈLE au scénario" in s._FORMAT_PANDORA
-    assert "HIGHLY DETAILED" in s._FORMAT_PANDORA_EN and "FAITHFUL" in s._FORMAT_PANDORA_EN
-    # Le vocabulaire scénario (INT./EXT.) reste LÉGITIME côté Cinéma
-    assert "INT./EXT." in s._FORMAT_PANDORA, "en-têtes de scène Cinéma préservés"
+    assert "DÉCOUPAGE PANDORA 2" in s._FORMAT_PANDORA
+    assert "SOURCE SCÉNARIO" in s._FORMAT_PANDORA and "PROMPT VISUEL" in s._FORMAT_PANDORA
+    assert "SCREENPLAY SOURCE" in s._FORMAT_PANDORA_EN and "VISUAL PROMPT" in s._FORMAT_PANDORA_EN
+    assert "P01 | Valeur de plan" not in s._FORMAT_PANDORA, "ancien contrat encore actif"
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -792,7 +826,8 @@ def decor_sept_vues():
     cohérence spatiale stricte ; worker dédié + combo de mode + option depuis
     le scénario (dialog d'extraction)."""
     from core.room_views import (SIX_FACES, build_six_view_prompts,
-                                  build_overview_prompt, build_seven_view_prompts)
+                                  build_overview_prompt, build_seven_view_prompts,
+                                  extract_base_prompt)
     assert len(SIX_FACES) == 6
     codes = {c for _, c, _ in SIX_FACES}
     assert codes == {"sol", "plafond", "gauche", "droite", "avant", "arriere"}
@@ -806,6 +841,21 @@ def decor_sept_vues():
     assert o_code == build_overview_prompt("x")[1]
     for label, code, p in seven:
         assert "salle à manger" in p and "strict spatial consistency" in p
+    # Un extérieur ne doit JAMAIS recevoir les consignes de pièce qui faisaient
+    # inventer des murs, fenêtres, mobilier et plafond dans une vallée.
+    exterior = build_seven_view_prompts("desert canyon", "Extérieur")
+    exterior_text = "\n".join(p for _, _, p in exterior)
+    assert "Interior view" not in exterior_text and "ENTIRE room" not in exterior_text
+    assert "OPEN SKY" in next(p for _, c, p in exterior if c == "plafond")
+    assert "90 degrees clockwise" in next(p for _, c, p in exterior if c == "droite")
+    assert "90 degrees counter-clockwise" in next(p for _, c, p in exterior if c == "gauche")
+    from api.nano_banana import _floor_plan_prompt
+    exterior_plan = _floor_plan_prompt("desert canyon", "Extérieur")
+    assert "OUTDOOR SITE PLAN" in exterior_plan and "no rooms" in exterior_plan
+    legacy = ("Vast desert canyon with ochre cliffs. Wide establishing shot of the "
+              "ENTIRE room seen at once: floor, ceiling and walls.")
+    assert extract_base_prompt(legacy) == "Vast desert canyon with ochre cliffs", \
+        "les variations des anciens projets ne doivent pas recycler le faux intérieur"
     # worker dédié — émet une liste structurée (1 entrée par vue)
     from api.nano_banana import GenerateRoomViewsWorker
     w = GenerateRoomViewsWorker("salle à manger", "Salle à manger")
@@ -829,11 +879,16 @@ def decor_sept_vues():
     assert "offer_room_views=True" in eg and "views_finished" in eg
     assert "room_group" in eg, \
         "depuis le scénario : 7 vues → 7 décors d'une pièce (room_group)"
-    # COHÉRENCE des 6 faces : chaque face est une ÉDITION NB2 qui INJECTE le plan
+    # COHÉRENCE des 6 faces : chaque face est une ÉDITION du moteur de raccord
+    # choisi qui INJECTE le plan
     # d'ensemble + le plan d'architecture comme RÉFÉRENCES (même pièce, angles
     # différents) ; repli TEXTE robuste (4 essais, backoff) si l'édition échoue.
     assert "ref_urls" in nb and "_gen_edit" in nb and "consistency" in nb, \
         "faces générées par édition avec références (plan d'ensemble + plan d'archi)"
+    assert "reference_model_key" in inspect.signature(GenerateRoomViewsWorker.__init__).parameters
+    assert "category" in inspect.signature(GenerateRoomViewsWorker.__init__).parameters
+    assert "build_request" in nb and "ref_model" in nb, \
+        "le moteur plan+raccords sélectionné doit router réellement l'endpoint"
     assert "ov_path" in nb and "fp_path" in nb, "réfs = plan d'ensemble + plan d'architecture"
     assert "edit_off" in nb and "range(4)" in nb, "repli texte robuste (4 essais)"
     assert "pandora_decor.log" in nb, "journal de diagnostic des 7 vues"
@@ -842,6 +897,8 @@ def decor_sept_vues():
     assert hasattr(w, "_faces_ok") and hasattr(w, "_last_error"), "attributs de diagnostic présents"
     assert "_room_warnings" in eg and "Vues manquantes" in eg, \
         "dialogue : avertissement consolidé des faces manquantes"
+    assert 'category=item.get("category", "")' in eg, \
+        "la catégorie intérieur/extérieur doit arriver jusqu'au worker"
     # Identifier+générer depuis le scénario : image unique (portrait), pas 5 vues.
     assert 'gen_mode="classic"' in eg and 'gen_mode="sheet_5views"' not in eg, \
         "personnages : portrait unique par défaut depuis le scénario"
@@ -985,12 +1042,14 @@ def pas_de_verif_solde():
 
 @test
 def moteurs_ia_par_tache():
-    """Intégration moteurs : GPT-5.5 (OpenAI) ajouté ; moteur IA paramétrable
+    """Intégration moteurs : profils OpenAI/Anthropic ; moteur IA paramétrable
     PAR TÂCHE sans dégrader le défaut ; appels câblés avec task=."""
     import core.ai_provider as ap
     assert "openai" in ap._PROVIDERS
-    assert set(ap.ENGINES) == {"claude", "opus", "haiku", "fable5", "gpt",
-                               "mistral", "kimi", "glm", "ollama"}
+    for key in ("claude", "opus", "haiku", "fable5", "openai_sol",
+                "openai_terra", "openai_luna", "gpt", "mistral", "kimi",
+                "glm", "ollama", "custom"):
+        assert key in ap.ENGINES
     assert ap.ENGINES["glm"]["provider"] == "glm", "GLM (Zhipu) — API ou local"
     assert ap.ENGINES["gpt"]["provider"] == "openai"
     assert ap.ENGINES["opus"]["creative_model"] == "claude-opus-4-8"
@@ -1004,24 +1063,30 @@ def moteurs_ia_par_tache():
     for k in ("enhance", "storyboard_chat", "assistant", "storyboard_gen",
               "screenplay", "extraction", "sync"):
         assert k in keys, f"tâche {k} paramétrable"
-    # Défaut inchangé (non régression)
-    assert ap._resolve_engine() == ("anthropic", "claude-opus-4-8")
-    # Override par tâche
+    # Profil Anthropic optimisé : routage stable et isolé de la config utilisateur.
     orig = ap._cfg
+    ap._cfg = lambda: {"ai_profile": "anthropic_optimized", "ai_task_engines": {}}
+    try:
+        assert ap._resolve_engine("storyboard_gen") == ("anthropic", "claude-opus-4-8")
+        assert ap._resolve_engine("screenplay") == ("anthropic", "claude-sonnet-5")
+    finally:
+        ap._cfg = orig
+    # Override par tâche
     ap._cfg = lambda: {"ai_provider": "anthropic", "ai_model_creative": "claude-sonnet-5",
                        "ai_task_engines": {"enhance": "gpt", "storyboard_chat": "fable5"}}
     try:
-        assert ap._resolve_engine("enhance") == ("openai", "")
+        assert ap._resolve_engine("enhance") == ("openai", "gpt-5.5")
         assert ap._resolve_engine("storyboard_chat") == ("anthropic", "claude-fable-5")
         assert ap._resolve_engine("assistant") == ("anthropic", "claude-sonnet-5")
         assert ap._model("creative", "openai") == "gpt-5.5"
     finally:
         ap._cfg = orig
-    # Choix personnalisé : global "custom" → repli Anthropic Sonnet ; overrides actifs
-    ap._cfg = lambda: {"ai_provider": "custom", "ai_model_creative": "",
+    # Fournisseur personnalisé : aucun repli inter-fournisseur silencieux.
+    ap._cfg = lambda: {"ai_profile": "custom", "ai_engine": "custom",
+                       "ai_provider": "custom", "custom_model": "local-model",
                        "ai_task_engines": {"enhance": "opus"}}
     try:
-        assert ap._resolve_engine() == ("anthropic", "claude-opus-4-8")
+        assert ap._resolve_engine() == ("custom", "local-model")
         assert ap._resolve_engine("enhance") == ("anthropic", "claude-opus-4-8")
     finally:
         ap._cfg = orig
@@ -1034,13 +1099,12 @@ def moteurs_ia_par_tache():
     assert 'task="assistant"' in inspect.getsource(__import__("api.assistant", fromlist=["_"]))
     # Paramètres : clés + testeurs GPT/Mistral + menu avancé par tâche
     src_pg = inspect.getsource(__import__("ui.page_settings", fromlist=["_"]))
-    assert '_test_btn("✓  Tester API GPT-5.5"' in src_pg and '_test_btn("✓  Tester API Mistral"' in src_pg
+    assert '_test_btn("✓  Tester API OpenAI"' in src_pg and '_test_btn("✓  Tester API Mistral"' in src_pg
     assert "Paramètres avancés" in src_pg and "_task_combos" in src_pg
     # Clés obligatoires (rouge) vs facultatives (menu déroulant bleu)
     assert '_badge("Obligatoire", "req")' in src_pg and '_badge("Facultatif", "opt")' in src_pg
     assert "Clés API facultatives" in src_pg
-    # Description avancés : PANDORA optimisé Fable 5
-    assert "optimisé avec Fable 5" in src_pg
+    assert "sans repli silencieux" in src_pg
     # Choix personnalisé câblé sur le moteur par tâche
     assert '"custom"' in src_pg and "_set_advanced" in src_pg
 
@@ -1053,14 +1117,15 @@ def moteur_kimi_api_ou_local():
     import core.ai_provider as ap
     assert "kimi" in ap._PROVIDERS
     assert ap.ENGINES["kimi"]["provider"] == "kimi"
-    assert ap.ENGINES["kimi"]["name"] == "Kimi K2.7"
+    assert ap.ENGINES["kimi"]["name"] == "Kimi"
     assert "kimi" in ap.ENGINE_ORDER
     assert ap._KIMI_DEFAULT_MODEL == "kimi-k2.7-code"
     assert ap._KIMI_DEFAULT_URL == "https://api.moonshot.ai/v1"
     orig = ap._cfg
     try:
         # Routage par tâche → provider kimi
-        ap._cfg = lambda: {"ai_task_engines": {"screenplay": "kimi"}}
+        ap._cfg = lambda: {"ai_profile": "single", "ai_provider": "kimi",
+                           "ai_task_engines": {"screenplay": "kimi"}}
         assert ap._resolve_engine("screenplay")[0] == "kimi"
         # Modèle : défaut + override
         ap._cfg = lambda: {}
@@ -1068,11 +1133,14 @@ def moteur_kimi_api_ou_local():
         ap._cfg = lambda: {"kimi_model": "kimi-k2.6"}
         assert ap._model("utility", "kimi", "") == "kimi-k2.6"
         # key_error : cloud SANS clé → erreur ; AVEC clé → None ; local → None
-        ap._cfg = lambda: {"ai_task_engines": {"sync": "kimi"}}
+        ap._cfg = lambda: {"ai_profile": "single", "ai_provider": "kimi",
+                           "ai_task_engines": {"sync": "kimi"}}
         assert ap.key_error("sync") and "Kimi" in ap.key_error("sync")
-        ap._cfg = lambda: {"ai_task_engines": {"sync": "kimi"}, "kimi_key": "sk-x"}
+        ap._cfg = lambda: {"ai_profile": "single", "ai_provider": "kimi",
+                           "ai_task_engines": {"sync": "kimi"}, "kimi_key": "sk-x"}
         assert ap.key_error("sync") is None
-        ap._cfg = lambda: {"ai_task_engines": {"sync": "kimi"},
+        ap._cfg = lambda: {"ai_profile": "single", "ai_provider": "kimi",
+                           "ai_task_engines": {"sync": "kimi"},
                            "kimi_url": "http://localhost:11434/v1"}
         assert ap.key_error("sync") is None, "local ne doit pas exiger de clé"
         # Payload OpenAI-compatible : URL /chat/completions, modèle, Bearer
@@ -1091,7 +1159,7 @@ def moteur_kimi_api_ou_local():
         ds = inspect.getsource(ap._dispatch_complete) + inspect.getsource(ap._dispatch_stream)
         assert ds.count('provider == "kimi"') == 2
         # Nom d'affichage
-        assert ap._engine_display_name("kimi", "") == "Kimi K2.7"
+        assert ap._engine_display_name("kimi", "") == "Kimi"
     finally:
         ap._cfg = orig
     # Paramètres Cinéma : sélecteur Kimi + champs URL/modèle + clé + testeur
@@ -1156,8 +1224,9 @@ def mise_en_scene_plan_de_feu():
     wsrc = inspect.getsource(__import__("ui.pandora_window", fromlist=["_"]))
     assert '"mise_en_scene"' in wsrc and '"plan_de_feu"' in wsrc
     assert wsrc.index('"storyboard"') < wsrc.index('"mise_en_scene"'), "Mise en scène après Storyboard"
-    assert wsrc.index('"camera"') < wsrc.index('"plan_de_feu"') < wsrc.index('"doublage"'), \
-        "Plan de feu entre Image & Son et Doublage"
+    assert wsrc.index('"plan_de_feu"') < wsrc.index('"camera"') < wsrc.index('"doublage"'), \
+        "Technique : Plan de feu avant Image & Son puis Doublage"
+    assert '("projets.png"' not in wsrc, "Projets retiré du dashboard global"
     # Synchro des prompts : tient compte de la mise en scène
     sp = inspect.getsource(__import__("api.screenplay", fromlist=["_"]))
     assert "mise_en_scene" in sp and "import core.staging" in sp
@@ -1165,21 +1234,28 @@ def mise_en_scene_plan_de_feu():
 
 @test
 def studio_musique_ia_et_image_ia():
-    """Studio IA : onglets « Musique IA » (multi-moteurs fal.ai, défaut = le plus
-    performant) et « Image IA » (panneau Studio Images partagé, source unique)."""
+    """Vidéo IA conserve ses outils vidéo/audio ; Image IA est désormais une
+    destination globale autonome, tout en gardant le panneau partagé unique."""
     import ui.seedance_widget as SW
     src = inspect.getsource(SW)
-    # Ordre groupé : … Upscaling (fin G1) → Sound Design → Musique IA (G2) → Image IA (G3)
+    # Image IA ne doit plus être dupliquée dans les onglets de Vidéo IA.
     assert (src.index("addTab(self.tab_upscale")
             < src.index("addTab(self.tab_sound")
-            < src.index("addTab(self.tab_music")
-            < src.index("addTab(self.tab_image")), \
-        "ordre groupé : Upscaling → Sound Design → Musique IA → Image IA"
+            < src.index("addTab(self.tab_music")), \
+        "ordre groupé : Upscaling → Sound Design → Musique IA"
+    assert "self.tab_image" not in src, "Image IA encore dupliquée dans Vidéo IA"
     # Barre d'onglets groupée : trait vertical en fin de groupe (façon dashboard)
     assert "_GroupedTabBar" in src and "set_group_ends" in src, \
         "barre d'onglets avec séparateurs de groupes"
-    assert "set_group_ends({3, 5, 6})" in src, \
-        "traits après Upscaling (G1), Musique IA (G2), Image IA (G3)"
+    assert "set_group_ends({3, 5})" in src, \
+        "traits après Upscaling (G1) et Musique IA (G2)"
+
+    import ui.pandora_window as PW
+    nav_src = inspect.getsource(PW)
+    assert nav_src.index('"image_ia"') < nav_src.index('"seedance"'), \
+        "dashboard : Image IA doit précéder Vidéo IA"
+    assert 'tr("nav.group_studio_ia")' in nav_src, \
+        "le groupe final doit s'appeler Studio IA"
 
     # ── Musique IA : catalogue multi-moteurs + défaut performant ──────────────
     import api.music as M
@@ -1293,12 +1369,12 @@ def decors_plan_auto_et_sync():
     assert hasattr(GenerateFloorPlansWorker, "plan_done")
 
     # Pipeline 7 vues raccord : plan d'ensemble → plan d'architecture (contexte)
-    # → 6 faces en injectant ces références (NB2 edit).
+    # → 6 faces en injectant ces références (moteur edit sélectionné).
     rv = inspect.getsource(GenerateRoomViewsWorker._real)
     assert "build_overview_prompt" in rv and "_floor_plan_prompt" in rv, "ensemble + architecture"
     assert "is_floor_plan" in rv, "plan d'architecture renvoyé séparément"
-    assert "nano-banana-2/edit" in rv and "image_urls" in rv, "faces avec références injectées"
-    assert rv.index("build_overview_prompt(base_en)") < rv.index("build_six_view_prompts(base_en)"), \
+    assert "build_request" in rv and "ref_urls" in rv, "faces avec références injectées"
+    assert rv.index("build_overview_prompt(") < rv.index("build_six_view_prompts("), \
         "plan d'ensemble AVANT les 6 faces"
 
     # Auto-génération depuis le scénario (décors uniquement)
@@ -1570,6 +1646,12 @@ def staging_outils_projecteurs_sections():
         _p = _C()
         assert hasattr(_p, "_btn_clear_all") and hasattr(_p, "_on_clear_all"), \
             f"{_C.__name__} : bouton Tout supprimer"
+    _lighting = PageLighting()
+    assert hasattr(_lighting, "_tools") and hasattr(_lighting, "_inspector"), \
+        "Plan de feu V2 : outils centraux + réglages projecteurs"
+    assert hasattr(_lighting._canvas, "fit_scene") and hasattr(_lighting._canvas, "zoom_by") \
+        and hasattr(_lighting._canvas, "set_grid_visible"), "outils du plan câblés"
+    assert "QGraphicsPolygonItem" in cvsrc, "cônes caméra et projecteurs affichés"
     # Le canevas vide réellement les éléments éditables + détecte le « rien à faire »
     assert "has_clearable" in psrc and "Rien à supprimer" in psrc, \
         "feedback quand il n'y a rien à supprimer"
@@ -1586,14 +1668,16 @@ def staging_outils_projecteurs_sections():
 
 @test
 def scenario_onglet_mise_en_page():
-    """Page Scénario : 2 onglets (Scénario / Mise en page PANDORA) façon Live —
-    la mise en page va dans son onglet et NE touche PAS au scénario."""
+    """Page Scénario : Scénario / Note de réalisation / Découpage PANDORA ;
+    le découpage reste distinct du texte narratif."""
     from ui.page_scenario import PageScenario
     p = PageScenario()
     assert hasattr(p, "_editor_tabs") and hasattr(p, "_layout_view"), "onglets éditeur"
-    assert p._editor_tabs.count() == 2, "Scénario + Mise en page PANDORA"
-    assert not p._editor_tabs.isTabEnabled(1), "Mise en page grisée tant que vide"
-    # La mise en page n'écrase pas le scénario
+    assert p._editor_tabs.count() == 3, "Scénario + Note + Découpage PANDORA"
+    assert hasattr(p, "_direction_note_edit")
+    assert p._editor_tabs.isTabEnabled(1), "la note reste toujours éditable"
+    assert not p._editor_tabs.isTabEnabled(2), "Découpage grisé tant que vide"
+    # Le découpage n'écrase pas le scénario
     p._set_editor_text("SCENARIO ORIGINAL")
     p._current = {}
     p._apply_layout("MISE EN PAGE PANDORA")
@@ -1603,14 +1687,17 @@ def scenario_onglet_mise_en_page():
     # bornée (lisible car largeur limitée — PAS le centrage pleine largeur illisible).
     from PyQt6.QtCore import Qt as _Qt
     _ed_align = p._editor_text.document().defaultTextOption().alignment()
+    _note_align = p._direction_note_edit.document().defaultTextOption().alignment()
     _lv_align = p._layout_view.document().defaultTextOption().alignment()
     assert _ed_align & _Qt.AlignmentFlag.AlignHCenter, "Scénario centré dans la colonne (façon Word)"
+    assert _note_align & _Qt.AlignmentFlag.AlignHCenter, "Note centrée dans la colonne"
     assert _lv_align & _Qt.AlignmentFlag.AlignHCenter, "Mise en page centrée dans la colonne"
     assert hasattr(p._editor_text, "_reading_column_filter") \
+        and hasattr(p._direction_note_edit, "_reading_column_filter") \
         and hasattr(p._layout_view, "_reading_column_filter"), \
-        "colonne de lecture centrée installée sur les 2 onglets"
-    assert p._editor_tabs.isTabEnabled(1) and p._editor_tabs.currentIndex() == 1
-    assert p._current.get("layout_content"), "mise en page persistée séparément"
+        "colonne de lecture centrée installée sur les 3 onglets"
+    assert p._editor_tabs.isTabEnabled(2) and p._editor_tabs.currentIndex() == 2
+    assert p._current.get("decoupage_content"), "découpage persisté séparément"
     # ── Source du découpage AUTOMATIQUE (règle 2026-07-09, aucun choix manuel) ──
     # Mise en page PANDORA si présente…
     assert p._decoupage_base() == "MISE EN PAGE PANDORA", \
@@ -1622,11 +1709,13 @@ def scenario_onglet_mise_en_page():
     p._layout_view.setPlainText("")
     assert p._decoupage_base() == "SCENARIO ORIGINAL", "sans mise en page → scénario"
     p._layout_view.setPlainText("MISE EN PAGE PANDORA")
-    # En Cinéma la génération passe par l'IA (qui REFORMULE) → si une mise en page
-    # existe, _on_storyboard AVERTIT (confirm_prompt_rewrite) ; plus AUCUN choix manuel.
+    # Depuis le 2026-07-23 : plus de blocage — un découpage non structuré ou périmé
+    # déclenche une CONFIRMATION explicite, et l'absence de découpage part du scénario.
     _obs = inspect.getsource(PageScenario._on_storyboard)
-    assert "confirm_prompt_rewrite" in _obs, \
-        "_on_storyboard Cinéma : avertissement de réécriture absent"
+    assert "is_structured_layout" in _obs and "Découpage non structuré" in _obs, \
+        "_on_storyboard Cinéma : confirmation du découpage non structuré absente"
+    assert "Découpage requis" not in _obs, \
+        "_on_storyboard Cinéma : le blocage « Découpage requis » doit avoir disparu"
     assert "choose_decoupage_source" not in _obs, \
         "_on_storyboard Cinéma : l'ancienne fenêtre de choix doit avoir disparu"
     # La fenêtre de mise en page applique vers l'onglet (pas _set_editor_text)
@@ -1637,6 +1726,62 @@ def scenario_onglet_mise_en_page():
     be = inspect.getsource(PageScenario._build_editor)
     assert "setFixedWidth(900)" not in be, "plus de colonne 900 px collée à gauche"
     assert "install_reading_column" in be, "colonne de lecture centrée (lignes lisibles)"
+
+
+@test
+def analyse_transfere_note_realisation():
+    """Appliquer une analyse range sa section 6 dans la note, jamais sa section 7."""
+    from core.direction_note import append_to_note, empty_note, extract_from_analysis
+
+    analysis_fr = """### 5. Suggestions concrètes pour le scénario
+- Renforcer l'enjeu narratif.
+
+### 6. Intentions à placer dans la Note de réalisation
+- Plans longs de 8 secondes au début.
+- Lumière froide puis passage progressif à l'ambre.
+- Montage plus rapide dans la dernière séquence.
+
+### 7. Inventaire complet des personnages
+ALICE | Principal | Séquences 1 à 4
+"""
+    extracted = extract_from_analysis(analysis_fr)
+    assert "Plans longs" in extracted and "Lumière froide" in extracted
+    assert "ALICE" not in extracted and "Inventaire" not in extracted, \
+        "l'inventaire des personnages ne doit jamais entrer dans la note"
+
+    analysis_en = """### 6. Intentions for the Director's Note
+- Slow, deliberate opening shots.
+- High-contrast moonlight.
+
+### 7. Complete character inventory
+ALICE | Lead
+"""
+    assert "moonlight" in extract_from_analysis(analysis_en)
+    assert "ALICE" not in extract_from_analysis(analysis_en)
+
+    base = empty_note() + "\nNote humaine conservée.\n"
+    merged = append_to_note(base, "INTENTIONS ISSUES DE L’ANALYSE DU SCÉNARIO",
+                            extracted, replace=True)
+    assert "Note humaine conservée" in merged and "Plans longs" in merged
+
+    from ui.page_scenario import PageScenario
+    page = PageScenario()
+    page._current = None       # test sans écriture projet
+    page._direction_note_edit.setPlainText("Note manuelle")
+    assert page._merge_analysis_direction_note(analysis_fr) is True
+    note = page._direction_note_edit.toPlainText()
+    assert "Note manuelle" in note and "Montage plus rapide" in note
+    assert "ALICE" not in note
+    assert page._merge_analysis_direction_note(analysis_fr) is False, \
+        "rouvrir la même analyse ne doit pas dupliquer la note"
+    source = inspect.getsource(PageScenario._open_arrange_window)
+    assert "_merge_analysis_direction_note(_final_analysis[0])" in source, \
+        "le bouton Mettre à jour le scénario doit transférer la note"
+    assert "if analysis and worker is None" in source \
+        and "_merge_analysis_direction_note(analysis)" in source, \
+        "rouvrir une analyse sauvegardée doit réparer la note manquante"
+    assert "_merge_analysis_direction_note(result)" in source, \
+        "une nouvelle analyse doit transférer automatiquement sa section 6"
 
 
 @test
@@ -1657,16 +1802,16 @@ def avertissement_reecriture_dialog():
 
 @test
 def placeholder_decoupage_source_cinema():
-    """Placeholder « ⊕ Générer depuis le scénario » (Storyboard Cinéma, découpage vide) :
-    source AUTOMATIQUE (Mise en page PANDORA sinon scénario) + AVERTISSEMENT de
-    réécriture si une mise en page existe (l'IA reformule) — règle 2026-07-09."""
+    """Le Storyboard exige le Découpage canonique et ne redécoupe plus le scénario."""
     import inspect
     from ui.page_storyboard import PageStoryboard
     _oa = inspect.getsource(PageStoryboard._on_analyze)
-    assert 'sc.get("layout_content"' in _oa and "_layout or _source" in _oa, \
-        "placeholder Cinéma : source automatique (layout sinon scénario) non branchée"
-    assert "confirm_prompt_rewrite" in _oa, \
-        "placeholder Cinéma : avertissement de réécriture absent"
+    assert 'sc.get("decoupage_content")' in _oa and "text = _layout" in _oa, \
+        "placeholder Cinéma : découpage canonique non branché"
+    assert "validate_layout" in _oa and "Aucune réécriture IA automatique" in _oa, \
+        "placeholder Cinéma : validation bloquante du découpage absente"
+    assert "_layout or _source" not in _oa and "confirm_prompt_rewrite" not in _oa, \
+        "le Storyboard conserve un repli silencieux vers le scénario brut"
     assert "choose_decoupage_source" not in _oa, \
         "placeholder Cinéma : l'ancienne fenêtre de choix doit avoir disparu"
     # Le bouton placeholder « ⊕ Générer depuis le scénario » est bien relié à _on_analyze.
@@ -1987,8 +2132,10 @@ def assistant_ia_routage_par_tache():
         _cfg.load_config = lambda: {}
         from ui.page_settings import SettingsPage
         ps = SettingsPage()
-        assert ps.ai_combo.currentData() == ("anthropic", "claude-opus-4-8"), \
-            f"défaut attendu = profil optimisé, eu {ps.ai_combo.currentData()}"
+        selected = ps.ai_combo.currentData()
+        assert isinstance(selected, dict) and selected.get("profile") in {
+            "anthropic_optimized", "openai_optimized"
+        }, f"profil optimisé attendu, eu {selected}"
     finally:
         _cfg.load_config = _orig
 
@@ -2131,13 +2278,16 @@ def image_ia_chat_a_droite():
         ss = f.read()
     assert "background-color: {CP['bg0']}" in ss, "fond Studio Images = bg0 (noir), comme Conducteur/Scénario"
     assert "iaChatPanel" in src, "panneau IA doit rester bleu marine (bg1, objectName iaChatPanel)"
-    assert "root.setContentsMargins(14, 12, 0, 12)" in src, "poignée non collée au bord (marge droite ≠ 0)"
+    # Depuis le 2026-07-22 : marges verticales à 0 aussi (la poignée et le panneau
+    # touchent les bords haut/bas — plus de bandes noires).
+    assert "root.setContentsMargins(14, 0, 0, 0)" in src, "poignée non collée aux bords (marges ≠ 0)"
     # Panneau chat ENTIÈREMENT marine — viewport du scroll peint aussi (sinon bande
     # noire en haut) ; poignée « IA » collée au bord (spacer masqué sur la page
-    # « seedance »). Retour Matthieu 2026-07-05.
+    # « image_ia »). Retour Matthieu 2026-07-05.
     assert "viewport().setStyleSheet" in src, "viewport du chat non peint → bande noire résiduelle"
     with open(os.path.join(root, "ui", "pandora_window.py"), encoding="utf-8") as f:
-        assert 'key != "seedance"' in f.read(), "spacer non masqué sur Studio IA → poignée IA décalée"
+        assert 'key not in ("image_ia", "plan_de_feu", "scenario")' in f.read(), \
+            "spacer masqué sur Image IA, Plan de feu et Scénario (poignées au bord)"
 
 
 @test
@@ -2408,13 +2558,12 @@ def panneau_scenario_aligne_jusqu_au_bord():
     assert "else 58)" in src, "hauteur de bouton non augmentée pour 2 lignes (58 par défaut)"
     # Bouton « Générer le storyboard » MIS EN AVANT (cadre vert, façon « Tout générer »).
     assert 'self._on_storyboard, color=CP["green"]' in src, "« Générer le storyboard » pas mis en avant (cadre coloré)"
-    # Réorg 2026-07-06 : « Écriture assistée par IA » scindée en « Scénario »
-    # (Analyse + Co-écriture) et « Finalisation » (Mise en page + Co-écriture des plans).
+    # Architecture 2026-07-21 : Scénario puis Découpage PANDORA.
     assert '_make_toggle("📖  Scénario"' in src, "section Scénario (ex-IA) absente"
-    assert '_make_toggle("🎯  Finalisation"' in src, "section Finalisation absente"
-    assert '"Co-écriture des plans"' in src and "def _on_plan_coedit" in src, \
-        "bouton/handler Co-écriture des plans absent (Cinéma)"
-    # Ordre du panneau : Scénario avant Finalisation avant Générer.
+    assert '_make_toggle("🎯  Découpage"' in src, "section Découpage absente"
+    assert '"Affiner le découpage"' in src and "def _on_plan_coedit" in src, \
+        "bouton/handler d'affinage du découpage absent"
+    # Ordre du panneau : Scénario avant Découpage avant Générer.
     assert src.index("(tog_scen,") < src.index("(tog_final,") < src.index("(tog_gen,"), \
         "ordre du panneau droit incorrect (Scénario, Finalisation, …, Générer)"
 
@@ -2435,10 +2584,11 @@ def coecriture_des_plans_cinema():
     from ui.dialog_plan_coedit import PlanCoEditDialog
     from api.plan_coedit import PlanCoEditWorker, _plan_coedit_system
     _syscine = _plan_coedit_system("cinema")
-    assert "P<NN> |" in _syscine, "format Cinéma non calibré dans le prompt"
+    assert "PLAN <NN>" in _syscine and "PROMPT VISUEL" in _syscine, \
+        "format Cinéma v2 non calibré dans le prompt"
     # Le plan réécrit reste dans la LANGUE DE TRAVAIL (français par défaut) —
     # la traduction vers l'anglais est faite à l'ENVOI aux moteurs.
-    assert "sensoriel, en français." in _syscine, "co-écriture Cinéma en langue de travail (fr)"
+    assert "détaillé en français." in _syscine, "co-écriture Cinéma en langue de travail (fr)"
     dlg = PlanCoEditDialog(None, cine, edition="cinema")
     assert not dlg.was_applied() and dlg.result_layout() == cine
     # Réordonner (glisser-déposer) / ajouter / dupliquer / supprimer + renum P0N (Cinéma).
@@ -2446,7 +2596,7 @@ def coecriture_des_plans_cinema():
     _lbls = [p["label"] for p in pl.split_plans(_re)]
     assert _lbls[0].startswith("P01 | Gros plan") and _lbls[1].startswith("P02 | Plan large"), "reorder + renum P0N"
     _add = pl.add_plan(cine, 0, "cinema")
-    assert pl.plan_count(_add) == 3 and "P02 | Plan moyen" in _add, "add gabarit Cinéma + renum"
+    assert pl.plan_count(_add) == 3 and "PLAN 02" in _add, "add gabarit Cinéma v2 + renum"
     assert pl.plan_count(pl.duplicate_plan(cine, 0)) == 3, "dup Cinéma"
     assert pl.plan_count(pl.delete_plan(cine, 0)) == 1, "delete Cinéma"
     for _m in ("_on_plans_reordered", "_plan_context_menu", "_duplicate_plan", "_delete_plan_at",
@@ -2581,7 +2731,7 @@ def refs_inspiration_completent_le_prompt_sans_alterer_keyframes():
 
 @test
 def studio_ia_onglets_style_conducteur():
-    """Onglets Studio IA Cinéma façon Conducteur (2026-07-06) : barre fond bg0 +
+    """Onglets Vidéo IA Cinéma façon Conducteur (2026-07-06) : barre fond bg0 +
     filet haut/bas, séparateurs de groupe conservés ; bouton « Envoyer à Claude »
     dans le chat Image IA (studio_images)."""
     import inspect
@@ -2590,7 +2740,7 @@ def studio_ia_onglets_style_conducteur():
         "barre d'onglets Studio IA Cinéma : fond noir + AUCUNE bordure (sinon ligne doublée/tronquée)"
     assert "QTabWidget::pane{{border:none;border-top:1px solid" in sw, \
         "filet pleine largeur sous la barre (bord haut du pane, façon Conducteur)"
-    assert "_GroupedTabBar" in sw and "set_group_ends({3, 5, 6})" in sw, \
+    assert "_GroupedTabBar" in sw and "set_group_ends({3, 5})" in sw, \
         "séparateurs de groupe Cinéma cassés"
     with open("studio_images/window.py", encoding="utf-8") as f:
         win = f.read()
@@ -2617,9 +2767,8 @@ def fleches_dialogue_fichier_en_blanc():
 
 @test
 def enrichissement_refs_chirurgical():
-    """Enrichissement « Références visuelles » CHIRURGICAL (2026-07-06) : le worker
-    renvoie des édits {find, replace} (moins de tokens) au lieu de tout réécrire ;
-    core.text_edits les applique en gardant le reste MOT POUR MOT."""
+    """Le worker legacy reste chirurgical, mais le flux principal range désormais
+    la direction artistique dans la note sans altérer le scénario."""
     import inspect
     from api.screenplay import EnrichScenarioWithRefsWorker
     sysp = EnrichScenarioWithRefsWorker._SYSTEM
@@ -2638,10 +2787,12 @@ def enrichissement_refs_chirurgical():
     assert "néon, reflets cyan" in new and "Un homme attend." in new and "ACTE 2" in new, \
         "application chirurgicale : passage remplacé, reste intact"
     assert len(applied) == 1 and not missed
-    # UI : application via apply_find_replace_edits (plus de remplacement total streamé).
+    # UI Cinéma : l'analyse est ajoutée à la note, jamais au texte narratif.
     from ui.page_scenario import PageScenario
     _refsrc = inspect.getsource(PageScenario._open_refs_window)
-    assert "apply_find_replace_edits" in _refsrc, "UI Cinéma n'applique pas les édits chirurgicaux"
+    assert "append_to_note" in _refsrc and "_direction_note_edit" in _refsrc
+    assert "EnrichScenarioWithRefsWorker(" not in _refsrc, \
+        "le flux principal modifie encore le scénario depuis le moodboard"
     # Le bouton « Enrichir » ne doit JAMAIS être masqué au clic — seulement grisé
     # pendant le traitement, puis réactivé (retour Matthieu : il disparaissait).
     assert "btn_enrich.setVisible(False)" not in _refsrc, \
@@ -2700,9 +2851,9 @@ def analyse_musicale_scenario_cinema():
         assert hasattr(p, m), "méthode musique manquante : " + m
     assert hasattr(p, "_music_hbox") and hasattr(p, "_btn_analyze_music")
     assert hasattr(p, "_choose_music_mode"), "popup de choix film/clip absent"
-    # Renommage Cinéma : « Musique du film » (et plus « Musiques du set »).
+    # Renommage Cinéma : section « Musique » (2026-07-22).
     src = inspect.getsource(PageScenario)
-    assert "♫  Musique du film" in src, "section non renommée en « Musique du film »"
+    assert '_make_toggle("♫  Musique"' in src, "section non renommée en « Musique »"
     # Timeline injectée selon le MODE choisi avant l'analyse.
     p._music_tracks = [{"name": "t", "bpm": 128, "duration": 200, "energy": "▁█", "drops": [8.0]}]
     p._music_mode = "clip"
@@ -2786,7 +2937,10 @@ def storyboard_hauteur_libelle_moods():
     assert "cells[19] = hgt_w" in src, "cellule Hauteur non assemblée"
     assert ("self._btn_save_sb_file" in src and "self._btn_open_sb_file" in src), "boutons fichier absents"
     assert "lay.addWidget(self._btn_save_sb_file)" not in src, "Sauvegarder ne doit plus être collé à droite"
-    assert "insertSpacing" in src, "espace/barre de séparation avant Sauvegarder/Ouvrir manquant"
+    # Depuis le 2026-07-22, Sauvegarder/Ouvrir/Moods/Synchronisation/Récurrents/
+    # Pitch deck vivent dans le menu déroulant « Action » tout à gauche.
+    assert "self._btn_actions" in src and "_sync_actions_menu" in src, \
+        "menu « Action » absent de la barre du storyboard"
     assert ("Aucun mood généré" in src and "_mood_ok" in src and "_mood_fail" in src), \
         "message moods non fiabilisé"
     assert "Configure ta clé fal.ai dans Paramètres pour générer les moods." in src, \
@@ -3641,7 +3795,8 @@ def analyse_arrangement_sauvegardee():
     # Erreur « crédits épuisés » → message clair (API texte ; fal.ai a le sien
     # dans core.worker.humanize_api_error)
     from core.ai_provider import humanize_ai_error
-    assert "console.anthropic.com" in humanize_ai_error("Your credit balance is too low")
+    credit_error = humanize_ai_error("Your credit balance is too low")
+    assert "Crédits" in credit_error and "fournisseur" in credit_error
     assert "réessaie" in humanize_ai_error("Error 429: rate limit exceeded")
     assert humanize_ai_error("autre erreur") == "autre erreur"
 
@@ -3779,6 +3934,8 @@ def moteurs_image_catalogue_unifie():
     assert set(IE.edit_capable_engines()) == {"nb2", "nb_pro", "nb2_lite",
                                               "seedream5_pro", "seedream5"}, \
         "éditeurs de référence (mapping) ≠ Nano Banana + Seedream 5"
+    assert [k for k, _ in IE.reference_engine_choices()] == IE.edit_capable_engines(), \
+        "workflow 7 vues : proposer uniquement les moteurs d'édition compatibles"
     assert not IE.is_edit_capable("recraft") and not IE.is_edit_capable("zimage")
     # 3) _build_image_args câble les moteurs ÉLARGIS via le catalogue (endpoints réels),
     #    et les 6 historiques gardent LEUR câblage (zéro régression).
@@ -4299,6 +4456,283 @@ def studio_ia_file_attente_et_balayage_moteurs():
     from core.i18n import _FR_TO_EN
     assert pn._gen_all_btn.text() in _FR_TO_EN, "libellé du balayage traduit"
     assert pn._gen_all_btn.toolTip() in _FR_TO_EN, "infobulle du balayage traduite"
+
+
+@test
+def prompt_video_prose_composee():
+    """Prompts Seedance du storyboard (2026-07-21) : à l'ENVOI, les sections FR sont
+    composées par l'IA en PROSE anglaise dense — style en TÊTE, fiches casting
+    injectées, son guidé (generate_audio), durée écrite — au lieu de partir balisées
+    puis traduites (mauvais rendus constatés). Le storyboard reste l'espace de
+    travail plan par plan (sections intactes) ; repli complet sur le chemin
+    historique (Live, texte libre, clé absente, erreur API)."""
+    from api import video_prompt as VP
+    from core.prompt_sections import build, video_with_sound
+
+    # 1) Ciblage : storyboard riche → composé ; Live (corps+son) et texte libre → NON.
+    riche = build(action="Jésus pousse sa lèvre avec l'index",
+                  staging="Jésus au deuxième plan à gauche",
+                  ambiance="calme poussiéreux presque sacré", decor="canyon ocre, arbre mort",
+                  lighting="lumière rasante cuivrée de fin de journée",
+                  technique="Gros plan, caméra fixe, objectif 85mm.", sound="vent chaud, brrrr")
+    assert VP.should_compose(riche), "prompt storyboard riche → composition"
+    assert not VP.should_compose(video_with_sound(
+        "Début : façade sombre. Milieu : pulsation. Fin : blackout.", "basses sourdes")), \
+        "prompt Live (corps + son) → chemin historique"
+    assert not VP.should_compose("un texte libre tapé à la main"), "texte libre → historique"
+    assert not VP.should_compose(""), "prompt vide → historique"
+
+    # 2) Fiches casting depuis le plan (character_names → description + prompt du casting).
+    import core.casting as _cast
+    _orig = _cast.list_characters
+    _cast.list_characters = lambda: [
+        {"name": "Jésus", "description": "Homme émacié, couronne d'épines",
+         "prompt": "barbe emmêlée, robe blanche déchirée"}]
+    try:
+        notes = VP.character_notes_for_shot({"character_names": ["Jésus", "Inconnu"]})
+    finally:
+        _cast.list_characters = _orig
+    assert "Jésus" in notes and "couronne d'épines" in notes and "robe blanche" in notes, \
+        "fiche casting injectée (description + prompt)"
+    assert VP.character_notes_for_shot({}) == "" and VP.character_notes_for_shot(None) == "", \
+        "sans personnage → pas de fiches (jamais bloquant)"
+
+    # 3) Composition : message complet, tâche video_prompt, tier créatif ; la recette
+    #    (style en tête, dialogues verbatim, pas de mots qualité) est dans le système.
+    from core import ai_provider as _ai
+    captured = {}
+    _oc = _ai.complete
+    def _fake(system, user, tier="utility", max_tokens=2048, task=None):
+        captured.update(system=system, user=user, tier=tier, task=task)
+        return "Painterly prose, head style prompt."
+    _ai.complete = _fake
+    try:
+        out = VP.compose(riche, style_suffix="Arcane style, painterly 3D",
+                         time_suffix="sunset, golden hour", duration=7,
+                         character_notes="- Jésus : couronne d'épines", include_sound=True)
+        assert out == "Painterly prose, head style prompt.", "prose renvoyée telle quelle"
+        assert captured["task"] == "video_prompt" and captured["tier"] == "creative", \
+            "task=video_prompt (routage par tâche) + tier créatif"
+        for frag in ("Arcane style, painterly 3D", "sunset, golden hour", "7 seconds",
+                     "couronne d'épines", "canyon ocre", "vent chaud"):
+            assert frag in captured["user"], f"contexte manquant dans le message : {frag}"
+        # Style en FIN de prompt depuis le 2026-07-23 (guide officiel Seedance 2.0).
+        for frag in ("FERMENT le prompt", "VERBATIM", "PHYSIQUEMENT", "masterpiece",
+                     "Ne TRANSFORME jamais l'action"):
+            assert frag in VP._SYSTEM, f"recette absente du prompt système : {frag}"
+        # Sans audio : la section son est retirée AVANT l'appel + consigne « pas de son ».
+        VP.compose(riche, include_sound=False)
+        assert "vent chaud" not in captured["user"], "sans audio, la section son ne part pas"
+        assert "NE PAS mentionner le son" in captured["user"], "consigne sans-son explicite"
+        # Son via sound_notes : tab_t2v STRIPPE la section son avant les params
+        # (protection suffixes de queue) → le texte est capturé AVANT et passe par
+        # params["sound_notes"] → bloc [AMBIANCE SONORE] du composeur.
+        from core.prompt_sections import strip_for_video as _sfv
+        VP.compose(_sfv(riche), sound_notes="cri d'oiseau lointain", include_sound=True)
+        assert "cri d'oiseau lointain" in captured["user"] \
+            and "[AMBIANCE SONORE" in captured["user"], "sound_notes → bloc son du composeur"
+        # Mise en scène / Plan de feu → composition : la synchro page_staging réécrit
+        # les sections FR du prompt (parse→build) ; toute modification DOIT se
+        # retrouver dans le message du composeur (même mécanique parse/build).
+        from core.prompt_sections import parse as _pp, build as _pb
+        _sec = _pp(riche)
+        _apres_sync = _pb(action=_sec["action"], staging="Comédiens replacés côté cour",
+                          ambiance=_sec["ambiance"], decor=_sec["decor"],
+                          lighting="Contre-jour bleu depuis la fenêtre",
+                          technique=_sec["technique"], sound=_sec["sound"])
+        assert VP.should_compose(_apres_sync), "prompt resynchronisé → toujours composé"
+        VP.compose(_apres_sync)
+        assert "Comédiens replacés côté cour" in captured["user"] \
+            and "Contre-jour bleu depuis la fenêtre" in captured["user"], \
+            "les sections modifiées par Mise en scène / Plan de feu partent au composeur"
+        # Réponse bavarde (préambule) → composition invalidée (repli traduction).
+        _ai.complete = lambda *a, **k: "Voici le prompt : ..."
+        assert VP.compose(riche) == "", "préambule détecté → repli"
+    finally:
+        _ai.complete = _oc
+
+    # 4) Tâche paramétrable (Paramètres → avancés) + défaut Sonnet 5 + i18n.
+    assert "video_prompt" in dict(_ai.TASKS), "tâche video_prompt dans les Paramètres avancés"
+    assert _ai.TASK_DEFAULTS.get("video_prompt") == "claude", "défaut = Sonnet 5 (écriture)"
+    from core.i18n import _FR_TO_EN
+    assert dict(_ai.TASKS)["video_prompt"] in _FR_TO_EN, "libellé de tâche traduit FR+EN"
+    assert "Composition du prompt vidéo (prose anglaise)…" in _FR_TO_EN, "message progression traduit"
+
+    # 5) api/real.py : composition branchée, suffixes style/heure CONSOMMÉS quand
+    #    composé (style déjà en tête de la prose), repli traduction conservé.
+    rsrc = inspect.getsource(__import__("api.real", fromlist=["x"]))
+    assert "should_compose" in rsrc and "_vp_compose" in rsrc, "composition branchée dans run_real"
+    assert '"" if _composed else params.get("style_suffix"' in rsrc, "style non recollé en fin"
+    assert '"" if _composed else params.get("time_suffix"' in rsrc, "contrainte horaire non doublée"
+    assert "if not _composed:" in rsrc, "repli strip+traduction conservé"
+
+    # 6) tab_t2v : fiches casting + son transmis à la génération (params) ; le son
+    #    est capturé AVANT le strip historique de la section [🎵 SOUND DESIGN].
+    tsrc = inspect.getsource(__import__("ui.tab_t2v", fromlist=["x"]))
+    assert "character_notes_for_shot" in tsrc and '"character_notes":' in tsrc, \
+        "fiches casting transmises dans les params de génération"
+    assert '"sound_notes":' in tsrc and "_sound_of(prompt)" in tsrc, \
+        "texte son transmis dans les params de génération"
+    assert tsrc.index("_sound_of(prompt)") < tsrc.index("_strip_sound(prompt)"), \
+        "le son doit être capturé AVANT le strip (sinon il est perdu)"
+    assert 'sound_notes=params.get("sound_notes"' in rsrc, "real.py transmet le son au composeur"
+
+    # 7) Langue de travail : le prompt FR du storyboard n'est JAMAIS réécrit — la
+    #    prose anglaise est locale à l'envoi (args) ; résultat/historique gardent le FR.
+    assert '"prompt":                params.get("prompt", "")' in rsrc, \
+        "le résultat/historique conserve le prompt FR d'origine, pas la prose anglaise"
+
+
+@test
+def coecriture_anti_perte():
+    """Pertes de travail en co-écriture (constats Matthieu 2026-07-21) — 3 remèdes :
+    (1) la coupe par LIMITE DE TOKENS est détectée précisément (chat_ex :
+    stop_reason/finish_reason) et la suite est demandée automatiquement
+    (chat_until_complete) → plus de fin de scénario perdue ; (2) « Réécrire selon
+    la co-écriture » re-parcourt TOUTE la discussion et RETENTE une fois les
+    passages non retrouvés ; (3) alerte déterministe AVANT la limite de tokens."""
+    from core import ai_provider as AI
+    # 1) Continuation : morceaux recollés dans l'ordre jusqu'au stop normal.
+    calls = []
+    def _fake_ex(system, messages, tier="creative", max_tokens=2048, task=None):
+        calls.append([dict(m) for m in messages])
+        return {"text": f"part{len(calls)}", "truncated": len(calls) < 3}
+    _orig_ex = AI.chat_ex
+    AI.chat_ex = _fake_ex
+    try:
+        out = AI.chat_until_complete("sys", [{"role": "user", "content": "go"}], max_tokens=64)
+    finally:
+        AI.chat_ex = _orig_ex
+    assert out == "part1part2part3", "continuation non recollée"
+    assert calls[1][-1]["content"].startswith("Continue EXACTEMENT") \
+        and calls[1][-2] == {"role": "assistant", "content": "part1"}, \
+        "relance : déjà-reçu renvoyé en assistant + consigne de reprise exacte"
+    assert calls[2][-2]["content"] == "part1part2", "cumul renvoyé à chaque relance"
+    # Worker branché (texte + vision) — Cinéma ; le Live est vérifié par son harnais.
+    src = inspect.getsource(__import__("api.screenplay", fromlist=["x"]))
+    assert "chat_until_complete" in src, "ArrangeChatWorker sans anti-troncature"
+    assert 'max_rounds=5' in src, "chemin vision sans continuation centralisée"
+    # 2) Relance auto des passages non retrouvés + instruction de couverture totale.
+    from ui.dialog_arrange_session import ArrangeSessionDialog
+    d = ArrangeSessionDialog(None, "INT. NUIT\nLIA regarde la mer.", "analyse", 5)
+    _cap = {}
+    d._start_worker = lambda instr, surgical=True, **k: _cap.update(instr=instr, surgical=surgical)
+    d._on_rewrite_coedit()
+    assert "Re-parcours TOUTE" in _cap["instr"] and "n'en oublie aucune" in _cap["instr"], \
+        "instruction de réécriture : couverture de TOUTE la discussion"
+    assert d._auto_retry_used is False, "la réécriture ciblée arme la relance auto"
+    _cap.clear()
+    d._on_edits_ready([{"find": "TEXTE INTROUVABLE XYZ", "replace": "x", "summary": "point A"}])
+    assert _cap.get("surgical") is True and "point A" in _cap.get("instr", "") \
+        and "EXACTEMENT" in _cap.get("instr", ""), "passages non retrouvés → relance auto"
+    assert d._auto_retry_used is True, "relance consommée"
+    _cap.clear()
+    d._on_edits_ready([{"find": "TOUJOURS INTROUVABLE", "replace": "y", "summary": "point B"}])
+    assert not _cap, "une SEULE relance auto par demande (pas de boucle infinie)"
+    # 3) Alerte tokens : déterministe, AVANT la limite, sans spam.
+    d2 = ArrangeSessionDialog(None, "x" * 250_000, "analyse", 5)   # ~78k tokens estimés
+    assert d2._estimated_session_tokens() > d2._TOKEN_WARN_FIRST, "estimation cohérente"
+    _bulles = []
+    d2._append_chat_bubble = lambda text, role: _bulles.append(text)
+    d2._maybe_warn_tokens()
+    assert _bulles and "Réécrire selon la co-écriture" in _bulles[0], "alerte tokens émise"
+    d2._maybe_warn_tokens()
+    assert len(_bulles) == 1, "pas de spam : ré-alerte au palier suivant seulement"
+    small = ArrangeSessionDialog(None, "court", "analyse", 5)
+    _b2 = []
+    small._append_chat_bubble = lambda text, role: _b2.append(text)
+    small._maybe_warn_tokens()
+    assert not _b2, "pas d'alerte sous le seuil"
+    assert "_maybe_warn_tokens" in inspect.getsource(ArrangeSessionDialog._on_message_ready), \
+        "l'alerte est vérifiée après chaque réponse du chat"
+    # i18n des nouvelles bulles
+    from core.i18n import _FR_TO_EN
+    assert "↻ Nouvelle tentative automatique sur les passages non retrouvés…" in _FR_TO_EN
+    assert any(k.startswith("⚠ La session devient volumineuse") for k in _FR_TO_EN), \
+        "alerte tokens traduite"
+
+
+@test
+def staging_navigation_refresh_is_deferred_and_coalesced():
+    """Plan de feu ne doit pas reconstruire toute la page plusieurs fois pendant
+    le changement d'onglet, sinon Windows la marque « Ne répond pas »."""
+    from ui.page_staging import PageStaging, PageLighting
+    from ui.pandora_window import PandoraWindow
+
+    assert PageStaging.DEFER_NAV_REFRESH is True
+    assert PageLighting.DEFER_NAV_REFRESH is True
+    show_src = inspect.getsource(PageStaging.showEvent)
+    assert "self.refresh()" not in show_src, "showEvent ne doit plus doubler le refresh"
+    helper_src = inspect.getsource(PandoraWindow._refresh_page)
+    assert "_pandora_refresh_pending" in helper_src and "QTimer.singleShot" in helper_src, \
+        "le refresh lourd doit être différé et regroupé"
+
+
+@test
+def decor_previews_generated_before_navigation():
+    """Les 7 vues sont preparees pendant la generation, sans fenetre modale."""
+    from PIL import Image
+    from PyQt6.QtCore import QSize
+    from core.image_preview import make_preview
+    from ui.page_decors import _load_card_pixmap
+
+    with tempfile.TemporaryDirectory() as folder:
+        source = os.path.join(folder, "decor_hd.png")
+        Image.new("RGB", (1600, 900), (20, 35, 60)).save(source)
+        preview = make_preview(source, max_size=(320, 240))
+        assert preview and os.path.isfile(preview), "apercu non genere"
+        with Image.open(preview) as image:
+            assert image.width <= 320 and image.height <= 240, "apercu trop grand"
+        pix = _load_card_pixmap(source, 162, 160)
+        assert not pix.isNull() and pix.size() == QSize(162, 160), \
+            "repli silencieux des anciens projets invalide"
+
+    worker_src = inspect.getsource(__import__(
+        "api.nano_banana", fromlist=["GenerateRoomViewsWorker"]
+    ).GenerateRoomViewsWorker._real)
+    assert "make_preview" in worker_src and '"thumbnail_path"' in worker_src, \
+        "les apercus doivent etre crees par le worker avant la navigation"
+    done_src = inspect.getsource(__import__(
+        "ui.dialog_extract_generate", fromlist=["ExtractGenerateDialog"]
+    ).ExtractGenerateDialog._on_all_done)
+    assert "QMessageBox.warning" not in done_src, \
+        "une alerte de generation ne doit pas ouvrir une nouvelle fenetre"
+
+    # Une pièce de 7 vues utilise un QWidget intermédiaire. S'il est rendu
+    # visible avant son ajout au layout, Qt l'affiche brièvement comme une
+    # fenêtre autonome intitulée « python ».
+    from ui.page_decors import PageDecors
+    group_src = inspect.getsource(PageDecors._group_section)
+    assert group_src.index("v.addWidget(body)") < group_src.index("body.setVisible"), \
+        "le groupe de vues ne doit jamais etre visible tant qu'il est parentless"
+
+    from PyQt6.QtCore import QObject, QEvent
+    from PyQt6.QtWidgets import QWidget
+
+    class _TopLevelWatch(QObject):
+        def __init__(self):
+            super().__init__()
+            self.shown = []
+
+        def eventFilter(self, obj, event):
+            if (event.type() == QEvent.Type.Show and isinstance(obj, QWidget)
+                    and obj.isWindow()):
+                self.shown.append(type(obj).__name__)
+            return False
+
+    page = PageDecors()
+    watch = _TopLevelWatch()
+    APP.installEventFilter(watch)
+    try:
+        page._group_section("Piece test", [{
+            "id": "face-test", "name": "Face test", "category": "Intérieur",
+            "room_view": "avant", "image_path": "", "assigned_shots": [],
+        }])
+        APP.processEvents()
+        assert not watch.shown, \
+            f"fenetre Qt autonome pendant la construction du groupe : {watch.shown}"
+    finally:
+        APP.removeEventFilter(watch)
 
 
 if __name__ == "__main__":

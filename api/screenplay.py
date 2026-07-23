@@ -42,155 +42,80 @@ def _lang_hint(lang: str) -> str:
 # ── Prompts système ───────────────────────────────────────────────────────────
 
 _FORMAT_SCREENPLAY = """\
-Tu es un superviseur de production expert travaillant pour Pandora, un outil de \
-pré-production IA qui génère des clips vidéo via Seedance 2.0 (ByteDance/fal.ai).
+Tu es un script editor pour Pandora.
 
-Ton rôle : mettre en page le scénario fourni dans le FORMAT PANDORA COMPLET — \
-un document de production intégré qui structure la production ET maximise la \
-qualité des vidéos générées par IA.
+Ta seule mission est de remettre en forme le SCÉNARIO fourni comme un scénario
+narratif propre. Tu ne réalises jamais le découpage technique à cette étape.
 
-════════════════════════════════════════════════════════
-STRUCTURE OBLIGATOIRE DU FORMAT PANDORA
-════════════════════════════════════════════════════════
+SÉPARATION ABSOLUE DES DOCUMENTS :
+- SCÉNARIO : récit, actions jouables, lieux, personnages et dialogues uniquement.
+- NOTE DE RÉALISATION : style d'image, références, temporalité, lumière, son,
+  rythme de montage et intentions de caméra.
+- DÉCOUPAGE : plans, durées, prompts visuels et propositions caméra.
+- STORYBOARD : réglages techniques validés et images.
 
-Le document doit comporter exactement ces sections dans cet ordre :
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-1. EN-TÊTE
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-════════════════════════════════════════════════════════
-[TITRE DU PROJET EN MAJUSCULES]
-[Sous-titre ou accroche — format, durée totale]
-════════════════════════════════════════════════════════
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-2. PERSONNAGES
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-════════════════════════════════════════════════════════
-PERSONNAGES
-════════════════════════════════════════════════════════
-
-Un bloc par personnage :
-NOM — Rôle ou fonction
-Âge, physique détaillé (taille, corpulence, traits, cheveux, peau).
-Tenue principale : description précise des vêtements, couleurs, matières.
-Attitude, énergie, ce que le corps exprime.
-
-RÈGLE : graphie du NOM strictement identique dans tout le document.
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-3. DÉCORS
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-════════════════════════════════════════════════════════
-DÉCORS
-════════════════════════════════════════════════════════
-
-Un bloc par décor unique :
-NOM DU DÉCOR — INT./EXT. — MOMENT (JOUR / NUIT / GOLDEN HOUR / etc.)
-Description visuelle détaillée : architecture, matières, couleurs, lumière \
-naturelle ou artificielle, objets présents, ambiance générale.
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-4. SCÉNARIO — PLANS
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-════════════════════════════════════════════════════════
-SCÉNARIO
-════════════════════════════════════════════════════════
-
-Un bloc par plan, séparé par une ligne de tirets :
-
-────────────────────────────────────────────────────────
-PLAN N — [INT./EXT.] [NOM DU DÉCOR] — [MOMENT]
-Séquence N — Plan N — Durée : Xs
-────────────────────────────────────────────────────────
-
-VALEUR DE PLAN : [Plan large / Plan moyen / Plan rapproché / Gros plan / Très gros plan]
-MOUVEMENT CAMÉRA : [description précise du mouvement ou "Caméra fixe"]
-AXE : [Face / Profil / 3/4 / Dos / Plongée / Contre-plongée — préciser si nécessaire]
-FOCALE : [valeur mm — type optique si pertinent]
-VITESSE : [Normale / Ralenti léger / Ralenti (120fps) / Accéléré]
-
-[Description de l'action au présent de l'indicatif. Ce que la caméra voit \
-exactement : position des personnages, gestes précis, expressions, matières, \
-lumières, profondeur de champ, arrière-plan. Minimum 3 lignes par plan.]
-
-[Son : ambiance, musique, effets — si notable]
-
-PROMPT SEEDANCE :
-[Prompt en anglais, 40-80 mots. Structure : shot type + sujet + action + \
-environnement + lumière + style technique + mouvement caméra. \
-Ne jamais inclure de dialogue ou voix off dans ce champ.]
-
-════════════════════════════════════════════════════════
-FIN — DURÉE TOTALE : Xs
-════════════════════════════════════════════════════════
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-RÈGLES IMPÉRATIVES
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-- Conserver TOUT le contenu narratif sans rien résumer ni couper
-- Noms de personnages : graphie STRICTEMENT IDENTIQUE dans tout le document
-- Dialogues et voix off : inclus directement dans le bloc du plan concerné, \
-  sous la description d'action, au format :
-      NOM DU PERSONNAGE (V.O.) ou NOM DU PERSONNAGE
-      "Texte du dialogue ou de la voix off."
-- Prompts Seedance : en anglais, jamais de voix off ni dialogue dedans
-- Descriptions visuelles : concret, dynamique, spécifique, spatial
-  ("la soie noire trempée de pluie" et non "une belle robe")
-  ("ses mains se crispent sur le fourreau" et non "il hésite")
-- Accessoires, véhicules, costumes importants : citer explicitement \
-  dans les descriptions — ils seront extraits automatiquement par Pandora
-- Durées : estimer selon le rythme naturel de la scène (4s minimum par plan)
-- Retourner uniquement le document mis en page, sans commentaires ni explications\
+RÈGLES :
+- Conserver intégralement le sens, les actions et les dialogues du texte source.
+- Organiser le texte en séquences avec des en-têtes INT./EXT., lieu et moment.
+- Écrire les actions au présent, sans enrichissement visuel inventé.
+- Garder la graphie des noms strictement cohérente.
+- Ne produire aucun numéro de plan, aucune durée, aucune focale, aucune valeur de
+  plan, aucun axe, aucun mouvement caméra et aucun prompt de génération.
+- Ne produire aucune fiche personnage ou fiche décor dans le scénario.
+- Si le texte contient des consignes de réalisation, ne pas les intégrer au récit :
+  les regrouper à la fin sous « À TRANSFÉRER DANS LA NOTE DE RÉALISATION ».
+- Ne jamais employer « PROMPT SEEDANCE », « PROMPT », « P01 » ou une structure
+  compacte de plan dans ce document.
+- Retourner uniquement le scénario remis en forme, sans commentaire extérieur.
 """
 
 _ARRANGE_SCREENPLAY_TMPL = """\
-Tu es un consultant créatif et superviseur de production pour Pandora, \
-un outil de pré-production IA qui génère des clips vidéo via Seedance 2.0 (ByteDance/fal.ai).
+Tu es un consultant dramaturgique et co-scénariste pour Pandora.
 
-CONTEXTE TECHNIQUE CRUCIAL :
-Ce scénario sera découpé en plans de 2 à 15 secondes, chacun envoyé à Seedance 2.0 sous forme de prompt vidéo. \
-La qualité des clips dépend directement de la qualité visuelle des descriptions dans le scénario. \
-Un bon scénario pour Pandora est un scénario dont chaque ligne d'action peut devenir un prompt efficace.
+SÉPARATION ABSOLUE DES DOCUMENTS :
+- Le SCÉNARIO contient le récit, les actions, les lieux et les dialogues.
+- La NOTE DE RÉALISATION contient style d'image, temporalité, lumière, durée des
+  plans, rythme de montage, valeurs, axes et mouvements caméra.
+- Le DÉCOUPAGE PANDORA transformera plus tard le scénario en plans.
+N'encourage jamais l'ajout d'une intention technique ou visuelle de fabrication dans
+le scénario. Classe-la dans la section 6 destinée à la Note de réalisation.
 
-Un scénario optimal pour Pandora :
-- Décrit ce que la caméra VOIT — personnages, costumes, décors, textures, lumières, mouvements
-- Peut être découpé en plans courts (2-15s) sans perdre de sens visuel
-- Évite les abstractions non visuelles (états intérieurs, ellipses non décrites, voix off sans image)
-- Nomme les personnages et décors de façon stable et précise (pour les extractions automatiques)
-- Intègre les éléments qui ont des références visuelles (personnages iconiques, décors marquants)
+Analyse le scénario fourni. Commence par un court paragraphe « EN BREF » (3 à 5
+lignes, sans numéro) qui résume ton diagnostic global en langage simple — c'est la
+première chose que le réalisateur lit. Puis structure ta réponse en 7 sections,
+numérotées EXACTEMENT « ### 1 » à « ### 7 » dans cet ordre (la section 6 est
+extraite automatiquement vers la Note de réalisation et la section 7 alimente le
+casting : ne les renumérote jamais, ne les fusionne jamais). Sois COMPLET dans
+chaque section — aucune limite de longueur :
 
-Analyse le scénario fourni et structure ta réponse en 6 sections :
+### 1. Structure narrative
+Rythme dramatique, cohérence des séquences, progression et équilibre action/dialogue.
 
-### 1. Structure narrative et découpage IA
-Rythme général, cohérence des séquences, équilibre action/dialogue. \
-Le scénario est-il découpable en plans de 2-15s ? \
-Y a-t-il des séquences trop longues, trop denses, ou qui créent des transitions visuellement problématiques ?
-
-### 2. Qualité des descriptions visuelles pour Seedance
-C'est la section la plus importante pour Pandora. Évalue la richesse "promptable" du scénario : \
-Les personnages sont-ils décrits avec suffisamment de détails (apparence, costumes, expressions, postures) ? \
-Les décors sont-ils assez précis et évocateurs ? \
-Y a-t-il des scènes abstraites qui produiraient des clips génériques ou incohérents d'un plan à l'autre ? \
-Cite les passages exacts à améliorer.
+### 2. Lisibilité des actions
+Évalue si l'action dramatique est compréhensible et jouable. Ne demande pas de
+textures, focales, lumières ou descriptions physiques destinées au moteur vidéo.
 
 ### 3. Points forts
-Ce qui fonctionne bien — narrativement ET visuellement pour la génération IA. \
-Cite les passages qui produiraient de bons prompts Seedance.
+Ce qui fonctionne bien narrativement, dans les personnages, les situations et les dialogues.
 
 ### 4. Proposition d'arrangement
-Si la structure narrative ou le rythme visuel peut être amélioré : \
-propose un ordre alternatif des séquences avec justification (impact dramatique ET impact IA). \
+Si la structure narrative peut être améliorée : \
+propose un ordre alternatif des séquences avec justification dramatique. \
 Indique les séquences à couper, fusionner, diviser ou déplacer. \
 Si la structure est déjà optimale, dis-le explicitement.
 
-### 5. Suggestions concrètes
-5 à 7 pistes actionnables, priorisées par impact sur la qualité de génération. \
+### 5. Suggestions concrètes pour le scénario
+5 à 7 pistes actionnables, priorisées par impact narratif. \
 Pour chaque suggestion : (a) ce qu'il faut changer, \
-(b) pourquoi ça améliore la génération Seedance, \
+(b) pourquoi cela améliore le récit, \
 (c) exemple de reformulation si pertinent.
 
-### 6. Inventaire complet des personnages
+### 6. Intentions à placer dans la Note de réalisation
+Liste séparée de toutes les informations de style, rythme de montage, temporalité,
+durée des plans, caméra, lumière, son et continuité évoquées ou suggérées.
+N'en insère aucune dans les suggestions de réécriture du scénario.
+
+### 7. Inventaire complet des personnages
 Liste TOUS les personnages sans exception : principaux, secondaires, figurants. \
 Ne jamais regrouper sous une formule générique. \
 Format par ligne : Nom/Fonction | Rôle (Principal / Secondaire / Figurant) | Scènes d'apparition
@@ -199,11 +124,10 @@ Respond in {LANG_INSTRUCTION}, in a structured, direct and constructive way.\
 """
 
 _APPLY_ARRANGE = """\
-Tu es un scénariste expert pour Pandora, un outil de pré-production IA \
-qui génère des clips vidéo via Seedance 2.0 (ByteDance/fal.ai).
+Tu es un scénariste expert pour Pandora.
 
-Tu appliques des suggestions d'arrangement à un scénario pour le rendre \
-plus fort narrativement ET plus efficace pour la génération vidéo IA.
+Tu appliques des suggestions d'arrangement pour rendre le scénario plus fort
+narrativement. Le découpage et la préparation vidéo sont des documents séparés.
 
 Tu reçois :
 1. LE SCÉNARIO ORIGINAL — la matière de base à préserver et améliorer
@@ -215,16 +139,14 @@ RÈGLES D'APPLICATION :
 - Maintiens la structure Pandora : séquences (—— SÉQUENCE N — TITRE ——), \
 en-têtes INT./EXT., noms de personnages en MAJUSCULES centrés
 - Noms de personnages : graphie STRICTEMENT IDENTIQUE tout au long du document
-- Enrichis les descriptions visuelles là où c'est pertinent : \
-ajoute des détails de costume, d'expression, de texture, de lumière, de mouvement — \
-tout ce qui rend les scènes plus "promptables" pour Seedance 2.0
-- Chaque ligne d'action doit décrire ce que la caméra peut voir — \
-traduis les états intérieurs en gestes, postures, expressions visibles
-- Assure-toi que chaque scène contient au moins une action visuelle claire et concrète \
-(le scénario sera découpé en plans de 2 à 15s)
+- Les actions peuvent être rendues concrètes et jouables, sans les transformer en plans
+- N'ajoute jamais style d'image, focale, valeur/axe/mouvement caméra, lumière de
+  fabrication, durée de plan ou rythme de montage au texte du scénario
+- Ignore, lors de la réécriture, les suggestions explicitement destinées à la
+  Note de réalisation
 - Ne résume pas, ne condense pas arbitrairement les dialogues importants
 
-Retourne UNIQUEMENT le scénario réécrit en mise en page Pandora, sans commentaires ni explications.\
+Retourne UNIQUEMENT le scénario réécrit, sans commentaires ni explications.\
 """
 
 _GENERATE_STORYBOARD_TMPL = """\
@@ -265,7 +187,10 @@ Retourne UNIQUEMENT un tableau JSON valide. Chaque élément du tableau représe
   "lighting": <str — {PROMPT_LANG}. PLAN DE FEU : INTENTION d'éclairage cohérente avec le scénario — direction de la lumière, qualité (douce/dure), température de couleur, contraste, sources pratiques motivées (lustre, fenêtre, bougie…). NE mentionne AUCUN projecteur ni appareil d'éclairage visible : c'est une intention de lumière, pas du matériel à l'image.>,
   "sound_prompt": <str — SOUND DESIGN / SFX prompt in {PROMPT_LANG} describing the shot's sound ambience: ambient textures, sound effects, room tone, materials and rhythm of the scene, ready for a sound-effects generator. NO speech, NO voice, NO music score, NO BPM (dialogue lives in the "action" field; this is ambience/SFX only). You MAY place the main sound events approximately in time within the shot (e.g. "around 1s", "mid-shot"). 1 to 3 concise sentences faithful to what the screenplay describes.>,
   "merged": <bool — true UNIQUEMENT si ce plan regroupe plusieurs beats d'action distincts du scénario (voir RÈGLES ABSOLUES). false par défaut>,
-  "merged_note": <str — si merged=true, description COURTE des beats fusionnés et de la raison ; sinon chaîne vide "">
+  "merged_note": <str — si merged=true, description COURTE des beats fusionnés et de la raison ; sinon chaîne vide "">,
+  "source_excerpt": <str — extrait EXACT du scénario couvert par ce plan (citation fidèle, dialogues inclus mot pour mot) ; si la source est un Découpage PANDORA, recopie sa SOURCE SCÉNARIO telle quelle>,
+  "rhythm": <str — tempo du plan, point de coupe et relation aux plans voisins ; si la source est un Découpage PANDORA, recopie son champ RYTHME ; sinon déduis-le sobrement du scénario>,
+  "intention": <str — fonction dramatique et visuelle du plan en une ou deux phrases ; si la source est un Découpage PANDORA, recopie son champ INTENTION>
 }
 
 Contrainte absolue : duration ne peut jamais dépasser 15.0 secondes (limite de Seedance 2.0).
@@ -274,129 +199,133 @@ Retourne UNIQUEMENT le tableau JSON, sans aucun texte avant ou après.\
 
 
 _FORMAT_PANDORA = """\
-Tu es un directeur de la photographie et superviseur de production travaillant avec Pandora, \
-un outil de pré-production IA qui génère des clips vidéo via Seedance 2.0 (ByteDance/fal.ai).
+Tu es le monteur et réalisateur associé de PANDORA. Tu prépares le passage du scénario
+au storyboard, sans réécrire le scénario et sans produire une fausse page de scénario.
 
-Ton rôle : transformer le scénario fourni en mise en page PANDORA — un découpage plan par plan \
-conçu pour piloter directement la génération vidéo IA.
+AUTORITÉ DES SOURCES :
+- Le SCÉNARIO est la seule vérité narrative. Garde les actions, dialogues, lieux et noms.
+- La NOTE DE RÉALISATION porte le style, la temporalité, le rythme, les durées, la
+  lumière, la palette et la grammaire caméra. Applique-la aux fiches sans la recopier
+  dans l'extrait narratif.
+- Ne mélange jamais narration, intention, prompt visuel et réglages caméra.
 
-FORMAT DE SORTIE OBLIGATOIRE :
+OBJECTIF : créer des FICHES DE PLANS éditoriales. Chaque fiche doit permettre au
+réalisateur de comprendre le rôle du plan, d'écrire ou corriger son prompt, de créer un
+mood, puis de transmettre des données séparées au Storyboard.
 
-—— SÉQUENCE N — TITRE COURT ——  (titre évocateur 2-4 mots, en MAJUSCULES)
+FORMAT OBLIGATOIRE — respecte exactement les libellés et l'ordre :
 
-P01 | Valeur de plan | Mouvement de caméra | Axe | ~Durée
-INT./EXT. LIEU PRÉCIS — MOMENT
-Description action : ce que la caméra voit, au présent, concret et visuel.
-                NOM PERSONNAGE  (si dialogue, centré en MAJUSCULES)
-        Réplique indentée.  (dialogue exact du scénario)
-→ SEEDANCE: Prompt vidéo court, descriptif, sensoriel, en français.
+DÉCOUPAGE PANDORA 2
 
-P02 | ...
-→ SEEDANCE: ...
+SÉQUENCE 1 — TITRE COURT
 
-RÈGLES DE NUMÉROTATION :
-- Plans numérotés P01, P02, P03... en continu sur tout le scénario (jamais de réinitialisation par séquence)
-- Chaque plan = 2 à 15 secondes maximum (limite absolue Seedance 2.0)
-- Découper les scènes longues en plusieurs plans cohérents
+PLAN 01
+SOURCE SCÉNARIO : Extrait exact et autonome du scénario couvert par ce plan, dialogues
+inclus mot pour mot. Aucune technique, aucun enrichissement visuel.
+INTENTION : Fonction dramatique et visuelle du plan en une ou deux phrases.
+RYTHME : Tempo, point de coupe et relation au plan précédent/suivant.
+DURÉE : 6s
+PROMPT VISUEL : Prompt moteur-agnostique très détaillé en français. Décris uniquement
+ce que l'image doit montrer : action fidèle, espace, lumière, palette, matières,
+atmosphère. N'invente aucun événement. Les personnages sont cités par leur nom.
+PERSONNAGES : Noms exacts séparés par des virgules, ou —
+DÉCOR : Nom exact du décor, ou —
+ACCESSOIRES : Noms séparés par des virgules, ou —
+VÉHICULES : Noms séparés par des virgules, ou —
+HMC : Éléments visibles séparés par des virgules, ou —
+VALEUR PROPOSÉE : Une valeur de plan PANDORA, ou —
+AXE PROPOSÉ : Un axe PANDORA, ou —
+MOUVEMENT PROPOSÉ : Un mouvement PANDORA, ou —
+FOCALE PROPOSÉE : Une focale indicative, ou —
+MOOD : À CRÉER
 
-VALEURS DE PLAN (utiliser ces termes exacts) :
-Grand ensemble | Plan d'ensemble | Plan large | Plan moyen | Plan poitrine | Gros plan | Très gros plan | Insert
+PLAN 02
+Répète ici tous les champs de PLAN 01 avec le contenu réel du deuxième plan.
 
-MOUVEMENTS (utiliser ces termes exacts) :
-Fixe | Panoramique | Travelling avant | Travelling arrière | Travelling latéral | Zoom avant | Zoom arrière | Steadicam | Grue/Drone | Caméra portée
-
-AXES (utiliser ces termes exacts) :
-Face | 3/4 | Latéral | Dos | Plongée | Contre-plongée | Subjectif
-
-DURÉE :
-- Notation "~Xs" (ex: ~6s, ~10s)
-- Maximum absolu : ~15s — si une scène dépasse 15s, la couper en plusieurs plans
-
-RÈGLES POUR LA DESCRIPTION ACTION :
-- Décrire UNIQUEMENT ce que la caméra peut voir : matières, textures, couleurs, lumières, gestes, postures, expressions
-- Personnages cités par leur NOM uniquement — jamais de description physique (les refs images gèrent la cohérence visuelle)
-- Si dialogue présent : le citer intégralement, NOM en MAJUSCULES centré + réplique indentée
-
-RÈGLES POUR LE PROMPT SEEDANCE (après →) :
-- Toujours en FRANÇAIS (traduction automatique gérée par Pandora avant envoi)
-- Jamais de technique caméra (déjà dans la ligne P01) — décrire uniquement sujet, décor, action, ambiance
-- Personnages cités par NOM uniquement — pas de description physique
-- RICHE et TRÈS DÉTAILLÉ : Seedance 2.0 donne de bien meilleurs résultats avec des prompts denses — ne sois PAS bref. 3 à 5 phrases développées.
-- Décrire précisément : personnage(s) (par NOM), lieu/environnement, action, lumière (direction, qualité, température de couleur), palette de couleurs, textures & matières, atmosphère/mood. NE PAS ajouter de mots de qualité génériques (« cinématographique », « ultra-détaillé », « photoréaliste », « 4K »…) — le style visuel est géré séparément.
-- Rester FIDÈLE au scénario : enrichir le rendu visuel mais n'inventer aucun élément narratif (personnages, lieux, événements).
-- Structure recommandée : [personnage(s)] + [lieu/environnement] + [action] + [lumière/couleurs/textures/ambiance]
-- Si dialogue : inclure la réplique exacte entre guillemets dans le prompt
-
-RÈGLES GLOBALES :
-- Conserver TOUT le contenu narratif du scénario original — aucune invention, aucune coupure arbitraire
-- Noms de personnages : graphie STRICTEMENT IDENTIQUE partout
-- Pas de commentaires ni d'explications hors format — retourner uniquement la mise en page PANDORA\
+RÈGLES DE DÉCOUPAGE :
+- Un plan par beat d'action, changement de point de vue, geste décisif ou réplique qui
+  exige une réaction distincte. Si tu dois fusionner deux beats, DIS-LE explicitement
+  dans l'INTENTION du plan concerné — jamais de fusion silencieuse.
+- Numérotation PLAN 01, PLAN 02… continue ; titres de séquence séparés.
+- Durée entre 2 et 15 secondes. La durée sert au rythme, pas à imposer un moteur.
+- SOURCE SCÉNARIO est une citation/extraction fidèle, pas une réécriture enrichie.
+- INTENTION explique pourquoi le plan existe ; PROMPT VISUEL décrit l'image à produire.
+- Le PROMPT VISUEL peut inclure les indications de caméra (valeur, mouvement, focale,
+  angle) quand elles servent l'image. Renseigne AUSSI les champs proposés dédiés :
+  le Storyboard les reprend et l'utilisateur pourra les modifier là-bas.
+- Les descriptions physiques précises viendront des identités visuelles de Casting,
+  Décors, Accessoires, Véhicules et HMC. Ici, liste les noms exacts uniquement.
+- Chaque PLAN doit contenir la totalité des champs. N'écris jamais « même structure »,
+  des points de suspension ou un champ implicite.
+- Retourne uniquement le document, sans markdown, sans commentaire et sans ancien
+  format compact « P01 | … ».\
 """
 
 
 _FORMAT_PANDORA_EN = """\
-You are a director of photography and production supervisor working with Pandora, \
-an AI pre-production tool that generates video clips via Seedance 2.0 (ByteDance/fal.ai).
+You are PANDORA's picture editor and associate director. Prepare the transition from
+screenplay to storyboard without rewriting the screenplay or imitating screenplay pages.
 
-Your role: transform the provided screenplay into a PANDORA layout — a shot-by-shot breakdown \
-designed to directly drive AI video generation.
+SOURCE AUTHORITY:
+- The SCREENPLAY is the only narrative truth. Preserve actions, dialogue, locations and names.
+- The DIRECTOR'S NOTE owns style, time treatment, pace, shot duration, lighting, palette
+  and camera grammar. Apply it without copying it into the narrative excerpt.
+- Never mix narrative source, intent, visual prompt and camera settings.
 
-MANDATORY OUTPUT FORMAT:
+GOAL: create editorial SHOT SHEETS. Each sheet must let the director understand why the
+shot exists, edit its prompt, create a mood, then send separate data to the Storyboard.
 
-—— SEQUENCE N — SHORT TITLE ——  (evocative 2-4 word title, in CAPITALS)
+MANDATORY FORMAT — keep these labels and this order exactly:
 
-P01 | Shot value | Camera movement | Axis | ~Duration
-INT./EXT. SPECIFIC LOCATION — TIME
-Action description: what the camera sees, in the present tense, concrete and visual.
-                CHARACTER NAME  (if dialogue, centered in CAPITALS)
-        Indented line.  (exact dialogue from the screenplay)
-→ SEEDANCE: Short, descriptive, sensory video prompt, in English.
+DÉCOUPAGE PANDORA 2
 
-P02 | ...
-→ SEEDANCE: ...
+SEQUENCE 1 — SHORT TITLE
 
-NUMBERING RULES:
-- Shots numbered P01, P02, P03... continuously across the whole screenplay (never reset per sequence)
-- Each shot = 2 to 15 seconds maximum (absolute Seedance 2.0 limit)
-- Split long scenes into several coherent shots
+PLAN 01
+SCREENPLAY SOURCE: Exact self-contained screenplay excerpt covered by this shot,
+including verbatim dialogue. No technique and no visual embellishment.
+INTENT: Dramatic and visual purpose of the shot in one or two sentences.
+RHYTHM: Pace, cut point and relationship to the adjacent shots.
+DURATION: 6s
+VISUAL PROMPT: Highly detailed, engine-agnostic English prompt. Describe only what the
+image should show: faithful action, space, light, palette, materials and atmosphere.
+Invent no event. Refer to characters by their exact names.
+CHARACTERS: Exact names separated by commas, or —
+SET: Exact set name, or —
+PROPS: Names separated by commas, or —
+VEHICLES: Names separated by commas, or —
+HMC: Visible elements separated by commas, or —
+SUGGESTED SHOT SIZE: A PANDORA shot size, or —
+SUGGESTED AXIS: A PANDORA axis, or —
+SUGGESTED MOVEMENT: A PANDORA movement, or —
+SUGGESTED FOCAL LENGTH: An indicative focal length, or —
+MOOD: TO CREATE
 
-SHOT VALUES (use these exact terms):
-Extreme wide | Wide shot | Full shot | Medium shot | Chest shot | Close-up | Extreme close-up | Insert
+PLAN 02
+Repeat every PLAN 01 field here with the real content of the second shot.
 
-MOVEMENTS (use these exact terms):
-Static | Pan | Dolly in | Dolly out | Lateral tracking | Zoom in | Zoom out | Steadicam | Crane/Drone | Handheld
-
-AXES (use these exact terms):
-Front | 3/4 | Lateral | Back | High angle | Low angle | POV
-
-DURATION:
-- Notation "~Xs" (e.g. ~6s, ~10s)
-- Absolute maximum: ~15s — if a scene exceeds 15s, split it into several shots
-
-RULES FOR THE ACTION DESCRIPTION:
-- Describe ONLY what the camera can see: materials, textures, colors, lights, gestures, postures, expressions
-- Characters referred to by their NAME only — never a physical description (image refs handle visual consistency)
-- If dialogue is present: quote it fully, NAME in CAPITALS centered + indented line
-
-RULES FOR THE SEEDANCE PROMPT (after →):
-- Always in ENGLISH
-- Never camera technique (already in the P01 line) — describe only subject, setting, action, mood
-- Characters referred to by NAME only — no physical description
-- RICH and HIGHLY DETAILED: Seedance 2.0 yields far better results with dense prompts — do NOT be brief. 3 to 5 developed sentences.
-- Describe precisely: character(s) (by NAME), location/environment, action, lighting (direction, quality, color temperature), color palette, textures & materials, mood/atmosphere. Do NOT add generic quality words ("cinematic", "ultra-detailed", "photorealistic", "4K"…) — the visual style is handled separately.
-- Stay FAITHFUL to the screenplay: enrich the visual rendering but invent no new narrative element (characters, places, events).
-- Recommended structure: [character(s)] + [location/environment] + [action] + [light/color/textures/mood]
-- If dialogue: include the exact line in quotes within the prompt
-
-GLOBAL RULES:
-- Keep ALL the narrative content of the original screenplay — no invention, no arbitrary cuts
-- Character names: STRICTLY IDENTICAL spelling everywhere
-- No comments or explanations outside the format — return only the PANDORA layout\
+BREAKDOWN RULES:
+- One shot per action beat, point-of-view change, decisive gesture, or line requiring a
+  separate reaction. If two beats must be merged, SAY SO explicitly in the shot's
+  INTENT — never merge silently.
+- Continuous PLAN 01, PLAN 02… numbering; separate sequence headings.
+- Duration from 2 to 15 seconds. Duration expresses pace, not a provider constraint.
+- SCREENPLAY SOURCE is a faithful extraction, not an embellished rewrite.
+- INTENT says why the shot exists; VISUAL PROMPT says what image should be produced.
+- VISUAL PROMPT may include camera indications (shot size, movement, focal length,
+  angle) whenever they serve the image. ALSO fill the dedicated suggested fields:
+  the Storyboard reuses them and the user can still edit them there.
+- Exact physical descriptions will come from the visual identities in Casting, Sets,
+  Props, Vehicles and HMC. Only list exact entity names here.
+- Every PLAN must contain every field. Never output “same structure”, ellipses or an
+  implicit field.
+- Return only the document, with no markdown, no commentary and no legacy compact
+  ``P01 | …`` format.\
 """
 
 
 def _format_pandora_prompt(lang: str) -> str:
-    """Sélectionne la version FR/EN du prompt de mise en page selon la langue de l'UI."""
+    """Sélectionne le contrat FR/EN du Découpage PANDORA 2."""
     return _FORMAT_PANDORA_EN if lang == "en" else _FORMAT_PANDORA
 
 
@@ -583,28 +512,22 @@ def _parse_shots_robust(json_str: str) -> list:
 
 
 def _fmt_err(e: Exception) -> str:
-    """Formats an Anthropic/network exception into a readable French message."""
+    """Formate une erreur du fournisseur IA réellement sélectionné."""
+    from core.ai_provider import ai_name_for_task, humanize_ai_error
     msg = str(e)
     low = msg.lower()
     if "connection" in low or "connect" in low or "network" in low or "ssl" in low:
         return (
-            "Erreur de connexion au serveur Anthropic.\n"
+            f"Erreur de connexion à {ai_name_for_task('screenplay')}.\n"
             "Vérifiez votre connexion internet.\n"
             "Si vous utilisez un VPN ou proxy, désactivez-le et réessayez.\n\n"
             f"Détail : {msg}"
         )
     if "401" in msg or "authentication" in low or "api_key" in low:
-        return (
-            "Clé API Anthropic invalide ou expirée.\n"
-            "Vérifiez la clé dans l'onglet Paramètres.\n\n"
-            f"Détail : {msg}"
-        )
+        return humanize_ai_error(msg)
     if "429" in msg or "rate" in low:
-        return (
-            "Limite de requêtes Anthropic atteinte. Attendez quelques secondes et réessayez.\n\n"
-            f"Détail : {msg}"
-        )
-    return f"Erreur Anthropic : {msg}"
+        return humanize_ai_error(msg)
+    return f"Erreur {ai_name_for_task('screenplay')} : {msg}"
 
 
 # ── Workers ───────────────────────────────────────────────────────────────────
@@ -639,23 +562,61 @@ class FormatPandoraWorker(QThread):
     finished = pyqtSignal(str)
     failed   = pyqtSignal(str)
 
-    def __init__(self, text: str):
+    def __init__(self, text: str, direction_note: str = ""):
         super().__init__()
         self._text = text
+        self._direction_note = direction_note or ""
 
     def run(self):
         from core.ai_provider import stream as ai_stream, key_error
+        from core.decoupage_document import is_v2_document, validate_v2_document
         err = key_error("screenplay")
         if err:
             self.failed.emit(err)
             return
         try:
             lang = _get_lang()
-            full_text = ai_stream(_format_pandora_prompt(lang),
-                                  _lang_hint(lang) + self._text,
-                                  on_chunk=self.chunk.emit,
-                                  tier="creative", max_tokens=16000, task="screenplay")
-            self.finished.emit(full_text.strip())
+            from core.direction_note import note_for_ai
+            note = note_for_ai(self._direction_note)
+            screenplay_label = "SCREENPLAY" if lang == "en" else "SCÉNARIO"
+            note_label = "DIRECTOR'S NOTE" if lang == "en" else "NOTE DE RÉALISATION"
+            user_content = f"[{screenplay_label} — SOURCE NARRATIVE]\n{self._text}"
+            if note:
+                user_content += f"\n\n[{note_label} — INTENTIONS DE FABRICATION]\n{note}"
+            system = _format_pandora_prompt(lang)
+
+            # Ne jamais afficher le flux brut : certains modèles peuvent commencer par
+            # reproduire l'ancien contrat avant de se corriger. La fenêtre ne reçoit que
+            # le document final une fois le contrat éditorial v2 validé.
+            full_text = ai_stream(system, _lang_hint(lang) + user_content,
+                                  on_chunk=None, tier="creative",
+                                  max_tokens=16000, task="screenplay").strip()
+
+            issues = validate_v2_document(full_text) if is_v2_document(full_text) else [
+                "structure_v2_non_reconnue"
+            ]
+            if issues:
+                correction = (
+                    "\n\nCORRECTION OBLIGATOIRE : ta réponse précédente a utilisé une "
+                    "structure obsolète ou incomplète. Recommence entièrement. La première "
+                    "ligne doit être exactement « DÉCOUPAGE PANDORA 2 » et chaque PLAN doit "
+                    "contenir tous les champs obligatoires. Le format compact P01 | … et les "
+                    "lignes → PROMPT: sont interdits. Ne commente pas la correction."
+                )
+                full_text = ai_stream(system + correction,
+                                      _lang_hint(lang) + user_content,
+                                      on_chunk=None, tier="creative",
+                                      max_tokens=16000, task="screenplay").strip()
+                issues = (validate_v2_document(full_text)
+                          if is_v2_document(full_text)
+                          else ["structure_v2_non_reconnue"])
+
+            if issues:
+                raise ValueError(
+                    "Le moteur IA n'a pas respecté le contrat Découpage PANDORA 2 "
+                    f"({', '.join(issues[:8])}). Aucun ancien découpage n'a été enregistré."
+                )
+            self.finished.emit(full_text)
         except Exception as e:
             self.failed.emit(_fmt_err(e))
 
@@ -833,9 +794,12 @@ class ArrangeScreenplayWorker(QThread):
                     )
 
             user_content = _lang_hint(lang) + "\n\n".join(prefixes) + "\n\n" + self._text
+            # 16000 tokens (au lieu de 4096, 2026-07-23) : l'analyse porte 7
+            # sections dont l'inventaire COMPLET des personnages — l'ancien
+            # plafond tronquait les sections 6/7 sur les longs scénarios.
             full_text = ai_stream(_arrange_screenplay_prompt(lang), user_content,
                                   on_chunk=self.chunk.emit,
-                                  tier="creative", max_tokens=4096, task="screenplay")
+                                  tier="creative", max_tokens=16000, task="screenplay")
             self.finished.emit(full_text)
         except Exception as e:
             self.failed.emit(_fmt_err(e))
@@ -906,27 +870,32 @@ class GenerateStoryboardWorker(QThread):
         self._strict_no_merge = strict_no_merge
 
     def run(self):
-        # Source DÉJÀ découpée en plans (Mise en page PANDORA co-écrite, « PLAN n — … »)
-        # → conversion DÉTERMINISTE : 1 plan = 1 plan, prompts co-écrits REPRIS tels
-        # quels. Aucun appel IA → aucune reformulation ni troncature (règle Live
-        # 2026-07-09, portée au Cinéma le 2026-07-13). Le scénario BRUT (pas de
-        # « PLAN n ») garde le découpage IA classique ci-dessous.
-        try:
-            from core.decoupage_layout import (is_structured_layout,
-                                               layout_segments_to_cinema_shots)
-            if is_structured_layout(self._text):
-                shots = layout_segments_to_cinema_shots(self._text)
-                if shots:
-                    self.finished.emit(shots)
-                    return
-        except Exception:
-            pass   # repli : découpage IA classique ci-dessous
+        # Depuis le 2026-07-23 (décision Matthieu) : le passage Découpage →
+        # Storyboard repasse par l'IA — elle relit les fiches, met chaque
+        # information dans la bonne case JSON et complète les champs manquants.
+        # Garde-fous conservés : nombre de plans respecté (1 fiche = 1 plan),
+        # fusion jamais silencieuse (merged/merged_note + accord utilisateur),
+        # PROMPT VISUEL repris comme base sans être réécrit. En cas d'échec IA
+        # sur un découpage structuré, REPLI sur la conversion déterministe
+        # (aucune perte : l'ancien chemin reste le filet de sécurité).
+        from core.decoupage_layout import (is_structured_layout,
+                                           layout_segments_to_cinema_shots)
+        self._structured_fallback = None
+        if is_structured_layout(self._text):
+            try:
+                self._structured_fallback = layout_segments_to_cinema_shots(self._text) or None
+            except Exception:
+                self._structured_fallback = None
         from core.ai_provider import (complete as ai_complete, key_error,
                                       ai_name_for_task)
         # Nom du moteur réellement choisi pour le découpage (Paramètres → par tâche)
         ai_name = lambda: ai_name_for_task("storyboard_gen")
         err = key_error("storyboard_gen")
         if err:
+            if self._structured_fallback:
+                # Pas de clé pour l'IA → conversion déterministe (filet).
+                self.finished.emit(self._structured_fallback)
+                return
             self.failed.emit(err)
             return
         try:
@@ -982,6 +951,24 @@ class GenerateStoryboardWorker(QThread):
                 names_block = "\n".join(lines) + "\n\n"
 
             user_content = _lang_hint(lang) + names_block + self._text
+            if self._structured_fallback:
+                _n = len(self._structured_fallback)
+                _fiche_rules = (
+                    f"[SOURCE = DÉCOUPAGE PANDORA VALIDÉ — {_n} fiches PLAN.\n"
+                    " - Produis EXACTEMENT un objet JSON par fiche, dans le même ordre"
+                    " (1 fiche = 1 plan — n'en supprime ni n'en ajoute aucun).\n"
+                    " - Le PROMPT VISUEL de chaque fiche est la BASE des champs"
+                    " action/staging/ambiance/decor/lighting : répartis son contenu dans"
+                    " les bonnes cases SANS le réécrire ni le résumer ; complète"
+                    " uniquement ce qui manque.\n"
+                    " - Reprends fidèlement les champs de la fiche : DURÉE, VALEUR/AXE/"
+                    "MOUVEMENT/FOCALE proposés, PERSONNAGES, DÉCOR, ACCESSOIRES,"
+                    " VÉHICULES, SÉQUENCE — et recopie SOURCE SCÉNARIO → source_excerpt,"
+                    " RYTHME → rhythm, INTENTION → intention.\n"
+                    " - Toute fusion doit être déclarée (merged:true + merged_note) —"
+                    " jamais silencieuse.]\n\n"
+                )
+                user_content = _lang_hint(lang) + names_block + _fiche_rules + self._text
             if self._duration_secs > 0:
                 mins, secs = divmod(self._duration_secs, 60)
                 dur_str = f"{mins}min {secs:02d}s" if mins else f"{secs}s"
@@ -1005,6 +992,9 @@ class GenerateStoryboardWorker(QThread):
             start = raw.find("[")
             end   = raw.rfind("]") + 1
             if start == -1 or end == 0:
+                if self._structured_fallback:
+                    self.finished.emit(self._structured_fallback)
+                    return
                 self.failed.emit(f"Réponse {ai_name()} invalide — pas de tableau JSON trouvé.")
                 return
 
@@ -1012,6 +1002,9 @@ class GenerateStoryboardWorker(QThread):
             shots = _parse_shots_robust(json_str)
 
             if not shots:
+                if self._structured_fallback:
+                    self.finished.emit(self._structured_fallback)
+                    return
                 self.failed.emit(f"Aucun plan extrait — la réponse {ai_name()} était mal formée.")
                 return
 
@@ -1022,7 +1015,9 @@ class GenerateStoryboardWorker(QThread):
             # raffinés ensuite par les pages dédiées (synchro).
             from core.prompt_sections import build as _ps_build, LIGHTING_NOTE as _LN
             for s in shots:
-                s["duration"] = min(float(s.get("duration", 8.0)), 15.0)
+                # Plancher ET plafond appliqués (2-15 s — le prompt l'exige, le
+                # code le garantit désormais aussi, 2026-07-23).
+                s["duration"] = min(max(float(s.get("duration", 8.0)), 2.0), 15.0)
                 s.setdefault("character_ids", [])
                 s.setdefault("accessory_ids", [])
                 s.setdefault("decor_id",      "")
@@ -1084,12 +1079,19 @@ class GenerateStoryboardWorker(QThread):
 
             self.finished.emit(shots)
         except Exception as e:
+            if self._structured_fallback:
+                # L'IA a échoué mais le découpage structuré reste convertible :
+                # on livre la conversion déterministe plutôt qu'une erreur.
+                self.finished.emit(self._structured_fallback)
+                return
             self.failed.emit(_fmt_err(e))
 
 
 # ── Workers d'extraction ──────────────────────────────────────────────────────
 
-def _extract_worker(system_prompt: str, text: str, max_tokens: int = 4096) -> list:
+def _extract_worker(system_prompt: str, text: str, max_tokens: int = 16000) -> list:
+    # 16000 tokens par défaut (2026-07-23) : un gros casting/inventaire ne doit
+    # jamais revenir tronqué — le coût ne dépend que de la sortie réelle.
     """Shared extraction logic: call the AI provider, return parsed JSON list."""
     from core.ai_provider import complete as ai_complete, key_error
     err = key_error("extraction")
@@ -1262,7 +1264,7 @@ class AnalyzeRecurrentShotsWorker(QThread):
         user = "\n\n".join(f"SÉQUENCE {seq}\n" + "\n".join(lines_by_seq[seq])
                            for seq in order)
         raw = ai_complete(_RECURRENT_SYSTEM, user, tier="creative",
-                          max_tokens=2048, task="extraction").strip()
+                          max_tokens=8192, task="extraction").strip()
         start, end = raw.find("{"), raw.rfind("}") + 1
         if start == -1 or end <= 0:
             return None
@@ -1320,17 +1322,12 @@ class AnalyzeReferencesWorker(QThread):
     def run(self):
         import base64
         import mimetypes
-        cfg = load_config()
-        key = cfg.get("anthropic_key", "").strip()
-        if not key:
-            self.failed.emit("Clé API Anthropic manquante.\nConfigure-la dans Paramètres.")
+        from core.ai_provider import key_error
+        err = key_error(task="vision")
+        if err:
+            self.failed.emit(err)
             return
         try:
-            # VISION (images) : volontairement sur Anthropic, hors couche ai_provider —
-            # les autres fournisseurs gèrent la vision différemment (périmètre v1 = texte).
-            import anthropic
-            client = anthropic.Anthropic(api_key=key)
-
             content: list = []
             for i, path in enumerate(self._paths):
                 if not __import__("os").path.isfile(path):
@@ -1361,27 +1358,22 @@ class AnalyzeReferencesWorker(QThread):
                 )
             content.append({"type": "text", "text": user_text})
 
-            full_text = ""
-            with client.messages.stream(
-                model=_MODEL,
-                max_tokens=2048,
-                thinking=_NO_THINK,
-                system=self._SYSTEM,
-                messages=[{"role": "user", "content": content}],
-            ) as stream:
-                for text in stream.text_stream:
-                    full_text += text
-                    self.chunk.emit(text)
+            from core.ai_provider import chat_stream
+            full_text = chat_stream(
+                self._SYSTEM, [{"role": "user", "content": content}],
+                on_chunk=self.chunk.emit, tier="creative", max_tokens=8192,
+                task="vision")
             self.done.emit(full_text.strip())
         except Exception as e:
             self.failed.emit(_fmt_err(e))
 
 
 class EnrichScenarioWithRefsWorker(QThread):
-    """Enrichit le scénario en croisant son texte avec l'analyse visuelle des références.
+    """Compatibilité historique pour les anciens appels d'enrichissement narratif.
 
-    Claude identifie les correspondances (personnages, décors, ambiances) et enrichit
-    uniquement les passages du scénario qui ont un équivalent dans les images analysées.
+    Le flux principal Cinéma ne l'utilise plus : la direction artistique issue des
+    références est désormais enregistrée dans la note de réalisation, séparément
+    du scénario.
     """
     chunk  = pyqtSignal(str)
     done   = pyqtSignal(dict)
@@ -1462,10 +1454,13 @@ _REFS_CHAT_SYSTEM = (
     "Tu disposes de l'ANALYSE du moodboard de référence (décodage complet : "
     "composition, style d'image, lumière, palette, matières) et du SCÉNARIO "
     "du film. L'utilisateur dialogue avec toi pour décider comment TRANSPOSER "
-    "cette direction artistique dans son scénario, son storyboard et ses plans.\n"
+    "cette direction artistique dans sa NOTE DE RÉALISATION, son découpage, "
+    "son storyboard et ses plans. Le scénario reste le document narratif.\n"
     "Règles :\n"
     "• Réponds en français, concret et actionnable — propose des formulations "
-    "prêtes à coller dans le scénario ou dans les prompts quand c'est utile ;\n"
+    "prêtes à coller dans la note de réalisation ou dans les prompts quand c'est utile ;\n"
+    "• Ne propose d'altérer le scénario que si l'utilisateur demande explicitement "
+    "une modification narrative ;\n"
     "• La DA est une inspiration à transposer, jamais à copier ;\n"
     "• Raisonne en séquences et en plans de cinéma (valeurs de plan, focales, "
     "lumière, palette) ;\n"
@@ -2156,7 +2151,7 @@ class StoryboardChatWorker(QThread):
 
         messages = self._history + [{"role": "user", "content": user_msg}]
         raw = ai_chat(_STORYBOARD_CHAT_SYSTEM, messages,
-                      tier="creative", max_tokens=4096, task="storyboard_chat").strip()
+                      tier="creative", max_tokens=8192, task="storyboard_chat").strip()
 
         # Nettoyage markdown éventuel.
         if "```" in raw:
@@ -2227,16 +2222,24 @@ def _arrange_chat_system(intensity: int) -> str:
         "Tu es un co-auteur travaillant dans Pandora, un outil de pré-production IA. "
         "Tu dialogues avec le réalisateur pour affiner le scénario.\n\n"
         f"{rule}\n\n"
-        "RÉFÉRENCES VISUELLES : Si des images sont jointes, intègre leurs détails visuels "
-        "UNIQUEMENT dans les parties que le réalisateur demande de modifier.\n\n"
+        "SÉPARATION ABSOLUE : le scénario contient uniquement récit, actions jouables, "
+        "lieux et dialogues. Style d'image, temporalité de fabrication, lumière, rythme "
+        "de montage, durée/valeur/axe/mouvement des plans et continuité technique vont "
+        "dans la NOTE DE RÉALISATION, jamais dans le scénario.\n\n"
+        "RÉFÉRENCES VISUELLES : Si des images sont jointes, leurs intentions esthétiques "
+        "vont dans la Note de réalisation. Seuls les faits narratifs explicitement demandés "
+        "peuvent modifier le scénario.\n\n"
         "FORMAT DE RÉPONSE OBLIGATOIRE :\n"
-        "Ta réponse doit contenir EXACTEMENT deux parties séparées par ces marqueurs :\n\n"
+        "Ta réponse doit contenir EXACTEMENT trois parties séparées par ces marqueurs :\n\n"
         "══════════ MESSAGE ══════════\n"
         "[Message conversationnel : indique précisément CE QUE TU AS CHANGÉ et où — "
         "2 à 4 lignes max, ton direct et collaboratif. Si la portée est ambiguë, pose une question.]\n"
         "══════════ SCÉNARIO ══════════\n"
-        "[Le scénario complet. Mise en page Pandora : séquences (—— SÉQUENCE N — TITRE ——), "
-        "en-têtes INT./EXT., noms de personnages en MAJUSCULES avant les répliques.]\n\n"
+        "[Le scénario complet : séquences, en-têtes INT./EXT., actions et dialogues. "
+        "Aucune instruction de plan ou de style de fabrication.]\n"
+        "══════════ NOTE DE RÉALISATION ══════════\n"
+        "[La note complète mise à jour. Reprends la note fournie et ajoute uniquement "
+        "les intentions techniques convenues. Si rien ne change, recopie-la.]\n\n"
         "RÈGLES :\n"
         "- « Ne touche pas X » ou « garde X intact » → X est copié mot pour mot, sans exception\n"
         "- « Développe Y » → ajoute du contenu cohérent UNIQUEMENT dans Y\n"
@@ -2275,29 +2278,36 @@ def _arrange_chat_surgical_system(intensity: int) -> str:
         "espaces. « replace » = ce même passage réécrit.\n"
         f"- {creativity}\n"
         "- Respecte « ne touche pas à X » / « garde X » sans exception.\n"
+        "- SÉPARATION ABSOLUE : style d'image, temporalité, lumière, montage, rythme, "
+        "durée/valeur/axe/mouvement des plans et continuité technique ne sont JAMAIS "
+        "des éditions du scénario. Place-les dans « note_append ».\n"
+        "- Une demande peut produire à la fois des « edits » narratifs et un "
+        "« note_append » technique. Ne mélange pas les deux.\n"
         "- IMPÉRATIF : si le réalisateur demande un changement, renvoie les éditions "
         "correspondantes dans « edits » DANS CETTE RÉPONSE. Ne dis JAMAIS que tu as "
         "modifié (ou que tu vas modifier) sans renvoyer l'édition — pas de promesse "
         "pour plus tard.\n\n"
-        "RÉFÉRENCES VISUELLES : si des images sont jointes, intègre leurs détails "
-        "UNIQUEMENT dans les passages demandés.\n\n"
+        "RÉFÉRENCES VISUELLES : leurs intentions esthétiques vont dans "
+        "« note_append » ; elles ne gonflent jamais le texte narratif.\n\n"
         "FORMAT — JSON STRICT, sans markdown, sans texte hors JSON :\n"
         '{ "message": "<ta réponse, claire et AÉRÉE : phrases courtes, paragraphes '
         "séparés par une ligne vide (\\n\\n), liste à puces si utile ; pour une simple "
         'confirmation d\'édition, 1-3 lignes suffisent ; pose une question si la '
         'portée est ambiguë>", '
         '"edits": [ {"find": "<extrait exact>", "replace": "<réécrit>", '
-        '"summary": "<résumé court>"} ] }'
+        '"summary": "<résumé court>"} ], '
+        '"note_append": "<intentions techniques structurées à ajouter à la note, ou vide>" }'
     )
 
 
-def _parse_surgical_reply(raw: str) -> tuple[str, list]:
-    """Extrait (message, edits) d'une réponse chirurgicale JSON {message, edits}.
+def _parse_surgical_reply_with_note(raw: str) -> tuple[str, list, str]:
+    """Extrait (message, edits, note_append) d'une réponse chirurgicale JSON.
     Tolérant au markdown / JSON partiel ; « edits » via parse_edits (robuste)."""
     import json as _json, re as _re
     from core.text_edits import parse_edits
     edits = parse_edits(raw)
     message = ""
+    note_append = ""
     s = (raw or "").strip()
     if "```" in s:
         for part in s.split("```"):
@@ -2309,6 +2319,7 @@ def _parse_surgical_reply(raw: str) -> tuple[str, list]:
         obj = _json.loads(s)
         if isinstance(obj, dict):
             message = str(obj.get("message", "")).strip()
+            note_append = str(obj.get("note_append", "") or "").strip()
     except Exception:
         m = _re.search(r'"message"\s*:\s*"((?:[^"\\]|\\.)*)"', s)
         if m:
@@ -2316,6 +2327,12 @@ def _parse_surgical_reply(raw: str) -> tuple[str, list]:
                 message = _json.loads('"' + m.group(1) + '"')
             except Exception:
                 message = m.group(1).strip()
+    return message, edits, note_append
+
+
+def _parse_surgical_reply(raw: str) -> tuple[str, list]:
+    """Compatibilité Live et extensions 1.3.x : message + éditions uniquement."""
+    message, edits, _note = _parse_surgical_reply_with_note(raw)
     return message, edits
 
 
@@ -2338,10 +2355,12 @@ class ArrangeChatWorker(QThread):
     message_ready    = pyqtSignal(str)
     screenplay_ready = pyqtSignal(str)
     edits_ready      = pyqtSignal(list)
+    direction_note_ready = pyqtSignal(str)
     failed           = pyqtSignal(str)
 
     _MARKER_MSG  = "══════════ MESSAGE ══════════"
     _MARKER_SCR  = "══════════ SCÉNARIO ══════════"
+    _MARKER_NOTE = "══════════ NOTE DE RÉALISATION ══════════"
 
     def __init__(
         self,
@@ -2352,6 +2371,7 @@ class ArrangeChatWorker(QThread):
         intensity: int = 5,
         ref_images: list | None = None,
         refs_analysis: str = "",
+        direction_note: str = "",
         surgical: bool = False,
     ):
         super().__init__()
@@ -2362,6 +2382,7 @@ class ArrangeChatWorker(QThread):
         self._intensity    = intensity
         self._ref_images   = ref_images or []
         self._refs         = refs_analysis or ""
+        self._direction_note = direction_note or ""
         self._surgical     = surgical
 
     def run(self):
@@ -2392,6 +2413,10 @@ class ArrangeChatWorker(QThread):
                     "ancre les ambiances, matières et lumières du scénario "
                     "dans cette direction.]\n" + self._refs.strip()
                 )
+            context_block += (
+                "\n\n[NOTE DE RÉALISATION ACTUELLE — document séparé du scénario]\n"
+                + (self._direction_note.strip() or "(vide)")
+            )
 
             # Construction des messages : on insère le contexte dans le premier message user
             messages = []
@@ -2441,37 +2466,40 @@ class ArrangeChatWorker(QThread):
             # longs étaient réécrits → 0 édition récupérée (constat Matthieu 2026-07-13).
             # COMPLET : 16000 — 8192 TRONQUAIT la FIN des longs scénarios (constat
             # Matthieu 2026-07-20 : « toute la fin était perdue ») ; parité avec le Live.
+            # ANTI-TRONCATURE (2026-07-21) : la coupe par limite est désormais DÉTECTÉE
+            # (stop_reason) et la suite demandée automatiquement → plus aucune perte,
+            # quel que soit la longueur du scénario (chat_until_complete, ×5 max).
             _maxtok = 8192 if self._surgical else 16000
             if self._ref_images:
-                # VISION (images jointes) : direct Anthropic — hors couche ai_provider
-                # (les autres fournisseurs gèrent la vision différemment ; périmètre v1 = texte).
-                import anthropic
-                from core.config import load_config as _lc
-                client = anthropic.Anthropic(api_key=_lc().get("anthropic_key", "").strip())
-                response = client.messages.create(
-                    model=_MODEL,
-                    max_tokens=_maxtok,
-                    thinking=_NO_THINK,
-                    system=_sys,
-                    messages=messages,
-                )
-                raw = response.content[0].text.strip()
+                # Le routeur convertit les blocs image pour Anthropic, OpenAI et
+                # serveurs compatibles, avec la même continuation anti-troncature.
+                from core.ai_provider import chat_until_complete as ai_chat_full
+                raw = ai_chat_full(_sys, messages, tier="creative",
+                                   max_tokens=_maxtok, task="screenplay",
+                                   max_rounds=5).strip()
             else:
-                raw = ai_chat(_sys, messages,
-                              tier="creative", max_tokens=_maxtok, task="screenplay").strip()
+                from core.ai_provider import chat_until_complete as ai_chat_full
+                raw = ai_chat_full(_sys, messages,
+                                   tier="creative", max_tokens=_maxtok,
+                                   task="screenplay").strip()
 
             # ── Mode CHIRURGICAL : message + ÉDITIONS ciblées (aucune réécriture totale) ──
             if self._surgical:
-                message, edits = _parse_surgical_reply(raw)
+                message, edits, note_append = _parse_surgical_reply_with_note(raw)
                 if not message:
                     message = "Modifications proposées." if edits else (raw.strip() or "…")
                 self.message_ready.emit(message)
+                if note_append:
+                    self.direction_note_ready.emit(note_append)
                 self.edits_ready.emit(edits)
                 return
 
             # ── Mode COMPLET : message + scénario réécrit entier (marqueurs) ──
             chat_msg   = ""
             screenplay = ""
+            direction_note = ""
+            if self._MARKER_NOTE in raw:
+                raw, direction_note = raw.split(self._MARKER_NOTE, 1)
             if self._MARKER_SCR in raw:
                 parts      = raw.split(self._MARKER_SCR, 1)
                 screenplay = parts[1].strip()
@@ -2491,6 +2519,8 @@ class ArrangeChatWorker(QThread):
                 self.message_ready.emit(chat_msg)
             if screenplay:
                 self.screenplay_ready.emit(screenplay)
+            if direction_note:
+                self.direction_note_ready.emit(direction_note.strip())
 
         except Exception as e:
             self.failed.emit(_fmt_err(e))

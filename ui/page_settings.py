@@ -4,7 +4,7 @@ from PyQt6.QtWidgets import (
     QScrollArea, QWidget, QVBoxLayout, QHBoxLayout,
     QLabel, QLineEdit, QPushButton, QMessageBox, QComboBox,
 )
-from PyQt6.QtCore import Qt
+from PyQt6.QtCore import Qt, pyqtSignal
 from ui.styles import CP
 from ui.icons import load_icon
 from ui.davinci_panel import DaVinciPanel
@@ -106,17 +106,32 @@ def _badge(text: str, kind: str) -> QLabel:
 
 
 class SettingsPage(QScrollArea):
+    manual_requested = pyqtSignal()
+
     def __init__(self):
         super().__init__()
         self.setWidgetResizable(True)
         self.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         self.setStyleSheet(f"background:{CP['bg0']};border:none;")
 
+        # Le contenu est CENTRÉ (largeur max 1360) à l'intérieur du scroll : la
+        # zone de défilement occupe toute la largeur de la fenêtre, donc sa barre
+        # est collée au bord droit (demande Matthieu 2026-07-22).
+        content = QWidget()
+        content.setStyleSheet(f"background:{CP['bg0']};")
+        content.setMaximumWidth(1360)
+
         container = QWidget()
         container.setStyleSheet(f"background:{CP['bg0']};")
+        _center = QHBoxLayout(container)
+        _center.setContentsMargins(0, 0, 0, 0)
+        _center.setSpacing(0)
+        _center.addStretch(1)
+        _center.addWidget(content, 4)
+        _center.addStretch(1)
         self.setWidget(container)
 
-        lay = QVBoxLayout(container)
+        lay = QVBoxLayout(content)
         lay.setContentsMargins(32, 28, 32, 32)
         lay.setSpacing(20)
 
@@ -240,6 +255,16 @@ class SettingsPage(QScrollArea):
             f"color:{CP['text_dim']};font-size:10px;background:transparent;"
         )
         lay.addWidget(_lbl_screen)
+
+        _manual_row = QHBoxLayout()
+        self._btn_manual = QPushButton("☰  Manuel d'utilisation")
+        self._btn_manual.setFixedHeight(36)
+        self._btn_manual.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._btn_manual.setStyleSheet(_ss_theme_inactive)
+        self._btn_manual.clicked.connect(self.manual_requested)
+        _manual_row.addWidget(self._btn_manual)
+        _manual_row.addStretch()
+        lay.addLayout(_manual_row)
         lay.addWidget(_divider())
 
         cfg = load_config()
@@ -247,8 +272,9 @@ class SettingsPage(QScrollArea):
         # ── Assistant IA (texte) — juste après l'Apparence (retour 2026-06-13) ─
         lay.addWidget(_section("Assistant IA"))
         _lbl_ai = QLabel(
-            "Moteur IA des fonctions texte : prompts, scénario, arrangement, storyboard, "
-            "assistant. L'analyse d'images reste sur Anthropic."
+            "Moteur IA des fonctions texte et d'analyse visuelle : prompts, scénario, "
+            "arrangement, storyboard et assistant. Les profils optimisés choisissent "
+            "automatiquement le meilleur modèle de leur famille pour chaque tâche."
         )
         _lbl_ai.setWordWrap(True)
         _lbl_ai.setStyleSheet(
@@ -256,20 +282,6 @@ class SettingsPage(QScrollArea):
         )
         lay.addWidget(_lbl_ai)
 
-        # (libellé, provider, modèle créatif)
-        self._AI_CHOICES = [
-            ("PANDORA optimisé — idéal par tâche · Opus pour le storyboard (défaut)",
-                                                          "anthropic", "claude-opus-4-8"),
-            ("Claude Sonnet 5 — tout en équilibré",       "anthropic", "claude-sonnet-5"),
-            ("Claude Haiku 4.5 — tout en rapide / économe", "anthropic", "claude-haiku-4-5"),
-            ("Fable 5 (Anthropic) — tout sur Fable 5",    "anthropic", "claude-fable-5"),
-            ("GPT-5.5 (OpenAI) — partout",                "openai",    ""),
-            ("Mistral — partout (expérimental)",          "mistral",   ""),
-            ("Kimi K2.7 (Moonshot) — API ou local (expérimental)", "kimi", ""),
-            ("GLM 4.7 (Zhipu) — API ou local (expérimental)", "glm", ""),
-            ("Ollama local — partout (expérimental)",     "ollama",    ""),
-            ("Choix personnalisé — un moteur par tâche",  "custom",     ""),
-        ]
         self.ai_combo = QComboBox()
         self.ai_combo.setFixedHeight(34)
         self.ai_combo.setStyleSheet(
@@ -280,18 +292,25 @@ class SettingsPage(QScrollArea):
             f"border:1px solid {CP['border_bright']};color:{CP['text_primary']};"
             f"selection-background-color:{CP['accent_dim']};}}"
         )
-        for label, prov, model in self._AI_CHOICES:
-            self.ai_combo.addItem(label, (prov, model))
-        _cur = (cfg.get("ai_provider", "anthropic"), cfg.get("ai_model_creative", ""))
-        # Défaut = Opus 4.8 (cf. core.ai_provider._DEFAULT_CREATIVE) : un modèle vide
-        # doit présélectionner Opus, sinon le combo affichait Sonnet à tort — et un
-        # Save aurait réellement rétrogradé l'assistant en Sonnet.
-        for i, (_, prov, model) in enumerate(self._AI_CHOICES):
-            if prov == _cur[0] and (prov != "anthropic" or model == (_cur[1] or "claude-opus-4-8")):
-                self.ai_combo.setCurrentIndex(i)
-                break
+        from ui.ai_model_selector import populate_primary
+        populate_primary(self.ai_combo, cfg)
         self.ai_combo.currentIndexChanged.connect(self._on_ai_choice_changed)
         lay.addWidget(self.ai_combo)
+
+        self._btn_refresh_ai_models = QPushButton("Actualiser les modèles accessibles")
+        self._btn_refresh_ai_models.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._btn_refresh_ai_models.setStyleSheet(
+            f"QPushButton{{background:transparent;color:{CP['accent2']};border:1px solid {CP['border']};"
+            f"border-radius:7px;padding:6px 10px;text-align:left;}}"
+            f"QPushButton:hover{{border-color:{CP['accent2']};}}"
+        )
+        self._btn_refresh_ai_models.clicked.connect(self._refresh_ai_models)
+        # Bouton RETIRÉ de l'affichage (demande Matthieu 2026-07-22) : la
+        # découverte des modèles se déclenche automatiquement au changement
+        # d'assistant. Le widget reste vivant : start_model_discovery écrit son
+        # état dedans pendant la découverte.
+        self._btn_refresh_ai_models.setParent(self)
+        self._btn_refresh_ai_models.hide()
 
         # Champs spécifiques aux fournisseurs alternatifs (visibles selon le choix).
         # Les CLÉS (OpenAI, Mistral) vivent dans la section « Clés API » plus bas
@@ -340,6 +359,20 @@ class SettingsPage(QScrollArea):
         self.glm_model_input.setStyleSheet(_field_style())
         lay.addWidget(self.glm_model_input)
 
+        # Fournisseur OpenAI-compatible libre : vLLM, LM Studio, passerelle privée…
+        self.custom_url_input = QLineEdit()
+        self.custom_url_input.setPlaceholderText(
+            "URL OpenAI-compatible (ex. http://localhost:1234/v1)")
+        self.custom_url_input.setText(cfg.get("custom_url", ""))
+        self.custom_url_input.setStyleSheet(_field_style())
+        lay.addWidget(self.custom_url_input)
+
+        self.custom_model_input = QLineEdit()
+        self.custom_model_input.setPlaceholderText("Identifiant exact du modèle personnalisé")
+        self.custom_model_input.setText(cfg.get("custom_model", ""))
+        self.custom_model_input.setStyleSheet(_field_style())
+        lay.addWidget(self.custom_model_input)
+
         self._lbl_ai_restart = QLabel(
             "Le nom de l'assistant dans l'interface se met à jour au prochain démarrage."
         )
@@ -347,7 +380,9 @@ class SettingsPage(QScrollArea):
         self._lbl_ai_restart.setStyleSheet(
             f"color:{CP['text_dim']};font-size:10px;font-style:italic;background:transparent;"
         )
-        lay.addWidget(self._lbl_ai_restart)
+        # Légende RETIRÉE de l'affichage avec le bouton (2026-07-22).
+        self._lbl_ai_restart.setParent(self)
+        self._lbl_ai_restart.hide()
 
         # ── Paramètres avancés : moteur IA PAR TÂCHE (repliable) ───────────────
         self._adv_open = False
@@ -370,16 +405,15 @@ class SettingsPage(QScrollArea):
         _adv_hint = QLabel(
             "Choisissez un moteur différent selon la tâche. « Par défaut » utilise "
             "le moteur sélectionné ci-dessus ; les clés se renseignent dans « Clés API ». "
-            "PANDORA est optimisé avec Fable 5 — le rendu avec les autres moteurs "
-            "n'est pas encore totalement fiable."
+            "Les profils Anthropic et ChatGPT restent strictement dans leur famille "
+            "de modèles, sans repli silencieux vers un autre fournisseur."
         )
         _adv_hint.setWordWrap(True)
         _adv_hint.setStyleSheet(f"color:{CP['text_dim']};font-size:10px;background:transparent;")
         adv_lay.addWidget(_adv_hint)
 
-        from core.ai_provider import (TASKS, ENGINES, ENGINE_ORDER,
-                                       recommended_engine_name)
-        _engine_items = [(ENGINES[k]["name"], k) for k in ENGINE_ORDER]
+        from core.ai_provider import TASKS
+        from ui.ai_model_selector import populate_task_engines
         self._task_combos = {}
         _saved_tasks = cfg.get("ai_task_engines") or {}
         for task_key, task_label in TASKS:
@@ -401,15 +435,8 @@ class SettingsPage(QScrollArea):
                 f"border:1px solid {CP['border_bright']};color:{CP['text_primary']};"
                 f"selection-background-color:{CP['accent_dim']};}}"
             )
-            # 1er item = défaut intelligent (affiche le moteur recommandé pour la tâche).
-            combo.addItem(f"Par défaut · {recommended_engine_name(task_key)}", "")
-            for name, key in _engine_items:
-                combo.addItem(name, key)
             _cur_eng = _saved_tasks.get(task_key, "")
-            for i in range(combo.count()):
-                if combo.itemData(i) == _cur_eng:
-                    combo.setCurrentIndex(i)
-                    break
+            populate_task_engines(combo, cfg, task_key, _cur_eng)
             self._task_combos[task_key] = combo
             row.addWidget(combo)
             adv_lay.addLayout(row)
@@ -614,16 +641,16 @@ class SettingsPage(QScrollArea):
         self.piapi_input.setStyleSheet(_field_style())
         opt_lay.addWidget(self.piapi_input)
 
-        # OpenAI (GPT-5.5)
+        # OpenAI
         oa_lbl_row = QHBoxLayout()
         oa_lbl_row.setSpacing(8)
-        lbl_oa = QLabel("OpenAI — GPT-5.5  (assistant texte, par moteur ou par tâche)")
+        lbl_oa = QLabel("OpenAI — GPT-5.6 / GPT-5.5  (assistant, par profil ou par tâche)")
         lbl_oa.setStyleSheet(
             f"color:{CP['text_secondary']};font-size:12px;background:transparent;"
         )
         oa_lbl_row.addWidget(lbl_oa, 1)
         oa_lbl_row.addWidget(_badge("Facultatif", "opt"))
-        oa_lbl_row.addWidget(_test_btn("✓  Tester API GPT-5.5", self.test_openai_connection))
+        oa_lbl_row.addWidget(_test_btn("✓  Tester API OpenAI", self.test_openai_connection))
         oa_lbl_row.addWidget(_link_btn("⇗  Obtenir une clé OpenAI", _OPENAI_KEYS_URL))
         opt_lay.addLayout(oa_lbl_row)
 
@@ -693,6 +720,25 @@ class SettingsPage(QScrollArea):
         self.glm_input.setEchoMode(QLineEdit.EchoMode.Password)
         self.glm_input.setStyleSheet(_field_style())
         opt_lay.addWidget(self.glm_input)
+
+        # Fournisseur OpenAI-compatible personnalisé — clé facultative en local.
+        cu_lbl_row = QHBoxLayout()
+        cu_lbl_row.setSpacing(8)
+        lbl_cu = QLabel("Fournisseur personnalisé  (API OpenAI-compatible ou serveur local)")
+        lbl_cu.setStyleSheet(
+            f"color:{CP['text_secondary']};font-size:12px;background:transparent;"
+        )
+        cu_lbl_row.addWidget(lbl_cu, 1)
+        cu_lbl_row.addWidget(_badge("Facultatif", "opt"))
+        cu_lbl_row.addWidget(_test_btn("✓  Tester le fournisseur", self.test_custom_connection))
+        opt_lay.addLayout(cu_lbl_row)
+
+        self.custom_key_input = QLineEdit()
+        self.custom_key_input.setPlaceholderText("Clé API personnalisée  (vide si serveur local)")
+        self.custom_key_input.setText(cfg.get("custom_key", ""))
+        self.custom_key_input.setEchoMode(QLineEdit.EchoMode.Password)
+        self.custom_key_input.setStyleSheet(_field_style())
+        opt_lay.addWidget(self.custom_key_input)
 
         lay.addWidget(self._opt_keys_box)
         lay.addWidget(_divider())
@@ -799,19 +845,37 @@ class SettingsPage(QScrollArea):
 
     def _on_ai_choice_changed(self, *_):
         """Champs Ollama conditionnels + « Choix personnalisé » ouvre les avancés."""
-        prov = (self.ai_combo.currentData() or ("anthropic", ""))[0]
+        from ui.ai_model_selector import selected_primary, selection_provider
+        _choice = selected_primary(self.ai_combo)
+        prov = selection_provider(self.ai_combo)
         self.ollama_url_input.setVisible(prov == "ollama")
         self.ollama_model_input.setVisible(prov == "ollama")
         self.kimi_url_input.setVisible(prov == "kimi")
         self.kimi_model_input.setVisible(prov == "kimi")
         self.glm_url_input.setVisible(prov == "glm")
         self.glm_model_input.setVisible(prov == "glm")
+        self.custom_url_input.setVisible(prov == "custom")
+        self.custom_model_input.setVisible(prov == "custom")
         # « Choix personnalisé » et « PANDORA optimisé » déplient le moteur par tâche
-        if prov in ("custom", "pandora") and not self._adv_open:
+        if (_choice.get("profile") in ("custom", "anthropic_optimized", "openai_optimized")
+                and not self._adv_open):
             self._set_advanced(True)
-        # « PANDORA optimisé » remplit les combos avec le preset conseillé
-        if prov == "pandora":
-            self._apply_pandora_preset()
+        # Appel avec un index = changement réel de l'utilisateur. L'appel sans
+        # argument pendant la construction ne doit pas écraser ses overrides sauvés.
+        if _ and hasattr(self, "_task_combos"):
+            from core.config import load_config
+            from ui.ai_model_selector import refresh_task_engines_for_primary
+            refresh_task_engines_for_primary(
+                self.ai_combo, self._task_combos, load_config())
+            # Découverte AUTOMATIQUE des modèles réellement accessibles à chaque
+            # changement d'assistant — remplace l'ancien bouton « Actualiser les
+            # modèles accessibles » (demande Matthieu 2026-07-22).
+            # UNIQUEMENT si la page est visible : les harnais instancient cette
+            # page hors écran et changent l'index — sans ce garde, des workers
+            # réseau seraient encore vivants à la sortie du processus (abort
+            # 0xC0000409 constaté dans tools/test_live.py).
+            if self.isVisible():
+                self._refresh_ai_models()
 
     def _set_advanced(self, open_: bool):
         self._adv_open = open_
@@ -822,6 +886,13 @@ class SettingsPage(QScrollArea):
 
     def _toggle_advanced(self):
         self._set_advanced(not self._adv_open)
+
+    def _refresh_ai_models(self):
+        """Interroge les API /models sans bloquer l'interface."""
+        self.save()  # les clés/URL visibles deviennent le snapshot de découverte
+        from ui.ai_model_selector import start_model_discovery
+        start_model_discovery(self, self.ai_combo, self._task_combos,
+                              self._btn_refresh_ai_models)
 
     def test_piapi_connection(self):
         key = self.piapi_input.text().strip()
@@ -847,7 +918,7 @@ class SettingsPage(QScrollArea):
 
     def save(self):
         cfg = load_config()
-        prov, model = self.ai_combo.currentData() or ("anthropic", "")
+        from ui.ai_model_selector import apply_primary_to_config
         # Moteur PAR TÂCHE : ne garder que les tâches dont le moteur ≠ « Par défaut »
         task_engines = {}
         for task_key, combo in getattr(self, "_task_combos", {}).items():
@@ -858,8 +929,6 @@ class SettingsPage(QScrollArea):
             "api_key":           self.api_input.text(),
             "anthropic_key":     self.anthropic_input.text(),
             "openai_key":        self.openai_input.text(),
-            "ai_provider":       prov,
-            "ai_model_creative": model,
             "mistral_key":       self.mistral_input.text(),
             "kimi_key":          self.kimi_input.text(),
             "kimi_url":          self.kimi_url_input.text(),
@@ -867,6 +936,9 @@ class SettingsPage(QScrollArea):
             "glm_key":           self.glm_input.text(),
             "glm_url":           self.glm_url_input.text(),
             "glm_model":         self.glm_model_input.text(),
+            "custom_key":        self.custom_key_input.text(),
+            "custom_url":        self.custom_url_input.text(),
+            "custom_model":      self.custom_model_input.text(),
             "ollama_url":        self.ollama_url_input.text(),
             "ollama_model":      self.ollama_model_input.text(),
             "ai_task_engines":   task_engines,
@@ -874,6 +946,7 @@ class SettingsPage(QScrollArea):
             "piapi_key":         self.piapi_input.text(),
             "distribution_mode": self.distribution_mode_combo.currentData() or "multi",
         })
+        apply_primary_to_config(cfg, self.ai_combo)
         save_config(cfg)
         from core.ai_provider import refresh_name_cache
         refresh_name_cache()   # le nom de l'assistant change → libellés au prochain démarrage
@@ -888,7 +961,8 @@ class SettingsPage(QScrollArea):
                   self.mistral_input, self.kimi_input, self.kimi_url_input,
                   self.kimi_model_input, self.glm_input, self.glm_url_input,
                   self.glm_model_input, self.ollama_url_input, self.ollama_model_input,
-                  self.piapi_input):
+                  self.custom_key_input, self.custom_url_input,
+                  self.custom_model_input, self.piapi_input):
             w.textChanged.connect(self.save)
         for combo in getattr(self, "_task_combos", {}).values():
             combo.currentIndexChanged.connect(self.save)
@@ -943,7 +1017,7 @@ class SettingsPage(QScrollArea):
                 headers={"Authorization": f"Bearer {key}"}, timeout=20,
             )
             if r.status_code == 200:
-                QMessageBox.information(self, "✓ Connexion OK", "Clé OpenAI (GPT-5.5) valide !")
+                QMessageBox.information(self, "✓ Connexion OK", "Clé OpenAI valide !")
             elif r.status_code in (401, 403):
                 QMessageBox.critical(self, "Clé invalide", "La clé API OpenAI est incorrecte.")
             else:
@@ -952,6 +1026,31 @@ class SettingsPage(QScrollArea):
                     f"Code {r.status_code}. La clé sera testée à la première génération.")
         except Exception as e:
             QMessageBox.critical(self, "Erreur OpenAI", f"Erreur : {str(e)[:200]}")
+
+    def test_custom_connection(self):
+        base = self.custom_url_input.text().strip().rstrip("/")
+        key = self.custom_key_input.text().strip()
+        if not base:
+            QMessageBox.warning(self, "URL manquante",
+                                "Entre l'URL du fournisseur OpenAI-compatible.")
+            return
+        try:
+            import requests
+            headers = {"Authorization": f"Bearer {key}"} if key else {}
+            r = requests.get(f"{base}/models", headers=headers, timeout=20)
+            if r.status_code == 200:
+                QMessageBox.information(
+                    self, "✓ Connexion OK", f"Fournisseur joignable sur {base}.")
+            elif r.status_code in (401, 403):
+                QMessageBox.critical(self, "Clé invalide",
+                                     "La clé du fournisseur personnalisé est refusée.")
+            else:
+                QMessageBox.information(
+                    self, "Réponse du fournisseur",
+                    f"Code {r.status_code}. Vérifie que l'URL expose /models.")
+        except Exception as e:
+            QMessageBox.critical(self, "Erreur du fournisseur",
+                                 f"Erreur : {str(e)[:200]}")
 
     def test_mistral_connection(self):
         key = self.mistral_input.text().strip()

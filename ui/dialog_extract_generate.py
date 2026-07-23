@@ -9,7 +9,7 @@ Two modes offered to the user at launch:
 import os
 from PyQt6.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
-    QScrollArea, QWidget, QFrame, QProgressBar,
+    QScrollArea, QWidget, QFrame, QProgressBar, QComboBox,
 )
 from PyQt6.QtCore import Qt
 from ui.styles import CP
@@ -150,6 +150,50 @@ class ExtractGenerateDialog(QDialog):
             f"color:{CP['text_secondary']};font-size:11px;background:transparent;"
         )
         choice_lay.addWidget(_hint)
+
+        self._room_image_model_combo = None
+        self._room_reference_model_combo = None
+        if self._offer_room_views:
+            from core.config import load_config
+            from core.image_engines import engine_choices, reference_engine_choices
+            combo_ss = (
+                f"QComboBox{{background:{CP['bg3']};border:1px solid {CP['border']};"
+                f"border-radius:6px;color:{CP['text_primary']};font-size:10px;padding:0 8px;}}"
+                f"QComboBox::drop-down{{border:none;width:20px;}}"
+                f"QComboBox QAbstractItemView{{background:{CP['bg3']};border:1px solid {CP['border_bright']};"
+                f"color:{CP['text_primary']};selection-background-color:{CP['accent_dim']};}}"
+            )
+            for label, attr, choices, default in (
+                (translate("Image de départ"), "_room_image_model_combo",
+                 engine_choices(), load_config().get("image_model", "nb2")),
+                (translate("Plan + raccords"), "_room_reference_model_combo",
+                 reference_engine_choices(), "nb2"),
+            ):
+                row = QHBoxLayout()
+                lbl = QLabel(label)
+                lbl.setFixedWidth(120)
+                lbl.setStyleSheet(
+                    f"color:{CP['text_secondary']};font-size:10px;background:transparent;")
+                row.addWidget(lbl)
+                combo = QComboBox()
+                for key, engine_label in choices:
+                    combo.addItem(engine_label, key)
+                idx = combo.findData(default)
+                if idx >= 0:
+                    combo.setCurrentIndex(idx)
+                combo.setFixedHeight(30)
+                combo.setStyleSheet(combo_ss)
+                setattr(self, attr, combo)
+                row.addWidget(combo, 1)
+                choice_lay.addLayout(row)
+            ref_hint = QLabel(translate(
+                "Pour les 7 vues : le premier moteur crée l'image maîtresse ; le "
+                "second reprend cette image pour le plan d'architecture et les raccords."
+            ))
+            ref_hint.setWordWrap(True)
+            ref_hint.setStyleSheet(
+                f"color:{CP['text_dim']};font-size:9px;background:transparent;")
+            choice_lay.addWidget(ref_hint)
 
         btn_identify = QPushButton("  " + translate(f"Identifier les {category_label}"))
         btn_identify.setFixedHeight(44)
@@ -443,7 +487,12 @@ class ExtractGenerateDialog(QDialog):
             import core.style as style_api
             w = GenerateRoomViewsWorker(
                 base_prompt=prompt, decor_name=name,
+                model_key=(self._room_image_model_combo.currentData()
+                           if self._room_image_model_combo else None),
                 style_suffix=style_api.get_image_suffix(),
+                reference_model_key=(self._room_reference_model_combo.currentData()
+                                     if self._room_reference_model_combo else "nb2"),
+                category=item.get("category", ""),
             )
             w.views_finished.connect(self._on_room_views_done)
             w.progress.connect(self._on_room_progress)   # « [3/8] Vue gauche… »
@@ -523,6 +572,7 @@ class ExtractGenerateDialog(QDialog):
             bprompt = item.get("prompt") or item.get("description") or base
             cat     = item.get("category", "Autre")
             fp_path = fp_entry.get("path") if fp_entry else ""
+            fp_thumb = fp_entry.get("thumbnail_path", "") if fp_entry else ""
             overview = next((v for v in view_entries if v.get("code") == "ensemble"),
                             view_entries[0])
             # Vue d'ensemble = le décor d'origine (id conservé → reste assigné aux
@@ -543,10 +593,19 @@ class ExtractGenerateDialog(QDialog):
                     "room_group":       base,
                     "room_view":        "Ensemble" if is_overview else label,
                     "prompt":           v.get("prompt", "") or bprompt,
+                    "room_base_prompt": bprompt,
                     "category":         cat,
                     "image_path":       v["path"],
+                    "thumbnail_path":   v.get("thumbnail_path", ""),
                     "generated_images": [v["path"]],
                     "floor_plan":       fp_path,
+                    "floor_plan_thumbnail": fp_thumb,
+                    "image_model_key":  (
+                        self._room_image_model_combo.currentData()
+                        if self._room_image_model_combo else "nb2"),
+                    "room_reference_model": (
+                        self._room_reference_model_combo.currentData()
+                        if self._room_reference_model_combo else "nb2"),
                 })
                 decors_api.save_decor(d)
             # Marque l'item comme « image générée » pour le décompte final.
@@ -594,13 +653,15 @@ class ExtractGenerateDialog(QDialog):
             f"{total} élément(s) sauvegardé(s) · {done} image(s) générée(s)"
         )
         if self._room_warnings:
-            from PyQt6.QtWidgets import QMessageBox
-            QMessageBox.warning(
-                self, translate("Vues manquantes"),
-                translate("Certaines faces de décor n'ont pas pu être générées par l'API :")
-                + "\n\n• " + "\n• ".join(self._room_warnings)
-                + "\n\n" + translate("Relancez la génération du décor — c'est souvent une "
-                                     "limite de débit temporaire de l'API d'images."))
+            # L'avertissement reste dans LA fenêtre de chargement : ne plus ouvrir
+            # de QMessageBox séparée au moment où l'utilisateur veut voir le décor.
+            details = " · ".join(self._room_warnings)
+            self._phase_lbl.setText(translate("Terminé — Vues manquantes"))
+            self._status_lbl.setText(
+                translate("Certaines vues n'ont pas pu être générées : ") + details)
+            self._status_lbl.setWordWrap(True)
+            self._status_lbl.setStyleSheet(
+                f"color:{CP.get('orange', '#ff8c42')};font-size:10px;background:transparent;")
             self._room_warnings = []
         self._maybe_start_floor_plans()
 

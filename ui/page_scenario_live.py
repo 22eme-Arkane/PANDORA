@@ -45,6 +45,60 @@ def _sep():
     return f
 
 
+class _PanelToggle(QWidget):
+    """Poignée latérale repliable du panneau droit — même principe visuel que la
+    poignée GUIDE et que « RÉGLAGES » du Plan de feu (portage Live 2026-07-23,
+    copie de page_scenario._PanelToggle — séparation Cinéma/Live)."""
+
+    toggled = pyqtSignal(bool)
+
+    def __init__(self, label: str = "ASSISTANT", *, opened=True, parent=None):
+        super().__init__(parent)
+        self._open = bool(opened)
+        self.setFixedWidth(42)
+        self.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.setToolTip(translate("Ouvrir ou fermer le panneau"))
+        self.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
+        # Mêmes couleurs que la poignée GUIDE (cohérence 2026-07-22).
+        self.setStyleSheet(f"background:{CP['bg1']};")
+        lay = QVBoxLayout(self)
+        lay.setContentsMargins(0, 0, 0, 0)
+        lay.setSpacing(0)
+        lay.addStretch()
+        text = QLabel(translate(label))
+        text.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        # letter-spacing 0 : « ASSISTANT » (9 caractères) doit tenir dans 42 px.
+        text.setStyleSheet(
+            f"color:{CP['accent']};font-size:7px;font-weight:900;"
+            "background:transparent;border:none;"
+        )
+        lay.addWidget(text)
+        lay.addSpacing(6)
+        self._arrow = QLabel()
+        self._arrow.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self._arrow.setStyleSheet(
+            f"color:{CP['accent']};font-size:18px;font-weight:700;"
+            "background:transparent;border:none;"
+        )
+        lay.addWidget(self._arrow)
+        lay.addStretch()
+        self._update_arrow()
+
+    def _update_arrow(self):
+        # Fermée → flèche vers l'EXTÉRIEUR (❯, panneau au bord droit) ;
+        # ouverte → vers l'INTÉRIEUR (❮) — même logique que RÉGLAGES.
+        self._arrow.setText("❮" if self._open else "❯")
+
+    def mousePressEvent(self, event):
+        if event.button() == Qt.MouseButton.LeftButton:
+            self._open = not self._open
+            self._update_arrow()
+            self.toggled.emit(self._open)
+            event.accept()
+            return
+        super().mousePressEvent(event)
+
+
 # ── Page Conducteur (landing + éditeur) ────────────────────────────────────────
 
 class PageScenario(QWidget):
@@ -293,46 +347,29 @@ class PageScenario(QWidget):
         outer.setContentsMargins(0, 0, 0, 0)
         outer.setSpacing(0)
 
-        # Top bar
+        # Top bar — N'EST PLUS AFFICHÉE (2026-07-23, parité Cinéma) : elle
+        # héberge les widgets vivants cachés (_title_edit, _save_indicator,
+        # boutons Sauvegarder/Ouvrir du menu Action).
         topbar = QWidget()
-        topbar.setFixedHeight(60)   # hauteur STANDARD des bandeaux (alignement assistant)
         topbar.setStyleSheet(f"background:{CP['bg1']};")
         tl = QHBoxLayout(topbar)
         tl.setContentsMargins(16, 0, 16, 0)
         tl.setSpacing(12)
 
-        btn_back = QPushButton("← Retour")
-        btn_back.setFixedHeight(34)
-        btn_back.setStyleSheet(
-            f"QPushButton{{background:transparent;color:{CP['text_secondary']};"
-            f"border:1px solid {CP['border']};border-radius:6px;font-size:11px;font-weight:700;padding:0 12px;}}"
-            f"QPushButton:hover{{background:{CP['bg2']};color:{CP['text_primary']};}}"
-        )
-        btn_back.clicked.connect(self._go_landing)
-        tl.addWidget(btn_back)
+        # Bouton « ← Retour » RETIRÉ (2026-07-23) : le retour aux conducteurs
+        # passe par le logo PANDORA → page de démarrage, comme côté Cinéma.
 
-        self._title_edit = QLineEdit()
+        # Champ titre RETIRÉ de l'affichage (2026-07-23) mais le widget reste
+        # vivant : il porte le titre du conducteur pour l'autosave, les analyses
+        # et le harnais. Parenté à la topbar pour éviter toute fenêtre fantôme,
+        # jamais ajouté au layout.
+        self._title_edit = QLineEdit(topbar)
         self._title_edit.setPlaceholderText("Titre du conducteur…")
-        self._title_edit.setFixedHeight(34)
-        self._title_edit.setFixedWidth(160)
-        self._title_edit.setStyleSheet(
-            f"QLineEdit{{background:{CP['bg2']};border:1px solid {CP['border']};"
-            f"border-radius:6px;color:{CP['text_primary']};font-size:13px;font-weight:600;padding:0 12px;}}"
-            f"QLineEdit:focus{{border-color:{CP['accent2_dim']};}}"
-        )
         self._title_edit.textChanged.connect(self._schedule_autosave)
-        self._title_edit.textChanged.connect(self._adjust_title_width)
-        tl.addWidget(self._title_edit)
+        self._title_edit.hide()
 
-        # Contrôles « Versions » (combo + ✚ + ✕) REMPLACÉS par Sauvegarder/Ouvrir,
-        # comme le Cinéma (les méthodes de versions restent, gardées par hasattr).
-
-        # ── Sauvegarder / Ouvrir le conducteur (fichiers, dossier Scénario) — porté
-        #    du Cinéma : juste après le titre, séparé par une barre verticale. ─────
-        _scn_sep = QFrame()
-        _scn_sep.setFixedSize(1, 24)
-        _scn_sep.setStyleSheet(f"background:{CP['border']};")
-        tl.addWidget(_scn_sep)
+        # ── Sauvegarder / Ouvrir le conducteur (fichiers, dossier Scénario) —
+        # vivants cachés, pilotés par le menu « ☰ Action » (2026-07-23). ─────────
         _yellow, _blue = "#f5c518", "#4aa3ff"
         self._btn_scn_save = QPushButton("💾  " + translate("Sauvegarder"))
         self._btn_scn_save.setFixedHeight(30)
@@ -343,7 +380,6 @@ class PageScenario(QWidget):
             f"QPushButton:hover{{background:rgba(245,197,24,0.12);}}"
         )
         self._btn_scn_save.clicked.connect(self._on_save_scenario_file)
-        tl.addWidget(self._btn_scn_save)
         self._btn_scn_open = QPushButton("📂  " + translate("Ouvrir"))
         self._btn_scn_open.setFixedHeight(30)
         self._btn_scn_open.setToolTip("Ouvrir un conducteur sauvegardé")
@@ -353,56 +389,60 @@ class PageScenario(QWidget):
             f"QPushButton:hover{{background:rgba(74,163,255,0.12);}}"
         )
         self._btn_scn_open.clicked.connect(self._on_open_scenario_file)
-        tl.addWidget(self._btn_scn_open)
 
-        # ── Style visuel (top bar, après les boutons de version) ──────────────
-        _style_sep_top = QFrame()
-        _style_sep_top.setFixedSize(1, 24)
-        _style_sep_top.setStyleSheet(f"background:{CP['border']};")
-        tl.addWidget(_style_sep_top)
+        # ── Bouton « ☰ Action » : Sauvegarder et Ouvrir regroupés dans un menu
+        # déroulant (vit dans la barre d'outils texte, tout à gauche). Les deux
+        # boutons d'origine restent vivants mais cachés (parenté topbar, jamais
+        # de fenêtre fantôme) ; le menu se recale dessus à chaque ouverture.
+        from PyQt6.QtWidgets import QMenu
+        for _b in (self._btn_scn_save, self._btn_scn_open):
+            _b.setParent(topbar)
+            _b.hide()
 
-        # Conducteur Live : styles dédiés au VJing (mêmes que le Studio IA)
-        import core.vj_styles as _vj_styles
-        self._film_style_combo = QComboBox()
-        self._film_style_combo.addItem("— Style VJ —", "")
-        for _s in _vj_styles.get_styles():
-            self._film_style_combo.addItem(f"    ✦  {_vj_styles.localized_name(_s)}", _s["key"])
-        self._film_style_combo.setFixedHeight(30)
-        self._film_style_combo.setMinimumWidth(140)
-        self._film_style_combo.setMaximumWidth(200)
-        self._film_style_combo.setStyleSheet(
-            f"QComboBox{{background:{CP['bg2']};border:1px solid {CP['border']};"
-            f"border-radius:5px;color:{CP['text_primary']};font-size:10px;padding:0 6px;}}"
-            f"QComboBox:focus{{border-color:{CP.get('accent2_dim', CP['border_bright'])};}}"
-            f"QComboBox::drop-down{{border:none;width:18px;}}"
-            f"QComboBox QAbstractItemView{{background:{CP['bg2']};color:{CP['text_primary']};"
-            f"selection-background-color:{CP.get('accent2_dim', CP['bg3'])};border:1px solid {CP['border']};}}"
+        self._btn_scn_actions = QPushButton("☰  Action")
+        self._btn_scn_actions.setFixedHeight(30)
+        self._btn_scn_actions.setStyleSheet(
+            f"QPushButton{{background:transparent;color:{CP['accent']};"
+            f"border:1px solid {CP['accent']};border-radius:6px;"
+            f"font-size:10px;font-weight:700;padding:0 12px;}}"
+            f"QPushButton:hover{{background:rgba(78,205,196,0.12);}}"
+            f"QPushButton:pressed{{background:rgba(78,205,196,0.22);}}"
+            f"QPushButton::menu-indicator{{image:none;width:0;}}"
         )
-        self._film_style_combo.currentIndexChanged.connect(self._schedule_autosave)
-        self._film_style_combo.currentIndexChanged.connect(self._on_scenario_style_changed)
-        tl.addWidget(self._film_style_combo)
-
-        # (Les boutons Live / Mapping sont désormais dans la bande « Durée cible »,
-        #  en haut à droite — voir _build_film_strip.)
-        tl.addStretch(1)
-
-        _ver_sep2 = QFrame()
-        _ver_sep2.setFixedSize(1, 24)
-        _ver_sep2.setStyleSheet(f"background:{CP['border']};")
-        tl.addWidget(_ver_sep2)
-
-        self._save_indicator = QLabel("")
-        self._save_indicator.setFixedWidth(80)
-        self._save_indicator.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
-        self._save_indicator.setStyleSheet(
-            f"color:{CP['text_dim']};font-size:10px;font-family:'Consolas',monospace;background:transparent;"
+        _scn_menu = QMenu(self._btn_scn_actions)
+        _scn_menu.setStyleSheet(
+            f"QMenu{{background:{CP['bg2']};border:1px solid {CP['border_bright']};"
+            f"border-radius:8px;padding:6px;}}"
+            f"QMenu::item{{color:{CP['text_primary']};padding:7px 18px;font-size:11px;}}"
+            f"QMenu::item:selected{{background:{CP['accent_dim']};color:{CP['text_primary']};}}"
         )
-        tl.addWidget(self._save_indicator)
+        _scn_menu.setToolTipsVisible(True)
+        self._scn_actions_pairs = [
+            (_scn_menu.addAction(""), self._btn_scn_save),
+            (_scn_menu.addAction(""), self._btn_scn_open),
+        ]
+        for _act, _src in self._scn_actions_pairs:
+            _act.triggered.connect(_src.click)
+        def _sync_scn_actions_menu():
+            for _act, _src in self._scn_actions_pairs:
+                _act.setText(_src.text())
+                _act.setToolTip(_src.toolTip())
+                _act.setEnabled(_src.isEnabled())
+        _scn_menu.aboutToShow.connect(_sync_scn_actions_menu)
+        self._btn_scn_actions.setMenu(_scn_menu)
 
+        # Le combo « Style VJ » vit désormais dans le panneau droit, en SECTION
+        # REPLIABLE comme les autres (voir _build_right_panel — 2026-07-23).
+        # Les boutons Live / Mapping aussi (section « Mode » du panneau droit).
 
-        outer.addWidget(topbar)
-        outer.addWidget(_sep())
-        outer.addWidget(self._build_film_strip())
+        self._save_indicator = QLabel("", topbar)
+        self._save_indicator.hide()
+
+        topbar.setParent(w)
+        topbar.hide()
+
+        # La bande « Durée cible » sous la barre du haut est SUPPRIMÉE
+        # (2026-07-23) : la rangée compacte vit en tête du panneau droit.
 
         # Main area
         main = QHBoxLayout()
@@ -459,7 +499,26 @@ class PageScenario(QWidget):
         )
         self._editor_tabs.addTab(self._editor_text, translate("Conducteur"))
 
-        # Onglet « Mise en page PANDORA » — vue optimisée moteurs (grisée jusqu'au clic)
+        # Onglet « Note de réalisation » — intentions de fabrication persistées
+        # avec le conducteur (champ direction_note — ajout 2026-07-23, parité
+        # Cinéma). Même présentation colonne de lecture que les autres onglets.
+        self._direction_note_edit = QTextEdit()
+        self._direction_note_edit.setFont(_tw_font)
+        self._direction_note_edit.setStyleSheet(
+            f"QTextEdit{{background:{CP['bg0']};border:none;color:{CP['text_primary']};}}"
+        )
+        self._direction_note_edit.document().setDocumentMargin(48)
+        self._direction_note_edit.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        install_reading_column(self._direction_note_edit, max_width=820, center=True)
+        self._direction_note_edit.setPlaceholderText(translate(
+            "Note destinée au découpage : style visuel, temporalité, rythme, "
+            "durée des plans, transitions, son et contraintes de la performance."
+        ))
+        self._direction_note_edit.textChanged.connect(self._schedule_autosave)
+        self._editor_tabs.addTab(self._direction_note_edit, translate("Note de réalisation"))
+
+        # Onglet « Découpage » (ex-« Mise en page PANDORA », renommé 2026-07-23)
+        # — vue optimisée moteurs (grisée jusqu'au clic)
         self._layout_view = QTextEdit()
         self._layout_view.setReadOnly(True)
         self._layout_view.setFont(_tw_font)
@@ -472,36 +531,217 @@ class PageScenario(QWidget):
         # colonne centrée sur la page → mise en page classique et lisible.
         install_reading_column(self._layout_view, max_width=820, center=True)
         self._layout_view.setPlaceholderText(translate(
-            "Clique « Mise en page PANDORA » (panneau de droite) pour générer ici la "
+            "Clique « Créer le découpage » (panneau de droite) pour générer ici la "
             "version optimisée pour les moteurs : plans découpés + prompts prêts pour Seedance. "
             "Ton conducteur, lui, reste intact dans l'onglet Conducteur."
         ))
-        self._editor_tabs.addTab(self._layout_view, translate("Mise en page PANDORA"))
-        self._editor_tabs.setTabEnabled(1, False)   # grisé tant qu'aucune mise en page
+        self._editor_tabs.addTab(self._layout_view, translate("Découpage"))
+        self._editor_tabs.setTabEnabled(2, False)   # grisé tant qu'aucune mise en page
 
-        main.addWidget(self._editor_tabs, 1)
+        # Colonne éditeur : barre d'outils texte AU-DESSUS des onglets
+        # Conducteur / Note de réalisation / Découpage (2026-07-23, parité Cinéma).
+        _editor_col_w = QWidget()
+        _editor_col = QVBoxLayout(_editor_col_w)
+        _editor_col.setContentsMargins(0, 0, 0, 0)
+        _editor_col.setSpacing(0)
+        _editor_col.addWidget(self._build_text_toolbar())
+        _editor_col.addWidget(self._editor_tabs, 1)
+        main.addWidget(_editor_col_w, 1)
 
-        # Right panel
-        right_sep = QFrame()
-        right_sep.setFixedWidth(1)
-        right_sep.setStyleSheet(f"background:{CP['border']};")
-        main.addWidget(right_sep)
-
-        main.addWidget(self._build_right_panel())
+        # Panneau droit REPLIABLE. La poignée ASSISTANT est TOUT À DROITE de la
+        # fenêtre, comme GUIDE l'est à gauche (2026-07-23, parité Cinéma) : le
+        # panneau se déplie à sa gauche, la poignée reste collée au bord.
+        self._right_panel_w = self._build_right_panel()
+        main.addWidget(self._right_panel_w)
+        self._panel_toggle = _PanelToggle("ASSISTANT", opened=True)
+        self._panel_toggle.toggled.connect(self._on_right_panel_toggled)
+        main.addWidget(self._panel_toggle)
 
         outer.addLayout(main, 1)
         return w
 
+    def _build_text_toolbar(self) -> QWidget:
+        """Barre d'outils texte (parité Cinéma 2026-07-23) : « ☰ Action » à gauche,
+        police, gras/italique/souligné et alignements centrés. Agit sur l'onglet
+        actif (Conducteur, Note de réalisation ou Découpage)."""
+        from PyQt6.QtWidgets import QFontComboBox
+        from PyQt6.QtGui import QPainter, QPixmap, QIcon, QColor as _QColor
+
+        bar = QWidget()
+        bar.setFixedHeight(40)
+        bar.setStyleSheet(f"background:{CP['bg1']};border-bottom:1px solid {CP['border']};")
+        tl = QHBoxLayout(bar)
+        tl.setContentsMargins(16, 0, 16, 0)
+        tl.setSpacing(6)
+
+        tl.addWidget(self._btn_scn_actions)
+        tl.addStretch(1)
+
+        self._font_combo = QFontComboBox()
+        self._font_combo.setFixedHeight(26)
+        self._font_combo.setFixedWidth(170)
+        self._font_combo.setToolTip("Police")
+        self._font_combo.setEditable(False)
+        self._font_combo.setCurrentFont(QFont("Courier New"))
+        self._font_combo.setStyleSheet(
+            f"QFontComboBox{{background:{CP['bg2']};border:1px solid {CP['border']};"
+            f"border-radius:5px;color:{CP['text_primary']};font-size:10px;padding:0 6px;}}"
+            f"QFontComboBox::drop-down{{border:none;width:16px;}}"
+            f"QFontComboBox::down-arrow{{image:none;border-left:4px solid transparent;"
+            f"border-right:4px solid transparent;border-top:5px solid {CP['text_dim']};"
+            f"margin-right:4px;}}"
+            f"QFontComboBox QAbstractItemView{{background:{CP['bg2']};color:{CP['text_primary']};"
+            f"selection-background-color:{CP.get('accent2_dim', CP['bg3'])};border:1px solid {CP['border']};}}"
+        )
+        self._font_combo.currentFontChanged.connect(self._on_toolbar_font)
+        tl.addWidget(self._font_combo)
+
+        _fmt_ss = (
+            # padding:0 obligatoire : le style global QPushButton viderait ces
+            # boutons de 26 px (texte clippé) — piège vécu côté Cinéma.
+            f"QPushButton{{background:transparent;color:{CP['text_secondary']};"
+            f"border:1px solid {CP['border']};border-radius:5px;font-size:12px;font-weight:700;padding:0;}}"
+            f"QPushButton:hover{{color:{CP['text_primary']};background:{CP['bg2']};}}"
+            f"QPushButton:checked{{color:{CP['accent']};border-color:{CP['accent']};"
+            f"background:rgba(78,205,196,0.10);}}"
+        )
+
+        def _fmt_btn(txt, tip):
+            b = QPushButton(txt)
+            b.setCheckable(True)
+            b.setFixedSize(26, 26)
+            b.setToolTip(tip)
+            b.setStyleSheet(_fmt_ss)
+            return b
+
+        def _tb_sep():
+            s = QFrame()
+            s.setFixedSize(1, 20)
+            s.setStyleSheet(f"background:{CP['border']};")
+            return s
+
+        tl.addWidget(_tb_sep())
+        self._btn_fmt_bold = _fmt_btn("B", "Gras")
+        self._btn_fmt_italic = _fmt_btn("I", "Italique")
+        _fi = self._btn_fmt_italic.font(); _fi.setItalic(True)
+        self._btn_fmt_italic.setFont(_fi)
+        self._btn_fmt_under = _fmt_btn("U", "Souligner")
+        _fu = self._btn_fmt_under.font(); _fu.setUnderline(True)
+        self._btn_fmt_under.setFont(_fu)
+        self._btn_fmt_bold.toggled.connect(self._on_toolbar_bold)
+        self._btn_fmt_italic.toggled.connect(self._on_toolbar_italic)
+        self._btn_fmt_under.toggled.connect(self._on_toolbar_underline)
+        tl.addWidget(self._btn_fmt_bold)
+        tl.addWidget(self._btn_fmt_italic)
+        tl.addWidget(self._btn_fmt_under)
+        tl.addWidget(_tb_sep())
+
+        def _align_icon(mode: str) -> QIcon:
+            pm = QPixmap(18, 18)
+            pm.fill(Qt.GlobalColor.transparent)
+            p = QPainter(pm)
+            p.setPen(_QColor(CP['text_secondary']))
+            for i, _w2 in enumerate((14, 9, 14, 9)):
+                y = 3 + i * 4
+                x = 2 if mode == "left" else ((18 - _w2) // 2 if mode == "center" else 16 - _w2)
+                p.drawLine(x, y, x + _w2, y)
+            p.end()
+            return QIcon(pm)
+
+        self._btn_align_left = _fmt_btn("", "Aligner à gauche")
+        self._btn_align_left.setIcon(_align_icon("left"))
+        self._btn_align_center = _fmt_btn("", "Centrer")
+        self._btn_align_center.setIcon(_align_icon("center"))
+        self._btn_align_right = _fmt_btn("", "Aligner à droite")
+        self._btn_align_right.setIcon(_align_icon("right"))
+        self._btn_align_left.clicked.connect(lambda: self._on_toolbar_align("left"))
+        self._btn_align_center.clicked.connect(lambda: self._on_toolbar_align("center"))
+        self._btn_align_right.clicked.connect(lambda: self._on_toolbar_align("right"))
+        tl.addWidget(self._btn_align_left)
+        tl.addWidget(self._btn_align_center)
+        tl.addWidget(self._btn_align_right)
+        tl.addStretch(1)
+
+        for _ed in (self._editor_text, self._direction_note_edit, self._layout_view):
+            _ed.cursorPositionChanged.connect(self._sync_text_toolbar)
+        self._editor_tabs.currentChanged.connect(self._sync_text_toolbar)
+        return bar
+
+    def _active_text_edit(self):
+        idx = self._editor_tabs.currentIndex() if hasattr(self, "_editor_tabs") else 0
+        return (self._editor_text, self._direction_note_edit, self._layout_view)[max(0, idx)]
+
+    def _on_toolbar_font(self, font):
+        from PyQt6.QtGui import QTextCharFormat
+        ed = self._active_text_edit()
+        fmt = QTextCharFormat()
+        fmt.setFontFamilies([font.family()])
+        cur = ed.textCursor()
+        cur.mergeCharFormat(fmt)
+        ed.mergeCurrentCharFormat(fmt)
+        ed.setFocus()
+
+    def _on_toolbar_bold(self, checked: bool):
+        ed = self._active_text_edit()
+        ed.setFontWeight(QFont.Weight.Bold if checked else QFont.Weight.Normal)
+        ed.setFocus()
+
+    def _on_toolbar_italic(self, checked: bool):
+        ed = self._active_text_edit()
+        ed.setFontItalic(checked)
+        ed.setFocus()
+
+    def _on_toolbar_underline(self, checked: bool):
+        ed = self._active_text_edit()
+        ed.setFontUnderline(checked)
+        ed.setFocus()
+
+    def _on_toolbar_align(self, mode: str):
+        ed = self._active_text_edit()
+        flags = {"left": Qt.AlignmentFlag.AlignLeft,
+                 "center": Qt.AlignmentFlag.AlignCenter,
+                 "right": Qt.AlignmentFlag.AlignRight}
+        ed.setAlignment(flags[mode])
+        self._sync_text_toolbar()
+        ed.setFocus()
+
+    def _on_right_panel_toggled(self, opened: bool):
+        """Replie/déplie le panneau droit (poignée latérale ASSISTANT)."""
+        if hasattr(self, "_right_panel_w"):
+            self._right_panel_w.setVisible(bool(opened))
+
+    def _sync_text_toolbar(self):
+        if not hasattr(self, "_btn_fmt_bold"):
+            return
+        ed = self._active_text_edit()
+        for _b, _on in (
+            (self._btn_fmt_bold,   ed.fontWeight() >= QFont.Weight.Bold),
+            (self._btn_fmt_italic, ed.fontItalic()),
+            (self._btn_fmt_under,  ed.fontUnderline()),
+            (self._btn_align_left,   ed.alignment() & Qt.AlignmentFlag.AlignLeft),
+            (self._btn_align_center, ed.alignment() & Qt.AlignmentFlag.AlignHCenter),
+            (self._btn_align_right,  ed.alignment() & Qt.AlignmentFlag.AlignRight),
+        ):
+            _b.blockSignals(True)
+            _b.setChecked(bool(_on))
+            _b.blockSignals(False)
+        self._font_combo.blockSignals(True)
+        _fam = ed.currentFont().family()
+        if _fam:
+            self._font_combo.setCurrentFont(QFont(_fam))
+        self._font_combo.blockSignals(False)
+
     def _build_film_strip(self) -> QWidget:
-        """Bande de configuration — Durée du film (visible en permanence au-dessus de l'éditeur)."""
+        """Rangée « Durée cible » — en tête du panneau droit (2026-07-23, parité
+        Cinéma). 40 px + ligne basse alignée sur la barre d'outils texte."""
         strip = QWidget()
-        strip.setFixedHeight(46)
+        strip.setFixedHeight(40)
         strip.setStyleSheet(
             f"background:{CP['bg1']};border-bottom:1px solid {CP['border']};"
         )
         sl = QHBoxLayout(strip)
-        sl.setContentsMargins(24, 0, 24, 0)
-        sl.setSpacing(10)
+        sl.setContentsMargins(10, 2, 10, 2)
+        sl.setSpacing(6)
 
         # ── Durée du film ─────────────────────────────────────────────────────
         self._dur_defined_check = QCheckBox("Durée cible :")
@@ -556,24 +796,8 @@ class PageScenario(QWidget):
         self._on_dur_defined_toggled(False)  # non défini par défaut
 
         sl.addStretch()
-
-        # ── Mode du conducteur : Live / Mapping (calibre toutes les actions Claude) ──
-        # Placés en haut à droite, dans le même encart que « Durée cible »,
-        # au-dessus de la section « Références visuelles » du panneau droit.
-        _mode_lbl = QLabel(translate("Mode :"))
-        _mode_lbl.setStyleSheet(
-            f"color:{CP['text_dim']};font-size:10px;font-weight:600;"
-            f"letter-spacing:0.5px;background:transparent;"
-        )
-        sl.addWidget(_mode_lbl)
-        self._btn_mode_live    = self._make_mode_btn("Live")
-        self._btn_mode_mapping = self._make_mode_btn("Mapping")
-        self._btn_mode_live.clicked.connect(lambda: self._set_live_mode("live"))
-        self._btn_mode_mapping.clicked.connect(lambda: self._set_live_mode("mapping"))
-        sl.addWidget(self._btn_mode_live)
-        sl.addWidget(self._btn_mode_mapping)
-        self._apply_mode_style()
-
+        # (Les boutons Mode Live/Mapping vivent dans leur SECTION du panneau
+        #  droit depuis le 2026-07-23 — voir _build_right_panel.)
         return strip
 
     def _build_right_panel(self):
@@ -588,16 +812,18 @@ class PageScenario(QWidget):
         root_lay.setSpacing(0)
 
         # ── helper: ai_btn ────────────────────────────────────────────────────
-        def _ai_btn(icon, label, sub, callback, color=None):
+        def _ai_btn(icon, label, sub, callback, color=None, radius=0):
             # color → bouton MIS EN AVANT (cadre + icône + libellé colorés, un peu plus
             # haut), à la façon de « Tout générer » mais dans une AUTRE couleur.
+            # radius=0 par défaut (parité Cinéma 2026-07-23) : rectangles droits,
+            # seuls les boutons mis en avant gardent leurs arrondis.
             btn = QPushButton()
             btn.setFixedHeight(60 if color else 52)
             _bd  = color or CP['border']
             _hov = color or CP['accent2_dim']
             btn.setStyleSheet(
                 f"QPushButton{{background:{CP['bg2']};border:{'1.5px' if color else '1px'} solid {_bd};"
-                f"border-radius:8px;text-align:left;padding:0 10px;}}"
+                f"border-radius:{radius}px;text-align:left;padding:0 10px;}}"
                 f"QPushButton:hover{{border-color:{_hov};background:{CP['bg3']};}}"
                 f"QPushButton:pressed{{background:{CP['bg4']};}}"
                 f"QPushButton:disabled{{opacity:0.4;}}"
@@ -634,8 +860,10 @@ class PageScenario(QWidget):
         # par la COULEUR SEULE (barre d'accent gauche retirée le 2026-07-03,
         # demande Matthieu — parité avec page_scenario.py).
         _toggle_ss = (
+            # border-radius:0 explicite : le style global QPushButton arrondirait
+            # les en-têtes de section (parité Cinéma 2026-07-23).
             f"QPushButton{{background:{CP['bg3']};color:{CP['accent']};"
-            f"border:none;"
+            f"border:none;border-radius:0px;"
             f"border-top:1px solid {CP['border']};border-bottom:1px solid {CP['border']};"
             f"font-size:11px;font-weight:800;text-align:left;"
             f"padding:9px 16px;letter-spacing:0.8px;}}"
@@ -719,7 +947,7 @@ class PageScenario(QWidget):
         )
         l_refs.addWidget(self._btn_load_analysis)
 
-        tog_refs = _make_toggle("🎨  Références visuelles", c_refs, expanded=False)
+        tog_refs = _make_toggle("🎨  Ajouter des références", c_refs, expanded=False)
 
         self._refresh_refs_display()
 
@@ -798,14 +1026,14 @@ class PageScenario(QWidget):
         c_final, l_final = _section_container()
 
         self._btn_format = _ai_btn(
-            "📝", "Mise en page PANDORA", "Structure le conducteur en blocs plans optimisés pour PANDORA", self._on_format,
+            "📝", "Créer le découpage", "Structure le conducteur en blocs plans optimisés pour PANDORA", self._on_format,
         )
         self._btn_plan_coedit = _ai_btn(
-            "✍", "Co-écriture des plans", "Réécrire/enrichir chaque plan un par un avant le découpage", self._on_plan_coedit,
+            "✍", "Affiner le découpage", "Réécrire/enrichir chaque plan un par un avant les séquences", self._on_plan_coedit,
         )
         l_final.addWidget(self._btn_format)
         l_final.addWidget(self._btn_plan_coedit)
-        tog_final = _make_toggle("🎯  Finalisation", c_final, expanded=True)
+        tog_final = _make_toggle("🎯  Découpage", c_final, expanded=True)
 
         # ── Section 2 : Générer depuis le conducteur (repliée par défaut) ───────
         c_gen, l_gen = _section_container()
@@ -823,8 +1051,8 @@ class PageScenario(QWidget):
             self._on_gen_vehicles,
         )
         self._btn_storyboard = _ai_btn(
-            "🎬", "Générer le découpage", "Découpe le conducteur en séquence (Live/Mapping)",
-            self._on_storyboard, color=CP["green"],
+            "🎬", "Générer les séquences", "Découpe le conducteur en séquence (Live/Mapping)",
+            self._on_storyboard, color=CP["green"], radius=8,
         )
         for _b in (
             self._btn_gen_characters, self._btn_gen_accessories,
@@ -845,17 +1073,63 @@ class PageScenario(QWidget):
             f"QPushButton:disabled{{opacity:0.35;border-color:{CP['border']};}}"
         )
         self._btn_generate_all.clicked.connect(self._on_generate_all)
-        tog_gen = _make_toggle("⚡  Générer depuis le conducteur", c_gen, expanded=True)
+        tog_gen = _make_toggle("⚡  Générer", c_gen, expanded=True)
 
-        # ── Ordre visuel du panneau droit (haut → bas), demande Matthieu 2026-07-06 :
-        # Conducteur, Finalisation, Musiques, Façade, Références, Générer (bas).
+        # ── Style VJ — SECTION REPLIABLE en tête du panneau (2026-07-23, parité
+        # Cinéma ; le combo vivait dans l'ancienne barre du haut) ──
+        import core.vj_styles as _vj_styles
+        c_style, l_style = _section_container()
+        self._film_style_combo = QComboBox()
+        self._film_style_combo.addItem("— Style VJ —", "")
+        for _s in _vj_styles.get_styles():
+            self._film_style_combo.addItem(f"    ✦  {_vj_styles.localized_name(_s)}", _s["key"])
+        self._film_style_combo.setFixedHeight(30)
+        self._film_style_combo.setStyleSheet(
+            f"QComboBox{{background:{CP['bg2']};border:1px solid {CP['border']};"
+            f"border-radius:0px;color:{CP['text_primary']};font-size:10px;padding:0 6px;}}"
+            f"QComboBox:focus{{border-color:{CP.get('accent2_dim', CP['border_bright'])};}}"
+            f"QComboBox::drop-down{{border:none;width:18px;}}"
+            f"QComboBox QAbstractItemView{{background:{CP['bg2']};color:{CP['text_primary']};"
+            f"selection-background-color:{CP.get('accent2_dim', CP['bg3'])};border:1px solid {CP['border']};}}"
+        )
+        self._film_style_combo.currentIndexChanged.connect(self._schedule_autosave)
+        self._film_style_combo.currentIndexChanged.connect(self._on_scenario_style_changed)
+        l_style.addWidget(self._film_style_combo)
+        tog_style = _make_toggle("🎭  Style VJ", c_style, expanded=False)
+
+        # ── Mode Live / Mapping — SECTION REPLIABLE (2026-07-23 ; les boutons
+        # vivaient dans la bande « Durée cible » aujourd'hui supprimée) ──
+        c_mode, l_mode = _section_container()
+        _mode_row_w = QWidget()
+        _mode_row_w.setStyleSheet(f"background:{CP['bg1']};")
+        _mode_row = QHBoxLayout(_mode_row_w)
+        _mode_row.setContentsMargins(10, 2, 10, 2)
+        _mode_row.setSpacing(6)
+        self._btn_mode_live    = self._make_mode_btn("Live")
+        self._btn_mode_mapping = self._make_mode_btn("Mapping")
+        self._btn_mode_live.clicked.connect(lambda: self._set_live_mode("live"))
+        self._btn_mode_mapping.clicked.connect(lambda: self._set_live_mode("mapping"))
+        _mode_row.addWidget(self._btn_mode_live, 1)
+        _mode_row.addWidget(self._btn_mode_mapping, 1)
+        l_mode.addWidget(_mode_row_w)
+        self._apply_mode_style()
+        tog_mode = _make_toggle("🎛  Mode", c_mode, expanded=False)
+
+        # ── Ordre visuel du panneau droit (haut → bas), parité Cinéma 2026-07-23 :
+        # Durée cible, Style VJ, Mode, Ajouter des références, Façade, Conducteur,
+        # Découpage, Générer, Musique.
+        sc_lay.addWidget(self._build_film_strip())
+        sc_lay.addWidget(tog_style)
+        sc_lay.addWidget(c_style)
+        sc_lay.addWidget(tog_mode)
+        sc_lay.addWidget(c_mode)
         for _tog, _cont in (
+            (tog_refs,  c_refs),
+            (tog_bld,   c_bld),
             (tog_cond,  c_cond),
             (tog_final, c_final),
-            (tog_music, c_music),
-            (tog_bld,   c_bld),
-            (tog_refs,  c_refs),
             (tog_gen,   c_gen),
+            (tog_music, c_music),
         ):
             sc_lay.addWidget(_tog)
             sc_lay.addWidget(_cont)
@@ -1060,6 +1334,19 @@ class PageScenario(QWidget):
         self._title_edit.setText(sc.get("title", ""))
         content = sc.get("formatted_content") or sc.get("raw_content", "")
         self._set_editor_text(content)
+        # Restaure la mise en forme visuelle si elle correspond toujours au texte
+        # (sinon le texte brut prévaut : une réécriture IA invalide l'ancien HTML).
+        _html = sc.get("formatted_html") or ""
+        if _html:
+            from PyQt6.QtGui import QTextDocument
+            _tmp = QTextDocument()
+            _tmp.setHtml(_html)
+            if _tmp.toPlainText() == self._editor_text.toPlainText():
+                self._editor_text.setHtml(_html)
+                from ui.widgets import apply_paragraph_spacing
+                apply_paragraph_spacing(self._editor_text)
+        if hasattr(self, "_direction_note_edit"):
+            self._direction_note_edit.setPlainText(sc.get("direction_note", ""))
         dur         = sc.get("duration_secs", 0)
         dur_defined = sc.get("duration_defined", False) or dur > 0
         self._dur_defined_check.setChecked(dur_defined)
@@ -1236,11 +1523,17 @@ class PageScenario(QWidget):
             "duration_defined":  dur_defined,
             "film_style":        film_style_key if film_style_key not in ("", "__sep__") else "",
             "live_mode":         self._live_mode,
+            # Note de réalisation Live persistée avec le conducteur (2026-07-23).
+            "direction_note":    (self._direction_note_edit.toPlainText()
+                                  if hasattr(self, "_direction_note_edit") else ""),
             "layout_content":    self._layout_view.toPlainText(),
             "music_tracks":      self._music_tracks,
             "ref_images":        [p for p in self._ref_images if os.path.isfile(p)],
             "ref_analysis":      self._last_ref_analysis,
             "ref_enriched":      self._ref_enriched,
+            # Mise en forme visuelle (gras/italique/police/alignements) de l'onglet
+            # Conducteur — les traitements IA restent sur le texte brut (parité Cinéma).
+            "formatted_html":    self._editor_text.toHtml(),
         })
         self._current = scenario_api.save_scenario(data)
         if not silent:
@@ -1294,6 +1587,9 @@ class PageScenario(QWidget):
             "duration_secs":     dur_secs,
             "duration_defined":  dur_defined,
             "film_style":        self._film_style_combo.currentData() or "",
+            "direction_note":    (self._direction_note_edit.toPlainText()
+                                  if hasattr(self, "_direction_note_edit") else ""),
+            "formatted_html":    self._editor_text.toHtml(),
         })
         try:
             scenario_api.export_scenario_to(path, data)
@@ -2056,7 +2352,10 @@ class PageScenario(QWidget):
         # Fenêtre d'aperçu en streaming (comme l'arrangement) ; l'« Appliquer »
         # écrit le résultat dans l'onglet « Mise en page PANDORA » (Conducteur intact).
         self._worker = FormatConducteurWorker(self._text_with_music(), self._live_mode,
-                                              dur_secs, facade_path=self._facade_for_mapping())
+                                              dur_secs, facade_path=self._facade_for_mapping(),
+                                              direction_note=(
+                                                  self._direction_note_edit.toPlainText()
+                                                  if hasattr(self, "_direction_note_edit") else ""))
         self._worker.failed.connect(self._on_ai_fail)
         self._open_format_window(worker=self._worker)
 

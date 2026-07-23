@@ -694,6 +694,7 @@ class ArrangeSessionDialog(QDialog):
         images = list(self._ref_images)
         self._ref_images.clear()
         self._refresh_refs_strip()
+        self._auto_retry_used = False   # nouvelle demande → droit à 1 relance auto
         self._start_worker(msg, ref_images=images)
 
     def _start_worker(self, user_message: str, ref_images: list | None = None,
@@ -731,43 +732,95 @@ class ArrangeSessionDialog(QDialog):
         self._history.append({"role": "assistant", "content": text})
         self._set_busy(False, "")
         self._commit_session()
+        self._maybe_warn_tokens()
+
+    # ── Garde-fou volume de session (demande Matthieu 2026-07-21) ────────────
+    _TOKEN_WARN_FIRST = 60_000   # ~tokens estimés au premier avertissement
+    _TOKEN_WARN_STEP  = 30_000   # ré-avertir tous les N tokens estimés ensuite
+
+    def _estimated_session_tokens(self) -> int:
+        """Estimation DÉTERMINISTE (≈ caractères / 3,2) du volume renvoyé à l'IA à
+        chaque tour : conducteur + analyse + historique du chat. Aucun appel IA."""
+        n = len(self._original or "") + len(self._analysis or "") + len(self._screenplay or "")
+        for m in self._history:
+            c = m.get("content", "")
+            if isinstance(c, str):
+                n += len(c)
+        return int(n / 3.2)
+
+    def _maybe_warn_tokens(self):
+        """Alerte AVANT d'atteindre la limite : session volumineuse → suggérer de
+        consolider (« Réécrire selon la co-écriture » + appliquer) pour ne pas
+        perdre de travail. Se répète tous les _TOKEN_WARN_STEP tokens estimés."""
+        est = self._estimated_session_tokens()
+        if est < getattr(self, "_next_token_warn", self._TOKEN_WARN_FIRST):
+            return
+        self._next_token_warn = est + self._TOKEN_WARN_STEP
+        self._append_chat_bubble(translate(
+            "⚠ La session devient volumineuse — on approche de la limite de tokens. "
+            "Pour ne rien perdre : lance « ✦ Réécrire selon la co-écriture » pour "
+            "consolider les changements, applique le conducteur au projet, puis "
+            "continue la discussion."), "claude")
 
     def _on_edits_ready(self, edits: list):
         """Chat CHIRURGICAL : applique les éditions ciblées à la version courante
-        (aucune réécriture totale). Liste vide = simple question/réponse."""
+        (aucune réécriture totale). Liste vide = simple question/réponse. Les
+        passages « non retrouvés » (find périmé) sont RETENTÉS automatiquement
+        une fois — c'était la 1re cause de co-écriture incomplète."""
         self._set_busy(False, "")
         if not edits:
             return   # pure Q&R : le message a déjà été affiché par _on_message_ready
         from core.text_edits import apply_find_replace_edits
         base = self._screenplay or self._original
         new_text, applied, missed = apply_find_replace_edits(base, edits)
-        if not applied:
+        if applied:
+            self._on_screenplay_ready(new_text)   # nouvelle version + prévisualisation
+            summary = "✎ " + " · ".join((a.get("summary") or "passage modifié") for a in applied)
+            if missed:
+                summary += f"  ({len(missed)} passage(s) non retrouvé(s))"
+            self._append_chat_bubble(summary, "claude")
+        else:
             self._append_chat_bubble(
                 "⚠ Aucune modification appliquée : le passage visé n'a pas été "
                 "retrouvé tel quel dans le conducteur.", "claude")
-            return
-        self._on_screenplay_ready(new_text)   # nouvelle version + prévisualisation
-        summary = "✎ " + " · ".join((a.get("summary") or "passage modifié") for a in applied)
-        if missed:
-            summary += f"  ({len(missed)} passage(s) non retrouvé(s))"
-        self._append_chat_bubble(summary, "claude")
+        # Relance AUTOMATIQUE (une seule fois par demande) des éditions dont le
+        # « find » ne collait plus au texte actuel — sinon elles étaient perdues.
+        if missed and not getattr(self, "_auto_retry_used", False):
+            self._auto_retry_used = True
+            points = " ; ".join((m.get("summary") or (m.get("find", "")[:60] + "…"))
+                                for m in missed[:8])
+            instruction = (
+                "Ces éditions n'ont PAS été appliquées : leur « find » ne correspond "
+                f"pas au texte actuel — {points}. Redonne UNIQUEMENT ces éditions, "
+                "avec un « find » recopié EXACTEMENT, caractère pour caractère, "
+                "depuis le conducteur ACTUEL fourni ci-dessus.")
+            self._append_chat_bubble(translate(
+                "↻ Nouvelle tentative automatique sur les passages non retrouvés…"),
+                "claude")
+            self._history.append({"role": "user", "content": instruction})
+            self._start_worker(instruction, surgical=True)
 
     def _on_rewrite_coedit(self):
-        """Bouton « Réécrire selon la co-écriture » : applique TOUTES les modifications
-        discutées, mais UNIQUEMENT sur les passages travaillés (éditions ciblées
-        find/replace) — le reste du conducteur est préservé, aucune troncature."""
+        """Bouton « Réécrire selon la co-écriture » : re-parcourt TOUTE la discussion
+        et applique CHAQUE modification convenue, mais UNIQUEMENT sur les passages
+        travaillés (éditions ciblées find/replace) — le reste du conducteur est
+        préservé, aucune troncature."""
         if not (self._screenplay or self._original).strip():
             return
         if self._worker and self._worker.isRunning():
             return
         instruction = (
-            "Applique maintenant TOUTES les modifications qu'on a discutées jusqu'ici, "
-            "sous forme d'éditions CIBLÉES (find/replace) sur les SEULS passages concernés. "
-            "Ne réécris PAS le reste du conducteur ; ne touche à aucun passage qui n'a pas "
-            "été abordé dans la discussion.")
+            "Re-parcours TOUTE notre discussion depuis le début et dresse dans "
+            "« message » la liste de CHAQUE modification convenue (une puce par point "
+            "— n'en oublie aucune, même les plus anciennes). Puis renvoie dans "
+            "« edits » les éditions CIBLÉES (find/replace) correspondantes, une par "
+            "point, sur les SEULS passages concernés. Ne réécris PAS le reste du "
+            "conducteur ; ne touche à aucun passage qui n'a pas été abordé dans la "
+            "discussion.")
         self._append_chat_bubble(
             "✦ Réécriture des passages travaillés (selon la co-écriture)…", "user")
         self._history.append({"role": "user", "content": instruction})
+        self._auto_retry_used = False   # cette demande a droit à sa relance auto
         self._start_worker(instruction, surgical=True)
 
     def _on_generate_full(self):

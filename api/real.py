@@ -45,24 +45,23 @@ def _fal_upload(fal_client, path: str) -> str:
         sys.stderr = _old_err
 
 
-def _analyze_style_ref(image_path: str, anthropic_key: str) -> str:
+def _analyze_style_ref(image_path: str, _legacy_key: str = "") -> str:
     """
-    Uses Claude Haiku Vision to extract style descriptors from a reference image.
+    Uses the selected vision engine to extract style descriptors from a reference image.
     Returns a short English string (10-15 words) to prepend to the video prompt,
     e.g. "photorealistic cinema, black and white, 35mm film grain, dramatic lighting".
     Returns "" on any error.
     """
     try:
-        import anthropic as _anthropic
+        from core.ai_provider import chat, key_error
         from core.image_payload import encode_image_for_vision
+        if key_error(task="vision"):
+            return ""
 
         _media_type, _img_b64 = encode_image_for_vision(image_path)
 
-        _client = _anthropic.Anthropic(api_key=anthropic_key)
-        _msg = _client.messages.create(
-            model="claude-haiku-4-5",
-            max_tokens=80,
-            messages=[{
+        _text = chat(
+            "", [{
                 "role": "user",
                 "content": [
                     {
@@ -87,31 +86,30 @@ def _analyze_style_ref(image_path: str, anthropic_key: str) -> str:
                         ),
                     },
                 ],
-            }],
-        )
-        return _msg.content[0].text.strip().rstrip(".")
+            }], tier="utility", max_tokens=80, task="vision")
+        return _text.strip().rstrip(".")
     except Exception:
         return ""
 
 
-def _analyze_draw_guidance(image_path: str, user_instruction: str, anthropic_key: str) -> str:
-    """Draw-to-Video : Claude Haiku Vision lit une image annotée (traits colorés
+def _analyze_draw_guidance(image_path: str, user_instruction: str,
+                           _legacy_key: str = "") -> str:
+    """Draw-to-Video : le moteur de vision lit une image annotée (traits colorés
     tracés par l'utilisateur pour REPÉRER des zones) + son instruction, et renvoie
     UNE instruction d'édition vidéo claire en anglais qui nomme les objets/zones
     marqués par leur position réelle, SANS mentionner les traits (qui ne sont JAMAIS
     envoyés au modèle vidéo → ils n'apparaissent pas). Retourne "" en cas d'erreur.
     """
     try:
-        import anthropic as _anthropic
+        from core.ai_provider import chat, key_error
         from core.image_payload import encode_image_for_vision
+        if key_error(task="vision"):
+            return ""
 
         _media_type, _img_b64 = encode_image_for_vision(image_path)
 
-        _client = _anthropic.Anthropic(api_key=anthropic_key)
-        _msg = _client.messages.create(
-            model="claude-haiku-4-5",
-            max_tokens=300,
-            messages=[{
+        _text = chat(
+            "", [{
                 "role": "user",
                 "content": [
                     {
@@ -137,15 +135,14 @@ def _analyze_draw_guidance(image_path: str, user_instruction: str, anthropic_key
                         ),
                     },
                 ],
-            }],
-        )
-        return _msg.content[0].text.strip()
+            }], tier="utility", max_tokens=300, task="vision")
+        return _text.strip()
     except Exception:
         return ""
 
 
-def _analyze_reference_refs(paths: list, anthropic_key: str) -> str:
-    """Claude Haiku Vision : décrit en TEXTE l'INSPIRATION d'images de référence
+def _analyze_reference_refs(paths: list, _legacy_key: str = "") -> str:
+    """Le moteur de vision décrit en TEXTE l'INSPIRATION d'images de référence
     ajoutées à un plan (ambiance, palette, lumière, composition, matières), en une
     courte phrase anglaise à AJOUTER au prompt.
 
@@ -156,8 +153,10 @@ def _analyze_reference_refs(paths: list, anthropic_key: str) -> str:
     le prompt est enrichi, les images de départ/fin ne sont jamais altérées.
     Retourne "" en cas d'erreur (jamais bloquant)."""
     try:
-        import anthropic as _anthropic
+        from core.ai_provider import chat, key_error
         from core.image_payload import encode_image_for_vision
+        if key_error(task="vision"):
+            return ""
 
         _content = []
         for _p in list(paths)[:3]:
@@ -183,13 +182,9 @@ def _analyze_reference_refs(paths: list, anthropic_key: str) -> str:
                 "keywords, comma-separated, no ending punctuation, no explanation."
             ),
         })
-        _client = _anthropic.Anthropic(api_key=anthropic_key)
-        _msg = _client.messages.create(
-            model="claude-haiku-4-5",
-            max_tokens=90,
-            messages=[{"role": "user", "content": _content}],
-        )
-        return _msg.content[0].text.strip().rstrip(".")
+        _text = chat("", [{"role": "user", "content": _content}],
+                     tier="utility", max_tokens=90, task="vision")
+        return _text.strip().rstrip(".")
     except Exception:
         return ""
 
@@ -278,40 +273,80 @@ def run_real(params: dict, emit_progress, is_cancelled) -> dict:
 
     # Traduit le prompt utilisateur vers l'anglais si nécessaire
     from core.lang import translate_to_english
-    from core.config import load_config as _lc
-    _cfg           = _lc()
-    _has_anthropic = bool(_cfg.get("anthropic_key", "").strip())
-    _anthropic_key = _cfg.get("anthropic_key", "").strip()
+    from core.ai_provider import key_error as _ai_key_error
+    _has_translation = _ai_key_error(task="translate") is None
+    _has_vision = _ai_key_error(task="vision") is None
     _raw_prompt = params.get("prompt", "")
-    # Prompt structuré en sections : le bloc [SOUND DESIGN] n'est PAS envoyé au
-    # modèle vidéo (séparation image/son). Les autres sections sont conservées.
+
+    # ── Composition en prose anglaise (storyboard Cinéma) ─────────────────────
+    # Les prompts STRUCTURÉS du storyboard (sections [🎬 ACTION]…) sont fusionnés
+    # par l'IA en prose anglaise dense — style en TÊTE, fiches casting injectées,
+    # action décrite physiquement, son guidé (api/video_prompt). La composition
+    # REMPLACE strip + traduction, et CONSOMME les suffixes style/heure (intégrés
+    # à la prose — ne plus les coller après). Repli : Live (beats), prompt libre,
+    # clé absente ou erreur API → chemin historique inchangé ci-dessous.
+    _composed  = False
+    _compose_attempted = False
+    _prompt_en = ""
     try:
-        from core.prompt_sections import strip_for_video as _strip_sound_section
-        _raw_prompt = _strip_sound_section(_raw_prompt)
+        from api.video_prompt import should_compose as _vp_should, compose as _vp_compose
+        # Depuis le 2026-07-23 : la composition se déclenche AUSSI pour un prompt
+        # en PROSE (sans sections) dès que le plan fournit son contexte Cinéma
+        # (bible visuelle / fiches casting). Les sections ne sont plus un
+        # prérequis — Seedance préfère la prose, et le PROMPT VISUEL du Découpage
+        # est de la prose. Le Live, qui n'envoie jamais ce contexte, reste sur le
+        # chemin historique.
+        _has_cine_context = bool((params.get("visual_context") or "").strip()
+                                 or (params.get("character_notes") or "").strip())
+        if _vp_should(_raw_prompt) or ((_raw_prompt or "").strip() and _has_cine_context):
+            _compose_attempted = True
+            from core import ai_provider as _aip
+            if _aip.key_error(task="video_prompt") is None:
+                emit_progress(3, "Composition du prompt vidéo (prose anglaise)…")
+                _pc = _vp_compose(
+                    _raw_prompt,
+                    style_suffix=params.get("style_suffix", ""),
+                    time_suffix=params.get("time_suffix", ""),
+                    duration=_dur_int,
+                    character_notes=params.get("character_notes", ""),
+                    visual_context=params.get("visual_context", ""),
+                    include_sound=bool(params.get("audio", True)),
+                    sound_notes=params.get("sound_notes", ""),
+                )
+                if _pc:
+                    _prompt_en = _pc
+                    _composed  = True
     except Exception:
-        pass
-    # Draw-to-Video : si une image annotée (traits de repérage) est fournie, Claude
-    # Vision la lit pour RÉÉCRIRE l'instruction en décrivant les zones/objets marqués
-    # SANS les traits. L'image annotée n'est JAMAIS envoyée à Seedance → les traits
-    # n'apparaissent pas ; seul le clip d'origine + ce prompt partent.
-    _draw_guidance = params.get("draw_guidance_path", "")
-    if _draw_guidance and os.path.isfile(_draw_guidance) and _anthropic_key:
-        emit_progress(4, "Analyse du dessin (repérage des zones)…")
-        _drawn = _analyze_draw_guidance(_draw_guidance, _raw_prompt, _anthropic_key)
-        if _drawn:
-            _raw_prompt = _drawn
-    if _raw_prompt and not _has_anthropic:
-        emit_progress(3, "⚠ Clé Anthropic manquante — prompt envoyé sans traduction")
-    else:
-        emit_progress(3, "Traduction du prompt…")
-    _prompt_en = translate_to_english(_raw_prompt) if _raw_prompt else ""
-    # Compress very long prompts via Mandarin (3× more compact than English)
-    if len(_prompt_en) > 2000:
-        from core.lang import translate_to_chinese
-        emit_progress(4, "Prompt long — compression en mandarin…")
-        _prompt_zh = translate_to_chinese(_prompt_en)
-        if _prompt_zh and len(_prompt_zh) < len(_prompt_en):
-            _prompt_en = _prompt_zh
+        _composed = False
+
+    if not _composed:
+        if _compose_attempted:
+            emit_progress(3, "⚠ Composition avancée invalide — repli vers le prompt historique")
+        # Prompt structuré en sections : le bloc [SOUND DESIGN] n'est PAS envoyé au
+        # modèle vidéo (séparation image/son). Les autres sections sont conservées.
+        try:
+            from core.prompt_sections import strip_for_video as _strip_sound_section
+            _raw_prompt = _strip_sound_section(_raw_prompt)
+        except Exception:
+            pass
+        # Draw-to-Video : le moteur visuel lit l'image annotée pour réécrire
+        # l'instruction en décrivant les zones/objets marqués
+        # SANS les traits. L'image annotée n'est JAMAIS envoyée à Seedance → les traits
+        # n'apparaissent pas ; seul le clip d'origine + ce prompt partent.
+        _draw_guidance = params.get("draw_guidance_path", "")
+        if _draw_guidance and os.path.isfile(_draw_guidance) and _has_vision:
+            emit_progress(4, "Analyse du dessin (repérage des zones)…")
+            _drawn = _analyze_draw_guidance(_draw_guidance, _raw_prompt)
+            if _drawn:
+                _raw_prompt = _drawn
+        if _raw_prompt and not _has_translation:
+            emit_progress(3, "⚠ Moteur de traduction indisponible — prompt envoyé tel quel")
+        else:
+            emit_progress(3, "Traduction du prompt…")
+        _prompt_en = translate_to_english(_raw_prompt) if _raw_prompt else ""
+    # Compression en mandarin SUPPRIMÉE (décision Matthieu 2026-07-23) : un prompt
+    # mi-anglais mi-chinois créait des incohérences ; on garde l'anglais intégral,
+    # quelle que soit la longueur.
 
     # Langue des dialogues (colonne « Langues » du storyboard) : à l'ENVOI
     # uniquement, on traduit les dialogues entre guillemets vers la langue
@@ -322,42 +357,50 @@ def run_real(params: dict, emit_progress, is_cancelled) -> dict:
     _has_quotes = (any(q in _prompt_en for q in ('"', "«", "“", "‘"))
                    or bool(_re.search(r"(?<![A-Za-zÀ-ÿ])'[^']{1,300}'(?![A-Za-zÀ-ÿ])",
                                       _prompt_en)))
-    if _prompt_en and _has_anthropic and _has_quotes:
+    if _prompt_en and _has_translation and _has_quotes:
         from core.lang import translate_dialogues_to
         emit_progress(5, "Traduction des dialogues…")
         _prompt_en = translate_dialogues_to(_prompt_en, _dialogue_lang)
 
     # ── Vision analysis of style reference image ───────────────────────────────
-    # Claude Haiku reads the style image and extracts visual style keywords
+    # The selected vision model reads the style image and extracts visual keywords
     # (e.g. "photorealistic cinema, black and white, 35mm film grain").
     # These are PREPENDED to the prompt so Seedance reads them first — the
     # highest-attention position, before the user's scene description.
     _style_ref_for_vision = next(
         (p for p, r in zip(ref_images, ref_roles) if r == "style"), ""
     )
-    if _style_ref_for_vision and _anthropic_key:
+    if _style_ref_for_vision and _has_vision:
         emit_progress(4, "Analyse de l'image de style…")
-        _vision_style = _analyze_style_ref(_style_ref_for_vision, _anthropic_key)
+        _vision_style = _analyze_style_ref(_style_ref_for_vision)
         if _vision_style:
-            _prompt_en = f"{_vision_style}, {_prompt_en}" if _prompt_en else _vision_style
+            # Style en FIN de prompt (guide officiel Seedance 2.0, 2026-07-23) —
+            # l'ancienne position en tête contredisait la documentation.
+            _prompt_en = f"{_prompt_en}, {_vision_style}" if _prompt_en else _vision_style
 
     # Lighting constraint — prepended so Seedance reads it first (highest attention weight)
-    _time_suffix = params.get("time_suffix", "")
+    # (déjà intégrée à la prose quand la composition a eu lieu → ne pas doubler)
+    _time_suffix = "" if _composed else params.get("time_suffix", "")
     if _time_suffix and _prompt_en:
         _prompt_en = f"{_time_suffix}, {_prompt_en}"
 
     # Append style + audio suffixes after translation so exact English keywords are preserved
-    _style_suffix = params.get("style_suffix", "")
+    # (style déjà EN TÊTE de la prose composée → ne pas le recoller en fin)
+    _style_suffix = "" if _composed else params.get("style_suffix", "")
     if _style_suffix and _prompt_en:
         _prompt_en = f"{_prompt_en}, {_style_suffix}"
-    _no_music_suffix = params.get("no_music_suffix", "")
+    # Ces trois suffixes télégraphiques ne sont plus recollés après une prose
+    # composée (2026-07-23) : la composition intègre déjà la cohérence des
+    # personnages (bible), l'absence de musique et les contrôles créatifs — les
+    # accoler cassait le format prose que la composition vient de construire.
+    _no_music_suffix = "" if _composed else params.get("no_music_suffix", "")
     if _no_music_suffix and _prompt_en:
         _prompt_en = f"{_prompt_en}, {_no_music_suffix}"
-    # Character consistency — appended after translation to preserve exact Seedance keywords
-    _char_suffix = params.get("char_consistency_suffix", "")
+    _char_suffix = "" if _composed else params.get("char_consistency_suffix", "")
     if _char_suffix and _prompt_en:
         _prompt_en = f"{_prompt_en}, {_char_suffix}"
-    # Creative controls — appended last so they override any conflicting phrasing above
+    # Les contrôles créatifs restent TOUJOURS appliqués : ce sont des réglages
+    # explicites de l'utilisateur, pas une redondance de la composition.
     _creative_suffix = params.get("creative_suffix", "")
     if _creative_suffix and _prompt_en:
         _prompt_en = f"{_prompt_en}, {_creative_suffix}"
@@ -413,13 +456,13 @@ def run_real(params: dict, emit_progress, is_cancelled) -> dict:
             # Images de RÉFÉRENCE (inspiration) ajoutées au plan : en i2v, les images de
             # DÉPART et de FIN sont VERROUILLÉES (keyframes) — l'endpoint n'accepte pas
             # d'images de référence en plus, et on ne veut SURTOUT PAS les altérer. On
-            # décrit donc l'inspiration en TEXTE (Claude Vision) et on l'AJOUTE au prompt :
+            # décrit donc l'inspiration en TEXTE (moteur vision) et on l'AJOUTE au prompt :
             # le prompt est complété, les keyframes restent intactes. (En mode « ref »,
             # sans keyframes, ces images partent normalement comme références visuelles.)
             _ref_inspo = [p for p, r in zip(ref_images, ref_roles) if r == "reference"]
-            if _ref_inspo and _anthropic_key:
+            if _ref_inspo and _has_vision:
                 emit_progress(11, "Analyse des références (inspiration)…")
-                _inspo_txt = _analyze_reference_refs(_ref_inspo, _anthropic_key)
+                _inspo_txt = _analyze_reference_refs(_ref_inspo)
                 if _inspo_txt:
                     args["prompt"] = (
                         args["prompt"].rstrip(" .")
@@ -655,6 +698,8 @@ def run_real(params: dict, emit_progress, is_cancelled) -> dict:
             "seed":                  result.get("seed", 0),
             "ref_images_attempted":  _ref_images_attempted,
             "ref_images_sent":       _ref_images_sent,
+            "prompt_composition":    "advanced" if _composed else (
+                "fallback" if _compose_attempted else "legacy"),
             "gcs_blocked":           _gcs_blocked,
             "gcs_error_detail":      _gcs_error_detail,
         }
@@ -740,6 +785,8 @@ def run_real(params: dict, emit_progress, is_cancelled) -> dict:
         "seed":                  result.get("seed", 0),
         "ref_images_attempted":  _ref_images_attempted,
         "ref_images_sent":       _ref_images_sent,
+        "prompt_composition":    "advanced" if _composed else (
+            "fallback" if _compose_attempted else "legacy"),
         "gcs_blocked":           _gcs_blocked,
         "gcs_error_detail":      _gcs_error_detail,
     }

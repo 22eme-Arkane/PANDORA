@@ -5,15 +5,16 @@ FormatConducteurWorker) est un TEXTE. Cet outil la parse en plans pour la
 co-écriture plan par plan, puis réinjecte UN plan réécrit à sa place
 (édition chirurgicale — les autres plans restent intacts).
 
-Deux formats gérés, avec la MÊME regex d'en-tête :
-  - Cinéma : « P01 | Valeur | Mouvement | Axe | ~Durée »
+Formats gérés, avec la MÊME regex d'en-tête :
+  - Cinéma courant : fiche « PLAN 01 » du Découpage PANDORA 2
+  - Cinéma historique : « P01 | Valeur | Mouvement | Axe | ~Durée » (migration)
   - Live   : « PLAN 1 — Titre court »
 
 Aucune dépendance UI — testable hors ligne.
 """
 import re
 
-# Début d'un plan : « P01 | … » (Cinéma) ou « PLAN 1 — … » (Live/Conducteur).
+# Début d'un plan : « P01 | … » (ancien Cinéma) ou « PLAN 1… » (v2/Live).
 # « P\d » n'attrape jamais « PLAN » (lettre L après P, pas un chiffre).
 _PLAN_RE = re.compile(r"^(P\d{1,3}\s*\||PLAN\s+\d{1,3}\b)", re.MULTILINE)
 
@@ -105,7 +106,11 @@ def _renumber_block(block: str, n: int) -> str:
     if re.match(r"^\s*P\d{1,3}\s*\|", block):
         return re.sub(r"^(\s*)P\d{1,3}(\s*\|)", rf"\g<1>P{n:02d}\g<2>", block, count=1)
     if re.match(r"^\s*PLAN\s+\d{1,3}\b", block):
-        return re.sub(r"^(\s*)PLAN\s+\d{1,3}\b", rf"\g<1>PLAN {n}", block, count=1)
+        is_pandora_v2 = bool(re.search(
+            r"^(?:SOURCE SC[ÉE]NARIO|SCREENPLAY SOURCE)\s*:",
+            block, re.IGNORECASE | re.MULTILINE))
+        number = f"{n:02d}" if is_pandora_v2 else str(n)
+        return re.sub(r"^(\s*)PLAN\s+\d{1,3}\b", rf"\g<1>PLAN {number}", block, count=1)
     return block
 
 
@@ -122,10 +127,8 @@ def _rebuild(head: str, blocks: list) -> str:
 def _blank_plan(edition: str) -> str:
     """Gabarit de plan VIERGE (le numéro sera réattribué par la renumérotation)."""
     if edition == "cinema":
-        return ("P01 | Plan moyen | Fixe | Face | ~5s\n"
-                "INT./EXT. LIEU PRÉCIS — MOMENT\n"
-                "Description de l'action, au présent, concrète et visuelle.\n"
-                "→ SEEDANCE: à décrire…")
+        from core.decoupage_document import blank_plan
+        return blank_plan(1)
     return ("PLAN 1 — Nouveau plan\n"
             "Durée : 5s · Valeur de plan : … · Mouvement : …\n"
             "PROMPT VIDÉO (français) : « à décrire… »\n"

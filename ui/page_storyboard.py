@@ -2261,8 +2261,9 @@ class PageStoryboard(QWidget):
         lay.setContentsMargins(0, 0, 0, 0)
         lay.setSpacing(0)
 
-        lay.addWidget(self._build_shots_topbar())
-        lay.addWidget(_sep())
+        # Bandeau titre « Storyboard » RETIRÉ (demande Matthieu 2026-07-22) : la
+        # fenêtre gagne la hauteur ; ses contrôles (versions, snapshots, durée)
+        # vivent maintenant dans la barre d'outils via _build_topbar_controls().
 
         _hw = QWidget()
         _hw.setStyleSheet("background:transparent;")
@@ -2277,9 +2278,12 @@ class PageStoryboard(QWidget):
             "▸ Bouton Générer (▶) sur chaque plan : envoie directement le plan vers Seedance 2.0 pour la génération.",
             "▸ Versions : gérez plusieurs versions du découpage (découpage final, alternatives, montage court…).",
         ], CP))
-        lay.addWidget(_hw)
 
+        # Barre d'outils EN PREMIÈRE rangée (2026-07-23) : sa ligne basse tombe
+        # exactement sur celles des en-têtes GUIDE / IA (40 px). Le bloc d'aide
+        # (caché) passe dessous pour ne plus décaler la ligne.
         lay.addWidget(self._build_shots_toolbar())
+        lay.addWidget(_hw)
         lay.addWidget(_sep())
 
         # ── Scrollbar horizontale en haut + zone de plans (avec marges) ──────
@@ -2340,28 +2344,15 @@ class PageStoryboard(QWidget):
 
         return page
 
-    def _build_shots_topbar(self) -> QWidget:
+    def _build_topbar_controls(self) -> QWidget:
+        """Ex-bandeau titre « Storyboard » (retiré le 2026-07-22) : ne reste que le
+        groupe compact de contrôles (versions, snapshots, durée), intégré à la
+        barre d'outils des plans."""
         bar = QWidget()
-        bar.setFixedHeight(60)   # hauteur STANDARD des bandeaux (alignement assistant)
-        bar.setStyleSheet(f"background:{CP['bg1']};")
+        bar.setStyleSheet("background:transparent;")
         lay = QHBoxLayout(bar)
-        lay.setContentsMargins(20, 0, 20, 0)
+        lay.setContentsMargins(0, 0, 0, 0)
         lay.setSpacing(10)
-
-        _ico = QLabel()
-        _ico.setFixedSize(26, 26)
-        _ico.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        _ico.setStyleSheet("background:transparent;")
-        _ico_pix = load_icon("storyboard.png", 26)
-        if not _ico_pix.isNull():
-            _ico.setPixmap(_ico_pix)
-        lay.addWidget(_ico)
-
-        title = QLabel("Storyboard")
-        title.setStyleSheet(
-            f"color:{CP['text_primary']};font-size:18px;font-weight:700;background:transparent;"
-        )
-        lay.addWidget(title)
 
         self._version_combo = QComboBox()
         self._version_combo.setFixedHeight(32)
@@ -2465,8 +2456,6 @@ class PageStoryboard(QWidget):
         lay.addWidget(self._btn_del_snap)
         self._btn_del_snap.setVisible(False)
 
-        lay.addStretch(1)
-
         self._dur_lbl = QLabel("")
         self._dur_lbl.setStyleSheet(
             f"color:{CP['text_secondary']};font-size:10px;"
@@ -2477,10 +2466,13 @@ class PageStoryboard(QWidget):
 
     def _build_shots_toolbar(self) -> QWidget:
         bar = QWidget()
-        bar.setMinimumHeight(52)
-        bar.setStyleSheet(f"background:{CP['bg0']};")
+        # 40 px + ligne basse : ALIGNÉ sur les en-têtes GUIDE / IA des panneaux
+        # latéraux et sur la barre d'outils du Scénario (demande Matthieu
+        # 2026-07-23 — les lignes tombent au même endroit).
+        bar.setFixedHeight(40)
+        bar.setStyleSheet(f"background:{CP['bg0']};border-bottom:1px solid {CP['border']};")
         lay = QHBoxLayout(bar)
-        lay.setContentsMargins(20, 8, 20, 8)
+        lay.setContentsMargins(20, 3, 20, 3)
         lay.setSpacing(10)
 
         self._ai_lbl = QLabel("")
@@ -2504,6 +2496,10 @@ class PageStoryboard(QWidget):
             f"QProgressBar::chunk{{background:{CP['accent']};border-radius:3px;}}"
         )
         lay.addWidget(self._mood_progress)
+
+        # Contrôles de l'ancien bandeau titre (versions, snapshots, durée) —
+        # intégrés ici depuis le retrait du bandeau (2026-07-22).
+        lay.addWidget(self._build_topbar_controls())
 
         # Hidden analyze button kept so callbacks (_on_shots_generated, _on_ai_fail) work
         self._btn_analyze = QPushButton()
@@ -2597,25 +2593,6 @@ class PageStoryboard(QWidget):
         )
         self._btn_pitch_deck.clicked.connect(self._on_export_pitch_deck)
 
-        # « Générer les Moods » tout à gauche, « Synchronisation » à sa droite
-        # (retour 2026-06-14) — avant le label/stretch qui pousse le reste à droite
-        lay.insertWidget(0, self._btn_batch_mood)
-        lay.insertWidget(1, self._btn_sync)
-        lay.insertWidget(2, self._btn_recurrent)
-
-        # Sauvegarder / Ouvrir : à droite de « Plans récurrents », séparés par un
-        # petit espace + une barre verticale.
-        _tb_sep = QWidget()
-        _tb_sep.setFixedWidth(1)
-        _tb_sep.setFixedHeight(24)
-        _tb_sep.setStyleSheet(f"background:{CP['border_bright']};")
-        lay.insertSpacing(3, 12)
-        lay.insertWidget(4, _tb_sep)
-        lay.insertSpacing(5, 12)
-        lay.insertWidget(6, self._btn_save_sb_file)
-        lay.insertWidget(7, self._btn_open_sb_file)
-        lay.insertWidget(8, self._btn_pitch_deck)
-
         btn_new = QPushButton("＋  Ajouter un plan")
         btn_new.setFixedHeight(34)
         btn_new.setStyleSheet(
@@ -2625,7 +2602,7 @@ class PageStoryboard(QWidget):
             f"QPushButton:pressed{{background:{CP['accent_dim']};color:#fff;}}"
         )
         btn_new.clicked.connect(self._on_new)
-        lay.addWidget(btn_new)
+        self._btn_new_shot = btn_new   # vit dans le menu « Action » (2026-07-22)
 
         self._btn_clear_shots = QPushButton("✕  Supprimer")
         self._btn_clear_shots.setFixedHeight(34)
@@ -2639,7 +2616,84 @@ class PageStoryboard(QWidget):
         )
         self._btn_clear_shots.setToolTip("Supprimer tous les plans du découpage actuel pour le régénérer")
         self._btn_clear_shots.clicked.connect(self._on_clear_shots)
-        lay.addWidget(self._btn_clear_shots)
+
+        # ── Bouton « Action » (demandes Matthieu 2026-07-22) : regroupe Sauvegarder,
+        # Ouvrir, Ajouter un plan, Générer les Moods, Synchronisation, Plans
+        # récurrents, Pitch deck et Supprimer (rouge) dans un menu déroulant, tout à
+        # gauche de la barre. Les boutons d'origine restent vivants mais CACHÉS : la
+        # logique d'état existante (« ⏹ Arrêter », « Analyse… », désactivation
+        # pendant un travail IA) continue d'écrire dedans, et le menu se recale sur
+        # leur texte/état/infobulle à chaque ouverture. Les stats (nb de plans,
+        # durée) restent visibles tout à droite de la barre.
+        for _b in (self._btn_batch_mood, self._btn_sync, self._btn_recurrent,
+                   self._btn_save_sb_file, self._btn_open_sb_file,
+                   self._btn_pitch_deck, self._btn_new_shot, self._btn_clear_shots):
+            _b.setParent(bar)
+            _b.hide()
+
+        self._btn_actions = QPushButton("☰  Action")
+        self._btn_actions.setFixedHeight(34)
+        self._btn_actions.setStyleSheet(
+            f"QPushButton{{background:transparent;color:{CP['accent']};"
+            f"border:1px solid {CP['accent']};border-radius:8px;"
+            f"font-size:11px;font-weight:700;padding:0 14px;}}"
+            f"QPushButton:hover{{background:rgba(78,205,196,0.12);}}"
+            f"QPushButton:pressed{{background:rgba(78,205,196,0.22);}}"
+            f"QPushButton::menu-indicator{{image:none;width:0;}}"
+        )
+        _amenu = QMenu(self._btn_actions)
+        _amenu.setStyleSheet(
+            f"QMenu{{background:{CP['bg2']};border:1px solid {CP['border_bright']};"
+            f"border-radius:8px;padding:6px;}}"
+            f"QMenu::item{{color:{CP['text_primary']};padding:7px 18px;font-size:11px;}}"
+            f"QMenu::item:selected{{background:{CP['accent_dim']};color:{CP['text_primary']};}}"
+            f"QMenu::item:disabled{{color:{CP['text_dim']};}}"
+        )
+        _amenu.setToolTipsVisible(True)
+        # Ordre demandé : Sauvegarder, Ouvrir, Ajouter un plan, Moods,
+        # Synchronisation, Récurrents, Pitch deck, Supprimer (rouge).
+        self._actions_pairs = [
+            (_amenu.addAction(""), self._btn_save_sb_file),
+            (_amenu.addAction(""), self._btn_open_sb_file),
+            (_amenu.addAction(""), self._btn_new_shot),
+            (_amenu.addAction(""), self._btn_batch_mood),
+            (_amenu.addAction(""), self._btn_sync),
+            (_amenu.addAction(""), self._btn_recurrent),
+            (_amenu.addAction(""), self._btn_pitch_deck),
+        ]
+        for _act, _src in self._actions_pairs:
+            _act.triggered.connect(_src.click)   # .click() respecte l'état désactivé
+
+        # « Supprimer » : QWidgetAction pour garder sa couleur ROUGE dans le menu.
+        from PyQt6.QtWidgets import QWidgetAction
+        _del_action = QWidgetAction(_amenu)
+        self._menu_del_btn = QPushButton()
+        self._menu_del_btn.setFlat(True)
+        self._menu_del_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._menu_del_btn.setStyleSheet(
+            f"QPushButton{{background:transparent;color:{CP['red']};border:none;"
+            f"border-radius:0px;padding:7px 18px;font-size:11px;text-align:left;}}"
+            f"QPushButton:hover{{background:rgba(255,79,106,0.12);}}"
+            f"QPushButton:disabled{{color:{CP['text_dim']};}}"
+        )
+        def _menu_delete_clicked():
+            _amenu.close()
+            self._btn_clear_shots.click()
+        self._menu_del_btn.clicked.connect(_menu_delete_clicked)
+        _del_action.setDefaultWidget(self._menu_del_btn)
+        _amenu.addAction(_del_action)
+
+        def _sync_actions_menu():
+            for _act, _src in self._actions_pairs:
+                _act.setText(_src.text())
+                _act.setToolTip(_src.toolTip())
+                _act.setEnabled(_src.isEnabled())
+            self._menu_del_btn.setText(self._btn_clear_shots.text())
+            self._menu_del_btn.setToolTip(self._btn_clear_shots.toolTip())
+            self._menu_del_btn.setEnabled(self._btn_clear_shots.isEnabled())
+        _amenu.aboutToShow.connect(_sync_actions_menu)
+        self._btn_actions.setMenu(_amenu)
+        lay.insertWidget(0, self._btn_actions)
 
         self._btn_del_sb = QPushButton("Supprimer")
         self._btn_del_sb.setFixedHeight(34)
@@ -3082,23 +3136,32 @@ class PageStoryboard(QWidget):
             if not sc:
                 return
 
-        _source = sc.get("formatted_content") or sc.get("raw_content", "")
-        _layout = (sc.get("layout_content", "") or "").strip()
-        if not _source.strip() and not _layout:
-            QMessageBox.warning(self, "Scénario vide", "Le scénario sélectionné est vide.")
+        _layout = (sc.get("decoupage_content") or sc.get("layout_content") or "").strip()
+        if not _layout:
+            QMessageBox.information(
+                self, "Découpage requis",
+                "Le Storyboard est construit uniquement depuis un Découpage validé.\n\n"
+                "Ouvre Scénario, crée ou affine le Découpage, puis relance cette action.")
             return
-        # Source AUTOMATIQUE (règle 2026-07-09) : Mise en page PANDORA si elle existe,
-        # sinon le scénario. Mise en page STRUCTURÉE (« PLAN n — … ») → conversion
-        # DÉTERMINISTE dans le worker (prompts co-écrits repris tels quels, zéro IA) :
-        # aucun avertissement. On n'avertit QUE si la mise en page n'est pas parsable
-        # et repasserait donc par l'IA qui REFORMULE (règle portée du Live 2026-07-13).
-        if _layout:
-            from core.decoupage_layout import is_structured_layout
-            if not is_structured_layout(_layout):
-                from ui.decoupage_dialogs import confirm_prompt_rewrite
-                if not confirm_prompt_rewrite(self):
-                    return
-        text = _layout or _source
+        from core.editorial_pipeline import status as editorial_status
+        if editorial_status(sc) == "decoupage_stale":
+            QMessageBox.warning(
+                self, "Découpage à actualiser",
+                "Le scénario ou la note de réalisation a changé depuis la création "
+                "du Découpage.\n\nRetourne dans Scénario, actualise et valide le "
+                "Découpage avant de reconstruire le Storyboard.")
+            return
+        # Le Storyboard ne redécoupe plus jamais silencieusement le scénario.
+        # Le document validé est converti de façon déterministe : 1 plan = 1 plan.
+        from core.decoupage_layout import validate_layout
+        if validate_layout(_layout):
+            QMessageBox.warning(
+                self, "Découpage non reconnu",
+                "Le Découpage n'est pas assez structuré pour être importé.\n\n"
+                "Corrige les en-têtes P01, P02…, les durées et les lignes PROMPT "
+                "dans la page Scénario. Aucune réécriture IA automatique ne sera lancée.")
+            return
+        text = _layout
 
         from api.screenplay import GenerateStoryboardWorker
         from core.ai_provider import ai_name_for_task
@@ -3237,6 +3300,12 @@ class PageStoryboard(QWidget):
             shot.pop("merged", None)          # champs de travail P2 (non persistés)
             shot.pop("merged_note", None)
             sb_api.save_shot(shot)
+        if sc_id:
+            try:
+                import core.scenario as scenario_api
+                scenario_api.mark_storyboard_synced(sc_id)
+            except Exception:
+                pass
         self._ai_lbl.setText(f"{len(shots)} {translate('plans importés ✓')}")
         self.refresh()
 

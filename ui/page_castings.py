@@ -141,12 +141,10 @@ class PageCastings(QWidget):
         root.setContentsMargins(0, 0, 0, 0)
         root.setSpacing(0)
 
-        root.addWidget(self._build_topbar())
+        # Bandeau titre « Castings » retiré (demande Matthieu 2026-07-22).
 
-        sep = QFrame()
-        sep.setFixedHeight(1)
-        sep.setStyleSheet(f"background:{CP['border']};")
-        root.addWidget(sep)
+        # Separateur haut retire (2026-07-23) : la barre d'outils est la 1re rangee,
+        # sa ligne basse tombe pile sur celles des en-tetes GUIDE / IA (40 px).
 
         root.addWidget(self._build_toolbar())
 
@@ -212,8 +210,9 @@ class PageCastings(QWidget):
 
     def _build_toolbar(self) -> QWidget:
         bar = QWidget()
-        bar.setFixedHeight(60)
-        bar.setStyleSheet(f"background:{CP['bg0']};")
+        # 40 px + ligne basse : premiere rangee alignee sur les en-tetes GUIDE/IA (2026-07-23).
+        bar.setFixedHeight(40)
+        bar.setStyleSheet(f"background:{CP['bg0']};border-bottom:1px solid {CP['border']};")
         lay = QHBoxLayout(bar)
         lay.setContentsMargins(32, 0, 32, 0)
         lay.setSpacing(12)
@@ -228,23 +227,17 @@ class PageCastings(QWidget):
             f"QLineEdit:focus{{border-color:{CP['accent_dim']};}}"
         )
         self._search.textChanged.connect(self._filter)
-        lay.addWidget(self._search, 1)
+        # Barre de recherche RETIRÉE de l'affichage (demande Matthieu 2026-07-22) ;
+        # le widget reste vivant car _filter lit son texte.
+        self._search.setParent(bar)
+        self._search.hide()
 
-        # Sauvegarder / Ouvrir un casting — à côté de la barre de recherche
-        # (même principe que le storyboard).
         self._btn_save_file, self._btn_open_file = make_save_open_buttons(
             self, kind="casting",
             list_fn=casting_api.list_characters,
             save_fn=casting_api.save_character,
             delete_fn=casting_api.delete_character,
             refresh_fn=self.refresh)
-        lay.addWidget(self._btn_save_file)
-        lay.addWidget(self._btn_open_file)
-
-        # Séparateur (espace + trait) : groupe FICHIER | actions de CRÉATION.
-        lay.addSpacing(6)
-        lay.addWidget(toolbar_separator())
-        lay.addSpacing(6)
 
         # Importer des photos = créer un personnage par image (≠ « Ouvrir » qui
         # recharge un casting sauvegardé). Regroupé avec les actions de création.
@@ -281,9 +274,17 @@ class PageCastings(QWidget):
         )
         btn_del_all.clicked.connect(self._on_delete_all)
 
-        lay.addWidget(btn_import)
-        lay.addWidget(btn_new)
-        lay.addWidget(btn_del_all)
+        # ── Bouton « Action » (demande Matthieu 2026-07-22, même principe que le
+        # Storyboard) : Sauvegarder, Ouvrir, Créer un personnage, Supprimer tout le
+        # casting (rouge). « Importer des photos » est retiré de l'affichage.
+        btn_import.setParent(bar)
+        btn_import.hide()
+        from ui.widgets import make_actions_menu_button
+        self._btn_actions = make_actions_menu_button(
+            bar, [self._btn_save_file, self._btn_open_file, btn_new],
+            red_entry=btn_del_all)
+        lay.addWidget(self._btn_actions)
+        lay.addStretch(1)
         return bar
 
     # ── Grille ────────────────────────────────────────────────────────────────
@@ -304,10 +305,11 @@ class PageCastings(QWidget):
             empty.setStyleSheet(
                 f"color:{CP['text_dim']};font-size:13px;background:transparent;border:none;"
             )
-            self._grid.addWidget(empty, 0, 0, 1, 6)
+            self._grid.addWidget(empty, 0, 0, 1, 9)
             return
 
-        cols = 6
+        # 9 colonnes (2026-07-23) : utiliser toute la largeur de la fenêtre.
+        cols = 9
         for i, char in enumerate(chars):
             card = CharacterCard(char)
             card.edit_requested.connect(self._on_edit)

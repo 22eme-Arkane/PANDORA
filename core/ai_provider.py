@@ -58,67 +58,23 @@ API :
 from __future__ import annotations
 
 
-# ── Fournisseurs & moteurs ──────────────────────────────────────────────────────
+from core.ai_registry import (ENGINE_ORDER, ENGINES as _REGISTRY_ENGINES,
+                              PANDORA_OPTIMIZED, TASK_DEFAULTS, TASKS,
+                              engine as _registry_engine,
+                              profile_from_config as _profile_from_config,
+                              recommended_engine_name,
+                              resolve_engine as _registry_resolve)
 
-_PROVIDERS = ("anthropic", "openai", "mistral", "kimi", "glm", "ollama")
-
-# Moteur = (fournisseur, modèle créatif, nom d'affichage). Permet de choisir
-# Claude vs Fable 5 (même fournisseur Anthropic, modèles différents) par tâche.
+# Forme historique conservée pour les pages et harnais existants.
 ENGINES: dict[str, dict] = {
-    "claude":  {"provider": "anthropic", "creative_model": "claude-sonnet-5",   "name": "Claude Sonnet 5"},
-    "opus":    {"provider": "anthropic", "creative_model": "claude-opus-4-8",   "name": "Claude Opus 4.8"},
-    "haiku":   {"provider": "anthropic", "creative_model": "claude-haiku-4-5",  "name": "Claude Haiku 4.5"},
-    "fable5":  {"provider": "anthropic", "creative_model": "claude-fable-5",    "name": "Fable 5"},
-    "gpt":     {"provider": "openai",    "creative_model": "",                  "name": "GPT-5.5"},
-    "mistral": {"provider": "mistral",   "creative_model": "",                  "name": "Mistral"},
-    "kimi":    {"provider": "kimi",      "creative_model": "",                  "name": "Kimi K2.7"},
-    "glm":     {"provider": "glm",       "creative_model": "",                  "name": "GLM 4.7"},
-    "ollama":  {"provider": "ollama",    "creative_model": "",                  "name": "Ollama"},
+    key: {**item, "creative_model": item.get("model", "")}
+    for key, item in _REGISTRY_ENGINES.items()
 }
 
-# Ordre d'affichage des moteurs dans les menus (Paramètres avancés).
-ENGINE_ORDER = ["claude", "opus", "haiku", "fable5", "gpt", "mistral", "kimi", "glm", "ollama"]
-
-# Tâches IA paramétrables individuellement (Paramètres → Assistant IA → avancés).
-# (clé, libellé FR). Chaque appelant passe task=<clé> ; sans override → moteur global.
-TASKS: list[tuple[str, str]] = [
-    ("enhance",         "Amélioration des prompts"),
-    ("storyboard_chat", "Chat du Storyboard"),
-    ("assistant",       "Assistant / guide complet"),
-    ("storyboard_gen",  "Génération du storyboard"),
-    ("screenplay",      "Scénario (mise en page, arrangement)"),
-    ("extraction",      "Extraction d'éléments (personnages, décors…)"),
-    ("sync",            "Synchronisation du storyboard"),
-    ("translate",       "Traduction des prompts (FR → EN/ZH)"),
-]
+_PROVIDERS = ("anthropic", "openai", "mistral", "kimi", "glm", "ollama", "custom")
 
 # Modèle par défaut (créatif) — Opus 4.8.
 _DEFAULT_CREATIVE = "claude-opus-4-8"
-
-# ── Moteur IDÉAL par tâche (profil « PANDORA optimisé » = DÉFAUT) ───────────────
-# Objectif : le MOINS de crédits possible, sans IA surdimensionnée. Seul le prompt
-# du storyboard reste sur Opus 4.8 (précision maximale exigée — découpage). Le reste
-# descend en Sonnet (équilibré) ou Haiku (économe). NB : les appels du tier utilitaire
-# (traduction, extractions courtes, chat) restent de toute façon sur Haiku via _model().
-TASK_DEFAULTS: dict[str, str] = {
-    "storyboard_gen":  "opus",    # découpage / prompts du storyboard — précision MAX
-    "screenplay":      "claude",  # scénario (mise en page, arrangement) — Sonnet 5
-    "sync":            "claude",  # synchronisation storyboard — Sonnet 5
-    "storyboard_chat": "claude",  # chat storyboard — Sonnet 5 (éditions JSON fiables)
-    "extraction":      "claude",  # extraction JSON (persos/décors…) — Sonnet 5 (précision)
-    "enhance":         "haiku",   # amélioration de prompt — Haiku (économe)
-    "assistant":       "claude",  # guide / assistant — Sonnet 5 (qualité des réponses)
-    "translate":       "haiku",   # traduction FR→EN/ZH — Haiku (économe)
-}
-
-# « PANDORA optimisé » = ce mapping (alias conservé pour les Paramètres).
-PANDORA_OPTIMIZED: dict[str, str] = dict(TASK_DEFAULTS)
-
-
-def recommended_engine_name(task: str) -> str:
-    """Nom du moteur conseillé pour une tâche (pour les libellés « Par défaut »)."""
-    e = ENGINES.get(TASK_DEFAULTS.get(task, ""))
-    return e["name"] if e else "Claude"
 
 _ANTHROPIC_UTILITY = "claude-haiku-4-5"
 _MISTRAL_MODELS = {"utility": "mistral-small-latest", "creative": "mistral-large-latest"}
@@ -159,25 +115,8 @@ def _resolve_engine(task: str | None = None) -> tuple[str, str]:
     → le moins de crédits, Opus seulement pour le storyboard ; (3) sinon, le moteur
     GLOBAL choisi explicitement (Sonnet / Haiku / Fable 5 / GPT / Mistral / Ollama)
     s'applique partout. Ne dégrade jamais un choix explicite de l'utilisateur."""
-    cfg = _cfg()
-    if task:
-        eng_key = (cfg.get("ai_task_engines") or {}).get(task)
-        if eng_key and eng_key in ENGINES:
-            e = ENGINES[eng_key]
-            return e["provider"], e["creative_model"]
-    provider = (cfg.get("ai_provider") or "anthropic").strip().lower()
-    creative = (cfg.get("ai_model_creative") or "").strip()
-    # Profil par défaut = routage idéal par tâche (économe, Opus pour le storyboard).
-    # « custom » (Choix personnalisé) : les tâches SANS override affichent
-    # « Par défaut · X » dans les Paramètres → elles doivent résoudre pareil.
-    _is_smart_default = (provider in ("pandora", "custom", "")
-                         or (provider == "anthropic" and creative in ("", _DEFAULT_CREATIVE)))
-    if _is_smart_default and task and task in TASK_DEFAULTS:
-        e = ENGINES[TASK_DEFAULTS[task]]
-        return e["provider"], e["creative_model"]
-    if provider not in _PROVIDERS:
-        provider = "anthropic"
-    return provider, (creative or _DEFAULT_CREATIVE)
+    item = _registry_resolve(_cfg(), task)
+    return item["provider"], item.get("model", "")
 
 
 def _model(tier: str, provider: str | None = None, creative_model: str = "") -> str:
@@ -187,18 +126,20 @@ def _model(tier: str, provider: str | None = None, creative_model: str = "") -> 
     if provider == "anthropic":
         return (creative_model or _DEFAULT_CREATIVE) if tier == "creative" else _ANTHROPIC_UTILITY
     if provider == "openai":
-        m = (_cfg().get("openai_model") or "").strip()
-        return m or _OPENAI_MODELS["creative" if tier == "creative" else "utility"]
+        return (creative_model or (_cfg().get("openai_model") or "").strip()
+                or _OPENAI_MODELS["creative" if tier == "creative" else "utility"])
     if provider == "mistral":
+        if creative_model and creative_model not in ("mistral-large-latest",):
+            return creative_model
         return _MISTRAL_MODELS["creative" if tier == "creative" else "utility"]
     if provider == "kimi":
-        m = (_cfg().get("kimi_model") or "").strip()
-        return m or _KIMI_DEFAULT_MODEL
+        return creative_model or (_cfg().get("kimi_model") or "").strip() or _KIMI_DEFAULT_MODEL
     if provider == "glm":
-        m = (_cfg().get("glm_model") or "").strip()
-        return m or _GLM_DEFAULT_MODEL
+        return creative_model or (_cfg().get("glm_model") or "").strip() or _GLM_DEFAULT_MODEL
     if provider == "ollama":
-        return (_cfg().get("ollama_model") or "llama3.1").strip() or "llama3.1"
+        return creative_model or (_cfg().get("ollama_model") or "llama3.1").strip() or "llama3.1"
+    if provider == "custom":
+        return creative_model or (_cfg().get("custom_model") or "").strip()
     return creative_model or _DEFAULT_CREATIVE
 
 
@@ -212,15 +153,14 @@ def ai_name() -> str:
     Mis en cache ; les Paramètres appellent refresh_name_cache() après sauvegarde."""
     global _NAME_CACHE
     if _NAME_CACHE is None:
-        provider = get_provider()
-        if provider == "anthropic":
-            _NAME_CACHE = "Fable 5" if "fable" in get_creative_model() else "Claude"
-        elif provider == "openai":
-            _NAME_CACHE = "GPT-5.5"
+        cfg = _cfg()
+        profile = _profile_from_config(cfg)
+        if profile == "anthropic_optimized":
+            _NAME_CACHE = "Anthropic optimisé"
+        elif profile == "openai_optimized":
+            _NAME_CACHE = "ChatGPT optimisé"
         else:
-            _NAME_CACHE = {"mistral": "Mistral", "kimi": "Kimi K2.7",
-                           "glm": "GLM 4.7",
-                           "ollama": "Ollama"}.get(provider, provider.capitalize())
+            _NAME_CACHE = _engine_display_name(*_resolve_engine())
     return _NAME_CACHE
 
 
@@ -246,10 +186,22 @@ def humanize_ai_error(msg: str) -> str:
     consignes de recharge diffèrent.)"""
     from core.i18n import translate as _tr
     low = (msg or "").lower()
+    openai_quota = (
+        "insufficient_quota" in low
+        or "exceeded your current quota" in low
+        or "you exceeded your quota" in low
+        or "billing_hard_limit_reached" in low
+        or "billing_not_active" in low
+        or ("quota" in low and ("billing" in low or "plan" in low))
+    )
+    if openai_quota:
+        return _tr("Crédits OpenAI épuisés ou plafond de dépenses atteint — "
+                   "recharge les crédits ou vérifie les limites du projet OpenAI, "
+                   "puis relance.")
     if ("credit balance" in low or "insufficient credit" in low
             or ("billing" in low and "credit" in low)):
-        return _tr("Crédits API épuisés — recharge ton compte "
-                   "(console.anthropic.com → Billing) puis relance. "
+        return _tr("Crédits API épuisés — recharge le compte du fournisseur "
+                   "sélectionné puis relance. "
                    "La dernière analyse sauvegardée reste disponible.")
     if "rate limit" in low or "429" in low or "overloaded" in low or "529" in low:
         return _tr("Service IA saturé ou limite de débit atteinte — "
@@ -275,7 +227,7 @@ def _engine_display_name(provider: str, creative_model: str) -> str:
             return "Claude Haiku 4.5"
         return "Claude Sonnet 5"
     if provider == "openai":
-        return ENGINES["gpt"]["name"]
+        return creative_model or "OpenAI"
     if provider == "mistral":
         return ENGINES["mistral"]["name"]
     if provider == "kimi":
@@ -283,7 +235,9 @@ def _engine_display_name(provider: str, creative_model: str) -> str:
     if provider == "glm":
         return ENGINES["glm"]["name"]
     if provider == "ollama":
-        return ENGINES["ollama"]["name"]
+        return creative_model or ENGINES["ollama"]["name"]
+    if provider == "custom":
+        return creative_model or "Fournisseur personnalisé"
     return "Claude"
 
 
@@ -305,7 +259,7 @@ def key_error(task: str | None = None) -> str | None:
         return None
     if provider == "openai":
         if not cfg.get("openai_key", "").strip():
-            return "Clé OpenAI (GPT-5.5) manquante — renseignez-la dans Paramètres."
+            return "Clé OpenAI manquante — renseignez-la dans Paramètres."
         return None
     if provider == "mistral":
         if not cfg.get("mistral_key", "").strip():
@@ -331,6 +285,16 @@ def key_error(task: str | None = None) -> str | None:
         return None
     if provider == "ollama":
         return None   # serveur local, pas de clé ; l'erreur réseau parlera d'elle-même
+    if provider == "custom":
+        url = (cfg.get("custom_url") or "").strip().lower()
+        if not url:
+            return "URL du fournisseur personnalisé manquante — renseignez-la dans Paramètres."
+        is_local = ("localhost" in url) or ("127.0.0.1" in url)
+        if not is_local and not cfg.get("custom_key", "").strip():
+            return "Clé du fournisseur personnalisé manquante — renseignez-la dans Paramètres."
+        if not (cfg.get("custom_model") or "").strip():
+            return "Modèle personnalisé manquant — renseignez-le dans Paramètres."
+        return None
     return None
 
 
@@ -374,9 +338,59 @@ def _anthropic_stream(system, messages, on_chunk, model, max_tokens) -> str:
     return full
 
 
+def _openai_content(content):
+    """Anthropic blocks → Chat Completions multimodal blocks."""
+    if isinstance(content, str):
+        return content
+    out = []
+    for block in content or []:
+        if not isinstance(block, dict):
+            continue
+        if block.get("type") == "text":
+            out.append({"type": "text", "text": block.get("text", "")})
+        elif block.get("type") == "image":
+            src = block.get("source") or {}
+            if src.get("type") == "base64" and src.get("data"):
+                mime = src.get("media_type") or "image/jpeg"
+                out.append({"type": "image_url", "image_url": {
+                    "url": f"data:{mime};base64,{src['data']}", "detail": "high"}})
+        elif block.get("type") == "image_url":
+            out.append(block)
+    return out or ""
+
+
+def _openai_messages(system, messages) -> list:
+    out = [{"role": "system", "content": system}] if system else []
+    out += [{"role": m["role"], "content": _openai_content(m.get("content", ""))}
+            for m in messages]
+    return out
+
+
+def _ollama_messages(system, messages) -> list:
+    """Convertit les blocs image en champ ``images`` attendu par Ollama."""
+    out = [{"role": "system", "content": system}] if system else []
+    for message in messages:
+        content = message.get("content", "")
+        if isinstance(content, str):
+            out.append({"role": message["role"], "content": content})
+            continue
+        texts, images = [], []
+        for block in content or []:
+            if block.get("type") == "text":
+                texts.append(block.get("text", ""))
+            elif block.get("type") == "image":
+                src = block.get("source") or {}
+                if src.get("data"):
+                    images.append(src["data"])
+        item = {"role": message["role"], "content": "\n".join(texts)}
+        if images:
+            item["images"] = images
+        out.append(item)
+    return out
+
+
 def _openai_payload(system, messages, model, max_tokens, stream_flag) -> tuple:
-    msgs = [{"role": "system", "content": system}] if system else []
-    msgs += [{"role": m["role"], "content": m["content"]} for m in messages]
+    msgs = _openai_messages(system, messages)
     return ("https://api.openai.com/v1/chat/completions", {
         "model": model, "max_completion_tokens": max_tokens,
         "messages": msgs, "stream": stream_flag,
@@ -417,8 +431,7 @@ def _openai_stream(system, messages, on_chunk, model, max_tokens) -> str:
 
 
 def _mistral_payload(system, messages, model, max_tokens, stream_flag) -> tuple:
-    msgs = [{"role": "system", "content": system}] if system else []
-    msgs += [{"role": m["role"], "content": m["content"]} for m in messages]
+    msgs = _openai_messages(system, messages)
     return ("https://api.mistral.ai/v1/chat/completions", {
         "model": model, "max_tokens": max_tokens,
         "messages": msgs, "stream": stream_flag,
@@ -464,8 +477,7 @@ def _kimi_base_url() -> str:
 
 
 def _kimi_payload(system, messages, model, max_tokens, stream_flag) -> tuple:
-    msgs = [{"role": "system", "content": system}] if system else []
-    msgs += [{"role": m["role"], "content": m["content"]} for m in messages]
+    msgs = _openai_messages(system, messages)
     # Bearer 'local' = jeton factice pour les serveurs locaux qui ignorent l'auth.
     key = _cfg().get("kimi_key", "").strip() or "local"
     return (f"{_kimi_base_url()}/chat/completions", {
@@ -514,8 +526,7 @@ def _glm_base_url() -> str:
 
 
 def _glm_payload(system, messages, model, max_tokens, stream_flag) -> tuple:
-    msgs = [{"role": "system", "content": system}] if system else []
-    msgs += [{"role": m["role"], "content": m["content"]} for m in messages]
+    msgs = _openai_messages(system, messages)
     # Bearer 'local' = jeton factice pour les serveurs locaux qui ignorent l'auth
     # (même convention que Kimi).
     key = _cfg().get("glm_key", "").strip() or "local"
@@ -561,13 +572,59 @@ def _glm_stream(system, messages, on_chunk, model, max_tokens) -> str:
     return full
 
 
+def _custom_base_url() -> str:
+    return ((_cfg().get("custom_url") or "").strip().rstrip("/"))
+
+
+def _custom_payload(system, messages, model, max_tokens, stream_flag) -> tuple:
+    """Fournisseur personnalisé au format OpenAI-compatible."""
+    msgs = _openai_messages(system, messages)
+    key = _cfg().get("custom_key", "").strip() or "local"
+    return (f"{_custom_base_url()}/chat/completions", {
+        "model": model, "max_tokens": max_tokens,
+        "messages": msgs, "stream": stream_flag,
+    }, {"Authorization": f"Bearer {key}", "Content-Type": "application/json"})
+
+
+def _custom_complete(system, messages, model, max_tokens) -> str:
+    import requests
+    url, payload, headers = _custom_payload(system, messages, model, max_tokens, False)
+    r = requests.post(url, json=payload, headers=headers, timeout=300)
+    r.raise_for_status()
+    return r.json()["choices"][0]["message"]["content"]
+
+
+def _custom_stream(system, messages, on_chunk, model, max_tokens) -> str:
+    import json as _json
+    import requests
+    url, payload, headers = _custom_payload(system, messages, model, max_tokens, True)
+    full = ""
+    with requests.post(url, json=payload, headers=headers, timeout=300, stream=True) as r:
+        r.raise_for_status()
+        for line in r.iter_lines():
+            if not line or not line.startswith(b"data:"):
+                continue
+            data = line[5:].strip()
+            if data == b"[DONE]":
+                break
+            try:
+                delta = _json.loads(data)["choices"][0]["delta"].get("content", "")
+            except Exception:
+                continue
+            if delta:
+                full += delta
+                if on_chunk:
+                    on_chunk(delta)
+    return full
+
+
 def _ollama_url() -> str:
     return ((_cfg().get("ollama_url") or "http://localhost:11434").strip().rstrip("/"))
 
 
 def _ollama_complete(system, messages, model, max_tokens) -> str:
     import requests
-    msgs = ([{"role": "system", "content": system}] if system else []) + list(messages)
+    msgs = _ollama_messages(system, messages)
     r = requests.post(f"{_ollama_url()}/api/chat", json={
         "model": model, "messages": msgs, "stream": False,
         "options": {"num_predict": max_tokens},
@@ -579,7 +636,7 @@ def _ollama_complete(system, messages, model, max_tokens) -> str:
 def _ollama_stream(system, messages, on_chunk, model, max_tokens) -> str:
     import json as _json
     import requests
-    msgs = ([{"role": "system", "content": system}] if system else []) + list(messages)
+    msgs = _ollama_messages(system, messages)
     full = ""
     with requests.post(f"{_ollama_url()}/api/chat", json={
         "model": model, "messages": msgs, "stream": True,
@@ -616,6 +673,8 @@ def _dispatch_complete(provider, system, messages, model, max_tokens) -> str:
         return _glm_complete(system, messages, model, max_tokens)
     if provider == "ollama":
         return _ollama_complete(system, messages, model, max_tokens)
+    if provider == "custom":
+        return _custom_complete(system, messages, model, max_tokens)
     return _anthropic_complete(system, messages, model, max_tokens)
 
 
@@ -630,6 +689,8 @@ def _dispatch_stream(provider, system, messages, on_chunk, model, max_tokens) ->
         return _glm_stream(system, messages, on_chunk, model, max_tokens)
     if provider == "ollama":
         return _ollama_stream(system, messages, on_chunk, model, max_tokens)
+    if provider == "custom":
+        return _custom_stream(system, messages, on_chunk, model, max_tokens)
     return _anthropic_stream(system, messages, on_chunk, model, max_tokens)
 
 
@@ -653,6 +714,71 @@ def chat(system: str, messages: list, tier: str = "creative",
     model = _model(tier, provider, creative)
     return _dispatch_complete(provider, _adapt(system, task, provider, model),
                               messages, model, max_tokens)
+
+
+def chat_ex(system: str, messages: list, tier: str = "creative",
+            max_tokens: int = 2048, task: str | None = None) -> dict:
+    """Comme chat(), mais renvoie {"text": str, "truncated": bool} : la coupe par
+    LIMITE DE LONGUEUR est détectée précisément (stop_reason « max_tokens » chez
+    Anthropic, finish_reason « length » chez les OpenAI-compatibles, done_reason
+    chez Ollama) — le socle des boucles de continuation anti-troncature
+    (co-écriture : fins de scénario perdues, constat Matthieu 2026-07-21)."""
+    provider, creative = _resolve_engine(task)
+    model = _model(tier, provider, creative)
+    sysp  = _adapt(system, task, provider, model)
+    if provider in ("openai", "mistral", "kimi", "glm", "custom"):
+        import requests
+        builder = {"openai": _openai_payload, "mistral": _mistral_payload,
+                   "kimi": _kimi_payload, "glm": _glm_payload,
+                   "custom": _custom_payload}[provider]
+        url, payload, headers = builder(sysp, messages, model, max_tokens, False)
+        r = requests.post(url, json=payload, headers=headers, timeout=300)
+        r.raise_for_status()
+        choice = r.json()["choices"][0]
+        return {"text": choice.get("message", {}).get("content", "") or "",
+                "truncated": choice.get("finish_reason") == "length"}
+    if provider == "ollama":
+        import requests
+        msgs = _ollama_messages(sysp, messages)
+        r = requests.post(f"{_ollama_url()}/api/chat", json={
+            "model": model, "messages": msgs, "stream": False,
+            "options": {"num_predict": max_tokens}}, timeout=600)
+        r.raise_for_status()
+        j = r.json()
+        return {"text": j.get("message", {}).get("content", "") or "",
+                "truncated": j.get("done_reason", "") == "length"}
+    # Anthropic (défaut)
+    msg = _anthropic_client().messages.create(
+        model=model, max_tokens=max_tokens, system=sysp, messages=messages,
+        **_anthropic_extra(model))
+    text = "".join(b.text for b in msg.content if getattr(b, "type", "") == "text")
+    return {"text": text, "truncated": getattr(msg, "stop_reason", "") == "max_tokens"}
+
+
+# Relance de continuation : reprendre au caractère exact, sans répétition ni méta.
+CONTINUE_PROMPT = ("Continue EXACTEMENT là où tu t'es arrêté, sans rien répéter ni "
+                   "reformuler, sans préambule ni commentaire : reprends au caractère "
+                   "suivant de ta réponse précédente.")
+
+
+def chat_until_complete(system: str, messages: list, tier: str = "creative",
+                        max_tokens: int = 2048, task: str | None = None,
+                        max_rounds: int = 4) -> str:
+    """chat() ANTI-TRONCATURE : si la réponse est coupée par la limite de longueur,
+    demande automatiquement LA SUITE (le déjà-reçu repart comme message assistant +
+    CONTINUE_PROMPT) et recolle, jusqu'à une fin normale (max `max_rounds`
+    continuations). Longueur de sortie effective : (max_rounds+1) × max_tokens —
+    plus aucune fin de scénario perdue en co-écriture."""
+    full = ""
+    msgs = list(messages)
+    for _ in range(max_rounds + 1):
+        res = chat_ex(system, msgs, tier, max_tokens, task)
+        full += res.get("text", "")
+        if not res.get("truncated") or not full:
+            break
+        msgs = list(messages) + [{"role": "assistant", "content": full},
+                                 {"role": "user",      "content": CONTINUE_PROMPT}]
+    return full
 
 
 def chat_stream(system: str, messages: list, on_chunk=None, tier: str = "creative",

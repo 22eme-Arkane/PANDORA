@@ -45,6 +45,59 @@ def _sep():
     return f
 
 
+class _PanelToggle(QWidget):
+    """Poignée latérale repliable du panneau droit — même principe visuel que la
+    poignée GUIDE et que « RÉGLAGES » du Plan de feu (demande Matthieu 2026-07-22)."""
+
+    toggled = pyqtSignal(bool)
+
+    def __init__(self, label: str = "ASSISTANT", *, opened=True, parent=None):
+        super().__init__(parent)
+        self._open = bool(opened)
+        self.setFixedWidth(42)
+        self.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.setToolTip(translate("Ouvrir ou fermer le panneau"))
+        self.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
+        # Mêmes couleurs que la poignée GUIDE (cohérence 2026-07-22).
+        self.setStyleSheet(f"background:{CP['bg1']};")
+        lay = QVBoxLayout(self)
+        lay.setContentsMargins(0, 0, 0, 0)
+        lay.setSpacing(0)
+        lay.addStretch()
+        text = QLabel(translate(label))
+        text.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        # letter-spacing 0 : « ASSISTANT » (9 caractères) doit tenir dans 42 px.
+        text.setStyleSheet(
+            f"color:{CP['accent']};font-size:7px;font-weight:900;"
+            "background:transparent;border:none;"
+        )
+        lay.addWidget(text)
+        lay.addSpacing(6)
+        self._arrow = QLabel()
+        self._arrow.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self._arrow.setStyleSheet(
+            f"color:{CP['accent']};font-size:18px;font-weight:700;"
+            "background:transparent;border:none;"
+        )
+        lay.addWidget(self._arrow)
+        lay.addStretch()
+        self._update_arrow()
+
+    def _update_arrow(self):
+        # Fermée → flèche vers l'EXTÉRIEUR (❯, panneau au bord droit) ;
+        # ouverte → vers l'INTÉRIEUR (❮) — même logique que RÉGLAGES.
+        self._arrow.setText("❮" if self._open else "❯")
+
+    def mousePressEvent(self, event):
+        if event.button() == Qt.MouseButton.LeftButton:
+            self._open = not self._open
+            self._update_arrow()
+            self.toggled.emit(self._open)
+            event.accept()
+            return
+        super().mousePressEvent(event)
+
+
 # ── Page Scénario (landing + éditeur) ────────────────────────────────────────
 
 class PageScenario(QWidget):
@@ -137,7 +190,7 @@ class PageScenario(QWidget):
         lay.setSpacing(32)
 
         lay.addWidget(HelpBlock("Scénario — Éditeur et assistant Claude IA", [
-            "▸ Rédigez ou collez votre scénario, puis utilisez Claude pour le formater en mise en page cinéma standard.",
+            "▸ Rédigez le scénario, consignez les intentions dans la Note de réalisation, puis créez le Découpage PANDORA.",
             "▸ Arrangement IA : Claude analyse la structure narrative et propose des améliorations (intensité réglable 1-10).",
             "▸ Générez automatiquement depuis le scénario : personnages, décors, accessoires, HMC, véhicules et storyboard.",
             "▸ Versions : sauvegardez plusieurs versions nommées et basculez entre elles à tout moment.",
@@ -304,35 +357,17 @@ class PageScenario(QWidget):
         tl.setContentsMargins(16, 0, 16, 0)
         tl.setSpacing(12)
 
-        btn_back = QPushButton("← Retour")
-        btn_back.setFixedHeight(34)
-        btn_back.setStyleSheet(
-            f"QPushButton{{background:transparent;color:{CP['text_secondary']};"
-            f"border:1px solid {CP['border']};border-radius:6px;font-size:11px;font-weight:700;padding:0 12px;}}"
-            f"QPushButton:hover{{background:{CP['bg2']};color:{CP['text_primary']};}}"
-        )
-        btn_back.clicked.connect(self._go_landing)
-        tl.addWidget(btn_back)
-
-        self._title_edit = QLineEdit()
+        # Champ titre RETIRÉ de l'affichage (demande Matthieu 2026-07-22) mais le
+        # widget reste vivant : il porte le titre du scénario pour l'autosave, les
+        # analyses et le harnais. Parenté à la topbar pour éviter toute fenêtre
+        # fantôme, jamais ajouté au layout.
+        self._title_edit = QLineEdit(topbar)
         self._title_edit.setPlaceholderText("Titre du scénario…")
-        self._title_edit.setFixedHeight(34)
-        self._title_edit.setFixedWidth(160)
-        self._title_edit.setStyleSheet(
-            f"QLineEdit{{background:{CP['bg2']};border:1px solid {CP['border']};"
-            f"border-radius:6px;color:{CP['text_primary']};font-size:13px;font-weight:600;padding:0 12px;}}"
-            f"QLineEdit:focus{{border-color:{CP['accent2_dim']};}}"
-        )
         self._title_edit.textChanged.connect(self._schedule_autosave)
-        self._title_edit.textChanged.connect(self._adjust_title_width)
-        tl.addWidget(self._title_edit)
+        self._title_edit.hide()
 
-        # ── Sauvegarder / Ouvrir le scénario (fichiers physiques, dossier Scénario) ──
-        _scn_sep = QFrame()
-        _scn_sep.setFixedSize(1, 24)
-        _scn_sep.setStyleSheet(f"background:{CP['border']};")
-        tl.addWidget(_scn_sep)
-
+        # ── Sauvegarder / Ouvrir le scénario (fichiers physiques, dossier Scénario)
+        # — tout à gauche de la barre, sous « Nous contacter » (2026-07-22) ──
         _yellow, _blue = "#f5c518", "#4aa3ff"
         self._btn_scn_save = QPushButton("💾  Sauvegarder")
         self._btn_scn_save.setFixedHeight(30)
@@ -343,7 +378,6 @@ class PageScenario(QWidget):
             f"QPushButton:hover{{background:rgba(245,197,24,0.12);}}"
         )
         self._btn_scn_save.clicked.connect(self._on_save_scenario_file)
-        tl.addWidget(self._btn_scn_save)
 
         self._btn_scn_open = QPushButton("📂  Ouvrir")
         self._btn_scn_open.setFixedHeight(30)
@@ -354,67 +388,65 @@ class PageScenario(QWidget):
             f"QPushButton:hover{{background:rgba(74,163,255,0.12);}}"
         )
         self._btn_scn_open.clicked.connect(self._on_open_scenario_file)
-        tl.addWidget(self._btn_scn_open)
 
-        # ── Style visuel (top bar, après les boutons de version) ──────────────
-        _style_sep_top = QFrame()
-        _style_sep_top.setFixedSize(1, 24)
-        _style_sep_top.setStyleSheet(f"background:{CP['border']};")
-        tl.addWidget(_style_sep_top)
+        # ── Bouton « Action » (demande Matthieu 2026-07-22) : Sauvegarder et Ouvrir
+        # regroupés dans un menu déroulant, tout à gauche sous « Nous contacter ».
+        # Les deux boutons d'origine restent vivants mais cachés (parenté topbar,
+        # jamais de fenêtre fantôme) ; le menu se recale dessus à chaque ouverture.
+        from PyQt6.QtWidgets import QMenu
+        for _b in (self._btn_scn_save, self._btn_scn_open):
+            _b.setParent(topbar)
+            _b.hide()
 
-        import core.style as _sc_style_mod
-        self._film_style_combo = QComboBox()
-        self._film_style_combo.addItem("— Style —", "")
-        _cur_grp_sc = None
-        for _s in _sc_style_mod.STYLES:
-            _g = _s.get("group", "")
-            if _g != _cur_grp_sc:
-                _cur_grp_sc = _g
-                _gi = next((g for g in _sc_style_mod.GROUPS if g["key"] == _g), None)
-                if _gi:
-                    self._film_style_combo.addItem(
-                        f"  {_gi['icon']}  {translate(_gi['name']).upper()}", "__sep__"
-                    )
-                    _sep_i = self._film_style_combo.model().item(
-                        self._film_style_combo.count() - 1
-                    )
-                    _sep_i.setEnabled(False)
-                    _sep_i.setForeground(QColor(CP.get("accent2", CP.get("accent", "#7c6bff"))))
-            self._film_style_combo.addItem(f"    {_s['icon']}  {translate(_s['name'])}", _s["key"])
-        self._film_style_combo.setFixedHeight(30)
-        self._film_style_combo.setMinimumWidth(140)
-        self._film_style_combo.setMaximumWidth(200)
-        self._film_style_combo.setStyleSheet(
-            f"QComboBox{{background:{CP['bg2']};border:1px solid {CP['border']};"
-            f"border-radius:5px;color:{CP['text_primary']};font-size:10px;padding:0 6px;}}"
-            f"QComboBox:focus{{border-color:{CP.get('accent2_dim', CP['border_bright'])};}}"
-            f"QComboBox::drop-down{{border:none;width:18px;}}"
-            f"QComboBox QAbstractItemView{{background:{CP['bg2']};color:{CP['text_primary']};"
-            f"selection-background-color:{CP.get('accent2_dim', CP['bg3'])};border:1px solid {CP['border']};}}"
+        self._btn_scn_actions = QPushButton("☰  Action")
+        self._btn_scn_actions.setFixedHeight(30)
+        self._btn_scn_actions.setStyleSheet(
+            f"QPushButton{{background:transparent;color:{CP['accent']};"
+            f"border:1px solid {CP['accent']};border-radius:6px;"
+            f"font-size:10px;font-weight:700;padding:0 12px;}}"
+            f"QPushButton:hover{{background:rgba(78,205,196,0.12);}}"
+            f"QPushButton:pressed{{background:rgba(78,205,196,0.22);}}"
+            f"QPushButton::menu-indicator{{image:none;width:0;}}"
         )
-        self._film_style_combo.currentIndexChanged.connect(self._schedule_autosave)
-        self._film_style_combo.currentIndexChanged.connect(self._on_scenario_style_changed)
-        tl.addWidget(self._film_style_combo)
+        _scn_menu = QMenu(self._btn_scn_actions)
+        _scn_menu.setStyleSheet(
+            f"QMenu{{background:{CP['bg2']};border:1px solid {CP['border_bright']};"
+            f"border-radius:8px;padding:6px;}}"
+            f"QMenu::item{{color:{CP['text_primary']};padding:7px 18px;font-size:11px;}}"
+            f"QMenu::item:selected{{background:{CP['accent_dim']};color:{CP['text_primary']};}}"
+        )
+        _scn_menu.setToolTipsVisible(True)
+        self._scn_actions_pairs = [
+            (_scn_menu.addAction(""), self._btn_scn_save),
+            (_scn_menu.addAction(""), self._btn_scn_open),
+        ]
+        for _act, _src in self._scn_actions_pairs:
+            _act.triggered.connect(_src.click)
+        def _sync_scn_actions_menu():
+            for _act, _src in self._scn_actions_pairs:
+                _act.setText(_src.text())
+                _act.setToolTip(_src.toolTip())
+                _act.setEnabled(_src.isEnabled())
+        _scn_menu.aboutToShow.connect(_sync_scn_actions_menu)
+        self._btn_scn_actions.setMenu(_scn_menu)
+        # Le bouton « Action » vit désormais dans la barre d'outils texte (même
+        # ligne que Gras/Italique…, demande Matthieu 2026-07-22) — pas ici.
 
         tl.addStretch(1)
 
-        _ver_sep2 = QFrame()
-        _ver_sep2.setFixedSize(1, 24)
-        _ver_sep2.setStyleSheet(f"background:{CP['border']};")
-        tl.addWidget(_ver_sep2)
+        # Le statut du flux éditorial (« Storyboard à créer »…) et l'indicateur
+        # « Sauvegardé ✓ » sont RETIRÉS de la barre (demande Matthieu 2026-07-22).
+        # _save_indicator reste vivant et caché : du code de sauvegarde écrit
+        # dedans ; parenté à la topbar pour éviter toute fenêtre fantôme.
+        self._save_indicator = QLabel("", topbar)
+        self._save_indicator.hide()
 
-        self._save_indicator = QLabel("")
-        self._save_indicator.setFixedWidth(80)
-        self._save_indicator.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
-        self._save_indicator.setStyleSheet(
-            f"color:{CP['text_dim']};font-size:10px;font-family:'Consolas',monospace;background:transparent;"
-        )
-        tl.addWidget(self._save_indicator)
-
-
-        outer.addWidget(topbar)
-        outer.addWidget(_sep())
-        outer.addWidget(self._build_film_strip())
+        # La barre du haut n'est PLUS affichée (2026-07-22) : « Action » a rejoint
+        # la barre d'outils texte et il ne restait ici que des widgets cachés.
+        # On la garde vivante et invisible : elle héberge _title_edit,
+        # _save_indicator et les boutons Sauvegarder/Ouvrir du menu Action.
+        topbar.setParent(w)
+        topbar.hide()
 
         # Main area
         main = QHBoxLayout()
@@ -449,9 +481,8 @@ class PageScenario(QWidget):
         self._editor_text.textChanged.connect(self._schedule_autosave)
         self._editor_text.textChanged.connect(self._update_dur_estimate)
 
-        # ── Deux onglets : Scénario (édition) / Mise en page PANDORA (optimisé) ──
-        # Comme dans PANDORA | Live : la mise en page PANDORA s'écrit dans son
-        # propre onglet et NE touche JAMAIS au scénario.
+        # ── Trois documents distincts : Scénario / Note / Découpage PANDORA ──
+        # Les intentions de fabrication ne polluent plus le texte narratif.
         from PyQt6.QtWidgets import QTabWidget
         self._editor_tabs = QTabWidget()
         # documentMode=False : sinon la barre d'onglets occupe toute la largeur et
@@ -473,6 +504,21 @@ class PageScenario(QWidget):
         )
         self._editor_tabs.addTab(self._editor_text, translate("Scénario"))
 
+        self._direction_note_edit = QTextEdit()
+        self._direction_note_edit.setFont(_tw_font)
+        self._direction_note_edit.setStyleSheet(
+            f"QTextEdit{{background:{CP['bg0']};border:none;color:{CP['text_primary']};}}"
+        )
+        self._direction_note_edit.document().setDocumentMargin(48)
+        self._direction_note_edit.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        install_reading_column(self._direction_note_edit, max_width=820, center=True)
+        self._direction_note_edit.setPlaceholderText(translate(
+            "Note destinée au découpage : style visuel, temporalité, rythme de montage, "
+            "durée des plans, grammaire caméra, continuité, son et contraintes."
+        ))
+        self._direction_note_edit.textChanged.connect(self._schedule_autosave)
+        self._editor_tabs.addTab(self._direction_note_edit, translate("Note de réalisation"))
+
         self._layout_view = QTextEdit()
         # Éditable : la mise en page PANDORA peut être retouchée à la main (les
         # éditions sont persistées via autosave → champ layout_content).
@@ -488,37 +534,240 @@ class PageScenario(QWidget):
         self._layout_view.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         install_reading_column(self._layout_view, max_width=820, center=True)
         self._layout_view.setPlaceholderText(translate(
-            "Clique « Mise en page PANDORA » (panneau de droite) pour générer ici la "
-            "version optimisée pour les moteurs. Ton scénario, lui, reste intact "
-            "dans l'onglet Scénario."
+            "Clique « Créer le découpage PANDORA » pour générer des fiches de plans : "
+            "source narrative, intention, rythme, prompt visuel, continuité et propositions "
+            "caméra. Ton scénario et ta note de réalisation restent intacts."
         ))
         self._layout_view.textChanged.connect(self._schedule_autosave)
-        self._editor_tabs.addTab(self._layout_view, translate("Mise en page PANDORA"))
-        self._editor_tabs.setTabEnabled(1, False)   # grisé tant qu'aucune mise en page
+        self._editor_tabs.addTab(self._layout_view, translate("Découpage"))
+        self._editor_tabs.setTabEnabled(2, False)   # grisé tant qu'aucun découpage
 
-        main.addWidget(self._editor_tabs, 1)
+        # Colonne éditeur : barre d'outils texte AU-DESSUS des onglets
+        # Scénario / Note de réalisation / Découpage (demande Matthieu 2026-07-22).
+        _editor_col_w = QWidget()
+        _editor_col = QVBoxLayout(_editor_col_w)
+        _editor_col.setContentsMargins(0, 0, 0, 0)
+        _editor_col.setSpacing(0)
+        _editor_col.addWidget(self._build_text_toolbar())
+        _editor_col.addWidget(self._editor_tabs, 1)
+        main.addWidget(_editor_col_w, 1)
 
-        # Right panel
-        right_sep = QFrame()
-        right_sep.setFixedWidth(1)
-        right_sep.setStyleSheet(f"background:{CP['border']};")
-        main.addWidget(right_sep)
-
-        main.addWidget(self._build_right_panel())
+        # Panneau droit REPLIABLE. La poignée ASSISTANT est TOUT À DROITE de la
+        # fenêtre, comme GUIDE l'est à gauche (demande Matthieu 2026-07-23) : le
+        # panneau se déplie à sa gauche, la poignée reste collée au bord.
+        self._right_panel_w = self._build_right_panel()
+        main.addWidget(self._right_panel_w)
+        self._panel_toggle = _PanelToggle("ASSISTANT", opened=True)
+        self._panel_toggle.toggled.connect(self._on_right_panel_toggled)
+        main.addWidget(self._panel_toggle)
 
         outer.addLayout(main, 1)
+        # La bande « Durée cible » du bas a été SUPPRIMÉE (2026-07-23) : la durée
+        # vit dans le panneau droit, sous Style — la page descend jusqu'au dock.
         return w
 
-    def _build_film_strip(self) -> QWidget:
-        """Bande de configuration — Durée du film (visible en permanence au-dessus de l'éditeur)."""
-        strip = QWidget()
-        strip.setFixedHeight(46)
-        strip.setStyleSheet(
-            f"background:{CP['bg1']};border-bottom:1px solid {CP['border']};"
+    def _build_text_toolbar(self) -> QWidget:
+        """Barre d'outils texte (demande Matthieu 2026-07-22) : police, gras /
+        italique / souligné, alignement gauche / centré / droite et plein écran.
+        Agit sur l'onglet actif (Scénario, Note de réalisation ou Découpage)."""
+        from PyQt6.QtWidgets import QFontComboBox
+        from PyQt6.QtGui import QPainter, QPixmap, QIcon
+
+        bar = QWidget()
+        bar.setFixedHeight(40)
+        bar.setStyleSheet(f"background:{CP['bg1']};border-bottom:1px solid {CP['border']};")
+        tl = QHBoxLayout(bar)
+        tl.setContentsMargins(16, 0, 16, 0)
+        tl.setSpacing(6)
+
+        # « Action » tout à gauche, sur la MÊME ligne que les outils de mise en
+        # forme (demande Matthieu 2026-07-22 — une ligne de moins). Le bouton est
+        # créé dans le bloc topbar caché, juste réinséré ici.
+        tl.addWidget(self._btn_scn_actions)
+        tl.addStretch(1)
+
+        self._font_combo = QFontComboBox()
+        self._font_combo.setFixedHeight(26)
+        self._font_combo.setFixedWidth(170)
+        self._font_combo.setToolTip("Police")
+        self._font_combo.setEditable(False)   # menu déroulant au CLIC sur tout le champ
+        self._font_combo.setCurrentFont(QFont("Courier New"))
+        self._font_combo.setStyleSheet(
+            f"QFontComboBox{{background:{CP['bg2']};border:1px solid {CP['border']};"
+            f"border-radius:5px;color:{CP['text_primary']};font-size:10px;padding:0 6px;}}"
+            f"QFontComboBox::drop-down{{border:none;width:16px;}}"
+            f"QFontComboBox::down-arrow{{image:none;border-left:4px solid transparent;"
+            f"border-right:4px solid transparent;border-top:5px solid {CP['text_dim']};"
+            f"margin-right:4px;}}"
+            f"QFontComboBox QAbstractItemView{{background:{CP['bg2']};color:{CP['text_primary']};"
+            f"selection-background-color:{CP.get('accent2_dim', CP['bg3'])};border:1px solid {CP['border']};}}"
         )
+        self._font_combo.currentFontChanged.connect(self._on_toolbar_font)
+        tl.addWidget(self._font_combo)
+
+        _fmt_ss = (
+            # padding:0 obligatoire : le style global de l'app donne un padding aux
+            # QPushButton qui viderait ces boutons de 26 px (texte clippé).
+            f"QPushButton{{background:transparent;color:{CP['text_secondary']};"
+            f"border:1px solid {CP['border']};border-radius:5px;font-size:12px;font-weight:700;padding:0;}}"
+            f"QPushButton:hover{{color:{CP['text_primary']};background:{CP['bg2']};}}"
+            f"QPushButton:checked{{color:{CP['accent']};border-color:{CP['accent']};"
+            f"background:rgba(78,205,196,0.10);}}"
+        )
+
+        def _fmt_btn(txt, tip):
+            b = QPushButton(txt)
+            b.setCheckable(True)
+            b.setFixedSize(26, 26)
+            b.setToolTip(tip)
+            b.setStyleSheet(_fmt_ss)
+            return b
+
+        def _tb_sep():
+            s = QFrame()
+            s.setFixedSize(1, 20)
+            s.setStyleSheet(f"background:{CP['border']};")
+            return s
+
+        tl.addWidget(_tb_sep())
+
+        self._btn_fmt_bold = _fmt_btn("B", "Gras")
+        self._btn_fmt_italic = _fmt_btn("I", "Italique")
+        _fi = self._btn_fmt_italic.font(); _fi.setItalic(True)
+        self._btn_fmt_italic.setFont(_fi)
+        self._btn_fmt_under = _fmt_btn("U", "Souligner")
+        _fu = self._btn_fmt_under.font(); _fu.setUnderline(True)
+        self._btn_fmt_under.setFont(_fu)
+        self._btn_fmt_bold.toggled.connect(self._on_toolbar_bold)
+        self._btn_fmt_italic.toggled.connect(self._on_toolbar_italic)
+        self._btn_fmt_under.toggled.connect(self._on_toolbar_underline)
+        tl.addWidget(self._btn_fmt_bold)
+        tl.addWidget(self._btn_fmt_italic)
+        tl.addWidget(self._btn_fmt_under)
+
+        tl.addWidget(_tb_sep())
+
+        # Icônes d'alignement dessinées en Qt (nettes à toute résolution — même
+        # principe que les glyphes filaires de la page de démarrage).
+        def _align_icon(mode: str) -> QIcon:
+            pm = QPixmap(18, 18)
+            pm.fill(Qt.GlobalColor.transparent)
+            p = QPainter(pm)
+            p.setPen(QColor(CP['text_secondary']))
+            widths = (14, 9, 14, 9)
+            for i, _w in enumerate(widths):
+                y = 3 + i * 4
+                if mode == "left":
+                    x = 2
+                elif mode == "center":
+                    x = (18 - _w) // 2
+                else:
+                    x = 16 - _w
+                p.drawLine(x, y, x + _w, y)
+            p.end()
+            return QIcon(pm)
+
+        self._btn_align_left = _fmt_btn("", "Aligner à gauche")
+        self._btn_align_left.setIcon(_align_icon("left"))
+        self._btn_align_center = _fmt_btn("", "Centrer")
+        self._btn_align_center.setIcon(_align_icon("center"))
+        self._btn_align_right = _fmt_btn("", "Aligner à droite")
+        self._btn_align_right.setIcon(_align_icon("right"))
+        self._btn_align_left.clicked.connect(lambda: self._on_toolbar_align("left"))
+        self._btn_align_center.clicked.connect(lambda: self._on_toolbar_align("center"))
+        self._btn_align_right.clicked.connect(lambda: self._on_toolbar_align("right"))
+        tl.addWidget(self._btn_align_left)
+        tl.addWidget(self._btn_align_center)
+        tl.addWidget(self._btn_align_right)
+
+        tl.addStretch(1)
+
+        # La barre reflète l'état du curseur de l'onglet actif.
+        for _ed in (self._editor_text, self._direction_note_edit, self._layout_view):
+            _ed.cursorPositionChanged.connect(self._sync_text_toolbar)
+        self._editor_tabs.currentChanged.connect(self._sync_text_toolbar)
+        return bar
+
+    # ── Barre d'outils texte : actions ────────────────────────────────────────
+
+    def _active_text_edit(self) -> QTextEdit:
+        idx = self._editor_tabs.currentIndex() if hasattr(self, "_editor_tabs") else 0
+        return (self._editor_text, self._direction_note_edit, self._layout_view)[max(0, idx)]
+
+    def _on_toolbar_font(self, font):
+        from PyQt6.QtGui import QTextCharFormat
+        ed = self._active_text_edit()
+        fmt = QTextCharFormat()
+        fmt.setFontFamilies([font.family()])
+        cur = ed.textCursor()
+        cur.mergeCharFormat(fmt)
+        ed.mergeCurrentCharFormat(fmt)
+        ed.setFocus()
+
+    def _on_toolbar_bold(self, checked: bool):
+        ed = self._active_text_edit()
+        ed.setFontWeight(QFont.Weight.Bold if checked else QFont.Weight.Normal)
+        ed.setFocus()
+
+    def _on_toolbar_italic(self, checked: bool):
+        ed = self._active_text_edit()
+        ed.setFontItalic(checked)
+        ed.setFocus()
+
+    def _on_toolbar_underline(self, checked: bool):
+        ed = self._active_text_edit()
+        ed.setFontUnderline(checked)
+        ed.setFocus()
+
+    def _on_toolbar_align(self, mode: str):
+        ed = self._active_text_edit()
+        flags = {
+            "left":   Qt.AlignmentFlag.AlignLeft,
+            "center": Qt.AlignmentFlag.AlignCenter,
+            "right":  Qt.AlignmentFlag.AlignRight,
+        }
+        ed.setAlignment(flags[mode])
+        self._sync_text_toolbar()
+        ed.setFocus()
+
+    def _on_right_panel_toggled(self, opened: bool):
+        """Replie/déplie le panneau droit (poignée latérale ASSISTANT)."""
+        if hasattr(self, "_right_panel_w"):
+            self._right_panel_w.setVisible(bool(opened))
+
+    def _sync_text_toolbar(self):
+        """Recale les boutons de la barre sur le format au curseur de l'onglet actif."""
+        if not hasattr(self, "_btn_fmt_bold"):
+            return
+        ed = self._active_text_edit()
+        for _b, _on in (
+            (self._btn_fmt_bold,   ed.fontWeight() >= QFont.Weight.Bold),
+            (self._btn_fmt_italic, ed.fontItalic()),
+            (self._btn_fmt_under,  ed.fontUnderline()),
+            (self._btn_align_left,   ed.alignment() & Qt.AlignmentFlag.AlignLeft),
+            (self._btn_align_center, ed.alignment() & Qt.AlignmentFlag.AlignHCenter),
+            (self._btn_align_right,  ed.alignment() & Qt.AlignmentFlag.AlignRight),
+        ):
+            _b.blockSignals(True)
+            _b.setChecked(bool(_on))
+            _b.blockSignals(False)
+        self._font_combo.blockSignals(True)
+        _fam = ed.currentFont().family()
+        if _fam:
+            self._font_combo.setCurrentFont(QFont(_fam))
+        self._font_combo.blockSignals(False)
+
+    def _build_film_strip(self) -> QWidget:
+        """Rangée « Durée cible » — dans le panneau droit, entre Style et
+        Ajouter des références (demande Matthieu 2026-07-23)."""
+        strip = QWidget()
+        # 40 px + ligne basse : le bas de la rangée Durée cible tombe sur la même
+        # ligne que la barre d'outils texte de l'éditeur (alignement 2026-07-23).
+        strip.setFixedHeight(40)
+        strip.setStyleSheet(f"background:{CP['bg1']};border-bottom:1px solid {CP['border']};")
         sl = QHBoxLayout(strip)
-        sl.setContentsMargins(24, 0, 24, 0)
-        sl.setSpacing(10)
+        sl.setContentsMargins(10, 2, 10, 2)
+        sl.setSpacing(6)
 
         # ── Durée du film ─────────────────────────────────────────────────────
         self._dur_defined_check = QCheckBox("Durée cible :")
@@ -587,16 +836,19 @@ class PageScenario(QWidget):
         root_lay.setSpacing(0)
 
         # ── helper: ai_btn ────────────────────────────────────────────────────
-        def _ai_btn(icon, label, sub, callback, color=None):
+        def _ai_btn(icon, label, sub, callback, color=None, radius=0):
             # color → bouton MIS EN AVANT (cadre + icône + libellé colorés), façon
             # « Tout générer » mais dans une AUTRE couleur.
+            # radius=0 par défaut (demande Matthieu 2026-07-22 : rectangles à bords
+            # droits, seuls « Valider et envoyer au Storyboard » et « Tout générer »
+            # gardent leurs arrondis).
             btn = QPushButton()
             btn.setFixedHeight(62 if color else 58)   # 2 lignes de description sans troncature
             _bd  = color or CP['border']
             _hov = color or CP['accent2_dim']
             btn.setStyleSheet(
                 f"QPushButton{{background:{CP['bg2']};border:{'1.5px' if color else '1px'} solid {_bd};"
-                f"border-radius:8px;text-align:left;padding:0 10px;}}"
+                f"border-radius:{radius}px;text-align:left;padding:0 10px;}}"
                 f"QPushButton:hover{{border-color:{_hov};background:{CP['bg3']};}}"
                 f"QPushButton:pressed{{background:{CP['bg4']};}}"
                 f"QPushButton:disabled{{opacity:0.4;}}"
@@ -636,8 +888,10 @@ class PageScenario(QWidget):
         # « crochets » sur le bord faisaient brouillon ; la distinction voulue
         # était un simple changement de couleur.)
         _toggle_ss = (
+            # border-radius:0 explicite : sans lui, le style global QPushButton
+            # arrondit les en-têtes de section (demande Matthieu 2026-07-22).
             f"QPushButton{{background:{CP['bg3']};color:{CP['accent']};"
-            f"border:none;"
+            f"border:none;border-radius:0px;"
             f"border-top:1px solid {CP['border']};border-bottom:1px solid {CP['border']};"
             f"font-size:11px;font-weight:800;text-align:left;"
             f"padding:9px 16px;letter-spacing:0.8px;}}"
@@ -704,7 +958,7 @@ class PageScenario(QWidget):
             f"QScrollBar::add-line:horizontal, QScrollBar::sub-line:horizontal{{width:0;}}"
         )
         self._refs_container_w = QWidget()
-        self._refs_container_w.setStyleSheet(f"background:{CP['bg2']};border-radius:8px;")
+        self._refs_container_w.setStyleSheet(f"background:{CP['bg2']};border-radius:0px;")
         self._refs_hbox = QHBoxLayout(self._refs_container_w)
         self._refs_hbox.setContentsMargins(8, 4, 8, 4)
         self._refs_hbox.setSpacing(8)
@@ -725,7 +979,7 @@ class PageScenario(QWidget):
         )
         l_refs.addWidget(self._btn_load_analysis)
 
-        tog_refs = _make_toggle("🎨  Références visuelles", c_refs, expanded=False)
+        tog_refs = _make_toggle("🎨  Ajouter des références", c_refs, expanded=False)
 
         self._refresh_refs_display()
 
@@ -747,7 +1001,7 @@ class PageScenario(QWidget):
             f"QScrollBar::add-line:horizontal, QScrollBar::sub-line:horizontal{{width:0;}}"
         )
         self._music_container_w = QWidget()
-        self._music_container_w.setStyleSheet(f"background:{CP['bg2']};border-radius:8px;")
+        self._music_container_w.setStyleSheet(f"background:{CP['bg2']};border-radius:0px;")
         self._music_hbox = QHBoxLayout(self._music_container_w)
         self._music_hbox.setContentsMargins(8, 4, 8, 4)
         self._music_hbox.setSpacing(8)
@@ -761,7 +1015,7 @@ class PageScenario(QWidget):
         )
         l_music.addWidget(self._btn_analyze_music)
 
-        tog_music = _make_toggle("♫  Musique du film", c_music, expanded=False)
+        tog_music = _make_toggle("♫  Musique", c_music, expanded=False)
 
         self._refresh_music_display()
 
@@ -778,21 +1032,21 @@ class PageScenario(QWidget):
         l_scen.addWidget(self._btn_coecriture)
         tog_scen = _make_toggle("📖  Scénario", c_scen, expanded=True)
 
-        # ── Section : Finalisation (mise en page + co-écriture des plans) ──────
+        # ── Section : Découpage (création + affinage plan par plan) ──────
         # Étape à ne pas sauter : préparer/optimiser les plans AVANT de générer le
         # storyboard. « Mise en page PANDORA » structure le scénario en plans ;
         # « Co-écriture des plans » les réécrit un par un (fenêtre dédiée).
         c_final, l_final = _section_container()
 
         self._btn_format = _ai_btn(
-            "📝", "Mise en page PANDORA", "Structure le scénario en blocs plans optimisés pour PANDORA", self._on_format,
+            "📝", "Créer le découpage PANDORA", "Transforme le scénario et la note en plans sans réécrire le récit", self._on_format,
         )
         self._btn_plan_coedit = _ai_btn(
-            "✍", "Co-écriture des plans", "Réécrire/enrichir chaque plan un par un avant le storyboard", self._on_plan_coedit,
+            "✍", "Affiner le découpage", "Co-écrire chaque plan avant de l'envoyer au Storyboard", self._on_plan_coedit,
         )
         l_final.addWidget(self._btn_format)
         l_final.addWidget(self._btn_plan_coedit)
-        tog_final = _make_toggle("🎯  Finalisation", c_final, expanded=True)
+        tog_final = _make_toggle("🎯  Découpage", c_final, expanded=True)
 
         # ── Section 2 : Générer depuis le scénario (repliée par défaut) ───────
         c_gen, l_gen = _section_container()
@@ -819,9 +1073,11 @@ class PageScenario(QWidget):
             "🚗", "Générer les véhicules", "Identifier les véhicules depuis le scénario",
             self._on_gen_vehicles,
         )
+        # « Générer le storyboard » (ancien nom repris le 2026-07-23) : dans la
+        # section Générer, derrière « Générer les véhicules » ; garde ses arrondis.
         self._btn_storyboard = _ai_btn(
-            "🎬", "Générer le storyboard", "Importe les plans dans Storyboard",
-            self._on_storyboard, color=CP["green"],
+            "🎬", "Générer le storyboard", "Construit le storyboard depuis le découpage — ou le scénario",
+            self._on_storyboard, color=CP["green"], radius=8,
         )
         for _b in (
             self._btn_gen_characters, self._btn_gen_decors, self._btn_gen_accessories,
@@ -842,16 +1098,58 @@ class PageScenario(QWidget):
             f"QPushButton:disabled{{opacity:0.35;border-color:{CP['border']};}}"
         )
         self._btn_generate_all.clicked.connect(self._on_generate_all)
-        tog_gen = _make_toggle("⚡  Générer depuis le scénario", c_gen, expanded=True)
+        tog_gen = _make_toggle("⚡  Générer", c_gen, expanded=True)
 
-        # ── Ordre visuel du panneau droit (haut → bas), demande Matthieu 2026-07-06 :
-        # Scénario, Finalisation, Musique, Références, Générer (bas).
+        # ── Style pictural du film — SECTION REPLIABLE comme les autres du
+        # panneau (demande Matthieu 2026-07-23), tout en haut ──
+        import core.style as _sc_style_mod
+        c_style, l_style = _section_container()
+        self._film_style_combo = QComboBox()
+        self._film_style_combo.addItem("— Style —", "")
+        _cur_grp_sc = None
+        for _s in _sc_style_mod.STYLES:
+            _g = _s.get("group", "")
+            if _g != _cur_grp_sc:
+                _cur_grp_sc = _g
+                _gi = next((g for g in _sc_style_mod.GROUPS if g["key"] == _g), None)
+                if _gi:
+                    self._film_style_combo.addItem(
+                        f"  {_gi['icon']}  {translate(_gi['name']).upper()}", "__sep__"
+                    )
+                    _sep_i = self._film_style_combo.model().item(
+                        self._film_style_combo.count() - 1
+                    )
+                    _sep_i.setEnabled(False)
+                    _sep_i.setForeground(QColor(CP.get("accent2", CP.get("accent", "#7c6bff"))))
+            self._film_style_combo.addItem(f"    {_s['icon']}  {translate(_s['name'])}", _s["key"])
+        self._film_style_combo.setFixedHeight(30)
+        self._film_style_combo.setStyleSheet(
+            f"QComboBox{{background:{CP['bg2']};border:1px solid {CP['border']};"
+            f"border-radius:0px;color:{CP['text_primary']};font-size:10px;padding:0 6px;}}"
+            f"QComboBox:focus{{border-color:{CP.get('accent2_dim', CP['border_bright'])};}}"
+            f"QComboBox::drop-down{{border:none;width:18px;}}"
+            f"QComboBox QAbstractItemView{{background:{CP['bg2']};color:{CP['text_primary']};"
+            f"selection-background-color:{CP.get('accent2_dim', CP['bg3'])};border:1px solid {CP['border']};}}"
+        )
+        self._film_style_combo.currentIndexChanged.connect(self._schedule_autosave)
+        self._film_style_combo.currentIndexChanged.connect(self._on_scenario_style_changed)
+        l_style.addWidget(self._film_style_combo)
+        tog_style = _make_toggle("🎭  Style", c_style, expanded=False)
+
+        # ── Durée cible AU-DESSUS de Style (demande Matthieu 2026-07-23) ──
+        sc_lay.addWidget(self._build_film_strip())
+        sc_lay.addWidget(tog_style)
+        sc_lay.addWidget(c_style)
+
+        # ── Ordre visuel du panneau droit (haut → bas), demande Matthieu 2026-07-23 :
+        # Durée cible, Style, Ajouter des références, Scénario, Découpage,
+        # Générer (… « Générer le storyboard » en dernier), puis Musique.
         for _tog, _cont in (
+            (tog_refs,  c_refs),
             (tog_scen,  c_scen),
             (tog_final, c_final),
-            (tog_music, c_music),
-            (tog_refs,  c_refs),
             (tog_gen,   c_gen),
+            (tog_music, c_music),
         ):
             sc_lay.addWidget(_tog)
             sc_lay.addWidget(_cont)
@@ -897,10 +1195,13 @@ class PageScenario(QWidget):
         self._result_area.setVisible(False)
         self._result_area.setStyleSheet(
             f"QTextEdit{{background:{CP['bg2']};border:1px solid {CP['border']};"
-            f"border-radius:8px;color:{CP['text_secondary']};font-size:11px;padding:12px;}}"
+            f"border-radius:0px;color:{CP['text_secondary']};font-size:11px;padding:12px;}}"
         )
         b_lay.addWidget(self._result_area)
 
+        # RETIRÉ de l'affichage (demande Matthieu 2026-07-22) : analyse et co-écriture
+        # se rouvrent depuis leurs boutons dédiés — ce raccourci n'a plus de raison
+        # d'être. Le widget reste vivant (nombreux appels setVisible), jamais montré.
         self._btn_reopen_window = QPushButton("⤢  Rouvrir la fenêtre")
         self._btn_reopen_window.setFixedHeight(30)
         self._btn_reopen_window.setVisible(False)
@@ -918,7 +1219,7 @@ class PageScenario(QWidget):
         self._btn_undo_action.setVisible(False)
         self._btn_undo_action.setStyleSheet(
             f"QPushButton{{background:transparent;color:{CP['text_secondary']};"
-            f"border:1px solid {CP['border']};border-radius:6px;font-size:10px;font-weight:700;padding:0 8px;}}"
+            f"border:1px solid {CP['border']};border-radius:0px;font-size:10px;font-weight:700;padding:0 8px;}}"
             f"QPushButton:hover{{background:rgba(255,79,106,0.10);color:{CP['red']};border-color:{CP['red']};}}"
         )
         self._btn_undo_action.clicked.connect(self._undo_ai_action)
@@ -1031,37 +1332,69 @@ class PageScenario(QWidget):
         apply_paragraph_spacing(self._editor_text)
 
     def _apply_layout(self, text: str):
-        """Écrit la Mise en page PANDORA dans son onglet dédié — le Scénario
-        (onglet 1) reste INTACT. Active l'onglet et l'affiche."""
+        """Écrit le Découpage PANDORA dans son onglet dédié. Le Scénario et
+        la Note de réalisation restent intacts."""
         if not text:
             return
+        from core.decoupage_layout import canonicalize_layout
+        text = canonicalize_layout(text)
         self._layout_view.setPlainText(text)
         from ui.widgets import apply_paragraph_spacing
         apply_paragraph_spacing(self._layout_view)   # centré + respiration (façon Word)
         if hasattr(self, "_editor_tabs"):
-            self._editor_tabs.setTabEnabled(1, True)
-            self._editor_tabs.setCurrentIndex(1)
+            self._editor_tabs.setTabEnabled(2, True)
+            self._editor_tabs.setCurrentIndex(2)
         if self._current is not None:
-            self._current["layout_content"] = text
+            from core.editorial_pipeline import mark_decoupage_built
+            self._current = mark_decoupage_built(self._current, text)
+        self._refresh_pipeline_status()
 
     def _clear_layout(self):
-        """Vide la Mise en page PANDORA et désactive son onglet."""
+        """Vide le Découpage PANDORA et désactive son onglet."""
         if hasattr(self, "_layout_view"):
             self._layout_view.clear()
         if hasattr(self, "_editor_tabs"):
-            self._editor_tabs.setTabEnabled(1, False)
+            self._editor_tabs.setTabEnabled(2, False)
             self._editor_tabs.setCurrentIndex(0)
+        self._refresh_pipeline_status()
 
     def _restore_layout(self, text: str):
-        """Recharge la Mise en page PANDORA depuis le scénario (onglet activé si présente)."""
+        """Recharge le Découpage PANDORA (onglet activé lorsqu'il existe)."""
         if not hasattr(self, "_layout_view"):
             return
         self._layout_view.setPlainText(text or "")
         from ui.widgets import apply_paragraph_spacing
         apply_paragraph_spacing(self._layout_view)   # centré + respiration (façon Word)
         if hasattr(self, "_editor_tabs"):
-            self._editor_tabs.setTabEnabled(1, bool((text or "").strip()))
+            self._editor_tabs.setTabEnabled(2, bool((text or "").strip()))
             self._editor_tabs.setCurrentIndex(0)
+        self._refresh_pipeline_status()
+
+    def _refresh_pipeline_status(self):
+        if not hasattr(self, "_pipeline_status_lbl"):
+            return
+        data = dict(self._current or {})
+        if hasattr(self, "_editor_text"):
+            data["formatted_content"] = self._editor_text.toPlainText()
+        if hasattr(self, "_direction_note_edit"):
+            data["direction_note"] = self._direction_note_edit.toPlainText()
+        if hasattr(self, "_layout_view"):
+            data["decoupage_content"] = self._layout_view.toPlainText()
+        from core.editorial_pipeline import status
+        labels = {
+            "screenplay_empty":  ("Scénario à écrire", CP["text_dim"]),
+            "decoupage_missing": ("Découpage à créer", CP["orange"]),
+            "decoupage_stale":   ("Découpage à actualiser", CP["red"]),
+            "storyboard_missing":("Storyboard à créer", CP["orange"]),
+            "storyboard_stale":  ("Storyboard à actualiser", CP["red"]),
+            "current":           ("Flux éditorial à jour", CP["green"]),
+        }
+        text, color = labels[status(data)]
+        self._pipeline_status_lbl.setText(text)
+        self._pipeline_status_lbl.setStyleSheet(
+            f"color:{color};font-size:9px;font-family:'Consolas',monospace;"
+            "background:transparent;"
+        )
 
     def _new_scenario(self):
         from core import context as _ctx
@@ -1073,6 +1406,8 @@ class PageScenario(QWidget):
         self._redo_stack.clear()
         self._title_edit.setText(_pname)
         self._set_editor_text("")
+        from core.direction_note import empty_note
+        self._direction_note_edit.setPlainText(empty_note())
         self._clear_layout()
         self._dur_defined_check.setChecked(False)
         self._dur_min.setValue(90)
@@ -1089,8 +1424,20 @@ class PageScenario(QWidget):
         self._title_edit.setText(sc.get("title", ""))
         content = sc.get("formatted_content") or sc.get("raw_content", "")
         self._set_editor_text(content)
-        # Mise en page PANDORA — restaurée dans son onglet dédié (scénario intact)
-        self._restore_layout(sc.get("layout_content", ""))
+        # Restaure la mise en forme visuelle si elle correspond toujours au texte
+        # (sinon le texte brut prévaut : une réécriture IA invalide l'ancien HTML).
+        _html = sc.get("formatted_html") or ""
+        if _html:
+            from PyQt6.QtGui import QTextDocument
+            _tmp = QTextDocument()
+            _tmp.setHtml(_html)
+            if _tmp.toPlainText() == self._editor_text.toPlainText():
+                self._editor_text.setHtml(_html)
+                from ui.widgets import apply_paragraph_spacing
+                apply_paragraph_spacing(self._editor_text)
+        self._direction_note_edit.setPlainText(sc.get("direction_note", ""))
+        # Découpage PANDORA — migration automatique depuis l'ancien layout_content.
+        self._restore_layout(sc.get("decoupage_content") or sc.get("layout_content", ""))
         dur         = sc.get("duration_secs", 0)
         dur_defined = sc.get("duration_defined", False) or dur > 0
         self._dur_defined_check.setChecked(dur_defined)
@@ -1122,7 +1469,7 @@ class PageScenario(QWidget):
         self._ref_enriched = bool(sc.get("ref_enriched", False)) and bool(self._last_ref_analysis)
         if self._last_ref_analysis:
             self._last_result_kind = "refs"
-            self._btn_reopen_window.setVisible(True)
+            self._btn_reopen_window.setVisible(False)   # bouton retiré (2026-07-22)
             self._ai_progress_lbl.setText(translate("Analyse des références disponible ✓"))
 
     def _import_scenario(self):
@@ -1697,14 +2044,20 @@ class PageScenario(QWidget):
             "duration_secs":     dur_secs,
             "duration_defined":  dur_defined,
             "film_style":        film_style_key if film_style_key not in ("", "__sep__") else "",
+            "direction_note":    self._direction_note_edit.toPlainText() if hasattr(self, "_direction_note_edit") else "",
+            "decoupage_content": self._layout_view.toPlainText() if hasattr(self, "_layout_view") else "",
             "layout_content":    self._layout_view.toPlainText() if hasattr(self, "_layout_view") else "",
             "music_tracks":      self._music_tracks,
             "music_mode":        self._music_mode,
             "ref_images":        [p for p in self._ref_images if os.path.isfile(p)],
             "ref_analysis":      self._last_ref_analysis,
             "ref_enriched":      self._ref_enriched,
+            # Mise en forme visuelle (gras/italique/police/alignements) de l'onglet
+            # Scénario — les traitements IA restent sur le texte brut.
+            "formatted_html":    self._editor_text.toHtml(),
         })
         self._current = scenario_api.save_scenario(data)
+        self._refresh_pipeline_status()
         if not silent:
             self._save_indicator.setText("Sauvegardé ✓")
             QTimer.singleShot(2000, lambda: self._save_indicator.setText(""))
@@ -1719,7 +2072,7 @@ class PageScenario(QWidget):
 
     def _decoupage_base(self) -> str:
         """Source du découpage (règle 2026-07-09, AUTOMATIQUE — aucun choix manuel) :
-        la « Mise en page PANDORA » (layout_content) si elle existe, sinon le scénario/
+        le « Découpage PANDORA » (decoupage_content) s'il existe, sinon le scénario/
         conducteur brut. Vaut pour TOUS les points de lancement (page + « Tout générer »)."""
         layout = self._layout_view.toPlainText().strip() if hasattr(self, "_layout_view") else ""
         return layout or self._get_text()
@@ -1754,10 +2107,13 @@ class PageScenario(QWidget):
             "title":             title or os.path.splitext(os.path.basename(path))[0],
             "raw_content":       text,
             "formatted_content": text,
+            "direction_note":    self._direction_note_edit.toPlainText() if hasattr(self, "_direction_note_edit") else "",
+            "decoupage_content": self._layout_view.toPlainText() if hasattr(self, "_layout_view") else "",
             "layout_content":    self._layout_view.toPlainText() if hasattr(self, "_layout_view") else "",
             "duration_secs":     dur_secs,
             "duration_defined":  dur_defined,
             "film_style":        self._film_style_combo.currentData() or "",
+            "formatted_html":    self._editor_text.toHtml(),
         })
         try:
             scenario_api.export_scenario_to(path, data)
@@ -1909,7 +2265,7 @@ class PageScenario(QWidget):
             return
         self._last_ref_analysis = txt
         self._last_result_kind = "refs"
-        self._btn_reopen_window.setVisible(True)
+        self._btn_reopen_window.setVisible(False)   # bouton retiré (2026-07-22)
         imgs = [p for p in e.get("images", [])
                 if isinstance(p, str) and os.path.isfile(p)]
         if imgs:
@@ -1934,16 +2290,19 @@ class PageScenario(QWidget):
     def _on_format(self):
         text = self._get_text()
         if not text:
-            self._ai_progress_lbl.setText("Écris d'abord un texte à mettre en page.")
+            self._ai_progress_lbl.setText("Écris d'abord un scénario à découper.")
             return
         from api.screenplay import FormatPandoraWorker
+        from core.ai_provider import ai_name_for_task
         self._set_ai_busy(True)
-        self._ai_progress_lbl.setText("Mise en page PANDORA en cours via Claude…")
+        self._ai_progress_lbl.setText(
+            f"Découpage PANDORA en cours via {ai_name_for_task('screenplay')}…")
         self._btn_reopen_window.setVisible(False)
         self._btn_undo_action.setVisible(False)
         self._result_area.clear()
         self._result_area.setVisible(False)
-        self._worker = FormatPandoraWorker(text)
+        note = self._direction_note_edit.toPlainText().strip()
+        self._worker = FormatPandoraWorker(text, direction_note=note)
         self._worker.failed.connect(self._on_ai_fail)
         self._open_format_window(worker=self._worker)
 
@@ -1958,24 +2317,24 @@ class PageScenario(QWidget):
         self._open_arrange_session(analysis)
 
     def _on_plan_coedit(self):
-        """Co-écriture des PLANS — réécrire/enrichir la mise en page plan par plan."""
+        """Co-écriture des PLANS — affiner le découpage plan par plan."""
         layout = self._layout_view.toPlainText().strip() if hasattr(self, "_layout_view") else ""
         if not layout:
             self._ai_progress_lbl.setText(
-                "Génère d'abord « Mise en page PANDORA », puis co-écris les plans.")
+                "Crée d'abord le Découpage PANDORA, puis affine les plans.")
             return
         from ui.dialog_plan_coedit import PlanCoEditDialog
         dlg = PlanCoEditDialog(self, layout, edition="cinema")
-        # AUTO-SAVE : chaque modification est écrite en DIRECT dans la Mise en page —
+        # AUTO-SAVE : chaque modification est écrite en DIRECT dans le Découpage —
         # plus aucune perte possible, même en fermant. (Connecté AVANT exec().)
         dlg.layout_committed.connect(self._on_plan_coedit_autosave)
         dlg.exec()
         if dlg.was_applied():
             self._apply_layout(dlg.result_layout())
-            self._ai_progress_lbl.setText("Plans co-écrits appliqués à la mise en page ✓")
+            self._ai_progress_lbl.setText("Découpage affiné et sauvegardé ✓")
 
     def _on_plan_coedit_autosave(self, layout_text: str):
-        """Auto-save de la co-écriture : réécrit et persiste la « Mise en page PANDORA »
+        """Auto-save de la co-écriture : réécrit et persiste le Découpage PANDORA
         à CHAQUE modification du dialogue. Silencieux (pas de bascule d'onglet)."""
         if not layout_text or not hasattr(self, "_layout_view"):
             return
@@ -1986,6 +2345,7 @@ class PageScenario(QWidget):
         except Exception:
             pass
         if self._current is not None:
+            self._current["decoupage_content"] = layout_text
             self._current["layout_content"] = layout_text
         try:
             self._save(silent=True)
@@ -2004,7 +2364,7 @@ class PageScenario(QWidget):
         if saved:
             self._last_analysis = saved
             self._last_result_kind = "arrange"
-            self._btn_reopen_window.setVisible(True)
+            self._btn_reopen_window.setVisible(False)   # bouton retiré (2026-07-22)
             self._open_arrange_window(analysis=saved)
             return
         self._start_arrange_analysis()
@@ -2057,12 +2417,44 @@ class PageScenario(QWidget):
 
     def _on_modify_done(self, result: str):
         self._set_ai_busy(False)
-        self._ai_progress_lbl.setText("Scénario modifié selon les suggestions ✓")
         self._push_undo()
         self._set_editor_text(result)
         if self._current is not None:
             self._current["formatted_content"] = result
+        note_added = self._merge_analysis_direction_note(self._last_analysis)
+        self._ai_progress_lbl.setText(
+            translate("Scénario modifié et intentions ajoutées à la note ✓")
+            if note_added else
+            translate("Scénario modifié selon les suggestions ✓")
+        )
         self._btn_undo_action.setVisible(True)
+
+    def _merge_analysis_direction_note(self, analysis: str) -> bool:
+        """Range la section 6 d'une analyse dans le document Note de réalisation.
+
+        Cette opération est déterministe et ne déclenche aucun nouvel appel IA.
+        Seule la section issue de la dernière analyse est remplacée : les notes
+        rédigées manuellement et les autres sections restent intactes.
+        """
+        from core.direction_note import append_to_note, extract_from_analysis
+        from core.i18n import get_lang
+
+        addition = extract_from_analysis(analysis)
+        if not addition or not hasattr(self, "_direction_note_edit"):
+            return False
+        title = ("INTENTIONS FROM SCREENPLAY ANALYSIS" if get_lang() == "en"
+                 else "INTENTIONS ISSUES DE L’ANALYSE DU SCÉNARIO")
+        current = self._direction_note_edit.toPlainText()
+        merged = append_to_note(current, title, addition, replace=True)
+        if merged.strip() == current.strip():
+            return False
+        self._direction_note_edit.blockSignals(True)
+        self._direction_note_edit.setPlainText(merged)
+        self._direction_note_edit.blockSignals(False)
+        if self._current is not None:
+            self._current["direction_note"] = merged
+            self._save(silent=True)
+        return True
 
     def _on_storyboard(self):
         _src = self._get_text()
@@ -2070,6 +2462,36 @@ class PageScenario(QWidget):
         if not _src and not _lay:
             self._ai_progress_lbl.setText("Écris d'abord un scénario à découper.")
             return
+        # DÉBLOQUÉ (décision Matthieu 2026-07-23) : sans découpage, le storyboard
+        # se génère directement depuis le SCÉNARIO par l'IA. Le découpage reste le
+        # chemin recommandé mais n'est plus un prérequis.
+        # Un découpage produit depuis une ancienne version du scénario ou de la
+        # note de réalisation ne doit jamais alimenter silencieusement le
+        # Storyboard. L'utilisateur garde la main sur sa validation éditoriale.
+        from core.editorial_pipeline import status as editorial_status
+        _pipeline_data = dict(self._current or {})
+        _pipeline_data.update({
+            "formatted_content": _src,
+            "direction_note": (
+                self._direction_note_edit.toPlainText()
+                if hasattr(self, "_direction_note_edit") else ""
+            ),
+            "decoupage_content": _lay,
+            "layout_content": _lay,
+        })
+        if _lay and editorial_status(_pipeline_data) == "decoupage_stale":
+            # CONFIRMATION au lieu d'un blocage (décision Matthieu 2026-07-23) :
+            # l'utilisateur comprend ce qui se passe et garde la main.
+            _rep = QMessageBox.question(
+                self,
+                "Découpage à actualiser",
+                "Le scénario ou la note de réalisation a changé depuis la création "
+                "du Découpage.\n\nContinuer quand même avec ce découpage ?",
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            )
+            if _rep != QMessageBox.StandardButton.Yes:
+                self._ai_progress_lbl.setText("Génération annulée — actualise le Découpage.")
+                return
         # Source AUTOMATIQUE (règle 2026-07-09) : Mise en page PANDORA si elle existe,
         # sinon le scénario. Mise en page STRUCTURÉE (« PLAN n — … ») → conversion
         # DÉTERMINISTE dans le worker (prompts co-écrits repris tels quels, zéro IA) :
@@ -2078,8 +2500,18 @@ class PageScenario(QWidget):
         if _lay:
             from core.decoupage_layout import is_structured_layout
             if not is_structured_layout(_lay):
-                from ui.decoupage_dialogs import confirm_prompt_rewrite
-                if not confirm_prompt_rewrite(self):
+                # CONFIRMATION au lieu d'un blocage (2026-07-23) : l'IA peut
+                # réinterpréter un découpage non structuré, mais jamais en silence.
+                _rep = QMessageBox.question(
+                    self,
+                    "Découpage non structuré",
+                    "Le document n'est pas reconnu comme un Découpage PANDORA "
+                    "structuré (fiches PLAN 01, PLAN 02…).\n\n"
+                    "L'IA devra l'interpréter pour construire le storyboard. "
+                    "Continuer ?",
+                    QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                )
+                if _rep != QMessageBox.StandardButton.Yes:
                     return
         import core.storyboard as sb_api
         existing = sb_api.list_shots(sb_api.DEFAULT_VERSION_ID)
@@ -2101,6 +2533,11 @@ class PageScenario(QWidget):
         dlg = StoryboardGenerateDialog(self._text_with_music(), dur_secs, sc_id, parent=self)
         if dlg.exec() == StoryboardGenerateDialog.DialogCode.Accepted and dlg._shots:
             count = len(dlg._shots)
+            if sc_id:
+                synced = scenario_api.mark_storyboard_synced(sc_id)
+                if synced:
+                    self._current = synced
+                    self._refresh_pipeline_status()
             # Mise en scène INITIALE auto (acteurs + caméra depuis l'axe du plan) —
             # l'utilisateur ajuste ensuite dans Mise en scène / Plan de feu.
             try:
@@ -2116,7 +2553,7 @@ class PageScenario(QWidget):
             except Exception:
                 pass
             self._ai_progress_lbl.setText(f"{count} {translate('plans importés dans le Storyboard ✓')}")
-            self._btn_goto_storyboard.setVisible(True)
+            self._btn_goto_storyboard.setVisible(False)   # bouton retiré (2026-07-22)
 
     # ── Handlers extraction ───────────────────────────────────────────────────
 
@@ -2210,11 +2647,14 @@ class PageScenario(QWidget):
     # ── Dialog Mise en page (streaming) ──────────────────────────────────────
 
     def _open_format_window(self, text: str = "", worker=None):
-        """Dialog de mise en page — streaming immédiat si worker fourni, statique sinon."""
+        """Aperçu du découpage — affiché seulement après validation du contrat v2."""
         from PyQt6.QtWidgets import QDialog, QVBoxLayout, QHBoxLayout, QTextEdit
         streaming = worker is not None
         dlg = QDialog(self)
-        dlg.setWindowTitle(translate("Mise en page PANDORA — Aperçu Claude"))
+        from core.ai_provider import ai_name_for_task
+        dlg.setWindowTitle(
+            f"{translate('Découpage PANDORA — Aperçu')} — "
+            f"{ai_name_for_task('screenplay')}")
         dlg.resize(900, 680)
         dlg.setStyleSheet(
             f"QDialog{{background:{CP['bg1']};}}"
@@ -2225,9 +2665,9 @@ class PageScenario(QWidget):
         lay.setSpacing(12)
 
         hdr = QHBoxLayout()
-        title_lbl = QLabel(translate("◈  Mise en page PANDORA — Aperçu"))
+        title_lbl = QLabel(translate("◈  Découpage PANDORA — Aperçu"))
         title_lbl.setStyleSheet(f"color:{CP['text_primary']};font-size:14px;font-weight:700;")
-        status_lbl = QLabel(translate("Mise en page en cours…") if streaming else translate("Mise en page terminée"))
+        status_lbl = QLabel(translate("Découpage en cours…") if streaming else translate("Découpage terminé"))
         status_lbl.setStyleSheet(
             f"color:{CP['accent'] if streaming else CP['text_dim']};"
             f"font-size:10px;font-family:'Consolas',monospace;"
@@ -2242,7 +2682,8 @@ class PageScenario(QWidget):
         if text:
             te.setPlainText(text)
         else:
-            te.setPlaceholderText(translate("Le scénario mis en page apparaît ici au fil de la génération…"))
+            te.setPlaceholderText(translate(
+                "Pandora construit et valide les fiches du Découpage PANDORA 2…"))
         _f = QFont("Courier New", 11)
         _f.setStyleHint(QFont.StyleHint.TypeWriter)
         te.setFont(_f)
@@ -2270,7 +2711,7 @@ class PageScenario(QWidget):
                 worker.quit()
                 abandon_thread(worker)
                 self._set_ai_busy(False)
-                self._ai_progress_lbl.setText("Mise en page annulée.")
+                self._ai_progress_lbl.setText("Découpage annulé.")
                 btn_close.setText(translate("Fermer"))
                 btn_close.setStyleSheet(_ghost_ss)
 
@@ -2287,7 +2728,7 @@ class PageScenario(QWidget):
         btn_close.clicked.connect(_on_close_btn)
         dlg.rejected.connect(_stop_worker)
 
-        btn_apply = QPushButton(translate("◈  Mettre dans « Mise en page PANDORA »"))
+        btn_apply = QPushButton(translate("◈  Enregistrer dans « Découpage PANDORA »"))
         btn_apply.setFixedHeight(36)
         btn_apply.setEnabled(not streaming)
         btn_apply.setStyleSheet(
@@ -2304,9 +2745,21 @@ class PageScenario(QWidget):
             result = _final_text[0].strip()
             if not result:
                 return
-            # La mise en page va dans son onglet dédié — le scénario reste intact.
+            from core.decoupage_layout import validate_layout
+            issues = validate_layout(result)
+            if issues:
+                QMessageBox.warning(
+                    dlg,
+                    "Découpage incomplet",
+                    "Ce résultat ne peut pas encore être validé.\n\n"
+                    "Chaque fiche PLAN 01, PLAN 02… doit séparer la source du scénario, "
+                    "l'intention, une durée compatible et le PROMPT VISUEL.\n\n"
+                    f"Points à corriger : {', '.join(issues[:8])}",
+                )
+                return
+            # Le découpage va dans son onglet dédié — le scénario reste intact.
             self._apply_layout(result)
-            self._ai_progress_lbl.setText("Mise en page PANDORA générée ✓ (onglet dédié)")
+            self._ai_progress_lbl.setText("Découpage PANDORA créé ✓ (onglet dédié)")
             dlg.accept()
 
         btn_apply.clicked.connect(_do_apply)
@@ -2327,12 +2780,15 @@ class PageScenario(QWidget):
                 btn_close.setText(translate("Fermer"))
                 btn_close.setStyleSheet(_ghost_ss)
                 _final_text[0] = result
+                # Le worker ne diffuse plus les fragments non validés : on remplace
+                # l'attente par le document v2 complet et seulement celui-ci.
+                te.setPlainText(result)
                 self._set_ai_busy(False)
                 self._last_format_result = result
                 self._last_result_kind = "format"
-                self._btn_reopen_window.setVisible(True)
-                self._ai_progress_lbl.setText("Mise en page PANDORA terminée ✓")
-                status_lbl.setText(translate("Mise en page PANDORA terminée"))
+                self._btn_reopen_window.setVisible(False)   # bouton retiré (2026-07-22)
+                self._ai_progress_lbl.setText("Découpage PANDORA terminé ✓")
+                status_lbl.setText(translate("Découpage PANDORA terminé"))
                 status_lbl.setStyleSheet(
                     f"color:{CP['text_dim']};font-size:10px;font-family:'Consolas',monospace;"
                 )
@@ -2348,7 +2804,7 @@ class PageScenario(QWidget):
                 status_lbl.setStyleSheet(
                     f"color:{CP['red']};font-size:10px;font-family:'Consolas',monospace;"
                 )
-                te.setPlainText(f"Erreur lors de la mise en page :\n{msg}")
+                te.setPlainText(f"Erreur lors du découpage :\n{msg}")
 
             worker.chunk.connect(_on_chunk)
             worker.finished.connect(_on_done)
@@ -2366,6 +2822,10 @@ class PageScenario(QWidget):
           - « Session de co-écriture » → ArrangeSessionDialog
           - « Appliquer les suggestions » → ApplyArrangeWorker en streaming dans le même dialog
         """
+        # Migration douce des analyses déjà sauvegardées : leur section 6 rejoint
+        # la note dès la réouverture, sans nouvel appel IA et sans doublon.
+        if analysis and worker is None:
+            self._merge_analysis_direction_note(analysis)
         from PyQt6.QtWidgets import QDialog, QVBoxLayout, QHBoxLayout, QTextEdit
         streaming = worker is not None
         dlg = QDialog(self)
@@ -2521,7 +2981,8 @@ class PageScenario(QWidget):
             if not analysis_txt or not original:
                 return
             intensity = self._arrange_intensity_value
-            w = ApplyArrangeWorker(original, analysis_txt, intensity)
+            w = ApplyArrangeWorker(original, analysis_txt, intensity,
+                                   refs_analysis=self._last_ref_analysis)
             _apply_worker[0] = w
             _streaming_active[0] = True
             btn_close.setText("Annuler")
@@ -2590,7 +3051,12 @@ class PageScenario(QWidget):
                 self._set_editor_text(result)
                 if self._current is not None:
                     self._current["formatted_content"] = result
-                self._ai_progress_lbl.setText("Scénario réécrit et appliqué ✓")
+                note_added = self._merge_analysis_direction_note(_final_analysis[0])
+                self._ai_progress_lbl.setText(
+                    translate("Scénario appliqué et intentions ajoutées à la note ✓")
+                    if note_added else
+                    translate("Scénario réécrit et appliqué ✓")
+                )
                 self._btn_undo_action.setVisible(True)
                 dlg.accept()
 
@@ -2630,15 +3096,22 @@ class PageScenario(QWidget):
                 if self._current is not None:
                     self._current["arrange_analysis"] = result
                     self._save(silent=True)
+                note_added = self._merge_analysis_direction_note(result)
                 btn_relaunch.setVisible(True)
-                self._btn_reopen_window.setVisible(True)
+                self._btn_reopen_window.setVisible(False)   # bouton retiré (2026-07-22)
                 text = self._editor_text.toPlainText()
                 mins, secs = self._estimate_duration(text)
                 if mins or secs:
                     est = f"~{mins}m{secs:02d}" if mins else f"~{secs}s"
-                    self._ai_progress_lbl.setText(f"Analyse terminée ✓  ·  Durée estimée : {est}")
+                    suffix = (translate(" · intentions ajoutées à la note")
+                              if note_added else "")
+                    self._ai_progress_lbl.setText(
+                        f"{translate('Analyse terminée')} ✓  ·  "
+                        f"{translate('Durée estimée')} : {est}{suffix}")
                 else:
-                    self._ai_progress_lbl.setText("Analyse terminée ✓")
+                    self._ai_progress_lbl.setText(
+                        translate("Analyse terminée et intentions ajoutées à la note ✓")
+                        if note_added else translate("Analyse terminée ✓"))
                 status_lbl.setText("Analyse terminée")
                 status_lbl.setStyleSheet(
                     f"color:{CP['text_dim']};font-size:10px;font-family:'Consolas',monospace;"
@@ -2675,6 +3148,7 @@ class PageScenario(QWidget):
         saved = (self._current or {}).get("arrange_session") or None
         dlg = ArrangeSessionDialog(self, original, analysis_text, intensity,
                                    refs_analysis=self._last_ref_analysis,
+                                   direction_note=self._direction_note_edit.toPlainText(),
                                    session_state=saved)
         # Autosave crash-proof : la session (conversation + scénario remanié) est
         # persistée dans le projet à CHAQUE tour — connecté AVANT exec() → plus
@@ -2691,11 +3165,25 @@ class PageScenario(QWidget):
                     self._save(silent=True)   # « Appliquer » → sauvegarde immédiate
                 self._ai_progress_lbl.setText("Scénario co-écrit appliqué ✓")
                 self._btn_undo_action.setVisible(True)
+        # La note est un document autonome : elle est conservée même si aucune
+        # réécriture narrative n'a été appliquée.
+        note = dlg.final_direction_note()
+        if note != self._direction_note_edit.toPlainText().strip():
+            self._direction_note_edit.setPlainText(note)
+            if self._current is not None:
+                self._current["direction_note"] = note
+                self._save(silent=True)
 
     def _on_arrange_session_autosave(self, state: dict):
         """Persiste la session de co-écriture dans le projet (reprise ultérieure)."""
         if self._current is not None:
             self._current["arrange_session"] = state
+            if isinstance(state.get("direction_note"), str):
+                self._current["direction_note"] = state["direction_note"]
+                if hasattr(self, "_direction_note_edit"):
+                    self._direction_note_edit.blockSignals(True)
+                    self._direction_note_edit.setPlainText(state["direction_note"])
+                    self._direction_note_edit.blockSignals(False)
             self._save(silent=True)
 
     def _open_refs_window(self, analysis: str = "", worker=None):
@@ -2860,21 +3348,21 @@ class PageScenario(QWidget):
             f"border:1px solid {CP['border']};}}"
         )
 
-        btn_enrich = QPushButton(translate("◎  Enrichir le scénario"))
+        btn_enrich = QPushButton(translate("◎  Ajouter à la note de réalisation"))
         btn_enrich.setFixedHeight(36)
         btn_enrich.setEnabled(not streaming)
         btn_enrich.setToolTip(
-            "Claude croise l'analyse visuelle avec le scénario et enrichit\n"
-            "les descriptions correspondantes (personnages, décors, ambiances)."
+            "Ajoute l'analyse du moodboard à la note de réalisation, sans modifier\n"
+            "le scénario narratif."
         )
         btn_enrich.setStyleSheet(_accent_btn_ss)
         # Petit signe « déjà enrichi » (retour Matthieu 2026-07-06) : si le scénario a
         # déjà été enrichi avec l'analyse courante, on le montre sur le bouton — on peut
         # toujours cliquer pour ré-enrichir. Réinitialisé à chaque nouvelle analyse.
         if getattr(self, "_ref_enriched", False) and not streaming:
-            btn_enrich.setText(translate("✓  Scénario déjà enrichi"))
+            btn_enrich.setText(translate("✓  Analyse déjà ajoutée à la note"))
             btn_enrich.setToolTip(translate(
-                "Déjà enrichi avec l'analyse courante — clique pour ré-enrichir."))
+                "Déjà ajoutée avec l'analyse courante — clique pour la réajouter."))
             btn_enrich.setStyleSheet(
                 f"QPushButton{{background:{CP['bg3']};color:{CP['green']};"
                 f"border:1px solid {CP['green']};border-radius:7px;font-size:11px;"
@@ -2897,95 +3385,23 @@ class PageScenario(QWidget):
             txt = _final_analysis[0]
             if not txt:
                 return
-            scenario_text = self._get_text() if self._current else ""
-            if not scenario_text.strip():
-                return
-
-            from api.screenplay import EnrichScenarioWithRefsWorker
-            w = EnrichScenarioWithRefsWorker(scenario_text, txt)
-            _enrich_worker[0] = w
-            _refs_streaming_active[0] = True
-            btn_close.setText("Annuler")
-            btn_close.setStyleSheet(_refs_cancel_ss)
-
-            # ── Bascule en phase "enrichissement" ─────────────────────────────
-            title_lbl.setText("✦  Enrichissement du scénario")
-            self._refs_status_lbl.setText("Enrichissement en cours…")
-            self._refs_status_lbl.setStyleSheet(
-                f"color:{CP['accent']};font-size:10px;font-family:'Consolas',monospace;"
+            from core.direction_note import append_to_note
+            current_note = self._direction_note_edit.toPlainText()
+            updated = append_to_note(
+                current_note,
+                "Références visuelles",
+                txt,
+                replace=True,
             )
-            te.clear()
-            te.setPlaceholderText(translate("Le scénario enrichi apparaît ici au fil de la génération…"))
-            btn_enrich.setEnabled(False)   # grisé pendant le traitement — mais JAMAIS masqué
-
-            _enriched = [""]
-
-            def _on_enrich_done(res: dict):
-                _refs_streaming_active[0] = False
-                btn_close.setText(translate("Fermer"))
-                btn_close.setStyleSheet(_refs_ghost_ss)
-                # Édition CHIRURGICALE : on n'applique que les passages renvoyés
-                # ({find, replace}) ; tout le reste du scénario reste MOT POUR MOT.
-                from core.text_edits import apply_find_replace_edits
-                edits = (res or {}).get("edits", [])
-                new_text, applied, missed = apply_find_replace_edits(scenario_text, edits)
-                if applied:
-                    _enriched[0] = new_text
-                    te.setPlainText(new_text)
-                    msg = translate("{n} passage(s) enrichi(s) ✓").format(n=len(applied))
-                    if missed:
-                        msg += translate(" · {n} non localisé(s)").format(n=len(missed))
-                    self._refs_status_lbl.setText(msg)
-                    self._refs_status_lbl.setStyleSheet(
-                        f"color:{CP['green']};font-size:10px;font-family:'Consolas',monospace;")
-                    btn_apply.setEnabled(True)
-                    btn_apply.setVisible(True)
-                    btn_enrich.setEnabled(True)   # reste visible — on peut ré-enrichir
-                else:
-                    # Aucun passage localisé → on remet l'analyse + le bouton « Enrichir »
-                    # pour réessayer (sinon le bouton disparaissait — dead-end).
-                    te.setPlainText(txt)
-                    self._refs_status_lbl.setText(translate("Aucun passage à enrichir localisé"))
-                    self._refs_status_lbl.setStyleSheet(
-                        f"color:{CP['text_dim']};font-size:10px;font-family:'Consolas',monospace;")
-                    btn_enrich.setEnabled(True)
-                    btn_enrich.setVisible(True)
-
-            def _on_enrich_failed(msg: str):
-                _refs_streaming_active[0] = False
-                btn_close.setText(translate("Fermer"))
-                btn_close.setStyleSheet(_refs_ghost_ss)
-                te.setPlainText(f"Erreur lors de l'enrichissement :\n{msg}")
-                self._refs_status_lbl.setText("Erreur")
-                self._refs_status_lbl.setStyleSheet(
-                    f"color:{CP['red']};font-size:10px;font-family:'Consolas',monospace;"
-                )
-                # Erreur → on remet le bouton « Enrichir » pour réessayer.
-                btn_enrich.setEnabled(True)
-                btn_enrich.setVisible(True)
-
-            def _do_apply():
-                result = _enriched[0].strip()
-                if not result:
-                    return
-                self._push_undo()
-                self._set_editor_text(result)
-                self._ref_enriched = True    # marqueur « déjà enrichi »
-                if self._current is not None:
-                    self._current["formatted_content"] = result
-                self._ai_progress_lbl.setText("Scénario enrichi par les références visuelles ✓")
-                self._btn_undo_action.setVisible(True)
-                dlg.accept()
-
-            try:
-                btn_apply.clicked.disconnect()   # évite un double « Appliquer » si on ré-enrichit
-            except Exception:
-                pass
-            btn_apply.setVisible(False)
-            btn_apply.clicked.connect(_do_apply)
-            w.done.connect(_on_enrich_done)
-            w.failed.connect(_on_enrich_failed)
-            w.start()
+            self._direction_note_edit.setPlainText(updated)
+            self._ref_enriched = True
+            if self._current is not None:
+                self._current["direction_note"] = updated
+            self._editor_tabs.setCurrentIndex(1)
+            self._ai_progress_lbl.setText(
+                "Références ajoutées à la note de réalisation ✓")
+            self._schedule_autosave()
+            dlg.accept()
 
         btn_enrich.clicked.connect(_do_enrich)
 
@@ -3167,7 +3583,7 @@ class PageScenario(QWidget):
             te.setPlainText(txt)
             self._last_ref_analysis = txt
             self._last_result_kind = "refs"
-            self._btn_reopen_window.setVisible(True)
+            self._btn_reopen_window.setVisible(False)   # bouton retiré (2026-07-22)
             imgs = [p for p in e.get("images", [])
                     if isinstance(p, str) and os.path.isfile(p)]
             if imgs:
@@ -3247,7 +3663,7 @@ class PageScenario(QWidget):
                 self._ref_enriched = False    # nouvelle analyse → scénario pas encore enrichi avec
                 n = len(self._ref_images)
                 self._ai_progress_lbl.setText(f"Analyse terminée — {n} image(s).")
-                self._btn_reopen_window.setVisible(True)
+                self._btn_reopen_window.setVisible(False)   # bouton retiré (2026-07-22)
                 self._refs_status_lbl.setText(f"{n} image(s) analysée(s)")
                 self._refs_status_lbl.setStyleSheet(
                     f"color:{CP['text_dim']};font-size:10px;font-family:'Consolas',monospace;"
@@ -3929,8 +4345,12 @@ class PageScenario(QWidget):
             def _done_portrait(p, _s, _i=item):
                 img = p or _s  # portrait_path toujours "", sheet_path = image réelle
                 if img:
-                    import core.casting as _c; _i["image_path"] = img; _c.save_character(_i)
-                self._gen_all_next_image()
+                    import core.casting as _c
+                    _i["image_path"] = img
+                    _c.save_character(_i)
+                    self._gen_all_analyze_identity("character", _i, img, _c.save_character)
+                else:
+                    self._gen_all_next_image()
             w.finished.connect(_done_portrait)
             w.failed.connect(lambda _e: (
                 self.__dict__.update({"_gen_all_error_count": self._gen_all_error_count + 1}),
@@ -3965,11 +4385,15 @@ class PageScenario(QWidget):
             else:
                 w = GenerateItemWorker(prompt, item.get("name", ""),
                                        subdir=subdir, num_images=1, subject_hint=hint)
-            def _done_item(p, _i=item, _m=_mod, _f=_sfn):
+            def _done_item(p, _i=item, _m=_mod, _f=_sfn, _t=item_type):
                 if p:
                     import importlib; m = importlib.import_module(_m)
-                    _i["image_path"] = p; getattr(m, _f)(_i)
-                self._gen_all_next_image()
+                    _i["image_path"] = p
+                    _save = getattr(m, _f)
+                    _save(_i)
+                    self._gen_all_analyze_identity(_t, _i, p, _save)
+                else:
+                    self._gen_all_next_image()
             w.finished.connect(_done_item)
             w.failed.connect(lambda _e: (
                 self.__dict__.update({"_gen_all_error_count": self._gen_all_error_count + 1}),
@@ -3978,6 +4402,33 @@ class PageScenario(QWidget):
 
         self._gen_all_workers.append(w)
         w.start()
+
+    def _gen_all_analyze_identity(self, item_type: str, item: dict, image_path: str,
+                                  save_callable):
+        """Dans le mode Tout générer, l'image produite est analysée avant de passer
+        à l'entité suivante. Le Storyboard récupère ainsi la description réelle de
+        l'image, pas seulement le prompt qui avait servi à la créer."""
+        from api.visual_identity import VisualIdentityWorker
+        from core.visual_identity import pending_identity
+        item["visual_identity"] = pending_identity(image_path, "generated")
+        save_callable(item)
+        desc = item.get("description") or item.get("prompt") or ""
+        worker = VisualIdentityWorker(item_type, image_path, "generated", desc)
+
+        def _ready(identity: dict):
+            item["visual_identity"] = identity
+            save_callable(item)
+            self._gen_all_next_image()
+
+        def _failed(_message: str):
+            # L'image et le statut pending restent persistés ; le dialogue de
+            # l'entité relancera automatiquement l'analyse à sa prochaine ouverture.
+            self._gen_all_next_image()
+
+        worker.done.connect(_ready)
+        worker.failed.connect(_failed)
+        self._gen_all_workers.append(worker)
+        worker.start()
 
     # ── Moods ─────────────────────────────────────────────────────────────────
 
@@ -4031,7 +4482,7 @@ class PageScenario(QWidget):
         if hasattr(self, "_gen_all_progress_bar"):
             self._gen_all_progress_bar.setVisible(False)
             self._gen_all_status_lbl.setText(translate(msg))
-        self._btn_goto_storyboard.setVisible(True)
+        self._btn_goto_storyboard.setVisible(False)   # bouton retiré (2026-07-22)
         self._gen_all_workers.clear()
 
     # ── Lifecycle ─────────────────────────────────────────────────────────────

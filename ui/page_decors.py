@@ -3,8 +3,8 @@ from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
     QScrollArea, QGridLayout, QLineEdit, QFrame, QMessageBox, QComboBox,
 )
-from PyQt6.QtCore import Qt, pyqtSignal
-from PyQt6.QtGui import QPixmap
+from PyQt6.QtCore import Qt, QSize, pyqtSignal
+from PyQt6.QtGui import QImageReader, QPixmap
 from ui.styles import CP
 from ui.icons import load_icon
 from ui.widgets import HelpBlock
@@ -13,6 +13,39 @@ from ui.element_io_buttons import make_save_open_buttons, toolbar_separator
 from core.decors import CATEGORIES
 from core.i18n import translate, to_source
 from ui.dialog_decor import DecorDialog
+
+
+def _load_card_pixmap(path: str, width: int, height: int) -> QPixmap:
+    """Decode une image directement a la taille utile pour une carte.
+
+    Les anciens projets n'ont pas forcement les apercus crees pendant la
+    generation. QImageReader evite alors de charger l'original pleine
+    resolution en memoire et conserve un affichage silencieux dans PANDORA.
+    """
+    if not path or not os.path.isfile(path):
+        return QPixmap()
+    reader = QImageReader(path)
+    reader.setAutoTransform(True)
+    source_size = reader.size()
+    if source_size.isValid() and source_size.width() and source_size.height():
+        scale = max(width / source_size.width(), height / source_size.height())
+        reader.setScaledSize(QSize(
+            max(width, round(source_size.width() * scale)),
+            max(height, round(source_size.height() * scale)),
+        ))
+    image = reader.read()
+    if image.isNull():
+        return QPixmap()
+    pix = QPixmap.fromImage(image).scaled(
+        width, height,
+        Qt.AspectRatioMode.KeepAspectRatioByExpanding,
+        Qt.TransformationMode.SmoothTransformation,
+    )
+    return pix.copy(
+        max(0, (pix.width() - width) // 2),
+        max(0, (pix.height() - height) // 2),
+        width, height,
+    )
 
 
 # ── Carte décor ───────────────────────────────────────────────────────────────
@@ -43,19 +76,13 @@ class DecorCard(QWidget):
             f"background:{CP['bg3']};border-radius:10px 10px 0 0;"
             f"color:{CP['text_dim']};font-size:36px;"
         )
-        img = data.get("image_path", "")
+        # Les aperçus sont préparés dans le worker de génération. La page n'a donc
+        # plus à décoder en rafale toutes les images pleine résolution à son ouverture.
+        img = data.get("thumbnail_path", "")
+        if not (img and os.path.isfile(img)):
+            img = data.get("image_path", "")
         if img and os.path.isfile(img):
-            pix = QPixmap(img).scaled(
-                self._W, self._H_IMG,
-                Qt.AspectRatioMode.KeepAspectRatioByExpanding,
-                Qt.TransformationMode.SmoothTransformation,
-            )
-            pix = pix.copy(
-                (pix.width()  - self._W)    // 2,
-                (pix.height() - self._H_IMG) // 2,
-                self._W, self._H_IMG,
-            )
-            self._thumb.setPixmap(pix)
+            self._thumb.setPixmap(_load_card_pixmap(img, self._W, self._H_IMG))
         else:
             self._thumb.setText("◻")
         lay.addWidget(self._thumb)
@@ -168,12 +195,10 @@ class PageDecors(QWidget):
         root.setContentsMargins(0, 0, 0, 0)
         root.setSpacing(0)
 
-        root.addWidget(self._build_topbar())
+        # Bandeau titre retiré (demande Matthieu 2026-07-22).
 
-        sep = QFrame()
-        sep.setFixedHeight(1)
-        sep.setStyleSheet(f"background:{CP['border']};")
-        root.addWidget(sep)
+        # Separateur haut retire (2026-07-23) : la barre d'outils est la 1re rangee,
+        # sa ligne basse tombe pile sur celles des en-tetes GUIDE / IA (40 px).
 
         root.addWidget(self._build_toolbar())
 
@@ -245,19 +270,16 @@ class PageDecors(QWidget):
 
     def _build_toolbar(self):
         bar = QWidget()
-        bar.setFixedHeight(60)
-        bar.setStyleSheet(f"background:{CP['bg0']};")
+        # 40 px + ligne basse : premiere rangee alignee sur les en-tetes GUIDE/IA (2026-07-23).
+        bar.setFixedHeight(40)
+        bar.setStyleSheet(f"background:{CP['bg0']};border-bottom:1px solid {CP['border']};")
         lay = QHBoxLayout(bar)
         lay.setContentsMargins(32, 0, 32, 0)
         lay.setSpacing(12)
 
-        lbl_cat = QLabel("Catégorie :")
-        lbl_cat.setStyleSheet(
-            f"color:{CP['text_secondary']};font-size:11px;background:transparent;"
-        )
-        lay.addWidget(lbl_cat)
-
-        self._cat_filter = QComboBox()
+        # Filtre catégorie RETIRÉ de l'affichage (demande Matthieu 2026-07-22) ;
+        # le combo reste vivant car _apply_filter lit sa valeur.
+        self._cat_filter = QComboBox(bar)
         self._cat_filter.addItems(["Toutes"] + CATEGORIES)
         self._cat_filter.setFixedHeight(36)
         self._cat_filter.setFixedWidth(160)
@@ -269,7 +291,7 @@ class PageDecors(QWidget):
             f"color:{CP['text_primary']};selection-background-color:{CP['accent_dim']};}}"
         )
         self._cat_filter.currentTextChanged.connect(lambda _: self._apply_filter())
-        lay.addWidget(self._cat_filter)
+        self._cat_filter.hide()
 
         self._search = QLineEdit()
         self._search.setPlaceholderText("🔍  Rechercher un décor…")
@@ -280,22 +302,16 @@ class PageDecors(QWidget):
             f"QLineEdit:focus{{border-color:{CP['accent_dim']};}}"
         )
         self._search.textChanged.connect(self._apply_filter)
-        lay.addWidget(self._search, 1)
+        # Barre de recherche RETIRÉE de l'affichage (2026-07-22) ; widget vivant.
+        self._search.setParent(bar)
+        self._search.hide()
 
-        # Sauvegarder / Ouvrir un décor — à côté de la barre de recherche.
         self._btn_save_file, self._btn_open_file = make_save_open_buttons(
             self, kind="decors",
             list_fn=decors_api.list_decors,
             save_fn=decors_api.save_decor,
             delete_fn=decors_api.delete_decor,
             refresh_fn=self.refresh)
-        lay.addWidget(self._btn_save_file)
-        lay.addWidget(self._btn_open_file)
-
-        # Séparateur (espace + trait) entre le groupe fichier et « Créer ».
-        lay.addSpacing(6)
-        lay.addWidget(toolbar_separator())
-        lay.addSpacing(6)
 
         btn_new = QPushButton("✦  Créer un décor")
         btn_new.setFixedHeight(36)
@@ -319,8 +335,14 @@ class PageDecors(QWidget):
         )
         btn_del_all.clicked.connect(self._on_delete_all)
 
-        lay.addWidget(btn_new)
-        lay.addWidget(btn_del_all)
+        # ── Bouton « Action » (2026-07-22, même principe que le Storyboard) :
+        # Sauvegarder, Ouvrir, Créer un décor, Tout supprimer (rouge).
+        from ui.widgets import make_actions_menu_button
+        self._btn_actions = make_actions_menu_button(
+            bar, [self._btn_save_file, self._btn_open_file, btn_new],
+            red_entry=btn_del_all)
+        lay.addWidget(self._btn_actions)
+        lay.addStretch(1)
         return bar
 
     # ── Plan des décors (vue de dessus, partagée avec Mise en scène / Plan de feu) ──
@@ -380,17 +402,16 @@ class PageDecors(QWidget):
         thumb = QLabel()
         thumb.setFixedSize(132, 78)
         thumb.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        fp = decor.get("floor_plan", "")
-        has = bool(fp and os.path.isfile(fp))
+        fp_full = decor.get("floor_plan", "")
+        fp = decor.get("floor_plan_thumbnail", "")
+        if not (fp and os.path.isfile(fp)):
+            fp = fp_full
+        has = bool(fp_full and os.path.isfile(fp_full))
         thumb.setStyleSheet(
             f"background:{CP['bg3']};border:1px solid {CP['border']};"
             f"border-radius:8px 8px 0 0;color:{CP['text_dim']};font-size:11px;")
         if has:
-            pix = QPixmap(fp).scaled(
-                132, 78, Qt.AspectRatioMode.KeepAspectRatioByExpanding,
-                Qt.TransformationMode.SmoothTransformation)
-            pix = pix.copy((pix.width() - 132) // 2, (pix.height() - 78) // 2, 132, 78)
-            thumb.setPixmap(pix)
+            thumb.setPixmap(_load_card_pixmap(fp, 132, 78))
             # Clic → aperçu en grand + options (variation / import).
             thumb.setCursor(Qt.CursorShape.PointingHandCursor)
             thumb.setToolTip(translate("Cliquer pour agrandir et modifier le plan"))
@@ -711,8 +732,11 @@ class PageDecors(QWidget):
         v.addLayout(head_row)
 
         body = self._cards_grid(items)
-        body.setVisible(not collapsed)
+        # IMPORTANT : rattacher le conteneur a la page AVANT de le rendre visible.
+        # Un QWidget parentless qui recoit setVisible(True) devient une fenetre Qt
+        # autonome (titre "python") pendant quelques millisecondes.
         v.addWidget(body)
+        body.setVisible(not collapsed)
 
         def _toggle(_=False):
             new_collapsed = not self._collapsed.get(title, False)

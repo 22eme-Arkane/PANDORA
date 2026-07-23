@@ -51,12 +51,14 @@ class FormatConducteurWorker(QThread):
     failed   = pyqtSignal(str)
     chunk    = pyqtSignal(str)
 
-    def __init__(self, text: str, mode: str, duration_secs: int = 0, facade_path: str = ""):
+    def __init__(self, text: str, mode: str, duration_secs: int = 0, facade_path: str = "",
+                 direction_note: str = ""):
         super().__init__()
         self._text   = text
         self._mode   = mode
         self._dur    = duration_secs
         self._facade = facade_path or ""   # image façade réelle (mapping) → Vision → texte
+        self._direction_note = direction_note or ""   # Note de réalisation Live (parité Cinéma)
 
     def run(self):
         if not self._text.strip():
@@ -146,6 +148,14 @@ class FormatConducteurWorker(QThread):
                 user = (f"[DURÉE CIBLE TOTALE : {dur_str} = {int(self._dur)} secondes. "
                         f"Dimensionne le NOMBRE et la durée des plans en conséquence.]\n\n"
                         + self._text)
+            # Note de réalisation Live : intentions de fabrication injectées AVEC le
+            # conducteur (même contrat que FormatPandoraWorker Cinéma via note_for_ai).
+            if self._direction_note.strip():
+                from core.direction_note import note_for_ai
+                note = note_for_ai(self._direction_note)
+                if note:
+                    note_label = ("DIRECTOR'S NOTE" if _is_en else "NOTE DE RÉALISATION")
+                    user += f"\n\n[{note_label} — INTENTIONS DE FABRICATION]\n{note}"
             # Tier créatif (Sonnet/Fable…) : prompts vidéo riches/détaillés pour
             # Seedance 2.0. 16000 tokens — un conducteur complet mis en page
             # dépassait 8000 (tronqué en réel le 2026-06-11) ; aligné sur Cinéma.

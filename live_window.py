@@ -22,15 +22,37 @@ Studio IA à la génération (à brancher) — pas en page autonome.
 
 from PyQt6.QtWidgets import (
     QMainWindow, QWidget, QHBoxLayout, QVBoxLayout,
-    QLabel, QStackedWidget, QFrame, QPushButton,
+    QLabel, QStackedWidget, QFrame, QPushButton, QStyle,
 )
 from PyQt6.QtCore import Qt, pyqtSignal, QSize
-from PyQt6.QtGui import QIcon, QShortcut, QKeySequence
+from PyQt6.QtGui import QIcon, QShortcut, QKeySequence, QColor, QPixmap, QImage
 
 from ui.styles import CP, PANDORA_STYLESHEET
-from ui.icons import app_icon, load_icon
+from ui.icons import app_icon, load_icon, dim
 from ui.assistant_panel import AssistantPanel, AssistantToggleStrip
 from core.i18n import get_lang, set_lang, retranslate_widget, translate, tr
+
+
+def _neon_foreground(pixmap: QPixmap, color: str = "#25d366") -> QPixmap:
+    """Extrait uniquement le dessin clair d'un badge et le colore en néon.
+
+    Les icônes historiques embarquent parfois un carré bleu marine. Teinter le
+    pixmap complet colorerait aussi ce carré ; on transforme donc la luminance en
+    alpha afin que seul le pictogramme intérieur reste visible.
+    (Copie Live de la recette pandora_window — séparation Cinéma/Live.)"""
+    if pixmap.isNull():
+        return pixmap
+    src = pixmap.toImage().convertToFormat(QImage.Format.Format_ARGB32)
+    out = src.copy()
+    neon = QColor(color)
+    for y in range(src.height()):
+        for x in range(src.width()):
+            px = src.pixelColor(x, y)
+            lum = int(0.2126 * px.red() + 0.7152 * px.green() + 0.0722 * px.blue())
+            # Seuil doux : supprime le fond sombre, conserve les traits anti-aliasés.
+            alpha = max(0, min(255, (lum - 42) * 3)) * px.alpha() // 255
+            out.setPixelColor(x, y, QColor(neon.red(), neon.green(), neon.blue(), alpha))
+    return QPixmap.fromImage(out)
 
 
 # ── Item de navigation Live (barre BASSE, façon pages DaVinci Resolve) ────────
@@ -58,15 +80,18 @@ class _LiveNavItem(QWidget):
 
         # Icône : PNG des logos Cinéma si disponible (logos dédiés Live à venir),
         # sinon repli sur le glyphe texte.
+        # Onglet ACTIF : vert « Nous contacter » (#25d366) à 75 % d'opacité —
+        # remplace l'ancienne pastille accent (demande Matthieu 2026-07-23,
+        # parité pandora_window.NavItem).
         self._use_png = False
-        self._pix_on = self._pix_off = None
+        self._pix_on = self._pix_off = self._pix_accent = None
         if icon_file:
-            from ui.icons import dim
             _pix = load_icon(icon_file, 24)
             if not _pix.isNull():
                 self._use_png = True
-                self._pix_on  = _pix
-                self._pix_off = dim(_pix, 0.55)
+                self._pix_on     = _pix
+                self._pix_off    = dim(_pix, 0.55)
+                self._pix_accent = dim(_neon_foreground(_pix, "#25d366"), 0.75)
 
         self._ico = QLabel("" if self._use_png else icon)
         self._ico.setFixedSize(24, 24)
@@ -87,19 +112,20 @@ class _LiveNavItem(QWidget):
         self.setStyleSheet(f"QWidget#LiveNavItem{{{css}border-radius:8px;}}")
 
     def _apply(self, active: bool):
-        accent = CP["accent2"]
         if active:
-            self._bg("background:rgba(124,107,255,0.16);"
-                     "border:1px solid rgba(124,107,255,0.30);")
+            # Plus de pastille : libellé + pictogramme intérieur en VERT
+            # « Nous contacter » (#25d366) à 75 % d'opacité (2026-07-23).
+            self._bg("background:transparent;border:1px solid transparent;")
             if self._use_png:
-                self._ico.setPixmap(self._pix_on)
+                self._ico.setPixmap(self._pix_accent)
             else:
                 self._ico.setStyleSheet(
-                    f"color:{accent};font-size:14px;background:transparent;border:none;"
+                    "color:rgba(37,211,102,0.75);font-size:14px;"
+                    "background:transparent;border:none;"
                 )
             self._lbl.setStyleSheet(
-                f"color:{accent};font-size:10px;font-weight:700;"
-                f"letter-spacing:0.3px;background:transparent;border:none;"
+                "color:rgba(37,211,102,0.75);font-size:10px;font-weight:700;"
+                "letter-spacing:0.3px;background:transparent;border:none;"
             )
         else:
             self._bg("background:transparent;border:1px solid transparent;")
@@ -120,8 +146,9 @@ class _LiveNavItem(QWidget):
 
     def enterEvent(self, e):
         if not self._active:
-            self._bg("background:rgba(255,255,255,0.05);"
-                     "border:1px solid rgba(255,255,255,0.08);")
+            # Survol léger (parité Cinéma 2026-07-23) : pas de carte autour de
+            # l'onglet, seuls pictogramme et libellé gagnent en contraste.
+            self._bg("background:transparent;border:1px solid transparent;")
             if self._use_png:
                 self._ico.setPixmap(self._pix_on)
             self._lbl.setStyleSheet(
@@ -144,9 +171,10 @@ class _LiveNavItem(QWidget):
 # (glyphe de repli, libellé FR, clé, PNG — logos Cinéma réutilisés en attendant
 #  des logos dédiés Live : Conducteur→scenario.png, Séquences→storyboard.png)
 # L'ordre gauche→droite reprend l'ancien ordre haut→bas du dashboard latéral.
+# « Projets » RETIRÉ de la nav basse (2026-07-23, parité Cinéma) : le retour aux
+# projets passe par le logo PANDORA → page de démarrage (home_requested).
+# « Image IA » AJOUTÉ à côté de « Studio IA » (réutilise ui/tab_image.py).
 _NAV_ITEMS = [
-    ("⊞", "Projets",             "projects",    "projets.png"),
-    None,
     ("✎", "Conducteur",          "conducteur",  "scenario.png"),
     None,
     ("▤", "Séquences Live",      "seq_live",    "storyboard.png"),
@@ -158,6 +186,7 @@ _NAV_ITEMS = [
     None,
     ("▶", "Resolume",            "resolume",    "Live.png"),
     None,
+    ("◈", "Image IA",            "image_ia",    "draw_to_video.png"),
     ("✦", "Studio IA",           "studio",      "seedance.png"),
     ("⚙", "Paramètres",          "settings",    "settings.png"),
 ]
@@ -280,6 +309,7 @@ class LiveWindow(QMainWindow):
     """Fenêtre principale du mode PANDORA | Live."""
     closed           = pyqtSignal()
     switch_requested = pyqtSignal(dict)
+    home_requested   = pyqtSignal()       # retour à la page de démarrage (logo)
 
     # nav key → clé de corpus de l'assistant
     _ASSIST_CTX = {
@@ -342,13 +372,17 @@ class LiveWindow(QMainWindow):
         body_lay.setSpacing(0)
 
         self._sidebar = _LiveSidebar()   # barre de navigation BASSE (taskbar)
+        # Disquette de sauvegarde dans la barre basse, à droite des drapeaux de
+        # langue et de leur séparateur (index 4 du layout — demande 2026-07-23).
+        self._sidebar.layout().insertWidget(4, self._btn_save_global)
         self._stack   = QStackedWidget()
         self._stack.setStyleSheet(f"background:{CP['bg0']};")
 
         from ui.live_pages import AssistantPanelLive
-        # header_height=60 : la ligne de l'en-tête Assistant s'ALIGNE sur celle
-        # des bandeaux de pages (60 px partout — retour 2026-06-12)
-        self._assistant        = AssistantPanelLive(header_height=60)
+        # header_height=40 (2026-07-23) : la ligne sous l'en-tête GUIDE tombe
+        # EXACTEMENT sur la ligne de la première rangée des pages (barres
+        # d'outils Conducteur/Séquences à 40 px — parité Cinéma).
+        self._assistant        = AssistantPanelLive(header_height=40)
         self._assistant.setVisible(False)   # assistant IA fermé par défaut
         self._assistant_toggle = AssistantToggleStrip(self._assistant, side="left")
 
@@ -364,7 +398,7 @@ class LiveWindow(QMainWindow):
         self._sb_chat_panel = StoryboardChatPanel(
             shots_provider=self._sb_chat_shots,
             on_applied=self._sb_chat_applied,
-            header_height=60,
+            header_height=40,   # aligné sur la barre d'outils des Séquences (2026-07-23)
         )
         self._sb_chat_panel.setVisible(False)
         self._sb_chat_toggle = StoryboardChatToggleStrip(self._sb_chat_panel)
@@ -473,15 +507,8 @@ class LiveWindow(QMainWindow):
         _llay.setSpacing(0)
         _llay.setAlignment(Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft)
 
-        # ── Manuel (ROUGE) + Nous contacter (VERT) — en haut à gauche ─────────
-        _ss_manual_red = (
-            "QPushButton{background:transparent;color:#ff4f6a;"
-            "border:1px solid rgba(255,79,106,0.35);border-radius:5px;"
-            "font-size:10px;font-weight:700;padding:0 10px;}"
-            "QPushButton:hover{background:rgba(255,79,106,0.10);color:#ff7187;"
-            "border-color:rgba(255,79,106,0.60);}"
-            "QPushButton:pressed{background:rgba(255,79,106,0.18);}"
-        )
+        # ── Nous contacter (VERT) — le Manuel rejoint les Paramètres Live
+        # (retrait topbar 2026-07-23, parité Cinéma) ───────────────────────────
         _ss_contact_green = (
             "QPushButton{background:transparent;color:#25d366;"
             "border:1px solid rgba(37,211,102,0.35);border-radius:5px;"
@@ -490,19 +517,27 @@ class LiveWindow(QMainWindow):
             "border-color:rgba(37,211,102,0.60);}"
             "QPushButton:pressed{background:rgba(37,211,102,0.18);}"
         )
-        self._btn_manual_top = QPushButton("☰  " + translate("Manuel d'utilisation"))
-        self._btn_manual_top.clicked.connect(self._on_manual)
-        self._btn_manual_top.setStyleSheet(_ss_manual_red)
         self._btn_contact_top = QPushButton("✉  " + translate("Nous contacter"))
         self._btn_contact_top.clicked.connect(self._on_contact)
         self._btn_contact_top.setStyleSheet(_ss_contact_green)
-        for _b in (self._btn_manual_top, self._btn_contact_top):
+        for _b in (self._btn_contact_top,):
             _b.setFixedHeight(26)
             _b.setCursor(Qt.CursorShape.PointingHandCursor)
             _llay.addWidget(_b)
             _llay.addSpacing(6)
 
         _lr_lay.addWidget(_left, 1)
+
+        # ── Zone cliquable sous le logo : retour à la page de démarrage ───────
+        # (le retour aux projets passe par ici depuis le retrait de l'onglet
+        # « Projets » de la nav basse — 2026-07-23, parité Cinéma)
+        self._home_hit = QPushButton()
+        self._home_hit.setFixedSize(190, 58)
+        self._home_hit.setToolTip(translate("Retour à l'accueil"))
+        self._home_hit.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._home_hit.setStyleSheet("QPushButton{background:transparent;border:none;}")
+        self._home_hit.clicked.connect(self.home_requested)
+        _lr_lay.addWidget(self._home_hit)
 
         _right = QWidget()
         _right.setStyleSheet("background:transparent;")
@@ -563,50 +598,33 @@ class LiveWindow(QMainWindow):
             "QPushButton:pressed{background:rgba(245,197,24,0.18);}"
         )
         btn_support.clicked.connect(self._on_funding)
+        # « Soutenir Pandora » collé au bord droit du cadre (2026-07-23) : la
+        # disquette a migré dans la barre basse, « Mises à jour » est retiré
+        # (parité Cinéma) — plus de séparateur ici.
         _rlay.addWidget(btn_support)
+        _lr_lay.setContentsMargins(12, 0, 4, 0)
 
-        _rlay.addSpacing(6)
-        _rlay.addWidget(_vsep())
-        _rlay.addSpacing(6)
-
-        # ── Vérifier les mises à jour ─────────────────────────────────────────
-        self._btn_update_header = QPushButton("↑  Mises à jour")
-        self._btn_update_header.setFixedHeight(26)
-        self._btn_update_header.setCursor(Qt.CursorShape.PointingHandCursor)
-        self._btn_update_header.setToolTip("Vérifier les mises à jour de PANDORA")
-        self._btn_update_header.setStyleSheet(
-            f"QPushButton{{background:transparent;color:{CP['accent']};"
-            f"border:1px solid rgba(78,205,196,0.38);border-radius:5px;"
-            f"font-size:10px;font-weight:700;padding:0 10px;}}"
-            f"QPushButton:hover{{background:rgba(78,205,196,0.09);"
-            f"border-color:rgba(78,205,196,0.70);}}"
-            f"QPushButton:pressed{{background:rgba(78,205,196,0.16);}}"
-            f"QPushButton:disabled{{color:{CP['text_dim']};"
-            f"border-color:{CP['border']};}}"
-        )
-        self._btn_update_header.clicked.connect(self._manual_update_check)
-        _rlay.addWidget(self._btn_update_header)
-
-        _rlay.addSpacing(6)
-        _rlay.addWidget(_vsep())
-        _rlay.addSpacing(6)
-
-        # ── Sauvegarder ───────────────────────────────────────────────────────
-        self._btn_save_global = QPushButton(tr("btn.save"))
-        self._btn_save_global.setFixedHeight(26)
+        # ── Sauvegarder : icône seule — créée ici, AFFICHÉE dans la barre basse
+        # (à droite des drapeaux de langue, demande Matthieu 2026-07-23) ─────────
+        self._btn_save_global = QPushButton()
+        self._btn_save_global.setIcon(
+            self.style().standardIcon(QStyle.StandardPixmap.SP_DialogSaveButton))
+        self._btn_save_global.setIconSize(QSize(15, 15))
+        self._btn_save_global.setToolTip(tr("btn.save"))
+        self._btn_save_global.setFixedSize(30, 26)
         self._btn_save_global.setCursor(Qt.CursorShape.PointingHandCursor)
         self._btn_save_global.setStyleSheet(
             f"QPushButton{{background:transparent;color:{CP['text_dim']};"
             f"border:1px solid {CP['border']};border-radius:5px;"
-            f"font-size:10px;font-weight:700;padding:0 12px;}}"
+            f"font-size:14px;font-weight:700;padding:0;}}"
             f"QPushButton:hover{{background:{CP['bg3']};color:{CP['text_primary']};"
             f"border-color:{CP['border_bright']};}}"
             f"QPushButton:pressed{{background:{CP['bg4']};}}"
         )
         self._btn_save_global.clicked.connect(self._on_global_save_click)
-        _rlay.addWidget(self._btn_save_global)
+        # Insertion différée dans la barre basse (voir __init__).
 
-        _lr_lay.addWidget(_right)
+        _lr_lay.addWidget(_right, 1)
 
         bar_lay.addWidget(_lr)
         bar_lay.addWidget(_center)
@@ -615,21 +633,23 @@ class LiveWindow(QMainWindow):
 
     def _on_global_save_click(self):
         self._on_global_save()
-        self._btn_save_global.setText(tr("btn.saved"))
+        self._btn_save_global.setIcon(
+            self.style().standardIcon(QStyle.StandardPixmap.SP_DialogApplyButton))
         self._btn_save_global.setStyleSheet(
             f"QPushButton{{background:transparent;color:{CP['accent']};"
             f"border:1px solid {CP['accent_dim']};border-radius:5px;"
-            f"font-size:10px;font-weight:700;padding:0 12px;}}"
+            f"font-size:14px;font-weight:700;padding:0;}}"
         )
         from PyQt6.QtCore import QTimer
         QTimer.singleShot(1400, self._reset_save_btn_global)
 
     def _reset_save_btn_global(self):
-        self._btn_save_global.setText(tr("btn.save"))
+        self._btn_save_global.setIcon(
+            self.style().standardIcon(QStyle.StandardPixmap.SP_DialogSaveButton))
         self._btn_save_global.setStyleSheet(
             f"QPushButton{{background:transparent;color:{CP['text_dim']};"
             f"border:1px solid {CP['border']};border-radius:5px;"
-            f"font-size:10px;font-weight:700;padding:0 12px;}}"
+            f"font-size:14px;font-weight:700;padding:0;}}"
             f"QPushButton:hover{{background:{CP['bg3']};color:{CP['text_primary']};"
             f"border-color:{CP['border_bright']};}}"
             f"QPushButton:pressed{{background:{CP['bg4']};}}"
@@ -715,8 +735,12 @@ class LiveWindow(QMainWindow):
             pass
 
     def _manual_update_check(self):
-        self._btn_update_header.setEnabled(False)
-        self._btn_update_header.setText("Vérification…")
+        # Le bouton « Mises à jour » a quitté la topbar (2026-07-23, parité
+        # Cinéma) — la méthode reste utilisable par un futur point d'entrée.
+        button = getattr(self, "_btn_update_header", None)
+        if button is not None:
+            button.setEnabled(False)
+            button.setText("Vérification…")
         from api.update_check import UpdateCheckWorker
         self._manual_update_worker = UpdateCheckWorker()
         self._manual_update_worker.update_available.connect(self._on_update_available)
@@ -728,8 +752,10 @@ class LiveWindow(QMainWindow):
         self._manual_update_worker.start()
 
     def _reset_update_btn(self):
-        self._btn_update_header.setEnabled(True)
-        self._btn_update_header.setText("↑  Mises à jour")
+        button = getattr(self, "_btn_update_header", None)
+        if button is not None:
+            button.setEnabled(True)
+            button.setText("↑  Mises à jour")
 
     def _on_no_update_manual(self):
         self._reset_update_btn()
@@ -765,14 +791,12 @@ class LiveWindow(QMainWindow):
         # Toutes les pages ci-dessous sont des VERSIONS LIVE INDÉPENDANTES
         # (sous-classes dédiées, voir ui/live_pages.py) → modifiables sans toucher Cinéma.
         from ui.live_pages import (
-            ProjetsLivePage, ConducteurPage, SequenceLivePage, SequenceMappingPage,
+            ConducteurPage, SequenceLivePage, SequenceMappingPage,
             CastingLivePage, AccessoiresLivePage, VehiculesLivePage,
         )
 
-        # ── Projets ─────────────────────────────────────────────────────────────
-        projects = ProjetsLivePage(self._project)
-        projects.switch_requested.connect(self.switch_requested)
-        self._pages["projects"] = projects
+        # « Projets » a quitté la nav basse (2026-07-23, parité Cinéma) : le
+        # retour aux projets passe par le logo → page de démarrage.
 
         # ── Conducteur (version Live du Scénario) ───────────────────────────────
         conducteur = ConducteurPage()
@@ -791,6 +815,12 @@ class LiveWindow(QMainWindow):
         self._pages["accessoires"] = AccessoiresLivePage()
         self._pages["vehicules"]   = VehiculesLivePage()
 
+        # ── Image IA — destination globale autonome (2026-07-23, parité
+        # Cinéma) : réutilise le panneau partagé Studio Images ───────────────────
+        from ui.tab_image import TabImage
+        image_ia = TabImage()
+        self._pages["image_ia"] = image_ia
+
         # ── Studio IA Live (dédié) ──────────────────────────────────────────────
         from ui.live_studio_widget import LiveStudioWidget
         studio = LiveStudioWidget()
@@ -807,20 +837,16 @@ class LiveWindow(QMainWindow):
 
         from ui.page_live_settings import PageLiveSettings
         settings = PageLiveSettings()
+        settings.manual_requested.connect(self._on_manual)
         self._pages["settings"] = settings
-        # Paramètres : SEULE page centrée comme le Studio IA (retour 2026-06-12)
-        settings.setMaximumWidth(1360)
-        self._settings_wrap = QWidget()
-        self._settings_wrap.setStyleSheet(f"background:{CP['bg0']};")
-        _sl = QHBoxLayout(self._settings_wrap)
-        _sl.setContentsMargins(0, 0, 0, 0)
-        _sl.setSpacing(0)
-        _sl.addStretch(1)
-        _sl.addWidget(settings, 4)
-        _sl.addStretch(1)
+        # Paramètres pleine largeur (2026-07-23, parité Cinéma) : la barre de
+        # défilement est collée au bord DROIT de la fenêtre ; le centrage du
+        # contenu (max 1360) est géré À L'INTÉRIEUR de PageLiveSettings.
+        self._settings_wrap = settings
 
-        for key in ("projects", "conducteur", "seq_live", "seq_mapping", "casting",
-                    "accessoires", "vehicules", "studio", "resolume", "settings"):
+        for key in ("conducteur", "seq_live", "seq_mapping", "casting",
+                    "accessoires", "vehicules", "image_ia", "studio",
+                    "resolume", "settings"):
             self._stack.addWidget(self._settings_wrap if key == "settings"
                                   else self._pages[key])
 
@@ -880,10 +906,13 @@ class LiveWindow(QMainWindow):
             self._sb_chat_panel.setVisible(False)
             self._sb_chat_toggle._open = False
             self._sb_chat_toggle._arrow.setText(self._sb_chat_toggle._arrow_char())
-        # Le Studio IA (« studio ») a sa PROPRE poignée droite (chat Image IA) : on
-        # masque le spacer sur cette page pour que la poignée « IA » soit COLLÉE au
-        # bord droit, comme « GUIDE » à gauche (retour Matthieu 2026-07-05).
-        self._right_spacer.setVisible(not is_seq and key != "studio")
+        # Le Studio IA (« studio ») et Image IA ont leur PROPRE poignée droite
+        # (chat Image IA) : on masque le spacer sur ces pages pour que la poignée
+        # « IA » soit COLLÉE au bord droit, comme « GUIDE » à gauche (retour
+        # Matthieu 2026-07-05 ; « image_ia » ajouté 2026-07-23).
+        # « conducteur » ajouté (2026-07-23) : sa poignée ASSISTANT est collée au
+        # bord droit, comme Studio IA et Image IA (parité Cinéma).
+        self._right_spacer.setVisible(not is_seq and key not in ("studio", "image_ia", "conducteur"))
 
     # ── Handlers ────────────────────────────────────────────────────────────────
 

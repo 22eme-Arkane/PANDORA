@@ -5,7 +5,7 @@ réécrire/enrichir jusqu'à ce qu'il soit prêt pour la génération du découp
 
 PARTAGÉ Cinéma ↔ Live (nouvelle fonctionnalité, pas un portage) : le paramètre
 ``edition`` calibre le format attendu du plan réécrit :
-  - "cinema" : « P01 | Valeur | Mouvement | Axe | ~Durée » + « → SEEDANCE: »
+  - "cinema" : fiche éditoriale « PLAN 01 » du Découpage PANDORA 2
   - "live"   : « PLAN n — Titre » + « PROMPT VIDÉO … » / « PROMPT SON … »
 
 Le worker reçoit le plan cible + le contexte (mise en page complète) et ne renvoie
@@ -14,12 +14,9 @@ Même pattern multimodal que ArrangeSessionChatConducteurWorker (marqueurs + vis
 """
 from PyQt6.QtCore import QThread, pyqtSignal
 
-_VISION_MODEL    = "claude-sonnet-5"
-_VISION_NO_THINK = {"type": "disabled"}
-
 # Nombre max d'images de référence envoyées à l'assistant (source de vérité UNIQUE —
 # le dialogue l'importe pour ne pas plafonner l'UI en-dessous). Large marge sous la
-# limite API Anthropic (100 images/requête).
+# limites usuelles des API multimodales.
 _MAX_REF_IMAGES = 12
 
 _MARKER_MSG  = "══════════ MESSAGE ══════════"
@@ -27,19 +24,27 @@ _MARKER_PLAN = "══════════ PLAN ═════════�
 
 
 def _fmt_block(edition: str, mode: str, _pl: str, _PL: str) -> str:
-    """Bloc « FORMAT DU PLAN » (Cinéma « P0N | … » / Live « PLAN n — … »), partagé par
+    """Bloc « FORMAT DU PLAN » (Cinéma v2 / Live), partagé par
     la co-écriture d'un plan ET le correctif global par lots."""
     if edition == "cinema":
         return (
-            "FORMAT DU PLAN RÉÉCRIT (respecte-le À L'IDENTIQUE) :\n"
-            "P<NN> | Valeur de plan | Mouvement de caméra | Axe | ~Durée\n"
-            "INT./EXT. LIEU PRÉCIS — MOMENT\n"
-            "Description de l'action au présent, concrète et visuelle.\n"
-            f"→ SEEDANCE: prompt vidéo court, descriptif, sensoriel, en {_pl}.\n\n"
-            "- Pour le plan RETRAVAILLÉ, garde son numéro (P<NN>) ; pour un plan AJOUTÉ, "
-            "mets un numéro placeholder au bon format (il sera réattribué automatiquement).\n"
-            "- Valeurs de plan / mouvements / axes : reprends la nomenclature PANDORA.\n"
-            "- Durée : notation ~Xs, maximum absolu ~15s."
+            "FORMAT DE LA FICHE RÉÉCRITE (respecte les libellés et l'ordre) :\n"
+            "PLAN <NN>\n"
+            "SOURCE SCÉNARIO : extrait exact, sans enrichissement technique.\n"
+            "INTENTION : fonction dramatique et visuelle du plan.\n"
+            "RYTHME : tempo, coupe et relation aux plans voisins.\n"
+            "DURÉE : <x>s\n"
+            f"PROMPT VISUEL : prompt moteur-agnostique détaillé en {_pl}.\n"
+            "PERSONNAGES : noms exacts, ou —\nDÉCOR : nom exact, ou —\n"
+            "ACCESSOIRES : noms, ou —\nVÉHICULES : noms, ou —\nHMC : éléments, ou —\n"
+            "VALEUR PROPOSÉE : …\nAXE PROPOSÉ : …\nMOUVEMENT PROPOSÉ : …\n"
+            "FOCALE PROPOSÉE : …\nMOOD : À CRÉER\n\n"
+            "- Garde le numéro PLAN <NN> du plan retravaillé ; un plan ajouté reçoit un "
+            "numéro provisoire qui sera réattribué automatiquement.\n"
+            "- SOURCE SCÉNARIO reste fidèle et séparée. INTENTION explique pourquoi le "
+            "plan existe. PROMPT VISUEL décrit l'image, sans réglages caméra.\n"
+            "- Durée entre 2 et 15 secondes. Les champs caméra sont des propositions "
+            "éditables pour le Storyboard."
         )
     _m = ("vidéo-mapping projeté sur une façade (géométrie du bâtiment conservée)"
           if mode == "mapping" else "set live / VJ")
@@ -96,9 +101,9 @@ def _plan_coedit_system(edition: str, mode: str = "live", discuss_only: bool = F
     fmt = _fmt_block(edition, mode, _pl, _PL)
     _intro = (
         "Tu es directeur de la photographie et superviseur de production sur PANDORA "
-        "(pré-production IA, génération vidéo via Seedance 2.0). Tu travailles avec le "
-        "réalisateur EN CO-ÉCRITURE sur UN SEUL plan de sa mise en page, pour le "
-        "réécrire et l'enrichir jusqu'à ce qu'il soit prêt pour la génération.\n\n"
+        "(pré-production visuelle, moteurs d'image et de vidéo interchangeables). Tu travailles avec le "
+        "réalisateur EN CO-ÉCRITURE sur UNE fiche du Découpage PANDORA, afin de "
+        "clarifier son intention et préparer son prompt avant le Storyboard.\n\n"
         "On te fournit : la MISE EN PAGE COMPLÈTE (contexte, à ne PAS réécrire), le "
         "PLAN CIBLE à retravailler, et la demande du réalisateur. Des images de "
         "référence peuvent être jointes : ce sont des INSPIRATIONS (ambiances, "
@@ -294,14 +299,8 @@ class PlanCoEditWorker(QThread):
             _max_out = 16000 if (self._all and not self._discuss) else 8192
 
             if _imgs:
-                # VISION (images jointes) : direct Anthropic — hors couche ai_provider.
-                import anthropic
-                from core.config import load_config as _lc
-                client = anthropic.Anthropic(api_key=_lc().get("anthropic_key", "").strip())
-                response = client.messages.create(
-                    model=_VISION_MODEL, max_tokens=_max_out,
-                    thinking=_VISION_NO_THINK, system=system, messages=messages)
-                raw = response.content[0].text.strip()
+                raw = ai_chat(system, messages, tier="creative",
+                              max_tokens=_max_out, task="screenplay").strip()
             else:
                 raw = ai_chat(system, messages, tier="creative",
                               max_tokens=_max_out, task="screenplay").strip()

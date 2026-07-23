@@ -530,12 +530,8 @@ class ArrangeConducteurStreamWorker(QThread):
 # MARQUEURS (MESSAGE / document réécrit), calibré CONDUCTEUR live/mapping —
 # jamais de format scénario cinéma (INT./EXT., dialogues screenplay).
 
-# Vision (images jointes) : appel DIRECT Anthropic — hors couche ai_provider
-# (aligné sur api/screenplay.py : les autres fournisseurs gèrent la vision
-# différemment ; périmètre v1 = texte). Réflexion désactivée pour ne pas
-# rogner la sortie.
-_VISION_MODEL    = "claude-sonnet-5"
-_VISION_NO_THINK = {"type": "disabled"}
+# Les images jointes utilisent désormais le même routeur multimodal que le texte.
+# La conversion Anthropic/OpenAI/Ollama est centralisée dans core.ai_provider.
 
 # Confinement façade pour la co-écriture d'un conducteur de MAPPING — critère
 # de VISIBILITÉ sur la photo de référence (jamais de liste noire d'éléments),
@@ -784,25 +780,20 @@ class ArrangeSessionChatConducteurWorker(QThread):
             # 16000 : réécriture COMPLÈTE (8192 tronquait). CHIRURGICAL : 8192 —
             # 4096 TRONQUAIT le JSON dès que plusieurs passages longs étaient
             # réécrits → 0 édition récupérée (constat Matthieu 2026-07-13).
+            # ANTI-TRONCATURE (2026-07-21, parité Cinéma) : coupe par limite DÉTECTÉE
+            # (stop_reason) + suite demandée automatiquement (chat_until_complete).
             _maxtok = 8192 if self._surgical else 16000
 
             if self._ref_images:
-                # VISION (images jointes) : direct Anthropic — hors couche ai_provider.
-                import anthropic
-                from core.config import load_config as _lc
-                client = anthropic.Anthropic(api_key=_lc().get("anthropic_key", "").strip())
-                response = client.messages.create(
-                    model=_VISION_MODEL,
-                    max_tokens=_maxtok,
-                    thinking=_VISION_NO_THINK,
-                    system=system,
-                    messages=messages,
-                )
-                raw = response.content[0].text.strip()
+                from core.ai_provider import chat_until_complete as ai_chat_full
+                raw = ai_chat_full(system, messages, tier="creative",
+                                   max_tokens=_maxtok, task="screenplay",
+                                   max_rounds=5).strip()
             else:
-                raw = ai_chat(system, messages,
-                              tier="creative", max_tokens=_maxtok,
-                              task="screenplay").strip()
+                from core.ai_provider import chat_until_complete as ai_chat_full
+                raw = ai_chat_full(system, messages,
+                                   tier="creative", max_tokens=_maxtok,
+                                   task="screenplay").strip()
 
             # ── Mode CHIRURGICAL : message + ÉDITIONS ciblées (aucune réécriture totale) ──
             if self._surgical:

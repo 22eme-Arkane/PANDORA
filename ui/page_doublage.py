@@ -200,7 +200,10 @@ class PageDoublage(QWidget):
         title_col.addWidget(t2)
         hl.addLayout(title_col)
         hl.addStretch()
-        root.addWidget(hdr)
+        # Bandeau titre RETIRÉ de l'affichage (demande Matthieu 2026-07-23),
+        # comme sur les autres onglets — le widget reste vivant et caché.
+        hdr.setParent(self)
+        hdr.hide()
 
         # ── Scroll principal ──────────────────────────────────────────────────
         scroll = QScrollArea()

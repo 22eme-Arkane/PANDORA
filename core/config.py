@@ -31,13 +31,19 @@ _DEFAULTS = {
     # Guide de démarrage — True = afficher au premier lancement
     "show_api_guide":        True,
     # ── Assistant IA texte (voir core/ai_provider.py) ──────────────────────────
-    "ai_provider":           "anthropic",          # anthropic | openai | mistral | ollama
+    "ai_provider":           "anthropic",          # compatibilité : fournisseur du choix simple
+    "ai_profile":            "anthropic_optimized",# anthropic_optimized | openai_optimized | single | custom
+    "ai_engine":             "",                   # clé du registre, ou provider:model-id découvert
     "ai_model_creative":     "claude-opus-4-8",    # défaut Opus 4.8 (Sonnet 5 / Fable 5 en option)
-    "openai_key":            "",                   # clé OpenAI (GPT-5.5)
-    "openai_model":          "",                   # vide = défaut gpt-5.5
+    "openai_key":            "",                   # clé OpenAI
+    "openai_model":          "",                   # modèle OpenAI simple ; vide = registre/profil
     "mistral_key":           "",
     "ollama_url":            "",                   # vide = http://localhost:11434
     "ollama_model":          "",                   # vide = llama3.1
+    "custom_key":            "",                   # fournisseur OpenAI-compatible personnalisé
+    "custom_url":            "",
+    "custom_model":          "",
+    "ai_available_models":   {},                   # cache local {provider: [model-id]} découvert via API
     "ai_task_engines":       {},                   # {task_key: engine_key} — moteur par tâche
 }
 

@@ -12,8 +12,8 @@ Refonte demandée par l'utilisateur (2026-06-10) :
   3. ENRICHISSEMENT calibré CONDUCTEUR (l'ancien worker réécrivait au format
      scénario Cinéma).
 
-Vision = Anthropic direct (doctrine v1 : le sélecteur d'assistant ne couvre que
-le texte) ; la synthèse et l'enrichissement passent par core/ai_provider.
+Vision, synthèse et enrichissement passent tous par ``core.ai_provider`` ; les
+blocs image sont adaptés au fournisseur choisi dans les Paramètres.
 """
 
 import os
@@ -117,19 +117,16 @@ class AnalyzeRefsConducteurWorker(QThread):
         self._mode  = mode if mode in ("live", "mapping") else "live"
 
     def run(self):
-        from core.config import load_config
-        key = load_config().get("anthropic_key", "").strip()
-        if not key:
-            self.failed.emit("Clé Anthropic (Claude) manquante — renseignez-la dans Paramètres.")
+        from core.ai_provider import chat, key_error
+        err = key_error(task="vision")
+        if err:
+            self.failed.emit(err)
             return
         paths = [p for p in self._paths if os.path.isfile(p)]
         if not paths:
             self.failed.emit("Aucune image valide à analyser.")
             return
         try:
-            # VISION : Anthropic direct (hors couche ai_provider — texte seulement)
-            import anthropic
-            client = anthropic.Anthropic(api_key=key)
             ctx = _mode_ctx(self._mode)
             analyses: list[str] = []
 
@@ -140,18 +137,13 @@ class AnalyzeRefsConducteurWorker(QThread):
                 name = os.path.basename(path)
                 self.chunk.emit(f"── Image {i}/{len(paths)} — {name} ──\n")
                 mime, b64 = encode_image_for_vision(path)
-                msg = client.messages.create(
-                    model="claude-haiku-4-5",
-                    max_tokens=800,
-                    system=_PER_IMAGE_SYSTEM.format(ctx=ctx),
-                    messages=[{"role": "user", "content": [
+                txt = chat(
+                    _PER_IMAGE_SYSTEM.format(ctx=ctx),
+                    [{"role": "user", "content": [
                         {"type": "image",
                          "source": {"type": "base64", "media_type": mime, "data": b64}},
                         {"type": "text", "text": f"Image {i} : analyse-la."},
-                    ]}],
-                )
-                txt = "".join(b.text for b in msg.content
-                              if getattr(b, "type", "") == "text").strip()
+                    ]}], tier="utility", max_tokens=800, task="vision").strip()
                 analyses.append(f"IMAGE {i} ({name}) :\n{txt}")
                 self.chunk.emit(txt + "\n\n")
 

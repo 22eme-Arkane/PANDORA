@@ -2468,8 +2468,13 @@ class TabT2V(QScrollArea):
             self._btn_style_toggle.setText(
                 ("▾  " if checked else "▸  ") + "Choisir les références")
         self._btn_style_toggle.toggled.connect(_toggle_style)
-        lay.addWidget(self._btn_style_toggle)
-        lay.addWidget(self._film_style_frame)
+        # Menu « Choisir les références » RETIRÉ de l'affichage (demande Matthieu
+        # 2026-07-23) : les références partent automatiquement (mosaïques casting/
+        # décor/etc.). Les widgets restent vivants et cachés — aucune logique cassée.
+        self._btn_style_toggle.setParent(self)
+        self._btn_style_toggle.hide()
+        self._film_style_frame.setParent(self)
+        self._film_style_frame.hide()
 
         # ── Storyboard selector ───────────────────────────────────────────────
         self._storyboard = StoryboardSelector()
@@ -2491,7 +2496,10 @@ class TabT2V(QScrollArea):
             f"QCheckBox::indicator:checked{{background:{C['accent_dim']};"
             f"border-color:{C['accent']};}}"
         )
-        lay.addWidget(self._no_ref_global_cb)
+        # Case « Ne pas envoyer les images de référence » RETIRÉE de l'affichage
+        # (demande Matthieu 2026-07-23) — le widget reste vivant (état lu à l'envoi).
+        self._no_ref_global_cb.setParent(self)
+        self._no_ref_global_cb.hide()
 
         # Description du plan sélectionné
         self._shot_desc_lbl = QLabel("")
@@ -2525,7 +2533,11 @@ class TabT2V(QScrollArea):
         _dur_outer.addWidget(self._dur_lock_lbl)
 
         _dur_outer.addStretch()
-        lay.addLayout(_dur_outer)
+        # Choix de durée RETIRÉ de l'affichage (2026-07-23) : la durée vient du
+        # storyboard. Widgets vivants et cachés (cb_dur est lu à l'envoi).
+        _dur_row_w = QWidget(self)
+        _dur_row_w.setLayout(_dur_outer)
+        _dur_row_w.hide()
 
         self._seed_lock_btn = QPushButton("🔓  ADN visuel — aléatoire")
         self._seed_lock_btn.setCheckable(True)
@@ -2543,10 +2555,12 @@ class TabT2V(QScrollArea):
             f"QPushButton:hover{{background:{C['bg3']};}}"
         )
         self._seed_lock_btn.toggled.connect(self._on_seed_toggle)
-        _t2v_adn_row = QHBoxLayout()
-        _t2v_adn_row.setAlignment(Qt.AlignmentFlag.AlignHCenter)
-        _t2v_adn_row.addWidget(self._seed_lock_btn)
-        lay.addLayout(_t2v_adn_row)
+        # L'ADN visuel vit désormais dans RENDU & AUDIO, en PREMIÈRE position
+        # (demande Matthieu 2026-07-23) — inséré plus bas dans _raccords_lay.
+        # Son verrouillage/déverrouillage automatique est inchangé.
+        self._t2v_adn_row = QHBoxLayout()
+        self._t2v_adn_row.setAlignment(Qt.AlignmentFlag.AlignHCenter)
+        self._t2v_adn_row.addWidget(self._seed_lock_btn)
 
         # ── Panel multi-sélection (visible uniquement lors d'une sélection multiple) ──
         self._multi_panel = QFrame()
@@ -2737,6 +2751,8 @@ class TabT2V(QScrollArea):
 
         # À partir d'ici, toutes les options s'ajoutent dans le CORPS repliable.
         _raccords_lay = _body_lay
+        # ADN visuel en PREMIÈRE position de RENDU & AUDIO (2026-07-23).
+        _raccords_lay.insertLayout(0, self._t2v_adn_row)
 
         def _raccord_toggle(title, subtitle, checked):
             w = QFrame()
@@ -4111,7 +4127,10 @@ class TabT2V(QScrollArea):
         # Retirer [🎵 SOUND DESIGN] AVANT l'assemblage : les suffixes ajoutés en
         # queue (« no subtitles »…) tombaient DANS la section son puis étaient
         # supprimés avec elle par api/real.strip_for_video (qui reste en filet).
-        from core.prompt_sections import strip_for_video as _strip_sound
+        # Le texte son est CAPTURÉ avant le strip → il guide l'audio Seedance via
+        # la composition en prose (api/video_prompt, params["sound_notes"]).
+        from core.prompt_sections import strip_for_video as _strip_sound, sound_of as _sound_of
+        _sound_notes = _sound_of(prompt)
         prompt = _strip_sound(prompt) or prompt
 
         context     = self._casting.get_context()
@@ -4251,6 +4270,18 @@ class TabT2V(QScrollArea):
             if _has_char_ref else ""
         )
 
+        # Fiches d'apparence des personnages du plan (casting) — injectées dans la
+        # composition du prompt vidéo en prose anglaise (api/video_prompt) : Seedance
+        # ne connaît pas « Jésus » sans sa description physique. Jamais bloquant.
+        try:
+            from api.video_prompt import (character_notes_for_shot as _vp_notes,
+                                          visual_context_for_shot as _vp_context)
+            _character_notes = _vp_notes(self._active_shot or {})
+            _visual_context = _vp_context(self._active_shot or {})
+        except Exception:
+            _character_notes = ""
+            _visual_context = ""
+
         # ADN visuel
         seed = self._get_seed()
 
@@ -4286,6 +4317,9 @@ class TabT2V(QScrollArea):
             "no_music_suffix":         no_music_suffix,
             "time_suffix":             time_suffix,
             "char_consistency_suffix":  char_consistency_suffix,
+            "character_notes":          _character_notes,
+            "visual_context":           _visual_context,
+            "sound_notes":              _sound_notes,
             "creative_suffix":          self._creative.get_creative_suffix(),
             "safety_tolerance_override": str(self._creative.get_safety_tolerance()),
             "model":          self._get_model(),

@@ -15,7 +15,7 @@ from PyQt6.QtWidgets import QApplication
 from PyQt6.QtGui import QColor, QPalette
 from PyQt6.QtCore import qInstallMessageHandler, QtMsgType
 from ui.styles import CP
-from ui.splash import SplashWindow
+from ui.start_page import StartPage
 from ui.pandora_window import PandoraWindow
 
 
@@ -140,6 +140,8 @@ if __name__ == "__main__":
     qInstallMessageHandler(_qt_msg_handler)
     app = QApplication(sys.argv)
     app.setStyle("Fusion")
+    from ui.input_policy import install_wheel_scroll_policy
+    install_wheel_scroll_policy(app)
     _force_qt_file_dialogs()   # dialogues Qt non-natifs → évite les crashs COM Windows
     _set_palette(app)
 
@@ -159,31 +161,22 @@ if __name__ == "__main__":
         _cfg["eula_accepted"] = True
         save_config(_cfg)
 
-    # ── Flux de démarrage ──────────────────────────────────────────────────────
-    #   Édition CINÉMA (build distribué) : pas de sélecteur de module, pas de
-    #   Live — SplashWindow("cinema") direct → PandoraWindow.
-    #   Édition COMPLÈTE (dev) : Chooser (Cinéma | Live) → SplashWindow(mode) →
-    #   PandoraWindow ou LiveWindow ; le bouton « retour » du splash y ramène.
+    # ── Flux de démarrage unifié ───────────────────────────────────────────────
+    #   Cinéma / Live restent sur la même page : la sélection choisit le mode du
+    #   prochain projet et filtre les récents, sans écran intermédiaire.
     from core.edition import is_cinema_only
     _CINEMA_ONLY = is_cinema_only()
 
-    state = {"chooser": None, "splash": None, "window": None, "opening": False}
-
-    def _show_chooser():
-        ch = state["chooser"]
-        if ch is not None:
-            ch.show()
-            ch.raise_()
-            ch.activateWindow()
+    state = {"start": None, "window": None, "opening": False}
 
     def _open_project(data: dict):
         if state["opening"]:
             return
         state["opening"] = True
-        sp = state["splash"]
-        if sp is not None:
-            sp.setEnabled(False)
-            sp.hide()
+        start_page = state["start"]
+        if start_page is not None:
+            start_page.setEnabled(False)
+            start_page.hide()
 
         mode = data.get("mode", "cinema")
         if mode == "live" and not _CINEMA_ONLY:
@@ -200,6 +193,22 @@ if __name__ == "__main__":
 
         win.switch_requested.connect(_on_switch)
 
+        def _return_home():
+            win.hide()
+            win.deleteLater()
+            state["window"] = None
+            state["opening"] = False
+            if start_page is not None:
+                start_page.setEnabled(True)
+                if hasattr(start_page, "refresh"):
+                    start_page.refresh()
+                start_page.showMaximized()
+                start_page.raise_()
+                start_page.activateWindow()
+
+        if hasattr(win, "home_requested"):
+            win.home_requested.connect(_return_home)
+
         if not icon.isNull():
             win.setWindowIcon(icon)
         state["window"] = win
@@ -211,54 +220,23 @@ if __name__ == "__main__":
             retranslate_widget(win)
         app._pandora = win
 
-    def _show_splash(mode: str):
-        ch = state["chooser"]
-        if ch is not None:
-            ch.hide()
-        # En édition Cinéma : pas de bouton « retour » (aucun sélecteur derrière)
-        sp = SplashWindow(mode, show_back=not _CINEMA_ONLY)
-        if not icon.isNull():
-            sp.setWindowIcon(icon)
-        if get_lang() != "fr":
-            retranslate_widget(sp)
-        state["splash"] = sp
-        state["opening"] = False
-
-        def _back():
-            sp.hide()
-            sp.deleteLater()
-            state["splash"] = None
-            _show_chooser()
-
-        sp.back_requested.connect(_back)
-        sp.project_selected.connect(_open_project)
-        sp.show()
-        sp.raise_()
-        sp.activateWindow()
-
-    if _CINEMA_ONLY:
-        # Édition Cinéma : splash Cinéma direct, sans jamais importer le
-        # sélecteur de module ni le Live.
-        _show_splash("cinema")
-    else:
-        from ui.chooser import ChooserWindow
-        chooser = ChooserWindow()
-        if not icon.isNull():
-            chooser.setWindowIcon(icon)
-        if get_lang() != "fr":
-            retranslate_widget(chooser)
-        chooser.cinema_requested.connect(lambda: _show_splash("cinema"))
-        chooser.live_requested.connect(lambda: _show_splash("live"))
-        chooser.lang_changed.connect(lambda _c: retranslate_widget(chooser))
-        state["chooser"] = chooser
-        chooser.show()
-        app._chooser = chooser
+    # Page unique : Cinéma/Live ne font que changer la sélection et filtrer les
+    # récents. Nouveau/Ouvrir mènent ensuite directement au projet.
+    start_page = StartPage(allow_live=not _CINEMA_ONLY)
+    if not icon.isNull():
+        start_page.setWindowIcon(icon)
+    start_page.project_selected.connect(_open_project)
+    state["start"] = start_page
+    start_page.show()
+    start_page.raise_()
+    start_page.activateWindow()
+    app._start_page = start_page
 
     from api.update_check import UpdateCheckWorker
     from ui.splash import UpdateDialog
 
     def _on_update_available(version: str, url: str):
-        parent = state["window"] or state["splash"] or state["chooser"]
+        parent = state["window"] or state["start"]
         dlg = UpdateDialog(version, url, parent)
         dlg.exec()
 

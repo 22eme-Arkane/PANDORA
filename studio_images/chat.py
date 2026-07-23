@@ -176,22 +176,18 @@ class ChatWorker(QThread):
         self._history = history
 
     def run(self):
-        if not self._key:
-            self.failed.emit("Clé API Anthropic manquante.\nRenseigne-la dans ⚙ Clés API.")
+        from core.ai_provider import (ai_name_for_task, chat, humanize_ai_error,
+                                      key_error)
+        err = key_error(task="element_chat")
+        if err:
+            self.failed.emit(err)
             return
-        import anthropic
-        client = anthropic.Anthropic(api_key=self._key)
         messages = to_api_messages(self._history)
         for attempt in range(3):
             try:
-                msg = client.messages.create(
-                    model=_CHAT_MODEL,
-                    max_tokens=700,
-                    thinking=_NO_THINK,
-                    system=_CHAT_SYSTEM,
-                    messages=messages,
-                )
-                self.done.emit(msg.content[0].text.strip())
+                text = chat(_CHAT_SYSTEM, messages, tier="creative",
+                            max_tokens=700, task="element_chat")
+                self.done.emit(text.strip())
                 return
             except Exception as e:
                 is_rate = "rate_limit" in str(e) or "429" in str(e)
@@ -200,7 +196,8 @@ class ChatWorker(QThread):
                     self.notice.emit(f"Limite de débit atteinte — nouvelle tentative dans {wait}s…")
                     time.sleep(wait)
                     continue
-                self.failed.emit(friendly_error(e))
+                self.failed.emit(humanize_ai_error(
+                    f"Erreur {ai_name_for_task('element_chat')} : {e}"))
                 return
 
 
@@ -216,15 +213,15 @@ class SynthPromptWorker(QThread):
         self._format = format_label
 
     def run(self):
-        if not self._key:
-            self.failed.emit("Clé API Anthropic manquante.\nRenseigne-la dans ⚙ Clés API.")
+        from core.ai_provider import (ai_name_for_task, complete, humanize_ai_error,
+                                      key_error)
+        err = key_error(task="element_chat")
+        if err:
+            self.failed.emit(err)
             return
         try:
-            import anthropic
-            client = anthropic.Anthropic(api_key=self._key)
-
             convo = "\n\n".join(
-                f"{'UTILISATEUR' if m['role'] == 'user' else 'CLAUDE'} : {text_of(m['content'])}"
+                f"{'UTILISATEUR' if m['role'] == 'user' else 'ASSISTANT'} : {text_of(m['content'])}"
                 for m in self._history
             )
             user_msg = (
@@ -234,14 +231,9 @@ class SynthPromptWorker(QThread):
             )
             for attempt in range(3):
                 try:
-                    msg = client.messages.create(
-                        model=_SYNTH_MODEL,
-                        max_tokens=500,
-                        thinking=_NO_THINK,
-                        system=_SYNTH_SYSTEM,
-                        messages=[{"role": "user", "content": user_msg}],
-                    )
-                    self.done.emit(msg.content[0].text.strip())
+                    text = complete(_SYNTH_SYSTEM, user_msg, tier="creative",
+                                    max_tokens=500, task="element_chat")
+                    self.done.emit(text.strip())
                     return
                 except Exception as e:
                     if ("rate_limit" in str(e) or "429" in str(e)) and attempt < 2:
@@ -249,4 +241,5 @@ class SynthPromptWorker(QThread):
                         continue
                     raise
         except Exception as e:
-            self.failed.emit(friendly_error(e))
+            self.failed.emit(humanize_ai_error(
+                f"Erreur {ai_name_for_task('element_chat')} : {e}"))

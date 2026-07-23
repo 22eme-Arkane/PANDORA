@@ -141,15 +141,56 @@ _CAP_DEFAULT = {"color": "bicolor", "cct": (2700, 6500), "dimmable": True,
                 "beam": None, "cri": 95}
 
 _CAP_FAMILY = {
-    "led_panel": {"color": "full",     "cct": (2800, 10000), "beam": None, "cri": 95},
-    "cob":       {"color": "daylight", "cct": (5600, 5600),  "beam": (15, 55), "cri": 96},
-    "fresnel":   {"color": "tungsten", "cct": (3200, 3200),  "beam": (15, 60), "cri": 100},
-    "tube":      {"color": "full",     "cct": (1750, 10000), "beam": None, "cri": 96},
-    "mat":       {"color": "full",     "cct": (2700, 6500),  "beam": None, "cri": 96},
-    "par_hmi":   {"color": "daylight", "cct": (5600, 5600),  "beam": (10, 60), "cri": 90},
-    "profile":   {"color": "tungsten", "cct": (3200, 3200),  "beam": (19, 50), "cri": 100},
-    "balloon":   {"color": "daylight", "cct": (5600, 5600),  "beam": None, "cri": 90},
-    "practical": {"color": "source",   "cct": (3000, 3000),  "beam": None, "cri": 80},
+    "led_panel": {"color": "full",     "cct": (2800, 10000), "beam": (110, 110), "beam_control": "fixed", "cri": 95},
+    "cob":       {"color": "daylight", "cct": (5600, 5600),  "beam": (55, 55), "beam_control": "accessory", "cri": 96,
+                  "accessories": (("Réflecteur étroit 15°", 15), ("Réflecteur moyen 30°", 30), ("Réflecteur standard 55°", 55), ("Open face 80°", 80))},
+    "fresnel":   {"color": "tungsten", "cct": (3200, 3200),  "beam": (15, 60), "beam_control": "focus", "cri": 100},
+    "tube":      {"color": "full",     "cct": (1750, 20000), "beam": (120, 120), "beam_control": "fixed", "cri": 96},
+    "mat":       {"color": "full",     "cct": (2700, 6500),  "beam": (120, 120), "beam_control": "fixed", "cri": 96},
+    "par_hmi":   {"color": "daylight", "cct": (5600, 5600),  "beam": (40, 40), "beam_control": "accessory", "cri": 90,
+                  "accessories": (("Lentille spot 12°", 12), ("Lentille medium 28°", 28), ("Lentille wide 40°", 40), ("Lentille extra-wide 58°", 58))},
+    "profile":   {"color": "tungsten", "cct": (3200, 3200),  "beam": (36, 36), "beam_control": "fixed", "cri": 100},
+    "balloon":   {"color": "daylight", "cct": (5600, 5600),  "beam": (170, 170), "beam_control": "fixed", "cri": 90},
+    "practical": {"color": "source",   "cct": (3000, 3000),  "beam": (100, 100), "beam_control": "fixed", "cri": 80},
+}
+
+# Profils photométriques et commandes propres aux modèles les plus utilisés.
+# Les angles sont des angles de faisceau horizontaux. Les optiques/accessoires
+# sont explicites : un COB ou un PAR n'est pas présenté comme un zoom continu.
+_CAP_EXACT = {
+    "arri skypanel s30-c": {"beam": (105, 105), "beam_control": "fixed", "cct": (2800, 10000),
+                             "color": "full", "green_magenta": True, "effects": True,
+                             "color_modes": ("CCT", "HSI", "RGBW", "Gels", "Effets")},
+    "arri skypanel s60-c": {"beam": (105, 105), "beam_control": "fixed", "cct": (2800, 10000),
+                             "color": "full", "green_magenta": True, "effects": True,
+                             "color_modes": ("CCT", "HSI", "RGBW", "Gels", "Effets")},
+    "arri skypanel s120-c": {"beam": (105, 105), "beam_control": "fixed", "cct": (2800, 10000),
+                              "color": "full", "green_magenta": True, "effects": True,
+                              "color_modes": ("CCT", "HSI", "RGBW", "Gels", "Effets")},
+    "arri skypanel s360-c": {"beam": (105, 105), "beam_control": "fixed", "cct": (2800, 10000),
+                              "color": "full", "green_magenta": True, "effects": True,
+                              "color_modes": ("CCT", "HSI", "RGBW", "Gels", "Effets")},
+    "aputure nova p300c": {"beam": (120, 120), "beam_control": "fixed", "cct": (2000, 10000),
+                            "color": "full", "green_magenta": True, "effects": True,
+                            "color_modes": ("CCT", "HSI", "RGI", "XY", "Gels", "Effets")},
+    "aputure nova p600c": {"beam": (120, 120), "beam_control": "fixed", "cct": (2000, 10000),
+                            "color": "full", "green_magenta": True, "effects": True,
+                            "color_modes": ("CCT", "HSI", "RGI", "XY", "Gels", "Effets")},
+    "astera titan tube": {"beam": (120, 120), "beam_control": "accessory", "cct": (1750, 20000),
+                           "color": "full", "green_magenta": True, "effects": True, "pixels": 16,
+                           "strobe": (0, 25), "accessories": (("Open face 120°", 120), ("SnapGrid 40°", 40)),
+                           "color_modes": ("CCT", "HSI", "RGBMintAmber", "Gels", "Effets")},
+    "astera helios tube": {"beam": (135, 135), "beam_control": "fixed", "cct": (1750, 20000),
+                            "color": "full", "green_magenta": True, "effects": True, "pixels": 8,
+                            "strobe": (0, 25), "color_modes": ("CCT", "HSI", "RGBMintAmber", "Gels", "Effets")},
+    "astera pixelbrick": {"beam": (13, 13), "beam_control": "accessory", "cct": (1750, 20000),
+                           "color": "full", "green_magenta": True, "effects": True, "pixels": 1,
+                           "strobe": (0, 25), "accessories": (("Open face 13°", 13), ("Filtre 17°", 17), ("Filtre 30°", 30))},
+    "arri l5-c (led)": {"beam": (15, 50), "beam_control": "focus", "cct": (2800, 10000), "color": "full"},
+    "arri l7-c (led)": {"beam": (15, 50), "beam_control": "focus", "cct": (2800, 10000), "color": "full"},
+    "arri l10-c (led)": {"beam": (15, 50), "beam_control": "focus", "cct": (2800, 10000), "color": "full"},
+    "arri orbiter": {"beam": (60, 60), "beam_control": "accessory", "cct": (2000, 20000), "color": "full",
+                      "accessories": (("Open face 80°", 80), ("Optique 60°", 60), ("Optique 30°", 30), ("Optique 15°", 15))},
 }
 
 # Overrides PAR MODÈLE (sous-chaîne, minuscule, 1er match gagne — du + spécifique
@@ -225,8 +266,11 @@ def capabilities(family: str, model: str = "") -> dict:
     """Capacités réglables d'un projecteur (défaut famille + overrides modèle)."""
     cap = dict(_CAP_FAMILY.get(family, _CAP_DEFAULT))
     ml = (model or "").lower()
+    exact = _CAP_EXACT.get(ml)
+    if exact:
+        cap.update(exact)
     for kw, override in _CAP_MODEL:
-        if kw in ml:
+        if not exact and kw in ml:
             cap.update(override)
             break
     # Découpe ellipsoïdale : faisceau FIXE déduit du degré dans le nom (19°/26°/36°).
@@ -235,11 +279,41 @@ def capabilities(family: str, model: str = "") -> dict:
     if family == "profile" and m:
         deg = int(m.group(1))
         cap["beam"] = (deg, deg)
+        cap["beam_control"] = "fixed"
     # Capacités dérivées : effets dynamiques (LED couleur/bicolore) et accessoire
     # louver / nid d'abeille (toutes sauf sources pratiques et ballons diffus).
-    cap["effects"] = cap["color"] in ("full", "bicolor")
-    cap["louver"]  = cap["color"] != "source" and family != "balloon"
+    cap.setdefault("effects", cap["color"] in ("full", "bicolor"))
+    cap.setdefault("green_magenta", cap["color"] in ("full", "bicolor"))
+    cap.setdefault("color_modes", ("CCT", "HSI", "Gels", "Effets") if cap["color"] == "full" else ("CCT",))
+    cap.setdefault("beam_control", "focus" if cap.get("beam") and cap["beam"][0] != cap["beam"][1] else "fixed")
+    # Les panneaux, tubes et mats disposent couramment d'un nid d'abeille / d'une
+    # grille de contrôle même lorsque le catalogue ne liste pas encore cet
+    # accessoire comme une optique nommée. Ne pas confondre sa disponibilité avec
+    # la présence d'un jeu d'optiques interchangeables.
+    cap["louver"] = bool(cap.get("accessories")) or family in {
+        "led_panel", "tube", "mat",
+    }
     return cap
+
+
+def effective_beam(light: dict) -> float:
+    """Angle horizontal réellement représenté par le cône du plan de feu."""
+    family = light.get("family", "")
+    model = light.get("model", "")
+    cap = capabilities(family, model)
+    settings = light.get("settings") or {}
+    accessory = settings.get("accessory", "")
+    for label, angle in cap.get("accessories", ()):
+        if label == accessory:
+            return float(angle)
+    # Seuls les projecteurs réellement focalisables utilisent la valeur libre
+    # « beam ». Les anciens projets contenaient souvent 38° pour tout le monde :
+    # cette valeur ne doit pas transformer un SkyPanel 105° en pseudo-spot.
+    beam = settings.get("beam")
+    if cap.get("beam_control") == "focus" and beam:
+        return float(beam)
+    native = cap.get("beam")
+    return float(native[0] if native else 60.0)
 
 
 # ── Effets dynamiques (fixtures à LED couleur : SkyPanel, Titan…) ───────────────
@@ -273,6 +347,7 @@ def default_settings(family: str, model: str = "") -> dict:
     lo, hi = cap["cct"]
     cct = lo if lo == hi else (5600 if (lo <= 5600 <= hi) else (lo + hi) // 2)
     beam = cap["beam"]
+    accessories = cap.get("accessories", ())
     return {
         "on":            True,    # allumé ; éteint → grisé + exclu du prompt
         "intensity":     100,
@@ -282,6 +357,10 @@ def default_settings(family: str, model: str = "") -> dict:
         "green_magenta": 0,       # -100 (magenta) .. +100 (vert)
         "gel":           "",
         "beam":          (beam[0] + beam[1]) // 2 if beam else 0,
+        "accessory":     accessories[0][0] if accessories else "",
+        "color_mode":    cap.get("color_modes", ("CCT",))[0],
+        "strobe_hz":     0,
+        "pixel_mode":    cap.get("pixels", 1),
         "height":        2.5,     # hauteur en mètres (du sol)
         "tilt":          90,      # inclinaison : 90 = horizontale ; < = plongée
         "louver":        False,   # louver / nid d'abeille (faisceau resserré)
@@ -360,12 +439,17 @@ def describe_settings(light: dict) -> str:
         parts.append(f"inclinée à {tilt}° (plongée)")
     else:
         parts.append(f"inclinée à {tilt}° (forte plongée, quasi top light)")
-    if s.get("louver") and cap.get("louver"):
-        parts.append("avec louver / nid d'abeille (faisceau resserré, peu de débordement)")
-    beam = s.get("beam", 0)
-    if beam and cap.get("beam"):
+    accessory = s.get("accessory", "")
+    if accessory:
+        parts.append(f"optique/accessoire {accessory}")
+    beam = effective_beam(light)
+    if beam:
         kind = "serré" if beam <= 25 else ("large" if beam >= 45 else "moyen")
         parts.append(f"faisceau {beam}° ({kind})")
+    if cap.get("pixels", 1) > 1:
+        parts.append(f"pilotage sur {s.get('pixel_mode', cap['pixels'])} groupe(s) de pixels")
+    if s.get("strobe_hz", 0):
+        parts.append(f"stroboscope {s['strobe_hz']} Hz")
     return ", ".join(parts)
 
 

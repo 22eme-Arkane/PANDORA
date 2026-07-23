@@ -14,6 +14,7 @@ import os
 
 from PyQt6.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, QTextEdit, QProgressBar,
+    QComboBox,
 )
 from PyQt6.QtCore import Qt, pyqtSignal, QThread
 
@@ -96,6 +97,53 @@ class RoomVariationsDialog(QDialog):
             f"QTextEdit:focus{{border-color:{CP['accent']};}}")
         lay.addWidget(self._prompt)
 
+        combo_ss = (
+            f"QComboBox{{background:{CP['bg3']};border:1px solid {CP['border']};"
+            f"border-radius:6px;color:{CP['text_primary']};font-size:11px;padding:0 8px;}}"
+            f"QComboBox::drop-down{{border:none;width:20px;}}"
+            f"QComboBox QAbstractItemView{{background:{CP['bg3']};border:1px solid {CP['border_bright']};"
+            f"color:{CP['text_primary']};selection-background-color:{CP['accent_dim']};}}"
+        )
+        from core.config import load_config
+        from core.image_engines import engine_choices, reference_engine_choices
+        source = next((d for d in self._decors if d.get("room_view") == "Ensemble"),
+                      self._decors[0] if self._decors else {})
+
+        engines_row = QHBoxLayout()
+        engines_row.addWidget(QLabel(translate("Image de départ")))
+        self._model_combo = QComboBox()
+        for key, label in engine_choices():
+            self._model_combo.addItem(label, key)
+        idx = self._model_combo.findData(
+            source.get("image_model_key") or load_config().get("image_model", "nb2"))
+        if idx >= 0:
+            self._model_combo.setCurrentIndex(idx)
+        self._model_combo.setStyleSheet(combo_ss)
+        engines_row.addWidget(self._model_combo, 1)
+        lay.addLayout(engines_row)
+
+        refs_row = QHBoxLayout()
+        refs_row.addWidget(QLabel(translate("Plan + raccords")))
+        self._reference_model_combo = QComboBox()
+        for key, label in reference_engine_choices():
+            self._reference_model_combo.addItem(label, key)
+        idx = self._reference_model_combo.findData(
+            source.get("room_reference_model") or "nb2")
+        if idx >= 0:
+            self._reference_model_combo.setCurrentIndex(idx)
+        self._reference_model_combo.setStyleSheet(combo_ss)
+        refs_row.addWidget(self._reference_model_combo, 1)
+        lay.addLayout(refs_row)
+
+        engine_hint = QLabel(translate(
+            "Le second moteur reprend l'image d'ensemble et le plan vu de dessus "
+            "afin de préserver la même architecture dans les six vues."
+        ))
+        engine_hint.setWordWrap(True)
+        engine_hint.setStyleSheet(
+            f"color:{CP['text_dim']};font-size:9px;background:transparent;")
+        lay.addWidget(engine_hint)
+
         self._progress = QProgressBar()
         self._progress.setRange(0, 100)
         self._progress.setVisible(False)
@@ -140,7 +188,10 @@ class RoomVariationsDialog(QDialog):
         """Prompt de départ = celui de la vue d'ensemble, sinon le 1er décor."""
         ov = next((d for d in self._decors if d.get("room_view") == "Ensemble"), None)
         d = ov or (self._decors[0] if self._decors else {})
-        return d.get("prompt", "") or d.get("description", "") or self._room
+        from core.room_views import extract_base_prompt
+        source = (d.get("room_base_prompt", "") or d.get("description", "")
+                  or d.get("prompt", "") or self._room)
+        return extract_base_prompt(source) or self._room
 
     # ── Affichage français du prompt (anglais stocké → français éditable) ─────────
 
@@ -196,7 +247,11 @@ class RoomVariationsDialog(QDialog):
         self._status.setText(translate("Génération des variations…"))
         self._worker = GenerateRoomViewsWorker(
             base_prompt=prompt, decor_name=self._room,
-            style_suffix=style_api.get_image_suffix())
+            model_key=self._model_combo.currentData(),
+            style_suffix=style_api.get_image_suffix(),
+            reference_model_key=self._reference_model_combo.currentData(),
+            category=next((d.get("category", "") for d in self._decors
+                           if d.get("category")), ""))
         self._worker.progress.connect(lambda pct, msg: (self._progress.setValue(pct),
                                                         self._status.setText(translate(msg))))
         self._worker.views_finished.connect(self._on_done)
@@ -228,6 +283,10 @@ class RoomVariationsDialog(QDialog):
             d["image_path"] = new_path     # la variation devient l'aperçu courant
             d["generated_images"] = gallery
             d["prompt"] = self._prompt.toPlainText().strip() or d.get("prompt", "")
+            d["room_base_prompt"] = self._prompt.toPlainText().strip()
+            d["image_model_key"] = self._model_combo.currentData() or "nb2"
+            d["room_reference_model"] = (
+                self._reference_model_combo.currentData() or "nb2")
             if fp:
                 d["floor_plan"] = fp
             decors_api.save_decor(d)

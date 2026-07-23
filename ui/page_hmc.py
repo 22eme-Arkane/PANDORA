@@ -171,12 +171,10 @@ class PageHMC(QWidget):
         root.setContentsMargins(0, 0, 0, 0)
         root.setSpacing(0)
 
-        root.addWidget(self._build_topbar())
+        # Bandeau titre retiré (demande Matthieu 2026-07-22).
 
-        sep = QFrame()
-        sep.setFixedHeight(1)
-        sep.setStyleSheet(f"background:{CP['border']};")
-        root.addWidget(sep)
+        # Separateur haut retire (2026-07-23) : la barre d'outils est la 1re rangee,
+        # sa ligne basse tombe pile sur celles des en-tetes GUIDE / IA (40 px).
 
         root.addWidget(self._build_toolbar())
 
@@ -237,13 +235,15 @@ class PageHMC(QWidget):
 
     def _build_toolbar(self):
         bar = QWidget()
-        bar.setFixedHeight(60)
-        bar.setStyleSheet(f"background:{CP['bg0']};")
+        # 40 px + ligne basse : premiere rangee alignee sur les en-tetes GUIDE/IA (2026-07-23).
+        bar.setFixedHeight(40)
+        bar.setStyleSheet(f"background:{CP['bg0']};border-bottom:1px solid {CP['border']};")
         lay = QHBoxLayout(bar)
         lay.setContentsMargins(32, 0, 32, 0)
         lay.setSpacing(10)
 
-        # Filtres type
+        # Filtres type — conservés (Tous / Habillage / Maquillage / Coiffure) mais
+        # ajoutés À DROITE du bouton « Action », plus bas (demande 2026-07-22).
         self._filter_btns: dict[str, QPushButton] = {}
         for label in ["Tous"] + TYPES:
             btn = QPushButton(label)
@@ -253,9 +253,6 @@ class PageHMC(QWidget):
             btn.setStyleSheet(self._filter_style(label == "Tous"))
             btn.clicked.connect(lambda checked, lbl=label: self._set_filter(lbl))
             self._filter_btns[label] = btn
-            lay.addWidget(btn)
-
-        lay.addStretch()
 
         self._search = QLineEdit()
         self._search.setPlaceholderText("🔍  Rechercher…")
@@ -267,22 +264,16 @@ class PageHMC(QWidget):
             f"QLineEdit:focus{{border-color:{CP['accent_dim']};}}"
         )
         self._search.textChanged.connect(self._apply_filter)
-        lay.addWidget(self._search)
+        # Barre de recherche RETIRÉE de l'affichage (2026-07-22) ; widget vivant.
+        self._search.setParent(bar)
+        self._search.hide()
 
-        # Sauvegarder / Ouvrir le HMC — à côté de la barre de recherche.
         self._btn_save_file, self._btn_open_file = make_save_open_buttons(
             self, kind="hmc",
             list_fn=hmc_api.list_hmc_items,
             save_fn=hmc_api.save_hmc_item,
             delete_fn=hmc_api.delete_hmc_item,
             refresh_fn=self.refresh)
-        lay.addWidget(self._btn_save_file)
-        lay.addWidget(self._btn_open_file)
-
-        # Séparateur (espace + trait) entre le groupe fichier et « Créer ».
-        lay.addSpacing(6)
-        lay.addWidget(toolbar_separator())
-        lay.addSpacing(6)
 
         btn_new = QPushButton("✦  Créer un élément HMC")
         btn_new.setFixedHeight(36)
@@ -306,8 +297,17 @@ class PageHMC(QWidget):
         )
         btn_del_all.clicked.connect(self._on_delete_all)
 
-        lay.addWidget(btn_new)
-        lay.addWidget(btn_del_all)
+        # ── Bouton « Action » (2026-07-22, même principe que le Storyboard) :
+        # Sauvegarder, Ouvrir, Créer un élément HMC, Tout supprimer (rouge) —
+        # puis les filtres type à sa droite.
+        from ui.widgets import make_actions_menu_button
+        self._btn_actions = make_actions_menu_button(
+            bar, [self._btn_save_file, self._btn_open_file, btn_new],
+            red_entry=btn_del_all)
+        lay.addWidget(self._btn_actions)
+        for _label in ["Tous"] + TYPES:
+            lay.addWidget(self._filter_btns[_label])
+        lay.addStretch(1)
         return bar
 
     def _filter_style(self, active: bool) -> str:
@@ -353,10 +353,11 @@ class PageHMC(QWidget):
             empty.setStyleSheet(
                 f"color:{CP['text_dim']};font-size:13px;background:transparent;border:none;"
             )
-            self._grid.addWidget(empty, 0, 0, 1, 6)
+            self._grid.addWidget(empty, 0, 0, 1, 9)
             return
 
-        cols = 6
+        # 9 colonnes (2026-07-23) : utiliser toute la largeur de la fenêtre.
+        cols = 9
         for i, item in enumerate(items):
             card = HMCCard(item)
             card.edit_requested.connect(self._on_edit)

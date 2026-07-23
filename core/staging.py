@@ -13,6 +13,8 @@ Stockage par projet : <data_root>/staging/index.json (+ images du plan).
 
 import os
 import json
+import math
+import re
 
 # Types de projecteurs pour le Plan de feu (nom, libellé).
 PROJECTOR_TYPES = [
@@ -26,6 +28,58 @@ PROJECTOR_TYPES = [
     ("practical","Practical (source dans le décor)"),
     ("ambient",  "Ambiance / fond"),
 ]
+
+
+_SENSOR_WIDTHS_MM = {
+    "alexa 65": 54.12,
+    "alexa 35": 27.99,
+    "alexa mini lf": 36.70,
+    "alexa lf": 36.70,
+    "alexa mini": 28.17,
+    "venice 2": 35.90,
+    "venice": 35.90,
+    "burano": 35.90,
+    "v-raptor": 40.96,
+    "komodo": 27.03,
+    "eos c400": 38.10,
+    "eos c500": 38.10,
+    "eos c300": 26.20,
+}
+
+
+def camera_horizontal_fov(shot: dict, sensor_width_mm: float | None = None) -> float:
+    """Champ horizontal réel en degrés, dérivé du capteur et de la focale.
+
+    Le repli est un capteur Super 35 (24,89 mm). Un objectif anamorphique 2×
+    double le champ horizontal après désanamorphose.
+    """
+    focal_text = str((shot or {}).get("focal") or "35")
+    match = re.search(r"(\d+(?:[.,]\d+)?)", focal_text)
+    focal_mm = float(match.group(1).replace(",", ".")) if match else 35.0
+    if sensor_width_mm is None:
+        try:
+            from core.camera_prefs import get_camera_prefs
+            prefs = get_camera_prefs()
+        except Exception:
+            prefs = {}
+        body = str(prefs.get("camera_body") or "").casefold()
+        sensor_width_mm = next((width for name, width in _SENSOR_WIDTHS_MM.items()
+                                if name in body), 24.89)
+        optics = " ".join((str(prefs.get("optics_brand") or ""),
+                            str(prefs.get("optics_series") or ""))).casefold()
+    else:
+        optics = str((shot or {}).get("optic") or "").casefold()
+    squeeze = 2.0 if "anamorph" in optics or "2x" in optics else 1.0
+    fov = math.degrees(2.0 * math.atan((float(sensor_width_mm) * squeeze) / (2.0 * focal_mm)))
+    return round(max(3.0, min(170.0, fov)), 2)
+
+
+def apply_camera_optics(record: dict, shot: dict) -> dict:
+    """Met à jour uniquement les données optiques de la caméra du plateau."""
+    camera = record.setdefault("camera", {"x": 0.5, "y": 0.85, "angle": 0.0})
+    camera["focal"] = str((shot or {}).get("focal") or "35mm")
+    camera["fov"] = camera_horizontal_fov(shot)
+    return record
 
 # Axes caméra dérivés de l'angle (degrés, 0 = vers le haut de l'image, horaire).
 # Pour cohérence avec storyboard.camera_axis.
@@ -139,6 +193,7 @@ def seed_record_for_shot(shot: dict) -> dict:
     axis = (shot.get("camera_axis") or "Face").strip()
     cx, cy, ang = _AXIS_TO_CAMERA.get(axis, _AXIS_TO_CAMERA["Face"])
     rec["camera"] = {"x": cx, "y": cy, "angle": ang}
+    apply_camera_optics(rec, shot)
     # Hauteur caméra si déjà saisie sur le plan (« 1,7 m » → 1.7).
     h = _parse_meters(shot.get("camera_height"))
     if h > 0:

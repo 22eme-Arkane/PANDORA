@@ -149,7 +149,10 @@ class PageStyle(QWidget):
         root.setContentsMargins(0, 0, 0, 0)
         root.setSpacing(0)
 
-        root.addWidget(self._build_topbar())
+        # Bandeau titre retiré (2026-07-22) — widget conservé caché (libellés référencés).
+        _tb = self._build_topbar()
+        _tb.setParent(self)
+        _tb.hide()
         root.addWidget(self._build_separator())
         root.addWidget(self._build_body(), 1)
 

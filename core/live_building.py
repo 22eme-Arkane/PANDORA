@@ -69,14 +69,12 @@ def describe_facade(image_path: str = "", *, cache: bool = True) -> str:
         except Exception:
             pass
     try:
-        from core.config import load_config
-        key = load_config().get("anthropic_key", "").strip()
+        from core.ai_provider import chat, key_error
     except Exception:
-        key = ""
-    if not key:
+        return ""
+    if key_error(task="vision"):
         return ""
     try:
-        import anthropic as _anthropic
         from core.i18n import get_lang
         from core.image_payload import encode_image_for_vision
         # Redimensionne/compresse : une photo de façade pleine résolution dépasse la
@@ -103,14 +101,12 @@ def describe_facade(image_path: str = "", *, cache: bool = True) -> str:
                  "texture (pierre, brique, crépi, verre) ; (f) ce qui N'EST PAS visible "
                  "(côtés, arrière, toit hors champ). Ne devine ni n'invente rien hors champ. "
                  "Donne la description seule, sans préambule.")
-        client = _anthropic.Anthropic(api_key=key)
-        msg = client.messages.create(
-            model="claude-haiku-4-5", max_tokens=400,
-            messages=[{"role": "user", "content": [
+        desc = chat(
+            "", [{"role": "user", "content": [
                 {"type": "image",
                  "source": {"type": "base64", "media_type": _mime, "data": b64}},
-                {"type": "text", "text": q}]}])
-        desc = msg.content[0].text.strip()
+                {"type": "text", "text": q}]}],
+            tier="utility", max_tokens=400, task="vision").strip()
         if desc and cache:
             try:
                 p = _desc_cache_path()

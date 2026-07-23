@@ -17,27 +17,26 @@ from core.pandora_dirs import get_bin_dir
 from core.worker import humanize_api_error
 
 
-def analyze_style_for_image(image_path: str, anthropic_key: str) -> str:
+def analyze_style_for_image(image_path: str, _legacy_key: str = "") -> str:
     """
-    Claude Haiku Vision — extrait les descripteurs de style pictural d'une image.
+    Le moteur de vision sélectionné extrait les descripteurs de style pictural.
     Retourne une phrase courte (10-15 mots) à préfixer au prompt NB,
     ex. "photorealistic cinema, full color, dramatic cinematic lighting".
     Retourne "" en cas d'erreur.
     """
     try:
         import base64
-        import anthropic as _anth
+        from core.ai_provider import chat, key_error
+        if key_error(task="vision"):
+            return ""
         _ext = os.path.splitext(image_path)[1].lower()
         _mime = {".jpg": "image/jpeg", ".jpeg": "image/jpeg",
                  ".png": "image/png", ".webp": "image/webp"}
         _media_type = _mime.get(_ext, "image/jpeg")
         with open(image_path, "rb") as _f:
             _b64 = base64.standard_b64encode(_f.read()).decode()
-        client = _anth.Anthropic(api_key=anthropic_key)
-        msg = client.messages.create(
-            model="claude-haiku-4-5",
-            max_tokens=80,
-            messages=[{"role": "user", "content": [
+        text = chat(
+            "", [{"role": "user", "content": [
                 {"type": "image", "source": {"type": "base64",
                  "media_type": _media_type, "data": _b64}},
                 {"type": "text", "text": (
@@ -52,35 +51,34 @@ def analyze_style_for_image(image_path: str, anthropic_key: str) -> str:
                     "Output ONLY the style keywords comma-separated, no punctuation at end, "
                     "no explanation."
                 )},
-            ]}],
-        )
-        return msg.content[0].text.strip().rstrip(".,")
+            ]}], tier="utility", max_tokens=80, task="vision")
+        return text.strip().rstrip(".,")
     except Exception:
         return ""
 
 
-def analyze_fidelity_for_image(image_path: str, anthropic_key: str, subject_hint: str = "") -> str:
+def analyze_fidelity_for_image(image_path: str, _legacy_key: str = "",
+                               subject_hint: str = "") -> str:
     """
-    Claude Haiku Vision — décrit le sujet avec précision maximale pour reproduction fidèle.
+    Le moteur de vision décrit le sujet avec précision maximale pour reproduction fidèle.
     subject_hint : "accessory", "vehicle", "location", "outfit/makeup/hair", etc.
     Retourne une phrase (max 60 mots) à préfixer au prompt NB.
     Retourne "" en cas d'erreur.
     """
     try:
         import base64
-        import anthropic as _anth
+        from core.ai_provider import chat, key_error
+        if key_error(task="vision"):
+            return ""
         _ext = os.path.splitext(image_path)[1].lower()
         _mime = {".jpg": "image/jpeg", ".jpeg": "image/jpeg",
                  ".png": "image/png", ".webp": "image/webp"}
         _media_type = _mime.get(_ext, "image/jpeg")
         with open(image_path, "rb") as _f:
             _b64 = base64.standard_b64encode(_f.read()).decode()
-        client = _anth.Anthropic(api_key=anthropic_key)
         hint_line = f" The subject is a {subject_hint}." if subject_hint else ""
-        msg = client.messages.create(
-            model="claude-haiku-4-5",
-            max_tokens=100,
-            messages=[{"role": "user", "content": [
+        text = chat(
+            "", [{"role": "user", "content": [
                 {"type": "image", "source": {"type": "base64",
                  "media_type": _media_type, "data": _b64}},
                 {"type": "text", "text": (
@@ -89,9 +87,8 @@ def analyze_fidelity_for_image(image_path: str, anthropic_key: str, subject_hint
                     "textures, and the most distinctive identifying features. "
                     "Under 60 words. Output ONLY the description, no preamble, no explanation."
                 )},
-            ]}],
-        )
-        return msg.content[0].text.strip().rstrip(".")
+            ]}], tier="utility", max_tokens=100, task="vision")
+        return text.strip().rstrip(".")
     except Exception:
         return ""
 
@@ -624,29 +621,23 @@ class OptimizePromptWorker(QThread):
         self._style_suffix = style_suffix
 
     def run(self):
-        cfg = load_config()
-        key = cfg.get("anthropic_key", "").strip()
-        if not key:
-            self.failed.emit("Clé API Anthropic manquante.\nConfigure-la dans Paramètres.")
+        from core.ai_provider import complete, key_error
+        err = key_error(task="enhance")
+        if err:
+            self.failed.emit(err)
             return
         try:
-            import anthropic
             lang = _get_lang()
-            client = anthropic.Anthropic(api_key=key)
             user_msg = self._desc
             if self._style_suffix:
                 user_msg = f"{user_msg}\n\n[Style visuel du projet : {self._style_suffix}]"
             _base_sys = _OPTIMIZE_CREATURE_SYSTEM if _is_creature(self._desc) else _OPTIMIZE_SYSTEM
             system = _apply_lang_to_system(_base_sys, lang)
-            msg = client.messages.create(
-                model="claude-haiku-4-5",
-                max_tokens=350,
-                system=system,
-                messages=[{"role": "user", "content": user_msg}],
-            )
-            self.finished.emit(msg.content[0].text.strip())
+            text = complete(system, user_msg, tier="utility", max_tokens=350,
+                            task="enhance")
+            self.finished.emit(text.strip())
         except Exception as e:
-            self.failed.emit(f"Erreur Anthropic : {e}")
+            self.failed.emit(humanize_api_error(str(e)))
 
 
 # ── Worker : optimisation du prompt avec images de référence ─────────────────
@@ -664,17 +655,16 @@ class OptimizeWithReferencesWorker(QThread):
         self._style_suffix = style_suffix
 
     def run(self):
-        cfg = load_config()
-        key = cfg.get("anthropic_key", "").strip()
-        if not key:
-            self.failed.emit("Clé API Anthropic manquante.\nConfigure-la dans Paramètres.")
+        from core.ai_provider import chat, key_error
+        err = key_error(task="vision")
+        if err:
+            self.failed.emit(err)
             return
         try:
-            import anthropic, base64
+            import base64
             from pathlib import Path
 
             lang = _get_lang()
-            client = anthropic.Anthropic(api_key=key)
             _mime = {
                 "jpg": "image/jpeg", "jpeg": "image/jpeg",
                 "png": "image/png",  "webp": "image/webp", "bmp": "image/bmp",
@@ -703,15 +693,12 @@ class OptimizeWithReferencesWorker(QThread):
                 )
             content.append({"type": "text", "text": user_text})
 
-            msg = client.messages.create(
-                model="claude-haiku-4-5",
-                max_tokens=350,
-                system=_apply_lang_to_system(self._SYSTEM, lang),
-                messages=[{"role": "user", "content": content}],
-            )
-            self.finished.emit(msg.content[0].text.strip())
+            text = chat(_apply_lang_to_system(self._SYSTEM, lang),
+                        [{"role": "user", "content": content}],
+                        tier="utility", max_tokens=350, task="vision")
+            self.finished.emit(text.strip())
         except Exception as e:
-            self.failed.emit(f"Erreur Anthropic : {e}")
+            self.failed.emit(humanize_api_error(str(e)))
 
 
 class OptimizeCharacterWithReferencesWorker(OptimizeWithReferencesWorker):
@@ -719,17 +706,16 @@ class OptimizeCharacterWithReferencesWorker(OptimizeWithReferencesWorker):
     _SYSTEM = _OPTIMIZE_CHARACTER_WITH_REF_SYSTEM
 
     def run(self):
-        cfg = load_config()
-        key = cfg.get("anthropic_key", "").strip()
-        if not key:
-            self.failed.emit("Clé API Anthropic manquante.\nConfigure-la dans Paramètres.")
+        from core.ai_provider import chat, key_error
+        err = key_error(task="vision")
+        if err:
+            self.failed.emit(err)
             return
         try:
-            import anthropic, base64
+            import base64
             from pathlib import Path
 
             lang = _get_lang()
-            client = anthropic.Anthropic(api_key=key)
             _mime = {
                 "jpg": "image/jpeg", "jpeg": "image/jpeg",
                 "png": "image/png",  "webp": "image/webp", "bmp": "image/bmp",
@@ -763,15 +749,12 @@ class OptimizeCharacterWithReferencesWorker(OptimizeWithReferencesWorker):
                 user_text += f"\n\n[Style visuel du projet : {self._style_suffix}]"
             content.append({"type": "text", "text": user_text})
 
-            msg = client.messages.create(
-                model="claude-opus-4-7",
-                max_tokens=400,
-                system=_apply_lang_to_system(self._SYSTEM, lang),
-                messages=[{"role": "user", "content": content}],
-            )
-            self.finished.emit(msg.content[0].text.strip())
+            text = chat(_apply_lang_to_system(self._SYSTEM, lang),
+                        [{"role": "user", "content": content}],
+                        tier="creative", max_tokens=400, task="vision")
+            self.finished.emit(text.strip())
         except Exception as e:
-            self.failed.emit(f"Erreur Anthropic : {e}")
+            self.failed.emit(humanize_api_error(str(e)))
 
 
 class OptimizeVehicleWithReferencesWorker(OptimizeWithReferencesWorker):
@@ -801,17 +784,16 @@ class OptimizeStyleReferenceWorker(OptimizeWithReferencesWorker):
     _SYSTEM = _OPTIMIZE_STYLE_REF_SYSTEM
 
     def run(self):
-        cfg = load_config()
-        key = cfg.get("anthropic_key", "").strip()
-        if not key:
-            self.failed.emit("Clé API Anthropic manquante.\nConfigure-la dans Paramètres.")
+        from core.ai_provider import chat, key_error
+        err = key_error(task="vision")
+        if err:
+            self.failed.emit(err)
             return
         try:
-            import anthropic, base64
+            import base64
             from pathlib import Path
 
             lang = _get_lang()
-            client = anthropic.Anthropic(api_key=key)
             _mime = {
                 "jpg": "image/jpeg", "jpeg": "image/jpeg",
                 "png": "image/png",  "webp": "image/webp", "bmp": "image/bmp",
@@ -852,15 +834,12 @@ class OptimizeStyleReferenceWorker(OptimizeWithReferencesWorker):
             )
             content.append({"type": "text", "text": user_text})
 
-            msg = client.messages.create(
-                model="claude-haiku-4-5",
-                max_tokens=350,
-                system=_apply_lang_to_system(self._SYSTEM, lang),
-                messages=[{"role": "user", "content": content}],
-            )
-            self.finished.emit(msg.content[0].text.strip())
+            text = chat(_apply_lang_to_system(self._SYSTEM, lang),
+                        [{"role": "user", "content": content}],
+                        tier="utility", max_tokens=350, task="vision")
+            self.finished.emit(text.strip())
         except Exception as e:
-            self.failed.emit(f"Erreur Anthropic : {e}")
+            self.failed.emit(humanize_api_error(str(e)))
 
 
 # ── Worker : génération du portrait via Nano Banana ───────────────────────────
@@ -1264,16 +1243,14 @@ class GeneratePortraitWithFaceIDWorker(QThread):
     # PuLID ne peut pas injecter tout seul (il gère la géométrie, pas la texture).
 
     def _analyze_texture(self) -> str | None:
-        """Extrait la texture cutanée via Claude Haiku (pas la géométrie)."""
-        cfg = load_config()
-        anthropic_key = cfg.get("anthropic_key", "").strip()
-        if not anthropic_key:
+        """Extrait la texture cutanée via le moteur de vision (pas la géométrie)."""
+        from core.ai_provider import chat, key_error
+        if key_error(task="vision"):
             return None
         try:
-            import anthropic, base64 as _b64
+            import base64 as _b64
             from pathlib import Path
 
-            client = anthropic.Anthropic(api_key=anthropic_key)
             ext  = Path(self._photo_path).suffix.lower().lstrip(".")
             mime = {
                 "jpg": "image/jpeg", "jpeg": "image/jpeg",
@@ -1282,19 +1259,15 @@ class GeneratePortraitWithFaceIDWorker(QThread):
             with open(self._photo_path, "rb") as f:
                 raw = _b64.standard_b64encode(f.read()).decode()
 
-            msg = client.messages.create(
-                model="claude-haiku-4-5",
-                max_tokens=120,
-                system=_TEXTURE_ANALYSIS_SYSTEM,
-                messages=[{
+            text = chat(
+                _TEXTURE_ANALYSIS_SYSTEM, [{
                     "role": "user",
                     "content": [
                         {"type": "image", "source": {"type": "base64", "media_type": mime, "data": raw}},
                         {"type": "text",  "text": "Extract skin texture details only."},
                     ],
-                }],
-            )
-            return msg.content[0].text.strip()
+                }], tier="utility", max_tokens=120, task="vision")
+            return text.strip()
         except Exception:
             return None
 
@@ -1302,20 +1275,13 @@ class GeneratePortraitWithFaceIDWorker(QThread):
         """Filtre char_prompt_en via Claude Haiku — supprime les descripteurs physiques
         (cheveux, yeux, morphologie) qui entrent en compétition avec l'embedding PuLID.
         Garde : costume, rôle, contexte, période."""
-        cfg = load_config()
-        anthropic_key = cfg.get("anthropic_key", "").strip()
-        if not anthropic_key:
+        from core.ai_provider import complete, key_error
+        if key_error(task="enhance"):
             return None
         try:
-            import anthropic
-            client = anthropic.Anthropic(api_key=anthropic_key)
-            msg = client.messages.create(
-                model="claude-haiku-4-5",
-                max_tokens=120,
-                system=_COSTUME_FILTER_SYSTEM,
-                messages=[{"role": "user", "content": char_prompt_en}],
-            )
-            return msg.content[0].text.strip()
+            return complete(_COSTUME_FILTER_SYSTEM, char_prompt_en,
+                            tier="utility", max_tokens=120,
+                            task="enhance").strip()
         except Exception:
             return None
 
@@ -1569,24 +1535,18 @@ GeneratePortraitFromPhotoWorker = GeneratePortraitWithFaceIDWorker
 
 def _run_optimize_worker(self, system_const, finished_signal, failed_signal):
     """Shared run logic for simple single-text optimize workers."""
-    cfg = load_config()
-    key = cfg.get("anthropic_key", "").strip()
-    if not key:
-        failed_signal.emit("Clé API Anthropic manquante.\nConfigure-la dans Paramètres.")
+    from core.ai_provider import complete, key_error
+    err = key_error(task="enhance")
+    if err:
+        failed_signal.emit(err)
         return
     try:
-        import anthropic
         lang = _get_lang()
-        client = anthropic.Anthropic(api_key=key)
-        msg = client.messages.create(
-            model="claude-haiku-4-5",
-            max_tokens=350,
-            system=_apply_lang_to_system(system_const, lang),
-            messages=[{"role": "user", "content": self._desc}],
-        )
-        finished_signal.emit(msg.content[0].text.strip())
+        text = complete(_apply_lang_to_system(system_const, lang), self._desc,
+                        tier="utility", max_tokens=350, task="enhance")
+        finished_signal.emit(text.strip())
     except Exception as e:
-        failed_signal.emit(f"Erreur Anthropic : {e}")
+        failed_signal.emit(humanize_api_error(str(e)))
 
 
 class OptimizeDecorPromptWorker(OptimizePromptWorker):
@@ -1893,12 +1853,19 @@ class GenerateRoomViewsWorker(QThread):
     failed         = pyqtSignal(str)
 
     def __init__(self, base_prompt: str, decor_name: str,
-                 model_key: str | None = None, style_suffix: str = ""):
+                 model_key: str | None = None, style_suffix: str = "",
+                 reference_model_key: str | None = None,
+                 category: str = ""):
         super().__init__()
         self._base         = base_prompt
         self._name         = decor_name
         self._model_key    = model_key
+        # Moteur image-to-image distinct : plan d'architecture + six raccords.
+        # Avant juillet 2026, ces étapes forçaient silencieusement NB2 Edit même
+        # lorsque l'utilisateur avait choisi un autre moteur pour l'image maître.
+        self._reference_model_key = reference_model_key or "nb2"
         self._style_suffix = style_suffix
+        self._category     = category or ""
         # Diagnostic lisible par le dialogue après views_finished.
         self._faces_ok     = 0
         self._faces_total  = 6
@@ -1914,7 +1881,7 @@ class GenerateRoomViewsWorker(QThread):
 
     def _mock(self):
         from core.room_views import build_seven_view_prompts
-        views = build_seven_view_prompts("")
+        views = build_seven_view_prompts("", self._category)
         for i, (label, _c, _d) in enumerate(views):
             self.progress.emit(int((i + 1) / len(views) * 100),
                                f"[{i+1}/7] {label} (mode mock)…")
@@ -1927,7 +1894,10 @@ class GenerateRoomViewsWorker(QThread):
             import requests
             import base64, mimetypes
             from core.lang import translate_to_english
-            from core.room_views import build_six_view_prompts, build_overview_prompt
+            from core.room_views import (
+                build_six_view_prompts, build_overview_prompt,
+                is_exterior_category,
+            )
 
             os.environ["FAL_KEY"] = key
             cfg = load_config()
@@ -1936,10 +1906,12 @@ class GenerateRoomViewsWorker(QThread):
                 cfg["image_model"] = self._model_key
             price = get_image_price(cfg)
             base_en = translate_to_english(self._base) if self._base else ""
+            exterior = is_exterior_category(self._category)
 
             safe = "".join(c for c in self._name if c.isalnum() or c in " -_").strip() or "decor"
             ts   = int(time.time())
             out: list[dict] = []
+            preview_by_path: dict[str, str] = {}
 
             # Journal de diagnostic — chaque échec de vue y est tracé pour pouvoir
             # comprendre « pourquoi je n'ai que le plan d'ensemble » (crédits / limite
@@ -1952,12 +1924,26 @@ class GenerateRoomViewsWorker(QThread):
                         _lf.write(m + "\n")
                 except Exception:
                     pass
-            _log(f"===== 7 vues « {self._name} » (modèle {get_image_endpoint(cfg)}) =====")
+            from core.image_engines import (
+                ar_to_target, build_request, is_edit_capable, short_label,
+            )
+            ref_model = (self._reference_model_key
+                         if is_edit_capable(self._reference_model_key) else "nb2")
+            _log(
+                f"===== 7 vues « {self._name} » "
+                f"(catégorie {self._category or 'non précisée'} · "
+                f"départ {get_image_endpoint(cfg)} · raccord {short_label(ref_model)}) ====="
+            )
 
             def _save(data: bytes, code: str) -> str:
                 p = os.path.join(_project_images_dir("decors"), f"{safe}_{code}_{ts}.png")
                 with open(p, "wb") as f:
                     f.write(data)
+                # Prepare l'aperçu AVANT d'autoriser la navigation vers la page
+                # Décors. Pillow travaille dans ce QThread, sans processus externe
+                # ni fenêtre console visible sous Windows.
+                from core.image_preview import make_preview
+                preview_by_path[p] = make_preview(p, max_size=(512, 512))
                 return p
 
             def _dataurl(path: str) -> str:
@@ -1983,15 +1969,12 @@ class GenerateRoomViewsWorker(QThread):
                 return requests.get(_extract_image_url(_res), timeout=120).content
 
             def _gen_edit(prompt: str, ref_urls: list, aspect: str) -> bytes:
-                _res = fal_client.subscribe("fal-ai/nano-banana-2/edit", arguments={
-                    "prompt":           prompt,
-                    "image_urls":       ref_urls,
-                    "num_images":       1,
-                    "aspect_ratio":     aspect,
-                    "resolution":       "1K",
-                    "output_format":    "png",
-                    "safety_tolerance": "6",
-                })
+                _ep, _args, _kind = build_request(
+                    ref_model, prompt, ar_to_target(aspect), "1K", ref_urls,
+                )
+                if _kind != "raster":
+                    raise RuntimeError("Le moteur de raccord doit produire une image raster.")
+                _res = fal_client.subscribe(_ep, arguments=_args)
                 return requests.get(_extract_image_url(_res), timeout=120).content
 
             def _gen_text_robust(prompt: str, aspect: str) -> bytes:
@@ -2015,7 +1998,8 @@ class GenerateRoomViewsWorker(QThread):
 
             # 1) PLAN D'ENSEMBLE d'abord (vue maîtresse) ─────────────────────────
             self.progress.emit(8, f"[1/8] Plan d'ensemble…  ({price})")
-            ov_label, ov_code, ov_prompt = build_overview_prompt(base_en)
+            ov_label, ov_code, ov_prompt = build_overview_prompt(
+                base_en, self._category)
             full_ov = ov_prompt
             if self._style_suffix:
                 full_ov = f"{full_ov}, {self._style_suffix}"
@@ -2023,7 +2007,9 @@ class GenerateRoomViewsWorker(QThread):
             ov_path = ""
             try:
                 ov_path = _save(_gen_text_robust(full_ov, "16:9"), ov_code)
-                out.append({"label": ov_label, "code": ov_code, "path": ov_path, "prompt": ov_prompt})
+                out.append({"label": ov_label, "code": ov_code, "path": ov_path,
+                            "thumbnail_path": preview_by_path.get(ov_path, ""),
+                            "prompt": ov_prompt})
             except Exception as e:
                 _log(f"plan d'ensemble ÉCHEC: {str(e)[:160]}")
             time.sleep(_VIEW_GAP_S)   # espacement entre vues (anti-saturation API)
@@ -2034,15 +2020,29 @@ class GenerateRoomViewsWorker(QThread):
             #    ensemble disponible (ou si l'édition échoue), repli texte robuste.
             #    Indispensable : le plan sert ensuite de référence spatiale aux 6 faces.
             self.progress.emit(20, "[2/8] Plan d'architecture (calé sur l'ensemble)…")
-            fp_prompt = _floor_plan_prompt(base_en or "an interior room")
-            fp_anchor = (
-                "Draw the TOP-DOWN architectural floor plan (bird's eye view, seen from "
-                "directly above) of the EXACT room shown in the reference image: SAME "
-                "walls, SAME proportions, SAME furniture in the SAME positions, SAME "
-                "doors and windows. Schematic blueprint / architect plan style — simple "
-                "lines, flat tones, neutral background, no people, no camera, no text "
-                "labels. Square framing."
-            )
+            fp_prompt = _floor_plan_prompt(
+                base_en or ("an outdoor location" if exterior else "an interior room"),
+                self._category)
+            if exterior:
+                fp_anchor = (
+                    "Draw the TOP-DOWN SITE PLAN (bird's eye view, seen from directly "
+                    "above) of the EXACT OUTDOOR NATURAL LOCATION shown in the reference "
+                    "image: SAME terrain boundaries, relief, cliffs, paths, rocks, "
+                    "vegetation, water and natural landmarks in the SAME positions. "
+                    "Landscape / location plan style with simple lines and flat tones. "
+                    "This is NOT a room: no walls, no ceiling, no furniture, no invented "
+                    "building or architecture unless explicitly visible in the reference. "
+                    "No people, no camera, no text labels. Square framing."
+                )
+            else:
+                fp_anchor = (
+                    "Draw the TOP-DOWN architectural floor plan (bird's eye view, seen "
+                    "from directly above) of the EXACT room shown in the reference image: "
+                    "SAME walls, SAME proportions, SAME furniture in the SAME positions, "
+                    "SAME doors and windows. Schematic blueprint / architect plan style — "
+                    "simple lines, flat tones, neutral background, no people, no camera, "
+                    "no text labels. Square framing."
+                )
             fp_path = ""
             ov_ref = [_dataurl(ov_path)] if (ov_path and os.path.isfile(ov_path)) else []
             try:
@@ -2055,7 +2055,9 @@ class GenerateRoomViewsWorker(QThread):
                 else:
                     fp_path = _save(_gen_text_robust(fp_prompt, "1:1"), "floorplan")
                 out.append({"label": "Plan (vue de dessus)", "code": "floorplan",
-                            "path": fp_path, "prompt": fp_prompt, "is_floor_plan": True})
+                            "path": fp_path,
+                            "thumbnail_path": preview_by_path.get(fp_path, ""),
+                            "prompt": fp_prompt, "is_floor_plan": True})
             except Exception as e:
                 _log(f"plan d'architecture ÉCHEC: {str(e)[:160]}")
             time.sleep(_VIEW_GAP_S)
@@ -2066,19 +2068,29 @@ class GenerateRoomViewsWorker(QThread):
             #    couleurs, mobilier, lumière — seul l'angle de caméra change (une face
             #    différente à chaque vue). Repli texte par face si l'édition échoue
             #    (fiabilité préservée). Réfs allégées (1K JPEG) pour ne pas saturer.
-            faces = build_six_view_prompts(base_en)
+            faces = build_six_view_prompts(base_en, self._category)
             ref_urls = [_dataurl(p) for p in (ov_path, fp_path)
                         if p and os.path.isfile(p)]
-            consistency = (
-                "The reference images show ONE specific room: a 3/4 establishing view "
-                "AND a TOP-DOWN architectural floor plan giving the exact layout. Treat "
-                "them as the GROUND TRUTH: keep IDENTICAL architecture, wall materials, "
-                "colours, furniture style and lighting / ambience, and place every "
-                "element CONSISTENTLY with the floor-plan layout. ONLY the camera "
-                "orientation changes — frame a DIFFERENT wall of the SAME room. Do NOT "
-                "repeat on this wall the objects that belong to the other walls (each "
-                "wall is distinct)."
-            )
+            if exterior:
+                consistency = (
+                    "The references show ONE specific OUTDOOR NATURAL LOCATION: a master "
+                    "view and a top-down SITE PLAN. They define identity and spatial "
+                    "layout, NOT camera composition. Keep the exact same terrain, relief, "
+                    "geology, paths, vegetation, weather, lighting and landmarks. Rotate "
+                    "the camera exactly as requested and reconstruct a GENUINELY DIFFERENT "
+                    "view; DO NOT clone or crop the master shot. No room, walls, ceiling, "
+                    "furniture or invented buildings unless explicitly present."
+                )
+            else:
+                consistency = (
+                    "The reference images show ONE specific room: a 3/4 establishing view "
+                    "AND a TOP-DOWN architectural floor plan giving the exact layout. Treat "
+                    "them as GROUND TRUTH for identity and layout, NOT camera composition. "
+                    "Keep identical architecture, wall materials, colours, furniture and "
+                    "lighting. Reconstruct the requested orientation and do not clone the "
+                    "master shot. Frame a DIFFERENT wall and do not repeat objects belonging "
+                    "to the other walls."
+                )
             edit_off   = not ref_urls   # aucune réf disponible → texte direct
             edit_fails = 0
             last_err = ""
@@ -2126,7 +2138,9 @@ class GenerateRoomViewsWorker(QThread):
                         continue   # cette face échoue vraiment, on garde les autres
                 p = _save(data, code)
                 # Prompt PAR VUE renvoyé (cadrage compris) → régénération fidèle.
-                out.append({"label": label, "code": code, "path": p, "prompt": fprompt})
+                out.append({"label": label, "code": code, "path": p,
+                            "thumbnail_path": preview_by_path.get(p, ""),
+                            "prompt": fprompt})
                 n_faces_ok += 1
                 if i < len(faces) - 1:
                     time.sleep(_VIEW_GAP_S)   # espacement entre faces (anti-saturation)
@@ -2364,11 +2378,25 @@ class GenerateFloorPlanWorker(QThread):
             self.failed.emit(humanize_api_error(f"Erreur plan vu de dessus : {e}"))
 
 
-def _floor_plan_prompt(base_en: str) -> str:
+def _floor_plan_prompt(base_en: str, category: str = "") -> str:
     """Prompt commun (plan d'architecte vu de dessus). La description du décor
     (base_en) peut contenir de l'atmosphère photographique (météo, humidité,
     profondeur de champ…) qui contredit le style schématique → consigne explicite
     d'ignorer tout sauf l'agencement spatial."""
+    from core.room_views import is_exterior_category
+    if is_exterior_category(category):
+        return (
+            f"TOP-DOWN OUTDOOR SITE PLAN (bird's eye view, seen from directly above) "
+            f"of: {base_en}. Clean landscape / location plan: terrain boundaries, "
+            f"elevation changes, cliffs, paths, rock outcrops, vegetation, water and "
+            f"natural landmarks drawn from above with simple lines and flat tones. "
+            f"Neutral background, clear and uncluttered, no people, no camera, no text "
+            f"labels. This is NOT an interior floor plan: no rooms, walls, ceiling or "
+            f"furniture, and no invented buildings unless structures are explicitly "
+            f"required by the description. Ignore lighting, weather, atmosphere, mood "
+            f"and depth-of-field wording; draw only the spatial outdoor layout. Square "
+            f"framing."
+        )
     return (
         f"TOP-DOWN architectural floor plan (bird's eye view, seen from directly "
         f"above) of: {base_en}. Clean schematic blueprint / architect plan style: "

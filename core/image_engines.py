@@ -162,6 +162,19 @@ def edit_capable_engines() -> list:
     return [k for k, v in ENGINES.items() if v.get("edit")]
 
 
+def reference_engine_choices() -> list:
+    """[(key, label)] limité aux moteurs réellement compatibles avec le raccord
+    multi-images du workflow « 7 vues ».
+
+    Le plan d'architecture reprend le plan d'ensemble, puis chaque face reprend
+    le plan d'ensemble ET le plan vu de dessus. Un simple moteur text-to-image ne
+    convient donc pas : il faut impérativement un endpoint d'édition acceptant des
+    images de référence. Les labels restent ceux du catalogue canonique afin que
+    le prix indicatif et le nombre de références soient visibles dans le dialogue.
+    """
+    return [(k, ENGINES[k]["label"]) for k in edit_capable_engines()]
+
+
 def is_edit_capable(key: str) -> bool:
     return bool(ENGINES.get(key, {}).get("edit"))
 

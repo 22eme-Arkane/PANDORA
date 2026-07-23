@@ -2241,8 +2241,9 @@ class PageStoryboard(QWidget):
         lay.setContentsMargins(0, 0, 0, 0)
         lay.setSpacing(0)
 
-        lay.addWidget(self._build_shots_topbar())
-        lay.addWidget(_sep())
+        # Bandeau titre « Storyboard » RETIRÉ (2026-07-23, parité Cinéma) : la
+        # fenêtre gagne la hauteur ; ses contrôles (versions, snapshots, durée)
+        # vivent maintenant dans la barre d'outils via _build_topbar_controls().
 
         _hw = QWidget()
         _hw.setStyleSheet("background:transparent;")
@@ -2259,9 +2260,12 @@ class PageStoryboard(QWidget):
             "▸ Bouton Générer (▶) sur chaque plan : envoie directement le plan vers Seedance 2.0 pour la génération.",
             "▸ Versions : gérez plusieurs versions du découpage (découpage final, alternatives, montage court…).",
         ], CP))
-        lay.addWidget(_hw)
 
+        # Barre d'outils EN PREMIÈRE rangée (2026-07-23) : sa ligne basse tombe
+        # exactement sur celles des en-têtes GUIDE / IA (40 px). Le bloc d'aide
+        # (caché) passe dessous pour ne plus décaler la ligne.
         lay.addWidget(self._build_shots_toolbar())
+        lay.addWidget(_hw)
         lay.addWidget(_sep())
 
         # ── Scrollbar horizontale en haut + zone de plans (avec marges) ──────
@@ -2361,28 +2365,15 @@ class PageStoryboard(QWidget):
 
         return page
 
-    def _build_shots_topbar(self) -> QWidget:
+    def _build_topbar_controls(self) -> QWidget:
+        """Ex-bandeau titre « Storyboard » (retiré le 2026-07-23, parité Cinéma) :
+        ne reste que le groupe compact de contrôles (versions, snapshots, durée),
+        intégré à la barre d'outils des plans."""
         bar = QWidget()
-        bar.setFixedHeight(60)   # hauteur STANDARD des bandeaux (alignement assistant)
-        bar.setStyleSheet(f"background:{CP['bg1']};")
+        bar.setStyleSheet("background:transparent;")
         lay = QHBoxLayout(bar)
-        lay.setContentsMargins(20, 0, 20, 0)
+        lay.setContentsMargins(0, 0, 0, 0)
         lay.setSpacing(10)
-
-        _ico = QLabel()
-        _ico.setFixedSize(26, 26)
-        _ico.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        _ico.setStyleSheet("background:transparent;")
-        _ico_pix = load_icon("storyboard.png", 26)
-        if not _ico_pix.isNull():
-            _ico.setPixmap(_ico_pix)
-        lay.addWidget(_ico)
-
-        title = QLabel("Storyboard")
-        title.setStyleSheet(
-            f"color:{CP['text_primary']};font-size:18px;font-weight:700;background:transparent;"
-        )
-        lay.addWidget(title)
 
         self._version_combo = QComboBox()
         self._version_combo.setFixedHeight(32)
@@ -2486,8 +2477,6 @@ class PageStoryboard(QWidget):
         lay.addWidget(self._btn_del_snap)
         self._btn_del_snap.setVisible(False)
 
-        lay.addStretch(1)
-
         self._dur_lbl = QLabel("")
         self._dur_lbl.setStyleSheet(
             f"color:{CP['text_secondary']};font-size:10px;"
@@ -2498,10 +2487,13 @@ class PageStoryboard(QWidget):
 
     def _build_shots_toolbar(self) -> QWidget:
         bar = QWidget()
-        bar.setMinimumHeight(52)
-        bar.setStyleSheet(f"background:{CP['bg0']};")
+        # 40 px + ligne basse : ALIGNÉ sur les en-têtes GUIDE / IA des panneaux
+        # latéraux et sur la barre d'outils du Conducteur (parité Cinéma
+        # 2026-07-23 — les lignes tombent au même endroit).
+        bar.setFixedHeight(40)
+        bar.setStyleSheet(f"background:{CP['bg0']};border-bottom:1px solid {CP['border']};")
         lay = QHBoxLayout(bar)
-        lay.setContentsMargins(20, 8, 20, 8)
+        lay.setContentsMargins(20, 2, 20, 2)
         lay.setSpacing(10)
 
         self._ai_lbl = QLabel("")
@@ -2510,7 +2502,7 @@ class PageStoryboard(QWidget):
             f"background:transparent;"
         )
         self._ai_lbl.setMinimumWidth(0)
-        # (ajouté au layout APRÈS Moods/Caler — boutons d'IA à GAUCHE, actions à droite)
+        # (ajouté au layout APRÈS le bouton Action — statut au centre, stats à droite)
 
         self._mood_progress = QProgressBar()
         self._mood_progress.setRange(0, 100)
@@ -2547,9 +2539,9 @@ class PageStoryboard(QWidget):
             f"QPushButton:disabled{{color:{CP['text_dim']};border-color:{CP['border']};}}"
         )
         self._btn_sync.clicked.connect(self._on_sync)
-        lay.addWidget(self._btn_sync)
         # Héritage Cinéma retiré (validé) : la synchro réaligne les prompts sur les
         # fiches casting/décors — sans objet en Live (prompts issus du découpage).
+        self._btn_sync.setParent(bar)
         self._btn_sync.setVisible(False)
 
         self._btn_batch_mood = QPushButton("✦  Générer les Moods")
@@ -2563,7 +2555,6 @@ class PageStoryboard(QWidget):
             f"QPushButton:disabled{{color:{CP['text_dim']};border-color:{CP['border']};}}"
         )
         self._btn_batch_mood.clicked.connect(self._on_batch_mood)
-        lay.addWidget(self._btn_batch_mood)
 
         self._btn_music_align = QPushButton("♫  " + translate("Caler sur la musique"))
         self._btn_music_align.setFixedHeight(34)
@@ -2579,17 +2570,9 @@ class PageStoryboard(QWidget):
             f"QPushButton:disabled{{color:{CP['text_dim']};border-color:{CP['border']};}}"
         )
         self._btn_music_align.clicked.connect(self._on_music_align)
-        lay.addWidget(self._btn_music_align)
 
-        # Sauvegarder / Ouvrir un storyboard + Pitch deck (portés du Cinéma) — à
-        # GAUCHE, après « Caler », séparés par une barre verticale (placement Cinéma).
-        _tb_sep = QWidget()
-        _tb_sep.setFixedWidth(1)
-        _tb_sep.setFixedHeight(24)
-        _tb_sep.setStyleSheet(f"background:{CP['border_bright']};")
-        lay.addSpacing(6)
-        lay.addWidget(_tb_sep)
-        lay.addSpacing(6)
+        # Sauvegarder / Ouvrir un storyboard + Pitch deck (portés du Cinéma) —
+        # regroupés dans le menu « Action » (2026-07-23, parité Cinéma).
         _yellow, _blue, _green = "#f5c518", "#4aa3ff", "#37d366"
         self._btn_save_sb_file = QPushButton("💾  Sauvegarder")
         self._btn_save_sb_file.setFixedHeight(34)
@@ -2601,7 +2584,6 @@ class PageStoryboard(QWidget):
             f"QPushButton:pressed{{background:rgba(245,197,24,0.22);}}"
         )
         self._btn_save_sb_file.clicked.connect(self._on_save_storyboard_file)
-        lay.addWidget(self._btn_save_sb_file)
 
         self._btn_open_sb_file = QPushButton("📂  Ouvrir")
         self._btn_open_sb_file.setFixedHeight(34)
@@ -2613,7 +2595,6 @@ class PageStoryboard(QWidget):
             f"QPushButton:pressed{{background:rgba(74,163,255,0.22);}}"
         )
         self._btn_open_sb_file.clicked.connect(self._on_open_storyboard_file)
-        lay.addWidget(self._btn_open_sb_file)
 
         self._btn_pitch_deck = QPushButton("🎬  Pitch deck")
         self._btn_pitch_deck.setFixedHeight(34)
@@ -2626,11 +2607,6 @@ class PageStoryboard(QWidget):
             f"QPushButton:pressed{{background:rgba(55,211,102,0.22);}}"
         )
         self._btn_pitch_deck.clicked.connect(self._on_export_pitch_deck)
-        lay.addWidget(self._btn_pitch_deck)
-
-        # Progression + statut, puis l'espace extensible pousse les actions à droite.
-        lay.addWidget(self._mood_progress)
-        lay.addWidget(self._ai_lbl, 1)
 
         btn_new = QPushButton("＋  Ajouter un plan")
         btn_new.setFixedHeight(34)
@@ -2641,7 +2617,7 @@ class PageStoryboard(QWidget):
             f"QPushButton:pressed{{background:{CP['accent_dim']};color:#fff;}}"
         )
         btn_new.clicked.connect(self._on_new)
-        lay.addWidget(btn_new)
+        self._btn_new_shot = btn_new   # vit dans le menu « Action » (2026-07-23)
 
         self._btn_clear_shots = QPushButton("✕  Supprimer")
         self._btn_clear_shots.setFixedHeight(34)
@@ -2655,7 +2631,25 @@ class PageStoryboard(QWidget):
         )
         self._btn_clear_shots.setToolTip("Supprimer tous les plans du découpage actuel pour le régénérer")
         self._btn_clear_shots.clicked.connect(self._on_clear_shots)
-        lay.addWidget(self._btn_clear_shots)
+
+        # ── Bouton « ☰ Action » tout à gauche (2026-07-23, parité Cinéma) :
+        # Sauvegarder, Ouvrir, Ajouter un plan, Générer les Moods, Caler sur la
+        # musique, Pitch deck, Supprimer (ROUGE). Les boutons d'origine restent
+        # vivants mais CACHÉS : la logique d'état existante (« ⏹ Arrêter »,
+        # désactivation pendant un travail IA) continue d'écrire dedans, et le
+        # menu se recale sur leur texte/état/infobulle à chaque ouverture.
+        from ui.widgets import make_actions_menu_button
+        self._btn_actions = make_actions_menu_button(
+            bar,
+            [self._btn_save_sb_file, self._btn_open_sb_file, self._btn_new_shot,
+             self._btn_batch_mood, self._btn_music_align, self._btn_pitch_deck],
+            red_entry=self._btn_clear_shots)
+        lay.insertWidget(0, self._btn_actions)
+
+        # Statut au centre, progression puis stats/durée à droite.
+        lay.addWidget(self._ai_lbl, 1)
+        lay.addWidget(self._mood_progress)
+        lay.addWidget(self._build_topbar_controls())
 
         self._btn_del_sb = QPushButton("Supprimer")
         self._btn_del_sb.setFixedHeight(34)

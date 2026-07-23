@@ -1,4 +1,4 @@
-"""api/staging_vision.py — Analyse VISION du plan de mise en scène par Claude.
+"""Analyse VISION du plan de mise en scène via le routeur IA central.
 
 Le PLAN VU DE DESSUS du décor (image créée avec Kontext, où le mobilier — table,
 chaises… — est visible) + les positions normalisées des jetons (caméra, personnages,
@@ -9,9 +9,8 @@ mobilier réellement visible et renvoie une description cinéma PRÉCISE :
   · mode feu     → d'où vient la lumière par rapport à la scène + l'ambiance.
 
 Sert à enrichir AUTOMATIQUEMENT les sections [MISE EN SCÈNE] / [PLAN DE FEU] du
-prompt, en complément du placement déterministe instantané. Aucune clé Anthropic →
-finished("") (l'appelant garde la version déterministe). La VISION reste sur
-Anthropic (cf. api/real._analyze_style_ref) — hors couche core/ai_provider (texte).
+prompt, en complément du placement déterministe instantané. Si le moteur sélectionné
+n'est pas disponible, l'appelant conserve la version déterministe.
 """
 
 import base64
@@ -19,9 +18,6 @@ import mimetypes
 import os
 
 from PyQt6.QtCore import QThread, pyqtSignal
-
-from core.config import load_config
-
 
 def _img_block(path: str) -> dict:
     ext = os.path.splitext(path)[1].lower()
@@ -69,11 +65,11 @@ class StagingVisionWorker(QThread):
 
     def run(self):
         try:
-            key = load_config().get("anthropic_key", "").strip()
-            if not key or not (self._plan and os.path.isfile(self._plan)) or not self._tokens:
+            from core.ai_provider import chat, key_error
+            if (key_error(task="vision") or
+                    not (self._plan and os.path.isfile(self._plan)) or not self._tokens):
                 self.finished.emit("")        # pas de clé / pas de plan → déterministe seul
                 return
-            import anthropic
 
             positions = _positions_text(self._tokens)
             if self._mode == "staging":
@@ -96,14 +92,11 @@ class StagingVisionWorker(QThread):
                 + (f"Décor : {self._decor}\n" if self._decor else "")
                 + positions + "\n\n" + ask)
 
-            client = anthropic.Anthropic(api_key=key)
-            msg = client.messages.create(
-                model="claude-haiku-4-5", max_tokens=240,
-                messages=[{"role": "user", "content": [
+            text = chat(
+                "", [{"role": "user", "content": [
                     _img_block(self._plan),
                     {"type": "text", "text": intro},
-                ]}],
-            )
-            self.finished.emit((msg.content[0].text or "").strip())
+                ]}], tier="utility", max_tokens=240, task="vision")
+            self.finished.emit(text.strip())
         except Exception as e:
             self.failed.emit(str(e)[:200])

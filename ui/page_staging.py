@@ -19,12 +19,17 @@ mais un sélecteur permet de choisir un AUTRE décor par plan (rec["plan_decor_i
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, QComboBox,
     QListWidget, QListWidgetItem, QInputDialog, QMenu, QMessageBox, QFileDialog,
+    QLineEdit, QFrame,
 )
-from PyQt6.QtCore import Qt, QTimer
+from PyQt6.QtCore import Qt, QTimer, QSize
 from PyQt6.QtGui import QShortcut, QKeySequence
 from ui.styles import CP
 from ui.widgets import HelpBlock
 from ui.staging_canvas import StagingCanvas
+from ui.lighting_workspace import (
+    LightingInspector, LightingInspectorToggle, LightingShotCard,
+    LightingToolbar, sequence_label,
+)
 from core.i18n import translate
 import os
 import core.storyboard as sb_api
@@ -48,6 +53,10 @@ def _btn(label: str) -> QPushButton:
 class PageStaging(QWidget):
 
     MODE = "staging"
+    # La reconstruction d'une page peut créer de nombreuses cartes et charger un
+    # plan. PandoraWindow la planifie après le premier rendu pour ne pas bloquer
+    # la pompe d'événements Windows pendant un changement d'onglet.
+    DEFER_NAV_REFRESH = True
 
     def __init__(self):
         super().__init__()
@@ -60,19 +69,8 @@ class PageStaging(QWidget):
         root.setContentsMargins(0, 0, 0, 0)
         root.setSpacing(0)
 
-        # ── Bandeau ────────────────────────────────────────────────────────────
-        band = QWidget()
-        band.setFixedHeight(60)
-        band.setStyleSheet(f"background:{CP['bg1']};border-bottom:1px solid {CP['border']};")
-        bl = QHBoxLayout(band)
-        bl.setContentsMargins(20, 0, 20, 0)
-        title = QLabel(("🎬  " if self._mode == "staging" else "💡  ")
-                       + translate("Mise en scène" if self._mode == "staging" else "Plan de feu"))
-        title.setStyleSheet(
-            f"color:{CP['text_primary']};font-size:16px;font-weight:700;background:transparent;")
-        bl.addWidget(title)
-        bl.addStretch()
-        root.addWidget(band)
+        # Bandeau titre (« Mise en scène » / « Plan de feu ») retiré — demande
+        # Matthieu 2026-07-22 : la fenêtre gagne la hauteur du bandeau.
 
         hb = HelpBlock(
             "Mise en scène — plan vu de dessus" if self._mode == "staging"
@@ -239,7 +237,9 @@ class PageStaging(QWidget):
 
     def showEvent(self, e):
         super().showEvent(e)
-        self.refresh()
+        # Le rafraîchissement est géré et regroupé par PandoraWindow._navigate.
+        # L'ancien appel direct provoquait un second refresh synchrone lors de la
+        # navigation, puis parfois un troisième à l'ActivationChange.
 
     def refresh(self):
         cur = self._shot.get("id") if self._shot else None
@@ -283,13 +283,17 @@ class PageStaging(QWidget):
         # Amorçage : acteurs + CAMÉRA (selon l'axe du plan) depuis le storyboard, UNE
         # SEULE FOIS — repli pour les storyboards créés avant le semis à la génération.
         # Le flag « _actors_seeded » évite de re-semer après un « Tout supprimer ».
-        if self._mode == "staging":
+        if self._mode == "staging" or getattr(self, "_combined_plateau", False):
             if not rec.get("_actors_seeded"):
                 seeded = staging.seed_record_for_shot(self._shot)
                 if not rec.get("actors"):
                     rec["actors"] = seeded["actors"]
                 rec["camera"] = seeded["camera"]   # caméra placée selon camera_axis
             rec["_actors_seeded"] = True
+            staging.apply_camera_optics(rec, self._shot)
+            for actor in rec.get("actors", []):
+                if not actor.get("gender"):
+                    actor["gender"] = self._actor_gender(actor.get("name", ""))
         self._canvas.load(rec)
         self._refresh_plan_combo()
 
@@ -346,7 +350,8 @@ class PageStaging(QWidget):
         if chars:
             menu = QMenu(self)
             for n in chars:
-                menu.addAction(n, lambda _=False, nm=n: self._canvas.add_actor(nm))
+                menu.addAction(n, lambda _=False, nm=n: self._canvas.add_actor(
+                    nm, gender=self._actor_gender(nm)))
             menu.addSeparator()
             menu.addAction(translate("Autre…"), self._add_actor_free)
             menu.exec(self.cursor().pos())
@@ -357,6 +362,27 @@ class PageStaging(QWidget):
         name, ok = QInputDialog.getText(self, translate("Acteur"), translate("Nom :"))
         if ok and name.strip():
             self._canvas.add_actor(name.strip())
+
+    @staticmethod
+    def _actor_gender(name: str) -> str:
+        """Genre visuel du pion, déduit de la fiche casting sans modifier celle-ci."""
+        try:
+            import core.casting as casting
+            char = next((c for c in casting.list_characters()
+                         if str(c.get("name", "")).casefold() == str(name).casefold()), {})
+        except Exception:
+            char = {}
+        explicit = str(char.get("gender") or char.get("sex") or char.get("sexe") or "").casefold()
+        if explicit:
+            return "female" if explicit.startswith("f") else "male" if explicit.startswith("h") or explicit.startswith("m") else ""
+        haystack = " ".join((str(name), str(char.get("description") or ""))).casefold()
+        female_terms = ("femme", "mère", "fille", "actrice", "elle ", " la ")
+        male_terms = ("homme", "père", "fils", "acteur", " il ", " le ")
+        if any(term in haystack for term in female_terms):
+            return "female"
+        if any(term in haystack for term in male_terms):
+            return "male"
+        return ""
 
     def _add_light(self):
         from ui.dialog_projector import ProjectorDialog
@@ -371,7 +397,7 @@ class PageStaging(QWidget):
 
     def _on_empty_context(self, x: float, y: float):
         menu = QMenu(self)
-        if self._mode == "staging":
+        if self._mode == "staging" or getattr(self, "_combined_plateau", False):
             chars = []
             try:
                 import core.casting as casting
@@ -383,13 +409,14 @@ class PageStaging(QWidget):
                     chars.append(n)
             sub = menu.addMenu(translate("Ajouter un acteur"))
             for n in chars:
-                sub.addAction(n, lambda _=False, nm=n: self._canvas.add_actor(nm, x, y))
+                sub.addAction(n, lambda _=False, nm=n: self._canvas.add_actor(
+                    nm, x, y, self._actor_gender(nm)))
             if chars:
                 sub.addSeparator()
             sub.addAction(translate("Autre…"), lambda: self._add_actor_free_at(x, y))
             menu.addAction(translate("Placer la caméra ici"),
                            lambda: self._canvas.place_camera(x, y))
-        else:
+        if self._mode != "staging":
             menu.addAction(translate("Créer un projecteur"), lambda: self._add_light_at(x, y))
         menu.exec(self.cursor().pos())
 
@@ -421,6 +448,7 @@ class PageStaging(QWidget):
 
     def _rename_actor(self, model: dict, name: str):
         model["name"] = name
+        model["gender"] = self._actor_gender(name)
         self._canvas.reload()
         self._autosave()
 
@@ -477,14 +505,26 @@ class PageStaging(QWidget):
                 self._autosave()   # → débounce → réécrit [💡 PLAN DE FEU] avec les réglages
 
     def _edit_light(self, model: dict):
+        import core.projectors as proj
         from ui.dialog_projector import ProjectorDialog
         dlg = ProjectorDialog(self, role=model.get("type", "key"),
                               family=model.get("family", ""), model=model.get("model", ""))
         if dlg.exec() == ProjectorDialog.DialogCode.Accepted:
             r = dlg.result_data()
             if r:
+                old_settings = model.get("settings") or {}
+                family = r.get("family", "")
+                projector_model = r.get("model", "")
+                settings = proj.default_settings(family, projector_model)
+                # Les réglages physiques de placement restent valables après un
+                # changement de tête ; les commandes propres à l'ancien modèle
+                # (faisceau, pixels, effet…) repartent sur des valeurs sûres.
+                for key in ("on", "intensity", "height", "tilt"):
+                    if key in old_settings:
+                        settings[key] = old_settings[key]
                 model.update({"name": r["name"], "type": r["role"],
-                              "family": r.get("family", ""), "model": r.get("model", "")})
+                              "family": family, "model": projector_model,
+                              "settings": settings})
                 self._canvas.reload()
                 self._autosave()
 
@@ -499,7 +539,7 @@ class PageStaging(QWidget):
             f"QMenu::item:selected{{background:{CP['accent_dim']};color:#07080f;}}")
         menu.addAction(translate("Synchroniser les décors (storyboard → plans)"),
                        self._sync_decors)
-        if self._mode == "staging":
+        if self._mode == "staging" or getattr(self, "_combined_plateau", False):
             menu.addAction(translate("Synchroniser la mise en scène → storyboard"),
                            self._sync_to_storyboard)
             menu.addAction(translate("Synchroniser le storyboard → mise en scène"),
@@ -809,7 +849,7 @@ class PageStaging(QWidget):
         elif self._mode == "lighting" and sec.get("lighting"):
             sec["lighting"] = ""   # plus aucune lumière en mode plan de feu → vider
             changed = True
-        if self._mode == "staging":
+        if self._mode == "staging" or getattr(self, "_combined_plateau", False):
             # La description VISION (ancrée au mobilier réellement visible : « assise
             # à la table, côté gauche ») PRIME sur le résumé déterministe tant que
             # les positions n'ont pas changé — elle n'est plus jamais écrasée par lui.
@@ -976,6 +1016,316 @@ class PageStaging(QWidget):
 
 
 class PageLighting(PageStaging):
-    """Plan de feu — même canevas, mode lumières, record partagé avec la Mise en
-    scène (réutilise le plan vu de dessus généré)."""
+    """Plan de feu — poste de travail dédié relié au moteur de mise en scène."""
     MODE = "lighting"
+
+    def __init__(self):
+        QWidget.__init__(self)
+        self._mode = self.MODE
+        self._combined_plateau = True
+        self._shots: list[dict] = []
+        self._all_shots: list[dict] = []
+        self._shot: dict | None = None
+        self.setStyleSheet(f"background:{CP['bg0']};")
+
+        root = QHBoxLayout(self)
+        root.setContentsMargins(0, 0, 0, 0)
+        root.setSpacing(0)
+
+        left = QFrame()
+        left.setObjectName("LightingShotsPanel")
+        left.setFixedWidth(292)
+        left.setStyleSheet(
+            "QFrame#LightingShotsPanel{"
+            "background:qlineargradient(x1:0,y1:0,x2:1,y2:0,"
+            "stop:0 #0a1a29,stop:1 #0c2130);"
+            "border-right:1px solid rgba(78,205,196,0.38);}"
+        )
+        ll = QVBoxLayout(left)
+        ll.setContentsMargins(10, 12, 10, 10)
+        ll.setSpacing(8)
+        section = QLabel(translate("PLANS DU STORYBOARD"))
+        section.setStyleSheet(
+            f"color:{CP['text_dim']};font-size:9px;font-weight:800;letter-spacing:1px;"
+            "background:transparent;border:none;"
+        )
+        ll.addWidget(section)
+        self._sequence_combo = QComboBox()
+        self._sequence_combo.setMinimumHeight(36)
+        self._sequence_combo.setStyleSheet(self._combo_style())
+        self._sequence_combo.currentIndexChanged.connect(self._apply_shot_filter)
+        ll.addWidget(self._sequence_combo)
+        # Menu du plan de décor REMONTÉ ici, à la place de la recherche
+        # (demande Matthieu 2026-07-23).
+        self._plan_combo = QComboBox()
+        self._plan_combo.setToolTip(translate("Plan du décor"))
+        self._plan_combo.setMinimumHeight(36)
+        self._plan_combo.setStyleSheet(self._combo_style())
+        self._plan_combo.currentIndexChanged.connect(self._on_plan_decor_changed)
+        ll.addWidget(self._plan_combo)
+        # Recherche RETIRÉE de l'affichage (2026-07-23) — le widget reste vivant
+        # car le filtre de la liste lit son texte.
+        self._search = QLineEdit(left)
+        self._search.setPlaceholderText(translate("Rechercher un plan…"))
+        self._search.textChanged.connect(self._apply_shot_filter)
+        self._search.hide()
+        self._list = QListWidget()
+        self._list.setSpacing(5)
+        # Barre de défilement VERTICALE à GAUCHE (liste en RTL, les cartes
+        # repassent en LTR dans _rebuild_shot_list) ; barre HORIZONTALE coupée —
+        # c'était le « rectangle noir » qui apparaissait en bas de la liste.
+        self._list.setLayoutDirection(Qt.LayoutDirection.RightToLeft)
+        self._list.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        self._list.setStyleSheet(
+            "QListWidget{background:transparent;border:none;outline:none;padding:0;}"
+            f"QListWidget::item{{background:{CP['bg2']};border:1px solid {CP['border']};"
+            "border-radius:8px;}"
+            "QListWidget::item:hover{background:rgba(255,255,255,0.04);"
+            f"border-color:{CP['border_bright']};}}"
+            "QListWidget::item:selected{background:rgba(78,205,196,0.10);"
+            f"border:1px solid {CP['accent']};}}"
+        )
+        self._list.currentRowChanged.connect(self._on_shot_changed)
+        self._list.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
+        self._list.customContextMenuRequested.connect(self._on_list_context)
+        ll.addWidget(self._list, 1)
+
+        # Bouton « Action » (2026-07-23) : ouvre le menu de synchronisation.
+        # Libellé écrit et style contour BLEU, comme « Soutenir Pandora »/« Ouvrir ».
+        _blue = "#4aa3ff"
+        self._btn_sync = QPushButton("☰  " + translate("Action"))
+        self._btn_sync.setFixedHeight(34)
+        self._btn_sync.setToolTip(translate("Synchronisation"))
+        self._btn_sync.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._btn_sync.setStyleSheet(
+            f"QPushButton{{background:transparent;color:{_blue};"
+            f"border:1px solid {_blue};border-radius:7px;"
+            f"font-size:11px;font-weight:700;padding:0 14px;}}"
+            f"QPushButton:hover{{background:rgba(74,163,255,0.12);}}"
+            f"QPushButton:pressed{{background:rgba(74,163,255,0.22);}}"
+        )
+        self._btn_sync.clicked.connect(self._open_sync_menu)
+        ll.addWidget(self._btn_sync)
+        self._shot_count = QLabel()
+        self._shot_count.setStyleSheet(
+            f"color:{CP['text_dim']};font-size:9px;background:transparent;border:none;"
+        )
+        ll.addWidget(self._shot_count)
+        root.addWidget(left)
+
+        center = QWidget()
+        center.setStyleSheet(f"background:{CP['bg0']};")
+        cl = QHBoxLayout(center)
+        cl.setContentsMargins(9, 9, 9, 9)
+        cl.setSpacing(8)
+        self._tools = LightingToolbar()
+        self._btn_clear_all = self._tools.clear_button
+        cl.addWidget(self._tools, 0, Qt.AlignmentFlag.AlignTop)
+        self._canvas = StagingCanvas(mode="combined")
+        cl.addWidget(self._canvas, 1)
+        root.addWidget(center, 1)
+
+        self._inspector = LightingInspector()
+        root.addWidget(self._inspector)
+        self._inspector_toggle = LightingInspectorToggle(opened=True)
+        self._inspector_toggle.toggled.connect(self._set_inspector_visible)
+        root.addWidget(self._inspector_toggle)
+
+        self._sync_timer = QTimer(self)
+        self._sync_timer.setSingleShot(True)
+        self._sync_timer.setInterval(250)
+        self._sync_timer.timeout.connect(self._apply_current_to_storyboard)
+        self._vision_timer = QTimer(self)
+        self._vision_timer.setSingleShot(True)
+        self._vision_timer.setInterval(1500)
+        self._vision_timer.timeout.connect(self._run_vision)
+        self._vision_worker = None
+        self._vision_shot_id = None
+        self._inspector_light_signature = ()
+
+        self._canvas.changed.connect(self._autosave)
+        self._canvas.changed.connect(self._sync_inspector_structure)
+        self._canvas.actor_context.connect(self._on_actor_context)
+        self._canvas.light_context.connect(self._on_light_context)
+        self._canvas.camera_context.connect(self._on_camera_context)
+        self._canvas.empty_context.connect(self._on_empty_context)
+        self._tools.tool_changed.connect(self._canvas.set_tool)
+        self._tools.add_light_requested.connect(self._add_light)
+        self._tools.add_actor_requested.connect(self._add_actor)
+        self._tools.place_camera_requested.connect(lambda: self._canvas.place_camera(0.5, 0.85))
+        self._tools.fit_requested.connect(self._canvas.fit_scene)
+        self._tools.zoom_requested.connect(self._canvas.zoom_by)
+        self._tools.grid_requested.connect(self._canvas.set_grid_visible)
+        self._tools.clear_requested.connect(self._on_clear_all)
+        self._inspector.changed.connect(self._on_inspector_changed)
+        self._inspector.advanced_requested.connect(self._open_advanced_settings)
+        self._inspector.delete_requested.connect(self._delete_light_from_inspector)
+
+        self._sc_del = QShortcut(QKeySequence(QKeySequence.StandardKey.Delete), self)
+        self._sc_del.activated.connect(self._canvas.remove_selected)
+        self._sc_bs = QShortcut(QKeySequence(Qt.Key.Key_Backspace), self)
+        self._sc_bs.activated.connect(self._canvas.remove_selected)
+
+    @staticmethod
+    def _combo_style() -> str:
+        return (
+            f"QComboBox{{background:{CP['bg2']};color:{CP['text_primary']};"
+            f"border:1px solid {CP['border']};border-radius:7px;padding:6px 9px;"
+            "font-size:9px;}"
+            f"QComboBox:hover{{border-color:{CP['accent_dim']};}}"
+        )
+
+    @staticmethod
+    def _compact_button_style() -> str:
+        return (
+            f"QPushButton{{background:{CP['bg2']};color:{CP['accent']};"
+            f"border:1px solid {CP['border']};border-radius:7px;font-size:15px;}}"
+            f"QPushButton:hover{{border-color:{CP['accent_dim']};"
+            "background:rgba(78,205,196,0.10);}}"
+        )
+
+    def refresh(self):
+        current_id = self._shot.get("id") if self._shot else ""
+        try:
+            versions = sb_api.list_versions()
+            vid = versions[0]["id"] if versions else sb_api.DEFAULT_VERSION_ID
+            self._all_shots = sb_api.list_shots(vid)
+        except Exception:
+            self._all_shots = []
+        previous = self._sequence_combo.currentData()
+        sequence_values = []
+        for shot in self._all_shots:
+            value = sequence_label(shot)
+            if value not in sequence_values:
+                sequence_values.append(value)
+        self._sequence_combo.blockSignals(True)
+        self._sequence_combo.clear()
+        self._sequence_combo.addItem(translate("Toutes les séquences"), "")
+        for value in sequence_values:
+            self._sequence_combo.addItem(value, value)
+        idx = self._sequence_combo.findData(previous)
+        self._sequence_combo.setCurrentIndex(max(0, idx))
+        self._sequence_combo.blockSignals(False)
+        self._rebuild_shot_list(current_id)
+
+    def _apply_shot_filter(self, *_args):
+        current_id = self._shot.get("id") if self._shot else ""
+        self._rebuild_shot_list(current_id)
+
+    def _rebuild_shot_list(self, current_id=""):
+        seq = self._sequence_combo.currentData() or ""
+        query = self._search.text().strip().casefold()
+        self._shots = []
+        for shot in self._all_shots:
+            haystack = " ".join((sequence_label(shot), str(shot.get("number", "")),
+                                 shot.get("scene_title", ""), shot.get("name", ""))).casefold()
+            if seq and sequence_label(shot) != seq:
+                continue
+            if query and query not in haystack:
+                continue
+            self._shots.append(shot)
+        self._list.blockSignals(True)
+        self._list.clear()
+        for shot in self._shots:
+            item = QListWidgetItem()
+            item.setSizeHint(QSize(258, 66))
+            self._list.addItem(item)
+            card = LightingShotCard(shot)
+            # La liste est en RTL (barre de défilement à gauche) : chaque carte
+            # repasse en LTR pour garder sa mise en page normale.
+            card.setLayoutDirection(Qt.LayoutDirection.LeftToRight)
+            self._list.setItemWidget(item, card)
+        self._list.blockSignals(False)
+        self._shot_count.setText(f"{len(self._shots)} {translate('plan(s)')}")
+        if self._shots:
+            row = next((i for i, s in enumerate(self._shots) if s.get("id") == current_id), 0)
+            self._list.setCurrentRow(row)
+        else:
+            self._shot = None
+            self._canvas.load({
+                "plan_image": "", "camera": {"x": 0.5, "y": 0.85, "angle": 0.0},
+                "actors": [], "props": [], "lights": [],
+            })
+            self._inspector.set_lights([])
+
+    def _on_shot_changed(self, row: int):
+        super()._on_shot_changed(row)
+        self._refresh_inspector()
+
+    def _refresh_inspector(self):
+        if not self._shot:
+            self._inspector_light_signature = ()
+            self._inspector.set_lights([])
+            return
+        # Les cartes doivent modifier les mêmes dictionnaires que le canevas.
+        # Une relecture via staging.get() créait une copie : le canevas sauvait
+        # ensuite ses anciennes valeurs par-dessus, d'où les curseurs qui
+        # revenaient immédiatement à leur position initiale.
+        lights = self._canvas.commit().get("lights", [])
+        self._inspector_light_signature = tuple(id(light) for light in lights)
+        self._inspector.set_lights(lights)
+
+    def _sync_inspector_structure(self):
+        """Reconstruit l'inspecteur seulement si la liste des sources change."""
+        lights = self._canvas.commit().get("lights", [])
+        signature = tuple(id(light) for light in lights)
+        if signature != self._inspector_light_signature:
+            self._refresh_inspector()
+
+    def _on_inspector_changed(self, _light: dict):
+        self._canvas.reload()
+        self._autosave()
+
+    def _open_advanced_settings(self, light: dict):
+        self._settings_light(light)
+        self._refresh_inspector()
+
+    def _delete_light_from_inspector(self, light: dict):
+        self._canvas.remove_model(light)
+
+    def _edit_light(self, model: dict):
+        super()._edit_light(model)
+        self._refresh_inspector()
+
+    def _toggle_light(self, model: dict):
+        super()._toggle_light(model)
+        self._refresh_inspector()
+
+    def _toggle_inspector(self):
+        self._set_inspector_visible(not self._inspector.isVisible())
+
+    def _set_inspector_visible(self, visible: bool):
+        self._inspector.setVisible(bool(visible))
+        self._inspector_toggle.set_open(bool(visible))
+
+    def _open_sync_menu(self):
+        menu = QMenu(self)
+        menu.setStyleSheet(
+            f"QMenu{{background:{CP['bg2']};border:1px solid {CP['border']};"
+            f"border-radius:8px;padding:4px 0;}}"
+            f"QMenu::item{{color:{CP['text_primary']};padding:8px 18px;font-size:11px;}}"
+            f"QMenu::item:selected{{background:{CP['accent_dim']};color:#07080f;}}")
+        menu.addAction(translate("Synchroniser les décors (storyboard → plateau)"),
+                       self._sync_decors)
+        menu.addAction(translate("Synchroniser le plateau complet → storyboard"),
+                       self._sync_to_storyboard)
+        menu.addAction(translate("Reconstruire caméra et acteurs depuis le storyboard"),
+                       self._sync_from_storyboard)
+        menu.exec(self._btn_sync.mapToGlobal(self._btn_sync.rect().bottomLeft()))
+
+    def _sync_to_storyboard(self):
+        """Le plateau combiné synchronise mise en scène, caméra et éclairage."""
+        n = 0
+        for shot in self._shots:
+            sid = shot.get("id")
+            if not sid:
+                continue
+            self._write_sections(shot, staging.get(sid))
+            n += 1
+        QMessageBox.information(
+            self, translate("Synchronisation"),
+            translate("Plateau synchronisé vers le storyboard.") + f"  ({n})")
+
+    def _on_clear_all(self):
+        super()._on_clear_all()
+        self._refresh_inspector()

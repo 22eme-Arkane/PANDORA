@@ -6,9 +6,10 @@ Connexion Resolume par défaut + clés API utilisées par le module Live.
 
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
-    QLineEdit, QSpinBox, QFrame,
+    QLineEdit, QSpinBox, QFrame, QScrollArea,
 )
-from PyQt6.QtCore import Qt
+from PyQt6.QtCore import Qt, pyqtSignal
+from core.config import load_config
 from core.i18n import translate
 from ui.styles import CP
 
@@ -53,21 +54,34 @@ def _separator() -> QFrame:
     return sep
 
 
-class PageLiveSettings(QWidget):
-    """Page Paramètres — connexion Resolume + clés API Live."""
+class PageLiveSettings(QScrollArea):
+    """Page Paramètres — connexion Resolume + clés API Live.
+
+    Page PLEINE LARGEUR (parité Cinéma 2026-07-22) : la zone de défilement
+    occupe toute la fenêtre, donc sa barre est collée au bord DROIT ; le
+    contenu est centré (largeur max 1360) À L'INTÉRIEUR du scroll."""
+    manual_requested = pyqtSignal()
 
     def __init__(self):
         super().__init__()
-        self.setStyleSheet(f"background:{CP['bg0']};")
-
-        scroll_area = QWidget()
-        scroll_area.setStyleSheet("background:transparent;")
-        root = QVBoxLayout(self)
-        root.setContentsMargins(0, 0, 0, 0)
-        root.setSpacing(0)
+        self.setWidgetResizable(True)
+        self.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        self.setStyleSheet(f"background:{CP['bg0']};border:none;")
 
         content = QWidget()
-        content.setStyleSheet("background:transparent;")
+        content.setStyleSheet(f"background:{CP['bg0']};")
+        content.setMaximumWidth(1360)
+
+        container = QWidget()
+        container.setStyleSheet(f"background:{CP['bg0']};")
+        _center = QHBoxLayout(container)
+        _center.setContentsMargins(0, 0, 0, 0)
+        _center.setSpacing(0)
+        _center.addStretch(1)
+        _center.addWidget(content, 4)
+        _center.addStretch(1)
+        self.setWidget(container)
+
         lay = QVBoxLayout(content)
         lay.setContentsMargins(48, 36, 48, 36)
         lay.setSpacing(0)
@@ -169,6 +183,24 @@ class PageLiveSettings(QWidget):
             f"color:{CP['text_dim']};font-size:10px;background:transparent;border:none;")
         lay.addSpacing(6)
         lay.addWidget(_scr_note)
+        lay.addSpacing(12)
+
+        # ── Manuel d'utilisation — retiré de la topbar (2026-07-23), il vit
+        # désormais ici comme côté Cinéma ────────────────────────────────────
+        _manual_row = QHBoxLayout()
+        self._btn_manual = QPushButton("☰  Manuel d'utilisation")
+        self._btn_manual.setFixedHeight(36)
+        self._btn_manual.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._btn_manual.setStyleSheet(
+            f"QPushButton{{background:transparent;color:{CP['text_secondary']};"
+            f"border:1px solid {CP['border']};border-radius:7px;font-size:12px;"
+            f"font-weight:600;padding:0 18px;}}"
+            f"QPushButton:hover{{background:{CP['bg3']};color:{CP['text_primary']};}}"
+        )
+        self._btn_manual.clicked.connect(self.manual_requested)
+        _manual_row.addWidget(self._btn_manual)
+        _manual_row.addStretch()
+        lay.addLayout(_manual_row)
         lay.addSpacing(28)
 
         # ── Section Clés API ────────────────────────────────────────────────────
@@ -279,18 +311,6 @@ class PageLiveSettings(QWidget):
         # core.ai_provider.TASK_DEFAULTS) : même sémantique que le combo Cinéma.
         # ⚠ Un modèle vide en config doit présélectionner CE choix (Opus), sinon
         # l'auto-save rétrograderait silencieusement le profil en Sonnet partout.
-        self._AI_CHOICES = [
-            ("PANDORA optimisé — idéal par tâche (défaut)", "anthropic", "claude-opus-4-8"),
-            ("Claude Sonnet 5 — tout en équilibré", "anthropic", "claude-sonnet-5"),
-            ("Claude Haiku 4.5 — tout en rapide / économe", "anthropic", "claude-haiku-4-5"),
-            ("Fable 5 (Anthropic) — qualité max",  "anthropic", "claude-fable-5"),
-            ("GPT-5.5 (OpenAI) — partout",         "openai",    ""),
-            ("Mistral — expérimental",             "mistral",   ""),
-            ("Kimi K2.7 (Moonshot) — API ou local", "kimi",     ""),
-            ("GLM 4.7 (Zhipu) — API ou local",     "glm",       ""),
-            ("Ollama local — expérimental",        "ollama",    ""),
-            ("Choix personnalisé — un moteur par tâche", "custom", ""),
-        ]
         self._ai_combo = QComboBox()
         self._ai_combo.setFixedHeight(34)
         self._ai_combo.setStyleSheet(
@@ -301,10 +321,25 @@ class PageLiveSettings(QWidget):
             f"border:1px solid {CP['border_bright']};color:{CP['text_primary']};"
             f"selection-background-color:{CP['accent_dim']};}}"
         )
-        for label, prov, model in self._AI_CHOICES:
-            self._ai_combo.addItem(label, (prov, model))
+        from ui.ai_model_selector import populate_primary
+        populate_primary(self._ai_combo, load_config())
         ai_row.addWidget(self._ai_combo, 1)
         ac.addLayout(ai_row)
+
+        self._btn_refresh_ai_models = QPushButton("Actualiser les modèles accessibles")
+        self._btn_refresh_ai_models.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._btn_refresh_ai_models.setStyleSheet(
+            f"QPushButton{{background:transparent;color:{CP['accent2']};border:1px solid {CP['border']};"
+            f"border-radius:7px;padding:6px 10px;text-align:left;}}"
+            f"QPushButton:hover{{border-color:{CP['accent2']};}}"
+        )
+        self._btn_refresh_ai_models.clicked.connect(self._refresh_ai_models)
+        # Bouton RETIRÉ de l'affichage (demande Matthieu 2026-07-22, porté au
+        # Live 2026-07-23) : la découverte des modèles se déclenche
+        # automatiquement au changement d'assistant. Le widget reste vivant :
+        # start_model_discovery écrit son état dedans pendant la découverte.
+        self._btn_refresh_ai_models.setParent(self)
+        self._btn_refresh_ai_models.hide()
 
         # ── Clés API facultatives (repliable — MÊME section que le Cinéma) ────
         self._opt_keys_open = False
@@ -337,15 +372,15 @@ class PageLiveSettings(QWidget):
         piapi_row.addWidget(_link_btn("⇗  Clés", "https://piapi.ai/workspace"))
         opt_lay.addLayout(piapi_row)
 
-        # OpenAI (GPT-5.5) — clé visible quand le moteur OpenAI (ou « Choix
+        # OpenAI — clé visible quand le moteur OpenAI (ou « Choix
         # personnalisé ») est sélectionné ; même clé de config que Cinéma.
         oa_row = QHBoxLayout()
         oa_row.setSpacing(12)
-        oa_row.addWidget(_key_label("Clé OpenAI (GPT-5.5) :"))
+        oa_row.addWidget(_key_label("Clé OpenAI (GPT-5.6 / GPT-5.5) :"))
         self._openai_input = _input("sk-••••••••••••••••••••••••", 0)
         self._openai_input.setEchoMode(QLineEdit.EchoMode.Password)
         oa_row.addWidget(self._openai_input, 1)
-        _oa_test = _test_btn("✓  Tester API GPT-5.5", self.test_openai_connection)
+        _oa_test = _test_btn("✓  Tester API OpenAI", self.test_openai_connection)
         oa_row.addWidget(_oa_test)
         _oa_link = _link_btn("⇗  Clés", "https://platform.openai.com/api-keys")
         oa_row.addWidget(_oa_link)
@@ -431,6 +466,29 @@ class PageLiveSettings(QWidget):
         self._glm_row_widgets = (glu_row.itemAt(0).widget(),
                                  self._glm_url_input, self._glm_model_input)
         opt_lay.addLayout(glu_row)
+
+        cuk_row = QHBoxLayout()
+        cuk_row.setSpacing(12)
+        cuk_row.addWidget(_key_label("Clé fournisseur personnalisé :"))
+        self._custom_key_input = _input("Vide si serveur local", 0)
+        self._custom_key_input.setEchoMode(QLineEdit.EchoMode.Password)
+        cuk_row.addWidget(self._custom_key_input, 1)
+        _cu_test = _test_btn("✓  Tester le fournisseur", self.test_custom_connection)
+        cuk_row.addWidget(_cu_test)
+        self._custom_key_row_widgets = (cuk_row.itemAt(0).widget(),
+                                        self._custom_key_input, _cu_test)
+        opt_lay.addLayout(cuk_row)
+
+        cu_row = QHBoxLayout()
+        cu_row.setSpacing(12)
+        cu_row.addWidget(_key_label("Personnalisé (URL · modèle) :"))
+        self._custom_url_input = _input("http://localhost:1234/v1", 0)
+        self._custom_model_input = _input("Identifiant exact du modèle", 0)
+        cu_row.addWidget(self._custom_url_input, 1)
+        cu_row.addWidget(self._custom_model_input, 1)
+        self._custom_row_widgets = (cu_row.itemAt(0).widget(),
+                                    self._custom_url_input, self._custom_model_input)
+        opt_lay.addLayout(cu_row)
         ac.addWidget(self._opt_keys_box)
 
         # ── Paramètres avancés : moteur IA PAR TÂCHE (repliable, parité Cinéma) ──
@@ -456,8 +514,8 @@ class PageLiveSettings(QWidget):
         _adv_hint = QLabel(
             "Choisissez un moteur différent selon la tâche. « Par défaut » utilise "
             "le moteur sélectionné ci-dessus ; les clés se renseignent dans « Clés API ». "
-            "PANDORA est optimisé avec Fable 5 — le rendu avec les autres moteurs "
-            "n'est pas encore totalement fiable."
+            "Les profils Anthropic et ChatGPT restent strictement dans leur famille "
+            "de modèles, sans repli silencieux vers un autre fournisseur."
         )
         _adv_hint.setWordWrap(True)
         _adv_hint.setStyleSheet(
@@ -465,9 +523,8 @@ class PageLiveSettings(QWidget):
         adv_lay.addWidget(_adv_hint)
 
         from core.config import load_config as _lc_tasks
-        from core.ai_provider import (TASKS, ENGINES, ENGINE_ORDER,
-                                      recommended_engine_name)
-        _engine_items = [(ENGINES[k]["name"], k) for k in ENGINE_ORDER]
+        from core.ai_provider import TASKS
+        from ui.ai_model_selector import populate_task_engines
         self._task_combos = {}
         _saved_tasks = _lc_tasks().get("ai_task_engines") or {}
         for task_key, task_label in TASKS:
@@ -489,14 +546,8 @@ class PageLiveSettings(QWidget):
                 f"border:1px solid {CP['border_bright']};color:{CP['text_primary']};"
                 f"selection-background-color:{CP['accent_dim']};}}"
             )
-            combo.addItem(f"Par défaut · {recommended_engine_name(task_key)}", "")
-            for name, key in _engine_items:
-                combo.addItem(name, key)
             _cur_eng = _saved_tasks.get(task_key, "")
-            for i in range(combo.count()):
-                if combo.itemData(i) == _cur_eng:
-                    combo.setCurrentIndex(i)
-                    break
+            populate_task_engines(combo, _lc_tasks(), task_key, _cur_eng)
             self._task_combos[task_key] = combo
             row.addWidget(combo)
             adv_lay.addLayout(row)
@@ -581,15 +632,18 @@ class PageLiveSettings(QWidget):
         ac.addWidget(self._adv_box)
 
         def _on_ai_changed(*_):
-            prov = (self._ai_combo.currentData() or ("anthropic", ""))[0]
+            from ui.ai_model_selector import selected_primary, selection_provider
+            _choice = selected_primary(self._ai_combo)
+            prov = selection_provider(self._ai_combo)
             # « Choix personnalisé » : toutes les clés restent saisissables (le
             # routage par tâche peut viser n'importe quel moteur) + avancés dépliés.
-            _all = prov == "custom"
+            _all = _choice.get("profile") == "custom"
             # Les rangées de CLÉS vivent dans « Clés API facultatives » et y
             # restent TOUJOURS visibles (parité Cinéma) ; seuls les champs
             # URL/modèle (serveurs locaux) suivent le choix d'assistant.
             for wdg in (self._openai_row_widgets + self._mistral_row_widgets
-                        + self._kimi_key_row_widgets + self._glm_key_row_widgets):
+                        + self._kimi_key_row_widgets + self._glm_key_row_widgets
+                        + self._custom_key_row_widgets):
                 wdg.setVisible(True)
             for wdg in self._ollama_row_widgets:
                 wdg.setVisible(_all or prov == "ollama")
@@ -597,8 +651,24 @@ class PageLiveSettings(QWidget):
                 wdg.setVisible(_all or prov == "kimi")
             for wdg in self._glm_row_widgets:
                 wdg.setVisible(_all or prov == "glm")
+            for wdg in self._custom_row_widgets:
+                wdg.setVisible(_all or prov == "custom")
             if _all and not self._adv_open:
                 self._set_advanced(True)
+            if _ and hasattr(self, "_task_combos"):
+                from core.config import load_config
+                from ui.ai_model_selector import refresh_task_engines_for_primary
+                refresh_task_engines_for_primary(
+                    self._ai_combo, self._task_combos, load_config())
+                # Découverte AUTOMATIQUE des modèles réellement accessibles à
+                # chaque changement d'assistant — remplace l'ancien bouton
+                # « Actualiser les modèles accessibles ». UNIQUEMENT si la page
+                # est visible : les harnais instancient cette page hors écran et
+                # changent l'index — sans ce garde, des workers réseau seraient
+                # encore vivants à la sortie du processus (abort 0xC0000409
+                # constaté côté Cinéma dans tools/test_live.py).
+                if self.isVisible():
+                    self._refresh_ai_models()
         self._ai_combo.currentIndexChanged.connect(_on_ai_changed)
         self._on_ai_changed = _on_ai_changed
 
@@ -696,8 +766,6 @@ class PageLiveSettings(QWidget):
 
         lay.addStretch()
 
-        root.addWidget(content, 1)
-
         self._load_settings()
         # Branché APRÈS le chargement : les setText de _load_settings ne
         # déclenchent pas de re-sauvegarde des valeurs fraîchement lues.
@@ -711,6 +779,7 @@ class PageLiveSettings(QWidget):
                   self._ollama_url_input, self._ollama_model_input,
                   self._kimi_input, self._kimi_url_input, self._kimi_model_input,
                   self._glm_input, self._glm_url_input, self._glm_model_input,
+                  self._custom_key_input, self._custom_url_input, self._custom_model_input,
                   self._piapi_input, self._host_input):
             w.textChanged.connect(self._save_api_key)
         self._port_spin.valueChanged.connect(self._save_api_key)
@@ -735,6 +804,13 @@ class PageLiveSettings(QWidget):
             ("▼" if self._opt_keys_open else "▶")
             + "  Clés API facultatives  (PiAPI, OpenAI, Mistral…)"
         )
+
+    def _refresh_ai_models(self):
+        """Interroge les API /models sans bloquer l'interface."""
+        self._save_api_key()
+        from ui.ai_model_selector import start_model_discovery
+        start_model_discovery(self, self._ai_combo, self._task_combos,
+                              self._btn_refresh_ai_models)
 
     def test_piapi_connection(self):
         from PyQt6.QtWidgets import QMessageBox
@@ -780,11 +856,8 @@ class PageLiveSettings(QWidget):
         # un modèle vide doit présélectionner « PANDORA optimisé », sinon le combo
         # affichait Sonnet à tort — et l'auto-save aurait réellement rétrogradé
         # l'assistant en Sonnet partout (perte du routage par tâche).
-        _cur = (cfg.get("ai_provider", "anthropic"), cfg.get("ai_model_creative", ""))
-        for i, (_, prov, model) in enumerate(self._AI_CHOICES):
-            if prov == _cur[0] and (prov != "anthropic" or model == (_cur[1] or "claude-opus-4-8")):
-                self._ai_combo.setCurrentIndex(i)
-                break
+        from ui.ai_model_selector import populate_primary
+        populate_primary(self._ai_combo, cfg)
         self._openai_input.setText(cfg.get("openai_key", ""))
         self._mistral_input.setText(cfg.get("mistral_key", ""))
         self._ollama_url_input.setText(cfg.get("ollama_url", ""))
@@ -795,6 +868,9 @@ class PageLiveSettings(QWidget):
         self._glm_input.setText(cfg.get("glm_key", ""))
         self._glm_url_input.setText(cfg.get("glm_url", ""))
         self._glm_model_input.setText(cfg.get("glm_model", ""))
+        self._custom_key_input.setText(cfg.get("custom_key", ""))
+        self._custom_url_input.setText(cfg.get("custom_url", ""))
+        self._custom_model_input.setText(cfg.get("custom_model", ""))
         self._on_ai_changed()
         self._piapi_input.setText(cfg.get("piapi_key", ""))
         _cur_prov = cfg.get("video_provider", "fal")
@@ -814,9 +890,8 @@ class PageLiveSettings(QWidget):
         cfg = load_config()
         cfg["api_key"]       = self._api_key_input.text().strip()
         cfg["anthropic_key"] = self._anthropic_input.text().strip()
-        prov, model = self._ai_combo.currentData() or ("anthropic", "")
-        cfg["ai_provider"]       = prov
-        cfg["ai_model_creative"] = model
+        from ui.ai_model_selector import apply_primary_to_config
+        apply_primary_to_config(cfg, self._ai_combo)
         cfg["openai_key"]        = self._openai_input.text().strip()
         # Moteur PAR TÂCHE : ne garder que les tâches dont le moteur ≠ « Par défaut »
         task_engines = {}
@@ -834,6 +909,9 @@ class PageLiveSettings(QWidget):
         cfg["glm_key"]           = self._glm_input.text().strip()
         cfg["glm_url"]           = self._glm_url_input.text().strip()
         cfg["glm_model"]         = self._glm_model_input.text().strip()
+        cfg["custom_key"]        = self._custom_key_input.text().strip()
+        cfg["custom_url"]        = self._custom_url_input.text().strip()
+        cfg["custom_model"]      = self._custom_model_input.text().strip()
         cfg["video_provider"]    = self.video_provider_combo.currentData() or "fal"
         cfg["piapi_key"]         = self._piapi_input.text().strip()
         cfg["distribution_mode"] = self.distribution_mode_combo.currentData() or "multi"
@@ -913,7 +991,7 @@ class PageLiveSettings(QWidget):
                 headers={"Authorization": f"Bearer {key}"}, timeout=20,
             )
             if r.status_code == 200:
-                QMessageBox.information(self, "✓ Connexion OK", "Clé OpenAI (GPT-5.5) valide !")
+                QMessageBox.information(self, "✓ Connexion OK", "Clé OpenAI valide !")
             elif r.status_code in (401, 403):
                 QMessageBox.critical(self, "Clé invalide", "La clé API OpenAI est incorrecte.")
             else:
@@ -922,6 +1000,32 @@ class PageLiveSettings(QWidget):
                     f"Code {r.status_code}. La clé sera testée à la première génération.")
         except Exception as e:
             QMessageBox.critical(self, "Erreur OpenAI", f"Erreur : {str(e)[:200]}")
+
+    def test_custom_connection(self):
+        from PyQt6.QtWidgets import QMessageBox
+        base = self._custom_url_input.text().strip().rstrip("/")
+        key = self._custom_key_input.text().strip()
+        if not base:
+            QMessageBox.warning(self, "URL manquante",
+                                "Entre l'URL du fournisseur OpenAI-compatible.")
+            return
+        try:
+            import requests
+            headers = {"Authorization": f"Bearer {key}"} if key else {}
+            r = requests.get(f"{base}/models", headers=headers, timeout=20)
+            if r.status_code == 200:
+                QMessageBox.information(
+                    self, "✓ Connexion OK", f"Fournisseur joignable sur {base}.")
+            elif r.status_code in (401, 403):
+                QMessageBox.critical(self, "Clé invalide",
+                                     "La clé du fournisseur personnalisé est refusée.")
+            else:
+                QMessageBox.information(
+                    self, "Réponse du fournisseur",
+                    f"Code {r.status_code}. Vérifie que l'URL expose /models.")
+        except Exception as e:
+            QMessageBox.critical(self, "Erreur du fournisseur",
+                                 f"Erreur : {str(e)[:200]}")
 
     def test_mistral_connection(self):
         from PyQt6.QtWidgets import QMessageBox

@@ -28,6 +28,12 @@ _T: dict[str, dict[str, str]] = {
     "nav.camera":      {"fr": "Image & Son",       "en": "Camera & Sound"},
     "nav.plan_de_feu": {"fr": "Plan de feu",       "en": "Lighting plan"},
     "nav.doublage":    {"fr": "Doublage",          "en": "Dubbing"},
+    "nav.image_ia":    {"fr": "Image IA",           "en": "AI Image"},
+    # Renommages 2026-07-22 : le groupe devient « Génération IA » et la
+    # destination vidéo reprend le nom « Studio IA ».
+    "nav.video_ia":    {"fr": "Studio IA",          "en": "AI Studio"},
+    "nav.group_studio_ia": {"fr": "GÉNÉRATION IA",    "en": "AI GENERATION"},
+    # Alias historique conservé pour les anciens appels internes.
     "nav.seedance":    {"fr": "Studio IA",          "en": "AI Studio"},
     "nav.settings":    {"fr": "Paramètres",        "en": "Settings"},
 
@@ -59,6 +65,53 @@ _T: dict[str, dict[str, str]] = {
 # Utilisée par retranslate_widget() pour tradure les strings hardcodées.
 
 _FR_TO_EN: dict[str, str] = {
+
+    # ── Interface V2 — navigation et Plan de feu ────────────────────────────
+    "ÉCRITURE":                              "WRITING",
+    "PRÉPARATION VISUELLE":                  "VISUAL PREPARATION",
+    "TECHNIQUE":                             "TECHNICAL",
+    "IA":                                    "AI",
+    "PLANS DU STORYBOARD":                   "STORYBOARD SHOTS",
+    "Toutes les séquences":                  "All sequences",
+    "Sans séquence":                         "No sequence",
+    "Rechercher un plan…":                   "Search for a shot…",
+    "Plan du storyboard":                    "Storyboard shot",
+    "Plan du décor":                         "Set floor plan",
+    "plan(s)":                               "shot(s)",
+    "RÉGLAGES DES PROJECTEURS":              "LIGHT SETTINGS",
+    "Aucun projecteur sur ce plan.\nUtilisez ＋ dans la barre d'outils pour en ajouter un.":
+        "No light on this shot.\nUse + in the toolbar to add one.",
+    "Les modifications sont enregistrées et synchronisées automatiquement.":
+        "Changes are saved and synchronized automatically.",
+    "Ouvrir ou fermer les réglages":          "Open or close settings",
+    "Retour à l'accueil":                     "Back to home",
+    "Sélectionner et déplacer":               "Select and move",
+    "Déplacer le plan":                       "Pan floor plan",
+    "Orienter un projecteur":                 "Aim a light",
+    "Ajouter un projecteur":                  "Add a light",
+    "Afficher ou masquer la grille":          "Show or hide grid",
+    "Adapter le plan à la fenêtre":           "Fit floor plan to window",
+    "Zoom avant":                             "Zoom in",
+    "Zoom arrière":                           "Zoom out",
+    "Allumer ou éteindre le projecteur":      "Turn light on or off",
+    "Angle de faisceau":                      "Beam angle",
+    "Louver / nid d'abeille":                 "Louver / honeycomb grid",
+    "Notes d'éclairage…":                     "Lighting notes…",
+    "Réglages avancés":                       "Advanced settings",
+    "Scénario modifié selon les suggestions ✓":
+        "Screenplay updated according to the suggestions ✓",
+    "Scénario modifié et intentions ajoutées à la note ✓":
+        "Screenplay updated and directing intentions added to the note ✓",
+    "Scénario réécrit et appliqué ✓":
+        "Rewritten screenplay applied ✓",
+    "Scénario appliqué et intentions ajoutées à la note ✓":
+        "Screenplay applied and directing intentions added to the note ✓",
+    "Analyse terminée":                      "Analysis complete",
+    "Analyse terminée ✓":                    "Analysis complete ✓",
+    "Durée estimée":                         "Estimated duration",
+    " · intentions ajoutées à la note":      " · intentions added to the note",
+    "Analyse terminée et intentions ajoutées à la note ✓":
+        "Analysis complete and directing intentions added to the note ✓",
 
     # ── Analyse des références visuelles — « Nouvelle analyse » ────────────────
     "✚  Nouvelle analyse":                    "✚  New analysis",
@@ -832,6 +885,13 @@ _FR_TO_EN: dict[str, str] = {
     "  NOUVEAU PROJET":                                   "  NEW PROJECT",
     "  OUVRIR UN PROJET":                                 "  OPEN PROJECT",
     "Aucun projet récent.\nCrée ton premier projet →":    "No recent projects.\nCreate your first project →",
+    "Votre environnement créatif pour le cinéma et le live": "Your creative environment for cinema and live",
+    "Créez un film ou une vidéo générés par IA":             "Create a film or an AI-generated video",
+    "Créez un live vidéo ou un mapping générés par IA":      "Create a live video or AI-generated mapping",
+    "Créez un projet vierge et commencez l'écriture.":        "Create a blank project and start writing.",
+    "Parcourez vos projets en local.":                        "Browse your local projects.",
+    "Le module Live n'est pas disponible dans cette édition.": "The Live module is not available in this edition.",
+    "Ce dossier ne contient pas de projet PANDORA valide.":   "This folder does not contain a valid PANDORA project.",
 
     # ── Dates relatives ───────────────────────────────────────────────────────
     "Aujourd'hui":          "Today",
@@ -1288,6 +1348,25 @@ _FR_TO_EN: dict[str, str] = {
         "(token-heavy — the chat only edits the requested passages).",
     # Co-écriture — bouton ciblé « Réécrire selon la co-écriture » + « Générer tout … »
     "✦  Réécrire selon la co-écriture":  "✦  Rewrite from the co-writing",
+    # Co-écriture — anti-perte de travail (2026-07-21) : relance auto + alerte tokens
+    "↻ Nouvelle tentative automatique sur les passages non retrouvés…":
+        "↻ Automatic retry on the passages that were not found…",
+    "⚠ La session devient volumineuse — on approche de la limite de tokens. "
+    "Pour ne rien perdre : lance « ✦ Réécrire selon la co-écriture » pour "
+    "consolider les changements, applique le scénario au projet, puis "
+    "continue la discussion.":
+        "⚠ The session is getting large — we are approaching the token limit. "
+        "To avoid losing anything: run \"✦ Rewrite from the co-writing\" to "
+        "consolidate the changes, apply the screenplay to the project, then "
+        "continue the discussion.",
+    "⚠ La session devient volumineuse — on approche de la limite de tokens. "
+    "Pour ne rien perdre : lance « ✦ Réécrire selon la co-écriture » pour "
+    "consolider les changements, applique le conducteur au projet, puis "
+    "continue la discussion.":
+        "⚠ The session is getting large — we are approaching the token limit. "
+        "To avoid losing anything: run \"✦ Rewrite from the co-writing\" to "
+        "consolidate the changes, apply the show script to the project, then "
+        "continue the discussion.",
     "✎  Générer tout le scénario":       "✎  Generate the whole screenplay",
     "✎  Générer tout le conducteur":     "✎  Generate the whole rundown",
     "Applique les modifications discutées, mais SEULEMENT sur les passages "
@@ -1691,13 +1770,26 @@ _FR_TO_EN: dict[str, str] = {
     "Scénario (mise en page, arrangement)": "Screenplay (formatting, arrangement)",
     "Extraction d'éléments (personnages, décors…)": "Element extraction (characters, locations…)",
     "Synchronisation du storyboard":    "Storyboard synchronization",
+    "Traduction des prompts (FR → EN/ZH)": "Prompt translation (FR → EN/ZH)",
+    "Prompt vidéo Seedance (prose anglaise)": "Seedance video prompt (English prose)",
+    "Direction artistique des éléments": "Element art direction",
+    "Analyse visuelle":                 "Visual analysis",
+    "Anthropic optimisé par tâche":     "Anthropic optimized per task",
+    "ChatGPT optimisé par tâche":       "ChatGPT optimized per task",
+    "Actualiser les modèles accessibles": "Refresh accessible models",
+    "Recherche des modèles accessibles…": "Searching accessible models…",
     "✓  Tester API GPT-5.5":            "✓  Test GPT-5.5 API",
+    "✓  Tester API OpenAI":             "✓  Test OpenAI API",
+    "✓  Tester le fournisseur":         "✓  Test provider",
     "✓  Tester API fal.ai":             "✓  Test fal.ai API",
     "✓  Tester API Anthropic":          "✓  Test Anthropic API",
     "◐  Sombre":                        "◐  Dark",
     "◑  Clair":                         "◑  Light",
     "ℹ  Comment obtenir les clés API":  "ℹ  How to get API keys",
     "Clé OpenAI (GPT-5.5) :":           "OpenAI key (GPT-5.5):",
+    "Clé OpenAI (GPT-5.6 / GPT-5.5) :": "OpenAI key (GPT-5.6 / GPT-5.5):",
+    "Clé fournisseur personnalisé :":   "Custom provider key:",
+    "Personnalisé (URL · modèle) :":     "Custom (URL · model):",
     "✓  Tester API Mistral":            "✓  Test Mistral API",
     "✓  Tester API Kimi":               "✓  Test Kimi API",
     "⇗  Obtenir une clé OpenAI":        "⇗  Get an OpenAI key",
@@ -1705,6 +1797,10 @@ _FR_TO_EN: dict[str, str] = {
     "⇗  Obtenir une clé Kimi":          "⇗  Get a Kimi key",
     "OpenAI — GPT-5.5  (assistant texte, par moteur ou par tâche)":
         "OpenAI — GPT-5.5  (text assistant, per engine or per task)",
+    "OpenAI — GPT-5.6 / GPT-5.5  (assistant, par profil ou par tâche)":
+        "OpenAI — GPT-5.6 / GPT-5.5  (assistant, per profile or per task)",
+    "Fournisseur personnalisé  (API OpenAI-compatible ou serveur local)":
+        "Custom provider  (OpenAI-compatible API or local server)",
     "Mistral  (assistant texte, expérimental)":
         "Mistral  (text assistant, experimental)",
     "Kimi K2.7 (Moonshot)  (assistant texte — API ou local, expérimental)":
@@ -2672,6 +2768,8 @@ _FR_TO_EN: dict[str, str] = {
     "Générer la HMC":                            "Generate HMC",
     "Générer les véhicules":                     "Generate vehicles",
     "Générer le storyboard":                     "Generate storyboard",
+    "Construit le storyboard depuis le découpage — ou le scénario":
+        "Builds the storyboard from the breakdown — or the screenplay",
     "Analyse en cours...":                       "Analyzing...",
     "L'analyse apparaît ici au fil de la génération...":
         "Analysis will appear here as it generates...",
@@ -2844,13 +2942,30 @@ _FR_TO_EN: dict[str, str] = {
     "Enregistré ✓":                              "Saved ✓",
     "Sauvegarder le scénario":                   "Save the screenplay",
     "Ouvrir un scénario":                        "Open a screenplay",
+    "Police":                                    "Font",
+    "Gras":                                      "Bold",
+    "Italique":                                  "Italic",
+    "Souligner":                                 "Underline",
+    "Aligner à gauche":                          "Align left",
+    "Centrer":                                   "Center",
+    "Aligner à droite":                          "Align right",
+    "Plein écran":                               "Full screen",
     "Sauvegarder le storyboard":                 "Save the storyboard",
     "Ouvrir un storyboard":                      "Open a storyboard",
     "Ajouter acteur":                            "Add actor",
     "Ajouter un acteur":                         "Add an actor",
     "Placer la caméra ici":                      "Place camera here",
+    "Placer ou déplacer la caméra":              "Place or move the camera",
     "Créer un projecteur":                       "Create a light",
     "Hauteur cam.":                              "Cam. height",
+    "RÉGLAGES":                                  "SETTINGS",
+    "Ouvrir ou fermer les réglages du plateau":  "Open or close the stage settings",
+    "Mode couleur":                              "Color mode",
+    "Vert / Magenta":                            "Green / magenta",
+    "Optique / accessoire":                      "Optic / accessory",
+    "Angle effectif":                            "Effective angle",
+    "Groupes de pixels":                         "Pixel groups",
+    "Effet":                                     "Effect",
     # ── Doublage : dialogues depuis le storyboard ─────────────────────────────
     "Depuis le storyboard — dialogues à doubler": "From the storyboard — lines to dub",
     "Charger les dialogues":                     "Load dialogue lines",
@@ -2875,6 +2990,12 @@ _FR_TO_EN: dict[str, str] = {
     "Synchronisation":                           "Synchronize",
     "Synchroniser les décors (storyboard → plans)":
         "Sync sets (storyboard → plans)",
+    "Synchroniser les décors (storyboard → plateau)":
+        "Sync sets (storyboard → stage)",
+    "Synchroniser le plateau complet → storyboard":
+        "Sync the complete stage → storyboard",
+    "Reconstruire caméra et acteurs depuis le storyboard":
+        "Rebuild camera and actors from the storyboard",
     "Synchroniser la mise en scène → storyboard":
         "Sync staging → storyboard",
     "Synchroniser le storyboard → mise en scène":
@@ -2894,6 +3015,8 @@ _FR_TO_EN: dict[str, str] = {
         "Staging synced to the storyboard.",
     "Plan de feu synchronisé vers le storyboard.":
         "Lighting plan synced to the storyboard.",
+    "Plateau synchronisé vers le storyboard.":
+        "Stage synced to the storyboard.",
     "Nom du plan":                               "Shot name",
     "Générer les décors + plan":                 "Generate sets + plan",
     "Mise en page PANDORA":                      "PANDORA layout",
@@ -4060,6 +4183,7 @@ _FR_TO_EN: dict[str, str] = {
     "Lever du soleil": "Sunrise",
     "Coucher du soleil": "Sunset",
     "Traduction du prompt…": "Translating prompt…",
+    "Composition du prompt vidéo (prose anglaise)…": "Composing the video prompt (English prose)…",
     "Analyse de l'image de style…": "Analyzing style image…",
     "Suppression du fond…": "Removing background…",
     "Encodage de l'image…": "Encoding image…",
@@ -4317,6 +4441,27 @@ _FR_TO_EN: dict[str, str] = {
     "🎨  Références visuelles": "🎨  Visual references",
     "☁  Claude IA": "☁  Claude AI",
     "⚡  Générer depuis le scénario": "⚡  Generate from the screenplay",
+    # ── Renommages du panneau Scénario (2026-07-22) ──
+    "🎨  Ajouter des références": "🎨  Add references",
+    "♫  Musique": "♫  Music",
+    "⚡  Générer": "⚡  Generate",
+    "Ouvrir ou fermer le panneau": "Open or close the panel",
+    "Analyser la nouvelle image ?": "Analyze the new image?",
+    # ── Portage Live 2026-07-23 ──
+    "Créer le découpage": "Create the breakdown",
+    "Générer les séquences": "Generate the sequences",
+    "Affiner le découpage": "Refine the breakdown",
+    "🎭  Style VJ": "🎭  VJ Style",
+    "🎛  Mode": "🎛  Mode",
+    "Réécrire/enrichir chaque plan un par un avant les séquences":
+        "Rewrite/enrich each shot one by one before the sequences",
+    "L'image active de « {name} » a changé.\n\n"
+    "Voulez-vous l'analyser maintenant pour adapter automatiquement "
+    "les prompts du Storyboard dans tous les plans où cet élément "
+    "apparaît ?":
+        "The active image of “{name}” has changed.\n\n"
+        "Analyze it now to automatically adapt the Storyboard prompts "
+        "in every shot where this element appears?",
     "Analyse structure + suggestions": "Structure analysis + suggestions",
     # ── Analyse & co-écriture (ex-« Proposer un arrangement », 2026-07-02) ──
     "Analyse & co-écriture": "Analysis & co-writing",
@@ -4327,6 +4472,10 @@ _FR_TO_EN: dict[str, str] = {
     "Lance d'abord « Analyse & co-écriture ».": "Run \"Analysis & co-writing\" first.",
     "Crédits API épuisés — recharge ton compte (console.anthropic.com → Billing) puis relance. La dernière analyse sauvegardée reste disponible.":
         "API credits exhausted — top up your account (console.anthropic.com → Billing) and retry. The last saved analysis remains available.",
+    "Crédits OpenAI épuisés ou plafond de dépenses atteint — recharge les crédits ou vérifie les limites du projet OpenAI, puis relance.":
+        "OpenAI credits exhausted or spending limit reached — add credits or check the OpenAI project limits, then retry.",
+    "Crédits API épuisés — recharge le compte du fournisseur sélectionné puis relance. La dernière analyse sauvegardée reste disponible.":
+        "API credits exhausted — top up the selected provider account and retry. The last saved analysis remains available.",
     "Service IA saturé ou limite de débit atteinte — réessaie dans quelques instants.":
         "AI service overloaded or rate limit reached — try again in a few moments.",
     "Clé API invalide — vérifie-la dans Paramètres → Clés API.":
@@ -4350,6 +4499,7 @@ _FR_TO_EN: dict[str, str] = {
 
     # ── Lot 10 — dialogues Aperçu/Analyse, mise à jour, soutien (captures) ──
     "Mise en page PANDORA — Aperçu Claude": "PANDORA Layout — Claude Preview",
+    "Mise en page PANDORA — Aperçu": "PANDORA Layout — Preview",
     "◈  Mise en page PANDORA — Aperçu": "◈  PANDORA Layout — Preview",
     "Mise en page en cours…": "Layout in progress…",
     "Mise en page terminée": "Layout complete",
@@ -4594,6 +4744,37 @@ _FR_TO_EN: dict[str, str] = {
     'Génération du découpage en plans… Cette opération peut prendre quelques secondes.': 'Generating the shot breakdown… This may take a few seconds.',
     'Choisir un scénario': 'Choose a screenplay',
     'Sélectionne le scénario à analyser :': 'Select the screenplay to analyze:',
+
+    # ── Flux Scénario → Note de réalisation → Découpage ──
+    "Note de réalisation": "Director's note",
+    "Découpage PANDORA": "PANDORA breakdown",
+    "Créer le découpage PANDORA": "Create the PANDORA breakdown",
+    "Transforme le scénario et la note en plans sans réécrire le récit":
+        "Turn the screenplay and note into shots without rewriting the story",
+    "Affiner le découpage": "Refine the breakdown",
+    "Co-écrire chaque plan avant de l'envoyer au Storyboard":
+        "Co-write each shot before sending it to Storyboard",
+    "🎯  Découpage": "🎯  Breakdown",
+    "Valider et envoyer au Storyboard": "Validate and send to Storyboard",
+    "◎  Ajouter à la note de réalisation": "◎  Add to the director's note",
+    "✓  Analyse déjà ajoutée à la note": "✓  Analysis already added to the note",
+    "Déjà ajoutée avec l'analyse courante — clique pour la réajouter.":
+        "Already added from the current analysis — click to add it again.",
+    "Importe le découpage validé sans le réinterpréter":
+        "Import the approved breakdown without reinterpreting it",
+    "Découpage PANDORA — Aperçu": "PANDORA breakdown — Preview",
+    "◈  Découpage PANDORA — Aperçu": "◈  PANDORA breakdown — Preview",
+    "◈  Enregistrer dans « Découpage PANDORA »":
+        "◈  Save to PANDORA breakdown",
+    "☁  Affiner le Découpage PANDORA": "☁  Refine the PANDORA breakdown",
+    "☁  Affiner le découpage plan par plan": "☁  Refine the breakdown shot by shot",
+    "📌  Identité visuelle": "📌  Visual identity",
+    "Identité visuelle canonique": "Canonical visual identity",
+    "Description visuelle canonique…": "Canonical visual description…",
+    "↻  Réanalyser l'image active": "↻  Reanalyze the active image",
+    "✓  Enregistrer l'identité": "✓  Save identity",
+    "Voir ou corriger la description exacte déduite de l'image active":
+        "View or correct the exact description derived from the active image",
 
     # ── Lot 3 — guides complets de l'assistant (audit 2026-06) ──
     "Créer un projet\nCliquez sur '+ Nouveau projet', donnez un nom et choisissez l'emplacement. PANDORA crée automatiquement la structure de fichiers.\n\nOuvrir un projet existant\nCliquez sur un projet dans la liste. Toutes les pages se mettent à jour automatiquement avec les données du projet sélectionné.\n\nRenommer / supprimer\nAccédez à la fiche du projet pour renommer. La suppression retire le projet de la liste uniquement — vos fichiers restent sur le disque.\n\nOrganisation des données\nChaque projet stocke scénario, storyboard, castings, décors, accessoires, HMC, véhicules et clips générés dans son propre dossier.": "Create a project\nClick '+ New project', give it a name and choose the location. PANDORA automatically creates the file structure.\n\nOpen an existing project\nClick a project in the list. All pages update automatically with the selected project's data.\n\nRename / delete\nGo to the project record to rename. Deleting only removes the project from the list — your files stay on disk.\n\nData organization\nEach project stores its screenplay, storyboard, castings, locations, props, HMC, vehicles and generated clips in its own folder.",

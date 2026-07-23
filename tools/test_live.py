@@ -452,8 +452,9 @@ def prompts_cinema_detailles():
         assert k in s._GENERATE_STORYBOARD_TMPL, f"champ de section {k}"
     assert "hors champ" in s._GENERATE_STORYBOARD_TMPL, "personnages hors champ exclus"
     assert hasattr(s, "_technique_line"), "section Technique déterministe"
-    assert "TRÈS DÉTAILLÉ" in s._FORMAT_PANDORA and "FIDÈLE au scénario" in s._FORMAT_PANDORA
-    assert "HIGHLY DETAILED" in s._FORMAT_PANDORA_EN
+    assert "DÉCOUPAGE PANDORA 2" in s._FORMAT_PANDORA
+    assert "SOURCE SCÉNARIO" in s._FORMAT_PANDORA and "PROMPT VISUEL" in s._FORMAT_PANDORA
+    assert "SCREENPLAY SOURCE" in s._FORMAT_PANDORA_EN and "VISUAL PROMPT" in s._FORMAT_PANDORA_EN
 
 
 @test
@@ -730,10 +731,14 @@ def colonnes_sequences():
         # centré était tronqué au-dessus du bouton, 2026-07-07).
         assert pg._empty_lbl.maximumWidth() < 16000 and pg._empty_lbl.minimumWidth() >= 400, \
             "label 'aucun découpage' à largeur fixe (anti-troncature)"
-        _tlay = pg._btn_batch_mood.parentWidget().layout()
-        assert (_tlay.indexOf(pg._btn_batch_mood) < _tlay.indexOf(pg._btn_music_align)
-                < _tlay.indexOf(pg._ai_lbl) < _tlay.indexOf(pg._btn_clear_shots)), \
-            "Moods et Caler à gauche, actions à droite"
+        # Depuis le 2026-07-23 (parité Cinéma) : Moods/Caler/Sauvegarder/Ouvrir/
+        # Pitch deck/Ajouter/Supprimer vivent dans le menu « ☰ Action » tout à
+        # gauche ; les boutons d'origine restent vivants mais cachés.
+        assert hasattr(pg, "_btn_actions"), "bouton « Action » absent de la barre Séquences"
+        _tlay = pg._btn_actions.parentWidget().layout()
+        assert _tlay.indexOf(pg._btn_actions) == 0, "« Action » doit être tout à gauche"
+        assert pg._btn_batch_mood.isHidden() and pg._btn_music_align.isHidden(), \
+            "boutons d'origine censés être cachés (pilotés par le menu Action)"
     sb.set_namespace("storyboard")
 
 
@@ -744,11 +749,13 @@ def coecriture_et_finalisation_live():
     import inspect
     src = inspect.getsource(__import__("ui.page_scenario_live", fromlist=["_"]))
     assert '_make_toggle("📖  Conducteur"' in src, "section Conducteur (ex-Claude IA) absente"
-    assert '_make_toggle("🎯  Finalisation"' in src, "section Finalisation absente"
+    # « Finalisation » renommée « Découpage » le 2026-07-23 (parité Cinéma).
+    assert '_make_toggle("🎯  Découpage"' in src, "section Découpage (ex-Finalisation) absente"
     # Bouton « Générer le découpage » MIS EN AVANT (cadre vert, façon « Tout générer »).
     assert 'self._on_storyboard, color=CP["green"]' in src, "« Générer le découpage » pas mis en avant (cadre coloré)"
-    assert '"Co-écriture des plans"' in src and "def _on_plan_coedit" in src, \
-        "bouton/handler Co-écriture des plans absent (Live)"
+    # « Co-écriture des plans » renommé « Affiner le découpage » (2026-07-23).
+    assert '"Affiner le découpage"' in src and "def _on_plan_coedit" in src, \
+        "bouton/handler Affiner le découpage absent (Live)"
     assert src.index("(tog_cond,") < src.index("(tog_final,") < src.index("(tog_gen,"), \
         "ordre du panneau droit incorrect (Conducteur, Finalisation, …, Générer)"
     import core.plan_layout as pl
@@ -1286,7 +1293,9 @@ def fenetre_live():
     """Topbar, assistant fermé par défaut, nav en BARRE BASSE, alias de navigation."""
     from live_window import LiveWindow
     w = LiveWindow({})
-    assert hasattr(w, "_btn_save_global") and hasattr(w, "_btn_update_header"), "topbar"
+    # 2026-07-23 (parité Cinéma) : « Mises à jour » retiré de la barre du haut ;
+    # la disquette vit dans la barre basse (insérée après le séparateur des drapeaux).
+    assert hasattr(w, "_btn_save_global") and not hasattr(w, "_btn_update_header"), "topbar"
     assert w._assistant.isHidden(), "assistant IA fermé par défaut"
     assert w._assistant_toggle._open is False, "poignée synchronisée"
     assert "settings" in w._sidebar._items, "Paramètres dans la nav"
@@ -1303,10 +1312,10 @@ def fenetre_live():
     assert w._assistant_toggle._side == "left", "flèches du strip en miroir côté gauche"
     # Retours 2026-06-12 : Manuel ET Nous contacter en HAUT À GAUCHE (topbar),
     # Paramètres seul en BAS À DROITE, séparation Projets|Conducteur
-    assert hasattr(w, "_btn_manual_top") and hasattr(w, "_btn_contact_top"), \
-        "Manuel + Contact dans la topbar"
-    # Couleurs (retour 2026-06-12 soir) : Manuel ROUGE, Nous contacter VERT
-    assert "255,79,106" in w._btn_manual_top.styleSheet(), "Manuel en rouge"
+    # 2026-07-23 (parité Cinéma) : Manuel RETIRÉ de la topbar (accessible depuis
+    # Paramètres) — seul « Nous contacter » (vert) reste en haut à gauche.
+    assert not hasattr(w, "_btn_manual_top") and hasattr(w, "_btn_contact_top"), \
+        "topbar : Contact seul (Manuel retiré)"
     assert "37,211,102" in w._btn_contact_top.styleSheet(), "Contact en vert"
     assert not hasattr(w._sidebar, "_btn_manual") and not hasattr(w._sidebar, "_btn_contact"), \
         "plus de Manuel/Contact dans la barre basse"
@@ -1315,16 +1324,21 @@ def fenetre_live():
                < _bar_lay.indexOf(w._sidebar._items["settings"])
                for k in w._sidebar._items if k != "settings"), \
         "Paramètres tout au bord, en bas à droite"
+    # 2026-07-23 : onglet Projets RETIRÉ (retour projets via le logo) ; Image IA
+    # ajouté à côté de Studio IA.
     from live_window import _NAV_ITEMS as _NI
-    assert _NI[1] is None and _NI[0][2] == "projects" and _NI[2][2] == "conducteur", \
-        "séparateur entre Projets et Conducteur"
-    # Largeur (retours finaux 2026-06-12) : toutes les pages s'étirent jusqu'aux
-    # bords SAUF Paramètres, centré comme les onglets du Studio IA
+    assert _NI[0][2] == "conducteur", "Conducteur en premier (Projets retiré)"
+    assert all(e is None or e[2] != "projects" for e in _NI), "onglet Projets retiré"
+    assert _NI[-3][2] == "image_ia" and _NI[-2][2] == "studio", \
+        "Image IA à côté de Studio IA"
+    # Paramètres pleine largeur (2026-07-23) : la barre de défilement colle au
+    # bord droit, le centrage 1360 vit À L'INTÉRIEUR de la page.
     for k in w._pages:
-        if k == "settings":
-            continue
         assert w._pages[k].maximumWidth() > 100000, f"page {k} pleine largeur"
-    assert w._pages["settings"].maximumWidth() == 1360, "Paramètres plafonné"
+    import inspect as _insp
+    from ui.page_live_settings import PageLiveSettings as _PLS
+    assert "setMaximumWidth(1360)" in _insp.getsource(_PLS), \
+        "contenu Paramètres non centré à l'intérieur du scroll"
     import inspect as _isp_lw
     w._navigate("settings")
     assert w._stack.currentWidget() is w._settings_wrap, \
@@ -1335,15 +1349,19 @@ def fenetre_live():
     from ui.dialog_contact import ContactDialog as _CDC
     assert _CDL._WA_GROUP == "PANDORA | Live" and "LEVinbwbtOv3yn8zr8zWPL" in _CDL._WA_LINK
     assert _CDC._WA_GROUP == "PANDORA | Cinéma" and "JRo5SWLBwbxLgACtrDksDj" in _CDC._WA_LINK
-    # Alignement des bandeaux (retour 2026-06-12) : l'en-tête de l'assistant
-    # partage la hauteur STANDARD 60 px des bandeaux de pages — lignes alignées
-    assert w._assistant._header.maximumHeight() == 60, "en-tête assistant aligné"
-    for _mod, _meth in (("ui.page_storyboard_live", "_build_shots_topbar"),
-                        ("ui.page_live", "_build_topbar")):
-        _m = __import__(_mod, fromlist=["x"])
-        _cls = getattr(_m, "PageStoryboard", None) or getattr(_m, "PageLive")
-        assert "setFixedHeight(60)" in _isp_lw.getsource(getattr(_cls, _meth)), \
-            f"bandeau 60 px : {_mod}.{_meth}"
+    # Alignement (2026-07-23) : l'en-tête de l'assistant partage la hauteur
+    # STANDARD 40 px de la première rangée des pages — lignes alignées.
+    assert w._assistant._header.maximumHeight() == 40, "en-tête assistant aligné"
+    # 2026-07-23 : le bandeau titre des Séquences est RETIRÉ — ses contrôles
+    # vivent dans la barre d'outils via _build_topbar_controls (parité Cinéma).
+    _msb = __import__("ui.page_storyboard_live", fromlist=["x"])
+    _sb_cls = getattr(_msb, "PageStoryboard")
+    assert not hasattr(_sb_cls, "_build_shots_topbar"), "bandeau titre Séquences censé être retiré"
+    assert hasattr(_sb_cls, "_build_topbar_controls"), "contrôles de l'ex-bandeau absents"
+    _mpl = __import__("ui.page_live", fromlist=["x"])
+    _pl_cls = getattr(_mpl, "PageLive")
+    assert "setFixedHeight(60)" in _isp_lw.getsource(_pl_cls._build_topbar), \
+        "bandeau 60 px : ui.page_live._build_topbar"
     # Conducteur (retours 2026-06-12 soir) : scrollbar de l'éditeur AU BORD
     # (marges dans le document, pas en padding CSS) et « Rouvrir la fenêtre »
     # TOUT EN BAS du panneau droit, sous « Tout générer »
@@ -1370,8 +1388,9 @@ def conducteur_ui():
     """Onglets Conducteur/Mise en page, mode dans la bande Durée cible, musique injectée."""
     from ui.page_scenario_live import PageScenario
     p = PageScenario()
-    assert p._editor_tabs.count() == 2, "2 onglets éditeur"
-    assert not p._editor_tabs.isTabEnabled(1), "Mise en page grisée au départ"
+    # 3 onglets depuis le 2026-07-23 : Conducteur, Note de réalisation, Découpage.
+    assert p._editor_tabs.count() == 3, "3 onglets éditeur (Conducteur/Note/Découpage)"
+    assert not p._editor_tabs.isTabEnabled(2), "Découpage grisé au départ (onglet 3)"
     assert hasattr(p, "_btn_mode_live") and hasattr(p, "_btn_mode_mapping"), "boutons mode"
     assert hasattr(p, "_music_hbox") and hasattr(p, "_bld_row"), "sections musique + façade"
     p._set_editor_text("Mon conducteur")
@@ -1393,6 +1412,31 @@ def conducteur_ui():
     assert "self._decoupage_base()" in inspect.getsource(PageScenario._on_storyboard) \
         and "choose_decoupage_source" not in inspect.getsource(PageScenario._on_storyboard), \
         "_on_storyboard Live : source automatique, plus de fenêtre de choix"
+    # ── Parité Cinéma 2026-07-23 : formatage riche persisté + Note injectée ──
+    assert "formatted_html" in inspect.getsource(PageScenario._save), \
+        "formatage riche du Conducteur persisté à la sauvegarde"
+    assert "direction_note=" in inspect.getsource(PageScenario._on_format), \
+        "Note de réalisation transmise au worker de mise en page"
+    from api.live_extract import FormatConducteurWorker
+    assert FormatConducteurWorker("t", "live", direction_note="n")._direction_note == "n"
+    import api.live_extract as _le
+    assert "note_for_ai" in inspect.getsource(_le.FormatConducteurWorker.run), \
+        "note filtrée via note_for_ai avant injection (jamais recopiée brute)"
+    # Restauration du formatage riche : appliquée si le HTML correspond au texte…
+    p2 = PageScenario()
+    _html = "<html><body><p><b>Bonjour</b></p></body></html>"
+    p2._open_scenario({"title": "T", "raw_content": "Bonjour",
+                       "formatted_content": "Bonjour", "formatted_html": _html})
+    from PyQt6.QtGui import QTextCursor
+    _cur = p2._editor_text.textCursor()
+    _cur.movePosition(QTextCursor.MoveOperation.Start)
+    _cur.movePosition(QTextCursor.MoveOperation.NextCharacter, QTextCursor.MoveMode.KeepAnchor)
+    assert _cur.charFormat().fontWeight() >= 600, "gras restauré à la réouverture"
+    # …et IGNORÉE si le texte a changé depuis (réécriture IA → texte brut prévaut).
+    p2._open_scenario({"title": "T", "raw_content": "Texte réécrit",
+                       "formatted_content": "Texte réécrit", "formatted_html": _html})
+    assert p2._editor_text.toPlainText() == "Texte réécrit", \
+        "HTML périmé écarté : le texte brut prévaut"
 
 
 @test
@@ -1458,33 +1502,31 @@ def workers_construction():
 def couche_ai_provider():
     """Couche d'abstraction IA : défauts, tiers, nom d'affichage, sites routés."""
     import core.ai_provider as ap
-    assert ap.get_provider() in ("anthropic", "openai", "mistral", "kimi", "glm", "ollama")
+    assert ap.get_provider() in ("anthropic", "openai", "mistral", "kimi", "glm", "ollama", "custom")
     assert ap._model("utility") and ap._model("creative"), "modèles des deux tiers"
     assert ap.ai_name(), "nom d'affichage"
-    # Les workers TEXTE ne doivent plus importer anthropic en direct
-    # (seuls les appels VISION y ont droit, marqués d'un commentaire).
+    # Aucun worker, texte ou vision, ne doit contourner le routeur central.
     import api.enhance, api.assistant, core.lang, api.live_extract, api.live_screenplay
-    for mod in (api.enhance, api.assistant, core.lang, api.live_extract):
+    for mod in (api.enhance, api.assistant, core.lang, api.live_extract,
+                api.live_screenplay):
         src = inspect.getsource(mod)
         assert "anthropic.Anthropic(" not in src, f"{mod.__name__} : appel anthropic direct restant"
     src = inspect.getsource(api.live_screenplay)
-    assert src.count("anthropic.Anthropic(") == 1, \
-        "live_screenplay : seul le site VISION du studio de co-écriture (images jointes)"
     assert "ai_chat" in src, "live_screenplay routé via ai_provider (texte)"
     import api.screenplay
     src = inspect.getsource(api.screenplay)
-    assert src.count("anthropic.Anthropic(") == 2, "screenplay : seuls les 2 sites VISION restent"
+    assert "anthropic.Anthropic(" not in src
     assert "core.ai_provider" in src, "screenplay routé via ai_provider"
 
 
 @test
 def selecteur_assistant_ia():
-    """Sélecteur IA dans Paramètres (Cinéma + Live) : 4 choix, champs conditionnels."""
+    """Sélecteur IA groupé, dynamique et identique dans Cinéma et Live."""
     from ui.page_settings import SettingsPage
     from ui.page_live_settings import PageLiveSettings
     cin = SettingsPage()
     nc = cin.ai_combo.count()
-    assert nc == 10, "10 choix côté Cinéma (PANDORA optimisé défaut, Sonnet, Haiku, Fable 5, GPT-5.5, Mistral, Kimi K2.7, GLM 4.7, Ollama, Personnalisé)"
+    assert nc >= 18
     assert any("Fable 5" in cin.ai_combo.itemText(i) for i in range(nc)), "Fable 5 proposé"
     assert any("GPT-5.5" in cin.ai_combo.itemText(i) for i in range(nc)), "GPT-5.5 proposé"
     # Clés GPT + Mistral toujours présentes (menu déroulant facultatif)
@@ -1492,7 +1534,7 @@ def selecteur_assistant_ia():
     # Ollama : champs conditionnels au choix global
     for i in range(nc):
         d = cin.ai_combo.itemData(i)
-        if d and d[0] == "ollama":
+        if isinstance(d, dict) and d.get("engine") == "ollama":
             cin.ai_combo.setCurrentIndex(i)
             break
     assert not cin.ollama_url_input.isHidden(), "champs Ollama visibles quand Ollama choisi"
@@ -1501,19 +1543,20 @@ def selecteur_assistant_ia():
     # PARITÉ Cinéma↔Live (demande Matthieu 2026-07-14) : mêmes 10 choix (mêmes
     # providers), hors DaVinci qui reste Cinéma-only.
     liv = PageLiveSettings()
-    assert liv._ai_combo.count() == nc == 10, \
-        "parité : le combo Live doit proposer les MÊMES 10 choix que le Cinéma"
-    _provs = lambda combo: [(combo.itemData(i) or ("", ""))[0] for i in range(combo.count())]
+    assert liv._ai_combo.count() == nc, "parité : mêmes choix Cinéma et Live"
+    _provs = lambda combo: [combo.itemData(i) for i in range(combo.count())]
     assert _provs(liv._ai_combo) == _provs(cin.ai_combo), \
         "parité : mêmes providers, même ordre, des deux côtés"
     # Ollama : trouvé par donnée (robuste au décalage d'index après ajout Kimi)
     _oll_i = next(i for i in range(liv._ai_combo.count())
-                  if (liv._ai_combo.itemData(i) or ("", ""))[0] == "ollama")
+                  if isinstance(liv._ai_combo.itemData(i), dict)
+                  and liv._ai_combo.itemData(i).get("engine") == "ollama")
     liv._ai_combo.setCurrentIndex(_oll_i)
     assert not liv._ollama_url_input.isHidden(), "champs Ollama visibles côté Live"
     # Kimi : sélection → champs clé + URL/modèle visibles, Ollama caché
     _km_i = next(i for i in range(liv._ai_combo.count())
-                 if (liv._ai_combo.itemData(i) or ("", ""))[0] == "kimi")
+                  if isinstance(liv._ai_combo.itemData(i), dict)
+                  and liv._ai_combo.itemData(i).get("engine") == "kimi")
     liv._ai_combo.setCurrentIndex(_km_i)
     assert not liv._kimi_input.isHidden(), "clé Kimi visible côté Live quand Kimi choisi"
     assert not liv._kimi_url_input.isHidden() and not liv._kimi_model_input.isHidden()
@@ -1543,7 +1586,8 @@ def parametres_live_parite_cinema():
         assert hasattr(liv, m), f"parité Paramètres : {m} manquant côté Live"
     # « Choix personnalisé » déplie les avancés et laisse TOUTES les clés saisissables
     _cu_i = next(i for i in range(liv._ai_combo.count())
-                 if (liv._ai_combo.itemData(i) or ("", ""))[0] == "custom")
+                  if isinstance(liv._ai_combo.itemData(i), dict)
+                  and liv._ai_combo.itemData(i).get("engine") == "custom")
     liv._ai_combo.setCurrentIndex(_cu_i)
     assert liv._adv_open, "custom → avancés dépliés"
     assert not liv._openai_input.isHidden() and not liv._mistral_input.isHidden() \
@@ -2016,7 +2060,8 @@ def analyse_arrangement_sauvegardee_live():
     assert p._last_analysis == "ANALYSE LIVE PERSISTÉE"
     # Erreur « crédits épuisés » → message clair
     from core.ai_provider import humanize_ai_error
-    assert "console.anthropic.com" in humanize_ai_error("Your credit balance is too low")
+    credit_error = humanize_ai_error("Your credit balance is too low")
+    assert "Crédits" in credit_error and "fournisseur" in credit_error
     assert humanize_ai_error("autre erreur") == "autre erreur"
 
 
@@ -2693,7 +2738,9 @@ def studio_ia_poignee_ia_au_bord_live():
     2026-07-05 ; parité avec le garde « seedance » côté Cinéma."""
     root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     with open(os.path.join(root, "live_window.py"), encoding="utf-8") as f:
-        assert 'key != "studio"' in f.read(), "spacer non masqué sur Studio IA Live → poignée IA décalée"
+        # Forme en tuple depuis le portage 2026-07-23 (studio + image_ia + conducteur).
+        assert 'key not in ("studio", "image_ia", "conducteur")' in f.read(), \
+            "spacer non masqué sur Studio IA Live → poignée IA décalée"
 
 
 @test
@@ -2821,6 +2868,62 @@ def coecriture_reecriture_ciblee_live():
     from core.i18n import _FR_TO_EN as T
     for _t in ("✦  Réécrire selon la co-écriture", "✎  Générer tout le conducteur"):
         assert _t in T, ("i18n manquant", _t)
+
+
+@test
+def prompt_video_live_jamais_compose():
+    """Composition prose Seedance (chantier Cinéma 2026-07-21) : les prompts LIVE
+    (corps en beats + [🎵 SOUND DESIGN]) ne sont JAMAIS composés par l'IA — une
+    réécriture diluerait les beats début/milieu/fin et le calage musical. Ils
+    restent sur le chemin historique strip + traduction d'api/real.py."""
+    from api.video_prompt import should_compose
+    from core.prompt_sections import video_with_sound
+    live = video_with_sound(
+        "Début : façade sombre, lueur bleue. Milieu : pulsation sur les fenêtres. "
+        "Fin : blackout sec.", "basses sourdes, kick au drop")
+    assert not should_compose(live), "prompt Live (corps + son) → jamais composé"
+    assert not should_compose("texte libre du Live"), "texte libre → jamais composé"
+    # Le repli d'api/real.py (partagé) reste en place pour ces prompts.
+    rsrc = inspect.getsource(__import__("api.real", fromlist=["x"]))
+    assert "if not _composed:" in rsrc and "translate_to_english" in rsrc, \
+        "chemin historique strip+traduction conservé pour le Live"
+    # Pas d'injection casting côté Live (pas de page Casting en Live) — assumé.
+    lsrc = inspect.getsource(__import__("ui.tab_t2v_live", fromlist=["x"]))
+    assert "character_notes_for_shot" not in lsrc, \
+        "Live sans fiches casting (divergence assumée, pas un oubli de portage)"
+
+
+@test
+def coecriture_anti_perte_live():
+    """Parité Live du chantier anti-perte co-écriture (2026-07-21) : continuation
+    anti-troncature dans le worker CONDUCTEUR (texte + vision), relance auto des
+    passages non retrouvés, alerte tokens déterministe — mêmes remèdes que Cinéma."""
+    src = inspect.getsource(__import__("api.live_screenplay", fromlist=["x"]))
+    assert "chat_until_complete" in src, "worker conducteur sans anti-troncature"
+    assert 'max_rounds=5' in src, "chemin vision sans continuation centralisée"
+    from ui.dialog_arrange_session_live import ArrangeSessionDialog
+    d = ArrangeSessionDialog(None, "=== ACTE 1 ===\nPLAN 1 — Ouverture", "analyse", 5)
+    _cap = {}
+    d._start_worker = lambda instr, surgical=True, **k: _cap.update(instr=instr, surgical=surgical)
+    d._on_rewrite_coedit()
+    assert "Re-parcours TOUTE" in _cap["instr"] and "conducteur" in _cap["instr"], \
+        "instruction de couverture totale (vocabulaire conducteur)"
+    _cap.clear()
+    d._on_edits_ready([{"find": "INTROUVABLE", "replace": "x", "summary": "point L"}])
+    assert _cap.get("surgical") is True and "point L" in _cap.get("instr", ""), \
+        "passages non retrouvés → relance auto"
+    _cap.clear()
+    d._on_edits_ready([{"find": "ENCORE INTROUVABLE", "replace": "y", "summary": "point M"}])
+    assert not _cap, "une seule relance auto par demande"
+    d2 = ArrangeSessionDialog(None, "x" * 250_000, "analyse", 5)
+    _bulles = []
+    d2._append_chat_bubble = lambda text, role: _bulles.append(text)
+    d2._maybe_warn_tokens()
+    assert _bulles and "applique le conducteur au projet" in _bulles[0], \
+        "alerte tokens Live (vocabulaire conducteur)"
+    from core.i18n import _FR_TO_EN
+    assert any("applique le conducteur au projet" in k for k in _FR_TO_EN), \
+        "alerte tokens Live traduite"
 
 
 if __name__ == "__main__":
