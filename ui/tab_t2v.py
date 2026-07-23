@@ -3319,7 +3319,10 @@ class TabT2V(QScrollArea):
         self._preview_translate_timer.timeout.connect(self._start_preview_translate)
         self._preview_translate_worker = None
         self._preview_translated_text: str | None = None
-        self._preview_expanded = False  # collapsed by default
+        # DÉPLIÉ par défaut (demande Matthieu 2026-07-24) : le prompt DÉFINITIF
+        # traduit en anglais (tel qu'envoyé au moteur) doit être visible dès la
+        # sélection d'un plan, pas caché derrière un repli.
+        self._preview_expanded = True
 
         frame = QFrame()
         frame.setStyleSheet(
@@ -3338,7 +3341,7 @@ class TabT2V(QScrollArea):
         hdr_lay.setContentsMargins(0, 9, 0, 9)
         hdr_lay.setSpacing(6)
 
-        self._preview_arrow = QLabel("▶")
+        self._preview_arrow = QLabel("▼")
         self._preview_arrow.setStyleSheet(
             f"color:{C['red']};font-size:9px;background:transparent;border:none;"
         )
@@ -3367,7 +3370,7 @@ class TabT2V(QScrollArea):
         # ── Corps (masqué par défaut) ─────────────────────────────────────────
         self._preview_body_container = QWidget()
         self._preview_body_container.setStyleSheet("background:transparent;")
-        self._preview_body_container.setVisible(False)
+        self._preview_body_container.setVisible(True)   # déplié par défaut
         body_lay = QVBoxLayout(self._preview_body_container)
         body_lay.setContentsMargins(0, 0, 0, 10)
         body_lay.setSpacing(6)
