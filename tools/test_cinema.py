@@ -2647,42 +2647,54 @@ def ecriteau_moteur_ia_du_storyboard():
 
 @test
 def style_visuel_section_storyboard():
-    """Le style d'image est CAPTURÉ dans le prompt du storyboard (section
-    [🎨 STYLE VISUEL]), lu par le Mood sans doublon, et RETIRÉ avant l'envoi vidéo
-    (le moteur vidéo reçoit son style via get_video_suffix) — demande Matthieu
-    2026-07-24."""
+    """Le style visuel est CAPTURÉ dans le prompt du storyboard (dernière section
+    [🎨 STYLE VISUEL] = style d'image projet + section « STYLE VISUEL » de la note),
+    ENVOYÉ au moteur vidéo EN FIN de prompt, et lu par le Mood — le tout sans
+    doublon (demande Matthieu 2026-07-24)."""
     import core.prompt_sections as ps
-    # 1) Section STYLE VISUEL en tête, préservée par rebuild().
-    assert ("style", "[🎨 STYLE VISUEL]") == ps.SECTIONS[0], "STYLE VISUEL doit être en tête"
+    # 1) STYLE VISUEL est la DERNIÈRE section (Seedance suit mieux le style en fin).
+    assert ("style", "[🎨 STYLE VISUEL]") == ps.SECTIONS[-1], "STYLE VISUEL doit être en dernier"
     base = ps.build(action="A", technique="Gros plan", sound="vent")
     assert "STYLE VISUEL" not in base
     inj = ps.rebuild(base, style="shot on ARRI Alexa 65, film grain")
-    assert "STYLE VISUEL" in inj and inj.split("\n")[0] == "[🎨 STYLE VISUEL]", \
-        "style injecté en tête"
+    _tags = [l for l in inj.split("\n") if l.startswith("[")]
+    assert _tags[-1] == "[🎨 STYLE VISUEL]", "style écrit en DERNIÈRE section du prompt"
     assert "ACTION" in inj and "SOUND DESIGN" in inj, "rebuild préserve les autres sections"
     assert ps.style_of(inj) == "shot on ARRI Alexa 65, film grain", "style_of() lit la section"
     # 2) rebuild d'une AUTRE section n'efface pas le style (régression majeure évitée).
     inj2 = ps.rebuild(inj, technique="Plan large")
     assert "STYLE VISUEL" in inj2 and "Plan large" in inj2, "édition partielle → style préservé"
-    # 3) strip_for_video retire STYLE **et** SON, garde le reste.
+    # 3) strip_for_video retire STYLE **et** SON du CORPS : le style ne passe pas à la
+    #    traduction (mots-clés anglais exacts préservés), il est recollé EN FIN ensuite.
     sv = ps.strip_for_video(inj)
     assert "STYLE VISUEL" not in sv and "SOUND DESIGN" not in sv and "ACTION" in sv, \
-        "vidéo : style + son retirés (pas de doublon avec get_video_suffix), action gardée"
-    # 4) Mood : le style de la SECTION prime et n'apparaît qu'une fois.
+        "corps vidéo : style + son retirés avant traduction, action gardée"
+    # 4) real.py : le style baké PRIME sur le get_video_suffix séparé et est recollé EN FIN
+    #    (aucun doublon). Prompt libre sans section → repli sur style_suffix (retro-compat).
+    import inspect
+    rsrc = inspect.getsource(__import__("api.real", fromlist=["_"]))
+    assert "style_of" in rsrc and "_baked_style" in rsrc, "real.py : style baké non lu"
+    assert "_effective_style = _baked_style or params.get(\"style_suffix\"" in rsrc, \
+        "real.py : le style baké doit primer, avec repli style_suffix (free-form)"
+    # 5) Mood : le style de la SECTION prime et n'apparaît qu'une fois.
     from api.apercu import build_mood_prompt
     shot = {"id": "z", "seedance_prompt": inj, "shot_size": "GP"}
     mood = build_mood_prompt(shot, "shot on ARRI Alexa 65, film grain")
     assert mood.lower().count("arri alexa 65") == 1, "style Mood non dupliqué"
-    assert mood.lower().startswith("shot on arri"), "style en tête du prompt Mood"
-    # 5) Rétro-compat : prompt sans section style → Mood retombe sur le suffixe projet.
+    # 6) Rétro-compat : prompt sans section style → Mood retombe sur le suffixe projet.
     mlegacy = build_mood_prompt({"id": "w", "seedance_prompt": base, "shot_size": "GP"},
                                 "shot on ARRI Alexa 65")
     assert "arri alexa 65" in mlegacy.lower(), "rétro-compat : style via suffixe projet"
-    # 6) L'injection à la sauvegarde du storyboard est bien branchée.
-    import inspect
+    # 7) Section « STYLE VISUEL » de la note de réalisation extraite proprement
+    #    (sans déborder sur la section suivante) et fusionnée à la création.
+    from core.direction_note import section_text
+    note = ("## INTENTION GÉNÉRALE\nx\n\n## STYLE VISUEL\ngrain lourd, désaturé\n\n"
+            "## SON ET MUSIQUE\nnappe grave\n")
+    ns = section_text(note, "STYLE VISUEL")
+    assert ns == "grain lourd, désaturé", f"extraction note STYLE VISUEL: {ns!r}"
     dsrc = inspect.getsource(__import__("ui.dialog_storyboard_generate", fromlist=["_"]))
-    assert "get_image_suffix()" in dsrc and "style=_style_txt" in dsrc, \
-        "dialogue storyboard : style non capturé à la sauvegarde"
+    assert "get_video_suffix()" in dsrc and "section_text" in dsrc and "STYLE VISUEL" in dsrc, \
+        "dialogue storyboard : style (projet + note) non capturé à la sauvegarde"
 
 
 @test
@@ -4744,7 +4756,11 @@ def prompt_video_prose_composee():
     #    composé (style déjà en tête de la prose), repli traduction conservé.
     rsrc = inspect.getsource(__import__("api.real", fromlist=["x"]))
     assert "should_compose" in rsrc and "_vp_compose" in rsrc, "composition branchée dans run_real"
-    assert '"" if _composed else params.get("style_suffix"' in rsrc, "style non recollé en fin"
+    # Composé → style NON recollé (déjà intégré à la prose). Non composé → on colle
+    # le style effectif EN FIN (style baké du storyboard prioritaire, sinon suffixe).
+    assert '"" if _composed else _effective_style' in rsrc, "style recollé même après compose (doublon)"
+    assert '_effective_style = _baked_style or params.get("style_suffix"' in rsrc, \
+        "style effectif = baké prioritaire, repli style_suffix (free-form)"
     assert '"" if _composed else params.get("time_suffix"' in rsrc, "contrainte horaire non doublée"
     assert "if not _composed:" in rsrc, "repli strip+traduction conservé"
 

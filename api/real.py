@@ -278,6 +278,19 @@ def run_real(params: dict, emit_progress, is_cancelled) -> dict:
     _has_vision = _ai_key_error(task="vision") is None
     _raw_prompt = params.get("prompt", "")
 
+    # Style visuel BAKÉ dans le prompt (section [🎨 STYLE VISUEL] écrite à la
+    # création du storyboard). Il est retiré du corps par strip_for_video() (pour
+    # ne pas passer à la traduction et garder les mots-clés anglais exacts) puis
+    # RÉ-APPLIQUÉ tel quel en fin de prompt. Il REMPLACE le get_video_suffix()
+    # séparé (params["style_suffix"]) → aucun doublon. Prompt libre sans section
+    # style → repli sur style_suffix (comportement historique inchangé).
+    try:
+        from core.prompt_sections import style_of as _style_of
+        _baked_style = (_style_of(_raw_prompt) or "").strip()
+    except Exception:
+        _baked_style = ""
+    _effective_style = _baked_style or params.get("style_suffix", "")
+
     # ── Composition en prose anglaise (storyboard Cinéma) ─────────────────────
     # Les prompts STRUCTURÉS du storyboard (sections [🎬 ACTION]…) sont fusionnés
     # par l'IA en prose anglaise dense — style en TÊTE, fiches casting injectées,
@@ -305,7 +318,7 @@ def run_real(params: dict, emit_progress, is_cancelled) -> dict:
                 emit_progress(3, "Composition du prompt vidéo (prose anglaise)…")
                 _pc = _vp_compose(
                     _raw_prompt,
-                    style_suffix=params.get("style_suffix", ""),
+                    style_suffix=_effective_style,
                     time_suffix=params.get("time_suffix", ""),
                     duration=_dur_int,
                     character_notes=params.get("character_notes", ""),
@@ -385,8 +398,10 @@ def run_real(params: dict, emit_progress, is_cancelled) -> dict:
         _prompt_en = f"{_time_suffix}, {_prompt_en}"
 
     # Append style + audio suffixes after translation so exact English keywords are preserved
-    # (style déjà EN TÊTE de la prose composée → ne pas le recoller en fin)
-    _style_suffix = "" if _composed else params.get("style_suffix", "")
+    # (style déjà intégré à la prose composée → ne pas le recoller en fin).
+    # Chemin NON composé : on colle le style EN FIN (Seedance le suit mieux là) —
+    # le style baké du storyboard PRIME sur le get_video_suffix() séparé.
+    _style_suffix = "" if _composed else _effective_style
     if _style_suffix and _prompt_en:
         _prompt_en = f"{_prompt_en}, {_style_suffix}"
     # Ces trois suffixes télégraphiques ne sont plus recollés après une prose

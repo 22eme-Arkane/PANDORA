@@ -31,13 +31,14 @@ import re
 import unicodedata
 
 # (clé, étiquette affichée — crochets + emoji + titre MAJUSCULE)
-# La section STYLE VISUEL vient EN TÊTE : elle porte le style d'image du projet
-# (mots-clés) capturé à la création du storyboard. Elle est VISIBLE dans le prompt
-# et lue par le Mood, mais RETIRÉE avant l'envoi au moteur vidéo (comme SOUND
-# DESIGN) — le moteur vidéo reçoit son style séparément via get_video_suffix(),
-# donc aucun doublon (demande Matthieu 2026-07-24).
+# La section STYLE VISUEL vient EN DERNIER : elle porte le style d'image du projet
+# (mots-clés) + les spécifications de la note de réalisation, capturés à la création
+# du storyboard. Elle est VISIBLE dans le prompt et lue par le Mood. Pour le moteur
+# vidéo, elle est retirée AVANT la traduction (pour préserver les mots-clés anglais
+# exacts) puis RÉ-APPLIQUÉE telle quelle EN FIN de prompt : Seedance suit mieux le
+# style visuel placé en fin de prompt (demande Matthieu 2026-07-24). Aucun doublon :
+# la ré-application remplace le get_video_suffix() séparé pour les plans de storyboard.
 SECTIONS = [
-    ("style",     "[🎨 STYLE VISUEL]"),
     ("action",    "[🎬 ACTION]"),
     ("staging",   "[🎭 MISE EN SCÈNE]"),
     ("ambiance",  "[🌐 AMBIANCE]"),
@@ -45,6 +46,7 @@ SECTIONS = [
     ("lighting",  "[💡 PLAN DE FEU]"),
     ("technique", "[🖼️ TECHNIQUE]"),
     ("sound",     "[🎵 SOUND DESIGN]"),
+    ("style",     "[🎨 STYLE VISUEL]"),
 ]
 _LABELS = {k: lbl for k, lbl in SECTIONS}
 

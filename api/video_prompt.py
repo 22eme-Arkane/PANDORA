@@ -156,7 +156,7 @@ def _build_user_message(prompt: str, style_suffix: str, time_suffix: str,
                  + (character_notes.strip() if character_notes.strip() else "(aucune)"))
     parts.append("[BIBLE VISUELLE CANONIQUE DU PLAN — source de vérité]\n"
                  + (visual_context.strip() if visual_context.strip() else "(indisponible)"))
-    parts.append("[STYLE VIDÉO — mots-clés anglais, à placer en tête]\n"
+    parts.append("[STYLE VIDÉO — mots-clés anglais, à placer EN FIN (dernière ligne)]\n"
                  + (style_suffix.strip() if style_suffix.strip() else "(aucun)"))
     if time_suffix.strip():
         parts.append(f"[CONTRAINTE D'ÉCLAIRAGE HORAIRE — anglais, à respecter]\n{time_suffix.strip()}")

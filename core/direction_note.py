@@ -10,6 +10,7 @@ quelle au moteur de découpage.
 from __future__ import annotations
 
 import re
+import unicodedata
 
 
 SECTIONS = (
@@ -53,6 +54,40 @@ def note_for_ai(value) -> str:
     meaningful = [line.strip() for line in text.splitlines()
                   if line.strip() and not line.lstrip().startswith("##")]
     return text if meaningful else ""
+
+
+def section_text(value, title: str) -> str:
+    """Contenu (sans l'en-tête) d'une section de la note, ex. « STYLE VISUEL ».
+
+    Reconnaît les en-têtes « ## Titre » (tolérant : accents, casse, niveau de #).
+    Renvoie le texte jusqu'à la section suivante, vidé du gabarit ; « » si absente
+    ou vide. Sert à alimenter le style visuel des prompts storyboard depuis la note
+    de réalisation (demande Matthieu 2026-07-24)."""
+    text = normalize_note(value)
+    if not text:
+        return ""
+
+    def _norm(s: str) -> str:
+        s = unicodedata.normalize("NFD", s or "")
+        s = "".join(c for c in s if not unicodedata.combining(c))
+        return " ".join(s.upper().split())
+
+    want = _norm(title)
+    lines = text.splitlines()
+    out: list[str] = []
+    capturing = False
+    heading = re.compile(r"^\s*#{1,6}\s*(?P<title>.+?)\s*$")
+    for line in lines:
+        m = heading.match(line)
+        if m:
+            if capturing:                       # section suivante → stop
+                break
+            if _norm(m.group("title")) == want:
+                capturing = True
+            continue
+        if capturing:
+            out.append(line)
+    return "\n".join(out).strip()
 
 
 def extract_from_analysis(analysis: str) -> str:

@@ -399,12 +399,30 @@ class StoryboardGenerateDialog(QDialog):
             # Matthieu 2026-07-24 : « le style doit être transmis à la création du
             # storyboard »). La section est lue par le Mood et RETIRÉE avant l'envoi
             # vidéo (get_video_suffix reste la source du style vidéo — pas de doublon).
+            # Style visuel CAPTURÉ à la création (demande Matthieu 2026-07-24) :
+            #   base = style d'image du projet (barre latérale Scénario, variante
+            #          vidéo car destination Seedance) ;
+            #   + spécifications de la section « STYLE VISUEL » de la note de
+            #     réalisation, si elle en ajoute.
+            # Écrit en DERNIÈRE section [🎨 STYLE VISUEL] (Seedance suit mieux le
+            # style en fin de prompt) ; envoyé tel quel au moteur vidéo, lu par le Mood.
             try:
                 import core.style as _style_mod
                 from core.prompt_sections import (rebuild as _ps_rebuild,
                                                   build as _ps_build,
                                                   is_structured as _ps_is)
-                _style_txt = (_style_mod.get_image_suffix() or "").strip()
+                _base_style = (_style_mod.get_video_suffix() or "").strip()
+                _note_style = ""
+                try:
+                    import core.scenario as _sc_api
+                    from core.direction_note import section_text as _sec_text
+                    _sc = _sc_api.get_scenario(self._scenario_id) if self._scenario_id else None
+                    if _sc:
+                        _note_style = _sec_text(_sc.get("direction_note", ""),
+                                                "STYLE VISUEL").strip()
+                except Exception:
+                    _note_style = ""
+                _style_txt = ", ".join(p for p in (_base_style, _note_style) if p)
             except Exception:
                 _style_txt = ""
             vid = sb_api.DEFAULT_VERSION_ID
