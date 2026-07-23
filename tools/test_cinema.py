@@ -2665,17 +2665,22 @@ def style_visuel_section_storyboard():
     inj2 = ps.rebuild(inj, technique="Plan large")
     assert "STYLE VISUEL" in inj2 and "Plan large" in inj2, "édition partielle → style préservé"
     # 3) strip_for_video retire STYLE **et** SON du CORPS : le style ne passe pas à la
-    #    traduction (mots-clés anglais exacts préservés), il est recollé EN FIN ensuite.
+    #    Le STYLE reste dans le CORPS (souvent écrit en français → doit être TRADUIT) ;
+    #    seul le SON est retiré (part au Sound Design). Le composeur, lui, le sort du
+    #    corps pour le rendre en anglais en fin de prose (strip_for_composer).
     sv = ps.strip_for_video(inj)
-    assert "STYLE VISUEL" not in sv and "SOUND DESIGN" not in sv and "ACTION" in sv, \
-        "corps vidéo : style + son retirés avant traduction, action gardée"
-    # 4) real.py : le style baké PRIME sur le get_video_suffix séparé et est recollé EN FIN
-    #    (aucun doublon). Prompt libre sans section → repli sur style_suffix (retro-compat).
+    assert "STYLE VISUEL" in sv and "SOUND DESIGN" not in sv and "ACTION" in sv, \
+        "corps vidéo : style CONSERVÉ (traduit), son retiré, action gardée"
+    sc = ps.strip_for_composer(inj)
+    assert "STYLE VISUEL" not in sc and "SOUND DESIGN" not in sc and "ACTION" in sc, \
+        "corps composeur : style ET son retirés (style repart par le bloc dédié)"
+    # 4) real.py : style baké → NON recollé (déjà traduit dans le corps) ; prompt libre
+    #    SANS section style → repli sur get_video_suffix (retro-compat, aucun doublon).
     import inspect
     rsrc = inspect.getsource(__import__("api.real", fromlist=["_"]))
     assert "style_of" in rsrc and "_baked_style" in rsrc, "real.py : style baké non lu"
-    assert "_effective_style = _baked_style or params.get(\"style_suffix\"" in rsrc, \
-        "real.py : le style baké doit primer, avec repli style_suffix (free-form)"
+    assert '"" if (_composed or _baked_style) else params.get("style_suffix"' in rsrc, \
+        "real.py : style baké recollé en double (doit rester dans le corps traduit)"
     # 5) Mood : le style de la SECTION prime et n'apparaît qu'une fois.
     from api.apercu import build_mood_prompt
     shot = {"id": "z", "seedance_prompt": inj, "shot_size": "GP"}
@@ -2696,12 +2701,12 @@ def style_visuel_section_storyboard():
     assert "get_video_suffix()" in dsrc and "section_text" in dsrc and "STYLE VISUEL" in dsrc, \
         "dialogue storyboard : style (projet + note) non capturé à la sauvegarde"
     # 8) L'aperçu « Prompt envoyé à Seedance » (studio vidéo) reflète le prompt RÉEL :
-    #    corps strippé du style avant traduction + style baké recollé en fin (sinon il
-    #    afficherait le style en double et traduirait ses mots-clés).
+    #    le style reste dans le corps (traduit) et n'est PAS recollé → pas de doublon.
     tsrc = inspect.getsource(__import__("ui.tab_t2v", fromlist=["_"]))
-    assert "_build_full_preview_text" in tsrc and "style_of" in tsrc, \
+    assert "_build_full_preview_text" in tsrc and "_baked_prev" in tsrc, \
         "aperçu vidéo : style baké non pris en compte"
-    assert "strip_for_video" in tsrc, "aperçu vidéo : corps non strippé avant traduction"
+    assert "if not _baked_prev and vs:" in tsrc, \
+        "aperçu vidéo : style projet recollé même si déjà baké (doublon)"
 
 
 @test
@@ -4760,14 +4765,15 @@ def prompt_video_prose_composee():
     assert "Composition du prompt vidéo (prose anglaise)…" in _FR_TO_EN, "message progression traduit"
 
     # 5) api/real.py : composition branchée, suffixes style/heure CONSOMMÉS quand
-    #    composé (style déjà en tête de la prose), repli traduction conservé.
+    #    composé (style rendu en anglais en fin de prose par le composeur), repli conservé.
     rsrc = inspect.getsource(__import__("api.real", fromlist=["x"]))
     assert "should_compose" in rsrc and "_vp_compose" in rsrc, "composition branchée dans run_real"
-    # Composé → style NON recollé (déjà intégré à la prose). Non composé → on colle
-    # le style effectif EN FIN (style baké du storyboard prioritaire, sinon suffixe).
-    assert '"" if _composed else _effective_style' in rsrc, "style recollé même après compose (doublon)"
+    # Composé OU plan avec section [🎨 STYLE VISUEL] (bakée, restée dans le corps traduit)
+    # → style NON recollé. Prompt libre SANS section → on colle get_video_suffix en fin.
+    assert '"" if (_composed or _baked_style) else params.get("style_suffix"' in rsrc, \
+        "style recollé en double (le style baké doit rester dans le corps traduit)"
     assert '_effective_style = _baked_style or params.get("style_suffix"' in rsrc, \
-        "style effectif = baké prioritaire, repli style_suffix (free-form)"
+        "style passé au composeur = baké prioritaire, repli style_suffix (free-form)"
     assert '"" if _composed else params.get("time_suffix"' in rsrc, "contrainte horaire non doublée"
     assert "if not _composed:" in rsrc, "repli strip+traduction conservé"
 

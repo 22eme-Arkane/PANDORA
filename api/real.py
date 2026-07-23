@@ -397,11 +397,12 @@ def run_real(params: dict, emit_progress, is_cancelled) -> dict:
     if _time_suffix and _prompt_en:
         _prompt_en = f"{_time_suffix}, {_prompt_en}"
 
-    # Append style + audio suffixes after translation so exact English keywords are preserved
-    # (style déjà intégré à la prose composée → ne pas le recoller en fin).
-    # Chemin NON composé : on colle le style EN FIN (Seedance le suit mieux là) —
-    # le style baké du storyboard PRIME sur le get_video_suffix() séparé.
-    _style_suffix = "" if _composed else _effective_style
+    # Style : chemin composé → déjà intégré (en anglais) en fin de prose par le
+    # composeur. Chemin NON composé : si le plan porte une section [🎨 STYLE VISUEL]
+    # (_baked_style), elle est RESTÉE dans le corps et vient d'être TRADUITE avec lui
+    # (souvent écrite en français) → surtout ne pas la recoller. On ne colle le style
+    # projet séparé (get_video_suffix) QUE pour un prompt libre SANS section style.
+    _style_suffix = "" if (_composed or _baked_style) else params.get("style_suffix", "")
     if _style_suffix and _prompt_en:
         _prompt_en = f"{_prompt_en}, {_style_suffix}"
     # Ces trois suffixes télégraphiques ne sont plus recollés après une prose

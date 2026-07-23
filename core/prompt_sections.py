@@ -143,14 +143,28 @@ def parse(prompt: str) -> dict:
 
 
 def strip_for_video(prompt: str) -> str:
-    """Retire les blocs SOUND DESIGN et STYLE VISUEL (non envoyés au modèle vidéo :
-    le son part au Sound Design, le style vidéo est appliqué séparément via
-    get_video_suffix() — les laisser doublerait le style). Conserve les autres
-    sections telles quelles. Prompt non structuré → renvoyé inchangé."""
+    """Retire le bloc SOUND DESIGN (le son part au Sound Design, jamais au modèle
+    vidéo). Le STYLE VISUEL, lui, est CONSERVÉ : il est souvent écrit en français
+    (note de réalisation) et DOIT donc passer par la traduction et figurer dans le
+    prompt final envoyé au moteur (demande Matthieu 2026-07-24). Le style n'est
+    consommé séparément (get_video_suffix) que pour les prompts SANS section style.
+    Prompt non structuré → renvoyé inchangé."""
     if not is_structured(prompt):
         return prompt
     s = parse(prompt)
-    # style + sound NON transmis (défauts vides de build()).
+    # sound NON transmis (défaut vide de build()) ; style CONSERVÉ.
+    return build(action=s["action"], staging=s["staging"], ambiance=s["ambiance"],
+                 decor=s["decor"], lighting=s["lighting"], technique=s["technique"],
+                 style=s["style"])
+
+
+def strip_for_composer(prompt: str) -> str:
+    """Corps destiné au COMPOSEUR : retire SOUND **et** STYLE. Le composeur reçoit le
+    style à part (bloc [STYLE VIDÉO]) pour le rendre en anglais EN FIN de prose ; le
+    laisser aussi dans le corps le dupliquerait. Prompt non structuré → inchangé."""
+    if not is_structured(prompt):
+        return prompt
+    s = parse(prompt)
     return build(action=s["action"], staging=s["staging"], ambiance=s["ambiance"],
                  decor=s["decor"], lighting=s["lighting"], technique=s["technique"])
 

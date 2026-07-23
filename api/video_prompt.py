@@ -146,9 +146,16 @@ def _build_user_message(prompt: str, style_suffix: str, time_suffix: str,
     tab_t2v AVANT son strip historique) ou, à défaut, la section [🎵 SOUND DESIGN]
     encore présente dans le prompt — jamais les deux (la section est retirée)."""
     try:
-        from core.prompt_sections import strip_for_video, sound_of
+        from core.prompt_sections import strip_for_composer, sound_of, style_of
         sound_notes = (sound_notes or "").strip() or sound_of(prompt).strip()
-        prompt = strip_for_video(prompt) or prompt
+        # Style baké dans le plan (section [🎨 STYLE VISUEL], souvent en français) :
+        # s'il n'a pas été fourni explicitement, on le capture ici pour le passer par
+        # le bloc [STYLE VIDÉO] — le composeur le RENDRA EN ANGLAIS en fin de prose.
+        if not (style_suffix or "").strip():
+            style_suffix = style_of(prompt).strip()
+        # Corps SANS style ni son (le style repart par son bloc, le son par l'AMBIANCE
+        # SONORE) → jamais de doublon dans la prose composée.
+        prompt = strip_for_composer(prompt) or prompt
     except Exception:
         sound_notes = (sound_notes or "").strip()
     parts = [f"[SECTIONS DU PLAN]\n{prompt.strip()}"]
@@ -156,7 +163,7 @@ def _build_user_message(prompt: str, style_suffix: str, time_suffix: str,
                  + (character_notes.strip() if character_notes.strip() else "(aucune)"))
     parts.append("[BIBLE VISUELLE CANONIQUE DU PLAN — source de vérité]\n"
                  + (visual_context.strip() if visual_context.strip() else "(indisponible)"))
-    parts.append("[STYLE VIDÉO — mots-clés anglais, à placer EN FIN (dernière ligne)]\n"
+    parts.append("[STYLE VISUEL — à RENDRE EN ANGLAIS et à placer EN FIN (dernière ligne)]\n"
                  + (style_suffix.strip() if style_suffix.strip() else "(aucun)"))
     if time_suffix.strip():
         parts.append(f"[CONTRAINTE D'ÉCLAIRAGE HORAIRE — anglais, à respecter]\n{time_suffix.strip()}")

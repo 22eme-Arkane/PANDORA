@@ -3435,10 +3435,10 @@ class TabT2V(QScrollArea):
         self._preview_body.setText(text)
 
     def _start_preview_translate(self):
-        # On traduit le CORPS sans les sections STYLE VISUEL / SOUND DESIGN, comme à
-        # la génération (api/real.py) : le style est recollé EXACT après traduction
-        # (mots-clés anglais préservés) et le son part au Sound Design. L'aperçu
-        # reflète ainsi le prompt réellement envoyé au moteur.
+        # On traduit le CORPS sans la section SOUND DESIGN (le son part au Sound
+        # Design). Le STYLE VISUEL est CONSERVÉ et donc TRADUIT avec le corps —
+        # souvent écrit en français, il doit figurer traduit dans le prompt final
+        # (comme api/real.py). L'aperçu reflète ainsi le prompt réellement envoyé.
         from core.prompt_sections import strip_for_video as _sfv_prev
         prompt_fr = _sfv_prev(self.prompt_ta.toPlainText().strip())
         if not prompt_fr:
@@ -3469,9 +3469,9 @@ class TabT2V(QScrollArea):
         lines = []
 
         # ── PROMPT ────────────────────────────────────────────────────────────
-        # Corps SANS les sections STYLE VISUEL / SOUND DESIGN (le style est recollé
-        # en fin ci-dessous, le son ne part pas au moteur vidéo) — cohérent avec
-        # api/real.py et avec la version traduite (déjà strippée avant traduction).
+        # Corps SANS la section SOUND DESIGN (le son ne part pas au moteur vidéo) ;
+        # le STYLE VISUEL est CONSERVÉ dans le corps (traduit avec lui) — cohérent
+        # avec api/real.py. La version traduite en contient déjà la traduction.
         if translated_user is not None:
             user_text = translated_user
         else:
@@ -3548,13 +3548,14 @@ class TabT2V(QScrollArea):
         import core.style as _sa
         _prev_cam = self._camera_picker.get_suffix() if hasattr(self, "_camera_picker") else ""
         vs = _sa.get_video_suffix_no_cam() if _prev_cam else _sa.get_video_suffix()
-        # Style RÉELLEMENT envoyé, collé EN FIN : la section [🎨 STYLE VISUEL] bakée
-        # dans le prompt du plan PRIME (comme api/real.py) ; sinon le style projet.
-        # → l'aperçu montre exactement le style envoyé, sans doublon.
+        # Style : la section [🎨 STYLE VISUEL] bakée dans le plan est DÉJÀ dans le
+        # corps (traduite avec lui, comme api/real.py) → ne pas la recoller. Sinon
+        # (prompt libre) on ajoute le style projet en fin. Aucun doublon.
         from core.prompt_sections import style_of as _style_of_prev
-        _applied_style = (_style_of_prev(self.prompt_ta.toPlainText()) or vs).strip()
-        if _applied_style:
-            fp = f"{fp}, {_applied_style}"
+        _baked_prev = _style_of_prev(self.prompt_ta.toPlainText()).strip()
+        if not _baked_prev and vs:
+            fp = f"{fp}, {vs}"
+        _applied_style = _baked_prev or vs   # pour l'affichage « Template » du récap
 
         music_on = (hasattr(self, "_music_cb") and self._music_cb
                     and self._music_cb.isChecked())
