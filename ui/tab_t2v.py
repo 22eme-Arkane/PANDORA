@@ -3435,7 +3435,12 @@ class TabT2V(QScrollArea):
         self._preview_body.setText(text)
 
     def _start_preview_translate(self):
-        prompt_fr = self.prompt_ta.toPlainText().strip()
+        # On traduit le CORPS sans les sections STYLE VISUEL / SOUND DESIGN, comme à
+        # la génération (api/real.py) : le style est recollé EXACT après traduction
+        # (mots-clés anglais préservés) et le son part au Sound Design. L'aperçu
+        # reflète ainsi le prompt réellement envoyé au moteur.
+        from core.prompt_sections import strip_for_video as _sfv_prev
+        prompt_fr = _sfv_prev(self.prompt_ta.toPlainText().strip())
         if not prompt_fr:
             return
         # Anti-crash : un QThread basé sur run() n'a pas de boucle d'événements, donc
@@ -3464,7 +3469,14 @@ class TabT2V(QScrollArea):
         lines = []
 
         # ── PROMPT ────────────────────────────────────────────────────────────
-        user_text = translated_user if translated_user is not None else self.prompt_ta.toPlainText().strip()
+        # Corps SANS les sections STYLE VISUEL / SOUND DESIGN (le style est recollé
+        # en fin ci-dessous, le son ne part pas au moteur vidéo) — cohérent avec
+        # api/real.py et avec la version traduite (déjà strippée avant traduction).
+        if translated_user is not None:
+            user_text = translated_user
+        else:
+            from core.prompt_sections import strip_for_video as _sfv_body
+            user_text = _sfv_body(self.prompt_ta.toPlainText().strip())
         if not user_text:
             import core.style as _sa_e
             _cam_e = self._camera_picker.get_suffix() if hasattr(self, "_camera_picker") else ""
@@ -3536,8 +3548,13 @@ class TabT2V(QScrollArea):
         import core.style as _sa
         _prev_cam = self._camera_picker.get_suffix() if hasattr(self, "_camera_picker") else ""
         vs = _sa.get_video_suffix_no_cam() if _prev_cam else _sa.get_video_suffix()
-        if vs:
-            fp = f"{fp}, {vs}"
+        # Style RÉELLEMENT envoyé, collé EN FIN : la section [🎨 STYLE VISUEL] bakée
+        # dans le prompt du plan PRIME (comme api/real.py) ; sinon le style projet.
+        # → l'aperçu montre exactement le style envoyé, sans doublon.
+        from core.prompt_sections import style_of as _style_of_prev
+        _applied_style = (_style_of_prev(self.prompt_ta.toPlainText()) or vs).strip()
+        if _applied_style:
+            fp = f"{fp}, {_applied_style}"
 
         music_on = (hasattr(self, "_music_cb") and self._music_cb
                     and self._music_cb.isChecked())
@@ -3655,10 +3672,11 @@ class TabT2V(QScrollArea):
                 else "Référence mood : ⚠ activé, mais ce plan n'a pas de mood (rien envoyé)"
             )
 
-        # Template / style vidéo
-        if vs:
+        # Template / style vidéo — on affiche le style RÉELLEMENT collé (baké du
+        # plan en priorité, sinon style projet), cohérent avec le prompt ci-dessus.
+        if _applied_style:
             _sname = (_sa.get_style() or {}).get("label", "Style")
-            _vshort = vs[:80] + ("…" if len(vs) > 80 else "")
+            _vshort = _applied_style[:80] + ("…" if len(_applied_style) > 80 else "")
             param_lines.append(f"Template : {_sname} → « {_vshort} »")
 
         # ADN visuel

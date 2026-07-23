@@ -2695,6 +2695,13 @@ def style_visuel_section_storyboard():
     dsrc = inspect.getsource(__import__("ui.dialog_storyboard_generate", fromlist=["_"]))
     assert "get_video_suffix()" in dsrc and "section_text" in dsrc and "STYLE VISUEL" in dsrc, \
         "dialogue storyboard : style (projet + note) non capturé à la sauvegarde"
+    # 8) L'aperçu « Prompt envoyé à Seedance » (studio vidéo) reflète le prompt RÉEL :
+    #    corps strippé du style avant traduction + style baké recollé en fin (sinon il
+    #    afficherait le style en double et traduirait ses mots-clés).
+    tsrc = inspect.getsource(__import__("ui.tab_t2v", fromlist=["_"]))
+    assert "_build_full_preview_text" in tsrc and "style_of" in tsrc, \
+        "aperçu vidéo : style baké non pris en compte"
+    assert "strip_for_video" in tsrc, "aperçu vidéo : corps non strippé avant traduction"
 
 
 @test
