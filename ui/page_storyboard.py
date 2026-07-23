@@ -762,16 +762,16 @@ class _ShotRow(QFrame):
             champs caméra (uniquement si le prompt est déjà structuré en sections)."""
             try:
                 from core.prompt_sections import (is_structured as _isS, parse as _pp,
-                                                  build as _pb, technique_line as _tl)
+                                                  rebuild as _rb, technique_line as _tl)
                 p = self._data.get("seedance_prompt", "")
                 if not _isS(p):
                     return
                 sec = _pp(p)
                 tech = _tl(self._data)
                 if tech != sec.get("technique", ""):
-                    self._data["seedance_prompt"] = _pb(
-                        action=sec["action"], staging=sec["staging"], ambiance=sec["ambiance"],
-                        decor=sec["decor"], lighting=sec["lighting"], technique=tech,
+                    # rebuild() préserve [🎨 STYLE VISUEL] et les autres sections.
+                    self._data["seedance_prompt"] = _rb(
+                        p, technique=tech,
                         sound=sec["sound"] or self._data.get("sound_prompt", ""))
             except Exception:
                 pass

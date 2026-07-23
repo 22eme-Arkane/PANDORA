@@ -1691,7 +1691,7 @@ class SyncStoryboardWorker(QThread):
         Déterministe : la mise en scène / le plan de feu viennent des données."""
         if self._opt_staging or self._opt_lighting:
             import core.staging as _staging
-            from core.prompt_sections import build as _build, parse as _parse
+            from core.prompt_sections import rebuild as _rebuild, parse as _parse
             for shot in self._shots:
                 sid = shot.get("id", "")
                 cur = (shot.get("seedance_prompt") or "").strip()
@@ -1702,10 +1702,9 @@ class SyncStoryboardWorker(QThread):
                 sound_txt   = sec.get("sound") or (shot.get("sound_prompt") or "").strip()
                 if not (staging_txt or light_txt):
                     continue
-                new = _build(action=action, staging=staging_txt,
-                             ambiance=sec.get("ambiance", ""), decor=sec.get("decor", ""),
-                             lighting=light_txt, technique=sec.get("technique", ""),
-                             sound=sound_txt)
+                # rebuild() préserve [🎨 STYLE VISUEL] et toute section non réécrite.
+                new = _rebuild(cur, action=action, staging=staging_txt,
+                               lighting=light_txt, sound=sound_txt)
                 if new and new != cur:
                     shot["seedance_prompt"] = new
                     shot["_prompt_changed"] = True

@@ -900,16 +900,16 @@ class ShotDialog(QDialog):
         # pas un ancien prompt à plat). Les autres sections sont préservées.
         try:
             from core.prompt_sections import (is_structured as _ps_is, parse as _ps_parse,
-                                              build as _ps_build, technique_line as _ps_tech)
+                                              rebuild as _ps_rebuild, technique_line as _ps_tech)
             _p = data.get("seedance_prompt", "")
             if _ps_is(_p):
                 _sec = _ps_parse(_p)
                 _tech = _ps_tech(data)
                 if _tech != _sec.get("technique", ""):
-                    data["seedance_prompt"] = _ps_build(
-                        action=_sec["action"], staging=_sec["staging"],
-                        ambiance=_sec["ambiance"], decor=_sec["decor"],
-                        lighting=_sec["lighting"], technique=_tech,
+                    # rebuild() préserve toutes les autres sections, dont
+                    # [🎨 STYLE VISUEL] (sinon l'édition d'un plan l'effacerait).
+                    data["seedance_prompt"] = _ps_rebuild(
+                        _p, technique=_tech,
                         sound=_sec["sound"] or data.get("sound_prompt", ""))
         except Exception:
             pass

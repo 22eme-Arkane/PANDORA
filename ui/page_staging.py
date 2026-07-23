@@ -614,7 +614,7 @@ class PageStaging(QWidget):
         """mise en scène / plan de feu → storyboard : place les comédiens dans la
         section [MISE EN SCÈNE] du prompt et la caméra dans les champs techniques
         (camera_axis / camera_placement) ; le plan de feu alimente [PLAN DE FEU]."""
-        from core.prompt_sections import parse as _parse, build as _build
+        from core.prompt_sections import parse as _parse, rebuild as _rebuild
         n = 0
         for s in self._shots:
             sid = s.get("id")
@@ -633,10 +633,10 @@ class PageStaging(QWidget):
                     actors_txt = _sv
                 else:
                     actors_txt = staging.staging_actors_summary(sid)
-                new = _build(action=action, staging=actors_txt or sec.get("staging", ""),
-                             ambiance=sec.get("ambiance", ""), decor=sec.get("decor", ""),
-                             lighting=sec.get("lighting", ""), technique=sec.get("technique", ""),
-                             sound=sec.get("sound", ""))
+                # rebuild() : ne touche que staging (+ action si le prompt était à
+                # plat) et PRÉSERVE [🎨 STYLE VISUEL] et les autres sections.
+                new = _rebuild(cur, action=action,
+                               staging=actors_txt or sec.get("staging", ""))
                 if new and new != cur:
                     s["seedance_prompt"] = new
                     changed = True
@@ -657,10 +657,8 @@ class PageStaging(QWidget):
                 _lv = rec.get("vision_lighting", "")
                 if light_txt and _lv and rec.get("vision_lighting_sig") == staging.positions_sig(rec, "lighting"):
                     light_txt = f"{light_txt}  {_lv}".strip()
-                new = _build(action=action, staging=sec.get("staging", ""),
-                             ambiance=sec.get("ambiance", ""), decor=sec.get("decor", ""),
-                             lighting=light_txt or sec.get("lighting", ""),
-                             technique=sec.get("technique", ""), sound=sec.get("sound", ""))
+                new = _rebuild(cur, action=action,
+                               lighting=light_txt or sec.get("lighting", ""))
                 if new and new != cur:
                     s["seedance_prompt"] = new
                     changed = True
@@ -795,9 +793,10 @@ class PageStaging(QWidget):
         staging → REMPLACE [MISE EN SCÈNE] (le placement déterministe était vague) ;
         feu → AJOUTE l'origine/ambiance de la lumière au [PLAN DE FEU] déterministe
         (on garde la direction relative caméra + les distances chiffrées)."""
-        from core.prompt_sections import parse as _parse, build as _build
+        from core.prompt_sections import parse as _parse, rebuild as _rebuild
         s = self._shot
-        sec = _parse(s.get("seedance_prompt", "") or "")
+        cur = s.get("seedance_prompt", "") or ""
+        sec = _parse(cur)
         if self._mode == "staging":
             staging_txt = txt
             lighting_txt = sec.get("lighting", "")
@@ -805,10 +804,8 @@ class PageStaging(QWidget):
             staging_txt = sec.get("staging", "")
             base = sec.get("lighting", "")
             lighting_txt = (base + "  " + txt).strip() if base else txt
-        new = _build(action=sec.get("action", ""), staging=staging_txt,
-                     ambiance=sec.get("ambiance", ""), decor=sec.get("decor", ""),
-                     lighting=lighting_txt, technique=sec.get("technique", ""),
-                     sound=sec.get("sound", ""))
+        # rebuild() préserve [🎨 STYLE VISUEL] et les sections non touchées.
+        new = _rebuild(cur, staging=staging_txt, lighting=lighting_txt)
         if new and new != (s.get("seedance_prompt", "") or ""):
             s["seedance_prompt"] = new
             try:
@@ -832,7 +829,7 @@ class PageStaging(QWidget):
         from core.prompt_sections import parse as _parse, build as _build
         sid = shot["id"]
         cur = shot.get("seedance_prompt", "") or ""
-        sec = _parse(cur)
+        sec = _parse(cur)   # contient déjà [🎨 STYLE VISUEL] s'il est présent
         changed = False
         # Plan de feu RELATIF À LA CAMÉRA → recalculé dans les 2 modes s'il y a des
         # lumières (sinon on préserve l'intention de lumière éventuelle du découpage).
@@ -888,11 +885,11 @@ class PageStaging(QWidget):
                     changed = True
         if not changed:
             return
-        shot["seedance_prompt"] = _build(
-            action=sec.get("action") or cur, staging=sec.get("staging", ""),
-            ambiance=sec.get("ambiance", ""), decor=sec.get("decor", ""),
-            lighting=sec.get("lighting", ""), technique=sec.get("technique", ""),
-            sound=sec.get("sound", "") or (shot.get("sound_prompt") or ""))
+        # sec (issu de parse) porte TOUTES les sections, dont [🎨 STYLE VISUEL] :
+        # build(**sec) après avoir fixé action/sound les préserve toutes.
+        sec["action"] = sec.get("action") or cur
+        sec["sound"]  = sec.get("sound", "") or (shot.get("sound_prompt") or "")
+        shot["seedance_prompt"] = _build(**sec)
         try:
             sb_api.save_shot({k: v for k, v in shot.items() if not k.startswith("_")})
         except Exception:

@@ -2646,6 +2646,46 @@ def ecriteau_moteur_ia_du_storyboard():
 
 
 @test
+def style_visuel_section_storyboard():
+    """Le style d'image est CAPTURÉ dans le prompt du storyboard (section
+    [🎨 STYLE VISUEL]), lu par le Mood sans doublon, et RETIRÉ avant l'envoi vidéo
+    (le moteur vidéo reçoit son style via get_video_suffix) — demande Matthieu
+    2026-07-24."""
+    import core.prompt_sections as ps
+    # 1) Section STYLE VISUEL en tête, préservée par rebuild().
+    assert ("style", "[🎨 STYLE VISUEL]") == ps.SECTIONS[0], "STYLE VISUEL doit être en tête"
+    base = ps.build(action="A", technique="Gros plan", sound="vent")
+    assert "STYLE VISUEL" not in base
+    inj = ps.rebuild(base, style="shot on ARRI Alexa 65, film grain")
+    assert "STYLE VISUEL" in inj and inj.split("\n")[0] == "[🎨 STYLE VISUEL]", \
+        "style injecté en tête"
+    assert "ACTION" in inj and "SOUND DESIGN" in inj, "rebuild préserve les autres sections"
+    assert ps.style_of(inj) == "shot on ARRI Alexa 65, film grain", "style_of() lit la section"
+    # 2) rebuild d'une AUTRE section n'efface pas le style (régression majeure évitée).
+    inj2 = ps.rebuild(inj, technique="Plan large")
+    assert "STYLE VISUEL" in inj2 and "Plan large" in inj2, "édition partielle → style préservé"
+    # 3) strip_for_video retire STYLE **et** SON, garde le reste.
+    sv = ps.strip_for_video(inj)
+    assert "STYLE VISUEL" not in sv and "SOUND DESIGN" not in sv and "ACTION" in sv, \
+        "vidéo : style + son retirés (pas de doublon avec get_video_suffix), action gardée"
+    # 4) Mood : le style de la SECTION prime et n'apparaît qu'une fois.
+    from api.apercu import build_mood_prompt
+    shot = {"id": "z", "seedance_prompt": inj, "shot_size": "GP"}
+    mood = build_mood_prompt(shot, "shot on ARRI Alexa 65, film grain")
+    assert mood.lower().count("arri alexa 65") == 1, "style Mood non dupliqué"
+    assert mood.lower().startswith("shot on arri"), "style en tête du prompt Mood"
+    # 5) Rétro-compat : prompt sans section style → Mood retombe sur le suffixe projet.
+    mlegacy = build_mood_prompt({"id": "w", "seedance_prompt": base, "shot_size": "GP"},
+                                "shot on ARRI Alexa 65")
+    assert "arri alexa 65" in mlegacy.lower(), "rétro-compat : style via suffixe projet"
+    # 6) L'injection à la sauvegarde du storyboard est bien branchée.
+    import inspect
+    dsrc = inspect.getsource(__import__("ui.dialog_storyboard_generate", fromlist=["_"]))
+    assert "get_image_suffix()" in dsrc and "style=_style_txt" in dsrc, \
+        "dialogue storyboard : style non capturé à la sauvegarde"
+
+
+@test
 def coecriture_des_plans_cinema():
     """Finalisation Cinéma : parseur de plans « P01 | … » + fenêtre de co-écriture
     plan par plan (chirurgical), worker/dialog partagés calibrés « cinema »."""

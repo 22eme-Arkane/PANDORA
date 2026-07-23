@@ -143,8 +143,17 @@ def build_mood_prompt(shot: dict, film_style: str = "") -> str:
 
     parts: list[str] = []
 
-    if film_style:
-        parts.append(film_style)
+    # Style : la section [🎨 STYLE VISUEL] du prompt (capturée à la création du
+    # storyboard, éditable dans le plan) PRIME sur le suffixe projet passé en
+    # argument — jamais les deux, sinon le style apparaîtrait en double (2026-07-24).
+    seedance_raw = (shot.get("seedance_prompt") or "").strip()
+    try:
+        from core.prompt_sections import style_of as _style_of
+        _style_txt = (_style_of(seedance_raw) or film_style or "").strip()
+    except Exception:
+        _style_txt = (film_style or "").strip()
+    if _style_txt:
+        parts.append(_style_txt)
 
     # Shot size — must come first so Flux frames the composition correctly
     shot_size = (shot.get("shot_size") or "").strip()
@@ -168,15 +177,16 @@ def build_mood_prompt(shot: dict, film_style: str = "") -> str:
 
     # Prompt Seedance — core content. Prompt structuré : on APLATIT les sections
     # (étiquettes françaises + emojis = bruit pour un modèle t2i) et on EXCLUT
-    # [🎵 SOUND DESIGN] — le son n'a pas sa place dans une image fixe.
-    seedance = (shot.get("seedance_prompt") or "").strip()
+    # [🎵 SOUND DESIGN] (son) + [🎨 STYLE VISUEL] (déjà placé en tête ci-dessus).
+    seedance = seedance_raw
     if seedance:
         try:
             from core.prompt_sections import is_structured as _ps_is, parse as _ps_parse
             if _ps_is(seedance):
                 _sec = _ps_parse(seedance)
                 seedance = ". ".join(v.strip().rstrip(".")
-                                     for k, v in _sec.items() if k != "sound" and v)
+                                     for k, v in _sec.items()
+                                     if k not in ("sound", "style") and v)
         except Exception:
             pass
         if seedance:

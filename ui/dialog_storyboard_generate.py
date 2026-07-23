@@ -394,6 +394,19 @@ class StoryboardGenerateDialog(QDialog):
         self._btn_confirm.setText(translate("Enregistrement…"))
         try:
             import core.storyboard as sb_api
+            # Style d'image du projet CAPTURÉ à la création du storyboard : chaque plan
+            # reçoit une section [🎨 STYLE VISUEL] visible dans son prompt (demande
+            # Matthieu 2026-07-24 : « le style doit être transmis à la création du
+            # storyboard »). La section est lue par le Mood et RETIRÉE avant l'envoi
+            # vidéo (get_video_suffix reste la source du style vidéo — pas de doublon).
+            try:
+                import core.style as _style_mod
+                from core.prompt_sections import (rebuild as _ps_rebuild,
+                                                  build as _ps_build,
+                                                  is_structured as _ps_is)
+                _style_txt = (_style_mod.get_image_suffix() or "").strip()
+            except Exception:
+                _style_txt = ""
             vid = sb_api.DEFAULT_VERSION_ID
             sb_api.clear_version_shots(vid)
             for shot in self._shots:
@@ -402,6 +415,12 @@ class StoryboardGenerateDialog(QDialog):
                 # Champs de travail P2 : ne pas persister dans le storyboard.
                 shot.pop("merged", None)
                 shot.pop("merged_note", None)
+                if _style_txt:
+                    _p = (shot.get("seedance_prompt") or "").strip()
+                    shot["seedance_prompt"] = (
+                        _ps_rebuild(_p, style=_style_txt) if _ps_is(_p)
+                        else _ps_build(style=_style_txt, action=_p)
+                    )
                 sb_api.save_shot(shot)
         except Exception as e:
             self._status_lbl.setText(f"⚠ {translate('Erreur sauvegarde :')} {e}")

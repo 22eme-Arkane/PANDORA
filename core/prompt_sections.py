@@ -31,7 +31,13 @@ import re
 import unicodedata
 
 # (clé, étiquette affichée — crochets + emoji + titre MAJUSCULE)
+# La section STYLE VISUEL vient EN TÊTE : elle porte le style d'image du projet
+# (mots-clés) capturé à la création du storyboard. Elle est VISIBLE dans le prompt
+# et lue par le Mood, mais RETIRÉE avant l'envoi au moteur vidéo (comme SOUND
+# DESIGN) — le moteur vidéo reçoit son style séparément via get_video_suffix(),
+# donc aucun doublon (demande Matthieu 2026-07-24).
 SECTIONS = [
+    ("style",     "[🎨 STYLE VISUEL]"),
     ("action",    "[🎬 ACTION]"),
     ("staging",   "[🎭 MISE EN SCÈNE]"),
     ("ambiance",  "[🌐 AMBIANCE]"),
@@ -64,9 +70,14 @@ _NORM_TO_KEY = {_norm_label(lbl): key for key, lbl in SECTIONS}
 
 
 def build(action: str = "", staging: str = "", ambiance: str = "", decor: str = "",
-          lighting: str = "", technique: str = "", sound: str = "") -> str:
-    """Assemble un prompt structuré (sections non vides uniquement)."""
-    vals = {"action": action, "staging": staging, "ambiance": ambiance,
+          lighting: str = "", technique: str = "", sound: str = "",
+          style: str = "") -> str:
+    """Assemble un prompt structuré (sections non vides uniquement).
+
+    `style` (nouveau, 2026-07-24) = section [🎨 STYLE VISUEL] en tête. La plupart
+    des appelants historiques ne le passent pas — préférez `rebuild()` pour ne
+    jamais PERDRE une section lors d'une réécriture partielle."""
+    vals = {"style": style, "action": action, "staging": staging, "ambiance": ambiance,
             "decor": decor, "lighting": lighting, "technique": technique, "sound": sound}
     parts = []
     for key, label in SECTIONS:
@@ -74,6 +85,18 @@ def build(action: str = "", staging: str = "", ambiance: str = "", decor: str = 
         if v:
             parts.append(f"{label}\n{v}")
     return "\n\n".join(parts)
+
+
+def rebuild(prompt: str, **overrides) -> str:
+    """Ré-assemble un prompt en NE remplaçant que les sections données, toutes les
+    autres (y compris [🎨 STYLE VISUEL]) étant préservées à l'identique. À préférer
+    à build() pour toute réécriture partielle : un appelant n'a plus à réénumérer
+    chaque section (et donc ne peut plus en oublier une)."""
+    sec = parse(prompt)
+    for k, v in overrides.items():
+        if k in sec:
+            sec[k] = v
+    return build(**sec)
 
 
 def _recognized_tags(prompt: str) -> list:
@@ -118,19 +141,26 @@ def parse(prompt: str) -> dict:
 
 
 def strip_for_video(prompt: str) -> str:
-    """Retire le bloc SOUND DESIGN (non envoyé au modèle vidéo). Conserve les
-    autres sections telles quelles. Prompt non structuré → renvoyé inchangé."""
+    """Retire les blocs SOUND DESIGN et STYLE VISUEL (non envoyés au modèle vidéo :
+    le son part au Sound Design, le style vidéo est appliqué séparément via
+    get_video_suffix() — les laisser doublerait le style). Conserve les autres
+    sections telles quelles. Prompt non structuré → renvoyé inchangé."""
     if not is_structured(prompt):
         return prompt
     s = parse(prompt)
+    # style + sound NON transmis (défauts vides de build()).
     return build(action=s["action"], staging=s["staging"], ambiance=s["ambiance"],
-                 decor=s["decor"], lighting=s["lighting"], technique=s["technique"],
-                 sound="")
+                 decor=s["decor"], lighting=s["lighting"], technique=s["technique"])
 
 
 def sound_of(prompt: str) -> str:
     """Texte de la section SOUND DESIGN (vide si absente)."""
     return parse(prompt).get("sound", "") if is_structured(prompt) else ""
+
+
+def style_of(prompt: str) -> str:
+    """Texte de la section STYLE VISUEL (vide si absente)."""
+    return parse(prompt).get("style", "") if is_structured(prompt) else ""
 
 
 def video_with_sound(video: str, sound: str) -> str:
