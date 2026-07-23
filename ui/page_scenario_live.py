@@ -817,7 +817,8 @@ class PageScenario(QWidget):
             # radius=0 par défaut (parité Cinéma 2026-07-23) : rectangles droits,
             # seuls les boutons mis en avant gardent leurs arrondis.
             btn = QPushButton()
-            btn.setFixedHeight(60 if color else 52)
+            # Hauteurs COMPACTES (parité Cinéma 2026-07-23 : gagner de la place).
+            btn.setFixedHeight(50 if color else 46)
             _bd  = color or CP['border']
             _hov = color or CP['accent2_dim']
             btn.setStyleSheet(
@@ -865,7 +866,7 @@ class PageScenario(QWidget):
             f"border:none;border-radius:0px;"
             f"border-top:1px solid {CP['border']};border-bottom:1px solid {CP['border']};"
             f"font-size:11px;font-weight:800;text-align:left;"
-            f"padding:9px 16px;letter-spacing:0.8px;}}"
+            f"padding:7px 16px;letter-spacing:0.8px;}}"
             f"QPushButton:hover{{background:{CP['bg4']};color:{CP['text_primary']};}}"
             f"QPushButton:checked{{background:{CP['bg3']};color:{CP['accent']};}}"
         )
@@ -898,16 +899,21 @@ class PageScenario(QWidget):
         scroll.setWidgetResizable(True)
         scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         scroll.setStyleSheet(
-            "QScrollArea{border:none;background:transparent;}"
+            f"QScrollArea{{border:none;background:{CP['bg1']};}}"
             f"QScrollBar:vertical{{background:{CP['bg2']};width:4px;border-radius:2px;}}"
             f"QScrollBar::handle:vertical{{background:{CP['border_bright']};border-radius:2px;}}"
             f"QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical{{height:0;}}"
         )
+        # Fond bg1 jusqu'en bas même contenu court (parité Cinéma 2026-07-23).
+        scroll.viewport().setStyleSheet(f"background:{CP['bg1']};")
 
         scroll_content = QWidget()
+        # WA_StyledBackground : fond bg1 peint jusqu'en bas (parité Cinéma).
+        scroll_content.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
         scroll_content.setStyleSheet(f"background:{CP['bg1']};")
         sc_lay = QVBoxLayout(scroll_content)
-        sc_lay.setContentsMargins(0, 0, 0, 0)
+        # Marge droite 8 px : espace entre les rectangles et la scrollbar.
+        sc_lay.setContentsMargins(0, 0, 8, 0)
         sc_lay.setSpacing(0)
 
         # ── Section 0 : Références visuelles ──────────────────────────────────
@@ -1143,8 +1149,11 @@ class PageScenario(QWidget):
         bottom = QWidget()
         bottom.setStyleSheet(f"background:{CP['bg1']};")
         b_lay = QVBoxLayout(bottom)
-        b_lay.setContentsMargins(16, 8, 16, 12)
+        # Annotations SOUS la ligne (parité Cinéma 2026-07-23) + marges réduites.
+        b_lay.setContentsMargins(16, 0, 16, 6)
         b_lay.setSpacing(6)
+
+        b_lay.addWidget(_sep())
 
         self._ai_progress_lbl = QLabel("")
         self._ai_progress_lbl.setWordWrap(True)
@@ -1153,8 +1162,6 @@ class PageScenario(QWidget):
             f"background:transparent;"
         )
         b_lay.addWidget(self._ai_progress_lbl)
-
-        b_lay.addWidget(_sep())
 
         self._ai_progress_bar = QProgressBar()
         self._ai_progress_bar.setRange(0, 0)

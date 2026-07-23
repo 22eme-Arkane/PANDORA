@@ -148,12 +148,8 @@ class PageCastings(QWidget):
         self._all_chars: list[dict] = []
         self._selected_id: str = ""
 
-        # ── Fiche latérale droite repliable (demande Matthieu 2026-07-23) :
-        # même principe que la poignée GUIDE / ASSISTANT — photo en grand,
-        # description et nombre de plans du personnage sélectionné. ──
-        outer = QHBoxLayout(self)
-        outer.setContentsMargins(0, 0, 0, 0)
-        outer.setSpacing(0)
+        # ── Fiche latérale droite repliable (2026-07-23) — MIGRÉE sur le module
+        # partagé ui/element_side_panel (uniformité des 5 pages éléments). ──
         _content = QWidget()
         _content.setStyleSheet("background:transparent;")
         root = QVBoxLayout(_content)
@@ -204,12 +200,9 @@ class PageCastings(QWidget):
         self._empty_state.setVisible(False)
         root.addWidget(self._empty_state, 1)
 
-        outer.addWidget(_content, 1)
-        outer.addWidget(self._build_char_panel())
-        from ui.page_scenario import _PanelToggle
-        self._char_toggle = _PanelToggle("FICHE", opened=False)
-        self._char_toggle.toggled.connect(self._on_char_panel_toggled)
-        outer.addWidget(self._char_toggle)
+        from ui.element_side_panel import attach_side_panel
+        self._side_panel = attach_side_panel(
+            self, _content, "Sélectionnez un personnage", "👤")
 
         self.refresh()
 
@@ -321,119 +314,18 @@ class PageCastings(QWidget):
         lay.addStretch(1)
         return bar
 
-    # ── Fiche latérale droite (personnage sélectionné) ────────────────────────
-
-    _PANEL_W = 320
-
-    def _build_char_panel(self) -> QWidget:
-        from core.i18n import translate
-        panel = QWidget()
-        panel.setFixedWidth(self._PANEL_W)
-        panel.setStyleSheet(f"background:{CP['bg1']};")
-        lay = QVBoxLayout(panel)
-        lay.setContentsMargins(14, 14, 14, 14)
-        lay.setSpacing(10)
-
-        self._cp_photo = QLabel("👤")
-        self._cp_photo.setFixedSize(self._PANEL_W - 28, 330)
-        self._cp_photo.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self._cp_photo.setStyleSheet(
-            f"background:{CP['bg3']};border-radius:10px;color:{CP['text_dim']};font-size:44px;"
-        )
-        lay.addWidget(self._cp_photo)
-
-        self._cp_name = QLabel(translate("Sélectionnez un personnage"))
-        self._cp_name.setWordWrap(True)
-        self._cp_name.setStyleSheet(
-            f"color:{CP['text_primary']};font-size:16px;font-weight:700;background:transparent;"
-        )
-        lay.addWidget(self._cp_name)
-
-        self._cp_role = QLabel("")
-        self._cp_role.setStyleSheet(
-            f"color:{CP['accent']};font-size:10px;font-weight:700;background:transparent;"
-        )
-        lay.addWidget(self._cp_role)
-
-        self._cp_stats = QLabel("")
-        self._cp_stats.setWordWrap(True)
-        self._cp_stats.setStyleSheet(
-            f"color:{CP['text_secondary']};font-size:11px;background:transparent;"
-        )
-        lay.addWidget(self._cp_stats)
-
-        _desc_scroll = QScrollArea()
-        _desc_scroll.setWidgetResizable(True)
-        _desc_scroll.setFrameStyle(0)
-        _desc_scroll.setStyleSheet("QScrollArea{background:transparent;border:none;}")
-        self._cp_desc = QLabel("")
-        self._cp_desc.setWordWrap(True)
-        self._cp_desc.setAlignment(Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignLeft)
-        self._cp_desc.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
-        self._cp_desc.setStyleSheet(
-            f"color:{CP['text_secondary']};font-size:11px;background:transparent;"
-        )
-        _desc_scroll.setWidget(self._cp_desc)
-        lay.addWidget(_desc_scroll, 1)
-
-        panel.setVisible(False)   # fermé par défaut (rien de sélectionné)
-        self._char_panel = panel
-        return panel
-
-    def _on_char_panel_toggled(self, opened: bool):
-        self._char_panel.setVisible(opened)
+    # ── Fiche latérale droite (module partagé element_side_panel) ─────────────
 
     def _on_card_selected(self, data: dict):
-        from core.i18n import translate
+        from ui.element_side_panel import storyboard_stats
         self._selected_id = data.get("id", "")
-        img = data.get("image_path", "")
-        w, h = self._PANEL_W - 28, 330
-        if img and os.path.isfile(img):
-            pix = QPixmap(img).scaled(
-                w, h, Qt.AspectRatioMode.KeepAspectRatioByExpanding,
-                Qt.TransformationMode.SmoothTransformation)
-            pix = pix.copy((pix.width() - w) // 2, (pix.height() - h) // 2, w, h)
-            self._cp_photo.setPixmap(pix)
-        else:
-            self._cp_photo.setPixmap(QPixmap())
-            self._cp_photo.setText("👤")
-        self._cp_name.setText(data.get("name") or "—")
-        self._cp_role.setText((data.get("role") or "").upper())
-        plans, seqs = self._char_plan_stats(data)
-        if plans:
-            _s = f"🎬  {plans} {translate('plan(s) au storyboard')}"
-            if seqs:
-                _s += f"  ·  {seqs} {translate('séquence(s)')}"
-        else:
-            _s = translate("Aucun plan au storyboard pour l'instant")
-        self._cp_stats.setText(_s)
-        self._cp_desc.setText((data.get("prompt") or "").strip()
-                              or translate("Aucune description."))
-        # La sélection OUVRE la fiche si elle est fermée (fermable via la poignée).
-        if not self._char_panel.isVisible():
-            self._char_toggle._open = True
-            self._char_toggle._update_arrow()
-            self._char_panel.setVisible(True)
-
-    def _char_plan_stats(self, data: dict) -> tuple[int, int]:
-        """(nb de plans, nb de séquences) du storyboard où ce personnage apparaît."""
-        try:
-            import core.storyboard as sb
-            shots = sb.list_shots()
-        except Exception:
-            return 0, 0
-        cid = data.get("id", "")
-        name = (data.get("name") or "").strip().lower()
-        n, seqs = 0, set()
-        for s in shots:
-            ids = s.get("character_ids") or []
-            names = [str(x).strip().lower() for x in (s.get("character_names") or [])]
-            if (cid and cid in ids) or (name and name in names):
-                n += 1
-                sq = s.get("seq_num")
-                if sq not in (None, ""):
-                    seqs.add(sq)
-        return n, len(seqs)
+        self._side_panel.show_item(
+            name=data.get("name") or "—",
+            subtitle=data.get("role", ""),
+            description=(data.get("prompt") or "").strip(),
+            stats=storyboard_stats("character", data),
+            image_path=data.get("image_path", ""),
+        )
 
     # ── Grille ────────────────────────────────────────────────────────────────
 
@@ -449,13 +341,7 @@ class PageCastings(QWidget):
                 self._on_card_selected(cur)
             else:
                 self._selected_id = ""
-                from core.i18n import translate
-                self._cp_photo.setPixmap(QPixmap())
-                self._cp_photo.setText("👤")
-                self._cp_name.setText(translate("Sélectionnez un personnage"))
-                self._cp_role.setText("")
-                self._cp_stats.setText("")
-                self._cp_desc.setText("")
+                self._side_panel.clear()
 
     def _render(self, chars: list[dict]):
         while self._grid.count():

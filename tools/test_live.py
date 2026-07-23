@@ -2739,9 +2739,13 @@ def studio_ia_poignee_ia_au_bord_live():
     2026-07-05 ; parité avec le garde « seedance » côté Cinéma."""
     root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     with open(os.path.join(root, "live_window.py"), encoding="utf-8") as f:
-        # Forme en tuple depuis le portage 2026-07-23 (studio + image_ia + conducteur).
-        assert 'key not in ("studio", "image_ia", "conducteur")' in f.read(), \
-            "spacer non masqué sur Studio IA Live → poignée IA décalée"
+        # 2026-07-23 : exclusion étendue aux pages éléments (fiches FICHE au bord).
+        _w = f.read()
+    for _k in ('"studio"', '"image_ia"', '"conducteur"',
+               '"casting"', '"accessoires"', '"vehicules"'):
+        assert _w.find('self._right_spacer.setVisible') < _w.find(_k, _w.find(
+            'self._right_spacer.setVisible')), \
+            f"spacer non masqué pour {_k} (poignée décalée du bord)"
 
 
 @test

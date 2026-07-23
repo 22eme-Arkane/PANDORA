@@ -85,7 +85,9 @@ class _PanelToggle(QWidget):
 
     def _update_arrow(self):
         # Fermée → flèche vers l'EXTÉRIEUR (❯, panneau au bord droit) ;
-        # ouverte → vers l'INTÉRIEUR (❮) — même logique que RÉGLAGES.
+        # ouverte → vers l'INTÉRIEUR (❮) — même logique que RÉGLAGES et les
+        # chats. (Brièvement inversée le 2026-07-23, puis RESTAURÉE le même
+        # jour à la demande de Matthieu : c'était le bon sens.)
         self._arrow.setText("❮" if self._open else "❯")
 
     def mousePressEvent(self, event):
@@ -855,8 +857,11 @@ class PageScenario(QWidget):
             # radius=0 par défaut (demande Matthieu 2026-07-22 : rectangles à bords
             # droits, seuls « Valider et envoyer au Storyboard » et « Tout générer »
             # gardent leurs arrondis).
+            # Test « contenu centré » du 2026-07-23 : REFUSÉ par Matthieu après
+            # essai (retour à l'alignement GAUCHE) — mais on GARDE les hauteurs
+            # compactes (46/50), les marges resserrées et les libellés courts.
             btn = QPushButton()
-            btn.setFixedHeight(62 if color else 58)   # 2 lignes de description sans troncature
+            btn.setFixedHeight(50 if color else 46)
             _bd  = color or CP['border']
             _hov = color or CP['accent2_dim']
             btn.setStyleSheet(
@@ -867,7 +872,7 @@ class PageScenario(QWidget):
                 f"QPushButton:disabled{{opacity:0.4;}}"
             )
             bl = QVBoxLayout(btn)
-            bl.setContentsMargins(6, 6, 6, 6)
+            bl.setContentsMargins(6, 4, 6, 4)
             bl.setSpacing(1)
             title_row = QHBoxLayout()
             title_row.setSpacing(6)
@@ -906,8 +911,10 @@ class PageScenario(QWidget):
             f"QPushButton{{background:{CP['bg3']};color:{CP['accent']};"
             f"border:none;border-radius:0px;"
             f"border-top:1px solid {CP['border']};border-bottom:1px solid {CP['border']};"
+            # Centrage testé puis refusé le 2026-07-23 → alignement GAUCHE
+            # conservé ; padding compact 7 px gardé.
             f"font-size:11px;font-weight:800;text-align:left;"
-            f"padding:9px 16px;letter-spacing:0.8px;}}"
+            f"padding:7px 16px;letter-spacing:0.8px;}}"
             f"QPushButton:hover{{background:{CP['bg4']};color:{CP['text_primary']};}}"
             f"QPushButton:checked{{background:{CP['bg3']};color:{CP['accent']};}}"
         )
@@ -944,16 +951,26 @@ class PageScenario(QWidget):
         scroll.setWidgetResizable(True)
         scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         scroll.setStyleSheet(
-            "QScrollArea{border:none;background:transparent;}"
+            f"QScrollArea{{border:none;background:{CP['bg1']};}}"
             f"QScrollBar:vertical{{background:{CP['bg2']};width:4px;border-radius:2px;}}"
             f"QScrollBar::handle:vertical{{background:{CP['border_bright']};border-radius:2px;}}"
             f"QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical{{height:0;}}"
         )
+        # Le fond bg1 remplit le panneau JUSQU'EN BAS même quand le contenu
+        # compacté est plus court que la fenêtre (retour Matthieu 2026-07-23 :
+        # « les menus sont rétrécis ») — viewport peint explicitement.
+        scroll.viewport().setStyleSheet(f"background:{CP['bg1']};")
 
         scroll_content = QWidget()
+        # WA_StyledBackground : sans lui, un QWidget ne peint PAS son fond de
+        # stylesheet → le bas du panneau restait noir une fois le contenu
+        # compacté (retour Matthieu 2026-07-23).
+        scroll_content.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
         scroll_content.setStyleSheet(f"background:{CP['bg1']};")
         sc_lay = QVBoxLayout(scroll_content)
-        sc_lay.setContentsMargins(0, 0, 0, 0)
+        # Marge droite 8 px (TEST 2026-07-23) : petit espace libre entre les
+        # rectangles et la barre de défilement (avant : 0, cartes collées).
+        sc_lay.setContentsMargins(0, 0, 8, 0)
         sc_lay.setSpacing(0)
 
         # ── Section 0 : Références visuelles ──────────────────────────────────
@@ -1070,10 +1087,11 @@ class PageScenario(QWidget):
             "🎭", "Générer les personnages", "Identifier les personnages depuis le scénario",
             self._on_gen_characters,
         )
+        # Renommé + description raccourcie (demande Matthieu 2026-07-23) — le
+        # plan vu de dessus est toujours généré, simplement plus mentionné ici.
         self._btn_gen_decors = _ai_btn(
-            "🏠", "Générer les décors + plan",
-            "Identifier les décors depuis le scénario et générer leur plan vu de dessus "
-            "(Mise en scène / Plan de feu)",
+            "🏠", "Générer les décors",
+            "Identifier les décors depuis le scénario",
             self._on_gen_decors,
         )
         self._btn_gen_accessories = _ai_btn(
@@ -1180,8 +1198,13 @@ class PageScenario(QWidget):
         bottom = QWidget()
         bottom.setStyleSheet(f"background:{CP['bg1']};")
         b_lay = QVBoxLayout(bottom)
-        b_lay.setContentsMargins(0, 8, 0, 12)   # aligné bord à bord avec les sections
+        # Marges resserrées (retour Matthieu 2026-07-23) : les ANNOTATIONS
+        # (« Découpage PANDORA créé ✓ »…) vivent SOUS la ligne, dans l'espace
+        # qu'occupait la zone « Tout générer » — le panneau y gagne en hauteur.
+        b_lay.setContentsMargins(0, 0, 0, 6)
         b_lay.setSpacing(6)
+
+        b_lay.addWidget(_sep())
 
         self._ai_progress_lbl = QLabel("")
         self._ai_progress_lbl.setWordWrap(True)
@@ -1190,8 +1213,6 @@ class PageScenario(QWidget):
             f"background:transparent;"
         )
         b_lay.addWidget(self._ai_progress_lbl)
-
-        b_lay.addWidget(_sep())
 
         self._ai_progress_bar = QProgressBar()
         self._ai_progress_bar.setRange(0, 0)
@@ -1265,8 +1286,11 @@ class PageScenario(QWidget):
             f"background:{CP['bg1']};"
         )
         ga_lay = QVBoxLayout(gen_all_zone)
-        ga_lay.setContentsMargins(0, 10, 0, 12)   # « Tout générer » aligné bord à bord
-        ga_lay.setSpacing(8)
+        # Marges 0 (2026-07-23) : « Tout générer » étant masqué, cette zone ne
+        # doit plus réserver de rectangle vide sous la ligne — l'espace revient
+        # aux sections du panneau. (Les marges reviendront avec le bouton.)
+        ga_lay.setContentsMargins(0, 0, 0, 0)
+        ga_lay.setSpacing(0)
 
         self._gen_all_progress_bar = QProgressBar()
         self._gen_all_progress_bar.setRange(0, 0)

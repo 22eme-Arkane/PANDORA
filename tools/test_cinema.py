@@ -2305,9 +2305,14 @@ def image_ia_chat_a_droite():
     # noire en haut) ; poignée « IA » collée au bord (spacer masqué sur la page
     # « image_ia »). Retour Matthieu 2026-07-05.
     assert "viewport().setStyleSheet" in src, "viewport du chat non peint → bande noire résiduelle"
+    # 2026-07-23 : exclusion étendue aux 5 pages éléments (poignées FICHE au bord).
     with open(os.path.join(root, "ui", "pandora_window.py"), encoding="utf-8") as f:
-        assert 'key not in ("image_ia", "plan_de_feu", "scenario")' in f.read(), \
-            "spacer masqué sur Image IA, Plan de feu et Scénario (poignées au bord)"
+        _w = f.read()
+    for _k in ('"image_ia"', '"plan_de_feu"', '"scenario"',
+               '"castings"', '"decors"', '"accessoires"', '"hmc"', '"vehicles"'):
+        assert _w.find('self._right_spacer.setVisible') < _w.find(_k, _w.find(
+            'self._right_spacer.setVisible')), \
+            f"spacer non masqué pour {_k} (poignée décalée du bord)"
 
 
 @test
@@ -2571,11 +2576,16 @@ def panneau_scenario_aligne_jusqu_au_bord():
     # Marges verticales resserrées à 4 (retour Matthieu : trop d'espace) — l'alignement
     # au bord (horizontal = 0) reste l'invariant.
     assert "lay.setContentsMargins(0, 4, 0, 4)" in src, "sections non alignées au bord"
-    assert "b_lay.setContentsMargins(0, 8, 0, 12)" in src, "zone basse non alignée"
-    assert "ga_lay.setContentsMargins(0, 10, 0, 12)" in src, "« Tout générer » non aligné"
-    # Descriptions sur 2 lignes + hauteur de bouton suffisante.
+    # 2026-07-23 : annotations SOUS la ligne, zone « Tout générer » (masqué)
+    # sans rectangle réservé — marges resserrées.
+    assert "b_lay.setContentsMargins(0, 0, 0, 6)" in src, "zone basse non alignée"
+    assert "ga_lay.setContentsMargins(0, 0, 0, 0)" in src, "zone Tout générer non résorbée"
+    # Descriptions avec word-wrap ; 2026-07-23 : hauteurs COMPACTES (46/50) et
+    # marge devant la scrollbar CONSERVÉES, centrage testé puis REFUSÉ (gauche).
     assert "sub_lbl.setWordWrap(True)" in src, "descriptions encore tronquées (pas de word-wrap)"
-    assert "else 58)" in src, "hauteur de bouton non augmentée pour 2 lignes (58 par défaut)"
+    assert "else 46)" in src, "hauteur compacte des boutons (46 par défaut)"
+    assert "sc_lay.setContentsMargins(0, 0, 8, 0)" in src, \
+        "espace entre les rectangles et la barre de défilement"
     # Bouton « Générer le storyboard » MIS EN AVANT : ROUGE + éclair (2026-07-23,
     # reprend l'identité de l'ex-« Tout générer », désormais masqué).
     assert 'self._on_storyboard, color=CP.get("red"' in src, \

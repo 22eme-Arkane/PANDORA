@@ -179,11 +179,27 @@ if __name__ == "__main__":
             start_page.hide()
 
         mode = data.get("mode", "cinema")
-        if mode == "live" and not _CINEMA_ONLY:
-            from live_window import LiveWindow
-            win = LiveWindow(data)
+        # Splash de chargement (2026-07-23) : la fenêtre est RECRÉÉE par
+        # conception (état propre entre projets) — le splash montre que rien
+        # n'a planté pendant la construction (pulse() anime entre les pages).
+        from ui.loading_splash import open_splash, close_splash
+        _pname = (data.get("name") or "").strip()
+        if _pname:
+            _splash_txt = f"Ouverture de « {_pname} »…"
+        elif mode == "live":
+            _splash_txt = "Ouverture de PANDORA | Live…"
         else:
-            win = PandoraWindow(data)
+            _splash_txt = "Ouverture de PANDORA Cinéma…"
+        open_splash(_splash_txt)
+        try:
+            if mode == "live" and not _CINEMA_ONLY:
+                from live_window import LiveWindow
+                win = LiveWindow(data)
+            else:
+                win = PandoraWindow(data)
+        except Exception:
+            close_splash()
+            raise
 
         def _on_switch(new_data: dict):
             win.hide()
@@ -220,6 +236,7 @@ if __name__ == "__main__":
             except Exception:
                 pass
         win.showMaximized()
+        close_splash()
         # Force taskbar icon refresh — Windows sometimes ignores the icon set before show()
         from PyQt6.QtCore import QTimer
         QTimer.singleShot(150, lambda: win.setWindowIcon(icon) if not icon.isNull() else None)

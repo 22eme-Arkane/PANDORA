@@ -508,10 +508,15 @@ class PandoraWindow(QMainWindow):
         scenario.style_changed.connect(self._on_scenario_style_changed)
         self._pages["scenario"] = scenario
         self._stack.addWidget(scenario)
+        # pulse() : anime le splash de chargement pendant la construction
+        # (événements d'entrée exclus — voir ui/loading_splash).
+        from ui.loading_splash import pulse
+        pulse()
 
         storyboard = PageStoryboard()
         self._pages["storyboard"] = storyboard
         self._stack.addWidget(storyboard)
+        pulse()
 
         from ui.page_staging import PageLighting
         plan_de_feu = PageLighting()
@@ -520,10 +525,12 @@ class PandoraWindow(QMainWindow):
         # plateau unifié sans recréer une seconde page ni un second état.
         self._pages["mise_en_scene"] = plan_de_feu
         self._stack.addWidget(plan_de_feu)
+        pulse()
 
         decors = PageDecors()
         self._pages["decors"] = decors
         self._stack.addWidget(decors)
+        pulse()
 
         camera = PageCamera()
         self._pages["camera"] = camera
@@ -544,6 +551,7 @@ class PandoraWindow(QMainWindow):
         vehicles = PageVehicles()
         self._pages["vehicles"] = vehicles
         self._stack.addWidget(vehicles)
+        pulse()
 
         doublage = PageDoublage()
         self._pages["doublage"] = doublage
@@ -554,6 +562,7 @@ class PandoraWindow(QMainWindow):
         image_ia = TabImage()
         self._pages["image_ia"] = image_ia
         self._stack.addWidget(image_ia)
+        pulse()
 
         settings = SettingsPage()
         settings.manual_requested.connect(self._on_manual)
@@ -567,6 +576,7 @@ class PandoraWindow(QMainWindow):
         seedance = SeedanceWidget()
         self._pages["seedance"] = seedance
         self._stack.addWidget(seedance)
+        pulse()
 
     def showEvent(self, event):
         super().showEvent(event)
@@ -872,7 +882,12 @@ class PandoraWindow(QMainWindow):
         # (retour Matthieu 2026-07-05).
         # « scenario » ajouté (2026-07-23) : sa poignée ASSISTANT est collée au
         # bord droit, comme les poignées d'Image IA et du Plan de feu.
-        self._right_spacer.setVisible(not is_sb and key not in ("image_ia", "plan_de_feu", "scenario"))
+        # Pages à POIGNÉE droite propre (ASSISTANT / IA / RÉGLAGES / FICHE) : le
+        # spacer de symétrie disparaît pour que la poignée COLLE au bord —
+        # étendu aux 5 pages éléments le 2026-07-23 (les fiches étaient décalées).
+        self._right_spacer.setVisible(not is_sb and key not in (
+            "image_ia", "plan_de_feu", "scenario",
+            "castings", "decors", "accessoires", "hmc", "vehicles"))
 
     def _refresh_project_page(self):
         """Le choix de projet vit désormais uniquement sur la page de démarrage."""

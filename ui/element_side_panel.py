@@ -33,20 +33,18 @@ class ElementSidePanel(QWidget):
         self._placeholder = placeholder
         self._toggle = None
         self.setFixedWidth(PANEL_W)
-        self.setStyleSheet(f"background:{CP['bg1']};")
+        # FOND réellement PEINT (retour Matthieu 2026-07-23 : la fiche Décors
+        # n'avait pas de fond) : un QWidget n'applique son stylesheet de fond
+        # qu'avec WA_StyledBackground + sélecteur ciblé (jamais de règle nue).
+        self.setObjectName("ElementSidePanel")
+        self.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
+        self.setStyleSheet(f"QWidget#ElementSidePanel{{background:{CP['bg1']};}}")
         lay = QVBoxLayout(self)
         lay.setContentsMargins(14, 14, 14, 14)
-        lay.setSpacing(10)
+        lay.setSpacing(8)
 
-        self._photo = QLabel(placeholder)
-        self._photo.setFixedSize(PANEL_W - 28, _PHOTO_H)
-        self._photo.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self._photo.setStyleSheet(
-            f"background:{CP['bg3']};border-radius:10px;"
-            f"color:{CP['text_dim']};font-size:44px;"
-        )
-        lay.addWidget(self._photo)
-
+        # ── Ordre 2026-07-23 (retour Matthieu) : NOM, sous-titre, PHOTO,
+        # « STORYBOARD » + présence, « DESCRIPTION » + texte. ──
         self._name = QLabel(translate(empty_text))
         self._name.setWordWrap(True)
         self._name.setStyleSheet(
@@ -61,6 +59,25 @@ class ElementSidePanel(QWidget):
         )
         lay.addWidget(self._sub)
 
+        self._photo = QLabel(placeholder)
+        self._photo.setFixedSize(PANEL_W - 28, _PHOTO_H)
+        self._photo.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self._photo.setStyleSheet(
+            f"background:{CP['bg3']};border-radius:10px;"
+            f"color:{CP['text_dim']};font-size:44px;"
+        )
+        lay.addWidget(self._photo)
+
+        def _caption(text: str) -> QLabel:
+            c = QLabel(text)
+            c.setStyleSheet(
+                f"color:{CP['text_dim']};font-size:9px;letter-spacing:2px;"
+                f"font-family:'Consolas',monospace;font-weight:700;background:transparent;"
+            )
+            return c
+
+        self._cap_sb = _caption("STORYBOARD")
+        lay.addWidget(self._cap_sb)
         self._stats = QLabel("")
         self._stats.setWordWrap(True)
         self._stats.setStyleSheet(
@@ -68,6 +85,8 @@ class ElementSidePanel(QWidget):
         )
         lay.addWidget(self._stats)
 
+        self._cap_desc = _caption("DESCRIPTION")
+        lay.addWidget(self._cap_desc)
         _scroll = QScrollArea()
         _scroll.setWidgetResizable(True)
         _scroll.setFrameStyle(0)
@@ -102,6 +121,7 @@ class ElementSidePanel(QWidget):
         self._sub.setText((subtitle or "").upper())
         self._stats.setText(stats or "")
         self._stats.setVisible(bool(stats))
+        self._cap_sb.setVisible(bool(stats))   # HMC : pas de présence storyboard
         self._desc.setText((description or "").strip() or translate("Aucune description."))
         self.reveal()
 

@@ -802,12 +802,8 @@ class LiveWindow(QMainWindow):
             CastingLivePage, AccessoiresLivePage, VehiculesLivePage,
         )
 
-        # « Projets » a quitté la nav basse (2026-07-23, parité Cinéma) : le
-        # retour aux projets passe par le logo → page de démarrage.
-
-        # ── Conducteur (version Live du Scénario) ───────────────────────────────
-        # Page Projets (réintroduite 2026-07-23) — même page que le Cinéma ; le
-        # switch recrée la fenêtre via main._on_switch.
+        # ── Page Projets (réintroduite 2026-07-23) — même page que le Cinéma ;
+        # le switch recrée la fenêtre via main._on_switch.
         from ui.page_projects import PageProjects
         _projects = PageProjects(self._project)
         # Un projet sans champ « mode » reste dans l'édition courante (Live).
@@ -818,10 +814,15 @@ class LiveWindow(QMainWindow):
         conducteur = ConducteurPage()
         conducteur.navigate_requested.connect(lambda key, extra=None: self._navigate(key))
         self._pages["conducteur"] = conducteur
+        # pulse() : anime le splash de chargement pendant la construction.
+        from ui.loading_splash import pulse
+        pulse()
 
         # ── Séquences Live + Mapping (versions Live du Storyboard) ──────────────
         self._pages["seq_live"]    = SequenceLivePage()
+        pulse()
         self._pages["seq_mapping"] = SequenceMappingPage()
+        pulse()
         # « ➤ SFX » d'un plan → Studio IA, onglet Sound Design pré-rempli
         for _sk in ("seq_live", "seq_mapping"):
             self._pages[_sk].sound_to_studio.connect(self._open_sound_design)
@@ -830,12 +831,14 @@ class LiveWindow(QMainWindow):
         self._pages["casting"]     = CastingLivePage()
         self._pages["accessoires"] = AccessoiresLivePage()
         self._pages["vehicules"]   = VehiculesLivePage()
+        pulse()
 
         # ── Image IA — destination globale autonome (2026-07-23, parité
         # Cinéma) : réutilise le panneau partagé Studio Images ───────────────────
         from ui.tab_image import TabImage
         image_ia = TabImage()
         self._pages["image_ia"] = image_ia
+        pulse()
 
         # ── Studio IA Live (dédié) ──────────────────────────────────────────────
         from ui.live_studio_widget import LiveStudioWidget
@@ -928,7 +931,11 @@ class LiveWindow(QMainWindow):
         # Matthieu 2026-07-05 ; « image_ia » ajouté 2026-07-23).
         # « conducteur » ajouté (2026-07-23) : sa poignée ASSISTANT est collée au
         # bord droit, comme Studio IA et Image IA (parité Cinéma).
-        self._right_spacer.setVisible(not is_seq and key not in ("studio", "image_ia", "conducteur"))
+        # Pages à poignée droite (dont fiches FICHE des éléments, 2026-07-23) :
+        # le spacer disparaît pour que la poignée colle au bord.
+        self._right_spacer.setVisible(not is_seq and key not in (
+            "studio", "image_ia", "conducteur",
+            "casting", "accessoires", "vehicules"))
 
     # ── Handlers ────────────────────────────────────────────────────────────────
 

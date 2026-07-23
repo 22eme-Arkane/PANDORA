@@ -94,24 +94,30 @@ class _ProjectCard(QWidget):
         lay.setSpacing(0)
 
         # Visuel = premier mood du storyboard (recadré cover), sinon placeholder.
+        # Deux pixmaps précalculés : normal + zoom 1.06 (survol néon, 2026-07-23).
         self._img = QLabel()
         self._img.setFixedSize(self._W, self._H)
         self._img.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        border = CP["accent"] if is_current else CP["border"]
+        self._rest_border = f"1px solid {CP['accent'] if is_current else CP['border']}"
         self._img.setStyleSheet(
-            f"background:{CP['bg2']};border:1px solid {border};border-radius:12px;"
+            f"background:{CP['bg2']};border:{self._rest_border};border-radius:12px;"
             f"color:{CP['text_dim']};font-size:40px;"
         )
+        self._pix_normal = self._pix_zoom = None
         thumb = _project_thumb(data.get("_path", ""))
         if thumb:
             pix = QPixmap(thumb)
             if not pix.isNull():
-                pix = pix.scaled(self._W, self._H,
-                                 Qt.AspectRatioMode.KeepAspectRatioByExpanding,
-                                 Qt.TransformationMode.SmoothTransformation)
-                pix = pix.copy((pix.width() - self._W) // 2,
-                               (pix.height() - self._H) // 2, self._W, self._H)
-                self._img.setPixmap(pix)
+                def _cover(scale: float) -> QPixmap:
+                    w2, h2 = int(self._W * scale), int(self._H * scale)
+                    p2 = pix.scaled(w2, h2,
+                                    Qt.AspectRatioMode.KeepAspectRatioByExpanding,
+                                    Qt.TransformationMode.SmoothTransformation)
+                    return p2.copy((p2.width() - self._W) // 2,
+                                   (p2.height() - self._H) // 2, self._W, self._H)
+                self._pix_normal = _cover(1.0)
+                self._pix_zoom = _cover(1.06)
+                self._img.setPixmap(self._pix_normal)
         if self._img.pixmap() is None or self._img.pixmap().isNull():
             self._img.setText("🎬")
         lay.addWidget(self._img)
@@ -146,6 +152,23 @@ class _ProjectCard(QWidget):
             return
         super().mousePressEvent(e)
 
+    def enterEvent(self, e):
+        # Survol : léger ZOOM du visuel + encadré NÉON violet (demande 2026-07-23).
+        if self._pix_zoom is not None:
+            self._img.setPixmap(self._pix_zoom)
+        self._img.setStyleSheet(
+            f"background:{CP['bg2']};border:1.5px solid {CP['accent2']};"
+            f"border-radius:12px;color:{CP['text_dim']};font-size:40px;"
+        )
+
+    def leaveEvent(self, e):
+        if self._pix_normal is not None:
+            self._img.setPixmap(self._pix_normal)
+        self._img.setStyleSheet(
+            f"background:{CP['bg2']};border:{self._rest_border};border-radius:12px;"
+            f"color:{CP['text_dim']};font-size:40px;"
+        )
+
     def contextMenuEvent(self, e):
         # Renommer — proposé sur le projet OUVERT uniquement (comportement historique).
         if not self._is_current:
@@ -178,11 +201,17 @@ class PageProjects(QWidget):
         root.setContentsMargins(0, 0, 0, 0)
         root.setSpacing(0)
 
-        # ── Boutons centrés : Nouveau (violet) + Ouvrir (disque dur) ─────────
+        # ── Bandeau PLEINE LARGEUR (maquette) : Nouveau (violet) + Ouvrir ─────
+        # Sélecteur ciblé OBLIGATOIRE (leçon du dashboard : une règle sans
+        # sélecteur se propage aux enfants stylés).
         head = QWidget()
-        head.setStyleSheet("background:transparent;")
+        head.setObjectName("ProjectsHeader")
+        head.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
+        head.setStyleSheet(
+            f"QWidget#ProjectsHeader{{background:{CP['bg1']};"
+            f"border-bottom:1px solid {CP['border']};}}")
         hl = QHBoxLayout(head)
-        hl.setContentsMargins(32, 22, 32, 6)
+        hl.setContentsMargins(32, 16, 32, 16)
         hl.setSpacing(12)
         hl.addStretch(1)
 
@@ -225,34 +254,79 @@ class PageProjects(QWidget):
             f"border-radius:10px;color:{CP['text_primary']};font-size:12px;padding:0 16px;}}"
             f"QLineEdit:focus{{border-color:{CP['accent_dim']};}}"
         )
-        self._search.textChanged.connect(lambda _t: self._rebuild_grid())
+        self._search.textChanged.connect(self._on_search_changed)
         search_row.addWidget(self._search)
         search_row.addStretch(1)
         root.addLayout(search_row)
 
-        # ── Caption + grille de vignettes ────────────────────────────────────
-        self._recents_lbl = QLabel(translate("PROJETS RÉCENTS"))
-        self._recents_lbl.setStyleSheet(
-            f"color:{CP['text_dim']};font-size:10px;letter-spacing:2px;"
-            f"font-family:'Consolas',monospace;font-weight:700;background:transparent;"
-        )
-        cap_row = QHBoxLayout()
-        cap_row.setContentsMargins(48, 22, 48, 4)
-        cap_row.addWidget(self._recents_lbl)
-        cap_row.addStretch(1)
-        root.addLayout(cap_row)
+        self._page = 0
+
+        # ── Grille à POSITIONS FIXES (retour Matthieu 2026-07-23) : 3 colonnes
+        # ancrées — 2 projets occupent les 2 emplacements de GAUCHE, aux mêmes
+        # places et tailles que la page précédente. Le bloc (largeur fixe) est
+        # centré ; les flèches ▲/▼ collent à la grille.
+        _nav_ss = (
+            f"QPushButton{{background:{CP['bg2']};color:{CP['text_secondary']};"
+            f"border:1px solid {CP['border']};border-radius:8px;"
+            f"font-size:10px;padding:0;}}"
+            f"QPushButton:hover{{color:{CP['text_primary']};"
+            f"border-color:{CP['accent2']};}}")
 
         scroll = QScrollArea()
         scroll.setWidgetResizable(True)
         scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         scroll.setStyleSheet("QScrollArea{background:transparent;border:none;}")
+
+        _content = QWidget()
+        _content.setStyleSheet("background:transparent;")
+        _cv = QVBoxLayout(_content)
+        _cv.setContentsMargins(0, 8, 0, 8)
+        _cv.setSpacing(10)
+        # Bloc CENTRÉ VERTICALEMENT dans l'espace disponible (retour 2026-07-23).
+        _cv.addStretch(1)
+
+        _GRID_W = 3 * _ProjectCard._W + 2 * 18
+        # « PROJETS RÉCENTS » aligné sur le bord GAUCHE de la première vignette
+        # (wrapper à la largeur de la grille, centré comme elle).
+        self._recents_lbl = QLabel(translate("PROJETS RÉCENTS"))
+        self._recents_lbl.setStyleSheet(
+            f"color:{CP['text_dim']};font-size:10px;letter-spacing:2px;"
+            f"font-family:'Consolas',monospace;font-weight:700;background:transparent;"
+        )
+        _cap_wrap = QWidget()
+        _cap_wrap.setFixedWidth(_GRID_W)
+        _cap_wrap.setStyleSheet("background:transparent;")
+        _cap_lay = QHBoxLayout(_cap_wrap)
+        _cap_lay.setContentsMargins(0, 0, 0, 0)
+        _cap_lay.addWidget(self._recents_lbl)
+        _cap_lay.addStretch(1)
+        _cv.addWidget(_cap_wrap, 0, Qt.AlignmentFlag.AlignHCenter)
+
+        self._btn_page_up = QPushButton("▲")
+        self._btn_page_up.setFixedSize(72, 24)
+        self._btn_page_up.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._btn_page_up.setStyleSheet(_nav_ss)
+        self._btn_page_up.clicked.connect(lambda: self._change_page(-1))
+        _cv.addWidget(self._btn_page_up, 0, Qt.AlignmentFlag.AlignHCenter)
+
         self._grid_container = QWidget()
         self._grid_container.setStyleSheet("background:transparent;")
+        self._grid_container.setFixedWidth(_GRID_W)
         self._grid = QGridLayout(self._grid_container)
         self._grid.setSpacing(18)
-        self._grid.setAlignment(Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignHCenter)
-        self._grid.setContentsMargins(48, 8, 48, 32)
-        scroll.setWidget(self._grid_container)
+        self._grid.setAlignment(Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignLeft)
+        self._grid.setContentsMargins(0, 0, 0, 0)
+        _cv.addWidget(self._grid_container, 0, Qt.AlignmentFlag.AlignHCenter)
+
+        self._btn_page_down = QPushButton("▼")
+        self._btn_page_down.setFixedSize(72, 24)
+        self._btn_page_down.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._btn_page_down.setStyleSheet(_nav_ss)
+        self._btn_page_down.clicked.connect(lambda: self._change_page(+1))
+        _cv.addWidget(self._btn_page_down, 0, Qt.AlignmentFlag.AlignHCenter)
+        _cv.addStretch(1)   # symétrique du ressort haut → bloc au milieu
+
+        scroll.setWidget(_content)
         root.addWidget(scroll, 1)
 
         self._rebuild_grid()
@@ -276,18 +350,40 @@ class PageProjects(QWidget):
         out += [p for p in recents if p.get("_path", "") != current_path]
         return [p for p in out if (p.get("mode", "cinema") or "cinema") == self._mode]
 
+    _PER_PAGE = 6   # 3 colonnes × 2 lignes, centrées (demande Matthieu 2026-07-23)
+
+    def _on_search_changed(self, _t: str):
+        self._page = 0
+        self._rebuild_grid()
+
+    def _change_page(self, step: int):
+        self._page = max(0, self._page + step)
+        self._rebuild_grid()
+
     def _rebuild_grid(self):
         while self._grid.count():
             item = self._grid.takeAt(0)
-            if item.widget():
-                item.widget().deleteLater()
+            w = item.widget()
+            if w is not None:
+                # setParent(None) AVANT deleteLater : sans ça, la carte retirée
+                # reste peinte jusqu'au prochain tour de boucle (carte fantôme
+                # au changement de page — vécu 2026-07-23).
+                w.setParent(None)
+                w.deleteLater()
 
         projects = self._projects()
         q = (self._search.text() or "").strip().lower()
         if q:
             projects = [p for p in projects if q in p.get("name", "").lower()]
-        _n = len(projects)
-        self._recents_lbl.setText(translate("PROJETS RÉCENTS") + f"  ·  {_n}")
+
+        # Pagination 6 par page — flèches ⌃/⌄ visibles selon la position.
+        total = len(projects)
+        max_page = max(0, (total - 1) // self._PER_PAGE)
+        self._page = min(self._page, max_page)
+        self._btn_page_up.setVisible(self._page > 0)
+        self._btn_page_down.setVisible(self._page < max_page)
+        page_items = projects[self._page * self._PER_PAGE:
+                              (self._page + 1) * self._PER_PAGE]
 
         pruned = project_api.get_last_pruned()
         row0 = 0
@@ -303,26 +399,26 @@ class PageProjects(QWidget):
                 f"background:rgba(255,180,0,0.08);border:1px solid rgba(255,180,0,0.25);"
                 f"border-radius:6px;padding:6px 10px;"
             )
-            self._grid.addWidget(warn, 0, 0, 1, 4)
+            self._grid.addWidget(warn, 0, 0, 1, 3)
             row0 = 1
 
-        if not projects:
+        if not page_items:
             empty = QLabel(translate(
                 "Aucun projet récent.\nCrée ton premier projet avec « ＋ Nouveau projet »."))
             empty.setAlignment(Qt.AlignmentFlag.AlignCenter)
             empty.setStyleSheet(
                 f"color:{CP['text_dim']};font-size:13px;background:transparent;padding:48px 0;")
-            self._grid.addWidget(empty, row0, 0, 1, 4)
+            self._grid.addWidget(empty, row0, 0, 1, 3)
             return
 
         current_path = self._current.get("_path", "")
-        for i, data in enumerate(projects):
+        for i, data in enumerate(page_items):
             card = _ProjectCard(
                 data, is_current=bool(current_path)
                 and data.get("_path", "") == current_path)
             card.clicked.connect(self._on_switch)
             card.rename_requested.connect(lambda _d: self._on_rename())
-            self._grid.addWidget(card, row0 + i // 4, i % 4)
+            self._grid.addWidget(card, row0 + i // 3, i % 3)
 
     # ── Actions ───────────────────────────────────────────────────────────────
 
