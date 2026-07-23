@@ -105,11 +105,15 @@ def _contrast_text(hexc: str) -> str:
 # ── Dialogue helpers ──────────────────────────────────────────────────────────
 
 def _text_dialog(parent: QWidget, title: str, initial: str = "",
-                 placeholder: str = "", enhance: bool = False) -> str | None:
-    """Styled multi-line text editor dialog. Returns new text or None if cancelled."""
+                 placeholder: str = "", enhance: bool = False,
+                 info: str = "") -> str | None:
+    """Styled multi-line text editor dialog. Returns new text or None if cancelled.
+
+    `info` (optionnel) : message affiché JUSTE au-dessus de l'encart de texte (ex. rappel
+    que le prompt est traduit en anglais avant génération)."""
     from ui.styles import PANDORA_STYLESHEET
     dlg = QDialog(parent)
-    dlg.setWindowTitle(title)
+    dlg.setWindowTitle(translate(title))
     # Redimensionnable (poignée) + taille par défaut CONFORTABLE, plafonnée à 85 %
     # de l'écran disponible → jamais plus grand que l'affichage (pas de crop).
     from PyQt6.QtGui import QGuiApplication
@@ -124,6 +128,14 @@ def _text_dialog(parent: QWidget, title: str, initial: str = "",
     lay = QVBoxLayout(dlg)
     lay.setContentsMargins(20, 18, 20, 18)
     lay.setSpacing(12)
+
+    if info:
+        _info_lbl = QLabel(translate(info))
+        _info_lbl.setWordWrap(True)
+        _info_lbl.setStyleSheet(
+            f"color:{CP['text_dim']};font-size:11px;background:transparent;border:none;"
+        )
+        lay.addWidget(_info_lbl)
 
     te = QTextEdit()
     te.setPlainText(initial or "")
@@ -1142,8 +1154,12 @@ class _ShotRow(QFrame):
         pmt_l.addWidget(_pmt_lbl)
         self._pmt_lbl = _pmt_lbl
         def _edit_prompt():
-            v = _text_dialog(self, "Prompt Seedance", data.get("seedance_prompt", ""),
-                             enhance=True)
+            v = _text_dialog(
+                self, "Modifier le prompt", data.get("seedance_prompt", ""),
+                enhance=True,
+                info="Ce prompt est automatiquement traduit en anglais avant la "
+                     "génération de la vidéo. Vous pouvez l'éditer ici dans votre "
+                     "langue de travail.")
             if v is not None:
                 _save_field("seedance_prompt", v)
         _clickable(pmt_w, _edit_prompt)

@@ -373,7 +373,11 @@ class OnboardingDialog(QDialog):
             f"font-size:10px;font-weight:700;padding:0 14px;}}"
             f"QPushButton:hover{{color:{CP['text_secondary']};border-color:{CP['border_bright']};}}"
         )
-        btn_skip.clicked.connect(self.accept)
+        # « Passer » DOIT enregistrer la préférence « Ne plus afficher » : accept()
+        # appelle hide() (pas close()) → closeEvent NE se déclenche PAS, donc brancher
+        # sur accept() ignorait la case cochée et le guide revenait à chaque démarrage
+        # (bug signalé par Matthieu 2026-07-24). _finish() sauve puis ferme.
+        btn_skip.clicked.connect(self._finish)
         hl.addWidget(btn_skip)
         outer.addWidget(header)
 

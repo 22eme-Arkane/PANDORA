@@ -3021,6 +3021,11 @@ _FR_TO_EN: dict[str, str] = {
     "Plateau synchronisé vers le storyboard.":
         "Stage synced to the storyboard.",
     "Nom du plan":                               "Shot name",
+    "Modifier le prompt":                        "Edit the prompt",
+    "Ce prompt est automatiquement traduit en anglais avant la génération de la vidéo. "
+    "Vous pouvez l'éditer ici dans votre langue de travail.":
+        "This prompt is automatically translated to English before the video is generated. "
+        "You can edit it here in your working language.",
     "Générer les décors + plan":                 "Generate sets + plan",
     "Mise en page PANDORA":                      "PANDORA layout",
     "◈  Mettre dans « Mise en page PANDORA »":    "◈  Put into « PANDORA layout »",
