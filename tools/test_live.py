@@ -758,6 +758,18 @@ def coecriture_et_finalisation_live():
         "bouton/handler Affiner le découpage absent (Live)"
     assert src.index("(tog_cond,") < src.index("(tog_final,") < src.index("(tog_gen,"), \
         "ordre du panneau droit incorrect (Conducteur, Finalisation, …, Générer)"
+    # Parité Cinéma 2026-07-23 : hauteur ADAPTATIVE des boutons (plancher 46/50,
+    # l'espace libre leur revient) et rangée « Durée cible » à sélecteur CIBLÉ
+    # (sans quoi un trait se dessinait sous « Durée cible » et sous « Estimé »).
+    assert "btn.setMinimumHeight(50 if color else 46)" in src, \
+        "plancher compact des boutons (46/50) perdu — Live"
+    assert "btn.setMaximumHeight(96)" in src and "QSizePolicy.Policy.Expanding" in src, \
+        "boutons du panneau Live non adaptatifs"
+    assert "sc_lay.addStretch()" not in src, \
+        "le ressort final réintroduirait le vide en bas du panneau Live"
+    assert "_section_container(grow=True)" in src, "sections d'actions Live non extensibles"
+    assert "QWidget#ScenarioDurStripLive{{background:" in src, \
+        "rangée Durée cible Live sans sélecteur ciblé (traits parasites)"
     import core.plan_layout as pl
     live = ("=== ACTE 1 ===\nPLAN 1 — A\nDurée : 8s\nPROMPT VIDÉO : \"a\"\n\n"
             "PLAN 2 — B\nDurée : 6s\nPROMPT VIDÉO : \"b\"\n")

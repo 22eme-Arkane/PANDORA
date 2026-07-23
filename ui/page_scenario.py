@@ -776,10 +776,14 @@ class PageScenario(QWidget):
         """Rangée « Durée cible » — dans le panneau droit, entre Style et
         Ajouter des références (demande Matthieu 2026-07-23)."""
         strip = QWidget()
-        # 40 px + ligne basse : le bas de la rangée Durée cible tombe sur la même
-        # ligne que la barre d'outils texte de l'éditeur (alignement 2026-07-23).
         strip.setFixedHeight(40)
-        strip.setStyleSheet(f"background:{CP['bg1']};border-bottom:1px solid {CP['border']};")
+        # Sélecteur CIBLÉ + WA_StyledBackground : une règle sans sélecteur se
+        # propage aux enfants — l'ancien « border-bottom » global dessinait un
+        # trait sous la case « Durée cible » ET sous « Estimé » (retiré le
+        # 2026-07-23, demande Matthieu).
+        strip.setObjectName("ScenarioDurStrip")
+        strip.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
+        strip.setStyleSheet(f"QWidget#ScenarioDurStrip{{background:{CP['bg1']};}}")
         sl = QHBoxLayout(strip)
         sl.setContentsMargins(10, 2, 10, 2)
         sl.setSpacing(6)
@@ -861,7 +865,13 @@ class PageScenario(QWidget):
             # essai (retour à l'alignement GAUCHE) — mais on GARDE les hauteurs
             # compactes (46/50), les marges resserrées et les libellés courts.
             btn = QPushButton()
-            btn.setFixedHeight(50 if color else 46)
+            # Hauteur ADAPTATIVE (2026-07-23, demande Matthieu : « que Style arrive
+            # jusqu'en bas ») : 46/50 = plancher compact conservé, et les boutons se
+            # partagent l'espace libre du panneau jusqu'à 96 px. Sur une fenêtre
+            # basse, on retrouve exactement les hauteurs compactes + le défilement.
+            btn.setMinimumHeight(50 if color else 46)
+            btn.setMaximumHeight(96)
+            btn.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Expanding)
             _bd  = color or CP['border']
             _hov = color or CP['accent2_dim']
             btn.setStyleSheet(
@@ -889,6 +899,7 @@ class PageScenario(QWidget):
             title_row.addWidget(ico_lbl)
             title_row.addWidget(txt_lbl)
             title_row.addStretch()
+            bl.addStretch(1)          # bloc texte CENTRÉ quand le bouton s'agrandit
             sub_lbl = QLabel(translate(sub))
             sub_lbl.setWordWrap(True)   # 2 lignes au lieu de tronquer la description
             sub_lbl.setStyleSheet(
@@ -896,6 +907,7 @@ class PageScenario(QWidget):
             )
             bl.addLayout(title_row)
             bl.addWidget(sub_lbl)
+            bl.addStretch(1)
             btn.clicked.connect(callback)
             return btn
 
@@ -932,9 +944,14 @@ class PageScenario(QWidget):
             btn.toggled.connect(_tog)
             return btn
 
-        def _section_container():
+        def _section_container(grow: bool = False):
             c = QWidget()
             c.setStyleSheet(f"background:{CP['bg1']};")
+            # grow=True : la section suit la hauteur du panneau et redistribue
+            # l'espace à ses boutons (sections d'actions uniquement — les sections
+            # à réglages gardent leur hauteur naturelle).
+            if grow:
+                c.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Expanding)
             lay = QVBoxLayout(c)
             # Marges horizontales à 0 : les cartes vont jusqu'au bord, alignées
             # sur les en-têtes de section pleine largeur (pas de retrait de 16 px).
@@ -1052,7 +1069,7 @@ class PageScenario(QWidget):
         self._refresh_music_display()
 
         # ── Section : Scénario (analyse + co-écriture du scénario) ─────────────
-        c_scen, l_scen = _section_container()
+        c_scen, l_scen = _section_container(grow=True)
 
         self._btn_arrange = _ai_btn(
             "🔎", "Analyse", "Analyse la structure narrative du scénario", self._on_arrange,
@@ -1068,7 +1085,7 @@ class PageScenario(QWidget):
         # Étape à ne pas sauter : préparer/optimiser les plans AVANT de générer le
         # storyboard. « Mise en page PANDORA » structure le scénario en plans ;
         # « Co-écriture des plans » les réécrit un par un (fenêtre dédiée).
-        c_final, l_final = _section_container()
+        c_final, l_final = _section_container(grow=True)
 
         self._btn_format = _ai_btn(
             "📝", "Créer le découpage PANDORA", "Transforme le scénario et la note en plans sans réécrire le récit", self._on_format,
@@ -1081,7 +1098,7 @@ class PageScenario(QWidget):
         tog_final = _make_toggle("🎯  Découpage", c_final, expanded=True)
 
         # ── Section 2 : Générer depuis le scénario (repliée par défaut) ───────
-        c_gen, l_gen = _section_container()
+        c_gen, l_gen = _section_container(grow=True)
 
         self._btn_gen_characters = _ai_btn(
             "🎭", "Générer les personnages", "Identifier les personnages depuis le scénario",
@@ -1186,9 +1203,16 @@ class PageScenario(QWidget):
             (tog_style, c_style),
         ):
             sc_lay.addWidget(_tog)
-            sc_lay.addWidget(_cont)
+            # Facteur d'étirement = NOMBRE DE BOUTONS de la section : sans lui, une
+            # section de 2 boutons recevrait autant d'espace libre qu'une section de
+            # 6, et les rectangles seraient de tailles très inégales.
+            _n = _cont.layout().count() if _cont.sizePolicy().verticalPolicy() == \
+                QSizePolicy.Policy.Expanding else 0
+            sc_lay.addWidget(_cont, _n)
 
-        sc_lay.addStretch()
+        # Pas de ressort finalglobal : l'espace libre revient aux boutons des
+        # sections d'actions (hauteur adaptative) pour que « Style » ferme le
+        # panneau en bas au lieu de laisser un vide.
         scroll.setWidget(scroll_content)
         root_lay.addWidget(scroll, 1)
 
@@ -2581,6 +2605,15 @@ class PageScenario(QWidget):
         # le BPM et les drops, comme dans PANDORA | Live. Source via _decoupage_base()
         # (mise en page si présente, sinon scénario).
         dlg = StoryboardGenerateDialog(self._text_with_music(), dur_secs, sc_id, parent=self)
+        # Écriteau du panneau : comme pour les personnages, décors, etc., il annonce
+        # QUI travaille — le moteur exact, ou l'absence d'IA quand le Découpage
+        # structuré est simplement converti (demande Matthieu 2026-07-23).
+        from core.ai_provider import ai_name_for_task
+        _sb_ai = "" if dlg.is_deterministic() else ai_name_for_task("storyboard_gen")
+        self._ai_progress_lbl.setText(
+            translate("Import déterministe du Découpage — sans IA…") if not _sb_ai
+            else translate("Génération du découpage via {ai}…").format(ai=_sb_ai)
+        )
         if dlg.exec() == StoryboardGenerateDialog.DialogCode.Accepted and dlg._shots:
             count = len(dlg._shots)
             if sc_id:
@@ -2602,8 +2635,14 @@ class PageScenario(QWidget):
                 _rec.detect_and_apply(sb_api.DEFAULT_VERSION_ID)
             except Exception:
                 pass
-            self._ai_progress_lbl.setText(f"{count} {translate('plans importés dans le Storyboard ✓')}")
+            _via = _sb_ai or translate("import déterministe, sans IA")
+            self._ai_progress_lbl.setText(
+                f"{count} {translate('plans importés dans le Storyboard ✓')} — {_via}"
+            )
             self._btn_goto_storyboard.setVisible(False)   # bouton retiré (2026-07-22)
+        else:
+            # Annulation / échec : ne pas laisser l'écriteau sur « génération en cours ».
+            self._ai_progress_lbl.setText("")
 
     # ── Handlers extraction ───────────────────────────────────────────────────
 

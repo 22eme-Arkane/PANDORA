@@ -395,6 +395,9 @@ _FR_TO_EN: dict[str, str] = {
     "Génération du découpage via {ai}…":   "Generating the breakdown via {ai}…",
     "Analyse du scénario via {ai}":        "Analyzing the screenplay via {ai}",
     "Analyse du scénario via {ai}…":       "Analyzing the screenplay via {ai}…",
+    "Import déterministe du Découpage — sans IA…":
+        "Deterministic import of the breakdown — no AI…",
+    "import déterministe, sans IA":        "deterministic import, no AI",
     # Décor 7 vues — avertissement faces manquantes
     "Vues manquantes":                     "Missing views",
     "Certaines faces de décor n'ont pas pu être générées par l'API :":

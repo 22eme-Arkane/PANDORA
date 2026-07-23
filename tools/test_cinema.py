@@ -140,9 +140,9 @@ def edition_cinema_only():
                 "api.resolume_push", "ui.tab_t2v_live"):
         assert f'"{mod}"' not in exc, f".spec ne doit PLUS exclure {mod} (v1.3.0)"
     assert "BUNDLE(" in spec and "PANDORA.app" in spec, "cible macOS présente"
-    # Version bumpée — build 1.3.5 (Cinéma + Live, Windows + macOS).
+    # Version bumpée — build 1.4.0 (Cinéma + Live, Windows + macOS).
     from core.version import VERSION
-    assert VERSION.split("-")[0] == "1.3.5", f"version attendue 1.3.5[-suffixe], lue {VERSION}"
+    assert VERSION.split("-")[0] == "1.4.0", f"version attendue 1.4.0[-suffixe], lue {VERSION}"
 
 
 @test
@@ -2583,7 +2583,22 @@ def panneau_scenario_aligne_jusqu_au_bord():
     # Descriptions avec word-wrap ; 2026-07-23 : hauteurs COMPACTES (46/50) et
     # marge devant la scrollbar CONSERVÉES, centrage testé puis REFUSÉ (gauche).
     assert "sub_lbl.setWordWrap(True)" in src, "descriptions encore tronquées (pas de word-wrap)"
-    assert "else 46)" in src, "hauteur compacte des boutons (46 par défaut)"
+    # 2026-07-23 (2e retour) : la hauteur devient ADAPTATIVE — 46/50 en plancher,
+    # puis les boutons se partagent l'espace libre pour que la dernière section
+    # ferme le panneau en bas au lieu de laisser un vide.
+    assert "btn.setMinimumHeight(50 if color else 46)" in src, \
+        "plancher compact des boutons (46/50) perdu"
+    assert "btn.setMaximumHeight(96)" in src, "plafond de hauteur des boutons absent"
+    assert "QSizePolicy.Policy.Expanding" in src, "boutons du panneau non extensibles"
+    assert "sc_lay.addStretch()" not in src, \
+        "le ressort final réintroduirait le vide en bas du panneau"
+    assert "_section_container(grow=True)" in src, "sections d'actions non extensibles"
+    # Rangée « Durée cible » : sélecteur CIBLÉ — une règle sans sélecteur se propage
+    # aux enfants et retraçait un trait sous « Durée cible » et sous « Estimé ».
+    assert "QWidget#ScenarioDurStrip{{background:" in src, \
+        "rangée Durée cible sans sélecteur ciblé (traits parasites)"
+    assert "strip.setStyleSheet(f\"background:" not in src, \
+        "style non ciblé de la rangée Durée cible (traits sous les libellés)"
     assert "sc_lay.setContentsMargins(0, 0, 8, 0)" in src, \
         "espace entre les rectangles et la barre de défilement"
     # Bouton « Générer le storyboard » MIS EN AVANT : ROUGE + éclair (2026-07-23,
@@ -2604,6 +2619,30 @@ def panneau_scenario_aligne_jusqu_au_bord():
         "ordre du panneau droit incorrect (Scénario→Découpage→Générer→Références→Musique→Style)"
     assert '_make_toggle("⚡  Générer depuis le scénario"' in src, \
         "section « Générer depuis le scénario » (nom restauré 2026-07-23)"
+
+
+@test
+def ecriteau_moteur_ia_du_storyboard():
+    """La génération du storyboard renseigne l'écriteau du panneau comme les autres
+    générations : nom EXACT du moteur, ou mention explicite quand le Découpage
+    structuré est converti sans IA (demande Matthieu 2026-07-23)."""
+    import inspect
+    src = inspect.getsource(__import__("ui.page_scenario", fromlist=["_"]))
+    _sb = src[src.index("def _on_storyboard"):src.index("def _start_extraction")]
+    assert "ai_name_for_task(\"storyboard_gen\")" in _sb, \
+        "moteur exact non résolu pour le storyboard"
+    assert "Génération du découpage via {ai}…" in _sb, "écriteau « via <moteur> » absent"
+    assert "Import déterministe du Découpage — sans IA…" in _sb, \
+        "cas déterministe non annoncé (afficher un moteur IA serait faux)"
+    assert "dlg.is_deterministic()" in _sb, "le dialogue doit dire s'il utilise l'IA"
+    # Le bilan final rappelle QUI a travaillé.
+    assert "— {_via}" in _sb, "bilan final sans mention du moteur"
+    # Le dialogue expose bien l'information.
+    _dsrc = inspect.getsource(__import__("ui.dialog_storyboard_generate", fromlist=["_"]))
+    assert "def is_deterministic" in _dsrc, "dialogue storyboard : accesseur manquant"
+    from core.i18n import _FR_TO_EN
+    for k in ("Import déterministe du Découpage — sans IA…", "import déterministe, sans IA"):
+        assert k in _FR_TO_EN, f"i18n manquante : {k}"
 
 
 @test

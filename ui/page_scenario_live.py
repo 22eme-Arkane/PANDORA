@@ -735,9 +735,12 @@ class PageScenario(QWidget):
         Cinéma). 40 px + ligne basse alignée sur la barre d'outils texte."""
         strip = QWidget()
         strip.setFixedHeight(40)
-        strip.setStyleSheet(
-            f"background:{CP['bg1']};border-bottom:1px solid {CP['border']};"
-        )
+        # Sélecteur CIBLÉ + WA_StyledBackground (parité Cinéma 2026-07-23) : sans
+        # sélecteur, le « border-bottom » se propageait aux enfants et traçait un
+        # trait sous « Durée cible » et sous « Estimé ».
+        strip.setObjectName("ScenarioDurStripLive")
+        strip.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
+        strip.setStyleSheet(f"QWidget#ScenarioDurStripLive{{background:{CP['bg1']};}}")
         sl = QHBoxLayout(strip)
         sl.setContentsMargins(10, 2, 10, 2)
         sl.setSpacing(6)
@@ -817,8 +820,12 @@ class PageScenario(QWidget):
             # radius=0 par défaut (parité Cinéma 2026-07-23) : rectangles droits,
             # seuls les boutons mis en avant gardent leurs arrondis.
             btn = QPushButton()
-            # Hauteurs COMPACTES (parité Cinéma 2026-07-23 : gagner de la place).
-            btn.setFixedHeight(50 if color else 46)
+            # Hauteur ADAPTATIVE (parité Cinéma 2026-07-23) : 46/50 = plancher
+            # compact, puis les boutons se partagent l'espace libre du panneau
+            # (jusqu'à 96 px) pour que la dernière section ferme le panneau.
+            btn.setMinimumHeight(50 if color else 46)
+            btn.setMaximumHeight(96)
+            btn.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Expanding)
             _bd  = color or CP['border']
             _hov = color or CP['accent2_dim']
             btn.setStyleSheet(
@@ -846,12 +853,14 @@ class PageScenario(QWidget):
             title_row.addWidget(ico_lbl)
             title_row.addWidget(txt_lbl)
             title_row.addStretch()
+            bl.addStretch(1)          # bloc texte CENTRÉ quand le bouton s'agrandit
             sub_lbl = QLabel(translate(sub))
             sub_lbl.setStyleSheet(
                 f"color:{CP['text_dim']};font-size:8px;background:transparent;border:none;"
             )
             bl.addLayout(title_row)
             bl.addWidget(sub_lbl)
+            bl.addStretch(1)
             btn.clicked.connect(callback)
             return btn
 
@@ -884,9 +893,13 @@ class PageScenario(QWidget):
             btn.toggled.connect(_tog)
             return btn
 
-        def _section_container():
+        def _section_container(grow: bool = False):
             c = QWidget()
             c.setStyleSheet(f"background:{CP['bg1']};")
+            # grow=True : sections d'ACTIONS — elles suivent la hauteur du panneau
+            # et redistribuent l'espace à leurs boutons (parité Cinéma).
+            if grow:
+                c.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Expanding)
             lay = QVBoxLayout(c)
             lay.setContentsMargins(16, 8, 16, 8)
             lay.setSpacing(6)
@@ -1012,7 +1025,7 @@ class PageScenario(QWidget):
         self._refresh_music_display()
 
         # ── Section : Conducteur (analyse + co-écriture du conducteur) ─────────
-        c_cond, l_cond = _section_container()
+        c_cond, l_cond = _section_container(grow=True)
 
         self._btn_arrange = _ai_btn(
             "🔎", "Analyse", "Analyse la structure du conducteur (rythme, séquences)", self._on_arrange,
@@ -1028,7 +1041,7 @@ class PageScenario(QWidget):
         # Étape à ne pas sauter : préparer/optimiser les plans AVANT de générer le
         # découpage. « Mise en page PANDORA » structure le conducteur en plans ;
         # « Co-écriture des plans » les réécrit un par un (fenêtre dédiée).
-        c_final, l_final = _section_container()
+        c_final, l_final = _section_container(grow=True)
 
         self._btn_format = _ai_btn(
             "📝", "Créer le découpage", "Structure le conducteur en blocs plans optimisés pour PANDORA", self._on_format,
@@ -1041,7 +1054,7 @@ class PageScenario(QWidget):
         tog_final = _make_toggle("🎯  Découpage", c_final, expanded=True)
 
         # ── Section 2 : Générer depuis le conducteur (repliée par défaut) ───────
-        c_gen, l_gen = _section_container()
+        c_gen, l_gen = _section_container(grow=True)
 
         self._btn_gen_characters = _ai_btn(
             "🎭", "Générer les personnages", "Identifier les personnages depuis le conducteur",
@@ -1137,9 +1150,15 @@ class PageScenario(QWidget):
             (tog_music, c_music),
         ):
             sc_lay.addWidget(_tog)
-            sc_lay.addWidget(_cont)
+            # Facteur d'étirement = nombre de boutons de la section, sinon une
+            # section de 2 boutons recevrait autant d'espace qu'une de 6.
+            _grows = (_cont.sizePolicy().verticalPolicy()
+                      == QSizePolicy.Policy.Expanding)
+            _n = _cont.layout().count() if _grows else 0
+            sc_lay.addWidget(_cont, _n)
 
-        sc_lay.addStretch()
+        # Pas de ressort final : l'espace libre revient aux boutons des sections
+        # d'actions (hauteur adaptative), le panneau se ferme en bas.
         scroll.setWidget(scroll_content)
         root_lay.addWidget(scroll, 1)
 

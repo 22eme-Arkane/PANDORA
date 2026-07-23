@@ -244,6 +244,11 @@ class StoryboardGenerateDialog(QDialog):
         # Start generation immediately
         self._start()
 
+    def is_deterministic(self) -> bool:
+        """Vrai si le Découpage est structuré : conversion plan à plan, sans IA.
+        La page Scénario s'en sert pour annoncer le bon moteur dans son écriteau."""
+        return bool(self._deterministic)
+
     # ── Generation ────────────────────────────────────────────────────────────
 
     def _start(self, strict_no_merge: bool = False):

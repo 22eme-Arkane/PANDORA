@@ -105,12 +105,22 @@ n'autorise PAS à franchir les limites suivantes, qui priment sur tout :
   ne JAMAIS remettre `bypassPermissions`.)
 - **Build & repo = DOUBLE ÉDITION depuis la v1.3.0** (décision Matthieu 2026-07-02 :
   « on enlève la séparation, le Live est prêt ») : les builds Windows/macOS embarquent
-  Cinéma ET Live (chooser au démarrage), et le repo public recevra le Live au prochain
-  push. ⚠ CE PUSH SERA PARTICULIER : `origin/main` (historique scrubbé Cinéma-only) et
-  le `main` local ont des HISTOIRES DIVERGENTES → il faudra un `--force-with-lease`
-  préparé et confirmé explicitement avec Matthieu (jamais un simple push).
-- **Jamais `git push --tags`** : les tags locaux pointent sur d'anciens SHAs d'avant
-  réécriture d'historique → restaurerait le Live public.
+  Cinéma ET Live (chooser au démarrage).
+- ⚠ **CORRECTION 2026-07-23 (vérifiée sur le dépôt, signalée par Matthieu)** : les deux
+  avertissements ci-dessous étaient FAUX et sont retirés. Ce qui est réellement vrai :
+  - Le **Live est public depuis la v1.1.2** (commit `2d04553` sur `origin/main` ; tous
+    les `*_live.py`, `live_window.py`, etc. y figurent). Le prochain push ne « publie »
+    donc rien de nouveau — c'est un push de version comme les autres.
+  - **Aucune divergence d'historique** : `git rev-list --left-right --count
+    origin/main...main` renvoie `0 8` et `origin/main` est un ancêtre direct de `main`
+    → un `git push` **fast-forward** ordinaire suffit. **Pas de `--force-with-lease`**,
+    qui serait ici inutile et risqué.
+  - **Les 12 tags locaux sont déjà tous publiés** sur `origin` (`git ls-remote --tags`),
+    et tous sont dans l'historique de `main` sauf `v1.2.1`. Rien à « restaurer ».
+  - Avant d'énoncer une contrainte git, la VÉRIFIER sur le dépôt (`rev-list`,
+    `merge-base --is-ancestor`, `ls-remote`) : ces trois affirmations ont survécu des
+    semaines dans les mémoires sans jamais être confrontées aux faits.
+  - Ce qui NE change PAS : **jamais de `push` sans demande explicite de Matthieu**.
 - Fichiers de contexte Claude (PANDORA_CONTEXT/COMMS/DEVLOG) = locaux, gitignorés,
   jamais poussés.
 
