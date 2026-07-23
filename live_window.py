@@ -175,6 +175,9 @@ class _LiveNavItem(QWidget):
 # projets passe par le logo PANDORA → page de démarrage (home_requested).
 # « Image IA » AJOUTÉ à côté de « Studio IA » (réutilise ui/tab_image.py).
 _NAV_ITEMS = [
+    # Onglet Projets RÉINTRODUIT à gauche du Conducteur (demande Matthieu
+    # 2026-07-23) : la page de démarrage n'est plus qu'un lanceur d'édition.
+    ("❐", "Projets",             "projects",    "projets.png"),
     ("✎", "Conducteur",          "conducteur",  "scenario.png"),
     None,
     ("▤", "Séquences Live",      "seq_live",    "storyboard.png"),
@@ -799,6 +802,15 @@ class LiveWindow(QMainWindow):
         # retour aux projets passe par le logo → page de démarrage.
 
         # ── Conducteur (version Live du Scénario) ───────────────────────────────
+        # Page Projets (réintroduite 2026-07-23) — même page que le Cinéma ; le
+        # switch recrée la fenêtre via main._on_switch.
+        from ui.page_projects import PageProjects
+        _projects = PageProjects(self._project)
+        # Un projet sans champ « mode » reste dans l'édition courante (Live).
+        _projects.switch_requested.connect(
+            lambda d: self.switch_requested.emit({**d, "mode": d.get("mode", "live")}))
+        self._pages["projects"] = _projects
+
         conducteur = ConducteurPage()
         conducteur.navigate_requested.connect(lambda key, extra=None: self._navigate(key))
         self._pages["conducteur"] = conducteur
@@ -844,7 +856,7 @@ class LiveWindow(QMainWindow):
         # contenu (max 1360) est géré À L'INTÉRIEUR de PageLiveSettings.
         self._settings_wrap = settings
 
-        for key in ("conducteur", "seq_live", "seq_mapping", "casting",
+        for key in ("projects", "conducteur", "seq_live", "seq_mapping", "casting",
                     "accessoires", "vehicules", "image_ia", "studio",
                     "resolume", "settings"):
             self._stack.addWidget(self._settings_wrap if key == "settings"

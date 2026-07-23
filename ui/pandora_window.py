@@ -25,6 +25,9 @@ from core.i18n import tr, get_lang, set_lang, retranslate_widget, translate
 
 def _get_nav_items():
     return [
+        # Onglet Projets RÉINTRODUIT à gauche de Scénario (demande Matthieu
+        # 2026-07-23) : la page de démarrage n'est plus qu'un lanceur d'édition.
+        ("projets.png",    tr("nav.projects"),    "projects"),
         ("scenario.png",   tr("nav.scenario"),    "scenario"),
         ("storyboard.png", tr("nav.storyboard"),  "storyboard"),
         None,
@@ -482,6 +485,16 @@ class PandoraWindow(QMainWindow):
         return win
 
     def _build_pages(self):
+        # Page Projets (réintroduite 2026-07-23) : ouvrir/créer un projet depuis
+        # la fenêtre — le switch recrée la fenêtre via main._on_switch.
+        from ui.page_projects import PageProjects
+        projects = PageProjects(self._project)
+        # Un projet sans champ « mode » reste dans l'édition courante.
+        projects.switch_requested.connect(
+            lambda d: self.switch_requested.emit({**d, "mode": d.get("mode", "cinema")}))
+        self._pages["projects"] = projects
+        self._stack.addWidget(projects)
+
         scenario = PageScenario()
         scenario.navigate_requested.connect(
             lambda key, extra: self._navigate(key, extra)

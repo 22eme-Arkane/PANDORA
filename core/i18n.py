@@ -4471,6 +4471,8 @@ _FR_TO_EN: dict[str, str] = {
     "Aucun scénario disponible.\nÉcris d'abord un scénario dans l'onglet Scénario.":
         "No screenplay available.\nWrite a screenplay in the Screenplay tab first.",
     "Aucun scénario": "No screenplay",
+    "ARRI Alexa 65 grand format — grade chaud/froid, grain 35mm, key art sci-fi haut de gamme":
+        "ARRI Alexa 65 large format — warm/cool grade, 35mm grain, high-end sci-fi key art",
     "⚡  Générer": "⚡  Generate",
     "Ouvrir ou fermer le panneau": "Open or close the panel",
     "Analyser la nouvelle image ?": "Analyze the new image?",

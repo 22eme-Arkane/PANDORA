@@ -212,6 +212,13 @@ if __name__ == "__main__":
         if not icon.isNull():
             win.setWindowIcon(icon)
         state["window"] = win
+        # Lancement depuis la carte Cinéma/Live (sans projet) → arriver sur
+        # l'onglet Projets pour ouvrir ou créer (demande Matthieu 2026-07-23).
+        if data.get("_start_on_projects"):
+            try:
+                win._navigate("projects")
+            except Exception:
+                pass
         win.showMaximized()
         # Force taskbar icon refresh — Windows sometimes ignores the icon set before show()
         from PyQt6.QtCore import QTimer
@@ -226,6 +233,10 @@ if __name__ == "__main__":
     if not icon.isNull():
         start_page.setWindowIcon(icon)
     start_page.project_selected.connect(_open_project)
+    # Clic direct sur une carte Cinéma/Live → fenêtre SANS projet, ouverte sur
+    # l'onglet Projets (le choix/création du projet se fait là, 2026-07-23).
+    start_page.mode_launched.connect(
+        lambda mode: _open_project({"mode": mode, "_start_on_projects": True}))
     state["start"] = start_page
     start_page.show()
     start_page.raise_()

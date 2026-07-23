@@ -1242,7 +1242,10 @@ def mise_en_scene_plan_de_feu():
     assert wsrc.index('"storyboard"') < wsrc.index('"mise_en_scene"'), "Mise en scène après Storyboard"
     assert wsrc.index('"plan_de_feu"') < wsrc.index('"camera"') < wsrc.index('"doublage"'), \
         "Technique : Plan de feu avant Image & Son puis Doublage"
-    assert '("projets.png"' not in wsrc, "Projets retiré du dashboard global"
+    # 2026-07-23 (2e passe) : Projets RÉINTRODUIT à gauche de Scénario — la page
+    # de démarrage n'est plus qu'un lanceur d'édition.
+    assert '("projets.png"' in wsrc and wsrc.index('"projects"') < wsrc.index('"scenario"'), \
+        "onglet Projets réintroduit à gauche de Scénario"
     # Synchro des prompts : tient compte de la mise en scène
     sp = inspect.getsource(__import__("api.screenplay", fromlist=["_"]))
     assert "mise_en_scene" in sp and "import core.staging" in sp
@@ -1322,8 +1325,9 @@ def studio_musique_ia_et_image_ia():
     assert hasattr(pn, "_cancel_btn") and hasattr(pn, "_res_value"), "Annuler + résolution dérivée"
     assert pn._progress.isHidden() and pn._cancel_btn.isHidden(), \
         "barre de chargement / Annuler masqués tant qu'inactif"
-    assert not pn._preview.isHidden() and "attente" in pn._preview.text().lower(), \
-        "aperçu visible avec placeholder (évite les trous)"
+    # 2026-07-23 : l'aperçu DISPARAÎT tant qu'aucune image (plus de rectangle
+    # « En attente d'aperçu »).
+    assert pn._preview.isHidden(), "aperçu masqué tant qu'aucune image générée"
     # Résolution : le combo 4K/2K/1K est SUPPRIMÉ (doublon avec la taille). Largeur
     # et Hauteur sont TOUJOURS visibles, saisie directe sans flèches (NoButtons), et
     # un template les pré-remplit. Les menus déroulants s'ouvrent vers le bas.
@@ -2572,8 +2576,12 @@ def panneau_scenario_aligne_jusqu_au_bord():
     # Descriptions sur 2 lignes + hauteur de bouton suffisante.
     assert "sub_lbl.setWordWrap(True)" in src, "descriptions encore tronquées (pas de word-wrap)"
     assert "else 58)" in src, "hauteur de bouton non augmentée pour 2 lignes (58 par défaut)"
-    # Bouton « Générer le storyboard » MIS EN AVANT (cadre vert, façon « Tout générer »).
-    assert 'self._on_storyboard, color=CP["green"]' in src, "« Générer le storyboard » pas mis en avant (cadre coloré)"
+    # Bouton « Générer le storyboard » MIS EN AVANT : ROUGE + éclair (2026-07-23,
+    # reprend l'identité de l'ex-« Tout générer », désormais masqué).
+    assert 'self._on_storyboard, color=CP.get("red"' in src, \
+        "« Générer le storyboard » pas mis en avant (cadre rouge)"
+    assert '"⚡", "Générer le storyboard"' in src, "éclair absent du bouton storyboard"
+    assert "self._btn_generate_all.hide()" in src, "« Tout générer » doit être masqué"
     # Architecture 2026-07-21 : Scénario puis Découpage PANDORA.
     assert '_make_toggle("📖  Scénario"' in src, "section Scénario (ex-IA) absente"
     assert '_make_toggle("🎯  Découpage"' in src, "section Découpage absente"

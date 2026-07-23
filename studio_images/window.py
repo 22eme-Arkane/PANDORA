@@ -452,9 +452,12 @@ class StudioImagesPanel(QWidget):
         _eng_head.setSpacing(6)
         _eng_head.addWidget(self._section_label("MOTEUR DE GÉNÉRATION"))
         _eng_head.addStretch(1)
+        # ☰ Action (Sauvegarder / Ouvrir) — même principe que les autres pages
+        # (demande Matthieu 2026-07-23) ; les boutons sources restent vivants.
         _btn_save, _btn_open = self._build_save_open_buttons()
-        _eng_head.addWidget(_btn_save)
-        _eng_head.addWidget(_btn_open)
+        from ui.widgets import make_actions_menu_button
+        self._btn_img_actions = make_actions_menu_button(self, [_btn_save, _btn_open])
+        _eng_head.addWidget(self._btn_img_actions)
         lay.addLayout(_eng_head)
         lay.addWidget(self._model)
 
@@ -509,18 +512,20 @@ class StudioImagesPanel(QWidget):
         self._prompt_lib.setToolTip("Prompts enregistrés — sélectionne pour charger")
         self._prompt_lib.activated.connect(self._on_prompt_selected)
         prompt_head.addWidget(self._prompt_lib)
-        save_p = QPushButton("💾")
+        # Boutons 💾/🗑 RETIRÉS de l'affichage (demande Matthieu 2026-07-23) —
+        # widgets vivants et branchés pour les réactiver d'un mot.
+        save_p = QPushButton("💾", self)
         save_p.setObjectName("secondary")
         save_p.setFixedWidth(36)
         save_p.setToolTip("Enregistrer le prompt actuel")
         save_p.clicked.connect(self._save_prompt_clicked)
-        prompt_head.addWidget(save_p)
-        del_p = QPushButton("🗑")
+        save_p.hide()
+        del_p = QPushButton("🗑", self)
         del_p.setObjectName("secondary")
         del_p.setFixedWidth(36)
         del_p.setToolTip("Supprimer le prompt sélectionné")
         del_p.clicked.connect(self._delete_prompt_clicked)
-        prompt_head.addWidget(del_p)
+        del_p.hide()
         lay.addLayout(prompt_head)
 
         self._prompt = QTextEdit()
@@ -603,28 +608,31 @@ class StudioImagesPanel(QWidget):
         # dimensionné EXACTEMENT à l'image générée (mise à l'échelle pour tenir
         # dans la zone) → pas de bandes noires autour. Centré ; le ressort ajouté
         # en bas de colonne absorbe l'espace libre (contenu calé en haut).
-        self._preview = QLabel(self._PREVIEW_PLACEHOLDER)
-        self._preview.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self._preview.setStyleSheet(
-            f"QLabel{{background: {CP['bg2']}; border: 1px solid {CP['border_bright']}; "
-            f"border-radius: 12px; color: {CP['text_secondary']}; font-size: 14px;}}")
-        self._preview.setFixedSize(*self._PREVIEW_EMPTY_SIZE)
-        lay.addWidget(self._preview, 0, Qt.AlignmentFlag.AlignHCenter)
-
-        # Actions image
+        # Actions image — AU-DESSUS de l'aperçu (demande Matthieu 2026-07-23).
         actions = QHBoxLayout()
         self._discuss_btn = QPushButton("💬  Analyser avec Claude")
         self._discuss_btn.setObjectName("secondary")
         self._discuss_btn.setToolTip("Envoie l'image générée à Claude pour qu'il l'analyse")
         self._discuss_btn.clicked.connect(self._send_result_to_claude)
         self._discuss_btn.setEnabled(False)
-        self._open_dir_btn = QPushButton("📂  Voir le fichier")
+        self._open_dir_btn = QPushButton("📁  Dossier de destination")
         self._open_dir_btn.setObjectName("secondary")
-        self._open_dir_btn.setToolTip("Ouvre le dossier avec l'image sélectionnée")
+        self._open_dir_btn.setToolTip("Ouvre le dossier de sortie avec l'image sélectionnée")
         self._open_dir_btn.clicked.connect(self._open_dir)
         actions.addWidget(self._discuss_btn, 1)
         actions.addWidget(self._open_dir_btn, 1)
         lay.addLayout(actions)
+
+        # Aperçu : MASQUÉ tant qu'aucune image (plus de rectangle « En attente
+        # d'aperçu », demande Matthieu 2026-07-23) ; dimensionné EXACTEMENT à
+        # l'image générée ensuite → pas de bandes noires autour.
+        self._preview = QLabel("")
+        self._preview.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self._preview.setStyleSheet(
+            f"QLabel{{background: {CP['bg2']}; border: 1px solid {CP['border_bright']}; "
+            f"border-radius: 12px; color: {CP['text_secondary']}; font-size: 14px;}}")
+        self._preview.setVisible(False)
+        lay.addWidget(self._preview, 0, Qt.AlignmentFlag.AlignHCenter)
 
         # Historique de session
         self._hist_row = QHBoxLayout()
@@ -1468,20 +1476,22 @@ class StudioImagesPanel(QWidget):
     _PREVIEW_MAX_H       = 600
 
     def _clear_preview(self):
-        """Remet l'aperçu sur son état vide : petit cadre + placeholder centré."""
+        """Aucune image → l'aperçu DISPARAÎT (plus de rectangle placeholder,
+        demande Matthieu 2026-07-23)."""
         self._preview.setPixmap(QPixmap())
-        self._preview.setText(self._PREVIEW_PLACEHOLDER)
-        self._preview.setFixedSize(*self._PREVIEW_EMPTY_SIZE)
+        self._preview.setText("")
+        self._preview.setVisible(False)
 
     def _show_preview(self, path):
         # L'image affichée devient celle jointe au prochain message Claude
         self._current_path = path
         self._pending_images = [path]
         self._discuss_btn.setEnabled(True)
+        self._preview.setVisible(True)
         pm = self._load_pixmap(path)
         if pm is None or pm.isNull():
             self._preview.setPixmap(QPixmap())
-            self._preview.setText("🅥  Logo vectoriel SVG généré\n\nOuvre-le via 📂 Voir le fichier")
+            self._preview.setText("🅥  Logo vectoriel SVG généré\n\nOuvre-le via 📁 Dossier de destination")
             self._preview.setFixedSize(*self._PREVIEW_EMPTY_SIZE)
             return
         # Affiche à la taille réelle de l'image, plafonnée à la zone max (on ne

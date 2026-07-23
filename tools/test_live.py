@@ -1324,11 +1324,12 @@ def fenetre_live():
                < _bar_lay.indexOf(w._sidebar._items["settings"])
                for k in w._sidebar._items if k != "settings"), \
         "Paramètres tout au bord, en bas à droite"
-    # 2026-07-23 : onglet Projets RETIRÉ (retour projets via le logo) ; Image IA
-    # ajouté à côté de Studio IA.
+    # 2026-07-23 (2e passe) : onglet Projets RÉINTRODUIT à gauche du Conducteur
+    # (la page de démarrage n'est plus qu'un lanceur d'édition) ; Image IA
+    # reste à côté de Studio IA.
     from live_window import _NAV_ITEMS as _NI
-    assert _NI[0][2] == "conducteur", "Conducteur en premier (Projets retiré)"
-    assert all(e is None or e[2] != "projects" for e in _NI), "onglet Projets retiré"
+    assert _NI[0][2] == "projects" and _NI[1][2] == "conducteur", \
+        "Projets en premier, Conducteur juste après"
     assert _NI[-3][2] == "image_ia" and _NI[-2][2] == "studio", \
         "Image IA à côté de Studio IA"
     # Paramètres pleine largeur (2026-07-23) : la barre de défilement colle au

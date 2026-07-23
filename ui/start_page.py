@@ -167,8 +167,10 @@ class _Background(QWidget):
 
     def __init__(self, parent=None):
         super().__init__(parent)
+        # v3 (2026-07-23) : texture organique bleu nuit + circuits dorés générée
+        # par Matthieu dans le Studio Images (bords denses, centre dégagé).
         self._background_pixmap = QPixmap(
-            os.path.join(_ASSETS, "start_background_v2.png")
+            os.path.join(_ASSETS, "start_background_v3.jpg")
         )
 
     def paintEvent(self, event):
@@ -587,6 +589,7 @@ class StartPage(_Background):
     """Fenêtre de démarrage unique Cinéma/Live + projets."""
 
     project_selected = pyqtSignal(dict)
+    mode_launched = pyqtSignal(str)   # clic Cinéma/Live → ouverture directe (2026-07-23)
     lang_changed = pyqtSignal(str)
 
     def __init__(self, allow_live: bool = True, parent=None):
@@ -672,10 +675,13 @@ class StartPage(_Background):
         grid.setColumnStretch(3, 75)
         grid.setColumnStretch(4, 24)
 
-        self._cinema = _ModeCard("cinema", os.path.join(_ASSETS, "start_cinema_hero_v3.png"))
+        # v5 (2026-07-23) : astronaute de profil devant Saturne (Studio Images).
+        self._cinema = _ModeCard("cinema", os.path.join(_ASSETS, "start_cinema_hero_v5.jpg"))
         self._live = _ModeCard("live", os.path.join(_ASSETS, "start_live_hero_v4.png"))
-        self._cinema.selected.connect(self.set_mode)
-        self._live.selected.connect(self.set_mode)
+        # Clic = OUVERTURE DIRECTE de l'édition (demande Matthieu 2026-07-23) —
+        # la page n'est plus un sélecteur : plus de Nouveau/Ouvrir/Récents ici.
+        self._cinema.selected.connect(self._launch_mode)
+        self._live.selected.connect(self._launch_mode)
         self._live.set_available(allow_live)
         grid.addWidget(self._cinema, 0, 1)
         grid.addWidget(self._live, 0, 3)
@@ -757,6 +763,13 @@ class StartPage(_Background):
             2,
             alignment=Qt.AlignmentFlag.AlignCenter,
         )
+        # Rangée basse MASQUÉE (demande Matthieu 2026-07-23) : Nouveau/Ouvrir et
+        # Projets récents vivent désormais dans l'onglet Projets de chaque
+        # édition — la page de démarrage n'est plus qu'un lanceur. Widgets
+        # gardés vivants (refresh des récents inoffensif, réactivables d'un mot).
+        actions.hide()
+        recent_panel.hide()
+        bottom_separator.hide()
         root.addLayout(grid)
         root.addStretch(1)
 
@@ -813,6 +826,14 @@ class StartPage(_Background):
         self._new_action.set_mode(mode)
         self._open_action.set_mode(mode)
         self._rebuild_recents()
+
+    def _launch_mode(self, mode: str):
+        """Clic sur une carte = OUVERTURE DIRECTE de l'édition (2026-07-23) —
+        l'onglet Projets de la fenêtre prend le relais pour ouvrir/créer."""
+        if mode not in _MODE_COLORS or (mode == "live" and not self._allow_live):
+            return
+        self.set_mode(mode)
+        self.mode_launched.emit(mode)
 
     def _scan_project_locations(self):
         try:

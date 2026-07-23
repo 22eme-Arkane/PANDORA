@@ -2291,7 +2291,8 @@ class PageStoryboard(QWidget):
         # (caché) passe dessous pour ne plus décaler la ligne.
         lay.addWidget(self._build_shots_toolbar())
         lay.addWidget(_hw)
-        lay.addWidget(_sep())
+        # (pas de _sep() ici : la barre d'outils a déjà sa ligne basse — le
+        # séparateur créait une DOUBLE ligne sous « Action », retour 2026-07-23.)
 
         # ── Scrollbar horizontale en haut + zone de plans (avec marges) ──────
         self._top_hscroll = QScrollBar(Qt.Orientation.Horizontal)

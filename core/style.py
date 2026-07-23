@@ -21,6 +21,50 @@ GROUPS = [
 STYLES = [
 
     # ── CINÉMA ────────────────────────────────────────────────────────────────
+    # « Arri 65 » en PREMIÈRE position (demande Matthieu 2026-07-23) : grade
+    # cinéma grand format signature — le prompt complet est injecté tel quel.
+    {
+        "key":          "arri_65",
+        "group":        "cinema",
+        "name":         "Arri 65",
+        "icon":         "🎥",
+        "description":  "ARRI Alexa 65 grand format — grade chaud/froid, grain 35mm, key art sci-fi haut de gamme",
+        "image_suffix": (
+            "Shot on ARRI Alexa 65, large format cinema camera, anamorphic-style depth of "
+            "field with soft falloff on background elements. Rich cinematic color grade: "
+            "warm amber highlights that never clip, deep dense blacks with retained shadow "
+            "detail, cool blue-cyan rim light contrasting the warm key light. Fine 35mm film "
+            "grain visible in dark areas, subtle organic lens flare on bright edges, slight "
+            "chromatic aberration at high-contrast borders. Soft directional lighting "
+            "creating natural falloff across the face, shallow depth of field isolating the "
+            "subject from a softly blurred atmospheric background. Photorealistic, high-end "
+            "sci-fi feature film key art quality, moody and contemplative atmosphere, "
+            "painterly light diffusion, subtle haze/atmosphere in the air catching the "
+            "light. Color palette: deep space black, warm gold/amber, cool blue-teal, muted "
+            "skin tones with soft contrast."),
+        "image_suffix_no_cam": (
+            "Rich cinematic color grade: warm amber highlights that never clip, deep dense "
+            "blacks with retained shadow detail, cool blue-cyan rim light contrasting the "
+            "warm key light. Fine 35mm film grain visible in dark areas, subtle organic "
+            "lens flare on bright edges, slight chromatic aberration at high-contrast "
+            "borders. Soft directional lighting with natural falloff, softly blurred "
+            "atmospheric background. Photorealistic, high-end sci-fi feature film key art "
+            "quality, moody and contemplative atmosphere, painterly light diffusion, subtle "
+            "haze in the air catching the light. Color palette: deep space black, warm "
+            "gold/amber, cool blue-teal, muted skin tones with soft contrast."),
+        "video_suffix": (
+            "shot on ARRI Alexa 65 large format, anamorphic depth of field with soft "
+            "falloff, warm amber highlights, deep dense blacks with shadow detail, cool "
+            "blue-cyan rim light against warm key light, fine 35mm film grain, subtle "
+            "organic lens flare, photorealistic high-end sci-fi feature film, moody "
+            "contemplative atmosphere, painterly light diffusion, atmospheric haze"),
+        "video_suffix_no_cam": (
+            "warm amber highlights, deep dense blacks with shadow detail, cool blue-cyan "
+            "rim light against warm key light, fine 35mm film grain, subtle organic lens "
+            "flare, photorealistic high-end sci-fi feature film, moody contemplative "
+            "atmosphere, painterly light diffusion, atmospheric haze"),
+        "color":        "#e8b34b",
+    },
     {
         "key":             "realistic",
         "group":           "cinema",

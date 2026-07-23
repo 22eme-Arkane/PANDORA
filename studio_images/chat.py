@@ -14,7 +14,8 @@ from PyQt6.QtCore import QThread, pyqtSignal
 _CHAT_MODEL  = "claude-sonnet-5"
 _SYNTH_MODEL = "claude-sonnet-5"
 # Sonnet 5 active la réflexion adaptative si `thinking` est omis → désactivée ici
-# (max_tokens courts : 500-700) pour ne pas rogner la réponse.
+# pour que tout le budget de sortie serve à la réponse. (Plafonds relevés le
+# 2026-07-23 : chat 8192 / synthèse 2048 — à 700, les réponses étaient tronquées.)
 _NO_THINK = {"type": "disabled"}
 
 # Nombre de tours utilisateur récents pour lesquels on renvoie les images en pleine
@@ -185,8 +186,10 @@ class ChatWorker(QThread):
         messages = to_api_messages(self._history)
         for attempt in range(3):
             try:
+                # 8192 (plafond chat/synthèse) : à 700, les réponses détaillées
+                # étaient tronquées en plein milieu (vécu Matthieu 2026-07-23).
                 text = chat(_CHAT_SYSTEM, messages, tier="creative",
-                            max_tokens=700, task="element_chat")
+                            max_tokens=8192, task="element_chat")
                 self.done.emit(text.strip())
                 return
             except Exception as e:
@@ -232,7 +235,7 @@ class SynthPromptWorker(QThread):
             for attempt in range(3):
                 try:
                     text = complete(_SYNTH_SYSTEM, user_msg, tier="creative",
-                                    max_tokens=500, task="element_chat")
+                                    max_tokens=2048, task="element_chat")
                     self.done.emit(text.strip())
                     return
                 except Exception as e:

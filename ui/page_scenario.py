@@ -422,11 +422,21 @@ class PageScenario(QWidget):
         ]
         for _act, _src in self._scn_actions_pairs:
             _act.triggered.connect(_src.click)
+        # « Tout générer » vit DANS le menu Action (demande Matthieu 2026-07-23 :
+        # retiré du bas du panneau mais accessible pour qui veut encore l'utiliser).
+        # Libellé fixe : le bouton source n'a pas de text() (contenu par layout).
+        self._act_gen_all = _scn_menu.addAction("⚡  " + translate("Tout générer"))
+        self._act_gen_all.setToolTip(
+            "Personnages · Décors · Accessoires · HMC · Véhicules · Storyboard · Images · Moods")
+        # .click() sur le bouton caché : respecte l'état désactivé (_set_ai_busy).
+        self._act_gen_all.triggered.connect(lambda: self._btn_generate_all.click())
         def _sync_scn_actions_menu():
             for _act, _src in self._scn_actions_pairs:
                 _act.setText(_src.text())
                 _act.setToolTip(_src.toolTip())
                 _act.setEnabled(_src.isEnabled())
+            self._act_gen_all.setEnabled(
+                hasattr(self, "_btn_generate_all") and self._btn_generate_all.isEnabled())
         _scn_menu.aboutToShow.connect(_sync_scn_actions_menu)
         self._btn_scn_actions.setMenu(_scn_menu)
         # Le bouton « Action » vit désormais dans la barre d'outils texte (même
@@ -1081,9 +1091,11 @@ class PageScenario(QWidget):
         )
         # « Générer le storyboard » (ancien nom repris le 2026-07-23) : dans la
         # section Générer, derrière « Générer les véhicules » ; garde ses arrondis.
+        # ROUGE + éclair (demande Matthieu 2026-07-23) : il reprend l'identité
+        # visuelle de l'ex-« Tout générer », masqué pour le moment.
         self._btn_storyboard = _ai_btn(
-            "🎬", "Générer le storyboard", "Construit le storyboard depuis le découpage — ou le scénario",
-            self._on_storyboard, color=CP["green"], radius=8,
+            "⚡", "Générer le storyboard", "Construit le storyboard depuis le découpage — ou le scénario",
+            self._on_storyboard, color=CP.get("red", "#ff4f6a"), radius=8,
         )
         for _b in (
             self._btn_gen_characters, self._btn_gen_decors, self._btn_gen_accessories,
@@ -1305,6 +1317,9 @@ class PageScenario(QWidget):
         _ga_btn_lay.addLayout(_ga_btn_row)
         _ga_btn_lay.addWidget(_ga_btn_sub)
         ga_lay.addWidget(self._btn_generate_all)
+        # « Tout générer » MASQUÉ pour le moment (demande Matthieu 2026-07-23) —
+        # widget vivant : _set_ai_busy et _on_generate_all restent branchés.
+        self._btn_generate_all.hide()
 
         root_lay.addWidget(gen_all_zone)
         return w
@@ -1535,9 +1550,14 @@ class PageScenario(QWidget):
     # ── Durée ─────────────────────────────────────────────────────────────────
 
     def _on_dur_defined_toggled(self, checked: bool):
-        """Affiche/masque les spinboxes durée selon la case à cocher."""
+        """Affiche/masque les spinboxes durée selon la case à cocher.
+        L'ESTIMATION disparaît quand la durée cible est active (retour Matthieu
+        2026-07-23) — la rangée garde ainsi la même largeur au lieu de pousser
+        le panneau (spinboxes + estimation ne tiennent pas ensemble en 300 px)."""
         self._dur_min.setVisible(checked)
         self._dur_sec.setVisible(checked)
+        if hasattr(self, "_dur_estimate_lbl"):
+            self._dur_estimate_lbl.setVisible(not checked)
         self._schedule_autosave()
 
     @staticmethod
@@ -2300,8 +2320,10 @@ class PageScenario(QWidget):
         from api.screenplay import FormatPandoraWorker
         from core.ai_provider import ai_name_for_task
         self._set_ai_busy(True)
+        # 'decoupage' (et pas 'screenplay') : depuis le routage du 2026-07-23 le
+        # Découpage tourne sur Opus 4.8 — le libellé doit nommer le VRAI moteur.
         self._ai_progress_lbl.setText(
-            f"Découpage PANDORA en cours via {ai_name_for_task('screenplay')}…")
+            f"Découpage PANDORA en cours via {ai_name_for_task('decoupage')}…")
         self._btn_reopen_window.setVisible(False)
         self._btn_undo_action.setVisible(False)
         self._result_area.clear()
@@ -2659,7 +2681,7 @@ class PageScenario(QWidget):
         from core.ai_provider import ai_name_for_task
         dlg.setWindowTitle(
             f"{translate('Découpage PANDORA — Aperçu')} — "
-            f"{ai_name_for_task('screenplay')}")
+            f"{ai_name_for_task('decoupage')}")
         dlg.resize(900, 680)
         dlg.setStyleSheet(
             f"QDialog{{background:{CP['bg1']};}}"
