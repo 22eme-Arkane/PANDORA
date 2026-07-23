@@ -2690,16 +2690,24 @@ def style_visuel_section_storyboard():
     mlegacy = build_mood_prompt({"id": "w", "seedance_prompt": base, "shot_size": "GP"},
                                 "shot on ARRI Alexa 65")
     assert "arri alexa 65" in mlegacy.lower(), "rétro-compat : style via suffixe projet"
-    # 7) Section « STYLE VISUEL » de la note de réalisation extraite proprement
-    #    (sans déborder sur la section suivante) et fusionnée à la création.
-    from core.direction_note import section_text
+    # 7) Style visuel extrait de la note de réalisation, de façon TOLÉRANTE :
+    #    a) la section « STYLE VISUEL » quand elle est renseignée ;
+    from core.direction_note import section_text, visual_style_from_note
     note = ("## INTENTION GÉNÉRALE\nx\n\n## STYLE VISUEL\ngrain lourd, désaturé\n\n"
             "## SON ET MUSIQUE\nnappe grave\n")
-    ns = section_text(note, "STYLE VISUEL")
-    assert ns == "grain lourd, désaturé", f"extraction note STYLE VISUEL: {ns!r}"
+    assert section_text(note, "STYLE VISUEL") == "grain lourd, désaturé", "extraction section directe"
+    assert visual_style_from_note(note) == "grain lourd, désaturé", "style depuis la section"
+    #    b) SINON les lignes de style rangées ailleurs par l'Analyse (cas réel FIGHTER :
+    #       « - Style graphique global façon Arcane… » sous « INTENTIONS ISSUES DE… »).
+    note2 = ("## STYLE VISUEL\n\n\n## INTENTIONS ISSUES DE L'ANALYSE DU SCÉNARIO\n"
+             "- Style graphique global façon « Arcane », rendu 3D peint à la main.\n"
+             "- Lumière rasante de fin de journée.\n- Durées : 6-8s.\n")
+    _vs = visual_style_from_note(note2)
+    assert "Arcane" in _vs and "peint à la main" in _vs, f"repli intentions d'analyse: {_vs!r}"
+    assert "Durées" not in _vs, "ne doit pas ramasser les lignes non-style"
     dsrc = inspect.getsource(__import__("ui.dialog_storyboard_generate", fromlist=["_"]))
-    assert "get_video_suffix()" in dsrc and "section_text" in dsrc and "STYLE VISUEL" in dsrc, \
-        "dialogue storyboard : style (projet + note) non capturé à la sauvegarde"
+    assert "get_video_suffix()" in dsrc and "visual_style_from_note" in dsrc, \
+        "dialogue storyboard : style (projet + note tolérante) non capturé à la sauvegarde"
     # 8) L'aperçu « Prompt envoyé à Seedance » (studio vidéo) reflète le prompt RÉEL :
     #    le style reste dans le corps (traduit) et n'est PAS recollé → pas de doublon.
     tsrc = inspect.getsource(__import__("ui.tab_t2v", fromlist=["_"]))

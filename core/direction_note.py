@@ -90,6 +90,40 @@ def section_text(value, title: str) -> str:
     return "\n".join(out).strip()
 
 
+# Lignes qui DÉCLARENT un style visuel (utile quand l'Analyse range le style dans
+# « INTENTIONS ISSUES DE L'ANALYSE » plutôt que dans la section « STYLE VISUEL »).
+_STYLE_DECL_RE = re.compile(
+    r"(style\s+graphique|style\s+d['’]image|style\s+visuel|style\s+d['’]animation|"
+    r"rendu\s+\w+|palette|look\s+visuel)",
+    re.IGNORECASE,
+)
+
+
+def visual_style_from_note(value) -> str:
+    """Style visuel décrit dans la note de réalisation, de façon TOLÉRANTE :
+    1) le contenu de la section « STYLE VISUEL » s'il est renseigné ;
+    2) sinon, les lignes qui déclarent un style ailleurs dans la note (ex. la puce
+       « - Style graphique global façon "Arcane"… » rangée par l'Analyse dans la
+       section « INTENTIONS ISSUES DE L'ANALYSE DU SCÉNARIO »).
+    Chaîne vide si rien trouvé. Ne lève jamais."""
+    try:
+        sec = section_text(value, "STYLE VISUEL").strip()
+        if sec:
+            return sec
+        text = normalize_note(value)
+        hits = []
+        for line in text.splitlines():
+            s = line.strip().lstrip("-•*").strip()
+            if not s or s.startswith("#"):
+                continue
+            low = s.lower()
+            if low.startswith("style ") or _STYLE_DECL_RE.search(low):
+                hits.append(s)
+        return " ".join(hits).strip()
+    except Exception:
+        return ""
+
+
 def extract_from_analysis(analysis: str) -> str:
     """Extrait la section consacrée à la note depuis une analyse dramaturgique.
 

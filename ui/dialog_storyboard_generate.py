@@ -415,11 +415,13 @@ class StoryboardGenerateDialog(QDialog):
                 _note_style = ""
                 try:
                     import core.scenario as _sc_api
-                    from core.direction_note import section_text as _sec_text
+                    from core.direction_note import visual_style_from_note as _vsn
                     _sc = _sc_api.get_scenario(self._scenario_id) if self._scenario_id else None
                     if _sc:
-                        _note_style = _sec_text(_sc.get("direction_note", ""),
-                                                "STYLE VISUEL").strip()
+                        # TOLÉRANT : section « STYLE VISUEL » de la note SINON les lignes
+                        # de style rangées ailleurs par l'Analyse (« Style graphique
+                        # façon Arcane… ») — cas réel FIGHTER 2026-07-24.
+                        _note_style = _vsn(_sc.get("direction_note", "")).strip()
                 except Exception:
                     _note_style = ""
                 _style_txt = ", ".join(p for p in (_base_style, _note_style) if p)
