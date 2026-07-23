@@ -53,13 +53,20 @@ Retourne uniquement un objet JSON valide :
 
 
 def _image_content(path: str) -> dict:
-    mime = {
-        ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".png": "image/png",
-        ".webp": "image/webp", ".bmp": "image/bmp",
-    }.get(Path(path).suffix.lower(), "image/jpeg")
-    with open(path, "rb") as fh:
-        data = base64.standard_b64encode(fh.read()).decode("ascii")
-    return {"type": "image", "source": {"type": "base64", "media_type": mime, "data": data}}
+    # Redimensionnée + réencodée JPEG avant envoi : l'API vision refuse les images
+    # trop lourdes (~5 Mo) — un portrait Nano Banana PNG brut dépassait la limite
+    # → erreur 400 invalid_request_error (vécu 2026-07-23).
+    try:
+        from api.element_chat import image_block
+        return image_block(path, max_px=1024)
+    except Exception:
+        mime = {
+            ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".png": "image/png",
+            ".webp": "image/webp", ".bmp": "image/bmp",
+        }.get(Path(path).suffix.lower(), "image/jpeg")
+        with open(path, "rb") as fh:
+            data = base64.standard_b64encode(fh.read()).decode("ascii")
+        return {"type": "image", "source": {"type": "base64", "media_type": mime, "data": data}}
 
 
 def _parse_json(raw: str) -> dict:

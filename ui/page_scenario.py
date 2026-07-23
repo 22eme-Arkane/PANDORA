@@ -476,8 +476,10 @@ class PageScenario(QWidget):
         # Colonne de lecture centrée (largeur max) : texte aligné à GAUCHE dans une
         # colonne centrée sur la page → lignes lisibles au lieu de traverser tout
         # l'écran (retour Matthieu 2026-07-06 : « bloc indigeste, lignes trop longues »).
-        from ui.widgets import install_reading_column
+        from ui.widgets import install_reading_column, scrollbar_on_left
         install_reading_column(self._editor_text, max_width=820, center=True)
+        # Scrollbar verticale au bord GAUCHE (côté GUIDE), texte toujours LTR.
+        scrollbar_on_left(self._editor_text)
         self._editor_text.textChanged.connect(self._schedule_autosave)
         self._editor_text.textChanged.connect(self._update_dur_estimate)
 
@@ -512,6 +514,7 @@ class PageScenario(QWidget):
         self._direction_note_edit.document().setDocumentMargin(48)
         self._direction_note_edit.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         install_reading_column(self._direction_note_edit, max_width=820, center=True)
+        scrollbar_on_left(self._direction_note_edit)
         self._direction_note_edit.setPlaceholderText(translate(
             "Note destinée au découpage : style visuel, temporalité, rythme de montage, "
             "durée des plans, grammaire caméra, continuité, son et contraintes."
@@ -533,6 +536,7 @@ class PageScenario(QWidget):
         self._layout_view.document().setDocumentMargin(48)
         self._layout_view.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         install_reading_column(self._layout_view, max_width=820, center=True)
+        scrollbar_on_left(self._layout_view)
         self._layout_view.setPlaceholderText(translate(
             "Clique « Créer le découpage PANDORA » pour générer des fiches de plans : "
             "source narrative, intention, rythme, prompt visuel, continuité et propositions "
@@ -1015,7 +1019,9 @@ class PageScenario(QWidget):
         )
         l_music.addWidget(self._btn_analyze_music)
 
-        tog_music = _make_toggle("♫  Musique", c_music, expanded=False)
+        # 🎵 (émoji pleine largeur, comme 🎨/📖/🎯/⚡) — le glyphe étroit « ♫ »
+        # décalait le libellé par rapport aux autres sections (retour 2026-07-23).
+        tog_music = _make_toggle("🎵  Musique", c_music, expanded=False)
 
         self._refresh_music_display()
 
@@ -1098,7 +1104,7 @@ class PageScenario(QWidget):
             f"QPushButton:disabled{{opacity:0.35;border-color:{CP['border']};}}"
         )
         self._btn_generate_all.clicked.connect(self._on_generate_all)
-        tog_gen = _make_toggle("⚡  Générer", c_gen, expanded=True)
+        tog_gen = _make_toggle("⚡  Générer depuis le scénario", c_gen, expanded=True)
 
         # ── Style pictural du film — SECTION REPLIABLE comme les autres du
         # panneau (demande Matthieu 2026-07-23), tout en haut ──
@@ -1136,20 +1142,19 @@ class PageScenario(QWidget):
         l_style.addWidget(self._film_style_combo)
         tog_style = _make_toggle("🎭  Style", c_style, expanded=False)
 
-        # ── Durée cible AU-DESSUS de Style (demande Matthieu 2026-07-23) ──
+        # ── Durée cible en tête du panneau ──
         sc_lay.addWidget(self._build_film_strip())
-        sc_lay.addWidget(tog_style)
-        sc_lay.addWidget(c_style)
 
-        # ── Ordre visuel du panneau droit (haut → bas), demande Matthieu 2026-07-23 :
-        # Durée cible, Style, Ajouter des références, Scénario, Découpage,
-        # Générer (… « Générer le storyboard » en dernier), puis Musique.
+        # ── Ordre visuel du panneau droit (haut → bas), demande Matthieu 2026-07-23
+        # (2e passe) : Durée cible, Scénario, Découpage, Générer depuis le scénario,
+        # Ajouter des références, Musique, et Style EN DERNIER.
         for _tog, _cont in (
-            (tog_refs,  c_refs),
             (tog_scen,  c_scen),
             (tog_final, c_final),
             (tog_gen,   c_gen),
+            (tog_refs,  c_refs),
             (tog_music, c_music),
+            (tog_style, c_style),
         ):
             sc_lay.addWidget(_tog)
             sc_lay.addWidget(_cont)

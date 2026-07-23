@@ -1540,11 +1540,18 @@ class _ShotListContainer(QWidget):
 
     def minimumSizeHint(self):
         from PyQt6.QtCore import QSize
+        # Mode vide (pas de tableau) : aucune largeur imposée — le message
+        # « Aucun découpage » se centre dans la fenêtre, pas dans les colonnes
+        # (porté du Live, demande Matthieu 2026-07-23).
+        if getattr(self, "_empty_mode", False):
+            return super().minimumSizeHint()
         w = sum(_col_widths) + len(_col_widths) - 1
         return QSize(w, super().minimumSizeHint().height())
 
     def sizeHint(self):
         from PyQt6.QtCore import QSize
+        if getattr(self, "_empty_mode", False):
+            return super().sizeHint()
         w = sum(_col_widths) + len(_col_widths) - 1
         return QSize(w, super().sizeHint().height())
 
@@ -2329,7 +2336,41 @@ class PageStoryboard(QWidget):
         tw_lay.setSpacing(0)
         tw_lay.addWidget(self._top_hscroll)
         tw_lay.addWidget(scroll, 1)
+        self._table_wrap = table_wrap
         lay.addWidget(table_wrap, 1)
+
+        # Message « tableau vide » HORS du scroll : centré dans la fenêtre de
+        # façon déterministe, sans scrollbars (porté du Live — demande Matthieu
+        # 2026-07-23 : bouton au centre, pas de barre de défilement à vide).
+        self._empty_wrap = QWidget()
+        self._empty_wrap.setStyleSheet("background:transparent;")
+        _ew = QVBoxLayout(self._empty_wrap)
+        _ew.setContentsMargins(0, 0, 0, 0)
+        _ew.setSpacing(18)
+        _ew.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self._empty_lbl = QLabel("")
+        self._empty_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self._empty_lbl.setWordWrap(True)
+        # Largeur DÉFINIE : un QLabel wordWrap centré recevait une largeur
+        # ambiguë → texte tronqué (vécu côté Live). Largeur fixe = rendu sûr.
+        self._empty_lbl.setFixedWidth(460)
+        self._empty_lbl.setStyleSheet(
+            f"color:{CP['text_dim']};font-size:13px;background:transparent;border:none;"
+        )
+        _ew.addWidget(self._empty_lbl, 0, Qt.AlignmentFlag.AlignHCenter)
+        self._empty_gen_btn = QPushButton("")
+        self._empty_gen_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._empty_gen_btn.setFixedHeight(42)
+        self._empty_gen_btn.setStyleSheet(
+            f"QPushButton{{background:{CP['accent2']};color:#fff;border:none;"
+            f"border-radius:8px;font-size:12px;font-weight:700;padding:0 28px;}}"
+            f"QPushButton:hover{{background:#9d8fff;}}"
+            f"QPushButton:pressed{{background:#6a5acd;}}")
+        self._empty_gen_btn.clicked.connect(self._on_analyze)
+        self._empty_gen_btn.setVisible(False)
+        _ew.addWidget(self._empty_gen_btn, 0, Qt.AlignmentFlag.AlignHCenter)
+        self._empty_wrap.setVisible(False)
+        lay.addWidget(self._empty_wrap, 1)
 
         # Synchroniser la scrollbar du haut avec la scrollbar interne du QScrollArea
         h_bar = scroll.horizontalScrollBar()
@@ -2956,40 +2997,29 @@ class PageStoryboard(QWidget):
 
         if not self._all_shots:
             no_version = not self._active_version_id or self._active_version_id == DEFAULT_VERSION_ID
+            # Pas de tableau → zone tableau ENTIÈREMENT masquée (scroll +
+            # scrollbar) ; message et bouton centrés dans la fenêtre (porté du
+            # Live — demande Matthieu 2026-07-23).
+            self._list_container._empty_mode = True
+            self._list_container.setMinimumWidth(0)
             if no_version:
-                # Aucun découpage encore généré → bouton de génération en un clic
-                # à la place du simple texte (demande Matthieu 2026-07-06).
-                empty = QWidget()
-                empty.setStyleSheet("background:transparent;")
-                _el = QVBoxLayout(empty)
-                _el.setContentsMargins(0, 48, 0, 0)
-                _el.setSpacing(18)
-                _el.setAlignment(Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignHCenter)
-                _lbl = QLabel(translate("Aucun découpage pour ce projet."))
-                _lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
-                _lbl.setStyleSheet(
-                    f"color:{CP['text_dim']};font-size:13px;background:transparent;border:none;")
-                _el.addWidget(_lbl, 0, Qt.AlignmentFlag.AlignHCenter)
-                _btn_gen = QPushButton("⊕  " + translate("Générer depuis le scénario"))
-                _btn_gen.setCursor(Qt.CursorShape.PointingHandCursor)
-                _btn_gen.setFixedHeight(42)
-                _btn_gen.setStyleSheet(
-                    f"QPushButton{{background:{CP['accent2']};color:#fff;border:none;"
-                    f"border-radius:8px;font-size:12px;font-weight:700;padding:0 28px;}}"
-                    f"QPushButton:hover{{background:#9d8fff;}}"
-                    f"QPushButton:pressed{{background:#6a5acd;}}")
-                _btn_gen.clicked.connect(self._on_analyze)
-                _el.addWidget(_btn_gen, 0, Qt.AlignmentFlag.AlignHCenter)
-                self._list_lay.addWidget(empty)
+                self._empty_lbl.setText(translate("Aucun découpage pour ce projet."))
+                self._empty_gen_btn.setText("⊕  " + translate("Générer depuis le scénario"))
+                self._empty_gen_btn.setVisible(True)
             else:
-                empty = QLabel(translate(
+                self._empty_lbl.setText(translate(
                     "Aucun plan dans ce découpage.\n\nClique ＋ Ajouter un plan pour créer un plan manuellement."))
-                empty.setAlignment(Qt.AlignmentFlag.AlignCenter)
-                empty.setStyleSheet(
-                    f"color:{CP['text_dim']};font-size:13px;background:transparent;border:none;")
-                self._list_lay.addWidget(empty)
+                self._empty_gen_btn.setVisible(False)
+            self._table_wrap.setVisible(False)
+            self._empty_wrap.setVisible(True)
             self._dur_lbl.setText("")
             return
+
+        # Tableau présent → zone tableau rétablie, placeholder ENTIÈREMENT masqué.
+        self._list_container._empty_mode = False
+        self._list_container.setMinimumWidth(sum(_col_widths) + len(_col_widths) - 1)
+        self._empty_wrap.setVisible(False)
+        self._table_wrap.setVisible(True)
 
         total_dur = sum(float(s.get("duration", 5.0)) for s in self._all_shots)
         mins = int(total_dur) // 60

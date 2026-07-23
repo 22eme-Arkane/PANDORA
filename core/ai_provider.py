@@ -153,14 +153,10 @@ def ai_name() -> str:
     Mis en cache ; les Paramètres appellent refresh_name_cache() après sauvegarde."""
     global _NAME_CACHE
     if _NAME_CACHE is None:
-        cfg = _cfg()
-        profile = _profile_from_config(cfg)
-        if profile == "anthropic_optimized":
-            _NAME_CACHE = "Anthropic optimisé"
-        elif profile == "openai_optimized":
-            _NAME_CACHE = "ChatGPT optimisé"
-        else:
-            _NAME_CACHE = _engine_display_name(*_resolve_engine())
+        # Toujours le NOM PRÉCIS du moteur résolu (« Fable 5 », « Claude Opus 4.8 »,
+        # « GPT-5.5 »…) : « Anthropic optimisé » / « ChatGPT optimisé » ne disent pas
+        # quel modèle travaille réellement (demande Matthieu 2026-07-23).
+        _NAME_CACHE = _engine_display_name(*_resolve_engine())
     return _NAME_CACHE
 
 

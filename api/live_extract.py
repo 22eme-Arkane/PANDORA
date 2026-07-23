@@ -159,8 +159,11 @@ class FormatConducteurWorker(QThread):
             # Tier créatif (Sonnet/Fable…) : prompts vidéo riches/détaillés pour
             # Seedance 2.0. 16000 tokens — un conducteur complet mis en page
             # dépassait 8000 (tronqué en réel le 2026-06-11) ; aligné sur Cinéma.
+            # task="decoupage" : la Mise en page Live est le pivot créatif du flux
+            # Live (les séquences en découlent) — même routage de tête que le
+            # Découpage Cinéma (2026-07-23).
             full = ai_stream(system, user, on_chunk=self.chunk.emit,
-                             tier="creative", max_tokens=16000, task="screenplay")
+                             tier="creative", max_tokens=16000, task="decoupage")
             self.finished.emit(full.strip())
         except Exception as e:
             self.failed.emit(_fmt_err(e))

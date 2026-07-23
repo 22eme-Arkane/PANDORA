@@ -449,7 +449,10 @@ class ArrangeSessionDialog(QDialog):
             f"color:{CP['text_dim']};font-size:10px;font-style:italic;"
             f"background:transparent;"
         )
-        lay.addWidget(self._chat_hint)
+        # Retiré de la mise en page (retour Matthieu 2026-07-23 : « texte qui flotte
+        # au milieu de nulle part ») — le placeholder de « Votre instruction » donne
+        # déjà l'exemple. Widget gardé vivant : des handlers appellent encore hide().
+        self._chat_hint.hide()
 
         # ── Références visuelles ──────────────────────────────────────────────
         lay.addWidget(_section_lbl("Références visuelles"))

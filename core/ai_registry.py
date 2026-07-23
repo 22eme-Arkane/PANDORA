@@ -21,6 +21,7 @@ TASKS: list[tuple[str, str]] = [
     ("assistant",       "Assistant / guide complet"),
     ("storyboard_gen",  "Génération du storyboard"),
     ("screenplay",      "Scénario (mise en page, arrangement)"),
+    ("decoupage",       "Découpage PANDORA (plans)"),
     ("extraction",      "Extraction d'éléments (personnages, décors…)"),
     ("sync",            "Synchronisation du storyboard"),
     ("translate",       "Traduction des prompts (FR → EN/ZH)"),
@@ -58,6 +59,10 @@ ENGINE_ORDER = [
 ANTHROPIC_OPTIMIZED: dict[str, str] = {
     "storyboard_gen": "opus",
     "screenplay": "claude",
+    # Le Découpage est devenu le PIVOT créatif du pipeline (le storyboard en est
+    # une conversion déterministe 1 plan = 1 fiche depuis 2026-07-22) → modèle de
+    # tête. Opus 4.8 et pas Fable 5 : décision Matthieu 2026-07-23 (crédits).
+    "decoupage": "opus",
     "sync": "claude",
     "storyboard_chat": "claude",
     "extraction": "claude",
@@ -73,6 +78,7 @@ ANTHROPIC_OPTIMIZED: dict[str, str] = {
 OPENAI_OPTIMIZED: dict[str, str] = {
     "storyboard_gen": "openai_sol",
     "screenplay": "openai_sol",
+    "decoupage": "openai_sol",
     "video_prompt": "openai_sol",
     "storyboard_chat": "openai_terra",
     "assistant": "openai_terra",

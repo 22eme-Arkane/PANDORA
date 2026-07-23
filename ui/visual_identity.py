@@ -77,7 +77,10 @@ def analyze_active_image(owner, image_path: str, source: str = "selected",
 
     def _failed(message: str):
         # L'image reste utilisable ; son ancienne description n'est simplement pas
-        # présentée comme vérifiée.
+        # présentée comme vérifiée. Jamais de JSON brut d'API dans le libellé.
+        low = (message or "").lower()
+        if "invalid_request_error" in low or "error code: 4" in low:
+            message = "requête refusée par le moteur vision — relancez via « Identité visuelle »"
         _status(owner, f"Image active enregistrée · analyse visuelle en attente : {message[:90]}")
 
     worker.done.connect(_done)

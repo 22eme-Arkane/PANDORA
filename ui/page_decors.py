@@ -53,6 +53,7 @@ def _load_card_pixmap(path: str, width: int, height: int) -> QPixmap:
 class DecorCard(QWidget):
     edit_requested   = pyqtSignal(dict)
     delete_requested = pyqtSignal(str)
+    selected         = pyqtSignal(dict)   # clic sur la carte → fiche latérale
 
     _W     = 162
     _H_IMG = 160
@@ -180,6 +181,14 @@ class DecorCard(QWidget):
     def enterEvent(self, e): self._overlay.show()
     def leaveEvent(self, e): self._overlay.hide()
 
+    def mousePressEvent(self, e):
+        # Clic sur la carte (hors boutons de l'overlay) → sélection dans la fiche.
+        if e.button() == Qt.MouseButton.LeftButton:
+            self.selected.emit(self._data)
+            e.accept()
+            return
+        super().mousePressEvent(e)
+
 
 # ── Page principale Décors ────────────────────────────────────────────────────
 
@@ -190,10 +199,17 @@ class PageDecors(QWidget):
         self.setStyleSheet(f"background:{CP['bg0']};")
         self._all_items: list[dict] = []
         self._collapsed: dict[str, bool] = {}   # état replié des bandeaux par pièce
+        self._selected_id: str = ""
 
-        root = QVBoxLayout(self)
+        # Fiche latérale droite repliable (poignée FICHE) — demande 2026-07-23.
+        from ui.element_side_panel import attach_side_panel
+        _content = QWidget()
+        _content.setStyleSheet("background:transparent;")
+        root = QVBoxLayout(_content)
         root.setContentsMargins(0, 0, 0, 0)
         root.setSpacing(0)
+        self._side_panel = attach_side_panel(
+            self, _content, "Sélectionnez un décor", "◻")
 
         # Bandeau titre retiré (demande Matthieu 2026-07-22).
 
@@ -231,7 +247,17 @@ class PageDecors(QWidget):
         self._sections_lay.setContentsMargins(32, 18, 32, 28)
 
         scroll.setWidget(self._grid_container)
+        self._scroll = scroll
         root.addWidget(scroll, 1)
+
+        # État vide CENTRÉ dans la fenêtre + « Générer depuis le scénario »
+        # (demande Matthieu 2026-07-23) — remplace le label en haut à gauche.
+        from ui.element_side_panel import make_empty_state, open_generate_from_scenario
+        self._empty_state = make_empty_state(
+            "Aucun décor pour ce projet.",
+            on_generate=lambda: open_generate_from_scenario(self, "decor"))
+        self._empty_state.setVisible(False)
+        root.addWidget(self._empty_state, 1)
 
         # ── Séparation + « Plan des décors » (synchro Mise en scène / Plan de feu) ──
         fp_sep = QFrame()
@@ -652,13 +678,22 @@ class PageDecors(QWidget):
                 w.widget().deleteLater()
 
         if not items:
-            empty = QLabel("Aucun décor.\nClique sur ✦ Créer un décor pour commencer.")
+            if not self._all_items:
+                # Aucun décor du tout → bloc centré + bouton « Générer depuis le
+                # scénario » à la place de la grille (demande 2026-07-23).
+                self._scroll.setVisible(False)
+                self._empty_state.setVisible(True)
+                return
+            # Filtre sans résultat → message simple dans la grille.
+            empty = QLabel(translate("Aucun décor ne correspond au filtre."))
             empty.setAlignment(Qt.AlignmentFlag.AlignCenter)
             empty.setStyleSheet(
                 f"color:{CP['text_dim']};font-size:13px;background:transparent;border:none;"
             )
             self._sections_lay.addWidget(empty)
             return
+        self._empty_state.setVisible(False)
+        self._scroll.setVisible(True)
 
         # Décors libres (sans pièce) en grille simple ; chaque pièce (room_group)
         # dans un bandeau dépliable regroupant ses vues.
@@ -673,7 +708,22 @@ class PageDecors(QWidget):
         card = DecorCard(item)
         card.edit_requested.connect(self._on_edit)
         card.delete_requested.connect(self._on_delete)
+        card.selected.connect(self._on_card_selected)
         return card
+
+    def _on_card_selected(self, item: dict):
+        from ui.element_side_panel import storyboard_stats
+        self._selected_id = item.get("id", "")
+        _sub = item.get("category", "")
+        if item.get("room_view"):
+            _sub = (_sub + "  ·  " if _sub else "") + item["room_view"]
+        self._side_panel.show_item(
+            name=item.get("name", ""),
+            subtitle=_sub,
+            description=item.get("prompt") or item.get("description", ""),
+            stats=storyboard_stats("decor", item),
+            image_path=item.get("image_path", ""),
+        )
 
     def _cards_grid(self, items: list[dict], cols: int = 6) -> QWidget:
         wrap = QWidget()

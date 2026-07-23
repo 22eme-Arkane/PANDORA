@@ -33,6 +33,7 @@ _CAT_COLOR = {
 class VehicleCard(QWidget):
     edit_requested   = pyqtSignal(dict)
     delete_requested = pyqtSignal(str)
+    selected         = pyqtSignal(dict)   # clic sur la carte → fiche latérale
 
     _W     = 162
     _H_IMG = 160
@@ -147,6 +148,14 @@ class VehicleCard(QWidget):
     def enterEvent(self, e): self._overlay.show()
     def leaveEvent(self, e): self._overlay.hide()
 
+    def mousePressEvent(self, e):
+        # Clic sur la carte (hors boutons de l'overlay) → sélection dans la fiche.
+        if e.button() == Qt.MouseButton.LeftButton:
+            self.selected.emit(self._data)
+            e.accept()
+            return
+        super().mousePressEvent(e)
+
 
 class PageVehicles(QWidget):
 
@@ -155,10 +164,17 @@ class PageVehicles(QWidget):
         self.setStyleSheet(f"background:{CP['bg0']};")
         self._all_items: list[dict] = []
         self._active_filter = "Tous"
+        self._selected_id: str = ""
 
-        root = QVBoxLayout(self)
+        # Fiche latérale droite repliable (poignée FICHE) — demande 2026-07-23.
+        from ui.element_side_panel import attach_side_panel
+        _content = QWidget()
+        _content.setStyleSheet("background:transparent;")
+        root = QVBoxLayout(_content)
         root.setContentsMargins(0, 0, 0, 0)
         root.setSpacing(0)
+        self._side_panel = attach_side_panel(
+            self, _content, "Sélectionnez un véhicule", "🚗")
 
         # Bandeau titre retiré (demande Matthieu 2026-07-22).
 
@@ -193,7 +209,16 @@ class PageVehicles(QWidget):
         self._grid.setContentsMargins(32, 24, 32, 32)
 
         scroll.setWidget(self._grid_container)
+        self._scroll = scroll
         root.addWidget(scroll, 1)
+
+        # État vide CENTRÉ + « Générer depuis le scénario » (demande 2026-07-23).
+        from ui.element_side_panel import make_empty_state, open_generate_from_scenario
+        self._empty_state = make_empty_state(
+            "Aucun véhicule pour ce projet.",
+            on_generate=lambda: open_generate_from_scenario(self, "vehicle"))
+        self._empty_state.setVisible(False)
+        root.addWidget(self._empty_state, 1)
 
         self.refresh()
 
@@ -334,7 +359,13 @@ class PageVehicles(QWidget):
                 w.widget().deleteLater()
 
         if not items:
-            empty = QLabel("Aucun véhicule.\nClique sur ✦ Créer un véhicule pour commencer.")
+            if not self._all_items:
+                # Aucun véhicule du tout → bloc centré + bouton de génération.
+                self._scroll.setVisible(False)
+                self._empty_state.setVisible(True)
+                return
+            from core.i18n import translate
+            empty = QLabel(translate("Aucun véhicule ne correspond au filtre."))
             empty.setAlignment(Qt.AlignmentFlag.AlignCenter)
             empty.setStyleSheet(
                 f"color:{CP['text_dim']};font-size:13px;background:transparent;border:none;"
@@ -342,13 +373,28 @@ class PageVehicles(QWidget):
             self._grid.addWidget(empty, 0, 0, 1, 9)
             return
 
+        self._empty_state.setVisible(False)
+        self._scroll.setVisible(True)
+
         # 9 colonnes (2026-07-23) : utiliser toute la largeur de la fenêtre.
         cols = 9
         for i, item in enumerate(items):
             card = VehicleCard(item)
             card.edit_requested.connect(self._on_edit)
             card.delete_requested.connect(self._on_delete)
+            card.selected.connect(self._on_card_selected)
             self._grid.addWidget(card, i // cols, i % cols)
+
+    def _on_card_selected(self, item: dict):
+        from ui.element_side_panel import storyboard_stats
+        self._selected_id = item.get("id", "")
+        self._side_panel.show_item(
+            name=item.get("name", ""),
+            subtitle=item.get("category", ""),
+            description=item.get("description") or item.get("prompt", ""),
+            stats=storyboard_stats("vehicle", item),
+            image_path=item.get("image_path", ""),
+        )
 
     def _on_delete_all(self):
         if not self._all_items:

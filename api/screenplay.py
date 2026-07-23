@@ -588,9 +588,12 @@ class FormatPandoraWorker(QThread):
             # Ne jamais afficher le flux brut : certains modèles peuvent commencer par
             # reproduire l'ancien contrat avant de se corriger. La fenêtre ne reçoit que
             # le document final une fois le contrat éditorial v2 validé.
+            # task="decoupage" : depuis que le storyboard est une conversion
+            # déterministe des fiches, le Découpage est l'étape créative pivot
+            # → routée sur le modèle de tête (Opus 4.8) du profil (2026-07-23).
             full_text = ai_stream(system, _lang_hint(lang) + user_content,
                                   on_chunk=None, tier="creative",
-                                  max_tokens=16000, task="screenplay").strip()
+                                  max_tokens=16000, task="decoupage").strip()
 
             issues = validate_v2_document(full_text) if is_v2_document(full_text) else [
                 "structure_v2_non_reconnue"
@@ -606,7 +609,7 @@ class FormatPandoraWorker(QThread):
                 full_text = ai_stream(system + correction,
                                       _lang_hint(lang) + user_content,
                                       on_chunk=None, tier="creative",
-                                      max_tokens=16000, task="screenplay").strip()
+                                      max_tokens=16000, task="decoupage").strip()
                 issues = (validate_v2_document(full_text)
                           if is_v2_document(full_text)
                           else ["structure_v2_non_reconnue"])
@@ -2068,6 +2071,10 @@ STORYBOARD_CHAT_FIELDS = [
     "decor_name", "shot_time", "duration", "comments",
     "camera_axis", "camera_placement", "actor_placement",
     "character_names", "accessory_names", "dialogue_lang",
+    # 2026-07-23 (audit « la main sur le tableau ») : champs qui manquaient à la
+    # liste blanche — les éditions dessus étaient ignorées EN SILENCE.
+    "optic", "camera_height", "camera_distance", "seq_name",
+    "vehicle_names", "chars_in", "chars_out", "mic_placement",
 ]
 
 _STORYBOARD_CHAT_SYSTEM = """\
@@ -2150,8 +2157,11 @@ class StoryboardChatWorker(QThread):
         )
 
         messages = self._history + [{"role": "user", "content": user_msg}]
+        # 16000 (plafond « sortie complète ») : à 8192, une demande en LOT
+        # (« ajoute X dans tous les prompts ») dépassait le budget → JSON tronqué
+        # → zéro édition appliquée, sans message (incident vécu, audit 2026-07-23).
         raw = ai_chat(_STORYBOARD_CHAT_SYSTEM, messages,
-                      tier="creative", max_tokens=8192, task="storyboard_chat").strip()
+                      tier="creative", max_tokens=16000, task="storyboard_chat").strip()
 
         # Nettoyage markdown éventuel.
         if "```" in raw:
@@ -2164,9 +2174,33 @@ class StoryboardChatWorker(QThread):
         try:
             result = json.loads(raw)
         except json.JSONDecodeError:
-            # Pas de JSON exploitable → on renvoie la réponse brute sans édition.
-            self.finished.emit({"reply": raw, "edits": []})
-            return
+            # Parsing TOLÉRANT : certains moteurs entourent le JSON de prose →
+            # on tente l'objet englobant par équilibrage d'accolades.
+            result = None
+            start = raw.find("{")
+            if start != -1:
+                depth = 0
+                for i in range(start, len(raw)):
+                    if raw[i] == "{":
+                        depth += 1
+                    elif raw[i] == "}":
+                        depth -= 1
+                        if depth == 0:
+                            try:
+                                result = json.loads(raw[start:i + 1])
+                            except json.JSONDecodeError:
+                                result = None
+                            break
+            if result is None:
+                # Réponse tronquée ou mal formée → ne JAMAIS échouer en silence :
+                # si le moteur avait commencé des éditions, le dire clairement.
+                reply = raw
+                if '"edits"' in raw:
+                    reply += ("\n\n⚠ Les modifications n'ont PAS pu être appliquées "
+                              "(réponse tronquée ou mal formée). Réduis le périmètre "
+                              "(ex. « plans 1 à 10 ») puis réessaie.")
+                self.finished.emit({"reply": reply, "edits": []})
+                return
 
         reply = str(result.get("reply", "")).strip()
         edits = result.get("edits", []) or []

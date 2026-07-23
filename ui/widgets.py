@@ -104,6 +104,18 @@ def install_reading_column(te, max_width: int = 820, vertical: int = 18,
     return f
 
 
+def scrollbar_on_left(te):
+    """Place la scrollbar VERTICALE d'un QTextEdit sur son bord GAUCHE (widget en
+    disposition droite-à-gauche) SANS toucher au sens de lecture : la direction du
+    texte est verrouillée gauche-à-droite sur le document (demande Matthieu
+    2026-07-23 : scrollbar du Scénario collée à la bande GUIDE)."""
+    from PyQt6.QtCore import Qt
+    te.setLayoutDirection(Qt.LayoutDirection.RightToLeft)
+    opt = te.document().defaultTextOption()
+    opt.setTextDirection(Qt.LayoutDirection.LeftToRight)
+    te.document().setDefaultTextOption(opt)
+
+
 def apply_paragraph_spacing(te, px: int = 12, center=None):
     """Ajoute une RESPIRATION sous chaque paragraphe (bloc) d'un QTextEdit — « retour
     à la ligne » visuel entre les paragraphes, sans polluer l'undo Qt ni déplacer le

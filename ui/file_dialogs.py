@@ -37,10 +37,11 @@ import os
 import re
 
 from PyQt6.QtWidgets import (QFileDialog, QFileIconProvider, QListView, QTreeView,
-                             QDialogButtonBox, QComboBox, QCompleter, QToolButton)
+                             QDialogButtonBox, QComboBox, QCompleter, QToolButton,
+                             QStyledItemDelegate)
 from PyQt6.QtCore import (QDir, QEvent, QFileInfo, QMutex, QObject, QRunnable,
                           QSize, QStandardPaths, Qt, QThreadPool, QTimer, QUrl)
-from PyQt6.QtGui import (QColor, QFileSystemModel, QGuiApplication, QIcon,
+from PyQt6.QtGui import (QColor, QFileSystemModel, QFont, QGuiApplication, QIcon,
                          QImageReader, QKeySequence, QPainter, QPixmap)
 
 
@@ -316,6 +317,27 @@ class ThumbnailIconProvider(QFileIconProvider):
         if view is not None and view not in self._views:
             self._views.append(view)
 
+    # ── Accès du délégué (peinture) ───────────────────────────────────────────
+    def cached_icon(self, path: str):
+        """Vignette déjà décodée pour ce chemin, sinon None (jamais bloquant)."""
+        return self._cache.get(path)
+
+    def request(self, path: str) -> None:
+        """Planifie le décodage d'une vignette absente du cache (appelé par le
+        délégué au moment du dessin — le modèle, lui, fige ses icônes)."""
+        if not path or path in self._queued or path in self._cache:
+            return
+        try:
+            ext = os.path.splitext(path)[1].lstrip(".").lower()
+            if ext not in _IMG_EXT:
+                return
+            st = os.stat(path)
+            if st.st_size > _MAX_THUMB_BYTES:
+                return
+            self._schedule(path, float(st.st_mtime))
+        except Exception:
+            pass
+
     # ── Interne ───────────────────────────────────────────────────────────────
     def _schedule(self, path: str, mtime: float) -> None:
         if path in self._queued:
@@ -373,6 +395,41 @@ class ThumbnailIconProvider(QFileIconProvider):
                     vp.update()
             except Exception:
                 pass
+
+
+try:
+    _FILE_PATH_ROLE = int(QFileSystemModel.Roles.FilePathRole)
+except Exception:                       # rétro-compat selon la version de PyQt6
+    _FILE_PATH_ROLE = int(Qt.ItemDataRole.UserRole) + 1
+
+
+class _ThumbnailDelegate(QStyledItemDelegate):
+    """Peint la vignette depuis le cache du provider AU MOMENT DU DESSIN.
+
+    ⚠ Pourquoi : QFileSystemModel résout l'icône d'un fichier UNE seule fois (via
+    son gatherer) et la fige dans son cache interne — repeindre la vue ne la
+    re-demande jamais au provider. Depuis le refactor anti-gel du 2026-07-20
+    (décodage en différé), la vignette arrivait donc APRÈS la résolution et
+    n'apparaissait plus du tout (vécu 2026-07-23). Le délégué contourne le cache
+    du modèle : à chaque paint, si la vignette est prête elle remplace l'icône."""
+
+    def __init__(self, provider: ThumbnailIconProvider, parent=None):
+        super().__init__(parent)
+        self._prov = provider
+
+    def initStyleOption(self, option, index):
+        super().initStyleOption(option, index)
+        try:
+            path = index.data(_FILE_PATH_ROLE)
+            if not isinstance(path, str) or not path:
+                return
+            ic = self._prov.cached_icon(path)
+            if ic is not None:
+                option.icon = ic
+            else:
+                self._prov.request(path)   # décodage en fond → la vue sera repeinte
+        except Exception:
+            pass
 
 
 _provider: ThumbnailIconProvider | None = None
@@ -595,17 +652,73 @@ def _style_dialog_buttons(dlg: QFileDialog):
                 b.setStyleSheet(other_ss)     # Annuler (et autres)
 
 
+# Boutons de navigation du QFileDialog non-natif (objectName Qt) → glyphe lisible
+# au premier regard + info-bulle FR/EN (retour Matthieu 2026-07-23 : les icônes
+# génériques Back/Forward/Parent/New Folder/List/Detail étaient incompréhensibles).
+_NAV_BUTTONS = {
+    "backButton":       ("←", "Précédent",                "Back"),
+    "forwardButton":    ("→", "Suivant",                  "Forward"),
+    "toParentButton":   ("↑", "Dossier parent",           "Parent folder"),
+    "newFolderButton":  ("📁", "Nouveau dossier",          "New folder"),
+    "listModeButton":   ("▦", "Vue vignettes",            "Thumbnail view"),
+    "detailModeButton": ("☰", "Vue détails",              "Detail view"),
+}
+
+
+def _glyph_icon(glyph: str, tint: QColor, px: int = 20, badge: str = "") -> QIcon:
+    """Icône dessinée depuis un glyphe texte (flèche, dossier…) — toujours nette
+    sur fond sombre, contrairement aux pixmaps génériques du style Qt."""
+    pm = QPixmap(px, px)
+    pm.fill(Qt.GlobalColor.transparent)
+    p = QPainter(pm)
+    p.setRenderHint(QPainter.RenderHint.Antialiasing)
+    f = QFont("Segoe UI Symbol")
+    f.setPixelSize(px - 4)
+    f.setBold(True)
+    p.setFont(f)
+    p.setPen(tint)
+    p.drawText(pm.rect(), Qt.AlignmentFlag.AlignCenter, glyph)
+    if badge:
+        bf = QFont("Segoe UI")
+        bf.setPixelSize(px // 2 + 1)
+        bf.setBold(True)
+        p.setFont(bf)
+        try:
+            from ui.styles import CP as _cp
+            p.setPen(QColor(_cp.get("green", "#25d366")))
+        except Exception:
+            p.setPen(QColor("#25d366"))
+        p.drawText(pm.rect().adjusted(px // 2 - 1, px // 3, 0, 0),
+                   Qt.AlignmentFlag.AlignCenter, badge)
+    p.end()
+    return QIcon(pm)
+
+
 def _whiten_nav_icons(dlg: QFileDialog):
-    """Les flèches de navigation (précédent / suivant / dossier parent) et les
-    boutons de vue du dialogue non-natif sont des ICÔNES sombres, quasi invisibles
-    sur le fond sombre (visibles seulement au survol). Le QSS « color » ne teinte
-    PAS une icône (pixmap) → on repeint le pixmap en clair. Retour Matthieu 2026-07-06."""
+    """Boutons de navigation du dialogue non-natif : glyphes EXPLICITES (← → ↑,
+    dossier+, vignettes, détails) pour les boutons connus — les icônes génériques
+    du style Qt étaient illisibles (retours Matthieu 2026-07-06 et 2026-07-23).
+    Les autres boutons gardent la recolorisation claire (le QSS « color » ne
+    teinte pas une icône/pixmap)."""
     try:
         from ui.styles import CP
         tint = QColor(CP.get("text_primary", "#e8eaf2"))
     except Exception:
         tint = QColor("#e8eaf2")
+    try:
+        from core.i18n import get_lang
+        _fr = (get_lang() or "fr") == "fr"
+    except Exception:
+        _fr = True
     for btn in dlg.findChildren(QToolButton):
+        entry = _NAV_BUTTONS.get(btn.objectName())
+        if entry:
+            glyph, tip_fr, tip_en = entry
+            badge = "+" if btn.objectName() == "newFolderButton" else ""
+            btn.setIcon(_glyph_icon(glyph, tint, 20, badge))
+            btn.setIconSize(QSize(20, 20))
+            btn.setToolTip(tip_fr if _fr else tip_en)
+            continue
         ic = btn.icon()
         if ic is None or ic.isNull():
             continue
@@ -727,9 +840,13 @@ def apply_thumbnails(dlg: QFileDialog) -> QFileDialog:
             # être repeinte quand elles sont prêtes, sinon elles n'apparaîtraient
             # qu'au prochain défilement.
             _prov.register_view(lv)
+            # Délégué OBLIGATOIRE : le modèle fige ses icônes, seul le délégué
+            # peut afficher une vignette arrivée après coup.
+            lv.setItemDelegate(_ThumbnailDelegate(_prov, lv))
     for tv in dlg.findChildren(QTreeView):
         tv.setIconSize(_THUMB_ROW)
         _prov.register_view(tv)
+        tv.setItemDelegateForColumn(0, _ThumbnailDelegate(_prov, tv))
         try:   # tri par nom par défaut (dossiers d'abord sous Windows)
             tv.sortByColumn(0, Qt.SortOrder.AscendingOrder)
         except Exception:

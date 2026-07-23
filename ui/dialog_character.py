@@ -819,7 +819,9 @@ class CharacterDialog(QDialog):
             f"background:rgba(255,140,66,0.08);border:1px solid rgba(255,140,66,0.25);"
             f"border-radius:6px;padding:8px 10px;"
         )
-        lay.addWidget(warn)
+        # Bandeau retiré de la mise en page (demande Matthieu 2026-07-23) — le
+        # message d'erreur du moteur suffit quand un sujet est réellement refusé.
+        warn.hide()
 
         prompt_header = QHBoxLayout()
         prompt_header.setContentsMargins(0, 0, 0, 0)
@@ -1098,14 +1100,33 @@ class CharacterDialog(QDialog):
         self._spinbox_count.setValue(1)
         self._spinbox_count.setFixedSize(50, 40)
         self._spinbox_count.setToolTip("Nombre de portraits à générer (1–4) — choisir parmi les résultats")
+        # Boutons natifs REMPLACÉS par deux vrais QPushButton ▲/▼ : les flèches du
+        # QSpinBox stylé sombre étaient invisibles et les triangles CSS ne rendent
+        # pas sur ce sous-contrôle (retour Matthieu 2026-07-23).
+        self._spinbox_count.setButtonSymbols(QSpinBox.ButtonSymbols.NoButtons)
+        self._spinbox_count.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self._spinbox_count.setStyleSheet(
             f"QSpinBox{{background:{CP['bg3']};border:1px solid {CP['border']};"
             f"border-radius:6px;color:{CP['text_primary']};font-size:12px;font-weight:700;"
             f"padding:0 4px;}}"
-            f"QSpinBox::up-button,QSpinBox::down-button{{width:16px;border:none;"
-            f"background:{CP['bg4']};border-radius:3px;}}"
         )
         _gen_row.addWidget(self._spinbox_count)
+        _steps_col = QVBoxLayout()
+        _steps_col.setContentsMargins(0, 0, 0, 0)
+        _steps_col.setSpacing(2)
+        for _sym, _fn in (("▲", self._spinbox_count.stepUp),
+                          ("▼", self._spinbox_count.stepDown)):
+            _b = QPushButton(_sym)
+            _b.setFixedSize(22, 19)
+            _b.setCursor(Qt.CursorShape.PointingHandCursor)
+            _b.clicked.connect(_fn)
+            _b.setStyleSheet(
+                f"QPushButton{{background:{CP['bg4']};border:none;border-radius:3px;"
+                f"color:{CP['text_secondary']};font-size:8px;padding:0;}}"
+                f"QPushButton:hover{{color:{CP['text_primary']};background:{CP['bg3']};}}"
+            )
+            _steps_col.addWidget(_b)
+        _gen_row.addLayout(_steps_col)
 
         from core.config import get_image_price, load_config as _lc
         _cfg  = _lc()
@@ -1335,6 +1356,9 @@ class CharacterDialog(QDialog):
         self._btn_doublage.setToolTip("Assigner ou écouter la voix de doublage de ce personnage")
         self._btn_doublage.clicked.connect(self._on_doublage)
         outer.addWidget(self._btn_doublage)
+        # Masqué tant que le Doublage n'est pas fonctionnel (demande Matthieu
+        # 2026-07-23) — widget gardé vivant pour le réactiver d'un mot.
+        self._btn_doublage.hide()
 
         if self._image_path and os.path.isfile(self._image_path):
             self._load_preview(self._image_path)

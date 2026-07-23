@@ -298,12 +298,15 @@ class PlanCoEditWorker(QThread):
             # (comme la génération de la mise en page) pour ne pas tronquer.
             _max_out = 16000 if (self._all and not self._discuss) else 8192
 
+            # task="decoupage" : la co-écriture réécrit des FICHES de plans qui
+            # partent telles quelles au Storyboard → même moteur de tête que la
+            # génération du Découpage (2026-07-23).
             if _imgs:
                 raw = ai_chat(system, messages, tier="creative",
-                              max_tokens=_max_out, task="screenplay").strip()
+                              max_tokens=_max_out, task="decoupage").strip()
             else:
                 raw = ai_chat(system, messages, tier="creative",
-                              max_tokens=_max_out, task="screenplay").strip()
+                              max_tokens=_max_out, task="decoupage").strip()
 
             if self._discuss:
                 # DISCUSSION seule : toute la réponse est conversationnelle, aucun plan
@@ -391,7 +394,7 @@ class PlanCoEditWorker(QThread):
                         "PLANS À CORRIGER (renvoie-les TOUS, corrigés, même ordre et "
                         f"format, et RIEN d'autre) :\n{batch_text}")
                 raw = ai_chat(system, [{"role": "user", "content": user}],
-                              tier="creative", max_tokens=8000, task="screenplay").strip()
+                              tier="creative", max_tokens=8000, task="decoupage").strip()
                 got = pl.split_plans(raw)
                 if len(got) >= n:
                     out_blocks.extend(g["text"] for g in got[:n])

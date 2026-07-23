@@ -1000,6 +1000,16 @@ def storyboard_chat_ia():
     # Worker
     from api.screenplay import StoryboardChatWorker, STORYBOARD_CHAT_FIELDS, _STORYBOARD_CHAT_SYSTEM
     assert "seedance_prompt" in STORYBOARD_CHAT_FIELDS and "scene_title" in STORYBOARD_CHAT_FIELDS
+    # 2026-07-23 (audit « la main sur le tableau ») : champs qui étaient ignorés
+    # en silence + budget élargi + parsing tolérant avec message explicite.
+    for _f in ("camera_axis", "optic", "camera_height", "camera_distance",
+               "seq_name", "vehicle_names", "chars_in", "chars_out"):
+        assert _f in STORYBOARD_CHAT_FIELDS, f"champ {_f} absent de la liste blanche"
+    _wsrc = inspect.getsource(StoryboardChatWorker._run)
+    assert "max_tokens=16000" in _wsrc, \
+        "8192 tronquait les demandes en lot (« tous les prompts ») → 16000"
+    assert "depth" in _wsrc and "n'ont PAS pu être appliquées" in _wsrc, \
+        "parsing tolérant (accolades) + message explicite en cas de troncature"
     w = StoryboardChatWorker("bonjour", [{"id": "1", "number": "1"}])
     assert hasattr(w, "finished") and hasattr(w, "failed")
     # Le system prompt impose la chirurgie + le format JSON edits/reply.
@@ -1058,6 +1068,9 @@ def moteurs_ia_par_tache():
     assert ap.PANDORA_OPTIMIZED["storyboard_gen"] == "opus", "storyboard = Opus"
     assert ap.PANDORA_OPTIMIZED["extraction"] == "claude", "extraction = Sonnet 5 (pas Opus)"
     assert ap.PANDORA_OPTIMIZED["screenplay"] == "claude", "scénario = Sonnet"
+    # 2026-07-23 : le Découpage est le pivot créatif (storyboard = conversion
+    # déterministe) → tâche dédiée routée sur Opus 4.8 (décision Matthieu).
+    assert ap.PANDORA_OPTIMIZED["decoupage"] == "opus", "découpage = Opus 4.8"
     assert not all(v == "opus" for v in ap.PANDORA_OPTIMIZED.values()), "plus Opus partout"
     keys = [t[0] for t in ap.TASKS]
     for k in ("enhance", "storyboard_chat", "assistant", "storyboard_gen",
@@ -1069,6 +1082,7 @@ def moteurs_ia_par_tache():
     try:
         assert ap._resolve_engine("storyboard_gen") == ("anthropic", "claude-opus-4-8")
         assert ap._resolve_engine("screenplay") == ("anthropic", "claude-sonnet-5")
+        assert ap._resolve_engine("decoupage") == ("anthropic", "claude-opus-4-8")
     finally:
         ap._cfg = orig
     # Override par tâche
@@ -1093,8 +1107,10 @@ def moteurs_ia_par_tache():
     # Appels câblés avec task=
     sp = inspect.getsource(__import__("api.screenplay", fromlist=["_"]))
     for t in ('task="storyboard_chat"', 'task="storyboard_gen"', 'task="sync"',
-              'task="screenplay"', 'task="extraction"'):
+              'task="screenplay"', 'task="extraction"', 'task="decoupage"'):
         assert t in sp, f"{t} câblé dans screenplay"
+    assert 'task="decoupage"' in inspect.getsource(__import__("api.plan_coedit", fromlist=["_"])), \
+        "co-écriture des plans routée sur le moteur du découpage"
     assert 'task="enhance"' in inspect.getsource(__import__("api.enhance", fromlist=["_"]))
     assert 'task="assistant"' in inspect.getsource(__import__("api.assistant", fromlist=["_"]))
     # Paramètres : clés + testeurs GPT/Mistral + menu avancé par tâche
@@ -2563,9 +2579,13 @@ def panneau_scenario_aligne_jusqu_au_bord():
     assert '_make_toggle("🎯  Découpage"' in src, "section Découpage absente"
     assert '"Affiner le découpage"' in src and "def _on_plan_coedit" in src, \
         "bouton/handler d'affinage du découpage absent"
-    # Ordre du panneau : Scénario avant Découpage avant Générer.
-    assert src.index("(tog_scen,") < src.index("(tog_final,") < src.index("(tog_gen,"), \
-        "ordre du panneau droit incorrect (Scénario, Finalisation, …, Générer)"
+    # Ordre du panneau (2026-07-23, 2e passe) : Scénario, Découpage, Générer depuis
+    # le scénario, Ajouter des références, Musique, Style en dernier.
+    assert (src.index("(tog_scen,") < src.index("(tog_final,") < src.index("(tog_gen,")
+            < src.index("(tog_refs,") < src.index("(tog_music,") < src.index("(tog_style,")), \
+        "ordre du panneau droit incorrect (Scénario→Découpage→Générer→Références→Musique→Style)"
+    assert '_make_toggle("⚡  Générer depuis le scénario"' in src, \
+        "section « Générer depuis le scénario » (nom restauré 2026-07-23)"
 
 
 @test
@@ -2853,7 +2873,8 @@ def analyse_musicale_scenario_cinema():
     assert hasattr(p, "_choose_music_mode"), "popup de choix film/clip absent"
     # Renommage Cinéma : section « Musique » (2026-07-22).
     src = inspect.getsource(PageScenario)
-    assert '_make_toggle("♫  Musique"' in src, "section non renommée en « Musique »"
+    assert '_make_toggle("🎵  Musique"' in src, \
+        "section « Musique » : émoji pleine largeur 🎵 (alignement du libellé)"
     # Timeline injectée selon le MODE choisi avant l'analyse.
     p._music_tracks = [{"name": "t", "bpm": 128, "duration": 200, "energy": "▁█", "drops": [8.0]}]
     p._music_mode = "clip"
@@ -3819,7 +3840,68 @@ def main() -> int:
             traceback.print_exc()
             ko += 1
     print(f"\n{ok} OK · {ko} échec(s)")
+    _teardown_qt()
     return 1 if ko else 0
+
+
+def _teardown_qt() -> None:
+    """Teardown DÉTERMINISTE avant la fin du processus (anti-0xC0000409).
+
+    Les tests laissent des widgets top-level jamais détruits (deleteLater sans
+    boucle d'événements = jamais traité) : le QFileDialog non natif garde son
+    thread « gatherer » de QFileSystemModel, et les vignettes tournent dans des
+    QThreadPool dont les threads inactifs survivent 30 s. Ces threads NATIFS
+    (invisibles depuis Python : ni threading.enumerate(), ni QThread) couraient
+    encore pendant la destruction de Qt à la sortie de l'interpréteur → fail-fast
+    Windows 0xC0000409 environ un run sur deux, APRÈS l'impression du résumé.
+    On détruit donc tout explicitement pendant que l'interpréteur est sain.
+    Chaque étape est blindée : ce bloc ne doit JAMAIS rougir un run vert."""
+    from PyQt6.QtCore import QThreadPool, QEvent
+
+    # 1. Fermer et détruire tous les widgets top-level, puis traiter les
+    #    DeferredDelete (sendPostedEvents les force même hors boucle d'événements).
+    for w in list(APP.topLevelWidgets()):
+        try:
+            w.close()
+            w.deleteLater()
+        except Exception:
+            pass
+    try:
+        APP.sendPostedEvents(None, QEvent.Type.DeferredDelete.value)
+        APP.processEvents()
+    except Exception:
+        pass
+
+    # 2. Vider les pools de threads (vignettes des dialogues de fichiers + global).
+    try:
+        import ui.file_dialogs as _FD
+        if _FD._provider is not None:
+            _FD._provider._timer.stop()
+            _FD._provider._pool.clear()
+            _FD._provider._pool.waitForDone(5000)
+    except Exception:
+        pass
+    try:
+        QThreadPool.globalInstance().clear()
+        QThreadPool.globalInstance().waitForDone(5000)
+    except Exception:
+        pass
+
+    # 3. Laisser finir les threads parqués par core.worker.abandon_thread.
+    try:
+        import core.worker as _CW
+        for _t in list(_CW._ABANDONED_THREADS):
+            try:
+                _t.wait(3000)
+            except Exception:
+                pass
+    except Exception:
+        pass
+
+    try:
+        APP.processEvents()
+    except Exception:
+        pass
 
 
 @test
