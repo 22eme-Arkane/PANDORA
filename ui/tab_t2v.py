@@ -2316,6 +2316,47 @@ class _PreviewTranslateWorker(QThread):
             self.done.emit(self._text)
 
 
+class _FinalPromptWorker(QThread):
+    """Produit le prompt FINAL de l'encart, EXACTEMENT comme l'envoi :
+    api.video_prompt.compose() → prose anglaise dense (style, heure, fiches et son
+    intégrés). Repli sur la traduction historique si la composition est indisponible
+    (pas de clé, erreur API, prompt non éligible) — jamais bloquant.
+
+    `composed` dit à l'UI quel chemin a été pris : le prompt final doit refléter le
+    même chemin à l'envoi, sinon l'écran mentirait sur ce qui part réellement."""
+    done = pyqtSignal(str, bool)   # (prompt_final, composed)
+
+    def __init__(self, prompt: str, ctx: dict):
+        super().__init__()
+        self._prompt = prompt
+        self._ctx = dict(ctx or {})
+
+    def run(self):
+        try:
+            from api.video_prompt import compose as _compose
+            out = _compose(
+                self._prompt,
+                style_suffix=self._ctx.get("style_suffix", ""),
+                time_suffix=self._ctx.get("time_suffix", ""),
+                duration=self._ctx.get("duration"),
+                character_notes=self._ctx.get("character_notes", ""),
+                visual_context=self._ctx.get("visual_context", ""),
+                include_sound=bool(self._ctx.get("audio", True)),
+                sound_notes=self._ctx.get("sound_notes", ""),
+            )
+            if out:
+                self.done.emit(out, True)
+                return
+        except Exception:
+            pass
+        # Repli : traduction du corps (chemin historique non composé).
+        try:
+            from core.lang import translate_to_english
+            self.done.emit(translate_to_english(self._prompt) or self._prompt, False)
+        except Exception:
+            self.done.emit(self._prompt, False)
+
+
 # ── Tab T2V ───────────────────────────────────────────────────────────────────
 
 class TabT2V(QScrollArea):
@@ -3338,6 +3379,7 @@ class TabT2V(QScrollArea):
         self._assembly_source: str | None = None
         self._suppress_prompt_signal = False
         self._final_sound_notes = ""
+        self._final_was_composed = False
         self._preview_expanded = False  # replié par défaut
 
         frame = QFrame()
@@ -3481,7 +3523,9 @@ class TabT2V(QScrollArea):
             return   # édition utilisateur entre-temps → on n'écrase jamais
         from core.prompt_sections import strip_for_video as _sfv_prev, sound_of as _so_prev
         self._final_sound_notes = _so_prev(src)
-        prompt_fr = _sfv_prev(src)
+        # Corps + briques pré-composition = EXACTEMENT ce que start_generation
+        # soumet au composeur → l'encart montrera la prose réellement envoyée.
+        prompt_fr = self._build_pre_compose_prompt(_sfv_prev(src))
         if not prompt_fr:
             return
         # Anti-crash : un QThread basé sur run() n'a pas de boucle d'événements, donc
@@ -3494,20 +3538,42 @@ class TabT2V(QScrollArea):
             from core.worker import abandon_thread
             abandon_thread(self._preview_translate_worker)
             self._preview_translate_worker = None
-        self._preview_spinner.setText("⟳  traduction…")
+        self._preview_spinner.setText("⟳  composition du prompt final…")
         self._preview_spinner.setVisible(True)
-        self._preview_translate_worker = _PreviewTranslateWorker(prompt_fr)
+        # Contexte du plan transmis au composeur — identique à celui de l'envoi.
+        try:
+            from api.video_prompt import (character_notes_for_shot as _vpn,
+                                          visual_context_for_shot as _vpc)
+            _cnotes, _vctx = _vpn(self._active_shot or {}), _vpc(self._active_shot or {})
+        except Exception:
+            _cnotes = _vctx = ""
+        import core.style as _sa_c
+        _cam_c = self._camera_picker.get_suffix() if hasattr(self, "_camera_picker") else ""
+        _st_c = (self._active_shot.get("shot_time") if self._active_shot else "") or ""
+        _ctx = {
+            "style_suffix": (_sa_c.get_video_suffix_no_cam() if _cam_c
+                             else _sa_c.get_video_suffix()),
+            "time_suffix":  self._SHOT_TIME_EN_PREVIEW.get(_st_c, ""),
+            "duration":     self._get_duration(),
+            "character_notes": _cnotes,
+            "visual_context":  _vctx,
+            "sound_notes":     self._final_sound_notes,
+            "audio": (self._audio_cb.isChecked()
+                      if (hasattr(self, "_audio_cb") and self._audio_cb) else True),
+        }
+        self._preview_translate_worker = _FinalPromptWorker(prompt_fr, _ctx)
         self._preview_translate_worker.done.connect(self._on_preview_translated)
         self._preview_translate_worker.start()
 
-    def _on_preview_translated(self, translated: str):
+    def _on_preview_translated(self, translated: str, composed: bool = False):
         self._preview_spinner.setVisible(False)
         src = getattr(self, "_assembly_source", None)
         if not src or self.prompt_ta.toPlainText().strip() != src:
-            return   # l'utilisateur a édité pendant la traduction → sa saisie prime
-        final = self._assemble_final_prompt_text(translated)
+            return   # l'utilisateur a édité pendant l'assemblage → sa saisie prime
+        final = self._assemble_final_prompt_text(translated, composed)
         if not final.strip():
             return
+        self._final_was_composed = bool(composed)
         # Remplacer l'encart par le prompt FINAL (anglais, injections écrites) —
         # signaux coupés pour ne pas déclencher _on_prompt_text_changed.
         self._suppress_prompt_signal = True
@@ -3527,11 +3593,42 @@ class TabT2V(QScrollArea):
         "Coucher du soleil": "sunset, golden hour, warm amber-orange light, sun low on the horizon",
     }
 
+    def _post_compose_injections(self, composed: bool) -> list:
+        """Briques ajoutées APRÈS la composition (miroir exact d'api/real.py).
+        Composé : la prose intègre déjà style/heure/son/fiches → seuls les contrôles
+        créatifs (réglages explicites de l'utilisateur) sont recollés. Non composé :
+        heure, style, musique et cohérence personnage le sont aussi."""
+        import core.style as _sa
+        inj = []
+        if not composed:
+            _st = (self._active_shot.get("shot_time") if self._active_shot else "") or ""
+            ts = self._SHOT_TIME_EN_PREVIEW.get(_st, "")
+            if ts:
+                inj.append(("Heure du plan (éclairage)", ts, "comma_prefix"))
+            _prev_cam = self._camera_picker.get_suffix() if hasattr(self, "_camera_picker") else ""
+            vs = _sa.get_video_suffix_no_cam() if _prev_cam else _sa.get_video_suffix()
+            from core.prompt_sections import style_of as _style_of_prev
+            if not _style_of_prev(self.prompt_ta.toPlainText()).strip() and vs:
+                inj.append(("Style vidéo du projet", vs, "comma_suffix"))
+            if not (hasattr(self, "_music_cb") and self._music_cb and self._music_cb.isChecked()):
+                inj.append(("Musique désactivée",
+                            "no music, no background music, no soundtrack, "
+                            "no musical score, natural ambient sound only", "comma_suffix"))
+            if any(os.path.isfile(d.get("sheet_path", "") or d.get("image_path", "") or "")
+                   for d in self._casting._char_data_map.values()):
+                inj.append(("Cohérence personnage (réfs casting)",
+                            "exact same person as the reference image, "
+                            "identical face features, same skin tone, same hair color and style, "
+                            "same clothing, strict visual consistency", "comma_suffix"))
+        cs = self._creative.get_creative_suffix()
+        if cs:
+            inj.append(("Contrôles créatifs", cs, "comma_suffix"))
+        return inj
+
     def _text_injections(self) -> list:
-        """Briques de TEXTE ajoutées au prompt — écrites dans l'encart par
-        l'assemblage du prompt final, ou ajoutées à l'envoi en mode libre.
-        [(label FR, texte, mode)] ; l'ordre de la liste EST l'ordre d'application
-        historique de l'envoi (_on_generate) — ne pas le réordonner."""
+        """Briques de TEXTE ajoutées au prompt AVANT la composition — écrites dans
+        l'encart par l'assemblage du prompt final, ou ajoutées à l'envoi en mode
+        libre. [(label FR, texte, mode)] ; l'ordre EST celui de start_generation."""
         inj = []
         ctx = self._casting.get_context()
         if ctx:
@@ -3572,38 +3669,16 @@ class TabT2V(QScrollArea):
         if not (hasattr(self, "_subtitle_cb") and self._subtitle_cb
                 and self._subtitle_cb.isChecked()):
             inj.append(("Sous-titres désactivés", "no subtitles", "comma_suffix"))
-        _st = (self._active_shot.get("shot_time") if self._active_shot else "") or ""
-        ts = self._SHOT_TIME_EN_PREVIEW.get(_st, "")
-        if ts:
-            inj.append(("Heure du plan (éclairage)", ts, "comma_prefix"))
-        _prev_cam = self._camera_picker.get_suffix() if hasattr(self, "_camera_picker") else ""
-        vs = _sa.get_video_suffix_no_cam() if _prev_cam else _sa.get_video_suffix()
-        # Style : la section [🎨 STYLE VISUEL] bakée dans le plan est DÉJÀ dans le
-        # corps (traduite avec lui, comme api/real.py) → ne pas la recoller. Sinon
-        # (prompt libre) on ajoute le style projet en fin. Aucun doublon.
-        from core.prompt_sections import style_of as _style_of_prev
-        _baked_prev = _style_of_prev(self.prompt_ta.toPlainText()).strip()
-        if not _baked_prev and vs:
-            inj.append(("Style vidéo du projet", vs, "comma_suffix"))
-        music_on = (hasattr(self, "_music_cb") and self._music_cb
-                    and self._music_cb.isChecked())
-        if not music_on:
-            inj.append(("Musique désactivée",
-                        "no music, no background music, no soundtrack, "
-                        "no musical score, natural ambient sound only", "comma_suffix"))
-        cs = self._creative.get_creative_suffix()
-        if cs:
-            inj.append(("Contrôles créatifs", cs, "comma_suffix"))
+        # Heure, style, musique, cohérence personnage et contrôles créatifs ne sont
+        # PAS ici : ils sont passés séparément au composeur (style/heure) ou recollés
+        # après lui → voir _post_compose_injections().
         return inj
 
-    def _assemble_final_prompt_text(self, body_en: str) -> str:
-        """Prompt FINAL de l'encart (WYSIWYG) : corps traduit en anglais + toutes
-        les briques texte, appliquées dans l'ordre EXACT de l'envoi historique.
-        Ce texte part ensuite TEL QUEL au moteur (aucune réinjection)."""
-        fp = (body_en or "").strip()
-        if not fp:
-            return ""
-        for _label, txt, mode in self._text_injections():
+    @staticmethod
+    def _apply_injections(text: str, injections: list) -> str:
+        """Applique des briques [(label, texte, mode)] à un prompt, dans l'ordre."""
+        fp = (text or "").strip()
+        for _label, txt, mode in injections:
             if mode == "ctx":
                 fp = txt + fp
             elif mode == "dash_prefix":
@@ -3615,6 +3690,25 @@ class TabT2V(QScrollArea):
             else:   # comma_suffix
                 fp = f"{fp}, {txt}"
         return fp
+
+    def _build_pre_compose_prompt(self, body: str) -> str:
+        """Texte soumis au composeur : corps du plan + briques pré-composition,
+        exactement comme start_generation les assemble avant l'appel."""
+        return self._apply_injections(body, self._text_injections())
+
+    def _assemble_final_prompt_text(self, body_out: str, composed: bool = False) -> str:
+        """Prompt FINAL de l'encart (WYSIWYG).
+
+        composed=True  : `body_out` est la prose composée (style/heure/son/fiches déjà
+                         intégrés) → seules les briques post-composition sont ajoutées.
+        composed=False : repli traduction → le corps a déjà reçu les briques
+                         pré-composition, on ajoute les post-composition du chemin
+                         historique (heure, style, musique, cohérence, créatifs).
+        Ce texte part ensuite TEL QUEL au moteur (aucune réinjection)."""
+        fp = (body_out or "").strip()
+        if not fp:
+            return ""
+        return self._apply_injections(fp, self._post_compose_injections(composed))
 
     def _send_time_injection_lines(self) -> list:
         """Injections faites À L'ENVOI par le moteur d'envoi, jamais écrites dans
@@ -3643,10 +3737,12 @@ class TabT2V(QScrollArea):
         lines = []
 
         if getattr(self, "_prompt_is_final", False):
-            lines.append("✓ L'encart contient le prompt FINAL — envoyé tel quel "
-                         "(les éléments texte y sont déjà écrits).")
+            _how = ("prose composée par l'IA" if getattr(self, "_final_was_composed", False)
+                    else "traduction (composition indisponible)")
+            lines.append(f"✓ L'encart contient le prompt FINAL — {_how}, envoyé tel "
+                         "quel (les éléments texte y sont déjà écrits).")
         else:
-            inj = self._text_injections()
+            inj = self._text_injections() + self._post_compose_injections(False)
             if inj:
                 lines.append("━━━ AJOUTÉS AU PROMPT À L'ENVOI ━━━")
                 for label, txt, _mode in inj:
@@ -4182,8 +4278,25 @@ class TabT2V(QScrollArea):
         self.btn_generate.setText(
             f"▶  Plan {self._batch_idx}/{self._batch_total} en cours…"
         )
+        # La file ATTEND le prompt final (composition) avant de lancer : sans cette
+        # attente elle partait 120 ms après la sélection, donc par le chemin
+        # historique — le MÊME plan aurait donné deux prompts différents selon qu'il
+        # est généré à l'unité ou en série (demande Matthieu 2026-07-24 : identique).
+        self._await_final_then_generate()
+
+    # Filet : au-delà de cette attente, on génère par le chemin historique plutôt
+    # que de bloquer la file (composition lente, API muette…).
+    _BATCH_FINAL_TIMEOUT_MS = 90000
+
+    def _await_final_then_generate(self, waited_ms: int = 0):
         from PyQt6.QtCore import QTimer
-        QTimer.singleShot(120, self.start_generation)
+        if not self._is_batch_mode:
+            return   # file annulée pendant l'attente
+        if (getattr(self, "_prompt_is_final", False)
+                or waited_ms >= self._BATCH_FINAL_TIMEOUT_MS):
+            QTimer.singleShot(0, self.start_generation)
+            return
+        QTimer.singleShot(150, lambda: self._await_final_then_generate(waited_ms + 150))
 
     def _refresh_price_estimate(self, *args):
         """Estimation de PRIX (rouge) : nb de plans sélectionnés × durée × prix/s du
@@ -4449,7 +4562,11 @@ class TabT2V(QScrollArea):
             "style_suffix":            "" if _final_mode else video_suffix,
             "no_music_suffix":         "" if _final_mode else no_music_suffix,
             "time_suffix":             "" if _final_mode else time_suffix,
-            "char_consistency_suffix":  char_consistency_suffix,
+            # Neutralisé en mode final AUSSI : api/real l'ajoute quand _composed est
+            # faux (ce qui est le cas ici puisqu'on saute la composition) — il
+            # apparaîtrait donc en plus de ce que l'écran montre. En repli
+            # traduction, il est déjà écrit dans l'encart (_post_compose_injections).
+            "char_consistency_suffix":  "" if _final_mode else char_consistency_suffix,
             "character_notes":          _character_notes,
             "visual_context":           _visual_context,
             "sound_notes":              _sound_notes,

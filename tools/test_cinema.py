@@ -2664,12 +2664,27 @@ def studio_prompt_final_wysiwyg():
     # Jamais écraser une saisie utilisateur en cours.
     assert tsrc.count("self.prompt_ta.toPlainText().strip() != src") >= 2, \
         "garde anti-écrasement de la saisie utilisateur absente"
+    # L'encart reçoit la PROSE COMPOSÉE (décision Matthieu 2026-07-24), pas une
+    # traduction littérale : sinon le prompt envoyé garderait les étiquettes de
+    # section et perdrait la prose optimisée Seedance. Repli traduction si la
+    # composition est indisponible (pas de clé / erreur API).
+    assert "class _FinalPromptWorker" in tsrc, "worker de composition absent"
+    assert "from api.video_prompt import compose as _compose" in tsrc, \
+        "l'encart doit être rempli par la composition, pas par une simple traduction"
+    assert "_build_pre_compose_prompt" in tsrc and "_post_compose_injections" in tsrc, \
+        "séparation pré/post composition absente (doublons ou briques perdues)"
+    assert "translate_to_english" in tsrc, "repli traduction absent"
+    # La FILE attend le prompt final → même prompt qu'en génération unitaire.
+    assert "_await_final_then_generate" in tsrc, \
+        "la file génère sans attendre le prompt final (résultats divergents)"
+    assert "_BATCH_FINAL_TIMEOUT_MS" in tsrc, "file sans filet de sécurité (blocage)"
     # Envoi : en mode final, AUCUNE brique texte n'est recollée + suffixes neutralisés.
     assert '"prompt_is_final":         _final_mode' in tsrc, "flag non transmis à api/real"
     for frag in ('"style_suffix":            "" if _final_mode else',
                  '"time_suffix":             "" if _final_mode else',
                  '"no_music_suffix":         "" if _final_mode else',
-                 '"creative_suffix":          "" if _final_mode else'):
+                 '"creative_suffix":          "" if _final_mode else',
+                 '"char_consistency_suffix":  "" if _final_mode else'):
         assert frag in tsrc, f"suffixe non neutralisé en mode final : {frag}"
     assert "context     = \"\" if _final_mode else" in tsrc, \
         "contexte casting recollé en mode final (doublon)"
@@ -2788,13 +2803,14 @@ def style_visuel_section_storyboard():
     dsrc = inspect.getsource(__import__("ui.dialog_storyboard_generate", fromlist=["_"]))
     assert "get_video_suffix()" in dsrc and "visual_style_from_note" in dsrc, \
         "dialogue storyboard : style (projet + note tolérante) non capturé à la sauvegarde"
-    # 8) L'aperçu « Prompt envoyé à Seedance » (studio vidéo) reflète le prompt RÉEL :
-    #    le style reste dans le corps (traduit) et n'est PAS recollé → pas de doublon.
+    # 8) Studio vidéo : le style baké dans le plan reste dans le corps (traduit /
+    #    composé) et n'est JAMAIS recollé par-dessus → pas de doublon. L'anti-doublon
+    #    vit dans _post_compose_injections (chemin de repli) et dans le récap.
     tsrc = inspect.getsource(__import__("ui.tab_t2v", fromlist=["_"]))
     assert "_build_full_preview_text" in tsrc and "_baked_prev" in tsrc, \
         "aperçu vidéo : style baké non pris en compte"
-    assert "if not _baked_prev and vs:" in tsrc, \
-        "aperçu vidéo : style projet recollé même si déjà baké (doublon)"
+    assert "if not _style_of_prev(self.prompt_ta.toPlainText()).strip() and vs:" in tsrc, \
+        "style projet recollé même si déjà baké dans le plan (doublon)"
 
 
 @test
