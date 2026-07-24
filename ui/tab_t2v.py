@@ -2331,6 +2331,17 @@ class _FinalPromptWorker(QThread):
         self._prompt = prompt
         self._ctx = dict(ctx or {})
 
+    def _with_dialogues(self, text: str) -> str:
+        """Traduit UNIQUEMENT les dialogues vers la langue du plan (colonne
+        « Langues » du Storyboard) — fait ICI pour que l'utilisateur VOIE les
+        répliques dans la bonne langue ; l'envoi ne les retraduit donc pas."""
+        lang = (self._ctx.get("dialogue_lang") or "en")
+        try:
+            from core.lang import translate_dialogues_to
+            return translate_dialogues_to(text, lang) or text
+        except Exception:
+            return text
+
     def run(self):
         try:
             from api.video_prompt import compose as _compose
@@ -2345,14 +2356,15 @@ class _FinalPromptWorker(QThread):
                 sound_notes=self._ctx.get("sound_notes", ""),
             )
             if out:
-                self.done.emit(out, True)
+                self.done.emit(self._with_dialogues(out), True)
                 return
         except Exception:
             pass
         # Repli : traduction du corps (chemin historique non composé).
         try:
             from core.lang import translate_to_english
-            self.done.emit(translate_to_english(self._prompt) or self._prompt, False)
+            _t = translate_to_english(self._prompt) or self._prompt
+            self.done.emit(self._with_dialogues(_t), False)
         except Exception:
             self.done.emit(self._prompt, False)
 
@@ -3380,6 +3392,7 @@ class TabT2V(QScrollArea):
         self._suppress_prompt_signal = False
         self._final_sound_notes = ""
         self._final_was_composed = False
+        self._final_assembly_failed = False
         self._preview_expanded = False  # replié par défaut
 
         frame = QFrame()
@@ -3560,6 +3573,9 @@ class TabT2V(QScrollArea):
             "sound_notes":     self._final_sound_notes,
             "audio": (self._audio_cb.isChecked()
                       if (hasattr(self, "_audio_cb") and self._audio_cb) else True),
+            # Langue des dialogues du plan (colonne « Langues » du Storyboard) :
+            # appliquée dès l'assemblage pour être VISIBLE dans l'encart.
+            "dialogue_lang": (self._active_shot or {}).get("dialogue_lang", "en") or "en",
         }
         self._preview_translate_worker = _FinalPromptWorker(prompt_fr, _ctx)
         self._preview_translate_worker.done.connect(self._on_preview_translated)
@@ -3573,6 +3589,22 @@ class TabT2V(QScrollArea):
         final = self._assemble_final_prompt_text(translated, composed)
         if not final.strip():
             return
+        # GARDE MÉTIER : un prompt FINAL ne contient JAMAIS d'étiquettes de section
+        # ([🎬 ACTION]…). S'il en reste, c'est que la composition ET la traduction
+        # ont échoué (clé absente, API muette) : on LAISSE le prompt de travail en
+        # place plutôt que d'installer un prompt non conforme, mi-français
+        # mi-anglais, que l'envoi expédierait tel quel (constat Matthieu 2026-07-24).
+        try:
+            from core.prompt_sections import is_structured as _is_struct
+            if _is_struct(final):
+                self._prompt_is_final = False
+                self._assembly_source = None
+                self._final_assembly_failed = True
+                self._refresh_prompt_preview()
+                return
+        except Exception:
+            pass
+        self._final_assembly_failed = False
         self._final_was_composed = bool(composed)
         # Remplacer l'encart par le prompt FINAL (anglais, injections écrites) —
         # signaux coupés pour ne pas déclencher _on_prompt_text_changed.
@@ -3727,7 +3759,12 @@ class TabT2V(QScrollArea):
             out.append("+ Template visuel : mots-clés extraits de l'image par "
                        "Claude Vision, ajoutés en fin de prompt")
         _dlang = (self._active_shot or {}).get("dialogue_lang", "en") if self._active_shot else "en"
-        out.append(f"+ Dialogues entre guillemets : traduits vers « {_dlang} » à l'envoi")
+        if getattr(self, "_prompt_is_final", False):
+            out.append(f"✓ Dialogues déjà traduits vers « {_dlang} » dans le prompt "
+                       "ci-dessus (seules les répliques entre guillemets)")
+        else:
+            out.append(f"+ Dialogues entre guillemets : traduits vers « {_dlang} » "
+                       "à l'envoi (seules les répliques, pas le reste du prompt)")
         return out
 
     def _build_full_preview_text(self, translated_user: str | None = None) -> str:
@@ -3742,6 +3779,12 @@ class TabT2V(QScrollArea):
             lines.append(f"✓ L'encart contient le prompt FINAL — {_how}, envoyé tel "
                          "quel (les éléments texte y sont déjà écrits).")
         else:
+            if getattr(self, "_final_assembly_failed", False):
+                lines.append("⚠ Prompt final indisponible (composition et traduction "
+                             "injoignables — vérifiez la clé IA dans Paramètres).")
+                lines.append("   L'encart garde le prompt de travail ; la traduction "
+                             "et les ajouts seront faits à l'envoi.")
+                lines.append("")
             inj = self._text_injections() + self._post_compose_injections(False)
             if inj:
                 lines.append("━━━ AJOUTÉS AU PROMPT À L'ENVOI ━━━")
@@ -4559,6 +4602,9 @@ class TabT2V(QScrollArea):
             # l'analyse vision du template restent appliquées à l'envoi (listées
             # dans « Éléments injectés dans le prompt »).
             "prompt_is_final":         _final_mode,
+            # Dialogues DÉJÀ traduits dans l'encart (mode final) → api/real ne doit
+            # pas les retraduire : double passage inutile et texte affiché ≠ envoyé.
+            "dialogues_translated":    _final_mode,
             "style_suffix":            "" if _final_mode else video_suffix,
             "no_music_suffix":         "" if _final_mode else no_music_suffix,
             "time_suffix":             "" if _final_mode else time_suffix,

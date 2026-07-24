@@ -375,16 +375,19 @@ def run_real(params: dict, emit_progress, is_cancelled) -> dict:
     # mi-anglais mi-chinois créait des incohérences ; on garde l'anglais intégral,
     # quelle que soit la longueur.
 
-    # Langue des dialogues (colonne « Langues » du storyboard) : à l'ENVOI
-    # uniquement, on traduit les dialogues entre guillemets vers la langue
-    # choisie pour ce plan (par défaut anglais). Le prompt à l'écran reste tel quel.
+    # Langue des dialogues (colonne « Langues » du storyboard) : SEULS les dialogues
+    # entre guillemets sont traduits vers la langue choisie pour ce plan (le reste du
+    # prompt reste en anglais). Quand le Studio a produit un prompt FINAL, ils sont
+    # déjà traduits À L'ÉCRAN (params["dialogues_translated"]) → ne pas refaire, sinon
+    # double passage et texte affiché ≠ texte envoyé.
     _dialogue_lang = (params.get("dialogue_lang", "en") or "en")
+    _dlg_done = bool(params.get("dialogues_translated"))
     # ' n'est un guillemet de dialogue que détaché des lettres (pas « It's »).
     import re as _re
     _has_quotes = (any(q in _prompt_en for q in ('"', "«", "“", "‘"))
                    or bool(_re.search(r"(?<![A-Za-zÀ-ÿ])'[^']{1,300}'(?![A-Za-zÀ-ÿ])",
                                       _prompt_en)))
-    if _prompt_en and _has_translation and _has_quotes:
+    if _prompt_en and _has_translation and _has_quotes and not _dlg_done:
         from core.lang import translate_dialogues_to
         emit_progress(5, "Traduction des dialogues…")
         _prompt_en = translate_dialogues_to(_prompt_en, _dialogue_lang)

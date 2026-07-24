@@ -220,9 +220,20 @@ def validate_composed_prompt(output: str, source_prompt: str = "") -> dict:
         errors.append("mots de qualité génériques")
     # Les dialogues explicites doivent rester verbatim jusqu'à l'étape dédiée de
     # traduction des dialogues dans api.real.
+    # ⚠ Le bloc [COHÉRENCE VISUELLE] nomme les entités entre guillemets DROITS
+    # (Personnage "Jésus", Décor "Canyon désertique de Bethléem"…). Ce ne sont PAS
+    # des dialogues : le composeur écrit en anglais et traduit forcément ces noms.
+    # Les compter comme dialogues faisait échouer la validation — donc la
+    # composition — sur TOUT plan ayant un personnage ou un décor assigné
+    # (bug constaté chez Matthieu le 2026-07-24). On les retire avant extraction.
+    _src = source_prompt or ""
+    _src = re.sub(r"\[COH[ÉE]RENCE VISUELLE.*?(?:\n\s*\n|\Z)", "\n", _src,
+                  flags=re.DOTALL | re.IGNORECASE)
+    _src = re.sub(r"^\s*(?:Personnage|D[ée]cor|Accessoire|V[ée]hicule|HMC|Costume)"
+                  r"[^\n]*$", "", _src, flags=re.MULTILINE | re.IGNORECASE)
     quoted = []
     for pattern in (r'"([^"\n]{1,300})"', r'«([^»\n]{1,300})»', r'“([^”\n]{1,300})”'):
-        quoted.extend(re.findall(pattern, source_prompt or ""))
+        quoted.extend(re.findall(pattern, _src))
     for dialogue in quoted:
         if dialogue not in text:
             errors.append(f"dialogue omis ou modifié : {dialogue[:60]}")

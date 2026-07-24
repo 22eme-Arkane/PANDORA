@@ -2674,6 +2674,37 @@ def studio_prompt_final_wysiwyg():
     assert "_build_pre_compose_prompt" in tsrc and "_post_compose_injections" in tsrc, \
         "séparation pré/post composition absente (doublons ou briques perdues)"
     assert "translate_to_english" in tsrc, "repli traduction absent"
+    # Un prompt FINAL ne contient JAMAIS d'étiquettes de section : si composition ET
+    # traduction échouent, on garde le prompt de travail au lieu d'installer un
+    # prompt franglais que l'envoi expédierait tel quel (constat Matthieu).
+    assert "_final_assembly_failed" in tsrc and "if _is_struct(final):" in tsrc, \
+        "garde manquante : un prompt non composé/non traduit pourrait devenir final"
+    # Les noms d'entités du bloc [COHÉRENCE VISUELLE] ne sont PAS des dialogues :
+    # les compter comme tels faisait échouer la composition sur tout plan ayant un
+    # personnage ou un décor (donc quasiment tous).
+    from api.video_prompt import validate_composed_prompt as _V
+    _src = ('[COHÉRENCE VISUELLE — apparence identique]\nPersonnage "Jésus" (Principal)\n'
+            'Décor "Canyon désertique de Bethléem"\nCRITIQUE : exact.\n\n'
+            '[ACTION]\nIl fait « brrr » longuement.')
+    _ok = ("Jesus sits over a Bethlehem desert canyon making a long « brrr » sound, "
+           "golden hour light, painterly style.")
+    assert _V(_ok, _src)["valid"], \
+        "composition rejetée à tort : noms d'entités pris pour des dialogues"
+    assert not _V("Jesus sits over a canyon in golden light, painterly style.",
+                  _src)["valid"], "un vrai dialogue omis doit rester rejeté"
+    # Dialogues : SEULES les répliques sont traduites vers la langue de la colonne
+    # « Langues » du Storyboard ; les noms d'entités du bloc de cohérence ne le sont
+    # JAMAIS (ils renommaient le décor et le personnage). Traduits dès l'assemblage
+    # pour être visibles, donc PAS refaits à l'envoi.
+    assert "dialogues_translated" in tsrc, "drapeau anti-double-traduction absent"
+    assert "translate_dialogues_to" in tsrc, "dialogues non traduits dans l'encart"
+    _rsrc_dlg = inspect.getsource(__import__("api.real", fromlist=["_"]))
+    assert "not _dlg_done" in _rsrc_dlg, \
+        "api/real retraduirait des dialogues déjà traduits"
+    import core.lang as _lang
+    _lsrc = inspect.getsource(_lang.translate_dialogues_to)
+    assert "_entity_line" in _lsrc and "Personnage|D" in _lsrc, \
+        "noms d'entités non protégés : le décor/personnage serait traduit"
     # La FILE attend le prompt final → même prompt qu'en génération unitaire.
     assert "_await_final_then_generate" in tsrc, \
         "la file génère sans attendre le prompt final (résultats divergents)"

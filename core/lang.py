@@ -62,6 +62,20 @@ def translate_dialogues_to(text: str, lang: str) -> str:
         r"«[^»]*»|“[^”]{1,300}”|‘[^’]{1,300}’|\"[^\"]{1,300}\""
         r"|(?<![A-Za-zÀ-ÿ])'[^']{1,300}'(?![A-Za-zÀ-ÿ])"
     )
+    # Les NOMS D'ENTITÉS du bloc [COHÉRENCE VISUELLE] sont entre guillemets droits
+    # (Personnage "Jésus", Décor "Canyon désertique de Bethléem"…). Ce ne sont pas
+    # des répliques : les traduire renommait le décor et le personnage dans le bloc
+    # de cohérence (2026-07-24). On les masque le temps de la traduction.
+    _entity_line = re.compile(
+        r"^\s*(?:Personnage|D[ée]cor|Accessoire|V[ée]hicule|HMC|Costume)[^\n]*$",
+        re.MULTILINE | re.IGNORECASE)
+    _kept: list[str] = []
+
+    def _mask(m: re.Match) -> str:
+        _kept.append(m.group(0))
+        return f"\x00E{len(_kept) - 1}\x00"
+
+    text = _entity_line.sub(_mask, text)
     memo: dict[str, str] = {}
 
     def _tr(m: re.Match) -> str:
@@ -87,7 +101,11 @@ def translate_dialogues_to(text: str, lang: str) -> str:
         memo[seg] = res
         return res
 
-    return pat.sub(_tr, text)
+    out_text = pat.sub(_tr, text)
+    # Restaure les lignes d'entités masquées (jamais traduites).
+    for _i, _line in enumerate(_kept):
+        out_text = out_text.replace(f"\x00E{_i}\x00", _line)
+    return out_text
 
 
 def translate_to_english(text: str) -> str:
