@@ -298,6 +298,12 @@ def run_real(params: dict, emit_progress, is_cancelled) -> dict:
     # REMPLACE strip + traduction, et CONSOMME les suffixes style/heure (intégrés
     # à la prose — ne plus les coller après). Repli : Live (beats), prompt libre,
     # clé absente ou erreur API → chemin historique inchangé ci-dessous.
+    # Prompt FINAL (encart du Studio, WYSIWYG 2026-07-24) : déjà assemblé/traduit
+    # en anglais avec toutes les briques texte écrites → composition, traduction et
+    # suffixes texte SAUTÉS (les params style/time/no_music/creative arrivent vides).
+    # Restent appliqués : cohérence personnage, analyse vision du template, dialogues.
+    _final = bool(params.get("prompt_is_final"))
+
     _composed  = False
     _compose_attempted = False
     _prompt_en = ""
@@ -311,7 +317,8 @@ def run_real(params: dict, emit_progress, is_cancelled) -> dict:
         # chemin historique.
         _has_cine_context = bool((params.get("visual_context") or "").strip()
                                  or (params.get("character_notes") or "").strip())
-        if _vp_should(_raw_prompt) or ((_raw_prompt or "").strip() and _has_cine_context):
+        if not _final and (_vp_should(_raw_prompt)
+                           or ((_raw_prompt or "").strip() and _has_cine_context)):
             _compose_attempted = True
             from core import ai_provider as _aip
             if _aip.key_error(task="video_prompt") is None:
@@ -352,11 +359,18 @@ def run_real(params: dict, emit_progress, is_cancelled) -> dict:
             _drawn = _analyze_draw_guidance(_draw_guidance, _raw_prompt)
             if _drawn:
                 _raw_prompt = _drawn
-        if _raw_prompt and not _has_translation:
+        if _final:
+            # Prompt FINAL de l'encart : DÉJÀ en anglais et déjà assemblé — le
+            # repasser au traducteur le réécrirait (l'utilisateur ne retrouverait
+            # plus le texte qu'il a validé à l'écran). Il part tel quel.
+            emit_progress(3, "Prompt final — envoyé tel quel (déjà en anglais)…")
+            _prompt_en = _raw_prompt
+        elif _raw_prompt and not _has_translation:
             emit_progress(3, "⚠ Moteur de traduction indisponible — prompt envoyé tel quel")
+            _prompt_en = translate_to_english(_raw_prompt) if _raw_prompt else ""
         else:
             emit_progress(3, "Traduction du prompt…")
-        _prompt_en = translate_to_english(_raw_prompt) if _raw_prompt else ""
+            _prompt_en = translate_to_english(_raw_prompt) if _raw_prompt else ""
     # Compression en mandarin SUPPRIMÉE (décision Matthieu 2026-07-23) : un prompt
     # mi-anglais mi-chinois créait des incohérences ; on garde l'anglais intégral,
     # quelle que soit la longueur.

@@ -2646,6 +2646,50 @@ def ecriteau_moteur_ia_du_storyboard():
 
 
 @test
+def studio_prompt_final_wysiwyg():
+    """Studio IA : à la sélection d'un plan, l'ENCART contient le prompt FINAL
+    (anglais, injections texte écrites dedans) et il part TEL QUEL — aucune
+    réinjection à l'envoi. Le bloc déroulant « Éléments injectés dans le prompt »
+    ne contient QUE les injections, jamais le prompt (demande Matthieu 2026-07-24)."""
+    import inspect
+    tsrc = inspect.getsource(__import__("ui.tab_t2v", fromlist=["_"]))
+    # Assemblage : sélection de plan → photo du texte → traduction → encart remplacé.
+    for frag in ("_schedule_final_assembly", "_assemble_final_prompt_text",
+                 "_text_injections", "_prompt_is_final", "_suppress_prompt_signal"):
+        assert frag in tsrc, f"mécanique WYSIWYG absente : {frag}"
+    # Le son de la section [🎵 SOUND DESIGN] est capturé AVANT de disparaître de
+    # l'encart (sinon le Sound Design le perdrait).
+    assert "self._final_sound_notes = _so(self._assembly_source)" in tsrc, \
+        "son non capturé à la prise de la photo source"
+    # Jamais écraser une saisie utilisateur en cours.
+    assert tsrc.count("self.prompt_ta.toPlainText().strip() != src") >= 2, \
+        "garde anti-écrasement de la saisie utilisateur absente"
+    # Envoi : en mode final, AUCUNE brique texte n'est recollée + suffixes neutralisés.
+    assert '"prompt_is_final":         _final_mode' in tsrc, "flag non transmis à api/real"
+    for frag in ('"style_suffix":            "" if _final_mode else',
+                 '"time_suffix":             "" if _final_mode else',
+                 '"no_music_suffix":         "" if _final_mode else',
+                 '"creative_suffix":          "" if _final_mode else'):
+        assert frag in tsrc, f"suffixe non neutralisé en mode final : {frag}"
+    assert "context     = \"\" if _final_mode else" in tsrc, \
+        "contexte casting recollé en mode final (doublon)"
+    # Le bloc déroulant reste REPLIÉ par défaut et n'affiche pas le prompt.
+    assert "self._preview_expanded = False" in tsrc, "bloc doit être replié par défaut"
+    assert "◈  Éléments injectés dans le prompt" in tsrc, "bloc mal nommé"
+    _bsrc = tsrc[tsrc.index("def _build_full_preview_text"):]
+    _bsrc = _bsrc[:_bsrc.index("def _assemble_preview_prompt")]
+    assert "AJOUTÉS AU PROMPT À L'ENVOI" in _bsrc and "APPLIQUÉS À L'ENVOI" in _bsrc, \
+        "bloc : sections d'injections manquantes"
+    assert "lines.append(fp)" not in _bsrc, "le bloc ne doit JAMAIS contenir le prompt"
+    # api/real : le prompt final saute composition ET traduction.
+    rsrc = inspect.getsource(__import__("api.real", fromlist=["_"]))
+    assert '_final = bool(params.get("prompt_is_final"))' in rsrc, "flag non lu par api/real"
+    assert "if not _final and (_vp_should(" in rsrc, "composition non sautée en mode final"
+    assert "if _final:" in rsrc and "_prompt_en = _raw_prompt" in rsrc, \
+        "traduction non sautée : le prompt final serait réécrit"
+
+
+@test
 def decoupage_affiche_titre_projet():
     """Onglet Découpage : la 1re ligne affiche le TITRE DU PROJET, pas le marqueur
     technique « DÉCOUPAGE PANDORA 2 » (demande Matthieu 2026-07-24). Le marqueur est

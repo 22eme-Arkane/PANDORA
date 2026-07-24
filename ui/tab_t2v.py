@@ -3245,8 +3245,12 @@ class TabT2V(QScrollArea):
 
         # Fill prompt
         if shot.get("seedance_prompt"):
+            self._prompt_is_final = False
             self.prompt_ta.setPlainText(shot["seedance_prompt"])
             self._update_injection_banner()
+            # Assemblage du prompt FINAL (traduction EN + injections écrites) qui
+            # remplacera l'encart — WYSIWYG : ce qui est affiché est ce qui part.
+            self._schedule_final_assembly()
             return
         _num   = shot.get("number", "")
         _title = shot.get("scene_title") or shot.get("decor_name") or ""
@@ -3268,9 +3272,11 @@ class TabT2V(QScrollArea):
             parts.append(f"Focale : {shot['focal']}")
         if shot.get("comments"):
             parts.append(shot["comments"])
+        self._prompt_is_final = False
         self.prompt_ta.setPlainText("\n".join(parts))
         self._update_injection_banner()
         self._refresh_prompt_preview()
+        self._schedule_final_assembly()
 
     def _on_shots_selected(self, shots: list):
         count = len(shots)
@@ -3315,14 +3321,24 @@ class TabT2V(QScrollArea):
         from PyQt6.QtCore import QTimer as _QTimer
         self._preview_translate_timer = _QTimer(self)
         self._preview_translate_timer.setSingleShot(True)
-        self._preview_translate_timer.setInterval(1600)
+        # Débounce court : l'assemblage du prompt FINAL se déclenche à la SÉLECTION
+        # d'un plan (plus à chaque frappe) — le délai n'absorbe que les balayages
+        # rapides de la bande de plans.
+        self._preview_translate_timer.setInterval(500)
         self._preview_translate_timer.timeout.connect(self._start_preview_translate)
         self._preview_translate_worker = None
         self._preview_translated_text: str | None = None
-        # DÉPLIÉ par défaut (demande Matthieu 2026-07-24) : le prompt DÉFINITIF
-        # traduit en anglais (tel qu'envoyé au moteur) doit être visible dès la
-        # sélection d'un plan, pas caché derrière un repli.
-        self._preview_expanded = True
+        # WYSIWYG (demande Matthieu 2026-07-24) : quand un plan est sélectionné,
+        # l'ENCART prompt est remplacé par le prompt FINAL (traduit en anglais,
+        # toutes les injections texte écrites dedans) et part TEL QUEL à l'envoi.
+        # _prompt_is_final : l'encart contient ce prompt final (éditable).
+        # _assembly_source : photo du texte au lancement — si l'utilisateur édite
+        # pendant la traduction, on n'écrase JAMAIS sa saisie.
+        self._prompt_is_final = False
+        self._assembly_source: str | None = None
+        self._suppress_prompt_signal = False
+        self._final_sound_notes = ""
+        self._preview_expanded = False  # replié par défaut
 
         frame = QFrame()
         frame.setStyleSheet(
@@ -3341,11 +3357,11 @@ class TabT2V(QScrollArea):
         hdr_lay.setContentsMargins(0, 9, 0, 9)
         hdr_lay.setSpacing(6)
 
-        self._preview_arrow = QLabel("▼")
+        self._preview_arrow = QLabel("▶")
         self._preview_arrow.setStyleSheet(
             f"color:{C['red']};font-size:9px;background:transparent;border:none;"
         )
-        _h_lbl = QLabel("◈  PANDORA — Prompt envoyé à Seedance")
+        _h_lbl = QLabel("◈  Éléments injectés dans le prompt")
         _h_lbl.setStyleSheet(
             f"color:{C['red']};font-size:10px;font-weight:700;"
             f"background:transparent;border:none;"
@@ -3356,7 +3372,7 @@ class TabT2V(QScrollArea):
             f"background:transparent;border:none;"
         )
         self._preview_spinner.setVisible(False)
-        _note = QLabel("traduit auto · sans upload images")
+        _note = QLabel("ajoutés au prompt depuis le Storyboard & les réglages")
         _note.setStyleSheet(
             f"color:{C['text_dim']};font-size:9px;background:transparent;border:none;"
         )
@@ -3370,7 +3386,7 @@ class TabT2V(QScrollArea):
         # ── Corps (masqué par défaut) ─────────────────────────────────────────
         self._preview_body_container = QWidget()
         self._preview_body_container.setStyleSheet("background:transparent;")
-        self._preview_body_container.setVisible(True)   # déplié par défaut
+        self._preview_body_container.setVisible(False)
         body_lay = QVBoxLayout(self._preview_body_container)
         body_lay.setContentsMargins(0, 0, 0, 10)
         body_lay.setSpacing(6)
@@ -3405,8 +3421,26 @@ class TabT2V(QScrollArea):
         return frame
 
     def _on_prompt_text_changed(self):
-        self._preview_translated_text = None
+        if getattr(self, "_suppress_prompt_signal", False):
+            return   # remplacement programmatique par l'assemblage — ne rien faire
+        # Édition manuelle : on annule tout assemblage EN COURS (jamais écraser la
+        # saisie de l'utilisateur). Un prompt DÉJÀ final reste final : l'utilisateur
+        # ajuste le texte exact qui partira au moteur (WYSIWYG).
+        self._assembly_source = None
         self._refresh_prompt_preview()
+
+    def _schedule_final_assembly(self):
+        """Programme l'assemblage du prompt FINAL de l'encart pour le plan qui vient
+        d'être sélectionné (débounce court pour les balayages de plans)."""
+        self._assembly_source = self.prompt_ta.toPlainText().strip()
+        # Son CAPTURÉ ici (et pas seulement au lancement de la traduction) : la
+        # section [🎵 SOUND DESIGN] disparaît de l'encart à l'assemblage, et elle
+        # doit continuer d'alimenter le Sound Design à l'envoi.
+        try:
+            from core.prompt_sections import sound_of as _so
+            self._final_sound_notes = _so(self._assembly_source)
+        except Exception:
+            self._final_sound_notes = ""
         self._preview_translate_timer.start()
 
     def _sync_film_anchor_with_style(self):
@@ -3438,12 +3472,16 @@ class TabT2V(QScrollArea):
         self._preview_body.setText(text)
 
     def _start_preview_translate(self):
-        # On traduit le CORPS sans la section SOUND DESIGN (le son part au Sound
-        # Design). Le STYLE VISUEL est CONSERVÉ et donc TRADUIT avec le corps —
-        # souvent écrit en français, il doit figurer traduit dans le prompt final
-        # (comme api/real.py). L'aperçu reflète ainsi le prompt réellement envoyé.
-        from core.prompt_sections import strip_for_video as _sfv_prev
-        prompt_fr = _sfv_prev(self.prompt_ta.toPlainText().strip())
+        # Assemblage du prompt FINAL de l'encart : on traduit le CORPS sans la
+        # section SOUND DESIGN (le son part au Sound Design). Le STYLE VISUEL est
+        # CONSERVÉ et donc TRADUIT avec le corps — souvent écrit en français, il
+        # doit figurer traduit dans le prompt final (comme api/real.py).
+        src = getattr(self, "_assembly_source", None)
+        if not src or self.prompt_ta.toPlainText().strip() != src:
+            return   # édition utilisateur entre-temps → on n'écrase jamais
+        from core.prompt_sections import strip_for_video as _sfv_prev, sound_of as _so_prev
+        self._final_sound_notes = _so_prev(src)
+        prompt_fr = _sfv_prev(src)
         if not prompt_fr:
             return
         # Anti-crash : un QThread basé sur run() n'a pas de boucle d'événements, donc
@@ -3464,38 +3502,40 @@ class TabT2V(QScrollArea):
 
     def _on_preview_translated(self, translated: str):
         self._preview_spinner.setVisible(False)
-        self._preview_translated_text = translated
+        src = getattr(self, "_assembly_source", None)
+        if not src or self.prompt_ta.toPlainText().strip() != src:
+            return   # l'utilisateur a édité pendant la traduction → sa saisie prime
+        final = self._assemble_final_prompt_text(translated)
+        if not final.strip():
+            return
+        # Remplacer l'encart par le prompt FINAL (anglais, injections écrites) —
+        # signaux coupés pour ne pas déclencher _on_prompt_text_changed.
+        self._suppress_prompt_signal = True
+        try:
+            self.prompt_ta.setPlainText(final)
+        finally:
+            self._suppress_prompt_signal = False
+        self._prompt_is_final = True
+        self._assembly_source = None
         self._refresh_prompt_preview()
 
-    def _build_full_preview_text(self, translated_user: str | None = None) -> str:
-        """Builds the complete preview text shown in the ◈ PANDORA block."""
-        lines = []
+    # Heure du plan → suffixe d'éclairage en anglais (partagé assemblage / envoi).
+    _SHOT_TIME_EN_PREVIEW = {
+        "Jour":            "strict daylight, natural midday sun, bright neutral light, no golden hour, no sunset",
+        "Nuit":            "nighttime scene, dark environment, night lighting, no daylight, moonlight or artificial light",
+        "Lever du soleil": "sunrise, warm golden morning light, sun just above the horizon, soft pink-orange sky",
+        "Coucher du soleil": "sunset, golden hour, warm amber-orange light, sun low on the horizon",
+    }
 
-        # ── PROMPT ────────────────────────────────────────────────────────────
-        # Corps SANS la section SOUND DESIGN (le son ne part pas au moteur vidéo) ;
-        # le STYLE VISUEL est CONSERVÉ dans le corps (traduit avec lui) — cohérent
-        # avec api/real.py. La version traduite en contient déjà la traduction.
-        if translated_user is not None:
-            user_text = translated_user
-        else:
-            from core.prompt_sections import strip_for_video as _sfv_body
-            user_text = _sfv_body(self.prompt_ta.toPlainText().strip())
-        if not user_text:
-            import core.style as _sa_e
-            _cam_e = self._camera_picker.get_suffix() if hasattr(self, "_camera_picker") else ""
-            _vs_e = _sa_e.get_video_suffix_no_cam() if _cam_e else _sa_e.get_video_suffix()
-            if not _vs_e and not _cam_e:
-                return "(prompt vide — aucun style ni caméra configurés)"
-            _hint = ["(prompt vide — éléments qui seront ajoutés à votre texte :)"]
-            if _cam_e:
-                _hint.append(f"+ Caméra : {_cam_e}")
-            if _vs_e:
-                _hint.append(f"+ Style : {_vs_e}")
-            return "\n".join(_hint)
-
-        context = self._casting.get_context()
-        fp = (context + user_text) if context else user_text
-
+    def _text_injections(self) -> list:
+        """Briques de TEXTE ajoutées au prompt — écrites dans l'encart par
+        l'assemblage du prompt final, ou ajoutées à l'envoi en mode libre.
+        [(label FR, texte, mode)] ; l'ordre de la liste EST l'ordre d'application
+        historique de l'envoi (_on_generate) — ne pas le réordonner."""
+        inj = []
+        ctx = self._casting.get_context()
+        if ctx:
+            inj.append(("Cohérence visuelle (casting/décor)", ctx, "ctx"))
         if self._active_shot:
             from core.camera_data import focal_to_framing_prefix, shot_movement_to_prompt
             _cam_bits = []
@@ -3506,49 +3546,36 @@ class TabT2V(QScrollArea):
             if _mov:
                 _cam_bits.append(_mov)
             if _cam_bits:
-                fp = f"{', '.join(_cam_bits)} — {fp}"
-
+                inj.append(("Cadrage storyboard (focale + mouvement)",
+                            ", ".join(_cam_bits), "dash_prefix"))
         if (hasattr(self, "_dyn_cam_cb") and self._dyn_cam_cb
                 and self._dyn_cam_cb.isChecked() and not self._active_shot):
-            fp = (f"{fp}, change the camera angle every 2 seconds "
-                  "alternating between several types of shots")
+            inj.append(("Caméra dynamique",
+                        "change the camera angle every 2 seconds "
+                        "alternating between several types of shots", "comma_suffix"))
         else:
-            cam = self._camera_picker.get_suffix()
+            cam = self._camera_picker.get_suffix() if hasattr(self, "_camera_picker") else ""
             if cam:
-                fp = f"{fp}, {cam}"
-
-        import core.style as _style_api_prev
-        _film_anchor_active_prev = hasattr(self, "_film_anchor_cb") and self._film_anchor_cb and self._film_anchor_cb.isChecked()
-        _film_covered_prev = _style_api_prev.get_style_key() in {"realistic"}
-        if _film_anchor_active_prev and not _film_covered_prev:
-            fp = (f"{fp}, shot on ARRI Alexa 35mm film, photorealistic live action footage, "
-                  "real human actors, authentic film grain, natural skin texture and pores, "
-                  "no CGI, no 3D render, no computer animation, no digital art, "
-                  "organic depth of field, natural practical lighting")
-
+                inj.append(("Caméra Image & Son", cam, "comma_suffix"))
+        import core.style as _sa
+        _film_anchor_active = (hasattr(self, "_film_anchor_cb") and self._film_anchor_cb
+                               and self._film_anchor_cb.isChecked())
+        if _film_anchor_active and _sa.get_style_key() not in {"realistic"}:
+            inj.append(("Prise de vue réelle (anti-CGI)",
+                        "shot on ARRI Alexa 35mm film, photorealistic live action footage, "
+                        "real human actors, authentic film grain, natural skin texture and pores, "
+                        "no CGI, no 3D render, no computer animation, no digital art, "
+                        "organic depth of field, natural practical lighting", "comma_suffix"))
         cont = self._continuity_bar.build_continuity_prefix()
         if cont:
-            fp = f"{cont}\n{fp}"
-
+            inj.append(("Raccord / continuité", cont, "nl_prefix"))
         if not (hasattr(self, "_subtitle_cb") and self._subtitle_cb
                 and self._subtitle_cb.isChecked()):
-            fp = f"{fp}, no subtitles"
-
-        # (suffixe qualité « 4K ultra HD… » RETIRÉ — mots de qualité génériques
-        # interdits par la doctrine des prompts : ils poussent vers un rendu CGI.)
-
-        _SHOT_TIME_EN = {
-            "Jour":            "strict daylight, natural midday sun, bright neutral light, no golden hour, no sunset",
-            "Nuit":            "nighttime scene, dark environment, night lighting, no daylight, moonlight or artificial light",
-            "Lever du soleil": "sunrise, warm golden morning light, sun just above the horizon, soft pink-orange sky",
-            "Coucher du soleil": "sunset, golden hour, warm amber-orange light, sun low on the horizon",
-        }
+            inj.append(("Sous-titres désactivés", "no subtitles", "comma_suffix"))
         _st = (self._active_shot.get("shot_time") if self._active_shot else "") or ""
-        ts = _SHOT_TIME_EN.get(_st, "")
+        ts = self._SHOT_TIME_EN_PREVIEW.get(_st, "")
         if ts:
-            fp = f"{ts}, {fp}"
-
-        import core.style as _sa
+            inj.append(("Heure du plan (éclairage)", ts, "comma_prefix"))
         _prev_cam = self._camera_picker.get_suffix() if hasattr(self, "_camera_picker") else ""
         vs = _sa.get_video_suffix_no_cam() if _prev_cam else _sa.get_video_suffix()
         # Style : la section [🎨 STYLE VISUEL] bakée dans le plan est DÉJÀ dans le
@@ -3557,22 +3584,91 @@ class TabT2V(QScrollArea):
         from core.prompt_sections import style_of as _style_of_prev
         _baked_prev = _style_of_prev(self.prompt_ta.toPlainText()).strip()
         if not _baked_prev and vs:
-            fp = f"{fp}, {vs}"
-        _applied_style = _baked_prev or vs   # pour l'affichage « Template » du récap
-
+            inj.append(("Style vidéo du projet", vs, "comma_suffix"))
         music_on = (hasattr(self, "_music_cb") and self._music_cb
                     and self._music_cb.isChecked())
         if not music_on:
-            fp = (f"{fp}, no music, no background music, no soundtrack, "
-                  "no musical score, natural ambient sound only")
-
+            inj.append(("Musique désactivée",
+                        "no music, no background music, no soundtrack, "
+                        "no musical score, natural ambient sound only", "comma_suffix"))
         cs = self._creative.get_creative_suffix()
         if cs:
-            fp = f"{fp}, {cs}"
+            inj.append(("Contrôles créatifs", cs, "comma_suffix"))
+        return inj
 
-        _pfx = "━━━ PROMPT " + ("(traduit) " if translated_user is not None else "(traduction…) ") + "━━━"
-        lines.append(_pfx)
-        lines.append(fp)
+    def _assemble_final_prompt_text(self, body_en: str) -> str:
+        """Prompt FINAL de l'encart (WYSIWYG) : corps traduit en anglais + toutes
+        les briques texte, appliquées dans l'ordre EXACT de l'envoi historique.
+        Ce texte part ensuite TEL QUEL au moteur (aucune réinjection)."""
+        fp = (body_en or "").strip()
+        if not fp:
+            return ""
+        for _label, txt, mode in self._text_injections():
+            if mode == "ctx":
+                fp = txt + fp
+            elif mode == "dash_prefix":
+                fp = f"{txt} — {fp}"
+            elif mode == "nl_prefix":
+                fp = f"{txt}\n{fp}"
+            elif mode == "comma_prefix":
+                fp = f"{txt}, {fp}"
+            else:   # comma_suffix
+                fp = f"{fp}, {txt}"
+        return fp
+
+    def _send_time_injection_lines(self) -> list:
+        """Injections faites À L'ENVOI par le moteur d'envoi, jamais écrites dans
+        l'encart (elles dépendent des images/réglages au moment de générer) —
+        listées dans le bloc « Éléments injectés » quel que soit le mode."""
+        out = []
+        _chars_img = [
+            d.get("name", "") for d in self._casting._char_data_map.values()
+            if os.path.isfile(d.get("sheet_path", "") or d.get("image_path", "") or "")
+        ]
+        if _chars_img:
+            out.append("+ Cohérence personnage (réfs casting) : "
+                       "« exact same person as the reference image… »")
+        _sref = getattr(self, "_style_ref_path", "")
+        if _sref and os.path.isfile(_sref):
+            out.append("+ Template visuel : mots-clés extraits de l'image par "
+                       "Claude Vision, ajoutés en fin de prompt")
+        _dlang = (self._active_shot or {}).get("dialogue_lang", "en") if self._active_shot else "en"
+        out.append(f"+ Dialogues entre guillemets : traduits vers « {_dlang} » à l'envoi")
+        return out
+
+    def _build_full_preview_text(self, translated_user: str | None = None) -> str:
+        """Bloc « ◈ Éléments injectés dans le prompt » : liste UNIQUEMENT ce qui est
+        injecté/envoyé et qui n'est PAS écrit dans l'encart — jamais le prompt
+        lui-même (demande Matthieu 2026-07-24, non éditable)."""
+        lines = []
+
+        if getattr(self, "_prompt_is_final", False):
+            lines.append("✓ L'encart contient le prompt FINAL — envoyé tel quel "
+                         "(les éléments texte y sont déjà écrits).")
+        else:
+            inj = self._text_injections()
+            if inj:
+                lines.append("━━━ AJOUTÉS AU PROMPT À L'ENVOI ━━━")
+                for label, txt, _mode in inj:
+                    _short = txt if len(txt) <= 110 else txt[:110] + "…"
+                    lines.append(f"+ {label} : {_short}")
+
+        _residual = self._send_time_injection_lines()
+        if _residual:
+            lines.append("")
+            lines.append("━━━ APPLIQUÉS À L'ENVOI ━━━")
+            lines.extend(_residual)
+
+        # Variables du récap PARAMÈTRES (recalculées localement).
+        import core.style as _sa
+        _prev_cam = self._camera_picker.get_suffix() if hasattr(self, "_camera_picker") else ""
+        vs = _sa.get_video_suffix_no_cam() if _prev_cam else _sa.get_video_suffix()
+        from core.prompt_sections import style_of as _style_of_prev
+        _baked_prev = _style_of_prev(self.prompt_ta.toPlainText()).strip()
+        _applied_style = _baked_prev or vs
+        music_on = (hasattr(self, "_music_cb") and self._music_cb
+                    and self._music_cb.isChecked())
+        cs = self._creative.get_creative_suffix()
 
         # ── IMAGES ENVOYÉES ───────────────────────────────────────────────────
         img_lines = []
@@ -3820,6 +3916,9 @@ class TabT2V(QScrollArea):
             return
         prompt = (entry.get("prompt") or "").strip()
         if prompt:
+            # Prompt d'historique = pré-traduction → chemin d'envoi historique
+            # (PAS le mode « prompt final » de l'encart).
+            self._prompt_is_final = False
             self.prompt_ta.setPlainText(prompt)
         try:
             seed = int(entry.get("seed") or 0)
@@ -4146,22 +4245,28 @@ class TabT2V(QScrollArea):
             if not self._check_davinci_connection():
                 return
 
+        # WYSIWYG (demande Matthieu 2026-07-24) : quand l'encart contient le prompt
+        # FINAL assemblé (sélection de plan → traduction EN + injections écrites),
+        # il part TEL QUEL — aucune brique texte n'est réinjectée ici, et api/real
+        # saute composition + traduction via params["prompt_is_final"].
+        _final_mode = bool(getattr(self, "_prompt_is_final", False))
+
         # Retirer [🎵 SOUND DESIGN] AVANT l'assemblage : les suffixes ajoutés en
         # queue (« no subtitles »…) tombaient DANS la section son puis étaient
         # supprimés avec elle par api/real.strip_for_video (qui reste en filet).
         # Le texte son est CAPTURÉ avant le strip → il guide l'audio Seedance via
         # la composition en prose (api/video_prompt, params["sound_notes"]).
         from core.prompt_sections import strip_for_video as _strip_sound, sound_of as _sound_of
-        _sound_notes = _sound_of(prompt)
+        _sound_notes = _sound_of(prompt) or (self._final_sound_notes if _final_mode else "")
         prompt = _strip_sound(prompt) or prompt
 
-        context     = self._casting.get_context()
+        context     = "" if _final_mode else self._casting.get_context()
         full_prompt = (context + prompt) if context else prompt
 
         # Framing (focale) + MOUVEMENT caméra du storyboard en tête — pour que
         # Seedance respecte le cadrage ET le mouvement (« Fixe » = plan fixe, sinon
         # le modèle dérive souvent en travelling/grue).
-        if self._active_shot:
+        if self._active_shot and not _final_mode:
             from core.camera_data import focal_to_framing_prefix, shot_movement_to_prompt
             _cam_bits = []
             _framing = focal_to_framing_prefix(self._active_shot.get("focal", ""))
@@ -4188,20 +4293,20 @@ class TabT2V(QScrollArea):
         )
 
         # Caméra dynamique (mode libre sans shot storyboard)
-        if (hasattr(self, "_dyn_cam_cb") and self._dyn_cam_cb.isChecked()
+        if (not _final_mode and hasattr(self, "_dyn_cam_cb") and self._dyn_cam_cb.isChecked()
                 and not self._active_shot):
             full_prompt = (
                 f"{full_prompt}, change the camera angle every 2 seconds "
                 "alternating between several types of shots"
             )
-        elif cam_suffix:
+        elif cam_suffix and not _final_mode:
             full_prompt = f"{full_prompt}, {cam_suffix}"
 
         # Prise de vue réelle — ancrage filmique anti-CGI/3D
         # (ignoré si le style actif couvre déjà le registre live-action)
         _film_anchor_active = hasattr(self, "_film_anchor_cb") and self._film_anchor_cb.isChecked()
         _film_already_covered = style_api.get_style_key() in {"realistic"}
-        if _film_anchor_active and not _film_already_covered:
+        if _film_anchor_active and not _film_already_covered and not _final_mode:
             full_prompt = (
                 f"{full_prompt}, shot on ARRI Alexa 35mm film, photorealistic live action footage, "
                 "real human actors, authentic film grain, natural skin texture and pores, "
@@ -4210,7 +4315,7 @@ class TabT2V(QScrollArea):
             )
 
         continuity = self._continuity_bar.build_continuity_prefix()
-        if continuity:
+        if continuity and not _final_mode:
             full_prompt = f"{continuity}\n{full_prompt}"
 
         audio_on = (
@@ -4236,7 +4341,7 @@ class TabT2V(QScrollArea):
             if (hasattr(self, "_subtitle_cb") and self._subtitle_cb)
             else False
         )
-        if not subtitle_on:
+        if not subtitle_on and not _final_mode:
             full_prompt = f"{full_prompt}, no subtitles"
 
         # Build composite reference mosaics — Seedance only
@@ -4335,14 +4440,20 @@ class TabT2V(QScrollArea):
         params = {
             "mode":                    "i2v" if i2v_frame else "t2v",
             "prompt":                  full_prompt,
-            "style_suffix":            video_suffix,
-            "no_music_suffix":         no_music_suffix,
-            "time_suffix":             time_suffix,
+            # Mode FINAL : les briques texte sont DÉJÀ écrites dans le prompt de
+            # l'encart → suffixes neutralisés (sinon doublons) ; api/real saute
+            # composition + traduction via le flag. La cohérence personnage et
+            # l'analyse vision du template restent appliquées à l'envoi (listées
+            # dans « Éléments injectés dans le prompt »).
+            "prompt_is_final":         _final_mode,
+            "style_suffix":            "" if _final_mode else video_suffix,
+            "no_music_suffix":         "" if _final_mode else no_music_suffix,
+            "time_suffix":             "" if _final_mode else time_suffix,
             "char_consistency_suffix":  char_consistency_suffix,
             "character_notes":          _character_notes,
             "visual_context":           _visual_context,
             "sound_notes":              _sound_notes,
-            "creative_suffix":          self._creative.get_creative_suffix(),
+            "creative_suffix":          "" if _final_mode else self._creative.get_creative_suffix(),
             "safety_tolerance_override": str(self._creative.get_safety_tolerance()),
             "model":          self._get_model(),
             "duration":       self._get_duration(),
