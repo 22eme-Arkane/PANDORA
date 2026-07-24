@@ -79,6 +79,8 @@ def _last_opened(iso: str) -> str:
 class _ProjectCard(QWidget):
     clicked = pyqtSignal(dict)
     rename_requested = pyqtSignal(dict)
+    duplicate_requested = pyqtSignal(dict)
+    delete_requested = pyqtSignal(dict)
 
     _W, _H = 420, 236
 
@@ -170,18 +172,27 @@ class _ProjectCard(QWidget):
         )
 
     def contextMenuEvent(self, e):
-        # Renommer — proposé sur le projet OUVERT uniquement (comportement historique).
-        if not self._is_current:
-            return
+        # Clic droit sur N'IMPORTE QUELLE vignette (demande Matthieu 2026-07-24) :
+        # renommer, dupliquer, supprimer. Auparavant réservé au projet ouvert.
         menu = QMenu(self)
         menu.setStyleSheet(
             f"QMenu{{background:{CP['bg2']};border:1px solid {CP['border_bright']};"
             f"border-radius:8px;padding:6px;}}"
             f"QMenu::item{{color:{CP['text_primary']};padding:7px 18px;font-size:11px;}}"
             f"QMenu::item:selected{{background:{CP['accent_dim']};}}"
+            f"QMenu::separator{{height:1px;background:{CP['border']};margin:4px 8px;}}"
         )
-        act = menu.addAction("✎  " + translate("Renommer le projet"))
-        act.triggered.connect(lambda: self.rename_requested.emit(self._data))
+        act_ren = menu.addAction("✎  " + translate("Renommer"))
+        act_ren.triggered.connect(lambda: self.rename_requested.emit(self._data))
+        act_dup = menu.addAction("⧉  " + translate("Dupliquer"))
+        act_dup.triggered.connect(lambda: self.duplicate_requested.emit(self._data))
+        menu.addSeparator()
+        act_del = menu.addAction("🗑  " + translate("Supprimer"))
+        act_del.triggered.connect(lambda: self.delete_requested.emit(self._data))
+        # Le projet OUVERT ne peut pas être supprimé (données en cours d'utilisation).
+        if self._is_current:
+            act_del.setEnabled(False)
+            act_del.setToolTip(translate("Fermez ou changez de projet pour le supprimer"))
         menu.exec(e.globalPos())
 
 
@@ -417,7 +428,11 @@ class PageProjects(QWidget):
                 data, is_current=bool(current_path)
                 and data.get("_path", "") == current_path)
             card.clicked.connect(self._on_switch)
-            card.rename_requested.connect(lambda _d: self._on_rename())
+            # Le projet CIBLÉ par le clic droit est transmis (plus seulement le projet
+            # ouvert) : chaque vignette agit sur SON projet.
+            card.rename_requested.connect(self._on_rename)
+            card.duplicate_requested.connect(self._on_duplicate)
+            card.delete_requested.connect(self._on_delete)
             self._grid.addWidget(card, row0 + i // 3, i % 3)
 
     # ── Actions ───────────────────────────────────────────────────────────────
@@ -446,19 +461,99 @@ class PageProjects(QWidget):
                 translate("Ce dossier ne contient pas de projet PANDORA valide.")
             )
 
-    def _on_rename(self):
+    def _is_open_project(self, data: dict) -> bool:
+        _cur = (self._current or {}).get("_path", "")
+        return bool(_cur) and data.get("_path", "") == _cur
+
+    def _on_rename(self, data: dict | None = None):
         from PyQt6.QtWidgets import QInputDialog
-        current_name = self._current.get("name", "")
+        target = data if isinstance(data, dict) and data.get("_path") else self._current
+        current_name = target.get("name", "")
         new_name, ok = QInputDialog.getText(
             self, translate("Renommer le projet"), translate("Nouveau nom :"), text=current_name
         )
         if not ok or not new_name.strip() or new_name.strip() == current_name:
             return
-        project_api.rename_project(self._current, new_name.strip())
+        project_api.rename_project(target, new_name.strip())
+        # Le projet ouvert garde son nom à jour (barre de titre, fiches…).
+        if self._is_open_project(target):
+            self._current["name"] = new_name.strip()
         self._rebuild_grid()
         w = self.window()
         if hasattr(w, "_refresh_project_page"):
             w._refresh_project_page()
+
+    def _on_duplicate(self, data: dict):
+        """Copie INTÉGRALE du projet (peut être long : images et clips inclus)."""
+        from PyQt6.QtWidgets import QInputDialog, QMessageBox, QApplication
+        from PyQt6.QtCore import Qt as _Qt
+        if not isinstance(data, dict) or not data.get("_path"):
+            return
+        suggested = f"{data.get('name', 'Projet')} (copie)"
+        new_name, ok = QInputDialog.getText(
+            self, translate("Dupliquer le projet"),
+            translate("Nom de la copie :"), text=suggested)
+        if not ok or not new_name.strip():
+            return
+        QApplication.setOverrideCursor(_Qt.CursorShape.WaitCursor)
+        try:
+            clone = project_api.duplicate_project(data, new_name.strip())
+        finally:
+            QApplication.restoreOverrideCursor()
+        if not clone:
+            QMessageBox.warning(self, translate("Duplication impossible"),
+                                translate("La copie du dossier du projet a échoué."))
+            return
+        self._rebuild_grid()
+
+    def _on_delete(self, data: dict):
+        """Suppression : retire de la liste, et n'efface les fichiers QUE si
+        l'utilisateur le demande explicitement (case décochée par défaut)."""
+        from PyQt6.QtWidgets import QMessageBox, QCheckBox
+        if not isinstance(data, dict) or not data.get("_path"):
+            return
+        if self._is_open_project(data):
+            QMessageBox.information(
+                self, translate("Projet ouvert"),
+                translate("Ce projet est actuellement ouvert. "
+                          "Ouvrez un autre projet avant de le supprimer."))
+            return
+        box = QMessageBox(self)
+        box.setIcon(QMessageBox.Icon.Warning)
+        box.setWindowTitle(translate("Supprimer le projet"))
+        box.setText(f"{translate('Supprimer')} « {data.get('name', '')} » ?")
+        box.setInformativeText(translate(
+            "Par défaut, le projet est seulement retiré de la liste : "
+            "son dossier reste sur le disque et peut être rouvert."))
+        cb = QCheckBox(translate("Supprimer aussi les fichiers du disque (irréversible)"))
+        box.setCheckBox(cb)
+        box.setStandardButtons(QMessageBox.StandardButton.Cancel
+                               | QMessageBox.StandardButton.Yes)
+        box.setDefaultButton(QMessageBox.StandardButton.Cancel)
+        try:
+            from ui.widgets import disable_default_buttons
+            disable_default_buttons(box)
+        except Exception:
+            pass
+        if box.exec() != QMessageBox.StandardButton.Yes:
+            return
+        _hard = cb.isChecked()
+        if _hard:
+            # Seconde confirmation : l'effacement disque est définitif.
+            _c = QMessageBox.question(
+                self, translate("Confirmation définitive"),
+                translate("Le dossier du projet et TOUT son contenu (scénario, "
+                          "storyboard, images, clips) seront définitivement "
+                          "supprimés. Confirmer ?"),
+                QMessageBox.StandardButton.Cancel | QMessageBox.StandardButton.Yes,
+                QMessageBox.StandardButton.Cancel)
+            if _c != QMessageBox.StandardButton.Yes:
+                return
+        if not project_api.delete_project(data, remove_files=_hard):
+            QMessageBox.warning(self, translate("Suppression incomplète"),
+                                translate("Le projet a été retiré de la liste, mais "
+                                          "son dossier n'a pas pu être supprimé."))
+        self._rebuild_grid()
 
     def _on_new(self):
         from ui.splash import NewProjectDialog

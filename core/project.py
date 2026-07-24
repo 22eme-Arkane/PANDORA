@@ -205,6 +205,71 @@ def rename_project(data: dict, new_name: str) -> dict:
     return data
 
 
+def duplicate_project(data: dict, new_name: str = "") -> dict | None:
+    """Duplique un projet : COPIE INTÉGRALE de son dossier (scénario, storyboard,
+    images, clips…) sous un nouveau nom, avec un nouvel identifiant. L'original
+    n'est jamais modifié. Retourne le nouveau projet, ou None si la copie échoue.
+
+    ⚠ Appel potentiellement LONG (un projet peut peser plusieurs Go) : appelé depuis
+    l'UI avec un curseur d'attente."""
+    import shutil
+    src = data.get("_path", "")
+    if not src or not os.path.isdir(src):
+        return None
+    base = os.path.dirname(src)
+    name = (new_name or "").strip() or f"{data.get('name', 'Projet')} (copie)"
+    safe = "".join(c for c in name if c.isalnum() or c in " -_").strip() or "Projet"
+    dest = os.path.join(base, safe)
+    i = 2
+    while os.path.exists(dest):
+        dest = os.path.join(base, f"{safe}_{i}")
+        i += 1
+    try:
+        shutil.copytree(src, dest)
+    except Exception:
+        return None
+    # Descripteur du CLONE : nouvel id/nom/dates. Les anciens .json copiés sont
+    # retirés pour qu'un seul descripteur subsiste dans le dossier.
+    for fname in os.listdir(dest):
+        if fname.lower().endswith(".json") and os.path.isfile(os.path.join(dest, fname)):
+            try:
+                with open(os.path.join(dest, fname), "r", encoding="utf-8") as f:
+                    _d = json.load(f)
+            except Exception:
+                continue
+            if isinstance(_d, dict) and "name" in _d and "id" in _d:
+                try:
+                    os.remove(os.path.join(dest, fname))
+                except OSError:
+                    pass
+    now = datetime.now().isoformat()
+    clone = {k: v for k, v in data.items() if not k.startswith("_")}
+    clone.update({"id": str(uuid.uuid4()), "name": name,
+                  "created_at": now, "modified_at": now})
+    clone["_path"] = dest
+    _save(clone)
+    add_to_recent(dest)
+    return clone
+
+
+def delete_project(data: dict, remove_files: bool = False) -> bool:
+    """Retire un projet du registre. Si remove_files=True, supprime AUSSI son dossier
+    du disque (IRRÉVERSIBLE) — l'appelant DOIT avoir obtenu une confirmation
+    explicite de l'utilisateur. Retourne True si le registre a été mis à jour."""
+    path = data.get("_path", "")
+    if not path:
+        return False
+    norm = os.path.normpath(path)
+    _save_registry([p for p in _load_registry() if os.path.normpath(p) != norm])
+    if remove_files and os.path.isdir(path):
+        import shutil
+        try:
+            shutil.rmtree(path)
+        except Exception:
+            return False
+    return True
+
+
 def touch_project(data: dict):
     """Met à jour modified_at, sauvegarde, et remonte dans le registre."""
     data["modified_at"] = datetime.now().isoformat()

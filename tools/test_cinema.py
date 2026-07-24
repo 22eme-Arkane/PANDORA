@@ -2736,6 +2736,57 @@ def studio_prompt_final_wysiwyg():
 
 
 @test
+def projets_menu_contextuel_vignette():
+    """Clic droit sur une vignette de projet : Renommer / Dupliquer / Supprimer
+    (demande Matthieu 2026-07-24 ; auparavant « Renommer » et seulement sur le
+    projet ouvert). Suppression protégée : jamais le projet ouvert, fichiers
+    conservés par défaut, effacement disque sur double confirmation."""
+    import inspect, tempfile, os, json
+    psrc = inspect.getsource(__import__("ui.page_projects", fromlist=["_"]))
+    for sig in ("rename_requested", "duplicate_requested", "delete_requested"):
+        assert f"{sig} = pyqtSignal(dict)" in psrc, f"signal manquant : {sig}"
+    assert "def _on_duplicate" in psrc and "def _on_delete" in psrc, "handlers manquants"
+    assert "if not self._is_current:\n            return" not in psrc, \
+        "le menu ne doit plus être réservé au projet ouvert"
+    assert "act_del.setEnabled(False)" in psrc, "le projet ouvert doit être protégé"
+    assert "remove_files=_hard" in psrc and "Confirmation définitive" in psrc, \
+        "effacement disque sans double confirmation"
+    # Le projet ciblé par le clic droit est bien celui traité (pas le projet ouvert).
+    assert "card.rename_requested.connect(self._on_rename)" in psrc, \
+        "renommage recâblé sur le projet ouvert au lieu de la vignette cliquée"
+
+    # API métier : duplication complète + suppression, sur des dossiers TEMPORAIRES.
+    import core.project as P
+    _reg, _dir = P._REGISTRY, P._DEFAULT_DIR
+    _tmp = tempfile.mkdtemp(prefix="pandora_t_proj_")
+    try:
+        P._REGISTRY = os.path.join(_tmp, "recent.json")
+        P._DEFAULT_DIR = os.path.join(_tmp, "P")
+        src = P.create_project("Film", parent_dir=P._DEFAULT_DIR)
+        os.makedirs(os.path.join(src["_path"], "data"), exist_ok=True)
+        with open(os.path.join(src["_path"], "data", "x.json"), "w", encoding="utf-8") as f:
+            json.dump({"a": 1}, f)
+        clone = P.duplicate_project(src, "Film v2")
+        assert clone and os.path.isdir(clone["_path"]), "duplication échouée"
+        assert clone["id"] != src["id"], "le clone doit avoir un nouvel identifiant"
+        assert os.path.isfile(os.path.join(clone["_path"], "data", "x.json")), \
+            "contenu du projet non copié"
+        assert os.path.isdir(src["_path"]), "l'original ne doit jamais être touché"
+        assert len([f for f in os.listdir(clone["_path"]) if f.endswith(".json")]) == 1, \
+            "le clone doit avoir un seul descripteur"
+        assert P.delete_project(clone, remove_files=False) and os.path.isdir(clone["_path"]), \
+            "suppression douce : les fichiers doivent être CONSERVÉS"
+        assert P.delete_project(clone, remove_files=True) and not os.path.isdir(clone["_path"]), \
+            "suppression dure : le dossier doit être effacé"
+    finally:
+        P._REGISTRY, P._DEFAULT_DIR = _reg, _dir
+        import shutil; shutil.rmtree(_tmp, ignore_errors=True)
+    from core.i18n import _FR_TO_EN
+    for k in ("Renommer", "Dupliquer", "Supprimer le projet", "Confirmation définitive"):
+        assert k in _FR_TO_EN, f"i18n manquante : {k}"
+
+
+@test
 def decoupage_affiche_titre_projet():
     """Onglet Découpage : la 1re ligne affiche le TITRE DU PROJET, pas le marqueur
     technique « DÉCOUPAGE PANDORA 2 » (demande Matthieu 2026-07-24). Le marqueur est

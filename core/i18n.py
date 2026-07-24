@@ -3021,6 +3021,31 @@ _FR_TO_EN: dict[str, str] = {
     "Plateau synchronisé vers le storyboard.":
         "Stage synced to the storyboard.",
     "Nom du plan":                               "Shot name",
+    # Menu contextuel des vignettes de projet (clic droit)
+    "Renommer":                                  "Rename",
+    "Dupliquer":                                 "Duplicate",
+    "Dupliquer le projet":                       "Duplicate project",
+    "Nom de la copie :":                         "Name of the copy:",
+    "Duplication impossible":                    "Duplication failed",
+    "La copie du dossier du projet a échoué.":   "Copying the project folder failed.",
+    "Projet ouvert":                             "Project open",
+    "Ce projet est actuellement ouvert. Ouvrez un autre projet avant de le supprimer.":
+        "This project is currently open. Open another project before deleting it.",
+    "Supprimer le projet":                       "Delete project",
+    "Par défaut, le projet est seulement retiré de la liste : son dossier reste sur le disque et peut être rouvert.":
+        "By default the project is only removed from the list: its folder stays on "
+        "disk and can be reopened.",
+    "Supprimer aussi les fichiers du disque (irréversible)":
+        "Also delete the files from disk (irreversible)",
+    "Confirmation définitive":                   "Final confirmation",
+    "Le dossier du projet et TOUT son contenu (scénario, storyboard, images, clips) seront définitivement supprimés. Confirmer ?":
+        "The project folder and ALL its contents (screenplay, storyboard, images, "
+        "clips) will be permanently deleted. Confirm?",
+    "Suppression incomplète":                    "Incomplete deletion",
+    "Le projet a été retiré de la liste, mais son dossier n'a pas pu être supprimé.":
+        "The project was removed from the list, but its folder could not be deleted.",
+    "Fermez ou changez de projet pour le supprimer":
+        "Close or switch project to delete it",
     "Modifier le prompt":                        "Edit the prompt",
     "Ce prompt est automatiquement traduit en anglais avant la génération de la vidéo. "
     "Vous pouvez l'éditer ici dans votre langue de travail.":
