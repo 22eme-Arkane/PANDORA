@@ -370,11 +370,19 @@ def _elements_picker_dialog(parent: QWidget, title: str,
     lay.addWidget(hdr)
 
     lst = QListWidget()
+    # ⚠ `:selected` doit REDONNER une couleur de texte. En ne neutralisant que le
+    # fond, la ligne sélectionnée prenait la couleur « texte sur surbrillance » de
+    # la palette système — sombre sur ce fond sombre : le nom de l'accessoire coché
+    # devenait illisible (constat Matthieu 2026-07-25).
+    # Fond en rgba() explicite, jamais en suffixe hex-opacity (rend « vert caca »).
     lst.setStyleSheet(
         f"QListWidget{{background:{CP['bg2']};border:1px solid {CP['border']};"
         f"border-radius:8px;color:{CP['text_primary']};font-size:12px;padding:4px;}}"
-        f"QListWidget::item{{padding:6px 10px;border-radius:4px;}}"
-        f"QListWidget::item:selected{{background:transparent;}}"
+        f"QListWidget::item{{padding:6px 10px;border-radius:4px;"
+        f"color:{CP['text_primary']};}}"
+        f"QListWidget::item:selected{{background:rgba(78,205,196,0.14);"
+        f"color:{CP['text_primary']};}}"
+        f"QListWidget::item:hover{{background:{CP['bg3']};color:{CP['text_primary']};}}"
     )
 
     for item in items:

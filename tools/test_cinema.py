@@ -785,6 +785,77 @@ def prompts_nano_banana_qualite():
 
 
 @test
+def generation_elements_choix_du_moteur():
+    """« Identifier et générer les images » doit demander le MOTEUR pour les cinq
+    catégories, pas seulement pour les décors (demande Matthieu 2026-07-25) : le
+    prompt est écrit dans la grammaire du moteur, le choix doit précéder l'envoi."""
+    import inspect
+    from ui.dialog_extract_generate import ExtractGenerateDialog
+    for label, factory in (("casting",     ExtractGenerateDialog.for_characters),
+                           ("décors",      ExtractGenerateDialog.for_decors),
+                           ("accessoires", ExtractGenerateDialog.for_accessories),
+                           ("HMC",         ExtractGenerateDialog.for_hmc),
+                           ("véhicules",   ExtractGenerateDialog.for_vehicles)):
+        dlg = factory("INT. CANYON - JOUR\nJésus tient un smartphone.", None)
+        combo = getattr(dlg, "_image_model_combo", None)
+        assert combo is not None, f"{label} : pas de sélecteur de moteur d'image"
+        keys = [combo.itemData(i) for i in range(combo.count())]
+        assert len(keys) >= 10, f"{label} : catalogue de moteurs incomplet ({len(keys)})"
+        assert any("seedream" in str(k) for k in keys), f"{label} : Seedream absent"
+        # Le chemin « 7 vues » (décors) lit l'ancien nom : il doit pointer le même objet.
+        assert dlg._room_image_model_combo is combo, f"{label} : alias 7-vues cassé"
+        dlg.deleteLater()
+    _g = inspect.getsource(ExtractGenerateDialog._gen_next)
+    assert _g.count("model_key=_engine") == 2, \
+        "le moteur choisi n'est pas transmis aux workers (portrait ET élément)"
+
+
+@test
+def moods_en_serie_prompt_retravaille():
+    """« Générer les Moods » en série doit produire le MÊME prompt retravaillé que
+    la fenêtre Mood : écrit dans la grammaire du moteur choisi, débarrassé des
+    termes vidéo."""
+    import inspect
+    import core.storyboard as sb
+    import api.apercu as A
+    sb.set_namespace("storyboard")
+    _run = inspect.getsource(A.MoodBatchWorker.run)
+    assert 'self._options.get("engine")' in _run and "build_mood_prompt" in _run, \
+        "la série ne transmet pas le moteur au constructeur de prompt"
+    import ui.page_storyboard as _PS
+    _dlg = inspect.getsource(_PS.PageStoryboard._on_batch_mood)
+    assert '"engine"' in _dlg and "MoodBatchWorker" in _dlg, \
+        "la fenêtre de série ne transmet pas le moteur choisi"
+    shot = {"id": "s", "seedance_prompt": "Jésus sur le rocher. La caméra avance. 8 secondes.",
+            "shot_size": "GP", "focal": "85mm"}
+    p_nb2  = A.build_mood_prompt(shot, "", "nb2")
+    p_seed = A.build_mood_prompt(shot, "", "seedream5")
+    assert "Action:" in p_nb2 and "Action:" not in p_seed, "grammaire non appliquée en série"
+    for p in (p_nb2, p_seed):
+        assert "avance" not in p.lower(), "mouvement caméra (FR) dans un prompt d'image"
+        assert "8 sec" not in p.lower(), "durée dans un prompt d'image"
+
+
+@test
+def picker_elements_nom_lisible_quand_selectionne():
+    """Storyboard : cocher un accessoire ne doit pas faire disparaître son nom.
+    `:selected` ne neutralisait que le FOND — le texte prenait la couleur « sur
+    surbrillance » de la palette, sombre sur fond sombre (constat Matthieu
+    2026-07-25). Vérifié des deux côtés : même dialogue, même défaut."""
+    import inspect
+    import ui.page_storyboard as _c, ui.page_storyboard_live as _l
+    for mod, side in ((_c, "Cinéma"), (_l, "Live")):
+        src = inspect.getsource(mod._elements_picker_dialog)
+        assert "QListWidget::item:selected{{background:transparent;}}" not in src, \
+            f"{side} : ancien style qui efface le texte sélectionné"
+        _i = src.index("::item:selected")
+        assert "color:" in src[_i:_i + 160], \
+            f"{side} : `:selected` sans couleur de texte explicite"
+        assert "rgba(" in src[_i:_i + 160], \
+            f"{side} : fond de sélection en hex-opacity (interdit sur fond sombre)"
+
+
+@test
 def studio_ia_prompt_final_mis_en_cache():
     """Composer un prompt final est un appel IA PAYANT. Revenir sur un plan déjà
     composé, storyboard inchangé, doit le réutiliser tel quel (demande Matthieu

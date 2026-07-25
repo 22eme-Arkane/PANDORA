@@ -3141,8 +3141,11 @@ class TabT2V(QScrollArea):
         self._update_injection_banner()
 
     def _on_context_changed(self, _ctx: str):
-        casting_images = self._casting.get_selected_images()
-        self._thumb_strip.update_images(casting_images)
+        # ⚠ get_ref_images() et non get_selected_images() : la seconde OMET le
+        # décor. Le bandeau annonçait « 2 images envoyées » pendant que les
+        # vignettes n'en montraient qu'une (même écart que côté Cinéma, corrigé le
+        # 2026-07-25). Bandeau et vignettes lisent la MÊME liste — celle qui part.
+        self._thumb_strip.update_images(self._casting.get_ref_images())
         self._update_injection_banner()
         self._refresh_prompt_preview()
 

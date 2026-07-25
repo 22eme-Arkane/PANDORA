@@ -151,41 +151,51 @@ class ExtractGenerateDialog(QDialog):
         )
         choice_lay.addWidget(_hint)
 
-        self._room_image_model_combo = None
+        # ── Moteur d'image — proposé pour TOUTES les catégories ────────────────
+        # Il n'existait que pour les décors (option « 7 vues ») : casting,
+        # accessoires, HMC et véhicules partaient d'office sur le moteur des
+        # Paramètres, sans jamais demander (constat Matthieu 2026-07-25). Le prompt
+        # étant désormais écrit dans la GRAMMAIRE du moteur (core/image_grammar),
+        # le moteur doit être choisi AVANT de lancer, pas subi.
+        from core.config import load_config
+        from core.image_engines import engine_choices, reference_engine_choices
+        combo_ss = (
+            f"QComboBox{{background:{CP['bg3']};border:1px solid {CP['border']};"
+            f"border-radius:6px;color:{CP['text_primary']};font-size:10px;padding:0 8px;}}"
+            f"QComboBox::drop-down{{border:none;width:20px;}}"
+            f"QComboBox QAbstractItemView{{background:{CP['bg3']};border:1px solid {CP['border_bright']};"
+            f"color:{CP['text_primary']};selection-background-color:{CP['accent_dim']};}}"
+        )
+
+        def _engine_row(label: str, choices: list, default: str) -> QComboBox:
+            row = QHBoxLayout()
+            lbl = QLabel(label)
+            lbl.setFixedWidth(120)
+            lbl.setStyleSheet(
+                f"color:{CP['text_secondary']};font-size:10px;background:transparent;")
+            row.addWidget(lbl)
+            combo = QComboBox()
+            for key, engine_label in choices:
+                combo.addItem(engine_label, key)
+            idx = combo.findData(default)
+            if idx >= 0:
+                combo.setCurrentIndex(idx)
+            combo.setFixedHeight(30)
+            combo.setStyleSheet(combo_ss)
+            row.addWidget(combo, 1)
+            choice_lay.addLayout(row)
+            return combo
+
+        self._image_model_combo = _engine_row(
+            translate("Image de départ") if self._offer_room_views
+            else translate("Moteur d'image"),
+            engine_choices(), load_config().get("image_model", "nb2"))
+        # Même objet sous son ancien nom : le chemin « 7 vues » le lit déjà.
+        self._room_image_model_combo = self._image_model_combo
         self._room_reference_model_combo = None
         if self._offer_room_views:
-            from core.config import load_config
-            from core.image_engines import engine_choices, reference_engine_choices
-            combo_ss = (
-                f"QComboBox{{background:{CP['bg3']};border:1px solid {CP['border']};"
-                f"border-radius:6px;color:{CP['text_primary']};font-size:10px;padding:0 8px;}}"
-                f"QComboBox::drop-down{{border:none;width:20px;}}"
-                f"QComboBox QAbstractItemView{{background:{CP['bg3']};border:1px solid {CP['border_bright']};"
-                f"color:{CP['text_primary']};selection-background-color:{CP['accent_dim']};}}"
-            )
-            for label, attr, choices, default in (
-                (translate("Image de départ"), "_room_image_model_combo",
-                 engine_choices(), load_config().get("image_model", "nb2")),
-                (translate("Plan + raccords"), "_room_reference_model_combo",
-                 reference_engine_choices(), "nb2"),
-            ):
-                row = QHBoxLayout()
-                lbl = QLabel(label)
-                lbl.setFixedWidth(120)
-                lbl.setStyleSheet(
-                    f"color:{CP['text_secondary']};font-size:10px;background:transparent;")
-                row.addWidget(lbl)
-                combo = QComboBox()
-                for key, engine_label in choices:
-                    combo.addItem(engine_label, key)
-                idx = combo.findData(default)
-                if idx >= 0:
-                    combo.setCurrentIndex(idx)
-                combo.setFixedHeight(30)
-                combo.setStyleSheet(combo_ss)
-                setattr(self, attr, combo)
-                row.addWidget(combo, 1)
-                choice_lay.addLayout(row)
+            self._room_reference_model_combo = _engine_row(
+                translate("Plan + raccords"), reference_engine_choices(), "nb2")
             ref_hint = QLabel(translate(
                 "Pour les 7 vues : le premier moteur crée l'image maîtresse ; le "
                 "second reprend cette image pour le plan d'architecture et les raccords."
@@ -501,6 +511,11 @@ class ExtractGenerateDialog(QDialog):
             w.start()
             return
 
+        # Moteur choisi dans la fenêtre — il détermine aussi la GRAMMAIRE dans
+        # laquelle le prompt sera écrit avant l'envoi (core/image_grammar).
+        _engine = (self._image_model_combo.currentData()
+                   if getattr(self, "_image_model_combo", None) else None)
+
         if self._is_characters:
             from api.nano_banana import GeneratePortraitWorker
             # Image unique (portrait) par défaut — pas le sheet 5 vues.
@@ -508,6 +523,7 @@ class ExtractGenerateDialog(QDialog):
                 prompt=prompt,
                 char_name=name,
                 gen_mode="classic",
+                model_key=_engine,
             )
             w.finished.connect(lambda p, s: self._on_img_done(p or s))
             w.failed.connect(self._on_img_failed)
@@ -517,6 +533,7 @@ class ExtractGenerateDialog(QDialog):
                 prompt=prompt,
                 item_name=name,
                 subdir=self._subdir,
+                model_key=_engine,
             )
             w.finished.connect(self._on_img_done)
             w.failed.connect(self._on_img_failed)

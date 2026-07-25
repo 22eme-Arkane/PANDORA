@@ -71,7 +71,7 @@ def _focal_to_en(focal_str: str) -> str:
 
 # ── Prompt builder ────────────────────────────────────────────────────────────
 
-def _build_mood_prompt_live(shot: dict) -> str:
+def _build_mood_prompt_live(shot: dict, engine_key: str = "") -> str:
     """Prompt mood pour PANDORA | Live (Séquences Live/Mapping).
 
     Différences voulues vs Cinéma :
@@ -81,25 +81,33 @@ def _build_mood_prompt_live(shot: dict) -> str:
       - PAS de « film grain » : le grain remonte les noirs purs de la projection ;
       - le prompt vidéo est temporel (« Opening… Then… final moment ») mais le mood
         est une IMAGE FIXE servant de KEYFRAME DE DÉBUT du plan → on demande
-        explicitement l'état d'OUVERTURE."""
+        explicitement l'état d'OUVERTURE.
+
+    Depuis le 2026-07-25, le Live reçoit lui aussi la GRAMMAIRE du moteur (demande
+    Matthieu) : brief à champs pour Nano Banana / GPT Image, prose sans interdit
+    pour Seedream, JSON pour FLUX.2. Et les mots de qualité génériques qui traînaient
+    ici (« ultra-detailed », « 4K ») disparaissent — ils sont interdits par la
+    doctrine de prompt de PANDORA et dégradent la passe de raisonnement de Seedream.
+    Le corps est en plus débarrassé de ce qui n'existe qu'en vidéo (mouvement de
+    caméra, vitesse, durée, son), en anglais comme en français."""
     # UN seul prompt à sections : ne garder que la VIDÉO (retirer [🎵 SOUND DESIGN]) —
-    # le son n'a aucune place dans une image fixe Flux.
+    # le son n'a aucune place dans une image fixe.
     from core.prompt_sections import video_of as _video_of
+    from core.image_grammar import (build_image_prompt as _build,
+                                    strip_video_terms as _strip_video)
     seedance = _video_of((shot.get("seedance_prompt") or "").strip())
-    parts = []
     if seedance:
-        parts.append(seedance)
-        parts.append(
+        body = _strip_video(seedance)[0]
+        use_case = (
             "Render the OPENING state of this sequence as ONE single still image — "
             "depict only the initial state described above, ignore the later "
-            "evolution (the 'then' / 'final moment' parts)"
+            "evolution (the 'then' / 'final moment' parts). "
+            "Single cinematic still frame, sharp focus."
         )
     else:
-        action = (shot.get("scene_title") or "").strip()
-        if action:
-            parts.append(action)
-    parts.append("single cinematic still frame, ultra-detailed, sharp focus, 4K")
-    return ". ".join(p for p in parts if p)
+        body = (shot.get("scene_title") or "").strip()
+        use_case = "Single cinematic still frame, sharp focus."
+    return _build({"action": body, "use_case": use_case}, engine_key or "flux")
 
 
 def mood_intent(shot: dict, film_style: str = "") -> dict:
@@ -196,15 +204,17 @@ def build_mood_prompt(shot: dict, film_style: str = "", engine_key: str = "") ->
     délègue au builder Live (pas de termes caméra, pas de grain, état d'ouverture).
     `engine_key` vide → même repli que `run_mood` (Nano Banana 2 en Cinéma, Flux
     en Live) : le prompt est ainsi toujours écrit pour le moteur qui le recevra."""
+    _live = False
     try:
         import core.storyboard as _sb
-        if _sb.get_namespace().startswith("live_seq_"):
-            return _build_mood_prompt_live(shot)
+        _live = _sb.get_namespace().startswith("live_seq_")
     except Exception:
         pass
-    from core.image_grammar import build_image_prompt as _build
     if not (engine_key or "").strip():
         engine_key = "nb2" if _is_cinema_mood() else "flux"
+    if _live:
+        return _build_mood_prompt_live(shot, engine_key)
+    from core.image_grammar import build_image_prompt as _build
     return _build(mood_intent(shot, film_style), engine_key)
 
 

@@ -363,6 +363,20 @@ def prompt_mood_live_propre():
     assert "SOUND DESIGN" not in p_live and "129 BPM" not in p_live, \
         "le son est retiré du prompt mood (image fixe)"
     assert "dolly push in" not in p_live, "pas de mouvement caméra"
+    # Le Live reçoit lui aussi la GRAMMAIRE du moteur (2026-07-25) : brief à champs
+    # pour Nano Banana, prose sans interdit pour Seedream — et plus aucun mot de
+    # qualité générique (« ultra-detailed », « 4K ») qui traînait dans ce builder.
+    sb.set_namespace("live_seq_mapping")
+    _l_nb2  = build_mood_prompt(shot, "style x", "nb2")
+    _l_seed = build_mood_prompt(shot, "style x", "seedream5")
+    sb.set_namespace("storyboard")
+    assert "Action:" in _l_nb2, "Live/Nano Banana : brief à champs attendu"
+    assert "Action:" not in _l_seed, "Live/Seedream : prose attendue"
+    for _p in (p_live, _l_nb2, _l_seed):
+        assert "OPENING state" in _p, "état d'ouverture perdu"
+        assert "4K" not in _p and "ultra-detailed" not in _p, \
+            "mots de qualité génériques (interdits par la doctrine de prompt)"
+        assert "129 BPM" not in _p, "le son n'a pas sa place dans une image fixe"
     # Cinéma : focale + titre conservés ; suffixe qualité assaini (audit 2026-07-02)
     assert "35mm" in p_cine and "cinematic still frame" in p_cine.lower() \
         and "Les baleines" in p_cine
@@ -458,6 +472,27 @@ def mood_batch_choix_moteur_live():
     # Le prompt reconstruit est écrit pour le moteur sélectionné.
     _rsrc = inspect.getsource(MoodDialog._reset_prompt)
     assert "_current_engine()" in _rsrc, "prompt du Mood non écrit pour le moteur"
+
+
+@test
+def studio_live_vignettes_et_picker():
+    """Deux défauts identiques au Cinéma, corrigés côté Live le 2026-07-25 :
+    1) les vignettes lisaient get_selected_images(), qui OMET le décor, pendant que
+       le bandeau lisait get_ref_images() — « 2 images envoyées », une vignette ;
+    2) dans le sélecteur d'éléments du Storyboard, `:selected` ne neutralisait que
+       le fond : le nom d'un élément coché devenait illisible."""
+    import ui.tab_t2v_live as TL
+    _cls = next(o for o in vars(TL).values()
+                if isinstance(o, type) and hasattr(o, "_on_context_changed"))
+    _s = inspect.getsource(_cls._on_context_changed)
+    assert "self._casting.get_ref_images()" in _s \
+        and "self._casting.get_selected_images()" not in _s, \
+        "vignettes Live : liste envoyée ≠ liste affichée (décor manquant)"
+    import ui.page_storyboard_live as PSL2
+    _p = inspect.getsource(PSL2._elements_picker_dialog)
+    _i = _p.index("::item:selected")
+    assert "color:" in _p[_i:_i + 160] and "rgba(" in _p[_i:_i + 160], \
+        "sélecteur d'éléments Live : texte sélectionné sans couleur explicite"
 
 
 @test
