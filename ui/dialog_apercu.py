@@ -4,6 +4,7 @@ import os
 from PyQt6.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
     QScrollArea, QWidget, QProgressBar, QSizePolicy, QFrame, QTextEdit,
+    QComboBox,
 )
 from PyQt6.QtCore import Qt, pyqtSignal, QTimer
 from core.i18n import translate
@@ -41,87 +42,11 @@ def _btn(text: str, accent: bool = False, danger: bool = False) -> QPushButton:
     return b
 
 
-def choose_mood_engine(parent) -> str | None:
-    """Fenêtre de choix du MOTEUR pour générer/varier un Mood. Propose TOUT le
-    catalogue image de PANDORA (Nano Banana 2/Pro/Lite, Seedream 5/4.5, Recraft,
-    Z-Image, Qwen, Ideogram, FLUX…). En séquence MAPPING FAÇADE, la liste se
-    restreint aux moteurs qui savent éditer une image de référence (géométrie
-    préservée). Renvoie la clé du moteur (« nb2 », « recraft », …, « flux ») ou
-    None (annulé)."""
-    from PyQt6.QtWidgets import QComboBox
-    from api.apercu import mood_engine_choices, current_mood_is_mapping
-    _is_map = current_mood_is_mapping()
-    choices = mood_engine_choices(_is_map)
-
-    dlg = QDialog(parent)
-    dlg.setWindowTitle(translate("Moteur du Mood"))
-    dlg.setMinimumWidth(470)
-    dlg.setStyleSheet(PANDORA_STYLESHEET + f"QDialog{{background:{CP['bg1']};}}")
-    lay = QVBoxLayout(dlg)
-    lay.setContentsMargins(22, 20, 22, 18)
-    lay.setSpacing(12)
-    q = QLabel(translate("Avec quel moteur générer ce Mood ?"))
-    q.setWordWrap(True)
-    q.setStyleSheet(
-        f"color:{CP['text_primary']};font-size:13px;font-weight:700;background:transparent;")
-    lay.addWidget(q)
-    _help = QLabel(translate(
-        "Mapping façade : seuls les moteurs qui éditent une image de référence "
-        "(géométrie du bâtiment préservée) sont proposés."
-        if _is_map else
-        "Tous les moteurs image de PANDORA sont disponibles — teste-les pour comparer le rendu."))
-    _help.setWordWrap(True)
-    _help.setStyleSheet(f"color:{CP['text_dim']};font-size:10px;background:transparent;")
-    lay.addWidget(_help)
-
-    combo = QComboBox()
-    for _k, _lbl in choices:
-        combo.addItem(_lbl, _k)
-    _di = combo.findData("nb2")
-    combo.setCurrentIndex(_di if _di >= 0 else 0)
-    combo.setFixedHeight(32)
-    combo.setStyleSheet(
-        f"QComboBox{{background:{CP['bg3']};border:1px solid {CP['border']};"
-        f"border-radius:6px;color:{CP['text_primary']};font-size:11px;padding:0 10px;}}"
-        f"QComboBox::drop-down{{border:none;width:22px;}}"
-        f"QComboBox QAbstractItemView{{background:{CP['bg3']};border:1px solid {CP['border_bright']};"
-        f"color:{CP['text_primary']};selection-background-color:{CP['accent_dim']};}}"
-    )
-    lay.addWidget(combo)
-    lay.addSpacing(4)
-
-    _res = {"engine": None}
-
-    def _accept():
-        _res["engine"] = combo.currentData()
-        dlg.accept()
-
-    row = QHBoxLayout()
-    row.addStretch()
-    cancel = QPushButton(translate("Annuler"))
-    cancel.setFixedHeight(34)
-    cancel.setStyleSheet(
-        f"QPushButton{{background:transparent;color:{CP['text_secondary']};"
-        f"border:1px solid {CP['border']};border-radius:8px;font-size:11px;font-weight:700;"
-        f"padding:0 16px;}}QPushButton:hover{{background:{CP['bg3']};}}")
-    cancel.clicked.connect(dlg.reject)
-    b_gen = QPushButton(translate("✦  Générer"))
-    b_gen.setFixedHeight(34)
-    b_gen.setStyleSheet(
-        f"QPushButton{{background:{CP['accent']};color:#07080f;border:none;border-radius:8px;"
-        f"font-size:11px;font-weight:700;padding:0 20px;}}QPushButton:hover{{background:#6eded6;}}")
-    b_gen.clicked.connect(_accept)
-    row.addWidget(cancel)
-    row.addWidget(b_gen)
-    lay.addLayout(row)
-    try:
-        from ui.widgets import disable_default_buttons
-        disable_default_buttons(dlg)
-    except Exception:
-        pass
-    if dlg.exec() == QDialog.DialogCode.Accepted:
-        return _res["engine"]
-    return None
+# Le choix du MOTEUR se fait désormais DANS la fenêtre Mood (combo au-dessus du
+# prompt) : le prompt affiché est écrit dans la grammaire du moteur sélectionné, donc
+# le moteur doit être connu AVANT de générer, pas au moment du clic. L'ancienne
+# fenêtre intermédiaire `choose_mood_engine` a été retirée (demande Matthieu
+# 2026-07-25).
 
 
 class MoodDialog(QDialog):
@@ -137,6 +62,10 @@ class MoodDialog(QDialog):
         self._pulse_timer = QTimer(self)
         self._pulse_val   = 0
         self._pulse_dir   = 1
+        # Le prompt a-t-il été retouché à la main ? Si oui, changer de moteur
+        # ADAPTE le texte de l'utilisateur au lieu de l'écraser.
+        self._prompt_dirty  = False
+        self._prompt_quiet  = False   # garde anti-boucle sur setPlainText()
 
         n = shot.get("number", "?")
         title_text = (shot.get("scene_title") or "")[:60]
@@ -237,6 +166,24 @@ class MoodDialog(QDialog):
             f"background:transparent;"
         )
         prompt_hdr.addWidget(prompt_lbl)
+
+        # Moteur de génération — CHOISI ICI, avant de générer. Le prompt ci-dessous
+        # est réécrit dans la grammaire du moteur sélectionné : un brief à champs
+        # pour Nano Banana / GPT Image, une prose sans interdit pour Seedream (son
+        # API n'a plus de prompt négatif), un objet JSON pour FLUX.2.
+        prompt_hdr.addSpacing(14)
+        _eng_lbl = QLabel("Moteur")
+        _eng_lbl.setStyleSheet(
+            f"color:{CP['text_dim']};font-size:11px;background:transparent;")
+        prompt_hdr.addWidget(_eng_lbl)
+        self._engine_combo = self._build_engine_combo()
+        prompt_hdr.addWidget(self._engine_combo)
+
+        self._grammar_lbl = QLabel("")
+        self._grammar_lbl.setStyleSheet(
+            f"color:{CP['text_dim']};font-size:10px;background:transparent;")
+        prompt_hdr.addWidget(self._grammar_lbl)
+
         prompt_hdr.addStretch()
         btn_reset_prompt = QPushButton("↺  Réinitialiser")
         btn_reset_prompt.setFixedHeight(24)
@@ -251,28 +198,31 @@ class MoodDialog(QDialog):
         prompt_hdr.addWidget(btn_reset_prompt)
         root.addLayout(prompt_hdr)
 
-        from api.apercu import build_mood_prompt
-        import core.style as _style_mod
-        _auto_prompt = build_mood_prompt(self._shot, _style_mod.get_image_suffix() or "")
         self._prompt_edit = QTextEdit()
-        self._prompt_edit.setPlainText(_auto_prompt)
-        self._prompt_edit.setFixedHeight(82)
+        # Plus haut qu'avant : le brief à champs des moteurs Nano Banana / GPT
+        # Image fait 6 à 8 lignes, et ce prompt est fait pour être RELU et corrigé
+        # avant de générer, pas seulement deviné à travers une fente.
+        self._prompt_edit.setFixedHeight(132)
         self._prompt_edit.setStyleSheet(
             f"QTextEdit{{background:{CP['bg3']};border:1px solid {CP['border']};"
             f"border-radius:6px;color:{CP['text_primary']};font-size:11px;padding:6px;}}"
             f"QTextEdit:focus{{border-color:{CP['accent']};}}"
         )
-        btn_reset_prompt.clicked.connect(
-            lambda: self._prompt_edit.setPlainText(
-                build_mood_prompt(self._shot, _style_mod.get_image_suffix() or "")
-            )
-        )
+        self._prompt_edit.textChanged.connect(self._on_prompt_typed)
+        btn_reset_prompt.clicked.connect(self._reset_prompt)
         root.addWidget(self._prompt_edit)
+
+        # Premier remplissage : prompt écrit pour le moteur sélectionné.
+        self._reset_prompt()
+        self._engine_combo.currentIndexChanged.connect(self._on_engine_changed)
 
         # ── Image principale ───────────────────────────────────────────────────
         self._img_lbl = QLabel()
         self._img_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self._img_lbl.setMinimumSize(760, 427)
+        # Minimum abaissé (760×427 → 640×360) pour compenser l'encart prompt plus
+        # haut : la fenêtre doit rester ouvrable sur un écran de portable. L'aperçu
+        # reste en Expanding et occupe tout l'espace disponible dès qu'il y en a.
+        self._img_lbl.setMinimumSize(640, 360)
         self._img_lbl.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
         self._img_lbl.setStyleSheet(
             f"background:{CP['bg0']};border:1px solid {CP['border']};border-radius:8px;"
@@ -380,6 +330,99 @@ class MoodDialog(QDialog):
 
         # Timer pour animation de la barre (pulsation 0→80→0)
         self._pulse_timer.timeout.connect(self._pulse_step)
+
+    # ── Moteur de génération + prompt écrit pour lui ──────────────────────────
+
+    def _build_engine_combo(self) -> QComboBox:
+        """Liste des moteurs proposables ici. En séquence MAPPING FAÇADE elle se
+        restreint aux moteurs qui savent éditer une image de référence (la
+        géométrie du bâtiment doit être préservée)."""
+        from api.apercu import mood_engine_choices, current_mood_is_mapping
+        combo = QComboBox()
+        combo.setFixedHeight(26)
+        combo.setMinimumWidth(210)
+        combo.setCursor(Qt.CursorShape.PointingHandCursor)
+        combo.setStyleSheet(
+            f"QComboBox{{background:{CP['bg3']};border:1px solid {CP['border']};"
+            f"border-radius:6px;color:{CP['text_primary']};font-size:10px;padding:0 8px;}}"
+            f"QComboBox::drop-down{{border:none;width:18px;}}"
+            f"QComboBox QAbstractItemView{{background:{CP['bg3']};"
+            f"border:1px solid {CP['border_bright']};color:{CP['text_primary']};"
+            f"selection-background-color:{CP['accent_dim']};}}"
+        )
+        for _k, _lbl in mood_engine_choices(current_mood_is_mapping()):
+            combo.addItem(_lbl, _k)
+        # Reprend le dernier moteur utilisé, s'il est proposable dans ce contexte.
+        _want = ""
+        try:
+            from core.config import load_config
+            _want = (load_config().get("mood_engine") or "").strip()
+        except Exception:
+            pass
+        _idx = combo.findData(_want) if _want else -1
+        if _idx < 0:
+            _idx = combo.findData("nb2")
+        combo.setCurrentIndex(_idx if _idx >= 0 else 0)
+        combo.setToolTip(translate(
+            "Le prompt ci-dessous est réécrit dans la grammaire de ce moteur.\n"
+            "Changer de moteur met le prompt à jour."))
+        return combo
+
+    def _current_engine(self) -> str:
+        return self._engine_combo.currentData() or "nb2"
+
+    def _set_prompt_text(self, text: str):
+        """Écrit le prompt SANS le marquer comme retouché à la main."""
+        self._prompt_quiet = True
+        try:
+            self._prompt_edit.setPlainText(text)
+        finally:
+            self._prompt_quiet = False
+
+    def _refresh_grammar_label(self):
+        from core.image_grammar import grammar_label
+        self._grammar_lbl.setText("· " + translate(grammar_label(self._current_engine())))
+
+    def _reset_prompt(self):
+        """(Re)construit le prompt depuis les données du plan, pour le moteur choisi."""
+        from api.apercu import build_mood_prompt
+        import core.style as _style_mod
+        self._set_prompt_text(build_mood_prompt(
+            self._shot, _style_mod.get_image_suffix() or "", self._current_engine()))
+        self._prompt_dirty = False
+        self._refresh_grammar_label()
+
+    def _on_prompt_typed(self):
+        if not self._prompt_quiet:
+            self._prompt_dirty = True
+
+    def _on_engine_changed(self):
+        """Changer de moteur change le prompt.
+
+        Prompt jamais retouché → on le reconstruit entièrement. Prompt retouché à
+        la main → on ADAPTE le texte de l'utilisateur (interdits convertis en
+        positif si le moteur ne sait pas interdire, mots de qualité et termes
+        vidéo retirés) plutôt que d'effacer son travail."""
+        from core.image_grammar import adapt_prompt
+        self._save_engine_pref()
+        if not self._prompt_dirty:
+            self._reset_prompt()
+            return
+        _txt, _ = adapt_prompt(self._prompt_edit.toPlainText().strip(),
+                               self._current_engine())
+        self._set_prompt_text(_txt)
+        self._prompt_dirty = True   # le texte reste celui de l'utilisateur
+        self._refresh_grammar_label()
+
+    def _save_engine_pref(self):
+        try:
+            from core.config import load_config, save_config
+            cfg = load_config()
+            if (cfg.get("mood_engine") or "") != self._current_engine():
+                cfg["mood_engine"] = self._current_engine()
+                save_config(cfg)
+        except Exception:
+            pass
 
     # ── Pulsation de la barre ─────────────────────────────────────────────────
 
@@ -579,11 +622,9 @@ class MoodDialog(QDialog):
         self._refresh()
 
     def _generate(self):
-        # Choix du moteur (Flux / Nano Banana 2) avant la variation → comparer les rendus.
-        engine = choose_mood_engine(self)
-        if not engine:
-            return
-        self._start_generation(engine=engine)
+        # Le moteur est choisi DANS la fenêtre (combo au-dessus du prompt) : plus
+        # de fenêtre intermédiaire, et le prompt affiché est déjà écrit pour lui.
+        self._start_generation(engine=self._current_engine())
 
     def _generate_from_image(self):
         """Mood inspiré : l'image choisie sert de DA (transposée, jamais collée)."""
@@ -591,10 +632,7 @@ class MoodDialog(QDialog):
         paths = ImageLibraryDialog.pick(self)
         if not paths:
             return
-        engine = choose_mood_engine(self)
-        if not engine:
-            return
-        self._start_generation(inspiration_ref=paths[0], engine=engine)
+        self._start_generation(inspiration_ref=paths[0], engine=self._current_engine())
 
     def _start_generation(self, inspiration_ref: str = "", engine: str = ""):
         from api.apercu import MoodGenerationWorker

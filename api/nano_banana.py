@@ -609,6 +609,41 @@ _SHEET_SUFFIX = (
 )
 
 
+# ── Finalisation d'un prompt d'ÉLÉMENT ────────────────────────────────────────
+# Deux règles, appliquées au dernier moment, juste avant l'appel :
+#
+#  1. FOND BLANC OBLIGATOIRE pour un personnage, un accessoire, un élément HMC ou
+#     un véhicule (décision Matthieu 2026-07-25). Ces images sont des FICHES DE
+#     RÉFÉRENCE : elles repartent ensuite au moteur vidéo comme référence de sujet.
+#     Si un décor traîne derrière le personnage, le moteur vidéo le reprend comme
+#     s'il faisait partie de lui et pollue le plan. Les suffixes le disaient déjà
+#     pour la plupart des modes, MAIS le mode « style pictural depuis une image de
+#     référence » les remplaçait par une chaîne vide (_sfx = "") — le fond blanc
+#     disparaissait alors complètement. C'est le trou que cette fonction bouche.
+#     Les DÉCORS sont exclus : ce sont de vrais lieux. Les éléments LIVE aussi —
+#     en mapping, le fond doit rester NOIR PUR.
+#
+#  2. GRAMMAIRE DU MOTEUR : Seedream (prompt négatif retiré de l'API par ByteDance)
+#     et FLUX.2 (JSON) lisent « no person » comme « person » — leurs interdits sont
+#     convertis en formulations positives. Les moteurs à champs (Nano Banana, GPT
+#     Image) et la prose simple gardent le texte tel quel : zéro changement sur le
+#     chemin par défaut.
+
+_WHITE_BG_SUBDIRS = {"castings", "accessories", "hmc", "vehicles"}
+
+
+def finalize_element_prompt(prompt: str, engine_key: str, white_bg: bool) -> str:
+    """Prompt d'élément prêt pour `engine_key`. Ne lève jamais : en cas de souci,
+    le prompt d'origine part inchangé (une génération vaut mieux qu'un plantage)."""
+    try:
+        from core.image_grammar import adapt_prompt
+        out, _ = adapt_prompt(prompt or "", engine_key or "nb2",
+                              drop_video=True, white_bg=bool(white_bg))
+        return out or (prompt or "")
+    except Exception:
+        return prompt or ""
+
+
 # ── Worker : optimisation du prompt via Claude ────────────────────────────────
 
 class OptimizePromptWorker(QThread):
@@ -1013,6 +1048,11 @@ class GeneratePortraitWorker(QThread):
 
             n = self._num_images
             full_prompt = f"{face_instruction}{prompt_en}\n\n{_sfx}"
+            # Fiche de casting → fond blanc TOUJOURS, y compris quand le style
+            # vient d'une image de référence (_sfx vidé plus haut), + grammaire du
+            # moteur réellement sélectionné.
+            full_prompt = finalize_element_prompt(full_prompt, _active_model,
+                                                  white_bg=True)
 
             if n > 1:
                 # N separate calls (num_images=1 each) — avoids API limit on batch size
@@ -1627,6 +1667,11 @@ class GenerateDecorSheetWorker(QThread):
             # Respecte l'éventuel modèle imposé au worker (_model_key) → args par-modèle
             # via le helper central (image_size pour GPT/Flux2/Seedream/Recraft).
             _decor_cfg = {**cfg, "image_model": (self._model_key or cfg.get("image_model", "nb2"))}
+            # Décor = vrai lieu → PAS de fond blanc ; seule la grammaire du moteur
+            # s'applique (les interdits du sheet 4 vues deviennent positifs sur
+            # Seedream, qui ne sait pas interdire).
+            full_prompt = finalize_element_prompt(
+                full_prompt, _decor_cfg["image_model"], white_bg=False)
             dest = _project_images_dir("decors")
             safe = "".join(c for c in self._name if c.isalnum() or c in " -_").strip() or "decor"
 
@@ -1767,6 +1812,13 @@ class GenerateItemWorker(QThread):
             price = get_image_price(cfg)
             n = self._num_images
             full_prompt = f"{prompt_en}\n\n{prompt_suffix}" if prompt_suffix else prompt_en
+            # Fond blanc pour tout ce qui est un OBJET de production (accessoire,
+            # HMC, véhicule, personnage) ; jamais pour un décor, qui est un lieu.
+            # En mode « fidélité », l'appel part sur Nano Banana 2 Edit quel que
+            # soit le modèle choisi → c'est SA grammaire qu'il faut viser.
+            _engine = "nb2" if _fidelity_image_url else cfg.get("image_model", "nb2")
+            full_prompt = finalize_element_prompt(
+                full_prompt, _engine, white_bg=self._subdir in _WHITE_BG_SUBDIRS)
 
             safe = "".join(c for c in self._name if c.isalnum() or c in " -_").strip() or "item"
             ts   = int(time.time())
@@ -2234,6 +2286,10 @@ class GeneratePortraitNB2EditWorker(QThread):
                 "Professional character portrait, studio lighting, cinematic quality, "
                 "sharp focus, detailed features."
             )
+            # Ce chemin n'imposait AUCUN fond : un portrait tiré d'une photo
+            # rapportait le décor de la photo, qui repartait ensuite en référence
+            # au moteur vidéo. Fiche de casting → fond blanc, comme partout ailleurs.
+            full_prompt = finalize_element_prompt(full_prompt, "nb2", white_bg=True)
 
             self.progress.emit(35, "Génération NB2 Edit (~$0.08)…")
 

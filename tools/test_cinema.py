@@ -785,8 +785,86 @@ def prompts_nano_banana_qualite():
 
 
 @test
+def elements_fond_blanc_obligatoire():
+    """Casting / accessoires / HMC / véhicules : fond blanc TOUJOURS, quel que soit
+    le mode et le moteur (décision Matthieu 2026-07-25). Ces images repartent en
+    référence au moteur vidéo — un décor derrière le sujet polluerait le plan.
+    Les décors, eux, restent de vrais lieux."""
+    import inspect
+    import api.nano_banana as nb
+    from core.image_grammar import has_white_bg
+    base = "Un chevalier en armure rouillée"
+    modes = {
+        "portrait classique":    nb._CLASSIC_PORTRAIT_SUFFIX,
+        "portrait éditorial":    nb._EDITORIAL_PORTRAIT_SUFFIX,
+        "pose d'action":         nb._ACTION_POSE_SUFFIX,
+        "portrait duo":          nb._DUO_PORTRAIT_SUFFIX,
+        "sheet 5 vues":          nb._SHEET_SUFFIX,
+        "accessoire / HMC":      nb._ITEM_LINE,
+        "véhicule":              nb._VEHICLE_LINE,
+        # ⚠ LE TROU HISTORIQUE : en « style pictural depuis une image de
+        # référence », le suffixe était remplacé par "" → plus AUCUN fond blanc.
+        "style depuis image":    "",
+    }
+    for label, sfx in modes.items():
+        src = (base + "\n\n" + sfx) if sfx else base
+        for eng in ("nb2", "nb_pro", "gpt2", "seedream5", "flux2", "recraft"):
+            out = nb.finalize_element_prompt(src, eng, True)
+            assert has_white_bg(out), f"{label} / {eng} : fond blanc absent"
+    # Décor : surtout PAS de fond blanc imposé.
+    dec = nb.finalize_element_prompt(base + "\n\n" + nb._DECOR_LINE, "nb2", False)
+    assert "isolated on plain white" not in dec, "décor : fond blanc imposé à tort"
+    assert "location photograph" in dec.lower(), "décor : reste un lieu réel"
+    # Les 4 chemins de génération d'élément passent bien par la finalisation.
+    for fn in (nb.GeneratePortraitWorker._real, nb.GenerateItemWorker._real,
+               nb.GenerateDecorSheetWorker._real,
+               nb.GeneratePortraitNB2EditWorker._real):
+        assert "finalize_element_prompt" in inspect.getsource(fn), \
+            f"{fn.__qualname__} : prompt non finalisé (fond blanc / grammaire moteur)"
+    # Le Live garde SES dossiers : en mapping le fond doit rester NOIR.
+    assert nb._WHITE_BG_SUBDIRS == {"castings", "accessories", "hmc", "vehicles"}, \
+        "fond blanc étendu au Live par erreur (mapping = fond noir pur)"
+
+
+@test
+def elements_grammaire_par_moteur():
+    """Le prompt d'un élément est réécrit pour le moteur choisi, sans rien perdre
+    sur le chemin par défaut (Nano Banana)."""
+    import api.nano_banana as nb
+    base = "Un casque de moto rouge"
+    src  = base + "\n\n" + nb._ITEM_LINE
+    # Nano Banana : la consigne éprouvée part TELLE QUELLE (zéro régression).
+    out_nb2 = nb.finalize_element_prompt(src, "nb2", True)
+    assert "No person, no face, no character, no model." in out_nb2, \
+        "Nano Banana : la consigne d'origine a été modifiée"
+    # Seedream : ByteDance a retiré le prompt négatif → « no person » y serait lu
+    # comme « person ». Les interdits doivent être devenus positifs.
+    out_seed = nb.finalize_element_prompt(src, "seedream5", True)
+    _flat = " " + out_seed.lower().replace(",", " ").replace(".", " ") + " "
+    assert " no " not in _flat, f"Seedream : interdit resté dans le prompt — {out_seed}"
+    assert "unpopulated" in out_seed or "studio backdrop" in out_seed, \
+        "Seedream : interdits supprimés sans contrepartie positive"
+    # Le sujet de l'utilisateur n'est jamais perdu.
+    for out in (out_nb2, out_seed):
+        assert "casque de moto rouge" in out, "sujet perdu à la réécriture"
+    # Repli sûr : une erreur de grammaire ne doit jamais empêcher une génération.
+    assert nb.finalize_element_prompt("", "moteur-inconnu", False) == ""
+    # Le filtre « vidéo » ne doit pas dévorer du vocabulaire de production courant :
+    # une veste des années 1970 n'est pas une durée, une cassette audio n'est pas
+    # une bande son, un miroir à main n'est pas une caméra portée.
+    from core.image_grammar import strip_video_terms
+    for phrase in ("a 1970s leather jacket", "80s sneakers with worn soles",
+                   "an audio cassette on the table", "a handheld mirror in her palm",
+                   "a copper pan hanging above the stove",
+                   "a crane standing in the marsh",
+                   "une caméra Super 8 posée sur la commode"):
+        kept, _ = strip_video_terms(phrase)
+        assert kept.strip() == phrase, f"objet supprimé à tort : {phrase!r} → {kept!r}"
+
+
+@test
 def prompt_mood_cinema_inchange():
-    """build_mood_prompt en namespace Cinéma : comportement historique complet."""
+    """build_mood_prompt en namespace Cinéma : contenu complet, sans vidéo-only."""
     import core.storyboard as sb
     from api.apercu import build_mood_prompt
     sb.set_namespace("storyboard")
@@ -795,9 +873,65 @@ def prompt_mood_cinema_inchange():
     assert "35mm" in p and "wide shot" in p, "termes caméra Cinéma présents"
     # Audit prompts 2026-07-02 : plus de mots qualité génériques interdits
     # (« 4K/film grain/high quality » poussaient un rendu contradictoire).
-    assert "cinematic still frame" in p and "4K" not in p, "suffixe mood assaini"
+    assert "cinematic still frame" in p.lower() and "4K" not in p, "suffixe mood assaini"
     assert "Marche en forêt" in p, "description d'action présente"
     assert "OPENING state" not in p, "pas de consigne keyframe Live côté Cinéma"
+
+
+@test
+def prompt_mood_sans_termes_video():
+    """Un Mood est une IMAGE : mouvement, hauteur de caméra, vitesse et durée en
+    sont exclus (demande Matthieu 2026-07-25) ; valeur de plan, axe, focale,
+    profondeur de champ et distance restent. La focale ne dit QUE la focale."""
+    import core.storyboard as sb
+    from api.apercu import build_mood_prompt, mood_intent
+    sb.set_namespace("storyboard")
+    shot = {"seedance_prompt": "a forest. the camera pushes in slowly. 8 seconds.",
+            "focal": "85mm", "shot_size": "GP", "camera_axis": "Plongée",
+            "depth_of_field": "Courte", "camera_distance": "0.6m",
+            "camera_height": "1.6m", "camera_movement": "Travelling avant",
+            "speed": "Ralenti", "shot_time": "Nuit", "decor_name": "Désert"}
+    for eng in ("nb2", "seedream5", "flux"):
+        p = build_mood_prompt(shot, "", eng)
+        low = p.lower()
+        assert "travelling" not in low and "dolly" not in low \
+            and "pushes in" not in low, f"{eng} : mouvement caméra dans un prompt image"
+        assert "1.6m high" not in low and "eye-level viewpoint" not in low, \
+            f"{eng} : hauteur de caméra dans un prompt image"
+        assert "slow motion" not in low, f"{eng} : vitesse dans un prompt image"
+        assert "8 seconds" not in low, f"{eng} : durée dans un prompt image"
+        assert "85mm lens" in low, f"{eng} : focale absente"
+        assert "shallow depth of field" in low, f"{eng} : profondeur de champ absente"
+        assert "0.6m from subject" in low, f"{eng} : distance absente"
+        assert "extreme close-up" in low and "high angle" in low, f"{eng} : cadrage absent"
+        assert "nighttime" in low, f"{eng} : heure du plan non traduite en éclairage"
+    # L'intention est indépendante du moteur ; seule sa mise en forme change.
+    it = mood_intent(shot, "")
+    assert "camera_movement" not in str(it.get("camera", "")).lower()
+    assert "85mm lens" in it["camera"] and "shallow depth of field" in it["camera"]
+
+
+@test
+def prompt_mood_grammaire_par_moteur():
+    """Changer de moteur change la FORME du prompt (dossier fal.ai 2026-07-25)."""
+    import core.storyboard as sb
+    from api.apercu import build_mood_prompt
+    sb.set_namespace("storyboard")
+    shot = {"seedance_prompt": "a forest", "shot_size": "PL", "focal": "35mm"}
+    p_nb2  = build_mood_prompt(shot, "", "nb2")
+    p_seed = build_mood_prompt(shot, "", "seedream5")
+    p_flux2 = build_mood_prompt(shot, "", "flux2")
+    p_flux  = build_mood_prompt(shot, "", "flux")
+    assert "Composition and camera:" in p_nb2, "Nano Banana : brief à champs attendu"
+    assert "Subject:" in p_nb2 or "Action:" in p_nb2, "Nano Banana : champs nommés"
+    assert "Action:" not in p_seed and "35mm lens" in p_seed, \
+        "Seedream : prose descriptive, pas de champs"
+    assert p_flux2.lstrip().startswith("{") and '"camera"' in p_flux2, \
+        "FLUX.2 : objet JSON attendu"
+    assert "Action:" not in p_flux and "35mm lens" in p_flux, "Flux : prose simple"
+    # Seedream n'a plus de prompt négatif : aucun interdit ne doit y figurer.
+    from core.image_grammar import supports_negatives
+    assert not supports_negatives("seedream5") and supports_negatives("nb2")
 
 
 @test

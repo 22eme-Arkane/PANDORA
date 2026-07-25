@@ -102,20 +102,23 @@ def _build_mood_prompt_live(shot: dict) -> str:
     return ". ".join(p for p in parts if p)
 
 
-def build_mood_prompt(shot: dict, film_style: str = "") -> str:
-    """Construit le prompt Flux à partir des données du plan storyboard.
+def mood_intent(shot: dict, film_style: str = "") -> dict:
+    """Intention structurée d'un Mood Cinéma — indépendante du moteur.
 
-    Sensible au contexte : en Séquences Live/Mapping (namespace live_seq_*),
-    délègue au builder Live (pas de termes caméra, pas de grain, état d'ouverture).
-    Comportement Cinéma inchangé."""
-    try:
-        import core.storyboard as _sb
-        if _sb.get_namespace().startswith("live_seq_"):
-            return _build_mood_prompt_live(shot)
-    except Exception:
-        pass
+    C'est la matière première : `core/image_grammar.build_image_prompt()` la rend
+    ensuite dans la grammaire du moteur choisi (brief à champs pour Nano Banana /
+    GPT Image, prose raisonnée sans interdit pour Seedream, JSON pour FLUX.2,
+    prose simple pour Flux / Z-Image / Qwen / Ideogram / Recraft).
 
-    parts: list[str] = []
+    Ce qui n'entre PAS dans l'intention (décision Matthieu 2026-07-25) : le
+    MOUVEMENT de caméra, la HAUTEUR de caméra, la VITESSE et la durée. Une image
+    fige un instant — ces champs ne décrivent que la vidéo, et les écrire pousse le
+    moteur au flou de filé ou à une composition « en cours de travelling ».
+    Ce qui reste : valeur de plan, axe, focale, profondeur de champ, distance —
+    ce sont des propriétés d'une image fixe."""
+    from core.image_grammar import strip_video_terms as _strip_video
+    from core.shot_terms import (focal_to_en as _focal_only, dof_to_en as _dof_en,
+                                 SHOT_TIME_EN as _TIME_EN)
 
     # Style : la section [🎨 STYLE VISUEL] du prompt (capturée à la création du
     # storyboard, éditable dans le plan) PRIME sur le suffixe projet passé en
@@ -126,32 +129,29 @@ def build_mood_prompt(shot: dict, film_style: str = "") -> str:
         _style_txt = (_style_of(seedance_raw) or film_style or "").strip()
     except Exception:
         _style_txt = (film_style or "").strip()
-    if _style_txt:
-        parts.append(_style_txt)
 
-    # Shot size — must come first so Flux frames the composition correctly
+    # ── Caméra : uniquement ce qui existe sur une image fixe ──────────────────
+    cam: list[str] = []
     shot_size = (shot.get("shot_size") or "").strip()
-    if shot_size and shot_size in _SHOT_SIZE_EN:
-        parts.append(_SHOT_SIZE_EN[shot_size])
-
-    # Focal length — strong visual signal for Flux
+    if shot_size in _SHOT_SIZE_EN:
+        cam.append(_SHOT_SIZE_EN[shot_size])
+    axis = (shot.get("camera_axis") or "").strip()
+    if axis in _CAMERA_AXIS_EN:
+        cam.append(_CAMERA_AXIS_EN[axis])
+    # Focale : la focale SEULE. C'est la colonne « P. de champ » qui dit si le
+    # fond est flou — l'ancien convertisseur y ajoutait « shallow depth of field »
+    # et contredisait le réglage explicite du plan.
     focal = (shot.get("focal") or "").strip()
     if focal:
-        parts.append(_focal_to_en(focal))
-
-    # Subject-to-camera distance — helps Flux understand spatial scale
+        cam.append(_focal_only(focal))
+    _dof = _dof_en(shot.get("depth_of_field", ""))
+    if _dof:
+        cam.append(_dof)
     distance = (shot.get("camera_distance") or "").strip()
     if distance:
-        parts.append(_distance_to_en(distance))
+        cam.append(_distance_to_en(distance))
 
-    # Camera axis
-    axis = (shot.get("camera_axis") or "").strip()
-    if axis and axis in _CAMERA_AXIS_EN:
-        parts.append(_CAMERA_AXIS_EN[axis])
-
-    # Prompt Seedance — core content. Prompt structuré : on APLATIT les sections
-    # (étiquettes françaises + emojis = bruit pour un modèle t2i) et on EXCLUT
-    # [🎵 SOUND DESIGN] (son) + [🎨 STYLE VISUEL] (déjà placé en tête ci-dessus).
+    # ── Corps du plan : le prompt vidéo, aplati et débarrassé du vidéo-only ───
     seedance = seedance_raw
     if seedance:
         try:
@@ -163,32 +163,49 @@ def build_mood_prompt(shot: dict, film_style: str = "") -> str:
                                      if k not in ("sound", "style") and v)
         except Exception:
             pass
-        if seedance:
-            parts.append(seedance)
+        seedance = _strip_video(seedance)[0]
 
-    # Description de l'action
-    scene_title = (shot.get("scene_title") or "").strip()
-    if scene_title:
-        parts.append(scene_title)
+    action_parts = [p.rstrip(" .") for p in
+                    (seedance, (shot.get("scene_title") or "").strip()) if p.strip()]
 
-    # Lieu + heure
-    decor_name = (shot.get("decor_name") or "").strip()
-    shot_time  = (shot.get("shot_time") or "").strip()
-    loc_tokens = [t for t in [decor_name, shot_time] if t]
-    if loc_tokens:
-        parts.append(", ".join(loc_tokens))
+    # Personnages présents → sujet explicite du brief.
+    _chars = shot.get("character_names") or []
+    if isinstance(_chars, str):
+        _chars = [c.strip() for c in _chars.split(",") if c.strip()]
+    subject = ", ".join(str(c).strip() for c in _chars if str(c).strip())
 
-    # Camera movement
-    movement = (shot.get("camera_movement") or "").strip()
-    if movement and movement != "Fixe" and movement in _MOVEMENT_EN:
-        parts.append(_MOVEMENT_EN[movement])
+    return {
+        "subject":     subject,
+        "action":      ". ".join(action_parts),
+        "setting":     (shot.get("decor_name") or "").strip(),
+        "lighting":    _TIME_EN.get((shot.get("shot_time") or "").strip(), ""),
+        "camera":      ", ".join(cam),
+        "style":       _style_txt,
+        # Le style du Mood est en tête depuis toujours et le rendu convient —
+        # on ne déplace pas ce qui marche (voir image_grammar.build_image_prompt).
+        "style_first": True,
+        "use_case":    "Cinematic still frame from a film storyboard — "
+                       "one single frozen instant, sharp focus.",
+    }
 
-    # Qualité — SANS mots de qualité génériques (« 4K », « high quality »… sont
-    # interdits par la doctrine des prompts) ni « film grain » imposé (il
-    # contredirait les styles non photoréalistes ; le style du projet le porte).
-    parts.append("cinematic still frame, sharp focus")
 
-    return ". ".join(p for p in parts if p)
+def build_mood_prompt(shot: dict, film_style: str = "", engine_key: str = "") -> str:
+    """Prompt d'un Mood, écrit dans la grammaire du moteur `engine_key`.
+
+    Sensible au contexte : en Séquences Live/Mapping (namespace live_seq_*),
+    délègue au builder Live (pas de termes caméra, pas de grain, état d'ouverture).
+    `engine_key` vide → même repli que `run_mood` (Nano Banana 2 en Cinéma, Flux
+    en Live) : le prompt est ainsi toujours écrit pour le moteur qui le recevra."""
+    try:
+        import core.storyboard as _sb
+        if _sb.get_namespace().startswith("live_seq_"):
+            return _build_mood_prompt_live(shot)
+    except Exception:
+        pass
+    from core.image_grammar import build_image_prompt as _build
+    if not (engine_key or "").strip():
+        engine_key = "nb2" if _is_cinema_mood() else "flux"
+    return _build(mood_intent(shot, film_style), engine_key)
 
 
 # ── Génération effective ──────────────────────────────────────────────────────
@@ -773,10 +790,14 @@ class MoodGenerationWorker(QThread):
         self._building_ref = _resolve_building_ref()
 
     def run(self):
+        # WYSIWYG : si la fenêtre a fourni un prompt, c'est EXACTEMENT lui qui part
+        # (il a déjà été écrit dans la grammaire du moteur choisi et montré à
+        # l'écran). Sinon on le construit ici, pour le même moteur.
         prompt = (
             self._custom_prompt
             if self._custom_prompt
-            else build_mood_prompt(self._shot, self._film_style)
+            else build_mood_prompt(self._shot, self._film_style,
+                                   (self._options.get("engine") or "").strip())
         )
         try:
             path = run_mood(self._shot, prompt, self._out_dir, self._api_key,
@@ -825,7 +846,9 @@ class MoodBatchWorker(QThread):
                 self.shot_progress.emit(i + 1, total, f"Plan {num} — {title[:40]}")
 
                 try:
-                    prompt  = build_mood_prompt(shot, self._film_style)
+                    prompt  = build_mood_prompt(
+                        shot, self._film_style,
+                        (self._options.get("engine") or "").strip())
                     out_dir = sb_api.get_apercu_dir(shot["id"])
 
                     def _prog(msg, _i=i, _t=total):

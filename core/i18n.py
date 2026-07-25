@@ -357,6 +357,15 @@ _FR_TO_EN: dict[str, str] = {
     "◇  Nano Banana 2":                     "◇  Nano Banana 2",
     "Moteur du Mood":                       "Mood engine",
     "Avec quel moteur générer ce Mood ?":   "Which engine to generate this Mood with?",
+    # Sélecteur de moteur DANS la fenêtre Mood + libellés de grammaire (2026-07-25).
+    "Le prompt ci-dessous est réécrit dans la grammaire de ce moteur.\n"
+    "Changer de moteur met le prompt à jour.":
+        "The prompt below is rewritten in this engine's grammar.\n"
+        "Switching engine updates the prompt.",
+    "brief à champs nommés":                "named-field brief",
+    "prose descriptive, sans interdit":     "descriptive prose, no negatives",
+    "objet JSON":                           "JSON object",
+    "prose descriptive":                    "descriptive prose",
     "Flux et Nano Banana 2 reçoivent les MÊMES consignes (façade = canvas prioritaire "
     "en mapping). Teste les deux pour comparer le rendu.":
         "Flux and Nano Banana 2 receive the SAME instructions (facade = priority canvas "

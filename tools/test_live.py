@@ -364,7 +364,11 @@ def prompt_mood_live_propre():
         "le son est retiré du prompt mood (image fixe)"
     assert "dolly push in" not in p_live, "pas de mouvement caméra"
     # Cinéma : focale + titre conservés ; suffixe qualité assaini (audit 2026-07-02)
-    assert "35mm" in p_cine and "cinematic still frame" in p_cine and "Les baleines" in p_cine
+    assert "35mm" in p_cine and "cinematic still frame" in p_cine.lower() \
+        and "Les baleines" in p_cine
+    # …mais le mouvement caméra n'entre PAS dans un prompt d'image, des deux côtés
+    # (Live l'excluait déjà, le Cinéma le retire depuis le 2026-07-25).
+    assert "dolly push in" not in p_cine, "Cinéma : mouvement caméra dans un Mood"
 
 
 @test
@@ -436,10 +440,24 @@ def mood_batch_choix_moteur_live():
         "worker unitaire : param options (moteur) absent"
     assert "options=self._options" in inspect.getsource(_A.MoodGenerationWorker.run), \
         "worker unitaire : moteur non transmis à run_mood"
-    from ui.dialog_apercu import MoodDialog, choose_mood_engine
-    assert callable(choose_mood_engine)
+    # Le moteur se choisit DANS la fenêtre Mood (combo au-dessus du prompt), plus
+    # dans une fenêtre intermédiaire : le prompt affiché doit déjà être écrit dans
+    # la grammaire du moteur, donc le moteur est connu AVANT le clic.
+    from ui.dialog_apercu import MoodDialog
+    import ui.dialog_apercu as _DA
+    assert not hasattr(_DA, "choose_mood_engine"), \
+        "l'ancienne fenêtre de choix de moteur doit avoir disparu"
     _gsrc = inspect.getsource(MoodDialog._generate)
-    assert "choose_mood_engine" in _gsrc, "variation de mood : pas de choix de moteur"
+    assert "_current_engine" in _gsrc, "variation de mood : moteur du combo non utilisé"
+    _csrc = inspect.getsource(MoodDialog._build_engine_combo)
+    assert "mood_engine_choices" in _csrc, "combo moteur : catalogue non branché"
+    # Changer de moteur DOIT changer le prompt.
+    _esrc = inspect.getsource(MoodDialog._on_engine_changed)
+    assert "_reset_prompt" in _esrc and "adapt_prompt" in _esrc, \
+        "changer de moteur ne réécrit pas le prompt"
+    # Le prompt reconstruit est écrit pour le moteur sélectionné.
+    _rsrc = inspect.getsource(MoodDialog._reset_prompt)
+    assert "_current_engine()" in _rsrc, "prompt du Mood non écrit pour le moteur"
 
 
 @test
