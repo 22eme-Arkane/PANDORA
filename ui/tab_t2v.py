@@ -2377,6 +2377,13 @@ class _FinalPromptWorker(QThread):
             from core.lang import translate_to_english
             _plain = _flat(self._prompt) or self._prompt
             _t = translate_to_english(_plain) or _plain
+            # La traduction retourne le texte INCHANGÉ quand elle ne peut pas
+            # travailler (clé de la tâche « translate » absente). Il faut le dire :
+            # sinon un prompt FRANÇAIS partirait au moteur sans avertissement.
+            if _t.strip() == _plain.strip():
+                _extra = ("le prompt n'a PAS pu être traduit en anglais "
+                          "(moteur de traduction indisponible)")
+                why = f"{why} ; {_extra}" if why else _extra
             self.done.emit(self._with_dialogues(_t), False, why)
         except Exception:
             self.done.emit(self._prompt, False, why or "assemblage indisponible")
@@ -3727,6 +3734,9 @@ class TabT2V(QScrollArea):
         """Applique des briques [(label, texte, mode)] à un prompt, dans l'ordre."""
         fp = (text or "").strip()
         for _label, txt, mode in injections:
+            txt = (txt or "").strip()
+            if not txt:
+                continue
             if mode == "ctx":
                 fp = txt + fp
             elif mode == "dash_prefix":
@@ -3734,9 +3744,9 @@ class TabT2V(QScrollArea):
             elif mode == "nl_prefix":
                 fp = f"{txt}\n{fp}"
             elif mode == "comma_prefix":
-                fp = f"{txt}, {fp}"
-            else:   # comma_suffix
-                fp = f"{fp}, {txt}"
+                fp = f"{txt.rstrip(' .')}, {fp}"
+            else:   # comma_suffix — pas de « ., » disgracieux
+                fp = f"{fp.rstrip(' .')}, {txt}"
         return fp
 
     def _build_pre_compose_prompt(self, body: str) -> str:

@@ -313,16 +313,34 @@ class PageProjects(QWidget):
         _cap_lay.addStretch(1)
         _cv.addWidget(_cap_wrap, 0, Qt.AlignmentFlag.AlignHCenter)
 
+        # Flèches de pagination dans des porte-widgets à HAUTEUR FIXE : masquer un
+        # bouton ne doit PAS libérer sa place, sinon la grille et le libellé
+        # « PROJETS RÉCENTS » sautent d'une page à l'autre (retour Matthieu
+        # 2026-07-24 : seules les vignettes changent, la mise en page ne bouge pas).
+        def _nav_slot(btn: QPushButton) -> QWidget:
+            w = QWidget()
+            w.setFixedHeight(btn.height() or 24)
+            w.setStyleSheet("background:transparent;")
+            l = QHBoxLayout(w)
+            l.setContentsMargins(0, 0, 0, 0)
+            l.addStretch(1)
+            l.addWidget(btn)
+            l.addStretch(1)
+            return w
+
         self._btn_page_up = QPushButton("▲")
         self._btn_page_up.setFixedSize(72, 24)
         self._btn_page_up.setCursor(Qt.CursorShape.PointingHandCursor)
         self._btn_page_up.setStyleSheet(_nav_ss)
         self._btn_page_up.clicked.connect(lambda: self._change_page(-1))
-        _cv.addWidget(self._btn_page_up, 0, Qt.AlignmentFlag.AlignHCenter)
+        _cv.addWidget(_nav_slot(self._btn_page_up))
 
         self._grid_container = QWidget()
         self._grid_container.setStyleSheet("background:transparent;")
         self._grid_container.setFixedWidth(_GRID_W)
+        # Hauteur FIXE = 2 lignes pleines, quel que soit le nombre de vignettes de
+        # la page : une dernière page incomplète ne doit pas remonter le bloc.
+        self._grid_container.setFixedHeight(2 * _ProjectCard._H + 18)
         self._grid = QGridLayout(self._grid_container)
         self._grid.setSpacing(18)
         self._grid.setAlignment(Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignLeft)
@@ -334,7 +352,7 @@ class PageProjects(QWidget):
         self._btn_page_down.setCursor(Qt.CursorShape.PointingHandCursor)
         self._btn_page_down.setStyleSheet(_nav_ss)
         self._btn_page_down.clicked.connect(lambda: self._change_page(+1))
-        _cv.addWidget(self._btn_page_down, 0, Qt.AlignmentFlag.AlignHCenter)
+        _cv.addWidget(_nav_slot(self._btn_page_down))
         _cv.addStretch(1)   # symétrique du ressort haut → bloc au milieu
 
         scroll.setWidget(_content)
@@ -398,6 +416,11 @@ class PageProjects(QWidget):
 
         pruned = project_api.get_last_pruned()
         row0 = 0
+        # Hauteur de référence = 2 lignes pleines (positions figées d'une page à
+        # l'autre) ; le bandeau d'avertissement occupe une ligne EN PLUS, sinon la
+        # seconde rangée de vignettes serait rognée.
+        _base_h = 2 * _ProjectCard._H + 18
+        self._grid_container.setFixedHeight(_base_h + (54 if pruned else 0))
         if pruned:
             n = len(pruned)
             warn = QLabel(

@@ -131,7 +131,11 @@ def translate_to_english(text: str) -> str:
         pass
 
     from core.ai_provider import complete, key_error
-    if key_error():
+    # Clé de la TÂCHE « translate » (et non du moteur global) : l'appel plus bas
+    # utilise task="translate", donc tester le moteur global court-circuitait la
+    # traduction quand seul le moteur de tâche est configuré — le prompt partait
+    # alors EN FRANÇAIS au moteur vidéo (constat Matthieu 2026-07-24).
+    if key_error(task="translate"):
         return text
 
     import re
@@ -159,7 +163,9 @@ def translate_to_english(text: str) -> str:
                 "spoken dialogue or text-on-object — copy them exactly as-is. "
                 "Return ONLY the translated text. No explanation, no prefix."
             ),
-            safe, tier="utility", max_tokens=800, task="translate",
+            # 4000 tokens : 800 tronquait les prompts longs (un prompt final
+            # assemble depasse 2000 caracteres) -> traduction coupee net.
+            safe, tier="utility", max_tokens=4000, task="translate",
         ).strip()
     except Exception:
         return text
@@ -207,7 +213,9 @@ def translate_to_french(text: str) -> str:
                 "Tokens of the form §D0§, §D1§ … are protected placeholders — copy them "
                 "exactly as-is. Return ONLY the translated text. No explanation, no prefix."
             ),
-            safe, tier="utility", max_tokens=800, task="translate",
+            # 4000 tokens : 800 tronquait les prompts longs (un prompt final
+            # assemble depasse 2000 caracteres) -> traduction coupee net.
+            safe, tier="utility", max_tokens=4000, task="translate",
         ).strip()
     except Exception:
         return text
@@ -266,7 +274,9 @@ def translate_to_chinese(text: str) -> str:
                 "copy them exactly as-is without any modification. "
                 "Return ONLY the translated text. No explanation, no prefix."
             ),
-            safe, tier="utility", max_tokens=800, task="translate",
+            # 4000 tokens : 800 tronquait les prompts longs (un prompt final
+            # assemble depasse 2000 caracteres) -> traduction coupee net.
+            safe, tier="utility", max_tokens=4000, task="translate",
         ).strip()
     except Exception:
         return text
