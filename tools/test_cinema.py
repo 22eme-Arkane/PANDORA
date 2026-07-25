@@ -140,9 +140,23 @@ def edition_cinema_only():
                 "api.resolume_push", "ui.tab_t2v_live"):
         assert f'"{mod}"' not in exc, f".spec ne doit PLUS exclure {mod} (v1.3.0)"
     assert "BUNDLE(" in spec and "PANDORA.app" in spec, "cible macOS présente"
-    # Version bumpée — build 1.4.0 (Cinéma + Live, Windows + macOS).
+    # Version bumpée — build 2.0.0 (Cinéma + Live, Windows + macOS). Saut direct
+    # depuis la 1.4.0 : le prompt est désormais écrit dans la GRAMMAIRE du moteur,
+    # image comme vidéo, ce qui change le comportement de toutes les générations
+    # (décision Matthieu 2026-07-25).
     from core.version import VERSION
-    assert VERSION.split("-")[0] == "1.4.0", f"version attendue 1.4.0[-suffixe], lue {VERSION}"
+    assert VERSION.split("-")[0] == "2.0.0", f"version attendue 2.0.0[-suffixe], lue {VERSION}"
+    # Le numéro affiché dans l'app et celui de l'installeur Windows ne doivent
+    # JAMAIS diverger (un installeur estampillé 1.4.0 pour un binaire 2.0.0 rend
+    # la vérification de mise à jour incohérente).
+    import os as _os
+    _iss = _os.path.join(_os.path.dirname(_os.path.dirname(_os.path.abspath(__file__))),
+                         "pandora_setup.iss")
+    if _os.path.isfile(_iss):
+        with open(_iss, encoding="utf-8", errors="ignore") as _f:
+            _issrc = _f.read()
+        assert f'"{VERSION}"' in _issrc, \
+            f"pandora_setup.iss n'est pas à la version {VERSION}"
 
 
 @test
