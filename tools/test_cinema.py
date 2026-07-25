@@ -146,17 +146,47 @@ def edition_cinema_only():
     # (décision Matthieu 2026-07-25).
     from core.version import VERSION
     assert VERSION.split("-")[0] == "2.0.0", f"version attendue 2.0.0[-suffixe], lue {VERSION}"
-    # Le numéro affiché dans l'app et celui de l'installeur Windows ne doivent
-    # JAMAIS diverger (un installeur estampillé 1.4.0 pour un binaire 2.0.0 rend
-    # la vérification de mise à jour incohérente).
-    import os as _os
-    _iss = _os.path.join(_os.path.dirname(_os.path.dirname(_os.path.abspath(__file__))),
-                         "pandora_setup.iss")
-    if _os.path.isfile(_iss):
-        with open(_iss, encoding="utf-8", errors="ignore") as _f:
-            _issrc = _f.read()
+    # ── UN SEUL numéro de version dans tout le produit ────────────────────────
+    # Chaque endroit qui recopie le numéro à la main finit par diverger : la 2.0.0
+    # est partie en build avec une charte d'utilisation estampillée 1.3.5, un .app
+    # macOS en 1.3.5 et une fenêtre CLUF figée sur « v1.0 » depuis quatorze
+    # versions (constat Matthieu 2026-07-25). Ce test ferme la porte.
+    import os as _os, re as _re
+    _root = _os.path.dirname(_os.path.dirname(_os.path.abspath(__file__)))
+
+    def _read(name):
+        p = _os.path.join(_root, name)
+        if not _os.path.isfile(p):
+            return None
+        with open(p, encoding="utf-8", errors="ignore") as _f:
+            return _f.read()
+
+    # 1. Installeur Windows.
+    _issrc = _read("pandora_setup.iss")
+    if _issrc is not None:
         assert f'"{VERSION}"' in _issrc, \
             f"pandora_setup.iss n'est pas à la version {VERSION}"
+    # 2. Chartes d'utilisation FR + EN — LUES PAR L'UTILISATEUR à l'installation.
+    for _eula in ("EULA.txt", "EULA_EN.txt"):
+        _txt = _read(_eula)
+        if _txt is None:
+            continue
+        _vers = set(_re.findall(r"(?m)^Version\s+([0-9]+\.[0-9]+\.[0-9]+)", _txt))
+        assert _vers, f"{_eula} : aucune ligne « Version X.Y.Z »"
+        assert _vers == {VERSION}, \
+            f"{_eula} annonce {sorted(_vers)} au lieu de {VERSION}"
+    # 3. Paquet macOS : le numéro doit être DÉRIVÉ, pas recopié.
+    _spec = _read("pandora.spec")
+    if _spec is not None:
+        assert '"CFBundleShortVersionString": _VERSION' in _spec \
+            and '"CFBundleVersion": _VERSION' in _spec, \
+            "pandora.spec : version macOS recopiée en dur au lieu d'être lue"
+    # 4. Fenêtre CLUF de l'application : même règle.
+    import inspect as _insp
+    from ui.dialog_eula import EulaDialog as _ED
+    _esrc = _insp.getsource(_ED)
+    assert "core.version import VERSION" in _esrc, \
+        "ui/dialog_eula.py : numéro de version écrit en dur"
 
 
 @test

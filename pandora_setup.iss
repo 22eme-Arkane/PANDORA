@@ -1,4 +1,4 @@
-; pandora_setup.iss — Inno Setup script pour PANDORA v1.2.1
+; pandora_setup.iss — Inno Setup script pour PANDORA (version : MyAppVersion)
 ;
 ; Prérequis :
 ;   - Inno Setup 6.x installé (https://jrsoftware.org/isinfo.php)

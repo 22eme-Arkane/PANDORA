@@ -16,6 +16,28 @@ import sys
 
 block_cipher = None
 
+
+def _app_version() -> str:
+    """Version LUE dans core/version.py — jamais recopiée à la main.
+
+    Le .app macOS annonçait encore 1.3.5 alors que l'application était en 2.0.0
+    (constat Matthieu 2026-07-25) : un numéro recopié finit toujours par diverger.
+    Lecture par expression régulière plutôt qu'import : le .spec est exécuté par
+    PyInstaller dans un contexte où le paquet `core` n'est pas forcément importable.
+    """
+    import re as _re
+    try:
+        with open(os.path.join("core", "version.py"), encoding="utf-8") as _f:
+            _m = _re.search(r'VERSION\s*=\s*["\']([^"\']+)["\']', _f.read())
+        if _m:
+            return _m.group(1)
+    except Exception:
+        pass
+    return "0.0.0"
+
+
+_VERSION = _app_version()
+
 _IS_MAC = sys.platform == "darwin"
 _ICO  = os.path.join("assets", "pandora_badge.ico")
 _ICNS = os.path.join("assets", "pandora_badge.icns")
@@ -171,8 +193,8 @@ if _IS_MAC:
         icon=_ICNS if os.path.isfile(_ICNS) else None,
         bundle_identifier="com.arkane22eme.pandora",
         info_plist={
-            "CFBundleShortVersionString": "1.3.5",
-            "CFBundleVersion": "1.3.5",
+            "CFBundleShortVersionString": _VERSION,
+            "CFBundleVersion": _VERSION,
             "NSHighResolutionCapable": True,
             "LSMinimumSystemVersion": "12.0",
         },

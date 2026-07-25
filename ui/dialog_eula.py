@@ -72,7 +72,14 @@ class EulaDialog(QDialog):
         hl.addWidget(self._title_lbl)
         hl.addStretch()
 
-        sub_lbl = QLabel("PANDORA v1.0 — 22eme Arkane")
+        # Version LUE, jamais recopiée : ce libellé est resté bloqué sur « v1.0 »
+        # pendant quatorze versions (constat Matthieu 2026-07-25).
+        try:
+            from core.version import VERSION as _V
+        except Exception:
+            _V = ""
+        sub_lbl = QLabel(f"PANDORA v{_V} — 22eme Arkane" if _V
+                         else "PANDORA — 22eme Arkane")
         sub_lbl.setStyleSheet(f"color:{CP['text_dim']};font-size:10px;background:transparent;")
         hl.addWidget(sub_lbl)
 
