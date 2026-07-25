@@ -799,6 +799,80 @@ def prompts_nano_banana_qualite():
 
 
 @test
+def moods_references_toutes_familles():
+    """Le Mood doit recevoir TOUTES les fiches images du plan : personnages, décor,
+    accessoires, véhicules, HMC. Les trois dernières n'étaient jamais envoyées et
+    la fenêtre ne proposait même pas de les inclure (constat Matthieu 2026-07-25)."""
+    import inspect, os as _os, tempfile as _tf
+    import api.apercu as A
+    import core.casting, core.decors, core.accessories, core.vehicles, core.hmc
+
+    _tmp = _tf.mkdtemp(prefix="pandora_moodrefs_")
+    def _img(n):
+        p = _os.path.join(_tmp, n + ".png")
+        with open(p, "wb") as f:                     # fichier bidon : seul isfile() compte
+            f.write(b"\x89PNG\r\n\x1a\n")
+        return p
+    _I = {k: _img(k) for k in ("perso", "decor", "prop", "veh", "hmc")}
+    _orig = (core.casting.get_character, core.decors.get_decor,
+             core.accessories.get_accessory, core.vehicles.get_vehicle,
+             core.hmc.get_hmc_item)
+    core.casting.get_character     = lambda i: {"image_path": _I["perso"]}
+    core.decors.get_decor          = lambda i: {"image_path": _I["decor"]}
+    core.accessories.get_accessory = lambda i: {"image_path": _I["prop"]}
+    core.vehicles.get_vehicle      = lambda i: {"image_path": _I["veh"]}
+    core.hmc.get_hmc_item          = lambda i: {"image_path": _I["hmc"]}
+    try:
+        shot = {"id": "s", "character_ids": ["c"], "decor_id": "d",
+                "accessory_ids": ["a"], "vehicle_ids": ["v"], "hmc_ids": ["h"]}
+        refs = A._shot_ref_images(shot)
+        for k in ("perso", "decor", "prop", "veh", "hmc"):
+            assert _I[k] in refs, f"référence {k} absente du Mood"
+        # Chaque case de la fenêtre doit pouvoir retirer sa famille.
+        for arg, absent in (("include_props", "prop"), ("include_vehicles", "veh"),
+                            ("include_hmc", "hmc"), ("include_chars", "perso"),
+                            ("include_decor", "decor")):
+            assert _I[absent] not in A._shot_ref_images(shot, **{arg: False}), \
+                f"{arg}=False n'exclut pas {absent}"
+    finally:
+        (core.casting.get_character, core.decors.get_decor,
+         core.accessories.get_accessory, core.vehicles.get_vehicle,
+         core.hmc.get_hmc_item) = _orig
+        import shutil as _sh
+        _sh.rmtree(_tmp, ignore_errors=True)
+
+    # La fenêtre expose les six cases, et le handler les transmet toutes.
+    import ui.page_storyboard as _PS
+    _dsrc = inspect.getsource(_PS._MoodBatchDialog._build_ui)
+    for attr in ("_opt_chars", "_opt_decor", "_opt_props", "_opt_vehicles",
+                 "_opt_hmc", "_opt_floor"):
+        assert attr in _dsrc, f"case {attr} absente de la fenêtre des Moods"
+    _hsrc = inspect.getsource(_PS.PageStoryboard._on_batch_mood)
+    for key in ('"props"', '"vehicles"', '"hmc"'):
+        assert key in _hsrc, f"{key} non transmis au worker de série"
+    # …et le dispatcher lit bien ces options.
+    _rsrc = inspect.getsource(A.run_mood)
+    for key in ('opts.get("props"', 'opts.get("vehicles"', 'opts.get("hmc"'):
+        assert key in _rsrc, f"run_mood ignore l'option {key}"
+
+
+@test
+def page_projets_liste_tous_les_projets():
+    """La page Projets doit pouvoir atteindre TOUS les projets. Elle paginait sur
+    `list_recent()`, plafonné à 9 : au-delà, les projets étaient inatteignables
+    même en tournant les pages (constat Matthieu 2026-07-25 : 19 au registre)."""
+    import inspect
+    import core.project as P
+    assert hasattr(P, "list_all"), "core.project.list_all absent"
+    assert P.list_recent(max_count=None) is not None, "list_recent sans plafond"
+    import ui.page_projects as _PP
+    _src = inspect.getsource(_PP.PageProjects._projects)
+    assert "project_api.list_all()" in _src \
+        and "project_api.list_recent()" not in _src, \
+        "la page Projets pagine encore sur la liste plafonnée"
+
+
+@test
 def generation_elements_choix_du_moteur():
     """« Identifier et générer les images » doit demander le MOTEUR pour les cinq
     catégories, pas seulement pour les décors (demande Matthieu 2026-07-25) : le

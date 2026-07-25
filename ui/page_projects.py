@@ -369,7 +369,10 @@ class PageProjects(QWidget):
 
     def _projects(self) -> list:
         current_path = self._current.get("_path", "")
-        recents = list(project_api.list_recent())
+        # TOUS les projets, sans plafond : cette page est faite pour les retrouver
+        # tous. `list_recent()` s'arrête à 9 — au-delà, les projets devenaient
+        # inatteignables même en tournant les pages (19 au registre, 9 affichés).
+        recents = list(project_api.list_all())
         # Projet OUVERT en tête (liseré accent), puis les autres récents du MÊME mode.
         out = []
         if current_path:

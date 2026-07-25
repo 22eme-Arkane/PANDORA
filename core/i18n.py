@@ -4827,6 +4827,10 @@ _FR_TO_EN: dict[str, str] = {
     "Nano Banana 2 (avec références)":   "Nano Banana 2 (with references)",
     "Flux (depuis le prompt seul)":      "Flux (from the prompt only)",
     "Envoyer les références des personnages": "Send character references",
+    "Envoyer les références des accessoires": "Send prop references",
+    "Envoyer les références des véhicules":   "Send vehicle references",
+    "Envoyer les références HMC (habillage, maquillage, coiffure)":
+        "Send costume / make-up / hair references",
     "Envoyer la référence du décor":     "Send the location reference",
     "Envoyer le plan d'architecte (repère d'agencement)":
         "Send the floor plan (layout reference)",

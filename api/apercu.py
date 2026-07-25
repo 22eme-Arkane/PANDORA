@@ -429,22 +429,37 @@ def mood_engine_choices(is_mapping: bool | None = None) -> list:
 
 
 def _shot_ref_images(shot: dict, include_chars: bool = True,
-                     include_decor: bool = True) -> list:
-    """Portraits des personnages assignés + image du décor du plan (réfs NB2).
-    `include_chars` / `include_decor` permettent d'exclure une catégorie (options
-    de la fenêtre « Générer les Moods »)."""
+                     include_decor: bool = True, include_props: bool = True,
+                     include_vehicles: bool = True, include_hmc: bool = True) -> list:
+    """Images de COHÉRENCE du plan : personnages, décor, accessoires, véhicules, HMC.
+
+    Les accessoires, véhicules et HMC assignés au plan n'étaient PAS envoyés — seuls
+    les portraits et le décor l'étaient — alors que le storyboard les référence et
+    que la fenêtre de génération ne proposait même pas de les inclure (constat
+    Matthieu 2026-07-25). Un accessoire qui a une fiche image doit se retrouver dans
+    le Mood, sinon le moteur le réinvente à chaque plan.
+
+    Ordre stable : personnages → décor → accessoires → véhicules → HMC. Chaque
+    catégorie peut être exclue depuis la fenêtre « Générer les Moods »."""
     refs: list = []
+
+    def _first_image(item: dict) -> str:
+        """Première image utilisable d'une fiche, quel que soit son champ."""
+        cands = [item.get("image_path"), item.get("sheet_path"),
+                 item.get("portrait_path"), item.get("portrait")]
+        cands += (item.get("generated_images") or [])[:1]
+        for p in cands:
+            if p and os.path.isfile(p):
+                return p
+        return ""
+
     if include_chars:
         try:
             import core.casting as cast
             for cid in (shot.get("character_ids") or []):
-                c = cast.get_character(cid) or {}
-                cands = [c.get("image_path"), c.get("portrait_path"), c.get("portrait")]
-                cands += (c.get("generated_images") or [])[:1]
-                for p in cands:
-                    if p and os.path.isfile(p):
-                        refs.append(p)
-                        break
+                p = _first_image(cast.get_character(cid) or {})
+                if p:
+                    refs.append(p)
         except Exception:
             pass
     if include_decor:
@@ -452,11 +467,31 @@ def _shot_ref_images(shot: dict, include_chars: bool = True,
             import core.decors as dec
             did = shot.get("decor_id")
             if did:
-                p = (dec.get_decor(did) or {}).get("image_path") or ""
-                if p and os.path.isfile(p):
+                p = _first_image(dec.get_decor(did) or {})
+                if p:
                     refs.append(p)
         except Exception:
             pass
+
+    # Accessoires / véhicules / HMC : même mécanique, une entrée par module.
+    for _flag, _mod_name, _getter, _ids_key in (
+            (include_props,    "core.accessories", "get_accessory", "accessory_ids"),
+            (include_vehicles, "core.vehicles",    "get_vehicle",   "vehicle_ids"),
+            (include_hmc,      "core.hmc",         "get_hmc_item",  "hmc_ids")):
+        if not _flag:
+            continue
+        try:
+            _mod = __import__(_mod_name, fromlist=["_"])
+            _get = getattr(_mod, _getter, None)
+            if _get is None:
+                continue
+            for _iid in (shot.get(_ids_key) or []):
+                p = _first_image(_get(_iid) or {})
+                if p:
+                    refs.append(p)
+        except Exception:
+            pass
+
     seen, out = set(), []
     for r in refs:
         if r not in seen:
@@ -744,7 +779,10 @@ def run_mood(shot: dict, prompt: str, output_dir: str, api_key: str, progress_cb
     def _consistency():
         return _shot_ref_images(shot,
                                 include_chars=opts.get("chars", True),
-                                include_decor=opts.get("decor", True))
+                                include_decor=opts.get("decor", True),
+                                include_props=opts.get("props", True),
+                                include_vehicles=opts.get("vehicles", True),
+                                include_hmc=opts.get("hmc", True))
 
     def _floor():
         if not opts.get("floor_plan", True):

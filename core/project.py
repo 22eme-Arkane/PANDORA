@@ -78,8 +78,23 @@ def get_last_pruned() -> list[str]:
     return list(_last_pruned)
 
 
-def list_recent(max_count: int = 9) -> list[dict]:
-    """Retourne les projets récents valides, triés par ordre d'ouverture."""
+def list_all() -> list[dict]:
+    """TOUS les projets valides du registre, sans plafond, triés par ordre
+    d'ouverture.
+
+    À utiliser partout où l'utilisateur doit pouvoir retrouver n'importe lequel de
+    ses projets — typiquement la page Projets et sa pagination. `list_recent()`
+    plafonne volontairement à 9 pour un bandeau « récents » ; l'employer pour la
+    page Projets faisait disparaître les projets au-delà du neuvième, quel que soit
+    le nombre de pages parcourues (constat Matthieu 2026-07-25 : 19 projets au
+    registre, 9 accessibles)."""
+    return list_recent(max_count=None)
+
+
+def list_recent(max_count: int | None = 9) -> list[dict]:
+    """Projets récents valides, triés par ordre d'ouverture.
+
+    `max_count=None` → aucun plafond (voir `list_all()`)."""
     global _last_pruned
     paths   = _load_registry()
     result  = []
@@ -93,7 +108,7 @@ def list_recent(max_count: int = 9) -> list[dict]:
     _last_pruned = pruned
     if pruned:
         _save_registry(valid)
-    return result[:max_count]
+    return result if max_count is None else result[:max_count]
 
 
 def scan_folder(folder: str):

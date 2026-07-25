@@ -7,7 +7,21 @@ import sys
 #    ne voit pas. faulthandler dumpe la pile de tous les threads dans un fichier. ──
 try:
     import faulthandler as _faulthandler, tempfile as _tempfile, os as _os
-    _fault_log = open(_os.path.join(_tempfile.gettempdir(), "pandora_fault.log"), "w")
+    # ⚠ Mode APPEND, jamais « w » : le fichier était remis à zéro à CHAQUE
+    # lancement, si bien qu'une fermeture inexpliquée effaçait sa propre preuve
+    # dès que l'utilisateur relançait l'application (constat 2026-07-25 : arrêt
+    # silencieux à la création d'un projet, journal vide au moment de l'analyse).
+    # Un en-tête horodaté sépare les sessions.
+    _fault_log = open(_os.path.join(_tempfile.gettempdir(), "pandora_fault.log"),
+                      "a", encoding="utf-8", errors="replace")
+    try:
+        import datetime as _dt
+        from core.version import VERSION as _V
+        _fault_log.write(f"\n===== session {_dt.datetime.now().isoformat()} "
+                         f"· PANDORA {_V} =====\n")
+        _fault_log.flush()
+    except Exception:
+        pass
     _faulthandler.enable(file=_fault_log, all_threads=True)
 except Exception:
     pass
@@ -201,17 +215,45 @@ if __name__ == "__main__":
             close_splash()
             raise
 
+        # ⚠ CRASH À LA CRÉATION D'UN PROJET (constat Matthieu 2026-07-25) : la
+        # fenêtre se fermait sans message et l'application ne revenait pas — alors
+        # que le projet, lui, était bien créé.
+        #
+        # Cause : ce signal est émis par un widget ENFANT de `win` — le bouton
+        # « Nouveau projet » ou une vignette de la page Projets. Détruire `win`
+        # ici revient à supprimer l'émetteur PENDANT sa propre émission ; et le
+        # splash de chargement ouvert juste après appelle processEvents(), qui
+        # exécute la suppression différée séance tenante. Quand la pile remonte,
+        # Qt reprend la main sur un objet C++ déjà libéré → arrêt brutal.
+        #
+        # Correctif : on rend la main à la boucle d'événements AVANT de basculer.
+        # L'ancienne fenêtre est masquée tout de suite (rien ne change à l'œil),
+        # puis détruite une fois la nouvelle debout, hors de toute émission.
         def _on_switch(new_data: dict):
+            from PyQt6.QtCore import QTimer as _QTimer
             win.hide()
-            win.deleteLater()
-            state["opening"] = False  # ré-entrée autorisée seulement sur changement explicite
-            _open_project(new_data)
+            try:
+                win.switch_requested.disconnect()
+            except TypeError:
+                pass
+
+            def _swap():
+                state["opening"] = False   # ré-entrée autorisée seulement ici
+                try:
+                    _open_project(new_data)
+                finally:
+                    win.deleteLater()
+
+            _QTimer.singleShot(0, _swap)
 
         win.switch_requested.connect(_on_switch)
 
         def _return_home():
+            from PyQt6.QtCore import QTimer as _QTimer
             win.hide()
-            win.deleteLater()
+            # Même précaution : « retour à l'accueil » est déclenché depuis un
+            # bouton de `win`.
+            _QTimer.singleShot(0, win.deleteLater)
             state["window"] = None
             state["opening"] = False
             if start_page is not None:

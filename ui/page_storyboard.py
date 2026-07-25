@@ -2024,10 +2024,18 @@ class _MoodBatchDialog(QDialog):
             f"QCheckBox::indicator:checked{{background:{CP['accent']};border-color:{CP['accent']};}}"
             f"QCheckBox:disabled{{color:{CP['text_dim']};}}"
         )
-        self._opt_chars = QCheckBox(translate("Envoyer les références des personnages"))
-        self._opt_decor = QCheckBox(translate("Envoyer la référence du décor"))
-        self._opt_floor = QCheckBox(translate("Envoyer le plan d'architecte (repère d'agencement)"))
-        for _cb in (self._opt_chars, self._opt_decor, self._opt_floor):
+        # Une case par famille d'éléments du plan. Accessoires, véhicules et HMC
+        # manquaient : leurs fiches images n'étaient tout simplement JAMAIS envoyées
+        # au moteur, alors que le plan les référence (constat Matthieu 2026-07-25).
+        self._opt_chars    = QCheckBox(translate("Envoyer les références des personnages"))
+        self._opt_decor    = QCheckBox(translate("Envoyer la référence du décor"))
+        self._opt_props    = QCheckBox(translate("Envoyer les références des accessoires"))
+        self._opt_vehicles = QCheckBox(translate("Envoyer les références des véhicules"))
+        self._opt_hmc      = QCheckBox(translate("Envoyer les références HMC (habillage, maquillage, coiffure)"))
+        self._opt_floor    = QCheckBox(translate("Envoyer le plan d'architecte (repère d'agencement)"))
+        self._ref_opts = (self._opt_chars, self._opt_decor, self._opt_props,
+                          self._opt_vehicles, self._opt_hmc, self._opt_floor)
+        for _cb in self._ref_opts:
             _cb.setChecked(True)
             _cb.setStyleSheet(_cb_style)
             lay.addWidget(_cb)
@@ -2040,7 +2048,7 @@ class _MoodBatchDialog(QDialog):
                 _has_ref = _rs(self._opt_engine.currentData() or "nb2").get("max", 0) > 0
             except Exception:
                 _has_ref = True
-            for _c in (self._opt_chars, self._opt_decor, self._opt_floor):
+            for _c in self._ref_opts:
                 _c.setEnabled(_has_ref)
         self._opt_engine.currentIndexChanged.connect(_sync_engine_opts)
         _sync_engine_opts()
@@ -3437,6 +3445,9 @@ class PageStoryboard(QWidget):
             "engine":     dlg._opt_engine.currentData() or "nb2",
             "chars":      dlg._opt_chars.isChecked(),
             "decor":      dlg._opt_decor.isChecked(),
+            "props":      dlg._opt_props.isChecked(),
+            "vehicles":   dlg._opt_vehicles.isChecked(),
+            "hmc":        dlg._opt_hmc.isChecked(),
             "floor_plan": dlg._opt_floor.isChecked(),
         }
 
