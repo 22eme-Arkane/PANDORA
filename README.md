@@ -18,9 +18,9 @@
 
 ## Download
 
-**[⬇ Download PANDORA v1.3.5 for Windows](https://github.com/22eme-Arkane/PANDORA/releases/download/v1.3.5/PANDORA_Setup_1.3.5.exe)**
+**[⬇ Download PANDORA v2.0.0 for Windows](https://github.com/22eme-Arkane/PANDORA/releases/download/v2.0.0/PANDORA_Setup_2.0.0.exe)**
 
-**[⬇ Download PANDORA v1.3.5 for macOS](https://github.com/22eme-Arkane/PANDORA/releases/download/v1.3.5/PANDORA_1.3.5.dmg)** *(Apple Silicon — see [Installation](#installation) for the first launch)*
+**[⬇ Download PANDORA v2.0.0 for macOS](https://github.com/22eme-Arkane/PANDORA/releases/download/v2.0.0/PANDORA_2.0.0.dmg)** *(Apple Silicon — see [Installation](#installation) for the first launch)*
 
 All versions: [Releases](../../releases)
 
@@ -28,30 +28,106 @@ All versions: [Releases](../../releases)
 
 ---
 
-## What's new in v1.3.5
+## What's new in v2.0.0
 
-This update lets you **cut your video generation costs** with an alternative provider, **import your own photos** into element sheets, and makes the very first launch friendlier.
+**A major release — the prompt is no longer one text sent to every engine.**
 
-**Choose your video provider — generate for less**
-- **fal.ai** remains the default, and you can now plug in **PiAPI** as a low-cost alternative for Seedance 2.0 (up to ~35 % cheaper per second).
-- Displayed prices **adapt automatically** to the selected provider, and a **fixed cost estimate** stays visible at the bottom of the AI Studio when you select several shots.
-- **Mono or multi-provider mode**: in mono mode, services the provider doesn't cover are greyed out with an explanation instead of failing.
+Until now, the same prompt went out to every video and image engine, and each one
+understood it its own way. PANDORA now **rewrites your shot in the writing style of
+the engine that will receive it** — and shows you on screen, editable, the exact text
+that will be sent. That single change reaches every generation in the app, which is
+why this is a 2.0.
 
-**Import your own photos**
-- Props, costumes (HMC), vehicles and sets: **import a real photo** instead of generating one, with optional **automatic background removal** (BiRefNet) for objects.
+### The prompt, rebuilt end to end
 
-**"Exact fidelity" is now exact**
-- The reference photo is now **actually sent to the image engine** (Nano Banana 2 Edit) — your real objects are reproduced faithfully, materials and details included. Previously only a text description was passed along.
+- **Written in the grammar of the chosen engine.** Named `Camera / Lighting / Motion /
+  Sound` lines for Seedance, one continuous sentence for Veo and Sora, a short action
+  directive for Kling, dense prose for the rest. Switching engines reassembles the
+  prompt on its own; if you edited the text by hand, your version is adapted, never
+  overwritten.
+- **Same rule for images**, everywhere in the app: a named-field brief for Nano Banana
+  and GPT Image, plain descriptive prose with no negatives at all for Seedream (its API
+  dropped negative prompts — writing "no person" there asks for a person), a structured
+  object for FLUX.2.
+- **What you see is what is sent.** Select a shot and the box fills with the final
+  English prose, everything PANDORA adds written out in plain sight. Edit it word by
+  word — nothing is re-glued or re-translated afterwards, alone or in a batch.
+- **Your project sheets actually reach the engine.** Character appearance, sets, props,
+  costumes and vehicles present in the shot are now written into the prompt. No more
+  engine inventing a character it only knew by name.
+- **The film's visual style is carried from screenplay to engine** — captured as a
+  visible, editable section on every shot, translated, and placed at the end of the
+  prompt where engines follow it best. Existing storyboards must be regenerated to
+  benefit.
+- **Every camera setting travels.** Shot size, axis, focal length, depth of field,
+  distance, height and speed used to stop at the Storyboard. They are translated and
+  injected now, with an explicit *locked-off* when there is no movement.
+- **Nothing video-only in an image prompt** — camera movement, height, speed, duration
+  and sound are stripped out (in French and English), and the shot's time of day becomes
+  a lighting intention instead of a raw word.
+- **Forbidden things become positive descriptions** for engines that cannot express a
+  negative, and **studio or franchise names are removed** from the payload while the
+  style descriptors that actually produce the look are kept.
+- **Dialogue is written in the shot's language**, and a **composed prompt is never paid
+  for twice** — come back to a shot you already prepared and it is reused as is.
 
-**A friendlier first launch**
-- The welcome screen now says plainly what each space does: *Cinéma — create an AI-generated film or video* · *Live — create an AI-generated video show or mapping*.
-- The startup guide was rebuilt as an **8-screen walkthrough** — one idea per screen, one button per action — and you can **paste your API keys directly in the guide**. Reopen it anytime from *Settings → API Help*.
-- An **INSTALLATION.txt** (FR/EN) now ships with every download, covering the Windows SmartScreen and macOS unblocking steps.
+### A different AI engine for each task
 
-**Settings, tidied up**
-- Optional API keys (PiAPI, OpenAI, Mistral…) grouped in one collapsible section, identical between the Cinéma and Live editions.
+Assign a model per use: screenplay writing, shot breakdown, storyboard chat, video
+prompt, translation, art direction, vision analysis. Ready-made per-task profiles for
+Anthropic and ChatGPT, a button that lists only the models your keys really unlock, and
+support for a custom provider or a local server. **When something fails, the real reason
+is shown** — an exhausted credit balance now says so instead of a vague "unavailable".
 
-> Previous release (v1.3.4): reliable co-writing edits, Live/Mapping timings conformed to the track, layout-to-storyboard with zero AI cost, visual references in Cinéma, four new image engines. Full history: [Releases](../../releases).
+### Screenplay and shot breakdown
+
+- **The breakdown became a series of shot sheets** — the exact screenplay excerpt,
+  intent, pace, duration, visual prompt and characters present, each shot revisable in
+  co-writing before anything is sent. Old breakdowns are converted automatically.
+- **A dedicated Director's Notes tab** separates craft intentions (visual style, light,
+  rhythm, camera grammar, continuity, sound) from the narrative text — and passes them
+  to the breakdown untouched.
+- **Co-writing is saved and restored** when you reopen the project, and the storyboard
+  assistant answers in full while driving more columns.
+- **New Depth of field column** in the Storyboard, and the whole chain
+  screenplay → notes → breakdown → storyboard is now shown as a chain.
+
+### Images and elements
+
+- **Every element gets a canonical visual identity** deduced from its active image and
+  editable by hand — change the active image and PANDORA offers to update the shots
+  where that element appears. Continuity no longer rests on your memory.
+- **Fourteen image engines, selectable everywhere** — in Storyboard and Live moods and
+  in all five element sheets, where there used to be two or six. Seedream 5 Pro joins
+  the catalogue.
+- **Guaranteed white background** on casting, props, costumes and vehicles: these sheets
+  are sent back as references to the video engine, where a stray set would contaminate
+  the shot.
+- **Outpaint an image to your target ratio** without cropping anything, **seven matched
+  views for each set**, an **art-direction chat inside element sheets**, engine and
+  variant **comparison in one command**, drag-and-drop references, and a new **Arri 65**
+  image style.
+
+### Interface
+
+A new home screen and illustrated project wall, right-click on a project thumbnail to
+rename, duplicate or delete, a single **Action** menu on every page, the lighting plan
+turned into a real workstation synchronised both ways with the storyboard, and the mouse
+wheel no longer changes a setting by accident.
+
+### Reliability
+
+French no longer leaks into prompts (four separate leaks closed, including a translator
+that answered instead of translating), your prompt edits are not lost, image generation
+no longer freezes or crashes, and large folders and image-heavy pages open instantly.
+
+### Live / mapping
+
+The Live edition follows the Cinéma one: same reworked interface, same shot sheets, same
+per-engine mood prompts, same fixes.
+
+> Previous release (v1.3.5): low-cost video provider, imported photos in element sheets,
+> exact-fidelity reproduction, friendlier first launch. Full history: [Releases](../../releases).
 
 ---
 
@@ -86,7 +162,7 @@ This update lets you **cut your video generation costs** with an alternative pro
 
 ### Windows
 
-1. Download `PANDORA_Setup_1.3.5.exe` from the link above and run it
+1. Download `PANDORA_Setup_2.0.0.exe` from the link above and run it
 2. If Windows shows *"Windows protected your PC"* (SmartScreen), click
    **More info** then **Run anyway** — the app is not code-signed yet
    (certificate in progress), this is the Windows equivalent of the macOS
@@ -97,7 +173,7 @@ This update lets you **cut your video generation costs** with an alternative pro
 
 ### macOS
 
-1. Download `PANDORA_1.3.5.dmg` from the link above
+1. Download `PANDORA_2.0.0.dmg` from the link above
 2. Open the DMG and drag **PANDORA** into **Applications** (as usual)
 3. **First launch** — macOS will claim that *"PANDORA is damaged and can't be
    opened"*. **This is normal, the app is not damaged** — macOS blocks apps
