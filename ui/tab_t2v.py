@@ -3689,17 +3689,16 @@ class TabT2V(QScrollArea):
         if ctx:
             inj.append(("Cohérence visuelle (casting/décor)", ctx, "ctx"))
         if self._active_shot:
-            from core.camera_data import focal_to_framing_prefix, shot_movement_to_prompt
-            _cam_bits = []
-            _fr = focal_to_framing_prefix(self._active_shot.get("focal", ""))
-            if _fr:
-                _cam_bits.append(_fr)
-            _mov = shot_movement_to_prompt(self._active_shot.get("camera_movement", ""))
-            if _mov:
-                _cam_bits.append(_mov)
+            # TOUS les champs techniques du plan (demande Matthieu 2026-07-25) :
+            # valeur, axe, focale, distance, hauteur, mouvement, vitesse. Avant, seuls
+            # la focale et le mouvement partaient — l'axe caméra, la valeur de plan,
+            # la distance, la hauteur et la vitesse se perdaient entre le Storyboard
+            # et le moteur alors qu'ils sont renseignés dans le tableau.
+            from core.shot_terms import camera_terms
+            _cam_bits = camera_terms(self._active_shot)
             if _cam_bits:
-                inj.append(("Cadrage storyboard (focale + mouvement)",
-                            ", ".join(_cam_bits), "dash_prefix"))
+                inj.append(("Caméra du plan (valeur, axe, focale, distance, hauteur, "
+                            "mouvement, vitesse)", ", ".join(_cam_bits), "dash_prefix"))
         if (hasattr(self, "_dyn_cam_cb") and self._dyn_cam_cb
                 and self._dyn_cam_cb.isChecked() and not self._active_shot):
             inj.append(("Caméra dynamique",
@@ -3769,28 +3768,64 @@ class TabT2V(QScrollArea):
         return self._apply_injections(fp, self._post_compose_injections(composed))
 
     def _send_time_injection_lines(self) -> list:
-        """Injections faites À L'ENVOI par le moteur d'envoi, jamais écrites dans
-        l'encart (elles dépendent des images/réglages au moment de générer) —
-        listées dans le bloc « Éléments injectés » quel que soit le mode."""
+        """Briques réellement ajoutées À L'ENVOI, jamais écrites dans l'encart.
+
+        Chaque ligne teste EXACTEMENT les mêmes conditions que start_generation /
+        api.real, moteur sélectionné compris. Auparavant elles étaient affichées sur
+        des conditions approximatives : la cohérence personnage était annoncée alors
+        qu'elle est neutralisée en mode final, et le template visuel alors qu'il ne
+        s'applique qu'à Seedance avec une clé vision (constat Matthieu 2026-07-25)."""
         out = []
-        _chars_img = [
-            d.get("name", "") for d in self._casting._char_data_map.values()
-            if os.path.isfile(d.get("sheet_path", "") or d.get("image_path", "") or "")
-        ]
-        if _chars_img:
+        _final = bool(getattr(self, "_prompt_is_final", False))
+        _model = self._get_model()
+        _is_seed = _model in _SEEDANCE_ENGINES
+        _no_ref = bool(getattr(self, "_no_ref_global_cb", None)
+                       and self._no_ref_global_cb.isChecked())
+        # Les images de référence ne partent QUE sur Seedance et si « aucune réf »
+        # n'est pas coché (start_generation) → sans elles, pas de rôle « character ».
+        _refs_active = _is_seed and not _no_ref
+        _has_char_ref = _refs_active and any(
+            os.path.isfile(d.get("sheet_path", "") or d.get("image_path", "") or "")
+            for d in self._casting._char_data_map.values())
+
+        # Cohérence personnage : recollée par api.real UNIQUEMENT en mode libre non
+        # composé. En mode final le paramètre part vide (WYSIWYG).
+        if _has_char_ref and not _final:
             out.append("+ Cohérence personnage (réfs casting) : "
-                       "« exact same person as the reference image… »")
+                       "« exact same person as the reference image… » — "
+                       "seulement si la composition n'a pas lieu")
+
+        # Template visuel : analysé par le moteur de VISION configuré, et seulement
+        # si l'image de style part réellement (Seedance).
         _sref = getattr(self, "_style_ref_path", "")
         if _sref and os.path.isfile(_sref):
-            out.append("+ Template visuel : mots-clés extraits de l'image par "
-                       "Claude Vision, ajoutés en fin de prompt")
+            try:
+                from core.ai_provider import key_error as _ke, ai_name_for_task as _an
+                _vision_ok = _ke(task="vision") is None
+                _vname = _an("vision")
+            except Exception:
+                _vision_ok, _vname = False, "vision"
+            if _refs_active and _vision_ok:
+                out.append(f"+ Template visuel : mots-clés extraits de l'image par "
+                           f"{_vname}, ajoutés en fin de prompt")
+            elif not _refs_active:
+                out.append("⚠ Template visuel ignoré : les images de référence ne "
+                           "partent que sur Seedance (et sans « aucune référence »)")
+            else:
+                out.append("⚠ Template visuel ignoré : moteur de vision non configuré")
+
+        # Dialogues — dire la vérité selon le mode ET le moteur.
         _dlang = (self._active_shot or {}).get("dialogue_lang", "en") if self._active_shot else "en"
-        if getattr(self, "_prompt_is_final", False):
+        if _final:
             out.append(f"✓ Dialogues déjà traduits vers « {_dlang} » dans le prompt "
                        "ci-dessus (seules les répliques entre guillemets)")
-        else:
+        elif _is_seed:
             out.append(f"+ Dialogues entre guillemets : traduits vers « {_dlang} » "
                        "à l'envoi (seules les répliques, pas le reste du prompt)")
+        else:
+            # Les moteurs externes n'appellent jamais translate_dialogues_to.
+            out.append(f"⚠ Dialogues NON traduits vers « {_dlang} » sur ce moteur — "
+                       "sélectionne un plan pour obtenir un prompt final traduit")
         return out
 
     def _build_full_preview_text(self, translated_user: str | None = None) -> str:
@@ -3810,6 +3845,15 @@ class TabT2V(QScrollArea):
                 lines.append("⚠ Prose composée non disponible"
                              + (f" : {_why}" if _why else "")
                              + " — le prompt reste correct, mais moins dense.")
+            # Les briques du plan sont FONDUES dans le prompt : sans ce rappel elles
+            # disparaissaient totalement de l'écran en mode final (constat 2026-07-25).
+            _fondues = [lbl for lbl, _t, _m in
+                        (self._text_injections() + self._post_compose_injections(
+                            getattr(self, "_final_was_composed", False)))]
+            if _fondues:
+                lines.append("")
+                lines.append("━━━ FONDUS DANS LE PROMPT CI-DESSUS ━━━")
+                lines.append("· " + "  ·  ".join(_fondues))
         else:
             if getattr(self, "_final_assembly_failed", False):
                 lines.append("⚠ Prompt final indisponible (composition et traduction "
@@ -3823,6 +3867,11 @@ class TabT2V(QScrollArea):
                 for label, txt, _mode in inj:
                     _short = txt if len(txt) <= 110 else txt[:110] + "…"
                     lines.append(f"+ {label} : {_short}")
+                # api/real intègre heure, style, musique et cohérence DANS la prose
+                # quand la composition réussit : ces quatre briques ne sont alors pas
+                # recollées telles quelles. Le dire plutôt que de laisser croire.
+                lines.append("   (si la composition IA réussit, heure/style/musique/"
+                             "cohérence sont intégrés à la prose, non recollés)")
 
         _residual = self._send_time_injection_lines()
         if _residual:
@@ -3891,7 +3940,14 @@ class TabT2V(QScrollArea):
         # Style de film (image de référence)
         _sref = getattr(self, "_style_ref_path", "")
         if _sref and os.path.isfile(_sref):
-            img_lines.append(f"Template visuel : [{os.path.basename(_sref)}] → analysé par Claude Vision")
+            # Nom EXACT du moteur de vision configuré (l'analyse passe par
+            # ai_provider task="vision", pas forcément Claude).
+            try:
+                from core.ai_provider import ai_name_for_task as _anv
+                _vn = _anv("vision")
+            except Exception:
+                _vn = "le moteur de vision"
+            img_lines.append(f"Template visuel : [{os.path.basename(_sref)}] → analysé par {_vn}")
 
         if img_lines:
             lines.append("")
@@ -3918,12 +3974,51 @@ class TabT2V(QScrollArea):
             _mic = " ".join(filter(None, [_prefs.get("mic_category","").strip(), _prefs.get("mic_model","").strip()]))
             if _mic:
                 param_lines.append(f"Micro : {_mic}")
-            _shot_focal = (self._active_shot or {}).get("focal", "")
-            if _shot_focal:
-                from core.camera_data import focal_to_framing_prefix
-                _framing = focal_to_framing_prefix(_shot_focal)
-                _fstr = f" → « {_framing} »" if _framing else ""
-                param_lines.append(f"Focale : {_shot_focal}{_fstr}  ← storyboard")
+        # ── Plan du storyboard : TOUS les champs, pas seulement la focale ──────
+        # (demande Matthieu 2026-07-25 — l'écran n'en montrait qu'un sur dix.)
+        _sh = self._active_shot or {}
+        if _sh:
+            from core.storyboard import SHOT_SIZE_LABELS as _SZL
+            _pairs = [
+                ("Valeur de plan", _SZL.get((_sh.get("shot_size") or "").strip(),
+                                            _sh.get("shot_size", ""))),
+                ("Axe caméra",     _sh.get("camera_axis", "")),
+                ("Mouvement",      _sh.get("camera_movement", "")),
+                ("Focale",         _sh.get("focal", "")),
+                ("Optique",        _sh.get("optic", "")),
+                ("Distance",       _sh.get("camera_distance", "")),
+                ("Hauteur",        _sh.get("camera_height", "")),
+                ("Vitesse",        _sh.get("speed", "")),
+                ("Décor",          _sh.get("decor_name", "")),
+                ("Heure",          _sh.get("shot_time", "")),
+            ]
+            _shot_line = "  ·  ".join(f"{k} : {str(v).strip()}"
+                                      for k, v in _pairs
+                                      if str(v).strip() and str(v).strip() != "—")
+            if _shot_line:
+                param_lines.append(f"Plan  ← storyboard :  {_shot_line}")
+            _dur_shot = _sh.get("duration", "")
+            _dlg_shot = _sh.get("dialogue_lang", "en") or "en"
+            try:
+                from core.lang import lang_label as _ll
+                _dlg_shot = _ll(_dlg_shot)
+            except Exception:
+                pass
+            param_lines.append(
+                f"Durée : {self._get_duration()}s"
+                + (f" (plan : {_dur_shot}s)" if str(_dur_shot).strip() else "")
+                + f"  ·  Langue des dialogues : {_dlg_shot}")
+            # Traduction anglaise réellement injectée dans le prompt, pour vérifier
+            # d'un coup d'œil ce que le moteur reçoit.
+            try:
+                from core.shot_terms import camera_terms as _ct
+                _terms = _ct(_sh)
+                if _terms:
+                    _t = ", ".join(_terms)
+                    param_lines.append("  → injecté : « "
+                                       + (_t if len(_t) <= 150 else _t[:150] + "…") + " »")
+            except Exception:
+                pass
 
         # Son
         audio_on = (hasattr(self, "_audio_cb") and self._audio_cb and self._audio_cb.isChecked())
@@ -4455,14 +4550,10 @@ class TabT2V(QScrollArea):
         # Seedance respecte le cadrage ET le mouvement (« Fixe » = plan fixe, sinon
         # le modèle dérive souvent en travelling/grue).
         if self._active_shot and not _final_mode:
-            from core.camera_data import focal_to_framing_prefix, shot_movement_to_prompt
-            _cam_bits = []
-            _framing = focal_to_framing_prefix(self._active_shot.get("focal", ""))
-            if _framing:
-                _cam_bits.append(_framing)
-            _mov = shot_movement_to_prompt(self._active_shot.get("camera_movement", ""))
-            if _mov:
-                _cam_bits.append(_mov)
+            # Même vocabulaire complet qu'à l'assemblage (core.shot_terms) : les deux
+            # chemins doivent produire les mêmes termes caméra.
+            from core.shot_terms import camera_terms
+            _cam_bits = camera_terms(self._active_shot)
             if _cam_bits:
                 full_prompt = f"{', '.join(_cam_bits)} — {full_prompt}"
 

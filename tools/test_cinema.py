@@ -434,9 +434,25 @@ def prompts_storyboard_cinema():
     _fx = _cd.shot_movement_to_prompt("Fixe").lower()
     assert "static" in _fx and "no camera movement" in _fx, "Fixe = plan fixe explicite"
     assert _cd.shot_movement_to_prompt("Grue / Drone") and not _cd.shot_movement_to_prompt(""), "mapping mouvements"
+    # Depuis le 2026-07-25, TOUS les champs techniques du plan partent (et plus
+    # seulement focale + mouvement) via core.shot_terms.camera_terms, utilisé aux
+    # DEUX endroits : assemblage du prompt final ET envoi en mode libre.
+    from core.shot_terms import camera_terms as _ctf, STATIC_EN as _STE
+    assert "static" in _STE.lower() and "no camera movement" in _STE.lower(), \
+        "Fixe = plan fixe explicite (vocabulaire partagé)"
+    _full = _ctf({"shot_size": "GP", "camera_axis": "Plongée", "focal": "85mm",
+                  "camera_distance": "0.6m", "camera_height": "1.7 m",
+                  "speed": "Ralenti", "camera_movement": "Fixe"})
+    _joined = ", ".join(_full).lower()
+    for _frag, _lbl in (("close-up", "valeur de plan"), ("high angle", "axe caméra"),
+                        ("85mm", "focale"), ("0.6m", "distance"),
+                        ("1.7m high", "hauteur"), ("slow motion", "vitesse"),
+                        ("locked-off", "mouvement fixe")):
+        assert _frag in _joined, f"champ non injecté dans le prompt : {_lbl}"
+    assert not _ctf({}), "plan vide → aucun terme"
     _t2v = inspect.getsource(__import__("ui.tab_t2v", fromlist=["_"]))
-    assert _t2v.count("shot_movement_to_prompt(self._active_shot") >= 2, \
-        "mouvement injecté dans l'envoi réel ET l'aperçu T2V"
+    assert _t2v.count("camera_terms(self._active_shot)") >= 2, \
+        "champs caméra injectés dans l'envoi réel ET l'assemblage du prompt final"
 
 
 @test

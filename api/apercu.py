@@ -14,40 +14,14 @@ from core.worker import humanize_api_error
 
 # ── Camera term mappings (Flux-native English) ────────────────────────────────
 
-_SHOT_SIZE_EN = {
-    "GP":     "extreme close-up, face filling the entire frame",
-    "GM":     "medium close-up, head and shoulders framing",
-    "PM":     "medium shot, waist up",
-    "PP":     "cowboy shot, mid-thigh up",
-    "PL":     "wide shot, full body visible",
-    "PE":     "establishing shot, wide environmental view",
-    "PTG":    "extreme wide shot, tiny subjects in vast landscape",
-    "Insert": "insert shot, isolated detail close-up",
-}
-
-_CAMERA_AXIS_EN = {
-    "Face":          "straight-on frontal angle, symmetrical framing",
-    "3/4":           "three-quarter angle, slight diagonal",
-    "Latéral 90°":   "side profile, 90-degree lateral angle",
-    "Dos":           "shot from behind the subject",
-    "Plongée":       "high angle shot, camera looking down on subject",
-    "Contre-plongée":"low angle shot, camera looking up, dramatic upward perspective",
-}
-
-_MOVEMENT_EN = {
-    "Panoramique horizontal": "horizontal pan",
-    "Panoramique vertical":   "vertical tilt",
-    "Travelling avant":       "dolly push in, camera moves forward",
-    "Travelling arrière":     "dolly pull out, camera moves backward",
-    "Travelling latéral":     "lateral tracking shot",
-    "Zoom avant":             "zoom in",
-    "Zoom arrière":           "zoom out",
-    "Steadicam":              "smooth steadicam glide",
-    "Grue / Drone":           "crane or drone aerial move",
-    "Caméra portée":          "handheld camera, organic movement",
-    "Plongée":                "downward tilt from high position",
-    "Contre-plongée":         "upward tilt from low position",
-}
+# Vocabulaire caméra PARTAGÉ avec le prompt vidéo (core/shot_terms.py) : ces
+# tables vivaient ici et n'étaient donc pas accessibles au Studio IA, qui
+# n'injectait que la focale et le mouvement (2026-07-25). Les convertisseurs
+# _distance_to_en / _focal_to_en restent LOCAUX : ils sont calibrés pour Flux
+# (plus de paliers) et ne doivent pas changer de rendu.
+from core.shot_terms import (SHOT_SIZE_EN as _SHOT_SIZE_EN,
+                             CAMERA_AXIS_EN as _CAMERA_AXIS_EN,
+                             MOVEMENT_EN as _MOVEMENT_EN)
 
 
 def _distance_to_en(dist_str: str) -> str:

@@ -53,6 +53,24 @@ def _fal_upload(fal_client, path: str) -> str:
         sys.stderr = _old_err
 
 
+def engine_prompt(params: dict) -> str:
+    """Prompt à envoyer au moteur.
+
+    Si le Studio a produit un prompt FINAL (params["prompt_is_final"]) — déjà
+    assemblé, traduit en anglais et dialogues calés sur la langue du plan — il part
+    TEL QUEL. Le repasser au traducteur le réécrirait ET renverrait les répliques
+    vers l'anglais, alors que l'écran affirme l'inverse (constat 2026-07-25 : les
+    9 moteurs non-Seedance ignoraient ce drapeau, contrairement à api/real.py).
+    Sinon : chemin historique (traduction vers l'anglais)."""
+    raw = (params.get("prompt") or "")
+    if params.get("prompt_is_final"):
+        return raw
+    if not raw:
+        return ""
+    from core.lang import translate_to_english
+    return translate_to_english(raw)
+
+
 def ensure_image_urls(fal_client, params: dict, emit_progress=None) -> None:
     """Adapte les params du workflow séquences/storyboard aux workers externes.
 
@@ -231,7 +249,6 @@ class KlingWorker(_CancellableWorker):
         try:
             import fal_client
             import requests
-            from core.lang import translate_to_english
 
             os.environ["FAL_KEY"] = key
             # Workflow séquences : image_path/end_image_path locaux → URLs i2v
@@ -254,7 +271,7 @@ class KlingWorker(_CancellableWorker):
             self.progress.emit(10, f"Kling v3 Pro {mode.upper()} — {dur}s (~${cost_est:.2f})…")
 
             prompt_raw = self.params.get("prompt", "")
-            prompt_en  = translate_to_english(prompt_raw) if prompt_raw else ""
+            prompt_en  = engine_prompt(self.params)   # prompt FINAL respecté
 
             # ── Style prefix depuis image de référence (Kling T2V ne supporte pas image_refs) ──
             ref_images = [p for p in self.params.get("ref_images", []) if p and os.path.isfile(p)]
@@ -377,7 +394,6 @@ class PixVerseWorker(_CancellableWorker):
         try:
             import fal_client
             import requests
-            from core.lang import translate_to_english
 
             os.environ["FAL_KEY"] = key
 
@@ -393,7 +409,7 @@ class PixVerseWorker(_CancellableWorker):
                 raise ValueError("PixVerse : image_url requis.")
 
             prompt_raw = self.params.get("prompt", "")
-            prompt_en  = translate_to_english(prompt_raw) if prompt_raw else ""
+            prompt_en  = engine_prompt(self.params)   # prompt FINAL respecté
 
             self.progress.emit(20, "Appel PixVerse v4.5 (environ 1 min)…")
 
@@ -478,12 +494,11 @@ class Veo3Worker(_CancellableWorker):
         try:
             import fal_client
             import requests
-            from core.lang import translate_to_english
 
             os.environ["FAL_KEY"] = key
 
             prompt_raw = self.params.get("prompt", "")
-            prompt_en  = translate_to_english(prompt_raw) if prompt_raw else ""
+            prompt_en  = engine_prompt(self.params)   # prompt FINAL respecté
 
             # ── Style prefix depuis image de référence (Veo 3.1 ne supporte pas image_refs) ──
             ref_images = [p for p in self.params.get("ref_images", []) if p and os.path.isfile(p)]
@@ -592,7 +607,6 @@ class HappyHorseWorker(_CancellableWorker):
         try:
             import fal_client
             import requests
-            from core.lang import translate_to_english
 
             os.environ["FAL_KEY"] = key
             # Workflow séquences : image_path/end_image_path locaux → URLs i2v
@@ -614,7 +628,7 @@ class HappyHorseWorker(_CancellableWorker):
             self.progress.emit(5, f"Happy Horse 1.0 {mode.upper()} — {dur}s {res} (~${cost_est:.2f})…")
 
             prompt_raw = self.params.get("prompt", "")
-            prompt_en  = translate_to_english(prompt_raw) if prompt_raw else ""
+            prompt_en  = engine_prompt(self.params)   # prompt FINAL respecté
 
             # ── Références visuelles (personnages, décor, style, accessoires) ──
             # Happy Horse reference-to-video accepte jusqu'à 9 images via image_urls.
@@ -784,7 +798,6 @@ class KlingO3Worker(_CancellableWorker):
         try:
             import fal_client
             import requests
-            from core.lang import translate_to_english
 
             os.environ["FAL_KEY"] = key
             # Workflow séquences : image_path/end_image_path locaux → URLs i2v
@@ -804,7 +817,7 @@ class KlingO3Worker(_CancellableWorker):
             self.progress.emit(10, f"Kling O3 4K {mode.upper()} — {dur}s (~${cost_est:.2f})…")
 
             prompt_raw = self.params.get("prompt", "")
-            prompt_en  = translate_to_english(prompt_raw) if prompt_raw else ""
+            prompt_en  = engine_prompt(self.params)   # prompt FINAL respecté
 
             # ── Style prefix depuis image de référence (Kling O3 ne supporte pas image_refs) ──
             ref_images = [p for p in self.params.get("ref_images", []) if p and os.path.isfile(p)]
@@ -919,7 +932,6 @@ class PixVerseV6Worker(_CancellableWorker):
         try:
             import fal_client
             import requests
-            from core.lang import translate_to_english
 
             os.environ["FAL_KEY"] = key
             # Workflow séquences : image_path/end_image_path locaux → URLs i2v
@@ -934,7 +946,7 @@ class PixVerseV6Worker(_CancellableWorker):
             self.progress.emit(10, f"PixVerse v6 — {dur}s {res} (~${cost_est:.2f})…")
 
             prompt_raw = self.params.get("prompt", "")
-            prompt_en  = translate_to_english(prompt_raw) if prompt_raw else ""
+            prompt_en  = engine_prompt(self.params)   # prompt FINAL respecté
 
             # ── Références visuelles (PixVerse v6 reference-to-video) ────────────
             ref_images = [p for p in self.params.get("ref_images", []) if p and os.path.isfile(p)]
@@ -1128,7 +1140,6 @@ class _SimpleFalVideoWorker(_CancellableWorker):
         try:
             import fal_client
             import requests
-            from core.lang import translate_to_english
 
             os.environ["FAL_KEY"] = key
             # Workflow / formulaire I2V : image_path/end_image_path locaux → URLs.
@@ -1145,7 +1156,7 @@ class _SimpleFalVideoWorker(_CancellableWorker):
                 dur = self.DEFAULT_DUR
 
             prompt_raw = self.params.get("prompt", "")
-            prompt_en  = translate_to_english(prompt_raw) if prompt_raw else ""
+            prompt_en  = engine_prompt(self.params)   # prompt FINAL respecté
             style_kw   = _style_prefix_from_refs(self.params)
             if style_kw:
                 prompt_en = f"{style_kw}, {prompt_en}" if prompt_en else style_kw
@@ -1327,13 +1338,12 @@ class Sora2Worker(_CancellableWorker):
         try:
             import fal_client
             import requests
-            from core.lang import translate_to_english
 
             os.environ["FAL_KEY"] = key
 
             ratio      = self.params.get("aspect_ratio", "16:9")
             prompt_raw = self.params.get("prompt", "")
-            prompt_en  = translate_to_english(prompt_raw) if prompt_raw else ""
+            prompt_en  = engine_prompt(self.params)   # prompt FINAL respecté
 
             # ── Style prefix depuis image de référence (Sora 2 ne supporte pas image_refs) ──
             ref_images = [p for p in self.params.get("ref_images", []) if p and os.path.isfile(p)]
