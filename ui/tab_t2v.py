@@ -3451,7 +3451,7 @@ class TabT2V(QScrollArea):
         self._preview_arrow.setStyleSheet(
             f"color:{C['red']};font-size:9px;background:transparent;border:none;"
         )
-        _h_lbl = QLabel("◈  Éléments injectés dans le prompt")
+        _h_lbl = QLabel("◈  Éléments injectés")
         _h_lbl.setStyleSheet(
             f"color:{C['red']};font-size:10px;font-weight:700;"
             f"background:transparent;border:none;"
@@ -3622,6 +3622,22 @@ class TabT2V(QScrollArea):
                                why: str = ""):
         self._preview_spinner.setVisible(False)
         self._final_fallback_reason = why or ""
+        # ALERTE VISIBLE même bloc replié : un compte API à zéro bloque TOUT le
+        # pipeline (composition + traduction) et le prompt repart en français.
+        # Enfoui dans un bloc fermé, l'avertissement passait inaperçu et faisait
+        # chercher un bug dans l'app (constat Matthieu 2026-07-25).
+        _low = (why or "").lower()
+        if "crédit" in _low or "credit" in _low or "quota" in _low:
+            self._preview_spinner.setText("⚠  Crédits IA épuisés — rechargez le compte")
+            self._preview_spinner.setStyleSheet(
+                f"color:{C['red']};font-size:9px;font-weight:700;"
+                f"background:transparent;border:none;")
+            self._preview_spinner.setToolTip(why)
+            self._preview_spinner.setVisible(True)
+        else:
+            self._preview_spinner.setStyleSheet(
+                f"color:{C['text_dim']};font-size:9px;font-style:italic;"
+                f"background:transparent;border:none;")
         src = getattr(self, "_assembly_source", None)
         if not src or self.prompt_ta.toPlainText().strip() != src:
             return   # l'utilisateur a édité pendant l'assemblage → sa saisie prime
@@ -4061,7 +4077,7 @@ class TabT2V(QScrollArea):
                 _terms = _ct(_sh)
                 if _terms:
                     _t = ", ".join(_terms)
-                    param_lines.append("  → injecté : « "
+                    param_lines.append("  → Paramètres injectés depuis le storyboard : « "
                                        + (_t if len(_t) <= 150 else _t[:150] + "…") + " »")
             except Exception:
                 pass

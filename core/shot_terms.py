@@ -16,6 +16,8 @@ Tout est déterministe : aucune IA, aucun appel réseau.
 
 from __future__ import annotations
 
+import re
+
 
 # Valeur de plan (codes du Storyboard) → cadrage anglais.
 SHOT_SIZE_EN = {
@@ -144,6 +146,39 @@ def speed_to_en(speed: str) -> str:
     return SPEED_EN.get((speed or "").strip(), "")
 
 
+# Profondeur de champ EXPLICITE (colonne du Storyboard).
+DOF_EN = {
+    "Très courte": "extremely shallow depth of field, strong background blur",
+    "Courte":      "shallow depth of field, softly blurred background",
+    "Moyenne":     "moderate depth of field",
+    "Grande":      "deep focus, foreground and background both sharp",
+    "Hyperfocale": "hyperfocal deep focus, everything sharp from foreground to infinity",
+}
+
+
+def dof_to_en(dof: str) -> str:
+    """Profondeur de champ → anglais. Vide = déduite de la focale."""
+    return DOF_EN.get((dof or "").strip(), "")
+
+
+# La focale porte déjà une mention de profondeur de champ (« 85mm portrait lens,
+# shallow depth of field… »). Quand l'utilisateur règle une profondeur EXPLICITE,
+# c'est elle qui fait foi : on retire la mention déduite pour éviter deux
+# indications contradictoires dans le même prompt.
+_DOF_IN_FOCAL_RE = re.compile(
+    r",\s*(?:very\s+)?(?:shallow|deep)\s+depth of field(?:[^,]*)?"
+    r"|,\s*softly blurred background"
+    r"|,\s*compressed perspective"
+    r"|,\s*deep focus",
+    re.IGNORECASE,
+)
+
+
+def _focal_without_dof(focal_en: str) -> str:
+    """Retire de la description de focale ce qui parle de profondeur de champ."""
+    return _DOF_IN_FOCAL_RE.sub("", focal_en or "").strip().rstrip(",")
+
+
 def camera_terms(shot: dict) -> list[str]:
     """Tous les termes CAMÉRA d'un plan, en anglais, dans l'ordre de lecture d'un
     chef opérateur : valeur → axe → focale → distance → hauteur → mouvement →
@@ -157,7 +192,11 @@ def camera_terms(shot: dict) -> list[str]:
     _ax = (shot.get("camera_axis") or "").strip()
     if _ax in CAMERA_AXIS_EN:
         out.append(CAMERA_AXIS_EN[_ax])
-    for _v in (focal_to_en(shot.get("focal", "")),
+    _dof = dof_to_en(shot.get("depth_of_field", ""))
+    _foc = focal_to_en(shot.get("focal", ""))
+    if _dof and _foc:
+        _foc = _focal_without_dof(_foc)   # la valeur explicite fait foi
+    for _v in (_foc, _dof,
                distance_to_en(shot.get("camera_distance", "")),
                height_to_en(shot.get("camera_height", ""))):
         if _v:

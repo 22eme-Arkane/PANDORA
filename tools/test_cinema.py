@@ -654,8 +654,24 @@ def colonne_langues_dialogues():
     """Colonne « Langues » (storyboard Cinéma) : choix par plan, défaut anglais ;
     dialogues traduits À L'ENVOI uniquement (pas dans le prompt affiché)."""
     import ui.page_storyboard as M
-    assert len(M._COLS) == 21, \
-        "Langues (16) · Nom du plan (17) · boutons (18) · Hauteur (19) · Référence (20) = 21 colonnes"
+    assert len(M._COLS) == 22, \
+        "Langues (16) · Nom du plan (17) · boutons (18) · Hauteur (19) · Référence (20) · P. de champ (21) = 22 colonnes"
+    # Profondeur de champ : colonne ENTRE Focale et Distance dans l'ordre par défaut
+    # (demande Matthieu 2026-07-25), avec son réglage dans la fiche de plan.
+    _o = M._DEFAULT_COL_ORDER
+    assert _o.index(21) == _o.index(8) + 1 and _o.index(9) == _o.index(21) + 1, \
+        "« P. de champ » doit être placée entre Focale et Dist."
+    from core.storyboard import DEPTHS_OF_FIELD
+    from core.shot_terms import camera_terms as _ct_dof, dof_to_en
+    assert "" in DEPTHS_OF_FIELD and "Grande" in DEPTHS_OF_FIELD, "valeurs de profondeur"
+    assert dof_to_en("Grande") and not dof_to_en(""), "vide = déduite de la focale"
+    # Une profondeur EXPLICITE prime sur celle déduite de la focale (sinon deux
+    # indications contradictoires dans le même prompt).
+    _tdof = ", ".join(_ct_dof({"focal": "85mm", "depth_of_field": "Grande"}))
+    assert _tdof.lower().count("depth of field") <= 1, "profondeur de champ en double"
+    assert "deep focus" in _tdof, "la valeur explicite doit primer sur la focale"
+    assert '"depth_of_field":' in inspect.getsource(
+        __import__("ui.dialog_shot", fromlist=["_"])), "réglage absent de la fiche de plan"
     assert M._COLS[20][0] == "Référence", "colonne Référence (inspiration) en logique 20"
     assert M._DEFAULT_COL_ORDER.index(20) == M._DEFAULT_COL_ORDER.index(1) + 1, \
         "Référence affichée juste après Mood"
@@ -2753,7 +2769,7 @@ def studio_prompt_final_wysiwyg():
         "contexte casting recollé en mode final (doublon)"
     # Le bloc déroulant reste REPLIÉ par défaut et n'affiche pas le prompt.
     assert "self._preview_expanded = False" in tsrc, "bloc doit être replié par défaut"
-    assert "◈  Éléments injectés dans le prompt" in tsrc, "bloc mal nommé"
+    assert "◈  Éléments injectés" in tsrc, "bloc mal nommé"
     _bsrc = tsrc[tsrc.index("def _build_full_preview_text"):]
     _bsrc = _bsrc[:_bsrc.index("def _assemble_preview_prompt")]
     assert "AJOUTÉS AU PROMPT À L'ENVOI" in _bsrc and "APPLIQUÉS À L'ENVOI" in _bsrc, \

@@ -17,6 +17,7 @@ import core.accessories as acc_api
 from core.storyboard import (
     DEFAULT_VERSION_ID,
     CAMERA_MOVEMENTS, SPEEDS, SHOT_SIZES, SHOT_SIZE_LABELS, FOCALS, DISTANCES, HEURE_PRESETS,
+    DEPTHS_OF_FIELD,
 )
 from core.worker import abandon_thread
 from ui.dialog_shot import ShotDialog
@@ -54,6 +55,7 @@ _COLS = [
     ("",              78,  False),  # 18 Boutons
     ("Hauteur",       64,  False),  # 19 camera_height (à côté de Dist.)
     ("Référence",    132,  False),  # 20 reference_images — inspiration → rôle « reference » (3 vignettes côte à côte)
+    ("P. de champ",   96,  False),  # 21 depth_of_field — entre Focale et Dist. (2026-07-25)
 ]
 
 _HEURE_PRESETS = HEURE_PRESETS
@@ -65,7 +67,8 @@ _col_widths: list[int] = [w for _, w, _ in _COLS]
 # Index 0 (grip) reste en tête et la colonne Boutons (dernière) reste en queue ; le reste
 # est réordonnable. « Nom du plan » (logique 17) s'affiche par défaut juste après « Plan »
 # (logique 3). Loaded from project config in PageStoryboard._render().
-_DEFAULT_COL_ORDER: list[int] = [0, 1, 20, 2, 3, 17, 4, 5, 6, 7, 8, 9, 19, 10, 11, 12, 13, 14, 15, 16, 18]
+#                                                        Focal ↓  ↓ P. de champ  ↓ Dist.
+_DEFAULT_COL_ORDER: list[int] = [0, 1, 20, 2, 3, 17, 4, 5, 6, 7, 8, 21, 9, 19, 10, 11, 12, 13, 14, 15, 16, 18]
 _col_order: list[int] = list(_DEFAULT_COL_ORDER)
 
 
@@ -767,7 +770,8 @@ class _ShotRow(QFrame):
             return l
 
         # Champs caméra → alimentent la section [🖼️ TECHNIQUE] du prompt.
-        _CAM_FIELDS = ("camera_movement", "shot_size", "focal", "optic", "speed")
+        _CAM_FIELDS = ("camera_movement", "shot_size", "focal", "optic", "speed",
+                       "depth_of_field")
 
         def _rebuild_technique():
             """Réécrit INSTANTANÉMENT la section [🖼️ TECHNIQUE] du prompt depuis les
@@ -1290,6 +1294,16 @@ class _ShotRow(QFrame):
 
         _clickable(hgt_w, _height_click)
         cells[19] = hgt_w
+
+        # ── Profondeur de champ ──────────────────────────────────────────────
+        # Vide = déduite de la focale par le prompt ; une valeur explicite prime.
+        dof_w, dof_l = _cell(_col_widths[21])
+        _cur_dof = data.get("depth_of_field", "") or ""
+        dof_l.addWidget(_lbl(translate(_cur_dof) if _cur_dof else "—",
+                             CP["accent"] if _cur_dof else CP["text_dim"], 10))
+        _clickable(dof_w, lambda _w=dof_w, _c=_cur_dof: _dropdown(
+            _w, DEPTHS_OF_FIELD, _c, "depth_of_field"))
+        cells[21] = dof_w
 
         # ── Vitesse ──────────────────────────────────────────────────────────
         spd_w, spd_l = _cell(_col_widths[10])

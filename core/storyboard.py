@@ -142,6 +142,18 @@ SPEEDS = [
     "Accéléré",
 ]
 
+# Profondeur de champ — colonne du Storyboard entre Focale et Distance
+# (demande Matthieu 2026-07-25). Vide = déduite de la focale par le prompt ;
+# une valeur explicite PRIME sur cette déduction.
+DEPTHS_OF_FIELD = [
+    "",                 # — (déduite de la focale)
+    "Très courte",      # bokeh marqué, arrière-plan très flou
+    "Courte",
+    "Moyenne",
+    "Grande",           # tout net
+    "Hyperfocale",      # net du premier plan à l'infini
+]
+
 
 def _ensure():
     os.makedirs(_sb_dir(), exist_ok=True)
@@ -445,6 +457,7 @@ def save_shot(data: dict, version_id: str = DEFAULT_VERSION_ID) -> dict:
         data.setdefault("camera_axis", "")
         data.setdefault("camera_distance", "")
         data.setdefault("camera_height", "")   # hauteur caméra (colonne storyboard)
+        data.setdefault("depth_of_field", "")  # profondeur de champ (vide = déduite)
         data.setdefault("speed", "Normale")
         data.setdefault("optic", "Sphérique")
         data.setdefault("focal", "35mm")

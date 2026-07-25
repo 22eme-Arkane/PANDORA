@@ -25,7 +25,7 @@ TASKS: list[tuple[str, str]] = [
     ("extraction",      "Extraction d'éléments (personnages, décors…)"),
     ("sync",            "Synchronisation du storyboard"),
     ("translate",       "Traduction des prompts (FR → EN/ZH)"),
-    ("video_prompt",    "Prompt vidéo Seedance (prose anglaise)"),
+    ("video_prompt",    "Prompt final (storyboard → moteur)"),
     ("element_chat",    "Direction artistique des éléments"),
     ("vision",          "Analyse visuelle"),
 ]

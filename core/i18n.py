@@ -1774,6 +1774,8 @@ _FR_TO_EN: dict[str, str] = {
     "Extraction d'éléments (personnages, décors…)": "Element extraction (characters, locations…)",
     "Synchronisation du storyboard":    "Storyboard synchronization",
     "Traduction des prompts (FR → EN/ZH)": "Prompt translation (FR → EN/ZH)",
+    "Prompt final (storyboard → moteur)": "Final prompt (storyboard → engine)",
+    "Éléments injectés":                  "Injected elements",
     "Prompt vidéo Seedance (prose anglaise)": "Seedance video prompt (English prose)",
     "Direction artistique des éléments": "Element art direction",
     "Analyse visuelle":                 "Visual analysis",
@@ -3021,6 +3023,14 @@ _FR_TO_EN: dict[str, str] = {
     "Plateau synchronisé vers le storyboard.":
         "Stage synced to the storyboard.",
     "Nom du plan":                               "Shot name",
+    # Profondeur de champ (colonne Storyboard, 2026-07-25)
+    "P. de champ":                               "DoF",
+    "Profondeur de champ":                       "Depth of field",
+    "Très courte":                               "Very shallow",
+    "Courte":                                    "Shallow",
+    "Moyenne":                                   "Moderate",
+    "Grande":                                    "Deep",
+    "Hyperfocale":                               "Hyperfocal",
     # Menu contextuel des vignettes de projet (clic droit)
     "Renommer":                                  "Rename",
     "Dupliquer":                                 "Duplicate",

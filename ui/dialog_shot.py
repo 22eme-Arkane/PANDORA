@@ -7,7 +7,7 @@ from PyQt6.QtCore import Qt
 from ui.styles import CP, PANDORA_STYLESHEET
 from ui.icons import claude_icon_pixmap, install_hover_icon
 import core.storyboard as sb_api
-from core.storyboard import CAMERA_MOVEMENTS, OPTICS, FOCALS, DISTANCES, SHOT_SIZES, SHOT_SIZE_LABELS, SPEEDS, HEURE_PRESETS
+from core.storyboard import CAMERA_MOVEMENTS, OPTICS, FOCALS, DISTANCES, SHOT_SIZES, SHOT_SIZE_LABELS, SPEEDS, HEURE_PRESETS, DEPTHS_OF_FIELD
 from core.i18n import to_source
 
 
@@ -284,6 +284,13 @@ class ShotDialog(QDialog):
         self._optic = _combo(OPTICS, self._shot.get("optic", "Sphérique"))
         col_optic.addWidget(self._optic)
 
+        col_dof = QVBoxLayout()
+        col_dof.setSpacing(4)
+        col_dof.addWidget(_lbl("P. de champ"))
+        # Vide = profondeur déduite de la focale par le prompt final.
+        self._dof = _combo(DEPTHS_OF_FIELD, self._shot.get("depth_of_field", ""))
+        col_dof.addWidget(self._dof)
+
         col_speed = QVBoxLayout()
         col_speed.setSpacing(4)
         col_speed.addWidget(_lbl("Vitesse"))
@@ -293,6 +300,7 @@ class ShotDialog(QDialog):
         row_cam.addLayout(col_move, 2)
         row_cam.addLayout(col_size, 1)
         row_cam.addLayout(col_focal, 1)
+        row_cam.addLayout(col_dof, 1)
         row_cam.addLayout(col_dist, 1)
         row_cam.addLayout(col_height, 1)
         row_cam.addLayout(col_optic, 1)
@@ -883,6 +891,7 @@ class ShotDialog(QDialog):
             "camera_height":    to_source(self._camera_height.currentText()),
             "shot_size":       self._shot_size.currentData() or "",
             "speed":           to_source(self._speed.currentText()),
+            "depth_of_field":  to_source(self._dof.currentText()),
             "comments":          self._comments.toPlainText().strip(),
             "seedance_prompt":   self._seedance_prompt.toPlainText().strip(),
             "sound_prompt":      self._sound_prompt.toPlainText().strip(),
