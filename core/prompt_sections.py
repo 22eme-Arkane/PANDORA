@@ -179,6 +179,26 @@ def style_of(prompt: str) -> str:
     return parse(prompt).get("style", "") if is_structured(prompt) else ""
 
 
+def flatten(prompt: str, include_sound: bool = False) -> str:
+    """Aplatit un prompt structuré en TEXTE CONTINU, sans étiquettes de section.
+
+    Sert au prompt FINAL du Studio : un prompt envoyé au moteur ne doit jamais
+    contenir « [🎬 ACTION] » & co. L'ordre de SECTIONS est conservé, donc le STYLE
+    VISUEL ferme le texte (Seedance suit mieux le style en fin). Le SON est exclu
+    par défaut (il part au Sound Design). Prompt non structuré → renvoyé tel quel."""
+    if not is_structured(prompt):
+        return (prompt or "").strip()
+    s = parse(prompt)
+    parts = []
+    for key, _lbl in SECTIONS:
+        if key == "sound" and not include_sound:
+            continue
+        v = (s.get(key) or "").strip()
+        if v:
+            parts.append(v.rstrip(" ."))
+    return ". ".join(parts) + "." if parts else ""
+
+
 def video_with_sound(video: str, sound: str) -> str:
     """Compose UN prompt Live unique : la VIDÉO (corps) suivie d'une section
     [🎵 SOUND DESIGN] si `sound` non vide. Sans son → renvoie la vidéo telle quelle.

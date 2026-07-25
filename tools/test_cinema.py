@@ -2679,6 +2679,22 @@ def studio_prompt_final_wysiwyg():
     # prompt franglais que l'envoi expédierait tel quel (constat Matthieu).
     assert "_final_assembly_failed" in tsrc and "if _is_struct(final):" in tsrc, \
         "garde manquante : un prompt non composé/non traduit pourrait devenir final"
+    # Un prompt FINAL est TOUJOURS brut : le repli APLATIT les sections (sinon la
+    # traduction gardait « [🎬 ACTION] » et la garde ci-dessus bloquait tout, laissant
+    # l'encart sur le prompt de travail français — constat Matthieu).
+    from core.prompt_sections import (flatten as _flatten, is_structured as _isstruct,
+                                      build as _psbuild)
+    _p = _psbuild(action="Il marche", decor="rue", technique="Gros plan",
+                  sound="pluie", style="Style Arcane")
+    _f = _flatten(_p)
+    assert not _isstruct(_f), "flatten() doit supprimer toutes les étiquettes"
+    assert "pluie" not in _f, "le son ne part pas au moteur vidéo"
+    assert _f.rstrip(".").endswith("Style Arcane"), "le style doit fermer le prompt"
+    assert "from core.prompt_sections import flatten as _flat" in tsrc, \
+        "le repli n'aplatit pas : l'encart resterait sur le prompt de travail"
+    # L'échec de composition doit être EXPLIQUÉ, pas silencieux.
+    assert "_final_fallback_reason" in tsrc and "Prose composée non disponible" in tsrc, \
+        "raison du repli non affichée à l'utilisateur"
     # Les noms d'entités du bloc [COHÉRENCE VISUELLE] ne sont PAS des dialogues :
     # les compter comme tels faisait échouer la composition sur tout plan ayant un
     # personnage ou un décor (donc quasiment tous).

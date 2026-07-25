@@ -2324,7 +2324,7 @@ class _FinalPromptWorker(QThread):
 
     `composed` dit à l'UI quel chemin a été pris : le prompt final doit refléter le
     même chemin à l'envoi, sinon l'écran mentirait sur ce qui part réellement."""
-    done = pyqtSignal(str, bool)   # (prompt_final, composed)
+    done = pyqtSignal(str, bool, str)   # (prompt_final, composed, raison_si_repli)
 
     def __init__(self, prompt: str, ctx: dict):
         super().__init__()
@@ -2343,30 +2343,43 @@ class _FinalPromptWorker(QThread):
             return text
 
     def run(self):
+        # Raison EXACTE d'un repli : affichée dans « Éléments injectés » pour que
+        # l'utilisateur sache quoi corriger (au lieu d'un échec silencieux).
+        why = ""
         try:
-            from api.video_prompt import compose as _compose
-            out = _compose(
-                self._prompt,
-                style_suffix=self._ctx.get("style_suffix", ""),
-                time_suffix=self._ctx.get("time_suffix", ""),
-                duration=self._ctx.get("duration"),
-                character_notes=self._ctx.get("character_notes", ""),
-                visual_context=self._ctx.get("visual_context", ""),
-                include_sound=bool(self._ctx.get("audio", True)),
-                sound_notes=self._ctx.get("sound_notes", ""),
-            )
-            if out:
-                self.done.emit(self._with_dialogues(out), True)
-                return
+            from core.ai_provider import key_error as _ke
+            why = _ke(task="video_prompt") or ""
         except Exception:
-            pass
-        # Repli : traduction du corps (chemin historique non composé).
+            why = ""
+        if not why:
+            try:
+                from api.video_prompt import compose as _compose
+                out = _compose(
+                    self._prompt,
+                    style_suffix=self._ctx.get("style_suffix", ""),
+                    time_suffix=self._ctx.get("time_suffix", ""),
+                    duration=self._ctx.get("duration"),
+                    character_notes=self._ctx.get("character_notes", ""),
+                    visual_context=self._ctx.get("visual_context", ""),
+                    include_sound=bool(self._ctx.get("audio", True)),
+                    sound_notes=self._ctx.get("sound_notes", ""),
+                )
+                if out:
+                    self.done.emit(self._with_dialogues(out), True, "")
+                    return
+                why = "le moteur a renvoyé une prose invalide (contrôle qualité)"
+            except Exception as e:
+                why = f"erreur du moteur de composition ({type(e).__name__})"
+        # Repli : le prompt est APLATI (aucune étiquette de section — un prompt
+        # envoyé n'en contient jamais) puis traduit en anglais.
         try:
+            from core.prompt_sections import flatten as _flat
             from core.lang import translate_to_english
-            _t = translate_to_english(self._prompt) or self._prompt
-            self.done.emit(self._with_dialogues(_t), False)
+            _plain = _flat(self._prompt) or self._prompt
+            _t = translate_to_english(_plain) or _plain
+            self.done.emit(self._with_dialogues(_t), False, why)
         except Exception:
-            self.done.emit(self._prompt, False)
+            self.done.emit(self._prompt, False, why or "assemblage indisponible")
 
 
 # ── Tab T2V ───────────────────────────────────────────────────────────────────
@@ -3393,6 +3406,7 @@ class TabT2V(QScrollArea):
         self._final_sound_notes = ""
         self._final_was_composed = False
         self._final_assembly_failed = False
+        self._final_fallback_reason = ""
         self._preview_expanded = False  # replié par défaut
 
         frame = QFrame()
@@ -3581,8 +3595,10 @@ class TabT2V(QScrollArea):
         self._preview_translate_worker.done.connect(self._on_preview_translated)
         self._preview_translate_worker.start()
 
-    def _on_preview_translated(self, translated: str, composed: bool = False):
+    def _on_preview_translated(self, translated: str, composed: bool = False,
+                               why: str = ""):
         self._preview_spinner.setVisible(False)
+        self._final_fallback_reason = why or ""
         src = getattr(self, "_assembly_source", None)
         if not src or self.prompt_ta.toPlainText().strip() != src:
             return   # l'utilisateur a édité pendant l'assemblage → sa saisie prime
@@ -3774,10 +3790,16 @@ class TabT2V(QScrollArea):
         lines = []
 
         if getattr(self, "_prompt_is_final", False):
-            _how = ("prose composée par l'IA" if getattr(self, "_final_was_composed", False)
-                    else "traduction (composition indisponible)")
-            lines.append(f"✓ L'encart contient le prompt FINAL — {_how}, envoyé tel "
-                         "quel (les éléments texte y sont déjà écrits).")
+            if getattr(self, "_final_was_composed", False):
+                lines.append("✓ L'encart contient le prompt FINAL — prose composée par "
+                             "l'IA, envoyé tel quel (les éléments texte y sont déjà écrits).")
+            else:
+                lines.append("✓ L'encart contient le prompt FINAL — sections aplaties "
+                             "et traduites, envoyé tel quel.")
+                _why = getattr(self, "_final_fallback_reason", "")
+                lines.append("⚠ Prose composée non disponible"
+                             + (f" : {_why}" if _why else "")
+                             + " — le prompt reste correct, mais moins dense.")
         else:
             if getattr(self, "_final_assembly_failed", False):
                 lines.append("⚠ Prompt final indisponible (composition et traduction "
