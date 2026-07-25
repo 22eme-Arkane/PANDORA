@@ -2363,6 +2363,9 @@ class _FinalPromptWorker(QThread):
                     visual_context=self._ctx.get("visual_context", ""),
                     include_sound=bool(self._ctx.get("audio", True)),
                     sound_notes=self._ctx.get("sound_notes", ""),
+                    # Grammaire du moteur SÉLECTIONNÉ (champs Seedance, phrase
+                    # continue Veo, directive Kling…) — demande Matthieu 2026-07-25.
+                    engine=self._ctx.get("engine", ""),
                 )
                 if out:
                     self.done.emit(self._with_dialogues(out), True, "")
@@ -3414,6 +3417,8 @@ class TabT2V(QScrollArea):
         self._final_was_composed = False
         self._final_assembly_failed = False
         self._final_fallback_reason = ""
+        self._final_ip_removed: list = []
+        self._final_engine = ""      # moteur pour lequel le prompt a été assemblé
         self._preview_expanded = False  # replié par défaut
 
         frame = QFrame()
@@ -3597,6 +3602,8 @@ class TabT2V(QScrollArea):
             # Langue des dialogues du plan (colonne « Langues » du Storyboard) :
             # appliquée dès l'assemblage pour être VISIBLE dans l'encart.
             "dialogue_lang": (self._active_shot or {}).get("dialogue_lang", "en") or "en",
+            # Moteur sélectionné → grammaire de sortie du composeur.
+            "engine": self._get_model(),
         }
         self._preview_translate_worker = _FinalPromptWorker(prompt_fr, _ctx)
         self._preview_translate_worker.done.connect(self._on_preview_translated)
@@ -3627,8 +3634,20 @@ class TabT2V(QScrollArea):
                 return
         except Exception:
             pass
+        # Noms d'IP / studios retirés du PAYLOAD (dossier fal.ai : déclencheurs de
+        # filtre, et pièce gênante dans un dossier de livraison). Les DESCRIPTEURS
+        # de style sont conservés — ce sont eux qui produisent le rendu. Jamais
+        # silencieux : les noms retirés sont listés dans « Éléments injectés ».
+        try:
+            from core.engine_grammar import strip_ip_names as _strip_ip
+            final, self._final_ip_removed = _strip_ip(final)
+        except Exception:
+            self._final_ip_removed = []
+        if not final.strip():
+            return
         self._final_assembly_failed = False
         self._final_was_composed = bool(composed)
+        self._final_engine = self._get_model()
         # Remplacer l'encart par le prompt FINAL (anglais, injections écrites) —
         # signaux coupés pour ne pas déclencher _on_prompt_text_changed.
         self._suppress_prompt_signal = True
@@ -3835,6 +3854,24 @@ class TabT2V(QScrollArea):
         lines = []
 
         if getattr(self, "_prompt_is_final", False):
+            # Grammaire réellement employée + alerte si le moteur a changé depuis.
+            try:
+                from core.engine_grammar import grammar_label, grammar_for
+                _cur = self._get_model()
+                _asm = getattr(self, "_final_engine", "") or _cur
+                lines.append(f"⌥ Grammaire : {grammar_label(_asm)}")
+                if grammar_for(_asm) != grammar_for(_cur):
+                    lines.append("⚠ Le moteur a changé depuis l'assemblage — "
+                                 "resélectionne le plan pour réécrire le prompt "
+                                 "dans la grammaire du nouveau moteur.")
+            except Exception:
+                pass
+            _ip = getattr(self, "_final_ip_removed", []) or []
+            if _ip:
+                lines.append("⌦ Noms de franchise/studio retirés du prompt : "
+                             + ", ".join(_ip)
+                             + " — les descripteurs de style sont conservés "
+                               "(ces noms déclenchent des filtres).")
             if getattr(self, "_final_was_composed", False):
                 lines.append("✓ L'encart contient le prompt FINAL — prose composée par "
                              "l'IA, envoyé tel quel (les éléments texte y sont déjà écrits).")
@@ -4136,6 +4173,27 @@ class TabT2V(QScrollArea):
 
     def _on_engine_changed(self):
         key = self._get_model()
+        # Le prompt final est écrit DANS la grammaire du moteur : changer de moteur
+        # doit le réassembler, sinon on enverrait des champs « Camera: » à Veo ou une
+        # phrase continue à Seedance (demande Matthieu 2026-07-25). On ne réassemble
+        # que si la grammaire change réellement, et jamais par-dessus une saisie
+        # manuelle en cours.
+        try:
+            from core.engine_grammar import grammar_for
+            _prev = getattr(self, "_final_engine", "")
+            if (self._active_shot and getattr(self, "_prompt_is_final", False)
+                    and _prev and grammar_for(_prev) != grammar_for(key)):
+                _shot_prompt = (self._active_shot.get("seedance_prompt") or "").strip()
+                if _shot_prompt:
+                    self._prompt_is_final = False
+                    self._suppress_prompt_signal = True
+                    try:
+                        self.prompt_ta.setPlainText(_shot_prompt)
+                    finally:
+                        self._suppress_prompt_signal = False
+                    self._schedule_final_assembly()
+        except Exception:
+            pass
         fixed_res = key in _FIXED_RES_ENGINES
         self.cb_ratio.setEnabled(key not in _FIXED_RATIO_ENGINES)
         # Mise à jour des options de résolution selon le moteur

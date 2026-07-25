@@ -2819,6 +2819,58 @@ def projets_menu_contextuel_vignette():
 
 
 @test
+def prompt_grammaire_par_moteur():
+    """Le prompt final est écrit dans la GRAMMAIRE du moteur sélectionné (dossier
+    fal.ai fourni par Matthieu 2026-07-25) : champs Seedance, phrase continue Veo
+    (négations en positif), directive courte Kling. Les noms d'IP/studios sont
+    retirés du payload, les DESCRIPTEURS de style conservés."""
+    import inspect
+    from core.engine_grammar import (grammar_for, grammar_label, format_rules,
+                                     strip_ip_names, find_ip_names)
+    # Grammaire par famille de moteur.
+    assert grammar_for("seedance-2.0") == "fields", "Seedance = champs"
+    assert grammar_for("seedance-2.0-fast") == "fields", "toute la famille Seedance"
+    assert grammar_for("veo-3.1") == "sentence", "Veo = phrase continue"
+    assert grammar_for("kling-o3-4k") == "directive" and grammar_for("kling-v3-pro") == "directive", \
+        "Kling = directive d'action"
+    assert grammar_for("ltx-2") == "plain" and grammar_for("") == "plain", "repli prose"
+    # Consignes de format réellement différenciées.
+    _f, _s, _d = format_rules("seedance-2.0"), format_rules("veo-3.1"), format_rules("kling-o3-4k")
+    assert "Camera:" in _f and "Constraints:" in _f, "champs Seedance absents"
+    assert "UNE SEULE phrase" in _s and "POSITIVEMENT" in _s, \
+        "Veo : phrase unique + négations reformulées en positif"
+    assert "DIRECTIVE" in _d, "Kling : directive d'action"
+    assert len({_f, _s, _d}) == 3, "les grammaires doivent différer"
+    for _r in (_f, _s, _d):
+        assert "emoji" in _r and "crochet" in _r, "règle commune : ni emoji ni crochets"
+    # Noms d'IP retirés, descripteurs conservés.
+    _t = ('Style graphique façon "Arcane" : Arcane League of Legends style, '
+          'Fortiche Studio aesthetic, 3D painterly render with hand-painted '
+          'textures, dramatic chiaroscuro lighting')
+    _out, _rm = strip_ip_names(_t)
+    assert _rm, "noms d'IP non détectés"
+    for _bad in ("arcane", "legends", "fortiche"):
+        assert _bad not in _out.lower(), f"nom d'IP resté dans le payload : {_bad}"
+    for _keep in ("3D painterly render", "hand-painted textures", "chiaroscuro"):
+        assert _keep in _out, f"descripteur de style perdu : {_keep}"
+    assert strip_ip_names("a man walks in the rain") == ("a man walks in the rain", []), \
+        "un texte sans IP doit rester intact"
+    assert not find_ip_names(""), "texte vide"
+    # Branchement : composeur + Studio.
+    vsrc = inspect.getsource(__import__("api.video_prompt", fromlist=["_"]))
+    assert "engine: str = \"\"" in vsrc and "format_rules(engine)" in vsrc, \
+        "le composeur ne reçoit pas la grammaire du moteur"
+    tsrc = inspect.getsource(__import__("ui.tab_t2v", fromlist=["_"]))
+    assert '"engine": self._get_model()' in tsrc, "moteur non transmis à l'assemblage"
+    assert "strip_ip_names" in tsrc and "_final_ip_removed" in tsrc, \
+        "noms d'IP non retirés / non tracés"
+    assert "grammar_for(_prev) != grammar_for(key)" in tsrc, \
+        "changer de moteur doit réassembler le prompt dans la nouvelle grammaire"
+    assert "Noms de franchise" in tsrc and "Grammaire :" in tsrc, \
+        "l'écran doit annoncer la grammaire et les noms retirés (jamais silencieux)"
+
+
+@test
 def decoupage_affiche_titre_projet():
     """Onglet Découpage : la 1re ligne affiche le TITRE DU PROJET, pas le marqueur
     technique « DÉCOUPAGE PANDORA 2 » (demande Matthieu 2026-07-24). Le marqueur est

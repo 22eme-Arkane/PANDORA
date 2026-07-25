@@ -178,18 +178,30 @@ def _build_user_message(prompt: str, style_suffix: str, time_suffix: str,
 
 def compose(prompt: str, style_suffix: str = "", time_suffix: str = "",
             duration=None, character_notes: str = "", include_sound: bool = True,
-            sound_notes: str = "", visual_context: str = "") -> str:
+            sound_notes: str = "", visual_context: str = "",
+            engine: str = "") -> str:
     """Compose la prose anglaise du plan. Renvoie "" en cas d'échec (l'appelant
     replie alors sur le chemin historique strip + traduction). Appel RÉSEAU —
-    à exécuter dans un QThread (GenerationWorker), jamais sur le thread UI."""
+    à exécuter dans un QThread (GenerationWorker), jamais sur le thread UI.
+
+    `engine` (clé du moteur sélectionné) détermine la GRAMMAIRE de sortie : champs
+    Seedance, phrase continue Veo (négations reformulées en positif), directive
+    courte Kling… Vide = prose dense générique (comportement historique)."""
     try:
         from core import ai_provider
+        system = _SYSTEM
+        if engine:
+            try:
+                from core.engine_grammar import format_rules
+                system = f"{_SYSTEM}\n\n{format_rules(engine)}"
+            except Exception:
+                pass
         user = _build_user_message(prompt, style_suffix or "", time_suffix or "",
                                    duration, character_notes or "", include_sound,
                                    sound_notes or "", visual_context or "")
         # 8192 tokens : plus aucune limite de longueur sur la prose (décision
         # Matthieu 2026-07-23 — les troncatures coûtent plus cher que les tokens).
-        out = (ai_provider.complete(_SYSTEM, user, tier="creative",
+        out = (ai_provider.complete(system, user, tier="creative",
                                     max_tokens=8192, task="video_prompt") or "").strip()
         if not validate_composed_prompt(out, prompt)["valid"]:
             return ""
