@@ -18,13 +18,33 @@
 
 ## Download
 
-**[⬇ Download PANDORA v2.0.0 for Windows](https://github.com/22eme-Arkane/PANDORA/releases/download/v2.0.0/PANDORA_Setup_2.0.0.exe)**
+**[⬇ Download PANDORA v2.0.1 for Windows](https://github.com/22eme-Arkane/PANDORA/releases/download/v2.0.1/PANDORA_Setup_2.0.1.exe)**
 
-**[⬇ Download PANDORA v2.0.0 for macOS](https://github.com/22eme-Arkane/PANDORA/releases/download/v2.0.0/PANDORA_2.0.0.dmg)** *(Apple Silicon — see [Installation](#installation) for the first launch)*
+**[⬇ Download PANDORA v2.0.1 for macOS](https://github.com/22eme-Arkane/PANDORA/releases/download/v2.0.1/PANDORA_2.0.1.dmg)** *(Apple Silicon — see [Installation](#installation) for the first launch)*
 
 All versions: [Releases](../../releases)
 
 🌐 **Official 22eme ARKANE website: [22eme-arkane.com](https://22eme-arkane.com)**
+
+---
+
+## What's new in v2.0.1
+
+A fast fix for a data-loss bug found in 2.0.0, worth its own release.
+
+- **The shot breakdown is never silently truncated again.** On a feature-length
+  screenplay the engine hit its output limit and stopped mid-document — at shot 28,
+  about half the script. Because the contract validates each shot independently, a
+  half-document whose shots are all well-formed passed without a single error, and
+  PANDORA saved half a film believing it was done. The cut is now **detected** and
+  the continuation requested automatically (up to six rounds), or the breakdown is
+  **refused with an explicit message** — a partial breakdown is worse than none.
+  Same fix on the Live layout.
+- **The "Support PANDORA" PayPal button works.** It pointed at PayPal's donation
+  endpoint, which is reserved for registered charities and always answered "this
+  organization can't accept donations". It now uses a PayPal.me link.
+
+Everyone on 2.0.0 should update.
 
 ---
 
@@ -162,7 +182,7 @@ per-engine mood prompts, same fixes.
 
 ### Windows
 
-1. Download `PANDORA_Setup_2.0.0.exe` from the link above and run it
+1. Download `PANDORA_Setup_2.0.1.exe` from the link above and run it
 2. If Windows shows *"Windows protected your PC"* (SmartScreen), click
    **More info** then **Run anyway** — the app is not code-signed yet
    (certificate in progress), this is the Windows equivalent of the macOS
@@ -173,7 +193,7 @@ per-engine mood prompts, same fixes.
 
 ### macOS
 
-1. Download `PANDORA_2.0.0.dmg` from the link above
+1. Download `PANDORA_2.0.1.dmg` from the link above
 2. Open the DMG and drag **PANDORA** into **Applications** (as usual)
 3. **First launch** — macOS will claim that *"PANDORA is damaged and can't be
    opened"*. **This is normal, the app is not damaged** — macOS blocks apps
