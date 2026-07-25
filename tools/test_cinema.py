@@ -785,6 +785,82 @@ def prompts_nano_banana_qualite():
 
 
 @test
+def studio_ia_prompt_final_mis_en_cache():
+    """Composer un prompt final est un appel IA PAYANT. Revenir sur un plan déjà
+    composé, storyboard inchangé, doit le réutiliser tel quel (demande Matthieu
+    2026-07-25). La clé couvre TOUT ce qui entre dans la composition — si le texte
+    du plan, le moteur, la durée, le style ou une fiche personnage bouge, on
+    recompose. Un échec API n'est jamais mémorisé : il doit pouvoir être retenté."""
+    import inspect
+    from ui.tab_t2v import TabT2V
+    for name in ("_final_cache_key", "_remember_final", "_compose_context"):
+        assert hasattr(TabT2V, name), f"TabT2V.{name} absent"
+    # La clé est l'empreinte du prompt ET du contexte — pas du seul id de plan
+    # (sinon modifier le plan renverrait l'ancien prompt).
+    _k = inspect.getsource(TabT2V._final_cache_key)
+    assert "prompt_fr" in _k and "ctx" in _k and "sha1" in _k, \
+        "clé de cache : doit couvrir le prompt ET le contexte de composition"
+    _s = inspect.getsource(TabT2V._start_preview_translate)
+    assert "_final_cache.get" in _s and "_on_preview_translated(*" in _s, \
+        "cache non consulté avant de lancer la composition"
+    assert "_FinalPromptWorker" in _s, "composition absente du chemin de secours"
+    # Le contexte du cache est EXACTEMENT celui envoyé au composeur.
+    _c = inspect.getsource(TabT2V._compose_context)
+    for k in ('"engine"', '"duration"', '"style_suffix"', '"character_notes"',
+              '"dialogue_lang"', '"sound_notes"'):
+        assert k in _c, f"contexte de composition incomplet : {k}"
+    _r = inspect.getsource(TabT2V._remember_final)
+    assert "if why:" in _r and "return" in _r, \
+        "un échec API (crédits, réseau) ne doit PAS être mis en cache"
+    # La file d'attente attend le prompt final : un plan généré en série reçoit
+    # le MÊME prompt qu'à l'unité — et profite donc aussi du cache.
+    _b = inspect.getsource(TabT2V._process_next_batch_shot)
+    assert "_await_final_then_generate" in _b, \
+        "la file part sans attendre le prompt final"
+
+
+@test
+def studio_ia_bandeau_et_vignettes_sous_elements_injectes():
+    """Le bandeau « MODE RÉFÉRENCE ACTIF » annonce les images envoyées : il doit
+    être posé sous « Éléments injectés », juste au-dessus des vignettes qu'il
+    décrit — et les vignettes doivent montrer TOUTES ces images, décor compris."""
+    import inspect
+    from ui.tab_t2v import TabT2V
+    _src = inspect.getsource(TabT2V.__init__)
+    _i_prev  = _src.index("_ez_lay.addWidget(self._prompt_preview)")
+    _i_bann  = _src.index("_ez_lay.addWidget(self._ref_mode_banner)")
+    _i_thumb = _src.index("_ez_lay.addWidget(self._thumb_strip)")
+    assert _i_prev < _i_bann < _i_thumb, \
+        "ordre attendu : Éléments injectés → bandeau référence → vignettes"
+    # ⚠ get_selected_images() OMET le décor : le bandeau annonçait 2 images et le
+    # strip n'en montrait qu'une. Les deux doivent lire get_ref_images().
+    _a = inspect.getsource(TabT2V._all_reference_images)
+    assert "self._casting.get_ref_images()" in _a \
+        and "self._casting.get_selected_images()" not in _a, \
+        "les vignettes ne lisent pas la liste réellement envoyée (décor manquant)"
+    _b = inspect.getsource(TabT2V._update_injection_banner)
+    assert "get_ref_images" in _b, "bandeau et vignettes doivent partager la source"
+
+
+@test
+def studio_ia_parametres_ordre_de_lecture():
+    """Bloc PARAMÈTRES : plan du storyboard, puis sa traduction juste dessous,
+    puis durée, son et ADN visuel (demande Matthieu 2026-07-25). La traduction
+    n'est plus tronquée — c'est elle qu'on vient vérifier."""
+    import inspect
+    from ui.tab_t2v import TabT2V
+    _src = inspect.getsource(TabT2V._build_full_preview_text)
+    assert "Paramètres injectés depuis le storyboard" not in _src, "ancien libellé"
+    for a, b in (("Plan  ← storyboard", "Traduction des paramètres du storyboard"),
+                 ("Traduction des paramètres du storyboard", 'f"Durée : '),
+                 ('f"Durée : ', '"Son : "'),
+                 ('"Son : "', 'f"ADN visuel')):
+        assert _src.index(a) < _src.index(b), f"ordre PARAMÈTRES : {a!r} doit précéder {b!r}"
+    _i = _src.index("Traduction des paramètres du storyboard")
+    assert "[:150]" not in _src[_i:_i + 400], "la traduction ne doit plus être tronquée"
+
+
+@test
 def elements_fond_blanc_obligatoire():
     """Casting / accessoires / HMC / véhicules : fond blanc TOUJOURS, quel que soit
     le mode et le moteur (décision Matthieu 2026-07-25). Ces images repartent en

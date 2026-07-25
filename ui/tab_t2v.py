@@ -2427,6 +2427,17 @@ class TabT2V(QScrollArea):
         self._batch_idx:     int        = 0
         self._is_batch_mode: bool       = False
         self._last_seed:     int | None = None
+        # ── Mémoire des prompts finaux déjà composés ──────────────────────────
+        # Composer un prompt final est un APPEL IA payant. Revenir sur un plan déjà
+        # composé, sans rien avoir changé au storyboard, le refaisait payer une
+        # deuxième fois (constat Matthieu 2026-07-25). La clé est l'empreinte de
+        # TOUT ce qui entre dans la composition (texte du plan, moteur, durée, style,
+        # fiches personnages, son, langue des dialogues…) : si l'un d'eux bouge, la
+        # clé change et la composition est refaite — sinon elle est réutilisée
+        # instantanément, sans réseau. Portée : la session (vidé à la fermeture).
+        self._final_cache: dict[str, tuple] = {}
+        self._final_cache_key_pending: str  = ""
+        self._final_from_cache: bool        = False
 
         container = QWidget()
         self.setWidget(container)
@@ -2760,7 +2771,11 @@ class TabT2V(QScrollArea):
         # ── Prompt ────────────────────────────────────────────────────────────
         _ez_lay.addWidget(section_label("Prompt"))
 
-        # ── Ref mode badge (teal) — visible quand Seedance passera en mode Référence ──
+        # ── Ref mode badge (teal) — visible quand Seedance passera en mode Référence.
+        #    Créé ici, mais AJOUTÉ AU LAYOUT plus bas, sous « Éléments injectés » et
+        #    juste au-dessus des vignettes qu'il décrit (demande Matthieu 2026-07-25) :
+        #    l'annonce « 2 images envoyées » et les images elles-mêmes se lisent
+        #    ensemble, au lieu d'être séparées par tout l'encart de prompt.
         self._ref_mode_banner = QFrame()
         self._ref_mode_banner.setStyleSheet(
             f"QFrame{{background:rgba(78,205,196,0.09);"
@@ -2777,7 +2792,6 @@ class TabT2V(QScrollArea):
         )
         _rm_lay.addWidget(self._ref_mode_lbl, 1)
         self._ref_mode_banner.setVisible(False)
-        _ez_lay.addWidget(self._ref_mode_banner)
 
         # ── Barre d'activité IA (au-dessus de l'encart) ───────────────────────
         # Une intervention IA sur le prompt (composition, traduction) prend
@@ -2811,6 +2825,9 @@ class TabT2V(QScrollArea):
         # ── Prompt preview (« Éléments injectés ») ────────────────────────────
         self._prompt_preview = self._build_prompt_preview()
         _ez_lay.addWidget(self._prompt_preview)
+
+        # Bandeau « MODE RÉFÉRENCE ACTIF » : sous le bloc, juste avant les vignettes.
+        _ez_lay.addWidget(self._ref_mode_banner)
 
         # ── Vignettes des images de référence — SOUS le bloc « Éléments
         #    injectés » (demande Matthieu 2026-07-25) : toutes celles réellement
@@ -3421,9 +3438,13 @@ class TabT2V(QScrollArea):
     def _all_reference_images(self) -> list:
         """TOUTES les images qui partent réellement avec le plan : entités du
         casting (personnages, décor, accessoires, HMC, véhicules), template visuel,
-        mood du plan et images d'inspiration. Le strip n'affichait que le casting —
-        on ne voyait donc qu'un portrait alors que plusieurs images partaient
-        (constat Matthieu 2026-07-25). Dédoublonné, ordre stable."""
+        mood du plan et images d'inspiration. Dédoublonné, ordre stable.
+
+        ⚠ Source = `get_ref_images()`, c'est-à-dire EXACTEMENT la liste envoyée au
+        moteur — et non `get_selected_images()`, qui omet le DÉCOR. Le bandeau
+        annonçait « 2 images envoyées » (perso + décor) pendant que les vignettes
+        n'en montraient qu'une (constat Matthieu 2026-07-25). Les deux affichages
+        lisent désormais la même source."""
         paths = []
 
         def _add(p):
@@ -3431,7 +3452,7 @@ class TabT2V(QScrollArea):
                 paths.append(p)
 
         try:
-            for p in self._casting.get_selected_images():
+            for p in self._casting.get_ref_images():
                 _add(p)
         except Exception:
             pass
@@ -3572,6 +3593,9 @@ class TabT2V(QScrollArea):
         # saisie de l'utilisateur). Un prompt DÉJÀ final reste final : l'utilisateur
         # ajuste le texte exact qui partira au moteur (WYSIWYG).
         self._assembly_source = None
+        # Le texte n'est plus celui qui a été composé/réutilisé : la mention
+        # « réutilisé » n'a plus lieu d'être.
+        self._final_from_cache = False
         self._refresh_prompt_preview()
 
     def _schedule_final_assembly(self):
@@ -3631,6 +3655,17 @@ class TabT2V(QScrollArea):
         prompt_fr = self._build_pre_compose_prompt(_sfv_prev(src))
         if not prompt_fr:
             return
+        _ctx = self._compose_context()
+        # ── Déjà composé à l'identique ? On réutilise, sans appel IA ──────────
+        _key = self._final_cache_key(prompt_fr, _ctx)
+        _hit = self._final_cache.get(_key)
+        if _hit is not None:
+            self._final_cache_key_pending = ""
+            self._final_from_cache = True
+            self._on_preview_translated(*_hit)
+            return
+        self._final_cache_key_pending = _key
+        self._final_from_cache = False
         # Anti-crash : un QThread basé sur run() n'a pas de boucle d'événements, donc
         # quit() est INOPÉRANT. Réassigner la variable laissait l'ancien thread être
         # collecté par le GC PENDANT qu'il tournait → « QThread: Destroyed while
@@ -3655,7 +3690,16 @@ class TabT2V(QScrollArea):
                 f"⟳  Composition du prompt final par {_who}…")
             self._ai_busy_lbl.setVisible(True)
             self._ai_busy_bar.setVisible(True)
-        # Contexte du plan transmis au composeur — identique à celui de l'envoi.
+        self._preview_translate_worker = _FinalPromptWorker(prompt_fr, _ctx)
+        self._preview_translate_worker.done.connect(self._on_preview_translated)
+        self._preview_translate_worker.start()
+
+    def _compose_context(self) -> dict:
+        """Contexte du plan transmis au composeur — identique à celui de l'envoi.
+
+        Extrait dans sa propre méthode pour servir DEUX usages : l'appel au
+        composeur, et l'empreinte du cache. Les deux doivent voir exactement les
+        mêmes entrées, sinon on réutiliserait un prompt périmé."""
         try:
             from api.video_prompt import (character_notes_for_shot as _vpn,
                                           visual_context_for_shot as _vpc)
@@ -3665,14 +3709,14 @@ class TabT2V(QScrollArea):
         import core.style as _sa_c
         _cam_c = self._camera_picker.get_suffix() if hasattr(self, "_camera_picker") else ""
         _st_c = (self._active_shot.get("shot_time") if self._active_shot else "") or ""
-        _ctx = {
+        return {
             "style_suffix": (_sa_c.get_video_suffix_no_cam() if _cam_c
                              else _sa_c.get_video_suffix()),
             "time_suffix":  self._SHOT_TIME_EN_PREVIEW.get(_st_c, ""),
             "duration":     self._get_duration(),
             "character_notes": _cnotes,
             "visual_context":  _vctx,
-            "sound_notes":     self._final_sound_notes,
+            "sound_notes":     getattr(self, "_final_sound_notes", ""),
             "audio": (self._audio_cb.isChecked()
                       if (hasattr(self, "_audio_cb") and self._audio_cb) else True),
             # Langue des dialogues du plan (colonne « Langues » du Storyboard) :
@@ -3681,12 +3725,41 @@ class TabT2V(QScrollArea):
             # Moteur sélectionné → grammaire de sortie du composeur.
             "engine": self._get_model(),
         }
-        self._preview_translate_worker = _FinalPromptWorker(prompt_fr, _ctx)
-        self._preview_translate_worker.done.connect(self._on_preview_translated)
-        self._preview_translate_worker.start()
+
+    # Au-delà, on purge les plus anciennes entrées (un long balayage de plans ne
+    # doit pas faire enfler la mémoire indéfiniment).
+    _FINAL_CACHE_MAX = 200
+
+    def _final_cache_key(self, prompt_fr: str, ctx: dict) -> str:
+        """Empreinte de TOUT ce qui détermine le prompt final. Une seule chose
+        change (le texte du plan, le moteur, la durée, le style, une fiche
+        personnage…) → clé différente → recomposition."""
+        import hashlib, json
+        payload = json.dumps({"p": prompt_fr, "c": ctx},
+                             sort_keys=True, ensure_ascii=False, default=str)
+        return hashlib.sha1(payload.encode("utf-8")).hexdigest()
+
+    def _remember_final(self, translated: str, composed: bool, why: str):
+        """Range le résultat d'une composition sous sa clé d'entrée."""
+        key = getattr(self, "_final_cache_key_pending", "")
+        if not key:
+            return
+        self._final_cache_key_pending = ""
+        # On ne mémorise PAS un échec dû à l'API (crédits, réseau) : il doit être
+        # retenté au prochain passage, sinon un plan resterait bloqué en repli
+        # jusqu'à la fermeture de l'app.
+        if why:
+            return
+        self._final_cache[key] = (translated, composed, why)
+        if len(self._final_cache) > self._FINAL_CACHE_MAX:
+            for _old in list(self._final_cache)[:len(self._final_cache) - self._FINAL_CACHE_MAX]:
+                self._final_cache.pop(_old, None)
 
     def _on_preview_translated(self, translated: str, composed: bool = False,
                                why: str = ""):
+        # Mémorisé AVANT tout : le résultat reste valable pour cette clé même si
+        # l'utilisateur a édité l'encart entre-temps et qu'on ne l'installe pas.
+        self._remember_final(translated, composed, why)
         self._preview_spinner.setVisible(False)
         if hasattr(self, "_ai_busy_bar"):
             self._ai_busy_bar.setVisible(False)
@@ -3971,6 +4044,9 @@ class TabT2V(QScrollArea):
             if getattr(self, "_final_was_composed", False):
                 lines.append("✓ L'encart contient le prompt FINAL — prose composée par "
                              "l'IA, envoyé tel quel (les éléments texte y sont déjà écrits).")
+                if getattr(self, "_final_from_cache", False):
+                    lines.append("♻ Déjà composé pour ce plan et rien n'a changé depuis — "
+                                 "prompt réutilisé, aucun crédit consommé.")
             else:
                 lines.append("✓ L'encart contient le prompt FINAL — sections aplaties "
                              "et traduites, envoyé tel quel.")
@@ -4128,8 +4204,23 @@ class TabT2V(QScrollArea):
             _shot_line = "  ·  ".join(f"{k} : {str(v).strip()}"
                                       for k, v in _pairs
                                       if str(v).strip() and str(v).strip() != "—")
+            # Ordre de lecture demandé (Matthieu 2026-07-25) : les réglages du plan,
+            # puis leur traduction juste dessous — les deux lignes se lisent alors en
+            # vis-à-vis —, puis la durée, le son et l'ADN visuel.
             if _shot_line:
                 param_lines.append(f"Plan  ← storyboard :  {_shot_line}")
+            # Traduction anglaise réellement injectée dans le prompt : c'est la même
+            # liste que ci-dessus, mot pour mot, telle que le moteur la reçoit. Elle
+            # n'est PLUS tronquée — la tronquer cachait précisément ce qu'elle sert
+            # à vérifier.
+            try:
+                from core.shot_terms import camera_terms as _ct
+                _terms = _ct(_sh)
+                if _terms:
+                    param_lines.append("  → Traduction des paramètres du storyboard : « "
+                                       + ", ".join(_terms) + " »")
+            except Exception:
+                pass
             _dur_shot = _sh.get("duration", "")
             _dlg_shot = _sh.get("dialogue_lang", "en") or "en"
             try:
@@ -4141,17 +4232,6 @@ class TabT2V(QScrollArea):
                 f"Durée : {self._get_duration()}s"
                 + (f" (plan : {_dur_shot}s)" if str(_dur_shot).strip() else "")
                 + f"  ·  Langue des dialogues : {_dlg_shot}")
-            # Traduction anglaise réellement injectée dans le prompt, pour vérifier
-            # d'un coup d'œil ce que le moteur reçoit.
-            try:
-                from core.shot_terms import camera_terms as _ct
-                _terms = _ct(_sh)
-                if _terms:
-                    _t = ", ".join(_terms)
-                    param_lines.append("  → Paramètres injectés depuis le storyboard : « "
-                                       + (_t if len(_t) <= 150 else _t[:150] + "…") + " »")
-            except Exception:
-                pass
 
         # Son
         audio_on = (hasattr(self, "_audio_cb") and self._audio_cb and self._audio_cb.isChecked())
@@ -4161,6 +4241,11 @@ class TabT2V(QScrollArea):
         snd.append(f"Musique : {'✓' if music_on else '✗ → no background music injecté'}")
         snd.append(f"Sous-titres : {'✓' if subtitle_on else '✗ → no subtitles injecté'}")
         param_lines.append("Son : " + "  ·  ".join(snd))
+
+        # ADN visuel
+        seed = self._get_seed()
+        if seed is not None:
+            param_lines.append(f"ADN visuel : {seed} 🔒")
 
         # Référence mood (« Se référer au mood ») — retour honnête : si activé mais
         # que le plan n'a pas de mood, on le signale (rien ne sera envoyé).
@@ -4177,11 +4262,6 @@ class TabT2V(QScrollArea):
             _sname = (_sa.get_style() or {}).get("label", "Style")
             _vshort = _applied_style[:80] + ("…" if len(_applied_style) > 80 else "")
             param_lines.append(f"Template : {_sname} → « {_vshort} »")
-
-        # ADN visuel
-        seed = self._get_seed()
-        if seed is not None:
-            param_lines.append(f"ADN visuel : {seed} 🔒")
 
         # Contrôles créatifs
         if cs:
