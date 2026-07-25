@@ -3,7 +3,7 @@ from datetime import datetime
 from PyQt6.QtWidgets import (
     QScrollArea, QWidget, QVBoxLayout, QHBoxLayout, QGridLayout,
     QPushButton, QMessageBox, QCheckBox, QComboBox, QFrame, QLabel, QDialog, QLineEdit,
-    QSlider, QSpinBox,
+    QSlider, QSpinBox, QProgressBar,
 )
 from PyQt6.QtCore import Qt, pyqtSignal, QThread
 from PyQt6.QtGui import QPixmap, QIntValidator
@@ -2779,6 +2779,28 @@ class TabT2V(QScrollArea):
         self._ref_mode_banner.setVisible(False)
         _ez_lay.addWidget(self._ref_mode_banner)
 
+        # ── Barre d'activité IA (au-dessus de l'encart) ───────────────────────
+        # Une intervention IA sur le prompt (composition, traduction) prend
+        # plusieurs secondes pendant lesquelles rien ne bougeait à l'écran
+        # (demande Matthieu 2026-07-25).
+        self._ai_busy_bar = QProgressBar()
+        self._ai_busy_bar.setRange(0, 0)          # indéterminée
+        self._ai_busy_bar.setFixedHeight(3)
+        self._ai_busy_bar.setTextVisible(False)
+        self._ai_busy_bar.setVisible(False)
+        self._ai_busy_bar.setStyleSheet(
+            f"QProgressBar{{background:{C['bg3']};border:none;border-radius:2px;}}"
+            f"QProgressBar::chunk{{background:{C['accent']};border-radius:2px;}}"
+        )
+        _ez_lay.addWidget(self._ai_busy_bar)
+        self._ai_busy_lbl = QLabel("")
+        self._ai_busy_lbl.setVisible(False)
+        self._ai_busy_lbl.setStyleSheet(
+            f"color:{C['accent']};font-size:9px;font-style:italic;"
+            f"background:transparent;border:none;"
+        )
+        _ez_lay.addWidget(self._ai_busy_lbl)
+
         prompt_frame, self.prompt_ta, self._btn_enhance, self._enhance_auto_cb = prompt_block(
             "Décris ta scène... ex: plan cinématique d'une forêt brumeuse au lever du soleil"
         )
@@ -2786,14 +2808,16 @@ class TabT2V(QScrollArea):
         self.prompt_ta.textChanged.connect(self._on_prompt_text_changed)
         _ez_lay.addWidget(prompt_frame)
 
-        # ── Thumbnail strip ───────────────────────────────────────────────────
+        # ── Prompt preview (« Éléments injectés ») ────────────────────────────
+        self._prompt_preview = self._build_prompt_preview()
+        _ez_lay.addWidget(self._prompt_preview)
+
+        # ── Vignettes des images de référence — SOUS le bloc « Éléments
+        #    injectés » (demande Matthieu 2026-07-25) : toutes celles réellement
+        #    envoyées, pas seulement les portraits du casting.
         self._thumb_strip = _ThumbnailStrip()
         self._thumb_strip.setVisible(False)
         _ez_lay.addWidget(self._thumb_strip)
-
-        # ── Prompt preview (prompt exact envoyé à Seedance) ───────────────────
-        self._prompt_preview = self._build_prompt_preview()
-        _ez_lay.addWidget(self._prompt_preview)
 
         # ── Rendu & Audio (toujours visible, y compris en multi-sélection) ───
         self._options_container = QFrame()
@@ -3394,9 +3418,40 @@ class TabT2V(QScrollArea):
         if not self._is_batch_mode:
             self.btn_generate.setText("▶▶  Lancer la file d'attente")
 
+    def _all_reference_images(self) -> list:
+        """TOUTES les images qui partent réellement avec le plan : entités du
+        casting (personnages, décor, accessoires, HMC, véhicules), template visuel,
+        mood du plan et images d'inspiration. Le strip n'affichait que le casting —
+        on ne voyait donc qu'un portrait alors que plusieurs images partaient
+        (constat Matthieu 2026-07-25). Dédoublonné, ordre stable."""
+        paths = []
+
+        def _add(p):
+            if p and os.path.isfile(p) and p not in paths:
+                paths.append(p)
+
+        try:
+            for p in self._casting.get_selected_images():
+                _add(p)
+        except Exception:
+            pass
+        _add(getattr(self, "_style_ref_path", ""))
+        if getattr(self, "_mood_ref_cb", None) and self._mood_ref_cb.isChecked():
+            _add(getattr(self, "_active_mood_path", ""))
+        for p in (self._active_shot or {}).get("reference_images", [])[:3]:
+            _add(p)
+        return paths
+
+    def _refresh_ref_thumbs(self):
+        try:
+            imgs = self._all_reference_images()
+            self._thumb_strip.update_images(imgs)
+            self._thumb_strip.setVisible(bool(imgs))
+        except Exception:
+            pass
+
     def _on_context_changed(self, _ctx: str):
-        casting_images = self._casting.get_selected_images()
-        self._thumb_strip.update_images(casting_images)
+        self._refresh_ref_thumbs()
         self._update_injection_banner()
         self._refresh_prompt_preview()
 
@@ -3588,6 +3643,18 @@ class TabT2V(QScrollArea):
             self._preview_translate_worker = None
         self._preview_spinner.setText("⟳  composition du prompt final…")
         self._preview_spinner.setVisible(True)
+        # Barre d'activité au-dessus de l'encart : l'utilisateur voit qu'une IA
+        # travaille sur son prompt (plusieurs secondes).
+        if hasattr(self, "_ai_busy_bar"):
+            try:
+                from core.ai_provider import ai_name_for_task as _ant
+                _who = _ant("video_prompt")
+            except Exception:
+                _who = "l'IA"
+            self._ai_busy_lbl.setText(
+                f"⟳  Composition du prompt final par {_who}…")
+            self._ai_busy_lbl.setVisible(True)
+            self._ai_busy_bar.setVisible(True)
         # Contexte du plan transmis au composeur — identique à celui de l'envoi.
         try:
             from api.video_prompt import (character_notes_for_shot as _vpn,
@@ -3621,6 +3688,10 @@ class TabT2V(QScrollArea):
     def _on_preview_translated(self, translated: str, composed: bool = False,
                                why: str = ""):
         self._preview_spinner.setVisible(False)
+        if hasattr(self, "_ai_busy_bar"):
+            self._ai_busy_bar.setVisible(False)
+            self._ai_busy_lbl.setVisible(False)
+        self._refresh_ref_thumbs()
         self._final_fallback_reason = why or ""
         # ALERTE VISIBLE même bloc replié : un compte API à zéro bloque TOUT le
         # pipeline (composition + traduction) et le prompt repart en français.

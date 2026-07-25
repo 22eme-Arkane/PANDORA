@@ -102,7 +102,12 @@ def distance_to_en(dist_str: str) -> str:
 
 
 def focal_to_en(focal_str: str) -> str:
-    """Focale → rendu optique anglais (compression, profondeur de champ)."""
+    """Focale → UNIQUEMENT la focale (« 85mm lens »).
+
+    Décision Matthieu 2026-07-25 : la focale ne doit rien dire d'autre. C'est la
+    colonne PROFONDEUR DE CHAMP qui porte cette information — auparavant la focale
+    y ajoutait « shallow depth of field », « deep focus », « compressed
+    perspective »… ce qui contredisait le réglage explicite de l'utilisateur."""
     s = (focal_str or "").strip()
     if not s:
         return ""
@@ -110,15 +115,7 @@ def focal_to_en(focal_str: str) -> str:
         mm = float("".join(c for c in s if c.isdigit() or c == "."))
     except (ValueError, TypeError):
         return f"{s} lens"
-    if mm <= 18:
-        return f"{mm:g}mm ultra wide-angle lens, strong perspective distortion, deep focus"
-    if mm <= 35:
-        return f"{mm:g}mm wide-angle lens, expansive field of view, deep depth of field"
-    if mm <= 55:
-        return f"{mm:g}mm standard lens, natural human perspective"
-    if mm <= 100:
-        return f"{mm:g}mm portrait lens, shallow depth of field, softly blurred background"
-    return f"{mm:g}mm telephoto lens, compressed perspective, very shallow depth of field"
+    return f"{mm:g}mm lens"
 
 
 def height_to_en(height_str: str) -> str:
@@ -161,22 +158,9 @@ def dof_to_en(dof: str) -> str:
     return DOF_EN.get((dof or "").strip(), "")
 
 
-# La focale porte déjà une mention de profondeur de champ (« 85mm portrait lens,
-# shallow depth of field… »). Quand l'utilisateur règle une profondeur EXPLICITE,
-# c'est elle qui fait foi : on retire la mention déduite pour éviter deux
-# indications contradictoires dans le même prompt.
-_DOF_IN_FOCAL_RE = re.compile(
-    r",\s*(?:very\s+)?(?:shallow|deep)\s+depth of field(?:[^,]*)?"
-    r"|,\s*softly blurred background"
-    r"|,\s*compressed perspective"
-    r"|,\s*deep focus",
-    re.IGNORECASE,
-)
-
-
-def _focal_without_dof(focal_en: str) -> str:
-    """Retire de la description de focale ce qui parle de profondeur de champ."""
-    return _DOF_IN_FOCAL_RE.sub("", focal_en or "").strip().rstrip(",")
+# (Le nettoyage anti-doublon focale↔profondeur n'a plus lieu d'être : depuis le
+#  2026-07-25 la focale ne dit QUE la focale, la profondeur de champ est portée par
+#  son propre champ.)
 
 
 def camera_terms(shot: dict) -> list[str]:
@@ -192,11 +176,8 @@ def camera_terms(shot: dict) -> list[str]:
     _ax = (shot.get("camera_axis") or "").strip()
     if _ax in CAMERA_AXIS_EN:
         out.append(CAMERA_AXIS_EN[_ax])
-    _dof = dof_to_en(shot.get("depth_of_field", ""))
-    _foc = focal_to_en(shot.get("focal", ""))
-    if _dof and _foc:
-        _foc = _focal_without_dof(_foc)   # la valeur explicite fait foi
-    for _v in (_foc, _dof,
+    for _v in (focal_to_en(shot.get("focal", "")),
+               dof_to_en(shot.get("depth_of_field", "")),
                distance_to_en(shot.get("camera_distance", "")),
                height_to_en(shot.get("camera_height", ""))):
         if _v:

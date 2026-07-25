@@ -6,6 +6,9 @@ etc.) pour qu'il puisse les lire et corriger. Cette fonction est appelée juste
 avant chaque appel réseau (Nano Banana, Seedance) pour convertir en anglais.
 """
 
+import re
+
+
 
 # ── Langue des dialogues (colonne « Langues » du storyboard) ────────────────────
 # La langue choisie par plan ne modifie JAMAIS le prompt affiché : à l'ENVOI vers
@@ -38,6 +41,41 @@ def lang_label(code: str) -> str:
         if c == code:
             return label.split("  ")[0]   # « Anglais » sans le « (recommandé) »
     return "Anglais"
+
+
+# Marqueurs d'une réponse CONVERSATIONNELLE du modèle (refus, demande de
+# précision, préambule) au lieu d'une réplique traduite.
+_CHATTY_MARKERS = (
+    "i'd be happy", "i would be happy", "could you provide", "could you clarify",
+    "i can't", "i cannot", "i'm unable", "please provide", "as an ai",
+    "appears to be", "it seems", "sorry", "désolé", "je peux", "note:",
+    "translation:", "traduction :", "here is", "voici la",
+)
+
+
+def _looks_conversational(out: str, source: str) -> bool:
+    """La sortie ressemble-t-elle à une RÉPONSE du modèle plutôt qu'à une réplique ?
+
+    Sans ce filet, un refus ou une demande de précision était injecté tel quel dans
+    le prompt final — c'est ainsi qu'un « I'd be happy to help translate movie
+    dialogue, but "brrrrrrr" appears to be a sound effect… Could you provide: 1. … »
+    s'est retrouvé DANS le prompt envoyé au moteur vidéo (constat Matthieu
+    2026-07-25). En cas de doute on garde la réplique d'origine : une réplique non
+    traduite est bénigne, une réponse de chatbot dans le prompt ne l'est pas."""
+    o = (out or "").strip()
+    if not o:
+        return True
+    low = o.lower()
+    if any(m in low for m in _CHATTY_MARKERS):
+        return True
+    # Une réplique de film ne contient pas de liste numérotée ni de saut de ligne.
+    if "\n" in o or re.search(r"(?m)^\s*\d+[.)]\s", o):
+        return True
+    # Réponse anormalement plus longue que la réplique d'origine.
+    src = (source or "").strip()
+    if len(o) > max(120, len(src) * 3 + 40):
+        return True
+    return False
 
 
 def translate_dialogues_to(text: str, lang: str) -> str:
@@ -88,14 +126,22 @@ def translate_dialogues_to(text: str, lang: str) -> str:
         try:
             out = complete(
                 (f"Translate the following spoken movie dialogue line into {target}. "
-                 "Keep it natural, spoken, faithful to the meaning and tone. "
-                 "Return ONLY the translated line — no quotes, no notes, no prefix."),
+                 "Keep it natural, spoken, faithful to the meaning and tone.\n"
+                 "If the line is an onomatopoeia, a vocal sound effect, a proper "
+                 "noun or is already in the target language, return it UNCHANGED.\n"
+                 "NEVER ask a question, never explain, never apologise, never add "
+                 "notes: reply with the line and nothing else.\n"
+                 "Return ONLY the line — no quotes, no notes, no prefix."),
                 inner, tier="utility", max_tokens=300, task="translate",
             ).strip()
         except Exception:
             return seg
         out = out.strip().strip("«»“”‘’\"'").strip()
         if not out:
+            return seg
+        # FILET : une réponse conversationnelle du modèle ne doit JAMAIS entrer
+        # dans le prompt (voir _looks_conversational).
+        if _looks_conversational(out, inner):
             return seg
         res = seg[0] + out + seg[-1]
         memo[seg] = res
