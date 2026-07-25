@@ -11,7 +11,14 @@ from ui.styles import CP, PANDORA_STYLESHEET
 
 _BTC_ADDRESS  = "bc1p386af47cm9eyk8k9cse5r72s7z9nr50q2s0ysk8d8ys5vugmnj7qgn3hca"
 _USDC_ADDRESS = "0x15a5177E00eD4D916953A3492C562197E91f7045"
-_PAYPAL_URL   = "https://www.paypal.com/donate?business=22eme.arkane%40gmail.com&currency_code=EUR"
+# ⚠ NE PAS revenir à « paypal.com/donate?business=<email> » : ce point d'entrée
+# passe par le programme de dons PayPal, réservé aux organisations caritatives
+# ENREGISTRÉES. Sur un compte personnel ou professionnel ordinaire il répond
+# « Cette organisation ne peut pas accepter de dons pour l'instant » — constaté en
+# production le 2026-07-25, le bouton était donc mort depuis sa mise en place.
+# PayPal.me fonctionne avec n'importe quel compte, sans statut associatif, et le
+# donateur choisit librement son montant (carte bancaire acceptée sans compte).
+_PAYPAL_URL   = "https://paypal.me/22emearkane"
 
 _QR_SIZE = 150
 

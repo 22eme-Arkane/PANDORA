@@ -829,6 +829,26 @@ def prompts_nano_banana_qualite():
 
 
 @test
+def bouton_don_paypal_utilisable():
+    """« Soutenir PANDORA » doit pointer un lien de don RÉELLEMENT utilisable.
+
+    Le bouton renvoyait vers « paypal.com/donate?business=<email> » : ce point
+    d'entrée passe par le programme de dons PayPal, réservé aux organisations
+    caritatives enregistrées, et répondait « Cette organisation ne peut pas
+    accepter de dons pour l'instant » (constat Matthieu 2026-07-25). Le bouton
+    était donc mort depuis sa mise en place, sans que rien ne le signale."""
+    import ui.dialog_funding as F
+    url = F._PAYPAL_URL
+    assert "donate?business=" not in url, \
+        "lien /donate : exige un statut d'organisation caritative, inutilisable ici"
+    assert url.startswith("https://"), f"lien de don non sécurisé : {url}"
+    assert "paypal.me/" in url or "ko-fi.com/" in url or "liberapay.com/" in url, \
+        f"forme de lien de don non reconnue : {url}"
+    # Les adresses crypto restent des chaînes non vides (autres moyens de soutien).
+    assert F._BTC_ADDRESS.strip() and F._USDC_ADDRESS.strip(), "adresses crypto vides"
+
+
+@test
 def decoupage_jamais_tronque_en_silence():
     """Le Découpage doit être COMPLET ou refusé — jamais un demi-document enregistré.
 
