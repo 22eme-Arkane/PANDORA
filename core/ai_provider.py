@@ -757,24 +757,43 @@ CONTINUE_PROMPT = ("Continue EXACTEMENT là où tu t'es arrêté, sans rien rép
                    "suivant de ta réponse précédente.")
 
 
-def chat_until_complete(system: str, messages: list, tier: str = "creative",
-                        max_tokens: int = 2048, task: str | None = None,
-                        max_rounds: int = 4) -> str:
-    """chat() ANTI-TRONCATURE : si la réponse est coupée par la limite de longueur,
-    demande automatiquement LA SUITE (le déjà-reçu repart comme message assistant +
-    CONTINUE_PROMPT) et recolle, jusqu'à une fin normale (max `max_rounds`
-    continuations). Longueur de sortie effective : (max_rounds+1) × max_tokens —
-    plus aucune fin de scénario perdue en co-écriture."""
+def chat_until_complete_ex(system: str, messages: list, tier: str = "creative",
+                           max_tokens: int = 2048, task: str | None = None,
+                           max_rounds: int = 4) -> dict:
+    """chat() ANTI-TRONCATURE, avec REDDITION DE COMPTES.
+
+    Si la réponse est coupée par la limite de longueur, demande automatiquement LA
+    SUITE (le déjà-reçu repart comme message assistant + CONTINUE_PROMPT) et
+    recolle, jusqu'à une fin normale (max `max_rounds` continuations). Longueur de
+    sortie effective : (max_rounds+1) × max_tokens.
+
+    Renvoie {"text", "truncated", "rounds"} : `truncated` reste VRAI si le texte
+    est ENCORE coupé après la dernière continuation. L'appelant doit alors refuser
+    d'enregistrer — un document tronqué enregistré en silence est une perte de
+    données invisible (découpage arrêté au plan 28 sur la moitié d'un scénario,
+    constat Matthieu 2026-07-25)."""
     full = ""
     msgs = list(messages)
+    truncated = False
+    rounds = 0
     for _ in range(max_rounds + 1):
         res = chat_ex(system, msgs, tier, max_tokens, task)
         full += res.get("text", "")
-        if not res.get("truncated") or not full:
+        truncated = bool(res.get("truncated"))
+        if not truncated or not full:
             break
+        rounds += 1
         msgs = list(messages) + [{"role": "assistant", "content": full},
                                  {"role": "user",      "content": CONTINUE_PROMPT}]
-    return full
+    return {"text": full, "truncated": truncated, "rounds": rounds}
+
+
+def chat_until_complete(system: str, messages: list, tier: str = "creative",
+                        max_tokens: int = 2048, task: str | None = None,
+                        max_rounds: int = 4) -> str:
+    """Idem, mais ne renvoie que le texte (appelants historiques)."""
+    return chat_until_complete_ex(system, messages, tier, max_tokens,
+                                  task, max_rounds).get("text", "")
 
 
 def chat_stream(system: str, messages: list, on_chunk=None, tier: str = "creative",

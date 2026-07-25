@@ -567,8 +567,35 @@ class FormatPandoraWorker(QThread):
         self._text = text
         self._direction_note = direction_note or ""
 
+    # Un long métrage ne tient PAS dans une seule réponse : à 16000 tokens, le
+    # modèle s'arrêtait net au milieu du document (28 plans pour la moitié d'un
+    # scénario, constat Matthieu 2026-07-25) et PANDORA enregistrait ce demi-
+    # découpage sans rien dire — chaque plan produit était valide, donc le contrat
+    # passait. Six continuations = jusqu'à 112 000 tokens de sortie.
+    _DECOUPAGE_MAX_ROUNDS = 6
+
+    def _decoupage_call(self, system: str, user_content: str) -> str:
+        """Un découpage COMPLET, ou une erreur explicite — jamais un demi-document.
+
+        Passe par la boucle anti-troncature (core.ai_provider) : dès que la réponse
+        est coupée par la limite de longueur, la suite est demandée et recollée."""
+        from core.ai_provider import chat_until_complete_ex
+        res = chat_until_complete_ex(
+            system, [{"role": "user", "content": user_content}],
+            tier="creative", max_tokens=16000, task="decoupage",
+            max_rounds=self._DECOUPAGE_MAX_ROUNDS)
+        if res.get("truncated"):
+            raise ValueError(
+                "Le découpage est INCOMPLET : le moteur IA a atteint sa limite de "
+                f"longueur même après {self._DECOUPAGE_MAX_ROUNDS} reprises "
+                "automatiques. Rien n'a été enregistré — un découpage partiel serait "
+                "pire qu'aucun. Découpez le scénario en parties et relancez, ou "
+                "choisissez un moteur à plus grande sortie dans Paramètres › "
+                "Moteur IA par tâche › Découpage.")
+        return (res.get("text") or "").strip()
+
     def run(self):
-        from core.ai_provider import stream as ai_stream, key_error
+        from core.ai_provider import key_error
         from core.decoupage_document import is_v2_document, validate_v2_document
         err = key_error("screenplay")
         if err:
@@ -591,9 +618,7 @@ class FormatPandoraWorker(QThread):
             # task="decoupage" : depuis que le storyboard est une conversion
             # déterministe des fiches, le Découpage est l'étape créative pivot
             # → routée sur le modèle de tête (Opus 4.8) du profil (2026-07-23).
-            full_text = ai_stream(system, _lang_hint(lang) + user_content,
-                                  on_chunk=None, tier="creative",
-                                  max_tokens=16000, task="decoupage").strip()
+            full_text = self._decoupage_call(system, _lang_hint(lang) + user_content)
 
             issues = validate_v2_document(full_text) if is_v2_document(full_text) else [
                 "structure_v2_non_reconnue"
@@ -606,10 +631,8 @@ class FormatPandoraWorker(QThread):
                     "contenir tous les champs obligatoires. Le format compact P01 | … et les "
                     "lignes → PROMPT: sont interdits. Ne commente pas la correction."
                 )
-                full_text = ai_stream(system + correction,
-                                      _lang_hint(lang) + user_content,
-                                      on_chunk=None, tier="creative",
-                                      max_tokens=16000, task="decoupage").strip()
+                full_text = self._decoupage_call(system + correction,
+                                                 _lang_hint(lang) + user_content)
                 issues = (validate_v2_document(full_text)
                           if is_v2_document(full_text)
                           else ["structure_v2_non_reconnue"])

@@ -162,9 +162,37 @@ class FormatConducteurWorker(QThread):
             # task="decoupage" : la Mise en page Live est le pivot créatif du flux
             # Live (les séquences en découlent) — même routage de tête que le
             # Découpage Cinéma (2026-07-23).
-            full = ai_stream(system, user, on_chunk=self.chunk.emit,
-                             tier="creative", max_tokens=16000, task="decoupage")
-            self.finished.emit(full.strip())
+            # ⚠ ANTI-TRONCATURE (2026-07-25) : relever le plafond ne fait que
+            # repousser le mur — il avait déjà été passé de 8000 à 16000 après une
+            # coupe réelle le 2026-06-11, et le Découpage Cinéma s'est fait couper
+            # à 16000 le 2026-07-25 (28 plans pour la moitié d'un scénario). On
+            # DÉTECTE désormais la coupe et on demande la suite jusqu'au document
+            # complet. Le texte arrive par blocs au lieu de mot à mot : chaque
+            # reprise est un nouvel appel, mais rien n'est perdu.
+            from core.ai_provider import chat_until_complete_ex
+            _msgs = [{"role": "user", "content": user}]
+            _seen = ""
+
+            def _emit_new(txt: str):
+                nonlocal _seen
+                if txt.startswith(_seen):
+                    self.chunk.emit(txt[len(_seen):])
+                else:
+                    self.chunk.emit(txt)
+                _seen = txt
+
+            res = chat_until_complete_ex(system, _msgs, tier="creative",
+                                         max_tokens=16000, task="decoupage",
+                                         max_rounds=6)
+            _emit_new(res.get("text", ""))
+            if res.get("truncated"):
+                raise ValueError(
+                    "La mise en page est INCOMPLÈTE : le moteur IA a atteint sa "
+                    "limite de longueur même après 6 reprises automatiques. Rien "
+                    "n'a été enregistré. Découpez le conducteur en parties, ou "
+                    "choisissez un moteur à plus grande sortie dans Paramètres › "
+                    "Moteur IA par tâche › Découpage.")
+            self.finished.emit((res.get("text") or "").strip())
         except Exception as e:
             self.failed.emit(_fmt_err(e))
 

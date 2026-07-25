@@ -829,6 +829,75 @@ def prompts_nano_banana_qualite():
 
 
 @test
+def decoupage_jamais_tronque_en_silence():
+    """Le Découpage doit être COMPLET ou refusé — jamais un demi-document enregistré.
+
+    Constat Matthieu 2026-07-25 : découpage arrêté au plan 28 sur la moitié d'un
+    scénario. Le moteur atteignait les 16000 tokens et s'arrêtait net ; comme
+    CHAQUE plan produit était bien formé, le contrat v2 validait et PANDORA
+    enregistrait le demi-découpage sans un mot. Relever le plafond ne fait que
+    déplacer le mur (il était déjà passé de 8000 à 16000) : on DÉTECTE la coupe et
+    on demande la suite."""
+    import inspect
+    import core.ai_provider as AP
+    import api.screenplay as SP
+    from core.decoupage_document import validate_v2_document
+
+    # 1. La boucle anti-troncature rend des comptes (et pas seulement du texte).
+    assert hasattr(AP, "chat_until_complete_ex"), "chat_until_complete_ex absent"
+    _src = inspect.getsource(AP.chat_until_complete_ex)
+    assert '"truncated"' in _src and "CONTINUE_PROMPT" in _src, \
+        "la boucle ne signale pas une troncature persistante"
+
+    # 2. Le Découpage passe par cette boucle, plus par un appel simple.
+    _d = inspect.getsource(SP.FormatPandoraWorker._decoupage_call)
+    assert "chat_until_complete_ex" in _d, "le Découpage n'a pas de boucle anti-troncature"
+    assert "raise" in _d and "INCOMPLET" in _d, \
+        "un découpage encore tronqué doit être REFUSÉ, pas enregistré"
+    _r = inspect.getsource(SP.FormatPandoraWorker.run)
+    assert "_decoupage_call" in _r and "ai_stream(" not in _r, \
+        "la génération du Découpage court-circuite encore la boucle"
+
+    # 3. Preuve du danger : un demi-document PASSE le contrat v2. C'est bien la
+    #    détection de la coupe — pas la validation — qui protège l'utilisateur.
+    def _plan(n):
+        return (f"PLAN {n:02d}\nSOURCE SCÉNARIO : Extrait {n}.\n"
+                f"INTENTION : Montrer {n}.\nRYTHME : Neutre.\nDURÉE : 5s\n"
+                f"PROMPT VISUEL : Image {n}.\nPERSONNAGES : —\nDÉCOR : —\n"
+                "ACCESSOIRES : —\nVÉHICULES : —\nHMC : —\nVALEUR PROPOSÉE : —\n"
+                "AXE PROPOSÉ : —\nMOUVEMENT PROPOSÉ : —\nFOCALE PROPOSÉE : —\n"
+                "MOOD : À CRÉER\n")
+    _moitie = "DÉCOUPAGE PANDORA 2\n\n" + "\n".join(_plan(i) for i in range(1, 29))
+    assert validate_v2_document(_moitie) == [], \
+        "hypothèse du test caduque : le contrat rejette désormais un demi-document"
+
+    # 4. La boucle recolle réellement les reprises, sans réseau.
+    _orig = AP.chat_ex
+    _state = {"calls": 0}
+    try:
+        def _fake(system, messages, tier="creative", max_tokens=2048, task=None):
+            _state["calls"] += 1
+            deja = 0
+            for m in messages:
+                if m.get("role") == "assistant":
+                    deja = m["content"].count("PLAN ")
+            fin = min(60, deja + 28)
+            txt = ("DÉCOUPAGE PANDORA 2\n\n" if deja == 0 else "")
+            txt += "\n".join(_plan(i) for i in range(deja + 1, fin + 1))
+            return {"text": txt, "truncated": fin < 60}
+        AP.chat_ex = _fake
+        res = AP.chat_until_complete_ex("s", [{"role": "user", "content": "x"}],
+                                        max_tokens=16000, task="decoupage", max_rounds=6)
+    finally:
+        AP.chat_ex = _orig
+    assert res["text"].count("PLAN ") == 60, \
+        f"document incomplet après reprises : {res['text'].count('PLAN ')} plans"
+    assert res["truncated"] is False and _state["calls"] >= 3, \
+        "les reprises n'ont pas eu lieu"
+    assert validate_v2_document(res["text"]) == [], "le document recollé est invalide"
+
+
+@test
 def moods_references_toutes_familles():
     """Le Mood doit recevoir TOUTES les fiches images du plan : personnages, décor,
     accessoires, véhicules, HMC. Les trois dernières n'étaient jamais envoyées et
