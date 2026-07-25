@@ -2370,22 +2370,31 @@ class _FinalPromptWorker(QThread):
                 if out:
                     self.done.emit(self._with_dialogues(out), True, "")
                     return
-                why = "le moteur a renvoyé une prose invalide (contrôle qualité)"
+                # Distinguer un ÉCHEC D'API (crédits, quota, clé) d'un rejet du
+                # contrôle qualité : confondre les deux envoyait chercher un bug
+                # dans l'app alors que le compte était à zéro (constat 2026-07-25).
+                try:
+                    from api.video_prompt import LAST_COMPOSE_ERROR as _lce
+                except Exception:
+                    _lce = ""
+                why = _lce or "le moteur a renvoyé une prose invalide (contrôle qualité)"
             except Exception as e:
                 why = f"erreur du moteur de composition ({type(e).__name__})"
         # Repli : le prompt est APLATI (aucune étiquette de section — un prompt
         # envoyé n'en contient jamais) puis traduit en anglais.
         try:
             from core.prompt_sections import flatten as _flat
-            from core.lang import translate_to_english
+            from core.lang import translate_to_english_ex
             _plain = _flat(self._prompt) or self._prompt
-            _t = translate_to_english(_plain) or _plain
-            # La traduction retourne le texte INCHANGÉ quand elle ne peut pas
-            # travailler (clé de la tâche « translate » absente). Il faut le dire :
-            # sinon un prompt FRANÇAIS partirait au moteur sans avertissement.
+            _t, _terr = translate_to_english_ex(_plain)
+            _t = _t or _plain
+            # La traduction rend le texte INCHANGÉ quand elle ne peut pas
+            # travailler. On remonte la VRAIE cause (crédits épuisés, quota, clé
+            # invalide) : « indisponible » tout court envoyait chercher un bug dans
+            # l'app alors que le compte API était à zéro (constat 2026-07-25).
             if _t.strip() == _plain.strip():
-                _extra = ("le prompt n'a PAS pu être traduit en anglais "
-                          "(moteur de traduction indisponible)")
+                _extra = ("le prompt n'a PAS pu être traduit en anglais — "
+                          + (_terr or "moteur de traduction indisponible"))
                 why = f"{why} ; {_extra}" if why else _extra
             self.done.emit(self._with_dialogues(_t), False, why)
         except Exception:

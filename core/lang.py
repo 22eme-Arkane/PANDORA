@@ -108,6 +108,22 @@ def translate_dialogues_to(text: str, lang: str) -> str:
     return out_text
 
 
+def translate_to_english_ex(text: str) -> tuple:
+    """Comme translate_to_english, mais retourne (texte, raison_d_echec).
+
+    La raison est HUMANISÉE (« Crédits API épuisés… ») : sans elle, un échec de
+    facturation ressemblait à un bug de l'application — le prompt repartait en
+    français avec pour seule explication « moteur de traduction indisponible »
+    (constat Matthieu 2026-07-25, crédit Anthropic à zéro)."""
+    global _LAST_TRANSLATE_ERROR
+    _LAST_TRANSLATE_ERROR = ""
+    out = translate_to_english(text)
+    return out, _LAST_TRANSLATE_ERROR
+
+
+_LAST_TRANSLATE_ERROR = ""
+
+
 def translate_to_english(text: str) -> str:
     """
     Traduit le texte en anglais via Claude Haiku.
@@ -130,12 +146,16 @@ def translate_to_english(text: str) -> str:
     except Exception:
         pass
 
+    global _LAST_TRANSLATE_ERROR
+    _LAST_TRANSLATE_ERROR = ""
     from core.ai_provider import complete, key_error
     # Clé de la TÂCHE « translate » (et non du moteur global) : l'appel plus bas
     # utilise task="translate", donc tester le moteur global court-circuitait la
     # traduction quand seul le moteur de tâche est configuré — le prompt partait
     # alors EN FRANÇAIS au moteur vidéo (constat Matthieu 2026-07-24).
-    if key_error(task="translate"):
+    _ke = key_error(task="translate")
+    if _ke:
+        _LAST_TRANSLATE_ERROR = _ke
         return text
 
     import re
@@ -167,7 +187,15 @@ def translate_to_english(text: str) -> str:
             # assemble depasse 2000 caracteres) -> traduction coupee net.
             safe, tier="utility", max_tokens=4000, task="translate",
         ).strip()
-    except Exception:
+    except Exception as e:
+        # On MEMORISE la vraie cause (credits epuises, quota, cle invalide...) :
+        # sans elle, l'appelant ne peut que dire « indisponible » et l'utilisateur
+        # cherche un bug dans l'app alors qu'il s'agit de sa facturation.
+        try:
+            from core.ai_provider import humanize_ai_error
+            _LAST_TRANSLATE_ERROR = humanize_ai_error(str(e))
+        except Exception:
+            _LAST_TRANSLATE_ERROR = str(e)[:200]
         return text
 
     # ── Restaure les dialogues originaux ─────────────────────────────────────

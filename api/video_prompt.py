@@ -176,6 +176,9 @@ def _build_user_message(prompt: str, style_suffix: str, time_suffix: str,
     return "\n\n".join(parts)
 
 
+LAST_COMPOSE_ERROR = ""   # raison humanisée du dernier échec de composition
+
+
 def compose(prompt: str, style_suffix: str = "", time_suffix: str = "",
             duration=None, character_notes: str = "", include_sound: bool = True,
             sound_notes: str = "", visual_context: str = "",
@@ -187,6 +190,8 @@ def compose(prompt: str, style_suffix: str = "", time_suffix: str = "",
     `engine` (clé du moteur sélectionné) détermine la GRAMMAIRE de sortie : champs
     Seedance, phrase continue Veo (négations reformulées en positif), directive
     courte Kling… Vide = prose dense générique (comportement historique)."""
+    global LAST_COMPOSE_ERROR
+    LAST_COMPOSE_ERROR = ""
     try:
         from core import ai_provider
         system = _SYSTEM
@@ -201,8 +206,18 @@ def compose(prompt: str, style_suffix: str = "", time_suffix: str = "",
                                    sound_notes or "", visual_context or "")
         # 8192 tokens : plus aucune limite de longueur sur la prose (décision
         # Matthieu 2026-07-23 — les troncatures coûtent plus cher que les tokens).
-        out = (ai_provider.complete(system, user, tier="creative",
-                                    max_tokens=8192, task="video_prompt") or "").strip()
+        try:
+            out = (ai_provider.complete(system, user, tier="creative",
+                                        max_tokens=8192, task="video_prompt") or "").strip()
+        except Exception as _e:
+            # Erreur de l'API (crédits épuisés, quota, clé) : on la REMONTE au lieu
+            # de la confondre avec « prose invalide » — l'utilisateur doit savoir
+            # que c'est sa facturation, pas la qualité du texte (constat 2026-07-25).
+            try:
+                LAST_COMPOSE_ERROR = ai_provider.humanize_ai_error(str(_e))
+            except Exception:
+                LAST_COMPOSE_ERROR = str(_e)[:200]
+            return ""
         if not validate_composed_prompt(out, prompt)["valid"]:
             return ""
         return out
