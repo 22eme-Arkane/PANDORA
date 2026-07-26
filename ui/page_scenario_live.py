@@ -2811,9 +2811,18 @@ class PageScenario(QWidget):
             return video_with_sound(str(seg.get("prompt") or "").strip(),
                                     str(seg.get("sound_prompt") or "").strip())
 
+        from core.live_bar import bpm_of_track, shot_extras
+
         saved = []
         for i, seg in enumerate(segments, 1):
+            # Blocs de barre + durée EXACTE : posés par core.live_bar.shot_extras,
+            # la même fonction que le chemin Séquences. Enrichir un seul des deux
+            # points d'écriture produirait une perte à 100 % sur l'autre, sans
+            # aucun signe — le mode de panne déjà vécu avec decoupage_content.
+            _track = _auto_music.get(str(i), "")
+            _extras = shot_extras(seg, bpm_of_track(_track, self._music_tracks))
             saved.append(_sb.save_shot({
+                **_extras,
                 "number":          i,
                 "scenario_id":     sc_id,
                 "scene_title":     seg.get("action", ""),
@@ -3195,7 +3204,8 @@ class PageScenario(QWidget):
             # on AVERTIT sans interdire, sinon un « 8 sec » au lieu de « Durée : 8s »
             # rendrait soudain inapplicable un découpage qui marchait hier.
             from api.live_extract import validate_live_layout, describe_layout_issues
-            issues = validate_live_layout(result)
+            issues = validate_live_layout(
+                result, getattr(self, "_live_mode", "live"))
             if issues:
                 from PyQt6.QtWidgets import QMessageBox
                 box = QMessageBox(dlg)

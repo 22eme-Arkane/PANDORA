@@ -153,6 +153,112 @@ def transformation_family(sparkline: str) -> str:
 NEEDS_TWO_CLIPS = "drop"   # ne se rend pas en une passe I2V
 
 
+# ── Les 8 blocs DANS le champ PROMPT VISUEL ──────────────────────────────────
+# Décision 2026-07-27 : les blocs ne sont PAS déclarés dans core/decoupage_document
+# (contrat partagé avec le Cinéma). Ils vivent comme sous-lignes étiquetées à
+# l'INTÉRIEUR de PROMPT VISUEL, que `_field()` lit jusqu'au prochain libellé CONNU.
+# Un libellé inconnu n'en est pas un : les sous-lignes restent donc dans le champ,
+# intactes, et le Cinéma ne voit jamais rien de tout ceci.
+#
+# C'est aussi ce qui protège la détection : `is_v2_document` exige littéralement une
+# ligne « PROMPT VISUEL : ». La remplacer par les blocs ferait retomber tout le Live
+# sur les branches héritées — et chaque découpage repartirait en réécriture IA, en
+# silence.
+BLOCK_LABELS = {
+    "surface":        ("SURFACE",),
+    "state_0":        ("ÉTAT 0", "ETAT 0", "STATE 0"),
+    "transformation": ("TRANSFORMATION",),
+    "state_1":        ("ÉTAT 1", "ETAT 1", "STATE 1"),
+    "black":          ("NOIR", "BLACK"),
+    "style":          ("STYLE",),
+    "constraints":    ("CONTRAINTES", "CONSTRAINTS"),
+}
+
+_ALL_BLOCK_RE = re.compile(
+    r"^[ \t]*(?:" + "|".join(
+        re.escape(a) for al in BLOCK_LABELS.values() for a in al) + r")[ \t]*:",
+    re.IGNORECASE | re.MULTILINE)
+
+
+def parse_blocks(text: str) -> dict:
+    """Extrait les blocs LIVE d'un champ PROMPT VISUEL. {} si aucun.
+
+    Tolérant : un découpage écrit avant ce contrat, ou un plan que l'utilisateur a
+    réécrit en prose libre, ne rend rien — l'appelant retombe alors sur le texte
+    entier. On ne casse jamais un plan existant.
+    """
+    src = text or ""
+    out = {}
+    for key, aliases in BLOCK_LABELS.items():
+        alt = "|".join(re.escape(a) for a in aliases)
+        m = re.search(rf"^[ \t]*(?:{alt})[ \t]*:[ \t]*(.*)$", src,
+                      re.IGNORECASE | re.MULTILINE)
+        if not m:
+            continue
+        nxt = _ALL_BLOCK_RE.search(src, m.end())
+        val = src[m.start(1):(nxt.start() if nxt else len(src))]
+        val = " ".join(val.split()).strip(" —-;,")
+        if val:
+            out[key] = val
+    return out
+
+
+def format_blocks(blocks: dict) -> str:
+    """Rend les blocs sous la forme attendue dans PROMPT VISUEL (ordre imposé)."""
+    lines = []
+    for key, aliases in BLOCK_LABELS.items():
+        val = " ".join(str((blocks or {}).get(key, "") or "").split())
+        if val:
+            lines.append(f"{aliases[0]} : {val}")
+    return "\n".join(lines)
+
+
+def has_blocks(text: str) -> bool:
+    """Vrai si ce prompt porte au moins l'ossature d'une barre (les trois temps)."""
+    b = parse_blocks(text)
+    return bool(b.get("state_0") and b.get("transformation") and b.get("state_1"))
+
+
+def bpm_of_track(name: str, tracks) -> float:
+    """BPM du morceau nommé. 0.0 si inconnu — jamais d'exception."""
+    try:
+        tk = next((t for t in (tracks or [])
+                   if isinstance(t, dict) and t.get("name") == name), None)
+        return float((tk or {}).get("bpm") or 0.0)
+    except (TypeError, ValueError):
+        return 0.0
+
+
+def shot_extras(seg: dict, bpm: float = 0.0) -> dict:
+    """Clés LIVE à poser sur un plan enregistré. {} si rien à ajouter.
+
+    UNE seule fonction pour les DEUX points d'écriture des plans (le chemin
+    « Appliquer le découpage » et le chemin Séquences). Le mode de panne à éviter
+    est connu : n'enrichir qu'un des deux crée une perte à 100 % sur l'autre,
+    silencieuse — c'est exactement ce qui était arrivé avec decoupage_content /
+    layout_content. En passant par ici, les deux ne peuvent plus diverger.
+
+    `duration_exact` est la durée VRAIE de la barre : on prend le nombre entier de
+    temps le plus proche de la durée conformée, et on le reconvertit en secondes.
+    C'est cette valeur — et pas l'entier — que le recalage ffmpeg attend.
+    """
+    out = {}
+    blocks = parse_blocks(str(seg.get("prompt") or ""))
+    if blocks:
+        out["live_bar"] = blocks
+    try:
+        dur = float(seg.get("duration") or 0)
+    except (TypeError, ValueError):
+        dur = 0.0
+    bpm = float(bpm or 0.0)
+    if bpm > 0 and dur > 0:
+        beats = max(1, round(dur * bpm / 60.0))
+        out["beats"] = int(beats)
+        out["bpm"] = round(bpm, 2)
+        out["duration_exact"] = round(bar_duration(bpm, beats), 3)
+    return out
+
+
 @dataclass
 class LiveBar:
     """Une barre de mapping : 8 blocs de payload, 4 champs hors payload."""

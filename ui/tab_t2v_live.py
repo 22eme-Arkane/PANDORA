@@ -3515,19 +3515,43 @@ class TabT2V(QScrollArea):
             except Exception:
                 _surface = ""
 
-        # Tempo du morceau assigné → durée de barre demandée au composeur.
+        # Tempo du morceau assigné → durée de barre demandée au composeur. Le plan
+        # porte son BPM depuis le découpage ; la recherche par nom de morceau reste
+        # le repli pour les plans écrits avant ce contrat.
         _bpm = 0.0
         try:
-            import core.scenario as _sc
-            _tracks = []
-            for _s in _sc.list_scenarios():
-                if _s.get("music_tracks"):
-                    _tracks = _s["music_tracks"]
-                    if _s.get("id") == (self._active_shot or {}).get("scenario_id"):
-                        break
-            _bpm = _ctxmod.bpm_for_shot(self._active_shot or {}, _tracks)
-        except Exception:
+            _bpm = float((self._active_shot or {}).get("bpm") or 0.0)
+        except (TypeError, ValueError):
             _bpm = 0.0
+        if _bpm <= 0:
+            try:
+                import core.scenario as _sc
+                _tracks = []
+                for _s in _sc.list_scenarios():
+                    if _s.get("music_tracks"):
+                        _tracks = _s["music_tracks"]
+                        if _s.get("id") == (self._active_shot or {}).get("scenario_id"):
+                            break
+                _bpm = _ctxmod.bpm_for_shot(self._active_shot or {}, _tracks)
+            except Exception:
+                _bpm = 0.0
+
+        # ── Les blocs de barre priment sur la prose ──────────────────────────
+        # Quand le découpage a produit les sept blocs, ils SONT le plan : les
+        # donner au composeur sous leur forme structurée lui dit explicitement où
+        # sont l'état initial, la transformation et l'état d'arrivée. Une prose
+        # aplatie les lui ferait redeviner — et c'est précisément là que les beats
+        # se dissolvent. Repli sur le corps aplati pour tout plan écrit avant ce
+        # contrat, ou réécrit à la main : on ne casse jamais un plan existant.
+        try:
+            from core.live_bar import format_blocks
+            _blocs = (self._active_shot or {}).get("live_bar") or {}
+            if isinstance(_blocs, dict) and _blocs:
+                _rendu = format_blocks(_blocs)
+                if _rendu:
+                    body = (_ctx_cast + _rendu) if _ctx_cast else _rendu
+        except Exception:
+            pass
 
         _dur = self._get_duration()
         try:
@@ -3536,10 +3560,16 @@ class TabT2V(QScrollArea):
         except Exception:
             _style = ""
 
+        # Le nombre de temps vient du plan quand le découpage l'a écrit — c'est lui
+        # qui connaît la barre. Sinon on le déduit de la durée et du tempo.
+        try:
+            _beats = int((self._active_shot or {}).get("beats") or 0)
+        except (TypeError, ValueError):
+            _beats = 0
         ctx = _ctxmod.compose_context(
             engine=self._get_model(), mode=_mode, style_suffix=_style,
             surface=_surface, bpm=_bpm,
-            beats=_ctxmod.beats_for(_dur, _bpm), duration=_dur, extras=[])
+            beats=_beats or _ctxmod.beats_for(_dur, _bpm), duration=_dur, extras=[])
         # Champs NON hachés, pour l'appel : la clé ne transporte que l'empreinte
         # de la surface, le composeur a besoin du texte entier.
         ctx["surface_text"] = _surface

@@ -52,7 +52,7 @@ def _claude(system: str, user: str, task: str | None = None,
     return complete(system, user, tier="creative", max_tokens=max_tokens, task=task)
 
 
-def validate_live_layout(text: str) -> list[str]:
+def validate_live_layout(text: str, mode: str = "") -> list[str]:
     """Erreurs BLOQUANTES d'un découpage Live (2026-07-26).
 
     ⚠ Ne JAMAIS utiliser validate_v2_document / is_v2_document ici : le contrat v2 du
@@ -87,6 +87,15 @@ def validate_live_layout(text: str) -> list[str]:
         for index, segment in enumerate(segments, 1):
             if not str(segment.get("sound_prompt") or "").strip():
                 issues.append(f"P{index:02d}:son")
+            # MAPPING : les trois temps de la barre sont exigés (2026-07-27).
+            # Sans ce contrôle, rien ne garantit que le modèle a produit les blocs :
+            # il retomberait en prose « riche » qui dissout la progression, et le
+            # Studio n'aurait plus rien à consommer. La règle est propre au mapping
+            # — une boucle VJ libre n'a pas de façade ni d'état d'arrivée imposé.
+            if (mode or "") == "mapping":
+                from core.live_bar import has_blocks
+                if not has_blocks(str(segment.get("prompt") or "")):
+                    issues.append(f"P{index:02d}:barre")
         return issues
     if not is_structured_layout(value):
         return ["structure_non_reconnue"]
@@ -121,6 +130,7 @@ _ISSUE_LABELS = {
     "duree":  "durée absente",
     "prompt": "PROMPT VIDÉO vide",
     "son":    "PROMPT SON manquant",
+    "barre":  "les trois temps de la barre manquent (ÉTAT 0 / TRANSFORMATION / ÉTAT 1)",
 }
 
 
@@ -166,11 +176,36 @@ Recommence ENTIÈREMENT, sans commenter la correction :
 - DURÉE porte une durée chiffrée sur chaque plan (vise 2 à 15 s ; pour un set long,
   ajoute des plans plutôt que d'allonger un plan) ;
 - PROMPT VISUEL est 100 % visuel, en beats relatifs (« ouverture : », « puis », « dans
-  le dernier instant »), JAMAIS en timecodes absolus, sans BPM ni terme audio ;
+  le dernier instant »), JAMAIS en timecodes absolus, sans BPM ni terme audio ;{blocs}
 - SON n'est jamais vide — c'est là, et là seulement, que le BPM et les temps forts
   interviennent.
 Aucun plan ne doit être abrégé, résumé ou remplacé par « même structure ».
 N'utilise PAS l'ancien format « === ACTE … === » / « PROMPT VIDÉO : »."""
+
+# Rappel des sept blocs, injecté dans la relance UNIQUEMENT en mapping. Sans ce
+# miroir (2026-07-27), le premier jet contenait les blocs et la relance corrective
+# téléguidait le moteur vers l'ancien contrat : l'échec empirait à chaque tour au
+# lieu de se corriger.
+_LAYOUT_CORRECTION_BLOCS = """
+- en MAPPING, PROMPT VISUEL ne contient QUE ces sept sous-lignes, chacune sur sa
+  ligne : SURFACE, ÉTAT 0, TRANSFORMATION, ÉTAT 1, NOIR, STYLE, CONTRAINTES —
+  la ligne « PROMPT VISUEL : » elle-même reste présente et les précède ;
+- ÉTAT 0 et ÉTAT 1 sont des ÉTATS (l'image au premier puis au dernier temps),
+  TRANSFORMATION est UN seul processus continu, sans coupe ;
+- aucune caméra, aucun mouvement d'appareil, aucune valeur de plan dans ces lignes :
+  le vidéoprojecteur est boulonné ;"""
+
+
+def layout_correction(mode: str = "live") -> str:
+    """Suffixe de relance corrective, aligné sur le contrat du mode.
+
+    `replace` et NON `.format()` : le texte contient « SÉQUENCE {n} — {titre} »,
+    des accolades LITTÉRALES destinées au modèle. `.format()` les prenait pour des
+    champs et levait KeyError('n') — à chaque relance corrective, donc exactement
+    quand le premier jet avait déjà échoué.
+    """
+    return _LAYOUT_CORRECTION.replace(
+        "{blocs}", _LAYOUT_CORRECTION_BLOCS if (mode or "") == "mapping" else "")
 
 
 # ── Mise en page ─────────────────────────────────────────────────────────────
@@ -235,6 +270,51 @@ class FormatConducteurWorker(QThread):
                         else "fort contraste, arêtes nettes, fond noir pur, sans brume")
             _beats   = ("'opening:', 'then', 'in the final moment'" if _is_en
                         else "« ouverture : », « puis », « dans le dernier instant »")
+
+            # ── PROMPT VISUEL : deux contrats selon le mode (2026-07-27) ──────
+            # En MAPPING, le plan n'est pas une scène mais une BARRE projetée sur
+            # de la pierre : un état au premier temps, UNE transformation continue,
+            # un état au dernier. On le fait écrire en blocs nommés plutôt qu'en
+            # prose, parce que c'est la seule façon de VÉRIFIER ensuite que les
+            # trois temps existent — une prose « riche » les dissout.
+            # Les blocs restent DANS le champ PROMPT VISUEL : le parseur partagé
+            # (core/decoupage_document) lit un champ jusqu'au prochain libellé
+            # CONNU, et ces sous-libellés-là ne le sont pas. Le Cinéma n'est donc
+            # pas touché, et « PROMPT VISUEL : » reste présent — sans cette ligne,
+            # is_v2_document renvoie faux et tout le Live retombe en réécriture IA.
+            _visuel_mapping = (
+                "PROMPT VISUEL : en " + _pl + ", et UNIQUEMENT sous la forme des "
+                "sept sous-lignes ci-dessous, chacune sur sa propre ligne. Ce plan "
+                "est UNE BARRE musicale projetée sur une façade : il a un état au "
+                "premier temps, UNE seule transformation continue, et un état au "
+                "dernier temps.\n"
+                "SURFACE : géométrie réelle du bâtiment (volumes, ouvertures, "
+                "matériau) — ce qui reçoit la lumière.\n"
+                "ÉTAT 0 : l'image au PREMIER temps. Un ÉTAT, pas une action.\n"
+                "TRANSFORMATION : le processus qui court sur toute la barre. UN "
+                "seul, continu, sans coupe ni changement de scène.\n"
+                "ÉTAT 1 : l'image au DERNIER temps — l'état d'arrivée.\n"
+                "NOIR : ce qui doit rester à ZÉRO lumière (le noir n'est pas une "
+                "couleur ici : ce qui est noir n'est pas projeté).\n"
+                "STYLE : le style visuel du plan.\n"
+                "CONTRAINTES : les interdits visuels du plan (texte, filigrane…).\n"
+                "INTERDITS ABSOLUS dans ces sept lignes : toute mention de CAMÉRA, "
+                "de mouvement d'appareil, de valeur de plan ou de focale — le "
+                "vidéoprojecteur est boulonné, il n'y a pas de caméra ; tout terme "
+                "audio ou BPM ; tout timecode absolu.\n")
+            _visuel_live = (
+                "PROMPT VISUEL : prompt en " + _pl + ", TRÈS DÉTAILLÉ et dense — Seedance 2.0 "
+                "exploite un MAXIMUM de détails, ne sois donc PAS bref. Décris précisément : "
+                "SUJET + ACTION, environnement, COMPOSITION & cadrage, LUMIÈRE (direction, "
+                "qualité, température), PALETTE, TEXTURES & matières, MOUVEMENT (ce qui bouge "
+                "et comment), ATMOSPHÈRE, STYLE visuel, repères de QUALITÉ (" + _quality + "). "
+                "Structure l'évolution en BEATS RELATIFS (" + _beats + ") — "
+                "JAMAIS de timecode absolu, le moteur ne les respecte pas ; les impacts "
+                "musicaux exacts vont sur les CUTS entre plans. 3 à 5 phrases riches, "
+                "autonome, prêt tel quel ; AUCUN terme audio ni BPM.\n")
+            _visuel_spec = (_visuel_mapping if self._mode == "mapping"
+                            else _visuel_live)
+
             system = (
                 "Tu es superviseur de génération vidéo IA ET sound designer pour PANDORA | Live. "
                 + _mode_ctx(self._mode) + " " + _lock +
@@ -274,15 +354,7 @@ class FormatConducteurWorker(QThread):
                 "RYTHME : Tempo, point de coupe, relation aux plans voisins et aux temps "
                 "forts de la musique.\n"
                 "DURÉE : 6s\n"
-                "PROMPT VISUEL : prompt en " + _pl + ", TRÈS DÉTAILLÉ et dense — Seedance 2.0 "
-                "exploite un MAXIMUM de détails, ne sois donc PAS bref. Décris précisément : "
-                "SUJET + ACTION, environnement, COMPOSITION & cadrage, LUMIÈRE (direction, "
-                "qualité, température), PALETTE, TEXTURES & matières, MOUVEMENT (ce qui bouge "
-                "et comment), ATMOSPHÈRE, STYLE visuel, repères de QUALITÉ (" + _quality + "). "
-                "Structure l'évolution en BEATS RELATIFS (" + _beats + ") — "
-                "JAMAIS de timecode absolu, le moteur ne les respecte pas ; les impacts "
-                "musicaux exacts vont sur les CUTS entre plans. 3 à 5 phrases riches, "
-                "autonome, prêt tel quel ; AUCUN terme audio ni BPM.\n"
+                + _visuel_spec +
                 "SON : prompt de sound design / SFX en " + _pl + " — ambiance, effets, textures "
                 "et rythme du plan, prêt pour un générateur de SFX. AUCUNE parole ni voix. "
                 "C'est ICI, et seulement ici, que le BPM et les drops interviennent.\n"
@@ -350,11 +422,12 @@ class FormatConducteurWorker(QThread):
             # premier jet raté s'affichait puis se faisait remplacer par l'erreur,
             # et l'utilisateur avait vu passer un découpage qui n'existait pas.
             full = self._layout_call(system, user)
-            issues = validate_live_layout(full)
+            issues = validate_live_layout(full, self._mode)
             if issues:
                 self.retrying.emit(describe_layout_issues(issues))
-                full = self._layout_call(system + _LAYOUT_CORRECTION, user)
-                issues = validate_live_layout(full)
+                full = self._layout_call(
+                    system + layout_correction(self._mode), user)
+                issues = validate_live_layout(full, self._mode)
             if issues:
                 raise ValueError(
                     "Le moteur IA n'a pas respecté le format de découpage Live, "

@@ -3930,14 +3930,23 @@ def decoupage_live_valide_avant_enregistrement():
 
     # 4. Le worker valide, relance UNE fois, puis refuse — et n'affiche rien avant.
     _run = inspect.getsource(FormatConducteurWorker.run)
-    assert "validate_live_layout(full)" in _run, "le worker ne valide pas sa sortie"
-    assert "_LAYOUT_CORRECTION" in _run and "self.retrying.emit" in _run, \
+    # Le MODE est passé au validateur (2026-07-27) : en mapping il exige en plus
+    # les trois temps de la barre, une règle sans objet en VJ libre.
+    assert "validate_live_layout(full, self._mode)" in _run, \
+        "le worker ne valide pas sa sortie, ou ne dit pas au validateur quel mode"
+    assert "layout_correction" in _run and "self.retrying.emit" in _run, \
         "pas de relance corrective annoncée"
-    assert _run.index("self.chunk.emit(full)") > _run.index("validate_live_layout(full)"), \
+    assert _run.index("self.chunk.emit(full)") > _run.index("validate_live_layout(full"), \
         "le document est affiché AVANT d'être validé (un jet raté serait montré)"
     assert "Rien n'a été enregistré" in _run, \
         "un découpage invalide doit être refusé, pas enregistré"
-    assert "validate_v2_document" not in _run and "is_v2_document" not in _run, \
+    # Sur le CODE seul : les commentaires du worker citent volontairement
+    # is_v2_document pour expliquer pourquoi la ligne « PROMPT VISUEL : » doit
+    # rester présente. Chercher dans le texte brut se déclencherait sur cette
+    # explication et ne prouverait rien.
+    _run_code = "\n".join(l for l in _run.splitlines()
+                          if not l.lstrip().startswith("#"))
+    assert "validate_v2_document" not in _run_code and "is_v2_document" not in _run_code, \
         "le worker Live utilise le validateur du Cinéma"
 
     # 5. Le suffixe correctif rappelle le contrat de FICHES, champ SON compris.
@@ -3953,7 +3962,8 @@ def decoupage_live_valide_avant_enregistrement():
     #    déjà en base ne doit pas devenir soudainement inapplicable.
     import ui.page_scenario_live as PSL
     _fmt = inspect.getsource(PSL.PageScenario._open_format_window)
-    assert "validate_live_layout(result)" in _fmt, "« Appliquer » ne valide rien"
+    assert "validate_live_layout(" in _fmt and '"_live_mode", "live"' in _fmt, \
+        "« Appliquer » ne valide rien, ou ignore le mode de séquence"
     assert "Appliquer quand même" in _fmt, \
         "« Appliquer » bloque au lieu d'avertir (régression sur les découpages existants)"
 
@@ -4856,6 +4866,158 @@ def refus_de_rognage_dit_ce_qui_ne_va_pas():
     from core.i18n import _FR_TO_EN
     assert any("Isoler (fond noir)" in k for k in _FR_TO_EN), \
         "le chemin vers l'outil n'est pas traduit"
+
+
+@test
+def blocs_de_barre_du_decoupage_jusquau_moteur():
+    """Les sept blocs LIVE traversent toute la chaîne : découpage → plan → Studio.
+
+    Dernier maillon du chantier (2026-07-27). Trois exigences, chacune adossée à un
+    mode de panne identifié pendant la reconnaissance :
+
+    · le contrat partagé core/decoupage_document n'est PAS modifié — les blocs
+      vivent DANS le champ PROMPT VISUEL, que le parseur lit jusqu'au prochain
+      libellé CONNU. Le Cinéma ne voit donc jamais rien, et la ligne
+      « PROMPT VISUEL : » reste présente : sans elle la détection v2 échoue et
+      tout le Live retomberait en réécriture IA, en silence ;
+    · les DEUX points d'écriture des plans passent par la MÊME fonction —
+      n'en enrichir qu'un produit une perte à 100 % sur l'autre, sans aucun signe
+      (mode de panne déjà vécu avec decoupage_content / layout_content) ;
+    · le Studio consomme les blocs plutôt que la prose aplatie, et le plan porte
+      sa durée EXACTE pour le recalage ffmpeg.
+    """
+    import ast
+    import core.decoupage_document as DD
+    from core.live_bar import (bpm_of_track, format_blocks, has_blocks,
+                               parse_blocks, shot_extras)
+
+    DOC = """DÉCOUPAGE PANDORA 2
+
+SÉQUENCE 1 — Intro
+
+PLAN 01
+SOURCE CONDUCTEUR : nappe grave, la façade se givre
+INTENTION : installer la tension
+DURÉE : 4
+PROMPT VISUEL :
+SURFACE : trapezoidal church facade, square bell tower
+ÉTAT 0 : nothing moves, the stone already veiled in thin frost
+TRANSFORMATION : the frost thickens steadily, crystals proliferating outward
+ÉTAT 1 : the frost has closed over the openings
+NOIR : background pure black, no gradient, no glow
+STYLE : frozen antique engraving
+CONTRAINTES : no text, no watermark
+SON : souffle glacé grave, réverbération de cathédrale
+PERSONNAGES : —
+"""
+
+    # ── 1. Le contrat partagé n'est pas touché ────────────────────────────────
+    for _bloc in ("SURFACE", "ÉTAT 0", "TRANSFORMATION", "NOIR", "CONTRAINTES"):
+        assert not any(_bloc in al for al in DD._LABELS.values()), \
+            (f"« {_bloc} » a été déclaré dans le contrat PARTAGÉ — le Cinéma s'en "
+             "trouve contraint, et un plan Cinéma contenant ce mot verrait son "
+             "champ précédent coupé")
+    assert DD.is_v2_document(DOC), \
+        ("le document n'est plus reconnu v2 : is_structured_layout retomberait sur "
+         "les branches héritées et chaque découpage repartirait en réécriture IA")
+
+    _segs = DD.parse_v2_document(DOC)
+    assert len(_segs) == 1, ("un seul plan attendu", len(_segs))
+    _seg = _segs[0]
+    assert "souffle" in _seg["sound_prompt"].lower(), \
+        "le SON n'est plus isolé — les blocs l'ont absorbé"
+    assert "cathédrale" not in _seg["prompt"], \
+        "le son a fui dans le PROMPT VISUEL"
+
+    # ── 2. Les blocs ressortent intacts, et l'aller-retour est stable ─────────
+    _b = parse_blocks(_seg["prompt"])
+    assert set(_b) == {"surface", "state_0", "transformation", "state_1",
+                       "black", "style", "constraints"}, sorted(_b)
+    assert _b["state_1"] == "the frost has closed over the openings"
+    assert parse_blocks(format_blocks(_b)) == _b, "l'aller-retour perd des blocs"
+    assert has_blocks(_seg["prompt"]) and not has_blocks("une prose libre sans blocs")
+
+    # ── 3. La durée EXACTE de la barre est calculée ──────────────────────────
+    _tracks = [{"name": "Intro", "bpm": 118}]
+    assert bpm_of_track("Intro", _tracks) == 118.0
+    assert bpm_of_track("Absent", _tracks) == 0.0
+    _ex = shot_extras(_seg, 118.0)
+    assert _ex["beats"] == 8, ("4 s à 118 BPM ≈ 8 temps", _ex)
+    assert abs(_ex["duration_exact"] - 4.068) < 0.01, _ex
+    assert _ex["live_bar"] == _b
+    # Sans tempo connu, on n'invente rien.
+    assert "duration_exact" not in shot_extras(_seg, 0.0)
+    # Un plan sans blocs n'en fabrique pas.
+    assert "live_bar" not in shot_extras({"prompt": "prose libre", "duration": 4}, 118)
+
+    # ── 4. Les DEUX points d'écriture passent par la même fonction ───────────
+    import ui.page_scenario_live as PScL
+    import ui.page_storyboard_live as PStL
+    _w1 = inspect.getsource(PScL.PageScenario._write_decoupage_segments)
+    _w2 = inspect.getsource(PStL.PageStoryboard._segments_to_shots)
+    for _nom, _src in (("Appliquer le découpage", _w1), ("Séquences", _w2)):
+        assert "shot_extras(" in _src, \
+            (f"le chemin « {_nom} » n'écrit pas les blocs — perte 100 % silencieuse "
+             "sur ce chemin, l'autre continuant de marcher")
+        assert "bpm_of_track(" in _src, \
+            f"le chemin « {_nom} » n'écrit pas la durée exacte de barre"
+
+    # ── 5. Le Studio consomme les blocs, pas la prose ────────────────────────
+    import ui.tab_t2v_live as TL
+    _inp = inspect.getsource(TL.TabT2V._live_compose_inputs)
+    assert "format_blocks" in _inp and '"live_bar"' in _inp, \
+        ("le Studio aplatit encore la prose : le composeur devrait redeviner où "
+         "sont les trois temps, et c'est là qu'ils se dissolvent")
+    assert '"beats"' in _inp, "le nombre de temps du plan n'est pas repris"
+
+    # ── 6. Le validateur exige la barre en MAPPING, et seulement là ──────────
+    from api.live_extract import validate_live_layout
+    assert validate_live_layout(DOC, "mapping") == [], \
+        "un découpage mapping conforme est refusé"
+    _plat = DOC.replace(
+        "SURFACE : trapezoidal church facade, square bell tower\n"
+        "ÉTAT 0 : nothing moves, the stone already veiled in thin frost\n"
+        "TRANSFORMATION : the frost thickens steadily, crystals proliferating outward\n"
+        "ÉTAT 1 : the frost has closed over the openings\n",
+        "une façade givrée, dense et contrastée, très détaillée\n")
+    assert validate_live_layout(_plat, "mapping") == ["P01:barre"], \
+        ("une prose sans les trois temps doit être refusée en mapping",
+         validate_live_layout(_plat, "mapping"))
+    assert validate_live_layout(_plat, "live") == [], \
+        "la règle de barre déborde sur le VJ libre, qui n'a pas de façade"
+    assert validate_live_layout(_plat) == [], "le mode par défaut n'est plus permissif"
+
+    # ── 7. La relance corrective est en MIROIR du premier jet ────────────────
+    from api.live_extract import layout_correction
+    _corr_map = layout_correction("mapping")
+    for _must in ("SURFACE", "ÉTAT 0", "TRANSFORMATION", "ÉTAT 1", "NOIR"):
+        assert _must in _corr_map, \
+            (f"la relance mapping ne rappelle pas « {_must} » : elle téléguiderait "
+             "vers l'ancien contrat et l'échec empirerait à chaque tour", _must)
+    assert "PROMPT VISUEL" in _corr_map
+    assert "SURFACE" not in layout_correction("live"), \
+        "la relance VJ réclame des blocs qui n'ont pas d'objet hors mapping"
+    _sys = inspect.getsource(_LE_module().FormatConducteurWorker.run)
+    assert "_visuel_mapping" in _sys and "_visuel_live" in _sys, \
+        "le premier jet ne distingue plus les deux contrats"
+
+    # ── 8. core/live_bar reste PUR (aucun appel IA, aucun Qt) ────────────────
+    import core.live_bar as LB
+    _mods = set()
+    for _n in ast.walk(ast.parse(inspect.getsource(LB))):
+        if isinstance(_n, ast.ImportFrom):
+            _mods.add(_n.module or "")
+        elif isinstance(_n, ast.Import):
+            _mods.update(a.name for a in _n.names)
+    for _interdit in ("core.ai_provider", "core.lang", "PyQt6",
+                      "core.engine_grammar", "core.decoupage_document"):
+        assert _interdit not in _mods, \
+            (f"core/live_bar doit rester pur et autonome — importe « {_interdit} »")
+
+
+def _LE_module():
+    import api.live_extract as _m
+    return _m
 
 
 if __name__ == "__main__":

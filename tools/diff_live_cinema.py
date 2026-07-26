@@ -95,6 +95,12 @@ EXPECTED_ONLY_LIVE = {
         "_write_decoupage_segments",
     },
     "ui/page_storyboard_live.py": {
+        # _alive : garde anti « wrapped C/C++ object has been deleted » sur la
+        # vignette Mood (2026-07-27). Le Cinéma porte le MÊME défaut latent aux
+        # mêmes endroits — divergence NON assumée, à reporter quand Matthieu le
+        # décidera. Laissée ici pour que le radar reste lisible, pas parce que
+        # c'est une spécificité Live.
+        "_alive",
         "_visible_order", "_load_conductor_tracks", "_on_music_align",
         # P2 « fusion » : côté Cinéma la fenêtre « Garder/Séparer » vit dans le
         # dialogue dédié (StoryboardGenerateDialog) ; côté Live la génération est

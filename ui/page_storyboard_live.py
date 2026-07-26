@@ -3343,7 +3343,13 @@ class PageStoryboard(QWidget):
             music = {a["id"]: a["track"] for a in assign_tracks_to_shots(pseudo, tracks or [])}
         except Exception:
             music = {}
+        # Blocs de barre + durée EXACTE : MÊME fonction que le chemin « Appliquer
+        # le découpage » (ui/page_scenario_live). Les deux points d'écriture ne
+        # peuvent donc plus diverger — n'en enrichir qu'un produirait une perte à
+        # 100 % sur l'autre, sans aucun signe.
+        from core.live_bar import bpm_of_track, shot_extras
         return [{
+            **shot_extras(s, bpm_of_track(music.get(str(i), ""), tracks or [])),
             "number":          i,
             "scene_title":     s.get("action", ""),
             "shot_size":       s.get("shot_size", ""),
