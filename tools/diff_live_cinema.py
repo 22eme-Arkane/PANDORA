@@ -67,6 +67,10 @@ EXPECTED_ONLY_LIVE = {
         # _FinalPromptWorker et appelle un autre composeur : deux classes
         # distinctes, pas un portage manquant.
         "_LiveFinalPromptWorker", "_repli",
+        # Le Conducteur Live fixe SA séquence avant chaque accès au storyboard
+        # (2026-07-27). Le Cinéma n'a qu'un namespace, « storyboard », qu'aucun
+        # autre onglet ne déplace : le besoin n'existe pas de ce côté.
+        "_pin_ns", "set_namespace",
     },
     "ui/page_scenario_live.py": {
         # (Musique : _refresh_music_display/_make_music_chip/_remove_music/

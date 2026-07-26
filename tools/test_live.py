@@ -5020,5 +5020,87 @@ def _LE_module():
     return _m
 
 
+@test
+def bande_conducteur_lit_toujours_sa_propre_sequence():
+    """Le Conducteur et le raccord ne lisent plus la séquence d'un autre onglet.
+
+    Bug rapporté par Matthieu le 2026-07-27 : après avoir arrêté la file d'attente
+    et supprimé la dernière frame d'un plan, la bande passait de 10 plans à 5 ; et
+    en relançant au plan 4, le raccord repartait de la frame du plan 1.
+
+    UNE seule cause pour les deux. `core.storyboard.set_namespace` est un état
+    GLOBAL de module : le Sound Design Live l'écrit avec SON mode à lui
+    (ui/tab_sound_design_live.py) sans jamais le restaurer. La bande lisait donc
+    une autre séquence, tronquée — et le raccord, qui prend le plan précédent dans
+    CETTE liste, remontait au mauvais plan. Le contournement trouvé par Matthieu
+    est la preuve du mécanisme : changer d'onglet et revenir rappelle showEvent,
+    qui repose le namespace et fait réapparaître les plans.
+    """
+    import ui.tab_t2v_live as TL
+
+    # ── 1. La bande possède SA séquence et la réaffirme avant chaque accès ────
+    _sel = TL.StoryboardSelector()
+    assert hasattr(_sel, "_ns"), "la bande ne connaît pas sa propre séquence"
+    _sel.set_namespace("live_seq_mapping")
+    assert _sel._ns == "live_seq_mapping"
+    import core.storyboard as _sb
+    _avant = _sb.get_namespace()
+    try:
+        _sb.set_namespace("live_seq_live")      # un autre onglet déplace l'état global
+        _sel._pin_ns()
+        assert _sb.get_namespace() == "live_seq_mapping", \
+            "la bande ne récupère pas sa séquence — elle lira celle d'un autre onglet"
+    finally:
+        _sb.set_namespace(_avant)
+
+    for _nom, _fn in (("_load_shots", TL.StoryboardSelector._load_shots),
+                      ("_clear_last_frame", TL.StoryboardSelector._clear_last_frame)):
+        assert "_pin_ns()" in inspect.getsource(_fn), \
+            (f"{_nom} accède au storyboard sans réaffirmer sa séquence")
+
+    # Le Studio tient la bande informée à CHAQUE bascule de mode.
+    _src = inspect.getsource(TL)
+    assert _src.count("_storyboard.set_namespace(") >= 4, \
+        ("la bande doit être resynchronisée à la construction, au showEvent, au "
+         "changement de mode ET au refresh — sinon elle dérive à nouveau")
+    _sel_shot = inspect.getsource(TL.TabT2V._on_shot_selected_impl)
+    assert "sb_api.set_namespace(" in _sel_shot and "list_shots()" in _sel_shot, \
+        ("la liste passée au raccord est lue sans fixer la séquence — c'est ce qui "
+         "faisait remonter le raccord au plan 1")
+
+    # ── 2. Le raccord prend bien le plan IMMÉDIATEMENT précédent ─────────────
+    _bar = TL._ContinuityBar()
+    _complet = [{"number": n} for n in range(1, 11)]
+    _bar.update_shot({"number": 4}, _complet)
+    assert _bar._prev_shot["number"] == 3, \
+        ("sur une liste complète le précédent du plan 4 est le plan 3",
+         _bar._prev_shot)
+    # Et sur une liste TRONQUÉE il se trompe — c'est précisément le symptôme
+    # observé, donc la preuve que la cause est bien la liste et pas le calcul.
+    _bar.update_shot({"number": 4}, [{"number": 1}, {"number": 4},
+                                     {"number": 5}, {"number": 6}])
+    assert _bar._prev_shot["number"] == 1, \
+        "le symptôme n'est plus reproductible — ce test ne prouve plus rien"
+
+    # ── 3. La rangée du raccord n'a plus ses widgets flottants ───────────────
+    _bar2 = TL._ContinuityBar()
+    _bar2.resize(1400, 90)
+    _bar2._i2v_thumb.setVisible(True)
+    _bar2._i2v_row_widget.setVisible(True)
+    _bar2.setVisible(True)
+    _bar2.grab()                       # force le calcul de layout
+    _lay = _bar2._i2v_row_widget.layout()
+    _x_icone = _lay.itemAt(0).widget().geometry().x()
+    _x_thumb = _bar2._i2v_thumb.geometry().x()
+    assert _x_icone < 60 and _x_thumb < 120, \
+        ("icône et vignette flottent au milieu de la barre : la case masquée garde "
+         "son facteur d'étirement", _x_icone, _x_thumb)
+    assert _bar2._i2v_caption.text(), \
+        "la vignette n'est accompagnée d'aucune légende — on ne sait pas ce qu'elle montre"
+    from core.i18n import _FR_TO_EN
+    assert any("dernière frame du plan précédent" in k for k in _FR_TO_EN), \
+        "légende du raccord non traduite"
+
+
 if __name__ == "__main__":
     sys.exit(main())

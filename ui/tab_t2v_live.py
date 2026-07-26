@@ -1179,6 +1179,21 @@ class StoryboardSelector(QWidget):
         self._selected_shot_ids: set[str]      = set()
         self._shot_cards:        dict[str, _ThumbCard] = {}
         self._shots_meta:        dict[str, dict]       = {}
+        # Séquence que CETTE bande représente. core.storyboard.set_namespace est un
+        # état GLOBAL de module : le Sound Design Live l'écrit avec SON mode à lui
+        # (ui/tab_sound_design_live.py) et ne le restaure pas. La bande lisait donc
+        # parfois une autre séquence que celle affichée — d'où des plans qui
+        # disparaissent, et un raccord qui remonte au mauvais plan précédent.
+        # Bug rapporté par Matthieu le 2026-07-27, avec son propre contournement
+        # comme preuve : changer d'onglet et revenir rappelle showEvent, qui
+        # repose le namespace et fait réapparaître les plans.
+        # On ADOPTE la séquence active à la construction plutôt que d'en imposer
+        # une : le propriétaire la précise juste après, et une bande construite
+        # dans un autre contexte continue de lire ce qu'elle doit lire.
+        try:
+            self._ns = sb_api.get_namespace() or "live_seq_live"
+        except Exception:
+            self._ns = "live_seq_live"
 
         lay = QVBoxLayout(self)
         lay.setContentsMargins(0, 0, 0, 0)
@@ -1283,7 +1298,23 @@ class StoryboardSelector(QWidget):
             self.shot_selected.emit({})
             self.shots_selected.emit(shots_list)
 
+    def set_namespace(self, ns: str):
+        """Fixe la séquence que cette bande représente (« live_seq_live/mapping »)."""
+        self._ns = ns or "live_seq_live"
+
+    def _pin_ns(self):
+        """Réaffirme le namespace de CETTE bande avant tout accès au storyboard.
+
+        Défensif et volontairement répété : n'importe quel autre onglet peut
+        l'avoir déplacé entre deux actions, sans prévenir et sans le restaurer.
+        """
+        try:
+            sb_api.set_namespace(self._ns)
+        except Exception:
+            pass
+
     def _load_shots(self):
+        self._pin_ns()
         while self._hbox.count():
             it = self._hbox.takeAt(0)
             if it.widget():
@@ -1392,6 +1423,10 @@ class StoryboardSelector(QWidget):
         ce qui casse la dérive cumulative). Retire les références du plan ET supprime
         les fichiers de frames — sinon la récupération par convention les rappellerait
         aussitôt. Les frames sont réécrites à la prochaine génération du plan."""
+        # Sans ce pin, get_shot/save_shot travailleraient sur la séquence d'un AUTRE
+        # onglet : la vignette semblait effacée mais l'écriture partait ailleurs, et
+        # la bande se rechargeait sur la mauvaise liste.
+        self._pin_ns()
         shot = sb_api.get_shot(shot_id) or self._shots_meta.get(shot_id)
         # Peut exister par convention même si les champs sont vides → on tente quand même.
         if shot:
@@ -1547,8 +1582,12 @@ class _ContinuityBar(QFrame):
             f"border:1px solid {C['border_bright']};}}"
             f"QCheckBox::indicator:checked{{background:{C['accent']};border-color:{C['accent']};}}"
         )
-        i2v_inner.addWidget(self._i2v_cb, 1)
-        # Doublon avec « Raccord automatique » (RENDU & AUDIO) → masqué.
+        # Facteur d'étirement RETIRÉ (2026-07-27) : la case est masquée en
+        # permanence (doublon de « Raccord automatique » dans RENDU & AUDIO), mais
+        # son item de layout gardait le stretch et écartait l'icône de la vignette
+        # — mesuré à 456 px et 910 px dans une barre de 1400. D'où deux widgets
+        # flottant au milieu du vide, sans rien pour les expliquer.
+        i2v_inner.addWidget(self._i2v_cb)
         self._i2v_cb.setVisible(False)
 
         self._i2v_thumb = QLabel()
@@ -1559,6 +1598,14 @@ class _ContinuityBar(QFrame):
         )
         self._i2v_thumb.setVisible(False)
         i2v_inner.addWidget(self._i2v_thumb)
+
+        # La vignette seule ne disait pas ce qu'elle montrait.
+        self._i2v_caption = QLabel(translate("dernière frame du plan précédent"))
+        self._i2v_caption.setStyleSheet(
+            f"color:{C['text_dim']};font-size:10px;background:transparent;border:none;"
+        )
+        i2v_inner.addWidget(self._i2v_caption)
+        i2v_inner.addStretch(1)
 
         outer.addWidget(self._i2v_row_widget)
 
@@ -2546,6 +2593,7 @@ class TabT2V(QScrollArea):
         import core.storyboard as _sb_init
         _sb_init.set_namespace("live_seq_live")
         self._storyboard = StoryboardSelector()
+        self._storyboard.set_namespace("live_seq_live")
         self._storyboard.shot_selected.connect(self._on_shot_selected)
         self._storyboard.shots_selected.connect(self._on_shots_selected)
         lay.addWidget(self._storyboard)
@@ -3172,7 +3220,15 @@ class TabT2V(QScrollArea):
             self._shot_desc_lbl.setVisible(False)
             self._shot_desc_lbl.setText("")
 
-        # Update raccord bar with all shots in the current storyboard
+        # Update raccord bar with all shots in the current storyboard.
+        # Namespace réaffirmé avant lecture (2026-07-27) : sur une liste tronquée
+        # par un namespace déplacé, le « plan précédent » du plan 4 devenait le
+        # plan 1 — et le raccord repartait de la frame du plan 1. Symptôme exact
+        # rapporté par Matthieu ; même cause que les plans qui disparaissent.
+        try:
+            sb_api.set_namespace(f"live_seq_{getattr(self, '_seq_mode', 'live')}")
+        except Exception:
+            pass
         all_shots = sb_api.list_shots()
         self._continuity_bar.update_shot(shot, all_shots)
 
@@ -3752,6 +3808,8 @@ class TabT2V(QScrollArea):
         try:
             import core.storyboard as _sb
             _sb.set_namespace(f"live_seq_{getattr(self, '_seq_mode', 'live')}")
+            self._storyboard.set_namespace(
+                f"live_seq_{getattr(self, '_seq_mode', 'live')}")
             self._storyboard.refresh()
         except Exception:
             pass
@@ -5227,6 +5285,7 @@ class TabT2V(QScrollArea):
         _sb.set_namespace(f"live_seq_{self._seq_mode}")
         self._apply_seq_style()
         if hasattr(self, "_storyboard"):
+            self._storyboard.set_namespace(f"live_seq_{self._seq_mode}")
             self._storyboard.refresh()
         if hasattr(self, "_ref_mode_banner"):
             self._update_injection_banner()
@@ -5351,6 +5410,8 @@ class TabT2V(QScrollArea):
         import core.storyboard as _sb
         _sb.set_namespace(f"live_seq_{getattr(self, '_seq_mode', 'live')}")
         self._casting.refresh()
+        self._storyboard.set_namespace(
+            f"live_seq_{getattr(self, '_seq_mode', 'live')}")
         self._storyboard.refresh()
         self._camera_picker.refresh()
         self._refresh_style_badge()
