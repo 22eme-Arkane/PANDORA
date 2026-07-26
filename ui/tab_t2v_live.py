@@ -2592,7 +2592,12 @@ class TabT2V(QScrollArea):
             f"background:transparent;border:none;"
         )
         _dur_outer.addWidget(_dur_lbl_w)
-        self.cb_dur = combo(["4 s", "5 s", "8 s", "10 s", "12 s", "15 s"])
+        # 3, 6 et 7 s ajoutées le 2026-07-26 : une barre de 8 temps tombe souvent
+        # sur ces valeurs (3,4 s à 140 BPM · 6,0 s à 80 BPM · 6,9 s à 70 BPM) et
+        # l'arrondi vers l'option la plus proche coûtait jusqu'à une seconde
+        # entière — soit deux temps de décalage sur la grille.
+        self.cb_dur = combo(["3 s", "4 s", "5 s", "6 s", "7 s", "8 s",
+                             "10 s", "12 s", "15 s"])
         self.cb_dur.setFixedWidth(100)
         _dur_outer.addWidget(self.cb_dur)
         self._dur_lock_lbl = QLabel("")
@@ -4136,7 +4141,7 @@ class TabT2V(QScrollArea):
 
     # ── Generation ────────────────────────────────────────────────────────────
 
-    _DUR_OPTIONS = [4, 5, 8, 10, 12, 15]
+    _DUR_OPTIONS = [3, 4, 5, 6, 7, 8, 10, 12, 15]
 
     def _get_duration(self) -> int:
         idx = self.cb_dur.currentIndex()
@@ -4929,11 +4934,24 @@ class TabT2V(QScrollArea):
         # EXACTEMENT la durée du plan : plus de dérive cumulée en timeline
         # (DaVinci) et les cuts restent sur les drops. Première/dernière frame
         # préservées → raccords par keyframes intacts.
+        # La cible est la durée EXACTE de la barre quand le plan la porte
+        # (`duration_exact`, écrit par le découpage qui connaît BPM et nombre de
+        # temps). Correctif 2026-07-26 : jusqu'ici on passait `duration`, que
+        # core.music_align.conform_durations_to_set a déjà arrondi à l'entier —
+        # le retime recevait donc la valeur arrondie et ne pouvait pas corriger
+        # l'arrondi. Il rattrapait seulement l'imprécision du moteur, jamais le
+        # décalage musical pour lequel il a été écrit. Repli sur l'entier tant
+        # qu'un plan ne porte pas encore sa durée exacte.
         if local_path and self._active_shot:
             try:
-                _target = float(self._active_shot.get("duration", 0) or 0)
+                _target = float(self._active_shot.get("duration_exact", 0) or 0)
             except (TypeError, ValueError):
                 _target = 0.0
+            if _target <= 0:
+                try:
+                    _target = float(self._active_shot.get("duration", 0) or 0)
+                except (TypeError, ValueError):
+                    _target = 0.0
             if _target > 0:
                 try:
                     from core.video_conform import conform_clip

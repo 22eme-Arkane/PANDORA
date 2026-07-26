@@ -4668,5 +4668,72 @@ def studio_live_prompt_final_wysiwyg_et_cache():
         _ap.complete, _ap.key_error = _vrai_c, _vrai_k
 
 
+@test
+def duree_de_barre_atteint_le_recalage_ffmpeg():
+    """Le retime ffmpeg reçoit la durée EXACTE de la barre, pas l'entier arrondi.
+
+    Constat du 2026-07-26, en préparant le branchement de core/live_bar : le
+    recalage `core.video_conform.conform_clip` était bien branché, mais on lui
+    passait `shot["duration"]`, que `core.music_align.conform_durations_to_set`
+    a déjà écrit en ENTIER (`s["duration"] = int(d)`). Sa cible était donc la
+    valeur arrondie : il ne pouvait corriger que l'imprécision du moteur, jamais
+    l'arrondi musical pour lequel il a été écrit. Sa propre docstring cite
+    « 5.625 s à 128 BPM » — un nombre qui n'atteignait jamais la fonction.
+
+    Le plan porte désormais `duration_exact` (clé propre au Live : save_shot
+    conserve les clés inconnues, le schéma Cinéma n'est pas touché).
+    """
+    import inspect
+    import ui.tab_t2v_live as TL
+    from core.live_bar import bar_duration
+    from core.music_align import conform_durations_to_set
+    from core.video_conform import MAX_DEVIATION, MIN_DELTA_S
+
+    # 1. Le constat qui motive le correctif : la conformation écrit des ENTIERS.
+    _segs = [{"duration": 3.4}, {"duration": 4.6}, {"duration": 5.1}]
+    conform_durations_to_set(_segs, 20)
+    assert all(isinstance(s["duration"], int) for s in _segs), \
+        "conform_durations_to_set n'arrondit plus — ce test n'a plus d'objet"
+
+    # 2. La cible du retime vient de `duration_exact` en priorité.
+    _src = inspect.getsource(TL.TabT2V.on_finished)
+    assert '"duration_exact"' in _src, \
+        ("le recalage reçoit encore la durée arrondie — il ne peut alors corriger "
+         "que l'imprécision du moteur, pas le décalage musical")
+    assert _src.index('"duration_exact"') < _src.index('"duration", 0'), \
+        "la durée exacte doit être essayée AVANT l'entier, pas après"
+
+    # 3. Le sélecteur offre les durées que produisent les barres courantes.
+    for _bpm, _attendu in ((140, 3), (80, 6), (70, 7)):
+        _d = round(bar_duration(_bpm, 8))
+        assert _d in TL.TabT2V._DUR_OPTIONS, \
+            (f"une barre de 8 temps à {_bpm} BPM fait {bar_duration(_bpm, 8):.2f}s "
+             f"→ {_d}s, absent du sélecteur : arrondi vers une autre valeur")
+    # Le libellé du combo et la liste de valeurs doivent rester alignés : c'est
+    # l'INDEX qui sert de valeur, un décalage enverrait une autre durée.
+    _init = inspect.getsource(TL.TabT2V.__init__)
+    for _d in TL.TabT2V._DUR_OPTIONS:
+        assert f'"{_d} s"' in _init, \
+            (f"la durée {_d}s est dans _DUR_OPTIONS mais absente du combo — "
+             "l'index ne correspond plus à la valeur envoyée")
+    assert len(TL.TabT2V._DUR_OPTIONS) == len(set(TL.TabT2V._DUR_OPTIONS)), \
+        "doublon dans les durées"
+    assert TL.TabT2V._DUR_OPTIONS == sorted(TL.TabT2V._DUR_OPTIONS), \
+        "les durées doivent rester croissantes — l'index sert de valeur"
+
+    # 4. Ce que le retime peut effectivement rattraper, tempo par tempo. Sert de
+    # documentation exécutable : à 140 BPM l'écart reste hors tolérance, et c'est
+    # assumé (un retime de 12,5 % s'entendrait et se verrait).
+    _hors = []
+    for _bpm in (96, 118, 128, 140, 174):
+        _exact = bar_duration(_bpm, 8)
+        _envoye = max(1, round(_exact))
+        if abs(_envoye - _exact) / _exact > MAX_DEVIATION:
+            _hors.append(_bpm)
+    assert _hors == [140], \
+        ("la couverture du recalage a changé — vérifier avant de l'accepter", _hors)
+    assert MIN_DELTA_S < 0.1, "seuil de non-action trop haut"
+
+
 if __name__ == "__main__":
     sys.exit(main())
