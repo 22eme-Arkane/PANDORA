@@ -12,11 +12,16 @@ visuel). Il suffit de les ASSEMBLER dans l'ordre qu'attend chaque moteur. C'est 
 que fait ce module : aucun appel réseau, aucun modèle, sortie reproductible.
 
 Le corps du plan (la section action) est repris MOT POUR MOT. Rien n'est réécrit.
+
+⚠ Ce module ne parle QU'À `core/live_grammar` (2026-07-26). Il n'importe plus
+`core/engine_grammar` en direct : c'est ce qui permet de retoucher la grammaire du
+Live sans jamais ouvrir un fichier dont dépend le Cinéma.
 """
 
 from __future__ import annotations
 
-from core.engine_grammar import grammar_for, strip_ip_names
+from core.live_grammar import (allows_camera, enforce_mode, grammar_for,
+                               strip_names)
 
 
 def _clean(text: str) -> str:
@@ -30,13 +35,18 @@ def _join_sentences(parts: list) -> str:
 
 
 def assemble(body: str, *, engine_key: str = "", camera_bits: list | None = None,
-             style: str = "", extras: list | None = None) -> tuple:
+             style: str = "", extras: list | None = None,
+             mode: str = "live") -> tuple:
     """Prompt final Live, écrit dans la grammaire du moteur. DÉTERMINISTE.
 
     `body`        — corps du plan, déjà aplati et traduit (repris tel quel) ;
     `camera_bits` — termes caméra du plan (core.shot_terms.camera_terms) ;
     `style`       — style visuel (projet + note de réalisation) ;
-    `extras`      — suffixes techniques déjà anglais (ADN mapping, « no music »…).
+    `extras`      — suffixes techniques déjà anglais (ADN mapping, « no music »…) ;
+    `mode`        — « live » ou « mapping ». En MAPPING la caméra est verrouillée :
+                    les termes caméra sont écartés ici même, et les champs interdits
+                    (Camera / Lighting / Sound / Music) sont retirés en bout de
+                    chaîne. Le cadre est boulonné, il ne se négocie pas au moteur.
 
     Retourne (prompt_final, noms_d_IP_retirés). Les noms de studios/franchises sont
     retirés partout — un moteur les refuse ou les imite mal, seuls les descripteurs
@@ -44,6 +54,8 @@ def assemble(body: str, *, engine_key: str = "", camera_bits: list | None = None
     """
     body = _clean(body)
     cam = [c for c in (camera_bits or []) if _clean(c)]
+    if not allows_camera(mode):
+        cam = []
     style = _clean(style)
     extras = [e for e in (extras or []) if _clean(e)]
     grammar = grammar_for(engine_key)
@@ -88,10 +100,13 @@ def assemble(body: str, *, engine_key: str = "", camera_bits: list | None = None
             parts.append(style)
         final = _join_sentences(parts)
 
-    return strip_ip_names(final)
+    # Filet de bout de chaîne : ce que le mode interdit ne part pas, même si un
+    # appelant distrait l'avait glissé dans `body` ou dans `extras`.
+    final, _ = enforce_mode(final, mode)
+    return strip_names(final)
 
 
 def describe(engine_key: str) -> str:
     """Libellé de la grammaire appliquée, pour l'affichage « Éléments injectés »."""
-    from core.engine_grammar import grammar_label
+    from core.live_grammar import grammar_label
     return grammar_label(engine_key)

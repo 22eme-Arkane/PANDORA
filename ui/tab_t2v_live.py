@@ -3474,7 +3474,9 @@ class TabT2V(QScrollArea):
         # approximation. Déterministe, aucun appel IA.
         try:
             from core.live_prompt import assemble as _assemble_prev
-            fp, self._last_ip_removed = _assemble_prev(fp, engine_key=self._get_model())
+            fp, self._last_ip_removed = _assemble_prev(
+                fp, engine_key=self._get_model(),
+                mode=getattr(self, "_seq_mode", "live"))
         except Exception:
             pass
 
@@ -4170,7 +4172,8 @@ class TabT2V(QScrollArea):
         try:
             from core.live_prompt import assemble as _assemble
             full_prompt, self._last_ip_removed = _assemble(
-                full_prompt, engine_key=self._get_model())
+                full_prompt, engine_key=self._get_model(),
+                mode=getattr(self, "_seq_mode", "live"))
         except Exception:
             self._last_ip_removed = []
 

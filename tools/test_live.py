@@ -4245,5 +4245,136 @@ def coecriture_anti_perte_live():
         "alerte tokens Live traduite"
 
 
+@test
+def grammaire_live_separee():
+    """La grammaire du Live est SÉPARÉE de celle du Cinéma (demande Matthieu
+    2026-07-26 : « est-ce que c'est possible de les séparer pour que ça ne touche
+    pas Cinéma quand on travaille sur Live ? »).
+
+    Le partage était réel : `core/live_prompt` importait `core/engine_grammar`, un
+    fichier dont dépend tout l'envoi Cinéma. Une correction motivée par un plan
+    Live s'y écrivait donc directement — c'est arrivé.
+
+    La séparation retenue ne duplique PAS la table moteur→forme (Seedance lit des
+    champs des deux côtés ; deux tables divergeraient). Elle sépare le VOCABULAIRE,
+    là où Cinéma et Live sont en opposition frontale : `Camera:`, `Lighting:` et
+    `Sound:` sont les champs du Cinéma et les trois interdits du mapping.
+    """
+    import ast
+    import glob
+    import inspect
+    import core.live_grammar as LG
+    import ui.tab_t2v_live as _TL
+    from core.live_prompt import assemble
+
+    def _lire(path):
+        # utf-8-SIG : plusieurs sources du dépôt portent un BOM, et ast.parse le
+        # refuse (« invalid non-printable character U+FEFF »).
+        with open(path, encoding="utf-8-sig") as fh:
+            return fh.read()
+
+    def _code_seul(path):
+        """Code pur : sans commentaires ni docstrings.
+
+        Indispensable — `engine_grammar.py` porte des commentaires qui PARLENT du
+        Live (l'historique d'un correctif). Un test qui cherche le mot dans le
+        texte brut se déclencherait sur ces commentaires et ne prouverait rien :
+        piège tombé quatre fois dans ce harnais.
+        """
+        tree = ast.parse(_lire(path))
+        for n in ast.walk(tree):
+            if isinstance(n, (ast.Module, ast.FunctionDef,
+                              ast.AsyncFunctionDef, ast.ClassDef)):
+                if ast.get_docstring(n) is not None:
+                    n.body = n.body[1:] or [ast.Pass()]
+        return ast.unparse(tree)
+
+    _ROOT_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
+    # 1. TRIPWIRE — le fichier partagé ne contient aucun code propre au Live.
+    _eg = _code_seul(os.path.join(_ROOT_DIR, "core", "engine_grammar.py")).lower()
+    assert "façon" in _eg, \
+        "le code d'engine_grammar n'a pas été lu — test sans valeur"
+    for _mot in ("mapping", "façade", "facade", "bpm", "sparkline",
+                 "vidéoprojecteur", "live_bar", "live_grammar"):
+        assert _mot not in _eg, \
+            (f"vocabulaire Live « {_mot} » dans core/engine_grammar.py — "
+             "il doit aller dans core/live_grammar.py, dont le Cinéma ne dépend pas")
+
+    # 2. Aucun module Live n'importe le fichier partagé en direct.
+    _lives = [p for p in glob.glob(os.path.join(_ROOT_DIR, "**", "*live*.py"),
+                                   recursive=True)
+              if os.sep + "tools" + os.sep not in p]
+    assert len(_lives) >= 5, ("trop peu de modules Live trouvés", len(_lives))
+    for _p in _lives:
+        if os.path.basename(_p) == "live_grammar.py":
+            continue          # LE point de passage autorisé, et le seul
+        _mods = set()
+        for _n in ast.walk(ast.parse(_lire(_p))):
+            if isinstance(_n, ast.ImportFrom):
+                _mods.add(_n.module or "")
+            elif isinstance(_n, ast.Import):
+                _mods.update(a.name for a in _n.names)
+        assert "core.engine_grammar" not in _mods, \
+            (f"{os.path.basename(_p)} importe core.engine_grammar en direct — "
+             "passer par core.live_grammar pour que le Cinéma reste hors de portée")
+
+    # 3. La table moteur→forme n'est PAS dupliquée : elle est déléguée.
+    from core.engine_grammar import grammar_for as _cine_shape
+    for _k in ("seedance-2.0", "veo-3.1", "kling-o3-4k", "ltx-2", ""):
+        assert LG.grammar_for(_k) == _cine_shape(_k), \
+            (f"la forme attendue par « {_k} » a divergé entre Live et Cinéma — "
+             "c'est un fait constructeur, il ne doit exister qu'une fois")
+
+    # 4. Le VOCABULAIRE, lui, diffère vraiment (garde anti-tautologie).
+    from core.engine_grammar import format_rules as _cine_rules
+    _cr = _cine_rules("seedance-2.0")
+    assert "Camera:" in _cr and "Sound:" in _cr, \
+        "le Cinéma n'impose plus Camera:/Sound: — le test ne compare plus rien"
+    _lr = LG.format_rules("seedance-2.0", mode="mapping")
+    for _interdit in ("Camera:", "Sound:", "Lighting:"):
+        assert _interdit not in _lr, \
+            (f"la consigne de mapping propose « {_interdit} » — "
+             "caméra boulonnée, lumière projetée, son = le set")
+    assert "Surface:" in _lr and "Black:" in _lr, "champs propres au mapping absents"
+    assert "Camera" not in LG.fields_for("mapping"), "Camera autorisé en mapping"
+    assert "Camera" in LG.fields_for("live"), "Camera interdit hors mapping"
+    assert not LG.allows_camera("mapping"), "caméra autorisée en mapping"
+    assert LG.allows_sound("live"), "son interdit hors mapping"
+
+    # 5. Comportement : en mapping la caméra n'atteint PAS le moteur.
+    _cam = ["slow dolly in", "handheld"]
+    _corps = "the frost thickens across the stone"
+    _live, _ = assemble(_corps, engine_key="seedance-2.0", camera_bits=_cam,
+                        mode="live")
+    assert "dolly" in _live, \
+        "hors mapping les termes caméra doivent passer — sinon test sans valeur"
+    _map, _ = assemble(_corps, engine_key="seedance-2.0", camera_bits=_cam,
+                       mode="mapping")
+    assert "dolly" not in _map and "handheld" not in _map, \
+        "termes caméra partis au moteur en mapping — le cadre est verrouillé"
+    assert _corps in _map, "le corps du plan doit passer mot pour mot"
+
+    # 6. Filet de bout de chaîne : un champ interdit glissé dans le corps saute.
+    _sale = _corps + "\nCamera: slow push in\nSound: deep drone\nStyle: engraving"
+    _net, _ = LG.enforce_mode(_sale, "mapping")
+    assert "Camera:" not in _net and "Sound:" not in _net, \
+        "champ interdit non filtré en mapping"
+    assert "Style: engraving" in _net, "le filet a mangé un champ autorisé"
+    _garde, _ = LG.enforce_mode(_sale, "live")
+    assert "Camera: slow push in" in _garde, \
+        "le filet mapping s'applique hors mapping — il déborde"
+
+    # 7. Le mode par défaut ne change RIEN à l'existant.
+    assert assemble(_corps, engine_key="veo-3.1")[0] == \
+           assemble(_corps, engine_key="veo-3.1", mode="live")[0], \
+        "le mode par défaut n'est plus « live » — régression silencieuse"
+
+    # 8. L'UI passe bien le mode réel de la séquence aux deux endroits.
+    _src = inspect.getsource(_TL)
+    assert _src.count('mode=getattr(self, "_seq_mode", "live")') >= 2, \
+        "l'aperçu ou l'envoi n'informe pas l'assemblage du mode de séquence"
+
+
 if __name__ == "__main__":
     sys.exit(main())
