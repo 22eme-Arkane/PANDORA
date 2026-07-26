@@ -3371,8 +3371,22 @@ class TabT2V(QScrollArea):
                 _add(get_building_ref())
             except Exception:
                 pass
-        if getattr(self, "_mood_ref_cb", None) and self._mood_ref_cb.isChecked():
-            _add(getattr(self, "_active_mood_path", ""))
+        # Le MOOD du plan. Il était lu ici via « _mood_ref_cb » et
+        # « _active_mood_path » — deux attributs qui n'existent NULLE PART dans le
+        # fichier : la condition valait toujours faux et le mood n'apparaissait
+        # jamais dans la bande, alors qu'il part bel et bien comme image de départ.
+        # Constat de Matthieu le 2026-07-27 : « je vois la façade et les trois
+        # images de référence, mais pas l'image du mood ». Corrigé en lisant la
+        # VRAIE option (« Utiliser les images du Mood ») et le VRAI mood actif.
+        if (getattr(self, "_seq_mode", "live") == "mapping"
+                and ((not hasattr(self, "_use_mood_cb"))
+                     or self._use_mood_cb.isChecked())
+                and self._active_shot):
+            try:
+                _kf, _ = self._get_mapping_keyframes(self._active_shot)
+                _add(_kf)
+            except Exception:
+                pass
         for p in (self._active_shot or {}).get("reference_images", [])[:3]:
             _add(p)
         return paths
@@ -4096,6 +4110,37 @@ class TabT2V(QScrollArea):
                     "⚠ Noms retirés du prompt (le moteur les refuse ou les imite "
                     "mal) : " + ", ".join(_ips))
 
+        # ── Ce qui ANCRE réellement le plan ───────────────────────────────────
+        # Deux options peuvent fournir l'image de départ, et une seule gagne.
+        # Tant que ce n'était pas écrit, « Utiliser les images du Mood » pouvait
+        # rester cochée sans rien faire, et le rendu ne ressemblait pas au Mood
+        # sans qu'on sache pourquoi.
+        if getattr(self, "_seq_mode", "live") == "mapping" and self._active_shot:
+            _mood_on = ((not hasattr(self, "_use_mood_cb"))
+                        or self._use_mood_cb.isChecked())
+            _raccord_on = bool(getattr(self, "_raccord_auto_cb", None)
+                               and self._raccord_auto_cb.isChecked())
+            if _mood_on:
+                try:
+                    _kf, _ = self._get_mapping_keyframes(self._active_shot)
+                except Exception:
+                    _kf = ""
+                if _kf:
+                    param_lines.append(
+                        translate("⚓ Image de départ : le Mood du plan")
+                        + f" — {os.path.basename(_kf)}")
+                    if _raccord_on:
+                        param_lines.append(translate(
+                            "   (le Mood est prioritaire sur le raccord automatique "
+                            "— décochez-le pour repartir de la frame précédente)"))
+                else:
+                    param_lines.append(translate(
+                        "⚠ « Utiliser les images du Mood » est coché mais ce plan "
+                        "n'a aucun Mood — génère-le d'abord"))
+            elif _raccord_on:
+                param_lines.append(translate(
+                    "⚓ Image de départ : la dernière frame du plan précédent"))
+
         # ── Verdict de la composition ─────────────────────────────────────────
         # Ce qui a été fait au prompt doit se lire ici, sinon un repli silencieux
         # passe pour un bug de l'application.
@@ -4579,6 +4624,14 @@ class TabT2V(QScrollArea):
                     if hasattr(self, "_spinbox_repeat") else 1
                 )
 
+        # Toute la chaîne d'envoi lit des plans, des frames et des moods, tous rangés
+        # SOUS le dossier de la séquence. Un autre onglet peut avoir déplacé le
+        # namespace global entre-temps : on le repose avant de rien lire.
+        try:
+            sb_api.set_namespace(f"live_seq_{getattr(self, '_seq_mode', 'live')}")
+        except Exception:
+            pass
+
         prompt = self.prompt_ta.toPlainText().strip()
         if not prompt:
             QMessageBox.warning(self, "Prompt vide", "Écris un prompt avant de générer !")
@@ -4849,8 +4902,16 @@ class TabT2V(QScrollArea):
         # Pas d'end_image_url : Seedance 2.0 image-to-video ne l'exploite pas
         # (start+end frame = feature Seedance 1.5 Pro) ; l'envoyer ne faisait rien
         # et écrasait le raccord. Le plan s'écoule librement depuis sa frame de départ.
+        # PRIORITÉ AU MOOD (correctif 2026-07-27). Le « not i2v_frame » qui gardait
+        # ce bloc donnait la main au raccord automatique — lequel est FORCÉ coché en
+        # mapping. Résultat : sauf pour le tout premier plan, le Mood n'atteignait
+        # jamais le moteur, alors que sa case était cochée et que son libellé promet
+        # « le Mood du plan sert d'images-clés ». L'option ne faisait rien.
+        # Le raccord depuis la dernière frame reste accessible : il suffit de
+        # décocher « Utiliser les images du Mood ».
+        self._anchor_kind = "raccord" if i2v_frame else ""
         if (getattr(self, "_seq_mode", "live") == "mapping" and self._active_shot
-                and _use_mood and not i2v_frame):
+                and _use_mood):
             kf_start, _ = self._get_mapping_keyframes(self._active_shot)
             if kf_start:
                 # Confinement façade : mood masqué (noir pur hors silhouette) avant
@@ -4862,7 +4923,8 @@ class TabT2V(QScrollArea):
                 _bref = get_building_ref()
                 if _bref:
                     kf_start = masked_keyframe(kf_start, _bref, get_data_root())
-                i2v_frame = kf_start   # ancrage du 1er plan uniquement
+                i2v_frame = kf_start
+                self._anchor_kind = "mood"
 
         params = {
             "mode":                    "i2v" if i2v_frame else "t2v",
@@ -5371,7 +5433,20 @@ class TabT2V(QScrollArea):
 
     def _get_mapping_keyframes(self, shot: dict) -> tuple[str, str]:
         """Raccord par images-clés (Mapping) : mood actif du plan = image de DÉBUT,
-        mood actif du plan SUIVANT = image de FIN. Renvoie ("", "") si pas de mood."""
+        mood actif du plan SUIVANT = image de FIN. Renvoie ("", "") si pas de mood.
+
+        Le namespace est réaffirmé (2026-07-27) : les moods sont rangés SOUS le
+        dossier de la séquence (core.storyboard.get_apercu_dir → _sb_dir →
+        _NAMESPACE). Un namespace déplacé par un autre onglet faisait chercher les
+        moods du Mapping dans le dossier du Live — aucun trouvé, donc aucune
+        image-clé, donc un envoi en t2v où le Mood n'atteignait jamais le moteur.
+        C'est ce que Matthieu a constaté : façade + références envoyées, Mood absent.
+        """
+        try:
+            sb_api.set_namespace(f"live_seq_{getattr(self, '_seq_mode', 'live')}")
+        except Exception:
+            pass
+
         def _active_mood(s: dict) -> str:
             try:
                 ap = sb_api.load_apercus(s.get("id", ""))

@@ -2195,6 +2195,13 @@ _FR_TO_EN: dict[str, str] = {
     "J'ai analysé votre conducteur et rédigé des suggestions détaillées (visibles dans l'onglet « Analyse initiale »).\n\nDites-moi ce que vous souhaitez modifier, affiner ou conserver — je produirai alors une version remaniée de votre conducteur en direct. Nous pouvons itérer autant de fois que nécessaire.": "I've analyzed your rundown and written detailed suggestions (visible in the « Initial analysis » tab).\n\nTell me what you'd like to change, refine or keep — I'll then produce a reworked version of your rundown live. We can iterate as many times as needed.",
     "🎵 J'ai aussi l'analyse musicale de votre set (durée, BPM, courbe d'énergie et temps forts de chaque morceau) : demandez-moi directement de caler le conducteur dessus.": "🎵 I also have the musical analysis of your set (duration, BPM, energy curve and peaks of each track): just ask me to sync the rundown to it.",
     "dernière frame du plan précédent": "last frame of the previous shot",
+    "⚓ Image de départ : le Mood du plan": "⚓ Start image: the shot's Mood",
+    "   (le Mood est prioritaire sur le raccord automatique — décochez-le pour repartir de la frame précédente)":
+        "   (the Mood takes priority over the automatic match cut — uncheck it to start from the previous frame)",
+    "⚠ « Utiliser les images du Mood » est coché mais ce plan n'a aucun Mood — génère-le d'abord":
+        "⚠ « Use the Mood images » is checked but this shot has no Mood — generate one first",
+    "⚓ Image de départ : la dernière frame du plan précédent":
+        "⚓ Start image: the last frame of the previous shot",
     # Refus de rognage façade — message diagnostique (2026-07-26).
     "Impossible de tirer un masque de la façade de référence.":
         "Could not derive a mask from the reference facade.",

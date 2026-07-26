@@ -1206,12 +1206,22 @@ def t2v_live_keyframes_mapping():
         "consigne de respect strict de la façade quand la case est décochée"
     assert 'ref_image_roles + ["facade"]' in _sg, \
         "façade toujours envoyée en référence (rôle facade) en mapping"
-    # RACCORD « dernière image réelle » (choix Matthieu 2026-07-09) : le mood n'ancre
-    # QUE le 1er plan (garde « and not i2v_frame ») — sinon le plan reprend la
-    # dernière frame rendue du plan précédent. Plus d'end_image_url (Seedance 2.0
-    # ne l'exploite pas).
-    assert "and _use_mood and not i2v_frame" in _sg, \
-        "le mood n'ancre que le 1er plan : le raccord dernière-frame a priorité"
+    # PRIORITÉ AU MOOD (révision du 2026-07-27, remplace le choix du 2026-07-09).
+    # L'ancienne garde « and not i2v_frame » donnait la main au raccord automatique,
+    # lequel est FORCÉ coché en mapping : sauf pour le tout premier plan, le Mood
+    # n'atteignait jamais le moteur, alors que sa case était cochée et que son
+    # libellé promet « le Mood du plan sert d'images-clés ». Matthieu l'a constaté
+    # deux fois : rendu très différent du Mood, et Mood absent des images envoyées.
+    # Le raccord depuis la dernière frame reste accessible — case Mood décochée.
+    assert "and not i2v_frame" not in _sg, \
+        ("le raccord automatique reprend la priorité sur le Mood : la case "
+         "« Utiliser les images du Mood » redevient sans effet")
+    assert "_anchor_kind" in _sg, \
+        "l'image qui ancre le plan n'est pas identifiée, donc pas affichable"
+    # Le libellé de la case doit continuer de promettre ce que le code fait.
+    _init = inspect.getsource(TabT2V.__init__)
+    assert "sert d'images-clés" in _init, \
+        "le libellé de l'option ne décrit plus son effet"
     assert "end_frame = kf_end" not in _sg, \
         "end_image_url retiré du mapping (Seedance 2.0 i2v ne l'exploite pas)"
     # Anti-dérive de proportions renforcée dans le prompt mapping (_mapping_dna).
@@ -5100,6 +5110,84 @@ def bande_conducteur_lit_toujours_sa_propre_sequence():
     from core.i18n import _FR_TO_EN
     assert any("dernière frame du plan précédent" in k for k in _FR_TO_EN), \
         "légende du raccord non traduite"
+
+
+@test
+def le_mood_atteint_vraiment_le_moteur():
+    """Le Mood du plan part bien à Seedance, et se voit dans les images envoyées.
+
+    Constaté par Matthieu le 2026-07-27 : « le rendu est très différent de
+    l'image du Mood », puis « je vois la façade et les trois images de référence,
+    mais pas l'image du mood ». DEUX défauts cumulés, tous deux côté Live :
+
+    1. les moods sont rangés SOUS le dossier de la séquence
+       (core.storyboard.get_apercu_dir → _sb_dir → _NAMESPACE). Un namespace
+       déplacé par un autre onglet faisait chercher les moods du Mapping dans le
+       dossier du Live : aucun trouvé, donc aucune image-clé, donc un envoi en
+       t2v où le Mood n'atteignait jamais le moteur ;
+    2. la bande de vignettes testait « _mood_ref_cb » et « _active_mood_path »,
+       deux attributs qui n'existent NULLE PART — la condition valait toujours
+       faux, le Mood n'était jamais affiché parmi les images envoyées.
+    """
+    import core.storyboard as sb
+    from PIL import Image
+    from ui.tab_t2v_live import TabT2V
+
+    sb.set_namespace("live_seq_mapping")
+    sb.clear_version_shots(sb.DEFAULT_VERSION_ID)
+    _shots = [sb.save_shot({"number": i, "scene_title": f"P{i}", "duration": 6},
+                           sb.DEFAULT_VERSION_ID) for i in (1, 2)]
+    for _s in _shots:
+        _ad = sb.get_apercu_dir(_s["id"])
+        os.makedirs(_ad, exist_ok=True)
+        _p = os.path.join(_ad, f"mood_{_s['number']}.jpg")
+        Image.new("RGB", (32, 18), (70, 40, 90)).save(_p)
+        sb.save_apercus(_s["id"], [_p], 0)
+
+    t = TabT2V()
+    t._set_seq_mode("mapping")
+
+    # ── 1. Le mood est trouvé MÊME si un autre onglet a déplacé le namespace ──
+    sb.set_namespace("live_seq_live")          # exactement ce que fait le Sound Design
+    _kf, _ = t._get_mapping_keyframes(_shots[0])
+    assert _kf and _kf.endswith("mood_1.jpg"), \
+        ("le mood n'est pas retrouvé quand le namespace a dérivé — c'est ce qui "
+         "faisait partir le plan en t2v sans mood", _kf)
+    assert sb.get_namespace() == "live_seq_mapping", \
+        "la recherche de mood doit reposer le namespace de la séquence"
+
+    # ── 2. Le mood figure dans les images ANNONCÉES comme envoyées ───────────
+    t._active_shot = _shots[0]
+    _imgs = t._all_reference_images()
+    assert any(p.endswith("mood_1.jpg") for p in _imgs), \
+        ("le Mood n'apparaît pas dans les images envoyées — c'est le constat "
+         "exact de Matthieu", [os.path.basename(p) for p in _imgs])
+
+    # Décoché → il n'y figure plus : la case pilote vraiment quelque chose.
+    t._use_mood_cb.setChecked(False)
+    assert not any(p.endswith("mood_1.jpg") for p in t._all_reference_images()), \
+        "la case « Utiliser les images du Mood » n'a aucun effet sur ce qui est envoyé"
+    t._use_mood_cb.setChecked(True)
+
+    # ── 3. Les attributs fantômes ne doivent pas revenir ─────────────────────
+    _src = inspect.getsource(TabT2V._all_reference_images)
+    for _mort in ("_mood_ref_cb", "_active_mood_path"):
+        _code = "\n".join(l for l in _src.splitlines()
+                          if not l.lstrip().startswith("#"))
+        assert _mort not in _code, \
+            (f"« {_mort} » n'existe nulle part dans le fichier : la condition vaut "
+             "toujours faux et le Mood disparaît à nouveau")
+
+    # ── 4. L'ancrage réel est ANNONCÉ à l'écran ──────────────────────────────
+    _prev = inspect.getsource(TabT2V._build_full_preview_text)
+    assert "Image de départ" in _prev, \
+        ("rien ne dit quelle image ancre le plan : deux options peuvent la fournir "
+         "et une seule gagne")
+    from core.i18n import _FR_TO_EN
+    assert any("Image de départ : le Mood du plan" in k for k in _FR_TO_EN), \
+        "annonce de l'ancrage non traduite"
+
+    sb.set_namespace("storyboard")
 
 
 if __name__ == "__main__":
