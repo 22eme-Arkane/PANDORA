@@ -151,6 +151,8 @@ class ArrangeSessionDialog(QDialog):
         intensity: int = 5,
         mode: str = "live",
         refs_analysis: str = "",
+        music_analysis: str = "",
+        direction_note: str = "",
         session_state: dict | None = None,
     ):
         super().__init__(parent)
@@ -164,6 +166,12 @@ class ArrangeSessionDialog(QDialog):
         self._intensity   = intensity
         self._mode        = mode if mode in ("live", "mapping") else "live"
         self._refs_analysis = refs_analysis or ""
+        # Timeline musicale du set (build_set_timeline) : le chat DOIT l'avoir,
+        # sinon il redemande une analyse déjà faite (2026-07-26).
+        self._music_analysis = music_analysis or ""
+        # Note de réalisation : présente dans l'onglet du Conducteur, elle
+        # n'arrivait pas jusqu'au chat (parité Cinéma, 2026-07-26).
+        self._direction_note = direction_note or ""
         self._history: list[dict] = []
         self._worker      = None
         self._screenplay  = ""          # version remaniée courante (conducteur)
@@ -668,6 +676,21 @@ class ArrangeSessionDialog(QDialog):
             "je produirai alors une version remaniée de votre conducteur en direct. "
             "Nous pouvons itérer autant de fois que nécessaire."
         )
+        # L'IA a la timeline musicale : le DIRE, sinon on la croit aveugle et on
+        # perd un tour à recoller une analyse qu'elle possède déjà (2026-07-26).
+        if self._music_analysis.strip():
+            intro += "\n\n" + translate(
+                "🎵 J'ai aussi l'analyse musicale de votre set (durée, BPM, "
+                "courbe d'énergie et temps forts de chaque morceau) : demandez-moi "
+                "directement de caler le conducteur dessus."
+            )
+        # Idem pour la Note de réalisation — un gabarit vide ne compte pas.
+        from core.direction_note import note_for_ai
+        if note_for_ai(self._direction_note).strip():
+            intro += "\n\n" + translate(
+                "📋 J'ai également votre Note de réalisation : je m'y tiens pour le "
+                "style, le rythme et la durée des plans."
+            )
         self._append_chat_bubble(intro, "claude")
 
     # ── Chat ─────────────────────────────────────────────────────────────────
@@ -717,6 +740,8 @@ class ArrangeSessionDialog(QDialog):
             ref_images=ref_images or [],
             mode=self._mode,
             refs_analysis=self._refs_analysis,
+            music_analysis=self._music_analysis,
+            direction_note=self._direction_note,
             surgical=surgical,
         )
         self._worker.message_ready.connect(self._on_message_ready)
@@ -740,8 +765,11 @@ class ArrangeSessionDialog(QDialog):
 
     def _estimated_session_tokens(self) -> int:
         """Estimation DÉTERMINISTE (≈ caractères / 3,2) du volume renvoyé à l'IA à
-        chaque tour : conducteur + analyse + historique du chat. Aucun appel IA."""
-        n = len(self._original or "") + len(self._analysis or "") + len(self._screenplay or "")
+        chaque tour : conducteur + analyse + direction artistique + timeline
+        musicale + note de réalisation + historique du chat. Aucun appel IA."""
+        n = (len(self._original or "") + len(self._analysis or "")
+             + len(self._screenplay or "") + len(self._refs_analysis or "")
+             + len(self._music_analysis or "") + len(self._direction_note or ""))
         for m in self._history:
             c = m.get("content", "")
             if isinstance(c, str):

@@ -13,7 +13,7 @@ from core.i18n import translate
 from core.visual_identity import (
     identity_matches_image, pending_identity, ready_identity,
 )
-from core.worker import abandon_thread
+from core.worker import abandon_thread, is_running
 from ui.styles import CP
 
 
@@ -37,8 +37,13 @@ def prepare_owner(owner, entity_type: str, item: dict):
     owner._visual_identity_worker = None
 
     def _cleanup():
+        # `destroyed` se déclenche APRÈS la destruction de l'objet C++ : le worker
+        # peut avoir été emporté avec l'arbre Qt. worker.isRunning() levait alors
+        # « RuntimeError: wrapped C/C++ object … has been deleted », remonté en
+        # fenêtre d'erreur à la fermeture du Live (2026-07-26). is_running() est la
+        # version sûre ; abandon_thread() encaisse déjà un objet détruit.
         worker = getattr(owner, "_visual_identity_worker", None)
-        if worker is not None and worker.isRunning():
+        if worker is not None and is_running(worker):
             abandon_thread(worker)
 
     owner.destroyed.connect(_cleanup)
@@ -56,7 +61,7 @@ def analyze_active_image(owner, image_path: str, source: str = "selected",
         return
     owner._visual_identity = pending_identity(image_path, source, previous)
     old = getattr(owner, "_visual_identity_worker", None)
-    if old is not None and old.isRunning():
+    if old is not None and is_running(old):
         abandon_thread(old)
     from api.visual_identity import VisualIdentityWorker
     worker = VisualIdentityWorker(

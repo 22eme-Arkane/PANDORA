@@ -24,7 +24,12 @@ _SEQ_RE = re.compile(
 )
 
 _LABELS = {
-    "source": ("SOURCE SCÉNARIO", "SCREENPLAY SOURCE"),
+    # « SOURCE CONDUCTEUR » : même champ, nom juste côté Live (2026-07-26).
+    "source": ("SOURCE SCÉNARIO", "SOURCE CONDUCTEUR",
+               "SCREENPLAY SOURCE", "RUNDOWN SOURCE"),
+    # SON : champ propre au Live (sound design + calage musical). Purement ADDITIF —
+    # validate_v2_document ne l'exige pas, le Cinéma n'est donc pas contraint.
+    "sound": ("SON", "PROMPT SON", "SOUND", "SOUND DESIGN"),
     "intention": ("INTENTION", "INTENT"),
     "rhythm": ("RYTHME", "RHYTHM"),
     "duration": ("DURÉE", "DURATION"),
@@ -117,6 +122,8 @@ def parse_v2_document(text: str) -> list[dict]:
             "rhythm": _field(block, "rhythm"),
             "duration": duration,
             "prompt": prompt,
+            # Vide côté Cinéma (pas de son par plan) ; renseigné en Live.
+            "sound_prompt": _field(block, "sound"),
             "character_names": _list_field(_field(block, "characters")),
             "decor_name": _field(block, "decor"),
             "accessory_names": _list_field(_field(block, "accessories")),

@@ -14,7 +14,7 @@ from PyQt6.QtWidgets import (
 from PyQt6.QtCore import Qt
 from ui.styles import CP
 from core.i18n import translate
-from core.worker import abandon_thread
+from core.worker import abandon_thread, is_running
 
 
 # ── Small item row ─────────────────────────────────────────────────────────────
@@ -346,8 +346,10 @@ class ExtractGenerateDialog(QDialog):
 
     def reject(self):
         self._cancelled = True
+        # is_running() et pas isRunning() : en fermeture, l'objet C++ d'un worker
+        # peut déjà être détruit → RuntimeError dans un slot = abort de l'app.
         for w in (self._extract_worker, self._gen_worker, self._floor_worker):
-            if w and w.isRunning():
+            if w and is_running(w):
                 try:
                     w.finished.disconnect()
                     w.failed.disconnect()

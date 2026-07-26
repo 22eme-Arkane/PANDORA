@@ -7,7 +7,8 @@ from PyQt6.QtCore import Qt
 from ui.styles import CP, PANDORA_STYLESHEET
 from ui.icons import claude_icon_pixmap, install_hover_icon
 import core.storyboard as sb_api
-from core.storyboard import CAMERA_MOVEMENTS, OPTICS, FOCALS, DISTANCES, SHOT_SIZES, SHOT_SIZE_LABELS, SPEEDS, HEURE_PRESETS
+from core.storyboard import (CAMERA_MOVEMENTS, OPTICS, FOCALS, DISTANCES, SHOT_SIZES,
+                             SHOT_SIZE_LABELS, SPEEDS, HEURE_PRESETS, DEPTHS_OF_FIELD)
 from core.i18n import to_source
 
 
@@ -285,9 +286,19 @@ class ShotDialog(QDialog):
 
         _hide_col(col_optic)   # Optique (Sphérique/Anamorphique) : sans objet en Live
 
+        # Profondeur de champ (portée du Cinéma le 2026-07-26) — vide = déduite de
+        # la focale par le prompt final. Le champ existait déjà dans le modèle
+        # partagé et était LU par le composeur : il restait vide faute de réglage.
+        col_dof = QVBoxLayout()
+        col_dof.setSpacing(4)
+        col_dof.addWidget(_lbl("P. de champ"))
+        self._dof = _combo(DEPTHS_OF_FIELD, self._shot.get("depth_of_field", ""))
+        col_dof.addWidget(self._dof)
+
         row_cam.addLayout(col_move, 2)
         row_cam.addLayout(col_size, 1)
         row_cam.addLayout(col_focal, 1)
+        row_cam.addLayout(col_dof, 1)
         row_cam.addLayout(col_dist, 1)
         row_cam.addLayout(col_optic, 1)
         row_cam.addLayout(col_speed, 1)
@@ -823,6 +834,7 @@ class ShotDialog(QDialog):
             "optic":            to_source(self._optic.currentText()),
             "focal":            to_source(self._focal.currentText()),
             "camera_distance":  to_source(self._camera_distance.currentText()),
+            "depth_of_field":  to_source(self._dof.currentText()),
             "shot_size":       self._shot_size.currentData() or "",
             "speed":           to_source(self._speed.currentText()),
             "comments":          self._comments.toPlainText().strip(),

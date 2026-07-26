@@ -26,6 +26,36 @@ _ACTE_RE     = re.compile(r"^=+\s*(.*?)\s*=+\s*$")   # toute ligne « === … ==
 _ACTE_NUM_RE = re.compile(r"^ACTE\s+(\d+)\s*[—–:.\-]?\s*(.*)$", re.IGNORECASE)
 _PLAN_RE = re.compile(r"^PLAN\s+(\d+)\s*[—–:-]\s*(.*)$", re.IGNORECASE)
 _DUR_RE  = re.compile(r"Dur[ée]{1,2}\s*:\s*(\d+)", re.IGNORECASE)
+# Timecode « 0:20 », « 0'20 », « 1m10 » : le modèle bascule spontanément sur cette
+# notation pour les plans longs. _DUR_RE n'attrapait que le chiffre de tête → un plan
+# de 20 s devenait un plan de 0 SECONDE, en silence (constat Matthieu 2026-07-26).
+_DUR_TC_RE = re.compile(
+    r"Dur[ée]{1,2}\s*:\s*(\d+)\s*[:'’m]\s*(\d{1,2})(?!\d)", re.IGNORECASE)
+# Secondes décimales « 0,5s » / « 0.5 s » : arrondies, jamais ramenées à zéro.
+_DUR_DEC_RE = re.compile(r"Dur[ée]{1,2}\s*:\s*(\d+[.,]\d+)", re.IGNORECASE)
+
+
+def duration_seconds(line: str) -> int | None:
+    """Durée en secondes lue sur une ligne technique, ou None si illisible.
+
+    Comprend « 12s », « 22 s », « 20 secondes », « 0:20 », « 0'20 », « 1m10 »,
+    « 0,5s ». Ne renvoie JAMAIS 0 : une durée nulle est un plan qui n'existe pas.
+    """
+    text = line or ""
+    m = _DUR_TC_RE.search(text)
+    if m:
+        total = int(m.group(1)) * 60 + int(m.group(2))
+        return total or None
+    m = _DUR_DEC_RE.search(text)
+    if m:
+        try:
+            return max(1, round(float(m.group(1).replace(",", "."))))
+        except ValueError:
+            return None
+    m = _DUR_RE.search(text)
+    if m:
+        return int(m.group(1)) or None
+    return None
 _VAL_RE  = re.compile(r"Valeur\s+de\s+plan\s*:\s*([^·|,;\n]+)", re.IGNORECASE)
 _MOV_RE  = re.compile(r"Mouvement\s*:\s*([^·|,;\n]+)", re.IGNORECASE)
 _VID_RE  = re.compile(r"^PROMPT\s+VID[EÉ]O[^:]*:\s*(.*)$", re.IGNORECASE)
@@ -308,9 +338,9 @@ def parse_layout_segments(layout_text: str) -> list:
         if cur is None:
             continue   # avant le 1er plan (préfixe / timeline musicale) → ignoré
         if _TECH_RE.match(s):
-            md = _DUR_RE.search(s)
+            md = duration_seconds(s)
             if md:
-                cur["duration"] = int(md.group(1))
+                cur["duration"] = md
             mv = _VAL_RE.search(s)
             if mv:
                 cur["shot_size"] = mv.group(1).strip(" ·|")

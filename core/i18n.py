@@ -415,6 +415,43 @@ _FR_TO_EN: dict[str, str] = {
         "Re-run the set generation — this is often a temporary rate limit of the image API.",
     "segments générés →":                  "segments generated →",
     "Mise en page du conducteur via Claude…": "Formatting the rundown via Claude…",
+    "Mise en page du conducteur via {ai}…":  "Formatting the rundown via {ai}…",
+    # Validation du découpage Live (2026-07-26)
+    "Découpage incomplet":                  "Incomplete breakdown",
+    "Ce découpage ne respecte pas complètement le format attendu.":
+        "This breakdown does not fully follow the expected format.",
+    "Les plans concernés risquent de mal partir en génération. Vous pouvez l'appliquer quand même et corriger ensuite.":
+        "The affected shots may generate poorly. You can apply it anyway and fix them afterwards.",
+    "Appliquer quand même":                 "Apply anyway",
+    "Corriger":                             "Fix it",
+    "Format incomplet — nouvelle tentative…": "Incomplete format — retrying…",
+    # ── Rognage d'un mood à la façade (Mapping, 2026-07-26) ──────────────────
+    "▦  Rogner à la façade":                "▦  Crop to the facade",
+    "Superpose ce mood à la façade de référence : recale un éventuel\ndécalage, puis rend NOIR tout ce qui dépasse la silhouette.\nSi la géométrie a dérivé, PANDORA le dit — mieux vaut regénérer.":
+        "Overlays this mood on the reference facade: corrects any offset, then\nrenders BLACK everything beyond the silhouette.\nIf the geometry has drifted, PANDORA says so — better regenerate.",
+    "Façade absente":                       "No facade",
+    "Ajoute d'abord la façade du bâtiment dans le Conducteur (« Ajouter des références » → Référence bâtiment).":
+        "Add the building facade in the Rundown first (« Add references » → Building reference).",
+    "Façade non isolée":                    "Facade not isolated",
+    "La façade de référence n'est pas détourée sur fond noir : impossible d'en tirer un masque fiable.\n\nDétoure-la d'abord (le fond doit être noir pur autour du bâtiment).":
+        "The reference facade is not cut out on a black background: no reliable mask can be derived.\n\nCut it out first (the background must be pure black around the building).",
+    "Mesure impossible":                    "Measurement failed",
+    "Impossible de comparer ce mood à la façade (image illisible ou vide).":
+        "Cannot compare this mood to the facade (unreadable or empty image).",
+    "Géométrie déformée":                   "Distorted geometry",
+    "Ce mood ne se superpose pas à la façade : la géométrie du bâtiment a dérivé pendant la génération (recouvrement {iou} %, {missing} % de la façade non couverte).\n\nUn recalage ne ferait que déplacer l'erreur. Mieux vaut REGÉNÉRER ce mood.":
+        "This mood does not overlay the facade: the building geometry drifted during generation (overlap {iou}%, {missing}% of the facade uncovered).\n\nRealigning would only move the error. Better REGENERATE this mood.",
+    "Rognage impossible":                   "Crop failed",
+    "Mood aligné sur la façade":            "Mood aligned to the facade",
+    "recalé de {dy}/{dx} px puis rogné":    "offset by {dy}/{dx} px then cropped",
+    "rogné à la silhouette":                "cropped to the silhouette",
+    "({pc} % de lumière hors façade supprimée)":
+        "({pc}% of light outside the facade removed)",
+    "Mood {quoi}.{extra}\n\nL'original reste dans la galerie.":
+        "Mood {quoi}.{extra}\n\nThe original stays in the gallery.",
+    # Fenêtre des Séquences Live — titre distinct de celle du Découpage (2026-07-26)
+    "Génération des séquences…":            "Generating the sequences…",
+    "Séquences générées":                   "Sequences generated",
     "Mise en page PANDORA":                "PANDORA layout",
     "Mise en page PANDORA générée ✓":      "PANDORA layout generated ✓",
     "Clique « Mise en page PANDORA » (panneau de droite) pour générer ici la "
@@ -468,6 +505,12 @@ _FR_TO_EN: dict[str, str] = {
     "analyse…":                            "analyzing…",
     "énergie":                             "energy",
     "✓  Appliquer dans l'onglet":          "✓  Apply to the tab",
+    "✓  Appliquer le découpage":           "✓  Apply the shot breakdown",
+    "Écrit le découpage dans l'onglet « Découpage » et l'ouvre. Le Conducteur reste intact.":
+        "Writes the shot breakdown into the « Breakdown » tab and opens it. The Rundown stays intact.",
+    "Découpage appliqué à l'onglet Découpage ✓": "Shot breakdown applied to the Breakdown tab ✓",
+    "📋 J'ai également votre Note de réalisation : je m'y tiens pour le style, le rythme et la durée des plans.":
+        "📋 I also have your Director's note: I'll stick to it for style, pacing and shot duration.",
     "Mode :":                              "Mode:",
     "Acte":                                "Act",
     "Musique":                             "Music",
@@ -2150,6 +2193,7 @@ _FR_TO_EN: dict[str, str] = {
     # ── Lot 17 — co-écriture (accueil), génération en série, divers ──
     "J'ai analysé votre scénario et rédigé des suggestions détaillées (visibles dans l'onglet « Analyse initiale »).\n\nDites-moi ce que vous souhaitez modifier, affiner ou conserver — je produirai alors une version remaniée de votre scénario en direct. Nous pouvons itérer autant de fois que nécessaire.": "I've analyzed your screenplay and written detailed suggestions (visible in the « Initial analysis » tab).\n\nTell me what you'd like to change, refine or keep — I'll then produce a reworked version of your screenplay live. We can iterate as many times as needed.",
     "J'ai analysé votre conducteur et rédigé des suggestions détaillées (visibles dans l'onglet « Analyse initiale »).\n\nDites-moi ce que vous souhaitez modifier, affiner ou conserver — je produirai alors une version remaniée de votre conducteur en direct. Nous pouvons itérer autant de fois que nécessaire.": "I've analyzed your rundown and written detailed suggestions (visible in the « Initial analysis » tab).\n\nTell me what you'd like to change, refine or keep — I'll then produce a reworked version of your rundown live. We can iterate as many times as needed.",
+    "🎵 J'ai aussi l'analyse musicale de votre set (durée, BPM, courbe d'énergie et temps forts de chaque morceau) : demandez-moi directement de caler le conducteur dessus.": "🎵 I also have the musical analysis of your set (duration, BPM, energy curve and peaks of each track): just ask me to sync the rundown to it.",
     "Génération en série": "Batch generation",
     "Vous avez sélectionné": "You selected",
     "plans.": "shots.",

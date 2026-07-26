@@ -2340,7 +2340,9 @@ class TabT2V(QScrollArea):
         _rect_row.addStretch()
         _fs_outer.addLayout(_rect_row)
 
-        # Bouton "Template de style" — toujours visible
+        # Bouton "Template de style" — RETIRÉ de l'affichage côté Live le 2026-07-26
+        # (demande Matthieu) : la seule référence d'ambiance qui a du sens ici est la
+        # FAÇADE du bâtiment. Widget vivant et caché, son état reste lu à l'envoi.
         self._btn_style_gallery = QPushButton("🖼  Template de style")
         self._btn_style_gallery.setFixedHeight(28)
         self._btn_style_gallery.setCursor(Qt.CursorShape.PointingHandCursor)
@@ -2353,11 +2355,8 @@ class TabT2V(QScrollArea):
             f"QPushButton:pressed{{background:rgba(124,107,255,0.28);}}"
         )
         self._btn_style_gallery.clicked.connect(self._on_style_gallery)
-        _btn_row = QHBoxLayout()
-        _btn_row.addStretch()
-        _btn_row.addWidget(self._btn_style_gallery)
-        _btn_row.addStretch()
-        _fs_outer.addLayout(_btn_row)
+        self._btn_style_gallery.setParent(self)
+        self._btn_style_gallery.hide()
 
         # Bouton "Retirer" — visible seulement quand un template est sélectionné
         self._style_ref_clear_btn = QPushButton("× Retirer")
@@ -2472,7 +2471,11 @@ class TabT2V(QScrollArea):
             f"QCheckBox::indicator:checked{{background:{C['accent_dim']};"
             f"border-color:{C['accent']};}}"
         )
-        lay.addWidget(self._no_ref_global_cb)
+        # Case « Ne pas envoyer les images de référence » RETIRÉE de l'affichage
+        # (2026-07-26, parité Cinéma) — le widget reste VIVANT, son état est lu à
+        # l'envoi ; seul le contrôle disparaît de l'écran.
+        self._no_ref_global_cb.setParent(self)
+        self._no_ref_global_cb.hide()
 
         # Description du plan sélectionné
         self._shot_desc_lbl = QLabel("")
@@ -2506,7 +2509,11 @@ class TabT2V(QScrollArea):
         _dur_outer.addWidget(self._dur_lock_lbl)
 
         _dur_outer.addStretch()
-        lay.addLayout(_dur_outer)
+        # Choix de durée RETIRÉ de l'affichage (2026-07-26, parité Cinéma) : la durée
+        # vient du storyboard. Widgets VIVANTS et cachés — cb_dur est lu à l'envoi.
+        _dur_row_w = QWidget(self)
+        _dur_row_w.setLayout(_dur_outer)
+        _dur_row_w.hide()
 
         self._seed_lock_btn = QPushButton("🔓  ADN visuel — aléatoire")
         self._seed_lock_btn.setCheckable(True)
@@ -2524,10 +2531,11 @@ class TabT2V(QScrollArea):
             f"QPushButton:hover{{background:{C['bg3']};}}"
         )
         self._seed_lock_btn.toggled.connect(self._on_seed_toggle)
-        _t2v_adn_row = QHBoxLayout()
-        _t2v_adn_row.setAlignment(Qt.AlignmentFlag.AlignHCenter)
-        _t2v_adn_row.addWidget(self._seed_lock_btn)
-        lay.addLayout(_t2v_adn_row)
+        # L'ADN visuel vit désormais dans RENDU & AUDIO, en PREMIÈRE position
+        # (parité Cinéma, 2026-07-26) — inséré plus bas dans _raccords_lay.
+        self._t2v_adn_row = QHBoxLayout()
+        self._t2v_adn_row.setAlignment(Qt.AlignmentFlag.AlignHCenter)
+        self._t2v_adn_row.addWidget(self._seed_lock_btn)
 
         # ── Panel multi-sélection (visible uniquement lors d'une sélection multiple) ──
         self._multi_panel = QFrame()
@@ -2699,6 +2707,9 @@ class TabT2V(QScrollArea):
         _raccords_header_lay.addWidget(_raccords_title)
         _raccords_header_lay.addStretch()
         _raccords_lay.addWidget(_raccords_header)
+        # ADN visuel en PREMIÈRE position de RENDU & AUDIO (parité Cinéma 2026-07-26) —
+        # il vivait sur la ligne « Durée », qui vient d'être retirée de l'affichage.
+        _raccords_lay.addLayout(self._t2v_adn_row)
 
         def _raccord_toggle(title, subtitle, checked):
             w = QFrame()

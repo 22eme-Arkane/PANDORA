@@ -293,6 +293,20 @@ class MoodDialog(QDialog):
             "L'image n'est jamais collée telle quelle."))
         self._btn_inspire.clicked.connect(self._generate_from_image)
         acts.addWidget(self._btn_inspire)
+        # ▦ Rogner à la façade — MAPPING uniquement (2026-07-26). Le moteur déborde
+        # souvent de la silhouette du bâtiment : tout ce qui sort du cadre mappé est
+        # perdu à la projection, et pollue les images de référence envoyées ensuite
+        # à Seedance. Le bouton recale d'abord (un décalage de quelques pixels est
+        # fréquent et corrigeable), puis noircit ce qui dépasse.
+        self._btn_facade_crop = _btn("▦  Rogner à la façade")
+        self._btn_facade_crop.setToolTip(translate(
+            "Superpose ce mood à la façade de référence : recale un éventuel\n"
+            "décalage, puis rend NOIR tout ce qui dépasse la silhouette.\n"
+            "Si la géométrie a dérivé, PANDORA le dit — mieux vaut regénérer."))
+        self._btn_facade_crop.clicked.connect(self._crop_to_facade)
+        self._btn_facade_crop.setVisible(self._is_mapping())
+        acts.addWidget(self._btn_facade_crop)
+
         self._btn_generate = _btn("✦  Générer une variation")
         self._btn_generate.clicked.connect(self._generate)
         acts.addWidget(self._btn_generate)
@@ -537,6 +551,98 @@ class MoodDialog(QDialog):
         if 0 <= new_idx < len(self._paths):
             self._current_idx = new_idx
             self._refresh()
+
+    # ── Rognage à la façade (Mapping) ─────────────────────────────────────────
+
+    @staticmethod
+    def _is_mapping() -> bool:
+        """Séquence Mapping courante ? (le rognage n'a de sens que là)."""
+        try:
+            return sb_api.get_namespace() == "live_seq_mapping"
+        except Exception:
+            return False
+
+    def _crop_to_facade(self):
+        """Recale le mood sur la façade puis noircit ce qui dépasse.
+
+        Trois issues : déjà aligné → on rogne ; décalage pur → on RECALE et on
+        rogne (tous les moods finissent ainsi au même endroit, ce qui est le but :
+        des images de référence sans défaut) ; déformation → on refuse de déplacer
+        l'erreur et on propose de regénérer."""
+        from PyQt6.QtWidgets import QMessageBox
+        if not self._paths or not (0 <= self._current_idx < len(self._paths)):
+            return
+        src = self._paths[self._current_idx]
+
+        from core.context import get_data_root
+        from core.live_building import get_building_ref
+        from core.live_mapping import (align_and_mask_image, ensure_facade_mask,
+                                       measure_facade_alignment)
+        ref = get_building_ref()
+        if not ref or not os.path.isfile(ref):
+            QMessageBox.information(
+                self, translate("Façade absente"),
+                translate("Ajoute d'abord la façade du bâtiment dans le Conducteur "
+                          "(« Ajouter des références » → Référence bâtiment)."))
+            return
+        mask = ensure_facade_mask(ref, get_data_root())
+        if not mask:
+            QMessageBox.warning(
+                self, translate("Façade non isolée"),
+                translate("La façade de référence n'est pas détourée sur fond noir : "
+                          "impossible d'en tirer un masque fiable.\n\nDétoure-la "
+                          "d'abord (le fond doit être noir pur autour du bâtiment)."))
+            return
+
+        m = measure_facade_alignment(src, mask)
+        verdict = m.get("verdict", "unavailable")
+        if verdict == "unavailable":
+            QMessageBox.warning(self, translate("Mesure impossible"), translate(
+                "Impossible de comparer ce mood à la façade (image illisible ou vide)."))
+            return
+        if verdict == "deformed":
+            # On ne recale PAS : déplacer une géométrie déformée ne fait que
+            # déplacer l'erreur. C'est la règle posée par Matthieu.
+            QMessageBox.warning(
+                self, translate("Géométrie déformée"),
+                translate(
+                    "Ce mood ne se superpose pas à la façade : la géométrie du "
+                    "bâtiment a dérivé pendant la génération (recouvrement "
+                    "{iou} %, {missing} % de la façade non couverte).\n\n"
+                    "Un recalage ne ferait que déplacer l'erreur. Mieux vaut "
+                    "REGÉNÉRER ce mood.").format(
+                        iou=int(m["iou_aligned"] * 100), missing=int(m["missing"] * 100)))
+            return
+
+        dy, dx = m.get("shift", (0, 0))
+        import hashlib
+        _key = hashlib.md5(f"{src}|{os.path.getmtime(src)}|{mask}".encode()).hexdigest()[:12]
+        out = os.path.join(get_data_root(), "mapping", "moods_rognes", f"{_key}.png")
+        try:
+            align_and_mask_image(src, mask, out, (dy, dx))
+        except Exception as e:
+            QMessageBox.warning(self, translate("Rognage impossible"), str(e))
+            return
+
+        # Le rognage AJOUTE une image et l'active : l'original reste dans la
+        # galerie, on peut toujours y revenir.
+        self._paths.insert(self._current_idx + 1, out)
+        self._current_idx += 1
+        self._active_idx = self._current_idx
+        sb_api.save_apercus(self._shot["id"], self._paths, self._active_idx)
+        self.apercu_changed.emit(self._shot["id"], out)
+        self._refresh()
+
+        _quoi = (translate("recalé de {dy}/{dx} px puis rogné").format(dy=dy, dx=dx)
+                 if (dy or dx) else translate("rogné à la silhouette"))
+        _extra = ""
+        if m.get("overflow", 0) > 0:
+            _extra = " " + translate("({pc} % de lumière hors façade supprimée)").format(
+                pc=round(m["overflow"] * 100, 1))
+        QMessageBox.information(
+            self, translate("Mood aligné sur la façade"),
+            translate("Mood {quoi}.{extra}\n\nL'original reste dans la galerie.")
+            .format(quoi=_quoi, extra=_extra))
 
     def _activate(self):
         if not self._paths:

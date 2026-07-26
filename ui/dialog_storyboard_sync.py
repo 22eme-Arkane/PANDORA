@@ -78,9 +78,23 @@ class StoryboardSyncConfirmDialog(QDialog):
          False, True),
     ]
 
-    def __init__(self, n_shots: int, parent=None):
+    # Opérations INTERDITES en édition Live (2026-07-26). Elles ne sont pas juste
+    # « inutiles » : elles détruisent le travail Live.
+    #  • rewrite_prompts  → recompose le prompt VJ par l'IA : les beats début/milieu/
+    #    fin sont dilués et la section [🎵 SOUND DESIGN] disparaît, donc plus de
+    #    sound design ni de calage musical.
+    #  • rewrite_scenario → reconstruit un SCÉNARIO littéraire INT./EXT. et l'écrit
+    #    dans le magasin des conducteurs — exactement ce que les prompts Live
+    #    déclarent interdit.
+    #  • resync_decors / sync_staging → notions Cinéma (page Décors, plan vu de
+    #    dessus) qui n'existent pas sous cette forme en Live.
+    _LIVE_FORBIDDEN = ("rewrite_prompts", "rewrite_scenario",
+                       "resync_decors", "sync_staging")
+
+    def __init__(self, n_shots: int, parent=None, edition: str = "cinema"):
         super().__init__(parent)
         self._checks: dict[str, QCheckBox] = {}
+        self._edition = "live" if edition == "live" else "cinema"
 
         self.setWindowTitle("Synchronisation — Storyboard")
         self.setMinimumWidth(540)
@@ -135,6 +149,10 @@ class StoryboardSyncConfirmDialog(QDialog):
         _opts_lay.setContentsMargins(0, 0, 2, 0)
         _opts_lay.setSpacing(10)
         for key, label, detail, default_on, is_ai in self._OPTIONS:
+            # En Live, les opérations destructrices ne sont pas seulement décochées :
+            # elles ne sont PAS proposées. Une case décochée se recoche.
+            if self._edition == "live" and key in self._LIVE_FORBIDDEN:
+                continue
             card = QFrame()
             card.setStyleSheet(
                 f"background:{CP['bg2']};border-radius:10px;border:1px solid {CP['border']};"
@@ -242,7 +260,13 @@ class StoryboardSyncConfirmDialog(QDialog):
         self._btn_ok.setEnabled(any_on)
 
     def selected_options(self) -> dict:
-        return {key: chk.isChecked() for key, chk in self._checks.items()}
+        opts = {key: chk.isChecked() for key, chk in self._checks.items()}
+        if self._edition == "live":
+            # Ceinture ET bretelles : même si une case interdite réapparaissait un
+            # jour dans _OPTIONS, elle repart à False côté Live.
+            for key in self._LIVE_FORBIDDEN:
+                opts[key] = False
+        return opts
 
 
 # ── Ligne de résultat par plan ─────────────────────────────────────────────────

@@ -305,7 +305,8 @@ def prompts_arrangement_conducteur():
 def prompts_mise_en_page():
     """Mise en page PANDORA Live : Sonnet, façade-écran, vidéo/son séparés, durée cible."""
     import api.live_extract as le
-    src = inspect.getsource(le.FormatConducteurWorker.run)
+    # CLASSE entière : l'appel vit dans _layout_call depuis la relance corrective.
+    src = inspect.getsource(le.FormatConducteurWorker)
     assert 'tier="creative"' in src, "tier créatif (Sonnet/Fable) pour la mise en page"
     assert "ÉCRAN" in src, "façade = écran (pas un sujet)"
     assert "seuls" not in src.split("ÉCRAN")[0] or True
@@ -319,7 +320,10 @@ def prompts_mise_en_page():
     # PROMPT VIDÉO : plus de mention du moteur « Seedance 2.0 » (rendu multi-moteurs) ;
     # la LANGUE de travail reste annotée. (2026-07-07)
     assert "PROMPT VIDÉO (Seedance 2.0" not in src, "annotation moteur retirée du PROMPT VIDÉO"
-    assert 'PROMPT VIDÉO (" + _pl + ")' in src, "langue de travail conservée dans l'annotation PROMPT VIDÉO"
+    # Depuis le passage aux fiches « DÉCOUPAGE PANDORA 2 » (2026-07-26) le champ
+    # s'appelle PROMPT VISUEL — la langue de travail reste annotée de la même façon.
+    assert 'PROMPT VISUEL : prompt en " + _pl' in src, \
+        "langue de travail conservée dans l'annotation du prompt visuel"
 
 
 @test
@@ -706,10 +710,15 @@ def storyboard_boutons_portes_du_cinema():
     csrc = inspect.getsource(M._ShotRow.contextMenuEvent)
     assert "Dupliquer" in csrc and "Libellé couleur" in csrc
     assert "_set_recurrent" not in csrc, "pas de « plan récurrent » en live (sans objet)"
-    # P2 fusion déclarée côté Live (dialogue + relance stricte)
-    assert hasattr(M.PageStoryboard, "_ask_merge_decision")
+    # Fusion de plans : notion RETIRÉE du Live le 2026-07-26. La clé `merged`
+    # n'était produite que par le worker CINÉMA, auquel le Live ne fait plus appel
+    # (il utilise GenerateDecoupageWorker). Garder le dialogue « Garder fusionné /
+    # Séparer » aurait laissé une branche morte qui rassure à tort.
+    assert not hasattr(M.PageStoryboard, "_ask_merge_decision"), \
+        "le dialogue de fusion est mort depuis la bascule sur le worker Live"
     gsrc = inspect.getsource(M.PageStoryboard._on_shots_generated)
-    assert "strict_no_merge=True" in gsrc and 'pop("merged"' in gsrc
+    assert "strict_no_merge" not in gsrc and 'pop("merged"' not in gsrc, \
+        "reste du chemin de fusion Cinéma dans le Live"
     # Ajouter une image de référence l'affiche DÈS le 1er ajout (bug « 2 fois »,
     # 2026-07-09) : le handler sauve PUIS émet changed → reconstruction de la ligne
     # depuis les données persistées (affichage non tributaire d'un widget invalidé).
@@ -733,12 +742,19 @@ def colonnes_sequences():
     import core.storyboard as sb
     import ui.page_storyboard_live as M
     from ui.live_pages import SequenceLivePage, SequenceMappingPage, _LIVE_DEFAULT_ORDER
-    assert len(M._COLS) == 23, "22 colonnes + Référence (inspiration)"
+    # 24 = 22 colonnes + Référence (22) + P. de champ (23, portée du Cinéma
+    # le 2026-07-26 et ajoutée EN FIN de _COLS pour ne pas décaler les ordres et
+    # largeurs déjà persistés dans les projets).
+    assert len(M._COLS) == 24, "22 colonnes + Référence + P. de champ"
+    assert M._COLS[23][0] == "P. de champ", "P. de champ en logique 23 (fin de liste)"
     assert M._COLS[2][0] == "Acte" and M._COLS[4][0] == "Prompt"   # UN seul prompt à sections
     assert M._COLS[16][0] == "TC" and M._COLS[17][0] == "Musique"
     assert M._COLS[18][0] == "BPM" and M._COLS[19][0] == "Transition"
     assert M._COLS[22][0] == "Référence", "colonne Référence (inspiration) en logique 22"
-    assert sorted(_LIVE_DEFAULT_ORDER) == list(range(23)), "ordre défaut = permutation valide"
+    assert sorted(_LIVE_DEFAULT_ORDER) == list(range(24)), "ordre défaut = permutation valide"
+    assert (_LIVE_DEFAULT_ORDER.index(23) == _LIVE_DEFAULT_ORDER.index(8) + 1
+            and _LIVE_DEFAULT_ORDER.index(9) == _LIVE_DEFAULT_ORDER.index(23) + 1), \
+        "P. de champ s'affiche entre Focal et Dist."
     assert _LIVE_DEFAULT_ORDER.index(22) == _LIVE_DEFAULT_ORDER.index(1) + 1, \
         "Référence affichée juste après Mood"
     mp = SequenceMappingPage(); mp.refresh()
@@ -804,13 +820,39 @@ def coecriture_et_finalisation_live():
     assert '_make_toggle("📖  Conducteur"' in src, "section Conducteur (ex-Claude IA) absente"
     # « Finalisation » renommée « Découpage » le 2026-07-23 (parité Cinéma).
     assert '_make_toggle("🎯  Découpage"' in src, "section Découpage (ex-Finalisation) absente"
-    # Bouton « Générer le découpage » MIS EN AVANT (cadre vert, façon « Tout générer »).
-    assert 'self._on_storyboard, color=CP["green"]' in src, "« Générer le découpage » pas mis en avant (cadre coloré)"
+    # « Générer les séquences » MIS EN AVANT en ROUGE + éclair (2026-07-26, parité
+    # Cinéma où « Générer le storyboard » a repris l'identité de « Tout générer »).
+    assert 'self._on_storyboard, color=CP.get("red", "#ff4f6a")' in src, \
+        "« Générer les séquences » pas en rouge"
+    assert '"⚡", "Générer les séquences"' in src, \
+        "« Générer les séquences » a perdu son éclair"
     # « Co-écriture des plans » renommé « Affiner le découpage » (2026-07-23).
     assert '"Affiner le découpage"' in src and "def _on_plan_coedit" in src, \
         "bouton/handler Affiner le découpage absent (Live)"
     assert src.index("(tog_cond,") < src.index("(tog_final,") < src.index("(tog_gen,"), \
         "ordre du panneau droit incorrect (Conducteur, Finalisation, …, Générer)"
+    # ── Panneau droit 2026-07-26 (demande Matthieu) ───────────────────────────
+    # « Ajouter des références » EN TÊTE, avant le Conducteur ; « Style VJ » et
+    # « Musiques du set » à la fin, après « Générer ».
+    assert src.index("(tog_refs,") < src.index("(tog_cond,"), \
+        "« Ajouter des références » doit précéder le Conducteur"
+    assert src.index("(tog_gen,") < src.index("(tog_style,") < src.index("(tog_music,"), \
+        "ordre de fin du panneau incorrect (… Générer, Style VJ, Musiques du set)"
+    # La « Référence bâtiment (façade) » est FUSIONNÉE dans « Ajouter des
+    # références » : plus de section repliable séparée, mais le bloc vit toujours.
+    assert '_make_toggle("🎨  Ajouter des références"' in src, \
+        "section « Ajouter des références » renommée ou disparue"
+    assert "tog_bld" not in src, \
+        "la façade a de nouveau sa propre section — elle doit être fusionnée"
+    assert "self._bld_row" in src and "l_refs.addLayout(self._bld_row)" in src, \
+        "le bloc façade n'est pas dans la section « Ajouter des références »"
+    # « Tout générer » vit dans le menu Action, plus au bas du panneau.
+    assert 'self._act_gen_all = _scn_menu.addAction("⚡  " + translate("Tout générer"))' in src, \
+        "« Tout générer » absent du menu Action (Live)"
+    assert "self._btn_generate_all.hide()" in src, \
+        "le bouton « Tout générer » du bas de panneau n'est pas masqué (Live)"
+    assert "self._act_gen_all.triggered.connect(lambda: self._btn_generate_all.click())" in src, \
+        "l'entrée de menu « Tout générer » n'est pas branchée sur le bouton (Live)"
     # Parité Cinéma 2026-07-23 : hauteur ADAPTATIVE des boutons (plancher 46/50,
     # l'espace libre leur revient) et rangée « Durée cible » à sélecteur CIBLÉ
     # (sans quoi un trait se dessinait sous « Durée cible » et sous « Estimé »).
@@ -2139,9 +2181,11 @@ def plafonds_anti_troncature():
     from api.live_extract import FormatConducteurWorker
     from api.live_screenplay import GenerateDecoupageWorker, ApplyArrangeConducteurWorker
     from api.live_refs import EnrichConducteurWithRefsWorker
+    # inspecte la CLASSE et non run() : depuis la relance corrective (2026-07-26),
+    # FormatConducteurWorker fait son appel dans _layout_call, rejoué à l'identique.
     for cls in (FormatConducteurWorker, GenerateDecoupageWorker,
                 ApplyArrangeConducteurWorker, EnrichConducteurWithRefsWorker):
-        assert "max_tokens=16000" in inspect.getsource(cls.run), \
+        assert "max_tokens=16000" in inspect.getsource(cls), \
             f"{cls.__name__} : sortie complète → 16000 tokens"
     # Les suggestions d'arrangement (pas un conducteur complet) : 8192 minimum
     from api.live_screenplay import ArrangeConducteurStreamWorker
@@ -2938,6 +2982,1001 @@ def coecriture_reecriture_ciblee_live():
     from core.i18n import _FR_TO_EN as T
     for _t in ("✦  Réécrire selon la co-écriture", "✎  Générer tout le conducteur"):
         assert _t in T, ("i18n manquant", _t)
+
+
+@test
+def coecriture_recoit_analyse_musicale():
+    """La co-écriture du Conducteur reçoit la TIMELINE MUSICALE du set (2026-07-26).
+
+    Constat Matthieu : « J'ai fait une analyse de la musique, peut-on l'appliquer au
+    Teaser ? » → l'IA répondait « colle-moi ton analyse musicale » alors qu'elle
+    existait dans le projet. La timeline n'allait qu'à l'Analyse et à la Mise en page
+    (_text_with_music) ; _open_arrange_session envoyait le conducteur BRUT."""
+    import inspect
+    from PyQt6.QtWidgets import QApplication
+    QApplication.instance() or QApplication([])
+
+    # 1. La page calcule la timeline et la passe au studio de co-écriture.
+    import ui.page_scenario_live as PSL
+    _src = inspect.getsource(PSL.PageScenario._open_arrange_session)
+    assert "build_set_timeline" in _src and "music_analysis=" in _src, \
+        "_open_arrange_session n'envoie pas la timeline musicale"
+
+    # 2. Le studio la relaie au worker.
+    from ui.dialog_arrange_session_live import ArrangeSessionDialog
+    assert "music_analysis=self._music_analysis" in inspect.getsource(
+        ArrangeSessionDialog._start_worker), "le studio ne relaie pas la timeline"
+
+    from core.music_analysis import build_set_timeline
+    timeline = build_set_timeline([
+        {"name": "Track A", "bpm": 128.0, "duration": 210.0,
+         "energy": "▁▃▅█▅▂", "drops": [32.0, 96.0]},
+    ])
+    assert "128 BPM" in timeline, "timeline de test mal construite"
+
+    # 3. L'utilisateur VOIT que l'IA l'a (sinon il recolle son analyse à la main).
+    d = ArrangeSessionDialog(None, "CONDUCTEUR", "ANALYSE", 5, music_analysis=timeline)
+    _chat = d._chat_view.toPlainText()
+    assert "analyse musicale" in _chat.lower(), \
+        "le chat n'annonce pas qu'il possède l'analyse musicale"
+
+    # 4. FONCTIONNEL : la timeline part réellement dans le message envoyé à l'IA.
+    import core.ai_provider as _ai
+    from api.live_screenplay import ArrangeSessionChatConducteurWorker
+    _cap = {}
+
+    def _fake_full(system, messages, **kw):
+        _cap["messages"] = messages
+        return "Message."
+
+    _old_key, _old_full = _ai.key_error, _ai.chat_until_complete
+    try:
+        _ai.key_error = lambda *a, **k: ""
+        _ai.chat_until_complete = _fake_full
+        w = ArrangeSessionChatConducteurWorker(
+            original="CONDUCTEUR", analysis="ANALYSE", history=[],
+            user_message="Cale le teaser sur la musique.",
+            music_analysis=timeline, surgical=True,
+        )
+        w.run()          # exécution SYNCHRONE : aucun thread, aucun réseau
+    finally:
+        _ai.key_error, _ai.chat_until_complete = _old_key, _old_full
+
+    _sent = "\n".join(
+        m["content"] if isinstance(m.get("content"), str) else ""
+        for m in _cap.get("messages", []))
+    assert "128 BPM" in _sent, "la timeline musicale n'atteint pas l'IA"
+    assert "ne la redemande jamais" in _sent, \
+        "consigne anti-« colle-moi ton analyse » absente du contexte"
+
+    # 5. Le garde-fou de volume compte ce contexte supplémentaire.
+    assert "self._music_analysis" in inspect.getsource(
+        ArrangeSessionDialog._estimated_session_tokens), \
+        "la timeline n'est pas comptée dans l'estimation de tokens"
+
+
+@test
+def coecriture_recoit_note_realisation():
+    """La co-écriture du Conducteur reçoit la NOTE DE RÉALISATION (2026-07-26).
+
+    Constat Matthieu : la note existe dans son onglet et part bien au découpage
+    (FormatConducteurWorker), mais le studio de co-écriture ne la recevait pas —
+    parité Cinéma, où ArrangeChatWorker l'injecte depuis toujours."""
+    import inspect
+    from PyQt6.QtWidgets import QApplication
+    QApplication.instance() or QApplication([])
+
+    import ui.page_scenario_live as PSL
+    _src = inspect.getsource(PSL.PageScenario._open_arrange_session)
+    assert "direction_note=" in _src and "_direction_note_edit" in _src, \
+        "_open_arrange_session n'envoie pas la note de réalisation"
+
+    from ui.dialog_arrange_session_live import ArrangeSessionDialog
+    assert "direction_note=self._direction_note" in inspect.getsource(
+        ArrangeSessionDialog._start_worker), "le studio ne relaie pas la note"
+
+    NOTE = "## STYLE VISUEL\nGivre bleu, pierre nue.\n## RYTHME\nPlans courts, 2 s."
+
+    # Le chat annonce qu'il l'a — un gabarit VIDE ne doit rien annoncer.
+    from core.direction_note import empty_note
+    d_vide = ArrangeSessionDialog(None, "CONDUCTEUR", "ANALYSE", 5,
+                                  direction_note=empty_note())
+    assert "note de réalisation" not in d_vide._chat_view.toPlainText().lower(), \
+        "un gabarit de note VIDE ne doit pas être annoncé comme rempli"
+    d = ArrangeSessionDialog(None, "CONDUCTEUR", "ANALYSE", 5, direction_note=NOTE)
+    assert "note de réalisation" in d._chat_view.toPlainText().lower(), \
+        "le chat n'annonce pas qu'il possède la note de réalisation"
+
+    # FONCTIONNEL : la note part réellement dans le message envoyé à l'IA.
+    import core.ai_provider as _ai
+    from api.live_screenplay import ArrangeSessionChatConducteurWorker
+    _cap = {}
+    _old_key, _old_full = _ai.key_error, _ai.chat_until_complete
+    try:
+        _ai.key_error = lambda *a, **k: ""
+        _ai.chat_until_complete = lambda system, messages, **kw: (
+            _cap.update(messages=messages) or "Message.")
+        w = ArrangeSessionChatConducteurWorker(
+            original="CONDUCTEUR", analysis="ANALYSE", history=[],
+            user_message="Resserre le rythme.", direction_note=NOTE, surgical=True,
+        )
+        w.run()          # SYNCHRONE : aucun thread, aucun réseau
+    finally:
+        _ai.key_error, _ai.chat_until_complete = _old_key, _old_full
+
+    _sent = "\n".join(
+        m["content"] if isinstance(m.get("content"), str) else ""
+        for m in _cap.get("messages", []))
+    assert "Givre bleu, pierre nue." in _sent, "la note de réalisation n'atteint pas l'IA"
+    assert "NOTE DE RÉALISATION ACTUELLE" in _sent, "en-tête de note absent du contexte"
+    assert "document séparé du conducteur" in _sent, \
+        "la séparation note / récit n'est pas rappelée à l'IA"
+
+
+@test
+def decoupage_applique_dans_le_bon_onglet():
+    """« Appliquer le découpage » écrit ET ouvre l'onglet DÉCOUPAGE (2026-07-26).
+
+    Régression trouvée par Matthieu : l'insertion de « Note de réalisation » en
+    position 1 (2026-07-23) avait décalé le Découpage en 2, mais _apply_layout
+    faisait toujours setTabEnabled(1, True)/setCurrentIndex(1) → la Note était
+    dégrisée et affichée, le Découpage restait GRISÉ donc inatteignable, alors
+    que le texte y était bien écrit."""
+    import inspect
+    from PyQt6.QtWidgets import QApplication
+    QApplication.instance() or QApplication([])
+    import ui.page_scenario_live as PSL
+
+    assert (PSL.PageScenario.TAB_CONDUCTEUR, PSL.PageScenario.TAB_NOTE,
+            PSL.PageScenario.TAB_DECOUPAGE) == (0, 1, 2), "index d'onglets renumérotés"
+
+    page = PSL.PageScenario()
+    page._save = lambda *a, **k: None       # jamais d'écriture réelle en test
+    assert page._editor_tabs.widget(page.TAB_DECOUPAGE) is page._layout_view, \
+        "l'onglet Découpage n'est pas celui du _layout_view"
+    assert not page._editor_tabs.isTabEnabled(page.TAB_DECOUPAGE), \
+        "le Découpage doit être grisé tant qu'il est vide"
+
+    page._apply_layout("PLAN 1 — Façade prise dans le givre.")
+
+    assert page._layout_view.toPlainText().startswith("PLAN 1"), \
+        "le découpage n'est pas écrit dans l'onglet"
+    assert page._editor_tabs.isTabEnabled(page.TAB_DECOUPAGE), \
+        "l'onglet Découpage reste grisé après « Appliquer »"
+    assert page._editor_tabs.currentIndex() == page.TAB_DECOUPAGE, \
+        "« Appliquer » n'ouvre pas l'onglet Découpage"
+    assert page._editor_tabs.isTabEnabled(page.TAB_NOTE), \
+        "la Note de réalisation ne doit JAMAIS être grisée"
+
+    # Plus aucun index d'onglet en dur dans la page (c'était la cause du bug).
+    # On vise l'APPEL (préfixe _editor_tabs.) : les commentaires qui racontent la
+    # régression citent « setTabEnabled(1, … ) » et ne doivent pas déclencher.
+    _src = inspect.getsource(PSL)
+    for _bad in ("_editor_tabs.setTabEnabled(0,", "_editor_tabs.setTabEnabled(1,",
+                 "_editor_tabs.setTabEnabled(2,", "_editor_tabs.setCurrentIndex(1)",
+                 "_editor_tabs.setCurrentIndex(2)"):
+        assert _bad not in _src, ("index d'onglet en dur — utiliser TAB_*", _bad)
+
+    # Libellé du bouton (demande Matthieu 2026-07-26) + i18n.
+    _fmt = inspect.getsource(PSL.PageScenario._open_format_window)
+    assert '"✓  Appliquer le découpage"' in _fmt, "bouton non renommé"
+    from core.i18n import _FR_TO_EN as T
+    assert "✓  Appliquer le découpage" in T, "i18n du bouton manquant"
+
+
+@test
+def nouveau_conducteur_repart_a_zero():
+    """Un NOUVEAU conducteur ne garde rien du précédent (2026-07-26).
+
+    Écart trouvé par audit : _new_scenario Live ne touchait ni la note de
+    réalisation ni le découpage — un nouveau conducteur héritait à l'écran de ceux
+    du projet précédent, et le premier enregistrement les figeait dedans."""
+    from PyQt6.QtWidgets import QApplication
+    QApplication.instance() or QApplication([])
+    import ui.page_scenario_live as PSL
+    from core.direction_note import empty_note, note_for_ai
+
+    page = PSL.PageScenario()
+    page._save = lambda *a, **k: None
+    page._editor_text.setPlainText("Ancien conducteur.")
+    page._direction_note_edit.setPlainText("## STYLE VISUEL\nGivre bleu du projet A.")
+    page._layout_view.setPlainText("PLAN 1 — Découpage du projet A")
+    page._editor_tabs.setTabEnabled(page.TAB_DECOUPAGE, True)
+
+    page._new_scenario()
+
+    assert page._editor_text.toPlainText().strip() == "", "le conducteur n'est pas vidé"
+    assert "projet A" not in page._direction_note_edit.toPlainText(), \
+        "la note de réalisation du projet précédent est héritée"
+    assert page._layout_view.toPlainText().strip() == "", \
+        "le découpage du projet précédent est hérité"
+    assert not page._editor_tabs.isTabEnabled(page.TAB_DECOUPAGE), \
+        "l'onglet Découpage reste actif alors qu'il est vide"
+    # Le GABARIT est posé : sans lui, section_text(« STYLE VISUEL ») ne trouve
+    # jamais rien et la note reste un champ libre inexploitable.
+    _note = page._direction_note_edit.toPlainText()
+    assert _note.strip() == empty_note().strip(), "gabarit de note non posé"
+    assert note_for_ai(_note) == "", "un gabarit vierge doit être considéré VIDE"
+
+    # Section 6 d'une analyse → rangée dans la note, sans appel IA.
+    assert hasattr(PSL.PageScenario, "_merge_analysis_direction_note"), \
+        "la section 6 de l'analyse n'est pas rangée dans la note (Live)"
+    import inspect
+    _src = inspect.getsource(PSL.PageScenario)
+    assert _src.count("self._merge_analysis_direction_note(") >= 2, \
+        "le rangement de la section 6 n'est branché qu'à un seul endroit"
+
+
+@test
+def synchronisation_live_ne_detruit_plus_les_prompts_vj():
+    """La « ⟳ Synchronisation » des Séquences Live ne peut plus recomposer les
+    prompts VJ ni réécrire le conducteur en scénario INT./EXT. (2026-07-26).
+
+    Le dialogue est PARTAGÉ avec le Cinéma et proposait rewrite_prompts coché par
+    DÉFAUT : le prompt entier était écrasé par l'IA — beats début/milieu/fin dilués,
+    section [🎵 SOUND DESIGN] supprimée — et rewrite_scenario écrivait un scénario
+    littéraire dans le magasin des conducteurs."""
+    import inspect
+    from PyQt6.QtWidgets import QApplication
+    QApplication.instance() or QApplication([])
+    from ui.dialog_storyboard_sync import StoryboardSyncConfirmDialog as D
+
+    interdites = set(D._LIVE_FORBIDDEN)
+    assert {"rewrite_prompts", "rewrite_scenario"} <= interdites, \
+        "les deux opérations destructrices doivent être interdites en Live"
+
+    # CINÉMA : rien ne change, toutes les options restent proposées.
+    cine = D(3)
+    assert "rewrite_prompts" in cine._checks, "régression Cinéma : option disparue"
+    assert set(k for k, *_ in D._OPTIONS) == set(cine._checks), \
+        "le Cinéma doit voir TOUTES les options"
+
+    # LIVE : les options interdites ne sont pas proposées…
+    live = D(3, edition="live")
+    for k in interdites:
+        assert k not in live._checks, f"option interdite encore proposée en Live : {k}"
+    # …et ressortent à False même si une case réapparaissait un jour.
+    opts = live.selected_options()
+    for k in interdites:
+        assert opts.get(k) is False, f"option interdite non forcée à False : {k}"
+    # Ce qui reste utile au Live est bien conservé.
+    for k in ("reassign", "sync_casting", "sync_accessories", "sync_vehicles"):
+        assert k in live._checks, f"synchronisation utile perdue en Live : {k}"
+
+    # La page Live demande bien l'édition Live.
+    import ui.page_storyboard_live as PSL
+    assert 'edition="live"' in inspect.getsource(PSL.PageStoryboard._on_sync), \
+        "les Séquences Live n'ouvrent pas le dialogue en mode Live"
+
+
+@test
+def tout_generer_live_analyse_identite_et_fraicheur():
+    """« Tout générer » Live analyse l'identité visuelle des images produites, et le
+    découpage périmé est signalé (2026-07-26, parité Cinéma).
+
+    Le composeur de prompt vidéo est PARTAGÉ et lit `visual_identity` : sans analyse,
+    le Live envoyait le prompt qui a créé l'image au lieu de la description réelle de
+    l'image — donc plus aucun verrou de continuité entre les plans."""
+    import inspect
+    import ui.page_scenario_live as PSL
+
+    assert hasattr(PSL.PageScenario, "_gen_all_analyze_identity"), \
+        "analyse d'identité visuelle absente du « Tout générer » Live"
+    _ai = inspect.getsource(PSL.PageScenario._gen_all_analyze_identity)
+    assert "VisualIdentityWorker" in _ai and "pending_identity" in _ai
+    assert "worker.done.connect" in _ai, "signal done (jamais finished) — doctrine projet"
+    # Un échec d'analyse ne doit JAMAIS arrêter la file.
+    assert _ai.count("_gen_all_next_image()") >= 2, \
+        "la file s'arrête si l'analyse échoue"
+    # Les deux chemins d'image (portrait ET élément) y passent.
+    _gi = inspect.getsource(PSL.PageScenario._gen_all_next_image)
+    assert _gi.count("self._gen_all_analyze_identity(") == 2, \
+        "un des deux chemins d'image (portrait / élément) saute l'analyse d'identité"
+
+    # Empreinte éditoriale : posée à l'application du découpage…
+    _al = inspect.getsource(PSL.PageScenario._apply_layout)
+    assert "mark_decoupage_built" in _al, "le découpage ne laisse pas d'empreinte"
+    # …et relue avant de générer les séquences.
+    _os = inspect.getsource(PSL.PageScenario._on_storyboard)
+    assert "decoupage_stale" in _os, "un découpage périmé n'est pas signalé"
+    # L'empreinte STORYBOARD reste volontairement débranchée : elle est globale au
+    # conducteur alors que le Live a DEUX jeux de séquences (live / mapping).
+    assert "mark_storyboard_synced" not in inspect.getsource(PSL), \
+        "empreinte storyboard branchée malgré les deux namespaces Live"
+
+    # Profondeur de champ : colonne + fiche de plan.
+    import ui.page_storyboard_live as PSB
+    assert PSB._COLS[23][0] == "P. de champ"
+    _row = inspect.getsource(PSB._ShotRow)
+    assert "DEPTHS_OF_FIELD" in _row and "cells[23]" in _row, \
+        "la colonne P. de champ n'est pas rendue"
+    import ui.dialog_shot_live as DSL
+    _src = inspect.getsource(DSL)
+    assert "DEPTHS_OF_FIELD" in _src and '"depth_of_field"' in _src, \
+        "la fiche de plan Live ne règle pas la profondeur de champ"
+
+
+@test
+def sequences_live_utilisent_le_worker_live():
+    """Les Séquences Live ne redécoupent plus avec le worker CINÉMA (2026-07-26).
+
+    « ⊕ Générer depuis le conducteur » importait api.screenplay.GenerateStoryboardWorker
+    dès qu'aucune mise en page n'était parsable. Ce worker applique le contrat FILM
+    (valeurs GP/GM/PM/PE, décor, Jour/Nuit), recompose les prompts en
+    [🎬 ACTION][🎭 MISE EN SCÈNE]… et charge les catalogues Décors/HMC du Cinéma. Rien
+    du Live ne survivait : ni confinement façade, ni caméra fixe en mapping, ni beats
+    relatifs, ni PROMPT SON."""
+    import inspect
+    from PyQt6.QtWidgets import QApplication
+    QApplication.instance() or QApplication([])
+    import ui.page_storyboard_live as PSL
+
+    _an = inspect.getsource(PSL.PageStoryboard._on_analyze)
+    assert "from api.live_screenplay import GenerateDecoupageWorker" in _an, \
+        "les Séquences Live n'utilisent pas le worker Live"
+    assert "GenerateStoryboardWorker" not in _an, \
+        "le worker CINÉMA est encore appelé depuis le Live"
+    # Le mode et la façade suivent la séquence courante.
+    assert "live_seq_mapping" in _an and "get_building_ref" in _an, \
+        "mode Live/Mapping ou façade non transmis au worker"
+    assert "direction_note=" in _an, "la note de réalisation ne part pas au découpage"
+
+    # La musique est assignée aussi par le chemin IA (le repli Cinéma la perdait).
+    _sts = inspect.getsource(PSL.PageStoryboard._segments_to_shots)
+    assert "assign_tracks_to_shots" in _sts and "music_track" in _sts, \
+        "assignation musicale absente du chemin IA"
+    assert "sound_prompt" in _sts, "le PROMPT SON n'est pas repris dans les plans"
+
+    # Le worker Live accepte bien la note.
+    import api.live_screenplay as LS
+    assert "direction_note" in inspect.signature(
+        LS.GenerateDecoupageWorker.__init__).parameters, \
+        "GenerateDecoupageWorker n'accepte pas la note de réalisation"
+    _run = inspect.getsource(LS.GenerateDecoupageWorker.run)
+    assert "note_for_ai" in _run and "NOTE DE RÉALISATION" in _run, \
+        "la note n'est pas injectée dans le découpage Live"
+
+    # Style visuel cuit dans les prompts, des DEUX côtés du Live.
+    _gen = inspect.getsource(PSL.PageStoryboard._on_shots_generated)
+    assert "visual_style_from_note" in _gen, \
+        "le style de la note n'atteint pas les prompts des Séquences"
+    import ui.page_scenario_live as PSC
+    assert "visual_style_from_note" in inspect.getsource(PSC.PageScenario._live_visual_style)
+    _wr = inspect.getsource(PSC.PageScenario._write_decoupage_segments)
+    assert "_with_visual_style" in _wr, "style non cuit à l'écriture des segments"
+    # Un prompt qui porte DÉJÀ un style co-écrit ne doit pas être écrasé.
+    from core.prompt_sections import build, style_of
+    _p = build(action="Une façade.", style="style déjà écrit")
+    assert PSC.PageScenario._with_visual_style(_p, "autre style") == _p, \
+        "le style co-écrit est écrasé"
+    _p2 = build(action="Une façade.")
+    assert "mon style" in style_of(PSC.PageScenario._with_visual_style(_p2, "mon style"))
+
+
+@test
+def mood_rogne_a_la_facade():
+    """« ▦ Rogner à la façade » : recale un DÉCALAGE, refuse une DÉFORMATION
+    (demande Matthieu 2026-07-26).
+
+    En mapping, le moteur déborde souvent de la silhouette : ce qui sort du cadre
+    est perdu à la projection ET pollue les images de référence envoyées ensuite à
+    Seedance. Un décalage de quelques pixels se recale — tous les moods finissent
+    alors au MÊME endroit par rapport à la façade. Une géométrie déformée, elle, ne
+    se répare pas : la recaler ne ferait que déplacer l'erreur."""
+    import os, tempfile
+    import numpy as np
+    from PIL import Image, ImageDraw
+    from core.live_mapping import (build_facade_mask, measure_facade_alignment,
+                                   align_and_mask_image)
+
+    tmp = tempfile.mkdtemp(prefix="pandora_facade_")
+    W, H = 640, 400
+
+    def facade(dx=0, dy=0, scale=1.0, skew=0, halo=False):
+        im = Image.new("RGB", (W, H), (0, 0, 0))
+        d = ImageDraw.Draw(im)
+        cx, cy = W / 2 + dx, H / 2 + dy
+        w, h = 300 * scale, 200 * scale
+        col = (90, 160, 255)
+        d.polygon([(cx - w/2 + skew, cy + h/2), (cx + w/2, cy + h/2),
+                   (cx + w/2 - 30, cy - h/2), (cx - w/2 + 30 + skew, cy - h/2)], fill=col)
+        d.rectangle([cx - 30, cy - h/2 - 90 * scale, cx + 30, cy - h/2], fill=col)
+        if halo:      # lumière qui DÉBORDE volontairement de la façade
+            d.ellipse([cx - w/2 - 40, cy - 40, cx - w/2 + 20, cy + 40], fill=(60, 90, 200))
+        return im
+
+    def _p(name, img):
+        p = os.path.join(tmp, name + ".png")
+        img.save(p)
+        return p
+
+    ref = _p("facade", facade())
+    mask = build_facade_mask(ref, os.path.join(tmp, "mask.png"), feather=0)
+    assert mask, "masque de façade non construit depuis une façade isolée"
+
+    # 1. Verdicts : décalage → recalable ; déformation → à regénérer.
+    ATTENDU = {
+        "identique":    ("aligned",  facade()),
+        "decale_2px":   ("shifted",  facade(dx=2, dy=1)),
+        "decale_15px":  ("shifted",  facade(dx=15)),
+        "halo":         ("overflow", facade(halo=True)),
+        "agrandi":      ("deformed", facade(scale=1.15)),
+        "deforme":      ("deformed", facade(skew=40)),
+    }
+    for nom, (attendu, img) in ATTENDU.items():
+        m = measure_facade_alignment(_p(nom, img), mask)
+        assert m["verdict"] == attendu, \
+            (f"« {nom} » jugé {m['verdict']} au lieu de {attendu}", m)
+
+    # 2. Un décalage pur est recalé EXACTEMENT (c'est ce qui garantit que tous les
+    #    moods finissent au même endroit par rapport à la façade).
+    m = measure_facade_alignment(_p("decale_15px", facade(dx=15)), mask)
+    assert m["shift"] == (0, 15), ("décalage mal estimé", m["shift"])
+    assert m["iou_aligned"] > 0.99, "le recalage ne superpose pas parfaitement"
+    # …et une déformation n'est JAMAIS améliorée par un recalage.
+    d = measure_facade_alignment(_p("deforme", facade(skew=40)), mask)
+    assert abs(d["iou_aligned"] - d["iou"]) < 0.01, \
+        "un recalage prétend corriger une déformation"
+
+    # 3. Le rognage supprime réellement ce qui dépasse, sans toucher l'original.
+    src = _p("halo", facade(halo=True))
+    m = measure_facade_alignment(src, mask)
+    out = align_and_mask_image(src, mask, os.path.join(tmp, "rogne.png"), m["shift"])
+    assert out != src, "l'original a été écrasé"
+    _refm = np.asarray(Image.open(mask).convert("L")) > 127
+    _av = np.logical_and(np.asarray(Image.open(src).convert("L")) > 18, ~_refm).sum()
+    _ap = np.logical_and(np.asarray(Image.open(out).convert("L")) > 18, ~_refm).sum()
+    assert _av > 0, "le cas de test ne déborde pas — test sans valeur"
+    assert _ap == 0, f"{_ap} pixel(s) dépassent encore après rognage"
+
+    # 4. Bouton présent, MAPPING uniquement, et jamais bloquant sans façade.
+    import inspect
+    import ui.dialog_apercu as DA
+    _src = inspect.getsource(DA.MoodDialog)
+    assert "_btn_facade_crop" in _src and "_crop_to_facade" in _src
+    assert "self._is_mapping()" in _src, "le bouton doit être réservé au Mapping"
+    _crop = inspect.getsource(DA.MoodDialog._crop_to_facade)
+    assert "REGÉNÉRER" in _crop and 'verdict == "deformed"' in _crop, \
+        "une déformation doit conduire à regénérer, pas à recaler"
+    assert "_paths.insert" in _crop, "le rognage doit AJOUTER une image, pas remplacer"
+
+    from core.i18n import _FR_TO_EN as T
+    for k in ("▦  Rogner à la façade", "Géométrie déformée", "Mood aligné sur la façade"):
+        assert k in T, ("i18n manquant", k)
+
+
+@test
+def onglet_decoupage_live_editable():
+    """L'onglet Découpage Live est ÉDITABLE et ses retouches sont persistées
+    (correctif 2026-07-26, parité Cinéma).
+
+    Il était en setReadOnly(True) : une fois généré, impossible de supprimer un plan,
+    corriger une durée ou réécrire un prompt. Le découpage est pourtant un document de
+    travail — c'est même l'étape où l'on reprend chaque plan avant de générer."""
+    from PyQt6.QtWidgets import QApplication
+    QApplication.instance() or QApplication([])
+    import core.scenario as scenario_api
+    import ui.page_scenario_live as PSL
+
+    page = PSL.PageScenario()
+    assert not page._layout_view.isReadOnly(), "l'onglet Découpage est en lecture seule"
+    # Les trois éditeurs de la page se comportent pareil.
+    assert not page._editor_text.isReadOnly() and not page._direction_note_edit.isReadOnly()
+
+    page._title_edit.setText("Teaser éditable")
+    page._editor_text.setPlainText("Conducteur du teaser.")
+    page._layout_view.setPlainText(
+        "DÉCOUPAGE PANDORA 2\n\nSÉQUENCE 1 — A\n\nPLAN 01\n"
+        "SOURCE CONDUCTEUR : Le givre.\nINTENTION : Ouvrir.\nRYTHME : Lent.\n"
+        "DURÉE : 5s\nPROMPT VISUEL : Façade givrée.\nSON : Souffle.\n"
+        "PERSONNAGES : —\nACCESSOIRES : —\nVÉHICULES : —")
+    page._save(silent=True)
+
+    # RETOUCHE À LA MAIN : on corrige une durée, comme le ferait l'utilisateur.
+    _txt = page._layout_view.toPlainText().replace("DURÉE : 5s", "DURÉE : 9s")
+    page._layout_view.setPlainText(_txt)
+    assert "DURÉE : 9s" in page._read_layout(), "_read_layout ne voit pas la retouche"
+    page._save(silent=True)
+
+    sid = (page._current or {}).get("id", "")
+    reread = scenario_api.get_scenario(sid) or {}
+    assert "DURÉE : 9s" in (reread.get("decoupage_content") or ""), \
+        "la retouche manuelle du découpage n'est pas enregistrée"
+
+    # L'édition déclenche bien l'autosave (pas seulement un _save explicite).
+    import inspect
+    _src = inspect.getsource(PSL.PageScenario._build_editor_tabs) \
+        if hasattr(PSL.PageScenario, "_build_editor_tabs") else inspect.getsource(PSL)
+    assert "self._layout_view.textChanged.connect(self._schedule_autosave)" in _src, \
+        "les retouches du découpage ne déclenchent pas l'autosave"
+
+
+@test
+def deux_fenetres_deux_titres_distincts():
+    """« Créer le découpage » et « Générer les séquences » n'ouvrent pas deux fenêtres
+    au MÊME titre (correctif 2026-07-26).
+
+    En renommant la fenêtre de mise en page « Découpage — Aperçu », je lui avais donné
+    le titre déjà porté par la fenêtre des séquences : cliquer sur « Générer les
+    séquences » donnait l'impression d'ouvrir la mauvaise fenêtre."""
+    import inspect
+    import ui.page_scenario_live as PSL
+
+    _seq = inspect.getsource(PSL.PageScenario._open_decoupage_window)   # Séquences
+    _dec = inspect.getsource(PSL.PageScenario._open_format_window)      # Découpage
+
+    assert "Séquences Mapping" in _seq and "Séquences Live" in _seq, \
+        "la fenêtre des séquences ne nomme pas la séquence courante"
+    assert 'translate("Découpage — Aperçu")' not in _seq, \
+        "les deux fenêtres portent encore le même titre"
+    assert "Découpage — Aperçu" in _dec, \
+        "la fenêtre du découpage a perdu son titre"
+    # Et son statut parle bien de séquences, pas de découpage.
+    assert "Génération des séquences…" in _seq and "Séquences générées" in _seq, \
+        "le statut de la fenêtre des séquences parle encore de découpage"
+
+    from core.i18n import _FR_TO_EN as T
+    for _k in ("Génération des séquences…", "Séquences générées"):
+        assert _k in T, ("i18n manquant", _k)
+
+
+@test
+def decoupage_live_produit_des_fiches_pandora_2():
+    """Le découpage Live est enfin au contrat « DÉCOUPAGE PANDORA 2 » (2026-07-26).
+
+    Constat Matthieu, captures à l'appui : le Cinéma produisait des FICHES (SOURCE /
+    INTENTION / RYTHME / DURÉE / PROMPT VISUEL / PERSONNAGES…) pendant que le Live
+    restait sur l'ancien format plat. Le Live a désormais le même contrat, plus SON —
+    son champ propre, qui alimente le sound design et le calage musical."""
+    import inspect
+    from core.decoupage_document import (is_v2_document, validate_v2_document,
+                                         parse_v2_document, _LABELS)
+    from core.decoupage_layout import parse_layout_segments
+    from api.live_extract import (FormatConducteurWorker, validate_live_layout,
+                                  _LAYOUT_CORRECTION)
+
+    V2 = ("DÉCOUPAGE PANDORA 2\n\nSÉQUENCE 1 — ACCROCHE GELÉE\n\nPLAN 01\n"
+          "SOURCE CONDUCTEUR : Toute la pierre de la façade est prise dans le givre.\n"
+          "INTENTION : Installer le gel total avant la première étincelle.\n"
+          "RYTHME : Tempo suspendu, aucune coupe avant le jaillissement.\n"
+          "DURÉE : 5s\n"
+          "PROMPT VISUEL : Ouverture : la façade est prise dans le givre. Puis le gel "
+          "s'épaissit. Dans le dernier instant, une microluminescence frémit.\n"
+          "SON : Souffle glacé grave, craquements de gel, réverbération d'église vide.\n"
+          "PERSONNAGES : Éloane\nACCESSOIRES : —\nVÉHICULES : —")
+
+    # 1. Le worker Live demande bien le contrat v2, plus l'ancien format plat.
+    #    On retire les COMMENTAIRES avant de vérifier : ils citent forcément les
+    #    champs retirés pour expliquer pourquoi ils le sont (piège rencontré trois
+    #    fois dans la journée — l'assertion mordait sur sa propre justification).
+    _run = "\n".join(l for l in inspect.getsource(FormatConducteurWorker.run).split("\n")
+                     if not l.strip().startswith("#"))
+    assert "DÉCOUPAGE PANDORA 2" in _run, "le Live ne demande pas le contrat v2"
+    for _champ in ("SOURCE CONDUCTEUR", "INTENTION", "RYTHME", "PROMPT VISUEL",
+                   "SON", "PERSONNAGES", "ACCESSOIRES", "VÉHICULES"):
+        assert _champ in _run, ("champ de fiche absent du contrat Live", _champ)
+    assert "=== ACTE {n}" not in _run, "l'ancien format plat est encore demandé"
+    assert "N'utilise PAS l'ancien format" in _LAYOUT_CORRECTION
+    # Champs hérités du Cinéma RETIRÉS du contrat Live (demande Matthieu 2026-07-26) :
+    # sans objet pour une boucle VJ ou un mapping à caméra verrouillée.
+    for _hors_sujet in ("VALEUR PROPOSÉE :", "MOUVEMENT PROPOSÉ :", "MOOD :"):
+        assert _hors_sujet not in _run, \
+            ("champ Cinéma encore demandé au Live", _hors_sujet)
+
+    # 2. Un document Live v2 satisfait AUSSI le contrat partagé du Cinéma.
+    assert is_v2_document(V2), "le document Live n'est pas reconnu comme v2"
+    assert validate_v2_document(V2) == [], \
+        "le contrat partagé refuse un découpage Live v2"
+    assert validate_live_layout(V2) == [], "le validateur Live refuse ses propres fiches"
+
+    # 3. SON est un champ v2 à part entière, et il est EXIGÉ côté Live seulement.
+    assert "sound" in _LABELS, "champ SON absent du contrat v2"
+    _sans_son = V2.replace(
+        "SON : Souffle glacé grave, craquements de gel, réverbération d'église vide.\n", "")
+    assert validate_v2_document(_sans_son) == [], \
+        "le Cinéma ne doit PAS exiger de son par plan"
+    assert validate_live_layout(_sans_son) == ["P01:son"], \
+        "le Live doit exiger le SON (sound design + calage musical)"
+
+    # 4. Les champs éditoriaux arrivent réellement jusqu'aux plans.
+    seg = parse_layout_segments(V2)[0]
+    assert seg["source"].startswith("Toute la pierre"), "SOURCE perdue"
+    assert seg["intention"].startswith("Installer"), "INTENTION perdue"
+    assert seg["rhythm"].startswith("Tempo"), "RYTHME perdu"
+    assert seg["sound_prompt"].startswith("Souffle"), "SON perdu"
+    assert seg["character_names"] == ["Éloane"], "PERSONNAGES perdus"
+    assert parse_v2_document(V2)[0]["sound_prompt"], "sound_prompt absent du parseur v2"
+    # Les champs Cinéma retirés du contrat ressortent VIDES, sans casser la lecture…
+    assert seg["shot_size"] == "" and seg["camera_movement"] == "", \
+        "une fiche Live sans propositions caméra devrait les rendre vides"
+    # …mais un découpage Live ANTÉRIEUR qui les porte reste lu correctement.
+    _legacy = V2 + ("\nVALEUR PROPOSÉE : Plan d'ensemble\n"
+                    "MOUVEMENT PROPOSÉ : Fixe\nMOOD : À CRÉER")
+    _ls = parse_layout_segments(_legacy)[0]
+    assert _ls["shot_size"] == "Plan d'ensemble" and _ls["camera_movement"] == "Fixe", \
+        "un ancien découpage Live perd ses propositions caméra"
+    assert validate_live_layout(_legacy) == [], "un ancien découpage Live est refusé"
+
+    # 5. Le prompt envoyé au moteur recolle VISUEL + SON (sinon le son disparaît).
+    from core.prompt_sections import video_with_sound, sound_of
+    _p = video_with_sound(seg["prompt"], seg["sound_prompt"])
+    assert sound_of(_p).startswith("Souffle"), "[🎵 SOUND DESIGN] non reconstitué"
+    import ui.page_scenario_live as PSC
+    assert "video_with_sound" in inspect.getsource(
+        PSC.PageScenario._write_decoupage_segments), \
+        "les fiches v2 perdraient leur son à l'écriture des plans"
+    import ui.page_storyboard_live as PSB
+    assert "video_with_sound" in inspect.getsource(PSB.PageStoryboard._segments_to_shots)
+
+    # 6. RÉTROCOMPATIBILITÉ : les découpages Live déjà enregistrés au format PLAT
+    #    restent lisibles et valides — rien à migrer.
+    PLAT = ("=== ACTE 1 — ACCROCHE ===\nPLAN 1 — Le gel dort\n"
+            "Durée : 5s · Valeur de plan : plan large · Mouvement : fixe\n"
+            "PROMPT VIDÉO (français) : \"La façade prise dans le givre, dense.\"\n"
+            "PROMPT SON (sound design / SFX, français) : \"Souffle glacé.\"")
+    assert not is_v2_document(PLAT)
+    assert validate_live_layout(PLAT) == [], \
+        "un ancien découpage Live au format plat est refusé — régression"
+    assert parse_layout_segments(PLAT)[0]["sound_prompt"].startswith("Souffle")
+
+
+@test
+def duree_en_timecode_nest_plus_lue_zero_seconde():
+    """Un plan écrit « Durée : 0:20 » vaut 20 s, plus 0 (correctif 2026-07-26).
+
+    _DUR_RE n'attrapait que le premier groupe de chiffres : le modèle bascule
+    spontanément en notation timecode pour les plans longs, et « 0:20 » devenait un
+    plan de ZÉRO seconde — en silence, avant que la validation n'existe. Le bug
+    touchait les DEUX éditions (module partagé)."""
+    from core.decoupage_layout import duration_seconds, parse_layout_segments
+
+    ATTENDU = {
+        "12s": 12, "22 s": 22, "20 secondes": 20, "8": 8,   # écritures simples
+        "0:20": 20, "0'20": 20, "0:20s": 20,                 # timecode court
+        "1m10": 70, "1:10": 70, "2:05": 125,                 # timecode avec minutes
+        "0,5s": 1, "0.5 s": 1,                               # décimales → jamais 0
+    }
+    for ecriture, attendu in ATTENDU.items():
+        lu = duration_seconds(f"Durée : {ecriture} · Valeur de plan : plan large")
+        assert lu == attendu, (f"« Durée : {ecriture} » lu {lu} au lieu de {attendu}")
+
+    # Illisible ou nul → None, pour que le parseur garde SON défaut (jamais 0).
+    for ecriture in ("—", "0:00", "0s", "", "à définir"):
+        assert duration_seconds(f"Durée : {ecriture}") is None, \
+            f"« {ecriture} » devrait être illisible, pas une durée"
+
+    # Bout en bout : le plan ne vaut jamais 0 seconde.
+    def _doc(d):
+        return ("=== ACTE 1 — A ===\nPLAN 1 — Titre\n"
+                f"Durée : {d} · Valeur de plan : plan large · Mouvement : fixe\n"
+                "PROMPT VIDÉO (français) : \"Une façade givrée, dense.\"\n"
+                "PROMPT SON (sound design / SFX, français) : \"Souffle.\"")
+    assert parse_layout_segments(_doc("0:20"))[0]["duration"] == 20
+    assert parse_layout_segments(_doc("—"))[0]["duration"] == 5, "défaut du parseur"
+    for _e in ("0:20", "0'20", "1m10", "0,5s", "—", "0:00"):
+        assert parse_layout_segments(_doc(_e))[0]["duration"] > 0, \
+            f"« {_e} » produit encore un plan de 0 seconde"
+
+
+@test
+def decoupage_live_valide_avant_enregistrement():
+    """Le découpage Live est VALIDÉ, relancé une fois, et refusé s'il reste faux
+    (2026-07-26, parité Cinéma qui verrouille depuis le 2026-07-23).
+
+    PIÈGE CENTRAL : ne JAMAIS valider le Live avec validate_v2_document — le contrat
+    v2 du Cinéma exige SOURCE SCÉNARIO / INTENTION / PROMPT VISUEL, que le Live ne
+    produit pas. Ce test le prouve en confrontant les deux validateurs au MÊME
+    document Live."""
+    import inspect
+    from api.live_extract import (FormatConducteurWorker, validate_live_layout,
+                                  describe_layout_issues, _LAYOUT_CORRECTION)
+
+    BON = ("=== ACTE 1 — ACCROCHE ===\n"
+           "PLAN 1 — Étincelle\n"
+           "Durée : 4s · Valeur de plan : plan d'ensemble · Mouvement : fixe\n"
+           "PROMPT VIDÉO (français) : \"Une étincelle jaillit du portail.\"\n"
+           "PROMPT SON (sound design / SFX, français) : \"Crépitement sec.\"")
+
+    # 1. Un découpage Live conforme passe.
+    assert validate_live_layout(BON) == [], "un découpage Live valide est refusé"
+
+    # 2. …et le validateur CINÉMA le rejetterait. C'est tout le piège.
+    from core.decoupage_document import validate_v2_document
+    assert validate_v2_document(BON), \
+        "validate_v2_document accepte le format Live — le piège aurait disparu"
+
+    # 3. Les fautes RÉELLEMENT bloquantes sont vues, et lisibles.
+    _sans_son = BON.replace(
+        "PROMPT SON (sound design / SFX, français) : \"Crépitement sec.\"", "")
+    assert validate_live_layout(_sans_son) == ["P01:son"], \
+        "PROMPT SON manquant non détecté (sound design + calage musical perdus)"
+    assert "PROMPT SON" in describe_layout_issues(["P01:son"])
+    # PROMPT VIDÉO absent : le parseur retombe SILENCIEUSEMENT sur le titre du plan,
+    # d'où le contrôle « prompt == titre » plutôt qu'un simple test de vacuité.
+    _sans_video = BON.replace(
+        "PROMPT VIDÉO (français) : \"Une étincelle jaillit du portail.\"", "")
+    assert validate_live_layout(_sans_video) == ["P01:prompt"], \
+        "PROMPT VIDÉO manquant non détecté (repli silencieux sur le titre)"
+    assert validate_live_layout("bonjour") == ["structure_non_reconnue"]
+    assert describe_layout_issues([]) == ""
+
+    # 3bis. Une durée HORS 2–15 s n'est PAS bloquante (correctif 2026-07-26, cas réel
+    # refusé à tort). core.music_align.conform_durations_to_set la répare EN PLACE
+    # avec ces mêmes bornes au moment d'écrire les plans : refuser le document
+    # revenait à jeter un découpage que PANDORA sait corriger seul.
+    _long = BON.replace("Durée : 4s", "Durée : 30s")
+    assert validate_live_layout(_long) == [], \
+        "une durée hors bornes bloque encore alors qu'elle est conformée ensuite"
+    from core.music_align import conform_durations_to_set
+    _segs = [{"duration": 22}, {"duration": 30}, {"duration": 6}]
+    conform_durations_to_set(_segs, 40)
+    assert [s["duration"] for s in _segs] == [15, 15, 10], \
+        "la conformation ne ramène plus les durées dans les bornes"
+    # Et la borne est ANNONCÉE au modèle dès le premier jet (elle n'était écrite
+    # nulle part : il produisait des plans de 20 à 40 s sans le savoir).
+    import api.live_extract as _LE
+    assert "entre 2 et 15 secondes" in inspect.getsource(
+        _LE.FormatConducteurWorker.run), "la borne de durée n'est pas dite au modèle"
+
+    # 4. Le worker valide, relance UNE fois, puis refuse — et n'affiche rien avant.
+    _run = inspect.getsource(FormatConducteurWorker.run)
+    assert "validate_live_layout(full)" in _run, "le worker ne valide pas sa sortie"
+    assert "_LAYOUT_CORRECTION" in _run and "self.retrying.emit" in _run, \
+        "pas de relance corrective annoncée"
+    assert _run.index("self.chunk.emit(full)") > _run.index("validate_live_layout(full)"), \
+        "le document est affiché AVANT d'être validé (un jet raté serait montré)"
+    assert "Rien n'a été enregistré" in _run, \
+        "un découpage invalide doit être refusé, pas enregistré"
+    assert "validate_v2_document" not in _run and "is_v2_document" not in _run, \
+        "le worker Live utilise le validateur du Cinéma"
+
+    # 5. Le suffixe correctif rappelle le contrat de FICHES, champ SON compris.
+    #    (Depuis le 2026-07-26 le Live produit lui aussi du « DÉCOUPAGE PANDORA 2 » ;
+    #    ce qu'il ne doit PAS faire, c'est retomber sur l'ancien format plat.)
+    assert "N'utilise PAS l'ancien format" in _LAYOUT_CORRECTION, \
+        "la relance n'interdit pas le retour à l'ancien format plat"
+    for _must in ("DÉCOUPAGE PANDORA 2", "SOURCE CONDUCTEUR", "INTENTION",
+                  "PROMPT VISUEL", "SON", "chiffrée sur chaque plan"):
+        assert _must in _LAYOUT_CORRECTION, ("relance corrective incomplète", _must)
+
+    # 6. « Appliquer » AVERTIT sans interdire : un découpage retouché à la main et
+    #    déjà en base ne doit pas devenir soudainement inapplicable.
+    import ui.page_scenario_live as PSL
+    _fmt = inspect.getsource(PSL.PageScenario._open_format_window)
+    assert "validate_live_layout(result)" in _fmt, "« Appliquer » ne valide rien"
+    assert "Appliquer quand même" in _fmt, \
+        "« Appliquer » bloque au lieu d'avertir (régression sur les découpages existants)"
+
+    from core.i18n import _FR_TO_EN as T
+    for _k in ("Découpage incomplet", "Appliquer quand même", "Corriger",
+               "Format incomplet — nouvelle tentative…"):
+        assert _k in T, ("i18n manquant", _k)
+
+
+@test
+def worker_detruit_ne_fait_plus_planter_la_fermeture():
+    """Fermer PANDORA Live ouvrait une fenêtre d'erreur (crash réel 2026-07-26) :
+
+        ui/visual_identity.py:41 in _cleanup
+            if worker is not None and worker.isRunning():
+        RuntimeError: wrapped C/C++ object of type VisualIdentityWorker has been deleted
+
+    `destroyed` se déclenche APRÈS la destruction de l'objet C++ : le worker peut avoir
+    été emporté avec l'arbre Qt, et isRunning() lève au lieu de répondre. Une exception
+    non gérée dans un slot PyQt6 fait tomber l'app (doctrine projet)."""
+    import inspect
+    from PyQt6.QtWidgets import QApplication
+    from PyQt6.QtCore import QThread
+    from PyQt6 import sip
+    QApplication.instance() or QApplication([])
+    from core.worker import abandon_thread, is_running
+
+    # 1. Un worker dont l'objet C++ est DÉTRUIT : isRunning() lève, is_running() non.
+    w = QThread()
+    sip.delete(w)
+    _leve = False
+    try:
+        w.isRunning()
+    except RuntimeError:
+        _leve = True
+    assert _leve, "le scénario du crash n'est plus reproductible — test à revoir"
+    assert is_running(w) is False, "is_running() doit répondre False, pas lever"
+
+    # 2. abandon_thread() encaisse aussi un objet détruit (aucune exception).
+    w2 = QThread()
+    sip.delete(w2)
+    abandon_thread(w2)
+
+    # 3. Le nettoyage d'identité visuelle survit à un worker détruit.
+    import ui.visual_identity as VI
+
+    class _Owner:
+        pass
+
+    owner = _Owner()
+    owner._visual_identity_worker = None
+    _dead = QThread()
+    sip.delete(_dead)
+    owner._visual_identity_worker = _dead
+    # On vise l'APPEL (« and worker.isRunning(): ») : le commentaire qui raconte le
+    # crash cite forcément worker.isRunning() et ne doit pas déclencher.
+    _src = inspect.getsource(VI.prepare_owner)
+    assert "is_running(worker)" in _src and "and worker.isRunning():" not in _src, \
+        "visual_identity._cleanup appelle encore isRunning() à nu"
+
+    # 4. Plus aucun isRunning() à nu dans un chemin de FERMETURE.
+    import ui.dialog_extract_generate as DEG, ui.dialog_room_variations as DRV
+    assert "and w.isRunning():" not in inspect.getsource(DEG.ExtractGenerateDialog.reject), \
+        "reject() appelle isRunning() à nu (abort possible à la fermeture)"
+    assert "and w.isRunning():" not in inspect.getsource(DRV.RoomVariationsDialog._abandon_tr_worker), \
+        "_abandon_tr_worker appelle isRunning() à nu"
+
+
+@test
+def erreurs_ia_texte_live_nomment_le_bon_moteur():
+    """Les erreurs de la chaîne TEXTE Live ne passent plus par l'humaniseur fal.ai
+    (2026-07-26). Toute la chaîne (mise en page, découpage, arrangement, co-écriture,
+    extraction) formatait ses erreurs avec core.worker.humanize_api_error, dont les
+    mots-clés incluent « credit » / « quota » et dont la sortie est « Crédits fal.ai
+    insuffisants — rechargez votre compte sur fal.ai/dashboard ». Un compte IA TEXTE
+    à zéro envoyait donc l'utilisateur recharger le mauvais compte."""
+    import inspect
+    from api.live_screenplay import fmt_err
+    import api.live_extract as LE
+    import api.live_screenplay as LS
+
+    # Plus AUCUN appel à l'humaniseur vidéo dans la chaîne texte Live.
+    for _mod in (LE, LS):
+        _src = inspect.getsource(_mod)
+        assert "humanize_api_error(" not in _src, \
+            (f"{_mod.__name__} : erreur texte passée par l'humaniseur fal.ai")
+
+    # Une erreur de crédit ne doit JAMAIS renvoyer vers fal.ai.
+    out = fmt_err(Exception("429 rate limit exceeded — insufficient credit"), "decoupage")
+    assert "fal.ai" not in out.lower(), "l'erreur texte renvoie encore vers fal.ai"
+
+    # L'erreur nomme le moteur RÉELLEMENT routé pour la tâche.
+    from core.ai_provider import ai_name_for_task
+    for _task in ("decoupage", "storyboard_gen", "screenplay"):
+        _name = ai_name_for_task(_task)
+        assert _name and _name in fmt_err(Exception("boom"), _task), \
+            (f"l'erreur ne nomme pas le moteur de la tâche « {_task} »")
+
+    # Chaque site d'échec passe une tâche explicite (jamais le défaut implicite).
+    _ls = inspect.getsource(LS)
+    assert _ls.count('fmt_err(e, "') >= 5, "un site d'erreur live_screenplay non typé"
+    assert 'fmt_err(e, "storyboard_gen")' in _ls, "le découpage doit nommer storyboard_gen"
+    _le = inspect.getsource(LE)
+    for _t in ('"decoupage"', '"screenplay"', '"extraction"'):
+        assert f"_fmt_err(e, {_t})" in _le, f"site d'erreur live_extract non typé : {_t}"
+
+    # Plafonds de sortie : l'extraction ne doit plus être coupée à 4096.
+    assert LE._MAX_TOKENS_BY_TASK.get("extraction") == 16000, \
+        "l'extraction Live est encore plafonnée trop bas (listes tronquées en silence)"
+    assert "max_tokens=4096" not in _le, "plafond 4096 encore écrit en dur"
+
+    # La garde de clé de la Mise en page doit viser la MÊME tâche que l'appel.
+    _run = inspect.getsource(LE.FormatConducteurWorker.run)
+    assert 'key_error("decoupage")' in _run and 'task="decoupage"' in _run, \
+        "la garde de clé et l'appel ne visent pas la même tâche"
+
+    # Libellés de progression : le moteur par tâche, pas la marque globale.
+    import ui.page_scenario_live as PSL
+    _fmt = inspect.getsource(PSL.PageScenario._on_format)
+    assert 'ai_name_for_task("decoupage")' in _fmt, \
+        "le libellé de la Mise en page ne nomme pas le moteur de la tâche"
+    _dec = inspect.getsource(PSL.PageScenario._on_storyboard)
+    assert 'ai_name_for_task("storyboard_gen")' in _dec, \
+        "le libellé du Découpage ne nomme pas le moteur de la tâche"
+    from core.i18n import _FR_TO_EN as T
+    for _k in ("Mise en page du conducteur via {ai}…", "Génération du découpage via {ai}…"):
+        assert _k in T, ("i18n manquant", _k)
+
+
+@test
+def decoupage_live_reellement_persiste():
+    """Le Découpage Live SURVIT à l'enregistrement (correctif 2026-07-26).
+
+    Perte silencieuse trouvée par audit : core/scenario.normalize_scenario donne la
+    PRIORITÉ à `decoupage_content` et ne retombe sur `layout_content` que si la clé est
+    ABSENTE (None) — pas si elle vaut "". Le Live n'écrivait que `layout_content` ; dès
+    le 2e enregistrement, le `decoupage_content` vide figé par la normalisation
+    précédente écrasait le découpage. « Appliquer le découpage ✓ » s'affichait, et au
+    rechargement l'onglet était vide ET grisé.
+
+    Ce test traverse la VRAIE persistance (aucun stub de list_scenarios) : c'était
+    précisément l'angle mort qui laissait le harnais vert."""
+    from PyQt6.QtWidgets import QApplication
+    QApplication.instance() or QApplication([])
+    import core.scenario as scenario_api
+    import ui.page_scenario_live as PSL
+
+    DEC = ("=== ACTE 1 — ACCROCHE ===\n"
+           "PLAN 1 — Étincelle\n"
+           "Durée : 4s · Valeur de plan : plan d'ensemble · Mouvement : fixe\n"
+           "PROMPT VIDÉO (français) : \"Une étincelle jaillit du portail.\"\n"
+           "PROMPT SON (sound design / SFX, français) : \"Crépitement sec.\"")
+
+    page = PSL.PageScenario()
+    page._title_edit.setText("Teaser persistance")
+    page._editor_text.setPlainText("Conducteur du teaser.")
+
+    # 1er autosave : le découpage est encore VIDE (l'utilisateur tape son conducteur).
+    page._save(silent=True)
+    # Puis « Appliquer le découpage » → 2e enregistrement.
+    page._layout_view.setPlainText(DEC)
+    page._save(silent=True)
+
+    sid = (page._current or {}).get("id", "")
+    assert sid, "le conducteur n'a pas été enregistré"
+    reread = scenario_api.get_scenario(sid) or {}
+    assert "PLAN 1 — Étincelle" in (reread.get("decoupage_content") or ""), \
+        "decoupage_content perdu à l'enregistrement"
+    assert "PLAN 1 — Étincelle" in (reread.get("layout_content") or ""), \
+        "alias layout_content perdu (les 2.0.1 installées ne reliraient plus le fichier)"
+    assert "PROMPT SON" in (reread.get("decoupage_content") or ""), \
+        "le PROMPT SON (sound design + calage musical) n'a pas survécu"
+
+    # Rechargement : l'onglet Découpage doit être rempli ET accessible.
+    page2 = PSL.PageScenario()
+    page2._save = lambda *a, **k: None
+    page2._open_scenario(reread)
+    assert "PLAN 1 — Étincelle" in page2._layout_view.toPlainText(), \
+        "le découpage ne revient pas dans l'onglet au rechargement"
+    assert page2._editor_tabs.isTabEnabled(page2.TAB_DECOUPAGE), \
+        "l'onglet Découpage est grisé alors qu'un découpage existe"
+
+    # Rétrocompatibilité : un conducteur ANTÉRIEUR au 2026-07-23 n'a que layout_content
+    # et AUCUN decoupage_content — il doit encore être migré par core/scenario.py.
+    ancien = scenario_api.normalize_scenario(
+        {"title": "Ancien", "layout_content": "PLAN 1 — Ancien format"})
+    assert "PLAN 1 — Ancien format" in ancien["decoupage_content"], \
+        "la migration des anciens conducteurs (layout_content seul) est cassée"
+
+    # Le format Live doit traverser canonicalize_layout INTACT (piège P3 de l'audit :
+    # un en-tête « PROMPT : » nu serait réécrit par la branche Cinéma).
+    from core.decoupage_layout import canonicalize_layout
+    assert "PROMPT VIDÉO (français)" in canonicalize_layout(DEC), \
+        "canonicalize_layout abîme le format Live"
+
+    # Les DEUX clés doivent être écrites partout où le Live sauve.
+    import inspect
+    _src = inspect.getsource(PSL.PageScenario)
+    assert _src.count('"decoupage_content": self._read_layout()') >= 2, \
+        "un point de sauvegarde Live n'écrit pas la clé canonique"
+    assert "_layout_view.toPlainText()" not in inspect.getsource(PSL.PageScenario._save), \
+        "_save doit passer par _read_layout(), jamais par la vue brute"
+
+
+@test
+def estimation_masquee_si_duree_cible():
+    """Durée cible cochée → l'ESTIMATION disparaît (parité Cinéma, portée Live
+    le 2026-07-26). Une durée choisie rend l'estimation sans objet, et les deux
+    ne tiennent pas ensemble dans les 300 px du panneau."""
+    from PyQt6.QtWidgets import QApplication
+    QApplication.instance() or QApplication([])
+    import ui.page_scenario_live as PSL
+
+    page = PSL.PageScenario()
+    page._save = lambda *a, **k: None       # jamais d'écriture réelle en test
+    lbl = page._dur_estimate_lbl
+
+    # isHidden() : reflète l'état demandé même si la page n'est pas à l'écran.
+    assert not lbl.isHidden(), "l'estimation doit être visible sans durée cible"
+
+    page._dur_defined_check.setChecked(True)
+    assert lbl.isHidden(), "l'estimation reste affichée alors que la durée cible est active"
+    assert not page._dur_min.isHidden() and not page._dur_sec.isHidden(), \
+        "les spinboxes de durée doivent apparaître avec la durée cible"
+
+    page._dur_defined_check.setChecked(False)
+    assert not lbl.isHidden(), "l'estimation ne revient pas quand on décoche la durée cible"
+
+    # Le rafraîchissement du texte ne doit JAMAIS ré-afficher le label.
+    page._dur_defined_check.setChecked(True)
+    page._editor_text.setPlainText("mot " * 400)
+    page._update_dur_estimate()
+    assert lbl.isHidden(), "_update_dur_estimate ré-affiche l'estimation masquée"
 
 
 @test

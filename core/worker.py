@@ -28,11 +28,23 @@ def abandon_thread(w) -> None:
     # Purge les threads déjà terminés (sûrs à libérer)
     _ABANDONED_THREADS[:] = [t for t in _ABANDONED_THREADS if _still_running(t)]
 
-def _still_running(t) -> bool:
+def is_running(t) -> bool:
+    """isRunning() SÛR : renvoie False au lieu de lever quand l'objet C++ du QThread
+    a déjà été détruit.
+
+    Appeler t.isRunning() directement lève « RuntimeError: wrapped C/C++ object of
+    type … has been deleted » — typiquement depuis un slot branché sur destroyed,
+    qui par construction se déclenche APRÈS la destruction côté C++ (crash réel à la
+    fermeture du Live, 2026-07-26). Tout code qui teste un worker susceptible d'avoir
+    été détruit doit passer par ici."""
     try:
         return t.isRunning()
     except Exception:
         return False
+
+
+# Ancien nom interne, conservé : utilisé par abandon_thread ci-dessus.
+_still_running = is_running
 
 
 _CREDIT_KEYWORDS = (

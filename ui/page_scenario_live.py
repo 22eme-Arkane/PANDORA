@@ -105,6 +105,16 @@ class PageScenario(QWidget):
     navigate_requested = pyqtSignal(str, str)  # (page_key, extra_arg)
     style_changed      = pyqtSignal(str)        # style key — propagate to all pages
 
+    # Index des onglets de l'éditeur — NOMMÉS depuis l'incident du 2026-07-26 :
+    # l'insertion de « Note de réalisation » en position 1 (2026-07-23) avait
+    # décalé le Découpage en 2, mais les setTabEnabled(1, …)/setCurrentIndex(1)
+    # étaient restés en dur. « Appliquer » dégrisait donc la Note de réalisation
+    # et laissait le Découpage GRISÉ, donc inatteignable, alors que le texte y
+    # était bien écrit. Ne JAMAIS réécrire ces index en dur.
+    TAB_CONDUCTEUR = 0
+    TAB_NOTE       = 1
+    TAB_DECOUPAGE  = 2
+
     def __init__(self):
         super().__init__()
         self.setStyleSheet(f"background:{CP['bg0']};")
@@ -423,11 +433,21 @@ class PageScenario(QWidget):
         ]
         for _act, _src in self._scn_actions_pairs:
             _act.triggered.connect(_src.click)
+        # « Tout générer » vit DANS le menu Action (parité Cinéma, demande Matthieu
+        # 2026-07-26 : retiré du bas du panneau mais accessible pour qui veut encore
+        # l'utiliser). Libellé fixe : le bouton source n'a pas de text() (layout).
+        self._act_gen_all = _scn_menu.addAction("⚡  " + translate("Tout générer"))
+        self._act_gen_all.setToolTip(
+            "Personnages · Décors · Accessoires · HMC · Véhicules · Storyboard · Images")
+        # .click() sur le bouton caché : respecte l'état désactivé (_set_ai_busy).
+        self._act_gen_all.triggered.connect(lambda: self._btn_generate_all.click())
         def _sync_scn_actions_menu():
             for _act, _src in self._scn_actions_pairs:
                 _act.setText(_src.text())
                 _act.setToolTip(_src.toolTip())
                 _act.setEnabled(_src.isEnabled())
+            self._act_gen_all.setEnabled(
+                hasattr(self, "_btn_generate_all") and self._btn_generate_all.isEnabled())
         _scn_menu.aboutToShow.connect(_sync_scn_actions_menu)
         self._btn_scn_actions.setMenu(_scn_menu)
 
@@ -520,7 +540,12 @@ class PageScenario(QWidget):
         # Onglet « Découpage » (ex-« Mise en page PANDORA », renommé 2026-07-23)
         # — vue optimisée moteurs (grisée jusqu'au clic)
         self._layout_view = QTextEdit()
-        self._layout_view.setReadOnly(True)
+        # ÉDITABLE (correctif 2026-07-26, parité Cinéma) : le découpage est un
+        # document de travail — on y supprime un plan, on corrige une durée, on
+        # réécrit un prompt. Il était en lecture seule côté Live, donc intouchable
+        # une fois généré. Les modifications sont persistées par l'autosave, comme
+        # le Conducteur et la Note de réalisation.
+        self._layout_view.setReadOnly(False)
         self._layout_view.setFont(_tw_font)
         self._layout_view.setStyleSheet(
             f"QTextEdit{{background:{CP['bg0']};border:none;"
@@ -535,8 +560,10 @@ class PageScenario(QWidget):
             "version optimisée pour les moteurs : plans découpés + prompts prêts pour Seedance. "
             "Ton conducteur, lui, reste intact dans l'onglet Conducteur."
         ))
+        self._layout_view.textChanged.connect(self._schedule_autosave)
         self._editor_tabs.addTab(self._layout_view, translate("Découpage"))
-        self._editor_tabs.setTabEnabled(2, False)   # grisé tant qu'aucune mise en page
+        # Grisé tant qu'aucun découpage n'existe.
+        self._editor_tabs.setTabEnabled(self.TAB_DECOUPAGE, False)
 
         # Colonne éditeur : barre d'outils texte AU-DESSUS des onglets
         # Conducteur / Note de réalisation / Découpage (2026-07-23, parité Cinéma).
@@ -929,7 +956,10 @@ class PageScenario(QWidget):
         sc_lay.setContentsMargins(0, 0, 8, 0)
         sc_lay.setSpacing(0)
 
-        # ── Section 0 : Références visuelles ──────────────────────────────────
+        # ── Section 0 : Ajouter des références ────────────────────────────────
+        # Fusion (demande Matthieu 2026-07-26) : les images de référence libres ET
+        # la façade du bâtiment vivent dans la MÊME section — c'étaient deux
+        # dépliants pour la même idée. Reste en tête, avant le Conducteur.
         c_refs, l_refs = _section_container()
 
         _refs_scroll = QScrollArea()
@@ -965,28 +995,30 @@ class PageScenario(QWidget):
         )
         l_refs.addWidget(self._btn_load_analysis)
 
-        tog_refs = _make_toggle("🎨  Ajouter des références", c_refs, expanded=False)
-
-        self._refresh_refs_display()
-
-        # ── Section 0ter : Référence bâtiment (façade) ────────────────────────
+        # ── Référence bâtiment (façade) — sous-bloc de la MÊME section ────────
         # Image de la façade pour le mapping. Réutilisée par la génération des
         # moods en Séquence Mapping (Flux Kontext édite la façade).
-        c_bld, l_bld = _section_container()
+        _bld_head = QLabel(translate("🏢  Référence bâtiment (façade)"))
+        _bld_head.setStyleSheet(
+            f"color:{CP['text_secondary']};font-size:9px;font-weight:700;"
+            f"background:transparent;border:none;padding-top:4px;")
+        l_refs.addWidget(_bld_head)
+
         self._bld_row = QVBoxLayout()
         self._bld_row.setContentsMargins(0, 0, 0, 0)
         self._bld_row.setSpacing(6)
-        l_bld.addLayout(self._bld_row)
+        l_refs.addLayout(self._bld_row)
         _bld_hint = QLabel(translate(
             "Image de la façade projetée. En Séquence Mapping, les moods sont générés "
             "SUR cette façade (sa géométrie est conservée)."))
         _bld_hint.setWordWrap(True)
         _bld_hint.setStyleSheet(
             f"color:{CP['text_dim']};font-size:9px;background:transparent;border:none;")
-        l_bld.addWidget(_bld_hint)
+        l_refs.addWidget(_bld_hint)
 
-        tog_bld = _make_toggle("🏢  Référence bâtiment (façade)", c_bld, expanded=False)
+        tog_refs = _make_toggle("🎨  Ajouter des références", c_refs, expanded=False)
 
+        self._refresh_refs_display()
         self._refresh_building_display()
 
         # ── Section 0bis : Musiques du set ────────────────────────────────────
@@ -1068,9 +1100,11 @@ class PageScenario(QWidget):
             "🚗", "Générer les véhicules", "Identifier les véhicules depuis le conducteur",
             self._on_gen_vehicles,
         )
+        # ROUGE + éclair (demande Matthieu 2026-07-26, parité Cinéma où « Générer le
+        # storyboard » a repris l'identité visuelle de l'ex-« Tout générer »).
         self._btn_storyboard = _ai_btn(
-            "🎬", "Générer les séquences", "Découpe le conducteur en séquence (Live/Mapping)",
-            self._on_storyboard, color=CP["green"], radius=8,
+            "⚡", "Générer les séquences", "Découpe le conducteur en séquence (Live/Mapping)",
+            self._on_storyboard, color=CP.get("red", "#ff4f6a"), radius=8,
         )
         for _b in (
             self._btn_gen_characters, self._btn_gen_accessories,
@@ -1133,20 +1167,17 @@ class PageScenario(QWidget):
         self._apply_mode_style()
         tog_mode = _make_toggle("🎛  Mode", c_mode, expanded=False)
 
-        # ── Ordre visuel du panneau droit (haut → bas), parité Cinéma 2026-07-23 :
-        # Durée cible, Style VJ, Mode, Ajouter des références, Façade, Conducteur,
-        # Découpage, Générer, Musique.
+        # ── Ordre visuel du panneau droit (haut → bas), demande Matthieu 2026-07-26 :
+        # Durée cible, Mode, Ajouter des références (façade fusionnée dedans),
+        # Conducteur, Découpage, Générer, puis Style VJ et Musiques du set.
         sc_lay.addWidget(self._build_film_strip())
-        sc_lay.addWidget(tog_style)
-        sc_lay.addWidget(c_style)
-        sc_lay.addWidget(tog_mode)
-        sc_lay.addWidget(c_mode)
         for _tog, _cont in (
+            (tog_mode,  c_mode),
             (tog_refs,  c_refs),
-            (tog_bld,   c_bld),
             (tog_cond,  c_cond),
             (tog_final, c_final),
             (tog_gen,   c_gen),
+            (tog_style, c_style),
             (tog_music, c_music),
         ):
             sc_lay.addWidget(_tog)
@@ -1251,8 +1282,12 @@ class PageScenario(QWidget):
             f"background:{CP['bg1']};"
         )
         ga_lay = QVBoxLayout(gen_all_zone)
-        ga_lay.setContentsMargins(16, 10, 16, 12)
-        ga_lay.setSpacing(8)
+        # Marges resserrées (2026-07-26) : « Tout générer » ayant rejoint le menu
+        # Action, cette zone ne doit plus réserver de rectangle vide sous la ligne
+        # — l'espace revient aux sections du panneau. Seul « Rouvrir la fenêtre »
+        # y reste, et il est masqué la plupart du temps.
+        ga_lay.setContentsMargins(16, 0, 16, 8)
+        ga_lay.setSpacing(6)
 
         self._gen_all_progress_bar = QProgressBar()
         self._gen_all_progress_bar.setRange(0, 0)
@@ -1301,7 +1336,11 @@ class PageScenario(QWidget):
         _ga_btn_lay.addLayout(_ga_btn_row)
         _ga_btn_lay.addWidget(_ga_btn_sub)
         ga_lay.addWidget(self._btn_generate_all)
-        # « Rouvrir la fenêtre » TOUT EN BAS, sous « Tout générer »
+        # « Tout générer » MASQUÉ : il vit dans le menu Action (demande Matthieu
+        # 2026-07-26) — widget vivant, _set_ai_busy et _on_generate_all restent
+        # branchés dessus.
+        self._btn_generate_all.hide()
+        # « Rouvrir la fenêtre » TOUT EN BAS du panneau
         ga_lay.addWidget(self._btn_reopen_window)
 
         root_lay.addWidget(gen_all_zone)
@@ -1344,6 +1383,20 @@ class PageScenario(QWidget):
         self._redo_stack.clear()
         self._title_edit.setText(_pname)
         self._set_editor_text("")
+        # Un NOUVEAU conducteur repart d'une note vierge et d'un découpage vide
+        # (correctif 2026-07-26) : sans ça, il héritait à l'écran de la note et du
+        # découpage du projet précédent, et le premier enregistrement les figeait
+        # dedans. Le gabarit empty_note() donne en prime les sections que
+        # section_text()/visual_style_from_note() savent lire.
+        try:
+            from core.direction_note import empty_note
+            if hasattr(self, "_direction_note_edit"):
+                self._direction_note_edit.setPlainText(empty_note())
+        except Exception:
+            pass
+        if hasattr(self, "_layout_view"):
+            self._layout_view.clear()
+            self._editor_tabs.setTabEnabled(self.TAB_DECOUPAGE, False)
         self._dur_defined_check.setChecked(False)
         self._dur_min.setValue(90)
         self._dur_sec.setValue(0)
@@ -1383,12 +1436,17 @@ class PageScenario(QWidget):
         self._film_style_combo.setCurrentIndex(idx if idx > 0 else 0)
         self._live_mode = sc.get("live_mode", "live")
         self._apply_mode_style()
-        _layout = sc.get("layout_content", "")
+        # Clé canonique d'abord, alias 1.3.x ensuite (les conducteurs antérieurs au
+        # 2026-07-23 n'ont que layout_content — core/scenario.py les migre).
+        _layout = sc.get("decoupage_content") or sc.get("layout_content", "")
         self._layout_view.setPlainText(_layout)
         from ui.widgets import apply_paragraph_spacing
         apply_paragraph_spacing(self._layout_view)   # centré + respiration (façon Word)
-        self._editor_tabs.setCurrentIndex(0)
-        self._editor_tabs.setTabEnabled(1, bool(_layout.strip()))
+        self._editor_tabs.setCurrentIndex(self.TAB_CONDUCTEUR)
+        # C'est le DÉCOUPAGE qu'on dégrise selon son contenu — pas la Note de
+        # réalisation, toujours accessible (correctif 2026-07-26).
+        self._editor_tabs.setTabEnabled(self.TAB_DECOUPAGE, bool(_layout.strip()))
+        self._editor_tabs.setTabEnabled(self.TAB_NOTE, True)
         _mt = sc.get("music_tracks", [])
         self._music_tracks = list(_mt) if isinstance(_mt, list) else []
         self._refresh_music_display()
@@ -1499,9 +1557,15 @@ class PageScenario(QWidget):
     # ── Durée ─────────────────────────────────────────────────────────────────
 
     def _on_dur_defined_toggled(self, checked: bool):
-        """Affiche/masque les spinboxes durée selon la case à cocher."""
+        """Affiche/masque les spinboxes durée selon la case à cocher.
+        L'ESTIMATION disparaît quand la durée cible est active (parité Cinéma,
+        portée côté Live le 2026-07-26) — une durée choisie rend l'estimation
+        sans objet, et la rangée garde la même largeur au lieu de pousser le
+        panneau (spinboxes + estimation ne tiennent pas ensemble en 300 px)."""
         self._dur_min.setVisible(checked)
         self._dur_sec.setVisible(checked)
+        if hasattr(self, "_dur_estimate_lbl"):
+            self._dur_estimate_lbl.setVisible(not checked)
         self._schedule_autosave()
 
     @staticmethod
@@ -1551,7 +1615,15 @@ class PageScenario(QWidget):
             # Note de réalisation Live persistée avec le conducteur (2026-07-23).
             "direction_note":    (self._direction_note_edit.toPlainText()
                                   if hasattr(self, "_direction_note_edit") else ""),
-            "layout_content":    self._layout_view.toPlainText(),
+            # DEUX clés obligatoires (correctif 2026-07-26) : core/scenario.py donne
+            # la PRIORITÉ à decoupage_content et ne retombe sur layout_content que si
+            # la clé est absente (None) — pas si elle vaut "". Le Live n'écrivait que
+            # layout_content : dès le 2e enregistrement, le decoupage_content vide
+            # figé par la normalisation précédente ÉCRASAIT le découpage. Perte
+            # silencieuse, 100 % des cas. layout_content reste écrit pour que les
+            # fichiers exportés restent lisibles par une 2.0.1 déjà installée.
+            "decoupage_content": self._read_layout(),
+            "layout_content":    self._read_layout(),
             "music_tracks":      self._music_tracks,
             "ref_images":        [p for p in self._ref_images if os.path.isfile(p)],
             "ref_analysis":      self._last_ref_analysis,
@@ -1573,12 +1645,19 @@ class PageScenario(QWidget):
     def _get_text(self) -> str:
         return self._editor_text.toPlainText().strip()
 
+    def _read_layout(self) -> str:
+        """Découpage en forme STOCKAGE. À utiliser pour TOUTE sauvegarde ou lecture —
+        jamais _layout_view.toPlainText() brut (discipline portée du Cinéma, où une
+        transformation d'affichage avait fini par fuir dans le fichier)."""
+        if not hasattr(self, "_layout_view"):
+            return ""
+        return self._layout_view.toPlainText()
+
     def _decoupage_base(self) -> str:
         """Source du découpage (règle 2026-07-09, AUTOMATIQUE — aucun choix manuel) :
-        la « Mise en page PANDORA » (layout_content) si elle existe, sinon le scénario/
-        conducteur brut. Vaut pour TOUS les points de lancement (page + « Tout générer »)."""
-        layout = self._layout_view.toPlainText().strip() if hasattr(self, "_layout_view") else ""
-        return layout or self._get_text()
+        le « Découpage » s'il existe, sinon le conducteur brut. Vaut pour TOUS les
+        points de lancement (page + « Tout générer »)."""
+        return self._read_layout().strip() or self._get_text()
 
     # ── Sauvegarder / Ouvrir le conducteur en fichier (porté du Cinéma) ──────────
 
@@ -1608,7 +1687,9 @@ class PageScenario(QWidget):
             "title":             title or os.path.splitext(os.path.basename(path))[0],
             "raw_content":       text,
             "formatted_content": text,
-            "layout_content":    self._layout_view.toPlainText() if hasattr(self, "_layout_view") else "",
+            # Les DEUX clés, comme dans _save (voir le commentaire là-bas).
+            "decoupage_content": self._read_layout(),
+            "layout_content":    self._read_layout(),
             "duration_secs":     dur_secs,
             "duration_defined":  dur_defined,
             "film_style":        self._film_style_combo.currentData() or "",
@@ -2370,8 +2451,14 @@ class PageScenario(QWidget):
             self._ai_progress_lbl.setText(translate("Écris d'abord un texte à mettre en page."))
             return
         from api.live_extract import FormatConducteurWorker
+        from core.ai_provider import ai_name_for_task
         self._set_ai_busy(True)
-        self._ai_progress_lbl.setText(translate("Mise en page du conducteur via Claude…"))
+        # « decoupage » et pas le nom global : translate() rebaptise « Claude » avec
+        # l'assistant GLOBAL, alors que la Mise en page est routée par tâche. Sur un
+        # projet où le Découpage tourne sur un autre moteur, le libellé mentait
+        # (correctif 2026-07-26, parité Cinéma).
+        self._ai_progress_lbl.setText(translate(
+            "Mise en page du conducteur via {ai}…").format(ai=ai_name_for_task("decoupage")))
         self._btn_reopen_window.setVisible(False)
         dur_secs = (self._dur_min.value() * 60 + self._dur_sec.value()) if self._dur_defined_check.isChecked() else 0
         # Fenêtre d'aperçu en streaming (comme l'arrangement) ; l'« Appliquer »
@@ -2446,13 +2533,24 @@ class PageScenario(QWidget):
         self._layout_view.setPlainText(layout_text)
         from ui.widgets import apply_paragraph_spacing
         apply_paragraph_spacing(self._layout_view)   # centré + respiration (façon Word)
-        self._editor_tabs.setTabEnabled(1, True)
-        self._editor_tabs.setCurrentIndex(1)
+        self._editor_tabs.setTabEnabled(self.TAB_DECOUPAGE, True)
+        self._editor_tabs.setCurrentIndex(self.TAB_DECOUPAGE)
+        # Empreinte éditoriale (2026-07-26) : mémorise SUR QUOI ce découpage a été
+        # bâti (conducteur + note). Retoucher le conducteur ensuite le rendra
+        # « à actualiser » au lieu de laisser croire qu'il est à jour.
+        # Branchée seulement MAINTENANT que decoupage_content est réellement
+        # persisté : avant, elle aurait empreinté une chaîne vide.
+        if self._current is not None:
+            try:
+                from core.editorial_pipeline import mark_decoupage_built
+                self._current = mark_decoupage_built(self._current, layout_text)
+            except Exception:
+                pass
         try:
             self._save(silent=True)
         except Exception:
             pass
-        self._ai_progress_lbl.setText(translate("Mise en page PANDORA générée ✓"))
+        self._ai_progress_lbl.setText(translate("Découpage appliqué à l'onglet Découpage ✓"))
 
     def _on_arrange(self):
         text = self._get_text()
@@ -2467,6 +2565,9 @@ class PageScenario(QWidget):
             self._last_analysis = saved
             self._last_result_kind = "arrange"
             self._btn_reopen_window.setVisible(True)
+            # Section 6 rangée dans la Note de réalisation (parité Cinéma) —
+            # déterministe, aucun appel IA.
+            self._merge_analysis_direction_note(saved)
             self._open_arrange_window(analysis=saved)
             return
         self._start_arrange_analysis()
@@ -2532,17 +2633,149 @@ class PageScenario(QWidget):
         # avertissement : depuis la mise en page la conversion est DÉTERMINISTE
         # (prompts repris tels quels) ; depuis le conducteur il n'existe encore aucun
         # prompt co-écrit à réécrire.
+        # Fraîcheur éditoriale (2026-07-26) : si le conducteur ou la note ont bougé
+        # depuis la construction du découpage, on le DIT avant de générer les
+        # séquences — sinon on fabrique des plans sur un découpage périmé sans que
+        # rien ne le signale. Seul l'étage « découpage » est contrôlé : l'empreinte
+        # storyboard est globale au conducteur alors que le Live a DEUX jeux de
+        # séquences (live / mapping), elle mentirait à chaque bascule de mode.
+        if self._current is not None and self._read_layout().strip():
+            try:
+                from core.editorial_pipeline import status as _ed_status
+                if _ed_status(self._current) == "decoupage_stale":
+                    from PyQt6.QtWidgets import QMessageBox
+                    _r = QMessageBox.question(
+                        self, translate("Découpage à actualiser"),
+                        translate("Le conducteur ou la note de réalisation ont changé "
+                                  "depuis la création du découpage.\n\n"
+                                  "Générer les séquences maintenant utilisera le "
+                                  "découpage actuel, qui ne reflète plus vos "
+                                  "modifications.\n\nContinuer quand même ?"),
+                        QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.Cancel,
+                        QMessageBox.StandardButton.Cancel)
+                    if _r != QMessageBox.StandardButton.Yes:
+                        return
+            except Exception:
+                pass
         text = self._decoupage_base()
         if not text:
             self._ai_progress_lbl.setText(translate("Écris d'abord un conducteur à découper."))
             return
         from api.live_screenplay import GenerateDecoupageWorker
+        from core.ai_provider import ai_name_for_task
         self._set_ai_busy(True)
-        self._ai_progress_lbl.setText(translate("Génération du découpage via Claude…"))
+        self._ai_progress_lbl.setText(translate(
+            "Génération du découpage via {ai}…").format(ai=ai_name_for_task("storyboard_gen")))
         self._btn_reopen_window.setVisible(False)
         self._worker = GenerateDecoupageWorker(self._text_with_music(), self._live_mode,
-                                               facade_path=self._facade_for_mapping())
+                                               facade_path=self._facade_for_mapping(),
+                                               direction_note=(
+                                                   self._direction_note_edit.toPlainText()
+                                                   if hasattr(self, "_direction_note_edit") else ""))
         self._open_decoupage_window(self._worker)
+
+    def _merge_analysis_direction_note(self, analysis: str) -> bool:
+        """Range la section 6 d'une analyse dans la Note de réalisation (parité
+        Cinéma, portée le 2026-07-26).
+
+        Déterministe : aucun nouvel appel IA. Seule la section issue de la dernière
+        analyse est remplacée — ce que vous avez écrit à la main reste intact."""
+        from core.direction_note import append_to_note, extract_from_analysis
+        from core.i18n import get_lang
+
+        addition = extract_from_analysis(analysis)
+        if not addition or not hasattr(self, "_direction_note_edit"):
+            return False
+        title = ("INTENTIONS FROM SCREENPLAY ANALYSIS" if get_lang() == "en"
+                 else "INTENTIONS ISSUES DE L’ANALYSE DU SCÉNARIO")
+        current = self._direction_note_edit.toPlainText()
+        merged = append_to_note(current, title, addition, replace=True)
+        if merged.strip() == current.strip():
+            return False
+        self._direction_note_edit.blockSignals(True)
+        self._direction_note_edit.setPlainText(merged)
+        self._direction_note_edit.blockSignals(False)
+        if self._current is not None:
+            self._current["direction_note"] = merged
+            self._save(silent=True)
+        return True
+
+    def _gen_all_analyze_identity(self, item_type: str, item: dict, image_path: str,
+                                  save_callable):
+        """Dans « Tout générer », l'image produite est ANALYSÉE avant de passer à
+        l'entité suivante (parité Cinéma, portée le 2026-07-26).
+
+        Le composeur de prompt vidéo est PARTAGÉ (api/video_prompt → format_visual_context)
+        et lit `visual_identity`. Sans cette analyse, le Live envoyait le prompt qui a
+        servi à créer l'image au lieu de la description réelle de l'image — donc plus
+        aucun verrou de continuité entre les plans."""
+        try:
+            from api.visual_identity import VisualIdentityWorker
+            from core.visual_identity import pending_identity
+        except Exception:
+            self._gen_all_next_image()
+            return
+        item["visual_identity"] = pending_identity(image_path, "generated")
+        try:
+            save_callable(item)
+        except Exception:
+            pass
+        desc = item.get("description") or item.get("prompt") or ""
+        worker = VisualIdentityWorker(item_type, image_path, "generated", desc)
+
+        def _ready(identity: dict):
+            item["visual_identity"] = identity
+            try:
+                save_callable(item)
+            except Exception:
+                pass
+            self._gen_all_next_image()
+
+        def _failed(_message: str):
+            # L'image et le statut « pending » restent persistés : la fiche relancera
+            # l'analyse à sa prochaine ouverture. On n'arrête jamais la file pour ça.
+            self._gen_all_next_image()
+
+        worker.done.connect(_ready)
+        worker.failed.connect(_failed)
+        self._gen_all_workers.append(worker)
+        worker.start()
+
+    def _live_visual_style(self) -> str:
+        """Style visuel à cuire dans les prompts : style VJ du projet + STYLE VISUEL
+        de la Note de réalisation (2026-07-26, parité Cinéma).
+
+        visual_style_from_note n'avait qu'UN appelant dans tout le produit, côté
+        Cinéma : le style écrit dans la note Live n'atteignait jamais les moteurs.
+        Tolérant — la fonction retrouve aussi un style rangé ailleurs par l'Analyse."""
+        parts = []
+        try:
+            import core.style as _style_mod
+            parts.append((_style_mod.get_video_suffix() or "").strip())
+        except Exception:
+            pass
+        try:
+            from core.direction_note import visual_style_from_note
+            parts.append(visual_style_from_note(
+                self._direction_note_edit.toPlainText()
+                if hasattr(self, "_direction_note_edit") else "").strip())
+        except Exception:
+            pass
+        return ", ".join(p for p in parts if p)
+
+    @staticmethod
+    def _with_visual_style(prompt: str, style: str) -> str:
+        """Ajoute [🎨 STYLE VISUEL] sans toucher aux autres sections. Un prompt qui
+        porte déjà un style est laissé tel quel : la co-écriture prime."""
+        if not style or not (prompt or "").strip():
+            return prompt or ""
+        try:
+            from core.prompt_sections import rebuild, style_of
+            if style_of(prompt).strip():
+                return prompt
+            return rebuild(prompt, style=style)
+        except Exception:
+            return prompt
 
     def _write_decoupage_segments(self, segments: list) -> list:
         """Écrit les segments dans la séquence Live/Mapping courante (namespace posé,
@@ -2565,6 +2798,19 @@ class PageScenario(QWidget):
                    for i, seg in enumerate(segments, 1)]
         _auto_music = {a["id"]: a["track"]
                        for a in assign_tracks_to_shots(_pseudo, self._music_tracks)}
+        _style = self._live_visual_style()
+
+        def _seedance_of(seg: dict) -> str:
+            """Prompt à sections du plan. Les fiches v2 (DÉCOUPAGE PANDORA 2) donnent
+            PROMPT VISUEL et SON séparés, sans seedance_prompt pré-assemblé : il faut
+            les recoller, sinon le sound design du plan disparaît (2026-07-26)."""
+            _ready = str(seg.get("seedance_prompt") or "").strip()
+            if _ready:
+                return _ready
+            from core.prompt_sections import video_with_sound
+            return video_with_sound(str(seg.get("prompt") or "").strip(),
+                                    str(seg.get("sound_prompt") or "").strip())
+
         saved = []
         for i, seg in enumerate(segments, 1):
             saved.append(_sb.save_shot({
@@ -2575,7 +2821,8 @@ class PageScenario(QWidget):
                 "camera_movement": seg.get("camera_movement", ""),
                 "duration":        seg.get("duration", 5),
                 # UN seul prompt à sections (vidéo + [🎵 SOUND DESIGN]) ; sound_prompt en repli.
-                "seedance_prompt": seg.get("seedance_prompt") or seg.get("prompt", ""),
+                "seedance_prompt": self._with_visual_style(
+                    _seedance_of(seg), _style),
                 "sound_prompt":    seg.get("sound_prompt", ""),
                 "seq_num":         seg.get("act", 1),
                 "seq_name":        seg.get("act_name", ""),
@@ -2624,7 +2871,12 @@ class PageScenario(QWidget):
             QDialog, QVBoxLayout, QHBoxLayout, QTextEdit, QProgressBar, QPushButton,
         )
         dlg = QDialog(self)
-        dlg.setWindowTitle(translate("Découpage — Aperçu"))
+        # Titre DISTINCT de la fenêtre « Créer le découpage » (correctif 2026-07-26) :
+        # les deux s'appelaient « Découpage — Aperçu », si bien que « Générer les
+        # séquences » donnait l'impression d'ouvrir la mauvaise fenêtre.
+        _seq_lbl = (translate("Séquences Mapping") if self._live_mode == "mapping"
+                    else translate("Séquences Live"))
+        dlg.setWindowTitle(f"{_seq_lbl} — {translate('Aperçu')}")
         dlg.resize(820, 640)
         dlg.setStyleSheet(
             f"QDialog{{background:{CP['bg1']};}}"
@@ -2634,9 +2886,9 @@ class PageScenario(QWidget):
         lay.setSpacing(12)
 
         hdr = QHBoxLayout()
-        title_lbl = QLabel("▤  " + translate("Découpage — Aperçu"))
+        title_lbl = QLabel(f"▤  {_seq_lbl} — {translate('Aperçu')}")
         title_lbl.setStyleSheet(f"color:{CP['text_primary']};font-size:14px;font-weight:700;")
-        status_lbl = QLabel(translate("Découpage en cours…"))
+        status_lbl = QLabel(translate("Génération des séquences…"))
         status_lbl.setStyleSheet(
             f"color:{CP['accent']};font-size:10px;font-family:'Consolas',monospace;")
         hdr.addWidget(title_lbl)
@@ -2702,7 +2954,7 @@ class PageScenario(QWidget):
             self._set_ai_busy(False)
             bar.setRange(0, 100)
             bar.setValue(100)
-            status_lbl.setText(translate("Découpage terminé"))
+            status_lbl.setText(translate("Séquences générées"))
             status_lbl.setStyleSheet(
                 f"color:{CP['green']};font-size:10px;font-family:'Consolas',monospace;")
             lines = []
@@ -2843,7 +3095,9 @@ class PageScenario(QWidget):
         from PyQt6.QtWidgets import QDialog, QVBoxLayout, QHBoxLayout, QTextEdit
         streaming = worker is not None
         dlg = QDialog(self)
-        dlg.setWindowTitle(translate("Mise en page PANDORA — Aperçu Claude"))
+        from core.ai_provider import ai_name_for_task
+        dlg.setWindowTitle(
+            f"{translate('Découpage — Aperçu')} — {ai_name_for_task('decoupage')}")
         dlg.resize(900, 680)
         dlg.setStyleSheet(
             f"QDialog{{background:{CP['bg1']};}}"
@@ -2916,11 +3170,11 @@ class PageScenario(QWidget):
         btn_close.clicked.connect(_on_close_btn)
         dlg.rejected.connect(_stop_worker)
 
-        btn_apply = QPushButton(translate("✓  Appliquer dans l'onglet"))
+        btn_apply = QPushButton(translate("✓  Appliquer le découpage"))
         btn_apply.setFixedHeight(36)
         btn_apply.setEnabled(not streaming)
         btn_apply.setToolTip(translate(
-            "Écrit la mise en page dans l'onglet « Mise en page PANDORA ». "
+            "Écrit le découpage dans l'onglet « Découpage » et l'ouvre. "
             "Le Conducteur reste intact."))
         btn_apply.setStyleSheet(
             f"QPushButton{{background:{CP['accent2']};color:#fff;"
@@ -2936,6 +3190,31 @@ class PageScenario(QWidget):
             result = _final_text[0].strip()
             if not result:
                 return
+            # Garde-fou 2026-07-26 : la génération IA est BLOQUANTE (le worker refuse
+            # un document invalide), mais ici le texte a pu être retouché à la main —
+            # on AVERTIT sans interdire, sinon un « 8 sec » au lieu de « Durée : 8s »
+            # rendrait soudain inapplicable un découpage qui marchait hier.
+            from api.live_extract import validate_live_layout, describe_layout_issues
+            issues = validate_live_layout(result)
+            if issues:
+                from PyQt6.QtWidgets import QMessageBox
+                box = QMessageBox(dlg)
+                box.setIcon(QMessageBox.Icon.Warning)
+                box.setWindowTitle(translate("Découpage incomplet"))
+                box.setText(translate(
+                    "Ce découpage ne respecte pas complètement le format attendu."))
+                box.setInformativeText(
+                    describe_layout_issues(issues) + "\n\n" + translate(
+                        "Les plans concernés risquent de mal partir en génération. "
+                        "Vous pouvez l'appliquer quand même et corriger ensuite."))
+                _ok = box.addButton(translate("Appliquer quand même"),
+                                    QMessageBox.ButtonRole.AcceptRole)
+                box.addButton(translate("Corriger"), QMessageBox.ButtonRole.RejectRole)
+                from ui.widgets import disable_default_buttons
+                disable_default_buttons(box)
+                box.exec()
+                if box.clickedButton() is not _ok:
+                    return
             self._apply_layout(result)
             dlg.accept()
 
@@ -2952,6 +3231,17 @@ class PageScenario(QWidget):
                 cursor.insertText(chunk)
                 te.setTextCursor(cursor)
 
+            def _on_retrying(reason: str):
+                # Le premier jet n'a pas tenu le format : on le dit et on repart de
+                # zéro à l'écran, sinon les deux tentatives se colleraient l'une
+                # sous l'autre dans l'aperçu (2026-07-26).
+                te.clear()
+                status_lbl.setText(
+                    translate("Format incomplet — nouvelle tentative…") + f"  ({reason})")
+                status_lbl.setStyleSheet(
+                    f"color:{CP['accent']};font-size:10px;font-family:'Consolas',monospace;"
+                )
+
             def _on_done(result: str):
                 _streaming_active[0] = False
                 btn_close.setText(translate("Fermer"))
@@ -2961,8 +3251,8 @@ class PageScenario(QWidget):
                 self._last_format_result = result
                 self._last_result_kind = "format"
                 self._btn_reopen_window.setVisible(True)
-                self._ai_progress_lbl.setText("Mise en page PANDORA terminée ✓")
-                status_lbl.setText(translate("Mise en page PANDORA terminée"))
+                self._ai_progress_lbl.setText("Découpage terminé ✓")
+                status_lbl.setText(translate("Découpage terminé"))
                 status_lbl.setStyleSheet(
                     f"color:{CP['text_dim']};font-size:10px;font-family:'Consolas',monospace;"
                 )
@@ -2978,11 +3268,13 @@ class PageScenario(QWidget):
                 status_lbl.setStyleSheet(
                     f"color:{CP['red']};font-size:10px;font-family:'Consolas',monospace;"
                 )
-                te.setPlainText(f"Erreur lors de la mise en page :\n{msg}")
+                te.setPlainText(f"Erreur lors du découpage :\n{msg}")
 
             worker.chunk.connect(_on_chunk)
             worker.finished.connect(_on_done)
             worker.failed.connect(_on_failed)
+            if hasattr(worker, "retrying"):
+                worker.retrying.connect(_on_retrying)
             worker.start()
 
         dlg.exec()
@@ -3273,6 +3565,10 @@ class PageScenario(QWidget):
                 if self._current is not None:
                     self._current["arrange_analysis"] = result
                     self._save(silent=True)
+                # Section 6 → Note de réalisation (parité Cinéma, 2026-07-26).
+                # Les intentions de fabrication cessent de polluer le récit et
+                # deviennent exploitables par le découpage et le style visuel.
+                self._merge_analysis_direction_note(result)
                 btn_relaunch.setVisible(True)
                 self._btn_reopen_window.setVisible(True)
                 text = self._editor_text.toPlainText()
@@ -3318,9 +3614,18 @@ class PageScenario(QWidget):
         original   = self._get_text()
         intensity  = self._arrange_intensity_value
         saved = (self._current or {}).get("arrange_session") or None
+        # La timeline musicale part AUSSI dans la co-écriture (2026-07-26) : elle
+        # n'allait qu'à l'Analyse et à la Mise en page (_text_with_music), si bien
+        # que le chat réclamait une analyse musicale déjà faite dans le projet.
+        from core.music_analysis import build_set_timeline
+        music_timeline = build_set_timeline(self._music_tracks)
         dlg = ArrangeSessionDialog(self, original, analysis_text, intensity,
                                    mode=self._live_mode,
                                    refs_analysis=self._last_ref_analysis,
+                                   music_analysis=music_timeline,
+                                   direction_note=(
+                                       self._direction_note_edit.toPlainText()
+                                       if hasattr(self, "_direction_note_edit") else ""),
                                    session_state=saved)
         # Autosave crash-proof : la session (conversation + conducteur remanié) est
         # persistée à CHAQUE tour — connecté AVANT exec() → réouverture = reprise.
@@ -4490,7 +4795,10 @@ class PageScenario(QWidget):
         from api.live_screenplay import GenerateDecoupageWorker
         self._ai_progress_lbl.setText("Génération complète [6/8] — Storyboard…")
         w = GenerateDecoupageWorker(self._text_with_music(), self._live_mode,
-                                    facade_path=self._facade_for_mapping())
+                                    facade_path=self._facade_for_mapping(),
+                                    direction_note=(
+                                        self._direction_note_edit.toPlainText()
+                                        if hasattr(self, "_direction_note_edit") else ""))
         w.finished.connect(self._gen_all_storyboard_done)
         w.failed.connect(lambda e: self._gen_all_step_error(e, "Storyboard"))
         self._gen_all_workers.append(w); w.start()
@@ -4543,7 +4851,16 @@ class PageScenario(QWidget):
             def _done_portrait(p, _s, _i=item):
                 img = p or _s  # portrait_path toujours "", sheet_path = image réelle
                 if img:
-                    import core.casting as _c; _i["image_path"] = img; _c.save_character(_i)
+                    import core.casting as _c
+                    _i["image_path"] = img
+                    _c.save_character(_i)
+                    # Analyse d'identité visuelle AVANT de passer à la suite (parité
+                    # Cinéma) : le composeur de prompt est PARTAGÉ et lit
+                    # visual_identity — sans elle, le Live perd le verrou d'identité
+                    # au moment de l'envoi vidéo.
+                    self._gen_all_analyze_identity("character", _i, img,
+                                                   _c.save_character)
+                    return
                 self._gen_all_next_image()
             w.finished.connect(_done_portrait)
             w.failed.connect(lambda _e: (
@@ -4579,10 +4896,14 @@ class PageScenario(QWidget):
             else:
                 w = GenerateItemWorker(prompt, item.get("name", ""),
                                        subdir=subdir, num_images=1, subject_hint=hint)
-            def _done_item(p, _i=item, _m=_mod, _f=_sfn):
+            def _done_item(p, _i=item, _m=_mod, _f=_sfn, _t=item_type):
                 if p:
                     import importlib; m = importlib.import_module(_m)
-                    _i["image_path"] = p; getattr(m, _f)(_i)
+                    _save = getattr(m, _f)
+                    _i["image_path"] = p
+                    _save(_i)
+                    self._gen_all_analyze_identity(_t, _i, p, _save)
+                    return
                 self._gen_all_next_image()
             w.finished.connect(_done_item)
             w.failed.connect(lambda _e: (

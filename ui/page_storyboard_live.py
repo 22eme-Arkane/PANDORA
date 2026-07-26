@@ -17,6 +17,7 @@ import core.accessories as acc_api
 from core.storyboard import (
     DEFAULT_VERSION_ID,
     CAMERA_MOVEMENTS, SPEEDS, SHOT_SIZES, SHOT_SIZE_LABELS, FOCALS, DISTANCES, HEURE_PRESETS,
+    DEPTHS_OF_FIELD,
 )
 from core.worker import abandon_thread
 from ui.dialog_shot_live import ShotDialog
@@ -56,6 +57,7 @@ _COLS = [
     ("Notes / Repère", 150, False), # 20 cue_note
     ("",              78,  False),  # 21 Boutons
     ("Référence",    132,  False),  # 22 reference_images — inspiration → rôle « reference » (3 vignettes côte à côte)
+    ("P. de champ",   96,  False),  # 23 depth_of_field — ajoutée EN FIN de liste (2026-07-26)
 ]
 
 _HEURE_PRESETS = HEURE_PRESETS
@@ -68,7 +70,12 @@ _col_widths: list[int] = [w for _, w, _ in _COLS]
 # Loaded from project config in PageStoryboard._render().
 # « Référence » (logique 22, ajoutée en fin de _COLS) s'affiche juste après « Mood »
 # (logique 1) ; le reste garde l'ordre naturel, boutons (21) en queue.
-_col_order: list[int] = [0, 1, 22] + list(range(2, 22))
+# « P. de champ » (logique 23) s'INSÈRE entre Focal (8) et Dist. (9) — ajoutée EN FIN
+# de _COLS puis positionnée ici (technique du Cinéma, 2026-07-26) : insérer au milieu
+# de _COLS aurait décalé tout l'ordre et toutes les largeurs des projets existants,
+# qui persistent _col_order et _col_widths dans la config du projet.
+#                                          Focal ↓   ↓ P. de champ  ↓ Dist.
+_col_order: list[int] = [0, 1, 22] + list(range(2, 9)) + [23] + list(range(9, 22))
 
 # Colonnes masquées pour la page courante (Mapping en masque plusieurs).
 # Défini par PageStoryboard._render() selon le mode (via self._hidden_cols).
@@ -1198,6 +1205,19 @@ class _ShotRow(QFrame):
             _w, FOCALS, _c, "focal"))
         cells[8] = foc_w
 
+        # ── Profondeur de champ ───────────────────────────────────────────────
+        # Portée du Cinéma le 2026-07-26. Le champ était déjà créé par le modèle
+        # partagé (core/storyboard.py) et LU par le composeur de prompt
+        # (core/shot_terms, api/apercu) — il restait donc structurellement vide côté
+        # Live, faute d'endroit pour le régler. Vide = déduite de la focale.
+        dof_w, dof_l = _cell(_col_widths[23])
+        _cur_dof = data.get("depth_of_field", "") or ""
+        dof_l.addWidget(_lbl(translate(_cur_dof) if _cur_dof else "—",
+                             CP["accent"] if _cur_dof else CP["text_dim"], 10))
+        _clickable(dof_w, lambda _w=dof_w, _c=_cur_dof: _dropdown(
+            _w, DEPTHS_OF_FIELD, _c, "depth_of_field"))
+        cells[23] = dof_w
+
         # ── Distance sujet-caméra ─────────────────────────────────────────────
         dst_w, dst_l = _cell(_col_widths[9])
         _cur_dst = data.get("camera_distance", "")
@@ -2212,7 +2232,11 @@ class PageStoryboard(QWidget):
         if not self._all_shots:
             return
         from ui.dialog_storyboard_sync import StoryboardSyncConfirmDialog, StoryboardSyncDialog
-        confirm = StoryboardSyncConfirmDialog(len(self._all_shots), parent=self)
+        # edition="live" (2026-07-26) : masque et force à False les opérations qui
+        # recomposeraient les prompts VJ ou réécriraient le conducteur en scénario
+        # INT./EXT. — voir _LIVE_FORBIDDEN dans le dialogue.
+        confirm = StoryboardSyncConfirmDialog(len(self._all_shots), parent=self,
+                                              edition="live")
         if confirm.exec() != StoryboardSyncConfirmDialog.DialogCode.Accepted:
             return
         options = confirm.selected_options()
@@ -3165,7 +3189,11 @@ class PageStoryboard(QWidget):
                 return
 
         _source = sc.get("formatted_content") or sc.get("raw_content", "")
-        _layout = (sc.get("layout_content", "") or "").strip()
+        # Clé canonique d'abord, alias 1.3.x ensuite (correctif 2026-07-26 : le Live
+        # n'écrivait que layout_content, que core/scenario.py écrasait ensuite par un
+        # decoupage_content vide → le storyboard repartait toujours du conducteur brut,
+        # donc des prompts recomposés au lieu des prompts co-écrits).
+        _layout = (sc.get("decoupage_content") or sc.get("layout_content", "") or "").strip()
         if not _source.strip() and not _layout:
             QMessageBox.warning(self, translate("Conducteur vide"),
                                 translate("Le conducteur sélectionné est vide."))
@@ -3198,13 +3226,18 @@ class PageStoryboard(QWidget):
                                       for a in assign_tracks_to_shots(_pseudo, _tracks)}
                         except Exception:
                             _music = {}
+                        from core.prompt_sections import video_with_sound as _vws
                         shots = [{
                             "number":          i,
                             "scene_title":     s.get("action", ""),
                             "shot_size":       s.get("shot_size", ""),
                             "camera_movement": s.get("camera_movement", ""),
                             "duration":        s.get("duration", 5),
-                            "seedance_prompt": s.get("seedance_prompt", ""),
+                            # Fiches v2 : PROMPT VISUEL et SON arrivent séparés, sans
+                            # prompt pré-assemblé — les recoller ou perdre le son.
+                            "seedance_prompt": (s.get("seedance_prompt")
+                                                or _vws(s.get("prompt", ""),
+                                                        s.get("sound_prompt", ""))),
                             "sound_prompt":    s.get("sound_prompt", ""),
                             "seq_num":         s.get("act", 1),
                             "seq_name":        s.get("act_name", ""),
@@ -3221,20 +3254,68 @@ class PageStoryboard(QWidget):
                 return
         text = _layout or _source
 
-        from api.screenplay import GenerateStoryboardWorker
+        # Worker LIVE et non celui du Cinéma (correctif 2026-07-26). Le worker Cinéma
+        # applique le contrat FILM — valeurs GP/GM/PM/PE, décor, Jour/Nuit, prompts
+        # recomposés en [🎬 ACTION][🎭 MISE EN SCÈNE]… — et ignore TOUT ce qui fait le
+        # Live : confinement façade, caméra fixe en mapping, beats relatifs, et le
+        # PROMPT SON qui alimente le sound design. Il chargeait en prime les
+        # catalogues Décors/HMC du Cinéma, qui n'existent pas ici.
+        from api.live_screenplay import GenerateDecoupageWorker
         from core.ai_provider import ai_name_for_task
+        import core.storyboard as _sbm
         self._btn_analyze.setEnabled(False)
         self._ai_lbl.setText(translate("Génération du découpage via {ai}…")
                              .format(ai=ai_name_for_task("storyboard_gen")))
-        # P2 — mémorise le texte pour une éventuelle relance « Séparer » (sans fusion).
+        _mode = "mapping" if _sbm.get_namespace() == "live_seq_mapping" else "live"
+        _facade = ""
+        if _mode == "mapping":
+            try:
+                from core.live_building import get_building_ref
+                _facade = get_building_ref()
+            except Exception:
+                _facade = ""
         self._gen_text = text
-        self._strict_retry = False
-        self._worker = GenerateStoryboardWorker(text)
+        self._worker = GenerateDecoupageWorker(
+            text, _mode, facade_path=_facade,
+            direction_note=(sc.get("direction_note", "") or ""))
         sc_id = sc.get("id", "")
-        self._worker.finished.connect(lambda shots: self._on_shots_generated(shots, sc_id))
+        _tracks = sc.get("music_tracks") or []
+        self._worker.finished.connect(
+            lambda segs: self._on_shots_generated(
+                self._segments_to_shots(segs, _tracks), sc_id))
         self._worker.failed.connect(self._on_ai_fail)
         self._worker.start()
         self._show_analysis_dialog(sc)
+
+    def _segments_to_shots(self, segments: list, tracks: list) -> list:
+        """Segments du worker Live → plans du tableau Séquences.
+
+        Même mise en forme que la conversion DÉTERMINISTE d'une mise en page, y
+        compris l'assignation musicale : le repli Cinéma la perdait, et la colonne
+        Musique/BPM restait vide (2026-07-26)."""
+        from core.prompt_sections import video_with_sound as _vws
+        segs = [s for s in (segments or []) if isinstance(s, dict)]
+        music = {}
+        try:
+            from core.music_align import assign_tracks_to_shots
+            pseudo = [{"id": str(i), "number": i, "duration": s.get("duration", 5)}
+                      for i, s in enumerate(segs, 1)]
+            music = {a["id"]: a["track"] for a in assign_tracks_to_shots(pseudo, tracks or [])}
+        except Exception:
+            music = {}
+        return [{
+            "number":          i,
+            "scene_title":     s.get("action", ""),
+            "shot_size":       s.get("shot_size", ""),
+            "camera_movement": s.get("camera_movement", ""),
+            "duration":        s.get("duration", 5),
+            "seedance_prompt": (s.get("seedance_prompt")
+                                or _vws(s.get("prompt", ""), s.get("sound_prompt", ""))),
+            "sound_prompt":    s.get("sound_prompt", ""),
+            "seq_num":         s.get("act", 1),
+            "seq_name":        s.get("act_name", ""),
+            "music_track":     music.get(str(i), ""),
+        } for i, s in enumerate(segs, 1)]
 
     def _show_analysis_dialog(self, sc: dict):
         from ui.styles import PANDORA_STYLESHEET
@@ -3348,61 +3429,44 @@ class PageStoryboard(QWidget):
     def _on_shots_generated(self, shots: list, sc_id: str):
         if hasattr(self, "_analysis_dlg") and self._analysis_dlg:
             self._analysis_dlg.accept()
-        # P2 — l'IA a-t-elle fusionné des plans ? Ne jamais fusionner en silence :
-        # on le signale et l'utilisateur décide (« Garder fusionné / Séparer »).
-        merged = [s for s in shots if s.get("merged")]
-        if merged and not getattr(self, "_strict_retry", False):
-            if self._ask_merge_decision(merged, len(shots)):
-                self._strict_retry = True
-                from api.screenplay import GenerateStoryboardWorker
-                self._ai_lbl.setText(translate("Séparation des plans en cours…"))
-                self._worker = GenerateStoryboardWorker(
-                    getattr(self, "_gen_text", ""), strict_no_merge=True)
-                self._worker.finished.connect(
-                    lambda sh, _s=sc_id: self._on_shots_generated(sh, _s))
-                self._worker.failed.connect(self._on_ai_fail)
-                self._worker.start()
-                return
+        # La fenêtre « Garder fusionné / Séparer » a été RETIRÉE le 2026-07-26 : la
+        # clé `merged` n'était produite que par le worker CINÉMA, auquel le Live ne
+        # fait plus appel. La garder aurait laissé un test sur un champ qui
+        # n'existera jamais — donc une branche morte qui rassure à tort.
         self._btn_analyze.setEnabled(True)
+        # Style visuel du projet + STYLE VISUEL de la Note de réalisation, cuit dans
+        # le prompt (2026-07-26, parité Cinéma) : sans lui, le style écrit dans la
+        # note Live n'atteignait jamais les moteurs. Point UNIQUE, traversé aussi
+        # bien par la conversion déterministe que par le découpage IA.
+        _style = ""
+        try:
+            import core.style as _style_mod, core.scenario as _sc_api
+            from core.direction_note import visual_style_from_note
+            _sc = _sc_api.get_scenario(sc_id) if sc_id else None
+            _style = ", ".join(p for p in (
+                (_style_mod.get_video_suffix() or "").strip(),
+                visual_style_from_note((_sc or {}).get("direction_note", "")).strip(),
+            ) if p)
+        except Exception:
+            _style = ""
         decors = dec_api.list_decors()
         decor_by_name = {d["name"].strip().lower(): d["id"] for d in decors}
         for shot in shots:
             shot["scenario_id"] = sc_id
             shot["version_id"]  = self._active_version_id
+            if _style and shot.get("seedance_prompt"):
+                try:
+                    from core.prompt_sections import rebuild, style_of
+                    if not style_of(shot["seedance_prompt"]).strip():
+                        shot["seedance_prompt"] = rebuild(shot["seedance_prompt"],
+                                                          style=_style)
+                except Exception:
+                    pass
             if shot.get("decor_name") and not shot.get("decor_id"):
                 shot["decor_id"] = decor_by_name.get(shot["decor_name"].strip().lower(), "")
-            shot.pop("merged", None)          # champs de travail P2 (non persistés)
-            shot.pop("merged_note", None)
             sb_api.save_shot(shot)
         self._ai_lbl.setText(f"{len(shots)} {translate('plans importés ✓')}")
         self.refresh()
-
-    def _ask_merge_decision(self, merged: list, total: int) -> bool:
-        """P2 (porté du Cinéma) — prévient que l'IA a fusionné des plans. True si
-        l'utilisateur veut SÉPARER (relance sans fusion), False pour garder."""
-        n = len(merged)
-        details = "\n".join(
-            f"  • {translate('Plan')} {s.get('number', '?')} : "
-            f"{s.get('merged_note', '') or s.get('scene_title', '')}"
-            for s in merged[:6]
-        )
-        if n > 6:
-            details += f"\n  … (+{n - 6})"
-        box = QMessageBox(self)
-        box.setWindowTitle(translate("Plans fusionnés"))
-        box.setIcon(QMessageBox.Icon.Question)
-        _lead   = translate("L'IA a regroupé plusieurs moments du scénario en")
-        _mrg    = translate("plan(s) fusionné(s)")
-        _tot    = translate("plans au total")
-        box.setText(f"{_lead} {n} {_mrg} ({total} {_tot}).\n\n" + details)
-        box.setInformativeText(translate(
-            "Voulez-vous garder ce découpage fusionné, ou séparer chaque moment en "
-            "plans distincts ?"))
-        btn_keep  = box.addButton(translate("Garder fusionné"), QMessageBox.ButtonRole.AcceptRole)
-        btn_split = box.addButton(translate("Séparer en plans distincts"), QMessageBox.ButtonRole.RejectRole)
-        box.setDefaultButton(btn_split)
-        box.exec()
-        return box.clickedButton() is btn_split
 
     def _on_ai_fail(self, err: str):
         if hasattr(self, "_analysis_dlg") and self._analysis_dlg:

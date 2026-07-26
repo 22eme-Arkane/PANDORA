@@ -226,8 +226,9 @@ class RoomVariationsDialog(QDialog):
 
     def _abandon_tr_worker(self, *_):
         w = self._tr_worker
-        if w and w.isRunning():
-            from core.worker import abandon_thread
+        # is_running() : appelé en fermeture, où l'objet C++ peut déjà être parti.
+        from core.worker import abandon_thread, is_running
+        if w and is_running(w):
             abandon_thread(w)
 
     # ── Génération ──────────────────────────────────────────────────────────────

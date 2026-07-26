@@ -312,6 +312,124 @@ def apply_facade_mask_to_image(image_path: str, mask_path: str,
     return out_path
 
 
+# ── Recalage d'un mood sur la façade ─────────────────────────────────────────
+# Demande Matthieu 2026-07-26 : un mood mapping doit se superposer EXACTEMENT à la
+# façade. Le moteur produit souvent un décalage de quelques pixels — corrigeable —
+# mais parfois une vraie déformation (échelle, perspective), qu'aucun recalage ne
+# répare : dans ce cas il faut regénérer, pas déplacer l'erreur.
+#
+# Au-delà de ce seuil de recouvrement APRÈS recalage, on considère que l'écart
+# n'était qu'une translation. En dessous, la géométrie a dérivé.
+_ALIGN_OK          = 0.97   # superposable : on recale et on rogne
+_ALIGN_ACCEPTABLE  = 0.90   # léger écart résiduel : on prévient, on laisse choisir
+
+
+def _binary(image_path: str, size=None):
+    """Zone ÉCLAIRÉE d'une image mapping (le fond est noir pur)."""
+    import numpy as np
+    from PIL import Image
+    im = Image.open(image_path).convert("L")
+    if size:
+        im = im.resize(size)
+    return np.asarray(im) > _LUMA_THRESHOLD
+
+
+def _iou(a, b) -> float:
+    import numpy as np
+    union = np.logical_or(a, b).sum()
+    return float(np.logical_and(a, b).sum() / union) if union else 0.0
+
+
+def estimate_shift(a, b) -> tuple:
+    """Translation (dy, dx) qui superpose `a` sur `b`, par corrélation de phase.
+
+    FFT plutôt qu'une recherche exhaustive : exact au pixel, insensible au bruit,
+    et sans dépendance supplémentaire (numpy est déjà là via librosa)."""
+    import numpy as np
+    A = np.fft.fft2(a.astype(float))
+    B = np.fft.fft2(b.astype(float))
+    R = A * np.conj(B)
+    R /= np.maximum(np.abs(R), 1e-9)
+    r = np.fft.ifft2(R).real
+    dy, dx = np.unravel_index(int(np.argmax(r)), r.shape)
+    h, w = a.shape
+    if dy > h // 2:
+        dy -= h
+    if dx > w // 2:
+        dx -= w
+    return int(dy), int(dx)
+
+
+def measure_facade_alignment(image_path: str, mask_path: str) -> dict:
+    """Compare un mood à la silhouette de façade.
+
+    Renvoie {iou, shift:(dy,dx), iou_aligned, overflow, missing, verdict} où
+    verdict vaut :
+      • "aligned"   — déjà superposé, rien à recaler ;
+      • "shifted"   — simple translation : recalable SANS perte ;
+      • "deformed"  — la géométrie a dérivé : recaler ne ferait que déplacer
+                      l'erreur, il faut REGÉNÉRER le mood ;
+      • "unavailable" — masque ou image illisible (jamais bloquant).
+    """
+    import numpy as np
+    try:
+        from PIL import Image
+        msk = Image.open(mask_path).convert("L")
+        ref = np.asarray(msk) > 127
+        img = _binary(image_path, size=msk.size)
+    except Exception:
+        return {"verdict": "unavailable"}
+    if not ref.any() or not img.any():
+        return {"verdict": "unavailable"}
+
+    iou0 = _iou(img, ref)
+    dy, dx = estimate_shift(img, ref)
+    moved = np.roll(np.roll(img, -dy, axis=0), -dx, axis=1)
+    iou1 = _iou(moved, ref)
+    # On ne « recale » jamais vers PIRE : si la translation n'apporte rien, on
+    # garde la position d'origine et on juge sur elle.
+    if iou1 < iou0:
+        dy, dx, iou1, moved = 0, 0, iou0, img
+
+    overflow = float(np.logical_and(moved, ~ref).sum() / max(1, moved.sum()))
+    missing  = float(np.logical_and(~moved, ref).sum() / max(1, ref.sum()))
+
+    if iou1 < _ALIGN_ACCEPTABLE:
+        verdict = "deformed"
+    elif dy or dx:
+        verdict = "shifted"          # translation pure → recalable sans perte
+    elif iou1 >= _ALIGN_OK:
+        verdict = "aligned"          # déjà en place
+    else:
+        # En place mais la lumière déborde de la silhouette : c'est le cas NORMAL
+        # d'un halo, et c'est précisément ce que le rognage sert à enlever.
+        verdict = "overflow"
+    return {"iou": iou0, "shift": (dy, dx), "iou_aligned": iou1,
+            "overflow": overflow, "missing": missing, "verdict": verdict}
+
+
+def align_and_mask_image(image_path: str, mask_path: str, out_path: str,
+                         shift: tuple = (0, 0)) -> str:
+    """Recale l'image de (dy, dx) puis rend NOIR tout ce qui dépasse la façade.
+
+    L'original n'est jamais modifié. Le recalage se fait à la taille RÉELLE de
+    l'image : la mesure, elle, travaille à la taille du masque."""
+    from PIL import Image, ImageChops
+    img = Image.open(image_path).convert("RGB")
+    mask = Image.open(mask_path).convert("L")
+    dy, dx = shift
+    if dy or dx:
+        # La mesure est faite à l'échelle du masque → on remet à l'échelle image.
+        sx = img.size[0] / float(mask.size[0])
+        sy = img.size[1] / float(mask.size[1])
+        img = ImageChops.offset(img, int(round(-dx * sx)), int(round(-dy * sy)))
+    black = Image.new("RGB", img.size, (0, 0, 0))
+    out = Image.composite(img, black, mask.resize(img.size))
+    os.makedirs(os.path.dirname(out_path) or ".", exist_ok=True)
+    out.save(out_path, "PNG")
+    return out_path
+
+
 def masked_keyframe(kf_path: str, ref_path: str, data_root: str) -> str:
     """Copie masquée d'un keyframe (cache) — renvoie l'ORIGINAL si le masque
     est indisponible (façade non isolée, erreur PIL…) : jamais bloquant."""

@@ -163,6 +163,33 @@ _SYSTEM_LIVE    = _decoupage_live_system("fr")
 _SYSTEM_MAPPING = _decoupage_mapping_system("fr")
 
 
+def fmt_err(e, task: str = "screenplay") -> str:
+    """Formate une erreur du fournisseur IA TEXTE réellement sélectionné.
+
+    Correctif 2026-07-26 : toute la chaîne texte du Live formatait ses erreurs avec
+    core.worker.humanize_api_error, qui est l'humaniseur des erreurs VIDÉO fal.ai. Un
+    compte IA texte à zéro renvoyait donc « Crédits fal.ai insuffisants — rechargez
+    votre compte sur fal.ai/dashboard », et l'utilisateur allait recharger le mauvais
+    compte. Calqué sur api/screenplay._fmt_err, mais paramétré par tâche : le Live
+    route la mise en page sur « decoupage », le découpage sur « storyboard_gen » et le
+    reste sur « screenplay », qui peuvent être trois moteurs différents."""
+    from core.ai_provider import ai_name_for_task, humanize_ai_error
+    msg = str(e)
+    low = msg.lower()
+    if "connection" in low or "connect" in low or "network" in low or "ssl" in low:
+        return (
+            f"Erreur de connexion à {ai_name_for_task(task)}.\n"
+            "Vérifiez votre connexion internet.\n"
+            "Si vous utilisez un VPN ou proxy, désactivez-le et réessayez.\n\n"
+            f"Détail : {msg}"
+        )
+    if "401" in msg or "authentication" in low or "api_key" in low:
+        return humanize_ai_error(msg)
+    if "429" in msg or "rate" in low:
+        return humanize_ai_error(msg)
+    return f"Erreur {ai_name_for_task(task)} : {msg}"
+
+
 def _extract_json_array(text: str) -> list:
     """Extrait un tableau JSON d'objets depuis la réponse Claude, de façon ROBUSTE :
     - tolère le texte autour et les blocs ```json (capture GREEDY de tout le tableau) ;
@@ -241,11 +268,17 @@ class GenerateDecoupageWorker(QThread):
     finished = pyqtSignal(list)   # list[dict] de segments
     failed   = pyqtSignal(str)
 
-    def __init__(self, text: str, mode: str, facade_path: str = ""):
+    def __init__(self, text: str, mode: str, facade_path: str = "",
+                 direction_note: str = ""):
         super().__init__()
         self._text   = text
         self._mode   = mode if mode in ("live", "mapping") else "live"
         self._facade = facade_path or ""   # image façade réelle (mapping) → Vision → texte
+        # Note de réalisation (2026-07-26) : elle partait à la Mise en page mais PAS
+        # au découpage direct — or c'est le chemin pris quand aucune mise en page
+        # n'existe. Ses intentions de fabrication étaient donc ignorées une fois sur
+        # deux, selon le chemin emprunté.
+        self._direction_note = direction_note or ""
 
     def run(self):
         text = (self._text or "").strip()
@@ -291,9 +324,19 @@ class GenerateDecoupageWorker(QThread):
                         system = system + facade_context_block(_fdesc, _lang)
                 except Exception:
                     pass
+            # Note de réalisation — document SÉPARÉ du conducteur (parité Cinéma,
+            # api/screenplay.py). Ses intentions guident le découpage sans entrer
+            # dans le récit ; un gabarit vide est traité comme vide.
+            _user = text
+            from core.direction_note import note_for_ai
+            _note = note_for_ai(self._direction_note)
+            if _note.strip():
+                _nl = "DIRECTOR'S NOTE" if _lang == "en" else "NOTE DE RÉALISATION"
+                _user = (f"[{_nl} — INTENTIONS DE FABRICATION]\n{_note.strip()}\n\n"
+                         f"[CONDUCTEUR]\n{text}")
             # 16000 : un découpage dense (beaucoup de plans × prompts détaillés)
             # atteignait le plafond de 8000 → JSON tronqué
-            out = complete(system, text, tier="creative", max_tokens=16000,
+            out = complete(system, _user, tier="creative", max_tokens=16000,
                            task="storyboard_gen")
             segments = [_normalize(s, self._mode) for s in _extract_json_array(out) if isinstance(s, dict)]
             if not segments:
@@ -305,8 +348,7 @@ class GenerateDecoupageWorker(QThread):
                 return
             self.finished.emit(segments)
         except Exception as e:
-            from core.worker import humanize_api_error
-            self.failed.emit(humanize_api_error(str(e)))
+            self.failed.emit(fmt_err(e, "storyboard_gen"))
 
 
 # ── Arrangement (streaming, pour la fenêtre de co-écriture) ───────────────────
@@ -410,8 +452,7 @@ class ApplyArrangeConducteurWorker(QThread):
                           tier="creative", max_tokens=16000, task="screenplay")
             self.finished.emit(full.strip())
         except Exception as e:
-            from core.worker import humanize_api_error
-            self.failed.emit(humanize_api_error(str(e)))
+            self.failed.emit(fmt_err(e, "screenplay"))
 
 
 _ARRANGE_CHAT = (
@@ -478,8 +519,7 @@ class ArrangeChatConducteurWorker(QThread):
                                tier="creative", max_tokens=8192, task="screenplay")
             self.done.emit(full.strip())
         except Exception as e:
-            from core.worker import humanize_api_error
-            self.failed.emit(humanize_api_error(str(e)))
+            self.failed.emit(fmt_err(e, "screenplay"))
 
 
 class ArrangeConducteurStreamWorker(QThread):
@@ -521,8 +561,7 @@ class ArrangeConducteurStreamWorker(QThread):
                           tier="creative", max_tokens=8192, task="screenplay")
             self.finished.emit(full)
         except Exception as e:
-            from core.worker import humanize_api_error
-            self.failed.emit(humanize_api_error(str(e)))
+            self.failed.emit(fmt_err(e, "screenplay"))
 
 
 # ── Studio de co-écriture — session interactive (fenêtre dédiée) ──────────────
@@ -698,6 +737,8 @@ class ArrangeSessionChatConducteurWorker(QThread):
         ref_images: list | None = None,
         mode: str = "live",
         refs_analysis: str = "",
+        music_analysis: str = "",
+        direction_note: str = "",
         surgical: bool = False,
     ):
         super().__init__()
@@ -709,6 +750,13 @@ class ArrangeSessionChatConducteurWorker(QThread):
         self._ref_images   = ref_images or []
         self._mode         = mode if mode in ("live", "mapping") else "live"
         self._refs         = refs_analysis or ""
+        # Timeline musicale du set (BPM, drops, énergie) — build_set_timeline().
+        # Sans elle, l'IA répondait « colle-moi ton analyse musicale » alors que
+        # l'analyse existait déjà dans le projet (2026-07-26).
+        self._music        = music_analysis or ""
+        # Note de réalisation du Conducteur (parité Cinéma, 2026-07-26) : elle
+        # existait dans l'onglet mais n'atteignait jamais la co-écriture.
+        self._note         = direction_note or ""
         self._surgical     = surgical
 
     def run(self):
@@ -731,6 +779,28 @@ class ArrangeSessionChatConducteurWorker(QThread):
                     "ancre les ambiances, matières et lumières du conducteur "
                     "dans cette direction.]\n" + self._refs.strip()
                 )
+            if self._music.strip():
+                context_block += (
+                    "\n\n[ANALYSE MUSICALE DÉJÀ FAITE — tu la POSSÈDES, ne la "
+                    "redemande jamais à l'utilisateur. Elle donne la durée, le BPM, "
+                    "la courbe d'énergie et les temps forts (drops) de chaque "
+                    "morceau du set. Quand on te demande de caler le conducteur "
+                    "sur la musique, appuie-toi sur ces valeurs : place les "
+                    "ruptures et les respirations sur les drops, et dimensionne "
+                    "les durées en mesures à partir du BPM.]\n" + self._music.strip()
+                )
+            # Note de réalisation — document SÉPARÉ du conducteur : ses intentions
+            # de fabrication guident la réécriture sans jamais entrer dans le récit.
+            from core.direction_note import note_for_ai
+            _note = note_for_ai(self._note)
+            context_block += (
+                "\n\n[NOTE DE RÉALISATION ACTUELLE — document séparé du conducteur. "
+                "Elle porte les intentions de fabrication (style visuel, temporalité "
+                "et lumière, rythme, durée des plans, grammaire caméra, son). "
+                "Respecte-la quand tu réécris le conducteur ; n'y recopie jamais ces "
+                "intentions techniques dans le récit lui-même.]\n"
+                + (_note.strip() or "(vide)")
+            )
 
             # Construction des messages : contexte injecté dans le 1er message user
             messages = []
@@ -829,5 +899,4 @@ class ArrangeSessionChatConducteurWorker(QThread):
                 self.screenplay_ready.emit(conducteur)
 
         except Exception as e:
-            from core.worker import humanize_api_error
-            self.failed.emit(humanize_api_error(str(e)))
+            self.failed.emit(fmt_err(e, "screenplay"))

@@ -18,13 +18,45 @@
 
 ## Download
 
-**[⬇ Download PANDORA v2.0.1 for Windows](https://github.com/22eme-Arkane/PANDORA/releases/download/v2.0.1/PANDORA_Setup_2.0.1.exe)**
+**[⬇ Download PANDORA v2.0.2 for Windows](https://github.com/22eme-Arkane/PANDORA/releases/download/v2.0.2/PANDORA_Setup_2.0.2.exe)**
 
-**[⬇ Download PANDORA v2.0.1 for macOS](https://github.com/22eme-Arkane/PANDORA/releases/download/v2.0.1/PANDORA_2.0.1.dmg)** *(Apple Silicon — see [Installation](#installation) for the first launch)*
+**[⬇ Download PANDORA v2.0.2 for macOS](https://github.com/22eme-Arkane/PANDORA/releases/download/v2.0.2/PANDORA_2.0.2.dmg)** *(Apple Silicon — see [Installation](#installation) for the first launch)*
 
 All versions: [Releases](../../releases)
 
 🌐 **Official 22eme ARKANE website: [22eme-arkane.com](https://22eme-arkane.com)**
+
+---
+
+## What's new in v2.0.2
+
+**The Live edition catches up with Cinema — including a silent data-loss bug.**
+
+- **Your Live breakdown is actually saved now.** It never was: from the second save
+  onward, an empty canonical key overwrote it every time. PANDORA said "breakdown
+  applied ✓" and kept nothing — on reopening, the tab was empty *and* greyed out, and
+  your sequences silently fell back to the raw rundown instead of your co-written
+  prompts. **Everyone working in Live should check their current breakdowns.**
+- **The Live breakdown uses the "DÉCOUPAGE PANDORA 2" shot-sheet contract**, like
+  Cinema: rundown source, intent, rhythm, duration, visual prompt, characters, props,
+  vehicles — plus `SON`, a Live-only field that feeds sound design and musical sync.
+  Existing flat-format breakdowns keep working; nothing to migrate.
+- **The Breakdown tab is editable.** It was read-only in Live: once generated, you
+  could not delete a shot, fix a duration or rewrite a prompt. Edits autosave.
+- **Live sequences no longer re-cut with the Cinema engine**, which applied the film
+  contract, rebuilt prompts and dropped the sound design entirely.
+- **"Sync" can no longer destroy your VJ prompts.** Two operations inherited from
+  Cinema — rewriting prompts and rebuilding a screenplay — are gone from the Live
+  dialog.
+- **A duration written as a timecode is read correctly.** `0:20` was parsed as **zero
+  seconds**, silently, in both editions.
+- **No more error window when closing PANDORA** (a worker tested after its C++ object
+  had been destroyed).
+- Text-AI errors name the right provider — a spent text account no longer sends you
+  to top up fal.ai. Extraction ceiling raised to 16 000 tokens. Depth-of-field column
+  and setting ported to Live. The breakdown is validated, retried once, and refused
+  rather than saved broken. Musical analysis and the director's note now reach Live
+  co-writing.
 
 ---
 
@@ -182,7 +214,7 @@ per-engine mood prompts, same fixes.
 
 ### Windows
 
-1. Download `PANDORA_Setup_2.0.1.exe` from the link above and run it
+1. Download `PANDORA_Setup_2.0.2.exe` from the link above and run it
 2. If Windows shows *"Windows protected your PC"* (SmartScreen), click
    **More info** then **Run anyway** — the app is not code-signed yet
    (certificate in progress), this is the Windows equivalent of the macOS
@@ -193,7 +225,7 @@ per-engine mood prompts, same fixes.
 
 ### macOS
 
-1. Download `PANDORA_2.0.1.dmg` from the link above
+1. Download `PANDORA_2.0.2.dmg` from the link above
 2. Open the DMG and drag **PANDORA** into **Applications** (as usual)
 3. **First launch** — macOS will claim that *"PANDORA is damaged and can't be
    opened"*. **This is normal, the app is not damaged** — macOS blocks apps

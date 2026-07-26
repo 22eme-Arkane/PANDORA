@@ -47,8 +47,9 @@ from ui.page_storyboard_live    import PageStoryboard   as _PageStoryboardLive
 # (colonnes caméra/décor, masquées selon la page) · boutons.
 # Drag toujours possible ensuite (l'ordre personnalisé du projet prime).
 # « Référence » (logique 22) affichée juste après « Mood » (logique 1), comme au Cinéma.
+# « P. de champ » (logique 23) s'insère entre Focal (8) et Dist. (9), comme au Cinéma.
 _LIVE_DEFAULT_ORDER = [0, 1, 22, 2, 3, 16, 4, 17, 18, 10, 15, 20, 19, 14, 13,
-                       5, 6, 7, 8, 9, 11, 12, 21]
+                       5, 6, 7, 8, 23, 9, 11, 12, 21]
 
 
 class SequenceLivePage(_PageStoryboardLive):
@@ -72,7 +73,9 @@ class SequenceMappingPage(_PageStoryboardLive):
     les colonnes inutiles : Axe Caméra (5), Mouvement (6), Valeur (7), Focal (8),
     Distance (9), Décor (11), Heure (12)."""
     _live_ns = "live_seq_mapping"
-    _hidden_cols = {5, 6, 7, 8, 9, 11, 12}
+    # 23 = P. de champ : masquée en Mapping comme les autres réglages optiques
+    # (caméra totalement fixe, cadre verrouillé sur la façade).
+    _hidden_cols = {5, 6, 7, 8, 9, 11, 12, 23}
     _default_col_order = _LIVE_DEFAULT_ORDER
 
     def __init__(self):
