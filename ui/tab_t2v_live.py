@@ -2253,6 +2253,76 @@ class _PreviewTranslateWorker(QThread):
             self.done.emit(self._text)
 
 
+class _LiveFinalPromptWorker(QThread):
+    """Compose le prompt final Live, avec repli déterministe garanti.
+
+    `done` et jamais `finished` : `finished` masquerait le signal natif de QThread.
+
+    Le repli n'est pas une option de secours mais la moitié du contrat : si l'IA
+    est indisponible, refusée par le contrôle de barre, ou sans clé, le plan doit
+    quand même partir — sur l'assemblage déterministe, exactement comme avant ce
+    chantier. Une seule chose est interdite : ne rien émettre. Une branche muette
+    laisserait la barre de chargement affichée pour toujours.
+    """
+
+    done = pyqtSignal(str, bool, str)   # (prompt_final, composé, raison_si_repli)
+
+    def __init__(self, prompt: str, ctx: dict):
+        super().__init__()
+        self._prompt = prompt or ""
+        # Copie : le contexte de l'UI peut changer pendant que le thread tourne.
+        self._ctx = dict(ctx or {})
+
+    def _repli(self, why: str):
+        """Traduction + assemblage déterministe — le chemin d'avant le chantier."""
+        try:
+            from core.lang import translate_to_english
+            body = translate_to_english(self._prompt) or self._prompt
+        except Exception:
+            body = self._prompt
+        try:
+            from core.live_prompt import assemble
+            out, _ = assemble(body, engine_key=self._ctx.get("engine", ""),
+                              mode=self._ctx.get("mode", "live"))
+        except Exception:
+            out = body
+        self.done.emit(out or body, False, why)
+
+    def run(self):
+        try:
+            from core import ai_provider
+            _ke = ai_provider.key_error(task="video_prompt")
+            if _ke:
+                # Pas de clé : inutile de payer un aller-retour pour l'apprendre.
+                self._repli(_ke)
+                return
+        except Exception:
+            pass
+        try:
+            import api.live_video_prompt as _lvp
+            out = _lvp.compose(
+                self._prompt,
+                engine=self._ctx.get("engine", ""),
+                mode=self._ctx.get("mode", "live"),
+                style_suffix=self._ctx.get("style_suffix", ""),
+                surface=self._ctx.get("surface_text", ""),
+                bpm=self._ctx.get("bpm", 0.0),
+                beats=self._ctx.get("beats", 8),
+                duration=self._ctx.get("duration", ""),
+                extras=self._ctx.get("extras_text", []),
+            )
+            if out:
+                self.done.emit(out, True, "")
+                return
+            # LAST_COMPOSE_ERROR est un global de module : le lire IMMÉDIATEMENT
+            # après le retour, avant qu'une autre composition ne l'écrase.
+            self._repli(_lvp.LAST_COMPOSE_ERROR
+                        or "le moteur a renvoyé une prose refusée par le contrôle "
+                           "de barre")
+        except Exception as exc:
+            self._repli(str(exc)[:200])
+
+
 # ── Tab T2V ───────────────────────────────────────────────────────────────────
 
 class TabT2V(QScrollArea):
@@ -2432,6 +2502,30 @@ class TabT2V(QScrollArea):
         self._btn_style_toggle.toggled.connect(_toggle_style)
         lay.addWidget(self._btn_style_toggle)
         lay.addWidget(self._film_style_frame)
+
+        # ── État de l'assemblage du prompt final (parité Cinéma, 2026-07-26) ──
+        # `_prompt_is_final` dit si l'encart contient le prompt RÉELLEMENT envoyé
+        # (anglais, composé, injections écrites) ou le prompt de travail français.
+        # `_assembly_source` est la photo du texte au moment où l'assemblage a été
+        # programmé : si l'utilisateur tape entre-temps, sa saisie prime et on
+        # n'écrase rien. `_suppress_prompt_signal` évite qu'écrire dans l'encart
+        # ne relance un cycle de composition — sans lui, la boucle est infinie ET
+        # facturée.
+        self._prompt_is_final = False
+        self._assembly_source: str | None = None
+        self._suppress_prompt_signal = False
+        self._final_compose_worker = None
+        self._final_engine = ""
+        self._final_mode_at_assembly = ""
+        self._final_why = ""
+        self._final_was_composed = False
+        self._final_assembly_failed = False
+        self._final_ip_removed: list = []
+        # Cache de SESSION : resélectionner un plan ne recompose pas, donc ne
+        # refacture pas. Vidé à la fermeture — rien n'est écrit sur disque.
+        self._final_cache: dict = {}
+        self._final_cache_key_pending = ""
+        self._final_from_cache = False
 
         # ── Sélecteur de séquence : Live / Mapping ────────────────────────────
         self._seq_mode = "live"
@@ -3120,6 +3214,12 @@ class TabT2V(QScrollArea):
         if shot.get("seedance_prompt"):
             self.prompt_ta.setPlainText(shot["seedance_prompt"])
             self._update_injection_banner()
+            # Assemblage programmé AVANT ce return : c'est le chemin de la
+            # MAJORITÉ des plans (ceux qui ont déjà un prompt de découpage), et
+            # il sort sans jamais rafraîchir l'aperçu. Accrocher l'assemblage
+            # seulement en fin de méthode ne l'aurait déclenché que pour les
+            # plans vides.
+            self._schedule_final_assembly()
             return
         _num   = shot.get("number", "")
         _title = shot.get("scene_title") or shot.get("decor_name") or ""
@@ -3144,6 +3244,7 @@ class TabT2V(QScrollArea):
         self.prompt_ta.setPlainText("\n".join(parts))
         self._update_injection_banner()
         self._refresh_prompt_preview()
+        self._schedule_final_assembly()
 
     def _on_shots_selected(self, shots: list):
         count = len(shots)
@@ -3240,6 +3341,16 @@ class TabT2V(QScrollArea):
         self._preview_translated_text: str | None = None
         self._preview_expanded = False  # collapsed by default
 
+        # Timer DISTINCT pour l'assemblage du prompt final — 500 ms, et surtout
+        # branché sur la SÉLECTION D'UN PLAN, jamais sur la frappe. Le timer de
+        # traduction ci-dessus part à chaque salve de frappe : y accrocher une
+        # composition IA facturerait un appel à chaque pause de saisie, bloc
+        # replié, à l'insu de l'utilisateur.
+        self._final_assembly_timer = _QTimer(self)
+        self._final_assembly_timer.setSingleShot(True)
+        self._final_assembly_timer.setInterval(500)
+        self._final_assembly_timer.timeout.connect(self._start_final_assembly)
+
         frame = QFrame()
         frame.setStyleSheet(
             f"QFrame{{background:{C['bg2']};border:1px solid rgba(255,79,106,0.45);"
@@ -3321,9 +3432,262 @@ class TabT2V(QScrollArea):
         return frame
 
     def _on_prompt_text_changed(self):
+        # Écriture PROGRAMMATIQUE de l'encart (installation du prompt final) : on
+        # sort tout de suite. Sans ce garde, poser le prompt final relance le
+        # cycle qui vient de le produire — une boucle infinie, et facturée.
+        if getattr(self, "_suppress_prompt_signal", False):
+            return
+        # Une saisie MANUELLE annule l'assemblage en cours : le texte affiché
+        # n'est plus celui qui a été photographié, l'utilisateur reprend la main.
+        self._prompt_is_final = False
+        self._assembly_source = None
         self._preview_translated_text = None
         self._refresh_prompt_preview()
         self._preview_translate_timer.start()
+
+    # ── Assemblage du prompt final (composition IA + cache) ───────────────────
+
+    def _hide_ai_busy(self):
+        """Masque les indicateurs d'activité IA. Appelé sur TOUS les chemins de
+        sortie, y compris l'abandon : un worker parqué a ses signaux bloqués, donc
+        personne ne masquerait la barre et elle resterait à l'écran pour toujours."""
+        try:
+            if hasattr(self, "_ai_busy_bar"):
+                self._ai_busy_bar.setVisible(False)
+                self._ai_busy_lbl.setVisible(False)
+            if hasattr(self, "_preview_spinner"):
+                self._preview_spinner.setVisible(False)
+        except Exception:
+            pass
+
+    def _schedule_final_assembly(self):
+        """Programme l'assemblage du prompt final pour le plan courant.
+
+        Photographie le texte de l'encart : c'est cette photo qui servira de garde
+        anti-écrasement au démarrage ET à la réception."""
+        try:
+            self._assembly_source = self.prompt_ta.toPlainText().strip()
+            self._final_why = ""
+            self._final_assembly_failed = False
+            self._final_from_cache = False
+            if self._assembly_source:
+                self._final_assembly_timer.start()
+        except Exception:
+            pass
+
+    def _live_compose_inputs(self) -> tuple:
+        """(texte pré-composition, contexte) — les DEUX entrées de la clé de cache.
+
+        Extrait dans sa propre méthode pour que l'appel et l'empreinte voient
+        exactement les mêmes données : sinon on resservirait une prose périmée.
+        """
+        from core.prompt_sections import flatten as _flatten
+        import core.live_compose_ctx as _ctxmod
+
+        _mode = getattr(self, "_seq_mode", "live")
+        body = _flatten(self.prompt_ta.toPlainText().strip()) or \
+            self.prompt_ta.toPlainText().strip()
+        _ctx_cast = self._casting.get_context()
+        if _ctx_cast:
+            body = _ctx_cast + body
+
+        # Réglages du plan : hors mapping seulement (le cadre y est verrouillé).
+        if self._active_shot and _mode != "mapping":
+            try:
+                from core.shot_terms import camera_terms
+                _bits = camera_terms(self._active_shot)
+                if _bits:
+                    body = f"{body} — {', '.join(_bits)}"
+            except Exception:
+                pass
+
+        # Surface de projection : en mapping, changer de bâtiment change TOUT.
+        _surface = ""
+        if _mode == "mapping":
+            try:
+                from core.live_building import describe_facade
+                _surface = describe_facade() or ""
+            except Exception:
+                _surface = ""
+
+        # Tempo du morceau assigné → durée de barre demandée au composeur.
+        _bpm = 0.0
+        try:
+            import core.scenario as _sc
+            _tracks = []
+            for _s in _sc.list_scenarios():
+                if _s.get("music_tracks"):
+                    _tracks = _s["music_tracks"]
+                    if _s.get("id") == (self._active_shot or {}).get("scenario_id"):
+                        break
+            _bpm = _ctxmod.bpm_for_shot(self._active_shot or {}, _tracks)
+        except Exception:
+            _bpm = 0.0
+
+        _dur = self._get_duration()
+        try:
+            import core.style as _sa
+            _style = _sa.get_video_suffix()
+        except Exception:
+            _style = ""
+
+        ctx = _ctxmod.compose_context(
+            engine=self._get_model(), mode=_mode, style_suffix=_style,
+            surface=_surface, bpm=_bpm,
+            beats=_ctxmod.beats_for(_dur, _bpm), duration=_dur, extras=[])
+        # Champs NON hachés, pour l'appel : la clé ne transporte que l'empreinte
+        # de la surface, le composeur a besoin du texte entier.
+        ctx["surface_text"] = _surface
+        ctx["extras_text"] = []
+        return body, ctx
+
+    def _start_final_assembly(self):
+        """Compose le prompt final du plan courant — cache d'abord, IA ensuite.
+
+        La composition vit ICI et jamais dans l'envoi : c'est ce qui permet de
+        n'ouvrir aucun fichier partagé, `api/real.py` sachant déjà respecter un
+        prompt déclaré final.
+        """
+        try:
+            src = getattr(self, "_assembly_source", None)
+            if not src or self.prompt_ta.toPlainText().strip() != src:
+                return   # l'utilisateur a tapé pendant le débounce : sa saisie prime
+            body, ctx = self._live_compose_inputs()
+            if not body.strip():
+                return
+
+            import core.live_compose_ctx as _ctxmod
+            key = _ctxmod.cache_key(body, {k: v for k, v in ctx.items()
+                                           if k not in ("surface_text", "extras_text")})
+            hit = self._final_cache.get(key)
+            if hit is not None:
+                # Déjà composé à l'identique : aucun thread, aucun réseau, aucun
+                # crédit. C'est tout l'intérêt du cache.
+                self._final_cache_key_pending = ""
+                self._final_from_cache = True
+                self._on_final_composed(*hit)
+                return
+
+            self._final_cache_key_pending = key
+            self._final_from_cache = False
+            # Parquer le worker précédent AVANT de réassigner : un QThread qui
+            # surcharge run() n'a pas de boucle d'événements, quit() est inopérant,
+            # et le laisser au ramasse-miettes pendant qu'il tourne fait planter
+            # l'app — typiquement en balayant les plans coup sur coup.
+            if self._final_compose_worker is not None:
+                from core.worker import abandon_thread
+                abandon_thread(self._final_compose_worker)
+                self._final_compose_worker = None
+
+            try:
+                from core.ai_provider import ai_name_for_task as _ant
+                _who = _ant("video_prompt")
+            except Exception:
+                _who = translate("l'IA")
+            if hasattr(self, "_ai_busy_bar"):
+                self._ai_busy_lbl.setText(
+                    translate("⟳  Composition du prompt final par") + f" {_who}…")
+                self._ai_busy_lbl.setVisible(True)
+                self._ai_busy_bar.setVisible(True)
+            if hasattr(self, "_preview_spinner"):
+                self._preview_spinner.setText(
+                    translate("⟳  composition du prompt final…"))
+                self._preview_spinner.setVisible(True)
+
+            self._final_compose_worker = _LiveFinalPromptWorker(body, ctx)
+            self._final_compose_worker.done.connect(self._on_final_composed)
+            self._final_compose_worker.start()
+        except Exception:
+            # Une exception non gérée ici laisserait la barre affichée.
+            self._hide_ai_busy()
+
+    def _remember_final(self, final: str, composed: bool, why: str):
+        """Range le résultat sous sa clé d'entrée.
+
+        Un échec dû à l'API (crédits, réseau) n'est PAS mémorisé : il doit être
+        retenté au passage suivant, sinon le plan resterait bloqué en repli
+        jusqu'à la fermeture de l'application."""
+        key = getattr(self, "_final_cache_key_pending", "")
+        if not key:
+            return
+        self._final_cache_key_pending = ""
+        if why:
+            return
+        self._final_cache[key] = (final, composed, why)
+        import core.live_compose_ctx as _ctxmod
+        _ctxmod.purge(self._final_cache)
+
+    def _on_final_composed(self, final: str, composed: bool = False, why: str = ""):
+        """Installe le prompt final dans l'encart. WYSIWYG : ce qu'on lit part."""
+        try:
+            self._hide_ai_busy()      # EN TÊTE : avant toute sortie anticipée
+            self._remember_final(final, composed, why)
+            self._final_why = why or ""
+
+            # Alerte VISIBLE même bloc replié : un compte à zéro bloque toute la
+            # chaîne et le prompt repart en français. Enfoui, l'avertissement
+            # passe pour un bug de l'application.
+            _low = (why or "").lower()
+            if any(w in _low for w in ("crédit", "credit", "quota")):
+                self._preview_spinner.setText(
+                    translate("⚠  Crédits IA épuisés — rechargez le compte"))
+                self._preview_spinner.setStyleSheet(
+                    f"color:{C['red']};font-size:9px;font-weight:700;"
+                    f"background:transparent;border:none;")
+                self._preview_spinner.setToolTip(why)
+                self._preview_spinner.setVisible(True)
+            else:
+                self._preview_spinner.setStyleSheet(
+                    f"color:{C['text_dim']};font-size:9px;font-style:italic;"
+                    f"background:transparent;border:none;")
+
+            # Garde anti-écrasement, DEUXIÈME occurrence : l'utilisateur a pu
+            # taper pendant que le thread tournait — sa saisie prime toujours.
+            src = getattr(self, "_assembly_source", None)
+            if not src or self.prompt_ta.toPlainText().strip() != src:
+                return
+            if not (final or "").strip():
+                return
+
+            # Noms de franchises retirés du payload — via la grammaire LIVE, pas
+            # celle du Cinéma (le harnais vérifie qu'aucun module Live n'importe
+            # engine_grammar en direct).
+            try:
+                from core.live_grammar import strip_names
+                final, self._final_ip_removed = strip_names(final)
+            except Exception:
+                self._final_ip_removed = []
+
+            # Garde métier : un prompt FINAL ne contient jamais d'étiquette de
+            # section. S'il en reste, composition ET traduction ont échoué — on
+            # LAISSE le prompt de travail plutôt que d'installer un texte
+            # mi-français mi-anglais que l'envoi expédierait tel quel.
+            try:
+                from core.prompt_sections import is_structured as _is_struct
+                if _is_struct(final):
+                    self._prompt_is_final = False
+                    self._assembly_source = None
+                    self._final_assembly_failed = True
+                    self._refresh_prompt_preview()
+                    return
+            except Exception:
+                pass
+
+            self._final_assembly_failed = False
+            self._final_was_composed = bool(composed)
+            self._final_engine = self._get_model()
+            self._final_mode_at_assembly = getattr(self, "_seq_mode", "live")
+            self._suppress_prompt_signal = True
+            try:
+                self.prompt_ta.setPlainText(final)
+            finally:
+                self._suppress_prompt_signal = False
+            self._prompt_is_final = True
+            self._assembly_source = None
+            self._refresh_prompt_preview()
+        except Exception:
+            # Une exception non gérée dans un slot PyQt6 fait ABORT toute l'app.
+            self._hide_ai_busy()
 
     def _sync_film_anchor_with_style(self):
         """En style « Film réaliste », la prise de vue réelle est déjà incluse dans le
@@ -3502,8 +3866,16 @@ class TabT2V(QScrollArea):
         except Exception:
             pass
 
+        # L'encart contient DÉJÀ le prompt envoyé (composé, anglais, injections
+        # écrites) : le reconstruire donnerait un texte DIFFÉRENT de celui que
+        # l'utilisateur lit et modifie — un aperçu qui ment. On l'affiche tel quel.
+        _is_final = bool(getattr(self, "_prompt_is_final", False))
+        if _is_final:
+            fp = self.prompt_ta.toPlainText().strip()
+
         _pfx = ("━━━ PROMPT FINAL ENVOYÉ "
-                + ("(anglais) " if translated_user is not None else "(traduction…) ")
+                + ("(anglais) " if (_is_final or translated_user is not None)
+                   else "(traduction…) ")
                 + "━━━")
         lines.append(_pfx)
         lines.append(fp)
@@ -3630,6 +4002,30 @@ class TabT2V(QScrollArea):
                 param_lines.append(
                     "⚠ Noms retirés du prompt (le moteur les refuse ou les imite "
                     "mal) : " + ", ".join(_ips))
+
+        # ── Verdict de la composition ─────────────────────────────────────────
+        # Ce qui a été fait au prompt doit se lire ici, sinon un repli silencieux
+        # passe pour un bug de l'application.
+        if getattr(self, "_prompt_is_final", False):
+            if getattr(self, "_final_was_composed", False):
+                param_lines.append(translate(
+                    "✓ Prose composée et vérifiée (structure de barre conservée)"))
+            else:
+                param_lines.append(
+                    translate("⚠ Composition refusée") + " : "
+                    + (getattr(self, "_final_why", "") or translate("raison inconnue"))
+                    + " — " + translate("repli sur l'assemblage déterministe"))
+            if getattr(self, "_final_from_cache", False):
+                param_lines.append(translate(
+                    "♻ Déjà composé pour ce plan — aucun crédit consommé"))
+            if (getattr(self, "_final_engine", "") != self._get_model()
+                    or getattr(self, "_final_mode_at_assembly", "")
+                    != getattr(self, "_seq_mode", "live")):
+                param_lines.append(translate(
+                    "⚠ Le moteur ou le mode a changé depuis l'assemblage"))
+        elif getattr(self, "_final_assembly_failed", False):
+            param_lines.append(translate(
+                "⚠ Prompt final indisponible — l'encart garde le prompt de travail"))
 
         # Son
         audio_on = (hasattr(self, "_audio_cb") and self._audio_cb and self._audio_cb.isChecked())
@@ -4015,8 +4411,29 @@ class TabT2V(QScrollArea):
         self.btn_generate.setText(
             f"▶  Plan {self._batch_idx}/{self._batch_total} en cours…"
         )
+        self._await_final_then_generate()
+
+    # Au-delà, on génère sans attendre plutôt que de bloquer la file.
+    _LIVE_BATCH_FINAL_TIMEOUT_MS = 90000
+
+    def _await_final_then_generate(self, waited_ms: int = 0):
+        """Attend que le prompt final du plan soit prêt, puis génère.
+
+        Sans cette attente, la file lançait la génération 120 ms après avoir
+        sélectionné le plan — jamais assez pour un assemblage. Le MÊME plan aurait
+        donc donné deux prompts différents selon qu'il part à l'unité ou en série.
+        """
         from PyQt6.QtCore import QTimer
-        QTimer.singleShot(120, self.start_generation)
+        try:
+            _pret = (getattr(self, "_prompt_is_final", False)
+                     or getattr(self, "_final_assembly_failed", False)
+                     or waited_ms >= self._LIVE_BATCH_FINAL_TIMEOUT_MS)
+        except Exception:
+            _pret = True
+        if _pret:
+            QTimer.singleShot(120, self.start_generation)
+            return
+        QTimer.singleShot(150, lambda: self._await_final_then_generate(waited_ms + 150))
 
     def _refresh_price_estimate(self, *args):
         """Met à jour l'estimation de PRIX (rouge) : nb de plans sélectionnés × durée
@@ -4073,6 +4490,13 @@ class TabT2V(QScrollArea):
         if not prompt:
             QMessageBox.warning(self, "Prompt vide", "Écris un prompt avant de générer !")
             return
+
+        # MODE FINAL : l'encart contient déjà le texte anglais assemblé en amont
+        # (à la sélection du plan) et validé à l'écran. On ne le reconstruit pas —
+        # tout ce qui suit ne s'applique qu'au prompt de travail français. Le
+        # drapeau `prompt_is_final` posé dans params dit à l'envoi de ne pas le
+        # retraduire : c'est ce qui rend l'encart WYSIWYG.
+        _final_mode = bool(getattr(self, "_prompt_is_final", False))
 
         # UN seul prompt à sections → texte continu pour le moteur vidéo.
         # flatten() et NON video_of() (correctif 2026-07-26) : video_of ne gardait
@@ -4198,6 +4622,14 @@ class TabT2V(QScrollArea):
                 mode=getattr(self, "_seq_mode", "live"))
         except Exception:
             self._last_ip_removed = []
+
+        # MODE FINAL — tout ce qui précède est écarté : l'encart contient déjà le
+        # texte assemblé en amont, en anglais, injections écrites, et l'utilisateur
+        # a pu le corriger à la main. Le reconstruire enverrait autre chose que ce
+        # qu'il a relu. Les briques ci-dessus restent en place pour le prompt de
+        # travail français, qui reste le chemin par défaut.
+        if _final_mode:
+            full_prompt = self.prompt_ta.toPlainText().strip()
 
         # Build composite reference mosaics — Seedance only
         _is_seedance = self._get_model() in _SEEDANCE_ENGINES
@@ -4342,18 +4774,28 @@ class TabT2V(QScrollArea):
         params = {
             "mode":                    "i2v" if i2v_frame else "t2v",
             "prompt":                  full_prompt,
-            "style_suffix":            video_suffix,
-            "no_music_suffix":         no_music_suffix,
-            "time_suffix":             time_suffix,
-            "char_consistency_suffix":  char_consistency_suffix,
-            "creative_suffix":          self._creative.get_creative_suffix(),
+            # En mode final les suffixes sont NEUTRALISÉS : ils sont déjà écrits
+            # dans le texte relu à l'écran. Les laisser les ferait recoller une
+            # seconde fois à l'envoi — doublons dans le payload.
+            "style_suffix":            "" if _final_mode else video_suffix,
+            "no_music_suffix":         "" if _final_mode else no_music_suffix,
+            "time_suffix":             "" if _final_mode else time_suffix,
+            "char_consistency_suffix": "" if _final_mode else char_consistency_suffix,
+            "creative_suffix":         ("" if _final_mode
+                                        else self._creative.get_creative_suffix()),
+            # Sans ce drapeau, l'envoi repasserait le texte anglais déjà validé à
+            # la traduction : ce qui part ne serait plus ce qui a été relu.
+            "prompt_is_final":         _final_mode,
             "safety_tolerance_override": str(self._creative.get_safety_tolerance()),
             "model":          self._get_model(),
             "duration":       self._get_duration(),
             "resolution":     (self.cb_res.currentData() or self.cb_res.currentText()),
             "aspect_ratio":   self.cb_ratio.currentText().split(" ")[0],
             "shot_title":     self._active_shot_title,
-            "audio":          audio_on,
+            # En mapping le son n'est JAMAIS généré — le son, c'est le set. La case
+            # à cocher ne doit pas pouvoir le rallumer par inadvertance.
+            "audio":          (False if getattr(self, "_seq_mode", "live") == "mapping"
+                               else audio_on),
             "ref_images":      ref_images,
             "ref_image_roles": ref_image_roles,
             "style_ref_path":  self._style_ref_path if _style_ref_active else "",
@@ -4402,6 +4844,12 @@ class TabT2V(QScrollArea):
                 self._worker.quit()
                 abandon_thread(self._worker)
             self._worker = None
+        # L'assemblage du prompt final aussi : sans ça, un worker de composition
+        # continue de tourner après l'annulation et sa barre reste à l'écran.
+        if getattr(self, "_final_compose_worker", None) is not None:
+            abandon_thread(self._final_compose_worker)
+            self._final_compose_worker = None
+        self._hide_ai_busy()
         if self._is_batch_mode:
             self._batch_queue.clear()
             self._is_batch_mode = False

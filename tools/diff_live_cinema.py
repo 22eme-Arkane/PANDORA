@@ -55,6 +55,18 @@ EXPECTED_ONLY_LIVE = {
         # (auto-réparation quand le champ last_frame_path/image_path a été perdu) —
         # Live/Mapping (2026-07-09). Reportable au Cinéma si besoin.
         "_shot_frame_path",
+        # Assemblage du prompt final (2026-07-26). Le Cinéma a des méthodes
+        # HOMONYMES (_start_preview_translate, _on_preview_translated,
+        # _compose_context, _final_cache_key, _remember_final) : les corps Live
+        # divergent VOLONTAIREMENT — grammaire mapping, contrôle de barre, mode de
+        # séquence dans la clé de cache. Ces noms-ci n'existent que côté Live.
+        "_schedule_final_assembly", "_start_final_assembly", "_on_final_composed",
+        "_live_compose_inputs", "_remember_final", "_hide_ai_busy",
+        "_await_final_then_generate",
+        # Le worker de composition Live. Son jumeau Cinéma s'appelle
+        # _FinalPromptWorker et appelle un autre composeur : deux classes
+        # distinctes, pas un portage manquant.
+        "_LiveFinalPromptWorker", "_repli",
     },
     "ui/page_scenario_live.py": {
         # (Musique : _refresh_music_display/_make_music_chip/_remove_music/

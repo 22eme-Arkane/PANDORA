@@ -2194,6 +2194,23 @@ _FR_TO_EN: dict[str, str] = {
     "J'ai analysé votre scénario et rédigé des suggestions détaillées (visibles dans l'onglet « Analyse initiale »).\n\nDites-moi ce que vous souhaitez modifier, affiner ou conserver — je produirai alors une version remaniée de votre scénario en direct. Nous pouvons itérer autant de fois que nécessaire.": "I've analyzed your screenplay and written detailed suggestions (visible in the « Initial analysis » tab).\n\nTell me what you'd like to change, refine or keep — I'll then produce a reworked version of your screenplay live. We can iterate as many times as needed.",
     "J'ai analysé votre conducteur et rédigé des suggestions détaillées (visibles dans l'onglet « Analyse initiale »).\n\nDites-moi ce que vous souhaitez modifier, affiner ou conserver — je produirai alors une version remaniée de votre conducteur en direct. Nous pouvons itérer autant de fois que nécessaire.": "I've analyzed your rundown and written detailed suggestions (visible in the « Initial analysis » tab).\n\nTell me what you'd like to change, refine or keep — I'll then produce a reworked version of your rundown live. We can iterate as many times as needed.",
     "🎵 J'ai aussi l'analyse musicale de votre set (durée, BPM, courbe d'énergie et temps forts de chaque morceau) : demandez-moi directement de caler le conducteur dessus.": "🎵 I also have the musical analysis of your set (duration, BPM, energy curve and peaks of each track): just ask me to sync the rundown to it.",
+    # Composition du prompt final Live (parité Cinéma, 2026-07-26).
+    "⟳  Composition du prompt final par": "⟳  Composing the final prompt with",
+    "⟳  composition du prompt final…": "⟳  composing the final prompt…",
+    "l'IA": "the AI",
+    "✓ Prose composée et vérifiée (structure de barre conservée)":
+        "✓ Prose composed and verified (bar structure preserved)",
+    "⚠ Composition refusée": "⚠ Composition rejected",
+    "repli sur l'assemblage déterministe": "fell back to deterministic assembly",
+    "raison inconnue": "reason unknown",
+    "♻ Déjà composé pour ce plan — aucun crédit consommé":
+        "♻ Already composed for this shot — no credits used",
+    "⚠ Le moteur ou le mode a changé depuis l'assemblage":
+        "⚠ Engine or mode changed since assembly",
+    "⚠ Prompt final indisponible — l'encart garde le prompt de travail":
+        "⚠ Final prompt unavailable — the box keeps the working prompt",
+    "⚠  Crédits IA épuisés — rechargez le compte":
+        "⚠  AI credits exhausted — top up the account",
     "Génération en série": "Batch generation",
     "Vous avez sélectionné": "You selected",
     "plans.": "shots.",

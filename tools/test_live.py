@@ -4548,5 +4548,125 @@ def aucun_prompt_live_ne_demande_un_booster():
                          _v["errors"])
 
 
+@test
+def studio_live_prompt_final_wysiwyg_et_cache():
+    """L'encart du Studio Live devient le prompt RÉELLEMENT envoyé, composé une
+    seule fois par plan (demande Matthieu 2026-07-26 : « la même chose que dans
+    cinéma — une barre de chargement, et une sauvegarde qui évite de recréer la
+    composition »).
+
+    Trois garanties sont vérifiées ici, et chacune répond à un mode de panne
+    précis : le déclencheur ne doit PAS être la frappe (sinon un appel facturé à
+    chaque pause de saisie) ; l'empreinte de cache doit contenir le mode, le
+    tempo, la surface et le moteur (sinon on ressert une prose périmée sans le
+    moindre signe à l'écran) ; et le repli doit toujours produire un texte.
+    """
+    import ast
+    import core.live_compose_ctx as CC
+    import ui.tab_t2v_live as TL
+
+    _src = inspect.getsource(TL)
+
+    # ── 1. Le worker et le contrat de signal ──────────────────────────────────
+    assert "class _LiveFinalPromptWorker" in _src, "worker de composition absent"
+    assert "done = pyqtSignal(str, bool, str)" in _src, \
+        "le worker doit émettre (prompt, composé, raison) — et « done », jamais " \
+        "« finished » qui masquerait le signal natif de QThread"
+    assert not hasattr(TL._LiveFinalPromptWorker, "start_generation"), \
+        "le worker ne doit pas porter start_generation : d'autres tests résolvent " \
+        "la classe testée par ce nom et inspecteraient la mauvaise"
+
+    # ── 2. Le déclencheur n'est PAS la frappe ─────────────────────────────────
+    _otc = inspect.getsource(TL.TabT2V._on_prompt_text_changed)
+    assert "_suppress_prompt_signal" in _otc, \
+        "écrire le prompt final dans l'encart relancerait le cycle — boucle facturée"
+    for _interdit in ("_schedule_final_assembly", "_final_assembly_timer"):
+        assert _interdit not in _otc, \
+            (f"la frappe déclenche l'assemblage via « {_interdit} » — un appel IA "
+             "facturé à chaque pause de saisie, bloc replié")
+    _sel = inspect.getsource(TL.TabT2V._on_shot_selected_impl)
+    assert _sel.count("_schedule_final_assembly()") >= 2, \
+        ("l'assemblage doit être programmé AVANT le return du plan qui a déjà un "
+         "prompt (le cas majoritaire) ET en fin de méthode")
+
+    # ── 3. Garde anti-écrasement, aux DEUX bouts comme au Cinéma ──────────────
+    assert _src.count('self.prompt_ta.toPlainText().strip() != src') >= 2, \
+        ("garde anti-écrasement attendue au lancement ET à la réception : sans "
+         "elle, une saisie faite pendant la composition est perdue")
+
+    # ── 4. Le contrat d'envoi ─────────────────────────────────────────────────
+    _gen = inspect.getsource(TL.TabT2V.start_generation)
+    assert '"prompt_is_final"' in _gen, \
+        ("sans ce drapeau l'envoi retraduit le texte anglais déjà validé — "
+         "ce qui part n'est plus ce qui a été relu")
+    for _interdit in ("visual_context", "character_notes"):
+        assert _interdit not in _gen, \
+            (f"« {_interdit} » dans les paramètres d'envoi déclenche le composeur "
+             "CINÉMA (Camera:/Sound:) sur un prompt Live, sans qu'aucun fichier "
+             "Live n'ait l'air fautif")
+
+    # ── 5. L'empreinte de cache — le trou le plus dangereux ───────────────────
+    _base = dict(engine="seedance-2.0", mode="live", style_suffix="engraving",
+                 surface="a church facade", bpm=118.0, beats=8, duration=8)
+    _k = lambda **kw: CC.cache_key("le givre gagne", CC.compose_context(**{**_base, **kw}))
+    _ref = _k()
+    for _quoi, _kw in (("le mode", {"mode": "mapping"}),
+                       ("le tempo", {"bpm": 140.0}),
+                       ("la surface", {"surface": "a stone bridge"}),
+                       ("le moteur", {"engine": "veo-3.1"}),
+                       ("le nombre de temps", {"beats": 4}),
+                       ("la durée", {"duration": 5})):
+        assert _k(**_kw) != _ref, \
+            (f"changer {_quoi} ne change pas la clé — une prose périmée serait "
+             "resservie sans aucun signe visible")
+    assert _k() == _ref, "l'empreinte n'est pas reproductible"
+    # Un tempo qui oscille au millième (librosa) ne doit pas faire rater le cache.
+    assert _k(bpm=118.01) == _ref, "le BPM n'est pas arrondi — tous les caches ratent"
+
+    # ── 6. Le module de contexte reste PUR ────────────────────────────────────
+    _mods = set()
+    for _n in ast.walk(ast.parse(inspect.getsource(CC))):
+        if isinstance(_n, ast.ImportFrom):
+            _mods.add(_n.module or "")
+        elif isinstance(_n, ast.Import):
+            _mods.update(a.name for a in _n.names)
+    assert _mods, "analyse AST vide — test sans valeur"
+    for _interdit in ("core.ai_provider", "core.lang", "core.engine_grammar",
+                      "api.live_video_prompt"):
+        assert _interdit not in _mods, \
+            (f"core/live_compose_ctx doit rester pur — importe « {_interdit} »")
+
+    # ── 7. Le worker, exécuté POUR DE VRAI, hors ligne ────────────────────────
+    _BARRE = ("Locked-off frontal view of a facade, isolated on pure black. At the "
+              "first beat, the stone is bare. Across the bar, frost spreads "
+              "steadily. By the final beat, it has closed over the openings.")
+    import core.ai_provider as _ap
+    _vrai_c, _vrai_k = _ap.complete, _ap.key_error
+    _recu = []
+    try:
+        _ap.key_error = lambda task=None: ""
+        _ap.complete = lambda *a, **k: _BARRE
+        w = TL._LiveFinalPromptWorker("le givre gagne la façade",
+                                      {"engine": "seedance-2.0", "mode": "mapping"})
+        w.done.connect(lambda t, c, y: _recu.append((t, c, y)))
+        w.run()                       # run() et non start() : synchrone, testable
+        assert _recu and _recu[-1][1] is True, ("composition valide non retenue", _recu)
+        assert "frost" in _recu[-1][0], "le corps du plan n'est pas ressorti"
+
+        # Échec fournisseur → repli déterministe, jamais une exception, jamais vide.
+        _recu.clear()
+        _ap.complete = lambda *a, **k: (_ for _ in ()).throw(RuntimeError("crédits épuisés"))
+        w2 = TL._LiveFinalPromptWorker("le givre gagne la façade",
+                                       {"engine": "seedance-2.0", "mode": "mapping"})
+        w2.done.connect(lambda t, c, y: _recu.append((t, c, y)))
+        w2.run()
+        assert _recu, "le worker n'a rien émis — la barre resterait affichée à vie"
+        _txt, _comp, _why = _recu[-1]
+        assert _comp is False and _txt.strip() and _why, \
+            ("le repli doit produire un texte ET une raison", _recu)
+    finally:
+        _ap.complete, _ap.key_error = _vrai_c, _vrai_k
+
+
 if __name__ == "__main__":
     sys.exit(main())
