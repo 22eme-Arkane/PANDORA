@@ -223,8 +223,16 @@ class FormatConducteurWorker(QThread):
             from core.i18n import get_lang
             _is_en   = (get_lang() == "en")
             _pl      = "anglais" if _is_en else "français"
-            _quality = ("cinematic, ultra-detailed, sharp, 4K" if _is_en
-                        else "cinématographique, ultra-détaillé, net, 4K")
+            # Repères de qualité UTILES EN PROJECTION (2026-07-26). Les anciens
+            # (« cinématographique, ultra-détaillé, 4K ») étaient une contradiction
+            # en production : core/live_bar.BANNED_POSITIVES les bannit, la
+            # grammaire mapping les efface et le contrôle de composition rejette
+            # toute prose qui les contient. On faisait écrire ce qu'on allait
+            # refuser. Ceux-ci décrivent ce qui tient VRAIMENT sur de la pierre :
+            # du contraste, des arêtes franches, et du noir qui reste noir.
+            _quality = ("high contrast, crisp edges, pure black background, no haze"
+                        if _is_en
+                        else "fort contraste, arêtes nettes, fond noir pur, sans brume")
             _beats   = ("'opening:', 'then', 'in the final moment'" if _is_en
                         else "« ouverture : », « puis », « dans le dernier instant »")
             system = (

@@ -3,7 +3,7 @@ from datetime import datetime
 from PyQt6.QtWidgets import (
     QScrollArea, QWidget, QVBoxLayout, QHBoxLayout, QGridLayout,
     QPushButton, QMessageBox, QCheckBox, QComboBox, QFrame, QLabel, QDialog, QLineEdit,
-    QSlider, QSpinBox,
+    QSlider, QSpinBox, QProgressBar,
 )
 from PyQt6.QtCore import Qt, pyqtSignal, QThread
 from PyQt6.QtGui import QPixmap, QIntValidator
@@ -2666,6 +2666,28 @@ class TabT2V(QScrollArea):
         self._ref_mode_banner.setVisible(False)
         # NB : ajouté à la mise en page principale (hors _edit_zone) plus bas, afin de
         # rester visible aussi en sélection multiple (où _edit_zone est masqué).
+
+        # ── Barre d'activité IA (au-dessus de l'encart) ───────────────────────
+        # La composition du prompt final prend plusieurs secondes pendant lesquelles
+        # rien ne bougeait à l'écran côté Live (portage de la parité Cinéma,
+        # demande Matthieu 2026-07-26).
+        self._ai_busy_bar = QProgressBar()
+        self._ai_busy_bar.setRange(0, 0)          # indéterminée
+        self._ai_busy_bar.setFixedHeight(3)
+        self._ai_busy_bar.setTextVisible(False)
+        self._ai_busy_bar.setVisible(False)
+        self._ai_busy_bar.setStyleSheet(
+            f"QProgressBar{{background:{C['bg3']};border:none;border-radius:2px;}}"
+            f"QProgressBar::chunk{{background:{C['accent']};border-radius:2px;}}"
+        )
+        _ez_lay.addWidget(self._ai_busy_bar)
+        self._ai_busy_lbl = QLabel("")
+        self._ai_busy_lbl.setVisible(False)
+        self._ai_busy_lbl.setStyleSheet(
+            f"color:{C['accent']};font-size:9px;font-style:italic;"
+            f"background:transparent;border:none;"
+        )
+        _ez_lay.addWidget(self._ai_busy_lbl)
 
         prompt_frame, self.prompt_ta, self._btn_enhance, self._enhance_auto_cb = prompt_block(
             "Décris ta scène... ex: plan cinématique d'une forêt brumeuse au lever du soleil"

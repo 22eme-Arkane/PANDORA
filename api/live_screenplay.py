@@ -25,8 +25,13 @@ def _decoupage_live_system(lang: str = "fr") -> str:
     beats = ('"opening:", "then", "building up", "in the final moment"' if en
              else "« ouverture : », « puis », « montée », « dans le dernier instant »")
     absol = '"at 3 seconds"' if en else "« à 3 secondes »"
-    qual  = ("cinematic, ultra-detailed, sharp, 4K" if en
-             else "cinématographique, ultra-détaillé, net, 4K")
+    # Repères de qualité UTILES EN PROJECTION (2026-07-26) : les anciens
+    # (« cinématographique, ultra-détaillé, 4K ») sont bannis par
+    # core/live_bar.BANNED_POSITIVES, effacés par la grammaire mapping et
+    # refusés par le contrôle de composition — on faisait écrire ce qu'on
+    # allait refuser. Ceux-ci décrivent ce qui tient sur de la pierre.
+    qual  = ("high contrast, crisp edges, pure black background, no haze" if en
+             else "fort contraste, arêtes nettes, fond noir pur, sans brume")
     return f"""\
 Tu es un directeur artistique VJ. À partir du CONDUCTEUR fourni, produis le DÉCOUPAGE
 d'une performance vidéo live (VJing), organisée en ACTES (grandes sections du
@@ -92,8 +97,13 @@ def _decoupage_mapping_system(lang: str = "fr") -> str:
     beats = ('"opening:", "then", "building up", "in the final moment"' if en
              else "« ouverture : », « puis », « montée », « dans le dernier instant »")
     absol = '"at 3 seconds"' if en else "« à 3 secondes »"
-    qual  = ("cinematic, ultra-detailed, sharp, 4K" if en
-             else "cinématographique, ultra-détaillé, net, 4K")
+    # Repères de qualité UTILES EN PROJECTION (2026-07-26) : les anciens
+    # (« cinématographique, ultra-détaillé, 4K ») sont bannis par
+    # core/live_bar.BANNED_POSITIVES, effacés par la grammaire mapping et
+    # refusés par le contrôle de composition — on faisait écrire ce qu'on
+    # allait refuser. Ceux-ci décrivent ce qui tient sur de la pierre.
+    qual  = ("high contrast, crisp edges, pure black background, no haze" if en
+             else "fort contraste, arêtes nettes, fond noir pur, sans brume")
     states = ('(ex: "the facade is fully covered by…", "the facade dissolves into '
               'darkness while…", "only the window frames glow…", "the building '
               'reappears, rebuilt out of…")' if en else

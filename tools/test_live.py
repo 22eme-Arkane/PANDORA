@@ -4191,10 +4191,14 @@ def estimation_masquee_si_duree_cible():
 
 @test
 def prompt_video_live_jamais_compose():
-    """Composition prose Seedance (chantier Cinéma 2026-07-21) : les prompts LIVE
-    (corps en beats + [🎵 SOUND DESIGN]) ne sont JAMAIS composés par l'IA — une
-    réécriture diluerait les beats début/milieu/fin et le calage musical. Ils
-    restent sur le chemin historique strip + traduction d'api/real.py."""
+    """Le composeur CINÉMA ne prend jamais un prompt Live.
+
+    Formulation d'origine (2026-07-21) : « le Live n'est jamais composé ». Elle a
+    été révisée le 2026-07-26 — Matthieu veut le même confort qu'au Cinéma. Ce que
+    ce test garde, et qui reste vital, c'est que le prompt Live ne parte pas dans
+    `api/video_prompt`, dont la consigne impose « Camera: » et « Sound: » : deux
+    des trois interdits du mapping. Le Live compose désormais avec SON composeur,
+    bridé par core/live_grammar et vérifié (voir `composition_live_verifiee`)."""
     from api.video_prompt import should_compose
     from core.prompt_sections import video_with_sound
     live = video_with_sound(
@@ -4374,6 +4378,174 @@ def grammaire_live_separee():
     _src = inspect.getsource(_TL)
     assert _src.count('mode=getattr(self, "_seq_mode", "live")') >= 2, \
         "l'aperçu ou l'envoi n'informe pas l'assemblage du mode de séquence"
+
+
+@test
+def composition_live_verifiee():
+    """Le Live PEUT être composé par l'IA, mais une composition qui perd la barre
+    est REJETÉE (demande Matthieu 2026-07-26 : « la même chose que dans cinéma »).
+
+    L'ancien arbitrage interdisait toute composition, par crainte de diluer les
+    beats. Le nouvel arbitrage la permet et la CONTRÔLE : c'est le contrôle qui
+    remplace l'abstinence, donc c'est lui qui doit être prouvé. Chaque cas
+    ci-dessous est une sortie que l'IA produit réellement quand on la laisse faire.
+    """
+    from api.live_video_prompt import (_SYSTEM_LIVE, _system_for, compose,
+                                       validate_live_composed as _v)
+
+    _BARRE = ("Locked-off frontal view of a trapezoidal church facade, dead centre, "
+              "isolated on pure black. At the first beat, the stone is already veiled "
+              "in a thin skin of frost. Across the bar, the frost thickens steadily, "
+              "crystals proliferating outward along the buttresses. By the final beat, "
+              "the frost has closed over the openings. Constraints: no camera "
+              "movement, no zoom, no pan, no tilt, no cuts, no scene change.")
+
+    # 1. Une VRAIE barre de mapping passe — sinon le contrôle serait inutilisable.
+    _ok = _v(_BARRE, mode="mapping")
+    assert _ok["valid"], ("une barre correcte est refusée", _ok["errors"])
+
+    # 2. Le cas qui motivait l'interdiction : la prose statique, beats dissous.
+    _plat = ("Locked-off frontal view of a frozen church facade covered in dense "
+             "frost, isolated on pure black, sharp crystalline texture.")
+    _r = _v(_plat, mode="mapping")
+    assert not _r["valid"], "une description statique est acceptée — beats perdus"
+    assert any("structure de barre" in e for e in _r["errors"]), \
+        ("le refus doit NOMMER la barre perdue", _r["errors"])
+
+    # 3. La caméra nommée : interdit en mapping, licite en live.
+    _cam = ("At the first beat the facade is bare. Across the bar the camera slowly "
+            "pans right while frost spreads. By the final beat everything is white.")
+    assert not _v(_cam, mode="mapping")["valid"], \
+        "caméra nommée acceptée en mapping — le vidéoprojecteur est boulonné"
+    assert _v(_cam, mode="live")["valid"], \
+        "caméra refusée hors mapping — le filtre déborde"
+    # Forme fléchie : « pans » doit compter autant que « pan ».
+    assert not _v(_cam.replace("the camera slowly pans", "the frame slowly pans"),
+                  mode="mapping")["valid"], "« pans » non détecté (forme fléchie)"
+
+    # 4. Les négations des contraintes ne comptent PAS comme des mouvements : c'est
+    # ce qui distingue un bon prompt d'un mauvais, et le confondre rejetterait
+    # précisément les mieux écrits.
+    assert "no camera movement" in _BARRE and _ok["valid"], \
+        "« no camera movement » pris pour un mouvement affirmé"
+
+    # 5. Une coupe casse le calage : un plan = un processus continu.
+    _coupe = ("At the first beat the facade is bare. Across the bar frost spreads "
+              "steadily. Cut to a wide shot. By the end everything is white.")
+    assert not _v(_coupe, mode="mapping")["valid"], "coupe acceptée dans la barre"
+
+    # 6. Les boosters de plateau sont des défauts projetés sur de la pierre.
+    assert not _v(_BARRE + " Cinematic, 4K, ultra-detailed.", mode="mapping")["valid"], \
+        "boosters acceptés"
+
+    # 7. La consigne système du mapping n'est PAS celle du Cinéma.
+    _sys_map = _system_for("seedance-2.0", "mapping")
+    assert "Camera:" not in _sys_map and "Sound:" not in _sys_map, \
+        "la consigne mapping propose les champs du Cinéma"
+    assert "Surface:" in _sys_map, "la consigne mapping n'a pas sa grammaire"
+    assert _SYSTEM_LIVE in _sys_map, "le socle Live a disparu de la consigne"
+    from api.video_prompt import _SYSTEM as _SYS_CINE
+    assert _SYS_CINE not in _sys_map, "le Live hérite de la consigne Cinéma"
+
+    # 8. DÉTERMINISTE et hors ligne : aucun appel réseau ne doit partir d'un test.
+    # On simule un échec du fournisseur → compose() renvoie "" et l'appelant replie.
+    import core.ai_provider as _ap
+    _vrai = _ap.complete
+    try:
+        _ap.complete = lambda *a, **k: (_ for _ in ()).throw(RuntimeError("crédits épuisés"))
+        assert compose("plan de test", engine="seedance-2.0", mode="mapping") == "", \
+            "une erreur fournisseur doit donner un repli, pas une exception"
+        import api.live_video_prompt as _LVP
+        assert _LVP.LAST_COMPOSE_ERROR, \
+            "la raison de l'échec doit être conservée pour être affichée"
+        # Une sortie invalide ne doit pas non plus passer.
+        _ap.complete = lambda *a, **k: _plat
+        assert compose("plan de test", engine="seedance-2.0", mode="mapping") == "", \
+            "une composition sans barre a été acceptée"
+        assert "structure de barre" in _LVP.LAST_COMPOSE_ERROR, \
+            "la raison du refus n'est pas exploitable à l'écran"
+        # Une sortie valide passe et ressort nettoyée.
+        _ap.complete = lambda *a, **k: _BARRE
+        assert compose("plan de test", engine="seedance-2.0", mode="mapping"), \
+            "une barre correcte est refusée par compose()"
+    finally:
+        _ap.complete = _vrai
+
+    # 9. Le composeur Live n'emprunte RIEN au composeur Cinéma (AST, pas texte :
+    # la docstring du module explique justement pourquoi il ne le fait pas).
+    import ast
+    import api.live_video_prompt as _M
+    _mods = set()
+    for _n in ast.walk(ast.parse(inspect.getsource(_M))):
+        if isinstance(_n, ast.ImportFrom):
+            _mods.add(_n.module or "")
+        elif isinstance(_n, ast.Import):
+            _mods.update(a.name for a in _n.names)
+    assert "core.engine_grammar" not in _mods, \
+        "le composeur Live importe la grammaire Cinéma"
+    assert "core.live_grammar" in _mods, "le composeur Live ignore sa propre grammaire"
+
+
+@test
+def aucun_prompt_live_ne_demande_un_booster():
+    """Les consignes IA du Live ne réclament plus les mots qu'on bannit ensuite.
+
+    Contradiction trouvée le 2026-07-26 en branchant la composition : le découpage
+    (api/live_extract) et le conducteur (api/live_screenplay) demandaient nommément
+    « cinématographique, ultra-détaillé, net, 4K » — les quatre mots que
+    core/live_bar.BANNED_POSITIVES interdit, que la grammaire mapping efface et que
+    api/live_video_prompt.validate_live_composed REJETTE. On faisait écrire, puis
+    effacer, puis on aurait refusé. Une composition branchée là-dessus aurait
+    échoué systématiquement, et le repli aurait eu l'air d'un bug.
+
+    Les repères de qualité gardés décrivent ce qui tient réellement en projection.
+    """
+    import ast
+    from core.live_bar import BANNED_POSITIVES
+
+    def _code_seul(path):
+        # Les commentaires du correctif CITENT les mots bannis pour expliquer
+        # pourquoi ils sont partis : une recherche dans le texte brut se
+        # déclencherait sur l'explication elle-même.
+        with open(path, encoding="utf-8-sig") as fh:
+            tree = ast.parse(fh.read())
+        for n in ast.walk(tree):
+            if isinstance(n, (ast.Module, ast.FunctionDef,
+                              ast.AsyncFunctionDef, ast.ClassDef)):
+                if ast.get_docstring(n) is not None:
+                    n.body = n.body[1:] or [ast.Pass()]
+        return ast.unparse(tree)
+
+    _ROOT_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    _CONSIGNES = ("api/live_extract.py", "api/live_screenplay.py")
+
+    for _rel in _CONSIGNES:
+        _src = _code_seul(os.path.join(_ROOT_DIR, *_rel.split("/")))
+        _low = _src.lower()
+        assert "prompt" in _low, (f"{_rel} n'a pas été lu — test sans valeur")
+        for _mot in BANNED_POSITIVES:
+            assert _mot.lower() not in _low, \
+                (f"{_rel} demande « {_mot} » à l'IA, alors que live_bar le bannit, "
+                 "que la grammaire mapping l'efface et que le contrôle de "
+                 "composition rejette toute prose qui le contient")
+
+    # Et le remplacement est bien là : sans lui le test passerait aussi sur un
+    # fichier où la notion de qualité aurait purement disparu.
+    for _rel in _CONSIGNES:
+        _src = _code_seul(os.path.join(_ROOT_DIR, *_rel.split("/")))
+        assert "high contrast" in _src, \
+            (f"{_rel} n'a plus AUCUN repère de qualité — les moteurs en ont besoin, "
+             "il fallait les remplacer, pas les supprimer")
+
+    # Bouclage : ce qu'on fait écrire passe le contrôle de composition.
+    from api.live_video_prompt import validate_live_composed
+    _prose = ("Locked-off frontal view of the facade, isolated on pure black. "
+              "At the first beat, the stone is bare. Across the bar, frost spreads "
+              "steadily. By the final beat, it has closed over the openings. "
+              "High contrast, crisp edges, pure black background, no haze.")
+    _v = validate_live_composed(_prose, mode="mapping")
+    assert _v["valid"], ("les repères de qualité retenus sont eux-mêmes refusés",
+                         _v["errors"])
 
 
 if __name__ == "__main__":
