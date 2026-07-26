@@ -2194,6 +2194,20 @@ _FR_TO_EN: dict[str, str] = {
     "J'ai analysé votre scénario et rédigé des suggestions détaillées (visibles dans l'onglet « Analyse initiale »).\n\nDites-moi ce que vous souhaitez modifier, affiner ou conserver — je produirai alors une version remaniée de votre scénario en direct. Nous pouvons itérer autant de fois que nécessaire.": "I've analyzed your screenplay and written detailed suggestions (visible in the « Initial analysis » tab).\n\nTell me what you'd like to change, refine or keep — I'll then produce a reworked version of your screenplay live. We can iterate as many times as needed.",
     "J'ai analysé votre conducteur et rédigé des suggestions détaillées (visibles dans l'onglet « Analyse initiale »).\n\nDites-moi ce que vous souhaitez modifier, affiner ou conserver — je produirai alors une version remaniée de votre conducteur en direct. Nous pouvons itérer autant de fois que nécessaire.": "I've analyzed your rundown and written detailed suggestions (visible in the « Initial analysis » tab).\n\nTell me what you'd like to change, refine or keep — I'll then produce a reworked version of your rundown live. We can iterate as many times as needed.",
     "🎵 J'ai aussi l'analyse musicale de votre set (durée, BPM, courbe d'énergie et temps forts de chaque morceau) : demandez-moi directement de caler le conducteur dessus.": "🎵 I also have the musical analysis of your set (duration, BPM, energy curve and peaks of each track): just ask me to sync the rundown to it.",
+    # Refus de rognage façade — message diagnostique (2026-07-26).
+    "Impossible de tirer un masque de la façade de référence.":
+        "Could not derive a mask from the reference facade.",
+    "l'image est illisible.": "the image cannot be read.",
+    "presque tout le cadre est éclairé — il n'y a pas de fond noir autour du bâtiment, c'est encore une photo avec son décor.":
+        "almost the whole frame is lit — there is no black background around the "
+        "building, this is still a photo with its surroundings.",
+    "presque rien ne ressort du fond — l'image est trop sombre pour qu'une silhouette s'en détache.":
+        "almost nothing stands out — the image is too dark for a silhouette to emerge.",
+    "Mesuré : {pct} % du cadre éclairé (il en faut entre {lo} et {hi} %).":
+        "Measured: {pct} % of the frame lit (it must be between {lo} and {hi} %).",
+    "Conducteur → « Ajouter des références » → Référence bâtiment → bouton « ◐ Isoler (fond noir) ».":
+        "Rundown → « Add references » → Building reference → « ◐ Isolate (black "
+        "background) » button.",
     # Composition du prompt final Live (parité Cinéma, 2026-07-26).
     "⟳  Composition du prompt final par": "⟳  Composing the final prompt with",
     "⟳  composition du prompt final…": "⟳  composing the final prompt…",

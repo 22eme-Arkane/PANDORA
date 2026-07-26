@@ -261,6 +261,24 @@ def generate_full_calage(ref_path: str, name: str, data_root: str) -> dict:
 _MASK_MIN_COVER, _MASK_MAX_COVER = 0.02, 0.95
 
 
+def facade_mask_coverage(ref_path: str) -> float:
+    """Part du cadre occupée par la silhouette éclairée, entre 0 et 1. -1 si illisible.
+
+    Diagnostic pour l'utilisateur (2026-07-26) : le refus de rognage disait
+    seulement « détoure-la d'abord », sans dire ce qui avait été mesuré ni sur
+    quel critère. Or les deux causes se soignent différemment — une couverture
+    quasi nulle veut dire que l'image est trop sombre pour être lue, une
+    couverture quasi totale qu'aucun fond noir n'entoure le bâtiment.
+    """
+    try:
+        from PIL import Image
+        img = Image.open(ref_path).convert("L")
+        mask = img.point(lambda v: 255 if v > _LUMA_THRESHOLD else 0)
+        return mask.histogram()[255] / float(mask.size[0] * mask.size[1])
+    except Exception:
+        return -1.0
+
+
 def build_facade_mask(ref_path: str, out_path: str, feather: int = 2) -> str:
     """Masque pixel PNG (blanc = façade, noir = hors silhouette) depuis la
     façade isolée sur fond noir. Renvoie "" si la façade n'est PAS isolée

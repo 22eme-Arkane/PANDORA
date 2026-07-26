@@ -4735,5 +4735,128 @@ def duree_de_barre_atteint_le_recalage_ffmpeg():
     assert MIN_DELTA_S < 0.1, "seuil de non-action trop haut"
 
 
+@test
+def vignette_mood_survit_a_la_destruction_de_sa_ligne():
+    """Rafraîchir une vignette Mood sur une ligne DÉTRUITE ne plante plus.
+
+    Crash rapporté par Matthieu le 2026-07-26 en rognant une façade :
+    « RuntimeError: wrapped C/C++ object of type QLabel has been deleted »,
+    page_storyboard_live.py:_on_apercu_changed → self._apercu_lbl.setPixmap.
+
+    Mécanisme : `refresh()` reconstruit le tableau avec deleteLater(), qui diffère
+    la destruction au prochain tour de boucle. Ouvrir la fenêtre Mood démarre une
+    boucle IMBRIQUÉE (dlg.exec()) où ces destructions sont traitées : la ligne
+    meurt PENDANT la fenêtre, et le rafraîchissement de fermeture la rappelait.
+    Intermittent, donc — ça ne casse que si un refresh précédait le clic.
+
+    Le garde `hasattr(self, "_apercu_lbl")` ne protégeait rien : l'attribut Python
+    survit à la destruction Qt et pointe sur un wrapper mort.
+    """
+    from PyQt6.QtWidgets import QLabel, QWidget
+    import ui.page_storyboard_live as PSL
+
+    # 1. _alive distingue vraiment un widget vivant d'un widget détruit.
+    _w = QWidget()
+    assert PSL._alive(_w), "un widget vivant est déclaré mort"
+    assert not PSL._alive(None), "None doit être déclaré mort"
+    import PyQt6.sip as _sip
+    _sip.delete(_w)                      # destruction C++ RÉELLE, pas simulée
+    assert not PSL._alive(_w), \
+        "un widget détruit côté C++ est déclaré vivant — le garde ne sert à rien"
+
+    # 2. Le cas exact du crash : la ligne existe, sa vignette est détruite.
+    class _FausseLigne(QWidget):
+        """Vraie QWidget : _alive doit voir un objet Qt, pas un objet Python."""
+        _data = {"id": "plan-42"}
+        _on_apercu_changed = PSL._ShotRow._on_apercu_changed
+
+    _row = _FausseLigne()
+    _lbl = QLabel()
+    _row._apercu_lbl = _lbl
+    # Sans destruction : le chemin doit être RÉELLEMENT emprunté, sinon le test
+    # ne prouverait rien (il passerait aussi sur une méthode vide).
+    _row._on_apercu_changed("plan-42", "")
+    assert _lbl.text(), "le chemin nominal ne met plus à jour la vignette"
+
+    _sip.delete(_lbl)
+    try:
+        _row._on_apercu_changed("plan-42", "")
+    except RuntimeError as exc:
+        raise AssertionError(
+            "la vignette détruite fait toujours planter : " + str(exc)) from None
+
+    # 3. Les deux autres points d'appel sont gardés eux aussi.
+    _src = inspect.getsource(PSL)
+    assert "if not _alive(row_self):" in _src, \
+        ("le rafraîchissement de fermeture de la fenêtre Mood n'est pas gardé — "
+         "c'est la ligne exacte du crash rapporté")
+    _batch = inspect.getsource(PSL.PageStoryboard._on_batch_mood_done)
+    assert "_alive(row)" in _batch, \
+        ("la génération de moods en série écrit dans _shot_rows sans vérifier "
+         "que la ligne existe encore")
+
+
+@test
+def refus_de_rognage_dit_ce_qui_ne_va_pas():
+    """« Façade non isolée » nomme la cause mesurée et où la corriger.
+
+    Signalé par Matthieu le 2026-07-26 : le rognage refuse avec « détoure-la
+    d'abord », sans dire ce qui a été mesuré ni où se trouve l'outil qui le fait.
+    Or les deux causes se soignent différemment — un cadre entièrement éclairé
+    veut dire qu'aucun fond noir n'entoure le bâtiment (c'est encore une photo
+    avec son décor) ; un cadre presque éteint, que l'image est trop sombre pour
+    qu'une silhouette s'en détache.
+    """
+    import tempfile
+    from PIL import Image
+    from core.live_mapping import (build_facade_mask, facade_mask_coverage,
+                                   _MASK_MAX_COVER, _MASK_MIN_COVER)
+
+    _d = tempfile.mkdtemp()
+
+    def _cas(nom, img):
+        p = os.path.join(_d, nom + ".png")
+        img.save(p)
+        return facade_mask_coverage(p), bool(
+            build_facade_mask(p, os.path.join(_d, nom + "_m.png")))
+
+    # 1. Photo non détourée (le cas de Matthieu) : cadre entièrement « éclairé ».
+    _cov, _ok = _cas("photo", Image.new("RGB", (200, 150), (40, 45, 70)))
+    assert not _ok and _cov >= _MASK_MAX_COVER, \
+        ("une photo non détourée doit être refusée par le HAUT", _cov)
+
+    # 2. Image trop sombre : rien ne ressort du fond.
+    _cov, _ok = _cas("sombre", Image.new("RGB", (200, 150), (5, 5, 5)))
+    assert not _ok and _cov <= _MASK_MIN_COVER, \
+        ("une image trop sombre doit être refusée par le BAS", _cov)
+
+    # 3. Façade correctement isolée : acceptée (sinon le refus serait systématique
+    #    et le test ne prouverait rien).
+    _im = Image.new("RGB", (200, 150), (0, 0, 0))
+    for _x in range(70, 130):
+        for _y in range(40, 140):
+            _im.putpixel((_x, _y), (200, 190, 170))
+    _cov, _ok = _cas("isolee", _im)
+    assert _ok, ("une façade correctement isolée est refusée", _cov)
+    assert _MASK_MIN_COVER < _cov < _MASK_MAX_COVER
+
+    # 4. Illisible → -1, jamais une exception.
+    assert facade_mask_coverage(os.path.join(_d, "inexistant.png")) < 0
+
+    # 5. Le message distingue les deux causes ET nomme le bouton qui les corrige.
+    import inspect as _i
+    import ui.dialog_apercu as _DA
+    _src = _i.getsource(_DA.MoodDialog._crop_to_facade)
+    assert "facade_mask_coverage" in _src, "le refus n'affiche aucune mesure"
+    assert "_MASK_MAX_COVER" in _src and "_MASK_MIN_COVER" in _src, \
+        "le refus ne distingue pas trop clair de trop sombre"
+    assert "Isoler (fond noir)" in _src, \
+        ("le message n'indique pas OÙ détourer — l'outil existe pourtant dans le "
+         "Conducteur, l'utilisateur ne peut pas le deviner")
+    from core.i18n import _FR_TO_EN
+    assert any("Isoler (fond noir)" in k for k in _FR_TO_EN), \
+        "le chemin vers l'outil n'est pas traduit"
+
+
 if __name__ == "__main__":
     sys.exit(main())

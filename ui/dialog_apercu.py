@@ -587,11 +587,33 @@ class MoodDialog(QDialog):
             return
         mask = ensure_facade_mask(ref, get_data_root())
         if not mask:
+            # Message DIAGNOSTIQUE (2026-07-26) : « détoure-la d'abord » ne disait
+            # ni ce qui avait été mesuré, ni où se trouve l'outil qui le fait. Les
+            # deux causes se soignent différemment, il faut donc les distinguer.
+            from core.live_mapping import (facade_mask_coverage,
+                                           _MASK_MAX_COVER, _MASK_MIN_COVER)
+            _cov = facade_mask_coverage(ref)
+            if _cov < 0:
+                _cause = translate("l'image est illisible.")
+            elif _cov >= _MASK_MAX_COVER:
+                _cause = translate(
+                    "presque tout le cadre est éclairé — il n'y a pas de fond noir "
+                    "autour du bâtiment, c'est encore une photo avec son décor.")
+            else:
+                _cause = translate(
+                    "presque rien ne ressort du fond — l'image est trop sombre pour "
+                    "qu'une silhouette s'en détache.")
             QMessageBox.warning(
                 self, translate("Façade non isolée"),
-                translate("La façade de référence n'est pas détourée sur fond noir : "
-                          "impossible d'en tirer un masque fiable.\n\nDétoure-la "
-                          "d'abord (le fond doit être noir pur autour du bâtiment)."))
+                translate("Impossible de tirer un masque de la façade de référence.")
+                + f"\n\n{_cause}\n\n"
+                + translate("Mesuré : {pct} % du cadre éclairé (il en faut entre "
+                            "{lo} et {hi} %).").format(
+                    pct=("?" if _cov < 0 else int(_cov * 100)),
+                    lo=int(_MASK_MIN_COVER * 100), hi=int(_MASK_MAX_COVER * 100))
+                + "\n\n"
+                + translate("Conducteur → « Ajouter des références » → Référence "
+                            "bâtiment → bouton « ◐ Isoler (fond noir) »."))
             return
 
         m = measure_facade_alignment(src, mask)

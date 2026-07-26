@@ -623,6 +623,37 @@ class _WrapLabel(QLabel):
 
 # ── Ligne de plan ─────────────────────────────────────────────────────────────
 
+def _alive(obj) -> bool:
+    """True si l'objet Qt existe encore CÔTÉ C++.
+
+    `hasattr(self, "_apercu_lbl")` ne prouve rien : quand Qt détruit un widget,
+    l'attribut Python survit et pointe sur un wrapper mort. Toute méthode appelée
+    dessus lève « wrapped C/C++ object of type QLabel has been deleted ».
+
+    Crash vécu le 2026-07-26 en rognant une façade. Le mécanisme : `refresh()`
+    reconstruit le tableau avec `deleteLater()`, qui ne détruit rien tout de
+    suite — la destruction attend le prochain tour de boucle d'événements. Ouvrir
+    la fenêtre Mood démarre justement une boucle IMBRIQUÉE (`dlg.exec()`) : les
+    destructions en attente y sont traitées, la ligne meurt PENDANT que la
+    fenêtre est ouverte, et le code qui la rappelait à la fermeture plantait.
+    D'où le caractère intermittent — ça ne casse que si un refresh précédait.
+    """
+    if obj is None:
+        return False
+    try:
+        from PyQt6 import sip
+        return not sip.isdeleted(obj)
+    except Exception:
+        # sip indisponible : on tente un accès Qt réel, seul test fiable.
+        try:
+            obj.objectName()
+            return True
+        except RuntimeError:
+            return False
+        except AttributeError:
+            return True   # pas un objet Qt : rien à vérifier, il est vivant
+
+
 class _ShotRow(QFrame):
     edit_requested      = pyqtSignal(dict)
     delete_requested    = pyqtSignal(str)
@@ -906,6 +937,11 @@ class _ShotRow(QFrame):
             dlg.exec()
             # Rafraîchit la cellule à la fermeture — une variation peut avoir été
             # générée ou activée sans passer par le signal apercu_changed.
+            # La ligne a pu être détruite PENDANT la fenêtre (boucle imbriquée
+            # qui traite un deleteLater en attente) : dans ce cas le tableau a
+            # déjà été reconstruit avec la bonne vignette, il n'y a rien à faire.
+            if not _alive(row_self):
+                return
             apercu = sb_api.load_apercus(shot_data["id"])
             paths  = [p for p in apercu.get("paths", []) if os.path.isfile(p)]
             idx    = min(apercu.get("active_idx", 0), max(0, len(paths) - 1))
@@ -1521,7 +1557,11 @@ class _ShotRow(QFrame):
         self.setMinimumHeight(self._content_height())
 
     def _on_apercu_changed(self, shot_id: str, image_path: str):
-        if shot_id != self._data.get("id") or not hasattr(self, "_apercu_lbl"):
+        if shot_id != self._data.get("id"):
+            return
+        # La ligne ET sa vignette doivent exister côté Qt : un refresh peut les
+        # avoir détruites entre-temps (voir _alive).
+        if not _alive(self) or not _alive(getattr(self, "_apercu_lbl", None)):
             return
         if image_path and os.path.isfile(image_path):
             pix = QPixmap(image_path).scaled(
@@ -3532,8 +3572,10 @@ class PageStoryboard(QWidget):
         self._mood_progress.setValue(current)
 
     def _on_batch_mood_done(self, shot_id: str, image_path: str):
+        # `_shot_rows` peut contenir des lignes déjà détruites : un refresh
+        # pendant la génération en série les remplace sans que le worker le sache.
         row = self._shot_rows.get(shot_id)
-        if row:
+        if _alive(row):
             row._on_apercu_changed(shot_id, image_path)
 
     def _on_batch_mood_failed(self, shot_id: str, err: str):
