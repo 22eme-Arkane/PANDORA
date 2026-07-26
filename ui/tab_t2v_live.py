@@ -4120,26 +4120,39 @@ class TabT2V(QScrollArea):
                         or self._use_mood_cb.isChecked())
             _raccord_on = bool(getattr(self, "_raccord_auto_cb", None)
                                and self._raccord_auto_cb.isChecked())
-            if _mood_on:
-                try:
-                    _kf, _ = self._get_mapping_keyframes(self._active_shot)
-                except Exception:
-                    _kf = ""
-                if _kf:
-                    param_lines.append(
-                        translate("⚓ Image de départ : le Mood du plan")
-                        + f" — {os.path.basename(_kf)}")
-                    if _raccord_on:
-                        param_lines.append(translate(
-                            "   (le Mood est prioritaire sur le raccord automatique "
-                            "— décochez-le pour repartir de la frame précédente)"))
-                else:
-                    param_lines.append(translate(
-                        "⚠ « Utiliser les images du Mood » est coché mais ce plan "
-                        "n'a aucun Mood — génère-le d'abord"))
-            elif _raccord_on:
+            # La frame de départ éventuelle vient du plan PRÉCÉDENT.
+            _prev_f = ""
+            try:
+                _p = getattr(self._continuity_bar, "_prev_shot", None)
+                if _raccord_on and _p:
+                    _prev_f = _shot_frame_path(_p, "last")
+            except Exception:
+                _prev_f = ""
+            try:
+                _kf, _ = (self._get_mapping_keyframes(self._active_shot)
+                          if _mood_on else ("", ""))
+            except Exception:
+                _kf = ""
+
+            if _prev_f and _kf:
                 param_lines.append(translate(
-                    "⚓ Image de départ : la dernière frame du plan précédent"))
+                    "⚓ Départ : dernière frame du plan précédent  →  Arrivée : "
+                    "Mood de ce plan"))
+                param_lines.append(f"   {os.path.basename(_prev_f)}  →  "
+                                   f"{os.path.basename(_kf)}")
+            elif _kf:
+                param_lines.append(
+                    translate("⚓ Départ : le Mood de ce plan")
+                    + f" — {os.path.basename(_kf)}"
+                    + translate("  (aucune frame rendue au plan précédent)"))
+            elif _prev_f:
+                param_lines.append(
+                    translate("⚓ Départ : la dernière frame du plan précédent")
+                    + f" — {os.path.basename(_prev_f)}")
+            elif _mood_on:
+                param_lines.append(translate(
+                    "⚠ « Utiliser les images du Mood » est coché mais ce plan "
+                    "n'a aucun Mood — génère-le d'abord"))
 
         # ── Verdict de la composition ─────────────────────────────────────────
         # Ce qui a été fait au prompt doit se lire ici, sinon un repli silencieux
@@ -4893,38 +4906,47 @@ class TabT2V(QScrollArea):
             )
             time_suffix = (time_suffix + _facade_strict) if time_suffix else _facade_strict.lstrip(", ")
 
+        # ── MÉTHODE DEUX PLAQUES (demande Matthieu 2026-07-27) ────────────────
+        # Le plan PART de la dernière frame rendue du plan précédent et ARRIVE sur
+        # le Mood du plan courant. Le clip suivant repart de SA dernière frame, et
+        # ainsi de suite : la continuité d'un plan à l'autre est conservée ET
+        # chaque plan atterrit sur l'image validée à l'écran.
+        #
+        # Les deux réglages précédents étaient EXCLUSIFS et se volaient l'image de
+        # départ : le raccord seul perdait le Mood (« le rendu ne ressemble pas au
+        # Mood »), le Mood seul perdait la continuité (« je n'ai plus de raccords »).
+        # Aucun des deux ne décrivait ce qui est voulu.
+        #
+        # ⚠ Deux notes du dépôt se contredisent sur end_image_url : un commentaire
+        # du 2026-07-09 affirme que Seedance 2.0 i2v ne l'exploite pas (feature
+        # 1.5 Pro), tandis que la doctrine de core/live_bar en fait ce qui verrouille
+        # l'image d'arrivée. La plomberie existe des deux côtés (api/real.py
+        # l'envoie déjà) ; c'est le rendu réel qui tranchera. Rien n'est perdu si le
+        # moteur l'ignore : le départ reste le raccord, comme avant.
         end_frame = ""
-        # Mapping : RACCORD « dernière image réelle » (choix Matthieu 2026-07-09).
-        # Le plan reprend EXACTEMENT la dernière frame RENDUE du plan précédent —
-        # déjà positionnée dans i2v_frame par le « Raccord automatique » ci-dessus —
-        # → vraie continuité visuelle d'un plan à l'autre. Le mood ne sert donc
-        # d'ancrage que pour le TOUT PREMIER plan (aucune frame précédente).
-        # Pas d'end_image_url : Seedance 2.0 image-to-video ne l'exploite pas
-        # (start+end frame = feature Seedance 1.5 Pro) ; l'envoyer ne faisait rien
-        # et écrasait le raccord. Le plan s'écoule librement depuis sa frame de départ.
-        # PRIORITÉ AU MOOD (correctif 2026-07-27). Le « not i2v_frame » qui gardait
-        # ce bloc donnait la main au raccord automatique — lequel est FORCÉ coché en
-        # mapping. Résultat : sauf pour le tout premier plan, le Mood n'atteignait
-        # jamais le moteur, alors que sa case était cochée et que son libellé promet
-        # « le Mood du plan sert d'images-clés ». L'option ne faisait rien.
-        # Le raccord depuis la dernière frame reste accessible : il suffit de
-        # décocher « Utiliser les images du Mood ».
         self._anchor_kind = "raccord" if i2v_frame else ""
         if (getattr(self, "_seq_mode", "live") == "mapping" and self._active_shot
                 and _use_mood):
             kf_start, _ = self._get_mapping_keyframes(self._active_shot)
             if kf_start:
                 # Confinement façade : mood masqué (noir pur hors silhouette) avant
-                # l'envoi — Seedance suit sa première frame. Copie en cache, le mood
-                # reste intact à l'écran.
+                # l'envoi. Copie en cache, le mood reste intact à l'écran.
                 from core.live_mapping import masked_keyframe
                 from core.live_building import get_building_ref
                 from core.context import get_data_root
                 _bref = get_building_ref()
                 if _bref:
                     kf_start = masked_keyframe(kf_start, _bref, get_data_root())
-                i2v_frame = kf_start
-                self._anchor_kind = "mood"
+                if i2v_frame:
+                    # Une frame précédente existe → elle reste le DÉPART, le Mood
+                    # devient l'ARRIVÉE. C'est le cas courant, à partir du plan 2.
+                    end_frame = kf_start
+                    self._anchor_kind = "raccord+mood"
+                else:
+                    # Aucun plan précédent rendu (premier plan, ou frame effacée) :
+                    # le Mood est le seul point d'ancrage disponible.
+                    i2v_frame = kf_start
+                    self._anchor_kind = "mood"
 
         params = {
             "mode":                    "i2v" if i2v_frame else "t2v",

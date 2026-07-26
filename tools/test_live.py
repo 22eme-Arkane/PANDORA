@@ -5180,12 +5180,29 @@ def le_mood_atteint_vraiment_le_moteur():
 
     # ── 4. L'ancrage réel est ANNONCÉ à l'écran ──────────────────────────────
     _prev = inspect.getsource(TabT2V._build_full_preview_text)
-    assert "Image de départ" in _prev, \
-        ("rien ne dit quelle image ancre le plan : deux options peuvent la fournir "
-         "et une seule gagne")
+    assert "Départ :" in _prev and "Arrivée :" in _prev, \
+        "rien ne dit d'où part le plan ni sur quelle image il atterrit"
     from core.i18n import _FR_TO_EN
-    assert any("Image de départ : le Mood du plan" in k for k in _FR_TO_EN), \
-        "annonce de l'ancrage non traduite"
+    assert any("Arrivée : Mood de ce plan" in k for k in _FR_TO_EN), \
+        "annonce de la chaîne départ → arrivée non traduite"
+
+    # ── 5. DEUX PLAQUES : le raccord ET le Mood, pas l'un OU l'autre ─────────
+    # Le 2026-07-27 j'avais donné la priorité au Mood en retirant « not
+    # i2v_frame » : le Mood revenait, mais les raccords disparaissaient
+    # (« ça n'utilise plus la dernière image du dernier plan »). Les deux
+    # réglages étaient exclusifs et se volaient l'image de départ ; aucun ne
+    # décrivait ce qui est voulu — partir de la frame précédente et ARRIVER sur
+    # le Mood du plan.
+    _sg2 = inspect.getsource(TabT2V.start_generation)
+    assert "end_frame = kf_start" in _sg2, \
+        ("le Mood n'est pas posé en image d'ARRIVÉE : soit il vole le départ au "
+         "raccord, soit il ne sert à rien")
+    assert '"end_image_path"' in _sg2, "l'image d'arrivée n'est pas transmise à l'envoi"
+    assert 'self._anchor_kind = "raccord+mood"' in _sg2, \
+        "le cas où les deux images coexistent n'est pas identifié"
+    # Et le repli reste : sans frame précédente, le Mood redevient le départ.
+    assert "i2v_frame = kf_start" in _sg2, \
+        "premier plan (aucune frame précédente) : le Mood doit rester le départ"
 
     sb.set_namespace("storyboard")
 

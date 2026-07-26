@@ -2196,6 +2196,12 @@ _FR_TO_EN: dict[str, str] = {
     "🎵 J'ai aussi l'analyse musicale de votre set (durée, BPM, courbe d'énergie et temps forts de chaque morceau) : demandez-moi directement de caler le conducteur dessus.": "🎵 I also have the musical analysis of your set (duration, BPM, energy curve and peaks of each track): just ask me to sync the rundown to it.",
     "dernière frame du plan précédent": "last frame of the previous shot",
     "⚓ Image de départ : le Mood du plan": "⚓ Start image: the shot's Mood",
+    "⚓ Départ : dernière frame du plan précédent  →  Arrivée : Mood de ce plan":
+        "⚓ Start: previous shot's last frame  →  End: this shot's Mood",
+    "⚓ Départ : le Mood de ce plan": "⚓ Start: this shot's Mood",
+    "  (aucune frame rendue au plan précédent)": "  (no rendered frame on the previous shot)",
+    "⚓ Départ : la dernière frame du plan précédent":
+        "⚓ Start: the previous shot's last frame",
     "   (le Mood est prioritaire sur le raccord automatique — décochez-le pour repartir de la frame précédente)":
         "   (the Mood takes priority over the automatic match cut — uncheck it to start from the previous frame)",
     "⚠ « Utiliser les images du Mood » est coché mais ce plan n'a aucun Mood — génère-le d'abord":
