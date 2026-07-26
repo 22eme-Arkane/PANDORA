@@ -2677,7 +2677,10 @@ class TabT2V(QScrollArea):
         # ── Thumbnail strip ───────────────────────────────────────────────────
         self._thumb_strip = _ThumbnailStrip()
         self._thumb_strip.setVisible(False)
-        _ez_lay.addWidget(self._thumb_strip)
+        # Les vignettes NE sont PAS ajoutées ici (2026-07-26) : elles vivaient dans
+        # _edit_zone, très au-dessus du bandeau « MODE RÉFÉRENCE ACTIF », si bien
+        # que l'annonce « N image(s) envoyée(s) » et les images se lisaient à deux
+        # endroits éloignés. Elles sont insérées JUSTE SOUS le bandeau, plus bas.
 
         # ── Prompt preview (prompt exact envoyé à Seedance) ───────────────────
         self._prompt_preview = self._build_prompt_preview()
@@ -2808,6 +2811,9 @@ class TabT2V(QScrollArea):
         lay.addWidget(self._edit_zone)
         # Encart « contexte injecté » : hors _edit_zone → visible aussi en multi-sélection.
         lay.addWidget(self._ref_mode_banner)
+        # Vignettes JUSTE SOUS le bandeau : « N image(s) envoyée(s) » et les images
+        # correspondantes se lisent ensemble (parité Cinéma, 2026-07-26).
+        lay.addWidget(self._thumb_strip)
 
         # ── Rendu & Audio (toujours visible, y compris multi-sélection) ───────
         lay.addWidget(self._options_container)
@@ -3151,12 +3157,52 @@ class TabT2V(QScrollArea):
         # L'encart « contexte injecté » s'applique aussi au lot → on le garde à jour.
         self._update_injection_banner()
 
+    def _all_reference_images(self) -> list:
+        """TOUTES les images qui partent réellement avec le plan.
+
+        Le Live n'affichait qu'UNE source sur quatre (correctif 2026-07-26) :
+        les entités du casting. Manquaient le template visuel, le mood du plan, ses
+        images d'inspiration et — le plus visible en mapping — la FAÇADE, pourtant
+        comptée dans le bandeau « N image(s) envoyée(s) ». Le compteur et la bande
+        de vignettes lisent désormais la MÊME liste.
+
+        ⚠ Source = get_ref_images() et non get_selected_images(), qui omet le décor.
+        """
+        paths = []
+
+        def _add(p):
+            if p and os.path.isfile(p) and p not in paths:
+                paths.append(p)
+
+        try:
+            for p in self._casting.get_ref_images():
+                _add(p)
+        except Exception:
+            pass
+        _add(getattr(self, "_style_ref_path", ""))
+        # Façade du bâtiment : image de référence à part entière en mapping.
+        if getattr(self, "_seq_mode", "live") == "mapping":
+            try:
+                from core.live_building import get_building_ref
+                _add(get_building_ref())
+            except Exception:
+                pass
+        if getattr(self, "_mood_ref_cb", None) and self._mood_ref_cb.isChecked():
+            _add(getattr(self, "_active_mood_path", ""))
+        for p in (self._active_shot or {}).get("reference_images", [])[:3]:
+            _add(p)
+        return paths
+
+    def _refresh_ref_thumbs(self):
+        try:
+            imgs = self._all_reference_images()
+            self._thumb_strip.update_images(imgs)
+            self._thumb_strip.setVisible(bool(imgs))
+        except Exception:
+            pass
+
     def _on_context_changed(self, _ctx: str):
-        # ⚠ get_ref_images() et non get_selected_images() : la seconde OMET le
-        # décor. Le bandeau annonçait « 2 images envoyées » pendant que les
-        # vignettes n'en montraient qu'une (même écart que côté Cinéma, corrigé le
-        # 2026-07-25). Bandeau et vignettes lisent la MÊME liste — celle qui part.
-        self._thumb_strip.update_images(self._casting.get_ref_images())
+        self._refresh_ref_thumbs()
         self._update_injection_banner()
         self._refresh_prompt_preview()
 
@@ -3339,6 +3385,13 @@ class TabT2V(QScrollArea):
                 _hint.append(f"+ Style : {_vs_e}")
             return "\n".join(_hint)
 
+        # Le SON ne part JAMAIS au moteur vidéo — il va au Sound Design. L'aperçu
+        # l'affichait pourtant sous « Prompt envoyé à Seedance » : il annonçait donc
+        # un texte différent du payload (correctif 2026-07-26). Même aplatissement
+        # qu'à l'envoi : toutes les sections sauf le son, sans étiquettes.
+        from core.prompt_sections import flatten as _flatten_prev
+        user_text = _flatten_prev(user_text) or user_text
+
         context = self._casting.get_context()
         fp = (context + user_text) if context else user_text
 
@@ -3349,6 +3402,16 @@ class TabT2V(QScrollArea):
                 _fr = focal_to_framing_prefix(_focal)
                 if _fr:
                     fp = f"{_fr} — {fp}"
+            # Mêmes réglages de plan qu'à l'envoi (valeur, axe, mouvement,
+            # distance, hauteur, vitesse, profondeur de champ).
+            try:
+                from core.shot_terms import camera_terms as _ct_prev
+                _bits = [b for b in _ct_prev(self._active_shot)
+                         if not (_focal and _focal.lower() in b.lower())]
+                if _bits:
+                    fp = f"{fp} — {', '.join(_bits)}"
+            except Exception:
+                pass
 
         if (hasattr(self, "_dyn_cam_cb") and self._dyn_cam_cb
                 and self._dyn_cam_cb.isChecked() and not self._active_shot):
@@ -3406,7 +3469,18 @@ class TabT2V(QScrollArea):
         if cs:
             fp = f"{fp}, {cs}"
 
-        _pfx = "━━━ PROMPT " + ("(traduit) " if translated_user is not None else "(traduction…) ") + "━━━"
+        # Grammaire du moteur + retrait des noms d'IP : EXACTEMENT la dernière
+        # étape de start_generation, pour que l'aperçu soit le payload et non une
+        # approximation. Déterministe, aucun appel IA.
+        try:
+            from core.live_prompt import assemble as _assemble_prev
+            fp, self._last_ip_removed = _assemble_prev(fp, engine_key=self._get_model())
+        except Exception:
+            pass
+
+        _pfx = ("━━━ PROMPT FINAL ENVOYÉ "
+                + ("(anglais) " if translated_user is not None else "(traduction…) ")
+                + "━━━")
         lines.append(_pfx)
         lines.append(fp)
 
@@ -3494,6 +3568,45 @@ class TabT2V(QScrollArea):
                 _fstr = f" → « {_framing} »" if _framing else ""
                 param_lines.append(f"Focale : {_shot_focal}{_fstr}  ← storyboard")
 
+            # TOUS les champs du plan, et leur traduction MOT POUR MOT telle
+            # qu'elle part au moteur (2026-07-26, parité Cinéma). Le Live n'en
+            # affichait qu'un sur dix : impossible de vérifier ce qui est envoyé,
+            # donc impossible de corriger une erreur.
+            _sh = self._active_shot or {}
+            _plan_bits = []
+            for _lbl, _k in (("Valeur", "shot_size"), ("Axe", "camera_axis"),
+                             ("Mouvement", "camera_movement"), ("Focale", "focal"),
+                             ("P. de champ", "depth_of_field"),
+                             ("Distance", "camera_distance"),
+                             ("Hauteur", "camera_height"), ("Vitesse", "speed")):
+                _v = str(_sh.get(_k, "") or "").strip()
+                if _v:
+                    _plan_bits.append(f"{_lbl} {_v}")
+            if _plan_bits:
+                param_lines.append("Plan ← storyboard : " + "  ·  ".join(_plan_bits))
+            try:
+                from core.shot_terms import camera_terms as _ct
+                _terms = _ct(_sh)
+                if _terms:
+                    # JAMAIS tronquée : c'est précisément ce qu'elle sert à vérifier.
+                    param_lines.append(
+                        "  → Traduction des paramètres du storyboard : « "
+                        + ", ".join(_terms) + " »")
+            except Exception:
+                pass
+            # Grammaire réellement appliquée au texte envoyé.
+            try:
+                from core.live_prompt import describe as _grammar_of
+                param_lines.append(
+                    f"⌥ Grammaire du moteur : {_grammar_of(self._get_model())}")
+            except Exception:
+                pass
+            _ips = getattr(self, "_last_ip_removed", None)
+            if _ips:
+                param_lines.append(
+                    "⚠ Noms retirés du prompt (le moteur les refuse ou les imite "
+                    "mal) : " + ", ".join(_ips))
+
         # Son
         audio_on = (hasattr(self, "_audio_cb") and self._audio_cb and self._audio_cb.isChecked())
         subtitle_on = (hasattr(self, "_subtitle_cb") and self._subtitle_cb and self._subtitle_cb.isChecked())
@@ -3532,6 +3645,12 @@ class TabT2V(QScrollArea):
     def _update_injection_banner(self, *_):
         if not hasattr(self, "_ref_mode_banner"):
             return
+        # Les VIGNETTES se rafraîchissent avec le bandeau (2026-07-26). Elles
+        # n'avaient qu'un seul point d'appel — un changement de casting — et
+        # restaient donc figées quand on changeait de plan, de mood ou de mode.
+        # En les branchant ici, le compteur « N image(s) envoyée(s) » et la bande
+        # affichée ne peuvent plus diverger : ils bougent ensemble.
+        self._refresh_ref_thumbs()
 
         ref_imgs = self._casting.get_ref_images()
         chars_missing = self._casting.get_chars_without_images()
@@ -3547,7 +3666,11 @@ class TabT2V(QScrollArea):
 
         lines = []
         if ref_imgs or style_ref_active or facade_active:
-            total = len(ref_imgs) + (1 if style_ref_active else 0) + (1 if facade_active else 0)
+            # Compteur = longueur EXACTE de la liste affichée en vignettes
+            # (2026-07-26). Il était recalculé à part et pouvait donc annoncer un
+            # nombre que la bande ne montrait pas — mood et images d'inspiration
+            # n'y étaient même pas comptés.
+            total = len(self._all_reference_images())
             ctx_parts = self._casting.get_context_parts()
             char_with_img = [
                 d.get("name", "") for cid, d in self._casting._char_data_map.items()
@@ -3927,12 +4050,16 @@ class TabT2V(QScrollArea):
             QMessageBox.warning(self, "Prompt vide", "Écris un prompt avant de générer !")
             return
 
-        # UN seul prompt à sections : on n'envoie au moteur vidéo QUE la partie VIDÉO
-        # (tout ce qui précède [🎵 SOUND DESIGN]). Le son part au Sound Design. On le
-        # retire AVANT l'assemblage des suffixes (« no subtitles »…) — sinon ils
-        # tombaient dans la section son. api/real.strip_for_video reste en filet.
-        from core.prompt_sections import video_of as _video_of
-        prompt = _video_of(prompt) or prompt
+        # UN seul prompt à sections → texte continu pour le moteur vidéo.
+        # flatten() et NON video_of() (correctif 2026-07-26) : video_of ne gardait
+        # QUE la section [🎬 ACTION] et jetait tout le reste — dont [🎨 STYLE VISUEL],
+        # écrit depuis la note de réalisation, et [🖼️ TECHNIQUE]. Le style n'arrivait
+        # donc jamais au moteur. flatten conserve toutes les sections, EXCLUT le son
+        # (qui part au Sound Design) et retire les étiquettes « [🎬 ACTION] » — un
+        # prompt final n'en contient jamais. Purement DÉTERMINISTE : la section
+        # action passe mot pour mot, les beats début/milieu/fin sont intacts.
+        from core.prompt_sections import flatten as _flatten
+        prompt = _flatten(prompt) or prompt
 
         context     = self._casting.get_context()
         full_prompt = (context + prompt) if context else prompt
@@ -3946,6 +4073,24 @@ class TabT2V(QScrollArea):
                 _framing = focal_to_framing_prefix(_focal)
                 if _framing:
                     full_prompt = f"{_framing} — {full_prompt}"
+
+            # TOUS les réglages du plan, et pas seulement la focale (correctif
+            # 2026-07-26, parité Cinéma) : core.shot_terms.camera_terms traduit
+            # valeur, axe, mouvement, focale, distance, hauteur, vitesse et
+            # profondeur de champ. Le Live n'en envoyait qu'UN sur huit — les
+            # colonnes du tableau Séquences étaient saisissables mais mortes.
+            # Déterministe : simple concaténation, aucun appel IA.
+            # En MAPPING on ne touche à rien : la caméra y est verrouillée.
+            try:
+                from core.shot_terms import camera_terms
+                _cam_bits = camera_terms(self._active_shot)
+                # La focale est déjà rendue par le préfixe de cadrage ci-dessus.
+                _cam_bits = [b for b in _cam_bits
+                             if not (_focal and _focal.lower() in b.lower())]
+                if _cam_bits:
+                    full_prompt = f"{full_prompt} — {', '.join(_cam_bits)}"
+            except Exception:
+                pass
 
         import core.style as style_api
         _style_ref_active = bool(
@@ -4012,6 +4157,22 @@ class TabT2V(QScrollArea):
         )
         if not subtitle_on:
             full_prompt = f"{full_prompt}, no subtitles"
+
+        # ── GRAMMAIRE DU MOTEUR + retrait des noms d'IP (2026-07-26) ─────────
+        # Jusqu'ici, changer de moteur côté Live ne modifiait pas une virgule du
+        # texte envoyé, et « façon Arcane » ou « style Ghibli » partaient tels
+        # quels — un moteur les refuse ou les imite mal ; seuls les descripteurs
+        # de style produisent le rendu.
+        # core.live_prompt est DÉTERMINISTE : il réordonne selon la grammaire
+        # attendue (champs Seedance, phrase continue Veo, directive Kling, prose)
+        # et retire les noms de franchises. Aucun appel IA, aucune réécriture —
+        # le corps du plan passe mot pour mot, les beats sont intacts.
+        try:
+            from core.live_prompt import assemble as _assemble
+            full_prompt, self._last_ip_removed = _assemble(
+                full_prompt, engine_key=self._get_model())
+        except Exception:
+            self._last_ip_removed = []
 
         # Build composite reference mosaics — Seedance only
         _is_seedance = self._get_model() in _SEEDANCE_ENGINES

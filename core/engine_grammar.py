@@ -161,8 +161,13 @@ def strip_ip_names(text: str) -> tuple[str, list[str]]:
     # Guillemets vides laissés par la suppression : « " " », « « » ».
     out = re.sub(r"[«\"“]\s*[»\"”]", "", out)
     # Tournures d'attribution devenues sans objet.
+    # Tournures d'attribution devenues sans objet. « in the manner of » ajouté le
+    # 2026-07-26 : c'est ce que la traduction produit à partir de « façon … », et
+    # sans lui le prompt finissait par « … in the manner of — » (constat sur un
+    # vrai plan Live). Le tiret cadratin compte aussi comme fin de segment.
     out = re.sub(r"(?i)\b(?:façon|facon|à la manière de|a la maniere de|"
-                 r"in the style of|style of)\s*(?=[,.;:]|$)", "", out)
+                 r"in the manner of|in the style of|style of|reminiscent of|"
+                 r"inspired by)\s*(?=[,.;:—–-]|$)", "", out)
     # Ponctuation et espaces orphelins.
     out = re.sub(r"\s*,\s*,+", ", ", out)
     out = re.sub(r"\s*:\s*,", " :", out)
@@ -170,4 +175,9 @@ def strip_ip_names(text: str) -> tuple[str, list[str]]:
     out = re.sub(r"[ \t]{2,}", " ", out)
     out = re.sub(r"\s+([,.;:])", r"\1", out)
     out = re.sub(r"^[\s,;:]+", "", out, flags=re.MULTILINE)
+    # Séparateur orphelin laissé devant un tiret (« A knight, — wide shot ») et
+    # ponctuation en fin de segment (2026-07-26).
+    out = re.sub(r"[,;:]\s*(?=[—–-]\s)", " ", out)
+    out = re.sub(r"[\s,;:]+$", "", out, flags=re.MULTILINE)
+    out = re.sub(r"[ \t]{2,}", " ", out)
     return out.strip(), found

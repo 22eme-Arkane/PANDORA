@@ -488,10 +488,23 @@ def studio_live_vignettes_et_picker():
     import ui.tab_t2v_live as TL
     _cls = next(o for o in vars(TL).values()
                 if isinstance(o, type) and hasattr(o, "_on_context_changed"))
-    _s = inspect.getsource(_cls._on_context_changed)
-    assert "self._casting.get_ref_images()" in _s \
-        and "self._casting.get_selected_images()" not in _s, \
+    # La source a été CENTRALISÉE dans _all_reference_images le 2026-07-26 : le
+    # Live n'affichait qu'UNE source sur quatre (casting), en oubliant le template
+    # visuel, le mood, les images d'inspiration et la FAÇADE — pourtant comptée
+    # dans le bandeau. On vérifie donc l'invariant, plus fort que l'ancien.
+    _all = inspect.getsource(_cls._all_reference_images)
+    assert "self._casting.get_ref_images()" in _all \
+        and "self._casting.get_selected_images()" not in _all, \
         "vignettes Live : liste envoyée ≠ liste affichée (décor manquant)"
+    for _src in ("_style_ref_path", "get_building_ref", "_mood_ref_cb",
+                 "reference_images"):
+        assert _src in _all, ("source d'images de référence oubliée", _src)
+    # Vignettes et compteur lisent la MÊME liste — ils ne peuvent plus diverger.
+    _ban = inspect.getsource(_cls._update_injection_banner)
+    assert "total = len(self._all_reference_images())" in _ban, \
+        "le compteur « N image(s) envoyée(s) » recalcule à part"
+    assert "self._refresh_ref_thumbs()" in _ban, \
+        "les vignettes ne suivent pas le bandeau (elles restaient figées)"
     import ui.page_storyboard_live as PSL2
     _p = inspect.getsource(PSL2._elements_picker_dialog)
     _i = _p.index("::item:selected")
@@ -3351,6 +3364,203 @@ def sequences_live_utilisent_le_worker_live():
         "le style co-écrit est écrasé"
     _p2 = build(action="Une façade.")
     assert "mon style" in style_of(PSC.PageScenario._with_visual_style(_p2, "mon style"))
+
+
+@test
+def grammaire_live_mapping_barre():
+    """Grammaire de prompt PANDORA | LIVE (spécification Matthieu 2026-07-26).
+
+    Ce n'est PAS une variante du Cinéma : quatre inversions. La caméra est
+    verrouillée et jamais nommée (c'est le vidéoprojecteur, il est boulonné) ; le
+    noir est structurel (zéro lumière projetée) ; la durée est imposée par la
+    grille (8 temps à X BPM) ; le son n'est JAMAIS généré — le son, c'est le set.
+    Conséquence : le vocabulaire de plateau du Cinéma devient une liste d'interdits.
+    """
+    from core.live_bar import (LiveBar, MAPPING_NEGATIVES, BANNED_POSITIVES,
+                               api_duration, bar_duration, duration_drift,
+                               sanitize_payload, transformation_family, EXACT_BPM)
+
+    bar = LiveBar(
+        surface="a trapezoidal church façade with a square bell tower, two buttresses",
+        state_0="nothing moves, the façade already buried under dense frost",
+        transformation="the frost thickens very slowly, crystals proliferate outward",
+        state_1="the frost has closed over the openings, tension at its peak",
+        black="the background is pure black with no gradient, no glow",
+        style="frozen antique engraving, wide spaced hatching, cinematic, 4K, ultra-detailed",
+        bpm=118, sparkline="▁▁▁▁▁▁▁▁",
+        sound_design="Souffle glacé grave à 118 BPM, réverbération de cathédrale.")
+    p, bannis = bar.to_prompt()
+
+    # 1. Frontière du PAYLOAD : ni son, ni sparkline, ni étiquette de bloc.
+    assert "Souffle" not in p and "cathédrale" not in p, \
+        "le SOUND DESIGN est parti au moteur — le son, c'est le set"
+    assert not any(c in p for c in "▁▂▃▄▅▆▇█"), \
+        "la sparkline est du bruit de tokenisation, elle ne va jamais au moteur"
+    assert "[" not in p and "]" not in p, "étiquette de bloc dans le payload"
+
+    # 2. Les boosters contre-productifs sont RETIRÉS, sans résidu de ponctuation.
+    assert {"cinematic", "4k", "ultra-detailed"} <= set(bannis), \
+        f"boosters non retirés : {bannis}"
+    for _mot in BANNED_POSITIVES:
+        assert _mot.lower() not in p.lower(), ("terme banni resté dans le payload", _mot)
+    assert ",." not in p and ",," not in p and " ," not in p, \
+        f"résidu de ponctuation après retrait des boosters : {p[:120]!r}"
+
+    # 3. Les négatifs anti-Cinéma sont injectés, les trois critiques en tête.
+    for _n in ("no camera movement", "no depth of field", "no film grain",
+               "no cuts", "no scene change"):
+        assert _n in p, ("négatif de mapping manquant", _n)
+    _c = p[p.index("Constraints:"):]
+    assert _c.index("no atmospheric haze") < _c.index("no camera movement"), \
+        "les contraintes critiques (brume, coupe) doivent venir en tête"
+
+    # 4. La caméra n'est JAMAIS nommée en positif — elle est verrouillée.
+    assert "Locked-off frontal view" in p, "le verrou de cadrage doit ouvrir le prompt"
+
+    # 5. Arithmétique de la barre : 8 temps = 480 / BPM ; on envoie l'ENTIER.
+    assert abs(bar_duration(118) - 4.068) < 0.001, "durée exacte 8 temps à 118 BPM"
+    assert bar.api_duration == "4", "on envoie l'entier le plus proche, pas l'exact"
+    assert abs(duration_drift(118) * 1000 + 68) < 1, "dérive attendue −68 ms"
+    for _bpm, _s in EXACT_BPM.items():
+        assert abs(bar_duration(_bpm) - _s) < 1e-9, (f"{_bpm} BPM doit tomber juste")
+    assert api_duration(140) == "3", "140 BPM → 3 s (entier le plus proche)"
+
+    # 6. La sparkline choisit la FORME, et un drop ne s'interpole pas.
+    for _s, _att in (("▁▁▁▁▁▁▁▁", "flat"), ("▁▂▃▄▅▆▇█", "rising"),
+                     ("█▇▆▅▄▃▂▁", "falling"), ("▁▁▁█▁▁▁▁", "drop")):
+        assert transformation_family(_s) == _att, (f"famille de « {_s} »")
+    assert not bar.needs_two_clips
+    assert LiveBar(sparkline="▁▁▁█▁▁▁▁").needs_two_clips, \
+        "un drop en milieu de barre exige DEUX clips, pas une passe I2V"
+
+    # 7. Paramètres moteur : jamais de son, 1080p (720p passe sous le panneau),
+    #    et la méthode DEUX PLAQUES qui verrouille l'arrivée sur le temps 8.
+    prm = bar.to_params(image_url="p0.png", end_image_url="p1.png")
+    assert prm["generate_audio"] is False, "le moteur ne doit jamais générer de son"
+    assert prm["resolution"] == "1080p" and prm["aspect_ratio"] == "4:3"
+    assert prm["end_image_url"] == "p1.png", "sans end_image, l'arrivée n'est pas calée"
+    assert prm["duration"] == "4"
+
+    # 8. Un texte sans terme banni n'est jamais modifié.
+    _txt = "Une prose normale, avec virgules, intacte."
+    assert sanitize_payload(_txt) == (_txt, []), "sanitize altère un texte sain"
+
+
+@test
+def prompt_live_grammaire_moteur_et_injections():
+    """Le prompt Live est écrit dans la GRAMMAIRE du moteur, sans composition IA
+    (chantier 2026-07-26).
+
+    Trois défauts mesurés par l'audit : (1) video_of() ne gardait que la section
+    action et jetait STYLE VISUEL et TECHNIQUE — le style de la note n'atteignait
+    jamais le moteur ; (2) le Live n'injectait que la focale, un champ sur huit ;
+    (3) changer de moteur ne modifiait pas une virgule du texte envoyé, et les noms
+    de franchises partaient tels quels."""
+    import inspect
+    from core.prompt_sections import build, flatten, video_of, sound_of
+    from core.live_prompt import assemble, describe
+
+    # 1. Le prompt envoyé conserve TOUTES les sections sauf le son.
+    p = build(action="Ouverture : la façade givrée.",
+              technique="Plan d'ensemble, caméra fixe.",
+              style="Gravure ancienne gelée, 4K.",
+              sound="Souffle glacé.")
+    assert "Gravure" not in video_of(p), \
+        "le cas de test ne reproduit plus la perte — test sans valeur"
+    _f = flatten(p)
+    for _garde in ("Ouverture", "Plan d'ensemble", "Gravure"):
+        assert _garde in _f, ("section perdue par flatten", _garde)
+    assert "Souffle" not in _f, "le son doit partir au Sound Design, pas au moteur"
+    assert "[🎬" not in _f, "un prompt final ne contient pas d'étiquettes de section"
+    assert sound_of(p), "le son doit rester extractible pour le Sound Design"
+
+    import ui.tab_t2v_live as TL
+    _cls = next(o for o in vars(TL).values()
+                if isinstance(o, type) and hasattr(o, "start_generation"))
+    # Commentaires ÉCARTÉS : ils citent forcément video_of pour expliquer pourquoi
+    # il a été remplacé (piège rencontré quatre fois — voir la mémoire projet).
+    _gen = "\n".join(l for l in inspect.getsource(_cls.start_generation).split("\n")
+                     if not l.strip().startswith("#"))
+    assert "flatten as _flatten" in _gen and "video_of(" not in _gen, \
+        "l'envoi Live utilise encore video_of (style et technique jetés)"
+
+    # 2. TOUS les paramètres du plan partent, pas seulement la focale.
+    assert "camera_terms" in _gen, "les réglages du plan n'atteignent pas le moteur"
+    from core.shot_terms import camera_terms
+    _bits = camera_terms({"shot_size": "PL", "camera_axis": "3/4",
+                          "camera_movement": "Travelling avant", "focal": "35mm",
+                          "camera_distance": "4m", "camera_height": "1.6m",
+                          "speed": "Ralenti", "depth_of_field": "Courte"})
+    assert len(_bits) >= 7, f"camera_terms ne traduit que {len(_bits)} champs"
+
+    # 3. La grammaire du moteur change RÉELLEMENT le texte — sans IA.
+    BODY = "Opening: the frozen facade. Then the frost thickens"
+    CAM = ["wide shot", "slow motion"]
+    rendus = {}
+    for eng in ("seedance-2.0", "veo-3.1", "kling-v3-pro", "pixverse-v4.5"):
+        rendus[eng], _ = assemble(BODY, engine_key=eng, camera_bits=CAM,
+                                  style="frozen engraving look")
+    assert "Camera:" in rendus["seedance-2.0"], "grammaire à champs perdue (Seedance)"
+    assert "shot with" in rendus["veo-3.1"], "grammaire phrase continue perdue (Veo)"
+    assert len(set(rendus.values())) >= 3, \
+        "les moteurs reçoivent tous le même texte — la grammaire ne sert à rien"
+    # Le corps du plan passe MOT POUR MOT : les beats ne sont jamais réécrits.
+    for _t in rendus.values():
+        assert "Opening: the frozen facade" in _t, "le corps du plan a été réécrit"
+
+    # 4. Les noms d'IP sont retirés partout.
+    _t, _ips = assemble("A knight walks, in the style of Arcane",
+                        engine_key="seedance-2.0")
+    assert _ips == ["Arcane"] and "Arcane" not in _t, \
+        "les noms de franchises partent encore au moteur"
+    assert "live_prompt import assemble" in _gen, \
+        "la grammaire moteur n'est pas appliquée à l'envoi Live"
+
+    # 4bis. Retirer un nom d'IP ne doit JAMAIS laisser de tournure orpheline.
+    #       « façon Arcane » traduit donne « in the manner of Arcane » : sans cette
+    #       formulation dans la liste, le prompt finissait par « in the manner of — »
+    #       (constat sur un vrai plan Live, 2026-07-26).
+    from core.engine_grammar import strip_ip_names as _strip
+    for _avant, _apres in (
+        ("Old frozen engraving, in the manner of Arcane, 4K", "Old frozen engraving, 4K"),
+        ("Old frozen engraving, in the manner of Arcane",     "Old frozen engraving"),
+        ("A knight, in the style of Ghibli — wide shot",      "A knight — wide shot"),
+        ("Rendu inspired by Pixar, net",                      "Rendu, net"),
+    ):
+        _got, _ = _strip(_avant)
+        assert _got == _apres, (f"résidu après retrait d'IP : {_got!r}")
+    assert _strip("Prose normale sans IP, 4K") == ("Prose normale sans IP, 4K", []), \
+        "un texte sans nom d'IP ne doit pas être modifié"
+
+    # 5. L'utilisateur VOIT ce qui est injecté.
+    _prev = inspect.getsource(_cls._build_full_preview_text)
+    for _must in ("Plan ← storyboard", "Traduction des paramètres du storyboard",
+                  "Grammaire du moteur", "Noms retirés du prompt"):
+        assert _must in _prev, ("bloc PARAMÈTRES incomplet", _must)
+
+    # 6. Aucune composition IA n'a été introduite : les beats restent intacts.
+    assert "video_prompt" not in _gen and "compose(" not in _gen, \
+        "une composition IA s'est glissée dans l'envoi Live (beats menacés)"
+    # On inspecte les IMPORTS RÉELS via l'AST, pas le texte : la docstring du
+    # module explique justement pourquoi il n'appelle PAS le composeur, donc une
+    # recherche textuelle se déclencherait sur son propre argumentaire.
+    import ast
+    import core.live_prompt as _LP
+    _tree = ast.parse(inspect.getsource(_LP))
+    _mods = set()
+    for _n in ast.walk(_tree):
+        if isinstance(_n, ast.Import):
+            _mods.update(a.name for a in _n.names)
+        elif isinstance(_n, ast.ImportFrom):
+            _mods.add(_n.module or "")
+    for _interdit in ("api.video_prompt", "core.ai_provider", "core.lang"):
+        assert _interdit not in _mods, \
+            (f"core/live_prompt doit rester DÉTERMINISTE — importe « {_interdit} »")
+    assert _mods, "aucun import détecté — l'analyse AST a échoué, test sans valeur"
+    # Reproductible : deux appels identiques donnent exactement le même texte.
+    assert assemble(BODY, engine_key="veo-3.1", camera_bits=CAM)[0] == \
+           assemble(BODY, engine_key="veo-3.1", camera_bits=CAM)[0], \
+        "l'assemblage n'est pas reproductible"
 
 
 @test
