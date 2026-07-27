@@ -285,6 +285,30 @@ _MAPPING_NIGHT_LOCK = (
 
 # Priorité façade quand une/des image(s) de RÉFÉRENCE accompagne(nt) la façade (la
 # façade est TOUJOURS la 1ʳᵉ image ; les réfs n'enrichissent que l'inspiration).
+# Nombre maximal d'images d'INSPIRATION envoyées avec une façade de mapping.
+# Chaque image ajoutée pèse face au texte : dix inspirations contre une façade et
+# un prompt, et c'est l'inspiration qui gagne. Deux suffisent à donner une
+# palette et une matière (constat Matthieu, 2026-07-27).
+_MAX_INSPIRATION_MAPPING = 2
+
+def _avec_directive_en_tete(prompt: str, directive: str) -> str:
+    """Consigne d'abord, description ensuite — pour les appels à IMAGES.
+
+    Sur un endpoint /edit, le modèle part des images : la consigne qui dit quoi
+    faire de chacune doit arriver AVANT le prompt. Placée en queue elle se lit
+    comme une remarque ; placée en tête, c'est un ordre. Constat de Matthieu
+    (2026-07-27) : « les variations ressemblent toujours aux images de référence
+    et jamais aux prompts ».
+    """
+    _d = (directive or "").lstrip(" |").strip()
+    _p = (prompt or "").strip()
+    if not _d:
+        return _p
+    if not _p:
+        return _d
+    return f"{_d}\n\n{_p}"
+
+
 _FACADE_PRIORITY_DIRECTIVE = (
     " | ABSOLUTE PRIORITY: the FIRST image is the building facade and it is the "
     "MANDATORY projection canvas. Keep its EXACT geometry, framing, scale, "
@@ -851,13 +875,13 @@ def run_generation_nb2(prompt: str, output_dir: str, api_key: str, progress_cb,
     if _facade:
         # ── MODE MAPPING : la FAÇADE est le canvas prioritaire (1ʳᵉ image) ; MÊMES
         # consignes que Flux (façade = base, réfs = inspiration lâche, nuit/fond noir).
-        refs = [_facade] + inspiration[:13]
+        refs = [_facade] + inspiration[:_MAX_INSPIRATION_MAPPING]
         _tag = "façade" + (f" + {len(inspiration)} inspiration(s)" if inspiration else "")
         progress_cb(f"Nano Banana 2 — {_tag} (mapping)…")
         urls = [_upload_ref_robust(fal_client, r) for r in refs]
         directive = (_FACADE_PRIORITY_DIRECTIVE if inspiration else "") + _MAPPING_NIGHT_LOCK
         result = fal_client.subscribe(_ep_edit, arguments={
-            "prompt": prompt + directive, "image_urls": urls,
+            "prompt": _avec_directive_en_tete(prompt, directive), "image_urls": urls,
             "num_images": 1, "aspect_ratio": _ar, "resolution": _res_enum,
             "output_format": "png", "safety_tolerance": "6",
         })
@@ -961,7 +985,11 @@ def run_generation_engine(engine_key: str, prompt: str, output_dir: str,
     if max_refs > 0:
         if is_mapping and facade_ref and os.path.isfile(facade_ref):
             insp = [r for r in (inspiration_refs or []) if r and os.path.isfile(r)]
-            ref_paths = [facade_ref] + insp
+            # Plafond d'INSPIRATIONS en mapping : chaque image ajoutée pèse dans
+            # la balance face au texte. Seedream accepte dix références — dix
+            # inspirations contre une façade et un prompt, c'est l'inspiration
+            # qui gagne. Deux suffisent à donner une palette et une matière.
+            ref_paths = [facade_ref] + insp[:_MAX_INSPIRATION_MAPPING]
             directive = (_FACADE_PRIORITY_DIRECTIVE if insp else "") + _MAPPING_NIGHT_LOCK
         else:
             cons = [r for r in (ref_images or []) if r and os.path.isfile(r)]
@@ -980,7 +1008,8 @@ def run_generation_engine(engine_key: str, prompt: str, output_dir: str,
         directive = _MAPPING_NIGHT_LOCK
 
     ref_urls    = [_upload_ref_robust(fal_client, p) for p in ref_paths]
-    full_prompt = prompt + (("\n\n" + directive) if directive else "")
+    full_prompt = (_avec_directive_en_tete(prompt, directive) if is_mapping
+                   else prompt + (("\n\n" + directive) if directive else ""))
 
     progress_cb(f"Génération du Mood via {label}"
                 + (f" ({len(ref_urls)} réf.)" if ref_urls else "") + "…")

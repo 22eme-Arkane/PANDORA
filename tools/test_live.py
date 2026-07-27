@@ -5466,6 +5466,53 @@ def lot_de_moods_compose_une_fois_par_plan():
 
 
 @test
+def le_texte_gouverne_les_images_de_reference():
+    """En mapping, la consigne passe AVANT le prompt, et les inspirations sont
+    plafonnées.
+
+    Constat de Matthieu (2026-07-27), sur « Action → Générer les Moods » avec
+    Seedream 5.0 et trois variations : « les trois variations ressemblent
+    toujours aux images de référence et jamais aux prompts ».
+
+    Le chemin d'envoi n'avait pourtant pas changé — vérifié au diff : façade en
+    image 1, inspirations ensuite, directives présentes. Ce qui a changé, c'est
+    la LONGUEUR du texte : le bloc français faisait ~600 caractères, la
+    composition en fait deux à quatre phrases, et le repli déterministe a lui
+    aussi maigri (TRANSFORMATION et ÉTAT 1 retirés le même jour). Face aux mêmes
+    images sur un endpoint /edit, le texte ne pèse plus assez.
+
+    Deux leviers, tous deux vérifiés ici : la consigne passe en TÊTE — en queue
+    elle se lit comme une remarque, en tête c'est un ordre — et le nombre
+    d'inspirations est PLAFONNÉ, chaque image ajoutée pesant contre le texte.
+    """
+    import api.apercu as A
+
+    # ① L'ordre : consigne d'abord, description ensuite.
+    _out = A._avec_directive_en_tete("DESCRIPTION DU PLAN", " | LA CONSIGNE")
+    assert _out.startswith("LA CONSIGNE"), (
+        "la consigne n'est pas en tête — sur un endpoint /edit elle se lit alors "
+        "comme une remarque et les images gagnent", _out[:60])
+    assert "DESCRIPTION DU PLAN" in _out, "le prompt a été perdu"
+    # Les deux cas dégénérés ne doivent pas produire de séparateur orphelin.
+    assert A._avec_directive_en_tete("SEUL", "") == "SEUL"
+    assert A._avec_directive_en_tete("", " | SEULE") == "SEULE"
+
+    # ② Le plafond d'inspirations existe et reste bas.
+    assert 1 <= A._MAX_INSPIRATION_MAPPING <= 3, (
+        "le plafond d'images d'inspiration en mapping doit rester bas : chacune "
+        "pèse face au texte", A._MAX_INSPIRATION_MAPPING)
+
+    # ③ Il est réellement APPLIQUÉ sur les deux chemins d'envoi.
+    for _fn in (A.run_generation_nb2, A.run_generation_engine):
+        _src = "\n".join(l for l in inspect.getsource(_fn).splitlines()
+                         if not l.lstrip().startswith("#"))
+        assert "_MAX_INSPIRATION_MAPPING" in _src, (
+            f"« {_fn.__name__} » n'applique pas le plafond d'inspirations")
+        assert "_avec_directive_en_tete" in _src, (
+            f"« {_fn.__name__} » ne met pas la consigne en tête")
+
+
+@test
 def composition_survit_a_la_fermeture_du_mood():
     """Rouvrir un plan inchangé ne doit RIEN repayer.
 
