@@ -5396,6 +5396,60 @@ def refus_de_composition_nest_pas_repaye():
 
 
 @test
+def mood_actif_apres_serie_nest_pas_un_tirage_au_hasard():
+    """Sur une série de variations, le mood ACTIF doit être la PREMIÈRE.
+
+    Le mood actif n'est pas un détail d'affichage : c'est lui qui sert d'image
+    de départ à la génération vidéo. Le lot le posait sur la DERNIÈRE variation
+    produite — donc sur un tirage aléatoire que personne n'avait regardé.
+    Demander quatre variations revenait à laisser la quatrième piloter le rendu,
+    bonne ou mauvaise ; et comme chaque tirage est indépendant, une sur quatre
+    ratée suffisait à donner l'impression que « la façade est moins respectée
+    quand j'en demande plusieurs ».
+
+    La fenêtre Mood se plaçait déjà sur la première des nouvelles : le lot fait
+    désormais pareil. Les autres variations restent là pour être comparées et
+    choisies à l'œil — c'est tout leur intérêt.
+    """
+    from PIL import Image
+    import core.storyboard as sb
+    import api.apercu as A
+
+    sb.set_namespace("live_seq_mapping")
+    sb.clear_version_shots(sb.DEFAULT_VERSION_ID)
+    _shot = sb.save_shot({"number": 1, "scene_title": "P1",
+                          "seedance_prompt": "façade"}, sb.DEFAULT_VERSION_ID)
+
+    _n = [0]
+    _vrai = A.run_mood
+
+    def _genere(shot, prompt, out_dir, key, cb, bref, **kw):
+        _n[0] += 1
+        os.makedirs(out_dir, exist_ok=True)
+        _p = os.path.join(out_dir, f"var{_n[0]}.png")
+        Image.new("RGB", (16, 9), (9, 9, 9)).save(_p)
+        return _p
+
+    try:
+        A.run_mood = _genere
+        A.MoodBatchWorker([_shot], {"variations": 4}).run()
+    finally:
+        A.run_mood = _vrai
+
+    _r = sb.load_apercus(_shot["id"])
+    assert len(_r["paths"]) == 4, ("les 4 variations ne sont pas toutes enregistrées",
+                                   _r["paths"])
+    assert _r["active_idx"] == 0, (
+        "le mood ACTIF est la variation "
+        f"{_r['active_idx'] + 1}/4 — c'est un tirage au hasard qui pilotera "
+        "l'image de départ de la vidéo")
+    assert _r["paths"][_r["active_idx"]].endswith("var1.png"), \
+        "l'index actif ne pointe pas sur la première variation"
+
+    sb.set_namespace("storyboard")
+
+
+@test
 def moods_generes_dans_leur_propre_sequence():
     """Un lot de Moods ne doit pas dépendre de l'onglet ouvert pendant qu'il tourne.
 

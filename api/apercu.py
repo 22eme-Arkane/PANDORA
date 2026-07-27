@@ -1016,6 +1016,7 @@ class MoodBatchWorker(QThread):
                     # vignette, pas pour compter. Multiplier l'émission
                     # fausserait leur décompte de plans traités.
                     last = ""
+                    _idx_premiere = -1
                     for k in range(_vars):
                         if self._cancelled:
                             break
@@ -1033,7 +1034,17 @@ class MoodBatchWorker(QThread):
                             paths    = [p for p in existing.get("paths", [])
                                         if os.path.isfile(p)]
                             paths.append(path)
-                            sb_api.save_apercus(shot["id"], paths, len(paths) - 1)
+                            if _idx_premiere < 0:
+                                _idx_premiere = len(paths) - 1
+                            # Le mood ACTIF est celui qui servira d'image de départ
+                            # à la vidéo. Sur une série, il se posait sur la
+                            # DERNIÈRE variation générée — donc sur un tirage
+                            # aléatoire que personne n'avait regardé : quatre
+                            # variations demandées, c'est la quatrième qui pilotait
+                            # le rendu, bonne ou mauvaise. On garde la PREMIÈRE,
+                            # comme le fait déjà la fenêtre Mood ; les autres sont
+                            # là pour être comparées et choisies à l'œil.
+                            sb_api.save_apercus(shot["id"], paths, _idx_premiere)
                             last = path
 
                     self.shot_done.emit(shot["id"], last)
