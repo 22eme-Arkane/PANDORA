@@ -51,6 +51,28 @@ def _install_excepthook():
     log_path = _os.path.join(tempfile.gettempdir(), "pandora_crash.log")
 
     def _hook(exc_type, exc, tb):
+        # Ctrl+C et sys.exit() ne sont PAS des plantages : Python lui-même les
+        # écarte dans son excepthook par défaut. Les traiter comme le reste
+        # affichait « Une erreur inattendue s'est produite » et écrivait un
+        # rapport de crash pour un arrêt DEMANDÉ par l'utilisateur (constat
+        # Matthieu 2026-07-27, capture à l'appui). On sort proprement, sans
+        # journal et sans fenêtre.
+        if issubclass(exc_type, KeyboardInterrupt):
+            try:
+                print("\nInterruption clavier — fermeture de PANDORA.",
+                      file=sys.stderr)
+            except Exception:
+                pass
+            try:
+                from PyQt6.QtWidgets import QApplication as _QA
+                if _QA.instance() is not None:
+                    _QA.instance().quit()
+            except Exception:
+                pass
+            return
+        if issubclass(exc_type, SystemExit):
+            return
+
         text = "".join(traceback.format_exception(exc_type, exc, tb))
         try:
             with open(log_path, "a", encoding="utf-8") as f:

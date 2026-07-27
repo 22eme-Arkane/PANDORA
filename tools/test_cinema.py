@@ -5719,5 +5719,85 @@ def decor_previews_generated_before_navigation():
         APP.removeEventFilter(watch)
 
 
+@test
+def ctrl_c_nest_pas_un_plantage():
+    """Ctrl+C ne doit PAS afficher « Une erreur inattendue s'est produite ».
+
+    Constat de Matthieu (2026-07-27, capture à l'appui) : interrompre PANDORA
+    depuis le terminal qui l'a lancé faisait remonter le KeyboardInterrupt dans
+    le filet `sys.excepthook`, qui l'écrivait dans pandora_crash.log et ouvrait
+    une fenêtre d'erreur proposant d'envoyer un rapport de crash — pour un arrêt
+    DEMANDÉ. Python lui-même écarte KeyboardInterrupt et SystemExit de son
+    excepthook par défaut ; le filet doit faire pareil.
+
+    Le filet reste indispensable pour les VRAIES exceptions : une exception non
+    gérée dans un slot PyQt6 fait sinon abort de toute l'application. Ce test
+    vérifie donc les deux sens — silence sur l'interruption, fenêtre sur l'erreur.
+    """
+    import enum
+    import PyQt6.QtWidgets as _W
+    import main as _main
+
+    vues = {"n": 0}
+
+    class _BoxStub:
+        class Icon(enum.Enum):
+            Critical = 1
+
+        class ButtonRole(enum.Enum):
+            RejectRole = 1
+            AcceptRole = 2
+
+        def __init__(self, *a, **k):
+            vues["n"] += 1
+
+        def setDetailedText(self, *a):
+            pass
+
+        def addButton(self, *a):
+            return object()
+
+        def exec(self):
+            return 0
+
+        def clickedButton(self):
+            return None
+
+        @staticmethod
+        def information(*a, **k):
+            pass
+
+    _vrai_box, _vrai_hook, _vrai_err = _W.QMessageBox, sys.excepthook, sys.stderr
+    try:
+        _W.QMessageBox = _BoxStub
+        _main._install_excepthook()
+        # Le filet RÉÉMET la trace sur stderr : sans ce bâillon, l'exception
+        # volontaire de ce test polluerait la sortie du harnais et ferait croire
+        # à un vrai échec en la lisant.
+        import io as _io
+        sys.stderr = _io.StringIO()
+
+        sys.excepthook(KeyboardInterrupt, KeyboardInterrupt(), None)
+        assert vues["n"] == 0, \
+            ("Ctrl+C ouvre une fenêtre de crash : un arrêt demandé est présenté "
+             "à l'utilisateur comme un plantage de PANDORA")
+
+        sys.excepthook(SystemExit, SystemExit(0), None)
+        assert vues["n"] == 0, "sys.exit() ne doit pas non plus passer pour un plantage"
+
+        # ET le filet doit rester actif pour ce à quoi il sert vraiment.
+        try:
+            raise ValueError("erreur de test")
+        except ValueError:
+            sys.excepthook(*sys.exc_info())
+        assert vues["n"] == 1, \
+            ("le filet n'attrape plus les vraies exceptions — une exception non "
+             "gérée dans un slot PyQt6 fait abort de toute l'application")
+    finally:
+        sys.stderr = _vrai_err
+        _W.QMessageBox = _vrai_box
+        sys.excepthook = _vrai_hook
+
+
 if __name__ == "__main__":
     sys.exit(main())
