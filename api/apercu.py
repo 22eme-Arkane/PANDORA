@@ -852,11 +852,16 @@ def run_mood(shot: dict, prompt: str, output_dir: str, api_key: str, progress_cb
 class MoodGenerationWorker(QThread):
     progress = pyqtSignal(str)
     finished = pyqtSignal(str)
+    multi_finished = pyqtSignal(list)   # N > 1 — mêmes signaux que Nano Banana
     failed   = pyqtSignal(str)
 
     def __init__(self, shot: dict, output_dir: str, custom_prompt: str = "",
-                 inspiration_ref: str = "", options: dict | None = None):
+                 inspiration_ref: str = "", options: dict | None = None,
+                 variations: int = 1):
         super().__init__()
+        # Une variation = un appel. Aucun moteur du catalogue ne rend N moods en
+        # un envoi (num_images vaut 1 partout dans ce fichier), donc on boucle.
+        self._variations = max(1, int(variations or 1))
         self._shot          = shot
         self._out_dir       = output_dir
         self._custom_prompt = custom_prompt
@@ -878,13 +883,31 @@ class MoodGenerationWorker(QThread):
             else build_mood_prompt(self._shot, self._film_style,
                                    (self._options.get("engine") or "").strip())
         )
-        try:
-            path = run_mood(self._shot, prompt, self._out_dir, self._api_key,
-                            self.progress.emit, self._building_ref,
-                            inspiration_ref=self._inspiration, options=self._options)
-            self.finished.emit(path)
-        except Exception as e:
-            self.failed.emit(humanize_api_error(str(e)))
+        n = self._variations
+        paths, last_err = [], ""
+        for k in range(n):
+            if self.isInterruptionRequested():
+                break
+            try:
+                def _prog(msg, _k=k):
+                    self.progress.emit(f"[{_k + 1}/{n}] {msg}" if n > 1 else msg)
+
+                path = run_mood(self._shot, prompt, self._out_dir, self._api_key,
+                                _prog, self._building_ref,
+                                inspiration_ref=self._inspiration,
+                                options=self._options)
+                if path:
+                    paths.append(path)
+            except Exception as e:
+                # Un échec en cours de série ne doit pas jeter les variations
+                # déjà obtenues : on retient la raison et on rend ce qu'on a.
+                last_err = humanize_api_error(str(e))
+        if not paths:
+            self.failed.emit(last_err or "aucune variation générée")
+        elif len(paths) == 1:
+            self.finished.emit(paths[0])
+        else:
+            self.multi_finished.emit(paths)
 
 
 # ── Worker batch ──────────────────────────────────────────────────────────────
@@ -914,6 +937,10 @@ class MoodBatchWorker(QThread):
     def run(self):
         import core.storyboard as sb_api
         total = len(self._shots)
+        try:
+            _vars = max(1, int(self._options.get("variations") or 1))
+        except (TypeError, ValueError):
+            _vars = 1
 
         try:
             for i, shot in enumerate(self._shots):
@@ -933,16 +960,32 @@ class MoodBatchWorker(QThread):
                     def _prog(msg, _i=i, _t=total):
                         self.shot_progress.emit(_i + 1, _t, msg)
 
-                    path = run_mood(shot, prompt, out_dir, self._api_key, _prog,
-                                    self._building_ref, options=self._options)
+                    # `shot_done` reste émis UNE fois par plan, avec la dernière
+                    # variation : les pages s'en servent pour rafraîchir une
+                    # vignette, pas pour compter. Multiplier l'émission
+                    # fausserait leur décompte de plans traités.
+                    last = ""
+                    for k in range(_vars):
+                        if self._cancelled:
+                            break
 
-                    if path and os.path.isfile(path):
-                        existing = sb_api.load_apercus(shot["id"])
-                        paths    = [p for p in existing.get("paths", []) if os.path.isfile(p)]
-                        paths.append(path)
-                        sb_api.save_apercus(shot["id"], paths, len(paths) - 1)
+                        def _progv(msg, _i=i, _t=total, _k=k):
+                            self.shot_progress.emit(
+                                _i + 1, _t,
+                                f"[variation {_k + 1}/{_vars}] {msg}" if _vars > 1 else msg)
 
-                    self.shot_done.emit(shot["id"], path or "")
+                        path = run_mood(shot, prompt, out_dir, self._api_key,
+                                        _progv, self._building_ref,
+                                        options=self._options)
+                        if path and os.path.isfile(path):
+                            existing = sb_api.load_apercus(shot["id"])
+                            paths    = [p for p in existing.get("paths", [])
+                                        if os.path.isfile(p)]
+                            paths.append(path)
+                            sb_api.save_apercus(shot["id"], paths, len(paths) - 1)
+                            last = path
+
+                    self.shot_done.emit(shot["id"], last)
 
                 except Exception as e:
                     self.shot_failed.emit(shot["id"], str(e))

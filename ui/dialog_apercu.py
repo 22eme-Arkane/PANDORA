@@ -4,7 +4,7 @@ import os
 from PyQt6.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
     QScrollArea, QWidget, QProgressBar, QSizePolicy, QFrame, QTextEdit,
-    QComboBox,
+    QComboBox, QSpinBox,
 )
 from PyQt6.QtCore import Qt, pyqtSignal, QTimer
 from core.i18n import translate
@@ -323,6 +323,30 @@ class MoodDialog(QDialog):
         self._btn_generate = _btn("✦  Générer une variation")
         self._btn_generate.clicked.connect(self._generate)
         acts.addWidget(self._btn_generate)
+
+        # ×N — plusieurs variations d'un coup. Chaque variation est un appel
+        # facturé : le compteur reste donc à 1 par défaut, et le bouton dit
+        # combien partent réellement plutôt que de laisser la surprise à la
+        # facture.
+        _x = QLabel("×")
+        _x.setStyleSheet(
+            f"color:{CP['text_dim']};font-size:12px;background:transparent;")
+        acts.addWidget(_x)
+        self._spin_variations = QSpinBox()
+        self._spin_variations.setRange(1, 8)
+        self._spin_variations.setValue(1)
+        self._spin_variations.setFixedSize(52, 34)
+        self._spin_variations.setToolTip(translate(
+            "Nombre de variations à générer d'affilée. "
+            "Chaque variation est une génération facturée."))
+        self._spin_variations.setStyleSheet(
+            f"QSpinBox{{background:{CP['bg3']};border:1px solid {CP['border']};"
+            f"border-radius:8px;color:{CP['text_primary']};font-size:12px;"
+            f"padding:0 4px;}}"
+            f"QSpinBox::up-button, QSpinBox::down-button{{width:16px;}}")
+        self._spin_variations.valueChanged.connect(self._sync_generate_label)
+        acts.addWidget(self._spin_variations)
+        self._sync_generate_label()
         root.addLayout(acts)
 
         # ── Barre de progression ───────────────────────────────────────────────
@@ -710,12 +734,23 @@ class MoodDialog(QDialog):
         self.apercu_changed.emit(self._shot["id"], active_path)
         self._refresh()
 
+    def _sync_generate_label(self, *_):
+        """Le bouton dit ce qu'il va faire : « une » ou « N » variations."""
+        try:
+            n = self._spin_variations.value()
+        except Exception:
+            n = 1
+        self._btn_generate.setText(
+            translate("✦  Générer une variation") if n == 1
+            else translate("✦  Générer") + f" {n} " + translate("variations"))
+
     def _disconnect_worker(self):
         if self._worker is None:
             return
         try:
             self._worker.progress.disconnect(self._on_progress)
             self._worker.finished.disconnect(self._on_generated)
+            self._worker.multi_finished.disconnect(self._on_generated_multi)
             self._worker.failed.disconnect(self._on_failed)
         except Exception:
             pass
@@ -789,9 +824,11 @@ class MoodDialog(QDialog):
         self._worker = MoodGenerationWorker(self._shot, apercu_dir,
                                             custom_prompt=custom_prompt,
                                             inspiration_ref=inspiration_ref,
-                                            options=_opts)
+                                            options=_opts,
+                                            variations=self._spin_variations.value())
         self._worker.progress.connect(self._on_progress)
         self._worker.finished.connect(self._on_generated)
+        self._worker.multi_finished.connect(self._on_generated_multi)
         self._worker.failed.connect(self._on_failed)
         self._btn_generate.setEnabled(False)
         self._btn_inspire.setEnabled(False)
@@ -810,6 +847,21 @@ class MoodDialog(QDialog):
         if path and os.path.isfile(path):
             self._paths.append(path)
             self._current_idx = len(self._paths) - 1
+            sb_api.save_apercus(self._shot["id"], self._paths, self._active_idx)
+        self._refresh()
+
+    def _on_generated_multi(self, paths: list):
+        """Série de variations. On se place sur la PREMIÈRE des nouvelles : c'est
+        celle qu'on vient de demander, et la navigation permet de parcourir les
+        suivantes sans en manquer une."""
+        self._stop_loading()
+        self._btn_generate.setEnabled(True)
+        self._btn_inspire.setEnabled(True)
+        _new = [p for p in (paths or []) if p and os.path.isfile(p)]
+        if _new:
+            _first = len(self._paths)
+            self._paths.extend(_new)
+            self._current_idx = _first
             sb_api.save_apercus(self._shot["id"], self._paths, self._active_idx)
         self._refresh()
 

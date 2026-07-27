@@ -2059,10 +2059,34 @@ class _MoodBatchDialog(QDialog):
         from ui.widgets import ResolutionCombo
         self._opt_res = ResolutionCombo()
         lay.addWidget(self._opt_res)
+        # Variations par plan — chacune est un appel facturé, donc 1 par defaut.
+        _var_row = QHBoxLayout()
+        _var_row.setSpacing(8)
+        _var_lbl = QLabel(translate("Variations"))
+        _var_lbl.setStyleSheet(
+            f"color:{CP['text_dim']};font-size:11px;background:transparent;")
+        _var_lbl.setFixedWidth(72)
+        _var_row.addWidget(_var_lbl)
+        from PyQt6.QtWidgets import QSpinBox as _QSpinBox   # importé localement
+        # dans ce fichier, comme partout ailleurs ici (pas au niveau module).
+        self._opt_variations = _QSpinBox()
+        self._opt_variations.setRange(1, 8)
+        self._opt_variations.setValue(1)
+        self._opt_variations.setFixedHeight(30)
+        self._opt_variations.setToolTip(translate(
+            "Nombre de moods generes par plan. Chaque variation est facturee."))
+        self._opt_variations.setStyleSheet(
+            f"QSpinBox{{background:{CP['bg2']};border:1px solid {CP['border']};"
+            f"border-radius:6px;color:{CP['text_primary']};font-size:11px;"
+            f"padding:0 8px;}}"
+            f"QSpinBox::up-button, QSpinBox::down-button{{width:18px;}}")
+        _var_row.addWidget(self._opt_variations, 1)
+        lay.addLayout(_var_row)
 
         def _accept_batch():
             self.engine = self._opt_engine.currentData() or "nb2"
             self.resolution = self._opt_res.resolution_key()
+            self.variations = self._opt_variations.value()
             self.accept()
 
         self._btn_gen = QPushButton(translate("✦  Générer les Moods"))
@@ -3561,7 +3585,8 @@ class PageStoryboard(QWidget):
         from api.apercu import MoodBatchWorker
         self._batch_mood_worker = MoodBatchWorker(
             selected, options={"engine": getattr(dlg, "engine", "flux"),
-                               "resolution": getattr(dlg, "resolution", "")})
+                               "resolution": getattr(dlg, "resolution", ""),
+                               "variations": getattr(dlg, "variations", 1)})
         self._batch_mood_worker.shot_progress.connect(self._on_batch_mood_progress)
         self._batch_mood_worker.shot_done.connect(self._on_batch_mood_done)
         self._batch_mood_worker.shot_failed.connect(self._on_batch_mood_failed)

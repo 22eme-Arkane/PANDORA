@@ -2028,6 +2028,29 @@ class _MoodBatchDialog(QDialog):
         self._opt_res = ResolutionCombo()
         _res_row.addWidget(self._opt_res, 1)
         lay.addLayout(_res_row)
+        # Variations par plan — chacune est un appel facturé, donc 1 par defaut.
+        _var_row = QHBoxLayout()
+        _var_row.setSpacing(8)
+        _var_lbl = QLabel(translate("Variations"))
+        _var_lbl.setStyleSheet(
+            f"color:{CP['text_dim']};font-size:11px;background:transparent;")
+        _var_lbl.setFixedWidth(72)
+        _var_row.addWidget(_var_lbl)
+        from PyQt6.QtWidgets import QSpinBox as _QSpinBox   # importé localement
+        # dans ce fichier, comme partout ailleurs ici (pas au niveau module).
+        self._opt_variations = _QSpinBox()
+        self._opt_variations.setRange(1, 8)
+        self._opt_variations.setValue(1)
+        self._opt_variations.setFixedHeight(30)
+        self._opt_variations.setToolTip(translate(
+            "Nombre de moods generes par plan. Chaque variation est facturee."))
+        self._opt_variations.setStyleSheet(
+            f"QSpinBox{{background:{CP['bg2']};border:1px solid {CP['border']};"
+            f"border-radius:6px;color:{CP['text_primary']};font-size:11px;"
+            f"padding:0 8px;}}"
+            f"QSpinBox::up-button, QSpinBox::down-button{{width:18px;}}")
+        _var_row.addWidget(self._opt_variations, 1)
+        lay.addLayout(_var_row)
 
         _cb_style = (
             f"QCheckBox{{color:{CP['text_secondary']};font-size:11px;"
@@ -3457,6 +3480,7 @@ class PageStoryboard(QWidget):
         _mood_opts = {
             "engine":     dlg._opt_engine.currentData() or "nb2",
             "resolution": dlg._opt_res.resolution_key(),
+            "variations": dlg._opt_variations.value(),
             "chars":      dlg._opt_chars.isChecked(),
             "decor":      dlg._opt_decor.isChecked(),
             "props":      dlg._opt_props.isChecked(),

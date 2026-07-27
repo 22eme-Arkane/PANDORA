@@ -2211,6 +2211,13 @@ _FR_TO_EN: dict[str, str] = {
     "Définition": "Resolution",
     "Format": "Aspect ratio",
     "Automatique": "Automatic",
+    "Variations": "Variations",
+    "variations": "variations",
+    "✦  Générer": "✦  Generate",
+    "Nombre de variations à générer d'affilée. Chaque variation est une génération facturée.":
+        "Number of variations to generate in a row. Each variation is a billed generation.",
+    "Nombre de moods generes par plan. Chaque variation est facturee.":
+        "Number of moods generated per shot. Each variation is billed.",
     "⚓ Image de départ : la dernière frame du plan précédent":
         "⚓ Start image: the last frame of the previous shot",
     # Refus de rognage façade — message diagnostique (2026-07-26).
