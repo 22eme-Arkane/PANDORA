@@ -3709,15 +3709,31 @@ class TabT2V(QScrollArea):
     def _remember_final(self, final: str, composed: bool, why: str):
         """Range le résultat sous sa clé d'entrée.
 
-        Un échec dû à l'API (crédits, réseau) n'est PAS mémorisé : il doit être
-        retenté au passage suivant, sinon le plan resterait bloqué en repli
-        jusqu'à la fermeture de l'application."""
+        Deux natures d'échec, deux traitements — les confondre coûtait cher :
+
+          · TRANSITOIRE (crédits, quota, réseau, clé absente) → PAS mémorisé, il
+            doit être retenté au passage suivant, sinon un creux de réseau
+            condamnerait le plan au repli jusqu'à la fermeture de l'application.
+          · DÉTERMINISTE (refus du contrôle de barre) → mémorisé comme un
+            succès. Le verdict ne dépend que des entrées, qui n'ont pas bougé :
+            retenter, c'est repayer un aller-retour IA pour réapprendre
+            exactement la même chose. C'est ce qui faisait recomposer un plan à
+            CHAQUE resélection alors que rien n'avait changé.
+
+        L'échappatoire reste entière : modifier le plan change la clé, et le
+        cache ne survit pas à la fermeture de l'application.
+        """
         key = getattr(self, "_final_cache_key_pending", "")
         if not key:
             return
         self._final_cache_key_pending = ""
         if why:
-            return
+            try:
+                from api.live_video_prompt import is_deterministic_refusal
+            except Exception:
+                return
+            if not is_deterministic_refusal(why):
+                return
         self._final_cache[key] = (final, composed, why)
         import core.live_compose_ctx as _ctxmod
         _ctxmod.purge(self._final_cache)

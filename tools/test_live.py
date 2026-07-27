@@ -5290,5 +5290,110 @@ def verrou_facade_atteint_le_payload():
         "annonce du verrou façade non traduite en anglais"
 
 
+@test
+def refus_de_composition_nest_pas_repaye():
+    """Un plan refusé par le contrôle de barre ne recompose pas à chaque retour.
+
+    Constat de Matthieu (2026-07-27) : « lorsqu'on désélectionne le plan et
+    qu'on le resélectionne, elle se refait à nouveau alors qu'elle a déjà été
+    chargée et qu'entre temps il n'y a pas eu de modification ».
+
+    La clé de cache était pourtant bonne — vérifié en rejouant le cycle complet
+    sélection → désélection → resélection : même empreinte, cache touché. Le
+    défaut était dans `_remember_final`, qui ne mémorisait QUE les succès. Or
+    `why` confond deux natures d'échec :
+
+      · transitoire  (crédits, quota, réseau, clé absente) → à retenter
+      · déterministe (refus du contrôle de barre)          → même verdict à
+        chaque fois, donc un aller-retour IA repayé pour rien à chaque
+        resélection du plan
+
+    Ce test fige le tri, et le fait qu'un refus mémorisé ne relance rien.
+    """
+    import core.storyboard as sb
+    import api.live_video_prompt as LVP
+    import ui.tab_t2v_live as TL
+    from ui.tab_t2v_live import TabT2V
+
+    # ── 1. Le tri des deux natures d'échec ───────────────────────────────────
+    assert LVP.is_deterministic_refusal(
+        LVP.REFUSAL_PREFIX + "structure de barre perdue"), \
+        "un refus du contrôle de barre doit être reconnu comme déterministe"
+    for _transitoire in ("crédits IA épuisés", "quota dépassé",
+                         "clé Anthropic absente", "connexion interrompue", ""):
+        assert not LVP.is_deterministic_refusal(_transitoire), \
+            (f"« {_transitoire} » est un aléa d'infrastructure : le figer "
+             "condamnerait le plan au repli jusqu'à la fermeture de l'app")
+
+    # Le marqueur doit être POSÉ par compose(), pas dupliqué en littéral : deux
+    # écritures parallèles divergeraient au premier reformulage du message.
+    _src = "\n".join(l for l in inspect.getsource(LVP.compose).splitlines()
+                     if not l.lstrip().startswith("#"))
+    assert "REFUSAL_PREFIX" in _src, \
+        "compose() n'utilise pas REFUSAL_PREFIX — le tri se fera sur un texte libre"
+
+    # ── 2. _remember_final mémorise le refus, retente l'incident ─────────────
+    sb.set_namespace("live_seq_mapping")
+    sb.clear_version_shots(sb.DEFAULT_VERSION_ID)
+    _shot = sb.save_shot({"number": 1, "scene_title": "P1", "duration": 6,
+                          "seedance_prompt": "Une vague de lumière monte sur la façade."},
+                         sb.DEFAULT_VERSION_ID)
+
+    t = TabT2V()
+    t._set_seq_mode("mapping")
+
+    t._final_cache.clear()
+    t._final_cache_key_pending = "K_refus"
+    t._remember_final("repli déterministe", False,
+                      LVP.REFUSAL_PREFIX + "coupe introduite dans la barre")
+    assert "K_refus" in t._final_cache, \
+        ("un refus du contrôle de barre n'est pas mémorisé : le même verdict "
+         "sera repayé à chaque resélection du plan")
+
+    t._final_cache_key_pending = "K_reseau"
+    t._remember_final("repli", False, "crédits IA épuisés")
+    assert "K_reseau" not in t._final_cache, \
+        ("un incident d'infrastructure ne doit PAS être figé : une fois les "
+         "crédits rechargés, le plan doit pouvoir se composer")
+
+    # ── 3. Bout en bout : refus, puis retour sur le plan → aucun recalcul ────
+    _vrai_worker = TL._LiveFinalPromptWorker
+
+    class _WorkerMuet:
+        """Ne compose rien : le test pilote lui-même le verdict."""
+        def __init__(self, body, ctx):
+            pass
+
+        def start(self):
+            pass
+    TL._LiveFinalPromptWorker = _WorkerMuet
+    try:
+        t._final_cache.clear()
+        t._final_assembly_timer.stop()
+
+        t._on_shot_selected(_shot)
+        t._final_assembly_timer.stop()          # on court-circuite le débounce
+        t._start_final_assembly()
+        assert not t._final_from_cache, "premier passage : rien ne peut être en cache"
+        assert t._final_cache_key_pending, "la clé d'entrée n'a pas été retenue"
+
+        # Ce que le worker aurait émis si le contrôle avait refusé la prose.
+        t._on_final_composed("deterministic fallback prose", False,
+                             LVP.REFUSAL_PREFIX + "structure de barre perdue")
+        assert len(t._final_cache) == 1, "le refus n'a pas été rangé dans le cache"
+
+        # Désélection, puis retour sur le MÊME plan, sans rien modifier.
+        t._on_shot_selected(None)
+        t._on_shot_selected(_shot)
+        t._final_assembly_timer.stop()
+        t._start_final_assembly()
+        assert t._final_from_cache, \
+            ("le plan recompose au retour alors que rien n'a changé — c'est le "
+             "symptôme rapporté par Matthieu, et chaque passage est facturé")
+    finally:
+        TL._LiveFinalPromptWorker = _vrai_worker
+        sb.set_namespace("storyboard")
+
+
 if __name__ == "__main__":
     sys.exit(main())

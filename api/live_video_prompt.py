@@ -40,6 +40,28 @@ import re
 
 LAST_COMPOSE_ERROR = ""   # raison humanisée du dernier échec (crédits, quota, clé…)
 
+# Marqueur STABLE d'un refus par le contrôle de barre. Il sert à distinguer deux
+# natures d'échec que le texte seul confond :
+#
+#   · DÉTERMINISTE — le contrôle a refusé la prose. Mêmes entrées → même verdict.
+#     Retenter, c'est repayer un aller-retour pour réapprendre la même chose.
+#   · TRANSITOIRE  — crédits, quota, réseau, clé absente. Là, retenter a du sens.
+#
+# L'appelant mémorise les premiers et retente les seconds. Un préfixe plutôt qu'un
+# code d'erreur : la raison reste lisible telle quelle à l'écran, sans table de
+# correspondance à tenir à jour.
+REFUSAL_PREFIX = "composition refusée : "
+
+
+def is_deterministic_refusal(why: str) -> bool:
+    """True si `why` est un verdict REPRODUCTIBLE du contrôle de barre.
+
+    Faux pour tout aléa d'infrastructure : ceux-là doivent être retentés au
+    passage suivant, sinon un creux de réseau condamnerait le plan au repli
+    jusqu'à la fermeture de l'application.
+    """
+    return (why or "").startswith(REFUSAL_PREFIX)
+
 
 # ── Consigne système — le socle, commun aux deux modes ────────────────────────
 _SYSTEM_LIVE = """Tu écris le prompt final d'un plan de spectacle VIDÉO LIVE (VJing,
@@ -265,7 +287,7 @@ def compose(prompt: str, *, engine: str = "", mode: str = "live",
             return ""
         verdict = validate_live_composed(out, mode=mode, source_prompt=prompt)
         if not verdict["valid"]:
-            LAST_COMPOSE_ERROR = "composition refusée : " + " · ".join(verdict["errors"])
+            LAST_COMPOSE_ERROR = REFUSAL_PREFIX + " · ".join(verdict["errors"])
             return ""
         # Dernier filet : la grammaire du mode s'applique AUSSI à une sortie IA.
         from core.live_grammar import enforce_mode, strip_names
