@@ -83,6 +83,21 @@ class ReferenceImagesDialog(QDialog):
             f"color:{CP['text_secondary']};font-size:11px;background:transparent;border:none;")
         lay.addWidget(_help)
 
+        # Un QLabel en wordWrap annonce un minimum d'UNE ligne, alors qu'à la
+        # largeur réelle du dialogue il en occupe DEUX : le layout réclamait donc
+        # 15 px de moins qu'il n'en fallait. Invisible à l'ouverture — mais au
+        # PREMIER ajout d'image, la bande de vignettes passe d'un simple label à
+        # une cellule de 92 px, le minimum dépasse la hauteur courante, et Qt
+        # redimensionne la fenêtre DÉJÀ VISIBLE à ce minimum sous-évalué. Windows
+        # la relevait aussitôt, d'où les « QWindowsWindow::setGeometry: Unable to
+        # set geometry » du terminal (15 px logiques × 150 % = les 22 px du log).
+        # On rend le minimum honnête : le rendu ne change pas d'un pixel, la
+        # fenêtre faisait déjà cette taille — on demande enfin la bonne.
+        self.ensurePolished()
+        _m = lay.contentsMargins()
+        _help.setMinimumHeight(
+            _help.heightForWidth(self.minimumWidth() - _m.left() - _m.right()))
+
         # Bande de vignettes
         self._thumbs_row = QHBoxLayout()
         self._thumbs_row.setSpacing(8)

@@ -5720,6 +5720,59 @@ def decor_previews_generated_before_navigation():
 
 
 @test
+def dialogue_references_annonce_sa_vraie_hauteur():
+    """Le minimum annoncé par le layout doit couvrir ce dont il a VRAIMENT besoin.
+
+    Symptôme (terminal de Matthieu, 2026-07-27, dix fois de suite) :
+      QWindowsWindow::setGeometry: Unable to set geometry 720x425 …
+      Resulting geometry: 720x447 … minimum size: 480x283
+
+    Cause mesurée : le QLabel d'aide est en wordWrap, donc son minimumSizeHint
+    ne compte qu'UNE ligne alors qu'à la largeur réelle du dialogue il en occupe
+    DEUX — 15 px logiques manquants, soit 22 px à 150 % d'échelle Windows, très
+    exactement l'écart 447-425. Invisible à l'ouverture ; mais au premier ajout
+    d'image, la bande de vignettes passe d'un label à une cellule de 92 px, le
+    minimum dépasse la hauteur courante, et Qt redimensionne la fenêtre DÉJÀ
+    VISIBLE à ce minimum sous-évalué.
+
+    Le test porte sur l'invariant, pas sur le nombre 15 : un layout ne doit
+    jamais réclamer moins que ce qu'il lui faut. Il vaut donc encore si le texte
+    d'aide est réécrit ou si la largeur minimale change.
+    """
+    from PIL import Image
+    from ui.dialog_reference_images import ReferenceImagesDialog
+
+    _td = os.path.join(_TMP, "refdlg")
+    os.makedirs(_td, exist_ok=True)
+    _imgs = []
+    for _i in range(3):
+        _q = os.path.join(_td, f"ref{_i}.png")
+        Image.new("RGB", (320, 180), (60, 40, 90)).save(_q)
+        _imgs.append(_q)
+
+    for _n in (0, 1, 3):
+        dlg = ReferenceImagesDialog(_imgs[:_n])
+        dlg.show()
+        _lay = dlg.layout()
+        _annonce = _lay.totalMinimumSize().height()
+        _reel    = _lay.heightForWidth(dlg.minimumWidth())
+        assert _annonce >= _reel, (
+            f"avec {_n} image(s), le layout annonce {_annonce} px de hauteur "
+            f"minimale alors qu'il lui en faut {_reel} : Qt redimensionnera la "
+            "fenêtre à une taille que Windows refuse, d'où « Unable to set "
+            "geometry » dans le terminal")
+
+    # Le vrai déclencheur : ajouter une image alors que la fenêtre est visible.
+    dlg = ReferenceImagesDialog([])
+    dlg.show()
+    dlg._add_paths([_imgs[0]])
+    _lay = dlg.layout()
+    assert _lay.totalMinimumSize().height() >= _lay.heightForWidth(dlg.minimumWidth()), \
+        ("après ajout d'une image à chaud, le minimum reste sous-évalué — c'est "
+         "exactement le moment où l'avertissement se produit")
+
+
+@test
 def ctrl_c_nest_pas_un_plantage():
     """Ctrl+C ne doit PAS afficher « Une erreur inattendue s'est produite ».
 
