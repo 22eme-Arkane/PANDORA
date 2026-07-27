@@ -47,6 +47,12 @@ LAST_COMPOSE_ERROR = ""
 # (à mémoriser, inutile de le repayer) d'un aléa d'infrastructure (à retenter).
 REFUSAL_PREFIX = "composition refusée : "
 
+# Sous ce rapport à la matière de départ, la « composition » est un résumé.
+# 0,60 et non 0,90 : l'anglais est plus compact que le français, et retirer les
+# étiquettes (« SURFACE : », « ÉTAT 0 : ») raccourcit légitimement le texte. Le
+# seuil vise la perte GROSSIÈRE, pas le resserrement normal.
+_SEUIL_PERTE = 0.60
+
 
 def is_deterministic_refusal(why: str) -> bool:
     """True si `why` est un refus du contrôle, donc reproductible à l'identique."""
@@ -136,6 +142,15 @@ CE QUI FAIT LA VALEUR DE CE PROMPT :
    que la fiche. Tu complètes la précision visuelle, tu n'inventes ni objet ni
    personnage absent.
 
+6. TU NE PERDS AUCUNE INFORMATION. C'est une RÉÉCRITURE, jamais un résumé. Tout
+   ce que la fiche décrit de l'instant demandé — chaque ouverture, chaque
+   matière, chaque couleur, chaque détail d'architecture, chaque contrainte
+   visuelle — doit se retrouver dans le prompt final. Tu retires les étiquettes,
+   tu traduis, tu réorganises dans la forme qu'attend le moteur ; tu ne coupes
+   pas. Si le résultat est plus court que la fiche, c'est que tu as perdu
+   quelque chose : reprends. La seule chose que tu écartes est ce qui décrit un
+   AUTRE moment que celui demandé.
+
 Réponds UNIQUEMENT avec le prompt final, sans commentaire ni préambule."""
 
 
@@ -220,11 +235,19 @@ def _format_rules(engine: str) -> str:
                 "Le contexte d'usage se met en PREMIER, en une phrase, avant "
                 "les champs.")
     elif shape == "natural":
+        # ⚠ La doc de ce moteur déconseille les LISTES DE MOTS-CLÉS ; elle ne
+        # demande pas d'être BREF. Écrire « deux à quatre phrases » ici a
+        # transformé une règle de FORME en ordre de COMPRESSION : le prompt est
+        # passé de ~600 caractères à moins de 250 et la description a fondu
+        # (constat Matthieu, 2026-07-27 : « la composition ne doit pas enlever
+        # de l'information »). La contrainte porte sur la FORME, pas la longueur.
         base = (
-            "FORMAT — DEUX à QUATRE phrases descriptives complètes, en prose "
-            "conversationnelle. Aucun champ nommé, aucune liste de mots-clés "
+            "FORMAT — de la prose descriptive, en phrases complètes et "
+            "conversationnelles : AUTANT DE PHRASES QU'IL EN FAUT pour ne rien "
+            "perdre de la fiche. Aucun champ nommé, aucune liste de mots-clés "
             "séparés par des virgules : ce moteur raisonne avant de peindre et "
-            "une accumulation de tags dégrade ce raisonnement. Le style se donne "
+            "une accumulation de tags dégrade ce raisonnement — mais une "
+            "description longue et articulée ne le gêne pas. Le style se donne "
             "comme un adjectif portant sur TOUTE la scène (« a moody noir "
             "photograph of… ») et non comme une étiquette ajoutée à la fin.")
     elif shape == "json":
@@ -408,6 +431,19 @@ def validate_image_composed(output: str, *, engine: str = "",
             errors.append("interdits en clair alors que ce moteur n'a pas de "
                           "prompt négatif — ils seront rendus comme des sujets")
 
+    # ⑥ PERTE D'INFORMATION. Une composition est une RÉÉCRITURE, pas un résumé :
+    #    « ça ne doit pas enlever de l'information » (Matthieu, 2026-07-27). On
+    #    compare à la matière RÉELLEMENT à rendre — pas à la fiche entière, dont
+    #    une partie décrit volontairement un autre moment. Refuser ici n'est pas
+    #    une perte : le repli est précisément le texte complet.
+    _ref = " ".join((source_prompt or "").split())
+    if _ref and len(_ref) >= 200:
+        _ratio = len(" ".join(text.split())) / float(len(_ref))
+        if _ratio < _SEUIL_PERTE:
+            errors.append(
+                f"information perdue — le prompt fait {int(_ratio * 100)} % de "
+                "la matière à rendre, c'est un résumé et non une réécriture")
+
     if len(text) < 80:
         warnings.append("prompt très court")
     return {"valid": not errors, "errors": errors, "warnings": warnings}
@@ -415,7 +451,7 @@ def validate_image_composed(output: str, *, engine: str = "",
 
 def compose(prompt: str, *, engine: str = "", kind: str = "", surface: str = "",
             moment: str = "", style_suffix: str = "", extras=None,
-            refs=None) -> str:
+            refs=None, source_ref: str = "") -> str:
     """Prompt final anglais pour ce moteur d'image. "" si échec ou refus.
 
     Appel RÉSEAU : à exécuter dans un QThread, jamais sur le thread UI.
@@ -456,7 +492,11 @@ def compose(prompt: str, *, engine: str = "", kind: str = "", surface: str = "",
         except Exception:
             pass
 
-        verdict = validate_image_composed(out, engine=engine, source_prompt=prompt)
+        # `source_ref` = la matière RÉELLEMENT à rendre (le repli déterministe),
+        # pas la fiche entière : celle-ci contient aussi ce qu'on demande
+        # volontairement d'écarter, et la comparer condamnerait toute sortie.
+        verdict = validate_image_composed(out, engine=engine,
+                                          source_prompt=source_ref or "")
         if not verdict["valid"]:
             LAST_COMPOSE_ERROR = REFUSAL_PREFIX + " · ".join(verdict["errors"])
             return ""

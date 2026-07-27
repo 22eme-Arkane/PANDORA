@@ -794,9 +794,14 @@ def compose_mood_prompt(shot: dict, film_style: str = "", engine: str = "",
         pass
     try:
         import api.image_prompt as _ip
+        # `source_ref` = le repli déterministe, c'est-à-dire EXACTEMENT la
+        # matière à rendre pour l'instant demandé. C'est la seule référence
+        # honnête pour juger d'une perte : la fiche entière contient aussi ce
+        # qu'on lui demande volontairement d'écarter.
         out = _ip.compose(fiche, engine=engine, kind=kind, moment=moment,
                           surface=surface, style_suffix=film_style,
-                          refs=_ref_roles(shot, building_ref, is_mapping))
+                          refs=_ref_roles(shot, building_ref, is_mapping),
+                          source_ref=_repli)
         if out:
             if _sid:
                 _compose_cache_write(_sid, _key, out, "")

@@ -5905,9 +5905,15 @@ def compositeur_image_par_moteur():
     import api.image_prompt as IP
 
     # ── 1. La forme demandée suit la grammaire RÉELLE du moteur ──────────────
+    # ⚠ « DEUX à QUATRE phrases » était pinglé ici jusqu'au 2026-07-27. C'était
+    # une ERREUR de lecture de la doc Seedream : elle déconseille les LISTES DE
+    # MOTS-CLÉS, elle ne demande pas d'être bref. Cette consigne a transformé une
+    # règle de forme en ordre de compression, et le prompt est passé de ~600 à
+    # moins de 250 caractères — « la composition ne doit pas enlever de
+    # l'information » (Matthieu). Le test épingle donc la règle CORRIGÉE.
     for _eng, _attendu in (("nb_pro", "Composition and camera"),
                            ("gpt2", "Important details"),
-                           ("seedream45", "DEUX à QUATRE phrases"),
+                           ("seedream45", "AUTANT DE PHRASES"),
                            ("flux2", "OBJET JSON")):
         _r = IP._format_rules(_eng)
         assert _attendu in _r, (
@@ -6021,6 +6027,27 @@ def compositeur_image_par_moteur():
         assert _attendu in _f, (
             f"« {_attendu} » absent de la fiche Cinéma : la composition serait "
             "plus pauvre que l'assemblage déterministe", _f)
+
+    # ── 4quater. Une composition est une RÉÉCRITURE, jamais un résumé ───────
+    # « En soi, la composition doit juste enlever les noms comme TRANSFORMATION,
+    # ÉTAT 1, et mettre en forme selon ce que le moteur accepte. Mais ça ne doit
+    # pas enlever de l'information » (Matthieu, 2026-07-27).
+    assert "TU NE PERDS AUCUNE INFORMATION" in IP._SYSTEM_IMAGE, \
+        "la consigne système n'interdit pas la perte d'information"
+    _matiere = ("A trapezoidal limestone facade with a square bell tower, a "
+                "pointed central portal, two stacked rose windows, four lancet "
+                "bays on the left flank, buttresses and stone edges, all of it "
+                "vanished under dense frost rendered as fine white hatching.")
+    _resume = "A frosted church facade at night."
+    _v = IP.validate_image_composed(_resume, engine="recraft",
+                                    source_prompt=_matiere)
+    assert not _v["valid"] and any("information perdue" in _e for _e in _v["errors"]), (
+        "un résumé passe le contrôle : la composition peut vider le prompt de "
+        "sa substance sans que rien ne le signale", _v)
+    # Une réécriture complète, elle, passe.
+    assert IP.validate_image_composed(_matiere, engine="recraft",
+                                      source_prompt=_matiere)["valid"], \
+        "une réécriture fidèle est refusée"
 
     # ── 5. Le tri des deux natures d'échec, comme côté Live ─────────────────
     assert IP.is_deterministic_refusal(IP.REFUSAL_PREFIX + "prompt encore en français")
