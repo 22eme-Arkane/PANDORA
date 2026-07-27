@@ -5898,6 +5898,41 @@ def compositeur_image_par_moteur():
         _v = IP.validate_image_composed(_txt, engine=_eng)
         assert _v["valid"], (f"sortie CORRECTE refusée sur {_eng}", _v["errors"])
 
+    # ── 4bis. Le cas RÉEL de Matthieu : « composition refusée : interdits » ──
+    # La fiche est en FRANÇAIS et liste des interdits (« CONTRAINTES : aucun
+    # texte, aucun filigrane »). Sur Seedream, le rédacteur les recopiait en
+    # « no text, no watermark » et le contrôle refusait TOUTES les compositions.
+    _fiche = ("SURFACE : façade en pierre calcaire, tour-clocher carrée.\n"
+              "ÉTAT 0 : la pierre sous un givre dense en hachures blanches.\n"
+              "CONTRAINTES : aucun texte, aucun filigrane, aucun logo.\n")
+    _u = IP._build_user_message(_fiche, kind="mood_mapping", surface="",
+                                moment="", style_suffix="", extras=None,
+                                engine="seedream5_pro")
+    assert "CONTRAINTES : aucun texte" not in _u, (
+        "le bloc d'interdits français est montré à un moteur sans prompt "
+        "négatif — il le recopiera, et le contrôle refusera la composition")
+    assert "POSITIF" in _u, "l'équivalent positif des contraintes n'est pas fourni"
+    # Le moteur qui SAIT interdire, lui, garde sa fiche intacte.
+    _u2 = IP._build_user_message(_fiche, kind="mood_mapping", surface="",
+                                 moment="", style_suffix="", extras=None,
+                                 engine="nb_pro")
+    assert "CONTRAINTES : aucun texte" in _u2, \
+        "Nano Banana sait interdire : sa fiche ne doit pas être amputée"
+
+    # La réparation retire l'interdit ET remet l'équivalent positif — et ce
+    # qu'elle produit doit PASSER le contrôle, sinon elle ne sert à rien.
+    _repare = IP._sans_interdits(
+        "A limestone facade encased in frost. There is no text and no watermark "
+        "anywhere. The facade fills the frame at its exact photographed scale.")
+    assert "no text" not in _repare, "la réparation laisse passer l'interdit"
+    assert "frost" in _repare and "photographed scale" in _repare, \
+        "la réparation a emporté le contenu utile avec l'interdit"
+    _v = IP.validate_image_composed(_repare, engine="seedream5_pro")
+    assert _v["valid"], (
+        "ce que la réparation produit est refusé par le contrôle — « without » "
+        "est une préposition dans les réécritures positives du dépôt, pas un "
+        "interdit", _v["errors"])
+
     # ── 5. Le tri des deux natures d'échec, comme côté Live ─────────────────
     assert IP.is_deterministic_refusal(IP.REFUSAL_PREFIX + "prompt encore en français")
     assert not IP.is_deterministic_refusal("crédits IA épuisés")

@@ -206,10 +206,68 @@ def _system_for(engine: str = "", kind: str = "") -> str:
     return f"{_SYSTEM_IMAGE}\n\n[USAGE]\n{_kind_brief(kind)}\n\n{_format_rules(engine)}"
 
 
+def _sans_interdits(text: str) -> str:
+    """Retire les interdits résiduels d'un texte destiné à un moteur SANS négatif.
+
+    `core.image_grammar.neutralize_negatives` fait le gros du travail mais reste
+    partiel : « There is no text and no watermark anywhere » — deux interdits
+    dans une seule proposition — lui échappe. On termine à la PHRASE : une
+    contrainte occupe presque toujours sa propre phrase, et en retirer une de
+    trop coûte moins cher que de refuser toute la composition pour un « no ».
+    """
+    from core.image_grammar import BASE_CONSTRAINTS, neutralize_negatives, to_positive
+
+    out = text or ""
+    try:
+        out, _ = neutralize_negatives(out)
+    except Exception:
+        pass
+    _phrases = re.split(r"(?<=[.!?])\s+", out)
+    _gardees = [p for p in _phrases
+                if not re.search(r"(?i)\bno\s+[a-z]", p)]
+    if len(_gardees) != len(_phrases):
+        out = " ".join(_gardees).strip()
+        # Ce qui est retiré ne doit pas être PERDU : on le remet en positif.
+        try:
+            _pos = to_positive(BASE_CONSTRAINTS)
+            if _pos:
+                out = (out + " " + ", ".join(_pos[:3]) + ".").strip()
+        except Exception:
+            pass
+    return re.sub(r"\s{2,}", " ", out).strip()
+
+
 def _build_user_message(prompt: str, *, kind: str, surface: str,
-                        moment: str, style_suffix: str, extras) -> str:
-    """Fiche de travail + contexte. Le MOMENT demandé est dit explicitement."""
-    parts = [f"[FICHE DE TRAVAIL]\n{(prompt or '').strip()}"]
+                        moment: str, style_suffix: str, extras,
+                        engine: str = "") -> str:
+    """Fiche de travail + contexte. Le MOMENT demandé est dit explicitement.
+
+    Sur un moteur SANS prompt négatif, le bloc de contraintes de la fiche est
+    converti en positif AVANT d'être montré : lui demander de ne pas recopier une
+    liste d'interdits qu'on lui met sous les yeux est un combat perdu d'avance —
+    il l'a recopiée à chaque fois.
+    """
+    _p = (prompt or "").strip()
+    _contraintes_pos = []
+    try:
+        from core.image_grammar import (BASE_CONSTRAINTS, supports_negatives,
+                                        to_positive)
+        if _p and not supports_negatives(engine):
+            # La fiche est en FRANÇAIS : `neutralize_negatives`, qui travaille sur
+            # l'anglais, n'y peut rien. On RETIRE donc le bloc de contraintes au
+            # lieu de tenter de le réécrire, et on redonne l'équivalent positif à
+            # part. Lui montrer une liste d'interdits en lui demandant de ne pas
+            # la recopier est un combat perdu — il l'a recopiée à chaque essai.
+            _p = re.sub(r"(?im)^[ \t]*(?:CONTRAINTES|CONSTRAINTS)[ \t]*:.*$", "", _p)
+            _p = re.sub(r"\n{3,}", "\n\n", _p).strip()
+            _contraintes_pos = to_positive(BASE_CONSTRAINTS)
+    except Exception:
+        pass
+    parts = [f"[FICHE DE TRAVAIL]\n{_p}"]
+    if _contraintes_pos:
+        parts.append("[CONTRAINTES — ce moteur n'a PAS de prompt négatif : "
+                     "exprime-les ainsi, en POSITIF, jamais en « no … »]\n"
+                     + ", ".join(_contraintes_pos))
     if (moment or "").strip():
         parts.append("[INSTANT À RENDRE — et lui seul]\n" + moment.strip())
     if (surface or "").strip():
@@ -288,7 +346,12 @@ def validate_image_composed(output: str, *, engine: str = "",
     # ⑤ Interdits en clair sur un moteur qui n'en a pas : ils deviennent des
     #    SUJETS. « no text » sur Seedream, c'est du texte à l'image.
     if not supports_negatives(engine):
-        if re.search(r"(?i)\bno\s+[a-z]", text) or re.search(r"(?i)\bwithout\s+[a-z]", text):
+        # Seuls les interdits NUS (« no text », « no watermark ») posent problème.
+        # « without » n'est PAS flagué : les réécritures positives du dépôt s'en
+        # servent comme préposition (« clean surfaces without signage »), et les
+        # bannir ferait refuser par le contrôle ce que la réparation vient tout
+        # juste de produire — le serpent qui se mord la queue.
+        if re.search(r"(?i)\bno\s+[a-z]", text):
             errors.append("interdits en clair alors que ce moteur n'a pas de "
                           "prompt négatif — ils seront rendus comme des sujets")
 
@@ -310,7 +373,7 @@ def compose(prompt: str, *, engine: str = "", kind: str = "", surface: str = "",
         system = _system_for(engine, kind)
         user   = _build_user_message(prompt, kind=kind, surface=surface,
                                      moment=moment, style_suffix=style_suffix,
-                                     extras=extras)
+                                     extras=extras, engine=engine)
         try:
             out = (ai_provider.complete(system, user, tier="creative",
                                         max_tokens=8192,
@@ -328,6 +391,16 @@ def compose(prompt: str, *, engine: str = "", kind: str = "", surface: str = "",
         # Une clôture ```json … ``` est fréquente et inoffensive : on la retire
         # avant de juger, plutôt que de refuser une sortie par ailleurs correcte.
         out = re.sub(r"^```(?:json|text)?\s*|\s*```$", "", out).strip()
+
+        # Filet côté SORTIE : même la fiche nettoyée, un modèle glisse parfois un
+        # « no text ». On RÉPARE avant de juger — refuser ferait perdre une
+        # composition par ailleurs bonne, et le repli déterministe est pire.
+        try:
+            from core.image_grammar import supports_negatives as _sn
+            if not _sn(engine):
+                out = _sans_interdits(out)
+        except Exception:
+            pass
 
         verdict = validate_image_composed(out, engine=engine, source_prompt=prompt)
         if not verdict["valid"]:
