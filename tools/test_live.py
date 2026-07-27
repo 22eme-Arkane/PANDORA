@@ -5207,5 +5207,88 @@ def le_mood_atteint_vraiment_le_moteur():
     sb.set_namespace("storyboard")
 
 
+@test
+def verrou_facade_atteint_le_payload():
+    """Le verrou géométrique du mapping doit PARTIR au moteur, mode final compris.
+
+    Régression vécue (2026-07-27, introduite la veille par le chantier « prompt
+    final composé ») : pour éviter les doublons dans le payload, TOUS les
+    suffixes ont été neutralisés en mode final —
+
+        "time_suffix": "" if _final_mode else time_suffix
+
+    Or en mapping `time_suffix` ne porte pas que du style : il porte
+    `_mapping_dna`, c'est-à-dire « STATIC LOCKED CAMERA — absolutely no zoom
+    […] the facade keeps the EXACT same width-to-height ratio […] pixel-locked ».
+    Et le mode final est le cas NORMAL : `_await_final_then_generate` attend
+    `_prompt_is_final` avant de lancer chaque plan. Le verrou ne partait donc
+    plus jamais, et rien dans le texte envoyé n'interdisait au bâtiment de
+    dériver. Constat de Matthieu : « j'ai toujours de légères déformations sur
+    le bâtiment ou pendant le plan, ça peut zoomer un tout petit peu ».
+
+    Lecture par AST et NON par recherche de texte : le commentaire qui explique
+    la règle cite forcément le motif interdit, piège déjà tombé cinq fois sur ce
+    harnais (cf. `grammaire_live_separee`).
+    """
+    import ast
+    import ui.tab_t2v_live as TL
+
+    with open(TL.__file__, encoding="utf-8-sig") as fh:
+        tree = ast.parse(fh.read())
+
+    _fn = None
+    for _node in ast.walk(tree):
+        if isinstance(_node, ast.FunctionDef) and _node.name == "start_generation":
+            _fn = _node
+            break
+    assert _fn is not None, "start_generation introuvable dans ui/tab_t2v_live.py"
+
+    # ── 1. La clé "time_suffix" du payload ───────────────────────────────────
+    _val = None
+    for _node in ast.walk(_fn):
+        if not isinstance(_node, ast.Dict):
+            continue
+        for _k, _v in zip(_node.keys, _node.values):
+            if isinstance(_k, ast.Constant) and _k.value == "time_suffix":
+                _val = _v
+    assert _val is not None, "aucune clé « time_suffix » dans le payload de start_generation"
+    _expr = ast.unparse(_val)
+
+    assert "_mapping_lock" in _expr, (
+        "le verrou géométrique du mapping ne part plus au moteur : la clé "
+        "« time_suffix » du payload vaut « " + _expr + " ». En mode final elle "
+        "s'évalue à une chaîne VIDE, donc plus aucune consigne n'interdit au "
+        "bâtiment de zoomer ou de changer de proportions.")
+
+    # ── 2. Le verrou est bien CONSTRUIT, et il dit la bonne chose ────────────
+    _assigne = [n for n in ast.walk(_fn)
+                if isinstance(n, ast.Assign)
+                and any(isinstance(t, ast.Name) and t.id == "_mapping_lock"
+                        for t in n.targets)]
+    assert len(_assigne) >= 2, (
+        "_mapping_lock doit être initialisé à vide PUIS rempli en mapping — "
+        f"{len(_assigne)} affectation(s) trouvée(s)")
+
+    _dna = [n.value for n in ast.walk(_fn)
+            if isinstance(n, ast.Assign)
+            and any(isinstance(t, ast.Name) and t.id == "_mapping_dna"
+                    for t in n.targets)]
+    assert _dna, "_mapping_dna a disparu — c'est lui qui porte tout le verrou"
+    _texte = ast.literal_eval(_dna[0]).lower()
+    for _exigence in ("no zoom", "locked", "proportions", "never rescales"):
+        assert _exigence in _texte, (
+            f"« {_exigence} » absent du verrou façade : le texte envoyé ne "
+            "couvre plus la dérive géométrique constatée à l'écran")
+
+    # ── 3. Un verrou invisible peut disparaître sans bruit : il s'annonce ────
+    _prev = inspect.getsource(TL.TabT2V._build_full_preview_text)
+    assert "Verrou façade" in _prev, (
+        "le verrou n'est pas annoncé dans « Éléments injectés » — il a déjà "
+        "disparu du payload une fois sans que rien ne le signale")
+    from core.i18n import _FR_TO_EN
+    assert any("Verrou façade" in k for k in _FR_TO_EN), \
+        "annonce du verrou façade non traduite en anglais"
+
+
 if __name__ == "__main__":
     sys.exit(main())

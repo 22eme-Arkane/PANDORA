@@ -2206,6 +2206,8 @@ _FR_TO_EN: dict[str, str] = {
         "   (the Mood takes priority over the automatic match cut — uncheck it to start from the previous frame)",
     "⚠ « Utiliser les images du Mood » est coché mais ce plan n'a aucun Mood — génère-le d'abord":
         "⚠ « Use the Mood images » is checked but this shot has no Mood — generate one first",
+    "🔒 Verrou façade ajouté à l'envoi : appareil figé, aucun zoom, proportions du bâtiment identiques à chaque image":
+        "🔒 Facade lock added on send: static camera, no zoom, building proportions identical in every frame",
     "⚓ Image de départ : la dernière frame du plan précédent":
         "⚓ Start image: the last frame of the previous shot",
     # Refus de rognage façade — message diagnostique (2026-07-26).

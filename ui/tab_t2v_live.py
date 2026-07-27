@@ -4154,6 +4154,16 @@ class TabT2V(QScrollArea):
                     "⚠ « Utiliser les images du Mood » est coché mais ce plan "
                     "n'a aucun Mood — génère-le d'abord"))
 
+        # ── Le verrou géométrique, ajouté à l'envoi ────────────────────────────
+        # Il n'est PAS dans l'encart : ce n'est pas du texte d'auteur mais une
+        # contrainte du mode, au même titre que « aucun son » en mapping. Il doit
+        # donc s'annoncer ici — sinon il peut disparaître du payload sans que rien
+        # ne le signale, ce qui est exactement ce qui s'est produit.
+        if getattr(self, "_seq_mode", "live") == "mapping":
+            param_lines.append(translate(
+                "🔒 Verrou façade ajouté à l'envoi : appareil figé, aucun zoom, "
+                "proportions du bâtiment identiques à chaque image"))
+
         # ── Verdict de la composition ─────────────────────────────────────────
         # Ce qui a été fait au prompt doit se lire ici, sinon un repli silencieux
         # passe pour un bug de l'application.
@@ -4836,6 +4846,12 @@ class TabT2V(QScrollArea):
         # ── Mode Mapping : recette des moods (nuit + noirs purs + façade verrouillée) ──
         # Le mapping se projette de nuit ; pour être projetable en vrai, les noirs
         # doivent être de VRAIS noirs (#000000). Consigne ajoutée APRÈS traduction.
+        #
+        # `_mapping_lock` isole la part TECHNIQUE de ce suffixe (appareil figé,
+        # bâtiment jamais redimensionné) de sa part de STYLE (l'heure du jour).
+        # Seule la part technique survit au mode final — cf. la clé "time_suffix"
+        # du payload plus bas, et le pourquoi de cette séparation.
+        _mapping_lock = ""
         if getattr(self, "_seq_mode", "live") == "mapping":
             _mapping_dna = (
                 "night-time projection mapping: deep night, pitch-black sky, NO daylight; "
@@ -4859,6 +4875,7 @@ class TabT2V(QScrollArea):
                 "outline, the sky and surroundings remain pure untouched black — ready "
                 "to be projection-mapped onto the real building"
             )
+            _mapping_lock = _mapping_dna
             time_suffix = (time_suffix + ", " + _mapping_dna) if time_suffix else _mapping_dna
 
         # Cohérence personnage — uniquement quand des personnages avec image sont présents
@@ -4904,6 +4921,8 @@ class TabT2V(QScrollArea):
                 "— facade elements may be lit or unlit but are NEVER moved, resized or "
                 "repositioned"
             )
+            _mapping_lock = ((_mapping_lock + _facade_strict) if _mapping_lock
+                             else _facade_strict.lstrip(", "))
             time_suffix = (time_suffix + _facade_strict) if time_suffix else _facade_strict.lstrip(", ")
 
         # ── MÉTHODE DEUX PLAQUES (demande Matthieu 2026-07-27) ────────────────
@@ -4956,7 +4975,15 @@ class TabT2V(QScrollArea):
             # seconde fois à l'envoi — doublons dans le payload.
             "style_suffix":            "" if _final_mode else video_suffix,
             "no_music_suffix":         "" if _final_mode else no_music_suffix,
-            "time_suffix":             "" if _final_mode else time_suffix,
+            # EXCEPTION — en mapping, ce suffixe n'est pas du style : il porte le
+            # VERROU GÉOMÉTRIQUE (appareil figé, façade jamais redimensionnée ni
+            # déplacée, proportions identiques à chaque image). Le neutraliser
+            # comme les autres l'a fait disparaître du payload dès que l'encart
+            # passait en mode final — c'est-à-dire toujours, la file attendant ce
+            # drapeau pour lancer. Le bâtiment dérivait alors sans que rien, dans
+            # le texte envoyé, ne le lui interdise. Seule la part technique repart
+            # ici : l'heure du jour, elle, est déjà écrite dans le texte relu.
+            "time_suffix":             (_mapping_lock if _final_mode else time_suffix),
             "char_consistency_suffix": "" if _final_mode else char_consistency_suffix,
             "creative_suffix":         ("" if _final_mode
                                         else self._creative.get_creative_suffix()),
