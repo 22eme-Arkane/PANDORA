@@ -560,6 +560,12 @@ class ShotDialog(QDialog):
         # de Fable 5. Le handler _on_enhance_seedance est conservé (inutilisé).
         self._btn_enhance_seedance = None
         lay.addLayout(seedance_header)
+        # Ce texte est un DOCUMENT DE TRAVAIL, pas ce qui part au moteur. Sans
+        # cette phrase, les étiquettes ACTION / SURFACE / ÉTAT 0 passent pour ce
+        # que le moteur va lire, et on cherche longtemps pourquoi le rendu ne
+        # correspond pas. Même note qu'au-dessus de l'encart du storyboard.
+        from ui.widgets import prompt_workflow_label
+        lay.addWidget(prompt_workflow_label(self))
         self._seedance_prompt = QTextEdit()
         self._seedance_prompt.setPlainText(self._shot.get("seedance_prompt", ""))
         self._seedance_prompt.setFixedHeight(68)

@@ -107,6 +107,9 @@ def _contrast_text(hexc: str) -> str:
 
 # ── Dialogue helpers ──────────────────────────────────────────────────────────
 
+from ui.widgets import PROMPT_WORKFLOW_NOTE as _PROMPT_NOTE
+
+
 def _text_dialog(parent: QWidget, title: str, initial: str = "",
                  placeholder: str = "", enhance: bool = False,
                  info: str = "") -> str | None:
@@ -1169,9 +1172,7 @@ class _ShotRow(QFrame):
             v = _text_dialog(
                 self, "Modifier le prompt", data.get("seedance_prompt", ""),
                 enhance=True,
-                info="Ce prompt est automatiquement traduit en anglais avant la "
-                     "génération de la vidéo. Vous pouvez l'éditer ici dans votre "
-                     "langue de travail.")
+                info=_PROMPT_NOTE)
             if v is not None:
                 _save_field("seedance_prompt", v)
         _clickable(pmt_w, _edit_prompt)

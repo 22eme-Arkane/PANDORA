@@ -5,6 +5,7 @@ Aucune référence image injectée — la fidélité aux personnages/décors n'e
 l'objectif ; c'est valider l'ambiance, l'éclairage et le prompt avant Seedance 2.0.
 """
 
+import json
 import os
 import uuid
 import requests
@@ -655,36 +656,109 @@ def compose_mood_inputs(shot: dict, film_style: str = "",
     return "\n".join(_lignes), "", "mood", ""
 
 
+def _compose_cache_path(shot_id: str) -> str:
+    """Le cache vit À CÔTÉ des moods du plan, pas en mémoire.
+
+    Une composition est un aller-retour IA FACTURÉ. Le garder sur l'instance du
+    dialogue le faisait mourir à la fermeture de la fenêtre : rouvrir le même
+    plan sans rien changer repayait (constat Matthieu, 2026-07-27).
+    """
+    import core.storyboard as sb
+    return os.path.join(sb.get_apercu_dir(shot_id), "prompt_cache.json")
+
+
+def compose_cache_key(fiche: str, moment: str, surface: str, style: str,
+                      engine: str, kind: str) -> str:
+    """Empreinte des entrées. Une seule change → recomposition.
+
+    C'est ce qui répond à « garder la composition tant que rien n'a bougé » : le
+    prompt du storyboard entre dans la fiche, donc l'éditer change la clé.
+    """
+    import hashlib
+    _payload = " ".join(" ".join((x or "").split())
+                             for x in (fiche, moment, surface, style, engine, kind))
+    return hashlib.sha1(_payload.encode("utf-8")).hexdigest()
+
+
+def _compose_cache_read(shot_id: str) -> dict:
+    try:
+        with open(_compose_cache_path(shot_id), encoding="utf-8") as f:
+            _d = json.load(f)
+        return _d if isinstance(_d, dict) else {}
+    except Exception:
+        return {}
+
+
+def _compose_cache_write(shot_id: str, key: str, prompt: str, why: str):
+    """Range la composition. Plafonné : un plan qu'on retravaille longtemps ne
+    doit pas laisser grossir son cache indéfiniment."""
+    try:
+        _d = _compose_cache_read(shot_id)
+        _d[key] = {"prompt": prompt, "why": why}
+        if len(_d) > 12:
+            for _old in list(_d)[:len(_d) - 12]:
+                _d.pop(_old, None)
+        _p = _compose_cache_path(shot_id)
+        os.makedirs(os.path.dirname(_p), exist_ok=True)
+        with open(_p, "w", encoding="utf-8") as f:
+            json.dump(_d, f, ensure_ascii=False, indent=1)
+    except Exception:
+        pass
+
+
 def compose_mood_prompt(shot: dict, film_style: str = "", engine: str = "",
                         building_ref: str = "", is_mapping=None) -> tuple:
-    """(prompt, composé, raison) — composition IA, repli déterministe garanti.
+    """(prompt, composé, raison, depuis_le_cache) — repli déterministe garanti.
 
     Le repli n'est pas une option de secours mais la moitié du contrat : sans clé,
     sans crédits ou sur un refus du contrôle, le Mood doit quand même partir —
     sur l'assemblage déterministe, exactement comme avant ce chantier.
     """
     _repli = build_mood_prompt(shot, film_style, engine)
+    _sid = (shot or {}).get("id", "")
+    try:
+        fiche, moment, kind, surface = compose_mood_inputs(
+            shot, film_style, building_ref, is_mapping)
+    except Exception as exc:
+        return _repli, False, str(exc)[:200], False
+    if not (fiche or "").strip():
+        return _repli, False, "fiche vide", False
+
+    _key = compose_cache_key(fiche, moment, surface, film_style, engine, kind)
+    if _sid:
+        _hit = _compose_cache_read(_sid).get(_key)
+        if isinstance(_hit, dict) and (_hit.get("prompt") or "").strip():
+            _why = _hit.get("why") or ""
+            return _hit["prompt"], (not _why), _why, True
+
     try:
         from core import ai_provider
         _ke = ai_provider.key_error(task="video_prompt")
         if _ke:
-            return _repli, False, _ke
+            # Pas de clé : rien à mémoriser, ça se corrige dans les Paramètres.
+            return _repli, False, _ke, False
     except Exception:
         pass
     try:
         import api.image_prompt as _ip
-        fiche, moment, kind, surface = compose_mood_inputs(
-            shot, film_style, building_ref, is_mapping)
-        if not (fiche or "").strip():
-            return _repli, False, "fiche vide"
         out = _ip.compose(fiche, engine=engine, kind=kind, moment=moment,
                           surface=surface, style_suffix=film_style)
         if out:
-            return out, True, ""
+            if _sid:
+                _compose_cache_write(_sid, _key, out, "")
+            return out, True, "", False
         # Global de module : le lire IMMÉDIATEMENT après le retour.
-        return _repli, False, (_ip.LAST_COMPOSE_ERROR or "composition refusée")
+        _why = _ip.LAST_COMPOSE_ERROR or "composition refusée"
+        # Un refus du CONTRÔLE est reproductible — inutile de le repayer. Un
+        # incident réseau, non : il doit être retenté au passage suivant.
+        try:
+            if _sid and _ip.is_deterministic_refusal(_why):
+                _compose_cache_write(_sid, _key, _repli, _why)
+        except Exception:
+            pass
+        return _repli, False, _why, False
     except Exception as exc:
-        return _repli, False, str(exc)[:200]
+        return _repli, False, str(exc)[:200], False
 
 
 def _res_enum_for(resolution: str) -> str:
@@ -1126,8 +1200,8 @@ class MoodBatchWorker(QThread):
                     # prompt, seul le tirage change. Composer par variation
                     # multiplierait la facture sans rien apporter.
                     _eng = (self._options.get("engine") or "").strip()
-                    prompt, _compose_ok, _compose_why = compose_mood_prompt(
-                        shot, self._film_style, _eng, self._building_ref)
+                    prompt, _compose_ok, _compose_why, _from_cache =                         compose_mood_prompt(shot, self._film_style, _eng,
+                                            self._building_ref)
                     if _compose_why:
                         # Le repli doit se LIRE : un lot qui retombe en silence
                         # sur le prompt déterministe donne des rendus différents

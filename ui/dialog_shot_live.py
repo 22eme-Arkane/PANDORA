@@ -578,6 +578,12 @@ class ShotDialog(QDialog):
         # « Améliorer le prompt » (☁) RETIRÉ — fonction jugée inutile/instable.
         self._btn_enhance_seedance.setVisible(False)
         lay.addLayout(seedance_header)
+        # Ce texte est un DOCUMENT DE TRAVAIL, pas ce qui part au moteur. Sans
+        # cette phrase, les étiquettes ACTION / SURFACE / ÉTAT 0 passent pour ce
+        # que le moteur va lire, et on cherche longtemps pourquoi le rendu ne
+        # correspond pas. Même note qu'au-dessus de l'encart du storyboard.
+        from ui.widgets import prompt_workflow_label
+        lay.addWidget(prompt_workflow_label(self))
         # UN seul prompt à sections (vidéo + [🎵 SOUND DESIGN]), comme en Cinéma : la
         # section son est extraite pour le Sound Design et retirée du prompt vidéo.
         self._seedance_prompt = QTextEdit()

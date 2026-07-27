@@ -57,41 +57,31 @@ class _MoodPromptWorker(QThread):
     laisserait la mention « composition… » affichée pour toujours.
     """
 
-    done = pyqtSignal(str, bool, str)   # (prompt, composé, raison_si_repli)
+    done = pyqtSignal(str, bool, str, bool)   # (prompt, composé, raison, du_cache)
 
-    def __init__(self, fiche: str, repli: str, engine: str, kind: str,
-                 moment: str, surface: str, style_suffix: str):
+    def __init__(self, shot: dict, style: str, engine: str,
+                 building_ref: str, is_mapping: bool):
         super().__init__()
-        self._fiche  = fiche or ""
-        self._repli  = repli or ""
+        self._shot   = shot or {}
+        self._style  = style or ""
         self._engine = engine or ""
-        self._kind   = kind or ""
-        self._moment = moment or ""
-        self._surface = surface or ""
-        self._style  = style_suffix or ""
+        self._bref   = building_ref or ""
+        self._mapping = bool(is_mapping)
 
     def run(self):
+        """Délègue à `api.apercu.compose_mood_prompt` — le MÊME chemin que le lot.
+
+        Y compris son cache sur disque : refermer puis rouvrir la fenêtre ne doit
+        pas repayer un aller-retour IA quand rien n'a changé dans le plan.
+        """
         try:
-            from core import ai_provider
-            _ke = ai_provider.key_error(task="video_prompt")
-            if _ke:
-                self.done.emit(self._repli, False, _ke)
-                return
-        except Exception:
-            pass
-        try:
-            import api.image_prompt as _ip
-            out = _ip.compose(self._fiche, engine=self._engine, kind=self._kind,
-                              moment=self._moment, surface=self._surface,
-                              style_suffix=self._style)
-            if out:
-                self.done.emit(out, True, "")
-                return
-            # Global de module : le lire IMMÉDIATEMENT après le retour.
-            self.done.emit(self._repli, False,
-                           _ip.LAST_COMPOSE_ERROR or "composition refusée")
+            from api.apercu import compose_mood_prompt
+            _p, _ok, _why, _cache = compose_mood_prompt(
+                self._shot, self._style, self._engine, self._bref,
+                is_mapping=self._mapping)
+            self.done.emit(_p, _ok, _why, _cache)
         except Exception as exc:
-            self.done.emit(self._repli, False, str(exc)[:200])
+            self.done.emit("", False, str(exc)[:200], False)
 
 
 class MoodDialog(QDialog):
@@ -566,21 +556,18 @@ class MoodDialog(QDialog):
             # L'utilisateur a repris la main : son texte prime, on ne l'écrase pas.
             if self._prompt_dirty:
                 return
-            fiche, moment, surface, style, kind = self._compose_inputs()
-            if not fiche.strip():
-                return
-            repli = self._prompt_edit.toPlainText().strip()
-            engine = self._current_engine()
-            key = f"{engine}|{kind}|{hash((fiche, moment, surface, style))}"
-
-            hit = self._compose_cache.get(key)
-            if hit is not None:
-                self._compose_from_cache = True
-                self._on_composed(*hit)
-                return
-
-            self._compose_key = key
-            self._compose_from_cache = False
+            try:
+                import core.style as _sm
+                _style = _sm.get_image_suffix() or ""
+            except Exception:
+                _style = ""
+            _bref = ""
+            if self._is_mapping():
+                try:
+                    from api.apercu import _resolve_building_ref
+                    _bref = _resolve_building_ref()
+                except Exception:
+                    _bref = ""
             # Parquer le worker précédent AVANT de réassigner : un QThread qui
             # surcharge run() n'a pas de boucle d'événements, et le laisser au
             # ramasse-miettes pendant qu'il tourne fait planter l'application.
@@ -594,36 +581,25 @@ class MoodDialog(QDialog):
 
             self._refresh_grammar_label(translate("composition du prompt…"))
             self._compose_worker = _MoodPromptWorker(
-                fiche, repli, engine, kind, moment, surface, style)
+                self._shot, _style, self._current_engine(), _bref,
+                self._is_mapping())
             self._compose_worker.done.connect(self._on_composed)
             self._compose_worker.start()
         except Exception:
             # Une exception non gérée dans un slot PyQt6 fait ABORT toute l'app.
             self._refresh_grammar_label()
 
-    def _on_composed(self, prompt: str, composed: bool, why: str):
+    def _on_composed(self, prompt: str, composed: bool, why: str,
+                     from_cache: bool = False):
         try:
             self._compose_why  = why or ""
             self._compose_done = bool(composed)
+            self._compose_from_cache = bool(from_cache)
             if self._prompt_dirty:
                 self._refresh_grammar_label()
                 return
             if (prompt or "").strip():
                 self._set_prompt_text(prompt.strip())
-            # Un refus du CONTRÔLE est reproductible : on le mémorise pour ne pas
-            # le repayer. Un incident réseau, non — il doit être retenté.
-            _key = getattr(self, "_compose_key", "")
-            if _key and not self._compose_from_cache:
-                _fige = composed
-                if why:
-                    try:
-                        from api.image_prompt import is_deterministic_refusal
-                        _fige = is_deterministic_refusal(why)
-                    except Exception:
-                        _fige = False
-                if _fige:
-                    self._compose_cache[_key] = (prompt, composed, why)
-                self._compose_key = ""
             self._refresh_grammar_label()
         except Exception:
             pass

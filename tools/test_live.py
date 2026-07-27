@@ -5453,12 +5453,80 @@ def lot_de_moods_compose_une_fois_par_plan():
         IP.compose = lambda p, **kw: ""
         A.run_mood = (lambda shot, prompt, out_dir, key, cb, bref, **kw:
                       _envois.append(prompt) or "")
-        _txt, _ok, _why = A.compose_mood_prompt(_shot, "", "nb2", __file__)
+        # 4-uplet depuis le cache sur disque (2026-07-27) : le dernier
+        # élément dit si la composition vient du cache plutôt que de l'IA.
+        _txt, _ok, _why, _cache = A.compose_mood_prompt(
+            _shot, "", "nb2", __file__)
         assert _txt.strip() and not _ok and _why, \
             "un refus de composition doit rendre le prompt déterministe ET sa raison"
         assert "SURFACE" in _txt, "le repli n'est pas l'assemblage déterministe"
     finally:
         IP.compose, A.run_mood = _vrai_compose, _vrai_mood
+        sb.set_namespace("storyboard")
+
+
+@test
+def composition_survit_a_la_fermeture_du_mood():
+    """Rouvrir un plan inchangé ne doit RIEN repayer.
+
+    Constat de Matthieu (2026-07-27) : « quand on ferme la fenêtre du Mood, qui a
+    déjà été composé, et qu'on la rouvre, la composition se refait ». Le cache
+    vivait sur l'instance du dialogue — il mourait donc avec la fenêtre, et
+    chaque réouverture était un aller-retour IA FACTURÉ.
+
+    Il vit désormais À CÔTÉ des moods du plan, sur disque. La clé porte la fiche,
+    l'instant, la surface, le style, le moteur et le type : modifier le plan ou
+    changer de moteur la change, et la composition repart — mais elle seule.
+    """
+    import core.storyboard as sb
+    import api.apercu as A
+    import api.image_prompt as IP
+    import core.ai_provider as AP
+
+    sb.set_namespace("live_seq_mapping")
+    sb.clear_version_shots(sb.DEFAULT_VERSION_ID)
+    _p = "\n".join((
+        "SURFACE : façade.",
+        "ÉTAT 0 : pierre givrée.",
+        "TRANSFORMATION : le gel s'épaissit.",
+        "ÉTAT 1 : givre opaque.",
+        "STYLE : gravure gelée.",
+    ))
+    _shot = sb.save_shot({"number": 1, "scene_title": "P1",
+                          "seedance_prompt": _p}, sb.DEFAULT_VERSION_ID)
+
+    _n = [0]
+    _vc, _vk = IP.compose, AP.key_error
+    try:
+        IP.compose = lambda p, **kw: (_n.__setitem__(0, _n[0] + 1),
+                                      "Composed English prompt.")[1]
+        AP.key_error = lambda **kw: None
+
+        _r1 = A.compose_mood_prompt(_shot, "", "nb2", __file__)
+        assert _n[0] == 1 and not _r1[3], "la première composition doit appeler l'IA"
+
+        # Fermer puis rouvrir la fenêtre = rappeler la même fonction.
+        _r2 = A.compose_mood_prompt(_shot, "", "nb2", __file__)
+        assert _n[0] == 1, (
+            f"{_n[0]} appels IA pour deux ouvertures du même plan inchangé — "
+            "chaque réouverture est facturée")
+        assert _r2[3], "le 4ᵉ élément doit annoncer que le prompt vient du cache"
+        assert _r1[0] == _r2[0], "le cache ne rend pas le même prompt"
+
+        # Modifier le plan DOIT relancer la composition.
+        _shot["seedance_prompt"] = _p.replace("pierre givrée", "pierre nue")
+        _r3 = A.compose_mood_prompt(_shot, "", "nb2", __file__)
+        assert _n[0] == 2 and not _r3[3],             "modifier le prompt du storyboard doit invalider le cache"
+
+        # Changer de moteur aussi — la grammaire n'est pas la même.
+        A.compose_mood_prompt(_shot, "", "seedream45", __file__)
+        assert _n[0] == 3, "changer de moteur doit invalider le cache"
+
+        # …et revenir à un état déjà composé le retrouve.
+        _r5 = A.compose_mood_prompt(_shot, "", "nb2", __file__)
+        assert _n[0] == 3 and _r5[3],             "le cache ne garde qu'une entrée : revenir sur un état déjà composé repaie"
+    finally:
+        IP.compose, AP.key_error = _vc, _vk
         sb.set_namespace("storyboard")
 
 

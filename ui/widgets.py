@@ -800,3 +800,30 @@ class RatioCombo(QComboBox):
     def ratio(self) -> str:
         """Ratio choisi (« 16:9 »…), ou "" si « Automatique »."""
         return (self.currentData() or "").strip()
+
+
+# Ce que l'utilisateur doit comprendre en ouvrant un encart de prompt : ce texte
+# est un DOCUMENT DE TRAVAIL, pas ce qui part au moteur. Sans cette phrase, les
+# étiquettes SURFACE / ÉTAT 0 / ACTION passent pour ce que le moteur va lire, et
+# on cherche longtemps pourquoi le rendu ne correspond pas (constat Matthieu,
+# 2026-07-27). Composant PARTAGÉ : la même explication au Cinéma et au Live.
+PROMPT_WORKFLOW_NOTE = (
+    "Ce prompt est votre document de travail : gardez ces blocs, ils structurent "
+    "le plan. À chaque envoi, PANDORA le réécrit pour le moteur choisi — en "
+    "anglais, en texte continu, sans les étiquettes — selon la grammaire propre "
+    "à la vidéo ou à l'image."
+)
+
+
+def prompt_workflow_label(parent=None) -> QLabel:
+    """Note d'explication à poser JUSTE AU-DESSUS d'un encart de prompt."""
+    from core.i18n import translate
+    lbl = QLabel(translate(PROMPT_WORKFLOW_NOTE), parent)
+    lbl.setWordWrap(True)
+    # La hauteur minimale d'un QLabel en wordWrap ne compte qu'UNE ligne : sans
+    # ce correctif, le layout réclame moins qu'il ne lui faut et Qt redimensionne
+    # la fenêtre à une taille que Windows refuse (cf. dialog_reference_images).
+    lbl.setStyleSheet(
+        f"color:{CP['text_dim']};font-size:11px;font-style:italic;"
+        f"background:transparent;border:none;")
+    return lbl

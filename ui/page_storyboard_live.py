@@ -109,9 +109,17 @@ _SEQ_PALETTE = [
 
 # ── Dialogue helpers ──────────────────────────────────────────────────────────
 
+from ui.widgets import PROMPT_WORKFLOW_NOTE as _PROMPT_NOTE
+
+
 def _text_dialog(parent: QWidget, title: str, initial: str = "",
-                 placeholder: str = "", enhance: bool = False) -> str | None:
-    """Styled multi-line text editor dialog. Returns new text or None if cancelled."""
+                 placeholder: str = "", enhance: bool = False,
+                 info: str = "") -> str | None:
+    """Styled multi-line text editor dialog. Returns new text or None if cancelled.
+
+    `info` (optionnel) : message affiché JUSTE au-dessus de l'encart de texte.
+    Même convention qu'au Cinéma — le radar de divergence compare ces deux
+    fonctions, et deux mécanismes différents pour le même besoin s'y verraient."""
     from ui.styles import PANDORA_STYLESHEET
     dlg = QDialog(parent)
     dlg.setWindowTitle(title)
@@ -130,6 +138,14 @@ def _text_dialog(parent: QWidget, title: str, initial: str = "",
     lay = QVBoxLayout(dlg)
     lay.setContentsMargins(20, 18, 20, 18)
     lay.setSpacing(12)
+
+    if info:
+        _info_lbl = QLabel(translate(info))
+        _info_lbl.setWordWrap(True)
+        _info_lbl.setStyleSheet(
+            f"color:{CP['text_dim']};font-size:11px;background:transparent;border:none;"
+        )
+        lay.addWidget(_info_lbl)
 
     te = QTextEdit()
     te.setPlainText(initial or "")
@@ -1174,7 +1190,8 @@ class _ShotRow(QFrame):
         # on l'édite d'un bloc ; « ➤ SFX » n'envoie QUE la section son (sound_of).
         def _edit_prompt():
             v = _text_dialog(self, translate("Prompt (vidéo + son)"),
-                             data.get("seedance_prompt", ""), enhance=True)
+                             data.get("seedance_prompt", ""), enhance=True,
+                             info=_PROMPT_NOTE)
             if v is not None:
                 _save_field("seedance_prompt", v)
 
