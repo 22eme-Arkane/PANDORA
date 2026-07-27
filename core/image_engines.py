@@ -199,17 +199,19 @@ def price_hint(key: str) -> str:
 
 # ── Construction des arguments d'appel (délègue à studio_images.build_request) ──
 
-_AR_TARGETS = {
-    "1:1":  (1024, 1024), "16:9": (1344, 768), "9:16": (768, 1344),
-    "4:3":  (1152, 896),  "3:4":  (896, 1152), "3:2":  (1216, 832),
-    "2:3":  (832, 1216),  "21:9": (1536, 640), "9:21": (640, 1536),
-    "4:5":  (896, 1152),  "5:4":  (1152, 896),
-}
+def ar_to_target(aspect_ratio: str, resolution: str = "") -> tuple:
+    """Ratio « 16:9 » → taille cible (w, h), au ratio EXACT.
 
+    Calculé par `core.image_resolution` depuis le 2026-07-27, là où une table
+    figée héritée des buckets SDXL donnait des ratios FAUX : « 16:9 » valait
+    (1344, 768), soit 1,750 au lieu de 1,7778. Toute image générée était donc
+    légèrement étirée — et un Mood étiré, servant d'image de départ à une
+    génération vidéo, déforme la façade du bâtiment qu'on projette.
 
-def ar_to_target(aspect_ratio: str) -> tuple:
-    """Ratio « 16:9 » → taille cible (w, h) ~1 Mpx exploitable par build_request."""
-    return _AR_TARGETS.get((aspect_ratio or "").strip(), (1024, 1024))
+    `resolution` vide = palier par défaut (1920 × 1080 en 16:9).
+    """
+    from core.image_resolution import DEFAULT_KEY, target_for
+    return target_for(aspect_ratio, resolution or DEFAULT_KEY)
 
 
 def _target_to_size_enum(target: tuple) -> str:
