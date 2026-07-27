@@ -656,6 +656,35 @@ def compose_mood_inputs(shot: dict, film_style: str = "",
     return "\n".join(_lignes), "", "mood", ""
 
 
+def _ref_roles(shot: dict, building_ref: str = "", is_mapping=None) -> list:
+    """Rôle de CHAQUE image jointe, dans l'ordre où `run_mood` les envoie.
+
+    Le compositeur écrivait jusqu'ici comme s'il n'y avait que du texte : deux
+    phrases pour Seedream, conformément à sa doc… face à deux images. Le modèle
+    n'avait presque rien à rendre et recopiait ce qu'il voyait — l'image
+    d'inspiration se retrouvait PLAQUÉE sur la façade au lieu de l'inspirer
+    (constat Matthieu, 2026-07-27).
+
+    ⚠ L'ordre doit suivre EXACTEMENT celui de `run_generation_nb2` et
+    `run_generation_engine` : « Figure 1 » désigne une position, pas un rôle. Une
+    liste décalée dirait au moteur que l'inspiration est le canevas.
+    """
+    if is_mapping is None:
+        is_mapping = bool(building_ref and os.path.isfile(building_ref))
+    _insp = [p for p in ((shot or {}).get("reference_images") or [])
+             if p and os.path.isfile(p)]
+    roles = []
+    if is_mapping and building_ref and os.path.isfile(building_ref):
+        roles.append("CANEVAS OBLIGATOIRE — la photo de la façade réelle. Sa "
+                     "géométrie, son cadrage, son échelle et son point de vue "
+                     "sont intouchables ; le contenu se projette DESSUS.")
+    for _ in _insp:
+        roles.append("INSPIRATION ARTISTIQUE seulement — palette, lumière, "
+                     "matière, motifs. Ne jamais la recopier, ne jamais en "
+                     "faire le sujet, ne jamais la coller sur la façade.")
+    return roles
+
+
 def _compose_cache_path(shot_id: str) -> str:
     """Le cache vit À CÔTÉ des moods du plan, pas en mémoire.
 
@@ -742,7 +771,8 @@ def compose_mood_prompt(shot: dict, film_style: str = "", engine: str = "",
     try:
         import api.image_prompt as _ip
         out = _ip.compose(fiche, engine=engine, kind=kind, moment=moment,
-                          surface=surface, style_suffix=film_style)
+                          surface=surface, style_suffix=film_style,
+                          refs=_ref_roles(shot, building_ref, is_mapping))
         if out:
             if _sid:
                 _compose_cache_write(_sid, _key, out, "")

@@ -5820,6 +5820,73 @@ def mood_affiche_le_prompt_compose():
 
 
 @test
+def compositeur_sait_quelles_images_sont_jointes():
+    """Le compositeur doit connaître les images jointes ET leur RÔLE.
+
+    Constat de Matthieu (2026-07-27) : « les images de référence ne sont plus
+    considérées comme des inspirations, elles sont plaquées sur la façade et
+    prennent le dessus sur le prompt ».
+
+    La plomberie était pourtant juste — façade en image 1, inspiration en
+    image 2, directives explicites dans le payload. Le défaut était dans le
+    compositeur : il écrivait comme s'il n'y avait que du texte, donc deux
+    phrases pour Seedream conformément à sa doc… face à deux images. Un prompt
+    de 90 caractères contre deux images, le modèle n'a presque rien à rendre et
+    recopie ce qu'il voit.
+    """
+    import os as _os
+    import api.apercu as A
+    import api.image_prompt as IP
+
+    _fac = os.path.join(_TMP, "roles_facade.png")
+    _ins = os.path.join(_TMP, "roles_inspi.png")
+    from PIL import Image
+    for _p in (_fac, _ins):
+        Image.new("RGB", (32, 18), (20, 20, 20)).save(_p)
+
+    _shot = {"id": "r1", "number": 1, "reference_images": [_ins],
+             "seedance_prompt": "SURFACE : façade.\nÉTAT 0 : pierre givrée."}
+    _roles = A._ref_roles(_shot, _fac, True)
+
+    # ① L'ORDRE est un contrat : « Figure 1 » désigne une POSITION, pas un rôle.
+    #    Une liste décalée dirait au moteur que l'inspiration est le canevas.
+    assert len(_roles) == 2, ("une façade + une inspiration = 2 rôles", _roles)
+    assert "CANEVAS" in _roles[0], "la façade doit être le PREMIER rôle déclaré"
+    assert "INSPIRATION" in _roles[1], "l'inspiration doit venir APRÈS la façade"
+
+    # ② La désignation des images est propre à chaque moteur — lue dans
+    #    core.image_grammar, jamais écrite en dur dans le compositeur.
+    for _eng, _token in (("seedream5_pro", "Figure 1"), ("flux2", "@image1"),
+                         ("nb_pro", "the first attached image")):
+        _r = IP._refs_rules(_eng, _roles)
+        assert _token in _r, (
+            f"« {_eng} » ne reçoit pas sa propre syntaxe de référence", _token)
+        assert "CANEVAS" in _r and "INSPIRATION" in _r, \
+            f"les rôles ne sont pas transmis pour « {_eng} »"
+
+    # ③ Sans image jointe, aucun bloc parasite.
+    assert IP._refs_rules("seedream5_pro", []) == "", \
+        "un prompt sans image ne doit pas parler d'images"
+
+    # ④ Et la consigne atteint réellement la consigne système du compositeur.
+    _sys = IP._system_for("seedream5_pro", "mood_mapping", _roles)
+    assert "IMAGES JOINTES" in _sys, \
+        "le rôle des images n'atteint pas la consigne système"
+    assert "PLUS DÉTAILLÉ" in _sys, (
+        "rien ne dit au rédacteur d'être plus détaillé quand des images sont "
+        "jointes — c'est la brièveté qui fait recopier l'inspiration")
+
+    # ⑤ Une prose longue ne doit plus être REFUSÉE : la règle des 2-4 phrases
+    #    vaut pour un texte seul.
+    _long = " ".join(f"Sentence number {i} describes the frozen stone facade."
+                     for i in range(1, 8))
+    _v = IP.validate_image_composed(_long, engine="seedream5_pro")
+    assert _v["valid"], ("une prose détaillée est refusée alors que c'est "
+                         "exactement ce qu'il faut avec des images jointes",
+                         _v["errors"])
+
+
+@test
 def compositeur_image_par_moteur():
     """Le prompt final IMAGE est écrit dans la grammaire du moteur, et en anglais.
 

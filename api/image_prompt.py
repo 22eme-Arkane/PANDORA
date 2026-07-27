@@ -139,6 +139,53 @@ CE QUI FAIT LA VALEUR DE CE PROMPT :
 Réponds UNIQUEMENT avec le prompt final, sans commentaire ni préambule."""
 
 
+def _refs_rules(engine: str, refs) -> str:
+    """Consigne sur les IMAGES JOINTES et leur RÔLE.
+
+    Sans elle, le compositeur écrit comme s'il n'y avait que du texte : deux
+    phrases pour Seedream, conformément à sa doc… face à deux images. Le modèle
+    n'a alors presque rien à rendre et recopie ce qu'il voit — l'image
+    d'inspiration se retrouve plaquée sur la façade au lieu de l'inspirer
+    (constat Matthieu, 2026-07-27).
+
+    La désignation des images est un FAIT CONSTRUCTEUR, différent chez chacun
+    (« Figure 1 » chez Seedream, « @image1 » chez FLUX.2, « the first attached
+    image » chez Nano Banana) : on la lit dans `core.image_grammar`, jamais en
+    dur ici.
+    """
+    _refs = [r for r in (refs or []) if (r or "").strip()]
+    if not _refs:
+        return ""
+    try:
+        from core.image_grammar import ref_syntax_label, ref_token
+    except Exception:
+        return ""
+    _lignes = []
+    for _i, _role in enumerate(_refs, start=1):
+        _tok = ""
+        try:
+            _tok = ref_token(engine, _i) or ""
+        except Exception:
+            _tok = ""
+        _lignes.append(f"  · {_tok or f'image {_i}'} — {_role}")
+    try:
+        _syntaxe = ref_syntax_label(engine)
+    except Exception:
+        _syntaxe = ""
+    return (
+        f"IMAGES JOINTES — {len(_refs)} image(s) accompagnent ce prompt, dans cet "
+        "ordre :\n" + "\n".join(_lignes) +
+        (f"\nCe moteur les désigne ainsi : {_syntaxe}. " if _syntaxe else "\n") +
+        "Écris le prompt EN TENANT COMPTE d'elles : dis explicitement ce que le "
+        "moteur doit faire de chacune. Une image de CANEVAS impose la géométrie "
+        "et ne doit jamais être remplacée ; une image d'INSPIRATION ne fournit "
+        "que palette, matière et ambiance, et ne doit jamais être recopiée ni "
+        "devenir le sujet.\n"
+        "Et sois PLUS DÉTAILLÉ que pour un prompt sans image : un texte trop "
+        "court laisse le moteur se rabattre sur ce qu'il voit, et il recopie."
+    )
+
+
 def _format_rules(engine: str) -> str:
     """Consigne de FORME, dérivée de la grammaire réelle du moteur.
 
@@ -201,9 +248,11 @@ def _format_rules(engine: str) -> str:
     return base
 
 
-def _system_for(engine: str = "", kind: str = "") -> str:
-    """Socle + contexte d'usage + grammaire du moteur."""
-    return f"{_SYSTEM_IMAGE}\n\n[USAGE]\n{_kind_brief(kind)}\n\n{_format_rules(engine)}"
+def _system_for(engine: str = "", kind: str = "", refs=None) -> str:
+    """Socle + contexte d'usage + grammaire du moteur + rôle des images jointes."""
+    _bloc = f"{_SYSTEM_IMAGE}\n\n[USAGE]\n{_kind_brief(kind)}\n\n{_format_rules(engine)}"
+    _r = _refs_rules(engine, refs)
+    return f"{_bloc}\n\n{_r}" if _r else _bloc
 
 
 def _sans_interdits(text: str) -> str:
@@ -340,8 +389,12 @@ def validate_image_composed(output: str, *, engine: str = "",
         if re.search(r"(?im)^\s*(subject|action|setting|style|constraints)\s*:", text):
             errors.append("champs nommés alors que ce moteur veut de la prose")
         _phrases = [p for p in re.split(r"(?<=[.!?])\s+", text) if p.strip()]
-        if len(_phrases) > 6:
-            warnings.append(f"{len(_phrases)} phrases — ce moteur en préfère 2 à 4")
+        # AVERTISSEMENT, jamais un refus : la règle des 2 à 4 phrases vaut pour
+        # un texte SEUL. Avec des images jointes, un prompt trop court laisse le
+        # moteur se rabattre sur ce qu'il voit — et il recopie l'inspiration au
+        # lieu de s'en inspirer.
+        if len(_phrases) > 8:
+            warnings.append(f"{len(_phrases)} phrases — vérifier que le moteur suit")
 
     # ⑤ Interdits en clair sur un moteur qui n'en a pas : ils deviennent des
     #    SUJETS. « no text » sur Seedream, c'est du texte à l'image.
@@ -361,7 +414,8 @@ def validate_image_composed(output: str, *, engine: str = "",
 
 
 def compose(prompt: str, *, engine: str = "", kind: str = "", surface: str = "",
-            moment: str = "", style_suffix: str = "", extras=None) -> str:
+            moment: str = "", style_suffix: str = "", extras=None,
+            refs=None) -> str:
     """Prompt final anglais pour ce moteur d'image. "" si échec ou refus.
 
     Appel RÉSEAU : à exécuter dans un QThread, jamais sur le thread UI.
@@ -370,7 +424,7 @@ def compose(prompt: str, *, engine: str = "", kind: str = "", surface: str = "",
     LAST_COMPOSE_ERROR = ""
     try:
         from core import ai_provider
-        system = _system_for(engine, kind)
+        system = _system_for(engine, kind, refs)
         user   = _build_user_message(prompt, kind=kind, surface=surface,
                                      moment=moment, style_suffix=style_suffix,
                                      extras=extras, engine=engine)
