@@ -1026,7 +1026,11 @@ def moods_en_serie_prompt_retravaille():
     import api.apercu as A
     sb.set_namespace("storyboard")
     _run = inspect.getsource(A.MoodBatchWorker.run)
-    assert 'self._options.get("engine")' in _run and "build_mood_prompt" in _run, \
+    # Le constructeur de prompt de la série est passé par `compose_mood_prompt`
+    # le 2026-07-27 (composition IA + repli déterministe). L'exigence est la
+    # même — le MOTEUR doit atteindre la construction du prompt — seul le nom
+    # de la fonction a changé.
+    assert 'self._options.get("engine")' in _run and "compose_mood_prompt" in _run, \
         "la série ne transmet pas le moteur au constructeur de prompt"
     import ui.page_storyboard as _PS
     _dlg = inspect.getsource(_PS.PageStoryboard._on_batch_mood)
@@ -5932,6 +5936,24 @@ def compositeur_image_par_moteur():
         "ce que la réparation produit est refusé par le contrôle — « without » "
         "est une préposition dans les réécritures positives du dépôt, pas un "
         "interdit", _v["errors"])
+
+    # ── 4ter. La fiche CINÉMA porte ses paramètres de plan ──────────────────
+    # Le Mood Cinéma n'est pas un mood de mapping : sa valeur tient à la valeur
+    # de plan, l'axe, la focale, la profondeur de champ et l'heure. Les perdre en
+    # route rendrait la composition plus pauvre que l'assemblage déterministe.
+    import core.storyboard as _sb
+    from api.apercu import compose_mood_inputs
+    _sb.set_namespace("storyboard")
+    _shot_cine = {"id": "c1", "number": 2, "scene_title": "Duel",
+                  "shot_size": "Gros plan", "camera_axis": "Face",
+                  "focal": "85mm", "shot_time": "Nuit", "decor_name": "Halle"}
+    _f, _m, _k, _s = compose_mood_inputs(_shot_cine, "", "")
+    assert _k == "mood", ("hors mapping, le contexte d'usage doit être « mood »", _k)
+    assert not _s, "aucune surface de projection ne doit être demandée hors mapping"
+    for _attendu in ("CAMÉRA", "85mm", "DÉCOR", "Halle", "LUMIÈRE"):
+        assert _attendu in _f, (
+            f"« {_attendu} » absent de la fiche Cinéma : la composition serait "
+            "plus pauvre que l'assemblage déterministe", _f)
 
     # ── 5. Le tri des deux natures d'échec, comme côté Live ─────────────────
     assert IP.is_deterministic_refusal(IP.REFUSAL_PREFIX + "prompt encore en français")

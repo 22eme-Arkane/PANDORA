@@ -596,6 +596,97 @@ def _upload_ref_robust(fal_client, path: str) -> str:
         sys.stdout, sys.stderr = _old_out, _old_err
 
 
+def compose_mood_inputs(shot: dict, film_style: str = "",
+                        building_ref: str = "", is_mapping=None) -> tuple:
+    """(fiche, moment, kind, surface) — ce que le COMPOSITEUR doit voir.
+
+    Point d'entrée PARTAGÉ par la fenêtre Mood et par le lot « Action → Générer
+    les Moods » : deux constructions parallèles divergeraient, et l'utilisateur
+    obtiendrait deux prompts différents pour le même plan selon le bouton
+    cliqué — exactement ce qui est arrivé côté vidéo.
+
+    Deux natures de fiche :
+
+      · MAPPING — la barre ENTIÈRE, transformation et état d'arrivée compris. Le
+        compositeur ne peut résoudre la contradiction « le STYLE décrit l'arrivée
+        alors que l'instant demandé est le départ » que s'il VOIT les deux.
+        L'instant à rendre lui est dit à part.
+
+      · CINÉMA — l'intention structurée du plan (`mood_intent`), qui porte la
+        valeur de plan, l'axe, la focale, la profondeur de champ et l'heure. La
+        rendre en lignes nommées plutôt qu'en prose lui donne des champs à
+        traiter, pas un bloc à deviner.
+    """
+    # `is_mapping` explicite quand l'appelant le sait mieux que nous : la fenêtre
+    # Mood se fie au NAMESPACE de séquence, alors qu'ici on ne verrait que le
+    # fichier de façade. Une séquence de mapping dont la photo n'est pas encore
+    # configurée reste une séquence de mapping — sa barre a des états.
+    if is_mapping is None:
+        is_mapping = bool(building_ref and os.path.isfile(building_ref))
+
+    if is_mapping:
+        from core.prompt_sections import video_of as _video_of
+        fiche = _video_of((shot.get("seedance_prompt") or "").strip())
+        moment = ""
+        try:
+            from core.live_bar import parse_blocks
+            _b = parse_blocks(fiche) or {}
+            if _b.get("state_0"):
+                moment = ("The state to render is the OPENING state of the shot, "
+                          "before any transformation: " + _b["state_0"])
+        except Exception:
+            pass
+        surface = ""
+        try:
+            from core.live_building import describe_facade
+            surface = describe_facade() or ""
+        except Exception:
+            surface = ""
+        return fiche, moment, "mood_mapping", surface
+
+    _intent = mood_intent(shot, film_style)
+    _lignes = []
+    for _cle, _lbl in (("subject", "SUJET"), ("action", "ACTION"),
+                       ("setting", "DÉCOR"), ("camera", "CAMÉRA"),
+                       ("lighting", "LUMIÈRE"), ("style", "STYLE")):
+        _v = (_intent.get(_cle) or "").strip()
+        if _v:
+            _lignes.append(f"{_lbl} : {_v}")
+    return "\n".join(_lignes), "", "mood", ""
+
+
+def compose_mood_prompt(shot: dict, film_style: str = "", engine: str = "",
+                        building_ref: str = "", is_mapping=None) -> tuple:
+    """(prompt, composé, raison) — composition IA, repli déterministe garanti.
+
+    Le repli n'est pas une option de secours mais la moitié du contrat : sans clé,
+    sans crédits ou sur un refus du contrôle, le Mood doit quand même partir —
+    sur l'assemblage déterministe, exactement comme avant ce chantier.
+    """
+    _repli = build_mood_prompt(shot, film_style, engine)
+    try:
+        from core import ai_provider
+        _ke = ai_provider.key_error(task="video_prompt")
+        if _ke:
+            return _repli, False, _ke
+    except Exception:
+        pass
+    try:
+        import api.image_prompt as _ip
+        fiche, moment, kind, surface = compose_mood_inputs(
+            shot, film_style, building_ref, is_mapping)
+        if not (fiche or "").strip():
+            return _repli, False, "fiche vide"
+        out = _ip.compose(fiche, engine=engine, kind=kind, moment=moment,
+                          surface=surface, style_suffix=film_style)
+        if out:
+            return out, True, ""
+        # Global de module : le lire IMMÉDIATEMENT après le retour.
+        return _repli, False, (_ip.LAST_COMPOSE_ERROR or "composition refusée")
+    except Exception as exc:
+        return _repli, False, str(exc)[:200]
+
+
 def _res_enum_for(resolution: str) -> str:
     """Palier PANDORA → enum `resolution` fal.ai. « 1K » si le module manque.
 
@@ -1030,9 +1121,19 @@ class MoodBatchWorker(QThread):
                 self.shot_progress.emit(i + 1, total, f"Plan {num} — {title[:40]}")
 
                 try:
-                    prompt  = build_mood_prompt(
-                        shot, self._film_style,
-                        (self._options.get("engine") or "").strip())
+                    # Composition IA du prompt final — UNE fois par plan, avant
+                    # la boucle des variations : les variations partagent le même
+                    # prompt, seul le tirage change. Composer par variation
+                    # multiplierait la facture sans rien apporter.
+                    _eng = (self._options.get("engine") or "").strip()
+                    prompt, _compose_ok, _compose_why = compose_mood_prompt(
+                        shot, self._film_style, _eng, self._building_ref)
+                    if _compose_why:
+                        # Le repli doit se LIRE : un lot qui retombe en silence
+                        # sur le prompt déterministe donne des rendus différents
+                        # de ceux de la fenêtre Mood, sans que rien ne l'explique.
+                        self.shot_progress.emit(
+                            i + 1, total, f"⚠ {_compose_why[:70]}")
                     out_dir = sb_api.get_apercu_dir(shot["id"])
 
                     def _prog(msg, _i=i, _t=total):

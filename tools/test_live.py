@@ -5396,6 +5396,73 @@ def refus_de_composition_nest_pas_repaye():
 
 
 @test
+def lot_de_moods_compose_une_fois_par_plan():
+    """« Action → Générer les Moods » compose aussi, et une seule fois par plan.
+
+    Vérification demandée par Matthieu le 2026-07-27 : le compositeur avait été
+    branché dans la fenêtre Mood, mais le LOT continuait d'envoyer le prompt
+    déterministe français — mesuré à ZÉRO appel de composition. Le même plan
+    donnait donc deux rendus différents selon le bouton cliqué.
+
+    UNE composition par plan, pas par variation : les variations partagent le
+    même prompt, seul le tirage change. Composer par variation multiplierait la
+    facture sans rien apporter.
+    """
+    import core.storyboard as sb
+    import api.apercu as A
+    import api.image_prompt as IP
+
+    sb.set_namespace("live_seq_mapping")
+    sb.clear_version_shots(sb.DEFAULT_VERSION_ID)
+    _p = ("SURFACE : façade en pierre.\n"
+          "ÉTAT 0 : pierre givrée, portail sombre.\n"
+          "TRANSFORMATION : le givre se fend.\n"
+          "ÉTAT 1 : cristal bleu.\n"
+          "STYLE : gravure gelée.\n")
+    _shot = sb.save_shot({"number": 1, "scene_title": "P1",
+                          "seedance_prompt": _p}, sb.DEFAULT_VERSION_ID)
+
+    _compos, _envois = [], []
+    _vrai_compose, _vrai_mood = IP.compose, A.run_mood
+    try:
+        IP.compose = lambda p, **kw: (_compos.append(kw) or
+                                      "English composed prompt for the engine.")
+        A.run_mood = (lambda shot, prompt, out_dir, key, cb, bref, **kw:
+                      _envois.append(prompt) or "")
+        _w = A.MoodBatchWorker([_shot], {"variations": 3})
+        _w._building_ref = __file__      # un fichier qui existe → mode mapping
+        _w.run()
+    finally:
+        IP.compose, A.run_mood = _vrai_compose, _vrai_mood
+
+    assert len(_compos) == 1, (
+        f"{len(_compos)} composition(s) pour 3 variations d'un même plan — "
+        "elles partagent le même prompt, une seule suffit")
+    assert len(_envois) == 3, ("les 3 variations n'ont pas été générées",
+                               len(_envois))
+    assert _compos[0].get("kind") == "mood_mapping", \
+        ("le lot ne compose pas dans le contexte mapping", _compos[0].get("kind"))
+    assert "OPENING state" in (_compos[0].get("moment") or ""), \
+        "l'instant à rendre n'est pas transmis par le lot"
+    for _p_envoye in _envois:
+        assert _p_envoye == "English composed prompt for the engine.", (
+            "le lot envoie le prompt déterministe au lieu du composé", _p_envoye[:60])
+
+    # Le repli reste garanti : sans composition, le plan part quand même.
+    try:
+        IP.compose = lambda p, **kw: ""
+        A.run_mood = (lambda shot, prompt, out_dir, key, cb, bref, **kw:
+                      _envois.append(prompt) or "")
+        _txt, _ok, _why = A.compose_mood_prompt(_shot, "", "nb2", __file__)
+        assert _txt.strip() and not _ok and _why, \
+            "un refus de composition doit rendre le prompt déterministe ET sa raison"
+        assert "SURFACE" in _txt, "le repli n'est pas l'assemblage déterministe"
+    finally:
+        IP.compose, A.run_mood = _vrai_compose, _vrai_mood
+        sb.set_namespace("storyboard")
+
+
+@test
 def mood_ne_decrit_que_letat_douverture():
     """Le Mood ne doit PAS recevoir la transformation ni l'état final.
 

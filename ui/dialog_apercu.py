@@ -530,40 +530,28 @@ class MoodDialog(QDialog):
     # ── Composition IA du prompt final image ─────────────────────────────────
 
     def _compose_inputs(self) -> tuple:
-        """(fiche, moment, surface, style) — les entrées de la composition.
+        """(fiche, moment, surface, style, kind) — délégué à `api.apercu`.
 
-        La fiche donnée au compositeur est la barre ENTIÈRE, pas l'état filtré :
-        il ne peut résoudre la contradiction « le STYLE décrit l'arrivée alors
-        que l'instant demandé est le départ » que s'il VOIT les deux. Le moment à
-        rendre lui est dit à part.
+        Le MÊME point d'entrée que le lot « Action → Générer les Moods ». Deux
+        constructions parallèles divergeraient, et le même plan donnerait deux
+        prompts différents selon le bouton cliqué.
         """
-        from core.prompt_sections import video_of as _video_of
-        fiche = _video_of((self._shot.get("seedance_prompt") or "").strip())
-        moment = ""
-        try:
-            from core.live_bar import parse_blocks
-            _b = parse_blocks(fiche) or {}
-            if _b.get("state_0"):
-                moment = ("The state to render is the OPENING state of the shot, "
-                          "before any transformation: " + _b["state_0"])
-        except Exception:
-            pass
-        surface = ""
-        if self._is_mapping():
-            try:
-                from core.live_building import describe_facade
-                surface = describe_facade() or ""
-            except Exception:
-                surface = ""
+        from api.apercu import compose_mood_inputs
         try:
             import core.style as _sm
             style = _sm.get_image_suffix() or ""
         except Exception:
             style = ""
-        return fiche, moment, surface, style
-
-    def _compose_kind(self) -> str:
-        return "mood_mapping" if self._is_mapping() else "mood"
+        _bref = ""
+        if self._is_mapping():
+            try:
+                from api.apercu import _resolve_building_ref
+                _bref = _resolve_building_ref()
+            except Exception:
+                _bref = ""
+        fiche, moment, kind, surface = compose_mood_inputs(
+            self._shot, style, _bref, is_mapping=self._is_mapping())
+        return fiche, moment, surface, style, kind
 
     def _schedule_compose(self):
         """Programme la composition. Débounce : changer de moteur en cascade ne
@@ -578,12 +566,12 @@ class MoodDialog(QDialog):
             # L'utilisateur a repris la main : son texte prime, on ne l'écrase pas.
             if self._prompt_dirty:
                 return
-            fiche, moment, surface, style = self._compose_inputs()
+            fiche, moment, surface, style, kind = self._compose_inputs()
             if not fiche.strip():
                 return
             repli = self._prompt_edit.toPlainText().strip()
             engine = self._current_engine()
-            key = f"{engine}|{self._compose_kind()}|{hash((fiche, moment, surface, style))}"
+            key = f"{engine}|{kind}|{hash((fiche, moment, surface, style))}"
 
             hit = self._compose_cache.get(key)
             if hit is not None:
@@ -606,7 +594,7 @@ class MoodDialog(QDialog):
 
             self._refresh_grammar_label(translate("composition du prompt…"))
             self._compose_worker = _MoodPromptWorker(
-                fiche, repli, engine, self._compose_kind(), moment, surface, style)
+                fiche, repli, engine, kind, moment, surface, style)
             self._compose_worker.done.connect(self._on_composed)
             self._compose_worker.start()
         except Exception:
