@@ -568,12 +568,31 @@ def _upload_ref_robust(fal_client, path: str) -> str:
         sys.stdout, sys.stderr = _old_out, _old_err
 
 
+def _res_enum_for(resolution: str) -> str:
+    """Palier PANDORA → enum `resolution` fal.ai. « 1K » si le module manque.
+
+    Isolé pour que les deux chemins de génération (Nano Banana natif et
+    catalogue générique) traduisent le palier de la MÊME façon : deux
+    conversions parallèles divergeraient au premier palier ajouté.
+    """
+    try:
+        from core.image_resolution import nano_enum
+        return nano_enum(resolution)
+    except Exception:
+        return "1K"
+
+
 def run_generation_nb2(prompt: str, output_dir: str, api_key: str, progress_cb,
                        ref_images: list | None = None, floor_plan: str = "",
                        inspiration_refs: list | None = None, facade_ref: str = "",
-                       engine_key: str = "nb2") -> str:
+                       engine_key: str = "nb2", resolution: str = "") -> str:
     """Mood via la famille Nano Banana : édition avec réfs si disponibles, sinon
     génération texte. Aspect 16:9, comme le mood Flux.
+
+    `resolution` : palier PANDORA (« 720p » … « 4k »), vide = défaut 1080p. Les
+    Nano Banana couplent aspect_ratio + resolution : ce chemin donne des ratios
+    EXACTS, contrairement aux moteurs à dimensions explicites — d'où la simple
+    traduction d'enum plutôt qu'un calcul de taille.
 
     `engine_key` : « nb2 » (défaut) ou « nb_pro » — mêmes consignes/args, seul
     l'endpoint change (Nano Banana 2 ↔ Nano Banana Pro). Nano Banana 2 Lite a un
@@ -599,6 +618,7 @@ def run_generation_nb2(prompt: str, output_dir: str, api_key: str, progress_cb,
         _ep_text, _ep_edit = _ne(engine_key)
     except Exception:
         _ep_text, _ep_edit = "fal-ai/nano-banana-2", "fal-ai/nano-banana-2/edit"
+    _res_enum = _res_enum_for(resolution)
 
     if _facade:
         # ── MODE MAPPING : la FAÇADE est le canvas prioritaire (1ʳᵉ image) ; MÊMES
@@ -610,7 +630,7 @@ def run_generation_nb2(prompt: str, output_dir: str, api_key: str, progress_cb,
         directive = (_FACADE_PRIORITY_DIRECTIVE if inspiration else "") + _MAPPING_NIGHT_LOCK
         result = fal_client.subscribe(_ep_edit, arguments={
             "prompt": prompt + directive, "image_urls": urls,
-            "num_images": 1, "aspect_ratio": "16:9", "resolution": "1K",
+            "num_images": 1, "aspect_ratio": "16:9", "resolution": _res_enum,
             "output_format": "png", "safety_tolerance": "6",
         })
     else:
@@ -645,14 +665,14 @@ def run_generation_nb2(prompt: str, output_dir: str, api_key: str, progress_cb,
             directive = "\n\n".join(_parts)
             result = fal_client.subscribe(_ep_edit, arguments={
                 "prompt": prompt + (("\n\n" + directive) if directive else ""), "image_urls": urls,
-                "num_images": 1, "aspect_ratio": "16:9", "resolution": "1K",
+                "num_images": 1, "aspect_ratio": "16:9", "resolution": _res_enum,
                 "output_format": "png", "safety_tolerance": "6",
             })
         else:
             progress_cb("Nano Banana 2…")
             result = fal_client.subscribe(_ep_text, arguments={
                 "prompt": prompt, "num_images": 1,
-                "aspect_ratio": "16:9", "resolution": "1K", "output_format": "png",
+                "aspect_ratio": "16:9", "resolution": _res_enum, "output_format": "png",
             })
     imgs = (result or {}).get("images") or []
     image_url = (imgs[0].get("url") if imgs and isinstance(imgs[0], dict)
@@ -678,7 +698,8 @@ def run_generation_engine(engine_key: str, prompt: str, output_dir: str,
                           api_key: str, progress_cb,
                           ref_images: list | None = None, facade_ref: str = "",
                           inspiration_refs: list | None = None,
-                          floor_plan: str = "", is_mapping: bool = False) -> str:
+                          floor_plan: str = "", is_mapping: bool = False,
+                          resolution: str = "") -> str:
     from core import image_engines as _ie
     os.makedirs(output_dir, exist_ok=True)
     label = _ie.short_label(engine_key)
@@ -736,7 +757,8 @@ def run_generation_engine(engine_key: str, prompt: str, output_dir: str,
     progress_cb(f"Génération du Mood via {label}"
                 + (f" ({len(ref_urls)} réf.)" if ref_urls else "") + "…")
     endpoint, args, _kind = _ie.build_request(
-        engine_key, full_prompt, _ie.ar_to_target("16:9"), "1K", ref_urls)
+        engine_key, full_prompt, _ie.ar_to_target("16:9", resolution),
+        _res_enum_for(resolution), ref_urls)
     result = fal_client.subscribe(endpoint, arguments=args)
 
     imgs = (result or {}).get("images") or []
@@ -762,8 +784,15 @@ def run_mood(shot: dict, prompt: str, output_dir: str, api_key: str, progress_cb
       - « flux » (héritage) → Flux Kontext (mapping) / t2i ;
       - tout autre moteur → chemin générique (build_request + réfs si le moteur les
         gère : Recraft/Z-Image/Qwen/Ideogram/FLUX Ultra/Seedream 5…).
-    `options` aussi : chars / decor / floor_plan (réfs envoyées aux moteurs à réfs)."""
+    `options` aussi : chars / decor / floor_plan (réfs envoyées aux moteurs à réfs),
+    et `resolution` (palier « 720p » … « 4k », vide = 1080p par défaut).
+
+    Le palier voyage dans `options` plutôt qu'en paramètre nommé : c'est déjà le
+    sac à dos des réglages de génération, et l'ajouter là évite de toucher les
+    signatures des workers et de leurs appelants, Cinéma comme Live.
+    """
     opts = options or {}
+    _res = (opts.get("resolution") or "").strip()
     engine = (opts.get("engine") or "").strip().lower()
     if not engine:
         engine = "nb2" if _is_cinema_mood() else "flux"
@@ -798,10 +827,11 @@ def run_mood(shot: dict, prompt: str, output_dir: str, api_key: str, progress_cb
         if _is_mapping:
             return run_generation_nb2(prompt, output_dir, api_key, progress_cb,
                                       inspiration_refs=_inspo, facade_ref=building_ref,
-                                      engine_key=engine)
+                                      engine_key=engine, resolution=_res)
         return run_generation_nb2(prompt, output_dir, api_key, progress_cb,
                                   _consistency(), floor_plan=_floor(),
-                                  inspiration_refs=_inspo, engine_key=engine)
+                                  inspiration_refs=_inspo, engine_key=engine,
+                                  resolution=_res)
 
     # ── Flux héritage (Kontext mapping / t2i depuis le prompt) ──────────────────
     if engine == "flux":
@@ -813,7 +843,8 @@ def run_mood(shot: dict, prompt: str, output_dir: str, api_key: str, progress_cb
     return run_generation_engine(
         engine, prompt, output_dir, api_key, progress_cb,
         ref_images=_consistency(), facade_ref=building_ref,
-        inspiration_refs=_inspo, floor_plan=_floor(), is_mapping=_is_mapping)
+        inspiration_refs=_inspo, floor_plan=_floor(), is_mapping=_is_mapping,
+        resolution=_res)
 
 
 # ── Worker unitaire ───────────────────────────────────────────────────────────

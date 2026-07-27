@@ -2054,8 +2054,15 @@ class _MoodBatchDialog(QDialog):
             f"selection-background-color:{CP['accent_dim']};}}")
         lay.addWidget(self._opt_engine)
 
+        # Définition — juste sous le moteur. En mapping c'est le réglage qui
+        # décide si le Mood se superposera à la façade sans recalage.
+        from ui.widgets import ResolutionCombo
+        self._opt_res = ResolutionCombo()
+        lay.addWidget(self._opt_res)
+
         def _accept_batch():
             self.engine = self._opt_engine.currentData() or "nb2"
+            self.resolution = self._opt_res.resolution_key()
             self.accept()
 
         self._btn_gen = QPushButton(translate("✦  Générer les Moods"))
@@ -3553,7 +3560,8 @@ class PageStoryboard(QWidget):
 
         from api.apercu import MoodBatchWorker
         self._batch_mood_worker = MoodBatchWorker(
-            selected, options={"engine": getattr(dlg, "engine", "flux")})
+            selected, options={"engine": getattr(dlg, "engine", "flux"),
+                               "resolution": getattr(dlg, "resolution", "")})
         self._batch_mood_worker.shot_progress.connect(self._on_batch_mood_progress)
         self._batch_mood_worker.shot_done.connect(self._on_batch_mood_done)
         self._batch_mood_worker.shot_failed.connect(self._on_batch_mood_failed)

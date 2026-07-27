@@ -684,3 +684,63 @@ def make_actions_menu_button(bar, entries, red_entry=None, label="Action"):
     menu.aboutToShow.connect(_sync)
     btn.setMenu(menu)
     return btn
+
+
+class ResolutionCombo(QComboBox):
+    """Définition des images générées — le MÊME sélecteur partout.
+
+    Un seul composant pour le Cinéma, le Live et le Studio IA : c'est ce qui
+    garantit que les quatre paliers, leurs libellés et leur défaut ne divergent
+    pas d'une page à l'autre au premier ajout.
+
+    Pourquoi il existe (2026-07-27, demande Matthieu) : les tailles cibles
+    étaient figées dans une table héritée des buckets SDXL, dont les ratios sont
+    FAUX (« 16:9 » y valait 1,750 au lieu de 1,7778). Toute image sortait
+    légèrement étirée, et un Mood étiré servant d'image de départ à une
+    génération vidéo déforme la façade qu'on projette sur un bâtiment réel.
+    Le calcul juste vit dans `core.image_resolution` ; ce widget n'en est que
+    la façade.
+
+    Ne persiste RIEN : il lit un défaut éventuel dans la config, il ne l'écrit
+    jamais. Les pages Paramètres sont en auto-save, et un combo qui écrit la
+    vraie `config.json` au premier changement d'index est précisément le piège
+    qui a déjà corrompu les clés API du projet.
+    """
+
+    def __init__(self, parent=None, *, compact: bool = False):
+        super().__init__(parent)
+        from core.image_resolution import DEFAULT_KEY, RESOLUTIONS
+        for _key, _label in RESOLUTIONS:
+            self.addItem(_label, _key)
+        _default = DEFAULT_KEY
+        try:
+            from core.config import load_config
+            _default = (load_config().get("image_resolution") or DEFAULT_KEY)
+        except Exception:
+            pass
+        _i = self.findData(_default)
+        self.setCurrentIndex(_i if _i >= 0 else self.findData(DEFAULT_KEY))
+        self.setFixedHeight(26 if compact else 30)
+        self.setToolTip(
+            "Définition des images générées.\n"
+            "Le ratio est toujours EXACT : c'est lui qui garantit que l'image "
+            "se superpose sans déformation.")
+        _fs = 10 if compact else 11
+        self.setStyleSheet(
+            f"QComboBox{{background:{CP['bg3']};border:1px solid {CP['border']};"
+            f"border-radius:6px;color:{CP['text_primary']};font-size:{_fs}px;padding:0 8px;}}"
+            f"QComboBox::drop-down{{border:none;width:20px;}}"
+            f"QComboBox QAbstractItemView{{background:{CP['bg3']};"
+            f"border:1px solid {CP['border_bright']};color:{CP['text_primary']};"
+            f"selection-background-color:{CP['accent_dim']};}}"
+        )
+
+    def resolution_key(self) -> str:
+        """Palier choisi (« 720p » … « 4k »). Jamais vide."""
+        from core.image_resolution import DEFAULT_KEY, normalize_key
+        return normalize_key(self.currentData() or DEFAULT_KEY)
+
+    def target(self, aspect_ratio: str = "16:9") -> tuple:
+        """(largeur, hauteur) au ratio EXACT pour ce palier."""
+        from core.image_resolution import target_for
+        return target_for(aspect_ratio, self.resolution_key())

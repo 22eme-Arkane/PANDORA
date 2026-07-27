@@ -179,6 +179,19 @@ class MoodDialog(QDialog):
         self._engine_combo = self._build_engine_combo()
         prompt_hdr.addWidget(self._engine_combo)
 
+        # Définition — juste après le moteur, les deux réglages du RENDU côte à
+        # côte. C'est ici que ça compte le plus : le Mood sert d'image de départ
+        # à la génération vidéo, donc son ratio est celui qui décide si la façade
+        # se superposera au bâtiment réel ou s'il faudra la recaler à la main.
+        prompt_hdr.addSpacing(10)
+        _res_lbl = QLabel("Définition")
+        _res_lbl.setStyleSheet(
+            f"color:{CP['text_dim']};font-size:11px;background:transparent;")
+        prompt_hdr.addWidget(_res_lbl)
+        from ui.widgets import ResolutionCombo
+        self._res_combo = ResolutionCombo(compact=True)
+        prompt_hdr.addWidget(self._res_combo)
+
         self._grammar_lbl = QLabel("")
         self._grammar_lbl.setStyleSheet(
             f"color:{CP['text_dim']};font-size:10px;background:transparent;")
@@ -767,10 +780,16 @@ class MoodDialog(QDialog):
         apercu_dir  = sb_api.get_apercu_dir(self._shot["id"])
         custom_prompt = self._prompt_edit.toPlainText().strip()
         self._disconnect_worker()
+        # La définition part TOUJOURS, même sans moteur explicite : l'ancien
+        # `options=None` quand `engine` était vide aurait fait retomber le Mood
+        # sur le défaut de l'API et rendu le sélecteur inopérant une fois sur deux.
+        _opts = {"resolution": self._res_combo.resolution_key()}
+        if engine:
+            _opts["engine"] = engine
         self._worker = MoodGenerationWorker(self._shot, apercu_dir,
                                             custom_prompt=custom_prompt,
                                             inspiration_ref=inspiration_ref,
-                                            options={"engine": engine} if engine else None)
+                                            options=_opts)
         self._worker.progress.connect(self._on_progress)
         self._worker.finished.connect(self._on_generated)
         self._worker.failed.connect(self._on_failed)

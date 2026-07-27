@@ -2208,6 +2208,7 @@ _FR_TO_EN: dict[str, str] = {
         "⚠ « Use the Mood images » is checked but this shot has no Mood — generate one first",
     "🔒 Verrou façade ajouté à l'envoi : appareil figé, aucun zoom, proportions du bâtiment identiques à chaque image":
         "🔒 Facade lock added on send: static camera, no zoom, building proportions identical in every frame",
+    "Définition": "Resolution",
     "⚓ Image de départ : la dernière frame du plan précédent":
         "⚓ Start image: the last frame of the previous shot",
     # Refus de rognage façade — message diagnostique (2026-07-26).

@@ -2016,6 +2016,19 @@ class _MoodBatchDialog(QDialog):
         eng_row.addWidget(self._opt_engine, 1)
         lay.addLayout(eng_row)
 
+        # Définition — sous le moteur, les deux réglages du RENDU au même endroit.
+        from ui.widgets import ResolutionCombo
+        _res_row = QHBoxLayout()
+        _res_row.setSpacing(8)
+        _res_lbl = QLabel(translate("Définition"))
+        _res_lbl.setStyleSheet(
+            f"color:{CP['text_dim']};font-size:11px;background:transparent;")
+        _res_lbl.setFixedWidth(72)
+        _res_row.addWidget(_res_lbl)
+        self._opt_res = ResolutionCombo()
+        _res_row.addWidget(self._opt_res, 1)
+        lay.addLayout(_res_row)
+
         _cb_style = (
             f"QCheckBox{{color:{CP['text_secondary']};font-size:11px;"
             f"background:transparent;spacing:7px;}}"
@@ -3443,6 +3456,7 @@ class PageStoryboard(QWidget):
         # Options cochées dans la fenêtre (moteur + références à envoyer).
         _mood_opts = {
             "engine":     dlg._opt_engine.currentData() or "nb2",
+            "resolution": dlg._opt_res.resolution_key(),
             "chars":      dlg._opt_chars.isChecked(),
             "decor":      dlg._opt_decor.isChecked(),
             "props":      dlg._opt_props.isChecked(),
