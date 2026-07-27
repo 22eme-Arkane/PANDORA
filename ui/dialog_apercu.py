@@ -361,23 +361,26 @@ class MoodDialog(QDialog):
             "L'image n'est jamais collée telle quelle."))
         self._btn_inspire.clicked.connect(self._generate_from_image)
         acts.addWidget(self._btn_inspire)
-        # ▦ Rogner à la façade — MAPPING uniquement (2026-07-26). Le moteur déborde
-        # souvent de la silhouette du bâtiment : tout ce qui sort du cadre mappé est
-        # perdu à la projection, et pollue les images de référence envoyées ensuite
-        # à Seedance. Le bouton recale d'abord (un décalage de quelques pixels est
-        # fréquent et corrigeable), puis noircit ce qui dépasse.
-        self._btn_facade_crop = _btn("▦  Rogner à la façade")
-        self._btn_facade_crop.setToolTip(translate(
-            "Superpose ce mood à la façade de référence : recale un éventuel\n"
-            "décalage, puis rend NOIR tout ce qui dépasse la silhouette.\n"
-            "Si la géométrie a dérivé, PANDORA le dit — mieux vaut regénérer."))
-        self._btn_facade_crop.clicked.connect(self._crop_to_facade)
-        self._btn_facade_crop.setVisible(self._is_mapping())
-        acts.addWidget(self._btn_facade_crop)
+        # « ▦ Rogner à la façade » RETIRÉ le 2026-07-27 sur demande de Matthieu :
+        # le bouton ne rendait pas le service attendu. Le masquage lui-même reste
+        # en place et automatique — `core.live_mapping.masked_keyframe` confine le
+        # mood à la silhouette AVANT de l'envoyer comme image-clé de mapping. Ce
+        # n'est donc pas la fonction qui disparaît, seulement son déclenchement
+        # manuel.
 
         self._btn_generate = _btn("✦  Générer une variation")
         self._btn_generate.clicked.connect(self._generate)
         acts.addWidget(self._btn_generate)
+
+        # Annuler — une génération peut durer et coûter. Le bouton n'apparaît que
+        # PENDANT, à la place occupée par le regard : juste après « Générer ».
+        self._btn_cancel_gen = _btn("✕  Annuler", danger=True)
+        self._btn_cancel_gen.setToolTip(translate(
+            "Arrête la génération en cours. Les variations déjà obtenues sont "
+            "conservées."))
+        self._btn_cancel_gen.clicked.connect(self._cancel_generation)
+        self._btn_cancel_gen.setVisible(False)
+        acts.addWidget(self._btn_cancel_gen)
 
         # ×N — plusieurs variations d'un coup. Chaque variation est un appel
         # facturé : le compteur reste donc à 1 par défaut, et le bouton dit
@@ -762,110 +765,6 @@ class MoodDialog(QDialog):
         except Exception:
             return False
 
-    def _crop_to_facade(self):
-        """Recale le mood sur la façade puis noircit ce qui dépasse.
-
-        Trois issues : déjà aligné → on rogne ; décalage pur → on RECALE et on
-        rogne (tous les moods finissent ainsi au même endroit, ce qui est le but :
-        des images de référence sans défaut) ; déformation → on refuse de déplacer
-        l'erreur et on propose de regénérer."""
-        from PyQt6.QtWidgets import QMessageBox
-        if not self._paths or not (0 <= self._current_idx < len(self._paths)):
-            return
-        src = self._paths[self._current_idx]
-
-        from core.context import get_data_root
-        from core.live_building import get_building_ref
-        from core.live_mapping import (align_and_mask_image, ensure_facade_mask,
-                                       measure_facade_alignment)
-        ref = get_building_ref()
-        if not ref or not os.path.isfile(ref):
-            QMessageBox.information(
-                self, translate("Façade absente"),
-                translate("Ajoute d'abord la façade du bâtiment dans le Conducteur "
-                          "(« Ajouter des références » → Référence bâtiment)."))
-            return
-        mask = ensure_facade_mask(ref, get_data_root())
-        if not mask:
-            # Message DIAGNOSTIQUE (2026-07-26) : « détoure-la d'abord » ne disait
-            # ni ce qui avait été mesuré, ni où se trouve l'outil qui le fait. Les
-            # deux causes se soignent différemment, il faut donc les distinguer.
-            from core.live_mapping import (facade_mask_coverage,
-                                           _MASK_MAX_COVER, _MASK_MIN_COVER)
-            _cov = facade_mask_coverage(ref)
-            if _cov < 0:
-                _cause = translate("l'image est illisible.")
-            elif _cov >= _MASK_MAX_COVER:
-                _cause = translate(
-                    "presque tout le cadre est éclairé — il n'y a pas de fond noir "
-                    "autour du bâtiment, c'est encore une photo avec son décor.")
-            else:
-                _cause = translate(
-                    "presque rien ne ressort du fond — l'image est trop sombre pour "
-                    "qu'une silhouette s'en détache.")
-            QMessageBox.warning(
-                self, translate("Façade non isolée"),
-                translate("Impossible de tirer un masque de la façade de référence.")
-                + f"\n\n{_cause}\n\n"
-                + translate("Mesuré : {pct} % du cadre éclairé (il en faut entre "
-                            "{lo} et {hi} %).").format(
-                    pct=("?" if _cov < 0 else int(_cov * 100)),
-                    lo=int(_MASK_MIN_COVER * 100), hi=int(_MASK_MAX_COVER * 100))
-                + "\n\n"
-                + translate("Conducteur → « Ajouter des références » → Référence "
-                            "bâtiment → bouton « ◐ Isoler (fond noir) »."))
-            return
-
-        m = measure_facade_alignment(src, mask)
-        verdict = m.get("verdict", "unavailable")
-        if verdict == "unavailable":
-            QMessageBox.warning(self, translate("Mesure impossible"), translate(
-                "Impossible de comparer ce mood à la façade (image illisible ou vide)."))
-            return
-        if verdict == "deformed":
-            # On ne recale PAS : déplacer une géométrie déformée ne fait que
-            # déplacer l'erreur. C'est la règle posée par Matthieu.
-            QMessageBox.warning(
-                self, translate("Géométrie déformée"),
-                translate(
-                    "Ce mood ne se superpose pas à la façade : la géométrie du "
-                    "bâtiment a dérivé pendant la génération (recouvrement "
-                    "{iou} %, {missing} % de la façade non couverte).\n\n"
-                    "Un recalage ne ferait que déplacer l'erreur. Mieux vaut "
-                    "REGÉNÉRER ce mood.").format(
-                        iou=int(m["iou_aligned"] * 100), missing=int(m["missing"] * 100)))
-            return
-
-        dy, dx = m.get("shift", (0, 0))
-        import hashlib
-        _key = hashlib.md5(f"{src}|{os.path.getmtime(src)}|{mask}".encode()).hexdigest()[:12]
-        out = os.path.join(get_data_root(), "mapping", "moods_rognes", f"{_key}.png")
-        try:
-            align_and_mask_image(src, mask, out, (dy, dx))
-        except Exception as e:
-            QMessageBox.warning(self, translate("Rognage impossible"), str(e))
-            return
-
-        # Le rognage AJOUTE une image et l'active : l'original reste dans la
-        # galerie, on peut toujours y revenir.
-        self._paths.insert(self._current_idx + 1, out)
-        self._current_idx += 1
-        self._active_idx = self._current_idx
-        sb_api.save_apercus(self._shot["id"], self._paths, self._active_idx)
-        self.apercu_changed.emit(self._shot["id"], out)
-        self._refresh()
-
-        _quoi = (translate("recalé de {dy}/{dx} px puis rogné").format(dy=dy, dx=dx)
-                 if (dy or dx) else translate("rogné à la silhouette"))
-        _extra = ""
-        if m.get("overflow", 0) > 0:
-            _extra = " " + translate("({pc} % de lumière hors façade supprimée)").format(
-                pc=round(m["overflow"] * 100, 1))
-        QMessageBox.information(
-            self, translate("Mood aligné sur la façade"),
-            translate("Mood {quoi}.{extra}\n\nL'original reste dans la galerie.")
-            .format(quoi=_quoi, extra=_extra))
-
     def _activate(self):
         if not self._paths:
             return
@@ -978,6 +877,46 @@ class MoodDialog(QDialog):
         self._status_lbl.show()
         self._refresh()
 
+    def _cancel_generation(self):
+        """Arrête la génération en cours SANS perdre ce qui est déjà obtenu.
+
+        JAMAIS `QThread.terminate()` : l'état Qt/Python en ressort corrompu et le
+        worker SUIVANT part en segfault. `abandon_thread` bloque les signaux,
+        demande l'interruption et garde une référence anti-GC — la boucle des
+        variations la teste entre deux tirages et sort proprement.
+
+        Les variations déjà enregistrées restent : elles ont été écrites au fil
+        de l'eau, elles sont valides, et les jeter parce qu'on interrompt la
+        suite n'aurait aucun sens.
+        """
+        try:
+            if self._worker is not None:
+                self._disconnect_worker()
+                try:
+                    from core.worker import abandon_thread
+                    abandon_thread(self._worker)
+                except Exception:
+                    pass
+                self._worker = None
+            self._stop_loading()
+            self._status_lbl.setText(translate("Génération annulée."))
+            self._status_lbl.show()
+            self._restore_after_generation()
+            # Ce qui a été produit avant l'arrêt doit apparaître.
+            self._load()
+            self._refresh()
+        except Exception:
+            self._restore_after_generation()
+
+    def _restore_after_generation(self):
+        """Rend la main : boutons réactivés, « Annuler » masqué."""
+        try:
+            self._btn_cancel_gen.setVisible(False)
+            self._btn_generate.setEnabled(True)
+            self._btn_inspire.setEnabled(True)
+        except Exception:
+            pass
+
     def _generate(self):
         # Le moteur est choisi DANS la fenêtre (combo au-dessus du prompt) : plus
         # de fenêtre intermédiaire, et le prompt affiché est déjà écrit pour lui.
@@ -1012,6 +951,7 @@ class MoodDialog(QDialog):
         self._worker.finished.connect(self._on_generated)
         self._worker.multi_finished.connect(self._on_generated_multi)
         self._worker.failed.connect(self._on_failed)
+        self._btn_cancel_gen.setVisible(True)
         self._btn_generate.setEnabled(False)
         self._btn_inspire.setEnabled(False)
         self._btn_activate.setEnabled(False)
@@ -1024,8 +964,7 @@ class MoodDialog(QDialog):
 
     def _on_generated(self, path: str):
         self._stop_loading()
-        self._btn_generate.setEnabled(True)
-        self._btn_inspire.setEnabled(True)
+        self._restore_after_generation()
         if path and os.path.isfile(path):
             self._paths.append(path)
             self._current_idx = len(self._paths) - 1
@@ -1037,8 +976,7 @@ class MoodDialog(QDialog):
         celle qu'on vient de demander, et la navigation permet de parcourir les
         suivantes sans en manquer une."""
         self._stop_loading()
-        self._btn_generate.setEnabled(True)
-        self._btn_inspire.setEnabled(True)
+        self._restore_after_generation()
         _new = [p for p in (paths or []) if p and os.path.isfile(p)]
         if _new:
             _first = len(self._paths)

@@ -2212,6 +2212,10 @@ _FR_TO_EN: dict[str, str] = {
     "Format": "Aspect ratio",
     "Automatique": "Automatic",
     "Variations": "Variations",
+    "✕  Annuler": "✕  Cancel",
+    "Arrête la génération en cours. Les variations déjà obtenues sont conservées.":
+        "Stops the running generation. Variations already produced are kept.",
+    "Génération annulée.": "Generation cancelled.",
     "Ce prompt est votre document de travail : gardez ces blocs, ils structurent le plan. À chaque envoi, PANDORA le réécrit pour le moteur choisi — en anglais, en texte continu, sans les étiquettes — selon la grammaire propre à la vidéo ou à l'image.":
         "This prompt is your working document: keep these blocks, they give the shot its structure. On every send, PANDORA rewrites it for the chosen engine — in English, as continuous text, without the labels — following the grammar specific to video or to image.",
     "composition du prompt…": "composing the prompt…",

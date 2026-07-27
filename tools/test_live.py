@@ -3649,20 +3649,18 @@ def mood_rogne_a_la_facade():
     assert _av > 0, "le cas de test ne déborde pas — test sans valeur"
     assert _ap == 0, f"{_ap} pixel(s) dépassent encore après rognage"
 
-    # 4. Bouton présent, MAPPING uniquement, et jamais bloquant sans façade.
+    # 4. Le bouton MANUEL « ▦ Rogner à la façade » a été RETIRÉ le 2026-07-27
+    #    (demande Matthieu : il ne rendait pas le service attendu). Les
+    #    assertions qui l'épinglaient sont parties avec lui — les garder aurait
+    #    figé une décision périmée.
+    #    Ce que ce test protège reste entier, et c'est l'essentiel : le masquage
+    #    lui-même, appliqué AUTOMATIQUEMENT par `masked_keyframe` avant l'envoi
+    #    de l'image-clé de mapping (points 1 à 3 ci-dessus).
     import inspect
     import ui.dialog_apercu as DA
     _src = inspect.getsource(DA.MoodDialog)
-    assert "_btn_facade_crop" in _src and "_crop_to_facade" in _src
-    assert "self._is_mapping()" in _src, "le bouton doit être réservé au Mapping"
-    _crop = inspect.getsource(DA.MoodDialog._crop_to_facade)
-    assert "REGÉNÉRER" in _crop and 'verdict == "deformed"' in _crop, \
-        "une déformation doit conduire à regénérer, pas à recaler"
-    assert "_paths.insert" in _crop, "le rognage doit AJOUTER une image, pas remplacer"
-
-    from core.i18n import _FR_TO_EN as T
-    for k in ("▦  Rogner à la façade", "Géométrie déformée", "Mood aligné sur la façade"):
-        assert k in T, ("i18n manquant", k)
+    assert "_btn_facade_crop" not in _src, \
+        "le bouton de rognage manuel est revenu — il a été retiré volontairement"
 
 
 @test
@@ -4816,66 +4814,6 @@ def vignette_mood_survit_a_la_destruction_de_sa_ligne():
          "que la ligne existe encore")
 
 
-@test
-def refus_de_rognage_dit_ce_qui_ne_va_pas():
-    """« Façade non isolée » nomme la cause mesurée et où la corriger.
-
-    Signalé par Matthieu le 2026-07-26 : le rognage refuse avec « détoure-la
-    d'abord », sans dire ce qui a été mesuré ni où se trouve l'outil qui le fait.
-    Or les deux causes se soignent différemment — un cadre entièrement éclairé
-    veut dire qu'aucun fond noir n'entoure le bâtiment (c'est encore une photo
-    avec son décor) ; un cadre presque éteint, que l'image est trop sombre pour
-    qu'une silhouette s'en détache.
-    """
-    import tempfile
-    from PIL import Image
-    from core.live_mapping import (build_facade_mask, facade_mask_coverage,
-                                   _MASK_MAX_COVER, _MASK_MIN_COVER)
-
-    _d = tempfile.mkdtemp()
-
-    def _cas(nom, img):
-        p = os.path.join(_d, nom + ".png")
-        img.save(p)
-        return facade_mask_coverage(p), bool(
-            build_facade_mask(p, os.path.join(_d, nom + "_m.png")))
-
-    # 1. Photo non détourée (le cas de Matthieu) : cadre entièrement « éclairé ».
-    _cov, _ok = _cas("photo", Image.new("RGB", (200, 150), (40, 45, 70)))
-    assert not _ok and _cov >= _MASK_MAX_COVER, \
-        ("une photo non détourée doit être refusée par le HAUT", _cov)
-
-    # 2. Image trop sombre : rien ne ressort du fond.
-    _cov, _ok = _cas("sombre", Image.new("RGB", (200, 150), (5, 5, 5)))
-    assert not _ok and _cov <= _MASK_MIN_COVER, \
-        ("une image trop sombre doit être refusée par le BAS", _cov)
-
-    # 3. Façade correctement isolée : acceptée (sinon le refus serait systématique
-    #    et le test ne prouverait rien).
-    _im = Image.new("RGB", (200, 150), (0, 0, 0))
-    for _x in range(70, 130):
-        for _y in range(40, 140):
-            _im.putpixel((_x, _y), (200, 190, 170))
-    _cov, _ok = _cas("isolee", _im)
-    assert _ok, ("une façade correctement isolée est refusée", _cov)
-    assert _MASK_MIN_COVER < _cov < _MASK_MAX_COVER
-
-    # 4. Illisible → -1, jamais une exception.
-    assert facade_mask_coverage(os.path.join(_d, "inexistant.png")) < 0
-
-    # 5. Le message distingue les deux causes ET nomme le bouton qui les corrige.
-    import inspect as _i
-    import ui.dialog_apercu as _DA
-    _src = _i.getsource(_DA.MoodDialog._crop_to_facade)
-    assert "facade_mask_coverage" in _src, "le refus n'affiche aucune mesure"
-    assert "_MASK_MAX_COVER" in _src and "_MASK_MIN_COVER" in _src, \
-        "le refus ne distingue pas trop clair de trop sombre"
-    assert "Isoler (fond noir)" in _src, \
-        ("le message n'indique pas OÙ détourer — l'outil existe pourtant dans le "
-         "Conducteur, l'utilisateur ne peut pas le deviner")
-    from core.i18n import _FR_TO_EN
-    assert any("Isoler (fond noir)" in k for k in _FR_TO_EN), \
-        "le chemin vers l'outil n'est pas traduit"
 
 
 @test
@@ -5463,6 +5401,93 @@ def lot_de_moods_compose_une_fois_par_plan():
     finally:
         IP.compose, A.run_mood = _vrai_compose, _vrai_mood
         sb.set_namespace("storyboard")
+
+
+@test
+def variation_de_mood_annulable():
+    """Une génération de Mood doit pouvoir être ARRÊTÉE.
+
+    Demande de Matthieu (2026-07-27) : « on clique sur Générer une variation, on
+    n'a pas la possibilité d'annuler la variation en cours ». Une série de huit
+    variations dure et coûte — devoir attendre la fin n'est pas acceptable.
+
+    Deux exigences, et la seconde compte autant que la première : les variations
+    DÉJÀ produites sont conservées. Elles ont été écrites au fil de l'eau, elles
+    sont valides, et les jeter parce qu'on interrompt la suite n'aurait aucun
+    sens.
+    """
+    import core.storyboard as sb
+    import ui.dialog_apercu as DA
+
+    sb.set_namespace("live_seq_mapping")
+    sb.clear_version_shots(sb.DEFAULT_VERSION_ID)
+    _shot = sb.save_shot({"number": 1, "scene_title": "P1",
+                          "seedance_prompt": "façade givrée"}, sb.DEFAULT_VERSION_ID)
+
+    dlg = DA.MoodDialog(None, _shot)
+    dlg._compose_timer.stop()
+
+    assert hasattr(dlg, "_btn_cancel_gen"), "aucun bouton d'annulation"
+    assert not dlg._btn_cancel_gen.isVisible(), \
+        "« Annuler » ne doit apparaître que PENDANT une génération"
+
+    # LANCER une génération doit suffire à faire apparaître « Annuler ». Sans
+    # cette étape le test passerait alors que le bouton n'est jamais montré —
+    # la même faiblesse que sur le déclenchement de la composition, où j'avais
+    # appelé la machinerie à la main en sautant ce qui l'active.
+    import api.apercu as _A
+
+    class _FauxWorker:
+        def __init__(self, *a, **kw):
+            pass
+
+        class _S:
+            def connect(self, *_):
+                pass
+        progress = _S(); finished = _S(); multi_finished = _S(); failed = _S()
+
+        def start(self):
+            pass
+
+        def isRunning(self):
+            return True
+
+    _vrai = _A.MoodGenerationWorker
+    try:
+        _A.MoodGenerationWorker = _FauxWorker
+        dlg._start_generation()
+    finally:
+        _A.MoodGenerationWorker = _vrai
+
+    assert dlg._btn_cancel_gen.isVisibleTo(dlg), (
+        "lancer une génération n'affiche pas « Annuler » : le bouton existe mais "
+        "reste invisible, donc inutilisable")
+    assert not dlg._btn_generate.isEnabled(), \
+        "« Générer » reste actif pendant une génération"
+
+    dlg._cancel_generation()
+
+    assert dlg._worker is None, "le worker n'a pas été relâché"
+    assert not dlg._btn_cancel_gen.isVisible(), "« Annuler » reste affiché après l'arrêt"
+    assert dlg._btn_generate.isEnabled(), \
+        "« Générer » n'est pas réactivé — la fenêtre reste bloquée"
+
+    # Contrôle par AST et non par recherche de texte : la docstring de la méthode
+    # EXPLIQUE qu'il ne faut pas appeler terminate(), donc elle contient le mot.
+    # C'est le piège le plus récurrent de ce harnais (cf. pieges-tests-pandora).
+    import ast as _ast
+    import textwrap as _tw
+    _fn = _ast.parse(_tw.dedent(
+        inspect.getsource(DA.MoodDialog._cancel_generation))).body[0]
+    _appels = {n.func.attr for n in _ast.walk(_fn)
+               if isinstance(n, _ast.Call) and isinstance(n.func, _ast.Attribute)}
+    _noms = {n.id for n in _ast.walk(_fn) if isinstance(n, _ast.Name)}
+    assert "terminate" not in _appels, \
+        "QThread.terminate() corrompt l'état Qt et fait planter le worker SUIVANT"
+    assert "abandon_thread" in (_appels | _noms), \
+        "le worker doit être PARQUÉ (abandon_thread), pas abandonné au ramasse-miettes"
+
+    sb.set_namespace("storyboard")
 
 
 @test
