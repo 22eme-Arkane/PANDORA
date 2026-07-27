@@ -5395,5 +5395,68 @@ def refus_de_composition_nest_pas_repaye():
         sb.set_namespace("storyboard")
 
 
+@test
+def moods_generes_dans_leur_propre_sequence():
+    """Un lot de Moods ne doit pas dépendre de l'onglet ouvert pendant qu'il tourne.
+
+    Constat de Matthieu (2026-07-27) : en demandant PLUSIEURS variations depuis
+    « Action → Générer les Moods », la façade est nettement moins respectée.
+
+    Mécanisme : `core.storyboard._NAMESPACE` est un état GLOBAL de module, qu'un
+    autre onglet déplace sans le restaurer. `api/apercu` le lit à quatre endroits
+    sans jamais le reposer — dont `get_apercu_dir` (où le mood est ÉCRIT) et
+    `_resolve_building_ref`, qui exige EXACTEMENT « live_seq_mapping » : sur une
+    dérive, il renvoie "" et la façade n'est plus envoyée du tout, donc le moteur
+    invente le bâtiment.
+
+    Le lien avec les variations est mécanique et non psychologique : un lot de N
+    variations dure N fois plus longtemps, donc laisse N fois plus d'occasions à
+    la dérive de se produire.
+
+    Le worker photographie donc le namespace à sa construction — sur le thread UI,
+    où il est encore juste — et le repose au début de run().
+    """
+    import core.storyboard as sb
+    import api.apercu as A
+
+    sb.set_namespace("live_seq_mapping")
+    sb.clear_version_shots(sb.DEFAULT_VERSION_ID)
+    _shot = sb.save_shot({"number": 1, "scene_title": "P1",
+                          "seedance_prompt": "façade"}, sb.DEFAULT_VERSION_ID)
+
+    _vus = []
+    _vrai = A.run_mood
+
+    def _espion(shot, prompt, out_dir, key, cb, bref, **kw):
+        _vus.append((sb.get_namespace(), out_dir))
+        return ""
+
+    try:
+        A.run_mood = _espion
+        w = A.MoodBatchWorker([_shot], {"variations": 3})
+        # Exactement ce que fait ui/tab_sound_design_live : il pose SON namespace
+        # et ne le restaure pas. Le worker est déjà construit, il tourne après.
+        sb.set_namespace("live_seq_live")
+        w.run()
+    finally:
+        A.run_mood = _vrai
+
+    assert len(_vus) == 3, ("les 3 variations n'ont pas toutes été lancées", len(_vus))
+    for _i, (_ns, _dir) in enumerate(_vus, 1):
+        assert _ns == "live_seq_mapping", (
+            f"variation {_i} : le lot tourne sous le namespace « {_ns} » au lieu de "
+            "celui de sa séquence — la façade n'est plus résolue et les moods sont "
+            "écrits ailleurs")
+        assert "live_seq_mapping" in _dir.replace("\\", "/"), (
+            f"variation {_i} : mood écrit hors de sa séquence", _dir)
+
+    # Le worker unitaire porte la même garde.
+    _w1 = A.MoodGenerationWorker(_shot, ".", variations=2)
+    assert getattr(_w1, "_namespace", "") == "live_seq_mapping", \
+        "le worker unitaire ne photographie pas son namespace"
+
+    sb.set_namespace("storyboard")
+
+
 if __name__ == "__main__":
     sys.exit(main())

@@ -880,9 +880,30 @@ class MoodGenerationWorker(QThread):
         import core.style as style_api
         self._api_key    = load_config().get("api_key", "").strip()
         self._film_style = style_api.get_image_suffix() or ""
+        # Le namespace storyboard est un état GLOBAL de module, et un autre
+        # onglet le déplace sans le restaurer. On le PHOTOGRAPHIE ici, sur le
+        # thread UI où il est encore juste, pour le reposer dans run() : sans ça
+        # `get_apercu_dir` écrit les moods sous la mauvaise séquence, et
+        # `_resolve_building_ref` — qui exige EXACTEMENT « live_seq_mapping » —
+        # renvoie "" , donc la façade n'est plus envoyée du tout et le moteur
+        # invente le bâtiment. Un lot de N variations dure N fois plus longtemps,
+        # donc laisse N fois plus d'occasions à la dérive de se produire.
+        try:
+            import core.storyboard as _sb0
+            self._namespace = _sb0.get_namespace()
+        except Exception:
+            self._namespace = ""
         self._building_ref = _resolve_building_ref()
 
     def run(self):
+        # Le namespace photographié à la construction est REPOSÉ ici : ce thread
+        # ne doit dépendre d'aucun onglet ouvert entre-temps.
+        try:
+            import core.storyboard as _sb0
+            if self._namespace and _sb0.get_namespace() != self._namespace:
+                _sb0.set_namespace(self._namespace)
+        except Exception:
+            pass
         # WYSIWYG : si la fenêtre a fourni un prompt, c'est EXACTEMENT lui qui part
         # (il a déjà été écrit dans la grammaire du moteur choisi et montré à
         # l'écran). Sinon on le construit ici, pour le même moteur.
@@ -937,6 +958,19 @@ class MoodBatchWorker(QThread):
         import core.style as style_api
         self._api_key    = load_config().get("api_key", "").strip()
         self._film_style = style_api.get_image_suffix() or ""
+        # Le namespace storyboard est un état GLOBAL de module, et un autre
+        # onglet le déplace sans le restaurer. On le PHOTOGRAPHIE ici, sur le
+        # thread UI où il est encore juste, pour le reposer dans run() : sans ça
+        # `get_apercu_dir` écrit les moods sous la mauvaise séquence, et
+        # `_resolve_building_ref` — qui exige EXACTEMENT « live_seq_mapping » —
+        # renvoie "" , donc la façade n'est plus envoyée du tout et le moteur
+        # invente le bâtiment. Un lot de N variations dure N fois plus longtemps,
+        # donc laisse N fois plus d'occasions à la dérive de se produire.
+        try:
+            import core.storyboard as _sb0
+            self._namespace = _sb0.get_namespace()
+        except Exception:
+            self._namespace = ""
         self._building_ref = _resolve_building_ref()
 
     def cancel(self):
@@ -945,6 +979,14 @@ class MoodBatchWorker(QThread):
 
     def run(self):
         import core.storyboard as sb_api
+        # Le namespace photographié à la construction est REPOSÉ ici : ce thread
+        # ne doit dépendre d'aucun onglet ouvert entre-temps.
+        try:
+            import core.storyboard as _sb0
+            if self._namespace and _sb0.get_namespace() != self._namespace:
+                _sb0.set_namespace(self._namespace)
+        except Exception:
+            pass
         total = len(self._shots)
         try:
             _vars = max(1, int(self._options.get("variations") or 1))
