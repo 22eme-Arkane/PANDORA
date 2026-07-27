@@ -5720,6 +5720,102 @@ def decor_previews_generated_before_navigation():
 
 
 @test
+def mood_affiche_le_prompt_compose():
+    """L'encart du Mood contient le prompt COMPOSÉ, celui qui part au moteur.
+
+    Constat de Matthieu (2026-07-27) : « je n'ai toujours pas de composition IA
+    dans le prompt quand j'ouvre la fenêtre du Mood ». Le module existait, il
+    n'était pas branché.
+
+    Ce test fige le CÂBLAGE, pas le texte produit :
+      · la fiche donnée au compositeur est la barre ENTIÈRE — il ne peut résoudre
+        la contradiction « le STYLE décrit l'arrivée, l'instant demandé est le
+        départ » que s'il VOIT les deux ;
+      · l'instant à rendre lui est dit à part ;
+      · le résultat atterrit dans l'encart, donc dans ce qui est envoyé ;
+      · un prompt retouché à la main n'est JAMAIS écrasé.
+    """
+    import core.storyboard as sb
+    import api.image_prompt as IP
+    from ui.dialog_apercu import MoodDialog, _MoodPromptWorker
+
+    # Contrat de signal : `done`, jamais `finished` (qui masquerait le natif).
+    assert hasattr(_MoodPromptWorker, "done"), "le worker n'expose pas `done`"
+    assert "finished" not in _MoodPromptWorker.__dict__, \
+        "`finished` masquerait le signal natif de QThread"
+
+    sb.set_namespace("live_seq_mapping")
+    sb.clear_version_shots(sb.DEFAULT_VERSION_ID)
+    _p = (
+        "SURFACE : façade en pierre, tour-clocher, portail en ogive.\n"
+        "ÉTAT 0 : toute la pierre sous un givre dense en hachures blanches.\n"
+        "TRANSFORMATION : le givre se fend, la rosace devient un cristal.\n"
+        "ÉTAT 1 : façade cristalline bleu glacé.\n"
+        "NOIR : le fond hors façade.\n"
+        "STYLE : gravure ancienne gelée, clair-obscur dramatique.\n"
+        "CONTRAINTES : aucun texte, façade à l'échelle exacte.\n"
+    )
+    _shot = sb.save_shot({"number": 1, "scene_title": "Givre",
+                          "seedance_prompt": _p}, sb.DEFAULT_VERSION_ID)
+
+    _vu = {}
+    _vrai = IP.compose
+
+    def _stub(prompt, **kw):
+        _vu.update(kw)
+        _vu["fiche"] = prompt
+        return ("Subject: a limestone church facade encased in dense white "
+                "frost.\nAction: the stone reads as fine engraved hatching.\n"
+                "Constraints: no text, no watermark.")
+
+    try:
+        IP.compose = _stub
+        dlg = MoodDialog(None, _shot)
+        # ⓪ OUVRIR la fenêtre suffit à programmer la composition. Sans cette
+        #    assertion, le test passerait alors que rien ne se déclenche — le
+        #    symptôme exact rapporté par Matthieu, la machinerie marchant très
+        #    bien dès qu'on l'appelle à la main.
+        assert dlg._compose_timer.isActive(), (
+            "ouvrir le Mood ne programme aucune composition : l'encart restera "
+            "sur le prompt déterministe")
+        dlg._compose_timer.stop()
+        dlg._start_compose()
+        assert dlg._compose_worker is not None, "aucune composition n'a été lancée"
+        dlg._compose_worker.run()      # synchrone : pas de boucle d'événements ici
+
+        # ① Le compositeur voit la barre ENTIÈRE — c'est la condition pour qu'il
+        #    puisse trancher entre l'état de départ et le style d'arrivée.
+        for _bloc in ("TRANSFORMATION", "ÉTAT 1", "STYLE"):
+            assert _bloc in _vu.get("fiche", ""), (
+                f"« {_bloc} » n'est pas donné au compositeur : il ne peut pas "
+                "voir la contradiction qu'on lui demande de résoudre")
+        # ② …et on lui dit lequel des états rendre.
+        assert "OPENING state" in (_vu.get("moment") or ""), \
+            "l'instant à rendre n'est pas transmis"
+        assert _vu.get("kind") == "mood_mapping", \
+            ("le contexte d'usage n'est pas celui du mapping", _vu.get("kind"))
+
+        # ③ Le composé est DANS l'encart — donc dans ce qui part au moteur.
+        _txt = dlg._prompt_edit.toPlainText()
+        assert "limestone church facade" in _txt, \
+            "l'encart n'affiche pas le prompt composé"
+        assert "SURFACE" not in _txt and "ÉTAT 0" not in _txt, \
+            "les étiquettes internes sont encore dans l'encart"
+        assert "composé" in dlg._grammar_lbl.text(), \
+            ("le verdict de composition ne se lit pas — un repli silencieux "
+             "passerait pour un bug de l'application")
+
+        # ④ Une retouche manuelle prime toujours.
+        dlg._prompt_dirty = True
+        dlg._on_composed("TEXTE COMPOSÉ QUI NE DOIT PAS APPARAÎTRE", True, "")
+        assert "NE DOIT PAS APPARAÎTRE" not in dlg._prompt_edit.toPlainText(), \
+            "la composition écrase le texte retouché à la main"
+    finally:
+        IP.compose = _vrai
+        sb.set_namespace("storyboard")
+
+
+@test
 def compositeur_image_par_moteur():
     """Le prompt final IMAGE est écrit dans la grammaire du moteur, et en anglais.
 

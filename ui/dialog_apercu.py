@@ -6,7 +6,7 @@ from PyQt6.QtWidgets import (
     QScrollArea, QWidget, QProgressBar, QSizePolicy, QFrame, QTextEdit,
     QComboBox, QSpinBox,
 )
-from PyQt6.QtCore import Qt, pyqtSignal, QTimer
+from PyQt6.QtCore import Qt, pyqtSignal, QTimer, QThread
 from core.i18n import translate
 from PyQt6.QtGui import QPixmap
 from ui.styles import CP, PANDORA_STYLESHEET
@@ -49,6 +49,51 @@ def _btn(text: str, accent: bool = False, danger: bool = False) -> QPushButton:
 # 2026-07-25).
 
 
+class _MoodPromptWorker(QThread):
+    """Compose le prompt final IMAGE du Mood. Repli déterministe garanti.
+
+    `done` et jamais `finished` : `finished` masquerait le signal natif de
+    QThread. Une seule chose est interdite — ne rien émettre : une branche muette
+    laisserait la mention « composition… » affichée pour toujours.
+    """
+
+    done = pyqtSignal(str, bool, str)   # (prompt, composé, raison_si_repli)
+
+    def __init__(self, fiche: str, repli: str, engine: str, kind: str,
+                 moment: str, surface: str, style_suffix: str):
+        super().__init__()
+        self._fiche  = fiche or ""
+        self._repli  = repli or ""
+        self._engine = engine or ""
+        self._kind   = kind or ""
+        self._moment = moment or ""
+        self._surface = surface or ""
+        self._style  = style_suffix or ""
+
+    def run(self):
+        try:
+            from core import ai_provider
+            _ke = ai_provider.key_error(task="video_prompt")
+            if _ke:
+                self.done.emit(self._repli, False, _ke)
+                return
+        except Exception:
+            pass
+        try:
+            import api.image_prompt as _ip
+            out = _ip.compose(self._fiche, engine=self._engine, kind=self._kind,
+                              moment=self._moment, surface=self._surface,
+                              style_suffix=self._style)
+            if out:
+                self.done.emit(out, True, "")
+                return
+            # Global de module : le lire IMMÉDIATEMENT après le retour.
+            self.done.emit(self._repli, False,
+                           _ip.LAST_COMPOSE_ERROR or "composition refusée")
+        except Exception as exc:
+            self.done.emit(self._repli, False, str(exc)[:200])
+
+
 class MoodDialog(QDialog):
     apercu_changed = pyqtSignal(str, str)   # shot_id, active_image_path
 
@@ -66,6 +111,17 @@ class MoodDialog(QDialog):
         # ADAPTE le texte de l'utilisateur au lieu de l'écraser.
         self._prompt_dirty  = False
         self._prompt_quiet  = False   # garde anti-boucle sur setPlainText()
+        # Composition IA du prompt final (2026-07-27). Le cache évite de repayer
+        # un aller-retour quand on rouvre le même plan sans rien changer.
+        self._compose_worker = None
+        self._compose_cache: dict = {}
+        self._compose_why    = ""
+        self._compose_done   = False
+        self._compose_from_cache = False
+        self._compose_timer  = QTimer(self)
+        self._compose_timer.setSingleShot(True)
+        self._compose_timer.setInterval(250)
+        self._compose_timer.timeout.connect(self._start_compose)
 
         n = shot.get("number", "?")
         title_text = (shot.get("scene_title") or "")[:60]
@@ -439,9 +495,25 @@ class MoodDialog(QDialog):
         finally:
             self._prompt_quiet = False
 
-    def _refresh_grammar_label(self):
+    def _refresh_grammar_label(self, status: str = ""):
+        """Grammaire du moteur + verdict de la composition.
+
+        Le verdict doit se LIRE : un repli silencieux passerait pour un bug de
+        l'application, et c'est précisément ce qui a rendu le diagnostic si long
+        du côté vidéo.
+        """
         from core.image_grammar import grammar_label
-        self._grammar_lbl.setText("· " + translate(grammar_label(self._current_engine())))
+        _txt = "· " + translate(grammar_label(self._current_engine()))
+        if status:
+            _txt += "  ·  " + status
+        elif self._prompt_dirty:
+            _txt += "  ·  " + translate("prompt retouché à la main")
+        elif self._compose_done:
+            _txt += "  ·  " + (translate("♻ déjà composé") if self._compose_from_cache
+                               else translate("✓ composé pour ce moteur"))
+        elif self._compose_why:
+            _txt += "  ·  ⚠ " + self._compose_why[:70]
+        self._grammar_lbl.setText(_txt)
 
     def _reset_prompt(self):
         """(Re)construit le prompt depuis les données du plan, pour le moteur choisi."""
@@ -451,6 +523,122 @@ class MoodDialog(QDialog):
             self._shot, _style_mod.get_image_suffix() or "", self._current_engine()))
         self._prompt_dirty = False
         self._refresh_grammar_label()
+        # Le texte déterministe s'affiche TOUT DE SUITE — l'encart n'est jamais
+        # vide — puis la composition le remplace quand elle revient.
+        self._schedule_compose()
+
+    # ── Composition IA du prompt final image ─────────────────────────────────
+
+    def _compose_inputs(self) -> tuple:
+        """(fiche, moment, surface, style) — les entrées de la composition.
+
+        La fiche donnée au compositeur est la barre ENTIÈRE, pas l'état filtré :
+        il ne peut résoudre la contradiction « le STYLE décrit l'arrivée alors
+        que l'instant demandé est le départ » que s'il VOIT les deux. Le moment à
+        rendre lui est dit à part.
+        """
+        from core.prompt_sections import video_of as _video_of
+        fiche = _video_of((self._shot.get("seedance_prompt") or "").strip())
+        moment = ""
+        try:
+            from core.live_bar import parse_blocks
+            _b = parse_blocks(fiche) or {}
+            if _b.get("state_0"):
+                moment = ("The state to render is the OPENING state of the shot, "
+                          "before any transformation: " + _b["state_0"])
+        except Exception:
+            pass
+        surface = ""
+        if self._is_mapping():
+            try:
+                from core.live_building import describe_facade
+                surface = describe_facade() or ""
+            except Exception:
+                surface = ""
+        try:
+            import core.style as _sm
+            style = _sm.get_image_suffix() or ""
+        except Exception:
+            style = ""
+        return fiche, moment, surface, style
+
+    def _compose_kind(self) -> str:
+        return "mood_mapping" if self._is_mapping() else "mood"
+
+    def _schedule_compose(self):
+        """Programme la composition. Débounce : changer de moteur en cascade ne
+        doit lancer qu'UN appel, pas un par cran du combo."""
+        try:
+            self._compose_timer.start()
+        except Exception:
+            pass
+
+    def _start_compose(self):
+        try:
+            # L'utilisateur a repris la main : son texte prime, on ne l'écrase pas.
+            if self._prompt_dirty:
+                return
+            fiche, moment, surface, style = self._compose_inputs()
+            if not fiche.strip():
+                return
+            repli = self._prompt_edit.toPlainText().strip()
+            engine = self._current_engine()
+            key = f"{engine}|{self._compose_kind()}|{hash((fiche, moment, surface, style))}"
+
+            hit = self._compose_cache.get(key)
+            if hit is not None:
+                self._compose_from_cache = True
+                self._on_composed(*hit)
+                return
+
+            self._compose_key = key
+            self._compose_from_cache = False
+            # Parquer le worker précédent AVANT de réassigner : un QThread qui
+            # surcharge run() n'a pas de boucle d'événements, et le laisser au
+            # ramasse-miettes pendant qu'il tourne fait planter l'application.
+            if self._compose_worker is not None:
+                try:
+                    from core.worker import abandon_thread
+                    abandon_thread(self._compose_worker)
+                except Exception:
+                    pass
+                self._compose_worker = None
+
+            self._refresh_grammar_label(translate("composition du prompt…"))
+            self._compose_worker = _MoodPromptWorker(
+                fiche, repli, engine, self._compose_kind(), moment, surface, style)
+            self._compose_worker.done.connect(self._on_composed)
+            self._compose_worker.start()
+        except Exception:
+            # Une exception non gérée dans un slot PyQt6 fait ABORT toute l'app.
+            self._refresh_grammar_label()
+
+    def _on_composed(self, prompt: str, composed: bool, why: str):
+        try:
+            self._compose_why  = why or ""
+            self._compose_done = bool(composed)
+            if self._prompt_dirty:
+                self._refresh_grammar_label()
+                return
+            if (prompt or "").strip():
+                self._set_prompt_text(prompt.strip())
+            # Un refus du CONTRÔLE est reproductible : on le mémorise pour ne pas
+            # le repayer. Un incident réseau, non — il doit être retenté.
+            _key = getattr(self, "_compose_key", "")
+            if _key and not self._compose_from_cache:
+                _fige = composed
+                if why:
+                    try:
+                        from api.image_prompt import is_deterministic_refusal
+                        _fige = is_deterministic_refusal(why)
+                    except Exception:
+                        _fige = False
+                if _fige:
+                    self._compose_cache[_key] = (prompt, composed, why)
+                self._compose_key = ""
+            self._refresh_grammar_label()
+        except Exception:
+            pass
 
     def _on_prompt_typed(self):
         if not self._prompt_quiet:
@@ -473,6 +661,8 @@ class MoodDialog(QDialog):
         self._set_prompt_text(_txt)
         self._prompt_dirty = True   # le texte reste celui de l'utilisateur
         self._refresh_grammar_label()
+        # Pas de composition ici : le texte appartient à l'utilisateur, on
+        # l'ADAPTE au nouveau moteur sans le réécrire.
 
     def _save_engine_pref(self):
         try:
@@ -764,12 +954,30 @@ class MoodDialog(QDialog):
         except Exception:
             pass
 
+    def _park_compose_worker(self):
+        """Un worker de composition qui survit au dialogue émettrait vers un
+        objet détruit. JAMAIS terminate() : état Qt corrompu et segfault sur le
+        worker suivant."""
+        try:
+            self._compose_timer.stop()
+        except Exception:
+            pass
+        if getattr(self, "_compose_worker", None) is not None:
+            try:
+                from core.worker import abandon_thread
+                abandon_thread(self._compose_worker)
+            except Exception:
+                pass
+            self._compose_worker = None
+
     def accept(self):
         self._disconnect_worker()
+        self._park_compose_worker()
         super().accept()
 
     def reject(self):
         self._disconnect_worker()
+        self._park_compose_worker()
         super().reject()
 
     def _import_image(self):

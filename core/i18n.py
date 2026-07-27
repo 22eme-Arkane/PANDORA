@@ -2212,6 +2212,10 @@ _FR_TO_EN: dict[str, str] = {
     "Format": "Aspect ratio",
     "Automatique": "Automatic",
     "Variations": "Variations",
+    "composition du prompt…": "composing the prompt…",
+    "prompt retouché à la main": "prompt edited by hand",
+    "♻ déjà composé": "♻ already composed",
+    "✓ composé pour ce moteur": "✓ composed for this engine",
     "variations": "variations",
     "✦  Générer": "✦  Generate",
     "Nombre de variations à générer d'affilée. Chaque variation est une génération facturée.":
