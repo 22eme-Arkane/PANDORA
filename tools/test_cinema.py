@@ -5720,6 +5720,101 @@ def decor_previews_generated_before_navigation():
 
 
 @test
+def compositeur_image_par_moteur():
+    """Le prompt final IMAGE est écrit dans la grammaire du moteur, et en anglais.
+
+    Chantier du 2026-07-27 (demande Matthieu). Trois défauts mesurés avant :
+      · `core/image_grammar.build_image_prompt` ne réécrit que le CONTENANT — le
+        même corps français traversait les cinq moteurs, étiquettes internes
+        comprises ;
+      · rien ne traduisait, alors que tout le reste de PANDORA traduit ;
+      · les blocs d'une barre se contredisent pour une image FIXE (« ÉTAT 0 :
+        monde forestier vert-doré » avec « STYLE : bleu outremer à cyan »), et
+        aucun filtre déterministe ne peut trancher — il faut réécrire.
+
+    Ce test fige le CONTRÔLE, pas le texte produit : la sortie de l'IA varie, mais
+    ce qu'on accepte et ce qu'on refuse ne doit pas bouger.
+    """
+    import api.image_prompt as IP
+
+    # ── 1. La forme demandée suit la grammaire RÉELLE du moteur ──────────────
+    for _eng, _attendu in (("nb_pro", "Composition and camera"),
+                           ("gpt2", "Important details"),
+                           ("seedream45", "DEUX à QUATRE phrases"),
+                           ("flux2", "OBJET JSON")):
+        _r = IP._format_rules(_eng)
+        assert _attendu in _r, (
+            f"la consigne de forme de « {_eng} » ne correspond pas à sa "
+            f"grammaire — « {_attendu} » attendu")
+
+    # Le moteur sans prompt négatif ne doit PAS recevoir « liste tes interdits ».
+    assert "OCCUPE la place" in IP._format_rules("seedream45"), \
+        ("Seedream n'a pas de prompt négatif : lui demander d'écrire ses "
+         "interdits les transforme en sujets à l'image")
+
+    # ── 2. La règle qui justifie tout le chantier est bien dans la consigne ──
+    _sys = IP._system_for("seedream45", "mood_mapping")
+    assert "CONTRADICTION" in _sys.upper(), \
+        ("la consigne ne dit pas au rédacteur de résoudre la contradiction "
+         "état de départ / style d'arrivée — c'est le cœur de sa tâche")
+    assert "OPENING FRAME" in _sys, "le contexte d'usage du mood mapping a disparu"
+
+    # ── 3. Ce qui doit être REFUSÉ ──────────────────────────────────────────
+    _refus = [
+        ("nb_pro", "Subject: a church.\nSURFACE : stone facade.", "étiquettes"),
+        ("nb_pro", "[🎬 ACTION]\nSubject: a church glowing at night.", "crochets"),
+        ("nb_pro", "Subject: la façade en pierre avec une lumière dans les baies "
+                   "qui sont sur la gauche.", "français"),
+        ("nb_pro", "Subject: a church, cinematic ultra-detailed 4K masterpiece.",
+         "génériques"),
+        ("seedream45", "Subject: a church.\nStyle: dark.", "prose"),
+        ("seedream45", "A church at night. There is no text anywhere in frame.",
+         "négatif"),
+        ("flux2", "A stone church glowing at night.", "JSON"),
+    ]
+    for _eng, _txt, _motif in _refus:
+        _v = IP.validate_image_composed(_txt, engine=_eng)
+        assert not _v["valid"], (f"« {_motif} » accepté sur {_eng} : {_txt[:50]}")
+        assert any(_motif in _e for _e in _v["errors"]), (
+            f"refusé sur {_eng}, mais pas pour la raison attendue « {_motif} »",
+            _v["errors"])
+
+    # ── 4. Ce qui doit PASSER — une sortie correcte par grammaire ───────────
+    _bons = [
+        ("nb_pro", "Concept frame for a night projection-mapping show.\n"
+                   "Subject: a stone church facade.\n"
+                   "Action: the rose window pulses with warm amber light.\n"
+                   "Constraints: no text, no watermark."),
+        ("gpt2", "Scene: a stone church at night. Subject: the west facade. "
+                 "Important details: the rose window glows amber. "
+                 "Constraints: no text, no watermark."),
+        ("seedream45", "A stone church facade at night, its central rose window "
+                       "pulsing with warm amber light while the surrounding "
+                       "masonry stays deep and unlit. Everything beyond the "
+                       "outline of the building falls to solid black."),
+        ("flux2", '{"scene": "a stone church facade at night", '
+                  '"lighting": "warm amber core"}'),
+        ("recraft", "A stone church facade at night, the rose window glowing "
+                    "warm amber against deep unlit masonry. "
+                    "Constraints: no text, no watermark."),
+    ]
+    for _eng, _txt in _bons:
+        _v = IP.validate_image_composed(_txt, engine=_eng)
+        assert _v["valid"], (f"sortie CORRECTE refusée sur {_eng}", _v["errors"])
+
+    # ── 5. Le tri des deux natures d'échec, comme côté Live ─────────────────
+    assert IP.is_deterministic_refusal(IP.REFUSAL_PREFIX + "prompt encore en français")
+    assert not IP.is_deterministic_refusal("crédits IA épuisés")
+    _src = "\n".join(l for l in inspect.getsource(IP.compose).splitlines()
+                     if not l.lstrip().startswith("#"))
+    assert "REFUSAL_PREFIX" in _src, \
+        "compose() n'utilise pas le marqueur — le refus sera repayé à chaque fois"
+    assert 'task="video_prompt"' in _src, \
+        ("l'appel IA doit porter un task= : sans lui, PANDORA route sur le moteur "
+         "global, le plus coûteux")
+
+
+@test
 def dialogue_references_annonce_sa_vraie_hauteur():
     """Le minimum annoncé par le layout doit couvrir ce dont il a VRAIMENT besoin.
 
