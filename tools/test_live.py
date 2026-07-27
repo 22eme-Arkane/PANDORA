@@ -5396,6 +5396,59 @@ def refus_de_composition_nest_pas_repaye():
 
 
 @test
+def mood_ne_decrit_que_letat_douverture():
+    """Le Mood ne doit PAS recevoir la transformation ni l'état final.
+
+    Constat de Matthieu (2026-07-27, captures à l'appui) : les moods rendaient
+    le monde forestier FINAL — arbres, cerf, renard, hibou — alors que l'ÉTAT 0
+    du plan dit « façade encore majoritairement givrée, portail sombre ».
+
+    Cause : le mood est l'image de DÉPART du plan, mais on lui envoyait la barre
+    ENTIÈRE — TRANSFORMATION et ÉTAT 1 compris — avant de lui demander, en une
+    phrase anglaise, d'« ignorer l'évolution ». Un moteur d'image ne sait pas
+    ignorer : il rend ce qu'on lui décrit. Décrire ce qu'on ne veut pas voir est
+    le plus sûr moyen de l'obtenir.
+
+    Les deux blocs temporels sont désormais RETIRÉS, pas contredits — et la
+    consigne négative disparaît avec eux.
+    """
+    import core.storyboard as sb
+    import api.apercu as A
+
+    sb.set_namespace("live_seq_mapping")
+    _p = (
+        "SURFACE : façade en pierre, portail en ogive, rosace centrale.\n"
+        "ÉTAT 0 : rosace battante en lumière chaude, façade encore givrée.\n"
+        "TRANSFORMATION : la rosace projette une forêt ; un cerf, un renard et "
+        "un hibou de lumière surgissent.\n"
+        "ÉTAT 1 : façade recouverte d'un monde forestier vert-doré.\n"
+        "NOIR : le fond hors façade.\n"
+        "STYLE : clair-obscur doré et vert.\n"
+        "CONTRAINTES : aucun texte, façade à l'échelle exacte.\n"
+    )
+    _out = A.build_mood_prompt({"id": "s1", "number": 1, "seedance_prompt": _p},
+                               "", "nb2")
+
+    for _interdit in ("TRANSFORMATION", "ÉTAT 1", "forestier", "cerf", "renard",
+                      "hibou"):
+        assert _interdit not in _out, (
+            f"« {_interdit} » part au moteur alors que le mood ne doit montrer "
+            "que l'état d'ouverture — c'est ce qui fait apparaître la forêt et "
+            "les animaux sur une façade censée être encore givrée")
+
+    # Une consigne négative ne remplace pas le retrait : si les blocs sont bien
+    # partis, il n'y a plus rien à ignorer.
+    assert "ignore the later" not in _out, \
+        "la consigne « ignore the later evolution » survit alors qu'elle n'a plus d'objet"
+
+    # Et ce qui décrit l'image fixe doit rester.
+    for _requis in ("SURFACE", "ÉTAT 0", "NOIR", "STYLE", "CONTRAINTES"):
+        assert _requis in _out, f"« {_requis} » a disparu du prompt du mood"
+
+    sb.set_namespace("storyboard")
+
+
+@test
 def mood_actif_apres_serie_nest_pas_un_tirage_au_hasard():
     """Sur une série de variations, le mood ACTIF doit être la PREMIÈRE.
 

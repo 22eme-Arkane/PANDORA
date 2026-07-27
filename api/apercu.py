@@ -96,6 +96,33 @@ def _build_mood_prompt_live(shot: dict, engine_key: str = "") -> str:
     from core.image_grammar import (build_image_prompt as _build,
                                     strip_video_terms as _strip_video)
     seedance = _video_of((shot.get("seedance_prompt") or "").strip())
+    # ── Ne PAS décrire ce qu'on ne veut pas voir (2026-07-27) ─────────────────
+    # Le mood est l'image de DÉPART du plan : seul l'ÉTAT 0 l'intéresse. On lui
+    # envoyait pourtant la barre entière — TRANSFORMATION et ÉTAT 1 compris —
+    # avant de demander, en une phrase, d'« ignorer l'évolution ». Un moteur
+    # d'image ne sait pas ignorer : il rend ce qu'on lui décrit. Constat de
+    # Matthieu, captures à l'appui : les moods rendaient le monde forestier
+    # final alors que l'ÉTAT 0 dit « façade encore majoritairement givrée,
+    # portail sombre ».
+    # Les deux blocs temporels sont donc RETIRÉS, pas contredits. Le reste de la
+    # barre — surface, noir, style, contraintes — décrit bien une image fixe.
+    _blocs = {}
+    try:
+        from core.live_bar import parse_blocks as _pb
+        _blocs = _pb(seedance) or {}
+    except Exception:
+        _blocs = {}
+    if _blocs.get("state_0"):
+        try:
+            from core.live_bar import format_blocks as _fb
+            body = _fb({k: v for k, v in _blocs.items()
+                        if k in ("surface", "state_0", "black", "style",
+                                 "constraints")})
+        except Exception:
+            body = _strip_video(seedance)[0]
+        # Plus rien à ignorer : la consigne négative disparaît avec les blocs.
+        use_case = "Single cinematic still frame, sharp focus."
+        return _build({"action": body, "use_case": use_case}, engine_key or "flux")
     if seedance:
         body = _strip_video(seedance)[0]
         use_case = (
