@@ -744,3 +744,59 @@ class ResolutionCombo(QComboBox):
         """(largeur, hauteur) au ratio EXACT pour ce palier."""
         from core.image_resolution import target_for
         return target_for(aspect_ratio, self.resolution_key())
+
+
+class RatioCombo(QComboBox):
+    """Format (ratio) de l'image générée — composant PARTAGÉ, comme ResolutionCombo.
+
+    Première entrée « Automatique », de donnée VIDE : c'est le défaut, et il
+    laisse chaque appelant garder sa règle historique (1:1 pour un accessoire,
+    16:9 pour un décor, 2:3 pour un portrait classique, 9:16 pour une pose
+    d'action…). Sans cette entrée, poser le combo changerait le rendu de toutes
+    les générations existantes le jour de l'installation — un réglage neuf ne
+    doit jamais modifier ce que l'utilisateur obtenait la veille.
+
+    `ratio()` renvoie donc "" tant que l'utilisateur n'a rien choisi, et
+    l'appelant s'écrit `self._ar_override or <sa règle>`.
+    """
+
+    # Les ratios réellement utiles en production. Tous exacts par construction :
+    # c'est core.image_resolution qui en dérive les dimensions.
+    CHOICES = (
+        ("",      "Automatique"),
+        ("1:1",   "1:1  ·  carré"),
+        ("16:9",  "16:9  ·  paysage"),
+        ("9:16",  "9:16  ·  portrait"),
+        ("4:3",   "4:3  ·  paysage classique"),
+        ("3:4",   "3:4  ·  portrait classique"),
+        ("3:2",   "3:2  ·  photo"),
+        ("2:3",   "2:3  ·  photo portrait"),
+        ("21:9",  "21:9  ·  cinémascope"),
+        ("4:5",   "4:5  ·  portrait réseaux"),
+    )
+
+    def __init__(self, parent=None, *, compact: bool = False,
+                 auto_hint: str = ""):
+        super().__init__(parent)
+        for _key, _label in self.CHOICES:
+            self.addItem(
+                (f"{_label} ({auto_hint})" if (not _key and auto_hint) else _label),
+                _key)
+        self.setCurrentIndex(0)
+        self.setFixedHeight(26 if compact else 30)
+        self.setToolTip(
+            "Format de l'image générée.\n"
+            "« Automatique » garde le format habituel de cet élément.")
+        _fs = 10 if compact else 11
+        self.setStyleSheet(
+            f"QComboBox{{background:{CP['bg3']};border:1px solid {CP['border']};"
+            f"border-radius:6px;color:{CP['text_primary']};font-size:{_fs}px;padding:0 8px;}}"
+            f"QComboBox::drop-down{{border:none;width:20px;}}"
+            f"QComboBox QAbstractItemView{{background:{CP['bg3']};"
+            f"border:1px solid {CP['border_bright']};color:{CP['text_primary']};"
+            f"selection-background-color:{CP['accent_dim']};}}"
+        )
+
+    def ratio(self) -> str:
+        """Ratio choisi (« 16:9 »…), ou "" si « Automatique »."""
+        return (self.currentData() or "").strip()

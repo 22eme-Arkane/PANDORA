@@ -376,6 +376,23 @@ class DecorDialog(QDialog):
         _m_row.addWidget(self._model_combo, 1)
         lay.addLayout(_m_row)
 
+        # Format (ratio) + Définition (résolution) — composants PARTAGÉS
+        # (ui/widgets.py), identiques dans tous les dialogues d'éléments.
+        # « Automatique » laisse la règle historique du décor : 16:9.
+        from ui.widgets import RatioCombo, ResolutionCombo
+        _fmt_row = QHBoxLayout()
+        _fmt_row.setSpacing(8)
+        _fmt_lbl = _lbl("Format")
+        _fmt_lbl.setFixedWidth(130)
+        _fmt_row.addWidget(_fmt_lbl)
+        self._ratio_combo = RatioCombo(auto_hint="16:9")
+        _fmt_row.addWidget(self._ratio_combo, 1)
+        _def_lbl = _lbl("Définition")
+        _fmt_row.addWidget(_def_lbl)
+        self._res_combo = ResolutionCombo()
+        _fmt_row.addWidget(self._res_combo, 1)
+        lay.addLayout(_fmt_row)
+
         self._reference_model_row = QWidget()
         self._reference_model_row.setStyleSheet("background:transparent;")
         _rm_row = QHBoxLayout(self._reference_model_row)
@@ -1107,7 +1124,9 @@ class DecorDialog(QDialog):
             self._worker_gen = GenerateRoomViewsWorker(
                 prompt, name, model_key=_mk, style_suffix=suffix,
                 reference_model_key=_rk,
-                category=self._cat.currentText())
+                category=self._cat.currentText(),
+                aspect_ratio=self._ratio_combo.ratio(),
+                resolution=self._res_combo.resolution_key())
             self._worker_gen.progress.connect(
                 lambda pct, msg: (self._progress.setValue(pct),
                                   self._status.setText(translate(msg))))
@@ -1118,7 +1137,9 @@ class DecorDialog(QDialog):
         elif mode == "sheet":
             self._status.setText("Génération du sheet 4 vues…")
             self._worker_gen = GenerateDecorSheetWorker(prompt, name, model_key=_mk,
-                                                        num_images=_num)
+                                                        num_images=_num,
+                                                        aspect_ratio=self._ratio_combo.ratio(),
+                                                        resolution=self._res_combo.resolution_key())
         else:
             import core.style as style_api
             if _usage == "style":
@@ -1136,6 +1157,8 @@ class DecorDialog(QDialog):
                 model_key=_mk, num_images=_num,
                 ref_usage=_usage, style_ref_path=_style_ref,
                 subject_hint="film location / decor",
+                aspect_ratio=self._ratio_combo.ratio(),
+                resolution=self._res_combo.resolution_key(),
             )
 
         self._worker_gen.progress.connect(lambda pct, msg: (self._progress.setValue(pct),
@@ -1202,7 +1225,9 @@ class DecorDialog(QDialog):
             return   # plan déjà à jour pour ce décor (ex. simple variation)
         name = self._name.text().strip() or "decor"
         self._fp_pending_prompt = prompt
-        self._floor_plan_worker = GenerateFloorPlanWorker(prompt, name)
+        self._floor_plan_worker = GenerateFloorPlanWorker(
+            prompt, name,
+            resolution=self._res_combo.resolution_key())
         self._floor_plan_worker.finished.connect(self._on_floor_plan_done)
         self._floor_plan_worker.failed.connect(lambda _e: None)   # non bloquant
         self._floor_plan_worker.start()

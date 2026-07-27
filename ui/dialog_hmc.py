@@ -377,6 +377,24 @@ class HMCDialog(QDialog):
         _m_row.addWidget(self._model_combo, 1)
         lay.addLayout(_m_row)
 
+        # Format (ratio) + Définition (résolution) — combos PARTAGÉS (ui/widgets).
+        # « Automatique » = la règle historique de cet élément (1:1 pour un HMC).
+        from ui.widgets import RatioCombo, ResolutionCombo
+        _fr_row = QHBoxLayout()
+        _fr_row.setSpacing(8)
+        _fmt_lbl = QLabel("Format")
+        _fmt_lbl.setFixedWidth(60)
+        _fmt_lbl.setStyleSheet(f"color:{CP['text_dim']};font-size:11px;background:transparent;")
+        _fr_row.addWidget(_fmt_lbl)
+        self._ratio_combo = RatioCombo(auto_hint="1:1")
+        _fr_row.addWidget(self._ratio_combo, 1)
+        _def_lbl = QLabel("Définition")
+        _def_lbl.setStyleSheet(f"color:{CP['text_dim']};font-size:11px;background:transparent;")
+        _fr_row.addWidget(_def_lbl)
+        self._res_combo = ResolutionCombo()
+        _fr_row.addWidget(self._res_combo, 1)
+        lay.addLayout(_fr_row)
+
         # Bouton générer
         _gen_row = QHBoxLayout()
         _gen_row.setSpacing(8)
@@ -942,6 +960,8 @@ class HMCDialog(QDialog):
             model_key=_mk, num_images=_num,
             ref_usage=_usage, style_ref_path=_style_ref,
             subject_hint="costume / makeup / hairstyle",
+            aspect_ratio=self._ratio_combo.ratio(),
+            resolution=self._res_combo.resolution_key(),
         )
         self._worker_gen.progress.connect(lambda pct, msg: (self._progress.setValue(pct),
                                                               self._status.setText(translate(msg))))

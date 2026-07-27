@@ -1077,6 +1077,26 @@ class CharacterDialog(QDialog):
         _m_row.addWidget(self._model_combo, 1)
         lay.addLayout(_m_row)
 
+        # Format (ratio) + Définition (résolution) — composants PARTAGÉS.
+        # « Automatique » reste le défaut : le format historique du portrait dépend
+        # du mode de génération (sheet_5views 16:9, editorial 1:1, action 9:16,
+        # duo 16:9, classic 2:3) — d'où l'indice « selon le mode ».
+        _fmt_row = QHBoxLayout()
+        _fmt_row.setSpacing(8)
+        _fmt_lbl = QLabel("Format")
+        _fmt_lbl.setStyleSheet(f"color:{CP['text_dim']};font-size:11px;background:transparent;")
+        _fmt_lbl.setFixedWidth(60)
+        _fmt_row.addWidget(_fmt_lbl)
+        from ui.widgets import RatioCombo, ResolutionCombo
+        self._ratio_combo = RatioCombo(auto_hint="selon le mode")
+        _fmt_row.addWidget(self._ratio_combo, 1)
+        _def_lbl = QLabel("Définition")
+        _def_lbl.setStyleSheet(f"color:{CP['text_dim']};font-size:11px;background:transparent;")
+        _fmt_row.addWidget(_def_lbl)
+        self._res_combo = ResolutionCombo()
+        _fmt_row.addWidget(self._res_combo, 1)
+        lay.addLayout(_fmt_row)
+
         _gen_row = QHBoxLayout()
         _gen_row.setSpacing(8)
         btn_gen = QPushButton("🎨  Générer le portrait")
@@ -1769,6 +1789,8 @@ class CharacterDialog(QDialog):
                 full_prompt, name, gen_mode=gen_mode,
                 model_key=_model_key, num_images=_num_images,
                 ref_usage=_ref_usage, style_ref_path=_style_ref,
+                aspect_ratio=self._ratio_combo.ratio(),
+                resolution=self._res_combo.resolution_key(),
             )
         self._worker_gen.progress.connect(self._on_gen_progress)
         self._worker_gen.finished.connect(self._on_gen_done)
@@ -2068,7 +2090,11 @@ class CharacterDialog(QDialog):
         name   = self._char.get("name", "") or "personnage"
         # PAS de repli sur la description (risque de narratif dans le prompt d'image).
         prompt = self._char.get("prompt", "") or name
-        self._nb2edit_worker = GeneratePortraitNB2EditWorker([path], prompt, name)
+        self._nb2edit_worker = GeneratePortraitNB2EditWorker(
+            [path], prompt, name,
+            aspect_ratio=self._ratio_combo.ratio(),
+            resolution=self._res_combo.resolution_key(),
+        )
         self._nb2edit_worker.progress.connect(self._on_nb2edit_progress)
         self._nb2edit_worker.finished.connect(self._on_nb2edit_done)
         self._nb2edit_worker.failed.connect(self._on_nb2edit_failed)

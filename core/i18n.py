@@ -2209,6 +2209,8 @@ _FR_TO_EN: dict[str, str] = {
     "🔒 Verrou façade ajouté à l'envoi : appareil figé, aucun zoom, proportions du bâtiment identiques à chaque image":
         "🔒 Facade lock added on send: static camera, no zoom, building proportions identical in every frame",
     "Définition": "Resolution",
+    "Format": "Aspect ratio",
+    "Automatique": "Automatic",
     "⚓ Image de départ : la dernière frame du plan précédent":
         "⚓ Start image: the last frame of the previous shot",
     # Refus de rognage façade — message diagnostique (2026-07-26).

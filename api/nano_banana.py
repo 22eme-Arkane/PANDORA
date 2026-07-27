@@ -396,6 +396,18 @@ def _apply_lang_to_system(system: str, lang: str) -> str:
     return result
 
 
+def _res_enum_for(resolution: str) -> str:
+    """Palier PANDORA (« 720p » … « 4k ») → enum `resolution` fal.ai.
+
+    Repli « 1K » : le comportement d'avant le sélecteur, jamais une erreur.
+    """
+    try:
+        from core.image_resolution import nano_enum
+        return nano_enum(resolution)
+    except Exception:
+        return "1K"
+
+
 def _ar_to_image_size(aspect_ratio: str) -> str:
     """Mappe un aspect_ratio PANDORA vers l'enum `image_size` de fal.ai (GPT Image 2,
     FLUX.2 pro, Seedream 4.5, Recraft utilisent image_size, pas aspect_ratio)."""
@@ -921,8 +933,11 @@ class GeneratePortraitWorker(QThread):
                  gen_mode: str = "sheet_5views", model_key: str | None = None,
                  num_images: int = 1,
                  ref_usage: str = "inspiration",
-                 style_ref_path: str = ""):
+                 style_ref_path: str = "",
+                 aspect_ratio: str = "", resolution: str = ""):
         super().__init__()
+        self._ar_override     = (aspect_ratio or "").strip()
+        self._resolution      = resolution
         self._prompt          = prompt
         self._name            = char_name
         self._ref_paths       = [p for p in (ref_paths or []) if p and os.path.isfile(p)]
@@ -1018,6 +1033,10 @@ class GeneratePortraitWorker(QThread):
                 _msg_start  = "Génération du portrait classique…"
                 _ar         = "2:3"
 
+            # Le format choisi dans le dialogue prime ; « Automatique » (vide)
+            # laisse la règle par mode ci-dessus, donc rien ne change par défaut.
+            _ar = self._ar_override or _ar
+
             # Si style extrait d'une image de référence, pas de suffix photoréaliste
             if self._ref_usage == "style" and self._style_ref_path and os.path.isfile(self._style_ref_path):
                 _sfx = ""
@@ -1062,7 +1081,7 @@ class GeneratePortraitWorker(QThread):
                         10 + int(i / n * 70),
                         f"[{i+1}/{n}] {_msg_start}  ({price})"
                     )
-                    _ep, _args = _build_image_args(full_prompt, _ar, "1K", cfg, 1)
+                    _ep, _args = _build_image_args(full_prompt, _ar, _res_enum_for(getattr(self, "_resolution", "")), cfg, 1)
                     if ref_url and _active_model in ("nb2", "nb_pro"):
                         _args["image_url"] = ref_url
                     _result = fal_client.subscribe(_ep, arguments=_args)
@@ -1080,7 +1099,7 @@ class GeneratePortraitWorker(QThread):
                 self.multi_finished.emit(paths)
             else:
                 self.progress.emit(10, f"{_msg_start}  ({price})")
-                _ep, _args = _build_image_args(full_prompt, _ar, "1K", cfg, 1)
+                _ep, _args = _build_image_args(full_prompt, _ar, _res_enum_for(getattr(self, "_resolution", "")), cfg, 1)
                 if ref_url and _active_model in ("nb2", "nb_pro"):
                     _args["image_url"] = ref_url
                 result = fal_client.subscribe(_ep, arguments=_args)
@@ -1621,8 +1640,11 @@ class GenerateDecorSheetWorker(QThread):
     failed         = pyqtSignal(str)
 
     def __init__(self, prompt: str, decor_name: str, model_key: str | None = None,
-                 num_images: int = 1):
+                 num_images: int = 1,
+                 aspect_ratio: str = "", resolution: str = ""):
         super().__init__()
+        self._ar_override = (aspect_ratio or "").strip()
+        self._resolution  = resolution
         self._prompt     = prompt
         self._name       = decor_name
         self._model_key  = model_key
@@ -1681,7 +1703,8 @@ class GenerateDecorSheetWorker(QThread):
                 self.progress.emit(pct_start,
                                    f"Sheet {i+1}/{self._num_images}…  ({price})")
                 _decor_endpoint, _decor_args = _build_image_args(
-                    full_prompt, "1:1", "1K", _decor_cfg, 1)
+                    full_prompt, self._ar_override or "1:1",
+                    _res_enum_for(self._resolution), _decor_cfg, 1)
                 result = fal_client.subscribe(_decor_endpoint, arguments=_decor_args)
                 url  = _extract_image_url(result)
                 self.progress.emit(pct_start + 20, f"Téléchargement sheet {i+1}…")
@@ -1712,8 +1735,11 @@ class GenerateItemWorker(QThread):
                  model_key: str | None = None, num_images: int = 1,
                  ref_usage: str = "inspiration",
                  style_ref_path: str = "",
-                 subject_hint: str = ""):
+                 subject_hint: str = "",
+                 aspect_ratio: str = "", resolution: str = ""):
         super().__init__()
+        self._ar_override     = (aspect_ratio or "").strip()
+        self._resolution      = resolution
         self._prompt          = prompt
         self._name            = item_name
         self._subdir          = subdir
@@ -1765,6 +1791,8 @@ class GenerateItemWorker(QThread):
             else:
                 prompt_suffix = _ITEM_LINE
                 aspect_ratio  = "1:1"
+            # Idem : le choix explicite prime, « Automatique » garde la règle.
+            aspect_ratio = self._ar_override or aspect_ratio
 
             # Traduit le prompt utilisateur (peut être en français) → anglais pour l'API
             prompt_en = translate_to_english(self._prompt) if self._prompt else ""
@@ -1839,11 +1867,12 @@ class GenerateItemWorker(QThread):
                             "image_urls":       [_fidelity_image_url],
                             "num_images":       1,
                             "aspect_ratio":     aspect_ratio,
-                            "resolution":       "1K",
+                            "resolution":       _res_enum_for(
+                                getattr(self, "_resolution", "")),
                             "output_format":    "png",
                             "safety_tolerance": "6",
                         })
-                _ep, _args = _build_image_args(_prompt_full, aspect_ratio, "1K", cfg, 1)
+                _ep, _args = _build_image_args(_prompt_full, aspect_ratio, _res_enum_for(getattr(self, "_resolution", "")), cfg, 1)
                 return fal_client.subscribe(_ep, arguments=_args)
 
             if n > 1:
@@ -1907,8 +1936,11 @@ class GenerateRoomViewsWorker(QThread):
     def __init__(self, base_prompt: str, decor_name: str,
                  model_key: str | None = None, style_suffix: str = "",
                  reference_model_key: str | None = None,
-                 category: str = ""):
+                 category: str = "",
+                 aspect_ratio: str = "", resolution: str = ""):
         super().__init__()
+        self._ar_override  = (aspect_ratio or "").strip()
+        self._resolution   = resolution
         self._base         = base_prompt
         self._name         = decor_name
         self._model_key    = model_key
@@ -2016,13 +2048,15 @@ class GenerateRoomViewsWorker(QThread):
                         return f"data:{mime};base64,{base64.b64encode(f.read()).decode()}"
 
             def _gen_text(prompt: str, aspect: str) -> bytes:
-                _ep, _args = _build_image_args(prompt, aspect, "1K", cfg, 1)
+                _ep, _args = _build_image_args(prompt, aspect, _res_enum_for(getattr(self, "_resolution", "")), cfg, 1)
                 _res = fal_client.subscribe(_ep, arguments=_args)
                 return requests.get(_extract_image_url(_res), timeout=120).content
 
             def _gen_edit(prompt: str, ref_urls: list, aspect: str) -> bytes:
                 _ep, _args, _kind = build_request(
-                    ref_model, prompt, ar_to_target(aspect), "1K", ref_urls,
+                    ref_model, prompt,
+                    ar_to_target(aspect, getattr(self, "_resolution", "")),
+                    _res_enum_for(getattr(self, "_resolution", "")), ref_urls,
                 )
                 if _kind != "raster":
                     raise RuntimeError("Le moteur de raccord doit produire une image raster.")
@@ -2300,7 +2334,8 @@ class GeneratePortraitNB2EditWorker(QThread):
                     "image_urls":       image_urls,
                     "num_images":       1,
                     "aspect_ratio":     "2:3",
-                    "resolution":       "1K",
+                    "resolution":       _res_enum_for(
+                        getattr(self, "_resolution", "")),
                     "output_format":    "png",
                     "safety_tolerance": "6",
                 },
@@ -2367,7 +2402,8 @@ class CleanBackgroundWorker(QThread):
                     "prompt":        prompt,
                     "image_urls":    [data_url],
                     "num_images":    1,
-                    "resolution":    "1K",
+                    "resolution":    _res_enum_for(
+                        getattr(self, "_resolution", "")),
                     "output_format": "png",
                 },
             )
@@ -2393,8 +2429,11 @@ class GenerateFloorPlanWorker(QThread):
     finished = pyqtSignal(str)
     failed   = pyqtSignal(str)
 
-    def __init__(self, decor_prompt: str, decor_name: str = "plan"):
+    def __init__(self, decor_prompt: str, decor_name: str = "plan",
+                 resolution: str = ""):
         super().__init__()
+        # Pas de ratio ici : un plan vu de dessus est carré par nature.
+        self._resolution = resolution
         self._prompt = decor_prompt
         self._name   = decor_name
 
@@ -2420,7 +2459,7 @@ class GenerateFloorPlanWorker(QThread):
                 f"flat tones, neutral background, clear and uncluttered, no people, no camera, "
                 f"no text labels. Square framing."
             )
-            ep, args = _build_image_args(prompt, "1:1", "1K", cfg, 1)
+            ep, args = _build_image_args(prompt, "1:1", _res_enum_for(getattr(self, "_resolution", "")), cfg, 1)
             result = fal_client.subscribe(ep, arguments=args)
             url  = _extract_image_url(result)
             data = requests.get(url, timeout=180).content
@@ -2508,7 +2547,7 @@ class GenerateFloorPlansWorker(QThread):
                                    f"Plan {i + 1}/{n} — {j.get('name', '')}")
                 base = j.get("prompt") or j.get("name") or "an interior room"
                 base_en = translate_to_english(base) if base else "an interior room"
-                ep, args = _build_image_args(_floor_plan_prompt(base_en), "1:1", "1K", cfg, 1)
+                ep, args = _build_image_args(_floor_plan_prompt(base_en), "1:1", _res_enum_for(getattr(self, "_resolution", "")), cfg, 1)
                 result = fal_client.subscribe(ep, arguments=args)
                 url  = _extract_image_url(result)
                 data = requests.get(url, timeout=180).content
@@ -2566,10 +2605,11 @@ class GenerateFloorPlanVariationWorker(QThread):
                 url = _upload_ref_robust(fal_client, self._ov)
                 result = fal_client.subscribe("fal-ai/nano-banana-2/edit", arguments={
                     "prompt": fp_anchor, "image_urls": [url], "num_images": 1,
-                    "aspect_ratio": "1:1", "resolution": "1K",
+                    "aspect_ratio": "1:1",
+                    "resolution": _res_enum_for(getattr(self, "_resolution", "")),
                     "output_format": "png", "safety_tolerance": "6"})
             else:
-                ep, args = _build_image_args(_floor_plan_prompt(base_en), "1:1", "1K", cfg, 1)
+                ep, args = _build_image_args(_floor_plan_prompt(base_en), "1:1", _res_enum_for(getattr(self, "_resolution", "")), cfg, 1)
                 result = fal_client.subscribe(ep, arguments=args)
             u = _extract_image_url(result)
             data = requests.get(u, timeout=180).content

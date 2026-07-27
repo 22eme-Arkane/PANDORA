@@ -385,6 +385,22 @@ class AccessoryDialog(QDialog):
         _m_row.addWidget(self._model_combo, 1)
         lay.addLayout(_m_row)
 
+        # Format (ratio) + Définition (résolution) — composants PARTAGÉS.
+        # « Automatique » laisse la règle historique de l'accessoire (1:1).
+        from ui.widgets import RatioCombo, ResolutionCombo
+        _fmt_row = QHBoxLayout()
+        _fmt_row.setSpacing(8)
+        _fmt_lbl = _lbl("Format")
+        _fmt_lbl.setFixedWidth(60)
+        _fmt_row.addWidget(_fmt_lbl)
+        self._ratio_combo = RatioCombo(auto_hint="1:1")
+        _fmt_row.addWidget(self._ratio_combo, 1)
+        _def_lbl = _lbl("Définition")
+        _fmt_row.addWidget(_def_lbl)
+        self._res_combo = ResolutionCombo()
+        _fmt_row.addWidget(self._res_combo, 1)
+        lay.addLayout(_fmt_row)
+
         # Bouton générer
         _gen_row = QHBoxLayout()
         _gen_row.setSpacing(8)
@@ -922,6 +938,8 @@ class AccessoryDialog(QDialog):
             model_key=_mk, num_images=_num,
             ref_usage=_usage, style_ref_path=_style_ref,
             subject_hint="prop / accessory",
+            aspect_ratio=self._ratio_combo.ratio(),
+            resolution=self._res_combo.resolution_key(),
         )
         self._worker_gen.progress.connect(lambda pct, msg: (self._progress.setValue(pct),
                                                               self._status.setText(translate(msg))))
