@@ -192,6 +192,15 @@ class MoodDialog(QDialog):
         self._res_combo = ResolutionCombo(compact=True)
         prompt_hdr.addWidget(self._res_combo)
 
+        prompt_hdr.addSpacing(10)
+        _fmt_lbl = QLabel(translate("Format"))
+        _fmt_lbl.setStyleSheet(
+            f"color:{CP['text_dim']};font-size:11px;background:transparent;")
+        prompt_hdr.addWidget(_fmt_lbl)
+        from ui.widgets import RatioCombo
+        self._ratio_combo = RatioCombo(compact=True, auto_hint="16:9")
+        prompt_hdr.addWidget(self._ratio_combo)
+
         self._grammar_lbl = QLabel("")
         self._grammar_lbl.setStyleSheet(
             f"color:{CP['text_dim']};font-size:10px;background:transparent;")
@@ -818,7 +827,8 @@ class MoodDialog(QDialog):
         # La définition part TOUJOURS, même sans moteur explicite : l'ancien
         # `options=None` quand `engine` était vide aurait fait retomber le Mood
         # sur le défaut de l'API et rendu le sélecteur inopérant une fois sur deux.
-        _opts = {"resolution": self._res_combo.resolution_key()}
+        _opts = {"resolution": self._res_combo.resolution_key(),
+                 "aspect_ratio": self._ratio_combo.ratio()}
         if engine:
             _opts["engine"] = engine
         self._worker = MoodGenerationWorker(self._shot, apercu_dir,

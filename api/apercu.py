@@ -271,7 +271,8 @@ _FACADE_PRIORITY_DIRECTIVE = (
 
 
 def run_generation(prompt: str, output_dir: str, api_key: str, progress_cb,
-                   building_ref: str = "", inspiration_ref: str = "") -> str:
+                   building_ref: str = "", inspiration_ref: str = "",
+                   aspect_ratio: str = "") -> str:
     """Génère une image et retourne son chemin. Lève une exception si erreur.
 
     - `building_ref` (façade, mapping) : Flux Kontext ÉDITE la façade (géométrie
@@ -328,7 +329,7 @@ def run_generation(prompt: str, output_dir: str, api_key: str, progress_cb,
                 "prompt":         kontext_prompt,
                 "image_urls":     urls,
                 "guidance_scale": 3.5,
-                "aspect_ratio":   "16:9",
+                "aspect_ratio":   aspect_ratio or "16:9",
             },
         )
     elif _has_facade:
@@ -585,7 +586,8 @@ def _res_enum_for(resolution: str) -> str:
 def run_generation_nb2(prompt: str, output_dir: str, api_key: str, progress_cb,
                        ref_images: list | None = None, floor_plan: str = "",
                        inspiration_refs: list | None = None, facade_ref: str = "",
-                       engine_key: str = "nb2", resolution: str = "") -> str:
+                       engine_key: str = "nb2", resolution: str = "",
+                       aspect_ratio: str = "") -> str:
     """Mood via la famille Nano Banana : édition avec réfs si disponibles, sinon
     génération texte. Aspect 16:9, comme le mood Flux.
 
@@ -619,6 +621,10 @@ def run_generation_nb2(prompt: str, output_dir: str, api_key: str, progress_cb,
     except Exception:
         _ep_text, _ep_edit = "fal-ai/nano-banana-2", "fal-ai/nano-banana-2/edit"
     _res_enum = _res_enum_for(resolution)
+    # Le Mood a toujours été en 16:9 : c'est le format de la vidéo qu'il alimente.
+    # Il reste le défaut — un Mood dans un autre format que la génération vidéo
+    # se ferait étirer, ce que tout ce chantier vient justement de supprimer.
+    _ar = aspect_ratio or "16:9"
 
     if _facade:
         # ── MODE MAPPING : la FAÇADE est le canvas prioritaire (1ʳᵉ image) ; MÊMES
@@ -630,7 +636,7 @@ def run_generation_nb2(prompt: str, output_dir: str, api_key: str, progress_cb,
         directive = (_FACADE_PRIORITY_DIRECTIVE if inspiration else "") + _MAPPING_NIGHT_LOCK
         result = fal_client.subscribe(_ep_edit, arguments={
             "prompt": prompt + directive, "image_urls": urls,
-            "num_images": 1, "aspect_ratio": "16:9", "resolution": _res_enum,
+            "num_images": 1, "aspect_ratio": _ar, "resolution": _res_enum,
             "output_format": "png", "safety_tolerance": "6",
         })
     else:
@@ -665,14 +671,14 @@ def run_generation_nb2(prompt: str, output_dir: str, api_key: str, progress_cb,
             directive = "\n\n".join(_parts)
             result = fal_client.subscribe(_ep_edit, arguments={
                 "prompt": prompt + (("\n\n" + directive) if directive else ""), "image_urls": urls,
-                "num_images": 1, "aspect_ratio": "16:9", "resolution": _res_enum,
+                "num_images": 1, "aspect_ratio": _ar, "resolution": _res_enum,
                 "output_format": "png", "safety_tolerance": "6",
             })
         else:
             progress_cb("Nano Banana 2…")
             result = fal_client.subscribe(_ep_text, arguments={
                 "prompt": prompt, "num_images": 1,
-                "aspect_ratio": "16:9", "resolution": _res_enum, "output_format": "png",
+                "aspect_ratio": _ar, "resolution": _res_enum, "output_format": "png",
             })
     imgs = (result or {}).get("images") or []
     image_url = (imgs[0].get("url") if imgs and isinstance(imgs[0], dict)
@@ -699,7 +705,7 @@ def run_generation_engine(engine_key: str, prompt: str, output_dir: str,
                           ref_images: list | None = None, facade_ref: str = "",
                           inspiration_refs: list | None = None,
                           floor_plan: str = "", is_mapping: bool = False,
-                          resolution: str = "") -> str:
+                          resolution: str = "", aspect_ratio: str = "") -> str:
     from core import image_engines as _ie
     os.makedirs(output_dir, exist_ok=True)
     label = _ie.short_label(engine_key)
@@ -757,7 +763,8 @@ def run_generation_engine(engine_key: str, prompt: str, output_dir: str,
     progress_cb(f"Génération du Mood via {label}"
                 + (f" ({len(ref_urls)} réf.)" if ref_urls else "") + "…")
     endpoint, args, _kind = _ie.build_request(
-        engine_key, full_prompt, _ie.ar_to_target("16:9", resolution),
+        engine_key, full_prompt,
+        _ie.ar_to_target(aspect_ratio or "16:9", resolution),
         _res_enum_for(resolution), ref_urls)
     result = fal_client.subscribe(endpoint, arguments=args)
 
@@ -793,6 +800,7 @@ def run_mood(shot: dict, prompt: str, output_dir: str, api_key: str, progress_cb
     """
     opts = options or {}
     _res = (opts.get("resolution") or "").strip()
+    _ar  = (opts.get("aspect_ratio") or "").strip()
     engine = (opts.get("engine") or "").strip().lower()
     if not engine:
         engine = "nb2" if _is_cinema_mood() else "flux"
@@ -827,24 +835,25 @@ def run_mood(shot: dict, prompt: str, output_dir: str, api_key: str, progress_cb
         if _is_mapping:
             return run_generation_nb2(prompt, output_dir, api_key, progress_cb,
                                       inspiration_refs=_inspo, facade_ref=building_ref,
-                                      engine_key=engine, resolution=_res)
+                                      engine_key=engine, resolution=_res,
+                                      aspect_ratio=_ar)
         return run_generation_nb2(prompt, output_dir, api_key, progress_cb,
                                   _consistency(), floor_plan=_floor(),
                                   inspiration_refs=_inspo, engine_key=engine,
-                                  resolution=_res)
+                                  resolution=_res, aspect_ratio=_ar)
 
     # ── Flux héritage (Kontext mapping / t2i depuis le prompt) ──────────────────
     if engine == "flux":
         _insp = _inspo[0] if _inspo else ""
         return run_generation(prompt, output_dir, api_key, progress_cb, building_ref,
-                              inspiration_ref=_insp)
+                              inspiration_ref=_insp, aspect_ratio=_ar)
 
     # ── Tout autre moteur du catalogue → chemin générique ───────────────────────
     return run_generation_engine(
         engine, prompt, output_dir, api_key, progress_cb,
         ref_images=_consistency(), facade_ref=building_ref,
         inspiration_refs=_inspo, floor_plan=_floor(), is_mapping=_is_mapping,
-        resolution=_res)
+        resolution=_res, aspect_ratio=_ar)
 
 
 # ── Worker unitaire ───────────────────────────────────────────────────────────

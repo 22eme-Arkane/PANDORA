@@ -2059,6 +2059,20 @@ class _MoodBatchDialog(QDialog):
         from ui.widgets import ResolutionCombo
         self._opt_res = ResolutionCombo()
         lay.addWidget(self._opt_res)
+        # Format — « Automatique » = 16:9, le format de la vidéo que ce Mood
+        # alimente. En mapping, l'aligner sur la façade évite au moteur de
+        # recadrer ou d'étirer l'image de départ.
+        _fmt_row = QHBoxLayout()
+        _fmt_row.setSpacing(8)
+        _fmt_lbl = QLabel(translate("Format"))
+        _fmt_lbl.setStyleSheet(
+            f"color:{CP['text_dim']};font-size:11px;background:transparent;")
+        _fmt_lbl.setFixedWidth(72)
+        _fmt_row.addWidget(_fmt_lbl)
+        from ui.widgets import RatioCombo as _RatioCombo
+        self._opt_ratio = _RatioCombo(auto_hint="16:9")
+        _fmt_row.addWidget(self._opt_ratio, 1)
+        lay.addLayout(_fmt_row)
         # Variations par plan — chacune est un appel facturé, donc 1 par defaut.
         _var_row = QHBoxLayout()
         _var_row.setSpacing(8)
@@ -2087,6 +2101,7 @@ class _MoodBatchDialog(QDialog):
             self.engine = self._opt_engine.currentData() or "nb2"
             self.resolution = self._opt_res.resolution_key()
             self.variations = self._opt_variations.value()
+            self.aspect_ratio = self._opt_ratio.ratio()
             self.accept()
 
         self._btn_gen = QPushButton(translate("✦  Générer les Moods"))
@@ -3586,7 +3601,8 @@ class PageStoryboard(QWidget):
         self._batch_mood_worker = MoodBatchWorker(
             selected, options={"engine": getattr(dlg, "engine", "flux"),
                                "resolution": getattr(dlg, "resolution", ""),
-                               "variations": getattr(dlg, "variations", 1)})
+                               "variations": getattr(dlg, "variations", 1),
+                               "aspect_ratio": getattr(dlg, "aspect_ratio", "")})
         self._batch_mood_worker.shot_progress.connect(self._on_batch_mood_progress)
         self._batch_mood_worker.shot_done.connect(self._on_batch_mood_done)
         self._batch_mood_worker.shot_failed.connect(self._on_batch_mood_failed)

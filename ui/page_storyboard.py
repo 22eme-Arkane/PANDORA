@@ -2028,6 +2028,20 @@ class _MoodBatchDialog(QDialog):
         self._opt_res = ResolutionCombo()
         _res_row.addWidget(self._opt_res, 1)
         lay.addLayout(_res_row)
+        # Format — « Automatique » = 16:9, le format de la vidéo que ce Mood
+        # alimente. En mapping, l'aligner sur la façade évite au moteur de
+        # recadrer ou d'étirer l'image de départ.
+        _fmt_row = QHBoxLayout()
+        _fmt_row.setSpacing(8)
+        _fmt_lbl = QLabel(translate("Format"))
+        _fmt_lbl.setStyleSheet(
+            f"color:{CP['text_dim']};font-size:11px;background:transparent;")
+        _fmt_lbl.setFixedWidth(72)
+        _fmt_row.addWidget(_fmt_lbl)
+        from ui.widgets import RatioCombo as _RatioCombo
+        self._opt_ratio = _RatioCombo(auto_hint="16:9")
+        _fmt_row.addWidget(self._opt_ratio, 1)
+        lay.addLayout(_fmt_row)
         # Variations par plan — chacune est un appel facturé, donc 1 par defaut.
         _var_row = QHBoxLayout()
         _var_row.setSpacing(8)
@@ -3481,6 +3495,7 @@ class PageStoryboard(QWidget):
             "engine":     dlg._opt_engine.currentData() or "nb2",
             "resolution": dlg._opt_res.resolution_key(),
             "variations": dlg._opt_variations.value(),
+            "aspect_ratio": dlg._opt_ratio.ratio(),
             "chars":      dlg._opt_chars.isChecked(),
             "decor":      dlg._opt_decor.isChecked(),
             "props":      dlg._opt_props.isChecked(),
