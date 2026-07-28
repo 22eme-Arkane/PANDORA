@@ -5712,6 +5712,105 @@ def mood_ne_decrit_que_letat_douverture():
 
 
 @test
+def mood_rend_linstant_de_lancrage():
+    """Le Mood rend l'instant que l'ANCRAGE deux plaques attend de lui.
+
+    Méthode deux plaques (2026-07-27, confirmée par Matthieu le 28/07 : « il
+    faut que le mood crée l'image de fin du plan actuel pour faire la
+    transition ») : la vidéo d'un plan PART de la dernière frame du plan
+    précédent et ARRIVE sur son Mood. Le Mood du cas courant est donc l'image
+    de FIN du plan (ÉTAT 1). Seul le PREMIER plan n'a pas de prédécesseur :
+    son Mood sert d'image de DÉPART (ÉTAT 0).
+
+    Le correctif du 27/07 (« ne plus décrire ce qu'on ne veut pas voir »)
+    forçait l'ÉTAT 0 partout — à contre-emploi pour tout plan ≥ 2 depuis
+    l'ancrage. Les deux se réconcilient ici : UN état à la fois, jamais la
+    barre entière, et l'état choisi suit l'ancrage (forçable par la fenêtre).
+    """
+    import core.storyboard as sb
+    import api.apercu as A
+
+    sb.set_namespace("live_seq_mapping")
+    _p = (
+        "SURFACE : façade.\n"
+        "ÉTAT 0 : pierre givrée sombre.\n"
+        "TRANSFORMATION : le gel fond peu à peu.\n"
+        "ÉTAT 1 : pierre nue dorée.\n"
+        "NOIR : le fond hors façade.\n"
+        "STYLE : gravure.\n"
+    )
+    _s1 = {"id": "i1", "number": 1, "seedance_prompt": _p}
+    _s2 = {"id": "i2", "number": 2, "seedance_prompt": _p}
+    try:
+        # ① Automatique : plan 2 → FIN (plaque d'arrivée), plan 1 → DÉBUT.
+        _out2 = A.build_mood_prompt(_s2, "", "nb2")
+        assert "pierre nue dorée" in _out2, \
+            "plan 2 : le Mood doit rendre l'ÉTAT 1 — c'est la plaque d'ARRIVÉE"
+        assert "pierre givrée" not in _out2 and "gel fond" not in _out2, \
+            ("plan 2 : l'état de départ ou la transformation partent au moteur "
+             "alors que seul l'état d'arrivée doit être décrit", _out2[:200])
+        _out1 = A.build_mood_prompt(_s1, "", "nb2")
+        assert "pierre givrée" in _out1 and "pierre nue dorée" not in _out1, \
+            "plan 1 : sans prédécesseur, le Mood reste l'image de DÉPART (ÉTAT 0)"
+
+        # ② Forçage : la fenêtre peut imposer l'un ou l'autre.
+        _force_d = A.build_mood_prompt(_s2, "", "nb2", instant="debut")
+        assert "pierre givrée" in _force_d and "pierre nue dorée" not in _force_d
+        _force_f = A.build_mood_prompt(_s1, "", "nb2", instant="fin")
+        assert "pierre nue dorée" in _force_f and "pierre givrée" not in _force_f
+
+        # ③ La composition reçoit le MÊME instant : son « moment » désigne
+        #    l'état d'arrivée pour un plan 2, l'ouverture pour un plan 1 —
+        #    et comme le moment entre dans la clé de cache, changer d'instant
+        #    recompose.
+        _, _m2, _k2, _ = A.compose_mood_inputs(_s2, "", "", is_mapping=True)
+        assert _k2 == "mood_mapping" and "FINAL" in _m2 and "pierre nue dorée" in _m2, \
+            ("plan 2 : le moment de composition doit désigner l'état FINAL", _m2)
+        _, _m1, _, _ = A.compose_mood_inputs(_s1, "", "", is_mapping=True)
+        assert "OPENING" in _m1 and "pierre givrée" in _m1, \
+            ("plan 1 : le moment de composition doit désigner l'OUVERTURE", _m1)
+        assert _m1 != _m2
+
+        # ④ La fenêtre : le sélecteur d'instant n'existe qu'en MAPPING, et
+        #    l'instant choisi gouverne le prompt reconstruit.
+        import ui.dialog_apercu as DA
+        sb.clear_version_shots(sb.DEFAULT_VERSION_ID)
+        _shot_ui = sb.save_shot({"number": 2, "scene_title": "P2",
+                                 "seedance_prompt": _p}, sb.DEFAULT_VERSION_ID)
+        dlg = DA.MoodDialog(None, _shot_ui)
+        dlg._compose_timer.stop()
+        try:
+            assert not dlg._instant_combo.isHidden(), \
+                "mapping : le sélecteur d'instant doit être proposé"
+            # setVisible/isHidden, pas isVisible : le dialogue n'est jamais
+            # affiché en headless (piège documenté).
+            _i_fin = dlg._instant_combo.findData("debut")
+            dlg._instant_combo.setCurrentIndex(_i_fin)
+            assert dlg._current_instant() == "debut"
+            assert "pierre givrée" in dlg._prompt_edit.toPlainText(), \
+                "forcer « Début » ne reconstruit pas le prompt affiché"
+        finally:
+            dlg._compose_timer.stop()
+            dlg.deleteLater()
+
+        # Hors mapping (namespace Live simple) : pas de sélecteur.
+        sb.set_namespace("live_seq_1")
+        _shot_l = {"id": "iL", "number": 2, "seedance_prompt": _p}
+        dlg2 = DA.MoodDialog(None, _shot_l)
+        dlg2._compose_timer.stop()
+        try:
+            assert dlg2._instant_combo.isHidden(), \
+                "hors mapping, le sélecteur d'instant n'a pas de sens"
+            assert dlg2._current_instant() == "", \
+                "hors mapping, l'instant doit rester vide (aucun ancrage)"
+        finally:
+            dlg2._compose_timer.stop()
+            dlg2.deleteLater()
+    finally:
+        sb.set_namespace("storyboard")
+
+
+@test
 def mood_actif_apres_serie_nest_pas_un_tirage_au_hasard():
     """Sur une série de variations, le mood ACTIF doit être la PREMIÈRE.
 

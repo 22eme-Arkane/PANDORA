@@ -2219,6 +2219,28 @@ _FR_TO_EN: dict[str, str] = {
     "Ce prompt est votre document de travail : gardez ces blocs, ils structurent le plan. À chaque envoi, PANDORA le réécrit pour le moteur choisi — en anglais, en texte continu, sans les étiquettes — selon la grammaire propre à la vidéo ou à l'image.":
         "This prompt is your working document: keep these blocks, they give the shot its structure. On every send, PANDORA rewrites it for the chosen engine — in English, as continuous text, without the labels — following the grammar specific to video or to image.",
     "composition du prompt…": "composing the prompt…",
+    "Instant : auto":               "Moment: auto",
+    "Début du plan":                "Start of the shot",
+    "Fin du plan":                  "End of the shot",
+    "Automatique (selon l'ancrage)": "Automatic (follows the anchoring)",
+    "Quel moment de la barre le Mood doit montrer.\n"
+    "Automatique : la FIN du plan — le Mood est la plaque d'ARRIVÉE de "
+    "la vidéo (elle part de la dernière frame du plan précédent) — sauf "
+    "pour le premier plan, qui n'a pas de prédécesseur et PART de son "
+    "Mood (DÉBUT).":
+        "Which moment of the bar the Mood should show.\n"
+        "Automatic: the END of the shot — the Mood is the ARRIVAL plate of "
+        "the video (it starts from the last frame of the previous shot) — "
+        "except for the first shot, which has no predecessor and STARTS "
+        "from its Mood (BEGINNING).",
+    "Quel moment de la barre chaque Mood doit montrer.\n"
+    "Automatique : la FIN du plan — le Mood est la plaque d'ARRIVÉE "
+    "de la vidéo — sauf pour le premier plan, qui n'a pas de "
+    "prédécesseur et PART de son Mood (DÉBUT).":
+        "Which moment of the bar each Mood should show.\n"
+        "Automatic: the END of the shot — the Mood is the ARRIVAL plate "
+        "of the video — except for the first shot, which has no "
+        "predecessor and STARTS from its Mood (BEGINNING).",
     "prompt retouché à la main": "prompt edited by hand",
     "♻ déjà composé": "♻ already composed",
     "✓ composé pour ce moteur": "✓ composed for this engine",

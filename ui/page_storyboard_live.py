@@ -2090,6 +2090,32 @@ class _MoodBatchDialog(QDialog):
         self._opt_ratio = _RatioCombo(auto_hint="16:9")
         _fmt_row.addWidget(self._opt_ratio, 1)
         lay.addLayout(_fmt_row)
+        # Instant rendu (MAPPING seulement) — ancrage deux plaques : la vidéo
+        # d'un plan PART de la dernière frame du plan précédent et ARRIVE sur
+        # son Mood. « Automatique » rend donc la FIN du plan, sauf le premier
+        # (sans prédécesseur, il PART de son Mood → début).
+        if _is_map:
+            _ins_row = QHBoxLayout()
+            _ins_row.setSpacing(8)
+            _ins_lbl = QLabel(translate("Instant"))
+            _ins_lbl.setStyleSheet(
+                f"color:{CP['text_dim']};font-size:11px;background:transparent;")
+            _ins_lbl.setFixedWidth(72)
+            _ins_row.addWidget(_ins_lbl)
+            self._opt_instant = _QComboBox()
+            self._opt_instant.addItem(translate("Automatique (selon l'ancrage)"), "")
+            self._opt_instant.addItem(translate("Début du plan"), "debut")
+            self._opt_instant.addItem(translate("Fin du plan"), "fin")
+            self._opt_instant.setFixedHeight(30)
+            self._opt_instant.setToolTip(translate(
+                "Quel moment de la barre chaque Mood doit montrer.\n"
+                "Automatique : la FIN du plan — le Mood est la plaque d'ARRIVÉE "
+                "de la vidéo — sauf pour le premier plan, qui n'a pas de "
+                "prédécesseur et PART de son Mood (DÉBUT)."))
+            self._opt_instant.setStyleSheet(self._opt_engine.styleSheet())
+            _ins_row.addWidget(self._opt_instant, 1)
+            lay.addLayout(_ins_row)
+
         # Variations par plan — chacune est un appel facturé, donc 1 par defaut.
         _var_row = QHBoxLayout()
         _var_row.setSpacing(8)
@@ -2119,6 +2145,8 @@ class _MoodBatchDialog(QDialog):
             self.resolution = self._opt_res.resolution_key()
             self.variations = self._opt_variations.value()
             self.aspect_ratio = self._opt_ratio.ratio()
+            self.instant = (self._opt_instant.currentData() or ""
+                            if hasattr(self, "_opt_instant") else "")
             self.accept()
 
         self._btn_gen = QPushButton(translate("✦  Générer les Moods"))
@@ -3619,7 +3647,8 @@ class PageStoryboard(QWidget):
             selected, options={"engine": getattr(dlg, "engine", "flux"),
                                "resolution": getattr(dlg, "resolution", ""),
                                "variations": getattr(dlg, "variations", 1),
-                               "aspect_ratio": getattr(dlg, "aspect_ratio", "")})
+                               "aspect_ratio": getattr(dlg, "aspect_ratio", ""),
+                               "instant": getattr(dlg, "instant", "")})
         self._batch_mood_worker.shot_progress.connect(self._on_batch_mood_progress)
         self._batch_mood_worker.shot_done.connect(self._on_batch_mood_done)
         self._batch_mood_worker.shot_failed.connect(self._on_batch_mood_failed)

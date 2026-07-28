@@ -60,13 +60,14 @@ class _MoodPromptWorker(QThread):
     done = pyqtSignal(str, bool, str, bool)   # (prompt, composé, raison, du_cache)
 
     def __init__(self, shot: dict, style: str, engine: str,
-                 building_ref: str, is_mapping: bool):
+                 building_ref: str, is_mapping: bool, instant: str = ""):
         super().__init__()
         self._shot   = shot or {}
         self._style  = style or ""
         self._engine = engine or ""
         self._bref   = building_ref or ""
         self._mapping = bool(is_mapping)
+        self._instant = instant or ""
 
     def run(self):
         """Délègue à `api.apercu.compose_mood_prompt` — le MÊME chemin que le lot.
@@ -78,7 +79,7 @@ class _MoodPromptWorker(QThread):
             from api.apercu import compose_mood_prompt
             _p, _ok, _why, _cache = compose_mood_prompt(
                 self._shot, self._style, self._engine, self._bref,
-                is_mapping=self._mapping)
+                is_mapping=self._mapping, instant=self._instant)
             self.done.emit(_p, _ok, _why, _cache)
         except Exception as exc:
             self.done.emit("", False, str(exc)[:200], False)
@@ -225,6 +226,28 @@ class MoodDialog(QDialog):
         self._engine_combo = self._build_engine_combo()
         prompt_hdr.addWidget(self._engine_combo)
 
+        # ── Instant rendu (MAPPING seulement) — ancrage deux plaques ──────────
+        # La vidéo d'un plan PART de la dernière frame du plan précédent et
+        # ARRIVE sur son Mood (méthode du 2026-07-27, confirmée par Matthieu le
+        # 28/07) : le Mood du cas courant est l'image de FIN du plan. Seul le
+        # premier plan, sans prédécesseur, part de son Mood → image de DÉBUT.
+        # « Automatique » suit cet ancrage ; le forçage sert à régénérer un
+        # départ ou une image-vitrine.
+        prompt_hdr.addSpacing(10)
+        self._instant_combo = QComboBox()
+        self._instant_combo.setFixedHeight(24)
+        self._instant_combo.addItem(translate("Instant : auto"), "")
+        self._instant_combo.addItem(translate("Début du plan"), "debut")
+        self._instant_combo.addItem(translate("Fin du plan"), "fin")
+        self._instant_combo.setToolTip(translate(
+            "Quel moment de la barre le Mood doit montrer.\n"
+            "Automatique : la FIN du plan — le Mood est la plaque d'ARRIVÉE de "
+            "la vidéo (elle part de la dernière frame du plan précédent) — sauf "
+            "pour le premier plan, qui n'a pas de prédécesseur et PART de son "
+            "Mood (DÉBUT)."))
+        self._instant_combo.setVisible(self._is_mapping())
+        prompt_hdr.addWidget(self._instant_combo)
+
         # Définition — juste après le moteur, les deux réglages du RENDU côte à
         # côte. C'est ici que ça compte le plus : le Mood sert d'image de départ
         # à la génération vidéo, donc son ratio est celui qui décide si la façade
@@ -283,6 +306,7 @@ class MoodDialog(QDialog):
         # Premier remplissage : prompt écrit pour le moteur sélectionné.
         self._reset_prompt()
         self._engine_combo.currentIndexChanged.connect(self._on_engine_changed)
+        self._instant_combo.currentIndexChanged.connect(self._on_instant_changed)
 
         # ── Image principale ───────────────────────────────────────────────────
         self._img_lbl = QLabel()
@@ -513,7 +537,8 @@ class MoodDialog(QDialog):
         from api.apercu import build_mood_prompt
         import core.style as _style_mod
         self._set_prompt_text(build_mood_prompt(
-            self._shot, _style_mod.get_image_suffix() or "", self._current_engine()))
+            self._shot, _style_mod.get_image_suffix() or "",
+            self._current_engine(), self._current_instant()))
         self._prompt_dirty = False
         self._refresh_grammar_label()
         # Le texte déterministe s'affiche TOUT DE SUITE — l'encart n'est jamais
@@ -566,7 +591,7 @@ class MoodDialog(QDialog):
             self._refresh_grammar_label(translate("composition du prompt…"))
             self._compose_worker = _MoodPromptWorker(
                 self._shot, _style, self._current_engine(), _bref,
-                self._is_mapping())
+                self._is_mapping(), self._current_instant())
             self._compose_worker.done.connect(self._on_composed)
             self._compose_worker.start()
         except Exception:
@@ -621,6 +646,26 @@ class MoodDialog(QDialog):
                 save_config(cfg)
         except Exception:
             pass
+
+    def _current_instant(self) -> str:
+        """« » (automatique) / « debut » / « fin » — toujours vide hors mapping."""
+        try:
+            if not self._is_mapping():
+                return ""
+            return self._instant_combo.currentData() or ""
+        except Exception:
+            return ""
+
+    def _on_instant_changed(self):
+        """Changer d'instant change l'état de la barre à rendre → prompt refait.
+
+        Texte retouché à la main : on ne l'écrase pas — l'instant choisi
+        s'appliquera au prochain « Réinitialiser », le texte de l'utilisateur
+        prime (même contrat que le changement de moteur)."""
+        if self._prompt_dirty:
+            self._refresh_grammar_label()
+            return
+        self._reset_prompt()
 
     # ── Pulsation de la barre ─────────────────────────────────────────────────
 
@@ -920,7 +965,10 @@ class MoodDialog(QDialog):
         # `options=None` quand `engine` était vide aurait fait retomber le Mood
         # sur le défaut de l'API et rendu le sélecteur inopérant une fois sur deux.
         _opts = {"resolution": self._res_combo.resolution_key(),
-                 "aspect_ratio": self._ratio_combo.ratio()}
+                 "aspect_ratio": self._ratio_combo.ratio(),
+                 # L'instant suit l'encart : le prompt affiché a été écrit pour
+                 # lui, et le worker s'en sert pour son repli si l'encart est vide.
+                 "instant": self._current_instant()}
         if engine:
             _opts["engine"] = engine
         self._worker = MoodGenerationWorker(self._shot, apercu_dir,
