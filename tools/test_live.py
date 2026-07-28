@@ -5776,6 +5776,47 @@ def mood_rend_letat_darrivee():
 
 
 @test
+def keyframes_de_raccord_a_la_meme_resolution():
+    """Les DEUX keyframes d'un plan partent à la MÊME résolution.
+
+    Piste trouvée par Matthieu (2026-07-29), mesurée sur Forcalquier : la
+    frame de raccord est extraite à la résolution NATIVE du clip (1280×720 en
+    génération 720p) alors que les moods font 1920×1080. Deux keyframes de
+    résolutions différentes laissent le moteur unifier LUI-MÊME — recadrages
+    et remises à l'échelle internes = dérive de façade garantie par
+    construction. La frame de raccord est désormais conformée aux dimensions
+    du Mood (qui porte la géométrie de la plaque) avant l'envoi.
+    """
+    import tempfile, inspect as _i
+    from PIL import Image
+    from core.video_utils import match_image_size
+
+    td = tempfile.mkdtemp(prefix="t_kfres_")
+    small = os.path.join(td, "raccord.png")
+    ref = os.path.join(td, "mood.png")
+    Image.new("RGB", (1280, 720), (10, 20, 30)).save(small)
+    Image.new("RGB", (1920, 1080), (30, 20, 10)).save(ref)
+
+    out = match_image_size(small, ref)
+    assert out != small, "la frame 720p doit être conformée aux dimensions du mood"
+    with Image.open(out) as im:
+        assert im.size == (1920, 1080), (im.size,)
+
+    # Même taille → chemin inchangé (aucune copie inutile).
+    assert match_image_size(ref, ref) == ref
+
+    # Ratio différent → on ne recadre pas à l'aveugle : chemin inchangé.
+    carre = os.path.join(td, "carre.png")
+    Image.new("RGB", (720, 720), (5, 5, 5)).save(carre)
+    assert match_image_size(carre, ref) == carre
+
+    # Et le pipeline d'envoi Live s'en sert réellement (code réel).
+    import ui.tab_t2v_live as TL
+    assert "match_image_size" in _i.getsource(TL), \
+        "la conformation des keyframes n'est pas branchée sur l'envoi Live"
+
+
+@test
 def rendu_audio_recalage_debrayable():
     """RENDU & AUDIO : le recalage ffmpeg se DÉBRAYE — et la stabilisation
     ne revient pas.

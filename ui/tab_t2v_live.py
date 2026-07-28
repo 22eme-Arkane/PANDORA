@@ -5041,6 +5041,16 @@ class TabT2V(QScrollArea):
         }
         if seed is not None:
             params["seed"] = seed
+        if i2v_frame and end_frame:
+            # Deux keyframes de résolutions différentes laissent le moteur
+            # unifier LUI-MÊME — recadrages internes = dérive de façade
+            # garantie par construction (constat Matthieu 2026-07-29 :
+            # frame de raccord extraite à la résolution du clip, 1280×720 en
+            # 720p, contre un mood 1920×1080). La frame de raccord est
+            # conformée aux dimensions du Mood, qui porte la géométrie de la
+            # plaque.
+            from core.video_utils import match_image_size
+            i2v_frame = match_image_size(i2v_frame, end_frame)
         if i2v_frame:
             params["image_path"] = i2v_frame
         if end_frame:

@@ -355,6 +355,41 @@ def add_letterbox(video_path: str, output_path: str, scope_ratio_str: str) -> bo
         return False
 
 
+def match_image_size(image_path: str, ref_image_path: str,
+                     cache_dir: str = "") -> str:
+    """Chemin d'une copie de `image_path` aux dimensions de `ref_image_path`.
+
+    Deux keyframes de résolutions différentes envoyées au même moteur i2v le
+    laissent unifier LUI-MÊME — recadrages et remises à l'échelle internes,
+    c'est-à-dire une dérive de façade garantie par construction (constat
+    Matthieu 2026-07-29 sur Forcalquier : frame de raccord 1280×720 contre
+    mood 1920×1080, générations 720p / plaques 1080p).
+
+    Même taille → chemin d'origine, aucune copie. Ratios différents de plus
+    de 1 % → chemin d'origine (on n'invente pas un recadrage). Erreur →
+    chemin d'origine (jamais bloquant).
+    """
+    try:
+        from PIL import Image
+        with Image.open(ref_image_path) as _ref:
+            tw, th = _ref.size
+        with Image.open(image_path) as _im:
+            if _im.size == (tw, th):
+                return image_path
+            sw, sh = _im.size
+            if not (sw and sh and tw and th):
+                return image_path
+            if abs((sw / sh) - (tw / th)) > 0.01 * (tw / th):
+                return image_path
+            _dir = cache_dir or os.path.dirname(os.path.abspath(image_path))
+            _base = os.path.splitext(os.path.basename(image_path))[0]
+            out = os.path.join(_dir, f"{_base}_{tw}x{th}.png")
+            _im.convert("RGB").resize((tw, th), Image.LANCZOS).save(out, "PNG")
+        return out if os.path.isfile(out) else image_path
+    except Exception:
+        return image_path
+
+
 def extract_last_frame(video_path: str, output_path: str) -> bool:
     """Extracts the last frame of video_path and saves it to output_path.
     Returns True on success. Tries FFmpeg → cv2 → imageio."""
