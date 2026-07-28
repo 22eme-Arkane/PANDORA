@@ -5538,6 +5538,62 @@ def le_texte_gouverne_les_images_de_reference():
 
 
 @test
+def correctif_du_compositeur_invalide_le_cache():
+    """Un correctif de CONSIGNE du compositeur doit invalider les compositions
+    mémorisées.
+
+    Découvert par l'audit du 2026-07-28 : la clé de cache ne portait que les
+    ENTRÉES (fiche, instant, surface, style, moteur, type). Or la consigne
+    système du compositeur est une entrée comme les autres — le correctif
+    « la composition ne résume plus » (27/07 au soir) n'atteignait donc JAMAIS
+    un plan déjà composé : sa fiche inchangée ressortait l'ancienne composition
+    du cache, et le correctif semblait sans effet à l'utilisateur.
+    """
+    import core.storyboard as sb
+    import api.apercu as A
+    import api.image_prompt as IP
+    import core.ai_provider as AP
+
+    sb.set_namespace("live_seq_mapping")
+    sb.clear_version_shots(sb.DEFAULT_VERSION_ID)
+    _shot = sb.save_shot({"number": 1, "scene_title": "P1",
+                          "seedance_prompt": ("SURFACE : façade.\n"
+                                              "ÉTAT 0 : pierre nue.\n"
+                                              "STYLE : bleu outremer.")},
+                         sb.DEFAULT_VERSION_ID)
+
+    _n = [0]
+    _vc, _vk = IP.compose, AP.key_error
+    _vf = getattr(IP, "grammar_fingerprint", None)
+    try:
+        IP.compose = lambda p, **kw: (_n.__setitem__(0, _n[0] + 1),
+                                      "Composed English prompt.")[1]
+        AP.key_error = lambda **kw: None
+
+        A.compose_mood_prompt(_shot, "", "nb2", __file__)
+        assert _n[0] == 1, "la première composition doit appeler l'IA"
+        A.compose_mood_prompt(_shot, "", "nb2", __file__)
+        assert _n[0] == 1, "plan inchangé, compositeur inchangé → cache"
+
+        # Un correctif de consigne est livré : l'empreinte du compositeur change.
+        IP.grammar_fingerprint = lambda: "REVISION-CORRIGEE"
+        A.compose_mood_prompt(_shot, "", "nb2", __file__)
+        assert _n[0] == 2, (
+            "le correctif du compositeur n'invalide pas le cache — les plans "
+            "déjà composés resserviraient l'ancienne version pour toujours")
+    finally:
+        IP.compose, AP.key_error = _vc, _vk
+        if _vf is not None:
+            IP.grammar_fingerprint = _vf
+        else:
+            try:
+                del IP.grammar_fingerprint
+            except AttributeError:
+                pass
+        sb.set_namespace("storyboard")
+
+
+@test
 def composition_survit_a_la_fermeture_du_mood():
     """Rouvrir un plan inchangé ne doit RIEN repayer.
 

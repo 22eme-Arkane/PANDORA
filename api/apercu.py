@@ -725,11 +725,20 @@ def compose_cache_key(fiche: str, moment: str, surface: str, style: str,
     """Empreinte des entrées. Une seule change → recomposition.
 
     C'est ce qui répond à « garder la composition tant que rien n'a bougé » : le
-    prompt du storyboard entre dans la fiche, donc l'éditer change la clé.
+    prompt du storyboard entre dans la fiche, donc l'éditer change la clé. La
+    CONSIGNE du compositeur est une entrée comme les autres (audit 2026-07-28) :
+    un correctif de consigne recompose les plans déjà en cache — sans quoi il ne
+    les atteindrait jamais.
     """
     import hashlib
+    try:
+        import api.image_prompt as _ip
+        _rev = _ip.grammar_fingerprint()
+    except Exception:
+        _rev = ""
     _payload = " ".join(" ".join((x or "").split())
-                             for x in (fiche, moment, surface, style, engine, kind))
+                             for x in (fiche, moment, surface, style, engine,
+                                       kind, _rev))
     return hashlib.sha1(_payload.encode("utf-8")).hexdigest()
 
 

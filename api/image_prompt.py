@@ -59,6 +59,39 @@ def is_deterministic_refusal(why: str) -> bool:
     return (why or "").startswith(REFUSAL_PREFIX)
 
 
+_FINGERPRINT = ""
+
+
+def grammar_fingerprint() -> str:
+    """Empreinte du compositeur — versionne le cache des compositions.
+
+    La consigne système est une ENTRÉE de la composition au même titre que la
+    fiche : un correctif de consigne doit invalider les compositions mémorisées,
+    sinon il n'atteint JAMAIS un plan déjà composé (audit du 2026-07-28 : le
+    correctif « la composition ne résume plus » du 27/07 au soir restait sans
+    effet sur tout plan dont la fiche n'avait pas bougé — le cache resservait
+    l'ancienne version, et le correctif semblait ne rien changer).
+
+    Empreinte = hash du SOURCE de ce module : en dev, toute retouche du
+    compositeur invalide ; en build figé (source indisponible), la VERSION de
+    PANDORA prend le relais — une mise à jour invalide.
+    """
+    global _FINGERPRINT
+    if _FINGERPRINT:
+        return _FINGERPRINT
+    try:
+        import hashlib, inspect, sys
+        _src = inspect.getsource(sys.modules[__name__])
+        _FINGERPRINT = hashlib.sha1(_src.encode("utf-8")).hexdigest()[:12]
+    except Exception:
+        try:
+            from core.version import VERSION
+            _FINGERPRINT = f"v{VERSION}"
+        except Exception:
+            _FINGERPRINT = "sans-empreinte"
+    return _FINGERPRINT
+
+
 # ── Ce que le prompt de travail contient et qui ne doit JAMAIS ressortir ──────
 # Vocabulaire interne PANDORA. Il structure la barre pour l'auteur et pour le
 # moteur VIDÉO ; pour un moteur d'image c'est du bruit sans référent.
