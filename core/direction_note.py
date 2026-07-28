@@ -90,6 +90,11 @@ def section_text(value, title: str) -> str:
     return "\n".join(out).strip()
 
 
+def _sans_markdown(s: str) -> str:
+    """Retire le gras/italique markdown des sorties IA (**…**, __…__)."""
+    return re.sub(r"\*\*|__", "", s or "").strip()
+
+
 # Lignes qui DÉCLARENT un style visuel (utile quand l'Analyse range le style dans
 # « INTENTIONS ISSUES DE L'ANALYSE » plutôt que dans la section « STYLE VISUEL »).
 _STYLE_DECL_RE = re.compile(
@@ -111,14 +116,41 @@ def visual_style_from_note(value) -> str:
         if sec:
             return sec
         text = normalize_note(value)
+        lines = text.splitlines()
         hits = []
-        for line in text.splitlines():
-            s = line.strip().lstrip("-•*").strip()
+        i = 0
+        while i < len(lines):
+            # Le markdown IA (« **Style d'image :** ») est nettoyé AVANT tout :
+            # lstrip("-•*") mangeait les ** ouvrants et laissait le « :** »
+            # fermant partir au moteur en fragment cassé (constat Matthieu
+            # 2026-07-28, projet FIGHTER).
+            s = _sans_markdown(lines[i].strip().lstrip("-•*").strip())
             if not s or s.startswith("#"):
+                i += 1
                 continue
             low = s.lower()
             if low.startswith("style ") or _STYLE_DECL_RE.search(low):
+                _avant, _sep, _apres = s.partition(":")
+                if _sep and not _apres.strip():
+                    # Libellé NU (« Style d'image : ») : le style est dans les
+                    # puces qui SUIVENT — les capturer jusqu'à la fin du bloc
+                    # (ligne vide ou ligne qui n'est plus une puce). C'est le
+                    # format que l'Analyse écrit dans « INTENTIONS ISSUES DE
+                    # L'ANALYSE » ; l'ancienne chasse gardait le libellé et
+                    # ratait le contenu.
+                    j = i + 1
+                    while j < len(lines):
+                        raw = lines[j].strip()
+                        if not raw.startswith(("-", "•")):
+                            break
+                        item = _sans_markdown(raw.lstrip("-•").strip())
+                        if item:
+                            hits.append(item)
+                        j += 1
+                    i = j
+                    continue
                 hits.append(s)
+            i += 1
         return " ".join(hits).strip()
     except Exception:
         return ""

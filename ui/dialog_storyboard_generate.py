@@ -137,10 +137,28 @@ class StoryboardGenerateDialog(QDialog):
         root.addWidget(sep)
 
         # ── Warning label ───────────────────────────────────────────────────────
-        warn = QLabel(
-            "✓  Import déterministe : un plan du Découpage devient un plan du Storyboard, sans réécriture IA."
-            if self._deterministic else
-            "⏳  La génération peut prendre du temps selon la longueur du scénario.")
+        # Le libellé dit la VÉRITÉ du chemin pris : depuis le 2026-07-23, un
+        # découpage structuré repasse par l'IA dès qu'une clé existe (relecture
+        # fiche par fiche) — la conversion déterministe n'est que le filet.
+        # L'ancien texte affirmait « sans réécriture IA » dans tous les cas :
+        # c'est lui qui a masqué la perte 84 → 20 (constat Matthieu 2026-07-28).
+        _has_ai_key = True
+        try:
+            from core.ai_provider import key_error as _ke
+            _has_ai_key = _ke("storyboard_gen") is None
+        except Exception:
+            pass
+        if self._deterministic and _has_ai_key:
+            _warn_txt = ("✓  Découpage structuré : relecture IA fiche par fiche "
+                         "(1 fiche = 1 plan, fusions signalées) — en cas d'échec "
+                         "IA, conversion déterministe sans perte.")
+        elif self._deterministic:
+            _warn_txt = ("✓  Import déterministe : un plan du Découpage devient "
+                         "un plan du Storyboard, sans réécriture IA.")
+        else:
+            _warn_txt = ("⏳  La génération peut prendre du temps selon la "
+                         "longueur du scénario.")
+        warn = QLabel(_warn_txt)
         warn.setWordWrap(True)
         warn.setStyleSheet(
             f"color:{CP['text_dim']};font-size:9px;font-style:italic;background:transparent;"
@@ -245,9 +263,22 @@ class StoryboardGenerateDialog(QDialog):
         self._start()
 
     def is_deterministic(self) -> bool:
-        """Vrai si le Découpage est structuré : conversion plan à plan, sans IA.
-        La page Scénario s'en sert pour annoncer le bon moteur dans son écriteau."""
-        return bool(self._deterministic)
+        """Vrai si la conversion sera RÉELLEMENT déterministe (sans IA).
+
+        Depuis le 2026-07-23, un découpage structuré repasse par l'IA dès
+        qu'une clé existe — la structure seule ne suffit plus. L'ancien retour
+        (structure seule) faisait afficher « import déterministe, sans IA » à
+        la page Scénario alors que l'IA avait réécrit (et parfois amputé) les
+        plans : c'est ce libellé qui a masqué la perte 84 → 20 (constat
+        Matthieu 2026-07-28). La page Scénario s'en sert pour annoncer le bon
+        moteur dans son écriteau."""
+        if not self._deterministic:
+            return False
+        try:
+            from core.ai_provider import key_error
+            return key_error("storyboard_gen") is not None
+        except Exception:
+            return True
 
     # ── Generation ────────────────────────────────────────────────────────────
 

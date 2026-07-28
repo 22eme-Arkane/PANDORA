@@ -1013,8 +1013,32 @@ class GenerateStoryboardWorker(QThread):
                         f" plans plus longs pour les atmosphères et dialogues.]\n\n"
                     )
                 user_content = _lang_hint(lang) + names_block + budget_hint + self._text
-            raw = ai_complete(_storyboard_prompt(lang, self._strict_no_merge), user_content,
-                              tier="creative", max_tokens=16000, task="storyboard_gen").strip()
+            # Un storyboard de long métrage ne tient PAS dans une seule réponse
+            # — même leçon que le Découpage (2026-07-25), jamais portée ici :
+            # à 16000 tokens (~800 par fiche), la réponse se coupait vers la
+            # 20ᵉ fiche et _parse_shots_robust récupérait les objets complets
+            # SANS RIEN DIRE (84 fiches → 20 plans, constat Matthieu
+            # 2026-07-28, projet FIGHTER). Boucle anti-troncature + repli.
+            from core.ai_provider import chat_until_complete_ex
+            _res = chat_until_complete_ex(
+                _storyboard_prompt(lang, self._strict_no_merge),
+                [{"role": "user", "content": user_content}],
+                tier="creative", max_tokens=16000, task="storyboard_gen",
+                max_rounds=6)
+            raw = (_res.get("text") or "").strip()
+            if _res.get("truncated"):
+                if self._structured_fallback:
+                    # Mieux vaut toutes les fiches sans réécriture IA qu'un
+                    # storyboard amputé : l'import déterministe reprend la main.
+                    self.finished.emit(self._structured_fallback)
+                    return
+                self.failed.emit(
+                    f"Storyboard INCOMPLET : {ai_name()} a atteint sa limite de "
+                    "longueur même après 6 reprises automatiques. Rien n'a été "
+                    "importé — un storyboard partiel serait pire qu'aucun. "
+                    "Découpez le scénario en parties, ou choisissez un moteur à "
+                    "plus grande sortie dans Paramètres › Moteur IA par tâche.")
+                return
             start = raw.find("[")
             end   = raw.rfind("]") + 1
             if start == -1 or end == 0:
@@ -1032,6 +1056,16 @@ class GenerateStoryboardWorker(QThread):
                     self.finished.emit(self._structured_fallback)
                     return
                 self.failed.emit(f"Aucun plan extrait — la réponse {ai_name()} était mal formée.")
+                return
+
+            # Filet de comptage : le worker CONNAÎT le nombre de fiches du
+            # découpage. Une réécriture qui en rend moins de la MOITIÉ n'est
+            # pas une fusion (elles sont marquées merged, à l'unité) — c'est
+            # une perte : JSON cassé en cours de route, modèle qui résume.
+            # Aucun plan ne disparaît en silence.
+            if (self._structured_fallback
+                    and len(shots) * 2 < len(self._structured_fallback)):
+                self.finished.emit(self._structured_fallback)
                 return
 
             # Assemble le prompt structuré en 7 sections étiquetées. L'IA renvoie

@@ -5887,6 +5887,200 @@ def compositeur_sait_quelles_images_sont_jointes():
 
 
 @test
+def style_de_projet_desactivable():
+    """RE-cliquer le style ACTIF le désactive — et ça se PERSISTE.
+
+    Constat Matthieu (2026-07-28, projet FIGHTER) : « un template que j'ai
+    activé un moment, puis désactivé, mais c'est resté ». Il n'existait AUCUN
+    chemin de désélection : cliquer une carte sélectionne, re-cliquer
+    re-sélectionne, et il n'y a pas de carte « Aucun ». La clé restait dans
+    project_styles.json pour toujours, et l'import du storyboard continuait
+    d'injecter le template fantôme (« shot on ARRI Alexa 65… ») dans le bloc
+    STYLE VISUEL de chaque plan.
+    """
+    import core.style as st
+    from ui.page_style import PageStyle
+
+    _orig = st._STYLES_FILE
+    st._STYLES_FILE = os.path.join(
+        tempfile.mkdtemp(prefix="t_style_"), "project_styles.json")
+    try:
+        page = PageStyle()
+        page._on_select("arri_65")
+        assert st.get_style_key() == "arri_65", "la sélection doit se persister"
+
+        # RE-cliquer la carte active = désactiver.
+        page._on_select("arri_65")
+        assert st.get_style_key() == "", (
+            "re-cliquer le style actif doit le DÉSACTIVER — sans ce geste, "
+            "aucun chemin ne retire jamais un style de projet")
+        assert st.get_image_suffix() == "", \
+            "un style désactivé ne doit plus rien injecter dans les prompts"
+        assert not page._active_badge.isVisible() or page._active_badge.isHidden(), \
+            "le badge de style actif doit disparaître à la désactivation"
+
+        # Geste réversible : re-cliquer réactive.
+        page._on_select("arri_65")
+        assert st.get_style_key() == "arri_65"
+
+        # ② Le combo « — Style — » de la page Scénario désactive AUSSI. La
+        #    vieille garde `if key` sautait set_style("") : le combo affichait
+        #    « — Style — » pendant que project_styles.json gardait arri_65.
+        from ui.page_scenario import PageScenario
+
+        class _Combo:
+            def __init__(self, data): self._d = data
+            def currentData(self): return self._d
+
+        class _Sig:
+            def emit(self, *_): pass
+
+        class _FauxPage:
+            _on_scenario_style_changed = PageScenario._on_scenario_style_changed
+            def __init__(self, data):
+                self._film_style_combo = _Combo(data)
+                self.style_changed = _Sig()
+
+        st.set_style("arri_65")
+        _FauxPage("")._on_scenario_style_changed(0)
+        assert st.get_style_key() == "", \
+            "choisir « — Style — » doit écrire set_style(\"\") — pas l'ignorer"
+        _FauxPage("__sep__")._on_scenario_style_changed(0)
+        assert st.get_style_key() == "", "un séparateur ne change rien"
+
+        # ③ La propagation suit un GESTE utilisateur (signal `activated`),
+        #    jamais un setCurrentIndex programmatique (currentIndexChanged) :
+        #    sinon charger un scénario sans film_style écraserait le style du
+        #    projet à l'ouverture.
+        _src_build = inspect.getsource(PageScenario)
+        assert "activated.connect(self._on_scenario_style_changed)" in _src_build, \
+            "la propagation du style doit être branchée sur `activated`"
+        assert "currentIndexChanged.connect(self._on_scenario_style_changed)" \
+            not in _src_build, \
+            ("brancher la propagation sur currentIndexChanged fait écraser le "
+             "style du projet par les setCurrentIndex programmatiques")
+    finally:
+        st._STYLES_FILE = _orig
+
+
+@test
+def style_de_note_extrait_sans_markdown():
+    """visual_style_from_note : le CONTENU du style, jamais son libellé markdown.
+
+    Constat Matthieu (2026-07-28, projet FIGHTER) : les plans importés avaient
+    « …atmospheric haze, Style d'image :** » en bloc STYLE VISUEL. Le repli
+    « chasse aux lignes » attrapait la ligne-libellé « **Style d'image :** »
+    (lstrip("-•*") mange les ** ouvrants, le « :** » fermant reste) et RATAIT
+    les puces suivantes qui portent le vrai style — « - Arcane League of
+    Legends style… » ne matche aucun déclencheur seule. Le style voulu
+    n'atteignait jamais le storyboard ; le fragment cassé, si.
+    """
+    from core.direction_note import visual_style_from_note
+
+    _note = (
+        "## INTENTIONS ISSUES DE L'ANALYSE DU SCÉNARIO\n"
+        "Tout ce qui suit doit sortir du scénario :\n"
+        "\n"
+        "**Style d'image :**\n"
+        "- Arcane League of Legends style, Fortiche Studio aesthetic, 3D "
+        "painterly render with hand-painted textures, visible brush strokes\n"
+        "- Encre rouge stylisée / giclées lors des swipes à gauche.\n"
+        "\n"
+        "**Temporalité / lumière :**\n"
+        "- « Fin de journée », « lumière rasante », brume dorée en profondeur.\n"
+    )
+    _out = visual_style_from_note(_note)
+    assert "Arcane League of Legends" in _out, \
+        ("le CONTENU du bloc (les puces sous le libellé) doit être extrait",
+         _out)
+    assert "**" not in _out and ":**" not in _out, \
+        ("du markdown brut part au moteur", _out)
+    assert "Temporalité" not in _out and "lumière rasante" not in _out, \
+        ("le bloc SUIVANT ne doit pas être aspiré", _out)
+
+    # La puce autoportante historique reste extraite (cas de la docstring).
+    _out2 = visual_style_from_note(
+        "## NOTES\n- Style graphique global façon gravure ancienne, hachures.\n")
+    assert "gravure ancienne" in _out2
+
+
+@test
+def storyboard_ia_ne_perd_jamais_de_plans():
+    """84 fiches ne peuvent pas devenir 20 plans en silence.
+
+    Constat Matthieu (2026-07-28, projet FIGHTER) : « Générer le storyboard »
+    depuis un découpage de 84 fiches n'a importé que 20 plans. La réécriture
+    IA partait en UN appel à max_tokens=16000 (~800 tokens par fiche ≈ 20
+    fiches), la réponse se coupait net, et _parse_shots_robust récupérait les
+    objets JSON complets SANS RIEN DIRE. Le Découpage a reçu le correctif
+    anti-troncature le 2026-07-25 (chat_until_complete_ex) — jamais porté ici.
+
+    Deux filets, tous deux vérifiés : réponse IA tronquée malgré les reprises
+    → conversion déterministe (aucune fiche perdue) ; réponse « complète »
+    mais rendant moins de la moitié des fiches → pareil.
+    """
+    import json as _json
+    import api.screenplay as SP
+    import core.ai_provider as AP
+    from core.decoupage_layout import (is_structured_layout,
+                                       layout_segments_to_cinema_shots)
+
+    _fiches = []
+    for i in range(1, 9):
+        _fiches.append(
+            f"PLAN {i:02d}\n"
+            f"SOURCE SCÉNARIO : Le héros marche ({i}).\n"
+            f"INTENTION : Plan {i}.\n"
+            f"DURÉE : 4s\n"
+            f"PROMPT VISUEL : Plan moyen, le héros marche dans le couloir {i}.\n"
+            f"VALEUR PROPOSÉE : PLAN MOYEN\n"
+        )
+    _doc = ("DÉCOUPAGE PANDORA 2\n\nSÉQUENCE 1 — LE COULOIR\n\n"
+            + "\n".join(_fiches))
+    assert is_structured_layout(_doc), "le mini-découpage doit être reconnu"
+    assert len(layout_segments_to_cinema_shots(_doc)) == 8, \
+        "le convertisseur déterministe doit rendre les 8 fiches"
+
+    # L'IA ne rend que 3 objets complets (réponse coupée à max_tokens).
+    _trois = _json.dumps([{"number": i, "scene_title": f"P{i}", "duration": 4,
+                           "action": f"plan {i}"} for i in (1, 2, 3)])
+    _vc, _vk = AP.complete, AP.key_error
+    _vx = getattr(AP, "chat_until_complete_ex", None)
+    _got = []
+    try:
+        AP.key_error = lambda *a, **k: None
+        AP.complete = lambda *a, **k: _trois
+        AP.chat_until_complete_ex = \
+            lambda *a, **k: {"text": _trois, "truncated": True}
+
+        w = SP.GenerateStoryboardWorker(_doc)
+        w.finished.connect(lambda shots: _got.append(shots))
+        w.failed.connect(lambda err: _got.append(err))
+        w.run()
+        assert _got and isinstance(_got[0], list), _got
+        assert len(_got[0]) == 8, (
+            f"{len(_got[0])} plans émis pour 8 fiches — la troncature IA perd "
+            "des plans en silence au lieu de replier sur le déterministe")
+
+        # Réponse « complète » mais amputée (le modèle a résumé) : même filet.
+        _got.clear()
+        AP.chat_until_complete_ex = \
+            lambda *a, **k: {"text": _trois, "truncated": False}
+        w2 = SP.GenerateStoryboardWorker(_doc)
+        w2.finished.connect(lambda shots: _got.append(shots))
+        w2.failed.connect(lambda err: _got.append(err))
+        w2.run()
+        assert _got and isinstance(_got[0], list) and len(_got[0]) == 8, (
+            "une réécriture qui rend moins de la moitié des fiches doit "
+            "replier sur la conversion déterministe",
+            len(_got[0]) if _got and isinstance(_got[0], list) else _got)
+    finally:
+        AP.complete, AP.key_error = _vc, _vk
+        if _vx is not None:
+            AP.chat_until_complete_ex = _vx
+
+
+@test
 def compositeur_image_par_moteur():
     """Le prompt final IMAGE est écrit dans la grammaire du moteur, et en anglais.
 

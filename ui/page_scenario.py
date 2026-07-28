@@ -1184,7 +1184,13 @@ class PageScenario(QWidget):
             f"selection-background-color:{CP.get('accent2_dim', CP['bg3'])};border:1px solid {CP['border']};}}"
         )
         self._film_style_combo.currentIndexChanged.connect(self._schedule_autosave)
-        self._film_style_combo.currentIndexChanged.connect(self._on_scenario_style_changed)
+        # `activated` et non `currentIndexChanged` : la propagation au style de
+        # PROJET (set_style, y compris la désactivation par « — Style — ») ne
+        # doit suivre qu'un GESTE UTILISATEUR. Les setCurrentIndex
+        # programmatiques (reset du formulaire, chargement d'un scénario sans
+        # film_style) émettent currentIndexChanged et écraseraient le style du
+        # projet à la simple ouverture.
+        self._film_style_combo.activated.connect(self._on_scenario_style_changed)
         l_style.addWidget(self._film_style_combo)
         tog_style = _make_toggle("🎭  Style", c_style, expanded=False)
 
@@ -1619,10 +1625,16 @@ class PageScenario(QWidget):
 
     def _on_scenario_style_changed(self, _idx: int):
         key = self._film_style_combo.currentData() or ""
-        if key and key != "__sep__":
-            import core.style as _style_mod
-            _style_mod.set_style(key, _style_mod.get_style_custom())
-            self.style_changed.emit(key)
+        if key == "__sep__":
+            return
+        # « — Style — » (key vide) DÉSACTIVE réellement : l'ancienne garde
+        # `if key` sautait set_style("") — le combo affichait « — Style — »
+        # pendant que project_styles.json gardait l'ancien template pour
+        # toujours, et l'import du storyboard continuait de l'injecter
+        # (constat Matthieu 2026-07-28, projet FIGHTER : arri_65 fantôme).
+        import core.style as _style_mod
+        _style_mod.set_style(key, _style_mod.get_style_custom())
+        self.style_changed.emit(key)
 
     # ── Save ─────────────────────────────────────────────────────────────────
 

@@ -349,8 +349,16 @@ class PageStyle(QWidget):
     # ── Logic ─────────────────────────────────────────────────────────────────
 
     def _on_select(self, key: str):
+        # RE-cliquer la carte ACTIVE désactive le style. Sans ce geste, AUCUN
+        # chemin ne remettait jamais la clé à vide : elle restait dans
+        # project_styles.json et l'import du storyboard continuait d'injecter
+        # un template que l'utilisateur croyait désactivé (constat Matthieu
+        # 2026-07-28, projet FIGHTER : « activé un moment, puis désactivé,
+        # mais c'est resté » — arri_65 baké dans les 20 plans importés).
+        if key and key == style_api.get_style_key():
+            key = ""
         for k, card in self._cards.items():
-            card.set_active(k == key)
+            card.set_active(bool(key) and k == key)
 
         style = next((s for s in style_api.STYLES if s["key"] == key), None)
         if style:
@@ -361,6 +369,8 @@ class PageStyle(QWidget):
                 f"padding:0 4px;"
             )
             self._active_badge.setVisible(True)
+        else:
+            self._active_badge.setVisible(False)
 
         custom = self._custom_edit.toPlainText().strip() if self._custom_edit else ""
         style_api.set_style(key, custom)

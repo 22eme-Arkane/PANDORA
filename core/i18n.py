@@ -407,6 +407,16 @@ _FR_TO_EN: dict[str, str] = {
     "Import déterministe du Découpage — sans IA…":
         "Deterministic import of the breakdown — no AI…",
     "import déterministe, sans IA":        "deterministic import, no AI",
+    "✓  Découpage structuré : relecture IA fiche par fiche "
+    "(1 fiche = 1 plan, fusions signalées) — en cas d'échec "
+    "IA, conversion déterministe sans perte.":
+        "✓  Structured breakdown: AI re-reads it card by card "
+        "(1 card = 1 shot, merges flagged) — on AI failure, "
+        "lossless deterministic conversion.",
+    "✓  Import déterministe : un plan du Découpage devient "
+    "un plan du Storyboard, sans réécriture IA.":
+        "✓  Deterministic import: one breakdown card becomes "
+        "one Storyboard shot, no AI rewriting.",
     # Décor 7 vues — avertissement faces manquantes
     "Vues manquantes":                     "Missing views",
     "Certaines faces de décor n'ont pas pu être générées par l'API :":
