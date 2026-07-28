@@ -283,12 +283,10 @@ _MAPPING_NIGHT_LOCK = (
     "entire background with PURE BLACK #000000."
 )
 
-# Priorité façade quand une/des image(s) de RÉFÉRENCE accompagne(nt) la façade (la
-# façade est TOUJOURS la 1ʳᵉ image ; les réfs n'enrichissent que l'inspiration).
-# Nombre maximal d'images d'INSPIRATION envoyées avec une façade de mapping.
-# Chaque image ajoutée pèse face au texte : dix inspirations contre une façade et
-# un prompt, et c'est l'inspiration qui gagne. Deux suffisent à donner une
-# palette et une matière (constat Matthieu, 2026-07-27).
+# Nombre maximal d'images d'INSPIRATION prises en compte pour la DESCRIPTION en
+# mapping. Elles ne partent plus en images (voir _describe_inspirations) : deux
+# suffisent à donner une palette et une matière — au-delà, la description
+# moyenne tout (constat Matthieu, 2026-07-27).
 _MAX_INSPIRATION_MAPPING = 2
 
 def _avec_directive_en_tete(prompt: str, directive: str) -> str:
@@ -309,30 +307,18 @@ def _avec_directive_en_tete(prompt: str, directive: str) -> str:
     return f"{_d}\n\n{_p}"
 
 
-_FACADE_PRIORITY_DIRECTIVE = (
-    " | ABSOLUTE PRIORITY: the FIRST image is the building facade and it is the "
-    "MANDATORY projection canvas. Keep its EXACT geometry, framing, scale, "
-    "perspective and viewpoint — the output MUST be THIS facade with the content "
-    "projected onto it. The following reference image(s) are ONLY a loose ARTISTIC "
-    "INSPIRATION to enrich the projected content: draw from their palette, light, "
-    "materials, mood and motifs, but they MUST NOT become the subject, MUST NOT "
-    "replace the facade, MUST NOT change the framing, and MUST NOT be pasted, "
-    "collaged or copied. The facade always stays the base; the references only "
-    "flavour what is projected onto it."
-)
-
-
 def run_generation(prompt: str, output_dir: str, api_key: str, progress_cb,
                    building_ref: str = "", inspiration_ref: str = "",
                    aspect_ratio: str = "") -> str:
     """Génère une image et retourne son chemin. Lève une exception si erreur.
 
     - `building_ref` (façade, mapping) : Flux Kontext ÉDITE la façade (géométrie
-      conservée) ;
-    - `inspiration_ref` : image d'INSPIRATION (direction artistique à transposer,
-      jamais collée). Avec façade → Kontext multi-images (l'univers de
-      l'inspiration est projeté SUR la façade) ; sans façade → Kontext
-      réinterprète l'inspiration pour dépeindre le plan ;
+      conservée). La façade est alors la SEULE image envoyée : une inspiration
+      jointe en plus finissait PLAQUÉE dessus quelles que soient les directives
+      — elle arrive désormais DÉCRITE dans le prompt (voir
+      _describe_inspirations) ;
+    - `inspiration_ref` SANS façade : Kontext réinterprète l'inspiration pour
+      dépeindre le plan (la DA est gardée, pas le contenu) ;
     - sinon Flux t2i classique."""
     os.makedirs(output_dir, exist_ok=True)
 
@@ -367,25 +353,11 @@ def run_generation(prompt: str, output_dir: str, api_key: str, progress_cb,
     # avec Nano Banana 2 → mêmes consignes quel que soit le moteur.
     _night_lock = _MAPPING_NIGHT_LOCK
 
-    if _has_facade and _has_inspi:
-        # Mapping + image(s) de référence : Kontext multi-images. ⚠ La FAÇADE (1ʳᵉ image)
-        # est la PRIORITÉ ABSOLUE ; la/les référence(s) n'enrichissent que l'inspiration.
-        kontext_prompt = prompt + _FACADE_PRIORITY_DIRECTIVE + _night_lock
-        progress_cb("Envoi de la façade et de l'inspiration à fal.ai…")
-        urls = [_upload_ref_robust(fal_client, building_ref),
-                _upload_ref_robust(fal_client, inspiration_ref)]
-        progress_cb("Mood inspiré sur la façade (Kontext multi)…")
-        result = fal_client.subscribe(
-            "fal-ai/flux-pro/kontext/max/multi",
-            arguments={
-                "prompt":         kontext_prompt,
-                "image_urls":     urls,
-                "guidance_scale": 3.5,
-                "aspect_ratio":   aspect_ratio or "16:9",
-            },
-        )
-    elif _has_facade:
+    if _has_facade:
         # Mapping : on édite la façade (géométrie conservée) via Flux Kontext.
+        # La façade est la SEULE image envoyée — le Kontext multi (façade +
+        # inspiration) recopiait l'inspiration sur la façade quelles que soient
+        # les directives ; l'inspiration arrive désormais décrite dans le prompt.
         kontext_prompt = prompt + _night_lock
         progress_cb("Envoi de la façade à fal.ai…")
         facade_url = _upload_ref_robust(fal_client, building_ref)
@@ -621,6 +593,113 @@ def _upload_ref_robust(fal_client, path: str) -> str:
         sys.stdout, sys.stderr = _old_out, _old_err
 
 
+# ── Inspirations DÉCRITES, plus jamais envoyées (mapping) ─────────────────────
+# Un endpoint /edit est piloté par les images PAR CONSTRUCTION : tant qu'une
+# inspiration partait en image, elle finissait PLAQUÉE sur la façade, quelles
+# que soient les directives — consigne en tête, rôles déclarés et plafond
+# compris (constats Matthieu, 2026-07-27 puis 2026-07-28). On ne les envoie
+# plus : leur ESPRIT (palette, lumière, matière, ambiance) est décrit en mots
+# par le moteur de vision et FONDU dans le prompt — le motif déjà employé par
+# la génération vidéo i2v (api/real.py). La façade redevient la SEULE image
+# envoyée. Le Cinéma, lui, continue d'envoyer ses références : pas de canevas à
+# défendre, et Matthieu le dit fonctionnel (2026-07-28).
+
+def _inspiration_cache_path() -> str:
+    """`apercus/inspiration_cache.json` — commun aux plans de la séquence.
+
+    La même image de référence sert souvent PLUSIEURS plans : un cache par plan
+    la ferait décrire (et facturer) une fois par plan. La clé étant l'empreinte
+    du CONTENU des fichiers, le cache suit les images, pas les plans.
+    """
+    import core.storyboard as sb
+    # get_apercu_dir(<id>) = <storyboard>/apercus/<id> — on veut le parent commun.
+    return os.path.join(os.path.dirname(sb.get_apercu_dir("x")),
+                        "inspiration_cache.json")
+
+
+def _describe_inspirations(paths: list) -> str:
+    """Description d'ENSEMBLE des images d'inspiration, "" si indisponible.
+
+    Une description commune plutôt qu'une par image : c'est leur esprit PARTAGÉ
+    (palette, lumière, matière) qu'on veut fondre dans le contenu projeté, pas
+    un inventaire. Jamais bloquant : sans clé vision ou sur erreur, le Mood part
+    sans description — comme un plan sans référence.
+    """
+    _paths = [p for p in (paths or []) if p and os.path.isfile(p)]
+    _paths = _paths[:_MAX_INSPIRATION_MAPPING]
+    if not _paths:
+        return ""
+    try:
+        import hashlib
+        _h = hashlib.sha1()
+        for _p in _paths:
+            with open(_p, "rb") as _f:
+                _h.update(_f.read())
+            _h.update(b"|")
+        _key = _h.hexdigest()
+
+        _cache_p = _inspiration_cache_path()
+        try:
+            with open(_cache_p, encoding="utf-8") as _f:
+                _cache = json.load(_f)
+            if not isinstance(_cache, dict):
+                _cache = {}
+        except Exception:
+            _cache = {}
+        _hit = _cache.get(_key)
+        if isinstance(_hit, str) and _hit.strip():
+            return _hit.strip()
+
+        from core.ai_provider import chat, key_error
+        from core.image_payload import encode_image_for_vision
+        if key_error(task="vision"):
+            return ""
+        _content = []
+        for _p in _paths:
+            try:
+                _mt, _b64 = encode_image_for_vision(_p)  # redimensionne sous la limite
+            except Exception:
+                continue
+            _content.append({"type": "image",
+                             "source": {"type": "base64", "media_type": _mt,
+                                        "data": _b64}})
+        if not _content:
+            return ""
+        _content.append({
+            "type": "text",
+            "text": (
+                "These are visual INSPIRATION references for a projection-mapping "
+                "visual. In 12-25 English words, capture ONLY their shared mood, "
+                "colour palette, lighting, materials and texture — as a prompt "
+                "suffix. Do NOT describe specific objects, characters or scenery "
+                "to copy. Output ONLY the keywords, comma-separated, no ending "
+                "punctuation, no explanation."
+            ),
+        })
+        _texte = (chat("", [{"role": "user", "content": _content}],
+                       tier="utility", max_tokens=110, task="vision")
+                  or "").strip().rstrip(".")
+        if _texte:
+            try:
+                _cache[_key] = _texte
+                if len(_cache) > 32:
+                    for _old in list(_cache)[:len(_cache) - 32]:
+                        _cache.pop(_old, None)
+                os.makedirs(os.path.dirname(_cache_p), exist_ok=True)
+                with open(_cache_p, "w", encoding="utf-8") as _f:
+                    json.dump(_cache, _f, ensure_ascii=False, indent=1)
+            except Exception:
+                pass
+        return _texte
+    except Exception:
+        return ""
+
+
+def _inspiration_texte(shot: dict) -> str:
+    """Description des images de la colonne « Référence » du plan, "" sinon."""
+    return _describe_inspirations((shot or {}).get("reference_images") or [])
+
+
 def compose_mood_inputs(shot: dict, film_style: str = "",
                         building_ref: str = "", is_mapping=None) -> tuple:
     """(fiche, moment, kind, surface) — ce que le COMPOSITEUR doit voir.
@@ -667,6 +746,16 @@ def compose_mood_inputs(shot: dict, film_style: str = "",
             surface = describe_facade() or ""
         except Exception:
             surface = ""
+        # Les images de la colonne « Référence » ne partent PLUS en images en
+        # mapping (voir _describe_inspirations) : leur esprit est décrit ICI,
+        # dans la fiche — le compositeur le fond dans le prompt, l'encart le
+        # montre, et la clé de cache y devient sensible (changer les images
+        # recompose ; les retirer aussi).
+        _insp = _inspiration_texte(shot)
+        if _insp:
+            fiche += ("\n\nINSPIRATION ARTISTIQUE (décrite depuis les images de "
+                      "référence du plan — à FONDRE dans le contenu projeté sur "
+                      "la façade ; ce n'est ni un sujet ni un canevas) : " + _insp)
         return fiche, moment, "mood_mapping", surface
 
     _intent = mood_intent(shot, film_style)
@@ -695,13 +784,19 @@ def _ref_roles(shot: dict, building_ref: str = "", is_mapping=None) -> list:
     """
     if is_mapping is None:
         is_mapping = bool(building_ref and os.path.isfile(building_ref))
+    roles = []
+    if is_mapping:
+        # En mapping, AUCUNE inspiration ne part en image (elles sont décrites
+        # dans la fiche — voir _describe_inspirations) : n'annoncer que ce qui
+        # est réellement joint, sinon le compositeur écrit des « Figure 2 »
+        # fantômes et le moteur hallucine.
+        if building_ref and os.path.isfile(building_ref):
+            roles.append("CANEVAS OBLIGATOIRE — la photo de la façade réelle. Sa "
+                         "géométrie, son cadrage, son échelle et son point de vue "
+                         "sont intouchables ; le contenu se projette DESSUS.")
+        return roles
     _insp = [p for p in ((shot or {}).get("reference_images") or [])
              if p and os.path.isfile(p)]
-    roles = []
-    if is_mapping and building_ref and os.path.isfile(building_ref):
-        roles.append("CANEVAS OBLIGATOIRE — la photo de la façade réelle. Sa "
-                     "géométrie, son cadrage, son échelle et son point de vue "
-                     "sont intouchables ; le contenu se projette DESSUS.")
     for _ in _insp:
         roles.append("INSPIRATION ARTISTIQUE seulement — palette, lumière, "
                      "matière, motifs. Ne jamais la recopier, ne jamais en "
@@ -777,6 +872,18 @@ def compose_mood_prompt(shot: dict, film_style: str = "", engine: str = "",
     if not (fiche or "").strip():
         return _repli, False, "fiche vide", False
 
+    if kind == "mood_mapping":
+        # Le REPLI porte la même information que la fiche : les images ne
+        # partant plus, la description est la seule trace de l'inspiration si
+        # la composition échoue. Elle entre AUSSI dans `source_ref` plus bas —
+        # le contrôle de perte exige alors du compositeur qu'il la rende.
+        # Recalcul gratuit : la fiche vient de chauffer le cache disque.
+        _insp = _inspiration_texte(shot)
+        if _insp:
+            _repli += ("\n\nARTISTIC INSPIRATION (described from the shot's "
+                       "reference images — blend it into the projected content; "
+                       "it is not a subject, not the canvas): " + _insp)
+
     _key = compose_cache_key(fiche, moment, surface, film_style, engine, kind)
     if _sid:
         _hit = _compose_cache_read(_sid).get(_key)
@@ -851,10 +958,11 @@ def run_generation_nb2(prompt: str, output_dir: str, api_key: str, progress_cb,
     l'endpoint change (Nano Banana 2 ↔ Nano Banana Pro). Nano Banana 2 Lite a un
     schéma d'args différent (anti-400) → routé par le chemin générique, pas ici.
 
-    - `facade_ref` (MAPPING) : si fourni, la FAÇADE est le canvas (1ʳᵉ image) et NB2
-      reçoit EXACTEMENT les mêmes consignes mapping que Flux (nuit, fond noir, visibilité
-      pilotée par le prompt) ; les `inspiration_refs` enrichissent l'inspiration. Les
-      familles cohérence/plan d'architecte (Cinéma) sont ignorées dans ce mode.
+    - `facade_ref` (MAPPING) : si fourni, la FAÇADE est le canvas et la SEULE
+      image envoyée, avec EXACTEMENT les mêmes consignes mapping que Flux (nuit,
+      fond noir, visibilité pilotée par le prompt). Les `inspiration_refs` sont
+      IGNORÉES dans ce mode (décrites en texte en amont — _describe_inspirations),
+      comme les familles cohérence/plan d'architecte (Cinéma).
     - Sinon (CINÉMA), trois familles dans CET ordre (NB2 ne numérote pas les images →
       l'ordre + les consignes désignent chaque plage) :
       1. `ref_images`      : cohérence (portraits persos + image décor) → même pièce/persos ;
@@ -878,15 +986,15 @@ def run_generation_nb2(prompt: str, output_dir: str, api_key: str, progress_cb,
     _ar = aspect_ratio or "16:9"
 
     if _facade:
-        # ── MODE MAPPING : la FAÇADE est le canvas prioritaire (1ʳᵉ image) ; MÊMES
-        # consignes que Flux (façade = base, réfs = inspiration lâche, nuit/fond noir).
-        refs = [_facade] + inspiration[:_MAX_INSPIRATION_MAPPING]
-        _tag = "façade" + (f" + {len(inspiration)} inspiration(s)" if inspiration else "")
-        progress_cb(f"Nano Banana 2 — {_tag} (mapping)…")
-        urls = [_upload_ref_robust(fal_client, r) for r in refs]
-        directive = (_FACADE_PRIORITY_DIRECTIVE if inspiration else "") + _MAPPING_NIGHT_LOCK
+        # ── MODE MAPPING : la FAÇADE est la SEULE image envoyée. Les inspirations
+        # ne sont plus jointes — sur un endpoint /edit elles finissaient plaquées
+        # sur la façade quelles que soient les directives ; elles arrivent
+        # désormais DÉCRITES dans le prompt (voir _describe_inspirations).
+        progress_cb("Nano Banana 2 — façade (mapping)…")
+        urls = [_upload_ref_robust(fal_client, _facade)]
         result = fal_client.subscribe(_ep_edit, arguments={
-            "prompt": _avec_directive_en_tete(prompt, directive), "image_urls": urls,
+            "prompt": _avec_directive_en_tete(prompt, _MAPPING_NIGHT_LOCK),
+            "image_urls": urls,
             "num_images": 1, "aspect_ratio": _ar, "resolution": _res_enum,
             "output_format": "png", "safety_tolerance": "6",
         })
@@ -989,13 +1097,12 @@ def run_generation_engine(engine_key: str, prompt: str, output_dir: str,
 
     if max_refs > 0:
         if is_mapping and facade_ref and os.path.isfile(facade_ref):
-            insp = [r for r in (inspiration_refs or []) if r and os.path.isfile(r)]
-            # Plafond d'INSPIRATIONS en mapping : chaque image ajoutée pèse dans
-            # la balance face au texte. Seedream accepte dix références — dix
-            # inspirations contre une façade et un prompt, c'est l'inspiration
-            # qui gagne. Deux suffisent à donner une palette et une matière.
-            ref_paths = [facade_ref] + insp[:_MAX_INSPIRATION_MAPPING]
-            directive = (_FACADE_PRIORITY_DIRECTIVE if insp else "") + _MAPPING_NIGHT_LOCK
+            # Façade SEULE : les inspirations ne partent plus en images en
+            # mapping — sur un endpoint /edit elles finissaient plaquées sur la
+            # façade quelles que soient les directives ; elles arrivent
+            # désormais DÉCRITES dans le prompt (voir _describe_inspirations).
+            ref_paths = [facade_ref]
+            directive = _MAPPING_NIGHT_LOCK
         else:
             cons = [r for r in (ref_images or []) if r and os.path.isfile(r)]
             insp = [r for r in (inspiration_refs or []) if r and os.path.isfile(r)]
@@ -1067,6 +1174,24 @@ def run_mood(shot: dict, prompt: str, output_dir: str, api_key: str, progress_cb
     _inspo = [p for p in (shot.get("reference_images") or []) if p and os.path.isfile(p)]
     if inspiration_ref and os.path.isfile(inspiration_ref):
         _inspo = [inspiration_ref] + [p for p in _inspo if p != inspiration_ref]
+
+    if _is_mapping:
+        # MAPPING : AUCUNE inspiration ne part en image — sur un endpoint /edit,
+        # l'image envoyée gagne contre le texte, quelles que soient les
+        # directives (constats Matthieu, 2026-07-27/28). Les références du plan
+        # sont déjà DÉCRITES dans le prompt composé (compose_mood_inputs) ;
+        # l'image choisie via « ◎ Mood inspiré d'une image », inconnue au moment
+        # de la composition, est décrite ICI, à l'envoi.
+        if inspiration_ref and os.path.isfile(inspiration_ref):
+            _desc = _describe_inspirations([inspiration_ref])
+            if _desc:
+                progress_cb("Image choisie décrite en texte (inspiration)…")
+                prompt = _avec_directive_en_tete(
+                    prompt,
+                    "ARTISTIC INSPIRATION (described from the chosen image — "
+                    "blend it into the projected content; it is not a subject, "
+                    "not the canvas): " + _desc)
+        _inspo = []
 
     # Cohérence Cinéma (persos/décor) + plan d'architecte — utiles aux moteurs à réfs.
     def _consistency():

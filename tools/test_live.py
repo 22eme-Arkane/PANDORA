@@ -392,11 +392,12 @@ def prompt_mood_live_propre():
 @test
 def prompts_moods_kontext():
     """Moods mapping : consignes PARTAGÉES Flux ↔ Nano Banana 2 (constantes module) —
-    canvas de nuit, fond noir, visibilité pilotée par le prompt, priorité façade."""
+    canvas de nuit, fond noir, visibilité pilotée par le prompt. La façade est la
+    SEULE image envoyée depuis le 2026-07-28 : le Kontext multi et la directive de
+    priorité façade ont disparu AVEC les images d'inspiration qu'ils encadraient."""
     import api.apercu as A
     src  = inspect.getsource(A.run_generation)
     lock = A._MAPPING_NIGHT_LOCK          # valeur (chaîne concaténée → fragments contigus)
-    prio = A._FACADE_PRIORITY_DIRECTIVE
     assert "projection CANVAS" in lock, "canvas"
     assert "lit ONLY" not in lock, "ancienne consigne retirée"
     assert "PURE BLACK #000000" in lock, "fond noir"
@@ -405,14 +406,17 @@ def prompts_moods_kontext():
     assert "VISIBILITY IS DRIVEN BY THE PROMPT" in lock and "MUST be rendered as PURE BLACK" in lock, \
         "consigne d'exclusion (éléments non visibles → noir) absente"
     assert "fal-ai/flux-pro/kontext" in src, "Kontext quand façade fournie"
-    assert "kontext/max/multi" in src, "Kontext multi quand façade + inspiration"
-    # FAÇADE = priorité absolue ; réf = inspiration lâche, jamais copiée/substituée.
-    assert "ABSOLUTE PRIORITY" in prio and "MANDATORY projection canvas" in prio, "façade non priorisée"
-    assert "loose ARTISTIC INSPIRATION" in prio and "MUST NOT replace the facade" in prio \
-        and "MUST NOT be pasted" in prio, "réf non cantonnée à l'inspiration"
+    # GARDE INVERSE — ne pas rebrancher l'envoi d'inspirations en mapping : sur un
+    # endpoint /edit, l'image envoyée gagne contre le texte, quelles que soient
+    # les directives (constats Matthieu 2026-07-27/28). Les inspirations sont
+    # DÉCRITES (_describe_inspirations), jamais jointes.
+    assert "kontext/max/multi" not in src, \
+        "le Kontext multi renvoie l'inspiration en image — doctrine 2026-07-28"
+    assert not hasattr(A, "_FACADE_PRIORITY_DIRECTIVE"), \
+        "directive de priorité façade revenue = des inspirations repartent en images"
     # Les MÊMES consignes mapping s'appliquent à Nano Banana 2 (mode façade partagé).
     nb2 = inspect.getsource(A.run_generation_nb2)
-    assert "_MAPPING_NIGHT_LOCK" in nb2 and "_FACADE_PRIORITY_DIRECTIVE" in nb2 and "facade_ref" in nb2, \
+    assert "_MAPPING_NIGHT_LOCK" in nb2 and "facade_ref" in nb2, \
         "NB2 n'utilise pas les mêmes consignes mapping / le mode façade"
     assert "facade_ref" in inspect.signature(A.run_generation_nb2).parameters, "NB2 : param facade_ref absent"
     import inspect as _i
@@ -5506,9 +5510,11 @@ def le_texte_gouverne_les_images_de_reference():
     aussi maigri (TRANSFORMATION et ÉTAT 1 retirés le même jour). Face aux mêmes
     images sur un endpoint /edit, le texte ne pèse plus assez.
 
-    Deux leviers, tous deux vérifiés ici : la consigne passe en TÊTE — en queue
-    elle se lit comme une remarque, en tête c'est un ordre — et le nombre
-    d'inspirations est PLAFONNÉ, chaque image ajoutée pesant contre le texte.
+    Ces leviers du 27/07 n'ont PAS suffi — le 28/07 les inspirations ne partent
+    plus DU TOUT en images en mapping (décrites en texte, voir le test suivant).
+    Restent vérifiés ici : la consigne en TÊTE — en queue elle se lit comme une
+    remarque, en tête c'est un ordre — et le plafond, qui borne désormais le
+    nombre d'images DÉCRITES.
     """
     import api.apercu as A
 
@@ -5524,17 +5530,143 @@ def le_texte_gouverne_les_images_de_reference():
 
     # ② Le plafond d'inspirations existe et reste bas.
     assert 1 <= A._MAX_INSPIRATION_MAPPING <= 3, (
-        "le plafond d'images d'inspiration en mapping doit rester bas : chacune "
-        "pèse face au texte", A._MAX_INSPIRATION_MAPPING)
+        "le plafond d'inspirations décrites en mapping doit rester bas : "
+        "au-delà, la description moyenne tout", A._MAX_INSPIRATION_MAPPING)
 
-    # ③ Il est réellement APPLIQUÉ sur les deux chemins d'envoi.
+    # ③ Il borne la DESCRIPTION (les runners, eux, ne joignent plus d'images
+    #    d'inspiration en mapping — vérifié par le test suivant sur l'appel réel).
+    _src = "\n".join(l for l in inspect.getsource(A._describe_inspirations).splitlines()
+                     if not l.lstrip().startswith("#"))
+    assert "_MAX_INSPIRATION_MAPPING" in _src, \
+        "_describe_inspirations n'applique pas le plafond"
+    # ④ La consigne reste EN TÊTE sur les deux chemins d'envoi (night lock).
     for _fn in (A.run_generation_nb2, A.run_generation_engine):
         _src = "\n".join(l for l in inspect.getsource(_fn).splitlines()
                          if not l.lstrip().startswith("#"))
-        assert "_MAX_INSPIRATION_MAPPING" in _src, (
-            f"« {_fn.__name__} » n'applique pas le plafond d'inspirations")
         assert "_avec_directive_en_tete" in _src, (
             f"« {_fn.__name__} » ne met pas la consigne en tête")
+
+
+@test
+def inspirations_decrites_jamais_envoyees_en_mapping():
+    """En mapping, les inspirations sont DÉCRITES en texte, plus jamais envoyées.
+
+    Constat de Matthieu (2026-07-28) : malgré la consigne en tête, les rôles
+    déclarés et le plafond (leviers du 27/07), « les prompts des moods semblent
+    être effacés au profit des images de référence ». Un endpoint /edit est
+    piloté par les images PAR CONSTRUCTION : tant qu'une inspiration part en
+    image, elle gagne contre le texte, quelles que soient les directives.
+
+    Levier suivant, déjà employé par la génération vidéo i2v (api/real.py) : ne
+    plus envoyer les inspirations, faire décrire leur ESPRIT (palette, lumière,
+    matière, ambiance) par le moteur de vision, et FONDRE cette description dans
+    le prompt. La façade redevient la SEULE image envoyée.
+    """
+    import types, tempfile, sys as _sys
+    import core.storyboard as sb
+    import api.apercu as A
+    import core.ai_provider as AP
+
+    sb.set_namespace("live_seq_mapping")
+    sb.clear_version_shots(sb.DEFAULT_VERSION_ID)
+    td = tempfile.mkdtemp(prefix="t_inspdesc_")
+    # De VRAIES images : les inspirations traversent encode_image_for_vision
+    # (Pillow) — un fichier d'octets arbitraires ferait échouer la description
+    # pour une raison qui n'existe pas en production.
+    from PIL import Image
+    def _mk(n, side, rgb):
+        p = os.path.join(td, n)
+        Image.new("RGB", (side, side), rgb).save(p)
+        return p
+    facade = _mk("facade.png", 8, (10, 10, 10))
+    i1, i2 = _mk("i1.png", 4, (0, 80, 80)), _mk("i2.png", 4, (40, 0, 40))
+    _fu = "U" + str(os.path.getsize(facade))   # URL stub de la façade (U+taille)
+    _shot = {"id": "s_inspdesc", "number": 1,
+             "seedance_prompt": ("SURFACE : façade en pierre.\n"
+                                 "ÉTAT 0 : pierre nue à peine éclairée.\n"
+                                 "STYLE : bleu outremer."),
+             "reference_images": [i1, i2]}
+
+    _n = [0]
+    _vc, _vk = AP.chat, AP.key_error
+    fake = types.ModuleType("fal_client")
+    caps = []
+    fake.subscribe = lambda endpoint, arguments=None, **k: (
+        caps.append((endpoint, arguments)) or {"images": [{"url": "http://o.png"}]})
+    fake.upload = lambda data, content_type=None: "U" + str(len(data))
+    _old_fc = _sys.modules.get("fal_client")
+    _sys.modules["fal_client"] = fake
+    import requests
+    _orig_get = requests.get
+    requests.get = lambda url, timeout=120: types.SimpleNamespace(content=b"PNG")
+    try:
+        AP.chat = lambda *a, **kw: (_n.__setitem__(0, _n[0] + 1),
+                                    "misty teal palette, wet asphalt reflections")[1]
+        AP.key_error = lambda **kw: None
+
+        # ① La FICHE de composition porte la description : le compositeur la
+        #    voit, l'encart WYSIWYG la montre, la clé de cache y est sensible.
+        fiche, _, _kind, _ = A.compose_mood_inputs(_shot, "", facade,
+                                                   is_mapping=True)
+        assert _kind == "mood_mapping"
+        assert "misty teal palette" in fiche, \
+            "la description vision n'entre pas dans la fiche de composition"
+        assert "INSPIRATION ARTISTIQUE" in fiche, \
+            "le bloc de description n'est pas étiqueté dans la fiche"
+        assert _n[0] == 1, f"{_n[0]} appel(s) vision pour UNE description"
+
+        # ② Cache disque par CONTENU : re-composer ne re-décrit pas… mais la
+        #    description doit toujours être LÀ (un compteur stable parce que la
+        #    description a été sautée serait un faux vert).
+        fiche2, _, _, _ = A.compose_mood_inputs(_shot, "", facade,
+                                                is_mapping=True)
+        assert "misty teal palette" in fiche2, \
+            "la description a disparu de la fiche au second passage"
+        assert _n[0] == 1, \
+            "la même sélection d'images est re-décrite — cache vision percé"
+
+        # ③ Flux mapping : Kontext SIMPLE — la façade est l'unique image, même
+        #    avec des références sur le plan.
+        caps.clear()
+        A.run_mood(_shot, "PROMPT COMPOSE", td, "k", lambda m: None, facade,
+                   options={"engine": "flux"})
+        _ep, _args = caps[-1]
+        assert _ep == "fal-ai/flux-pro/kontext", \
+            ("l'inspiration repart en image (endpoint multi)", _ep)
+        assert _args.get("image_url") == _fu and "image_urls" not in _args, \
+            ("la façade doit être l'UNIQUE image envoyée", _args)
+
+        # ④ NB2 mapping : une SEULE URL — la façade.
+        caps.clear()
+        A.run_mood(_shot, "PROMPT COMPOSE", td, "k", lambda m: None, facade,
+                   options={"engine": "nb2"})
+        _ep, _args = caps[-1]
+        assert _args.get("image_urls") == [_fu], \
+            ("les inspirations partent encore en images", _args.get("image_urls"))
+
+        # ⑤ « ◎ Mood inspiré d'une image » : choisie au CLIC, donc inconnue de la
+        #    composition — décrite à l'ENVOI, jamais jointe.
+        caps.clear()
+        A.run_mood(_shot, "PROMPT COMPOSE", td, "k", lambda m: None, facade,
+                   inspiration_ref=i1, options={"engine": "flux"})
+        _ep, _args = caps[-1]
+        assert _ep == "fal-ai/flux-pro/kontext" and _args.get("image_url") == _fu, \
+            "l'image choisie ne doit pas partir en image en mapping"
+        assert "misty teal palette" in (_args.get("prompt") or ""), \
+            "l'image choisie doit être DÉCRITE dans le prompt d'envoi"
+
+        # ⑥ Les rôles annoncés au compositeur suivent l'envoi réel : canevas seul.
+        _roles = A._ref_roles(_shot, facade, is_mapping=True)
+        assert len(_roles) == 1 and "CANEVAS" in _roles[0], \
+            ("les rôles annoncent des images qui ne partent plus", _roles)
+    finally:
+        AP.chat, AP.key_error = _vc, _vk
+        requests.get = _orig_get
+        if _old_fc is not None:
+            _sys.modules["fal_client"] = _old_fc
+        else:
+            _sys.modules.pop("fal_client", None)
+        sb.set_namespace("storyboard")
 
 
 @test

@@ -5848,11 +5848,18 @@ def compositeur_sait_quelles_images_sont_jointes():
              "seedance_prompt": "SURFACE : façade.\nÉTAT 0 : pierre givrée."}
     _roles = A._ref_roles(_shot, _fac, True)
 
-    # ① L'ORDRE est un contrat : « Figure 1 » désigne une POSITION, pas un rôle.
-    #    Une liste décalée dirait au moteur que l'inspiration est le canevas.
-    assert len(_roles) == 2, ("une façade + une inspiration = 2 rôles", _roles)
-    assert "CANEVAS" in _roles[0], "la façade doit être le PREMIER rôle déclaré"
-    assert "INSPIRATION" in _roles[1], "l'inspiration doit venir APRÈS la façade"
+    # ① En MAPPING, la façade est la SEULE image jointe (2026-07-28) : les
+    #    inspirations sont DÉCRITES dans la fiche, plus jamais envoyées — sur un
+    #    endpoint /edit, l'image envoyée gagne contre le texte. Annoncer une
+    #    « Figure 2 » qui ne part pas ferait halluciner le moteur.
+    assert len(_roles) == 1, ("en mapping, seul le canevas est joint", _roles)
+    assert "CANEVAS" in _roles[0], "la façade doit être le rôle déclaré"
+
+    # ①bis Hors mapping (Cinéma), les images de référence partent toujours en
+    #    images : leur rôle d'inspiration reste déclaré au compositeur.
+    _roles_cine = A._ref_roles(_shot, "", False)
+    assert len(_roles_cine) == 1 and "INSPIRATION" in _roles_cine[0], \
+        ("Cinéma : le rôle d'inspiration a disparu", _roles_cine)
 
     # ② La désignation des images est propre à chaque moteur — lue dans
     #    core.image_grammar, jamais écrite en dur dans le compositeur.
@@ -5861,8 +5868,7 @@ def compositeur_sait_quelles_images_sont_jointes():
         _r = IP._refs_rules(_eng, _roles)
         assert _token in _r, (
             f"« {_eng} » ne reçoit pas sa propre syntaxe de référence", _token)
-        assert "CANEVAS" in _r and "INSPIRATION" in _r, \
-            f"les rôles ne sont pas transmis pour « {_eng} »"
+        assert "CANEVAS" in _r, f"les rôles ne sont pas transmis pour « {_eng} »"
 
     # ③ Sans image jointe, aucun bloc parasite.
     assert IP._refs_rules("seedream5_pro", []) == "", \

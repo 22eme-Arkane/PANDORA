@@ -521,30 +521,11 @@ class MoodDialog(QDialog):
         self._schedule_compose()
 
     # ── Composition IA du prompt final image ─────────────────────────────────
-
-    def _compose_inputs(self) -> tuple:
-        """(fiche, moment, surface, style, kind) — délégué à `api.apercu`.
-
-        Le MÊME point d'entrée que le lot « Action → Générer les Moods ». Deux
-        constructions parallèles divergeraient, et le même plan donnerait deux
-        prompts différents selon le bouton cliqué.
-        """
-        from api.apercu import compose_mood_inputs
-        try:
-            import core.style as _sm
-            style = _sm.get_image_suffix() or ""
-        except Exception:
-            style = ""
-        _bref = ""
-        if self._is_mapping():
-            try:
-                from api.apercu import _resolve_building_ref
-                _bref = _resolve_building_ref()
-            except Exception:
-                _bref = ""
-        fiche, moment, kind, surface = compose_mood_inputs(
-            self._shot, style, _bref, is_mapping=self._is_mapping())
-        return fiche, moment, surface, style, kind
+    # (Pas de _compose_inputs ici : TOUT passe par le worker, qui délègue à
+    # api.apercu.compose_mood_prompt. Construire la fiche sur le thread UI
+    # appellerait désormais le moteur de VISION — les images de référence y
+    # sont décrites en texte — et gèlerait la fenêtre le temps d'un aller-retour
+    # réseau.)
 
     def _schedule_compose(self):
         """Programme la composition. Débounce : changer de moteur en cascade ne
