@@ -522,10 +522,10 @@ class MoodDialog(QDialog):
 
     # ── Composition IA du prompt final image ─────────────────────────────────
     # (Pas de _compose_inputs ici : TOUT passe par le worker, qui délègue à
-    # api.apercu.compose_mood_prompt. Construire la fiche sur le thread UI
-    # appellerait désormais le moteur de VISION — les images de référence y
-    # sont décrites en texte — et gèlerait la fenêtre le temps d'un aller-retour
-    # réseau.)
+    # api.apercu.compose_mood_prompt — un seul chemin, un seul cache, partagé
+    # avec le lot. Une construction locale de la fiche n'a plus d'appelant
+    # depuis cette délégation, et en garder une inviterait à composer sur le
+    # thread UI.)
 
     def _schedule_compose(self):
         """Programme la composition. Débounce : changer de moteur en cascade ne
