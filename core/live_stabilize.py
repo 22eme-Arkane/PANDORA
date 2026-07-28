@@ -1,4 +1,14 @@
-"""Stabilisation façade des clips de mapping (Live).
+"""Stabilisation façade des clips de mapping (Live) — DÉBRANCHÉE (2026-07-29).
+
+⚠ ÉTAT : retirée de RENDU & AUDIO le jour de sa livraison, verdict Matthieu
+sur clip réel : « ça ne fonctionne pas du tout, c'est encore pire ». La cause
+est structurelle : sur un vrai mapping, les features ORB s'accrochent au
+CONTENU PROJETÉ — qui bouge par principe — et non à la pierre ; l'estimation
+« corrige » alors le mouvement du contenu, c'est-à-dire qu'elle l'aggrave. Le
+test synthétique (scène FIXE qui dérive) reste vert : il valide la mécanique,
+pas le cas réel. Une v2 devrait s'ancrer sur la SILHOUETTE de la façade
+(contour du lumineux sur fond noir), invariante au contenu — pas sur les
+features. Ne pas rebrancher sans cette refonte.
 
 Les modèles vidéo ne garantissent jamais une fixité au pixel près : même avec
 la méthode deux plaques et le verrou géométrique, Seedance laisse de légères

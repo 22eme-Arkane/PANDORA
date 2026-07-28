@@ -2983,17 +2983,11 @@ class TabT2V(QScrollArea):
         self._conform_cb = _conform_cb_inner
         _raccords_lay.addWidget(self._conform_toggle_row)
 
-        # Stabilisation façade (mapping) — annule les dérives d'échelle du
-        # moteur en recalant chaque image sur la plaque de départ
-        # (core/live_stabilize). Décochée par défaut : elle coûte du temps.
-        self._stab_toggle_row, _stab_cb_inner = _raccord_toggle(
-            "Stabilisation façade (mapping)",
-            "Recale chaque image sur la géométrie de la plaque de départ — "
-            "annule les dérives d'échelle du moteur · ≈1 min par clip",
-            False,
-        )
-        self._stab_cb = _stab_cb_inner
-        _raccords_lay.addWidget(self._stab_toggle_row)
+        # (Pas de case « Stabilisation façade » : essayée puis RETIRÉE le
+        # 2026-07-29 — sur un vrai clip mapping, les points d'accroche suivent
+        # le CONTENU projeté, qui bouge par principe, au lieu de la pierre :
+        # la « correction » aggravait la dérive. core/live_stabilize reste
+        # débranché, avec la leçon ; une v2 devrait s'ancrer sur la SILHOUETTE.)
 
         # « Caméra dynamique » et « Synchroniser le décor » RETIRÉS de l'UI Live
         # (demande Matthieu 2026-07-05). Les cases ne sont plus créées : tous leurs
@@ -5205,42 +5199,6 @@ class TabT2V(QScrollArea):
                                         f"{_cf['target']:.3f}s (calage musical)")
                 except Exception:
                     pass
-
-        # ── Stabilisation façade (option) : annule les dérives d'échelle ──────
-        # AVANT le verrouillage façade : le masque doit tomber sur une image
-        # déjà recalée, sinon il fige une silhouette qui glisse dessous.
-        if (local_path and getattr(self, "_seq_mode", "live") == "mapping"
-                and getattr(self, "_stab_cb", None)
-                and self._stab_cb.isChecked()):
-            try:
-                from core.live_stabilize import stabilize_clip
-                from PyQt6.QtWidgets import QApplication as _QApp
-
-                def _stab_prog(pct):
-                    # Garde l'interface vivante pendant le calcul (subprocess +
-                    # OpenCV sur le fil courant, comme le conform et le lock).
-                    try:
-                        self.progress.setValue(int(pct))
-                    except Exception:
-                        pass
-                    _QApp.processEvents()
-
-                _tmp = local_path + ".stab.mp4"
-                _res = stabilize_clip(local_path, _tmp, progress_cb=_stab_prog)
-                if _res.get("ok") and os.path.isfile(_tmp):
-                    os.replace(_tmp, local_path)
-                    davinci_msg += (
-                        f"\n🎯 Stabilisé sur la façade (correction max "
-                        f"{_res.get('max_correction_px', 0)} px)")
-                else:
-                    try:
-                        os.remove(_tmp)
-                    except OSError:
-                        pass
-                    if _res.get("error"):
-                        davinci_msg += f"\n🎯 Stabilisation impossible : {_res['error']}"
-            except Exception:
-                pass
 
         # ── Verrouillage façade (option) : noir pur garanti hors silhouette ───
         if (local_path and getattr(self, "_seq_mode", "live") == "mapping"

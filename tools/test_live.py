@@ -5776,16 +5776,20 @@ def mood_rend_letat_darrivee():
 
 
 @test
-def rendu_audio_recalage_et_stabilisation_optionnels():
-    """RENDU & AUDIO : le recalage ffmpeg se DÉBRAYE, la stabilisation s'active.
+def rendu_audio_recalage_debrayable():
+    """RENDU & AUDIO : le recalage ffmpeg se DÉBRAYE — et la stabilisation
+    ne revient pas.
 
-    Demandes Matthieu (2026-07-28, nuit) : « FFmpeg retravaille la durée des
-    clips et j'aimerais pouvoir ne pas le faire ou le faire » — le conform
-    était appliqué SANS condition après chaque export. Et la stabilisation
-    façade (core/live_stabilize) doit être proposée au même endroit.
+    Demande Matthieu (2026-07-28) : « FFmpeg retravaille la durée des clips
+    et j'aimerais pouvoir ne pas le faire ou le faire » — le conform était
+    appliqué SANS condition après chaque export. Coché par défaut = le
+    comportement historique est préservé.
 
-    Défauts : recalage COCHÉ (comportement historique préservé),
-    stabilisation DÉCOCHÉE (elle coûte du temps de calcul).
+    GARDE INVERSE stabilisation : essayée puis RETIRÉE le 2026-07-29 (« ça ne
+    fonctionne pas du tout, c'est encore pire ») — sur un vrai clip mapping,
+    les points d'accroche suivent le CONTENU projeté, qui bouge par principe,
+    au lieu de la pierre. Ne pas rebrancher core/live_stabilize sans une
+    approche NOUVELLE (ancrage sur la silhouette, pas sur les features).
     """
     import inspect as _i
     import ui.tab_t2v_live as TL
@@ -5796,19 +5800,20 @@ def rendu_audio_recalage_et_stabilisation_optionnels():
             "pas de case « Recalage de durée (ffmpeg) » dans RENDU & AUDIO"
         assert t._conform_cb.isChecked(), \
             "le recalage doit rester COCHÉ par défaut (comportement historique)"
-        assert hasattr(t, "_stab_cb"), \
-            "pas de case « Stabilisation façade » dans RENDU & AUDIO"
-        assert not t._stab_cb.isChecked(), \
-            "la stabilisation doit être DÉCOCHÉE par défaut (coût de calcul)"
+        assert not hasattr(t, "_stab_cb"), \
+            ("la stabilisation façade est revenue dans RENDU & AUDIO — retirée "
+             "le 2026-07-29, elle aggravait la dérive sur un vrai clip")
     finally:
         t.deleteLater()
 
-    # Les cases GOUVERNENT réellement le pipeline post-export (code réel).
+    # La case GOUVERNE réellement le pipeline post-export (code réel)…
     _src = _i.getsource(TL)
     assert "self._conform_cb.isChecked()" in _src, \
         "le conform ffmpeg ignore la case — il reste inconditionnel"
-    assert "stabilize_clip" in _src and "self._stab_cb.isChecked()" in _src, \
-        "la stabilisation n'est pas branchée sur le pipeline post-export"
+    # …et plus rien n'appelle la stabilisation à l'export.
+    assert "stabilize_clip" not in _src.replace(
+        "# la « correction » aggravait la dérive", ""), \
+        "un appel à stabilize_clip subsiste dans le pipeline d'export"
 
 
 @test
