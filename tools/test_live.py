@@ -5776,6 +5776,42 @@ def mood_rend_letat_darrivee():
 
 
 @test
+def rendu_audio_recalage_et_stabilisation_optionnels():
+    """RENDU & AUDIO : le recalage ffmpeg se DÉBRAYE, la stabilisation s'active.
+
+    Demandes Matthieu (2026-07-28, nuit) : « FFmpeg retravaille la durée des
+    clips et j'aimerais pouvoir ne pas le faire ou le faire » — le conform
+    était appliqué SANS condition après chaque export. Et la stabilisation
+    façade (core/live_stabilize) doit être proposée au même endroit.
+
+    Défauts : recalage COCHÉ (comportement historique préservé),
+    stabilisation DÉCOCHÉE (elle coûte du temps de calcul).
+    """
+    import inspect as _i
+    import ui.tab_t2v_live as TL
+
+    t = TL.TabT2V()
+    try:
+        assert hasattr(t, "_conform_cb"), \
+            "pas de case « Recalage de durée (ffmpeg) » dans RENDU & AUDIO"
+        assert t._conform_cb.isChecked(), \
+            "le recalage doit rester COCHÉ par défaut (comportement historique)"
+        assert hasattr(t, "_stab_cb"), \
+            "pas de case « Stabilisation façade » dans RENDU & AUDIO"
+        assert not t._stab_cb.isChecked(), \
+            "la stabilisation doit être DÉCOCHÉE par défaut (coût de calcul)"
+    finally:
+        t.deleteLater()
+
+    # Les cases GOUVERNENT réellement le pipeline post-export (code réel).
+    _src = _i.getsource(TL)
+    assert "self._conform_cb.isChecked()" in _src, \
+        "le conform ffmpeg ignore la case — il reste inconditionnel"
+    assert "stabilize_clip" in _src and "self._stab_cb.isChecked()" in _src, \
+        "la stabilisation n'est pas branchée sur le pipeline post-export"
+
+
+@test
 def stabilisation_recale_sur_la_plaque():
     """La stabilisation ANNULE une dérive d'échelle/position mesurée.
 

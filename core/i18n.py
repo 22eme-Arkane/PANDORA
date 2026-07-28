@@ -2231,6 +2231,16 @@ _FR_TO_EN: dict[str, str] = {
     "composition du prompt…": "composing the prompt…",
     "composition du prompt par l'IA…": "AI is composing the prompt…",
     "Image active du plan": "Active image of the shot",
+    "Recalage de durée (ffmpeg)": "Duration conform (ffmpeg)",
+    "Retime léger après l'export : le clip dure EXACTEMENT la durée du "
+    "plan (calage musical) · Décoché → le clip est livré brut":
+        "Light retime after export: the clip lasts EXACTLY the shot "
+        "duration (music sync) · Unchecked → the clip is delivered as is",
+    "Stabilisation façade (mapping)": "Facade stabilization (mapping)",
+    "Recale chaque image sur la géométrie de la plaque de départ — "
+    "annule les dérives d'échelle du moteur · ≈1 min par clip":
+        "Realigns every frame onto the start-plate geometry — cancels "
+        "the engine's scale drift · ≈1 min per clip",
     "prompt retouché à la main": "prompt edited by hand",
     "♻ déjà composé": "♻ already composed",
     "✓ composé pour ce moteur": "✓ composed for this engine",

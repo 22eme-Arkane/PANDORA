@@ -2971,6 +2971,30 @@ class TabT2V(QScrollArea):
         _raccords_lay.addWidget(self._sfx_auto_toggle_row)
         self._sfx_workers: list = []   # refs anti-GC des workers SFX en cours
 
+        # Recalage de durée ffmpeg — DÉBRAYABLE (demande Matthieu 2026-07-28) :
+        # jusqu'ici le conform était appliqué sans condition après chaque
+        # export. Coché par défaut = le comportement historique est préservé.
+        self._conform_toggle_row, _conform_cb_inner = _raccord_toggle(
+            "Recalage de durée (ffmpeg)",
+            "Retime léger après l'export : le clip dure EXACTEMENT la durée du "
+            "plan (calage musical) · Décoché → le clip est livré brut",
+            True,
+        )
+        self._conform_cb = _conform_cb_inner
+        _raccords_lay.addWidget(self._conform_toggle_row)
+
+        # Stabilisation façade (mapping) — annule les dérives d'échelle du
+        # moteur en recalant chaque image sur la plaque de départ
+        # (core/live_stabilize). Décochée par défaut : elle coûte du temps.
+        self._stab_toggle_row, _stab_cb_inner = _raccord_toggle(
+            "Stabilisation façade (mapping)",
+            "Recale chaque image sur la géométrie de la plaque de départ — "
+            "annule les dérives d'échelle du moteur · ≈1 min par clip",
+            False,
+        )
+        self._stab_cb = _stab_cb_inner
+        _raccords_lay.addWidget(self._stab_toggle_row)
+
         # « Caméra dynamique » et « Synchroniser le décor » RETIRÉS de l'UI Live
         # (demande Matthieu 2026-07-05). Les cases ne sont plus créées : tous leurs
         # usages (aperçu, prompt, affichage conditionnel) sont gardés par
@@ -5157,7 +5181,12 @@ class TabT2V(QScrollArea):
         # l'arrondi. Il rattrapait seulement l'imprécision du moteur, jamais le
         # décalage musical pour lequel il a été écrit. Repli sur l'entier tant
         # qu'un plan ne porte pas encore sa durée exacte.
-        if local_path and self._active_shot:
+        # Débrayable depuis RENDU & AUDIO (demande Matthieu 2026-07-28) — la
+        # garde getattr suit le motif des autres cases : sans la case, le
+        # comportement historique (recalage appliqué) est conservé.
+        if (local_path and self._active_shot
+                and (not getattr(self, "_conform_cb", None)
+                     or self._conform_cb.isChecked())):
             try:
                 _target = float(self._active_shot.get("duration_exact", 0) or 0)
             except (TypeError, ValueError):
@@ -5176,6 +5205,42 @@ class TabT2V(QScrollArea):
                                         f"{_cf['target']:.3f}s (calage musical)")
                 except Exception:
                     pass
+
+        # ── Stabilisation façade (option) : annule les dérives d'échelle ──────
+        # AVANT le verrouillage façade : le masque doit tomber sur une image
+        # déjà recalée, sinon il fige une silhouette qui glisse dessous.
+        if (local_path and getattr(self, "_seq_mode", "live") == "mapping"
+                and getattr(self, "_stab_cb", None)
+                and self._stab_cb.isChecked()):
+            try:
+                from core.live_stabilize import stabilize_clip
+                from PyQt6.QtWidgets import QApplication as _QApp
+
+                def _stab_prog(pct):
+                    # Garde l'interface vivante pendant le calcul (subprocess +
+                    # OpenCV sur le fil courant, comme le conform et le lock).
+                    try:
+                        self.progress.setValue(int(pct))
+                    except Exception:
+                        pass
+                    _QApp.processEvents()
+
+                _tmp = local_path + ".stab.mp4"
+                _res = stabilize_clip(local_path, _tmp, progress_cb=_stab_prog)
+                if _res.get("ok") and os.path.isfile(_tmp):
+                    os.replace(_tmp, local_path)
+                    davinci_msg += (
+                        f"\n🎯 Stabilisé sur la façade (correction max "
+                        f"{_res.get('max_correction_px', 0)} px)")
+                else:
+                    try:
+                        os.remove(_tmp)
+                    except OSError:
+                        pass
+                    if _res.get("error"):
+                        davinci_msg += f"\n🎯 Stabilisation impossible : {_res['error']}"
+            except Exception:
+                pass
 
         # ── Verrouillage façade (option) : noir pur garanti hors silhouette ───
         if (local_path and getattr(self, "_seq_mode", "live") == "mapping"
