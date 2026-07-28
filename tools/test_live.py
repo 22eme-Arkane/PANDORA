@@ -5776,6 +5776,57 @@ def mood_rend_letat_darrivee():
 
 
 @test
+def vignette_active_soulignee_selection_encadree():
+    """ACTIVE = souligné vert néon ; SÉLECTIONNÉE = rectangle néon.
+
+    Demande Matthieu (2026-07-28) : « l'image active est actuellement encadrée,
+    ce qui porte confusion avec l'image sélectionnée. On souligne désormais
+    l'image active d'un trait vert néon, et le rectangle néon sert à la
+    sélection. » Avant, c'était l'inverse : l'ACTIVE portait le rectangle
+    accent et la sélection un simple border_bright — impossible de savoir
+    laquelle partirait comme plaque du plan.
+    """
+    import tempfile
+    import core.storyboard as sb
+    import ui.dialog_apercu as DA
+    from ui.styles import CP as _CP
+    from PIL import Image
+
+    sb.set_namespace("live_seq_mapping")
+    sb.clear_version_shots(sb.DEFAULT_VERSION_ID)
+    _shot = sb.save_shot({"number": 1, "scene_title": "P1",
+                          "seedance_prompt": "SURFACE : façade.\nÉTAT 1 : or.\n"},
+                         sb.DEFAULT_VERSION_ID)
+    _td = tempfile.mkdtemp(prefix="t_thumbs_")
+    _p1 = os.path.join(_td, "a.png")
+    _p2 = os.path.join(_td, "b.png")
+    Image.new("RGB", (32, 18), (10, 10, 40)).save(_p1)
+    Image.new("RGB", (32, 18), (40, 10, 10)).save(_p2)
+    sb.save_apercus(_shot["id"], [_p1, _p2], 0)   # ACTIVE = la première
+
+    dlg = DA.MoodDialog(None, _shot)
+    dlg._compose_timer.stop()
+    try:
+        dlg._current_idx = 1                       # SÉLECTIONNÉE = la seconde
+        dlg._refresh()
+        _s_active = dlg._thumb_lay.itemAt(0).widget().styleSheet()
+        _s_select = dlg._thumb_lay.itemAt(1).widget().styleSheet()
+
+        assert "border-bottom" in _s_active and _CP["green"] in _s_active, \
+            ("l'image ACTIVE doit être SOULIGNÉE d'un trait vert néon",
+             _s_active)
+        assert _CP["accent"] not in _s_active, \
+            ("le rectangle néon sur l'active se confond avec la sélection",
+             _s_active)
+        assert _CP["accent"] in _s_select and "border-bottom" not in _s_select, \
+            ("l'image SÉLECTIONNÉE doit porter le rectangle néon", _s_select)
+    finally:
+        dlg._compose_timer.stop()
+        dlg.deleteLater()
+        sb.set_namespace("storyboard")
+
+
+@test
 def composition_montre_une_barre_de_chargement():
     """La composition IA s'annonce par une BARRE qui pulse, pas un texte gris.
 

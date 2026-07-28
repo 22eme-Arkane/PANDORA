@@ -2230,6 +2230,7 @@ _FR_TO_EN: dict[str, str] = {
         "This prompt is your working document: keep these blocks, they give the shot its structure. On every send, PANDORA rewrites it for the chosen engine — in English, as continuous text, without the labels — following the grammar specific to video or to image.",
     "composition du prompt…": "composing the prompt…",
     "composition du prompt par l'IA…": "AI is composing the prompt…",
+    "Image active du plan": "Active image of the shot",
     "prompt retouché à la main": "prompt edited by hand",
     "♻ déjà composé": "♻ already composed",
     "✓ composé pour ce moteur": "✓ composed for this engine",

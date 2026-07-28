@@ -798,10 +798,19 @@ class MoodDialog(QDialog):
             )
             pix = pix.copy((pix.width() - 106) // 2, (pix.height() - 62) // 2, 106, 62)
             thumb.setPixmap(pix)
-            border = CP["accent"] if i == self._active_idx else (
-                CP["border_bright"] if i == self._current_idx else CP["border"]
-            )
-            thumb.setStyleSheet(f"border:2px solid {border};border-radius:4px;")
+            # ACTIVE = SOULIGNÉE d'un trait vert néon ; SÉLECTIONNÉE = rectangle
+            # néon (demande Matthieu 2026-07-28 : l'encadré de l'active se
+            # confondait avec la sélection — impossible de savoir laquelle
+            # partirait comme plaque du plan). Une vignette peut être les deux :
+            # rectangle néon ET souligné vert.
+            _cadre = CP["accent"] if i == self._current_idx else CP["border"]
+            _style = f"border:2px solid {_cadre};border-radius:4px;"
+            if i == self._active_idx:
+                _style += f"border-bottom:4px solid {CP['green']};"
+            thumb.setStyleSheet(_style)
+            thumb.setToolTip(
+                translate("Image active du plan") if i == self._active_idx
+                else "")
 
             def _make_jump(idx):
                 def _handler(_e):
