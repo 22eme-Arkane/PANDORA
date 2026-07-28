@@ -342,7 +342,8 @@ def prompts_generation_video_mapping():
 @test
 def prompt_mood_live_propre():
     """En Séquences Live/Mapping, le prompt mood est épuré : pas de termes caméra,
-    pas de français, pas de film grain, état d'OUVERTURE demandé (keyframe)."""
+    pas de français, pas de film grain, état d'ARRIVÉE demandé (plaque d'arrivée,
+    décision Matthieu 2026-07-28)."""
     import core.storyboard as sb
     from api.apercu import build_mood_prompt
     from core.prompt_sections import video_with_sound
@@ -362,7 +363,9 @@ def prompt_mood_live_propre():
     assert "lens" not in p_live and "35mm" not in p_live, "pas de focale en Live"
     assert "film grain" not in p_live, "pas de grain (noirs purs)"
     assert "Les baleines" not in p_live, "pas de titre français collé"
-    assert "OPENING state" in p_live, "état d'ouverture demandé (keyframe de début)"
+    # Prose sans blocs de barre → branche héritée : elle demande l'état FINAL
+    # (le Mood est la plaque d'ARRIVÉE de la vidéo — décision Matthieu 28/07).
+    assert "FINAL state" in p_live, "état d'arrivée demandé (plaque d'arrivée)"
     # UN seul prompt à sections : la section son NE POLLUE PAS l'image fixe.
     assert "SOUND DESIGN" not in p_live and "129 BPM" not in p_live, \
         "le son est retiré du prompt mood (image fixe)"
@@ -377,7 +380,7 @@ def prompt_mood_live_propre():
     assert "Action:" in _l_nb2, "Live/Nano Banana : brief à champs attendu"
     assert "Action:" not in _l_seed, "Live/Seedream : prose attendue"
     for _p in (p_live, _l_nb2, _l_seed):
-        assert "OPENING state" in _p, "état d'ouverture perdu"
+        assert "FINAL state" in _p, "état d'arrivée perdu"
         assert "4K" not in _p and "ultra-detailed" not in _p, \
             "mots de qualité génériques (interdits par la doctrine de prompt)"
         assert "129 BPM" not in _p, "le son n'a pas sa place dans une image fixe"
@@ -5380,8 +5383,8 @@ def lot_de_moods_compose_une_fois_par_plan():
                                len(_envois))
     assert _compos[0].get("kind") == "mood_mapping", \
         ("le lot ne compose pas dans le contexte mapping", _compos[0].get("kind"))
-    assert "OPENING state" in (_compos[0].get("moment") or ""), \
-        "l'instant à rendre n'est pas transmis par le lot"
+    assert "FINAL state" in (_compos[0].get("moment") or ""), \
+        "l'état d'ARRIVÉE à rendre n'est pas transmis par le lot"
     for _p_envoye in _envois:
         assert _p_envoye == "English composed prompt for the engine.", (
             "le lot envoie le prompt déterministe au lieu du composé", _p_envoye[:60])
@@ -5659,21 +5662,17 @@ def composition_survit_a_la_fermeture_du_mood():
 
 
 @test
-def mood_ne_decrit_que_letat_douverture():
-    """Le Mood ne doit PAS recevoir la transformation ni l'état final.
+def mood_ne_decrit_quun_seul_etat():
+    """Le Mood rend UN état de la barre — jamais la barre entière.
 
-    Constat de Matthieu (2026-07-27, captures à l'appui) : les moods rendaient
-    le monde forestier FINAL — arbres, cerf, renard, hibou — alors que l'ÉTAT 0
-    du plan dit « façade encore majoritairement givrée, portail sombre ».
+    Constat de Matthieu (2026-07-27, captures à l'appui) : envoyée entière, la
+    barre faisait rendre un mélange — un moteur d'image ne sait pas « ignorer
+    l'évolution », il rend ce qu'on lui décrit. Décrire ce qu'on ne veut pas
+    voir est le plus sûr moyen de l'obtenir.
 
-    Cause : le mood est l'image de DÉPART du plan, mais on lui envoyait la barre
-    ENTIÈRE — TRANSFORMATION et ÉTAT 1 compris — avant de lui demander, en une
-    phrase anglaise, d'« ignorer l'évolution ». Un moteur d'image ne sait pas
-    ignorer : il rend ce qu'on lui décrit. Décrire ce qu'on ne veut pas voir est
-    le plus sûr moyen de l'obtenir.
-
-    Les deux blocs temporels sont désormais RETIRÉS, pas contredits — et la
-    consigne négative disparaît avec eux.
+    Depuis le 2026-07-28 (décision Matthieu, deuxième passe), l'état rendu est
+    l'ARRIVÉE (ÉTAT 1) pour tous les plans : c'est l'action même du plan, et
+    la plaque d'ARRIVÉE de la vidéo. TRANSFORMATION et ÉTAT 0 ne partent pas.
     """
     import core.storyboard as sb
     import api.apercu as A
@@ -5692,12 +5691,16 @@ def mood_ne_decrit_que_letat_douverture():
     _out = A.build_mood_prompt({"id": "s1", "number": 1, "seedance_prompt": _p},
                                "", "nb2")
 
-    for _interdit in ("TRANSFORMATION", "ÉTAT 1", "forestier", "cerf", "renard",
-                      "hibou"):
+    # L'état d'ARRIVÉE est rendu…
+    assert "forestier" in _out, \
+        "l'ÉTAT 1 (le monde forestier) doit être la matière du Mood"
+    # …et RIEN d'autre : ni le processus, ni l'état de départ.
+    for _interdit in ("TRANSFORMATION", "ÉTAT 0", "rosace battante",
+                      "encore givrée", "cerf", "renard", "hibou"):
         assert _interdit not in _out, (
             f"« {_interdit} » part au moteur alors que le mood ne doit montrer "
-            "que l'état d'ouverture — c'est ce qui fait apparaître la forêt et "
-            "les animaux sur une façade censée être encore givrée")
+            "que l'état d'arrivée — décrire le processus ou le départ, c'est "
+            "l'obtenir en surimpression")
 
     # Une consigne négative ne remplace pas le retrait : si les blocs sont bien
     # partis, il n'y a plus rien à ignorer.
@@ -5705,30 +5708,26 @@ def mood_ne_decrit_que_letat_douverture():
         "la consigne « ignore the later evolution » survit alors qu'elle n'a plus d'objet"
 
     # Et ce qui décrit l'image fixe doit rester.
-    for _requis in ("SURFACE", "ÉTAT 0", "NOIR", "STYLE", "CONTRAINTES"):
+    for _requis in ("SURFACE", "ÉTAT 1", "NOIR", "STYLE", "CONTRAINTES"):
         assert _requis in _out, f"« {_requis} » a disparu du prompt du mood"
 
     sb.set_namespace("storyboard")
 
 
 @test
-def mood_rend_linstant_de_lancrage():
-    """Le Mood rend l'instant que l'ANCRAGE deux plaques attend de lui.
+def mood_rend_letat_darrivee():
+    """Le Mood rend l'état d'ARRIVÉE du plan — pour TOUS les plans.
 
-    Méthode deux plaques (2026-07-27, confirmée par Matthieu le 28/07 : « il
-    faut que le mood crée l'image de fin du plan actuel pour faire la
-    transition ») : la vidéo d'un plan PART de la dernière frame du plan
-    précédent et ARRIVE sur son Mood. Le Mood du cas courant est donc l'image
-    de FIN du plan (ÉTAT 1). Seul le PREMIER plan n'a pas de prédécesseur :
-    son Mood sert d'image de DÉPART (ÉTAT 0).
-
-    Le correctif du 27/07 (« ne plus décrire ce qu'on ne veut pas voir »)
-    forçait l'ÉTAT 0 partout — à contre-emploi pour tout plan ≥ 2 depuis
-    l'ancrage. Les deux se réconcilient ici : UN état à la fois, jamais la
-    barre entière, et l'état choisi suit l'ancrage (forçable par la fenêtre).
+    Décision Matthieu (2026-07-28, deuxième passe) : « c'est la fin de plan
+    qui est intéressante pour tous les plans. C'est l'action même du plan qui
+    nous intéresse, pas le début, qui est la continuité du plan précédent. »
+    Le sélecteur d'instant (auto/début/fin) livré plus tôt le même jour est
+    RETIRÉ : la méthode deux plaques fait ARRIVER la vidéo sur son Mood, donc
+    ÉTAT 1 — plan 1 compris.
     """
     import core.storyboard as sb
     import api.apercu as A
+    import ui.dialog_apercu as DA
 
     sb.set_namespace("live_seq_mapping")
     _p = (
@@ -5739,74 +5738,92 @@ def mood_rend_linstant_de_lancrage():
         "NOIR : le fond hors façade.\n"
         "STYLE : gravure.\n"
     )
-    _s1 = {"id": "i1", "number": 1, "seedance_prompt": _p}
-    _s2 = {"id": "i2", "number": 2, "seedance_prompt": _p}
     try:
-        # ① Automatique : plan 2 → FIN (plaque d'arrivée), plan 1 → DÉBUT.
-        _out2 = A.build_mood_prompt(_s2, "", "nb2")
-        assert "pierre nue dorée" in _out2, \
-            "plan 2 : le Mood doit rendre l'ÉTAT 1 — c'est la plaque d'ARRIVÉE"
-        assert "pierre givrée" not in _out2 and "gel fond" not in _out2, \
-            ("plan 2 : l'état de départ ou la transformation partent au moteur "
-             "alors que seul l'état d'arrivée doit être décrit", _out2[:200])
-        _out1 = A.build_mood_prompt(_s1, "", "nb2")
-        assert "pierre givrée" in _out1 and "pierre nue dorée" not in _out1, \
-            "plan 1 : sans prédécesseur, le Mood reste l'image de DÉPART (ÉTAT 0)"
+        # ① Tous les plans rendent l'ÉTAT 1 — le plan 1 aussi.
+        for _num in (1, 2):
+            _out = A.build_mood_prompt({"id": f"i{_num}", "number": _num,
+                                        "seedance_prompt": _p}, "", "nb2")
+            assert "pierre nue dorée" in _out, \
+                (f"plan {_num} : le Mood doit rendre l'ÉTAT 1 — c'est la "
+                 "plaque d'ARRIVÉE", _out[:200])
+            assert "pierre givrée" not in _out and "gel fond" not in _out, \
+                (f"plan {_num} : l'état de départ ou la transformation partent "
+                 "au moteur", _out[:200])
 
-        # ② Forçage : la fenêtre peut imposer l'un ou l'autre.
-        _force_d = A.build_mood_prompt(_s2, "", "nb2", instant="debut")
-        assert "pierre givrée" in _force_d and "pierre nue dorée" not in _force_d
-        _force_f = A.build_mood_prompt(_s1, "", "nb2", instant="fin")
-        assert "pierre nue dorée" in _force_f and "pierre givrée" not in _force_f
+        # ② Barre sans ÉTAT 1 : repli sur l'état DISPONIBLE, jamais la barre
+        #    entière.
+        _p0 = ("SURFACE : façade.\nÉTAT 0 : pierre givrée sombre.\n"
+               "STYLE : gravure.\n")
+        _out0 = A.build_mood_prompt({"id": "i0", "number": 3,
+                                     "seedance_prompt": _p0}, "", "nb2")
+        assert "pierre givrée" in _out0, \
+            "sans ÉTAT 1, l'état d'ouverture reste le seul état à rendre"
 
-        # ③ La composition reçoit le MÊME instant : son « moment » désigne
-        #    l'état d'arrivée pour un plan 2, l'ouverture pour un plan 1 —
-        #    et comme le moment entre dans la clé de cache, changer d'instant
-        #    recompose.
-        _, _m2, _k2, _ = A.compose_mood_inputs(_s2, "", "", is_mapping=True)
-        assert _k2 == "mood_mapping" and "FINAL" in _m2 and "pierre nue dorée" in _m2, \
-            ("plan 2 : le moment de composition doit désigner l'état FINAL", _m2)
-        _, _m1, _, _ = A.compose_mood_inputs(_s1, "", "", is_mapping=True)
-        assert "OPENING" in _m1 and "pierre givrée" in _m1, \
-            ("plan 1 : le moment de composition doit désigner l'OUVERTURE", _m1)
-        assert _m1 != _m2
+        # ③ Le « moment » de composition désigne l'état FINAL pour tous.
+        _, _m1, _k, _ = A.compose_mood_inputs(
+            {"id": "i1", "number": 1, "seedance_prompt": _p}, "", "",
+            is_mapping=True)
+        assert _k == "mood_mapping" and "FINAL" in _m1 \
+            and "pierre nue dorée" in _m1, \
+            ("plan 1 : le moment doit désigner l'état FINAL", _m1)
 
-        # ④ La fenêtre : le sélecteur d'instant n'existe qu'en MAPPING, et
-        #    l'instant choisi gouverne le prompt reconstruit.
-        import ui.dialog_apercu as DA
-        sb.clear_version_shots(sb.DEFAULT_VERSION_ID)
-        _shot_ui = sb.save_shot({"number": 2, "scene_title": "P2",
-                                 "seedance_prompt": _p}, sb.DEFAULT_VERSION_ID)
-        dlg = DA.MoodDialog(None, _shot_ui)
-        dlg._compose_timer.stop()
-        try:
-            assert not dlg._instant_combo.isHidden(), \
-                "mapping : le sélecteur d'instant doit être proposé"
-            # setVisible/isHidden, pas isVisible : le dialogue n'est jamais
-            # affiché en headless (piège documenté).
-            _i_fin = dlg._instant_combo.findData("debut")
-            dlg._instant_combo.setCurrentIndex(_i_fin)
-            assert dlg._current_instant() == "debut"
-            assert "pierre givrée" in dlg._prompt_edit.toPlainText(), \
-                "forcer « Début » ne reconstruit pas le prompt affiché"
-        finally:
-            dlg._compose_timer.stop()
-            dlg.deleteLater()
-
-        # Hors mapping (namespace Live simple) : pas de sélecteur.
-        sb.set_namespace("live_seq_1")
-        _shot_l = {"id": "iL", "number": 2, "seedance_prompt": _p}
-        dlg2 = DA.MoodDialog(None, _shot_l)
-        dlg2._compose_timer.stop()
-        try:
-            assert dlg2._instant_combo.isHidden(), \
-                "hors mapping, le sélecteur d'instant n'a pas de sens"
-            assert dlg2._current_instant() == "", \
-                "hors mapping, l'instant doit rester vide (aucun ancrage)"
-        finally:
-            dlg2._compose_timer.stop()
-            dlg2.deleteLater()
+        # ④ GARDE INVERSE — le sélecteur d'instant ne doit pas revenir.
+        assert not hasattr(DA.MoodDialog, "_on_instant_changed"), \
+            ("le sélecteur d'instant est revenu — décision Matthieu "
+             "2026-07-28 : fin du plan pour tous, sans réglage")
     finally:
+        sb.set_namespace("storyboard")
+
+
+@test
+def reinitialiser_recompose_a_neuf():
+    """« Réinitialiser » RETENTE la composition — cache ignoré, refus compris.
+
+    Constat Matthieu (2026-07-28) : « le bouton Réinitialiser ne semble pas
+    marcher ». Il marchait… en resservant le CACHE : un refus du contrôle y
+    est mémorisé, donc recharger puis recomposer réaffichait la même erreur,
+    sans jamais redonner sa chance à l'IA. `force_fresh` saute la LECTURE du
+    cache (l'écriture reste), et le dialogue le passe quand la composition
+    vient du bouton Réinitialiser.
+    """
+    import core.storyboard as sb
+    import api.apercu as A
+    import api.image_prompt as IP
+    import core.ai_provider as AP
+    import ui.dialog_apercu as DA
+
+    sb.set_namespace("live_seq_mapping")
+    sb.clear_version_shots(sb.DEFAULT_VERSION_ID)
+    _shot = sb.save_shot({"number": 1, "scene_title": "P1",
+                          "seedance_prompt": ("SURFACE : façade.\n"
+                                              "ÉTAT 0 : givre.\n"
+                                              "ÉTAT 1 : pierre dorée.\n"
+                                              "STYLE : gravure.")},
+                         sb.DEFAULT_VERSION_ID)
+    _n = [0]
+    _vc, _vk = IP.compose, AP.key_error
+    try:
+        IP.compose = lambda p, **kw: (_n.__setitem__(0, _n[0] + 1),
+                                      "Composed English prompt.")[1]
+        AP.key_error = lambda **kw: None
+
+        A.compose_mood_prompt(_shot, "", "nb2", __file__)
+        A.compose_mood_prompt(_shot, "", "nb2", __file__)
+        assert _n[0] == 1, "hors Réinitialiser, le cache doit servir"
+
+        _p, _ok, _why, _cache = A.compose_mood_prompt(
+            _shot, "", "nb2", __file__, force_fresh=True)
+        assert _n[0] == 2 and not _cache, \
+            "Réinitialiser doit RECOMPOSER, pas resservir le cache"
+
+        # Le bouton passe réellement le drapeau (code réel, pas commentaire).
+        assert "_compose_fresh = True" in inspect.getsource(
+            DA.MoodDialog._reset_prompt), \
+            "Réinitialiser ne demande pas de composition fraîche"
+        assert "force_fresh" in inspect.getsource(DA._MoodPromptWorker.run), \
+            "le worker de composition ignore le drapeau de fraîcheur"
+    finally:
+        IP.compose, AP.key_error = _vc, _vk
         sb.set_namespace("storyboard")
 
 

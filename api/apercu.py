@@ -72,29 +72,7 @@ def _focal_to_en(focal_str: str) -> str:
 
 # ── Prompt builder ────────────────────────────────────────────────────────────
 
-def _instant_effectif(shot: dict, instant: str = "") -> str:
-    """« fin » pour tout plan qui a un prédécesseur, « debut » pour le premier.
-
-    Méthode DEUX PLAQUES (2026-07-27, confirmée par Matthieu le 28/07 : « il
-    faut que le mood crée l'image de fin du plan actuel pour faire la
-    transition ») : la vidéo d'un plan PART de la dernière frame du plan
-    précédent et ARRIVE sur son Mood — voir tab_t2v_live. Le Mood du cas
-    courant est donc l'image de FIN du plan. Seul le PREMIER plan n'a pas de
-    prédécesseur : son Mood sert d'image de DÉPART (état d'ouverture).
-
-    `instant` vide = automatique ; « debut » / « fin » = forcé par la fenêtre.
-    """
-    _i = (instant or "").strip().lower()
-    if _i in ("debut", "fin"):
-        return _i
-    try:
-        return "debut" if int(shot.get("number") or 1) <= 1 else "fin"
-    except (TypeError, ValueError):
-        return "fin"
-
-
-def _build_mood_prompt_live(shot: dict, engine_key: str = "",
-                            instant: str = "") -> str:
+def _build_mood_prompt_live(shot: dict, engine_key: str = "") -> str:
     """Prompt mood pour PANDORA | Live (Séquences Live/Mapping).
 
     Différences voulues vs Cinéma :
@@ -135,18 +113,16 @@ def _build_mood_prompt_live(shot: dict, engine_key: str = "",
         _blocs = _pb(seedance) or {}
     except Exception:
         _blocs = {}
-    # ── L'instant suit l'ANCRAGE deux plaques (2026-07-28) ────────────────────
-    # Le Mood du cas courant est la plaque d'ARRIVÉE du plan → ÉTAT 1. Celui du
-    # premier plan est la plaque de DÉPART → ÉTAT 0. Toujours UN état à la
-    # fois, jamais la barre entière : décrire ce qu'on ne veut pas voir est le
-    # plus sûr moyen de l'obtenir (constat du 27/07).
-    _inst = _instant_effectif(shot, instant)
-    _etat = "state_1" if _inst == "fin" else "state_0"
-    if not _blocs.get(_etat):
-        # Barre incomplète : replier sur l'état DISPONIBLE plutôt que sur la
-        # barre entière.
-        _autre = "state_0" if _etat == "state_1" else "state_1"
-        _etat = _etat if _blocs.get(_etat) else (_autre if _blocs.get(_autre) else "")
+    # ── Le Mood rend l'état d'ARRIVÉE — pour TOUS les plans (2026-07-28) ──────
+    # Décision Matthieu (deuxième passe, après essai d'un sélecteur
+    # auto/début/fin retiré le jour même) : « c'est la fin de plan qui est
+    # intéressante pour tous les plans. C'est l'action même du plan qui nous
+    # intéresse, pas le début, qui est la continuité du plan précédent. »
+    # La méthode deux plaques fait ARRIVER la vidéo sur son Mood → ÉTAT 1.
+    # Toujours UN état à la fois, jamais la barre entière : décrire ce qu'on
+    # ne veut pas voir est le plus sûr moyen de l'obtenir (constat du 27/07).
+    _etat = "state_1" if _blocs.get("state_1") else \
+        ("state_0" if _blocs.get("state_0") else "")
     if _etat:
         try:
             from core.live_bar import format_blocks as _fb
@@ -160,20 +136,12 @@ def _build_mood_prompt_live(shot: dict, engine_key: str = "",
         return _build({"action": body, "use_case": use_case}, engine_key or "flux")
     if seedance:
         body = _strip_video(seedance)[0]
-        if _inst == "fin":
-            use_case = (
-                "Render the FINAL state of this sequence as ONE single still "
-                "image — depict only the end state, after the transformation "
-                "has fully completed. "
-                "Single cinematic still frame, sharp focus."
-            )
-        else:
-            use_case = (
-                "Render the OPENING state of this sequence as ONE single still image — "
-                "depict only the initial state described above, ignore the later "
-                "evolution (the 'then' / 'final moment' parts). "
-                "Single cinematic still frame, sharp focus."
-            )
+        use_case = (
+            "Render the FINAL state of this sequence as ONE single still "
+            "image — depict only the end state, after the transformation "
+            "has fully completed. "
+            "Single cinematic still frame, sharp focus."
+        )
     else:
         body = (shot.get("scene_title") or "").strip()
         use_case = "Single cinematic still frame, sharp focus."
@@ -267,16 +235,14 @@ def mood_intent(shot: dict, film_style: str = "") -> dict:
     }
 
 
-def build_mood_prompt(shot: dict, film_style: str = "", engine_key: str = "",
-                      instant: str = "") -> str:
+def build_mood_prompt(shot: dict, film_style: str = "", engine_key: str = "") -> str:
     """Prompt d'un Mood, écrit dans la grammaire du moteur `engine_key`.
 
     Sensible au contexte : en Séquences Live/Mapping (namespace live_seq_*),
-    délègue au builder Live (pas de termes caméra, pas de grain, UN seul état de
-    la barre — celui que l'ancrage attend, voir `_instant_effectif`).
+    délègue au builder Live (pas de termes caméra, pas de grain, UN seul état
+    de la barre — l'ARRIVÉE, décision Matthieu 2026-07-28).
     `engine_key` vide → même repli que `run_mood` (Nano Banana 2 en Cinéma, Flux
-    en Live) : le prompt est ainsi toujours écrit pour le moteur qui le recevra.
-    `instant` : "" = automatique, « debut » / « fin » = forcé (Live seulement)."""
+    en Live) : le prompt est ainsi toujours écrit pour le moteur qui le recevra."""
     _live = False
     try:
         import core.storyboard as _sb
@@ -286,7 +252,7 @@ def build_mood_prompt(shot: dict, film_style: str = "", engine_key: str = "",
     if not (engine_key or "").strip():
         engine_key = "nb2" if _is_cinema_mood() else "flux"
     if _live:
-        return _build_mood_prompt_live(shot, engine_key, instant)
+        return _build_mood_prompt_live(shot, engine_key)
     from core.image_grammar import build_image_prompt as _build
     return _build(mood_intent(shot, film_style), engine_key)
 
@@ -667,8 +633,7 @@ def _upload_ref_robust(fal_client, path: str) -> str:
 
 
 def compose_mood_inputs(shot: dict, film_style: str = "",
-                        building_ref: str = "", is_mapping=None,
-                        instant: str = "") -> tuple:
+                        building_ref: str = "", is_mapping=None) -> tuple:
     """(fiche, moment, kind, surface) — ce que le COMPOSITEUR doit voir.
 
     Point d'entrée PARTAGÉ par la fenêtre Mood et par le lot « Action → Générer
@@ -702,11 +667,10 @@ def compose_mood_inputs(shot: dict, film_style: str = "",
         try:
             from core.live_bar import parse_blocks
             _b = parse_blocks(fiche) or {}
-            # L'instant suit l'ANCRAGE deux plaques (voir _instant_effectif) :
-            # plaque d'ARRIVÉE pour le cas courant, de DÉPART pour le plan 1.
-            # Le moment entre dans la clé de cache → changer d'instant recompose.
-            _inst = _instant_effectif(shot, instant)
-            if _inst == "fin" and _b.get("state_1"):
+            # L'état rendu est l'ARRIVÉE, pour tous les plans (décision
+            # Matthieu 2026-07-28) — repli sur l'ouverture si la barre n'a pas
+            # d'ÉTAT 1.
+            if _b.get("state_1"):
                 moment = ("The state to render is the FINAL state of the shot, "
                           "after the transformation has fully completed: "
                           + _b["state_1"])
@@ -824,26 +788,30 @@ def _compose_cache_write(shot_id: str, key: str, prompt: str, why: str):
 
 def compose_mood_prompt(shot: dict, film_style: str = "", engine: str = "",
                         building_ref: str = "", is_mapping=None,
-                        instant: str = "") -> tuple:
+                        force_fresh: bool = False) -> tuple:
     """(prompt, composé, raison, depuis_le_cache) — repli déterministe garanti.
 
     Le repli n'est pas une option de secours mais la moitié du contrat : sans clé,
     sans crédits ou sur un refus du contrôle, le Mood doit quand même partir —
     sur l'assemblage déterministe, exactement comme avant ce chantier.
-    `instant` : "" = automatique (ancrage), « debut » / « fin » = forcé.
+
+    `force_fresh` (bouton « Réinitialiser ») : saute la LECTURE du cache —
+    l'écriture reste. Un refus du contrôle y est mémorisé ; sans ce drapeau,
+    « Réinitialiser » resservait la même erreur à l'identique, sans jamais
+    redonner sa chance à l'IA (constat Matthieu 2026-07-28).
     """
-    _repli = build_mood_prompt(shot, film_style, engine, instant)
+    _repli = build_mood_prompt(shot, film_style, engine)
     _sid = (shot or {}).get("id", "")
     try:
         fiche, moment, kind, surface = compose_mood_inputs(
-            shot, film_style, building_ref, is_mapping, instant)
+            shot, film_style, building_ref, is_mapping)
     except Exception as exc:
         return _repli, False, str(exc)[:200], False
     if not (fiche or "").strip():
         return _repli, False, "fiche vide", False
 
     _key = compose_cache_key(fiche, moment, surface, film_style, engine, kind)
-    if _sid:
+    if _sid and not force_fresh:
         _hit = _compose_cache_read(_sid).get(_key)
         if isinstance(_hit, dict) and (_hit.get("prompt") or "").strip():
             _why = _hit.get("why") or ""
@@ -1232,8 +1200,7 @@ class MoodGenerationWorker(QThread):
             self._custom_prompt
             if self._custom_prompt
             else build_mood_prompt(self._shot, self._film_style,
-                                   (self._options.get("engine") or "").strip(),
-                                   (self._options.get("instant") or "").strip())
+                                   (self._options.get("engine") or "").strip())
         )
         n = self._variations
         paths, last_err = [], ""
@@ -1332,9 +1299,7 @@ class MoodBatchWorker(QThread):
                     _eng = (self._options.get("engine") or "").strip()
                     prompt, _compose_ok, _compose_why, _from_cache = \
                         compose_mood_prompt(shot, self._film_style, _eng,
-                                            self._building_ref,
-                                            instant=(self._options.get("instant")
-                                                     or "").strip())
+                                            self._building_ref)
                     if _compose_why:
                         # Le repli doit se LIRE : un lot qui retombe en silence
                         # sur le prompt déterministe donne des rendus différents

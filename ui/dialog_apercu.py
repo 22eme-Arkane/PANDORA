@@ -60,14 +60,14 @@ class _MoodPromptWorker(QThread):
     done = pyqtSignal(str, bool, str, bool)   # (prompt, composé, raison, du_cache)
 
     def __init__(self, shot: dict, style: str, engine: str,
-                 building_ref: str, is_mapping: bool, instant: str = ""):
+                 building_ref: str, is_mapping: bool, fresh: bool = False):
         super().__init__()
         self._shot   = shot or {}
         self._style  = style or ""
         self._engine = engine or ""
         self._bref   = building_ref or ""
         self._mapping = bool(is_mapping)
-        self._instant = instant or ""
+        self._fresh   = bool(fresh)
 
     def run(self):
         """Délègue à `api.apercu.compose_mood_prompt` — le MÊME chemin que le lot.
@@ -79,7 +79,7 @@ class _MoodPromptWorker(QThread):
             from api.apercu import compose_mood_prompt
             _p, _ok, _why, _cache = compose_mood_prompt(
                 self._shot, self._style, self._engine, self._bref,
-                is_mapping=self._mapping, instant=self._instant)
+                is_mapping=self._mapping, force_fresh=self._fresh)
             self.done.emit(_p, _ok, _why, _cache)
         except Exception as exc:
             self.done.emit("", False, str(exc)[:200], False)
@@ -109,6 +109,10 @@ class MoodDialog(QDialog):
         self._compose_why    = ""
         self._compose_done   = False
         self._compose_from_cache = False
+        # Posé par « Réinitialiser » : la PROCHAINE composition ignore le cache
+        # (un refus mémorisé doit pouvoir être retenté). Consommé par
+        # _start_compose, un seul envoi.
+        self._compose_fresh  = False
         self._compose_timer  = QTimer(self)
         self._compose_timer.setSingleShot(True)
         self._compose_timer.setInterval(250)
@@ -226,27 +230,11 @@ class MoodDialog(QDialog):
         self._engine_combo = self._build_engine_combo()
         prompt_hdr.addWidget(self._engine_combo)
 
-        # ── Instant rendu (MAPPING seulement) — ancrage deux plaques ──────────
-        # La vidéo d'un plan PART de la dernière frame du plan précédent et
-        # ARRIVE sur son Mood (méthode du 2026-07-27, confirmée par Matthieu le
-        # 28/07) : le Mood du cas courant est l'image de FIN du plan. Seul le
-        # premier plan, sans prédécesseur, part de son Mood → image de DÉBUT.
-        # « Automatique » suit cet ancrage ; le forçage sert à régénérer un
-        # départ ou une image-vitrine.
-        prompt_hdr.addSpacing(10)
-        self._instant_combo = QComboBox()
-        self._instant_combo.setFixedHeight(24)
-        self._instant_combo.addItem(translate("Instant : auto"), "")
-        self._instant_combo.addItem(translate("Début du plan"), "debut")
-        self._instant_combo.addItem(translate("Fin du plan"), "fin")
-        self._instant_combo.setToolTip(translate(
-            "Quel moment de la barre le Mood doit montrer.\n"
-            "Automatique : la FIN du plan — le Mood est la plaque d'ARRIVÉE de "
-            "la vidéo (elle part de la dernière frame du plan précédent) — sauf "
-            "pour le premier plan, qui n'a pas de prédécesseur et PART de son "
-            "Mood (DÉBUT)."))
-        self._instant_combo.setVisible(self._is_mapping())
-        prompt_hdr.addWidget(self._instant_combo)
+        # (Pas de sélecteur d'instant : le Mood rend l'état d'ARRIVÉE pour TOUS
+        # les plans — décision Matthieu 2026-07-28, après essai d'un combo
+        # auto/début/fin retiré le jour même : « c'est l'action même du plan
+        # qui nous intéresse, pas le début, qui est la continuité du plan
+        # précédent ». La doctrine vit dans api.apercu._build_mood_prompt_live.)
 
         # Définition — juste après le moteur, les deux réglages du RENDU côte à
         # côte. C'est ici que ça compte le plus : le Mood sert d'image de départ
@@ -270,11 +258,6 @@ class MoodDialog(QDialog):
         self._ratio_combo = RatioCombo(compact=True, auto_hint="16:9")
         prompt_hdr.addWidget(self._ratio_combo)
 
-        self._grammar_lbl = QLabel("")
-        self._grammar_lbl.setStyleSheet(
-            f"color:{CP['text_dim']};font-size:10px;background:transparent;")
-        prompt_hdr.addWidget(self._grammar_lbl)
-
         prompt_hdr.addStretch()
         btn_reset_prompt = QPushButton("↺  Réinitialiser")
         btn_reset_prompt.setFixedHeight(24)
@@ -288,6 +271,16 @@ class MoodDialog(QDialog):
         )
         prompt_hdr.addWidget(btn_reset_prompt)
         root.addLayout(prompt_hdr)
+
+        # Ligne d'état de la composition — SOUS l'en-tête, pleine largeur.
+        # Dans l'en-tête, la grammaire et surtout la RAISON d'un échec étaient
+        # tronquées à quelques lettres (« ⚠ comp… ») : une erreur illisible ne
+        # se corrige pas (constat Matthieu 2026-07-28).
+        self._grammar_lbl = QLabel("")
+        self._grammar_lbl.setWordWrap(True)
+        self._grammar_lbl.setStyleSheet(
+            f"color:{CP['text_dim']};font-size:10px;background:transparent;")
+        root.addWidget(self._grammar_lbl)
 
         self._prompt_edit = QTextEdit()
         # Plus haut qu'avant : le brief à champs des moteurs Nano Banana / GPT
@@ -306,7 +299,6 @@ class MoodDialog(QDialog):
         # Premier remplissage : prompt écrit pour le moteur sélectionné.
         self._reset_prompt()
         self._engine_combo.currentIndexChanged.connect(self._on_engine_changed)
-        self._instant_combo.currentIndexChanged.connect(self._on_instant_changed)
 
         # ── Image principale ───────────────────────────────────────────────────
         self._img_lbl = QLabel()
@@ -529,8 +521,14 @@ class MoodDialog(QDialog):
             _txt += "  ·  " + (translate("♻ déjà composé") if self._compose_from_cache
                                else translate("✓ composé pour ce moteur"))
         elif self._compose_why:
-            _txt += "  ·  ⚠ " + self._compose_why[:70]
+            # La raison COMPLÈTE : la ligne d'état est en pleine largeur avec
+            # retour à la ligne — une erreur tronquée à quelques lettres ne se
+            # corrige pas (constat Matthieu 2026-07-28 : « ⚠ comp… »).
+            _txt += "  ·  ⚠ " + self._compose_why[:240]
         self._grammar_lbl.setText(_txt)
+        # Le texte intégral reste consultable au survol, verdict compris.
+        self._grammar_lbl.setToolTip(
+            _txt + (("\n\n" + self._compose_why) if self._compose_why else ""))
 
     def _reset_prompt(self):
         """(Re)construit le prompt depuis les données du plan, pour le moteur choisi."""
@@ -538,11 +536,16 @@ class MoodDialog(QDialog):
         import core.style as _style_mod
         self._set_prompt_text(build_mood_prompt(
             self._shot, _style_mod.get_image_suffix() or "",
-            self._current_engine(), self._current_instant()))
+            self._current_engine()))
         self._prompt_dirty = False
         self._refresh_grammar_label()
         # Le texte déterministe s'affiche TOUT DE SUITE — l'encart n'est jamais
-        # vide — puis la composition le remplace quand elle revient.
+        # vide — puis la composition le remplace quand elle revient. FRAÎCHE :
+        # « Réinitialiser » doit RETENTER la composition, pas resservir le
+        # cache — un refus du contrôle y est mémorisé, et le resservir
+        # réaffichait la même erreur à l'identique (constat Matthieu
+        # 2026-07-28 : « le bouton Réinitialiser ne semble pas marcher »).
+        self._compose_fresh = True
         self._schedule_compose()
 
     # ── Composition IA du prompt final image ─────────────────────────────────
@@ -589,9 +592,11 @@ class MoodDialog(QDialog):
                 self._compose_worker = None
 
             self._refresh_grammar_label(translate("composition du prompt…"))
+            _fresh = bool(getattr(self, "_compose_fresh", False))
+            self._compose_fresh = False   # le drapeau ne vaut que pour UN envoi
             self._compose_worker = _MoodPromptWorker(
                 self._shot, _style, self._current_engine(), _bref,
-                self._is_mapping(), self._current_instant())
+                self._is_mapping(), fresh=_fresh)
             self._compose_worker.done.connect(self._on_composed)
             self._compose_worker.start()
         except Exception:
@@ -646,26 +651,6 @@ class MoodDialog(QDialog):
                 save_config(cfg)
         except Exception:
             pass
-
-    def _current_instant(self) -> str:
-        """« » (automatique) / « debut » / « fin » — toujours vide hors mapping."""
-        try:
-            if not self._is_mapping():
-                return ""
-            return self._instant_combo.currentData() or ""
-        except Exception:
-            return ""
-
-    def _on_instant_changed(self):
-        """Changer d'instant change l'état de la barre à rendre → prompt refait.
-
-        Texte retouché à la main : on ne l'écrase pas — l'instant choisi
-        s'appliquera au prochain « Réinitialiser », le texte de l'utilisateur
-        prime (même contrat que le changement de moteur)."""
-        if self._prompt_dirty:
-            self._refresh_grammar_label()
-            return
-        self._reset_prompt()
 
     # ── Pulsation de la barre ─────────────────────────────────────────────────
 
@@ -965,10 +950,7 @@ class MoodDialog(QDialog):
         # `options=None` quand `engine` était vide aurait fait retomber le Mood
         # sur le défaut de l'API et rendu le sélecteur inopérant une fois sur deux.
         _opts = {"resolution": self._res_combo.resolution_key(),
-                 "aspect_ratio": self._ratio_combo.ratio(),
-                 # L'instant suit l'encart : le prompt affiché a été écrit pour
-                 # lui, et le worker s'en sert pour son repli si l'encart est vide.
-                 "instant": self._current_instant()}
+                 "aspect_ratio": self._ratio_combo.ratio()}
         if engine:
             _opts["engine"] = engine
         self._worker = MoodGenerationWorker(self._shot, apercu_dir,

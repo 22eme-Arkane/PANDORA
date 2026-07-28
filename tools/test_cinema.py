@@ -5793,9 +5793,10 @@ def mood_affiche_le_prompt_compose():
             assert _bloc in _vu.get("fiche", ""), (
                 f"« {_bloc} » n'est pas donné au compositeur : il ne peut pas "
                 "voir la contradiction qu'on lui demande de résoudre")
-        # ② …et on lui dit lequel des états rendre.
-        assert "OPENING state" in (_vu.get("moment") or ""), \
-            "l'instant à rendre n'est pas transmis"
+        # ② …et on lui dit lequel des états rendre — l'ARRIVÉE depuis le
+        #    2026-07-28 (le Mood est la plaque d'arrivée de la vidéo).
+        assert "FINAL state" in (_vu.get("moment") or ""), \
+            "l'état d'ARRIVÉE à rendre n'est pas transmis"
         assert _vu.get("kind") == "mood_mapping", \
             ("le contexte d'usage n'est pas celui du mapping", _vu.get("kind"))
 
@@ -5961,6 +5962,36 @@ def style_de_projet_desactivable():
              "style du projet par les setCurrentIndex programmatiques")
     finally:
         st._STYLES_FILE = _orig
+
+
+@test
+def controle_anglais_en_mots_entiers():
+    """« angles », « shades » et « façade » ne sont pas du français.
+
+    Constat Matthieu (2026-07-28, Mood plan 1 mapping) : « composition
+    refusée : prompt encore en français (façade, les) » sur une sortie
+    parfaitement ANGLAISE — puis refus MÉMORISÉ par le cache, que
+    « Réinitialiser » resservait tel quel. Le contrôle testait par
+    SOUS-CHAÎNE : « les  » attrapait angles/circles, « des  » attrapait
+    shades/sides, et « façade » est un emprunt courant de l'anglais (la
+    composition réussie du même plan l'écrit : « the limestone façade »).
+    Mots-outils en MOTS ENTIERS désormais, façade retirée.
+    """
+    import api.image_prompt as IP
+
+    _en = ("A moody nocturnal photograph of a limestone façade, its buttress "
+           "angles and window circles catching cold light, deep shades of "
+           "blue across the stone surfaces, tight white hatching over the "
+           "joints.")
+    _v = IP.validate_image_composed(_en, engine="seedream5_pro")
+    assert _v["valid"], \
+        ("une sortie parfaitement anglaise est refusée comme française",
+         _v["errors"])
+
+    _fr = ("La façade est prise dans le givre avec les contreforts dans la "
+           "lumière froide.")
+    _v2 = IP.validate_image_composed(_fr, engine="seedream5_pro")
+    assert not _v2["valid"], "du vrai français doit rester refusé"
 
 
 @test

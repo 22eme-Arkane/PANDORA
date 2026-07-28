@@ -105,12 +105,19 @@ _ETIQUETTES_INTERNES = (
     "PROMPT VISUEL", "MISE EN SCÈNE", "STYLE VISUEL", "PLAN DE FEU", "AMBIANCE",
 )
 
-# Résidus de français : le prompt DOIT sortir en anglais. Mots-outils choisis
-# pour ne pas exister en anglais, afin de ne pas déclencher sur un faux ami.
+# Résidus de français : le prompt DOIT sortir en anglais. Mots-outils testés
+# en MOTS ENTIERS — l'ancien test par SOUS-CHAÎNE refusait des sorties
+# parfaitement anglaises : « les  » attrapait angles/circles, « des  »
+# attrapait shades/sides, et « façade » est un emprunt que l'anglais écrit
+# couramment (la composition réussie du même plan disait « the limestone
+# façade »). Constat Matthieu 2026-07-28 : « composition refusée : prompt
+# encore en français (façade, les) » — refus ensuite MÉMORISÉ par le cache.
 _MOTS_FRANCAIS = (
-    "façade", "lumière", "pierre", "avec", "dans", "les ", "des ", "une ",
-    "qui ", "sur la", "vers ", "puis ", "aucun", "aucune", "jamais",
+    "lumière", "pierre", "avec", "dans", "les", "des", "une",
+    "qui", "vers", "puis", "aucun", "aucune", "jamais",
 )
+_RE_FRANCAIS = re.compile(
+    r"\b(?:" + "|".join(_MOTS_FRANCAIS) + r")\b", re.IGNORECASE)
 
 
 def _kind_brief(kind: str) -> str:
@@ -417,9 +424,9 @@ def validate_image_composed(output: str, *, engine: str = "",
 
     # ② Le prompt doit être en ANGLAIS. C'était le défaut historique du volet
     #    image : le français partait tel quel au moteur.
-    _fr = [m for m in _MOTS_FRANCAIS if m in low]
+    _fr = sorted({m.group(0).lower() for m in _RE_FRANCAIS.finditer(low)})
     if len(_fr) >= 2:
-        errors.append("prompt encore en français (" + ", ".join(sorted(set(_fr))[:4]) + ")")
+        errors.append("prompt encore en français (" + ", ".join(_fr[:4]) + ")")
 
     # ③ Les boosters dégradent la passe de raisonnement des moteurs récents.
     _, boosters = strip_quality_boosters(text)
