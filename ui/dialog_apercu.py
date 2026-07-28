@@ -113,6 +113,16 @@ class MoodDialog(QDialog):
         # (un refus mémorisé doit pouvoir être retenté). Consommé par
         # _start_compose, un seul envoi.
         self._compose_fresh  = False
+        # Barre de chargement de la composition : pulsation MANUELLE, comme la
+        # barre de génération — le mode indéterminé de Qt ne s'anime pas
+        # toujours avec un chunk stylé. Timer dédié : celui de la génération
+        # est arrêté par _stop_loading, qui ne doit pas geler cette barre-ci.
+        self._composing          = False
+        self._compose_pulse      = QTimer(self)
+        self._compose_pulse.setInterval(25)
+        self._compose_pulse.timeout.connect(self._compose_pulse_step)
+        self._compose_pulse_val  = 0
+        self._compose_pulse_dir  = 1
         self._compose_timer  = QTimer(self)
         self._compose_timer.setSingleShot(True)
         self._compose_timer.setInterval(250)
@@ -271,6 +281,34 @@ class MoodDialog(QDialog):
         )
         prompt_hdr.addWidget(btn_reset_prompt)
         root.addLayout(prompt_hdr)
+
+        # Barre de chargement de la COMPOSITION — à la place du libellé
+        # « composition du prompt… » : un texte gris ne se voit pas, une barre
+        # qui pulse dit clairement qu'un aller-retour IA est en cours
+        # (demande Matthieu 2026-07-28).
+        self._compose_row = QWidget()
+        _cl = QHBoxLayout(self._compose_row)
+        _cl.setContentsMargins(0, 2, 0, 0)
+        _cl.setSpacing(8)
+        self._compose_bar = QProgressBar()
+        self._compose_bar.setFixedHeight(6)
+        self._compose_bar.setFixedWidth(180)
+        self._compose_bar.setTextVisible(False)
+        self._compose_bar.setRange(0, 100)
+        self._compose_bar.setValue(0)
+        self._compose_bar.setStyleSheet(
+            f"QProgressBar{{background:{CP['bg3']};border:none;border-radius:3px;}}"
+            f"QProgressBar::chunk{{background:qlineargradient(x1:0,y1:0,x2:1,y2:0,"
+            f"stop:0 {CP['accent']},stop:1 #6eded6);border-radius:3px;}}"
+        )
+        _cl.addWidget(self._compose_bar)
+        _compose_lbl = QLabel(translate("composition du prompt par l'IA…"))
+        _compose_lbl.setStyleSheet(
+            f"color:{CP['text_dim']};font-size:10px;background:transparent;")
+        _cl.addWidget(_compose_lbl)
+        _cl.addStretch()
+        self._compose_row.setVisible(False)
+        root.addWidget(self._compose_row)
 
         # Ligne d'état de la composition — SOUS l'en-tête, pleine largeur.
         # Dans l'en-tête, la grammaire et surtout la RAISON d'un échec étaient
@@ -513,6 +551,13 @@ class MoodDialog(QDialog):
         """
         from core.image_grammar import grammar_label
         _txt = "· " + translate(grammar_label(self._current_engine()))
+        if getattr(self, "_composing", False):
+            # La barre de chargement dit déjà « en cours » : afficher en plus
+            # l'ancien verdict (un ⚠ périmé, surtout) ferait croire que
+            # l'erreur persiste pendant qu'on recompose.
+            self._grammar_lbl.setText(_txt)
+            self._grammar_lbl.setToolTip(_txt)
+            return
         if status:
             _txt += "  ·  " + status
         elif self._prompt_dirty:
@@ -591,7 +636,14 @@ class MoodDialog(QDialog):
                     pass
                 self._compose_worker = None
 
-            self._refresh_grammar_label(translate("composition du prompt…"))
+            # La barre remplace le libellé « composition du prompt… » : elle
+            # pulse tant que l'aller-retour IA n'est pas revenu.
+            self._composing = True
+            self._compose_row.setVisible(True)
+            self._compose_pulse_val = 0
+            self._compose_pulse_dir = 1
+            self._compose_pulse.start()
+            self._refresh_grammar_label()
             _fresh = bool(getattr(self, "_compose_fresh", False))
             self._compose_fresh = False   # le drapeau ne vaut que pour UN envoi
             self._compose_worker = _MoodPromptWorker(
@@ -606,6 +658,9 @@ class MoodDialog(QDialog):
     def _on_composed(self, prompt: str, composed: bool, why: str,
                      from_cache: bool = False):
         try:
+            self._composing = False
+            self._compose_pulse.stop()
+            self._compose_row.setVisible(False)
             self._compose_why  = why or ""
             self._compose_done = bool(composed)
             self._compose_from_cache = bool(from_cache)
@@ -653,6 +708,16 @@ class MoodDialog(QDialog):
             pass
 
     # ── Pulsation de la barre ─────────────────────────────────────────────────
+
+    def _compose_pulse_step(self):
+        self._compose_pulse_val += self._compose_pulse_dir * 3
+        if self._compose_pulse_val >= 80:
+            self._compose_pulse_val = 80
+            self._compose_pulse_dir = -1
+        elif self._compose_pulse_val <= 0:
+            self._compose_pulse_val = 0
+            self._compose_pulse_dir = 1
+        self._compose_bar.setValue(self._compose_pulse_val)
 
     def _pulse_step(self):
         self._pulse_val += self._pulse_dir * 3

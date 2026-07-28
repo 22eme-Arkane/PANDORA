@@ -5776,6 +5776,64 @@ def mood_rend_letat_darrivee():
 
 
 @test
+def composition_montre_une_barre_de_chargement():
+    """La composition IA s'annonce par une BARRE qui pulse, pas un texte gris.
+
+    Demande Matthieu (2026-07-28) : « une barre de chargement à la place de
+    composition… afin qu'on comprenne qu'il y a un chargement en cours ». Le
+    libellé « composition du prompt… » dans la ligne d'état ne se voyait pas —
+    l'utilisateur ne savait pas qu'un aller-retour IA tournait.
+
+    Le test passe par le VRAI déclencheur (_start_compose), pas en montrant la
+    barre à la main — la même faiblesse déjà mordue deux fois.
+    """
+    import core.storyboard as sb
+    import ui.dialog_apercu as DA
+
+    sb.set_namespace("live_seq_mapping")
+    sb.clear_version_shots(sb.DEFAULT_VERSION_ID)
+    _shot = sb.save_shot({"number": 1, "scene_title": "P1",
+                          "seedance_prompt": ("SURFACE : façade.\n"
+                                              "ÉTAT 1 : pierre dorée.\n"
+                                              "STYLE : gravure.")},
+                         sb.DEFAULT_VERSION_ID)
+
+    class _S:
+        def connect(self, *_): pass
+
+    class _FauxWorker:
+        done = _S()
+        def __init__(self, *a, **k): pass
+        def start(self): pass
+
+    dlg = DA.MoodDialog(None, _shot)
+    dlg._compose_timer.stop()
+    try:
+        assert dlg._compose_row.isHidden(), \
+            "au repos, la barre de composition doit être cachée"
+
+        _orig = DA._MoodPromptWorker
+        DA._MoodPromptWorker = _FauxWorker
+        try:
+            dlg._start_compose()
+        finally:
+            DA._MoodPromptWorker = _orig
+        assert not dlg._compose_row.isHidden(), \
+            "lancer la composition doit MONTRER la barre de chargement"
+        assert dlg._compose_pulse.isActive(), \
+            "la barre doit PULSER — une barre figée ne dit pas « en cours »"
+
+        dlg._on_composed("English composed prompt.", True, "", False)
+        assert dlg._compose_row.isHidden(), \
+            "la barre doit disparaître quand la composition revient"
+        assert not dlg._compose_pulse.isActive()
+    finally:
+        dlg._compose_timer.stop()
+        dlg.deleteLater()
+        sb.set_namespace("storyboard")
+
+
+@test
 def reinitialiser_recompose_a_neuf():
     """« Réinitialiser » RETENTE la composition — cache ignoré, refus compris.
 
