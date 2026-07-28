@@ -5776,6 +5776,78 @@ def mood_rend_letat_darrivee():
 
 
 @test
+def stabilisation_recale_sur_la_plaque():
+    """La stabilisation ANNULE une dérive d'échelle/position mesurée.
+
+    Demande Matthieu (2026-07-28) : malgré les verrous, Seedance laisse de
+    légères dérives d'échelle sur la façade — inévitables à la source, donc
+    annulées en post : chaque image est recalée sur la géométrie de la
+    première (la plaque de départ du plan).
+
+    Le test fabrique la panne exacte : une texture FIXE à laquelle on applique
+    un zoom et un glissement progressifs (la dérive Seedance en miniature).
+    Avant stabilisation, la dernière image diverge de la première ; après,
+    elle doit s'y recoller.
+    """
+    import subprocess, tempfile
+    import numpy as np
+    import cv2
+    from core.video_utils import get_ffmpeg_exe, _NO_WINDOW
+    from core.live_stabilize import stabilize_clip
+
+    rng = np.random.default_rng(7)
+    base = rng.uniform(0, 255, (270, 480, 3)).astype(np.uint8)
+    base = cv2.GaussianBlur(base, (5, 5), 0)
+    td = tempfile.mkdtemp(prefix="t_stab_")
+    src = os.path.join(td, "drift.mp4")
+    p = subprocess.Popen(
+        [get_ffmpeg_exe(), "-y", "-f", "rawvideo", "-pix_fmt", "bgr24",
+         "-s", "480x270", "-r", "24", "-i", "pipe:0",
+         "-c:v", "libx264", "-preset", "ultrafast", "-crf", "12",
+         "-pix_fmt", "yuv420p", src],
+        stdin=subprocess.PIPE, stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL, creationflags=_NO_WINDOW)
+    for k in range(30):
+        s = 1.0 + 0.0006 * k                     # zoom cumulé ≈ 1,8 %
+        dx = 0.15 * k                            # glissement cumulé ≈ 4,5 px
+        M = np.float32([[s, 0, dx + (1 - s) * 240], [0, s, (1 - s) * 135]])
+        p.stdin.write(cv2.warpAffine(base, M, (480, 270)).tobytes())
+    p.stdin.close()
+    p.wait()
+    assert p.returncode == 0 and os.path.isfile(src), "clip de test non écrit"
+
+    def _premiere_et_derniere(path):
+        cap = cv2.VideoCapture(path)
+        _ok, f0 = cap.read()
+        fN = f0
+        while True:
+            ok, fr = cap.read()
+            if not ok:
+                break
+            fN = fr
+        cap.release()
+        return f0, fN
+
+    def _diff(a, b):
+        return float(np.mean(np.abs(a.astype(np.int16) - b.astype(np.int16))))
+
+    f0, fN = _premiere_et_derniere(src)
+    d_avant = _diff(f0, fN)
+    assert d_avant > 8.0, ("la dérive du clip de test est trop faible pour "
+                           "prouver quoi que ce soit", d_avant)
+
+    res = stabilize_clip(src)
+    assert res.get("ok"), ("stabilisation en échec", res)
+    g0, gN = _premiere_et_derniere(res["out"])
+    d_apres = _diff(g0, gN)
+    assert d_apres < d_avant * 0.5, (
+        "la stabilisation ne recale pas la texture sur la géométrie de départ",
+        round(d_avant, 1), round(d_apres, 1))
+    assert res.get("max_correction_px", 0) > 1.0, \
+        "aucune correction mesurée alors que la dérive est réelle"
+
+
+@test
 def vignette_active_soulignee_selection_encadree():
     """ACTIVE = souligné vert néon ; SÉLECTIONNÉE = rectangle néon.
 
