@@ -1164,6 +1164,43 @@ class PageScenario(QWidget):
         _mode_row.addWidget(self._btn_mode_live, 1)
         _mode_row.addWidget(self._btn_mode_mapping, 1)
         l_mode.addWidget(_mode_row_w)
+
+        # ── Génération mapping (spec Matthieu 2026-07-30) : MÊME champ
+        # persisté que le sélecteur du RENDU & AUDIO (core/live_chain,
+        # live_gen_mode) — deux vues, UN état, zéro duplication.
+        from core import live_chain as _lc_mode
+        self._gen_mode_head = QLabel(translate("⛓  Génération mapping"))
+        self._gen_mode_head.setStyleSheet(
+            f"color:{CP['text_secondary']};font-size:9px;font-weight:700;"
+            f"background:transparent;border:none;padding-top:4px;")
+        l_mode.addWidget(self._gen_mode_head)
+        self._gen_mode_combo = QComboBox()
+        self._gen_mode_combo.addItem(translate("Raccord par frame vidéo"),
+                                     _lc_mode.MODE_FRAMES)
+        self._gen_mode_combo.addItem(translate("Chaîne d'images (I2V)"),
+                                     _lc_mode.MODE_CHAIN)
+        _gm_i = self._gen_mode_combo.findData(_lc_mode.get_gen_mode())
+        self._gen_mode_combo.setCurrentIndex(_gm_i if _gm_i >= 0 else 0)
+        self._gen_mode_combo.setFixedHeight(28)
+        self._gen_mode_combo.setStyleSheet(
+            f"QComboBox{{background:{CP['bg2']};border:1px solid {CP['border']};"
+            f"border-radius:6px;color:{CP['text_primary']};font-size:10px;padding:0 8px;}}"
+            f"QComboBox::drop-down{{border:none;width:18px;}}"
+            f"QComboBox QAbstractItemView{{background:{CP['bg2']};"
+            f"color:{CP['text_primary']};border:1px solid {CP['border']};}}")
+        # `activated` = geste utilisateur uniquement (piège du combo de style,
+        # 2026-07-28 : un setCurrentIndex de chargement ne doit jamais écrire).
+        self._gen_mode_combo.activated.connect(self._on_gen_mode_changed)
+        l_mode.addWidget(self._gen_mode_combo)
+        self._gen_mode_hint = QLabel(translate(
+            "Chaîne d'images : chaque plan part du Mood du plan précédent — "
+            "jamais d'une frame vidéo. L'image de départ du plan 1 (état 0) "
+            "est générée avec les Moods."))
+        self._gen_mode_hint.setWordWrap(True)
+        self._gen_mode_hint.setStyleSheet(
+            f"color:{CP['text_dim']};font-size:9px;background:transparent;border:none;")
+        l_mode.addWidget(self._gen_mode_hint)
+
         self._apply_mode_style()
         tog_mode = _make_toggle("🎛  Mode", c_mode, expanded=False)
 
@@ -1535,6 +1572,37 @@ class PageScenario(QWidget):
                 f"font-size:10px;font-weight:700;padding:0 10px;}}"
                 f"QPushButton:hover{{border-color:{_acc};}}"
             )
+        # Le mode de génération (frame vidéo / chaîne d'images) n'a de sens
+        # qu'en MAPPING — la rangée se retire de la section en mode Live.
+        _is_map = (getattr(self, "_live_mode", "live") == "mapping")
+        for _w in (getattr(self, "_gen_mode_head", None),
+                   getattr(self, "_gen_mode_combo", None),
+                   getattr(self, "_gen_mode_hint", None)):
+            if _w is not None:
+                _w.setVisible(_is_map)
+        if _is_map:
+            self._refresh_gen_mode_combo()
+
+    def _on_gen_mode_changed(self, *args):
+        """Choix utilisateur → écrit le champ UNIQUE partagé (core/live_chain),
+        celui que lit aussi le sélecteur RENDU & AUDIO du Studio IA."""
+        from core import live_chain as _lc
+        try:
+            _lc.set_gen_mode(self._gen_mode_combo.currentData()
+                             or _lc.MODE_FRAMES)
+        except Exception:
+            pass
+
+    def _refresh_gen_mode_combo(self):
+        """Recale le combo sur le champ persisté — un chargement ne doit
+        jamais écrire (le combo n'écrit que sur `activated`)."""
+        from core import live_chain as _lc
+        try:
+            _i = self._gen_mode_combo.findData(_lc.get_gen_mode())
+            if _i >= 0 and _i != self._gen_mode_combo.currentIndex():
+                self._gen_mode_combo.setCurrentIndex(_i)
+        except Exception:
+            pass
 
     # ── Save ─────────────────────────────────────────────────────────────────
 

@@ -2352,6 +2352,35 @@ _FR_TO_EN: dict[str, str] = {
     "génération depuis la seule façade (respect strict : ni zoom ni déplacement)":
         "Checked → the shot's Mood (and the next one's) is used as keyframes · Unchecked → "
         "generate from the facade only (strict lock: no zoom, no shift)",
+    # ── Mode de génération mapping : chaîne d'images (spec 2026-07-30) ──────
+    "Génération mapping":               "Mapping generation",
+    "⛓  Génération mapping":            "⛓  Mapping generation",
+    "Raccord par frame vidéo":          "Video-frame chaining",
+    "Chaîne d'images (I2V)":            "Image chain (I2V)",
+    "Frame vidéo → le plan part de la dernière image du clip précédent · "
+    "Chaîne d'images → il part du Mood du plan précédent (aucune frame "
+    "vidéo réinjectée : la dérive ne s'accumule plus)":
+        "Video frame → each shot starts from the previous clip's last frame · "
+        "Image chain → it starts from the previous shot's Mood (no video "
+        "frame is re-ingested: drift can no longer accumulate)",
+    "Chaîne d'images : chaque plan part du Mood du plan précédent — "
+    "jamais d'une frame vidéo. L'image de départ du plan 1 (état 0) "
+    "est générée avec les Moods.":
+        "Image chain: each shot starts from the previous shot's Mood — "
+        "never from a video frame. Shot 1's start image (state 0) is "
+        "generated along with the Moods.",
+    "⚓ Chaîne d'images — Départ : image de départ (état 0)"
+    "  →  Arrivée : Mood de ce plan":
+        "⚓ Image chain — Start: start image (state 0)"
+        "  →  End: this shot's Mood",
+    "⚓ Chaîne d'images — Départ : Mood du plan précédent"
+    "  →  Arrivée : Mood de ce plan":
+        "⚓ Image chain — Start: previous shot's Mood"
+        "  →  End: this shot's Mood",
+    "⚓ Chaîne d'images — Départ : le Mood de ce plan":
+        "⚓ Image chain — Start: this shot's Mood",
+    "  (image de départ du plan 1 à générer via « Générer les Moods »)":
+        "  (shot 1's start image still to generate via “Generate the Moods”)",
     "Se référer au mood":               "Refer to the mood",
     "Envoie le mood validé du plan comme image de référence → cohésion exacte "
     "(composition, cadrage, lumière, couleurs) avec le mood. Sans effet si le "

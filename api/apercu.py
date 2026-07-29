@@ -72,7 +72,8 @@ def _focal_to_en(focal_str: str) -> str:
 
 # ── Prompt builder ────────────────────────────────────────────────────────────
 
-def _build_mood_prompt_live(shot: dict, engine_key: str = "") -> str:
+def _build_mood_prompt_live(shot: dict, engine_key: str = "",
+                            instant: str = "end") -> str:
     """Prompt mood pour PANDORA | Live (Séquences Live/Mapping).
 
     Différences voulues vs Cinéma :
@@ -121,8 +122,18 @@ def _build_mood_prompt_live(shot: dict, engine_key: str = "") -> str:
     # La méthode deux plaques fait ARRIVER la vidéo sur son Mood → ÉTAT 1.
     # Toujours UN état à la fois, jamais la barre entière : décrire ce qu'on
     # ne veut pas voir est le plus sûr moyen de l'obtenir (constat du 27/07).
-    _etat = "state_1" if _blocs.get("state_1") else \
-        ("state_0" if _blocs.get("state_0") else "")
+    #
+    # `instant="start"` (chaîne d'images, spec 2026-07-30) : l'IMAGE DE DÉPART
+    # du premier plan rend l'ÉTAT 0 — la seule plaque de la séquence qui n'est
+    # l'arrivée de personne. Ce n'est PAS le retour du sélecteur d'instant (UI)
+    # retiré le 2026-07-28 : aucun réglage n'est exposé, le pipeline seul
+    # choisit l'instant, et le défaut reste l'arrivée partout.
+    if instant == "start":
+        _etat = "state_0" if _blocs.get("state_0") else \
+            ("state_1" if _blocs.get("state_1") else "")
+    else:
+        _etat = "state_1" if _blocs.get("state_1") else \
+            ("state_0" if _blocs.get("state_0") else "")
     if _etat:
         try:
             from core.live_bar import format_blocks as _fb
@@ -137,10 +148,14 @@ def _build_mood_prompt_live(shot: dict, engine_key: str = "") -> str:
     if seedance:
         body = _strip_video(seedance)[0]
         use_case = (
-            "Render the FINAL state of this sequence as ONE single still "
-            "image — depict only the end state, after the transformation "
-            "has fully completed. "
-            "Single cinematic still frame, sharp focus."
+            ("Render the OPENING state of this sequence as ONE single still "
+             "image — depict only the initial state, before any "
+             "transformation begins. "
+             if instant == "start" else
+             "Render the FINAL state of this sequence as ONE single still "
+             "image — depict only the end state, after the transformation "
+             "has fully completed. ")
+            + "Single cinematic still frame, sharp focus."
         )
     else:
         body = (shot.get("scene_title") or "").strip()
@@ -235,12 +250,15 @@ def mood_intent(shot: dict, film_style: str = "") -> dict:
     }
 
 
-def build_mood_prompt(shot: dict, film_style: str = "", engine_key: str = "") -> str:
+def build_mood_prompt(shot: dict, film_style: str = "", engine_key: str = "",
+                      instant: str = "end") -> str:
     """Prompt d'un Mood, écrit dans la grammaire du moteur `engine_key`.
 
     Sensible au contexte : en Séquences Live/Mapping (namespace live_seq_*),
     délègue au builder Live (pas de termes caméra, pas de grain, UN seul état
     de la barre — l'ARRIVÉE, décision Matthieu 2026-07-28).
+    `instant="start"` (chaîne d'images) : l'image de DÉPART du plan 1 rend
+    l'ÉTAT 0 — paramètre de pipeline, jamais exposé dans l'UI.
     `engine_key` vide → même repli que `run_mood` (Nano Banana 2 en Cinéma, Flux
     en Live) : le prompt est ainsi toujours écrit pour le moteur qui le recevra."""
     _live = False
@@ -252,7 +270,7 @@ def build_mood_prompt(shot: dict, film_style: str = "", engine_key: str = "") ->
     if not (engine_key or "").strip():
         engine_key = "nb2" if _is_cinema_mood() else "flux"
     if _live:
-        return _build_mood_prompt_live(shot, engine_key)
+        return _build_mood_prompt_live(shot, engine_key, instant)
     from core.image_grammar import build_image_prompt as _build
     return _build(mood_intent(shot, film_style), engine_key)
 
@@ -667,7 +685,8 @@ def _upload_ref_robust(fal_client, path: str) -> str:
 
 
 def compose_mood_inputs(shot: dict, film_style: str = "",
-                        building_ref: str = "", is_mapping=None) -> tuple:
+                        building_ref: str = "", is_mapping=None,
+                        instant: str = "end") -> tuple:
     """(fiche, moment, kind, surface) — ce que le COMPOSITEUR doit voir.
 
     Point d'entrée PARTAGÉ par la fenêtre Mood et par le lot « Action → Générer
@@ -703,14 +722,25 @@ def compose_mood_inputs(shot: dict, film_style: str = "",
             _b = parse_blocks(fiche) or {}
             # L'état rendu est l'ARRIVÉE, pour tous les plans (décision
             # Matthieu 2026-07-28) — repli sur l'ouverture si la barre n'a pas
-            # d'ÉTAT 1.
-            if _b.get("state_1"):
-                moment = ("The state to render is the FINAL state of the shot, "
-                          "after the transformation has fully completed: "
-                          + _b["state_1"])
-            elif _b.get("state_0"):
-                moment = ("The state to render is the OPENING state of the shot, "
-                          "before any transformation: " + _b["state_0"])
+            # d'ÉTAT 1. `instant="start"` (image de départ du plan 1, chaîne
+            # d'images) inverse la préférence : OUVERTURE d'abord. Le moment
+            # entre dans la clé de cache → départ et arrivée ne peuvent pas se
+            # servir l'un l'autre.
+            _pref = ("state_0", "state_1") if instant == "start" \
+                else ("state_1", "state_0")
+            _key1, _key2 = _pref
+            if _b.get(_key1):
+                moment = ((
+                    "The state to render is the OPENING state of the shot, "
+                    "before any transformation: ") if _key1 == "state_0" else (
+                    "The state to render is the FINAL state of the shot, "
+                    "after the transformation has fully completed: ")) + _b[_key1]
+            elif _b.get(_key2):
+                moment = ((
+                    "The state to render is the OPENING state of the shot, "
+                    "before any transformation: ") if _key2 == "state_0" else (
+                    "The state to render is the FINAL state of the shot, "
+                    "after the transformation has fully completed: ")) + _b[_key2]
         except Exception:
             pass
         surface = ""
@@ -822,7 +852,7 @@ def _compose_cache_write(shot_id: str, key: str, prompt: str, why: str):
 
 def compose_mood_prompt(shot: dict, film_style: str = "", engine: str = "",
                         building_ref: str = "", is_mapping=None,
-                        force_fresh: bool = False) -> tuple:
+                        force_fresh: bool = False, instant: str = "end") -> tuple:
     """(prompt, composé, raison, depuis_le_cache) — repli déterministe garanti.
 
     Le repli n'est pas une option de secours mais la moitié du contrat : sans clé,
@@ -834,11 +864,11 @@ def compose_mood_prompt(shot: dict, film_style: str = "", engine: str = "",
     « Réinitialiser » resservait la même erreur à l'identique, sans jamais
     redonner sa chance à l'IA (constat Matthieu 2026-07-28).
     """
-    _repli = build_mood_prompt(shot, film_style, engine)
+    _repli = build_mood_prompt(shot, film_style, engine, instant=instant)
     _sid = (shot or {}).get("id", "")
     try:
         fiche, moment, kind, surface = compose_mood_inputs(
-            shot, film_style, building_ref, is_mapping)
+            shot, film_style, building_ref, is_mapping, instant=instant)
     except Exception as exc:
         return _repli, False, str(exc)[:200], False
     if not (fiche or "").strip():
@@ -1320,6 +1350,27 @@ class MoodBatchWorker(QThread):
         except (TypeError, ValueError):
             _vars = 1
 
+        # ── Chaîne d'images (spec 2026-07-30, modèle ASYMÉTRIQUE) : le PLAN 1
+        # de la séquence reçoit AUSSI son image de DÉPART (plaque d'ÉTAT 0).
+        # Les plans N>1 n'en génèrent pas — leur départ est le mood du plan
+        # précédent, résolu à l'envoi (aucune génération inutile, aucun coût).
+        _chain, _first_id = False, ""
+        try:
+            from core import live_chain as _lc
+            _chain = (self._namespace == "live_seq_mapping"
+                      and _lc.get_gen_mode() == _lc.MODE_CHAIN)
+            if _chain:
+                _all = sb_api.list_shots()
+                if _all:
+                    def _n(s):
+                        try:
+                            return int(s.get("number") or 0)
+                        except (TypeError, ValueError):
+                            return 0
+                    _first_id = min(_all, key=_n).get("id", "")
+        except Exception:
+            _chain, _first_id = False, ""
+
         try:
             for i, shot in enumerate(self._shots):
                 if self._cancelled:
@@ -1384,6 +1435,26 @@ class MoodBatchWorker(QThread):
                             # là pour être comparées et choisies à l'œil.
                             sb_api.save_apercus(shot["id"], paths, _idx_premiere)
                             last = path
+
+                    # Image de DÉPART du plan 1 (chaîne d'images) : composée sur
+                    # l'ÉTAT 0, rangée en SIDECAR — jamais dans la galerie, dont
+                    # l'image ACTIVE reste la plaque d'ARRIVÉE.
+                    if _chain and shot.get("id") == _first_id \
+                            and not self._cancelled:
+                        p_start, _ok_s, _why_s, _ = compose_mood_prompt(
+                            shot, self._film_style, _eng, self._building_ref,
+                            instant="start")
+                        if _why_s:
+                            self.shot_progress.emit(i + 1, total,
+                                                    f"⚠ {_why_s[:70]}")
+                        self.shot_progress.emit(
+                            i + 1, total, "Image de départ du plan 1 (état 0)…")
+                        sp = run_mood(shot, p_start, out_dir, self._api_key,
+                                      _prog, self._building_ref,
+                                      options=self._options)
+                        if sp and os.path.isfile(sp):
+                            from core import live_chain as _lc2
+                            _lc2.set_start_image(shot["id"], sp)
 
                     self.shot_done.emit(shot["id"], last)
 

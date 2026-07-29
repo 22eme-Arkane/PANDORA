@@ -5877,6 +5877,374 @@ def mood_livre_la_definition_promise():
 
 
 @test
+def mode_de_generation_mapping_unique_et_persiste():
+    """live_gen_mode : UN champ persisté par projet, défaut = comportement actuel.
+
+    Spec Matthieu (2026-07-30) : le choix « raccord par frame vidéo » /
+    « chaîne d'images » est UN champ (live_gen_mode), lu et écrit par les deux
+    UI — jamais deux états dupliqués. Défaut = frames (rien ne change pour les
+    projets existants). Une valeur inconnue retombe sur le défaut, sans lever.
+    """
+    from core import live_chain as lc
+    from core.context import get_data_root
+
+    _f = os.path.join(get_data_root(), "live_gen_mode.json")
+    if os.path.isfile(_f):
+        os.remove(_f)
+    try:
+        assert lc.get_gen_mode() == lc.MODE_FRAMES, \
+            "défaut ≠ comportement historique (frames)"
+        lc.set_gen_mode(lc.MODE_CHAIN)
+        assert lc.get_gen_mode() == lc.MODE_CHAIN, "le champ ne persiste pas"
+        lc.set_gen_mode("n_importe_quoi")
+        assert lc.get_gen_mode() == lc.MODE_FRAMES, \
+            "valeur inconnue : doit retomber sur le défaut"
+    finally:
+        lc.set_gen_mode(lc.MODE_FRAMES)
+
+
+@test
+def chaine_dimages_resout_le_depart():
+    """Chaîne d'images : le plan N part du MOOD ACTIF du plan N-1 (une image,
+    jamais une frame vidéo) ; le plan 1 part de son image de départ générée.
+
+    Modèle ASYMÉTRIQUE (décision Matthieu, spec 2026-07-30) : le départ du plan
+    N>1 n'est PAS stocké — il est résolu DYNAMIQUEMENT à l'envoi (= zéro
+    invalidation à gérer quand on régénère/réordonne). Seul le plan 1 possède
+    une image de départ propre, rangée en SIDECAR (jamais dans la galerie des
+    moods : l'image active de la galerie reste la plaque d'ARRIVÉE).
+    """
+    import core.storyboard as sb
+    from core import live_chain as lc
+    from PIL import Image
+
+    sb.set_namespace("live_seq_mapping")
+    _made = []
+    try:
+        # Numéros négatifs : tenir l'ordre même si un autre test a laissé des
+        # plans dans ce namespace (le « précédent » est résolu par tri).
+        s1 = sb.save_shot({"number": -109, "scene_title": "chaine-un"})
+        s2 = sb.save_shot({"number": -108, "scene_title": "chaine-deux"})
+        _made = [s1["id"], s2["id"]]
+
+        d1 = sb.get_apercu_dir(s1["id"])
+        os.makedirs(d1, exist_ok=True)
+        m1 = os.path.join(d1, "mood1.png")
+        Image.new("RGB", (64, 36), (10, 10, 10)).save(m1)
+        sb.save_apercus(s1["id"], [m1], 0)
+
+        # ① Plan N>1 → mood actif du plan précédent, résolu à la volée.
+        assert lc.chain_start_for(s2) == m1, \
+            "le départ du plan N doit être le mood ACTIF du plan N-1"
+
+        # ② Plan 1 sans image de départ → "" (repli géré à l'envoi).
+        assert lc.chain_start_for(s1) == "", \
+            "plan 1 sans image de départ : résolution vide attendue"
+
+        # ③ Image de départ du plan 1 : sidecar, PAS la galerie.
+        st = os.path.join(d1, "start.png")
+        Image.new("RGB", (64, 36), (5, 5, 5)).save(st)
+        lc.set_start_image(s1["id"], st)
+        assert lc.get_start_image(s1["id"]) == st
+        assert lc.chain_start_for(s1) == st
+        assert st not in sb.load_apercus(s1["id"]).get("paths", []), \
+            ("l'image de départ ne doit JAMAIS entrer dans la galerie des "
+             "moods — l'image active y reste la plaque d'ARRIVÉE")
+
+        # ④ Mood du précédent effacé → résolution vide (repli, pas d'erreur).
+        sb.save_apercus(s1["id"], [], 0)
+        assert lc.chain_start_for(s2) == ""
+    finally:
+        for _sid in _made:
+            try:
+                sb.delete_shot(_sid)
+            except Exception:
+                pass
+        sb.set_namespace("storyboard")
+
+
+@test
+def envoi_chaine_part_du_mood_precedent():
+    """L'ENVOI en mode chaîne : les deux keyframes sont des IMAGES générées
+    (mood N-1 → mood N), envoyées TELLES QUE VALIDÉES à l'écran — sans
+    masquage ni frame vidéo extraite. En mode frames, le comportement
+    d'aujourd'hui est INTACT.
+
+    Cœur anti-dérive de la spec 2026-07-30 : la chaîne ne ré-ingère plus
+    JAMAIS une frame produite par Seedance (boule de neige tuée par
+    construction), et le départ du plan N est LE MÊME FICHIER que l'arrivée
+    du plan N-1 (raccord exact par identité).
+
+    PAS de masquage dans la chaîne (audit mesuré 2026-07-30) : Matthieu
+    craignait un parasitage, et l'audit lui donne raison deux fois —
+    (a) sur le projet réel le masque est un NO-OP silencieux (façade RGBA à
+    fond transparent → build_facade_mask refuse, couverture lue 99 %) : les
+    bons rendus passés étaient DE FAIT sans masque ; (b) le composite est
+    NON idempotent (bord adouci multiplicatif : érosion ~1 px et
+    assombrissement à chaque passe) — inacceptable dans une chaîne. Le
+    masquage des keyframes est un chantier séparé, pas une pièce de la
+    chaîne.
+    """
+    import inspect as _i
+    import core.storyboard as sb
+    from core import live_chain as lc
+    from PIL import Image
+    import ui.tab_t2v_live as TL
+
+    sb.set_namespace("live_seq_mapping")
+    _made = []
+    try:
+        s1 = sb.save_shot({"number": -209, "scene_title": "envoi-un"})
+        s2 = sb.save_shot({"number": -208, "scene_title": "envoi-deux"})
+        _made = [s1["id"], s2["id"]]
+        for s, name in ((s1, "m1"), (s2, "m2")):
+            d = sb.get_apercu_dir(s["id"])
+            os.makedirs(d, exist_ok=True)
+            m = os.path.join(d, f"{name}.png")
+            Image.new("RGB", (64, 36), (12, 12, 12)).save(m)
+            sb.save_apercus(s["id"], [m], 0)
+
+        t = TL.TabT2V()
+        try:
+            t._seq_mode = "mapping"
+            # ① Plan N : départ = mood du plan précédent, arrivée = son mood —
+            #    et le départ du plan N EST l'arrivée du plan N-1 (même
+            #    fichier : raccord exact par identité).
+            ks, ke = t._chain_keyframes(s2)
+            assert ks and os.path.basename(ks).startswith("m1"), \
+                ("départ attendu : mood du plan précédent", ks)
+            assert ke and os.path.basename(ke).startswith("m2"), \
+                ("arrivée attendue : mood du plan courant", ke)
+            _, ke_prev = t._chain_keyframes(s1)
+            assert os.path.normpath(ks) == os.path.normpath(ke_prev), \
+                ("le départ du plan N doit être LE MÊME FICHIER que "
+                 "l'arrivée du plan N-1", ks, ke_prev)
+            # ② Plan 1 : départ = image de départ dédiée quand elle existe.
+            d1 = sb.get_apercu_dir(s1["id"])
+            st = os.path.join(d1, "start.png")
+            Image.new("RGB", (64, 36), (3, 3, 3)).save(st)
+            lc.set_start_image(s1["id"], st)
+            ks1, ke1 = t._chain_keyframes(s1)
+            assert ks1 and os.path.basename(ks1).startswith("start"), \
+                ("départ du plan 1 attendu : image de départ (état 0)", ks1)
+            assert ke1 and os.path.basename(ke1).startswith("m1"), (ke1,)
+        finally:
+            t.deleteLater()
+
+        # ③ GARDE INVERSE — la chaîne n'applique AUCUN masquage : les images
+        #    partent telles que validées à l'écran (audit 2026-07-30 : masque
+        #    no-op sur données réelles + composite non idempotent).
+        _chain_src = "\n".join(l.split("#", 1)[0] for l in
+                               _i.getsource(TL.TabT2V._chain_keyframes)
+                               .splitlines())
+        assert "masked_keyframe" not in _chain_src, \
+            ("la chaîne d'images ne doit PAS masquer les keyframes — "
+             "crainte de parasitage de Matthieu confirmée par l'audit")
+
+        # ④ L'envoi réel consulte la chaîne SOUS garde du mode (code réel,
+        #    commentaires exclus) — et le chemin frames reste présent.
+        src = "\n".join(l.split("#", 1)[0] for l in
+                        _i.getsource(TL.TabT2V.start_generation).splitlines())
+        assert "_chain_keyframes(" in src, \
+            "start_generation n'utilise pas la chaîne d'images"
+        assert "MODE_CHAIN" in src or "i2v_chain" in src, \
+            "la chaîne doit être GARDÉE par live_gen_mode — pas inconditionnelle"
+        assert "_shot_frame_path" in src or "_prev_frame" in src, \
+            ("le mode frames (raccord par frame vidéo) doit RESTER le "
+             "comportement par défaut — rétro-compatibilité spec")
+    finally:
+        for _sid in _made:
+            try:
+                sb.delete_shot(_sid)
+            except Exception:
+                pass
+        sb.set_namespace("storyboard")
+
+
+@test
+def compose_instant_depart_etat_zero():
+    """instant="start" : la composition désigne l'état d'OUVERTURE (état 0) —
+    et le défaut reste l'ARRIVÉE (doctrine Matthieu 2026-07-28 intacte).
+
+    L'image de départ du plan 1 est la plaque d'ÉTAT 0 : même compositeur,
+    même façade, seul l'instant change. La clé de cache inclut le moment →
+    les deux instants ne peuvent pas se servir l'un l'autre.
+    """
+    import api.apercu as A
+    import core.storyboard as sb
+
+    sb.set_namespace("live_seq_mapping")
+    _p = (
+        "SURFACE : façade.\n"
+        "ÉTAT 0 : pierre givrée sombre.\n"
+        "TRANSFORMATION : le gel fond peu à peu.\n"
+        "ÉTAT 1 : pierre nue dorée.\n"
+        "NOIR : le fond hors façade.\n"
+        "STYLE : gravure.\n"
+    )
+    _shot = {"id": "ic1", "number": 1, "seedance_prompt": _p}
+    try:
+        _, m_end, _, _ = A.compose_mood_inputs(_shot, "", "", is_mapping=True)
+        _, m_start, _, _ = A.compose_mood_inputs(_shot, "", "", is_mapping=True,
+                                                 instant="start")
+        assert "FINAL" in m_end and "pierre nue dorée" in m_end, (m_end,)
+        assert "OPENING" in m_start and "pierre givrée" in m_start, \
+            ("instant=start doit désigner l'ÉTAT 0", m_start)
+        assert "pierre nue dorée" not in m_start, \
+            "l'état d'arrivée fuit dans le moment de départ"
+        k_end = A.compose_cache_key("f", m_end, "s", "", "nb2", "mood_mapping")
+        k_start = A.compose_cache_key("f", m_start, "s", "", "nb2", "mood_mapping")
+        assert k_end != k_start, "départ et arrivée partagent la même clé de cache"
+
+        # Le prompt déterministe (repli) suit le même instant.
+        out_start = A.build_mood_prompt(_shot, "", "nb2", instant="start")
+        assert "pierre givrée" in out_start and "pierre nue dorée" not in out_start, \
+            ("le repli déterministe du départ doit rendre l'ÉTAT 0 seul",
+             out_start[:200])
+    finally:
+        sb.set_namespace("storyboard")
+
+
+@test
+def lot_asymetrique_genere_le_depart_du_plan_1():
+    """Le lot en mode chaîne : plan 1 → DEUX images (départ état 0 + mood),
+    plans suivants → UNE seule (leur mood). En mode frames : une par plan,
+    comme aujourd'hui (garde inverse).
+
+    Modèle asymétrique de la spec 2026-07-30 — pas de génération inutile :
+    le départ des plans N>1 n'est pas une image propre, c'est le mood du
+    plan précédent.
+    """
+    import core.storyboard as sb
+    from core import live_chain as lc
+    import api.apercu as A
+    from PIL import Image
+
+    sb.set_namespace("live_seq_mapping")
+    _made, _calls = [], []
+    _compose0, _run0 = A.compose_mood_prompt, A.run_mood
+    try:
+        # Numéros très bas : le « plan 1 » du lot est le plus PETIT numéro de
+        # la séquence — le test doit le rester même si un autre test a laissé
+        # des plans dans ce namespace.
+        s1 = sb.save_shot({"number": -9, "scene_title": "lot-un",
+                           "seedance_prompt": "SURFACE : f.\nÉTAT 0 : a.\nÉTAT 1 : b.\n"})
+        s2 = sb.save_shot({"number": -8, "scene_title": "lot-deux",
+                           "seedance_prompt": "SURFACE : f.\nÉTAT 0 : c.\nÉTAT 1 : d.\n"})
+        _made = [s1["id"], s2["id"]]
+
+        def _fake_compose(shot, film_style="", engine="", building_ref="",
+                          is_mapping=None, force_fresh=False, instant="end"):
+            return f"PROMPT-{instant}", True, "", False
+
+        def _fake_run(shot, prompt, out_dir, api_key, progress_cb,
+                      building_ref="", inspiration_ref="", options=None):
+            os.makedirs(out_dir, exist_ok=True)
+            p = os.path.join(out_dir, f"gen_{len(_calls)}.png")
+            Image.new("RGB", (32, 18), (8, 8, 8)).save(p)
+            _calls.append((shot.get("id"), prompt))
+            return p
+
+        A.compose_mood_prompt = _fake_compose
+        A.run_mood = _fake_run
+
+        # ① Mode chaîne : 2 appels pour le plan 1, 1 pour le plan 2.
+        lc.set_gen_mode(lc.MODE_CHAIN)
+        w = A.MoodBatchWorker([s1, s2], options={"engine": "nb2"})
+        w.run()
+        _c1 = [c for c in _calls if c[0] == s1["id"]]
+        _c2 = [c for c in _calls if c[0] == s2["id"]]
+        assert len(_c1) == 2, \
+            (f"plan 1 : 2 images attendues (départ + mood), {len(_c1)} générée(s)")
+        assert len(_c2) == 1, \
+            (f"plan 2 : 1 seule image attendue (son mood), {len(_c2)} générée(s)")
+        assert any("PROMPT-start" in c[1] for c in _c1), \
+            "le départ du plan 1 doit être composé avec instant=start (état 0)"
+        _st = lc.get_start_image(s1["id"])
+        assert _st and os.path.isfile(_st), \
+            "l'image de départ du plan 1 n'est pas rangée (sidecar)"
+        assert _st not in sb.load_apercus(s1["id"]).get("paths", []), \
+            "l'image de départ ne doit pas entrer dans la galerie des moods"
+
+        # ② Garde inverse — mode frames : une image par plan, aucune image
+        #    de départ générée (pas de coût ajouté au comportement actuel).
+        _calls.clear()
+        lc.set_gen_mode(lc.MODE_FRAMES)
+        for _sid in _made:
+            try:
+                import shutil
+                shutil.rmtree(sb.get_apercu_dir(_sid), ignore_errors=True)
+            except Exception:
+                pass
+        w2 = A.MoodBatchWorker([s1, s2], options={"engine": "nb2"})
+        w2.run()
+        assert len(_calls) == 2, \
+            (f"mode frames : 2 appels attendus (1 par plan), {len(_calls)}")
+        assert not any("PROMPT-start" in c[1] for c in _calls), \
+            "mode frames : aucune image de départ ne doit être générée"
+    finally:
+        A.compose_mood_prompt, A.run_mood = _compose0, _run0
+        lc.set_gen_mode(lc.MODE_FRAMES)
+        for _sid in _made:
+            try:
+                sb.delete_shot(_sid)
+            except Exception:
+                pass
+        sb.set_namespace("storyboard")
+
+
+@test
+def selecteur_chaine_synchronise_les_deux_ui():
+    """Le mode vit dans UN champ : RENDU & AUDIO (Studio IA) et la page
+    Séquence exposent le MÊME live_gen_mode — changer l'un se lit dans
+    l'autre. Libellés traduits FR→EN.
+    """
+    from core import live_chain as lc
+    from core.i18n import _FR_TO_EN
+    import ui.tab_t2v_live as TL
+    from ui.page_scenario_live import PageScenario
+
+    lc.set_gen_mode(lc.MODE_FRAMES)
+    try:
+        t = TL.TabT2V()
+        try:
+            assert hasattr(t, "_gen_mode_combo"), \
+                "pas de sélecteur de mode dans RENDU & AUDIO"
+            assert t._gen_mode_combo.currentData() == lc.MODE_FRAMES
+            # Choix utilisateur → écrit le champ partagé.
+            _i_chain = t._gen_mode_combo.findData(lc.MODE_CHAIN)
+            assert _i_chain >= 0, "l'option « chaîne d'images » manque"
+            t._gen_mode_combo.setCurrentIndex(_i_chain)
+            t._on_gen_mode_changed()
+            assert lc.get_gen_mode() == lc.MODE_CHAIN, \
+                "le sélecteur RENDU & AUDIO n'écrit pas live_gen_mode"
+        finally:
+            t.deleteLater()
+
+        # La page Séquence lit le MÊME champ (pas d'état dupliqué).
+        p = PageScenario()
+        try:
+            assert hasattr(p, "_gen_mode_combo"), \
+                "pas de sélecteur de mode dans la page Séquence (Mode)"
+            p._refresh_gen_mode_combo()
+            assert p._gen_mode_combo.currentData() == lc.MODE_CHAIN, \
+                "la page Séquence ne reflète pas le champ partagé"
+            _i_frames = p._gen_mode_combo.findData(lc.MODE_FRAMES)
+            p._gen_mode_combo.setCurrentIndex(_i_frames)
+            p._on_gen_mode_changed()
+            assert lc.get_gen_mode() == lc.MODE_FRAMES, \
+                "le sélecteur de la page Séquence n'écrit pas live_gen_mode"
+        finally:
+            p.deleteLater()
+
+        # i18n : les libellés du sélecteur sont traduits.
+        for _lbl in ("Raccord par frame vidéo", "Chaîne d'images (I2V)"):
+            assert _lbl in _FR_TO_EN, f"libellé non traduit : {_lbl}"
+    finally:
+        lc.set_gen_mode(lc.MODE_FRAMES)
+
+
+@test
 def rendu_audio_recalage_debrayable():
     """RENDU & AUDIO : le recalage ffmpeg se DÉBRAYE — et la stabilisation
     ne revient pas.

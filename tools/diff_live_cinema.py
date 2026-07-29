@@ -47,6 +47,10 @@ EXPECTED_ONLY_LIVE = {
         "_make_seq_btn", "_apply_seq_style", "_set_seq_mode",
         "_refresh_bref", "_on_pick_bref", "_on_clear_bref",
         "_get_mapping_keyframes",
+        # Chaîne d'images mapping (spec Matthieu 2026-07-30, core/live_chain) :
+        # keyframes = moods (jamais de frame vidéo réinjectée) + sélecteur du
+        # mode de génération dans RENDU & AUDIO. Le Cinéma n'a pas de mapping.
+        "_chain_keyframes", "_on_gen_mode_changed", "_refresh_gen_mode_combo",
         # Vignettes Conducteur = dernière frame rendue + croix pour l'effacer
         # (casse la dérive du raccord au plan choisi) — besoin propre au workflow
         # séquence continue Live/Mapping (2026-07-09). Reportable au Cinéma si besoin.
@@ -97,6 +101,9 @@ EXPECTED_ONLY_LIVE = {
         # helper commun « Appliquer »/« Tout générer » (2026-07-13). Le Cinéma écrit
         # ses plans via StoryboardGenerateDialog (pas de namespace à poser).
         "_write_decoupage_segments",
+        # Sélecteur « Génération mapping » (section Mode, spec 2026-07-30) —
+        # même champ live_gen_mode que le RENDU & AUDIO du Studio IA Live.
+        "_on_gen_mode_changed", "_refresh_gen_mode_combo",
     },
     "ui/page_storyboard_live.py": {
         # _alive : garde anti « wrapped C/C++ object has been deleted » sur la

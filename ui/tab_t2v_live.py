@@ -2961,6 +2961,56 @@ class TabT2V(QScrollArea):
         self._use_mood_cb = _use_mood_cb_inner
         _raccords_lay.addWidget(self._use_mood_toggle_row)
 
+        # ── Mode de génération MAPPING (spec Matthieu 2026-07-30) ────────────
+        # UN champ persisté par projet (core/live_chain.live_gen_mode), partagé
+        # avec la page Séquence — jamais d'état dupliqué. « Frame vidéo » =
+        # comportement historique ; « Chaîne d'images » = le plan N part du
+        # Mood du plan N-1 (aucune frame extraite d'un clip ne rentre dans la
+        # chaîne → le rognage moteur ne peut plus s'accumuler).
+        from core import live_chain as _lc_mode
+        self._gen_mode_row = QFrame()
+        self._gen_mode_row.setStyleSheet(
+            f"QFrame{{background:transparent;border:none;"
+            f"border-top:1px solid {C['border']};border-radius:0px;padding:4px;}}")
+        _gm_lay = QHBoxLayout(self._gen_mode_row)
+        _gm_lay.setContentsMargins(14, 8, 14, 8)
+        _gm_col = QVBoxLayout()
+        _gm_col.setSpacing(2)
+        _gm_t = QLabel(translate("Génération mapping"))
+        _gm_t.setStyleSheet(
+            f"color:{C['text_secondary']};font-size:12px;font-weight:600;border:none;")
+        _gm_col.addWidget(_gm_t)
+        _gm_s = QLabel(translate(
+            "Frame vidéo → le plan part de la dernière image du clip précédent · "
+            "Chaîne d'images → il part du Mood du plan précédent (aucune frame "
+            "vidéo réinjectée : la dérive ne s'accumule plus)"))
+        _gm_s.setWordWrap(True)
+        _gm_s.setStyleSheet(
+            f"color:{C['text_dim']};font-size:10px;"
+            f"font-family:'Consolas',monospace;border:none;")
+        _gm_col.addWidget(_gm_s)
+        self._gen_mode_combo = QComboBox()
+        self._gen_mode_combo.addItem(translate("Raccord par frame vidéo"),
+                                     _lc_mode.MODE_FRAMES)
+        self._gen_mode_combo.addItem(translate("Chaîne d'images (I2V)"),
+                                     _lc_mode.MODE_CHAIN)
+        _gm_i = self._gen_mode_combo.findData(_lc_mode.get_gen_mode())
+        self._gen_mode_combo.setCurrentIndex(_gm_i if _gm_i >= 0 else 0)
+        self._gen_mode_combo.setFixedHeight(26)
+        self._gen_mode_combo.setStyleSheet(
+            f"QComboBox{{background:{C['bg3']};border:1px solid {C['border_bright']};"
+            f"border-radius:6px;color:{C['text_primary']};font-size:11px;padding:0 8px;}}"
+            f"QComboBox::drop-down{{border:none;width:20px;}}"
+            f"QComboBox QAbstractItemView{{background:{C['bg3']};"
+            f"border:1px solid {C['border_bright']};color:{C['text_primary']};}}")
+        # `activated` = geste utilisateur uniquement : un setCurrentIndex de
+        # chargement ne doit JAMAIS écrire le champ du projet (piège du combo
+        # de style, 2026-07-28 : currentIndexChanged effaçait le style au load).
+        self._gen_mode_combo.activated.connect(self._on_gen_mode_changed)
+        _gm_lay.addLayout(_gm_col, 1)
+        _gm_lay.addWidget(self._gen_mode_combo)
+        _raccords_lay.addWidget(self._gen_mode_row)
+
         self._sfx_auto_toggle_row, _sfx_auto_cb_inner = _raccord_toggle(
             "Sound design auto",
             "À la fin de chaque clip, génère aussi l'ambiance SFX du plan (prompt son, "
@@ -4168,7 +4218,36 @@ class TabT2V(QScrollArea):
             except Exception:
                 _kf = ""
 
-            if _prev_f and _kf:
+            # ── Chaîne d'images (spec 2026-07-30) : l'ancrage est résolu par
+            # la CHAÎNE, jamais par une frame vidéo — l'annoncer tel quel.
+            from core import live_chain as _lc
+            _chain_on = _mood_on and _lc.get_gen_mode() == _lc.MODE_CHAIN
+            if _chain_on:
+                try:
+                    _ks, _ke = self._chain_keyframes(self._active_shot)
+                except Exception:
+                    _ks, _ke = "", ""
+                if _ks and _ke:
+                    _premier = _lc.previous_shot(self._active_shot) is None
+                    param_lines.append(translate(
+                        "⚓ Chaîne d'images — Départ : image de départ (état 0)"
+                        "  →  Arrivée : Mood de ce plan") if _premier else
+                        translate(
+                        "⚓ Chaîne d'images — Départ : Mood du plan précédent"
+                        "  →  Arrivée : Mood de ce plan"))
+                    param_lines.append(f"   {os.path.basename(_ks)}  →  "
+                                       f"{os.path.basename(_ke)}")
+                elif _ke:
+                    param_lines.append(
+                        translate("⚓ Chaîne d'images — Départ : le Mood de ce plan")
+                        + f" — {os.path.basename(_ke)}"
+                        + translate("  (image de départ du plan 1 à générer "
+                                    "via « Générer les Moods »)"))
+                else:
+                    param_lines.append(translate(
+                        "⚠ « Utiliser les images du Mood » est coché mais ce plan "
+                        "n'a aucun Mood — génère-le d'abord"))
+            elif _prev_f and _kf:
                 param_lines.append(translate(
                     "⚓ Départ : dernière frame du plan précédent  →  Arrivée : "
                     "Mood de ce plan"))
@@ -4980,26 +5059,48 @@ class TabT2V(QScrollArea):
         self._anchor_kind = "raccord" if i2v_frame else ""
         if (getattr(self, "_seq_mode", "live") == "mapping" and self._active_shot
                 and _use_mood):
-            kf_start, _ = self._get_mapping_keyframes(self._active_shot)
-            if kf_start:
-                # Confinement façade : mood masqué (noir pur hors silhouette) avant
-                # l'envoi. Copie en cache, le mood reste intact à l'écran.
-                from core.live_mapping import masked_keyframe
-                from core.live_building import get_building_ref
-                from core.context import get_data_root
-                _bref = get_building_ref()
-                if _bref:
-                    kf_start = masked_keyframe(kf_start, _bref, get_data_root())
-                if i2v_frame:
-                    # Une frame précédente existe → elle reste le DÉPART, le Mood
-                    # devient l'ARRIVÉE. C'est le cas courant, à partir du plan 2.
-                    end_frame = kf_start
-                    self._anchor_kind = "raccord+mood"
-                else:
-                    # Aucun plan précédent rendu (premier plan, ou frame effacée) :
-                    # le Mood est le seul point d'ancrage disponible.
-                    i2v_frame = kf_start
-                    self._anchor_kind = "mood"
+            from core import live_chain as _lc
+            if _lc.get_gen_mode() == _lc.MODE_CHAIN:
+                # ── CHAÎNE D'IMAGES (spec Matthieu 2026-07-30) : départ = mood
+                # du plan précédent (image de départ état 0 pour le plan 1),
+                # arrivée = mood du plan. La frame vidéo extraite est IGNORÉE —
+                # c'est elle qui transportait le rognage Seedance de plan en
+                # plan. Sans mood du tout, on retombe sur le comportement
+                # d'aujourd'hui (raccord/t2v), rien n'est perdu.
+                _ks, _ke = self._chain_keyframes(self._active_shot)
+                if _ke:
+                    if _ks:
+                        i2v_frame, end_frame = _ks, _ke
+                        self._anchor_kind = "chaine"
+                    else:
+                        # Premier plan sans image de départ : le mood est le
+                        # seul point d'ancrage — comme aujourd'hui.
+                        i2v_frame = _ke
+                        self._anchor_kind = "mood"
+            else:
+                kf_start, _ = self._get_mapping_keyframes(self._active_shot)
+                if kf_start:
+                    # Confinement façade : mood masqué (noir pur hors silhouette)
+                    # avant l'envoi. Copie en cache, le mood reste intact à
+                    # l'écran. (⚠ Audit 2026-07-30 : no-op si la façade est un
+                    # PNG à fond TRANSPARENT — build_facade_mask lit la
+                    # couverture sans l'alpha et refuse. Chantier séparé.)
+                    from core.live_mapping import masked_keyframe
+                    from core.live_building import get_building_ref
+                    from core.context import get_data_root
+                    _bref = get_building_ref()
+                    if _bref:
+                        kf_start = masked_keyframe(kf_start, _bref, get_data_root())
+                    if i2v_frame:
+                        # Une frame précédente existe → elle reste le DÉPART, le
+                        # Mood devient l'ARRIVÉE. Cas courant à partir du plan 2.
+                        end_frame = kf_start
+                        self._anchor_kind = "raccord+mood"
+                    else:
+                        # Aucun plan précédent rendu (premier plan, ou frame
+                        # effacée) : le Mood est le seul point d'ancrage.
+                        i2v_frame = kf_start
+                        self._anchor_kind = "mood"
 
         params = {
             "mode":                    "i2v" if i2v_frame else "t2v",
@@ -5459,6 +5560,36 @@ class TabT2V(QScrollArea):
             self._dyn_cam_toggle_row.setVisible(self._seq_mode != "mapping")
             if self._seq_mode == "mapping" and getattr(self, "_dyn_cam_cb", None):
                 self._dyn_cam_cb.setChecked(False)
+        # Le mode de génération (frame vidéo / chaîne d'images) n'a de sens
+        # qu'en mapping — la ligne se retire du RENDU & AUDIO en séquence Live.
+        if getattr(self, "_gen_mode_row", None):
+            self._gen_mode_row.setVisible(self._seq_mode == "mapping")
+            self._refresh_gen_mode_combo()
+
+    def _on_gen_mode_changed(self, *args):
+        """Choix utilisateur du mode de génération mapping → écrit le champ
+        UNIQUE partagé (core/live_chain) que la page Séquence lit aussi."""
+        from core import live_chain as _lc
+        try:
+            _lc.set_gen_mode(self._gen_mode_combo.currentData()
+                             or _lc.MODE_FRAMES)
+        except Exception:
+            pass
+        try:
+            self._refresh_prompt_preview()
+        except Exception:
+            pass
+
+    def _refresh_gen_mode_combo(self):
+        """Recale le combo sur le champ persisté — jamais l'inverse : un
+        chargement ne doit pas écrire (le combo n'écrit que sur `activated`)."""
+        from core import live_chain as _lc
+        try:
+            _i = self._gen_mode_combo.findData(_lc.get_gen_mode())
+            if _i >= 0 and _i != self._gen_mode_combo.currentIndex():
+                self._gen_mode_combo.setCurrentIndex(_i)
+        except Exception:
+            pass
 
     # ── Référence bâtiment (façade) ──────────────────────────────────────────
 
@@ -5578,6 +5709,35 @@ class TabT2V(QScrollArea):
             pass
         return start, end
 
+    def _chain_keyframes(self, shot: dict) -> tuple:
+        """Keyframes du mode CHAÎNE D'IMAGES (spec Matthieu 2026-07-30) :
+        départ = mood ACTIF du plan précédent (image de départ dédiée — état 0
+        — pour le premier plan), arrivée = mood ACTIF du plan courant. Renvoie
+        ("", "") sans mood ; ("", mood) pour un premier plan sans image de
+        départ.
+
+        Toujours des IMAGES générées, jamais une frame extraite d'un clip : la
+        chaîne ne ré-ingère aucun pixel produit par Seedance, le rognage moteur
+        ne peut donc plus s'accumuler de plan en plan. Le départ du plan N EST
+        le fichier d'arrivée du plan N-1 → raccord exact par identité.
+
+        AUCUN masquage ici (audit mesuré 2026-07-30) : la crainte de parasitage
+        de Matthieu est confirmée deux fois — sur les données réelles le masque
+        façade est un no-op silencieux (façade RGBA à fond transparent →
+        build_facade_mask refuse la couverture), et son composite n'est PAS
+        idempotent (bord adouci multiplicatif : érosion ~1 px par passe). Les
+        images partent telles que validées à l'écran ; le masquage des
+        keyframes est un chantier séparé, pas une pièce de la chaîne."""
+        try:
+            sb_api.set_namespace(f"live_seq_{getattr(self, '_seq_mode', 'live')}")
+        except Exception:
+            pass
+        from core import live_chain as _lc
+        end = _lc.active_mood(shot)
+        if not end:
+            return "", ""
+        return _lc.chain_start_for(shot), end
+
     def refresh(self):
         # Recale le namespace sur la séquence sélectionnée (Live/Mapping) avant lecture.
         import core.storyboard as _sb
@@ -5588,6 +5748,10 @@ class TabT2V(QScrollArea):
         self._storyboard.refresh()
         self._camera_picker.refresh()
         self._refresh_style_badge()
+        # Le mode de génération est PAR PROJET : le recaler à chaque refresh
+        # (changement de projet ou modification depuis la page Séquence).
+        if hasattr(self, "_gen_mode_combo"):
+            self._refresh_gen_mode_combo()
 
     def _open_output_folder(self):
         from core.config import get_output_dir
