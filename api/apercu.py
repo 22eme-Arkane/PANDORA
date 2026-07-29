@@ -333,9 +333,42 @@ _FACADE_PRIORITY_DIRECTIVE = (
 )
 
 
+def _conform_mood_definition(path: str, aspect_ratio: str = "",
+                             resolution: str = "") -> str:
+    """Ramène l'image téléchargée à la définition PROMISE par le sélecteur.
+
+    Constat Matthieu (2026-07-29, Forcalquier) : « Générer les moods » réglé
+    sur 1280×720, fichier reçu en 1368×768. Les moteurs à enum (Nano Banana :
+    1K/2K/4K) et Kontext (aucune dimension acceptée) choisissent LEURS
+    dimensions. En mapping c'est double peine : l'écart de résolution entre
+    keyframes revient par la porte du Mood, et le ratio approximatif du
+    moteur (1368/768 = 1,781) étire la façade à la génération vidéo 16:9
+    exacte.
+
+    Redimensionnement LANCZOS EN PLACE, uniquement si le moteur a rendu le
+    format demandé (±1 %) : un AUTRE format signifie que le moteur a recadré
+    ou réinterprété — l'étirer au forceps abîmerait la géométrie au lieu de
+    la réparer, l'image repart telle quelle. Ne lève jamais.
+    """
+    try:
+        from PIL import Image
+        from core.image_resolution import target_for
+        tw, th = target_for(aspect_ratio or "16:9", resolution or "")
+        with Image.open(path) as im:
+            w, h = im.size
+            if (w, h) == (tw, th) or not (w and h):
+                return path
+            if abs((w * th) / float(h * tw) - 1.0) > 0.01:
+                return path
+            im.convert("RGB").resize((tw, th), Image.LANCZOS).save(path)
+        return path
+    except Exception:
+        return path
+
+
 def run_generation(prompt: str, output_dir: str, api_key: str, progress_cb,
                    building_ref: str = "", inspiration_ref: str = "",
-                   aspect_ratio: str = "") -> str:
+                   aspect_ratio: str = "", resolution: str = "") -> str:
     """Génère une image et retourne son chemin. Lève une exception si erreur.
 
     - `building_ref` (façade, mapping) : Flux Kontext ÉDITE la façade (géométrie
@@ -450,7 +483,8 @@ def run_generation(prompt: str, output_dir: str, api_key: str, progress_cb,
     out  = os.path.join(output_dir, f"{uuid.uuid4().hex}.jpg")
     with open(out, "wb") as f:
         f.write(resp.content)
-    return out
+    # Kontext n'accepte aucune dimension : il rend SES tailles (~1 Mpx).
+    return _conform_mood_definition(out, aspect_ratio, resolution)
 
 
 # ── Génération mood NANO BANANA 2 (Cinéma) ────────────────────────────────────
@@ -876,9 +910,10 @@ def run_generation_nb2(prompt: str, output_dir: str, api_key: str, progress_cb,
     génération texte. Aspect 16:9, comme le mood Flux.
 
     `resolution` : palier PANDORA (« 720p » … « 4k »), vide = défaut 1080p. Les
-    Nano Banana couplent aspect_ratio + resolution : ce chemin donne des ratios
-    EXACTS, contrairement aux moteurs à dimensions explicites — d'où la simple
-    traduction d'enum plutôt qu'un calcul de taille.
+    Nano Banana couplent aspect_ratio + resolution (enum 1K/2K/4K) et rendent
+    LEURS dimensions — mesuré le 2026-07-29 : 1368×768 pour un 16:9 en 1K,
+    ratio 1,781 ≠ 16/9. L'image téléchargée est donc CONFORMÉE à la définition
+    promise avant d'être rendue à l'appelant.
 
     `engine_key` : « nb2 » (défaut) ou « nb_pro » — mêmes consignes/args, seul
     l'endpoint change (Nano Banana 2 ↔ Nano Banana Pro). Nano Banana 2 Lite a un
@@ -974,7 +1009,7 @@ def run_generation_nb2(prompt: str, output_dir: str, api_key: str, progress_cb,
     out = os.path.join(output_dir, f"{uuid.uuid4().hex}.png")
     with open(out, "wb") as f:
         f.write(resp.content)
-    return out
+    return _conform_mood_definition(out, _ar, resolution)
 
 
 # ── Génération mood GÉNÉRIQUE — n'importe quel moteur du catalogue ─────────────
@@ -1067,7 +1102,9 @@ def run_generation_engine(engine_key: str, prompt: str, output_dir: str,
     out = os.path.join(output_dir, f"{uuid.uuid4().hex}.png")
     with open(out, "wb") as f:
         f.write(resp.content)
-    return out
+    # Même les moteurs à dimensions explicites peuvent arrondir (multiples de
+    # 32, plafonds de surface) : la promesse du sélecteur est tenue ICI.
+    return _conform_mood_definition(out, aspect_ratio, resolution)
 
 
 def run_mood(shot: dict, prompt: str, output_dir: str, api_key: str, progress_cb,
@@ -1135,7 +1172,8 @@ def run_mood(shot: dict, prompt: str, output_dir: str, api_key: str, progress_cb
     if engine == "flux":
         _insp = _inspo[0] if _inspo else ""
         return run_generation(prompt, output_dir, api_key, progress_cb, building_ref,
-                              inspiration_ref=_insp, aspect_ratio=_ar)
+                              inspiration_ref=_insp, aspect_ratio=_ar,
+                              resolution=_res)
 
     # ── Tout autre moteur du catalogue → chemin générique ───────────────────────
     return run_generation_engine(

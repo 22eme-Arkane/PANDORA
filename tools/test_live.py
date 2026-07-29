@@ -5817,6 +5817,66 @@ def keyframes_de_raccord_a_la_meme_resolution():
 
 
 @test
+def mood_livre_la_definition_promise():
+    """Le Mood téléchargé fait EXACTEMENT la définition choisie au lot.
+
+    Constat Matthieu (2026-07-29, Forcalquier) : façade passée en 1280×720,
+    « Générer les moods » réglé sur 1280×720… et le fichier généré fait
+    1368×768. Nano Banana ne prend qu'un enum (1K/2K/4K) et choisit SES
+    dimensions ; Kontext n'accepte aucune dimension. Un Mood qui ne fait pas
+    la taille annoncée ré-introduit l'écart de résolution entre keyframes
+    qu'on vient de fermer, et son ratio approximatif (1368/768 = 1,781)
+    étire la façade à la génération vidéo 16:9 exacte. → L'image téléchargée
+    est CONFORMÉE à la définition promise, quel que soit le moteur.
+    """
+    import tempfile, inspect as _i
+    from PIL import Image
+    import api.apercu as A
+
+    td = tempfile.mkdtemp(prefix="t_moodres_")
+
+    # ① Cas réel : NB2 « 1K » rend 1368×768 pour un 16:9 demandé en 720p.
+    p = os.path.join(td, "mood_nb2.png")
+    Image.new("RGB", (1368, 768), (12, 24, 36)).save(p)
+    A._conform_mood_definition(p, "16:9", "720p")
+    with Image.open(p) as im:
+        assert im.size == (1280, 720), \
+            ("le Mood doit faire la définition PROMISE par le sélecteur",
+             im.size)
+
+    # ② Déjà à la bonne taille → intouché.
+    q = os.path.join(td, "mood_ok.png")
+    Image.new("RGB", (1280, 720), (1, 2, 3)).save(q)
+    assert A._conform_mood_definition(q, "16:9", "720p") == q
+    with Image.open(q) as im:
+        assert im.size == (1280, 720)
+
+    # ③ FORMAT étranger (le moteur a rendu un autre ratio) → ne JAMAIS étirer.
+    c = os.path.join(td, "mood_carre.png")
+    Image.new("RGB", (1024, 1024), (7, 7, 7)).save(c)
+    A._conform_mood_definition(c, "16:9", "720p")
+    with Image.open(c) as im:
+        assert im.size == (1024, 1024), \
+            "un format étranger ne doit pas être étiré au forceps"
+
+    # ④ Palier vide → défaut du catalogue (1080p), jamais d'exception.
+    d = os.path.join(td, "mood_defaut.png")
+    Image.new("RGB", (2736, 1536), (9, 9, 9)).save(d)
+    A._conform_mood_definition(d, "", "")
+    with Image.open(d) as im:
+        assert im.size == (1920, 1080), (im.size,)
+
+    # ⑤ Les TROIS chemins de génération conforment leur téléchargement
+    #    (code réel, commentaires exclus).
+    for fn in (A.run_generation, A.run_generation_nb2,
+               A.run_generation_engine):
+        src = "\n".join(l.split("#", 1)[0]
+                        for l in _i.getsource(fn).splitlines())
+        assert "_conform_mood_definition(" in src, \
+            f"{fn.__name__} rend l'image du moteur sans la conformer"
+
+
+@test
 def rendu_audio_recalage_debrayable():
     """RENDU & AUDIO : le recalage ffmpeg se DÉBRAYE — et la stabilisation
     ne revient pas.
