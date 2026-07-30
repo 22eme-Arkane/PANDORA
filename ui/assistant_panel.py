@@ -387,8 +387,8 @@ CORPUS: dict[str, dict] = {
             "Ajoutez vos morceaux : l'analyse locale extrait BPM, énergie et drops. "
             "Cette timeline musicale guide les durées des plans et les prompts son.\n\n"
             "Façade (mode Mapping)\n"
-            "La photo de la façade isolée sur fond noir sert de canevas aux moods, "
-            "de masque de confinement et de base au calage Resolume.\n\n"
+            "La photo de la façade isolée sur fond noir sert de canevas aux moods "
+            "et de masque de confinement.\n\n"
             "Générer\n"
             "« Analyse & co-écriture » (analyse + suggestions affinables), « Mise en page "
             "PANDORA » (actes/plans + prompts), « Générer le découpage » (séquence "
@@ -431,7 +431,7 @@ CORPUS: dict[str, dict] = {
             "Moteur recommandé : Seedance 2.0 (capacités affichées dans le menu).",
             "'▶▶ Lancer la file d'attente' partout — annulable à tout moment.",
             "'Ouvrir le dossier' est toujours actif, même avant de générer.",
-            "Vidéothèque : lecture, envoi vers Modifier / Upscaling / → Resolume.",
+            "Vidéothèque : lecture, envoi vers Modifier / Upscaling.",
         ],
         "guide": (
             "Générer depuis Séquences\n"
@@ -446,8 +446,8 @@ CORPUS: dict[str, dict] = {
             "File en petits carrés, Topaz/SeedVR2, ×2/×4 — la sortie garde le même "
             "nom que la source (relink direct).\n\n"
             "Vidéothèque\n"
-            "Tous les clips du projet ; « → Resolume » pré-charge la file du "
-            "contrôleur."
+            "Tous les clips du projet — les fichiers sont dans le dossier "
+            "vidéos, prêts pour votre logiciel VJ."
         ),
     },
     "live_sequences": {
@@ -476,17 +476,13 @@ CORPUS: dict[str, dict] = {
             "La façade isolée sur fond noir sert de canevas ET de masque.",
             "Raccords par keyframes : le mood du plan N+1 termine le plan N.",
             "Le contenu reste confiné dans la silhouette VISIBLE, à échelle exacte.",
-            "« ▱ Calage Resolume » : preset Advanced Output + mire du bâtiment.",
         ],
         "guide": (
             "Le principe\n"
             "Une séquence continue sur façade VERROUILLÉE : caméra fixe, l'architecture "
             "visible reste à position et échelle exactes (la projection se superpose "
             "au vrai bâtiment). La façade peut disparaître, changer de matière ou "
-            "être recouverte — jamais zoomer ni glisser.\n\n"
-            "Calage Resolume\n"
-            "Le polygone de la façade est extrait automatiquement du masque et écrit "
-            "en preset Advanced Output, avec une mire de calage propre au bâtiment."
+            "être recouverte — jamais zoomer ni glisser."
         ),
     },
     "mapping": {
@@ -494,7 +490,6 @@ CORPUS: dict[str, dict] = {
         "context": "Séquences projetées sur une façade (caméra fixe, raccords par keyframes).",
         "tips": [
             "La façade isolée sur fond noir (BiRefNet) sert de canevas ET de masque.",
-            "« ▱ Calage Resolume » génère le preset Advanced Output + la mire du bâtiment.",
             "Le contenu reste confiné DANS la silhouette visible sur la photo.",
         ],
         "guide": "",
@@ -526,9 +521,8 @@ CORPUS: dict[str, dict] = {
     },
     "live_settings": {
         "title": "Paramètres",
-        "context": "Connexion Resolume + clés API (partagées avec Cinéma) + assistant IA.",
+        "context": "Clés API (partagées avec Cinéma) + assistant IA.",
         "tips": [
-            "Hôte/port Resolume + test de connexion en tête de page.",
             "Les clés fal.ai et Anthropic sont partagées avec PANDORA | Cinéma.",
             "Choisissez l'assistant IA : Claude, Fable 5, Mistral ou Ollama local.",
         ],

@@ -2405,7 +2405,7 @@ class TabT2V(QScrollArea):
             "▸ Raccords : générez d'abord les Moods de tous les plans — chaque clip va du mood du plan au mood du plan suivant.",
             "▸ Références : template de style + façade dans « Choisir les références » ; performers dans « Éléments récurrents ».",
             "▸ ADN visuel : verrouillez le seed pour garder la même identité visuelle sur toute la séquence.",
-            "▸ Sortie : les clips arrivent dans la Vidéothèque, prêts à être envoyés vers Resolume.",
+            "▸ Sortie : les clips arrivent dans la Vidéothèque et dans le dossier vidéos du projet.",
             "▸ Mode mock : sans clé fal.ai, la génération est simulée localement (aucun crédit consommé).",
         ], C))
 

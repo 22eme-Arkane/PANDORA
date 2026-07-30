@@ -187,8 +187,9 @@ _NAV_ITEMS = [
     ("❖", "Accessoires",         "accessoires", "accesoires.png"),
     ("⛟", "Véhicules",           "vehicules",   "vehicule.png"),
     None,
-    ("▶", "Resolume",            "resolume",    "Live.png"),
-    None,
+    # ("▶", "Resolume", "resolume", "Live.png") — onglet RETIRÉ pour le
+    # moment (demande Matthieu 2026-07-30). Code conservé : ui/page_live.py,
+    # resolume/, api/resolume_push.py restent intacts pour un retour futur.
     ("◈", "Image IA",            "image_ia",    "draw_to_video.png"),
     ("✦", "Studio IA",           "studio",      "seedance.png"),
     ("⚙", "Paramètres",          "settings",    "settings.png"),
@@ -843,16 +844,19 @@ class LiveWindow(QMainWindow):
         # ── Studio IA Live (dédié) ──────────────────────────────────────────────
         from ui.live_studio_widget import LiveStudioWidget
         studio = LiveStudioWidget()
-        studio.open_resolume.connect(lambda: self._navigate("resolume"))
         self._pages["studio"] = studio
 
-        # ── Contrôleur Resolume (réactivé — chantier 2026-06-11) ───────────────
-        from ui.page_live import PageLive
-        resolume = PageLive()
-        self._pages["resolume"] = resolume
-        # Vidéothèque « → Resolume » : la file de clips arrive pré-chargée
-        studio.tab_library.send_to_resolume.connect(
-            lambda paths: (resolume.queue_paths(paths), self._navigate("resolume")))
+        # ── Contrôleur Resolume : RETIRÉ pour le moment (demande Matthieu
+        # 2026-07-30). Code conservé pour un retour futur — pour réactiver :
+        #   studio.open_resolume.connect(lambda: self._navigate("resolume"))
+        #   from ui.page_live import PageLive
+        #   resolume = PageLive()
+        #   self._pages["resolume"] = resolume
+        #   studio.tab_library.send_to_resolume.connect(
+        #       lambda paths: (resolume.queue_paths(paths),
+        #                      self._navigate("resolume")))
+        # + rétablir l'entrée de nav « ▶ Resolume » et la clé dans la boucle
+        # du stack ci-dessous.
 
         from ui.page_live_settings import PageLiveSettings
         settings = PageLiveSettings()
@@ -865,7 +869,7 @@ class LiveWindow(QMainWindow):
 
         for key in ("projects", "conducteur", "seq_live", "seq_mapping", "casting",
                     "accessoires", "vehicules", "image_ia", "studio",
-                    "resolume", "settings"):
+                    "settings"):
             self._stack.addWidget(self._settings_wrap if key == "settings"
                                   else self._pages[key])
 

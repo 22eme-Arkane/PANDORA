@@ -2379,6 +2379,15 @@ _FR_TO_EN: dict[str, str] = {
         "with the Moods.",
     # Sections repliables de la fenêtre Mood (prompt en grand sans défiler).
     "Prévisualisation":                 "Preview",
+    # Retrait de l'intégration Resolume (« pour le moment », 2026-07-30).
+    "▸ Sortie : les clips arrivent dans la Vidéothèque et dans le dossier vidéos du projet.":
+        "▸ Output: clips land in the Video library and in the project's videos folder.",
+    "▸ Les fichiers sont dans le dossier vidéos du projet — "
+    "importez-les dans votre logiciel VJ.":
+        "▸ The files live in the project's videos folder — "
+        "import them into your VJ software.",
+    "Configuration des clés API du module Live.":
+        "Configuration of the Live module's API keys.",
     # Échec d'enregistrement des frames post-génération (audit 2026-07-30).
     "Clip généré, mais frames de raccord non enregistrées : ":
         "Clip generated, but continuity frames could not be saved: ",

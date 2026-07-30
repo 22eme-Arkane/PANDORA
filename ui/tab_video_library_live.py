@@ -165,12 +165,16 @@ class _LiveVideoCard(QFrame):
         row2 = QHBoxLayout()
         row2.setContentsMargins(0, 0, 0, 0)
         row2.setSpacing(4)
-        btn_res = QPushButton("→ Resolume")
-        btn_res.setCursor(Qt.CursorShape.PointingHandCursor)
-        btn_res.setToolTip(translate("Charger ce clip dans Resolume"))
-        btn_res.setStyleSheet(_ss_violet)
-        btn_res.clicked.connect(lambda: self.resolume_requested.emit(self._path))
-        row2.addWidget(btn_res)
+        # « → Resolume » RETIRÉ pour le moment (demande Matthieu 2026-07-30) —
+        # le signal resolume_requested et resolume/client.py restent en place
+        # pour un retour futur :
+        #   btn_res = QPushButton("→ Resolume")
+        #   btn_res.setCursor(Qt.CursorShape.PointingHandCursor)
+        #   btn_res.setToolTip(translate("Charger ce clip dans Resolume"))
+        #   btn_res.setStyleSheet(_ss_violet)
+        #   btn_res.clicked.connect(
+        #       lambda: self.resolume_requested.emit(self._path))
+        #   row2.addWidget(btn_res)
         btn_up = QPushButton("⇪ " + translate("Upscale"))
         btn_up.setCursor(Qt.CursorShape.PointingHandCursor)
         btn_up.setToolTip(translate("Envoyer vers l'onglet Upscaling (Live)"))
@@ -239,7 +243,8 @@ class TabVideoLibraryLive(QScrollArea):
             translate("▸ Retrouvez ici tous les loops et vidéos générés pour ce live."),
             translate("▸ ▶ Lire ouvre la vidéo dans votre lecteur par défaut."),
             translate("▸ ⤷ Modifier envoie le clip vers l'onglet « Modifier »."),
-            translate("▸ → Resolume bascule vers l'onglet Resolume pour le charger dans un slot."),
+            translate("▸ Les fichiers sont dans le dossier vidéos du projet — "
+                      "importez-les dans votre logiciel VJ."),
         ], C))
 
         top_bar = QHBoxLayout()

@@ -14,6 +14,9 @@ from ui.dialog_user_manual import (   # noqa: F401
 
 # ── Sections FR ────────────────────────────────────────────────────────────────
 
+# (Section « ▶ Resolume » RETIRÉE pour le moment — demande Matthieu
+#  2026-07-30. Les builders _l_resolume/_le_resolume sont conservés pour un
+#  retour futur : ré-ajouter l'entrée, le groupe DIFFUSION/SHOW et le builder.)
 _L_SECTIONS = [
     ("🎛", "Bienvenue dans PANDORA | Live"),
     ("✎",  "Conducteur"),
@@ -22,14 +25,12 @@ _L_SECTIONS = [
     ("✦",  "Studio IA"),
     ("♫",  "Sound Design"),
     ("⇪",  "Upscaling"),
-    ("▶",  "Resolume"),
     ("⚙",  "Paramètres"),
 ]
 _L_GROUPS_FR = [
     ("DÉMARRAGE", 1),
     ("CRÉATION",  3),
     ("PRODUCTION", 3),
-    ("DIFFUSION", 1),
     ("RÉFÉRENCE", 1),
 ]
 
@@ -39,8 +40,8 @@ def _l_welcome() -> str:
         _h("Bienvenue dans PANDORA | Live", 1),
         _p("PANDORA | Live est le module <b>performance</b> de PANDORA : il prépare des sets "
            "de loops vidéo IA pour le <b>VJing</b> et des séquences continues pour le "
-           "<b>mapping vidéo</b> sur façade, calés sur la musique, puis les envoie dans "
-           "<b>Resolume Arena</b>."),
+           "<b>mapping vidéo</b> sur façade, calés sur la musique — les clips sont prêts "
+           "à importer dans votre <b>logiciel VJ</b>."),
         _sep_html(),
         _h("L'interface"),
         _ul(
@@ -58,7 +59,8 @@ def _l_welcome() -> str:
             "<b>4.</b> <b>♫ Caler sur la musique</b> : durées quantisées en mesures, cuts sur les drops",
             "<b>5.</b> <b>✦ Générer les Moods</b>, puis les clips depuis le Studio IA",
             "<b>6.</b> Sound Design et Upscaling au besoin",
-            "<b>7.</b> Envoyez le set dans <b>Resolume</b> (slots, BPM, mode show)",
+            "<b>7.</b> Récupérez le set dans la <b>Vidéothèque</b> (dossier vidéos du "
+            "projet) et importez-le dans votre logiciel VJ",
         ),
         _tip("Sans clé fal.ai, tout fonctionne en mode démo (générations simulées). "
              "Les clés API sont partagées avec PANDORA | Cinéma."),
@@ -76,8 +78,8 @@ def _l_conducteur() -> str:
             "<b>Références visuelles</b> — images d'inspiration analysées par l'IA "
             "(direction artistique réutilisable entre projets, chat DA intégré)",
             "<b>Référence bâtiment (façade)</b> — la photo de la façade pour le mapping ; "
-            "isolez-la sur fond noir (détourage intégré) : elle sert de canevas aux moods, "
-            "de masque de confinement et de base au <b>calage Resolume</b>",
+            "isolez-la sur fond noir (détourage intégré) : elle sert de canevas aux moods "
+            "et de masque de confinement",
             "<b>Musiques du set</b> — ajoutez vos morceaux : BPM, énergie et drops sont "
             "analysés et injectés dans l'IA",
             "<b>Analyse & co-écriture</b> — analyse + suggestions, affinables en co-écriture",
@@ -111,7 +113,6 @@ def _l_sequences() -> str:
             "Glissez les lignes pour réordonner, étirez les colonnes, double-cliquez pour éditer",
             "Chaque plan a un champ <b>🔊 Son</b> (prompt sound design) → bouton <b>➤ SFX</b>",
             "Les clips générés sont <b>conformés</b> à la durée calée (ffmpeg) — pas de dérive en timeline",
-            "<b>▱ Calage Resolume</b> (mode Mapping) : génère le preset Advanced Output + la mire",
         ),
     ])
 
@@ -149,7 +150,8 @@ def _l_studio() -> str:
         ),
         _h("Vidéothèque"),
         _ul(
-            "Tous les clips du projet : lecture, envoi vers Modifier / Upscaling / <b>→ Resolume</b>",
+            "Tous les clips du projet : lecture, envoi vers Modifier / Upscaling — "
+            "les fichiers sont dans le dossier vidéos, prêts pour votre logiciel VJ",
         ),
     ])
 
@@ -213,7 +215,6 @@ def _l_settings() -> str:
     return "".join([
         _h("Paramètres", 1),
         _ul(
-            "<b>Connexion Resolume</b> — hôte (localhost) et port (8080) + test de connexion",
             "<b>Clés API</b> — partagées avec PANDORA | Cinéma : fal.ai (vidéo, SFX, upscale), "
             "Anthropic (assistant, traduction, découpage)",
             "<b>Aide API</b> — rouvre le <b>guide de démarrage</b> pas-à-pas "
@@ -226,7 +227,7 @@ def _l_settings() -> str:
 
 _L_BUILDERS = [
     _l_welcome, _l_conducteur, _l_sequences, _l_elements,
-    _l_studio, _l_sound, _l_upscale, _l_resolume, _l_settings,
+    _l_studio, _l_sound, _l_upscale, _l_settings,
 ]
 
 
@@ -240,14 +241,12 @@ _L_SECTIONS_EN = [
     ("✦",  "AI Studio"),
     ("♫",  "Sound Design"),
     ("⇪",  "Upscaling"),
-    ("▶",  "Resolume"),
     ("⚙",  "Settings"),
 ]
 _L_GROUPS_EN = [
     ("GET STARTED", 1),
     ("CREATION",  3),
     ("PRODUCTION", 3),
-    ("SHOW", 1),
     ("REFERENCE", 1),
 ]
 
@@ -257,7 +256,8 @@ def _le_welcome() -> str:
         _h("Welcome to PANDORA | Live", 1),
         _p("PANDORA | Live is PANDORA's <b>performance</b> module: it builds AI video loop "
            "sets for <b>VJing</b> and continuous sequences for facade <b>video mapping</b>, "
-           "beat-aligned to your music, then sends them to <b>Resolume Arena</b>."),
+           "beat-aligned to your music — the clips are ready to import into your "
+           "<b>VJ software</b>."),
         _sep_html(),
         _h("The interface"),
         _ul(
@@ -275,7 +275,8 @@ def _le_welcome() -> str:
             "<b>4.</b> <b>♫ Align to music</b>: durations quantized to bars, cuts on the drops",
             "<b>5.</b> <b>✦ Generate Moods</b>, then the clips from the AI Studio",
             "<b>6.</b> Sound Design and Upscaling as needed",
-            "<b>7.</b> Send the set to <b>Resolume</b> (slots, BPM, show mode)",
+            "<b>7.</b> Grab the set from the <b>Video library</b> (the project's videos "
+            "folder) and import it into your VJ software",
         ),
         _tip("Without a fal.ai key everything runs in demo mode (simulated generations). "
              "API keys are shared with PANDORA | Cinéma."),
@@ -293,8 +294,8 @@ def _le_conducteur() -> str:
             "<b>Visual references</b> — inspiration images analysed by the AI "
             "(reusable art direction, built-in AD chat)",
             "<b>Building reference (facade)</b> — the facade photo for mapping; isolate it "
-            "on black (built-in cutout): it becomes the mood canvas, the confinement mask "
-            "and the basis of the <b>Resolume calibration</b>",
+            "on black (built-in cutout): it becomes the mood canvas and the "
+            "confinement mask",
             "<b>Set music</b> — add your tracks: BPM, energy and drops are analysed and "
             "injected into the AI",
             "<b>Analysis & co-writing</b> — analysis + suggestions, refinable in co-writing",
@@ -328,7 +329,6 @@ def _le_sequences() -> str:
             "Drag rows to reorder, resize columns, double-click to edit",
             "Each shot has a <b>🔊 Sound</b> field (sound design prompt) → <b>➤ SFX</b> button",
             "Generated clips are <b>conformed</b> to the aligned duration (ffmpeg) — no timeline drift",
-            "<b>▱ Resolume calibration</b> (Mapping mode): generates the Advanced Output preset + the test card",
         ),
     ])
 
@@ -364,7 +364,8 @@ def _le_studio() -> str:
         ),
         _h("Video library"),
         _ul(
-            "All the project's clips: play, send to Edit / Upscaling / <b>→ Resolume</b>",
+            "All the project's clips: play, send to Edit / Upscaling — the files live "
+            "in the project's videos folder, ready for your VJ software",
         ),
     ])
 
@@ -428,7 +429,6 @@ def _le_settings() -> str:
     return "".join([
         _h("Settings", 1),
         _ul(
-            "<b>Resolume connection</b> — host (localhost) and port (8080) + connection test",
             "<b>API keys</b> — shared with PANDORA | Cinéma: fal.ai (video, SFX, upscale), "
             "Anthropic (assistant, translation, breakdown)",
             "<b>API Help</b> — reopens the step-by-step <b>startup guide</b> "
@@ -441,7 +441,7 @@ def _le_settings() -> str:
 
 _L_BUILDERS_EN = [
     _le_welcome, _le_conducteur, _le_sequences, _le_elements,
-    _le_studio, _le_sound, _le_upscale, _le_resolume, _le_settings,
+    _le_studio, _le_sound, _le_upscale, _le_settings,
 ]
 
 

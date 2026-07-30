@@ -116,6 +116,9 @@ a = Analysis(
         "api.lipsync", "api.shot_lipsync", "core.dialogue",   # lip-sync Studio IA + DaVinci
         "api.face_swap",     # « Changer un visage / le décor » → Pixverse Swap
         "ui.file_dialogs",   # dialogues fichiers non-natifs + vignettes d'images
+        # Arborescence + chaîne d'images (2026-07-30) : importés uniquement
+        # dans des corps de fonction — déclarés par prudence (doctrine du spec).
+        "core.project_layout", "core.live_chain",
         # ── Studio Images (onglet « Image IA ») ───────────────────────────────
         # Modules importés à plat au runtime via sys.path.insert dans
         # ui/tab_image.py → invisibles à l'analyse statique de PyInstaller.

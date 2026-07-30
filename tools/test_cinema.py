@@ -140,11 +140,12 @@ def edition_cinema_only():
                 "api.resolume_push", "ui.tab_t2v_live"):
         assert f'"{mod}"' not in exc, f".spec ne doit PLUS exclure {mod} (v1.3.0)"
     assert "BUNDLE(" in spec and "PANDORA.app" in spec, "cible macOS présente"
-    # Version bumpée — build 2.0.2 (Cinéma + Live, Windows + macOS). Chantier de
-    # parité Live : découpage enfin persisté, contrat « DÉCOUPAGE PANDORA 2 » porté
-    # au Live, onglet Découpage éditable, crash de fermeture corrigé (2026-07-26).
+    # Version bumpée — build 2.1.0 (2026-07-30) : chaîne d'images mapping,
+    # nouvelle arborescence de projet (project_layout, replis legacy), masque
+    # façade réparé, définition exacte des moods, config atomique, retrait
+    # provisoire de l'intégration Resolume.
     from core.version import VERSION
-    assert VERSION.split("-")[0] == "2.0.2", f"version attendue 2.0.2[-suffixe], lue {VERSION}"
+    assert VERSION.split("-")[0] == "2.1.0", f"version attendue 2.1.0[-suffixe], lue {VERSION}"
     # ── UN SEUL numéro de version dans tout le produit ────────────────────────
     # Chaque endroit qui recopie le numéro à la main finit par diverger : la 2.0.0
     # est partie en build avec une charte d'utilisation estampillée 1.3.5, un .app

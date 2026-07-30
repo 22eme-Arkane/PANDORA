@@ -1,7 +1,10 @@
 """
 ui/page_live_settings.py — Paramètres PANDORA | Live.
 
-Connexion Resolume par défaut + clés API utilisées par le module Live.
+Clés API utilisées par le module Live. (La section CONNEXION RESOLUME est
+retirée de l'affichage pour le moment — demande Matthieu 2026-07-30 — mais
+tout son code, ses clés de config et son worker de test sont conservés :
+repasser _RESOLUME_UI à True la réaffiche telle quelle.)
 """
 
 from PyQt6.QtWidgets import (
@@ -12,6 +15,9 @@ from PyQt6.QtCore import Qt, pyqtSignal
 from core.config import load_config
 from core.i18n import translate
 from ui.styles import CP
+
+# Intégration Resolume retirée de l'UI « pour le moment » (2026-07-30).
+_RESOLUME_UI = False
 
 
 def _section_title(text: str) -> QLabel:
@@ -95,7 +101,7 @@ class PageLiveSettings(QScrollArea):
         lay.addWidget(title)
         lay.addSpacing(4)
 
-        sub = QLabel("Configuration de la connexion Resolume et des clés API.")
+        sub = QLabel("Configuration des clés API du module Live.")
         sub.setStyleSheet(
             f"color:{CP['text_dim']};font-size:12px;"
             f"background:transparent;border:none;"
@@ -683,9 +689,14 @@ class PageLiveSettings(QScrollArea):
         lay.addWidget(api_card)
         lay.addSpacing(28)
 
-        # ── Section Resolume ────────────────────────────────────────────────────
-        lay.addWidget(_section_title("CONNEXION RESOLUME"))
-        lay.addSpacing(14)
+        # ── Section Resolume — RETIRÉE de l'affichage pour le moment (demande
+        # Matthieu 2026-07-30). La carte est toujours CONSTRUITE (widgets,
+        # host/port, worker de test) mais n'est plus ajoutée au layout ni
+        # titrée : les clés resolume_host/port restent lues/écrites, et tout
+        # se réactive en repassant _RESOLUME_UI à True. ─────────────────────
+        if _RESOLUME_UI:
+            lay.addWidget(_section_title("CONNEXION RESOLUME"))
+            lay.addSpacing(14)
 
         resolume_card = QFrame()
         resolume_card.setStyleSheet(
@@ -761,8 +772,14 @@ class PageLiveSettings(QScrollArea):
         test_row.addWidget(self._test_lbl, 1)
         rc.addLayout(test_row)
 
-        lay.addWidget(resolume_card)
-        lay.addSpacing(28)
+        if _RESOLUME_UI:
+            lay.addWidget(resolume_card)
+            lay.addSpacing(28)
+        else:
+            # Carte construite mais jamais affichée : parent posé pour que Qt
+            # la détruise avec la page (pas de fenêtre orpheline).
+            resolume_card.setParent(self)
+            resolume_card.setVisible(False)
 
         lay.addStretch()
 

@@ -2245,25 +2245,17 @@ class PageScenario(QWidget):
                 f"font-weight:700;padding:0 10px;}}"
                 f"QPushButton:hover{{background:rgba(78,205,196,0.10);}}")
             self._btn_isolate.clicked.connect(self._on_isolate_building)
-            self._btn_calage = QPushButton("▱  " + translate("Calage Resolume"))
-            self._btn_calage.setFixedHeight(28)
-            self._btn_calage.setCursor(Qt.CursorShape.PointingHandCursor)
-            self._btn_calage.setToolTip(translate(
-                "Extrait automatiquement le polygone de la façade et génère :\n"
-                "• un preset Advanced Output (menu Presets de Resolume)\n"
-                "• une mire de calage PNG spécifique au bâtiment.\n"
-                "Le calage manuel des points devient une simple vérification."))
-            self._btn_calage.setStyleSheet(
-                f"QPushButton{{background:transparent;color:{CP['accent2']};"
-                f"border:1px solid {CP['accent2_dim']};border-radius:6px;font-size:10px;"
-                f"font-weight:700;padding:0 10px;}}"
-                f"QPushButton:hover{{background:rgba(124,107,255,0.10);}}")
-            self._btn_calage.clicked.connect(self._on_generate_calage)
+            # « ▱ Calage Resolume » RETIRÉ pour le moment (demande Matthieu
+            # 2026-07-30) — _on_generate_calage et core/live_mapping
+            # (polygone, preset Advanced Output, mire) restent intacts pour
+            # un retour futur :
+            #   self._btn_calage = QPushButton("▱  " + translate("Calage Resolume"))
+            #   … setToolTip / setStyleSheet …
+            #   self._btn_calage.clicked.connect(self._on_generate_calage)
+            #   self._bld_row.addWidget(self._btn_calage)
             _bl.addWidget(btn_chg, 1)
             _bl.addWidget(self._btn_isolate, 1)
             self._bld_row.addWidget(btns)
-            # Pleine largeur (était tronqué en rangée de 3)
-            self._bld_row.addWidget(self._btn_calage)
         else:
             btn_add = QPushButton("▦  " + translate("Choisir la façade"))
             btn_add.setFixedHeight(60)
