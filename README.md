@@ -18,13 +18,61 @@
 
 ## Download
 
-**[⬇ Download PANDORA v2.0.2 for Windows](https://github.com/22eme-Arkane/PANDORA/releases/download/v2.0.2/PANDORA_Setup_2.0.2.exe)**
+**[⬇ Download PANDORA v2.1.0 for Windows](https://github.com/22eme-Arkane/PANDORA/releases/download/v2.1.0/PANDORA_Setup_2.1.0.exe)**
 
-**[⬇ Download PANDORA v2.0.2 for macOS](https://github.com/22eme-Arkane/PANDORA/releases/download/v2.0.2/PANDORA_2.0.2.dmg)** *(Apple Silicon — see [Installation](#installation) for the first launch)*
+**[⬇ Download PANDORA v2.1.0 for macOS](https://github.com/22eme-Arkane/PANDORA/releases/download/v2.1.0/PANDORA_2.1.0.dmg)** *(Apple Silicon — see [Installation](#installation) for the first launch)*
 
 All versions: [Releases](../../releases)
 
 🌐 **Official 22eme ARKANE website: [22eme-arkane.com](https://22eme-arkane.com)**
+
+---
+
+## What's new in v2.1.0
+
+**Live mapping stops drifting — and every image lands at the exact size you asked for.**
+
+This release attacks the #1 complaint on video-mapping work: after a few shots, the
+generated clips slowly zoomed, cropped and wandered off the building. The cause was
+structural — each shot restarted from a frame extracted from the previous *video*,
+so every generation's small drift was re-injected and compounded, like a photocopy
+of a photocopy.
+
+- **New "Image chain" mode (default) in Sequence Mapping.** Shots are generated in
+  image-to-video with a start and an end image: each shot *ends* on its own Mood and
+  the next shot *starts* from that exact same file. Identity, not extraction — the
+  snowball is gone by construction. Shot 1 gets two thumbnails (start state + end
+  state); every following shot chains automatically. The previous frames-based mode
+  is still there behind the **Mode** toggle next to ACTION.
+- **Start/end thumbnails right in the storyboard.** Click either one to generate or
+  regenerate that state alone, without running the whole batch. You can also
+  **import your own image** as a Mood — in Live *and* in Cinema.
+- **Images at the exact resolution you chose.** Every ratio except 1:1 was silently
+  rendered at SDXL bucket sizes (a 16:9 request came back 1368×768). All image
+  generation now delivers the exact definition selected, 1920×1080 by default, and
+  batch moods are conformed pixel-exact before being saved.
+- **Facade masking repaired.** The confinement mask silently did nothing on RGBA
+  facades, and re-applying it ate one pixel per pass. Fixed, cache rebuilt, and the
+  option is now clearly toggleable (off by default) in RENDU & AUDIO.
+- **The Mood prompt is composed by AI in the engine's grammar** — batch and single
+  generations alike, in both editions, with a persistent cache so a composition is
+  never paid twice. The prompt and preview panes are now collapsible; unfold the
+  prompt alone and it takes the full height.
+- **New project folder layout.** New projects are created with a clean, numbered
+  English structure (`01_writing`, `02_elements`, `03_production`, `04_live`,
+  hidden `.cache`). **Existing projects are untouched** — they keep their historical
+  folders forever and everything keeps working, no migration, nothing to do.
+- **Config file writes are now atomic** — a crash mid-save can no longer corrupt
+  your API keys; a corrupted file is quarantined and rebuilt instead of taking the
+  app down.
+- **Resolume integration is set aside for now** — the tab and buttons are removed
+  from the Live edition; generated sets live in the project's videos folder, ready
+  to import into any VJ software. The engine remains in the code and may return.
+- Plus: the batch "Generate Moods" respects the two-plate anchoring (a shot *leaves*
+  the previous frame and *arrives* on its Mood), reference images went back to being
+  true inspirations, cancellable Mood generation, neon-green highlight for the
+  active Mood, readable errors throughout, and both user guides (Cinema + Live)
+  brought up to date in French and English.
 
 ---
 
@@ -214,7 +262,7 @@ per-engine mood prompts, same fixes.
 
 ### Windows
 
-1. Download `PANDORA_Setup_2.0.2.exe` from the link above and run it
+1. Download `PANDORA_Setup_2.1.0.exe` from the link above and run it
 2. If Windows shows *"Windows protected your PC"* (SmartScreen), click
    **More info** then **Run anyway** — the app is not code-signed yet
    (certificate in progress), this is the Windows equivalent of the macOS
@@ -225,7 +273,7 @@ per-engine mood prompts, same fixes.
 
 ### macOS
 
-1. Download `PANDORA_2.0.2.dmg` from the link above
+1. Download `PANDORA_2.1.0.dmg` from the link above
 2. Open the DMG and drag **PANDORA** into **Applications** (as usual)
 3. **First launch** — macOS will claim that *"PANDORA is damaged and can't be
    opened"*. **This is normal, the app is not damaged** — macOS blocks apps
