@@ -12,8 +12,10 @@ import json
 
 
 def _path() -> str:
-    from core.context import get_data_root
-    return os.path.join(get_data_root(), "live_building_ref.json")
+    # Arborescence 2026-07-30 : cible 04_live/facade/live_building_ref.json,
+    # repli legacy à la racine de data/ (core/project_layout.FACADE_FILES).
+    from core import project_layout as _pl
+    return _pl.file("live_building_ref.json")
 
 
 def get_building_ref() -> str:
@@ -29,7 +31,8 @@ def get_building_ref() -> str:
 def set_building_ref(path: str) -> None:
     try:
         p = _path()
-        os.makedirs(os.path.dirname(p), exist_ok=True)
+        from core import project_layout as _pl
+        _pl.ensure_parent(p)
         with open(p, "w", encoding="utf-8") as f:
             json.dump({"path": path or ""}, f)
     except Exception:
@@ -41,8 +44,9 @@ def clear_building_ref() -> None:
 
 
 def _desc_cache_path() -> str:
-    from core.context import get_data_root
-    return os.path.join(get_data_root(), "facade_desc.json")
+    # Cible 04_live/facade/facade_desc.json, repli legacy racine de data/.
+    from core import project_layout as _pl
+    return _pl.file("facade_desc.json")
 
 
 def describe_facade(image_path: str = "", *, cache: bool = True) -> str:

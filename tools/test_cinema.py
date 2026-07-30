@@ -3058,13 +3058,20 @@ def sauver_ouvrir_elements():
     except ValueError:
         pass
     assert eio.file_suffix("vehicles") == "vehicules"
-    # Dossier de sauvegarde DÉDIÉ par type (pas la racine du projet).
-    for _k, _folder in (("casting", "Casting"), ("decors", "Décors"),
-                        ("accessories", "Accessoires"), ("hmc", "HMC"),
-                        ("vehicles", "Véhicules")):
+    # Dossier de sauvegarde DÉDIÉ par type — arborescence 2026-07-30 : les
+    # saves vivent DANS leur catégorie (02_elements/<cat>/saves) pour un
+    # projet neuf ; les anciens dossiers capitalisés FR (Casting, Décors…)
+    # restent servis en repli legacy par core/project_layout (testé dans
+    # arborescence_source_de_verite_unique).
+    for _k, _cat in (("casting", "characters"), ("decors", "sets"),
+                     ("accessories", "props"), ("hmc", "hmc"),
+                     ("vehicles", "vehicles")):
         d = eio.saves_dir(_k)
-        assert d.rstrip("/\\").endswith(_folder) and _o.path.isdir(d), \
-            f"dossier dédié « {_folder} » absent"
+        assert (d.rstrip("/\\").endswith("saves")
+                and _o.sep + _cat + _o.sep in d
+                and "02_elements" in d
+                and _o.path.isdir(d)), \
+            f"dossier de saves « 02_elements/{_cat}/saves » absent : {d}"
 
     # 2) Helper UI commun + branchement des 5 pages (inspection source : robuste).
     from ui.element_io_buttons import make_save_open_buttons  # noqa: F401
@@ -6519,6 +6526,72 @@ def frames_apres_generation_jamais_silencieuses():
         "l'échec des frames post-génération doit s'afficher (Cinéma)"
     assert "save_shot" in code and "set_error" in code, \
         "le bloc frames doit rester protégé ET signaler ses échecs"
+
+
+@test
+def arborescence_source_de_verite_unique():
+    """core/project_layout : résolution cible/legacy façon « Studio IA ».
+
+    Chantier arborescence (spec Matthieu 2026-07-30) : un projet NEUF va vers
+    la cible 01_writing…04_live, un projet ANCIEN continue sur ses dossiers
+    historiques tant qu'il n'est pas migré, un projet MIGRÉ prend la cible
+    même si un legacy traîne. Jamais de makedirs dans la résolution (le
+    piège documenté du renommage Studio IA).
+    """
+    from core import project_layout as PL
+
+    td = tempfile.mkdtemp(prefix="t_layout_")
+
+    # ① Projet neuf → cible.
+    assert PL.dir("castings", td).endswith(
+        os.path.join("02_elements", "characters"))
+    assert not os.path.isdir(os.path.join(td, "02_elements")), \
+        "la résolution ne doit RIEN créer"
+
+    # ② Ancien projet : legacy présent → legacy (rien ne casse avant migration).
+    os.makedirs(os.path.join(td, "castings"))
+    assert PL.dir("castings", td) == os.path.join(td, "castings")
+
+    # ③ Migré : cible présente → prioritaire même si le legacy traîne.
+    os.makedirs(os.path.join(td, "02_elements", "characters"))
+    assert PL.dir("castings", td).endswith("characters")
+
+    # ④ Deux legacy ordonnés (videos : « Studio IA » avant « Seedance »).
+    td2 = tempfile.mkdtemp(prefix="t_layout2_")
+    os.makedirs(os.path.join(td2, "Seedance"))
+    assert PL.dir("videos", td2) == os.path.join(td2, "Seedance")
+    os.makedirs(os.path.join(td2, "Studio IA"))
+    assert PL.dir("videos", td2) == os.path.join(td2, "Studio IA")
+
+    # ⑤ Fichiers façade : legacy à la racine tant que la cible n'existe pas.
+    p = os.path.join(td2, "live_building_ref.json")
+    with open(p, "w", encoding="utf-8") as f:
+        f.write("{}")
+    assert PL.file("live_building_ref.json", td2) == p
+    cible = os.path.join(td2, "04_live", "facade", "live_building_ref.json")
+    PL.ensure_parent(cible)
+    with open(cible, "w", encoding="utf-8") as f:
+        f.write("{}")
+    assert PL.file("live_building_ref.json", td2) == cible
+
+    # ⑥ Marqueur de migration + hygiène de la table.
+    assert not PL.is_migrated(td2)
+    os.makedirs(os.path.join(td2, "01_writing"))
+    assert PL.is_migrated(td2)
+    cibles = [t for t, _ in PL.LAYOUT.values()]
+    assert len(set(cibles)) == len(cibles), "cibles dupliquées dans LAYOUT"
+    for t in cibles:
+        assert t.split("/")[0] in ("01_writing", "02_elements",
+                                   "03_production", "04_live", ".cache"), t
+
+    # ⑦ Les CINQ modules d'éléments passent par le layout (code réel).
+    import inspect as _i
+    for _mod_name in ("casting", "decors", "accessories", "hmc", "vehicles"):
+        _m = __import__(f"core.{_mod_name}", fromlist=["_"])
+        _src = "\n".join(l.split("#", 1)[0]
+                         for l in _i.getsource(_m).splitlines())
+        assert "project_layout" in _src, \
+            f"core/{_mod_name}.py ne passe pas par project_layout"
 
 
 if __name__ == "__main__":

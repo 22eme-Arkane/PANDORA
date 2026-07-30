@@ -17,7 +17,10 @@ import core.context as ctx
 
 
 def _path() -> str:
-    d = os.path.join(ctx.get_data_root(), "live_conducteur")
+    # Arborescence 2026-07-30 : cible 04_live/conducteur, repli legacy
+    # « live_conducteur » (core/project_layout).
+    from core import project_layout as _pl
+    d = _pl.dir("live_conducteur")
     os.makedirs(d, exist_ok=True)
     return os.path.join(d, "index.json")
 

@@ -35,7 +35,11 @@ def subdir(kind: str) -> str:
 
 
 def _base_dir(kind: str) -> str:
-    d = os.path.join(ctx.get_data_root(), subdir(kind))
+    # Arborescence 2026-07-30 : cible 04_live/characters|props|vehicles,
+    # repli legacy live_castings|live_accessories|live_vehicles — la clé
+    # LOGIQUE (subdir passé au worker Nano Banana) ne change pas.
+    from core import project_layout as _pl
+    d = _pl.dir(subdir(kind))
     os.makedirs(d, exist_ok=True)
     return d
 
@@ -48,7 +52,10 @@ def images_dir(kind: str) -> str:
 
 def images_dir_for_subdir(sub: str) -> str:
     """Utilisé par api/nano_banana._project_images_dir pour les subdirs Live."""
-    d = os.path.join(ctx.get_data_root(), sub, "images")
+    from core import project_layout as _pl
+    base = _pl.dir(sub) if sub in _pl.LAYOUT \
+        else os.path.join(ctx.get_data_root(), sub)
+    d = os.path.join(base, "images")
     os.makedirs(d, exist_ok=True)
     return d
 

@@ -27,7 +27,10 @@ _KINDS = ("live", "mapping")
 
 
 def _base_dir(kind: str) -> str:
-    d = os.path.join(ctx.get_data_root(), f"live_seq_{kind}")
+    # Arborescence 2026-07-30 : cible 04_live/sequences_<kind>, repli legacy
+    # live_seq_<kind> (core/project_layout — la clé logique reste live_seq_*).
+    from core import project_layout as _pl
+    d = _pl.dir(f"live_seq_{kind}")
     os.makedirs(d, exist_ok=True)
     return d
 

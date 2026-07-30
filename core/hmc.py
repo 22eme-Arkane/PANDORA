@@ -7,8 +7,10 @@ from core.paths import APP_ROOT as _ROOT
 
 
 def _hmc_dir() -> str:
-    from core.context import get_data_root
-    return os.path.join(get_data_root(), "hmc")
+    # Arborescence 2026-07-30 : cible 02_elements/hmc, repli legacy « hmc »
+    # à la racine pour les projets non migrés (core/project_layout).
+    from core import project_layout as _pl
+    return _pl.dir("hmc")
 
 TYPES = ["Habit", "Maquillage", "Coiffure"]
 

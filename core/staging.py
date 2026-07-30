@@ -123,8 +123,10 @@ def axis_from_placement(rec: dict) -> str:
 
 
 def _dir() -> str:
-    from core.context import get_data_root
-    d = os.path.join(get_data_root(), "staging")
+    # Arborescence 2026-07-30 : cible 01_writing/staging, repli legacy
+    # « staging » pour les projets non migrés (core/project_layout).
+    from core import project_layout as _pl
+    d = _pl.dir("staging")
     os.makedirs(d, exist_ok=True)
     return d
 
@@ -242,10 +244,10 @@ def save(shot_id: str, data: dict) -> None:
 
 def staging_saves_dir(mode: str = "staging") -> str:
     """Dossier par défaut des sauvegardes de mise en scène / plan de feu (pour la
-    boîte de dialogue Windows)."""
-    from core.context import get_data_root
-    sub = "Mise en scène" if mode == "staging" else "Plan de feu"
-    d = os.path.join(get_data_root(), sub)
+    boîte de dialogue Windows). Cible 01_writing/staging/(lighting_)saves,
+    repli legacy « Mise en scène » / « Plan de feu » (arborescence 2026-07-30)."""
+    from core import project_layout as _pl
+    d = _pl.dir("staging_saves" if mode == "staging" else "lighting_saves")
     os.makedirs(d, exist_ok=True)
     return d
 

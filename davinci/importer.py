@@ -10,15 +10,18 @@ _IMAGE_EXTS = {".png", ".jpg", ".jpeg", ".webp", ".bmp", ".tiff", ".tif"}
 _VIDEO_EXTS = {".mp4", ".mov", ".mxf", ".avi", ".mkv"}
 _AUDIO_EXTS = {".wav", ".mp3", ".aac", ".m4a", ".ogg"}
 
-# (data subfolder, DaVinci bin name)
+# (clé core/project_layout, sous-dossier optionnel, nom du bin DaVinci).
+# Arborescence 2026-07-30 : les dossiers sont résolus par le layout (cible
+# 01_writing/02_elements, repli legacy) — l'ancien littéral figé sautait
+# SILENCIEUSEMENT tout dossier renommé (isdir → continue).
 _PROJECT_BINS = [
-    ("castings/images",   "Castings"),
-    ("decors/images",     "Décors"),
-    ("accessories/images","Accessoires"),
-    ("hmc/images",        "HMC"),
-    ("vehicles/images",   "Véhicules"),
-    ("scenarios",         "Scénario"),
-    ("storyboard",        "Storyboard"),
+    ("castings",   "images", "Castings"),
+    ("decors",     "images", "Décors"),
+    ("accessories","images", "Accessoires"),
+    ("hmc",        "images", "HMC"),
+    ("vehicles",   "images", "Véhicules"),
+    ("screenplay", "",       "Scénario"),
+    ("storyboard", "",       "Storyboard"),
 ]
 
 
@@ -37,8 +40,11 @@ def sync_project_to_davinci() -> tuple[int, int]:
 
     imported = 0
     errors = 0
-    for subfolder, bin_name in _PROJECT_BINS:
-        folder = os.path.join(data_root, subfolder)
+    from core import project_layout as _pl
+    for key, extra, bin_name in _PROJECT_BINS:
+        folder = _pl.dir(key, data_root)
+        if extra:
+            folder = os.path.join(folder, extra)
         if not os.path.isdir(folder):
             continue
         for fname in os.listdir(folder):

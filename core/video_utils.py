@@ -471,8 +471,9 @@ def _video_stream_info(path: str) -> dict:
 
 def _transcode_cache_dir() -> str:
     try:
-        from core.context import get_data_root
-        d = os.path.join(get_data_root(), ".transcode")
+        # Arborescence 2026-07-30 : .cache/transcode, repli legacy .transcode.
+        from core import project_layout as _pl
+        d = _pl.dir("cache_transcode")
     except Exception:
         import tempfile
         d = os.path.join(tempfile.gettempdir(), "pandora_transcode")

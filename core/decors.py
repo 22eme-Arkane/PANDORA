@@ -7,8 +7,10 @@ from core.paths import APP_ROOT as _ROOT
 
 
 def _dec_dir() -> str:
-    from core.context import get_data_root
-    return os.path.join(get_data_root(), "decors")
+    # Arborescence 2026-07-30 : cible 02_elements/sets, repli legacy
+    # « decors » pour les projets non migrés (core/project_layout).
+    from core import project_layout as _pl
+    return _pl.dir("decors")
 
 CATEGORIES = [
     "Intérieur",

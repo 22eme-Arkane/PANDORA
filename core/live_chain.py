@@ -43,8 +43,10 @@ _DEFAULT = MODE_CHAIN
 
 
 def _path() -> str:
-    from core.context import get_data_root
-    return os.path.join(get_data_root(), "live_gen_mode.json")
+    # Arborescence 2026-07-30 : cible 04_live/live_gen_mode.json, repli
+    # legacy à la racine de data/ (core/project_layout.FACADE_FILES).
+    from core import project_layout as _pl
+    return _pl.file("live_gen_mode.json")
 
 
 def get_gen_mode() -> str:

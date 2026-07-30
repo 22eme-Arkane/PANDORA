@@ -266,8 +266,11 @@ def generate_full_calage(ref_path: str, name: str, data_root: str) -> dict:
     safe_name = (name or "facade").replace("|", "-").strip() or "facade"
     xml = build_advanced_output_preset(safe_name, points, guide_image=ref_path)
     preset_path = save_advanced_output_preset(xml, f"PANDORA {safe_name}")
+    from core import project_layout as _pl
+    _map_dir = _pl.dir("cache_mapping", data_root)
+    os.makedirs(_map_dir, exist_ok=True)
     mire_path = build_calibration_card(
-        ref_path, points, os.path.join(data_root, "mapping", "mire_calage.png"))
+        ref_path, points, os.path.join(_map_dir, "mire_calage.png"))
     return {"points": points, "preset_path": preset_path,
             "mire_path": mire_path, "preset_name": f"PANDORA {safe_name}"}
 
@@ -337,7 +340,9 @@ def ensure_facade_mask(ref_path: str, data_root: str) -> str:
     # resservir — changer le jeton invalide aussi les masked_kf dérivés.
     key = hashlib.md5(
         f"{ref_path}|{os.path.getmtime(ref_path)}|v2".encode()).hexdigest()[:16]
-    out = os.path.join(data_root, "mapping", f"facade_mask_{key}.png")
+    from core import project_layout as _pl
+    out = os.path.join(_pl.dir("cache_mapping", data_root),
+                       f"facade_mask_{key}.png")
     if os.path.isfile(out):
         return out
     try:
@@ -496,7 +501,9 @@ def masked_keyframe(kf_path: str, ref_path: str, data_root: str) -> str:
     import hashlib
     key = hashlib.md5(
         f"{kf_path}|{os.path.getmtime(kf_path)}|{mask}".encode()).hexdigest()[:16]
-    out = os.path.join(data_root, "mapping", "masked_kf", f"{key}.png")
+    from core import project_layout as _pl
+    out = os.path.join(_pl.dir("cache_mapping", data_root),
+                       "masked_kf", f"{key}.png")
     if os.path.isfile(out):
         return out
     try:

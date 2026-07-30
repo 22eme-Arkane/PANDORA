@@ -45,8 +45,10 @@ def mark_storyboard_synced(scenario_id: str) -> dict | None:
 
 
 def _sce_dir() -> str:
-    from core.context import get_data_root
-    return os.path.join(get_data_root(), "scenarios")
+    # Arborescence 2026-07-30 : cible 01_writing/screenplay, repli legacy
+    # « scenarios » pour les projets non migrés (core/project_layout).
+    from core import project_layout as _pl
+    return _pl.dir("screenplay")
 
 
 def _ensure():
@@ -155,8 +157,11 @@ def delete_scenario(scenario_id: str):
 # Le scénario est déjà dans le dossier du projet → pas de sous-dossier projet.
 
 def _saves_dir() -> str:
-    from core.context import get_data_root
-    d = os.path.join(get_data_root(), "Scénario")
+    # Sauvegardes NOMMÉES : cible 01_writing/screenplay/saves, repli legacy
+    # « Scénario » (décision Matthieu 2026-07-30 : saves/ DANS la catégorie,
+    # pas de fusion avec la base de travail — deux rôles distincts).
+    from core import project_layout as _pl
+    d = _pl.dir("screenplay_saves")
     os.makedirs(d, exist_ok=True)
     return d
 

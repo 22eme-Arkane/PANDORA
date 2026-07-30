@@ -5130,8 +5130,7 @@ class TabT2V(QScrollArea):
             if shot_id:
                 try:
                     from core.video_utils import extract_first_frame, extract_last_frame
-                    from core.context import get_data_root
-                    frames_dir = os.path.join(get_data_root(), "storyboard", "frames")
+                    frames_dir = sb_api.frames_dir()
                     os.makedirs(frames_dir, exist_ok=True)
 
                     # First frame → storyboard thumbnail (image_path), always updated

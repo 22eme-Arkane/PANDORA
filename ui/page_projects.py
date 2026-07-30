@@ -30,7 +30,10 @@ def _project_thumb(path: str) -> str:
     DIRECTE des JSON du projet — sans toucher au contexte global."""
     if not path:
         return ""
-    sb_dir = os.path.join(path, "data", "storyboard")
+    # Arborescence 2026-07-30 : résolu par le layout pour CE projet (cible
+    # 01_writing/storyboard, repli legacy) — lecture directe, contexte intact.
+    from core import project_layout as _pl
+    sb_dir = _pl.dir("storyboard", os.path.join(path, "data"))
     try:
         with open(os.path.join(sb_dir, "index.json"), encoding="utf-8") as fh:
             data = json.load(fh)

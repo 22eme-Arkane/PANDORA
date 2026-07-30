@@ -112,8 +112,11 @@ def first_project_mood(data: dict) -> str:
 
     data_root = os.path.join(root, "data")
     namespaces = ("storyboard", "live_seq_live", "live_seq_mapping")
+    from core import project_layout as _pl
     for namespace in namespaces:
-        apercus_root = os.path.join(data_root, namespace, "apercus")
+        # Arborescence 2026-07-30 : dossier résolu par le layout pour CE
+        # projet (cible 01_writing / 04_live, repli legacy).
+        apercus_root = os.path.join(_pl.dir(namespace, data_root), "apercus")
         if not os.path.isdir(apercus_root):
             continue
         for current, dirs, files in os.walk(apercus_root):

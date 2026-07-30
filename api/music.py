@@ -127,10 +127,11 @@ def engine_spec(key: str) -> dict:
 
 
 def _music_output_dir() -> str:
-    """Dossier de sortie des musiques générées (<projet>/data/music)."""
+    """Dossier de sortie des musiques générées : 03_production/music, repli
+    legacy « music » (arborescence 2026-07-30, core/project_layout)."""
     try:
-        from core.context import get_data_root
-        d = os.path.join(get_data_root(), "music")
+        from core import project_layout as _pl
+        d = _pl.dir("music")
     except Exception:
         from core.pandora_dirs import get_bin_dir
         d = get_bin_dir("music")

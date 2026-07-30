@@ -122,28 +122,22 @@ def get_output_dir(cfg: dict | None = None) -> str:
     from core.context import get_project_path
     project_path = get_project_path()
     if project_path:
-        new    = os.path.join(project_path, "data", "Studio IA")
-        legacy = os.path.join(project_path, "data", "Seedance")
-        # Projet créé avant le renommage Seedance → Studio IA : on conserve son
-        # dossier « Seedance » existant pour ne pas perdre ses vidéos.
-        if not os.path.isdir(new) and os.path.isdir(legacy):
-            return legacy
-        os.makedirs(new, exist_ok=True)
-        return new
+        # Arborescence 2026-07-30 : cible 03_production/videos, replis legacy
+        # « Studio IA » puis « Seedance » (core/project_layout — la table
+        # généralise le mécanisme de repli né ici avec Seedance→Studio IA).
+        from core import project_layout as _pl
+        d = _pl.dir("videos", os.path.join(project_path, "data"))
+        os.makedirs(d, exist_ok=True)
+        return d
     from core.pandora_dirs import get_bin_dir
     return get_bin_dir("seedance", cfg)
 
 
 def project_video_dir() -> str:
-    """<projet>/data/Studio IA/ (ou « Seedance » legacy si présent) — dossier des
-    vidéos générées du projet courant, pour la Vidéothèque."""
-    from core.context import get_data_root
-    base   = get_data_root()
-    new    = os.path.join(base, "Studio IA")
-    legacy = os.path.join(base, "Seedance")
-    if not os.path.isdir(new) and os.path.isdir(legacy):
-        return legacy
-    return new
+    """Dossier des vidéos générées du projet courant, pour la Vidéothèque :
+    03_production/videos (replis legacy « Studio IA » puis « Seedance »)."""
+    from core import project_layout as _pl
+    return _pl.dir("videos")
 
 
 def _migrate(cfg: dict) -> dict:

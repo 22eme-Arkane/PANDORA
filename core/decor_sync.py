@@ -15,8 +15,10 @@ import shutil
 
 
 def _dir() -> str:
-    from core.context import get_data_root
-    d = os.path.join(get_data_root(), "decor_sync")
+    # Arborescence 2026-07-30 : .cache/decor_sync (dérivés régénérables),
+    # repli legacy « decor_sync » (core/project_layout).
+    from core import project_layout as _pl
+    d = _pl.dir("cache_decor_sync")
     os.makedirs(d, exist_ok=True)
     return d
 

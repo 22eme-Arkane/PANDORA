@@ -113,8 +113,8 @@ def _shot_frame_path(shot: dict, kind: str = "last") -> str:
     if p and os.path.isfile(p):
         return p
     try:
-        from core.context import get_data_root
-        c = os.path.join(get_data_root(), "storyboard", "frames",
+        import core.storyboard as _sbf
+        c = os.path.join(_sbf.frames_dir(),
                          f"{shot.get('id', '')}_{kind}_frame.png")
         return c if os.path.isfile(c) else ""
     except Exception:
@@ -1437,8 +1437,7 @@ class StoryboardSelector(QWidget):
             self._shots_meta[shot_id] = shot
         # Suppression des fichiers de frames (convention) — la seule vraie source.
         try:
-            from core.context import get_data_root
-            _fd = os.path.join(get_data_root(), "storyboard", "frames")
+            _fd = sb_api.frames_dir()
             for _k in ("last", "first"):
                 _p = os.path.join(_fd, f"{shot_id}_{_k}_frame.png")
                 if os.path.isfile(_p):
@@ -5432,8 +5431,7 @@ class TabT2V(QScrollArea):
             if shot_id:
                 try:
                     from core.video_utils import extract_first_frame, extract_last_frame
-                    from core.context import get_data_root
-                    frames_dir = os.path.join(get_data_root(), "storyboard", "frames")
+                    frames_dir = sb_api.frames_dir()
                     os.makedirs(frames_dir, exist_ok=True)
 
                     # First frame → storyboard thumbnail (image_path), always updated

@@ -61,10 +61,13 @@ _ENDPOINTS = {
 
 
 def _upscale_output_dir() -> str:
-    """Dossier de sortie des vidéos upscalées."""
+    """Dossier de sortie des vidéos upscalées : 03_production/upscaled, repli
+    legacy « upscaled » (arborescence 2026-07-30). ⚠ Le NOM DE FICHIER reste
+    strictement celui de la source (contrat Relink DaVinci) — seul le dossier
+    est résolu par le layout."""
     try:
-        from core.context import get_data_root
-        d = os.path.join(get_data_root(), "upscaled")
+        from core import project_layout as _pl
+        d = _pl.dir("upscaled")
     except Exception:
         from core.pandora_dirs import get_bin_dir
         d = get_bin_dir("upscaled")

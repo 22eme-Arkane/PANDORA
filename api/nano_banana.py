@@ -1192,7 +1192,8 @@ class GenerateStoryboardSketchesWorker(QThread):
             self.finished.emit()
             return
 
-        img_dir = os.path.join(get_data_root(), "storyboard", "images")
+        from core import project_layout as _pl
+        img_dir = os.path.join(_pl.dir("storyboard"), "images")
         os.makedirs(img_dir, exist_ok=True)
 
         cfg = load_config()

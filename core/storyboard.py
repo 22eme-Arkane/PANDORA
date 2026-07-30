@@ -40,8 +40,24 @@ def get_namespace() -> str:
     return _NAMESPACE
 
 def _sb_dir() -> str:
+    # Arborescence 2026-07-30 : le namespace reste la CLÉ LOGIQUE (storyboard /
+    # live_seq_live / live_seq_mapping — ~80 littéraux intouchés), seul le
+    # dossier disque change via core/project_layout (01_writing/storyboard,
+    # 04_live/sequences_*), avec repli legacy pour les projets non migrés.
+    from core import project_layout as _pl
+    if _NAMESPACE in _pl.LAYOUT:
+        return _pl.dir(_NAMESPACE)
     from core.context import get_data_root
     return os.path.join(get_data_root(), _NAMESPACE)
+
+
+def frames_dir() -> str:
+    """Dossier des frames de raccord — chemin FIXE hors namespace : les frames
+    des séquences LIVE y vivent AUSSI (littéral historique « storyboard/frames »,
+    cartographie 2026-07-30 — références croisées depuis live_seq_mapping).
+    Résolu par le layout : 01_writing/storyboard/frames, repli legacy."""
+    from core import project_layout as _pl
+    return os.path.join(_pl.dir("storyboard"), "frames")
 
 DEFAULT_VERSION_ID = "default"
 
@@ -620,8 +636,12 @@ def save_apercus(shot_id: str, paths: list, active_idx: int) -> None:
 # Déjà dans le dossier du projet → pas de sous-dossier projet.
 
 def _saves_dir() -> str:
-    from core.context import get_data_root
-    d = os.path.join(get_data_root(), "Storyboard")
+    # Sauvegardes NOMMÉES : cible 01_writing/storyboard/saves, repli legacy
+    # « Storyboard » — qui, sur NTFS insensible à la casse, est PHYSIQUEMENT
+    # le dossier de données storyboard/ : la migration sépare les .json de
+    # sauvegarde vers saves/ (constat cartographie 2026-07-30).
+    from core import project_layout as _pl
+    d = _pl.dir("storyboard_saves")
     os.makedirs(d, exist_ok=True)
     return d
 

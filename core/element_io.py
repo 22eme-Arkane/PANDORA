@@ -44,22 +44,24 @@ def file_suffix(kind: str) -> str:
     }.get(kind, kind or "elements")
 
 
-# Dossier de sauvegarde DÉDIÉ par type (créé à la demande) — comme le storyboard
-# enregistre dans <data_root>/Storyboard/. Évite d'atterrir dans la racine du projet.
-_KIND_FOLDER = {
-    "casting":     "Casting",
-    "decors":      "Décors",
-    "accessories": "Accessoires",
-    "hmc":         "HMC",
-    "vehicles":    "Véhicules",
+# Dossier de sauvegarde DÉDIÉ par type (créé à la demande). Arborescence
+# 2026-07-30 : les saves vivent DANS leur catégorie (02_elements/<cat>/saves),
+# repli legacy sur les anciens dossiers capitalisés FR à la racine de data/
+# (Casting, Décors, Accessoires, HMC, Véhicules) — table core/project_layout.
+_KIND_TO_LAYOUT = {
+    "casting":     "castings_saves",
+    "decors":      "decors_saves",
+    "accessories": "accessories_saves",
+    "hmc":         "hmc_saves",
+    "vehicles":    "vehicles_saves",
 }
 
 
 def saves_dir(kind: str) -> str:
-    """Dossier d'enregistrement/ouverture par défaut pour ce type, sous le projet
-    courant (<data_root>/<Type>/). Créé s'il n'existe pas."""
-    from core.context import get_data_root
-    d = os.path.join(get_data_root(), _KIND_FOLDER.get(kind, "Éléments"))
+    """Dossier d'enregistrement/ouverture par défaut pour ce type, sous le
+    projet courant. Créé s'il n'existe pas."""
+    from core import project_layout as _pl
+    d = _pl.dir(_KIND_TO_LAYOUT.get(kind, "elements_saves"))
     os.makedirs(d, exist_ok=True)
     return d
 

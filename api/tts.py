@@ -74,11 +74,11 @@ KOKORO_VOICES_RECOMMENDED = [
 
 
 def _audio_output_dir() -> str:
-    """Dossier de sortie des fichiers audio."""
+    """Dossier de sortie des fichiers audio : 03_production/dubbing/audio,
+    repli legacy « doublage/audio » (arborescence 2026-07-30)."""
     try:
-        from core.context import get_data_root
-        root = get_data_root()
-        d = os.path.join(root, "doublage", "audio")
+        from core import project_layout as _pl
+        d = os.path.join(_pl.dir("dubbing"), "audio")
     except Exception:
         d = get_bin_dir("doublage_audio")
     os.makedirs(d, exist_ok=True)
@@ -1095,10 +1095,12 @@ class SoniloVideoWorker(QThread):
 
 
 def _sfx_output_dir() -> str:
-    """Dossier de sortie du sound design Live (vidéos sonorisées)."""
+    """Dossier de sortie du sound design (vidéos sonorisées) :
+    03_production/sound_design, replis legacy « live_sound_design » puis
+    « sound_design » (arborescence 2026-07-30)."""
     try:
-        from core.context import get_data_root
-        d = os.path.join(get_data_root(), "live_sound_design")
+        from core import project_layout as _pl
+        d = _pl.dir("sound_design")
     except Exception:
         d = get_bin_dir("live_sound_design")
     os.makedirs(d, exist_ok=True)

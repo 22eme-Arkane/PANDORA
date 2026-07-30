@@ -40,20 +40,24 @@ def _migrate_legacy():
 
 
 def _init_project_dirs(folder: str):
-    """Crée les sous-dossiers data/ dans le dossier du projet."""
-    for sub in (
-        "storyboard",
-        "storyboard/frames",
-        "decors/images",
-        "castings/images",
-        "accessories/images",
-        "vehicles/images",
-        "scenarios",
-        "hmc/images",
-        "Studio IA",
-        "doublage",
+    """Crée les sous-dossiers data/ dans le dossier du projet — la structure
+    CIBLE (arborescence 2026-07-30, core/project_layout) : un projet neuf naît
+    directement en 01_writing…04_live, sans aucun dossier legacy."""
+    from core import project_layout as _pl
+    for key, extra in (
+        ("storyboard",  "frames"),
+        ("screenplay",  ""),
+        ("castings",    "images"),
+        ("decors",      "images"),
+        ("accessories", "images"),
+        ("hmc",         "images"),
+        ("vehicles",    "images"),
+        ("videos",      ""),
+        ("dubbing",     ""),
     ):
-        os.makedirs(os.path.join(folder, "data", sub), exist_ok=True)
+        base = os.path.join(folder, "data", _pl.rel(key))
+        os.makedirs(os.path.join(base, extra) if extra else base,
+                    exist_ok=True)
 
 
 def _save_registry(paths: list[str]):

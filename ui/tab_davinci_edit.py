@@ -1604,8 +1604,10 @@ class TabDavinciEdit(QScrollArea):
 
     def _draw_dir(self) -> str:
         try:
-            from core.context import get_data_root
-            d = os.path.join(get_data_root(), "draw_to_video")
+            # Arborescence 2026-07-30 : 03_production/draw_to_video, repli
+            # legacy « draw_to_video » (core/project_layout).
+            from core import project_layout as _pl
+            d = _pl.dir("draw_to_video")
         except Exception:
             from core.pandora_dirs import get_bin_dir
             d = get_bin_dir("draw_to_video")

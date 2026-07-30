@@ -128,8 +128,10 @@ class _MidThumbWorker(QThread):
     @staticmethod
     def cache_path(path: str) -> str:
         import hashlib
-        from core.context import get_data_root
-        d = os.path.join(get_data_root(), ".thumbs_mid")
+        # Arborescence 2026-07-30 : cache sous .cache/thumbs_mid, repli
+        # legacy .thumbs_mid (core/project_layout, miroir de tab_upscale).
+        from core import project_layout as _pl
+        d = _pl.dir("cache_thumbs")
         os.makedirs(d, exist_ok=True)
         try:
             mtime = int(os.path.getmtime(path))

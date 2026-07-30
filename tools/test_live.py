@@ -1266,9 +1266,9 @@ def conducteur_derniere_frame_croix():
     # RÉCUPÉRATION PAR CONVENTION (auto-réparation) : un plan au CHAMP vide mais dont
     # le fichier {id}_last_frame.png existe sur disque → la vignette + la croix
     # apparaissent quand même (cas réel : champ perdu par une édition/re-découpage).
-    from core.context import get_data_root
     from ui.tab_t2v_live import _shot_frame_path
-    _fdir = os.path.join(get_data_root(), "storyboard", "frames")
+    # Arborescence 2026-07-30 : le chemin des frames passe par le layout.
+    _fdir = sb.frames_dir()
     os.makedirs(_fdir, exist_ok=True)
     s3 = sb.save_shot({"number": 3, "scene_title": "P3"}, sb.DEFAULT_VERSION_ID)  # champ vide
     _conv = os.path.join(_fdir, f"{s3['id']}_last_frame.png")
@@ -7200,7 +7200,11 @@ def moods_generes_dans_leur_propre_sequence():
             f"variation {_i} : le lot tourne sous le namespace « {_ns} » au lieu de "
             "celui de sa séquence — la façade n'est plus résolue et les moods sont "
             "écrits ailleurs")
-        assert "live_seq_mapping" in _dir.replace("\\", "/"), (
+        # Arborescence 2026-07-30 : cible 04_live/sequences_mapping, legacy
+        # live_seq_mapping — les deux prouvent que le mood est écrit sous SA
+        # séquence (et pas sous celle d'un autre onglet).
+        _d = _dir.replace("\\", "/")
+        assert ("sequences_mapping" in _d or "live_seq_mapping" in _d), (
             f"variation {_i} : mood écrit hors de sa séquence", _dir)
 
     # Le worker unitaire porte la même garde.
