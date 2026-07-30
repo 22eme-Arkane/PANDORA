@@ -1213,6 +1213,38 @@ def run_mood(shot: dict, prompt: str, output_dir: str, api_key: str, progress_cb
         resolution=_res, aspect_ratio=_ar)
 
 
+def run_start_image(shot: dict, film_style: str, api_key: str, progress_cb,
+                    building_ref: str = "", options: dict | None = None) -> str:
+    """Image de DÉPART du premier plan (chaîne d'images, spec 2026-07-30) : la
+    plaque d'ÉTAT 0. Compose l'état 0 (`instant="start"`), génère via le MÊME
+    dispatcher que les moods, range le chemin en SIDECAR (core/live_chain) —
+    jamais dans la galerie, dont l'image active reste l'ARRIVÉE.
+
+    Fonction PARTAGÉE par le lot ET la fenêtre Mood (constat Matthieu
+    2026-07-30 : « Générer une variation » du plan 1 ne produisait que la
+    fin) : deux constructions parallèles divergeraient, comme côté vidéo.
+    Renvoie le chemin ("" si échec) ; ne lève jamais pour un simple échec de
+    rangement."""
+    import core.storyboard as sb_api
+    opts = dict(options or {})
+    _eng = (opts.get("engine") or "").strip()
+    prompt, _ok, _why, _ = compose_mood_prompt(
+        shot, film_style, _eng, building_ref, instant="start")
+    if _why:
+        try:
+            progress_cb(f"⚠ {_why[:70]}")
+        except Exception:
+            pass
+    out_dir = sb_api.get_apercu_dir(shot["id"])
+    path = run_mood(shot, prompt, out_dir, api_key, progress_cb,
+                    building_ref, options=opts)
+    if path and os.path.isfile(path):
+        from core import live_chain as _lc
+        _lc.set_start_image(shot.get("id", ""), path)
+        return path
+    return ""
+
+
 # ── Worker unitaire ───────────────────────────────────────────────────────────
 
 class MoodGenerationWorker(QThread):
@@ -1438,23 +1470,15 @@ class MoodBatchWorker(QThread):
 
                     # Image de DÉPART du plan 1 (chaîne d'images) : composée sur
                     # l'ÉTAT 0, rangée en SIDECAR — jamais dans la galerie, dont
-                    # l'image ACTIVE reste la plaque d'ARRIVÉE.
+                    # l'image ACTIVE reste la plaque d'ARRIVÉE. Même chemin que
+                    # la fenêtre Mood (fonction partagée).
                     if _chain and shot.get("id") == _first_id \
                             and not self._cancelled:
-                        p_start, _ok_s, _why_s, _ = compose_mood_prompt(
-                            shot, self._film_style, _eng, self._building_ref,
-                            instant="start")
-                        if _why_s:
-                            self.shot_progress.emit(i + 1, total,
-                                                    f"⚠ {_why_s[:70]}")
                         self.shot_progress.emit(
                             i + 1, total, "Image de départ du plan 1 (état 0)…")
-                        sp = run_mood(shot, p_start, out_dir, self._api_key,
-                                      _prog, self._building_ref,
-                                      options=self._options)
-                        if sp and os.path.isfile(sp):
-                            from core import live_chain as _lc2
-                            _lc2.set_start_image(shot["id"], sp)
+                        run_start_image(shot, self._film_style, self._api_key,
+                                        _prog, self._building_ref,
+                                        options=self._options)
 
                     self.shot_done.emit(shot["id"], last)
 

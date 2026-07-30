@@ -918,53 +918,108 @@ class _ShotRow(QFrame):
         mood_l = QVBoxLayout(mood_w)
         mood_l.setContentsMargins(3, 4, 3, 4)
         mood_l.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        img_lbl = QLabel()
-        img_lbl.setFixedSize(86, 58)
-        img_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        # Load active aperçu image
+
+        # Chaîne d'images (mapping) : DEUX vignettes — DÉPART | ARRIVÉE —
+        # demande Matthieu 2026-07-30 (contrôle plan par plan sans le lot).
+        from core import live_chain as _lc
+        try:
+            _chain_cell = (sb_api.get_namespace() == "live_seq_mapping"
+                           and _lc.get_gen_mode() == _lc.MODE_CHAIN)
+        except Exception:
+            _chain_cell = False
+
+        # Image ACTIVE du plan (l'arrivée).
         apercu_data = sb_api.load_apercus(data["id"])
         apercu_paths = [p for p in apercu_data.get("paths", []) if os.path.isfile(p)]
         active_idx = min(apercu_data.get("active_idx", 0), max(0, len(apercu_paths) - 1))
         active_path = apercu_paths[active_idx] if apercu_paths else ""
-        if active_path:
-            pix = QPixmap(active_path).scaled(
-                86, 58,
-                Qt.AspectRatioMode.KeepAspectRatioByExpanding,
-                Qt.TransformationMode.SmoothTransformation,
-            )
-            pix = pix.copy((pix.width()-86)//2, (pix.height()-58)//2, 86, 58)
-            img_lbl.setPixmap(pix)
-            img_lbl.setStyleSheet(f"background:{CP['bg3']};border:none;")
-        else:
-            img_lbl.setStyleSheet(
-                f"background:{CP['bg3']};border:1px solid {CP['border_bright']};"
-                f"color:{CP['accent_dim']};font-size:7px;padding:4px;"
-            )
-            img_lbl.setWordWrap(True)
-            img_lbl.setText("Cliquer\npour Mood")
-        img_lbl.setCursor(Qt.CursorShape.PointingHandCursor)
-        img_lbl.setToolTip("Voir / générer le Mood de ce plan")
-        self._apercu_lbl = img_lbl
 
-        def _open_apercu(img_label=img_lbl, shot_data=data, row_self=self):
+        def _fill_mini(lbl, path, empty_txt):
+            w, h = lbl.width(), lbl.height()
+            if path and os.path.isfile(path):
+                pix = QPixmap(path).scaled(
+                    w, h,
+                    Qt.AspectRatioMode.KeepAspectRatioByExpanding,
+                    Qt.TransformationMode.SmoothTransformation)
+                pix = pix.copy((pix.width() - w) // 2,
+                               (pix.height() - h) // 2, w, h)
+                lbl.setPixmap(pix)
+                lbl.setStyleSheet(f"background:{CP['bg3']};border:none;")
+            else:
+                lbl.setStyleSheet(
+                    f"background:{CP['bg3']};border:1px solid {CP['border_bright']};"
+                    f"color:{CP['accent_dim']};font-size:7px;padding:2px;")
+                lbl.setWordWrap(True)
+                lbl.setText(empty_txt)
+
+        def _open_apercu_for(shot_data, row_self=self):
             from ui.dialog_apercu import MoodDialog
             dlg = MoodDialog(row_self.window(), shot_data)
             dlg.apercu_changed.connect(row_self._on_apercu_changed)
             dlg.exec()
-            # Rafraîchit la cellule à la fermeture — une variation peut avoir été
-            # générée ou activée sans passer par le signal apercu_changed.
+            # Rafraîchit la cellule à la fermeture — une variation peut avoir
+            # été générée ou activée sans passer par le signal apercu_changed.
             # La ligne a pu être détruite PENDANT la fenêtre (boucle imbriquée
-            # qui traite un deleteLater en attente) : dans ce cas le tableau a
-            # déjà été reconstruit avec la bonne vignette, il n'y a rien à faire.
+            # qui traite un deleteLater en attente) : le tableau a alors déjà
+            # été reconstruit avec la bonne vignette, rien à faire.
             if not _alive(row_self):
                 return
-            apercu = sb_api.load_apercus(shot_data["id"])
+            apercu = sb_api.load_apercus(row_self._data["id"])
             paths  = [p for p in apercu.get("paths", []) if os.path.isfile(p)]
             idx    = min(apercu.get("active_idx", 0), max(0, len(paths) - 1))
-            row_self._on_apercu_changed(shot_data["id"], paths[idx] if paths else "")
-        _clickable(img_lbl, _open_apercu)
+            row_self._on_apercu_changed(row_self._data["id"],
+                                        paths[idx] if paths else "")
+            row_self._refresh_chain_thumb()
 
-        mood_l.addWidget(img_lbl)
+        if _chain_cell:
+            _prev = _lc.previous_shot(data)
+            _row_thumbs = QHBoxLayout()
+            _row_thumbs.setContentsMargins(0, 0, 0, 0)
+            _row_thumbs.setSpacing(2)
+            start_lbl = QLabel()
+            start_lbl.setFixedSize(42, 58)
+            start_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            _fill_mini(start_lbl, _lc.chain_start_for(data),
+                       "État 0\nà générer" if _prev is None else "—")
+            start_lbl.setCursor(Qt.CursorShape.PointingHandCursor)
+            if _prev is None:
+                start_lbl.setToolTip(translate(
+                    "Départ — état 0 du plan 1\nCliquer : fenêtre Mood du plan "
+                    "(✦ Générer l'état 0 ou ⬆ Importer)"))
+                _clickable(start_lbl,
+                           lambda shot_data=data: _open_apercu_for(shot_data))
+            else:
+                start_lbl.setToolTip(translate(
+                    "Départ — arrivée du plan précédent\nCliquer : fenêtre "
+                    "Mood du plan précédent"))
+                _clickable(start_lbl,
+                           lambda shot_data=_prev: _open_apercu_for(shot_data))
+
+            img_lbl = QLabel()
+            img_lbl.setFixedSize(42, 58)
+            img_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            _fill_mini(img_lbl, active_path, "Cliquer\npour Mood")
+            img_lbl.setCursor(Qt.CursorShape.PointingHandCursor)
+            img_lbl.setToolTip(translate(
+                "Arrivée — Mood du plan\nCliquer : voir / générer"))
+            _clickable(img_lbl, lambda shot_data=data: _open_apercu_for(shot_data))
+
+            _row_thumbs.addWidget(start_lbl)
+            _row_thumbs.addWidget(img_lbl)
+            mood_l.addLayout(_row_thumbs)
+            self._mood_start_lbl = start_lbl
+            self._mood_end_lbl = img_lbl
+            self._apercu_lbl = img_lbl
+        else:
+            img_lbl = QLabel()
+            img_lbl.setFixedSize(86, 58)
+            img_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            _fill_mini(img_lbl, active_path, "Cliquer\npour Mood")
+            img_lbl.setCursor(Qt.CursorShape.PointingHandCursor)
+            img_lbl.setToolTip("Voir / générer le Mood de ce plan")
+            self._apercu_lbl = img_lbl
+            _clickable(img_lbl, lambda shot_data=data: _open_apercu_for(shot_data))
+            mood_l.addWidget(img_lbl)
         cells[1] = mood_w
 
         # ── Référence (col 22) — images d'INSPIRATION injectées en génération ──
@@ -1580,18 +1635,41 @@ class _ShotRow(QFrame):
         # avoir détruites entre-temps (voir _alive).
         if not _alive(self) or not _alive(getattr(self, "_apercu_lbl", None)):
             return
+        # Dimensions de LA vignette (86×58 en cellule simple, 42×58 en cellule
+        # chaîne DÉPART|ARRIVÉE) — un pixmap plus large déborderait.
+        _w = self._apercu_lbl.width() or 86
+        _h = self._apercu_lbl.height() or 58
         if image_path and os.path.isfile(image_path):
             pix = QPixmap(image_path).scaled(
-                86, 58,
+                _w, _h,
                 Qt.AspectRatioMode.KeepAspectRatioByExpanding,
                 Qt.TransformationMode.SmoothTransformation,
             )
-            pix = pix.copy((pix.width()-86)//2, (pix.height()-58)//2, 86, 58)
+            pix = pix.copy((pix.width() - _w)//2, (pix.height() - _h)//2, _w, _h)
             self._apercu_lbl.setPixmap(pix)
             self._apercu_lbl.setStyleSheet(f"background:{CP['bg3']};border:none;")
         else:
             self._apercu_lbl.clear()
             self._apercu_lbl.setText("Cliquer\npour Mood")
+
+    def _refresh_chain_thumb(self):
+        """Recale la vignette DÉPART après fermeture d'une fenêtre Mood — le
+        mood actif du plan précédent (ou l'image d'état 0) a pu changer."""
+        lbl = getattr(self, "_mood_start_lbl", None)
+        if lbl is None or not _alive(self) or not _alive(lbl):
+            return
+        from core import live_chain as _lc
+        path = _lc.chain_start_for(self._data)
+        if not (path and os.path.isfile(path)):
+            return
+        _w, _h = lbl.width() or 42, lbl.height() or 58
+        pix = QPixmap(path).scaled(
+            _w, _h,
+            Qt.AspectRatioMode.KeepAspectRatioByExpanding,
+            Qt.TransformationMode.SmoothTransformation)
+        pix = pix.copy((pix.width() - _w)//2, (pix.height() - _h)//2, _w, _h)
+        lbl.setPixmap(pix)
+        lbl.setStyleSheet(f"background:{CP['bg3']};border:none;")
 
 
 # ── Conteneur de plans avec drop-zone ────────────────────────────────────────
@@ -2791,6 +2869,35 @@ class PageStoryboard(QWidget):
             red_entry=self._btn_clear_shots)
         lay.insertWidget(0, self._btn_actions)
 
+        # ── Mode de génération MAPPING, à droite d'Action (demande Matthieu
+        # 2026-07-30 : « comme les boutons Guide et IA ») : bascule segmentée
+        # à deux pastilles, actif = accent plein. UN champ persisté par projet
+        # (core/live_chain.live_gen_mode), partagé avec le RENDU & AUDIO du
+        # Studio IA — jamais d'état dupliqué. Visible en séquence MAPPING.
+        def _genmode_btn(text, tip):
+            b = QPushButton(translate(text))
+            b.setFixedHeight(26)
+            b.setCursor(Qt.CursorShape.PointingHandCursor)
+            b.setToolTip(translate(tip))
+            return b
+        self._btn_genmode_frames = _genmode_btn(
+            "Frame vidéo",
+            "Raccord par frame vidéo (historique) : le plan part de la "
+            "dernière image du clip précédent")
+        self._btn_genmode_chain = _genmode_btn(
+            "Chaîne d'images",
+            "Chaîne d'images (I2V) : le plan part du Mood du plan précédent — "
+            "aucune frame vidéo réinjectée, la dérive ne s'accumule plus. "
+            "Le plan 1 part de son image de départ (état 0), générée avec "
+            "les Moods.")
+        self._btn_genmode_frames.clicked.connect(
+            lambda: self._on_genmode_clicked("frames"))
+        self._btn_genmode_chain.clicked.connect(
+            lambda: self._on_genmode_clicked("chain"))
+        lay.insertWidget(1, self._btn_genmode_frames)
+        lay.insertWidget(2, self._btn_genmode_chain)
+        self._apply_genmode_style()
+
         # Statut au centre, progression puis stats/durée à droite.
         lay.addWidget(self._ai_lbl, 1)
         lay.addWidget(self._mood_progress)
@@ -3036,6 +3143,55 @@ class PageStoryboard(QWidget):
         self._all_shots = sb_api.list_shots(self._active_version_id)
         self._refresh_snap_combo()
         self._render()
+        # Le mode de génération est PAR PROJET et la visibilité dépend de la
+        # séquence (mapping seulement) — recaler les pastilles à chaque venue.
+        self._apply_genmode_style()
+
+    # ── Mode de génération mapping — pastilles « Frame vidéo | Chaîne
+    # d'images » à droite du bouton Action (demande Matthieu 2026-07-30) ─────
+
+    def _on_genmode_clicked(self, which: str):
+        """Choix utilisateur → écrit le champ UNIQUE partagé (core/live_chain),
+        celui que lisent aussi le RENDU & AUDIO du Studio IA et l'envoi."""
+        from core import live_chain as _lc
+        try:
+            _lc.set_gen_mode(_lc.MODE_CHAIN if which == "chain"
+                             else _lc.MODE_FRAMES)
+        except Exception:
+            pass
+        self._apply_genmode_style()
+
+    def _apply_genmode_style(self):
+        """Recale les pastilles sur le champ persisté + leur visibilité
+        (séquence MAPPING seulement). Style = bascule Guide/IA du panneau
+        assistant : segment actif en accent plein, l'autre en contour."""
+        from core import live_chain as _lc
+        try:
+            _is_map = sb_api.get_namespace() == "live_seq_mapping"
+        except Exception:
+            _is_map = False
+        _chain = False
+        try:
+            _chain = _lc.get_gen_mode() == _lc.MODE_CHAIN
+        except Exception:
+            pass
+
+        def _seg(active):
+            if active:
+                return (f"QPushButton{{background:{CP['accent']};color:#07080f;"
+                        f"border:1px solid {CP['accent']};border-radius:6px;"
+                        f"font-size:10px;font-weight:800;padding:0 12px;}}")
+            return (f"QPushButton{{background:transparent;color:{CP['text_dim']};"
+                    f"border:1px solid {CP['border']};border-radius:6px;"
+                    f"font-size:10px;font-weight:700;padding:0 12px;}}"
+                    f"QPushButton:hover{{color:{CP['accent']};"
+                    f"border-color:{CP['accent_dim']};}}")
+
+        for b, on in ((getattr(self, "_btn_genmode_frames", None), not _chain),
+                      (getattr(self, "_btn_genmode_chain", None), _chain)):
+            if b is not None:
+                b.setVisible(_is_map)
+                b.setStyleSheet(_seg(on))
 
     def _on_col_width_changed(self, col_idx: int, new_w: int):
         total = sum(_col_widths) + len(_col_widths) - 1

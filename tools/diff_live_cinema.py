@@ -47,6 +47,10 @@ EXPECTED_ONLY_LIVE = {
         "_make_seq_btn", "_apply_seq_style", "_set_seq_mode",
         "_refresh_bref", "_on_pick_bref", "_on_clear_bref",
         "_get_mapping_keyframes",
+        # Statut du masque de façade (réparation 2026-07-30) : l'encart d'envoi
+        # mapping annonce quand le confinement ne s'appliquera pas — le Cinéma
+        # n'a ni façade ni masque.
+        "_facade_mask_status",
         # Chaîne d'images mapping (spec Matthieu 2026-07-30, core/live_chain) :
         # keyframes = moods (jamais de frame vidéo réinjectée) + sélecteur du
         # mode de génération dans RENDU & AUDIO. Le Cinéma n'a pas de mapping.
@@ -101,9 +105,9 @@ EXPECTED_ONLY_LIVE = {
         # helper commun « Appliquer »/« Tout générer » (2026-07-13). Le Cinéma écrit
         # ses plans via StoryboardGenerateDialog (pas de namespace à poser).
         "_write_decoupage_segments",
-        # Sélecteur « Génération mapping » (section Mode, spec 2026-07-30) —
-        # même champ live_gen_mode que le RENDU & AUDIO du Studio IA Live.
-        "_on_gen_mode_changed", "_refresh_gen_mode_combo",
+        # (Sélecteur « Génération mapping » : a vécu ici quelques heures le
+        #  2026-07-30, DÉPLACÉ le jour même vers la barre de la page Séquence
+        #  Mapping — entrées retirées pour ne pas masquer une régression.)
     },
     "ui/page_storyboard_live.py": {
         # _alive : garde anti « wrapped C/C++ object has been deleted » sur la
@@ -113,6 +117,13 @@ EXPECTED_ONLY_LIVE = {
         # c'est une spécificité Live.
         "_alive",
         "_visible_order", "_load_conductor_tracks", "_on_music_align",
+        # Pastilles « Frame vidéo | Chaîne d'images » à droite du bouton Action
+        # (demande Matthieu 2026-07-30, style Guide/IA) — champ live_gen_mode
+        # partagé avec le RENDU & AUDIO du Studio IA. Pas de mapping au Cinéma.
+        "_on_genmode_clicked", "_apply_genmode_style",
+        # Cellule Mood à DEUX vignettes (DÉPART | ARRIVÉE) en mode chaîne —
+        # le départ se recale après fermeture d'une fenêtre Mood.
+        "_refresh_chain_thumb",
         # P2 « fusion » : côté Cinéma la fenêtre « Garder/Séparer » vit dans le
         # dialogue dédié (StoryboardGenerateDialog) ; côté Live la génération est
         # inline dans la page → l'ask est une méthode de page (Live uniquement).

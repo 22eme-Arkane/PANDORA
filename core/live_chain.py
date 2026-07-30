@@ -3,11 +3,11 @@ core/live_chain.py — Mode de génération du MAPPING Live : frame vidéo ou ch
 
 Spec Matthieu 2026-07-30, contre la DÉRIVE D'ÉCHELLE de la façade :
 
-  · MODE_FRAMES (« r2v » dans la spec, défaut) — comportement historique : le plan N
-    part de la DERNIÈRE FRAME VIDÉO extraite du clip N-1. C'est cette frame qui
+  · MODE_FRAMES (« r2v ») — comportement historique : le plan N part de la
+    DERNIÈRE FRAME VIDÉO extraite du clip N-1. C'est cette frame qui
     transporte le rognage Seedance de plan en plan (effet boule de neige mesuré le
     2026-07-29 sur Forcalquier).
-  · MODE_CHAIN (« i2v_chain ») — chaîne d'images : le plan N part du MOOD du plan
+  · MODE_CHAIN (« i2v_chain », DÉFAUT) — chaîne d'images : le plan N part du MOOD du plan
     N-1 (une image générée, jamais passée par la vidéo) et arrive sur SON mood. La
     chaîne ne ré-ingère plus aucune frame produite par le moteur vidéo → le rognage
     ne peut plus s'accumuler, par construction. Le plan 1 part d'une image de
@@ -35,6 +35,12 @@ MODE_CHAIN  = "i2v_chain"  # chaîne d'images : mood N-1 → mood N
 
 _MODES = (MODE_FRAMES, MODE_CHAIN)
 
+# Décision Matthieu 2026-07-30 (après la spec, qui donnait « r2v » par défaut) :
+# « par défaut on est en mode I2V dans séquence mapping » — la chaîne d'images
+# est le comportement normal du mapping, le raccord par frame vidéo devient le
+# mode de repli explicite.
+_DEFAULT = MODE_CHAIN
+
 
 def _path() -> str:
     from core.context import get_data_root
@@ -46,9 +52,9 @@ def get_gen_mode() -> str:
     try:
         with open(_path(), encoding="utf-8") as f:
             m = (json.load(f).get("mode") or "").strip()
-        return m if m in _MODES else MODE_FRAMES
+        return m if m in _MODES else _DEFAULT
     except Exception:
-        return MODE_FRAMES
+        return _DEFAULT
 
 
 def set_gen_mode(mode: str) -> None:
@@ -57,7 +63,7 @@ def set_gen_mode(mode: str) -> None:
         p = _path()
         os.makedirs(os.path.dirname(p), exist_ok=True)
         with open(p, "w", encoding="utf-8") as f:
-            json.dump({"mode": mode if mode in _MODES else MODE_FRAMES}, f)
+            json.dump({"mode": mode if mode in _MODES else _DEFAULT}, f)
     except Exception:
         pass
 

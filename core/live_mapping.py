@@ -33,6 +33,28 @@ _LUMA_THRESHOLD = 18      # fond noir pur (#000) vs façade éclairée
 _SCAN_MAX_SIDE  = 640     # profils calculés sur une version réduite (vitesse)
 
 
+# ── 0. Lecture d'une façade détourée ──────────────────────────────────────────
+
+def _luma_on_black(image_path: str):
+    """Image PIL en niveaux de gris, l'ALPHA composé sur NOIR au préalable.
+
+    Les façades détourées récentes sont des PNG RGBA à fond TRANSPARENT dont
+    le RGB sous la transparence est quasi blanc (BiRefNet garde la couleur
+    d'origine). `convert("L")` seul ignore l'alpha et lit ce blanc : sur le
+    projet réel, la couverture mesurée passait de 20,7 % (vrai) à 99,5 % (lu)
+    → refus de masque, confinement dégradé EN SILENCE pendant des semaines
+    (audit mesuré 2026-07-30). Composer sur noir rend un fond transparent
+    équivalent au fond noir historique ; sans canal alpha, c'est l'identité."""
+    from PIL import Image
+
+    img = Image.open(image_path)
+    if "A" in img.getbands():
+        img = img.convert("RGBA")
+        black = Image.new("RGBA", img.size, (0, 0, 0, 255))
+        img = Image.alpha_composite(black, img)
+    return img.convert("L")
+
+
 # ── 1. Extraction du polygone ─────────────────────────────────────────────────
 
 def _perp_dist(p, a, b) -> float:
@@ -66,12 +88,11 @@ def extract_facade_polygon(image_path: str, max_points: int = 12,
     """Polygone fermé (liste de (x, y) en pixels de composition, origine en
     haut à gauche — convention Resolume) épousant la silhouette de la façade.
 
-    image_path = façade isolée sur fond noir (BiRefNet) — ou toute image dont
-    le sujet est nettement plus lumineux que le fond."""
+    image_path = façade isolée sur fond noir OU transparent (BiRefNet) — ou
+    toute image dont le sujet est nettement plus lumineux que le fond."""
     import numpy as np
-    from PIL import Image
 
-    img = Image.open(image_path).convert("L")
+    img = _luma_on_black(image_path)
     w0, h0 = img.size
     scale = max(w0, h0) / float(_SCAN_MAX_SIDE)
     if scale > 1:
@@ -268,11 +289,11 @@ def facade_mask_coverage(ref_path: str) -> float:
     seulement « détoure-la d'abord », sans dire ce qui avait été mesuré ni sur
     quel critère. Or les deux causes se soignent différemment — une couverture
     quasi nulle veut dire que l'image est trop sombre pour être lue, une
-    couverture quasi totale qu'aucun fond noir n'entoure le bâtiment.
+    couverture quasi totale qu'aucun fond noir ni transparent n'entoure le
+    bâtiment.
     """
     try:
-        from PIL import Image
-        img = Image.open(ref_path).convert("L")
+        img = _luma_on_black(ref_path)
         mask = img.point(lambda v: 255 if v > _LUMA_THRESHOLD else 0)
         return mask.histogram()[255] / float(mask.size[0] * mask.size[1])
     except Exception:
@@ -281,12 +302,18 @@ def facade_mask_coverage(ref_path: str) -> float:
 
 def build_facade_mask(ref_path: str, out_path: str, feather: int = 2) -> str:
     """Masque pixel PNG (blanc = façade, noir = hors silhouette) depuis la
-    façade isolée sur fond noir. Renvoie "" si la façade n'est PAS isolée
-    (masque couvrant ~tout ou ~rien du cadre) — on ne détruit jamais une image
-    dont on ne maîtrise pas le détourage."""
-    from PIL import Image, ImageFilter
+    façade isolée sur fond noir ou transparent. Renvoie "" si la façade n'est
+    PAS isolée (masque couvrant ~tout ou ~rien du cadre) — on ne détruit
+    jamais une image dont on ne maîtrise pas le détourage.
 
-    img = Image.open(ref_path).convert("L")
+    Le masque sorti est BINAIRE (0/255). Le bord adouci laissé par le flou
+    rendait le composite NON idempotent : chaque passe multipliait le bord par
+    lui-même — érosion ~1 px et assombrissement mesurés à CHAQUE application
+    (audit 2026-07-30). Le flou ne sert plus qu'à LISSER le contour avant le
+    seuil ; masquer une image déjà masquée la laisse désormais intacte."""
+    from PIL import ImageFilter
+
+    img = _luma_on_black(ref_path)
     mask = img.point(lambda v: 255 if v > _LUMA_THRESHOLD else 0)
     hist = mask.histogram()
     cover = hist[255] / float(mask.size[0] * mask.size[1])
@@ -294,6 +321,7 @@ def build_facade_mask(ref_path: str, out_path: str, feather: int = 2) -> str:
         return ""
     if feather > 0:
         mask = mask.filter(ImageFilter.GaussianBlur(feather))
+        mask = mask.point(lambda v: 255 if v >= 128 else 0)
     os.makedirs(os.path.dirname(out_path) or ".", exist_ok=True)
     mask.save(out_path, "PNG")
     return out_path
@@ -304,8 +332,11 @@ def ensure_facade_mask(ref_path: str, data_root: str) -> str:
     if not ref_path or not os.path.isfile(ref_path):
         return ""
     import hashlib
+    # « v2 » = alpha composé sur noir + masque binaire (2026-07-30) : un cache
+    # d'avant réparation (aveugle à l'alpha, bord adouci) ne doit jamais
+    # resservir — changer le jeton invalide aussi les masked_kf dérivés.
     key = hashlib.md5(
-        f"{ref_path}|{os.path.getmtime(ref_path)}".encode()).hexdigest()[:16]
+        f"{ref_path}|{os.path.getmtime(ref_path)}|v2".encode()).hexdigest()[:16]
     out = os.path.join(data_root, "mapping", f"facade_mask_{key}.png")
     if os.path.isfile(out):
         return out
@@ -322,7 +353,11 @@ def apply_facade_mask_to_image(image_path: str, mask_path: str,
     from PIL import Image
 
     img = Image.open(image_path).convert("RGB")
-    mask = Image.open(mask_path).convert("L").resize(img.size)
+    # Re-seuiller APRÈS le resize : l'interpolation recrée des gris au bord
+    # quand les tailles diffèrent, et un bord gris rend le composite non
+    # idempotent (érosion à chaque passe — audit 2026-07-30).
+    mask = (Image.open(mask_path).convert("L").resize(img.size)
+            .point(lambda v: 255 if v >= 128 else 0))
     black = Image.new("RGB", img.size, (0, 0, 0))
     out = Image.composite(img, black, mask)
     os.makedirs(os.path.dirname(out_path) or ".", exist_ok=True)
@@ -442,7 +477,9 @@ def align_and_mask_image(image_path: str, mask_path: str, out_path: str,
         sy = img.size[1] / float(mask.size[1])
         img = ImageChops.offset(img, int(round(-dx * sx)), int(round(-dy * sy)))
     black = Image.new("RGB", img.size, (0, 0, 0))
-    out = Image.composite(img, black, mask.resize(img.size))
+    # Même re-seuil que apply_facade_mask_to_image : pas de gris de resize.
+    out = Image.composite(img, black, mask.resize(img.size)
+                          .point(lambda v: 255 if v >= 128 else 0))
     os.makedirs(os.path.dirname(out_path) or ".", exist_ok=True)
     out.save(out_path, "PNG")
     return out_path

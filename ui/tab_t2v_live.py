@@ -2529,6 +2529,30 @@ class TabT2V(QScrollArea):
         _lock_row.setAlignment(Qt.AlignmentFlag.AlignHCenter)
         _lock_row.addWidget(self._facade_lock_cb)
         _fs_outer.addLayout(_lock_row)
+        # Confinement des keyframes : mood masqué (noir hors silhouette) AVANT
+        # l'envoi. Historiquement TOUJOURS appliqué — mais l'audit du
+        # 2026-07-30 a montré qu'il ne faisait en réalité RIEN (façade RGBA à
+        # fond transparent refusée sans un mot) : les bons rendus récents
+        # étaient DE FAIT sans masque. Le masque réparé, on ne le rallume pas
+        # dans le dos de l'utilisateur : case DÉCOCHÉE par défaut
+        # (= comportement récent), en attendant la décision de Matthieu sur le
+        # défaut. Si elle tombe, changer AUSSI l'assertion du harnais
+        # (confinement_facade_debrayable_et_annonce).
+        self._facade_mask_cb = QCheckBox(
+            "▦  Confiner les keyframes au masque de façade (noir hors silhouette)")
+        self._facade_mask_cb.setToolTip(
+            "Avant chaque envoi Mapping : le Mood servant d'image-clé est "
+            "masqué à la silhouette du bâtiment (copie en cache, le Mood "
+            "reste intact à l'écran). Nécessite une façade isolée sur fond "
+            "noir ou transparent (BiRefNet).")
+        self._facade_mask_cb.setStyleSheet(self._facade_lock_cb.styleSheet())
+        _mask_row = QHBoxLayout()
+        _mask_row.setAlignment(Qt.AlignmentFlag.AlignHCenter)
+        _mask_row.addWidget(self._facade_mask_cb)
+        _fs_outer.addLayout(_mask_row)
+        # L'encart d'envoi annonce l'état du confinement → le tenir à jour.
+        self._facade_mask_cb.stateChanged.connect(self._refresh_prompt_preview)
+        self._facade_lock_cb.stateChanged.connect(self._refresh_prompt_preview)
 
         # ── En-tête repliable (replié par défaut : gagne de la place si inutilisé) ──
         self._film_style_frame.setVisible(False)
@@ -4267,6 +4291,41 @@ class TabT2V(QScrollArea):
                     "⚠ « Utiliser les images du Mood » est coché mais ce plan "
                     "n'a aucun Mood — génère-le d'abord"))
 
+            # ── Confinement façade : son état se LIT ici (audit 2026-07-30 :
+            # la façade RGBA à fond transparent était refusée sans un mot —
+            # masquage et verrouillage dégradaient en silence pendant des
+            # semaines). La chaîne d'images n'applique AUCUN masque, par
+            # décision — l'annonce ne concerne que le mode frames.
+            _mask_on = bool(getattr(self, "_facade_mask_cb", None)
+                            and self._facade_mask_cb.isChecked()
+                            and not _chain_on)
+            _lock_on = bool(getattr(self, "_facade_lock_cb", None)
+                            and self._facade_lock_cb.isChecked())
+            if _mask_on or _lock_on:
+                try:
+                    from core.live_building import get_building_ref as _gbr
+                    _bref_ui = _gbr()
+                except Exception:
+                    _bref_ui = ""
+                if not _bref_ui:
+                    param_lines.append(translate(
+                        "⚠ Confinement façade demandé mais aucune façade de "
+                        "bâtiment n'est choisie"))
+                else:
+                    _mpath, _cov = self._facade_mask_status()
+                    if not _mpath:
+                        _diag = (f" ({_cov * 100:.0f} % "
+                                 + translate("du cadre éclairé") + ")"
+                                 if _cov >= 0 else "")
+                        param_lines.append(translate(
+                            "⚠ Masque de façade indisponible — keyframes et "
+                            "clips partent SANS confinement : isole la façade "
+                            "sur fond noir ou transparent") + _diag)
+                    elif _mask_on:
+                        param_lines.append(translate(
+                            "▦ Confinement façade : keyframes masquées avant "
+                            "l'envoi (noir pur hors silhouette)"))
+
         # ── Le verrou géométrique, ajouté à l'envoi ────────────────────────────
         # Il n'est PAS dans l'encart : ce n'est pas du texte d'auteur mais une
         # contrainte du mode, au même titre que « aucun son » en mapping. Il doit
@@ -5080,17 +5139,22 @@ class TabT2V(QScrollArea):
             else:
                 kf_start, _ = self._get_mapping_keyframes(self._active_shot)
                 if kf_start:
-                    # Confinement façade : mood masqué (noir pur hors silhouette)
-                    # avant l'envoi. Copie en cache, le mood reste intact à
-                    # l'écran. (⚠ Audit 2026-07-30 : no-op si la façade est un
-                    # PNG à fond TRANSPARENT — build_facade_mask lit la
-                    # couverture sans l'alpha et refuse. Chantier séparé.)
-                    from core.live_mapping import masked_keyframe
-                    from core.live_building import get_building_ref
-                    from core.context import get_data_root
-                    _bref = get_building_ref()
-                    if _bref:
-                        kf_start = masked_keyframe(kf_start, _bref, get_data_root())
+                    # Confinement façade : mood masqué (noir pur hors
+                    # silhouette) avant l'envoi — copie en cache, le mood reste
+                    # intact à l'écran. DÉBRAYABLE depuis le 2026-07-30 :
+                    # l'audit a montré que le masque ne s'appliquait en fait
+                    # JAMAIS (façade RGBA refusée en silence) — réparé, il
+                    # RÉACTIVERAIT un confinement que les bons rendus récents
+                    # n'ont jamais subi. Il ne s'applique que case cochée.
+                    if (getattr(self, "_facade_mask_cb", None)
+                            and self._facade_mask_cb.isChecked()):
+                        from core.live_mapping import masked_keyframe
+                        from core.live_building import get_building_ref
+                        from core.context import get_data_root
+                        _bref = get_building_ref()
+                        if _bref:
+                            kf_start = masked_keyframe(kf_start, _bref,
+                                                       get_data_root())
                     if i2v_frame:
                         # Une frame précédente existe → elle reste le DÉPART, le
                         # Mood devient l'ARRIVÉE. Cas courant à partir du plan 2.
@@ -5593,6 +5657,34 @@ class TabT2V(QScrollArea):
 
     # ── Référence bâtiment (façade) ──────────────────────────────────────────
 
+    def _facade_mask_status(self) -> tuple:
+        """(chemin_masque, couverture) pour la façade courante — memoizé par
+        (chemin, mtime) : l'encart d'envoi se rafraîchit à chaque frappe, on
+        ne refait pas l'analyse PIL à chaque fois.
+
+        chemin_masque = "" si le masque est indisponible ; la couverture
+        (part du cadre éclairée, -1 si illisible) n'est mesurée que dans ce
+        cas — c'est la matière du diagnostic affiché. L'audit du 2026-07-30 a
+        montré des semaines de dégradation muette : ce statut existe pour que
+        l'encart puisse DIRE quand le confinement ne s'appliquera pas."""
+        try:
+            from core.live_building import get_building_ref
+            from core.context import get_data_root
+            ref = get_building_ref()
+            if not ref or not os.path.isfile(ref):
+                return "", -1.0
+            key = (ref, os.path.getmtime(ref))
+            memo = getattr(self, "_facade_mask_memo", None)
+            if memo and memo[0] == key:
+                return memo[1]
+            from core.live_mapping import ensure_facade_mask, facade_mask_coverage
+            mask = ensure_facade_mask(ref, get_data_root())
+            cov = -1.0 if mask else facade_mask_coverage(ref)
+            self._facade_mask_memo = (key, (mask, cov))
+            return mask, cov
+        except Exception:
+            return "", -1.0
+
     def _refresh_bref(self):
         while self._bref_row.count():
             it = self._bref_row.takeAt(0)
@@ -5721,13 +5813,12 @@ class TabT2V(QScrollArea):
         ne peut donc plus s'accumuler de plan en plan. Le départ du plan N EST
         le fichier d'arrivée du plan N-1 → raccord exact par identité.
 
-        AUCUN masquage ici (audit mesuré 2026-07-30) : la crainte de parasitage
-        de Matthieu est confirmée deux fois — sur les données réelles le masque
-        façade est un no-op silencieux (façade RGBA à fond transparent →
-        build_facade_mask refuse la couverture), et son composite n'est PAS
-        idempotent (bord adouci multiplicatif : érosion ~1 px par passe). Les
-        images partent telles que validées à l'écran ; le masquage des
-        keyframes est un chantier séparé, pas une pièce de la chaîne."""
+        AUCUN masquage ici — décision Matthieu (crainte de parasitage,
+        2026-07-30) : les images partent telles que validées à l'écran. Le
+        masque façade a depuis été RÉPARÉ (alpha composé sur noir + sortie
+        binaire idempotente, même jour) — ne PAS le brancher sur la chaîne
+        sans décision explicite de Matthieu ; en mode frames il est désormais
+        débrayable (case « Confiner les keyframes au masque de façade »)."""
         try:
             sb_api.set_namespace(f"live_seq_{getattr(self, '_seq_mode', 'live')}")
         except Exception:

@@ -85,6 +85,34 @@ class _MoodPromptWorker(QThread):
             self.done.emit("", False, str(exc)[:200], False)
 
 
+class _StartImageWorker(QThread):
+    """Génère l'image de DÉPART (état 0) du premier plan — chaîne d'images.
+
+    Passe par `api.apercu.run_start_image`, le MÊME chemin que le lot
+    (spec Matthieu 2026-07-30). `done` et jamais `finished` (signal natif).
+    Émet TOUJOURS : "" si échec — une branche muette gèlerait la barre.
+    """
+
+    done = pyqtSignal(str)   # chemin du sidecar ("" si échec)
+
+    def __init__(self, shot: dict, style: str, options: dict | None = None):
+        super().__init__()
+        self._shot    = shot or {}
+        self._style   = style or ""
+        self._options = dict(options or {})
+
+    def run(self):
+        try:
+            from api.apercu import run_start_image, _resolve_building_ref
+            from core.config import load_config
+            key = load_config().get("api_key", "").strip()
+            self.done.emit(run_start_image(
+                self._shot, self._style, key, lambda *_: None,
+                _resolve_building_ref(), options=self._options) or "")
+        except Exception:
+            self.done.emit("")
+
+
 class MoodDialog(QDialog):
     apercu_changed = pyqtSignal(str, str)   # shot_id, active_image_path
 
@@ -220,13 +248,24 @@ class MoodDialog(QDialog):
         root.addWidget(desc_frame)
 
         # ── Zone prompt modifiable ─────────────────────────────────────────────
+        # Sections REPLIABLES Prompt / Prévisualisation (demande Matthieu
+        # 2026-07-30) : replier l'aperçu déploie le prompt EN GRAND — il se
+        # relit sans défiler. Fenêtre PARTAGÉE → le Cinéma en profite tel quel.
+        def _fold_btn(text):
+            b = QPushButton("▼  " + translate(text))
+            b.setCheckable(True)
+            b.setChecked(True)
+            b.setCursor(Qt.CursorShape.PointingHandCursor)
+            b.setStyleSheet(
+                f"QPushButton{{color:{CP['accent']};font-size:11px;font-weight:700;"
+                f"background:transparent;border:none;text-align:left;padding:0;}}"
+                f"QPushButton:hover{{color:#6eded6;}}")
+            return b
+
         prompt_hdr = QHBoxLayout()
-        prompt_lbl = QLabel("Prompt")
-        prompt_lbl.setStyleSheet(
-            f"color:{CP['text_secondary']};font-size:11px;font-weight:600;"
-            f"background:transparent;"
-        )
-        prompt_hdr.addWidget(prompt_lbl)
+        self._tog_prompt = _fold_btn("Prompt")
+        self._tog_prompt.toggled.connect(lambda *_: self._apply_fold_state())
+        prompt_hdr.addWidget(self._tog_prompt)
 
         # Moteur de génération — CHOISI ICI, avant de générer. Le prompt ci-dessous
         # est réécrit dans la grammaire du moteur sélectionné : un brief à champs
@@ -339,6 +378,9 @@ class MoodDialog(QDialog):
         self._engine_combo.currentIndexChanged.connect(self._on_engine_changed)
 
         # ── Image principale ───────────────────────────────────────────────────
+        self._tog_preview = _fold_btn("Prévisualisation")
+        self._tog_preview.toggled.connect(lambda *_: self._apply_fold_state())
+        root.addWidget(self._tog_preview)
         self._img_lbl = QLabel()
         self._img_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
         # Minimum abaissé (760×427 → 640×360) pour compenser l'encart prompt plus
@@ -350,6 +392,61 @@ class MoodDialog(QDialog):
             f"background:{CP['bg0']};border:1px solid {CP['border']};border-radius:8px;"
         )
         root.addWidget(self._img_lbl, 1)
+
+        # ── Chaîne d'images (mapping, spec Matthieu 2026-07-30) ───────────────
+        # DEUX vignettes : DÉPART → ARRIVÉE. Plan 1 : départ = image d'état 0
+        # (générée par le lot « Générer les Moods ») ; plans N>1 : départ =
+        # image ACTIVE du plan précédent, résolue à l'ouverture — jamais une
+        # frame vidéo. L'arrivée est toujours l'image ACTIVE de CE plan (la
+        # soulignée de vert dans la galerie). Visible en Mapping + mode chaîne.
+        # Fond OPAQUE : un fond translucide laissait transparaître l'aperçu
+        # pendant le recalage du pixmap (« l'encart chaîne mord sur l'image »).
+        self._chain_row = QFrame()
+        self._chain_row.setStyleSheet(
+            f"QFrame{{background:{CP['bg2']};"
+            f"border:1px solid {CP['border']};border-radius:8px;}}")
+        _ch_lay = QHBoxLayout(self._chain_row)
+        _ch_lay.setContentsMargins(10, 6, 10, 6)
+        _ch_lay.setSpacing(12)
+        _ch_title = QLabel(translate("⛓  Chaîne"))
+        _ch_title.setStyleSheet(
+            f"color:{CP['accent']};font-size:10px;font-weight:800;"
+            f"background:transparent;border:none;")
+        _ch_lay.addWidget(_ch_title)
+
+        def _chain_cell():
+            w = QWidget()
+            w.setStyleSheet("background:transparent;border:none;")
+            v = QVBoxLayout(w)
+            v.setContentsMargins(0, 0, 0, 0)
+            v.setSpacing(2)
+            t = QLabel()
+            t.setFixedSize(106, 62)
+            t.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            t.setStyleSheet(
+                f"background:{CP['bg0']};border:1px solid {CP['border']};"
+                f"border-radius:4px;color:{CP['text_dim']};font-size:9px;")
+            c = QLabel("")
+            c.setAlignment(Qt.AlignmentFlag.AlignHCenter)
+            c.setStyleSheet(
+                f"color:{CP['text_dim']};font-size:9px;"
+                f"background:transparent;border:none;")
+            v.addWidget(t)
+            v.addWidget(c)
+            return w, t, c
+
+        _w_s, self._chain_start_thumb, self._chain_start_cap = _chain_cell()
+        _ch_arrow = QLabel("→")
+        _ch_arrow.setStyleSheet(
+            f"color:{CP['accent']};font-size:16px;font-weight:800;"
+            f"background:transparent;border:none;")
+        _w_e, self._chain_end_thumb, self._chain_end_cap = _chain_cell()
+        _ch_lay.addWidget(_w_s)
+        _ch_lay.addWidget(_ch_arrow)
+        _ch_lay.addWidget(_w_e)
+        _ch_lay.addStretch()
+        root.addWidget(self._chain_row)
+        self._chain_row.setVisible(False)
 
         # ── Bande de miniatures ────────────────────────────────────────────────
         self._thumb_scroll = QScrollArea()
@@ -416,11 +513,12 @@ class MoodDialog(QDialog):
         self._btn_inspire.clicked.connect(self._generate_from_image)
         acts.addWidget(self._btn_inspire)
         # « ▦ Rogner à la façade » RETIRÉ le 2026-07-27 sur demande de Matthieu :
-        # le bouton ne rendait pas le service attendu. Le masquage lui-même reste
-        # en place et automatique — `core.live_mapping.masked_keyframe` confine le
-        # mood à la silhouette AVANT de l'envoyer comme image-clé de mapping. Ce
-        # n'est donc pas la fonction qui disparaît, seulement son déclenchement
-        # manuel.
+        # le bouton ne rendait pas le service attendu. Le masquage du mood avant
+        # l'envoi comme image-clé de mapping (`core.live_mapping.masked_keyframe`)
+        # existe toujours, mais il est DÉBRAYABLE depuis le 2026-07-30 — case
+        # « Confiner les keyframes au masque de façade » du Studio IA Live,
+        # décochée par défaut (l'audit a montré que le masque ne s'était en fait
+        # jamais appliqué : façade RGBA refusée en silence, réparée depuis).
 
         self._btn_generate = _btn("✦  Générer une variation")
         self._btn_generate.clicked.connect(self._generate)
@@ -493,6 +591,42 @@ class MoodDialog(QDialog):
 
         # Timer pour animation de la barre (pulsation 0→80→0)
         self._pulse_timer.timeout.connect(self._pulse_step)
+
+        # État initial des sections repliables (les deux ouvertes = compact).
+        self._apply_fold_state()
+
+    def _apply_fold_state(self):
+        """Applique l'état des sections repliables Prompt / Prévisualisation.
+
+        Demande Matthieu (2026-07-30) : « lorsqu'on déroule seulement le menu
+        prompt, qu'on le voie en grand pour ne pas avoir à défiler ». Les deux
+        dépliées = comportement historique (prompt compact 132 px, aperçu en
+        vedette) ; aperçu replié → le prompt reçoit tout l'espace."""
+        if not hasattr(self, "_tog_prompt") or not hasattr(self, "_img_lbl"):
+            return
+        _p_open = self._tog_prompt.isChecked()
+        _v_open = self._tog_preview.isChecked()
+        self._tog_prompt.setText(("▼  " if _p_open else "▶  ")
+                                 + translate("Prompt"))
+        self._tog_preview.setText(("▼  " if _v_open else "▶  ")
+                                  + translate("Prévisualisation"))
+        self._prompt_edit.setVisible(_p_open)
+        self._img_lbl.setVisible(_v_open)
+        _root = self.layout()
+        if _p_open and not _v_open:
+            # Prompt seul déplié : il prend TOUTE la place laissée libre.
+            self._prompt_edit.setMinimumHeight(132)
+            self._prompt_edit.setMaximumHeight(16777215)
+            if _root is not None:
+                _root.setStretchFactor(self._prompt_edit, 1)
+        else:
+            self._prompt_edit.setMinimumHeight(132)
+            self._prompt_edit.setMaximumHeight(132)
+            if _root is not None:
+                _root.setStretchFactor(self._prompt_edit, 0)
+        # La hauteur de l'aperçu change sans resizeEvent (la fenêtre ne bouge
+        # pas) : recaler le pixmap une fois le layout posé.
+        QTimer.singleShot(0, self._rescale_preview)
 
     # ── Moteur de génération + prompt écrit pour lui ──────────────────────────
 
@@ -820,8 +954,170 @@ class MoodDialog(QDialog):
             thumb.mousePressEvent = _make_jump(i)
             self._thumb_lay.insertWidget(i, thumb)
 
-    def resizeEvent(self, event):
-        super().resizeEvent(event)
+        self._refresh_chain_row()
+
+    def _refresh_chain_row(self):
+        """Rangée CHAÎNE (mapping + mode chaîne) : DÉPART → ARRIVÉE.
+
+        Demande Matthieu 2026-07-30 : « dans le mood du premier plan en mode
+        I2V on doit avoir deux vignettes, l'une pour start et l'autre pour
+        end. Pareil pour les autres plans mais start reprend l'image end
+        active du plan précédent. » Le départ est RÉSOLU à l'affichage
+        (core/live_chain) — jamais stocké, jamais une frame vidéo."""
+        if not hasattr(self, "_chain_row"):
+            return
+        from core import live_chain as _lc
+        try:
+            show = self._is_mapping() and _lc.get_gen_mode() == _lc.MODE_CHAIN
+        except Exception:
+            show = False
+        _was = not self._chain_row.isHidden()
+        self._chain_row.setVisible(show)
+        if _was != show:
+            # La rangée qui (dis)paraît change la hauteur de l'aperçu SANS
+            # resizeEvent : recaler le pixmap une fois le layout posé.
+            QTimer.singleShot(0, self._rescale_preview)
+        if not show:
+            return
+        _premier = _lc.previous_shot(self._shot) is None
+        start = _lc.chain_start_for(self._shot)
+        end = self._paths[self._active_idx] if self._paths else ""
+
+        def _fill(lbl, path, empty_txt):
+            if path and os.path.isfile(path):
+                pix = QPixmap(path).scaled(
+                    106, 62,
+                    Qt.AspectRatioMode.KeepAspectRatioByExpanding,
+                    Qt.TransformationMode.SmoothTransformation)
+                pix = pix.copy((pix.width() - 106) // 2,
+                               (pix.height() - 62) // 2, 106, 62)
+                lbl.setPixmap(pix)
+                lbl.setText("")
+            else:
+                lbl.clear()
+                lbl.setText(translate(empty_txt))
+
+        _fill(self._chain_start_thumb, start,
+              "État 0\nà générer" if _premier
+              else "Mood du plan\nprécédent absent")
+        self._chain_start_cap.setText(
+            translate("Départ — état 0 (plan 1)") if _premier
+            else translate("Départ — arrivée du plan précédent"))
+        _fill(self._chain_end_thumb, end, "Aucun Mood\nactif")
+        self._chain_end_cap.setText(translate("Arrivée — image active"))
+
+        # La vignette DÉPART du premier plan est un point d'ACTION (demande
+        # Matthieu 2026-07-30 : générer ou importer sans passer par le lot).
+        # Pour les plans suivants, le départ appartient au plan précédent.
+        if _premier:
+            self._chain_start_thumb.setCursor(Qt.CursorShape.PointingHandCursor)
+            self._chain_start_thumb.setToolTip(translate(
+                "Image de DÉPART du plan 1 (état 0)\n"
+                "Cliquer : ✦ Générer l'état 0  ou  ⬆ Importer une image"))
+
+            def _start_menu(_e, _self=self):
+                from PyQt6.QtWidgets import QMenu
+                m = QMenu(_self)
+                m.addAction(translate("✦  Générer l'état 0"),
+                            _self._generate_start_image)
+                m.addAction(translate("⬆  Importer une image"),
+                            _self._import_start_image)
+                try:
+                    _pos = _self._chain_start_thumb.mapToGlobal(_e.pos())
+                except Exception:
+                    _pos = _self._chain_start_thumb.mapToGlobal(
+                        _self._chain_start_thumb.rect().center())
+                m.exec(_pos)
+            self._chain_start_thumb.mousePressEvent = _start_menu
+        else:
+            self._chain_start_thumb.setCursor(Qt.CursorShape.ArrowCursor)
+            self._chain_start_thumb.setToolTip(translate(
+                "Départ = arrivée du plan précédent — il se génère depuis la "
+                "fenêtre Mood du plan précédent"))
+            self._chain_start_thumb.mousePressEvent = lambda _e: None
+
+    def _generate_start_image(self):
+        """Génère l'image de DÉPART (état 0) du premier plan — même chemin que
+        le lot (`api.apercu.run_start_image`), sans passer par lui."""
+        if getattr(self, "_start_worker", None) and self._start_worker.isRunning():
+            return
+        import core.style as style_api
+        try:
+            _style = style_api.get_image_suffix() or ""
+        except Exception:
+            _style = ""
+        _opts = {"resolution": self._res_combo.resolution_key(),
+                 "aspect_ratio": self._ratio_combo.ratio(),
+                 "engine": self._current_engine()}
+        self._start_worker = _StartImageWorker(self._shot, _style, _opts)
+        self._start_worker.done.connect(self._on_start_image_done)
+        self._start_loading("Image de départ (état 0)…")
+        self._start_worker.start()
+
+    def _on_start_image_done(self, path: str):
+        self._stop_loading()
+        self._status_lbl.setText(
+            translate("Image de départ générée ✓") if path else
+            translate("Échec de l'image de départ — réessaie."))
+        self._status_lbl.show()
+        self._refresh_chain_row()
+
+    def _import_start_image(self):
+        """Importer une image comme DÉPART (état 0) — demande Matthieu
+        2026-07-30 : réutiliser une image déjà générée ou un fichier à soi.
+        Copiée dans le dossier du plan, référencée par le sidecar (jamais
+        dans la galerie)."""
+        from ui.dialog_image_library import ImageLibraryDialog
+        paths = ImageLibraryDialog.pick(self)
+        if not paths or not (paths[0] and os.path.isfile(paths[0])):
+            return
+        import shutil
+        dest = sb_api.get_apercu_dir(self._shot["id"])
+        os.makedirs(dest, exist_ok=True)
+        base, ext = os.path.splitext(os.path.basename(paths[0]))
+        dst = os.path.join(dest, f"start_import_{base}{ext}")
+        i = 1
+        while os.path.exists(dst):
+            dst = os.path.join(dest, f"start_import_{base}_{i}{ext}")
+            i += 1
+        try:
+            shutil.copy2(paths[0], dst)
+        except OSError:
+            return
+        from core import live_chain as _lc
+        _lc.set_start_image(self._shot["id"], dst)
+        self._status_lbl.setText(translate("Image de départ importée ✓"))
+        self._status_lbl.show()
+        self._refresh_chain_row()
+
+    def _maybe_chain_start(self):
+        """« Générer une variation » du PREMIER plan produit AUSSI son image de
+        DÉPART quand elle manque (constat Matthieu 2026-07-30 : seule la fin
+        sortait). Garde stricte : jamais de re-génération si elle existe —
+        pas de coût caché."""
+        try:
+            from core import live_chain as _lc
+            if not (self._is_mapping()
+                    and _lc.get_gen_mode() == _lc.MODE_CHAIN):
+                return
+            if _lc.previous_shot(self._shot) is not None:
+                return
+            if _lc.get_start_image(self._shot.get("id", "")):
+                return
+            self._generate_start_image()
+        except Exception:
+            pass
+
+    def _rescale_preview(self):
+        """Recale le pixmap de l'aperçu sur la taille COURANTE du label.
+
+        Appelé par resizeEvent, mais AUSSI quand la rangée chaîne
+        apparaît/disparaît : la fenêtre ne bouge alors pas d'un pixel (aucun
+        resizeEvent) alors que la hauteur du label change — l'image restait
+        calibrée pour l'ancienne hauteur et MORDAIT sur la rangée (constat
+        Matthieu 2026-07-30, capture à l'appui)."""
+        if getattr(self, "_img_lbl", None) is None or self._img_lbl.isHidden():
+            return   # aperçu replié : rien à recaler (refait au dépliage)
         if self._paths and 0 <= self._current_idx < len(self._paths):
             pix = QPixmap(self._paths[self._current_idx])
             if not pix.isNull():
@@ -831,6 +1127,10 @@ class MoodDialog(QDialog):
                     Qt.TransformationMode.SmoothTransformation,
                 )
                 self._img_lbl.setPixmap(scaled)
+
+    def resizeEvent(self, event):
+        super().resizeEvent(event)
+        self._rescale_preview()
 
     # ── Actions ───────────────────────────────────────────────────────────────
 
@@ -1055,6 +1355,8 @@ class MoodDialog(QDialog):
             self._current_idx = len(self._paths) - 1
             sb_api.save_apercus(self._shot["id"], self._paths, self._active_idx)
         self._refresh()
+        if path and os.path.isfile(path):
+            self._maybe_chain_start()
 
     def _on_generated_multi(self, paths: list):
         """Série de variations. On se place sur la PREMIÈRE des nouvelles : c'est
@@ -1069,6 +1371,8 @@ class MoodDialog(QDialog):
             self._current_idx = _first
             sb_api.save_apercus(self._shot["id"], self._paths, self._active_idx)
         self._refresh()
+        if _new:
+            self._maybe_chain_start()
 
     def _on_failed(self, error: str):
         self._stop_loading()

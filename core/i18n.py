@@ -2354,7 +2354,6 @@ _FR_TO_EN: dict[str, str] = {
         "generate from the facade only (strict lock: no zoom, no shift)",
     # ── Mode de génération mapping : chaîne d'images (spec 2026-07-30) ──────
     "Génération mapping":               "Mapping generation",
-    "⛓  Génération mapping":            "⛓  Mapping generation",
     "Raccord par frame vidéo":          "Video-frame chaining",
     "Chaîne d'images (I2V)":            "Image chain (I2V)",
     "Frame vidéo → le plan part de la dernière image du clip précédent · "
@@ -2363,12 +2362,57 @@ _FR_TO_EN: dict[str, str] = {
         "Video frame → each shot starts from the previous clip's last frame · "
         "Image chain → it starts from the previous shot's Mood (no video "
         "frame is re-ingested: drift can no longer accumulate)",
-    "Chaîne d'images : chaque plan part du Mood du plan précédent — "
-    "jamais d'une frame vidéo. L'image de départ du plan 1 (état 0) "
-    "est générée avec les Moods.":
-        "Image chain: each shot starts from the previous shot's Mood — "
-        "never from a video frame. Shot 1's start image (state 0) is "
-        "generated along with the Moods.",
+    # Pastilles de la page Séquence Mapping (à droite du bouton Action).
+    "Frame vidéo":                      "Video frame",
+    "Chaîne d'images":                  "Image chain",
+    "Raccord par frame vidéo (historique) : le plan part de la "
+    "dernière image du clip précédent":
+        "Video-frame chaining (historic): the shot starts from the "
+        "previous clip's last frame",
+    "Chaîne d'images (I2V) : le plan part du Mood du plan précédent — "
+    "aucune frame vidéo réinjectée, la dérive ne s'accumule plus. "
+    "Le plan 1 part de son image de départ (état 0), générée avec "
+    "les Moods.":
+        "Image chain (I2V): the shot starts from the previous shot's Mood — "
+        "no video frame is re-ingested, drift can no longer accumulate. "
+        "Shot 1 starts from its start image (state 0), generated along "
+        "with the Moods.",
+    # Sections repliables de la fenêtre Mood (prompt en grand sans défiler).
+    "Prévisualisation":                 "Preview",
+    # Rangée chaîne de la fenêtre Mood (deux vignettes DÉPART → ARRIVÉE).
+    "⛓  Chaîne":                        "⛓  Chain",
+    "Départ — état 0 (plan 1)":         "Start — state 0 (shot 1)",
+    "Départ — arrivée du plan précédent": "Start — previous shot's end",
+    "Arrivée — image active":           "End — active image",
+    "État 0\nà générer":                "State 0\nto generate",
+    "Mood du plan\nprécédent absent":   "Previous shot's\nMood missing",
+    "Aucun Mood\nactif":                "No active\nMood",
+    # Génération / import du DÉPART (état 0) sans passer par le lot.
+    "✦  Générer l'état 0":              "✦  Generate state 0",
+    "Image de DÉPART du plan 1 (état 0)\n"
+    "Cliquer : ✦ Générer l'état 0  ou  ⬆ Importer une image":
+        "Shot 1 START image (state 0)\n"
+        "Click: ✦ Generate state 0  or  ⬆ Import an image",
+    "Départ = arrivée du plan précédent — il se génère depuis la "
+    "fenêtre Mood du plan précédent":
+        "Start = previous shot's end — generate it from the previous "
+        "shot's Mood window",
+    "Image de départ générée ✓":        "Start image generated ✓",
+    "Échec de l'image de départ — réessaie.":
+        "Start image failed — try again.",
+    "Image de départ importée ✓":       "Start image imported ✓",
+    "Image de départ (état 0)…":        "Start image (state 0)…",
+    # Cellule Mood du storyboard mapping : deux vignettes DÉPART | ARRIVÉE.
+    "Départ — état 0 du plan 1\nCliquer : fenêtre Mood du plan "
+    "(✦ Générer l'état 0 ou ⬆ Importer)":
+        "Start — shot 1 state 0\nClick: the shot's Mood window "
+        "(✦ Generate state 0 or ⬆ Import)",
+    "Départ — arrivée du plan précédent\nCliquer : fenêtre "
+    "Mood du plan précédent":
+        "Start — previous shot's end\nClick: previous shot's "
+        "Mood window",
+    "Arrivée — Mood du plan\nCliquer : voir / générer":
+        "End — the shot's Mood\nClick: view / generate",
     "⚓ Chaîne d'images — Départ : image de départ (état 0)"
     "  →  Arrivée : Mood de ce plan":
         "⚓ Image chain — Start: start image (state 0)"
@@ -3825,6 +3869,18 @@ _FR_TO_EN: dict[str, str] = {
     "Après chaque génération Mapping : tout ce qui dépasse la silhouette du bâtiment est rendu noir pur dans le clip final (garanti à 100 %). Nécessite une façade isolée sur fond noir (BiRefNet).":
         "After every Mapping generation: anything beyond the building silhouette is rendered pure black in the final clip (100% guaranteed). Requires a facade isolated on a black background (BiRefNet).",
     "▦ Verrouillé au masque de façade": "▦ Locked to the facade mask",
+    # ── Confinement façade débrayable + annonce d'indisponibilité (2026-07-30) ──
+    "▦  Confiner les keyframes au masque de façade (noir hors silhouette)":
+        "▦  Confine keyframes to the facade mask (black outside the silhouette)",
+    "Avant chaque envoi Mapping : le Mood servant d'image-clé est masqué à la silhouette du bâtiment (copie en cache, le Mood reste intact à l'écran). Nécessite une façade isolée sur fond noir ou transparent (BiRefNet).":
+        "Before every Mapping send: the Mood used as keyframe is masked to the building silhouette (cached copy, the Mood stays intact on screen). Requires a facade isolated on a black or transparent background (BiRefNet).",
+    "⚠ Masque de façade indisponible — keyframes et clips partent SANS confinement : isole la façade sur fond noir ou transparent":
+        "⚠ Facade mask unavailable — keyframes and clips are sent WITHOUT confinement: isolate the facade on a black or transparent background",
+    "du cadre éclairé":                 "of the frame lit",
+    "⚠ Confinement façade demandé mais aucune façade de bâtiment n'est choisie":
+        "⚠ Facade confinement requested but no building facade is chosen",
+    "▦ Confinement façade : keyframes masquées avant l'envoi (noir pur hors silhouette)":
+        "▦ Facade confinement: keyframes masked before sending (pure black outside the silhouette)",
     "Durée :":                      "Duration:",
     "0 plans sélectionnés":         "0 shots selected",
     " plans sélectionnés":          " shots selected",

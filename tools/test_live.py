@@ -2416,6 +2416,143 @@ def confinement_facade():
 
 
 @test
+def masque_facade_lit_lalpha():
+    """Le masque de façade COMPOSE L'ALPHA SUR NOIR et sort BINAIRE
+    (réparation de l'audit mesuré 2026-07-30).
+
+    Sur le projet réel (Mapping Forcalquier), la façade détourée est un PNG
+    RGBA à fond TRANSPARENT dont le RGB sous la transparence est quasi blanc
+    (mesuré : alpha=0 sur 78,9 % du cadre, RGB≈229). convert("L") ignorait
+    l'alpha → couverture lue 99,47 % > plafond 0,95 → build_facade_mask
+    renvoyait "" et masked_keyframe comme lock_video_to_facade dégradaient EN
+    SILENCE : aucun masque n'a jamais été construit sur données réelles. Et le
+    bord adouci (GaussianBlur) rendait le composite NON idempotent (érosion
+    ~1 px + assombrissement du bord à chaque passe). Test vu ROUGE avant la
+    réparation (3 échecs : couverture, masque refusé, composite non stable)."""
+    import numpy as np
+    from PIL import Image, ImageDraw
+    from core.live_mapping import (
+        build_facade_mask, facade_mask_coverage, apply_facade_mask_to_image,
+        extract_facade_polygon,
+    )
+
+    # Façade façon données réelles : RGB quasi blanc PARTOUT, la silhouette
+    # n'est portée QUE par l'alpha (opaque dans le polygone, transparent autour).
+    W, H = 640, 360
+    rgba = Image.new("RGBA", (W, H), (229, 229, 229, 0))
+    d = ImageDraw.Draw(rgba)
+    d.polygon([(60, 330), (60, 140), (320, 40), (580, 140), (580, 330)],
+              fill=(210, 205, 200, 255))
+    fp = os.path.join(_TMP, "facade_rgba.png")
+    rgba.save(fp)
+
+    # 1. La couverture lue est celle de la SILHOUETTE, pas du blanc sous l'alpha.
+    cov = facade_mask_coverage(fp)
+    assert 0.05 < cov < 0.7, \
+        f"couverture lue {cov:.2%} — l'alpha est ignoré (bug d'origine : ~99 %)"
+
+    # 2. Le masque se construit : blanc dans la façade, noir dehors.
+    mp = build_facade_mask(fp, os.path.join(_TMP, "mapping", "mask_rgba.png"))
+    assert mp and os.path.isfile(mp), \
+        "façade RGBA à fond transparent → masque REFUSÉ (le no-op silencieux)"
+    with Image.open(mp) as m:
+        assert m.getpixel((320, 220)) > 200, "intérieur façade = blanc"
+        assert m.getpixel((10, 10)) < 30, "hors silhouette = noir"
+
+    # 3. CONTRE-ÉPREUVES — les garde-fous d'origine tiennent toujours :
+    #    opaque plein cadre (non isolée) et transparente de bout en bout.
+    full_op = Image.new("RGBA", (64, 64), (255, 255, 255, 255))
+    fpo = os.path.join(_TMP, "facade_opaque.png")
+    full_op.save(fpo)
+    assert build_facade_mask(fpo, os.path.join(_TMP, "mapping", "mo.png")) == "", \
+        "image opaque pleine → toujours refusée (façade non isolée)"
+    full_tr = Image.new("RGBA", (64, 64), (255, 255, 255, 0))
+    fpt = os.path.join(_TMP, "facade_vide.png")
+    full_tr.save(fpt)
+    assert build_facade_mask(fpt, os.path.join(_TMP, "mapping", "mt.png")) == "", \
+        "image entièrement transparente → refusée (rien à masquer)"
+
+    # 4. Masque BINAIRE (seuil 128 après lissage) → composite IDEMPOTENT :
+    #    masquer une image déjà masquée redonne EXACTEMENT la même image.
+    with Image.open(mp) as m:
+        h = m.convert("L").histogram()
+        assert sum(h) == h[0] + h[255], \
+            "des gris subsistent dans le masque — le bord redevient multiplicatif"
+    kf = os.path.join(_TMP, "kf_idem.png")
+    Image.new("RGB", (W, H), (180, 60, 40)).save(kf)
+    p1 = apply_facade_mask_to_image(kf, mp, os.path.join(_TMP, "idem_1.png"))
+    p2 = apply_facade_mask_to_image(p1, mp, os.path.join(_TMP, "idem_2.png"))
+    a1, a2 = np.asarray(Image.open(p1)), np.asarray(Image.open(p2))
+    assert (a1 == a2).all(), \
+        "composite non idempotent : le bord s'érode/s'assombrit à chaque passe"
+
+    # 5. Le POLYGONE de calage Resolume lit l'alpha lui aussi (même racine) :
+    #    la silhouette extraite tient dans l'emprise dessinée — avec le bug,
+    #    le blanc sous l'alpha donnait un polygone plein cadre.
+    pts = extract_facade_polygon(fp)
+    assert len(pts) >= 4, "façade non détectée pour le calage"
+    xs = [p[0] for p in pts]
+    assert min(xs) > 100 and max(xs) < 1830, \
+        ("polygone plein cadre — l'alpha est ignoré", min(xs), max(xs))
+
+
+@test
+def confinement_facade_debrayable_et_annonce():
+    """Le confinement façade est DÉBRAYABLE (décoché par défaut) et son
+    indisponibilité S'ANNONCE dans l'encart d'envoi mapping au lieu de
+    dégrader en silence.
+
+    Contexte (audit mesuré 2026-07-30) : masked_keyframe était appliqué SANS
+    condition mais ne faisait RIEN sur les données réelles (façade RGBA
+    refusée) — les bons rendus récents de Matthieu étaient DE FAIT sans
+    masque. Le masque réparé, le rallumer d'office changerait ses rendus dans
+    son dos : la case matérialise le comportement récent (décochée) en
+    attendant sa décision sur le défaut. ⚠ Si la décision tombe (« actif par
+    défaut »), RÉÉCRIRE l'assertion du défaut — ne pas la contourner."""
+    import inspect
+    from PIL import Image
+    from ui.tab_t2v_live import TabT2V
+    from core.i18n import _FR_TO_EN
+
+    t = TabT2V()
+    try:
+        # 1. La case existe, décochée par défaut (comportement récent conservé).
+        assert hasattr(t, "_facade_mask_cb"), "case de confinement absente"
+        assert not t._facade_mask_cb.isChecked(), \
+            "confinement actif par défaut — décision de Matthieu requise"
+
+        # 2. L'envoi ne masque que si la case est cochée (code réel, sans
+        #    commentaires — piège n°1 des harnais).
+        src = "\n".join(l.split("#", 1)[0] for l in
+                        inspect.getsource(TabT2V.start_generation).splitlines())
+        assert "masked_keyframe" in src, "le confinement a disparu de l'envoi"
+        assert "_facade_mask_cb" in src, "masquage non gardé par la case"
+
+        # 3. Statut du masque mesurable : une façade NON isolable (image pleine)
+        #    donne masque="" + couverture ~100 % — la matière de la ligne ⚠.
+        _ni = os.path.join(_TMP, "bref_plein.png")
+        Image.new("RGB", (64, 64), (240, 240, 240)).save(_ni)
+        import core.live_building as LB
+        _old = LB.get_building_ref
+        LB.get_building_ref = lambda: _ni
+        try:
+            mp, cov = t._facade_mask_status()
+            assert mp == "" and cov > 0.9, (mp, cov)
+        finally:
+            LB.get_building_ref = _old
+
+        # 4. L'encart d'envoi consulte le masque et annonce l'indisponibilité
+        #    (des semaines de dégradation muette) — et l'annonce est traduite.
+        srcp = inspect.getsource(TabT2V._build_full_preview_text)
+        assert "_facade_mask_status" in srcp, "l'encart ne consulte pas le masque"
+        assert "Masque de façade indisponible" in srcp, "pas de ligne ⚠ dans l'encart"
+        assert any("Masque de façade indisponible" in k for k in _FR_TO_EN), \
+            "ligne d'encart non traduite (_FR_TO_EN)"
+    finally:
+        t.deleteLater()
+
+
+@test
 def selection_plage_et_lasso():
     """Maj+clic = plage + lasso (rubber band) dans le Conducteur visuel —
     Live ET Cinéma ; bibliothèque Resolume : multi-sélection + drag multiple."""
@@ -5352,8 +5489,13 @@ def lot_de_moods_compose_une_fois_par_plan():
     import core.storyboard as sb
     import api.apercu as A
     import api.image_prompt as IP
+    from core import live_chain as _lc
 
     sb.set_namespace("live_seq_mapping")
+    # Ce test mesure la mécanique des VARIATIONS, pas la chaîne d'images : en
+    # mode chaîne (défaut depuis le 2026-07-30), le plan 1 génère EN PLUS son
+    # image de départ — épinglé en frames pour compter juste.
+    _lc.set_gen_mode(_lc.MODE_FRAMES)
     sb.clear_version_shots(sb.DEFAULT_VERSION_ID)
     _p = ("SURFACE : façade en pierre.\n"
           "ÉTAT 0 : pierre givrée, portail sombre.\n"
@@ -5403,6 +5545,7 @@ def lot_de_moods_compose_une_fois_par_plan():
         assert "SURFACE" in _txt, "le repli n'est pas l'assemblage déterministe"
     finally:
         IP.compose, A.run_mood = _vrai_compose, _vrai_mood
+        _lc.set_gen_mode(_lc.MODE_CHAIN)   # défaut projet (2026-07-30)
         sb.set_namespace("storyboard")
 
 
@@ -5878,12 +6021,14 @@ def mood_livre_la_definition_promise():
 
 @test
 def mode_de_generation_mapping_unique_et_persiste():
-    """live_gen_mode : UN champ persisté par projet, défaut = comportement actuel.
+    """live_gen_mode : UN champ persisté par projet, défaut = CHAÎNE D'IMAGES.
 
     Spec Matthieu (2026-07-30) : le choix « raccord par frame vidéo » /
     « chaîne d'images » est UN champ (live_gen_mode), lu et écrit par les deux
-    UI — jamais deux états dupliqués. Défaut = frames (rien ne change pour les
-    projets existants). Une valeur inconnue retombe sur le défaut, sans lever.
+    UI — jamais deux états dupliqués. Décision du même jour, après la spec :
+    « par défaut on est en mode I2V dans séquence mapping » — la chaîne est le
+    comportement normal, le raccord par frame vidéo devient le repli
+    explicite. Une valeur inconnue retombe sur le défaut, sans lever.
     """
     from core import live_chain as lc
     from core.context import get_data_root
@@ -5892,15 +6037,19 @@ def mode_de_generation_mapping_unique_et_persiste():
     if os.path.isfile(_f):
         os.remove(_f)
     try:
-        assert lc.get_gen_mode() == lc.MODE_FRAMES, \
-            "défaut ≠ comportement historique (frames)"
-        lc.set_gen_mode(lc.MODE_CHAIN)
-        assert lc.get_gen_mode() == lc.MODE_CHAIN, "le champ ne persiste pas"
-        lc.set_gen_mode("n_importe_quoi")
-        assert lc.get_gen_mode() == lc.MODE_FRAMES, \
-            "valeur inconnue : doit retomber sur le défaut"
-    finally:
+        assert lc.get_gen_mode() == lc.MODE_CHAIN, \
+            ("défaut ≠ chaîne d'images — décision Matthieu 2026-07-30 : "
+             "« par défaut on est en mode I2V dans séquence mapping »")
         lc.set_gen_mode(lc.MODE_FRAMES)
+        assert lc.get_gen_mode() == lc.MODE_FRAMES, "le champ ne persiste pas"
+        lc.set_gen_mode("n_importe_quoi")
+        assert lc.get_gen_mode() == lc.MODE_CHAIN, \
+            "valeur inconnue : doit retomber sur le défaut (chaîne)"
+    finally:
+        try:
+            os.remove(_f)
+        except OSError:
+            pass
 
 
 @test
@@ -5975,15 +6124,13 @@ def envoi_chaine_part_du_mood_precedent():
     construction), et le départ du plan N est LE MÊME FICHIER que l'arrivée
     du plan N-1 (raccord exact par identité).
 
-    PAS de masquage dans la chaîne (audit mesuré 2026-07-30) : Matthieu
-    craignait un parasitage, et l'audit lui donne raison deux fois —
-    (a) sur le projet réel le masque est un NO-OP silencieux (façade RGBA à
-    fond transparent → build_facade_mask refuse, couverture lue 99 %) : les
-    bons rendus passés étaient DE FAIT sans masque ; (b) le composite est
-    NON idempotent (bord adouci multiplicatif : érosion ~1 px et
-    assombrissement à chaque passe) — inacceptable dans une chaîne. Le
-    masquage des keyframes est un chantier séparé, pas une pièce de la
-    chaîne.
+    PAS de masquage dans la chaîne — décision Matthieu (crainte de
+    parasitage, confirmée par l'audit mesuré du 2026-07-30 : masque alors
+    NO-OP silencieux sur les données réelles + composite non idempotent).
+    Le masque a depuis été RÉPARÉ le même jour (alpha composé sur noir,
+    sortie binaire idempotente — voir masque_facade_lit_lalpha) : la garde
+    ci-dessous ne protège plus un défaut mais la DÉCISION — ne pas brancher
+    le masque sur la chaîne sans un accord explicite de Matthieu.
     """
     import inspect as _i
     import core.storyboard as sb
@@ -6184,7 +6331,7 @@ def lot_asymetrique_genere_le_depart_du_plan_1():
             "mode frames : aucune image de départ ne doit être générée"
     finally:
         A.compose_mood_prompt, A.run_mood = _compose0, _run0
-        lc.set_gen_mode(lc.MODE_FRAMES)
+        lc.set_gen_mode(lc.MODE_CHAIN)   # défaut projet (décision 2026-07-30)
         for _sid in _made:
             try:
                 sb.delete_shot(_sid)
@@ -6195,14 +6342,16 @@ def lot_asymetrique_genere_le_depart_du_plan_1():
 
 @test
 def selecteur_chaine_synchronise_les_deux_ui():
-    """Le mode vit dans UN champ : RENDU & AUDIO (Studio IA) et la page
-    Séquence exposent le MÊME live_gen_mode — changer l'un se lit dans
-    l'autre. Libellés traduits FR→EN.
+    """Le mode vit dans UN champ : RENDU & AUDIO (Studio IA) et les PASTILLES
+    de la page Séquence Mapping (à droite du bouton Action, style Guide/IA —
+    demande Matthieu 2026-07-30) lisent et écrivent le MÊME live_gen_mode.
+    Les pastilles n'apparaissent qu'en séquence MAPPING. Libellés traduits.
     """
+    import core.storyboard as sb
     from core import live_chain as lc
     from core.i18n import _FR_TO_EN
     import ui.tab_t2v_live as TL
-    from ui.page_scenario_live import PageScenario
+    from ui.live_pages import SequenceMappingPage
 
     lc.set_gen_mode(lc.MODE_FRAMES)
     try:
@@ -6221,27 +6370,429 @@ def selecteur_chaine_synchronise_les_deux_ui():
         finally:
             t.deleteLater()
 
-        # La page Séquence lit le MÊME champ (pas d'état dupliqué).
-        p = PageScenario()
+        # Les pastilles de la page Séquence Mapping lisent le MÊME champ.
+        sb.set_namespace("live_seq_mapping")
+        p = SequenceMappingPage()
         try:
-            assert hasattr(p, "_gen_mode_combo"), \
-                "pas de sélecteur de mode dans la page Séquence (Mode)"
-            p._refresh_gen_mode_combo()
-            assert p._gen_mode_combo.currentData() == lc.MODE_CHAIN, \
-                "la page Séquence ne reflète pas le champ partagé"
-            _i_frames = p._gen_mode_combo.findData(lc.MODE_FRAMES)
-            p._gen_mode_combo.setCurrentIndex(_i_frames)
-            p._on_gen_mode_changed()
+            assert hasattr(p, "_btn_genmode_frames") \
+                and hasattr(p, "_btn_genmode_chain"), \
+                "pas de pastilles « Frame vidéo | Chaîne d'images » dans la barre"
+            p._apply_genmode_style()
+            assert not p._btn_genmode_chain.isHidden(), \
+                "pastilles invisibles en séquence mapping"
+            # Champ = chaîne (écrit par le Studio ci-dessus) → segment actif =
+            # chaîne (graisse 800), l'autre en contour (700).
+            assert "800" in p._btn_genmode_chain.styleSheet() \
+                and "800" not in p._btn_genmode_frames.styleSheet(), \
+                "les pastilles ne reflètent pas le champ partagé"
+            # Clic utilisateur → écrit le champ partagé.
+            p._on_genmode_clicked("frames")
             assert lc.get_gen_mode() == lc.MODE_FRAMES, \
-                "le sélecteur de la page Séquence n'écrit pas live_gen_mode"
+                "les pastilles n'écrivent pas live_gen_mode"
+            assert "800" in p._btn_genmode_frames.styleSheet(), \
+                "le segment actif ne suit pas le clic"
+            # Hors mapping → les pastilles se retirent.
+            sb.set_namespace("live_seq_live")
+            p._apply_genmode_style()
+            assert p._btn_genmode_frames.isHidden(), \
+                "les pastilles doivent disparaître hors séquence mapping"
         finally:
             p.deleteLater()
 
-        # i18n : les libellés du sélecteur sont traduits.
-        for _lbl in ("Raccord par frame vidéo", "Chaîne d'images (I2V)"):
+        # i18n : les libellés des deux UI sont traduits.
+        for _lbl in ("Raccord par frame vidéo", "Chaîne d'images (I2V)",
+                     "Frame vidéo", "Chaîne d'images"):
             assert _lbl in _FR_TO_EN, f"libellé non traduit : {_lbl}"
     finally:
+        lc.set_gen_mode(lc.MODE_CHAIN)
+        sb.set_namespace("storyboard")
+
+
+@test
+def fenetre_mood_montre_la_chaine():
+    """La fenêtre Mood en mode chaîne montre DEUX vignettes DÉPART → ARRIVÉE.
+
+    Demande Matthieu (2026-07-30) : « dans le mood du premier plan en mode I2V
+    on doit avoir deux vignettes, l'une pour start et l'autre pour end.
+    Pareil pour les autres plans mais start reprend l'image end active du
+    plan précédent. » Hors mapping/chaîne, la rangée disparaît.
+    """
+    import core.storyboard as sb
+    from core import live_chain as lc
+    from PIL import Image
+    import ui.dialog_apercu as DA
+
+    sb.set_namespace("live_seq_mapping")
+    _made = []
+    try:
+        lc.set_gen_mode(lc.MODE_CHAIN)
+        s1 = sb.save_shot({"number": -309, "scene_title": "fen-un"})
+        s2 = sb.save_shot({"number": -308, "scene_title": "fen-deux"})
+        _made = [s1["id"], s2["id"]]
+        for s, name in ((s1, "m1"), (s2, "m2")):
+            d = sb.get_apercu_dir(s["id"])
+            os.makedirs(d, exist_ok=True)
+            m = os.path.join(d, f"{name}.png")
+            Image.new("RGB", (64, 36), (9, 9, 9)).save(m)
+            sb.save_apercus(s["id"], [m], 0)
+        st = os.path.join(sb.get_apercu_dir(s1["id"]), "start.png")
+        Image.new("RGB", (64, 36), (4, 4, 4)).save(st)
+        lc.set_start_image(s1["id"], st)
+
+        # ① Plan N>1 : départ = image ACTIVE du plan précédent.
+        d2 = DA.MoodDialog(None, s2)
+        try:
+            assert hasattr(d2, "_chain_row"), \
+                "pas de rangée chaîne dans la fenêtre Mood"
+            assert not d2._chain_row.isHidden(), \
+                "rangée chaîne invisible en mode chaîne"
+            assert not d2._chain_start_thumb.pixmap().isNull(), \
+                "vignette DÉPART vide — l'image active du plan précédent " \
+                "doit s'y afficher"
+            assert not d2._chain_end_thumb.pixmap().isNull(), \
+                "vignette ARRIVÉE vide — l'image active du plan doit s'y afficher"
+            assert "précédent" in d2._chain_start_cap.text(), \
+                (d2._chain_start_cap.text(),)
+        finally:
+            d2.deleteLater()
+
+        # ② Plan 1 : départ = image d'état 0 dédiée.
+        d1 = DA.MoodDialog(None, s1)
+        try:
+            assert not d1._chain_start_thumb.pixmap().isNull(), \
+                "vignette DÉPART du plan 1 vide — l'image d'état 0 est posée"
+            assert "état 0" in d1._chain_start_cap.text(), \
+                (d1._chain_start_cap.text(),)
+        finally:
+            d1.deleteLater()
+
+        # ③ Garde inverse — mode frames : la rangée se retire.
         lc.set_gen_mode(lc.MODE_FRAMES)
+        d3 = DA.MoodDialog(None, s2)
+        try:
+            assert d3._chain_row.isHidden(), \
+                "la rangée chaîne doit disparaître en mode frames"
+        finally:
+            d3.deleteLater()
+    finally:
+        lc.set_gen_mode(lc.MODE_CHAIN)
+        for _sid in _made:
+            try:
+                sb.delete_shot(_sid)
+            except Exception:
+                pass
+        sb.set_namespace("storyboard")
+
+
+@test
+def apercu_ne_mord_pas_sur_la_rangee_chaine():
+    """L'aperçu est RECALÉ quand la rangée chaîne apparaît (constat Matthieu
+    2026-07-30, capture à l'appui : « l'encart chaîne mord sur l'image »).
+
+    Mécanisme : la rangée qui devient visible rétrécit le label d'aperçu SANS
+    passer par resizeEvent (la fenêtre, elle, n'a pas bougé) — le pixmap
+    restait calibré pour l'ancienne hauteur et débordait sur la rangée. Le
+    basculement de visibilité déclenche désormais un recalage différé.
+    """
+    import core.storyboard as sb
+    from core import live_chain as lc
+    from PIL import Image
+    import ui.dialog_apercu as DA
+
+    sb.set_namespace("live_seq_mapping")
+    _made = []
+    try:
+        s1 = sb.save_shot({"number": -609, "scene_title": "mord-un"})
+        _made = [s1["id"]]
+        d1 = sb.get_apercu_dir(s1["id"])
+        os.makedirs(d1, exist_ok=True)
+        m1 = os.path.join(d1, "m1.png")
+        Image.new("RGB", (1280, 720), (25, 25, 60)).save(m1)
+        sb.save_apercus(s1["id"], [m1], 0)
+
+        # Séquence RÉELLE du bug : fenêtre ouverte SANS la rangée (mode
+        # frames), puis la rangée apparaît via un simple _refresh — la
+        # fenêtre ne bouge pas d'un pixel.
+        lc.set_gen_mode(lc.MODE_FRAMES)
+        dlg = DA.MoodDialog(None, s1)
+        try:
+            dlg._compose_timer.stop()
+            dlg.resize(900, 900)
+            dlg.show()
+            for _ in range(8):
+                APP.processEvents()
+            lc.set_gen_mode(lc.MODE_CHAIN)
+            dlg._refresh()
+            for _ in range(8):
+                APP.processEvents()
+            _pm = dlg._img_lbl.pixmap()
+            assert _pm is not None and not _pm.isNull(), "aperçu vide"
+            assert _pm.height() <= dlg._img_lbl.height() + 1, \
+                ("le pixmap déborde du label — il mord sur la rangée chaîne",
+                 _pm.height(), dlg._img_lbl.height())
+            dlg.close()
+        finally:
+            dlg.deleteLater()
+    finally:
+        lc.set_gen_mode(lc.MODE_CHAIN)
+        for _sid in _made:
+            try:
+                sb.delete_shot(_sid)
+            except Exception:
+                pass
+        sb.set_namespace("storyboard")
+
+
+@test
+def fenetre_mood_sections_depliantes():
+    """Prompt et Prévisualisation sont REPLIABLES — et le prompt passe EN
+    GRAND quand l'aperçu est replié (demande Matthieu 2026-07-30 : « qu'on le
+    voie en grand pour ne pas avoir à défiler vers le bas »).
+
+    Fenêtre PARTAGÉE Cinéma/Live (dialog_apercu commun) : le Cinéma reçoit
+    le même comportement sans portage. Défaut = les deux sections DÉPLIÉES,
+    prompt compact — le comportement historique ne bouge pas.
+    """
+    import core.storyboard as sb
+    from PIL import Image
+    import ui.dialog_apercu as DA
+
+    sb.set_namespace("live_seq_mapping")
+    _made = []
+    try:
+        s1 = sb.save_shot({"number": -709, "scene_title": "plie-un"})
+        _made = [s1["id"]]
+        d1 = sb.get_apercu_dir(s1["id"])
+        os.makedirs(d1, exist_ok=True)
+        m1 = os.path.join(d1, "m1.png")
+        Image.new("RGB", (640, 360), (20, 20, 50)).save(m1)
+        sb.save_apercus(s1["id"], [m1], 0)
+
+        dlg = DA.MoodDialog(None, s1)
+        try:
+            dlg._compose_timer.stop()
+            dlg.resize(900, 900)
+            dlg.show()
+            for _ in range(6):
+                APP.processEvents()
+
+            # ① Défaut : deux sections dépliées, prompt COMPACT.
+            assert hasattr(dlg, "_tog_prompt") and hasattr(dlg, "_tog_preview"), \
+                "sections Prompt / Prévisualisation non repliables"
+            assert dlg._tog_prompt.isChecked() and dlg._tog_preview.isChecked(), \
+                "défaut attendu : les deux sections ouvertes (comportement actuel)"
+            assert not dlg._prompt_edit.isHidden() and not dlg._img_lbl.isHidden()
+            assert dlg._prompt_edit.maximumHeight() <= 200, \
+                "les deux ouvertes : le prompt reste compact"
+
+            # ② Aperçu replié → le prompt se déploie EN GRAND.
+            dlg._tog_preview.setChecked(False)
+            for _ in range(6):
+                APP.processEvents()
+            assert dlg._img_lbl.isHidden(), "aperçu replié mais toujours visible"
+            assert dlg._prompt_edit.maximumHeight() > 200, \
+                "prompt seul : il doit prendre la place (lecture sans défiler)"
+            assert dlg._prompt_edit.height() > 200, \
+                ("le prompt ne s'est pas réellement agrandi",
+                 dlg._prompt_edit.height())
+
+            # ③ Prompt replié aussi → l'éditeur disparaît.
+            dlg._tog_prompt.setChecked(False)
+            APP.processEvents()
+            assert dlg._prompt_edit.isHidden(), "prompt replié mais visible"
+
+            # ④ Tout redéplier → retour au compact + pixmap recalé au label.
+            dlg._tog_prompt.setChecked(True)
+            dlg._tog_preview.setChecked(True)
+            for _ in range(8):
+                APP.processEvents()
+            assert dlg._prompt_edit.maximumHeight() <= 200
+            assert not dlg._img_lbl.isHidden()
+            _pm = dlg._img_lbl.pixmap()
+            assert _pm is not None and not _pm.isNull() \
+                and _pm.height() <= dlg._img_lbl.height() + 1, \
+                "le pixmap n'est pas recalé après redéploiement de l'aperçu"
+            dlg.close()
+        finally:
+            dlg.deleteLater()
+    finally:
+        for _sid in _made:
+            try:
+                sb.delete_shot(_sid)
+            except Exception:
+                pass
+        sb.set_namespace("storyboard")
+
+
+@test
+def depart_du_plan_1_generable_sans_le_lot():
+    """Le DÉPART (état 0) se génère SANS passer par « Action → Générer les
+    Moods » — constat Matthieu (2026-07-30) : « Générer une variation » du
+    plan 1 ne produisait QUE l'image de fin.
+
+    ① `api.apercu.run_start_image` : fonction PARTAGÉE lot/fenêtre (compose
+       l'état 0 + génère + range en sidecar) — deux constructions parallèles
+       divergeraient, comme côté vidéo.
+    ② Le lot passe par ELLE (code réel).
+    ③ Fenêtre Mood (plan 1, chaîne) : la vignette Départ est CLIQUABLE et
+       branchée sur la génération ; le worker rend le chemin du sidecar.
+    ④ « Générer une variation » du plan 1 SANS départ → l'état 0 est généré
+       dans la foulée (garde : jamais s'il existe déjà — pas de coût caché).
+    """
+    import inspect as _i
+    import core.storyboard as sb
+    from core import live_chain as lc
+    import api.apercu as A
+    import ui.dialog_apercu as DA
+    from PIL import Image
+
+    sb.set_namespace("live_seq_mapping")
+    _made, _calls = [], []
+    _compose0, _run0 = A.compose_mood_prompt, A.run_mood
+    try:
+        lc.set_gen_mode(lc.MODE_CHAIN)
+        s1 = sb.save_shot({"number": -409, "scene_title": "dep-un",
+                           "seedance_prompt": "SURFACE : f.\nÉTAT 0 : a.\nÉTAT 1 : b.\n"})
+        _made = [s1["id"]]
+        d1 = sb.get_apercu_dir(s1["id"])
+        os.makedirs(d1, exist_ok=True)
+        m1 = os.path.join(d1, "m1.png")
+        Image.new("RGB", (64, 36), (7, 7, 7)).save(m1)
+        sb.save_apercus(s1["id"], [m1], 0)
+
+        def _fake_compose(shot, film_style="", engine="", building_ref="",
+                          is_mapping=None, force_fresh=False, instant="end"):
+            return f"P-{instant}", True, "", False
+
+        def _fake_run(shot, prompt, out_dir, api_key, progress_cb,
+                      building_ref="", inspiration_ref="", options=None):
+            os.makedirs(out_dir, exist_ok=True)
+            p = os.path.join(out_dir, f"g{len(_calls)}.png")
+            Image.new("RGB", (32, 18), (3, 3, 3)).save(p)
+            _calls.append(prompt)
+            return p
+
+        A.compose_mood_prompt = _fake_compose
+        A.run_mood = _fake_run
+
+        # ① Fonction partagée : état 0 composé, image générée, sidecar posé.
+        out = A.run_start_image(s1, "", "cle", lambda *_: None, "",
+                                {"engine": "nb2"})
+        assert out and os.path.isfile(out), "run_start_image ne rend pas d'image"
+        assert lc.get_start_image(s1["id"]) == out, \
+            "le départ généré n'est pas rangé en sidecar"
+        assert _calls and "P-start" in _calls[-1], \
+            "le départ doit être composé avec instant=start (état 0)"
+
+        # ② Le lot partage ce chemin (code réel, commentaires exclus).
+        _src = "\n".join(l.split("#", 1)[0] for l in
+                         _i.getsource(A.MoodBatchWorker.run).splitlines())
+        assert "run_start_image(" in _src, \
+            "le lot ne passe pas par la fonction partagée du départ"
+
+        # ③ Fenêtre Mood : vignette Départ cliquable + worker branché.
+        from PyQt6.QtCore import Qt as _Qt
+        dlg = DA.MoodDialog(None, s1)
+        try:
+            dlg._compose_timer.stop()
+            assert hasattr(dlg, "_generate_start_image"), \
+                "pas de génération du départ dans la fenêtre Mood"
+            assert dlg._chain_start_thumb.cursor().shape() == \
+                _Qt.CursorShape.PointingHandCursor, \
+                "la vignette Départ du plan 1 doit être cliquable"
+        finally:
+            dlg.deleteLater()
+        _res = []
+        w = DA._StartImageWorker(s1, "", {"engine": "nb2"})
+        w.done.connect(lambda p: _res.append(p))
+        w.run()
+        assert _res and _res[0] and os.path.isfile(_res[0]), \
+            "le worker de départ ne produit pas d'image"
+
+        # ④ « Générer une variation » enchaîne le départ MANQUANT (code réel),
+        #    sous garde d'existence — jamais de re-génération silencieuse.
+        _gsrc = "\n".join(l.split("#", 1)[0] for l in
+                          _i.getsource(DA.MoodDialog).splitlines())
+        assert "_maybe_chain_start" in _gsrc, \
+            ("« Générer une variation » du plan 1 doit produire aussi le "
+             "départ manquant (constat Matthieu : seule la fin sortait)")
+        _msrc = "\n".join(l.split("#", 1)[0] for l in
+                          _i.getsource(DA.MoodDialog._maybe_chain_start)
+                          .splitlines())
+        assert "get_start_image" in _msrc, \
+            "le départ existant ne doit JAMAIS être régénéré en silence"
+    finally:
+        A.compose_mood_prompt, A.run_mood = _compose0, _run0
+        lc.set_gen_mode(lc.MODE_CHAIN)
+        for _sid in _made:
+            try:
+                sb.delete_shot(_sid)
+            except Exception:
+                pass
+        sb.set_namespace("storyboard")
+
+
+@test
+def storyboard_mood_deux_vignettes_en_chaine():
+    """La colonne Mood du storyboard mapping porte DEUX vignettes par plan en
+    mode chaîne : DÉPART | ARRIVÉE (demande Matthieu 2026-07-30 — contrôle
+    plan par plan, sans passer par le lot). Le départ du plan N>1 renvoie au
+    plan PRÉCÉDENT — son arrivée EST ce départ. En mode frames : UNE vignette,
+    comme avant.
+    """
+    import core.storyboard as sb
+    from core import live_chain as lc
+    from ui.live_pages import SequenceMappingPage
+    from PIL import Image
+
+    sb.set_namespace("live_seq_mapping")
+    _made = []
+    try:
+        lc.set_gen_mode(lc.MODE_CHAIN)
+        s1 = sb.save_shot({"number": -509, "scene_title": "sb-un"})
+        s2 = sb.save_shot({"number": -508, "scene_title": "sb-deux"})
+        _made = [s1["id"], s2["id"]]
+        for s, name in ((s1, "m1"), (s2, "m2")):
+            d = sb.get_apercu_dir(s["id"])
+            os.makedirs(d, exist_ok=True)
+            m = os.path.join(d, f"{name}.png")
+            Image.new("RGB", (64, 36), (11, 11, 11)).save(m)
+            sb.save_apercus(s["id"], [m], 0)
+
+        page = SequenceMappingPage()
+        try:
+            page.refresh()
+            row1 = page._shot_rows.get(s1["id"])
+            row2 = page._shot_rows.get(s2["id"])
+            assert row1 is not None and row2 is not None, "lignes introuvables"
+            for r in (row1, row2):
+                assert getattr(r, "_mood_start_lbl", None) is not None, \
+                    "pas de vignette DÉPART dans la colonne Mood"
+                assert getattr(r, "_mood_end_lbl", None) is not None, \
+                    "pas de vignette ARRIVÉE dans la colonne Mood"
+            assert "état 0" in row1._mood_start_lbl.toolTip(), \
+                ("le départ du plan 1 est l'image d'état 0",
+                 row1._mood_start_lbl.toolTip())
+            assert "précédent" in row2._mood_start_lbl.toolTip(), \
+                ("le départ du plan N>1 renvoie au plan précédent",
+                 row2._mood_start_lbl.toolTip())
+
+            # Mode frames → une seule vignette (comportement historique).
+            lc.set_gen_mode(lc.MODE_FRAMES)
+            page.refresh()
+            rowf = page._shot_rows.get(s2["id"])
+            assert getattr(rowf, "_mood_start_lbl", None) is None, \
+                "en mode frames la vignette DÉPART ne doit pas exister"
+        finally:
+            page.deleteLater()
+    finally:
+        lc.set_gen_mode(lc.MODE_CHAIN)
+        for _sid in _made:
+            try:
+                sb.delete_shot(_sid)
+            except Exception:
+                pass
+        sb.set_namespace("storyboard")
 
 
 @test
@@ -6595,8 +7146,12 @@ def moods_generes_dans_leur_propre_sequence():
     """
     import core.storyboard as sb
     import api.apercu as A
+    from core import live_chain as _lc
 
     sb.set_namespace("live_seq_mapping")
+    # Ce test compte les VARIATIONS : en mode chaîne (défaut 2026-07-30) le
+    # plan 1 génère en plus son image de départ — épinglé en frames.
+    _lc.set_gen_mode(_lc.MODE_FRAMES)
     sb.clear_version_shots(sb.DEFAULT_VERSION_ID)
     _shot = sb.save_shot({"number": 1, "scene_title": "P1",
                           "seedance_prompt": "façade"}, sb.DEFAULT_VERSION_ID)
@@ -6617,6 +7172,7 @@ def moods_generes_dans_leur_propre_sequence():
         w.run()
     finally:
         A.run_mood = _vrai
+        _lc.set_gen_mode(_lc.MODE_CHAIN)   # défaut projet (2026-07-30)
 
     assert len(_vus) == 3, ("les 3 variations n'ont pas toutes été lancées", len(_vus))
     for _i, (_ns, _dir) in enumerate(_vus, 1):
