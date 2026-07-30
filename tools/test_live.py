@@ -6625,6 +6625,26 @@ def fenetre_mood_sections_depliantes():
 
 
 @test
+def frames_apres_generation_jamais_silencieuses_live():
+    """L'échec d'enregistrement des frames post-génération S'AFFICHE (Live).
+
+    Audit 2026-07-30 : même except:pass muet que côté Cinéma — or au Live la
+    CHAÎNE D'IMAGES et les raccords dépendent de last_frame_path. Le bloc
+    reste protégé mais l'échec est signalé (progress.set_error), en PARITÉ
+    avec ui/tab_t2v.py.
+    """
+    import inspect as _i
+    import ui.tab_t2v_live as TL
+
+    src = _i.getsource(TL.TabT2V.on_finished)
+    code = "\n".join(l.split("#", 1)[0] for l in src.splitlines())
+    assert "Clip généré, mais" in src, \
+        "l'échec des frames post-génération doit s'afficher (Live)"
+    assert "save_shot" in code and "set_error" in code, \
+        "le bloc frames doit rester protégé ET signaler ses échecs"
+
+
+@test
 def depart_du_plan_1_generable_sans_le_lot():
     """Le DÉPART (état 0) se génère SANS passer par « Action → Générer les
     Moods » — constat Matthieu (2026-07-30) : « Générer une variation » du

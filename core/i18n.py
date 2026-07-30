@@ -2379,6 +2379,9 @@ _FR_TO_EN: dict[str, str] = {
         "with the Moods.",
     # Sections repliables de la fenêtre Mood (prompt en grand sans défiler).
     "Prévisualisation":                 "Preview",
+    # Échec d'enregistrement des frames post-génération (audit 2026-07-30).
+    "Clip généré, mais frames de raccord non enregistrées : ":
+        "Clip generated, but continuity frames could not be saved: ",
     # Rangée chaîne de la fenêtre Mood (deux vignettes DÉPART → ARRIVÉE).
     "⛓  Chaîne":                        "⛓  Chain",
     "Départ — état 0 (plan 1)":         "Start — state 0 (shot 1)",
@@ -5158,15 +5161,16 @@ def set_lang(lang: str) -> None:
     if lang not in LANGUAGES:
         return
     _LANG = lang
+    # Persistance via core.config : écriture ATOMIQUE (l'ancien open("w")
+    # direct sur le MÊME config.json pouvait laisser un JSON tronqué), et
+    # garde-fou des harnais gratuit — save_config y est neutralisé, donc un
+    # test qui change la langue n'écrit plus la vraie config (audit
+    # 2026-07-30 : test_cinema.py:3949 le faisait réellement).
     try:
-        cfg: dict = {}
-        if os.path.isfile(_CFG):
-            with open(_CFG, "r", encoding="utf-8") as f:
-                cfg = json.load(f)
+        from core.config import load_config, save_config
+        cfg = load_config()
         cfg["ui_language"] = lang
-        os.makedirs(os.path.dirname(_CFG), exist_ok=True)
-        with open(_CFG, "w", encoding="utf-8") as f:
-            json.dump(cfg, f, indent=2, ensure_ascii=False)
+        save_config(cfg)
     except Exception:
         pass
 

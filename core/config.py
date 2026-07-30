@@ -165,15 +165,37 @@ def _migrate(cfg: dict) -> dict:
     return cfg
 
 
+def _atomic_write_json(path: str, data: dict) -> None:
+    """Écriture ATOMIQUE (tmp + os.replace) : un crash pendant l'écriture ne
+    laisse jamais un JSON tronqué. La config porte les clés API réelles, non
+    restaurables — un fichier tronqué bloquait l'app au démarrage (audit
+    2026-07-30). Pattern repris de ui/file_dialogs._save_prefs."""
+    tmp = f"{path}.tmp"
+    with open(tmp, "w", encoding="utf-8") as f:
+        json.dump(data, f, indent=2)
+    os.replace(tmp, path)
+
+
 def load_config() -> dict:
     os.makedirs(_DATA_DIR, exist_ok=True)
     if os.path.exists(_CONFIG_FILE):
-        with open(_CONFIG_FILE, "r") as f:
-            return _migrate(json.load(f))
+        try:
+            with open(_CONFIG_FILE, "r", encoding="utf-8") as f:
+                return _migrate(json.load(f))
+        except (json.JSONDecodeError, OSError, UnicodeDecodeError):
+            # Config corrompue (écriture interrompue d'avant l'atomicité) :
+            # ne JAMAIS l'écraser — mise de côté horodatée pour récupérer les
+            # clés API à la main, puis repli sur les défauts.
+            try:
+                import time as _t
+                os.replace(_CONFIG_FILE,
+                           f"{_CONFIG_FILE}.corrupt_{int(_t.time())}")
+            except OSError:
+                pass
+            return dict(_DEFAULTS)
     return dict(_DEFAULTS)
 
 
 def save_config(cfg: dict):
     os.makedirs(_DATA_DIR, exist_ok=True)
-    with open(_CONFIG_FILE, "w") as f:
-        json.dump(cfg, f, indent=2)
+    _atomic_write_json(_CONFIG_FILE, cfg)

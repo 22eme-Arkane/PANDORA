@@ -5147,8 +5147,19 @@ class TabT2V(QScrollArea):
 
                     sb_api.save_shot(updated)
                     self._active_shot = updated
-                except Exception:
-                    pass
+                except Exception as _e_frames:
+                    # JAMAIS silencieux (audit 2026-07-30) : le clip est payé
+                    # et rendu, mais sans image_path/last_frame_path les
+                    # raccords et les vignettes cassent au plan suivant —
+                    # l'utilisateur doit le voir tout de suite. Le bloc reste
+                    # protégé : un échec ici ne doit pas arrêter la file.
+                    try:
+                        self.progress.set_error(
+                            translate("Clip généré, mais frames de raccord "
+                                      "non enregistrées : ")
+                            + str(_e_frames)[:120])
+                    except Exception:
+                        pass
 
         # Synchro décor (même axe) : fige le fond du 1er plan d'un (décor + axe)
         if (local_path and os.path.isfile(local_path) and self._active_shot

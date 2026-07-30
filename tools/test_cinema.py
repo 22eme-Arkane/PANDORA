@@ -6419,5 +6419,107 @@ def ctrl_c_nest_pas_un_plantage():
         sys.excepthook = _vrai_hook
 
 
+@test
+def worker_plans_architecte_chemin_derreur_repare():
+    """GenerateFloorPlansWorker : failed_safe vit SUR LA CLASSE QUI L'APPELLE.
+
+    Audit 2026-07-30 : la méthode était définie sur
+    GenerateFloorPlanVariationWorker — qui n'a ni _jobs, ni plan_done, ni
+    finished(int) redéclaré : le chemin d'erreur d'import du worker de LOT
+    levait AttributeError, et la méthode mal placée aurait frappé le signal
+    NATIF QThread.finished → TypeError.
+    """
+    import api.nano_banana as NB
+
+    assert "failed_safe" in vars(NB.GenerateFloorPlansWorker), \
+        "failed_safe doit vivre sur GenerateFloorPlansWorker (qui l'appelle)"
+    assert "failed_safe" not in vars(NB.GenerateFloorPlanVariationWorker), \
+        ("failed_safe est définie sur le worker de VARIATION, qui n'a "
+         "ni _jobs ni plan_done — mauvaise classe")
+
+    w = NB.GenerateFloorPlansWorker([{"id": "a"}, {"id": "b"}])
+    _done, _fin = [], []
+    w.plan_done.connect(lambda jid, p: _done.append((jid, p)))
+    w.finished.connect(lambda n: _fin.append(n))
+    w.failed_safe(RuntimeError("import KO"), 2)
+    assert _done == [("a", ""), ("b", "")] and _fin == [0], (_done, _fin)
+
+
+@test
+def config_atomique_et_lecture_avec_filet():
+    """config.json : écriture ATOMIQUE (tmp + os.replace) et lecture blindée.
+
+    Audit 2026-07-30 : save_config écrivait en open("w") direct et
+    load_config n'avait aucun try — un crash pendant l'écriture laissait un
+    JSON tronqué qui BLOQUAIT l'app au démarrage (le fichier porte les clés
+    API réelles, non restaurables). Le fichier corrompu est désormais mis de
+    côté (.corrupt_*) : les clés restent récupérables à la main.
+    """
+    import inspect as _i
+    import json as _json
+    import glob as _g
+    import core.config as C
+
+    # ① L'écriture passe par le helper atomique (code réel).
+    src = "\n".join(l.split("#", 1)[0]
+                    for l in _i.getsource(C).splitlines())
+    assert "os.replace(" in src and "_atomic_write_json" in src, \
+        "save_config n'écrit pas de façon atomique (tmp + os.replace)"
+
+    td = tempfile.mkdtemp(prefix="t_cfg_")
+    p = os.path.join(td, "config.json")
+    C._atomic_write_json(p, {"a": 1})
+    with open(p, encoding="utf-8") as f:
+        assert _json.load(f) == {"a": 1}
+    assert not os.path.exists(p + ".tmp"), "fichier temporaire non nettoyé"
+
+    # ② Un JSON corrompu ne bloque plus le démarrage : mis de côté + défauts.
+    _orig = C._CONFIG_FILE
+    try:
+        C._CONFIG_FILE = os.path.join(td, "config_corrompue.json")
+        with open(C._CONFIG_FILE, "w", encoding="utf-8") as f:
+            f.write('{"api_key": "tronq')
+        cfg = C.load_config()
+        assert isinstance(cfg, dict) and "api_key" in cfg, \
+            "le filet doit rendre les défauts, pas lever"
+        assert not os.path.exists(C._CONFIG_FILE), \
+            "le fichier corrompu doit être MIS DE CÔTÉ (pas laissé en place)"
+        assert _g.glob(C._CONFIG_FILE + ".corrupt_*"), \
+            "le fichier corrompu doit être CONSERVÉ (.corrupt_*) — clés API"
+    finally:
+        C._CONFIG_FILE = _orig
+
+    # ③ set_lang persiste via save_config (neutralisé dans les harnais →
+    #    un test qui change la langue n'écrit PLUS la vraie config).
+    import core.i18n as I18N
+    _s = "\n".join(l.split("#", 1)[0]
+                   for l in _i.getsource(I18N.set_lang).splitlines())
+    assert "save_config" in _s, \
+        ("set_lang doit persister via core.config.save_config "
+         "(écriture atomique + garde-fou des harnais)")
+
+
+@test
+def frames_apres_generation_jamais_silencieuses():
+    """L'échec d'enregistrement des frames post-génération S'AFFICHE (Cinéma).
+
+    Audit 2026-07-30 : extraction + save_shot vivaient sous un unique
+    try/except:pass — si save_shot échouait après une génération PAYÉE, le
+    clip était rendu mais image_path/last_frame_path n'étaient jamais
+    persistés : raccords et vignettes cassaient au plan suivant, sans un
+    mot. Le bloc reste protégé (pas de crash en fin de file), mais l'échec
+    est signalé via progress.set_error.
+    """
+    import inspect as _i
+    import ui.tab_t2v as T
+
+    src = _i.getsource(T.TabT2V.on_finished)
+    code = "\n".join(l.split("#", 1)[0] for l in src.splitlines())
+    assert "Clip généré, mais" in src, \
+        "l'échec des frames post-génération doit s'afficher (Cinéma)"
+    assert "save_shot" in code and "set_error" in code, \
+        "le bloc frames doit rester protégé ET signaler ses échecs"
+
+
 if __name__ == "__main__":
     sys.exit(main())

@@ -2563,6 +2563,19 @@ class GenerateFloorPlansWorker(QThread):
         self.progress.emit(100, "Plans terminés")
         self.finished.emit(made)
 
+    def failed_safe(self, e, n):
+        """Chemin d'erreur d'IMPORT du run : chaque job est soldé (plan_done
+        vide) puis finished(0) — l'appelant sait que rien n'a été généré.
+
+        Audit 2026-07-30 : cette méthode vivait sur
+        GenerateFloorPlanVariationWorker, qui n'a ni _jobs, ni plan_done, ni
+        finished(int) redéclaré — le chemin d'erreur levait AttributeError et
+        la méthode mal placée aurait frappé le signal NATIF QThread.finished
+        (TypeError sur emit(0)). Elle appartient à CE worker de lot."""
+        for j in self._jobs:
+            self.plan_done.emit(str(j.get("id", "")), "")
+        self.finished.emit(0)
+
 
 class GenerateFloorPlanVariationWorker(QThread):
     """Génère UNE variation du plan d'architecte d'un décor, CALÉE sur le plan
@@ -2620,8 +2633,3 @@ class GenerateFloorPlanVariationWorker(QThread):
             self.done.emit(self._id, path)
         except Exception:
             self.done.emit(self._id, "")
-
-    def failed_safe(self, e, n):
-        for j in self._jobs:
-            self.plan_done.emit(str(j.get("id", "")), "")
-        self.finished.emit(0)

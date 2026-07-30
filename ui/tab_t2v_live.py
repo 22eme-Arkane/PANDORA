@@ -5449,8 +5449,19 @@ class TabT2V(QScrollArea):
 
                     sb_api.save_shot(updated)
                     self._active_shot = updated
-                except Exception:
-                    pass
+                except Exception as _e_frames:
+                    # JAMAIS silencieux (audit 2026-07-30) : le clip est payé
+                    # et rendu, mais sans image_path/last_frame_path la CHAÎNE
+                    # D'IMAGES et les raccords cassent au plan suivant —
+                    # l'utilisateur doit le voir tout de suite. Le bloc reste
+                    # protégé : un échec ici ne doit pas arrêter la file.
+                    try:
+                        self.progress.set_error(
+                            translate("Clip généré, mais frames de raccord "
+                                      "non enregistrées : ")
+                            + str(_e_frames)[:120])
+                    except Exception:
+                        pass
 
         # Rafraîchit la bande Conducteur → la DERNIÈRE frame rendue (et sa croix
         # d'effacement) apparaît dès la fin de l'export. Sans ça, les vignettes
