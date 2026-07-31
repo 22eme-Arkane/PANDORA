@@ -184,10 +184,16 @@ class PageCastings(QWidget):
 
         self._grid_container = QWidget()
         self._grid_container.setStyleSheet("background:transparent;")
-        self._grid = QGridLayout(self._grid_container)
-        self._grid.setSpacing(18)
-        self._grid.setAlignment(Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignLeft)
-        self._grid.setContentsMargins(32, 24, 32, 32)
+        # Deux espaces dépliables — « Personnages principaux » et « Figuration »
+        # (demande Matthieu 2026-07-31). La grille unique reste utilisée à
+        # l'intérieur de chaque section ; `self._grid` désigne toujours celle
+        # des principaux pour que le filtre et l'état vide restent inchangés.
+        self._sections_lay = QVBoxLayout(self._grid_container)
+        self._sections_lay.setSpacing(14)
+        self._sections_lay.setAlignment(Qt.AlignmentFlag.AlignTop)
+        self._sections_lay.setContentsMargins(32, 24, 32, 32)
+        #: État replié de chaque section, conservé entre deux rafraîchissements.
+        self._collapsed: dict[str, bool] = {}
 
         scroll.setWidget(self._grid_container)
         self._scroll = scroll
@@ -343,9 +349,26 @@ class PageCastings(QWidget):
                 self._selected_id = ""
                 self._side_panel.clear()
 
+    def _cards_grid(self, chars: list[dict], cols: int = 9) -> QWidget:
+        """Grille de cartes — 9 colonnes, toute la largeur de la fenêtre."""
+        wrap = QWidget()
+        wrap.setStyleSheet("background:transparent;")
+        g = QGridLayout(wrap)
+        g.setSpacing(18)
+        g.setContentsMargins(0, 0, 0, 0)
+        g.setAlignment(Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignLeft)
+        for i, char in enumerate(chars):
+            card = CharacterCard(char)
+            card.edit_requested.connect(self._on_edit)
+            card.delete_requested.connect(self._on_delete)
+            card.selected.connect(self._on_card_selected)
+            g.addWidget(card, i // cols, i % cols)
+        return wrap
+
     def _render(self, chars: list[dict]):
-        while self._grid.count():
-            item = self._grid.takeAt(0)
+        from core.i18n import translate
+        while self._sections_lay.count():
+            item = self._sections_lay.takeAt(0)
             if item.widget():
                 item.widget().deleteLater()
 
@@ -355,25 +378,43 @@ class PageCastings(QWidget):
                 self._scroll.setVisible(False)
                 self._empty_state.setVisible(True)
                 return
-            from core.i18n import translate
             empty = QLabel(translate("Aucun personnage ne correspond au filtre."))
             empty.setAlignment(Qt.AlignmentFlag.AlignCenter)
             empty.setStyleSheet(
                 f"color:{CP['text_dim']};font-size:13px;background:transparent;border:none;"
             )
-            self._grid.addWidget(empty, 0, 0, 1, 9)
+            self._sections_lay.addWidget(empty)
             return
         self._empty_state.setVisible(False)
         self._scroll.setVisible(True)
 
-        # 9 colonnes (2026-07-23) : utiliser toute la largeur de la fenêtre.
-        cols = 9
-        for i, char in enumerate(chars):
-            card = CharacterCard(char)
-            card.edit_requested.connect(self._on_edit)
-            card.delete_requested.connect(self._on_delete)
-            card.selected.connect(self._on_card_selected)
-            self._grid.addWidget(card, i // cols, i % cols)
+        from core.casting import split_by_cast_type
+        from ui.collapsible import CollapsibleSection
+        mains, extras = split_by_cast_type(chars)
+
+        # Une section VIDE ne s'affiche pas : un casting sans figuration ne doit
+        # pas gagner un bandeau inutile. Les principaux restent dépliés (c'est
+        # le travail courant), la figuration se replie dès qu'elle est fournie —
+        # c'est elle qui noyait la page.
+        for _key, _titre, _items, _open in (
+                ("principaux", "Personnages principaux", mains, True),
+                ("figuration", "Figuration", extras,
+                 len(extras) <= 12)):
+            if not _items:
+                continue
+            _exp = self._collapsed.get(_key)
+            if _exp is None:
+                _exp = _open
+            # Le compteur est passé DANS le titre : `CollapsibleSection`
+            # réécrit le texte du bouton à chaque bascule et effacerait un
+            # libellé posé après coup. Le nom est traduit avant concaténation —
+            # « Personnages principaux · 5 » ne serait dans aucun dictionnaire.
+            sec = CollapsibleSection(
+                f"{translate(_titre)}   ·   {len(_items)}", expanded=bool(_exp))
+            sec.add_widget(self._cards_grid(_items))
+            sec.header_button().toggled.connect(
+                lambda ok, k=_key: self._collapsed.__setitem__(k, bool(ok)))
+            self._sections_lay.addWidget(sec)
 
     def _filter(self, text: str):
         q = text.lower()

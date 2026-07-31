@@ -805,8 +805,30 @@ class CharacterDialog(QDialog):
         )
         col_role.addWidget(self._role)
 
+        # ── Principal / Figuration (demande Matthieu 2026-07-31) ─────────────
+        # Distinct du « Rôle », qui dit un MÉTIER : un figurant a lui aussi un
+        # rôle. Ce champ range le personnage dans l'un des deux espaces de la
+        # page Casting. Par défaut PRINCIPAL — un casting existant ne doit pas
+        # se retrouver en figuration parce que le champ n'existait pas encore.
+        from core.casting import CAST_MAIN, CAST_EXTRA, cast_type as _cast_type
+        col_cast = QVBoxLayout()
+        col_cast.setSpacing(4)
+        col_cast.addWidget(_lbl("Type"))
+        self._cast_type = QComboBox()
+        self._cast_type.addItem(translate("Personnage principal"), CAST_MAIN)
+        self._cast_type.addItem(translate("Figuration"), CAST_EXTRA)
+        _ct = _cast_type(self._char)
+        self._cast_type.setCurrentIndex(1 if _ct == CAST_EXTRA else 0)
+        self._cast_type.setFixedHeight(36)
+        self._cast_type.setStyleSheet(self._role.styleSheet())
+        self._cast_type.setToolTip(translate(
+            "Range le personnage dans « Personnages principaux » ou "
+            "« Figuration » sur la page Casting."))
+        col_cast.addWidget(self._cast_type)
+
         row.addLayout(col_name, 2)
         row.addLayout(col_role, 1)
+        row.addLayout(col_cast, 1)
         lay.addLayout(row)
 
         warn = QLabel(
@@ -939,25 +961,13 @@ class CharacterDialog(QDialog):
         )
         _style_lbl_w.setFixedWidth(150)
         _style_row.addWidget(_style_lbl_w)
-        import core.style as _style_mod
+        from ui.style_combo import populate as _populate_styles
         self._portrait_style_combo = QComboBox()
-        self._portrait_style_combo.addItem("— Aucun —", "")
-        _cur_grp = None
-        for _s in _style_mod.STYLES:
-            _g = _s.get("group", "")
-            if _g != _cur_grp:
-                _cur_grp = _g
-                _gi = next((g for g in _style_mod.GROUPS if g["key"] == _g), None)
-                if _gi:
-                    self._portrait_style_combo.addItem(
-                        f"  {_gi['icon']}  {translate(_gi['name']).upper()}", "__sep__"
-                    )
-                    _sep_item = self._portrait_style_combo.model().item(
-                        self._portrait_style_combo.count() - 1
-                    )
-                    _sep_item.setEnabled(False)
-                    _sep_item.setForeground(QColor(CP.get("accent", "#7c6bff")))
-            self._portrait_style_combo.addItem(f"    {_s['icon']}  {translate(_s['name'])}", _s["key"])
+        # Liste partagée (ui/style_combo) : « Style de la note de réalisation »
+        # en tête, puis l'entrée neutre, puis les styles par famille.
+        _populate_styles(self._portrait_style_combo, first_label="— Aucun —",
+                         saved_key=self._char.get("character_style_key", ""),
+                         accent_key="accent")
         self._portrait_style_combo.setFixedHeight(32)
         self._portrait_style_combo.setStyleSheet(
             f"QComboBox{{background:{CP['bg3']};border:1px solid {CP['border']};"
@@ -968,13 +978,8 @@ class CharacterDialog(QDialog):
             f"color:{CP['text_primary']};selection-background-color:{CP['accent_dim']};"
             f"font-size:11px;padding:4px;}}"
         )
-        # Pré-sélectionner le style du projet par défaut
-        _default_key = _style_mod.get_style_key()
-        if _default_key:
-            for _i in range(self._portrait_style_combo.count()):
-                if self._portrait_style_combo.itemData(_i) == _default_key:
-                    self._portrait_style_combo.setCurrentIndex(_i)
-                    break
+        # (la sélection par défaut est faite par ui.style_combo.populate :
+        #  note de réalisation si elle décrit un style, sinon style du projet)
         _style_row.addWidget(self._portrait_style_combo, 1)
         lay.addLayout(_style_row)
         self._on_ref_usage_changed()
@@ -1700,21 +1705,15 @@ class CharacterDialog(QDialog):
     def _update_suffix_edit(self):
         if not hasattr(self, "_suffix_edit"):
             return
-        import core.style as _style_mod
         from core.camera_prefs import get_camera_prefs
+        from ui.style_combo import suffix_for
         prefs = get_camera_prefs()
         cam = prefs.get("camera_body", "").strip()
         optic = prefs.get("optics_series", "").strip()
         has_cam = bool(cam or optic)
-        sk = self._portrait_style_combo.currentData() if hasattr(self, "_portrait_style_combo") else ""
-        if sk and sk != "__sep__":
-            _s = next((s for s in _style_mod.STYLES if s["key"] == sk), None)
-            if _s:
-                sfx = _s.get("image_suffix_no_cam", _s["image_suffix"]) if has_cam else _s["image_suffix"]
-            else:
-                sfx = _style_mod.get_image_suffix_no_cam() if has_cam else _style_mod.get_image_suffix()
-        else:
-            sfx = _style_mod.get_image_suffix_no_cam() if has_cam else _style_mod.get_image_suffix()
+        # Résolution partagée : gère la clé « note de réalisation » comme les
+        # clés de style normales (et le repli sur le style du projet).
+        sfx = suffix_for(getattr(self, "_portrait_style_combo", None), no_cam=has_cam)
         cam_parts = []
         if cam:
             cam_parts.append(f"shot on {cam}")
@@ -2834,6 +2833,9 @@ class CharacterDialog(QDialog):
         data.update({
             "name":             name,
             "role":             self._role.currentText(),
+            # Principal / figuration — la valeur EN DUR (pas le libellé affiché,
+            # qui change avec la langue de l'interface).
+            "cast_type":        self._cast_type.currentData(),
             "prompt":           self._prompt.toPlainText().strip(),
             "image_path":       self._image_path,
             "sheet_path":       self._sheet_path,
@@ -2842,6 +2844,10 @@ class CharacterDialog(QDialog):
             "accessory_ids":    list(self._active_acc_ids),
             "hmc_ids":          list(self._active_hmc_ids),
             "ref_usage_key":    self._ref_usage_combo.currentData() if hasattr(self, "_ref_usage_combo") else "inspiration",
+            # Persisté comme dans les 4 autres fiches : le style choisi (dont
+            # « note de réalisation ») est retrouvé à la réouverture.
+            "character_style_key": (self._portrait_style_combo.currentData()
+                                    if hasattr(self, "_portrait_style_combo") else ""),
         })
         from core.visual_identity import prepare_identity_for_save
         data["visual_identity"] = prepare_identity_for_save(

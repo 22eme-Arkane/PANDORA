@@ -7329,5 +7329,109 @@ def fenetre_mood_montre_les_images_envoyees():
         _sh.rmtree(_tmp, ignore_errors=True)
 
 
+@test
+def casting_principaux_et_figuration_separes():
+    """Le Casting range les personnages dans DEUX espaces dépliables (demande
+    Matthieu 2026-07-31). Le défaut est PRINCIPAL : un casting existant, dont
+    les fiches n'ont pas le champ, ne doit pas basculer en figuration."""
+    from PyQt6.QtWidgets import QApplication
+    QApplication.instance() or QApplication([])
+    from core.casting import (split_by_cast_type, cast_type, is_extra,
+                              CAST_MAIN, CAST_EXTRA)
+
+    # Défaut : champ absent, vide ou inconnu → principal.
+    for _c in ({}, {"cast_type": ""}, {"cast_type": "  "}, {"cast_type": "zzz"}):
+        assert cast_type(_c) == CAST_MAIN, _c
+        assert not is_extra(_c), _c
+    assert cast_type({"cast_type": "FIGURATION"}) == CAST_EXTRA, "casse ignorée"
+
+    chars = [{"id": "a", "name": "Jésus"},
+             {"id": "b", "name": "Villageois", "cast_type": CAST_EXTRA},
+             {"id": "c", "name": "Marie", "cast_type": CAST_MAIN}]
+    mains, extras = split_by_cast_type(chars)
+    assert [c["id"] for c in mains] == ["a", "c"], mains
+    assert [c["id"] for c in extras] == ["b"], extras
+
+    # La page rend bien DEUX sections, et une section vide ne s'affiche pas.
+    import core.casting as _C
+    import ui.page_castings as _PC
+    _orig = _C.list_characters
+    try:
+        _C.list_characters = lambda: chars
+        page = _PC.PageCastings()
+        page.refresh()
+        _secs = [page._sections_lay.itemAt(i).widget()
+                 for i in range(page._sections_lay.count())]
+        _titres = [w.header_button().text() for w in _secs
+                   if hasattr(w, "header_button")]
+        assert len(_titres) == 2, _titres
+        assert "principaux" in _titres[0].lower(), _titres
+        assert "figuration" in _titres[1].lower(), _titres
+        # Compteurs présents (c'est ce qui permet de juger d'un coup d'œil).
+        assert "2" in _titres[0] and "1" in _titres[1], _titres
+
+        # Aucun figurant → une seule section, pas de bandeau vide.
+        _C.list_characters = lambda: [{"id": "a", "name": "Jésus"}]
+        page.refresh()
+        _secs = [page._sections_lay.itemAt(i).widget()
+                 for i in range(page._sections_lay.count())]
+        _n = len([w for w in _secs if hasattr(w, "header_button")])
+        assert _n == 1, f"{_n} sections alors qu'il n'y a pas de figuration"
+    finally:
+        _C.list_characters = _orig
+
+    # La fiche personnage sauve la VALEUR, jamais le libellé traduit.
+    import inspect as _i
+    import ui.dialog_character as _DC
+    _src = "\n".join(l.split("#", 1)[0]
+                     for l in _i.getsource(_DC).splitlines())
+    assert '"cast_type":        self._cast_type.currentData()' in _src, \
+        "le type de casting n'est pas enregistré depuis la donnée du combo"
+
+
+@test
+def image_et_son_retire_sans_rien_casser():
+    """« Image & Son » est retiré (Matthieu 2026-07-31 : « il ne sert pas »).
+
+    Le MODULE reste : dix endroits le lisent, dont le Studio IA des DEUX
+    éditions. Le retrait passe par un drapeau qui rend les préférences vides —
+    l'état d'un projet neuf, déjà géré partout. Un projet qui avait réglé une
+    caméra ne doit plus l'injecter, la page qui permettait d'en changer
+    n'existant plus."""
+    import inspect as _i
+    import core.camera_prefs as _CP
+
+    assert _CP._FEATURE_ENABLED is False, "la fonctionnalité est censée être retirée"
+    prefs = _CP.get_camera_prefs()
+    assert set(prefs) == set(_CP._DEFAULTS), "les clés doivent toutes rester présentes"
+    assert not any(v for v in prefs.values()), ("préférences non vides", prefs)
+    assert _CP.get_prompt_suffix() == "", "une caméra entre encore dans les prompts"
+
+    # …et plus rien ne s'écrit sur le disque.
+    _appels = []
+    _orig = _CP._save_all
+    try:
+        _CP._save_all = lambda d: _appels.append(d)
+        _CP.save_camera_prefs({"camera_brand": "ARRI"})
+        assert not _appels, "save_camera_prefs écrit encore malgré le retrait"
+    finally:
+        _CP._save_all = _orig
+
+    # L'entrée de navigation n'est plus construite (code commenté, pas supprimé).
+    import ui.pandora_window as _PW
+    _src = "\n".join(l.split("#", 1)[0]
+                     for l in _i.getsource(_PW).splitlines())
+    assert 'tr("nav.camera")' not in _src, "l'entrée Image & Son est encore montée"
+    assert "PageCamera()" not in _src, "la page Image & Son est encore construite"
+
+    # Le manuel reste ALIGNÉ après le retrait de sa section (FR + EN).
+    import ui.dialog_user_manual as _M
+    assert len(_M._SECTIONS) == len(_M._BUILDERS) == sum(n for _t, n in _M._GROUPS_FR), \
+        "manuel FR désaligné"
+    assert len(_M._SECTIONS_EN) == len(_M._BUILDERS_EN) == sum(n for _t, n in _M._GROUPS_EN), \
+        "manuel EN désaligné"
+    assert all("Image & Son" not in t for _i2, t in _M._SECTIONS), _M._SECTIONS
+
+
 if __name__ == "__main__":
     sys.exit(main())

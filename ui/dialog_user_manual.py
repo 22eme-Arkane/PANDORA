@@ -79,7 +79,11 @@ _SECTIONS = [
     ("◈",  "Accessoires"),
     ("✂",  "HMC"),
     ("🚗", "Véhicules"),
-    ("◎",  "Image & Son"),
+    # « Image & Son » retiré de l'application (2026-07-31) → section retirée du
+    # manuel, et PRÉ-PRODUCTION passe de 8 à 7 sections. Pour la remettre :
+    # rétablir cette entrée, le compte du groupe, et le builder `_s_camera`
+    # (conservé plus bas, simplement déréférencé) — même chose côté anglais.
+    # ("◎",  "Image & Son"),
     # STUDIO IA
     ("✦",  "Studio IA"),
     ("🎨", "Style visuel"),
@@ -93,7 +97,7 @@ _SECTIONS = [
 # Groupes de navigation (nom du groupe, nombre de sections dans le groupe)
 _GROUPS_FR = [
     ("DÉMARRAGE",       2),
-    ("PRÉ-PRODUCTION",  8),
+    ("PRÉ-PRODUCTION",  7),   # 8 avant le retrait d'« Image & Son »
     ("STUDIO IA",       4),
     ("RÉFÉRENCE",       2),
 ]
@@ -1026,7 +1030,7 @@ def _s_shortcuts() -> str:
 _BUILDERS = [
     _s_welcome, _s_projects,                                    # DÉMARRAGE
     _s_scenario, _s_storyboard, _s_castings, _s_decors,        # PRÉ-PRODUCTION
-    _s_accessories, _s_hmc, _s_vehicles, _s_camera,
+    _s_accessories, _s_hmc, _s_vehicles,   # `_s_camera` retiré (Image & Son)
     _s_seedance, _s_style, _s_doublage, _s_tarifs,             # STUDIO IA
     _s_settings, _s_shortcuts,                                  # RÉFÉRENCE
 ]
@@ -1043,7 +1047,9 @@ _SECTIONS_EN = [
     ("◈",  "Props"),
     ("✂",  "HMC"),
     ("🚗", "Vehicles"),
-    ("◎",  "Camera & Sound"),
+    # « Camera & Sound » removed from the app (2026-07-31) — see the French
+    # list above for how to restore it.
+    # ("◎",  "Camera & Sound"),
     # AI STUDIO
     ("✦",  "AI Studio"),
     ("🎨", "Visual style"),
@@ -1056,7 +1062,7 @@ _SECTIONS_EN = [
 
 _GROUPS_EN = [
     ("GET STARTED",    2),
-    ("PRE-PRODUCTION", 8),
+    ("PRE-PRODUCTION", 7),   # 8 before « Camera & Sound » was removed
     ("AI STUDIO",      4),
     ("REFERENCE",      2),
 ]
@@ -1962,7 +1968,7 @@ def _e_shortcuts() -> str:
 _BUILDERS_EN = [
     _e_welcome, _e_projects,                                    # GET STARTED
     _e_scenario, _e_storyboard, _e_castings, _e_decors,        # PRE-PRODUCTION
-    _e_accessories, _e_hmc, _e_vehicles, _e_camera,
+    _e_accessories, _e_hmc, _e_vehicles,   # `_e_camera` removed (Camera & Sound)
     _e_seedance, _e_style, _e_doublage, _e_pricing,            # AI STUDIO
     _e_settings, _e_shortcuts,                                  # REFERENCE
 ]

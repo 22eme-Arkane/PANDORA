@@ -13,7 +13,7 @@ from ui.page_accessories import PageAccessories
 from ui.page_hmc import PageHMC
 from ui.page_vehicles import PageVehicles
 from ui.page_camera import PageCamera
-from ui.page_decors import PageDecors
+from ui.decors_hub import DecorsHub
 from ui.page_scenario import PageScenario
 from ui.page_storyboard import PageStoryboard
 from ui.page_doublage import PageDoublage
@@ -38,7 +38,11 @@ def _get_nav_items():
         ("vehicule.png",   tr("nav.vehicles"),    "vehicles"),
         None,
         ("plan_de_feu.png", tr("nav.plan_de_feu"), "plan_de_feu"),
-        ("camera.png",     tr("nav.camera"),      "camera"),
+        # « Image & Son » RETIRÉ (décision Matthieu 2026-07-31 : « il ne sert
+        # pas »). Pour le remettre : décommenter la ligne ci-dessous ET remettre
+        # `_FEATURE_ENABLED = True` dans core/camera_prefs.py — sans quoi la
+        # page s'afficherait mais ne mémoriserait plus rien.
+        # ("camera.png",     tr("nav.camera"),      "camera"),
         ("doublage.png",   tr("nav.doublage"),    "doublage"),
         None,
         ("draw_to_video.png", tr("nav.image_ia"), "image_ia"),
@@ -527,14 +531,18 @@ class PandoraWindow(QMainWindow):
         self._stack.addWidget(plan_de_feu)
         pulse()
 
-        decors = PageDecors()
+        # Deux onglets depuis le 2026-07-31 : « Décors » (page classique) et
+        # « 7 vues » (atelier de rotations) — voir ui/decors_hub.py.
+        decors = DecorsHub()
         self._pages["decors"] = decors
         self._stack.addWidget(decors)
         pulse()
 
-        camera = PageCamera()
-        self._pages["camera"] = camera
-        self._stack.addWidget(camera)
+        # Page « Image & Son » plus construite — voir la nav ci-dessus. La
+        # classe reste importée et intacte ; rien d'autre ne la référence.
+        # camera = PageCamera()
+        # self._pages["camera"] = camera
+        # self._stack.addWidget(camera)
 
         castings = PageCastings()
         self._pages["castings"] = castings

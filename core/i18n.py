@@ -2391,6 +2391,32 @@ _FR_TO_EN: dict[str, str] = {
     # Échec d'enregistrement des frames post-génération (audit 2026-07-30).
     "Clip généré, mais frames de raccord non enregistrées : ":
         "Clip generated, but continuity frames could not be saved: ",
+    # Casting : deux espaces, principaux et figuration (2026-07-31).
+    "Personnages principaux":           "Main characters",
+    "Figuration":                       "Extras",
+    "Personnage principal":             "Main character",
+    "Type":                             "Type",
+    "Range le personnage dans « Personnages principaux » ou "
+    "« Figuration » sur la page Casting.":
+        "Files the character under “Main characters” or “Extras” on the "
+        "Cast page.",
+    # Rangée « images envoyées au moteur » de la fenêtre Mood (2026-07-31).
+    "🖼  Images envoyées au moteur":     "🖼  Images sent to the engine",
+    "🖼  Ce moteur n'accepte aucune image de référence — "
+    "il travaillera d'après le texte seul":
+        "🖼  This engine accepts no reference image — "
+        "it will work from the text alone",
+    "🖼  Aucune image envoyée — ce plan n'a ni décor ni personnage "
+    "avec une fiche image":
+        "🖼  No image sent — this shot has no set and no character "
+        "with a sheet image",
+    "Façade":                           "Facade",
+    "Personnage":                       "Character",
+    "Décor":                            "Set",
+    "Accessoire":                       "Prop",
+    "Véhicule":                         "Vehicle",
+    "Inspiration":                      "Inspiration",
+    "Plan d'architecte":                "Floor plan",
     # Rangée chaîne de la fenêtre Mood (deux vignettes DÉPART → ARRIVÉE).
     "⛓  Chaîne":                        "⛓  Chain",
     "Départ — état 0 (plan 1)":         "Start — state 0 (shot 1)",
@@ -3097,6 +3123,94 @@ _FR_TO_EN: dict[str, str] = {
         "Set your fal.ai key in Settings to generate a variation.",
     "La variation n'a pas pu être générée (clé fal.ai ? réseau ?).":
         "The variation could not be generated (fal.ai key? network?).",
+    # Bouton « Créer le plan du décor » (fiche décor) + clic direct sur une
+    # vignette « à générer » (2026-07-31).
+    "▦  Créer le plan du décor":                 "▦  Create the set floor plan",
+    "Créer le plan du décor":                    "Create the set floor plan",
+    "Plan en cours…":                            "Generating plan…",
+    "Générer le plan d'architecte du décor (vu de dessus) — utilisé par la Mise en scène et le Plan de feu":
+        "Generate the set's architect floor plan (top-down view) — used by Staging and the Lighting plan",
+    "Décris d'abord le décor pour générer son plan.":
+        "Describe the set first to generate its floor plan.",
+    "Génération du plan vu de dessus…":          "Generating the top-down floor plan…",
+    "Mode mock : aucun plan généré (clé fal.ai absente)":
+        "Mock mode: no floor plan generated (fal.ai key missing)",
+    "Plan du décor généré ✓ — visible dans « Plan des décors » (page Décors)":
+        "Set floor plan generated ✓ — shown in “Set floor plans” (Sets page)",
+    "Cliquer pour générer le plan d'architecte (vu de dessus)":
+        "Click to generate the architect floor plan (top-down view)",
+    "génération…":                               "generating…",
+    "Configure ta clé fal.ai dans Paramètres pour générer le plan.":
+        "Set your fal.ai key in Settings to generate the floor plan.",
+    "Le plan n'a pas pu être généré (clé fal.ai ? réseau ?).":
+        "The floor plan could not be generated (fal.ai key? network?).",
+
+    # ── Fenêtre « Générer depuis le scénario » : validation explicite ─────────
+    "✓  OK":                                     "✓  OK",
+    "✕  Arrêter":                                "✕  Stop",
+
+    # ── Sections repliables des fiches d'élément (2026-07-31) ────────────────
+    "🖼  Références visuelles":                  "🖼  Visual references",
+    "⚙  Réglages de génération":                 "⚙  Generation settings",
+    "🎨  Contrôles créatifs":                    "🎨  Creative controls",
+
+    # ── Style repris de la note de réalisation (2026-07-31) ───────────────────
+    "📝  Style de la note de réalisation":       "📝  Style from the director's note",
+    "Reprend le STYLE VISUEL écrit dans la note de réalisation (page Scénario). Relu à chaque génération : modifier la note change le style.":
+        "Uses the VISUAL STYLE written in the director's note (Screenplay page). "
+        "Re-read at every generation: editing the note changes the style.",
+    "Aucun style visuel dans la note de réalisation — écris-le dans la page Scénario.":
+        "No visual style in the director's note — write it in the Screenplay page.",
+
+    # ── Atelier 7 vues (onglet « 7 vues » de la partie Décors, 2026-07-31) ─────
+    "7 vues":                                    "7 views",
+    "Atelier 7 vues":                            "7-view workshop",
+    "Vraies rotations de caméra autour d'un décor : les six vues sont recalculées depuis l'image d'ensemble, puis écrites sur les vues de la pièce (page Décors, storyboard, Mise en scène).":
+        "True camera rotations around a set: the six views are recomputed from the master image, then written to the room's views (Sets page, storyboard, Staging).",
+    "Pièce / décor":                             "Room / set",
+    "Moteur":                                    "Engine",
+    "Multi-angles (Qwen)":                       "Multi-angle (Qwen)",
+    "Orbite 360° (Seedance)":                    "360° orbit (Seedance)",
+    "Panorama 360° (Hunyuan World)":             "360° panorama (Hunyuan World)",
+    "6 vues par angles caméra numériques · ~0,04 $/vue · plafond approché (contre-plongée)":
+        "6 views from numeric camera angles · ~$0.04/view · ceiling approximated (low-angle)",
+    "1 vidéo orbitale 720p × 8 s (~2,40 $) → 4 faces murales · Sol/Plafond non couverts":
+        "1 orbital video 720p × 8 s (~$2.40) → 4 wall faces · Floor/Ceiling not covered",
+    "1 panorama (~0,10 $) → 6 vues reprojetées en LOCAL, géométrie garantie":
+        "1 panorama (~$0.10) → 6 views reprojected LOCALLY, guaranteed geometry",
+    "Zoom":                                      "Zoom",
+    "0 = très large (tout le mur) · 5 = moyen · 10 = serré":
+        "0 = very wide (whole wall) · 5 = medium · 10 = tight",
+    "Générer les vues":                          "Generate views",
+    "Générer les 4 faces":                       "Generate the 4 faces",
+    "Plan d'ensemble (source)":                  "Master view (source)",
+    "Les 6 vues dérivées":                       "The 6 derived views",
+    "Aucun décor avec une image.\nGénère d'abord un décor dans l'onglet Standard.":
+        "No set with an image.\nGenerate a set first in the Standard tab.",
+    # Onglets de la partie Décors + visualiseur plein écran (2026-07-31)
+    "Standard":                                  "Standard",
+    "Avancé":                                    "Advanced",
+    "Cliquer pour voir en grand":                "Click to view full size",
+    "Plan d'ensemble":                           "Master view",
+    "Panorama 360°":                             "360° panorama",
+    "Aucune image à afficher":                   "No image to display",
+    "Image illisible":                           "Unreadable image",
+    "Avant":                                     "Front",
+    "Arrière":                                   "Back",
+    "Gauche":                                    "Left",
+    "Droite":                                    "Right",
+    "Sol":                                       "Floor",
+    "Plafond":                                   "Ceiling",
+    "Mode mock : configure ta clé fal.ai dans Paramètres pour générer les vues.":
+        "Mock mode: set your fal.ai key in Settings to generate the views.",
+    "Génération des vues…":                      "Generating views…",
+    "Mode mock : aucune vue générée (clé fal.ai absente)":
+        "Mock mode: no view generated (fal.ai key missing)",
+    "panorama 360° conservé sur la pièce":       "360° panorama kept on the room",
+    "vidéo d'orbite conservée sur la pièce":     "orbit video kept on the room",
+    "✓ {n} vue(s) écrite(s) sur la pièce.":      "✓ {n} view(s) written to the room.",
+    "Les vues manquantes gardent leur image actuelle.":
+        "Missing views keep their current image.",
 
     # ── Mise en scène / Plan de feu — outils & projecteurs (2026-06-16) ────────
     "Déplacer":                                  "Move",

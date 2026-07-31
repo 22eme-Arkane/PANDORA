@@ -83,3 +83,34 @@ def delete_character(char_id: str):
 
 def get_character(char_id: str) -> dict | None:
     return next((c for c in _all_characters() if c.get("id") == char_id), None)
+
+
+# ── Principaux / figuration (demande Matthieu 2026-07-31) ─────────────────────
+# Un long-métrage aligne vite des dizaines de silhouettes qui noient les rôles
+# qui comptent. Le champ `cast_type` les sépare en deux espaces dépliables.
+# Distinct du champ « Rôle », qui dit un MÉTIER (Lead Actor, Sound Mixer…) :
+# un figurant a lui aussi un rôle, ce n'est pas la même question.
+CAST_MAIN  = "principal"
+CAST_EXTRA = "figuration"
+
+#: Valeur par défaut : tout personnage déjà enregistré reste PRINCIPAL — un
+#: champ absent ne doit jamais faire basculer un rôle existant en figuration.
+CAST_TYPES = (CAST_MAIN, CAST_EXTRA)
+
+
+def cast_type(char: dict | None) -> str:
+    """Type de casting d'un personnage, avec repli sur « principal »."""
+    _v = ((char or {}).get("cast_type") or "").strip().lower()
+    return _v if _v in CAST_TYPES else CAST_MAIN
+
+
+def is_extra(char: dict | None) -> bool:
+    return cast_type(char) == CAST_EXTRA
+
+
+def split_by_cast_type(chars: list[dict]) -> tuple[list[dict], list[dict]]:
+    """(principaux, figuration) — l'ordre d'origine est conservé dans chaque
+    groupe, pour ne pas réorganiser un casting déjà rangé par l'utilisateur."""
+    mains  = [c for c in (chars or []) if not is_extra(c)]
+    extras = [c for c in (chars or []) if is_extra(c)]
+    return mains, extras
