@@ -576,21 +576,51 @@ def run_real(params: dict, emit_progress, is_cancelled) -> dict:
                         f"reinterpreted in the film's visual style."
                     )
                 elif _role == "decor":
-                    if params.get("decor_ref_free", False):
+                    # Trois façons de traiter l'image du décor. `decor_ref_mode`
+                    # prime ; `decor_ref_free` reste lu pour les appelants qui
+                    # n'envoient encore que le booléen (Live).
+                    _dmode = (params.get("decor_ref_mode") or "").strip().lower()
+                    if not _dmode:
+                        _dmode = ("inspiration" if params.get("decor_ref_free", False)
+                                  else "lieu")
+                    if _dmode == "inspiration":
                         _prompt_additions.append(
                             f"VISUAL ATMOSPHERE @Image{_idx}: Draw inspiration from the mood, "
                             f"color palette, and aesthetic of this location — but reinterpret "
                             f"the space freely. Do not replicate the exact architecture or layout. "
                             f"Use the image as a stylistic reference only."
                         )
-                    else:
+                    elif _dmode == "identique":
+                        # Le décor EST le plan : cadrage, échelle et point de vue
+                        # de l'image sont conservés. C'est le seul mode où l'on
+                        # accepte que l'image serve de cadre.
                         _prompt_additions.append(
-                            f"FILMING LOCATION @Image{_idx}: This is the physical space the camera "
-                            f"moves through — NOT a static backdrop or background plate. "
-                            f"The camera explores this environment freely: tracking shots, pans, "
-                            f"depth reveals, different angles and viewpoints within the space. "
-                            f"Preserve the architectural character and atmosphere of the location "
-                            f"while showing it from multiple perspectives."
+                            f"LOCKED FRAMING @Image{_idx}: Reproduce this exact view of the "
+                            f"location — same camera position, same angle, same scale, same "
+                            f"composition. Treat it as the actual frame of this shot: only the "
+                            f"characters and the action move within it. Do NOT re-frame, do NOT "
+                            f"move the camera to another part of the space."
+                        )
+                    else:
+                        # « lieu » — l'image dit OÙ, le prompt dit COMMENT c'est
+                        # cadré. L'ancienne consigne demandait au moteur de
+                        # montrer l'endroit « sous plusieurs angles » sans jamais
+                        # nommer le cadrage voulu : sur un plan serré, il rendait
+                        # donc le plan d'ensemble de la fiche (constat Matthieu
+                        # 2026-07-31 : « il utilise vraiment le plan d'ensemble
+                        # comme le plan désigné »). On dit désormais l'inverse,
+                        # comme le fait déjà la directive des Moods.
+                        _prompt_additions.append(
+                            f"FILMING LOCATION @Image{_idx}: This image tells you WHERE the "
+                            f"scene happens — it is NOT the framing of this shot. It is the "
+                            f"physical space the camera moves through, not a backdrop and not "
+                            f"a composition to copy. Keep its architecture, materials, colours "
+                            f"and lighting, then place the camera INSIDE that space to shoot "
+                            f"exactly the shot described above: obey the shot size, camera axis, "
+                            f"angle and focal length written in the prompt. If the prompt asks "
+                            f"for a close shot, move in close on the subject and let the rest of "
+                            f"the location fall out of frame. Do NOT reproduce the wide "
+                            f"establishing view of the reference image."
                         )
                 elif _role == "accessory":
                     _prompt_additions.append(

@@ -7433,5 +7433,55 @@ def image_et_son_retire_sans_rien_casser():
     assert all("Image & Son" not in t for _i2, t in _M._SECTIONS), _M._SECTIONS
 
 
+@test
+def image_du_decor_lieu_cadrage_ou_inspiration():
+    """L'image de la fiche décor peut vouloir dire trois choses différentes, et
+    le moteur ne peut pas le deviner.
+
+    Constat Matthieu 2026-07-31 : « il utilise l'image de référence telle
+    quelle, comme un tableau fixe… si mon personnage est à gauche du cadre et
+    que je fais un plan serré sur lui, je m'attends à voir autre chose que le
+    plan d'ensemble ». L'ancienne consigne demandait au moteur de montrer le
+    lieu « sous plusieurs angles » sans jamais nommer le cadrage voulu."""
+    import inspect as _i
+    import api.real as _R
+
+    _src = _i.getsource(_R.run_real)
+    _i0 = _src.find('elif _role == "decor"')
+    assert _i0 > 0, "le rôle « decor » a disparu de l'envoi"
+    _bloc = _src[_i0:_i0 + 4200]
+
+    # Trois modes → trois consignes DISTINCTES.
+    for _mode, _tag in (("lieu", "FILMING LOCATION"),
+                        ("identique", "LOCKED FRAMING"),
+                        ("inspiration", "VISUAL ATMOSPHERE")):
+        assert _tag in _bloc, (f"consigne du mode « {_mode} » absente", _tag)
+
+    # Le mode « lieu » doit dire que l'image N'EST PAS le cadrage, et renvoyer
+    # au plan pour la valeur et l'axe — c'est tout le correctif.
+    for _phrase in ("NOT the framing of this shot",
+                    "obey the shot size, camera axis",
+                    "Do NOT reproduce the wide"):
+        assert _phrase in _bloc, ("le mode « lieu » ne cadre rien", _phrase)
+
+    # …et le mode « identique » doit au contraire VERROUILLER le cadrage.
+    assert "same camera position" in _bloc and "only the" in _bloc, \
+        "le mode « identique » ne verrouille pas le cadrage"
+
+    # Compatibilité : un appelant qui n'envoie que l'ancien booléen garde son
+    # sens (le Live n'a pas encore le sélecteur).
+    assert 'params.get("decor_ref_free"' in _bloc, \
+        "l'ancien booléen n'est plus lu — le Live perdrait son réglage"
+
+    # Le sélecteur vit dans RENDU & AUDIO et part réellement au moteur.
+    import ui.tab_t2v as _T
+    _s = "\n".join(l.split("#", 1)[0] for l in _i.getsource(_T).splitlines())
+    assert "_decor_ref_combo" in _s, "pas de sélecteur « Image du décor »"
+    assert '"decor_ref_mode"' in _s, "le mode choisi n'est pas envoyé"
+    # Défaut = « lieu » : c'est le comportement attendu d'un découpage.
+    assert 'return _c.currentData() or "lieu"' in _s, \
+        "le repli du sélecteur n'est pas « lieu »"
+
+
 if __name__ == "__main__":
     sys.exit(main())

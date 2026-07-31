@@ -2391,6 +2391,22 @@ _FR_TO_EN: dict[str, str] = {
     # Échec d'enregistrement des frames post-génération (audit 2026-07-30).
     "Clip généré, mais frames de raccord non enregistrées : ":
         "Clip generated, but continuity frames could not be saved: ",
+    # RENDU & AUDIO : ce que le moteur fait de l'image du décor (2026-07-31).
+    "Image du décor":                   "Location image",
+    "Lieu — la caméra s'y déplace selon l'axe et la valeur du plan":
+        "Location — the camera moves inside it, following the shot's axis and size",
+    "Identique — l'image EST le cadrage, seule l'action bouge":
+        "Identical — the image IS the framing, only the action moves",
+    "Inspiration — ambiance et palette seulement, espace libre":
+        "Inspiration — mood and palette only, space reinterpreted",
+    "Ce que le moteur doit faire de l'image de la fiche décor.\n"
+    "« Lieu » : elle dit OÙ se passe la scène, le cadrage vient du plan.\n"
+    "« Identique » : elle dit AUSSI comment c'est cadré.\n"
+    "« Inspiration » : elle ne donne que l'ambiance.":
+        "What the engine should do with the location sheet's image.\n"
+        "“Location”: it says WHERE the scene happens; framing comes from the shot.\n"
+        "“Identical”: it also says how the shot is framed.\n"
+        "“Inspiration”: it only gives the mood.",
     # Casting : deux espaces, principaux et figuration (2026-07-31).
     "Personnages principaux":           "Main characters",
     "Figuration":                       "Extras",

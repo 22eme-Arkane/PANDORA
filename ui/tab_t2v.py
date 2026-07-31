@@ -592,6 +592,9 @@ class CastingSelector(QWidget):
     def _on_decor_mode_toggled(self, checked: bool):
         pass  # état lu directement via get_decor_ref_free()
 
+    # NB : le sélecteur « Image du décor » vit dans RENDU & AUDIO, sur l'onglet
+    # lui-même (`_decor_ref_mode`), pas sur ce panneau de casting.
+
     def get_decor_ref_free(self) -> bool:
         return not self._decor_mode_cb.isChecked()
 
@@ -2949,6 +2952,50 @@ class TabT2V(QScrollArea):
         self._raccord_auto_cb = _raccord_auto_cb_inner
         _raccords_lay.addWidget(self._raccord_auto_toggle_row)
 
+        # ── Ce que Seedance doit faire de l'image du décor ────────────────────
+        # Demande Matthieu 2026-07-31 : « il utilise l'image de référence telle
+        # quelle, comme un tableau fixe, il ne se balade pas à l'intérieur. Si
+        # mon personnage est à gauche du cadre et que je fais un plan serré sur
+        # lui, je m'attends à voir autre chose que le plan d'ensemble. »
+        # Trois intentions distinctes, qu'aucune case à cocher ne pouvait dire.
+        self._decor_ref_row = QFrame()
+        self._decor_ref_row.setStyleSheet(
+            f"QFrame{{background:transparent;border:none;"
+            f"border-top:1px solid {C['border']};border-radius:0px;padding:4px;}}")
+        _dr_lay = QVBoxLayout(self._decor_ref_row)
+        _dr_lay.setContentsMargins(14, 8, 14, 8)
+        _dr_lay.setSpacing(4)
+        _dr_t = QLabel(translate("Image du décor"))
+        _dr_t.setStyleSheet(
+            f"color:{C['text_secondary']};font-size:12px;font-weight:600;border:none;")
+        _dr_lay.addWidget(_dr_t)
+        self._decor_ref_combo = QComboBox()
+        self._decor_ref_combo.addItem(
+            translate("Lieu — la caméra s'y déplace selon l'axe et la valeur du plan"),
+            "lieu")
+        self._decor_ref_combo.addItem(
+            translate("Identique — l'image EST le cadrage, seule l'action bouge"),
+            "identique")
+        self._decor_ref_combo.addItem(
+            translate("Inspiration — ambiance et palette seulement, espace libre"),
+            "inspiration")
+        self._decor_ref_combo.setFixedHeight(28)
+        self._decor_ref_combo.setStyleSheet(
+            f"QComboBox{{background:{C['bg3']};border:1px solid {C['border']};"
+            f"border-radius:6px;color:{C['text_primary']};font-size:11px;padding:0 8px;}}"
+            f"QComboBox:focus{{border-color:{C['accent']};}}"
+            f"QComboBox::drop-down{{border:none;width:18px;}}"
+            f"QComboBox QAbstractItemView{{background:{C['bg3']};"
+            f"border:1px solid {C['border_bright']};color:{C['text_primary']};"
+            f"selection-background-color:{C['accent_dim']};}}")
+        self._decor_ref_combo.setToolTip(translate(
+            "Ce que le moteur doit faire de l'image de la fiche décor.\n"
+            "« Lieu » : elle dit OÙ se passe la scène, le cadrage vient du plan.\n"
+            "« Identique » : elle dit AUSSI comment c'est cadré.\n"
+            "« Inspiration » : elle ne donne que l'ambiance."))
+        _dr_lay.addWidget(self._decor_ref_combo)
+        _raccords_lay.addWidget(self._decor_ref_row)
+
         self._dyn_cam_toggle_row = toggle_row(
             "Caméra dynamique",
             "Changement d'angle toutes les 2 secondes",
@@ -3633,6 +3680,14 @@ class TabT2V(QScrollArea):
         # À chaque retour sur l'onglet : si le style « Film réaliste » est actif, la
         # prise de vue réelle est cochée d'office (le style peut avoir changé ailleurs).
         self._sync_film_anchor_with_style()
+
+    def _decor_ref_mode(self) -> str:
+        """Ce que le moteur doit faire de l'image du décor : « lieu » (défaut),
+        « identique » ou « inspiration ». Voir RENDU & AUDIO › Image du décor."""
+        _c = getattr(self, "_decor_ref_combo", None)
+        if _c is None:
+            return "lieu"
+        return _c.currentData() or "lieu"
 
     def _refresh_prompt_preview(self, *_):
         if not hasattr(self, "_preview_body") or not self._preview_expanded:
@@ -4988,6 +5043,14 @@ class TabT2V(QScrollArea):
             "ref_image_roles": ref_image_roles,
             "style_ref_path":  self._style_ref_path if _style_ref_active else "",
             "decor_ref_free":  self._casting.get_decor_ref_free(),
+            # Ce que le moteur doit faire de l'image du décor (RENDU & AUDIO).
+            # La case « Mode ancré » de la zone Décor reste maîtresse quand elle
+            # est DÉCOCHÉE : elle dit déjà « inspiration seulement », et deux
+            # réglages qui se contredisent laisseraient l'utilisateur sans
+            # explication.
+            "decor_ref_mode": ("inspiration"
+                               if self._casting.get_decor_ref_free()
+                               else self._decor_ref_mode()),
         }
         if seed is not None:
             params["seed"] = seed
