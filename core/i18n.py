@@ -35,6 +35,7 @@ _T: dict[str, dict[str, str]] = {
     "nav.group_studio_ia": {"fr": "GÉNÉRATION IA",    "en": "AI GENERATION"},
     # Alias historique conservé pour les anciens appels internes.
     "nav.seedance":    {"fr": "Studio IA",          "en": "AI Studio"},
+    "nav.cost":        {"fr": "Coût du projet",    "en": "Project cost"},
     "nav.settings":    {"fr": "Paramètres",        "en": "Settings"},
 
     # ── Topbar globale
@@ -2391,6 +2392,31 @@ _FR_TO_EN: dict[str, str] = {
     # Échec d'enregistrement des frames post-génération (audit 2026-07-30).
     "Clip généré, mais frames de raccord non enregistrées : ":
         "Clip generated, but continuity frames could not be saved: ",
+    # Fenêtre « Coût du projet » (2026-07-31).
+    "Coût du projet":                   "Project cost",
+    "Chaque opération facturée depuis la création du projet. Les montants "
+    "sont ESTIMÉS d'après les grilles annoncées par les fournisseurs — un "
+    "essai refusé, une remise ou un changement de tarif peuvent écarter ce "
+    "total de votre relevé réel.":
+        "Every billed operation since the project was created. Amounts are "
+        "ESTIMATED from the providers' published rates — a refused attempt, a "
+        "discount or a price change can move this total away from your actual "
+        "statement.",
+    "Aucune dépense enregistrée pour ce projet.\n\nLes générations "
+    "lancées à partir de maintenant apparaîtront ici.":
+        "No spending recorded for this project.\n\nGenerations started from "
+        "now on will appear here.",
+    "Total estimé":                     "Estimated total",
+    "opérations":                       "operations",
+    "Afficher":                         "Show",
+    "Tout":                             "All",
+    "Vidéo":                            "Video",
+    "Texte (IA)":                       "Text (AI)",
+    "Audio":                            "Audio",
+    "Autre":                            "Other",
+    "Opération":                        "Operation",
+    "Impossible d'ouvrir le coût du projet : ":
+        "Could not open the project cost: ",
     # RENDU & AUDIO : ce que le moteur fait de l'image du décor (2026-07-31).
     "Image du décor":                   "Location image",
     "Ce que le moteur fait de l'image de la fiche décor : le lieu où se "

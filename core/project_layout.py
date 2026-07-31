@@ -104,6 +104,10 @@ FACADE_FILES = {
     "facade_desc.json":       "04_live/facade/facade_desc.json",
     "live_gen_mode.json":     "04_live/live_gen_mode.json",
     "facade_fond_noir.jpg":   "04_live/facade/facade_fond_noir.jpg",
+    # Journal des dépenses du projet (fenêtre « Coût du projet », 2026-07-31).
+    # Rangé à la racine de data/ : ce n'est ni de l'écriture, ni des éléments,
+    # ni de la production — c'est un relevé qui porte sur le projet entier.
+    "spend.json":             "spend.json",
 }
 
 

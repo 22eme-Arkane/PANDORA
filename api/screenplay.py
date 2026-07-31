@@ -2166,6 +2166,23 @@ FORMAT DE RÉPONSE — JSON STRICT, sans markdown, sans texte hors JSON :
 - "edits" est une liste VIDE [] si aucune modification n'est demandée.
 - "value" doit contenir la valeur ENTIÈRE du champ après modification (pas un fragment).
 - Garde la même langue que le contenu d'origine du champ.
+
+⚠ MODIFICATION QUI TOUCHE BEAUCOUP DE PLANS — UTILISE CE FORMAT, PAS L'AUTRE :
+Quand la même substitution s'applique à plusieurs plans (« remplace ce bloc de
+style dans tous les plans », « renomme ce personnage partout »), NE RÉÉCRIS PAS
+chaque plan en entier : une seule édition de REMPLACEMENT suffit.
+
+  {"field": "<champ>", "find": "<texte EXACT à chercher, copié verbatim>",
+   "replace": "<texte de remplacement>", "scope": "all",
+   "summary": "<résumé court FR>"}
+
+- "scope": "all" applique à TOUS les plans qui contiennent "find" ; tu peux
+  aussi donner "ids": ["…","…"] pour restreindre à certains plans.
+- "find" doit être copié MOT POUR MOT depuis le découpage fourni, sinon rien
+  ne correspondra. Les plans qui ne contiennent pas "find" sont ignorés.
+- C'est le SEUL format acceptable au-delà de quelques plans : réécrire
+  soixante-quinze prompts entiers dépasse la taille de réponse permise, la
+  réponse est coupée en plein milieu et AUCUNE modification n'est appliquée.
 """ % ("\n".join(f"  - {f}" for f in STORYBOARD_CHAT_FIELDS))
 
 
@@ -2260,10 +2277,14 @@ class StoryboardChatWorker(QThread):
 
         reply = str(result.get("reply", "")).strip()
         edits = result.get("edits", []) or []
-        # Filtre les éditions sur la liste blanche des champs.
+        # Filtre les éditions sur la liste blanche des champs. Deux formes sont
+        # acceptées : la valeur complète (`value`) et le remplacement ciblé
+        # (`find`/`replace`), qui seul permet de toucher des dizaines de plans
+        # sans faire exploser la taille de la réponse.
         clean_edits = [
             e for e in edits
             if isinstance(e, dict) and e.get("field") in STORYBOARD_CHAT_FIELDS
+            and (("value" in e) or (e.get("find") and "replace" in e))
         ]
         self.finished.emit({"reply": reply, "edits": clean_edits})
 

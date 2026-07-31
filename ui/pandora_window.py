@@ -47,6 +47,11 @@ def _get_nav_items():
         None,
         ("draw_to_video.png", tr("nav.image_ia"), "image_ia"),
         ("seedance.png",   tr("nav.video_ia"),    "seedance"),
+        None,
+        # « Coût du projet » — dernier avant Paramètres, derrière un séparateur
+        # (demande Matthieu 2026-07-31). Ce n'est pas une page de travail : elle
+        # ouvre une fenêtre, d'où le traitement à part dans `_go`.
+        ("cout.png",       tr("nav.cost"),        "cost"),
         ("settings.png",   tr("nav.settings"),    "settings"),
     ]
 
@@ -83,6 +88,9 @@ _FALLBACK = {
     "doublage.png":    "🎙",
     "draw_to_video.png":"◈",
     "seedance.png":    "✦",
+    # Pas de badge dessiné pour le coût : le repli texte EST l'icône, en blanc
+    # néon (voir `_COLOR_ICONS`, dont « cout.png » est volontairement absent).
+    "cout.png":        "💰",
     "settings.png":    "⚙",
 }
 
@@ -193,16 +201,26 @@ class NavItem(QWidget):
             )
         else:
             self._bg("background:transparent;border:1px solid transparent;")
-            if self._use_png:
+            # « Coût du projet » se distingue en BLANC NÉON même au repos
+            # (demande Matthieu 2026-07-31) : ce n'est pas une étape du travail
+            # mais un relevé qu'on va consulter, il doit se repérer d'un coup
+            # d'œil dans la barre sans crier plus fort que l'onglet actif.
+            _neon = (self._key == "cost")
+            if self._use_png and not _neon:
                 self._ico.setPixmap(self._pix_off)  # blanc dim
             else:
                 self._ico.setText(_FALLBACK.get(self._ico_file, "●"))
                 self._ico.setStyleSheet(
-                    f"color:{CP['text_dim']};font-size:14px;background:transparent;border:none;"
+                    (f"color:#ffffff;font-size:14px;background:transparent;border:none;"
+                     if _neon else
+                     f"color:{CP['text_dim']};font-size:14px;background:transparent;border:none;")
                 )
             self._lbl.setStyleSheet(
-                f"color:{CP['text_secondary']};font-size:10px;font-weight:600;"
-                f"letter-spacing:0.2px;background:transparent;border:none;"
+                (f"color:#ffffff;font-size:10px;font-weight:700;"
+                 f"letter-spacing:0.2px;background:transparent;border:none;"
+                 if _neon else
+                 f"color:{CP['text_secondary']};font-size:10px;font-weight:600;"
+                 f"letter-spacing:0.2px;background:transparent;border:none;")
             )
 
     def setActive(self, active: bool):
@@ -825,6 +843,22 @@ class PandoraWindow(QMainWindow):
     def _navigate(self, key: str, extra: str = ""):
         if key == "mise_en_scene":
             key = "plan_de_feu"
+
+        # « Coût du projet » n'est pas une page mais une FENÊTRE : on l'ouvre et
+        # on laisse la navigation où elle était, sinon un simple coup d'œil au
+        # budget ferait perdre l'écran de travail en cours.
+        if key == "cost":
+            try:
+                from ui.dialog_project_cost import ProjectCostDialog
+                ProjectCostDialog(self).exec()
+            except Exception as e:
+                from PyQt6.QtWidgets import QMessageBox
+                QMessageBox.warning(self, translate("Coût du projet"),
+                                    translate("Impossible d'ouvrir le coût du "
+                                              "projet : ") + str(e)[:200])
+            self._sidebar.set_active(getattr(self, "_current_nav", "") or "")
+            return
+
         self._current_nav = key   # mémorisé pour le rafraîchissement au retour de focus
         page = self._pages.get(key)
         if page:

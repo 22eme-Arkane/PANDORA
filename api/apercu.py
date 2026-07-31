@@ -1034,6 +1034,25 @@ def run_generation_nb2(prompt: str, output_dir: str, api_key: str, progress_cb,
 # (façade en mapping ; cohérence persos/décor + inspiration + plan d'architecte en
 # Cinéma) ; ceux qui les ignorent génèrent depuis le prompt seul (+ style du film).
 
+def _image_price_hint(engine_key: str) -> float:
+    """Prix indicatif d'UNE image, lu dans le libellé du catalogue de moteurs.
+
+    Les libellés portent le tarif annoncé (« ~$0.0675–0.135 ») : on prend la
+    borne BASSE, la seule qu'on puisse affirmer sans connaître la définition
+    facturée. C'est un ordre de grandeur pour le journal de dépenses, pas une
+    facture — la fenêtre « Coût du projet » l'annonce comme estimé."""
+    try:
+        import re as _re
+        from core import image_engines as _ie3
+        _lbl = _ie3.label_for(engine_key) or ""
+        _m = _re.findall(r"\$?(\d+[.,]\d+)", _lbl)
+        if _m:
+            return float(_m[0].replace(",", "."))
+    except Exception:
+        pass
+    return 0.0
+
+
 def run_generation_engine(engine_key: str, prompt: str, output_dir: str,
                           api_key: str, progress_cb,
                           ref_images: list | None = None, facade_ref: str = "",
@@ -1113,6 +1132,18 @@ def run_generation_engine(engine_key: str, prompt: str, output_dir: str,
         _ie.ar_to_target(aspect_ratio or "16:9", resolution),
         _res_enum_for(resolution), ref_urls)
     result = fal_client.subscribe(endpoint, arguments=args)
+
+    # Journal de dépenses du projet (demande Matthieu 2026-07-31) : une image
+    # générée est facturée, elle doit apparaître dans « Coût du projet ».
+    # Le montant vient du libellé du catalogue — c'est une ESTIMATION, et la
+    # fenêtre le dit. Ne jamais faire échouer une génération déjà payée.
+    try:
+        from core import spend as _sp
+        _sp.record(_sp.KIND_IMAGE, label, "Mood / image du plan",
+                   _image_price_hint(engine_key),
+                   f"{resolution or ''} · {len(ref_urls)} réf.".strip(" ·"))
+    except Exception:
+        pass
 
     imgs = (result or {}).get("images") or []
     image_url = (imgs[0].get("url") if imgs and isinstance(imgs[0], dict)

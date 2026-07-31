@@ -21,6 +21,34 @@ def save_to_history(entry: dict):
     history = history[:_MAX_ENTRIES]
     with open(_HISTORY_FILE, "w", encoding="utf-8") as f:
         json.dump(history, f, ensure_ascii=False, indent=2)
+    _note_spend(entry)
+
+
+def _note_spend(entry: dict):
+    """Reporte la génération dans le journal de dépenses du PROJET.
+
+    Point de branchement unique : les douze appels à `save_to_history` couvrent
+    toutes les générations vidéo (T2V, I2V, Extension, Référence, DaVinci,
+    Live). Le coût est ESTIMÉ avec la même grille que l'estimation affichée
+    avant de lancer — c'est le seul chiffre que PANDORA connaisse, la facture
+    réelle appartient au fournisseur. Ne lève jamais : un journal muet ne doit
+    pas faire échouer une génération déjà payée."""
+    try:
+        from core import pricing, spend
+        _model = (entry.get("model") or entry.get("engine") or "").strip()
+        _res   = (entry.get("resolution") or "").strip()
+        try:
+            _dur = float(entry.get("duration") or 0)
+        except (TypeError, ValueError):
+            _dur = 0.0
+        _cost, _mode = pricing.estimate(_model, _res, _dur, 1)
+        _bits = [b for b in (_res, f"{_dur:g}s" if _dur else "") if b]
+        spend.record(
+            spend.KIND_VIDEO, _model or "moteur vidéo",
+            (entry.get("prompt") or entry.get("title") or "Génération vidéo")[:90],
+            _cost, "  ·  ".join(_bits))
+    except Exception:
+        pass
 
 
 def find_entry_by_path(path: str) -> dict | None:

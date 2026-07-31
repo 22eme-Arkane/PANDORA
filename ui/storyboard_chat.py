@@ -11,7 +11,7 @@ Fermé par défaut, ouvert via la poignée.
 
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
-    QTextEdit, QScrollArea,
+    QTextEdit, QScrollArea, QProgressBar,
 )
 from PyQt6.QtCore import Qt, QTimer
 from ui.styles import CP
@@ -132,6 +132,36 @@ class StoryboardChatPanel(QWidget):
         input_lay.addWidget(self._btn_send)
         lay.addWidget(input_frame)
 
+        # ── Barre de chargement (demande Matthieu 2026-07-31) ─────────────────
+        # « Ça donne l'impression que la requête n'a pas été reçue. » Le bouton
+        # passait en « … » et plus rien ne bougeait pendant de longues secondes.
+        # Barre indéterminée, comme celle de la génération d'éléments dans le
+        # Scénario : elle ne prétend pas connaître l'avancement, elle dit
+        # seulement que l'IA travaille.
+        self._busy = QProgressBar()
+        self._busy.setRange(0, 0)
+        self._busy.setFixedHeight(3)
+        self._busy.setTextVisible(False)
+        self._busy.setStyleSheet(
+            f"QProgressBar{{background:{CP['bg3']};border:none;border-radius:2px;}}"
+            f"QProgressBar::chunk{{background:qlineargradient(x1:0,y1:0,x2:1,y2:0,"
+            f"stop:0 {CP['accent']},stop:1 #6eded6);border-radius:2px;}}")
+        self._busy.setVisible(False)
+        lay.addWidget(self._busy)
+        self._busy_lbl = QLabel(translate("L'IA lit le découpage et réfléchit…"))
+        self._busy_lbl.setStyleSheet(
+            f"color:{CP['text_dim']};font-size:10px;background:transparent;")
+        self._busy_lbl.setVisible(False)
+        lay.addWidget(self._busy_lbl)
+
+    def _set_busy(self, on: bool):
+        """Barre visible + bouton neutralisé pendant que l'IA travaille."""
+        for _w in (getattr(self, "_busy", None), getattr(self, "_busy_lbl", None)):
+            if _w is not None:
+                _w.setVisible(bool(on))
+        self._btn_send.setEnabled(not on)
+        self._btn_send.setText("…" if on else "✦  " + translate("Envoyer"))
+
     # ── Envoi ────────────────────────────────────────────────────────────────────
 
     def _on_send(self):
@@ -147,8 +177,7 @@ class StoryboardChatPanel(QWidget):
 
         self._add_bubble("user", msg)
         self._input.clear()
-        self._btn_send.setEnabled(False)
-        self._btn_send.setText("…")
+        self._set_busy(True)
 
         from api.screenplay import StoryboardChatWorker
         self._worker = StoryboardChatWorker(msg, shots, list(self._history))
@@ -158,6 +187,7 @@ class StoryboardChatPanel(QWidget):
         self._history.append({"role": "user", "content": msg})
 
     def _on_reply(self, result: dict):
+        self._set_busy(False)
         reply = (result.get("reply") or "").strip()
         edits = result.get("edits") or []
 
@@ -178,13 +208,11 @@ class StoryboardChatPanel(QWidget):
             self._add_bubble("system",
                              "Aucune modification appliquée (plan ou champ introuvable).")
 
-        self._btn_send.setEnabled(True)
-        self._btn_send.setText("✦  " + translate("Envoyer"))
+        self._set_busy(False)
 
     def _on_error(self, err: str):
+        self._set_busy(False)
         self._add_bubble("assistant", f"Erreur : {err}")
-        self._btn_send.setEnabled(True)
-        self._btn_send.setText("✦  " + translate("Envoyer"))
 
     # ── Application des éditions (chirurgicale) ────────────────────────────────────
 
@@ -200,6 +228,42 @@ class StoryboardChatPanel(QWidget):
             field = e.get("field")
             if field not in STORYBOARD_CHAT_FIELDS:
                 continue
+
+            # ── Remplacement CIBLÉ sur plusieurs plans ────────────────────────
+            # « Remplace ce bloc de style dans tous les plans » : demander à
+            # l'IA de réécrire les 75 prompts entiers dépassait la taille de
+            # réponse permise — le JSON arrivait coupé en plein milieu et RIEN
+            # n'était appliqué, alors que la réponse semblait complète à
+            # l'écran (constat Matthieu 2026-07-31). Une seule édition
+            # find/replace fait le même travail sans rien faire exploser.
+            if e.get("find") and "replace" in e:
+                _find = str(e.get("find") or "")
+                _repl = str(e.get("replace") or "")
+                _ids = e.get("ids") or []
+                _cibles = ([by_id.get(i) for i in _ids] if _ids
+                           else list(shots))
+                _n = 0
+                for _s in _cibles:
+                    if not _s:
+                        continue
+                    _cur = _s.get(field)
+                    if not isinstance(_cur, str) or _find not in _cur:
+                        continue
+                    _s[field] = _cur.replace(_find, _repl)
+                    try:
+                        sb_api.save_shot({k: v for k, v in _s.items()
+                                          if not k.startswith("_")})
+                        _n += 1
+                    except Exception:
+                        continue
+                if _n:
+                    applied.append({
+                        "number": f"×{_n}",
+                        "summary": (e.get("summary")
+                                    or f"{field} — remplacement sur {_n} plan(s)"),
+                    })
+                continue
+
             shot = by_id.get(e.get("id")) or by_num.get(str(e.get("number")))
             if not shot:
                 continue

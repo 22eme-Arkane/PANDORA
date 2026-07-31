@@ -7610,5 +7610,73 @@ def performance_vignettes_en_cache_et_storyboard_progressif():
     assert "singleShot" in _r, "le tableau est encore posé d'un seul bloc"
 
 
+@test
+def cout_du_projet_journal_et_fenetre():
+    """« Coût du projet » (demande Matthieu 2026-07-31) : chaque opération
+    facturée est notée DANS le projet, avec son montant, et la fenêtre en
+    donne le total."""
+    import os as _os, tempfile as _tf, shutil as _sh, inspect as _i
+    from PyQt6.QtWidgets import QApplication
+    QApplication.instance() or QApplication([])
+    import core.context as _ctx
+    from core import spend as _sp
+
+    _prev_path = _ctx.get_project_path() if hasattr(_ctx, "get_project_path") else ""
+    _prev_id = _ctx.get_project_id()
+    _td = _tf.mkdtemp(prefix="pandora_spend_")
+    try:
+        _ctx.set_project_path(_td)
+        _ctx.set_project_id("t-spend")
+        assert _sp.load() == [], "journal non vide sur un projet neuf"
+
+        _sp.record(_sp.KIND_VIDEO, "seedance-2.0", "Plan 21", 1.50, "720p")
+        _sp.record(_sp.KIND_IMAGE, "Seedream 5.0 Pro", "Mood", 0.0675)
+        _sp.record(_sp.KIND_TEXT, "claude-sonnet-5", "Découpage", 0.12)
+        _items = _sp.load()
+        assert len(_items) == 3, _items
+        # Le plus RÉCENT en premier — la fenêtre lit dans cet ordre.
+        assert _items[0]["label"] == "Découpage", _items[0]
+        assert abs(_sp.total_usd() - 1.6875) < 1e-6, _sp.total_usd()
+        _par = _sp.totals_by_kind()
+        assert _par[_sp.KIND_VIDEO] == (1, 1.5), _par
+        # Le journal vit DANS le projet, pas sur le poste.
+        assert _os.path.isfile(_os.path.join(_td, "data", "spend.json"))
+
+        # Un montant illisible ne casse rien (une génération déjà payée ne doit
+        # jamais échouer à cause du journal).
+        _sp.record(_sp.KIND_OTHER, "x", "y", None)
+        assert len(_sp.load()) == 4
+
+        # La fenêtre affiche les lignes et le total.
+        from ui.dialog_project_cost import ProjectCostDialog
+        _d = ProjectCostDialog()
+        assert _d._lay.count() == 4, _d._lay.count()
+        assert "1.69" in _d._total_lbl.text(), _d._total_lbl.text()
+    finally:
+        try:
+            _ctx.set_project_path(_prev_path)
+            _ctx.set_project_id(_prev_id)
+        except Exception:
+            pass
+        _sh.rmtree(_td, ignore_errors=True)
+
+    # Les générations VIDÉO alimentent le journal par un point unique.
+    import core.history as _H
+    _src = "\n".join(l.split("#", 1)[0] for l in _i.getsource(_H).splitlines())
+    assert "_note_spend" in _src and "spend.record" in _src, \
+        "les générations vidéo n'alimentent pas le coût du projet"
+
+    # Le bouton est dans la barre, à GAUCHE de Paramètres, et ouvre une fenêtre
+    # (pas une page) : consulter le budget ne doit pas faire perdre l'écran.
+    import ui.pandora_window as _PW
+    _keys = [it[2] for it in _PW._get_nav_items() if it]
+    assert "cost" in _keys, "pas d'entrée « Coût du projet » dans la navigation"
+    assert _keys.index("cost") == _keys.index("settings") - 1, \
+        "« Coût du projet » doit précéder Paramètres"
+    _nav = "\n".join(l.split("#", 1)[0]
+                     for l in _i.getsource(_PW.PandoraWindow._navigate).splitlines())
+    assert "ProjectCostDialog" in _nav, "le bouton n'ouvre pas la fenêtre"
+
+
 if __name__ == "__main__":
     sys.exit(main())
