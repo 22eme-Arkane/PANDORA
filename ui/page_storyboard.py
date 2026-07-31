@@ -3141,49 +3141,33 @@ class PageStoryboard(QWidget):
         self._shot_rows = {}
         decors_cache = {d["id"]: d for d in dec_api.list_decors()}
 
-        # ── Construction PROGRESSIVE (audit de lenteur, 2026-07-31) ───────────
-        # Une ligne de découpage coûte ~70 widgets ; sur 75 plans cela fait
-        # 5 400 widgets posés d'un seul bloc, soit ~1,2 s pendant lesquelles
-        # l'application est FIGÉE — à chaque ouverture de l'onglet, à chaque
-        # rafraîchissement. C'est la lenteur signalée par Matthieu (« quand je
-        # clique sur un onglet, le temps d'ouverture est long »).
-        #
-        # Le tableau s'affiche donc par PAQUETS : le premier est posé tout de
-        # suite (la page est lisible et défilable immédiatement), les suivants
-        # entre deux tours de boucle d'événements — l'interface reste réactive
-        # au lieu de bloquer. Le résultat final est identique, seul l'étalement
-        # change. Un jeton de génération invalide les paquets d'un rendu
-        # précédent : deux rafraîchissements rapprochés ne doivent pas mélanger
-        # leurs lignes.
-        self._render_token = getattr(self, "_render_token", 0) + 1
-        _token = self._render_token
-        _shots = list(self._all_shots)
-        _LOT = 12
-
-        def _poser(debut: int):
-            if _token != getattr(self, "_render_token", 0):
-                return                      # un rendu plus récent a pris la main
-            _fin = min(debut + _LOT, len(_shots))
-            for shot in _shots[debut:_fin]:
+        # ── Construction du tableau ───────────────────────────────────────────
+        # Les lignes sont posées D'AFFILÉE, dans l'ordre. Une tentative de
+        # construction par paquets (audit de lenteur 2026-07-31) a été RETIRÉE :
+        # elle rendait la main en 146 ms au lieu de 1 200, mais l'insertion
+        # différée décalait les lignes et cassait l'affichage — lignes qui se
+        # chevauchent, hauteurs incohérentes (constat Matthieu, capture à
+        # l'appui). Un tableau juste et lent vaut mieux qu'un tableau rapide et
+        # faux ; l'ordre des widgets de cette liste est un contrat, pas un
+        # détail. Le gain de vitesse passe donc par le gel des repaints
+        # ci-dessous, qui ne touche ni à l'ordre ni à la structure.
+        _upd = self._list_container.updatesEnabled()
+        self._list_container.setUpdatesEnabled(False)
+        try:
+            for shot in self._all_shots:
                 row = _ShotRow(shot, decors_cache=decors_cache)
                 row.edit_requested.connect(self._on_edit)
                 row.delete_requested.connect(self._on_delete)
                 row.duplicate_requested.connect(self._on_duplicate)
                 row.changed.connect(self.refresh)
                 self._shot_rows[shot["id"]] = row
-                # Avant le ressort final, qui doit rester en dernier.
-                _pos = max(0, self._list_lay.count() - (1 if self._stretch_posed else 0))
-                self._list_lay.insertWidget(_pos, row)
-                self._list_lay.insertWidget(_pos + 1, _RowResizeHandle(row))
-            if _fin < len(_shots):
-                QTimer.singleShot(0, lambda: _poser(_fin))
-            else:
-                QTimer.singleShot(0, lambda: _col_hub.resized.emit(4, _col_widths[4]))
+                self._list_lay.addWidget(row)
+                self._list_lay.addWidget(_RowResizeHandle(row))
+            self._list_lay.addStretch()
+        finally:
+            self._list_container.setUpdatesEnabled(_upd)
 
-        self._stretch_posed = False
-        _poser(0)                            # premier paquet : tout de suite
-        self._list_lay.addStretch()
-        self._stretch_posed = True
+        QTimer.singleShot(0, lambda: _col_hub.resized.emit(4, _col_widths[4]))
 
     # ── Plans récurrents (analyse IA → coloration par groupe) ───────────────────
 

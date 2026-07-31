@@ -7600,14 +7600,18 @@ def performance_vignettes_en_cache_et_storyboard_progressif():
         _s = "\n".join(l.split("#", 1)[0] for l in _i.getsource(_m).splitlines())
         assert "card_pixmap" in _s, f"{_mod} ne passe pas par le cache de vignettes"
 
-    # ③ Storyboard : construction par PAQUETS, avec un jeton qui invalide les
-    #    paquets d'un rendu précédent (deux refresh rapprochés ne doivent pas
-    #    mélanger leurs lignes).
+    # ③ Storyboard : les lignes sont posées D'AFFILÉE, repaints gelés pendant
+    #    la construction. Une version par PAQUETS a été essayée puis RETIRÉE :
+    #    elle rendait la main 8× plus vite mais l'insertion différée décalait
+    #    les lignes — chevauchements et hauteurs incohérentes à l'écran
+    #    (constat Matthieu 2026-07-31). L'ordre de cette liste est un contrat.
     import ui.page_storyboard as _PS
     _r = "\n".join(l.split("#", 1)[0]
                    for l in _i.getsource(_PS.PageStoryboard._render).splitlines())
-    assert "_render_token" in _r, "aucun jeton de rendu — les paquets peuvent se mélanger"
-    assert "singleShot" in _r, "le tableau est encore posé d'un seul bloc"
+    assert "setUpdatesEnabled(False)" in _r, \
+        "les repaints ne sont plus gelés pendant la construction du tableau"
+    assert "insertWidget" not in _r, \
+        "insertion à position calculée : c'est ce qui cassait l'affichage"
 
 
 @test
