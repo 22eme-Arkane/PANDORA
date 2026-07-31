@@ -336,8 +336,6 @@ class _Sidebar(QWidget):
             lay.addWidget(group)
 
         lay.addStretch()
-        lay.addWidget(_vsep())
-        lay.addSpacing(4)
 
         # ── « Coût du projet » — juste avant Paramètres ───────────────────────
         # Bouton DISCRET (demande Matthieu 2026-07-31) : même forme que « Nous
@@ -357,7 +355,13 @@ class _Sidebar(QWidget):
             f"QPushButton:pressed{{background:rgba(255,255,255,0.09);}}")
         self._btn_cost.clicked.connect(lambda: self.nav_clicked.emit("cost"))
         lay.addWidget(self._btn_cost)
-        lay.addSpacing(6)
+
+        # Séparateur ENTRE le coût et Paramètres (demande Matthieu) : le coût
+        # se rattache visuellement aux onglets de travail, Paramètres reste
+        # isolé tout au bord.
+        lay.addSpacing(4)
+        lay.addWidget(_vsep())
+        lay.addSpacing(4)
 
         # ── Droite : Paramètres tout au bord ──────────────────────────────────
         icon_file, label, key = next(e for e in _get_nav_items()
