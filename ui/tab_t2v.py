@@ -2958,6 +2958,10 @@ class TabT2V(QScrollArea):
         # mon personnage est à gauche du cadre et que je fais un plan serré sur
         # lui, je m'attends à voir autre chose que le plan d'ensemble. »
         # Trois intentions distinctes, qu'aucune case à cocher ne pouvait dire.
+        # Mise en page alignée sur les autres lignes de RENDU & AUDIO (demande
+        # Matthieu 2026-07-31) : titre à GAUCHE, contrôle à DROITE, description
+        # en dessous sur toute la largeur. Un réglage posé pleine largeur sous
+        # son titre cassait la lecture en colonne de la section.
         self._decor_ref_row = QFrame()
         self._decor_ref_row.setStyleSheet(
             f"QFrame{{background:transparent;border:none;"
@@ -2965,10 +2969,14 @@ class TabT2V(QScrollArea):
         _dr_lay = QVBoxLayout(self._decor_ref_row)
         _dr_lay.setContentsMargins(14, 8, 14, 8)
         _dr_lay.setSpacing(4)
+        _dr_head = QHBoxLayout()
+        _dr_head.setContentsMargins(0, 0, 0, 0)
+        _dr_head.setSpacing(8)
         _dr_t = QLabel(translate("Image du décor"))
         _dr_t.setStyleSheet(
             f"color:{C['text_secondary']};font-size:12px;font-weight:600;border:none;")
-        _dr_lay.addWidget(_dr_t)
+        _dr_head.addWidget(_dr_t)
+        _dr_head.addStretch()
         self._decor_ref_combo = QComboBox()
         self._decor_ref_combo.addItem(
             translate("Lieu — la caméra s'y déplace selon l'axe et la valeur du plan"),
@@ -2980,11 +2988,16 @@ class TabT2V(QScrollArea):
             translate("Inspiration — ambiance et palette seulement, espace libre"),
             "inspiration")
         self._decor_ref_combo.setFixedHeight(28)
+        self._decor_ref_combo.setMinimumWidth(330)
+        # Flèche à GAUCHE (demande Matthieu) — le texte des options est long, la
+        # flèche collée à droite se retrouvait loin du libellé qu'elle ouvre.
         self._decor_ref_combo.setStyleSheet(
             f"QComboBox{{background:{C['bg3']};border:1px solid {C['border']};"
-            f"border-radius:6px;color:{C['text_primary']};font-size:11px;padding:0 8px;}}"
+            f"border-radius:6px;color:{C['text_primary']};font-size:11px;"
+            f"padding:0 8px 0 24px;}}"
             f"QComboBox:focus{{border-color:{C['accent']};}}"
-            f"QComboBox::drop-down{{border:none;width:18px;}}"
+            f"QComboBox::drop-down{{border:none;width:18px;"
+            f"subcontrol-origin:padding;subcontrol-position:left center;}}"
             f"QComboBox QAbstractItemView{{background:{C['bg3']};"
             f"border:1px solid {C['border_bright']};color:{C['text_primary']};"
             f"selection-background-color:{C['accent_dim']};}}")
@@ -2993,7 +3006,16 @@ class TabT2V(QScrollArea):
             "« Lieu » : elle dit OÙ se passe la scène, le cadrage vient du plan.\n"
             "« Identique » : elle dit AUSSI comment c'est cadré.\n"
             "« Inspiration » : elle ne donne que l'ambiance."))
-        _dr_lay.addWidget(self._decor_ref_combo)
+        _dr_head.addWidget(self._decor_ref_combo)
+        _dr_lay.addLayout(_dr_head)
+        _dr_desc = QLabel(translate(
+            "Ce que le moteur fait de l'image de la fiche décor : le lieu où se "
+            "passe la scène, le cadrage exact du plan, ou une simple ambiance."))
+        _dr_desc.setWordWrap(True)
+        _dr_desc.setStyleSheet(
+            f"color:{C['text_dim']};font-size:10px;font-family:'Consolas',monospace;"
+            f"border:none;background:transparent;")
+        _dr_lay.addWidget(_dr_desc)
         _raccords_lay.addWidget(self._decor_ref_row)
 
         self._dyn_cam_toggle_row = toggle_row(
@@ -3053,23 +3075,21 @@ class TabT2V(QScrollArea):
         self._lipsync_cb = _lipsync_cb_inner
         _raccords_lay.addWidget(self._lipsync_toggle_row)
 
-        # Moteur lip-sync (défaut Sync 2 Pro) — placé AVANT la description, aligné à 14.
+        # Moteur lip-sync (défaut Sync 2 Pro) — REMONTÉ sur la ligne du titre,
+        # à droite, comme « Image du décor » (demande Matthieu 2026-07-31). Le
+        # libellé « Moteur lip-sync » est retiré : la ligne s'appelle déjà
+        # « Resynchroniser les lèvres », le nom du moteur se lit dans le menu.
         from api.lipsync import (LIPSYNC_ENGINES as _LSE, LIPSYNC_ENGINE_ORDER as _LSO,
                                  get_lipsync_engine as _get_ls)
-        _ls_row = QWidget()
-        _ls_row.setStyleSheet("background:transparent;border:none;")
-        _ls_lay = QHBoxLayout(_ls_row)
-        _ls_lay.setContentsMargins(14, 2, 14, 4)
-        _ls_lay.setSpacing(8)
-        _ls_lbl = QLabel("Moteur lip-sync")
-        _ls_lbl.setStyleSheet(f"color:{C['text_dim']};font-size:11px;border:none;")
-        _ls_lay.addWidget(_ls_lbl)
         self._lipsync_engine_combo = QComboBox()
         self._lipsync_engine_combo.setFixedHeight(28)
+        self._lipsync_engine_combo.setMinimumWidth(210)
         self._lipsync_engine_combo.setStyleSheet(
             f"QComboBox{{background:{C['bg2']};border:1px solid {C['border']};"
-            f"border-radius:6px;color:{C['text_primary']};font-size:11px;padding:0 8px;}}"
-            f"QComboBox::drop-down{{border:none;width:20px;}}"
+            f"border-radius:6px;color:{C['text_primary']};font-size:11px;"
+            f"padding:0 8px 0 24px;}}"
+            f"QComboBox::drop-down{{border:none;width:20px;"
+            f"subcontrol-origin:padding;subcontrol-position:left center;}}"
             f"QComboBox QAbstractItemView{{background:{C['bg3']};"
             f"border:1px solid {C['border_bright']};color:{C['text_primary']};"
             f"selection-background-color:{C['accent_dim']};}}"
@@ -3089,8 +3109,10 @@ class TabT2V(QScrollArea):
             _c["lipsync_engine"] = self._lipsync_engine_combo.currentData() or "sync2pro"
             save_config(_c)
         self._lipsync_engine_combo.currentIndexChanged.connect(_save_ls_engine)
-        _ls_lay.addWidget(self._lipsync_engine_combo, 1)
-        _raccords_lay.addWidget(_ls_row)
+        # Inséré dans la ligne du titre, JUSTE AVANT la case à cocher (dernier
+        # widget du layout) — même position que les contrôles des autres lignes.
+        _ls_head = self._lipsync_toggle_row.layout()
+        _ls_head.insertWidget(max(0, _ls_head.count() - 1), self._lipsync_engine_combo)
 
         # Description du lip-sync — APRÈS le moteur, alignée à 14 (comme le moteur).
         _ls_desc_wrap = QWidget()

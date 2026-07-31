@@ -194,6 +194,10 @@ class PageCastings(QWidget):
         self._sections_lay.setContentsMargins(32, 24, 32, 32)
         #: État replié de chaque section, conservé entre deux rafraîchissements.
         self._collapsed: dict[str, bool] = {}
+        #: Dernier nombre de colonnes posé — évite de reconstruire la grille à
+        #: chaque pixel pendant un redimensionnement.
+        from ui.grid_flow import ColumnsWatcher
+        self._cols_watch = ColumnsWatcher()
 
         scroll.setWidget(self._grid_container)
         self._scroll = scroll
@@ -349,8 +353,20 @@ class PageCastings(QWidget):
                 self._selected_id = ""
                 self._side_panel.clear()
 
-    def _cards_grid(self, chars: list[dict], cols: int = 9) -> QWidget:
-        """Grille de cartes — 9 colonnes, toute la largeur de la fenêtre."""
+    def _grid_columns(self) -> int:
+        """Colonnes qui tiennent VRAIMENT dans la zone d'affichage.
+
+        Le nombre était écrit en dur (9) : dès que le panneau FICHE s'ouvrait,
+        les vignettes débordaient et se retrouvaient rognées, en-tête compris."""
+        from ui.grid_flow import columns_for
+        _vp = self._scroll.viewport().width() if hasattr(self, "_scroll") else 0
+        # 32 px de marge de chaque côté (contentsMargins des sections).
+        return columns_for(max(0, _vp - 64))
+
+    def _cards_grid(self, chars: list[dict], cols: int | None = None) -> QWidget:
+        """Grille de cartes, sur autant de colonnes que la largeur en permet."""
+        if cols is None:
+            cols = self._grid_columns()
         wrap = QWidget()
         wrap.setStyleSheet("background:transparent;")
         g = QGridLayout(wrap)
@@ -364,6 +380,19 @@ class PageCastings(QWidget):
             card.selected.connect(self._on_card_selected)
             g.addWidget(card, i // cols, i % cols)
         return wrap
+
+    def resizeEvent(self, e):
+        """Re-pose les cartes quand la largeur fait gagner ou perdre une colonne.
+
+        Le test porte sur le NOMBRE de colonnes, pas sur les pixels : un
+        redimensionnement continu reconstruirait sinon la grille des dizaines de
+        fois. Couvre aussi l'ouverture du panneau FICHE, qui rétrécit la zone."""
+        super().resizeEvent(e)
+        try:
+            if self._cols_watch.changed(self._grid_columns()) and self._all_chars:
+                self._render(self._filtered_chars())
+        except Exception:
+            pass
 
     def _render(self, chars: list[dict]):
         from core.i18n import translate
@@ -416,13 +445,16 @@ class PageCastings(QWidget):
                 lambda ok, k=_key: self._collapsed.__setitem__(k, bool(ok)))
             self._sections_lay.addWidget(sec)
 
+    def _filtered_chars(self) -> list[dict]:
+        """Personnages actuellement affichés (filtre de recherche appliqué)."""
+        q = (self._search.text() or "").lower() if hasattr(self, "_search") else ""
+        if not q:
+            return self._all_chars
+        return [c for c in self._all_chars
+                if q in c.get("name", "").lower() or q in c.get("role", "").lower()]
+
     def _filter(self, text: str):
-        q = text.lower()
-        filtered = [
-            c for c in self._all_chars
-            if q in c.get("name", "").lower() or q in c.get("role", "").lower()
-        ] if q else self._all_chars
-        self._render(filtered)
+        self._render(self._filtered_chars())
 
     # ── Actions ───────────────────────────────────────────────────────────────
 

@@ -2393,6 +2393,10 @@ _FR_TO_EN: dict[str, str] = {
         "Clip generated, but continuity frames could not be saved: ",
     # RENDU & AUDIO : ce que le moteur fait de l'image du décor (2026-07-31).
     "Image du décor":                   "Location image",
+    "Ce que le moteur fait de l'image de la fiche décor : le lieu où se "
+    "passe la scène, le cadrage exact du plan, ou une simple ambiance.":
+        "What the engine does with the location sheet's image: the place where "
+        "the scene happens, the shot's exact framing, or just a mood.",
     "Lieu — la caméra s'y déplace selon l'axe et la valeur du plan":
         "Location — the camera moves inside it, following the shot's axis and size",
     "Identique — l'image EST le cadrage, seule l'action bouge":

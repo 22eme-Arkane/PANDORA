@@ -200,6 +200,8 @@ class PageDecors(QWidget):
         self._all_items: list[dict] = []
         self._collapsed: dict[str, bool] = {}   # état replié des bandeaux par pièce
         self._selected_id: str = ""
+        from ui.grid_flow import ColumnsWatcher
+        self._cols_watch = ColumnsWatcher()
 
         # Fiche latérale droite repliable (poignée FICHE) — demande 2026-07-23.
         from ui.element_side_panel import attach_side_panel
@@ -375,18 +377,29 @@ class PageDecors(QWidget):
 
     def _build_floor_plans_section(self):
         wrap = QWidget()
-        wrap.setFixedHeight(168)
+        # Hauteur LIBRE : la bande se replie (voir le bouton ci-dessous), une
+        # hauteur fixe l'aurait laissée occuper 168 px même une fois refermée.
         wrap.setStyleSheet(f"background:{CP['bg0']};")
         v = QVBoxLayout(wrap)
         v.setContentsMargins(32, 8, 32, 10)
         v.setSpacing(4)
 
         head = QHBoxLayout()
-        lbl = QLabel("▦  " + translate("Plan des décors"))
-        lbl.setStyleSheet(
+        # Émoticône plutôt que le carroyage ▦, et la bande devient DÉPLIABLE
+        # comme les autres sections de la page (demande Matthieu 2026-07-31) :
+        # une carte dit mieux « vu de dessus » qu'un symbole de trame.
+        self._fp_toggle = QPushButton()
+        self._fp_toggle.setCheckable(True)
+        self._fp_toggle.setChecked(True)
+        self._fp_toggle.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._fp_toggle.setFlat(True)
+        self._fp_toggle.setStyleSheet(
+            f"QPushButton{{background:transparent;border:none;text-align:left;"
             f"color:{CP['text_secondary']};font-size:12px;font-weight:700;"
-            f"letter-spacing:1px;background:transparent;")
-        head.addWidget(lbl)
+            f"letter-spacing:1px;padding:0;}}"
+            f"QPushButton:hover{{color:{CP['text_primary']};}}")
+        self._fp_title = "🗺  " + translate("Plan des décors")
+        head.addWidget(self._fp_toggle)
         sub = QLabel(translate("— vus de dessus, synchronisés avec Mise en scène et Plan de feu"))
         sub.setStyleSheet(f"color:{CP['text_dim']};font-size:9px;background:transparent;")
         head.addWidget(sub)
@@ -415,7 +428,21 @@ class PageDecors(QWidget):
         self._fp_row.setSpacing(12)
         self._fp_row.addStretch()
         hs.setWidget(inner)
+        hs.setFixedHeight(120)
         v.addWidget(hs, 1)
+
+        # Repli : la bande des plans mange 168 px en permanence alors qu'on ne
+        # la consulte que par moments. Le sous-titre et le bouton de génération
+        # restent visibles une fois repliée — on doit pouvoir lancer les plans
+        # manquants sans tout rouvrir.
+        self._fp_body = hs
+
+        def _sync_fp(*_a):
+            _open = self._fp_toggle.isChecked()
+            self._fp_body.setVisible(_open)
+            self._fp_toggle.setText(("▼  " if _open else "▶  ") + self._fp_title)
+        self._fp_toggle.toggled.connect(_sync_fp)
+        _sync_fp()
         return wrap
 
     def _fp_card(self, decor: dict, display_name: str | None = None):
@@ -743,13 +770,27 @@ class PageDecors(QWidget):
         self._empty_state.setVisible(False)
         self._scroll.setVisible(True)
 
-        # Décors libres (sans pièce) en grille simple ; chaque pièce (room_group)
-        # dans un bandeau dépliable regroupant ses vues.
+        # Chaque pièce (room_group) dans son bandeau dépliable. Les décors LIBRES
+        # (sans pièce) étaient posés en grille nue, sans en-tête : ils flottaient
+        # au-dessus des sections sans qu'on sache ce qu'ils étaient. Ils ont
+        # désormais leur propre section, « Vue d'ensemble des décors » (demande
+        # Matthieu 2026-07-31), placée en tête.
+        _libres, _pieces = [], []
         for group, group_items in decors_api.group_by_room(items):
-            if group:
-                self._sections_lay.addWidget(self._group_section(group, group_items))
-            else:
-                self._sections_lay.addWidget(self._cards_grid(group_items))
+            (_pieces if group else _libres).append((group, group_items))
+        if _libres:
+            from ui.collapsible import CollapsibleSection
+            _tous = [it for _g, _its in _libres for it in _its]
+            _exp = self._collapsed.get("__ensemble__", False)
+            _sec = CollapsibleSection(
+                f"{translate('🖼  Vue d\'ensemble des décors')}   ·   {len(_tous)}",
+                expanded=not _exp)
+            _sec.add_widget(self._cards_grid(_tous))
+            _sec.header_button().toggled.connect(
+                lambda ok: self._collapsed.__setitem__("__ensemble__", not bool(ok)))
+            self._sections_lay.addWidget(_sec)
+        for group, group_items in _pieces:
+            self._sections_lay.addWidget(self._group_section(group, group_items))
         self._sections_lay.addStretch(1)
 
     def _make_card(self, item: dict) -> DecorCard:
@@ -773,12 +814,28 @@ class PageDecors(QWidget):
             image_path=item.get("image_path", ""),
         )
 
-    # 9 colonnes comme Castings / Accessoires / HMC / Véhicules : Décors était
-    # resté à 6 et sautait la ligne alors qu'il restait un tiers d'écran libre
-    # (constat Matthieu 2026-07-31 sur « Dojo — Crèche de Noël », 7 vues : la
-    # septième tombait seule à la ligne suivante). Les cartes font 162 px de
-    # large partout, la largeur tenable est donc la même.
-    def _cards_grid(self, items: list[dict], cols: int = 9) -> QWidget:
+    def _grid_columns(self) -> int:
+        """Colonnes qui tiennent VRAIMENT dans la zone d'affichage.
+
+        Décors était resté à 6 colonnes en dur et sautait la ligne alors qu'il
+        restait un tiers d'écran libre (« Dojo — Crèche de Noël », 7 vues : la
+        septième tombait seule). Un nombre fixe, quel qu'il soit, rognait à
+        l'inverse les vignettes dès que le panneau FICHE s'ouvrait."""
+        from ui.grid_flow import columns_for
+        _vp = self._scroll.viewport().width() if hasattr(self, "_scroll") else 0
+        return columns_for(max(0, _vp - 64))
+
+    def resizeEvent(self, e):
+        super().resizeEvent(e)
+        try:
+            if self._cols_watch.changed(self._grid_columns()) and self._all_items:
+                self._render(self._all_items)
+        except Exception:
+            pass
+
+    def _cards_grid(self, items: list[dict], cols: int | None = None) -> QWidget:
+        if cols is None:
+            cols = self._grid_columns()
         wrap = QWidget()
         wrap.setStyleSheet("background:transparent;")
         g = QGridLayout(wrap)

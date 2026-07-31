@@ -98,10 +98,29 @@ CAST_EXTRA = "figuration"
 CAST_TYPES = (CAST_MAIN, CAST_EXTRA)
 
 
+#: Mots qui, dans le champ « Rôle », désignent déjà de la figuration. Les
+#: castings existants n'ont pas `cast_type` mais beaucoup portent « Figurant »
+#: dans leur rôle : sans cette lecture, ils resteraient tous rangés en
+#: principaux et la séparation n'aurait aucun effet visible (constat Matthieu
+#: 2026-07-31, projet FIGHTER : vingt fiches « Figurant » côté principaux).
+_ROLE_FIGURATION = ("figurant", "figuration", "extra", "background actor",
+                    "silhouette")
+
+
 def cast_type(char: dict | None) -> str:
-    """Type de casting d'un personnage, avec repli sur « principal »."""
+    """Type de casting d'un personnage.
+
+    Ordre de lecture : le champ explicite `cast_type` d'abord — c'est un choix
+    de l'utilisateur, il prime toujours. À défaut, on lit le champ « Rôle » :
+    une fiche déjà marquée « Figurant » est de la figuration, sans qu'on ait à
+    la rouvrir une par une. Repli final : principal."""
     _v = ((char or {}).get("cast_type") or "").strip().lower()
-    return _v if _v in CAST_TYPES else CAST_MAIN
+    if _v in CAST_TYPES:
+        return _v
+    _role = ((char or {}).get("role") or "").strip().lower()
+    if any(_m in _role for _m in _ROLE_FIGURATION):
+        return CAST_EXTRA
+    return CAST_MAIN
 
 
 def is_extra(char: dict | None) -> bool:

@@ -4273,10 +4273,13 @@ def moods_fenetre_options():
 
 @test
 def rendu_audio_repliable_lipsync_ordre():
-    """RENDU & AUDIO est un menu déroulant (replié par défaut). Bloc lip-sync :
-    « Moteur lip-sync » AVANT la description, alignés."""
-    import inspect
-    from PyQt6.QtWidgets import QLabel
+    """RENDU & AUDIO est un menu déroulant (replié par défaut).
+
+    Disposition des lignes à réglage (Matthieu 2026-07-31) : le TITRE à gauche,
+    le MENU à droite sur la même ligne, la DESCRIPTION en dessous. Le libellé
+    « Moteur lip-sync » est retiré — la ligne s'appelle déjà « Resynchroniser
+    les lèvres » et le nom du moteur se lit dans le menu."""
+    from PyQt6.QtWidgets import QLabel, QComboBox
     import ui.tab_t2v as M
     tab = M.TabT2V()
     # Repliable
@@ -4286,15 +4289,31 @@ def rendu_audio_repliable_lipsync_ordre():
     assert not tab._raccords_body.isHidden(), "clic = déplier"
     tab._raccords_toggle_btn.click()
     assert tab._raccords_body.isHidden(), "re-clic = replier"
-    # Lip-sync : la description n'est plus dans le toggle ; moteur + description dans le corps
+
+    # Le menu du moteur est SUR la ligne du titre, plus dans le corps en dessous.
+    assert tab._lipsync_engine_combo in tab._lipsync_toggle_row.findChildren(QComboBox), \
+        "le menu lip-sync n'est pas sur la ligne du titre"
     tlbls = [l.text() for l in tab._lipsync_toggle_row.findChildren(QLabel)]
     assert not any("Après génération" in t for t in tlbls), "description encore dans le toggle"
+    assert not any("Moteur lip-sync" in t for t in tlbls), \
+        "le libellé « Moteur lip-sync » devait être retiré"
     blbls = [l.text() for l in tab._raccords_body.findChildren(QLabel)]
-    assert any("Moteur lip-sync" in t for t in blbls) and any("Après génération" in t for t in blbls)
-    # Moteur AVANT description (ordre dans le code)
-    src = inspect.getsource(M.TabT2V)
-    assert src.index("addWidget(_ls_row)") < src.index("addWidget(_ls_desc_wrap)"), \
-        "« Moteur lip-sync » doit précéder la description"
+    assert not any("Moteur lip-sync" in t for t in blbls), \
+        "« Moteur lip-sync » traîne encore dans le corps"
+    assert any("Après génération" in t for t in blbls), "description du lip-sync perdue"
+
+    # Même disposition pour « Image du décor » : titre + menu sur une ligne,
+    # description en dessous.
+    assert tab._decor_ref_combo in tab._decor_ref_row.findChildren(QComboBox)
+    _dlbls = [l.text() for l in tab._decor_ref_row.findChildren(QLabel)]
+    assert any("Image du décor" in t for t in _dlbls), "titre du réglage décor absent"
+    assert any("le lieu où se passe la scène" in t for t in _dlbls), \
+        "description du réglage décor absente"
+
+    # Flèche des menus à GAUCHE (demande Matthieu) — vérifié sur la feuille de style.
+    for _c in (tab._decor_ref_combo, tab._lipsync_engine_combo):
+        assert "subcontrol-position:left" in _c.styleSheet().replace(" ", ""), \
+            "la flèche du menu n'est pas placée à gauche"
 
 
 @test

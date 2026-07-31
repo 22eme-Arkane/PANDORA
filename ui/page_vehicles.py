@@ -203,10 +203,14 @@ class PageVehicles(QWidget):
 
         self._grid_container = QWidget()
         self._grid_container.setStyleSheet("background:transparent;")
-        self._grid = QGridLayout(self._grid_container)
-        self._grid.setSpacing(18)
-        self._grid.setAlignment(Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignLeft)
-        self._grid.setContentsMargins(32, 24, 32, 32)
+        # Une section dépliable PAR CATÉGORIE (demande Matthieu 2026-07-31).
+        self._sections_lay = QVBoxLayout(self._grid_container)
+        self._sections_lay.setSpacing(14)
+        self._sections_lay.setAlignment(Qt.AlignmentFlag.AlignTop)
+        self._sections_lay.setContentsMargins(32, 24, 32, 32)
+        self._collapsed: dict[str, bool] = {}
+        from ui.grid_flow import ColumnsWatcher
+        self._cols_watch = ColumnsWatcher()
 
         scroll.setWidget(self._grid_container)
         self._scroll = scroll
@@ -353,8 +357,9 @@ class PageVehicles(QWidget):
         self._apply_filter()
 
     def _render(self, items: list[dict]):
-        while self._grid.count():
-            w = self._grid.takeAt(0)
+        from core.i18n import translate
+        while self._sections_lay.count():
+            w = self._sections_lay.takeAt(0)
             if w.widget():
                 w.widget().deleteLater()
 
@@ -364,26 +369,58 @@ class PageVehicles(QWidget):
                 self._scroll.setVisible(False)
                 self._empty_state.setVisible(True)
                 return
-            from core.i18n import translate
             empty = QLabel(translate("Aucun véhicule ne correspond au filtre."))
             empty.setAlignment(Qt.AlignmentFlag.AlignCenter)
             empty.setStyleSheet(
                 f"color:{CP['text_dim']};font-size:13px;background:transparent;border:none;"
             )
-            self._grid.addWidget(empty, 0, 0, 1, 9)
+            self._sections_lay.addWidget(empty)
             return
 
         self._empty_state.setVisible(False)
         self._scroll.setVisible(True)
 
-        # 9 colonnes (2026-07-23) : utiliser toute la largeur de la fenêtre.
-        cols = 9
+        from ui.grid_flow import group_by_category
+        from ui.collapsible import CollapsibleSection
+        for _cat, _items in group_by_category(items):
+            _exp = self._collapsed.get(_cat, True)
+            sec = CollapsibleSection(
+                f"{translate(_cat)}   ·   {len(_items)}", expanded=bool(_exp))
+            sec.add_widget(self._cards_grid(_items))
+            sec.header_button().toggled.connect(
+                lambda ok, k=_cat: self._collapsed.__setitem__(k, bool(ok)))
+            self._sections_lay.addWidget(sec)
+
+    def _grid_columns(self) -> int:
+        """Colonnes qui tiennent vraiment dans la zone d'affichage."""
+        from ui.grid_flow import columns_for
+        _vp = self._scroll.viewport().width() if hasattr(self, "_scroll") else 0
+        return columns_for(max(0, _vp - 64))
+
+    def _cards_grid(self, items: list[dict], cols: int | None = None) -> QWidget:
+        if cols is None:
+            cols = self._grid_columns()
+        wrap = QWidget()
+        wrap.setStyleSheet("background:transparent;")
+        g = QGridLayout(wrap)
+        g.setSpacing(18)
+        g.setContentsMargins(0, 0, 0, 0)
+        g.setAlignment(Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignLeft)
         for i, item in enumerate(items):
             card = VehicleCard(item)
             card.edit_requested.connect(self._on_edit)
             card.delete_requested.connect(self._on_delete)
             card.selected.connect(self._on_card_selected)
-            self._grid.addWidget(card, i // cols, i % cols)
+            g.addWidget(card, i // cols, i % cols)
+        return wrap
+
+    def resizeEvent(self, e):
+        super().resizeEvent(e)
+        try:
+            if self._cols_watch.changed(self._grid_columns()) and self._all_items:
+                self._render(self._all_items)
+        except Exception:
+            pass
 
     def _on_card_selected(self, item: dict):
         from ui.element_side_panel import storyboard_stats
