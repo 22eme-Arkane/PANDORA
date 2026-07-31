@@ -57,18 +57,30 @@ def _get_nav_items():
 
 
 def _get_nav_groups():
-    """Navigation globale unique validée pour la V2 de PANDORA."""
+    """Navigation globale unique validée pour la V2 de PANDORA.
+
+    ⚠ Le nombre de groupes est dicté par les séparateurs de `_get_nav_items`,
+    pas par cette liste de titres : ajouter un séparateur sans ajouter de titre
+    faisait PLANTER l'application au démarrage sur un IndexError (régression du
+    2026-07-31, en ajoutant « Coût du projet »). Les intitulés ne sont plus
+    affichés depuis 2026-07-23 — ils ne servent que d'info-bulle — donc un
+    groupe sans titre est parfaitement légitime : il dessine simplement un
+    séparateur de plus. On indexe donc SANS jamais dépasser."""
     groups, current = [], []
     labels = [translate("ÉCRITURE"), translate("PRÉPARATION VISUELLE"),
               translate("TECHNIQUE"), tr("nav.group_studio_ia")]
+
+    def _label() -> str:
+        return labels[len(groups)] if len(groups) < len(labels) else ""
+
     for entry in _get_nav_items():
         if entry is None:
-            groups.append((labels[len(groups)], current))
+            groups.append((_label(), current))
             current = []
         elif entry[2] != "settings":
             current.append(entry)
     if current:
-        groups.append((labels[len(groups)], current))
+        groups.append((_label(), current))
     return groups
 
 # Fallback texte si le PNG est absent

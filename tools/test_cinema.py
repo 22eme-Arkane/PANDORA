@@ -7677,6 +7677,22 @@ def cout_du_projet_journal_et_fenetre():
                      for l in _i.getsource(_PW.PandoraWindow._navigate).splitlines())
     assert "ProjectCostDialog" in _nav, "le bouton n'ouvre pas la fenêtre"
 
+    # ⚠ ET LA BARRE SE CONSTRUIT VRAIMENT. Vérifier la LISTE d'entrées ne
+    # suffit pas : ajouter un séparateur sans ajouter de titre de groupe a fait
+    # PLANTER l'application au démarrage sur un IndexError, alors que ce test
+    # passait au vert (régression du 2026-07-31, signalée par Matthieu au
+    # lancement). Le nombre de groupes est dicté par les séparateurs, pas par
+    # la liste des titres — on construit donc pour de bon.
+    _groups = _PW._get_nav_groups()
+    assert len(_groups) >= 5, ("le séparateur avant « Coût du projet » a "
+                               "disparu", len(_groups))
+    _sb = _PW._Sidebar()
+    assert "cost" in _sb._items and "settings" in _sb._items, sorted(_sb._items)
+    # Un groupe SANS titre est légitime (les intitulés ne sont plus affichés) :
+    # ce qui ne l'est pas, c'est de planter dessus.
+    assert any(not _lbl for _lbl, _ in _groups), \
+        "le groupe du coût devrait être sans titre"
+
 
 if __name__ == "__main__":
     sys.exit(main())
