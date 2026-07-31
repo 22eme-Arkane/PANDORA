@@ -108,12 +108,16 @@ class ElementSidePanel(QWidget):
     def show_item(self, *, name: str, subtitle: str = "", description: str = "",
                   stats: str = "", image_path: str = ""):
         w, h = PANEL_W - 28, _PHOTO_H
-        if image_path and os.path.isfile(image_path):
-            pix = QPixmap(image_path).scaled(
-                w, h, Qt.AspectRatioMode.KeepAspectRatioByExpanding,
-                Qt.TransformationMode.SmoothTransformation)
-            pix = pix.copy((pix.width() - w) // 2, (pix.height() - h) // 2, w, h)
-            self._photo.setPixmap(pix)
+        # Photo de la fiche mise en cache, décodée à la taille du panneau
+        # (audit 2026-07-31) : chaque clic sur une carte redéveloppait le
+        # fichier d'origine — une fiche de personnage fait 2160×3840 — pour
+        # l'afficher dans un panneau de quelques centaines de pixels. C'est ce
+        # qui donnait les « 2 ou 3 secondes » ressenties au clic.
+        from ui.thumb_cache import card_pixmap, ensure_cache_size
+        ensure_cache_size()
+        _pix = card_pixmap(image_path, w, h)
+        if _pix is not None:
+            self._photo.setPixmap(_pix)
         else:
             self._photo.setPixmap(QPixmap())
             self._photo.setText(self._placeholder)

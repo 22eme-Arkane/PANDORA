@@ -46,19 +46,18 @@ class CharacterCard(QWidget):
             f"color:{CP['text_dim']};font-size:36px;"
         )
 
+        # Vignette mise en cache AU FORMAT D'AFFICHAGE (audit 2026-07-31) : on
+        # décodait ici le fichier entier — une fiche de personnage fait
+        # 2160×3840 — pour l'afficher en 162 px, et on vidait le cache juste
+        # avant pour être sûr de voir une image régénérée. Vingt personnages,
+        # c'était vingt décodages pleine résolution à chaque ouverture de
+        # l'onglet. La clé du cache porte désormais la date du fichier : une
+        # image régénérée est rechargée d'elle-même, sans purge à l'aveugle.
+        from ui.thumb_cache import card_pixmap, ensure_cache_size
+        ensure_cache_size()
         img_path = data.get("image_path", "")
-        if img_path and os.path.isfile(img_path):
-            QPixmapCache.remove(img_path)
-            pix = QPixmap(img_path).scaled(
-                self._W, self._H_IMG,
-                Qt.AspectRatioMode.KeepAspectRatioByExpanding,
-                Qt.TransformationMode.SmoothTransformation,
-            )
-            pix = pix.copy(
-                (pix.width()  - self._W)    // 2,
-                (pix.height() - self._H_IMG) // 2,
-                self._W, self._H_IMG,
-            )
+        pix = card_pixmap(img_path, self._W, self._H_IMG)
+        if pix is not None:
             self._thumb.setPixmap(pix)
         else:
             self._thumb.setText("👤")

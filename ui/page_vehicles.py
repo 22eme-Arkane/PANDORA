@@ -57,18 +57,11 @@ class VehicleCard(QWidget):
             f"background:{CP['bg3']};border-radius:10px 10px 0 0;"
             f"color:{CP['text_dim']};font-size:36px;"
         )
-        img = data.get("image_path", "")
-        if img and os.path.isfile(img):
-            pix = QPixmap(img).scaled(
-                self._W, self._H_IMG,
-                Qt.AspectRatioMode.KeepAspectRatioByExpanding,
-                Qt.TransformationMode.SmoothTransformation,
-            )
-            pix = pix.copy(
-                (pix.width()  - self._W)    // 2,
-                (pix.height() - self._H_IMG) // 2,
-                self._W, self._H_IMG,
-            )
+        # Vignette en cache, décodée à la taille d'affichage (audit 2026-07-31).
+        from ui.thumb_cache import card_pixmap, ensure_cache_size
+        ensure_cache_size()
+        pix = card_pixmap(data.get("image_path", ""), self._W, self._H_IMG)
+        if pix is not None:
             self._thumb.setPixmap(pix)
         else:
             self._thumb.setText(_CAT_ICONS.get(cat, "🚗"))

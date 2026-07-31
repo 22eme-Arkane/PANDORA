@@ -24,6 +24,16 @@ def _load_card_pixmap(path: str, width: int, height: int) -> QPixmap:
     """
     if not path or not os.path.isfile(path):
         return QPixmap()
+    # Cache au format d'affichage (audit de lenteur 2026-07-31) : le décodage
+    # réduit ci-dessous était déjà bon, mais il était REFAIT à chaque
+    # construction de carte — 38 lectures de fichiers à chaque ouverture de
+    # l'onglet Décors, soit ~845 ms. La clé porte la date du fichier : une
+    # image régénérée se recharge d'elle-même.
+    from ui.thumb_cache import card_pixmap, ensure_cache_size
+    ensure_cache_size()
+    _cached = card_pixmap(path, width, height)
+    if _cached is not None:
+        return _cached
     reader = QImageReader(path)
     reader.setAutoTransform(True)
     source_size = reader.size()

@@ -7553,5 +7553,62 @@ def note_de_realisation_repli_prend_le_bloc_entier():
         _V(_v)
 
 
+@test
+def performance_vignettes_en_cache_et_storyboard_progressif():
+    """Audit de lenteur du 2026-07-31 (« tout est assez lent », 2 à 3 s au clic).
+
+    Deux causes mesurées, deux correctifs qui doivent le rester :
+
+    1. Les cartes décodaient l'image SOURCE à chaque construction — une fiche
+       de personnage fait 2160×3840 pour un affichage en 162 px — et le
+       Casting vidait même le cache juste avant. Ouvrir un onglet relisait
+       tout le disque : Décors 798 ms, Casting 341 ms.
+    2. Le Storyboard posait ses ~5 400 widgets d'un bloc : 6,6 s d'interface
+       FIGÉE à chaque rafraîchissement."""
+    import inspect as _i
+    from ui.thumb_cache import card_pixmap, _key
+
+    # ① La clé de cache porte la DATE du fichier : une image régénérée est
+    #    rechargée sans qu'on ait à purger le cache à l'aveugle.
+    import os as _os, tempfile as _tf, shutil as _sh, time as _t
+    _tmp = _tf.mkdtemp(prefix="pandora_thumb_")
+    try:
+        _p = _os.path.join(_tmp, "x.png")
+        with open(_p, "wb") as f:
+            f.write(b"\x89PNG\r\n\x1a\n")
+        _k1 = _key(_p, 162, 190, "cover")
+        _os.utime(_p, (_t.time() + 10, _t.time() + 10))     # « régénérée »
+        assert _key(_p, 162, 190, "cover") != _k1, \
+            "la clé ignore la date du fichier — une image régénérée resterait figée"
+        # Taille demandée différente → clé différente (pas de vignette étirée).
+        assert _key(_p, 92, 92, "cover") != _k1
+        # Fichier absent → pas de pixmap, et surtout pas d'exception.
+        assert card_pixmap(_os.path.join(_tmp, "absent.png"), 10, 10) is None
+        assert card_pixmap("", 10, 10) is None
+    finally:
+        _sh.rmtree(_tmp, ignore_errors=True)
+
+    # ② Plus aucune purge de cache à l'aveugle dans les cartes.
+    import ui.page_castings as _PC
+    _src = "\n".join(l.split("#", 1)[0] for l in _i.getsource(_PC).splitlines())
+    assert "QPixmapCache.remove" not in _src, \
+        "le Casting vide encore le cache à chaque carte"
+    # …et les cinq pages passent bien par le cache partagé.
+    for _mod in ("ui.page_castings", "ui.page_accessories", "ui.page_hmc",
+                 "ui.page_vehicles", "ui.page_decors", "ui.element_side_panel"):
+        _m = __import__(_mod, fromlist=["_"])
+        _s = "\n".join(l.split("#", 1)[0] for l in _i.getsource(_m).splitlines())
+        assert "card_pixmap" in _s, f"{_mod} ne passe pas par le cache de vignettes"
+
+    # ③ Storyboard : construction par PAQUETS, avec un jeton qui invalide les
+    #    paquets d'un rendu précédent (deux refresh rapprochés ne doivent pas
+    #    mélanger leurs lignes).
+    import ui.page_storyboard as _PS
+    _r = "\n".join(l.split("#", 1)[0]
+                   for l in _i.getsource(_PS.PageStoryboard._render).splitlines())
+    assert "_render_token" in _r, "aucun jeton de rendu — les paquets peuvent se mélanger"
+    assert "singleShot" in _r, "le tableau est encore posé d'un seul bloc"
+
+
 if __name__ == "__main__":
     sys.exit(main())
