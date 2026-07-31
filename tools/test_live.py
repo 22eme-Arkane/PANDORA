@@ -1027,18 +1027,42 @@ def reorg_colonnes_et_heritages():
 def estimation_prix_generation():
     """core/pricing : estimation INDICATIVE = nb plans × durée × prix/s (moteur +
     résolution) ; moteurs à durée fixe facturés au clip ; rappel « voir fal.ai »."""
-    from core import pricing
-    # Seedance 720p : $0.30/s → 10 plans × 5 s = 50 s = $15.
-    cost, mode = pricing.estimate("seedance-2.0", "720p", 50.0, 10)
-    assert abs(cost - 15.0) < 0.01 and mode == "s", f"720p ×50s = $15 attendu ({cost})"
-    # 4K bien plus cher.
-    assert pricing.estimate("seedance-2.0", "4k", 50.0, 10)[0] > 50, "4K > 1080p/720p"
-    # Veo : facturé au CLIP (durée non prise en compte).
-    c_veo, m_veo = pricing.estimate("veo-3.1", "1080p", 40.0, 5)
-    assert m_veo == "clip" and abs(c_veo - 5.0) < 0.01, "Veo 5 clips × $1 = $5"
-    # Le message contient le montant + le rappel fal.ai.
-    msg = pricing.format_estimate("Seedance 2.0", "seedance-2.0", "720p", 50.0, 10)
-    assert "$15.00" in msg and "10 plans" in msg and "fal.ai" in msg, msg
+    from core import pricing, media_provider as _mp
+
+    # ⚠ ISOLATION DU DISTRIBUTEUR — le prix dépend du distributeur choisi dans
+    # les Paramètres avancés (fal.ai / PiAPI…). Ce test figeait la grille fal.ai
+    # en dur : il est passé au rouge le jour où le distributeur du poste est
+    # passé sur PiAPI (0,20 $/s au lieu de 0,30), sans qu'une seule ligne de
+    # code ait bougé. Un test ne doit pas dépendre d'un réglage de l'utilisateur.
+    _orig = _mp.active_video_provider
+    _mp.active_video_provider = lambda *_a, **_k: "fal"
+    try:
+        # Seedance 720p chez fal.ai : $0.30/s → 10 plans × 5 s = 50 s = $15.
+        cost, mode = pricing.estimate("seedance-2.0", "720p", 50.0, 10)
+        assert abs(cost - 15.0) < 0.01 and mode == "s", f"720p ×50s = $15 attendu ({cost})"
+        # 4K bien plus cher.
+        assert pricing.estimate("seedance-2.0", "4k", 50.0, 10)[0] > 50, "4K > 1080p/720p"
+        # Veo : facturé au CLIP (durée non prise en compte).
+        c_veo, m_veo = pricing.estimate("veo-3.1", "1080p", 40.0, 5)
+        assert m_veo == "clip" and abs(c_veo - 5.0) < 0.01, "Veo 5 clips × $1 = $5"
+        # Le message contient le montant + le rappel fal.ai.
+        msg = pricing.format_estimate("Seedance 2.0", "seedance-2.0", "720p", 50.0, 10)
+        assert "$15.00" in msg and "10 plans" in msg and "fal.ai" in msg, msg
+    finally:
+        _mp.active_video_provider = _orig
+
+    # …et la grille d'un distributeur ALTERNATIF est bien prise en compte : le
+    # comportement que le test masquait doit être vérifié, pas contourné.
+    _mp.active_video_provider = lambda *_a, **_k: "piapi"
+    _orig_pps = _mp.price_per_second
+    _mp.price_per_second = lambda *_a, **_k: (0.20, "piapi")
+    try:
+        _c, _m = pricing.estimate("seedance-2.0", "720p", 50.0, 10)
+        assert abs(_c - 10.0) < 0.01 and _m == "s", \
+            f"la grille du distributeur alternatif est ignorée ({_c})"
+    finally:
+        _mp.active_video_provider = _orig
+        _mp.price_per_second = _orig_pps
 
 
 @test
