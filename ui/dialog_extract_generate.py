@@ -187,23 +187,14 @@ class ExtractGenerateDialog(QDialog):
             return combo
 
         self._image_model_combo = _engine_row(
-            translate("Image de départ") if self._offer_room_views
-            else translate("Moteur d'image"),
+            translate("Moteur d'image"),
             engine_choices(), load_config().get("image_model", "nb2"))
         # Même objet sous son ancien nom : le chemin « 7 vues » le lit déjà.
         self._room_image_model_combo = self._image_model_combo
+        # Le second moteur (« Plan + raccords ») ne servait QUE au bouton
+        # « 7 vues », retiré plus bas : un réglage sans option à régler est un
+        # piège. Il reste à None — le chemin room_views le gère déjà.
         self._room_reference_model_combo = None
-        if self._offer_room_views:
-            self._room_reference_model_combo = _engine_row(
-                translate("Plan + raccords"), reference_engine_choices(), "nb2")
-            ref_hint = QLabel(translate(
-                "Pour les 7 vues : le premier moteur crée l'image maîtresse ; le "
-                "second reprend cette image pour le plan d'architecture et les raccords."
-            ))
-            ref_hint.setWordWrap(True)
-            ref_hint.setStyleSheet(
-                f"color:{CP['text_dim']};font-size:9px;background:transparent;")
-            choice_lay.addWidget(ref_hint)
 
         btn_identify = QPushButton("  " + translate(f"Identifier les {category_label}"))
         btn_identify.setFixedHeight(44)
@@ -229,23 +220,34 @@ class ExtractGenerateDialog(QDialog):
         btn_gen.clicked.connect(lambda: self._start(generate=True))
         choice_lay.addWidget(btn_gen)
 
-        # ── 3e option (décors uniquement) : les 7 vues de chaque pièce ──────────
-        if self._offer_room_views:
-            btn_seven = QPushButton(
-                "  " + translate("Identifier et générer les 7 vues de la pièce"))
-            btn_seven.setFixedHeight(44)
-            btn_seven.setStyleSheet(
-                f"QPushButton{{background:transparent;color:{CP['text_primary']};"
-                f"border:1px solid {CP.get('accent2','#7c6bff')};border-radius:8px;"
-                f"font-size:12px;font-weight:700;text-align:left;padding-left:14px;}}"
-                f"QPushButton:hover{{background:{CP['bg3']};"
-                f"border-color:{CP.get('accent2','#7c6bff')};}}"
-            )
-            btn_seven.setToolTip(translate(
-                "Pour chaque décor : 6 faces (sol, plafond, 4 murs) + un plan "
-                "d'ensemble — 7 images par pièce, cohérence spatiale stricte"))
-            btn_seven.clicked.connect(lambda: self._start(generate=True, room_views=True))
-            choice_lay.addWidget(btn_seven)
+        # ── 3e option RETIRÉE : « Identifier et générer les 7 vues » ────────────
+        # Décision Matthieu 2026-07-31 : le dialogue ne propose plus que les deux
+        # premières options (identifier / identifier + images). Les vues d'une
+        # pièce se travaillent maintenant dans l'atelier dédié — onglet Décors ›
+        # Avancé — où l'on choisit le moteur de rotation et où l'on VOIT chaque
+        # vue avant de l'accepter. Les lancer à l'aveugle depuis le Scénario
+        # multipliait les images sans qu'on puisse juger, alors que le rendu est
+        # encore expérimental.
+        #
+        # Pour le remettre : décommenter ce bloc — le chemin `room_views=True`
+        # de `_start()` est intact, ainsi que toute la génération derrière.
+        #
+        # if self._offer_room_views:
+        #     btn_seven = QPushButton(
+        #         "  " + translate("Identifier et générer les 7 vues de la pièce"))
+        #     btn_seven.setFixedHeight(44)
+        #     btn_seven.setStyleSheet(
+        #         f"QPushButton{{background:transparent;color:{CP['text_primary']};"
+        #         f"border:1px solid {CP.get('accent2','#7c6bff')};border-radius:8px;"
+        #         f"font-size:12px;font-weight:700;text-align:left;padding-left:14px;}}"
+        #         f"QPushButton:hover{{background:{CP['bg3']};"
+        #         f"border-color:{CP.get('accent2','#7c6bff')};}}"
+        #     )
+        #     btn_seven.setToolTip(translate(
+        #         "Pour chaque décor : 6 faces (sol, plafond, 4 murs) + un plan "
+        #         "d'ensemble — 7 images par pièce, cohérence spatiale stricte"))
+        #     btn_seven.clicked.connect(lambda: self._start(generate=True, room_views=True))
+        #     choice_lay.addWidget(btn_seven)
 
         root.addWidget(self._choice_frame)
 
@@ -327,6 +329,25 @@ class ExtractGenerateDialog(QDialog):
         )
         self._btn_cancel.clicked.connect(self._on_cancel)
 
+        # Bouton OK : dès que les éléments sont ENREGISTRÉS, on peut valider et
+        # partir — même si une étape de fond continue (plans vus de dessus).
+        # Avant, le seul bouton disponible restait « ✕ Annuler » en rouge, ce
+        # qui laissait croire qu'on allait perdre ce qui venait d'être créé
+        # (retour Matthieu 2026-07-31 : « il n'y a pas de bouton OK »).
+        self._btn_ok = QPushButton(translate("✓  OK"))
+        self._btn_ok.setFixedHeight(38)
+        self._btn_ok.setMinimumWidth(110)
+        self._btn_ok.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._btn_ok.setStyleSheet(
+            f"QPushButton{{background:transparent;color:{CP['accent']};"
+            f"border:1px solid {CP['accent_dim']};border-radius:8px;"
+            f"font-size:12px;font-weight:700;padding:0 18px;}}"
+            f"QPushButton:hover{{background:rgba(78,205,196,0.10);"
+            f"border-color:{CP['accent']};}}"
+        )
+        self._btn_ok.clicked.connect(self.accept)
+        self._btn_ok.setVisible(False)
+
         self._btn_navigate = QPushButton("→  Voir")
         self._btn_navigate.setFixedHeight(38)
         self._btn_navigate.setStyleSheet(
@@ -339,15 +360,18 @@ class ExtractGenerateDialog(QDialog):
 
         footer.addWidget(self._btn_cancel)
         footer.addStretch()
+        footer.addWidget(self._btn_ok)
+        footer.addSpacing(8)
         footer.addWidget(self._btn_navigate)
         root.addLayout(footer)
 
     # ── Cancel / close ────────────────────────────────────────────────────────
 
-    def reject(self):
-        self._cancelled = True
-        # is_running() et pas isRunning() : en fermeture, l'objet C++ d'un worker
-        # peut déjà être détruit → RuntimeError dans un slot = abort de l'app.
+    def _park_workers(self):
+        """Détache et parque les workers encore vivants avant de fermer.
+
+        is_running() et pas isRunning() : en fermeture, l'objet C++ d'un worker
+        peut déjà être détruit → RuntimeError dans un slot = abort de l'app."""
         for w in (self._extract_worker, self._gen_worker, self._floor_worker):
             if w and is_running(w):
                 try:
@@ -356,13 +380,42 @@ class ExtractGenerateDialog(QDialog):
                 except Exception:
                     pass
                 abandon_thread(w)
+
+    def reject(self):
+        self._cancelled = True
+        self._park_workers()
         super().reject()
+
+    def accept(self):
+        # Valider PENDANT une étape de fond (plans vus de dessus) est permis :
+        # les éléments sont déjà enregistrés. On coupe donc proprement ce qui
+        # tourne encore — sans quoi un worker survivrait à la fenêtre détruite.
+        self._cancelled = True
+        self._park_workers()
+        super().accept()
 
     def _on_cancel(self):
         self.reject()
 
+    def _saved_state(self):
+        """Les éléments sont ENREGISTRÉS : « Annuler » n'a plus de sens (rien ne
+        serait défait), on propose « OK » et on neutralise le rouge du bouton."""
+        if getattr(self, "_btn_ok", None) is None or self._btn_ok.isVisible():
+            return
+        self._btn_ok.setVisible(True)
+        self._btn_cancel.setText(translate("✕  Arrêter"))
+        self._btn_cancel.setStyleSheet(
+            f"QPushButton{{background:{CP['bg3']};color:{CP['text_secondary']};"
+            f"border:1px solid {CP['border']};border-radius:8px;"
+            f"font-size:12px;font-weight:600;padding:0 18px;}}"
+            f"QPushButton:hover{{background:{CP['bg2']};}}"
+        )
+
     def _finish_state(self, show_navigate: bool = False):
-        self._btn_cancel.setText("Fermer")
+        # Plus rien ne tourne : « Fermer » suffit, le bouton OK ferait doublon.
+        if getattr(self, "_btn_ok", None) is not None:
+            self._btn_ok.setVisible(False)
+        self._btn_cancel.setText(translate("Fermer"))
         self._btn_cancel.setStyleSheet(
             f"QPushButton{{background:{CP['bg3']};color:{CP['text_secondary']};"
             f"border:1px solid {CP['border']};border-radius:8px;"
@@ -434,6 +487,8 @@ class ExtractGenerateDialog(QDialog):
                 self._post_save_fn(saved, it)
             self._saved_items.append(saved)
             row.set_state("PENDING")
+        # Rien ne peut plus être perdu → bouton OK disponible tout de suite.
+        self._saved_state()
 
         if self._generate_images:
             self._status_lbl.setText(

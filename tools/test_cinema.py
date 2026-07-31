@@ -4441,6 +4441,530 @@ def plan_decor_variation_import_resync():
 
 
 @test
+def plan_decor_creation_directe_fiche_et_vignette():
+    """Créer le plan d'architecte vu de dessus À LA DEMANDE (demande 2026-07-31) :
+    1. fiche décor → bouton « Créer le plan du décor » qui FORCE la régénération
+       (la génération auto, elle, ne relance rien si le plan est à jour) ;
+    2. page Décors → une vignette « à générer » se clique et lance la génération
+       de CE seul décor (worker de lot à 1 job) ; sans clé fal.ai on INFORME ;
+       un échec du clic direct N'EST PAS silencieux ;
+    3. core.decors.set_floor_plan purge l'aperçu léger : sans ça, la carte
+       continuerait d'afficher l'ANCIEN plan après une régénération."""
+    import os, tempfile
+    from PyQt6.QtWidgets import QApplication, QLabel
+    from PyQt6.QtCore import Qt as _Qt
+    QApplication.instance() or QApplication([])
+
+    class _Sig:
+        def connect(self, *_a):
+            pass
+
+    # ── 1. Fiche décor : bouton présent, force la régénération, se verrouille ──
+    import ui.dialog_decor as DD
+    d = tempfile.mkdtemp()
+    fp = os.path.join(d, "plan.png")
+    open(fp, "wb").write(b"x")
+    item = {"id": "", "name": "Salon", "prompt": "un salon", "floor_plan": fp,
+            "floor_plan_prompt": "un salon", "generated_images": []}
+    dlg = DD.DecorDialog(None, item=item)
+    assert hasattr(dlg, "_btn_floor_plan"), "bouton « Créer le plan du décor » absent"
+    made = []
+
+    class _FauxFP:
+        def __init__(self, prompt, name, resolution=""):
+            made.append(prompt)
+            self.finished = _Sig()
+            self.failed = _Sig()
+
+        def isRunning(self):
+            return False
+
+        def start(self):
+            made.append("start")
+
+    _orig_fp = DD.GenerateFloorPlanWorker
+    DD.GenerateFloorPlanWorker = _FauxFP
+    try:
+        dlg._maybe_gen_floor_plan()
+        assert made == [], "plan à jour → la génération AUTO ne doit rien relancer"
+        dlg._on_create_floor_plan()
+        assert "start" in made, "le bouton doit FORCER la régénération même à jour"
+        assert not dlg._btn_floor_plan.isEnabled(), \
+            "bouton non verrouillé pendant la génération"
+        dlg._floor_plan_worker = None   # worker factice → rien à parquer
+        dlg._on_floor_plan_done("")     # mock (pas de clé)
+        assert dlg._btn_floor_plan.isEnabled(), "bouton non réactivé après le mock"
+    finally:
+        DD.GenerateFloorPlanWorker = _orig_fp
+
+    # ── 2. Page Décors : vignette « à générer » cliquable → job unique ────────
+    import ui.page_decors as PD
+    import api.nano_banana as NB
+    import core.config as CFG
+    page = PD.PageDecors()
+    card = page._fp_card({"id": "z", "name": "Grange", "prompt": "une grange"}, "Grange")
+    th = next((l for l in card.findChildren(QLabel) if "mousePressEvent" in vars(l)), None)
+    assert th is not None and "générer" in th.text(), \
+        "vignette « à générer » sans clic branché"
+    assert th.cursor().shape() == _Qt.CursorShape.PointingHandCursor, \
+        "vignette « à générer » sans curseur cliquable"
+
+    calls = {"jobs": None, "start": 0}
+
+    class _FauxLot:
+        def __init__(self, jobs):
+            calls["jobs"] = jobs
+            self.plan_done = _Sig()
+            self.finished = _Sig()
+
+        def isRunning(self):
+            return False
+
+        def start(self):
+            calls["start"] += 1
+
+    shown = []
+
+    class _FauxBox:
+        @staticmethod
+        def information(*_a, **_k):
+            shown.append("info")
+
+        @staticmethod
+        def warning(*_a, **_k):
+            shown.append("warn")
+
+    _o_lot, _o_cfg, _o_box = NB.GenerateFloorPlansWorker, CFG.load_config, PD.QMessageBox
+    NB.GenerateFloorPlansWorker = _FauxLot
+    PD.QMessageBox = _FauxBox
+    try:
+        CFG.load_config = lambda: {"api_key": "k"}
+        page._on_gen_single_plan({"id": "z", "prompt": "une grange", "name": "Grange"})
+        assert calls["start"] == 1 and [j["id"] for j in calls["jobs"]] == ["z"], calls
+        assert not page._fp_btn.isEnabled(), "bouton de lot non verrouillé pendant le job"
+        page._fp_worker = None          # worker factice → rien à parquer
+        # Sans clé fal.ai : informer, ne pas rester muet ni lancer de worker.
+        CFG.load_config = lambda: {"api_key": ""}
+        page._on_gen_single_plan({"id": "z", "prompt": "p", "name": "n"})
+        assert shown == ["info"] and calls["start"] == 1, (shown, calls)
+        # Échec du clic direct (0 plan généré) → avertissement, pas un silence.
+        page.refresh = lambda: None
+        page._fp_single = True
+        page._on_fp_plans_finished(0)
+        assert shown == ["info", "warn"], "échec du clic direct resté silencieux"
+        assert not page._fp_single, "_fp_single doit retomber après le lot"
+    finally:
+        NB.GenerateFloorPlansWorker = _o_lot
+        CFG.load_config = _o_cfg
+        PD.QMessageBox = _o_box
+
+    # ── 3. set_floor_plan purge l'aperçu léger de l'ancien plan ───────────────
+    import core.decors as dec
+    saved = []
+    _oL, _oS = dec._load_index, dec._save_index
+    dec._load_index = lambda: [{"id": "x", "floor_plan": "ancien.png",
+                                "floor_plan_thumbnail": "ancien_thumb.jpg"}]
+    dec._save_index = lambda idx: saved.append(idx)
+    try:
+        assert dec.set_floor_plan("x", "nouveau.png")
+        assert saved and saved[0][0]["floor_plan"] == "nouveau.png"
+        assert saved[0][0]["floor_plan_thumbnail"] == "", \
+            "aperçu léger de l'ANCIEN plan non purgé → la carte l'afficherait encore"
+    finally:
+        dec._load_index, dec._save_index = _oL, _oS
+
+    import core.i18n as i18n
+    assert "Créer le plan du décor" in i18n._FR_TO_EN
+    assert "Cliquer pour générer le plan d'architecte (vu de dessus)" in i18n._FR_TO_EN
+
+
+@test
+def fiche_decor_repliable_et_style_de_la_note():
+    """Trois retours de Matthieu (2026-07-31) sur les fenêtres de génération :
+
+    1. La fiche décor devient LISIBLE : nom/catégorie/prompt restent visibles,
+       tout le reste est rangé dans des sections repliées, et les CINQ menus
+       (usage des références, style, mode, moteur, format) sont réunis dans
+       UNE seule section « Réglages de génération ».
+    2. « Style de la note de réalisation » est en TÊTE de toutes les listes de
+       style et sélectionné par défaut quand la note décrit un style — la
+       relecture est DIRECTE (réécrire la note change le style généré).
+    3. La fenêtre « Générer depuis le scénario » propose un bouton OK dès que
+       les éléments sont enregistrés (avant : seul « ✕ Annuler » en rouge,
+       alors que plus rien ne pouvait être perdu).
+    """
+    import inspect
+    from PyQt6.QtWidgets import QApplication, QComboBox
+    QApplication.instance() or QApplication([])
+
+    # ── 1. Fiche décor : sections repliables + regroupement des 5 menus ──────
+    import ui.dialog_decor as DD
+    from ui.collapsible import CollapsibleSection
+    dlg = DD.DecorDialog(None, item={"name": "Salon", "prompt": "un salon",
+                                     "generated_images": []})
+    for attr in ("_sec_refs", "_sec_settings", "_sec_creative"):
+        sec = getattr(dlg, attr, None)
+        assert isinstance(sec, CollapsibleSection), (attr, "section absente")
+        assert not sec.is_expanded(), (attr, "doit être REPLIÉE par défaut")
+    # Le prompt, lui, reste visible sans rien déplier.
+    assert not dlg._prompt.isHidden(), "le prompt ne doit pas être replié"
+    # Les 5 menus vivent DANS la section réglages (et pas ailleurs).
+    def _in_section(widget, section):
+        p = widget.parent()
+        while p is not None:
+            if p is section.body():
+                return True
+            p = p.parent()
+        return False
+    for name, w in (("usage", dlg._ref_usage_combo), ("style", dlg._style_combo),
+                    ("mode", dlg._gen_mode), ("moteur", dlg._model_combo),
+                    ("format", dlg._ratio_combo), ("définition", dlg._res_combo)):
+        assert _in_section(w, dlg._sec_settings), \
+            (name, "doit être dans la section « Réglages de génération »")
+    # Replier/déplier agit réellement sur le corps.
+    dlg._sec_settings.set_expanded(True)
+    assert dlg._sec_settings.body().isVisibleTo(dlg), "déplier n'affiche pas le corps"
+    dlg._sec_settings.set_expanded(False)
+    assert not dlg._sec_settings.body().isVisibleTo(dlg), "replier ne masque pas"
+
+    # Le prompt est ÉLASTIQUE (demande Matthieu 2026-07-31) : il prend la place
+    # laissée libre quand tout est replié, et revient à son minimum une fois
+    # les sections ouvertes. Une hauteur FIXE le laissait à 100 px sur une
+    # fiche presque vide, alors qu'un prompt de décor fait dix lignes.
+    from PyQt6.QtWidgets import QSizePolicy as _QSP
+    assert dlg._prompt.sizePolicy().verticalPolicy() == _QSP.Policy.Expanding, \
+        "le prompt doit pouvoir s'étirer"
+    assert dlg._prompt.maximumHeight() > 1000, \
+        "hauteur encore FIXE (setFixedHeight) : le prompt ne grandira jamais"
+    dlg2 = DD.DecorDialog(None, item={"name": "S", "prompt": "p",
+                                      "generated_images": []})
+    dlg2.resize(1200, 860)
+    dlg2.show()
+    QApplication.instance().processEvents()
+    h_replie = dlg2._prompt.height()
+    for s in (dlg2._sec_refs, dlg2._sec_settings, dlg2._sec_creative):
+        s.set_expanded(True)
+    QApplication.instance().processEvents()
+    h_deplie = dlg2._prompt.height()
+    assert h_replie > h_deplie, (
+        f"le prompt ne s'agrandit pas quand les sections sont repliées "
+        f"({h_replie} px replié vs {h_deplie} px déplié)")
+    assert h_deplie >= 100, ("le prompt passe sous sa hauteur minimale", h_deplie)
+
+    # ── 2. Style de la note : en tête, actif seulement si la note en décrit un ─
+    import core.style as style_api
+    import core.scenario as scenario_api
+    from ui.style_combo import populate, suffix_for, NOTE_KEY
+    _oL, _oK = scenario_api.list_scenarios, style_api.get_style_key
+    try:
+        # (a) sans note → entrée présente mais DÉSACTIVÉE, défaut = style projet
+        scenario_api.list_scenarios = lambda: []
+        style_api.get_style_key = lambda: "arri_65"
+        c = QComboBox()
+        populate(c)
+        assert c.itemData(0) == NOTE_KEY, "l'entrée note doit être en TÊTE"
+        assert not c.model().item(0).isEnabled(), \
+            "sans style écrit dans la note, l'entrée ne doit pas être choisissable"
+        assert c.currentData() == "arri_65", "repli sur le style du projet"
+        # (b) avec note → active ET sélectionnée par défaut ; suffixe = la note
+        scenario_api.list_scenarios = lambda: [
+            {"direction_note": "## STYLE VISUEL\nArcane, rendu peint à la main\n"}]
+        c2 = QComboBox()
+        populate(c2)
+        assert c2.model().item(0).isEnabled() and c2.currentData() == NOTE_KEY, \
+            "avec un style dans la note, l'entrée doit être le défaut"
+        assert "Arcane" in suffix_for(c2), suffix_for(c2)
+        # (c) choisie comme style DE PROJET → les suffixes projet la relisent
+        style_api.get_style_key = lambda: NOTE_KEY
+        assert "Arcane" in style_api.get_image_suffix(), "suffixe image"
+        assert "Arcane" in style_api.get_video_suffix(), "suffixe vidéo"
+        # (d) note vidée → aucun style, mais AUCUN plantage
+        scenario_api.list_scenarios = lambda: [{"direction_note": "## STYLE VISUEL\n\n"}]
+        assert style_api.get_image_suffix() == "", "note vide → pas de style inventé"
+    finally:
+        scenario_api.list_scenarios, style_api.get_style_key = _oL, _oK
+    # Les 5 fenêtres d'élément passent bien par la liste PARTAGÉE.
+    import ui.dialog_accessory as DA, ui.dialog_hmc as DH
+    import ui.dialog_vehicle as DV, ui.dialog_character as DC
+    for mod in (DD, DA, DH, DV, DC):
+        assert "ui.style_combo" in inspect.getsource(mod), \
+            (mod.__name__, "n'utilise pas la liste de styles partagée")
+
+    # ── 3. Bouton OK dès que les éléments sont enregistrés ───────────────────
+    import ui.dialog_extract_generate as EG
+    src = inspect.getsource(EG.ExtractGenerateDialog)
+    assert "_btn_ok" in src and "_saved_state" in src, "bouton OK absent"
+    saved_src = inspect.getsource(EG.ExtractGenerateDialog._on_extraction_done)
+    assert "_saved_state()" in saved_src, \
+        "le bouton OK doit apparaître dès la sauvegarde, pas à la toute fin"
+    # accept() doit PARQUER les workers : fermer pendant les plans d'architecte
+    # laissait sinon un QThread survivre à la fenêtre détruite (crash Qt).
+    acc = inspect.getsource(EG.ExtractGenerateDialog.accept)
+    assert "_park_workers" in acc, "accept() ne parque pas les workers en cours"
+    assert "_park_workers" in inspect.getsource(EG.ExtractGenerateDialog.reject)
+
+    import core.i18n as i18n
+    for k in ("⚙  Réglages de génération", "📝  Style de la note de réalisation",
+              "✓  OK"):
+        assert k in i18n._FR_TO_EN, ("i18n manquant", k)
+
+
+@test
+def atelier_7_vues_trois_moteurs():
+    """Atelier 7 vues (2026-07-31) : la partie Décors devient DEUX onglets
+    (« Décors » = page classique inchangée · « 7 vues » = atelier de vraies
+    rotations), avec TROIS moteurs comparables. Fige :
+    1. le hub à 2 onglets branché dans la navigation ;
+    2. le mapping des angles Qwen (schéma fal.ai vérifié le 2026-07-31) ;
+    3. les temps d'extraction de l'orbite (quarts de tour, 720p max en i2v) ;
+    4. la géométrie de la reprojection panorama (4 yaw + 2 pôles) ;
+    5. le mode mock des 3 workers : sans clé → done([]) SANS réseau ;
+    6. l'écriture des vues sur la pièce (room_group), création comprise."""
+    import inspect, os, tempfile
+    from PyQt6.QtWidgets import QApplication
+    QApplication.instance() or QApplication([])
+
+    # 1) Hub 2 onglets, page classique intacte, branché dans la fenêtre.
+    from ui.decors_hub import DecorsHub
+    import ui.page_decors as PD
+    import ui.page_decors_multiview as PM
+    hub = DecorsHub()
+    assert hub.tabs.count() == 2, "la partie Décors doit avoir 2 onglets"
+    assert isinstance(hub.tabs.widget(0), PD.PageDecors), "onglet 1 = page classique"
+    assert isinstance(hub.tabs.widget(1), PM.PageDecorsMultiview), "onglet 2 = atelier"
+    assert hasattr(hub, "refresh"), "la navigation appelle refresh() sur la page"
+    import ui.pandora_window as PW
+    assert "DecorsHub()" in inspect.getsource(PW.PandoraWindow), \
+        "la navigation doit monter le hub, pas PageDecors directement"
+
+    # 2) Angles Qwen — schéma CORRIGÉ SUR ESSAI RÉEL (2026-07-31, décor « Dojo
+    #    — Crèche de Noël ») : Matthieu a constaté que « la gauche est en fait
+    #    la droite ». Le LoRA compte les degrés dans le sens où voyage la
+    #    CAMÉRA, pas le sujet : +90° l'amène à gauche de la pièce. Le schéma
+    #    précédent venait de la doc, pas d'un rendu — il était inversé.
+    import api.multiview as MV
+    exp = {"avant": (0, 0), "gauche": (90, 0), "arriere": (180, 0),
+           "droite": (270, 0), "sol": (0, 90), "plafond": (0, -30)}
+    for code, (h, v) in exp.items():
+        a = MV.QWEN_ANGLES[code]
+        assert (a["horizontal_angle"], a["vertical_angle"]) == (h, v), (code, a)
+
+    # …et le moteur ne DEMANDE que les vues qu'il sait produire : « avant » est
+    # un doublon de l'image d'ensemble (rotation nulle), « plafond » exigerait
+    # −90° de site quand le LoRA s'arrête à −30°. Les demander revenait à payer
+    # deux images inutilisables (décision Matthieu 2026-07-31).
+    assert set(MV.QWEN_SKIP) == {"avant", "plafond"}, MV.QWEN_SKIP
+    from core.room_views import SIX_FACES as _SIX
+    _demandees = [c for _l, c, _d in _SIX if c not in MV.QWEN_SKIP]
+    assert _demandees == ["arriere", "gauche", "droite", "sol"], _demandees
+    _run = inspect.getsource(MV.QwenMultiAngleWorker.run)
+    assert "QWEN_SKIP" in _run, "le worker ignore la liste des vues écartées"
+
+    # 3) Orbite : quarts de tour réguliers, l'avant à t=0 ; i2v plafonne à 720p.
+    t = MV.orbit_face_times(8)
+    assert t == {"avant": 0.0, "droite": 2.0, "arriere": 4.0, "gauche": 6.0}, t
+    assert MV.ORBIT_RESOLUTION == "720p", "image-to-video Seedance 2.0 ≤ 720p"
+
+    # 4) Reprojection panorama : géométrie vérifiée sur une image synthétique
+    #    (couleur par direction) — centres des 4 yaw + zénith + nadir.
+    import math
+    import numpy as np
+    from PIL import Image
+    from core.panorama import render_view, VIEW_ANGLES
+    W, H = 200, 100
+    arr = np.zeros((H, W, 3), dtype=np.uint8)
+    for u in range(W):
+        lon = (u / W - 0.5) * 2 * math.pi
+        if abs(lon) < math.pi / 4:
+            arr[:, u] = (255, 0, 0)
+        elif math.pi / 4 <= lon <= 3 * math.pi / 4:
+            arr[:, u] = (0, 255, 0)
+        elif abs(lon) > 3 * math.pi / 4:
+            arr[:, u] = (0, 0, 255)
+        else:
+            arr[:, u] = (255, 255, 0)
+    for v in range(H):
+        lat = (0.5 - v / H) * math.pi
+        if lat > math.radians(60):
+            arr[v, :] = (255, 255, 255)
+        elif lat < math.radians(-60):
+            arr[v, :] = (40, 40, 40)
+    pano = Image.fromarray(arr, "RGB")
+    attendu = {"avant": (255, 0, 0), "droite": (0, 255, 0),
+               "arriere": (0, 0, 255), "gauche": (255, 255, 0),
+               "plafond": (255, 255, 255), "sol": (40, 40, 40)}
+    for code, (yaw, pitch) in VIEW_ANGLES.items():
+        c = render_view(pano, yaw, pitch, 95.0, 64, 36).getpixel((32, 18))
+        assert all(abs(a - b) <= 14 for a, b in zip(c, attendu[code])), \
+            (code, c, attendu[code], "la reprojection ne regarde pas la bonne direction")
+
+    # 5) Mode mock : sans clé fal.ai, les 3 workers émettent done([]) sans réseau.
+    _o_cfg = MV.load_config
+    MV.load_config = lambda: {}
+    try:
+        for cls in (MV.QwenMultiAngleWorker, MV.SeedanceOrbitWorker,
+                    MV.HunyuanPanoramaWorker):
+            w = cls("", "test")
+            got = []
+            w.done.connect(lambda v, _g=got: _g.append(v))
+            w.run()   # synchrone : pas de thread dans le harnais
+            assert got == [[]], (cls.__name__, got, "mock sans clé ≠ done([])")
+    finally:
+        MV.load_config = _o_cfg
+
+    # 6) Écriture des vues : un décor libre devient une pièce, le frère est créé
+    #    puis MIS À JOUR (pas dupliqué) à la vue suivante.
+    import core.decors as dec
+    d = tempfile.mkdtemp()
+    p1 = os.path.join(d, "v1.png")
+    open(p1, "wb").write(b"x")
+    store: list[dict] = [{"id": "libre", "name": "Grange", "prompt": "une grange",
+                          "category": "Intérieur", "room_group": ""}]
+
+    def _fake_save(data):
+        for i, existing in enumerate(store):
+            if existing.get("id") and existing.get("id") == data.get("id"):
+                store[i] = data
+                return data
+        data.setdefault("id", f"id{len(store)}")
+        store.append(data)
+        return data
+
+    _oL, _oS = dec.list_decors, dec.save_decor
+    dec.list_decors = lambda: list(store)
+    dec.save_decor = _fake_save
+    try:
+        page = PM.PageDecorsMultiview()
+        rep = store[0]
+        page._apply_view(rep, {"label": "Avant", "code": "avant", "path": p1,
+                               "thumbnail_path": "", "prompt": "vue avant"})
+        assert rep.get("room_group") == "Grange", "le décor libre devient une pièce"
+        freres = [s for s in store if s.get("room_view") == "Avant"]
+        assert len(freres) == 1 and freres[0]["image_path"] == p1, freres
+        p2 = os.path.join(d, "v2.png")
+        open(p2, "wb").write(b"y")
+        page._apply_view(rep, {"label": "Avant", "code": "avant", "path": p2,
+                               "thumbnail_path": "", "prompt": "vue avant"})
+        freres = [s for s in store if s.get("room_view") == "Avant"]
+        assert len(freres) == 1, "la régénération ne doit PAS dupliquer le frère"
+        assert freres[0]["image_path"] == p2 and p1 in freres[0]["generated_images"]
+        page._apply_view(rep, {"label": "Panorama 360°", "code": "panorama",
+                               "path": p2, "thumbnail_path": "", "prompt": "",
+                               "is_panorama": True})
+        assert rep.get("panorama_path") == p2, "panorama conservé sur la pièce"
+    finally:
+        dec.list_decors, dec.save_decor = _oL, _oS
+
+    import core.i18n as i18n
+    for k in ("Atelier 7 vues", "7 vues", "Générer les vues", "Pièce / décor"):
+        assert k in i18n._FR_TO_EN, ("i18n manquant", k)
+
+
+@test
+def apercu_plein_ecran_des_vues_et_onglets_renommes():
+    """Retours Matthieu 2026-07-31 (capture de l'atelier en fonctionnement) :
+    1. les vues générées s'ouvrent en GRAND au clic, avec navigation entre
+       elles (comparer « Avant » et « Arrière » est le geste utile) ;
+    2. les onglets de la partie Décors s'appellent « Standard » / « Avancé ».
+    """
+    import os, tempfile
+    from PIL import Image
+    from PyQt6.QtWidgets import QApplication
+    from PyQt6.QtCore import Qt
+    QApplication.instance() or QApplication([])
+
+    # ── 2. Onglets renommés ─────────────────────────────────────────────────
+    from ui.decors_hub import DecorsHub
+    hub = DecorsHub()
+    titres = [hub.tabs.tabText(i) for i in range(hub.tabs.count())]
+    assert any("Standard" in t for t in titres), titres
+    assert any("Avancé" in t for t in titres), titres
+    assert not any("7 vues" in t for t in titres), ("l'ancien libellé subsiste", titres)
+
+    # ── 1. Visualiseur : navigation, bouclage, cas limites ───────────────────
+    _d = os.path.join(_TMP, "preview")
+    os.makedirs(_d, exist_ok=True)
+    paths = {}
+    for nom, rgb in (("master", (90, 60, 140)), ("avant", (200, 60, 60)),
+                     ("arriere", (60, 60, 200)), ("gauche", (220, 200, 60))):
+        p = os.path.join(_d, f"{nom}.png")
+        Image.new("RGB", (320, 180), rgb).save(p)
+        paths[nom] = p
+
+    from ui.image_preview_dialog import ImagePreviewDialog, show_images
+    items = [("Plan d'ensemble", paths["master"]), ("Avant", paths["avant"]),
+             ("Arrière", paths["arriere"]), ("Gauche", paths["gauche"])]
+    dlg = ImagePreviewDialog(items, 2)
+    assert dlg.current_label() == "Arrière", "ouverture sur la vue cliquée"
+    dlg.next()
+    assert dlg.current_label() == "Gauche"
+    dlg.next()
+    assert dlg.current_label() == "Plan d'ensemble", "la navigation doit BOUCLER"
+    dlg.previous()
+    assert dlg.current_label() == "Gauche"
+    # Une seule image → pas de flèches (elles ne mèneraient nulle part).
+    solo = ImagePreviewDialog([("Avant", paths["avant"])], 0)
+    solo.show()
+    assert not solo._btn_prev.isVisible() and not solo._btn_next.isVisible()
+    # Une entrée illisible est ÉCARTÉE, et rien ne s'ouvre s'il ne reste rien.
+    mixte = ImagePreviewDialog([("Absent", os.path.join(_d, "nope.png")),
+                               ("Avant", paths["avant"])], 0)
+    assert mixte.current_label() == "Avant", "l'entrée illisible doit être écartée"
+    assert show_images(None, [("X", os.path.join(_d, "nope.png"))]) is False, \
+        "aucune image lisible → ne pas ouvrir une fenêtre vide"
+
+    # ── L'atelier propose bien ensemble + vues, et branche le clic ───────────
+    import core.decors as dec
+    import ui.page_decors_multiview as PM
+    store = [{"id": "e", "name": "Dojo", "room_group": "Dojo",
+              "room_view": "Ensemble", "image_path": paths["master"]},
+             {"id": "a", "name": "Dojo · Avant", "room_group": "Dojo",
+              "room_view": "Avant", "image_path": paths["avant"]},
+             {"id": "b", "name": "Dojo · Arrière", "room_group": "Dojo",
+              "room_view": "Arrière", "image_path": paths["arriere"]}]
+    _oL = dec.list_decors
+    dec.list_decors = lambda: list(store)
+    try:
+        page = PM.PageDecorsMultiview()
+        page.refresh()
+        labels = [l for l, _p in page._preview_items()]
+        assert labels == ["Plan d'ensemble", "Avant", "Arrière"], labels
+        # La vignette d'une vue EXISTANTE est cliquable ; celle « à générer » non
+        # (elle lancerait un aperçu vide).
+        av = page._view_cards.get("avant")
+        assert av is not None and "mousePressEvent" in vars(av), \
+            "la vignette d'une vue générée doit ouvrir l'aperçu"
+        assert av.cursor().shape() == Qt.CursorShape.PointingHandCursor
+        sol = page._view_cards.get("sol")
+        assert sol is not None and "mousePressEvent" not in vars(sol), \
+            "une vue « à générer » ne doit pas ouvrir d'aperçu vide"
+
+        # Reconstruire la grille ne doit laisser AUCUNE carte fantôme.
+        # `deleteLater` ne détruit qu'au prochain tour de boucle d'événements :
+        # une carte seulement retirée du LAYOUT reste ENFANT de son conteneur
+        # et flotte en (0,0) par-dessus le plan d'ensemble (carte « Plafond »
+        # fantôme, constatée au rendu 2026-07-31). Il faut setParent(None).
+        # On compte les cartes encore RATTACHÉES à l'arbre : après trois
+        # reconstructions il doit toujours y en avoir six, pas dix-huit.
+        from PyQt6.QtWidgets import QWidget as _QW
+        _carte = lambda w: (w.width() == PM._CARD_W
+                            and w.height() == PM._CARD_H + 22)
+        page.refresh()
+        page.refresh()
+        rattachees = [w for w in page.findChildren(_QW) if _carte(w)]
+        assert len(rattachees) == len(PM.SIX_FACES), (
+            f"{len(rattachees)} cartes rattachées au lieu de {len(PM.SIX_FACES)} : "
+            "les anciennes restent enfants du conteneur et flottent par-dessus "
+            "le plan d'ensemble (setParent(None) manquant avant deleteLater)")
+    finally:
+        dec.list_decors = _oL
+
+    import core.i18n as i18n
+    for k in ("Standard", "Avancé", "Cliquer pour voir en grand"):
+        assert k in i18n._FR_TO_EN, ("i18n manquant", k)
+
+
+@test
 def film_reel_auto_coche_en_style_realiste():
     """RENDU & AUDIO : en style « Film réaliste » (key 'realistic'), le toggle
     « Prise de vue réelle » se coche automatiquement. On ne décoche jamais hors
@@ -6044,6 +6568,58 @@ def style_de_note_extrait_sans_markdown():
 
 
 @test
+def style_visuel_lu_malgre_le_gabarit_vide():
+    """Un gabarit « ## STYLE VISUEL » VIDE ne doit pas masquer la vraie section.
+
+    Constat Matthieu (2026-07-31, projet FIGHTER v2, données réelles) : le
+    style d'image ne reprenait qu'UNE puce sur six — « - Rendu 3D painterly…
+    » — au lieu du paragraphe entier. Cause mesurée dans sa note : le titre
+    « ## STYLE VISUEL » y figure DEUX FOIS — le gabarit vide d'`empty_note()`
+    en position 22, et la vraie section en position 2560 (l'analyse empile ses
+    intentions à la suite au lieu de remplir le gabarit). `section_text`
+    s'arrêtait à la PREMIÈRE occurrence, donc vide → repli « chasse aux
+    lignes », qui ne ramasse que les lignes matchant un déclencheur : seule
+    « Rendu 3D painterly » matche `rendu\\s+\\w+`, les cinq autres puces étaient
+    perdues.
+    """
+    from core.direction_note import section_text, visual_style_from_note
+
+    note = (
+        "## INTENTION GÉNÉRALE\n\n\n"
+        "## STYLE VISUEL\n\n\n"                     # ← gabarit VIDE, en premier
+        "## SON ET MUSIQUE\n\n\n"
+        "## INTENTIONS ISSUES DE L'ANALYSE DU SCÉNARIO\n\n"
+        "## STYLE VISUEL\n"                          # ← la VRAIE section
+        "Référence maîtresse : Arcane (League of Legends), Fortiche Studio.\n"
+        "- Rendu 3D painterly avec textures peintes à la main.\n"
+        "- Chiaroscuro cinématographique dramatique, rim light vibrant.\n"
+        "- Character design expressif et anguleux ; cross-hatching.\n"
+        "- Fumée volumétrique, accents néon lumineux.\n"
+        "- Atmosphère hybride : steampunk Hextech et gritty façon Zaun.\n"
+        "\n"
+        "## TEMPORALITÉ ET LUMIÈRE\nfin de journée\n"
+    )
+    out = visual_style_from_note(note)
+    assert out == section_text(note, "STYLE VISUEL"), \
+        "le style doit venir de la SECTION, pas du repli"
+    # Le paragraphe ENTIER, pas une puce.
+    for attendu in ("Référence maîtresse", "Rendu 3D painterly", "Chiaroscuro",
+                    "Character design", "Fumée volumétrique", "steampunk Hextech"):
+        assert attendu in out, (f"« {attendu} » perdu — le style est tronqué", out)
+    assert len(out.splitlines()) >= 6, ("une seule ligne remontée", out)
+    # …et surtout PAS la section suivante.
+    assert "fin de journée" not in out, ("la section suivante est aspirée", out)
+
+    # Toutes les occurrences vides → « », le repli reprend la main (pas de
+    # régression pour les notes où le style est rangé ailleurs).
+    vide = "## STYLE VISUEL\n\n\n## STYLE VISUEL\n   \n\n## AUTRE\nx\n"
+    assert section_text(vide, "STYLE VISUEL") == ""
+    # Section unique et remplie : comportement historique inchangé.
+    simple = "## STYLE VISUEL\ngrain lourd, désaturé\n\n## SON\nnappe\n"
+    assert section_text(simple, "STYLE VISUEL") == "grain lourd, désaturé"
+
+
+@test
 def storyboard_ia_ne_perd_jamais_de_plans():
     """84 fiches ne peuvent pas devenir 20 plans en silence.
 
@@ -6593,6 +7169,164 @@ def arborescence_source_de_verite_unique():
                          for l in _i.getsource(_m).splitlines())
         assert "project_layout" in _src, \
             f"core/{_mod_name}.py ne passe pas par project_layout"
+
+
+@test
+def mood_les_references_sont_ANNONCEES_au_compositeur():
+    """Les images jointes doivent être DÉCRITES au compositeur, pas seulement
+    envoyées. Sur le plan 21 de FIGHTER (Seedream 5.0 Pro), trois fiches
+    partaient au moteur et AUCUNE ne lui était annoncée : le compositeur
+    écrivait une description autonome, que le moteur d'édition suivait à la
+    lettre en ignorant les images — d'où un rendu photoréaliste alors que les
+    fiches étaient peintes (constat Matthieu 2026-07-31).
+
+    Le test mord sur le COMPORTEMENT, pas sur le source : il compte les images
+    envoyées et les rôles décrits, et exige l'égalité."""
+    import os as _os, tempfile as _tf, shutil as _sh
+    import api.apercu as A
+    import core.casting, core.decors, core.accessories, core.vehicles, core.hmc
+
+    _tmp = _tf.mkdtemp(prefix="pandora_refroles_")
+    def _img(n):
+        p = _os.path.join(_tmp, n + ".png")
+        with open(p, "wb") as f:
+            f.write(b"\x89PNG\r\n\x1a\n")
+        return p
+    _I = {k: _img(k) for k in ("perso", "decor", "prop")}
+    _orig = (core.casting.get_character, core.decors.get_decor,
+             core.accessories.get_accessory, core.vehicles.get_vehicle,
+             core.hmc.get_hmc_item)
+    core.casting.get_character     = lambda i: {"name": "Jésus",  "image_path": _I["perso"]}
+    core.decors.get_decor          = lambda i: {"name": "Désert", "image_path": _I["decor"]}
+    core.accessories.get_accessory = lambda i: {"name": "Croix",  "image_path": _I["prop"]}
+    core.vehicles.get_vehicle      = lambda i: {}
+    core.hmc.get_hmc_item          = lambda i: {}
+    try:
+        shot = {"id": "s-refroles", "number": -21, "character_ids": ["c"],
+                "decor_id": "d", "accessory_ids": ["a"],
+                "vehicle_ids": [], "hmc_ids": []}
+        envoyees = A._shot_ref_images(shot)
+        roles    = A._ref_roles(shot)
+        assert len(envoyees) == 3, ("collecte incomplète", envoyees)
+        assert len(roles) == len(envoyees), (
+            f"{len(envoyees)} images envoyées mais {len(roles)} décrites — "
+            "le compositeur ignore les fiches", roles)
+        # Le rôle NOMME la fiche : « reference 1 » ne relie rien au sujet.
+        _blob = " ".join(roles).lower()
+        for _nom in ("jésus", "désert", "croix"):
+            assert _nom in _blob, (f"« {_nom} » absent des rôles", roles)
+
+        # Les rôles entrent dans la CLÉ DE CACHE : sans cela, le correctif
+        # n'atteindrait jamais un plan déjà composé.
+        k_avec = A.compose_cache_key("f", "", "", "", "nb2", "mood", roles)
+        k_sans = A.compose_cache_key("f", "", "", "", "nb2", "mood", [])
+        assert k_avec != k_sans, "les rôles ne comptent pas dans la clé de cache"
+    finally:
+        (core.casting.get_character, core.decors.get_decor,
+         core.accessories.get_accessory, core.vehicles.get_vehicle,
+         core.hmc.get_hmc_item) = _orig
+        _sh.rmtree(_tmp, ignore_errors=True)
+
+
+@test
+def style_visuel_tronque_repare_reecriture_respectee():
+    """La section [🎨 STYLE VISUEL] est cuite dans chaque plan à la création du
+    storyboard et plus jamais rafraîchie. Les 75 plans de FIGHTER portaient donc
+    UNE ligne sur les treize de la note de réalisation, et le Mood — qui préfère
+    la section cuite au style relu — propageait la perte jusqu'à l'image.
+
+    Règle : on répare une TRONCATURE, on ne touche jamais à une RÉÉCRITURE."""
+    from core.style_resolve import effective_visual_style, is_truncation_of
+
+    complet = ("Référence maîtresse : Arcane, esthétique Fortiche Studio.\n"
+               "- Rendu 3D painterly avec textures peintes à la main.\n"
+               "- Chiaroscuro dramatique, rim light vibrant.\n"
+               "- Character design expressif et anguleux.")
+    cuit = "Rendu 3D painterly avec textures peintes à la main."
+
+    assert is_truncation_of(cuit, complet), "troncature non reconnue"
+    assert effective_visual_style(cuit, complet) == complet, \
+        "le style complet n'est pas rendu"
+
+    # Contre-épreuve n°1 : une réécriture volontaire est INTOUCHABLE.
+    manuel = "Noir et blanc charbonneux, grain argentique lourd."
+    assert effective_visual_style(manuel, complet) == manuel, \
+        "un style réécrit à la main a été écrasé"
+    assert not is_truncation_of(manuel, complet)
+
+    # Contre-épreuve n°2 : rien à comparer → on ne casse rien.
+    assert effective_visual_style("", complet) == complet
+    assert effective_visual_style(cuit, "") == cuit
+    assert effective_visual_style("", "") == ""
+
+    # Contre-épreuve n°3 : un style cuit PLUS RICHE que le courant reste maître
+    # (le plan a été enrichi, ce n'est pas une troncature).
+    riche = complet + "\n- Fumée volumétrique, accents néon."
+    assert effective_visual_style(riche, complet) == riche
+
+    # …et le Mood s'en sert réellement (le prompt porte tout le style).
+    from api.apercu import mood_intent
+    _it = mood_intent({"id": "s-style", "number": -22,
+                       "seedance_prompt": "[🎨 STYLE VISUEL]\n" + cuit +
+                                          "\n\n[🎬 ACTION]\nIl marche."},
+                      complet)
+    assert "Chiaroscuro" in (_it.get("style") or ""), \
+        ("le Mood envoie encore le style tronqué", _it.get("style"))
+
+
+@test
+def fenetre_mood_montre_les_images_envoyees():
+    """L'encart « images envoyées » doit lire le MÊME plan que l'envoi, sinon il
+    rassure à tort. Demande Matthieu 2026-07-31 : « ça me permettra de vérifier
+    que toutes les images sont bien envoyées »."""
+    import os as _os, tempfile as _tf, shutil as _sh, inspect as _i
+    from core import mood_refs as _mr
+    import core.casting, core.decors, core.accessories, core.vehicles, core.hmc
+
+    _tmp = _tf.mkdtemp(prefix="pandora_encart_")
+    def _img(n):
+        p = _os.path.join(_tmp, n + ".png")
+        with open(p, "wb") as f:
+            f.write(b"\x89PNG\r\n\x1a\n")
+        return p
+    _I = {k: _img(k) for k in ("perso", "decor")}
+    _orig = (core.casting.get_character, core.decors.get_decor,
+             core.accessories.get_accessory, core.vehicles.get_vehicle,
+             core.hmc.get_hmc_item)
+    core.casting.get_character = lambda i: {"name": "Jésus",  "image_path": _I["perso"]}
+    core.decors.get_decor      = lambda i: {"name": "Désert", "image_path": _I["decor"]}
+    core.accessories.get_accessory = lambda i: {}
+    core.vehicles.get_vehicle      = lambda i: {}
+    core.hmc.get_hmc_item          = lambda i: {}
+    try:
+        shot = {"id": "s-encart", "number": -23, "character_ids": ["c"],
+                "decor_id": "d", "accessory_ids": [], "vehicle_ids": [],
+                "hmc_ids": []}
+        plan = _mr.reference_plan(shot, is_mapping=False)
+        assert [r.kind for r in plan] == [_mr.KIND_CHARACTER, _mr.KIND_DECOR], \
+            ("ordre d'envoi inattendu", [r.kind for r in plan])
+        assert plan[0].name == "Jésus" and plan[1].name == "Désert"
+        # La nature seule est traduisible ; le nom propre ne doit pas y passer.
+        assert plan[0].kind_label() == "Personnage"
+        assert "Jésus" not in plan[0].kind_label()
+
+        # Le PLAFOND du moteur s'applique — un moteur sans référence n'en reçoit
+        # aucune, et l'encart doit pouvoir le dire.
+        assert _mr.reference_plan(shot, is_mapping=False, max_refs=0) == []
+        assert len(_mr.reference_plan(shot, is_mapping=False, max_refs=1)) == 1
+
+        # L'encart lit bien mood_refs (et pas une collecte parallèle à lui).
+        import ui.dialog_apercu as _DA
+        _src = "\n".join(l.split("#", 1)[0] for l in
+                         _i.getsource(_DA.MoodDialog._refresh_refs_row).splitlines())
+        assert "mood_refs" in _src and "reference_plan" in _src, \
+            "l'encart n'utilise pas le plan de référence commun"
+        assert "ref_support" in _src, "l'encart ignore le plafond du moteur"
+    finally:
+        (core.casting.get_character, core.decors.get_decor,
+         core.accessories.get_accessory, core.vehicles.get_vehicle,
+         core.hmc.get_hmc_item) = _orig
+        _sh.rmtree(_tmp, ignore_errors=True)
 
 
 if __name__ == "__main__":

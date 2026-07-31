@@ -448,6 +448,14 @@ class PageDecors(QWidget):
             thumb.mousePressEvent = _click
         else:
             thumb.setText("▦\n" + translate("à générer"))
+            # Clic → générer directement le plan d'architecte de CE décor.
+            thumb.setCursor(Qt.CursorShape.PointingHandCursor)
+            thumb.setToolTip(translate("Cliquer pour générer le plan d'architecte (vu de dessus)"))
+
+            def _click_gen(e, _d=decor, _t=thumb):
+                if e.button() == Qt.MouseButton.LeftButton:
+                    self._on_gen_single_plan(_d, _t)
+            thumb.mousePressEvent = _click_gen
         cv.addWidget(thumb)
         name = QLabel(disp)
         name.setFixedHeight(26)
@@ -614,8 +622,13 @@ class PageDecors(QWidget):
             return
         while self._fp_row.count() > 1:   # garde le stretch final
             it = self._fp_row.takeAt(0)
-            if it.widget():
-                it.widget().deleteLater()
+            w = it.widget()
+            if w is not None:
+                # setParent(None) AVANT deleteLater : sinon la carte, retirée
+                # du layout mais toujours enfant de la page jusqu'au prochain
+                # tour de boucle, flotte en (0,0) par-dessus le reste.
+                w.setParent(None)
+                w.deleteLater()
         reps = self._fp_representatives()
         for d in reps:
             disp = d.get("room_group") or d.get("name", "—")
@@ -629,21 +642,48 @@ class PageDecors(QWidget):
                                  + (f" ({missing})" if missing else ""))
 
     def _on_gen_missing_plans(self):
-        if self._fp_worker is not None and self._fp_worker.isRunning():
-            return
         decors = [d for d in self._fp_representatives()
                   if not (d.get("floor_plan") and os.path.isfile(d["floor_plan"]))]
-        if not decors:
-            return
         jobs = [{"id": d["id"], "prompt": d.get("prompt") or d.get("name", ""),
                  "name": d.get("name", "plan")} for d in decors if d.get("id")]
+        self._start_fp_jobs(jobs, single=False)
+
+    def _on_gen_single_plan(self, decor: dict, thumb=None):
+        """Clic sur une vignette « à générer » : génère directement le plan
+        d'architecte (vu de dessus) de CE décor, sans passer par le lot."""
+        from core.config import load_config
+        if not load_config().get("api_key", "").strip():
+            QMessageBox.information(
+                self, translate("Plan du décor"),
+                translate("Configure ta clé fal.ai dans Paramètres pour générer le plan."))
+            return
+        if not decor.get("id"):
+            return
+        job = {"id": decor["id"], "prompt": decor.get("prompt") or decor.get("name", ""),
+               "name": decor.get("name", "plan")}
+        if self._start_fp_jobs([job], single=True) and thumb is not None:
+            thumb.setText("▦\n" + translate("génération…"))
+
+    def _start_fp_jobs(self, jobs: list, single: bool) -> bool:
+        """Plomberie commune lot / clic direct. True si le worker a démarré."""
+        if self._fp_worker is not None and self._fp_worker.isRunning():
+            return False
+        if getattr(self, "_fp_var_worker", None) and self._fp_var_worker.isRunning():
+            return False
+        if not jobs:
+            return False
         from api.nano_banana import GenerateFloorPlansWorker
+        from core.worker import abandon_thread
+        if self._fp_worker is not None:
+            abandon_thread(self._fp_worker)
+        self._fp_single = single
         self._fp_worker = GenerateFloorPlansWorker(jobs)
         self._fp_worker.plan_done.connect(self._on_fp_plan_done)
         self._fp_worker.finished.connect(self._on_fp_plans_finished)
         self._fp_btn.setEnabled(False)
         self._fp_btn.setText(translate("Génération…"))
         self._fp_worker.start()
+        return True
 
     def _on_fp_plan_done(self, decor_id: str, path: str):
         if path:
@@ -653,7 +693,15 @@ class PageDecors(QWidget):
                 pass
 
     def _on_fp_plans_finished(self, n: int):
+        single = getattr(self, "_fp_single", False)
+        self._fp_single = False
         self.refresh()
+        # Clic direct sur UNE vignette : un échec silencieux laisserait croire
+        # que rien ne s'est passé — même retour que la variation de plan.
+        if single and n == 0:
+            QMessageBox.warning(
+                self, translate("Plan du décor"),
+                translate("Le plan n'a pas pu être généré (clé fal.ai ? réseau ?)."))
 
     def refresh(self):
         self._all_items = decors_api.list_decors()
@@ -725,7 +773,12 @@ class PageDecors(QWidget):
             image_path=item.get("image_path", ""),
         )
 
-    def _cards_grid(self, items: list[dict], cols: int = 6) -> QWidget:
+    # 9 colonnes comme Castings / Accessoires / HMC / Véhicules : Décors était
+    # resté à 6 et sautait la ligne alors qu'il restait un tiers d'écran libre
+    # (constat Matthieu 2026-07-31 sur « Dojo — Crèche de Noël », 7 vues : la
+    # septième tombait seule à la ligne suivante). Les cartes font 162 px de
+    # large partout, la largeur tenable est donc la même.
+    def _cards_grid(self, items: list[dict], cols: int = 9) -> QWidget:
         wrap = QWidget()
         wrap.setStyleSheet("background:transparent;")
         g = QGridLayout(wrap)
@@ -754,9 +807,11 @@ class PageDecors(QWidget):
         head = QPushButton(_label(not collapsed))
         head.setCursor(Qt.CursorShape.PointingHandCursor)
         head.setFixedHeight(34)
+        # Bordure uniforme : le liseré d'accent de 3 px à gauche se lisait comme
+        # une parenthèse ouvrante collée au titre (constat Matthieu 2026-07-31).
         head.setStyleSheet(
             f"QPushButton{{text-align:left;background:{CP['bg2']};color:{CP['text_primary']};"
-            f"border:1px solid {CP['border']};border-left:3px solid {CP['accent']};"
+            f"border:1px solid {CP['border']};"
             f"border-radius:8px;font-size:12px;font-weight:700;padding:0 14px;}}"
             f"QPushButton:hover{{background:{CP['bg3']};}}")
 

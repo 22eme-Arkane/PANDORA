@@ -38,7 +38,8 @@ from ui.page_decors import _load_card_pixmap
 # (clé, libellé court, ligne d'info affichée sous les contrôles)
 ENGINES = [
     ("qwen", "Multi-angles (Qwen)",
-     "6 vues par angles caméra numériques · ~0,04 $/vue · plafond approché (contre-plongée)"),
+     "4 vues par angles caméra numériques (Droite, Arrière, Gauche, Sol) · "
+     "~0,04 $/vue · Avant = votre image d'ensemble, Plafond hors de portée"),
     ("orbit", "Orbite 360° (Seedance)",
      "1 vidéo orbitale 720p × 8 s (~2,40 $) → 4 faces murales · Sol/Plafond non couverts"),
     ("hunyuan", "Panorama 360° (Hunyuan World)",
@@ -77,6 +78,27 @@ class PageDecorsMultiview(QWidget):
         sub.setStyleSheet(
             f"color:{CP['text_dim']};font-size:10px;background:transparent;")
         root.addWidget(sub)
+
+        # ── Bandeau EXPÉRIMENTAL (demande Matthieu 2026-07-31) ───────────────
+        # L'atelier donne de vrais résultats sur les quatre faces murales, mais
+        # deux vues restent des approximations que le moteur ne sait pas
+        # produire : l'ARRIÈRE (ce qui est derrière l'objectif n'existe pas dans
+        # l'image source — le modèle retourne l'image) et le PLAFOND (il
+        # faudrait −90° de site, le LoRA s'arrête à −30°). Le dire ici plutôt
+        # que laisser l'utilisateur croire à une panne de son côté.
+        warn = QLabel(translate(
+            "⚗  EXPÉRIMENTAL — en cours de test. En multi-angles, seules les "
+            "vues réellement tenues par le moteur sont demandées : Droite, "
+            "Arrière, Gauche et Sol. « Avant » n'est pas régénéré (c'est votre "
+            "image d'ensemble) et « Plafond » n'est pas demandé (le moteur ne "
+            "lève pas la caméra assez haut). L'ARRIÈRE reste imparfait : ce qui "
+            "se trouve derrière la caméra n'existe pas dans l'image de départ, "
+            "le moteur l'invente. Vérifiez chaque vue avant de l'utiliser."))
+        warn.setWordWrap(True)
+        warn.setStyleSheet(
+            f"color:{CP['orange']};font-size:10px;background:transparent;"
+            f"border:1px solid {CP['orange']};border-radius:6px;padding:6px 8px;")
+        root.addWidget(warn)
 
         # ── Contrôles ────────────────────────────────────────────────────────
         bar = QHBoxLayout()

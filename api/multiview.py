@@ -46,12 +46,32 @@ ORBIT_ENDPOINT   = "bytedance/seedance-2.0/image-to-video"
 # haut : le Plafond est APPROCHÉ (contre-plongée maximale + consigne texte).
 QWEN_ANGLES: dict[str, dict] = {
     "avant":   {"horizontal_angle": 0,   "vertical_angle": 0},
-    "droite":  {"horizontal_angle": 90,  "vertical_angle": 0},
+    # ⚠ GAUCHE/DROITE ÉTAIENT INVERSÉES (constat Matthieu 2026-07-31, sur le
+    # décor « Dojo — Crèche de Noël » : « la gauche est en fait la droite »).
+    # Le LoRA compte les degrés dans le sens where the CAMERA travels, pas dans
+    # celui du sujet : tourner de +90° amène la caméra sur le côté GAUCHE de la
+    # pièce. La table disait l'inverse ; les deux vues sortaient échangées.
+    "droite":  {"horizontal_angle": 270, "vertical_angle": 0},
     "arriere": {"horizontal_angle": 180, "vertical_angle": 0},
-    "gauche":  {"horizontal_angle": 270, "vertical_angle": 0},
+    "gauche":  {"horizontal_angle": 90,  "vertical_angle": 0},
     "sol":     {"horizontal_angle": 0,   "vertical_angle": 90},
+    # ⚠ Le PLAFOND est hors de portée de ce moteur, et il faut le dire : le sol
+    # marche parce que +90° (caméra au-dessus, regard vers le bas) est dans la
+    # plage ; le plafond demanderait −90°, or le LoRA s'arrête à −30°, ce qui ne
+    # donne qu'une légère contre-plongée. Constat Matthieu : « autant le sol est
+    # compris, autant le plafond, il n'a pas l'air de comprendre ». On garde la
+    # valeur limite et on ANNONCE l'approximation dans l'atelier plutôt que de
+    # laisser croire à une vraie vue de plafond.
     "plafond": {"horizontal_angle": 0,   "vertical_angle": -30},
 }
+
+#: Vues que ce moteur NE DEMANDE PLUS (voir le commentaire dans `run`) :
+#: « avant » est un doublon de l'image d'ensemble, « plafond » est hors de
+#: portée du LoRA. Quatre vues restent : droite, arrière, gauche, sol.
+QWEN_SKIP = ("avant", "plafond")
+
+#: Vue conservée mais dont la fidélité n'est pas garantie — l'UI le signale.
+QWEN_APPROX = ("arriere",)
 
 _QWEN_EXTRA: dict[str, str] = {
     "sol":     "top-down view of the floor of this exact location",
@@ -180,12 +200,25 @@ class QwenMultiAngleWorker(_MultiviewBase):
 
         out: list[dict] = []
         last_err = ""
-        codes = [code for _l, code, _d in SIX_FACES]
+        # On ne demande QUE les vues que ce moteur sait réellement produire
+        # (décision Matthieu 2026-07-31, après essai sur « Dojo — Crèche de
+        # Noël »). Deux vues sont retirées de la commande :
+        #   · AVANT   — 0°/0°, aucune rotation : le moteur rendait une
+        #     réinterprétation de l'image d'ensemble, qui est DÉJÀ présente sur
+        #     la pièce sous le badge « Ensemble ». Un appel payé pour un doublon.
+        #   · PLAFOND — demanderait −90° de site ; le LoRA s'arrête à −30°, donc
+        #     il ne lève jamais vraiment la caméra. « Le plafond, il n'a pas
+        #     l'air de comprendre » : il ne peut pas.
+        # L'ARRIÈRE est conservé bien qu'imparfait — il donne parfois un vrai
+        # contrechamp, et c'est à l'œil de trancher ; le bandeau le signale.
+        codes = [code for _l, code, _d in SIX_FACES
+                 if code not in QWEN_SKIP]
         for i, code in enumerate(codes):
             if self.isInterruptionRequested():
                 break
             self.progress.emit(8 + int(i / len(codes) * 88),
-                               f"[{i + 1}/6] Vue « {_LABELS[code]} » (angles)…")
+                               f"[{i + 1}/{len(codes)}] Vue « {_LABELS[code]} » "
+                               "(angles)…")
             extra = _QWEN_EXTRA.get(
                 code, "same location seen from this new camera angle")
             prompt = f"{extra}, same scene, empty location, no people"
