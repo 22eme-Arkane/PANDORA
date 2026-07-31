@@ -140,12 +140,14 @@ def edition_cinema_only():
                 "api.resolume_push", "ui.tab_t2v_live"):
         assert f'"{mod}"' not in exc, f".spec ne doit PLUS exclure {mod} (v1.3.0)"
     assert "BUNDLE(" in spec and "PANDORA.app" in spec, "cible macOS présente"
-    # Version bumpée — build 2.1.0 (2026-07-30) : chaîne d'images mapping,
-    # nouvelle arborescence de projet (project_layout, replis legacy), masque
-    # façade réparé, définition exacte des moods, config atomique, retrait
-    # provisoire de l'intégration Resolume.
+    # Version bumpée — build 2.1.1 (2026-07-31) : les fiches partent enfin
+    # DÉCRITES au moteur, note de réalisation entière dans le style, décor
+    # traité comme un LIEU, pages d'éléments rangées en sections à largeur
+    # adaptative, vignettes en cache (Storyboard et Décors nettement plus
+    # rapides), Casting séparé principaux/figuration, retrait d'Image & Son,
+    # « Coût du projet ».
     from core.version import VERSION
-    assert VERSION.split("-")[0] == "2.1.0", f"version attendue 2.1.0[-suffixe], lue {VERSION}"
+    assert VERSION.split("-")[0] == "2.1.1", f"version attendue 2.1.1[-suffixe], lue {VERSION}"
     # ── UN SEUL numéro de version dans tout le produit ────────────────────────
     # Chaque endroit qui recopie le numéro à la main finit par diverger : la 2.0.0
     # est partie en build avec une charte d'utilisation estampillée 1.3.5, un .app

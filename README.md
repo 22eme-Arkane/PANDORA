@@ -18,13 +18,61 @@
 
 ## Download
 
-**[⬇ Download PANDORA v2.1.0 for Windows](https://github.com/22eme-Arkane/PANDORA/releases/download/v2.1.0/PANDORA_Setup_2.1.0.exe)**
+**[⬇ Download PANDORA v2.1.1 for Windows](https://github.com/22eme-Arkane/PANDORA/releases/download/v2.1.1/PANDORA_Setup_2.1.1.exe)**
 
-**[⬇ Download PANDORA v2.1.0 for macOS](https://github.com/22eme-Arkane/PANDORA/releases/download/v2.1.0/PANDORA_2.1.0.dmg)** *(Apple Silicon — see [Installation](#installation) for the first launch)*
+**[⬇ Download PANDORA v2.1.1 for macOS](https://github.com/22eme-Arkane/PANDORA/releases/download/v2.1.1/PANDORA_2.1.1.dmg)** *(Apple Silicon — see [Installation](#installation) for the first launch)*
 
 All versions: [Releases](../../releases)
 
 🌐 **Official 22eme ARKANE website: [22eme-arkane.com](https://22eme-arkane.com)**
+
+---
+
+## What's new in v2.1.1
+
+**Your reference sheets finally reach the engine — and the app stops crawling.**
+
+- **Reference images are now DESCRIBED to the engine, not just sent.** On a shot
+  with a character and a set, three sheets were uploaded and *none* of them were
+  announced: the prompt writer produced a self-contained description of the
+  scene, and an image-editing endpoint follows the text over pictures it was
+  told nothing about. Every attached image is now named with its role and its
+  sheet's name (« the character sheet for "Jesus" — keep this face, costume
+  **and the drawn look of the sheet** »). The Mood window shows exactly which
+  images are leaving, with the engine's cap (`3/10`).
+- **The whole director's note reaches the prompt.** Only the first matching line
+  of the visual-style block survived: on a note written as bullet points, twelve
+  lines out of thirteen were dropped and the engine never received the style at
+  all. The fallback now takes the whole paragraph — and a style that was frozen
+  truncated in an existing storyboard is repaired, while a hand-rewritten one is
+  left untouched.
+- **The set image is a PLACE, not the framing.** A close shot on a character
+  standing on the left of the frame still returned the wide establishing view of
+  the set sheet. New **Location image** setting in RENDU & AUDIO: *Location*
+  (default — the camera moves inside it, following the shot's axis and size),
+  *Identical* (the image IS the framing), *Inspiration*.
+- **The app is much faster.** Cards were decoding their source file on every
+  build — a character sheet is 2160×3840 for a 162 px thumbnail — and the Cast
+  page even flushed the cache first. Thumbnails are now cached at display size:
+  **Storyboard 6.6 s → 0.1 s, Sets 0.80 s → 0.03 s, clicking a card 116 → 24 ms**.
+- **Cast split into Main characters and Extras**, two collapsible sections.
+  Existing casts fall into place on their own: a sheet whose role already says
+  « Figurant » is filed as an extra.
+- **Props, HMC and Vehicles are grouped by category**, Sets gain a « Location
+  overview » section and a collapsible « Floor plans » strip. Grids now use the
+  **real available width** and re-flow when the side panel opens — no more
+  clipped thumbnails.
+- **New « Project cost » button**, next to Settings: every billed operation with
+  its price and a total. Amounts are clearly labelled as estimates.
+- The storyboard AI chat **applies bulk edits again** (replacing a style block
+  across 75 shots used to exceed the response limit and silently apply nothing),
+  and shows a **progress bar** while it thinks.
+- Multi-angle workshop: left/right were swapped, « Front » duplicated your
+  master image and « Ceiling » was out of the engine's reach — the workshop now
+  only requests the four views it can actually produce, and says so.
+- « Camera & Sound » removed (unused). Fixed: an `IndexError` at startup, and a
+  price test that turned red simply because the machine used a different
+  provider.
 
 ---
 
@@ -262,7 +310,7 @@ per-engine mood prompts, same fixes.
 
 ### Windows
 
-1. Download `PANDORA_Setup_2.1.0.exe` from the link above and run it
+1. Download `PANDORA_Setup_2.1.1.exe` from the link above and run it
 2. If Windows shows *"Windows protected your PC"* (SmartScreen), click
    **More info** then **Run anyway** — the app is not code-signed yet
    (certificate in progress), this is the Windows equivalent of the macOS
@@ -273,7 +321,7 @@ per-engine mood prompts, same fixes.
 
 ### macOS
 
-1. Download `PANDORA_2.1.0.dmg` from the link above
+1. Download `PANDORA_2.1.1.dmg` from the link above
 2. Open the DMG and drag **PANDORA** into **Applications** (as usual)
 3. **First launch** — macOS will claim that *"PANDORA is damaged and can't be
    opened"*. **This is normal, the app is not damaged** — macOS blocks apps

@@ -10,7 +10,7 @@
 ; Produit : dist\PANDORA_Setup_1.2.1.exe
 
 #define MyAppName      "PANDORA"
-#define MyAppVersion   "2.1.0"
+#define MyAppVersion   "2.1.1"
 #define MyAppPublisher "22eme Arkane"
 #define MyAppURL       "https://github.com/22eme-arkane/pandora"
 #define MyAppExeName   "PANDORA.exe"
