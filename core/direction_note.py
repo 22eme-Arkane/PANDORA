@@ -62,7 +62,16 @@ def section_text(value, title: str) -> str:
     Reconnaît les en-têtes « ## Titre » (tolérant : accents, casse, niveau de #).
     Renvoie le texte jusqu'à la section suivante, vidé du gabarit ; « » si absente
     ou vide. Sert à alimenter le style visuel des prompts storyboard depuis la note
-    de réalisation (demande Matthieu 2026-07-24)."""
+    de réalisation (demande Matthieu 2026-07-24).
+
+    ⚠ Une note porte SOUVENT le titre DEUX FOIS : le gabarit vide créé par
+    `empty_note()` en tête, puis la vraie section ajoutée plus bas (l'analyse
+    empile ses intentions à la suite au lieu de remplir le gabarit). On
+    parcourt donc TOUTES les occurrences et on renvoie la PREMIÈRE NON VIDE —
+    sinon un gabarit vide masque le contenu réel (bug constaté le 2026-07-31
+    sur FIGHTER v2 : « ## STYLE VISUEL » vide en position 22, la vraie section
+    en position 2560 ; le style tombait alors dans le repli, qui ne ramassait
+    qu'une seule puce sur six)."""
     text = normalize_note(value)
     if not text:
         return ""
@@ -74,20 +83,24 @@ def section_text(value, title: str) -> str:
 
     want = _norm(title)
     lines = text.splitlines()
+    heading = re.compile(r"^\s*#{1,6}\s*(?P<title>.+?)\s*$")
+    blocks: list[str] = []
     out: list[str] = []
     capturing = False
-    heading = re.compile(r"^\s*#{1,6}\s*(?P<title>.+?)\s*$")
     for line in lines:
         m = heading.match(line)
         if m:
-            if capturing:                       # section suivante → stop
-                break
+            if capturing:                       # section suivante → on solde
+                blocks.append("\n".join(out).strip())
+                out, capturing = [], False
             if _norm(m.group("title")) == want:
                 capturing = True
             continue
         if capturing:
             out.append(line)
-    return "\n".join(out).strip()
+    if capturing:                               # section en fin de note
+        blocks.append("\n".join(out).strip())
+    return next((b for b in blocks if b), "")
 
 
 def _sans_markdown(s: str) -> str:
@@ -104,54 +117,89 @@ _STYLE_DECL_RE = re.compile(
 )
 
 
+# Lignes de PRODUCTION qui traînent dans un paragraphe de style et n'ont rien à
+# faire dans un prompt d'image (« Durées : 6-8s », « Format : 16:9 »…). On ne
+# juge PAS le contenu, seulement le libellé : un couple « métadonnée : valeur »
+# est une consigne de fabrication, pas une intention visuelle. La lumière,
+# elle, reste du style et passe.
+_HORS_STYLE_RE = re.compile(
+    r"^\s*(dur[ée]es?|timings?|rythmes?|cadences?|budgets?|fps|"
+    r"r[ée]solutions?|formats?|livrables?|nombre\s+de\s+plans?|"
+    r"nb\s+de\s+plans?)\s*:",
+    re.IGNORECASE,
+)
+
+
+def _declare_un_style(line: str) -> bool:
+    """La ligne ANNONCE-t-elle un parti pris visuel ?
+
+    Le markdown IA (« **Style d'image :** ») est nettoyé AVANT tout : lstrip
+    mangeait les ** ouvrants et laissait le « :** » fermant partir au moteur en
+    fragment cassé (constat Matthieu 2026-07-28, projet FIGHTER)."""
+    s = _sans_markdown((line or "").strip().lstrip("-•*").strip()).lower()
+    return bool(s) and (s.startswith("style ") or bool(_STYLE_DECL_RE.search(s)))
+
+
+def _blocs_de_note(text: str) -> list:
+    """Découpe la note en BLOCS : une ligne vide ou un titre les sépare.
+
+    C'est l'unité qui compte pour lire une note : un paragraphe de style se
+    présente comme une phrase d'accroche suivie de ses puces, sans ligne vide
+    entre elles."""
+    blocs, cur = [], []
+    for raw in (text or "").splitlines():
+        s = raw.strip()
+        if not s or s.startswith("#"):
+            if cur:
+                blocs.append(cur)
+                cur = []
+            continue
+        cur.append(raw)
+    if cur:
+        blocs.append(cur)
+    return blocs
+
+
 def visual_style_from_note(value) -> str:
     """Style visuel décrit dans la note de réalisation, de façon TOLÉRANTE :
     1) le contenu de la section « STYLE VISUEL » s'il est renseigné ;
-    2) sinon, les lignes qui déclarent un style ailleurs dans la note (ex. la puce
-       « - Style graphique global façon "Arcane"… » rangée par l'Analyse dans la
-       section « INTENTIONS ISSUES DE L'ANALYSE DU SCÉNARIO »).
-    Chaîne vide si rien trouvé. Ne lève jamais."""
+    2) sinon, le ou les BLOCS qui parlent de style ailleurs dans la note (ex. le
+       paragraphe rangé par l'Analyse sous « INTENTIONS ISSUES DE L'ANALYSE DU
+       SCÉNARIO »).
+    Chaîne vide si rien trouvé. Ne lève jamais.
+
+    ⚠ Le repli travaillait LIGNE À LIGNE et ne gardait que celles contenant un
+    mot déclencheur (« rendu », « palette », « style »…). Sur une note rédigée
+    en puces DESCRIPTIVES, une seule ligne passait : sur la note de FIGHTER,
+    « Rendu 3D painterly » survivait, et Arcane, le chiaroscuro, le character
+    design, la fumée volumétrique et les néons étaient perdus — le moteur ne
+    recevait jamais le style demandé. On raisonne donc par BLOC : dès qu'une
+    ligne d'un paragraphe déclare un style, c'est que le paragraphe entier en
+    parle, et il part en entier. Les blocs voisins (temporalité, son, intention)
+    restent à l'écart, puisqu'ils n'ont aucune ligne déclarative."""
     try:
         sec = section_text(value, "STYLE VISUEL").strip()
         if sec:
             return sec
-        text = normalize_note(value)
-        lines = text.splitlines()
-        hits = []
-        i = 0
-        while i < len(lines):
-            # Le markdown IA (« **Style d'image :** ») est nettoyé AVANT tout :
-            # lstrip("-•*") mangeait les ** ouvrants et laissait le « :** »
-            # fermant partir au moteur en fragment cassé (constat Matthieu
-            # 2026-07-28, projet FIGHTER).
-            s = _sans_markdown(lines[i].strip().lstrip("-•*").strip())
-            if not s or s.startswith("#"):
-                i += 1
+        hits: list[str] = []
+        for bloc in _blocs_de_note(normalize_note(value)):
+            if not any(_declare_un_style(l) for l in bloc):
                 continue
-            low = s.lower()
-            if low.startswith("style ") or _STYLE_DECL_RE.search(low):
-                _avant, _sep, _apres = s.partition(":")
-                if _sep and not _apres.strip():
-                    # Libellé NU (« Style d'image : ») : le style est dans les
-                    # puces qui SUIVENT — les capturer jusqu'à la fin du bloc
-                    # (ligne vide ou ligne qui n'est plus une puce). C'est le
-                    # format que l'Analyse écrit dans « INTENTIONS ISSUES DE
-                    # L'ANALYSE » ; l'ancienne chasse gardait le libellé et
-                    # ratait le contenu.
-                    j = i + 1
-                    while j < len(lines):
-                        raw = lines[j].strip()
-                        if not raw.startswith(("-", "•")):
-                            break
-                        item = _sans_markdown(raw.lstrip("-•").strip())
-                        if item:
-                            hits.append(item)
-                        j += 1
-                    i = j
+            for raw in bloc:
+                item = _sans_markdown(raw.strip().lstrip("-•*").strip())
+                if not item:
                     continue
-                hits.append(s)
-            i += 1
-        return " ".join(hits).strip()
+                # Métadonnée de fabrication glissée dans le paragraphe.
+                if _HORS_STYLE_RE.match(item):
+                    continue
+                # Libellé NU (« Style d'image : ») : il n'apporte rien au moteur,
+                # le contenu est dans les lignes qui suivent — déjà capturées
+                # puisqu'on prend tout le bloc.
+                _avant, _sep, _apres = item.partition(":")
+                if _sep and not _apres.strip():
+                    continue
+                hits.append(item)
+        return "\n".join(hits).strip()
     except Exception:
         return ""
 

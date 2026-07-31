@@ -7483,5 +7483,56 @@ def image_du_decor_lieu_cadrage_ou_inspiration():
         "le repli du sélecteur n'est pas « lieu »"
 
 
+@test
+def note_de_realisation_repli_prend_le_bloc_entier():
+    """Quand la note n'a PAS de section « STYLE VISUEL », le style est rangé
+    ailleurs — typiquement sous « INTENTIONS ISSUES DE L'ANALYSE », en puces
+    descriptives. Le repli travaillait ligne à ligne et ne gardait que celles
+    portant un mot déclencheur (« rendu », « palette »…) : sur la note de
+    FIGHTER, « Rendu 3D painterly » survivait seul et Arcane, le chiaroscuro,
+    le character design, la fumée et les néons étaient perdus.
+
+    Règle : dès qu'une ligne d'un PARAGRAPHE déclare un style, tout le
+    paragraphe part — et lui seul."""
+    from core.direction_note import visual_style_from_note as _V
+
+    note = (
+        "## INTENTION GÉNÉRALE\nUn conte de Noël brutal.\n\n"
+        "## INTENTIONS ISSUES DE L'ANALYSE DU SCÉNARIO\n"
+        "Référence maîtresse : Arcane (League of Legends), Fortiche Studio.\n"
+        "- Rendu 3D painterly avec textures peintes à la main.\n"
+        "- Chiaroscuro dramatique, rim light vibrant.\n"
+        "- Character design expressif et anguleux.\n"
+        "- Fumée volumétrique, accents néon lumineux.\n\n"
+        "## TEMPORALITÉ ET LUMIÈRE\nFin de journée, lumière rasante.\n"
+    )
+    out = _V(note)
+    for _attendu in ("Arcane", "Fortiche", "Rendu 3D painterly", "Chiaroscuro",
+                     "Character design", "Fumée volumétrique"):
+        assert _attendu in out, (f"« {_attendu} » perdu par le repli", out)
+    assert len(out.splitlines()) >= 5, ("le repli tronque encore", out)
+    # …et il n'aspire PAS les paragraphes voisins, qui parlent d'autre chose.
+    assert "lumière rasante" not in out, ("la temporalité est aspirée", out)
+    assert "conte de Noël" not in out, ("l'intention générale est aspirée", out)
+
+    # La SECTION reste prioritaire quand elle existe (le repli ne s'en mêle pas).
+    _n = ("## STYLE VISUEL\ngrain lourd, désaturé\n\n"
+          "## INTENTIONS\n- Rendu 3D painterly partout.\n")
+    assert _V(_n) == "grain lourd, désaturé", _V(_n)
+
+    # Libellé NU (« Style d'image : ») : exclu, ses puces conservées.
+    _n2 = ("## INTENTIONS\n**Style d'image :**\n"
+           "- Aquarelle délavée, papier grainé.\n- Contours à l'encre.\n")
+    _r2 = _V(_n2)
+    assert "Style d'image" not in _r2 and "Aquarelle" in _r2 and "encre" in _r2, _r2
+
+    # Aucune mention de style → chaîne vide, jamais d'aspiration au hasard.
+    assert _V("## INTENTION\nUn drame social.\n\n## SON\nNappes graves.\n") == ""
+
+    # Entrées dégénérées : ne lève jamais (la note vient d'un champ libre).
+    for _v in ("", None, "   \n\n", 42, ["x"]):
+        _V(_v)
+
+
 if __name__ == "__main__":
     sys.exit(main())
