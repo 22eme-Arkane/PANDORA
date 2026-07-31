@@ -7670,32 +7670,30 @@ def cout_du_projet_journal_et_fenetre():
     assert "_note_spend" in _src and "spend.record" in _src, \
         "les générations vidéo n'alimentent pas le coût du projet"
 
-    # Le bouton est dans la barre, à GAUCHE de Paramètres, et ouvre une fenêtre
-    # (pas une page) : consulter le budget ne doit pas faire perdre l'écran.
+    # Le bouton ouvre une FENÊTRE, pas une page : consulter le budget ne doit
+    # pas faire perdre l'écran de travail en cours.
     import ui.pandora_window as _PW
-    _keys = [it[2] for it in _PW._get_nav_items() if it]
-    assert "cost" in _keys, "pas d'entrée « Coût du projet » dans la navigation"
-    assert _keys.index("cost") == _keys.index("settings") - 1, \
-        "« Coût du projet » doit précéder Paramètres"
     _nav = "\n".join(l.split("#", 1)[0]
                      for l in _i.getsource(_PW.PandoraWindow._navigate).splitlines())
     assert "ProjectCostDialog" in _nav, "le bouton n'ouvre pas la fenêtre"
 
-    # ⚠ ET LA BARRE SE CONSTRUIT VRAIMENT. Vérifier la LISTE d'entrées ne
-    # suffit pas : ajouter un séparateur sans ajouter de titre de groupe a fait
-    # PLANTER l'application au démarrage sur un IndexError, alors que ce test
-    # passait au vert (régression du 2026-07-31, signalée par Matthieu au
-    # lancement). Le nombre de groupes est dicté par les séparateurs, pas par
-    # la liste des titres — on construit donc pour de bon.
-    _groups = _PW._get_nav_groups()
-    assert len(_groups) >= 5, ("le séparateur avant « Coût du projet » a "
-                               "disparu", len(_groups))
+    # ⚠ ET LA BARRE SE CONSTRUIT VRAIMENT. Vérifier une liste ne suffit pas :
+    # une première version ajoutait un séparateur de groupe et faisait PLANTER
+    # l'application au démarrage (IndexError) alors que ce test passait au vert
+    # (régression du 2026-07-31, signalée par Matthieu au lancement).
     _sb = _PW._Sidebar()
-    assert "cost" in _sb._items and "settings" in _sb._items, sorted(_sb._items)
-    # Un groupe SANS titre est légitime (les intitulés ne sont plus affichés) :
-    # ce qui ne l'est pas, c'est de planter dessus.
-    assert any(not _lbl for _lbl, _ in _groups), \
-        "le groupe du coût devrait être sans titre"
+    assert hasattr(_sb, "_btn_cost"), "pas de bouton « Coût du projet » dans la barre"
+    assert "settings" in _sb._items, sorted(_sb._items)
+    # Il reste DISCRET : pas d'émoticône, teinte des libellés de la barre —
+    # ce n'est pas une étape du travail (demande Matthieu).
+    _txt = _sb._btn_cost.text()
+    assert not any(ord(c) > 0x2100 for c in _txt), ("émoticône dans le bouton", _txt)
+    from ui.styles import CP as _CP
+    assert _CP["text_secondary"] in _sb._btn_cost.styleSheet(), \
+        "le bouton n'est pas dans la teinte discrète de la barre"
+    # …et il n'est PAS une entrée de navigation (ce n'est pas une page).
+    assert "cost" not in [it[2] for it in _PW._get_nav_items() if it], \
+        "« Coût du projet » ne doit pas être une page de la navigation"
 
 
 if __name__ == "__main__":

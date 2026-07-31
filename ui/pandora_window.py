@@ -47,13 +47,11 @@ def _get_nav_items():
         None,
         ("draw_to_video.png", tr("nav.image_ia"), "image_ia"),
         ("seedance.png",   tr("nav.video_ia"),    "seedance"),
-        None,
-        # « Coût du projet » — dernier avant Paramètres, derrière un séparateur
-        # (demande Matthieu 2026-07-31). Ce n'est pas une page de travail : elle
-        # ouvre une fenêtre, d'où le traitement à part dans `_go`.
-        ("cout.png",       tr("nav.cost"),        "cost"),
         ("settings.png",   tr("nav.settings"),    "settings"),
     ]
+    # NB : « Coût du projet » N'EST PAS dans cette liste. Ce n'est pas une page
+    # de travail mais un relevé qu'on consulte : c'est un bouton discret posé à
+    # côté de Paramètres, dans la zone droite de la barre (voir `_Sidebar`).
 
 
 def _get_nav_groups():
@@ -100,9 +98,6 @@ _FALLBACK = {
     "doublage.png":    "🎙",
     "draw_to_video.png":"◈",
     "seedance.png":    "✦",
-    # Pas de badge dessiné pour le coût : le repli texte EST l'icône, en blanc
-    # néon (voir `_COLOR_ICONS`, dont « cout.png » est volontairement absent).
-    "cout.png":        "💰",
     "settings.png":    "⚙",
 }
 
@@ -213,26 +208,16 @@ class NavItem(QWidget):
             )
         else:
             self._bg("background:transparent;border:1px solid transparent;")
-            # « Coût du projet » se distingue en BLANC NÉON même au repos
-            # (demande Matthieu 2026-07-31) : ce n'est pas une étape du travail
-            # mais un relevé qu'on va consulter, il doit se repérer d'un coup
-            # d'œil dans la barre sans crier plus fort que l'onglet actif.
-            _neon = (self._key == "cost")
-            if self._use_png and not _neon:
+            if self._use_png:
                 self._ico.setPixmap(self._pix_off)  # blanc dim
             else:
                 self._ico.setText(_FALLBACK.get(self._ico_file, "●"))
                 self._ico.setStyleSheet(
-                    (f"color:#ffffff;font-size:14px;background:transparent;border:none;"
-                     if _neon else
-                     f"color:{CP['text_dim']};font-size:14px;background:transparent;border:none;")
+                    f"color:{CP['text_dim']};font-size:14px;background:transparent;border:none;"
                 )
             self._lbl.setStyleSheet(
-                (f"color:#ffffff;font-size:10px;font-weight:700;"
-                 f"letter-spacing:0.2px;background:transparent;border:none;"
-                 if _neon else
-                 f"color:{CP['text_secondary']};font-size:10px;font-weight:600;"
-                 f"letter-spacing:0.2px;background:transparent;border:none;")
+                f"color:{CP['text_secondary']};font-size:10px;font-weight:600;"
+                f"letter-spacing:0.2px;background:transparent;border:none;"
             )
 
     def setActive(self, active: bool):
@@ -353,6 +338,26 @@ class _Sidebar(QWidget):
         lay.addStretch()
         lay.addWidget(_vsep())
         lay.addSpacing(4)
+
+        # ── « Coût du projet » — juste avant Paramètres ───────────────────────
+        # Bouton DISCRET (demande Matthieu 2026-07-31) : même forme que « Nous
+        # contacter » — bordure fine, fond transparent — mais dans le gris des
+        # libellés de la barre, sans émoticône. Ce n'est pas une étape du
+        # travail, ça ne doit pas attirer l'œil plus que Paramètres.
+        self._btn_cost = QPushButton(tr("nav.cost"))
+        self._btn_cost.setFixedHeight(26)
+        self._btn_cost.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._btn_cost.setStyleSheet(
+            f"QPushButton{{background:transparent;color:{CP['text_secondary']};"
+            f"border:1px solid {CP['border']};border-radius:5px;"
+            f"font-size:10px;font-weight:600;padding:0 10px;}}"
+            f"QPushButton:hover{{color:{CP['text_primary']};"
+            f"border-color:{CP['border_bright']};"
+            f"background:rgba(255,255,255,0.05);}}"
+            f"QPushButton:pressed{{background:rgba(255,255,255,0.09);}}")
+        self._btn_cost.clicked.connect(lambda: self.nav_clicked.emit("cost"))
+        lay.addWidget(self._btn_cost)
+        lay.addSpacing(6)
 
         # ── Droite : Paramètres tout au bord ──────────────────────────────────
         icon_file, label, key = next(e for e in _get_nav_items()
