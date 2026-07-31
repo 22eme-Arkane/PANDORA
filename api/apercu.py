@@ -184,10 +184,17 @@ def mood_intent(shot: dict, film_style: str = "") -> dict:
     # Style : la section [🎨 STYLE VISUEL] du prompt (capturée à la création du
     # storyboard, éditable dans le plan) PRIME sur le suffixe projet passé en
     # argument — jamais les deux, sinon le style apparaîtrait en double (2026-07-24).
+    # ⚠ « PRIME » ne veut pas dire « même si elle est amputée » : la section cuite
+    # d'un storyboard ancien ne contient parfois qu'UNE ligne sur treize de la
+    # note de réalisation (troncature de capture, projet FIGHTER). Le Mood
+    # renvoyait alors au moteur un style privé de l'essentiel — d'où des images
+    # hors style. `effective_visual_style` rend la version complète quand la
+    # cuite n'en est qu'un extrait, et respecte tout style réellement réécrit.
     seedance_raw = (shot.get("seedance_prompt") or "").strip()
     try:
         from core.prompt_sections import style_of as _style_of
-        _style_txt = (_style_of(seedance_raw) or film_style or "").strip()
+        from core.style_resolve import effective_visual_style as _eff
+        _style_txt = _eff(_style_of(seedance_raw), film_style).strip()
     except Exception:
         _style_txt = (film_style or "").strip()
 
@@ -556,57 +563,21 @@ def _shot_ref_images(shot: dict, include_chars: bool = True,
     le Mood, sinon le moteur le réinvente à chaque plan.
 
     Ordre stable : personnages → décor → accessoires → véhicules → HMC. Chaque
-    catégorie peut être exclue depuis la fenêtre « Générer les Moods »."""
-    refs: list = []
+    catégorie peut être exclue depuis la fenêtre « Générer les Moods ».
 
-    def _first_image(item: dict) -> str:
-        """Première image utilisable d'une fiche, quel que soit son champ."""
-        cands = [item.get("image_path"), item.get("sheet_path"),
-                 item.get("portrait_path"), item.get("portrait")]
-        cands += (item.get("generated_images") or [])[:1]
-        for p in cands:
-            if p and os.path.isfile(p):
-                return p
-        return ""
-
-    if include_chars:
-        try:
-            import core.casting as cast
-            for cid in (shot.get("character_ids") or []):
-                p = _first_image(cast.get_character(cid) or {})
-                if p:
-                    refs.append(p)
-        except Exception:
-            pass
-    if include_decor:
-        try:
-            import core.decors as dec
-            did = shot.get("decor_id")
-            if did:
-                p = _first_image(dec.get_decor(did) or {})
-                if p:
-                    refs.append(p)
-        except Exception:
-            pass
-
-    # Accessoires / véhicules / HMC : même mécanique, une entrée par module.
-    for _flag, _mod_name, _getter, _ids_key in (
-            (include_props,    "core.accessories", "get_accessory", "accessory_ids"),
-            (include_vehicles, "core.vehicles",    "get_vehicle",   "vehicle_ids"),
-            (include_hmc,      "core.hmc",         "get_hmc_item",  "hmc_ids")):
-        if not _flag:
-            continue
-        try:
-            _mod = __import__(_mod_name, fromlist=["_"])
-            _get = getattr(_mod, _getter, None)
-            if _get is None:
-                continue
-            for _iid in (shot.get(_ids_key) or []):
-                p = _first_image(_get(_iid) or {})
-                if p:
-                    refs.append(p)
-        except Exception:
-            pass
+    ⚠ La collecte elle-même vit désormais dans `core/mood_refs.py`, qui sert
+    AUSSI la fiche du compositeur et l'encart « images envoyées » de la fenêtre
+    Mood. Trois collectes parallèles avaient déjà divergé : trois images
+    partaient au moteur et zéro lui étaient annoncées (constat Matthieu
+    2026-07-31). Cette fonction n'est plus qu'une vue « chemins seuls » de ce
+    plan unique — la garder évite de réécrire ses appelants et ses tests."""
+    from core import mood_refs as _mr
+    _plan = _mr.reference_plan(
+        shot, options={"chars": include_chars, "decor": include_decor,
+                       "props": include_props, "vehicles": include_vehicles,
+                       "hmc": include_hmc, "floor_plan": False},
+        is_mapping=False)
+    refs = _mr.paths_of(_plan, _mr.CONSISTENCY_KINDS)
 
     seen, out = set(), []
     for r in refs:
@@ -774,21 +745,21 @@ def _ref_roles(shot: dict, building_ref: str = "", is_mapping=None) -> list:
     ⚠ L'ordre doit suivre EXACTEMENT celui de `run_generation_nb2` et
     `run_generation_engine` : « Figure 1 » désigne une position, pas un rôle. Une
     liste décalée dirait au moteur que l'inspiration est le canevas.
+
+    ⚠ CINÉMA — cette liste ignorait les fiches de COHÉRENCE (personnages, décor,
+    accessoires, véhicules, HMC). Elles partaient pourtant bel et bien : sur le
+    plan 21 de FIGHTER, trois images étaient envoyées à Seedream et aucune n'était
+    annoncée. Le compositeur écrivait donc une description autonome de la scène,
+    que le moteur d'ÉDITION suivait à la lettre en ignorant les fiches — d'où un
+    rendu photoréaliste alors que les deux fiches étaient peintes (constat
+    Matthieu 2026-07-31). L'ordre et les rôles viennent maintenant du plan unique
+    de `core/mood_refs.py`, celui-là même qui fournit les chemins à l'envoi.
     """
-    if is_mapping is None:
-        is_mapping = bool(building_ref and os.path.isfile(building_ref))
-    _insp = [p for p in ((shot or {}).get("reference_images") or [])
-             if p and os.path.isfile(p)]
-    roles = []
-    if is_mapping and building_ref and os.path.isfile(building_ref):
-        roles.append("CANEVAS OBLIGATOIRE — la photo de la façade réelle. Sa "
-                     "géométrie, son cadrage, son échelle et son point de vue "
-                     "sont intouchables ; le contenu se projette DESSUS.")
-    for _ in _insp:
-        roles.append("INSPIRATION ARTISTIQUE seulement — palette, lumière, "
-                     "matière, motifs. Ne jamais la recopier, ne jamais en "
-                     "faire le sujet, ne jamais la coller sur la façade.")
-    return roles
+    from core import mood_refs as _mr
+    _plan = _mr.reference_plan(shot, building_ref=building_ref,
+                               is_mapping=is_mapping,
+                               max_inspiration_mapping=_MAX_INSPIRATION_MAPPING)
+    return [r.role_en() for r in _plan]
 
 
 def _compose_cache_path(shot_id: str) -> str:
@@ -803,7 +774,7 @@ def _compose_cache_path(shot_id: str) -> str:
 
 
 def compose_cache_key(fiche: str, moment: str, surface: str, style: str,
-                      engine: str, kind: str) -> str:
+                      engine: str, kind: str, refs: list | None = None) -> str:
     """Empreinte des entrées. Une seule change → recomposition.
 
     C'est ce qui répond à « garder la composition tant que rien n'a bougé » : le
@@ -811,6 +782,12 @@ def compose_cache_key(fiche: str, moment: str, surface: str, style: str,
     CONSIGNE du compositeur est une entrée comme les autres (audit 2026-07-28) :
     un correctif de consigne recompose les plans déjà en cache — sans quoi il ne
     les atteindrait jamais.
+
+    Les RÔLES DES IMAGES JOINTES sont une entrée au même titre (2026-07-31) : le
+    compositeur écrit un texte différent selon qu'il sait ou non que des fiches
+    accompagnent le prompt. Sans eux dans la clé, le correctif qui vient de leur
+    rendre la parole n'aurait jamais atteint un plan déjà composé — et changer
+    le décor d'un plan aurait laissé en place un prompt écrit pour l'ancien.
     """
     import hashlib
     try:
@@ -818,9 +795,10 @@ def compose_cache_key(fiche: str, moment: str, surface: str, style: str,
         _rev = _ip.grammar_fingerprint()
     except Exception:
         _rev = ""
+    _refs = " ".join(refs or [])
     _payload = " ".join(" ".join((x or "").split())
                              for x in (fiche, moment, surface, style, engine,
-                                       kind, _rev))
+                                       kind, _rev, _refs))
     return hashlib.sha1(_payload.encode("utf-8")).hexdigest()
 
 
@@ -874,7 +852,12 @@ def compose_mood_prompt(shot: dict, film_style: str = "", engine: str = "",
     if not (fiche or "").strip():
         return _repli, False, "fiche vide", False
 
-    _key = compose_cache_key(fiche, moment, surface, film_style, engine, kind)
+    # Les rôles sont calculés UNE fois : ils entrent dans la clé de cache et
+    # partent au compositeur. Deux calculs séparés pourraient diverger, et une
+    # clé qui ne décrit pas ce qu'a vu le compositeur rend le cache menteur.
+    _roles = _ref_roles(shot, building_ref, is_mapping)
+    _key = compose_cache_key(fiche, moment, surface, film_style, engine, kind,
+                             _roles)
     if _sid and not force_fresh:
         _hit = _compose_cache_read(_sid).get(_key)
         if isinstance(_hit, dict) and (_hit.get("prompt") or "").strip():
@@ -897,8 +880,7 @@ def compose_mood_prompt(shot: dict, film_style: str = "", engine: str = "",
         # qu'on lui demande volontairement d'écarter.
         out = _ip.compose(fiche, engine=engine, kind=kind, moment=moment,
                           surface=surface, style_suffix=film_style,
-                          refs=_ref_roles(shot, building_ref, is_mapping),
-                          source_ref=_repli)
+                          refs=_roles, source_ref=_repli)
         if out:
             if _sid:
                 _compose_cache_write(_sid, _key, out, "")
@@ -1019,7 +1001,10 @@ def run_generation_nb2(prompt: str, output_dir: str, api_key: str, progress_cb,
             if _fp:    _parts.append(_FLOOR_PLAN_DIRECTIVE)
             directive = "\n\n".join(_parts)
             result = fal_client.subscribe(_ep_edit, arguments={
-                "prompt": prompt + (("\n\n" + directive) if directive else ""), "image_urls": urls,
+                # Consigne EN TÊTE : c'est un appel /edit, le modèle part des
+                # images. Même raison qu'en mapping (constat 2026-07-27).
+                "prompt": _avec_directive_en_tete(prompt, directive),
+                "image_urls": urls,
                 "num_images": 1, "aspect_ratio": _ar, "resolution": _res_enum,
                 "output_format": "png", "safety_tolerance": "6",
             })
@@ -1110,12 +1095,19 @@ def run_generation_engine(engine_key: str, prompt: str, output_dir: str,
         # force au moins le rendu nocturne fond noir par sécurité).
         directive = _MAPPING_NIGHT_LOCK
 
-    ref_urls    = [_upload_ref_robust(fal_client, p) for p in ref_paths]
-    full_prompt = (_avec_directive_en_tete(prompt, directive) if is_mapping
+    ref_urls = [_upload_ref_robust(fal_client, p) for p in ref_paths]
+    # Consigne EN TÊTE dès qu'il y a des images — mapping comme Cinéma. Le
+    # raisonnement du 2026-07-27 ne dépend pas de l'édition : dès que des
+    # références partent, l'appel bascule sur un endpoint /edit et le modèle
+    # commence par regarder les images ; une consigne placée après la
+    # description se lit comme une remarque. Le Cinéma la recevait en queue —
+    # c'est l'une des deux causes des moods qui ignoraient les fiches.
+    full_prompt = (_avec_directive_en_tete(prompt, directive) if (is_mapping or ref_urls)
                    else prompt + (("\n\n" + directive) if directive else ""))
 
-    progress_cb(f"Génération du Mood via {label}"
-                + (f" ({len(ref_urls)} réf.)" if ref_urls else "") + "…")
+    # Le compte est affiché MÊME à zéro : « aucune référence » est précisément
+    # l'information qui manquait pour comprendre un mood hors sujet.
+    progress_cb(f"Génération du Mood via {label} ({len(ref_urls)} réf.)…")
     endpoint, args, _kind = _ie.build_request(
         engine_key, full_prompt,
         _ie.ar_to_target(aspect_ratio or "16:9", resolution),

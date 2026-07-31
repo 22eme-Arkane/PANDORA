@@ -377,6 +377,42 @@ class MoodDialog(QDialog):
         self._reset_prompt()
         self._engine_combo.currentIndexChanged.connect(self._on_engine_changed)
 
+        # ── Images envoyées au moteur (demande Matthieu 2026-07-31) ────────────
+        # « Pour qu'on sache quelles images sont envoyées, ça me permettra de
+        # vérifier que toutes les images sont bien envoyées. » La perte était
+        # jusque-là parfaitement silencieuse : trois fiches partaient, aucune
+        # n'était annoncée au compositeur, et rien à l'écran ne le disait. Cette
+        # rangée lit le MÊME plan que l'envoi (core/mood_refs) — ce qui s'affiche
+        # ici est donc, par construction, ce qui part.
+        self._refs_row = QFrame()
+        self._refs_row.setStyleSheet(
+            f"QFrame{{background:{CP['bg2']};"
+            f"border:1px solid {CP['border']};border-radius:8px;}}")
+        _rf_outer = QVBoxLayout(self._refs_row)
+        _rf_outer.setContentsMargins(10, 6, 10, 6)
+        _rf_outer.setSpacing(4)
+        self._refs_title = QLabel(translate("🖼  Images envoyées au moteur"))
+        self._refs_title.setStyleSheet(
+            f"color:{CP['accent']};font-size:10px;font-weight:800;"
+            f"background:transparent;border:none;")
+        _rf_outer.addWidget(self._refs_title)
+        _rf_scroll = QScrollArea()
+        _rf_scroll.setFixedHeight(74)
+        _rf_scroll.setWidgetResizable(True)
+        _rf_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
+        _rf_scroll.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        _rf_scroll.setStyleSheet("background:transparent;border:none;")
+        self._refs_inner = QWidget()
+        self._refs_inner.setStyleSheet("background:transparent;border:none;")
+        self._refs_lay = QHBoxLayout(self._refs_inner)
+        self._refs_lay.setContentsMargins(0, 0, 0, 0)
+        self._refs_lay.setSpacing(8)
+        self._refs_lay.addStretch()
+        _rf_scroll.setWidget(self._refs_inner)
+        _rf_outer.addWidget(_rf_scroll)
+        root.addWidget(self._refs_row)
+        self._refresh_refs_row()
+
         # ── Image principale ───────────────────────────────────────────────────
         self._tog_preview = _fold_btn("Prévisualisation")
         self._tog_preview.toggled.connect(lambda *_: self._apply_fold_state())
@@ -594,6 +630,105 @@ class MoodDialog(QDialog):
 
         # État initial des sections repliables (les deux ouvertes = compact).
         self._apply_fold_state()
+
+    def _refresh_refs_row(self):
+        """Vignettes des images qui partent AU MOTEUR, dans l'ordre d'envoi.
+
+        Lit `core.mood_refs.reference_plan` — la même liste que l'envoi et que la
+        fiche du compositeur. Le plafond dépend du moteur choisi : Seedream en
+        accepte dix, FLUX.2 et GPT Image aucune. Un moteur sans référence n'est
+        pas une anomalie, mais il doit se DIRE : c'est ce silence qui a fait
+        croire que les fiches étaient prises en compte alors qu'elles ne
+        partaient pas (constat Matthieu 2026-07-31).
+        """
+        if not hasattr(self, "_refs_lay"):
+            return
+        # Purge (le stretch final est reposé à la fin).
+        while self._refs_lay.count():
+            _it = self._refs_lay.takeAt(0)
+            _w = _it.widget()
+            if _w is not None:
+                _w.setParent(None)
+
+        _eng = self._current_engine()
+        try:
+            from core import image_engines as _ie
+            _max = int(_ie.ref_support(_eng).get("max", 0) or 0)
+        except Exception:
+            _max = 0
+        try:
+            from core import mood_refs as _mr
+            from api.apercu import _resolve_building_ref
+            _plan = _mr.reference_plan(self._shot,
+                                       building_ref=_resolve_building_ref(),
+                                       is_mapping=self._is_mapping(),
+                                       max_refs=_max)
+        except Exception:
+            _plan = []
+
+        if _max <= 0:
+            self._refs_title.setText(translate(
+                "🖼  Ce moteur n'accepte aucune image de référence — "
+                "il travaillera d'après le texte seul"))
+        elif not _plan:
+            self._refs_title.setText(translate(
+                "🖼  Aucune image envoyée — ce plan n'a ni décor ni personnage "
+                "avec une fiche image"))
+        else:
+            self._refs_title.setText(
+                translate("🖼  Images envoyées au moteur")
+                + f"  ({len(_plan)}/{_max})")
+
+        for _ref in _plan:
+            _cell = QWidget()
+            _cell.setStyleSheet("background:transparent;border:none;")
+            _v = QVBoxLayout(_cell)
+            _v.setContentsMargins(0, 0, 0, 0)
+            _v.setSpacing(2)
+            _t = QLabel()
+            _t.setFixedSize(58, 34)
+            _t.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            _t.setStyleSheet(
+                f"background:{CP['bg0']};border:1px solid {CP['border']};"
+                f"border-radius:4px;color:{CP['text_dim']};font-size:8px;")
+            try:
+                _pm = QPixmap(_ref.path)
+                if not _pm.isNull():
+                    _t.setPixmap(_pm.scaled(
+                        92, 34, Qt.AspectRatioMode.KeepAspectRatio,
+                        Qt.TransformationMode.SmoothTransformation))
+                else:
+                    _t.setText("?")
+            except Exception:
+                _t.setText("?")
+            # Seule la NATURE se traduit ; le nom de la fiche est un nom propre.
+            _kind = translate(_ref.kind_label())
+            _full = _kind + (" · " + _ref.name if _ref.name else "")
+            _t.setToolTip(_full + "\n" + _ref.path)
+            # Nature en clair, nom de la fiche dessous : « Décor » lisible d'un
+            # coup d'œil, « Désert - traversée » pour vérifier que c'est LA bonne
+            # fiche. Tout sur une ligne, la colonne était trop étroite pour être
+            # lue (« Décor · Désert … » au premier rendu).
+            _c = QLabel(_kind)
+            _c.setFixedWidth(92)
+            _c.setAlignment(Qt.AlignmentFlag.AlignHCenter)
+            _c.setStyleSheet(
+                f"color:{CP['text_secondary']};font-size:9px;font-weight:700;"
+                f"background:transparent;border:none;")
+            _n = QLabel()
+            _n.setFixedWidth(92)
+            _n.setAlignment(Qt.AlignmentFlag.AlignHCenter)
+            _n.setStyleSheet(
+                f"color:{CP['text_dim']};font-size:8px;"
+                f"background:transparent;border:none;")
+            _n.setText(_n.fontMetrics().elidedText(
+                _ref.name or "", Qt.TextElideMode.ElideRight, 90))
+            _t.setFixedSize(92, 34)
+            _v.addWidget(_t)
+            _v.addWidget(_c)
+            _v.addWidget(_n)
+            self._refs_lay.addWidget(_cell)
+        self._refs_lay.addStretch()
 
     def _apply_fold_state(self):
         """Applique l'état des sections repliables Prompt / Prévisualisation.
@@ -820,6 +955,9 @@ class MoodDialog(QDialog):
         vidéo retirés) plutôt que d'effacer son travail."""
         from core.image_grammar import adapt_prompt
         self._save_engine_pref()
+        # Le plafond de références dépend du moteur (Seedream 10, FLUX.2 aucune) :
+        # la rangée « images envoyées » doit suivre le changement.
+        self._refresh_refs_row()
         if not self._prompt_dirty:
             self._reset_prompt()
             return
