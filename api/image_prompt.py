@@ -235,7 +235,12 @@ def _refs_rules(engine: str, refs) -> str:
         "moteur doit faire de chacune. Une image de CANEVAS impose la géométrie "
         "et ne doit jamais être remplacée ; une image d'INSPIRATION ne fournit "
         "que palette, matière et ambiance, et ne doit jamais être recopiée ni "
-        "devenir le sujet.\n"
+        "devenir le sujet ; une image de COHÉRENCE est la FICHE OFFICIELLE d'un "
+        "personnage, d'un décor ou d'un objet du film — son apparence ET sa "
+        "facture graphique font autorité, et le prompt doit renvoyer à elle "
+        "plutôt que de redécrire le sujet de zéro. Ne décris JAMAIS un élément "
+        "d'une façon qui contredise sa fiche : si la fiche est peinte, le plan "
+        "est peint.\n"
         "Et sois PLUS DÉTAILLÉ que pour un prompt sans image : un texte trop "
         "court laisse le moteur se rabattre sur ce qu'il voit, et il recopie."
     )
