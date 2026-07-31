@@ -1,0 +1,57 @@
+🎬 PANDORA 2.1.1 — VOS FICHES ARRIVENT ENFIN JUSQU'AU MOTEUR
+
+Cette mise à jour corrige un défaut que je traînais sans le savoir, et qui expliquait beaucoup de générations décevantes : vos fiches de personnages et de décors partaient bien au moteur… mais personne ne lui disait ce qu'elles étaient.
+
+LE MOTEUR SAIT ENFIN CE QU'IL REÇOIT
+
+Quand vous génériez un Mood, PANDORA envoyait les images de vos fiches — le personnage, le décor — et écrivait à côté une description complète de la scène. Sauf qu'un moteur d'édition d'image, face à un texte qui décrit tout et des images dont on ne lui a rien dit, suit le texte. Résultat : un rendu qui ignorait vos fiches.
+
+Désormais chaque image jointe est annoncée avec son rôle ET le nom de sa fiche : « fiche du personnage "Jésus" — garder ce visage, ce costume et la facture graphique de la fiche ». Et la fenêtre Mood affiche maintenant, entre le prompt et l'aperçu, les vignettes de ce qui part réellement, avec le plafond du moteur (3/10). Vous voyez ce qui est envoyé.
+
+TOUTE VOTRE NOTE DE RÉALISATION ARRIVE AU PROMPT
+
+Seule la première ligne de votre style visuel survivait. Sur une note écrite en puces — la mienne fait treize lignes : Arcane, Fortiche, chiaroscuro, character design, fumée volumétrique, néons — douze lignes sur treize disparaissaient. Le moteur n'a jamais reçu le style demandé. C'est réparé, et un style figé tronqué dans un storyboard existant est rattrapé automatiquement (un style que vous avez réécrit à la main, lui, n'est jamais touché).
+
+LE DÉCOR EST UN LIEU, PAS UN CADRAGE
+
+Un gros plan sur un personnage placé à gauche du cadre renvoyait quand même le plan d'ensemble de la fiche décor. Nouveau réglage « Image du décor » dans RENDU & AUDIO, trois choix :
+— Lieu (par défaut) : l'image dit OÙ, la caméra s'y déplace selon l'axe et la valeur du plan
+— Identique : l'image EST le cadrage, seule l'action bouge
+— Inspiration : ambiance et palette seulement
+
+L'APPLICATION EST BEAUCOUP PLUS RAPIDE
+
+J'ai mesuré au lieu de deviner. Les cartes décodaient l'image source à chaque affichage — une fiche de personnage fait 2160×3840 pour une vignette de 162 pixels — et la page Casting vidait même le cache avant de recharger. Résultat après correction :
+— Storyboard : 6,6 s → 0,1 s
+— Décors : 0,80 s → 0,03 s
+— Clic sur une fiche : 116 ms → 24 ms
+
+TOUT EST RANGÉ
+
+— Casting séparé en « Personnages principaux » et « Figuration », deux menus dépliables. Vos castings existants se rangent tout seuls : une fiche dont le rôle dit déjà « Figurant » part au bon endroit.
+— Accessoires, HMC et Véhicules regroupés par catégorie
+— Décors : section « Vue d'ensemble » et bande « Plan des décors » repliable
+— Les grilles utilisent enfin toute la largeur disponible et se réorganisent quand le panneau Fiche s'ouvre — fini les vignettes rognées
+
+NOUVEAU : COÛT DU PROJET
+
+Un bouton discret à côté de Paramètres ouvre l'historique de toutes vos générations — IA de texte, images, vidéos — avec le prix de chaque opération et un total. Les montants sont des estimations d'après les grilles publiées par les fournisseurs, c'est annoncé clairement dans la fenêtre : c'est fait pour piloter un budget, pas pour remplacer une facture. Le journal démarre à cette version, les dépenses passées ne sont enregistrées nulle part.
+
+ET AUSSI
+
+— Le chat IA du storyboard applique de nouveau les modifications de masse (remplacer un bloc de style dans 75 plans dépassait la taille de réponse et n'appliquait rien, en silence), et affiche une barre de chargement pendant qu'il réfléchit
+— Atelier multi-angles : gauche et droite étaient inversées, « Avant » recopiait votre image et « Plafond » était hors de portée du moteur — l'atelier ne demande plus que les quatre vues qu'il sait produire, et le dit
+— L'onglet « Image & Son » est retiré (il ne servait pas)
+
+📥 TÉLÉCHARGER LA 2.1.1
+
+Windows : https://github.com/22eme-Arkane/PANDORA/releases/download/v2.1.1/PANDORA_Setup_2.1.1.exe
+macOS (Apple Silicon) : https://github.com/22eme-Arkane/PANDORA/releases/download/v2.1.1/PANDORA_2.1.1.dmg
+
+L'installation se fait par-dessus votre version actuelle, vos projets et vos clés sont conservés.
+
+Toutes les notes détaillées : https://github.com/22eme-Arkane/PANDORA/releases/tag/v2.1.1
+
+Comme toujours, dites-moi ce qui cloche. Cette mise à jour vient presque entièrement de choses que j'ai vues en travaillant sur mon propre film — c'est comme ça que sortent les vrais problèmes.
+
+Matthieu — 22eme Arkane
