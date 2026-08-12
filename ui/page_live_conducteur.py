@@ -318,6 +318,19 @@ class PageLiveConducteur(QWidget):
     def _on_decoupage(self):
         if not self._require_text():
             return
+        # ── Moteur vidéo VISÉ (2026-08-09, parité Cinéma) ─────────────────────
+        # Posé AVANT d'écrire le découpage, une seule fois par projet : la
+        # grammaire de prompt ne se rattrape pas après coup sur tous les plans.
+        # Annuler ici annule le découpage — on ne devine pas un moteur.
+        # ⚠ La liste vient de tab_t2v_live, PAS de la Cinéma : les deux éditions
+        # ne proposent pas les mêmes moteurs.
+        try:
+            from ui.dialog_target_engine import ask_target_engine
+            from ui.tab_t2v_live import _ENGINES as _ENG_LIVE
+            if ask_target_engine(_ENG_LIVE, parent=self) is None:
+                return
+        except Exception:
+            pass   # jamais bloquer un découpage sur ce réglage
         self._save()
         from api.live_screenplay import GenerateDecoupageWorker
         self._status.setText(translate("Génération du découpage avec Claude…"))

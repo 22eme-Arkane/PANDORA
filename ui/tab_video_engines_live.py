@@ -3,7 +3,7 @@ ui/tab_video_engines.py — Onglet Génération Directe (sans storyboard).
 
 Moteurs disponibles :
   · Seedance 2.0 T2V      — bytedance/seedance-2.0/text-to-video              (~$0.30/s)
-  · Seedance Fast T2V     — bytedance/seedance-2.0/fast/text-to-video         (~$0.09/s)
+  · Seedance Fast T2V     — bytedance/seedance-2.0/fast/text-to-video         (~$0.24/s)
   · Happy Horse 1.0 T2V   — alibaba/happy-horse/text-to-video                 ($0.14-0.28/s)
   · Happy Horse 1.0 I2V   — alibaba/happy-horse/image-to-video                ($0.14-0.28/s)
   · Kling O3 4K T2V       — fal-ai/kling-video/o3/4k/text-to-video            (~$0.42/s)
@@ -533,13 +533,16 @@ class _SeedanceT2VForm(QWidget):
         res_col.addWidget(res_lbl)
         self._res_combo = QComboBox()
         self._res_combo.setStyleSheet(_combo_style())
+        # ⚠ Ces libellés annonçaient « /5s » alors que la valeur est un prix à la
+        # SECONDE (mêmes chiffres que partout ailleurs) : facteur 5 d'erreur à
+        # l'affichage. Prix recopiés de core/pricing._PER_SECOND (fal.ai 2026-08-09).
         if "fast" in model_key.lower():
-            self._res_combo.addItem("480p  (~$0.09/5s)",  "480p")
-            self._res_combo.addItem("720p  (~$0.18/5s)",  "720p")
+            self._res_combo.addItem("480p  (~$0.11/s)",  "480p")
+            self._res_combo.addItem("720p  (~$0.24/s)",  "720p")
         else:
-            self._res_combo.addItem("1080p  (~$0.60/5s)", "1080p")
-            self._res_combo.addItem("720p   (~$0.30/5s)", "720p")
-            self._res_combo.addItem("480p   (~$0.16/5s)", "480p")
+            self._res_combo.addItem("1080p  (~$0.68/s)", "1080p")
+            self._res_combo.addItem("720p   (~$0.30/s)", "720p")
+            self._res_combo.addItem("480p   (~$0.14/s)", "480p")
         res_col.addWidget(self._res_combo)
         params_row.addLayout(res_col, 1)
 
@@ -1234,7 +1237,7 @@ class TabVideoEngines(QWidget):
 
     _ENGINES = [
         ("Seedance 2.0 — T2V  (~$0.30/s)",            "seedance_t2v",      True),
-        ("Seedance Fast — T2V  (~$0.09/s)",             "seedance_fast_t2v", True),
+        ("Seedance Fast — T2V  (~$0.24/s)",             "seedance_fast_t2v", True),
         ("Seedance 1.5 Pro — T2V  (audio natif · ~$0.05/s) ★", "seedance15_t2v", True),
         ("Seedance 1.5 Pro — I2V  (start/end frame · audio)",  "seedance15_i2v", True),
         ("LTX-2 — T2V  (4K + audio · ~$0.04/s)",       "ltx2_t2v",          True),
@@ -1297,7 +1300,7 @@ class TabVideoEngines(QWidget):
         # ── En-tête ────────────────────────────────────────────────────────────
         lay.addWidget(HelpBlock("Génération Directe — Multi-moteurs IA", [
             "▸ Génération vidéo sans storyboard — idéal pour expérimenter rapidement avec différents modèles.",
-            "▸ Seedance 2.0 : moteur principal (~$0.30/s) · Seedance Fast : version rapide (~$0.09/s).",
+            "▸ Seedance 2.0 : moteur principal (~$0.30/s) · Seedance Fast : version rapide (~$0.24/s).",
             "▸ Happy Horse 1.0 ★ : modèle Alibaba #1 Video Arena, 720p ou 1080p, T2V + I2V ($0.14–0.28/s).",
             "▸ Kling O3 4K : dernier Kling, résolution 4K, T2V + I2V (~$0.42/s).",
             "▸ Kling v3 Pro : I2V + T2V ($0.112–0.196/s) · Kling v3 4K : T2V ultra-def ($0.28–0.39/s).",

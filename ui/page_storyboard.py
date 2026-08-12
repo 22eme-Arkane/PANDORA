@@ -8,6 +8,23 @@ from PyQt6.QtWidgets import (
 from PyQt6.QtCore import Qt, pyqtSignal, QObject, QTimer
 from PyQt6.QtGui import QPixmap
 from ui.styles import CP, COMBO_ARROW_URL as _ARROW_URL
+from ui.prompt_form_selector import PromptFormSelector
+from ui.prompt_view_toggle import PromptViewToggle
+
+
+def _prompt_cell_text(shot: dict) -> str:
+    """Texte de la colonne Prompt selon la vue courante.
+
+    Point UNIQUE : la hauteur de ligne et le libellé doivent être calculés sur
+    le MÊME texte, sinon la cellule est tronquée ou trop haute. La vue
+    « finale » n'affiche que ce qui a déjà été composé — jamais d'appel IA
+    déclenché par un simple affichage.
+    """
+    try:
+        from core import final_prompt as _fp
+        return _fp.display_text(shot, _fp.current_view())
+    except Exception:
+        return (shot or {}).get("seedance_prompt", "") or ""
 from ui.widgets import HelpBlock
 from ui.icons import load_icon, claude_icon_pixmap
 import core.storyboard as sb_api
@@ -108,6 +125,15 @@ def _contrast_text(hexc: str) -> str:
 # ── Dialogue helpers ──────────────────────────────────────────────────────────
 
 from ui.widgets import PROMPT_WORKFLOW_NOTE as _PROMPT_NOTE
+
+# Note du dialogue d'édition du prompt FINAL (vue « Prompt final ») — le texte
+# édité ici est CE QUI PART au moteur ; le document structuré est réaligné
+# derrière par la synchronisation.
+_FINAL_NOTE = (
+    "Ce texte est CE QUI PART au moteur — anglais, dans sa grammaire. "
+    "Après validation, PANDORA réaligne le document structuré du plan sur vos "
+    "changements (quelques secondes)."
+)
 
 
 def _text_dialog(parent: QWidget, title: str, initial: str = "",
@@ -680,7 +706,20 @@ class _ShotRow(QFrame):
         sb.set_recurrent(self._data.get("id", ""), color, "")
         self.changed.emit()
 
+    # Colonnes VISUELLES : leur contenu a sa propre taille (vignettes, boutons)
+    # et ne doit pas piloter la hauteur de la ligne.
+    _VISUAL_COLS = frozenset({0, 1, 18, 20})
+
     def _content_height(self) -> int:
+        """Hauteur nécessaire pour que AUCUNE cellule ne soit rognée.
+
+        ⚠ Mesure TOUTES les cellules de texte réellement construites, au lieu
+        d'une liste écrite à la main. L'ancienne version n'en citait que
+        quatre (prompt, nom, accessoires, acteurs) : « Mouvement » n'y était
+        pas, donc « Panoramique vertical » — deux lignes dans 96 px — était
+        coupé (signalé par Matthieu le 2026-08-11). Le défaut n'était pas
+        propre au mouvement : toute colonne ajoutée depuis échappait au
+        calcul. Ici, une colonne ne PEUT plus être oubliée."""
         from PyQt6.QtGui import QFont, QFontMetrics
 
         def _h(text: str, col_idx: int, px: int, bold: bool = False) -> int:
@@ -698,13 +737,20 @@ class _ShotRow(QFrame):
             )
             return r.height() + 14  # 8+6 = cell top+bottom padding
 
-        return max(
-            self._MIN_H,
-            _h((self._data.get("seedance_prompt", "") or "")[:300], 4, 9),
-            _h(self._data.get("scene_title", "") or "", 17, 10),
-            _h(", ".join(self._data.get("accessory_names", []) or []), 12, 9),
-            _h(", ".join(self._data.get("character_names", []) or []), 13, 10),
-        )
+        cells = getattr(self, "_col_cells", None)
+        if not cells:
+            # Qt peut interroger sizeHint AVANT la fin de la construction :
+            # on rend le minimum, la mesure réelle suivra au prochain appel.
+            return self._MIN_H
+        tallest = self._MIN_H
+        for col_idx, cell in cells.items():
+            if col_idx in self._VISUAL_COLS or col_idx >= len(_col_widths):
+                continue
+            for lbl in cell.findChildren(_WrapLabel):
+                tallest = max(tallest, _h(lbl.text(), col_idx,
+                                          getattr(lbl, "_px", 10),
+                                          getattr(lbl, "_bold", False)))
+        return tallest
 
     def sizeHint(self):
         from PyQt6.QtCore import QSize
@@ -778,6 +824,10 @@ class _ShotRow(QFrame):
             l.setStyleSheet(s)
             l.setWordWrap(True)
             l.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Minimum)
+            # Taille estampillée pour _content_height : la police vient du STYLE
+            # CSS, donc label.font() renverrait la police par défaut et la
+            # mesure serait fausse. On garde la valeur réellement appliquée.
+            l._px, l._bold = size, bold
             return l
 
         # Champs caméra → alimentent la section [🖼️ TECHNIQUE] du prompt.
@@ -808,6 +858,25 @@ class _ShotRow(QFrame):
             if key in _CAM_FIELDS:
                 _rebuild_technique()
             sb_api.save_shot(self._data)
+            # ── Synchronisation structuré → final (2026-08-09) ────────────────
+            # Recomposition débouncée quand un champ qui ATTEINT le prompt
+            # final change — et seulement ceux-là (question Matthieu
+            # 2026-08-11 : pas d'appel IA pour un champ que le final ne voit
+            # pas). Deux familles :
+            #   · _CAM_FIELDS réécrivent le bloc TECHNIQUE (donc le texte) ;
+            #   · les champs HORS-TEXTE (axe, distance, hauteur, heure, durée,
+            #     langue) partent au composeur par injection/contexte — c'est
+            #     l'empreinte F_CTX qui les surveille.
+            _FINAL_CTX_FIELDS = ("camera_axis", "camera_distance",
+                                 "camera_height", "shot_time", "duration",
+                                 "dialogue_lang")
+            if (key == "seedance_prompt" or key in _CAM_FIELDS
+                    or key in _FINAL_CTX_FIELDS):
+                try:
+                    from core.prompt_sync import scheduler as _sched
+                    _sched().schedule_final(self._data)
+                except Exception:
+                    pass
             self.changed.emit()
 
         def _save_fields(updates: dict):
@@ -1155,7 +1224,10 @@ class _ShotRow(QFrame):
         pmt_l = QVBoxLayout(pmt_w)
         pmt_l.setContentsMargins(7, 8, 6, 6)
         pmt_l.setSpacing(0)
-        _full_pmt = data.get("seedance_prompt", "") or ""
+        # Vue « structuré » (document de travail) ou « final » (texte réellement
+        # envoyé au moteur). La vue ne compose RIEN : elle n'affiche que ce qui
+        # existe déjà — composer coûte un appel IA par plan.
+        _full_pmt = _prompt_cell_text(data)
         _prev_pmt = (_full_pmt[:300] + "…") if len(_full_pmt) > 300 else (_full_pmt or "—")
         _pmt_lbl = _WrapLabel(_prev_pmt or "—")
         _pmt_lbl.setWordWrap(True)
@@ -1164,11 +1236,44 @@ class _ShotRow(QFrame):
         _pmt_lbl.setStyleSheet(
             f"color:{CP['text_dim']};font-size:9px;background:transparent;border:none;"
         )
+        # Créé hors de _lbl() : on estampille quand même sa taille RÉELLE,
+        # sinon _content_height le mesurerait à 10 px et la cellule Prompt
+        # (la plus longue du tableau) serait sous-évaluée.
+        _pmt_lbl._px, _pmt_lbl._bold = 9, False
         if _full_pmt:
             _pmt_lbl.setToolTip(_full_pmt)
         pmt_l.addWidget(_pmt_lbl)
         self._pmt_lbl = _pmt_lbl
         def _edit_prompt():
+            # Vue STRUCTURÉE : on édite le document de travail → le final est
+            # recomposé derrière (débouncé). Vue FINALE : on édite le texte qui
+            # part au moteur → le structuré est reconstruit derrière. Les deux
+            # prompts restent synchronisés dans les DEUX sens (2026-08-09).
+            try:
+                from core import final_prompt as _fpv
+                _in_final = _fpv.current_view() == "final"
+            except Exception:
+                _in_final = False
+            if _in_final:
+                from core import final_prompt as _fp2
+                _cur = _fp2.text_of(data)
+                v = _text_dialog(
+                    self, "Modifier le prompt final", _cur,
+                    enhance=False,
+                    info=_FINAL_NOTE)
+                if v is not None and v.strip() and v != _cur:
+                    data[_fp2.F_TEXT] = v
+                    sb_api.save_shot(data)
+                    # Cellule rafraîchie tout de suite ; le structuré suivra
+                    # par la synchronisation (débouncée).
+                    _pmt_lbl.setText((v[:300] + "…") if len(v) > 300 else v)
+                    _pmt_lbl.setToolTip(v)
+                    try:
+                        from core.prompt_sync import scheduler as _sched
+                        _sched().schedule_structured(data, v)
+                    except Exception:
+                        pass
+                return
             v = _text_dialog(
                 self, "Modifier le prompt", data.get("seedance_prompt", ""),
                 enhance=True,
@@ -2205,6 +2310,31 @@ class PageStoryboard(QWidget):
         self._worker = None
         self._batch_mood_worker = None
         self._shot_rows: dict[str, "_ShotRow"] = {}
+        # ── Vue de la colonne Prompt : on OUVRE un projet sur le document de
+        # travail ─────────────────────────────────────────────────────────────
+        # La vue vit dans core/final_prompt (module), donc elle survivait au
+        # changement de projet : on rouvrait un autre film en vue « finale »,
+        # dont les plans n'ont aucun final composé → « à composer » partout.
+        # La page est construite UNE fois par fenêtre (les pages vivent dans
+        # une pile) : réinitialiser ici garde la vue pendant qu'on travaille,
+        # et repart proprement au projet suivant.
+        try:
+            from core import final_prompt as _fp_init
+            _fp_init.set_current_view("structure")
+        except Exception:
+            pass
+        # Synchronisation structuré ↔ final (2026-08-09) : quand un plan a été
+        # resynchronisé en arrière-plan, sa ligne doit se rafraîchir — sinon on
+        # lit un prompt que la sync vient de remplacer.
+        # ⚠ MÉTHODE LIÉE, pas une lambda : le scheduler est un singleton qui
+        # SURVIT à la page. Qt déconnecte un slot lié à la destruction du
+        # receveur ; une lambda, jamais — elle rappelait une page morte
+        # (RuntimeError réel, Matthieu 2026-08-11).
+        try:
+            from core.prompt_sync import scheduler as _sched
+            _sched().synced.connect(self._on_prompt_synced)
+        except Exception:
+            pass
         self._analysis_dlg = None
         self._first_show_done = False
 
@@ -2525,6 +2655,42 @@ class PageStoryboard(QWidget):
         btn_new_ver.clicked.connect(self._on_new_version)
         lay.addWidget(btn_new_ver)
         btn_new_ver.setVisible(False)
+
+        # ── Vue de la colonne Prompt (EN PREMIER — retour Matthieu 2026-08-11) ─
+        # « Structuré » = votre document de travail (blocs français, éditable).
+        # « Final » = le texte réellement envoyé au moteur. On choisit la VUE
+        # d'abord ; la forme, réglage d'essai qui n'agit qu'en vue finale,
+        # vient après elle dans la barre.
+        self._prompt_view_toggle = PromptViewToggle()
+        self._prompt_view_toggle.changed.connect(self._on_prompt_view_changed)
+        lay.addWidget(self._prompt_view_toggle)
+
+        # ── Composer les finals d'un storyboard EXISTANT ──────────────────────
+        # Les storyboards antérieurs à l'architecture « à l'endroit » n'ont pas
+        # de final stocké : la vue finale n'affichait qu'un avertissement SANS
+        # issue (constat Matthieu 2026-08-11). Ce bouton est l'issue — un clic
+        # explicite, jamais une composition déclenchée par l'affichage.
+        self._btn_compose_finals = QPushButton("")
+        self._btn_compose_finals.setFixedHeight(32)
+        self._btn_compose_finals.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._btn_compose_finals.setStyleSheet(
+            f"QPushButton{{background:transparent;color:{CP['accent']};"
+            f"border:1px solid {CP['accent_dim']};border-radius:7px;"
+            f"font-size:11px;font-weight:700;padding:0 12px;}}"
+            f"QPushButton:hover{{background:rgba(78,205,196,0.10);}}"
+            f"QPushButton:disabled{{color:{CP['text_dim']};"
+            f"border-color:{CP['border']};}}"
+        )
+        self._btn_compose_finals.clicked.connect(self._on_compose_finals)
+        lay.addWidget(self._btn_compose_finals)
+
+        # ── Forme du prompt (essai) ───────────────────────────────────────────
+        # Comparer fiche technique et phrase de réalisateur sur le MÊME plan.
+        # N'agit qu'en vue finale → désactivée en vue structurée (l'infobulle
+        # dit pourquoi), placée APRÈS la bascule qui l'active.
+        self._prompt_form = PromptFormSelector()
+        lay.addWidget(self._prompt_form)
+        self._sync_prompt_form_enabled()
 
         # ── Séparateur + versions snapshot ────────────────────────────────────
         _vs = QFrame()
@@ -2882,6 +3048,198 @@ class PageStoryboard(QWidget):
         self._version_combo.blockSignals(False)
         self._btn_del_sb.setEnabled(len(versions) > 1)
 
+    # ── Vue de la colonne Prompt ─────────────────────────────────────────────
+
+    def _sync_prompt_form_enabled(self):
+        """La « Forme du prompt » ne sert QUE pour le prompt final.
+
+        En vue structurée elle ne changerait rien de visible : la laisser
+        active donnerait l'illusion d'un réglage sans effet — c'est exactement
+        ce qui a rendu le sélecteur incompréhensible au premier essai.
+        """
+        try:
+            from core import final_prompt as _fp
+            _final = _fp.current_view() == "final"
+            self._prompt_form.setEnabled(_final)
+            self._prompt_form.setToolTip("" if _final else translate(
+                "La forme ne concerne que le prompt final — passez en « Prompt "
+                "final » pour la changer."))
+        except Exception:
+            pass
+
+    def _on_prompt_synced(self, _sid: str):
+        """Un plan a été resynchronisé en arrière-plan → ré-afficher."""
+        from PyQt6 import sip
+        if sip.isdeleted(self):
+            return
+        self._render()
+
+    def _on_prompt_view_changed(self, view: str):
+        """Bascule structuré ↔ final : on ne compose RIEN, on ré-affiche."""
+        try:
+            from core import final_prompt as _fp
+            _fp.set_current_view(view)
+        except Exception:
+            return
+        self._sync_prompt_form_enabled()
+        self._render()
+
+    # ── Composer les finals d'un storyboard existant ─────────────────────────
+
+    def _refresh_compose_btn(self):
+        """Libellé/visibilité du bouton : l'utilisateur voit COMBIEN de plans
+        seront composés (donc payés) avant de cliquer. Caché hors vue finale
+        et quand tout est à jour."""
+        # ⚠ Ce slot peut être rappelé APRÈS la destruction de la page : le lot
+        # de composition (~1 min) et le scheduler survivent à un changement de
+        # projet. Toucher un widget mort lève RuntimeError → boîte d'erreur
+        # chez l'utilisateur (crash réel, Matthieu 2026-08-11).
+        from PyQt6 import sip
+        if sip.isdeleted(self):
+            return
+        btn = getattr(self, "_btn_compose_finals", None)
+        if btn is None or sip.isdeleted(btn):
+            return
+        try:
+            from core import final_prompt as _fp
+            from core.prompt_sync import shots_needing_final
+            if _fp.current_view() != "final":
+                btn.setVisible(False)
+                return
+            if getattr(self, "_batch_worker", None) is not None \
+                    and self._batch_worker.isRunning():
+                btn.setVisible(True)      # progression affichée par le worker
+                return
+            n = len(shots_needing_final(self._all_shots))
+            btn.setVisible(n > 0)
+            btn.setEnabled(n > 0)
+            # Libellé COURT (demande Matthieu 2026-08-11). Pas « Générer » :
+            # chaque ligne du tableau a déjà son bouton Générer (la vidéo) —
+            # « Composer » est le mot PANDORA de la fabrication du prompt.
+            # L'explication complète vit dans l'infobulle.
+            btn.setText(translate("⟳ Composer ({n})").format(n=n))
+            btn.setToolTip(translate(
+                "Composer le prompt final des plans qui n'en ont pas "
+                "(ou plus) — un appel IA par plan."))
+        except Exception:
+            btn.setVisible(False)
+
+    def _on_compose_finals(self):
+        """Compose les finals manquants/périmés — après CONFIRMATION chiffrée
+        (c'est une dépense en rafale : un appel IA par plan)."""
+        from PyQt6.QtWidgets import QMessageBox
+        from core.prompt_sync import (BatchComposeWorker, shots_needing_final)
+        todo = shots_needing_final(self._all_shots)
+        if not todo:
+            return
+        rep = QMessageBox.question(
+            self, translate("Composer les prompts finaux"),
+            translate("Composer le prompt final de {n} plan(s) ?\n"
+                      "Un appel IA par plan — le texte composé est celui qui "
+                      "partira au moteur.").format(n=len(todo)),
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+        )
+        if rep != QMessageBox.StandardButton.Yes:
+            return
+        # Parquer l'ancien worker (jamais terminate() — règle anti-segfault).
+        if getattr(self, "_batch_worker", None) is not None:
+            from core.worker import abandon_thread
+            abandon_thread(self._batch_worker)
+        # ── Fenêtre de progression ────────────────────────────────────────────
+        # Le seul retour était le libellé du bouton : on ne voyait pas que
+        # l'application travaillait (retour Matthieu 2026-08-11), alors qu'un
+        # lot de 12 plans dure plus d'une minute. Fenêtre MODALE, sans bouton
+        # d'annulation trompeur : les compositions déjà lancées sont payées,
+        # on ne fait pas croire qu'on peut les reprendre.
+        from PyQt6.QtWidgets import QProgressDialog
+        _dlg = QProgressDialog(
+            translate("Composition des prompts finaux…"), "", 0, len(todo), self)
+        _dlg.setWindowTitle(translate("Composer les prompts finaux"))
+        _dlg.setCancelButton(None)
+        _dlg.setWindowModality(Qt.WindowModality.WindowModal)
+        _dlg.setMinimumDuration(0)
+        _dlg.setAutoClose(False)
+        _dlg.setAutoReset(False)
+        _dlg.setValue(0)
+        self._batch_dlg = _dlg
+
+        w = BatchComposeWorker(todo)
+        self._batch_worker = w
+        self._btn_compose_finals.setEnabled(False)
+        # MÉTHODES LIÉES, jamais de lambdas : Qt déconnecte automatiquement un
+        # slot lié quand son receveur est détruit — une lambda, non. C'est
+        # exactement le crash du 2026-08-11 : la page détruite pendant le lot
+        # (changement de projet), la lambda de progression touchait un bouton
+        # mort → RuntimeError à chaque plan composé.
+        w.progress.connect(self._on_batch_progress)
+        w.done.connect(self._on_compose_finals_done)
+        w.failed.connect(self._on_batch_failed)
+        w.start()
+
+    def _on_batch_progress(self, i: int, n: int):
+        from PyQt6 import sip
+        if sip.isdeleted(self):
+            return
+        btn = getattr(self, "_btn_compose_finals", None)
+        if btn is not None and not sip.isdeleted(btn):
+            btn.setText(translate("⟳ Composition… {i}/{n}").format(i=i, n=n))
+        dlg = getattr(self, "_batch_dlg", None)
+        if dlg is not None and not sip.isdeleted(dlg):
+            dlg.setMaximum(n)
+            dlg.setValue(i)
+            dlg.setLabelText(
+                translate("Composition des prompts finaux… {i}/{n}")
+                .format(i=i, n=n))
+
+    def _close_batch_dlg(self):
+        """Ferme la fenêtre de progression, quoi qu'il arrive."""
+        from PyQt6 import sip
+        dlg = getattr(self, "_batch_dlg", None)
+        self._batch_dlg = None
+        if dlg is not None and not sip.isdeleted(dlg):
+            dlg.close()
+            dlg.deleteLater()
+
+    def _on_batch_failed(self, _err: str):
+        self._on_compose_finals_done([])
+
+    def _on_compose_finals_done(self, copies: list):
+        """Application sur le thread principal — un plan modifié pendant la
+        composition est jeté (même garde que l'édition), puis ré-affichage."""
+        # La fenêtre de progression se ferme AVANT tout dialogue de résultat —
+        # sinon le message s'ouvre derrière une modale encore affichée.
+        self._close_batch_dlg()
+        applied, reasons = 0, []
+        try:
+            from core.prompt_sync import apply_batch_results, failure_reasons
+            applied = apply_batch_results(copies)
+            reasons = failure_reasons(copies)
+        except Exception:
+            pass
+        if reasons:
+            # ⚠ Dire la VRAIE cause, plan par plan. La version précédente
+            # accusait la clé IA dès qu'un plan échouait — Matthieu a vu
+            # « vérifiez la clé IA » alors que 8 plans venaient d'être
+            # composés avec succès (2026-08-11). Un diagnostic faux coûte
+            # plus cher qu'un diagnostic absent.
+            from PyQt6.QtWidgets import QMessageBox
+            _uniq, _seen = [], set()
+            for _plan, _why in reasons:
+                if _why not in _seen:
+                    _seen.add(_why)
+                    _uniq.append(_why)
+            _plans = ", ".join(p for p, _ in reasons[:12])
+            _msg = translate(
+                "{ok} plan(s) composé(s), {ko} en échec (plans {plans}).\n\n"
+                "Raison : {why}").format(
+                    ok=applied, ko=len(reasons), plans=_plans,
+                    why="\n".join(_uniq[:3]))
+            QMessageBox.information(
+                self, translate("Composer les prompts finaux"), _msg)
+        # Recharger depuis le disque (les finals viennent d'y être sauvés).
+        self._all_shots = sb_api.list_shots(self._active_version_id)
+        self._render()
+
     def _on_combo_changed(self, index: int):
         if index < 0:
             return
@@ -3092,6 +3450,9 @@ class PageStoryboard(QWidget):
         self._list_container.updateGeometry()
 
     def _render(self):
+        # Le bouton « Composer les prompts finaux » suit l'état des plans :
+        # son compte doit se rafraîchir à CHAQUE rendu (chargement, sync…).
+        self._refresh_compose_btn()
         # Reload column order from project config
         order = sb_api.load_col_order(len(_COLS), _DEFAULT_COL_ORDER)
         _col_order[:] = order

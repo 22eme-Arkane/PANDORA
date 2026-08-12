@@ -50,7 +50,7 @@ _MOD_TEMPLATES = {
            "lumineuse et les mêmes ombres. Ne change rien d'autre."),
 }
 
-_RES_OPTS = [("720p  (~$0.30/s)", "720p"), ("1080p", "1080p"), ("480p  (~$0.16/s)", "480p")]
+_RES_OPTS = [("720p  (~$0.30/s)", "720p"), ("1080p", "1080p"), ("480p  (~$0.14/s)", "480p")]
 
 
 class _RefPicker(QPushButton):
@@ -105,7 +105,7 @@ class TabModifyLive(QScrollArea):
 
     _ENGINES = [
         ("Seedance 2.0  (~$0.30/s)",      "seedance-2.0"),
-        ("Seedance Fast  (~$0.09/s)",     "seedance-2.0-fast"),
+        ("Seedance Fast  (~$0.24/s)",     "seedance-2.0-fast"),
     ]
 
     def __init__(self):

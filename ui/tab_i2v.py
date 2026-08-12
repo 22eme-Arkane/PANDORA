@@ -60,7 +60,7 @@ class TabI2V(QScrollArea):
         grid = QGridLayout()
         grid.setSpacing(12)
         self.cb_dur = combo(["5 secondes", "10 secondes", "15 secondes"])
-        self.cb_res = combo([("1080p  (~$0.60/s)", "1080p"), ("720p  (~$0.30/s)", "720p"), ("480p  (~$0.16/s)", "480p")])
+        self.cb_res = combo([("1080p  (~$0.68/s)", "1080p"), ("720p  (~$0.30/s)", "720p"), ("480p  (~$0.14/s)", "480p")])
         for (row, col_idx), lbl, widget in [
             ((0, 0), "Durée",      self.cb_dur),
             ((0, 1), "Résolution", self.cb_res),

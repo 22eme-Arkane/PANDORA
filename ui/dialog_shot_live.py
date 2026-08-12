@@ -521,13 +521,23 @@ class ShotDialog(QDialog):
             f"background:transparent;border:none;"
         )
         dur_header.addWidget(self._dur_lbl)
-        dur_header.addWidget(_lbl("/ 15.0s max", size=10, color=CP["text_dim"]))
+        # Plafond = celui du MOTEUR VISÉ par le projet (2026-08-09, parité
+        # Cinéma) : 30 s si Seedance 2.5 — le plan-séquence long est le vrai
+        # gain pour le mapping. En dixièmes de seconde.
+        try:
+            from core.seedance_family import duration_bounds as _sfb
+            from core.target_engine import get_target_engine as _teg
+            _dur_max10 = _sfb(_teg())[1] * 10
+        except Exception:
+            _dur_max10 = 150
+        dur_header.addWidget(_lbl(f"/ {_dur_max10 / 10:.1f}s max",
+                                  size=10, color=CP["text_dim"]))
         lay.addLayout(dur_header)
 
         self._dur_slider = QSlider(Qt.Orientation.Horizontal)
-        self._dur_slider.setRange(10, 150)
+        self._dur_slider.setRange(10, _dur_max10)
         dur_val = int(float(self._shot.get("duration", 5.0)) * 10)
-        self._dur_slider.setValue(max(10, min(150, dur_val)))
+        self._dur_slider.setValue(max(10, min(_dur_max10, dur_val)))
         self._dur_slider.setStyleSheet(
             f"QSlider::groove:horizontal{{height:4px;background:{CP['bg3']};border-radius:2px;}}"
             f"QSlider::handle:horizontal{{width:16px;height:16px;margin:-6px 0;"

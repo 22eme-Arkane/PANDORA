@@ -1296,6 +1296,119 @@ _FR_TO_EN: dict[str, str] = {
     "Clé Anthropic":                "Anthropic API Key",
     "Clé Nano Banana":              "Nano Banana API Key",
     "Dossier de sortie":            "Output folder",
+    # Emplacement des projets (disque externe) — Paramètres Cinéma ET Live
+    "Dossier des projets":          "Projects folder",
+    # Fenêtre « moteur cible » à la création du storyboard
+    "Moteur de génération visé":    "Target generation engine",
+    "Pour quel moteur écrit-on ce découpage ?":
+        "Which engine are we writing this breakdown for?",
+    "Chaque moteur attend une forme de prompt différente. Le découpage "
+    "sera écrit dans celle du moteur choisi — c'est plus simple que de "
+    "réécrire tous les plans ensuite.":
+        "Each engine expects a different prompt shape. The breakdown will be "
+        "written in the chosen engine's shape — simpler than rewriting every "
+        "shot afterwards.",
+    "Ce choix n'enferme rien : vous pourrez toujours rendre un plan "
+    "avec un autre moteur depuis le Studio.":
+        "This choice locks nothing in: you can still render any shot with "
+        "another engine from the Studio.",
+    "Écrire le découpage":          "Write the breakdown",
+    "Forme du prompt":              "Prompt shape",
+    # Sélecteur d'essai « Forme du prompt » (barre Storyboard)
+    "essai":                        "trial",
+    # Bascule « Prompt structuré / Prompt final » (barre Storyboard)
+    "Prompt structuré":             "Structured prompt",
+    "Prompt final":                 "Final prompt",
+    "Modifier le prompt final":     "Edit the final prompt",
+    "⟳ Composer ({n})":             "⟳ Compose ({n})",
+    "Composer le prompt final des plans qui n'en ont pas "
+    "(ou plus) — un appel IA par plan.":
+        "Compose the final prompt of the shots that lack one "
+        "(or lost it) — one AI call per shot.",
+    "⟳ Composition… {i}/{n}":       "⟳ Composing… {i}/{n}",
+    "Composition des prompts finaux…": "Composing final prompts…",
+    "Composition des prompts finaux… {i}/{n}":
+        "Composing final prompts… {i}/{n}",
+    "Composer les prompts finaux":  "Compose final prompts",
+    "Composer le prompt final de {n} plan(s) ?\n"
+    "Un appel IA par plan — le texte composé est celui qui "
+    "partira au moteur.":
+        "Compose the final prompt of {n} shot(s)?\n"
+        "One AI call per shot — the composed text is what will be sent to "
+        "the engine.",
+    "{ok} plan(s) composé(s), {ko} en échec (plans {plans}).\n\n"
+    "Raison : {why}":
+        "{ok} shot(s) composed, {ko} failed (shots {plans}).\n\n"
+        "Reason: {why}",
+    "Prompts finaux : {i}/{n} plans composés…":
+        "Final prompts: {i}/{n} shots composed…",
+    "Ce texte est CE QUI PART au moteur — anglais, dans sa grammaire. "
+    "Après validation, PANDORA réaligne le document structuré du plan sur vos "
+    "changements (quelques secondes).":
+        "This text is WHAT IS SENT to the engine — English, in its grammar. "
+        "After you confirm, PANDORA realigns the shot's structured document "
+        "with your changes (a few seconds).",
+    "Votre document de travail : les blocs qui structurent le plan. "
+    "C'est ce que vous éditez.":
+        "Your working document: the blocks that structure the shot. This is "
+        "what you edit.",
+    "Le texte réellement envoyé au moteur, réécrit en anglais dans sa "
+    "grammaire. Affiché seulement s'il a déjà été composé.":
+        "The text actually sent to the engine, rewritten in English in its own "
+        "grammar. Shown only if it has already been composed.",
+    "La forme ne concerne que le prompt final — passez en « Prompt "
+    "final » pour la changer.":
+        "The shape only affects the final prompt — switch to “Final prompt” to "
+        "change it.",
+    "Automatique (recommandé par le moteur)": "Automatic (engine's own shape)",
+    "Fiche technique":              "Technical sheet",
+    "Phrase de réalisateur":        "Director's sentence",
+    "Directive courte":             "Short directive",
+    "Prose dense":                  "Dense prose",
+    "PANDORA choisit la forme d'après le moteur visé. C'est le comportement "
+    "d'origine.":
+        "PANDORA picks the shape from the target engine. Original behaviour.",
+    "Une ligne par poste : Camera:, Subject:, Action:, Lighting:, Style:.":
+        "One line per department: Camera:, Subject:, Action:, Lighting:, Style:.",
+    "Une phrase continue qui décrit le plan comme on le dirait à un chef "
+    "opérateur, puis une phrase de détails.":
+        "One continuous sentence describing the shot the way you would tell a "
+        "cinematographer, then a sentence of detail.",
+    "Ce qui bouge, où va la caméra. Rien d'autre.":
+        "What moves, where the camera goes. Nothing else.",
+    "Un bloc serré, sans étiquettes et sans remplissage.":
+        "One tight block, no labels and no filler.",
+    "Résolutions":                  "Resolutions",
+    "Durées":                       "Durations",
+    "Images de référence":          "Reference images",
+    "Coût indicatif":               "Indicative cost",
+    "en 720p":                      "at 720p",
+    "Les fiches sont désignées dans le prompt (@Image1).":
+        "Sheets are addressed inside the prompt (@Image1).",
+    "Audio natif : chaque plan reçoit une clause sonore.":
+        "Native audio: every shot gets a sound clause.",
+    "Aucune contrainte particulière relevée pour ce moteur.":
+        "No specific constraint recorded for this engine.",
+    "DOSSIER DES PROJETS":          "PROJECTS FOLDER",
+    "Parcourir…":                   "Browse…",
+    "Choisir le dossier des projets": "Choose the projects folder",
+    "Dossier par défaut.":          "Default folder.",
+    "Dossier par défaut — créé au premier projet.":
+        "Default folder — created with your first project.",
+    "Dossier accessible ✓":         "Folder reachable ✓",
+    "⚠  Dossier introuvable actuellement (disque débranché ?). "
+    "Les projets qui s'y trouvent ne sont pas listés tant qu'il "
+    "n'est pas rebranché — ils ne sont pas perdus.":
+        "⚠  Folder currently unreachable (drive unplugged?). Projects stored "
+        "there are not listed until it is plugged back in — they are not lost.",
+    "Les nouveaux projets seront créés ici — pratique pour travailler "
+    "sur un disque externe depuis plusieurs machines. Changer ce dossier "
+    "ne déplace aucun projet existant : déplacez-le vous-même, puis "
+    "utilisez « Ouvrir un projet » une fois.":
+        "New projects will be created here — handy for working from an "
+        "external drive across several machines. Changing this folder does not "
+        "move any existing project: move it yourself, then use “Open a "
+        "project” once.",
     "Langue":                       "Language",
     "Sauvegarder les paramètres":   "Save settings",
     "Modèle de génération d'images": "Image Generation Model",

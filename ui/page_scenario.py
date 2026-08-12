@@ -1154,26 +1154,14 @@ class PageScenario(QWidget):
 
         # ── Style pictural du film — SECTION REPLIABLE comme les autres du
         # panneau (demande Matthieu 2026-07-23), tout en haut ──
-        import core.style as _sc_style_mod
         c_style, l_style = _section_container()
         self._film_style_combo = QComboBox()
-        self._film_style_combo.addItem("— Style —", "")
-        _cur_grp_sc = None
-        for _s in _sc_style_mod.STYLES:
-            _g = _s.get("group", "")
-            if _g != _cur_grp_sc:
-                _cur_grp_sc = _g
-                _gi = next((g for g in _sc_style_mod.GROUPS if g["key"] == _g), None)
-                if _gi:
-                    self._film_style_combo.addItem(
-                        f"  {_gi['icon']}  {translate(_gi['name']).upper()}", "__sep__"
-                    )
-                    _sep_i = self._film_style_combo.model().item(
-                        self._film_style_combo.count() - 1
-                    )
-                    _sep_i.setEnabled(False)
-                    _sep_i.setForeground(QColor(CP.get("accent2", CP.get("accent", "#7c6bff"))))
-            self._film_style_combo.addItem(f"    {_s['icon']}  {translate(_s['name'])}", _s["key"])
+        # Liste partagée (ui/style_combo) : « Style de la note de réalisation »
+        # en tête. Choisie ICI, elle devient le style DU PROJET → tous les
+        # suffixes (image et vidéo) relisent la note en direct.
+        from ui.style_combo import populate as _populate_styles
+        _populate_styles(self._film_style_combo, first_label="— Style —",
+                         select_default=False)   # sélection posée au chargement
         self._film_style_combo.setFixedHeight(30)
         self._film_style_combo.setStyleSheet(
             f"QComboBox{{background:{CP['bg2']};border:1px solid {CP['border']};"
@@ -2661,6 +2649,18 @@ class PageScenario(QWidget):
         dur_secs = (self._dur_min.value() * 60 + self._dur_sec.value()) if self._dur_defined_check.isChecked() else 0
         sc_id = (self._current or {}).get("id", "")
         from ui.dialog_storyboard_generate import StoryboardGenerateDialog
+        # ── Moteur vidéo VISÉ (2026-08-09) ────────────────────────────────────
+        # Question posée AVANT d'écrire quoi que ce soit, et une seule fois par
+        # projet : chaque moteur attend une forme de prompt différente, et la
+        # rattraper après coup obligerait à recomposer tous les plans.
+        # Annuler ici annule la génération — on ne devine pas un moteur.
+        try:
+            from ui.dialog_target_engine import ask_target_engine
+            from ui.tab_t2v import _ENGINES as _ENG
+            if ask_target_engine(_ENG, parent=self) is None:
+                return
+        except Exception:
+            pass   # jamais bloquer un découpage sur ce réglage
         # Timeline musicale injectée (si un set a été analysé) → découpage calé sur
         # le BPM et les drops, comme dans PANDORA | Live. Source via _decoupage_base()
         # (mise en page si présente, sinon scénario).

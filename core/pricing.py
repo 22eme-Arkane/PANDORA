@@ -3,8 +3,15 @@ core/pricing.py — Estimation INDICATIVE du coût de génération vidéo (fal.a
 
 ⚠ Les tarifs fal.ai ÉVOLUENT : ces valeurs sont approximatives et servent à donner
 un ordre de grandeur AVANT génération. Toujours vérifier le prix réel sur fal.ai.
-Sources : Manuel d'utilisation (dialog_user_manual) + libellés des combos de
-résolution (tab_t2v_live._ENGINE_RESOLUTIONS).
+
+SOURCE DE VÉRITÉ = la grille publiée par fal.ai (catalogue fal, champ
+`pricingInfoOverride` de chaque endpoint), relevée le 2026-08-09.
+⚠ Ce fichier est le SEUL point de vérité ; les libellés de résolution des
+onglets et le manuel ne font que le RECOPIER. Ne jamais faire l'inverse : la
+docstring citait auparavant le manuel et les combos comme sources, et c'est
+exactement par là qu'une grille périmée (1080p à $0.60 au lieu de $0.682,
+Fast à $0.18 au lieu de $0.2419) a survécu dans quinze fichiers.
+À chaque mise à jour : corriger ICI, puis répercuter dans les libellés.
 
 Deux modes de facturation :
   - à la SECONDE (Seedance, PixVerse, Happy Horse, Kling…) → prix × durée totale ;
@@ -12,11 +19,37 @@ Deux modes de facturation :
 """
 
 # $/seconde par moteur × résolution (valeurs API minuscules « 4k/1080p/720p/480p »).
+#
+# ⚠ Grille Seedance RELEVÉE SUR fal.ai le 2026-08-09 (API du catalogue fal,
+# champ `pricingInfoOverride` des endpoints bytedance/seedance-2.0/*). Les
+# valeurs précédentes sous-estimaient le 1080p de 12 % et le Fast de 34 %.
+# fal facture en réalité au TOKEN : tokens = (largeur × hauteur × durée × 24)
+# / 1024, puis $0.014/1000 tokens (480p/720p/1080p), $0.008/1000 (4k) pour le
+# standard, $0.0112/1000 pour le Fast, $0.007/1000 pour le Mini. Les $/s
+# ci-dessous sont cette formule appliquée aux définitions usuelles — fal publie
+# lui-même 720p et 1080p en $/s, et les deux concordent à 0,3 % près.
 _PER_SECOND = {
-    "seedance-2.0":      {"4k": 1.55, "1080p": 0.60, "720p": 0.30, "480p": 0.16},
-    "seedance-2.0-fast": {"720p": 0.18, "480p": 0.09},
+    # Seedance 2.5 (sortie fal 2026-08-07) : 720p MAXIMUM — ni 1080p ni 4K —
+    # et 56 % plus cher que la 2.0 à résolution égale. Ce n'est pas un
+    # remplacement : voir core/seedance_family.
+    "seedance-2.5":      {"720p": 0.4730, "480p": 0.2205},
+    "seedance-2.0":      {"4k": 1.56, "1080p": 0.682, "720p": 0.3034, "480p": 0.135},
+    "seedance-2.0-fast": {"720p": 0.2419, "480p": 0.108},
+    "seedance-2.0-mini": {"720p": 0.1547, "480p": 0.0721},
     "pixverse-v6":       {"1080p": 0.115, "720p": 0.075, "480p": 0.025},
-    "happy-horse-1.0":   {"1080p": 0.28, "720p": 0.14},
+    # Happy Horse : la clé reste « -1.0 » car elle est ENREGISTRÉE dans les
+    # plans et l'historique des projets existants — la renommer les ferait
+    # retomber sur le repli. Le moteur appelé est bien la v1.1 depuis le
+    # 2026-08-09 (api/video_engines), d'où le 1080p à $0.18 au lieu de $0.28.
+    "happy-horse-1.0":   {"1080p": 0.18, "720p": 0.14},
+    # Kling v3 Turbo (fal 2026-06-17) : palier rapide du Kling déjà intégré.
+    "kling-v3-turbo-pro":      {"1080p": 0.14},
+    "kling-v3-turbo-standard": {"1080p": 0.112},
+    # Flux 3 (Black Forest Labs, fal 2026-08-04). Le détail par mode — dont
+    # l'extension, bien plus chère, et le palier brouillon à 0,06 $/s — vit
+    # dans core/flux3_family ; ici seul le tarif du mode courant.
+    "flux-3":       {"1080p": 0.29, "720p": 0.17},
+    "flux-3-draft": {"720p": 0.06},
     "kling-v3-pro":      {"1080p": 0.15},          # manuel : $0.112–0.196/s → ~milieu
     "kling-o3-4k":       {"4k": 0.42, "4K": 0.42},
 }

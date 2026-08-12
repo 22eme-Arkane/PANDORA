@@ -694,7 +694,7 @@ def _s_seedance() -> str:
             "<b>Veo 3.1</b> (Google) — T2V · 1080p · audio natif · ~$1.00/vidéo",
             "<b>Sora 2</b> (OpenAI) — T2V · 1080p · durée fixe · ~$0.40/vidéo",
             "<b>PixVerse v6</b> — T2V · 360p à 1080p · $0.025-0.115/s · économique",
-            "<b>Seedance 2.0 Fast</b> — Version rapide · économique · $0.09/s",
+            "<b>Seedance 2.0 Fast</b> — Version rapide · économique · $0.24/s",
         ),
         _tip("Seedance 2.0 est le moteur par défaut — le plus optimisé dans Pandora (références, lipsync, storyboard). "
              "Classement ELO vidéo Avril 2026. "
@@ -864,7 +864,7 @@ def _s_tarifs() -> str:
         _table_row(["Veo 3.1", "T2V", "1080p", "✓", "~$1.00/vidéo"]),
         _table_row(["Sora 2", "T2V", "1080p", "✗", "~$0.40/vidéo"]),
         _table_row(["PixVerse v6", "T2V", "360p → 1080p", "✗", "$0.025-0.115/s"]),
-        _table_row(["Seedance 2.0 Fast", "T2V", "jusqu'à 720p", "✓", "~$0.09/s"]),
+        _table_row(["Seedance 2.0 Fast", "T2V", "jusqu'à 720p", "✓", "~$0.24/s"]),
         "</table>",
     ])
     table_audio = "".join([
@@ -1642,7 +1642,7 @@ def _e_seedance() -> str:
             "<b>Veo 3.1</b> (Google) — T2V · 1080p · native audio · ~$1.00/video",
             "<b>Sora 2</b> (OpenAI) — T2V · 1080p · fixed duration · ~$0.40/video",
             "<b>PixVerse v6</b> — T2V · 360p to 1080p · $0.025-0.115/s · economical",
-            "<b>Seedance 2.0 Fast</b> — Fast version · economical · $0.09/s",
+            "<b>Seedance 2.0 Fast</b> — Fast version · economical · $0.24/s",
         ),
         _tip("Seedance 2.0 is the default engine — most optimized in Pandora (references, lipsync, storyboard). "
              "ELO video ranking, April 2026. "
@@ -1800,7 +1800,7 @@ def _e_pricing() -> str:
         _table_row(["Veo 3.1", "T2V", "1080p", "✓", "~$1.00/video"]),
         _table_row(["Sora 2", "T2V", "1080p", "✗", "~$0.40/video"]),
         _table_row(["PixVerse v6", "T2V", "360p → 1080p", "✗", "$0.025-0.115/s"]),
-        _table_row(["Seedance 2.0 Fast", "T2V", "up to 720p", "✓", "~$0.09/s"]),
+        _table_row(["Seedance 2.0 Fast", "T2V", "up to 720p", "✓", "~$0.24/s"]),
         "</table>",
     ])
     table_audio = "".join([

@@ -8,6 +8,7 @@ from PyQt6.QtWidgets import (
 from PyQt6.QtCore import Qt, pyqtSignal, QObject, QTimer
 from PyQt6.QtGui import QPixmap
 from ui.styles import CP, COMBO_ARROW_URL as _ARROW_URL
+from ui.prompt_form_selector import PromptFormSelector
 from ui.widgets import HelpBlock
 from ui.icons import load_icon, claude_icon_pixmap
 import core.storyboard as sb_api
@@ -2624,6 +2625,12 @@ class PageStoryboard(QWidget):
         btn_new_ver.clicked.connect(self._on_new_version)
         lay.addWidget(btn_new_ver)
         btn_new_ver.setVisible(False)
+
+        # ── Forme du prompt (essai) — parité Cinéma ───────────────────────────
+        # Comparer fiche technique et phrase de réalisateur sur le MÊME plan.
+        # Le réglage vit dans le projet et n'affecte que la FORME du texte.
+        self._prompt_form = PromptFormSelector()
+        lay.addWidget(self._prompt_form)
 
         # ── Séparateur + versions snapshot ────────────────────────────────────
         _vs = QFrame()

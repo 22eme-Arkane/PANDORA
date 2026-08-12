@@ -1,0 +1,36 @@
+🔧 PANDORA 2.0.1 — CORRECTIF IMPORTANT, MISE À JOUR RECOMMANDÉE
+
+Quelques heures après la sortie de la 2.0.0, j'ai découvert un bug sérieux en travaillant sur mon propre film. Je préfère vous le dire franchement, parce qu'il peut vous avoir fait perdre du travail sans que vous vous en aperceviez.
+
+CE QUI SE PASSAIT
+
+Sur un scénario long, la génération du découpage s'arrêtait au milieu — dans mon cas au plan 28, sur environ la moitié du script. Le moteur IA atteignait sa limite de longueur et se coupait net.
+
+Le vrai problème n'est pas la coupure : c'est que PANDORA ne la voyait pas. Chaque plan produit était correctement formé, donc la vérification interne validait le document et l'enregistrait comme s'il était terminé. Pas de message, pas d'erreur, pas de plantage. Vous vous retrouviez avec la moitié de votre film en croyant avoir tout.
+
+C'est le genre de panne que je déteste le plus : silencieuse.
+
+CE QUE VOUS DEVEZ VÉRIFIER
+
+Si vous avez généré un découpage avec la 2.0.0, ouvrez-le et regardez le dernier plan. S'il s'arrête avant la fin de votre scénario, relancez la génération avec la 2.0.1 — elle ira jusqu'au bout.
+
+CE QUI EST CORRIGÉ
+
+La coupure est maintenant détectée, et PANDORA demande automatiquement la suite jusqu'à obtenir le document complet. Et si malgré tout le découpage restait incomplet, il est refusé avec un message clair plutôt qu'enregistré à moitié : un découpage partiel est pire qu'aucun découpage.
+
+Même correctif sur la Mise en page du Live, qui avait exactement le même défaut.
+
+J'en ai profité pour réparer le bouton « Soutenir PANDORA » : il pointait vers un système de dons réservé aux associations déclarées, et refusait donc systématiquement. Il était cassé depuis sa mise en place. Il fonctionne maintenant.
+
+📥 TÉLÉCHARGER LA 2.0.1
+
+Windows : https://github.com/22eme-Arkane/PANDORA/releases/download/v2.0.1/PANDORA_Setup_2.0.1.exe
+macOS (Apple Silicon) : https://github.com/22eme-Arkane/PANDORA/releases/download/v2.0.1/PANDORA_2.0.1.dmg
+
+L'installation se fait par-dessus la 2.0.0, vos projets sont conservés.
+
+Toutes les nouveautés de la 2.0 restent décrites dans la vidéo et la description précédentes — cette version ne fait que corriger.
+
+Merci de votre patience, et surtout : n'hésitez jamais à me signaler ce qui cloche. Celui-ci, je l'ai trouvé en utilisant PANDORA pour de vrai, et c'est comme ça que les bugs les plus vicieux sortent du bois.
+
+Matthieu — 22eme Arkane

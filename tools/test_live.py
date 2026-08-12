@@ -1037,9 +1037,18 @@ def estimation_prix_generation():
     _orig = _mp.active_video_provider
     _mp.active_video_provider = lambda *_a, **_k: "fal"
     try:
-        # Seedance 720p chez fal.ai : $0.30/s → 10 plans × 5 s = 50 s = $15.
+        # Seedance 720p chez fal.ai : $0.3034/s → 10 plans × 5 s = 50 s = $15.17.
+        # (Grille relevée sur fal.ai le 2026-08-09 ; c'était $0.30 auparavant.)
         cost, mode = pricing.estimate("seedance-2.0", "720p", 50.0, 10)
-        assert abs(cost - 15.0) < 0.01 and mode == "s", f"720p ×50s = $15 attendu ({cost})"
+        assert abs(cost - 15.17) < 0.01 and mode == "s", f"720p ×50s = $15.17 attendu ({cost})"
+        # Le 1080p coûte plus du DOUBLE du 720p chez fal ($0.682 vs $0.3034) — il
+        # était figé à $0.60, soit 12 % sous le prix réel.
+        assert abs(pricing.price_per_second("seedance-2.0", "1080p") - 0.682) < 1e-9
+        # Seedance Mini DOIT avoir sa propre grille : absent de la table, il
+        # retombait sur le repli prudent ($0.30/s) et était surestimé ×4.
+        assert abs(pricing.price_per_second("seedance-2.0-mini", "720p") - 0.1547) < 1e-9
+        assert pricing.price_per_second("seedance-2.0-mini", "480p") < 0.10, \
+            "Mini 480p doit être le tarif le moins cher, pas le repli à $0.30"
         # 4K bien plus cher.
         assert pricing.estimate("seedance-2.0", "4k", 50.0, 10)[0] > 50, "4K > 1080p/720p"
         # Veo : facturé au CLIP (durée non prise en compte).
@@ -1047,7 +1056,7 @@ def estimation_prix_generation():
         assert m_veo == "clip" and abs(c_veo - 5.0) < 0.01, "Veo 5 clips × $1 = $5"
         # Le message contient le montant + le rappel fal.ai.
         msg = pricing.format_estimate("Seedance 2.0", "seedance-2.0", "720p", 50.0, 10)
-        assert "$15.00" in msg and "10 plans" in msg and "fal.ai" in msg, msg
+        assert "$15.17" in msg and "10 plans" in msg and "fal.ai" in msg, msg
     finally:
         _mp.active_video_provider = _orig
 
@@ -7237,6 +7246,86 @@ def moods_generes_dans_leur_propre_sequence():
         "le worker unitaire ne photographie pas son namespace"
 
     sb.set_namespace("storyboard")
+
+
+@test
+def dossier_des_projets_reglable_live():
+    """Parité Live du réglage « Dossier des projets » (2026-08-09).
+
+    MÊME clé de config et MÊME dossier que le Cinéma : un projet porte son mode
+    dans son propre fichier et la page de démarrage filtre là-dessus. Deux
+    dossiers séparés obligeraient à régler deux fois la même chose."""
+    import os as _os, tempfile as _tf
+    import core.config as _cm
+    from core import projects_location as _loc
+
+    _orig_load, _orig_save = _cm.load_config, _cm.save_config
+    _fake = {"fal_key": "SECRET"}
+    _cm.load_config = lambda: dict(_fake)
+    _cm.save_config = lambda c: (_fake.clear(), _fake.update(c))
+    try:
+        _tmp = _tf.mkdtemp(prefix="pandora_ext_live_")
+        _loc.set_projects_root(_tmp)
+        assert _fake.get("fal_key") == "SECRET", \
+            "l'enregistrement a effacé les autres clés de la config"
+        # La clé écrite est bien celle que lisent la page de démarrage
+        # (_scan_project_locations) et « Nouveau projet » — pas une clé à part.
+        assert _os.path.normpath(_fake["last_project_location"]) == \
+            _os.path.normpath(_tmp), sorted(_fake)
+
+        from ui.page_live_settings import PageLiveSettings
+        _p = PageLiveSettings()
+        assert hasattr(_p, "_projects_location"), \
+            "pas de « Dossier des projets » dans les Paramètres Live"
+        assert _tmp in _p._projects_location._field.text()
+    finally:
+        _cm.load_config, _cm.save_config = _orig_load, _orig_save
+
+
+@test
+def moteur_cible_live_parite():
+    """Parité Live de la fenêtre « moteur cible » (2026-08-09).
+
+    Le découpage Live passe par _on_decoupage, pas par le dialogue Cinéma :
+    le branchement doit être fait des DEUX côtés, avec la liste de moteurs de
+    CHAQUE édition — elles ne proposent pas les mêmes."""
+    import inspect as _i
+    _src = _i.getsource(__import__("ui.page_live_conducteur", fromlist=["_"]))
+    assert "ask_target_engine" in _src, \
+        "le Live ne pose pas la question du moteur avant le découpage"
+    assert "tab_t2v_live import _ENGINES" in _src, \
+        "le Live doit proposer SES moteurs, pas ceux du Cinéma"
+    # …et il renonce si l'utilisateur annule, au lieu de générer quand même.
+    _dec = _i.getsource(
+        __import__("ui.page_live_conducteur", fromlist=["_"]).PageLiveConducteur._on_decoupage
+        if hasattr(__import__("ui.page_live_conducteur", fromlist=["_"]),
+                   "PageLiveConducteur") else object)
+    assert "is None" in _dec and "return" in _dec, \
+        "annuler le choix de moteur doit annuler le découpage"
+
+    # Le module de réglage est PARTAGÉ : une seule table, pas une copie Live.
+    from core import target_engine as _te
+    assert callable(_te.get_target_engine) and callable(_te.briefing)
+
+
+@test
+def forme_du_prompt_selecteur_live():
+    """Parité Live du sélecteur « Forme du prompt » (2026-08-09).
+
+    Le Live compose ses prompts via live_grammar, qui s'appuie sur la MÊME
+    table moteur→forme : l'essai doit donc agir des deux côtés, et le
+    sélecteur être présent dans la barre du Storyboard Live."""
+    import inspect as _i
+    from core import prompt_form as _pf, engine_grammar as _eg
+
+    _src = _i.getsource(__import__("ui.page_storyboard_live", fromlist=["_"]))
+    assert "PromptFormSelector()" in _src, \
+        "sélecteur absent de la barre Storyboard Live"
+
+    # Le module de réglage est PARTAGÉ — pas une copie Live (une seule table).
+    assert _pf.AUTO == "auto" and callable(_pf.set_form)
+    assert "prompt_form" in _i.getsource(_eg.grammar_for), \
+        "grammar_for doit rester le point d'entrée UNIQUE de la forme"
 
 
 if __name__ == "__main__":

@@ -303,7 +303,7 @@ class TabExtension(QScrollArea):
             width:22px;background:{C['bg3']};border:none;}}
             QSpinBox::up-button:hover,QSpinBox::down-button:hover{{background:{C['border_bright']};}}
         """)
-        self.cb_res = combo([("1080p  (~$0.60/s)", "1080p"), ("720p  (~$0.30/s)", "720p"), ("480p  (~$0.16/s)", "480p")])
+        self.cb_res = combo([("1080p  (~$0.68/s)", "1080p"), ("720p  (~$0.30/s)", "720p"), ("480p  (~$0.14/s)", "480p")])
 
         for col_idx, lbl, widget in [
             (0, "Durée à ajouter", self.cb_dur),

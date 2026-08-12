@@ -12,11 +12,17 @@ Pipeline :
 
 Prérequis : ffmpeg disponible dans le PATH.
 
-Moteurs (relevé fal.ai 2026-06-24) — interchangeables (video_url + audio_url) :
-  · Sync 2 Pro  fal-ai/sync-lipsync/v2/pro  $5/min  studio, gros plans, émotion (DÉFAUT)
-  · Sync-3      fal-ai/sync-lipsync/v3      $8/min  le + récent, frame-accurate
-  · Sync 2      fal-ai/sync-lipsync/v2      $3/min  conversationnel
-  · LatentSync  fal-ai/latentsync           éco     ByteDance, historique
+Moteurs — interchangeables (même contrat : video_url + audio_url) :
+  · Sync 2 Pro  fal-ai/sync-lipsync/v2/pro  $5/min     studio, gros plans (DÉFAUT)
+  · Sync-3      fal-ai/sync-lipsync/v3      $8/min     le + récent, frame-accurate
+  · VEED v2     veed/lipsync/v2             ~$4.20/min 0,07 $/s (relevé 2026-08-12)
+  · Sync 2      fal-ai/sync-lipsync/v2      $3/min     conversationnel
+  · LatentSync  fal-ai/latentsync           éco        ByteDance, historique
+
+⚠ VEED facture À LA SECONDE de vidéo produite (0,07 $/s) là où les Sync
+annoncent un tarif à la minute — le $/min affiché est une conversion, pas une
+grille officielle. Schéma d'entrée vérifié identique (video_url + audio_url) :
+il se substitue aux autres sans adapter le worker.
 """
 
 import os
@@ -35,10 +41,13 @@ _NO_WINDOW = subprocess.CREATE_NO_WINDOW if sys.platform == "win32" else 0
 LIPSYNC_ENGINES: dict[str, dict] = {
     "sync2pro":   {"endpoint": "fal-ai/sync-lipsync/v2/pro", "name": "Sync 2 Pro", "price": "$5/min"},
     "sync3":      {"endpoint": "fal-ai/sync-lipsync/v3",     "name": "Sync-3",     "price": "$8/min"},
+    "veed2":      {"endpoint": "veed/lipsync/v2",            "name": "VEED v2",    "price": "~$4.20/min"},
     "sync2":      {"endpoint": "fal-ai/sync-lipsync/v2",     "name": "Sync 2",     "price": "$3/min"},
     "latentsync": {"endpoint": "fal-ai/latentsync",          "name": "LatentSync", "price": "éco"},
 }
-LIPSYNC_ENGINE_ORDER = ["sync2pro", "sync3", "sync2", "latentsync"]
+# Ordre = du plus cher au plus économique (VEED se place entre Sync 2 Pro et
+# Sync 2 : 0,07 $/s ≈ 4,20 $/min).
+LIPSYNC_ENGINE_ORDER = ["sync2pro", "sync3", "veed2", "sync2", "latentsync"]
 LIPSYNC_DEFAULT = "sync2pro"
 
 

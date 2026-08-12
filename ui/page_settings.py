@@ -8,6 +8,7 @@ from PyQt6.QtCore import Qt, pyqtSignal
 from ui.styles import CP
 from ui.icons import load_icon
 from ui.davinci_panel import DaVinciPanel
+from ui.projects_location_row import ProjectsLocationRow
 from core.config import load_config, save_config
 from davinci.bridge import install_pandora_send
 
@@ -268,6 +269,15 @@ class SettingsPage(QScrollArea):
         lay.addWidget(_divider())
 
         cfg = load_config()
+
+        # ── Dossier des projets ───────────────────────────────────────────────
+        # L'emplacement se choisissait UNIQUEMENT dans « Nouveau projet » : une
+        # fois le premier projet créé, plus moyen de le retrouver. Réglage porté
+        # ici et dans les Paramètres Live (même clé, même dossier).
+        lay.addWidget(_section("Dossier des projets"))
+        self._projects_location = ProjectsLocationRow()
+        lay.addWidget(self._projects_location)
+        lay.addWidget(_divider())
 
         # ── Assistant IA (texte) — juste après l'Apparence (retour 2026-06-13) ─
         lay.addWidget(_section("Assistant IA"))

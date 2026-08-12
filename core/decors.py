@@ -144,6 +144,10 @@ def set_floor_plan(decor_id: str, path: str) -> bool:
     for decor in index:
         if decor.get("id") == decor_id:
             decor["floor_plan"] = path or ""
+            # L'aperçu léger correspond à l'ANCIEN plan : on le vide, la page
+            # Décors retombe sur l'image pleine tant qu'aucun nouvel aperçu
+            # n'est préparé.
+            decor["floor_plan_thumbnail"] = ""
             decor["updated_at"] = datetime.now().isoformat()
             _save_index(index)
             return True

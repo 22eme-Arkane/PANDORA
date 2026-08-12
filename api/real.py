@@ -1,18 +1,22 @@
 """
-API Seedance 2.0 via fal.ai — appel réel.
+API Seedance via fal.ai — appel réel (familles 2.0 et 2.5).
 
-Endpoints confirmés :
-  T2V  → bytedance/seedance-2.0/text-to-video
-  I2V  → bytedance/seedance-2.0/image-to-video
-  REF  → bytedance/seedance-2.0/reference-to-video
-  EXT  → bytedance/seedance-2.0/reference-to-video  (via video_urls)
+Les chemins d'endpoint, les résolutions acceptées, les plafonds de références
+et la désignation des refs sont dans **core/seedance_family** — ce fichier ne
+fait que router. Ajouter une version future ne devrait plus le toucher.
 
-Fast : préfixe bytedance/seedance-2.0/fast/...
+  T2V  → <base>/text-to-video
+  I2V  → <base>/image-to-video
+  REF  → <base>/reference-to-video
+  EXT  → <base>/reference-to-video  (via video_urls)
+
+  base = bytedance/seedance-2.0 · /fast · /mini · bytedance/seedance-2.5
 
 Auth : variable d'environnement FAL_KEY (lue automatiquement par fal_client)
        ou injectée depuis config.json.
 
-Tarifs : ~$0.30/s (standard) · ~$0.24/s (fast) en 720p
+Tarifs 720p : ~$0.30/s (2.0) · ~$0.24/s (fast) · ~$0.47/s (2.5).
+⚠ La 2.5 plafonne à 720p — voir core/seedance_family pour le détail.
 """
 
 import os
@@ -200,17 +204,19 @@ def run_real(params: dict, emit_progress, is_cancelled) -> dict:
 
     mode  = params.get("mode", "t2v")
     model = params.get("model", "seedance-2.0")
-    fast  = "fast" in model.lower()
-    base  = "bytedance/seedance-2.0/fast" if fast else "bytedance/seedance-2.0"
 
     # ── Endpoints ─────────────────────────────────────────────────────────────
-    endpoints = {
-        "t2v": f"{base}/text-to-video",
-        "i2v": f"{base}/image-to-video",
-        "ref": f"{base}/reference-to-video",
-        "ext": f"{base}/reference-to-video",
-    }
+    # La table des familles (2.0 / fast / mini / 2.5) vit dans
+    # core/seedance_family : chemin, résolutions, plafonds, désignation des
+    # références. Ici on ne fait que router — ajouter une version future ne
+    # touchera plus ce fichier.
+    from core import seedance_family as _sf
+    endpoints = _sf.endpoints(model)
     endpoint = endpoints.get(mode, endpoints["t2v"])
+    # Conservé pour le routage PiAPI plus bas (run_piapi) : ce distributeur ne
+    # couvre que la 2.0 standard et fast — la 2.5 repli donc toujours sur fal
+    # (core/media_provider._COVERAGE ne la liste pas).
+    fast = "fast" in model.lower()
 
     # Auto-switch to ref endpoint when reference images are provided for t2v
     _raw_ref_images = params.get("ref_images", [])
@@ -227,11 +233,21 @@ def run_real(params: dict, emit_progress, is_cancelled) -> dict:
         if _p and os.path.isfile(_p):
             ref_images.append(_p)
             ref_roles.append("")
-    # Seedance reference-to-video accepte jusqu'à 9 images (image_urls). On passe de
-    # 4 à 9 pour laisser la place aux images de RÉFÉRENCE (inspiration) par plan, en
-    # plus des mosaïques (personnages/décor/accessoires) + style + mood.
-    ref_images = ref_images[:9]
-    ref_roles  = ref_roles[:9]
+    # Plafond d'images de référence : 9 en Seedance 2.0 (mosaïques
+    # personnages/décor/accessoires + style + mood + inspirations du plan),
+    # 50 en 2.5. Le chiffre vient de core/seedance_family, jamais d'ici.
+    _max_refs = _sf.max_images(model)
+    ref_images = ref_images[:_max_refs]
+    ref_roles  = ref_roles[:_max_refs]
+
+    # ── Références NOMMÉES (Seedance 2.5) ──────────────────────────────────────
+    # La 2.5 adresse chaque pièce jointe par un jeton du prompt : @Image1,
+    # @Image2… numérotés dans l'ordre d'envoi. On annote donc les rôles AVANT
+    # qu'ils ne soient décrits au moteur : « fiche du personnage Jésus
+    # (@Image1) ». Le lien image↔texte devient structurel au lieu d'être
+    # persuasif (cf. correctif 2.1.1 : les fiches partaient sans être décrites).
+    # No-op complet sur la 2.0, qui ne sait pas nommer ses références.
+    ref_roles = _sf.annotate_roles_with_tokens(ref_roles, model)
 
     # ── Clip source : transcodage H.264 automatique si nécessaire ───────────────
     # (MXF/ProRes/HEVC → H.264 ; > 1080p → downscale lanczos ; RÉELLEMENT
@@ -264,11 +280,11 @@ def run_real(params: dict, emit_progress, is_cancelled) -> dict:
 
     # ── Arguments communs ─────────────────────────────────────────────────────
     duration = params.get("duration", 10)
-    # Seedance API requires duration as a string in ['auto','4'..'15'] — minimum 4 s
-    try:
-        _dur_int = max(4, min(15, int(duration)))
-    except (TypeError, ValueError):
-        _dur_int = 10
+    # Fenêtre de durée PAR MOTEUR (core/seedance_family) : 4–15 s pour la
+    # famille 2.0, 4–30 s pour la 2.5 (plan-séquence natif). L'ancien
+    # « min(15, … ) » en dur aurait silencieusement amputé de moitié un plan
+    # de 30 s demandé à la 2.5.
+    _dur_int = _sf.clamp_duration(model, duration)
     duration = _dur_int  # keep as int for result dict
 
     # Traduit le prompt utilisateur vers l'anglais si nécessaire
@@ -440,6 +456,15 @@ def run_real(params: dict, emit_progress, is_cancelled) -> dict:
 
     _raw_res = params.get("resolution", "720p") or "720p"
     _res_clean = _raw_res.split()[0]  # strip price label: "720p (~$0.30/s)" → "720p"
+    # Le moteur choisi n'accepte peut-être pas cette résolution : la 2.5
+    # plafonne à 720p. Cas réel : un plan réglé en 1080p/4K puis basculé sur la
+    # 2.5 — l'appel échouerait. On rabat sur la meilleure disponible ET on le
+    # DIT dans la progression, plutôt que de livrer en silence autre chose que
+    # ce qu'annonce le menu.
+    _res_asked = _res_clean
+    _res_clean = _sf.clamp_resolution(model, _res_clean)
+    if _res_clean != _res_asked:
+        emit_progress(3, f"{_res_asked} indisponible sur ce moteur → {_res_clean}")
 
     args = {
         "prompt":           _prompt_en,

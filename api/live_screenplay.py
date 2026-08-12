@@ -248,7 +248,16 @@ def _normalize(seg: dict, mode: str) -> dict:
         dur = int(seg.get("duration", 5))
     except (TypeError, ValueError):
         dur = 5
-    dur = max(4, min(15, dur))
+    # Plafond de durée = celui du MOTEUR VISÉ par le projet (2026-08-09) :
+    # 30 s si le découpage est écrit pour Seedance 2.5 (plan-séquence — le
+    # vrai gain pour le mapping), 15 s sinon. Le clamp d'envoi (api/real)
+    # revérifie de toute façon par moteur.
+    try:
+        from core.seedance_family import clamp_duration as _sf_clamp
+        from core.target_engine import get_target_engine as _te_get
+        dur = _sf_clamp(_te_get(), dur)
+    except Exception:
+        dur = max(4, min(15, dur))
     mv = seg.get("camera_movement", "") or ("Fixe" if mode == "mapping" else "")
     try:
         act = int(seg.get("act", 1))

@@ -2,7 +2,9 @@
 api/video_engines.py — Moteurs vidéo alternatifs à Seedance 2.0.
 
 Modèles fal.ai :
-  - Happy Horse 1.0 T2V/I2V : alibaba/happy-horse/{text,image,reference}-to-video — $0.14-0.28/s
+  - Happy Horse 1.1 T2V/I2V : alibaba/happy-horse/v1.1/{text,image,reference}-to-video — $0.14-0.18/s
+    (clé PANDORA « happy-horse-1.0 » CONSERVÉE : elle est enregistrée dans les
+     plans et l'historique des projets existants — voir core/pricing)
   - Kling O3 4K T2V/I2V     : fal-ai/kling-video/o3/4k/{text,image}-to-video      — $0.42/s
   - Kling v3 Pro I2V         : fal-ai/kling-video/v3/pro/image-to-video            — $0.112-0.196/s
   - Kling v3 Pro T2V         : fal-ai/kling-video/v3/pro/text-to-video             — $0.112-0.196/s
@@ -258,15 +260,28 @@ class KlingWorker(_CancellableWorker):
             dur       = int(self.params.get("duration", 5))
             with_audio = self.params.get("generate_audio", True)
             variant   = self.params.get("variant", "pro")
+            # Palier TURBO (fal 2026-06-17) : même famille v3, rendu plus
+            # rapide et moins cher — pro 0,14 $/s, standard 0,112 $/s (relevé
+            # 2026-08-09). Il vit ici plutôt que dans un worker séparé : c'est
+            # le MÊME contrat d'appel, seul le chemin change.
+            _sub = {"turbo-pro": "turbo/pro", "turbo-standard": "turbo/standard"}
             if variant == "4k":
                 endpoint = "fal-ai/kling-video/v3/4k/text-to-video"
+            elif variant in _sub:
+                _kind = "image-to-video" if mode == "i2v" else "text-to-video"
+                endpoint = f"fal-ai/kling-video/v3/{_sub[variant]}/{_kind}"
             elif mode == "i2v":
                 endpoint = "fal-ai/kling-video/v3/pro/image-to-video"
             else:
                 endpoint = "fal-ai/kling-video/v3/pro/text-to-video"
 
-            price_rate = self._PRICE_WITH_AUDIO if with_audio else self._PRICE_NO_AUDIO
-            cost_est   = dur * price_rate
+            # Turbo est facturé à un tarif FIXE (pas de variation selon l'audio).
+            _TURBO_RATE = {"turbo-pro": 0.14, "turbo-standard": 0.112}
+            if variant in _TURBO_RATE:
+                price_rate = _TURBO_RATE[variant]
+            else:
+                price_rate = self._PRICE_WITH_AUDIO if with_audio else self._PRICE_NO_AUDIO
+            cost_est = dur * price_rate
 
             self.progress.emit(10, f"Kling v3 Pro {mode.upper()} — {dur}s (~${cost_est:.2f})…")
 
@@ -567,7 +582,9 @@ class HappyHorseWorker(_CancellableWorker):
     finished = pyqtSignal(dict)
     failed   = pyqtSignal(str)
 
-    _PRICE = {"720p": 0.14, "1080p": 0.28}
+    # Tarifs Happy Horse 1.1 relevés sur fal.ai le 2026-08-09. Le 1080p passe de
+    # $0.28 (1.0) à $0.18 : la montée de version le rend 36 % MOINS cher.
+    _PRICE = {"720p": 0.14, "1080p": 0.18}
 
     def __init__(self, params: dict):
         """
@@ -618,14 +635,16 @@ class HappyHorseWorker(_CancellableWorker):
             ratio    = self.params.get("aspect_ratio", "16:9")
             cost_est = dur * self._PRICE.get(res, 0.14)
 
+            # Happy Horse 1.1 (fal, 2026-06-22) : chemins VERSIONNÉS. L'ancien
+            # `alibaba/happy-horse/...` sans version pointait la 1.0.
             _ep_map = {
-                "t2v": "alibaba/happy-horse/text-to-video",
-                "i2v": "alibaba/happy-horse/image-to-video",
-                "ref": "alibaba/happy-horse/reference-to-video",
+                "t2v": "alibaba/happy-horse/v1.1/text-to-video",
+                "i2v": "alibaba/happy-horse/v1.1/image-to-video",
+                "ref": "alibaba/happy-horse/v1.1/reference-to-video",
             }
             endpoint = _ep_map.get(mode, _ep_map["t2v"])
 
-            self.progress.emit(5, f"Happy Horse 1.0 {mode.upper()} — {dur}s {res} (~${cost_est:.2f})…")
+            self.progress.emit(5, f"Happy Horse 1.1 {mode.upper()} — {dur}s {res} (~${cost_est:.2f})…")
 
             prompt_raw = self.params.get("prompt", "")
             prompt_en  = engine_prompt(self.params)   # prompt FINAL respecté
@@ -745,6 +764,277 @@ class HappyHorseWorker(_CancellableWorker):
         except Exception as e:
             if not self._cancelled:
                 self.failed.emit(humanize_api_error(f"Erreur Happy Horse : {e}"))
+
+
+# ── Worker Flux 3 (Black Forest Labs) ────────────────────────────────────────
+
+class Flux3Worker(_CancellableWorker):
+    """
+    Génère une vidéo via Flux 3 (Black Forest Labs / fal.ai).
+    Modes T2V, I2V et first-last-frame. Audio natif. 720p/1080p, 5–20 s.
+    Pleine qualité ~$0.17-0.29/s · brouillon (draft) $0.06/s en 720p.
+
+    ⚠ Particularités encodées depuis core/flux3_family (relevé 2026-08-09) :
+      · PAS de reference-to-video : les images de cohérence casting/décor ne
+        peuvent pas être envoyées — on le DIT au lieu de les perdre en silence ;
+      · safety_tolerance sur une échelle 0–4 (Seedance : 1–6) → toujours clampé ;
+      · en brouillon, la sortie inclut un draft_cache à CONSERVER : c'est lui
+        (et lui seul) que draft-enhance sait affiner.
+    """
+    progress = pyqtSignal(int, str)
+    finished = pyqtSignal(dict)
+    failed   = pyqtSignal(str)
+
+    def __init__(self, params: dict):
+        """
+        params attendus :
+          prompt        (str)  requis
+          mode          (str)  "t2v" | "i2v" | "flf"
+          image_url     (str)  requis si i2v / flf (début)
+          end_image_url (str)  requis si flf (fin)
+          duration      (int)  5-20, défaut 5 (clampé par le moteur)
+          resolution    (str)  "720p" | "1080p"
+          aspect_ratio  (str)  cf. flux3_family.ASPECTS
+          draft         (bool) palier brouillon 720p à $0.06/s
+        """
+        super().__init__()
+        self.params = params
+
+    def run(self):
+        cfg = load_config()
+        key = cfg.get("api_key", "").strip()
+        if not key:
+            self._mock()
+        else:
+            self._real(key)
+
+    def _mock(self):
+        mode = self.params.get("mode", "t2v").upper()
+        dur  = self.params.get("duration", 5)
+        for pct, msg in [
+            (10, f"Flux 3 {mode} — mode mock…"),
+            (50, "Génération vidéo (simulation)…"),
+            (100, "Terminé — mode mock (aucune clé fal.ai)"),
+        ]:
+            self.progress.emit(pct, msg)
+            time.sleep(0.4)
+        self.finished.emit({"url": "", "duration": dur, "model": "flux-3",
+                            "credits_used": 0})
+
+    def _real(self, key: str):
+        try:
+            import fal_client
+            import requests
+            from core import flux3_family as f3
+
+            os.environ["FAL_KEY"] = key
+            ensure_image_urls(fal_client, self.params, self.progress.emit)
+
+            mode  = self.params.get("mode", "t2v")
+            draft = bool(self.params.get("draft", False))
+            dur   = f3.clamp_duration(self.params.get("duration", 5))
+            res   = "720p" if draft else f3.clamp_resolution(
+                self.params.get("resolution", "720p"))
+            ratio = self.params.get("aspect_ratio", "16:9")
+            if ratio not in f3.ASPECTS:
+                ratio = "16:9"
+            rate     = f3.price_per_second(mode, res, draft)
+            cost_est = int(dur) * rate
+
+            endpoint = f3.endpoint(mode, draft=draft)
+            _tier = "draft" if draft else res
+            self.progress.emit(
+                5, f"Flux 3 {mode.upper()} ({_tier}) — {dur}s (~${cost_est:.2f})…")
+
+            prompt_en = engine_prompt(self.params)   # prompt FINAL respecté
+
+            # Flux 3 n'a AUCUN mécanisme d'images de référence : prévenir vaut
+            # mieux que perdre en silence (les fiches ne partiront pas).
+            _refs = [p for p in self.params.get("ref_images", [])
+                     if p and os.path.isfile(p)]
+            if _refs:
+                self.progress.emit(
+                    6, f"⚠ {len(_refs)} image(s) de référence ignorée(s) — "
+                       "Flux 3 n'accepte pas de références visuelles.")
+
+            args: dict = {
+                "prompt":         prompt_en,
+                "duration":       str(dur),          # schéma fal : enum "5".."20"
+                "aspect_ratio":   ratio,
+                "generate_audio": bool(self.params.get("audio", True)),
+                # Échelle PROPRE à Flux 3 (0-4) — un « 6 » recopié de Seedance
+                # ferait refuser l'appel.
+                "safety_tolerance": f3.clamp_safety(
+                    self.params.get("safety_tolerance_override", 4)),
+            }
+            if not draft:
+                args["resolution"] = res
+
+            if mode in ("i2v", "flf"):
+                img_url = self.params.get("image_url", "")
+                if not img_url:
+                    raise ValueError("Flux 3 I2V : image_url requis.")
+                key_img = "start_image_url" if mode == "flf" else "image_url"
+                args[key_img] = img_url
+            if mode == "flf":
+                end_url = self.params.get("end_image_url", "")
+                if not end_url:
+                    raise ValueError("Flux 3 first-last : end_image_url requis.")
+                args["end_image_url"] = end_url
+
+            # Suffixes hérités du tab T2V (même pipeline que les autres moteurs)
+            for key_suf, sep in [("style_suffix", ", "), ("no_music_suffix", ", "),
+                                 ("creative_suffix", ", ")]:
+                v = self.params.get(key_suf, "")
+                if v and args.get("prompt"):
+                    args["prompt"] = args["prompt"] + sep + v
+
+            self.progress.emit(20, "Appel Flux 3 (peut prendre 1-3 min)…")
+            result = fal_client.subscribe(endpoint, arguments=args)
+            if not isinstance(result, dict):
+                raise RuntimeError(f"Réponse inattendue : {str(result)[:200]}")
+
+            video = result.get("video") or {}
+            url   = video.get("url", "") if isinstance(video, dict) else ""
+            if not url:
+                url = result.get("url", "")
+            if not url:
+                raise RuntimeError(f"URL vidéo manquante : {str(result)[:200]}")
+
+            # Brouillon : le jeton d'affinage est la SEULE voie vers la pleine
+            # qualité (draft-enhance ne prend pas d'URL vidéo) — on le conserve.
+            _cache = result.get("draft_cache") or {}
+            draft_cache_url = (_cache.get("url", "") if isinstance(_cache, dict)
+                               else "") or result.get("draft_cache_url", "")
+
+            self.progress.emit(80, "Téléchargement de la vidéo…")
+            data = requests.get(url, timeout=300).content
+            out_dir = _video_output_dir()
+            ts      = int(time.time())
+            _suffix = "draft_" if draft else ""
+            local   = os.path.join(out_dir, f"flux3_{_suffix}{mode}_{dur}s_{ts}.mp4")
+            with open(local, "wb") as f:
+                f.write(data)
+
+            self.progress.emit(100, f"Flux 3 ✓  {dur}s {_tier} · ~${cost_est:.2f}")
+            if not self._cancelled:
+                out = {
+                    "url":          url,
+                    "local_path":   local,
+                    "duration":     int(dur),
+                    "resolution":   res,
+                    "model":        "flux-3-draft" if draft else "flux-3",
+                    "credits_used": cost_est,
+                }
+                if draft_cache_url:
+                    out["draft_cache_url"] = draft_cache_url
+                self.finished.emit(out)
+
+        except Exception as e:
+            if not self._cancelled:
+                self.failed.emit(humanize_api_error(f"Erreur Flux 3 : {e}"))
+
+
+# ── Worker Flux 3 — AFFINAGE d'un brouillon ──────────────────────────────────
+
+class Flux3EnhanceWorker(_CancellableWorker):
+    """Rend en pleine qualité 1080p un brouillon Flux 3 déjà généré.
+
+    C'est la seconde moitié du palier brouillon : on sort tout le film à
+    0,06 $/s, on regarde, et on ne paie le prix fort QUE sur les plans gardés.
+
+    ⚠ L'affinage ne prend PAS une URL de vidéo : il consomme le
+    `draft_cache_url` (paquet chiffré) renvoyé par le brouillon. Sans ce jeton,
+    il faut tout regénérer — d'où le message explicite plutôt qu'un échec API
+    obscur. Il ne prend pas non plus de prompt : le cache porte le seed et le
+    mouvement, l'affinage rejoue le MÊME plan en meilleure qualité (corriger le
+    texte impose de refaire un brouillon).
+    """
+    progress = pyqtSignal(int, str)
+    finished = pyqtSignal(dict)
+    failed   = pyqtSignal(str)
+
+    def __init__(self, params: dict):
+        """params : draft_cache_url (requis) · duration (info coût) ·
+        safety_tolerance_override (0-4)."""
+        super().__init__()
+        self.params = params
+
+    def run(self):
+        cfg = load_config()
+        key = cfg.get("api_key", "").strip()
+        if not key:
+            self._mock()
+        else:
+            self._real(key)
+
+    def _mock(self):
+        dur = self.params.get("duration", 5)
+        for pct, msg in [(10, "Flux 3 — affinage (mock)…"),
+                         (60, "Rendu pleine qualité (simulation)…"),
+                         (100, "Terminé — mode mock (aucune clé fal.ai)")]:
+            self.progress.emit(pct, msg)
+            time.sleep(0.4)
+        self.finished.emit({"url": "", "duration": dur, "model": "flux-3-enhance",
+                            "credits_used": 0})
+
+    def _real(self, key: str):
+        try:
+            import fal_client
+            import requests
+            from core import flux3_family as f3
+
+            cache_url = (self.params.get("draft_cache_url") or "").strip()
+            if not cache_url:
+                raise ValueError(
+                    "Affinage impossible : ce clip n'a pas de jeton de brouillon "
+                    "(draft_cache). Seul un clip produit en mode BROUILLON peut "
+                    "être affiné — sinon, relancez une génération.")
+
+            os.environ["FAL_KEY"] = key
+            dur      = int(self.params.get("duration", 5) or 5)
+            cost_est = dur * f3.enhance_price_per_second()
+
+            self.progress.emit(
+                5, f"Flux 3 — affinage 1080p, {dur}s (~${cost_est:.2f})…")
+
+            args = {
+                "draft_cache_url": cache_url,
+                "safety_tolerance": f3.clamp_safety(
+                    self.params.get("safety_tolerance_override", 4)),
+            }
+            self.progress.emit(20, "Appel Flux 3 draft-enhance (1-3 min)…")
+            result = fal_client.subscribe(f3.ENHANCE_ENDPOINT, arguments=args)
+            if not isinstance(result, dict):
+                raise RuntimeError(f"Réponse inattendue : {str(result)[:200]}")
+
+            video = result.get("video") or {}
+            url   = video.get("url", "") if isinstance(video, dict) else ""
+            if not url:
+                url = result.get("url", "")
+            if not url:
+                raise RuntimeError(f"URL vidéo manquante : {str(result)[:200]}")
+
+            self.progress.emit(80, "Téléchargement de la vidéo affinée…")
+            data  = requests.get(url, timeout=300).content
+            ts    = int(time.time())
+            local = os.path.join(_video_output_dir(), f"flux3_enhanced_{dur}s_{ts}.mp4")
+            with open(local, "wb") as f:
+                f.write(data)
+
+            self.progress.emit(100, f"Flux 3 affiné ✓  {dur}s 1080p · ~${cost_est:.2f}")
+            if not self._cancelled:
+                self.finished.emit({
+                    "url":          url,
+                    "local_path":   local,
+                    "duration":     dur,
+                    "resolution":   "1080p",
+                    "model":        "flux-3-enhance",
+                    "credits_used": cost_est,
+                })
+        except Exception as e:
+            if not self._cancelled:
+                self.failed.emit(humanize_api_error(f"Erreur Flux 3 (affinage) : {e}"))
 
 
 # ── Worker Kling O3 4K ────────────────────────────────────────────────────────

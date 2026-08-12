@@ -885,15 +885,33 @@ class GenerateStoryboardWorker(QThread):
     """Génère un découpage technique storyboard depuis un texte de scénario."""
     finished = pyqtSignal(list)   # liste de dicts (plans)
     failed   = pyqtSignal(str)
+    # Composition des prompts FINALS (architecture 2026-08-09) : (faits, total).
+    compose_progress = pyqtSignal(int, int)
 
     def __init__(self, text: str, duration_secs: int = 0,
-                 element_names: dict | None = None, strict_no_merge: bool = False):
+                 element_names: dict | None = None, strict_no_merge: bool = False,
+                 target_engine: str = ""):
         super().__init__()
         self._text            = text
         self._duration_secs   = duration_secs
         self._element_names   = element_names or {}
         # P2 : relance en mode « séparer » quand l'utilisateur refuse une fusion.
         self._strict_no_merge = strict_no_merge
+        # Moteur vidéo VISÉ (2026-08-09) : le prompt de chaque plan est écrit
+        # dans SA grammaire. Vide → on lit le choix du projet.
+        self._target_engine   = (target_engine or "").strip()
+
+    def _engine_briefing(self) -> str:
+        """Consigne de forme de prompt à ajouter au prompt système.
+
+        Ne lève jamais : un découpage doit pouvoir se générer même si le
+        réglage de moteur est absent ou illisible.
+        """
+        try:
+            from core import target_engine as _te
+            return _te.briefing(self._target_engine or None)
+        except Exception:
+            return ""
 
     def run(self):
         # Depuis le 2026-07-23 (décision Matthieu) : le passage Découpage →
@@ -975,6 +993,14 @@ class GenerateStoryboardWorker(QThread):
                 lines.append("Véhicules : " + ", ".join(en["vehicles"]))
             if len(lines) > 1:
                 names_block = "\n".join(lines) + "\n\n"
+
+            # ── Grammaire du moteur VISÉ (2026-08-09) ─────────────────────────
+            # Ajoutée à names_block, et PAS à chacune des trois affectations de
+            # user_content plus bas : elles le reprennent toutes, donc un point
+            # d'insertion unique garantit qu'aucune branche ne l'oublie.
+            _brief = self._engine_briefing()
+            if _brief:
+                names_block = names_block + "[" + _brief + "]\n\n"
 
             user_content = _lang_hint(lang) + names_block + self._text
             if self._structured_fallback:
@@ -1074,10 +1100,19 @@ class GenerateStoryboardWorker(QThread):
             # champs caméra. La MISE EN SCÈNE / le PLAN DE FEU sont un premier jet,
             # raffinés ensuite par les pages dédiées (synchro).
             from core.prompt_sections import build as _ps_build, LIGHTING_NOTE as _LN
+            # Plafond de durée = celui du MOTEUR VISÉ (2026-08-09) : 30 s si le
+            # découpage est écrit pour Seedance 2.5, 15 s sinon (plancher 2 s
+            # inchangé — le clamp d'envoi par moteur refera le minimum API).
+            try:
+                from core.seedance_family import duration_bounds as _sf_bounds
+                from core.target_engine import get_target_engine as _te_get
+                _dur_max = float(_sf_bounds(_te_get())[1])
+            except Exception:
+                _dur_max = 15.0
             for s in shots:
-                # Plancher ET plafond appliqués (2-15 s — le prompt l'exige, le
-                # code le garantit désormais aussi, 2026-07-23).
-                s["duration"] = min(max(float(s.get("duration", 8.0)), 2.0), 15.0)
+                # Plancher ET plafond appliqués (le prompt l'exige, le code le
+                # garantit aussi, 2026-07-23).
+                s["duration"] = min(max(float(s.get("duration", 8.0)), 2.0), _dur_max)
                 s.setdefault("character_ids", [])
                 s.setdefault("accessory_ids", [])
                 s.setdefault("decor_id",      "")
@@ -1136,6 +1171,22 @@ class GenerateStoryboardWorker(QThread):
                         ]
             except Exception:
                 pass
+
+            # ── Prompt FINAL de chaque plan — MÊME passe (2026-08-09) ─────────
+            # Architecture « à l'endroit » : quand le storyboard s'affiche, les
+            # DEUX prompts existent. Composés ICI (après résolution des IDs :
+            # le composeur lit la bible visuelle du plan) et PAS dans le JSON
+            # du découpage — y ajouter un champ anglais par fiche doublerait la
+            # sortie et ressusciterait la troncature silencieuse (84 fiches →
+            # 20 plans, FIGHTER 2026-07-28). Sans clé IA : 0 composé, le
+            # Studio garde son filet (composition à l'envoi).
+            try:
+                from core.prompt_sync import compose_finals_for_shots
+                compose_finals_for_shots(
+                    shots,
+                    progress_cb=lambda i, n: self.compose_progress.emit(i, n))
+            except Exception:
+                pass   # un storyboard sans finals vaut mieux que pas de storyboard
 
             self.finished.emit(shots)
         except Exception as e:

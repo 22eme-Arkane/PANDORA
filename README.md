@@ -18,15 +18,67 @@
 
 ## Download
 
-**[⬇ Download PANDORA v2.1.1 for Windows](https://github.com/22eme-Arkane/PANDORA/releases/download/v2.1.1/PANDORA_Setup_2.1.1.exe)**
+**[⬇ Download PANDORA v2.2.0 for Windows](https://github.com/22eme-Arkane/PANDORA/releases/download/v2.2.0/PANDORA_Setup_2.2.0.exe)**
 
-**[⬇ Download PANDORA v2.1.1 for macOS](https://github.com/22eme-Arkane/PANDORA/releases/download/v2.1.1/PANDORA_2.1.1.dmg)** *(Apple Silicon — see [Installation](#installation) for the first launch)*
+**[⬇ Download PANDORA v2.2.0 for macOS](https://github.com/22eme-Arkane/PANDORA/releases/download/v2.2.0/PANDORA_2.2.0.dmg)** *(Apple Silicon — see [Installation](#installation) for the first launch)*
 
 All versions: [Releases](../../releases)
 
 🌐 **Official 22eme ARKANE website: [22eme-arkane.com](https://22eme-arkane.com)**
 
 ---
+
+## What's new in v2.2.0
+
+**The prompt you read in the Storyboard is now the prompt that is sent.**
+
+Until now the Storyboard held a French working document, and the *actual* prompt
+was written at the last moment, at send time, inside the Studio — invisible, and
+gone when you closed the app. The pipeline now runs the right way round.
+
+- **Both prompts are born with the storyboard and stay in sync.** The breakdown
+  writes the structured working document *and* the final engine-ready prompt,
+  and saves both with the shot. Edit either one and the other is rebuilt; the
+  Studio no longer composes anything, it reads. A **Structured / Final** switch
+  in the Storyboard bar shows you exactly which one you are looking at.
+- **You choose the target engine before the breakdown is written.** Each engine
+  expects a different prompt shape, and retrofitting it across dozens of shots
+  means recomposing everything. The window states the real constraints of the
+  engine you pick — resolutions, durations, how reference sheets are addressed.
+- **Existing storyboards can catch up.** A **Compose** button fills in the final
+  prompts of shots that never had one, with a count so you know the cost before
+  you click, and a progress window while it works.
+- **Seedance 2.5** — 30-second single takes, up to 50 multimodal references, and
+  sheets addressed by name inside the prompt (`@Image1`). It is added *next to*
+  Seedance 2.0, never in its place: it caps at 720p and costs 56 % more at equal
+  resolution, so 1080p and 4K still belong to 2.0.
+- **Happy Horse 1.1** replaces 1.0 — 1080p is now $0.18/s instead of $0.28/s.
+- **Flux 3 (Black Forest Labs)** — text-to-video, image-to-video and
+  first-last-frame, 5 to 20 seconds, native audio. Its **draft tier** renders at
+  $0.06/s: generate the whole film cheaply, watch it, then hit **✦ Refine** in
+  the Video library to render only the takes you keep in full 1080p. Refining
+  reuses the draft's cache, so it replays the exact same shot — it is not a
+  re-roll. Note that Flux 3 has no reference-image mechanism at all: character
+  and set sheets cannot be attached, and PANDORA says so rather than dropping
+  them silently.
+- **Kling v3 Turbo** — a faster, cheaper tier of the Kling engine already on
+  board ($0.14/s pro, $0.112/s standard).
+- **VEED Lipsync v2** joins the lip-sync engines (~$4.20/min), between Sync 2
+  Pro and Sync 2.
+- **Stable Audio 3** for music and sound effects, alongside 2.5. fal publishes
+  no price grid for this family yet, and the picker says so instead of showing
+  an invented figure.
+- **The projects folder is now visible in Settings**, in both editions. It was
+  only ever offered in the New Project window, so after your first project there
+  was no way to find it again. Useful for working from an external drive across
+  two machines.
+- **fal.ai price grid corrected.** 1080p was 12 % under the real price and the
+  Fast tier 34 % under; Seedance Mini had no entry at all and fell back to a
+  figure four times too high. The « Project cost » window is accurate again.
+- Fixed: table rows no longer clip a two-line camera movement; a crash when
+  leaving the Storyboard while prompts were being composed; and shots whose
+  dialogue contains ellipses or curly apostrophes are no longer rejected as
+  « altered ».
 
 ## What's new in v2.1.1
 
@@ -310,7 +362,7 @@ per-engine mood prompts, same fixes.
 
 ### Windows
 
-1. Download `PANDORA_Setup_2.1.1.exe` from the link above and run it
+1. Download `PANDORA_Setup_2.2.0.exe` from the link above and run it
 2. If Windows shows *"Windows protected your PC"* (SmartScreen), click
    **More info** then **Run anyway** — the app is not code-signed yet
    (certificate in progress), this is the Windows equivalent of the macOS
@@ -321,7 +373,7 @@ per-engine mood prompts, same fixes.
 
 ### macOS
 
-1. Download `PANDORA_2.1.1.dmg` from the link above
+1. Download `PANDORA_2.2.0.dmg` from the link above
 2. Open the DMG and drag **PANDORA** into **Applications** (as usual)
 3. **First launch** — macOS will claim that *"PANDORA is damaged and can't be
    opened"*. **This is normal, the app is not damaged** — macOS blocks apps

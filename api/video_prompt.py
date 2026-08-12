@@ -218,7 +218,44 @@ def compose(prompt: str, style_suffix: str = "", time_suffix: str = "",
             except Exception:
                 LAST_COMPOSE_ERROR = str(_e)[:200]
             return ""
-        if not validate_composed_prompt(out, prompt)["valid"]:
+        _v = validate_composed_prompt(out, prompt)
+        # ── UNE reprise ciblée quand la seule faute est un dialogue ───────────
+        # Le composeur écrit en anglais et traduit parfois la réplique, alors
+        # qu'elle doit rester VERBATIM. Un plan de dialogue devenait alors
+        # INCOMPOSABLE — 4 plans bloqués chez Matthieu le 2026-08-11, sans
+        # aucun moyen de s'en sortir. On redemande UNE fois en citant les
+        # répliques exactes à recopier. Coût : un appel de plus, uniquement
+        # sur échec (jamais sur le chemin nominal).
+        if not _v["valid"] and all("dialogue" in e for e in _v["errors"]):
+            # Répliques ENTIÈRES (pas les messages d'erreur, tronqués à 60
+            # caractères — c'était le défaut : on redemandait un texte coupé).
+            _quotes = _v.get("missing_dialogues") or []
+            if _quotes:
+                _fix = (user + "\n\n[REPRISE — RÈGLE ABSOLUE]\n"
+                        "Ta réponse précédente a modifié ou omis des répliques. "
+                        "Recopie CHACUNE de ces répliques EXACTEMENT, caractère "
+                        "par caractère, avec ses guillemets et dans sa langue "
+                        "d'origine — ne les traduis pas, ne les reformule pas :\n"
+                        + "\n".join(f'- {q}' for q in _quotes))
+                try:
+                    _retry = (ai_provider.complete(
+                        system, _fix, tier="creative", max_tokens=8192,
+                        task="video_prompt") or "").strip()
+                except Exception:
+                    _retry = ""
+                if _retry:
+                    _v2 = validate_composed_prompt(_retry, prompt)
+                    if _v2["valid"]:
+                        return _retry
+                    _v = _v2
+        if not _v["valid"]:
+            # ⚠ Un rejet de validation était TOTALEMENT SILENCIEUX : compose()
+            # rendait "" sans dire pourquoi, et l'appelant ne pouvait que
+            # deviner (le lot du Storyboard accusait la clé IA alors que la
+            # clé marchait — constat Matthieu 2026-08-11). On remonte la
+            # raison exacte.
+            LAST_COMPOSE_ERROR = ("prose refusée par la validation : "
+                                  + " ; ".join(_v["errors"])[:300])
             return ""
         return out
     except Exception:
@@ -261,7 +298,31 @@ def validate_composed_prompt(output: str, source_prompt: str = "") -> dict:
     quoted = []
     for pattern in (r'"([^"\n]{1,300})"', r'«([^»\n]{1,300})»', r'“([^”\n]{1,300})”'):
         quoted.extend(re.findall(pattern, _src))
+    missing = []
+    _norm_text = _norm_dialogue(text)
     for dialogue in quoted:
-        if dialogue not in text:
+        # Comparaison NORMALISÉE : apostrophes courbes, points de suspension,
+        # espaces multiples et espaces insécables varient d'un modèle à
+        # l'autre sans rien changer à la réplique. Les compter comme des
+        # altérations rendait INCOMPOSABLE tout plan de dialogue (4 plans
+        # bloqués chez Matthieu le 2026-08-11).
+        if _norm_dialogue(dialogue) not in _norm_text:
+            missing.append(dialogue)
             errors.append(f"dialogue omis ou modifié : {dialogue[:60]}")
-    return {"valid": not errors, "errors": errors, "warnings": warnings}
+    # `missing` porte les répliques ENTIÈRES — l'ancienne reprise les relisait
+    # dans les messages d'erreur, donc TRONQUÉES à 60 caractères : elle
+    # demandait de recopier un texte coupé, qui ne pouvait jamais correspondre.
+    return {"valid": not errors, "errors": errors, "warnings": warnings,
+            "missing_dialogues": missing}
+
+
+def _norm_dialogue(s: str) -> str:
+    """Forme comparable d'une réplique : apostrophes, points de suspension,
+    guillemets et espaces uniformisés. Ne change RIEN au texte envoyé."""
+    import re as _re
+    s = (s or "")
+    for a, b in (("’", "'"), ("‘", "'"), ("…", "..."),
+                 ("“", '"'), ("”", '"'), ("«", '"'), ("»", '"'),
+                 (" ", " "), (" ", " "), ("–", "-"), ("—", "-")):
+        s = s.replace(a, b)
+    return _re.sub(r"\s+", " ", s).strip().lower()

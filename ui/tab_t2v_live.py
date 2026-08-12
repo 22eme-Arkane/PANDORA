@@ -28,7 +28,15 @@ import core.storyboard as sb_api
 
 _ENGINES = [
     ("Seedance 2.0  (recommandée)", "seedance-2.0"),        # Défaut — optimisé dans Pandora
-    ("Happy Horse 1.0  (prochainement)", "happy-horse-1.0"), # n°1 ELO — intégration en cours
+    # Seedance 2.5 : plan-séquence jusqu'à 30 s et jusqu'à 50 références, MAIS
+    # 720p maximum (ni 1080p ni 4K) et 56 % plus cher à résolution égale. Elle
+    # ne REMPLACE donc pas la 2.0 — le libellé annonce les deux faces.
+    ("Seedance 2.5  (30 s · 720p max)", "seedance-2.5"),
+    # Flux 3 (BFL, fal 2026-08-04) : audio natif, 5-20 s, pas d'images de
+    # référence. Brouillon $0.06/s pour trier avant d'affiner.
+    ("Flux 3  (audio natif · 5-20 s)",  "flux-3"),
+    ("Flux 3 Brouillon  (~$0.06/s)",    "flux-3-draft"),
+    ("Happy Horse 1.1  (prochainement)", "happy-horse-1.0"), # n°1 ELO — intégration en cours
     ("Kling v3 Pro  (prochainement)",    "kling-v3-pro"),    # n°3 ELO — 1080p + audio natif
     ("Kling O3 4K  (prochainement)",     "kling-o3-4k"),     # Variante 4K Kling
     ("Veo 3.1  (prochainement)",         "veo-3.1"),         # Google — audio natif
@@ -37,11 +45,14 @@ _ENGINES = [
     ("Seedance 2.0 Fast",               "seedance-2.0-fast"), # Rapide — qualité réduite
 ]
 
-_SEEDANCE_ENGINES    = {"seedance-2.0", "seedance-2.0-fast"}
+_SEEDANCE_ENGINES    = {"seedance-2.0", "seedance-2.0-fast", "seedance-2.5"}
 _FIXED_RES_ENGINES   = {"veo-3.1", "kling-v3-pro", "kling-o3-4k", "sora-2"}
 _FIXED_RATIO_ENGINES = {"veo-3.1", "kling-v3-pro", "kling-o3-4k"}
 # Moteurs sans support natif d'images de référence (fallback texte uniquement)
-_TEXT_FALLBACK_ENGINES = {"kling-v3-pro", "kling-o3-4k", "veo-3.1", "sora-2"}
+_TEXT_FALLBACK_ENGINES = {"kling-v3-pro", "kling-o3-4k", "veo-3.1", "sora-2",
+                          # Flux 3 : aucun mécanisme de références visuelles →
+                          # les fiches sont DÉCRITES en texte, jamais perdues.
+                          "flux-3", "flux-3-draft"}
 _ENGINE_RES_FORCED   = {
     "veo-3.1":      "1080p",
     "kling-v3-pro": "1080p",
@@ -52,9 +63,15 @@ _ENGINE_RES_FORCED   = {
 _ENGINE_RESOLUTIONS = {
     # 4K natif Seedance 2.0 VALIDÉ en réel (Matthieu 2026-07-05) → EN TÊTE de liste.
     # Valeur API "4k" (minuscule). Tarif = formule fal.ai (H×W×durée×24/1024 tokens
-    # × $0.008/1000) ≈ $1.55/s en 3840×2160. Défaut = 720p (voir _ENGINE_DEFAULT_RES).
-    "seedance-2.0":      [("4K  (~$1.55/s)", "4k"), ("1080p  (~$0.60/s)", "1080p"), ("720p  (~$0.30/s)", "720p"), ("480p  (~$0.16/s)", "480p")],
-    "seedance-2.0-fast": [("480p  (~$0.09/s)", "480p"),  ("720p  (~$0.18/s)", "720p")],
+    # × $0.008/1000) ≈ $1.56/s en 3840×2160. Défaut = 720p (voir _ENGINE_DEFAULT_RES).
+    # Prix RECOPIÉS de core/pricing._PER_SECOND (seule source) — relevé fal.ai 2026-08-09.
+    "seedance-2.0":      [("4K  (~$1.56/s)", "4k"), ("1080p  (~$0.68/s)", "1080p"), ("720p  (~$0.30/s)", "720p"), ("480p  (~$0.14/s)", "480p")],
+    "seedance-2.0-fast": [("480p  (~$0.11/s)", "480p"),  ("720p  (~$0.24/s)", "720p")],
+    # 2.5 : pas de 1080p ni de 4K chez fal — la liste ne doit proposer que ce
+    # que l'endpoint accepte réellement (sinon l'appel échoue).
+    "seedance-2.5":      [("720p  (~$0.47/s)", "720p"),  ("480p  (~$0.22/s)", "480p")],
+    "flux-3":            [("1080p  (~$0.29/s)", "1080p"), ("720p  (~$0.17/s)", "720p")],
+    "flux-3-draft":      [("720p  (~$0.06/s)", "720p")],
     "kling-v3-pro":      [("1080p", "1080p")],
     "kling-o3-4k":       [("4K",    "4K")],
     "veo-3.1":           [("1080p", "1080p")],
@@ -73,9 +90,14 @@ def _make_ext_worker(model: str, params: dict):
     from api.video_engines import (
         Veo3Worker, KlingWorker, KlingO3Worker,
         HappyHorseWorker, PixVerseV6Worker, Sora2Worker,
+        Flux3Worker,
     )
     p = dict(params)
     p.setdefault("mode", "t2v")
+    # Flux 3 : un seul worker pour les deux paliers — « draft » = brouillon
+    # $0.06/s (720p), jeton d'affinage conservé dans le résultat.
+    if model == "flux-3-draft":
+        p["draft"] = True
     mapping = {
         "veo-3.1":         Veo3Worker,
         "kling-v3-pro":    KlingWorker,
@@ -83,6 +105,8 @@ def _make_ext_worker(model: str, params: dict):
         "happy-horse-1.0": HappyHorseWorker,
         "pixverse-v6":     PixVerseV6Worker,
         "sora-2":          Sora2Worker,
+        "flux-3":          Flux3Worker,
+        "flux-3-draft":    Flux3Worker,
     }
     cls = mapping.get(model)
     return cls(p) if cls else None
@@ -4487,8 +4511,36 @@ class TabT2V(QScrollArea):
     def _get_model(self) -> str:
         return self.cb_model.currentData() or "seedance-2.0"
 
+    def _refresh_duration_options(self):
+        """Options de durée = fenêtre du moteur sélectionné (2026-08-09, parité
+        Cinéma). Seedance 2.5 monte à 30 s — le plan-séquence long est le vrai
+        gain pour le mapping ; le combo était figé à 15 s pour tous."""
+        try:
+            from core.seedance_family import duration_bounds, is_seedance
+            key = self._get_model()
+            hi = duration_bounds(key)[1] if is_seedance(key) else 15
+        except Exception:
+            hi = 15
+        opts = [d for d in (3, 4, 5, 6, 7, 8, 10, 12, 15, 20, 25, 30) if d <= hi]
+        if opts == list(self._DUR_OPTIONS):
+            return
+        cur = self._get_duration()
+        self._DUR_OPTIONS = opts           # attribut d'instance (masque la classe)
+        if not hasattr(self, "cb_dur"):
+            return
+        locked = not self.cb_dur.isEnabled()   # verrou « durée de la séquence »
+        self.cb_dur.blockSignals(True)
+        self.cb_dur.clear()
+        self.cb_dur.addItems([f"{d} s" for d in opts])
+        best = min(range(len(opts)), key=lambda i: abs(opts[i] - cur))
+        self.cb_dur.setCurrentIndex(best)
+        self.cb_dur.blockSignals(False)
+        self.cb_dur.setEnabled(not locked)
+
     def _on_engine_changed(self):
         key = self._get_model()
+        # Les durées offertes dépendent du moteur (30 s en 2.5).
+        self._refresh_duration_options()
         fixed_res = key in _FIXED_RES_ENGINES
         self.cb_ratio.setEnabled(key not in _FIXED_RATIO_ENGINES)
         # Mise à jour des options de résolution selon le moteur

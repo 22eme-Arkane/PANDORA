@@ -15,6 +15,7 @@ from PyQt6.QtCore import Qt, pyqtSignal
 from core.config import load_config
 from core.i18n import translate
 from ui.styles import CP
+from ui.projects_location_row import ProjectsLocationRow
 
 # Intégration Resolume retirée de l'UI « pour le moment » (2026-07-30).
 _RESOLUME_UI = False
@@ -207,6 +208,16 @@ class PageLiveSettings(QScrollArea):
         _manual_row.addWidget(self._btn_manual)
         _manual_row.addStretch()
         lay.addLayout(_manual_row)
+        lay.addSpacing(28)
+
+        # ── Dossier des projets (parité Cinéma) ─────────────────────────────────
+        # MÊME clé de config et MÊME dossier que le Cinéma : un projet porte son
+        # mode dans son propre fichier, la page de démarrage filtre là-dessus.
+        # Deux dossiers séparés obligeraient à régler deux fois la même chose.
+        lay.addWidget(_section_title("DOSSIER DES PROJETS"))
+        lay.addSpacing(10)
+        self._projects_location = ProjectsLocationRow()
+        lay.addWidget(self._projects_location)
         lay.addSpacing(28)
 
         # ── Section Clés API ────────────────────────────────────────────────────

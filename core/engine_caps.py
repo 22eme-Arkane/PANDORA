@@ -18,6 +18,12 @@ sait réellement lui envoyer les images.
 
 ENGINE_CAPS = {
     #                      i2v    end_frame  refs
+    "seedance-2.5":      {"i2v": True,  "end_frame": True,  "refs": "full"},
+    # Flux 3 : i2v + first-last-frame + keyframes (jusqu'à 10 images épinglées
+    # à un frame_index). Pas de reference-to-video → aucune image de cohérence
+    # personnage/décor, d'où refs="none" malgré la richesse des keyframes.
+    "flux-3":            {"i2v": True,  "end_frame": True,  "refs": "none"},
+    "flux-3-draft":      {"i2v": True,  "end_frame": True,  "refs": "none"},
     "seedance-2.0":      {"i2v": True,  "end_frame": True,  "refs": "full"},
     "seedance-2.0-fast": {"i2v": True,  "end_frame": True,  "refs": "full"},
     "seedance-2.0-mini": {"i2v": True,  "end_frame": True,  "refs": "none"},

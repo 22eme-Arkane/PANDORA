@@ -446,6 +446,51 @@ def extract_last_frame(video_path: str, output_path: str) -> bool:
     return False
 
 
+def extract_frame_at(video_path: str, seconds: float, output_path: str) -> bool:
+    """Extrait la frame au temps `seconds` (depuis le début) vers output_path.
+    Returns True on success. Tries FFmpeg → cv2. Sert à l'atelier 7 vues
+    (orbite Seedance : frames aux quarts de tour)."""
+    os.makedirs(os.path.dirname(os.path.abspath(output_path)), exist_ok=True)
+    seconds = max(0.0, float(seconds))
+
+    # ── FFmpeg ────────────────────────────────────────────────────────────────
+    try:
+        r = subprocess.run(
+            [get_ffmpeg_exe(), "-y", "-ss", f"{seconds:.3f}", "-i", video_path,
+             "-frames:v", "1", "-q:v", "2", output_path],
+            capture_output=True,
+            timeout=30,
+            creationflags=_NO_WINDOW,
+        )
+        if r.returncode == 0 and os.path.isfile(output_path):
+            return True
+    except (FileNotFoundError, subprocess.TimeoutExpired, OSError):
+        pass
+
+    # ── OpenCV ────────────────────────────────────────────────────────────────
+    try:
+        import cv2
+        cap = cv2.VideoCapture(video_path)
+        if cap.isOpened():
+            fps = cap.get(cv2.CAP_PROP_FPS) or 24.0
+            total = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+            idx = int(round(seconds * fps))
+            if total > 0:
+                idx = min(idx, max(0, total - 1))
+            cap.set(cv2.CAP_PROP_POS_FRAMES, idx)
+            ret, frame = cap.read()
+            cap.release()
+            if ret:
+                cv2.imwrite(output_path, frame)
+                return os.path.isfile(output_path)
+    except ImportError:
+        pass
+    except Exception:
+        pass
+
+    return False
+
+
 # ── Compatibilité moteurs : transcodage H.264 automatique ──────────────────────
 
 def _video_stream_info(path: str) -> dict:

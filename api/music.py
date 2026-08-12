@@ -98,6 +98,28 @@ MUSIC_ENGINES = {
         "max_dur":  190,
         "price":    "~$0.20 / audio",
     },
+    # Stable Audio 3 (fal, 2026-06-03). Deux paliers utiles ici : « medium »
+    # pour la musique, « small/sfx » pour le bruitage. fal ne publie AUCUNE
+    # grille pour cette famille — on l'écrit au lieu d'inventer un chiffre qui
+    # fausserait « Coût du projet ».
+    "stable-audio-3": {
+        "label":    "Stable Audio 3  ·  musique + SFX  ·  tarif fal non publié",
+        "endpoint": "fal-ai/stable-audio-3/medium/text-to-audio",
+        "kind":     "stable3",
+        "vocals":   False,
+        "lyrics":   False,
+        "max_dur":  190,
+        "price":    "tarif fal non publié",
+    },
+    "stable-audio-3-sfx": {
+        "label":    "Stable Audio 3 SFX  ·  bruitage seul  ·  tarif fal non publié",
+        "endpoint": "fal-ai/stable-audio-3/small/sfx/text-to-audio",
+        "kind":     "stable3",
+        "vocals":   False,
+        "lyrics":   False,
+        "max_dur":  190,
+        "price":    "tarif fal non publié",
+    },
     "elevenlabs": {
         "label":    "ElevenLabs Music  ·  qualité premium, sections  ·  ~$0.80/min",
         "endpoint": "fal-ai/elevenlabs/music",
@@ -111,7 +133,8 @@ MUSIC_ENGINES = {
 
 # Ordre d'affichage dans le sélecteur (le défaut en tête).
 ENGINE_ORDER = ["lyria3", "lyria2", "cassette", "ace-step", "diffrhythm",
-                "minimax-music", "stable-audio-25", "elevenlabs"]
+                "minimax-music", "stable-audio-3", "stable-audio-3-sfx",
+                "stable-audio-25", "elevenlabs"]
 
 
 def default_engine() -> str:
@@ -159,7 +182,14 @@ def _build_args(kind: str, prompt: str, lyrics: str, duration: float) -> dict:
             args["lyrics"] = lyrics.strip()
         return args
     if kind == "stable":
+        # Stable Audio 2.5 : la durée s'appelle `seconds_total`.
         return {"prompt": prompt, "seconds_total": dur}
+    if kind == "stable3":
+        # ⚠ Stable Audio 3 a RENOMMÉ le champ : `duration` (nombre), pas
+        # `seconds_total`. Réutiliser le kind « stable » aurait envoyé un champ
+        # inconnu → durée par défaut (30 s) silencieusement appliquée, quelle
+        # que soit la demande. Relevé sur le schéma fal le 2026-08-12.
+        return {"prompt": prompt, "duration": dur}
     if kind == "elevenlabs":
         return {"prompt": prompt, "music_length_ms": dur * 1000}
     return {"prompt": prompt}

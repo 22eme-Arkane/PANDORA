@@ -307,14 +307,33 @@ class StoryboardGenerateDialog(QDialog):
         except Exception:
             pass  # éléments non critiques — la génération continue sans eux
 
+        # ── Moteur vidéo VISÉ ─────────────────────────────────────────────────
+        # Posé UNE fois par projet, avant d'écrire le découpage : la grammaire
+        # de prompt ne se rattrape pas après coup sur des dizaines de plans.
+        # Une relance (« séparer les plans ») ne repose pas la question.
+        _engine = ""
+        try:
+            from core import target_engine as _te
+            _engine = _te.get_target_engine()
+        except Exception:
+            pass
+
         w = GenerateStoryboardWorker(
             self._scenario_text, self._duration_secs,
             element_names=element_names or None,
             strict_no_merge=strict_no_merge,
+            target_engine=_engine,
         )
         self._worker = w
         w.finished.connect(self._on_done)
         w.failed.connect(self._on_failed)
+        # Composition des prompts finals (même passe) : elle suit l'écriture des
+        # fiches et peut durer ~1 min sur un long métrage — l'annoncer, sinon le
+        # dialogue semble figé pendant que les appels tournent.
+        w.compose_progress.connect(
+            lambda i, n: self._status_lbl.setText(
+                translate("Prompts finaux : {i}/{n} plans composés…")
+                .format(i=i, n=n)))
         w.start()
 
     def _on_done(self, shots: list):

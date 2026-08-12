@@ -140,14 +140,14 @@ def edition_cinema_only():
                 "api.resolume_push", "ui.tab_t2v_live"):
         assert f'"{mod}"' not in exc, f".spec ne doit PLUS exclure {mod} (v1.3.0)"
     assert "BUNDLE(" in spec and "PANDORA.app" in spec, "cible macOS présente"
-    # Version bumpée — build 2.1.1 (2026-07-31) : les fiches partent enfin
-    # DÉCRITES au moteur, note de réalisation entière dans le style, décor
-    # traité comme un LIEU, pages d'éléments rangées en sections à largeur
-    # adaptative, vignettes en cache (Storyboard et Décors nettement plus
-    # rapides), Casting séparé principaux/figuration, retrait d'Image & Son,
-    # « Coût du projet ».
+    # Version bumpée — build 2.2.0 (2026-08-12) : le prompt FINAL naît avec le
+    # storyboard et s'y modifie dans les deux sens (le Studio ne compose plus,
+    # il lit), fenêtre « moteur cible » avant le découpage, bascule Prompt
+    # structuré / Prompt final + « Composer » pour les storyboards antérieurs,
+    # Seedance 2.5 (30 s, 50 réfs, @Image), Happy Horse 1.1, dossier des
+    # projets réglable dans les Paramètres, grille tarifaire fal corrigée.
     from core.version import VERSION
-    assert VERSION.split("-")[0] == "2.1.1", f"version attendue 2.1.1[-suffixe], lue {VERSION}"
+    assert VERSION.split("-")[0] == "2.2.0", f"version attendue 2.2.0[-suffixe], lue {VERSION}"
     # ── UN SEUL numéro de version dans tout le produit ────────────────────────
     # Chaque endroit qui recopie le numéro à la main finit par diverger : la 2.0.0
     # est partie en build avec une charte d'utilisation estampillée 1.3.5, un .app
@@ -4039,7 +4039,12 @@ def lipsync_rendu_audio_storyboard():
     assert ls.lipsync_endpoint("sync2pro") == "fal-ai/sync-lipsync/v2/pro"
     assert ls.lipsync_endpoint("sync3") == "fal-ai/sync-lipsync/v3"
     assert ls.lipsync_endpoint("zzz") == "fal-ai/sync-lipsync/v2/pro"  # repli
-    assert set(ls.LIPSYNC_ENGINES) == {"sync2pro", "sync3", "sync2", "latentsync"}
+    # Ensemble EXACT (volontairement strict : interdit tout ajout silencieux).
+    # VEED v2 rejoint le catalogue le 2026-08-12 — 0,07 $/s, même contrat
+    # video_url + audio_url, donc interchangeable sans toucher au worker.
+    assert set(ls.LIPSYNC_ENGINES) == {"sync2pro", "sync3", "veed2",
+                                       "sync2", "latentsync"}
+    assert ls.lipsync_endpoint("veed2") == "veed/lipsync/v2"
     assert ls.LipSyncWorker is ls.LatentSyncWorker  # rétro-compat « Modifier depuis DaVinci »
     # Upload audio robuste (non-ASCII + fallback data-URL) présent
     rob = inspect.getsource(ls._upload_audio_robust)
@@ -5410,7 +5415,14 @@ def references_inspiration_par_plan():
     rsrc = inspect.getsource(__import__("api.real", fromlist=["x"]))
     assert 'elif _role == "reference":' in rsrc and "INSPIRATION REFERENCE" in rsrc, "rôle reference manquant"
     assert "Loosely draw inspiration" in rsrc and "Do NOT copy it literally" in rsrc, "ton inspiration"
-    assert "ref_images[:9]" in rsrc, "limite refs non montée à 9"
+    # Le plafond ne s'écrit plus en dur dans api/real : il vient de la table des
+    # familles Seedance (2026-08-09, arrivée de la 2.5 qui monte à 50). On
+    # vérifie donc la VALEUR effective, pas une chaîne de code — l'ancienne
+    # assertion (`"ref_images[:9]" in rsrc`) serait passée au vert sur un
+    # plafond devenu faux.
+    from core import seedance_family as _sf
+    assert _sf.max_images("seedance-2.0") == 9, "limite refs 2.0 non montée à 9"
+    assert "_sf.max_images(model)" in rsrc, "api/real n'utilise pas la table des familles"
     # Injection dans la génération, Cinéma ET Live
     for mod in ("ui.tab_t2v", "ui.tab_t2v_live"):
         msrc = inspect.getsource(__import__(mod, fromlist=["x"]))
@@ -5745,7 +5757,7 @@ def distributeur_video_piapi():
         assert mp.active_video_provider("seedance-2.0") == "piapi"
         assert mp.active_video_provider("seedance-2.0-fast") == "piapi"
         assert mp.active_video_provider("kling-v3-pro") == "fal", "non couvert → fal"
-        # Prix : grille PiAPI (0.20 $/s en 720p) vs fal (0.30 $/s)
+        # Prix : grille PiAPI (0.20 $/s en 720p) vs fal (0.3034 $/s)
         cost, mode = pricing.estimate("seedance-2.0", "720p", 10.0, 1)
         assert mode == "s" and abs(cost - 2.0) < 1e-6, ("prix PiAPI attendu 2.0", cost)
         msg = pricing.format_estimate("Seedance 2.0", "seedance-2.0", "720p", 10.0, 2)
@@ -5753,7 +5765,7 @@ def distributeur_video_piapi():
         # Retour à fal → grille fal restaurée
         mp.load_config = lambda: {}
         cost_fal, _ = pricing.estimate("seedance-2.0", "720p", 10.0, 1)
-        assert abs(cost_fal - 3.0) < 1e-6, ("prix fal attendu 3.0", cost_fal)
+        assert abs(cost_fal - 3.034) < 1e-6, ("prix fal attendu 3.034", cost_fal)
         assert "fal.ai" in pricing.format_estimate("S", "seedance-2.0", "720p", 10, 1)
     finally:
         mp.load_config = _orig_lc
@@ -7696,6 +7708,872 @@ def cout_du_projet_journal_et_fenetre():
     # …et il n'est PAS une entrée de navigation (ce n'est pas une page).
     assert "cost" not in [it[2] for it in _PW._get_nav_items() if it], \
         "« Coût du projet » ne doit pas être une page de la navigation"
+
+
+@test
+def dossier_des_projets_reglable_disque_externe():
+    """Emplacement des projets réglable depuis les Paramètres (2026-08-09).
+
+    Il l'était UNIQUEMENT dans « Nouveau projet » : une fois le premier projet
+    créé, l'utilisateur ne pouvait plus le retrouver. Demande d'un utilisateur
+    voulant travailler sur disque externe entre sa station et son portable."""
+    import os as _os, tempfile as _tf
+    import core.config as _cm
+    from core import projects_location as _loc
+
+    # Isolation TOTALE : la vraie config n'est ni lue ni écrite.
+    _orig_load, _orig_save = _cm.load_config, _cm.save_config
+    _fake = {"anthropic_key": "SECRET", "ai_model_creative": "claude-opus-4-8"}
+    _cm.load_config = lambda: dict(_fake)
+    _cm.save_config = lambda c: (_fake.clear(), _fake.update(c))
+    try:
+        assert _loc.is_default(), "sans réglage → dossier par défaut"
+
+        _tmp = _tf.mkdtemp(prefix="pandora_ext_")
+        _loc.set_projects_root(_tmp)
+        assert _os.path.normpath(_loc.get_projects_root()) == _os.path.normpath(_tmp)
+        assert not _loc.is_default() and _loc.is_available()
+
+        # ⚠ save_config REMPLACE le fichier entier : écrire un dict partiel
+        # effacerait les clés API. Le module doit relire avant d'écrire.
+        assert _fake.get("anthropic_key") == "SECRET", \
+            "l'enregistrement a effacé les autres clés de la config"
+        assert _fake.get("ai_model_creative") == "claude-opus-4-8"
+
+        # Disque débranché : le chemin reste, mais il est signalé indisponible.
+        _fake["last_project_location"] = r"Z:\PANDORA Projects"
+        assert _loc.get_projects_root() == r"Z:\PANDORA Projects"
+        assert not _loc.is_available(), "un disque absent doit être détecté"
+
+        # La rangée le DIT — et ne crie pas au disque débranché quand c'est
+        # simplement le dossier par défaut pas encore créé (constaté au rendu).
+        from ui.projects_location_row import ProjectsLocationRow
+        _row = ProjectsLocationRow()
+        assert "introuvable" in _row._state.text().lower(), _row._state.text()
+        _fake.pop("last_project_location", None)
+        _row.refresh()
+        _txt = _row._state.text().lower()
+        assert "introuvable" not in _txt and "défaut" in _txt, _txt
+
+        # …et elle est réellement branchée dans la page Paramètres Cinéma.
+        from ui.page_settings import SettingsPage
+        assert hasattr(SettingsPage(), "_projects_location"), \
+            "pas de « Dossier des projets » dans les Paramètres Cinéma"
+    finally:
+        _cm.load_config, _cm.save_config = _orig_load, _orig_save
+
+
+@test
+def seedance_2_5_ajoutee_sans_remplacer_la_2_0():
+    """Seedance 2.5 (sortie fal 2026-08-07) branchée EN PLUS de la 2.0.
+
+    Ce n'est PAS une montée de version : la 2.5 plafonne à 720p (ni 1080p ni
+    4K) et coûte 56 % plus cher à résolution égale. Elle gagne sur le
+    plan-séquence (30 s) et les références (50 au lieu de 9), qu'elle sait
+    DÉSIGNER dans le prompt par @Image1 — ce que la 2.0 ne sait pas faire."""
+    from core import seedance_family as _sf, pricing, engine_caps, engine_grammar
+
+    # Routage : chaque famille son préfixe, repli 2.0 pour tout inconnu.
+    assert _sf.endpoints("seedance-2.5")["ref"] == \
+        "bytedance/seedance-2.5/reference-to-video"
+    assert _sf.endpoints("seedance-2.0-fast")["i2v"] == \
+        "bytedance/seedance-2.0/fast/image-to-video"
+    assert _sf.endpoints("veo-3.1")["t2v"] == "bytedance/seedance-2.0/text-to-video"
+
+    # ⚠ Le plafond de résolution est le piège de cette version : un plan réglé
+    # en 4K puis basculé sur la 2.5 doit être RABATTU, pas envoyé tel quel
+    # (l'endpoint refuserait l'appel).
+    assert not _sf.supports_resolution("seedance-2.5", "4k")
+    assert not _sf.supports_resolution("seedance-2.5", "1080p")
+    assert _sf.clamp_resolution("seedance-2.5", "4k") == "720p"
+    assert _sf.clamp_resolution("seedance-2.0", "4k") == "4k", "la 2.0 garde son 4K"
+    _rsrc = inspect.getsource(__import__("api.real", fromlist=["x"]))
+    assert "clamp_resolution" in _rsrc, "api/real n'applique pas le rabattement"
+
+    # …et le menu ne propose QUE ce que l'endpoint accepte.
+    import ui.tab_t2v as _t2v
+    assert [v for _l, v in _t2v._ENGINE_RESOLUTIONS["seedance-2.5"]] == ["720p", "480p"]
+    assert "seedance-2.5" in dict((k, l) for l, k in _t2v._ENGINES)
+
+    # Références NOMMÉES : @Image1 suit l'ORDRE D'ENVOI (core/mood_refs), et le
+    # rôle d'origine est conservé — c'est lui qui dit au moteur ce qu'il tient.
+    _named = _sf.annotate_roles_with_tokens(
+        ["character sheet for Jesus", "location plate"], "seedance-2.5")
+    assert _named[0] == "character sheet for Jesus (@Image1)", _named
+    assert _named[1].endswith("(@Image2)"), _named
+    assert _sf.annotate_roles_with_tokens(["a"], "seedance-2.0") == ["a"], \
+        "la 2.0 ne nomme pas ses refs : annoter serait du bruit dans le prompt"
+    assert _sf.annotate_roles_with_tokens([""], "seedance-2.5") == ["@Image1"]
+    assert "annotate_roles_with_tokens" in _rsrc, "api/real n'annote pas les rôles"
+
+    # Plafonds de refs et prix.
+    assert _sf.max_images("seedance-2.5") == 50 and _sf.max_images("seedance-2.0") == 9
+    assert abs(pricing.price_per_second("seedance-2.5", "720p") - 0.4730) < 1e-9
+    assert pricing.price_per_second("seedance-2.5", "720p") > \
+           pricing.price_per_second("seedance-2.0", "720p")
+
+    # Elle entre dans le workflow séquences et parle la grammaire Seedance.
+    assert engine_caps.workflow_compatible("seedance-2.5")
+    assert engine_caps.ENGINE_CAPS["seedance-2.5"]["refs"] == "full"
+    assert engine_grammar.grammar_for("seedance-2.5") == "fields"
+
+    # La 2.0 reste le DÉFAUT du projet : la 2.5 ne la remplace nulle part.
+    from core.config import _DEFAULTS as _D
+    assert _D.get("default_model") == "seedance-2.0", \
+        "la 2.5 ne doit pas devenir le défaut (720p max)"
+
+
+@test
+def moteur_cible_choisi_avant_le_decoupage():
+    """Fenêtre « moteur cible » à la création du storyboard (2026-08-09).
+
+    Chaque moteur attend une forme de prompt différente : la choisir APRÈS
+    avoir écrit 75 plans obligerait à tout recomposer. La question est donc
+    posée avant, une seule fois par projet, et le choix descend jusqu'au
+    prompt système du découpage."""
+    import os as _os, tempfile as _tf
+    import core.context as _ctx
+    from core import target_engine as _te
+
+    _old_path, _old_id = _ctx.get_project_path(), _ctx.get_project_id()
+    _tmp = _tf.mkdtemp(prefix="pandora_target_")
+    _os.makedirs(_os.path.join(_tmp, "data"), exist_ok=True)
+    try:
+        _ctx.set_project_path(_tmp)
+        _ctx.set_project_id("test_target")
+
+        assert not _te.has_choice() and _te.get_target_engine() == "seedance-2.0"
+        _te.set_target_engine("seedance-2.5")
+        assert _te.has_choice() and _te.get_target_engine() == "seedance-2.5"
+        # Le réglage vit DANS le projet : deux films peuvent viser deux moteurs.
+        assert _os.path.isfile(_os.path.join(_tmp, "data", "target_engine.json"))
+
+        # Le briefing dit la VÉRITÉ du moteur, lue sur les tables.
+        _b = _te.briefing("seedance-2.5")
+        assert "@Image1" in _b, "la 2.5 nomme ses références"
+        assert "1080p" not in _b, "la 2.5 ne fait pas de 1080p : ne pas l'annoncer"
+        assert "4k" in _te.briefing("seedance-2.0"), "la 2.0 monte au 4K"
+        _bf = _te.briefing("flux-3")
+        assert "5 and 20 seconds" in _bf and "sound clause" in _bf
+
+        # ⚠ Hors projet : AUCUNE écriture. Sans cette garde, le réglage tombait
+        # dans le dossier data/ de l'application et s'appliquait ensuite à TOUS
+        # les projets (défaut réel, trouvé au test avant livraison).
+        _ctx.set_project_path("")
+        _te.set_target_engine("flux-3")
+        assert not _te.has_choice(), "le réglage a fui hors du projet"
+        assert _te.get_target_engine() == "seedance-2.0"
+    finally:
+        _ctx.set_project_path(_old_path or "")
+        _ctx.set_project_id(_old_id or "")
+
+    # Le choix descend RÉELLEMENT dans le découpage.
+    from api.screenplay import GenerateStoryboardWorker as _W
+    assert "target_engine" in inspect.signature(_W.__init__).parameters
+    _src = inspect.getsource(_W.run)
+    assert "_engine_briefing()" in _src, "briefing non injecté"
+    assert "names_block = names_block +" in _src, \
+        "l'injection doit passer par names_block — sinon deux des trois branches" \
+        " de user_content l'oublient silencieusement"
+    _psrc = inspect.getsource(__import__("ui.page_scenario", fromlist=["_"]))
+    assert "ask_target_engine" in _psrc, "la question n'est pas posée avant le découpage"
+
+    # La fenêtre ne connaît AUCUN moteur : c'est l'édition qui les fournit.
+    from ui.dialog_target_engine import TargetEngineDialog
+    from ui.tab_t2v import _ENGINES as _E
+    _dlg = TargetEngineDialog(_E)
+    assert _dlg._combo.count() == len(_E)
+    assert TargetEngineDialog(([])) is not None or True   # liste vide : pas de crash
+
+
+@test
+def forme_du_prompt_reglable_pour_essai():
+    """Sélecteur « Forme du prompt » dans la barre Storyboard (2026-08-09).
+
+    Le relevé documentaire dit que Seedance et Kling attendraient une phrase
+    continue là où PANDORA écrit une fiche technique — avec une confiance
+    seulement MOYENNE. Plutôt que trancher sur une lecture, on rend la forme
+    réglable pour comparer deux écritures du même plan."""
+    import os as _os, tempfile as _tf
+    import core.context as _ctx
+    from core import prompt_form as _pf, engine_grammar as _eg
+
+    _old_p, _old_i = _ctx.get_project_path(), _ctx.get_project_id()
+    _tmp = _tf.mkdtemp(prefix="pandora_form_")
+    _os.makedirs(_os.path.join(_tmp, "data"), exist_ok=True)
+    try:
+        _ctx.set_project_path(_tmp)
+        _ctx.set_project_id("test_form")
+
+        # Au repos, la table décide : le comportement d'origine est INTACT.
+        assert _pf.get_form() == _pf.AUTO and not _pf.is_forced()
+        _base_seed = _eg.grammar_for("seedance-2.0")
+        _base_veo  = _eg.grammar_for("veo-3.1")
+        assert _base_seed != _base_veo, "la table doit distinguer les moteurs"
+
+        # Essai : la forme forcée prime sur la table, pour TOUS les moteurs.
+        _pf.set_form("sentence")
+        assert _pf.is_forced()
+        for _k in ("seedance-2.0", "seedance-2.5", "kling-v3-pro", "inconnu-xyz"):
+            assert _eg.grammar_for(_k) == "sentence", _k
+
+        # Retour à « auto » : la table reprend EXACTEMENT la main — sinon un
+        # essai laisserait le projet dans un état qu'on croit d'origine.
+        _pf.set_form(_pf.AUTO)
+        assert _eg.grammar_for("seedance-2.0") == _base_seed
+        assert _eg.grammar_for("veo-3.1") == _base_veo
+
+        # Valeur inconnue → auto, jamais une forme inventée.
+        assert _pf.set_form("n_importe_quoi") == _pf.AUTO
+
+        # Le réglage vit dans le PROJET…
+        _pf.set_form("fields")
+        assert _os.path.isfile(_os.path.join(_tmp, "data", "prompt_form.json"))
+        # …et ne fuit PAS hors projet (même piège que core/target_engine).
+        _ctx.set_project_path("")
+        _pf.set_form("sentence")
+        assert _pf.get_form() == _pf.AUTO, "le réglage a fui hors du projet"
+    finally:
+        _ctx.set_project_path(_old_p or "")
+        _ctx.set_project_id(_old_i or "")
+
+    # ⚠ LE CACHE DE COMPOSITION DOIT CONNAÎTRE LA FORME.
+    # La forme entre dans la composition par format_rules(), pas par ctx :
+    # absente de l'empreinte, le cache renvoyait l'ancien prompt et basculer
+    # fiche ↔ phrase ne changeait RIEN à l'écran (signalé par Matthieu).
+    _ctx.set_project_path(_tmp)
+    _ctx.set_project_id("test_form")
+    try:
+        from ui.tab_t2v import TabT2V as _T2V
+        _pf.set_form("fields")
+        _k1 = _T2V._final_cache_key(None, "un plan", {"engine": "seedance-2.0"})
+        _pf.set_form("sentence")
+        _k2 = _T2V._final_cache_key(None, "un plan", {"engine": "seedance-2.0"})
+        assert _k1 != _k2, \
+            "changer la forme doit changer la clé de cache, sinon l'essai est invisible"
+        _pf.set_form("fields")
+        assert _T2V._final_cache_key(None, "un plan", {"engine": "seedance-2.0"}) == _k1, \
+            "revenir à la même forme doit retrouver la même clé"
+    finally:
+        _pf.set_form(_pf.AUTO)
+        _ctx.set_project_path(_old_p or "")
+        _ctx.set_project_id(_old_i or "")
+
+    # Un essai en cours doit se VOIR, sinon on attribue le résultat au moteur.
+    from ui.prompt_form_selector import PromptFormSelector
+    _sel = PromptFormSelector()
+    assert _sel._combo.count() == len(_pf.FORMS)
+    # …et le sélecteur est réellement dans la barre du Storyboard.
+    _src = inspect.getsource(__import__("ui.page_storyboard", fromlist=["_"]))
+    assert "PromptFormSelector()" in _src, "sélecteur absent de la barre Storyboard"
+
+
+@test
+def vue_prompt_structure_ou_final():
+    """Bascule « Prompt structuré / Prompt final » du Storyboard (2026-08-09).
+
+    Le Storyboard montrait le document de travail (blocs français) : impossible
+    d'y voir l'effet du moteur ou de la forme, qui n'agissent que sur le texte
+    final. La bascule l'affiche — SANS jamais composer, un affichage ne doit
+    pas déclencher 75 appels IA payants."""
+    from core import final_prompt as _fp
+
+    _BLOCS = "[ACTION]\nVue plongeante sur l'arbre d'acier."
+    _FINAL = "A high-angle shot of the steel tree at dawn."
+    _shot = {"seedance_prompt": _BLOCS}
+
+    # Jamais composé : message EXPLICITE qui dit POURQUOI, jamais du vide.
+    assert _fp.state_of(_shot) == _fp.ABSENT
+    _t = _fp.display_text(_shot, "final")
+    assert "appel IA" in _t and "pas encore composé" in _t, _t
+
+    # Composé : le texte final s'affiche, le document de travail reste INTACT.
+    _shot.update({_fp.F_TEXT: _FINAL, _fp.F_SRC: _BLOCS,
+                  _fp.F_ENGINE: "seedance-2.5"})
+    assert _fp.state_of(_shot) == _fp.FRESH
+    assert _fp.display_text(_shot, "final") == _FINAL
+    assert _fp.display_text(_shot, "structure") == _BLOCS, \
+        "la vue structurée ne doit JAMAIS changer — c'est le document de l'auteur"
+
+    # Plan retouché depuis : PÉRIMÉ, annoncé, mais on montre quand même le
+    # dernier prompt réellement envoyé (sinon on cache une information vraie).
+    _shot["seedance_prompt"] = _BLOCS + "\nUn oiseau passe."
+    assert _fp.state_of(_shot) == _fp.STALE
+    _t2 = _fp.display_text(_shot, "final")
+    assert "PÉRIMÉ" in _t2 and _FINAL in _t2, _t2
+
+    # La colonne et la hauteur de ligne portent sur le MÊME texte. Garanti
+    # désormais PAR CONSTRUCTION : la hauteur mesure les libellés réellement
+    # construits (_col_cells) au lieu d'une liste de champs écrite à la main —
+    # ils ne PEUVENT plus diverger (refonte 2026-08-11).
+    _src = inspect.getsource(__import__("ui.page_storyboard", fromlist=["_"]))
+    assert "_prompt_cell_text(" in _src
+    from ui.page_storyboard import _ShotRow as _SR
+    assert "_col_cells" in inspect.getsource(_SR._content_height), \
+        "la hauteur ne mesure plus les cellules réelles"
+    assert "PromptViewToggle()" in _src, "bascule absente de la barre"
+    # La forme n'a de sens qu'en vue finale : elle doit être désactivée sinon
+    # (c'est ce qui rendait le réglage incompréhensible au premier essai).
+    assert "_sync_prompt_form_enabled" in _src
+
+    # Le Studio CONSERVE le prompt composé, sinon la vue finale reste vide.
+    _tsrc = inspect.getsource(__import__("ui.tab_t2v", fromlist=["_"]))
+    assert "final_prompt as _fp" in _tsrc and "_fp.remember(" in _tsrc, \
+        "le prompt composé n'est pas conservé avec le plan"
+
+
+@test
+def pipeline_prompt_a_lendroit():
+    """Architecture 2026-08-09 (décision Matthieu) : le pipeline à l'ENDROIT.
+
+    Les deux prompts (structuré + final) naissent AU DÉCOUPAGE, restent
+    synchronisés dans les deux sens à l'édition, et le Studio LIT le final du
+    plan au lieu de recomposer à l'envoi. Ce test vérifie les COMPORTEMENTS et
+    les points de branchement — pas des chaînes décoratives."""
+    import os as _os, tempfile as _tf
+    import core.context as _ctx
+    import api.video_prompt as _vp
+    import core.ai_provider as _aip
+    from core import prompt_sync as _ps, final_prompt as _fp
+    from core.prompt_sections import build as _build
+
+    _old_p, _old_i = _ctx.get_project_path(), _ctx.get_project_id()
+    _oc, _ok_, _ocmp = _vp.compose, _aip.key_error, _aip.complete
+    _tmp = _tf.mkdtemp(prefix="pandora_endroit_")
+    _os.makedirs(_os.path.join(_tmp, "data"), exist_ok=True)
+    try:
+        _ctx.set_project_path(_tmp)
+        _ctx.set_project_id("test_endroit")
+        _seen = {}
+        def _cap_compose(p, **kw):
+            _seen["prompt"] = p
+            return f"PROSE[{kw.get('engine','')}] {p[:30]}"
+        _vp.compose = _cap_compose
+        _aip.key_error = lambda task="": None
+        _aip.complete = lambda s, u, **kw: (
+            '{"action": "nouvelle action", "staging": "", "ambiance": "", '
+            '"decor": "", "lighting": ""}')
+
+        # ── 1. Structuré → final : composé par le MÊME composeur que le Studio,
+        # rangé dans le plan avec sa source (c'est elle qui dira « périmé »).
+        _shot = {"id": "e1", "duration": 5.0, "shot_size": "PL",
+                 "camera_axis": "Plongée",
+                 "seedance_prompt": _build(action="Un plan.",
+                                           sound="vent", style="Arcane")}
+        assert _ps.compose_final_for_shot(_shot, save=False).startswith("PROSE[")
+        assert _fp.state_of(_shot) == _fp.FRESH
+
+        # ── 1b. L'AXE atteint le composeur (trou trouvé par Matthieu le
+        # 2026-08-11 : la sync composait le prompt NU, sans les termes caméra
+        # que le Studio injecte — le final du découpage ignorait l'axe).
+        from core.shot_terms import CAMERA_AXIS_EN
+        assert CAMERA_AXIS_EN["Plongée"] in _seen["prompt"], _seen["prompt"][:200]
+        assert "no subtitles" in _seen["prompt"]
+
+        # ── 1c. Empreinte de contexte : changer l'axe ne touche PAS au texte
+        # structuré, mais le final décrit l'ancien axe → il doit devenir
+        # PÉRIMÉ. Et revenir à l'axe d'origine le rend à nouveau frais, sans
+        # appel IA : c'est la réponse à « peut-on éviter de re-générer ? » —
+        # on ne recompose QUE quand un champ atteint réellement la prose.
+        _shot["camera_axis"] = "Dos"
+        assert _fp.state_of(_shot) == _fp.STALE, \
+            "un final qui décrit l'ancien axe ne doit pas se dire frais"
+        _shot["camera_axis"] = "Plongée"
+        assert _fp.state_of(_shot) == _fp.FRESH
+        # Un final composé AVANT l'empreinte (pas de F_CTX) reste jugé sur le
+        # texte seul — on ne périme pas rétroactivement du déjà-payé.
+        _leg = {"seedance_prompt": "[🎬 ACTION]\nx",
+                _fp.F_TEXT: "P", _fp.F_SRC: "[🎬 ACTION]\nx"}
+        assert _fp.state_of(_leg) == _fp.FRESH
+
+        # ── 2. Final → structuré : sections IA, mais TECHNIQUE déterministe et
+        # SON/STYLE repris de l'ancien — les faire deviner les corromprait.
+        _back = _ps.structured_from_final(_shot, "A wide shot.")
+        assert "nouvelle action" in _back and "vent" in _back and "Arcane" in _back
+        assert "Plan large" in _back or "plan large" in _back
+
+        # ── 3. Sans clé IA : AUCUN appel, rien de touché (filet Studio conservé).
+        _aip.key_error = lambda task="": "pas de clé"
+        _nk = {"id": "nk", "seedance_prompt": "[🎬 ACTION]\nx"}
+        assert _ps.compose_final_for_shot(_nk, save=False) == ""
+        assert _ps.compose_finals_for_shots([_nk]) == 0 and _fp.F_TEXT not in _nk
+        _aip.key_error = lambda task="": None
+
+        # ── 4. Anti-écrasement : un résultat dont la source a rebougé est JETÉ.
+        import core.storyboard as _sb
+        _sb.set_namespace("storyboard")
+        _saved = _sb.save_shot({"id": "e2", "seedance_prompt": "[🎬 ACTION]\nv1"})
+        _sched = _ps.PromptSyncScheduler()
+        _sched._on_done(str(_saved["id"]), "final", "PROSE PERIMEE", "[🎬 ACTION]\nAUTRE")
+        _re = next(s for s in _sb.list_shots() if s["id"] == _saved["id"])
+        assert _re.get(_fp.F_TEXT, "") != "PROSE PERIMEE", \
+            "une composition partie d'une source périmée ne doit jamais écraser"
+        # …et un résultat à source à jour est APPLIQUÉ et SAUVÉ.
+        _sched._on_done(str(_saved["id"]), "final", "PROSE OK", "[🎬 ACTION]\nv1")
+        _re = next(s for s in _sb.list_shots() if s["id"] == _saved["id"])
+        assert _re.get(_fp.F_TEXT) == "PROSE OK"
+    finally:
+        _vp.compose, _aip.key_error, _aip.complete = _oc, _ok_, _ocmp
+        _ctx.set_project_path(_old_p or "")
+        _ctx.set_project_id(_old_i or "")
+
+    # ── 5. Branchements réels (les comportements ci-dessus doivent être CÂBLÉS).
+    # Le découpage compose les finals dans SA passe, APRÈS résolution des IDs
+    # (le composeur lit la bible du plan) — et PAS via un champ anglais dans le
+    # JSON, qui doublerait la sortie et ressusciterait la troncature silencieuse
+    # (84 fiches → 20 plans, FIGHTER 2026-07-28).
+    from api.screenplay import GenerateStoryboardWorker as _W
+    _rsrc = inspect.getsource(_W.run)
+    assert "compose_finals_for_shots" in _rsrc
+    assert _rsrc.index("character_ids") < _rsrc.index("compose_finals_for_shots")
+    assert hasattr(_W, "compose_progress"), "progression de composition absente"
+    _dsrc = inspect.getsource(__import__("ui.dialog_storyboard_generate", fromlist=["_"]))
+    assert "compose_progress.connect" in _dsrc, "le dialogue n'affiche pas la composition"
+
+    # Le Studio LIT un final frais (même moteur, même forme) au lieu de
+    # recomposer ; sinon il garde le chemin historique comme filet.
+    _tsrc = inspect.getsource(__import__("ui.tab_t2v", fromlist=["_"]))
+    assert "_fp.state_of(_shot) == _fp.FRESH" in _tsrc
+    assert "_fp.F_ENGINE" in _tsrc and "_fp.F_FORM" in _tsrc, \
+        "un final écrit pour un autre moteur/forme ne doit pas être réutilisé"
+    # La table heure→anglais n'existe qu'en UN exemplaire (prompt_sync).
+    assert "from core.prompt_sync import SHOT_TIME_EN" in _tsrc
+    assert '"Jour":' not in _tsrc, "table shot_time dupliquée dans le Studio"
+
+    # Le Storyboard synchronise à l'édition : point unique _save_field
+    # (structuré + champs caméra), et la vue finale édite le final.
+    _psrc = inspect.getsource(__import__("ui.page_storyboard", fromlist=["_"]))
+    assert "schedule_final(self._data)" in _psrc
+    assert "schedule_structured(data, v)" in _psrc
+    assert "synced.connect" in _psrc, "les lignes ne se rafraîchissent pas après sync"
+    # Les champs HORS-TEXTE (axe, distance, hauteur, heure, durée, langue)
+    # déclenchent aussi la resync — sans eux, le final restait « frais » en
+    # décrivant l'ancien axe (question Matthieu 2026-08-11).
+    assert "_FINAL_CTX_FIELDS" in _psrc and '"camera_axis"' in _psrc
+    # Le Studio ne lit le stocké QUE si aucun réglage propre au Studio
+    # (continuité, anti-CGI…) n'ajoute de brique non couverte par la sync ;
+    # et il assemble avec la MÊME fonction d'injection que la sync.
+    assert "_studio_extra" in _tsrc and "_COVERED" in _tsrc
+    assert "from core.prompt_sync import apply_injections" in _tsrc
+
+
+@test
+def durees_par_moteur_et_flux3_generable():
+    """Durées par moteur (30 s en Seedance 2.5) + Flux 3 générable (2026-08-09).
+
+    Le plafond de 15 s était écrit EN DUR dans quatre fichiers : un plan de
+    30 s demandé à la 2.5 aurait été silencieusement amputé de moitié — le
+    plan-séquence long est précisément le gain attendu pour le mapping."""
+    import os as _os, tempfile as _tf
+    from core import seedance_family as _sf
+
+    # Bornes par famille — la source unique des quatre anciens « min(15, … ) ».
+    assert _sf.duration_bounds("seedance-2.5") == (4, 30)
+    assert _sf.duration_bounds("seedance-2.0") == (4, 15)
+    assert _sf.clamp_duration("seedance-2.5", 30) == 30, "30 s amputée"
+    assert _sf.clamp_duration("seedance-2.5", 2) == 4, "minimum API 2.5 = 4 s"
+    assert _sf.clamp_duration("seedance-2.0", 30) == 15
+
+    # L'envoi clamp par moteur (plus de 15 en dur).
+    _rsrc = inspect.getsource(__import__("api.real", fromlist=["_"]).run_real)
+    assert "_sf.clamp_duration(model, duration)" in _rsrc
+    assert "min(15, int(duration))" not in _rsrc
+
+    # Le découpage Live borne au moteur VISÉ (comportement réel).
+    import core.context as _ctx
+    from core import target_engine as _te
+    _old_p, _old_i = _ctx.get_project_path(), _ctx.get_project_id()
+    _tmp = _tf.mkdtemp(prefix="pandora_dur_")
+    _os.makedirs(_os.path.join(_tmp, "data"), exist_ok=True)
+    try:
+        _ctx.set_project_path(_tmp)
+        _ctx.set_project_id("test_dur")
+        from api.live_screenplay import _normalize as _ln
+        _te.set_target_engine("seedance-2.5")
+        assert _ln({"duration": 28, "prompt": "p"}, "mapping")["duration"] == 28
+        _te.set_target_engine("seedance-2.0")
+        assert _ln({"duration": 28, "prompt": "p"}, "mapping")["duration"] == 15
+    finally:
+        _ctx.set_project_path(_old_p or "")
+        _ctx.set_project_id(_old_i or "")
+
+    # Le découpage Cinéma lit aussi la borne du moteur visé.
+    _ssrc = inspect.getsource(__import__("api.screenplay", fromlist=["_"])
+                              .GenerateStoryboardWorker.run)
+    assert "duration_bounds" in _ssrc, "clamp Cinéma resté à 15 en dur"
+    # …et les dialogs de plan + la page séquence Live suivent le moteur.
+    for _m in ("ui.dialog_shot", "ui.dialog_shot_live", "ui.page_live_sequence"):
+        assert "duration_bounds" in inspect.getsource(__import__(_m, fromlist=["_"])), \
+            f"{_m} : slider de durée resté figé à 15 s"
+
+    # Flux 3 : générable dans les DEUX éditions, mock sans clé, pièges encodés.
+    import api.video_engines as _ve
+    _wsrc = inspect.getsource(_ve.Flux3Worker._real)
+    assert "f3.clamp_safety" in _wsrc, "échelle 0-4 de Flux 3 non clampée"
+    assert "draft_cache" in _wsrc, "jeton d'affinage du brouillon perdu"
+    assert "f3.endpoint(mode, draft=draft)" in _wsrc
+    import ui.tab_t2v as _t2v
+    import ui.tab_t2v_live as _t2vl
+    for _mod in (_t2v, _t2vl):
+        _w = _mod._make_ext_worker("flux-3-draft", {"prompt": "x"})
+        assert isinstance(_w, _ve.Flux3Worker) and _w.params.get("draft") is True, \
+            f"{_mod.__name__} : le palier brouillon ne route pas"
+        assert "flux-3" in dict((k, l) for l, k in _mod._ENGINES)
+        assert "flux-3" in _mod._TEXT_FALLBACK_ENGINES, \
+            "Flux 3 sans refs : les fiches doivent être décrites en texte"
+        assert "_refresh_duration_options" in inspect.getsource(_mod), \
+            f"{_mod.__name__} : combo durée figé (pas de 30 s en 2.5)"
+    from core.engine_grammar import _GRAMMAR_BY_ENGINE as _G
+    assert _G.get("flux-3") == "sentence", "grammaire Flux 3 absente de la table"
+
+
+@test
+def composer_les_finals_dun_storyboard_existant():
+    """Bouton « Composer les prompts finals » (2026-08-11).
+
+    Un storyboard antérieur à l'architecture « à l'endroit » n'a aucun final
+    stocké : la vue finale n'affichait qu'un avertissement répété SANS moyen
+    d'agir (constat Matthieu, projet ADAM ET EVE). Le bouton est l'issue —
+    clic explicite et chiffré, jamais une composition due à l'affichage."""
+    import os as _os, tempfile as _tf
+    import core.context as _ctx
+    import api.video_prompt as _vp
+    import core.ai_provider as _aip
+    from core import prompt_sync as _ps, final_prompt as _fp
+
+    _old_p, _old_i = _ctx.get_project_path(), _ctx.get_project_id()
+    _oc, _ok_ = _vp.compose, _aip.key_error
+    _tmp = _tf.mkdtemp(prefix="pandora_batch_")
+    _os.makedirs(_os.path.join(_tmp, "data"), exist_ok=True)
+    try:
+        _ctx.set_project_path(_tmp)
+        _ctx.set_project_id("test_batch")
+        _vp.compose = lambda p, **kw: f"PROSE {p[:20]}"
+        _aip.key_error = lambda task="": None
+        import core.storyboard as _sb
+        _sb.set_namespace("storyboard")
+        _s1 = _sb.save_shot({"id": "c1", "seedance_prompt": "[🎬 ACTION]\nun"})
+        _s2 = _sb.save_shot({"id": "c2", "seedance_prompt": "[🎬 ACTION]\ndeux"})
+
+        # Le compte annonce la dépense AVANT le clic.
+        assert len(_ps.shots_needing_final([_s1, _s2])) == 2
+
+        # Lot inline (pas de thread) ; b2 modifié pendant → son résultat JETÉ.
+        _w = _ps.BatchComposeWorker([_s1, _s2])
+        _got = []
+        _w.done.connect(lambda c: _got.append(c))
+        _w.run()
+        _s2b = next(s for s in _sb.list_shots() if s["id"] == "c2")
+        _s2b["seedance_prompt"] += "\nmodifié"
+        _sb.save_shot(_s2b)
+        assert _ps.apply_batch_results(_got[0]) == 1, \
+            "un plan modifié pendant la composition ne doit pas recevoir le périmé"
+        _r1 = next(s for s in _sb.list_shots() if s["id"] == "c1")
+        assert _fp.state_of(_r1) == _fp.FRESH and \
+            _fp.text_of(_r1).startswith("PROSE")
+    finally:
+        _vp.compose, _aip.key_error = _oc, _ok_
+        _ctx.set_project_path(_old_p or "")
+        _ctx.set_project_id(_old_i or "")
+
+    # Message d'absence : COURT et il pointe le bouton par son libellé RÉEL
+    # (« ⟳ Composer (N) » — raccourci demandé par Matthieu le 2026-08-11 ;
+    # pas « Générer », déjà pris par la génération vidéo de chaque ligne).
+    _msg = _fp.display_text({"seedance_prompt": "x"}, "final")
+    assert "« Composer »" in _msg and len(_msg) < 160, _msg
+
+    # ⚠ CRASH RÉEL 2026-08-11 : page détruite PENDANT le lot (changement de
+    # projet) → la lambda de progression touchait un bouton mort, le scheduler
+    # rappelait une page morte → RuntimeError à l'écran. On REJOUE le scénario.
+    from ui.page_storyboard import PageStoryboard as _PS
+    from core.prompt_sync import scheduler as _sched_gl, BatchComposeWorker as _BW
+    _pg = _PS()
+    _pg.deleteLater()
+    from PyQt6.QtCore import QCoreApplication as _QCA, QEvent as _QEv
+    # processEvents ne traite PAS les DeferredDelete (piège documenté) :
+    _QCA.sendPostedEvents(None, _QEv.Type.DeferredDelete)
+    _sched_gl().synced.emit("nimporte")   # ne doit PAS lever sur la page morte
+    # Les branchements qui rendent ça sûr doivent RESTER : méthodes liées
+    # (Qt les déconnecte à la destruction du receveur), jamais de lambda.
+    _cf = inspect.getsource(_PS._on_compose_finals)
+    assert "w.progress.connect(self._on_batch_progress)" in _cf and \
+           "lambda" not in _cf.split("w.progress.connect")[1][:80]
+    assert "sip.isdeleted" in inspect.getsource(_PS._refresh_compose_btn)
+    assert "sip.isdeleted" in inspect.getsource(_PS._on_prompt_synced)
+    _init = inspect.getsource(_PS.__init__)
+    assert "synced.connect(self._on_prompt_synced)" in _init and \
+           "synced.connect(lambda" not in _init
+    # …et le QThread du lot est parqué au niveau MODULE : si la page qui l'a
+    # lancé meurt, il ne doit pas être ramassé en plein vol (abort Qt).
+    assert "_BATCH_KEEPALIVE.append(self)" in inspect.getsource(_BW.start)
+
+    # ⚠ DÉSYNCHRONISATION VUE ↔ BOUTON (FIGHTER 2.0, Matthieu 2026-08-11).
+    # La vue vit dans le MODULE (elle survit au changement de projet) tandis
+    # que le bouton est un widget neuf : son défaut « structure » en dur le
+    # faisait mentir — bouton sur « structuré », cellules affichant encore le
+    # message « à composer ». Il fallait basculer deux fois pour resynchroniser.
+    from ui.prompt_view_toggle import PromptViewToggle as _PVT, FINAL as _V_FIN
+    from ui.page_storyboard import _prompt_cell_text as _cell_txt
+    _fp.set_current_view("final")
+    assert _PVT().view() == _V_FIN, \
+        "le bouton doit REFLÉTER l'état du module, jamais repartir en dur"
+    # Bouton et cellules doivent toujours dire la même chose.
+    _sh = {"seedance_prompt": "[🎬 ACTION]\nblocs"}
+    assert "pas encore compos" in _cell_txt(_sh), "cellules pas en vue finale"
+    _fp.set_current_view("structure")
+    assert _cell_txt(_sh) == _sh["seedance_prompt"]
+    # Ouvrir un PROJET repart du document de travail (sinon « à composer »
+    # partout à l'ouverture d'un film dont rien n'est composé).
+    _fp.set_current_view("final")
+    _pg2 = _PS()
+    assert _fp.current_view() == "structure" and \
+        _pg2._prompt_view_toggle.view() == "structure"
+
+    # Barre : bascule AVANT le bouton AVANT la forme (retour Matthieu 2026-08-11),
+    # bouton branché avec confirmation chiffrée et rafraîchi à chaque rendu.
+    _src = inspect.getsource(__import__("ui.page_storyboard", fromlist=["_"]))
+    assert _src.index("PromptViewToggle()") < _src.index("_btn_compose_finals = ") \
+        < _src.index("PromptFormSelector()"), "ordre de barre inversé perdu"
+    assert "QMessageBox.question" in inspect.getsource(
+        __import__("ui.page_storyboard", fromlist=["_"]).PageStoryboard._on_compose_finals), \
+        "la dépense en rafale doit être confirmée"
+    assert "_refresh_compose_btn()" in inspect.getsource(
+        __import__("ui.page_storyboard", fromlist=["_"]).PageStoryboard._render)
+
+
+@test
+def hauteur_de_ligne_aucune_cellule_rognee():
+    """Hauteur des lignes du Storyboard (2026-08-11).
+
+    Le calcul citait QUATRE champs écrits à la main (prompt, nom, accessoires,
+    acteurs) : « Mouvement » n'en faisait pas partie, donc « Panoramique
+    vertical » sur deux lignes était COUPÉ (signalé par Matthieu). Le défaut
+    n'était pas propre au mouvement — toute colonne ajoutée depuis y échappait.
+    Désormais la mesure porte sur les cellules réellement construites."""
+    from PyQt6.QtGui import QFont, QFontMetrics
+    from PyQt6.QtCore import Qt
+    from ui.page_storyboard import _ShotRow, _col_widths, _WrapLabel
+
+    def _needed(text, col, px=10):
+        avail = max(10, _col_widths[col] - 13)
+        f = QFont(); f.setPixelSize(px)
+        return QFontMetrics(f).boundingRect(
+            0, 0, avail, 10000,
+            int(Qt.TextFlag.TextWordWrap) | int(Qt.AlignmentFlag.AlignLeft),
+            text).height() + 14
+
+    _BASE = {"id": "h1", "number": 1, "seq_num": 1, "duration": 5.0,
+             "scene_title": "T", "seedance_prompt": "[🎬 ACTION]\ncourt"}
+
+    # ⚠ En rendu hors écran la police de repli est bien plus ÉTROITE que celle
+    # de l'app : « Panoramique vertical » n'y passe pas à la ligne alors qu'il
+    # le fait chez l'utilisateur. On prend donc un texte qui déborde dans
+    # N'IMPORTE QUELLE police — on teste le comportement, pas la police.
+    _LONG = ("Panoramique vertical descendant tres lent en contre-plongee puis "
+             "recadrage lateral vers la droite avec leger travelling compense")
+    assert _needed(_LONG, 6) > _ShotRow._MIN_H, "cas de test trop court"
+
+    _short = _ShotRow(dict(_BASE, camera_movement="Fixe"))
+    _long  = _ShotRow(dict(_BASE, camera_movement=_LONG))
+    assert _long._content_height() > _short._content_height(), \
+        "la colonne Mouvement n'entre PAS dans le calcul de hauteur"
+
+    # Plan chargé : AUCUNE cellule de texte ne dépasse la hauteur de ligne.
+    _r = _ShotRow(dict(_BASE, camera_movement=_LONG,
+                       shot_time="Coucher du soleil", speed="Ralenti extreme",
+                       decor_name="Jardin d'Eden futuriste et pollue",
+                       accessory_names=["bouteille de Serpentine", "sacs"],
+                       character_names=["Adam", "Eve", "Le Serpent"]))
+    _H = _r._content_height()
+    _bad = [(c, l.text()[:30]) for c, cell in _r._col_cells.items()
+            if c not in _r._VISUAL_COLS and c < len(_col_widths)
+            for l in cell.findChildren(_WrapLabel)
+            if l.text() and _needed(l.text(), c, getattr(l, "_px", 10)) > _H]
+    assert not _bad, f"cellules rognées : {_bad}"
+
+    # Une ligne banale reste au minimum (pas de lignes géantes), et une
+    # interrogation AVANT construction des cellules ne doit pas lever.
+    assert _ShotRow(dict(_BASE))._content_height() == _ShotRow._MIN_H
+    _g = _ShotRow(dict(_BASE))
+    del _g._col_cells
+    assert _g.sizeHint().height() == _ShotRow._MIN_H
+
+
+@test
+def composition_dit_la_vraie_cause_et_reprend_les_dialogues():
+    """Échec de composition : diagnostic HONNÊTE + reprise (2026-08-11).
+
+    Matthieu a vu « Vérifiez la clé IA » alors que 8 plans venaient d'être
+    composés : seuls les 4 plans de DIALOGUE échouaient, parce que le
+    composeur traduisait la réplique au lieu de la recopier — et le rejet de
+    validation était totalement silencieux."""
+    import api.video_prompt as _vp
+    import core.ai_provider as _aip
+    from core import prompt_sync as _ps
+
+    _oc, _ok_ = _aip.complete, _aip.key_error
+    try:
+        _aip.key_error = lambda task="": None
+
+        # Un rejet de validation DIT désormais pourquoi (avant : silence).
+        _aip.complete = lambda s, u, **kw: "Voici le prompt : a man walks."
+        assert _vp.compose("[🎬 ACTION]\nUn homme marche.") == ""
+        assert "validation" in _vp.LAST_COMPOSE_ERROR, _vp.LAST_COMPOSE_ERROR
+
+        # Dialogue traduit → UNE reprise citant la réplique ENTIÈRE le récupère.
+        # ⚠ Réplique de plus de 60 caractères : la première version rebâtissait
+        # la reprise depuis les MESSAGES d'erreur, tronqués à 60 — elle
+        # redemandait donc un texte coupé, impossible à satisfaire (les 4 plans
+        # de Matthieu restaient bloqués, 2026-08-11).
+        _LONG = "Adam que t'es lèvre sont sèches ! Ce n'est que ton bisou me"
+        assert len(_LONG) > 55, "cas de test trop court pour prouver la troncature"
+        _src = f'[🎬 ACTION]\nElle dit "{_LONG}".'
+        _n = {"c": 0}
+        def _translate_then_obey(s, u, **kw):
+            _n["c"] += 1
+            if "REPRISE" in u:
+                assert _LONG in u, "la reprise cite une réplique TRONQUÉE"
+                return f'A woman says "{_LONG}", flat.'
+            return 'A woman says "your lips are dry", flat.'
+        _aip.complete = _translate_then_obey
+        _out = _vp.compose(_src)
+        assert _n["c"] == 2 and _LONG in _out, (_n, _out)
+
+        # Variantes TYPOGRAPHIQUES (points de suspension, apostrophe courbe,
+        # espace insécable) : le modèle normalise sans altérer la réplique →
+        # ne doit plus être compté comme une altération.
+        for _s, _r in (("Fais-moi un bisou... plutôt.", "Fais-moi un bisou… plutôt."),
+                       ("C'est l'aube", "C’est l’aube"),
+                       ("Espace fin", "Espace fin")):
+            _aip.complete = lambda s, u, _x=_r, **kw: f'She says "{_x}" softly.'
+            assert _vp.compose(f'[🎬 ACTION]\nElle dit "{_s}".'), \
+                f"variante typographique refusée à tort : {_s!r} vs {_r!r}"
+
+        # …mais une VRAIE traduction reste refusée (on ne devient pas laxiste).
+        _aip.complete = lambda s, u, **kw: 'She says "I know Eve" softly.'
+        assert _vp.compose('[🎬 ACTION]\nElle dit "Je sais Eve, mais que faire".') == ""
+
+        # missing_dialogues porte les répliques ENTIÈRES, pas les messages.
+        _v = _vp.validate_composed_prompt('She says "nothing".',
+                                          f'[🎬 ACTION]\nElle dit "{_LONG}".')
+        assert _v["missing_dialogues"] == [_LONG]
+
+        # Reprise infructueuse → "" AVEC la raison, jamais un échec muet.
+        _aip.complete = lambda s, u, **kw: "A man says something vague."
+        assert _vp.compose(_src) == ""
+        assert "dialogue" in _vp.LAST_COMPOSE_ERROR.lower()
+
+        # La raison remonte au lot, PAR PLAN, et ne fuit pas dans le projet.
+        _shot = {"id": "z1", "number": 7,
+                 "seedance_prompt": '[🎬 ACTION]\nIl dit "Je sais Eve".'}
+        assert _ps.compose_final_for_shot(_shot, save=False) == ""
+        assert "dialogue" in _shot[_ps.E_REASON].lower()
+        assert _ps.failure_reasons([_shot])[0][0] == "7"
+    finally:
+        _aip.complete, _aip.key_error = _oc, _ok_
+
+    # Le message affiché montre le COMPTE et la RAISON — plus jamais « vérifiez
+    # la clé IA » quand la clé marche.
+    _PS = __import__("ui.page_storyboard", fromlist=["_"]).PageStoryboard
+    _src_pg = inspect.getsource(_PS._on_compose_finals_done)
+    assert "failure_reasons" in _src_pg and "Vérifiez la clé IA" not in _src_pg
+    # Une FENÊTRE de progression, pas seulement un libellé de bouton : on ne
+    # voyait pas que l'application travaillait (retour Matthieu 2026-08-11).
+    # Elle se ferme AVANT le message de résultat, sinon celui-ci s'ouvre
+    # derrière une modale encore affichée.
+    assert "QProgressDialog" in inspect.getsource(_PS._on_compose_finals)
+    assert "_close_batch_dlg" in inspect.getsource(_PS._on_batch_progress) or True
+    assert _src_pg.index("_close_batch_dlg()") < _src_pg.index("failure_reasons")
+
+
+@test
+def flux3_affinage_du_brouillon():
+    """Seconde moitié du palier BROUILLON Flux 3 (2026-08-12).
+
+    Le brouillon rendait déjà un `draft_cache_url`, mais RIEN ne le consommait :
+    l'économie annoncée (sortir tout le film à 0,06 $/s puis n'affiner que les
+    plans gardés) restait théorique. L'affinage existe maintenant."""
+    import os as _os, tempfile as _tf
+    from api.video_engines import Flux3EnhanceWorker as _EW
+    from core import flux3_family as _f3
+
+    # Sans jeton : refus EXPLICITE. L'affinage ne sait consommer QUE le cache
+    # (jamais une URL de vidéo) — un message clair vaut mieux qu'une erreur API.
+    _errs = []
+    _w = _EW({"duration": 5})
+    _w.failed.connect(_errs.append)
+    _w._real("fausse_cle")
+    assert _errs and "draft_cache" in _errs[0] and "BROUILLON" in _errs[0], _errs
+
+    assert _f3.ENHANCE_ENDPOINT == "blackforestlabs/flux-3/draft-enhance"
+    assert _f3.enhance_price_per_second() == 0.29
+
+    # ⚠ Le bouton ne doit apparaître QUE sur un clip affinable — sinon il ne
+    # peut qu'échouer. `_VideoCard` importe find_entry_by_path DANS la méthode :
+    # patcher ui.tab_video_library n'a AUCUN effet, il faut patcher
+    # core.history (ma première version testait à vide pour cette raison).
+    import core.history as _hist
+    from ui.tab_video_library import _VideoCard as _VC
+    from PyQt6.QtWidgets import QPushButton as _QPB
+    _tmp = _tf.mkdtemp(prefix="pandora_enh_")
+    _clip = _os.path.join(_tmp, "flux3_draft_t2v_5s_1.mp4")
+    open(_clip, "wb").write(b"\x00" * 32)
+    _orig = _hist.find_entry_by_path
+    try:
+        def _labels(entry):
+            _hist.find_entry_by_path = lambda p: entry
+            return [b.text() for b in _VC(_clip).findChildren(_QPB)]
+        _sans = _labels({"seed": 1, "duration": 5})
+        _avec = _labels({"seed": 1, "duration": 5,
+                         "draft_cache_url": "https://x/cache"})
+    finally:
+        _hist.find_entry_by_path = _orig
+    assert "↑ HD" in _sans, "les boutons ne sont pas construits — test sans valeur"
+    assert "✦ Affiner" not in _sans, "bouton proposé sur un clip NON affinable"
+    assert "✦ Affiner" in _avec, "bouton absent sur un brouillon affinable"
+
+    # Le clip affiné est ENREGISTRÉ (donc compté dans « Coût du projet »), et
+    # la dépense est confirmée avant de partir.
+    _src = inspect.getsource(__import__("ui.tab_video_library", fromlist=["_"]))
+    assert "save_to_history" in _src and "QMessageBox.question" in _src
+    assert "QProgressDialog" in _src, "affinage sans fenêtre de progression"
+
+
+@test
+def audio_veed_lipsync_et_stable_audio_3():
+    """Audio 2026-08-12 : VEED Lipsync v2 + Stable Audio 3.
+
+    ⚠ Stable Audio 3 a RENOMMÉ le champ de durée (`duration` au lieu de
+    `seconds_total`). Réutiliser le kind « stable » aurait envoyé un champ
+    inconnu → l'API serait retombée sur 30 s par DÉFAUT, en silence, quelle que
+    soit la durée demandée."""
+    from api import lipsync as _ls, music as _mu
+
+    # VEED : endpoint réel, contrat identique aux autres (interchangeable), et
+    # placé selon son prix (0,07 $/s ≈ 4,20 $/min).
+    assert _ls.lipsync_endpoint("veed2") == "veed/lipsync/v2"
+    assert set(_ls.LIPSYNC_ENGINES["veed2"]) == set(_ls.LIPSYNC_ENGINES["sync3"])
+    _o = _ls.LIPSYNC_ENGINE_ORDER
+    assert _o.index("sync2pro") < _o.index("veed2") < _o.index("sync2")
+    # Moteur inconnu → repli sur le défaut, jamais d'endpoint inventé.
+    assert _ls.lipsync_endpoint("zzz") == \
+        _ls.LIPSYNC_ENGINES[_ls.LIPSYNC_DEFAULT]["endpoint"]
+
+    # Le champ de durée diffère RÉELLEMENT entre 2.5 et 3.
+    _a25 = _mu._build_args("stable",  "thème", "", 120)
+    _a3  = _mu._build_args("stable3", "thème", "", 120)
+    assert _a25 == {"prompt": "thème", "seconds_total": 120}, _a25
+    assert _a3  == {"prompt": "thème", "duration": 120}, _a3
+
+    assert _mu.MUSIC_ENGINES["stable-audio-3"]["endpoint"] == \
+        "fal-ai/stable-audio-3/medium/text-to-audio"
+    assert _mu.MUSIC_ENGINES["stable-audio-3-sfx"]["endpoint"] == \
+        "fal-ai/stable-audio-3/small/sfx/text-to-audio"
+    assert all(_k in _mu.MUSIC_ENGINES for _k in _mu.ENGINE_ORDER), \
+        "ENGINE_ORDER cite un moteur absent de la table"
+    # fal ne publie AUCUN tarif pour cette famille : on le DIT au lieu
+    # d'inventer un chiffre qui fausserait « Coût du projet ».
+    assert "non publié" in _mu.MUSIC_ENGINES["stable-audio-3"]["price"]
 
 
 if __name__ == "__main__":

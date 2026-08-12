@@ -37,7 +37,14 @@ import re
 
 # Clé de moteur (ui/tab_t2v._ENGINES) → grammaire.
 _GRAMMAR_BY_ENGINE = {
+    "seedance-2.5":       "fields",
     "seedance-2.0":       "fields",
+    # Flux 3 : la doc BFL est explicite — UNE phrase cinématographique continue
+    # (gabarit « [camera] shot of [subject] [action] in [environment] »), avec
+    # clause sonore en fin (audio natif ON par défaut). Nouveau moteur, aucun
+    # historique d'essais à contredire : on suit la doc (relevé 2026-08-09).
+    "flux-3":             "sentence",
+    "flux-3-draft":       "sentence",
     "seedance-2.0-fast":  "fields",
     "seedance-2.0-mini":  "fields",
     "seedance-1.5-pro":   "fields",
@@ -56,7 +63,21 @@ GRAMMAR_LABELS = {
 
 
 def grammar_for(engine_key: str) -> str:
-    """Grammaire attendue par ce moteur. Repli « plain » pour tout moteur inconnu."""
+    """Grammaire attendue par ce moteur. Repli « plain » pour tout moteur inconnu.
+
+    ⚠ Un réglage d'ESSAI (Storyboard → « Forme du prompt ») peut FORCER une
+    autre forme, pour comparer deux écritures du même plan sans modifier cette
+    table. Point d'entrée UNIQUE : tout ce qui compose un prompt passe ici, y
+    compris le Live via live_grammar — donc le sélecteur agit partout d'un coup
+    et il n'existe qu'un seul endroit à lire pour savoir ce qui est envoyé.
+    """
+    try:
+        from core import prompt_form as _pf
+        forced = _pf.get_form()
+        if forced != _pf.AUTO:
+            return forced
+    except Exception:
+        pass   # un réglage illisible ne doit jamais empêcher de composer
     return _GRAMMAR_BY_ENGINE.get((engine_key or "").strip(), "plain")
 
 

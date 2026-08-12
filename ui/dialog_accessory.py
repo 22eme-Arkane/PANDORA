@@ -288,32 +288,12 @@ class AccessoryDialog(QDialog):
         style_lbl = _lbl("Style d'image")
         style_lbl.setFixedWidth(130)
         style_row.addWidget(style_lbl)
-        import core.style as _style_mod
-        from PyQt6.QtGui import QColor as _QColor
+        from ui.style_combo import populate as _populate_styles
         self._style_combo = QComboBox()
-        self._style_combo.addItem("— Style du projet —", "")
-        _cur_grp = None
-        for _s in _style_mod.STYLES:
-            _g = _s.get("group", "")
-            if _g != _cur_grp:
-                _cur_grp = _g
-                _gi = next((g for g in _style_mod.GROUPS if g["key"] == _g), None)
-                if _gi:
-                    self._style_combo.addItem(
-                        f"  {_gi['icon']}  {translate(_gi['name']).upper()}", "__sep__"
-                    )
-                    _sep_item = self._style_combo.model().item(
-                        self._style_combo.count() - 1
-                    )
-                    _sep_item.setEnabled(False)
-                    _sep_item.setForeground(_QColor(CP.get("accent2", "#7c6bff")))
-            self._style_combo.addItem(f"    {_s['icon']}  {translate(_s['name'])}", _s["key"])
-        saved_key = self._item.get("accessory_style_key", "") or _style_mod.get_style_key()
-        if saved_key:
-            for _i in range(self._style_combo.count()):
-                if self._style_combo.itemData(_i) == saved_key:
-                    self._style_combo.setCurrentIndex(_i)
-                    break
+        # Liste partagée (ui/style_combo) : « Style de la note de réalisation »
+        # en tête, puis le style du projet, puis les styles par famille.
+        _populate_styles(self._style_combo,
+                         saved_key=self._item.get("accessory_style_key", ""))
         self._style_combo.setFixedHeight(36)
         self._style_combo.setStyleSheet(
             f"QComboBox{{background:{CP['bg3']};border:1px solid {CP['border']};"
@@ -828,21 +808,15 @@ class AccessoryDialog(QDialog):
     def _update_suffix_edit(self):
         if not hasattr(self, "_suffix_edit"):
             return
-        import core.style as _style_mod
         from core.camera_prefs import get_camera_prefs
+        from ui.style_combo import suffix_for
         prefs = get_camera_prefs()
         cam = prefs.get("camera_body", "").strip()
         optic = prefs.get("optics_series", "").strip()
         has_cam = bool(cam or optic)
-        sk = self._style_combo.currentData() if hasattr(self, "_style_combo") else ""
-        if sk and sk != "__sep__":
-            _s = next((s for s in _style_mod.STYLES if s["key"] == sk), None)
-            if _s:
-                sfx = _s.get("image_suffix_no_cam", _s["image_suffix"]) if has_cam else _s["image_suffix"]
-            else:
-                sfx = _style_mod.get_image_suffix_no_cam() if has_cam else _style_mod.get_image_suffix()
-        else:
-            sfx = _style_mod.get_image_suffix_no_cam() if has_cam else _style_mod.get_image_suffix()
+        # Résolution partagée : gère la clé « note de réalisation » comme les
+        # clés de style normales (et le repli sur le style du projet).
+        sfx = suffix_for(getattr(self, "_style_combo", None), no_cam=has_cam)
         cam_parts = []
         if cam:
             cam_parts.append(f"shot on {cam}")

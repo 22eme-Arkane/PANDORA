@@ -51,6 +51,7 @@ class _VideoCard(QFrame):
     play_requested = pyqtSignal(str)
     edit_requested = pyqtSignal(str)
     reprise_requested = pyqtSignal(dict)   # « ↑ HD » : reprise par la GRAINE (comme l'Historique)
+    enhance_requested = pyqtSignal(dict)   # « ✦ Affiner » : brouillon Flux 3 → 1080p
 
     _TH_W = 160
     _TH_H = 90
@@ -162,6 +163,31 @@ class _VideoCard(QFrame):
                 f"QPushButton:hover{{background:rgba(124,107,255,0.15);}}")
             btn_hd.clicked.connect(lambda _=False, e=dict(_reprise): self.reprise_requested.emit(e))
             lay.addWidget(btn_hd)
+
+        # « ✦ Affiner » — seconde moitié du palier BROUILLON Flux 3 : rendre ce
+        # clip en pleine qualité 1080p. Visible UNIQUEMENT si l'entrée porte le
+        # jeton `draft_cache_url` : l'affinage ne sait consommer que lui (pas
+        # une URL de vidéo), donc un bouton sur un clip sans jeton ne pourrait
+        # qu'échouer. On économise à l'utilisateur un faux espoir.
+        if _reprise and (_reprise.get("draft_cache_url") or "").strip():
+            btn_enh = QPushButton("✦ Affiner")
+            btn_enh.setCursor(Qt.CursorShape.PointingHandCursor)
+            try:
+                from core.flux3_family import enhance_price_per_second as _eps
+                _cost = int(_reprise.get("duration", 5) or 5) * _eps()
+                _tip = (f"Rendre ce brouillon en pleine qualité 1080p "
+                        f"(~${_cost:.2f}) — même plan, même mouvement.")
+            except Exception:
+                _tip = "Rendre ce brouillon en pleine qualité 1080p."
+            btn_enh.setToolTip(_tip)
+            btn_enh.setStyleSheet(
+                f"QPushButton{{background:transparent;border:1px solid {C['accent']};"
+                f"border-radius:6px;color:{C['accent']};font-size:11px;font-weight:700;"
+                f"padding:4px 10px;}}"
+                f"QPushButton:hover{{background:rgba(124,107,255,0.15);}}")
+            btn_enh.clicked.connect(
+                lambda _=False, e=dict(_reprise): self.enhance_requested.emit(e))
+            lay.addWidget(btn_enh)
 
     def set_thumb_pixmap(self, pix: QPixmap):
         self._thumb.setPixmap(pix)
@@ -348,6 +374,7 @@ class TabVideoLibrary(QScrollArea):
             card.play_requested.connect(self._on_play)
             card.edit_requested.connect(self._on_send_to_edit)
             card.reprise_requested.connect(self.send_to_reprise)
+            card.enhance_requested.connect(self._on_enhance)
             self._cards[path] = card
             row, col = divmod(i, _COLS)
             self._grid.addWidget(card, row, col)
@@ -482,6 +509,97 @@ class TabVideoLibrary(QScrollArea):
 
     def _on_send_to_edit(self, path: str):
         self.send_to_davinci_edit.emit([path])
+
+    # ── Affinage d'un brouillon Flux 3 ───────────────────────────────────────
+
+    def _on_enhance(self, entry: dict):
+        """Rend un brouillon Flux 3 en pleine qualité 1080p, après CONFIRMATION
+        chiffrée : c'est une dépense, et le clip affiné vient s'ajouter au
+        brouillon (on ne remplace jamais un fichier existant)."""
+        from PyQt6.QtWidgets import QMessageBox, QProgressDialog
+        from core.flux3_family import enhance_price_per_second
+        from api.video_engines import Flux3EnhanceWorker
+
+        dur  = int(entry.get("duration", 5) or 5)
+        cost = dur * enhance_price_per_second()
+        if QMessageBox.question(
+                self, "Affiner le brouillon",
+                f"Rendre ce plan en pleine qualité 1080p ?\n"
+                f"Durée {dur}s — coût estimé ~${cost:.2f}.\n"
+                f"Le brouillon est conservé ; le clip affiné s'ajoute "
+                f"à la vidéothèque.",
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
+        ) != QMessageBox.StandardButton.Yes:
+            return
+
+        # Fenêtre de progression : l'affinage dure 1 à 3 minutes. Sans elle,
+        # l'application semble figée (même retour que sur la composition en
+        # lot). Pas de bouton d'annulation : l'appel est déjà parti et payé.
+        _dlg = QProgressDialog("Affinage en pleine qualité…", "", 0, 0, self)
+        _dlg.setWindowTitle("Affiner le brouillon")
+        _dlg.setCancelButton(None)
+        _dlg.setWindowModality(Qt.WindowModality.WindowModal)
+        _dlg.setMinimumDuration(0)
+        _dlg.setAutoClose(False)
+        _dlg.setAutoReset(False)
+        self._enh_dlg = _dlg
+
+        # Parquer l'éventuel affinage précédent (jamais terminate() — règle
+        # maison anti-segfault), puis garder une référence anti-GC.
+        from core.worker import abandon_thread
+        if getattr(self, "_enh_worker", None) is not None:
+            abandon_thread(self._enh_worker)
+        w = Flux3EnhanceWorker({
+            "draft_cache_url": entry.get("draft_cache_url", ""),
+            "duration": dur,
+        })
+        self._enh_worker = w
+        w.progress.connect(self._on_enhance_progress)
+        w.finished.connect(self._on_enhance_done)
+        w.failed.connect(self._on_enhance_failed)
+        w.start()
+
+    def _close_enh_dlg(self):
+        """Ferme la fenêtre de progression, quoi qu'il arrive."""
+        from PyQt6 import sip
+        dlg = getattr(self, "_enh_dlg", None)
+        self._enh_dlg = None
+        if dlg is not None and not sip.isdeleted(dlg):
+            dlg.close()
+            dlg.deleteLater()
+
+    def _on_enhance_progress(self, pct: int, msg: str):
+        from PyQt6 import sip
+        if sip.isdeleted(self):
+            return
+        dlg = getattr(self, "_enh_dlg", None)
+        if dlg is not None and not sip.isdeleted(dlg):
+            dlg.setLabelText(msg)
+
+    def _on_enhance_done(self, result: dict):
+        from PyQt6 import sip
+        if sip.isdeleted(self):
+            return
+        self._close_enh_dlg()
+        # Enregistré dans l'historique → compté dans « Coût du projet », comme
+        # toute génération payante.
+        try:
+            from core.history import save_to_history
+            save_to_history({**result, "status": "done"})
+        except Exception:
+            pass
+        from PyQt6.QtWidgets import QMessageBox
+        QMessageBox.information(self, "Affiner le brouillon",
+                                "Clip affiné ajouté à la vidéothèque.")
+        self.refresh()
+
+    def _on_enhance_failed(self, error: str):
+        from PyQt6 import sip
+        if sip.isdeleted(self):
+            return
+        self._close_enh_dlg()
+        from ui.widgets import show_api_error
+        show_api_error(self, error)
 
     def _open_output_folder(self):
         folder = self._get_output_dir()

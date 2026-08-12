@@ -267,7 +267,15 @@ class PageLiveSequence(QWidget):
         self._dur_lbl.setStyleSheet(f"color:{CP['text_secondary']};font-size:11px;background:transparent;")
         lay.addWidget(self._dur_lbl)
         self._dur = QSlider(Qt.Orientation.Horizontal)
-        self._dur.setMinimum(4); self._dur.setMaximum(15); self._dur.setValue(5)
+        # Plafond = celui du moteur VISÉ par le projet (30 s en Seedance 2.5 —
+        # le plan-séquence long est le vrai gain du mapping, 2026-08-09).
+        try:
+            from core.seedance_family import duration_bounds as _sfb
+            from core.target_engine import get_target_engine as _teg
+            _dmin, _dmax = _sfb(_teg())
+        except Exception:
+            _dmin, _dmax = 4, 15
+        self._dur.setMinimum(_dmin); self._dur.setMaximum(_dmax); self._dur.setValue(5)
         self._dur.setStyleSheet(
             f"QSlider::groove:horizontal{{height:4px;background:{CP['bg3']};border-radius:2px;}}"
             f"QSlider::handle:horizontal{{width:14px;height:14px;background:{CP['accent2']};"

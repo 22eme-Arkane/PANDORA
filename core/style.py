@@ -375,8 +375,24 @@ def get_style() -> dict | None:
     return next((s for s in STYLES if s["key"] == key), None)
 
 
+def _note_suffix_or_none() -> str | None:
+    """Style de la note quand le PROJET est réglé sur « note de réalisation ».
+
+    None si le projet est sur un style normal. Chaîne (éventuellement vide,
+    note sans style écrit) sinon — le suffixe personnalisé s'y ajoute comme
+    pour un style normal.
+    """
+    if get_style_key() != NOTE_STYLE_KEY:
+        return None
+    parts = [p for p in (note_visual_style(), get_style_custom()) if p]
+    return ", ".join(parts)
+
+
 def get_image_suffix() -> str:
     """Suffix appended to image generation prompts (characters, HMC, décors, accessoires)."""
+    note = _note_suffix_or_none()
+    if note is not None:
+        return note
     style = get_style()
     if not style:
         return ""
@@ -389,6 +405,9 @@ def get_image_suffix() -> str:
 
 def get_image_suffix_no_cam() -> str:
     """Image suffix with camera/optic brand refs stripped — used when Image & Son overrides camera."""
+    note = _note_suffix_or_none()
+    if note is not None:
+        return note
     style = get_style()
     if not style:
         return ""
@@ -401,6 +420,9 @@ def get_image_suffix_no_cam() -> str:
 
 def get_video_suffix() -> str:
     """Suffix appended to video generation prompts (Seedance 2.0)."""
+    note = _note_suffix_or_none()
+    if note is not None:
+        return note
     style = get_style()
     if not style:
         return ""
@@ -413,6 +435,9 @@ def get_video_suffix() -> str:
 
 def get_video_suffix_no_cam() -> str:
     """Video suffix with camera/optic brand refs stripped — used when Image & Son overrides camera."""
+    note = _note_suffix_or_none()
+    if note is not None:
+        return note
     style = get_style()
     if not style:
         return ""
@@ -427,6 +452,63 @@ def is_no_audio() -> bool:
     """Returns True if the selected style disables audio generation (e.g. Clip vidéo)."""
     style = get_style()
     return bool(style and style.get("no_audio"))
+
+
+# ── Style de la NOTE DE RÉALISATION ───────────────────────────────────────────
+# Demande Matthieu 2026-07-31 : plutôt que de re-choisir un style figé dans
+# chaque fenêtre, on doit pouvoir dire « prends le style visuel écrit dans la
+# note de réalisation ». Cette clé spéciale vit EN TÊTE de toutes les listes de
+# style (décors, casting, accessoires, HMC, véhicules, Image IA) et se relit en
+# DIRECT : réécrire la note change le style de la prochaine génération.
+
+NOTE_STYLE_KEY = "__note__"
+
+
+def note_visual_style() -> str:
+    """Style visuel décrit dans la note de réalisation du scénario courant.
+
+    Prend le scénario le plus récent du projet (`list_scenarios` renvoie
+    l'index, plus récent en tête) et en extrait le style de façon tolérante
+    (section « STYLE VISUEL », sinon les lignes de style rangées ailleurs par
+    l'Analyse). Chaîne vide si aucune note ou aucun style écrit. Ne lève jamais.
+    """
+    try:
+        import core.scenario as scenario_api
+        from core.direction_note import visual_style_from_note
+        for scenario in scenario_api.list_scenarios():
+            style = visual_style_from_note(scenario.get("direction_note", "")).strip()
+            if style:
+                return style
+    except Exception:
+        pass
+    return ""
+
+
+def has_note_visual_style() -> bool:
+    """True si la note de réalisation décrit réellement un style visuel."""
+    return bool(note_visual_style())
+
+
+def image_suffix_for_key(style_key: str, no_cam: bool = False) -> str:
+    """Suffixe d'image pour une clé de combo, y compris les clés SPÉCIALES.
+
+    - ``NOTE_STYLE_KEY`` → le style visuel de la note de réalisation (relu en
+      direct à chaque génération) ; repli sur le style du projet si la note
+      n'en décrit aucun, pour ne jamais générer « sans style ».
+    - clé de style connue → son suffixe (variante sans caméra si demandée).
+    - vide / inconnue / séparateur → le style du projet.
+    """
+    if style_key == NOTE_STYLE_KEY:
+        note = note_visual_style()
+        if note:
+            return note
+        style_key = ""
+    if style_key and style_key != "__sep__":
+        style = next((s for s in STYLES if s["key"] == style_key), None)
+        if style:
+            return (style.get("image_suffix_no_cam", style["image_suffix"])
+                    if no_cam else style["image_suffix"])
+    return get_image_suffix_no_cam() if no_cam else get_image_suffix()
 
 
 # ── Style reference images ─────────────────────────────────────────────────────

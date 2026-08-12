@@ -26,7 +26,17 @@ import core.storyboard as sb_api
 
 _ENGINES = [
     ("Seedance 2.0  (recommandée)", "seedance-2.0"),        # Défaut — optimisé dans Pandora
-    ("Happy Horse 1.0  (prochainement)", "happy-horse-1.0"), # n°1 ELO — intégration en cours
+    # Seedance 2.5 : plan-séquence jusqu'à 30 s et jusqu'à 50 références, MAIS
+    # 720p maximum (ni 1080p ni 4K) et 56 % plus cher à résolution égale. Elle
+    # ne REMPLACE donc pas la 2.0 — le libellé annonce les deux faces.
+    ("Seedance 2.5  (30 s · 720p max)", "seedance-2.5"),
+    # Flux 3 (BFL, fal 2026-08-04) : audio natif, 5-20 s, PAS d'images de
+    # référence (fiches décrites en texte). Le palier Brouillon sort à $0.06/s
+    # pour trier avant d'affiner — l'économie n'existe QUE si on jette des
+    # plans (test core/flux3_family : tout garder coûte PLUS cher).
+    ("Flux 3  (audio natif · 5-20 s)",  "flux-3"),
+    ("Flux 3 Brouillon  (~$0.06/s)",    "flux-3-draft"),
+    ("Happy Horse 1.1  (prochainement)", "happy-horse-1.0"), # n°1 ELO — intégration en cours
     ("Kling v3 Pro  (prochainement)",    "kling-v3-pro"),    # n°3 ELO — 1080p + audio natif
     ("Kling O3 4K  (prochainement)",     "kling-o3-4k"),     # Variante 4K Kling
     ("Veo 3.1  (prochainement)",         "veo-3.1"),         # Google — audio natif
@@ -40,13 +50,16 @@ _ENGINES = [
     ("LTX-2  (4K natif)",               "ltx-2"),             # Lightricks — i2v 4K
 ]
 
-_SEEDANCE_ENGINES    = {"seedance-2.0", "seedance-2.0-fast"}
+_SEEDANCE_ENGINES    = {"seedance-2.0", "seedance-2.0-fast", "seedance-2.5"}
 _FIXED_RES_ENGINES   = {"veo-3.1", "kling-v3-pro", "kling-o3-4k", "sora-2"}
 _FIXED_RATIO_ENGINES = {"veo-3.1", "kling-v3-pro", "kling-o3-4k"}
 # Moteurs sans support natif d'images de référence (fallback texte uniquement)
 _TEXT_FALLBACK_ENGINES = {"kling-v3-pro", "kling-o3-4k", "veo-3.1", "sora-2",
                           "seedance-1.5-pro", "ltx-2",
-                          "seedance-2.0-mini", "gemini-omni-flash", "grok-video"}
+                          "seedance-2.0-mini", "gemini-omni-flash", "grok-video",
+                          # Flux 3 : aucun mécanisme de références visuelles →
+                          # les fiches sont DÉCRITES en texte, jamais perdues.
+                          "flux-3", "flux-3-draft"}
 _ENGINE_RES_FORCED   = {
     "veo-3.1":      "1080p",
     "kling-v3-pro": "1080p",
@@ -57,9 +70,15 @@ _ENGINE_RES_FORCED   = {
 _ENGINE_RESOLUTIONS = {
     # 4K natif Seedance 2.0 VALIDÉ en réel (Matthieu 2026-07-05) → EN TÊTE de liste.
     # Valeur API "4k" (minuscule). Tarif = formule fal.ai (H×W×durée×24/1024 tokens
-    # × $0.008/1000) ≈ $1.55/s en 3840×2160. Défaut = 720p (voir _ENGINE_DEFAULT_RES).
-    "seedance-2.0":      [("4K  (~$1.55/s)", "4k"), ("1080p  (~$0.60/s)", "1080p"), ("720p  (~$0.30/s)", "720p"), ("480p  (~$0.16/s)", "480p")],
-    "seedance-2.0-fast": [("480p  (~$0.09/s)", "480p"),  ("720p  (~$0.18/s)", "720p")],
+    # × $0.008/1000) ≈ $1.56/s en 3840×2160. Défaut = 720p (voir _ENGINE_DEFAULT_RES).
+    # Prix RECOPIÉS de core/pricing._PER_SECOND (seule source) — relevé fal.ai 2026-08-09.
+    "seedance-2.0":      [("4K  (~$1.56/s)", "4k"), ("1080p  (~$0.68/s)", "1080p"), ("720p  (~$0.30/s)", "720p"), ("480p  (~$0.14/s)", "480p")],
+    "seedance-2.0-fast": [("480p  (~$0.11/s)", "480p"),  ("720p  (~$0.24/s)", "720p")],
+    # 2.5 : pas de 1080p ni de 4K chez fal — la liste ne doit proposer que ce
+    # que l'endpoint accepte réellement (sinon l'appel échoue).
+    "seedance-2.5":      [("720p  (~$0.47/s)", "720p"),  ("480p  (~$0.22/s)", "480p")],
+    "flux-3":            [("1080p  (~$0.29/s)", "1080p"), ("720p  (~$0.17/s)", "720p")],
+    "flux-3-draft":      [("720p  (~$0.06/s)", "720p")],
     "kling-v3-pro":      [("1080p", "1080p")],
     "kling-o3-4k":       [("4K",    "4K")],
     "veo-3.1":           [("1080p", "1080p")],
@@ -85,9 +104,15 @@ def _make_ext_worker(model: str, params: dict):
         HappyHorseWorker, PixVerseV6Worker, Sora2Worker,
         Seedance15Worker, LTX2Worker,
         GeminiOmniFlashWorker, Seedance20MiniWorker, GrokVideoWorker,
+        Flux3Worker,
     )
     p = dict(params)
     p.setdefault("mode", "t2v")
+    # Flux 3 : un seul worker pour les deux paliers — la clé « draft » choisit
+    # le brouillon à $0.06/s (720p) ; le jeton d'affinage revient dans le
+    # résultat (draft_cache_url).
+    if model == "flux-3-draft":
+        p["draft"] = True
     mapping = {
         "veo-3.1":           Veo3Worker,
         "kling-v3-pro":      KlingWorker,
@@ -100,6 +125,8 @@ def _make_ext_worker(model: str, params: dict):
         "gemini-omni-flash": GeminiOmniFlashWorker,
         "seedance-2.0-mini": Seedance20MiniWorker,
         "grok-video":        GrokVideoWorker,
+        "flux-3":            Flux3Worker,
+        "flux-3-draft":      Flux3Worker,
     }
     cls = mapping.get(model)
     return cls(p) if cls else None
@@ -3725,6 +3752,41 @@ class TabT2V(QScrollArea):
         src = getattr(self, "_assembly_source", None)
         if not src or self.prompt_ta.toPlainText().strip() != src:
             return   # édition utilisateur entre-temps → on n'écrase jamais
+        # ── Le plan porte déjà son prompt FINAL ? On le LIT (2026-08-09) ──────
+        # Architecture à l'endroit : le Storyboard est la source, le Studio lit.
+        # Conditions strictes — le texte de l'encart est bien le structuré du
+        # plan (pas une saisie manuelle), le final est FRAIS, et il a été écrit
+        # pour CE moteur et CETTE forme (sinon sa grammaire ne correspond plus
+        # → on recompose, chemin historique conservé comme filet).
+        try:
+            from core import final_prompt as _fp, prompt_form as _pfm
+            _shot = self._active_shot or {}
+            # Le final stocké a été composé avec les briques DU PLAN (termes
+            # caméra, no subtitles) et la bible. Si un réglage PROPRE AU STUDIO
+            # ajoute une brique de plus (raccord de continuité, anti-CGI,
+            # caméra dynamique, caméra Image & Son, sous-titres réactivés…),
+            # le stocké ne la contient pas → on compose, chemin historique.
+            _COVERED = {
+                "Cohérence visuelle (casting/décor)",     # bible du composeur
+                "Caméra du plan (valeur, axe, focale, distance, hauteur, "
+                "mouvement, vitesse)",                    # plan_injections
+                "Sous-titres désactivés",                 # plan_injections
+            }
+            _studio_extra = [l for l, _t, _m in self._text_injections()
+                             if l not in _COVERED]
+            if (_shot and not _studio_extra
+                    and src == (_shot.get("seedance_prompt") or "").strip()
+                    and _fp.state_of(_shot) == _fp.FRESH
+                    and (_shot.get(_fp.F_ENGINE) or "") == self._get_model()
+                    and (_shot.get(_fp.F_FORM) or "") == _pfm.get_form()):
+                _stored = _fp.text_of(_shot)
+                if _stored:
+                    self._final_cache_key_pending = ""
+                    self._final_from_cache = True
+                    self._on_preview_translated(_stored, True, "")
+                    return
+        except Exception:
+            pass
         from core.prompt_sections import strip_for_video as _sfv_prev, sound_of as _so_prev
         self._final_sound_notes = _so_prev(src)
         # Corps + briques pré-composition = EXACTEMENT ce que start_generation
@@ -3812,7 +3874,18 @@ class TabT2V(QScrollArea):
         change (le texte du plan, le moteur, la durée, le style, une fiche
         personnage…) → clé différente → recomposition."""
         import hashlib, json
-        payload = json.dumps({"p": prompt_fr, "c": ctx},
+        # ⚠ La FORME du prompt (Storyboard → « Forme du prompt ») entre dans la
+        # composition sans passer par ctx : elle est lue à l'intérieur de
+        # format_rules(). Omise ici, le cache renvoyait l'ancienne composition
+        # et basculer fiche ↔ phrase ne changeait RIEN à l'écran — défaut
+        # signalé par Matthieu le 2026-08-09. L'invariant de cette clé, c'est
+        # « TOUT ce qui détermine le prompt final » : la forme en fait partie.
+        try:
+            from core import prompt_form as _pf
+            _form = _pf.get_form()
+        except Exception:
+            _form = ""
+        payload = json.dumps({"p": prompt_fr, "c": ctx, "f": _form},
                              sort_keys=True, ensure_ascii=False, default=str)
         return hashlib.sha1(payload.encode("utf-8")).hexdigest()
 
@@ -3828,6 +3901,22 @@ class TabT2V(QScrollArea):
         if why:
             return
         self._final_cache[key] = (translated, composed, why)
+        # ── Conservation avec le PLAN ─────────────────────────────────────────
+        # Le cache ci-dessus meurt à la fermeture. Le Storyboard doit pouvoir
+        # RELIRE le prompt réellement envoyé (vue « Prompt final ») sans
+        # relancer une composition payante : on le range donc à côté du plan,
+        # avec le document de travail qui l'a produit — c'est lui qui dira si
+        # le prompt est périmé après une retouche.
+        try:
+            if self._active_shot and translated:
+                from core import final_prompt as _fp, prompt_form as _pfm
+                _fp.remember(
+                    self._active_shot, translated,
+                    (self._active_shot.get("seedance_prompt") or ""),
+                    engine=self._get_model(), form=_pfm.get_form(),
+                )
+        except Exception:
+            pass   # rater la mémorisation ne doit pas casser une génération réussie
         if len(self._final_cache) > self._FINAL_CACHE_MAX:
             for _old in list(self._final_cache)[:len(self._final_cache) - self._FINAL_CACHE_MAX]:
                 self._final_cache.pop(_old, None)
@@ -3906,12 +3995,11 @@ class TabT2V(QScrollArea):
         self._refresh_prompt_preview()
 
     # Heure du plan → suffixe d'éclairage en anglais (partagé assemblage / envoi).
-    _SHOT_TIME_EN_PREVIEW = {
-        "Jour":            "strict daylight, natural midday sun, bright neutral light, no golden hour, no sunset",
-        "Nuit":            "nighttime scene, dark environment, night lighting, no daylight, moonlight or artificial light",
-        "Lever du soleil": "sunrise, warm golden morning light, sun just above the horizon, soft pink-orange sky",
-        "Coucher du soleil": "sunset, golden hour, warm amber-orange light, sun low on the horizon",
-    }
+    # SOURCE UNIQUE : core/prompt_sync.SHOT_TIME_EN — la même table sert au
+    # Studio ET à la synchronisation du Storyboard. Un doublon local aurait
+    # divergé à la première retouche (et le final stocké n'aurait plus été
+    # celui que le Studio compose).
+    from core.prompt_sync import SHOT_TIME_EN as _SHOT_TIME_EN_PREVIEW
 
     def _post_compose_injections(self, composed: bool) -> list:
         """Briques ajoutées APRÈS la composition (miroir exact d'api/real.py).
@@ -3995,23 +4083,14 @@ class TabT2V(QScrollArea):
 
     @staticmethod
     def _apply_injections(text: str, injections: list) -> str:
-        """Applique des briques [(label, texte, mode)] à un prompt, dans l'ordre."""
-        fp = (text or "").strip()
-        for _label, txt, mode in injections:
-            txt = (txt or "").strip()
-            if not txt:
-                continue
-            if mode == "ctx":
-                fp = txt + fp
-            elif mode == "dash_prefix":
-                fp = f"{txt} — {fp}"
-            elif mode == "nl_prefix":
-                fp = f"{txt}\n{fp}"
-            elif mode == "comma_prefix":
-                fp = f"{txt.rstrip(' .')}, {fp}"
-            else:   # comma_suffix — pas de « ., » disgracieux
-                fp = f"{fp.rstrip(' .')}, {txt}"
-        return fp
+        """Applique des briques [(label, texte, mode)] à un prompt, dans l'ordre.
+
+        Corps déplacé dans core/prompt_sync.apply_injections : la
+        synchronisation du Storyboard assemble avec la MÊME fonction — deux
+        copies auraient divergé à la première retouche, et le final stocké
+        n'aurait plus été celui que le Studio envoie."""
+        from core.prompt_sync import apply_injections
+        return apply_injections(text, injections)
 
     def _build_pre_compose_prompt(self, body: str) -> str:
         """Texte soumis au composeur : corps du plan + briques pré-composition,
@@ -4424,8 +4503,39 @@ class TabT2V(QScrollArea):
     def _get_model(self) -> str:
         return self.cb_model.currentData() or "seedance-2.0"
 
+    def _refresh_duration_options(self):
+        """Options de durée = fenêtre du moteur sélectionné (2026-08-09).
+
+        Seedance 2.5 accepte 30 s (plan-séquence natif) : le combo doit les
+        proposer — il était figé à 15 s pour tout le monde. Les moteurs hors
+        famille Seedance gardent leur plafond historique de 15 s (leurs bornes
+        réelles sont gérées par leurs propres workers)."""
+        try:
+            from core.seedance_family import duration_bounds, is_seedance
+            key = self._get_model()
+            hi = duration_bounds(key)[1] if is_seedance(key) else 15
+        except Exception:
+            hi = 15
+        opts = [d for d in (4, 5, 8, 10, 12, 15, 20, 25, 30) if d <= hi]
+        if opts == list(self._DUR_OPTIONS):
+            return
+        cur = self._get_duration()
+        self._DUR_OPTIONS = opts           # attribut d'instance (masque la classe)
+        if not hasattr(self, "cb_dur"):
+            return
+        locked = not self.cb_dur.isEnabled()   # verrou « durée du storyboard »
+        self.cb_dur.blockSignals(True)
+        self.cb_dur.clear()
+        self.cb_dur.addItems([f"{d} s" for d in opts])
+        best = min(range(len(opts)), key=lambda i: abs(opts[i] - cur))
+        self.cb_dur.setCurrentIndex(best)
+        self.cb_dur.blockSignals(False)
+        self.cb_dur.setEnabled(not locked)
+
     def _on_engine_changed(self):
         key = self._get_model()
+        # Les durées offertes dépendent du moteur (30 s en 2.5).
+        self._refresh_duration_options()
         # Le prompt final est écrit DANS la grammaire du moteur : changer de moteur
         # doit le réassembler, sinon on enverrait des champs « Camera: » à Veo ou une
         # phrase continue à Seedance (demande Matthieu 2026-07-25). On ne réassemble
@@ -4968,13 +5078,12 @@ class TabT2V(QScrollArea):
         # génériques interdits par la doctrine des prompts — poussent vers un rendu
         # CGI plastique ; le style vidéo du projet et l'ancrage film suffisent.)
         # Heure du plan → suffixe d'éclairage en anglais, ajouté APRÈS traduction
-        # pour que les mots-clés Seedance ne soient pas altérés par Claude Haiku
-        _SHOT_TIME_EN = {
-            "Jour":             "strict daylight, natural midday sun, bright neutral light, no golden hour, no sunset",
-            "Nuit":             "nighttime scene, dark environment, night lighting, no daylight, moonlight or artificial light",
-            "Lever du soleil":  "sunrise, warm golden morning light, sun just above the horizon, soft pink-orange sky",
-            "Coucher du soleil":"sunset, golden hour, warm amber-orange light, sun low on the horizon",
-        }
+        # pour que les mots-clés Seedance ne soient pas altérés par Claude Haiku.
+        # ⚠ Table UNIQUE (core/prompt_sync.SHOT_TIME_EN) : ce chemin d'envoi en
+        # portait une DEUXIÈME copie locale — trouvée par le test du pipeline à
+        # l'endroit le 2026-08-09. Trois copies qui divergent = trois éclairages
+        # différents pour la même heure selon l'écran qui compose.
+        from core.prompt_sync import SHOT_TIME_EN as _SHOT_TIME_EN
         _shot_time = (self._active_shot.get("shot_time") if self._active_shot else "") or ""
         time_suffix = _SHOT_TIME_EN.get(_shot_time, "")
 

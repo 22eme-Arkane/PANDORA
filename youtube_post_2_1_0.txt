@@ -1,0 +1,44 @@
+🎬 PANDORA 2.1.0 — LE MAPPING NE DÉRIVE PLUS
+
+Grosse mise à jour, et une bonne nouvelle pour tous ceux qui font du mapping vidéo : le problème du zoom qui se cumule de plan en plan est réglé — pas contourné, réglé à la racine.
+
+LA CHAÎNE D'IMAGES (le cœur de cette version)
+
+Jusqu'ici, chaque plan de mapping repartait d'une image extraite de la vidéo du plan précédent. Chaque génération dérive un tout petit peu, et cette dérive était réinjectée au plan suivant, qui en ajoutait la sienne... comme la photocopie d'une photocopie. Au bout de quelques plans, l'image zoomait, se rognait, quittait le bâtiment.
+
+Le nouveau mode « Chaîne d'images », activé par défaut dans Séquence Mapping, change la construction : chaque plan est généré en image → vidéo avec une image de départ ET une image d'arrivée. Le plan arrive sur son propre Mood, et le plan suivant part exactement du même fichier. Le raccord se fait par identité d'image — plus rien n'est extrait d'une vidéo, la boule de neige ne peut plus exister.
+
+Concrètement dans le storyboard : deux vignettes cliquables par plan (départ | arrivée). Vous générez ou régénérez un état seul, sans relancer tout le lot. Le plan 1 a son état de départ dédié, que vous pouvez générer ou... importer.
+
+IMPORT D'IMAGES DANS LES MOODS
+
+Live ET Cinéma : si vous avez déjà l'image parfaite, importez-la directement comme Mood au lieu de la régénérer.
+
+LES IMAGES FONT ENFIN LA TAILLE DEMANDÉE
+
+Tous les ratios sauf le carré étaient silencieusement rendus aux tailles internes du moteur : un 1280×720 demandé revenait en 1368×768. Toute la génération d'images livre maintenant la définition exacte choisie, 1920×1080 par défaut.
+
+ET AUSSI
+
+— Masque de confinement façade réparé (il ne faisait silencieusement rien sur les façades détourées) — débrayable, décoché par défaut
+— Le prompt des Moods est composé par l'IA dans la grammaire du moteur, avec un cache : une composition n'est jamais payée deux fois
+— Panneaux Prompt / Prévisualisation repliables dans la fenêtre Mood — dépliez le prompt seul, il prend toute la hauteur
+— Nouvelle arborescence claire pour les NOUVEAUX projets (01_writing, 02_elements, 03_production, 04_live) — vos projets existants ne bougent pas d'un poil, rien à faire
+— Sauvegarde de configuration blindée : un plantage ne peut plus corrompre vos clés API
+— L'onglet Resolume est mis de côté pour le moment : vos sets restent dans le dossier vidéos du projet, prêts pour n'importe quel logiciel VJ
+— Guides utilisateur Cinéma et Live remis à jour, français et anglais
+
+Cette version inclut aussi la 2.0.2, jamais publiée : le découpage Live qui n'était en réalité JAMAIS enregistré (vérifiez vos découpages existants !), l'onglet Découpage éditable en Live, et la durée en timecode (0:20) qui était lue comme zéro seconde.
+
+📥 TÉLÉCHARGER LA 2.1.0
+
+Windows : https://github.com/22eme-Arkane/PANDORA/releases/download/v2.1.0/PANDORA_Setup_2.1.0.exe
+macOS (Apple Silicon) : https://github.com/22eme-Arkane/PANDORA/releases/download/v2.1.0/PANDORA_2.1.0.dmg
+
+L'installation se fait par-dessus votre version actuelle, vos projets et vos clés sont conservés.
+
+Toutes les notes détaillées : https://github.com/22eme-Arkane/PANDORA/releases/tag/v2.1.0
+
+Comme toujours, n'hésitez pas à me signaler ce qui cloche — la dérive du mapping, c'est en travaillant sur mon propre set que je l'ai mesurée, image par image.
+
+Matthieu — 22eme Arkane

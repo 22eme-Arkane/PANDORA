@@ -2,7 +2,7 @@
 from PyQt6.QtWidgets import (
     QDialog, QWidget, QHBoxLayout, QVBoxLayout, QLabel, QPushButton,
     QLineEdit, QTextEdit, QComboBox, QProgressBar, QFileDialog,
-    QMessageBox, QFrame, QScrollArea, QCheckBox, QSpinBox,
+    QMessageBox, QFrame, QScrollArea, QCheckBox, QSpinBox, QSizePolicy,
 )
 from PyQt6.QtCore import Qt
 from PyQt6.QtGui import QPixmap
@@ -168,6 +168,17 @@ class DecorDialog(QDialog):
         row.addLayout(col_cat, 1)
         lay.addLayout(row)
 
+        # ── Sections REPLIABLES (2026-07-31) ─────────────────────────────────
+        # La fiche accumulait une douzaine de contrôles empilés : illisible, et
+        # le prompt se retrouvait noyé. Le nom, la catégorie et le prompt
+        # restent visibles ; tout le reste est rangé dans des sections repliées
+        # par défaut. Les 5 menus (usage des références, style, mode, moteur,
+        # format) sont réunis dans UNE section « Réglages de génération ».
+        from ui.collapsible import CollapsibleSection
+        self._sec_refs = CollapsibleSection("🖼  Références visuelles", expanded=False)
+        self._sec_settings = CollapsibleSection("⚙  Réglages de génération", expanded=False)
+        self._sec_creative = CollapsibleSection("🎨  Contrôles créatifs", expanded=False)
+
         # Avertissement
         warn = QLabel(
             "⚠  Nano Banana applique des filtres de contenu (ByteDance / fal.ai). "
@@ -216,21 +227,28 @@ class DecorDialog(QDialog):
             "Clique sur ☁ pour optimiser via Claude."
         )
         self._prompt.setPlainText(self._item.get("prompt", ""))
-        self._prompt.setFixedHeight(100)
+        # ÉLASTIQUE (demande Matthieu 2026-07-31) : le prompt prend toute la
+        # place laissée libre quand les sections sont repliées, et revient à
+        # sa hauteur minimale quand on les déplie. Hauteur FIXE auparavant :
+        # 100 px même sur une fiche vide, alors qu'un prompt de décor fait
+        # facilement dix lignes.
+        self._prompt.setMinimumHeight(100)
+        self._prompt.setSizePolicy(QSizePolicy.Policy.Preferred,
+                                   QSizePolicy.Policy.Expanding)
         self._prompt.setStyleSheet(
             f"QTextEdit{{background:{CP['bg3']};border:1px solid {CP['border']};"
             f"border-radius:6px;color:{CP['text_primary']};font-size:12px;padding:8px;}}"
             f"QTextEdit:focus{{border-color:{CP['accent']};}}"
         )
-        lay.addWidget(self._prompt)
+        lay.addWidget(self._prompt, 1)   # 1 = c'est LUI qui absorbe l'espace libre
 
-        # Références visuelles
+        # Références visuelles — dans leur section repliable
+        lay.addWidget(self._sec_refs)
         rh = QHBoxLayout()
-        rh.addWidget(_lbl("Références visuelles"))
         rh.addStretch()
         self._refs_hint_lbl = _lbl("Claude enrichit le prompt", size=10, color=CP["text_dim"])
         rh.addWidget(self._refs_hint_lbl)
-        lay.addLayout(rh)
+        self._sec_refs.add_layout(rh)
 
         self._refs_scroll = QScrollArea()
         self._refs_scroll.setFixedHeight(76)
@@ -250,7 +268,10 @@ class DecorDialog(QDialog):
         self._refs_layout.setSpacing(8)
         self._refs_scroll.setWidget(self._refs_container)
         self._refresh_refs()
-        lay.addWidget(self._refs_scroll)
+        self._sec_refs.add_widget(self._refs_scroll)
+
+        # ── Réglages de génération : les 5 menus réunis ──────────────────────
+        lay.addWidget(self._sec_settings)
 
         # Usage des références
         _ur = QHBoxLayout()
@@ -271,7 +292,7 @@ class DecorDialog(QDialog):
                 break
         self._ref_usage_combo.currentIndexChanged.connect(self._on_ref_usage_changed)
         _ur.addWidget(self._ref_usage_combo, 1)
-        lay.addLayout(_ur)
+        self._sec_settings.add_layout(_ur)
 
         # Style d'image
         style_row = QHBoxLayout()
@@ -279,32 +300,12 @@ class DecorDialog(QDialog):
         style_lbl = _lbl("Style d'image")
         style_lbl.setFixedWidth(130)
         style_row.addWidget(style_lbl)
-        import core.style as _style_mod
-        from PyQt6.QtGui import QColor as _QColor
+        from ui.style_combo import populate as _populate_styles
         self._style_combo = QComboBox()
-        self._style_combo.addItem("— Style du projet —", "")
-        _cur_grp = None
-        for _s in _style_mod.STYLES:
-            _g = _s.get("group", "")
-            if _g != _cur_grp:
-                _cur_grp = _g
-                _gi = next((g for g in _style_mod.GROUPS if g["key"] == _g), None)
-                if _gi:
-                    self._style_combo.addItem(
-                        f"  {_gi['icon']}  {translate(_gi['name']).upper()}", "__sep__"
-                    )
-                    _sep_item = self._style_combo.model().item(
-                        self._style_combo.count() - 1
-                    )
-                    _sep_item.setEnabled(False)
-                    _sep_item.setForeground(_QColor(CP.get("accent2", "#7c6bff")))
-            self._style_combo.addItem(f"    {_s['icon']}  {translate(_s['name'])}", _s["key"])
-        saved_key = self._item.get("decor_style_key", "") or _style_mod.get_style_key()
-        if saved_key:
-            for _i in range(self._style_combo.count()):
-                if self._style_combo.itemData(_i) == saved_key:
-                    self._style_combo.setCurrentIndex(_i)
-                    break
+        # Liste partagée (ui/style_combo) : « Style de la note de réalisation »
+        # en tête, puis le style du projet, puis les styles par famille.
+        _populate_styles(self._style_combo,
+                         saved_key=self._item.get("decor_style_key", ""))
         self._style_combo.setFixedHeight(36)
         self._style_combo.setStyleSheet(
             f"QComboBox{{background:{CP['bg3']};border:1px solid {CP['border']};"
@@ -316,7 +317,7 @@ class DecorDialog(QDialog):
             f"font-size:11px;padding:4px;}}"
         )
         style_row.addWidget(self._style_combo, 1)
-        lay.addLayout(style_row)
+        self._sec_settings.add_layout(style_row)
         # Appliquer l'état initial selon l'usage de référence sauvegardé
         self._on_ref_usage_changed()
 
@@ -350,7 +351,7 @@ class DecorDialog(QDialog):
             f"color:{CP['text_primary']};selection-background-color:{CP['accent_dim']};}}"
         )
         mode_row.addWidget(self._gen_mode, 1)
-        lay.addLayout(mode_row)
+        self._sec_settings.add_layout(mode_row)
 
         # Deux choix explicites pour le workflow « 7 vues » : le premier moteur
         # crée l'image maîtresse ; le second doit savoir ÉDITER des références et
@@ -374,7 +375,7 @@ class DecorDialog(QDialog):
         self._model_combo.setFixedHeight(30)
         self._model_combo.setStyleSheet(_combo_ss())
         _m_row.addWidget(self._model_combo, 1)
-        lay.addLayout(_m_row)
+        self._sec_settings.add_layout(_m_row)
 
         # Format (ratio) + Définition (résolution) — composants PARTAGÉS
         # (ui/widgets.py), identiques dans tous les dialogues d'éléments.
@@ -391,7 +392,7 @@ class DecorDialog(QDialog):
         _fmt_row.addWidget(_def_lbl)
         self._res_combo = ResolutionCombo()
         _fmt_row.addWidget(self._res_combo, 1)
-        lay.addLayout(_fmt_row)
+        self._sec_settings.add_layout(_fmt_row)
 
         self._reference_model_row = QWidget()
         self._reference_model_row.setStyleSheet("background:transparent;")
@@ -415,7 +416,7 @@ class DecorDialog(QDialog):
             "ils reprennent l'image maîtresse, puis le plan d'architecture."
         )
         _rm_row.addWidget(self._reference_model_combo, 1)
-        lay.addWidget(self._reference_model_row)
+        self._sec_settings.add_widget(self._reference_model_row)
 
         self._reference_model_hint = QLabel(
             "Le premier moteur crée le plan d'ensemble. Le second reprend cette "
@@ -426,14 +427,14 @@ class DecorDialog(QDialog):
         self._reference_model_hint.setStyleSheet(
             f"color:{CP['text_dim']};font-size:9px;background:transparent;border:none;"
         )
-        lay.addWidget(self._reference_model_hint)
+        self._sec_settings.add_widget(self._reference_model_hint)
         self._gen_mode.currentIndexChanged.connect(self._on_generation_mode_changed)
         self._style_combo.currentIndexChanged.connect(self._update_suffix_edit)
         _sfx_lbl = QLabel("↓  Suffix de style injecté (modifiable) :")
         _sfx_lbl.setStyleSheet(
             f"color:{CP['text_dim']};font-size:9px;background:transparent;border:none;"
         )
-        lay.addWidget(_sfx_lbl)
+        self._sec_settings.add_widget(_sfx_lbl)
         self._suffix_edit = QTextEdit()
         self._suffix_edit.setFixedHeight(54)
         self._suffix_edit.setStyleSheet(
@@ -450,14 +451,13 @@ class DecorDialog(QDialog):
             "Inclut la caméra/optique définie dans Image & Son si configurée.\n"
             "Modifiable librement — ce texte est envoyé tel quel à l'API."
         )
-        lay.addWidget(self._suffix_edit)
+        self._sec_settings.add_widget(self._suffix_edit)
         self._update_suffix_edit()
 
-        sep_c = QFrame(); sep_c.setFixedHeight(1)
-        sep_c.setStyleSheet(f"background:{CP['border']};")
-        lay.addWidget(sep_c)
+        # Contrôles créatifs — leur propre section repliable
         self._creative = NanoBananaControlsPanel()
-        lay.addWidget(self._creative)
+        self._sec_creative.add_widget(self._creative)
+        lay.addWidget(self._sec_creative)
 
         _gen_row = QHBoxLayout()
         _gen_row.setSpacing(8)
@@ -516,7 +516,9 @@ class DecorDialog(QDialog):
             f"color:{CP['text_dim']};font-size:10px;font-family:'Consolas',monospace;background:transparent;"
         )
 
-        lay.addStretch()
+        # PAS de addStretch() ici : l'espace libre doit aller au PROMPT
+        # (addWidget(self._prompt, 1) plus haut), pas à un ressort en fin de
+        # colonne qui le laisserait à 100 px sur une fiche presque vide.
 
         scroll.setWidget(w)
         outer_lay.addWidget(scroll, 1)
@@ -544,12 +546,33 @@ class DecorDialog(QDialog):
         )
         self._btn_import_photo.setToolTip(translate("Utiliser une photo existante du décor plutôt que de le générer"))
         self._btn_import_photo.clicked.connect(self._import_photo)
+
+        # Créer/régénérer le PLAN D'ARCHITECTE vu de dessus à la demande —
+        # même plan que la section « Plan des décors » (page Décors), lu en
+        # direct par la Mise en scène et le Plan de feu.
+        self._btn_floor_plan = QPushButton("▦  Créer le plan du décor")
+        self._btn_floor_plan.setFixedHeight(32)
+        self._btn_floor_plan.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._btn_floor_plan.setStyleSheet(
+            f"QPushButton{{background:transparent;color:{CP['text_secondary']};"
+            f"border:1px solid {CP['border']};border-radius:8px;"
+            f"font-size:11px;font-weight:700;padding:0 14px;}}"
+            f"QPushButton:hover{{background:{CP['bg3']};color:{CP['text_primary']};"
+            f"border-color:{CP['border_bright']};}}"
+            f"QPushButton:disabled{{color:{CP['text_dim']};border-color:{CP['border']};}}"
+        )
+        self._btn_floor_plan.setToolTip(translate(
+            "Générer le plan d'architecte du décor (vu de dessus) — "
+            "utilisé par la Mise en scène et le Plan de feu"))
+        self._btn_floor_plan.clicked.connect(self._on_create_floor_plan)
+
         # Aligné sur « Générer l'image » : on réserve à droite la largeur du
         # « × » (14) + spinbox (50) + leurs espacements (8+8) = 80 px.
         _import_row = QHBoxLayout()
-        _import_row.setSpacing(0)
+        _import_row.setSpacing(8)
         _import_row.addWidget(self._btn_import_photo, 1)
-        _import_row.addSpacing(80)
+        _import_row.addWidget(self._btn_floor_plan, 1)
+        _import_row.addSpacing(72)
         _action_lay.addLayout(_import_row)
 
         _action_lay.addWidget(price_lbl)
@@ -1013,21 +1036,15 @@ class DecorDialog(QDialog):
     def _update_suffix_edit(self):
         if not hasattr(self, "_suffix_edit"):
             return
-        import core.style as _style_mod
         from core.camera_prefs import get_camera_prefs
+        from ui.style_combo import suffix_for
         prefs = get_camera_prefs()
         cam = prefs.get("camera_body", "").strip()
         optic = prefs.get("optics_series", "").strip()
         has_cam = bool(cam or optic)
-        sk = self._style_combo.currentData() if hasattr(self, "_style_combo") else ""
-        if sk and sk != "__sep__":
-            _s = next((s for s in _style_mod.STYLES if s["key"] == sk), None)
-            if _s:
-                sfx = _s.get("image_suffix_no_cam", _s["image_suffix"]) if has_cam else _s["image_suffix"]
-            else:
-                sfx = _style_mod.get_image_suffix_no_cam() if has_cam else _style_mod.get_image_suffix()
-        else:
-            sfx = _style_mod.get_image_suffix_no_cam() if has_cam else _style_mod.get_image_suffix()
+        # Résolution partagée : gère la clé « note de réalisation » comme les
+        # clés de style normales (et le repli sur le style du projet).
+        sfx = suffix_for(getattr(self, "_style_combo", None), no_cam=has_cam)
         cam_parts = []
         if cam:
             cam_parts.append(f"shot on {cam}")
@@ -1223,20 +1240,64 @@ class DecorDialog(QDialog):
         if (existing and os.path.isfile(existing)
                 and prompt == self._item.get("floor_plan_prompt", "")):
             return   # plan déjà à jour pour ce décor (ex. simple variation)
-        name = self._name.text().strip() or "decor"
+        self._start_floor_plan_worker(prompt, manual=False)
+
+    def _on_create_floor_plan(self):
+        """Bouton « Créer le plan du décor » : (re)génère le plan d'architecte vu
+        de dessus À LA DEMANDE, même si un plan à jour existe déjà."""
+        prompt = self._prompt.toPlainText().strip()
+        if not prompt:
+            self._status.setText(translate("Décris d'abord le décor pour générer son plan."))
+            return
+        self._start_floor_plan_worker(prompt, manual=True)
+
+    def _start_floor_plan_worker(self, prompt: str, manual: bool):
+        """Lance GenerateFloorPlanWorker (auto OU bouton). `manual` pilote le
+        retour visuel : bouton verrouillé + statut ; le chemin auto reste muet."""
+        w = self._floor_plan_worker
+        if w is not None and w.isRunning():
+            return
+        if w is not None:
+            from core.worker import abandon_thread
+            abandon_thread(w)
+        self._fp_manual = manual
         self._fp_pending_prompt = prompt
+        if manual:
+            self._btn_floor_plan.setEnabled(False)
+            self._btn_floor_plan.setText("▦  " + translate("Plan en cours…"))
+            self._status.setText(translate("Génération du plan vu de dessus…"))
+        name = self._name.text().strip() or "decor"
         self._floor_plan_worker = GenerateFloorPlanWorker(
             prompt, name,
             resolution=self._res_combo.resolution_key())
         self._floor_plan_worker.finished.connect(self._on_floor_plan_done)
-        self._floor_plan_worker.failed.connect(lambda _e: None)   # non bloquant
+        self._floor_plan_worker.failed.connect(self._on_floor_plan_failed)
         self._floor_plan_worker.start()
 
+    def _reset_floor_plan_btn(self):
+        if hasattr(self, "_btn_floor_plan"):
+            self._btn_floor_plan.setEnabled(True)
+            self._btn_floor_plan.setText("▦  " + translate("Créer le plan du décor"))
+
+    def _on_floor_plan_failed(self, err: str):
+        """Échec du plan : muet pour la génération AUTO (non bloquant), affiché
+        dans le statut quand le bouton « Créer le plan du décor » l'a demandé."""
+        self._reset_floor_plan_btn()
+        if getattr(self, "_fp_manual", False):
+            self._status.setText(err)
+
     def _on_floor_plan_done(self, path: str):
+        self._reset_floor_plan_btn()
+        manual = getattr(self, "_fp_manual", False)
         if not (path and os.path.isfile(path)):
+            if manual:
+                self._status.setText(translate("Mode mock : aucun plan généré (clé fal.ai absente)"))
             return   # mock / échec → pas de plan (la page Décors peut le générer plus tard)
+        if manual:
+            self._status.setText(translate("Plan du décor généré ✓ — visible dans « Plan des décors » (page Décors)"))
         self._item["floor_plan"] = path
         self._item["floor_plan_prompt"] = getattr(self, "_fp_pending_prompt", "")
+        self._item["floor_plan_thumbnail"] = ""   # l'aperçu léger visait l'ancien plan
         # Si le décor est déjà sauvegardé (édition), persiste tout de suite (plan + prompt).
         _id = self._item.get("id")
         if _id:
@@ -1246,9 +1307,19 @@ class DecorDialog(QDialog):
                 if _dec is not None:
                     _dec["floor_plan"] = path
                     _dec["floor_plan_prompt"] = self._item["floor_plan_prompt"]
+                    _dec["floor_plan_thumbnail"] = ""
                     _d.save_decor(_dec)
                 else:
                     _d.set_floor_plan(_id, path)
+                # Un seul plan par PIÈCE : les vues sœurs (room_group) partagent
+                # le plan, comme dans la page Décors (_apply_floor_plan_by_id).
+                group = (self._item.get("room_group")
+                         or (_dec or {}).get("room_group") or "")
+                if group:
+                    for sib in _d.list_decors():
+                        if (sib.get("room_group") == group and sib.get("id")
+                                and sib["id"] != _id):
+                            _d.set_floor_plan(sib["id"], path)
             except Exception:
                 pass
 
