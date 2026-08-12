@@ -1,0 +1,72 @@
+🎬 PANDORA 2.2.0 — LE PROMPT QUE VOUS LISEZ EST ENFIN CELUI QUI PART
+
+Cette mise à jour corrige quelque chose que je faisais à l'envers depuis le début, et que je n'avais pas vu tant qu'un utilisateur ne me l'a pas dit en une phrase : « on part de la fin pour aller au début, ça n'a pas de sens ».
+
+LE PIPELINE REMIS À L'ENDROIT
+
+Jusqu'ici, le Storyboard gardait vos notes de travail en français, et le VRAI prompt — celui envoyé au moteur, en anglais — était écrit au dernier moment, dans le Studio, au moment d'appuyer sur Générer. Invisible. Et perdu dès que vous fermiez l'application.
+
+Autrement dit : ce que vous lisiez n'était pas ce qui partait.
+
+Désormais le découpage écrit les DEUX prompts d'un coup et les enregistre avec le plan. Vous modifiez le document structuré, le prompt final se réécrit derrière. Vous modifiez le prompt final, le document structuré se réaligne. Le Studio ne compose plus rien : il lit.
+
+Une bascule « Prompt structuré / Prompt final » dans la barre du Storyboard vous montre lequel des deux vous regardez.
+
+LE MOTEUR SE CHOISIT AVANT D'ÉCRIRE
+
+Chaque moteur vidéo attend une forme de prompt différente. S'en apercevoir après avoir écrit 75 plans oblige à tout recomposer. La question est donc posée au début, et la fenêtre annonce les contraintes réelles du moteur choisi : résolutions, durées, façon dont vos fiches sont désignées.
+
+Vos storyboards existants ne sont pas laissés de côté : un bouton « Composer » remplit les prompts finaux manquants, avec le nombre de plans affiché avant de cliquer.
+
+SEEDANCE 2.5
+
+Des plans de 30 secondes d'un seul tenant, jusqu'à 50 références, et vos fiches enfin désignées par leur nom dans le prompt.
+
+Elle s'ajoute À CÔTÉ de la 2.0, jamais à sa place : elle plafonne à 720p et coûte 56 % plus cher à résolution égale. Pour livrer en 1080p ou en 4K, la 2.0 reste le bon choix. PANDORA vous le dit dans le menu au lieu de vous laisser le découvrir.
+
+FLUX 3 — ET SURTOUT SON MODE BROUILLON
+
+Black Forest Labs entre dans la vidéo. Texte, image, première/dernière image, 5 à 20 secondes, audio natif.
+
+Le vrai intérêt est ailleurs : son palier BROUILLON rend à 0,06 $/s. Vous sortez le film entier pour une poignée d'euros, vous regardez, et le bouton « ✦ Affiner » ne rend en pleine qualité 1080p que les prises que vous gardez. L'affinage rejoue exactement le même plan depuis le cache du brouillon — ce n'est pas un nouveau tirage.
+
+Une précision honnête : sur un film de 75 plans, l'économie n'existe que si vous jetez. Si vous gardez tout, le deux-temps coûte plus cher qu'une génération directe. C'est le tri qui paie, pas le procédé.
+
+Attention aussi : Flux 3 n'accepte AUCUNE image de référence. Vos fiches personnage et décor ne peuvent pas lui être envoyées. PANDORA le signale au lieu de les perdre en silence.
+
+ET AUSSI CÔTÉ MOTEURS
+
+— Kling v3 Turbo : palier rapide et moins cher du Kling déjà embarqué
+— Happy Horse 1.1 remplace la 1.0 — le 1080p passe de 0,28 à 0,18 $/s
+— VEED Lipsync v2 rejoint les moteurs de synchro labiale
+— Stable Audio 3 pour la musique et le bruitage
+
+LES PRIX ÉTAIENT FAUX
+
+En vérifiant la grille de fal.ai, j'ai trouvé que le 1080p était sous-estimé de 12 %, le palier Fast de 34 %, et que Seedance Mini n'avait aucune entrée du tout — il retombait sur un chiffre quatre fois trop élevé. Certains menus affichaient même un prix à la seconde libellé « par 5 secondes ».
+
+La fenêtre « Coût du projet » dit de nouveau la vérité.
+
+LE DOSSIER DES PROJETS EST ENFIN VISIBLE
+
+Il n'était proposé qu'à la création du tout premier projet. Ensuite, plus moyen de le retrouver. Il est maintenant dans les Paramètres des deux éditions — pratique pour travailler depuis un disque externe entre votre station et votre portable.
+
+CORRIGÉ
+
+— Les lignes du tableau ne rognent plus un mouvement de caméra qui tient sur deux lignes
+— Un plantage en quittant le Storyboard pendant une composition en lot
+— Les plans dont le dialogue contient des points de suspension ou des apostrophes courbes ne sont plus refusés comme « altérés »
+— La bascule Prompt structuré/final et les cellules ne se contredisent plus à l'ouverture d'un projet
+
+📥 TÉLÉCHARGER LA 2.2.0
+
+Windows : https://github.com/22eme-Arkane/PANDORA/releases/download/v2.2.0/PANDORA_Setup_2.2.0.exe
+macOS (Apple Silicon) : https://github.com/22eme-Arkane/PANDORA/releases/download/v2.2.0/PANDORA_2.2.0.dmg
+
+L'installation se fait par-dessus votre version actuelle, vos projets et vos clés sont conservés.
+
+Toutes les notes détaillées : https://github.com/22eme-Arkane/PANDORA/releases/tag/v2.2.0
+
+Comme toujours, dites-moi ce qui cloche. Cette version vient presque entièrement de choses vues en travaillant sur mes propres films — et d'une remarque d'utilisateur qui m'a fait refaire l'architecture dans le bon sens.
+
+Matthieu — 22eme Arkane
