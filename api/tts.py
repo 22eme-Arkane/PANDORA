@@ -543,56 +543,21 @@ class IndexTTS2Worker(QThread):
 
 
 # ── Voix IA multi-moteurs (text → speech) ────────────────────────────────────
-# Registre des moteurs TTS « voix de synthèse » (sans échantillon). Schémas
-# best-effort fal.ai : tous acceptent un champ texte ; envoi minimal {"text": …}
-# (voix par défaut du moteur) pour éviter les erreurs de paramètres.
+# Le registre vit dans core/speech_engines.py : chaque moteur y déclare le nom
+# de son champ texte, où déposer la voix et comment nommer le français. Ces
+# trois points diffèrent d'un moteur à l'autre, et les ignorer est ce qui
+# faisait échouer MiniMax/Gemini (champ requis « prompt ») et laissait
+# ElevenLabs parler avec « Rachel », sa voix américaine par défaut.
 
-SPEECH_ENGINES = {
-    "elevenlabs-v3": {
-        "label":    "ElevenLabs Eleven v3  ·  FR natif · recommandé  ·  ~$0.10/1000c",
-        "endpoint": "fal-ai/elevenlabs/tts/eleven-v3",
-        "price":    "~$0.10 / 1000 c",
-        # language_code='fr' forcé → règle l'accent anglais d'Index TTS 2 sur du FR.
-        "extra":    {"language_code": "fr"},
-    },
-    "minimax-2.8-hd": {
-        "label":    "MiniMax Speech 2.8 HD  ·  FR · 300+ voix · qualité  ·  ~$0.05/1000c",
-        "endpoint": "fal-ai/minimax/speech-2.8-hd",
-        "price":    "~$0.05 / 1000 c",
-    },
-    "minimax-2.8-turbo": {
-        "label":    "MiniMax Speech 2.8 Turbo  ·  FR · rapide  ·  ~$0.04/1000c",
-        "endpoint": "fal-ai/minimax/speech-2.8-turbo",
-        "price":    "~$0.04 / 1000 c",
-    },
-    "gemini-tts": {
-        "label":    "Gemini 3.1 Flash TTS  ·  Google · tags expressifs",
-        "endpoint": "fal-ai/gemini-3.1-flash-tts",
-        "price":    "~$0.02 / 1000 c",
-    },
-    "inworld": {
-        "label":    "Inworld TTS 1.5 Max  ·  multilingue",
-        "endpoint": "fal-ai/inworld-tts",
-        "price":    "~$0.02 / 1000 c",
-    },
-    "qwen3": {
-        "label":    "Qwen3-TTS  ·  10 langues · open source",
-        "endpoint": "fal-ai/qwen-3-tts/text-to-speech/1.7b",
-        "price":    "~$0.02 / 1000 c",
-    },
-    "maya1": {
-        "label":    "Maya1  ·  voix expressive (Maya Research)",
-        "endpoint": "fal-ai/maya",
-        "price":    "~$0.002 / s",
-    },
-}
-
-SPEECH_ENGINE_ORDER = ["elevenlabs-v3", "minimax-2.8-hd", "minimax-2.8-turbo",
-                       "gemini-tts", "inworld", "qwen3", "maya1"]
-
-
-def speech_engine_spec(key: str) -> dict:
-    return SPEECH_ENGINES.get(key, SPEECH_ENGINES["minimax-2.8-hd"])
+from core.speech_engines import (           # noqa: E402  (registre, pas un cycle)
+    ENGINES as SPEECH_ENGINES,
+    ORDER as SPEECH_ENGINE_ORDER,
+    spec as speech_engine_spec,
+    build_args as build_speech_args,
+    voices_for as speech_voices_for,
+    default_voice_for as default_speech_voice,
+    estimate_usd as speech_estimate_usd,
+)
 
 
 class FalSpeechWorker(QThread):
@@ -602,11 +567,15 @@ class FalSpeechWorker(QThread):
     finished = pyqtSignal(str)
     failed   = pyqtSignal(str)
 
-    def __init__(self, engine_key: str, text: str, label: str = ""):
+    def __init__(self, engine_key: str, text: str, label: str = "",
+                 voice: str = "", french: bool = True, instruction: str = ""):
         super().__init__()
-        self._engine = engine_key
-        self._text   = text
-        self._label  = label or engine_key
+        self._engine      = engine_key
+        self._text        = text
+        self._label       = label or engine_key
+        self._voice       = voice
+        self._french      = french
+        self._instruction = instruction
 
     def run(self):
         key = load_config().get("api_key", "").strip()
@@ -633,10 +602,18 @@ class FalSpeechWorker(QThread):
 
             os.environ["FAL_KEY"] = key
             spec = speech_engine_spec(self._engine)
-            self.progress.emit(15, f"Synthèse — {spec['label'].split('·')[0].strip()}…")
+            _name  = spec["label"].split("·")[0].strip()
+            _voice = self._voice or default_speech_voice(self._engine)
+            _est   = speech_estimate_usd(self._engine, len(self._text))
+            # Un coût de 0 signifie « tarif non relevé », jamais « gratuit ».
+            _cost  = f" (~${_est:.4f})" if _est else ""
+            self.progress.emit(
+                15, f"Synthèse — {_name}" + (f" · {_voice}" if _voice else "")
+                    + f"{_cost}…")
 
-            args = {"text": self._text}
-            args.update(spec.get("extra", {}))   # ex. eleven-v3 → language_code='fr'
+            args = build_speech_args(self._engine, self._text,
+                                     voice=self._voice, french=self._french,
+                                     instruction=self._instruction)
             result = fal_client.subscribe(spec["endpoint"], arguments=args)
 
             audio_url = ""

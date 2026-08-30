@@ -17,9 +17,9 @@ import re
 
 VERSION_MARKER = "DÉCOUPAGE PANDORA 2"
 
-_PLAN_RE = re.compile(r"^PLAN\s+0*(\d{1,3})\s*$", re.IGNORECASE | re.MULTILINE)
+_PLAN_RE = re.compile(r"^PLAN\s+0*(\d+)\s*$", re.IGNORECASE | re.MULTILINE)
 _SEQ_RE = re.compile(
-    r"^S[ÉE]QUENCE\s+0*(\d{1,3})\s*[—–:\-]?\s*(.*?)\s*$",
+    r"^S[ÉE]QUENCE\s+0*(\d+)\s*[—–:\-]?\s*(.*?)\s*$",
     re.IGNORECASE | re.MULTILINE,
 )
 

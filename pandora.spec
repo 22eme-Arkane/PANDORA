@@ -75,6 +75,13 @@ a = Analysis(
         "PIL.Image",
         "PIL.PngImagePlugin",
         "PIL.JpegImagePlugin",
+        # ── Écoute des voix dans la page Doublage (ui/audio_preview.py) ───────
+        # QtMultimedia est importé PARESSEUSEMENT et dans un try : l'analyse
+        # statique de PyInstaller ne le voit donc pas. Sans ces deux lignes, le
+        # bouton « Écouter » marcherait en développement et retomberait
+        # silencieusement sur le lecteur système dans l'installeur.
+        "PyQt6.QtMultimedia",
+        "PyQt6.QtMultimediaWidgets",
         # ── Analyse musicale (Scénario → « Musiques du set ») ──────────────────
         # Moteur librosa PARTAGÉ avec PANDORA | Live, désormais embarqué dans le
         # build Cinéma pour le travail en clip (BPM + drops → découpage calé).

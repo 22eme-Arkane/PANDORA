@@ -16,7 +16,7 @@ import re
 
 # Début d'un plan : « P01 | … » (ancien Cinéma) ou « PLAN 1… » (v2/Live).
 # « P\d » n'attrape jamais « PLAN » (lettre L après P, pas un chiffre).
-_PLAN_RE = re.compile(r"^(P\d{1,3}\s*\||PLAN\s+\d{1,3}\b)", re.MULTILINE)
+_PLAN_RE = re.compile(r"^(P\d+\s*\||PLAN\s+\d+\b)", re.MULTILINE)
 
 
 def split_plans(layout_text: str) -> list[dict]:
@@ -103,14 +103,14 @@ def _head_and_blocks(layout_text: str):
 def _renumber_block(block: str, n: int) -> str:
     """Renumérote l'en-tête d'un bloc plan : « P0X | » → « P{n:02d} | » (Cinéma) ou
     « PLAN X » → « PLAN n » (Live). Bloc non reconnu : renvoyé inchangé."""
-    if re.match(r"^\s*P\d{1,3}\s*\|", block):
-        return re.sub(r"^(\s*)P\d{1,3}(\s*\|)", rf"\g<1>P{n:02d}\g<2>", block, count=1)
-    if re.match(r"^\s*PLAN\s+\d{1,3}\b", block):
+    if re.match(r"^\s*P\d+\s*\|", block):
+        return re.sub(r"^(\s*)P\d+(\s*\|)", rf"\g<1>P{n:02d}\g<2>", block, count=1)
+    if re.match(r"^\s*PLAN\s+\d+\b", block):
         is_pandora_v2 = bool(re.search(
             r"^(?:SOURCE SC[ÉE]NARIO|SCREENPLAY SOURCE)\s*:",
             block, re.IGNORECASE | re.MULTILINE))
         number = f"{n:02d}" if is_pandora_v2 else str(n)
-        return re.sub(r"^(\s*)PLAN\s+\d{1,3}\b", rf"\g<1>PLAN {number}", block, count=1)
+        return re.sub(r"^(\s*)PLAN\s+\d+\b", rf"\g<1>PLAN {number}", block, count=1)
     return block
 
 

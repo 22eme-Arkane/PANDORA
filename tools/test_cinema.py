@@ -140,14 +140,14 @@ def edition_cinema_only():
                 "api.resolume_push", "ui.tab_t2v_live"):
         assert f'"{mod}"' not in exc, f".spec ne doit PLUS exclure {mod} (v1.3.0)"
     assert "BUNDLE(" in spec and "PANDORA.app" in spec, "cible macOS présente"
-    # Version bumpée — build 2.2.0 (2026-08-12) : le prompt FINAL naît avec le
-    # storyboard et s'y modifie dans les deux sens (le Studio ne compose plus,
-    # il lit), fenêtre « moteur cible » avant le découpage, bascule Prompt
-    # structuré / Prompt final + « Composer » pour les storyboards antérieurs,
-    # Seedance 2.5 (30 s, 50 réfs, @Image), Happy Horse 1.1, dossier des
-    # projets réglable dans les Paramètres, grille tarifaire fal corrigée.
+    # Version bumpée — build 2.3.0 (2026-08-30) : découpage ET storyboard par
+    # LOTS successifs (un livre entier devient traitable), avertissement chiffré
+    # avant de dépenser, mur silencieux PLAN 999 supprimé (au-delà, les plans
+    # disparaissaient sans erreur), coût des appels IA texte enfin journalisé
+    # dans « Coût du projet », voix du Doublage réparées (3 moteurs sur 7
+    # étaient rejetés par fal) + Voice Changer + écoute des voix.
     from core.version import VERSION
-    assert VERSION.split("-")[0] == "2.2.0", f"version attendue 2.2.0[-suffixe], lue {VERSION}"
+    assert VERSION.split("-")[0] == "2.3.0", f"version attendue 2.3.0[-suffixe], lue {VERSION}"
     # ── UN SEUL numéro de version dans tout le produit ────────────────────────
     # Chaque endroit qui recopie le numéro à la main finit par diverger : la 2.0.0
     # est partie en build avec une charte d'utilisation estampillée 1.3.5, un .app
@@ -2577,16 +2577,109 @@ def nouveaux_moteurs_fal_2026():
                   "Seedance20MiniWorker", "GeminiOmniFlashWorker", "GrokVideoWorker"):
             assert w in dsrc, f"{mod}: dispatch {w} manquant"
 
-    # — TTS : registre + workers + page Doublage (3e mode + moteur de clonage) —
+    # — TTS : registre + workers + page Doublage (4 modes + moteur de clonage) —
+    #
+    # L'ancienne version de ce test figeait le NOMBRE de moteurs et la présence
+    # d'un dict « extra ». Il était vert pendant que trois moteurs sur sept
+    # étaient rejetés par fal (champ requis « prompt », on envoyait « text ») et
+    # que les autres parlaient français avec leur voix anglaise par défaut.
+    # On teste donc désormais la CHARGE UTILE, seule chose qui décide du rendu.
     import api.tts as tts
-    assert len(tts.SPEECH_ENGINES) == 7 and "minimax-2.8-hd" in tts.SPEECH_ENGINES
-    # ElevenLabs Eleven v3 (FR natif) + language_code='fr' forcé via 'extra'
-    assert "elevenlabs-v3" in tts.SPEECH_ENGINES
-    assert tts.SPEECH_ENGINES["elevenlabs-v3"].get("extra", {}).get("language_code") == "fr"
+    from core import speech_engines as se
+
+    # ORDER = le menu ; AUDITION_ONLY = les moteurs présents pour le seul
+    # bouton « Écouter ». La somme doit couvrir ENGINES exactement : un moteur
+    # oublié des deux serait inatteignable, et un moteur en trop apparaîtrait
+    # deux fois dans la page.
+    assert set(se.ORDER) | se.AUDITION_ONLY == set(se.ENGINES), \
+        "ORDER + AUDITION_ONLY ne couvrent pas ENGINES"
+    assert not (set(se.ORDER) & se.AUDITION_ONLY), \
+        "un moteur d'audition ne doit pas aussi figurer dans le menu"
     assert hasattr(tts, "FalSpeechWorker") and hasattr(tts, "FoleyControlWorker")
+
+    for _k, _spec in se.ENGINES.items():
+        assert _spec.get("text_key"), f"{_k} : champ texte non déclaré"
+        _a = se.build_args(_k, "Bonjour.")
+        assert _a.get(_spec["text_key"]) == "Bonjour.", \
+            f"{_k} : le texte n'est pas déposé sous {_spec['text_key']}"
+        # Un moteur qui attend « prompt » ne doit JAMAIS recevoir « text ».
+        if _spec["text_key"] != "text":
+            assert "text" not in _a, f"{_k} : « text » envoyé au lieu de son champ réel"
+
+    # Les trois moteurs qui exigent « prompt » — la panne d'origine.
+    for _k in ("minimax-2.8-hd", "minimax-2.8-turbo", "gemini-tts"):
+        assert "prompt" in se.build_args(_k, "x"), f"{_k} : doit recevoir « prompt »"
+    assert "transcript" in se.build_args("async-tts-pro", "x")
+
+    # Aucune voix implicite : sans voix explicite, ElevenLabs retombe sur
+    # « Rachel » (américaine) et Inworld sur « Craig (en) ».
+    assert se.build_args("elevenlabs-v3", "x").get("voice"), \
+        "elevenlabs-v3 : aucune voix transmise → repli sur Rachel"
+    assert se.build_args("inworld", "x").get("voice", "").endswith("(fr)"), \
+        "inworld : la voix par défaut doit être francophone"
+    # Voix imbriquées : un chemin pointé mal résolu produit un 422 muet.
+    assert se.build_args("minimax-2.8-hd", "x")["voice_setting"]["voice_id"]
+    assert se.build_args("async-tts-pro", "x")["voice"]["name"]
+    # La langue doit être nommée comme chaque moteur l'attend.
+    assert se.build_args("minimax-2.8-hd", "x")["language_boost"] == "French"
+    assert se.build_args("gemini-tts", "x")["language_code"] == "French (France)"
+    assert se.build_args("seed-speech-v2", "x")["language"] == "fr"
+    # french=False ne doit forcer aucune langue (voix-off en VO).
+    assert "language_boost" not in se.build_args("minimax-2.8-hd", "x", french=False)
+    # Moteurs porteurs de vraies voix françaises.
+    assert se.has_french_voices("inworld") and se.has_french_voices("seed-speech-v2")
+    # Un tarif non relevé vaut 0.0 et doit être affiché comme inconnu, pas gratuit.
+    assert se.estimate_usd("inworld", 1000) == 0.01
+
+    # — Écouter une voix : le cache doit rendre la réécoute GRATUITE —
+    from core import voice_auditions as va
+    import api.voice_audition as vaud
+
+    # Deux voix distinctes ne doivent jamais se réduire au même fichier : les
+    # noms contiennent des accents et des parenthèses (« Hélène (fr) »).
+    assert va.audition_path("inworld", "Alain (fr)") != \
+           va.audition_path("inworld", "Hélène (fr)")
+    # Le chemin est stable d'un appel à l'autre, sinon le cache ne sert à rien.
+    assert va.audition_path("inworld", "Alain (fr)") == \
+           va.audition_path("inworld", "Alain (fr)")
+    # Changer la phrase d'audition invalide les caches sans suppression manuelle.
+    assert va._TEXT_TAG in va.audition_path("inworld", "Alain (fr)")
+
+    # Un extrait déjà en cache ne doit PAS relire la clé ni appeler fal.
+    _real_cached, _real_path = vaud.is_cached, vaud.audition_path
+    _real_cfg = vaud.load_config
+    def _boom(*a, **k):
+        raise AssertionError("appel facturé alors que l'extrait est en cache !")
+    vaud.is_cached = lambda e, v: True
+    vaud.audition_path = lambda e, v: "X:/faux/extrait.mp3"
+    vaud.load_config = _boom
+    try:
+        w = vaud.VoiceAuditionWorker("inworld", "Alain (fr)")
+        _got = []
+        w.done.connect(lambda p, c: _got.append((p, c)))
+        w.failed.connect(lambda e: _got.append(("FAILED", e)))
+        w.run()                       # run() direct : aucun thread, aucun réseau
+        assert _got and _got[0][1] is True, f"cache non honoré : {_got}"
+    finally:
+        vaud.is_cached, vaud.audition_path = _real_cached, _real_path
+        vaud.load_config = _real_cfg
+
     psrc = inspect.getsource(importlib.import_module("ui.page_doublage"))
-    for tok in ("_speech_combo", "_clone_engine_combo", "FalSpeechWorker", "IndexTTS2Worker"):
+    for tok in ("_speech_combo", "_speech_voice_combo", "_clone_engine_combo",
+                "FalSpeechWorker", "IndexTTS2Worker", "VoiceChangerWorker",
+                "_on_speech_engine_changed", "VoiceAuditionWorker",
+                "_make_audition_row", "_on_audition", "audio_preview"):
         assert tok in psrc, f"page_doublage : {tok} manquant"
+    # QtMultimedia est importé dans un try : sans déclaration explicite dans le
+    # spec, le bouton « Écouter » marcherait en dev et pas dans l'installeur.
+    import io as _io
+    _spec_path = os.path.join(os.path.dirname(os.path.dirname(
+        os.path.abspath(__file__))), "pandora.spec")
+    _spec = _io.open(_spec_path, encoding="utf-8").read()
+    assert "PyQt6.QtMultimedia" in _spec, "pandora.spec : QtMultimedia non déclaré"
+    # La voix choisie doit réellement partir au worker.
+    gsrc = inspect.getsource(importlib.import_module("ui.page_doublage").PageDoublage._on_generate)
+    assert "voice=voice" in gsrc, "page_doublage : la voix n'est pas transmise au worker"
 
     # — Foley Control câblé dans les deux Sound Design —
     for mod in ("ui.tab_sound_design", "ui.tab_sound_design_live"):
@@ -8574,6 +8667,189 @@ def audio_veed_lipsync_et_stable_audio_3():
     # fal ne publie AUCUN tarif pour cette famille : on le DIT au lieu
     # d'inventer un chiffre qui fausserait « Coût du projet ».
     assert "non publié" in _mu.MUSIC_ENGINES["stable-audio-3"]["price"]
+
+
+@test
+def decoupage_par_lots_et_cout_du_texte():
+    """Un livre entier doit pouvoir être découpé, et son coût doit s'afficher.
+
+    Retour d'un utilisateur : livre collé dans le Scénario → l'analyse passe,
+    le découpage s'arrête, et « Coût du projet » affiche 0,00 $. Trois défauts
+    distincts, testés ici séparément.
+    """
+    import tempfile, shutil
+    from core import decoupage_batches as db
+    from core import decoupage_scale as dsc
+    from core import ai_spend, spend, context
+    from core.decoupage_document import (
+        parse_v2_document, validate_v2_document, is_v2_document)
+
+    # ── 1. La numérotation ne doit plus avoir de mur ──────────────────────────
+    # `\d{1,3}` faisait DISPARAÎTRE en silence tout plan au-delà de 999, et la
+    # validation ne s'en apercevait pas : sur un livre, des centaines de plans
+    # se volatilisaient sans une erreur.
+    # Libellés EXACTS du contrat v2 (core/decoupage_document._LABELS) : c'est
+    # « SOURCE SCÉNARIO » et non « SOURCE ». Une fiche approximative ferait
+    # passer le test sur un document que PANDORA refuserait.
+    _b = lambda n: (f"PLAN {n}\nSOURCE SCÉNARIO : Il marche.\nINTENTION : tension\n"
+                    "DURÉE : 5\nPROMPT VISUEL : a man walks\n")
+    _doc = "DÉCOUPAGE PANDORA 2\n\n" + "\n".join(_b(n) for n in (1, 999, 1000, 4200))
+    _vus = [s.get("number") for s in parse_v2_document(_doc)]
+    assert _vus == [1, 999, 1000, 4200], f"plans perdus au-delà de 999 : {_vus}"
+
+    # ── 2. L'estimation doit coller au réel ───────────────────────────────────
+    # Calibrée sur FIGHTER : 15 256 caractères → 84 plans. Un écart de plus de
+    # 15 % signifie que les constantes ont dérivé du corpus.
+    _e = dsc.estimate("x" * 15256)
+    assert abs(_e["shots"] - 84) <= 13, f"estimation hors sol : {_e['shots']} plans"
+    assert dsc.estimate("")["verdict"] == dsc.OK
+    assert dsc.estimate("x" * 600000)["verdict"] == dsc.IMPOSSIBLE
+    assert dsc.estimate("x" * 15256)["verdict"] == dsc.OK, \
+        "un court métrage ne doit PAS déclencher l'avertissement"
+    assert 40000 < dsc.max_chars_single_pass() < 90000
+
+    # ── 3. Trancher puis recoller ne doit rien perdre ─────────────────────────
+    _sc = "\n\n".join(f"SÉQUENCE {i} — TITRE {i}\nEXT. LIEU {i} — JOUR\n"
+                      + ("Il marche lentement vers la porte. " * 40)
+                      for i in range(1, 13))
+    _lots = db.slice_screenplay(_sc)
+    assert len(_lots) > 1, "un long scénario doit produire plusieurs tranches"
+    assert all(l.strip() for l in _lots), "tranche vide produite"
+    assert sum(len(l) for l in _lots) >= len(_sc.strip()) * 0.98, "texte perdu"
+    # Un scénario court reste en UNE tranche — pas de cas particulier à écrire.
+    assert len(db.slice_screenplay("court")) == 1
+    assert db.slice_screenplay("") == []
+
+    _p1 = "DÉCOUPAGE PANDORA 2\n\n" + "\n".join(_b(n) for n in (1, 2, 3))
+    _p2 = ("DÉCOUPAGE PANDORA 2\n\n" + "\n".join(_b(n) for n in (1, 2))
+           + "\n\nVoilà, dis-moi si je continue.")
+    _join = db.join_batches([_p1, _p2])
+    assert db.plan_count(_join) == 5, "des plans se perdent au recollage"
+    assert is_v2_document(_join) and not validate_v2_document(_join)
+    assert _join.upper().count("DÉCOUPAGE PANDORA 2") == 1, "marqueur dupliqué"
+    assert "dis-moi si je continue" not in _join.lower(), \
+        "le bavardage final est avalé dans le dernier champ du dernier plan"
+
+    # ── 4. Le rappel de continuité doit rester BORNÉ ──────────────────────────
+    # C'est tout l'intérêt de la file : la boucle actuelle renvoie tout le texte
+    # déjà produit à chaque tour. Si le rappel grossit avec le document, on a
+    # recréé le coût quadratique qu'on fuyait.
+    _petit = db.carry_over("DÉCOUPAGE PANDORA 2\n\n" + "\n".join(_b(n) for n in range(1, 6)))
+    _gros  = db.carry_over("DÉCOUPAGE PANDORA 2\n\n" + "\n".join(_b(n) for n in range(1, 400)))
+    assert len(_gros) < len(_petit) * 3, \
+        f"le rappel enfle avec le document ({len(_petit)} → {len(_gros)})"
+    assert db.carry_over("") == "", "premier lot : rappel vide, pas d'exception"
+
+    # ── 5. Le coût du texte doit arriver dans « Coût du projet » ──────────────
+    class _U:  input_tokens = 340200; output_tokens = 96400
+    class _M:  usage = _U()
+
+    _old = context.get_project_path()
+    _tmp = tempfile.mkdtemp(prefix="pandora_spend_")
+    try:
+        # Hors projet : on n'écrit RIEN (sinon le journal d'un film atterrirait
+        # dans le dossier de l'application — piège déjà vécu sur ce projet).
+        context.set_project_path("")
+        assert ai_spend.note_message(_M(), "claude-opus-4-8", "decoupage") > 0
+        context.set_project_path(_tmp)
+        _avant = len(spend.load())
+        ai_spend.note_message(_M(), "claude-opus-4-8", "decoupage")
+        ai_spend.note_message(_M(), "modele-inconnu", "analyse")
+        _apres = spend.load()
+        assert len(_apres) - _avant == 2, "les appels texte ne sont pas journalisés"
+        assert any(e["kind"] == spend.KIND_TEXT for e in _apres)
+        _op = next(e for e in _apres if e["engine"] == "claude-opus-4-8")
+        assert 12.0 < _op["cost_usd"] < 12.7, f"tarif Opus faux : {_op['cost_usd']}"
+        _in = next(e for e in _apres if e["engine"] == "modele-inconnu")
+        assert _in["cost_usd"] == 0.0 and "inconnu" in _in["detail"], \
+            "un tarif inconnu doit être DIT, jamais présenté comme gratuit"
+    finally:
+        context.set_project_path(_old)
+        shutil.rmtree(_tmp, ignore_errors=True)
+
+    # Un nom de modèle versionné doit retomber sur sa famille, sinon toute la
+    # ligne texte vaudrait 0 dès la prochaine version d'un modèle.
+    assert ai_spend.price_for("claude-sonnet-5-20260101") == (3.0, 15.0)
+
+    # ── 6. La capture est branchée sur les VRAIS points d'appel ───────────────
+    import inspect as _i
+    from core import ai_provider as _ap
+    for _fn in (_ap._anthropic_complete, _ap._anthropic_stream, _ap.chat_ex):
+        assert "_note_usage" in _i.getsource(_fn), \
+            f"{_fn.__name__} ne journalise pas sa consommation"
+    for _fn in (_ap.chat, _ap.chat_ex, _ap.stream):
+        assert "_set_task_ctx" in _i.getsource(_fn), \
+            f"{_fn.__name__} ne dit pas quelle tâche est en cours"
+
+    # ── 7. Le worker de file respecte les règles Qt du projet ─────────────────
+    from api.decoupage_queue import DecoupageQueueWorker as _Q
+    _qs = _i.getsource(_Q)
+    assert "terminate(" not in _qs, "terminate() est interdit"
+    assert "isInterruptionRequested" in _qs, "annulation impossible"
+    assert 'res.get("truncated")' in _qs, \
+        "le drapeau de troncature n'est pas lu : un lot coupé passerait pour bon"
+    for _sig in ("progress", "batch_done", "done", "failed"):
+        assert hasattr(_Q, _sig), f"signal {_sig} manquant"
+
+    # L'avertissement est bien branché AVANT la dépense.
+    _src = _i.getsource(__import__("ui.page_scenario", fromlist=["_"]).PageScenario._on_format)
+    assert "should_warn" in _src and "_start_decoupage_queue" in _src, \
+        "l'avertissement de taille n'est pas branché sur le découpage"
+
+    # ── 8. Storyboard par lots : mêmes plans qu'en une passe ──────────────────
+    from core import storyboard_batches as sbb
+    from core.decoupage_layout import layout_segments_to_cinema_shots, is_structured_layout
+
+    _fiches = 30
+    _sbdoc = "DÉCOUPAGE PANDORA 2\n\n" + "\n".join(
+        f"SÉQUENCE {1 + n // 10} — SÉQ {1 + n // 10}\n" + _b(n) if n % 10 == 1
+        else _b(n) for n in range(1, _fiches + 1))
+    assert sbb.count_fiches(_sbdoc) == _fiches
+    _lots = sbb.split_document(_sbdoc, per_batch=12)
+    assert len(_lots) == sbb.batches_needed(_sbdoc, 12) == 3
+    # Chaque sous-document doit rester exploitable SEUL, sinon ni le parseur ni
+    # le repli déterministe ne le reprendront.
+    assert all(is_v2_document(l) for l in _lots), "un lot n'est pas un document v2"
+    assert all(is_structured_layout(l) for l in _lots)
+    assert not any(validate_v2_document(l) for l in _lots)
+    assert sum(sbb.count_fiches(l) for l in _lots) == _fiches, "fiches perdues"
+
+    # Équivalence : lots recollés == passe unique. C'est la seule garantie qui
+    # compte — découper ne doit RIEN changer au storyboard produit.
+    _par_lots = sbb.merge_shots([layout_segments_to_cinema_shots(l) for l in _lots])
+    _une_passe = layout_segments_to_cinema_shots(_sbdoc)
+    assert len(_par_lots) == len(_une_passe) == _fiches
+    assert [s["number"] for s in _par_lots] == list(range(1, _fiches + 1)), \
+        "la numérotation ne redevient pas continue : douze « plan 1 »"
+    assert [s.get("scene_title") for s in _par_lots] == \
+           [s.get("scene_title") for s in _une_passe], "ordre ou contenu altéré"
+    assert [s.get("seq_num") for s in _par_lots] == \
+           [s.get("seq_num") for s in _une_passe], "séquences perdues au tranchage"
+    assert sbb.split_document("") == [] and sbb.merge_shots([]) == []
+
+    # Le coordinateur réutilise le worker existant plutôt que de le réécrire :
+    # sans cela, le repli déterministe et la détection de fusion divergeraient.
+    from api.storyboard_queue import StoryboardQueueWorker as _SQ
+    _sq = _i.getsource(_SQ)
+    assert "GenerateStoryboardWorker" in _sq, \
+        "le coordinateur duplique la conversion au lieu de réutiliser le worker"
+    assert "terminate(" not in _sq and "isInterruptionRequested" in _sq
+    for _sig in ("progress", "batch_done", "compose_progress", "done", "failed"):
+        assert hasattr(_SQ, _sig), f"signal {_sig} manquant"
+
+    # Bascule : les projets EXISTANTS restent sur le chemin éprouvé.
+    from ui.dialog_storyboard_generate import StoryboardGenerateDialog as _SD
+    assert _SD._QUEUE_THRESHOLD_FICHES >= 90, \
+        "seuil trop bas : un court métrage basculerait sur la file sans raison"
+    _ssrc = _i.getsource(_SD._start)
+    assert "_QUEUE_THRESHOLD_FICHES" in _ssrc and "_start_queue" in _ssrc, \
+        "la file storyboard n'est pas branchée"
+    # Le contrat « aperçu PUIS confirmation » doit tenir : la file rend des
+    # plans, elle n'enregistre rien. Rien n'est écrit avant que l'auteur
+    # clique « Importer » — c'est ce qui distingue un aperçu d'un fait accompli.
+    for _interdit in ("save_shot", "save_shots", "add_shot"):
+        assert _interdit not in _sq, \
+            f"le coordinateur persiste ({_interdit}) : l'aperçu devient un fait accompli"
 
 
 if __name__ == "__main__":

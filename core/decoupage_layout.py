@@ -80,7 +80,7 @@ def _strip_quotes(s: str) -> str:
 # ── Lecteur de migration du format CINÉMA historique ──────────────────────────
 # Le format compact ci-dessous n'est plus produit ni demandé. Il est reconnu une seule
 # fois au chargement afin de convertir sans perte les anciens projets en fiches v2.
-_CINE_PLAN_RE = re.compile(r"^P\s*0*(\d{1,3})\s*\|(.*)$", re.IGNORECASE)
+_CINE_PLAN_RE = re.compile(r"^P\s*0*(\d+)\s*\|(.*)$", re.IGNORECASE)
 # Les anciens projets utilisent « SEEDANCE ». Les nouveaux documents emploient
 # le terme moteur-agnostique « PROMPT » ; les deux restent lisibles.
 _CINE_PROMPT_RE = re.compile(

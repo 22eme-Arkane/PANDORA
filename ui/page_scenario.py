@@ -1463,7 +1463,7 @@ class PageScenario(QWidget):
         if not text or self._LAYOUT_MARKER in text.upper():
             return text
         import re as _re
-        if (_re.search(r"^PLAN\s+0*\d{1,3}\s*$", text, _re.I | _re.M)
+        if (_re.search(r"^PLAN\s+0*\d+\s*$", text, _re.I | _re.M)
                 and _re.search(r"^(?:PROMPT VISUEL|VISUAL PROMPT)\s*:", text, _re.I | _re.M)):
             lines = text.split("\n")
             for i, l in enumerate(lines):
@@ -2412,6 +2412,31 @@ class PageScenario(QWidget):
         if not text:
             self._ai_progress_lbl.setText("Écris d'abord un scénario à découper.")
             return
+        # ── Avertir AVANT de dépenser ─────────────────────────────────────────
+        # Un utilisateur a collé un livre entier : l'analyse est passée, le
+        # découpage s'est arrêté. Il ne pouvait pas aboutir — le découpage
+        # produit six fois la longueur du scénario. On le dit maintenant, avec
+        # des chiffres, plutôt qu'après l'attente et la dépense.
+        from ui.dialog_decoupage_scale import (
+            DecoupageScaleDialog, should_warn, BATCHES, CANCEL,
+        )
+        if should_warn(text):
+            from core import ai_spend as _sp
+            from core import decoupage_scale as _scale
+            from core.ai_provider import _resolve_engine, _model
+            _prov, _creat = _resolve_engine("decoupage")
+            _mdl = _model("creative", _prov, _creat)
+            _p = _sp.price_for(_mdl)
+            _cost = (_scale.cost_estimate_usd(text, _p[0], _p[1]) if _p else 0.0)
+            _dlg = DecoupageScaleDialog(self, text, cost_usd=_cost)
+            _dlg.exec()
+            _choice = _dlg.choice()
+            if _choice == CANCEL:
+                return
+            if _choice == BATCHES:
+                self._start_decoupage_queue(text)
+                return
+
         from api.screenplay import FormatPandoraWorker
         from core.ai_provider import ai_name_for_task
         self._set_ai_busy(True)
@@ -2427,6 +2452,73 @@ class PageScenario(QWidget):
         self._worker = FormatPandoraWorker(text, direction_note=note)
         self._worker.failed.connect(self._on_ai_fail)
         self._open_format_window(worker=self._worker)
+
+    # ── Découpage par lots ────────────────────────────────────────────────────
+
+    def _start_decoupage_queue(self, text: str):
+        """Lance le découpage tranche par tranche.
+
+        Un SEUL worker porte toute la file : pas de réassignation de worker à
+        chaud, donc aucun des trois pièges Qt du projet (worker ramassé en vol,
+        lambda non déconnectable, file qui s'arrête au premier élément).
+        """
+        from api.decoupage_queue import DecoupageQueueWorker
+        from core.worker import abandon_thread
+
+        prev = getattr(self, "_worker", None)
+        if prev is not None:
+            abandon_thread(prev)
+
+        self._queue_doc = ""
+        self._set_ai_busy(True)
+        self._btn_reopen_window.setVisible(False)
+        self._btn_undo_action.setVisible(False)
+        self._result_area.clear()
+        self._result_area.setVisible(False)
+        self._ai_progress_lbl.setText(translate("Découpage par lots — préparation…"))
+
+        note = self._direction_note_edit.toPlainText().strip()
+        w = DecoupageQueueWorker(text, direction_note=note)
+        # Méthodes liées : Qt les déconnecte à la destruction de la page.
+        w.progress.connect(self._on_queue_progress)
+        w.batch_done.connect(self._on_queue_batch)
+        w.done.connect(self._on_queue_done)
+        w.failed.connect(self._on_queue_failed)
+        self._worker = w
+        w.start()
+
+    def _on_queue_progress(self, pct: int, msg: str):
+        self._ai_progress_lbl.setText(translate(msg))
+
+    def _on_queue_batch(self, index: int, total: int, document: str):
+        # Chaque lot abouti est conservé : si le suivant échoue, rien de ce qui
+        # a déjà été produit — et payé — n'est perdu.
+        self._queue_doc = document
+        self._ai_progress_lbl.setText(
+            f"{translate('Découpage par lots')} — {index}/{total} "
+            f"({len(document)} {translate('caractères')})")
+
+    def _on_queue_done(self, document: str):
+        self._set_ai_busy(False)
+        self._queue_doc = document
+        self._ai_progress_lbl.setText(translate("Découpage par lots terminé ✓"))
+        # On rejoint le chemin normal : même aperçu, même validation, même
+        # bouton « Appliquer ». Rien n'est enregistré sans le geste de l'auteur.
+        self._open_format_window(text=document)
+
+    def _on_queue_failed(self, msg: str, index: int, document: str):
+        self._set_ai_busy(False)
+        if document.strip():
+            self._queue_doc = document
+            self._ai_progress_lbl.setText(
+                f"{translate('Découpage interrompu au lot')} {index} — "
+                f"{translate('les lots déjà produits sont conservés')}")
+            # Le partiel est montré, pas jeté : l'auteur décide de l'appliquer
+            # ou non, et peut relancer plus tard sur la suite.
+            self._open_format_window(text=document)
+            show_api_error(self, msg)
+        else:
+            self._on_ai_fail(msg)
 
     def _on_coecriture(self):
         """Co-écriture du SCÉNARIO — ouvre directement le studio de co-écriture."""

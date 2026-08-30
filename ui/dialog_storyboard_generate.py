@@ -318,6 +318,20 @@ class StoryboardGenerateDialog(QDialog):
         except Exception:
             pass
 
+        # ── Une passe, ou une file de lots ? ──────────────────────────────────
+        # Un appel unique plafonne à 16 000 jetons et jusqu'à 7 reprises ; à
+        # environ 800 jetons par fiche, il s'essouffle vers 140 fiches — et les
+        # dernières reprises coûtent cher, puisque chacune relit tout ce qui a
+        # déjà été écrit. Au-delà du seuil, on bascule sur la file : chaque lot
+        # tient en un seul appel. En deçà, RIEN NE CHANGE — le chemin éprouvé
+        # reste celui de tous les projets existants (FIGHTER : 84 fiches).
+        from core.storyboard_batches import count_fiches
+        _n_fiches = count_fiches(self._scenario_text)
+        if _n_fiches > self._QUEUE_THRESHOLD_FICHES:
+            self._start_queue(element_names or None, strict_no_merge, _engine,
+                              _n_fiches)
+            return
+
         w = GenerateStoryboardWorker(
             self._scenario_text, self._duration_secs,
             element_names=element_names or None,
@@ -330,11 +344,68 @@ class StoryboardGenerateDialog(QDialog):
         # Composition des prompts finals (même passe) : elle suit l'écriture des
         # fiches et peut durer ~1 min sur un long métrage — l'annoncer, sinon le
         # dialogue semble figé pendant que les appels tournent.
-        w.compose_progress.connect(
-            lambda i, n: self._status_lbl.setText(
-                translate("Prompts finaux : {i}/{n} plans composés…")
-                .format(i=i, n=n)))
+        w.compose_progress.connect(self._on_compose_progress)
         w.start()
+
+    #: Au-delà de ce nombre de fiches, la génération passe par la file.
+    #: Dérivé du plafond réel, pas choisi au hasard — voir `_start`.
+    _QUEUE_THRESHOLD_FICHES = 100
+
+    def _start_queue(self, element_names, strict_no_merge, engine, n_fiches):
+        """Génération par lots — même aperçu, même confirmation, mêmes plans.
+
+        Le contrat de cette fenêtre est « aperçu PUIS confirmation » : la file
+        ne touche à rien, elle rend une liste de plans comme le worker simple.
+        """
+        from api.storyboard_queue import StoryboardQueueWorker
+        from core.worker import abandon_thread
+
+        prev = getattr(self, "_worker", None)
+        if prev is not None:
+            abandon_thread(prev)
+
+        self._phase_lbl.setText(translate("Génération par lots"))
+        self._status_lbl.setText(
+            f"{n_fiches} {translate('fiches à convertir')} — "
+            + translate("traitement par lots successifs…"))
+
+        w = StoryboardQueueWorker(
+            self._scenario_text, self._duration_secs,
+            element_names=element_names, strict_no_merge=strict_no_merge,
+            target_engine=engine,
+        )
+        self._worker = w
+        # Méthodes liées : Qt les déconnecte à la destruction de la fenêtre.
+        w.progress.connect(self._on_queue_progress)
+        w.batch_done.connect(self._on_queue_batch)
+        w.compose_progress.connect(self._on_compose_progress)
+        w.done.connect(self._on_done)
+        w.failed.connect(self._on_queue_failed)
+        w.start()
+
+    def _on_compose_progress(self, i: int, n: int):
+        self._status_lbl.setText(
+            translate("Prompts finaux : {i}/{n} plans composés…").format(i=i, n=n))
+
+    def _on_queue_progress(self, pct: int, msg: str):
+        self._status_lbl.setText(translate(msg))
+
+    def _on_queue_batch(self, index: int, total: int, n_plans: int):
+        self._phase_lbl.setText(
+            f"{translate('Génération par lots')} — {index}/{total}")
+        self._status_lbl.setText(
+            f"{n_plans} {translate('plans produits jusqu’ici')}")
+
+    def _on_queue_failed(self, msg: str, shots: list):
+        # Les lots déjà produits ont été payés : on les propose plutôt que de
+        # tout jeter. L'auteur reste seul juge de ce qu'il importe.
+        if shots:
+            self._on_done(shots)
+            self._status_lbl.setText(
+                f"{translate('Interrompu')} — {len(shots)} "
+                + translate("plans conservés") + f" · {msg}")
+        else:
+            self._on_failed(msg)
 
     def _on_done(self, shots: list):
         self._shots = shots

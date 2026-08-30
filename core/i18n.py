@@ -3880,15 +3880,146 @@ _FR_TO_EN: dict[str, str] = {
     "Échantillon vocal requis":     "Voice sample required",
     # ── Doublage : voix IA multi-moteurs + moteur de clonage ──────────────────
     "Voix IA — multi-moteurs":      "AI Voices — multi-engine",
-    "ElevenLabs Eleven v3 (FR, défaut) · MiniMax 2.8 · Gemini · Inworld · Qwen3 · Maya1\nVoix de synthèse — pas d'échantillon requis":
-        "ElevenLabs Eleven v3 (FR, default) · MiniMax 2.8 · Gemini · Inworld · Qwen3 · Maya1\nSynthetic voices — no sample required",
+    "11 moteurs · Inworld (4 voix FR natives) · MiniMax · Qwen Audio 3 · Seed Speech\nChoix de la voix ET de la langue":
+        "11 engines · Inworld (4 native FR voices) · MiniMax · Qwen Audio 3 · Seed Speech\nPick the voice AND the language",
     "Clonage de voix":              "Voice cloning",
     "F5-TTS ou Index TTS 2 (FR) · clone depuis un échantillon\nLangue détectée / choisie selon le moteur":
         "F5-TTS or Index TTS 2 (FR) · clone from a sample\nLanguage auto-detected / chosen per engine",
     "Moteur de voix IA":            "AI voice engine",
-    "Voix de synthèse — aucun échantillon requis. MiniMax 2.8 HD/Turbo gèrent bien le français.":
-        "Synthetic voices — no sample required. MiniMax 2.8 HD/Turbo handle French well.",
     "Moteur de clonage":            "Cloning engine",
+    # ── Doublage : Voice Changer (votre voix, un autre timbre) ────────────────
+    "Voice Changer":                "Voice Changer",
+    "Vous dites la réplique, le modèle change le timbre\nLa prononciation française reste la vôtre":
+        "You speak the line, the model swaps the timbre\nThe French pronunciation stays yours",
+    "Voix":                         "Voice",
+    "Votre enregistrement":         "Your recording",
+    "Timbre cible":                 "Target timbre",
+    "Format de sortie":             "Output format",
+    "Aucun enregistrement chargé":  "No recording loaded",
+    "📂  Charger un enregistrement": "📂  Load a recording",
+    "Charger votre enregistrement": "Load your recording",
+    "🎛  Convertir le timbre":       "🎛  Convert the timbre",
+    "Retirer le bruit de fond de mon enregistrement":
+        "Remove background noise from my recording",
+    "Enregistrement requis":        "Recording required",
+    "Chargez votre enregistrement : le Voice Changer transforme une voix existante, il n'en fabrique pas une depuis du texte.":
+        "Load your recording: Voice Changer transforms an existing voice, it does not build one from text.",
+    "MP3 44,1 kHz · 128 kbps  (défaut)":  "MP3 44.1 kHz · 128 kbps  (default)",
+    "MP3 44,1 kHz · 192 kbps  (qualité)": "MP3 44.1 kHz · 192 kbps  (quality)",
+    "PCM 48 kHz  (montage)":              "PCM 48 kHz  (editing)",
+    "PCM 44,1 kHz":                       "PCM 44.1 kHz",
+    "Le texte saisi plus haut n'est pas utilisé dans ce mode : c'est votre enregistrement qui porte les mots ET l'interprétation. Le modèle ne remplace que le grain de la voix — d'où une prononciation française qui ne peut pas être fausse.\nFormats acceptés : MP3 · WAV · M4A · AAC · OGG   ·   tarif fal non relevé":
+        "The text above is unused in this mode: your recording carries both the words AND the delivery. The model only replaces the grain of the voice — which is why the French pronunciation cannot come out wrong.\nAccepted formats: MP3 · WAV · M4A · AAC · OGG   ·   fal pricing not published",
+    "Aucune voix française dédiée : le français est imposé par le réglage de langue du moteur.":
+        "No dedicated French voice: French is enforced through the engine's language setting.",
+    "Ce moteur déduit la langue du texte saisi.":
+        "This engine infers the language from the text you type.",
+    "Ce moteur n'expose aucun choix de voix":
+        "This engine exposes no voice selection",
+    " voix française(s) native(s) — en tête de liste.":
+        " native French voice(s) — listed first.",
+    # ── Découpage : avertissement de taille + file de lots ────────────────────
+    "Scénario volumineux":          "Large screenplay",
+    "Ce découpage ne peut pas aboutir d'une seule traite":
+        "This breakdown cannot complete in a single pass",
+    "Ce découpage va être long et coûteux":
+        "This breakdown will be long and expensive",
+    "Estimation":                   "Estimate",
+    "Longueur du scénario":         "Screenplay length",
+    "caractères":                   "characters",
+    "Plans attendus":               "Expected shots",
+    "Reprises nécessaires":         "Continuations needed",
+    "maximum":                      "maximum",
+    "Coût estimé du découpage":     "Estimated breakdown cost",
+    "Le découpage produit environ six fois la longueur du scénario. Au-delà d'environ 58 000 caractères, il dépasse ce que le moteur peut écrire en une fois, même avec ses reprises automatiques : il s'arrêterait en cours de route et rien ne serait enregistré.":
+        "A breakdown runs about six times the length of the screenplay. Past roughly 58,000 characters it exceeds what the engine can write in one go, even with its automatic continuations: it would stop midway and nothing would be saved.",
+    "Le découpage produit environ six fois la longueur du scénario. À cette taille, le moteur devra s'y reprendre à plusieurs fois, et chaque reprise relit tout ce qu'il a déjà écrit — c'est ce qui fait grimper le coût.":
+        "A breakdown runs about six times the length of the screenplay. At this size the engine will need several passes, and each pass re-reads everything it has already written — which is what drives the cost up.",
+    "Le découpage par lots traite le scénario tranche par tranche et reprend là où il s'est arrêté. C'est plus sûr, moins cher, et vous pouvez l'interrompre puis le reprendre.":
+        "Batch mode works through the screenplay slice by slice and picks up where it left off. It is safer, cheaper, and you can stop and resume it.",
+    "lots prévus":                  "batches planned",
+    "Chiffres estimés à partir de deux découpages réels — un ordre de grandeur, pas une facture.":
+        "Figures estimated from two real breakdowns — an order of magnitude, not an invoice.",
+    "Découper d'une traite quand même": "Break down in one pass anyway",
+    "Découper par lots":            "Break down in batches",
+    "Découpage par lots — préparation…": "Batch breakdown — preparing…",
+    "Découpage par lots":           "Batch breakdown",
+    "Découpage par lots terminé ✓":  "Batch breakdown complete ✓",
+    "Découpage interrompu au lot":  "Breakdown stopped at batch",
+    "les lots déjà produits sont conservés":
+        "the batches already produced are kept",
+    "Découpage interrompu.":        "Breakdown interrupted.",
+    "Le scénario est vide.":        "The screenplay is empty.",
+    # ── Storyboard par lots ───────────────────────────────────────────────────
+    "Génération par lots":          "Batch generation",
+    "fiches à convertir":           "cards to convert",
+    "traitement par lots successifs…": "processing in successive batches…",
+    "plans produits jusqu’ici":     "shots produced so far",
+    "Interrompu":                   "Interrupted",
+    "plans conservés":              "shots kept",
+    "Génération interrompue.":      "Generation interrupted.",
+    "Aucune fiche PLAN trouvée dans le découpage.":
+        "No PLAN card found in the breakdown.",
+    # ── Doublage : écouter une voix avant de la choisir ───────────────────────
+    "▶  Écouter":                   "▶  Listen",
+    "Fait dire une phrase française à cette voix. Le premier essai coûte quelques centimes ; l'extrait est ensuite conservé et réécouté gratuitement.":
+        "Has this voice read a French sentence. The first try costs a few cents; the sample is then kept and replayed for free.",
+    "Ce moteur n'expose aucune voix : il n'y a rien à écouter.":
+        "This engine exposes no voice: there is nothing to listen to.",
+    "Préparation de l'extrait…":    "Preparing the sample…",
+    "▶  Lecture de l'extrait":      "▶  Playing the sample",
+    "▶  Lecture (extrait déjà en cache)":
+        "▶  Playing (sample already cached)",
+    "▶  Extrait ouvert dans le lecteur du système":
+        "▶  Sample opened in the system player",
+    "Extrait déjà généré — lecture immédiate":
+        "Sample already generated — playing straight away",
+    "Téléchargement de l'extrait…": "Downloading the sample…",
+    "Extrait prêt ✓":               "Sample ready ✓",
+    "Aucune clé fal.ai : impossible de générer un extrait. Renseignez la clé dans les Paramètres.":
+        "No fal.ai key: a sample cannot be generated. Enter the key in Settings.",
+    # ── Doublage : libellés des 11 moteurs de voix (core/speech_engines) ──────
+    "Inworld TTS-1.5 Max  ·  4 voix FR natives  ·  $0.01/1000c":
+        "Inworld TTS-1.5 Max  ·  4 native FR voices  ·  $0.01/1000c",
+    "ElevenLabs Eleven v3  ·  voix FR/EN  ·  $0.10/1000c":
+        "ElevenLabs Eleven v3  ·  FR/EN voices  ·  $0.10/1000c",
+    "MiniMax Speech 2.8 HD  ·  renfort FR  ·  $0.10/1000c":
+        "MiniMax Speech 2.8 HD  ·  FR boost  ·  $0.10/1000c",
+    "MiniMax Speech 2.8 Turbo  ·  renfort FR  ·  $0.06/1000c":
+        "MiniMax Speech 2.8 Turbo  ·  FR boost  ·  $0.06/1000c",
+    "Qwen Audio 3.0 TTS  ·  45 voix · FR explicite  ·  ~$0.05/1000c":
+        "Qwen Audio 3.0 TTS  ·  45 voices · explicit FR  ·  ~$0.05/1000c",
+    "ByteDance Seed Speech v2  ·  1 voix FR native  ·  tarif non relevé":
+        "ByteDance Seed Speech v2  ·  1 native FR voice  ·  pricing not published",
+    "Async TTS Pro  ·  6 langues dont FR · 100 voix  ·  $0.01/1000c":
+        "Async TTS Pro  ·  6 languages incl. FR · 100 voices  ·  $0.01/1000c",
+    "Gemini 3.1 Flash TTS  ·  FR (France)  ·  tarif non relevé":
+        "Gemini 3.1 Flash TTS  ·  FR (France)  ·  pricing not published",
+    "xAI TTS  ·  FR · balises expressives  ·  $0.015/1000c":
+        "xAI TTS  ·  FR · expressive tags  ·  $0.015/1000c",
+    "Qwen3-TTS 1.7B  ·  FR · open source  ·  tarif non relevé":
+        "Qwen3-TTS 1.7B  ·  FR · open source  ·  pricing not published",
+    "Maya1  ·  voix expressive · sans réglage":
+        "Maya1  ·  expressive voice · no settings",
+    # ── Doublage : notes explicatives par moteur ──────────────────────────────
+    "Alain, Hélène, Mathieu et Étienne sont des voix françaises natives — pas des voix anglaises lisant du français.":
+        "Alain, Hélène, Mathieu and Étienne are native French voices — not English voices reading French.",
+    "Le moteur retombe sur « Rachel » (voix américaine) si aucune voix n'est transmise — c'était le cas jusqu'ici.":
+        "The engine falls back to “Rachel” (an American voice) when no voice is sent — which is what happened until now.",
+    "Attend « prompt » et non « text ». Les voix sont neutres : c'est language_boost qui impose le français.":
+        "Expects “prompt”, not “text”. Its voices carry no language: language_boost is what enforces French.",
+    "Attend « prompt » et non « text ».":
+        "Expects “prompt”, not “text”.",
+    "Le plus récent du catalogue fal (29/07/2026). La couverture linguistique voix par voix n'est pas publiée par fal — essayer plusieurs voix avec la langue forcée sur French.":
+        "The newest of the fal catalogue (2026-07-29). Per-voice language coverage is not published by fal — try several voices with the language forced to French.",
+    "Accepte une consigne de jeu en langage naturel (voice_instruction) : « d'une voix lasse, plus lentement ».":
+        "Accepts a plain-language delivery note (voice_instruction): “in a weary voice, slower”.",
+    "Moteur restreint à 6 langues européennes : le français y est traité comme une langue principale, pas comme la trentième.":
+        "Limited to 6 European languages: French is treated as a primary language here, not as the thirtieth.",
+    "Accepte des balises dans le texte : [laugh], [pause], <whisper>…</whisper>. Cinq voix seulement.":
+        "Accepts inline tags: [laugh], [pause], <whisper>…</whisper>. Five voices only.",
+    "N'expose ni voix ni langue : la langue est déduite du texte.":
+        "Exposes neither voice nor language: the language is inferred from the text.",
     "F5-TTS  ·  EN/ZH (FR expérimental)":   "F5-TTS  ·  EN/ZH (FR experimental)",
     "Index TTS 2  ·  clonage multilingue FR":   "Index TTS 2  ·  multilingual FR cloning",
     # ── Sound Design : moteur vidéo→son ───────────────────────────────────────

@@ -3,7 +3,10 @@ ui/page_doublage.py — Page Doublage : synthèse vocale IA + clonage de voix.
 
 Modes :
   - ElevenLabs Turbo v2.5 : voix multilingues dont FR (fal-ai, $0.05/1000 chars)
-  - F5-TTS                : clonage de voix multilingue (EN/ZH principalement, FR expérimental)
+  - Voix IA multi-moteurs : 11 moteurs, avec CHOIX DE LA VOIX (core/speech_engines)
+  - Voice Changer         : votre enregistrement, un autre timbre — la prosodie
+                            française reste celle d'un locuteur natif
+  - F5-TTS / Index TTS 2  : clonage de voix depuis un échantillon
 
 Pipeline complet : F5-TTS → (futur) pydub mix → (futur) LatentSync lip sync
 """
@@ -14,7 +17,7 @@ import subprocess
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
     QScrollArea, QTextEdit, QComboBox, QFrame, QFileDialog,
-    QProgressBar, QSizePolicy,
+    QProgressBar, QSizePolicy, QCheckBox,
 )
 from PyQt6.QtCore import Qt, QUrl
 from core.i18n import translate
@@ -27,7 +30,12 @@ from api.tts import (
     ElevenLabsWorker, ELEVENLABS_VOICES, ELEVENLABS_VOICES_FR,
     F5TTSWorker, IndexTTS2Worker,
     FalSpeechWorker, SPEECH_ENGINES, SPEECH_ENGINE_ORDER,
+    speech_engine_spec, speech_voices_for, speech_estimate_usd,
 )
+from api.voice_changer import VoiceChangerWorker, OUTPUT_FORMATS, target_voices
+from api.voice_audition import VoiceAuditionWorker
+from core import voice_auditions as _auditions
+from ui import audio_preview
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
@@ -151,9 +159,17 @@ class PageDoublage(QWidget):
         self.setStyleSheet(f"background:{CP['bg0']};")
 
         self._tts_worker             = None
-        self._mode: str              = "elevenlabs"   # "elevenlabs" | "clone"
+        # "speech" | "changer" | "elevenlabs" | "clone" — la valeur est reposée
+        # par _set_mode() en fin de construction pour que la carte cochée et le
+        # panneau visible ne puissent pas se contredire.
+        self._mode: str              = "speech"
         self._voice_sample_path: str = ""
+        self._changer_audio_path: str = ""
         self._results: list[dict]    = []
+        # Écoute des voix : un seul worker à la fois, et la liste des boutons
+        # pour tous les griser pendant qu'un extrait se génère.
+        self._audition_worker        = None
+        self._audition_buttons: list = []
 
         root = QVBoxLayout(self)
         root.setContentsMargins(0, 0, 0, 0)
@@ -232,6 +248,11 @@ class PageDoublage(QWidget):
         self._build_results_panel()
         self._build_voice_assign_panel()
         self._content_lay.addStretch()
+
+        # Source de vérité unique : la carte cochée, le panneau visible et le
+        # libellé du bouton sont posés par le même appel. Deux états séparés
+        # finissent toujours par se contredire à l'ouverture.
+        self._set_mode(self._mode)
 
     # ── Depuis le storyboard : dialogues des plans ─────────────────────────────
 
@@ -346,32 +367,40 @@ class PageDoublage(QWidget):
     # ── Sélecteur de mode ─────────────────────────────────────────────────────
 
     def _build_mode_selector(self):
-        row = QHBoxLayout()
-        row.setSpacing(10)
-
+        self._btn_mode_speech = self._make_mode_card(
+            "Voix IA — multi-moteurs",
+            "11 moteurs · Inworld (4 voix FR natives) · MiniMax · Qwen Audio 3 · Seed Speech\nChoix de la voix ET de la langue",
+            CP["accent"], True,
+        )
+        self._btn_mode_changer = self._make_mode_card(
+            "Voice Changer",
+            "Vous dites la réplique, le modèle change le timbre\nLa prononciation française reste la vôtre",
+            CP["accent"], False,
+        )
         self._btn_mode_eleven = self._make_mode_card(
             "ElevenLabs Turbo v2.5",
             "20 voix · multilingue FR/EN/ES… · sélection de voix\n$0.05 / 1000 caractères",
-            CP["accent"], True,
-        )
-        self._btn_mode_speech = self._make_mode_card(
-            "Voix IA — multi-moteurs",
-            "ElevenLabs Eleven v3 (FR, défaut) · MiniMax 2.8 · Gemini · Inworld · Qwen3 · Maya1\nVoix de synthèse — pas d'échantillon requis",
-            CP["accent"], False,
+            CP["accent2"], False,
         )
         self._btn_mode_clone = self._make_mode_card(
             "Clonage de voix",
             "F5-TTS ou Index TTS 2 (FR) · clone depuis un échantillon\nLangue détectée / choisie selon le moteur",
             CP["accent2"], False,
         )
-        self._btn_mode_eleven.clicked.connect(lambda: self._set_mode("elevenlabs"))
         self._btn_mode_speech.clicked.connect(lambda: self._set_mode("speech"))
+        self._btn_mode_changer.clicked.connect(lambda: self._set_mode("changer"))
+        self._btn_mode_eleven.clicked.connect(lambda: self._set_mode("elevenlabs"))
         self._btn_mode_clone.clicked.connect(lambda: self._set_mode("clone"))
 
-        row.addWidget(self._btn_mode_eleven, 1)
-        row.addWidget(self._btn_mode_speech, 1)
-        row.addWidget(self._btn_mode_clone, 1)
-        self._content_lay.addLayout(row)
+        # Deux rangées de deux : à quatre de front, les descriptions se
+        # tronquent sur un écran de portable.
+        for pair in ((self._btn_mode_speech, self._btn_mode_changer),
+                     (self._btn_mode_eleven, self._btn_mode_clone)):
+            row = QHBoxLayout()
+            row.setSpacing(10)
+            for b in pair:
+                row.addWidget(b, 1)
+            self._content_lay.addLayout(row)
 
     def _make_mode_card(self, title: str, desc: str,
                          accent: str, active: bool) -> QPushButton:
@@ -429,22 +458,166 @@ class PageDoublage(QWidget):
 
     def _set_mode(self, mode: str):
         self._mode = mode
-        is_eleven = (mode == "elevenlabs")
-        is_speech = (mode == "speech")
-        is_clone  = (mode == "clone")
-        self._apply_mode_card_style(
-            self._btn_mode_eleven, is_eleven, self._btn_mode_eleven.property("accent"))
-        self._apply_mode_card_style(
-            self._btn_mode_speech, is_speech, self._btn_mode_speech.property("accent"))
-        self._apply_mode_card_style(
-            self._btn_mode_clone, is_clone, self._btn_mode_clone.property("accent"))
-        self._btn_mode_eleven.setChecked(is_eleven)
-        self._btn_mode_speech.setChecked(is_speech)
-        self._btn_mode_clone.setChecked(is_clone)
+        is_eleven  = (mode == "elevenlabs")
+        is_speech  = (mode == "speech")
+        is_clone   = (mode == "clone")
+        is_changer = (mode == "changer")
+        for btn, on in ((self._btn_mode_eleven,  is_eleven),
+                        (self._btn_mode_speech,  is_speech),
+                        (self._btn_mode_changer, is_changer),
+                        (self._btn_mode_clone,   is_clone)):
+            self._apply_mode_card_style(btn, on, btn.property("accent"))
+            btn.setChecked(on)
         self._eleven_frame.setVisible(is_eleven)
         self._speech_frame.setVisible(is_speech)
+        self._changer_frame.setVisible(is_changer)
         self._clone_frame.setVisible(is_clone)
-        self._btn_generate.setText("🎙  Générer l'audio")
+        # Le Voice Changer ne lit pas de texte : il transforme un enregistrement.
+        # On MASQUE le champ au lieu de le griser — un QTextEdit désactivé garde
+        # ici l'apparence d'un champ actif, et laisser une grande zone de saisie
+        # inutile en haut de page invite à y écrire pour rien.
+        self._text_section.setVisible(not is_changer)
+        self._btn_generate.setText(
+            "🎛  Convertir le timbre" if is_changer else "🎙  Générer l'audio")
+
+    def _on_speech_engine_changed(self, *_):
+        """Repeuple les voix du moteur choisi et dit ce qu'il sait faire.
+
+        Le point important est la distinction entre un moteur qui possède de
+        VRAIES voix françaises (Inworld, Seed Speech) et un moteur qui se
+        contente d'un réglage de langue : le second parlera français avec le
+        grain d'une voix anglophone.
+        """
+        if not hasattr(self, "_speech_voice_combo"):
+            return
+        key  = self._speech_combo.currentData() or ""
+        spec = speech_engine_spec(key)
+
+        voices = speech_voices_for(key)
+        self._speech_voice_combo.blockSignals(True)
+        self._speech_voice_combo.clear()
+        if voices:
+            for label, value, is_fr in voices:
+                self._speech_voice_combo.addItem(
+                    f"{label}   ·  FR natif" if is_fr else label, value)
+        else:
+            self._speech_voice_combo.addItem(
+                translate("Ce moteur n'expose aucun choix de voix"), "")
+        self._speech_voice_combo.blockSignals(False)
+        self._speech_voice_combo.setEnabled(bool(voices))
+
+        n_fr = sum(1 for _, _, is_fr in voices if is_fr)
+        if n_fr:
+            # Une seule chaîne, pas un assemblage de morceaux : des fragments
+            # comme « — placée » ne peuvent pas être traduits séparément.
+            # Le « (s) » suit la convention déjà en place dans cette page.
+            head = (f"{n_fr}"
+                    + translate(" voix française(s) native(s) — en tête de liste."))
+        elif spec.get("lang_key"):
+            head = translate("Aucune voix française dédiée : le français est "
+                             "imposé par le réglage de langue du moteur.")
+        else:
+            head = translate("Ce moteur déduit la langue du texte saisi.")
+        # La note est reconstruite à chaque changement de moteur : sans
+        # translate() ici, passer l'app en anglais puis changer de moteur
+        # ferait réapparaître du français.
+        note = translate(spec.get("note") or "")
+        self._speech_note.setText(
+            f"{head}   ·   {spec.get('price', '')}" + (f"\n{note}" if note else "")
+        )
+
+    # ── Écouter une voix avant de la choisir ──────────────────────────────────
+
+    def _make_audition_row(self, combo: QComboBox, source: str) -> QHBoxLayout:
+        """Assemble « liste de voix + bouton Écouter ».
+
+        `source` dit où lire le couple moteur/voix au moment du clic — la
+        valeur est portée par le bouton, pas capturée dans une lambda, pour que
+        Qt puisse déconnecter proprement à la destruction de la page.
+        """
+        btn = _btn("▶  Écouter", CP["accent"])
+        btn.setFixedWidth(120)
+        btn.setProperty("audition_src", source)
+        btn.setToolTip(translate(
+            "Fait dire une phrase française à cette voix. Le premier essai "
+            "coûte quelques centimes ; l'extrait est ensuite conservé et "
+            "réécouté gratuitement."
+        ))
+        btn.clicked.connect(self._on_audition)
+        self._audition_buttons.append(btn)
+
+        row = QHBoxLayout()
+        row.setSpacing(8)
+        row.addWidget(combo, 1)
+        row.addWidget(btn)
+        return row
+
+    def _audition_target(self, source: str) -> tuple[str, str]:
+        """Moteur et voix à auditionner selon l'endroit d'où l'on clique.
+
+        Les deux listes ElevenLabs (mode Turbo et timbre cible du Voice
+        Changer) auditionnent le MÊME moteur : ce sont les mêmes voix, et le
+        cache est alors partagé — un extrait généré d'un côté sert de l'autre.
+        """
+        if source == "speech":
+            return (self._speech_combo.currentData() or "inworld",
+                    self._speech_voice_combo.currentData() or "")
+        if source == "changer":
+            return "elevenlabs-turbo", (self._changer_voice_combo.currentData() or "")
+        return "elevenlabs-turbo", (self._voice_combo.currentData() or "")
+
+    def _on_audition(self):
+        btn = self.sender()
+        if btn is None:
+            return
+        engine, voice = self._audition_target(btn.property("audition_src") or "speech")
+        if not voice:
+            show_api_error(self, translate(
+                "Ce moteur n'expose aucune voix : il n'y a rien à écouter."))
+            return
+
+        # Parquer le worker précédent AVANT de réassigner — jamais de mise à
+        # None à chaud, jamais de terminate().
+        if self._audition_worker is not None:
+            from core.worker import abandon_thread
+            abandon_thread(self._audition_worker)
+        audio_preview.stop()
+
+        for b in self._audition_buttons:
+            b.setEnabled(False)
+        self._progress.setVisible(True)
+        self._progress.setValue(0)
+        self._lbl_status.setVisible(True)
+        self._lbl_status.setText(translate("Préparation de l'extrait…"))
+
+        self._audition_worker = VoiceAuditionWorker(engine, voice)
+        self._audition_worker.progress.connect(self._on_progress)
+        self._audition_worker.done.connect(self._on_audition_done)
+        self._audition_worker.failed.connect(self._on_audition_failed)
+        self._audition_worker.start()
+
+    def _on_audition_done(self, path: str, from_cache: bool):
+        for b in self._audition_buttons:
+            b.setEnabled(True)
+        self._progress.setValue(100)
+        inline = audio_preview.play(path)
+        if not inline:
+            # Le lecteur interne n'est pas disponible : l'extrait s'ouvre dans
+            # le lecteur du système. On le DIT, sinon la fenêtre qui surgit
+            # passe pour un bug.
+            self._lbl_status.setText(translate(
+                "▶  Extrait ouvert dans le lecteur du système"))
+        elif from_cache:
+            self._lbl_status.setText(translate("▶  Lecture (extrait déjà en cache)"))
+        else:
+            self._lbl_status.setText(translate("▶  Lecture de l'extrait"))
+
+    def _on_audition_failed(self, error: str):
+        for b in self._audition_buttons:
+            b.setEnabled(True)
+        self._progress.setVisible(False)
+        self._lbl_status.setVisible(False)
+        show_api_error(self, error)
 
     # ── Panneau d'entrée ──────────────────────────────────────────────────────
 
@@ -519,7 +692,7 @@ class PageDoublage(QWidget):
             lang_tag = " · FR/EN" if v in ELEVENLABS_VOICES_FR else " · EN"
             self._voice_combo.addItem(f"{v}{lang_tag}", v)
         self._voice_combo.setCurrentIndex(0)
-        voice_col.addWidget(self._voice_combo)
+        voice_col.addLayout(self._make_audition_row(self._voice_combo, "eleven"))
         voice_row.addLayout(voice_col, 1)
 
         ef_lay.addLayout(voice_row)
@@ -546,15 +719,93 @@ class PageDoublage(QWidget):
             if _spec:
                 self._speech_combo.addItem(_spec["label"], _k)
         sp_lay.addWidget(self._speech_combo)
-        note_sp = QLabel(
-            "Voix de synthèse — aucun échantillon requis. MiniMax 2.8 HD/Turbo gèrent bien le français."
-        )
-        note_sp.setStyleSheet(
+
+        # La voix ne peut PAS rester implicite : sans elle, chaque moteur
+        # retombe sur sa voix par défaut, qui est anglophone partout.
+        sp_lay.addWidget(section_label("Voix"))
+        self._speech_voice_combo = QComboBox()
+        self._speech_voice_combo.setFixedHeight(34)
+        self._speech_voice_combo.setStyleSheet(_combo_ss)
+        sp_lay.addLayout(self._make_audition_row(self._speech_voice_combo, "speech"))
+
+        self._speech_note = QLabel("")
+        self._speech_note.setWordWrap(True)
+        self._speech_note.setStyleSheet(
             f"color:{CP['text_dim']};font-size:9px;font-family:'Consolas',monospace;"
             f"background:transparent;"
         )
-        sp_lay.addWidget(note_sp)
+        sp_lay.addWidget(self._speech_note)
         lay.addWidget(self._speech_frame)
+
+        # Méthode liée, pas lambda : Qt sait déconnecter la première à la
+        # destruction du receveur, jamais la seconde.
+        self._speech_combo.currentIndexChanged.connect(self._on_speech_engine_changed)
+        self._on_speech_engine_changed()
+
+        # ── Config Voice Changer — votre voix, un autre timbre ───────────────
+        self._changer_frame = QWidget()
+        self._changer_frame.setVisible(False)
+        ch_lay = QVBoxLayout(self._changer_frame)
+        ch_lay.setContentsMargins(0, 0, 0, 0)
+        ch_lay.setSpacing(8)
+
+        ch_lay.addWidget(section_label("Votre enregistrement"))
+        ch_row = QHBoxLayout()
+        ch_row.setSpacing(8)
+        self._lbl_changer_audio = QLabel("Aucun enregistrement chargé")
+        self._lbl_changer_audio.setStyleSheet(
+            f"color:{CP['text_dim']};font-size:10px;font-family:'Consolas',monospace;"
+            f"background:{CP['bg2']};border:1px solid {CP['border']};border-radius:6px;"
+            f"padding:6px 10px;"
+        )
+        self._lbl_changer_audio.setSizePolicy(
+            QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed
+        )
+        self._lbl_changer_audio.setFixedHeight(32)
+        btn_ch_load = _btn("📂  Charger un enregistrement", CP["accent"])
+        btn_ch_load.setFixedWidth(220)
+        btn_ch_load.clicked.connect(self._on_load_changer_audio)
+        ch_row.addWidget(self._lbl_changer_audio, 1)
+        ch_row.addWidget(btn_ch_load)
+        ch_lay.addLayout(ch_row)
+
+        ch_lay.addWidget(section_label("Timbre cible"))
+        self._changer_voice_combo = QComboBox()
+        self._changer_voice_combo.setFixedHeight(34)
+        self._changer_voice_combo.setStyleSheet(_combo_ss)
+        for _lbl, _val, _fr in target_voices():
+            self._changer_voice_combo.addItem(
+                f"{_lbl}   ·  FR/EN" if _fr else f"{_lbl}   ·  EN", _val)
+        ch_lay.addLayout(self._make_audition_row(self._changer_voice_combo, "changer"))
+
+        ch_lay.addWidget(section_label("Format de sortie"))
+        self._changer_format_combo = QComboBox()
+        self._changer_format_combo.setFixedHeight(34)
+        self._changer_format_combo.setStyleSheet(_combo_ss)
+        for _lbl, _val in OUTPUT_FORMATS:
+            self._changer_format_combo.addItem(_lbl, _val)
+        ch_lay.addWidget(self._changer_format_combo)
+
+        self._changer_denoise = QCheckBox("Retirer le bruit de fond de mon enregistrement")
+        self._changer_denoise.setStyleSheet(
+            f"color:{CP['text_secondary']};font-size:11px;background:transparent;"
+        )
+        ch_lay.addWidget(self._changer_denoise)
+
+        note_ch = QLabel(
+            "Le texte saisi plus haut n'est pas utilisé dans ce mode : c'est votre "
+            "enregistrement qui porte les mots ET l'interprétation. Le modèle ne "
+            "remplace que le grain de la voix — d'où une prononciation française "
+            "qui ne peut pas être fausse.\n"
+            "Formats acceptés : MP3 · WAV · M4A · AAC · OGG   ·   tarif fal non relevé"
+        )
+        note_ch.setWordWrap(True)
+        note_ch.setStyleSheet(
+            f"color:{CP['text_dim']};font-size:9px;font-family:'Consolas',monospace;"
+            f"background:transparent;"
+        )
+        ch_lay.addWidget(note_ch)
+        lay.addWidget(self._changer_frame)
 
         # ── Config F5-TTS — Clonage voix multilingue ─────────────────────────
         self._clone_frame = QWidget()
@@ -712,6 +963,22 @@ class PageDoublage(QWidget):
             f"padding:6px 10px;"
         )
 
+    def _on_load_changer_audio(self):
+        path, _ = QFileDialog.getOpenFileName(
+            self, "Charger votre enregistrement",
+            os.path.expanduser("~"),
+            "Audio (*.mp3 *.wav *.m4a *.aac *.ogg);;Tous (*.*)",
+        )
+        if not path:
+            return
+        self._changer_audio_path = path
+        self._lbl_changer_audio.setText(os.path.basename(path))
+        self._lbl_changer_audio.setStyleSheet(
+            f"color:{CP['accent']};font-size:10px;font-family:'Consolas',monospace;"
+            f"background:{CP['bg2']};border:1px solid {CP['accent']};border-radius:6px;"
+            f"padding:6px 10px;"
+        )
+
     def _on_generate(self):
         self._btn_generate.setEnabled(False)
         self._progress.setVisible(True)
@@ -753,10 +1020,36 @@ class PageDoublage(QWidget):
                 self._progress.setVisible(False)
                 self._lbl_status.setVisible(False)
                 return
-            eng   = self._speech_combo.currentData() or "minimax-2.8-hd"
-            label = eng
-            self._tts_worker = FalSpeechWorker(eng, text, label=label)
+            eng   = self._speech_combo.currentData() or "inworld"
+            voice = self._speech_voice_combo.currentData() or ""
+            # Le nom de fichier porte la voix : en retrouver une à l'oreille
+            # dans un dossier de rushes est autrement pénible.
+            label = f"{eng}_{voice}" if voice else eng
+            self._tts_worker = FalSpeechWorker(eng, text, label=label, voice=voice)
             mode_label = "Voix IA"
+
+        elif self._mode == "changer":
+            if not self._changer_audio_path:
+                from PyQt6.QtWidgets import QMessageBox
+                QMessageBox.warning(
+                    self, "Enregistrement requis",
+                    "Chargez votre enregistrement : le Voice Changer transforme "
+                    "une voix existante, il n'en fabrique pas une depuis du texte."
+                )
+                self._btn_generate.setEnabled(True)
+                self._progress.setVisible(False)
+                self._lbl_status.setVisible(False)
+                return
+            voice = self._changer_voice_combo.currentData() or "Charlotte"
+            label = f"changer_{voice}"
+            self._tts_worker = VoiceChangerWorker(
+                self._changer_audio_path,
+                voice=voice,
+                output_format=self._changer_format_combo.currentData() or "mp3_44100_128",
+                remove_noise=self._changer_denoise.isChecked(),
+                label=label,
+            )
+            mode_label = "Voice Changer"
 
         else:  # elevenlabs
             text = self._text_edit.toPlainText().strip()

@@ -313,11 +313,45 @@ def _anthropic_extra(model: str) -> dict:
     return {"thinking": {"type": "disabled"}}
 
 
+# ── Journalisation du coût : quelle tâche est en cours, dans CE thread ───────
+# Les adaptateurs bas niveau ne reçoivent pas le `task` (il faudrait changer la
+# signature de _dispatch_complete, dont le harnais lit la source). On le dépose
+# donc dans un contexte propre au thread : les workers PANDORA tournent chacun
+# dans leur QThread, il n'y a donc aucun mélange possible entre deux tâches
+# simultanées.
+import threading as _threading
+
+_task_ctx = _threading.local()
+
+
+def _set_task_ctx(task: str | None, model: str, provider: str) -> None:
+    _task_ctx.task = task or ""
+    _task_ctx.model = model or ""
+    _task_ctx.provider = provider or ""
+
+
+def _note_usage(msg) -> None:
+    """Range la consommation d'une réponse Anthropic dans « Coût du projet ».
+
+    Silencieuse par construction : un journal indisponible ne doit jamais
+    remonter dans un appel IA que l'utilisateur a déjà payé.
+    """
+    try:
+        from core.ai_spend import note_message
+        note_message(msg,
+                     getattr(_task_ctx, "model", "") or "",
+                     getattr(_task_ctx, "task", "") or "",
+                     provider=getattr(_task_ctx, "provider", "") or "anthropic")
+    except Exception:
+        pass
+
+
 def _anthropic_complete(system, messages, model, max_tokens) -> str:
     msg = _anthropic_client().messages.create(
         model=model, max_tokens=max_tokens, system=system, messages=messages,
         **_anthropic_extra(model),
     )
+    _note_usage(msg)
     return "".join(b.text for b in msg.content if getattr(b, "type", "") == "text")
 
 
@@ -331,6 +365,11 @@ def _anthropic_stream(system, messages, on_chunk, model, max_tokens) -> str:
             full += t
             if on_chunk:
                 on_chunk(t)
+        # Le décompte n'est disponible qu'une fois le flux terminé.
+        try:
+            _note_usage(st.get_final_message())
+        except Exception:
+            pass
     return full
 
 
@@ -708,6 +747,7 @@ def chat(system: str, messages: list, tier: str = "creative",
     """Conversation multi-tours : messages = [{"role": "user"|"assistant", "content": str}]."""
     provider, creative = _resolve_engine(task)
     model = _model(tier, provider, creative)
+    _set_task_ctx(task, model, provider)
     return _dispatch_complete(provider, _adapt(system, task, provider, model),
                               messages, model, max_tokens)
 
@@ -722,6 +762,7 @@ def chat_ex(system: str, messages: list, tier: str = "creative",
     provider, creative = _resolve_engine(task)
     model = _model(tier, provider, creative)
     sysp  = _adapt(system, task, provider, model)
+    _set_task_ctx(task, model, provider)
     if provider in ("openai", "mistral", "kimi", "glm", "custom"):
         import requests
         builder = {"openai": _openai_payload, "mistral": _mistral_payload,
@@ -747,6 +788,7 @@ def chat_ex(system: str, messages: list, tier: str = "creative",
     msg = _anthropic_client().messages.create(
         model=model, max_tokens=max_tokens, system=sysp, messages=messages,
         **_anthropic_extra(model))
+    _note_usage(msg)
     text = "".join(b.text for b in msg.content if getattr(b, "type", "") == "text")
     return {"text": text, "truncated": getattr(msg, "stop_reason", "") == "max_tokens"}
 
@@ -816,6 +858,7 @@ def stream(system: str, user: str, on_chunk=None, tier: str = "creative",
     """Appel en streaming : on_chunk(str) à chaque fragment ; renvoie le texte complet."""
     provider, creative = _resolve_engine(task)
     model = _model(tier, provider, creative)
+    _set_task_ctx(task, model, provider)
     return _dispatch_stream(provider, _adapt(system, task, provider, model),
                             [{"role": "user", "content": user}],
                             on_chunk, model, max_tokens)

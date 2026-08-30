@@ -18,15 +18,54 @@
 
 ## Download
 
-**[⬇ Download PANDORA v2.2.0 for Windows](https://github.com/22eme-Arkane/PANDORA/releases/download/v2.2.0/PANDORA_Setup_2.2.0.exe)**
+**[⬇ Download PANDORA v2.3.0 for Windows](https://github.com/22eme-Arkane/PANDORA/releases/download/v2.3.0/PANDORA_Setup_2.3.0.exe)**
 
-**[⬇ Download PANDORA v2.2.0 for macOS](https://github.com/22eme-Arkane/PANDORA/releases/download/v2.2.0/PANDORA_2.2.0.dmg)** *(Apple Silicon — see [Installation](#installation) for the first launch)*
+**[⬇ Download PANDORA v2.3.0 for macOS](https://github.com/22eme-Arkane/PANDORA/releases/download/v2.3.0/PANDORA_2.3.0.dmg)** *(Apple Silicon — see [Installation](#installation) for the first launch)*
 
 All versions: [Releases](../../releases)
 
 🌐 **Official 22eme ARKANE website: [22eme-arkane.com](https://22eme-arkane.com)**
 
 ---
+
+## What's new in v2.3.0
+
+**A whole book can now be broken down — and you are told what it will cost
+before you spend it.**
+
+A user pasted an entire book into the Screenplay. The analysis went through, and
+the breakdown stopped. It could not have succeeded: a breakdown runs about six
+times the length of its input, and a single pass caps out around 58 000
+characters. That ceiling is now measured, announced, and worked around.
+
+- **Breakdown and storyboard now run in successive batches.** Each batch is
+  sized to fit a single call, so nothing needs the continuation loop that
+  re-reads everything already written at every round. If batch seven fails, the
+  first six are kept and offered to you — never thrown away.
+- **A size warning before any spending.** Past a certain length PANDORA states
+  the expected number of shots, the passes required and an order-of-magnitude
+  cost, then offers batch mode. When a single pass genuinely cannot finish, the
+  “do it in one pass anyway” button is not offered at all.
+- **Silent shot loss above PLAN 999 fixed.** Shot numbers were read with a
+  three-digit pattern: past 999 the cards were invisible to the parser *and the
+  contract still validated*. On a long work, hundreds of shots could vanish
+  without a single error message.
+- **AI text calls are finally counted in « Project cost ».** The window had a
+  “Text (AI)” line that nothing ever wrote — analysis, breakdown and storyboard
+  all showed 0.00 $. Token usage is now read from the response and priced.
+- **Dubbing voices repaired.** Three of the seven engines were being rejected
+  outright by fal (they expect `prompt`, PANDORA sent `text`), and the rest fell
+  back to their default English voice — which is what made French sound wrong.
+  Inworld's four native French voices (Alain, Hélène, Mathieu, Étienne) were in
+  the app all along and unreachable, at a tenth of the price of ElevenLabs.
+- **Voice Changer.** You speak the line yourself, in French, and the model only
+  swaps the timbre — so the pronunciation cannot come out wrong.
+- **Listen to a voice before choosing it.** fal publishes no voice samples, so
+  PANDORA generates one short French sentence per voice and caches it: the first
+  listen costs a fraction of a cent, every replay is free.
+- **New voice engines:** Qwen Audio 3.0 TTS, ByteDance Seed Speech v2 (with
+  plain-language delivery notes), Async TTS Pro, xAI TTS.
+
 
 ## What's new in v2.2.0
 
@@ -362,7 +401,7 @@ per-engine mood prompts, same fixes.
 
 ### Windows
 
-1. Download `PANDORA_Setup_2.2.0.exe` from the link above and run it
+1. Download `PANDORA_Setup_2.3.0.exe` from the link above and run it
 2. If Windows shows *"Windows protected your PC"* (SmartScreen), click
    **More info** then **Run anyway** — the app is not code-signed yet
    (certificate in progress), this is the Windows equivalent of the macOS
@@ -373,7 +412,7 @@ per-engine mood prompts, same fixes.
 
 ### macOS
 
-1. Download `PANDORA_2.2.0.dmg` from the link above
+1. Download `PANDORA_2.3.0.dmg` from the link above
 2. Open the DMG and drag **PANDORA** into **Applications** (as usual)
 3. **First launch** — macOS will claim that *"PANDORA is damaged and can't be
    opened"*. **This is normal, the app is not damaged** — macOS blocks apps
