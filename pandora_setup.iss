@@ -42,8 +42,12 @@ ArchitecturesAllowed=x64compatible
 SetupIconFile=assets\pandora_badge.ico
 
 ; Images de l'assistant (générées par tools/make_wizard_images.py)
-WizardImageFile=assets\wizard_large.bmp
-WizardSmallImageFile=assets\wizard_small.bmp
+; Une image PAR FACTEUR D'ÉCHELLE : Inno choisit celle qui correspond à l'écran.
+; Avec la seule image 100 %, la mise en page de l'assistant se calculait sur une
+; échelle qui n'était pas celle du poste — les cases à cocher de la page de fin
+; sortaient tronquées à 125/150 % (constat Matthieu, build 2.3.0).
+WizardImageFile=assets\wizard_large.bmp,assets\wizard_large_125.bmp,assets\wizard_large_150.bmp,assets\wizard_large_200.bmp
+WizardSmallImageFile=assets\wizard_small.bmp,assets\wizard_small_125.bmp,assets\wizard_small_150.bmp,assets\wizard_small_200.bmp
 
 ; Exige les droits administrateur (pour écrire dans Program Files)
 PrivilegesRequired=admin
@@ -63,6 +67,12 @@ LicenseFile=EULA.txt
 
 ; Page de bienvenue
 WizardStyle=modern
+; La page de fin porte TROIS cases à cocher (lancer PANDORA + deux vidéos).
+; À la taille par défaut, la hauteur de ligne calculée par Inno rognait le carré
+; de la case sur un écran mis à l'échelle. Élargir l'assistant donne à la liste
+; la place qui lui manquait, et rend l'EULA plus lisible au passage.
+WizardSizePercent=120
+WizardResizable=yes
 
 ; Désinstalleur
 UninstallDisplayName={#MyAppName} {#MyAppVersion}

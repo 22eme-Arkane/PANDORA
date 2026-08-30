@@ -1,9 +1,19 @@
-"""Génère assets/wizard_large.bmp (164×314) et assets/wizard_small.bmp (55×58) pour Inno Setup.
+"""Génère les images de l'assistant d'installation Inno Setup, à TOUTES les échelles.
 
 Sources prioritaires :
-  - assets/icons/wizard_large.png  → wizard_large.bmp
-  - assets/icons/wizard_small.png  → wizard_small.bmp
-Fallback (génération depuis app_icon.png) uniquement si les sources sont absentes.
+  - assets/icons/wizard_large.png  → wizard_large*.bmp
+  - assets/icons/wizard_small.png  → wizard_small*.bmp
+Repli (génération depuis app_icon.png) uniquement si les sources sont absentes.
+
+⚠ POURQUOI PLUSIEURS TAILLES (constat Matthieu 2026-08-30, build 2.3.0)
+Sur la page de fin de l'installeur, les cases à cocher apparaissaient tronquées.
+Le projet ne fournissait qu'une seule image, à l'échelle 100 % (164×314), alors
+que Windows tourne couramment à 125 % ou 150 % : Inno devait étirer l'image et
+la mise en page se calculait sur une échelle qui n'était pas celle de l'écran.
+
+Inno Setup accepte une LISTE d'images séparées par des virgules et choisit
+celle qui correspond au facteur d'échelle courant. On produit donc les quatre
+échelles usuelles — 100, 125, 150 et 200 % — dérivées de la taille de base.
 """
 import os
 import sys
@@ -19,57 +29,73 @@ except ImportError:
 
 BG = (7, 8, 15)  # #07080f — fond sombre PANDORA
 
-# ── Wizard large (164×314) ────────────────────────────────────────────────────
-src_large = os.path.join(ASSETS, "icons", "wizard_large.png")
-dst_large = os.path.join(ASSETS, "wizard_large.bmp")
+#: Échelles produites. La clé est le suffixe de fichier ; « » = l'image de base,
+#: celle que `WizardImageFile` cite en premier.
+SCALES = (("", 1.0), ("_125", 1.25), ("_150", 1.5), ("_200", 2.0))
 
-if os.path.isfile(src_large):
-    img = Image.open(src_large).convert("RGB")
-    img = img.resize((164, 314), Image.LANCZOS)
-    img.save(dst_large, format="BMP")
-    print(f"Wizard large : {dst_large}  (164×314)")
-else:
-    # Fallback : générer depuis app_icon.png
-    src = os.path.join(ASSETS, "app_icon.png")
-    if not os.path.isfile(src):
-        src = os.path.join(ASSETS, "pandora_badge.png")
-    if not os.path.isfile(src):
-        print("ERREUR : wizard_large.png et app_icon.png introuvables")
-        sys.exit(1)
-    badge = Image.open(src).convert("RGBA")
-    W, H = 164, 314
-    canvas = Image.new("RGBA", (W, H), BG + (255,))
-    logo_size = min(W - 24, 130)
-    logo = badge.resize((logo_size, logo_size), Image.LANCZOS)
-    x = (W - logo_size) // 2
-    y = H // 2 - logo_size // 2 - 20
-    canvas.paste(logo, (x, y), logo)
-    out = Image.new("RGB", (W, H), BG)
-    out.paste(canvas, mask=canvas.split()[3])
-    out.save(dst_large, format="BMP")
-    print(f"Wizard large (fallback) : {dst_large}  (164×314)")
+BASE_LARGE = (164, 314)
+BASE_SMALL = (55, 58)
 
-# ── Wizard small (55×58) ─────────────────────────────────────────────────────
-src_small = os.path.join(ASSETS, "icons", "wizard_small.png")
-dst_small = os.path.join(ASSETS, "wizard_small.bmp")
 
-if os.path.isfile(src_small):
-    img = Image.open(src_small).convert("RGB")
-    img = img.resize((55, 58), Image.LANCZOS)
-    img.save(dst_small, format="BMP")
-    print(f"Wizard small : {dst_small}  (55×58)")
-else:
-    # Fallback : générer depuis app_icon.png
-    src = os.path.join(ASSETS, "app_icon.png")
+def _sizes(base: tuple[int, int]) -> list[tuple[str, tuple[int, int]]]:
+    return [(suf, (round(base[0] * f), round(base[1] * f))) for suf, f in SCALES]
+
+
+def _from_source(src: str, base: tuple[int, int], stem: str) -> bool:
+    """Décline une source PNG à toutes les échelles. Faux si la source manque."""
     if not os.path.isfile(src):
-        src = os.path.join(ASSETS, "pandora_badge.png")
-    if not os.path.isfile(src):
-        print("ERREUR : wizard_small.png et app_icon.png introuvables")
-        sys.exit(1)
-    badge = Image.open(src).convert("RGBA")
-    SW, SH = 55, 58
-    out = Image.new("RGB", (SW, SH), BG)
-    logo_s = badge.resize((SW, SH), Image.LANCZOS)
-    out.paste(logo_s, (0, 0), logo_s)
-    out.save(dst_small, format="BMP")
-    print(f"Wizard small (fallback) : {dst_small}  (55×58)")
+        return False
+    img = Image.open(src).convert("RGB")
+    for suf, size in _sizes(base):
+        dst = os.path.join(ASSETS, f"{stem}{suf}.bmp")
+        # On repart TOUJOURS de la source pleine résolution : agrandir la
+        # version 100 % donnerait une image molle aux échelles hautes.
+        img.resize(size, Image.LANCZOS).save(dst, format="BMP")
+        print(f"  {stem}{suf}.bmp  {size[0]}x{size[1]}")
+    return True
+
+
+def _badge() -> "Image.Image":
+    for name in ("app_icon.png", "pandora_badge.png"):
+        p = os.path.join(ASSETS, name)
+        if os.path.isfile(p):
+            return Image.open(p).convert("RGBA")
+    print("ERREUR : ni wizard_*.png ni app_icon.png/pandora_badge.png")
+    sys.exit(1)
+
+
+def _fallback_large(stem: str, base: tuple[int, int]) -> None:
+    badge = _badge()
+    for suf, (W, H) in _sizes(base):
+        canvas = Image.new("RGBA", (W, H), BG + (255,))
+        logo_size = min(W - round(24 * W / base[0]), round(130 * W / base[0]))
+        logo = badge.resize((logo_size, logo_size), Image.LANCZOS)
+        canvas.paste(logo, ((W - logo_size) // 2,
+                            H // 2 - logo_size // 2 - round(20 * H / base[1])), logo)
+        out = Image.new("RGB", (W, H), BG)
+        out.paste(canvas, mask=canvas.split()[3])
+        out.save(os.path.join(ASSETS, f"{stem}{suf}.bmp"), format="BMP")
+        print(f"  {stem}{suf}.bmp  {W}x{H}  [repli]")
+
+
+def _fallback_small(stem: str, base: tuple[int, int]) -> None:
+    badge = _badge()
+    for suf, (W, H) in _sizes(base):
+        out = Image.new("RGB", (W, H), BG)
+        logo = badge.resize((W, H), Image.LANCZOS)
+        out.paste(logo, (0, 0), logo)
+        out.save(os.path.join(ASSETS, f"{stem}{suf}.bmp"), format="BMP")
+        print(f"  {stem}{suf}.bmp  {W}x{H}  [repli]")
+
+
+# ASCII pur : build.ps1 lance ce script dans une console cp1252 et s'arrête à
+# la première erreur. Un simple caractère de filet (U+2500) suffit à tuer le
+# build sur un UnicodeEncodeError.
+print("Images de l'assistant d'installation - 4 echelles")
+if not _from_source(os.path.join(ASSETS, "icons", "wizard_large.png"),
+                    BASE_LARGE, "wizard_large"):
+    _fallback_large("wizard_large", BASE_LARGE)
+
+if not _from_source(os.path.join(ASSETS, "icons", "wizard_small.png"),
+                    BASE_SMALL, "wizard_small"):
+    _fallback_small("wizard_small", BASE_SMALL)
