@@ -8852,5 +8852,44 @@ def decoupage_par_lots_et_cout_du_texte():
             f"le coordinateur persiste ({_interdit}) : l'aperçu devient un fait accompli"
 
 
+@test
+def prix_image_jamais_le_numero_de_version():
+    """Le prix d'une image ne doit pas être lu dans le nom du moteur.
+
+    Constat Matthieu 2026-08-30 : « Seedream met environ 5 dollars l'image ».
+    Le motif acceptait un montant SANS signe dollar, donc la première décimale
+    du libellé — et dans « Seedream 5.0 Pro » c'est le numéro de version.
+    Cinq moteurs sur quatorze étaient faux, jusqu'à 165× le tarif réel. Les
+    moteurs sans décimale dans leur nom étaient justes, ce qui masquait tout.
+    """
+    from core import image_engines as _ie
+    from api.apercu import _image_price_hint, _MAX_PLAUSIBLE_IMAGE_USD
+
+    # Aucun moteur ne doit sortir un prix invraisemblable. C'est l'assertion
+    # qui aurait fait rougir le harnais dès l'ajout de Seedream 5.0.
+    for _k in _ie.ENGINES:
+        _p = _image_price_hint(_k)
+        assert 0.0 <= _p <= _MAX_PLAUSIBLE_IMAGE_USD, \
+            f"{_k} : prix invraisemblable {_p} $ / image"
+
+    # Les cinq moteurs qui portaient un numéro de version décimal.
+    for _k, _attendu in (("seedream5_pro", 0.0675), ("seedream5", 0.035),
+                         ("seedream45", 0.03), ("recraft", 0.04),
+                         ("flux_ultra", 0.06)):
+        if _k in _ie.ENGINES:
+            assert abs(_image_price_hint(_k) - _attendu) < 1e-9, \
+                f"{_k} : {_image_price_hint(_k)} au lieu de {_attendu}"
+
+    # Le signe dollar est ce qui distingue un prix d'un numéro de version :
+    # la garantie tient à lui, pas à la forme des libellés d'aujourd'hui.
+    _src = inspect.getsource(_image_price_hint)
+    assert r"\$?" not in _src, "le signe dollar est redevenu optionnel"
+
+    # Tout moteur du catalogue doit annoncer un prix : un moteur à 0 $ serait
+    # présenté comme gratuit dans « Coût du projet ».
+    _muets = [k for k in _ie.ENGINES if _image_price_hint(k) == 0.0]
+    assert not _muets, f"moteurs sans tarif lisible : {_muets}"
+
+
 if __name__ == "__main__":
     sys.exit(main())

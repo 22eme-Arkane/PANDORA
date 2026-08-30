@@ -1034,20 +1034,39 @@ def run_generation_nb2(prompt: str, output_dir: str, api_key: str, progress_cb,
 # (façade en mapping ; cohérence persos/décor + inspiration + plan d'architecte en
 # Cinéma) ; ceux qui les ignorent génèrent depuis le prompt seul (+ style du film).
 
+#: Au-dessus de ce montant, un prix « à l'image » n'est pas crédible : le plus
+#: cher du catalogue est à 0,15 $. Un chiffre plus élevé signale une lecture
+#: fautive, pas un moteur onéreux — on préfère alors ne rien annoncer.
+_MAX_PLAUSIBLE_IMAGE_USD = 1.0
+
+
 def _image_price_hint(engine_key: str) -> float:
     """Prix indicatif d'UNE image, lu dans le libellé du catalogue de moteurs.
 
     Les libellés portent le tarif annoncé (« ~$0.0675–0.135 ») : on prend la
     borne BASSE, la seule qu'on puisse affirmer sans connaître la définition
     facturée. C'est un ordre de grandeur pour le journal de dépenses, pas une
-    facture — la fenêtre « Coût du projet » l'annonce comme estimé."""
+    facture — la fenêtre « Coût du projet » l'annonce comme estimé.
+
+    ⚠ LE SIGNE DOLLAR EST OBLIGATOIRE (constat Matthieu 2026-08-30).
+    Il était facultatif : la première décimale du libellé était retenue, et
+    dans « Seedream 5.0 Pro » c'est le NUMÉRO DE VERSION. Cinq moteurs étaient
+    faux, Seedream 5.0 journalisé à 5,00 $ l'image au lieu de 0,0675 $ — cent
+    soixante-cinq fois trop. Les moteurs sans décimale dans leur nom étaient
+    justes, ce qui a masqué le défaut.
+    """
     try:
         import re as _re
         from core import image_engines as _ie3
         _lbl = _ie3.label_for(engine_key) or ""
-        _m = _re.findall(r"\$?(\d+[.,]\d+)", _lbl)
-        if _m:
-            return float(_m[0].replace(",", "."))
+        # `\$` littéral : seul un montant précédé du dollar est un prix.
+        _m = _re.findall(r"\$\s*(\d+(?:[.,]\d+)?)", _lbl)
+        if not _m:
+            return 0.0
+        _v = float(_m[0].replace(",", "."))
+        # Filet : mieux vaut ne rien annoncer qu'annoncer un chiffre absurde,
+        # qui fausserait le total du projet sans que rien ne le signale.
+        return _v if 0.0 < _v <= _MAX_PLAUSIBLE_IMAGE_USD else 0.0
     except Exception:
         pass
     return 0.0
