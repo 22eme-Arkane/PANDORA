@@ -1,0 +1,74 @@
+🎬 PANDORA 2.3.0 — UN LIVRE ENTIER PEUT ENFIN ÊTRE DÉCOUPÉ
+
+Cette version vient presque entièrement d'un retour d'utilisateur. Il a collé un livre entier dans le Scénario. L'analyse est passée. Le découpage s'est arrêté.
+
+En regardant pourquoi, j'ai découvert que ça ne pouvait pas marcher — et deux autres choses que je ne cherchais pas.
+
+CE QUI SE PASSAIT VRAIMENT
+
+Un découpage produit environ SIX FOIS la longueur du scénario. Je l'ai mesuré sur mes propres films : 15 000 caractères de scénario donnent 94 000 caractères de découpage, pour 84 plans.
+
+Ça veut dire qu'une génération d'un seul tenant plafonne vers 58 000 caractères. Un long métrage dépasse déjà le double. Un livre, sept à dix fois.
+
+Ce n'était donc pas un incident : c'était structurellement impossible.
+
+LE DÉCOUPAGE ET LE STORYBOARD TRAVAILLENT MAINTENANT PAR LOTS
+
+Le scénario est tranché aux bons endroits — séquences, scènes, chapitres — et chaque tranche est calibrée pour tenir en un seul appel.
+
+L'intérêt n'est pas seulement que ça aboutit. C'est aussi que ça coûte moins cher : jusqu'ici, chaque reprise du moteur relisait tout ce qu'il avait déjà écrit. Sur vingt reprises, vous payiez dix-neuf fois le même texte.
+
+Et si un lot échoue en route, les précédents sont conservés et vous sont proposés. Vous pouvez interrompre, puis reprendre.
+
+Sur le storyboard, la bascule se fait à 100 fiches : en dessous, rien ne change pour vos projets existants.
+
+ON VOUS DIT CE QUE ÇA VA COÛTER, AVANT
+
+Au-delà d'une certaine longueur, une fenêtre annonce le nombre de plans attendus et un ordre de grandeur du coût, puis propose le mode par lots.
+
+Quand une génération d'un seul tenant ne peut vraiment pas aboutir, le bouton « faire quand même » n'apparaît pas. Un bouton qui mène à coup sûr à l'échec n'est pas une liberté, c'est un piège.
+
+DES PLANS DISPARAISSAIENT EN SILENCE AU-DELÀ DE 999
+
+Celui-là, personne ne l'avait signalé, et il est plus grave que le problème d'origine.
+
+Les numéros de plan étaient lus sur trois chiffres. Au-delà de PLAN 999, les fiches devenaient invisibles — et le contrôle de validité ne disait rien. Sur une œuvre longue, des centaines de plans pouvaient s'évaporer sans un seul message d'erreur.
+
+LE COÛT DE L'IA DE TEXTE ÉTAIT INVISIBLE
+
+La fenêtre « Coût du projet » avait une ligne « Texte (IA) » que rien n'écrivait. Votre scénario, votre découpage, votre storyboard : tout affichait 0,00 $.
+
+L'information était pourtant là — le moteur la renvoie à chaque réponse, et le code la jetait. Elle est maintenant lue et chiffrée. Et quand un tarif n'est pas public, c'est écrit noir sur blanc plutôt que présenté comme gratuit.
+
+DOUBLAGE : LES VOIX N'ÉTAIENT PAS MAUVAISES, ELLES ÉTAIENT MAL APPELÉES
+
+Un autre utilisateur me disait que les voix françaises étaient très mal gérées. J'ai cherché de meilleurs moteurs. Le problème était chez moi.
+
+PANDORA envoyait la même chose à tous les moteurs. Or trois d'entre eux attendent un autre nom de champ : MiniMax HD, MiniMax Turbo et Gemini étaient purement et simplement refusés. Les autres tombaient sur leur voix par défaut, qui est anglaise partout — Rachel chez ElevenLabs, Craig chez Inworld.
+
+Autrement dit : depuis le début, vos voix off françaises étaient dites par une voix américaine.
+
+Et le plus rageant : QUATRE VOIX FRANÇAISES NATIVES étaient déjà dans l'application, inatteignables. Alain, Hélène, Mathieu et Étienne, chez Inworld — à 0,01 $ les 1000 caractères, soit dix fois moins cher qu'ElevenLabs.
+
+DEUX AJOUTS POUR LA VOIX
+
+— VOICE CHANGER : vous dites la réplique vous-même, en français, et le modèle ne change que le timbre. La prononciation ne peut pas être fausse, puisqu'elle est la vôtre.
+
+— ÉCOUTER UNE VOIX AVANT DE LA CHOISIR : fal ne publie aucun extrait, donc PANDORA en génère un et le garde. La première écoute coûte une fraction de centime, toutes les suivantes sont gratuites.
+
+Et quatre nouveaux moteurs : Qwen Audio 3.0, ByteDance Seed Speech v2 (qui accepte des consignes de jeu en français — « d'une voix lasse, plus lentement »), Async TTS Pro, xAI TTS.
+
+📥 TÉLÉCHARGER LA 2.3.0
+
+Windows : https://github.com/22eme-Arkane/PANDORA/releases/download/v2.3.0/PANDORA_Setup_2.3.0.exe
+macOS (Apple Silicon) : https://github.com/22eme-Arkane/PANDORA/releases/download/v2.3.0/PANDORA_2.3.0.dmg
+
+L'installation se fait par-dessus votre version actuelle, vos projets et vos clés sont conservés.
+
+Toutes les notes détaillées : https://github.com/22eme-Arkane/PANDORA/releases/tag/v2.3.0
+
+Une précision honnête : les files de lots et les nouveaux moteurs de voix sont vérifiés sur les documentations d'API et sur mes propres projets, mais aucune génération facturée n'a été lancée pour valider cette version. Dites-moi ce que ça donne chez vous.
+
+Merci aux deux utilisateurs qui ont signalé ces problèmes. Cette version est la leur.
+
+Matthieu — 22eme Arkane
