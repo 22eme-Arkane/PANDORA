@@ -24,11 +24,15 @@ Le frontend aplatit tout cela avant l'envoi, avec des identifiants
 « externe:interne » ; on fait exactement pareil.
 
 La conversion a besoin des DÉFINITIONS de nœuds (`GET /object_info`) pour
-savoir dans quel ordre les `widgets_values` tombent dans les entrées. Trois
-pièges connus, tous traités : une entrée à `control_after_generate` consomme
-UNE valeur de plus (« fixed » / « randomize ») ; les nœuds virtuels de
+savoir dans quel ordre les `widgets_values` tombent dans les entrées. Pièges
+connus, tous traités : une entrée à `control_after_generate` consomme UNE
+valeur de plus (« fixed » / « randomize ») ; un widget RELIÉ garde sa case
+(le lien prime, la case est consommée quand même) ; les nœuds virtuels de
 l'éditeur (`Note`, `MarkdownNote`, `PrimitiveNode`, `Reroute`) n'existent pas
-côté serveur ; un nœud muet (mode 2) ou contourné (mode 4) ne part pas.
+côté serveur ; un nœud muet (mode 2) ou contourné (mode 4) ne part pas ; un
+nœud qui n'alimente aucune sortie est élagué (le serveur l'ignorerait).
+Vérifié contre ComfyUI 0.35.1 le 14/09/2026 : la validation de `POST /prompt`
+n'a plus rien à redire aux gabarits H3 hormis les fichiers de modèles absents.
 
 Module PUR : aucune requête ici. `object_info` est passé en paramètre.
 """
@@ -212,12 +216,12 @@ def flatten(wf: dict) -> dict:
 
 # ── Définitions de nœuds ─────────────────────────────────────────────────────
 
-def _widget_inputs(class_def: dict) -> list[tuple[str, bool]]:
-    """(nom, consomme_une_valeur_de_contrôle) pour chaque entrée-widget, dans
-    l'ordre required puis optional — l'ordre dans lequel l'éditeur range les
-    `widgets_values`."""
-    out: list[tuple[str, bool]] = []
-    spec = (class_def or {}).get("input") or {}
+def _widget_specs(input_spec: dict) -> list[tuple[str, bool, object, dict]]:
+    """(nom, contrôle, type, options) pour chaque entrée-widget d'un bloc
+    `{"required": …, "optional": …}`, dans l'ordre required puis optional —
+    l'ordre dans lequel l'éditeur range les `widgets_values`."""
+    out: list[tuple[str, bool, object, dict]] = []
+    spec = input_spec or {}
     for section in ("required", "optional"):
         for name, desc in (spec.get(section) or {}).items():
             if not isinstance(desc, (list, tuple)) or not desc:
@@ -227,14 +231,90 @@ def _widget_inputs(class_def: dict) -> list[tuple[str, bool]]:
             if isinstance(kind, list):
                 is_widget = True                       # COMBO = liste de choix
             elif isinstance(kind, str):
-                is_widget = kind in _WIDGET_TYPES and not _is_link_type(kind)
+                # Types du schéma V3 (relevé sur ComfyUI 0.35.1, 14/09/2026) :
+                # COMFY_DYNAMICCOMBO_V3 (SaveVideo.format/codec) est un widget
+                # dont la valeur est la clé de l'option choisie ; ses
+                # sous-entrées éventuelles arrivent en « parent.enfant » et
+                # ne sont pas gérées ici. COMFY_AUTOGROW_V3
+                # (ComfyMathExpression.values → prises « values.a ») et
+                # COMFY_MATCHTYPE_V3 (ComfySwitchNode) sont des PRISES.
+                is_widget = ((kind in _WIDGET_TYPES and not _is_link_type(kind))
+                             or kind.startswith("COMFY_DYNAMICCOMBO"))
             else:
                 is_widget = False
             if extra.get("forceInput"):
                 is_widget = False
             if is_widget:
-                out.append((name, bool(extra.get("control_after_generate"))))
+                out.append((name, bool(extra.get("control_after_generate")), kind, extra))
     return out
+
+
+def _widget_inputs(class_def: dict) -> list[tuple[str, bool]]:
+    """(nom, consomme_une_valeur_de_contrôle) des widgets d'une classe."""
+    return [(n, c) for n, c, _k, _e in _widget_specs((class_def or {}).get("input") or {})]
+
+
+def _default_value(kind, extra: dict):
+    """Ce que le frontend met dans un widget qu'aucune valeur enregistrée ne
+    couvre : le `default` de la définition, sinon le premier choix d'une
+    liste, sinon le zéro du type."""
+    if "default" in extra:
+        return extra["default"]
+    if isinstance(kind, list):
+        return kind[0] if kind else None
+    if kind == "COMBO":
+        opts = extra.get("options") or []
+        return opts[0] if opts else None
+    if isinstance(kind, str) and kind.startswith("COMFY_DYNAMICCOMBO"):
+        opts = [o for o in (extra.get("options") or []) if isinstance(o, dict)]
+        return opts[0].get("key") if opts else None
+    return {"INT": 0, "FLOAT": 0.0, "STRING": "", "BOOLEAN": False}.get(kind)
+
+
+def _consume_widgets(input_spec: dict, values: list, i: int, linked_names: set,
+                     inputs: dict, prefix: str = "", depth: int = 0) -> int:
+    """Range `values` (les `widgets_values`) dans `inputs` selon l'ordre des
+    widgets de `input_spec` ; rend l'index de la prochaine case libre.
+
+    Règles relevées sur la sérialisation du frontend lui-même
+    (`app.graphToPrompt()`, ComfyUI 0.35.1, 14/09/2026) :
+      - UNE case par widget, relié ou non — un widget converti en prise garde
+        sa valeur dans la liste ; le lien prime ensuite ;
+      - un widget à `control_after_generate` consomme une case de plus ;
+      - un combo DYNAMIQUE (SaveVideo.format) est suivi immédiatement des
+        widgets de l'option choisie, nommés « parent.enfant » (format.codec) ;
+      - un widget `hidden` n'a pas de case mais part avec son défaut
+        (SaveVideo.codec) ;
+      - au-delà des valeurs enregistrées, le frontend complète par le défaut
+        (CreateVideo.color_space absent d'un gabarit plus ancien que le nœud).
+    """
+    for name, has_control, kind, extra in _widget_specs(input_spec):
+        full = f"{prefix}{name}"
+        if extra.get("hidden"):
+            if full not in inputs and full not in linked_names:
+                d = _default_value(kind, extra)
+                if d is not None:
+                    inputs[full] = d
+            continue
+        if full in linked_names:
+            pass                                    # le lien prime, case consommée
+        elif i < len(values):
+            inputs[full] = values[i]
+        else:
+            d = _default_value(kind, extra)
+            if d is not None:
+                inputs[full] = d
+        i += 1
+        if has_control:
+            i += 1                                  # « fixed » / « randomize »
+        if isinstance(kind, str) and kind.startswith("COMFY_DYNAMICCOMBO") and depth < 4:
+            chosen = inputs.get(full) if full not in linked_names else None
+            opt = next((o for o in (extra.get("options") or [])
+                        if isinstance(o, dict) and o.get("key") == chosen), None)
+            if opt:
+                i = _consume_widgets(opt.get("inputs") or {}, values, i, linked_names,
+                                     inputs, prefix=f"{full}.", depth=depth + 1)
+    return i
 
 
 # ── Conversion ───────────────────────────────────────────────────────────────
@@ -318,28 +398,97 @@ def to_api(wf: dict, object_info: dict) -> dict:
                 if k not in linked_names:
                     inputs[k] = v
         else:
-            values = list(raw_wv or [])
-            i = 0
-            for name, has_control in _widget_inputs(cdef):
-                if name in linked_names:
-                    # Le widget converti en prise ne consomme pas de valeur —
-                    # sauf s'il porte un contrôle, qui reste dans la liste.
-                    if has_control and i < len(values):
-                        i += 1
-                    continue
-                if i < len(values):
-                    inputs[name] = values[i]
-                    i += 1
-                if has_control:
-                    i += 1          # « fixed » / « randomize » : pas une entrée
-        api[str(nid)] = {"class_type": ctype, "inputs": inputs}
+            # ⚠ La première version sautait la case des widgets reliés :
+            # weight_dtype recevait le nom du modèle, CLIPLoader.type le nom
+            # du CLIP et BasicScheduler.denoise le nombre de pas — refusés
+            # par le serveur (constat 14/09/2026). Règles dans _consume_widgets.
+            _consume_widgets(cdef.get("input") or {}, list(raw_wv or []), 0,
+                             linked_names, inputs)
+        api[str(nid)] = {"class_type": ctype, "inputs": inputs,
+                         "_meta": {"title": n.get("title") or ctype}}
 
     if unknown:
         raise ConversionError(
             "Nœuds inconnus du serveur : " + ", ".join(sorted(set(unknown)))
             + ". Il manque probablement un nœud personnalisé, ou ComfyUI est "
               "trop ancien pour ce workflow.")
-    return api
+    return prune_unreachable(api, object_info)
+
+
+def prune_unreachable(api: dict, object_info: dict) -> dict:
+    """Retire les nœuds qui n'alimentent aucun nœud de sortie (`output_node`).
+
+    Le serveur ne valide et n'exécute que l'amont des sorties ; un nœud
+    laissé pendant dans l'éditeur (le gabarit I2V officiel garde un
+    ImageScaleToTotalPixels → GetImageSize débranchés) ne gêne pas le rendu
+    mais pollue les diagnostics — et son entrée « image » manquante serait
+    lue comme une erreur par un contrôle statique. Sans nœud de sortie, on ne
+    touche à rien : c'est au serveur de dire « Prompt has no outputs »."""
+    outs = [nid for nid, n in api.items()
+            if (object_info.get(n.get("class_type")) or {}).get("output_node")]
+    if not outs:
+        return api
+    seen: set[str] = set()
+    stack = list(outs)
+    while stack:
+        nid = stack.pop()
+        if nid in seen or nid not in api:
+            continue
+        seen.add(nid)
+        for v in (api[nid].get("inputs") or {}).values():
+            if isinstance(v, list) and len(v) == 2 and isinstance(v[0], str):
+                stack.append(v[0])
+    return {nid: n for nid, n in api.items() if nid in seen}
+
+
+#: Dossier de `models/` où déposer un fichier, d'après le nom de l'entrée.
+_MODEL_FOLDERS = {
+    "unet_name": "diffusion_models", "clip_name": "text_encoders",
+    "clip_name1": "text_encoders", "clip_name2": "text_encoders",
+    "clip_name3": "text_encoders", "vae_name": "vae", "lora_name": "loras",
+    "ckpt_name": "checkpoints", "control_net_name": "controlnet",
+    "upscale_model_name": "upscale_models", "style_model_name": "style_models",
+    "clip_vision_name": "clip_vision", "gligen_name": "gligen",
+}
+
+
+def _combo_options(desc) -> list | None:
+    """Choix d'une entrée-liste, dans les deux écritures de /object_info :
+    `[[…], {}]` (V1) ou `["COMBO", {"options": […]}]` (V3)."""
+    if not isinstance(desc, (list, tuple)) or not desc:
+        return None
+    if isinstance(desc[0], list):
+        return desc[0]
+    if desc[0] == "COMBO" and len(desc) > 1 and isinstance(desc[1], dict):
+        opts = desc[1].get("options")
+        return opts if isinstance(opts, list) else None
+    return None
+
+
+def missing_models(api: dict, object_info: dict) -> list[tuple[str, str, str]]:
+    """(fichier, dossier models/…, classe) pour chaque entrée « *_name » dont
+    la valeur n'est pas dans la liste que le serveur publie — c'est-à-dire
+    un fichier de modèle que ComfyUI ne voit pas.
+
+    ⚠ Le serveur valide TOUT l'amont des sorties, branches inactives
+    comprises : le LoRA turbo des gabarits H3 est exigé même turbo
+    désactivé (constat 14/09/2026). D'où ce pré-vol : une liste lisible des
+    fichiers à déposer vaut mieux qu'un « value_not_in_list » anglais."""
+    out: list[tuple[str, str, str]] = []
+    for n in api.values():
+        cdef = object_info.get(n.get("class_type")) or {}
+        spec = cdef.get("input") or {}
+        for section in ("required", "optional"):
+            for name, desc in (spec.get(section) or {}).items():
+                if not name.endswith("_name"):
+                    continue
+                opts = _combo_options(desc)
+                if opts is None:
+                    continue
+                val = (n.get("inputs") or {}).get(name)
+                if isinstance(val, str) and val not in opts:
+                    out.append((val, _MODEL_FOLDERS.get(name, "…"), n.get("class_type", "")))
+    return out
 
 
 # ── Remplissage ──────────────────────────────────────────────────────────────

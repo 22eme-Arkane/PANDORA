@@ -1428,10 +1428,10 @@ class TabVideoEngines(QWidget):
             # gabarits officiels ; « personnalisé » = le .json réglé dans les
             # Paramètres. Index alignés sur _ENGINES, comme au-dessus.
             _NewEngineForm("t2v", with_res=True,
-                           res_opts=[("768p  (natif)", "768p"), ("480p", "480p")],
+                           res_opts=[("480p  (défaut officiel · 8 Go)", "480p"), ("768p  (natif · plus de VRAM)", "768p")],
                            dur=(5, 15, 5), note="ComfyUI · MiniMax H3 · gabarit officiel · le Format oriente le cadre"),
             _NewEngineForm("i2v", with_image=True, with_end=True, with_res=True,
-                           res_opts=[("768p  (natif)", "768p"), ("480p", "480p")],
+                           res_opts=[("480p  (défaut officiel · 8 Go)", "480p"), ("768p  (natif · plus de VRAM)", "768p")],
                            dur=(5, 15, 5), note="ComfyUI · MiniMax H3 · première / dernière image"),
             _NewEngineForm("t2v", dur=(2, 15, 5),
                            note="ComfyUI · votre workflow (Paramètres › ComfyUI) · le prompt remplace le premier nœud texte"),

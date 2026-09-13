@@ -4027,6 +4027,8 @@ _FR_TO_EN: dict[str, str] = {
     "ComfyUI · MiniMax H3 · gabarit officiel · le Format oriente le cadre":
         "ComfyUI · MiniMax H3 · official template · Format sets the orientation",
     "ComfyUI · MiniMax H3 · première / dernière image": "ComfyUI · MiniMax H3 · first / last frame",
+    "480p  (défaut officiel · 8 Go)": "480p  (official default · 8 GB)",
+    "768p  (natif · plus de VRAM)": "768p  (native · more VRAM)",
     "ComfyUI · votre workflow (Paramètres › ComfyUI) · le prompt remplace le premier nœud texte":
         "ComfyUI · your workflow (Settings › ComfyUI) · the prompt replaces the first text node",
     # ── Doublage : écouter une voix avant de la choisir ───────────────────────

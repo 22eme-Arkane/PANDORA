@@ -9115,8 +9115,10 @@ def comfyui_moteur_nodal_et_journal_de_cout():
         {"id": 3, "type": "Reroute", "inputs": [{"name": "", "link": 10}], "outputs": [{"links": [11]}]},
         {"id": 4, "type": "KSampler",
          "inputs": [{"name": "seed", "link": 20}, {"name": "positive", "link": 11}],
-         # seed converti en prise : sa valeur de contrôle « fixed » reste dans la liste
-         "widgets_values": ["fixed", 20, 7.5, "euler"]},
+         # seed converti en prise : sa CASE et sa valeur de contrôle « fixed »
+         # restent dans la liste (règle vérifiée sur graphToPrompt, 14/09/2026 —
+         # la première version sautait la case et décalait tout d'un cran)
+         "widgets_values": [99, "fixed", 20, 7.5, "euler"]},
         {"id": 5, "type": "Note", "widgets_values": ["commentaire"]},
         {"id": 6, "type": "LoadImage", "mode": 2, "widgets_values": ["muet.png", "image"]},
     ], "links": [[10, 1, 0, 3, 0, "CONDITIONING"], [11, 3, 0, 4, 1, "CONDITIONING"],
@@ -9194,16 +9196,36 @@ def comfyui_moteur_nodal_et_journal_de_cout():
         assert api[next(i for i, t in types.items() if t == "RandomNoise")]["inputs"]["noise_seed"] == 7
         assert api[next(i for i, t in types.items() if t == "PrimitiveFloat")]["inputs"]["value"] == 5.0, \
             "la durée entre en secondes par le PrimitiveFloat"
+        # Cadre en littéraux dans les DEUX modes : le gabarit I2V officiel relie
+        # width/height à un ResolutionSelector « 1:1 » (0,4 MP), PAS à l'image —
+        # sans littéraux un mood 16:9 sortirait carré (constat 14/09/2026).
+        assert (h3["width"], h3["height"]) == (480, 832), f"480p portrait = 480×832, lu {(h3['width'], h3['height'])}"
         if key.endswith("i2v"):
-            assert h3["width"] == ["115", 0], "en I2V le cadre suit l'image : liens inchangés"
             assert api["114"]["inputs"]["image"] == "pandora/depart.png"
             assert h3["last_frame"] == [h3c.END_IMAGE_NODE, 0] and api[h3c.END_IMAGE_NODE]["inputs"]["image"] == "pandora/fin.png"
-        else:
-            assert (h3["width"], h3["height"]) == (480, 848), "T2V 480p portrait"
 
     # ── 4b. Remplissage : cas synthétiques ────────────────────────────────────
     assert h3c.snap_frames(5) == 124 and h3c.snap_frames(2.3) == 56 and h3c.snap_frames(0) == 5
     assert h3c.frame_for("768p", "16:9") == (1344, 768) and h3c.frame_for("480p", "1:1") == (480, 480)
+    # Multiples de 32 (pas du nœud H3), grand côté au multiple INFÉRIEUR : 832
+    # en 480p 16:9 comme le ResolutionSelector officiel à 0,4 MP — pas 848.
+    assert h3c.frame_for("480p", "16:9") == (832, 480) and h3c.frame_for("768p", "9:16") == (768, 1344)
+    assert h3c.frame_for("768p", "21:9") == (1792, 768) and h3c.frame_for("480p", "4:3") == (640, 480)
+    assert h3c.frame_for("768p", "n'importe quoi") == (1344, 768), "ratio illisible → 16:9 paysage"
+    assert h3c.frame_for("480p", "1:9") == (480, 1184), "au-delà de 2,5× le grand côté est borné : 1200 → 1184 (multiple de 32 inférieur)"
+    import tempfile as _tf
+    from PIL import Image as _Img
+    with _tf.TemporaryDirectory() as _td:
+        _p = os.path.join(_td, "mood.png")
+        _Img.new("RGB", (1920, 1080)).save(_p)
+        assert h3c.frame_for_image("480p", _p) == (832, 480), "I2V : le cadre suit le ratio de l'image"
+        _Img.new("RGB", (1080, 1920)).save(_p)
+        assert h3c.frame_for_image("768p", _p) == (768, 1344)
+        assert h3c.frame_for_image("480p", os.path.join(_td, "absente.png")) is None
+        plan = h3c.fill_plan({"1": {"class_type": "MiniMaxH3ImageToVideo", "inputs": {}}},
+                             {"mode": "i2v", "image_path": _p, "resolution": "480p", "aspect_ratio": "16:9"}, "x")
+        assert [v for c, n, v in plan if n in ("width", "height")] == [480, 832], \
+            "en I2V l'image (portrait) prime sur le ratio du formulaire (paysage)"
     try:
         h3c.fill_plan({"1": {"class_type": "KSampler", "inputs": {}}}, {}, "x")
         assert False, "sans nœud de prompt, fill_plan doit lever"
@@ -9216,6 +9238,57 @@ def comfyui_moteur_nodal_et_journal_de_cout():
     p = h3c.prepare_params({"prompt": "x"}, "comfy_h3_i2v")
     assert p["mode"] == "i2v" and p["workflow_path"].endswith("minimax_h3_i2v.json")
 
+    # ── 4c. ORACLE : la sérialisation du frontend lui-même ────────────────────
+    # `app.graphToPrompt()` relevé sur ComfyUI 0.35.1 le 14/09/2026, avec le
+    # /object_info du même serveur figé (tools/fixtures/comfy). Le convertisseur
+    # doit produire EXACTEMENT ce que le frontend envoie (hors _meta, titres
+    # localisés) ; seuls les nœuds débranchés du gabarit I2V (119, 120) sont
+    # élagués en plus. C'est ce test qui aurait attrapé le décalage des widgets
+    # reliés (weight_dtype, CLIPLoader.type/device, denoise) que le serveur a
+    # refusé — le harnais synthétique, écrit sur la même idée fausse, passait.
+    import json
+    fx = os.path.join(os.path.dirname(os.path.abspath(__file__)), "fixtures", "comfy")
+    with open(os.path.join(fx, "object_info_h3.json"), encoding="utf-8") as _f:
+        real_info = {k: v for k, v in json.load(_f).items() if not k.startswith("_")}
+    for key, name, pruned in (("comfy_h3_t2v", "t2v", set()), ("comfy_h3_i2v", "i2v", {"119", "120"})):
+        with open(os.path.join(fx, f"oracle_video_minimax_h3_{name}.json"), encoding="utf-8") as _f:
+            oracle = json.load(_f)
+        mine = wf.to_api(wf.load(h3c.template_path(key)), real_info)
+        assert set(oracle) - set(mine) == pruned and not (set(mine) - set(oracle)), sorted(set(oracle) ^ set(mine))
+        for nid in mine:
+            assert mine[nid]["class_type"] == oracle[nid]["class_type"], nid
+            assert mine[nid]["inputs"] == oracle[nid]["inputs"], \
+                f"{key} nœud {nid} {mine[nid]['class_type']} :\n  moi     {mine[nid]['inputs']}\n  oracle  {oracle[nid]['inputs']}"
+        # Les cas qui ont réellement mordu (refusés par le serveur avant correction).
+        _by = lambda cls: mine[next(i for i, n in mine.items() if n["class_type"] == cls)]["inputs"]  # noqa: E731
+        assert _by("UNETLoader")["weight_dtype"] == "default"
+        assert _by("CLIPLoader")["type"] == "minimax" and _by("CLIPLoader")["device"] == "default"
+        assert _by("BasicScheduler")["denoise"] == 1 and isinstance(_by("BasicScheduler")["steps"], list)
+        s = mine["92"]["inputs"]
+        assert s["format"] == "auto" and s["format.codec"] == "auto" and s["codec"] == "auto", \
+            "combo dynamique : option, sous-entrée « format.codec » et entrée cachée « codec »"
+        assert _by("CreateVideo")["color_space"] == "sRGB", "widget absent du gabarit → défaut de la définition"
+        assert _by("ComfyMathExpression")["values.a"] == [f"{'140' if name == 't2v' else '105'}:{'133' if name == 't2v' else '111'}", 0]
+        # Pré-vol : les fichiers que ce serveur ne voyait pas au moment du relevé
+        # (les deux VAE étaient arrivés, pas le reste), avec leur dossier. Le LoRA
+        # turbo y est bien que `turbo_mode` soit à False : le serveur valide
+        # toutes les branches.
+        miss = wf.missing_models(mine, real_info)
+        assert {(f, d) for f, d, _c in miss} == {
+            ("minimax_h3_fl2va_pruned_int8_convrot.safetensors", "diffusion_models"),
+            ("qwen3vl_32b_minimax_h3_nvfp4_awq.safetensors", "text_encoders"),
+            ("minimax_h3_fl2v_turbo_8step_v1.0_comfyui_bf16.safetensors", "loras")}, miss
+        # Remplissage puis élagage : le sélecteur 115, remplacé par des littéraux,
+        # ne nourrit plus rien et ne part pas.
+        wf.fill(mine, h3c.fill_plan(mine, {"resolution": "480p", "aspect_ratio": "16:9", "duration": 5,
+                                            "mode": name, "seed": 1}, "x"))
+        mine = wf.prune_unreachable(mine, real_info)
+        hh = _by("MiniMaxH3ImageToVideo")
+        assert (hh["width"], hh["height"]) == (832, 480) and "115" not in mine, (hh["width"], hh["height"], "115" in mine)
+        assert hh["length"] == [f"{'140' if name == 't2v' else '105'}:{'132' if name == 't2v' else '107'}", 1], "length reste relié au calcul 17k+5"
+    assert wf.prune_unreachable({"1": {"class_type": "X", "inputs": {}}}, {}) == {"1": {"class_type": "X", "inputs": {}}}, \
+        "sans nœud de sortie connu, on ne touche à rien"
+
     # ── 5. Onglets et Paramètres ──────────────────────────────────────────────
     for mod in ("ui.tab_video_engines", "ui.tab_video_engines_live"):
         m = importlib.import_module(mod)
@@ -9227,6 +9300,10 @@ def comfyui_moteur_nodal_et_journal_de_cout():
         tab = m.TabVideoEngines()
         assert len(tab._forms) == len(keys), f"{mod}: formulaires désalignés"
         assert getattr(tab._forms[keys.index("comfy_h3_i2v")], "_mode", "") == "i2v"
+        # 480p par défaut : le gabarit officiel tourne à 0,4 MP (≈ 832×480) ;
+        # 768p (1 MP) est 2,5× plus lourd — sur 8 Go de VRAM ce n'est pas un défaut.
+        for k in ("comfy_h3_t2v", "comfy_h3_i2v"):
+            assert tab._forms[keys.index(k)]._res_combo.currentData() == "480p", f"{mod}: {k} doit proposer 480p par défaut"
         tab.deleteLater()
     for mod in ("ui.page_settings", "ui.page_live_settings"):
         assert "ComfyRow" in inspect.getsource(importlib.import_module(mod)), f"{mod}: rangée ComfyUI absente"

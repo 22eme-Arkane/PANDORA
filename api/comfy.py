@@ -77,6 +77,7 @@ class ComfyWorker(_CancellableWorker):
             raise ValueError("Aucun workflow ComfyUI : choisissez un gabarit H3 ou un fichier .json.")
         wf = _wf.load(path)
         info = _cf.fetch_object_info(base)
+        self._object_info = info
         api = _wf.to_api(wf, info)
 
         # Remplissages standard, par convention de classe (voir core/comfy_h3).
@@ -88,7 +89,9 @@ class ComfyWorker(_CancellableWorker):
         _h3c.apply_images(api, self.params)
         for ctype, name, value in (self.params.get("fill") or []):
             _wf.fill(api, [(ctype, name, value)])
-        return api
+        # Ce qui n'alimente plus la sortie après remplissage (le sélecteur de
+        # résolution, remplacé par des littéraux) ne part pas.
+        return _wf.prune_unreachable(api, info)
 
     # ── Exécution ────────────────────────────────────────────────────────────
 
@@ -112,6 +115,19 @@ class ComfyWorker(_CancellableWorker):
                     self.params[pkey] = self._upload(base, p)
 
             api = self._load_and_fill(base)
+
+            # Pré-vol : les fichiers de modèles que le serveur ne voit pas. Le
+            # serveur valide TOUT l'amont des sorties, branches inactives
+            # comprises — le LoRA turbo des gabarits H3 est exigé même turbo
+            # désactivé. Une liste lisible vaut mieux que son anglais.
+            missing = _wf.missing_models(api, getattr(self, "_object_info", {}) or {})
+            if missing:
+                lines = "\n".join(f"  • {f}  →  models/{d}" for f, d, _c in missing)
+                raise RuntimeError(
+                    "Fichiers de modèles absents de ComfyUI :\n" + lines
+                    + "\nDéposez-les dans le dossier models de ComfyUI (guide H3 : "
+                      "Paramètres → ComfyUI), attendez la fin des téléchargements "
+                      "(fichiers .part), puis relancez.")
 
             self.progress.emit(15, f"{self._label} — envoi à ComfyUI…")
             client_id = _cf.new_client_id()

@@ -15,8 +15,13 @@ video_minimax_h3_{t2v,i2v,r2v}, 2026-09-13) et les sources de ComfyUI
   durée    → PrimitiveFloat.value EN SECONDES : un ComfyMathExpression du
              gabarit calcule ensuite « 17k+5 » images à 24 fps — on ne touche
              pas à `length`, qui est relié à ce calcul
-  cadre    → width/height du nœud H3 (pas 32 obligé, min 32) — en T2V seulement :
-             en I2V le gabarit déduit le cadre de l'image d'entrée
+  cadre    → width/height du nœud H3 (multiples de 32), dans les DEUX modes.
+             ⚠ Le gabarit I2V officiel relie le cadre à un ResolutionSelector
+             « 1:1 (Square) » à 0,4 MP — PAS à l'image (le ImageScaleToTotalPixels
+             → GetImageSize du fichier est débranché) : sans littéraux, un mood
+             16:9 serait rendu carré (constat 14/09/2026, ComfyUI 0.35.1). En
+             I2V le cadre suit donc le ratio de l'image de départ ; le T2V
+             officiel tourne à 0,4 MP (≈ 832×480), d'où le palier 480p par défaut
   seed     → RandomNoise.noise_seed ; le gabarit est en « fixed » et rendrait
              la MÊME vidéo à chaque clic : sans seed fournie, on en tire une
   images   → LoadImage.image (la 1re du fichier = départ) ; la dernière image
@@ -47,12 +52,33 @@ TEMPLATES = {
 
 FPS = 24
 FRAMES_STEP, FRAMES_BASE = 17, 5
-#: Cadres natifs H3 par résolution PANDORA, en (petit côté, grand côté),
-#: multiples de 32 — ceux des gabarits officiels pour 768p.
-FRAMES = {"480p": (480, 848), "768p": (768, 1344)}
-_LANDSCAPE = ("16:9", "21:9", "4:3")
+#: Petit côté du cadre H3 par palier PANDORA. Le grand côté se déduit du
+#: ratio, au multiple de 32 INFÉRIEUR : 1344 pour 16:9 en 768p (la valeur du
+#: gabarit officiel), 832 en 480p (ce que rend le ResolutionSelector officiel
+#: à 0,4 MP). 848 (la valeur d'abord retenue) n'est pas un multiple de 32.
+SHORT_SIDE = {"480p": 480, "768p": 768}
+#: (petit côté, grand côté 16:9) par palier — forme historique, gardée pour
+#: les lecteurs qui ne veulent qu'un ordre de grandeur.
+FRAMES = {"480p": (480, 832), "768p": (768, 1344)}
+#: Au-delà de 21:9 le modèle n'est pas entraîné : on borne le grand côté.
+_MAX_RATIO = 2.5
 
 END_IMAGE_NODE = "pandora_end_frame"
+
+
+def _snap32(x: float) -> int:
+    return max(32, int(x // 32) * 32)
+
+
+def _parse_ratio(text) -> tuple[float, bool]:
+    """(grand/petit, paysage ?) depuis « 16:9 » ; repli 16:9 paysage."""
+    try:
+        a, b = (float(x) for x in str(text).strip().split(":")[:2])
+        if a <= 0 or b <= 0:
+            raise ValueError
+    except Exception:
+        return 16 / 9, True
+    return max(a, b) / min(a, b), a >= b
 
 
 class NoPromptTarget(ValueError):
@@ -68,14 +94,30 @@ def snap_frames(seconds) -> int:
     return f + (5 - (f % 17)) % 17
 
 
+def _short_side(resolution: str) -> int:
+    return SHORT_SIDE.get((resolution or "480p").lower().split()[0], SHORT_SIDE["480p"])
+
+
 def frame_for(resolution: str, aspect_ratio: str) -> tuple[int, int]:
-    short, long_ = FRAMES.get((resolution or "768p").lower().split()[0], FRAMES["768p"])
-    r = (aspect_ratio or "16:9").strip()
-    if r == "1:1":
-        return short, short
-    if r in _LANDSCAPE:
-        return long_, short
-    return short, long_
+    """(largeur, hauteur) pour un palier et un ratio « a:b » quelconque."""
+    short = _short_side(resolution)
+    ratio, landscape = _parse_ratio(aspect_ratio or "16:9")
+    long_ = _snap32(short * min(_MAX_RATIO, max(1.0, ratio)))
+    return (long_, short) if landscape else (short, long_)
+
+
+def frame_for_image(resolution: str, path: str) -> tuple[int, int] | None:
+    """Cadre qui garde l'orientation ET le ratio de l'image de départ (I2V),
+    ou None si l'image est illisible."""
+    try:
+        from PIL import Image
+        with Image.open(path) as im:
+            iw, ih = im.size
+    except Exception:
+        return None
+    if not iw or not ih:
+        return None
+    return frame_for(resolution, f"{iw}:{ih}")
 
 
 def template_path(engine_key: str) -> str:
@@ -127,11 +169,17 @@ def fill_plan(api: dict, params: dict, prompt_en: str) -> list[tuple[str, str, o
             if _wf.find(api, cls):
                 plan.append((cls, "length", length))
 
-    if (params.get("mode") or "t2v") != "i2v":
-        w, h = frame_for(params.get("resolution") or "768p", params.get("aspect_ratio") or "16:9")
-        for cls in H3_NODES:
-            if _wf.find(api, cls):
-                plan += [(cls, "width", w), (cls, "height", h)]
+    # Cadre dans les DEUX modes (voir l'en-tête : le gabarit I2V officiel le
+    # relie à un sélecteur 1:1, pas à l'image). En I2V il suit l'image de départ.
+    res = params.get("resolution") or "480p"
+    wh = None
+    if (params.get("mode") or "t2v") == "i2v" and params.get("image_path"):
+        wh = frame_for_image(res, params["image_path"])
+    if wh is None:
+        wh = frame_for(res, params.get("aspect_ratio") or "16:9")
+    for cls in H3_NODES:
+        if _wf.find(api, cls):
+            plan += [(cls, "width", wh[0]), (cls, "height", wh[1])]
     return plan
 
 
