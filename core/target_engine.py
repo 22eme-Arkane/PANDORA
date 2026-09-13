@@ -175,4 +175,31 @@ def briefing(engine_key: str | None = None) -> str:
             )
     except Exception:
         pass
+    try:
+        from core import h3_family as _h3
+        if _h3.is_h3(key):
+            out.append(
+                f"Shot durations must be between {_h3.DURATION_MIN} and "
+                f"{_h3.DURATION_MAX} seconds.")
+            if key in _h3.tiers():
+                out.append("Available output resolutions: "
+                           + ", ".join(_h3.resolutions(key)) + ".")
+            out.append(
+                "Reference images are numbered in the order they are sent and "
+                "addressed inside the prompt as Image 1, Image 2… — when a shot "
+                "relies on a character or location sheet, refer to it that way. "
+                f"At most {_h3.MAX_REF_IMAGES} reference images per shot."
+            )
+            out.append(
+                "Audio is generated natively (stereo): end each prompt with a "
+                "short sound clause; name who speaks any line of dialogue."
+            )
+            if key == "minimax-h3-local":
+                out.append(
+                    "The prompt is sent VERBATIM to a local model with no "
+                    "server-side rewriting: be complete and explicit, do not "
+                    "rely on the engine to fill in missing detail."
+                )
+    except Exception:
+        pass
     return "\n".join(out)

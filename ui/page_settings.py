@@ -9,6 +9,7 @@ from ui.styles import CP
 from ui.icons import load_icon
 from ui.davinci_panel import DaVinciPanel
 from ui.projects_location_row import ProjectsLocationRow
+from ui.h3_local_row import H3LocalRow
 from core.config import load_config, save_config
 from davinci.bridge import install_pandora_send
 
@@ -277,6 +278,15 @@ class SettingsPage(QScrollArea):
         lay.addWidget(_section("Dossier des projets"))
         self._projects_location = ProjectsLocationRow()
         lay.addWidget(self._projects_location)
+        lay.addWidget(_divider())
+
+        # ── MiniMax H3 en local (13/09/2026) ──────────────────────────────────
+        # Serveur stable-diffusion.cpp sur la machine. La rangée s'enregistre
+        # elle-même (clé h3_local_url) : rien à ajouter dans save(), qui relit
+        # la config entière avant d'écrire et conserve donc la clé.
+        lay.addWidget(_section("MiniMax H3 en local"))
+        self._h3_local = H3LocalRow(initial_url=cfg.get("h3_local_url", ""))
+        lay.addWidget(self._h3_local)
         lay.addWidget(_divider())
 
         # ── Assistant IA (texte) — juste après l'Apparence (retour 2026-06-13) ─

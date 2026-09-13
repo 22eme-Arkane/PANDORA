@@ -53,6 +53,21 @@ _PER_SECOND = {
     "kling-v3-pro":      {"1080p": 0.15},          # manuel : $0.112–0.196/s → ~milieu
     "kling-o3-4k":       {"4k": 0.42, "4K": 0.42},
 }
+# MiniMax H3 (fal 2026-09-13) : la grille vit dans core/h3_family — UNE source,
+# lue ici plutôt que recopiée. Tarif PLEIN (la promo −75 % de lancement de
+# H3 Max/Turbo expirait le 14/09/2026 ; sous-estimer un coût est la seule
+# erreur impardonnable dans « Coût du projet »).
+try:
+    from core import h3_family as _h3
+    _PER_SECOND.update(_h3.price_table())
+except Exception:
+    pass
+# H3 en LOCAL (stable-diffusion.cpp sur la machine) : rien n'est facturé. Sans
+# cette entrée, un moteur inconnu retombe sur _DEFAULT_PER_S = 0,30 $/s et le
+# journal afficherait un coût pour une génération gratuite — même famille
+# d'erreur que le prix des images lu dans le numéro de version (30/08/2026).
+_PER_SECOND["minimax-h3-local"] = {"480p": 0.0, "768p": 0.0, "1080p": 0.0,
+                                   "rapide": 0.0, "qualite": 0.0}
 # $/clip pour les moteurs à durée fixe (facturés à la vidéo).
 _PER_VIDEO = {
     "veo-3.1": 1.00,

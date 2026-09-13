@@ -8891,5 +8891,146 @@ def prix_image_jamais_le_numero_de_version():
     assert not _muets, f"moteurs sans tarif lisible : {_muets}"
 
 
+@test
+def minimax_h3_fal_et_local():
+    """MiniMax H3 (Hailuo 3.0) — trois paliers fal + le serveur local sd.cpp.
+
+    Relevé 2026-09-13. Ce qui doit tenir : les tables (chemins, résolutions,
+    tarifs) sont la seule source ; les formulaires de l'onglet Moteurs restent
+    ALIGNÉS PAR INDEX sur la liste des moteurs, dans les deux éditions ; le
+    local coûte 0 dans le journal ; la requête locale respecte les contraintes
+    du VAE (multiples de 32, images 17k+5, cfg 1.0).
+    """
+    import importlib
+    from core import h3_family as h3
+    from core import h3_local as h3l
+    from core import pricing, engine_grammar, target_engine
+    import api.video_engines as ve
+    import api.h3_local as h3api
+
+    # ── Table de famille ──────────────────────────────────────────────────────
+    assert h3.tiers() == ["minimax-h3", "minimax-h3-max", "minimax-h3-max-turbo"]
+    assert h3.endpoint("minimax-h3", "ref") == "minimax/h3/reference-to-video"
+    assert h3.endpoint("minimax-h3-max-turbo", "ref") == "", \
+        "Turbo n'a pas de reference-to-video : l'appelant doit le savoir"
+    assert h3.fal_resolution("minimax-h3", "768p") == "768P"
+    assert h3.fal_resolution("minimax-h3-max", "1080p") == "1080P"
+    assert h3.fal_resolution("minimax-h3", "720p") == "768P", "repli sur le natif"
+    assert h3.is_upscaled("minimax-h3", "4k") and not h3.is_upscaled("minimax-h3", "768p")
+    assert h3.clamp_duration(3) == 5 and h3.clamp_duration(40) == 15
+    assert h3.clamp_expansion("minimax-h3-max", "fast") == "balanced", \
+        "Max n'a pas de mode fast : l'envoyer serait un 422"
+    assert h3.clamp_expansion("minimax-h3", "fast") == "fast"
+    assert abs(h3.estimate("minimax-h3", "768p", 10) - 0.60) < 1e-9
+    # 7 images sur H3 : 5 gratuites, 2 × 0,08 $.
+    assert abs(h3.estimate("minimax-h3", "768p", 10, n_ref_images=7) - 0.76) < 1e-9
+    assert h3.annotate_roles_with_tokens(["Léa", "Le dojo"]) == ["Léa (Image 1)", "Le dojo (Image 2)"]
+
+    # ── Une seule grille : pricing lit h3_family ──────────────────────────────
+    assert pricing.price_per_second("minimax-h3", "768p") == 0.06
+    assert pricing.price_per_second("minimax-h3-max", "1080p") == 0.16
+    assert pricing.price_per_second("minimax-h3-max-turbo", "768p") == 0.04
+    # Le LOCAL coûte 0 — sans entrée, un moteur inconnu retombe sur 0,30 $/s.
+    assert pricing.price_per_second("minimax-h3-local", "rapide") == 0.0
+    assert pricing.price_per_second("minimax-h3-local", "768p") == 0.0
+
+    # ── Grammaire + briefing du découpage ─────────────────────────────────────
+    for k in ("minimax-h3", "minimax-h3-max", "minimax-h3-max-turbo", "minimax-h3-local"):
+        assert engine_grammar.grammar_for(k) == "sentence", k
+    _b = target_engine.briefing("minimax-h3")
+    assert "Image 1" in _b and "5 and 15 seconds" in _b and "768p" in _b
+    assert "VERBATIM" in target_engine.briefing("minimax-h3-local")
+
+    # ── Workers fal : chemins et hooks ────────────────────────────────────────
+    assert ve.H3Worker.ENDPOINT_T2V == "minimax/h3/text-to-video"
+    assert ve.H3Worker.ENDPOINT_I2V == "minimax/h3/image-to-video" and ve.H3Worker.END_FRAME
+    assert ve.H3MaxWorker.ENDPOINT_T2V == "minimax/h3-max/text-to-video"
+    assert ve.H3MaxTurboWorker.ENDPOINT_I2V == "minimax/h3-max-turbo/image-to-video"
+    assert ve.H3Worker.DUR_STR is False, "MiniMax veut la durée en entier"
+    assert ve.H3Worker.RATIO_T2V_ONLY, "le schéma I2V n'a pas aspect_ratio"
+    _w = ve.H3MaxWorker({"prompt": "x", "resolution": "1080p"})
+    assert _w._resolution_arg("1080p") == "1080P"
+    assert _w._price_per_s("1080p") == 0.16
+    assert _w._extra_args("t2v") == {"prompt_expansion_mode": "balanced"}, \
+        "prompt_expansion_mode est REQUIS sur Max : l'omettre est un 422"
+    assert ve.H3Worker({"prompt": "x"})._extra_args("t2v") == {}, \
+        "sur H3 de base il est optionnel : on ne l'invente pas"
+    # Les hooks ne changent RIEN aux moteurs existants.
+    _s = ve.Seedance15Worker({"prompt": "x"})
+    assert _s._resolution_arg("720p") == "720p" and _s._extra_args("t2v") == {}
+    assert _s._price_per_s("720p") == ve.Seedance15Worker.PRICE_PER_S
+
+    # ── Local : requête conforme au VAE, jamais d'image fantôme ──────────────
+    assert h3l.snap_dimension(383) == 384 and h3l.snap_dimension(700) == 704
+    assert h3l.snap_frames(56) == 56 and h3l.snap_frames(60) == 56 and h3l.snap_frames(240) == 243
+    assert h3l.frames_for_seconds(2.3) == 56
+    _rq = h3l.build_request("a cat", 383, 672, 60, steps=8, seed=7)
+    assert _rq["width"] == 384 and _rq["video_frames"] == 56 and _rq["fps"] == 24
+    assert _rq["sample_params"]["guidance"]["txt_cfg"] == 1.0
+    assert _rq["output_format"] == "webm" and _rq["seed"] == 7
+    assert h3l.INIT_IMAGE_FIELD not in _rq, "pas d'image → pas de champ image"
+    assert h3l.build_request("x", 384, 672, 56, init_image_b64="AAAA")[h3l.INIT_IMAGE_FIELD] == "AAAA"
+    assert h3l.normalize_url("") == h3l.DEFAULT_URL
+    assert h3l.normalize_url("localhost:1234/") == "http://localhost:1234"
+    assert h3l.ping("http://127.0.0.1:1")[0] is False, "un port fermé doit dire injoignable"
+    assert h3api._find_b64({"result": {"b64_json": "Q" * 200}}) == "Q" * 200
+    assert h3api._find_b64({"data": [{"b64_json": "Q" * 200}]}) == "Q" * 200
+    assert h3api._find_b64({"status": "completed"}) == ""
+    assert "EU" in h3l.LICENSE_NOTICE or "Union européenne" in h3l.LICENSE_NOTICE, \
+        "l'avis de licence doit nommer les territoires exclus"
+
+    # ── Local : le cadre s'oriente par le Format, la durée vient du curseur ──
+    # Constaté au rendu : le préréglage imposait 384×672 (portrait) pendant que
+    # le menu Format affichait « 16:9 — Paysage ». Le préréglage donne petit et
+    # grand côté, le ratio choisit l'orientation.
+    assert h3l.frame_for("rapide", "16:9") == (672, 384)
+    assert h3l.frame_for("rapide", "9:16") == (384, 672)
+    assert h3l.frame_for("rapide", "1:1") == (384, 384)
+    assert h3l.frame_for("qualite", "21:9") == (1344, 768)
+    assert h3l.frame_for("inconnu", "16:9") == (672, 384), "préréglage inconnu → repli rapide"
+    assert h3l.steps_for("qualite") == 25 and h3l.steps_for("rapide") == 8
+    _lw = h3api.H3LocalWorker({"prompt": "x", "resolution": "rapide",
+                               "aspect_ratio": "9:16", "duration": 10})
+    _w_, _h_, _f_ = _lw._dimensions()
+    assert (_w_, _h_) == (384, 672) and _f_ == 243, f"portrait 10 s attendu, lu {(_w_, _h_, _f_)}"
+    _lw2 = h3api.H3LocalWorker({"prompt": "x", "resolution": "qualite", "aspect_ratio": "16:9"})
+    assert _lw2._dimensions()[:2] == (1344, 768) and _lw2._steps() == 25
+    assert _lw2._end_image_b64() == "" and _lw2._init_image_b64() == "", \
+        "sans image locale, aucun champ image ne doit partir"
+
+    # ── Onglet Moteurs : liste et formulaires ALIGNÉS, dans les DEUX éditions ─
+    # C'est le vrai risque : _forms[combo.currentIndex()] — un décalage et
+    # tous les moteurs suivants affichent le mauvais formulaire.
+    for mod in ("ui.tab_video_engines", "ui.tab_video_engines_live"):
+        m = importlib.import_module(mod)
+        src = inspect.getsource(m.TabVideoEngines._on_generate)
+        for w in ("H3Worker", "H3MaxWorker", "H3MaxTurboWorker", "H3LocalWorker"):
+            assert w in src, f"{mod}: dispatch {w} manquant"
+        keys = [k for _, k, _ in m.TabVideoEngines._ENGINES]
+        for k in ("h3_t2v", "h3_i2v", "h3max_t2v", "h3max_i2v", "h3turbo_t2v",
+                  "h3turbo_i2v", "h3local_t2v", "h3local_i2v"):
+            assert k in keys, f"{mod}: moteur {k} absent de la liste"
+        assert len(keys) == len(set(keys)), f"{mod}: clé de moteur en double"
+        tab = m.TabVideoEngines()
+        assert len(tab._forms) == len(m.TabVideoEngines._ENGINES), \
+            f"{mod}: {len(tab._forms)} formulaires pour {len(m.TabVideoEngines._ENGINES)} moteurs"
+        # Le formulaire d'un I2V H3 doit bien être un I2V (image de départ).
+        i = keys.index("h3_i2v")
+        assert getattr(tab._forms[i], "_mode", "") == "i2v", f"{mod}: formulaire H3 I2V décalé"
+        i = keys.index("h3local_t2v")
+        assert getattr(tab._forms[i], "_mode", "") == "t2v", f"{mod}: formulaire H3 local décalé"
+        tab.deleteLater()
+
+    # ── Rangée de réglage : neutre, auto-enregistrée, licence affichée ───────
+    from ui.h3_local_row import H3LocalRow
+    _rsrc = inspect.getsource(H3LocalRow)
+    assert "LICENSE_NOTICE" in _rsrc and "set_url" in inspect.getsource(
+        importlib.import_module("ui.h3_local_row"))
+    _psrc = inspect.getsource(importlib.import_module("ui.page_settings"))
+    _lsrc = inspect.getsource(importlib.import_module("ui.page_live_settings"))
+    assert "H3LocalRow" in _psrc and "H3LocalRow" in _lsrc, \
+        "la rangée H3 local doit être dans les Paramètres des DEUX éditions"
+
+
 if __name__ == "__main__":
     sys.exit(main())

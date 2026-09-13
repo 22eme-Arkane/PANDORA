@@ -16,6 +16,7 @@ from core.config import load_config
 from core.i18n import translate
 from ui.styles import CP
 from ui.projects_location_row import ProjectsLocationRow
+from ui.h3_local_row import H3LocalRow
 
 # Intégration Resolume retirée de l'UI « pour le moment » (2026-07-30).
 _RESOLUME_UI = False
@@ -218,6 +219,15 @@ class PageLiveSettings(QScrollArea):
         lay.addSpacing(10)
         self._projects_location = ProjectsLocationRow()
         lay.addWidget(self._projects_location)
+        lay.addSpacing(28)
+
+        # ── MiniMax H3 en local (parité Cinéma, 13/09/2026) ────────────────────
+        # Même composant neutre, même clé de config h3_local_url ; la rangée
+        # s'enregistre elle-même.
+        lay.addWidget(_section_title("MINIMAX H3 EN LOCAL"))
+        lay.addSpacing(10)
+        self._h3_local = H3LocalRow(initial_url=load_config().get("h3_local_url", ""))
+        lay.addWidget(self._h3_local)
         lay.addSpacing(28)
 
         # ── Section Clés API ────────────────────────────────────────────────────

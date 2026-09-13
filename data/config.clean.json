@@ -17,6 +17,7 @@
   "openai_model": "",
   "mistral_key": "",
   "ollama_url": "",
+  "h3_local_url": "",
   "ollama_model": "",
   "custom_key": "",
   "custom_url": "",

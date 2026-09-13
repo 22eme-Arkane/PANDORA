@@ -52,6 +52,17 @@ _GRAMMAR_BY_ENGINE = {
     "sora-2":             "sentence",
     "kling-v3-pro":       "directive",
     "kling-o3-4k":        "directive",
+    # MiniMax H3 (relevé 2026-09-13) : prose cinématographique continue, et fal
+    # réécrit de toute façon le prompt côté serveur (prompt_expansion_mode).
+    # Les références se nomment « Image 1, Image 2 » DANS la phrase — voir
+    # core/h3_family.annotate_roles_with_tokens.
+    "minimax-h3":           "sentence",
+    "minimax-h3-max":       "sentence",
+    "minimax-h3-max-turbo": "sentence",
+    # Local (stable-diffusion.cpp) : même modèle, même prose — mais AUCUNE
+    # réécriture serveur : le prompt part tel quel, d'où l'importance de la
+    # forme « sentence » ici plus qu'ailleurs.
+    "minimax-h3-local":     "sentence",
 }
 
 GRAMMAR_LABELS = {

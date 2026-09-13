@@ -3960,6 +3960,27 @@ _FR_TO_EN: dict[str, str] = {
     "Génération interrompue.":      "Generation interrupted.",
     "Aucune fiche PLAN trouvée dans le découpage.":
         "No PLAN card found in the breakdown.",
+    # ── MiniMax H3 : fal + serveur local (13/09/2026) ─────────────────────────
+    "MiniMax H3 en local":          "MiniMax H3 on this machine",
+    "Adresse du serveur H3 local (défaut : ": "Local H3 server address (default: ",
+    "Tester":                       "Test",
+    "Non vérifié — cliquez sur « Tester ».": "Not checked — click “Test”.",
+    "Installez le projet communautaire minimax-h3-local (stable-diffusion.cpp, fonctionne sur une carte 8 Go), lancez start_server.ps1, puis testez. PANDORA n'embarque ni les poids ni le moteur.":
+        "Install the community project minimax-h3-local (stable-diffusion.cpp, runs on an 8 GB card), launch start_server.ps1, then test. PANDORA ships neither the weights nor the engine.",
+    "Les poids MiniMax H3 sont publiés sous la « MiniMax H3 Community License », qui exclut l'Union européenne, le Royaume-Uni, la Corée du Sud et les États-Unis : y faire tourner le modèle — ou en utiliser les sorties — n'est pas autorisé sans accord écrit de MiniMax. PANDORA ne distribue ni les poids ni le moteur ; il se connecte au serveur que vous installez. L'installer et l'utiliser relève de votre seule responsabilité.":
+        "The MiniMax H3 weights are released under the “MiniMax H3 Community License”, which excludes the European Union, the United Kingdom, South Korea and the United States: running the model there — or using its outputs — is not permitted without MiniMax's written consent. PANDORA distributes neither the weights nor the engine; it connects to the server you install. Installing and using it is your sole responsibility.",
+    "MiniMax H3 · 9 réfs « Image 1, Image 2 » · 21:9 possible":
+        "MiniMax H3 · 9 refs “Image 1, Image 2” · 21:9 available",
+    "MiniMax H3 · première / dernière image":  "MiniMax H3 · first / last frame",
+    "MiniMax H3 Max · réécriture du prompt côté fal": "MiniMax H3 Max · prompt rewritten on fal's side",
+    "MiniMax H3 Max · première / dernière image": "MiniMax H3 Max · first / last frame",
+    "MiniMax H3 Max Turbo · moitié prix du Max": "MiniMax H3 Max Turbo · half the Max price",
+    "MiniMax H3 Max Turbo · première / dernière image": "MiniMax H3 Max Turbo · first / last frame",
+    "H3 local · 0 $ · le Format oriente le cadre · serveur minimax-h3-local (Paramètres)":
+        "Local H3 · $0 · Format sets the orientation · minimax-h3-local server (Settings)",
+    "H3 local · première / dernière image · 0 $": "Local H3 · first / last frame · $0",
+    "Rapide — 384×672 · ~1,5 min pour 2,3 s":   "Fast — 384×672 · ~1.5 min per 2.3 s",
+    "Qualité — 768×1344 · ~28 min pour 2,3 s":  "Quality — 768×1344 · ~28 min per 2.3 s",
     # ── Doublage : écouter une voix avant de la choisir ───────────────────────
     "▶  Écouter":                   "▶  Listen",
     "Fait dire une phrase française à cette voix. Le premier essai coûte quelques centimes ; l'extrait est ensuite conservé et réécouté gratuitement.":

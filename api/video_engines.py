@@ -1400,6 +1400,7 @@ class _SimpleFalVideoWorker(_CancellableWorker):
     END_FRAME       = False   # supporte end_image_url (raccords / keyframes)
     SEND_RESOLUTION = False
     SEND_RATIO      = False
+    RATIO_T2V_ONLY  = False   # aspect_ratio absent du schéma I2V → ne pas l'envoyer
     SEND_DURATION   = False
     DUR_STR         = True    # duration en str (famille ByteDance) sinon int
     DEFAULT_DUR     = 5
@@ -1407,6 +1408,20 @@ class _SimpleFalVideoWorker(_CancellableWorker):
     def __init__(self, params: dict):
         super().__init__()
         self.params = params
+
+    # ── Hooks (identité par défaut ; les familles à table les surchargent) ──
+
+    def _resolution_arg(self, res: str) -> str:
+        """Valeur de `resolution` envoyée à fal pour une résolution PANDORA."""
+        return res
+
+    def _extra_args(self, mode: str) -> dict:
+        """Champs supplémentaires propres au moteur."""
+        return {}
+
+    def _price_per_s(self, res: str) -> float:
+        """$/s pour cette résolution (les tables de famille varient par palier)."""
+        return self.PRICE_PER_S
 
     def run(self):
         key = load_config().get("api_key", "").strip()
@@ -1452,10 +1467,14 @@ class _SimpleFalVideoWorker(_CancellableWorker):
                 prompt_en = f"{style_kw}, {prompt_en}" if prompt_en else style_kw
 
             args: dict = {"prompt": prompt_en}
+            res = (self.params.get("resolution", "720p") or "720p").split()[0]
             if self.SEND_RESOLUTION:
-                res = (self.params.get("resolution", "720p") or "720p").split()[0]
-                args["resolution"] = res
-            if self.SEND_RATIO:
+                # Hook : un moteur peut renommer la résolution (« 768p » PANDORA
+                # → « 768P » fal chez MiniMax). Identité par défaut.
+                args["resolution"] = self._resolution_arg(res)
+            # Certains schémas I2V n'ont PAS aspect_ratio (le cadre suit
+            # l'image) et rejettent le champ : RATIO_T2V_ONLY le retient.
+            if self.SEND_RATIO and not (mode == "i2v" and self.RATIO_T2V_ONLY):
                 args["aspect_ratio"] = self.params.get("aspect_ratio", "16:9")
             if self.SEND_DURATION:
                 args["duration"] = str(dur) if self.DUR_STR else dur
@@ -1468,8 +1487,12 @@ class _SimpleFalVideoWorker(_CancellableWorker):
                 args["image_url"] = img_url
                 if self.END_FRAME and self.params.get("end_image_url"):
                     args["end_image_url"] = self.params["end_image_url"]
+            # Champs propres au moteur (ex. prompt_expansion_mode, REQUIS chez
+            # H3 Max : l'omettre est un rejet 422 — leçon du Doublage).
+            args.update(self._extra_args(mode) or {})
 
-            cost = dur * self.PRICE_PER_S if self.PRICE_PER_S else self.FLAT_PRICE
+            _pps = self._price_per_s(res)
+            cost = dur * _pps if _pps else self.FLAT_PRICE
             self.progress.emit(15, f"{self.MODEL} {mode.upper()} (peut prendre 1-3 min)…")
 
             result = fal_client.subscribe(endpoint, arguments=args)
@@ -1586,6 +1609,66 @@ class GrokVideoWorker(_SimpleFalVideoWorker):
     SEND_DURATION   = True
     DUR_STR         = False
     DEFAULT_DUR     = 5
+
+
+class _H3FalWorker(_SimpleFalVideoWorker):
+    """MiniMax H3 sur fal — base des trois paliers (relevé 2026-09-13).
+
+    Tout ce qui est propre au moteur vient de core/h3_family : chemins, noms de
+    résolution (« 768p » → « 768P »), durée 5–15 s, tarif par palier ET par
+    résolution, mode de réécriture du prompt. Le schéma I2V n'a pas
+    d'aspect_ratio (le cadre suit l'image) : RATIO_T2V_ONLY le retient.
+    """
+    TIER            = "minimax-h3"
+    SEND_RESOLUTION = True
+    SEND_RATIO      = True
+    RATIO_T2V_ONLY  = True
+    SEND_DURATION   = True
+    DUR_STR         = False   # entier chez MiniMax
+    END_FRAME       = True    # image_url + end_image_url (première/dernière image)
+    DEFAULT_DUR     = 5
+
+    def _resolution_arg(self, res: str) -> str:
+        from core import h3_family as _h3
+        return _h3.fal_resolution(self.TIER, res)
+
+    def _price_per_s(self, res: str) -> float:
+        from core import h3_family as _h3
+        return _h3.price_per_second(self.TIER, res)
+
+    def _extra_args(self, mode: str) -> dict:
+        from core import h3_family as _h3
+        out = {}
+        wanted = self.params.get("prompt_expansion_mode", "")
+        # Requis sur Max/Turbo, optionnel sur H3 : on l'envoie toujours borné
+        # aux valeurs du palier — un mode inconnu serait un 422.
+        if wanted or self.TIER in _h3.EXPANSION_REQUIRED:
+            out["prompt_expansion_mode"] = _h3.clamp_expansion(self.TIER, wanted)
+        return out
+
+
+class H3Worker(_H3FalWorker):
+    """MiniMax H3 — 480P/768P natifs, 2K/4K = upscale du 768P. ~$0.06/s en 768p."""
+    TIER         = "minimax-h3"
+    ENDPOINT_T2V = "minimax/h3/text-to-video"
+    ENDPOINT_I2V = "minimax/h3/image-to-video"
+    MODEL        = "minimax-h3"
+
+
+class H3MaxWorker(_H3FalWorker):
+    """MiniMax H3 Max — 1080P par raffinement latent. prompt_expansion_mode requis."""
+    TIER         = "minimax-h3-max"
+    ENDPOINT_T2V = "minimax/h3-max/text-to-video"
+    ENDPOINT_I2V = "minimax/h3-max/image-to-video"
+    MODEL        = "minimax-h3-max"
+
+
+class H3MaxTurboWorker(_H3FalWorker):
+    """MiniMax H3 Max Turbo — même palier, moitié prix."""
+    TIER         = "minimax-h3-max-turbo"
+    ENDPOINT_T2V = "minimax/h3-max-turbo/text-to-video"
+    ENDPOINT_I2V = "minimax/h3-max-turbo/image-to-video"
+    MODEL        = "minimax-h3-max-turbo"
 
 
 class Sora2Worker(_CancellableWorker):

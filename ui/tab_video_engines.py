@@ -1142,6 +1142,14 @@ class TabVideoEngines(QWidget):
         ("LTX-2 — I2V  (4K + audio · ~$0.04/s)",       "ltx2_i2v",          True),
         ("Wan 2.7 — T2V  (Alibaba · first/last frame)", "wan27_t2v",         True),
         ("Hailuo 2.3 Pro — T2V  (MiniMax · ~$0.49/vidéo)", "hailuo23_t2v",   True),
+        ("MiniMax H3 — T2V  (768p ~$0.06/s · 2K/4K upscale · audio)",  "h3_t2v",       True),
+        ("MiniMax H3 — I2V  (first/last frame · audio)",              "h3_i2v",       True),
+        ("MiniMax H3 Max — T2V  (1080p ~$0.16/s · audio)",           "h3max_t2v",    True),
+        ("MiniMax H3 Max — I2V  (first/last frame · audio)",          "h3max_i2v",    True),
+        ("MiniMax H3 Max Turbo — T2V  (1080p ~$0.08/s)",              "h3turbo_t2v",  True),
+        ("MiniMax H3 Max Turbo — I2V  (first/last frame)",            "h3turbo_i2v",  True),
+        ("MiniMax H3 LOCAL — T2V  (votre GPU · 0 $ · serveur sd.cpp)", "h3local_t2v", True),
+        ("MiniMax H3 LOCAL — I2V  (votre GPU · 0 $)",                 "h3local_i2v",  True),
         ("Seedance 2.0 Mini — T2V  (éco · audio · ~$0.155/s)", "seedance20mini_t2v", True),
         ("Seedance 2.0 Mini — I2V  (start/end frame · audio)", "seedance20mini_i2v", True),
         ("Gemini Omni Flash — T2V  (Google · audio natif · ~$0.125/s)", "gemini_omni_t2v", True),
@@ -1260,6 +1268,45 @@ class TabVideoEngines(QWidget):
             _NewEngineForm("i2v", with_image=True, dur=(4, 10, 5), note="LTX-2 · image-to-video"),
             _NewEngineForm("t2v", dur=(4, 10, 5), note="Wan 2.7 · first / last frame"),
             _NewEngineForm("t2v", dur=(6, 10, 6), note="Hailuo 2.3 Pro · prix fixe ~$0.49 / vidéo"),
+            # ── MiniMax H3 (fal, relevé 2026-09-13) — 5 à 15 s, audio natif ──
+            # Formulaires alignés par INDEX sur _ENGINES : un décalage ici et
+            # c'est le mauvais formulaire qui s'affiche pour tous les suivants.
+            _NewEngineForm("t2v", with_res=True,
+                           res_opts=[("768p  (~$0.06/s · natif)", "768p"), ("480p  (~$0.05/s)", "480p"),
+                                     ("2K  (~$0.13/s · upscale du 768p)", "2k"),
+                                     ("4K  (~$0.16/s · upscale du 768p)", "4k")],
+                           dur=(5, 15, 5), note="MiniMax H3 · 9 réfs « Image 1, Image 2 » · 21:9 possible"),
+            _NewEngineForm("i2v", with_image=True, with_end=True, with_res=True,
+                           res_opts=[("768p  (~$0.06/s · natif)", "768p"), ("480p  (~$0.05/s)", "480p"),
+                                     ("2K  (~$0.13/s · upscale)", "2k"), ("4K  (~$0.16/s · upscale)", "4k")],
+                           dur=(5, 15, 5), note="MiniMax H3 · première / dernière image"),
+            _NewEngineForm("t2v", with_res=True,
+                           res_opts=[("768p  (~$0.08/s · natif)", "768p"), ("1080p  (~$0.16/s · raffiné)", "1080p"),
+                                     ("480p  (~$0.05/s)", "480p")],
+                           dur=(5, 15, 5), note="MiniMax H3 Max · réécriture du prompt côté fal"),
+            _NewEngineForm("i2v", with_image=True, with_end=True, with_res=True,
+                           res_opts=[("768p  (~$0.08/s · natif)", "768p"), ("1080p  (~$0.16/s · raffiné)", "1080p"),
+                                     ("480p  (~$0.05/s)", "480p")],
+                           dur=(5, 15, 5), note="MiniMax H3 Max · première / dernière image"),
+            _NewEngineForm("t2v", with_res=True,
+                           res_opts=[("768p  (~$0.04/s)", "768p"), ("1080p  (~$0.08/s)", "1080p"),
+                                     ("480p  (~$0.025/s)", "480p")],
+                           dur=(5, 15, 5), note="MiniMax H3 Max Turbo · moitié prix du Max"),
+            _NewEngineForm("i2v", with_image=True, with_end=True, with_res=True,
+                           res_opts=[("768p  (~$0.04/s)", "768p"), ("1080p  (~$0.08/s)", "1080p"),
+                                     ("480p  (~$0.025/s)", "480p")],
+                           dur=(5, 15, 5), note="MiniMax H3 Max Turbo · première / dernière image"),
+            # ── MiniMax H3 LOCAL (serveur stable-diffusion.cpp sur la machine) ──
+            # Les « résolutions » sont des PRÉRÉGLAGES mesurés sur 8 Go de VRAM
+            # (core/h3_local.PRESETS) ; la durée y est bornée par la carte.
+            _NewEngineForm("t2v", with_res=True,
+                           res_opts=[("Rapide — 384×672 · ~1,5 min pour 2,3 s", "rapide"),
+                                     ("Qualité — 768×1344 · ~28 min pour 2,3 s", "qualite")],
+                           dur=(2, 10, 2), note="H3 local · 0 $ · le Format oriente le cadre · serveur minimax-h3-local (Paramètres)"),
+            _NewEngineForm("i2v", with_image=True, with_end=True, with_res=True,
+                           res_opts=[("Rapide — 384×672 · ~1,5 min pour 2,3 s", "rapide"),
+                                     ("Qualité — 768×1344 · ~28 min pour 2,3 s", "qualite")],
+                           dur=(2, 10, 2), note="H3 local · première / dernière image · 0 $"),
             _NewEngineForm("t2v", with_audio=True, with_res=True,
                            res_opts=[("480p  (~$0.072/s)", "480p"), ("720p  (~$0.155/s)", "720p")],
                            dur=(4, 12, 5), note="Seedance 2.0 Mini · éco + audio"),
@@ -1435,6 +1482,18 @@ class TabVideoEngines(QWidget):
         elif key == "hailuo23_t2v":
             from api.video_engines import Hailuo23Worker
             self._worker = Hailuo23Worker(params)
+        elif key in ("h3_t2v", "h3_i2v"):
+            from api.video_engines import H3Worker
+            self._worker = H3Worker(params)
+        elif key in ("h3max_t2v", "h3max_i2v"):
+            from api.video_engines import H3MaxWorker
+            self._worker = H3MaxWorker(params)
+        elif key in ("h3turbo_t2v", "h3turbo_i2v"):
+            from api.video_engines import H3MaxTurboWorker
+            self._worker = H3MaxTurboWorker(params)
+        elif key in ("h3local_t2v", "h3local_i2v"):
+            from api.h3_local import H3LocalWorker
+            self._worker = H3LocalWorker(params)
         elif key in ("seedance20mini_t2v", "seedance20mini_i2v"):
             from api.video_engines import Seedance20MiniWorker
             self._worker = Seedance20MiniWorker(params)
