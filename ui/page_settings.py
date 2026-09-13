@@ -10,6 +10,7 @@ from ui.icons import load_icon
 from ui.davinci_panel import DaVinciPanel
 from ui.projects_location_row import ProjectsLocationRow
 from ui.h3_local_row import H3LocalRow
+from ui.comfy_row import ComfyRow
 from core.config import load_config, save_config
 from davinci.bridge import install_pandora_send
 
@@ -287,6 +288,12 @@ class SettingsPage(QScrollArea):
         lay.addWidget(_section("MiniMax H3 en local"))
         self._h3_local = H3LocalRow(initial_url=cfg.get("h3_local_url", ""))
         lay.addWidget(self._h3_local)
+        lay.addWidget(_divider())
+
+        # ── ComfyUI (13/09/2026) — rendu local par défaut, nodal ──────────────
+        lay.addWidget(_section("ComfyUI"))
+        self._comfy = ComfyRow()
+        lay.addWidget(self._comfy)
         lay.addWidget(_divider())
 
         # ── Assistant IA (texte) — juste après l'Apparence (retour 2026-06-13) ─

@@ -68,17 +68,56 @@ except Exception:
 # d'erreur que le prix des images lu dans le numéro de version (30/08/2026).
 _PER_SECOND["minimax-h3-local"] = {"480p": 0.0, "768p": 0.0, "1080p": 0.0,
                                    "rapide": 0.0, "qualite": 0.0}
+# ComfyUI (13/09/2026) : rendu sur la machine de l'utilisateur, rien n'est facturé.
+_PER_SECOND["comfy"] = {"480p": 0.0, "768p": 0.0, "1080p": 0.0, "": 0.0}
+# Moteurs de la famille _SimpleFalVideoWorker (api/video_engines) qui portaient
+# leur tarif UNIQUEMENT dans leur attribut PRICE_PER_S : absents de la grille,
+# ils étaient journalisés au repli 0,30 $/s (constat 14/09/2026). Les valeurs
+# ci-dessous sont celles des workers ; le harnais vérifie qu'elles ne divergent
+# pas de plus de 10 % — deux chiffres différents avant et après seraient un
+# mensonge. Wan 2.7 n'annonce de tarif nulle part : il reste sur le repli.
+_PER_SECOND.update({
+    "seedance-1.5-pro":  {"720p": 0.052, "480p": 0.052},
+    "ltx-2":             {"1080p": 0.04, "720p": 0.04, "4k": 0.04},
+    "gemini-omni-flash": {"720p": 0.125, "1080p": 0.125},
+    "grok-video":        {"720p": 0.07, "480p": 0.05},
+})
 # $/clip pour les moteurs à durée fixe (facturés à la vidéo).
 _PER_VIDEO = {
     "veo-3.1": 1.00,
     "sora-2":  0.40,
+    # Hailuo 2.3 Pro est facturé AU CLIP (~0,49 $), pas à la seconde : sans
+    # cette entrée il était journalisé à 0,30 $/s × durée (constat 14/09/2026).
+    "hailuo-2.3-pro": 0.49,
 }
 _DEFAULT_PER_S = 0.30   # repli prudent (≈ Seedance 720p) pour un moteur inconnu
 
 
+#: Suffixes de MODE que les workers accolent à leur clé de moteur dans le dict
+#: émis (« seedance-1.5-pro-t2v », « minimax-h3-i2v »). Le journal de coût
+#: reçoit cette clé composée ; la grille est indexée sans suffixe.
+_MODE_SUFFIXES = ("-t2v", "-i2v", "-ref", "-ext", "-r2v", "-flf2v")
+
+
+def canonical_engine(engine: str) -> str:
+    """Clé de grille d'un moteur tel que les workers le nomment.
+
+    ⚠ Bug trouvé le 13/09/2026 : sans ce retrait, TOUS les moteurs de la
+    famille _SimpleFalVideoWorker (Seedance 1.5, LTX-2, Wan, Hailuo, Mini,
+    Gemini, Grok, H3) tombaient sur _DEFAULT_PER_S = 0,30 $/s dans « Coût du
+    projet », quel que soit leur tarif réel — même famille d'erreur que le
+    prix des images lu dans le numéro de version (30/08/2026).
+    """
+    e = (engine or "").strip()
+    for suf in _MODE_SUFFIXES:
+        if e.lower().endswith(suf):
+            return e[: -len(suf)]
+    return e
+
+
 def price_per_second(engine: str, resolution: str) -> float | None:
     """$/s pour (moteur, résolution), ou None si le moteur est facturé au clip."""
-    engine = (engine or "").strip()
+    engine = canonical_engine(engine)
     if engine in _PER_VIDEO:
         return None
     rates = _PER_SECOND.get(engine)
@@ -101,7 +140,11 @@ def estimate(engine: str, resolution: str, total_seconds: float,
       - "clip"   : facturé à la vidéo (durée fixe) ;
       - "approx" : moteur inconnu → repli prudent.
     """
-    engine = (engine or "").strip()
+    # C'est CETTE fonction que le journal de coût appelle (core/history) : la
+    # clé arrive avec son suffixe de mode (« hailuo-2.3-pro-t2v ») et doit être
+    # canonisée ICI, pas seulement dans price_per_second — sinon Hailuo (au
+    # clip), ComfyUI et H3 local (0 $) tombaient tous à 0,30 $/s.
+    engine = canonical_engine(engine)
     n_clips = max(1, int(n_clips or 1))
     total_seconds = max(0.0, float(total_seconds or 0.0))
     if engine in _PER_VIDEO:

@@ -17,6 +17,7 @@ from core.i18n import translate
 from ui.styles import CP
 from ui.projects_location_row import ProjectsLocationRow
 from ui.h3_local_row import H3LocalRow
+from ui.comfy_row import ComfyRow
 
 # Intégration Resolume retirée de l'UI « pour le moment » (2026-07-30).
 _RESOLUME_UI = False
@@ -228,6 +229,13 @@ class PageLiveSettings(QScrollArea):
         lay.addSpacing(10)
         self._h3_local = H3LocalRow(initial_url=load_config().get("h3_local_url", ""))
         lay.addWidget(self._h3_local)
+        lay.addSpacing(28)
+
+        # ── ComfyUI (parité Cinéma, 13/09/2026) ─────────────────────────────────
+        lay.addWidget(_section_title("COMFYUI"))
+        lay.addSpacing(10)
+        self._comfy = ComfyRow()
+        lay.addWidget(self._comfy)
         lay.addSpacing(28)
 
         # ── Section Clés API ────────────────────────────────────────────────────

@@ -3981,6 +3981,54 @@ _FR_TO_EN: dict[str, str] = {
     "H3 local · première / dernière image · 0 $": "Local H3 · first / last frame · $0",
     "Rapide — 384×672 · ~1,5 min pour 2,3 s":   "Fast — 384×672 · ~1.5 min per 2.3 s",
     "Qualité — 768×1344 · ~28 min pour 2,3 s":  "Quality — 768×1344 · ~28 min per 2.3 s",
+    # ── ComfyUI (13/09/2026) ──────────────────────────────────────────────────
+    "ComfyUI":                      "ComfyUI",
+    "ComfyUI — installation":       "ComfyUI — setup",
+    "ComfyUI est installé mais ne répond pas": "ComfyUI is installed but not responding",
+    "ComfyUI n'est pas installé":   "ComfyUI is not installed",
+    "ComfyUI est un moteur de rendu local à construction nodale — le même principe que Fusion dans DaVinci Resolve ou Nuke. PANDORA s'y connecte pour faire tourner MiniMax H3 et tout workflow que vous y assemblez, sur votre propre carte graphique, sans facture.":
+        "ComfyUI is a local, node-based render engine — the same idea as Fusion in DaVinci Resolve or Nuke. PANDORA connects to it to run MiniMax H3 and any workflow you build there, on your own GPU, with no bill.",
+    "Étapes":                       "Steps",
+    "1.  Lancez ComfyUI Desktop et attendez que sa fenêtre affiche l'éditeur.":
+        "1.  Launch ComfyUI Desktop and wait for its window to show the editor.",
+    "1.  Téléchargez ComfyUI Desktop (site officiel) et installez-le.":
+        "1.  Download ComfyUI Desktop (official site) and install it.",
+    "2.  Lancez-le une première fois : il prépare son environnement (plusieurs minutes).":
+        "2.  Launch it once: it prepares its environment (several minutes).",
+    "•  Pour MiniMax H3 : dans ComfyUI, Bibliothèque de gabarits › Vidéo › MiniMax H3. Le gabarit télécharge les modèles (plusieurs dizaines de Go).":
+        "•  For MiniMax H3: in ComfyUI, Template Library › Video › MiniMax H3. The template downloads the models (tens of GB).",
+    "•  Revenez ici et cliquez « Vérifier ». L'adresse se détecte seule ; ne la changez que si ComfyUI écoute ailleurs.":
+        "•  Come back here and click “Check”. The address is detected automatically; change it only if ComfyUI listens elsewhere.",
+    "Adresse (détection automatique : ": "Address (auto-detected: ",
+    "Vérifier":                     "Check",
+    "Plus tard":                    "Later",
+    "Guide H3 (docs.comfy.org)":    "H3 guide (docs.comfy.org)",
+    "Télécharger ComfyUI Desktop":  "Download ComfyUI Desktop",
+    "version trop ancienne pour H3 (0.30.0 minimum) — mettez ComfyUI à jour":
+        "too old for H3 (0.30.0 minimum) — update ComfyUI",
+    "trop ancien pour H3 (0.30.0 minimum)": "too old for H3 (0.30.0 minimum)",
+    "Toujours injoignable. ComfyUI Desktop doit être lancé ET avoir fini de démarrer son serveur (la fenêtre affiche l'éditeur de nœuds).":
+        "Still unreachable. ComfyUI Desktop must be running AND have finished starting its server (the window shows the node editor).",
+    "Les poids MiniMax H3 sont publiés sous une licence qui exclut l'Union européenne, le Royaume-Uni, la Corée du Sud et les États-Unis. PANDORA ne distribue ni les poids ni le moteur : les installer et les utiliser relève de votre seule responsabilité.":
+        "The MiniMax H3 weights are released under a license that excludes the European Union, the United Kingdom, South Korea and the United States. PANDORA distributes neither the weights nor the engine: installing and using them is your sole responsibility.",
+    "Adresse du serveur (vide = détection automatique sur ": "Server address (empty = auto-detect on ",
+    "Aucun ComfyUI trouvé sur les adresses usuelles.": "No ComfyUI found on the usual addresses.",
+    "Workflow personnalisé (.json exporté de ComfyUI) — pour le moteur « ComfyUI · Workflow personnalisé »":
+        "Custom workflow (.json exported from ComfyUI) — for the “ComfyUI · Custom workflow” engine",
+    "Choisir un workflow ComfyUI":  "Choose a ComfyUI workflow",
+    "ComfyUI Desktop s'installe depuis comfy.org ; PANDORA n'embarque ni le moteur ni les modèles. Les gabarits MiniMax H3 fournis avec ComfyUI (Bibliothèque › Vidéo) téléchargent eux-mêmes leurs modèles.":
+        "ComfyUI Desktop installs from comfy.org; PANDORA ships neither the engine nor the models. The MiniMax H3 templates bundled with ComfyUI (Library › Video) download their own models.",
+    "ComfyUI · MiniMax H3 — T2V  (local par défaut · nodal · 0 $)":
+        "ComfyUI · MiniMax H3 — T2V  (default local · node-based · $0)",
+    "ComfyUI · MiniMax H3 — I2V  (first/last frame · 0 $)":
+        "ComfyUI · MiniMax H3 — I2V  (first/last frame · $0)",
+    "ComfyUI · Workflow personnalisé  (votre graphe · 0 $)":
+        "ComfyUI · Custom workflow  (your graph · $0)",
+    "ComfyUI · MiniMax H3 · gabarit officiel · le Format oriente le cadre":
+        "ComfyUI · MiniMax H3 · official template · Format sets the orientation",
+    "ComfyUI · MiniMax H3 · première / dernière image": "ComfyUI · MiniMax H3 · first / last frame",
+    "ComfyUI · votre workflow (Paramètres › ComfyUI) · le prompt remplace le premier nœud texte":
+        "ComfyUI · your workflow (Settings › ComfyUI) · the prompt replaces the first text node",
     # ── Doublage : écouter une voix avant de la choisir ───────────────────────
     "▶  Écouter":                   "▶  Listen",
     "Fait dire une phrase française à cette voix. Le premier essai coûte quelques centimes ; l'extrait est ensuite conservé et réécouté gratuitement.":

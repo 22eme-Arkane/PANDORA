@@ -1252,6 +1252,9 @@ class TabVideoEngines(QWidget):
         ("MiniMax H3 Max Turbo — I2V  (first/last frame)",            "h3turbo_i2v",  True),
         ("MiniMax H3 LOCAL — T2V  (votre GPU · 0 $ · serveur sd.cpp)", "h3local_t2v", True),
         ("MiniMax H3 LOCAL — I2V  (votre GPU · 0 $)",                 "h3local_i2v",  True),
+        ("ComfyUI · MiniMax H3 — T2V  (local par défaut · nodal · 0 $)", "comfy_h3_t2v", True),
+        ("ComfyUI · MiniMax H3 — I2V  (first/last frame · 0 $)",       "comfy_h3_i2v", True),
+        ("ComfyUI · Workflow personnalisé  (votre graphe · 0 $)",       "comfy_custom", True),
         ("Seedance 2.0 Mini — T2V  (éco · audio · ~$0.155/s)", "seedance20mini_t2v", True),
         ("Seedance 2.0 Mini — I2V  (start/end frame · audio)", "seedance20mini_i2v", True),
         ("Gemini Omni Flash — T2V  (Google · audio natif · ~$0.125/s)", "gemini_omni_t2v", True),
@@ -1421,6 +1424,17 @@ class TabVideoEngines(QWidget):
                            res_opts=[("Rapide — 384×672 · ~1,5 min pour 2,3 s", "rapide"),
                                      ("Qualité — 768×1344 · ~28 min pour 2,3 s", "qualite")],
                            dur=(2, 10, 2), note="H3 local · première / dernière image · 0 $"),
+            # ── ComfyUI (13/09/2026) — rendu local par défaut, H3 sur les
+            # gabarits officiels ; « personnalisé » = le .json réglé dans les
+            # Paramètres. Index alignés sur _ENGINES, comme au-dessus.
+            _NewEngineForm("t2v", with_res=True,
+                           res_opts=[("768p  (natif)", "768p"), ("480p", "480p")],
+                           dur=(5, 15, 5), note="ComfyUI · MiniMax H3 · gabarit officiel · le Format oriente le cadre"),
+            _NewEngineForm("i2v", with_image=True, with_end=True, with_res=True,
+                           res_opts=[("768p  (natif)", "768p"), ("480p", "480p")],
+                           dur=(5, 15, 5), note="ComfyUI · MiniMax H3 · première / dernière image"),
+            _NewEngineForm("t2v", dur=(2, 15, 5),
+                           note="ComfyUI · votre workflow (Paramètres › ComfyUI) · le prompt remplace le premier nœud texte"),
             _NewEngineForm("t2v", with_audio=True, with_res=True,
                            res_opts=[("480p  (~$0.072/s)", "480p"), ("720p  (~$0.155/s)", "720p")],
                            dur=(4, 12, 5), note="Seedance 2.0 Mini · éco + audio"),
@@ -1861,6 +1875,19 @@ class TabVideoEngines(QWidget):
         elif key in ("h3local_t2v", "h3local_i2v"):
             from api.h3_local import H3LocalWorker
             self._worker = H3LocalWorker(params)
+        elif key in ("comfy_h3_t2v", "comfy_h3_i2v", "comfy_custom"):
+            # Sans serveur vivant, on guide au lieu d'échouer dans un thread.
+            from core import comfy as _cf
+            if not _cf.discover():
+                from ui.dialog_comfy_install import ComfyInstallDialog
+                _dlg = ComfyInstallDialog(self)
+                _dlg.exec()
+                if not _dlg.is_ready():
+                    return
+            from core import comfy_h3 as _h3c
+            _h3c.prepare_params(params, key)
+            from api.comfy import ComfyWorker
+            self._worker = ComfyWorker(params)
         elif key in ("seedance20mini_t2v", "seedance20mini_i2v"):
             from api.video_engines import Seedance20MiniWorker
             self._worker = Seedance20MiniWorker(params)

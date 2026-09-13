@@ -9032,5 +9032,214 @@ def minimax_h3_fal_et_local():
         "la rangée H3 local doit être dans les Paramètres des DEUX éditions"
 
 
+@test
+def comfyui_moteur_nodal_et_journal_de_cout():
+    """ComfyUI piloté par PANDORA (13/09/2026) — et un bug de journal trouvé en chemin.
+
+    Le journal recevait « seedance-1.5-pro-t2v » et cherchait « seedance-1.5-pro » :
+    tous les moteurs de _SimpleFalVideoWorker étaient comptés 0,30 $/s. On
+    vérifie chaque sous-classe, puis le protocole ComfyUI hors ligne (le
+    convertisseur éditeur→API sur un graphe synthétique avec Reroute, Primitive,
+    Note et seed à contrôle), et l'alignement des onglets à 36 moteurs.
+    """
+    import importlib
+    from core import pricing, comfy as cf, comfy_workflow as wf, comfy_h3 as h3c
+    import api.video_engines as ve
+
+    # ── 1. Le journal résout la clé COMPOSÉE émise par les workers ────────────
+    assert pricing.canonical_engine("seedance-1.5-pro-t2v") == "seedance-1.5-pro"
+    assert pricing.canonical_engine("minimax-h3-i2v") == "minimax-h3"
+    assert pricing.canonical_engine("comfy-t2v") == "comfy"
+    assert pricing.canonical_engine("flux-3") == "flux-3", "sans suffixe : inchangé"
+    # Garde anti-dérive : TOUT worker qui annonce un tarif doit exister dans la
+    # grille (sinon le journal retombe sur 0,30 $/s), et la grille doit dire la
+    # même chose que lui à 10 % près (le worker annonce le coût AVANT, le
+    # journal le compte APRÈS — deux chiffres différents seraient un mensonge).
+    def _subclasses(c):
+        out = []
+        for s in c.__subclasses__():
+            out.append(s); out += _subclasses(s)
+        return out
+    for cls in _subclasses(ve._SimpleFalVideoWorker):
+        if cls.__name__.startswith("_"):
+            continue
+        emitted = f"{cls.MODEL}-t2v"
+        if cls.FLAT_PRICE and not cls.PRICE_PER_S:
+            assert pricing.price_per_second(emitted, "") is None, \
+                f"{cls.__name__} est facturé au clip : il doit être dans _PER_VIDEO"
+            continue
+        if not cls.PRICE_PER_S and not pricing._PER_SECOND.get(cls.MODEL):
+            continue          # tarif porté par une table de famille (H3) — testé plus haut
+        assert pricing._PER_SECOND.get(cls.MODEL), \
+            f"{cls.__name__} ({cls.MODEL}) absent de la grille : journalisé à 0,30 $/s"
+        if cls.PRICE_PER_S:
+            g = pricing.price_per_second(emitted, "720p")
+            assert abs(g - cls.PRICE_PER_S) <= 0.10 * cls.PRICE_PER_S, \
+                f"{cls.__name__} : worker {cls.PRICE_PER_S} $/s, grille {g} $/s"
+    assert pricing.price_per_second("minimax-h3-local-t2v", "rapide") == 0.0
+    assert pricing.price_per_second("comfy-i2v", "768p") == 0.0
+    assert pricing.price_per_second("hailuo-2.3-pro-t2v", "") is None, "Hailuo est au clip"
+    assert pricing.estimate("hailuo-2.3-pro-t2v", "", 6, 1)[0] == 0.49
+
+    # ── 2. Protocole ComfyUI, sans serveur ────────────────────────────────────
+    assert cf.normalize_url("localhost:8188/") == "http://localhost:8188"
+    assert cf.normalize_url("") == "" and cf.get_url({}) == cf.DEFAULT_URL
+    assert cf.ping("http://127.0.0.1:1")[0] is False
+    assert cf.version_ok("0.34.0") and cf.version_ok("v0.35.1") and not cf.version_ok("0.29.9")
+    assert cf.history_status({"status": {"status_str": "success", "completed": True}})[0] == "success"
+    st, msg = cf.history_status({"status": {"status_str": "error", "messages": [
+        ["execution_error", {"exception_message": "CUDA out of memory"}]]}})
+    assert st == "error" and "CUDA" in msg
+    assert cf.history_status({})[0] == "running"
+    outs = cf.outputs_of({"outputs": {"9": {"images": [{"filename": "a.png", "type": "output"}]},
+                                      "12": {"gifs": [{"filename": "clip.mp4", "subfolder": "video", "type": "output"}]}}})
+    assert outs[0]["filename"] == "clip.mp4", "la vidéo passe avant l'aperçu image"
+    assert cf.view_url("http://h:1", outs[0]).startswith("http://h:1/view?filename=clip.mp4")
+    assert cf.prompt_payload({"1": {}}, "cid")["client_id"] == "cid"
+
+    # ── 3. Convertisseur éditeur → API ────────────────────────────────────────
+    info = {
+        "CLIPTextEncode": {"input": {"required": {"text": ["STRING", {"multiline": True}],
+                                                  "clip": ["CLIP"]}}},
+        "KSampler": {"input": {"required": {"model": ["MODEL"],
+                                            "seed": ["INT", {"control_after_generate": True}],
+                                            "steps": ["INT", {}], "cfg": ["FLOAT", {}],
+                                            "sampler_name": [["euler", "dpmpp_2m"]],
+                                            "positive": ["CONDITIONING"], "latent_image": ["LATENT"]}}},
+        "LoadImage": {"input": {"required": {"image": [["a.png"], {"image_upload": True}]}}},
+    }
+    ui = {"nodes": [
+        {"id": 1, "type": "CLIPTextEncode", "inputs": [{"name": "clip", "link": None}],
+         "widgets_values": ["un chat"]},
+        {"id": 2, "type": "PrimitiveNode", "widgets_values": [1234]},
+        {"id": 3, "type": "Reroute", "inputs": [{"name": "", "link": 10}], "outputs": [{"links": [11]}]},
+        {"id": 4, "type": "KSampler",
+         "inputs": [{"name": "seed", "link": 20}, {"name": "positive", "link": 11}],
+         # seed converti en prise : sa valeur de contrôle « fixed » reste dans la liste
+         "widgets_values": ["fixed", 20, 7.5, "euler"]},
+        {"id": 5, "type": "Note", "widgets_values": ["commentaire"]},
+        {"id": 6, "type": "LoadImage", "mode": 2, "widgets_values": ["muet.png", "image"]},
+    ], "links": [[10, 1, 0, 3, 0, "CONDITIONING"], [11, 3, 0, 4, 1, "CONDITIONING"],
+                 [20, 2, 0, 4, 0, "INT"]]}
+    api = wf.to_api(ui, info)
+    assert set(api) == {"1", "4"}, f"virtuels et muets exclus : {sorted(api)}"
+    assert api["1"]["inputs"]["text"] == "un chat"
+    k = api["4"]["inputs"]
+    assert k["seed"] == 1234, "la Primitive doit fournir la valeur"
+    assert k["positive"] == ["1", 0], "le Reroute doit être traversé jusqu'à la source"
+    assert k["steps"] == 20 and k["cfg"] == 7.5 and k["sampler_name"] == "euler", k
+    assert wf.is_api_format(api) and not wf.is_ui_format(api)
+    assert wf.to_api(api, info) == api, "un fichier déjà API repart tel quel"
+    try:
+        wf.to_api({"nodes": [{"id": 9, "type": "NoeudPersoAbsent", "widgets_values": []}], "links": []}, info)
+        assert False, "une classe inconnue doit lever"
+    except wf.ConversionError as e:
+        assert "NoeudPersoAbsent" in str(e)
+    assert wf.fill(api, [("CLIPTextEncode", "text", "x"), ("Absent", "y", 1)]) == ["Absent"]
+
+    # ── 4. Sous-graphes : les gabarits H3 OFFICIELS s'aplatissent ────────────
+    # Ce sont les vrais fichiers de Comfy-Org/workflow_templates, embarqués.
+    for key, outer_id, inner_video in (("comfy_h3_t2v", "140", "130"), ("comfy_h3_i2v", "105", "91")):
+        path = h3c.template_path(key)
+        assert os.path.isfile(path), f"gabarit absent : {path}"
+        ui = wf.load(path)
+        assert ui.get("definitions", {}).get("subgraphs"), "le gabarit officiel est bâti sur un sous-graphe"
+        flat = wf.flatten(ui)
+        types = {str(n["id"]): n["type"] for n in flat["nodes"]}
+        assert "definitions" not in flat and not any(len(t) > 30 for t in types.values()), \
+            "il ne doit plus rester d'instance de sous-graphe"
+        assert types.get(f"{outer_id}:{inner_video}") == "CreateVideo"
+        assert len(types) == len(set(types)), "identifiants aplatis en double"
+        h3_ids = [i for i, t in types.items() if t == "MiniMaxH3ImageToVideo"]
+        assert len(h3_ids) == 1, f"un seul nœud H3 attendu, lu {h3_ids}"
+        # La sortie du sous-graphe est redirigée vers le nœud interne qui la produit.
+        lk = {str(l[0]): l for l in flat["links"]}
+        to_save = [l for l in lk.values() if str(l[3]) == "92"]
+        assert to_save and str(to_save[0][1]) == f"{outer_id}:{inner_video}", \
+            f"SaveVideo doit recevoir la vidéo de {outer_id}:{inner_video}, lu {to_save}"
+        # Le prompt promu arrive au nœud H3 par un PrimitiveNode synthétique.
+        prim = [n for n in flat["nodes"] if n["type"] == "PrimitiveNode" and n["id"].endswith(":promoted:2")]
+        assert prim and str(prim[0]["widgets_values"][0]).startswith(("Realistic", "Editorial")), \
+            "le prompt promu (slot 2) doit être porté par un PrimitiveNode"
+        # Conversion complète avec des définitions dérivées du gabarit lui-même :
+        # on vérifie la mécanique (liens, primitives, ids), pas les noms de widgets.
+        info = {t: {"input": {"required": {}}} for t in set(types.values()) if t not in wf._VIRTUAL}
+        api = wf.to_api(ui, info)
+        h3 = api[h3_ids[0]]["inputs"]
+        assert str(h3["prompt"]).startswith(("Realistic", "Editorial")), "prompt littéral attendu sur le nœud H3"
+        # Le nœud externe est BRANCHÉ sur width/height (ResolutionSelector 115) :
+        # le lien prime sur la valeur promue, comme dans le frontend.
+        assert h3["width"] == ["115", 0] and h3["height"] == ["115", 1], (h3["width"], h3["height"])
+        assert isinstance(h3["length"], list) and types[h3["length"][0]] == "ComfyMathExpression", \
+            "length reste relié au calcul 17k+5"
+        assert isinstance(h3["clip"], list) and types[h3["clip"][0]] == "CLIPLoader"
+        assert api["92"]["inputs"]["video"] == [f"{outer_id}:{inner_video}", 0]
+        rn = next(i for i, t in types.items() if t == "RandomNoise")
+        assert api[rn]["inputs"]["noise_seed"] == 757358688076805, "seed promue (widgets_values[4])"
+        if key == "comfy_h3_i2v":
+            assert h3["first_frame"] == ["114", 0], f"first_frame doit venir du LoadImage 114, lu {h3.get('first_frame')}"
+            assert "last_frame" not in h3, "last_frame libre dans le gabarit I2V"
+        else:
+            assert "first_frame" not in h3 and "last_frame" not in h3
+
+        # Remplissage PANDORA sur le vrai graphe.
+        params = {"seed": 7, "resolution": "480p", "aspect_ratio": "9:16", "duration": 5,
+                  "mode": "i2v" if key.endswith("i2v") else "t2v",
+                  "_comfy_image": "pandora/depart.png", "_comfy_end_image": "pandora/fin.png"}
+        plan = h3c.fill_plan(api, params, "a cat on a roof")
+        wf.fill(api, plan)
+        h3c.apply_images(api, params)
+        h3 = api[h3_ids[0]]["inputs"]
+        assert h3["prompt"] == "a cat on a roof"
+        assert api[next(i for i, t in types.items() if t == "RandomNoise")]["inputs"]["noise_seed"] == 7
+        assert api[next(i for i, t in types.items() if t == "PrimitiveFloat")]["inputs"]["value"] == 5.0, \
+            "la durée entre en secondes par le PrimitiveFloat"
+        if key.endswith("i2v"):
+            assert h3["width"] == ["115", 0], "en I2V le cadre suit l'image : liens inchangés"
+            assert api["114"]["inputs"]["image"] == "pandora/depart.png"
+            assert h3["last_frame"] == [h3c.END_IMAGE_NODE, 0] and api[h3c.END_IMAGE_NODE]["inputs"]["image"] == "pandora/fin.png"
+        else:
+            assert (h3["width"], h3["height"]) == (480, 848), "T2V 480p portrait"
+
+    # ── 4b. Remplissage : cas synthétiques ────────────────────────────────────
+    assert h3c.snap_frames(5) == 124 and h3c.snap_frames(2.3) == 56 and h3c.snap_frames(0) == 5
+    assert h3c.frame_for("768p", "16:9") == (1344, 768) and h3c.frame_for("480p", "1:1") == (480, 480)
+    try:
+        h3c.fill_plan({"1": {"class_type": "KSampler", "inputs": {}}}, {}, "x")
+        assert False, "sans nœud de prompt, fill_plan doit lever"
+    except h3c.NoPromptTarget:
+        pass
+    plan = h3c.fill_plan({"1": {"class_type": "CLIPTextEncode", "inputs": {}},
+                          "2": {"class_type": "KSampler", "inputs": {}}}, {}, "x")
+    seed_val = next(v for c, n, v in plan if c == "KSampler")
+    assert isinstance(seed_val, int) and seed_val > 0, "sans seed fournie, on en tire une (jamais « fixed »)"
+    p = h3c.prepare_params({"prompt": "x"}, "comfy_h3_i2v")
+    assert p["mode"] == "i2v" and p["workflow_path"].endswith("minimax_h3_i2v.json")
+
+    # ── 5. Onglets et Paramètres ──────────────────────────────────────────────
+    for mod in ("ui.tab_video_engines", "ui.tab_video_engines_live"):
+        m = importlib.import_module(mod)
+        src = inspect.getsource(m.TabVideoEngines._on_generate)
+        assert "ComfyWorker" in src and "ComfyInstallDialog" in src, f"{mod}: dispatch ComfyUI manquant"
+        keys = [k for _, k, _ in m.TabVideoEngines._ENGINES]
+        for k in ("comfy_h3_t2v", "comfy_h3_i2v", "comfy_custom"):
+            assert k in keys, f"{mod}: {k} absent"
+        tab = m.TabVideoEngines()
+        assert len(tab._forms) == len(keys), f"{mod}: formulaires désalignés"
+        assert getattr(tab._forms[keys.index("comfy_h3_i2v")], "_mode", "") == "i2v"
+        tab.deleteLater()
+    for mod in ("ui.page_settings", "ui.page_live_settings"):
+        assert "ComfyRow" in inspect.getsource(importlib.import_module(mod)), f"{mod}: rangée ComfyUI absente"
+    from ui.dialog_comfy_install import ComfyInstallDialog
+    dsrc = inspect.getsource(ComfyInstallDialog)
+    assert "DOWNLOAD_URL" in dsrc and "desktop_installed" in dsrc
+    # Lignes de CODE seulement : un commentaire qui cite le mot fait mordre le
+    # test à vide (piège connu, mémoire « pièges des tests »).
+    import re as _re
+    _code_lines = [l.split("#", 1)[0] for l in dsrc.splitlines()]
+    assert not any(_re.search(r"\blambda\b", l) for l in _code_lines), \
+        "dialog_comfy_install : fermeture anonyme dans le code (méthodes liées attendues)"
+
+
 if __name__ == "__main__":
     sys.exit(main())
