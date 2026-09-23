@@ -425,8 +425,7 @@ class LiveWindow(QMainWindow):
         outer.addWidget(body, 1)
         outer.addWidget(self._sidebar)
 
-        self._pages: dict[str, QWidget] = {}
-        self._build_pages()
+        self._build_pages()          # installe self._pages (construction paresseuse)
 
         self._sidebar.nav_clicked.connect(self._navigate)
         self._sidebar.manual_requested.connect(self._on_manual)
@@ -796,82 +795,87 @@ class LiveWindow(QMainWindow):
     # formulaire (voir LiveStudioWidget._clamp_content_width).
 
     def _build_pages(self):
-        # Toutes les pages ci-dessous sont des VERSIONS LIVE INDÉPENDANTES
-        # (sous-classes dédiées, voir ui/live_pages.py) → modifiables sans toucher Cinéma.
-        from ui.live_pages import (
-            ConducteurPage, SequenceLivePage, SequenceMappingPage,
-            CastingLivePage, AccessoiresLivePage, VehiculesLivePage,
-        )
+        """Fabriques des pages Live : une page n'est CONSTRUITE qu'à sa
+        première demande (ui/lazy_pages, même mécanisme que Cinéma) — la page
+        d'accueil par la navigation initiale, les autres au premier clic.
+        Toutes les pages sont des VERSIONS LIVE INDÉPENDANTES (sous-classes
+        dédiées, voir ui/live_pages.py) → modifiables sans toucher Cinéma.
+        Le câblage des signaux vit dans chaque fabrique."""
+        from ui.lazy_pages import LazyPages
+        from ui.live_pages import CastingLivePage, AccessoiresLivePage, VehiculesLivePage
+        # Image IA — destination globale autonome (2026-07-23, parité Cinéma) :
+        # réutilise le panneau partagé Studio Images.
+        from ui.tab_image import TabImage
+        from ui.live_studio_widget import LiveStudioWidget
+        factories = {
+            "projects":    self._make_page_projects,
+            "conducteur":  self._make_page_conducteur,
+            # Séquences Live + Mapping (versions Live du Storyboard)
+            "seq_live":    self._make_page_seq_live,
+            "seq_mapping": self._make_page_seq_mapping,
+            "casting":     CastingLivePage,
+            "accessoires": AccessoiresLivePage,
+            "vehicules":   VehiculesLivePage,
+            "image_ia":    TabImage,
+            "studio":      LiveStudioWidget,
+            "settings":    self._make_page_settings,
+        }
+        # ── Contrôleur Resolume : RETIRÉ pour le moment (demande Matthieu
+        # 2026-07-30). Code conservé pour un retour futur — pour réactiver :
+        #   studio.open_resolume.connect(lambda: self._navigate("resolume"))
+        #   from ui.page_live import PageLive
+        #   factories["resolume"] = PageLive  (+ câbler
+        #   studio.tab_library.send_to_resolume → resolume.queue_paths puis
+        #   self._navigate("resolume")) et rétablir l'entrée de nav « ▶ Resolume ».
+        self._pages = LazyPages(factories, self._on_page_built)
 
-        # ── Page Projets (réintroduite 2026-07-23) — même page que le Cinéma ;
+    def _on_page_built(self, key: str, page: QWidget):
+        """Une page vient d'être construite : dans la pile, et traduite si
+        l'interface n'est pas en français (elle naît en français)."""
+        self._stack.addWidget(page)
+        if get_lang() != "fr":
+            retranslate_widget(page)
+            if hasattr(page, "retranslate"):
+                page.retranslate()
+
+    def _make_page_projects(self):
+        # Page Projets (réintroduite 2026-07-23) — même page que le Cinéma ;
         # le switch recrée la fenêtre via main._on_switch.
         from ui.page_projects import PageProjects
         _projects = PageProjects(self._project)
         # Un projet sans champ « mode » reste dans l'édition courante (Live).
         _projects.switch_requested.connect(
             lambda d: self.switch_requested.emit({**d, "mode": d.get("mode", "live")}))
-        self._pages["projects"] = _projects
+        return _projects
 
+    def _make_page_conducteur(self):
+        from ui.live_pages import ConducteurPage
         conducteur = ConducteurPage()
         conducteur.navigate_requested.connect(lambda key, extra=None: self._navigate(key))
-        self._pages["conducteur"] = conducteur
-        # pulse() : anime le splash de chargement pendant la construction.
-        from ui.loading_splash import pulse
-        pulse()
+        return conducteur
 
-        # ── Séquences Live + Mapping (versions Live du Storyboard) ──────────────
-        self._pages["seq_live"]    = SequenceLivePage()
-        pulse()
-        self._pages["seq_mapping"] = SequenceMappingPage()
-        pulse()
+    def _make_page_seq_live(self):
+        from ui.live_pages import SequenceLivePage
+        page = SequenceLivePage()
         # « ➤ SFX » d'un plan → Studio IA, onglet Sound Design pré-rempli
-        for _sk in ("seq_live", "seq_mapping"):
-            self._pages[_sk].sound_to_studio.connect(self._open_sound_design)
+        page.sound_to_studio.connect(self._open_sound_design)
+        return page
 
-        # ── Casting / Accessoires / Véhicules (versions Live) ──────────────────
-        self._pages["casting"]     = CastingLivePage()
-        self._pages["accessoires"] = AccessoiresLivePage()
-        self._pages["vehicules"]   = VehiculesLivePage()
-        pulse()
+    def _make_page_seq_mapping(self):
+        from ui.live_pages import SequenceMappingPage
+        page = SequenceMappingPage()
+        page.sound_to_studio.connect(self._open_sound_design)
+        return page
 
-        # ── Image IA — destination globale autonome (2026-07-23, parité
-        # Cinéma) : réutilise le panneau partagé Studio Images ───────────────────
-        from ui.tab_image import TabImage
-        image_ia = TabImage()
-        self._pages["image_ia"] = image_ia
-        pulse()
-
-        # ── Studio IA Live (dédié) ──────────────────────────────────────────────
-        from ui.live_studio_widget import LiveStudioWidget
-        studio = LiveStudioWidget()
-        self._pages["studio"] = studio
-
-        # ── Contrôleur Resolume : RETIRÉ pour le moment (demande Matthieu
-        # 2026-07-30). Code conservé pour un retour futur — pour réactiver :
-        #   studio.open_resolume.connect(lambda: self._navigate("resolume"))
-        #   from ui.page_live import PageLive
-        #   resolume = PageLive()
-        #   self._pages["resolume"] = resolume
-        #   studio.tab_library.send_to_resolume.connect(
-        #       lambda paths: (resolume.queue_paths(paths),
-        #                      self._navigate("resolume")))
-        # + rétablir l'entrée de nav « ▶ Resolume » et la clé dans la boucle
-        # du stack ci-dessous.
-
+    def _make_page_settings(self):
         from ui.page_live_settings import PageLiveSettings
         settings = PageLiveSettings()
         settings.manual_requested.connect(self._on_manual)
-        self._pages["settings"] = settings
         # Paramètres pleine largeur (2026-07-23, parité Cinéma) : la barre de
         # défilement est collée au bord DROIT de la fenêtre ; le centrage du
         # contenu (max 1360) est géré À L'INTÉRIEUR de PageLiveSettings.
         self._settings_wrap = settings
-
-        for key in ("projects", "conducteur", "seq_live", "seq_mapping", "casting",
-                    "accessoires", "vehicules", "image_ia", "studio",
-                    "settings"):
-            self._stack.addWidget(self._settings_wrap if key == "settings"
-                                  else self._pages[key])
+        return settings
 
     # Les pages copiées de Cinéma émettent parfois les clés Cinéma → on les
     # ré-aiguille vers les clés Live correspondantes.

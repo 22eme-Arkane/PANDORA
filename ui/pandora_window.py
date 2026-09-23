@@ -485,8 +485,7 @@ class PandoraWindow(QMainWindow):
         outer.addWidget(body, 1)
         outer.addWidget(self._sidebar)
 
-        self._pages: dict[str, QWidget] = {}
-        self._build_pages()
+        self._build_pages()          # installe self._pages (construction paresseuse)
 
         self._sidebar.nav_clicked.connect(self._navigate)
         self._sidebar.manual_requested.connect(self._on_manual)
@@ -534,6 +533,50 @@ class PandoraWindow(QMainWindow):
         return win
 
     def _build_pages(self):
+        """Fabriques des pages : une page n'est CONSTRUITE qu'à sa première
+        demande (ui/lazy_pages) — la page d'accueil par `_navigate("scenario")`
+        juste après, les autres au premier clic. Mesuré le 24/09/2026 : tout
+        construire d'avance coûtait ~7 s de construction + 3 s de premier
+        setCurrentWidget + 9 s de premier affichage sur un petit projet, le
+        Studio seul 3,5 s. Le câblage des signaux vit dans chaque fabrique."""
+        from ui.lazy_pages import LazyPages
+        from ui.page_staging import PageLighting
+        factories = {
+            "projects":    self._make_page_projects,
+            "scenario":    self._make_page_scenario,
+            "storyboard":  PageStoryboard,
+            "plan_de_feu": PageLighting,
+            # Deux onglets depuis le 2026-07-31 : « Décors » (page classique) et
+            # « 7 vues » (atelier de rotations) — voir ui/decors_hub.py.
+            "decors":      DecorsHub,
+            # Page « Image & Son » plus construite — la classe PageCamera reste
+            # importée et intacte ; rien d'autre ne la référence.
+            "castings":    PageCastings,
+            "accessoires": PageAccessories,
+            "hmc":         PageHMC,
+            "vehicles":    PageVehicles,
+            "doublage":    PageDoublage,
+            # Image IA est une destination globale autonome. Le panneau partagé
+            # reste la source unique de l'app Studio Images et de PANDORA.
+            "image_ia":    TabImage,
+            "settings":    self._make_page_settings,
+            "seedance":    SeedanceWidget,
+        }
+        # Compatibilité : les anciens raccourcis « Mise en scène » ouvrent le
+        # plateau unifié sans recréer une seconde page ni un second état.
+        self._pages = LazyPages(factories, self._on_page_built,
+                                aliases={"mise_en_scene": "plan_de_feu"})
+
+    def _on_page_built(self, key: str, page: QWidget):
+        """Une page vient d'être construite : dans la pile, et traduite si
+        l'interface n'est pas en français (elle naît en français)."""
+        self._stack.addWidget(page)
+        if get_lang() != "fr":
+            retranslate_widget(page)
+            if hasattr(page, "retranslate"):
+                page.retranslate()
+
+    def _make_page_projects(self):
         # Page Projets (réintroduite 2026-07-23) : ouvrir/créer un projet depuis
         # la fenêtre — le switch recrée la fenêtre via main._on_switch.
         from ui.page_projects import PageProjects
@@ -541,89 +584,24 @@ class PandoraWindow(QMainWindow):
         # Un projet sans champ « mode » reste dans l'édition courante.
         projects.switch_requested.connect(
             lambda d: self.switch_requested.emit({**d, "mode": d.get("mode", "cinema")}))
-        self._pages["projects"] = projects
-        self._stack.addWidget(projects)
+        return projects
 
+    def _make_page_scenario(self):
         scenario = PageScenario()
         scenario.navigate_requested.connect(
             lambda key, extra: self._navigate(key, extra)
         )
         scenario.style_changed.connect(self._on_scenario_style_changed)
-        self._pages["scenario"] = scenario
-        self._stack.addWidget(scenario)
-        # pulse() : anime le splash de chargement pendant la construction
-        # (événements d'entrée exclus — voir ui/loading_splash).
-        from ui.loading_splash import pulse
-        pulse()
+        return scenario
 
-        storyboard = PageStoryboard()
-        self._pages["storyboard"] = storyboard
-        self._stack.addWidget(storyboard)
-        pulse()
-
-        from ui.page_staging import PageLighting
-        plan_de_feu = PageLighting()
-        self._pages["plan_de_feu"] = plan_de_feu
-        # Compatibilité : les anciens raccourcis « Mise en scène » ouvrent le
-        # plateau unifié sans recréer une seconde page ni un second état.
-        self._pages["mise_en_scene"] = plan_de_feu
-        self._stack.addWidget(plan_de_feu)
-        pulse()
-
-        # Deux onglets depuis le 2026-07-31 : « Décors » (page classique) et
-        # « 7 vues » (atelier de rotations) — voir ui/decors_hub.py.
-        decors = DecorsHub()
-        self._pages["decors"] = decors
-        self._stack.addWidget(decors)
-        pulse()
-
-        # Page « Image & Son » plus construite — voir la nav ci-dessus. La
-        # classe reste importée et intacte ; rien d'autre ne la référence.
-        # camera = PageCamera()
-        # self._pages["camera"] = camera
-        # self._stack.addWidget(camera)
-
-        castings = PageCastings()
-        self._pages["castings"] = castings
-        self._stack.addWidget(castings)
-
-        accessories = PageAccessories()
-        self._pages["accessoires"] = accessories
-        self._stack.addWidget(accessories)
-
-        hmc = PageHMC()
-        self._pages["hmc"] = hmc
-        self._stack.addWidget(hmc)
-
-        vehicles = PageVehicles()
-        self._pages["vehicles"] = vehicles
-        self._stack.addWidget(vehicles)
-        pulse()
-
-        doublage = PageDoublage()
-        self._pages["doublage"] = doublage
-        self._stack.addWidget(doublage)
-
-        # Image IA est une destination globale autonome. Le panneau partagé
-        # reste la source unique de l'app Studio Images et de PANDORA.
-        image_ia = TabImage()
-        self._pages["image_ia"] = image_ia
-        self._stack.addWidget(image_ia)
-        pulse()
-
+    def _make_page_settings(self):
         settings = SettingsPage()
         settings.manual_requested.connect(self._on_manual)
-        self._pages["settings"] = settings
         # Paramètres pleine largeur depuis le 2026-07-22 : la barre de défilement
         # doit être collée au bord DROIT de la fenêtre. Le centrage du contenu
         # (largeur max 1360) est géré À L'INTÉRIEUR de SettingsPage.
         self._settings_wrap = settings
-        self._stack.addWidget(self._settings_wrap)
-
-        seedance = SeedanceWidget()
-        self._pages["seedance"] = seedance
-        self._stack.addWidget(seedance)
-        pulse()
+        return settings
 
     def showEvent(self, event):
         super().showEvent(event)

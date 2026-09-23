@@ -1500,7 +1500,8 @@ def fenetre_live():
         "Image IA à côté de Studio IA"
     # Paramètres pleine largeur (2026-07-23) : la barre de défilement colle au
     # bord droit, le centrage 1360 vit À L'INTÉRIEUR de la page.
-    for k in w._pages:
+    # Construction paresseuse (24/09/2026) : on force TOUTES les pages ici.
+    for k in w._pages.keys_all():
         assert w._pages[k].maximumWidth() > 100000, f"page {k} pleine largeur"
     import inspect as _insp
     from ui.page_live_settings import PageLiveSettings as _PLS
@@ -2797,8 +2798,15 @@ def pont_resolume():
     # Page contrôleur : réactivée dans la nav + branchée à la Vidéothèque
     import live_window as LW
     src_w = inspect.getsource(LW)
-    assert '"resolume"' in src_w and "PageLive()" in src_w, "page dans la fenêtre Live"
-    assert "queue_paths" in src_w, "Vidéothèque → file pré-chargée"
+    # Contrôleur RETIRÉ de la fenêtre (demande Matthieu 2026-07-30) : aucune
+    # fabrique « resolume » active — l'ancienne assertion ne passait que grâce
+    # au code en COMMENTAIRE (piège connu). La recette de retour reste documentée.
+    _code_w = "\n".join(l.split("#", 1)[0] for l in src_w.splitlines())
+    _code_pages = "\n".join(l.split("#", 1)[0] for l in
+                            inspect.getsource(LW.LiveWindow._build_pages).splitlines())
+    assert '"resolume":' not in _code_pages and "PageLive()" not in _code_w, \
+        "Resolume censé être retiré de la fenêtre Live (aucune fabrique active)"
+    assert "resolume" in src_w and "queue_paths" in src_w, "recette de retour documentée"
     from ui.page_live import PageLive
     src_p = inspect.getsource(PageLive)
     assert "scan_live_clips" in src_p, "bibliothèque = clips du PROJET"

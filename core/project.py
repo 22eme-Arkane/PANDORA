@@ -194,9 +194,19 @@ def load_project(path: str) -> dict | None:
             if not isinstance(data, dict) or "id" not in data or "name" not in data:
                 continue
             data["_path"] = path
+            changed = False
             if not data.get("id"):
                 data["id"] = str(uuid.uuid4())
-            _save(data)  # renames to {safe_name}.json and removes project.json if needed
+                changed = True
+            # N'écrire que s'il y a quelque chose à migrer (ancien project.json,
+            # fichier mal nommé, id manquant). Réécrire le descripteur à CHAQUE
+            # lecture, c'était 20 écritures disque par listing de la page
+            # Projets (profil du 24/09/2026) — et 20 occasions de le corrompre.
+            safe = "".join(c for c in data.get("name", "Projet") if c.isalnum() or c in " -_").strip() or "Projet"
+            if fname != f"{safe}.json" or os.path.isfile(os.path.join(path, "project.json")):
+                changed = True
+            if changed:
+                _save(data)  # renomme en {safe_name}.json et retire project.json
             return data
         except ValueError:
             corrupt.append(fpath)          # JSON vide ou tronqué

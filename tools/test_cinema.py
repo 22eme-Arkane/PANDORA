@@ -265,8 +265,11 @@ def refonte_interface():
         "Génération directe : « Lancer la file d'attente »"
     # Paramètres pleine largeur depuis le 2026-07-22 : la barre de défilement est
     # collée au bord droit ; le centrage (max 1360) vit DANS SettingsPage.
-    src_pages = inspect.getsource(PW.PandoraWindow._build_pages)
+    # Depuis la construction paresseuse (24/09/2026) la page Paramètres naît
+    # dans sa fabrique ; la pile reçoit chaque page via _on_page_built.
+    src_pages = inspect.getsource(PW.PandoraWindow._make_page_settings)
     assert "_settings_wrap" in src_pages, "page Paramètres absente de la pile"
+    assert "LazyPages" in inspect.getsource(PW.PandoraWindow._build_pages)
     from ui.page_settings import SettingsPage as _SP
     _sp_src = inspect.getsource(_SP.__init__)
     assert "setMaximumWidth(1360)" in _sp_src and "addStretch(1)" in _sp_src, \
@@ -4853,7 +4856,8 @@ def atelier_7_vues_trois_moteurs():
     assert isinstance(hub.tabs.widget(1), PM.PageDecorsMultiview), "onglet 2 = atelier"
     assert hasattr(hub, "refresh"), "la navigation appelle refresh() sur la page"
     import ui.pandora_window as PW
-    assert "DecorsHub()" in inspect.getsource(PW.PandoraWindow), \
+    _src_pages = inspect.getsource(PW.PandoraWindow._build_pages)
+    assert "DecorsHub" in _src_pages and "PageDecors" not in _src_pages, \
         "la navigation doit monter le hub, pas PageDecors directement"
 
     # 2) Angles Qwen — schéma CORRIGÉ SUR ESSAI RÉEL (2026-07-31, décor « Dojo
@@ -9403,6 +9407,44 @@ def aucun_widget_sans_parent_affiche_a_la_construction():
         i, j = code.find(start), code.find(end)
         assert 0 <= i < j, f"{mod} : bornes introuvables ({start!r} → {end!r})"
         assert forbidden not in code[i:j], f"{mod} : {forbidden} avant l'ajout à la mise en page"
+
+
+@test
+def pages_construites_a_la_premiere_demande():
+    """ui/lazy_pages : les pages d'une fenêtre ne sont construites qu'au
+    premier accès — `[]`, `get`, `in` construisent, itérer non ; les alias
+    partagent la page ; une clé inconnue n'est pas construite. Mesuré le
+    24/09/2026 : tout construire d'avance = 7 s + 3 s + 9 s à l'ouverture."""
+    from ui.lazy_pages import LazyPages
+    built, posed = [], []
+    def _mk(name):
+        def _f():
+            built.append(name)
+            return {"name": name}
+        return _f
+    pages = LazyPages({"a": _mk("a"), "b": _mk("b"), "c": _mk("c")},
+                      lambda k, p: posed.append(k), aliases={"a_bis": "a"})
+    assert built == [] and list(pages) == [], "rien n'est construit d'avance"
+    assert "a" in pages and "a_bis" in pages and "zzz" not in pages
+    assert built == [], "« in » ne construit pas"
+    assert pages["a"]["name"] == "a" and built == ["a"] and posed == ["a"]
+    assert pages["a_bis"] is pages["a"] and built == ["a"], "l'alias partage la page"
+    assert pages.get("b")["name"] == "b" and built == ["a", "b"]
+    assert pages.get("zzz") is None and built == ["a", "b"], "clé inconnue : rien"
+    assert list(pages) == ["a", "b"] and pages.is_built("c") is False
+    assert sorted(pages.keys_all()) == ["a", "a_bis", "b", "c"]
+    pages.build_all()
+    assert built == ["a", "b", "c"] and posed == ["a", "b", "c"]
+    pages.build_all()
+    assert built == ["a", "b", "c"], "jamais deux fois"
+    # Les deux fenêtres s'en servent ; la page d'accueil vient de la navigation initiale.
+    import ui.pandora_window as _PW
+    import live_window as _LW
+    for cls in (_PW.PandoraWindow, _LW.LiveWindow):
+        src = inspect.getsource(cls._build_pages)
+        assert "LazyPages(" in src and "self._stack.addWidget" not in src, cls.__name__
+        assert "self._stack.addWidget(page)" in inspect.getsource(cls._on_page_built)
+    assert '_navigate("scenario")' in inspect.getsource(_PW.PandoraWindow.__init__)
 
 
 if __name__ == "__main__":
