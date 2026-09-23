@@ -296,6 +296,14 @@ class SettingsPage(QScrollArea):
         lay.addWidget(self._comfy)
         lay.addWidget(_divider())
 
+        # ── Modules externes (24/09/2026) — état et installation de ce que
+        # PANDORA utilise sans l'embarquer : ComfyUI, H3 local, Ollama ──────
+        from ui.externals_section import ExternalsSection
+        lay.addWidget(_section("Modules externes"))
+        self._externals = ExternalsSection()
+        lay.addWidget(self._externals)
+        lay.addWidget(_divider())
+
         # ── Assistant IA (texte) — juste après l'Apparence (retour 2026-06-13) ─
         lay.addWidget(_section("Assistant IA"))
         _lbl_ai = QLabel(

@@ -238,6 +238,17 @@ class PageLiveSettings(QScrollArea):
         lay.addWidget(self._comfy)
         lay.addSpacing(28)
 
+        # ── Modules externes (24/09/2026, parité Cinéma) — état et installation
+        # de ce que PANDORA utilise sans l'embarquer : ComfyUI, H3 local, Ollama
+        from ui.externals_section import ExternalsSection
+        _ext_title = QLabel(translate("Modules externes"))
+        _ext_title.setStyleSheet(
+            f"color:{CP['accent']};font-size:11px;font-weight:800;letter-spacing:1px;background:transparent;")
+        lay.addWidget(_ext_title)
+        self._externals = ExternalsSection()
+        lay.addWidget(self._externals)
+        lay.addSpacing(28)
+
         # ── Section Clés API ────────────────────────────────────────────────────
         _api_head = QHBoxLayout()
         _api_head.setSpacing(10)

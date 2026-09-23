@@ -3180,6 +3180,12 @@ class TabT2V(QScrollArea):
             grid.addWidget(g, row, col)
         lay.addLayout(grid)
 
+        # ── Module externe du moteur (ComfyUI, H3 local) : bandeau non bloquant
+        # dès la sélection — « pas installé — PANDORA peut l'installer » ─────
+        from ui.external_banner import ExternalBanner
+        self._external_banner = ExternalBanner()
+        lay.addWidget(self._external_banner)
+
         # ── Banner compatibilité références (moteurs texte-seul) ───────────────
         self._ref_compat_banner = QLabel(
             "⚠  Ce moteur ne supporte pas les images de référence nativement. "
@@ -4581,6 +4587,11 @@ class TabT2V(QScrollArea):
         key = self._get_model()
         # Les durées offertes dépendent du moteur (30 s en 2.5).
         self._refresh_duration_options()
+        # Le bandeau n'existe qu'après la grille : le signal peut partir pendant
+        # la construction (défaut posé sur le combo).
+        _banner = getattr(self, "_external_banner", None)
+        if _banner is not None:
+            _banner.set_engine(key)
         fixed_res = key in _FIXED_RES_ENGINES
         self.cb_ratio.setEnabled(key not in _FIXED_RATIO_ENGINES)
         # Mise à jour des options de résolution selon le moteur

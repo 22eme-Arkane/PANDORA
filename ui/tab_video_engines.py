@@ -1228,6 +1228,11 @@ class TabVideoEngines(QWidget):
                     item.setForeground(_QBrush(_QColor(C['text_dim'])))
         self._engine_combo.currentIndexChanged.connect(self._on_engine_changed)
         lay.addWidget(self._engine_combo)
+        # Module externe du moteur (ComfyUI, H3 local) : bandeau non bloquant
+        # dès la sélection — « pas installé — PANDORA peut l'installer ».
+        from ui.external_banner import ExternalBanner
+        self._external_banner = ExternalBanner()
+        lay.addWidget(self._external_banner)
 
         # ── Prompt header : label + bouton améliorer à droite ─────────────────
         _prompt_hdr = QHBoxLayout()
@@ -1410,6 +1415,9 @@ class TabVideoEngines(QWidget):
     # ── Changement moteur ──────────────────────────────────────────────────────
 
     def _on_engine_changed(self, idx: int):
+        _banner = getattr(self, "_external_banner", None)
+        if _banner is not None:
+            _banner.set_engine(self._engine_combo.currentData() or "")
         # Chaque moteur a son propre formulaire (donc son propre champ prompt).
         # On reporte le prompt du moteur précédent vers le nouveau pour ne pas
         # « perdre » ce que l'utilisateur a écrit en changeant de moteur.

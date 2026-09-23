@@ -63,6 +63,18 @@ a second instead of forty.**
   billed per clip, not per second. Fixed, with a drift test.
 - **ComfyUI detection tolerates a cold GPU** — the first status call after a
   pause takes over a second; a running server no longer passes for absent.
+- **External modules: PANDORA installs what it does not ship.** Pick an engine
+  that needs ComfyUI, the local H3 server or Ollama and a banner tells you at
+  once what is missing; one window explains the steps and does the work with
+  a click — downloads the official ComfyUI Desktop or Ollama installer and
+  launches it, drops the five MiniMax H3 model files (~45 GB, resumable)
+  straight into ComfyUI's model folder, fetches the community sd.cpp project
+  and runs its setup, pulls an Ollama model, starts what is installed but not
+  running. Settings gets an « External modules » board with the state of
+  each. Nothing is downloaded or launched without a click.
+- **H3 generates from the Storyboard.** MiniMax H3 (fal, local sd.cpp,
+  ComfyUI) now appears in « Generate from storyboard » and in the Live
+  sequences, not only in the Engines tab.
 
 ---
 

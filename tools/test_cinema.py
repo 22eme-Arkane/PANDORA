@@ -9334,15 +9334,18 @@ def comfyui_moteur_nodal_et_journal_de_cout():
         tab.deleteLater()
     for mod in ("ui.page_settings", "ui.page_live_settings"):
         assert "ComfyRow" in inspect.getsource(importlib.import_module(mod)), f"{mod}: rangée ComfyUI absente"
+    # Depuis le 24/09/2026 la fenêtre ComfyUI est la fenêtre GÉNÉRIQUE des
+    # modules externes ouverte sur « comfyui » (voir modules_externes_*).
     from ui.dialog_comfy_install import ComfyInstallDialog
-    dsrc = inspect.getsource(ComfyInstallDialog)
-    assert "DOWNLOAD_URL" in dsrc and "desktop_installed" in dsrc
+    from ui.dialog_external import ExternalDialog
+    assert issubclass(ComfyInstallDialog, ExternalDialog) and hasattr(ComfyInstallDialog, "is_ready")
+    dsrc = inspect.getsource(ExternalDialog)
     # Lignes de CODE seulement : un commentaire qui cite le mot fait mordre le
     # test à vide (piège connu, mémoire « pièges des tests »).
     import re as _re
     _code_lines = [l.split("#", 1)[0] for l in dsrc.splitlines()]
     assert not any(_re.search(r"\blambda\b", l) for l in _code_lines), \
-        "dialog_comfy_install : fermeture anonyme dans le code (méthodes liées attendues)"
+        "dialog_external : fermeture anonyme dans le code (méthodes liées attendues)"
 
 
 @test
@@ -9485,6 +9488,119 @@ def h3_et_comfy_generables_depuis_le_storyboard():
         "avec une image de départ : gabarit I2V"
     # Sans serveur, la fenêtre d'installation est proposée depuis ce Studio aussi.
     assert "ComfyInstallDialog" in _insp.getsource(_T), "guidage ComfyUI absent du Studio"
+
+
+@test
+def modules_externes_registre_fenetre_bandeau_et_telechargement():
+    """Chantier du 24/09/2026 (demande Matthieu) : tout ce qui est externe à
+    PANDORA — ComfyUI Desktop et ses modèles H3, le serveur H3 local, Ollama —
+    passe par UN registre (core/externals), UNE fenêtre (ui/dialog_external),
+    un bandeau sous le choix du moteur et une section des Paramètres ; PANDORA
+    télécharge et lance lui-même ce qu'il peut (api/external_install), avec
+    reprise des téléchargements interrompus."""
+    import tempfile as _tf
+    import threading as _th
+    import http.server as _hs
+    import importlib
+    from core import externals as _ex
+    from api import external_install as _ei
+
+    # 1. Registre : chaque module a tout ce que la fenêtre affiche.
+    assert set(_ex.EXTERNALS) == {"comfyui", "h3_local", "ollama"}
+    for ext in _ex.EXTERNALS.values():
+        assert ext.name and ext.purpose and ext.steps and ext.download_url.startswith("https://") \
+            and ext.docs_url.startswith("https://"), ext.key
+    for k in ("comfy", "comfy_h3_t2v", "comfy_custom"):
+        assert _ex.for_engine(k).key == "comfyui", k
+    for k in ("minimax-h3-local", "h3local_i2v"):
+        assert _ex.for_engine(k).key == "h3_local", k
+    assert _ex.for_engine("ollama").key == "ollama" and _ex.for_engine("seedance-2.0") is None
+    assert _ex.EXTERNALS["comfyui"].license_note and _ex.EXTERNALS["h3_local"].license_note, \
+        "la licence H3 (territoires exclus) doit être affichée pour les deux voies H3"
+
+    # 2. Modèles H3 : lus dans les gabarits officiels (jamais une liste à la main).
+    req = _ex.h3_models_required()
+    assert len(req) == 5, [m["name"] for m in req]
+    assert all(m["url"].startswith("https://huggingface.co/") for m in req)
+    assert {m["directory"] for m in req} == {"vae", "diffusion_models", "text_encoders", "loras"}
+    with _tf.TemporaryDirectory() as td:
+        for m in req[:2]:
+            os.makedirs(os.path.join(td, m["directory"]), exist_ok=True)
+            with open(os.path.join(td, m["directory"], m["name"]), "wb") as f:
+                f.write(b"x")
+        os.makedirs(os.path.join(td, req[2]["directory"]), exist_ok=True)
+        with open(os.path.join(td, req[2]["directory"], req[2]["name"]) + ".part", "wb") as f:
+            f.write(b"x")                                   # en cours → absent
+        assert len(_ex.h3_models_missing(td)) == 3
+    assert len(_ex.h3_models_missing("")) == 5, "sans dossier connu, tout manque"
+    assert isinstance(_ex.comfy_models_dir(), str) and isinstance(_ex.externals_dir(), str)
+
+    # 3. Téléchargement reprenable : un .part de 300 octets reprend avec Range.
+    payload = bytes(range(256)) * 40                       # 10 240 octets
+    seen = {}
+
+    class _H(_hs.BaseHTTPRequestHandler):
+        def do_GET(self):
+            rng = self.headers.get("Range")
+            seen["range"] = rng
+            start = int(rng.split("=")[1].split("-")[0]) if rng else 0
+            body = payload[start:]
+            self.send_response(206 if rng else 200)
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+
+        def log_message(self, *a):
+            pass
+
+    srv = _hs.HTTPServer(("127.0.0.1", 0), _H)
+    t = _th.Thread(target=srv.serve_forever, daemon=True)
+    t.start()
+    try:
+        with _tf.TemporaryDirectory() as td:
+            dest = os.path.join(td, "m.bin")
+            with open(dest + ".part", "wb") as f:
+                f.write(payload[:300])
+            ticks = []
+            out = _ei.download(f"http://127.0.0.1:{srv.server_port}/m.bin", dest,
+                               progress=lambda d, tot: ticks.append((d, tot)))
+            assert seen["range"] == "bytes=300-", seen
+            with open(out, "rb") as f:
+                assert f.read() == payload, "reprise : contenu final exact"
+            assert not os.path.exists(dest + ".part") and ticks and ticks[-1][0] == len(payload)
+    finally:
+        srv.shutdown()
+
+    # 4. Fenêtre, bandeau, section : constructibles hors réseau (état fourni),
+    #    méthodes liées, et présents là où on choisit un moteur.
+    from ui.dialog_external import ExternalDialog
+    from ui.dialog_comfy_install import ComfyInstallDialog
+    st = _ex.Status(installed=False, running=False, detail="test")
+    for key in _ex.EXTERNALS:
+        dlg = ExternalDialog(key, status=st)
+        assert dlg.is_ready() is False and dlg._b_install.isVisible() is False  # caché tant que non affiché
+        assert dlg._b_install.isVisibleTo(dlg), f"{key} : « Installer automatiquement » attendu quand rien n'est installé"
+        dlg.deleteLater()
+    dlg = ComfyInstallDialog(status=_ex.Status(installed=True, running=True, version="0.35.1", missing=["x"]))
+    assert dlg.is_ready() and dlg._b_models.isVisibleTo(dlg) and not dlg._b_install.isVisibleTo(dlg)
+    dlg.deleteLater()
+    from ui.external_banner import ExternalBanner
+    b = ExternalBanner()
+    b.set_engine("seedance-2.0")
+    assert b.isHidden() and b._key == "", "aucun bandeau pour un moteur fal"
+    b.deleteLater()
+    for mod in ("ui.tab_t2v", "ui.tab_t2v_live", "ui.tab_video_engines", "ui.tab_video_engines_live"):
+        src = inspect.getsource(importlib.import_module(mod))
+        assert "ExternalBanner" in src and "set_engine(" in src, f"{mod} : bandeau absent"
+    for mod in ("ui.page_settings", "ui.page_live_settings"):
+        assert "ExternalsSection" in inspect.getsource(importlib.import_module(mod)), f"{mod} : section absente"
+    # Le worker n'exécute jamais rien sans clic : ses actions sont nommées, pas devinées.
+    for name in ("_comfyui_install", "_comfyui_models", "_comfyui_launch", "_ollama_install",
+                 "_ollama_pull", "_ollama_launch", "_h3_local_install", "_h3_local_launch"):
+        assert hasattr(_ei.ExternalInstallWorker, name), name
+    # Lignes de CODE seulement (le commentaire de closeEvent cite le mot).
+    _code = "\n".join(l.split("#", 1)[0] for l in inspect.getsource(ExternalDialog).splitlines())
+    assert "terminate(" not in _code, "jamais QThread.terminate()"
 
 
 if __name__ == "__main__":

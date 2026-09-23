@@ -4006,6 +4006,61 @@ _FR_TO_EN: dict[str, str] = {
     "Plus tard":                    "Later",
     "Guide H3 (docs.comfy.org)":    "H3 guide (docs.comfy.org)",
     "Télécharger ComfyUI Desktop":  "Download ComfyUI Desktop",
+    # ── Modules externes (24/09/2026) ──────────────────────────────────────
+    "Modules externes": "External modules",
+    "installation": "installation",
+    "Installer automatiquement": "Install automatically",
+    "Télécharger les modèles H3": "Download the H3 models",
+    "Télécharger le modèle": "Download the model",
+    "Lancer": "Launch",
+    "Lancement…": "Launching…",
+    "Annuler le téléchargement": "Cancel the download",
+    "Page de téléchargement": "Download page",
+    "Guide": "Guide",
+    "Vérifier à nouveau": "Check again",
+    "Vérification…": "Checking…",
+    "Non vérifié": "Not checked",
+    "Ouvrir…": "Open…",
+    "Installer / Guide…": "Install / Guide…",
+    "Lancer / Guide…": "Launch / Guide…",
+    "Télécharger / Guide…": "Download / Guide…",
+    "Adresse du serveur": "Server address",
+    "vide = détection automatique": "empty = automatic detection",
+    "PANDORA peut l'installer.": "PANDORA can install it.",
+    "n'est pas installé sur cet ordinateur": "is not installed on this computer",
+    "est installé mais ne tourne pas": "is installed but not running",
+    "tourne — il manque des fichiers de modèle": "is running — model files are missing",
+    "est prêt": "is ready",
+    "Téléchargement en cours — vous pouvez fermer cette fenêtre, il reprendra là où il s'est arrêté.":
+        "Download in progress — you can close this window, it will resume where it stopped.",
+    "Annulé — le téléchargement reprendra là où il s'est arrêté.":
+        "Cancelled — the download will resume where it stopped.",
+    "Ce que PANDORA utilise mais n'embarque pas : installé chez vous, sous vos yeux. Rien n'est téléchargé ni lancé sans un clic.":
+        "What PANDORA uses but does not ship: installed on your machine, in plain sight. Nothing is downloaded or launched without a click.",
+    "Le rendu vidéo LOCAL par défaut de PANDORA : MiniMax H3 sur votre carte graphique, et tout workflow ComfyUI personnalisé. 0 $ par clip.":
+        "PANDORA's default LOCAL video renderer: MiniMax H3 on your own graphics card, and any custom ComfyUI workflow. $0 per clip.",
+    "MiniMax H3 sans ComfyUI, sur une carte de 8 Go : un binaire CUDA et des poids GGUF, servis sur le port 1234 (projet communautaire minimax-h3-local). 0 $ par clip.":
+        "MiniMax H3 without ComfyUI, on an 8 GB card: one CUDA binary and GGUF weights served on port 1234 (community project minimax-h3-local). $0 per clip.",
+    "Une IA texte qui tourne sur votre machine (assistant, analyses) : aucune clé, aucun crédit, vos textes ne quittent pas l'ordinateur.":
+        "A text AI running on your machine (assistant, analyses): no key, no credits, your texts never leave the computer.",
+    "Installer ComfyUI Desktop (installeur officiel, ~180 Mo) et le lancer une première fois jusqu'à ce que son interface s'affiche.":
+        "Install ComfyUI Desktop (official installer, ~180 MB) and launch it once, until its interface shows up.",
+    "Laisser ComfyUI Desktop ouvert pendant les rendus, puis « Tester » ici.":
+        "Keep ComfyUI Desktop open during renders, then « Test » here.",
+    "PANDORA télécharge les scripts du projet dans son dossier de modules.":
+        "PANDORA downloads the project's scripts into its modules folder.",
+    "« Lancer le serveur » démarre start_server.ps1 (port 1234) ; puis « Tester ».":
+        "« Launch the server » starts start_server.ps1 (port 1234); then « Test ».",
+    "Installer Ollama (installeur officiel) — il démarre ensuite tout seul.":
+        "Install Ollama (official installer) — it then starts on its own.",
+    "Choisir « Ollama local » dans l'Assistant IA des Paramètres.":
+        "Pick « Ollama local » in the AI Assistant settings.",
+    "ComfyUI Desktop n'est pas installé sur cet ordinateur.": "ComfyUI Desktop is not installed on this computer.",
+    "ComfyUI Desktop est installé mais ne tourne pas.": "ComfyUI Desktop is installed but not running.",
+    "Serveur MiniMax H3 local en marche.": "Local MiniMax H3 server running.",
+    "Projet installé, serveur arrêté — « Lancer le serveur ».": "Project installed, server stopped — « Launch the server ».",
+    "Ollama n'est pas installé sur cet ordinateur.": "Ollama is not installed on this computer.",
+    "Ollama est installé mais ne tourne pas.": "Ollama is installed but not running.",
     "version trop ancienne pour H3 (0.30.0 minimum) — mettez ComfyUI à jour":
         "too old for H3 (0.30.0 minimum) — update ComfyUI",
     "trop ancien pour H3 (0.30.0 minimum)": "too old for H3 (0.30.0 minimum)",
