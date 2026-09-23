@@ -9091,6 +9091,26 @@ def comfyui_moteur_nodal_et_journal_de_cout():
         ["execution_error", {"exception_message": "CUDA out of memory"}]]}})
     assert st == "error" and "CUDA" in msg
     assert cf.history_status({})[0] == "running"
+    # discover() à deux temps (23/09/2026) : un serveur vivant mais FROID (le
+    # premier /system_stats réveille CUDA, ~1,2 s mesuré) doit être trouvé, et
+    # un port vide écarté sans requête. Simulation : 8188 « écoute » mais son
+    # ping ne réussit qu'avec un délai >= 2 s ; 8000 est vide.
+    _calls = []
+    def _fake_port_open(url, timeout=0.5):
+        return url.endswith(":8188")
+    def _fake_ping(url="", timeout=2.0):
+        _calls.append((url, timeout))
+        return (timeout >= 2.0 and url.endswith(":8188")), "", {}
+    _orig_po, _orig_ping = cf._port_open, cf.ping
+    cf._port_open, cf.ping = _fake_port_open, _fake_ping
+    try:
+        assert cf.discover({}) == "http://127.0.0.1:8188", "serveur froid non trouvé (délai par défaut trop court)"
+        assert _calls and all(u.endswith(":8188") for u, _t in _calls), f"le port vide (8000) ne doit pas être sondé : {_calls}"
+        assert cf.discover({}, timeout=1.0) == "", "avec 1 s le serveur froid rate : c'est le bug d'origine, épinglé"
+        assert cf.discover({cf.CONFIG_KEY: "127.0.0.1:8188"}) == "http://127.0.0.1:8188", "l'adresse réglée est normalisée et sondée d'abord"
+    finally:
+        cf._port_open, cf.ping = _orig_po, _orig_ping
+    assert cf._port_open("http://127.0.0.1:1", timeout=0.3) is False, "port fermé → False sans lever"
     outs = cf.outputs_of({"outputs": {"9": {"images": [{"filename": "a.png", "type": "output"}]},
                                       "12": {"gifs": [{"filename": "clip.mp4", "subfolder": "video", "type": "output"}]}}})
     assert outs[0]["filename"] == "clip.mp4", "la vidéo passe avant l'aperçu image"

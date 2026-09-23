@@ -103,15 +103,41 @@ def ping(url: str = "", timeout: float = 2.0) -> tuple[bool, str, dict]:
         return False, f"ComfyUI injoignable sur {base} — {e.__class__.__name__}", {"url": base}
 
 
-def discover(cfg: dict | None = None, timeout: float = 1.0) -> str:
+def _port_open(url: str, timeout: float = 0.5) -> bool:
+    """Quelque chose écoute-t-il à cette adresse ? Un simple connect TCP :
+    rien à voir avec ComfyUI, mais il écarte en une demi-seconde les ports
+    où il n'y a personne, sans coûter le prix d'une vraie requête."""
+    import socket
+    from urllib.parse import urlsplit
+    p = urlsplit(normalize_url(url))
+    host = p.hostname or "127.0.0.1"
+    port = p.port or (443 if p.scheme == "https" else 80)
+    try:
+        socket.create_connection((host, port), timeout=timeout).close()
+        return True
+    except OSError:
+        return False
+
+
+def discover(cfg: dict | None = None, timeout: float = 8.0) -> str:
     """URL d'un ComfyUI vivant : l'adresse réglée d'abord, puis les candidates.
-    Chaîne vide si rien ne répond."""
+    Chaîne vide si rien ne répond.
+
+    ⚠ Mesuré le 23/09/2026 : le PREMIER `/system_stats` après une période
+    d'inactivité met ~1,2 s (réveil CUDA — l'endpoint interroge les
+    périphériques), les suivants ~10 ms. Avec 1 s de délai, un serveur
+    vivant mais froid passait pour absent : la fenêtre d'installation
+    s'ouvrait alors que ComfyUI tournait, et le deuxième clic marchait.
+    D'où deux temps : un connect TCP d'une demi-seconde écarte les ports
+    vides, puis `/system_stats` a tout le délai qu'il faut."""
     tried = []
     configured = normalize_url((cfg if cfg is not None else load_config()).get(CONFIG_KEY, ""))
     for u in ([configured] if configured else []) + list(CANDIDATE_URLS):
         if u in tried:
             continue
         tried.append(u)
+        if not _port_open(u):
+            continue
         if ping(u, timeout)[0]:
             return u
     return ""
