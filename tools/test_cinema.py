@@ -9450,5 +9450,42 @@ def pages_construites_a_la_premiere_demande():
     assert '_navigate("scenario")' in inspect.getsource(_PW.PandoraWindow.__init__)
 
 
+@test
+def h3_et_comfy_generables_depuis_le_storyboard():
+    """24/09/2026 (constat Matthieu) : MiniMax H3, H3 local et ComfyUI
+    n'apparaissaient pas dans « Moteur de génération » de « Générer depuis le
+    storyboard » — seul l'onglet Moteurs les avait. Le filtre du combo est
+    core/engine_caps.ENGINE_CAPS ; le routage, _make_ext_worker."""
+    import inspect as _insp
+    from core import engine_caps as _caps, engine_grammar as _gr, target_engine as _te
+    import ui.tab_t2v as _T
+    keys = ("minimax-h3", "minimax-h3-max", "minimax-h3-max-turbo", "comfy", "minimax-h3-local")
+    for k in keys:
+        assert _caps.workflow_compatible(k), f"{k} : absent d'ENGINE_CAPS → filtré du combo"
+        assert k in [e[1] for e in _T._ENGINES], f"{k} absent de la liste du Studio"
+        assert k in _T._ENGINE_RESOLUTIONS and k in _T._TEXT_FALLBACK_ENGINES, k
+        assert _gr.grammar_for(k) == "sentence", k
+    listed = [k for _l, k in _caps.sequence_engines(_T._ENGINES, use_keyframes=False)]
+    assert all(k in listed for k in keys), listed
+    assert "VERBATIM" in _te.briefing("comfy"), "consigne H3 (prompt envoyé tel quel) pour ComfyUI"
+    # Routage : le bon worker, le bon mode, le bon gabarit ComfyUI.
+    from api.video_engines import H3Worker, H3MaxWorker, H3MaxTurboWorker
+    from api.h3_local import H3LocalWorker
+    from api.comfy import ComfyWorker
+    base = {"prompt": "x", "resolution": "768p", "aspect_ratio": "16:9", "duration": 5}
+    assert isinstance(_T._make_ext_worker("minimax-h3", base), H3Worker)
+    assert isinstance(_T._make_ext_worker("minimax-h3-max", base), H3MaxWorker)
+    assert isinstance(_T._make_ext_worker("minimax-h3-max-turbo", base), H3MaxTurboWorker)
+    w = _T._make_ext_worker("minimax-h3-local", base)
+    assert isinstance(w, H3LocalWorker) and w.params["mode"] == "t2v"
+    w = _T._make_ext_worker("comfy", base)
+    assert isinstance(w, ComfyWorker) and w.params["workflow_path"].endswith("minimax_h3_t2v.json")
+    w = _T._make_ext_worker("comfy", {**base, "image_path": "C:/x/mood.png"})
+    assert w.params["mode"] == "i2v" and w.params["workflow_path"].endswith("minimax_h3_i2v.json"), \
+        "avec une image de départ : gabarit I2V"
+    # Sans serveur, la fenêtre d'installation est proposée depuis ce Studio aussi.
+    assert "ComfyInstallDialog" in _insp.getsource(_T), "guidage ComfyUI absent du Studio"
+
+
 if __name__ == "__main__":
     sys.exit(main())

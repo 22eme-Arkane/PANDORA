@@ -35,6 +35,18 @@ ENGINE_CAPS = {
     "happy-horse-1.0":   {"i2v": True,  "end_frame": False, "refs": "full"},
     "pixverse-v6":       {"i2v": True,  "end_frame": False, "refs": "style"},
     "ltx-2":             {"i2v": True,  "end_frame": False, "refs": "none"},
+    # MiniMax H3 / Hailuo 3.0 sur fal (13/09/2026) : image de départ ET de fin
+    # (_H3FalWorker.END_FRAME). La référence-vidéo existe chez fal mais le
+    # Studio ne l'envoie pas encore → refs "none" : fiches décrites en texte.
+    "minimax-h3":           {"i2v": True,  "end_frame": True,  "refs": "none"},
+    "minimax-h3-max":       {"i2v": True,  "end_frame": True,  "refs": "none"},
+    "minimax-h3-max-turbo": {"i2v": True,  "end_frame": True,  "refs": "none"},
+    # H3 sur la machine de l'utilisateur : ComfyUI (first_frame + LoadImage
+    # synthétique pour last_frame) et sd.cpp (init_image / end_image). 0 $.
+    # Absents d'ici, ils n'apparaissaient PAS dans « Générer depuis le
+    # storyboard » (constat Matthieu, 24/09/2026) : ENGINE_CAPS est le filtre.
+    "comfy":                {"i2v": True,  "end_frame": True,  "refs": "none"},
+    "minimax-h3-local":     {"i2v": True,  "end_frame": True,  "refs": "none"},
     # ÉCARTÉS du workflow séquences : text-to-video pur dans notre intégration
     # (aucune image acceptée → ni raccords ni keyframes ni façade possibles).
     "veo-3.1":           {"i2v": False, "end_frame": False, "refs": "none"},

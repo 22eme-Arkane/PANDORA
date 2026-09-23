@@ -7336,5 +7336,34 @@ def forme_du_prompt_selecteur_live():
         "grammar_for doit rester le point d'entrée UNIQUE de la forme"
 
 
+@test
+def h3_et_comfy_generables_depuis_les_sequences_live():
+    """Miroir Live du constat du 24/09/2026 : MiniMax H3 (fal, local sd.cpp,
+    ComfyUI) doivent apparaître dans « Moteur de génération » des Séquences
+    Live et être routés vers leurs workers — le filtre est ENGINE_CAPS."""
+    from core import engine_caps as _caps, engine_grammar as _gr
+    import ui.tab_t2v_live as _T
+    keys = ("minimax-h3", "minimax-h3-max", "minimax-h3-max-turbo", "comfy", "minimax-h3-local")
+    for k in keys:
+        assert _caps.workflow_compatible(k), f"{k} : absent d'ENGINE_CAPS → filtré du combo"
+        assert k in [e[1] for e in _T._ENGINES], f"{k} absent de la liste du Studio Live"
+        assert k in _T._ENGINE_RESOLUTIONS and k in _T._TEXT_FALLBACK_ENGINES, k
+        assert _gr.grammar_for(k) == "sentence", k
+    listed = [k for _l, k in _caps.sequence_engines(_T._ENGINES)]
+    assert all(k in listed for k in keys), listed
+    from api.video_engines import H3Worker, H3MaxWorker, H3MaxTurboWorker
+    from api.h3_local import H3LocalWorker
+    from api.comfy import ComfyWorker
+    base = {"prompt": "x", "resolution": "768p", "aspect_ratio": "16:9", "duration": 5}
+    assert isinstance(_T._make_ext_worker("minimax-h3", base), H3Worker)
+    assert isinstance(_T._make_ext_worker("minimax-h3-max", base), H3MaxWorker)
+    assert isinstance(_T._make_ext_worker("minimax-h3-max-turbo", base), H3MaxTurboWorker)
+    assert isinstance(_T._make_ext_worker("minimax-h3-local", base), H3LocalWorker)
+    w = _T._make_ext_worker("comfy", {**base, "image_path": "C:/x/mood.png"})
+    assert isinstance(w, ComfyWorker) and w.params["mode"] == "i2v" \
+        and w.params["workflow_path"].endswith("minimax_h3_i2v.json")
+    assert "ComfyInstallDialog" in inspect.getsource(_T), "guidage ComfyUI absent du Studio Live"
+
+
 if __name__ == "__main__":
     sys.exit(main())

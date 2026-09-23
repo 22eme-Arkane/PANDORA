@@ -36,6 +36,15 @@ _ENGINES = [
     # référence. Brouillon $0.06/s pour trier avant d'affiner.
     ("Flux 3  (audio natif · 5-20 s)",  "flux-3"),
     ("Flux 3 Brouillon  (~$0.06/s)",    "flux-3-draft"),
+    # MiniMax H3 / Hailuo 3.0 (fal 2026-09-13) : audio natif, 5-15 s, trois
+    # paliers. Et H3 SUR VOTRE MACHINE : ComfyUI (rendu local par défaut) ou
+    # le serveur sd.cpp pour 8 Go — 0 $. Les fiches sont décrites en texte
+    # (pas de référence-vidéo depuis le Studio pour l'instant).
+    ("MiniMax H3  (audio · 5-15 s)",            "minimax-h3"),
+    ("MiniMax H3 Max  (1080p)",                 "minimax-h3-max"),
+    ("MiniMax H3 Max Turbo  (rapide)",          "minimax-h3-max-turbo"),
+    ("ComfyUI · MiniMax H3 local  (0 $)",       "comfy"),
+    ("MiniMax H3 local · sd.cpp  (0 $ · 8 Go)", "minimax-h3-local"),
     ("Happy Horse 1.1  (prochainement)", "happy-horse-1.0"), # n°1 ELO — intégration en cours
     ("Kling v3 Pro  (prochainement)",    "kling-v3-pro"),    # n°3 ELO — 1080p + audio natif
     ("Kling O3 4K  (prochainement)",     "kling-o3-4k"),     # Variante 4K Kling
@@ -52,7 +61,11 @@ _FIXED_RATIO_ENGINES = {"veo-3.1", "kling-v3-pro", "kling-o3-4k"}
 _TEXT_FALLBACK_ENGINES = {"kling-v3-pro", "kling-o3-4k", "veo-3.1", "sora-2",
                           # Flux 3 : aucun mécanisme de références visuelles →
                           # les fiches sont DÉCRITES en texte, jamais perdues.
-                          "flux-3", "flux-3-draft"}
+                          "flux-3", "flux-3-draft",
+                          # H3 : la référence-vidéo n'est pas encore envoyée
+                          # depuis le Studio ; local et ComfyUI n'en ont pas.
+                          "minimax-h3", "minimax-h3-max", "minimax-h3-max-turbo",
+                          "minimax-h3-local", "comfy"}
 _ENGINE_RES_FORCED   = {
     "veo-3.1":      "1080p",
     "kling-v3-pro": "1080p",
@@ -78,6 +91,16 @@ _ENGINE_RESOLUTIONS = {
     "sora-2":            [("1080p", "1080p")],
     "pixverse-v6":       [("1080p  (~$0.115/s)", "1080p"), ("720p  (~$0.075/s)", "720p"), ("480p  (~$0.025/s)", "480p")],
     "happy-horse-1.0":   [("1080p  (~$0.28/s)", "1080p"),  ("720p  (~$0.14/s)", "720p")],
+    # MiniMax H3 (tarif plein de core/h3_family) : 2K/4K = agrandissement.
+    "minimax-h3":           [("768p  (~$0.06/s)", "768p"), ("480p  (~$0.05/s)", "480p"),
+                             ("2K  (agrandi · ~$0.13/s)", "2k"), ("4K  (agrandi · ~$0.16/s)", "4k")],
+    "minimax-h3-max":       [("768p  (~$0.08/s)", "768p"), ("1080p  (~$0.16/s)", "1080p"), ("480p  (~$0.05/s)", "480p")],
+    "minimax-h3-max-turbo": [("768p  (~$0.04/s)", "768p"), ("1080p  (~$0.08/s)", "1080p"), ("480p  (~$0.025/s)", "480p")],
+    # ComfyUI : 480p = le défaut du gabarit officiel (0,4 MP) ; 768p natif mais 2,5× plus lourd.
+    "comfy":                [("480p  (défaut officiel · 8 Go)", "480p"), ("768p  (natif · plus de VRAM)", "768p")],
+    # sd.cpp : la « résolution » est un préréglage (petit côté × pas).
+    "minimax-h3-local":     [("Rapide — 384×672 · ~1,5 min pour 2,3 s", "rapide"),
+                             ("Qualité — 768×1344 · ~28 min pour 2,3 s", "qualite")],
 }
 # Résolution par défaut par moteur (sinon = 1er item du menu). Seedance : 720p par
 # défaut même si le 4K est désormais en tête (Matthieu sort rarement en 1080p/4K).
@@ -90,7 +113,7 @@ def _make_ext_worker(model: str, params: dict):
     from api.video_engines import (
         Veo3Worker, KlingWorker, KlingO3Worker,
         HappyHorseWorker, PixVerseV6Worker, Sora2Worker,
-        Flux3Worker,
+        Flux3Worker, H3Worker, H3MaxWorker, H3MaxTurboWorker,
     )
     p = dict(params)
     p.setdefault("mode", "t2v")
@@ -98,7 +121,24 @@ def _make_ext_worker(model: str, params: dict):
     # $0.06/s (720p), jeton d'affinage conservé dans le résultat.
     if model == "flux-3-draft":
         p["draft"] = True
+    # H3 (fal, sd.cpp, ComfyUI) : le mode suit la présence d'une image de
+    # départ (raccord i2v) — ces workers lisent params["mode"] pour envoyer ou
+    # non l'image, et ComfyUI choisit en plus son gabarit officiel (T2V/I2V).
+    if model in ("minimax-h3", "minimax-h3-max", "minimax-h3-max-turbo",
+                 "minimax-h3-local", "comfy"):
+        p["mode"] = "i2v" if p.get("image_path") else "t2v"
+    if model == "comfy":
+        from core import comfy_h3 as _h3c
+        from api.comfy import ComfyWorker
+        _h3c.prepare_params(p, "comfy_h3_i2v" if p["mode"] == "i2v" else "comfy_h3_t2v")
+        return ComfyWorker(p)
+    if model == "minimax-h3-local":
+        from api.h3_local import H3LocalWorker
+        return H3LocalWorker(p)
     mapping = {
+        "minimax-h3":           H3Worker,
+        "minimax-h3-max":       H3MaxWorker,
+        "minimax-h3-max-turbo": H3MaxTurboWorker,
         "veo-3.1":         Veo3Worker,
         "kling-v3-pro":    KlingWorker,
         "kling-o3-4k":     KlingO3Worker,
@@ -5278,6 +5318,17 @@ class TabT2V(QScrollArea):
         self.progress.setVisible(True)
 
         _model_key = self._get_model()
+        if _model_key == "comfy":
+            # Sans serveur vivant, on GUIDE (fenêtre d'installation) au lieu
+            # d'échouer dans un thread — même contrat que l'onglet Moteurs.
+            from core import comfy as _cf
+            if not _cf.discover():
+                from ui.dialog_comfy_install import ComfyInstallDialog
+                _dlg = ComfyInstallDialog(self)
+                _dlg.exec()
+                if not _dlg.is_ready():
+                    self.on_failed("ComfyUI injoignable : lancez ComfyUI Desktop, puis relancez.")
+                    return
         if _model_key in _SEEDANCE_ENGINES:
             self._worker = GenerationWorker(params)
             self._worker.finished.connect(self.on_finished)

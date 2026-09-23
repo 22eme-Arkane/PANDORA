@@ -63,6 +63,7 @@ _GRAMMAR_BY_ENGINE = {
     # réécriture serveur : le prompt part tel quel, d'où l'importance de la
     # forme « sentence » ici plus qu'ailleurs.
     "minimax-h3-local":     "sentence",
+    "comfy":                "sentence",   # ComfyUI · MiniMax H3 (gabarits officiels)
 }
 
 GRAMMAR_LABELS = {

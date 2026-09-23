@@ -3981,6 +3981,8 @@ _FR_TO_EN: dict[str, str] = {
     "H3 local · première / dernière image · 0 $": "Local H3 · first / last frame · $0",
     "Rapide — 384×672 · ~1,5 min pour 2,3 s":   "Fast — 384×672 · ~1.5 min per 2.3 s",
     "Qualité — 768×1344 · ~28 min pour 2,3 s":  "Quality — 768×1344 · ~28 min per 2.3 s",
+    "2K  (agrandi · ~$0.13/s)": "2K  (upscaled · ~$0.13/s)",
+    "4K  (agrandi · ~$0.16/s)": "4K  (upscaled · ~$0.16/s)",
     # ── ComfyUI (13/09/2026) ──────────────────────────────────────────────────
     "ComfyUI":                      "ComfyUI",
     "ComfyUI — installation":       "ComfyUI — setup",

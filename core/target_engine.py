@@ -177,7 +177,9 @@ def briefing(engine_key: str | None = None) -> str:
         pass
     try:
         from core import h3_family as _h3
-        if _h3.is_h3(key):
+        # « comfy » = MiniMax H3 sur ComfyUI (gabarits officiels) : même modèle,
+        # même consigne — et pas de réécriture du prompt côté serveur.
+        if _h3.is_h3(key) or key == "comfy":
             out.append(
                 f"Shot durations must be between {_h3.DURATION_MIN} and "
                 f"{_h3.DURATION_MAX} seconds.")
@@ -194,7 +196,7 @@ def briefing(engine_key: str | None = None) -> str:
                 "Audio is generated natively (stereo): end each prompt with a "
                 "short sound clause; name who speaks any line of dialogue."
             )
-            if key == "minimax-h3-local":
+            if key in ("minimax-h3-local", "comfy"):
                 out.append(
                     "The prompt is sent VERBATIM to a local model with no "
                     "server-side rewriting: be complete and explicit, do not "
