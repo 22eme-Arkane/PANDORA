@@ -859,6 +859,12 @@ class PandoraWindow(QMainWindow):
             return
 
         self._current_nav = key   # mémorisé pour le rafraîchissement au retour de focus
+        # Une page construite par CETTE navigation reflète déjà le disque : la
+        # rafraîchir dans la foulée refaisait tout le travail (le Storyboard
+        # rendait son tableau deux fois à la première visite — profil du
+        # 24/09/2026, 2,7 s sur FIGHTER). Le Live garde son refresh : il
+        # bascule l'espace de noms du storyboard APRÈS la construction.
+        fresh = not self._pages.is_built(key)
         page = self._pages.get(key)
         if page:
             # Paramètres vit dans son conteneur centré
@@ -866,7 +872,7 @@ class PandoraWindow(QMainWindow):
                 self._settings_wrap if key == "settings" else page)
             if extra and hasattr(page, "open_version"):
                 page.open_version(extra)
-            else:
+            elif not fresh:
                 self._refresh_page(page)
             if get_lang() != "fr":
                 retranslate_widget(page)
