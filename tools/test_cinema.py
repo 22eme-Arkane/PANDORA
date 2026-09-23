@@ -147,7 +147,10 @@ def edition_cinema_only():
     # dans « Coût du projet », voix du Doublage réparées (3 moteurs sur 7
     # étaient rejetés par fal) + Voice Changer + écoute des voix.
     from core.version import VERSION
-    assert VERSION.split("-")[0] == "2.3.0", f"version attendue 2.3.0[-suffixe], lue {VERSION}"
+    # Build 2.4.0 (2026-09-24) : ComfyUI comme moteur et rendu local par défaut,
+    # MiniMax H3 (fal, local sd.cpp, ComfyUI), ouverture de projet 46 s → 0,4 s,
+    # plus de fenêtres parasites, descripteur de projet atomique.
+    assert VERSION.split("-")[0] == "2.4.0", f"version attendue 2.4.0[-suffixe], lue {VERSION}"
     # ── UN SEUL numéro de version dans tout le produit ────────────────────────
     # Chaque endroit qui recopie le numéro à la main finit par diverger : la 2.0.0
     # est partie en build avec une charte d'utilisation estampillée 1.3.5, un .app

@@ -18,13 +18,51 @@
 
 ## Download
 
-**[⬇ Download PANDORA v2.3.0 for Windows](https://github.com/22eme-Arkane/PANDORA/releases/download/v2.3.0/PANDORA_Setup_2.3.0.exe)**
+**[⬇ Download PANDORA v2.4.0 for Windows](https://github.com/22eme-Arkane/PANDORA/releases/download/v2.4.0/PANDORA_Setup_2.4.0.exe)**
 
-**[⬇ Download PANDORA v2.3.0 for macOS](https://github.com/22eme-Arkane/PANDORA/releases/download/v2.3.0/PANDORA_2.3.0.dmg)** *(Apple Silicon — see [Installation](#installation) for the first launch)*
+**[⬇ Download PANDORA v2.4.0 for macOS](https://github.com/22eme-Arkane/PANDORA/releases/download/v2.4.0/PANDORA_2.4.0.dmg)** *(Apple Silicon — see [Installation](#installation) for the first launch)*
 
 All versions: [Releases](../../releases)
 
 🌐 **Official 22eme ARKANE website: [22eme-arkane.com](https://22eme-arkane.com)**
+
+---
+
+## What's new in v2.4.0
+
+**Your own machine becomes a render engine — and a project now opens in under
+a second instead of forty.**
+
+- **ComfyUI as a render engine, and the default local one.** Three engines join
+  the Engines tab: *MiniMax H3 — text-to-video* and *image-to-video* on
+  ComfyUI's official templates, and *Custom workflow* — any `.json` saved from
+  the ComfyUI editor. PANDORA ships nothing of ComfyUI or MiniMax: it talks to
+  your ComfyUI Desktop, converts the editor workflow to the API format itself
+  (sub-graphs, reroutes, primitives — checked node for node against what the
+  ComfyUI frontend sends), uploads your frames, follows the queue and brings
+  the clip back. Choose the engine with no server running and a window guides
+  you to install or launch it. Before anything is sent, a pre-flight lists
+  exactly which model files ComfyUI cannot see and the folder each one goes
+  in. Verified end to end: a 5-second clip with its soundtrack, on an 8 GB
+  laptop GPU. 0 $.
+- **MiniMax H3 (Hailuo 3.0) on fal.ai, three tiers** — H3, H3 Max, H3 Max
+  Turbo — priced per tier in « Project cost », plus H3 *local* through a
+  stable-diffusion.cpp server built for 8 GB cards. The model's license
+  excludes some territories; PANDORA shows the notice, the choice is yours.
+- **Opening a project: 46 s → 0.4 s.** Every page and every Studio tab was
+  built up front; each is now built the first time you click it. The phantom
+  windows that flashed open and shut while a project loaded or was duplicated
+  were five widgets shown before they had a parent — gone. The Storyboard no
+  longer renders its table twice on the first visit.
+- **Project descriptor written atomically — and repaired.** A project whose
+  descriptor had been truncated to 0 bytes could not be opened any more; it is
+  now rebuilt from its folder.
+- **« Project cost » was wrong for eight video engines.** A whole family was
+  logged at 0.30 $/s whatever its real price (the mode suffix hid them from
+  the price grid), four engines had no price at all, and Hailuo 2.3 Pro is
+  billed per clip, not per second. Fixed, with a drift test.
+- **ComfyUI detection tolerates a cold GPU** — the first status call after a
+  pause takes over a second; a running server no longer passes for absent.
 
 ---
 
@@ -401,7 +439,7 @@ per-engine mood prompts, same fixes.
 
 ### Windows
 
-1. Download `PANDORA_Setup_2.3.0.exe` from the link above and run it
+1. Download `PANDORA_Setup_2.4.0.exe` from the link above and run it
 2. If Windows shows *"Windows protected your PC"* (SmartScreen), click
    **More info** then **Run anyway** — the app is not code-signed yet
    (certificate in progress), this is the Windows equivalent of the macOS
@@ -412,7 +450,7 @@ per-engine mood prompts, same fixes.
 
 ### macOS
 
-1. Download `PANDORA_2.3.0.dmg` from the link above
+1. Download `PANDORA_2.4.0.dmg` from the link above
 2. Open the DMG and drag **PANDORA** into **Applications** (as usual)
 3. **First launch** — macOS will claim that *"PANDORA is damaged and can't be
    opened"*. **This is normal, the app is not damaged** — macOS blocks apps
