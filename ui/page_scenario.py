@@ -937,7 +937,12 @@ class PageScenario(QWidget):
             btn.setCheckable(True)
             btn.setChecked(expanded)
             btn.setStyleSheet(_toggle_ss)
-            container.setVisible(expanded)
+            # ⚠ Ne rendre visible que par le repli : `setVisible(True)` sur un
+            # conteneur encore SANS parent en fait une fenêtre de premier
+            # niveau le temps de la construction — trois fenêtres qui
+            # clignotaient à l'ouverture d'un projet (mesuré le 23/09/2026).
+            if not expanded:
+                container.setVisible(False)
             def _tog(checked, b=btn, c=container, t=_t):
                 c.setVisible(checked)
                 b.setText(f"{'▼' if checked else '▶'}  {t}")

@@ -62,8 +62,7 @@ def _init_project_dirs(folder: str):
 
 def _save_registry(paths: list[str]):
     os.makedirs(os.path.dirname(_REGISTRY), exist_ok=True)
-    with open(_REGISTRY, "w", encoding="utf-8") as f:
-        json.dump(paths, f, indent=2, ensure_ascii=False)
+    _write_json_atomic(_REGISTRY, paths)
 
 
 def add_to_recent(path: str):
@@ -182,6 +181,7 @@ def load_project(path: str) -> dict | None:
     if not os.path.isdir(path):
         return None
     # Scan root-level .json files for a valid project descriptor
+    corrupt: list[str] = []
     for fname in sorted(os.listdir(path)):
         if not fname.endswith(".json"):
             continue
@@ -198,8 +198,31 @@ def load_project(path: str) -> dict | None:
                 data["id"] = str(uuid.uuid4())
             _save(data)  # renames to {safe_name}.json and removes project.json if needed
             return data
+        except ValueError:
+            corrupt.append(fpath)          # JSON vide ou tronqué
         except Exception:
             continue
+    # Descripteur vide ou tronqué mais dossier de travail intact (constat
+    # 23/09/2026) : le descripteur ne porte qu'un identifiant, un nom et des
+    # dates — on le REBÂTIT plutôt que de déclarer le projet illisible. Le nom
+    # vient du dossier ; le mode reste « cinema » (l'utilisateur peut le
+    # changer), l'ancien fichier vide est écrasé par le nouveau.
+    if corrupt and os.path.isdir(os.path.join(path, "data")):
+        try:
+            created = datetime.fromtimestamp(os.path.getmtime(path)).isoformat()
+        except OSError:
+            created = datetime.now().isoformat()
+        data = {
+            "id":          str(uuid.uuid4()),
+            "name":        os.path.basename(os.path.normpath(path)) or "Projet",
+            "mode":        "cinema",
+            "created_at":  created,
+            "modified_at": datetime.now().isoformat(),
+            "thumbnail":   "",
+            "_path":       path,
+        }
+        _save(data)
+        return data
     return None
 
 
@@ -298,6 +321,23 @@ def touch_project(data: dict):
         add_to_recent(path)
 
 
+def _write_json_atomic(path: str, payload) -> None:
+    """Écrit le JSON dans un fichier voisin puis le met en place d'un seul
+    coup (`os.replace`). Un `open(..., "w")` direct VIDE d'abord le fichier :
+    une coupure entre l'ouverture et la fin de l'écriture laisse un
+    descripteur de 0 octet — c'est l'état dans lequel « La guerre toujours
+    la guerre » a été retrouvé le 23/09/2026, projet devenu illisible."""
+    tmp = f"{path}.{os.getpid()}.tmp"
+    with open(tmp, "w", encoding="utf-8") as f:
+        json.dump(payload, f, indent=2, ensure_ascii=False)
+        f.flush()
+        try:
+            os.fsync(f.fileno())
+        except OSError:
+            pass
+    os.replace(tmp, path)
+
+
 def _save(data: dict):
     path = data.get("_path", "")
     if not path:
@@ -306,8 +346,7 @@ def _save(data: dict):
     safe = "".join(c for c in name if c.isalnum() or c in " -_").strip() or "Projet"
     new_file = os.path.join(path, f"{safe}.json")
     payload = {k: v for k, v in data.items() if not k.startswith("_")}
-    with open(new_file, "w", encoding="utf-8") as f:
-        json.dump(payload, f, indent=2, ensure_ascii=False)
+    _write_json_atomic(new_file, payload)
     # Remove legacy project.json if it differs from the new file
     legacy = os.path.join(path, "project.json")
     if os.path.isfile(legacy) and os.path.normpath(legacy) != os.path.normpath(new_file):

@@ -3052,7 +3052,10 @@ class TabT2V(QScrollArea):
         )
         self._dyn_cam_cb = self._dyn_cam_toggle_row.findChild(QCheckBox)
         self._dyn_cam_cb.stateChanged.connect(self._refresh_prompt_preview)
-        self._dyn_cam_toggle_row.setVisible(True)  # caché quand shot actif
+        # (caché quand un plan est actif — voir plus bas). ⚠ Pas de
+        # setVisible(True) AVANT l'ajout à la mise en page : la rangée, encore
+        # sans parent, devenait une fenêtre de premier niveau le temps de la
+        # construction (mesuré le 23/09/2026).
         _raccords_lay.addWidget(self._dyn_cam_toggle_row)  # → RENDU & AUDIO, après Raccord automatique
 
         self._decor_sync_toggle_row, _decor_sync_cb_inner = _raccord_toggle(

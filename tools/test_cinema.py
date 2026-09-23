@@ -9338,5 +9338,72 @@ def comfyui_moteur_nodal_et_journal_de_cout():
         "dialog_comfy_install : fermeture anonyme dans le code (méthodes liées attendues)"
 
 
+@test
+def descripteur_de_projet_atomique_et_repare():
+    """Le descripteur de projet s'écrit de façon ATOMIQUE et se RÉPARE.
+
+    23/09/2026 : « La guerre toujours la guerre » retrouvé avec un descripteur
+    de 0 octet (écriture directe interrompue) → projet illisible alors que tout
+    son dossier data/ était intact. Désormais : écriture dans un voisin puis
+    os.replace, et un descripteur vide/tronqué est rebâti depuis le dossier."""
+    import tempfile as _tf
+    import json as _json
+    from core import project as _pj
+    with _tf.TemporaryDirectory() as td:
+        d = os.path.join(td, "Mon film")
+        os.makedirs(os.path.join(d, "data"))
+        with open(os.path.join(d, "Mon film.json"), "w", encoding="utf-8"):
+            pass                                             # 0 octet
+        data = _pj.load_project(d)
+        assert data and data["name"] == "Mon film" and data["id"] and data["_path"] == d, data
+        with open(os.path.join(d, "Mon film.json"), encoding="utf-8") as f:
+            saved = _json.load(f)
+        assert saved["id"] == data["id"] and "_path" not in saved and saved["mode"] == "cinema"
+        assert not [f for f in os.listdir(d) if f.endswith(".tmp")], "fichier temporaire oublié"
+        # Un JSON vide SANS dossier data/ n'est pas un projet : pas de réparation.
+        e = os.path.join(td, "Vide")
+        os.makedirs(e)
+        with open(os.path.join(e, "x.json"), "w", encoding="utf-8"):
+            pass
+        assert _pj.load_project(e) is None
+    src = inspect.getsource(_pj._write_json_atomic)
+    assert "os.replace" in src, "l'écriture doit passer par un voisin puis os.replace"
+    for fn in (_pj._save, _pj._save_registry):
+        s = inspect.getsource(fn)
+        assert "_write_json_atomic" in s and "open(" not in s, f"{fn.__name__} : écriture directe"
+
+
+@test
+def aucun_widget_sans_parent_affiche_a_la_construction():
+    """Un widget sans parent rendu visible AVANT son ajout à une mise en page
+    devient une fenêtre de premier niveau — cinq fenêtres clignotaient à
+    l'ouverture d'un projet (mesuré le 23/09/2026 : assistant_panel,
+    page_scenario ×3, tab_t2v, + dialog_style_gallery). Le motif est épinglé
+    à la source : plus de `setVisible(True)` / `setVisible(expanded)` avant
+    `addWidget` dans ces constructeurs."""
+    import importlib
+    # (module, motif interdit, borne de début, borne de fin) : le motif ne doit
+    # pas apparaître ENTRE les bornes — c'est-à-dire avant l'ajout du widget à
+    # sa mise en page. Le même appel APRÈS l'ajout (tab_t2v l. ~3395) est sain.
+    cases = (
+        ("ui.assistant_panel", "_guide_lbl.setVisible(True)",
+         "self._guide_lbl = QLabel()", "tips_lay.addWidget(self._guide_lbl)"),
+        ("ui.page_scenario", "container.setVisible(expanded)",
+         "def _make_toggle", "def _section_container"),
+        ("ui.page_scenario_live", "container.setVisible(expanded)",
+         "def _make_toggle", "def _section_container"),
+        ("ui.dialog_style_gallery", "container.setVisible(expanded)",
+         "def _add_section", "self._tree_lay.addWidget(container)"),
+        ("ui.tab_t2v", "_dyn_cam_toggle_row.setVisible(True)",
+         "self._dyn_cam_toggle_row = toggle_row(", "_raccords_lay.addWidget(self._dyn_cam_toggle_row)"),
+    )
+    for mod, forbidden, start, end in cases:
+        src = inspect.getsource(importlib.import_module(mod))
+        code = "\n".join(l.split("#", 1)[0] for l in src.splitlines())
+        i, j = code.find(start), code.find(end)
+        assert 0 <= i < j, f"{mod} : bornes introuvables ({start!r} → {end!r})"
+        assert forbidden not in code[i:j], f"{mod} : {forbidden} avant l'ajout à la mise en page"
+
+
 if __name__ == "__main__":
     sys.exit(main())

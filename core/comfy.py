@@ -148,8 +148,11 @@ def desktop_installed() -> bool:
     Sert à la fenêtre d'installation : le message n'est pas le même selon
     qu'il faut installer ou simplement démarrer."""
     try:
+        # CREATE_NO_WINDOW : sans lui, une console clignote à l'écran de
+        # l'utilisateur à chaque ouverture de la fenêtre d'installation.
         out = subprocess.run(["tasklist", "/FO", "CSV"], capture_output=True,
-                             text=True, errors="replace", timeout=10).stdout
+                             text=True, errors="replace", timeout=10,
+                             creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0)).stdout
         if "comfy desktop.exe" in out.lower():
             return True
     except Exception:

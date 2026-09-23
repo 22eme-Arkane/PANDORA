@@ -438,7 +438,11 @@ class StyleGalleryDialog(QDialog):
             btn = self._make_style_btn(s["key"], s["icon"], s["name"])
             cont_lay.addWidget(btn)
 
-        container.setVisible(expanded)
+        # Ne masquer que par le repli : `setVisible(True)` sur un conteneur
+        # encore sans parent en fait une fenêtre de premier niveau le temps de
+        # la construction (famille des fenêtres qui clignotaient, 23/09/2026).
+        if not expanded:
+            container.setVisible(False)
         _exp = [expanded]
 
         def _toggle():

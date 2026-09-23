@@ -722,7 +722,10 @@ class AssistantPanel(QWidget):
 
         self._guide_lbl = QLabel()
         self._guide_lbl.setWordWrap(True)
-        self._guide_lbl.setVisible(True)
+        # ⚠ Pas de setVisible(True) AVANT l'ajout à la mise en page : sans
+        # parent, le label devenait une FENÊTRE de premier niveau le temps de
+        # la construction — une des fenêtres qui clignotaient à l'ouverture
+        # d'un projet (constat Matthieu, mesuré le 23/09/2026).
         self._guide_lbl.setStyleSheet(
             f"color:{CP['text_secondary']};font-size:10px;background:transparent;"
             f"line-height:1.4;"
