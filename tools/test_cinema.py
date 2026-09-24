@@ -9747,6 +9747,22 @@ def ia_locales_comme_claude_contexte_pensee_vision_et_serveurs():
     cs = open(os.path.join(os.path.dirname(__file__), "ai_conformance.py"), encoding="utf-8").read()
     assert "AP._cfg = lambda: cfg" in cs and "save_config" not in cs
 
+    # 9. Marqueurs tolérants (constat conformité : qwen2.5vl écrit 9 « ═ » au lieu
+    #    de 10 → le scénario réécrit disparaissait en silence).
+    from core.markers import normalize_markers
+    M = "══════════ MESSAGE ══════════"
+    S = "══════════ SCÉNARIO ══════════"
+    for variant in ("═════════ SCÉNARIO ══════════", "=== SCÉNARIO ===", "──────  SCÉNARIO ──────",
+                    "══════════SCÉNARIO══════════"):
+        assert normalize_markers("a\n" + variant + "\nb", (M, S)) == "a\n" + S + "\nb", variant
+    assert normalize_markers("a\n" + S + "\nb", (M, S)) == "a\n" + S + "\nb", "canonique inchangé"
+    assert normalize_markers("scénario : === scénario ===", (S,)) == "scénario : === scénario ===", \
+        "le mot-clé reste exact (casse)"
+    assert normalize_markers("", (S,)) == "" and normalize_markers("rien", (S,)) == "rien"
+    from api import plan_coedit as _pc
+    for mod in (__import__("api.screenplay", fromlist=["_"]), _pc):
+        assert "normalize_markers(raw" in inspect.getsource(mod), f"{mod.__name__} : découpage non tolérant"
+
 
 @test
 def images_comfyui_catalogue_contrat_generique_et_appel_unique():

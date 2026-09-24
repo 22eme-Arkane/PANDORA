@@ -316,6 +316,10 @@ class PlanCoEditWorker(QThread):
 
             chat_msg = ""
             plan = ""
+            # Marqueurs tolérants (core/markers) : un modèle local qui perd un « ═ »
+            # ne doit pas faire disparaître le plan réécrit (24/09/2026).
+            from core.markers import normalize_markers
+            raw = normalize_markers(raw, (_MARKER_MSG, _MARKER_PLAN))
             if _MARKER_PLAN in raw:
                 parts = raw.split(_MARKER_PLAN, 1)
                 plan  = parts[1].strip()

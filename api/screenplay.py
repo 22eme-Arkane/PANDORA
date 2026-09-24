@@ -2672,6 +2672,10 @@ class ArrangeChatWorker(QThread):
             chat_msg   = ""
             screenplay = ""
             direction_note = ""
+            # Marqueurs tolérants (core/markers) : un modèle local qui perd un « ═ »
+            # ne doit pas faire disparaître le scénario réécrit (24/09/2026).
+            from core.markers import normalize_markers
+            raw = normalize_markers(raw, (self._MARKER_MSG, self._MARKER_SCR, self._MARKER_NOTE))
             if self._MARKER_NOTE in raw:
                 raw, direction_note = raw.split(self._MARKER_NOTE, 1)
             if self._MARKER_SCR in raw:

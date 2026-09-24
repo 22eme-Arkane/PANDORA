@@ -897,6 +897,10 @@ class ArrangeSessionChatConducteurWorker(QThread):
             # ── Mode COMPLET : message + conducteur réécrit entier (marqueurs) ──
             chat_msg   = ""
             conducteur = ""
+            # Marqueurs tolérants (core/markers) : un modèle local qui perd un « ═ »
+            # ne doit pas faire disparaître le conducteur réécrit (24/09/2026).
+            from core.markers import normalize_markers
+            raw = normalize_markers(raw, (self._MARKER_MSG, self._MARKER_DOC))
             if self._MARKER_DOC in raw:
                 parts      = raw.split(self._MARKER_DOC, 1)
                 conducteur = parts[1].strip()

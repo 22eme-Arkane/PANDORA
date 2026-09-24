@@ -1779,6 +1779,22 @@ def parametres_live_parite_cinema():
 
 
 @test
+def marqueurs_tolerants_coecriture_live():
+    """Le conducteur réécrit ne doit pas disparaître parce qu'un modèle local a
+    écrit 9 « ═ » au lieu de 10 (constat tools/ai_conformance, 24/09/2026) :
+    le découpage Live normalise les marqueurs (core/markers) avant de couper."""
+    import inspect
+    from core.markers import normalize_markers
+    from api import live_screenplay as _ls
+    src = inspect.getsource(_ls)
+    assert "normalize_markers(raw" in src, "découpage Live non tolérant"
+    D = "══════════ CONDUCTEUR ══════════"
+    raw = "══════════ MESSAGE ══════════\nok\n═════════ CONDUCTEUR ═════════\nTEXTE"
+    norm = normalize_markers(raw, ("══════════ MESSAGE ══════════", D))
+    assert D in norm and norm.split(D, 1)[1].strip() == "TEXTE"
+
+
+@test
 def calage_musical_deterministe():
     """align_shots_to_music : durées en mesures exactes + cuts attirés sur les drops."""
     from core.music_align import align_shots_to_music, bar_seconds

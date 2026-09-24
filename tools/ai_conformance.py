@@ -95,7 +95,11 @@ def t_marqueurs():
               "puis une analyse d'une phrase.")
     out = AP.complete(system, "Théo monte l'escalier. Marguerite vérifie la lampe.",
                       tier="creative", max_tokens=400, task="screenplay")
-    ok = "══════════ ANALYSE ══════════" in out and out.strip().index("══════════ ANALYSE") > 5
+    # Même tolérance que les analyseurs de PANDORA (core/markers) : un « ═ »
+    # perdu ne compte pas, le mot-clé et la position (après le texte) si.
+    from core.markers import normalize_markers
+    norm = normalize_markers(out, ("══════════ ANALYSE ══════════",))
+    ok = "══════════ ANALYSE ══════════" in norm and norm.strip().index("══════════ ANALYSE") > 5
     return ok, out
 
 
