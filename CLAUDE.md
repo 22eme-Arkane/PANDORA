@@ -1,9 +1,8 @@
 # CLAUDE.md — Pandora × Seedance 2.0
 
-> **Mémoire commune Codex ↔ Fable 5** : lire d'abord
-> `.claude/memory/passation_codex_fable5.md`. Elle contient l'état opérationnel courant
-> et les règles les plus récentes de Matthieu ; elle prévaut sur toute instruction
-> historique contradictoire ou plus permissive dans ce fichier.
+> La passation Codex ↔ Fable 5 (`.claude/memory/passation_codex_fable5.md`) n'est
+> **plus demandée** depuis le 24/09/2026 (décision Matthieu) : ni à lire en début de
+> session, ni à compléter. Le fichier reste comme archive.
 
 # BOUCLE DE TRAVAIL — auto-vérification et auto-correction (à appliquer systématiquement)
 
