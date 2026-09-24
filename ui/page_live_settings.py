@@ -453,8 +453,13 @@ class PageLiveSettings(QScrollArea):
         self._ollama_model_input = _input("llama3.1", 0)
         oll_row.addWidget(self._ollama_url_input, 1)
         oll_row.addWidget(self._ollama_model_input, 1)
+        # Modèles recommandés, téléchargement, fenêtre de contexte : la fenêtre du
+        # module Ollama (parité Cinéma, chantier IA locales 24/09/2026).
+        _oll_models = _test_btn("⬇  Modèles recommandés…", self._open_ollama_models)
+        oll_row.addWidget(_oll_models)
         self._ollama_row_widgets = (oll_row.itemAt(0).widget(),
-                                    self._ollama_url_input, self._ollama_model_input)
+                                    self._ollama_url_input, self._ollama_model_input,
+                                    _oll_models)
         opt_lay.addLayout(oll_row)
 
         # Kimi (Moonshot) — clé facultative (vide en local) + URL/modèle. L'URL de base
@@ -535,6 +540,12 @@ class PageLiveSettings(QScrollArea):
         self._custom_row_widgets = (cu_row.itemAt(0).widget(),
                                     self._custom_url_input, self._custom_model_input)
         opt_lay.addLayout(cu_row)
+
+        # Serveur IA local OpenAI-compatible (LM Studio, llama.cpp, vLLM, Jan…) —
+        # MÊME composant que le Cinéma (ui/local_ai_panel), mêmes clés de config.
+        from ui.local_ai_panel import LocalAIPanel
+        self._local_panel = LocalAIPanel()
+        opt_lay.addWidget(self._local_panel)
         ac.addWidget(self._opt_keys_box)
 
         # ── Paramètres avancés : moteur IA PAR TÂCHE (repliable, parité Cinéma) ──
@@ -699,6 +710,11 @@ class PageLiveSettings(QScrollArea):
                 wdg.setVisible(_all or prov == "glm")
             for wdg in self._custom_row_widgets:
                 wdg.setVisible(_all or prov == "custom")
+            if hasattr(self, "_local_panel"):
+                self._local_panel.setVisible(_all or prov == "local")
+                # Le panneau vit dans la boîte repliable : la choisir la déplie.
+                if prov == "local" and not self._opt_keys_open:
+                    self._toggle_opt_keys()
             if _all and not self._adv_open:
                 self._set_advanced(True)
             if _ and hasattr(self, "_task_combos"):
@@ -839,6 +855,7 @@ class PageLiveSettings(QScrollArea):
                   self._custom_key_input, self._custom_url_input, self._custom_model_input,
                   self._piapi_input, self._host_input):
             w.textChanged.connect(self._save_api_key)
+        self._local_panel.changed.connect(self._save_api_key)
         self._port_spin.valueChanged.connect(self._save_api_key)
         for combo in getattr(self, "_task_combos", {}).values():
             combo.currentIndexChanged.connect(self._save_api_key)
@@ -868,6 +885,14 @@ class PageLiveSettings(QScrollArea):
         from ui.ai_model_selector import start_model_discovery
         start_model_discovery(self, self._ai_combo, self._task_combos,
                               self._btn_refresh_ai_models)
+
+    def _open_ollama_models(self):
+        """Fenêtre du module Ollama (modèles recommandés, téléchargement, contexte) ;
+        le modèle choisi avec « Utiliser » revient dans le champ (parité Cinéma)."""
+        from core.config import load_config
+        from ui.dialog_external import ExternalDialog
+        ExternalDialog("ollama", self).exec()
+        self._ollama_model_input.setText(load_config().get("ollama_model", ""))
 
     def test_piapi_connection(self):
         from PyQt6.QtWidgets import QMessageBox
@@ -928,6 +953,7 @@ class PageLiveSettings(QScrollArea):
         self._custom_key_input.setText(cfg.get("custom_key", ""))
         self._custom_url_input.setText(cfg.get("custom_url", ""))
         self._custom_model_input.setText(cfg.get("custom_model", ""))
+        self._local_panel.load(cfg)
         self._on_ai_changed()
         self._piapi_input.setText(cfg.get("piapi_key", ""))
         _cur_prov = cfg.get("video_provider", "fal")
@@ -969,6 +995,7 @@ class PageLiveSettings(QScrollArea):
         cfg["custom_key"]        = self._custom_key_input.text().strip()
         cfg["custom_url"]        = self._custom_url_input.text().strip()
         cfg["custom_model"]      = self._custom_model_input.text().strip()
+        self._local_panel.apply(cfg)     # local_preset / local_url / local_model / local_key
         cfg["video_provider"]    = self.video_provider_combo.currentData() or "fal"
         cfg["piapi_key"]         = self._piapi_input.text().strip()
         cfg["distribution_mode"] = self.distribution_mode_combo.currentData() or "multi"

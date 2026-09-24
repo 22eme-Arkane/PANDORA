@@ -25,9 +25,12 @@ def _local(url: str) -> bool:
 
 
 def _compatible(provider: str, model_id: str) -> bool:
-    """Écarte les modèles manifestement incompatibles avec les tâches de texte."""
+    """Écarte les modèles manifestement incompatibles avec les tâches de texte
+    (embeddings, re-classement, transcription… — core/local_llm.is_chat_model :
+    un serveur local les liste au même titre que les modèles de conversation)."""
+    from core.local_llm import is_chat_model
     mid = (model_id or "").lower()
-    if not mid:
+    if not mid or not is_chat_model(mid):
         return False
     if provider == "anthropic":
         return mid.startswith("claude-")
@@ -70,7 +73,15 @@ def discover_provider(provider: str, cfg: dict, timeout: int = 20) -> list[str]:
         r.raise_for_status()
         return sorted({str(x.get("model") or x.get("name") or "").strip()
                        for x in r.json().get("models", [])
-                       if x.get("model") or x.get("name")}, key=str.lower)
+                       if (x.get("model") or x.get("name"))
+                       and _compatible("ollama", str(x.get("model") or x.get("name")))},
+                      key=str.lower)
+    if provider == "local":
+        # Serveur OpenAI-compatible local : adresse du préréglage (LM Studio,
+        # llama.cpp, vLLM, Jan…) ou celle saisie ; clé facultative.
+        from core.local_llm import local_base_url
+        return _openai_compatible_models("local", local_base_url(cfg),
+                                         (cfg.get("local_key") or "").strip(), timeout)
     if provider == "anthropic":
         import requests
         key = (cfg.get("anthropic_key") or "").strip()
@@ -96,7 +107,7 @@ def discover_provider(provider: str, cfg: dict, timeout: int = 20) -> list[str]:
 
 def discover_all(cfg: dict, providers: tuple[str, ...] | None = None) -> tuple[dict, dict]:
     providers = providers or ("anthropic", "openai", "mistral", "kimi", "glm",
-                              "ollama", "custom")
+                              "ollama", "local", "custom")
     models, errors = {}, {}
     for provider in providers:
         try:

@@ -11,6 +11,9 @@ import uuid
 import requests
 from PyQt6.QtCore import QThread, pyqtSignal
 from core.worker import humanize_api_error
+# Un seul point d'appel image (24/09/2026) : fal comme avant, ou ComfyUI quand
+# le moteur choisi est un gabarit local « comfy:… » — même forme de réponse.
+from core.image_call import subscribe as _img_subscribe, needs_fal as _needs_fal
 
 
 # ── Camera term mappings (Flux-native English) ────────────────────────────────
@@ -444,7 +447,7 @@ def run_generation(prompt: str, output_dir: str, api_key: str, progress_cb,
         urls = [_upload_ref_robust(fal_client, building_ref),
                 _upload_ref_robust(fal_client, inspiration_ref)]
         progress_cb("Mood inspiré sur la façade (Kontext multi)…")
-        result = fal_client.subscribe(
+        result = _img_subscribe(
             "fal-ai/flux-pro/kontext/max/multi",
             arguments={
                 "prompt":         kontext_prompt,
@@ -459,7 +462,7 @@ def run_generation(prompt: str, output_dir: str, api_key: str, progress_cb,
         progress_cb("Envoi de la façade à fal.ai…")
         facade_url = _upload_ref_robust(fal_client, building_ref)
         progress_cb("Génération du Mood nocturne sur la façade (Kontext)…")
-        result = fal_client.subscribe(
+        result = _img_subscribe(
             "fal-ai/flux-pro/kontext",
             arguments={
                 "prompt":              kontext_prompt,
@@ -480,7 +483,7 @@ def run_generation(prompt: str, output_dir: str, api_key: str, progress_cb,
         progress_cb("Envoi de l'image d'inspiration à fal.ai…")
         inspi_url = _upload_ref_robust(fal_client, inspiration_ref)
         progress_cb("Mood inspiré de l'image (Kontext)…")
-        result = fal_client.subscribe(
+        result = _img_subscribe(
             "fal-ai/flux-pro/kontext",
             arguments={
                 "prompt":              kontext_prompt,
@@ -491,7 +494,7 @@ def run_generation(prompt: str, output_dir: str, api_key: str, progress_cb,
         )
     else:
         progress_cb("Génération du Mood via Flux…")
-        result = fal_client.subscribe(
+        result = _img_subscribe(
             "fal-ai/flux/dev",
             arguments={
                 "prompt":                prompt,
@@ -965,7 +968,7 @@ def run_generation_nb2(prompt: str, output_dir: str, api_key: str, progress_cb,
         progress_cb(f"Nano Banana 2 — {_tag} (mapping)…")
         urls = [_upload_ref_robust(fal_client, r) for r in refs]
         directive = (_FACADE_PRIORITY_DIRECTIVE if inspiration else "") + _MAPPING_NIGHT_LOCK
-        result = fal_client.subscribe(_ep_edit, arguments={
+        result = _img_subscribe(_ep_edit, arguments={
             "prompt": _avec_directive_en_tete(prompt, directive), "image_urls": urls,
             "num_images": 1, "aspect_ratio": _ar, "resolution": _res_enum,
             "output_format": "png", "safety_tolerance": "6",
@@ -1000,7 +1003,7 @@ def run_generation_nb2(prompt: str, output_dir: str, api_key: str, progress_cb,
             if n_insp: _parts.append(_INSPIRATION_REF_DIRECTIVE)
             if _fp:    _parts.append(_FLOOR_PLAN_DIRECTIVE)
             directive = "\n\n".join(_parts)
-            result = fal_client.subscribe(_ep_edit, arguments={
+            result = _img_subscribe(_ep_edit, arguments={
                 # Consigne EN TÊTE : c'est un appel /edit, le modèle part des
                 # images. Même raison qu'en mapping (constat 2026-07-27).
                 "prompt": _avec_directive_en_tete(prompt, directive),
@@ -1010,7 +1013,7 @@ def run_generation_nb2(prompt: str, output_dir: str, api_key: str, progress_cb,
             })
         else:
             progress_cb("Nano Banana 2…")
-            result = fal_client.subscribe(_ep_text, arguments={
+            result = _img_subscribe(_ep_text, arguments={
                 "prompt": prompt, "num_images": 1,
                 "aspect_ratio": _ar, "resolution": _res_enum, "output_format": "png",
             })
@@ -1083,7 +1086,8 @@ def run_generation_engine(engine_key: str, prompt: str, output_dir: str,
     label = _ie.short_label(engine_key)
 
     # ── Mock (pas de clé fal.ai) : vignette de simulation, comme le mood Flux ──
-    if not api_key:
+    # Un gabarit ComfyUI n'a pas besoin de clé fal : pas de simulation pour lui.
+    if not api_key and _needs_fal(engine_key):
         import time
         progress_cb(f"Simulation {label} (pas de clé fal.ai)…")
         time.sleep(1.0)
@@ -1150,7 +1154,7 @@ def run_generation_engine(engine_key: str, prompt: str, output_dir: str,
         engine_key, full_prompt,
         _ie.ar_to_target(aspect_ratio or "16:9", resolution),
         _res_enum_for(resolution), ref_urls)
-    result = fal_client.subscribe(endpoint, arguments=args)
+    result = _img_subscribe(endpoint, arguments=args)
 
     # Journal de dépenses du projet (demande Matthieu 2026-07-31) : une image
     # générée est facturée, elle doit apparaître dans « Coût du projet ».

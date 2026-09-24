@@ -13,6 +13,15 @@ import time
 
 from PyQt6.QtCore import QThread, pyqtSignal
 from core.config import load_config, get_image_endpoint, get_image_price
+# Un seul point d'appel image (24/09/2026) : fal comme avant, ou ComfyUI quand
+# le moteur choisi est un gabarit local « comfy:… » — même forme de réponse.
+from core.image_call import subscribe as _img_subscribe, needs_fal as _needs_fal
+
+
+def _fal_required(cfg: dict, model_key: str | None = None) -> bool:
+    """Faut-il une clé fal pour ce moteur ? Non pour un gabarit ComfyUI —
+    sans quoi un utilisateur qui n'a QUE ComfyUI tombait sur le mode mock."""
+    return _needs_fal(model_key or (cfg or {}).get("image_model", ""))
 from core.pandora_dirs import get_bin_dir
 from core.worker import humanize_api_error
 
@@ -950,7 +959,7 @@ class GeneratePortraitWorker(QThread):
     def run(self):
         cfg = load_config()
         key = cfg.get("api_key", "").strip()
-        if not key:
+        if not key and _fal_required(cfg, getattr(self, "_model_key", None)):
             self._mock()
         else:
             self._real(key)
@@ -1084,7 +1093,7 @@ class GeneratePortraitWorker(QThread):
                     _ep, _args = _build_image_args(full_prompt, _ar, _res_enum_for(getattr(self, "_resolution", "")), cfg, 1)
                     if ref_url and _active_model in ("nb2", "nb_pro"):
                         _args["image_url"] = ref_url
-                    _result = fal_client.subscribe(_ep, arguments=_args)
+                    _result = _img_subscribe(_ep, arguments=_args)
                     _url = _extract_image_url(_result)
                     data = requests.get(_url, timeout=120).content
                     p = os.path.join(dest, f"{safe}_{ts}_portrait_{i}.png")
@@ -1102,7 +1111,7 @@ class GeneratePortraitWorker(QThread):
                 _ep, _args = _build_image_args(full_prompt, _ar, _res_enum_for(getattr(self, "_resolution", "")), cfg, 1)
                 if ref_url and _active_model in ("nb2", "nb_pro"):
                     _args["image_url"] = ref_url
-                result = fal_client.subscribe(_ep, arguments=_args)
+                result = _img_subscribe(_ep, arguments=_args)
                 self.progress.emit(80, "Téléchargement de l'image…")
                 url  = _extract_image_url(result)
                 data = requests.get(url, timeout=120).content
@@ -1229,7 +1238,7 @@ class GenerateStoryboardSketchesWorker(QThread):
             full_prompt = f"{prompt_en}\n\n{_STORYBOARD_SKETCH_SUFFIX}"
 
             # Sketches storyboard → Flux Schnell par défaut (~$0.003 vs $0.08)
-            result = fal_client.subscribe(
+            result = _img_subscribe(
                 "fal-ai/flux/schnell",
                 arguments={
                     "prompt":               full_prompt,
@@ -1274,7 +1283,7 @@ class GeneratePortraitWithFaceIDWorker(QThread):
     def run(self):
         cfg = load_config()
         key = cfg.get("api_key", "").strip()
-        if not key:
+        if not key and _fal_required(cfg, getattr(self, "_model_key", None)):
             self._mock()
         else:
             self._real(key)
@@ -1468,7 +1477,7 @@ class GeneratePortraitWithFaceIDWorker(QThread):
                     args["reference_image_url"] = ref_url
                     args["id_weight"]           = _id_weight
 
-                result = fal_client.subscribe(endpoint, arguments=args)
+                result = _img_subscribe(endpoint, arguments=args)
                 _imgs = result.get("images") if isinstance(result, dict) else None
                 if not _imgs:
                     raise RuntimeError(
@@ -1654,7 +1663,7 @@ class GenerateDecorSheetWorker(QThread):
     def run(self):
         cfg = load_config()
         key = cfg.get("api_key", "").strip()
-        if not key:
+        if not key and _fal_required(cfg, getattr(self, "_model_key", None)):
             self._mock()
         else:
             self._real(key)
@@ -1706,7 +1715,7 @@ class GenerateDecorSheetWorker(QThread):
                 _decor_endpoint, _decor_args = _build_image_args(
                     full_prompt, self._ar_override or "1:1",
                     _res_enum_for(self._resolution), _decor_cfg, 1)
-                result = fal_client.subscribe(_decor_endpoint, arguments=_decor_args)
+                result = _img_subscribe(_decor_endpoint, arguments=_decor_args)
                 url  = _extract_image_url(result)
                 self.progress.emit(pct_start + 20, f"Téléchargement sheet {i+1}…")
                 data = requests.get(url, timeout=120).content
@@ -1756,7 +1765,7 @@ class GenerateItemWorker(QThread):
     def run(self):
         cfg = load_config()
         key = cfg.get("api_key", "").strip()
-        if not key:
+        if not key and _fal_required(cfg, getattr(self, "_model_key", None)):
             self._mock()
         else:
             self._real(key)
@@ -1857,7 +1866,7 @@ class GenerateItemWorker(QThread):
                 au moteur (NB2 Edit, image_urls) → reproduction réelle ; sinon
                 text-to-image du modèle choisi."""
                 if _fidelity_image_url:
-                    return fal_client.subscribe(
+                    return _img_subscribe(
                         "fal-ai/nano-banana-2/edit",
                         arguments={
                             "prompt": (
@@ -1874,7 +1883,7 @@ class GenerateItemWorker(QThread):
                             "safety_tolerance": "6",
                         })
                 _ep, _args = _build_image_args(_prompt_full, aspect_ratio, _res_enum_for(getattr(self, "_resolution", "")), cfg, 1)
-                return fal_client.subscribe(_ep, arguments=_args)
+                return _img_subscribe(_ep, arguments=_args)
 
             if n > 1:
                 # N separate calls (num_images=1 each) — avoids API limit on batch size
@@ -1959,7 +1968,7 @@ class GenerateRoomViewsWorker(QThread):
     def run(self):
         cfg = load_config()
         key = cfg.get("api_key", "").strip()
-        if not key:
+        if not key and _fal_required(cfg, getattr(self, "_model_key", None)):
             self._mock()
         else:
             self._real(key)
@@ -2050,7 +2059,7 @@ class GenerateRoomViewsWorker(QThread):
 
             def _gen_text(prompt: str, aspect: str) -> bytes:
                 _ep, _args = _build_image_args(prompt, aspect, _res_enum_for(getattr(self, "_resolution", "")), cfg, 1)
-                _res = fal_client.subscribe(_ep, arguments=_args)
+                _res = _img_subscribe(_ep, arguments=_args)
                 return requests.get(_extract_image_url(_res), timeout=120).content
 
             def _gen_edit(prompt: str, ref_urls: list, aspect: str) -> bytes:
@@ -2061,7 +2070,7 @@ class GenerateRoomViewsWorker(QThread):
                 )
                 if _kind != "raster":
                     raise RuntimeError("Le moteur de raccord doit produire une image raster.")
-                _res = fal_client.subscribe(_ep, arguments=_args)
+                _res = _img_subscribe(_ep, arguments=_args)
                 return requests.get(_extract_image_url(_res), timeout=120).content
 
             def _gen_text_robust(prompt: str, aspect: str) -> bytes:
@@ -2276,7 +2285,7 @@ class GeneratePortraitNB2EditWorker(QThread):
     def run(self):
         cfg = load_config()
         key = cfg.get("api_key", "").strip()
-        if not key:
+        if not key and _fal_required(cfg, getattr(self, "_model_key", None)):
             self._mock()
         else:
             self._real(key)
@@ -2328,7 +2337,7 @@ class GeneratePortraitNB2EditWorker(QThread):
 
             self.progress.emit(35, "Génération NB2 Edit (~$0.08)…")
 
-            result = fal_client.subscribe(
+            result = _img_subscribe(
                 "fal-ai/nano-banana-2/edit",
                 arguments={
                     "prompt":           full_prompt,
@@ -2397,7 +2406,7 @@ class CleanBackgroundWorker(QThread):
                 "furniture, materials, colors, lighting and camera angle. "
                 "Photorealistic, no people, no characters, empty location."
             )
-            result = fal_client.subscribe(
+            result = _img_subscribe(
                 "fal-ai/nano-banana-2/edit",
                 arguments={
                     "prompt":        prompt,
@@ -2461,7 +2470,7 @@ class GenerateFloorPlanWorker(QThread):
                 f"no text labels. Square framing."
             )
             ep, args = _build_image_args(prompt, "1:1", _res_enum_for(getattr(self, "_resolution", "")), cfg, 1)
-            result = fal_client.subscribe(ep, arguments=args)
+            result = _img_subscribe(ep, arguments=args)
             url  = _extract_image_url(result)
             data = requests.get(url, timeout=180).content
             safe = "".join(c for c in self._name if c.isalnum() or c in " -_").strip() or "plan"
@@ -2549,7 +2558,7 @@ class GenerateFloorPlansWorker(QThread):
                 base = j.get("prompt") or j.get("name") or "an interior room"
                 base_en = translate_to_english(base) if base else "an interior room"
                 ep, args = _build_image_args(_floor_plan_prompt(base_en), "1:1", _res_enum_for(getattr(self, "_resolution", "")), cfg, 1)
-                result = fal_client.subscribe(ep, arguments=args)
+                result = _img_subscribe(ep, arguments=args)
                 url  = _extract_image_url(result)
                 data = requests.get(url, timeout=180).content
                 safe = "".join(c for c in j.get("name", "plan")
@@ -2617,14 +2626,14 @@ class GenerateFloorPlanVariationWorker(QThread):
             if self._ov and os.path.isfile(self._ov):
                 from api.apercu import _upload_ref_robust
                 url = _upload_ref_robust(fal_client, self._ov)
-                result = fal_client.subscribe("fal-ai/nano-banana-2/edit", arguments={
+                result = _img_subscribe("fal-ai/nano-banana-2/edit", arguments={
                     "prompt": fp_anchor, "image_urls": [url], "num_images": 1,
                     "aspect_ratio": "1:1",
                     "resolution": _res_enum_for(getattr(self, "_resolution", "")),
                     "output_format": "png", "safety_tolerance": "6"})
             else:
                 ep, args = _build_image_args(_floor_plan_prompt(base_en), "1:1", _res_enum_for(getattr(self, "_resolution", "")), cfg, 1)
-                result = fal_client.subscribe(ep, arguments=args)
+                result = _img_subscribe(ep, arguments=args)
             u = _extract_image_url(result)
             data = requests.get(u, timeout=180).content
             path = os.path.join(images_dir(), f"floorplan_var_{int(time.time())}.png")

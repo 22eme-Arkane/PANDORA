@@ -26,6 +26,7 @@ from PyQt6.QtWidgets import (
 )
 
 from core import externals as _ex
+from core import local_llm as _ll
 from core.i18n import translate
 from ui.styles import CP
 from ui.widgets import disable_default_buttons, section_label
@@ -130,6 +131,91 @@ class ExternalDialog(QDialog):
         self._prog.setVisible(False)
         lay.addWidget(self._prog)
 
+        # ComfyUI : les modèles d'un gabarit d'IMAGE (catalogue lu chez le
+        # serveur, core/comfy_catalog) — tous les moteurs, jusqu'aux plus lourds.
+        self._tpl_combo = None
+        if ext.key == "comfyui":
+            from PyQt6.QtWidgets import QComboBox
+            from core import comfy_catalog as _cc
+            entries = _cc.load_cached()
+            if entries:
+                trow = QHBoxLayout()
+                trow.setSpacing(8)
+                self._tpl_combo = QComboBox()
+                self._tpl_combo.setFixedHeight(36)
+                for e in entries:
+                    self._tpl_combo.addItem(
+                        f"{e.get('title') or e['name']}  ·  {'édition' if e.get('edit') else 'texte → image'}"
+                        f"  ·  {_cc.gb(int(e.get('size') or 0))}", e["name"])
+                trow.addWidget(self._tpl_combo, 1)
+                b_tpl = _btn("⬇  " + translate("Télécharger les modèles de ce gabarit"), CP["accent"])
+                b_tpl.clicked.connect(self._template_models)
+                trow.addWidget(b_tpl)
+                lay.addWidget(section_label("Moteurs d'images ComfyUI"))
+                lay.addLayout(trow)
+
+        # Ollama : modèles recommandés (core/local_llm.OLLAMA_MODELS — jusqu'aux
+        # plus lourds, décision Matthieu) à télécharger puis « Utiliser », et le
+        # plafond de la fenêtre de contexte que PANDORA demande au serveur.
+        self._model_combo = None
+        self._ctx_spin = None
+        if ext.key == "ollama":
+            from PyQt6.QtWidgets import QComboBox, QSpinBox
+            lay.addWidget(section_label("Modèles recommandés"))
+            mrow = QHBoxLayout()
+            mrow.setSpacing(8)
+            self._model_combo = QComboBox()
+            self._model_combo.setEditable(True)
+            self._model_combo.setFixedHeight(36)
+            for m in _ll.OLLAMA_MODELS:
+                self._model_combo.addItem(_ll.model_label(m), m["name"])
+            self._model_combo.setToolTip("\n".join(f"{m['name']} — {m['note']}" for m in _ll.OLLAMA_MODELS))
+            mrow.addWidget(self._model_combo, 1)
+            b_get = _btn("⬇  " + translate("Télécharger ce modèle"), CP["accent"])
+            b_get.clicked.connect(self._pull_chosen)
+            mrow.addWidget(b_get)
+            b_use = _btn("✓  " + translate("Utiliser ce modèle"), CP["accent2"])
+            b_use.clicked.connect(self._use_chosen)
+            mrow.addWidget(b_use)
+            lay.addLayout(mrow)
+            crow = QHBoxLayout()
+            crow.setSpacing(8)
+            clbl = QLabel(translate("Fenêtre de contexte maxi (jetons)"))
+            clbl.setStyleSheet(f"color:{CP['text_secondary']};font-size:11px;background:transparent;")
+            crow.addWidget(clbl)
+            self._ctx_spin = QSpinBox()
+            self._ctx_spin.setRange(_ll.OLLAMA_CTX_FLOOR, _ll.OLLAMA_CTX_MAX)
+            self._ctx_spin.setSingleStep(4096)
+            self._ctx_spin.setFixedHeight(32)
+            self._ctx_spin.setStyleSheet(
+                f"QSpinBox{{background:{CP['bg3']};border:1px solid {CP['border']};border-radius:6px;"
+                f"color:{CP['text_primary']};font-size:11px;padding:0 8px;}}")
+            self._ctx_spin.setValue(self._cfg_int("ollama_num_ctx", _ll.OLLAMA_CTX_DEFAULT))
+            self._ctx_spin.valueChanged.connect(self._save_ctx)
+            crow.addWidget(self._ctx_spin)
+            chint = QLabel(translate("PANDORA dimensionne la fenêtre sur chaque appel (scénario + sortie) sans dépasser ce plafond."))
+            chint.setWordWrap(True)
+            chint.setStyleSheet(f"color:{CP['text_dim']};font-size:10px;background:transparent;")
+            crow.addWidget(chint, 1)
+            lay.addLayout(crow)
+        # llama.cpp : le modèle GGUF (Hugging Face) que « Lancer » servira.
+        if ext.key == "llamacpp":
+            from PyQt6.QtWidgets import QComboBox
+            lay.addWidget(section_label("Modèle GGUF à servir"))
+            grow = QHBoxLayout()
+            grow.setSpacing(8)
+            self._model_combo = QComboBox()
+            self._model_combo.setEditable(True)
+            self._model_combo.setFixedHeight(36)
+            for m in _ll.GGUF_MODELS:
+                self._model_combo.addItem(f"{m['note']}  ·  carte {m['vram']} Go  ·  {m['hf']}", m["hf"])
+            cur = self._cfg_str("llamacpp_model")
+            if cur:
+                i = self._model_combo.findData(cur)
+                self._model_combo.setCurrentIndex(i) if i >= 0 else self._model_combo.setEditText(cur)
+            grow.addWidget(self._model_combo, 1)
+            lay.addLayout(grow)
+
         if ext.license_note:
             note = QLabel("⚠  " + translate(ext.license_note))
             note.setWordWrap(True)
@@ -213,6 +299,9 @@ class ExternalDialog(QDialog):
         self._b_launch.setVisible(st.installed and not st.running and not busy)
         self._b_models.setVisible(ext.key == "comfyui" and st.installed and bool(st.missing) and not busy)
         self._b_pull.setVisible(ext.key == "ollama" and st.running and bool(st.missing) and not busy)
+        # llama.cpp : « Lancer » sert aussi à changer de modèle (le serveur recharge).
+        if ext.key == "llamacpp":
+            self._b_launch.setVisible(st.installed and not busy)
         self._b_cancel.setVisible(busy)
 
     def is_ready(self) -> bool:
@@ -243,17 +332,74 @@ class ExternalDialog(QDialog):
     def _models(self):
         self._run("models")
 
+    def _template_models(self):
+        if self._tpl_combo is None or not self._tpl_combo.currentData():
+            return
+        self._run("models", {"templates": [self._tpl_combo.currentData()]})
+
     def _pull(self):
-        model = ""
-        try:
-            from core.config import load_config
-            model = (load_config().get("ollama_model") or "").strip()
-        except Exception:
-            pass
-        self._run("pull", {"model": model or _ex.OLLAMA_DEFAULT_MODEL})
+        self._run("pull", {"model": self._cfg_str("ollama_model") or _ex.OLLAMA_DEFAULT_MODEL})
+
+    def _chosen_model(self) -> str:
+        if self._model_combo is None:
+            return ""
+        data = self._model_combo.currentData()
+        text = self._model_combo.currentText().strip()
+        # Saisie libre : le texte ; choix de la liste : l'identifiant porté par l'item.
+        i = self._model_combo.findText(text)
+        return str(self._model_combo.itemData(i) or text) if i >= 0 else (text or str(data or ""))
+
+    def _pull_chosen(self):
+        m = self._chosen_model()
+        if m:
+            self._run("pull", {"model": m})
+
+    def _use_chosen(self):
+        m = self._chosen_model()
+        if m:
+            self._save_cfg({"ollama_model": m})
+            self._state.setText("✓  " + translate("Modèle Ollama de PANDORA :") + f" {m}")
+            self._state.setStyleSheet(f"color:{CP['accent']};font-size:11px;background:transparent;")
+
+    def _save_ctx(self, value: int):
+        self._save_cfg({"ollama_num_ctx": int(value)})
 
     def _launch(self):
-        self._run("launch")
+        params = None
+        if self._ext.key == "llamacpp" and self._model_combo is not None:
+            hf = self._chosen_model()
+            if hf:
+                self._save_cfg({"llamacpp_model": hf})
+                params = {"hf": hf}
+        self._run("launch", params)
+
+    # Lecture / écriture de la config : une clé à la fois, sur un clic explicite
+    # (jamais à la construction — les harnais instancient cette fenêtre).
+    @staticmethod
+    def _cfg_str(key: str) -> str:
+        try:
+            from core.config import load_config
+            return str(load_config().get(key) or "").strip()
+        except Exception:
+            return ""
+
+    @staticmethod
+    def _cfg_int(key: str, default: int) -> int:
+        try:
+            from core.config import load_config
+            return int(load_config().get(key) or default)
+        except Exception:
+            return default
+
+    @staticmethod
+    def _save_cfg(values: dict):
+        try:
+            from core.config import load_config, save_config
+            cfg = load_config()
+            cfg.update(values)
+            save_config(cfg)
+        except Exception:
+            pass
 
     def _cancel(self):
         if self._worker is not None:

@@ -25,10 +25,21 @@ Config (config.json) :
     "glm_model"          : modèle GLM (défaut "glm-4.7")
     "ollama_url"         : URL du serveur Ollama (défaut http://localhost:11434)
     "ollama_model"       : modèle Ollama (défaut "llama3.1")
+    "ollama_num_ctx"     : plafond de la fenêtre de contexte demandée à Ollama (défaut 32768)
+    "local_preset"       : serveur OpenAI-compatible LOCAL : lmstudio | llamacpp | vllm | jan | other
+    "local_url"          : son adresse (vide = celle du préréglage, voir core/local_llm)
+    "local_model"        : identifiant du modèle chargé sur ce serveur
+    "local_key"          : clé facultative (un serveur local n'en demande pas)
     "ai_task_engines"    : {task_key: engine_key} — moteur par tâche (override du défaut)
 
 Moteurs (engine_key) — granularité du choix par tâche :
-    "claude" · "fable5" · "gpt" · "mistral" · "kimi" · "glm" · "ollama"
+    "claude" · "fable5" · "gpt" · "mistral" · "kimi" · "glm" · "ollama" · "local" · "custom"
+
+IA LOCALES « comme Claude » (24/09/2026, core/local_llm) : fenêtre de contexte
+Ollama dimensionnée sur l'appel (sinon l'entrée était coupée en silence),
+réflexion désactivée quand le modèle sait penser (comme `thinking: disabled`
+chez Anthropic), blocs <think> retirés des réponses et des flux de TOUS les
+moteurs non-Anthropic, garde vision, consommation journalisée pour tous.
 
 Kimi K2.7 (Moonshot AI) — API officielle compatible OpenAI (base /v1, Bearer key).
 Modèle par défaut "kimi-k2.7-code". L'URL de base étant éditable, le MÊME moteur
@@ -71,7 +82,11 @@ ENGINES: dict[str, dict] = {
     for key, item in _REGISTRY_ENGINES.items()
 }
 
-_PROVIDERS = ("anthropic", "openai", "mistral", "kimi", "glm", "ollama", "custom")
+_PROVIDERS = ("anthropic", "openai", "mistral", "kimi", "glm", "ollama", "local", "custom")
+#: Fournisseurs qui tournent sur la machine : temps de réponse longs tolérés,
+#: aucune clé, directives renforcées (core/engine_prompts).
+_LOCAL_PROVIDERS = ("ollama", "local")
+_LOCAL_TIMEOUT = (10, 1800)      # un gros modèle sur CPU met de longues minutes
 
 # Modèle par défaut (créatif) — Opus 4.8.
 _DEFAULT_CREATIVE = "claude-opus-4-8"
@@ -138,9 +153,23 @@ def _model(tier: str, provider: str | None = None, creative_model: str = "") -> 
         return creative_model or (_cfg().get("glm_model") or "").strip() or _GLM_DEFAULT_MODEL
     if provider == "ollama":
         return creative_model or (_cfg().get("ollama_model") or "llama3.1").strip() or "llama3.1"
+    if provider == "local":
+        return creative_model or (_cfg().get("local_model") or "").strip()
     if provider == "custom":
         return creative_model or (_cfg().get("custom_model") or "").strip()
     return creative_model or _DEFAULT_CREATIVE
+
+
+def is_local_provider(task: str | None = None) -> bool:
+    """Vrai si la tâche est servie par une IA qui tourne sur la machine (ou par
+    un fournisseur OpenAI-compatible pointé vers localhost)."""
+    provider, _ = _resolve_engine(task)
+    if provider in _LOCAL_PROVIDERS:
+        return True
+    if provider in ("kimi", "glm", "custom"):
+        url = (_cfg().get(f"{provider}_url") or "").lower()
+        return "localhost" in url or "127.0.0.1" in url
+    return False
 
 
 # ── Nom d'affichage du moteur global ────────────────────────────────────────────
@@ -204,6 +233,15 @@ def humanize_ai_error(msg: str) -> str:
                    "réessaie dans quelques instants.")
     if "401" in low or "authentication" in low or "invalid x-api-key" in low:
         return _tr("Clé API invalide — vérifie-la dans Paramètres → Clés API.")
+    # Serveur LOCAL éteint : « Connection refused » brut n'aide personne.
+    if ("connection refused" in low or "max retries exceeded" in low
+            or "failed to establish" in low or "winerror 10061" in low
+            or "actively refused" in low):
+        return _tr("Serveur IA injoignable — lancez le serveur local (Ollama, LM Studio, "
+                   "llama.cpp…) ou vérifiez son adresse dans Paramètres → Assistant IA, "
+                   "puis relancez.")
+    if "does not support images" in low or "ne voit pas les images" in low:
+        return msg
     return msg
 
 
@@ -232,6 +270,9 @@ def _engine_display_name(provider: str, creative_model: str) -> str:
         return ENGINES["glm"]["name"]
     if provider == "ollama":
         return creative_model or ENGINES["ollama"]["name"]
+    if provider == "local":
+        from core.local_llm import preset, preset_key
+        return creative_model or ("Serveur IA local · " + preset(preset_key(_cfg()))["name"])
     if provider == "custom":
         return creative_model or "Fournisseur personnalisé"
     return "Claude"
@@ -281,6 +322,12 @@ def key_error(task: str | None = None) -> str | None:
         return None
     if provider == "ollama":
         return None   # serveur local, pas de clé ; l'erreur réseau parlera d'elle-même
+    if provider == "local":
+        # Adresse toujours connue (préréglage) ; seul le MODÈLE peut manquer.
+        if not (cfg.get("local_model") or "").strip():
+            return ("Aucun modèle choisi pour le serveur IA local — Paramètres → Assistant IA → "
+                    "« Tester » liste les modèles chargés sur le serveur, choisissez-en un.")
+        return None
     if provider == "custom":
         url = (cfg.get("custom_url") or "").strip().lower()
         if not url:
@@ -344,6 +391,32 @@ def _note_usage(msg) -> None:
                      provider=getattr(_task_ctx, "provider", "") or "anthropic")
     except Exception:
         pass
+
+
+def _note_counts(input_tokens, output_tokens) -> None:
+    """Même journal, à partir de DÉCOMPTES (OpenAI-compatibles : `usage`,
+    Ollama : prompt_eval_count / eval_count). Les moteurs locaux coûtent 0 $ :
+    les jetons restent visibles dans « Coût du projet », le montant reste nul.
+    Silencieuse par construction (voir _note_usage)."""
+    try:
+        from core.ai_spend import note_usage
+        note_usage(getattr(_task_ctx, "model", "") or "",
+                   getattr(_task_ctx, "task", "") or "",
+                   int(input_tokens or 0), int(output_tokens or 0),
+                   provider=getattr(_task_ctx, "provider", "") or "anthropic")
+    except Exception:
+        pass
+
+
+def _note_oai_usage(j: dict) -> None:
+    u = (j or {}).get("usage") or {}
+    if u:
+        _note_counts(u.get("prompt_tokens"), u.get("completion_tokens"))
+
+
+def _note_ollama_usage(j: dict) -> None:
+    if (j or {}).get("prompt_eval_count") or (j or {}).get("eval_count"):
+        _note_counts(j.get("prompt_eval_count"), j.get("eval_count"))
 
 
 def _anthropic_complete(system, messages, model, max_tokens) -> str:
@@ -424,29 +497,34 @@ def _ollama_messages(system, messages) -> list:
     return out
 
 
-def _openai_payload(system, messages, model, max_tokens, stream_flag) -> tuple:
-    msgs = _openai_messages(system, messages)
-    return ("https://api.openai.com/v1/chat/completions", {
-        "model": model, "max_completion_tokens": max_tokens,
-        "messages": msgs, "stream": stream_flag,
-    }, {"Authorization": f"Bearer {_cfg().get('openai_key', '').strip()}",
-        "Content-Type": "application/json"})
+# ── Adaptateur OpenAI-compatible UNIQUE ─────────────────────────────────────
+# Un seul chemin d'appel pour OpenAI, Mistral, Kimi, GLM, le serveur local et
+# le fournisseur personnalisé : seule la charge utile (URL, clé, options)
+# diffère. Avant le 24/09/2026 chaque moteur avait sa copie du même code —
+# et aucune copie ne retirait la pensée <think> ni ne journalisait les jetons.
 
-
-def _openai_complete(system, messages, model, max_tokens) -> str:
+def _oai_json(url: str, payload: dict, headers: dict, timeout=300) -> dict:
     import requests
-    url, payload, headers = _openai_payload(system, messages, model, max_tokens, False)
-    r = requests.post(url, json=payload, headers=headers, timeout=300)
+    r = requests.post(url, json=payload, headers=headers, timeout=timeout)
     r.raise_for_status()
-    return r.json()["choices"][0]["message"]["content"]
+    j = r.json()
+    _note_oai_usage(j)
+    return j
 
 
-def _openai_stream(system, messages, on_chunk, model, max_tokens) -> str:
+def _oai_complete(url: str, payload: dict, headers: dict, timeout=300) -> str:
+    from core.local_llm import strip_thinking
+    j = _oai_json(url, payload, headers, timeout)
+    return strip_thinking(j["choices"][0].get("message", {}).get("content", "") or "")
+
+
+def _oai_stream(url: str, payload: dict, headers: dict, on_chunk, timeout=300) -> str:
     import json as _json
     import requests
-    url, payload, headers = _openai_payload(system, messages, model, max_tokens, True)
+    from core.local_llm import ThinkFilter
+    filt = ThinkFilter()
     full = ""
-    with requests.post(url, json=payload, headers=headers, timeout=300, stream=True) as r:
+    with requests.post(url, json=payload, headers=headers, timeout=timeout, stream=True) as r:
         r.raise_for_status()
         for line in r.iter_lines():
             if not line or not line.startswith(b"data:"):
@@ -455,14 +533,48 @@ def _openai_stream(system, messages, on_chunk, model, max_tokens) -> str:
             if data == b"[DONE]":
                 break
             try:
-                delta = _json.loads(data)["choices"][0]["delta"].get("content", "")
+                chunk = _json.loads(data)
+            except Exception:
+                continue
+            if chunk.get("usage"):                      # stream_options.include_usage
+                _note_oai_usage(chunk)
+            try:
+                # Les modèles « thinking » (Kimi, GLM, DeepSeek…) posent leur
+                # réflexion dans 'reasoning_content' : ignorée volontairement.
+                delta = chunk["choices"][0]["delta"].get("content", "") or ""
             except Exception:
                 continue
             if delta:
-                full += delta
-                if on_chunk:
-                    on_chunk(delta)
+                vis = filt.feed(delta)
+                if vis:
+                    full += vis
+                    if on_chunk:
+                        on_chunk(vis)
+    rest = filt.flush()
+    if rest:
+        full += rest
+        if on_chunk:
+            on_chunk(rest)
     return full
+
+
+def _openai_payload(system, messages, model, max_tokens, stream_flag) -> tuple:
+    msgs = _openai_messages(system, messages)
+    payload = {"model": model, "max_completion_tokens": max_tokens,
+               "messages": msgs, "stream": stream_flag}
+    if stream_flag:
+        payload["stream_options"] = {"include_usage": True}
+    return ("https://api.openai.com/v1/chat/completions", payload,
+            {"Authorization": f"Bearer {_cfg().get('openai_key', '').strip()}",
+             "Content-Type": "application/json"})
+
+
+def _openai_complete(system, messages, model, max_tokens) -> str:
+    return _oai_complete(*_openai_payload(system, messages, model, max_tokens, False))
+
+
+def _openai_stream(system, messages, on_chunk, model, max_tokens) -> str:
+    return _oai_stream(*_openai_payload(system, messages, model, max_tokens, True), on_chunk)
 
 
 def _mistral_payload(system, messages, model, max_tokens, stream_flag) -> tuple:
@@ -475,35 +587,11 @@ def _mistral_payload(system, messages, model, max_tokens, stream_flag) -> tuple:
 
 
 def _mistral_complete(system, messages, model, max_tokens) -> str:
-    import requests
-    url, payload, headers = _mistral_payload(system, messages, model, max_tokens, False)
-    r = requests.post(url, json=payload, headers=headers, timeout=300)
-    r.raise_for_status()
-    return r.json()["choices"][0]["message"]["content"]
+    return _oai_complete(*_mistral_payload(system, messages, model, max_tokens, False))
 
 
 def _mistral_stream(system, messages, on_chunk, model, max_tokens) -> str:
-    import json as _json
-    import requests
-    url, payload, headers = _mistral_payload(system, messages, model, max_tokens, True)
-    full = ""
-    with requests.post(url, json=payload, headers=headers, timeout=300, stream=True) as r:
-        r.raise_for_status()
-        for line in r.iter_lines():
-            if not line or not line.startswith(b"data:"):
-                continue
-            data = line[5:].strip()
-            if data == b"[DONE]":
-                break
-            try:
-                delta = _json.loads(data)["choices"][0]["delta"].get("content", "")
-            except Exception:
-                continue
-            if delta:
-                full += delta
-                if on_chunk:
-                    on_chunk(delta)
-    return full
+    return _oai_stream(*_mistral_payload(system, messages, model, max_tokens, True), on_chunk)
 
 
 def _kimi_base_url() -> str:
@@ -522,37 +610,13 @@ def _kimi_payload(system, messages, model, max_tokens, stream_flag) -> tuple:
 
 
 def _kimi_complete(system, messages, model, max_tokens) -> str:
-    import requests
-    url, payload, headers = _kimi_payload(system, messages, model, max_tokens, False)
-    r = requests.post(url, json=payload, headers=headers, timeout=300)
-    r.raise_for_status()
-    return r.json()["choices"][0]["message"]["content"]
+    return _oai_complete(*_kimi_payload(system, messages, model, max_tokens, False))
 
 
 def _kimi_stream(system, messages, on_chunk, model, max_tokens) -> str:
-    import json as _json
-    import requests
-    url, payload, headers = _kimi_payload(system, messages, model, max_tokens, True)
-    full = ""
-    with requests.post(url, json=payload, headers=headers, timeout=300, stream=True) as r:
-        r.raise_for_status()
-        for line in r.iter_lines():
-            if not line or not line.startswith(b"data:"):
-                continue
-            data = line[5:].strip()
-            if data == b"[DONE]":
-                break
-            try:
-                # Kimi K2.7 est un modèle « thinking » : on ne garde que 'content'
-                # (la réflexion est dans 'reasoning_content', ignorée volontairement).
-                delta = _json.loads(data)["choices"][0]["delta"].get("content", "")
-            except Exception:
-                continue
-            if delta:
-                full += delta
-                if on_chunk:
-                    on_chunk(delta)
-    return full
+    # Kimi K2.7 est un modèle « thinking » : l'adaptateur commun ne garde que
+    # 'content' (la réflexion est dans 'reasoning_content', ignorée volontairement).
+    return _oai_stream(*_kimi_payload(system, messages, model, max_tokens, True), on_chunk)
 
 
 def _glm_base_url() -> str:
@@ -572,39 +636,12 @@ def _glm_payload(system, messages, model, max_tokens, stream_flag) -> tuple:
 
 
 def _glm_complete(system, messages, model, max_tokens) -> str:
-    # RÉUTILISE le chemin OpenAI-compatible de Kimi : seul le payload
-    # (URL de base + clé glm_*) diffère.
-    import requests
-    url, payload, headers = _glm_payload(system, messages, model, max_tokens, False)
-    r = requests.post(url, json=payload, headers=headers, timeout=300)
-    r.raise_for_status()
-    return r.json()["choices"][0]["message"]["content"]
+    # Même chemin OpenAI-compatible que Kimi : seul le payload (URL + clé glm_*) diffère.
+    return _oai_complete(*_glm_payload(system, messages, model, max_tokens, False))
 
 
 def _glm_stream(system, messages, on_chunk, model, max_tokens) -> str:
-    import json as _json
-    import requests
-    url, payload, headers = _glm_payload(system, messages, model, max_tokens, True)
-    full = ""
-    with requests.post(url, json=payload, headers=headers, timeout=300, stream=True) as r:
-        r.raise_for_status()
-        for line in r.iter_lines():
-            if not line or not line.startswith(b"data:"):
-                continue
-            data = line[5:].strip()
-            if data == b"[DONE]":
-                break
-            try:
-                # GLM 4.7 est un modèle « thinking » (comme Kimi K2.7) : on ne garde
-                # que 'content' (la réflexion 'reasoning_content' est ignorée).
-                delta = _json.loads(data)["choices"][0]["delta"].get("content", "")
-            except Exception:
-                continue
-            if delta:
-                full += delta
-                if on_chunk:
-                    on_chunk(delta)
-    return full
+    return _oai_stream(*_glm_payload(system, messages, model, max_tokens, True), on_chunk)
 
 
 def _custom_base_url() -> str:
@@ -622,61 +659,131 @@ def _custom_payload(system, messages, model, max_tokens, stream_flag) -> tuple:
 
 
 def _custom_complete(system, messages, model, max_tokens) -> str:
-    import requests
-    url, payload, headers = _custom_payload(system, messages, model, max_tokens, False)
-    r = requests.post(url, json=payload, headers=headers, timeout=300)
-    r.raise_for_status()
-    return r.json()["choices"][0]["message"]["content"]
+    return _oai_complete(*_custom_payload(system, messages, model, max_tokens, False), _custom_timeout())
 
 
 def _custom_stream(system, messages, on_chunk, model, max_tokens) -> str:
-    import json as _json
-    import requests
-    url, payload, headers = _custom_payload(system, messages, model, max_tokens, True)
-    full = ""
-    with requests.post(url, json=payload, headers=headers, timeout=300, stream=True) as r:
-        r.raise_for_status()
-        for line in r.iter_lines():
-            if not line or not line.startswith(b"data:"):
-                continue
-            data = line[5:].strip()
-            if data == b"[DONE]":
-                break
-            try:
-                delta = _json.loads(data)["choices"][0]["delta"].get("content", "")
-            except Exception:
-                continue
-            if delta:
-                full += delta
-                if on_chunk:
-                    on_chunk(delta)
-    return full
+    return _oai_stream(*_custom_payload(system, messages, model, max_tokens, True), on_chunk, _custom_timeout())
 
+
+def _custom_timeout():
+    u = _custom_base_url().lower()
+    return _LOCAL_TIMEOUT if ("localhost" in u or "127.0.0.1" in u) else 300
+
+
+# ── Serveur OpenAI-compatible LOCAL (LM Studio, llama.cpp, vLLM, Jan…) ───────
+
+def _local_base_url() -> str:
+    from core.local_llm import local_base_url
+    return local_base_url(_cfg())
+
+
+def _local_payload(system, messages, model, max_tokens, stream_flag) -> tuple:
+    """Charge utile OpenAI stricte ; les serveurs qui l'acceptent (llama.cpp,
+    vLLM, Jan) reçoivent en plus `chat_template_kwargs.enable_thinking=false`
+    — la réflexion des Qwen3-like coûte le budget de sortie, comme chez Ollama
+    (think:false) et Anthropic (thinking:disabled)."""
+    from core.local_llm import preset, preset_key
+    cfg = _cfg()
+    p = preset(preset_key(cfg))
+    msgs = _openai_messages(system, messages)
+    key = (cfg.get("local_key") or "").strip() or "local"
+    payload = {"model": model, "max_tokens": max_tokens, "messages": msgs, "stream": stream_flag}
+    if p["think_kwargs"]:
+        payload["chat_template_kwargs"] = {"enable_thinking": False}
+    if stream_flag and p["usage_stream"]:
+        payload["stream_options"] = {"include_usage": True}
+    return (f"{_local_base_url()}/chat/completions", payload,
+            {"Authorization": f"Bearer {key}", "Content-Type": "application/json"})
+
+
+def _local_complete(system, messages, model, max_tokens) -> str:
+    return _oai_complete(*_local_payload(system, messages, model, max_tokens, False), _LOCAL_TIMEOUT)
+
+
+def _local_stream(system, messages, on_chunk, model, max_tokens) -> str:
+    return _oai_stream(*_local_payload(system, messages, model, max_tokens, True), on_chunk, _LOCAL_TIMEOUT)
+
+
+# ── Ollama ───────────────────────────────────────────────────────────────────
 
 def _ollama_url() -> str:
     return ((_cfg().get("ollama_url") or "http://localhost:11434").strip().rstrip("/"))
 
 
+_OLLAMA_INFO: dict[tuple, dict] = {}       # (url, modèle) → {"caps": [...], "ctx": int}
+_OLLAMA_CTX_USED: dict[str, int] = {}      # modèle → dernière fenêtre demandée (collante)
+
+
+def _ollama_info(model: str) -> dict:
+    """Capacités (completion, vision, thinking…) et contexte natif d'un modèle,
+    lus UNE fois chez Ollama (/api/show). {} si le serveur ne les publie pas."""
+    key = (_ollama_url(), model)
+    if key in _OLLAMA_INFO:
+        return _OLLAMA_INFO[key]
+    info: dict = {}
+    try:
+        import requests
+        r = requests.post(f"{_ollama_url()}/api/show", json={"model": model}, timeout=20)
+        if r.ok:
+            j = r.json()
+            caps = j.get("capabilities")
+            info["caps"] = [str(c).lower() for c in caps] if isinstance(caps, list) else None
+            mi = j.get("model_info") or {}
+            ctx = [v for k, v in mi.items() if str(k).endswith(".context_length")]
+            info["ctx"] = int(ctx[0]) if ctx and isinstance(ctx[0], (int, float)) else 0
+    except Exception:
+        pass
+    _OLLAMA_INFO[key] = info
+    return info
+
+
+def _ollama_request(system, messages, model, max_tokens, stream_flag) -> dict:
+    """La requête /api/chat « comme Claude » : fenêtre de contexte dimensionnée
+    sur l'appel (et jamais réduite ensuite, pour ne pas recharger le modèle),
+    réflexion coupée si le modèle sait penser, garde vision."""
+    from core.local_llm import ollama_num_ctx, vision_error, OLLAMA_CTX_DEFAULT
+    msgs = _ollama_messages(system, messages)
+    info = _ollama_info(model)
+    caps = info.get("caps")
+    err = vision_error(model, caps, messages)
+    if err:
+        raise RuntimeError(err)
+    try:
+        ceiling = int(_cfg().get("ollama_num_ctx") or OLLAMA_CTX_DEFAULT)
+    except (TypeError, ValueError):
+        ceiling = OLLAMA_CTX_DEFAULT
+    ctx = ollama_num_ctx(messages, max_tokens, system, info.get("ctx") or 0, ceiling)
+    ctx = max(ctx, _OLLAMA_CTX_USED.get(model, 0))
+    _OLLAMA_CTX_USED[model] = ctx
+    req = {"model": model, "messages": msgs, "stream": stream_flag,
+           "options": {"num_predict": max_tokens, "num_ctx": ctx}}
+    if caps and "thinking" in caps:
+        req["think"] = False
+    return req
+
+
 def _ollama_complete(system, messages, model, max_tokens) -> str:
     import requests
-    msgs = _ollama_messages(system, messages)
-    r = requests.post(f"{_ollama_url()}/api/chat", json={
-        "model": model, "messages": msgs, "stream": False,
-        "options": {"num_predict": max_tokens},
-    }, timeout=600)
+    from core.local_llm import strip_thinking
+    r = requests.post(f"{_ollama_url()}/api/chat",
+                      json=_ollama_request(system, messages, model, max_tokens, False),
+                      timeout=_LOCAL_TIMEOUT)
     r.raise_for_status()
-    return r.json().get("message", {}).get("content", "")
+    j = r.json()
+    _note_ollama_usage(j)
+    return strip_thinking(j.get("message", {}).get("content", "") or "")
 
 
 def _ollama_stream(system, messages, on_chunk, model, max_tokens) -> str:
     import json as _json
     import requests
-    msgs = _ollama_messages(system, messages)
+    from core.local_llm import ThinkFilter
+    filt = ThinkFilter()
     full = ""
-    with requests.post(f"{_ollama_url()}/api/chat", json={
-        "model": model, "messages": msgs, "stream": True,
-        "options": {"num_predict": max_tokens},
-    }, timeout=600, stream=True) as r:
+    with requests.post(f"{_ollama_url()}/api/chat",
+                       json=_ollama_request(system, messages, model, max_tokens, True),
+                       timeout=_LOCAL_TIMEOUT, stream=True) as r:
         r.raise_for_status()
         for line in r.iter_lines():
             if not line:
@@ -685,13 +792,21 @@ def _ollama_stream(system, messages, on_chunk, model, max_tokens) -> str:
                 chunk = _json.loads(line)
             except Exception:
                 continue
-            delta = chunk.get("message", {}).get("content", "")
+            delta = chunk.get("message", {}).get("content", "") or ""
             if delta:
-                full += delta
-                if on_chunk:
-                    on_chunk(delta)
+                vis = filt.feed(delta)
+                if vis:
+                    full += vis
+                    if on_chunk:
+                        on_chunk(vis)
             if chunk.get("done"):
+                _note_ollama_usage(chunk)
                 break
+    rest = filt.flush()
+    if rest:
+        full += rest
+        if on_chunk:
+            on_chunk(rest)
     return full
 
 
@@ -708,6 +823,8 @@ def _dispatch_complete(provider, system, messages, model, max_tokens) -> str:
         return _glm_complete(system, messages, model, max_tokens)
     if provider == "ollama":
         return _ollama_complete(system, messages, model, max_tokens)
+    if provider == "local":
+        return _local_complete(system, messages, model, max_tokens)
     if provider == "custom":
         return _custom_complete(system, messages, model, max_tokens)
     return _anthropic_complete(system, messages, model, max_tokens)
@@ -724,6 +841,8 @@ def _dispatch_stream(provider, system, messages, on_chunk, model, max_tokens) ->
         return _glm_stream(system, messages, on_chunk, model, max_tokens)
     if provider == "ollama":
         return _ollama_stream(system, messages, on_chunk, model, max_tokens)
+    if provider == "local":
+        return _local_stream(system, messages, on_chunk, model, max_tokens)
     if provider == "custom":
         return _custom_stream(system, messages, on_chunk, model, max_tokens)
     return _anthropic_stream(system, messages, on_chunk, model, max_tokens)
@@ -763,26 +882,26 @@ def chat_ex(system: str, messages: list, tier: str = "creative",
     model = _model(tier, provider, creative)
     sysp  = _adapt(system, task, provider, model)
     _set_task_ctx(task, model, provider)
-    if provider in ("openai", "mistral", "kimi", "glm", "custom"):
-        import requests
+    if provider in ("openai", "mistral", "kimi", "glm", "local", "custom"):
+        from core.local_llm import strip_thinking
         builder = {"openai": _openai_payload, "mistral": _mistral_payload,
                    "kimi": _kimi_payload, "glm": _glm_payload,
-                   "custom": _custom_payload}[provider]
-        url, payload, headers = builder(sysp, messages, model, max_tokens, False)
-        r = requests.post(url, json=payload, headers=headers, timeout=300)
-        r.raise_for_status()
-        choice = r.json()["choices"][0]
-        return {"text": choice.get("message", {}).get("content", "") or "",
+                   "local": _local_payload, "custom": _custom_payload}[provider]
+        timeout = {"local": _LOCAL_TIMEOUT, "custom": _custom_timeout()}.get(provider, 300)
+        j = _oai_json(*builder(sysp, messages, model, max_tokens, False), timeout)
+        choice = j["choices"][0]
+        return {"text": strip_thinking(choice.get("message", {}).get("content", "") or ""),
                 "truncated": choice.get("finish_reason") == "length"}
     if provider == "ollama":
         import requests
-        msgs = _ollama_messages(sysp, messages)
-        r = requests.post(f"{_ollama_url()}/api/chat", json={
-            "model": model, "messages": msgs, "stream": False,
-            "options": {"num_predict": max_tokens}}, timeout=600)
+        from core.local_llm import strip_thinking
+        r = requests.post(f"{_ollama_url()}/api/chat",
+                          json=_ollama_request(sysp, messages, model, max_tokens, False),
+                          timeout=_LOCAL_TIMEOUT)
         r.raise_for_status()
         j = r.json()
-        return {"text": j.get("message", {}).get("content", "") or "",
+        _note_ollama_usage(j)
+        return {"text": strip_thinking(j.get("message", {}).get("content", "") or ""),
                 "truncated": j.get("done_reason", "") == "length"}
     # Anthropic (défaut)
     msg = _anthropic_client().messages.create(

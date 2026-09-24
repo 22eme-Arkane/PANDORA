@@ -6074,7 +6074,8 @@ def studio_ia_file_attente_et_balayage_moteurs():
     assert (pn._count.minimum(), pn._count.maximum()) == (1, 10), "lot de 1 à 10 images"
     _real = inspect.getsource(IG.ImageWorker._real)
     assert "isInterruptionRequested()" in _real, "« Annuler » doit interrompre la file"
-    assert _real.index("isInterruptionRequested()") < _real.index("fal_client.subscribe"), \
+    # Depuis le 24/09/2026 l'appel passe par _subscribe (fal ou ComfyUI).
+    assert _real.index("isInterruptionRequested()") < _real.index("_subscribe("), \
         "interrompre AVANT l'appel facturé (sinon le reste du lot est payé)"
 
     # ── 4. Balayage multi-moteurs ────────────────────────────────────────────
@@ -8894,8 +8895,12 @@ def prix_image_jamais_le_numero_de_version():
 
     # Tout moteur du catalogue doit annoncer un prix : un moteur à 0 $ serait
     # présenté comme gratuit dans « Coût du projet ».
-    _muets = [k for k in _ie.ENGINES if _image_price_hint(k) == 0.0]
+    # Les gabarits ComfyUI (kind « comfy », 24/09/2026) coûtent réellement 0 $ :
+    # leur libellé se termine par « $0 », lisible — ils ne sont pas « muets ».
+    _muets = [k for k in _ie.ENGINES if _image_price_hint(k) == 0.0 and not _ie.is_comfy(k)]
     assert not _muets, f"moteurs sans tarif lisible : {_muets}"
+    _comfy = [k for k in _ie.ENGINES if _ie.is_comfy(k)]
+    assert all(_ie.label_for(k).endswith("$0") for k in _comfy), "gabarit ComfyUI sans « $0 » lisible"
 
 
 @test
@@ -9506,7 +9511,7 @@ def modules_externes_registre_fenetre_bandeau_et_telechargement():
     from api import external_install as _ei
 
     # 1. Registre : chaque module a tout ce que la fenêtre affiche.
-    assert set(_ex.EXTERNALS) == {"comfyui", "h3_local", "ollama"}
+    assert set(_ex.EXTERNALS) == {"comfyui", "h3_local", "ollama", "lmstudio", "llamacpp", "vllm", "jan"}
     for ext in _ex.EXTERNALS.values():
         assert ext.name and ext.purpose and ext.steps and ext.download_url.startswith("https://") \
             and ext.docs_url.startswith("https://"), ext.key
@@ -9576,10 +9581,12 @@ def modules_externes_registre_fenetre_bandeau_et_telechargement():
     from ui.dialog_external import ExternalDialog
     from ui.dialog_comfy_install import ComfyInstallDialog
     st = _ex.Status(installed=False, running=False, detail="test")
-    for key in _ex.EXTERNALS:
+    for key, ext in _ex.EXTERNALS.items():
         dlg = ExternalDialog(key, status=st)
         assert dlg.is_ready() is False and dlg._b_install.isVisible() is False  # caché tant que non affiché
-        assert dlg._b_install.isVisibleTo(dlg), f"{key} : « Installer automatiquement » attendu quand rien n'est installé"
+        # vLLM = documentation seule (Linux / WSL) : pas d'installation automatique, par choix.
+        assert dlg._b_install.isVisibleTo(dlg) == ext.auto_install, \
+            f"{key} : « Installer automatiquement » {'attendu' if ext.auto_install else 'inattendu'} quand rien n'est installé"
         dlg.deleteLater()
     dlg = ComfyInstallDialog(status=_ex.Status(installed=True, running=True, version="0.35.1", missing=["x"]))
     assert dlg.is_ready() and dlg._b_models.isVisibleTo(dlg) and not dlg._b_install.isVisibleTo(dlg)
@@ -9596,11 +9603,275 @@ def modules_externes_registre_fenetre_bandeau_et_telechargement():
         assert "ExternalsSection" in inspect.getsource(importlib.import_module(mod)), f"{mod} : section absente"
     # Le worker n'exécute jamais rien sans clic : ses actions sont nommées, pas devinées.
     for name in ("_comfyui_install", "_comfyui_models", "_comfyui_launch", "_ollama_install",
-                 "_ollama_pull", "_ollama_launch", "_h3_local_install", "_h3_local_launch"):
+                 "_ollama_pull", "_ollama_launch", "_h3_local_install", "_h3_local_launch",
+                 "_lmstudio_install", "_lmstudio_launch", "_jan_install", "_jan_launch",
+                 "_llamacpp_install", "_llamacpp_launch"):
         assert hasattr(_ei.ExternalInstallWorker, name), name
     # Lignes de CODE seulement (le commentaire de closeEvent cite le mot).
     _code = "\n".join(l.split("#", 1)[0] for l in inspect.getsource(ExternalDialog).splitlines())
     assert "terminate(" not in _code, "jamais QThread.terminate()"
+
+
+@test
+def ia_locales_comme_claude_contexte_pensee_vision_et_serveurs():
+    """Chantier IA locales (24/09/2026, demande Matthieu : tous les moteurs, même
+    les plus lourds, « exactement comme Claude »). Quatre défauts corrigés
+    (core/local_llm) : Ollama coupait l'ENTRÉE en silence (pas de num_ctx), la
+    pensée <think> des modèles raisonnants restait dans la réponse, un modèle
+    sans vision « décrivait » des images qu'il ne voyait pas, et LM Studio /
+    llama.cpp / vLLM / Jan n'avaient ni préréglage, ni découverte, ni guide."""
+    import importlib
+    from core import local_llm as ll, ai_registry as R, ai_provider as AP, externals as EX
+    from api import ai_models as AM
+
+    # 1. Pensée : réponses ET flux, balises coupées entre deux fragments.
+    assert ll.strip_thinking("<think>a</think>\n\n[1]") == "[1]"
+    assert ll.strip_thinking("<think>réponse coupée pendant la réflexion") == ""
+    assert ll.strip_thinking("texte <b>gras</b>") == "texte <b>gras</b>"
+    f = ll.ThinkFilter()
+    out = "".join(f.feed(c) for c in ["Bon", "jour <th", "ink>secret</thi", "nk>\n\nRéponse", " <b>x"]) + f.flush()
+    assert out == "Bonjour Réponse <b>x", repr(out)
+
+    # 2. Fenêtre Ollama : dimensionnée sur l'appel, plancher, plafond, contexte natif.
+    big = [{"role": "user", "content": "x" * 60000}]
+    assert ll.ollama_num_ctx(big, 16000) == 32768, "60 000 car. + 16 k de sortie → 32 k"
+    assert ll.ollama_num_ctx([{"role": "user", "content": "court"}], 512) == ll.OLLAMA_CTX_FLOOR
+    assert ll.ollama_num_ctx([{"role": "user", "content": "x" * 300000}], 16000, ceiling=131072) == 131072
+    assert ll.ollama_num_ctx([{"role": "user", "content": "x" * 300000}], 16000,
+                             model_ctx=32768, ceiling=131072) == 32768, "jamais au-delà du modèle"
+    orig = AP._cfg
+    AP._cfg = lambda: {"ai_provider": "ollama", "ollama_model": "m-think", "ollama_num_ctx": 65536}
+    try:
+        url = AP._ollama_url()
+        AP._OLLAMA_INFO[(url, "m-think")] = {"caps": ["completion", "vision", "thinking"], "ctx": 262144}
+        AP._OLLAMA_INFO[(url, "m-plain")] = {"caps": ["completion"], "ctx": 32768}
+        AP._OLLAMA_CTX_USED.pop("m-think", None)
+        req = AP._ollama_request("S", [{"role": "user", "content": "x" * 90000}], "m-think", 16000, False)
+        assert req["think"] is False, "réflexion coupée quand le modèle sait penser (= thinking:disabled chez Anthropic)"
+        assert req["options"]["num_ctx"] == 51200 and req["options"]["num_predict"] == 16000, req["options"]
+        req2 = AP._ollama_request("S", [{"role": "user", "content": "court"}], "m-think", 100, False)
+        assert req2["options"]["num_ctx"] == 51200, "fenêtre collante : jamais réduite (pas de rechargement)"
+        assert "think" not in AP._ollama_request("S", [{"role": "user", "content": "x"}], "m-plain", 10, False)
+        # 3. Garde vision.
+        try:
+            AP._ollama_request("S", [{"role": "user", "content": [
+                {"type": "text", "text": "?"},
+                {"type": "image", "source": {"type": "base64", "data": "AAAA"}}]}], "m-plain", 10, False)
+            raise AssertionError("un modèle sans vision a reçu des images sans erreur")
+        except RuntimeError as e:
+            assert "ne voit pas les images" in str(e)
+        assert not ll.vision_error("m", None, [{"role": "user", "content": [{"type": "image"}]}]), \
+            "capacités inconnues (vieux serveur) → on laisse passer"
+    finally:
+        AP._cfg = orig
+        AP._OLLAMA_CTX_USED.pop("m-think", None)
+
+    # 4. Fournisseur « local » : préréglages, charge utile, clé facultative, groupe.
+    assert "local" in AP._PROVIDERS and R.ENGINES["local"]["group"] == "local" == R.ENGINES["ollama"]["group"]
+    assert set(ll.LOCAL_PRESETS) == {"lmstudio", "llamacpp", "vllm", "jan", "other"}
+    rows = R.primary_menu_items({"local": ["qwen3-8b"], "ollama": ["qwen3.6:latest"]})
+    engines = [r.get("engine") for r in rows if r["selectable"]]
+    assert "local" in engines and "local:qwen3-8b" in engines and "ollama:qwen3.6:latest" in engines
+    assert [r["label"] for r in rows if not r["selectable"]][2] == "Local — sur votre machine"
+    AP._cfg = lambda: {"ai_profile": "single", "ai_provider": "local", "ai_engine": "local",
+                       "local_preset": "llamacpp", "local_model": "qwen3-8b"}
+    try:
+        assert AP._resolve_engine("screenplay") == ("local", "qwen3-8b") and AP.key_error("screenplay") is None
+        url, payload, headers = AP._local_payload("S", [{"role": "user", "content": "h"}], "qwen3-8b", 99, True)
+        assert url == "http://localhost:8080/v1/chat/completions" and headers["Authorization"] == "Bearer local"
+        assert payload["chat_template_kwargs"] == {"enable_thinking": False}, "llama.cpp : réflexion coupée"
+        assert payload["stream_options"] == {"include_usage": True} and payload["max_tokens"] == 99
+        assert AP.is_local_provider("screenplay") and "llama.cpp" in AP._engine_display_name("local", "")
+        AP._cfg = lambda: {"ai_profile": "single", "ai_provider": "local", "ai_engine": "local",
+                           "local_preset": "lmstudio", "local_url": "http://10.0.0.9:1234/v1/"}
+        assert "Aucun modèle" in AP.key_error("assistant")
+        url, payload, _ = AP._local_payload("S", [{"role": "user", "content": "h"}], "m", 9, False)
+        assert url == "http://10.0.0.9:1234/v1/chat/completions" and "chat_template_kwargs" not in payload, \
+            "LM Studio : charge utile strictement OpenAI"
+    finally:
+        AP._cfg = orig
+    assert "injoignable" in AP.humanize_ai_error("HTTPConnectionPool(host='localhost', port=1234): Max retries exceeded")
+    # Un seul adaptateur OpenAI-compatible : plus de copies du même flux.
+    src = inspect.getsource(AP)
+    for fn in ("_openai_stream", "_mistral_stream", "_kimi_stream", "_glm_stream", "_custom_stream", "_local_stream"):
+        assert "_oai_stream(" in inspect.getsource(getattr(AP, fn)), f"{fn} : adaptateur commun attendu"
+    for fn in ("_oai_json", "_ollama_complete", "_ollama_stream"):
+        assert "_note_" in inspect.getsource(getattr(AP, fn)), f"{fn} : consommation non journalisée"
+    assert src.count("filt = ThinkFilter()") == 2, "flux OpenAI-compatible + flux Ollama filtrés"
+    from core.engine_prompts import _needs_reinforcement, TASK_ROLES
+    assert _needs_reinforcement("local", "gros-modele-70b") and _needs_reinforcement("ollama", "x")
+    for t in ("decoupage", "video_prompt", "element_chat", "vision"):
+        assert t in TASK_ROLES, f"rappel de rôle manquant pour {t}"
+
+    # 5. Découverte : les embeddings ne sont pas des assistants ; « local » découvert.
+    assert AM._compatible("ollama", "nomic-embed-text:latest") is False
+    assert AM._compatible("local", "qwen3-8b") and AM._compatible("mistral", "codestral-embed") is False
+    assert "local" in inspect.getsource(AM.discover_all)
+    assert not ll.is_chat_model("bge-reranker-v2") and ll.is_chat_model("gemma3:12b")
+
+    # 6. Modèles recommandés : uniques, tailles et cartes renseignées, jusqu'aux plus lourds.
+    names = [m["name"] for m in ll.OLLAMA_MODELS]
+    assert len(set(names)) == len(names) >= 15 and all(m["gb"] > 0 and m["vram"] >= 8 for m in ll.OLLAMA_MODELS)
+    assert max(m["vram"] for m in ll.OLLAMA_MODELS) >= 80, "les plus lourds aussi (décision Matthieu)"
+    assert any(m["vision"] for m in ll.OLLAMA_MODELS) and all(":" in m["hf"] or "gpt-oss" in m["hf"] for m in ll.GGUF_MODELS)
+
+    # 7. Modules externes des serveurs locaux + panneau partagé dans les DEUX Paramètres.
+    for k in EX.LOCAL_SERVER_KEYS:
+        assert EX.for_engine("local:" + k).key == k and EX.EXTERNALS[k].url_config_key == "local_url"
+    assert EX.local_server_url("jan").endswith(":1337/v1")
+    assert EX.EXTERNALS["lmstudio"].download_url == "https://lmstudio.ai/download/latest/win32/x64"
+    from ui.local_ai_panel import LocalAIPanel
+    pnl = LocalAIPanel()
+    pnl.load({"local_preset": "jan", "local_model": "abc", "ai_available_models": {"local": ["m1", "m2"]}})
+    assert pnl.current_preset() == "jan" and pnl.model_combo.count() == 3
+    assert pnl.apply({}) == {"local_preset": "jan", "local_url": "", "local_model": "abc", "local_key": ""}
+    pnl.deleteLater()
+    for mod in ("ui.page_settings", "ui.page_live_settings"):
+        s = inspect.getsource(importlib.import_module(mod))
+        assert "LocalAIPanel" in s and "_local_panel.apply(cfg)" in s and "_open_ollama_models" in s, mod
+    from ui.dialog_external import ExternalDialog
+    dlg = ExternalDialog("ollama", status=EX.Status(installed=True, running=True, detail="t"))
+    assert dlg._model_combo is not None and dlg._ctx_spin is not None
+    assert dlg._chosen_model() == ll.OLLAMA_MODELS[0]["name"]
+    dlg._model_combo.setEditText("monmodele:7b")
+    assert dlg._chosen_model() == "monmodele:7b"
+    dlg.deleteLater()
+    dlg = ExternalDialog("llamacpp", status=EX.Status(installed=True, running=False, detail="t"))
+    assert dlg._b_launch.isVisibleTo(dlg) and dlg._chosen_model() == ll.GGUF_MODELS[0]["hf"]
+    dlg.deleteLater()
+    import core.i18n as i18n
+    for s in ("Local — sur votre machine", "Modèles recommandés", "Utiliser ce modèle",
+              "Fenêtre de contexte maxi (jetons)", "Clé (vide pour un serveur local)"):
+        assert s in i18n._FR_TO_EN, s
+    # 8. Le script de conformité existe et ne touche jamais la vraie config.
+    cs = open(os.path.join(os.path.dirname(__file__), "ai_conformance.py"), encoding="utf-8").read()
+    assert "AP._cfg = lambda: cfg" in cs and "save_config" not in cs
+
+
+@test
+def images_comfyui_catalogue_contrat_generique_et_appel_unique():
+    """Chantier images (24/09/2026, demande Matthieu : TOUS les moteurs, même
+    les plus lourds) : le catalogue est LU chez ComfyUI (core/comfy_catalog),
+    le contrat de remplissage est lu dans la STRUCTURE de n'importe quel
+    gabarit (core/comfy_image), et tous les points de génération passent par
+    UN appel (core/image_call) qui rend une URL /view comme une URL fal.
+    Validé sur les gabarits officiels contre le serveur ; ici, six d'entre eux
+    figés avec leurs définitions (tools/fixtures/comfy/images)."""
+    import json
+    from core import comfy_catalog as _cc, comfy_image as _ci, comfy_workflow as _wf, image_call as _ic
+
+    # 1. Catalogue : la catégorie « Image » seulement (mediaType = la vignette !),
+    #    pas les nœuds API, pas ce qui n'est pas ouvert.
+    index = [
+        {"title": "Image", "templates": [
+            {"name": "image_other_edit", "title": "E", "mediaType": "image", "tags": ["Image Edit"], "size": 3e9},
+            {"name": "api_x", "title": "API", "mediaType": "image", "openSource": True},
+            {"name": "image_closed", "title": "C", "mediaType": "image", "openSource": False},
+            {"name": "image_z_image", "title": "Z", "mediaType": "image", "size": 21e9, "tags": ["Text to Image"], "openSource": True},
+        ]},
+        {"title": "Video", "templates": [{"name": "video_v", "title": "V", "mediaType": "image", "openSource": True}]},
+        {"title": "Image Tools", "templates": [{"name": "utility_u", "title": "U", "mediaType": "image", "openSource": True}]},
+    ]
+    entries = _cc.parse_index(index)
+    # Familles connues en tête (Z-Image…), le reste alphabétique.
+    assert [e["name"] for e in entries] == ["image_z_image", "image_other_edit"], entries
+    assert entries[1]["edit"] and not entries[0]["edit"]
+    eng = _cc.as_engine({"name": "image_z_image", "title": "Z", "size": 21e9, "edit": False})
+    assert eng["endpoint"] == "comfy:image_z_image" and eng["kind"] == "comfy" and "21 Go" in eng["label"] and eng["label"].endswith("$0")
+    assert _cc.is_comfy_engine("comfy:image_z_image") and _cc.template_name("comfy:image_z_image") == "image_z_image"
+    assert _ic.needs_fal("nb2") and not _ic.needs_fal("comfy:image_z_image")
+
+    # 2. Contrat générique sur six gabarits officiels figés.
+    fx = os.path.join(os.path.dirname(os.path.abspath(__file__)), "fixtures", "comfy", "images")
+    with open(os.path.join(fx, "object_info_images.json"), encoding="utf-8") as f:
+        oi = {k: v for k, v in json.load(f).items() if not k.startswith("_")}
+    expect = {
+        #                                      prompt neg  size  seed  loads
+        "image_z_image_turbo":                 (1,    0,   True, True, 0),
+        # L'instance ACTIVE est la variante « base » (la distillée est contournée) :
+        # elle porte un encodeur négatif à texte vide — un vrai nœud négatif.
+        "image_flux2_klein_text_to_image":     (1,    1,   True, True, 0),
+        "image_flux2_klein_image_edit_4b_distilled": (1, 0, False, True, 1),
+        "image_qwen_image_edit_2509":          (1,    1,   False, True, 1),
+        "image_sdxl_simple":                   (1,    1,   True, True, 0),
+        "hidream_i1_dev":                      (1,    1,   True, True, 0),
+    }
+    for name, (np_, nn, sized, seeded, loads) in expect.items():
+        api = _wf.prune_unreachable(_wf.to_api(_wf.load(os.path.join(fx, name + ".json")), oi), oi)
+        info = _ci.analyze(api, oi)
+        assert len(info["prompt_nodes"]) == np_, (name, info["prompt_nodes"])
+        assert len(info["negative_nodes"]) == nn, (name, info["negative_nodes"])
+        assert bool(info["size_targets"]) is sized, (name, info["size_targets"])
+        assert bool(info["seed_targets"]) is seeded, (name, info["seed_targets"])
+        assert len(info["load_images"]) == loads and info["outputs"], (name, info["load_images"], info["outputs"])
+        refs = ["pandora/a.png"] if loads else []
+        _ci.fill(api, oi, info, "PROMPT PANDORA", "NEG", 832, 480, 4242, refs)
+        for nid in info["prompt_nodes"]:
+            cls = api[nid]["class_type"]
+            assert all(api[nid]["inputs"][k] == "PROMPT PANDORA" for k in _ci._string_inputs(oi, cls)), name
+        for nid in info["negative_nodes"]:
+            assert "NEG" in api[nid]["inputs"].values(), name
+        for nid, key in info["seed_targets"]:
+            assert api[nid]["inputs"][key] == 4242, name
+        if sized:
+            vals = sorted(api[nid]["inputs"][key] for nid, key in info["size_targets"])
+            assert vals[:2] == [480, 832] or vals == [480, 832] * (len(vals) // 2), (name, vals)
+        for nid in info["load_images"]:
+            assert api[nid]["inputs"]["image"] == "pandora/a.png", name
+    # Klein T2V : la largeur promue passe par un PrimitiveInt — celui relié à `width`.
+    api = _wf.prune_unreachable(_wf.to_api(_wf.load(os.path.join(fx, "image_flux2_klein_text_to_image.json")), oi), oi)
+    info = _ci.analyze(api, oi)
+    _ci.fill(api, oi, info, "x", "", 1344, 768, 1, [])
+    lat = next(n for n in api.values() if n["class_type"] == "EmptyFlux2LatentImage")["inputs"]
+    assert api[lat["width"][0]]["inputs"]["value"] == 1344 and api[lat["height"][0]]["inputs"]["value"] == 768, lat
+    # Édition : deux références pour un seul LoadImage → la première ; un LoadImage
+    # de plus que de références → il reprend la première (jamais l'image d'exemple).
+    api = _wf.prune_unreachable(_wf.to_api(_wf.load(os.path.join(fx, "image_flux2_klein_image_edit_4b_distilled.json")), oi), oi)
+    info = _ci.analyze(api, oi)
+    assert not info["size_targets"], "en édition le cadre suit l'image : rien à écrire"
+    _ci.fill(api, oi, info, "x", "", None, None, 1, ["pandora/1.png", "pandora/2.png"])
+    assert api[info["load_images"][0]]["inputs"]["image"] == "pandora/1.png"
+
+    # 3. Nœud CONTOURNÉ (mode 4) : ses entrées passent vers ses sorties, comme le frontend.
+    info_syn = {"A": {"input": {"required": {"text": ["STRING", {"multiline": True}]}}},
+                "B": {"input": {"required": {"conditioning": ["CONDITIONING"]}}},
+                "C": {"input": {"required": {"conditioning": ["CONDITIONING"]}}, "output_node": True}}
+    ui = {"nodes": [
+        {"id": 1, "type": "A", "inputs": [], "outputs": [{"type": "CONDITIONING", "links": [10]}], "widgets_values": ["t"]},
+        {"id": 2, "type": "B", "mode": 4, "inputs": [{"name": "conditioning", "type": "CONDITIONING", "link": 10}],
+         "outputs": [{"type": "CONDITIONING", "links": [11]}], "widgets_values": []},
+        {"id": 3, "type": "C", "inputs": [{"name": "conditioning", "type": "CONDITIONING", "link": 11}], "widgets_values": []},
+    ], "links": [[10, 1, 0, 2, 0, "CONDITIONING"], [11, 2, 0, 3, 0, "CONDITIONING"]]}
+    api = _wf.to_api(ui, info_syn)
+    assert "2" not in api and api["3"]["inputs"]["conditioning"] == ["1", 0], api
+
+    # 4. Un seul appel : « comfy: » part vers ComfyUI, le reste vers fal ; les
+    #    points de génération n'appellent plus fal_client.subscribe directement.
+    import importlib
+    from core import comfy_image as _cim
+    _orig = _cim.subscribe
+    _cim.subscribe = lambda name, args, *a, **k: {"images": [{"url": f"http://127.0.0.1:8188/view?filename={name}.png"}]}
+    try:
+        r = _ic.subscribe("comfy:image_z_image", {"prompt": "p"})
+        assert r["images"][0]["url"].endswith("image_z_image.png")
+    finally:
+        _cim.subscribe = _orig
+    for mod in ("api.nano_banana", "api.apercu", "studio_images.imagegen"):
+        try:
+            src = inspect.getsource(importlib.import_module(mod))
+        except Exception:
+            import importlib.util
+            p = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), *mod.split(".")) + ".py"
+            src = open(p, encoding="utf-8").read()
+        code = "\n".join(l.split("#", 1)[0] for l in src.splitlines())
+        assert "fal_client.subscribe(" not in code, f"{mod} : appel fal direct restant"
+    se = importlib.import_module("core.image_engines")._load_studio_engines()
+    se.ENGINES["comfy:test_tpl"] = se._comfy_engine({"name": "test_tpl", "title": "T", "edit": True, "loads": 2, "size": 5e9})
+    try:
+        ep, args, kind = se.build_request("comfy:test_tpl", "p", (1024, 576), "1K", ["d1", "d2", "d3"])
+        assert ep == "comfy:test_tpl" and args["width"] == 1024 and args["ref_urls"] == ["d1", "d2"] and kind == "raster"
+    finally:
+        del se.ENGINES["comfy:test_tpl"]
 
 
 if __name__ == "__main__":

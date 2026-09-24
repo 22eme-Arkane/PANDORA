@@ -165,6 +165,68 @@ _TOP_ENGINES = ["seedream5_pro", "recraft", "nb2"]
 ENGINES = {k: ENGINES[k] for k in
            (_TOP_ENGINES + [k for k in ENGINES if k not in _TOP_ENGINES])}
 
+
+# ── Moteurs ComfyUI (24/09/2026) — les gabarits d'images officiels, en local ─
+# Le cache est écrit par core/comfy_catalog quand ComfyUI répond (index lu
+# chez le serveur) ; ce module reste AUTONOME (pas d'import de core) et se
+# contente de le lire. Chaque gabarit devient un moteur kind="comfy", endpoint
+# « comfy:<nom> », 0 $ — routé vers ComfyUI par core/image_call.
+def _comfy_cache_path() -> str:
+    import os
+    base = os.environ.get("LOCALAPPDATA") or os.path.expanduser("~")
+    return os.path.join(base, "PANDORA", "externals", "comfy_image_catalog.json")
+
+
+def _comfy_engine(entry: dict) -> dict:
+    name = str(entry.get("name") or "")
+    edit = bool(entry.get("edit"))
+    loads = int(entry.get("loads") or (1 if edit else 0))
+    size = int(entry.get("size") or 0)
+    poids = f"{size / 1e9:.0f} Go" if size >= 1e9 else (f"{size / 1e6:.0f} Mo" if size else "?")
+    return {
+        # « $0 » en queue : la mention de prix se LIT dans le libellé (price_hint).
+        "label":    f"ComfyUI · {entry.get('title') or name}  ·  "
+                    f"{'édition · réfs' if edit else 'texte → image'} · {poids} sur votre GPU  ·  $0",
+        "endpoint": "comfy:" + name,
+        "kind":     "comfy",
+        "family":   "ComfyUI",
+        # Le nom du gabarit est unique par construction : le slug le garde en
+        # entier (abrégé, deux gabarits se confondaient — test « slugs uniques »).
+        "slug":     "comfy-" + name.lower().replace("_", "-"),
+        "output":   "raster",
+        "refs":     ({"max": loads, "hint": f"✅ {loads} image(s) de référence = entrées du gabarit"} if loads
+                     else {"max": 0, "hint": "❌ gabarit texte → image : les références sont ignorées"}),
+        "comfy":    {"name": name, "edit": edit, "size": size},
+    }
+
+
+def load_comfy_engines() -> dict:
+    """{clé: moteur} depuis le cache — vide si ComfyUI n'a jamais répondu."""
+    import json
+    try:
+        with open(_comfy_cache_path(), encoding="utf-8") as f:
+            entries = json.load(f).get("templates") or []
+    except Exception:
+        return {}
+    out = {}
+    for e in entries:
+        if e.get("name"):
+            out["comfy:" + e["name"]] = _comfy_engine(e)
+    return out
+
+
+ENGINES.update(load_comfy_engines())
+
+
+def refresh_comfy_engines() -> int:
+    """Relit le cache (après un rafraîchissement par core/comfy_catalog) et met
+    le catalogue à jour en place — les sélecteurs repeuplés ensuite le voient."""
+    fresh = load_comfy_engines()
+    for k in [k for k in ENGINES if k.startswith("comfy:") and k not in fresh]:
+        del ENGINES[k]
+    ENGINES.update(fresh)
+    return len(fresh)
+
 # Moteur par défaut d'une nouvelle installation (la préférence sauvegardée de
 # l'utilisateur prime toujours).
 DEFAULT_ENGINE = "seedream5_pro"
@@ -243,6 +305,16 @@ def build_request(engine_key: str, prompt: str, target: tuple,
     e = ENGINES.get(engine_key, ENGINES["nb2"])
     kind = e["kind"]
     refs = [u for u in (ref_urls or []) if u]
+
+    if kind == "comfy":
+        # ComfyUI (core/comfy_image) : prompt, cadre exact, références telles
+        # quelles (data-URL / chemin / http) ; le gabarit fait le reste.
+        w, h = target
+        _max = int(e.get("refs", {}).get("max") or 0)
+        return e["endpoint"], {
+            "prompt": prompt, "width": int(w), "height": int(h),
+            "ref_urls": refs[:_max] if _max else [],
+        }, "raster"
 
     if kind == "nano":
         args = {

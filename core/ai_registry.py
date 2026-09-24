@@ -12,6 +12,9 @@ from __future__ import annotations
 GROUPS = (
     ("anthropic", "Anthropic"),
     ("openai", "ChatGPT / OpenAI"),
+    # Les IA qui tournent SUR la machine (Ollama, LM Studio, llama.cpp, vLLM,
+    # Jan…) : un groupe à elles depuis le 24/09/2026 — voir core/local_llm.
+    ("local", "Local — sur votre machine"),
     ("experimental", "Expérimental"),
 )
 
@@ -45,15 +48,21 @@ ENGINES: dict[str, dict] = {
     "mistral":      {"group": "experimental", "provider": "mistral", "model": "mistral-large-latest", "utility_model": "mistral-small-latest", "name": "Mistral"},
     "kimi":         {"group": "experimental", "provider": "kimi", "model": "kimi-k2.7-code", "name": "Kimi"},
     "glm":          {"group": "experimental", "provider": "glm", "model": "glm-4.7", "name": "GLM"},
-    "ollama":       {"group": "experimental", "provider": "ollama", "model": "llama3.1", "name": "Ollama local"},
+    "ollama":       {"group": "local", "provider": "ollama", "model": "llama3.1", "name": "Ollama local"},
+    # Serveur OpenAI-compatible LOCAL (préréglages LM Studio / llama.cpp / vLLM /
+    # Jan dans core/local_llm) : le modèle vient de la config (local_model).
+    "local":        {"group": "local", "provider": "local", "model": "", "name": "Serveur IA local (LM Studio, llama.cpp, vLLM, Jan…)"},
     "custom":       {"group": "experimental", "provider": "custom", "model": "", "name": "Fournisseur personnalisé"},
 }
 
 ENGINE_ORDER = [
     "opus", "claude", "haiku", "fable5",
     "openai_sol", "openai_terra", "openai_luna", "gpt",
-    "mistral", "kimi", "glm", "ollama", "custom",
+    "mistral", "kimi", "glm", "ollama", "local", "custom",
 ]
+
+#: Fournisseurs qui tournent sur la machine (aucune clé, aucun crédit).
+LOCAL_PROVIDERS = ("ollama", "local")
 
 
 ANTHROPIC_OPTIMIZED: dict[str, str] = {
@@ -112,7 +121,12 @@ def dynamic_engine(provider: str, model: str) -> dict:
     """Crée une fiche moteur pour un modèle retourné par une API ``/models``."""
     provider = (provider or "").strip().lower()
     model = (model or "").strip()
-    group = provider if provider in ("anthropic", "openai") else "experimental"
+    if provider in ("anthropic", "openai"):
+        group = provider
+    elif provider in LOCAL_PROVIDERS:
+        group = "local"
+    else:
+        group = "experimental"
     return {"group": group, "provider": provider, "model": model,
             "utility_model": model, "name": model}
 
@@ -133,9 +147,10 @@ def engine(key: str, cfg: dict | None = None) -> dict | None:
         "kimi": cfg.get("kimi_model"),
         "glm": cfg.get("glm_model"),
         "ollama": cfg.get("ollama_model"),
+        "local": cfg.get("local_model"),
         "custom": cfg.get("custom_model"),
     }.get(provider)
-    if configured and key in ("gpt", "kimi", "glm", "ollama", "custom"):
+    if configured and key in ("gpt", "kimi", "glm", "ollama", "local", "custom"):
         item["model"] = str(configured).strip()
         item["utility_model"] = item["model"]
     return item
@@ -170,6 +185,8 @@ def _legacy_single_engine(cfg: dict) -> dict:
         model = (cfg.get("glm_model") or "glm-4.7").strip()
     elif provider == "ollama":
         model = (cfg.get("ollama_model") or "llama3.1").strip()
+    elif provider == "local":
+        model = (cfg.get("local_model") or "").strip()
     elif provider == "custom":
         model = (cfg.get("custom_model") or "").strip()
     else:
@@ -218,7 +235,12 @@ def primary_menu_items(discovered: dict[str, list[str]] | None = None) -> list[d
     static_by_group = {
         "anthropic": ["opus", "claude", "haiku", "fable5"],
         "openai": ["openai_sol", "openai_terra", "openai_luna", "gpt"],
-        "experimental": ["mistral", "kimi", "glm", "ollama", "custom"],
+        "local": ["ollama", "local"],
+        "experimental": ["mistral", "kimi", "glm", "custom"],
+    }
+    providers_by_group = {
+        "local": LOCAL_PROVIDERS,
+        "experimental": ("mistral", "kimi", "glm", "custom"),
     }
     profile_by_group = {
         "anthropic": "anthropic_optimized",
@@ -237,8 +259,7 @@ def primary_menu_items(discovered: dict[str, list[str]] | None = None) -> list[d
             rows.append({"label": item["name"], "selectable": True,
                          "profile": "custom" if key == "custom" else "single",
                          "engine": key})
-        providers = (group_key,) if group_key != "experimental" else (
-            "mistral", "kimi", "glm", "ollama", "custom")
+        providers = providers_by_group.get(group_key, (group_key,))
         for provider in providers:
             for model in discovered.get(provider, []) or []:
                 if model in seen:

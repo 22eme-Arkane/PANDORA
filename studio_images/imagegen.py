@@ -18,6 +18,25 @@ from PyQt6.QtCore import QThread, pyqtSignal
 import engines
 
 
+def _subscribe(endpoint: str, arguments: dict | None = None, **kw) -> dict:
+    """fal, ou ComfyUI pour un endpoint « comfy:… » (24/09/2026). Le pont vit
+    dans core/image_call — présent dans PANDORA ; en Studio autonome (sans
+    core), un moteur ComfyUI n'est simplement pas proposé."""
+    if str(endpoint).startswith("comfy:"):
+        from core.image_call import subscribe as _s
+        return _s(endpoint, arguments, **kw)
+    import fal_client
+    return _subscribe(endpoint, arguments=arguments or {}, **kw)
+
+
+def _fal_needed(jobs) -> bool:
+    """Une clé fal manque-t-elle vraiment ? Pas si tous les moteurs demandés
+    sont des gabarits ComfyUI (0 $, en local)."""
+    if not jobs:
+        return True
+    return any(not str(k).startswith("comfy:") for k in jobs)
+
+
 def _extract_image_url(result) -> str:
     """Extrait l'URL de la première image d'une réponse fal.ai."""
     if not isinstance(result, dict):
@@ -86,7 +105,7 @@ class ImageWorker(QThread):
 
     def run(self):
         os.makedirs(self._out_dir, exist_ok=True)
-        if not self._key:
+        if not self._key and _fal_needed(getattr(self, "_jobs", None)):
             self._mock()
         else:
             self._real()
@@ -153,7 +172,7 @@ class ImageWorker(QThread):
             try:
                 endpoint, args, out_kind = engines.build_request(
                     ekey, self._prompt, self._target, self._res, ref_urls)
-                result = fal_client.subscribe(endpoint, arguments=args)
+                result = _subscribe(endpoint, arguments=args)
 
                 self.progress.emit(base + int(84 / n * 0.6),
                                    f"[{i + 1}/{n}] {name} — téléchargement…")
@@ -219,7 +238,7 @@ class OutpaintWorker(QThread):
         if not self._expands:
             self.failed.emit("Aucune extension demandée (l'image est déjà au format cible).")
             return
-        if not self._key:
+        if not self._key and _fal_needed(getattr(self, "_jobs", None)):
             self._mock()
         else:
             self._real()
@@ -257,7 +276,7 @@ class OutpaintWorker(QThread):
             self.progress.emit(35, "FLUX.2 Outpaint — extension de l'image…")
             args = {"image_url": image_url, "mode": "high",
                     "output_format": "png", **self._expands}
-            result = fal_client.subscribe("fal-ai/flux-2-pro/outpaint", arguments=args)
+            result = _subscribe("fal-ai/flux-2-pro/outpaint", arguments=args)
 
             url = _extract_image_url(result)
             self.progress.emit(75, "Téléchargement de l'image étendue…")

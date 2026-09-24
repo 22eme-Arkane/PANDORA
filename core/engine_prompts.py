@@ -62,6 +62,22 @@ TASK_ROLES: dict[str, str] = {
         "Tu modifies un storyboard par conversation : ta réponse est le JSON "
         "strict demandé (réponse + éditions ciblées) — rien d'autre."
     ),
+    "decoupage": (
+        "Tu produis un DÉCOUPAGE technique (fiches de plans) : ta réponse suit "
+        "EXACTEMENT le format demandé par les consignes, du premier au dernier plan."
+    ),
+    "video_prompt": (
+        "Tu écris le prompt final d'un plan pour un moteur vidéo : ta réponse est "
+        "UNIQUEMENT ce prompt, dans la langue exigée — sans titre ni commentaire."
+    ),
+    "element_chat": (
+        "Tu diriges artistiquement un élément (personnage, décor, accessoire…) : "
+        "ta réponse respecte le format demandé, sans commentaire autour."
+    ),
+    "vision": (
+        "Tu analyses les IMAGES fournies : décris uniquement ce qui s'y voit, "
+        "dans le format demandé — n'invente rien qui ne soit pas visible."
+    ),
 }
 
 
@@ -108,7 +124,7 @@ ta sortie respecte le format demandé du premier au dernier caractère.\
 def _needs_reinforcement(provider: str, model: str) -> bool:
     """Petits modèles locaux → directives répétées. Ollama toujours ; les autres
     providers OpenAI-compatibles pointés vers un modèle visiblement petit aussi."""
-    if provider == "ollama":
+    if provider in ("ollama", "local"):
         return True
     m = (model or "").lower()
     # Heuristique : tailles de petits modèles dans le nom (llama3.1:8b, mistral-7b…)

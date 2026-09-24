@@ -127,15 +127,94 @@ EXTERNALS: dict[str, External] = {
         docs_url="https://ollama.com/library",
         steps=(
             "Installer Ollama (installeur officiel) — il démarre ensuite tout seul.",
-            f"Télécharger un modèle (par défaut « {OLLAMA_DEFAULT_MODEL} », ~5 Go) : "
-            "PANDORA peut le faire pour vous.",
+            "Télécharger un modèle : PANDORA en propose une liste (Qwen, Gemma, Mistral, "
+            "gpt-oss, Llama… de 5 Go aux plus lourds) et le télécharge pour vous.",
             "Choisir « Ollama local » dans l'Assistant IA des Paramètres.",
         ),
         engine_keys=("ollama",),
         url_config_key="ollama_url",
         auto_install=True,
     ),
+    # ── Serveurs OpenAI-compatibles locaux (fournisseur « local », préréglages
+    # dans core/local_llm) — chantier IA locales du 24/09/2026 ─────────────
+    "lmstudio": External(
+        key="lmstudio",
+        name="LM Studio",
+        purpose="IA texte locale avec une interface : catalogue de modèles GGUF, "
+                "chargement en un clic, serveur OpenAI-compatible (port 1234). PANDORA "
+                "s'y connecte comme à Claude. Aucune clé, aucun crédit.",
+        download_url="https://lmstudio.ai/download/latest/win32/x64",
+        docs_url="https://lmstudio.ai/docs/app/api",
+        steps=(
+            "Installer LM Studio (installeur officiel) et télécharger un modèle dans son "
+            "onglet Découvrir (Qwen3, Gemma 3, Mistral Small… selon votre carte).",
+            "Charger le modèle avec une fenêtre de contexte d'au moins 32 000 jetons "
+            "(réglage du chargement), puis démarrer le serveur local (onglet Développeur).",
+            "Dans PANDORA : Assistant IA → « Serveur IA local », préréglage LM Studio, "
+            "« Tester » liste les modèles chargés.",
+        ),
+        engine_keys=("local:lmstudio",),
+        url_config_key="local_url",
+        auto_install=True,
+    ),
+    "llamacpp": External(
+        key="llamacpp",
+        name="llama.cpp (llama-server)",
+        purpose="Le moteur de référence des modèles GGUF, sans interface : un exécutable, "
+                "un modèle pris sur Hugging Face, un port (8080). Le plus léger et le "
+                "plus rapide sur une carte NVIDIA.",
+        download_url="https://github.com/ggml-org/llama.cpp/releases",
+        docs_url="https://github.com/ggml-org/llama.cpp/blob/master/tools/server/README.md",
+        steps=(
+            "PANDORA télécharge la dernière version Windows (CUDA si une carte NVIDIA est "
+            "détectée, sinon CPU) dans son dossier de modules.",
+            "« Lancer » ouvre une console : llama-server télécharge le modèle GGUF choisi "
+            "(Hugging Face) au premier démarrage, puis sert le port 8080.",
+            "Dans PANDORA : Assistant IA → « Serveur IA local », préréglage llama.cpp.",
+        ),
+        engine_keys=("local:llamacpp",),
+        url_config_key="local_url",
+        auto_install=True,
+    ),
+    "vllm": External(
+        key="vllm",
+        name="vLLM",
+        purpose="Serveur haute performance pour les GROS modèles, sur une ou plusieurs "
+                "cartes (Linux ou WSL sous Windows). Port 8000, API OpenAI-compatible.",
+        download_url="https://docs.vllm.ai/en/latest/getting_started/installation/",
+        docs_url="https://docs.vllm.ai/",
+        steps=(
+            "Installer vLLM sur une machine Linux (ou WSL) : « pip install vllm » dans un "
+            "environnement Python avec CUDA — voir le guide.",
+            "Démarrer « vllm serve <modèle> --port 8000 » ; le serveur télécharge le modèle "
+            "depuis Hugging Face.",
+            "Dans PANDORA : Assistant IA → « Serveur IA local », préréglage vLLM, adresse "
+            "de la machine si elle n'est pas celle-ci.",
+        ),
+        engine_keys=("local:vllm",),
+        url_config_key="local_url",
+        auto_install=False,
+    ),
+    "jan": External(
+        key="jan",
+        name="Jan",
+        purpose="Application open source : catalogue de modèles, interface de chat et "
+                "serveur OpenAI-compatible local (port 1337).",
+        download_url="https://github.com/janhq/jan/releases/latest",
+        docs_url="https://jan.ai/docs",
+        steps=(
+            "Installer Jan (installeur officiel) et télécharger un modèle dans son Hub.",
+            "Activer le serveur local dans Jan (Paramètres → Serveur local, port 1337).",
+            "Dans PANDORA : Assistant IA → « Serveur IA local », préréglage Jan.",
+        ),
+        engine_keys=("local:jan",),
+        url_config_key="local_url",
+        auto_install=True,
+    ),
 }
+
+#: Les modules qui servent le fournisseur « local » (clé du préréglage = clé du module).
+LOCAL_SERVER_KEYS = ("lmstudio", "llamacpp", "vllm", "jan")
 
 
 def for_engine(engine_key: str) -> External | None:
@@ -191,6 +270,51 @@ def ollama_exe() -> str:
     return shutil.which("ollama") or ""
 
 
+def _first_file(*paths: str) -> str:
+    for p in paths:
+        if p and os.path.isfile(p):
+            return p
+    return ""
+
+
+def lmstudio_exe() -> str:
+    la, pf = os.environ.get("LOCALAPPDATA", ""), os.environ.get("PROGRAMFILES", "")
+    return _first_file(os.path.join(la, "Programs", "LM Studio", "LM Studio.exe"),
+                       os.path.join(la, "LM-Studio", "LM Studio.exe"),
+                       os.path.join(pf, "LM Studio", "LM Studio.exe"))
+
+
+def lms_cli() -> str:
+    """L'outil en ligne de commande de LM Studio (« lms server start ») — il
+    permet de démarrer le serveur sans passer par l'interface."""
+    home = os.path.expanduser("~")
+    return _first_file(os.path.join(home, ".lmstudio", "bin", "lms.exe"),
+                       os.path.join(home, ".cache", "lm-studio", "bin", "lms.exe")) \
+        or (shutil.which("lms") or "")
+
+
+def jan_exe() -> str:
+    la, pf = os.environ.get("LOCALAPPDATA", ""), os.environ.get("PROGRAMFILES", "")
+    return _first_file(os.path.join(la, "Programs", "jan", "Jan.exe"),
+                       os.path.join(la, "Programs", "Jan", "Jan.exe"),
+                       os.path.join(pf, "Jan", "Jan.exe"))
+
+
+def llamacpp_dir() -> str:
+    return os.path.join(externals_dir(), "llama.cpp")
+
+
+def llama_server_exe() -> str:
+    return _first_file(os.path.join(llamacpp_dir(), "llama-server.exe")) \
+        or (shutil.which("llama-server") or "")
+
+
+def nvidia_gpu_present() -> bool:
+    return bool(shutil.which("nvidia-smi")
+                or os.path.isfile(os.path.join(os.environ.get("SYSTEMROOT", r"C:\Windows"),
+                                               "System32", "nvidia-smi.exe")))
+
+
 def h3_local_dir() -> str:
     return os.path.join(externals_dir(), "minimax-h3-local")
 
@@ -228,13 +352,42 @@ def h3_models_required() -> list[dict]:
 def h3_models_missing(models_dir: str) -> list[dict]:
     """Ceux qui ne sont pas (complètement) dans le dossier de modèles : un
     `.part` en cours de téléchargement compte comme absent."""
+    return models_missing(h3_models_required(), models_dir)
+
+
+def models_missing(required: list[dict], models_dir: str) -> list[dict]:
     if not models_dir:
-        return h3_models_required()
-    out = []
-    for m in h3_models_required():
-        if not os.path.isfile(os.path.join(models_dir, m["directory"], m["name"])):
-            out.append(m)
-    return out
+        return list(required)
+    return [m for m in required
+            if not os.path.isfile(os.path.join(models_dir, m["directory"], m["name"]))]
+
+
+def _models_of_workflow(wf: dict) -> list[dict]:
+    seen: dict[str, dict] = {}
+    nodes = list(wf.get("nodes") or [])
+    for sg in (wf.get("definitions") or {}).get("subgraphs") or []:
+        nodes.extend(sg.get("nodes") or [])
+    for n in nodes:
+        for m in (n.get("properties") or {}).get("models") or []:
+            name, url, d = m.get("name"), m.get("url"), m.get("directory")
+            if name and url and d and name not in seen:
+                seen[name] = {"name": name, "url": url, "directory": d}
+    return list(seen.values())
+
+
+def template_models(name: str) -> list[dict]:
+    """Les fichiers de modèles qu'un gabarit officiel d'IMAGE déclare — lus
+    dans sa copie locale (core/comfy_image.load_template la range dans le
+    dossier des modules quand ComfyUI répond). Vide si le gabarit n'a jamais
+    été chargé."""
+    from core import comfy_workflow as _wf
+    path = os.path.join(externals_dir(), "comfy_templates", f"{name}.json")
+    if not os.path.isfile(path):
+        return []
+    try:
+        return _models_of_workflow(_wf.load(path))
+    except Exception:
+        return []
 
 
 # ── Détection ────────────────────────────────────────────────────────────────
@@ -316,4 +469,45 @@ def detect(key: str) -> Status:
         else:
             st.detail = f"Ollama {st.version} en marche, modèle prêt."
         return st
+    if key in LOCAL_SERVER_KEYS:
+        return _detect_openai_server(key)
     return Status(detail=f"Module inconnu : {key}", checked=False)
+
+
+def local_server_url(key: str) -> str:
+    """Adresse d'un serveur local : celle saisie dans les Paramètres si le
+    préréglage courant est ce module, sinon celle du préréglage."""
+    from core.local_llm import preset_url
+    try:
+        from core.config import load_config
+        cfg = load_config()
+        if (cfg.get("local_preset") or "").strip().lower() == key and (cfg.get("local_url") or "").strip():
+            return cfg["local_url"].strip().rstrip("/")
+    except Exception:
+        pass
+    return preset_url(key)
+
+
+def _detect_openai_server(key: str) -> Status:
+    exe = {"lmstudio": lmstudio_exe, "jan": jan_exe, "llamacpp": llama_server_exe}.get(key, lambda: "")()
+    st = Status(installed=bool(exe))
+    base = local_server_url(key)
+    name = EXTERNALS[key].name
+    try:
+        j = _get_json(base + "/models")
+        st.running = st.installed = True
+        names = [str(m.get("id") if isinstance(m, dict) else m) for m in (j.get("data") or [])]
+        st.version = f"{len(names)} modèle(s)"
+        if not names:
+            st.missing = ["(aucun modèle chargé)"]
+    except Exception:
+        st.running = False
+    if not st.installed:
+        st.detail = f"{name} n'est pas installé sur cet ordinateur (ou son serveur ne répond pas sur {base})."
+    elif not st.running:
+        st.detail = f"{name} est installé mais son serveur ne répond pas sur {base}."
+    elif st.missing:
+        st.detail = f"{name} répond sur {base} — aucun modèle chargé : chargez-en un dans l'application."
+    else:
+        st.detail = f"{name} en marche sur {base} — {st.version}."
+    return st

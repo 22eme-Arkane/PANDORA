@@ -75,6 +75,36 @@ a second instead of forty.**
 - **H3 generates from the Storyboard.** MiniMax H3 (fal, local sd.cpp,
   ComfyUI) now appears in « Generate from storyboard » and in the Live
   sequences, not only in the Engines tab.
+- **Every open ComfyUI image template becomes an image engine — 0 $.**
+  Characters, sets, props, moods and the image Studio can now render on your
+  own GPU: PANDORA reads ComfyUI's official template index (the « Image »
+  category — Z-Image, Flux.2 Klein and Dev, Qwen-Image and Qwen-Image-Edit,
+  Krea-2, SDXL, SD3.5, HiDream, Chroma, Lumina, OmniGen2… 101 templates, up
+  to the heaviest), works out where each one takes its prompt, negative
+  prompt, size, seed and reference images from the template's own structure,
+  and calls it through the same single path as the fal engines. The list is
+  read from your ComfyUI and cached, so it follows ComfyUI's updates. The
+  ComfyUI window downloads a template's model files for you. Verified end to
+  end: an SDXL image in 16 s.
+- **Local text AIs work like Claude.** Four things kept a local model from
+  behaving: Ollama silently cut the *input* (no context window was
+  requested, so a screenplay lost its beginning and the system prompt),
+  reasoning models left their `<think>` blocks in the answer (JSON parsing
+  broke, the output budget was eaten), a model without vision « described »
+  images it never saw, and LM Studio, llama.cpp, vLLM and Jan only existed
+  behind « custom provider ». Now: the context window is sized on every call
+  (ceiling adjustable), thinking is switched off when the model supports it
+  and stripped otherwise (answers and streams, all non-Anthropic engines),
+  a clear error names a vision-capable model, and a « Local — on your
+  machine » group in the AI Assistant offers Ollama and a *Local AI server*
+  with presets for LM Studio, llama.cpp, vLLM and Jan — address, model
+  discovery, install/launch window. The Ollama window lists recommended
+  models from 5 GB to 140 GB (Qwen, Gemma, Mistral, gpt-oss, Llama,
+  DeepSeek) and downloads them. Token usage of every engine is logged in
+  « Project cost » (local engines at 0 $). A conformance script
+  (`tools/ai_conformance.py`) checks any engine against PANDORA's real
+  requirements: bare translation, JSON arrays and objects, exact markers,
+  truncation + continuation, no thinking, long context, vision.
 
 ---
 

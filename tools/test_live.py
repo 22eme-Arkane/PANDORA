@@ -1750,8 +1750,16 @@ def parametres_live_parite_cinema():
     # Testeurs de clés + aide API (parité)
     for m in ("test_connection", "test_anthropic_connection", "test_openai_connection",
               "test_mistral_connection", "test_kimi_connection", "test_glm_connection",
-              "_show_api_help", "_toggle_advanced"):
+              "_show_api_help", "_toggle_advanced", "_open_ollama_models"):
         assert hasattr(liv, m), f"parité Paramètres : {m} manquant côté Live"
+    # Serveur IA local (LM Studio, llama.cpp, vLLM, Jan…) : MÊME panneau que le
+    # Cinéma (ui/local_ai_panel), visible quand « Serveur IA local » est choisi.
+    assert type(liv._local_panel) is type(cin._local_panel), "panneau partagé attendu"
+    _lo_i = next(i for i in range(liv._ai_combo.count())
+                 if isinstance(liv._ai_combo.itemData(i), dict)
+                 and liv._ai_combo.itemData(i).get("engine") == "local")
+    liv._ai_combo.setCurrentIndex(_lo_i)
+    assert liv._local_panel.isVisibleTo(liv), "panneau local visible côté Live"
     # « Choix personnalisé » déplie les avancés et laisse TOUTES les clés saisissables
     _cu_i = next(i for i in range(liv._ai_combo.count())
                   if isinstance(liv._ai_combo.itemData(i), dict)

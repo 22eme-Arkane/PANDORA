@@ -92,6 +92,25 @@ def _norm_links(raw) -> dict[str, tuple[str, int, str, int]]:
 
 # ── Aplatissement des sous-graphes ───────────────────────────────────────────
 
+def _collect_defs(wf: dict) -> dict:
+    """Toutes les définitions de sous-graphes, y compris celles NICHÉES dans la
+    définition d'un autre sous-graphe : dans Flux.2 Klein 9B KV (24/09/2026),
+    « Reference Conditioning » n'est défini qu'à l'intérieur du sous-graphe
+    d'édition, et une instance en est posée à la racine — sans cela, cette
+    instance restait un nœud inconnu et ses liens pointaient dans le vide."""
+    out: dict = {}
+
+    def walk(container: dict):
+        for s in ((container.get("definitions") or {}).get("subgraphs") or []):
+            sid = str(s.get("id"))
+            if sid not in out:
+                out[sid] = s
+                walk(s)
+
+    walk(wf)
+    return out
+
+
 def flatten(wf: dict) -> dict:
     """Format éditeur → format éditeur SANS sous-graphes.
 
@@ -104,7 +123,7 @@ def flatten(wf: dict) -> dict:
     """
     if not is_ui_format(wf):
         return wf
-    defs = {str(s.get("id")): s for s in ((wf.get("definitions") or {}).get("subgraphs") or [])}
+    defs = _collect_defs(wf)
     nodes = [dict(n) for n in wf.get("nodes", [])]
     links = _norm_links(wf.get("links"))
     if not defs or not any(str(n.get("type")) in defs for n in nodes):
@@ -127,9 +146,10 @@ def flatten(wf: dict) -> dict:
             continue
         sg = defs[sid]
         outer_id = str(n["id"])
-        # Aplatir d'abord l'intérieur (sous-graphes imbriqués).
+        # Aplatir d'abord l'intérieur (sous-graphes imbriqués) — avec TOUTES les
+        # définitions connues, y compris celles nichées dans d'autres.
         inner = flatten({"nodes": sg.get("nodes", []), "links": sg.get("links", []),
-                         "definitions": wf.get("definitions")})
+                         "definitions": {"subgraphs": list(defs.values())}})
         in_nodes = {str(x["id"]): dict(x) for x in inner["nodes"]}
         in_links = _norm_links(inner["links"])
         sg_inputs = sg.get("inputs") or []
@@ -210,6 +230,14 @@ def flatten(wf: dict) -> dict:
             continue          # consommé par la frontière ci-dessus
         else:
             new_links[lid] = (o, os_, t, ts)
+
+    # Un lien de frontière créé plus haut peut partir d'une AUTRE instance de
+    # sous-graphe (Flux.2 Klein 9B KV : la sortie de « Reference Conditioning »
+    # 134 nourrit une entrée du sous-graphe d'édition 132) — sa redirection
+    # n'était pas encore connue quand le lien a été posé : on la rejoue ici.
+    for lid, (o, os_, t, ts) in list(new_links.items()):
+        if (o, os_) in redirect:
+            new_links[lid] = (redirect[(o, os_)][0], redirect[(o, os_)][1], t, ts)
 
     return {"nodes": out_nodes, "links": [[k, *v] for k, v in new_links.items()]}
 
@@ -336,7 +364,13 @@ def to_api(wf: dict, object_info: dict) -> dict:
     links = _norm_links(flat.get("links"))
 
     def source_of(link_id) -> tuple[str, int] | None:
-        """Remonte les Reroute jusqu'à une vraie source."""
+        """Remonte les Reroute — et les nœuds CONTOURNÉS — jusqu'à une vraie source.
+
+        Un nœud contourné (mode 4) n'existe pas côté serveur mais le frontend
+        fait PASSER ses entrées vers ses sorties : la sortie de type T reprend
+        la première entrée reliée de type T. Sans cela, un lien issu d'un nœud
+        contourné pointait vers un identifiant absent du graphe (relevé le
+        24/09/2026 sur Flux.2 Klein 9B KV et OmniGen2 : « ['134', 0] »)."""
         seen = 0
         while link_id is not None and seen < 64:
             seen += 1
@@ -348,6 +382,18 @@ def to_api(wf: dict, object_info: dict) -> dict:
                 ins = n.get("inputs") or []
                 link_id = ins[0].get("link") if ins else None
                 continue
+            if n and n.get("mode") == _MODE_BYPASSED:
+                outs = n.get("outputs") or []
+                out_type = outs[src[1]].get("type") if src[1] < len(outs) else None
+                nxt = None
+                for i in n.get("inputs") or []:
+                    if i.get("link") is not None and (i.get("type") == out_type or out_type in (None, "*")):
+                        nxt = i.get("link")
+                        break
+                link_id = nxt
+                continue
+            if n and n.get("mode") == _MODE_MUTED:
+                return None
             return src[0], src[1]
         return None
 

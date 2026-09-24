@@ -95,7 +95,7 @@ def apply_primary_to_config(cfg: dict, combo) -> dict:
         model = spec.get("model", "")
         cfg["ai_provider"] = provider
         cfg["ai_model_creative"] = model
-        if provider in ("openai", "kimi", "glm", "ollama", "custom"):
+        if provider in ("openai", "kimi", "glm", "ollama", "local", "custom"):
             cfg[f"{provider}_model"] = model
     return cfg
 

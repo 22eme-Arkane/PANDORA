@@ -4061,6 +4061,72 @@ _FR_TO_EN: dict[str, str] = {
     "Projet installé, serveur arrêté — « Lancer le serveur ».": "Project installed, server stopped — « Launch the server ».",
     "Ollama n'est pas installé sur cet ordinateur.": "Ollama is not installed on this computer.",
     "Ollama est installé mais ne tourne pas.": "Ollama is installed but not running.",
+    "Télécharger les modèles de ce gabarit": "Download this template's models",
+    "Moteurs d'images ComfyUI": "ComfyUI image engines",
+    "Modèles du gabarit en place.": "Template models in place.",
+    # ── IA locales « comme Claude » (24/09/2026) ───────────────────────────
+    "Local — sur votre machine": "Local — on your machine",
+    "Serveur IA local (LM Studio, llama.cpp, vLLM, Jan…)": "Local AI server (LM Studio, llama.cpp, vLLM, Jan…)",
+    "Autre serveur OpenAI-compatible": "Other OpenAI-compatible server",
+    "llama.cpp (llama-server)": "llama.cpp (llama-server)",
+    "Serveur OpenAI-compatible qui tourne sur votre machine (ou sur une machine du réseau). Choisissez le logiciel, « Tester » liste les modèles qu'il a chargés.":
+        "OpenAI-compatible server running on your machine (or on a machine of your network). Pick the software; « Test » lists the models it has loaded.",
+    "Identifiant du modèle chargé (« Tester » les liste)": "Identifier of the loaded model (« Test » lists them)",
+    "Clé (vide pour un serveur local)": "Key (empty for a local server)",
+    "Adresse": "Address",
+    "Le serveur refuse la clé.": "The server rejects the key.",
+    "Serveur joignable": "Server reachable",
+    "modèles chargés": "loaded models",
+    "Serveur joignable, mais aucun modèle chargé — chargez-en un dans l'application.":
+        "Server reachable, but no model loaded — load one in the application.",
+    "Serveur injoignable sur": "Server unreachable on",
+    "lancez-le, ou installez-le (« Installer / Guide… »).": "launch it, or install it (« Install / Guide… »).",
+    "⬇  Modèles Ollama recommandés…": "⬇  Recommended Ollama models…",
+    "⬇  Modèles recommandés…": "⬇  Recommended models…",
+    "Modèles recommandés": "Recommended models",
+    "Modèle GGUF à servir": "GGUF model to serve",
+    "Télécharger ce modèle": "Download this model",
+    "Utiliser ce modèle": "Use this model",
+    "Modèle Ollama de PANDORA :": "PANDORA's Ollama model:",
+    "Fenêtre de contexte maxi (jetons)": "Max context window (tokens)",
+    "PANDORA dimensionne la fenêtre sur chaque appel (scénario + sortie) sans dépasser ce plafond.":
+        "PANDORA sizes the window on each call (screenplay + output) without exceeding this ceiling.",
+    "Télécharger un modèle : PANDORA en propose une liste (Qwen, Gemma, Mistral, gpt-oss, Llama… de 5 Go aux plus lourds) et le télécharge pour vous.":
+        "Download a model: PANDORA offers a list (Qwen, Gemma, Mistral, gpt-oss, Llama… from 5 GB to the heaviest) and downloads it for you.",
+    "IA texte locale avec une interface : catalogue de modèles GGUF, chargement en un clic, serveur OpenAI-compatible (port 1234). PANDORA s'y connecte comme à Claude. Aucune clé, aucun crédit.":
+        "Local text AI with an interface: GGUF model catalogue, one-click loading, OpenAI-compatible server (port 1234). PANDORA connects to it like to Claude. No key, no credits.",
+    "Installer LM Studio (installeur officiel) et télécharger un modèle dans son onglet Découvrir (Qwen3, Gemma 3, Mistral Small… selon votre carte).":
+        "Install LM Studio (official installer) and download a model in its Discover tab (Qwen3, Gemma 3, Mistral Small… depending on your card).",
+    "Charger le modèle avec une fenêtre de contexte d'au moins 32 000 jetons (réglage du chargement), puis démarrer le serveur local (onglet Développeur).":
+        "Load the model with a context window of at least 32,000 tokens (load settings), then start the local server (Developer tab).",
+    "Dans PANDORA : Assistant IA → « Serveur IA local », préréglage LM Studio, « Tester » liste les modèles chargés.":
+        "In PANDORA: AI Assistant → « Local AI server », LM Studio preset, « Test » lists the loaded models.",
+    "Le moteur de référence des modèles GGUF, sans interface : un exécutable, un modèle pris sur Hugging Face, un port (8080). Le plus léger et le plus rapide sur une carte NVIDIA.":
+        "The reference engine for GGUF models, no interface: one executable, a model from Hugging Face, one port (8080). The lightest and fastest on an NVIDIA card.",
+    "PANDORA télécharge la dernière version Windows (CUDA si une carte NVIDIA est détectée, sinon CPU) dans son dossier de modules.":
+        "PANDORA downloads the latest Windows build (CUDA if an NVIDIA card is detected, CPU otherwise) into its modules folder.",
+    "« Lancer » ouvre une console : llama-server télécharge le modèle GGUF choisi (Hugging Face) au premier démarrage, puis sert le port 8080.":
+        "« Launch » opens a console: llama-server downloads the chosen GGUF model (Hugging Face) on first start, then serves port 8080.",
+    "Dans PANDORA : Assistant IA → « Serveur IA local », préréglage llama.cpp.":
+        "In PANDORA: AI Assistant → « Local AI server », llama.cpp preset.",
+    "Serveur haute performance pour les GROS modèles, sur une ou plusieurs cartes (Linux ou WSL sous Windows). Port 8000, API OpenAI-compatible.":
+        "High-performance server for BIG models, on one or several cards (Linux, or WSL on Windows). Port 8000, OpenAI-compatible API.",
+    "Installer vLLM sur une machine Linux (ou WSL) : « pip install vllm » dans un environnement Python avec CUDA — voir le guide.":
+        "Install vLLM on a Linux machine (or WSL): « pip install vllm » in a Python environment with CUDA — see the guide.",
+    "Démarrer « vllm serve <modèle> --port 8000 » ; le serveur télécharge le modèle depuis Hugging Face.":
+        "Start « vllm serve <model> --port 8000 »; the server downloads the model from Hugging Face.",
+    "Dans PANDORA : Assistant IA → « Serveur IA local », préréglage vLLM, adresse de la machine si elle n'est pas celle-ci.":
+        "In PANDORA: AI Assistant → « Local AI server », vLLM preset, the machine's address if it is not this one.",
+    "Application open source : catalogue de modèles, interface de chat et serveur OpenAI-compatible local (port 1337).":
+        "Open-source application: model catalogue, chat interface and local OpenAI-compatible server (port 1337).",
+    "Installer Jan (installeur officiel) et télécharger un modèle dans son Hub.":
+        "Install Jan (official installer) and download a model in its Hub.",
+    "Activer le serveur local dans Jan (Paramètres → Serveur local, port 1337).":
+        "Enable the local server in Jan (Settings → Local server, port 1337).",
+    "Dans PANDORA : Assistant IA → « Serveur IA local », préréglage Jan.":
+        "In PANDORA: AI Assistant → « Local AI server », Jan preset.",
+    "Serveur IA injoignable — lancez le serveur local (Ollama, LM Studio, llama.cpp…) ou vérifiez son adresse dans Paramètres → Assistant IA, puis relancez.":
+        "AI server unreachable — start the local server (Ollama, LM Studio, llama.cpp…) or check its address in Settings → AI Assistant, then retry.",
     "version trop ancienne pour H3 (0.30.0 minimum) — mettez ComfyUI à jour":
         "too old for H3 (0.30.0 minimum) — update ComfyUI",
     "trop ancien pour H3 (0.30.0 minimum)": "too old for H3 (0.30.0 minimum)",

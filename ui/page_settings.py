@@ -408,6 +408,25 @@ class SettingsPage(QScrollArea):
         self.custom_model_input.setStyleSheet(_field_style())
         lay.addWidget(self.custom_model_input)
 
+        # Ollama : la fenêtre du module propose les modèles recommandés (jusqu'aux
+        # plus lourds), les télécharge et règle la fenêtre de contexte (24/09/2026).
+        self._btn_ollama_models = QPushButton("⬇  Modèles Ollama recommandés…")
+        self._btn_ollama_models.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._btn_ollama_models.setStyleSheet(
+            f"QPushButton{{background:transparent;color:{CP['accent2']};border:1px solid {CP['border']};"
+            f"border-radius:7px;padding:6px 10px;text-align:left;}}"
+            f"QPushButton:hover{{border-color:{CP['accent2']};}}")
+        self._btn_ollama_models.clicked.connect(self._open_ollama_models)
+        lay.addWidget(self._btn_ollama_models)
+
+        # Serveur IA local OpenAI-compatible (LM Studio, llama.cpp, vLLM, Jan…) :
+        # préréglage, adresse, modèle découvert, guide d'installation — composant
+        # partagé avec le Live (ui/local_ai_panel, chantier IA locales 24/09/2026).
+        from ui.local_ai_panel import LocalAIPanel
+        self._local_panel = LocalAIPanel()
+        self._local_panel.load(cfg)
+        lay.addWidget(self._local_panel)
+
         self._lbl_ai_restart = QLabel(
             "Le nom de l'assistant dans l'interface se met à jour au prochain démarrage."
         )
@@ -885,6 +904,10 @@ class SettingsPage(QScrollArea):
         prov = selection_provider(self.ai_combo)
         self.ollama_url_input.setVisible(prov == "ollama")
         self.ollama_model_input.setVisible(prov == "ollama")
+        if hasattr(self, "_btn_ollama_models"):
+            self._btn_ollama_models.setVisible(prov == "ollama")
+        if hasattr(self, "_local_panel"):
+            self._local_panel.setVisible(prov == "local")
         self.kimi_url_input.setVisible(prov == "kimi")
         self.kimi_model_input.setVisible(prov == "kimi")
         self.glm_url_input.setVisible(prov == "glm")
@@ -921,6 +944,13 @@ class SettingsPage(QScrollArea):
 
     def _toggle_advanced(self):
         self._set_advanced(not self._adv_open)
+
+    def _open_ollama_models(self):
+        """Fenêtre du module Ollama (modèles recommandés, téléchargement, contexte) ;
+        le modèle choisi avec « Utiliser » revient dans le champ."""
+        from ui.dialog_external import ExternalDialog
+        ExternalDialog("ollama", self).exec()
+        self.ollama_model_input.setText(load_config().get("ollama_model", ""))
 
     def _refresh_ai_models(self):
         """Interroge les API /models sans bloquer l'interface."""
@@ -981,6 +1011,8 @@ class SettingsPage(QScrollArea):
             "piapi_key":         self.piapi_input.text(),
             "distribution_mode": self.distribution_mode_combo.currentData() or "multi",
         })
+        if hasattr(self, "_local_panel"):
+            self._local_panel.apply(cfg)     # local_preset / local_url / local_model / local_key
         apply_primary_to_config(cfg, self.ai_combo)
         save_config(cfg)
         from core.ai_provider import refresh_name_cache
@@ -999,6 +1031,8 @@ class SettingsPage(QScrollArea):
                   self.custom_key_input, self.custom_url_input,
                   self.custom_model_input, self.piapi_input):
             w.textChanged.connect(self.save)
+        if hasattr(self, "_local_panel"):
+            self._local_panel.changed.connect(self.save)
         for combo in getattr(self, "_task_combos", {}).values():
             combo.currentIndexChanged.connect(self.save)
         self.video_provider_combo.currentIndexChanged.connect(self.save)

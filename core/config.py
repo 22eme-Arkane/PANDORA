@@ -40,6 +40,13 @@ _DEFAULTS = {
     "mistral_key":           "",
     "ollama_url":            "",                   # vide = http://localhost:11434
     "ollama_model":          "",                   # vide = llama3.1
+    "ollama_num_ctx":        32768,                # plafond de la fenêtre demandée à Ollama (core/local_llm)
+    # Serveur OpenAI-compatible LOCAL (LM Studio, llama.cpp, vLLM, Jan… — core/local_llm)
+    "local_preset":          "lmstudio",           # lmstudio | llamacpp | vllm | jan | other
+    "local_url":             "",                   # vide = adresse du préréglage
+    "local_model":           "",                   # identifiant du modèle chargé sur le serveur
+    "local_key":             "",                   # facultative
+    "llamacpp_model":        "",                   # dépôt GGUF Hugging Face servi par « Lancer »
     "custom_key":            "",                   # fournisseur OpenAI-compatible personnalisé
     "custom_url":            "",
     "custom_model":          "",

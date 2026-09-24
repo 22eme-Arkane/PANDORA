@@ -120,6 +120,27 @@ ENGINES = _build_catalogue()
 DEFAULT_ENGINE = "nb2"
 
 
+def refresh_comfy() -> int:
+    """Après un rafraîchissement du cache des gabarits ComfyUI (core/comfy_catalog,
+    quand le serveur répond) : recharge les moteurs « comfy: » dans le catalogue
+    Studio, puis ici — EN PLACE, pour que tout ce qui tient `ENGINES` par
+    référence voie la mise à jour. Rend le nombre de moteurs ComfyUI."""
+    n = 0
+    if _SE is not None and hasattr(_SE, "refresh_comfy_engines"):
+        try:
+            n = int(_SE.refresh_comfy_engines())
+        except Exception:
+            n = 0
+    fresh = _build_catalogue()
+    ENGINES.clear()
+    ENGINES.update(fresh)
+    return n
+
+
+def is_comfy(key: str) -> bool:
+    return ENGINES.get(key, {}).get("kind") == "comfy"
+
+
 # ── Introspection ─────────────────────────────────────────────────────────────
 
 def label_for(key: str) -> str:

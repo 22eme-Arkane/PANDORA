@@ -126,6 +126,13 @@ a = Analysis(
         # Arborescence + chaîne d'images (2026-07-30) : importés uniquement
         # dans des corps de fonction — déclarés par prudence (doctrine du spec).
         "core.project_layout", "core.live_chain",
+        # Modules externes + images ComfyUI + IA locales (2026-09-24) : registre,
+        # fenêtre, bandeau, section, catalogue, contrat, appel unique, panneau —
+        # tous importés dans des corps de fonction (même doctrine).
+        "core.externals", "api.external_install", "ui.dialog_external",
+        "ui.external_banner", "ui.externals_section", "ui.dialog_comfy_install",
+        "core.comfy", "core.comfy_workflow", "core.comfy_catalog", "core.comfy_image",
+        "core.image_call", "core.local_llm", "ui.local_ai_panel",
         # ── Studio Images (onglet « Image IA ») ───────────────────────────────
         # Modules importés à plat au runtime via sys.path.insert dans
         # ui/tab_image.py → invisibles à l'analyse statique de PyInstaller.

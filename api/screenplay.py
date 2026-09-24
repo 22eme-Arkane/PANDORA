@@ -513,10 +513,22 @@ def _parse_shots_robust(json_str: str) -> list:
 
 def _fmt_err(e: Exception) -> str:
     """Formate une erreur du fournisseur IA réellement sélectionné."""
-    from core.ai_provider import ai_name_for_task, humanize_ai_error
+    from core.ai_provider import ai_name_for_task, humanize_ai_error, is_local_provider
     msg = str(e)
     low = msg.lower()
     if "connection" in low or "connect" in low or "network" in low or "ssl" in low:
+        try:
+            local = is_local_provider("screenplay")
+        except Exception:
+            local = False
+        if local:
+            # Une IA locale éteinte n'est pas un problème d'internet.
+            return (
+                f"Serveur IA local injoignable ({ai_name_for_task('screenplay')}).\n"
+                "Lancez-le (Ollama, LM Studio, llama.cpp…) ou vérifiez son adresse dans "
+                "Paramètres → Assistant IA, puis relancez.\n\n"
+                f"Détail : {msg}"
+            )
         return (
             f"Erreur de connexion à {ai_name_for_task('screenplay')}.\n"
             "Vérifiez votre connexion internet.\n"
