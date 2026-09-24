@@ -131,6 +131,11 @@ def _refresh_image_catalog() -> None:
         if base:
             _cc.refresh(base)
             _ie.refresh_comfy()
+            # Et les gabarits VIDÉO à entrée vidéo (« Modifier un clip » en local).
+            try:
+                _cc.refresh_video(base)
+            except Exception:
+                pass
     except Exception:
         pass
 

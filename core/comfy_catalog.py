@@ -153,6 +153,125 @@ def load_cached() -> list[dict]:
         return []
 
 
+# ── Gabarits VIDÉO à entrée vidéo : « Modifier un clip » en local ────────────
+# Catégories « Video » et « Video Tools » de l'index ; on ne garde que ce qui
+# PREND un clip (LoadVideo) et en rend un — édition (Bernini-R, Capybara…),
+# inpainting (VOID), agrandissement (SeedVR2), interpolation. Les gabarits qui
+# exigent une détection ou un masque à décrire (SCAIL-2, VACE, Wan Animate)
+# entrent aussi : PANDORA remplit ce qu'il reconnaît, le reste garde la valeur
+# du gabarit — l'utilisateur voit le titre et choisit.
+
+VIDEO_CACHE_NAME = "comfy_video_catalog.json"
+VIDEO_CATEGORIES = ("Video", "Video Tools")
+_VIDEO_PRIORITY = ("video_edit", "editing", "inpaint", "upscale", "character", "animate",
+                   "vace", "interpolation")
+
+
+def video_cache_path() -> str:
+    from core.externals import externals_dir
+    return os.path.join(externals_dir(), VIDEO_CACHE_NAME)
+
+
+def _video_kind(t: dict) -> str:
+    tags = " ".join(str(x) for x in (t.get("tags") or [])).lower()
+    name = str(t.get("name") or "").lower()
+    if "video edit" in tags or "video_edit" in name or "editing" in name:
+        return "edit"
+    if "inpaint" in tags or "inpaint" in name:
+        return "inpaint"
+    if "upscale" in tags or "upscale" in name:
+        return "upscale"
+    if "interpolation" in tags:
+        return "interpolation"
+    if "character" in tags or "motion" in tags or "animate" in name or "vace" in name:
+        return "character"
+    return "other"
+
+
+def _video_priority(e: dict) -> tuple:
+    order = ("edit", "inpaint", "upscale", "character", "interpolation", "other")
+    k = e.get("kind", "other")
+    return (order.index(k) if k in order else len(order), e.get("name", ""))
+
+
+def parse_video_index(index: list) -> list[dict]:
+    out, seen = [], set()
+    for cat in index or []:
+        ctitle = str(cat.get("title") or cat.get("moduleName") or "")
+        if ctitle not in VIDEO_CATEGORIES:
+            continue
+        for t in cat.get("templates") or []:
+            name = str(t.get("name") or "")
+            if not name or name.startswith("api_") or t.get("openSource") is False or name in seen:
+                continue
+            seen.add(name)
+            e = _normalize(t, ctitle)
+            e["kind"] = _video_kind(t)
+            out.append(e)
+    out.sort(key=_video_priority)
+    return out
+
+
+def probe_video_entries(base_url: str, entries: list[dict], object_info: dict | None = None) -> list[dict]:
+    """Ne garde que ce qui PREND un clip et en REND un ; note s'il y a une
+    consigne texte (`prompted`) et combien d'images de référence (`loads`)."""
+    from core import comfy_image as _ci
+    from core import comfy_workflow as _wf
+    oi = object_info or _ci.object_info(base_url)
+    kept = []
+    for e in entries:
+        try:
+            wf = _ci.load_template(base_url, e["name"])
+            flat = _wf.flatten(wf)
+            classes = {n.get("type") for n in flat.get("nodes", [])}
+            if any((oi.get(c) or {}).get("api_node") for c in classes):
+                continue
+            api = _wf.to_api(wf, oi)
+            info = _ci.analyze(api, oi)
+            if not info.get("load_videos") or not info["outputs"]:
+                continue
+            e = dict(e)
+            e["loads"] = len(info["load_images"])
+            e["prompted"] = bool(info["prompt_nodes"])
+            e["negative"] = bool(info["negative_nodes"])
+            kept.append(e)
+        except Exception:
+            continue
+    return kept
+
+
+def refresh_video(base_url: str, timeout: float = 15.0, probe: bool = True) -> list[dict]:
+    with urllib.request.urlopen(base_url.rstrip("/") + "/templates/index.json", timeout=timeout) as r:
+        index = json.loads(r.read().decode("utf-8", "replace"))
+    entries = parse_video_index(index)
+    if probe:
+        entries = probe_video_entries(base_url, entries)
+    path = video_cache_path()
+    tmp = path + ".tmp"
+    with open(tmp, "w", encoding="utf-8") as f:
+        json.dump({"base_url": base_url, "templates": entries}, f, ensure_ascii=False, indent=1)
+    os.replace(tmp, path)
+    return entries
+
+
+def load_cached_video() -> list[dict]:
+    try:
+        with open(video_cache_path(), encoding="utf-8") as f:
+            return list(json.load(f).get("templates") or [])
+    except Exception:
+        return []
+
+
+_KIND_LABEL = {"edit": "édition", "inpaint": "inpainting", "upscale": "agrandissement",
+               "character": "personnage / mouvement", "interpolation": "interpolation", "other": "outil"}
+
+
+def video_engine_label(entry: dict) -> str:
+    """Libellé du sélecteur « Modifier un clip » : ComfyUI · titre · genre · poids · 0 $."""
+    return (f"ComfyUI · {entry.get('title') or entry['name']}  ·  {_KIND_LABEL.get(entry.get('kind'), 'outil')}"
+            f" · {gb(int(entry.get('size') or 0))} sur votre GPU  ·  0 $")
+
+
 def engine_key(name: str) -> str:
     return PREFIX + name
 

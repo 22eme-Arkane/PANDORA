@@ -1,8 +1,8 @@
 # CLAUDE.md — Pandora × Seedance 2.0
 
 > La passation Codex ↔ Fable 5 (`.claude/memory/passation_codex_fable5.md`) n'est
-> **plus demandée** depuis le 24/09/2026 (décision Matthieu) : ni à lire en début de
-> session, ni à compléter. Le fichier reste comme archive.
+> **plus demandée** depuis le 24/09/2026 (décision Matthieu) ; le fichier a été
+> supprimé le même jour. Ne pas la recréer.
 
 # BOUCLE DE TRAVAIL — auto-vérification et auto-correction (à appliquer systématiquement)
 

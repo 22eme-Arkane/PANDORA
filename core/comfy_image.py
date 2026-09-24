@@ -220,11 +220,14 @@ def analyze(api: dict, oi: dict) -> dict:
                     if src:
                         seed_targets.append((src, "value"))
     loads = sorted((nid for nid, n in api.items() if n["class_type"] == "LoadImage"), key=_natural)
+    # Gabarits VIDÉO (édition, agrandissement… — core/comfy_video) : le clip
+    # source entre par un nœud LoadVideo (entrée `file`, déposée par /upload/image).
+    videos = sorted((nid for nid, n in api.items() if n["class_type"] == "LoadVideo"), key=_natural)
     outputs = [nid for nid, n in api.items() if (oi.get(n["class_type"]) or {}).get("output_node")]
     return {
         "prompt_nodes": prompt_nodes, "negative_nodes": negative_nodes,
         "size_targets": sorted(set(size_targets)), "seed_targets": sorted(set(seed_targets)),
-        "load_images": loads, "outputs": outputs,
+        "load_images": loads, "load_videos": videos, "outputs": outputs,
     }
 
 
@@ -244,8 +247,11 @@ def _natural(nid: str):
 
 def fill(api: dict, oi: dict, info: dict, prompt: str, negative: str = "",
          width: int | None = None, height: int | None = None, seed: int | None = None,
-         ref_names: list[str] | None = None) -> None:
-    if not info["prompt_nodes"]:
+         ref_names: list[str] | None = None, video_names: list[str] | None = None,
+         require_prompt: bool = True) -> None:
+    """`require_prompt=False` : un gabarit SANS nœud de prompt (agrandisseur
+    vidéo, interpolation…) reste remplissable — le texte est alors ignoré."""
+    if not info["prompt_nodes"] and require_prompt:
         raise NoPromptTarget("Ce gabarit n'a aucun nœud de prompt reconnu : PANDORA ne saurait pas où écrire.")
     for nid in info["prompt_nodes"]:
         for name in _string_inputs(oi, api[nid]["class_type"]):
@@ -268,6 +274,10 @@ def fill(api: dict, oi: dict, info: dict, prompt: str, negative: str = "",
     if refs:
         for i, nid in enumerate(info["load_images"]):
             api[nid]["inputs"]["image"] = refs[i] if i < len(refs) else refs[0]
+    vids = list(video_names or [])
+    if vids:
+        for i, nid in enumerate(info.get("load_videos") or []):
+            api[nid]["inputs"]["file"] = vids[i] if i < len(vids) else vids[0]
 
 
 def _feeds(api: dict, src_id: str, input_name: str) -> bool:
@@ -324,6 +334,22 @@ def upload_ref(base: str, ref, index: int) -> str:
     name = f"pandora_ref_{int(time.time())}_{index}.png"
     r = requests.post(f"{base}/upload/image", files={"image": (name, data)},
                       data={"overwrite": "true", "subfolder": "pandora"}, timeout=120)
+    r.raise_for_status()
+    j = r.json() or {}
+    sub = j.get("subfolder") or ""
+    return f"{sub}/{j.get('name') or name}" if sub else (j.get("name") or name)
+
+
+def upload_video(base: str, path: str) -> str:
+    """Dépose un clip dans le dossier d'entrée de ComfyUI (même point d'accès
+    que les images — LoadVideo lit `input/`) ; rend le nom attendu par `file`."""
+    import requests
+    if not (path and os.path.isfile(path)):
+        raise RuntimeError(f"Clip source introuvable : {path}")
+    name = f"pandora_clip_{int(time.time())}_{os.path.basename(path)}"
+    with open(path, "rb") as f:
+        r = requests.post(f"{base}/upload/image", files={"image": (name, f)},
+                          data={"overwrite": "true", "subfolder": "pandora"}, timeout=600)
     r.raise_for_status()
     j = r.json() or {}
     sub = j.get("subfolder") or ""

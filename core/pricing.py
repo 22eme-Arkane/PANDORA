@@ -109,6 +109,11 @@ def canonical_engine(engine: str) -> str:
     prix des images lu dans le numéro de version (30/08/2026).
     """
     e = (engine or "").strip()
+    # Gabarits ComfyUI nommés (« comfy:<image> », « comfy_edit:<vidéo> ») :
+    # tous sur la ligne « comfy » = 0 $ — sinon ils tomberaient sur le tarif
+    # par défaut d'un moteur inconnu (0,30 $/s) dans « Coût du projet ».
+    if e.startswith(("comfy:", "comfy_edit:")):
+        return "comfy"
     for suf in _MODE_SUFFIXES:
         if e.lower().endswith(suf):
             return e[: -len(suf)]

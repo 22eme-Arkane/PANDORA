@@ -50,6 +50,8 @@ _WIDGET_TYPES = {"INT", "FLOAT", "STRING", "BOOLEAN", "COMBO"}
 _VIRTUAL = ("Note", "MarkdownNote", "PrimitiveNode", "Reroute")
 _MODE_MUTED, _MODE_BYPASSED = 2, 4
 _SG_IN, _SG_OUT = -10, -20
+#: Case de contrôle qui suit un widget de graine dans `widgets_values`.
+_CONTROLS = ("fixed", "increment", "decrement", "randomize")
 
 
 # ── Lecture ──────────────────────────────────────────────────────────────────
@@ -72,7 +74,21 @@ def is_ui_format(wf: dict) -> bool:
 
 
 def _is_link_type(t) -> bool:
-    return isinstance(t, str) and (t.upper() in _LINK_TYPES or t == "*")
+    """Une prise (connexion). Un type composé « IMAGE,MASK » (entrée de
+    sous-graphe acceptant plusieurs types — LTX IC-LoRA, 24/09/2026) en est une."""
+    if not isinstance(t, str):
+        return False
+    if t == "*" or t.upper() in _LINK_TYPES:
+        return True
+    return "," in t and any(p.strip().upper() in _LINK_TYPES for p in t.split(","))
+
+
+def _is_widget_type(t) -> bool:
+    """Une valeur (widget) : INT, FLOAT, STRING, BOOLEAN, COMBO ou combo
+    dynamique. Tout autre type — standard, composé ou propre à un nœud
+    personnalisé (BBOX, OPTICAL_FLOW_MODEL…) — est une prise : c'est le
+    critère qui range les `widgets_values` d'un nœud de sous-graphe."""
+    return isinstance(t, str) and (t.upper() in _WIDGET_TYPES or t.startswith("COMFY_DYNAMICCOMBO"))
 
 
 # ── Liens ────────────────────────────────────────────────────────────────────
@@ -155,11 +171,28 @@ def flatten(wf: dict) -> dict:
         sg_inputs = sg.get("inputs") or []
         sg_outputs = sg.get("outputs") or []
 
-        # Valeurs promues : widgets_values externes ↔ entrées non-connexion, dans l'ordre.
-        promoted = [i for i, spec in enumerate(sg_inputs) if not _is_link_type(spec.get("type"))]
-        wv = list(n.get("widgets_values") or [])
-        slot_value = {slot: wv[k] for k, slot in enumerate(promoted) if k < len(wv)}
+        # Valeurs promues : les `widgets_values` du nœud externe suivent l'ordre
+        # des entrées NON-connexion du sous-graphe (gabarit H3 : le prompt est
+        # la 1re valeur alors que la prise « prompt » n'est même pas listée sur
+        # le nœud externe), une entrée INT de graine traînant sa case de
+        # contrôle (« fixed » / « randomize » — LTX IC-LoRA : sans ce saut, un
+        # LoRA atterrissait dans ckpt_name). Un nœud externe SANS valeur
+        # (widgets_values vide — VOID, Capybara, SeedVR2, relevé 24/09/2026)
+        # laisse au nœud INTERNE sa propre valeur : c'est ce que l'éditeur
+        # affiche, et ce que graphToPrompt envoie.
         outer_inputs = n.get("inputs") or []
+        wv = list(n.get("widgets_values") or [])
+        slot_value: dict[int, object] = {}
+        k = 0
+        for slot, spec in enumerate(sg_inputs):
+            if not _is_widget_type(spec.get("type")):
+                continue                      # prise (même composée ou propre à un nœud)
+            if k >= len(wv):
+                break
+            slot_value[slot] = wv[k]
+            k += 1
+            if str(spec.get("type")).upper() == "INT" and k < len(wv) and wv[k] in _CONTROLS:
+                k += 1
 
         def rename(iid: str) -> str:
             return f"{outer_id}:{iid}"
@@ -195,19 +228,20 @@ def flatten(wf: dict) -> dict:
                     new_links[nl] = (src[0], src[1], rename(t), ts)
                     if tin is not None:
                         tin["link"] = nl
-                elif os_ in slot_value or not _is_link_type(spec.get("type")):
+                elif os_ in slot_value:
                     # Valeur promue → PrimitiveNode synthétique.
                     pid = f"{outer_id}:promoted:{os_}"
                     out_nodes.append({"id": pid, "type": "PrimitiveNode",
-                                      "widgets_values": [slot_value.get(os_)],
+                                      "widgets_values": [slot_value[os_]],
                                       "inputs": [], "outputs": [{"links": []}]})
                     nl = fresh_link()
                     new_links[nl] = (pid, 0, rename(t), ts)
                     if tin is not None:
                         tin["link"] = nl
                 else:
-                    # Prise de connexion externe non branchée (first_frame absent) :
-                    # l'entrée interne reste libre.
+                    # Aucune valeur externe (widget promu sans valeur enregistrée)
+                    # ou prise de connexion non branchée (first_frame absent) :
+                    # l'entrée interne reste libre — son propre widget parle.
                     if tin is not None:
                         tin["link"] = None
             elif t == str(_SG_OUT):

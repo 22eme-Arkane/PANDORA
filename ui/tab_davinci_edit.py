@@ -35,9 +35,21 @@ from davinci.ping_worker import BridgePingWorker
 from ui.tab_t2v import (
     _DaVinciBar, _ENGINES, _DAVINCI_ENGINES, _SEEDANCE_ENGINES,
     _FIXED_RES_ENGINES, _FIXED_RATIO_ENGINES, _ENGINE_RES_FORCED,
-    _TEXT_FALLBACK_ENGINES, _ENGINE_RESOLUTIONS,
+    _TEXT_FALLBACK_ENGINES, _ENGINE_RESOLUTIONS, _ENGINE_DEFAULT_RES,
     _make_ext_worker, _norm_ext_result,
 )
+
+
+def _comfy_edit_engines() -> list[tuple[str, str, dict]]:
+    """Les gabarits ComfyUI d'ÉDITION vidéo lus chez le serveur (core/comfy_catalog,
+    cache local) — « Modifier un clip » SUR VOTRE MACHINE, 0 $ (24/09/2026)."""
+    try:
+        from core import comfy_catalog as _cc
+        from core import comfy_video as _cv
+        return [(_cc.video_engine_label(e), _cv.engine_key(e["name"]), e)
+                for e in _cc.load_cached_video()]
+    except Exception:
+        return []
 
 
 _INBOX = os.path.join(os.environ.get("TEMP", tempfile.gettempdir()), "pandora_clips_inbox.json")
@@ -1087,25 +1099,31 @@ class TabDavinciEdit(QScrollArea):
         self._dyn_cam_cb = self._dyn_cam_toggle_row.findChild(QCheckBox)
         _ra_body_lay.addWidget(self._dyn_cam_toggle_row)
 
-        # Resynchroniser les lèvres (LatentSync) — DANS le corps de RENDU & AUDIO.
+        # Resynchroniser les lèvres — DANS le corps de RENDU & AUDIO. Le moteur est
+        # celui des Paramètres du storyboard (Sync 2 Pro par défaut, LatentSync en
+        # option) : le libellé le NOMME au lieu de promettre LatentSync (constat
+        # 24/09/2026 : l'étiquette disait LatentSync, le moteur réel était Sync 2 Pro).
+        from api.lipsync import LIPSYNC_ENGINES as _LSE, get_lipsync_engine as _gle
+        _ls_name = (_LSE.get(_gle()) or {}).get("name", "Sync 2 Pro")
         self._lipsync_toggle_row = toggle_row(
             "Resynchroniser les lèvres",
-            "Synchronisation labiale LatentSync — ⚠ réencode (qualité moindre) + audio sur piste séparée",
+            f"Synchronisation labiale ({_ls_name}) — ⚠ réencode (qualité moindre) + audio sur piste séparée",
             False,
         )
         self._cb_lipsync = self._lipsync_toggle_row.findChild(QCheckBox)
         if not _ffmpeg_ok():
             self._cb_lipsync.setEnabled(False)
             self._lipsync_toggle_row.setToolTip(
-                "ffmpeg non détecté — installez ffmpeg et ajoutez-le au PATH pour activer LatentSync."
+                "ffmpeg non détecté — installez ffmpeg et ajoutez-le au PATH pour activer la synchronisation labiale."
             )
         else:
             self._lipsync_toggle_row.setToolTip(
-                "Après génération Seedance, resynchronise les lèvres de l'acteur\n"
-                "avec l'audio source du clip DaVinci (fal-ai/latentsync).\n"
-                "⚠ Réencode via LatentSync → qualité moindre que le clip Seedance brut.\n"
+                "Après génération, resynchronise les lèvres de l'acteur\n"
+                f"avec l'audio source du clip DaVinci (moteur : {_ls_name}, réglable dans\n"
+                "« Générer depuis le storyboard »).\n"
+                "⚠ Réencode → qualité moindre que le clip brut.\n"
                 "Importe la vidéo lip-synced + la piste audio séparément dans DaVinci.\n"
-                "Décoche pour garder le clip Seedance brut (un seul fichier, pleine qualité)."
+                "Décoche pour garder le clip brut (un seul fichier, pleine qualité)."
             )
         _ra_body_lay.addWidget(self._lipsync_toggle_row)
         lay.addWidget(self._ra_container)
@@ -1126,11 +1144,23 @@ class TabDavinciEdit(QScrollArea):
         # « remplacer un visage / un fond ». Seedance 2.0 reste le défaut (1ʳᵉ entrée).
         self._cb_model.addItem(translate("Pixverse Swap · remplacer un visage (≤720p)"), "pixverse_face")
         self._cb_model.addItem(translate("Pixverse Swap · remplacer un fond (≤720p)"), "pixverse_bg")
+        # ComfyUI : gabarits officiels d'édition vidéo SUR VOTRE MACHINE (Bernini-R,
+        # Capybara, VOID, SeedVR2…) — catalogue lu chez le serveur, 0 $.
+        self._comfy_edit_entries = {}
+        for _lbl, _key, _entry in _comfy_edit_engines():
+            self._cb_model.addItem(_lbl, _key)
+            self._comfy_edit_entries[_key] = _entry
         self._cb_model.currentIndexChanged.connect(self._on_engine_changed)
         self._cb_ratio = combo(["16:9 — Paysage", "9:16 — Portrait", "4:3", "3:4"])
         _def_key = self._cb_model.currentData() or "seedance-2.0"
         _def_res = _ENGINE_RESOLUTIONS.get(_def_key, [("1080p", "1080p"), ("720p", "720p"), ("480p", "480p")])
         self._cb_res = combo(_def_res)
+        # 720p par défaut (comme le Studio) : la 1re entrée de la grille est le 4K
+        # (~1,56 $/s) — un clip « modifié » sans y penser coûtait 5× le prix.
+        for _i in range(self._cb_res.count()):
+            if self._cb_res.itemData(_i) == _ENGINE_DEFAULT_RES.get(_def_key, "720p"):
+                self._cb_res.setCurrentIndex(_i)
+                break
 
         for (row, col), lbl, widget in [
             ((0, 0), "Moteur de génération", self._cb_model),
@@ -1146,6 +1176,11 @@ class TabDavinciEdit(QScrollArea):
             params_grid.addWidget(g, row, col)
 
         body_params.addLayout(params_grid)
+        # Bandeau du module externe (ComfyUI) sous le choix du moteur — même
+        # composant que le Studio et l'onglet Moteurs (ui/external_banner).
+        from ui.external_banner import ExternalBanner
+        self._external_banner = ExternalBanner()
+        body_params.addWidget(self._external_banner)
 
         # ── Banner compatibilité références (moteurs texte-seul) ─────────────
         self._ref_compat_banner = QLabel(
@@ -1369,11 +1404,21 @@ class TabDavinciEdit(QScrollArea):
     # ── Chargement des clips ──────────────────────────────────────────────────
 
     def _load_clips(self, clips: list):
+        # Pendant une file, la liste est FIGÉE : la file indexe les cartes par
+        # position — une inbox DaVinci ou un import en cours de route faisait
+        # générer le mauvais clip ou bloquait la file (IndexError dans un slot).
+        if self._queue_running():
+            QMessageBox.warning(self, translate("Génération en cours"),
+                                translate("La liste des clips ne peut pas changer pendant la file — "
+                                          "attendez la fin ou annulez."))
+            return
         # Les images Draw-to-Video sont indexées par position : la liste de clips
-        # change → on repart à zéro (indices obsolètes).
+        # change → on repart à zéro (indices obsolètes). Idem pour les images de
+        # référence PAR CLIP (elles restaient et partaient avec d'autres clips).
         self._draw_images = {}
         self._draw_overlays = {}
         self._draw_frames = {}
+        self._per_clip_ref_images = {}
         # Durée de régénération calée sur le clip source (par index), réutilisée par
         # le lip-sync pour aligner l'audio sur la vidéo.
         self._gen_durations = {}
@@ -1760,13 +1805,23 @@ class TabDavinciEdit(QScrollArea):
     def _get_model(self) -> str:
         return self._cb_model.currentData() or "seedance-2.0"
 
+    def _is_comfy_edit(self) -> bool:
+        return str(self._get_model()).startswith("comfy_edit:")
+
     def _on_engine_changed(self):
         key = self._get_model()
+        if getattr(self, "_external_banner", None) is not None:
+            self._external_banner.set_engine("comfy" if key.startswith("comfy_edit:") else "")
         if key in ("pixverse_face", "pixverse_bg"):
             # Pixverse Swap : ≤720p, garde le cadrage source (ratio verrouillé).
             fixed_res = False
             self._cb_ratio.setEnabled(False)
             options = [("720p", "720p"), ("540p", "540p"), ("360p", "360p")]
+        elif key.startswith("comfy_edit:"):
+            # Gabarit ComfyUI : le clip garde sa définition et son cadrage.
+            fixed_res = False
+            self._cb_ratio.setEnabled(False)
+            options = [("Définition du clip source", "source")]
         else:
             fixed_res = key in _FIXED_RES_ENGINES
             self._cb_ratio.setEnabled(key not in _FIXED_RATIO_ENGINES)
@@ -1988,6 +2043,17 @@ class TabDavinciEdit(QScrollArea):
                 self._per_clip_prompt.toPlainText()
             )
 
+        # Gabarit ComfyUI : sans serveur vivant, on GUIDE (fenêtre du module) au
+        # lieu d'échouer clip par clip dans un thread — même contrat que le Studio.
+        if self._is_comfy_edit():
+            from core import comfy as _cf
+            if not _cf.discover():
+                from ui.dialog_comfy_install import ComfyInstallDialog
+                _dlg = ComfyInstallDialog(self)
+                _dlg.exec()
+                if not _dlg.is_ready():
+                    return
+
         n_prises = self._spin_prises.value()
         self._queue = []
         for (clip_idx, _card) in selected:
@@ -2048,6 +2114,17 @@ class TabDavinciEdit(QScrollArea):
         if not hasattr(self, "_modif_hint"):
             return
         mode = self._pixverse_engine_mode()
+        if self._is_comfy_edit():
+            e = self._comfy_edit_entries.get(self._get_model(), {})
+            _refs = int(e.get("loads") or 0)
+            self._modif_hint.setText(
+                translate("Gabarit ComfyUI sur votre machine (0 $) :") + f" {e.get('title') or ''} — "
+                + (translate("consigne texte prise en compte") if e.get("prompted")
+                   else translate("sans consigne texte (outil automatique)"))
+                + (("  ·  " + translate("image de référence requise") + f" ({_refs})") if _refs else "")
+                + "  ·  " + translate("ComfyUI Desktop doit tourner ; les modèles se téléchargent depuis sa fenêtre (Paramètres → Modules externes)."))
+            self._modif_hint.setVisible(True)
+            return
         self._modif_hint.setVisible(bool(mode))
         if mode == "person":
             self._modif_hint.setText(translate(
@@ -2062,16 +2139,28 @@ class TabDavinciEdit(QScrollArea):
 
     def _source_gen_duration(self, clip_idx: int) -> int:
         """Durée de régénération Seedance calée sur le clip SOURCE (sondée par ffprobe,
-        bornée 4–15 s — contrainte API). Repli 5 s si la durée est introuvable."""
+        bornée 4–15 s — 4–30 s pour la 2.5, contrainte API). Repli 5 s si la durée
+        est introuvable."""
+        try:
+            hi = 30 if "2.5" in str(self._get_model()) else 15
+        except Exception:
+            hi = 15
         try:
             clip = self._clips_data[clip_idx]
             from core.video_utils import video_duration_s
             d = video_duration_s(clip.get("file_path", ""))
             if d and d > 0:
-                return max(4, min(15, round(d)))
+                return max(4, min(hi, round(d)))
         except Exception:
             pass
         return 5
+
+    def _queue_running(self) -> bool:
+        w = getattr(self, "_worker", None)
+        try:
+            return bool(w is not None and w.isRunning())
+        except RuntimeError:
+            return False
 
     def _process_next(self):
         if self._queue_pos >= len(self._queue):
@@ -2103,6 +2192,12 @@ class TabDavinciEdit(QScrollArea):
 
         video_path = clip.get("file_path", "")
         has_video = bool(video_path and os.path.isfile(video_path))
+        if not has_video:
+            # Avant : repli SILENCIEUX en texte seul — un plan sans rapport avec la
+            # source, payé quand même (constat 24/09/2026).
+            self._on_clip_failed("Clip source introuvable sur le disque — rien à modifier.",
+                                 clip_idx, prise_idx)
+            return
 
         # Inject @Video1 so Seedance knows to reference the uploaded clip
         if has_video and "@Video1" not in prompt:
@@ -2152,12 +2247,15 @@ class TabDavinciEdit(QScrollArea):
         if _draw_img and os.path.isfile(_draw_img):
             params["draw_guidance_path"] = _draw_img
 
+        # Références : en mode PAR CLIP, l'image du clip d'abord (l'image globale,
+        # masquée à l'écran, ne sert que de repli) ; en mode GLOBAL, l'image globale.
         ref_images = []
-        if self._global_ref_image and os.path.isfile(self._global_ref_image):
-            ref_images.append(self._global_ref_image)
         per_ref = self._per_clip_ref_images.get(clip_idx, "")
-        if per_ref and os.path.isfile(per_ref) and per_ref not in ref_images:
+        if self._rb_per_clip.isChecked() and per_ref and os.path.isfile(per_ref):
             ref_images.append(per_ref)
+        if self._global_ref_image and os.path.isfile(self._global_ref_image) \
+                and self._global_ref_image not in ref_images:
+            ref_images.append(self._global_ref_image)
         # NB : l'image annotée Draw-to-Video N'EST PAS ajoutée aux références
         # (elle partirait sinon à Seedance → traits visibles). Elle est passée via
         # params["draw_guidance_path"] et analysée par Claude Vision côté worker.
@@ -2202,7 +2300,29 @@ class TabDavinciEdit(QScrollArea):
             return
 
         _model_key = self._get_model()
-        if _model_key in _SEEDANCE_ENGINES:
+        # Parquer le worker précédent AVANT de réassigner (règle maison — la
+        # branche Pixverse le faisait, celle-ci non).
+        prev = getattr(self, "_worker", None)
+        if prev is not None:
+            abandon_thread(prev)
+        if _model_key.startswith("comfy_edit:"):
+            # ── Gabarit ComfyUI d'édition vidéo, sur la machine (0 $) ──────────
+            from api.comfy_edit import ComfyEditWorker
+            _entry = self._comfy_edit_entries.get(_model_key, {})
+            _raw = params.get("prompt", "")
+            self._worker = ComfyEditWorker({
+                "engine":       _model_key,
+                "engine_label": "ComfyUI · " + str(_entry.get("title") or _model_key),
+                "video_path":   video_path,
+                "prompt":       _raw,
+                "image_path":   ref_images[0] if ref_images else "",
+                "seed":         seed,
+            })
+            self._worker.finished.connect(
+                lambda r, ci=clip_idx, pi=prise_idx, p=_raw:
+                    self._on_clip_done(_norm_ext_result(r, p), ci, pi)
+            )
+        elif _model_key in _SEEDANCE_ENGINES:
             self._worker = GenerationWorker(params)
             self._worker.finished.connect(
                 lambda r, ci=clip_idx, pi=prise_idx: self._on_clip_done(r, ci, pi)
@@ -2266,7 +2386,7 @@ class TabDavinciEdit(QScrollArea):
         clip_name = card.clip().get("name", "") if card else ""
         card.set_status(f"P{prise_idx + 1}/{n_pr} ↷ LS…", C["accent"])
 
-        self._lbl_lipsync_stage.setText("● Étape 2/3 — Synchronisation LatentSync…")
+        self._lbl_lipsync_stage.setText("● Étape 2/3 — Synchronisation labiale…")
         self._lbl_lipsync_stage.setVisible(True)
 
         self._lipsync_worker = LatentSyncWorker(
@@ -2288,7 +2408,7 @@ class TabDavinciEdit(QScrollArea):
         self._lipsync_worker.start()
 
     def _on_lipsync_progress(self, pct: int, msg: str):
-        self._lbl_lipsync_stage.setText(f"● Étape 2/3 — LatentSync  {pct}%  {msg}")
+        self._lbl_lipsync_stage.setText(f"● Étape 2/3 — Lèvres  {pct}%  {msg}")
 
     def _on_lipsync_done(self, seedance_result: dict, clip_idx: int, prise_idx: int,
                           video_path: str, audio_path: str):
@@ -2319,11 +2439,14 @@ class TabDavinciEdit(QScrollArea):
         self._lbl_lipsync_stage.setVisible(False)
 
         hist_entry = {
-            "mode":       "t2v",
+            "mode":       "edit",
             "prompt":     seedance_result.get("prompt", ""),
             "model":      self._get_model(),
             "video_path": video_path,
+            "local_path": video_path,
             "duration":   seedance_result.get("duration", ""),
+            "resolution": self._cb_res.currentData() or "",
+            "seed":       seedance_result.get("seed", 0) or 0,
         }
         save_to_history(hist_entry)
         self.generation_done.emit(hist_entry)
@@ -2366,14 +2489,24 @@ class TabDavinciEdit(QScrollArea):
             self._failed_clips.append((clip_idx, err))
 
         hist_entry = {
-            "mode":       "t2v",
+            "mode":       "edit",
             "prompt":     result.get("prompt", ""),
             "model":      self._get_model(),
             "video_path": local_path,
+            "local_path": local_path,
             "duration":   result.get("duration", ""),
+            # La résolution manquait : le journal de coût prenait la 1re ligne de la
+            # grille (le 4K, 1,56 $/s) pour un clip généré en 720p.
+            "resolution": self._cb_res.currentData() or "",
+            "seed":       result.get("seed", 0) or 0,
         }
-        save_to_history(hist_entry)
-        self.generation_done.emit(hist_entry)
+        # Une simulation n'a rien coûté : ni historique, ni journal de dépenses.
+        if not ir.get("mock"):
+            try:
+                save_to_history(hist_entry)
+            except Exception:
+                pass
+            self.generation_done.emit(hist_entry)
         self._advance_queue()
 
     def _advance_queue(self):
@@ -2411,6 +2544,11 @@ class TabDavinciEdit(QScrollArea):
         self._process_next()
 
     def _cancel_queue(self):
+        # Les deux workers sont PARQUÉS (core.worker.abandon_thread : signaux
+        # bloqués + interruption + référence gardée). Avant le 24/09/2026 la
+        # référence était simplement mise à None sur un thread encore vivant →
+        # « QThread: Destroyed while thread is still running » (abort) à la fin
+        # de la génération, quelques secondes plus tard.
         if self._lipsync_worker:
             try:
                 self._lipsync_worker.finished.disconnect()
@@ -2418,7 +2556,7 @@ class TabDavinciEdit(QScrollArea):
                 self._lipsync_worker.progress.disconnect()
             except Exception:
                 pass
-            self._lipsync_worker.quit()
+            abandon_thread(self._lipsync_worker)
             self._lipsync_worker = None
         if self._worker:
             try:
@@ -2428,11 +2566,17 @@ class TabDavinciEdit(QScrollArea):
             except Exception:
                 pass
             if hasattr(self._worker, "cancel"):
-                self._worker.cancel()
-            else:
-                self._worker.quit()
-                abandon_thread(self._worker)
+                try:
+                    self._worker.cancel()
+                except Exception:
+                    pass
+            abandon_thread(self._worker)
             self._worker = None
+        # La carte en cours ne reste pas « P1/1… » : elle dit qu'on a annulé.
+        if 0 <= self._queue_pos < len(self._queue):
+            ci = self._queue[self._queue_pos][0]
+            if ci < len(self._clip_cards):
+                self._clip_cards[ci].set_status("✗ annulé", C["text_dim"])
         self._queue_pos = len(self._queue)
         self._lbl_queue_info.setText("File annulée.")
         self._lbl_progress.setText("")
@@ -2452,7 +2596,11 @@ class TabDavinciEdit(QScrollArea):
         self._btn_cancel.setVisible(False)
         self._lbl_lipsync_stage.setVisible(False)
         total = len(self._queue)
-        self._lbl_queue_info.setText(f"File terminée — {total} génération(s) complétée(s).")
+        n_ok = max(0, total - len(self._failed_clips) - self._mock_count)
+        self._lbl_queue_info.setText(
+            f"File terminée — {n_ok} génération(s) réussie(s) sur {total}"
+            + (f", {len(self._failed_clips)} échouée(s)" if self._failed_clips else "")
+            + (f", {self._mock_count} simulée(s)" if self._mock_count else "") + ".")
         self._progress.setValue(100)
         self._lbl_progress.setText("")
         if self._failed_clips:
@@ -2466,7 +2614,7 @@ class TabDavinciEdit(QScrollArea):
                 f"{len(self._failed_clips)} clip(s) n'ont pas pu être générés :\n\n"
                 + "\n".join(clip_names),
             )
-        elif self._mock_count > 0:
+        if self._mock_count > 0:
             QMessageBox.warning(
                 self,
                 "Simulation — aucun fichier créé",

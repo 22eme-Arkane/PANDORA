@@ -693,7 +693,18 @@ def run_real(params: dict, emit_progress, is_cancelled) -> dict:
         direction  = params.get("direction", "after")
         ext_refs   = [p for p in params.get("ref_images", []) if p and os.path.isfile(p)][:3]
 
-        endpoint = f"{base}/reference-to-video"
+        # ⚠ Jusqu'au 24/09/2026 cette ligne lisait une variable `base` supprimée
+        # avec la table des familles (août 2026) : NameError sur CHAQUE envoi de
+        # « Modifier un clip », dans les deux éditions, depuis la v2.2.0 — après
+        # avoir déjà transcodé le clip et payé la traduction. La table
+        # core/seedance_family porte le chemin d'édition (« ext ») de chaque version.
+        endpoint = endpoints.get("ext") or endpoints.get("ref") or endpoints["t2v"]
+        # Seedance 2.5 nomme la tâche (relevé fal.ai 24/09/2026 : `task` =
+        # reference | editing | extension, défaut reference) : une reprise
+        # ciblée est une ÉDITION du clip, un prolongement une EXTENSION.
+        # Seedance 2.0 n'a pas ce champ.
+        if "2.5" in str(model):
+            args["task"] = "editing" if direction == "new_take" else "extension"
 
         _video_upload_ok = False
         if direction == "new_take":
@@ -711,11 +722,14 @@ def run_real(params: dict, emit_progress, is_cancelled) -> dict:
                                 args["video_urls"] = [fal_client.upload(_vf.read(), content_type=_ct)]
                             _video_upload_ok = True
                         except Exception as _fb:
-                            emit_progress(9, f"⚠ Upload clip échoué ({_fb}) — génération sans référence vidéo")
-                    else:
-                        emit_progress(9, f"⚠ Upload clip échoué ({_vu_str[:60]}) — génération sans référence vidéo")
+                            _vu_str = str(_fb)
+                    # Une « modification » sans le clip serait un plan sans rapport
+                    # avec la source, facturé quand même : on s'arrête ici.
+                    if not _video_upload_ok:
+                        raise RuntimeError(
+                            f"Envoi du clip source impossible ({_vu_str[:120]}) — rien n'a été généré.")
             else:
-                emit_progress(8, "⚠ Fichier clip introuvable — génération sans référence vidéo")
+                raise RuntimeError("Fichier du clip source introuvable — rien à modifier.")
         else:
             if video_path and os.path.isfile(video_path):
                 try:

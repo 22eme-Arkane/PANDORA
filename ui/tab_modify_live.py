@@ -106,7 +106,22 @@ class TabModifyLive(QScrollArea):
     _ENGINES = [
         ("Seedance 2.0  (~$0.30/s)",      "seedance-2.0"),
         ("Seedance Fast  (~$0.24/s)",     "seedance-2.0-fast"),
+        # 2.5 : plan-séquence jusqu'à 30 s, 720p max, tâche « editing » nommée
+        # (parité Cinéma, 24/09/2026).
+        ("Seedance 2.5  (30 s · 720p max)", "seedance-2.5"),
     ]
+
+    @staticmethod
+    def _comfy_edit_engines() -> list:
+        """Gabarits ComfyUI d'édition vidéo lus chez le serveur (cache local) :
+        « Modifier un clip » SUR LA MACHINE, 0 $ — même liste que le Cinéma."""
+        try:
+            from core import comfy_catalog as _cc
+            from core import comfy_video as _cv
+            return [(_cc.video_engine_label(e), _cv.engine_key(e["name"]), e)
+                    for e in _cc.load_cached_video()]
+        except Exception:
+            return []
 
     def __init__(self):
         super().__init__()
@@ -120,6 +135,8 @@ class TabModifyLive(QScrollArea):
         self._queue: list[int] = []
         self._queue_pos = 0
         self._worker = None
+        self._failed: list[str] = []
+        self._mock_count = 0
         self._last_folder = ""
         self._library_provider = None
 
@@ -317,7 +334,16 @@ class TabModifyLive(QScrollArea):
         self._engine_combo.setStyleSheet(_combo_style())
         for label, key in self._ENGINES:
             self._engine_combo.addItem(label, key)
+        self._comfy_edit_entries = {}
+        for _lbl, _key, _entry in self._comfy_edit_engines():
+            self._engine_combo.addItem(_lbl, _key)
+            self._comfy_edit_entries[_key] = _entry
+        self._engine_combo.currentIndexChanged.connect(self._on_engine_changed)
         eng_col.addWidget(self._engine_combo)
+        # Bandeau du module externe (ComfyUI) sous le moteur — composant partagé.
+        from ui.external_banner import ExternalBanner
+        self._external_banner = ExternalBanner()
+        eng_col.addWidget(self._external_banner)
         row.addLayout(eng_col, 1)
         dur_col = QVBoxLayout()
         dur_col.setSpacing(6)
@@ -325,8 +351,10 @@ class TabModifyLive(QScrollArea):
         self._dur_lbl.setStyleSheet(f"color:{C['text_secondary']};font-size:12px;background:transparent;")
         dur_col.addWidget(self._dur_lbl)
         self._dur_slider = QSlider(Qt.Orientation.Horizontal)
-        self._dur_slider.setMinimum(2)
-        self._dur_slider.setMaximum(10)
+        # 4–15 s = la fenêtre que Seedance accepte (2 ou 3 s devenaient 4 s en
+        # silence ; le curseur s'arrêtait à 10 alors que l'API monte à 15).
+        self._dur_slider.setMinimum(4)
+        self._dur_slider.setMaximum(15)
         self._dur_slider.setValue(5)
         self._dur_slider.setStyleSheet(_slider_style())
         self._dur_slider.valueChanged.connect(
@@ -394,7 +422,25 @@ class TabModifyLive(QScrollArea):
             paths = []
         self.add_clips_from_paths(paths)
 
+    def _queue_running(self) -> bool:
+        w = self._worker
+        try:
+            return bool(w is not None and w.isRunning())
+        except RuntimeError:
+            return False
+
+    def _refuse_while_running(self) -> bool:
+        """La file indexe les clips par position : la liste est FIGÉE tant qu'elle
+        tourne (sinon mauvais clip généré ou file bloquée)."""
+        if not self._queue_running():
+            return False
+        self._status_lbl.setText("⏳  " + translate("Liste figée pendant la file — attendez la fin."))
+        self._status_lbl.show()
+        return True
+
     def _on_clear_clips(self):
+        if self._refuse_while_running():
+            return
         self._clips.clear()
         self._per_clip_prompts.clear()
         self._per_clip_ref.clear()
@@ -402,10 +448,19 @@ class TabModifyLive(QScrollArea):
         self._reload_list()
 
     def add_clips_from_paths(self, paths: list):
+        if self._refuse_while_running():
+            return
         for p in paths:
             if p and os.path.isfile(p) and p not in self._clips:
                 self._clips.append(p)
         self._reload_list()
+
+    def _on_engine_changed(self, *_):
+        key = str(self._engine_combo.currentData() or "")
+        if getattr(self, "_external_banner", None) is not None:
+            self._external_banner.set_engine("comfy" if key.startswith("comfy_edit:") else "")
+        # Gabarit ComfyUI : le clip garde sa définition (pas de choix de résolution).
+        self._res_combo.setEnabled(not key.startswith("comfy_edit:"))
 
     def _reload_list(self):
         self._clip_list.blockSignals(True)
@@ -429,7 +484,9 @@ class TabModifyLive(QScrollArea):
         has = bool(self._clips)
         self._empty_lbl.setVisible(not has)
         self._clip_list.setVisible(has)
-        self._btn_generate.setEnabled(has)
+        # Jamais réactiver « Lancer » pendant une file (le bouton relançait une
+        # deuxième file par-dessus la première).
+        self._btn_generate.setEnabled(has and not self._queue_running())
 
     # ── Prompt mode / par clip ─────────────────────────────────────────────────
 
@@ -441,13 +498,18 @@ class TabModifyLive(QScrollArea):
             self._load_current_per_clip()
 
     def _on_clip_row_changed(self, row: int):
-        # Sauvegarde le prompt/réf du clip précédent avant de changer.
-        self._save_current_per_clip()
+        # Sauvegarde le prompt/réf du clip précédent avant de changer — en mode
+        # PAR CLIP seulement : en mode global l'éditeur par clip garde l'ancien
+        # texte et le recopiait sur chaque ligne parcourue (constat 24/09/2026).
+        if self._rb_per_clip.isChecked():
+            self._save_current_per_clip()
         self._current_idx = row
         if self._rb_per_clip.isChecked():
             self._load_current_per_clip()
 
     def _save_current_per_clip(self):
+        if not self._rb_per_clip.isChecked():
+            return
         if 0 <= self._current_idx < len(self._clips) and self._pc_prompt.isEnabled():
             self._per_clip_prompts[self._current_idx] = self._pc_prompt.toPlainText()
             self._per_clip_ref[self._current_idx] = self._pc_ref.path()
@@ -514,8 +576,19 @@ class TabModifyLive(QScrollArea):
             QMessageBox.warning(self, translate("Aucun clip"),
                                 translate("Cochez au moins un clip à modifier."))
             return
+        # Gabarit ComfyUI : sans serveur vivant, on GUIDE (fenêtre du module).
+        if str(self._engine_combo.currentData() or "").startswith("comfy_edit:"):
+            from core import comfy as _cf
+            if not _cf.discover():
+                from ui.dialog_comfy_install import ComfyInstallDialog
+                _dlg = ComfyInstallDialog(self)
+                _dlg.exec()
+                if not _dlg.is_ready():
+                    return
         self._queue = sel
         self._queue_pos = 0
+        self._failed = []
+        self._mock_count = 0
         self._btn_generate.setEnabled(False)
         self._btn_generate.setText(translate("Génération en cours…"))
         self._progress.setValue(0)
@@ -538,9 +611,12 @@ class TabModifyLive(QScrollArea):
             "direction":      "new_take",
             "prompt":         prompt,
             "model":          self._engine_combo.currentData() or "seedance-2.0",
-            "duration":       self._dur_slider.value(),
+            "duration":       max(4, int(self._dur_slider.value())),
             "resolution":     self._res_combo.currentData() or "720p",
             "aspect_ratio":   "16:9",
+            # `audio` est LA clé que lit api/real (generate_audio n'était jamais
+            # lue : l'audio partait toujours, facturé — constat 24/09/2026).
+            "audio":          self._audio_chk.isChecked(),
             "generate_audio": self._audio_chk.isChecked(),
             "video_path":     clip_path,
         }
@@ -554,9 +630,20 @@ class TabModifyLive(QScrollArea):
         if self._queue_pos >= len(self._queue):
             self._btn_generate.setEnabled(True)
             self._btn_generate.setText("▶▶  " + translate("Lancer la file d'attente"))
-            self._status_lbl.setText("✓  " + translate("File terminée."))
-            self._status_lbl.setStyleSheet(
-                f"color:{C['accent']};font-size:11px;background:transparent;")
+            failed = getattr(self, "_failed", [])
+            mocks = getattr(self, "_mock_count", 0)
+            if failed:
+                self._status_lbl.setText(f"✗  {len(failed)} " + translate("échec(s)") + " — " + failed[-1][:80])
+                self._status_lbl.setStyleSheet(
+                    f"color:{C['red']};font-size:11px;background:transparent;")
+            elif mocks:
+                self._status_lbl.setText("✓  " + translate("File terminée (simulation — aucun fichier créé)."))
+                self._status_lbl.setStyleSheet(
+                    f"color:{C['text_secondary']};font-size:11px;background:transparent;")
+            else:
+                self._status_lbl.setText("✓  " + translate("File terminée."))
+                self._status_lbl.setStyleSheet(
+                    f"color:{C['accent']};font-size:11px;background:transparent;")
             return
         idx = self._queue[self._queue_pos]
         clip = self._clips[idx]
@@ -564,7 +651,21 @@ class TabModifyLive(QScrollArea):
         # Parquer le worker précédent AVANT de réassigner (anti-blocage de file).
         if self._worker is not None:
             abandon_thread(self._worker)
-        self._worker = GenerationWorker(params)
+        _key = str(params.get("model") or "")
+        if _key.startswith("comfy_edit:"):
+            # Gabarit ComfyUI d'édition vidéo, sur la machine (0 $).
+            from api.comfy_edit import ComfyEditWorker
+            _entry = self._comfy_edit_entries.get(_key, {})
+            _refs = params.get("ref_images") or []
+            self._worker = ComfyEditWorker({
+                "engine":       _key,
+                "engine_label": "ComfyUI · " + str(_entry.get("title") or _key),
+                "video_path":   clip,
+                "prompt":       params.get("prompt", ""),
+                "image_path":   _refs[0] if _refs else "",
+            })
+        else:
+            self._worker = GenerationWorker(params)
         self._worker.progress.connect(self._on_progress)
         self._worker.finished.connect(lambda r, _i=idx: self._on_one_finished(r, _i))
         self._worker.failed.connect(lambda e, _i=idx: self._on_one_failed(e, _i))
@@ -578,6 +679,7 @@ class TabModifyLive(QScrollArea):
 
     def _on_one_finished(self, result: dict, idx: int):
         local = result.get("local_path", "")
+        ir = {"success": bool(local), "mock": False, "local_path": local, "error": ""}
         if not local and result.get("video_url"):
             try:
                 from core.download import download_result
@@ -588,20 +690,45 @@ class TabModifyLive(QScrollArea):
             if ir.get("success") and not ir.get("mock"):
                 local = ir.get("local_path", "")
                 result = {**result, "local_path": local}
-        if local:
+        elif not local:
+            ir = {"success": False, "mock": True, "local_path": "", "error": ""}
+        if ir.get("mock"):
+            # Simulation (pas de clé) : dit, et ni historique ni coût.
+            self._mock_count = getattr(self, "_mock_count", 0) + 1
+            self._set_item_prefix(idx, "✓ (simulation) ")
+        elif local:
             self._last_folder = os.path.dirname(local)
             self._set_item_prefix(idx, "✓ ")
+            # Historique + journal de coût du projet (parité Cinéma — le Live n'y
+            # écrivait jamais : coût sous-estimé, pas de « ↑ HD »).
+            try:
+                from core.history import save_to_history
+                save_to_history({
+                    "mode": "edit", "prompt": result.get("prompt", ""),
+                    "model": str(self._engine_combo.currentData() or "seedance-2.0"),
+                    "video_path": local, "local_path": local,
+                    "duration": result.get("duration", "") or self._dur_slider.value(),
+                    "resolution": self._res_combo.currentData() or "",
+                    "seed": result.get("seed", 0) or 0,
+                })
+            except Exception:
+                pass
             self.generation_done.emit(result)
         else:
-            self._set_item_prefix(idx, "✓ ")   # mode démo (pas de clé)
+            # Vidéo payée mais téléchargement raté : ce n'est PAS un « ✓ ».
+            err = ir.get("error") or translate("téléchargement raté")
+            self._failed.append(err)
+            self._set_item_prefix(idx, "✗ ")
+            self._status_lbl.setText(f"✗  {err[:100]}")
         self._queue_pos += 1
         self._process_next()
 
     def _on_one_failed(self, err: str, idx: int):
         self._set_item_prefix(idx, "✗ ")
+        self._failed = getattr(self, "_failed", []) + [err]
         self._queue_pos += 1
+        self._status_lbl.setText(f"✗  {err[:100]}")
         if self._queue_pos >= len(self._queue):
-            self._status_lbl.setText(f"✗  {err[:100]}")
             show_api_error(self, err)
         self._process_next()
 

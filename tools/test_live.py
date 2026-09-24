@@ -702,7 +702,23 @@ def storyboard_boutons_portes_du_cinema():
     assert t._clip_list.count() == 1, "liste de clips cochable"
     _p = t._build_params(0, _real)
     assert _p["mode"] == "ext" and "generate_audio" in _p and "resolution" in _p
+    # `audio` est la clé que lit api/real (generate_audio n'était jamais lue) ;
+    # la durée respecte la fenêtre Seedance 4–15 s (24/09/2026).
+    assert _p["audio"] == _p["generate_audio"] and 4 <= _p["duration"] <= 15
+    assert t._dur_slider.minimum() == 4 and t._dur_slider.maximum() == 15
     assert "@Video1" in _p["prompt"] and _p["video_path"] == _real
+    # Moteurs : Seedance 2.5 (parité) + gabarits ComfyUI d'édition (cache) ; le
+    # routage comfy_edit part vers api.comfy_edit.ComfyEditWorker.
+    _keys = [t._engine_combo.itemData(i) for i in range(t._engine_combo.count())]
+    assert "seedance-2.5" in _keys
+    _src = inspect.getsource(MM.TabModifyLive._process_next)
+    assert "ComfyEditWorker" in _src and 'startswith("comfy_edit:")' in _src
+    # Un téléchargement raté n'est plus un « ✓ » ; une simulation est nommée.
+    _src2 = inspect.getsource(MM.TabModifyLive._on_one_finished)
+    assert "simulation" in _src2 and "save_to_history" in _src2 and '"✗ "' in _src2
+    # La liste est figée pendant une file ; le bouton ne se réactive pas en cours.
+    assert "_refuse_while_running" in inspect.getsource(MM.TabModifyLive.add_clips_from_paths)
+    assert "_queue_running" in inspect.getsource(MM.TabModifyLive._refresh_clip_state)
     # P5 — 2ᵉ fenêtre (2 écrans) portée au Live
     import live_window as LW
     src_i = inspect.getsource(LW.LiveWindow.__init__)

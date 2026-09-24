@@ -9613,6 +9613,202 @@ def modules_externes_registre_fenetre_bandeau_et_telechargement():
 
 
 @test
+def modifier_un_clip_endpoint_annulation_parquee_et_moteurs_locaux():
+    """Audit « Modifier un clip » (24/09/2026). (1) api/real.py lisait une variable
+    `base` supprimée en août → NameError sur CHAQUE envoi en mode « ext », dans les
+    deux éditions, depuis la v2.2.0 : le chemin d'édition vient désormais de
+    core/seedance_family et la 2.5 nomme sa tâche. (2) « Annuler » lâchait un
+    QThread vivant (abort différé) : les workers sont parqués. (3) 720p par défaut
+    (la grille commençait au 4K). (4) Gabarits ComfyUI d'édition vidéo comme
+    moteurs (0 $), routés vers api.comfy_edit.ComfyEditWorker. (5) Clip absent →
+    échec explicite (plus de repli texte seul payé) ; références selon le mode ;
+    liste figée pendant la file ; simulation non journalisée."""
+    import ast, tempfile as _tf
+    import api.real as _real
+    from core import seedance_family as _sf
+
+    # 1. Aucun nom libre `base` dans run_real ; le mode ext lit la table.
+    tree = ast.parse(inspect.getsource(_real.run_real))
+    fn = tree.body[0]
+    assigned = {n.id for n in ast.walk(fn) if isinstance(n, ast.Name) and isinstance(n.ctx, ast.Store)}
+    assigned |= {a.arg for a in fn.args.args}
+    loaded = {n.id for n in ast.walk(fn) if isinstance(n, ast.Name) and isinstance(n.ctx, ast.Load)}
+    assert "base" not in (loaded - assigned), "run_real lit encore une variable `base` jamais définie"
+    src = inspect.getsource(_real.run_real)
+    assert 'endpoints.get("ext")' in src and '"task"' in src and '"editing"' in src
+    for m in ("seedance-2.0", "seedance-2.0-fast", "seedance-2.5"):
+        assert _sf.endpoints(m).get("ext", "").endswith("/reference-to-video"), m
+    assert "rien n'a été généré" in src, "un clip non envoyé doit arrêter la génération"
+
+    # 2-5. Onglet Cinéma, hors réseau : catalogue ComfyUI synthétique.
+    from core import comfy_catalog as _cc
+    _orig_cached = _cc.load_cached_video
+    _cc.load_cached_video = lambda: [{"name": "video_x_video_edit", "title": "X Edit", "kind": "edit",
+                                      "size": 3e9, "loads": 0, "prompted": True}]
+    try:
+        import ui.tab_davinci_edit as DE
+        tab = DE.TabDavinciEdit()
+    finally:
+        _cc.load_cached_video = _orig_cached
+    keys = [tab._cb_model.itemData(i) for i in range(tab._cb_model.count())]
+    assert "comfy_edit:video_x_video_edit" in keys and "seedance-2.0" in keys and "pixverse_face" in keys
+    assert tab._cb_res.currentData() == "720p", f"720p par défaut attendu, lu {tab._cb_res.currentData()}"
+    assert hasattr(tab, "_external_banner"), "bandeau ComfyUI attendu sous le moteur"
+    # Routage comfy_edit : worker de api.comfy_edit, clip + prompt + référence transmis.
+    import api.comfy_edit as _ce
+    seen = {}
+
+    class _StubWorker:
+        def __init__(self, params):
+            seen.update(params)
+            self.finished = _Sig(); self.progress = _Sig(); self.failed = _Sig()
+        def start(self): pass
+        def isRunning(self): return False
+
+    class _Sig:
+        def connect(self, *_): pass
+
+    with _tf.TemporaryDirectory() as td:
+        clip = os.path.join(td, "plan.mp4")
+        with open(clip, "wb") as f:
+            f.write(b"\x00" * 1024)
+        tab._load_clips([{"name": "plan", "file_path": clip}])
+        for i in range(tab._cb_model.count()):
+            if tab._cb_model.itemData(i) == "comfy_edit:video_x_video_edit":
+                tab._cb_model.setCurrentIndex(i)
+        assert tab._modif_hint.isVisibleTo(tab) and "ComfyUI" in tab._modif_hint.text()
+        tab._prompt_global.setPlainText("remplace le fond par une plage")
+        tab._queue = [(0, 0)]; tab._queue_pos = 0; tab._failed_clips = []; tab._mock_count = 0
+        _orig_w = _ce.ComfyEditWorker
+        _ce.ComfyEditWorker = _StubWorker
+        try:
+            tab._process_next()
+        finally:
+            _ce.ComfyEditWorker = _orig_w
+        assert seen.get("engine") == "comfy_edit:video_x_video_edit" and seen.get("video_path") == clip
+        assert "@Video1" in seen.get("prompt", "") and "plage" in seen["prompt"]
+        # Clip absent : échec explicite, pas de génération texte seul (le bilan de
+        # fin de file ouvre une boîte modale : neutralisée le temps du test).
+        tab._worker = None
+        tab._load_clips([{"name": "fantome", "file_path": os.path.join(td, "absent.mp4")}])
+        tab._queue = [(0, 0)]; tab._queue_pos = 0; tab._failed_clips = []
+        _orig_warn = DE.QMessageBox.warning
+        DE.QMessageBox.warning = staticmethod(lambda *a, **k: None)
+        try:
+            tab._process_next()
+        finally:
+            DE.QMessageBox.warning = _orig_warn
+        assert tab._failed_clips and "introuvable" in tab._failed_clips[0][1]
+    # Annulation : les deux workers passent par abandon_thread, jamais `= None` à chaud.
+    _cs = inspect.getsource(DE.TabDavinciEdit._cancel_queue)
+    assert _cs.count("abandon_thread(") >= 2 and ".quit()" not in _cs
+    _ps = inspect.getsource(DE.TabDavinciEdit._process_next)
+    assert "abandon_thread(prev)" in _ps and "ComfyEditWorker" in _ps
+    assert "_per_clip_ref_images = {}" in inspect.getsource(DE.TabDavinciEdit._load_clips)
+    assert '"resolution"' in inspect.getsource(DE.TabDavinciEdit._import_and_advance)
+    # L'étiquette ne promet plus LatentSync (le moteur réel est celui des Paramètres).
+    assert "Synchronisation LatentSync" not in inspect.getsource(DE.TabDavinciEdit._start_lipsync)
+    assert "_ls_name" in inspect.getsource(DE.TabDavinciEdit._build_ui)
+    # Tarif : un gabarit ComfyUI nommé vaut 0 $ dans le journal.
+    from core import pricing
+    assert pricing.price_per_second("comfy_edit:video_x_video_edit", "source") == 0.0
+    tab.deleteLater()
+
+
+@test
+def comfy_widgets_promus_par_nom_valeur_interne_et_case_de_controle():
+    """Convertisseur ComfyUI, sous-graphes (constat validation vidéo 24/09/2026) :
+    les `widgets_values` du nœud EXTERNE suivent l'ordre des entrées non-connexion
+    du SOUS-GRAPHE (le gabarit H3 met le prompt en tête sans le lister parmi ses
+    prises) ; une graine INT traîne sa case « fixed »/« randomize » ; un nœud
+    externe SANS valeur laisse au nœud interne la sienne. Avant : 14 gabarits
+    vidéo refusés (`value: None`, un LoRA dans `ckpt_name`)."""
+    from core import comfy_workflow as _wf
+
+    def sg_wf(outer_wv, outer_inputs):
+        return {"nodes": [{"id": 1, "type": "sg-1", "widgets_values": outer_wv, "inputs": outer_inputs,
+                           "outputs": []}],
+                "links": [],
+                "definitions": {"subgraphs": [{
+                    "id": "sg-1",
+                    "inputs": [{"name": "text", "type": "STRING", "linkIds": [10]},
+                               {"name": "noise_seed", "type": "INT", "linkIds": [11]},
+                               {"name": "ckpt_name", "type": "COMBO", "linkIds": [12]},
+                               {"name": "steps", "type": "INT", "linkIds": [13]}],
+                    "outputs": [],
+                    "nodes": [
+                        {"id": 2, "type": "CLIPTextEncode", "widgets_values": ["texte interne"],
+                         "inputs": [{"name": "text", "type": "STRING", "link": 10, "widget": {"name": "text"}}], "outputs": []},
+                        {"id": 3, "type": "KSampler", "widgets_values": [7, "fixed", 20],
+                         "inputs": [{"name": "seed", "type": "INT", "link": 11, "widget": {"name": "seed"}},
+                                    {"name": "steps", "type": "INT", "link": 13, "widget": {"name": "steps"}}], "outputs": []},
+                        {"id": 4, "type": "CheckpointLoaderSimple", "widgets_values": ["interne.safetensors"],
+                         "inputs": [{"name": "ckpt_name", "type": "COMBO", "link": 12, "widget": {"name": "ckpt_name"}}], "outputs": []},
+                    ],
+                    "links": [{"id": 10, "origin_id": -10, "origin_slot": 0, "target_id": 2, "target_slot": 0, "type": "STRING"},
+                              {"id": 11, "origin_id": -10, "origin_slot": 1, "target_id": 3, "target_slot": 0, "type": "INT"},
+                              {"id": 12, "origin_id": -10, "origin_slot": 2, "target_id": 4, "target_slot": 0, "type": "COMBO"},
+                              {"id": 13, "origin_id": -10, "origin_slot": 3, "target_id": 3, "target_slot": 1, "type": "INT"}],
+                }]}}
+
+    def promoted_values(flat):
+        prim = {n["id"]: n["widgets_values"][0] for n in flat["nodes"] if n["type"] == "PrimitiveNode"}
+        by_link = {l[0]: (l[1], l[3], l[4]) for l in flat["links"]}
+        out = {}
+        for n in flat["nodes"]:
+            for i in n.get("inputs") or []:
+                src = by_link.get(str(i.get("link")))
+                out[(n["type"], i["name"])] = prim.get(src[0]) if src else ("LIBRE" if i.get("link") is None else "LIEN")
+        return out
+
+    # 1. Externe SANS valeur : chaque entrée interne reste libre → sa propre valeur.
+    outer_in = [{"name": "text", "type": "STRING", "link": None, "widget": {"name": "text"}},
+                {"name": "noise_seed", "type": "INT", "link": None, "widget": {"name": "noise_seed"}},
+                {"name": "ckpt_name", "type": "COMBO", "link": None, "widget": {"name": "ckpt_name"}}]
+    v = promoted_values(_wf.flatten(sg_wf([], outer_in)))
+    assert v[("CLIPTextEncode", "text")] == "LIBRE" and v[("KSampler", "seed")] == "LIBRE" \
+        and v[("CheckpointLoaderSimple", "ckpt_name")] == "LIBRE", v
+    # 2. Externe AVEC valeurs : ordre des entrées du sous-graphe, case de contrôle
+    #    sautée après la graine ; « steps » (4e) au-delà des valeurs → interne.
+    v = promoted_values(_wf.flatten(sg_wf(["texte externe", 42, "randomize", "externe.safetensors"], outer_in)))
+    assert v[("CLIPTextEncode", "text")] == "texte externe" and v[("KSampler", "seed")] == 42 \
+        and v[("CheckpointLoaderSimple", "ckpt_name")] == "externe.safetensors" and v[("KSampler", "steps")] == "LIBRE", v
+    # 2b. Sans case de contrôle enregistrée : les valeurs suivent sans saut.
+    v = promoted_values(_wf.flatten(sg_wf(["t", 42, "externe.safetensors", 30], outer_in)))
+    assert v[("KSampler", "seed")] == 42 and v[("CheckpointLoaderSimple", "ckpt_name")] == "externe.safetensors" \
+        and v[("KSampler", "steps")] == 30, v
+    # 2c. Une prise composée « IMAGE,MASK » ou propre à un nœud (BBOX) n'occupe
+    #     aucune case : ce sont des connexions (LTX IC-LoRA : sans cela, tout
+    #     glissait de deux cases et un checkpoint arrivait dans un INT).
+    assert _wf._is_link_type("IMAGE,MASK") and not _wf._is_widget_type("IMAGE,MASK") \
+        and not _wf._is_widget_type("BBOX") and _wf._is_widget_type("COMBO") and _wf._is_widget_type("INT")
+    # 3. Valeurs partielles : ce qui manque reste interne, jamais None.
+    v = promoted_values(_wf.flatten(sg_wf(["texte externe"], outer_in)))
+    assert v[("CLIPTextEncode", "text")] == "texte externe" and v[("KSampler", "seed")] == "LIBRE", v
+    # 4. Le contrat vidéo : LoadVideo reconnu, remplissage sans prompt toléré.
+    from core import comfy_image as _ci, comfy_video as _cv, comfy_catalog as _cc
+    oi = {"LoadVideo": {"input": {"required": {"file": [["a.mp4"]]}}},
+          "SaveVideo": {"input": {"required": {"video": ["VIDEO"]}}, "output_node": True}}
+    api = {"1": {"class_type": "LoadVideo", "inputs": {"file": "a.mp4"}},
+           "2": {"class_type": "SaveVideo", "inputs": {"video": ["1", 0]}}}
+    info = _ci.analyze(api, oi)
+    assert info["load_videos"] == ["1"] and info["outputs"] == ["2"] and not info["prompt_nodes"]
+    _ci.fill(api, oi, info, "", "", None, None, 3, [], ["pandora/clip.mp4"], require_prompt=False)
+    assert api["1"]["inputs"]["file"] == "pandora/clip.mp4"
+    assert _cv.is_edit_engine("comfy_edit:x") and _cv.template_name("comfy_edit:video_x") == "video_x"
+    entries = _cc.parse_video_index([
+        {"title": "Video", "templates": [
+            {"name": "video_x_video_edit", "title": "X", "tags": ["Video Edit"], "size": 3e9},
+            {"name": "api_y", "title": "Y", "tags": ["Video Edit"]},
+            {"name": "video_z", "title": "Z", "tags": ["Motion Control"], "openSource": False}]},
+        {"title": "Video Tools", "templates": [{"name": "utility_up", "title": "U", "tags": ["Video Upscale"], "size": 4e9}]},
+        {"title": "Image", "templates": [{"name": "image_nope", "title": "N", "tags": ["Text to Image"]}]}])
+    assert [e["name"] for e in entries] == ["video_x_video_edit", "utility_up"], entries
+    assert entries[0]["kind"] == "edit" and entries[1]["kind"] == "upscale"
+    assert _cc.video_engine_label(entries[1]).endswith("0 $") and "agrandissement" in _cc.video_engine_label(entries[1])
+
+
+@test
 def ia_locales_comme_claude_contexte_pensee_vision_et_serveurs():
     """Chantier IA locales (24/09/2026, demande Matthieu : tous les moteurs, même
     les plus lourds, « exactement comme Claude »). Quatre défauts corrigés

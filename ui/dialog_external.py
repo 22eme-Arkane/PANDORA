@@ -138,7 +138,8 @@ class ExternalDialog(QDialog):
             from PyQt6.QtWidgets import QComboBox
             from core import comfy_catalog as _cc
             entries = _cc.load_cached()
-            if entries:
+            videos = _cc.load_cached_video()
+            if entries or videos:
                 trow = QHBoxLayout()
                 trow.setSpacing(8)
                 self._tpl_combo = QComboBox()
@@ -146,6 +147,11 @@ class ExternalDialog(QDialog):
                 for e in entries:
                     self._tpl_combo.addItem(
                         f"{e.get('title') or e['name']}  ·  {'édition' if e.get('edit') else 'texte → image'}"
+                        f"  ·  {_cc.gb(int(e.get('size') or 0))}", e["name"])
+                # Gabarits VIDÉO à entrée vidéo (« Modifier un clip » en local).
+                for e in videos:
+                    self._tpl_combo.addItem(
+                        f"🎞 {e.get('title') or e['name']}  ·  vidéo · {_cc._KIND_LABEL.get(e.get('kind'), 'outil')}"
                         f"  ·  {_cc.gb(int(e.get('size') or 0))}", e["name"])
                 trow.addWidget(self._tpl_combo, 1)
                 b_tpl = _btn("⬇  " + translate("Télécharger les modèles de ce gabarit"), CP["accent"])

@@ -4125,6 +4125,21 @@ _FR_TO_EN: dict[str, str] = {
         "Enable the local server in Jan (Settings → Local server, port 1337).",
     "Dans PANDORA : Assistant IA → « Serveur IA local », préréglage Jan.":
         "In PANDORA: AI Assistant → « Local AI server », Jan preset.",
+    # ── Modifier un clip : gabarits ComfyUI + audit (24/09/2026) ──────────────
+    "Gabarit ComfyUI sur votre machine (0 $) :": "ComfyUI template on your machine ($0):",
+    "consigne texte prise en compte": "text instruction used",
+    "sans consigne texte (outil automatique)": "no text instruction (automatic tool)",
+    "image de référence requise": "reference image required",
+    "ComfyUI Desktop doit tourner ; les modèles se téléchargent depuis sa fenêtre (Paramètres → Modules externes).":
+        "ComfyUI Desktop must be running; models download from its window (Settings → External modules).",
+    "Définition du clip source": "Source clip definition",
+    "Génération en cours": "Generation in progress",
+    "La liste des clips ne peut pas changer pendant la file — attendez la fin ou annulez.":
+        "The clip list cannot change while the queue runs — wait for the end or cancel.",
+    "Liste figée pendant la file — attendez la fin.": "List frozen while the queue runs — wait for the end.",
+    "échec(s)": "failure(s)",
+    "File terminée (simulation — aucun fichier créé).": "Queue finished (simulation — no file created).",
+    "téléchargement raté": "download failed",
     "Serveur IA injoignable — lancez le serveur local (Ollama, LM Studio, llama.cpp…) ou vérifiez son adresse dans Paramètres → Assistant IA, puis relancez.":
         "AI server unreachable — start the local server (Ollama, LM Studio, llama.cpp…) or check its address in Settings → AI Assistant, then retry.",
     "version trop ancienne pour H3 (0.30.0 minimum) — mettez ComfyUI à jour":

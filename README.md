@@ -105,6 +105,21 @@ a second instead of forty.**
   (`tools/ai_conformance.py`) checks any engine against PANDORA's real
   requirements: bare translation, JSON arrays and objects, exact markers,
   truncation + continuation, no thinking, long context, vision.
+- **« Edit a clip » works again — and works on your own GPU.** Every real
+  send from « Edit a clip » had failed since v2.2.0 in both editions: the
+  code read a variable deleted in August, after having transcoded the clip
+  and paid the translation. Fixed, with a test that reads the function's
+  own names. Also fixed in the audit: « Cancel » left a live thread behind
+  (a crash a few seconds later), the default resolution was 4K (five times
+  the 720p price), the Live edition ignored the audio switch, showed « ✓ » on
+  a failed download and logged neither history nor cost, a missing source
+  clip silently became a text-only generation, and reference images leaked
+  between clips. New: the 24 open ComfyUI video templates that take a clip
+  in (Bernini-R and Capybara *Video Edit*, VOID inpainting, SeedVR2 upscale,
+  SCAIL-2 character replacement, Wan Animate 2, VACE…) are listed as
+  engines at 0 $ in both editions, Seedance 2.5 names its task
+  (`editing`) and allows 30 s, and the lip-sync switch names the engine it
+  really uses.
 
 ---
 
