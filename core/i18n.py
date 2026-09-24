@@ -4093,8 +4093,11 @@ _FR_TO_EN: dict[str, str] = {
         "PANDORA sizes the window on each call (screenplay + output) without exceeding this ceiling.",
     "Télécharger un modèle : PANDORA en propose une liste (Qwen, Gemma, Mistral, gpt-oss, Llama… de 5 Go aux plus lourds) et le télécharge pour vous.":
         "Download a model: PANDORA offers a list (Qwen, Gemma, Mistral, gpt-oss, Llama… from 5 GB to the heaviest) and downloads it for you.",
-    "IA texte locale avec une interface : catalogue de modèles GGUF, chargement en un clic, serveur OpenAI-compatible (port 1234). PANDORA s'y connecte comme à Claude. Aucune clé, aucun crédit.":
-        "Local text AI with an interface: GGUF model catalogue, one-click loading, OpenAI-compatible server (port 1234). PANDORA connects to it like to Claude. No key, no credits.",
+    "IA texte locale avec une interface : catalogue de modèles GGUF, chargement en un clic, serveur OpenAI-compatible (port 1234). PANDORA s'y connecte comme à un fournisseur en ligne. Aucune clé, aucun crédit.":
+        "Local text AI with an interface: GGUF model catalogue, one-click loading, OpenAI-compatible server (port 1234). PANDORA connects to it like to an online provider. No key, no credits.",
+    "Démarrer automatiquement les serveurs locaux": "Start local servers automatically",
+    "Au moment de générer : ComfyUI Desktop, MiniMax H3 local, Ollama, LM Studio… sont lancés par PANDORA s'ils sont installés mais arrêtés. Décoché : la fenêtre du module s'ouvre et vous cliquez « Lancer ».":
+        "When generating: ComfyUI Desktop, local MiniMax H3, Ollama, LM Studio… are launched by PANDORA when installed but stopped. Unchecked: the module window opens and you click « Launch ».",
     "Installer LM Studio (installeur officiel) et télécharger un modèle dans son onglet Découvrir (Qwen3, Gemma 3, Mistral Small… selon votre carte).":
         "Install LM Studio (official installer) and download a model in its Discover tab (Qwen3, Gemma 3, Mistral Small… depending on your card).",
     "Charger le modèle avec une fenêtre de contexte d'au moins 32 000 jetons (réglage du chargement), puis démarrer le serveur local (onglet Développeur).":
@@ -4125,6 +4128,20 @@ _FR_TO_EN: dict[str, str] = {
         "Enable the local server in Jan (Settings → Local server, port 1337).",
     "Dans PANDORA : Assistant IA → « Serveur IA local », préréglage Jan.":
         "In PANDORA: AI Assistant → « Local AI server », Jan preset.",
+    # ── Démarrage automatique des serveurs locaux (24/09/2026) ────────────────
+    "démarrage": "startup",
+    "Démarrage de": "Starting",
+    "Vérification du module…": "Checking the module…",
+    "Le serveur répond.": "The server answers.",
+    "Le serveur n'a pas répondu dans le délai.": "The server did not answer in time.",
+    "Lancement de": "Launching",
+    "Ouvrir le guide…": "Open the guide…",
+    "écoulé :": "elapsed:",
+    "délai maxi": "max wait",
+    "PANDORA le lancera au moment de générer.": "PANDORA will launch it when you generate.",
+    "Lancer maintenant": "Launch now",
+    "Démarrer automatiquement les serveurs locaux au moment de générer (ComfyUI, MiniMax H3 local, Ollama, LM Studio…)":
+        "Start local servers automatically when generating (ComfyUI, local MiniMax H3, Ollama, LM Studio…)",
     # ── Modifier un clip : gabarits ComfyUI + audit (24/09/2026) ──────────────
     "Gabarit ComfyUI sur votre machine (0 $) :": "ComfyUI template on your machine ($0):",
     "consigne texte prise en compte": "text instruction used",

@@ -142,7 +142,7 @@ EXTERNALS: dict[str, External] = {
         name="LM Studio",
         purpose="IA texte locale avec une interface : catalogue de modèles GGUF, "
                 "chargement en un clic, serveur OpenAI-compatible (port 1234). PANDORA "
-                "s'y connecte comme à Claude. Aucune clé, aucun crédit.",
+                "s'y connecte comme à un fournisseur en ligne. Aucune clé, aucun crédit.",
         download_url="https://lmstudio.ai/download/latest/win32/x64",
         docs_url="https://lmstudio.ai/docs/app/api",
         steps=(
@@ -472,6 +472,54 @@ def detect(key: str) -> Status:
     if key in LOCAL_SERVER_KEYS:
         return _detect_openai_server(key)
     return Status(detail=f"Module inconnu : {key}", checked=False)
+
+
+def autostart_enabled() -> bool:
+    try:
+        from core.config import load_config
+        return bool(load_config().get("externals_autostart", True))
+    except Exception:
+        return True
+
+
+def autostart_blocking(key: str, wait_s: float = 30.0) -> bool:
+    """Lance un module INSTALLÉ mais arrêté et attend qu'il réponde — version
+    BLOQUANTE pour les workers (l'IA texte : Ollama, LM Studio). Rend False
+    sans rien faire si le démarrage automatique est désactivé, si le module
+    n'est pas installé ou s'il n'a pas répondu à temps. Jamais d'installation."""
+    import os
+    import subprocess
+    import time
+    if not autostart_enabled():
+        return False
+    try:
+        if key == "ollama":
+            exe = ollama_exe()
+            if not exe:
+                return False
+            os.startfile(exe)                                  # noqa: S606 — action voulue
+            probe = lambda: _get_json(_ollama_url() + "/api/version", 2.0)
+        elif key == "lmstudio":
+            lms = lms_cli()
+            if not lms:
+                return False
+            port = local_server_url("lmstudio").rsplit(":", 1)[-1].split("/")[0]
+            flags = getattr(subprocess, "CREATE_NO_WINDOW", 0)
+            subprocess.Popen([lms, "server", "start", "--port", port], creationflags=flags)
+            probe = lambda: _get_json(local_server_url("lmstudio") + "/models", 2.0)
+        else:
+            return False
+        t0 = time.time()
+        while time.time() - t0 < wait_s:
+            time.sleep(2)
+            try:
+                probe()
+                return True
+            except Exception:
+                continue
+    except Exception:
+        pass
+    return False
 
 
 def local_server_url(key: str) -> str:

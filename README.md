@@ -120,6 +120,14 @@ a second instead of forty.**
   engines at 0 $ in both editions, Seedance 2.5 names its task
   (`editing`) and allows 30 s, and the lip-sync switch names the engine it
   really uses.
+- **Local servers start by themselves.** When an engine needs ComfyUI
+  Desktop, the local MiniMax H3 server, Ollama, LM Studio, Jan or llama.cpp
+  and it is installed but not running, PANDORA launches it when you click
+  Generate, shows the seconds passing while it warms up, then carries on.
+  The install window only appears when the module is really missing (or if
+  you switch the automatic start off in Settings → External modules). The
+  banner under the engine gets a one-click « Launch now », and the text AI
+  restarts Ollama or LM Studio on its own when a call finds them asleep.
 
 ---
 

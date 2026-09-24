@@ -5251,15 +5251,20 @@ class TabT2V(QScrollArea):
 
         _model_key = self._get_model()
         if _model_key == "comfy":
-            # Sans serveur vivant, on GUIDE (fenêtre d'installation) au lieu
-            # d'échouer dans un thread — même contrat que l'onglet Moteurs.
+            # Sans serveur vivant : PANDORA le LANCE et l'attend (ui/external_autostart) ;
+            # la fenêtre d'installation ne s'ouvre que s'il n'est pas installé.
             from core import comfy as _cf
             if not _cf.discover():
-                from ui.dialog_comfy_install import ComfyInstallDialog
-                _dlg = ComfyInstallDialog(self)
-                _dlg.exec()
-                if not _dlg.is_ready():
+                from ui.external_autostart import ensure_ready
+                if not ensure_ready("comfyui", self):
                     self.on_failed("ComfyUI injoignable : lancez ComfyUI Desktop, puis relancez.")
+                    return
+        elif _model_key == "minimax-h3-local":
+            from core import h3_local as _h3l
+            if not _h3l.ping(_h3l.get_url())[0]:
+                from ui.external_autostart import ensure_ready
+                if not ensure_ready("h3_local", self):
+                    self.on_failed("Serveur MiniMax H3 local injoignable — Paramètres → Modules externes, puis relancez.")
                     return
         if _model_key in _SEEDANCE_ENGINES:
             self._worker = GenerationWorker(params)

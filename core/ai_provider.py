@@ -671,6 +671,29 @@ def _custom_timeout():
     return _LOCAL_TIMEOUT if ("localhost" in u or "127.0.0.1" in u) else 300
 
 
+# ── Démarrage automatique des serveurs IA locaux ─────────────────────────────
+
+def _with_autostart(module_key: str, call):
+    """Exécute `call()` ; si le serveur local refuse la connexion, le LANCE
+    (core.externals.autostart_blocking : Ollama, LM Studio) et réessaie une
+    fois. Un serveur qui dort ne doit pas coûter un clic dans les Paramètres
+    (demande Matthieu, 24/09/2026)."""
+    import requests
+    try:
+        return call()
+    except requests.exceptions.ConnectionError:
+        from core.externals import autostart_blocking
+        if module_key and autostart_blocking(module_key):
+            return call()
+        raise
+
+
+def _local_module_key() -> str:
+    """Module externe du préréglage local courant (« lmstudio »… ou '')."""
+    from core.local_llm import external_for_preset, preset_key
+    return external_for_preset(preset_key(_cfg()))
+
+
 # ── Serveur OpenAI-compatible LOCAL (LM Studio, llama.cpp, vLLM, Jan…) ───────
 
 def _local_base_url() -> str:
@@ -698,11 +721,13 @@ def _local_payload(system, messages, model, max_tokens, stream_flag) -> tuple:
 
 
 def _local_complete(system, messages, model, max_tokens) -> str:
-    return _oai_complete(*_local_payload(system, messages, model, max_tokens, False), _LOCAL_TIMEOUT)
+    return _with_autostart(_local_module_key(), lambda: _oai_complete(
+        *_local_payload(system, messages, model, max_tokens, False), _LOCAL_TIMEOUT))
 
 
 def _local_stream(system, messages, on_chunk, model, max_tokens) -> str:
-    return _oai_stream(*_local_payload(system, messages, model, max_tokens, True), on_chunk, _LOCAL_TIMEOUT)
+    return _with_autostart(_local_module_key(), lambda: _oai_stream(
+        *_local_payload(system, messages, model, max_tokens, True), on_chunk, _LOCAL_TIMEOUT))
 
 
 # ── Ollama ───────────────────────────────────────────────────────────────────
@@ -763,13 +788,21 @@ def _ollama_request(system, messages, model, max_tokens, stream_flag) -> dict:
     return req
 
 
-def _ollama_complete(system, messages, model, max_tokens) -> str:
+def _ollama_post(payload: dict, stream: bool = False):
+    """POST /api/chat — Ollama arrêté ? lancé et attendu, puis un nouvel essai."""
     import requests
+
+    def _do():
+        r = requests.post(f"{_ollama_url()}/api/chat", json=payload,
+                          timeout=_LOCAL_TIMEOUT, stream=stream)
+        r.raise_for_status()
+        return r
+    return _with_autostart("ollama", _do)
+
+
+def _ollama_complete(system, messages, model, max_tokens) -> str:
     from core.local_llm import strip_thinking
-    r = requests.post(f"{_ollama_url()}/api/chat",
-                      json=_ollama_request(system, messages, model, max_tokens, False),
-                      timeout=_LOCAL_TIMEOUT)
-    r.raise_for_status()
+    r = _ollama_post(_ollama_request(system, messages, model, max_tokens, False))
     j = r.json()
     _note_ollama_usage(j)
     return strip_thinking(j.get("message", {}).get("content", "") or "")
@@ -777,13 +810,10 @@ def _ollama_complete(system, messages, model, max_tokens) -> str:
 
 def _ollama_stream(system, messages, on_chunk, model, max_tokens) -> str:
     import json as _json
-    import requests
     from core.local_llm import ThinkFilter
     filt = ThinkFilter()
     full = ""
-    with requests.post(f"{_ollama_url()}/api/chat",
-                       json=_ollama_request(system, messages, model, max_tokens, True),
-                       timeout=_LOCAL_TIMEOUT, stream=True) as r:
+    with _ollama_post(_ollama_request(system, messages, model, max_tokens, True), stream=True) as r:
         r.raise_for_status()
         for line in r.iter_lines():
             if not line:
@@ -888,17 +918,15 @@ def chat_ex(system: str, messages: list, tier: str = "creative",
                    "kimi": _kimi_payload, "glm": _glm_payload,
                    "local": _local_payload, "custom": _custom_payload}[provider]
         timeout = {"local": _LOCAL_TIMEOUT, "custom": _custom_timeout()}.get(provider, 300)
-        j = _oai_json(*builder(sysp, messages, model, max_tokens, False), timeout)
+        _req = builder(sysp, messages, model, max_tokens, False)
+        j = _with_autostart(_local_module_key() if provider == "local" else "",
+                            lambda: _oai_json(*_req, timeout))
         choice = j["choices"][0]
         return {"text": strip_thinking(choice.get("message", {}).get("content", "") or ""),
                 "truncated": choice.get("finish_reason") == "length"}
     if provider == "ollama":
-        import requests
         from core.local_llm import strip_thinking
-        r = requests.post(f"{_ollama_url()}/api/chat",
-                          json=_ollama_request(sysp, messages, model, max_tokens, False),
-                          timeout=_LOCAL_TIMEOUT)
-        r.raise_for_status()
+        r = _ollama_post(_ollama_request(sysp, messages, model, max_tokens, False))
         j = r.json()
         _note_ollama_usage(j)
         return {"text": strip_thinking(j.get("message", {}).get("content", "") or ""),

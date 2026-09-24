@@ -47,6 +47,9 @@ _DEFAULTS = {
     "local_model":           "",                   # identifiant du modèle chargé sur le serveur
     "local_key":             "",                   # facultative
     "llamacpp_model":        "",                   # dépôt GGUF Hugging Face servi par « Lancer »
+    # Modules externes installés mais arrêtés : PANDORA les lance lui-même au
+    # moment de générer (ui/external_autostart) — False = fenêtre + clic.
+    "externals_autostart":   True,
     "custom_key":            "",                   # fournisseur OpenAI-compatible personnalisé
     "custom_url":            "",
     "custom_model":          "",

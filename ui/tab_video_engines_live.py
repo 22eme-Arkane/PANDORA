@@ -1881,16 +1881,20 @@ class TabVideoEngines(QWidget):
             from api.video_engines import H3MaxTurboWorker
             self._worker = H3MaxTurboWorker(params)
         elif key in ("h3local_t2v", "h3local_i2v"):
+            # Serveur arrêté : PANDORA le lance et l'attend (ui/external_autostart).
+            from core import h3_local as _h3l
+            if not _h3l.ping(_h3l.get_url())[0]:
+                from ui.external_autostart import ensure_ready
+                if not ensure_ready("h3_local", self):
+                    return
             from api.h3_local import H3LocalWorker
             self._worker = H3LocalWorker(params)
         elif key in ("comfy_h3_t2v", "comfy_h3_i2v", "comfy_custom"):
-            # Sans serveur vivant, on guide au lieu d'échouer dans un thread.
+            # Sans serveur vivant : lancé et attendu ; guide seulement si absent.
             from core import comfy as _cf
             if not _cf.discover():
-                from ui.dialog_comfy_install import ComfyInstallDialog
-                _dlg = ComfyInstallDialog(self)
-                _dlg.exec()
-                if not _dlg.is_ready():
+                from ui.external_autostart import ensure_ready
+                if not ensure_ready("comfyui", self):
                     return
             from core import comfy_h3 as _h3c
             _h3c.prepare_params(params, key)

@@ -9325,7 +9325,9 @@ def comfyui_moteur_nodal_et_journal_de_cout():
     for mod in ("ui.tab_video_engines", "ui.tab_video_engines_live"):
         m = importlib.import_module(mod)
         src = inspect.getsource(m.TabVideoEngines._on_generate)
-        assert "ComfyWorker" in src and "ComfyInstallDialog" in src, f"{mod}: dispatch ComfyUI manquant"
+        # Depuis le 24/09/2026 le serveur est LANCÉ et attendu (ui/external_autostart)
+        # au lieu d'ouvrir la fenêtre d'installation.
+        assert "ComfyWorker" in src and 'ensure_ready("comfyui"' in src, f"{mod}: dispatch ComfyUI manquant"
         keys = [k for _, k, _ in m.TabVideoEngines._ENGINES]
         for k in ("comfy_h3_t2v", "comfy_h3_i2v", "comfy_custom"):
             assert k in keys, f"{mod}: {k} absent"
@@ -9491,8 +9493,9 @@ def h3_et_comfy_generables_depuis_le_storyboard():
     w = _T._make_ext_worker("comfy", {**base, "image_path": "C:/x/mood.png"})
     assert w.params["mode"] == "i2v" and w.params["workflow_path"].endswith("minimax_h3_i2v.json"), \
         "avec une image de départ : gabarit I2V"
-    # Sans serveur, la fenêtre d'installation est proposée depuis ce Studio aussi.
-    assert "ComfyInstallDialog" in _insp.getsource(_T), "guidage ComfyUI absent du Studio"
+    # Sans serveur, il est LANCÉ et attendu depuis ce Studio aussi (ui/external_autostart) ;
+    # la fenêtre d'installation n'apparaît que s'il n'est pas installé.
+    assert 'ensure_ready("comfyui"' in _insp.getsource(_T), "guidage ComfyUI absent du Studio"
 
 
 @test
@@ -9610,6 +9613,107 @@ def modules_externes_registre_fenetre_bandeau_et_telechargement():
     # Lignes de CODE seulement (le commentaire de closeEvent cite le mot).
     _code = "\n".join(l.split("#", 1)[0] for l in inspect.getsource(ExternalDialog).splitlines())
     assert "terminate(" not in _code, "jamais QThread.terminate()"
+
+
+@test
+def serveurs_locaux_demarres_automatiquement():
+    """Demande Matthieu (24/09/2026, capture « installé mais ne tourne pas ») : un
+    module INSTALLÉ mais arrêté est lancé par PANDORA au moment de générer
+    (ui/external_autostart), attendu jusqu'à ce qu'il réponde ; la fenêtre
+    d'installation ne s'ouvre que s'il n'est pas installé ou si le démarrage
+    automatique est désactivé. Même réflexe côté IA texte (Ollama, LM Studio)."""
+    import importlib
+    from PyQt6.QtCore import QTimer
+    from core import externals as _ex
+    import ui.external_autostart as _ea
+    import api.external_install as _ei
+    import ui.dialog_external as _de
+    calls = {"detect": 0, "launch": 0}
+
+    def fake_detect(key):
+        calls["detect"] += 1
+        return _ex.Status(installed=True, running=calls["launch"] > 0 and calls["detect"] >= 2, detail="t")
+
+    class _Guide:
+        def __init__(self, *a, **k): pass
+        def exec(self): return 0
+        def is_ready(self): return False
+
+    # ⚠ Pas de boucle d'événements imbriquée ici : elle traiterait les
+    # deleteLater() des tests précédents (widgets aux threads encore vivants →
+    # abort Qt, harnais mort en silence — vécu le 24/09/2026). L'automate est
+    # exercé SANS thread : les slots sont appelés directement, le lancement et
+    # le guide sont des bouchons qui enregistrent.
+    _orig_en = _ea.autostart_enabled
+    _ea.autostart_enabled = lambda: True
+
+    def make():
+        d = _ea.AutoStartDialog("ollama", poll_ms=50)
+        d._tick.stop()
+        rec = []
+        d._launch = lambda: (rec.append("launch"),
+                             d._on_status("ollama", _ex.Status(installed=True, running=True, detail="t")))
+        d._open_guide = lambda st=None: (rec.append("guide"), setattr(d, "ready", False))
+        return d, rec
+
+    try:
+        # 1. Installé, arrêté → lancé UNE fois, puis prêt — sans guide.
+        d, rec = make()
+        d._on_status("ollama", _ex.Status(installed=True, running=False, detail="t"))
+        assert d.ready and d.launched and rec == ["launch"], (d.ready, d.launched, rec)
+        # 2. Déjà en marche → prêt sans lancement.
+        d, rec = make()
+        d._on_status("ollama", _ex.Status(installed=True, running=True, detail="t"))
+        assert d.ready and not d.launched and rec == []
+        # 3. Pas installé → le guide, jamais de lancement.
+        d, rec = make()
+        d._on_status("ollama", _ex.Status(installed=False, running=False, detail="t"))
+        assert not d.ready and not d.launched and rec == ["guide"]
+        # 4. Lancé mais toujours muet après le délai → le guide.
+        d, rec = make()
+        d.launched = True
+        d._t0 -= 10_000
+        d._on_status("ollama", _ex.Status(installed=True, running=False, detail="t"))
+        assert not d.ready and rec == ["guide"]
+        # 5. Démarrage automatique désactivé → le guide, jamais de lancement.
+        _ea.autostart_enabled = lambda: False
+        d, rec = make()
+        d._on_status("ollama", _ex.Status(installed=True, running=False, detail="t"))
+        assert not d.ready and not d.launched and rec == ["guide"]
+    finally:
+        _ea.autostart_enabled = _orig_en
+    # 5. Branché partout où un moteur a besoin d'un serveur : ComfyUI (6 onglets)
+    #    et MiniMax H3 local (4 onglets) ; plus aucun onglet n'ouvre lui-même la
+    #    fenêtre d'installation.
+    for mod, h3 in (("ui.tab_t2v", True), ("ui.tab_t2v_live", True), ("ui.tab_video_engines", True),
+                    ("ui.tab_video_engines_live", True), ("ui.tab_davinci_edit", False),
+                    ("ui.tab_modify_live", False)):
+        s = inspect.getsource(importlib.import_module(mod))
+        assert 'ensure_ready("comfyui"' in s and "ComfyInstallDialog(self)" not in s, mod
+        if h3:
+            assert 'ensure_ready("h3_local"' in s, f"{mod} : garde H3 local absente"
+    # 6. IA texte : Ollama / LM Studio relancés depuis le worker, une seule fois.
+    from core import ai_provider as AP
+    assert "_with_autostart" in inspect.getsource(AP._ollama_post) \
+        and "_with_autostart" in inspect.getsource(AP._local_complete) \
+        and "_with_autostart" in inspect.getsource(AP.chat_ex)
+    _orig_en = _ex.autostart_enabled
+    _ex.autostart_enabled = lambda: False
+    try:
+        assert _ex.autostart_blocking("ollama") is False, "désactivé → rien lancé"
+    finally:
+        _ex.autostart_enabled = _orig_en
+    assert _ex.autostart_blocking("comfyui") is False, "seuls Ollama et LM Studio en bloquant"
+    # 7. Réglage dans les Paramètres, bandeau qui lance d'un clic.
+    from ui.externals_section import ExternalsSection
+    sec = ExternalsSection()
+    assert hasattr(sec, "_auto_cb") and sec._auto_cb.isChecked() == _ex.autostart_enabled()
+    sec.deleteLater()
+    import ui.external_banner as _eb
+    assert '_mode = "launch"' in inspect.getsource(_eb.ExternalBanner._on_status) \
+        and "ensure_ready" in inspect.getsource(_eb.ExternalBanner._open)
+    import core.i18n as i18n
+    assert "Lancer maintenant" in i18n._FR_TO_EN and "Démarrage de" in i18n._FR_TO_EN
 
 
 @test

@@ -1795,6 +1795,19 @@ def parametres_live_parite_cinema():
 
 
 @test
+def serveurs_locaux_demarres_automatiquement_live():
+    """Parité du démarrage automatique des modules externes (24/09/2026) : les
+    onglets Live lancent et attendent ComfyUI / MiniMax H3 local au moment de
+    générer (ui/external_autostart) au lieu d'ouvrir la fenêtre d'installation."""
+    import inspect, importlib
+    for mod, h3 in (("ui.tab_t2v_live", True), ("ui.tab_video_engines_live", True), ("ui.tab_modify_live", False)):
+        s = inspect.getsource(importlib.import_module(mod))
+        assert 'ensure_ready("comfyui"' in s and "ComfyInstallDialog(self)" not in s, mod
+        if h3:
+            assert 'ensure_ready("h3_local"' in s, f"{mod} : garde H3 local absente"
+
+
+@test
 def marqueurs_tolerants_coecriture_live():
     """Le conducteur réécrit ne doit pas disparaître parce qu'un modèle local a
     écrit 9 « ═ » au lieu de 10 (constat tools/ai_conformance, 24/09/2026) :
@@ -7402,7 +7415,7 @@ def h3_et_comfy_generables_depuis_les_sequences_live():
     w = _T._make_ext_worker("comfy", {**base, "image_path": "C:/x/mood.png"})
     assert isinstance(w, ComfyWorker) and w.params["mode"] == "i2v" \
         and w.params["workflow_path"].endswith("minimax_h3_i2v.json")
-    assert "ComfyInstallDialog" in inspect.getsource(_T), "guidage ComfyUI absent du Studio Live"
+    assert 'ensure_ready("comfyui"' in inspect.getsource(_T), "guidage ComfyUI absent du Studio Live"
 
 
 if __name__ == "__main__":

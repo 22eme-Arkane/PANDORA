@@ -2048,10 +2048,8 @@ class TabDavinciEdit(QScrollArea):
         if self._is_comfy_edit():
             from core import comfy as _cf
             if not _cf.discover():
-                from ui.dialog_comfy_install import ComfyInstallDialog
-                _dlg = ComfyInstallDialog(self)
-                _dlg.exec()
-                if not _dlg.is_ready():
+                from ui.external_autostart import ensure_ready
+                if not ensure_ready("comfyui", self):
                     return
 
         n_prises = self._spin_prises.value()

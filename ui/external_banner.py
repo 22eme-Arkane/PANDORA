@@ -82,12 +82,16 @@ class ExternalBanner(QFrame):
             self.setVisible(False)
             return
         name = _ex.EXTERNALS[key].name
+        self._mode = "dialog"
         if not st.installed:
             text = f"{name} " + translate("n'est pas installé sur cet ordinateur") + " — " + translate("PANDORA peut l'installer.")
             self._btn.setText(translate("Installer / Guide…"))
         elif not st.running:
-            text = f"{name} " + translate("est installé mais ne tourne pas") + "."
-            self._btn.setText(translate("Lancer / Guide…"))
+            # Installé mais arrêté : UN clic le lance (plus de fenêtre à traverser) ;
+            # la génération le lancera d'ailleurs toute seule (ui/external_autostart).
+            text = f"{name} " + translate("est installé mais ne tourne pas") + " — " + translate("PANDORA le lancera au moment de générer.")
+            self._btn.setText("▶  " + translate("Lancer maintenant"))
+            self._mode = "launch"
         else:
             text = f"{name} " + translate("tourne — il manque des fichiers de modèle") + f" ({len(st.missing)})."
             self._btn.setText(translate("Télécharger / Guide…"))
@@ -96,6 +100,13 @@ class ExternalBanner(QFrame):
 
     def _open(self):
         if not self._key:
+            return
+        if getattr(self, "_mode", "dialog") == "launch":
+            from ui.external_autostart import ensure_ready
+            if ensure_ready(self._key, self):
+                self.setVisible(False)
+                return
+            self.refresh()
             return
         from ui.dialog_external import ExternalDialog
         dlg = ExternalDialog(self._key, self, status=self._status)

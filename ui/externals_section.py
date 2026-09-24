@@ -119,10 +119,33 @@ class ExternalsSection(QWidget):
         hint.setWordWrap(True)
         hint.setStyleSheet(f"color:{CP['text_dim']};font-size:10px;background:transparent;")
         lay.addWidget(hint)
+        # Démarrage automatique (24/09/2026) : un module installé mais arrêté
+        # est lancé par PANDORA au moment de générer, sans fenêtre ni clic.
+        from PyQt6.QtWidgets import QCheckBox
+        from ui.widgets import toggle_row
+        self._auto_row = toggle_row(
+            translate("Démarrer automatiquement les serveurs locaux"),
+            translate("Au moment de générer : ComfyUI Desktop, MiniMax H3 local, Ollama, LM Studio… "
+                      "sont lancés par PANDORA s'ils sont installés mais arrêtés. Décoché : la fenêtre "
+                      "du module s'ouvre et vous cliquez « Lancer »."),
+            _ex.autostart_enabled())
+        self._auto_cb = self._auto_row.findChild(QCheckBox)
+        self._auto_cb.toggled.connect(self._on_auto_toggled)
+        lay.addWidget(self._auto_row)
         for ext in _ex.EXTERNALS.values():
             row = _Row(ext, self)
             self._rows[ext.key] = row
             lay.addWidget(row)
+
+    def _on_auto_toggled(self, checked: bool):
+        # Relit la config ENTIÈRE avant d'écrire : save_config remplace le fichier.
+        try:
+            from core.config import load_config, save_config
+            cfg = load_config()
+            cfg["externals_autostart"] = bool(checked)
+            save_config(cfg)
+        except Exception:
+            pass
 
     def showEvent(self, event):
         super().showEvent(event)

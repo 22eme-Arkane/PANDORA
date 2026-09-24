@@ -133,7 +133,7 @@ a = Analysis(
         "ui.external_banner", "ui.externals_section", "ui.dialog_comfy_install",
         "core.comfy", "core.comfy_workflow", "core.comfy_catalog", "core.comfy_image",
         "core.image_call", "core.local_llm", "ui.local_ai_panel", "core.markers",
-        "core.comfy_video",
+        "core.comfy_video", "ui.external_autostart", "api.comfy_edit",
         # ── Studio Images (onglet « Image IA ») ───────────────────────────────
         # Modules importés à plat au runtime via sys.path.insert dans
         # ui/tab_image.py → invisibles à l'analyse statique de PyInstaller.
