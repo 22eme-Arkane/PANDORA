@@ -128,6 +128,39 @@ a second instead of forty.**
   you switch the automatic start off in Settings → External modules). The
   banner under the engine gets a one-click « Launch now », and the text AI
   restarts Ollama or LM Studio on its own when a call finds them asleep.
+- **Ten cloud video editors in « Edit a clip », both editions.** Kling O3 Edit
+  (Pro, Standard, 4K) and Kling O1 Edit understand the same @Video1 / @Image1
+  tags as Seedance; Wan 2.7 Edit, HappyHorse Video Edit, Bernini-R Edit (the
+  same model as the local ComfyUI template), FLUX.3 Edit Video, Gemini Omni
+  Flash 1.1 Edit and Lucy Edit Pro take a plain description. Each one is a
+  row in a table (endpoint, fields, price per second) checked against its
+  fal.ai page; the clip keeps its duration and the cost is logged per
+  second. The upscaler gains SeedVR2 on your own GPU through ComfyUI, at 0 $,
+  keeping the source file name for DaVinci's Relink.
+- **Every fal.ai engine re-read sheet by sheet (2026-09-24) — prices, fields,
+  new tiers.** Veo 3.1 was logged at « $1.00 per clip » while fal bills per
+  second by resolution and audio (a default clip cost $3.20); it now sends
+  resolution, 4/6/8 s and the audio switch, in Pro, Fast and Lite tiers, text
+  and image-to-video. Sora 2 was stuck at 4 s: it now takes 4 to 20 s at
+  $0.10/s, plus Sora 2 Pro (720p → true 1080p) and image-to-video. Kling O3
+  Pro and Standard join the 4K tier (all three with an end frame — the 4K
+  image-to-video call was sending the wrong field name and would have been
+  refused). PixVerse v6 gets image-to-video (v4.5 has left fal), 1–15 s and
+  the *right* audio field (`generate_audio_switch` — audio was silently never
+  produced), with per-resolution prices. New engines in both editions: Wan
+  3.0 (2–30 s in one take, audio), LTX-2.3 Pro, Gemini Omni Flash 1.1 and
+  Grok Imagine 1.5, text and image-to-video. LTX-2 now sends its real
+  durations (6/8/10 s) and resolutions (1080p → 2160p); Wan 2.7 sends the
+  resolution it charges for; Seedance 2.5 offers the 1080p fal added ($1.16/s,
+  never the default). Kling v3 Pro, Kling v3 Turbo (start-image field),
+  PixVerse and Kling O3 prices corrected in « Project cost ». The direct
+  generation tab's image pickers were handing local paths to fal: they are
+  uploaded now. Lip-sync gains Kling Lipsync (~$0.84/min, clips of 2–10 s) and
+  PixVerse Lipsync (~$2.40/min); the upscaler gains Topaz Astra 2 (generative)
+  and SeedVR2 finally honours the ×2/×4 factor. Images: Seedream 5.0 Flash,
+  Qwen-Image 2 and 2 Pro, Kling Image O3 (up to 10 references) and GPT Image
+  2.5 Flare join the catalogue; FLUX.2 pro can edit with references; the GPT
+  Image 2 label said ~$0.04 for an image that costs about $0.20 (token-billed).
 
 ---
 

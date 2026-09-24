@@ -26,10 +26,11 @@ import core.storyboard as sb_api
 
 _ENGINES = [
     ("Seedance 2.0  (recommandée)", "seedance-2.0"),        # Défaut — optimisé dans Pandora
-    # Seedance 2.5 : plan-séquence jusqu'à 30 s et jusqu'à 50 références, MAIS
-    # 720p maximum (ni 1080p ni 4K) et 56 % plus cher à résolution égale. Elle
-    # ne REMPLACE donc pas la 2.0 — le libellé annonce les deux faces.
-    ("Seedance 2.5  (30 s · 720p max)", "seedance-2.5"),
+    # Seedance 2.5 : plan-séquence jusqu'à 30 s et jusqu'à 50 références ; le
+    # 1080p est arrivé chez fal (relu le 24/09/2026, 1,164 $/s), toujours pas
+    # de 4K, et 56 % plus cher à résolution égale. Elle ne REMPLACE donc pas
+    # la 2.0 — le libellé annonce les deux faces.
+    ("Seedance 2.5  (30 s · 1080p max)", "seedance-2.5"),
     # Flux 3 (BFL, fal 2026-08-04) : audio natif, 5-20 s, PAS d'images de
     # référence (fiches décrites en texte). Le palier Brouillon sort à $0.06/s
     # pour trier avant d'affiner — l'économie n'existe QUE si on jette des
@@ -45,27 +46,47 @@ _ENGINES = [
     ("MiniMax H3 Max Turbo  (rapide)",          "minimax-h3-max-turbo"),
     ("ComfyUI · MiniMax H3 local  (0 $)",       "comfy"),
     ("MiniMax H3 local · sd.cpp  (0 $ · 8 Go)", "minimax-h3-local"),
-    ("Happy Horse 1.1  (prochainement)", "happy-horse-1.0"), # n°1 ELO — intégration en cours
-    ("Kling v3 Pro  (prochainement)",    "kling-v3-pro"),    # n°3 ELO — 1080p + audio natif
-    ("Kling O3 4K  (prochainement)",     "kling-o3-4k"),     # Variante 4K Kling
-    ("Veo 3.1  (prochainement)",         "veo-3.1"),         # Google — audio natif
-    ("Sora 2  (prochainement)",          "sora-2"),          # OpenAI — 1080p
-    ("PixVerse v6  (prochainement)",     "pixverse-v6"),     # PixVerse — flexible
+    # Moteurs fal relus fiche par fiche le 24/09/2026 (api/video_engines) :
+    # tous branchés — les mentions « prochainement » dataient d'avant.
+    ("Happy Horse 1.1  (réfs · 720p/1080p)", "happy-horse-1.0"), # n°1 ELO
+    ("Kling v3 Pro  (1080p · audio)",        "kling-v3-pro"),    # n°3 ELO
+    ("Kling O3 Pro  (audio · 3-15 s)",       "kling-o3-pro"),
+    ("Kling O3 Standard  (éco · 3-15 s)",    "kling-o3-standard"),
+    ("Kling O3 4K  (4K natif)",              "kling-o3-4k"),
+    ("Veo 3.1  (Google · audio · 4-8 s)",    "veo-3.1"),
+    ("Veo 3.1 Fast  (Google · audio)",       "veo-3.1-fast"),
+    ("Veo 3.1 Lite  (Google · éco)",         "veo-3.1-lite"),
+    ("Sora 2  (OpenAI · 720p · 4-20 s)",     "sora-2"),
+    ("Sora 2 Pro  (OpenAI · 1080p · 4-20 s)", "sora-2-pro"),
+    ("Wan 3.0  (Alibaba · audio · 2-30 s)",  "wan-3.0"),
+    ("PixVerse v6  (éco · 1-15 s)",          "pixverse-v6"),
+    ("Gemini Omni Flash 1.1  (Google · 3-10 s)", "gemini-omni-flash-1.1"),
+    ("Grok Imagine 1.5  (xAI · 1-15 s)",     "grok-video-1.5"),
+    ("LTX-2.3 Pro  (Lightricks · image de fin)", "ltx-2.3"),
     ("Seedance 2.0 Fast",               "seedance-2.0-fast"), # Rapide — qualité réduite
     ("Seedance 2.0 Mini",               "seedance-2.0-mini"), # éco — début+fin + audio
     ("Seedance 1.5 Pro",                "seedance-1.5-pro"),  # début+fin + audio natif
     ("Gemini Omni Flash",               "gemini-omni-flash"), # Google — audio natif
     ("Grok Video",                      "grok-video"),        # xAI — audio
-    ("LTX-2  (4K natif)",               "ltx-2"),             # Lightricks — i2v 4K
+    ("LTX-2  (1080p-2160p · audio)",    "ltx-2"),             # Lightricks
 ]
 
 _SEEDANCE_ENGINES    = {"seedance-2.0", "seedance-2.0-fast", "seedance-2.5"}
-_FIXED_RES_ENGINES   = {"veo-3.1", "kling-v3-pro", "kling-o3-4k", "sora-2"}
-_FIXED_RATIO_ENGINES = {"veo-3.1", "kling-v3-pro", "kling-o3-4k"}
+# Résolution imposée par l'endpoint (une seule valeur). Veo et Sora en sont
+# SORTIS le 24/09/2026 : fal les propose en 720p → 4K, facturés à la seconde.
+_FIXED_RES_ENGINES   = {"kling-v3-pro", "kling-o3-4k", "kling-o3-pro", "kling-o3-standard", "sora-2"}
+# Ratio imposé (16:9) : Veo n'accepte que 16:9 / 9:16 — le worker ramène tout
+# autre choix à 16:9, on ne laisse donc pas croire qu'un 1:1 partira.
+_FIXED_RATIO_ENGINES = {"veo-3.1", "veo-3.1-fast", "veo-3.1-lite", "kling-v3-pro", "kling-o3-4k"}
 # Moteurs sans support natif d'images de référence (fallback texte uniquement)
 _TEXT_FALLBACK_ENGINES = {"kling-v3-pro", "kling-o3-4k", "veo-3.1", "sora-2",
                           "seedance-1.5-pro", "ltx-2",
                           "seedance-2.0-mini", "gemini-omni-flash", "grok-video",
+                          # Relevé fal 24/09/2026 : aucun de ceux-ci ne prend
+                          # d'images de référence (image de départ/fin seulement).
+                          "kling-o3-pro", "kling-o3-standard", "veo-3.1-fast",
+                          "veo-3.1-lite", "sora-2-pro", "wan-3.0", "ltx-2.3",
+                          "gemini-omni-flash-1.1", "grok-video-1.5",
                           # Flux 3 : aucun mécanisme de références visuelles →
                           # les fiches sont DÉCRITES en texte, jamais perdues.
                           "flux-3", "flux-3-draft",
@@ -74,10 +95,11 @@ _TEXT_FALLBACK_ENGINES = {"kling-v3-pro", "kling-o3-4k", "veo-3.1", "sora-2",
                           "minimax-h3", "minimax-h3-max", "minimax-h3-max-turbo",
                           "minimax-h3-local", "comfy"}
 _ENGINE_RES_FORCED   = {
-    "veo-3.1":      "1080p",
-    "kling-v3-pro": "1080p",
-    "kling-o3-4k":  "4K",
-    "sora-2":       "1080p",
+    "kling-v3-pro":      "1080p",
+    "kling-o3-4k":       "4K",
+    "kling-o3-pro":      "1080p",
+    "kling-o3-standard": "1080p",
+    "sora-2":            "720p",     # la fiche Sora 2 (non Pro) ne documente que 720p
 }
 # Résolutions disponibles par moteur — (label affiché, valeur API), premier = défaut
 _ENGINE_RESOLUTIONS = {
@@ -89,20 +111,36 @@ _ENGINE_RESOLUTIONS = {
     "seedance-2.0-fast": [("480p  (~$0.11/s)", "480p"),  ("720p  (~$0.24/s)", "720p")],
     # 2.5 : pas de 1080p ni de 4K chez fal — la liste ne doit proposer que ce
     # que l'endpoint accepte réellement (sinon l'appel échoue).
-    "seedance-2.5":      [("720p  (~$0.47/s)", "720p"),  ("480p  (~$0.22/s)", "480p")],
+    # 2.5 : 720p en tête (défaut) — le 1080p est arrivé chez fal (24/09/2026) à
+    # 1,164 $/s, 2,5 × le 720p : proposé, jamais choisi par défaut.
+    "seedance-2.5":      [("720p  (~$0.47/s)", "720p"), ("1080p  (~$1.16/s)", "1080p"), ("480p  (~$0.22/s)", "480p")],
     "flux-3":            [("1080p  (~$0.29/s)", "1080p"), ("720p  (~$0.17/s)", "720p")],
     "flux-3-draft":      [("720p  (~$0.06/s)", "720p")],
-    "kling-v3-pro":      [("1080p", "1080p")],
-    "kling-o3-4k":       [("4K",    "4K")],
-    "veo-3.1":           [("1080p", "1080p")],
-    "sora-2":            [("1080p", "1080p")],
-    "pixverse-v6":       [("1080p  (~$0.115/s)", "1080p"), ("720p  (~$0.075/s)", "720p"), ("480p  (~$0.025/s)", "480p")],
+    # Prix relus fiche par fiche sur fal.ai le 24/09/2026 (core/pricing).
+    "kling-v3-pro":      [("1080p  (~$0.168/s · audio)", "1080p")],
+    "kling-o3-pro":      [("1080p  (~$0.14/s · audio)", "1080p")],
+    "kling-o3-standard": [("1080p  (~$0.112/s · audio)", "1080p")],
+    "kling-o3-4k":       [("4K  (~$0.42/s)", "4K")],
+    "veo-3.1":           [("720p  (~$0.40/s · audio)", "720p"), ("1080p  (~$0.40/s · audio)", "1080p"), ("4K  (~$0.60/s)", "4k")],
+    "veo-3.1-fast":      [("720p  (~$0.15/s · audio)", "720p"), ("1080p  (~$0.15/s · audio)", "1080p"), ("4K  (~$0.35/s)", "4k")],
+    "veo-3.1-lite":      [("720p  (~$0.05/s · audio)", "720p"), ("1080p  (~$0.08/s · audio)", "1080p")],
+    "sora-2":            [("720p  (~$0.10/s)", "720p")],
+    "sora-2-pro":        [("720p  (~$0.30/s)", "720p"), ("1080p  (~$0.50/s · 1792×1024)", "1080p"),
+                          ("1080p natif  (~$0.70/s · 1920×1080)", "true_1080p")],
+    "wan-3.0":           [("720p  (~$0.10/s)", "720p"), ("480p  (~$0.05/s)", "480p"), ("1080p  (~$0.20/s)", "1080p")],
+    # PixVerse v6 : sans / avec audio.
+    "pixverse-v6":       [("720p  (~$0.045-0.06/s)", "720p"), ("1080p  (~$0.09-0.115/s)", "1080p"),
+                          ("540p  (~$0.035-0.045/s)", "540p"), ("360p  (~$0.025-0.035/s)", "360p")],
+    "gemini-omni-flash-1.1": [("720p  (~$0.10/s)", "720p"), ("360p  (~$0.03/s)", "360p"),
+                              ("1080p  (~$0.15/s)", "1080p"), ("4K  (~$0.30/s)", "4k")],
+    "grok-video-1.5":    [("720p  (~$0.14/s)", "720p"), ("480p  (~$0.08/s)", "480p"), ("1080p  (~$0.25/s)", "1080p")],
+    "ltx-2.3":           [("1080p  (~$0.08/s)", "1080p"), ("1440p  (~$0.16/s)", "1440p"), ("2160p  (~$0.32/s)", "2160p")],
     "happy-horse-1.0":   [("1080p  (~$0.28/s)", "1080p"),  ("720p  (~$0.14/s)", "720p")],
     "seedance-1.5-pro":  [("720p  (~$0.05/s)", "720p"), ("1080p", "1080p")],
     "seedance-2.0-mini": [("480p  (~$0.072/s)", "480p"), ("720p  (~$0.155/s)", "720p")],
     "gemini-omni-flash": [("720p  (~$0.125/s)", "720p"), ("1080p", "1080p")],
     "grok-video":        [("480p  (~$0.05/s)", "480p"), ("720p  (~$0.07/s)", "720p")],
-    "ltx-2":             [("4K  (natif)", "4K")],
+    "ltx-2":             [("1080p  (~$0.06/s)", "1080p"), ("1440p  (~$0.12/s)", "1440p"), ("2160p  (~$0.24/s)", "2160p")],
     # MiniMax H3 (tarif plein de core/h3_family) : 2K/4K = agrandissement.
     "minimax-h3":           [("768p  (~$0.06/s)", "768p"), ("480p  (~$0.05/s)", "480p"),
                              ("2K  (agrandi · ~$0.13/s)", "2k"), ("4K  (agrandi · ~$0.16/s)", "4k")],
@@ -117,6 +155,9 @@ _ENGINE_RESOLUTIONS = {
 # Résolution par défaut par moteur (sinon = 1er item du menu). Seedance : 720p par
 # défaut même si le 4K est désormais en tête (Matthieu sort rarement en 1080p/4K).
 _ENGINE_DEFAULT_RES = {"seedance-2.0": "720p"}
+# Durée maximale acceptée par l'endpoint pour les moteurs HORS famille
+# Seedance (relevé fal 24/09/2026) ; les autres gardent le plafond de 15 s.
+_ENGINE_MAX_DURATION = {"wan-3.0": 30, "sora-2": 20, "sora-2-pro": 20}
 # Moteurs disponibles dans le tab DaVinci Edit (workflow testé et validé uniquement)
 _DAVINCI_ENGINES = [e for e in _ENGINES if e[1] in _SEEDANCE_ENGINES]
 
@@ -128,9 +169,16 @@ def _make_ext_worker(model: str, params: dict):
         Seedance15Worker, LTX2Worker,
         GeminiOmniFlashWorker, Seedance20MiniWorker, GrokVideoWorker,
         Flux3Worker, H3Worker, H3MaxWorker, H3MaxTurboWorker,
+        KlingO3ProWorker, KlingO3StandardWorker, Wan30Worker, LTX23Worker,
+        GeminiOmniFlash11Worker, GrokVideo15Worker,
     )
     p = dict(params)
     p.setdefault("mode", "t2v")
+    # Paliers d'un même worker (relevé fal 24/09/2026) : la clé choisit la variante.
+    if model in ("veo-3.1-fast", "veo-3.1-lite"):
+        p["variant"] = model.rsplit("-", 1)[1]
+    if model == "sora-2-pro":
+        p["variant"] = "pro"
     # Flux 3 : un seul worker pour les deux paliers — la clé « draft » choisit
     # le brouillon à $0.06/s (720p) ; le jeton d'affinage revient dans le
     # résultat (draft_cache_url).
@@ -155,11 +203,20 @@ def _make_ext_worker(model: str, params: dict):
         "minimax-h3-max":       H3MaxWorker,
         "minimax-h3-max-turbo": H3MaxTurboWorker,
         "veo-3.1":           Veo3Worker,
+        "veo-3.1-fast":      Veo3Worker,
+        "veo-3.1-lite":      Veo3Worker,
         "kling-v3-pro":      KlingWorker,
         "kling-o3-4k":       KlingO3Worker,
+        "kling-o3-pro":      KlingO3ProWorker,
+        "kling-o3-standard": KlingO3StandardWorker,
         "happy-horse-1.0":   HappyHorseWorker,
         "pixverse-v6":       PixVerseV6Worker,
         "sora-2":            Sora2Worker,
+        "sora-2-pro":        Sora2Worker,
+        "wan-3.0":           Wan30Worker,
+        "ltx-2.3":           LTX23Worker,
+        "gemini-omni-flash-1.1": GeminiOmniFlash11Worker,
+        "grok-video-1.5":    GrokVideo15Worker,
         "seedance-1.5-pro":  Seedance15Worker,
         "ltx-2":             LTX2Worker,
         "gemini-omni-flash": GeminiOmniFlashWorker,
@@ -4562,7 +4619,7 @@ class TabT2V(QScrollArea):
         try:
             from core.seedance_family import duration_bounds, is_seedance
             key = self._get_model()
-            hi = duration_bounds(key)[1] if is_seedance(key) else 15
+            hi = duration_bounds(key)[1] if is_seedance(key) else _ENGINE_MAX_DURATION.get(key, 15)
         except Exception:
             hi = 15
         opts = [d for d in (4, 5, 8, 10, 12, 15, 20, 25, 30) if d <= hi]

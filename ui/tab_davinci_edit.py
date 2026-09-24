@@ -1144,6 +1144,12 @@ class TabDavinciEdit(QScrollArea):
         # « remplacer un visage / un fond ». Seedance 2.0 reste le défaut (1ʳᵉ entrée).
         self._cb_model.addItem(translate("Pixverse Swap · remplacer un visage (≤720p)"), "pixverse_face")
         self._cb_model.addItem(translate("Pixverse Swap · remplacer un fond (≤720p)"), "pixverse_bg")
+        # Éditeurs vidéo cloud (api/video_edit, relevé fal.ai 24/09/2026) : Kling O3/O1
+        # Edit (balises @Video1/@Image1 comme Seedance), Wan 2.7, HappyHorse,
+        # Bernini-R, FLUX.3, Gemini Omni 1.1, Lucy — une table, un worker.
+        from api.video_edit import EDIT_ENGINES as _EDIT
+        for _k in _EDIT:
+            self._cb_model.addItem(_EDIT[_k]["label"], _k)
         # ComfyUI : gabarits officiels d'édition vidéo SUR VOTRE MACHINE (Bernini-R,
         # Capybara, VOID, SeedVR2…) — catalogue lu chez le serveur, 0 $.
         self._comfy_edit_entries = {}
@@ -1808,6 +1814,10 @@ class TabDavinciEdit(QScrollArea):
     def _is_comfy_edit(self) -> bool:
         return str(self._get_model()).startswith("comfy_edit:")
 
+    def _is_cloud_edit(self) -> bool:
+        from api.video_edit import is_edit_engine
+        return is_edit_engine(self._get_model())
+
     def _on_engine_changed(self):
         key = self._get_model()
         if getattr(self, "_external_banner", None) is not None:
@@ -1822,6 +1832,12 @@ class TabDavinciEdit(QScrollArea):
             fixed_res = False
             self._cb_ratio.setEnabled(False)
             options = [("Définition du clip source", "source")]
+        elif self._is_cloud_edit():
+            # Éditeur cloud : cadrage de la source ; résolutions de sa fiche.
+            from api.video_edit import EDIT_ENGINES as _EDIT
+            fixed_res = False
+            self._cb_ratio.setEnabled(False)
+            options = list(_EDIT[key]["res"])
         else:
             fixed_res = key in _FIXED_RES_ENGINES
             self._cb_ratio.setEnabled(key not in _FIXED_RATIO_ENGINES)
@@ -2112,6 +2128,20 @@ class TabDavinciEdit(QScrollArea):
         if not hasattr(self, "_modif_hint"):
             return
         mode = self._pixverse_engine_mode()
+        if self._is_cloud_edit():
+            from api.video_edit import EDIT_ENGINES as _EDIT
+            e = _EDIT[self._get_model()]
+            _refs = int(e.get("refs") or 0)
+            self._modif_hint.setText(
+                translate("Éditeur vidéo cloud :") + " "
+                + (translate("balises @Video1 / @Image1 comprises (comme Seedance)") if e.get("tags")
+                   else translate("décrivez la modification en clair (les balises @Video1 sont retirées)"))
+                + (("  ·  " + translate("images de référence :") + f" {_refs}") if _refs
+                   else "  ·  " + translate("sans image de référence"))
+                + ((("  ·  " + e["limits"]) if e.get("limits") else ""))
+                + "  ·  " + translate("le clip garde sa durée."))
+            self._modif_hint.setVisible(True)
+            return
         if self._is_comfy_edit():
             e = self._comfy_edit_entries.get(self._get_model(), {})
             _refs = int(e.get("loads") or 0)
@@ -2303,7 +2333,25 @@ class TabDavinciEdit(QScrollArea):
         prev = getattr(self, "_worker", None)
         if prev is not None:
             abandon_thread(prev)
-        if _model_key.startswith("comfy_edit:"):
+        if self._is_cloud_edit():
+            # ── Éditeur vidéo cloud (api/video_edit : Kling O3/O1, Wan 2.7…) ────
+            from api.video_edit import VideoEditWorker, EDIT_ENGINES as _EDIT
+            _raw = params.get("prompt", "")
+            self._worker = VideoEditWorker({
+                "engine":       _model_key,
+                "engine_label": _EDIT[_model_key]["label"].split("  (")[0],
+                "video_path":   video_path,
+                "prompt":       _raw,
+                "prompt_is_final": params.get("prompt_is_final", False),
+                "ref_images":   ref_images,
+                "resolution":   params.get("resolution", "source"),
+                "duration":     gen_dur,
+            })
+            self._worker.finished.connect(
+                lambda r, ci=clip_idx, pi=prise_idx, p=_raw:
+                    self._on_clip_done(_norm_ext_result(r, p), ci, pi)
+            )
+        elif _model_key.startswith("comfy_edit:"):
             # ── Gabarit ComfyUI d'édition vidéo, sur la machine (0 $) ──────────
             from api.comfy_edit import ComfyEditWorker
             _entry = self._comfy_edit_entries.get(_model_key, {})

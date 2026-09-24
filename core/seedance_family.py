@@ -8,11 +8,12 @@ sur la communication marketing — le 2026-08-09.
 
 ⚠ LA 2.5 N'EST PAS UN REMPLACEMENT DE LA 2.0
 --------------------------------------------
-Elle plafonne à **720p** (pas de 1080p, pas de 4K) et coûte **56 % plus cher**
-à résolution égale. Elle gagne ailleurs : plan-séquence de 30 s d'un bloc, et
-jusqu'à 50 entrées multimodales au lieu de 9 images.
+Elle plafonne à **1080p** (le 1080p est arrivé chez fal entre août et le
+2026-09-24, à 1,164 $/s — pas de 4K) et coûte **56 % plus cher** à résolution
+égale (720p : 0,473 contre 0,303). Elle gagne ailleurs : plan-séquence de 30 s
+d'un bloc, et jusqu'à 50 entrées multimodales au lieu de 9 images.
 
-  · livrer en 1080p/4K            → 2.0
+  · livrer en 4K                  → 2.0
   · plan long tenu, beaucoup de réfs → 2.5
 
 Le défaut du projet reste donc la 2.0. La 2.5 s'ajoute au choix.
@@ -59,7 +60,8 @@ _FAMILY = {
     },
     "seedance-2.5": {
         "base":        "bytedance/seedance-2.5",
-        "resolutions": ("720p", "480p"),      # PAS de 1080p ni de 4K
+        # 1080p ajouté par fal (fiche relue le 2026-09-24) ; toujours PAS de 4K.
+        "resolutions": ("1080p", "720p", "480p"),
         "max_images":  50,                    # 50 ENTRÉES multimodales au total
         "max_videos":  50,
         "max_audios":  50,
@@ -122,6 +124,11 @@ def clamp_resolution(engine_key: str, resolution: str) -> str:
     allowed = spec(engine_key)["resolutions"]
     if res in allowed:
         return res
+    # Rabattement vers la meilleure résolution RAISONNABLE : un 4K demandé à la
+    # 2.5 tombe sur 720p (le 1080p à 1,164 $/s serait une facture surprise,
+    # pas un repli), comme avant l'arrivée du 1080p.
+    if "720p" in allowed:
+        return "720p"
     return allowed[0]          # les tuples sont ordonnés du meilleur au moindre
 
 

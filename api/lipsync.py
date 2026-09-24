@@ -16,13 +16,18 @@ Moteurs — interchangeables (même contrat : video_url + audio_url) :
   · Sync 2 Pro  fal-ai/sync-lipsync/v2/pro  $5/min     studio, gros plans (DÉFAUT)
   · Sync-3      fal-ai/sync-lipsync/v3      $8/min     le + récent, frame-accurate
   · VEED v2     veed/lipsync/v2             ~$4.20/min 0,07 $/s (relevé 2026-08-12)
+  · PixVerse    fal-ai/pixverse/lipsync     ~$2.40/min 0,04 $/s (fiche fal 2026-09-24)
   · Sync 2      fal-ai/sync-lipsync/v2      $3/min     conversationnel
+  · Kling       fal-ai/kling-video/lipsync/audio-to-video  ~$0.84/min  0,014 $/s
+                                            (arrondi aux 5 s ; vidéo 2–10 s, 720p/1080p)
   · LatentSync  fal-ai/latentsync           éco        ByteDance, historique
 
-⚠ VEED facture À LA SECONDE de vidéo produite (0,07 $/s) là où les Sync
+⚠ VEED, PixVerse et Kling facturent À LA SECONDE de vidéo là où les Sync
 annoncent un tarif à la minute — le $/min affiché est une conversion, pas une
-grille officielle. Schéma d'entrée vérifié identique (video_url + audio_url) :
-il se substitue aux autres sans adapter le worker.
+grille officielle. Schémas d'entrée vérifiés identiques (video_url + audio_url,
+sortie `video.url`) : ils se substituent aux autres sans adapter le worker.
+⚠ Kling n'accepte qu'un clip de 2 à 10 s (100 Mo, 720p/1080p) et un audio de
+2 à 60 s : au-delà, c'est fal qui refuse — le message remonte tel quel.
 """
 
 import os
@@ -43,11 +48,15 @@ LIPSYNC_ENGINES: dict[str, dict] = {
     "sync3":      {"endpoint": "fal-ai/sync-lipsync/v3",     "name": "Sync-3",     "price": "$8/min"},
     "veed2":      {"endpoint": "veed/lipsync/v2",            "name": "VEED v2",    "price": "~$4.20/min"},
     "sync2":      {"endpoint": "fal-ai/sync-lipsync/v2",     "name": "Sync 2",     "price": "$3/min"},
+    # Ajoutés le 2026-09-24 (fiches fal) — même contrat video_url + audio_url.
+    "pixverse":   {"endpoint": "fal-ai/pixverse/lipsync",    "name": "PixVerse Lipsync", "price": "~$2.40/min"},
+    "kling":      {"endpoint": "fal-ai/kling-video/lipsync/audio-to-video",
+                   "name": "Kling Lipsync", "price": "~$0.84/min · clip 2-10 s"},
     "latentsync": {"endpoint": "fal-ai/latentsync",          "name": "LatentSync", "price": "éco"},
 }
 # Ordre = du plus cher au plus économique (VEED se place entre Sync 2 Pro et
-# Sync 2 : 0,07 $/s ≈ 4,20 $/min).
-LIPSYNC_ENGINE_ORDER = ["sync2pro", "sync3", "veed2", "sync2", "latentsync"]
+# Sync 2 : 0,07 $/s ≈ 4,20 $/min ; PixVerse 0,04 $/s ; Kling 0,014 $/s).
+LIPSYNC_ENGINE_ORDER = ["sync2pro", "sync3", "veed2", "sync2", "pixverse", "kling", "latentsync"]
 LIPSYNC_DEFAULT = "sync2pro"
 
 

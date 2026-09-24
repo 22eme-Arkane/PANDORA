@@ -49,9 +49,14 @@ _GRAMMAR_BY_ENGINE = {
     "seedance-2.0-mini":  "fields",
     "seedance-1.5-pro":   "fields",
     "veo-3.1":            "sentence",
+    "veo-3.1-fast":       "sentence",
+    "veo-3.1-lite":       "sentence",
     "sora-2":             "sentence",
+    "sora-2-pro":         "sentence",
     "kling-v3-pro":       "directive",
     "kling-o3-4k":        "directive",
+    "kling-o3-pro":       "directive",
+    "kling-o3-standard":  "directive",
     # MiniMax H3 (relevé 2026-09-13) : prose cinématographique continue, et fal
     # réécrit de toute façon le prompt côté serveur (prompt_expansion_mode).
     # Les références se nomment « Image 1, Image 2 » DANS la phrase — voir

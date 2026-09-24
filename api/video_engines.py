@@ -1,18 +1,30 @@
 """
 api/video_engines.py — Moteurs vidéo alternatifs à Seedance 2.0.
 
-Modèles fal.ai :
+Modèles fal.ai (relevé fiche par fiche sur fal.ai le 2026-09-24 — `llms.txt`
+de chaque endpoint ; les prix sont ceux publiés ce jour-là, à revérifier) :
   - Happy Horse 1.1 T2V/I2V : alibaba/happy-horse/v1.1/{text,image,reference}-to-video — $0.14-0.18/s
     (clé PANDORA « happy-horse-1.0 » CONSERVÉE : elle est enregistrée dans les
      plans et l'historique des projets existants — voir core/pricing)
   - Kling O3 4K T2V/I2V     : fal-ai/kling-video/o3/4k/{text,image}-to-video      — $0.42/s
-  - Kling v3 Pro I2V         : fal-ai/kling-video/v3/pro/image-to-video            — $0.112-0.196/s
-  - Kling v3 Pro T2V         : fal-ai/kling-video/v3/pro/text-to-video             — $0.112-0.196/s
+  - Kling O3 Pro T2V/I2V    : fal-ai/kling-video/o3/pro/{text,image}-to-video     — $0.112 / $0.14 (audio)
+  - Kling O3 Standard       : fal-ai/kling-video/o3/standard/{text,image}-to-video — $0.084 / $0.112 (audio)
+  - Kling v3 Pro I2V         : fal-ai/kling-video/v3/pro/image-to-video            — $0.112 / $0.168 (audio)
+  - Kling v3 Pro T2V         : fal-ai/kling-video/v3/pro/text-to-video             — $0.112 / $0.168 (audio)
   - Kling v3 4K T2V          : fal-ai/kling-video/v3/4k/text-to-video              — $0.28-0.39/s
-  - PixVerse v6 T2V          : fal-ai/pixverse/v6/text-to-video                    — $0.025-0.115/s
-  - PixVerse v4.5 I2V        : fal-ai/pixverse/v4.5/image-to-video                 — $0.04-0.08/s
-  - Veo 3.1 T2V              : fal-ai/veo3.1                                        — ~$1.00/vidéo
-  - Sora 2 T2V               : fal-ai/sora-2/text-to-video                         — $0.10/s
+  - PixVerse v6 T2V/I2V      : fal-ai/pixverse/v6/{text,image}-to-video            — $0.025-0.115/s
+  - Veo 3.1 T2V/I2V          : fal-ai/veo3.1[/fast|/lite][/image-to-video]         — $0.20-0.60/s (Pro)
+  - Sora 2 T2V/I2V           : fal-ai/sora-2/{text,image}-to-video[/pro]           — $0.10/s (Pro 0.30-0.70)
+  - Wan 3.0 T2V/I2V          : alibaba/wan-3.0/{text,image}-to-video               — $0.05-0.20/s
+  - LTX-2 / LTX-2.3          : fal-ai/ltx-2[.3]/{text,image}-to-video              — $0.06-0.32/s
+  - Gemini Omni Flash 1.1    : google/gemini-omni-flash/v1.1/{text,image}-to-video — $0.03-0.30/s
+  - Grok Imagine 1.5         : xai/grok-imagine-video/v1.5/{text,image}-to-video   — $0.08-0.25/s
+
+⚠ Noms de champ qui ont MORDU (2026-09-24) : l'image de départ s'appelle
+`image_url` chez Kling O3 (4K, Pro, Standard) et Kling v3 Turbo, mais
+`start_image_url` chez Kling v3 Pro et Wan 3.0 ; PixVerse v6 dit
+`generate_audio_switch`, pas `generate_audio` ; Veo veut la durée en « 8s » ;
+Sora et LTX n'acceptent que quelques durées entières.
 
 Tous héritent d'une interface commune : progress(int,str) + finished(dict) + failed(str).
 """
@@ -80,6 +92,20 @@ def ensure_image_urls(fal_client, params: dict, emit_progress=None) -> None:
     dernière frame de raccord, end_image_path = mood du plan suivant) ; les moteurs
     externes attendent des URLs. Uploade et bascule en i2v. Modifie params EN PLACE.
     """
+    # Formulaires « Génération directe » (onglet Moteurs) : leurs sélecteurs
+    # d'image mettent un CHEMIN LOCAL dans image_url / end_image_url (constat
+    # 24/09/2026 — Kling, Kling O3, Happy Horse, PixVerse). Il partait tel quel
+    # vers fal, qui ne peut pas lire « C:\… » : on l'uploade ici, une fois
+    # pour tous les workers.
+    for _k in ("image_url", "end_image_url"):
+        _v = str(params.get(_k, "") or "")
+        if _v and not _v.lower().startswith(("http://", "https://", "data:")) and os.path.isfile(_v):
+            if emit_progress:
+                emit_progress(6, "Upload de l'image de départ…" if _k == "image_url"
+                              else "Upload de l'image de fin…")
+            params[_k] = _fal_upload(fal_client, _v)
+            if _k == "image_url":
+                params["mode"] = "i2v"
     img = params.get("image_path", "")
     if img and os.path.isfile(img) and not params.get("image_url"):
         if emit_progress:
@@ -205,7 +231,8 @@ class KlingWorker(_CancellableWorker):
     finished = pyqtSignal(dict)
     failed   = pyqtSignal(str)
 
-    # Tarifs indicatifs (source : fal.ai, mai 2025)
+    # Tarifs relevés sur fal.ai (fiche v3/pro, 2026-09-24) : 0,112 $/s sans
+    # audio, 0,168 $/s avec — la grille core/pricing disait 0,15 « milieu ».
     _PRICE_NO_AUDIO   = 0.112   # $/s
     _PRICE_WITH_AUDIO = 0.168   # $/s
 
@@ -300,22 +327,29 @@ class KlingWorker(_CancellableWorker):
                 if style_kw:
                     prompt_en = f"{style_kw}, {prompt_en}"
 
+            _turbo = variant in _sub
             args: dict = {
-                "prompt":          prompt_en,
-                "duration":        str(dur),
-                "generate_audio":  with_audio,
-                "shot_type":       self.params.get("shot_type", "customize"),
+                "prompt":   prompt_en,
+                "duration": str(dur),
             }
+            if not _turbo:
+                # Le schéma TURBO (fiche fal 2026-09-24) ne connaît que
+                # prompt / image_url / duration : audio, prompt négatif,
+                # cfg et shot_type n'y existent pas.
+                args["generate_audio"] = with_audio
+                args["shot_type"] = self.params.get("shot_type", "customize")
             if mode == "i2v":
                 img_url = self.params.get("image_url", "")
                 if not img_url:
                     raise ValueError("Kling I2V : image_url requis.")
-                args["start_image_url"] = img_url
-                if self.params.get("end_image_url"):
+                # ⚠ Deux noms pour le même champ chez Kling : `start_image_url`
+                # sur v3 Pro, `image_url` sur v3 Turbo (fiches 2026-09-24).
+                args["image_url" if _turbo else "start_image_url"] = img_url
+                if self.params.get("end_image_url") and not _turbo:
                     args["end_image_url"] = self.params["end_image_url"]
-            if self.params.get("negative_prompt"):
+            if self.params.get("negative_prompt") and not _turbo:
                 args["negative_prompt"] = self.params["negative_prompt"]
-            if self.params.get("cfg_scale") is not None:
+            if self.params.get("cfg_scale") is not None and not _turbo:
                 args["cfg_scale"] = float(self.params["cfg_scale"])
 
             self.progress.emit(20, "Appel Kling v3 Pro (peut prendre 1-2 min)…")
@@ -356,30 +390,34 @@ class KlingWorker(_CancellableWorker):
                 self.failed.emit(humanize_api_error(f"Erreur Kling : {e}"))
 
 
-# ── Worker PixVerse v4.5 ──────────────────────────────────────────────────────
+# ── Worker PixVerse v6 Image-to-Video ────────────────────────────────────────
 
 class PixVerseWorker(_CancellableWorker):
     """
-    Génère une vidéo via PixVerse v4.5 Image-to-Video.
+    Génère une vidéo via PixVerse v6 Image-to-Video (fiche fal 2026-09-24).
 
-    Le modèle PixVerse est moins cher que Kling/Seedance mais sans audio natif.
-    Idéal pour des itérations rapides et économiques.
+    Remplace la v4.5 (retirée du catalogue fal). Même contrat d'appel côté
+    PANDORA : image_url + prompt ; la v6 ajoute résolution 360p–1080p, durée
+    1–15 s, audio optionnel (`generate_audio_switch`) et prompt négatif. Pas
+    d'aspect_ratio : le cadre suit l'image.
     """
     progress = pyqtSignal(int, str)
     finished = pyqtSignal(dict)
     failed   = pyqtSignal(str)
 
-    # Tarifs indicatifs
-    _PRICE_720P  = 0.04   # $/s (5s = $0.20)
-    _PRICE_1080P = 0.08   # $/s (5s = $0.40)
+    # $/s (sans audio, avec audio) — relevé fal 2026-09-24.
+    _PRICE = {"360p": (0.025, 0.035), "540p": (0.035, 0.045),
+              "720p": (0.045, 0.060), "1080p": (0.090, 0.115)}
 
     def __init__(self, params: dict):
         """
         params attendus :
-          prompt      (str)  requis
-          image_url   (str)  requis
-          duration    (int)  5 (seule option actuellement)
-          resolution  (str)  "720p" | "1080p", défaut "720p"
+          prompt          (str)  requis
+          image_url       (str)  requis (ou image_path local — uploadé)
+          duration        (int)  1-15, défaut 5
+          resolution      (str)  "360p" | "540p" | "720p" | "1080p", défaut "720p"
+          generate_audio  (bool) défaut False
+          negative_prompt (str)  optionnel
         """
         super().__init__()
         self.params = params
@@ -395,7 +433,7 @@ class PixVerseWorker(_CancellableWorker):
     def _mock(self):
         dur = self.params.get("duration", 5)
         steps = [
-            (15, "PixVerse v4.5 — mode mock…"),
+            (15, "PixVerse v6 I2V — mode mock…"),
             (50, "Génération vidéo PixVerse (simulation)…"),
             (90, f"Vidéo {dur}s en cours…"),
             (100, "Terminé — mode mock (aucune clé fal.ai)"),
@@ -403,7 +441,7 @@ class PixVerseWorker(_CancellableWorker):
         for pct, msg in steps:
             self.progress.emit(pct, msg)
             time.sleep(0.5)
-        self.finished.emit({"url": "", "duration": dur, "model": "pixverse-v4.5", "credits_used": 0})
+        self.finished.emit({"url": "", "duration": dur, "model": "pixverse-v6-i2v", "credits_used": 0})
 
     def _real(self, key: str):
         try:
@@ -411,13 +449,16 @@ class PixVerseWorker(_CancellableWorker):
             import requests
 
             os.environ["FAL_KEY"] = key
+            # Workflow séquences : image_path locale → URL
+            ensure_image_urls(fal_client, self.params, self.progress.emit)
 
-            dur  = int(self.params.get("duration", 5))
-            res  = self.params.get("resolution", "720p")
-            rate = self._PRICE_1080P if res == "1080p" else self._PRICE_720P
-            cost = dur * rate
+            dur   = max(1, min(15, int(self.params.get("duration", 5) or 5)))
+            res   = (self.params.get("resolution", "720p") or "720p").split()[0]
+            audio = bool(self.params.get("generate_audio", False))
+            rate  = self._PRICE.get(res, self._PRICE["720p"])[1 if audio else 0]
+            cost  = dur * rate
 
-            self.progress.emit(10, f"PixVerse v4.5 I2V — {dur}s {res} (~${cost:.2f})…")
+            self.progress.emit(10, f"PixVerse v6 I2V — {dur}s {res} (~${cost:.2f})…")
 
             img_url = self.params.get("image_url", "")
             if not img_url:
@@ -426,15 +467,18 @@ class PixVerseWorker(_CancellableWorker):
             prompt_raw = self.params.get("prompt", "")
             prompt_en  = engine_prompt(self.params)   # prompt FINAL respecté
 
-            self.progress.emit(20, "Appel PixVerse v4.5 (environ 1 min)…")
+            self.progress.emit(20, "Appel PixVerse v6 (environ 1 min)…")
 
-            result = fal_client.subscribe(
-                "fal-ai/pixverse/v4.5/image-to-video",
-                arguments={
-                    "prompt":    prompt_en,
-                    "image_url": img_url,
-                },
-            )
+            args = {
+                "prompt":                prompt_en,
+                "image_url":             img_url,
+                "resolution":            res,
+                "duration":              dur,
+                "generate_audio_switch": audio,
+            }
+            if self.params.get("negative_prompt"):
+                args["negative_prompt"] = self.params["negative_prompt"]
+            result = fal_client.subscribe("fal-ai/pixverse/v6/image-to-video", arguments=args)
 
             if not isinstance(result, dict):
                 raise RuntimeError(f"Réponse inattendue : {str(result)[:200]}")
@@ -451,38 +495,91 @@ class PixVerseWorker(_CancellableWorker):
 
             out_dir  = _video_output_dir()
             ts       = int(time.time())
-            local    = os.path.join(out_dir, f"pixverse_{dur}s_{ts}.mp4")
+            local    = os.path.join(out_dir, f"pixverse_v6_i2v_{dur}s_{ts}.mp4")
             with open(local, "wb") as f:
                 f.write(data)
 
-            self.progress.emit(100, f"PixVerse ✓  {dur}s {res} · ~${cost:.2f}")
-            self.finished.emit({
-                "url":          url,
-                "local_path":   local,
-                "duration":     dur,
-                "resolution":   res,
-                "model":        "pixverse-v4.5-i2v",
-                "credits_used": cost,
-            })
+            self.progress.emit(100, f"PixVerse v6 ✓  {dur}s {res} · ~${cost:.2f}")
+            if not self._cancelled:
+                self.finished.emit({
+                    "url":          url,
+                    "local_path":   local,
+                    "duration":     dur,
+                    "resolution":   res,
+                    "model":        "pixverse-v6-i2v",
+                    "credits_used": cost,
+                })
 
         except Exception as e:
-            self.failed.emit(humanize_api_error(f"Erreur PixVerse : {e}"))
+            if not self._cancelled:
+                self.failed.emit(humanize_api_error(f"Erreur PixVerse : {e}"))
 
 
 # ── Worker Veo 3.1 ────────────────────────────────────────────────────────────
 
 class Veo3Worker(_CancellableWorker):
     """
-    Génère une vidéo via Veo 3.1 (Google / fal-ai).
-    Vidéo 8 secondes · 1080p · audio natif · ~$1.00 / vidéo.
+    Génère une vidéo via Veo 3.1 (Google / fal-ai) — trois paliers, T2V et I2V.
+
+    Relevé fal 2026-09-24 : facturé À LA SECONDE (et non « ~1 $ la vidéo »),
+    selon résolution ET audio. L'ancien appel n'envoyait que le prompt : fal
+    prenait 720p / 8 s / audio, soit 3,20 $ le clip pour un journal à 1 $.
+
+      variant "pro"  : fal-ai/veo3.1[/image-to-video]        720p-1080p 0.20/0.40 · 4k 0.40/0.60
+      variant "fast" : fal-ai/veo3.1/fast[/image-to-video]   720p-1080p 0.10/0.15 · 4k 0.30/0.35
+      variant "lite" : fal-ai/veo3.1/lite[/image-to-video]   720p 0.03/0.05 · 1080p 0.05/0.08
+
+    Durée « 4s » / « 6s » / « 8s » (chaîne), ratio 16:9 ou 9:16 seulement
+    (« auto » en I2V), `generate_audio` vrai par défaut.
     """
     progress = pyqtSignal(int, str)
     finished = pyqtSignal(dict)
     failed   = pyqtSignal(str)
 
+    # (sans audio, avec audio) par résolution et par palier.
+    _PRICE = {
+        "pro":  {"720p": (0.20, 0.40), "1080p": (0.20, 0.40), "4k": (0.40, 0.60)},
+        "fast": {"720p": (0.10, 0.15), "1080p": (0.10, 0.15), "4k": (0.30, 0.35)},
+        "lite": {"720p": (0.03, 0.05), "1080p": (0.05, 0.08)},
+    }
+    _ENDPOINT = {"pro": "fal-ai/veo3.1", "fast": "fal-ai/veo3.1/fast", "lite": "fal-ai/veo3.1/lite"}
+    _MODEL    = {"pro": "veo-3.1", "fast": "veo-3.1-fast", "lite": "veo-3.1-lite"}
+    _DURATIONS = (4, 6, 8)
+
     def __init__(self, params: dict):
+        """
+        params attendus :
+          prompt         (str)  requis
+          variant        (str)  "pro" | "fast" | "lite", défaut "pro"
+          mode           (str)  "t2v" | "i2v" (image_url / image_path)
+          duration       (int)  4 | 6 | 8 (arrondi au plus proche), défaut 8
+          resolution     (str)  "720p" | "1080p" | "4k" (lite : pas de 4k)
+          aspect_ratio   (str)  "16:9" | "9:16" (autre → 16:9)
+          generate_audio (bool) défaut True
+          negative_prompt (str) optionnel
+        """
         super().__init__()
         self.params = params
+
+    @classmethod
+    def snap_duration(cls, seconds) -> int:
+        try:
+            v = float(seconds)
+        except (TypeError, ValueError):
+            return 8
+        return min(cls._DURATIONS, key=lambda d: abs(d - v))
+
+    @classmethod
+    def price_per_second(cls, variant: str, resolution: str, audio: bool = True) -> float:
+        table = cls._PRICE.get(variant or "pro", cls._PRICE["pro"])
+        res = (resolution or "720p").lower().split()[0]
+        if res not in table:
+            res = "720p"
+        return table[res][1 if audio else 0]
+
+    def _variant(self) -> str:
+        v = (self.params.get("variant") or "pro").lower()
+        return v if v in self._ENDPOINT else "pro"
 
     def run(self):
         cfg = load_config()
@@ -493,16 +590,17 @@ class Veo3Worker(_CancellableWorker):
             self._real(key)
 
     def _mock(self):
+        dur = self.snap_duration(self.params.get("duration", 8))
         for pct, msg in [
-            (10, "Veo 3.1 — mode mock…"),
+            (10, f"Veo 3.1 ({self._variant()}) — mode mock…"),
             (50, "Génération vidéo Google (simulation)…"),
             (100, "Terminé — mode mock (aucune clé fal.ai)"),
         ]:
             self.progress.emit(pct, msg)
             time.sleep(0.5)
         self.finished.emit({
-            "url": "", "duration": 8, "model": "veo-3.1",
-            "resolution": "1080p", "credits_used": 0,
+            "url": "", "duration": dur, "model": self._MODEL[self._variant()],
+            "resolution": self.params.get("resolution", "720p"), "credits_used": 0,
         })
 
     def _real(self, key: str):
@@ -511,11 +609,26 @@ class Veo3Worker(_CancellableWorker):
             import requests
 
             os.environ["FAL_KEY"] = key
+            # Workflow séquences : image_path locale → URL, mode i2v
+            ensure_image_urls(fal_client, self.params, self.progress.emit)
+
+            variant = self._variant()
+            mode    = "i2v" if (self.params.get("mode") == "i2v" or self.params.get("image_url")) else "t2v"
+            dur     = self.snap_duration(self.params.get("duration", 8))
+            res     = (self.params.get("resolution", "720p") or "720p").lower().split()[0]
+            if res not in self._PRICE[variant]:
+                res = "720p"
+            audio   = bool(self.params.get("generate_audio", True))
+            rate    = self.price_per_second(variant, res, audio)
+            cost    = dur * rate
+            ratio   = self.params.get("aspect_ratio", "16:9")
+            if ratio not in ("16:9", "9:16"):
+                ratio = "16:9"
 
             prompt_raw = self.params.get("prompt", "")
             prompt_en  = engine_prompt(self.params)   # prompt FINAL respecté
 
-            # ── Style prefix depuis image de référence (Veo 3.1 ne supporte pas image_refs) ──
+            # ── Style prefix depuis image de référence (Veo ne prend pas d'image_refs) ──
             ref_images = [p for p in self.params.get("ref_images", []) if p and os.path.isfile(p)]
             ref_roles  = self.params.get("ref_image_roles", [])
             if ref_images:
@@ -527,21 +640,27 @@ class Veo3Worker(_CancellableWorker):
                 if style_kw:
                     prompt_en = f"{style_kw}, {prompt_en}"
 
-            self.progress.emit(10, "Veo 3.1 — soumission (peut prendre 2-3 min)…")
+            endpoint = self._ENDPOINT[variant] + ("/image-to-video" if mode == "i2v" else "")
+            args: dict = {
+                "prompt":         prompt_en,
+                "aspect_ratio":   ratio,
+                "duration":       f"{dur}s",
+                "resolution":     res,
+                "generate_audio": audio,
+            }
+            if mode == "i2v":
+                args["image_url"] = self.params["image_url"]
+            if self.params.get("negative_prompt"):
+                args["negative_prompt"] = self.params["negative_prompt"]
 
-            result = fal_client.subscribe(
-                "fal-ai/veo3.1",
-                arguments={"prompt": prompt_en},
-                with_logs=False,
-            )
+            self.progress.emit(10, f"Veo 3.1 {variant} {mode.upper()} — {dur}s {res} (~${cost:.2f}, 2-3 min)…")
+
+            result = fal_client.subscribe(endpoint, arguments=args, with_logs=False)
 
             if not isinstance(result, dict):
                 raise RuntimeError(f"Réponse inattendue : {str(result)[:200]}")
 
-            video     = result.get("video") or {}
-            url       = (video.get("url", "") if isinstance(video, dict)
-                         else result.get("url", ""))
-            duration  = (video.get("duration", 8) if isinstance(video, dict) else 8)
+            url = _extract_video_url(result)
             if not url:
                 raise RuntimeError(f"URL vidéo manquante : {str(result)[:200]}")
 
@@ -550,19 +669,19 @@ class Veo3Worker(_CancellableWorker):
 
             out_dir  = _video_output_dir()
             ts       = int(time.time())
-            local    = os.path.join(out_dir, f"veo31_{ts}.mp4")
+            local    = os.path.join(out_dir, f"veo31_{variant}_{mode}_{dur}s_{ts}.mp4")
             with open(local, "wb") as f:
                 f.write(data)
 
-            self.progress.emit(100, f"Veo 3.1 ✓  {duration}s · 1080p")
+            self.progress.emit(100, f"Veo 3.1 ✓  {dur}s · {res} · ~${cost:.2f}")
             if not self._cancelled:
                 self.finished.emit({
                     "url":          url,
                     "local_path":   local,
-                    "duration":     duration,
-                    "resolution":   "1080p",
-                    "model":        "veo-3.1",
-                    "credits_used": 1.0,
+                    "duration":     dur,
+                    "resolution":   res,
+                    "model":        f"{self._MODEL[variant]}-{mode}",
+                    "credits_used": cost,
                 })
 
         except Exception as e:
@@ -1130,7 +1249,12 @@ class KlingO3Worker(_CancellableWorker):
                 img_url = self.params.get("image_url", "")
                 if not img_url:
                     raise ValueError("Kling O3 I2V : image_url requis.")
-                args["start_image_url"] = img_url
+                # ⚠ Fiche fal 2026-09-24 : le champ s'appelle `image_url` (pas
+                # `start_image_url` comme sur Kling v3 Pro) — l'ancien nom aurait
+                # valu un rejet « image_url required » à CHAQUE envoi i2v.
+                args["image_url"] = img_url
+                if self.params.get("end_image_url"):
+                    args["end_image_url"] = self.params["end_image_url"]
 
             self.progress.emit(20, "Appel Kling O3 4K (peut prendre 2-4 min)…")
 
@@ -1183,16 +1307,22 @@ class PixVerseV6Worker(_CancellableWorker):
     finished = pyqtSignal(dict)
     failed   = pyqtSignal(str)
 
-    _PRICE = {"360p": 0.025, "540p": 0.05, "720p": 0.075, "1080p": 0.115}
+    # $/s (sans audio, avec audio) — fiche fal 2026-09-24. L'ancienne grille
+    # (0,075 en 720p) était celle d'un relevé antérieur, faux aux deux tiers.
+    _PRICE_TABLE = {"360p": (0.025, 0.035), "540p": (0.035, 0.045),
+                    "720p": (0.045, 0.060), "1080p": (0.090, 0.115)}
+    # Vue « avec audio » (le pire cas) pour ce qui lit encore _PRICE.
+    _PRICE = {k: v[1] for k, v in _PRICE_TABLE.items()}
 
     def __init__(self, params: dict):
         """
         params attendus :
-          prompt         (str)  requis
-          resolution     (str)  "360p" | "540p" | "720p" | "1080p", défaut "720p"
-          duration       (int)  3-8, défaut 5
-          generate_audio (bool) défaut False
-          aspect_ratio   (str)  "16:9" | "9:16" | "1:1", défaut "16:9"
+          prompt          (str)  requis
+          resolution      (str)  "360p" | "540p" | "720p" | "1080p", défaut "720p"
+          duration        (int)  1-15, défaut 5
+          generate_audio  (bool) défaut False  → envoyé comme `generate_audio_switch`
+          aspect_ratio    (str)  16:9 · 4:3 · 1:1 · 3:4 · 9:16 · 2:3 · 3:2 · 21:9
+          negative_prompt (str)  optionnel
         """
         super().__init__()
         self.params = params
@@ -1227,11 +1357,11 @@ class PixVerseV6Worker(_CancellableWorker):
             # Workflow séquences : image_path/end_image_path locaux → URLs i2v
             ensure_image_urls(fal_client, self.params, self.progress.emit)
 
-            dur      = int(self.params.get("duration", 5))
-            res      = self.params.get("resolution", "720p")
+            dur      = max(1, min(15, int(self.params.get("duration", 5) or 5)))
+            res      = (self.params.get("resolution", "720p") or "720p").split()[0]
             ratio    = self.params.get("aspect_ratio", "16:9")
-            audio    = self.params.get("generate_audio", False)
-            cost_est = dur * self._PRICE.get(res, 0.075)
+            audio    = bool(self.params.get("generate_audio", False))
+            cost_est = dur * self._PRICE_TABLE.get(res, self._PRICE_TABLE["720p"])[1 if audio else 0]
 
             self.progress.emit(10, f"PixVerse v6 — {dur}s {res} (~${cost_est:.2f})…")
 
@@ -1298,13 +1428,18 @@ class PixVerseV6Worker(_CancellableWorker):
 
             self.progress.emit(20, "Appel PixVerse v6 (environ 1 min)…")
 
+            # ⚠ Le champ audio s'appelle `generate_audio_switch` chez PixVerse
+            # (fiches T2V, I2V et reference-to-video, 2026-09-24) : sous
+            # `generate_audio` il était simplement ignoré — audio jamais produit.
             args: dict = {
-                "prompt":         prompt_en,
-                "resolution":     res,
-                "duration":       dur,
-                "aspect_ratio":   ratio,
-                "generate_audio": audio,
+                "prompt":                prompt_en,
+                "resolution":            res,
+                "duration":              dur,
+                "aspect_ratio":          ratio,
+                "generate_audio_switch": audio,
             }
+            if self.params.get("negative_prompt"):
+                args["negative_prompt"] = self.params["negative_prompt"]
             if uploaded_refs:
                 args["image_references"] = uploaded_refs
 
@@ -1395,13 +1530,22 @@ class _SimpleFalVideoWorker(_CancellableWorker):
     ENDPOINT_I2V    = ""      # "" → moteur text-to-video uniquement
     MODEL           = "video"
     PRICE_PER_S     = 0.0     # $/s estimé (0 → utilise FLAT_PRICE)
+    PRICE_BY_RES    = {}      # {résolution: $/s} quand le tarif dépend de la résolution
     FLAT_PRICE      = 0.0     # $/vidéo (modèles à prix fixe, ex. Hailuo)
     AUDIO           = False   # envoie generate_audio
+    AUDIO_FIELD     = "generate_audio"   # nom du champ audio (Wan 3.0 : « audio »)
+    AUDIO_DEFAULT   = True    # valeur si l'appelant ne dit rien
+    AUDIO_PRICE_OFF = {}      # {résolution: $/s} SANS audio, si le tarif en dépend
     END_FRAME       = False   # supporte end_image_url (raccords / keyframes)
+    IMAGE_FIELD     = "image_url"   # nom du champ image de départ (Wan 3.0 : start_image_url)
     SEND_RESOLUTION = False
+    RESOLUTIONS     = ()      # valeurs acceptées ; hors liste → la première (rien = tout passe)
     SEND_RATIO      = False
+    RATIOS          = ()      # ratios acceptés ; hors liste → 16:9 (rien = tout passe)
     RATIO_T2V_ONLY  = False   # aspect_ratio absent du schéma I2V → ne pas l'envoyer
     SEND_DURATION   = False
+    DURATIONS       = ()      # durées acceptées (Sora 4/8/12…, LTX 6/8/10) ; rien = libre
+    DUR_MIN, DUR_MAX = 0, 0   # bornes si DURATIONS est vide (0 = pas de borne)
     DUR_STR         = True    # duration en str (famille ByteDance) sinon int
     DEFAULT_DUR     = 5
 
@@ -1413,6 +1557,8 @@ class _SimpleFalVideoWorker(_CancellableWorker):
 
     def _resolution_arg(self, res: str) -> str:
         """Valeur de `resolution` envoyée à fal pour une résolution PANDORA."""
+        if self.RESOLUTIONS and res not in self.RESOLUTIONS:
+            return self.RESOLUTIONS[0]
         return res
 
     def _extra_args(self, mode: str) -> dict:
@@ -1421,7 +1567,28 @@ class _SimpleFalVideoWorker(_CancellableWorker):
 
     def _price_per_s(self, res: str) -> float:
         """$/s pour cette résolution (les tables de famille varient par palier)."""
+        if self.PRICE_BY_RES:
+            r = self._resolution_arg(res)
+            audio_on = self.params.get("generate_audio", self.AUDIO_DEFAULT) if self.AUDIO else True
+            if not audio_on and self.AUDIO_PRICE_OFF:
+                return self.AUDIO_PRICE_OFF.get(r, next(iter(self.AUDIO_PRICE_OFF.values())))
+            return self.PRICE_BY_RES.get(r, next(iter(self.PRICE_BY_RES.values())))
         return self.PRICE_PER_S
+
+    def _snap_duration(self, dur: int) -> int:
+        """Durée ramenée à ce que l'endpoint accepte (liste fermée ou bornes)."""
+        if self.DURATIONS:
+            return min(self.DURATIONS, key=lambda d: abs(d - dur))
+        if self.DUR_MIN:
+            dur = max(self.DUR_MIN, dur)
+        if self.DUR_MAX:
+            dur = min(self.DUR_MAX, dur)
+        return dur
+
+    def _ratio_arg(self, ratio: str) -> str:
+        if self.RATIOS and ratio not in self.RATIOS:
+            return "16:9" if "16:9" in self.RATIOS else self.RATIOS[0]
+        return ratio
 
     def run(self):
         key = load_config().get("api_key", "").strip()
@@ -1456,9 +1623,10 @@ class _SimpleFalVideoWorker(_CancellableWorker):
             endpoint = self.ENDPOINT_I2V if (mode == "i2v" and self.ENDPOINT_I2V) else self.ENDPOINT_T2V
 
             try:
-                dur = int(self.params.get("duration", self.DEFAULT_DUR) or self.DEFAULT_DUR)
+                dur = int(round(float(self.params.get("duration", self.DEFAULT_DUR) or self.DEFAULT_DUR)))
             except (TypeError, ValueError):
                 dur = self.DEFAULT_DUR
+            dur = self._snap_duration(dur)
 
             prompt_raw = self.params.get("prompt", "")
             prompt_en  = engine_prompt(self.params)   # prompt FINAL respecté
@@ -1470,21 +1638,21 @@ class _SimpleFalVideoWorker(_CancellableWorker):
             res = (self.params.get("resolution", "720p") or "720p").split()[0]
             if self.SEND_RESOLUTION:
                 # Hook : un moteur peut renommer la résolution (« 768p » PANDORA
-                # → « 768P » fal chez MiniMax). Identité par défaut.
+                # → « 768P » fal chez MiniMax) ou la borner à sa liste.
                 args["resolution"] = self._resolution_arg(res)
             # Certains schémas I2V n'ont PAS aspect_ratio (le cadre suit
             # l'image) et rejettent le champ : RATIO_T2V_ONLY le retient.
             if self.SEND_RATIO and not (mode == "i2v" and self.RATIO_T2V_ONLY):
-                args["aspect_ratio"] = self.params.get("aspect_ratio", "16:9")
+                args["aspect_ratio"] = self._ratio_arg(self.params.get("aspect_ratio", "16:9"))
             if self.SEND_DURATION:
                 args["duration"] = str(dur) if self.DUR_STR else dur
             if self.AUDIO:
-                args["generate_audio"] = self.params.get("generate_audio", True)
+                args[self.AUDIO_FIELD] = bool(self.params.get("generate_audio", self.AUDIO_DEFAULT))
             if mode == "i2v":
                 img_url = self.params.get("image_url", "")
                 if not img_url:
                     raise ValueError(f"{self.MODEL} I2V : image de départ requise.")
-                args["image_url"] = img_url
+                args[self.IMAGE_FIELD] = img_url
                 if self.END_FRAME and self.params.get("end_image_url"):
                     args["end_image_url"] = self.params["end_image_url"]
             # Champs propres au moteur (ex. prompt_expansion_mode, REQUIS chez
@@ -1543,21 +1711,91 @@ class Seedance15Worker(_SimpleFalVideoWorker):
 
 
 class LTX2Worker(_SimpleFalVideoWorker):
-    """LTX-2 (Lightricks) — 4K natif + audio stéréo. T2V + I2V."""
-    ENDPOINT_T2V = "fal-ai/ltx-2/text-to-video"
-    ENDPOINT_I2V = "fal-ai/ltx-2/image-to-video"
-    MODEL        = "ltx-2"
-    PRICE_PER_S  = 0.04
-    SEND_RATIO   = True
-    DEFAULT_DUR  = 5
+    """LTX-2 (Lightricks) — 1080p/1440p/2160p + audio. T2V + I2V.
+
+    Fiche fal 2026-09-24 : durée 6 / 8 / 10 s (entier), PAS d'aspect_ratio,
+    `generate_audio` vrai par défaut. 0,06 $/s en 1080p, 0,12 en 1440p, 0,24
+    en 2160p — l'ancien 0,04 « 4K » et la durée « 5 » en chaîne étaient faux."""
+    ENDPOINT_T2V    = "fal-ai/ltx-2/text-to-video"
+    ENDPOINT_I2V    = "fal-ai/ltx-2/image-to-video"
+    MODEL           = "ltx-2"
+    PRICE_PER_S     = 0.06
+    PRICE_BY_RES    = {"1080p": 0.06, "1440p": 0.12, "2160p": 0.24}
+    AUDIO           = True
+    SEND_RESOLUTION = True
+    RESOLUTIONS     = ("1080p", "1440p", "2160p")
+    SEND_DURATION   = True
+    DURATIONS       = (6, 8, 10)
+    DUR_STR         = False
+    DEFAULT_DUR     = 6
+
+    def _resolution_arg(self, res: str) -> str:
+        # Les menus PANDORA disent « 4K » : c'est le 2160p de LTX.
+        r = (res or "").lower()
+        if r in ("4k", "2160p"):
+            return "2160p"
+        if r in ("2k", "1440p"):
+            return "1440p"
+        return "1080p"
+
+
+class LTX23Worker(LTX2Worker):
+    """LTX-2.3 Pro (Lightricks, fal 2026-09-24) — même contrat que LTX-2, plus
+    l'image de fin en I2V et un ratio 16:9 / 9:16 en T2V. 0,08 / 0,16 / 0,32 $/s."""
+    ENDPOINT_T2V    = "fal-ai/ltx-2.3/text-to-video"
+    ENDPOINT_I2V    = "fal-ai/ltx-2.3/image-to-video"
+    MODEL           = "ltx-2.3"
+    PRICE_PER_S     = 0.08
+    PRICE_BY_RES    = {"1080p": 0.08, "1440p": 0.16, "2160p": 0.32}
+    END_FRAME       = True
+    SEND_RATIO      = True
+    RATIOS          = ("16:9", "9:16")
+    RATIO_T2V_ONLY  = True    # en I2V le schéma dit « auto » : on laisse faire
 
 
 class Wan27Worker(_SimpleFalVideoWorker):
-    """Wan 2.7 (Alibaba) — first/last frame, leader Wan-Bench. T2V."""
-    ENDPOINT_T2V = "fal-ai/wan/v2.7/text-to-video"
-    MODEL        = "wan-2.7"
-    SEND_RATIO   = True
-    DEFAULT_DUR  = 5
+    """Wan 2.7 (Alibaba) — T2V. Fiche fal 2026-09-24 : 720p 0,10 $/s, 1080p
+    0,15 $/s (défaut fal = 1080p : on ENVOIE la résolution choisie), durée
+    2–15 s entière, prompt négatif."""
+    ENDPOINT_T2V    = "fal-ai/wan/v2.7/text-to-video"
+    MODEL           = "wan-2.7"
+    PRICE_PER_S     = 0.10
+    PRICE_BY_RES    = {"720p": 0.10, "1080p": 0.15}
+    SEND_RESOLUTION = True
+    RESOLUTIONS     = ("720p", "1080p")
+    SEND_RATIO      = True
+    RATIOS          = ("16:9", "9:16", "1:1", "4:3", "3:4")
+    SEND_DURATION   = True
+    DUR_MIN, DUR_MAX = 2, 15
+    DUR_STR         = False
+    DEFAULT_DUR     = 5
+
+    def _extra_args(self, mode: str) -> dict:
+        neg = (self.params.get("negative_prompt") or "").strip()
+        return {"negative_prompt": neg[:500]} if neg else {}
+
+
+class Wan30Worker(_SimpleFalVideoWorker):
+    """Wan 3.0 (Alibaba, fal 2026-09-24) — T2V + I2V (première/dernière image),
+    2 à 30 s d'un bloc, audio natif (`audio`), 480p/720p/1080p à 0,05 / 0,10 /
+    0,20 $/s. ⚠ image de départ = `start_image_url`."""
+    ENDPOINT_T2V    = "alibaba/wan-3.0/text-to-video"
+    ENDPOINT_I2V    = "alibaba/wan-3.0/image-to-video"
+    MODEL           = "wan-3.0"
+    PRICE_PER_S     = 0.10
+    PRICE_BY_RES    = {"480p": 0.05, "720p": 0.10, "1080p": 0.20}
+    AUDIO           = True
+    AUDIO_FIELD     = "audio"
+    END_FRAME       = True
+    IMAGE_FIELD     = "start_image_url"
+    SEND_RESOLUTION = True
+    RESOLUTIONS     = ("720p", "480p", "1080p")
+    SEND_RATIO      = True
+    RATIOS          = ("16:9", "4:3", "1:1", "3:4", "9:16", "adaptive")
+    SEND_DURATION   = True
+    DUR_MIN, DUR_MAX = 2, 30
+    DUR_STR         = False
+    DEFAULT_DUR     = 5
 
 
 class Hailuo23Worker(_SimpleFalVideoWorker):
@@ -1580,6 +1818,26 @@ class GeminiOmniFlashWorker(_SimpleFalVideoWorker):
     SEND_DURATION = True
     DUR_STR       = False
     DEFAULT_DUR   = 5
+
+
+class GeminiOmniFlash11Worker(_SimpleFalVideoWorker):
+    """Gemini Omni Flash 1.1 (Google, fal 2026-09-24) — T2V + I2V avec image de
+    fin, 3–10 s, 360p/720p/1080p/4k à 0,03 / 0,10 / 0,15 / 0,30 $/s. Pas de
+    champ audio (le son est natif), ratio 16:9 ou 9:16."""
+    ENDPOINT_T2V    = "google/gemini-omni-flash/v1.1/text-to-video"
+    ENDPOINT_I2V    = "google/gemini-omni-flash/v1.1/image-to-video"
+    MODEL           = "gemini-omni-flash-1.1"
+    PRICE_PER_S     = 0.10
+    PRICE_BY_RES    = {"720p": 0.10, "360p": 0.03, "1080p": 0.15, "4k": 0.30}
+    END_FRAME       = True
+    SEND_RESOLUTION = True
+    RESOLUTIONS     = ("720p", "360p", "1080p", "4k")
+    SEND_RATIO      = True
+    RATIOS          = ("16:9", "9:16")
+    SEND_DURATION   = True
+    DUR_MIN, DUR_MAX = 3, 10
+    DUR_STR         = False
+    DEFAULT_DUR     = 8
 
 
 class Seedance20MiniWorker(_SimpleFalVideoWorker):
@@ -1609,6 +1867,62 @@ class GrokVideoWorker(_SimpleFalVideoWorker):
     SEND_DURATION   = True
     DUR_STR         = False
     DEFAULT_DUR     = 5
+
+
+class GrokVideo15Worker(_SimpleFalVideoWorker):
+    """Grok Imagine Video 1.5 (xAI, fal 2026-09-24) — T2V + I2V, 1–15 s,
+    480p/720p/1080p à 0,08 / 0,14 / 0,25 $/s. Ratio en T2V seulement (l'I2V
+    suit l'image) ; pas de champ audio (le son est compris)."""
+    ENDPOINT_T2V    = "xai/grok-imagine-video/v1.5/text-to-video"
+    ENDPOINT_I2V    = "xai/grok-imagine-video/v1.5/image-to-video"
+    MODEL           = "grok-video-1.5"
+    PRICE_PER_S     = 0.14
+    PRICE_BY_RES    = {"720p": 0.14, "480p": 0.08, "1080p": 0.25}
+    SEND_RESOLUTION = True
+    RESOLUTIONS     = ("720p", "480p", "1080p")
+    SEND_RATIO      = True
+    RATIOS          = ("16:9", "4:3", "3:2", "1:1", "2:3", "3:4", "9:16")
+    RATIO_T2V_ONLY  = True
+    SEND_DURATION   = True
+    DUR_MIN, DUR_MAX = 1, 15
+    DUR_STR         = False
+    DEFAULT_DUR     = 6
+
+
+class KlingO3ProWorker(_SimpleFalVideoWorker):
+    """Kling O3 Pro (fal 2026-09-24) — T2V (16:9 · 9:16 · 1:1) + I2V avec
+    image de fin, 3–15 s (chaîne), audio optionnel (faux par défaut) :
+    0,112 $/s sans, 0,14 $/s avec. ⚠ image de départ = `image_url`."""
+    ENDPOINT_T2V    = "fal-ai/kling-video/o3/pro/text-to-video"
+    ENDPOINT_I2V    = "fal-ai/kling-video/o3/pro/image-to-video"
+    MODEL           = "kling-o3-pro"
+    PRICE_PER_S     = 0.14
+    PRICE_BY_RES    = {"1080p": 0.14}
+    AUDIO           = True
+    AUDIO_DEFAULT   = False
+    AUDIO_PRICE_OFF = {"1080p": 0.112}
+    END_FRAME       = True
+    SEND_RATIO      = True
+    RATIOS          = ("16:9", "9:16", "1:1")
+    RATIO_T2V_ONLY  = True
+    SEND_DURATION   = True
+    DUR_MIN, DUR_MAX = 3, 15
+    DUR_STR         = True
+    DEFAULT_DUR     = 5
+
+    def _extra_args(self, mode: str) -> dict:
+        return {"shot_type": self.params.get("shot_type", "customize")}
+
+
+class KlingO3StandardWorker(KlingO3ProWorker):
+    """Kling O3 Standard — même contrat que le Pro, 0,084 $/s sans audio,
+    0,112 $/s avec (fiches fal 2026-09-24)."""
+    ENDPOINT_T2V    = "fal-ai/kling-video/o3/standard/text-to-video"
+    ENDPOINT_I2V    = "fal-ai/kling-video/o3/standard/image-to-video"
+    MODEL           = "kling-o3-standard"
+    PRICE_PER_S     = 0.112
+    PRICE_BY_RES    = {"1080p": 0.112}
+    AUDIO_PRICE_OFF = {"1080p": 0.084}
 
 
 class _H3FalWorker(_SimpleFalVideoWorker):
@@ -1673,21 +1987,48 @@ class H3MaxTurboWorker(_H3FalWorker):
 
 class Sora2Worker(_CancellableWorker):
     """
-    Génère une vidéo via Sora 2 (OpenAI / fal.ai).
-    Durée fixe 4 s · $0.10/s (~$0.40 par vidéo).
+    Génère une vidéo via Sora 2 (OpenAI / fal.ai) — T2V et I2V, deux paliers.
+
+    Fiches fal 2026-09-24 : durée 4 / 8 / 12 / 16 / 20 s (entier — l'ancien
+    appel n'en envoyait pas et restait à 4 s), ratio 16:9 ou 9:16, résolution
+    « 720p » (Sora 2) ou 720p / 1080p / true_1080p (Sora 2 Pro).
+      Sora 2     : $0.10/s
+      Sora 2 Pro : $0.30/s 720p · $0.50/s 1080p (1792×1024) · $0.70/s true_1080p (1920×1080)
     """
     progress = pyqtSignal(int, str)
     finished = pyqtSignal(dict)
     failed   = pyqtSignal(str)
 
+    _DURATIONS = (4, 8, 12, 16, 20)
+    _PRICE = {
+        "std": {"720p": 0.10, "1080p": 0.10},
+        "pro": {"720p": 0.30, "1080p": 0.50, "true_1080p": 0.70},
+    }
+    _MODEL = {"std": "sora-2", "pro": "sora-2-pro"}
+
     def __init__(self, params: dict):
         """
         params attendus :
           prompt       (str)  requis
-          aspect_ratio (str)  "16:9" | "9:16" | "1:1", défaut "16:9"
+          variant      (str)  "std" | "pro", défaut "std"
+          mode         (str)  "t2v" | "i2v" (image_url / image_path)
+          aspect_ratio (str)  "16:9" | "9:16" (autre → 16:9)
+          duration     (int)  4 | 8 | 12 | 16 | 20 (arrondi au plus proche)
+          resolution   (str)  "720p" | "1080p" | "true_1080p" (Pro)
         """
         super().__init__()
         self.params = params
+
+    @classmethod
+    def snap_duration(cls, seconds) -> int:
+        try:
+            v = float(seconds)
+        except (TypeError, ValueError):
+            return 4
+        return min(cls._DURATIONS, key=lambda d: abs(d - v))
+
+    def _variant(self) -> str:
+        return "pro" if (self.params.get("variant") or "").lower() == "pro" else "std"
 
     def run(self):
         cfg = load_config()
@@ -1698,6 +2039,7 @@ class Sora2Worker(_CancellableWorker):
             self._real(key)
 
     def _mock(self):
+        dur = self.snap_duration(self.params.get("duration", 4))
         for pct, msg in [
             (10, "Sora 2 — mode mock…"),
             (50, "Génération vidéo OpenAI (simulation)…"),
@@ -1705,7 +2047,8 @@ class Sora2Worker(_CancellableWorker):
         ]:
             self.progress.emit(pct, msg)
             time.sleep(0.5)
-        self.finished.emit({"url": "", "duration": 4, "model": "sora-2", "credits_used": 0})
+        self.finished.emit({"url": "", "duration": dur, "model": self._MODEL[self._variant()],
+                            "credits_used": 0})
 
     def _real(self, key: str):
         try:
@@ -1713,8 +2056,23 @@ class Sora2Worker(_CancellableWorker):
             import requests
 
             os.environ["FAL_KEY"] = key
+            ensure_image_urls(fal_client, self.params, self.progress.emit)
 
-            ratio      = self.params.get("aspect_ratio", "16:9")
+            variant = self._variant()
+            mode    = "i2v" if (self.params.get("mode") == "i2v" or self.params.get("image_url")) else "t2v"
+            dur     = self.snap_duration(self.params.get("duration", 4))
+            ratio   = self.params.get("aspect_ratio", "16:9")
+            if ratio not in ("16:9", "9:16"):
+                ratio = "16:9"
+            res     = (self.params.get("resolution", "720p") or "720p").lower().split()[0]
+            table   = self._PRICE[variant]
+            if res not in table:
+                res = "720p"
+            if variant == "std":
+                # Sora 2 (non Pro) : la fiche ne documente que « 720p ».
+                res = "720p"
+            rate    = table[res]
+            cost    = dur * rate
             prompt_raw = self.params.get("prompt", "")
             prompt_en  = engine_prompt(self.params)   # prompt FINAL respecté
 
@@ -1730,25 +2088,25 @@ class Sora2Worker(_CancellableWorker):
                 if style_kw:
                     prompt_en = f"{style_kw}, {prompt_en}"
 
-            self.progress.emit(10, "Sora 2 — soumission (~$0.40 / vidéo)…")
+            endpoint = ("fal-ai/sora-2/image-to-video" if mode == "i2v"
+                        else "fal-ai/sora-2/text-to-video") + ("/pro" if variant == "pro" else "")
+            args: dict = {
+                "prompt":       prompt_en,
+                "aspect_ratio": ratio,
+                "duration":     dur,
+                "resolution":   res,
+            }
+            if mode == "i2v":
+                args["image_url"] = self.params["image_url"]
 
-            result = fal_client.subscribe(
-                "fal-ai/sora-2/text-to-video",
-                arguments={
-                    "prompt":       prompt_en,
-                    "aspect_ratio": ratio,
-                },
-                with_logs=False,
-            )
+            self.progress.emit(10, f"Sora 2{' Pro' if variant == 'pro' else ''} {mode.upper()} — {dur}s {res} (~${cost:.2f})…")
+
+            result = fal_client.subscribe(endpoint, arguments=args, with_logs=False)
 
             if not isinstance(result, dict):
                 raise RuntimeError(f"Réponse inattendue : {str(result)[:200]}")
 
-            video    = result.get("video") or {}
-            url      = video.get("url", "") if isinstance(video, dict) else ""
-            duration = video.get("duration", 4) if isinstance(video, dict) else 4
-            if not url:
-                url = result.get("url", "")
+            url = _extract_video_url(result)
             if not url:
                 raise RuntimeError(f"URL vidéo manquante : {str(result)[:200]}")
 
@@ -1757,19 +2115,19 @@ class Sora2Worker(_CancellableWorker):
 
             out_dir  = _video_output_dir()
             ts       = int(time.time())
-            local    = os.path.join(out_dir, f"sora2_{ts}.mp4")
+            local    = os.path.join(out_dir, f"sora2{'pro' if variant == 'pro' else ''}_{mode}_{dur}s_{ts}.mp4")
             with open(local, "wb") as f:
                 f.write(data)
 
-            self.progress.emit(100, f"Sora 2 ✓  {duration}s · ~$0.40")
+            self.progress.emit(100, f"Sora 2 ✓  {dur}s · {res} · ~${cost:.2f}")
             if not self._cancelled:
                 self.finished.emit({
                     "url":          url,
                     "local_path":   local,
-                    "duration":     duration,
-                    "resolution":   "1080p",
-                    "model":        "sora-2",
-                    "credits_used": 0.40,
+                    "duration":     dur,
+                    "resolution":   res,
+                    "model":        f"{self._MODEL[variant]}-{mode}",
+                    "credits_used": cost,
                 })
 
         except Exception as e:

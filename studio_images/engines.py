@@ -6,13 +6,18 @@ resolution, paramètre de référence…). build_request() centralise la traduct
 d'une demande générique (prompt, taille cible, résolution, références) vers les
 arguments exacts attendus par l'endpoint choisi.
 
-Schémas vérifiés sur fal.ai (juin 2026) :
+Schémas vérifiés sur fal.ai (juin 2026, relus le 2026-09-24) :
 - nano-banana-2 / pro : aspect_ratio enum, resolution (512x512|1K|2K|4K),
   num_images 1-4, output_format, refs via image_urls (endpoint /edit, jusqu'à 14)
 - ideogram/v3         : image_size (enum ou {width,height}), rendering_speed,
   style (AUTO|GENERAL|REALISTIC|DESIGN), image_urls (refs de style)
 - flux-pro/v1.1-ultra : aspect_ratio enum, output_format, image_url (1 réf)
-- recraft/v4.1/*      : image_size ({width,height} jusqu'à 14142), colors
+- recraft/v4.1/*      : image_size ({width,height} jusqu'à 14142), colors — 0,035 $
+- seedream v5 flash   : image_size 1024²–2048², num_images 1-6, /edit ≤ 10 image_urls — 0,027 $
+- qwen-image-2[/pro]  : image_size 512²–2048², num_images 1-4, negative_prompt,
+  /edit 1-3 image_urls — 0,035 $ (Pro 0,075 $)
+- kling-image/o3      : aspect_ratio enum, resolution 1K|2K|4K, num_images 1-9,
+  /image-to-image ≤ 10 image_urls citées « @Image1 » — 0,028 $ (4K ×2)
 """
 
 # Ratios supportés par les moteurs basés sur aspect_ratio
@@ -111,6 +116,51 @@ ENGINES = {
         "output":   "raster",
         "refs":     {"max": 0, "hint": "❌ ce moteur ignore les images de référence"},
     },
+    # ── Ajoutés le 2026-09-24 (fiches fal relues) ─────────────────────────────
+    "qwen_image2": {
+        # image_size 512²–2048², num_images 1-4, negative_prompt ; /edit = 1 à 3 refs.
+        "label":    "Qwen-Image 2  ·  texte & édition · 3 refs  ·  ~$0.035",
+        "endpoint": "fal-ai/qwen-image-2/text-to-image",
+        "edit":     "fal-ai/qwen-image-2/edit",
+        "kind":     "imgsize",
+        "family":   "Qwen",
+        "slug":     "qwen-image-2",
+        "output":   "raster",
+        "refs":     {"max": 3, "hint": "✅ jusqu'à 3 références (édition)"},
+    },
+    "qwen_image2_pro": {
+        "label":    "Qwen-Image 2 Pro  ·  texte & détail  ·  ~$0.075",
+        "endpoint": "fal-ai/qwen-image-2/pro/text-to-image",
+        "kind":     "imgsize",
+        "family":   "Qwen Pro",
+        "slug":     "qwen-image-2-pro",
+        "output":   "raster",
+        "refs":     {"max": 0, "hint": "❌ ce moteur ignore les images de référence"},
+    },
+    "seedream5_flash": {
+        # ⚠ Préfixe SANS « fal-ai/ », comme le Pro. image_size 1024²–2048²
+        # (défaut auto_2K), num_images 1-6, /edit ≤ 10 refs (les 10 DERNIÈRES).
+        "label":    "Seedream 5.0 Flash  ·  ByteDance · rapide · 10 refs  ·  ~$0.027",
+        "endpoint": "bytedance/seedream/v5/flash/text-to-image",
+        "edit":     "bytedance/seedream/v5/flash/edit",
+        "kind":     "seedream",
+        "family":   "Seedream Flash",
+        "slug":     "seedream-5-flash",
+        "output":   "raster",
+        "refs":     {"max": 10, "hint": "✅ jusqu'à 10 références (édition)"},
+    },
+    "kling_image": {
+        # aspect_ratio + resolution 1K/2K/4K (4K = prix double) ; /image-to-image
+        # ≤ 10 refs citées « @Image1 » ; sortie `images`.
+        "label":    "Kling Image O3  ·  Kuaishou · 10 refs @Image1  ·  ~$0.028",
+        "endpoint": "fal-ai/kling-image/o3/text-to-image",
+        "edit":     "fal-ai/kling-image/o3/image-to-image",
+        "kind":     "kling_img",
+        "family":   "Kling",
+        "slug":     "kling-image-o3",
+        "output":   "raster",
+        "refs":     {"max": 10, "hint": "✅ jusqu'à 10 références (@Image1, @Image2…)"},
+    },
     "ideogram": {
         "label":    "Ideogram V3  ·  champion du TEXTE & logos  ·  ~$0.06",
         "endpoint": "fal-ai/ideogram/v3",
@@ -139,7 +189,8 @@ ENGINES = {
         "refs":     {"max": 1, "hint": "⚠️ 1 seule référence (image prompt / variation)"},
     },
     "recraft": {
-        "label":    "Recraft V4.1  ·  branding / éditorial  ·  ~$0.04",
+        # 0,035 $ l'image (fiche fal relue le 2026-09-24 ; c'était noté 0,04).
+        "label":    "Recraft V4.1  ·  branding / éditorial  ·  ~$0.035",
         "endpoint": "fal-ai/recraft/v4.1/text-to-image",
         "kind":     "recraft",
         "family":   "Recraft",
@@ -343,14 +394,33 @@ def build_request(engine_key: str, prompt: str, target: tuple,
 
     if kind in ("seedream", "imgsize"):
         # Modèles DiT (Seedream 5/4.5, Z-Image Turbo, Qwen-Image) : image_size en
-        # objet {width,height} + num_images. Seedream 5.0 Lite a un endpoint /edit
-        # qui accepte jusqu'à 10 images de référence. Schémas best-effort fal.ai.
+        # objet {width,height} + num_images. Seedream 5.0 Lite/Pro/Flash et
+        # Qwen-Image 2 ont un endpoint /edit qui accepte des images de référence
+        # (plafond = refs.max du moteur). Schémas best-effort fal.ai.
         args = {
             "prompt":     prompt,
             "num_images": 1,
             "image_size": _size_obj(target),
         }
-        if kind == "seedream" and refs and e.get("edit"):
+        if refs and e.get("edit"):
+            _max = int(e.get("refs", {}).get("max") or 10)
+            return e["edit"], {**args, "image_urls": refs[:_max]}, "raster"
+        return e["endpoint"], args, "raster"
+
+    if kind == "kling_img":
+        # Kling Image O3 (fal 2026-09-24) : ratio enum + resolution 1K/2K/4K
+        # (le 4K coûte le double : réservé aux cibles > 2560 px). Avec des
+        # références → image-to-image, jusqu'à 10 images citées « @Image1 ».
+        w, h = target
+        res = "4K" if max(w, h) > 2560 else ("2K" if max(w, h) > 1024 else "1K")
+        args = {
+            "prompt":        prompt,
+            "num_images":    1,
+            "aspect_ratio":  _nearest_aspect(target, ["21:9", "16:9", "3:2", "4:3", "1:1", "3:4", "2:3", "9:16"]),
+            "resolution":    res,
+            "output_format": "png",
+        }
+        if refs and e.get("edit"):
             return e["edit"], {**args, "image_urls": refs[:10]}, "raster"
         return e["endpoint"], args, "raster"
 

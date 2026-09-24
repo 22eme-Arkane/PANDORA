@@ -1,20 +1,21 @@
 """
 ui/tab_video_engines.py — Onglet Génération Directe (sans storyboard).
 
-Moteurs disponibles :
-  · Seedance 2.0 T2V      — bytedance/seedance-2.0/text-to-video              (~$0.30/s)
-  · Seedance Fast T2V     — bytedance/seedance-2.0/fast/text-to-video         (~$0.24/s)
-  · Happy Horse 1.0 T2V   — alibaba/happy-horse/text-to-video                 ($0.14-0.28/s)
-  · Happy Horse 1.0 I2V   — alibaba/happy-horse/image-to-video                ($0.14-0.28/s)
-  · Kling O3 4K T2V       — fal-ai/kling-video/o3/4k/text-to-video            (~$0.42/s)
-  · Kling O3 4K I2V       — fal-ai/kling-video/o3/4k/image-to-video           (~$0.42/s)
-  · Kling v3 Pro I2V      — fal-ai/kling-video/v3/pro/image-to-video          ($0.112-0.196/s)
-  · Kling v3 Pro T2V      — fal-ai/kling-video/v3/pro/text-to-video           ($0.112-0.196/s)
+Moteurs disponibles (endpoints et tarifs relus fiche par fiche sur fal.ai le
+2026-09-24 — voir api/video_engines) :
+  · Seedance 2.0 / Fast   — bytedance/seedance-2.0[/fast]/text-to-video       (~$0.30 / ~$0.24 /s)
+  · Seedance 1.5 Pro, 2.0 Mini, LTX-2, LTX-2.3, Wan 2.7, Wan 3.0, Hailuo 2.3,
+    MiniMax H3 (fal, local, ComfyUI), Gemini Omni Flash 1.0 / 1.1, Grok 1.0 / 1.5
+  · Happy Horse 1.1 T2V/I2V — alibaba/happy-horse/v1.1/…                      ($0.14-0.18/s)
+  · Kling O3 4K / Pro / Standard T2V+I2V — fal-ai/kling-video/o3/{4k,pro,standard}/…
+  · Kling v3 Pro I2V/T2V  — fal-ai/kling-video/v3/pro/…                       ($0.112-0.168/s)
   · Kling v3 4K T2V       — fal-ai/kling-video/v3/4k/text-to-video            ($0.28-0.39/s)
-  · PixVerse v6 T2V       — fal-ai/pixverse/v6/text-to-video                  ($0.025-0.115/s)
-  · PixVerse v4.5 I2V     — fal-ai/pixverse/v4.5/image-to-video               ($0.04-0.08/s)
-  · Veo 3.1 T2V           — fal-ai/veo3.1                                     (~$1.00/vidéo)
-  · Sora 2 T2V            — fal-ai/sora-2/text-to-video                       (~$0.40/vidéo)
+  · PixVerse v6 T2V/I2V   — fal-ai/pixverse/v6/{text,image}-to-video          ($0.025-0.115/s)
+  · Veo 3.1 Pro/Fast/Lite T2V+I2V — fal-ai/veo3.1[/fast|/lite][/image-to-video] ($0.03-0.60/s)
+  · Sora 2 / Sora 2 Pro T2V+I2V — fal-ai/sora-2/{text,image}-to-video[/pro]   ($0.10 / $0.30-0.70 /s)
+
+⚠ Liste _ENGINES et liste _forms alignées PAR INDEX : tout ajout se fait aux
+DEUX endroits, dans le même ordre.
 """
 
 import os
@@ -329,7 +330,7 @@ class _KlingT2VForm(QWidget):
         lay.addLayout(params_row)
 
     def _update_dur_label(self, val: int):
-        price = val * (0.196 if self._audio_chk.isChecked() else 0.112)
+        price = val * (0.168 if self._audio_chk.isChecked() else 0.112)
         self._dur_lbl.setText(f"Durée : {val} s  (~${price:.2f})")
 
     def get_params(self) -> dict:
@@ -349,7 +350,11 @@ class _KlingT2VForm(QWidget):
 
 
 class _PixVerseForm(QWidget):
-    """Formulaire PixVerse I2V."""
+    """Formulaire PixVerse v6 I2V (fiche fal 2026-09-24 — la v4.5 n'existe plus).
+    Résolution 360p–1080p, durée 1–15 s, audio optionnel. Le cadre suit l'image."""
+    _PRICE = {"360p": (0.025, 0.035), "540p": (0.035, 0.045),
+              "720p": (0.045, 0.060), "1080p": (0.090, 0.115)}
+
     def __init__(self):
         super().__init__()
         self.setStyleSheet("background:transparent;")
@@ -379,33 +384,64 @@ class _PixVerseForm(QWidget):
         res_col.addWidget(res_lbl)
         self._res_combo = QComboBox()
         self._res_combo.setStyleSheet(_combo_style())
-        self._res_combo.addItem("1080p  (~$0.40 / 5 s)", "1080p")
-        self._res_combo.addItem("720p  (~$0.20 / 5 s)", "720p")
+        self._res_combo.addItem("720p   (~$0.045-0.06/s)", "720p")
+        self._res_combo.addItem("1080p  (~$0.09-0.115/s)", "1080p")
+        self._res_combo.addItem("540p   (~$0.035-0.045/s)", "540p")
+        self._res_combo.addItem("360p   (~$0.025-0.035/s)", "360p")
+        self._res_combo.currentIndexChanged.connect(self._update_dur_label)
         res_col.addWidget(self._res_combo)
+        res_col.addStretch()
         params_row.addLayout(res_col, 1)
 
-        note_col = QVBoxLayout()
-        note_col.setSpacing(6)
-        note_lbl = QLabel("Durée : 5 s (fixe)")
-        note_lbl.setStyleSheet(f"color:{C['text_dim']};font-size:11px;background:transparent;")
-        note_col.addWidget(note_lbl)
-        note2 = QLabel("Sans audio natif · Idéal pour itérations rapides")
-        note2.setStyleSheet(f"color:{C['text_dim']};font-size:10px;background:transparent;")
-        note_col.addWidget(note2)
-        note_col.addStretch()
-        params_row.addLayout(note_col, 1)
+        audio_col = QVBoxLayout()
+        audio_col.setSpacing(6)
+        audio_lbl = QLabel("Audio :")
+        audio_lbl.setStyleSheet(f"color:{C['text_secondary']};font-size:12px;background:transparent;")
+        audio_col.addWidget(audio_lbl)
+        self._audio_chk = QCheckBox("Générer l'audio")
+        self._audio_chk.setChecked(False)
+        self._audio_chk.setStyleSheet(f"color:{C['text_primary']};font-size:12px;background:transparent;")
+        self._audio_chk.toggled.connect(self._update_dur_label)
+        audio_col.addWidget(self._audio_chk)
+        audio_col.addStretch()
+        params_row.addLayout(audio_col, 1)
 
         lay.addLayout(params_row)
+
+        dur_col = QVBoxLayout()
+        dur_col.setSpacing(6)
+        self._dur_lbl = QLabel("Durée : 5 s  (~$0.23)")
+        self._dur_lbl.setStyleSheet(f"color:{C['text_secondary']};font-size:12px;background:transparent;")
+        dur_col.addWidget(self._dur_lbl)
+        self._dur_slider = QSlider(Qt.Orientation.Horizontal)
+        self._dur_slider.setMinimum(1)
+        self._dur_slider.setMaximum(15)
+        self._dur_slider.setValue(5)
+        self._dur_slider.setStyleSheet(_slider_style())
+        self._dur_slider.valueChanged.connect(self._update_dur_label)
+        dur_col.addWidget(self._dur_slider)
+        lay.addLayout(dur_col)
+        lay.addStretch()
+
+    def _update_dur_label(self, *_):
+        val  = self._dur_slider.value()
+        rate = self._PRICE.get(self._res_combo.currentData() or "720p", self._PRICE["720p"])
+        rate = rate[1 if self._audio_chk.isChecked() else 0]
+        self._dur_lbl.setText(f"Durée : {val} s  (~${val * rate:.2f})")
 
     def get_params(self) -> dict | None:
         img = self._img.path()
         if not img:
             return None
+        # Chemin LOCAL → uploadé par le worker (ensure_image_urls), comme les
+        # autres formulaires I2V de cet onglet.
         return {
-            "image_url":  img,
-            "prompt":     self._prompt.toPlainText().strip(),
-            "duration":   5,
-            "resolution": self._res_combo.currentData() or "720p",
+            "mode":           "i2v",
+            "image_path":     img,
+            "prompt":         self._prompt.toPlainText().strip(),
+            "duration":       self._dur_slider.value(),
+            "resolution":     self._res_combo.currentData() or "720p",
+            "generate_audio": self._audio_chk.isChecked(),
         }
 
     def error(self) -> str:
@@ -587,64 +623,10 @@ class _Kling4KForm(QWidget):
         return ""
 
 
-class _Veo31Form(QWidget):
-    """Formulaire Veo 3.1 T2V."""
-    def __init__(self):
-        super().__init__()
-        self.setStyleSheet("background:transparent;")
-        lay = QVBoxLayout(self)
-        lay.setContentsMargins(0, 0, 0, 0)
-        lay.setSpacing(12)
-
-        # Caractéristiques fixes
-        note_card = QWidget()
-        note_card.setStyleSheet(
-            f"QWidget{{background:rgba(78,205,196,0.06);"
-            f"border:1px solid {C['accent_dim']};border-radius:8px;}}"
-        )
-        note_lay = QHBoxLayout(note_card)
-        note_lay.setContentsMargins(14, 10, 14, 10)
-        note_lay.setSpacing(20)
-        for label, value in [
-            ("Durée", "8 s (fixe)"),
-            ("Résolution", "1080p"),
-            ("Audio", "Natif"),
-            ("Coût", "~$1.00 / vidéo"),
-        ]:
-            col = QVBoxLayout()
-            col.setSpacing(2)
-            lbl = QLabel(label.upper())
-            lbl.setStyleSheet(
-                f"color:{C['text_dim']};font-size:9px;"
-                f"letter-spacing:1px;background:transparent;"
-            )
-            val_lbl = QLabel(value)
-            val_lbl.setStyleSheet(
-                f"color:{C['accent']};font-size:12px;font-weight:700;background:transparent;"
-            )
-            col.addWidget(lbl)
-            col.addWidget(val_lbl)
-            note_lay.addLayout(col)
-        note_lay.addStretch()
-        lay.addWidget(note_card)
-
-        self._prompt = QTextEdit()
-        self._prompt.setPlaceholderText(
-            "Décrivez la scène en détail — Veo 3.1 génère vidéo + audio haute qualité…\n"
-            "(FR accepté, traduit automatiquement en anglais)"
-        )
-        self._prompt.setMinimumHeight(120)
-        self._prompt.setMaximumHeight(200)
-        self._prompt.setStyleSheet(_prompt_style())
-        lay.addWidget(self._prompt)
-
-    def get_params(self) -> dict:
-        return {"prompt": self._prompt.toPlainText().strip()}
-
-    def error(self) -> str:
-        if not self._prompt.toPlainText().strip():
-            return "Le prompt est requis pour Veo 3.1."
-        return ""
+# Veo 3.1 et Sora 2 : les formulaires figés (« 8 s · 1080p · ~1 $ la vidéo »,
+# « 4 s · ~0,40 $ ») ont été REMPLACÉS le 24/09/2026 par _NewEngineForm — fal
+# facture à la seconde selon résolution et audio, et accepte 4/6/8 s (Veo) ou
+# 4 à 20 s (Sora). Voir _forms plus bas.
 
 
 class _HappyHorseForm(QWidget):
@@ -939,77 +921,6 @@ class _PixVerseV6Form(QWidget):
         return ""
 
 
-class _Sora2Form(QWidget):
-    """Formulaire Sora 2 T2V."""
-    def __init__(self):
-        super().__init__()
-        self.setStyleSheet("background:transparent;")
-        lay = QVBoxLayout(self)
-        lay.setContentsMargins(0, 0, 0, 0)
-        lay.setSpacing(12)
-
-        note_card = QWidget()
-        note_card.setStyleSheet(
-            f"QWidget{{background:transparent;border:1px solid {C['accent_dim']};border-radius:8px;}}"
-        )
-        note_lay = QHBoxLayout(note_card)
-        note_lay.setContentsMargins(14, 10, 14, 10)
-        note_lay.setSpacing(20)
-        for label, value in [
-            ("Durée", "4 s (fixe)"),
-            ("Résolution", "1080p"),
-            ("Coût", "~$0.40 / vidéo"),
-        ]:
-            col = QVBoxLayout()
-            col.setSpacing(2)
-            lbl = QLabel(label.upper())
-            lbl.setStyleSheet(
-                f"color:{C['text_dim']};font-size:9px;letter-spacing:1px;background:transparent;"
-            )
-            val_lbl = QLabel(value)
-            val_lbl.setStyleSheet(
-                f"color:{C['accent']};font-size:12px;font-weight:700;background:transparent;"
-            )
-            col.addWidget(lbl)
-            col.addWidget(val_lbl)
-            note_lay.addLayout(col)
-        note_lay.addStretch()
-        lay.addWidget(note_card)
-
-        self._prompt = QTextEdit()
-        self._prompt.setPlaceholderText(
-            "Décrivez la scène en détail — Sora 2 génère une vidéo 1080p haute qualité…\n"
-            "(FR accepté, traduit automatiquement en anglais)"
-        )
-        self._prompt.setMinimumHeight(100)
-        self._prompt.setMaximumHeight(180)
-        self._prompt.setStyleSheet(_prompt_style())
-        lay.addWidget(self._prompt)
-
-        ratio_col = QVBoxLayout()
-        ratio_col.setSpacing(6)
-        ratio_lbl = QLabel("Format :")
-        ratio_lbl.setStyleSheet(f"color:{C['text_secondary']};font-size:12px;background:transparent;")
-        ratio_col.addWidget(ratio_lbl)
-        self._ratio_combo = QComboBox()
-        self._ratio_combo.setStyleSheet(_combo_style())
-        for lbl2, val in [("16:9 — Paysage", "16:9"), ("9:16 — Portrait", "9:16"), ("1:1 — Carré", "1:1")]:
-            self._ratio_combo.addItem(lbl2, val)
-        ratio_col.addWidget(self._ratio_combo)
-        lay.addLayout(ratio_col)
-
-    def get_params(self) -> dict:
-        return {
-            "prompt":       self._prompt.toPlainText().strip(),
-            "aspect_ratio": self._ratio_combo.currentData() or "16:9",
-        }
-
-    def error(self) -> str:
-        if not self._prompt.toPlainText().strip():
-            return "Le prompt est requis pour Sora 2."
-        return ""
-
-
 # ── Tab principal ──────────────────────────────────────────────────────────────
 
 class _NewEngineForm(QWidget):
@@ -1020,7 +931,7 @@ class _NewEngineForm(QWidget):
 
     def __init__(self, mode="t2v", *, with_image=False, with_end=False,
                  with_audio=False, with_res=False, res_opts=None,
-                 dur=(4, 12, 5), note=""):
+                 dur=(4, 12, 5), note="", audio_default=True):
         super().__init__()
         self._mode       = mode
         self._with_image = with_image
@@ -1097,10 +1008,14 @@ class _NewEngineForm(QWidget):
         lay.addLayout(dur_col)
 
         if with_audio:
-            self._audio_chk = QCheckBox("Générer l'audio (recommandé)")
-            self._audio_chk.setChecked(True)
+            self._audio_chk = QCheckBox("Générer l'audio (recommandé)" if audio_default
+                                        else "Générer l'audio (facturé en plus)")
+            self._audio_chk.setChecked(bool(audio_default))
             self._audio_chk.setStyleSheet(f"color:{C['text_primary']};font-size:12px;background:transparent;")
             lay.addWidget(self._audio_chk)
+        # La pile de formulaires prend la hauteur du plus grand : sans ce ressort,
+        # l'espace restant s'étalait ENTRE les rangées (libellé loin de son menu).
+        lay.addStretch()
 
     def get_params(self) -> dict | None:
         if self._with_image and not self._img.path():
@@ -1129,6 +1044,38 @@ class _NewEngineForm(QWidget):
         return ""
 
 
+# ── Options de résolution des moteurs relus le 24/09/2026 (fiches fal) ──────
+# Prix AVEC audio quand le moteur en a un (pire cas) ; « 4k » minuscule = la
+# valeur fal (« 4K » majuscule n'existe que chez Kling O3 4K).
+_VEO_RES      = [("720p  (~$0.20-0.40/s)", "720p"), ("1080p  (~$0.20-0.40/s)", "1080p"), ("4K  (~$0.40-0.60/s)", "4k")]
+_VEO_FAST_RES = [("720p  (~$0.10-0.15/s)", "720p"), ("1080p  (~$0.10-0.15/s)", "1080p"), ("4K  (~$0.30-0.35/s)", "4k")]
+_VEO_LITE_RES = [("720p  (~$0.03-0.05/s)", "720p"), ("1080p  (~$0.05-0.08/s)", "1080p")]
+_SORA_PRO_RES = [("720p  (~$0.30/s)", "720p"), ("1080p  (~$0.50/s · 1792×1024)", "1080p"),
+                 ("1080p natif  (~$0.70/s · 1920×1080)", "true_1080p")]
+_WAN27_RES    = [("720p  (~$0.10/s)", "720p"), ("1080p  (~$0.15/s)", "1080p")]
+_WAN30_RES    = [("720p  (~$0.10/s)", "720p"), ("480p  (~$0.05/s)", "480p"), ("1080p  (~$0.20/s)", "1080p")]
+_LTX2_RES     = [("1080p  (~$0.06/s)", "1080p"), ("1440p  (~$0.12/s)", "1440p"), ("2160p  (~$0.24/s)", "2160p")]
+_LTX23_RES    = [("1080p  (~$0.08/s)", "1080p"), ("1440p  (~$0.16/s)", "1440p"), ("2160p  (~$0.32/s)", "2160p")]
+_GEMINI11_RES = [("720p  (~$0.10/s)", "720p"), ("360p  (~$0.03/s)", "360p"), ("1080p  (~$0.15/s)", "1080p"), ("4K  (~$0.30/s)", "4k")]
+_GROK15_RES   = [("720p  (~$0.14/s)", "720p"), ("480p  (~$0.08/s)", "480p"), ("1080p  (~$0.25/s)", "1080p")]
+
+
+# ── Options de résolution des moteurs relus le 24/09/2026 (fiches fal) ──────
+# Prix AVEC audio quand le moteur en a un (pire cas) ; « 4k » minuscule = la
+# valeur fal (« 4K » majuscule n'existe que chez Kling O3 4K).
+_VEO_RES      = [("720p  (~$0.20-0.40/s)", "720p"), ("1080p  (~$0.20-0.40/s)", "1080p"), ("4K  (~$0.40-0.60/s)", "4k")]
+_VEO_FAST_RES = [("720p  (~$0.10-0.15/s)", "720p"), ("1080p  (~$0.10-0.15/s)", "1080p"), ("4K  (~$0.30-0.35/s)", "4k")]
+_VEO_LITE_RES = [("720p  (~$0.03-0.05/s)", "720p"), ("1080p  (~$0.05-0.08/s)", "1080p")]
+_SORA_PRO_RES = [("720p  (~$0.30/s)", "720p"), ("1080p  (~$0.50/s · 1792×1024)", "1080p"),
+                 ("1080p natif  (~$0.70/s · 1920×1080)", "true_1080p")]
+_WAN27_RES    = [("720p  (~$0.10/s)", "720p"), ("1080p  (~$0.15/s)", "1080p")]
+_WAN30_RES    = [("720p  (~$0.10/s)", "720p"), ("480p  (~$0.05/s)", "480p"), ("1080p  (~$0.20/s)", "1080p")]
+_LTX2_RES     = [("1080p  (~$0.06/s)", "1080p"), ("1440p  (~$0.12/s)", "1440p"), ("2160p  (~$0.24/s)", "2160p")]
+_LTX23_RES    = [("1080p  (~$0.08/s)", "1080p"), ("1440p  (~$0.16/s)", "1440p"), ("2160p  (~$0.32/s)", "2160p")]
+_GEMINI11_RES = [("720p  (~$0.10/s)", "720p"), ("360p  (~$0.03/s)", "360p"), ("1080p  (~$0.15/s)", "1080p"), ("4K  (~$0.30/s)", "4k")]
+_GROK15_RES   = [("720p  (~$0.14/s)", "720p"), ("480p  (~$0.08/s)", "480p"), ("1080p  (~$0.25/s)", "1080p")]
+
+
 class TabVideoEngines(QWidget):
     """Onglet génération directe multi-moteurs."""
     generation_done = pyqtSignal(dict)
@@ -1138,9 +1085,9 @@ class TabVideoEngines(QWidget):
         ("Seedance Fast — T2V  (~$0.24/s)",             "seedance_fast_t2v", True),
         ("Seedance 1.5 Pro — T2V  (audio natif · ~$0.05/s) ★", "seedance15_t2v", True),
         ("Seedance 1.5 Pro — I2V  (start/end frame · audio)",  "seedance15_i2v", True),
-        ("LTX-2 — T2V  (4K + audio · ~$0.04/s)",       "ltx2_t2v",          True),
-        ("LTX-2 — I2V  (4K + audio · ~$0.04/s)",       "ltx2_i2v",          True),
-        ("Wan 2.7 — T2V  (Alibaba · first/last frame)", "wan27_t2v",         True),
+        ("LTX-2 — T2V  (1080p-2160p + audio · $0.06-0.24/s)", "ltx2_t2v",    True),
+        ("LTX-2 — I2V  (1080p-2160p + audio · $0.06-0.24/s)", "ltx2_i2v",    True),
+        ("Wan 2.7 — T2V  (Alibaba · 720p/1080p · $0.10-0.15/s)", "wan27_t2v", True),
         ("Hailuo 2.3 Pro — T2V  (MiniMax · ~$0.49/vidéo)", "hailuo23_t2v",   True),
         ("MiniMax H3 — T2V  (768p ~$0.06/s · 2K/4K upscale · audio)",  "h3_t2v",       True),
         ("MiniMax H3 — I2V  (first/last frame · audio)",              "h3_i2v",       True),
@@ -1163,13 +1110,34 @@ class TabVideoEngines(QWidget):
         ("Happy Horse 1.0 — I2V  ($0.14-0.28/s)",      "happy_horse_i2v",   True),
         ("Kling O3 4K — T2V  (~$0.42/s)",              "kling_o3_t2v",      True),
         ("Kling O3 4K — I2V  (~$0.42/s)",              "kling_o3_i2v",      True),
-        ("Kling v3 Pro — I2V  ($0.112-0.196/s)",       "kling_i2v",         True),
-        ("Kling v3 Pro — T2V  ($0.112-0.196/s)",       "kling_t2v",         True),
+        ("Kling v3 Pro — I2V  ($0.112-0.168/s)",       "kling_i2v",         True),
+        ("Kling v3 Pro — T2V  ($0.112-0.168/s)",       "kling_t2v",         True),
         ("Kling v3 4K — T2V  ($0.28-0.39/s)",          "kling_4k_t2v",      True),
         ("PixVerse v6 — T2V  ($0.025-0.115/s)",        "pixverse_v6_t2v",   True),
-        ("PixVerse v4.5 — I2V  ($0.04-0.08/s)",        "pixverse_i2v",      True),
-        ("Veo 3.1 — T2V  (~$1.00 / vidéo)",            "veo31_t2v",         True),
-        ("Sora 2 — T2V  (~$0.40 / vidéo · 4 s)",      "sora2_t2v",         True),
+        ("PixVerse v6 — I2V  ($0.025-0.115/s · 1-15 s)", "pixverse_i2v",    True),
+        ("Veo 3.1 — T2V  (Google · audio · $0.20-0.60/s)", "veo31_t2v",      True),
+        ("Sora 2 — T2V  (OpenAI · $0.10/s · 4-20 s)",   "sora2_t2v",         True),
+        # ── Ajoutés le 24/09/2026 (fiches fal) — formulaires alignés par INDEX ──
+        ("Veo 3.1 — I2V  (Google · audio · $0.20-0.60/s)",        "veo31_i2v",      True),
+        ("Veo 3.1 Fast — T2V  (Google · audio · $0.10-0.35/s)",   "veo31_fast_t2v", True),
+        ("Veo 3.1 Fast — I2V  (Google · audio · $0.10-0.35/s)",   "veo31_fast_i2v", True),
+        ("Veo 3.1 Lite — T2V  (Google · éco · $0.03-0.08/s)",     "veo31_lite_t2v", True),
+        ("Veo 3.1 Lite — I2V  (Google · éco · $0.03-0.08/s)",     "veo31_lite_i2v", True),
+        ("Sora 2 — I2V  (OpenAI · $0.10/s · 4-20 s)",             "sora2_i2v",      True),
+        ("Sora 2 Pro — T2V  (OpenAI · $0.30-0.70/s · 4-20 s)",    "sora2_pro_t2v",  True),
+        ("Sora 2 Pro — I2V  (OpenAI · $0.30-0.70/s · 4-20 s)",    "sora2_pro_i2v",  True),
+        ("Kling O3 Pro — T2V  ($0.112-0.14/s)",                   "kling_o3pro_t2v", True),
+        ("Kling O3 Pro — I2V  (first/last frame · $0.112-0.14/s)", "kling_o3pro_i2v", True),
+        ("Kling O3 Standard — T2V  ($0.084-0.112/s)",             "kling_o3std_t2v", True),
+        ("Kling O3 Standard — I2V  (first/last frame · $0.084-0.112/s)", "kling_o3std_i2v", True),
+        ("Wan 3.0 — T2V  (Alibaba · audio · 2-30 s · $0.05-0.20/s)", "wan30_t2v",   True),
+        ("Wan 3.0 — I2V  (first/last frame · audio · 2-30 s)",    "wan30_i2v",      True),
+        ("LTX-2.3 Pro — T2V  (1080p-2160p + audio · $0.08-0.32/s)", "ltx23_t2v",    True),
+        ("LTX-2.3 Pro — I2V  (first/last frame · $0.08-0.32/s)",  "ltx23_i2v",      True),
+        ("Gemini Omni Flash 1.1 — T2V  (Google · 3-10 s · $0.03-0.30/s)", "gemini11_t2v", True),
+        ("Gemini Omni Flash 1.1 — I2V  (first/last frame · $0.03-0.30/s)", "gemini11_i2v", True),
+        ("Grok Imagine 1.5 — T2V  (xAI · 1-15 s · $0.08-0.25/s)", "grok15_t2v",     True),
+        ("Grok Imagine 1.5 — I2V  (xAI · 1-15 s · $0.08-0.25/s)", "grok15_i2v",     True),
     ]
 
     def __init__(self):
@@ -1202,11 +1170,12 @@ class TabVideoEngines(QWidget):
             "▸ Génération vidéo sans storyboard — idéal pour expérimenter rapidement avec différents modèles.",
             "▸ Seedance 2.0 : moteur principal (~$0.30/s) · Seedance Fast : version rapide (~$0.24/s).",
             "▸ Happy Horse 1.0 ★ : modèle Alibaba #1 Video Arena, 720p ou 1080p, T2V + I2V ($0.14–0.28/s).",
-            "▸ Kling O3 4K : dernier Kling, résolution 4K, T2V + I2V (~$0.42/s).",
-            "▸ Kling v3 Pro : I2V + T2V ($0.112–0.196/s) · Kling v3 4K : T2V ultra-def ($0.28–0.39/s).",
-            "▸ PixVerse v6 : T2V 360p–1080p avec audio optionnel ($0.025–0.115/s).",
-            "▸ Veo 3.1 : modèle Google, audio natif, 8 s fixes, 1080p (~$1.00/vidéo).",
-            "▸ Sora 2 : modèle OpenAI, 4 s fixes, 1080p, haute qualité (~$0.40/vidéo).",
+            "▸ Kling O3 : Pro ($0.112–0.14/s), Standard ($0.084–0.112/s) et 4K (~$0.42/s), T2V + I2V avec image de fin.",
+            "▸ Kling v3 Pro : I2V + T2V ($0.112–0.168/s) · Kling v3 4K : T2V ultra-def ($0.28–0.39/s).",
+            "▸ PixVerse v6 : T2V + I2V 360p–1080p, 1 à 15 s, audio optionnel ($0.025–0.115/s).",
+            "▸ Veo 3.1 : Google, audio natif, 4/6/8 s, 720p → 4K — Pro $0.20–0.60/s · Fast $0.10–0.35/s · Lite $0.03–0.08/s.",
+            "▸ Sora 2 : OpenAI, 4 à 20 s, $0.10/s · Sora 2 Pro : 720p → 1080p natif, $0.30–0.70/s.",
+            "▸ Nouveaux (09/2026) : Wan 3.0 (2-30 s, audio), LTX-2.3 Pro, Gemini Omni Flash 1.1, Grok Imagine 1.5 — T2V + I2V.",
             "▸ Les prompts en français sont traduits automatiquement en anglais avant envoi.",
         ], C))
 
@@ -1272,9 +1241,12 @@ class TabVideoEngines(QWidget):
             _NewEngineForm("i2v", with_image=True, with_end=True, with_audio=True, with_res=True,
                            res_opts=[("720p", "720p"), ("480p", "480p")],
                            dur=(4, 12, 5), note="Seedance 1.5 Pro · raccord start / end frame"),
-            _NewEngineForm("t2v", dur=(4, 10, 5), note="LTX-2 · 4K + audio stéréo"),
-            _NewEngineForm("i2v", with_image=True, dur=(4, 10, 5), note="LTX-2 · image-to-video"),
-            _NewEngineForm("t2v", dur=(4, 10, 5), note="Wan 2.7 · first / last frame"),
+            _NewEngineForm("t2v", with_audio=True, with_res=True, res_opts=_LTX2_RES, dur=(6, 10, 6),
+                           note="LTX-2 · 6 / 8 / 10 s · audio natif"),
+            _NewEngineForm("i2v", with_image=True, with_audio=True, with_res=True, res_opts=_LTX2_RES,
+                           dur=(6, 10, 6), note="LTX-2 · image-to-video · 6 / 8 / 10 s"),
+            _NewEngineForm("t2v", with_res=True, res_opts=_WAN27_RES, dur=(2, 15, 5),
+                           note="Wan 2.7 · 720p / 1080p · 2-15 s"),
             _NewEngineForm("t2v", dur=(6, 10, 6), note="Hailuo 2.3 Pro · prix fixe ~$0.49 / vidéo"),
             # ── MiniMax H3 (fal, relevé 2026-09-13) — 5 à 15 s, audio natif ──
             # Formulaires alignés par INDEX sur _ENGINES : un décalage ici et
@@ -1351,8 +1323,51 @@ class TabVideoEngines(QWidget):
             _Kling4KForm(),
             _PixVerseV6Form(),
             _PixVerseForm(),
-            _Veo31Form(),
-            _Sora2Form(),
+            _NewEngineForm("t2v", with_audio=True, with_res=True, res_opts=_VEO_RES, dur=(4, 8, 8),
+                           note="Veo 3.1 · Google · audio natif · 4 / 6 / 8 s · 16:9 ou 9:16"),
+            _NewEngineForm("t2v", dur=(4, 20, 4),
+                           note="Sora 2 · OpenAI · 720p · 4 / 8 / 12 / 16 / 20 s · 16:9 ou 9:16"),
+            # ── Ajoutés le 24/09/2026 — même ordre que _ENGINES ──────────────
+            _NewEngineForm("i2v", with_image=True, with_audio=True, with_res=True, res_opts=_VEO_RES,
+                           dur=(4, 8, 8), note="Veo 3.1 · image-to-video · 4 / 6 / 8 s"),
+            _NewEngineForm("t2v", with_audio=True, with_res=True, res_opts=_VEO_FAST_RES, dur=(4, 8, 8),
+                           note="Veo 3.1 Fast · Google · 4 / 6 / 8 s · 16:9 ou 9:16"),
+            _NewEngineForm("i2v", with_image=True, with_audio=True, with_res=True, res_opts=_VEO_FAST_RES,
+                           dur=(4, 8, 8), note="Veo 3.1 Fast · image-to-video"),
+            _NewEngineForm("t2v", with_audio=True, with_res=True, res_opts=_VEO_LITE_RES, dur=(4, 8, 8),
+                           note="Veo 3.1 Lite · Google · le moins cher des Veo"),
+            _NewEngineForm("i2v", with_image=True, with_audio=True, with_res=True, res_opts=_VEO_LITE_RES,
+                           dur=(4, 8, 8), note="Veo 3.1 Lite · image-to-video"),
+            _NewEngineForm("i2v", with_image=True, dur=(4, 20, 4),
+                           note="Sora 2 · image-to-video · 4 / 8 / 12 / 16 / 20 s"),
+            _NewEngineForm("t2v", with_res=True, res_opts=_SORA_PRO_RES, dur=(4, 20, 4),
+                           note="Sora 2 Pro · OpenAI · 4 / 8 / 12 / 16 / 20 s · 16:9 ou 9:16"),
+            _NewEngineForm("i2v", with_image=True, with_res=True, res_opts=_SORA_PRO_RES, dur=(4, 20, 4),
+                           note="Sora 2 Pro · image-to-video"),
+            _NewEngineForm("t2v", with_audio=True, audio_default=False, dur=(3, 15, 5),
+                           note="Kling O3 Pro · 16:9 · 9:16 · 1:1 · audio en option"),
+            _NewEngineForm("i2v", with_image=True, with_end=True, with_audio=True, audio_default=False,
+                           dur=(3, 15, 5), note="Kling O3 Pro · première / dernière image"),
+            _NewEngineForm("t2v", with_audio=True, audio_default=False, dur=(3, 15, 5),
+                           note="Kling O3 Standard · le Kling le moins cher"),
+            _NewEngineForm("i2v", with_image=True, with_end=True, with_audio=True, audio_default=False,
+                           dur=(3, 15, 5), note="Kling O3 Standard · première / dernière image"),
+            _NewEngineForm("t2v", with_audio=True, with_res=True, res_opts=_WAN30_RES, dur=(2, 30, 5),
+                           note="Wan 3.0 · audio natif · plan-séquence jusqu'à 30 s"),
+            _NewEngineForm("i2v", with_image=True, with_end=True, with_audio=True, with_res=True,
+                           res_opts=_WAN30_RES, dur=(2, 30, 5), note="Wan 3.0 · première / dernière image · 2-30 s"),
+            _NewEngineForm("t2v", with_audio=True, with_res=True, res_opts=_LTX23_RES, dur=(6, 10, 6),
+                           note="LTX-2.3 Pro · 6 / 8 / 10 s · 16:9 ou 9:16"),
+            _NewEngineForm("i2v", with_image=True, with_end=True, with_audio=True, with_res=True,
+                           res_opts=_LTX23_RES, dur=(6, 10, 6), note="LTX-2.3 Pro · première / dernière image"),
+            _NewEngineForm("t2v", with_res=True, res_opts=_GEMINI11_RES, dur=(3, 10, 8),
+                           note="Gemini Omni Flash 1.1 · son natif · 16:9 ou 9:16"),
+            _NewEngineForm("i2v", with_image=True, with_end=True, with_res=True, res_opts=_GEMINI11_RES,
+                           dur=(3, 10, 8), note="Gemini Omni Flash 1.1 · première / dernière image"),
+            _NewEngineForm("t2v", with_res=True, res_opts=_GROK15_RES, dur=(1, 15, 6),
+                           note="Grok Imagine 1.5 · xAI · son compris"),
+            _NewEngineForm("i2v", with_image=True, with_res=True, res_opts=_GROK15_RES, dur=(1, 15, 6),
+                           note="Grok Imagine 1.5 · image-to-video (le cadre suit l'image)"),
         ]
         for form in self._forms:
             self._stack.addWidget(form)
@@ -1564,7 +1579,37 @@ class TabVideoEngines(QWidget):
         elif key == "sora2_t2v":
             from api.video_engines import Sora2Worker
             self._worker = Sora2Worker(params)
+        # ── Moteurs ajoutés le 24/09/2026 (fiches fal) ─────────────────────
+        elif key in ("veo31_i2v", "veo31_fast_t2v", "veo31_fast_i2v",
+                     "veo31_lite_t2v", "veo31_lite_i2v"):
+            from api.video_engines import Veo3Worker
+            params["variant"] = "fast" if "fast" in key else ("lite" if "lite" in key else "pro")
+            self._worker = Veo3Worker(params)
+        elif key in ("sora2_i2v", "sora2_pro_t2v", "sora2_pro_i2v"):
+            from api.video_engines import Sora2Worker
+            if "pro" in key:
+                params["variant"] = "pro"
+            self._worker = Sora2Worker(params)
+        elif key in ("kling_o3pro_t2v", "kling_o3pro_i2v"):
+            from api.video_engines import KlingO3ProWorker
+            self._worker = KlingO3ProWorker(params)
+        elif key in ("kling_o3std_t2v", "kling_o3std_i2v"):
+            from api.video_engines import KlingO3StandardWorker
+            self._worker = KlingO3StandardWorker(params)
+        elif key in ("wan30_t2v", "wan30_i2v"):
+            from api.video_engines import Wan30Worker
+            self._worker = Wan30Worker(params)
+        elif key in ("ltx23_t2v", "ltx23_i2v"):
+            from api.video_engines import LTX23Worker
+            self._worker = LTX23Worker(params)
+        elif key in ("gemini11_t2v", "gemini11_i2v"):
+            from api.video_engines import GeminiOmniFlash11Worker
+            self._worker = GeminiOmniFlash11Worker(params)
+        elif key in ("grok15_t2v", "grok15_i2v"):
+            from api.video_engines import GrokVideo15Worker
+            self._worker = GrokVideo15Worker(params)
         else:
+            # pixverse_i2v — PixVerse v6 image-to-video (la v4.5 a quitté fal).
             from api.video_engines import PixVerseWorker
             self._worker = PixVerseWorker(params)
 

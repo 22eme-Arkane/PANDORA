@@ -404,6 +404,14 @@ class TabUpscaleLive(QScrollArea):
             from core.worker import abandon_thread
             abandon_thread(self._worker)
         from api.upscale import UpscaleVideoWorker
+        if (self._model_combo.currentData() or "") == "seedvr_local":
+            # SeedVR2 local : ComfyUI lancé et attendu si besoin (ui/external_autostart).
+            from core import comfy as _cf
+            if not _cf.discover():
+                from ui.external_autostart import ensure_ready
+                if not ensure_ready("comfyui", self):
+                    self._on_item_failed("ComfyUI injoignable : lancez ComfyUI Desktop, puis relancez.")
+                    return
         self._worker = UpscaleVideoWorker(
             it["path"],
             model=self._model_combo.currentData() or "topaz",

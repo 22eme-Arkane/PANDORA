@@ -711,6 +711,8 @@ def storyboard_boutons_portes_du_cinema():
     # routage comfy_edit part vers api.comfy_edit.ComfyEditWorker.
     _keys = [t._engine_combo.itemData(i) for i in range(t._engine_combo.count())]
     assert "seedance-2.5" in _keys
+    from api.video_edit import EDIT_ENGINES as _EDIT
+    assert all(k in _keys for k in _EDIT), "éditeurs vidéo cloud proposés côté Live (parité)"
     _src = inspect.getsource(MM.TabModifyLive._process_next)
     assert "ComfyEditWorker" in _src and 'startswith("comfy_edit:")' in _src
     # Un téléchargement raté n'est plus un « ✓ » ; une simulation est nommée.
@@ -1067,9 +1069,12 @@ def estimation_prix_generation():
             "Mini 480p doit être le tarif le moins cher, pas le repli à $0.30"
         # 4K bien plus cher.
         assert pricing.estimate("seedance-2.0", "4k", 50.0, 10)[0] > 50, "4K > 1080p/720p"
-        # Veo : facturé au CLIP (durée non prise en compte).
+        # Veo 3.1 : à la SECONDE depuis la relecture des fiches fal du
+        # 24/09/2026 (0,40 $/s en 1080p avec audio) — « 1 $ le clip » était faux
+        # d'un facteur trois. Hailuo 2.3 Pro reste le seul moteur au clip.
         c_veo, m_veo = pricing.estimate("veo-3.1", "1080p", 40.0, 5)
-        assert m_veo == "clip" and abs(c_veo - 5.0) < 0.01, "Veo 5 clips × $1 = $5"
+        assert m_veo == "s" and abs(c_veo - 16.0) < 0.01, f"Veo 40 s × $0.40 = $16 ({c_veo})"
+        assert pricing.estimate("hailuo-2.3-pro", "", 6.0, 2) == (0.98, "clip")
         # Le message contient le montant + le rappel fal.ai.
         msg = pricing.format_estimate("Seedance 2.0", "seedance-2.0", "720p", 50.0, 10)
         assert "$15.17" in msg and "10 plans" in msg and "fal.ai" in msg, msg
@@ -1382,8 +1387,11 @@ def coecriture_conducteur_chirurgicale():
 def moteurs_filtres_workflow():
     """Seuls les moteurs compatibles workflow (i2v/keyframes/réfs) sont proposés."""
     from core.engine_caps import workflow_compatible, sequence_engines, ENGINE_CAPS
-    assert not workflow_compatible("veo-3.1") and not workflow_compatible("sora-2"), \
-        "t2v purs écartés"
+    # Veo 3.1 et Sora 2 étaient écartés (t2v purs) jusqu'au 24/09/2026 : fal
+    # expose leurs endpoints image-to-video, api/video_engines les envoie.
+    assert workflow_compatible("veo-3.1") and workflow_compatible("sora-2"), \
+        "Veo/Sora i2v depuis le 24/09/2026"
+    assert not ENGINE_CAPS["veo-3.1"]["end_frame"] and ENGINE_CAPS["veo-3.1"]["refs"] == "none"
     for k in ("seedance-2.0", "kling-v3-pro", "happy-horse-1.0", "pixverse-v6"):
         assert workflow_compatible(k), f"{k} compatible"
     assert ENGINE_CAPS["kling-v3-pro"]["end_frame"], "Kling v3 = keyframes (end_image_url)"
@@ -1391,10 +1399,10 @@ def moteurs_filtres_workflow():
     import core.context as _ctx, tempfile as _tf
     from ui.tab_t2v_live import TabT2V, _ENGINES
     keys = [k for _, k in sequence_engines(_ENGINES)]
-    assert "veo-3.1" not in keys and "sora-2" not in keys
+    assert "veo-3.1" in keys and "sora-2" in keys
     t = TabT2V()
     combo_keys = [t.cb_model.itemData(i) for i in range(t.cb_model.count())]
-    assert "veo-3.1" not in combo_keys and "sora-2" not in combo_keys
+    assert "veo-3.1" in combo_keys and "sora-2" in combo_keys
     assert "kling-v3-pro" in combo_keys and "seedance-2.0" in combo_keys
     # Les workers externes savent uploader les keyframes locales
     import api.video_engines as ve, inspect as _i
@@ -1645,8 +1653,11 @@ def workers_construction():
     from api.live_screenplay import GenerateDecoupageWorker, ArrangeConducteurStreamWorker
     from api.live_extract import FormatConducteurWorker
     from core.music_analysis import AnalyzeMusicWorker
-    assert [k for _, k in UPSCALE_MODELS] == ["topaz", "seedvr"]
+    # 24/09/2026 : Topaz Astra 2 (génératif, fal `topaz/upscale/video/creative`)
+    # et SeedVR2 sur ComfyUI (0 $) rejoignent la liste.
+    assert [k for _, k in UPSCALE_MODELS] == ["topaz", "topaz_creative", "seedvr", "seedvr_local"]
     assert UpscaleVideoWorker("x.mp4", model="topaz", upscale_factor=4)._factor == 4
+    assert UpscaleVideoWorker("x.mp4", model="topaz_creative")._model == "topaz_creative"
     # Modèles Topaz = valeurs EXACTES de l'enum fal.ai (vu en réel : « Gaia » nu
     # → erreur immédiate ; seuls Proteus/Nyx nus existent)
     from api.upscale import TOPAZ_MODELS
@@ -1667,12 +1678,16 @@ def workers_construction():
     assert "abandon_thread" in src_tab, "annulation = worker parqué (anti-crash)"
     assert "_cancelled" in inspect.getsource(UPS.TabUpscaleLive._process_next), \
         "la file s'arrête après annulation"
-    # Sortie upscale = MÊME NOM que la source (relink direct dans DaVinci)
-    src_u = inspect.getsource(UpscaleVideoWorker._real)
+    # Sortie upscale = MÊME NOM que la source (relink direct dans DaVinci).
+    # Depuis le 24/09/2026 le nom est résolu par _output_path(), partagé par
+    # les modes fal ET local (SeedVR2 sur ComfyUI).
+    src_u = inspect.getsource(UpscaleVideoWorker._output_path)
     assert "os.path.basename(self._video)" in src_u, \
         "nom de sortie = nom du fichier source"
-    assert "int(time.time())" not in src_u, \
-        "pas de timestamp dans le nom (casserait le relink)"
+    for _m in (UpscaleVideoWorker._real, UpscaleVideoWorker._local):
+        _s = inspect.getsource(_m)
+        assert "_output_path()" in _s and "int(time.time())" not in _s, \
+            f"{_m.__name__} : pas de timestamp dans le nom (casserait le relink)"
     assert SFX1VideoWorker("x.mp4", "p", 12.0)._duration == 12.0
     assert SFX1Worker("p", 10.0)._duration == 10.0
     assert GenerateDecoupageWorker("t", "mapping")._mode == "mapping"
@@ -7416,6 +7431,44 @@ def h3_et_comfy_generables_depuis_les_sequences_live():
     assert isinstance(w, ComfyWorker) and w.params["mode"] == "i2v" \
         and w.params["workflow_path"].endswith("minimax_h3_i2v.json")
     assert 'ensure_ready("comfyui"' in inspect.getsource(_T), "guidage ComfyUI absent du Studio Live"
+
+
+@test
+def moteurs_fal_relus_24_09_2026_live():
+    """Miroir Live de la relecture des fiches fal du 24/09/2026 : les neuf moteurs
+    ajoutés (Kling O3 Pro/Standard, Veo Fast/Lite, Sora 2 Pro, Wan 3.0,
+    LTX-2.3, Gemini Omni Flash 1.1, Grok 1.5) sont dans les Séquences Live ET
+    dans l'onglet Moteurs Live, routés vers les mêmes workers que le Cinéma ;
+    Veo et Sora, désormais i2v, entrent dans le workflow séquence."""
+    from core import engine_caps as _caps
+    import ui.tab_t2v_live as _T
+    import ui.tab_video_engines_live as _M
+    import api.video_engines as ve
+    new_keys = ("veo-3.1-fast", "veo-3.1-lite", "sora-2-pro", "kling-o3-pro", "kling-o3-standard",
+                "wan-3.0", "ltx-2.3", "gemini-omni-flash-1.1", "grok-video-1.5")
+    listed = [k for _l, k in _caps.sequence_engines(_T._ENGINES)]
+    for k in new_keys + ("veo-3.1", "sora-2"):
+        assert k in [e[1] for e in _T._ENGINES], f"{k} absent de la liste du Studio Live"
+        assert k in listed, f"{k} filtré du combo Live (ENGINE_CAPS)"
+        assert k in _T._ENGINE_RESOLUTIONS and k in _T._TEXT_FALLBACK_ENGINES, k
+    base = {"prompt": "x", "aspect_ratio": "16:9", "duration": 5}
+    assert isinstance(_T._make_ext_worker("kling-o3-pro", base), ve.KlingO3ProWorker)
+    assert isinstance(_T._make_ext_worker("ltx-2.3", base), ve.LTX23Worker)
+    assert isinstance(_T._make_ext_worker("gemini-omni-flash-1.1", base), ve.GeminiOmniFlash11Worker)
+    w = _T._make_ext_worker("veo-3.1-lite", {**base, "image_path": "C:/x/mood.png"})
+    assert isinstance(w, ve.Veo3Worker) and w.params["variant"] == "lite"
+    assert _T._ENGINE_MAX_DURATION["sora-2-pro"] == 20
+    assert [v for _l, v in _T._ENGINE_RESOLUTIONS["seedance-2.5"]] == ["720p", "1080p", "480p"]
+    keys = [k for _, k, _ in _M.TabVideoEngines._ENGINES]
+    for k in ("veo31_fast_i2v", "sora2_pro_i2v", "kling_o3std_i2v", "wan30_t2v", "ltx23_i2v",
+              "gemini11_t2v", "grok15_i2v", "pixverse_i2v"):
+        assert k in keys, f"Moteurs Live : {k} absent"
+    tab = _M.TabVideoEngines()
+    assert len(tab._forms) == len(keys), "Moteurs Live : formulaires désalignés"
+    assert tab._forms[keys.index("wan30_i2v")]._mode == "i2v"
+    assert tab._forms[keys.index("kling_o3std_t2v")]._audio_chk.isChecked() is False
+    tab.deleteLater()
+    assert "_Veo31Form" not in inspect.getsource(_M) and "PixVerse v4.5" not in inspect.getsource(_M)
 
 
 if __name__ == "__main__":

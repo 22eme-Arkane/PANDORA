@@ -14,8 +14,9 @@ Fast à $0.18 au lieu de $0.2419) a survécu dans quinze fichiers.
 À chaque mise à jour : corriger ICI, puis répercuter dans les libellés.
 
 Deux modes de facturation :
-  - à la SECONDE (Seedance, PixVerse, Happy Horse, Kling…) → prix × durée totale ;
-  - au CLIP (Veo 3.1, Sora 2 : durée fixe) → prix × nombre de clips.
+  - à la SECONDE (Seedance, PixVerse, Happy Horse, Kling, Veo, Sora…) → prix × durée ;
+  - au CLIP (Hailuo 2.3 Pro : prix fixe) → prix × nombre de clips.
+Relecture fiche par fiche des tarifs fal le 2026-09-24 (voir api/video_engines).
 """
 
 # $/seconde par moteur × résolution (valeurs API minuscules « 4k/1080p/720p/480p »).
@@ -29,14 +30,17 @@ Deux modes de facturation :
 # ci-dessous sont cette formule appliquée aux définitions usuelles — fal publie
 # lui-même 720p et 1080p en $/s, et les deux concordent à 0,3 % près.
 _PER_SECOND = {
-    # Seedance 2.5 (sortie fal 2026-08-07) : 720p MAXIMUM — ni 1080p ni 4K —
-    # et 56 % plus cher que la 2.0 à résolution égale. Ce n'est pas un
+    # Seedance 2.5 (sortie fal 2026-08-07 ; fiche relue le 2026-09-24) : le
+    # 1080p est ARRIVÉ depuis (1,164 $/s — 2,5 × le 720p) ; toujours pas de
+    # 4K, et 56 % plus cher que la 2.0 à résolution égale. Ce n'est pas un
     # remplacement : voir core/seedance_family.
-    "seedance-2.5":      {"720p": 0.4730, "480p": 0.2205},
+    "seedance-2.5":      {"1080p": 1.164, "720p": 0.4730, "480p": 0.2205},
     "seedance-2.0":      {"4k": 1.56, "1080p": 0.682, "720p": 0.3034, "480p": 0.135},
     "seedance-2.0-fast": {"720p": 0.2419, "480p": 0.108},
     "seedance-2.0-mini": {"720p": 0.1547, "480p": 0.0721},
-    "pixverse-v6":       {"1080p": 0.115, "720p": 0.075, "480p": 0.025},
+    # PixVerse v6 (fiches fal 2026-09-24) : tarif AVEC audio, le pire cas
+    # (sans : 0,025 / 0,035 / 0,045 / 0,090). Le 720p était compté 0,075.
+    "pixverse-v6":       {"1080p": 0.115, "720p": 0.060, "540p": 0.045, "360p": 0.035},
     # Happy Horse : la clé reste « -1.0 » car elle est ENREGISTRÉE dans les
     # plans et l'historique des projets existants — la renommer les ferait
     # retomber sur le repli. Le moteur appelé est bien la v1.1 depuis le
@@ -50,8 +54,28 @@ _PER_SECOND = {
     # dans core/flux3_family ; ici seul le tarif du mode courant.
     "flux-3":       {"1080p": 0.29, "720p": 0.17},
     "flux-3-draft": {"720p": 0.06},
-    "kling-v3-pro":      {"1080p": 0.15},          # manuel : $0.112–0.196/s → ~milieu
+    # Kling v3 Pro (fiche fal 2026-09-24) : 0,112 $/s sans audio, 0,168 avec —
+    # l'audio est activé par défaut dans PANDORA, on compte le pire cas.
+    "kling-v3-pro":      {"1080p": 0.168},
     "kling-o3-4k":       {"4k": 0.42, "4K": 0.42},
+    # Kling O3 Pro / Standard (fal 2026-09-24) : avec audio (sans : 0,112 / 0,084).
+    "kling-o3-pro":      {"1080p": 0.14},
+    "kling-o3-standard": {"1080p": 0.112},
+    # Veo 3.1 (fal 2026-09-24) : À LA SECONDE, selon résolution et audio — le
+    # journal comptait « 1 $ la vidéo » pour un clip qui en coûtait 3,20.
+    # Valeurs AVEC audio (défaut) ; sans : Pro 0,20 / 0,40 (4k), Fast 0,10 /
+    # 0,30 (4k), Lite 0,03 (720p) / 0,05 (1080p).
+    "veo-3.1":       {"720p": 0.40, "1080p": 0.40, "4k": 0.60},
+    "veo-3.1-fast":  {"720p": 0.15, "1080p": 0.15, "4k": 0.35},
+    "veo-3.1-lite":  {"720p": 0.05, "1080p": 0.08},
+    # Sora 2 (fal 2026-09-24) : 0,10 $/s, durée 4 à 20 s — plus « 0,40 $ le
+    # clip de 4 s ». Sora 2 Pro : 720p 0,30 · 1080p 0,50 · true_1080p 0,70.
+    "sora-2":        {"720p": 0.10, "1080p": 0.10},
+    "sora-2-pro":    {"720p": 0.30, "1080p": 0.50, "true_1080p": 0.70},
+    # Wan 3.0 (fal 2026-09-24) et Wan 2.7 (720p 0,10 · 1080p 0,15 — il n'avait
+    # aucun tarif et tombait sur le repli 0,30).
+    "wan-3.0":       {"720p": 0.10, "480p": 0.05, "1080p": 0.20},
+    "wan-2.7":       {"720p": 0.10, "1080p": 0.15},
 }
 # MiniMax H3 (fal 2026-09-13) : la grille vit dans core/h3_family — UNE source,
 # lue ici plutôt que recopiée. Tarif PLEIN (la promo −75 % de lancement de
@@ -70,22 +94,32 @@ _PER_SECOND["minimax-h3-local"] = {"480p": 0.0, "768p": 0.0, "1080p": 0.0,
                                    "rapide": 0.0, "qualite": 0.0}
 # ComfyUI (13/09/2026) : rendu sur la machine de l'utilisateur, rien n'est facturé.
 _PER_SECOND["comfy"] = {"480p": 0.0, "768p": 0.0, "1080p": 0.0, "": 0.0}
+# Éditeurs vidéo cloud de « Modifier un clip » (24/09/2026) : la grille vit
+# dans api/video_edit.EDIT_ENGINES — UNE source, lue ici.
+try:
+    from api.video_edit import price_table as _edit_prices
+    _PER_SECOND.update(_edit_prices())
+except Exception:
+    pass
 # Moteurs de la famille _SimpleFalVideoWorker (api/video_engines) qui portaient
 # leur tarif UNIQUEMENT dans leur attribut PRICE_PER_S : absents de la grille,
 # ils étaient journalisés au repli 0,30 $/s (constat 14/09/2026). Les valeurs
 # ci-dessous sont celles des workers ; le harnais vérifie qu'elles ne divergent
 # pas de plus de 10 % — deux chiffres différents avant et après seraient un
-# mensonge. Wan 2.7 n'annonce de tarif nulle part : il reste sur le repli.
+# mensonge. Relu sur les fiches fal le 2026-09-24 : LTX-2 vaut 0,06 $/s en
+# 1080p (0,12 en 1440p, 0,24 en 2160p), pas 0,04 « 4K ».
 _PER_SECOND.update({
     "seedance-1.5-pro":  {"720p": 0.052, "480p": 0.052},
-    "ltx-2":             {"1080p": 0.04, "720p": 0.04, "4k": 0.04},
+    "ltx-2":             {"1080p": 0.06, "1440p": 0.12, "2160p": 0.24, "4k": 0.24},
+    "ltx-2.3":           {"1080p": 0.08, "1440p": 0.16, "2160p": 0.32, "4k": 0.32},
     "gemini-omni-flash": {"720p": 0.125, "1080p": 0.125},
+    "gemini-omni-flash-1.1": {"720p": 0.10, "360p": 0.03, "1080p": 0.15, "4k": 0.30},
     "grok-video":        {"720p": 0.07, "480p": 0.05},
+    "grok-video-1.5":    {"720p": 0.14, "480p": 0.08, "1080p": 0.25},
 })
-# $/clip pour les moteurs à durée fixe (facturés à la vidéo).
+# $/clip pour les moteurs à durée fixe (facturés à la vidéo). Veo 3.1 et
+# Sora 2 en sont SORTIS le 2026-09-24 : fal les facture à la seconde.
 _PER_VIDEO = {
-    "veo-3.1": 1.00,
-    "sora-2":  0.40,
     # Hailuo 2.3 Pro est facturé AU CLIP (~0,49 $), pas à la seconde : sans
     # cette entrée il était journalisé à 0,30 $/s × durée (constat 14/09/2026).
     "hailuo-2.3-pro": 0.49,

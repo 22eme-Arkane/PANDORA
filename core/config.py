@@ -71,22 +71,25 @@ IMAGE_MODEL_ENDPOINTS = {
     "recraft":    "fal-ai/recraft/v4.1/text-to-image",
 }
 
+# Prix relus sur les fiches fal le 2026-09-24 : GPT Image 2 est facturé AU
+# JETON (30 $ le million de jetons de sortie) — une image 1024² en qualité
+# « high » revient à ~0,20 $, pas 0,04 ; Recraft V4.1 est à 0,035 $.
 IMAGE_MODEL_LABELS = {
     "nb2":        "Nano Banana 2  —  Gemini 3.1 Flash  ·  $0.08/img",
     "nb_pro":     "Nano Banana Pro  —  Gemini 3 Pro  ·  $0.15/img",
-    "gpt2":       "GPT Image 2  —  OpenAI · suivi de prompt + texte  ·  ~$0.04/img",
+    "gpt2":       "GPT Image 2  —  OpenAI · suivi de prompt + texte  ·  ~$0.20/img (high)",
     "flux2":      "FLUX.2 [pro]  —  photoréalisme  ·  ~$0.03/img",
     "seedream45": "Seedream 4.5  —  ByteDance · photoréalisme  ·  $0.04/img",
-    "recraft":    "Recraft V4.1  —  texte / typo / logos  ·  $0.04/img",
+    "recraft":    "Recraft V4.1  —  texte / typo / logos  ·  $0.035/img",
 }
 
 IMAGE_MODEL_PRICES = {
     "nb2":        "$0.08",
     "nb_pro":     "$0.15",
-    "gpt2":       "$0.04",
+    "gpt2":       "$0.20",
     "flux2":      "$0.03",
     "seedream45": "$0.04",
-    "recraft":    "$0.04",
+    "recraft":    "$0.035",
 }
 
 

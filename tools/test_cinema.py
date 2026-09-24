@@ -1319,7 +1319,9 @@ def moteurs_storyboard_filtres():
     pairs = sequence_engines(t2v._ENGINES, use_keyframes=False,
                              recommended=("seedance-2.0",))
     keys = [k for _, k in pairs]
-    assert "veo-3.1" not in keys and "sora-2" not in keys, "t2v purs écartés"
+    # Veo 3.1 et Sora 2 étaient écartés (t2v purs) jusqu'au 24/09/2026 : leurs
+    # endpoints image-to-video existent chez fal et sont envoyés depuis.
+    assert "veo-3.1" in keys and "sora-2" in keys, "Veo/Sora i2v depuis le 24/09/2026"
     assert "kling-v3-pro" in keys and "seedance-2.0" in keys, "moteurs i2v ouverts"
     labels = dict((k, l) for l, k in pairs)
     assert "keyframes" not in " ".join(labels.values()), \
@@ -4141,8 +4143,10 @@ def lipsync_rendu_audio_storyboard():
     # Ensemble EXACT (volontairement strict : interdit tout ajout silencieux).
     # VEED v2 rejoint le catalogue le 2026-08-12 — 0,07 $/s, même contrat
     # video_url + audio_url, donc interchangeable sans toucher au worker.
+    # PixVerse et Kling Lipsync rejoignent le catalogue le 2026-09-24 (fiches
+    # fal : video_url + audio_url, sortie video.url — même contrat).
     assert set(ls.LIPSYNC_ENGINES) == {"sync2pro", "sync3", "veed2",
-                                       "sync2", "latentsync"}
+                                       "sync2", "pixverse", "kling", "latentsync"}
     assert ls.lipsync_endpoint("veed2") == "veed/lipsync/v2"
     assert ls.LipSyncWorker is ls.LatentSyncWorker  # rétro-compat « Modifier depuis DaVinci »
     # Upload audio robuste (non-ASCII + fallback data-URL) présent
@@ -5579,9 +5583,13 @@ def moteurs_image_catalogue_unifie():
               "flux_ultra", "seedream5", "seedream5_pro", "nb2_lite"):
         assert k in keys, f"{k} absent du catalogue unifié"
     # 2) Mapping : SEULS les moteurs éditeurs de référence (endpoint /edit).
+    # 24/09/2026 : Seedream 5 Flash, Qwen-Image 2, Kling Image O3, GPT Image
+    # 2.5 Flare et FLUX.2 pro ont un /edit relu sur leur fiche fal.
     assert set(IE.edit_capable_engines()) == {"nb2", "nb_pro", "nb2_lite",
-                                              "seedream5_pro", "seedream5"}, \
-        "éditeurs de référence (mapping) ≠ Nano Banana + Seedream 5"
+                                              "seedream5_pro", "seedream5",
+                                              "seedream5_flash", "qwen_image2",
+                                              "kling_image", "gpt25", "flux2"}, \
+        "éditeurs de référence (mapping) ≠ moteurs à endpoint /edit vérifié"
     assert [k for k, _ in IE.reference_engine_choices()] == IE.edit_capable_engines(), \
         "workflow 7 vues : proposer uniquement les moteurs d'édition compatibles"
     assert not IE.is_edit_capable("recraft") and not IE.is_edit_capable("zimage")
@@ -7885,15 +7893,19 @@ def seedance_2_5_ajoutee_sans_remplacer_la_2_0():
     # en 4K puis basculé sur la 2.5 doit être RABATTU, pas envoyé tel quel
     # (l'endpoint refuserait l'appel).
     assert not _sf.supports_resolution("seedance-2.5", "4k")
-    assert not _sf.supports_resolution("seedance-2.5", "1080p")
+    # Le 1080p est arrivé chez fal (fiche relue le 24/09/2026, 1,164 $/s) ; un
+    # 4K demandé retombe sur 720p, PAS sur ce 1080p à 2,5 × le prix.
+    assert _sf.supports_resolution("seedance-2.5", "1080p")
     assert _sf.clamp_resolution("seedance-2.5", "4k") == "720p"
+    assert _sf.clamp_resolution("seedance-2.5", "1080p") == "1080p"
     assert _sf.clamp_resolution("seedance-2.0", "4k") == "4k", "la 2.0 garde son 4K"
     _rsrc = inspect.getsource(__import__("api.real", fromlist=["x"]))
     assert "clamp_resolution" in _rsrc, "api/real n'applique pas le rabattement"
 
     # …et le menu ne propose QUE ce que l'endpoint accepte.
     import ui.tab_t2v as _t2v
-    assert [v for _l, v in _t2v._ENGINE_RESOLUTIONS["seedance-2.5"]] == ["720p", "480p"]
+    assert [v for _l, v in _t2v._ENGINE_RESOLUTIONS["seedance-2.5"]] == ["720p", "1080p", "480p"], \
+        "720p reste EN TÊTE (défaut) ; le 1080p à 1,16 $/s se choisit, ne s'impose pas"
     assert "seedance-2.5" in dict((k, l) for l, k in _t2v._ENGINES)
 
     # Références NOMMÉES : @Image1 suit l'ORDRE D'ENVOI (core/mood_refs), et le
@@ -7921,7 +7933,7 @@ def seedance_2_5_ajoutee_sans_remplacer_la_2_0():
     # La 2.0 reste le DÉFAUT du projet : la 2.5 ne la remplace nulle part.
     from core.config import _DEFAULTS as _D
     assert _D.get("default_model") == "seedance-2.0", \
-        "la 2.5 ne doit pas devenir le défaut (720p max)"
+        "la 2.5 ne doit pas devenir le défaut (56 % plus chère, pas de 4K)"
 
 
 @test
@@ -7952,7 +7964,9 @@ def moteur_cible_choisi_avant_le_decoupage():
         # Le briefing dit la VÉRITÉ du moteur, lue sur les tables.
         _b = _te.briefing("seedance-2.5")
         assert "@Image1" in _b, "la 2.5 nomme ses références"
-        assert "1080p" not in _b, "la 2.5 ne fait pas de 1080p : ne pas l'annoncer"
+        # Le 1080p est arrivé chez fal pour la 2.5 (fiche relue le 24/09/2026) ;
+        # toujours pas de 4K — le briefing lit la table, il doit dire les deux.
+        assert "1080p" in _b and "4k" not in _b.lower(), "la 2.5 : 1080p oui, 4K non"
         assert "4k" in _te.briefing("seedance-2.0"), "la 2.0 monte au 4K"
         _bf = _te.briefing("flux-3")
         assert "5 and 20 seconds" in _bf and "sound clause" in _bf
@@ -8882,8 +8896,9 @@ def prix_image_jamais_le_numero_de_version():
 
     # Les cinq moteurs qui portaient un numéro de version décimal.
     for _k, _attendu in (("seedream5_pro", 0.0675), ("seedream5", 0.035),
-                         ("seedream45", 0.03), ("recraft", 0.04),
-                         ("flux_ultra", 0.06)):
+                         ("seedream45", 0.03), ("recraft", 0.035),
+                         ("flux_ultra", 0.06), ("seedream5_flash", 0.027),
+                         ("kling_image", 0.028), ("qwen_image2_pro", 0.075)):
         if _k in _ie.ENGINES:
             assert abs(_image_price_hint(_k) - _attendu) < 1e-9, \
                 f"{_k} : {_image_price_hint(_k)} au lieu de {_attendu}"
@@ -9616,6 +9631,70 @@ def modules_externes_registre_fenetre_bandeau_et_telechargement():
 
 
 @test
+def editeurs_video_cloud_table_worker_et_routage():
+    """« Branche toutes les nouveautés » (Matthieu, 24/09/2026) : les éditeurs vidéo
+    fal relevés fiche par fiche (Kling O3/O1 Edit, Wan 2.7, HappyHorse, Bernini-R,
+    FLUX.3, Gemini Omni 1.1, Lucy) sont une TABLE (api/video_edit) : charge utile
+    construite sans réseau, balises @Video1 gardées ou retirées selon le moteur,
+    variante « reference-edit » de Bernini-R avec images, tarif 0 $/s connu du
+    journal, moteurs proposés et routés dans les deux onglets « Modifier un clip »,
+    SeedVR2 local dans l'agrandisseur."""
+    import importlib
+    from api import video_edit as VE
+    from core import pricing
+    assert len(VE.EDIT_ENGINES) >= 10 and all(v["endpoint"] and v["price"] and v["res"] for v in VE.EDIT_ENGINES.values())
+    # Kling : balises gardées, images dans image_urls (≤4), keep_audio.
+    ep, a = VE.build_args("kling-o3-edit-pro", "Reprends @Video1, remplace le fond par @Image1",
+                          "https://v/clip.mp4", ["https://i/1.png"] * 6, "source")
+    assert ep == "fal-ai/kling-video/o3/pro/video-to-video/edit" and "@Video1" in a["prompt"]
+    assert len(a["image_urls"]) == 4 and a["keep_audio"] is True and "resolution" not in a
+    # Wan 2.7 : balises retirées, UNE référence, durée 0 = source, audio d'origine, 1080p.
+    ep, a = VE.build_args("wan-2.7-edit", "Reprends @Video1, remplace le fond par @Image1",
+                          "https://v/clip.mp4", ["https://i/1.png", "https://i/2.png"], "1080p")
+    assert ep == "fal-ai/wan/v2.7/edit-video" and "@" not in a["prompt"] and "the reference image" in a["prompt"]
+    assert a["reference_image_url"] == "https://i/1.png" and a["duration"] == 0 \
+        and a["audio_setting"] == "origin" and a["resolution"] == "1080p"
+    # Bernini-R : sans image → edit-video ; avec → reference-edit-video ; négatif.
+    ep, a = VE.build_args("bernini-r-edit", "make it night", "https://v/c.mp4", [], "source", "blurry")
+    assert ep == "fal-ai/bernini-r/edit-video" and a["negative_prompt"] == "blurry" and "reference_image_urls" not in a
+    ep, a = VE.build_args("bernini-r-edit", "make it night", "https://v/c.mp4", ["https://i/r.png"], "source")
+    assert ep == "fal-ai/bernini-r/reference-edit-video" and a["reference_image_urls"] == ["https://i/r.png"]
+    # FLUX.3 : aucune image même si fournie ; garde-fou de sécurité.
+    ep, a = VE.build_args("flux-3-edit", "x", "https://v/c.mp4", ["https://i/r.png"], "source")
+    assert "image_urls" not in a and "reference_image_urls" not in a and a["safety_tolerance"] == "4"
+    # Tarif : lu par le journal, par palier quand la fiche en a.
+    assert pricing.price_per_second("kling-o3-edit-pro", "source") == 0.168
+    assert pricing.price_per_second("wan-2.7-edit", "1080p") == 0.15 and pricing.price_per_second("wan-2.7-edit", "720p") == 0.10
+    assert pricing.price_per_second("gemini-omni-1.1-edit", "4k") == 0.30
+    # Sortie : `video.url` ou `video_url`.
+    assert VE._extract_video_url({"video": {"url": "https://o/v.mp4"}}) == "https://o/v.mp4"
+    assert VE._extract_video_url({"video_url": "https://o/w.mp4"}) == "https://o/w.mp4"
+    # Onglets : proposés et routés (source), Cinéma ET Live.
+    for mod, cls in (("ui.tab_davinci_edit", "TabDavinciEdit"), ("ui.tab_modify_live", "TabModifyLive")):
+        m = importlib.import_module(mod)
+        s = inspect.getsource(getattr(m, cls)._process_next)
+        assert "VideoEditWorker" in s, f"{mod} : éditeurs cloud non routés"
+    import ui.tab_davinci_edit as DE
+    tab = DE.TabDavinciEdit()
+    keys = [tab._cb_model.itemData(i) for i in range(tab._cb_model.count())]
+    assert all(k in keys for k in VE.EDIT_ENGINES), "tous les éditeurs cloud proposés"
+    for i, k in enumerate(keys):
+        if k == "wan-2.7-edit":
+            tab._cb_model.setCurrentIndex(i)
+    assert [tab._cb_res.itemData(i) for i in range(tab._cb_res.count())] == ["1080p", "720p"]
+    assert not tab._cb_ratio.isEnabled() and "cloud" in tab._modif_hint.text()
+    tab.deleteLater()
+    # Agrandisseur : SeedVR2 local (gabarit ComfyUI) présent, contrat du nom conservé.
+    from api import upscale as UP
+    assert any(k == "seedvr_local" for _l, k in UP.UPSCALE_MODELS)
+    w = UP.UpscaleVideoWorker("C:/x/Plan 03.mp4", model="seedvr_local")
+    assert w._model == "seedvr_local" and w._output_path().endswith("Plan 03.mp4")
+    assert "_local" in inspect.getsource(UP.UpscaleVideoWorker.run)
+    for mod in ("ui.tab_upscale", "ui.tab_upscale_live"):
+        assert 'ensure_ready("comfyui"' in inspect.getsource(importlib.import_module(mod)), mod
+
+
+@test
 def serveurs_locaux_demarres_automatiquement():
     """Demande Matthieu (24/09/2026, capture « installé mais ne tourne pas ») : un
     module INSTALLÉ mais arrêté est lancé par PANDORA au moment de générer
@@ -10188,6 +10267,183 @@ def images_comfyui_catalogue_contrat_generique_et_appel_unique():
         assert ep == "comfy:test_tpl" and args["width"] == 1024 and args["ref_urls"] == ["d1", "d2"] and kind == "raster"
     finally:
         del se.ENGINES["comfy:test_tpl"]
+
+
+@test
+def moteurs_fal_relus_fiche_par_fiche_24_09_2026():
+    """Relecture des fiches fal (`llms.txt`) du 24/09/2026 — ce que le code envoie
+    doit être ce que la fiche dit. Trois erreurs qui auraient coûté de l'argent
+    ou un rejet : Veo journalisé « 1 $ le clip » (fal facture à la seconde,
+    3,20 $ le clip par défaut) ; Kling O3 4K envoyait `start_image_url` (le
+    champ s'appelle `image_url` → rejet) ; PixVerse envoyait `generate_audio`
+    (le champ est `generate_audio_switch` → audio jamais produit). Plus les
+    nouveaux moteurs branchés dans les DEUX éditions, aux DEUX endroits."""
+    import importlib, inspect, os, tempfile
+    import api.video_engines as ve
+    from core import pricing, engine_caps, engine_grammar, seedance_family as sf
+
+    # ── 1. Noms de champs (les pièges) ──────────────────────────────────────
+    src_o3 = inspect.getsource(ve.KlingO3Worker._real)
+    # (le commentaire cite l'ancien nom : on vérifie le CODE, pas les commentaires)
+    assert 'args["image_url"] = img_url' in src_o3 and 'args["start_image_url"]' not in src_o3
+    src_k = inspect.getsource(ve.KlingWorker._real)
+    assert '"image_url" if _turbo else "start_image_url"' in src_k, "Turbo dit image_url, Pro start_image_url"
+    assert ve.Wan30Worker.IMAGE_FIELD == "start_image_url" and ve.Wan30Worker.AUDIO_FIELD == "audio"
+    for cls in (ve.PixVerseV6Worker, ve.PixVerseWorker):
+        s = inspect.getsource(cls._real)
+        assert "generate_audio_switch" in s and '"generate_audio":' not in s, cls.__name__
+
+    # ── 2. Endpoints exacts des nouveaux moteurs ────────────────────────────
+    assert ve.KlingO3ProWorker.ENDPOINT_I2V == "fal-ai/kling-video/o3/pro/image-to-video"
+    assert ve.KlingO3StandardWorker.ENDPOINT_T2V == "fal-ai/kling-video/o3/standard/text-to-video"
+    assert ve.Wan30Worker.ENDPOINT_I2V == "alibaba/wan-3.0/image-to-video"
+    assert ve.LTX23Worker.ENDPOINT_T2V == "fal-ai/ltx-2.3/text-to-video" and ve.LTX23Worker.END_FRAME
+    assert ve.GeminiOmniFlash11Worker.ENDPOINT_I2V == "google/gemini-omni-flash/v1.1/image-to-video"
+    assert ve.GrokVideo15Worker.ENDPOINT_T2V == "xai/grok-imagine-video/v1.5/text-to-video"
+    assert ve.Veo3Worker._ENDPOINT == {"pro": "fal-ai/veo3.1", "fast": "fal-ai/veo3.1/fast",
+                                       "lite": "fal-ai/veo3.1/lite"}
+    src_pv = inspect.getsource(ve.PixVerseWorker)
+    # (la docstring raconte le remplacement de la v4.5 : on vérifie l'ENDPOINT)
+    assert "fal-ai/pixverse/v6/image-to-video" in src_pv and '"fal-ai/pixverse/v4.5' not in src_pv
+    src_sora = inspect.getsource(ve.Sora2Worker._real)
+    assert "fal-ai/sora-2/image-to-video" in src_sora and '"duration":     dur' in src_sora
+
+    # ── 3. Durées fermées, bornes, ratios, résolutions ──────────────────────
+    assert ve.Veo3Worker.snap_duration(5) == 4 and ve.Veo3Worker.snap_duration(7) == 6 \
+        and ve.Veo3Worker.snap_duration(30) == 8
+    assert ve.Sora2Worker.snap_duration(10) == 8 and ve.Sora2Worker.snap_duration(25) == 20
+    assert ve.LTX2Worker.DURATIONS == (6, 8, 10) and ve.LTX2Worker.DUR_STR is False
+    _l = ve.LTX2Worker({"prompt": "x"})
+    assert _l._snap_duration(5) == 6 and _l._snap_duration(9) == 8
+    assert _l._resolution_arg("4K") == "2160p" and _l._resolution_arg("720p") == "1080p"
+    _w = ve.Wan30Worker({"prompt": "x"})
+    assert _w._snap_duration(45) == 30 and _w._snap_duration(1) == 2
+    _k = ve.KlingO3ProWorker({"prompt": "x"})
+    assert _k._ratio_arg("21:9") == "16:9" and _k._ratio_arg("1:1") == "1:1" and _k.RATIO_T2V_ONLY
+
+    # ── 4. Tarifs : worker ↔ grille, à la seconde ───────────────────────────
+    assert ve.Veo3Worker.price_per_second("pro", "1080p", True) == 0.40
+    assert ve.Veo3Worker.price_per_second("lite", "720p", False) == 0.03
+    assert pricing.price_per_second("veo-3.1-t2v", "1080p") == 0.40
+    assert pricing.price_per_second("sora-2-i2v", "720p") == 0.10
+    assert "veo-3.1" not in pricing._PER_VIDEO and "sora-2" not in pricing._PER_VIDEO
+    assert pricing.estimate("veo-3.1", "1080p", 8, 1) == (3.2, "s"), "le clip Veo par défaut vaut 3,20 $"
+    assert pricing.price_per_second("kling-v3-pro", "1080p") == 0.168
+    assert pricing.price_per_second("pixverse-v6", "720p") == 0.060
+    assert pricing.price_per_second("wan-2.7-t2v", "1080p") == 0.15, "Wan 2.7 tombait sur le repli 0,30"
+    assert pricing.price_per_second("seedance-2.5", "1080p") == 1.164
+    assert ve.KlingO3ProWorker({"prompt": "x"})._price_per_s("1080p") == 0.112, "audio OFF par défaut"
+    assert ve.KlingO3ProWorker({"prompt": "x", "generate_audio": True})._price_per_s("1080p") == 0.14
+    assert ve.KlingO3StandardWorker({"prompt": "x"})._price_per_s("1080p") == 0.084
+
+    # ── 5. Seedance 2.5 : 1080p accepté, 4K rabattu sur 720p ────────────────
+    assert sf.supports_resolution("seedance-2.5", "1080p") and not sf.supports_resolution("seedance-2.5", "4k")
+    assert sf.clamp_resolution("seedance-2.5", "4k") == "720p"
+
+    # ── 6. Capacités, grammaire, listes du Studio (deux éditions) ───────────
+    new_keys = ("veo-3.1-fast", "veo-3.1-lite", "sora-2-pro", "kling-o3-pro", "kling-o3-standard",
+                "wan-3.0", "ltx-2.3", "gemini-omni-flash-1.1", "grok-video-1.5")
+    for k in new_keys + ("veo-3.1", "sora-2"):
+        assert engine_caps.workflow_compatible(k), k
+    assert engine_caps.ENGINE_CAPS["kling-o3-4k"]["end_frame"] and engine_caps.ENGINE_CAPS["wan-3.0"]["end_frame"]
+    assert engine_grammar.grammar_for("kling-o3-pro") == "directive"
+    assert engine_grammar.grammar_for("sora-2-pro") == "sentence"
+    import ui.tab_t2v as _T, ui.tab_t2v_live as _TL
+    for mod in (_T, _TL):
+        keys = [k for _, k in mod._ENGINES]
+        for k in new_keys:
+            assert k in keys and k in mod._ENGINE_RESOLUTIONS and k in mod._TEXT_FALLBACK_ENGINES, \
+                f"{mod.__name__}: {k}"
+        assert "prochainement" not in " ".join(l for l, _ in mod._ENGINES), "moteurs branchés : plus de « prochainement »"
+        assert "veo-3.1" not in mod._FIXED_RES_ENGINES and mod._ENGINE_RES_FORCED["sora-2"] == "720p"
+        assert mod._ENGINE_MAX_DURATION["wan-3.0"] == 30
+        w = mod._make_ext_worker("veo-3.1-fast", {"prompt": "x"})
+        assert isinstance(w, ve.Veo3Worker) and w.params["variant"] == "fast"
+        w = mod._make_ext_worker("sora-2-pro", {"prompt": "x"})
+        assert isinstance(w, ve.Sora2Worker) and w.params["variant"] == "pro"
+        assert isinstance(mod._make_ext_worker("kling-o3-standard", {"prompt": "x"}), ve.KlingO3StandardWorker)
+        assert isinstance(mod._make_ext_worker("wan-3.0", {"prompt": "x"}), ve.Wan30Worker)
+        assert isinstance(mod._make_ext_worker("grok-video-1.5", {"prompt": "x"}), ve.GrokVideo15Worker)
+
+    # ── 7. Onglet Moteurs : clés, formulaires alignés, audio Kling O3 décoché ─
+    for modname in ("ui.tab_video_engines", "ui.tab_video_engines_live"):
+        m = importlib.import_module(modname)
+        keys = [k for _, k, _ in m.TabVideoEngines._ENGINES]
+        for k in ("veo31_i2v", "veo31_fast_t2v", "veo31_lite_i2v", "sora2_pro_t2v", "kling_o3pro_i2v",
+                  "kling_o3std_t2v", "wan30_i2v", "ltx23_t2v", "gemini11_i2v", "grok15_t2v", "pixverse_i2v"):
+            assert k in keys, f"{modname}: {k}"
+        assert len(keys) == len(set(keys)), f"{modname}: clé en double"
+        src = inspect.getsource(m.TabVideoEngines._on_generate)
+        for w_ in ("KlingO3ProWorker", "KlingO3StandardWorker", "Wan30Worker", "LTX23Worker",
+                   "GeminiOmniFlash11Worker", "GrokVideo15Worker"):
+            assert w_ in src, f"{modname}: dispatch {w_}"
+        assert "_Veo31Form" not in inspect.getsource(m) and "_Sora2Form" not in inspect.getsource(m)
+        tab = m.TabVideoEngines()
+        assert len(tab._forms) == len(keys), f"{modname}: formulaires désalignés"
+        assert tab._forms[keys.index("kling_o3pro_t2v")]._audio_chk.isChecked() is False
+        assert tab._forms[keys.index("kling_o3std_i2v")]._mode == "i2v"
+        assert tab._forms[keys.index("veo31_i2v")]._mode == "i2v"
+        assert tab._forms[keys.index("veo31_t2v")]._res_combo.currentData() == "720p"
+        assert tab._forms[keys.index("grok15_i2v")]._mode == "i2v"
+        _pv = tab._forms[keys.index("pixverse_i2v")]
+        assert _pv._dur_slider.maximum() == 15 and _pv._res_combo.currentData() == "720p"
+        _lt = tab._forms[keys.index("ltx2_t2v")]
+        assert _lt._dur_slider.minimum() == 6 and _lt._res_combo.currentData() == "1080p"
+        tab.deleteLater()
+
+    # ── 8. ensure_image_urls : un CHEMIN LOCAL dans image_url est uploadé ────
+    class _FakeFal:
+        @staticmethod
+        def upload_file(p):
+            return "https://cdn/" + os.path.basename(p)
+    with tempfile.TemporaryDirectory() as d:
+        p = os.path.join(d, "start.png")
+        with open(p, "wb") as f:
+            f.write(b"x")
+        prm = {"image_url": p, "end_image_url": "https://already/ok.png", "mode": "t2v"}
+        ve.ensure_image_urls(_FakeFal, prm)
+        assert prm["image_url"] == "https://cdn/start.png" and prm["mode"] == "i2v"
+        assert prm["end_image_url"] == "https://already/ok.png", "une URL reste une URL"
+
+    # ── 9. Lip-sync + agrandisseur ─────────────────────────────────────────
+    from api import lipsync as ls, upscale as up
+    assert ls.lipsync_endpoint("kling") == "fal-ai/kling-video/lipsync/audio-to-video"
+    assert ls.lipsync_endpoint("pixverse") == "fal-ai/pixverse/lipsync"
+    _o = ls.LIPSYNC_ENGINE_ORDER
+    assert _o.index("sync2") < _o.index("pixverse") < _o.index("kling") < _o.index("latentsync")
+    assert up._ENDPOINTS["topaz_creative"] == "topaz/upscale/video/creative"
+    src_up = inspect.getsource(up.UpscaleVideoWorker._real)
+    assert '"upscale_mode"' in src_up and 'self._model == "seedvr"' in src_up, "SeedVR2 honore le facteur"
+    assert up.UpscaleVideoWorker("x.mp4", model="topaz_creative")._model == "topaz_creative"
+
+    # ── 10. Images : nouveaux moteurs et endpoints d'édition ────────────────
+    from core import image_engines as ie
+    ep, a, _ = ie.build_request("gpt25", "p", (1920, 1080), "1K", ["data:a"])
+    assert ep == "openai/gpt-image-2.5/flare/edit" and a["image_urls"] == ["data:a"] and a["quality"] == "high"
+    ep, a, _ = ie.build_request("gpt25", "p", (1920, 1080), "1K", [])
+    assert ep == "openai/gpt-image-2.5/flare/text-to-image" and "image_urls" not in a
+    ep, a, _ = ie.build_request("flux2", "p", (1920, 1080), "1K", ["data:a", "data:b"])
+    assert ep == "fal-ai/flux-2-pro/edit" and a["image_urls"] == ["data:a", "data:b"] and "num_images" not in a
+    ep, a, _ = ie.build_request("flux2", "p", (1920, 1080), "1K", [])
+    assert ep == "fal-ai/flux-2-pro" and "image_urls" not in a
+    se = ie._load_studio_engines()
+    ep, a, _ = se.build_request("kling_image", "p", (1920, 1080), "1K", ["d1"])
+    assert ep == "fal-ai/kling-image/o3/image-to-image" and a["resolution"] == "2K" and a["image_urls"] == ["d1"]
+    ep, a, _ = se.build_request("kling_image", "p", (1024, 1024), "1K", [])
+    assert ep == "fal-ai/kling-image/o3/text-to-image" and a["resolution"] == "1K" and a["aspect_ratio"] == "1:1"
+    ep, a, _ = se.build_request("seedream5_flash", "p", (1920, 1080), "1K", ["d"] * 12)
+    assert ep == "bytedance/seedream/v5/flash/edit" and len(a["image_urls"]) == 10
+    ep, a, _ = se.build_request("qwen_image2", "p", (1920, 1080), "1K", ["d"] * 5)
+    assert ep == "fal-ai/qwen-image-2/edit" and len(a["image_urls"]) == 3, "Qwen-Image 2 : 3 refs maximum"
+    ep, a, _ = se.build_request("qwen_image2_pro", "p", (1920, 1080), "1K", ["d"])
+    assert ep == "fal-ai/qwen-image-2/pro/text-to-image" and "image_urls" not in a
+    assert "0.035" in se.ENGINES["recraft"]["label"] and "$0.20" in ie.ENGINES["gpt2"]["label"]
+    assert {"gpt25", "kling_image", "seedream5_flash", "qwen_image2", "flux2"} <= set(ie.edit_capable_engines())
+    from core.config import IMAGE_MODEL_PRICES
+    assert IMAGE_MODEL_PRICES["gpt2"] == "$0.20" and IMAGE_MODEL_PRICES["recraft"] == "$0.035"
+    import api.nano_banana as nb
+    assert '"fal-ai/instant-id"' not in inspect.getsource(nb), "id fal inexistant : aucun appel ne doit le porter"
+    assert "fal-ai/flux-pulid" in inspect.getsource(nb.GeneratePortraitWithFaceIDWorker._real)
 
 
 if __name__ == "__main__":

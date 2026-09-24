@@ -65,7 +65,10 @@ _SE = _load_studio_engines()
 # Studio IA ferait DISPARAÎTRE ces deux moteurs des dialogs d'éléments (régression).
 _EXTRA_ENGINES = OrderedDict([
     ("gpt2", {
-        "label":    "GPT Image 2  ·  OpenAI · suivi de prompt + texte  ·  ~$0.04",
+        # Facturé AU JETON (fiche fal relue le 2026-09-24 : 30 $ le million de
+        # jetons de sortie) — une image 1024² en qualité « high » ≈ 0,20 $, pas
+        # 0,04 comme le libellé l'a longtemps dit.
+        "label":    "GPT Image 2  ·  OpenAI · suivi de prompt + texte  ·  ~$0.20",
         "endpoint": "openai/gpt-image-2",
         "kind":     "gpt2",
         "family":   "GPT Image",
@@ -73,14 +76,30 @@ _EXTRA_ENGINES = OrderedDict([
         "output":   "raster",
         "refs":     {"max": 0, "hint": "❌ ce moteur ignore les images de référence"},
     }),
+    ("gpt25", {
+        # GPT Image 2.5 Flare (fal 2026-09-24) : même schéma que GPT Image 2
+        # (image_size enum, quality low→max, num_images 1-10) pour ~4× moins cher
+        # en « high » (~0,05 $) ; /flare/edit prend jusqu'à 16 images + un masque.
+        "label":    "GPT Image 2.5 Flare  ·  OpenAI · édition · 16 refs  ·  ~$0.05",
+        "endpoint": "openai/gpt-image-2.5/flare/text-to-image",
+        "edit":     "openai/gpt-image-2.5/flare/edit",
+        "kind":     "gpt2",
+        "family":   "GPT Image 2.5",
+        "slug":     "gpt-image-2-5-flare",
+        "output":   "raster",
+        "refs":     {"max": 16, "hint": "✅ jusqu'à 16 références (édition)"},
+    }),
     ("flux2", {
-        "label":    "FLUX.2 [pro]  ·  photoréalisme  ·  ~$0.03",
+        # /edit (fal 2026-09-24) : image_urls requis, image_size « auto »,
+        # safety_tolerance 1-5 — 0,03 $ le premier mégapixel.
+        "label":    "FLUX.2 [pro]  ·  photoréalisme · édition · refs  ·  ~$0.03",
         "endpoint": "fal-ai/flux-2-pro",
+        "edit":     "fal-ai/flux-2-pro/edit",
         "kind":     "flux2",
         "family":   "FLUX",
         "slug":     "flux-2-pro",
         "output":   "raster",
-        "refs":     {"max": 0, "hint": "❌ ce moteur ignore les images de référence"},
+        "refs":     {"max": 9, "hint": "✅ références via /edit (jusqu'à 9 images)"},
     }),
 ])
 
@@ -178,8 +197,10 @@ def engine_choices() -> list:
 def edit_capable_engines() -> list:
     """Moteurs qui savent ÉDITER une image de référence (endpoint /edit) — c.-à-d.
     ceux qui peuvent générer SUR une façade en préservant sa géométrie (mapping Live).
-    = familles Nano Banana + Seedream 5 (Pro/Lite). Sert à filtrer le sélecteur de
-    Mood quand on est en séquence mapping (choix Matthieu 2026-07-20)."""
+    = familles Nano Banana + Seedream 5 (Pro/Lite/Flash), et depuis le 24/09/2026
+    Qwen-Image 2, Kling Image O3, GPT Image 2.5 Flare et FLUX.2 pro (/edit relus
+    sur fal). Sert à filtrer le sélecteur de Mood quand on est en séquence mapping
+    (choix Matthieu 2026-07-20)."""
     return [k for k, v in ENGINES.items() if v.get("edit")]
 
 
@@ -256,17 +277,26 @@ def build_request(engine_key: str, prompt: str, target: tuple,
     refs = [u for u in (ref_urls or []) if u]
 
     if engine_key in _EXTRA_ENGINES:
+        e = _EXTRA_ENGINES[engine_key]
         size_enum = _target_to_size_enum(target)
-        if engine_key == "gpt2":
-            return "openai/gpt-image-2", {
+        _max = int(e.get("refs", {}).get("max") or 0)
+        use_edit = bool(refs and e.get("edit") and _max)
+        if e["kind"] == "gpt2":
+            args = {
                 "prompt": prompt, "image_size": size_enum,
                 "num_images": 1, "quality": "high", "output_format": "png",
-            }, "raster"
-        # flux2
-        return "fal-ai/flux-2-pro", {
+            }
+            if use_edit:
+                return e["edit"], {**args, "image_urls": refs[:_max]}, "raster"
+            return e["endpoint"], args, "raster"
+        # flux2 — /edit : image_urls requis, safety_tolerance plafonné à 5.
+        args = {
             "prompt": prompt, "image_size": size_enum,
             "output_format": "png", "safety_tolerance": "5",
-        }, "raster"
+        }
+        if use_edit:
+            return e["edit"], {**args, "image_urls": refs[:_max]}, "raster"
+        return e["endpoint"], args, "raster"
 
     if _SE is not None and engine_key in _SE.ENGINES:
         return _SE.build_request(engine_key, prompt, target, resolution, refs)

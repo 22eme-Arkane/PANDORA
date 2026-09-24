@@ -31,10 +31,20 @@ ENGINE_CAPS = {
     "gemini-omni-flash": {"i2v": True,  "end_frame": False, "refs": "none"},
     "grok-video":        {"i2v": True,  "end_frame": False, "refs": "none"},
     "kling-v3-pro":      {"i2v": True,  "end_frame": True,  "refs": "style"},
-    "kling-o3-4k":       {"i2v": True,  "end_frame": False, "refs": "none"},
+    # Kling O3 (fiches fal 2026-09-24) : image de départ ET de fin sur les
+    # trois paliers (4K, Pro, Standard).
+    "kling-o3-4k":       {"i2v": True,  "end_frame": True,  "refs": "none"},
+    "kling-o3-pro":      {"i2v": True,  "end_frame": True,  "refs": "none"},
+    "kling-o3-standard": {"i2v": True,  "end_frame": True,  "refs": "none"},
     "happy-horse-1.0":   {"i2v": True,  "end_frame": False, "refs": "full"},
     "pixverse-v6":       {"i2v": True,  "end_frame": False, "refs": "style"},
     "ltx-2":             {"i2v": True,  "end_frame": False, "refs": "none"},
+    "ltx-2.3":           {"i2v": True,  "end_frame": True,  "refs": "none"},
+    # Nouveaux moteurs fal (relevé 2026-09-24) — tous i2v, images de fin
+    # documentées sur Wan 3.0 et Gemini Omni Flash 1.1.
+    "wan-3.0":               {"i2v": True,  "end_frame": True,  "refs": "none"},
+    "gemini-omni-flash-1.1": {"i2v": True,  "end_frame": True,  "refs": "none"},
+    "grok-video-1.5":        {"i2v": True,  "end_frame": False, "refs": "none"},
     # MiniMax H3 / Hailuo 3.0 sur fal (13/09/2026) : image de départ ET de fin
     # (_H3FalWorker.END_FRAME). La référence-vidéo existe chez fal mais le
     # Studio ne l'envoie pas encore → refs "none" : fiches décrites en texte.
@@ -47,10 +57,16 @@ ENGINE_CAPS = {
     # storyboard » (constat Matthieu, 24/09/2026) : ENGINE_CAPS est le filtre.
     "comfy":                {"i2v": True,  "end_frame": True,  "refs": "none"},
     "minimax-h3-local":     {"i2v": True,  "end_frame": True,  "refs": "none"},
-    # ÉCARTÉS du workflow séquences : text-to-video pur dans notre intégration
-    # (aucune image acceptée → ni raccords ni keyframes ni façade possibles).
-    "veo-3.1":           {"i2v": False, "end_frame": False, "refs": "none"},
-    "sora-2":            {"i2v": False, "end_frame": False, "refs": "none"},
+    # Veo 3.1 et Sora 2 : ÉCARTÉS jusqu'au 2026-09-24 (text-to-video pur dans
+    # notre intégration). Leurs endpoints image-to-video existent chez fal
+    # (`fal-ai/veo3.1[/fast|/lite]/image-to-video`, `fal-ai/sora-2/image-to-
+    # video[/pro]`, champ `image_url`) et api/video_engines les envoie depuis :
+    # ils entrent dans le workflow (raccord i2v, pas d'image de fin ni de réfs).
+    "veo-3.1":           {"i2v": True,  "end_frame": False, "refs": "none"},
+    "veo-3.1-fast":      {"i2v": True,  "end_frame": False, "refs": "none"},
+    "veo-3.1-lite":      {"i2v": True,  "end_frame": False, "refs": "none"},
+    "sora-2":            {"i2v": True,  "end_frame": False, "refs": "none"},
+    "sora-2-pro":        {"i2v": True,  "end_frame": False, "refs": "none"},
 }
 
 

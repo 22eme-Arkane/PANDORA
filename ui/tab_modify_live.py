@@ -106,9 +106,9 @@ class TabModifyLive(QScrollArea):
     _ENGINES = [
         ("Seedance 2.0  (~$0.30/s)",      "seedance-2.0"),
         ("Seedance Fast  (~$0.24/s)",     "seedance-2.0-fast"),
-        # 2.5 : plan-séquence jusqu'à 30 s, 720p max, tâche « editing » nommée
-        # (parité Cinéma, 24/09/2026).
-        ("Seedance 2.5  (30 s · 720p max)", "seedance-2.5"),
+        # 2.5 : plan-séquence jusqu'à 30 s, 1080p max (fal, relu le 24/09/2026),
+        # tâche « editing » nommée (parité Cinéma, 24/09/2026).
+        ("Seedance 2.5  (30 s · 1080p max)", "seedance-2.5"),
     ]
 
     @staticmethod
@@ -334,6 +334,10 @@ class TabModifyLive(QScrollArea):
         self._engine_combo.setStyleSheet(_combo_style())
         for label, key in self._ENGINES:
             self._engine_combo.addItem(label, key)
+        # Éditeurs vidéo cloud (api/video_edit) — même table que le Cinéma.
+        from api.video_edit import EDIT_ENGINES as _EDIT
+        for _k in _EDIT:
+            self._engine_combo.addItem(_EDIT[_k]["label"], _k)
         self._comfy_edit_entries = {}
         for _lbl, _key, _entry in self._comfy_edit_engines():
             self._engine_combo.addItem(_lbl, _key)
@@ -422,6 +426,15 @@ class TabModifyLive(QScrollArea):
             paths = []
         self.add_clips_from_paths(paths)
 
+    @staticmethod
+    def _clip_duration(path: str) -> float:
+        """Durée du clip source (ffprobe) pour l'estimation de coût des éditeurs."""
+        try:
+            from core.video_utils import video_duration_s
+            return float(video_duration_s(path) or 0.0)
+        except Exception:
+            return 0.0
+
     def _queue_running(self) -> bool:
         w = self._worker
         try:
@@ -459,8 +472,12 @@ class TabModifyLive(QScrollArea):
         key = str(self._engine_combo.currentData() or "")
         if getattr(self, "_external_banner", None) is not None:
             self._external_banner.set_engine("comfy" if key.startswith("comfy_edit:") else "")
-        # Gabarit ComfyUI : le clip garde sa définition (pas de choix de résolution).
+        # Gabarit ComfyUI ou éditeur cloud : le clip garde sa définition (le choix
+        # 720p/1080p du Live vaut pour Seedance ; les éditeurs à paliers lisent
+        # la résolution choisie si leur fiche la connaît, sinon la source).
+        from api.video_edit import is_edit_engine
         self._res_combo.setEnabled(not key.startswith("comfy_edit:"))
+        self._dur_slider.setEnabled(not (key.startswith("comfy_edit:") or is_edit_engine(key)))
 
     def _reload_list(self):
         self._clip_list.blockSignals(True)
@@ -650,7 +667,22 @@ class TabModifyLive(QScrollArea):
         if self._worker is not None:
             abandon_thread(self._worker)
         _key = str(params.get("model") or "")
-        if _key.startswith("comfy_edit:"):
+        from api.video_edit import is_edit_engine
+        if is_edit_engine(_key):
+            # Éditeur vidéo cloud (api/video_edit) : le clip garde sa durée.
+            from api.video_edit import VideoEditWorker, EDIT_ENGINES as _EDIT
+            _res = params.get("resolution", "720p")
+            _known = {v for _l, v in _EDIT[_key]["res"]}
+            self._worker = VideoEditWorker({
+                "engine":       _key,
+                "engine_label": _EDIT[_key]["label"].split("  (")[0],
+                "video_path":   clip,
+                "prompt":       params.get("prompt", ""),
+                "ref_images":   params.get("ref_images") or [],
+                "resolution":   _res if _res in _known else next(iter(_known)),
+                "duration":     self._clip_duration(clip),
+            })
+        elif _key.startswith("comfy_edit:"):
             # Gabarit ComfyUI d'édition vidéo, sur la machine (0 $).
             from api.comfy_edit import ComfyEditWorker
             _entry = self._comfy_edit_entries.get(_key, {})

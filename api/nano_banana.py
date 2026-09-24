@@ -1264,11 +1264,14 @@ class GenerateStoryboardSketchesWorker(QThread):
 
 class GeneratePortraitWithFaceIDWorker(QThread):
     """
-    Two-step face-faithful generation:
-    Step 1 → fal-ai/instant-id   : encode face identity → portrait with exact face
-    Step 2 → fal-ai/nano-banana-2 : use that portrait as style anchor → 5-view character sheet
-
-    Falls back to direct nano-banana-2 if InstantID fails.
+    Génération fidèle au visage en deux temps (pipeline « Anchor Portrait ») :
+    Étape 1 → fal-ai/flux-pulid : buste de référence depuis la photo réelle
+               (reference_image_url + id_weight — endpoint vérifié le 24/09/2026 ;
+               l'ancienne mention « fal-ai/instant-id » ne correspondait à aucun
+               appel du code, et cet id n'existe plus chez fal : le vrai s'écrit
+               « fal-ai/instantid » et n'est pas utilisé ici)
+    Étape 2 → fal-ai/flux-pulid ×4 (le buste IA comme ancre) + fal-ai/flux/dev
+               pour la vue de dos → planche 5 vues assemblée localement (Pillow).
     """
     progress = pyqtSignal(int, str)
     finished = pyqtSignal(str, str)  # (portrait_path, sheet_path)

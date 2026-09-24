@@ -4,8 +4,12 @@ api/upscale.py — Workers d'upscaling vidéo via fal.ai.
 Modèles :
   - Topaz Video Upscale : fal-ai/topaz/upscale/video
         video_url (req), upscale_factor (1-4, déf. 2), model (déf. "Proteus"), options…
+  - Topaz Astra 2       : topaz/upscale/video/creative   (fiche fal 2026-09-24)
+        video_url (req), upscale_factor (1-4), prompt, creativity/realism/sharp (0-1),
+        target_fps, H264_output — génératif : ~3 $ les 10 s jusqu'en 1080p, 5 $ en 4K (30 fps)
   - SeedVR2 Video       : fal-ai/seedvr/upscale/video   (~$0.001/MP)
-        video_url (req)
+        video_url (req), upscale_mode "factor"|"target", upscale_factor (1-10),
+        target_resolution 720p…2160p (relevé 2026-09-24 : le facteur est bien accepté)
 
 Bascule mock ↔ réel selon la clé fal.ai (api_key). Upload du fichier local → URL fal,
 puis téléchargement du résultat. Conçu pour être RÉUTILISÉ par Cinéma à terme.
@@ -23,8 +27,17 @@ from core.worker import humanize_api_error
 # (label UI, clé interne)
 UPSCALE_MODELS = [
     ("Topaz Video  (qualité maximale)",   "topaz"),
+    # Topaz Astra 2 (fal `topaz/upscale/video/creative`, 24/09/2026) : upscale
+    # GÉNÉRATIF qui réinvente le détail — ~0,30 $/s jusqu'en 1080p à 30 fps.
+    ("Topaz Astra 2  (génératif, ~$0.30/s)", "topaz_creative"),
     ("SeedVR2  (rapide, ~$0.001/MP)",     "seedvr"),
+    # SeedVR2 3B sur la machine (gabarit officiel ComfyUI « Video Upscale: SeedVR2
+    # 3B Int8 », 4 Go) — 0 $, ComfyUI Desktop doit tourner (24/09/2026).
+    ("SeedVR2 sur votre GPU  (ComfyUI · 0 $)", "seedvr_local"),
 ]
+
+#: Gabarit ComfyUI du mode local (catalogue vidéo — core/comfy_catalog).
+SEEDVR_LOCAL_TEMPLATE = "utility_seedvr2_3b_int8_upscale_video"
 
 # Modèles d'amélioration Topaz — (libellé affiché, valeur EXACTE de l'enum API).
 # ⚠ Vu en réel (2026-06-11) : « Gaia »/« Artemis »/« Starlight » nus n'existent
@@ -55,8 +68,9 @@ TOPAZ_MODELS = [
 ]
 
 _ENDPOINTS = {
-    "topaz":  "fal-ai/topaz/upscale/video",
-    "seedvr": "fal-ai/seedvr/upscale/video",
+    "topaz":          "fal-ai/topaz/upscale/video",
+    "topaz_creative": "topaz/upscale/video/creative",
+    "seedvr":         "fal-ai/seedvr/upscale/video",
 }
 
 
@@ -76,7 +90,8 @@ def _upscale_output_dir() -> str:
 
 
 class UpscaleVideoWorker(QThread):
-    """Upscale un clip vidéo via fal.ai (Topaz ou SeedVR2). Sortie = MP4 local."""
+    """Upscale un clip vidéo via fal.ai (Topaz, Topaz Astra 2, SeedVR2) ou en
+    local (SeedVR2 sur ComfyUI). Sortie = MP4 local."""
     progress = pyqtSignal(int, str)
     finished = pyqtSignal(str)      # chemin local du fichier upscalé
     failed   = pyqtSignal(str)
@@ -85,17 +100,63 @@ class UpscaleVideoWorker(QThread):
                  topaz_model: str = "Proteus", label: str = ""):
         super().__init__()
         self._video       = video_path
-        self._model       = model if model in _ENDPOINTS else "topaz"
+        self._model       = model if (model in _ENDPOINTS or model == "seedvr_local") else "topaz"
         self._factor      = int(upscale_factor)
         self._topaz_model = topaz_model or "Proteus"
         self._label       = label or "upscaled"
+        self._cancelled   = False
+
+    def cancel(self):
+        self._cancelled = True
 
     def run(self):
+        if self._model == "seedvr_local":
+            self._local()                      # aucune clé : c'est votre carte qui travaille
+            return
         key = load_config().get("api_key", "").strip()
         if not key:
             self._mock()
         else:
             self._real(key)
+
+    def _output_path(self) -> str:
+        # MÊME NOM que le fichier source (dossier différent) → « Relink Media »
+        # direct dans DaVinci Resolve (contrat commun à tous les modes).
+        base = os.path.splitext(os.path.basename(self._video))[0]
+        safe = "".join(c for c in base if c.isalnum() or c in " -_.()").strip() \
+            or (self._label or "upscaled")
+        return os.path.join(_upscale_output_dir(), f"{safe}.mp4")
+
+    def _local(self):
+        """SeedVR2 par le gabarit officiel ComfyUI (core/comfy_video) — 0 $."""
+        try:
+            import requests
+            from core import comfy_video as _cv
+            if not self._video or not os.path.isfile(self._video):
+                raise RuntimeError("Vidéo introuvable.")
+            res = _cv.subscribe(SEEDVR_LOCAL_TEMPLATE, {"video_path": self._video, "prompt": ""},
+                                progress=lambda m: self.progress.emit(30, m),
+                                is_cancelled=lambda: self._cancelled)
+            self.progress.emit(80, "Téléchargement de la vidéo upscalée…")
+            data = requests.get(res["video"]["url"], timeout=600).content
+            target = self._output_path()
+            ext = (os.path.splitext(res["video"].get("file_name", "") or "")[1] or ".mp4").lower()
+            raw = target if ext == ".mp4" else target[:-4] + ext
+            with open(raw, "wb") as f:
+                f.write(data)
+            if ext != ".mp4":
+                # WebM/GIF du gabarit → MP4 (ffmpeg embarqué), nom source conservé.
+                from api.h3_local import _to_mp4
+                out = _to_mp4(raw)
+                if out and out != target:
+                    os.replace(out, target)
+            path = target
+            self.progress.emit(100, "Upscalé ✓  0 $")
+            if not self._cancelled:
+                self.finished.emit(path)
+        except Exception as e:
+            if not self._cancelled:
+                self.failed.emit(humanize_api_error(f"Erreur upscaling local : {e}"))
 
     def _mock(self):
         for pct, msg in [
@@ -123,7 +184,18 @@ class UpscaleVideoWorker(QThread):
             if self._model == "topaz":
                 args["upscale_factor"] = max(1, min(4, self._factor))
                 args["model"] = self._topaz_model
-            # SeedVR2 : seul video_url est documenté → on n'envoie rien d'autre.
+            elif self._model == "topaz_creative":
+                # Astra 2 (fiche fal 2026-09-24) : facteur 1-4, réglages neutres
+                # (créativité et netteté 0,5) — le prompt guide le détail inventé.
+                args["upscale_factor"] = max(1, min(4, self._factor))
+                args["creativity"] = 0.5
+                args["sharp"] = 0.5
+            elif self._model == "seedvr":
+                # Fiche fal 2026-09-24 : upscale_mode « factor » + facteur 1-10.
+                # Avant, seul video_url partait et fal appliquait son ×2 quel
+                # que soit le ×4 demandé dans le menu.
+                args["upscale_mode"] = "factor"
+                args["upscale_factor"] = max(1, min(10, self._factor))
 
             self.progress.emit(25, f"Upscaling ×{self._factor} ({self._model})…")
             result = fal_client.subscribe(_ENDPOINTS[self._model], arguments=args)
@@ -136,13 +208,10 @@ class UpscaleVideoWorker(QThread):
             data = requests.get(out_url, timeout=600).content
 
             # MÊME NOM que le fichier source (dossier différent) → « Relink Media »
-            # direct dans DaVinci Resolve : on pointe le dossier data/upscaled/ et
+            # direct dans DaVinci Resolve : on pointe le dossier upscaled/ et
             # toute la timeline se relinke en haute résolution. Un ré-upscale du
             # même clip remplace la version précédente.
-            base = os.path.splitext(os.path.basename(self._video))[0]
-            safe = "".join(c for c in base if c.isalnum() or c in " -_.()").strip() \
-                or (self._label or "upscaled")
-            path = os.path.join(_upscale_output_dir(), f"{safe}.mp4")
+            path = self._output_path()
             with open(path, "wb") as f:
                 f.write(data)
 
