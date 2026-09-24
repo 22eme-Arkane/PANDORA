@@ -161,6 +161,12 @@ a second instead of forty.**
   Qwen-Image 2 and 2 Pro, Kling Image O3 (up to 10 references) and GPT Image
   2.5 Flare join the catalogue; FLUX.2 pro can edit with references; the GPT
   Image 2 label said ~$0.04 for an image that costs about $0.20 (token-billed).
+- **Installed build: the ComfyUI H3 templates are found again.** The installer
+  shipped the three MiniMax H3 workflow files, but the app looked for them in
+  its data folder instead of its program folder, so every H3 generation on
+  ComfyUI stopped at « No ComfyUI workflow ». Bundled assets now resolve from
+  the program folder in both editions, with a test that simulates the frozen
+  build.
 
 ---
 

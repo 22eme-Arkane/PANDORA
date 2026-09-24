@@ -10446,5 +10446,53 @@ def moteurs_fal_relus_fiche_par_fiche_24_09_2026():
     assert "fal-ai/flux-pulid" in inspect.getsource(nb.GeneratePortraitWithFaceIDWorker._real)
 
 
+@test
+def gabarits_comfy_trouves_en_version_installee():
+    """Constat Matthieu (24/09/2026, installeur 2.4.0) : « Aucun workflow
+    ComfyUI : choisissez un gabarit H3 ou un fichier .json » à chaque
+    génération H3 sur ComfyUI. Les .json étaient bien livrés dans _internal/
+    mais cherchés sous APP_ROOT, qui en version gelée est le dossier de DONNÉES
+    (%LOCALAPPDATA%\\PANDORA). Invisible en dev : les deux racines coïncident.
+    On simule le mode gelé : les gabarits doivent venir de sys._MEIPASS."""
+    import inspect, os, shutil, sys as _sys, tempfile
+    from core import comfy_workflow as wf, comfy_h3 as h3c, paths as _paths
+    _src = inspect.getsource(wf.workflows_dir)
+    assert "from core.paths import assets_root" in _src and "join(APP_ROOT" not in _src, \
+        "les assets livrés ne se cherchent pas sous APP_ROOT (dossier de données en gelé)"
+    # Dev : le dossier du projet, gabarits présents.
+    assert os.path.isfile(h3c.template_path("comfy_h3_i2v")) and os.path.isfile(h3c.template_path("comfy_h3_t2v"))
+    assert _paths.assets_root() == _paths.APP_ROOT, "en dev, une seule racine"
+    # Gelé simulé : _MEIPASS avec assets/comfy_workflows, APP_ROOT ailleurs.
+    tmp = tempfile.mkdtemp(prefix="pandora_meipass_")
+    try:
+        dst = os.path.join(tmp, "assets", "comfy_workflows")
+        os.makedirs(dst)
+        shutil.copy(h3c.template_path("comfy_h3_i2v"), dst)
+        had_frozen, had_mei = hasattr(_sys, "frozen"), hasattr(_sys, "_MEIPASS")
+        old_frozen, old_mei = getattr(_sys, "frozen", None), getattr(_sys, "_MEIPASS", None)
+        _sys.frozen, _sys._MEIPASS = True, tmp
+        try:
+            assert _paths.assets_root() == tmp
+            p = h3c.template_path("comfy_h3_i2v")
+            assert p.startswith(tmp) and os.path.isfile(p), p
+            assert not h3c.template_path("comfy_h3_t2v").startswith(_paths.APP_ROOT)
+            prm = h3c.prepare_params({"prompt": "x"}, "comfy_h3_i2v")
+            assert os.path.isfile(prm["workflow_path"]) and prm["mode"] == "i2v"
+        finally:
+            if had_frozen:
+                _sys.frozen = old_frozen
+            else:
+                del _sys.frozen
+            if had_mei:
+                _sys._MEIPASS = old_mei
+            else:
+                del _sys._MEIPASS
+    finally:
+        shutil.rmtree(tmp, ignore_errors=True)
+    # Et le build embarque bien le dossier (spec : tout assets/).
+    spec = open(os.path.join(_paths.APP_ROOT, "pandora.spec"), encoding="utf-8").read()
+    assert '("assets", "assets")' in spec, "assets/ (dont comfy_workflows) doit être dans datas"
+
+
 if __name__ == "__main__":
     sys.exit(main())

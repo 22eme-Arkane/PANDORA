@@ -607,6 +607,12 @@ def describe(api: dict) -> str:
 
 
 def workflows_dir() -> str:
-    """Dossier des gabarits livrés avec PANDORA (assets/comfy_workflows)."""
-    from core.paths import APP_ROOT
-    return os.path.join(APP_ROOT, "assets", "comfy_workflows")
+    """Dossier des gabarits livrés avec PANDORA (assets/comfy_workflows).
+
+    ⚠ Lu depuis la racine des ASSETS (sys._MEIPASS en version installée), pas
+    depuis APP_ROOT : en gelé, APP_ROOT est le dossier de données
+    %LOCALAPPDATA%\\PANDORA, où aucun gabarit n'existe — c'est l'erreur
+    « Aucun workflow ComfyUI » vue par Matthieu sur l'installeur 2.4.0
+    (24/09/2026), invisible en développement et dans les harnais."""
+    from core.paths import assets_root
+    return os.path.join(assets_root(), "assets", "comfy_workflows")
