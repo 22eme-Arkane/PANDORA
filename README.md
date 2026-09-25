@@ -161,6 +161,19 @@ a second instead of forty.**
   Qwen-Image 2 and 2 Pro, Kling Image O3 (up to 10 references) and GPT Image
   2.5 Flare join the catalogue; FLUX.2 pro can edit with references; the GPT
   Image 2 label said ~$0.04 for an image that costs about $0.20 (token-billed).
+- **« Edit clips »: the right account is blamed, the clip fits the engine, and
+  lip-sync is current.** A failed edit was reported as « fal.ai credits
+  insufficient » whatever the cause: the credit detector matched words like
+  « balance », « credit », « out of » or « quota », so an empty *Anthropic*
+  account (translation) or a fal validation error (« duration out of range »)
+  wore the same label. Each message now names its account, and fal's own
+  reason is shown. The source clip is converted to what the engine accepts
+  before upload (Seedance 2.0: 720p and 15 s; a 1080p export was refused).
+  Veo 3.1 is sent with the maximum moderation tolerance. The lip-sync row of
+  « Edit clips » gets the engine menu (Sync-3, Kling, PixVerse, VEED, Sync 2,
+  LatentSync — with year and specialty) and the audio to sync: the clip's own
+  track or a dubbing file, in both editions; a locally rendered clip (ComfyUI)
+  is uploaded before syncing.
 - **Installed build: the ComfyUI H3 templates are found again.** The installer
   shipped the three MiniMax H3 workflow files, but the app looked for them in
   its data folder instead of its program folder, so every H3 generation on

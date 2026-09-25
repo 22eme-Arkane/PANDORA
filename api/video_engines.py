@@ -648,6 +648,11 @@ class Veo3Worker(_CancellableWorker):
                 "resolution":     res,
                 "generate_audio": audio,
             }
+            if variant != "lite":
+                # Tolérance de modération au MAXIMUM (échelle 1-6, défaut fal 4 —
+                # fiches Pro/Fast ; Lite n'a pas le champ). Demande Matthieu
+                # 25/09/2026 : « au maximum des autorisations, sans restriction ».
+                args["safety_tolerance"] = "6"
             if mode == "i2v":
                 args["image_url"] = self.params["image_url"]
             if self.params.get("negative_prompt"):

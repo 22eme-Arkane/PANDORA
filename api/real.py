@@ -257,7 +257,13 @@ def run_real(params: dict, emit_progress, is_cancelled) -> dict:
     if _vp and os.path.isfile(_vp):
         try:
             from core.video_utils import ensure_engine_video
-            _vp2 = ensure_engine_video(_vp, emit=lambda m: emit_progress(2, m))
+            # Plafonds du MOTEUR (core/seedance_family) : la 2.0 n'accepte en
+            # référence que du 480p–720p de 2 à 15 s — un 1080p de 20 s partait
+            # tel quel et était refusé (25/09/2026). On réduit et on coupe AVANT
+            # l'upload, en le disant dans la progression.
+            _vh, _vs = _sf.video_input_limits(model)
+            _vp2 = ensure_engine_video(_vp, emit=lambda m: emit_progress(2, m),
+                                       max_height=_vh, max_seconds=_vs)
             if _vp2 and _vp2 != _vp:
                 params = dict(params)
                 params["video_path"] = _vp2

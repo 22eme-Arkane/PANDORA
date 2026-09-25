@@ -5101,6 +5101,33 @@ _FR_TO_EN: dict[str, str] = {
     "Grok Imagine 1.5 · xAI · son compris": "Grok Imagine 1.5 · xAI · sound included",
     "Grok Imagine 1.5 · image-to-video (le cadre suit l'image)": "Grok Imagine 1.5 · image-to-video (frame follows the image)",
     "Topaz Astra 2  (génératif, ~$0.30/s)": "Topaz Astra 2  (generative, ~$0.30/s)",
+    # Lèvres dans « Modifier des clips » (25/09/2026) — moteur au choix + audio fichier.
+    "Synchronisation labiale — moteur au choix ci-contre · ⚠ réencode (qualité moindre) + audio sur piste séparée":
+        "Lip sync — engine of your choice opposite · ⚠ re-encodes (lower quality) + audio on a separate track",
+    "Audio pour les lèvres :": "Audio for the lips:",
+    "Piste audio du clip source": "Source clip's audio track",
+    "Fichier audio (doublage, voix enregistrée)…": "Audio file (dubbing, recorded voice)…",
+    "Audio des lèvres manquant": "Lip-sync audio missing",
+    "Choisissez le fichier audio (doublage, voix) à synchroniser avec « Parcourir… », ou repassez sur « Piste audio du clip source ».":
+        "Choose the audio file (dubbing, voice) to sync with « Browse… », or switch back to « Source clip's audio track ».",
+    "Choisir l'audio à synchroniser (doublage, voix)": "Choose the audio to sync (dubbing, voice)",
+    "Tous les fichiers (*)": "All files (*)",
+    "Synchronisation labiale": "Lip sync",
+    "Lèvres": "Lips",
+    "lèvres ✗": "lips ✗",
+    "ffmpeg non détecté — installez ffmpeg et ajoutez-le au PATH pour activer la synchronisation labiale.":
+        "ffmpeg not detected — install ffmpeg and add it to PATH to enable lip sync.",
+    "Après génération, resynchronise les lèvres avec l'audio choisi ci-dessous (piste du clip source, ou fichier de doublage). ⚠ Réencode → qualité moindre ; la vidéo lip-synced et sa piste audio sont enregistrées séparément.":
+        "After generation, re-syncs the lips with the audio chosen below (source clip's track, or a dubbing file). ⚠ Re-encodes → lower quality; the lip-synced video and its audio track are saved separately.",
+    "Sync 2 Pro · $5/min — studio, gros plans": "Sync 2 Pro · $5/min — studio, close-ups",
+    "Sync-3 · $8/min — 2026 · le plus récent, image par image": "Sync-3 · $8/min — 2026 · the newest, frame-accurate",
+    "VEED v2 · ~$4.20/min — polyvalent": "VEED v2 · ~$4.20/min — all-round",
+    "Sync 2 · $3/min — conversationnel": "Sync 2 · $3/min — conversational",
+    "Kling Lipsync · ~$0.84/min — 2026 · clips de 2 à 10 s": "Kling Lipsync · ~$0.84/min — 2026 · 2 to 10 s clips",
+    "LatentSync · $0.20 / clip — éco (2025) · jusqu'à 40 s": "LatentSync · $0.20 / clip — budget (2025) · up to 40 s",
+    # Messages de crédit : le BON compte est nommé (core/worker, 25/09/2026).
+    "Crédits du fournisseur IA TEXTE (Anthropic/OpenAI…) épuisés — la préparation du prompt (traduction, analyse d'image, composition) a échoué. Le compte fal.ai n'est pas en cause.\nRechargez ce compte (console.anthropic.com → Plans & Billing) ou changez de fournisseur dans Paramètres → Assistant IA.":
+        "Text-AI provider credits (Anthropic/OpenAI…) exhausted — preparing the prompt (translation, image analysis, composition) failed. The fal.ai account is not the cause.\nTop up that account (console.anthropic.com → Plans & Billing) or switch provider in Settings → AI Assistant.",
     "Image de fin (optionnel)": "End image (optional)",
     "Le prompt est requis.": "A prompt is required.",
     "Le prompt est requis pour Kling T2V.": "A prompt is required for Kling T2V.",

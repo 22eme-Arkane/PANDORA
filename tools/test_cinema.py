@@ -9889,9 +9889,11 @@ def modifier_un_clip_endpoint_annulation_parquee_et_moteurs_locaux():
     assert "abandon_thread(prev)" in _ps and "ComfyEditWorker" in _ps
     assert "_per_clip_ref_images = {}" in inspect.getsource(DE.TabDavinciEdit._load_clips)
     assert '"resolution"' in inspect.getsource(DE.TabDavinciEdit._import_and_advance)
-    # L'étiquette ne promet plus LatentSync (le moteur réel est celui des Paramètres).
+    # L'étiquette ne promet plus LatentSync : depuis le 25/09/2026 le moteur se
+    # CHOISIT dans la ligne (menu nom · prix — année/spécialité, api/lipsync.engine_label).
     assert "Synchronisation LatentSync" not in inspect.getsource(DE.TabDavinciEdit._start_lipsync)
-    assert "_ls_name" in inspect.getsource(DE.TabDavinciEdit._build_ui)
+    _bsrc = inspect.getsource(DE.TabDavinciEdit._build_ui)
+    assert "_lipsync_engine_combo" in _bsrc and "engine_label" in _bsrc and "_ls_name" not in _bsrc
     # Tarif : un gabarit ComfyUI nommé vaut 0 $ dans le journal.
     from core import pricing
     assert pricing.price_per_second("comfy_edit:video_x_video_edit", "source") == 0.0
@@ -10492,6 +10494,90 @@ def gabarits_comfy_trouves_en_version_installee():
     # Et le build embarque bien le dossier (spec : tout assets/).
     spec = open(os.path.join(_paths.APP_ROOT, "pandora.spec"), encoding="utf-8").read()
     assert '("assets", "assets")' in spec, "assets/ (dont comfy_workflows) doit être dans datas"
+
+
+@test
+def modifier_un_clip_credits_limites_video_et_levres_25_09_2026():
+    """Constat Matthieu 25/09/2026 sur « Modifier des clips » : « Crédits fal.ai
+    insuffisants » à chaque génération — alors que fal avait 13 $ de solde et
+    que c'était le compte Anthropic (traduction) qui était vide. La détection
+    de crédit mordait sur « credit », « balance », « out of », « quota » : un
+    rejet de validation fal (« duration out of range ») passait aussi pour un
+    problème de crédits. Trois choses sont épinglées : le bon compte est nommé,
+    le clip de référence est conformé aux limites du moteur AVANT l'upload
+    (Seedance 2.0 : 720p, 15 s — fiche fal), et le lip-sync de cet onglet offre
+    le moteur au choix et l'audio de doublage, dans les deux éditions."""
+    import importlib, inspect, os, subprocess, tempfile
+    from core import worker as W, seedance_family as sf, video_utils as vu
+
+    # ── 1. Crédits : le BON compte, et une validation n'est plus un « crédit » ─
+    anth = ("Error code: 400 - {'type': 'error', 'error': {'type': 'invalid_request_error', "
+            "'message': 'Your credit balance is too low to access the Anthropic API. "
+            "Please go to Plans & Billing to upgrade or purchase credits.'}}")
+    m = W.humanize_api_error(anth)
+    assert "IA TEXTE" in m and "fal.ai n'est pas en cause" in m, m
+    falb = "403 Forbidden: Exhausted balance. Top up your balance at fal.ai/dashboard/billing."
+    assert W.humanize_api_error(falb).startswith("Crédits fal.ai insuffisants")
+    val = ("422 Unprocessable Entity: [{'loc': ['body', 'video_urls'], "
+           "'msg': 'Video duration out of range [2, 15]', 'type': 'value_error'}]")
+    assert W.humanize_api_error(val) == val, "un rejet de validation reste lisible tel quel"
+    for s in ("file size limit exceeded", "video out of range", "quota of 3 videos", "Content moderation: unsafe"):
+        assert not W.is_credit_error(s), s
+    assert W.fal_error_detail(val) == "Video duration out of range [2, 15]"
+    import ui.tab_davinci_edit as DE
+    assert DE.TabDavinciEdit._humanize_error(val).startswith("Refusé par le moteur : Video duration out of range")
+
+    # ── 2. Limites du clip de référence par moteur, appliquées par api/real ──
+    assert sf.video_input_limits("seedance-2.0") == (720, 15)
+    assert sf.video_input_limits("seedance-2.0-fast") == (720, 15)
+    assert sf.video_input_limits("seedance-2.5") == (1080, 30)
+    assert sf.video_input_limits("inconnu") == (720, 15), "repli = la 2.0, la plus stricte"
+    _rsrc = inspect.getsource(importlib.import_module("api.real"))
+    assert "video_input_limits(model)" in _rsrc and "max_height=_vh, max_seconds=_vs" in _rsrc
+    # Clip synthétique 1080p / 4 s → 720p / 2 s (ffmpeg embarqué) ; sans plafond, tel quel.
+    ffmpeg = vu.get_ffmpeg_exe()
+    d = tempfile.mkdtemp(prefix="pandora_vu_")
+    src = os.path.join(d, "clip1080.mp4")
+    r = subprocess.run([ffmpeg, "-y", "-f", "lavfi", "-i", "testsrc=size=1920x1080:rate=24:duration=4",
+                        "-pix_fmt", "yuv420p", "-c:v", "libx264", "-preset", "ultrafast", src],
+                       capture_output=True, timeout=120, creationflags=getattr(vu, "_NO_WINDOW", 0))
+    assert r.returncode == 0 and os.path.isfile(src), "ffmpeg embarqué : clip de test"
+    assert vu.video_needs_transcode(src) == "", "1080p progressif : rien à convertir pour un moteur 1080p"
+    why = vu.video_needs_transcode(src, max_height=720, max_seconds=2)
+    assert "> 720p" in why and "> 2 s" in why, why
+    out = vu.ensure_engine_video(src, max_height=720, max_seconds=2)
+    assert out != src and out.endswith("_720p_2s.mp4"), out
+    assert vu._video_dims(out) == (1280, 720), vu._video_dims(out)
+    assert abs(vu.video_duration_s(out) - 2.0) < 0.2, vu.video_duration_s(out)
+    assert vu.ensure_engine_video(src) == src, "sans plafond, le 1080p part tel quel"
+    assert vu.ensure_engine_video(src, max_height=720, max_seconds=2) == out, "cache par plafond"
+
+    # ── 3. Veo : tolérance de modération au maximum (Pro/Fast ; Lite n'a pas le champ)
+    import api.video_engines as ve
+    _vsrc = inspect.getsource(ve.Veo3Worker._real)
+    assert 'args["safety_tolerance"] = "6"' in _vsrc and 'if variant != "lite"' in _vsrc
+
+    # ── 4. Lèvres : moteur au choix + audio fichier, vidéo locale déposée chez fal
+    from api import lipsync as ls
+    assert ls.engine_label("sync3").startswith("Sync-3 · $8/min — 2026")
+    assert ls._is_public_url("https://v3.fal.media/x.mp4")
+    assert not ls._is_public_url("http://127.0.0.1:8188/view?filename=a.mp4")
+    assert not ls._is_public_url(r"C:\clips\a.mp4")
+    assert "ensure_public_video_url(" in inspect.getsource(ls.LipSyncWorker._run)
+    tab = DE.TabDavinciEdit()
+    keys = [tab._lipsync_engine_combo.itemData(i) for i in range(tab._lipsync_engine_combo.count())]
+    assert keys == ls.LIPSYNC_ENGINE_ORDER and "sync3" in keys and "kling" in keys, keys
+    assert tab._lipsync_audio_combo.currentData() == "clip" and tab._btn_lipsync_audio.isHidden()
+    tab._lipsync_audio_combo.setCurrentIndex(1)
+    assert tab._lipsync_audio_combo.currentData() == "file" and not tab._btn_lipsync_audio.isHidden()
+    assert tab._lipsync_audio_file() == "", "aucun fichier choisi → rien"
+    _ssrc = inspect.getsource(DE.TabDavinciEdit._start_lipsync)
+    assert "engine            = engine" in _ssrc and "audio_path        = self._lipsync_audio_file()" in _ssrc
+    assert "LatentSyncWorker" not in _ssrc, "le worker s'appelle par son nom générique"
+    _gsrc = inspect.getsource(DE.TabDavinciEdit._start_queue) if hasattr(DE.TabDavinciEdit, "_start_queue") \
+        else inspect.getsource(DE)
+    assert "Audio des lèvres manquant" in _gsrc, "mode fichier sans fichier → refus AVANT de payer"
+    tab.deleteLater()
 
 
 if __name__ == "__main__":

@@ -7471,5 +7471,32 @@ def moteurs_fal_relus_24_09_2026_live():
     assert "_Veo31Form" not in inspect.getsource(_M) and "PixVerse v4.5" not in inspect.getsource(_M)
 
 
+@test
+def modifier_clips_live_levres_moteur_et_audio_fichier():
+    """Parité Cinéma (25/09/2026) : le lip-sync de « Modifier des clips » Live
+    propose le moteur au choix (Sync-3, Kling, PixVerse… avec l'année et la
+    spécialité) et l'audio à synchroniser (piste du clip ou fichier de
+    doublage) ; la file enchaîne les lèvres APRÈS le téléchargement du clip et
+    reprend depuis les slots du worker de lèvres — jamais mis à None à chaud."""
+    import inspect
+    import ui.tab_modify_live as M
+    from api import lipsync as ls
+    t = M.TabModifyLive()
+    keys = [t._lipsync_engine_combo.itemData(i) for i in range(t._lipsync_engine_combo.count())]
+    assert keys == ls.LIPSYNC_ENGINE_ORDER, keys
+    assert t._lipsync_audio_combo.currentData() == "clip" and t._btn_lipsync_audio.isHidden()
+    t._lipsync_audio_combo.setCurrentIndex(1)
+    assert not t._btn_lipsync_audio.isHidden()
+    assert not t._lipsync_wanted() and t._lipsync_audio_file() == ""
+    assert t._lipsync_worker is None
+    src = inspect.getsource(M.TabModifyLive._on_one_finished)
+    assert "_start_lipsync(" in src and "_lipsync_wanted()" in src and \
+        src.index("save_to_history") < src.index("_start_lipsync("), "lèvres APRÈS l'historique"
+    s2 = inspect.getsource(M.TabModifyLive._start_lipsync)
+    assert "LipSyncWorker(" in s2 and "audio_path=audio_file" in s2 and "abandon_thread(" in s2
+    assert "Audio des lèvres manquant" in inspect.getsource(M.TabModifyLive._on_generate)
+    t.deleteLater()
+
+
 if __name__ == "__main__":
     sys.exit(main())

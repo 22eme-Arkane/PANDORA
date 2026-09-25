@@ -44,16 +44,32 @@ _NO_WINDOW = subprocess.CREATE_NO_WINDOW if sys.platform == "win32" else 0
 
 # ── Catalogue des moteurs de synchronisation labiale ──────────────────────────
 LIPSYNC_ENGINES: dict[str, dict] = {
-    "sync2pro":   {"endpoint": "fal-ai/sync-lipsync/v2/pro", "name": "Sync 2 Pro", "price": "$5/min"},
-    "sync3":      {"endpoint": "fal-ai/sync-lipsync/v3",     "name": "Sync-3",     "price": "$8/min"},
-    "veed2":      {"endpoint": "veed/lipsync/v2",            "name": "VEED v2",    "price": "~$4.20/min"},
-    "sync2":      {"endpoint": "fal-ai/sync-lipsync/v2",     "name": "Sync 2",     "price": "$3/min"},
+    # « tag » : ce qui distingue le moteur, affiché dans les menus (25/09/2026 —
+    # Matthieu ne voyait qu'une « vieille version » : le menu ne disait ni
+    # l'année ni la spécialité de chacun).
+    "sync2pro":   {"endpoint": "fal-ai/sync-lipsync/v2/pro", "name": "Sync 2 Pro", "price": "$5/min",
+                   "tag": "studio, gros plans"},
+    "sync3":      {"endpoint": "fal-ai/sync-lipsync/v3",     "name": "Sync-3",     "price": "$8/min",
+                   "tag": "2026 · le plus récent, image par image"},
+    "veed2":      {"endpoint": "veed/lipsync/v2",            "name": "VEED v2",    "price": "~$4.20/min",
+                   "tag": "polyvalent"},
+    "sync2":      {"endpoint": "fal-ai/sync-lipsync/v2",     "name": "Sync 2",     "price": "$3/min",
+                   "tag": "conversationnel"},
     # Ajoutés le 2026-09-24 (fiches fal) — même contrat video_url + audio_url.
-    "pixverse":   {"endpoint": "fal-ai/pixverse/lipsync",    "name": "PixVerse Lipsync", "price": "~$2.40/min"},
+    "pixverse":   {"endpoint": "fal-ai/pixverse/lipsync",    "name": "PixVerse Lipsync", "price": "~$2.40/min",
+                   "tag": "2026"},
     "kling":      {"endpoint": "fal-ai/kling-video/lipsync/audio-to-video",
-                   "name": "Kling Lipsync", "price": "~$0.84/min · clip 2-10 s"},
-    "latentsync": {"endpoint": "fal-ai/latentsync",          "name": "LatentSync", "price": "éco"},
+                   "name": "Kling Lipsync", "price": "~$0.84/min", "tag": "2026 · clips de 2 à 10 s"},
+    "latentsync": {"endpoint": "fal-ai/latentsync",          "name": "LatentSync", "price": "$0.20 / clip",
+                   "tag": "éco (2025) · jusqu'à 40 s"},
 }
+
+
+def engine_label(key: str) -> str:
+    """« Sync-3 · $8/min — 2026 · le plus récent… » pour un menu."""
+    e = LIPSYNC_ENGINES.get(key) or LIPSYNC_ENGINES[LIPSYNC_DEFAULT]
+    tag = e.get("tag", "")
+    return f"{e['name']} · {e['price']}" + (f" — {tag}" if tag else "")
 # Ordre = du plus cher au plus économique (VEED se place entre Sync 2 Pro et
 # Sync 2 : 0,07 $/s ≈ 4,20 $/min ; PixVerse 0,04 $/s ; Kling 0,014 $/s).
 LIPSYNC_ENGINE_ORDER = ["sync2pro", "sync3", "veed2", "sync2", "pixverse", "kling", "latentsync"]
@@ -82,6 +98,36 @@ def ffmpeg_available() -> bool:
         return os.path.isfile(exe)
     import shutil
     return shutil.which("ffmpeg") is not None
+
+
+def _is_public_url(url: str) -> bool:
+    u = (url or "").strip().lower()
+    if not u.startswith(("http://", "https://")):
+        return False
+    return not any(h in u for h in ("://localhost", "://127.0.0.1", "://0.0.0.0", "://[::1]"))
+
+
+def ensure_public_video_url(fal_client, video_url: str, tmp_dir: str) -> str:
+    """URL de vidéo que fal peut LIRE. Un résultat ComfyUI (« Modifier un clip »
+    sur la machine) est une URL /view du serveur local, et un fichier déjà
+    téléchargé est un chemin : dans les deux cas le moteur de lip-sync ne
+    verrait rien — on rapatrie puis on dépose chez fal (25/09/2026)."""
+    url = (video_url or "").strip()
+    if _is_public_url(url):
+        return url
+    local = url
+    if url.lower().startswith(("http://", "https://")):
+        import requests
+        local = os.path.join(tmp_dir, "source_video.mp4")
+        with requests.get(url, stream=True, timeout=600) as r:
+            r.raise_for_status()
+            with open(local, "wb") as f:
+                for chunk in r.iter_content(1 << 20):
+                    f.write(chunk)
+    if not (local and os.path.isfile(local)):
+        raise RuntimeError("Vidéo à synchroniser introuvable (ni URL publique, ni fichier local).")
+    _cap = io.StringIO() if False else None
+    return fal_client.upload_file(local)
 
 
 def _upload_audio_robust(fal_client, path: str) -> str:
@@ -245,6 +291,9 @@ class LipSyncWorker(QThread):
         # ── 2. Upload audio vers fal.ai (robuste non-ASCII + fallback data-URL) ─
         self.progress.emit(20, "Upload audio vers fal.ai…")
         audio_url = _upload_audio_robust(fal_client, wav_src)
+        # La vidéo aussi doit être lisible par fal (résultat ComfyUI local,
+        # fichier déjà téléchargé) — sinon rien n'est déposé, elle est reprise.
+        video_url = ensure_public_video_url(fal_client, self._video_url, tmp_dir)
 
         # ── 3. Appel du moteur lip-sync choisi ─────────────────────────────────
         _eng = LIPSYNC_ENGINES.get(self._engine) or LIPSYNC_ENGINES[LIPSYNC_DEFAULT]
@@ -252,7 +301,7 @@ class LipSyncWorker(QThread):
         result = fal_client.subscribe(
             lipsync_endpoint(self._engine),
             arguments={
-                "video_url": self._video_url,
+                "video_url": video_url,
                 "audio_url": audio_url,
             },
             with_logs=False,

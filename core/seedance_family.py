@@ -75,6 +75,25 @@ _DEFAULT_KEY = "seedance-2.0"
 # Plafond GLOBAL d'entrées multimodales de la 2.5 (images + vidéos + audio).
 MAX_MULTIMODAL_2_5 = 50
 
+# Ce qu'un CLIP DE RÉFÉRENCE (`video_urls`, « Modifier un clip ») peut être —
+# fiches fal relues le 25/09/2026 : (hauteur max, durée max en secondes).
+#   · 2.0 (et Fast/Mini) : 480p–720p, 2 à 15 s cumulées, < 50 Mo. Un export
+#     DaVinci 1080p partait tel quel et était REFUSÉ — l'erreur, avalée par la
+#     détection de crédit, s'affichait « Crédits fal.ai insuffisants ».
+#   · 2.5 : 300 à 6 000 px par côté, 1,8 à 30,2 s par vidéo, 200 Mo — le
+#     plafond 1080p est le nôtre (upload utile), 30 s la fenêtre du moteur.
+_VIDEO_INPUT_LIMITS = {
+    "seedance-2.0":      (720, 15),
+    "seedance-2.0-fast": (720, 15),
+    "seedance-2.0-mini": (720, 15),
+    "seedance-2.5":      (1080, 30),
+}
+
+
+def video_input_limits(engine_key: str) -> tuple[int, int]:
+    """(hauteur max en px, durée max en s) d'un clip envoyé en référence."""
+    return _VIDEO_INPUT_LIMITS.get((engine_key or "").strip(), _VIDEO_INPUT_LIMITS[_DEFAULT_KEY])
+
 
 def is_seedance(engine_key: str) -> bool:
     return (engine_key or "").strip() in _FAMILY

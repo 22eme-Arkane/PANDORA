@@ -646,26 +646,36 @@ def video_duration_s(path: str) -> float:
 ENGINE_MAX_HEIGHT = 1080
 
 
-def video_needs_transcode(path: str) -> str:
+def video_needs_transcode(path: str, max_height: int = ENGINE_MAX_HEIGHT,
+                          max_seconds: float = 0.0) -> str:
     """'' si le clip part TEL QUEL aux moteurs ; sinon une RAISON courte et lisible
     (pour PRÉVENIR l'utilisateur avant de générer) : « format/codec », « > 1080p »,
-    « entrelacée », ou une combinaison."""
+    « entrelacée », « > 15 s », ou une combinaison.
+
+    `max_height` / `max_seconds` : plafonds PROPRES AU MOTEUR (Seedance 2.0
+    n'accepte en référence vidéo que du 480p–720p de 2 à 15 s — fiche fal relue
+    le 25/09/2026 ; un export DaVinci 1080p partait tel quel et était refusé)."""
     if not path or not os.path.isfile(path):
         return ""
     reasons = []
     if not is_engine_compatible(path):
         reasons.append("format/codec non supporté")
     dims = _video_dims(path)
-    if dims and dims[1] > ENGINE_MAX_HEIGHT:
-        reasons.append(f"résolution {dims[0]}×{dims[1]} > 1080p")
+    if dims and min(dims) > max_height:
+        reasons.append(f"résolution {dims[0]}×{dims[1]} > {max_height}p")
+    if max_seconds and max_seconds > 0:
+        d = video_duration_s(path)
+        if d and d > max_seconds + 0.05:
+            reasons.append(f"durée {d:.1f} s > {max_seconds:g} s")
     if video_is_interlaced(path):
         reasons.append("vidéo entrelacée (trames)")
     return " · ".join(reasons)
 
 
-def ensure_engine_video(path: str, emit=None) -> str:
-    """Retourne un chemin vidéo H.264/mp4 PROGRESSIF ≤ 1080p exploitable par les
-    moteurs IA.
+def ensure_engine_video(path: str, emit=None, max_height: int = ENGINE_MAX_HEIGHT,
+                        max_seconds: float = 0.0) -> str:
+    """Retourne un chemin vidéo H.264/mp4 PROGRESSIF ≤ `max_height` (défaut
+    1080p) et ≤ `max_seconds` (0 = pas de coupe) exploitable par les moteurs IA.
 
     - BYPASS TOTAL (chemin d'origine, zéro ré-encodage) si le clip est déjà
       conforme : mp4/H.264, yuv420p, ≤ 1080p, progressif — le cas le plus
@@ -686,9 +696,10 @@ def ensure_engine_video(path: str, emit=None) -> str:
     """
     if not path or not os.path.isfile(path):
         return path
-    reason = video_needs_transcode(path)
+    max_height = int(max_height or ENGINE_MAX_HEIGHT)
+    reason = video_needs_transcode(path, max_height=max_height, max_seconds=max_seconds)
     if not reason:
-        return path   # déjà H.264/mp4 yuv420p progressif ≤1080p → envoyé tel quel
+        return path   # déjà H.264/mp4 yuv420p progressif ≤ plafond → envoyé tel quel
     try:
         st = os.stat(path)
         sig = f"{os.path.splitext(os.path.basename(path))[0]}_{st.st_size}_{int(st.st_mtime)}"
@@ -697,25 +708,33 @@ def ensure_engine_video(path: str, emit=None) -> str:
     safe = "".join(c for c in sig if c.isalnum() or c in "-_") or "clip"
     # Suffixe _h264p2 : invalide l'ancien cache _h264 (produit avec le yadif
     # systématique + preset veryfast → fichiers potentiellement dégradés).
-    out = os.path.join(_transcode_cache_dir(), safe + "_h264p2.mp4")
+    # Les plafonds propres au moteur font partie de la clé : un 720p/15 s pour
+    # Seedance ne doit pas resservir un 1080p mis en cache pour Kling.
+    tag = "" if (max_height == ENGINE_MAX_HEIGHT and not max_seconds) else \
+        f"_{max_height}p{('_' + str(int(round(max_seconds))) + 's') if max_seconds else ''}"
+    out = os.path.join(_transcode_cache_dir(), safe + "_h264p2" + tag + ".mp4")
     if os.path.isfile(out) and os.path.getsize(out) > 0:
         return out
     if emit:
         try:
-            emit(f"Conversion du clip ({reason}) en H.264 progressif ≤ 1080p…")
+            emit(f"Conversion du clip ({reason}) en H.264 progressif ≤ {max_height}p"
+                 + (f", {max_seconds:g} s max" if max_seconds else "") + "…")
         except Exception:
             pass
     try:
         vf_parts = []
         if video_is_interlaced(path):
             vf_parts.append("yadif")   # source réellement entrelacée UNIQUEMENT
-        # scale=-2:'min(1080,ih)' → plafonne à 1080p sans jamais agrandir, AR conservé.
-        vf_parts.append("scale=-2:'min(1080,ih)':flags=lanczos")
+        # Plafonne le PETIT côté (portrait compris) sans jamais agrandir, AR conservé.
+        vf_parts.append(f"scale=if(gt(iw\\,ih)\\,-2\\,'min({max_height},iw)'):"
+                        f"if(gt(iw\\,ih)\\,'min({max_height},ih)'\\,-2):flags=lanczos")
         vf_parts.append("format=yuv420p")
-        cmd = [get_ffmpeg_exe(), "-y", "-i", path,
-               "-vf", ",".join(vf_parts),
-               "-c:v", "libx264", "-preset", "slow", "-crf", "18",
-               "-movflags", "+faststart", "-c:a", "aac", "-b:a", "192k", out]
+        cmd = [get_ffmpeg_exe(), "-y", "-i", path]
+        if max_seconds and max_seconds > 0:
+            cmd += ["-t", f"{float(max_seconds):.3f}"]   # coupe : les N premières secondes
+        cmd += ["-vf", ",".join(vf_parts),
+                "-c:v", "libx264", "-preset", "slow", "-crf", "18",
+                "-movflags", "+faststart", "-c:a", "aac", "-b:a", "192k", out]
         r = subprocess.run(cmd, capture_output=True, timeout=1800, creationflags=_NO_WINDOW)
         if r.returncode == 0 and os.path.isfile(out) and os.path.getsize(out) > 0:
             return out

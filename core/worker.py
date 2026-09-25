@@ -47,22 +47,65 @@ def is_running(t) -> bool:
 _still_running = is_running
 
 
+# Mots-clés d'un VRAI refus de facturation. « out of », « limit exceeded »,
+# « quota », « balance » ou le simple mot « credit » y figuraient : un rejet
+# de validation fal (« duration out of range », « file size limit exceeded »)
+# ou l'erreur de crédit du fournisseur IA TEXTE (Anthropic : « Your credit
+# balance is too low ») s'affichaient tous en « Crédits fal.ai insuffisants »
+# — constat Matthieu 25/09/2026, alors que fal avait 13 $ de solde.
 _CREDIT_KEYWORDS = (
-    "insufficient", "credit", "balance", "payment", "402",
-    "not enough", "out of", "topup", "top up", "top-up",
-    "quota", "limit exceeded", "billing",
+    "exhausted balance", "insufficient balance", "balance is too low",
+    "insufficient credit", "insufficient funds", "top up your", "topup",
+    "payment required", "402", "purchase credits", "billing_hard_limit",
+    "insufficient_quota", "exceeded your current quota", "not enough credit",
+)
+# Ce qui signe une erreur du fournisseur IA TEXTE (traduction, analyse
+# d'image, composition) et non de fal.ai.
+_TEXT_AI_MARKERS = (
+    "anthropic", "plans & billing", "openai", "mistral", "insufficient_quota",
+    "exceeded your current quota", "x-api-key", "console.anthropic",
 )
 
+
 def is_credit_error(err: str) -> bool:
-    low = err.lower()
+    low = (err or "").lower()
     return any(kw in low for kw in _CREDIT_KEYWORDS)
 
+
+def is_text_ai_error(err: str) -> bool:
+    """L'erreur vient du fournisseur IA texte (Anthropic/OpenAI…), pas de fal."""
+    low = (err or "").lower()
+    return any(m in low for m in _TEXT_AI_MARKERS)
+
+
+def fal_error_detail(err: str) -> str:
+    """Le ou les `msg` d'un détail de validation fal (liste JSON-like
+    `[{'loc': [...], 'msg': '…'}]`), sinon l'erreur elle-même, courte. Ce que
+    fal reproche au clip (durée, résolution, taille) doit se LIRE, pas se
+    deviner (« durée trop courte ? »)."""
+    import re as _re
+    msgs = _re.findall(r"""['"]msg['"]\s*:\s*['"]([^'"]{3,200})['"]""", err or "")
+    if msgs:
+        return " · ".join(dict.fromkeys(m.strip() for m in msgs))
+    return (err or "").strip().replace("\n", " ")[:200]
+
+
 def humanize_api_error(err: str) -> str:
-    """Détecte les erreurs de crédit fal.ai et retourne un message lisible."""
+    """Erreur d'un worker de génération, lisible : nomme le BON compte quand
+    c'est une affaire de crédits, laisse passer tout le reste tel quel."""
     if is_credit_error(err):
+        if is_text_ai_error(err):
+            return (
+                "Crédits du fournisseur IA TEXTE (Anthropic/OpenAI…) épuisés — la "
+                "préparation du prompt (traduction, analyse d'image, composition) a "
+                "échoué. Le compte fal.ai n'est pas en cause.\n"
+                "Rechargez ce compte (console.anthropic.com → Plans & Billing) ou "
+                "changez de fournisseur dans Paramètres → Assistant IA."
+            )
         return (
             "Crédits fal.ai insuffisants — la génération n'a pas pu démarrer.\n"
-            "Rechargez votre compte sur fal.ai/dashboard pour continuer."
+            "Rechargez votre compte sur fal.ai/dashboard pour continuer.\n"
+            f"({fal_error_detail(err)})"
         )
     return err
 

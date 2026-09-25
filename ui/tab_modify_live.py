@@ -135,6 +135,8 @@ class TabModifyLive(QScrollArea):
         self._queue: list[int] = []
         self._queue_pos = 0
         self._worker = None
+        self._lipsync_worker = None          # parqué (abandon_thread), jamais mis à None à chaud
+        self._lipsync_audio_path = ""        # fichier de doublage/voix choisi (RENDU & AUDIO)
         self._failed: list[str] = []
         self._mock_count = 0
         self._last_folder = ""
@@ -321,6 +323,76 @@ class TabModifyLive(QScrollArea):
             self._res_combo.addItem(_lbl, _val)
         _res_row.addWidget(self._res_combo, 1)
         _ra.addLayout(_res_row)
+
+        # ── Lèvres (parité Cinéma, 25/09/2026) : moteur AU CHOIX (fiches fal
+        # 2026 — Sync-3, Kling, PixVerse… le menu dit lequel est récent) et
+        # audio à synchroniser : piste du clip source ou fichier (doublage). ──
+        from api.lipsync import (LIPSYNC_ENGINE_ORDER as _LSO, engine_label as _ls_label,
+                                 get_lipsync_engine as _gle, ffmpeg_available as _ffmpeg_ok)
+        _ls_row = QHBoxLayout()
+        _ls_row.setSpacing(8)
+        self._lipsync_chk = QCheckBox(translate("Resynchroniser les lèvres"))
+        self._lipsync_chk.setChecked(False)
+        self._lipsync_chk.setStyleSheet(f"color:{C['text_primary']};font-size:12px;background:transparent;")
+        self._lipsync_chk.setToolTip(translate(
+            "Après génération, resynchronise les lèvres avec l'audio choisi ci-dessous "
+            "(piste du clip source, ou fichier de doublage). ⚠ Réencode → qualité moindre ; "
+            "la vidéo lip-synced et sa piste audio sont enregistrées séparément."))
+        _ls_row.addWidget(self._lipsync_chk)
+        self._lipsync_engine_combo = QComboBox()
+        self._lipsync_engine_combo.setMinimumHeight(30)
+        self._lipsync_engine_combo.setStyleSheet(_combo_style())
+        for _k in _LSO:
+            self._lipsync_engine_combo.addItem(translate(_ls_label(_k)), _k)
+        _cur_ls = _gle()
+        for _i in range(self._lipsync_engine_combo.count()):
+            if self._lipsync_engine_combo.itemData(_i) == _cur_ls:
+                self._lipsync_engine_combo.setCurrentIndex(_i)
+                break
+
+        def _save_ls_engine(*_a):
+            # Même réglage que le Cinéma et le storyboard (config lipsync_engine).
+            from core.config import load_config, save_config
+            _c = load_config()
+            _c["lipsync_engine"] = self._lipsync_engine_combo.currentData() or "sync2pro"
+            save_config(_c)
+        self._lipsync_engine_combo.currentIndexChanged.connect(_save_ls_engine)
+        _ls_row.addWidget(self._lipsync_engine_combo, 1)
+        _ra.addLayout(_ls_row)
+        if not _ffmpeg_ok():
+            self._lipsync_chk.setEnabled(False)
+            self._lipsync_chk.setToolTip(translate(
+                "ffmpeg non détecté — installez ffmpeg et ajoutez-le au PATH pour activer la synchronisation labiale."))
+
+        _ls_audio_row = QHBoxLayout()
+        _ls_audio_row.setSpacing(8)
+        _ls_audio_lbl = QLabel(translate("Audio pour les lèvres :"))
+        _ls_audio_lbl.setStyleSheet(f"color:{C['text_secondary']};font-size:12px;background:transparent;")
+        _ls_audio_row.addWidget(_ls_audio_lbl)
+        self._lipsync_audio_combo = QComboBox()
+        self._lipsync_audio_combo.setMinimumHeight(30)
+        self._lipsync_audio_combo.setStyleSheet(_combo_style())
+        self._lipsync_audio_combo.addItem(translate("Piste audio du clip source"), "clip")
+        self._lipsync_audio_combo.addItem(translate("Fichier audio (doublage, voix enregistrée)…"), "file")
+        _ls_audio_row.addWidget(self._lipsync_audio_combo, 1)
+        self._lipsync_audio_lbl = QLabel("")
+        self._lipsync_audio_lbl.setStyleSheet(
+            f"color:{C['text_dim']};font-size:10px;font-family:'Consolas',monospace;background:transparent;")
+        _ls_audio_row.addWidget(self._lipsync_audio_lbl, 1)
+        self._btn_lipsync_audio = QPushButton(translate("Parcourir…"))
+        self._btn_lipsync_audio.setMinimumHeight(30)
+        self._btn_lipsync_audio.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._btn_lipsync_audio.setStyleSheet(
+            f"QPushButton{{background:transparent;color:{C['accent']};border:1px solid {C['accent_dim']};"
+            f"border-radius:6px;padding:0 10px;font-size:11px;}}"
+            f"QPushButton:hover{{border-color:{C['accent']};}}")
+        self._btn_lipsync_audio.setVisible(False)
+        self._btn_lipsync_audio.clicked.connect(self._on_pick_lipsync_audio)
+        _ls_audio_row.addWidget(self._btn_lipsync_audio)
+        self._lipsync_audio_combo.currentIndexChanged.connect(
+            lambda *_a: self._btn_lipsync_audio.setVisible(
+                self._lipsync_audio_combo.currentData() == "file"))
+        _ra.addLayout(_ls_audio_row)
         lay.addWidget(self._ra_body)
 
         # ── Moteur + durée ───────────────────────────────────────────────────
@@ -593,6 +665,15 @@ class TabModifyLive(QScrollArea):
             QMessageBox.warning(self, translate("Aucun clip"),
                                 translate("Cochez au moins un clip à modifier."))
             return
+        # Lèvres sur un FICHIER audio : il faut l'avoir choisi avant de payer.
+        if (self._lipsync_wanted() and self._lipsync_audio_combo.currentData() == "file"
+                and not self._lipsync_audio_file()):
+            from PyQt6.QtWidgets import QMessageBox
+            QMessageBox.warning(
+                self, translate("Audio des lèvres manquant"),
+                translate("Choisissez le fichier audio (doublage, voix) à synchroniser avec "
+                          "« Parcourir… », ou repassez sur « Piste audio du clip source »."))
+            return
         # Gabarit ComfyUI : sans serveur vivant, on GUIDE (fenêtre du module).
         if str(self._engine_combo.currentData() or "").startswith("comfy_edit:"):
             from core import comfy as _cf
@@ -744,12 +825,89 @@ class TabModifyLive(QScrollArea):
             except Exception:
                 pass
             self.generation_done.emit(result)
+            # Lèvres (RENDU & AUDIO) : après le téléchargement, avant d'avancer —
+            # la file reprend depuis _on_lipsync_done / _on_lipsync_failed.
+            if self._lipsync_wanted() and self._start_lipsync(result, idx, local):
+                return
         else:
             # Vidéo payée mais téléchargement raté : ce n'est PAS un « ✓ ».
             err = ir.get("error") or translate("téléchargement raté")
             self._failed.append(err)
             self._set_item_prefix(idx, "✗ ")
             self._status_lbl.setText(f"✗  {err[:100]}")
+        self._queue_pos += 1
+        self._process_next()
+
+    # ── Lèvres (parité Cinéma, 25/09/2026) ─────────────────────────────────────
+
+    def _on_pick_lipsync_audio(self):
+        from PyQt6.QtWidgets import QFileDialog
+        path, _ = QFileDialog.getOpenFileName(
+            self, translate("Choisir l'audio à synchroniser (doublage, voix)"), "",
+            "Audio (*.wav *.mp3 *.m4a *.aac *.flac *.ogg);;" + translate("Tous les fichiers (*)"),
+        )
+        if path:
+            self._lipsync_audio_path = path
+            self._lipsync_audio_lbl.setText(os.path.basename(path))
+
+    def _lipsync_audio_file(self) -> str:
+        """Fichier audio choisi (mode « fichier »), sinon '' = piste du clip source."""
+        if self._lipsync_audio_combo.currentData() == "file":
+            p = self._lipsync_audio_path or ""
+            return p if os.path.isfile(p) else ""
+        return ""
+
+    def _lipsync_wanted(self) -> bool:
+        chk = getattr(self, "_lipsync_chk", None)
+        return bool(chk is not None and chk.isChecked() and chk.isEnabled())
+
+    def _start_lipsync(self, result: dict, idx: int, local: str) -> bool:
+        """Lance la synchronisation labiale sur le clip généré ; False si rien à
+        synchroniser (la file avance alors normalement)."""
+        try:
+            from api.lipsync import LipSyncWorker, LIPSYNC_ENGINES as _LSE
+            from core.config import get_output_dir
+            from core.video_utils import video_duration_s
+            engine = self._lipsync_engine_combo.currentData() or ""
+            audio_file = self._lipsync_audio_file()
+            source = self._clips[idx] if 0 <= idx < len(self._clips) else ""
+            if not audio_file and not (source and os.path.isfile(source)):
+                return False
+            if self._lipsync_worker is not None:
+                abandon_thread(self._lipsync_worker)
+            name = (_LSE.get(engine) or {}).get("name", "lip-sync")
+            self._set_item_prefix(idx, f"⏳ ↷ {name} ")
+            self._status_lbl.setText("↷  " + translate("Synchronisation labiale") + f" ({name})…")
+            self._lipsync_worker = LipSyncWorker(
+                video_url=result.get("video_url", "") or local,
+                source_video_path=source,
+                output_dir=os.path.dirname(local) or get_output_dir(),
+                shot_name=os.path.splitext(os.path.basename(local))[0],
+                engine=engine,
+                audio_path=audio_file,
+                target_duration=video_duration_s(local) or 0.0,
+            )
+            self._lipsync_worker.progress.connect(self._on_progress)
+            self._lipsync_worker.finished.connect(
+                lambda vp, ap, _i=idx: self._on_lipsync_done(_i, vp, ap))
+            self._lipsync_worker.failed.connect(
+                lambda e, _i=idx: self._on_lipsync_failed(_i, e))
+            self._lipsync_worker.start()
+            return True
+        except Exception:
+            return False
+
+    def _on_lipsync_done(self, idx: int, video_path: str, audio_path: str):
+        self._set_item_prefix(idx, "✓ ↷ ")
+        if video_path:
+            self._last_folder = os.path.dirname(video_path)
+        self._queue_pos += 1
+        self._process_next()
+
+    def _on_lipsync_failed(self, idx: int, err: str):
+        # Le clip généré est sauvegardé ; seules les lèvres ont échoué.
+        self._set_item_prefix(idx, "✓ (" + translate("lèvres ✗") + ") ")
+        self._failed.append(translate("Lèvres") + " : " + str(err)[:100])
         self._queue_pos += 1
         self._process_next()
 

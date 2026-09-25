@@ -1099,18 +1099,48 @@ class TabDavinciEdit(QScrollArea):
         self._dyn_cam_cb = self._dyn_cam_toggle_row.findChild(QCheckBox)
         _ra_body_lay.addWidget(self._dyn_cam_toggle_row)
 
-        # Resynchroniser les lèvres — DANS le corps de RENDU & AUDIO. Le moteur est
-        # celui des Paramètres du storyboard (Sync 2 Pro par défaut, LatentSync en
-        # option) : le libellé le NOMME au lieu de promettre LatentSync (constat
-        # 24/09/2026 : l'étiquette disait LatentSync, le moteur réel était Sync 2 Pro).
-        from api.lipsync import LIPSYNC_ENGINES as _LSE, get_lipsync_engine as _gle
-        _ls_name = (_LSE.get(_gle()) or {}).get("name", "Sync 2 Pro")
+        # Resynchroniser les lèvres — DANS le corps de RENDU & AUDIO, avec le
+        # moteur AU CHOIX ici même (25/09/2026 : jusque-là le moteur ne se
+        # réglait que dans « Générer depuis le storyboard » et le menu ne disait
+        # pas lequel était récent) et l'audio à synchroniser : la piste du clip
+        # source, ou un fichier (doublage, voix enregistrée).
+        from api.lipsync import (LIPSYNC_ENGINES as _LSE, LIPSYNC_ENGINE_ORDER as _LSO,
+                                 engine_label as _ls_label, get_lipsync_engine as _gle)
         self._lipsync_toggle_row = toggle_row(
             "Resynchroniser les lèvres",
-            f"Synchronisation labiale ({_ls_name}) — ⚠ réencode (qualité moindre) + audio sur piste séparée",
+            "Synchronisation labiale — moteur au choix ci-contre · ⚠ réencode (qualité moindre) + audio sur piste séparée",
             False,
         )
         self._cb_lipsync = self._lipsync_toggle_row.findChild(QCheckBox)
+        self._lipsync_engine_combo = QComboBox()
+        self._lipsync_engine_combo.setFixedHeight(28)
+        self._lipsync_engine_combo.setMinimumWidth(300)
+        self._lipsync_engine_combo.setStyleSheet(
+            f"QComboBox{{background:{C['bg2']};border:1px solid {C['border']};"
+            f"border-radius:6px;color:{C['text_primary']};font-size:11px;padding:0 8px;}}"
+            f"QComboBox::drop-down{{border:none;width:20px;}}"
+            f"QComboBox QAbstractItemView{{background:{C['bg3']};"
+            f"border:1px solid {C['border_bright']};color:{C['text_primary']};"
+            f"selection-background-color:{C['accent_dim']};}}"
+        )
+        for _k in _LSO:
+            self._lipsync_engine_combo.addItem(_ls_label(_k), _k)
+        _cur_ls = _gle()
+        for _i in range(self._lipsync_engine_combo.count()):
+            if self._lipsync_engine_combo.itemData(_i) == _cur_ls:
+                self._lipsync_engine_combo.setCurrentIndex(_i)
+                break
+
+        def _save_ls_engine(*_a):
+            # Même réglage que le storyboard (config lipsync_engine) : un seul
+            # moteur choisi, lu partout.
+            from core.config import load_config, save_config
+            _c = load_config()
+            _c["lipsync_engine"] = self._lipsync_engine_combo.currentData() or "sync2pro"
+            save_config(_c)
+        self._lipsync_engine_combo.currentIndexChanged.connect(_save_ls_engine)
+        _ls_head = self._lipsync_toggle_row.layout()
+        _ls_head.insertWidget(max(0, _ls_head.count() - 1), self._lipsync_engine_combo)
         if not _ffmpeg_ok():
             self._cb_lipsync.setEnabled(False)
             self._lipsync_toggle_row.setToolTip(
@@ -1118,14 +1148,51 @@ class TabDavinciEdit(QScrollArea):
             )
         else:
             self._lipsync_toggle_row.setToolTip(
-                "Après génération, resynchronise les lèvres de l'acteur\n"
-                f"avec l'audio source du clip DaVinci (moteur : {_ls_name}, réglable dans\n"
-                "« Générer depuis le storyboard »).\n"
+                "Après génération, resynchronise les lèvres de l'acteur avec l'audio\n"
+                "choisi ci-dessous (piste du clip source, ou fichier de doublage).\n"
+                "Le moteur se choisit dans le menu de cette ligne (Sync-3 = le plus récent).\n"
                 "⚠ Réencode → qualité moindre que le clip brut.\n"
                 "Importe la vidéo lip-synced + la piste audio séparément dans DaVinci.\n"
                 "Décoche pour garder le clip brut (un seul fichier, pleine qualité)."
             )
         _ra_body_lay.addWidget(self._lipsync_toggle_row)
+
+        # Audio à synchroniser : piste du clip (défaut) ou fichier.
+        self._lipsync_audio_path = ""
+        _ls_audio_wrap = QFrame()
+        _ls_audio_wrap.setStyleSheet(
+            f"QFrame{{background:{C['bg2']};border:1px solid {C['border']};border-radius:6px;}}")
+        _ls_audio_lay = QHBoxLayout(_ls_audio_wrap)
+        _ls_audio_lay.setContentsMargins(14, 6, 14, 6)
+        _ls_audio_lay.setSpacing(8)
+        _ls_audio_lbl = QLabel("Audio pour les lèvres :")
+        _ls_audio_lbl.setStyleSheet(
+            f"color:{C['text_secondary']};font-size:12px;font-weight:600;border:none;background:transparent;")
+        _ls_audio_lay.addWidget(_ls_audio_lbl)
+        self._lipsync_audio_combo = QComboBox()
+        self._lipsync_audio_combo.setFixedHeight(28)
+        self._lipsync_audio_combo.setStyleSheet(self._lipsync_engine_combo.styleSheet())
+        self._lipsync_audio_combo.addItem("Piste audio du clip source", "clip")
+        self._lipsync_audio_combo.addItem("Fichier audio (doublage, voix enregistrée)…", "file")
+        _ls_audio_lay.addWidget(self._lipsync_audio_combo, 1)
+        self._lipsync_audio_lbl = QLabel("")
+        self._lipsync_audio_lbl.setStyleSheet(
+            f"color:{C['text_dim']};font-size:10px;font-family:'Consolas',monospace;border:none;background:transparent;")
+        _ls_audio_lay.addWidget(self._lipsync_audio_lbl, 1)
+        self._btn_lipsync_audio = QPushButton("Parcourir…")
+        self._btn_lipsync_audio.setFixedHeight(28)
+        self._btn_lipsync_audio.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._btn_lipsync_audio.setStyleSheet(
+            f"QPushButton{{background:transparent;color:{C['accent']};border:1px solid {C['accent_dim']};"
+            f"border-radius:6px;padding:0 10px;font-size:11px;}}"
+            f"QPushButton:hover{{border-color:{C['accent']};}}")
+        self._btn_lipsync_audio.setVisible(False)
+        self._btn_lipsync_audio.clicked.connect(self._on_pick_lipsync_audio)
+        _ls_audio_lay.addWidget(self._btn_lipsync_audio)
+        self._lipsync_audio_combo.currentIndexChanged.connect(
+            lambda *_a: self._btn_lipsync_audio.setVisible(
+                self._lipsync_audio_combo.currentData() == "file"))
+        _ra_body_lay.addWidget(_ls_audio_wrap)
         lay.addWidget(self._ra_container)
 
         # ── Contrôles créatifs ────────────────────────────────────────────────
@@ -2017,11 +2084,24 @@ class TabDavinciEdit(QScrollArea):
                 self,
                 "Format non supporté",
                 "Pour le moment, seuls les clips exportés en H.264 1080p (ou inférieur) "
-                "et inférieurs à 50 MB peuvent être envoyés à Seedance.\n\n"
+                "et inférieurs à 50 MB peuvent être envoyés à Seedance.\n"
+                "(PANDORA les convertit ensuite lui-même aux limites du moteur : "
+                "720p et 15 s pour Seedance 2.0.)\n\n"
                 "Veuillez ré-exporter les clips suivants depuis DaVinci Resolve "
                 "en H.264 1080p avant de relancer :\n\n"
                 + "\n".join(f"  • {c}" for c in invalid_clips)
             )
+            return
+        # Lèvres sur un FICHIER audio : il faut l'avoir choisi avant de payer.
+        if (getattr(self, "_cb_lipsync", None) is not None and self._cb_lipsync.isChecked()
+                and self._cb_lipsync.isEnabled()
+                and getattr(self, "_lipsync_audio_combo", None) is not None
+                and self._lipsync_audio_combo.currentData() == "file"
+                and not self._lipsync_audio_file()):
+            QMessageBox.warning(
+                self, "Audio des lèvres manquant",
+                "Choisissez le fichier audio (doublage, voix) à synchroniser avec « Parcourir… », "
+                "ou repassez sur « Piste audio du clip source ».")
             return
 
         # Info CONVERSION : prévenir quand un clip sera transcodé avant l'envoi
@@ -2164,6 +2244,24 @@ class TabDavinciEdit(QScrollArea):
                 "Moteur Pixverse Swap (fond) : remplace le fond du clip par l'image de "
                 "référence SANS régénérer la scène. Ajoute le nouveau fond en « Image de "
                 "référence ». (720p max · audio conservé.)"))
+
+    def _on_pick_lipsync_audio(self):
+        path, _ = QFileDialog.getOpenFileName(
+            self, "Choisir l'audio à synchroniser (doublage, voix)", "",
+            "Audio (*.wav *.mp3 *.m4a *.aac *.flac *.ogg);;Tous les fichiers (*)",
+        )
+        if path:
+            self._lipsync_audio_path = path
+            self._lipsync_audio_lbl.setText(os.path.basename(path))
+
+    def _lipsync_audio_file(self) -> str:
+        """Fichier audio à synchroniser si l'utilisateur en a choisi un, sinon ''
+        (= piste du clip source, extraite par le worker)."""
+        combo = getattr(self, "_lipsync_audio_combo", None)
+        if combo is not None and combo.currentData() == "file":
+            p = getattr(self, "_lipsync_audio_path", "") or ""
+            return p if os.path.isfile(p) else ""
+        return ""
 
     def _source_gen_duration(self, clip_idx: int) -> int:
         """Durée de régénération Seedance calée sur le clip SOURCE (sondée par ffprobe,
@@ -2414,32 +2512,40 @@ class TabDavinciEdit(QScrollArea):
         if seed_used and seed_used > 0 and self._seed_lock_btn.isChecked():
             self._last_seed = seed_used
 
-        # ── LatentSync branch ─────────────────────────────────────────────────
+        # ── Lèvres (RENDU & AUDIO) ────────────────────────────────────────────
         if self._cb_lipsync.isChecked() and self._cb_lipsync.isEnabled():
-            video_url   = result.get("video_url", "")
+            video_url   = result.get("video_url", "") or result.get("local_path", "")
             source_path = self._clips_data[clip_idx].get("file_path", "")
-            mock_url    = not video_url or "mock" in video_url or not video_url.startswith("http")
-            if video_url and not mock_url and source_path and os.path.isfile(source_path):
+            mock_url    = not video_url or "mock" in video_url
+            # Une URL locale (ComfyUI) ou un fichier suffisent : le worker les
+            # dépose chez fal. L'audio vient du clip source OU du fichier choisi.
+            has_audio = bool(self._lipsync_audio_file()) or bool(source_path and os.path.isfile(source_path))
+            if video_url and not mock_url and has_audio:
                 self._start_lipsync(result, clip_idx, prise_idx)
                 return  # la file avancera depuis _on_lipsync_done/_on_lipsync_failed
 
         self._import_and_advance(result, clip_idx, prise_idx)
 
     def _start_lipsync(self, seedance_result: dict, clip_idx: int, prise_idx: int):
-        from api.lipsync import LatentSyncWorker
+        from api.lipsync import LipSyncWorker, LIPSYNC_ENGINES as _LSE
         card      = self._clip_cards[clip_idx]
         n_pr      = self._spin_prises.value()
         clip_name = card.clip().get("name", "") if card else ""
-        card.set_status(f"P{prise_idx + 1}/{n_pr} ↷ LS…", C["accent"])
+        engine    = self._lipsync_engine_combo.currentData() or ""
+        _eng_name = (_LSE.get(engine) or {}).get("name", "lip-sync")
+        card.set_status(f"P{prise_idx + 1}/{n_pr} ↷ {_eng_name}…", C["accent"])
 
-        self._lbl_lipsync_stage.setText("● Étape 2/3 — Synchronisation labiale…")
+        self._lbl_lipsync_stage.setText(f"● Étape 2/3 — Synchronisation labiale ({_eng_name})…")
         self._lbl_lipsync_stage.setVisible(True)
 
-        self._lipsync_worker = LatentSyncWorker(
-            video_url         = seedance_result.get("video_url", ""),
+        self._lipsync_worker = LipSyncWorker(
+            video_url         = seedance_result.get("video_url", "") or seedance_result.get("local_path", ""),
             source_video_path = self._clips_data[clip_idx].get("file_path", ""),
             output_dir        = get_output_dir(),
             shot_name         = clip_name,
+            engine            = engine,
+            # Fichier de doublage / voix si choisi ; sinon la piste du clip source.
+            audio_path        = self._lipsync_audio_file(),
             # Cale l'audio sur la durée EXACTE de la vidéo régénérée (= durée du clip
             # source, bornée 4–15 s) → son et image synchrones, durée de sortie nette.
             target_duration   = self._gen_durations.get(clip_idx, 0.0),
@@ -2568,9 +2674,12 @@ class TabDavinciEdit(QScrollArea):
         e = error.lower()
         is_validation = any(k in e for k in ("'loc'", '"loc"', "[{", "unprocessable", "422"))
         if is_validation:
-            if any(k in e for k in ("duration", "too short", "minimum", "length", "second")):
-                return "Durée du clip trop courte"
-            return "Clip refusé par Seedance (durée trop courte ?)"
+            # Ce que fal reproche au clip se LIT dans le détail (durée, résolution,
+            # taille…) — avant, tout 422 devenait « durée trop courte ? ».
+            from core.worker import fal_error_detail
+            detail = fal_error_detail(error)
+            return ("Refusé par le moteur : " + detail)[:140] if detail else \
+                "Clip refusé par le moteur (format, durée ou taille ?)"
         if "401" in e or "403" in e or "unauthorized" in e or "forbidden" in e:
             return "Clé API invalide ou expirée"
         if "timeout" in e or "timed out" in e:
