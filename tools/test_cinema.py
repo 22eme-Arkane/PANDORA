@@ -150,7 +150,11 @@ def edition_cinema_only():
     # Build 2.4.0 (2026-09-24) : ComfyUI comme moteur et rendu local par défaut,
     # MiniMax H3 (fal, local sd.cpp, ComfyUI), ouverture de projet 46 s → 0,4 s,
     # plus de fenêtres parasites, descripteur de projet atomique.
-    assert VERSION.split("-")[0] == "2.4.0", f"version attendue 2.4.0[-suffixe], lue {VERSION}"
+    # Build 2.4.1 (2026-09-26) : moteurs du Studio Images réparés (récursion),
+    # état du Studio par projet, discussion copiable, sélection multi-moteurs
+    # mémorisée, « Modifier des clips » (bon compte nommé, clip aux limites du
+    # moteur, lip-sync au choix), installeur (logo, cases de la page de fin).
+    assert VERSION.split("-")[0] == "2.4.1", f"version attendue 2.4.1[-suffixe], lue {VERSION}"
     # ── UN SEUL numéro de version dans tout le produit ────────────────────────
     # Chaque endroit qui recopie le numéro à la main finit par diverger : la 2.0.0
     # est partie en build avec une charte d'utilisation estampillée 1.3.5, un .app
@@ -10750,6 +10754,118 @@ def studio_images_selection_multi_moteurs_memorisee():
     # Le fichier de sélection n'est ni commité ni embarqué.
     root = _os.path.dirname(_os.path.dirname(_os.path.abspath(__file__)))
     assert "studio_images/multi_engines.json" in open(_os.path.join(root, ".gitignore"), encoding="utf-8").read()
+
+
+@test
+def studio_images_etat_propre_au_projet():
+    """Constat Matthieu 26/09/2026 : en ouvrant un autre projet, le Studio IA
+    montrait les images de référence du projet PRÉCÉDENT ; et à la réouverture
+    d'un projet, le prompt, les références et la discussion avec Claude avaient
+    disparu. Les références vivaient dans la config GLOBALE du Studio, le prompt
+    et la discussion nulle part. Désormais : <projet>/data/Image IA/
+    session_en_cours.json, écrit à chaque changement, relu à l'ouverture ; les
+    copies de références vont dans le projet ; et un panneau de l'ANCIEN projet
+    encore vivant n'écrit jamais dans le nouveau."""
+    import os as _os, sys as _sys, tempfile, json as _json
+    from PIL import Image
+    import core.context as _ctx
+    _studio = _os.path.join(_os.path.dirname(_os.path.dirname(_os.path.abspath(__file__))), "studio_images")
+    if _studio not in _sys.path:
+        _sys.path.insert(0, _studio)
+    from ui.tab_image import TabImage
+    old_path, old_id = _ctx.get_project_path(), _ctx.get_project_id()
+    projA, projB = tempfile.mkdtemp(prefix="pandora_projA_"), tempfile.mkdtemp(prefix="pandora_projB_")
+    for _p in (projA, projB):
+        _os.makedirs(_os.path.join(_p, "data"), exist_ok=True)
+    src = _os.path.join(tempfile.mkdtemp(prefix="pandora_ref_"), "masques.png")
+    Image.new("RGB", (32, 32), (10, 200, 60)).save(src)
+    keep, W, _orig_save = [], None, None
+    try:
+        _ctx.set_project_path(projA); _ctx.set_project_id("A")
+        ta = TabImage(); keep.append(ta); pa = ta.panel
+        W = _sys.modules[type(pa).__module__]
+        _orig_save = W.cfg_mod.save_config
+        W.cfg_mod.save_config = lambda cfg: None          # jamais la vraie config du Studio
+        fileA = _os.path.join(projA, "data", "Image IA", "session_en_cours.json")
+        assert _os.path.normcase(pa._session_file) == _os.path.normcase(fileA), pa._session_file
+        pa._select_data(pa._model, "nb2")                   # un moteur qui prend des références
+        pa._add_ref_files([src])
+        assert len(pa._ref_paths) == 1, pa._ref_paths
+        assert _os.path.normcase(pa._ref_paths[0]).startswith(
+            _os.path.normcase(_os.path.join(projA, "data", "Image IA", "refs"))), "copie DANS le projet"
+        assert pa._ref_paths[0] not in (pa.cfg.get("ref_paths") or []), "plus dans la config globale"
+        pa._prompt.setPlainText("Sticker rond ARMANA")
+        assert pa._autosave_timer.isActive(), "la frappe programme la sauvegarde"
+        pa._history = [{"role": "user", "content": "Un sticker ?"},
+                       {"role": "assistant", "content": "Oui, rond."}]
+        pa._autosave_session()
+        with open(fileA, encoding="utf-8") as f:
+            data = _json.load(f)
+        assert data["settings"]["prompt"] == "Sticker rond ARMANA" and len(data["history"]) == 2
+        assert data["ref_paths"] == pa._ref_paths and data["settings"]["image_model"] == "nb2"
+
+        # ── Autre projet : RIEN ne suit ────────────────────────────────────────
+        _ctx.set_project_path(projB); _ctx.set_project_id("B")
+        tb = TabImage(); keep.append(tb); pb = tb.panel
+        assert _os.path.normcase(pb._session_file).startswith(_os.path.normcase(projB))
+        assert pb._ref_paths == [] and pb._prompt.toPlainText() == "" and pb._history == [], \
+            (pb._ref_paths, pb._prompt.toPlainText(), pb._history)
+        # L'ancien panneau (projet A), encore vivant, écrit TOUJOURS dans A.
+        pa._prompt.setPlainText("Sticker rond ARMANA v2")
+        pa._flush_session()
+        with open(fileA, encoding="utf-8") as f:
+            assert _json.load(f)["settings"]["prompt"] == "Sticker rond ARMANA v2"
+        assert not _os.path.exists(pb._session_file), "rien n'a été écrit dans le projet B"
+
+        # ── Réouverture de A : prompt, références, discussion reviennent ──────
+        _ctx.set_project_path(projA); _ctx.set_project_id("A")
+        ta2 = TabImage(); keep.append(ta2); pa2 = ta2.panel
+        assert pa2._prompt.toPlainText() == "Sticker rond ARMANA v2"
+        assert pa2._ref_paths == pa._ref_paths and _os.path.isfile(pa2._ref_paths[0])
+        assert [m["content"] for m in pa2._history] == ["Un sticker ?", "Oui, rond."]
+        _texts = [w.text() for w in pa2._chat_scroll.widget().findChildren(W._Bubble)]
+        assert "Un sticker ?" in _texts and "Oui, rond." in _texts, _texts
+        assert not pa2._autosave_timer.isActive(), "la restauration n'écrit rien"
+    finally:
+        if W is not None and _orig_save is not None:
+            W.cfg_mod.save_config = _orig_save
+        _ctx.set_project_path(old_path); _ctx.set_project_id(old_id)
+        for _t in keep:
+            _t.deleteLater()
+
+
+@test
+def studio_images_bulle_copiable():
+    """Constat Matthieu 26/09/2026 : dans la discussion de l'Image IA, cliquer un
+    message puis copier ne copiait rien (il fallait clic droit → Tout
+    sélectionner → Ctrl+C). Le QLabel n'acceptait pas le focus clavier : Ctrl+C
+    ne lui parvenait jamais. Ctrl+C copie maintenant la sélection, ou le message
+    entier s'il n'y en a pas ; le menu offre « Copier le message »."""
+    import sys as _sys, inspect as _insp
+    from PyQt6.QtCore import Qt
+    from PyQt6.QtGui import QKeyEvent
+    from PyQt6.QtWidgets import QApplication
+    from ui.tab_image import TabImage
+    t = TabImage(); pn = t.panel
+    W = _sys.modules[type(pn).__module__]
+    msg = "Voici le prompt : sticker rond, fond transparent."
+    pn._add_bubble("assistant", msg)
+    b = [w for w in pn._chat_scroll.widget().findChildren(W._Bubble) if w.text() == msg][-1]
+    assert b.focusPolicy() != Qt.FocusPolicy.NoFocus, "le clic doit donner le focus (sinon Ctrl+C perdu)"
+    cb = QApplication.clipboard()
+    ctrl_c = lambda: QKeyEvent(QKeyEvent.Type.KeyPress, Qt.Key.Key_C, Qt.KeyboardModifier.ControlModifier)
+    cb.setText("")
+    b.keyPressEvent(ctrl_c())
+    assert cb.text() == msg, repr(cb.text())
+    b.setSelection(0, 5)
+    cb.setText("")
+    b.keyPressEvent(ctrl_c())
+    assert cb.text() == "Voici", repr(cb.text())
+    _menu = _insp.getsource(W._Bubble.contextMenuEvent)
+    assert "Copier le message" in _menu and "copy_all()" in _menu
+    from core.i18n import _FR_TO_EN
+    assert "Copier le message" in _FR_TO_EN and "Copier la sélection" in _FR_TO_EN
+    t.deleteLater()
 
 
 if __name__ == "__main__":

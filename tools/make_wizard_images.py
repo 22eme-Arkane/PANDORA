@@ -88,6 +88,39 @@ def _fallback_small(stem: str, base: tuple[int, int]) -> None:
         print(f"  {stem}{suf}.bmp  {W}x{H}  [repli]")
 
 
+#: Blanc de l'en-tête des pages de l'assistant (style « modern », thème clair).
+HEADER_BG = (255, 255, 255)
+
+
+def _small_from_app_icon(stem: str, base: tuple[int, int]) -> bool:
+    """Image en haut à droite des pages : le LOGO ACTUEL de l'application —
+    assets/pandora_badge.ico, celui de la barre de titre, de l'en-tête de
+    PANDORA et de son raccourci — centré sur le blanc de l'en-tête.
+
+    Jusqu'au 26/09/2026 cette image venait de assets/icons/wizard_small.png, un
+    ANCIEN « P » seul sur fond sombre (constat Matthieu). Lire l'icône de
+    l'application elle-même garde l'installeur à jour si le logo change."""
+    ico = os.path.join(ASSETS, "pandora_badge.ico")
+    if not os.path.isfile(ico):
+        return False
+    src = Image.open(ico)
+    sizes = sorted(src.info.get("sizes") or [src.size])
+    try:
+        src.size = sizes[-1]            # la plus grande image de l'icône
+    except Exception:
+        pass
+    src = src.convert("RGBA")
+    for suf, (W, H) in _sizes(base):
+        out = Image.new("RGB", (W, H), HEADER_BG)
+        margin = max(1, round(2 * W / base[0]))
+        side = min(W, H) - 2 * margin
+        logo = src.resize((side, side), Image.LANCZOS)
+        out.paste(logo, ((W - side) // 2, (H - side) // 2), logo)
+        out.save(os.path.join(ASSETS, f"{stem}{suf}.bmp"), format="BMP")
+        print(f"  {stem}{suf}.bmp  {W}x{H}  [logo actuel]")
+    return True
+
+
 # ASCII pur : build.ps1 lance ce script dans une console cp1252 et s'arrête à
 # la première erreur. Un simple caractère de filet (U+2500) suffit à tuer le
 # build sur un UnicodeEncodeError.
@@ -96,6 +129,5 @@ if not _from_source(os.path.join(ASSETS, "icons", "wizard_large.png"),
                     BASE_LARGE, "wizard_large"):
     _fallback_large("wizard_large", BASE_LARGE)
 
-if not _from_source(os.path.join(ASSETS, "icons", "wizard_small.png"),
-                    BASE_SMALL, "wizard_small"):
+if not _small_from_app_icon("wizard_small", BASE_SMALL):
     _fallback_small("wizard_small", BASE_SMALL)

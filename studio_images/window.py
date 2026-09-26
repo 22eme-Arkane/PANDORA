@@ -5,16 +5,70 @@ Gauche  : génération d'image (format, modèle, prompt, références, aperçu).
 Droite  : dialogue avec Claude + bouton de synthèse du prompt.
 """
 
+import json
 import os
 import time
 
-from PyQt6.QtCore import Qt, QPoint, QSize, QUrl, pyqtSignal
-from PyQt6.QtGui import QDesktopServices, QImageReader, QPixmap
+from PyQt6.QtCore import Qt, QPoint, QSize, QTimer, QUrl, pyqtSignal
+from PyQt6.QtGui import QDesktopServices, QImageReader, QKeySequence, QPixmap
 from PyQt6.QtWidgets import (
     QAbstractSpinBox, QApplication, QCheckBox, QComboBox, QDialog, QFileDialog, QFormLayout, QHBoxLayout,
-    QInputDialog, QLabel, QLineEdit, QMainWindow, QMessageBox, QProgressBar,
+    QInputDialog, QLabel, QLineEdit, QMainWindow, QMenu, QMessageBox, QProgressBar,
     QPushButton, QScrollArea, QSpinBox, QSplitter, QTextEdit, QVBoxLayout, QWidget,
 )
+
+
+def _tr(text: str) -> str:
+    """Texte dans la langue de PANDORA quand le Studio y est embarqué ;
+    inchangé en Studio autonome (pas de core)."""
+    try:
+        from core.i18n import translate
+        return translate(text)
+    except Exception:
+        return text
+
+
+class _Bubble(QLabel):
+    """Bulle de la discussion avec Claude, COPIABLE.
+
+    Constat Matthieu 26/09/2026 : cliquer un message puis « Copier » ne copiait
+    rien — il fallait clic droit → Tout sélectionner → Ctrl+C. Cause : avec le
+    seul drapeau TextSelectableByMouse, QLabel refuse le focus clavier, donc
+    Ctrl+C ne lui parvenait jamais, et le menu de Qt ne copie qu'une sélection.
+    Ici : sélection souris ET clavier (le clic donne le focus), Ctrl+C sans
+    sélection = le message entier, et un menu « Copier le message »."""
+
+    def __init__(self, text: str):
+        super().__init__(text)
+        self.setWordWrap(True)
+        self.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse
+                                     | Qt.TextInteractionFlag.TextSelectableByKeyboard)
+        self.setToolTip(_tr("Ctrl+C ou clic droit : copier le message"))
+
+    def copy_all(self):
+        QApplication.clipboard().setText(self.text())
+
+    def keyPressEvent(self, e):
+        if e.matches(QKeySequence.StandardKey.Copy) and not self.hasSelectedText():
+            self.copy_all()
+            e.accept()
+            return
+        super().keyPressEvent(e)
+
+    def contextMenuEvent(self, e):
+        menu = QMenu(self)
+        a_msg = menu.addAction(_tr("Copier le message"))
+        a_sel = menu.addAction(_tr("Copier la sélection"))
+        a_sel.setEnabled(self.hasSelectedText())
+        menu.addSeparator()
+        a_all = menu.addAction(_tr("Tout sélectionner"))
+        chosen = menu.exec(e.globalPos())
+        if chosen is a_msg:
+            self.copy_all()
+        elif chosen is a_sel:
+            QApplication.clipboard().setText(self.selectedText())
+        elif chosen is a_all:
+            self.setSelection(0, len(self.text()))
 
 
 # ── Combo dont la liste s'ouvre TOUJOURS vers le bas ─────────────────────────
@@ -268,6 +322,15 @@ class StudioImagesPanel(QWidget):
         self._synth_worker = None
         self._img_worker = None
         self._abandoned_workers = []  # threads parqués (référence anti-GC)
+        # État par PROJET PANDORA (voir _project_session_file) : fichier fixé à
+        # la construction, sauvegarde immédiate à chaque changement, prompt
+        # tapé au clavier regroupé par un minuteur court.
+        self._session_file = ""
+        self._restoring = False
+        self._autosave_timer = QTimer(self)
+        self._autosave_timer.setSingleShot(True)
+        self._autosave_timer.setInterval(700)
+        self._autosave_timer.timeout.connect(self._autosave_session)
 
         # Quitter l'app pendant une génération/discussion détruisait le QThread
         # encore vivant → abort C sans traceback. On parque tout à la fermeture
@@ -275,6 +338,7 @@ class StudioImagesPanel(QWidget):
         _app = QApplication.instance()
         if _app is not None:
             _app.aboutToQuit.connect(self._park_all)
+            _app.aboutToQuit.connect(self._flush_session)
 
         root = QVBoxLayout(self)
         # Marges DROITE et VERTICALES = 0 : la poignée du chat (et le panneau
@@ -326,9 +390,88 @@ class StudioImagesPanel(QWidget):
 
         root.addLayout(body, 1)
 
-        # Restaure les images de référence de la dernière session
-        self._ref_paths = [p for p in self.cfg.get("ref_paths", []) if p and os.path.isfile(p)]
-        self._refresh_refs()
+        # État du Studio PROPRE AU PROJET PANDORA (demande Matthieu 26/09/2026) :
+        # prompt, images de référence, discussion avec Claude, dernière image et
+        # réglages vivent dans <projet>/data/Image IA/session_en_cours.json.
+        # Avant, les références étaient GLOBALES (config du Studio) : ouvrir un
+        # autre projet ramenait celles du précédent, et le prompt comme la
+        # discussion disparaissaient à la réouverture. Studio autonome (sans
+        # PANDORA) : comportement historique, références dans la config.
+        self._session_file = self._project_session_file()
+        if self._session_file:
+            self._restore_project_session()
+        else:
+            self._ref_paths = [p for p in self.cfg.get("ref_paths", []) if p and os.path.isfile(p)]
+            self._refresh_refs()
+        self._prompt.textChanged.connect(self._schedule_autosave)
+
+    # ── État du Studio par projet PANDORA ─────────────────────────────────────
+    @staticmethod
+    def _project_session_file() -> str:
+        """Fichier d'état du Studio pour le projet PANDORA ouvert, '' hors
+        PANDORA ou sans projet. Calculé UNE fois, à la construction : ouvrir un
+        projet crée une nouvelle fenêtre PANDORA (donc un nouveau panneau), et
+        l'ancien panneau, qui se ferme APRÈS le changement de projet, ne doit
+        jamais écrire dans le projet suivant."""
+        try:
+            from core import context as _ctx
+            if not (_ctx.get_project_path() or "").strip():
+                return ""
+            base = _ctx.get_data_root()
+        except Exception:
+            return ""
+        return os.path.join(base, "Image IA", "session_en_cours.json")
+
+    def _restore_project_session(self):
+        data = {}
+        try:
+            with open(self._session_file, encoding="utf-8") as f:
+                data = json.load(f)
+        except Exception:
+            data = {}
+        self._restoring = True
+        try:
+            if isinstance(data, dict) and data:
+                self._load_session_dict(data)
+            else:
+                self._ref_paths = []        # projet neuf : rien ne vient d'ailleurs
+                self._refresh_refs()
+        finally:
+            self._restoring = False
+
+    def _schedule_autosave(self):
+        if self._session_file and not self._restoring:
+            self._autosave_timer.start()
+
+    def _autosave_session(self):
+        """Écrit l'état courant du Studio dans le projet (écriture atomique)."""
+        if not self._session_file or self._restoring:
+            return
+        self._autosave_timer.stop()
+        tmp = self._session_file + ".tmp"
+        try:
+            os.makedirs(os.path.dirname(self._session_file), exist_ok=True)
+            with open(tmp, "w", encoding="utf-8") as f:
+                json.dump(self._session_dict(), f, ensure_ascii=False, indent=2)
+            os.replace(tmp, self._session_file)
+        except Exception:
+            try:
+                os.remove(tmp)
+            except Exception:
+                pass
+
+    def _flush_session(self):
+        """Écrit tout de suite ce qui attend encore (prompt en cours de frappe)."""
+        try:
+            if self._autosave_timer.isActive():
+                self._autosave_session()
+        except Exception:
+            pass
+
+    def hideEvent(self, e):
+        # Changement de projet, fermeture de la fenêtre : rien ne se perd.
+        self._flush_session()
+        super().hideEvent(e)
 
     # ── Sauvegarder / Ouvrir — placés à côté du « Moteur de génération » ───────
     def _build_save_open_buttons(self):
@@ -869,9 +1012,7 @@ class StudioImagesPanel(QWidget):
         box.setContentsMargins(0, 0, 0, 0)
 
         if text:
-            bubble = QLabel(text)
-            bubble.setWordWrap(True)
-            bubble.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
+            bubble = _Bubble(text)
             bubble.setStyleSheet(BUBBLE_USER if role == "user" else BUBBLE_AI)
             box.addWidget(bubble)
 
@@ -932,6 +1073,7 @@ class StudioImagesPanel(QWidget):
         self.cfg["custom_h"] = self._ch.value()
         self.cfg["count"] = self._count.value()
         cfg_mod.save_config(self.cfg)
+        self._autosave_session()     # et les réglages du projet ouvert
 
     def _on_format_changed(self):
         """Sélectionner un template qui a des dimensions les reporte automatiquement
@@ -1078,6 +1220,8 @@ class StudioImagesPanel(QWidget):
                 self._save_project_data()
             except Exception:
                 pass
+        # Et l'état du Studio dans le projet PANDORA ouvert (s'il y en a un).
+        self._autosave_session()
 
     def _save_project_data(self):
         if not self._project_id:
@@ -1169,6 +1313,7 @@ class StudioImagesPanel(QWidget):
         self._history = []
         self._refs_in_chat = set()
         self._rebuild_chat_view()
+        self._autosave_session()
 
     def _rebuild_chat_view(self):
         # Retire toutes les bulles (garde le stretch final)
@@ -1259,6 +1404,7 @@ class StudioImagesPanel(QWidget):
 
         self._add_bubble("user", text, images=imgs)
         self._history.append({"role": "user", "content": content})
+        self._autosave_session()
 
         self._set_chat_busy(True, "Claude réfléchit…")
         self._park_worker(self._chat_worker)   # jamais écraser un thread vivant
@@ -1278,6 +1424,7 @@ class StudioImagesPanel(QWidget):
         # Retire le dernier tour utilisateur pour garder l'historique cohérent
         if self._history and self._history[-1]["role"] == "user":
             self._history.pop()
+        self._autosave_session()
         self._set_chat_busy(False)
         QMessageBox.critical(self, "Erreur", msg)
 
@@ -1344,15 +1491,22 @@ class StudioImagesPanel(QWidget):
 
     # ── Références ───────────────────────────────────────────────────────────
     def _store_ref(self, src):
-        """Copie l'image dans studio_images/refs/ (nom = hash du contenu) et
-        retourne le chemin de la copie. Dédoublonne : même image → même copie."""
+        """Copie l'image (nom = hash du contenu) et retourne le chemin de la
+        copie. Dédoublonne : même image → même copie. Dans PANDORA, la copie va
+        DANS le projet (<projet>/data/Image IA/refs/) : elle voyage avec lui
+        (disque externe…) ; en Studio autonome, dans studio_images/refs/."""
         import hashlib
         import shutil
         try:
             with open(src, "rb") as f:
                 h = hashlib.md5(f.read()).hexdigest()[:16]
             ext = os.path.splitext(src)[1].lower() or ".png"
-            dest = os.path.join(cfg_mod.refs_dir(), h + ext)
+            if self._session_file:
+                d = os.path.join(os.path.dirname(self._session_file), "refs")
+                os.makedirs(d, exist_ok=True)
+            else:
+                d = cfg_mod.refs_dir()
+            dest = os.path.join(d, h + ext)
             if not os.path.isfile(dest):
                 shutil.copyfile(src, dest)
             return dest
@@ -1360,7 +1514,12 @@ class StudioImagesPanel(QWidget):
             return src  # repli : on garde le chemin d'origine
 
     def _persist_refs(self):
-        """Mémorise les références courantes dans la config (revient au prochain lancement)."""
+        """Mémorise les références courantes : dans le PROJET PANDORA ouvert
+        (plus dans la config globale, sinon elles suivaient l'utilisateur d'un
+        projet à l'autre) ; en Studio autonome, dans la config comme avant."""
+        if self._session_file:
+            self._autosave_session()
+            return
         self.cfg["ref_paths"] = self._ref_paths
         cfg_mod.save_config(self.cfg)
 

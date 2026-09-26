@@ -18,13 +18,57 @@
 
 ## Download
 
-**[⬇ Download PANDORA v2.4.0 for Windows](https://github.com/22eme-Arkane/PANDORA/releases/download/v2.4.0/PANDORA_Setup_2.4.0.exe)**
+**[⬇ Download PANDORA v2.4.1 for Windows](https://github.com/22eme-Arkane/PANDORA/releases/download/v2.4.1/PANDORA_Setup_2.4.1.exe)**
 
-**[⬇ Download PANDORA v2.4.0 for macOS](https://github.com/22eme-Arkane/PANDORA/releases/download/v2.4.0/PANDORA_2.4.0.dmg)** *(Apple Silicon — see [Installation](#installation) for the first launch)*
+**[⬇ Download PANDORA v2.4.1 for macOS](https://github.com/22eme-Arkane/PANDORA/releases/download/v2.4.1/PANDORA_2.4.1.dmg)** *(Apple Silicon — see [Installation](#installation) for the first launch)*
 
 All versions: [Releases](../../releases)
 
 🌐 **Official 22eme ARKANE website: [22eme-arkane.com](https://22eme-arkane.com)**
+
+---
+
+## What's new in v2.4.1
+
+**Every engine of the image Studio works again, and the Studio now belongs to
+your project.**
+
+- **Image Studio: all engines repaired.** Since v2.4.0 every image engine of
+  the Studio (Seedream, Recraft, Nano Banana, Ideogram, Recraft Vector…) and
+  Outpaint stopped at « maximum recursion depth exceeded »: while routing the
+  calls through a single fal/ComfyUI entry point, the function that sends to
+  fal had been made to call itself. Fixed, with a test that runs the real
+  call path (the old test only read the code's text, and had pushed the
+  mistake).
+- **The Studio's state follows the project.** The prompt, the reference
+  images, the conversation with Claude, the last image and the settings are
+  saved in the project itself (`data/Image IA/`) at every change and come back
+  when the project is reopened — they were lost before. Opening another
+  project no longer brings the previous one's reference images along;
+  imported references are copied into the project, so they travel with it.
+- **Messages of the conversation can be copied.** Click a message and press
+  Ctrl+C to copy it whole (or just the selected part), or right-click →
+  « Copy the message ». Before, the click did not give the message the keyboard
+  focus, so Ctrl+C copied nothing.
+- **« Generate with several engines » remembers your selection** — in every
+  project and after a restart — instead of going back to one engine per family.
+- **« Edit clips »: the right account is blamed, the clip fits the engine, and
+  lip-sync is current.** A failed edit was reported as « fal.ai credits
+  insufficient » whatever the cause: the credit detector matched words like
+  « balance », « credit », « out of » or « quota », so an empty *Anthropic*
+  account (translation) or a fal validation error (« duration out of range »)
+  wore the same label. Each message now names its account, and fal's own
+  reason is shown. The source clip is converted to what the engine accepts
+  before upload (Seedance 2.0: 720p and 15 s; a 1080p export was refused).
+  Veo 3.1 is sent with the maximum moderation tolerance. The lip-sync row of
+  « Edit clips » gets the engine menu (Sync-3, Kling, PixVerse, VEED, Sync 2,
+  LatentSync — with year and specialty) and the audio to sync: the clip's own
+  track or a dubbing file, in both editions; a locally rendered clip (ComfyUI)
+  is uploaded before syncing.
+- **Installer.** The top-right image shows the current PANDORA logo; the
+  check boxes of the last page are drawn whole (they were cut on the left —
+  checked this time on a real render at 150 %); « Watch the complete
+  tutorial » is gone until the new tutorial is ready.
 
 ---
 
@@ -161,19 +205,6 @@ a second instead of forty.**
   Qwen-Image 2 and 2 Pro, Kling Image O3 (up to 10 references) and GPT Image
   2.5 Flare join the catalogue; FLUX.2 pro can edit with references; the GPT
   Image 2 label said ~$0.04 for an image that costs about $0.20 (token-billed).
-- **« Edit clips »: the right account is blamed, the clip fits the engine, and
-  lip-sync is current.** A failed edit was reported as « fal.ai credits
-  insufficient » whatever the cause: the credit detector matched words like
-  « balance », « credit », « out of » or « quota », so an empty *Anthropic*
-  account (translation) or a fal validation error (« duration out of range »)
-  wore the same label. Each message now names its account, and fal's own
-  reason is shown. The source clip is converted to what the engine accepts
-  before upload (Seedance 2.0: 720p and 15 s; a 1080p export was refused).
-  Veo 3.1 is sent with the maximum moderation tolerance. The lip-sync row of
-  « Edit clips » gets the engine menu (Sync-3, Kling, PixVerse, VEED, Sync 2,
-  LatentSync — with year and specialty) and the audio to sync: the clip's own
-  track or a dubbing file, in both editions; a locally rendered clip (ComfyUI)
-  is uploaded before syncing.
 - **Installed build: the ComfyUI H3 templates are found again.** The installer
   shipped the three MiniMax H3 workflow files, but the app looked for them in
   its data folder instead of its program folder, so every H3 generation on
@@ -556,7 +587,7 @@ per-engine mood prompts, same fixes.
 
 ### Windows
 
-1. Download `PANDORA_Setup_2.4.0.exe` from the link above and run it
+1. Download `PANDORA_Setup_2.4.1.exe` from the link above and run it
 2. If Windows shows *"Windows protected your PC"* (SmartScreen), click
    **More info** then **Run anyway** — the app is not code-signed yet
    (certificate in progress), this is the Windows equivalent of the macOS
@@ -567,7 +598,7 @@ per-engine mood prompts, same fixes.
 
 ### macOS
 
-1. Download `PANDORA_2.4.0.dmg` from the link above
+1. Download `PANDORA_2.4.1.dmg` from the link above
 2. Open the DMG and drag **PANDORA** into **Applications** (as usual)
 3. **First launch** — macOS will claim that *"PANDORA is damaged and can't be
    opened"*. **This is normal, the app is not damaged** — macOS blocks apps

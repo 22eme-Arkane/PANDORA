@@ -7498,5 +7498,39 @@ def modifier_clips_live_levres_moteur_et_audio_fichier():
     t.deleteLater()
 
 
+@test
+def studio_images_etat_par_projet_live():
+    """Parité Live (26/09/2026) : l'onglet Image IA du Live embarque le même
+    panneau que le Cinéma ; son état (prompt, références, discussion avec
+    Claude) est rattaché au projet LIVE ouvert — jamais au précédent."""
+    import os as _os, sys as _sys, tempfile, json as _json
+    import core.context as _ctx
+    import ui.live_studio_widget as LSW
+    from ui.tab_image import TabImage
+    assert "TabImage()" in inspect.getsource(LSW), "le Live embarque le même onglet Image IA"
+    old_path, old_id = _ctx.get_project_path(), _ctx.get_project_id()
+    proj = tempfile.mkdtemp(prefix="pandora_live_proj_")
+    _os.makedirs(_os.path.join(proj, "data"), exist_ok=True)
+    W, _o = None, None
+    try:
+        _ctx.set_project_path(proj); _ctx.set_project_id("L")
+        t = TabImage(); pn = t.panel
+        W = _sys.modules[type(pn).__module__]
+        _o = W.cfg_mod.save_config
+        W.cfg_mod.save_config = lambda c: None
+        assert _os.path.normcase(pn._session_file).startswith(_os.path.normcase(proj)), pn._session_file
+        pn._prompt.setPlainText("Mapping façade — néons")
+        pn._flush_session()
+        with open(pn._session_file, encoding="utf-8") as f:
+            assert _json.load(f)["settings"]["prompt"] == "Mapping façade — néons"
+        t2 = TabImage()
+        assert t2.panel._prompt.toPlainText() == "Mapping façade — néons", "réouverture du projet Live"
+        t.deleteLater(); t2.deleteLater()
+    finally:
+        if W is not None and _o is not None:
+            W.cfg_mod.save_config = _o
+        _ctx.set_project_path(old_path); _ctx.set_project_id(old_id)
+
+
 if __name__ == "__main__":
     sys.exit(main())

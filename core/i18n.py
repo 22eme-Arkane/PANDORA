@@ -5101,6 +5101,10 @@ _FR_TO_EN: dict[str, str] = {
     "Grok Imagine 1.5 · xAI · son compris": "Grok Imagine 1.5 · xAI · sound included",
     "Grok Imagine 1.5 · image-to-video (le cadre suit l'image)": "Grok Imagine 1.5 · image-to-video (frame follows the image)",
     "Topaz Astra 2  (génératif, ~$0.30/s)": "Topaz Astra 2  (generative, ~$0.30/s)",
+    # Studio Images — discussion copiable (26/09/2026).
+    "Ctrl+C ou clic droit : copier le message": "Ctrl+C or right-click: copy the message",
+    "Copier le message": "Copy the message",
+    "Copier la sélection": "Copy the selection",
     # Studio Images — « Générer avec plusieurs moteurs » (sélection mémorisée, 26/09/2026).
     "Choisis les moteurs de génération": "Choose the generation engines",
     "Un par famille": "One per family",

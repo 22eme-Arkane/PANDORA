@@ -10,7 +10,7 @@
 ; Produit : dist\PANDORA_Setup_1.2.1.exe
 
 #define MyAppName      "PANDORA"
-#define MyAppVersion   "2.4.0"
+#define MyAppVersion   "2.4.1"
 #define MyAppPublisher "22eme Arkane"
 #define MyAppURL       "https://github.com/22eme-arkane/pandora"
 #define MyAppExeName   "PANDORA.exe"
@@ -67,10 +67,8 @@ LicenseFile=EULA.txt
 
 ; Page de bienvenue
 WizardStyle=modern
-; La page de fin porte TROIS cases à cocher (lancer PANDORA + deux vidéos).
-; À la taille par défaut, la hauteur de ligne calculée par Inno rognait le carré
-; de la case sur un écran mis à l'échelle. Élargir l'assistant donne à la liste
-; la place qui lui manquait, et rend l'EULA plus lisible au passage.
+; Assistant élargi : l'EULA est plus lisible. (Les cases tronquées de la page
+; de fin ne venaient PAS de la taille — voir CurPageChanged dans [Code].)
 WizardSizePercent=120
 WizardResizable=yes
 
@@ -101,7 +99,6 @@ english.UpdateCheckTitle=Update available
 english.UpdateCheckMsg=A newer version of {#MyAppName} is available: %1%n%nYou are about to install version {#MyAppVersion} (older).%n%nDo you want to download the latest version instead?%n(Click No to continue installing this older version.)
 english.UpdateCheckBtn=Download latest version
 english.WatchPresentation=Watch the presentation video (YouTube)
-english.WatchTutorial=Watch the complete tutorial (YouTube)
 english.DaVinciGroup=DaVinci Resolve Studio integration (requires Studio edition)
 english.DaVinciScriptsDesc=Install Pandora Send and Pandora Bridge scripts%n  Pandora Send — sends selected clips from DaVinci timeline to PANDORA AI Studio (Workspace > Scripts > pandora_send, or assign a keyboard shortcut)%n  Pandora Bridge — runs as a background service in DaVinci Resolve Studio; listens on port 9877 and automatically imports AI-generated videos into your Media Pool (Workspace > Scripts > seedance_bridge)
 
@@ -111,7 +108,6 @@ french.UpdateCheckTitle=Mise à jour disponible
 french.UpdateCheckMsg=Une nouvelle version de {#MyAppName} est disponible : %1%n%nVous êtes sur le point d'installer la version {#MyAppVersion} (ancienne).%n%nVoulez-vous télécharger la dernière version à la place ?%n(Cliquez Non pour continuer quand même avec cette ancienne version.)
 french.UpdateCheckBtn=Télécharger la dernière version
 french.WatchPresentation=Voir la présentation vidéo (YouTube)
-french.WatchTutorial=Voir le tutoriel complet (YouTube)
 french.DaVinciGroup=Intégration DaVinci Resolve Studio (requiert l'édition Studio)
 french.DaVinciScriptsDesc=Installer les scripts Pandora Send et Pandora Bridge%n  Pandora Send — envoie les clips sélectionnés depuis la timeline DaVinci vers le Studio IA de PANDORA (Espace de travail > Scripts > pandora_send, ou assignez un raccourci clavier)%n  Pandora Bridge — tourne en arrière-plan dans DaVinci Resolve Studio ; ecoute sur le port 9877 et importe automatiquement les videos generees par l'IA dans votre Media Pool (Espace de travail > Scripts > seedance_bridge)
 
@@ -121,7 +117,6 @@ german.UpdateCheckTitle=Update verfügbar
 german.UpdateCheckMsg=Eine neuere Version von {#MyAppName} ist verfügbar: %1%n%nSie sind dabei, Version {#MyAppVersion} (älter) zu installieren.%n%nMöchten Sie stattdessen die neueste Version herunterladen?%n(Klicken Sie Nein, um trotzdem diese ältere Version zu installieren.)
 german.UpdateCheckBtn=Neueste Version herunterladen
 german.WatchPresentation=Präsentationsvideo ansehen (YouTube)
-german.WatchTutorial=Vollständiges Tutorial ansehen (YouTube)
 german.DaVinciGroup=DaVinci Resolve Studio Integration (erfordert Studio-Edition)
 german.DaVinciScriptsDesc=Pandora Send und Pandora Bridge Skripte installieren%n  Pandora Send — sendet ausgewählte Clips aus DaVinci zur PANDORA KI-Studio%n  Pandora Bridge — Hintergrunddienst in DaVinci; importiert KI-Videos automatisch in den Media Pool
 
@@ -131,7 +126,6 @@ spanish.UpdateCheckTitle=Actualización disponible
 spanish.UpdateCheckMsg=Hay una versión más reciente de {#MyAppName} disponible: %1%n%nEstá a punto de instalar la versión {#MyAppVersion} (antigua).%n%n¿Desea descargar la última versión en su lugar?%n(Haga clic en No para continuar instalando esta versión antigua.)
 spanish.UpdateCheckBtn=Descargar la última versión
 spanish.WatchPresentation=Ver el vídeo de presentación (YouTube)
-spanish.WatchTutorial=Ver el tutorial completo (YouTube)
 spanish.DaVinciGroup=Integracion DaVinci Resolve Studio (requiere edicion Studio)
 spanish.DaVinciScriptsDesc=Instalar scripts Pandora Send y Pandora Bridge%n  Pandora Send — envia clips seleccionados de DaVinci al Estudio IA de PANDORA%n  Pandora Bridge — servicio en segundo plano; importa videos IA automaticamente al Media Pool
 
@@ -141,7 +135,6 @@ italian.UpdateCheckTitle=Aggiornamento disponibile
 italian.UpdateCheckMsg=È disponibile una nuova versione di {#MyAppName}: %1%n%nStai per installare la versione {#MyAppVersion} (precedente).%n%nVuoi scaricare invece l'ultima versione?%n(Clicca No per continuare comunque con questa versione precedente.)
 italian.UpdateCheckBtn=Scarica l'ultima versione
 italian.WatchPresentation=Guarda il video di presentazione (YouTube)
-italian.WatchTutorial=Guarda il tutorial completo (YouTube)
 italian.DaVinciGroup=Integrazione DaVinci Resolve Studio (richiede edizione Studio)
 italian.DaVinciScriptsDesc=Installa script Pandora Send e Pandora Bridge%n  Pandora Send — invia clip selezionate da DaVinci allo Studio IA di PANDORA%n  Pandora Bridge — servizio in background; importa video IA automaticamente nel Media Pool
 
@@ -151,7 +144,6 @@ portuguese.UpdateCheckTitle=Atualização disponível
 portuguese.UpdateCheckMsg=Uma versão mais recente de {#MyAppName} está disponível: %1%n%nVocê está prestes a instalar a versão {#MyAppVersion} (mais antiga).%n%nDeseja baixar a versão mais recente?%n(Clique em Não para continuar instalando esta versão mais antiga.)
 portuguese.UpdateCheckBtn=Baixar a versão mais recente
 portuguese.WatchPresentation=Assistir ao vídeo de apresentação (YouTube)
-portuguese.WatchTutorial=Assistir ao tutorial completo (YouTube)
 portuguese.DaVinciGroup=Integracao DaVinci Resolve Studio (requer edicao Studio)
 portuguese.DaVinciScriptsDesc=Instalar scripts Pandora Send e Pandora Bridge%n  Pandora Send — envia clips selecionados do DaVinci para o Studio IA do PANDORA%n  Pandora Bridge — servico em segundo plano; importa videos IA automaticamente para o Media Pool
 
@@ -161,7 +153,6 @@ dutch.UpdateCheckTitle=Update beschikbaar
 dutch.UpdateCheckMsg=Er is een nieuwere versie van {#MyAppName} beschikbaar: %1%n%nU staat op het punt versie {#MyAppVersion} (ouder) te installeren.%n%nWilt u in plaats daarvan de nieuwste versie downloaden?%n(Klik op Nee om toch deze oudere versie te installeren.)
 dutch.UpdateCheckBtn=Nieuwste versie downloaden
 dutch.WatchPresentation=Bekijk de presentatievideo (YouTube)
-dutch.WatchTutorial=Bekijk de volledige tutorial (YouTube)
 dutch.DaVinciGroup=DaVinci Resolve Studio integratie (vereist Studio-editie)
 dutch.DaVinciScriptsDesc=Pandora Send en Pandora Bridge scripts installeren%n  Pandora Send — stuurt geselecteerde clips van DaVinci naar PANDORA AI Studio%n  Pandora Bridge — achtergrondservice; importeert AI-videos automatisch in de Media Pool
 
@@ -171,7 +162,6 @@ russian.UpdateCheckTitle=Доступно обновление
 russian.UpdateCheckMsg=Доступна более новая версия {#MyAppName}: %1%n%nВы собираетесь установить версию {#MyAppVersion} (устаревшую).%n%nХотите загрузить последнюю версию?%n(Нажмите Нет, чтобы продолжить установку этой старой версии.)
 russian.UpdateCheckBtn=Загрузить последнюю версию
 russian.WatchPresentation=Смотреть видео-презентацию (YouTube)
-russian.WatchTutorial=Смотреть полное руководство (YouTube)
 russian.DaVinciGroup=Интеграция DaVinci Resolve Studio (требует Studio-версии)
 russian.DaVinciScriptsDesc=Установить скрипты Pandora Send и Pandora Bridge%n  Pandora Send — отправляет выбранные клипы из DaVinci в AI Studio PANDORA%n  Pandora Bridge — фоновый сервис; автоматически импортирует AI-видео в Media Pool
 
@@ -181,7 +171,6 @@ polish.UpdateCheckTitle=Dostępna aktualizacja
 polish.UpdateCheckMsg=Dostępna jest nowsza wersja {#MyAppName}: %1%n%nZamierzasz zainstalować wersję {#MyAppVersion} (starszą).%n%nCzy chcesz pobrać najnowszą wersję?%n(Kliknij Nie, aby kontynuować instalację tej starszej wersji.)
 polish.UpdateCheckBtn=Pobierz najnowszą wersję
 polish.WatchPresentation=Obejrzyj film prezentacyjny (YouTube)
-polish.WatchTutorial=Obejrzyj pełny samouczek (YouTube)
 polish.DaVinciGroup=Integracja DaVinci Resolve Studio (wymaga edycji Studio)
 polish.DaVinciScriptsDesc=Zainstaluj skrypty Pandora Send i Pandora Bridge%n  Pandora Send — wysyla wybrane klipy z DaVinci do AI Studio PANDORA%n  Pandora Bridge — usluga w tle; automatycznie importuje wideo AI do Media Pool
 
@@ -191,7 +180,6 @@ turkish.UpdateCheckTitle=Güncelleme mevcut
 turkish.UpdateCheckMsg={#MyAppName} uygulamasının daha yeni bir sürümü mevcut: %1%n%n{#MyAppVersion} (eski) sürümünü yüklemek üzeresiniz.%n%nBunun yerine en son sürümü indirmek ister misiniz?%n(Bu eski sürümü yüklemeye devam etmek için Hayır'a tıklayın.)
 turkish.UpdateCheckBtn=En son sürümü indir
 turkish.WatchPresentation=Tanıtım videosunu izle (YouTube)
-turkish.WatchTutorial=Tam eğitimi izle (YouTube)
 turkish.DaVinciGroup=DaVinci Resolve Studio entegrasyonu (Studio surumu gerektirir)
 turkish.DaVinciScriptsDesc=Pandora Send ve Pandora Bridge betiklerini yukle%n  Pandora Send — secili klipleri DaVinci'den PANDORA AI Studio'ya gonderir%n  Pandora Bridge — arka plan servisi; AI videolarini Media Pool'a otomatik olarak aktar
 
@@ -201,7 +189,6 @@ japanese.UpdateCheckTitle=アップデートが利用可能
 japanese.UpdateCheckMsg={#MyAppName} の新しいバージョンが利用可能です: %1%n%nバージョン {#MyAppVersion}（古いバージョン）をインストールしようとしています。%n%n代わりに最新バージョンをダウンロードしますか？%n（いいえをクリックすると、この古いバージョンのインストールを続行します。）
 japanese.UpdateCheckBtn=最新バージョンをダウンロード
 japanese.WatchPresentation=プレゼンテーション動画を見る (YouTube)
-japanese.WatchTutorial=完全なチュートリアルを見る (YouTube)
 japanese.DaVinciGroup=DaVinci Resolve Studio 統合（Studio版が必要）
 japanese.DaVinciScriptsDesc=Pandora SendとPandora Bridgeスクリプトをインストール%n  Pandora Send — DaVinciからPANDORA AIスタジオへクリップを送信%n  Pandora Bridge — バックグラウンドサービス；AI動画をMedia Poolへ自動インポート
 
@@ -221,9 +208,9 @@ Name: "{autodesktop}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; Tasks: de
 [Run]
 ; Lancer PANDORA à la fin de l'installation (optionnel)
 Filename: "{app}\{#MyAppExeName}"; Description: "{cm:LaunchProgram,{#StringChange(MyAppName, '&', '&&')}}"; Flags: nowait postinstall skipifsilent
-; Liens vidéo — page de fin d'installation
+; Lien vidéo — page de fin d'installation. « Voir le tutoriel complet » est
+; retiré (décision Matthieu 26/09/2026) : un nouveau tutoriel viendra plus tard.
 Filename: "https://youtu.be/ci9jA_Tye2E"; Description: "{cm:WatchPresentation}"; Flags: shellexec nowait postinstall skipifsilent unchecked
-Filename: "https://www.youtube.com/watch?v=SC3pRI5bR1Q"; Description: "{cm:WatchTutorial}"; Flags: shellexec nowait postinstall skipifsilent unchecked
 
 [UninstallDelete]
 ; Nettoyage propre — supprimer les données utilisateur seulement si vide
@@ -357,6 +344,22 @@ end;
 procedure InitializeWizard();
 begin
   CheckForUpdate();
+end;
+
+{ ── Page de fin : cases à cocher entières ─────────────────────────────────
+  Constat Matthieu (builds 2.3.0 puis 2.4.0) : les cases de la page de fin
+  sortaient ROGNÉES à gauche et le libellé touchait leur bord droit. Rendu
+  capturé le 26/09/2026 à 150 % : ni les images multi-échelles ni
+  WizardSizePercent (les deux corrections d'août) n'y changeaient rien, et la
+  hauteur de ligne seule non plus. C'est le décalage horizontal de la case
+  dans la liste (Offset) qui manquait. }
+procedure CurPageChanged(CurPageID: Integer);
+begin
+  if CurPageID = wpFinished then
+  begin
+    WizardForm.RunList.Offset := ScaleX(6);
+    WizardForm.RunList.MinItemHeight := ScaleY(26);
+  end;
 end;
 
 { ── Exécuté à la fin de l'installation principale ───────────────────────────}
