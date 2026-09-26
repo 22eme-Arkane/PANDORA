@@ -10261,7 +10261,27 @@ def images_comfyui_catalogue_contrat_generique_et_appel_unique():
             p = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), *mod.split(".")) + ".py"
             src = open(p, encoding="utf-8").read()
         code = "\n".join(l.split("#", 1)[0] for l in src.splitlines())
-        assert "fal_client.subscribe(" not in code, f"{mod} : appel fal direct restant"
+        if mod.endswith("imagegen"):
+            # Le Studio AUTONOME (sans core) garde UN repli fal direct, DANS
+            # _subscribe seulement. ⚠ Exiger « aucun fal_client.subscribe( » ici
+            # a poussé au rechercher-remplacer qui a rendu _subscribe récursive
+            # (26/09/2026) : on vérifie désormais la STRUCTURE (ast) — et le
+            # comportement dans studio_images_appel_fal_sans_recursion.
+            import ast as _ast
+            _tree = _ast.parse(src)
+            _owners = []
+            for _fn in [n for n in _ast.walk(_tree) if isinstance(n, _ast.FunctionDef)]:
+                for _c in _ast.walk(_fn):
+                    if isinstance(_c, _ast.Call):
+                        _f = _c.func
+                        if isinstance(_f, _ast.Attribute) and _f.attr == "subscribe" \
+                                and isinstance(_f.value, _ast.Name) and _f.value.id == "fal_client":
+                            _owners.append(_fn.name)
+                        if _fn.name == "_subscribe" and isinstance(_f, _ast.Name) and _f.id == "_subscribe":
+                            raise AssertionError("_subscribe s'appelle elle-même (récursion infinie)")
+            assert _owners == ["_subscribe"], f"{mod} : appel fal direct hors de _subscribe ({_owners})"
+        else:
+            assert "fal_client.subscribe(" not in code, f"{mod} : appel fal direct restant"
     se = importlib.import_module("core.image_engines")._load_studio_engines()
     se.ENGINES["comfy:test_tpl"] = se._comfy_engine({"name": "test_tpl", "title": "T", "edit": True, "loads": 2, "size": 5e9})
     try:
@@ -10578,6 +10598,158 @@ def modifier_un_clip_credits_limites_video_et_levres_25_09_2026():
         else inspect.getsource(DE)
     assert "Audio des lèvres manquant" in _gsrc, "mode fichier sans fichier → refus AVANT de payer"
     tab.deleteLater()
+
+
+@test
+def studio_images_appel_fal_sans_recursion():
+    """Constat Matthieu 26/09/2026 : « maximum recursion depth exceeded » sur TOUS
+    les moteurs du Studio Images (Seedream 5 Pro, Recraft, Nano Banana 2, Ideogram
+    V4, Recraft Vector), depuis le 24/09. En remplaçant les appels directs
+    `fal_client.subscribe(` par `_subscribe(` (un seul point d'appel fal/ComfyUI),
+    la ligne À L'INTÉRIEUR de `_subscribe` a été remplacée aussi : la fonction
+    s'appelait elle-même. Le test de l'époque ne lisait que le TEXTE du module
+    (« plus d'appel fal direct ») — il a même poussé à l'erreur. Celui-ci APPELLE
+    le chemin réel : la fonction, puis le worker complet, fal simulé."""
+    import os as _os, sys as _sys, tempfile, types, builtins
+    _studio = _os.path.join(_os.path.dirname(_os.path.dirname(_os.path.abspath(__file__))), "studio_images")
+    if _studio not in _sys.path:
+        _sys.path.insert(0, _studio)
+    import imagegen as IG
+    from core import image_call as _ic
+
+    # ── 1. Dans PANDORA : tout passe par core/image_call (fal ET ComfyUI) ─────
+    calls = []
+    _orig = _ic.subscribe
+    _ic.subscribe = lambda ep, args=None, *a, **k: (calls.append((ep, args)), {"images": [{"url": "http://x/i.png"}]})[1]
+    try:
+        assert IG._subscribe("fal-ai/nano-banana-2", arguments={"prompt": "p"}) == {"images": [{"url": "http://x/i.png"}]}
+        assert calls == [("fal-ai/nano-banana-2", {"prompt": "p"})], calls
+        IG._subscribe("comfy:image_z_image", arguments={"prompt": "p"})
+        assert calls[-1][0] == "comfy:image_z_image"
+    finally:
+        _ic.subscribe = _orig
+
+    # ── 2. Studio AUTONOME (sans core) : repli fal direct, sans récursion ─────
+    fake_fal = types.ModuleType("fal_client")
+    fake_fal.subscribe = lambda ep, arguments=None, **k: {"ep": ep, "args": arguments}
+    real_import = builtins.__import__
+
+    def _no_core(name, *a, **k):
+        if name == "core.image_call" or name == "core":
+            raise ImportError("Studio autonome : pas de core")
+        return real_import(name, *a, **k)
+    old_fal = _sys.modules.get("fal_client")
+    _sys.modules["fal_client"] = fake_fal
+    builtins.__import__ = _no_core
+    try:
+        assert IG._subscribe("fal-ai/x", arguments={"prompt": "p"}) == {"ep": "fal-ai/x", "args": {"prompt": "p"}}
+        try:
+            IG._subscribe("comfy:tpl", arguments={})
+            raise AssertionError("un moteur ComfyUI sans PANDORA doit être refusé clairement")
+        except RuntimeError as e:
+            assert "ComfyUI" in str(e)
+    finally:
+        builtins.__import__ = real_import
+        if old_fal is not None:
+            _sys.modules["fal_client"] = old_fal
+        else:
+            _sys.modules.pop("fal_client", None)
+
+    # ── 3. Le worker COMPLET, en balayage de deux moteurs (raster + SVG) ─────
+    from PIL import Image
+    import io, requests as _rq
+    buf = io.BytesIO(); Image.new("RGB", (40, 30), (200, 10, 10)).save(buf, "PNG")
+    png = buf.getvalue()
+
+    class _Resp:
+        def __init__(self, content): self.content = content
+    _orig_get = _rq.get
+    _rq.get = lambda url, *a, **k: _Resp(b"<svg xmlns='http://www.w3.org/2000/svg'/>" if url.endswith(".svg") else png)
+    _ic.subscribe = lambda ep, args=None, *a, **k: {"images": [{"url": "http://x/" + ("v.svg" if "vector" in ep else "i.png")}]}
+    _old_env = _os.environ.get("FAL_KEY")
+    out = tempfile.mkdtemp(prefix="pandora_studio_")
+    got, errs = [], []
+    try:
+        w = IG.ImageWorker(fal_key="cle-test", engine_key="nb2", prompt="un sticker", resolution="1K",
+                           ref_paths=[], out_dir=out, target_size=(64, 48),
+                           engine_keys=["nb2", "recraft_vector"])
+        w.done.connect(lambda paths: got.extend(paths))
+        w.failed.connect(lambda e: errs.append(e))
+        w._real()                       # synchrone : aucun thread, aucun réseau
+    finally:
+        _rq.get = _orig_get
+        _ic.subscribe = _orig
+        if _old_env is None:
+            _os.environ.pop("FAL_KEY", None)
+        else:
+            _os.environ["FAL_KEY"] = _old_env
+    assert not errs, errs
+    assert len(got) == 2 and all(_os.path.isfile(p) for p in got), got
+    assert got[0].endswith("_nano-banana-2.png") and got[1].endswith("_recraft-v4-1-vector.svg"), got
+    with Image.open(got[0]) as im:
+        assert im.size == (64, 48), "taille exacte demandée"
+
+
+@test
+def studio_images_selection_multi_moteurs_memorisee():
+    """Demande Matthieu 26/09/2026 : « Générer avec plusieurs moteurs » cochait
+    toujours « un par famille ». La dernière sélection VALIDÉE est désormais
+    gardée — hors projet et après relance — dans un fichier À PART
+    (multi_engines.json : config.json est réécrit en entier par chaque panneau
+    et une fenêtre secondaire aurait effacé le choix). Annuler ne change rien ;
+    un moteur disparu du catalogue est ignoré ; rien de valide → un par famille."""
+    import os as _os, sys as _sys, tempfile, json as _json
+    _studio = _os.path.join(_os.path.dirname(_os.path.dirname(_os.path.abspath(__file__))), "studio_images")
+    if _studio not in _sys.path:
+        _sys.path.insert(0, _studio)
+    from ui.tab_image import TabImage
+    _ti = TabImage()
+    pn = _ti.panel
+    W = _sys.modules[type(pn).__module__]
+    SC, E = W.cfg_mod, W.engines
+    td = tempfile.mkdtemp(prefix="pandora_multi_")
+    _orig = SC._MULTI_FILE
+    SC._MULTI_FILE = _os.path.join(td, "multi_engines.json")    # jamais la vraie config
+    try:
+        # Jamais choisi → un par famille, comme avant.
+        assert pn._multi_engine_preselection() == E.sweep_engines()
+        mine = ["seedream5_pro", "recraft", "nb2", "ideogram4", "recraft_vector"]
+        seen, launched = [], []
+        pn._prompt_or_warn = lambda: "un sticker"
+        pn._launch_image_worker = lambda prompt, **k: launched.append(k.get("engine_keys"))
+        pn._choose_engines = lambda pre: (seen.append(list(pre)), list(mine))[1]
+        pn._generate_all_engines()
+        assert launched and launched[-1][:len(mine)] == mine, launched
+        with open(SC._MULTI_FILE, encoding="utf-8") as f:
+            assert _json.load(f) == {"engines": mine}, "sélection écrite"
+        # Rouverte (autre projet, autre lancement) → cochée d'office.
+        pn._generate_all_engines()
+        assert set(seen[-1]) == set(mine), seen[-1]
+        # Annuler ne touche pas à la mémoire.
+        pn._choose_engines = lambda pre: None
+        pn._generate_all_engines()
+        assert SC.load_multi_engines() == mine
+        # Un moteur disparu (gabarit ComfyUI retiré…) est ignoré ; plus rien → un par famille.
+        SC.save_multi_engines(["nb2", "comfy:disparu"])
+        assert pn._multi_engine_preselection() == ["nb2"]
+        SC.save_multi_engines(["comfy:disparu"])
+        assert pn._multi_engine_preselection() == E.sweep_engines()
+        # Fichier illisible → [] (jamais d'exception à l'ouverture du dialogue).
+        with open(SC._MULTI_FILE, "w", encoding="utf-8") as f:
+            f.write('{"engines": [tron')
+        assert SC.load_multi_engines() == [] and pn._multi_engine_preselection() == E.sweep_engines()
+        assert not _os.path.exists(SC._MULTI_FILE + ".tmp")
+    finally:
+        SC._MULTI_FILE = _orig
+        for _a in ("_prompt_or_warn", "_launch_image_worker", "_choose_engines"):
+            pn.__dict__.pop(_a, None)
+    # Le dialogue le dit, et il est traduit.
+    from core.i18n import _FR_TO_EN
+    assert "Ta sélection est gardée pour la prochaine fois" in inspect.getsource(type(pn)._choose_engines)
+    assert "Un par famille" in _FR_TO_EN and "Choisis les moteurs de génération" in _FR_TO_EN
+    # Le fichier de sélection n'est ni commité ni embarqué.
+    root = _os.path.dirname(_os.path.dirname(_os.path.abspath(__file__)))
+    assert "studio_images/multi_engines.json" in open(_os.path.join(root, ".gitignore"), encoding="utf-8").read()
 
 
 if __name__ == "__main__":

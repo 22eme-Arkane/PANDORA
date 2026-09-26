@@ -56,6 +56,11 @@ def _pandora_config_path() -> str:
 
 _HERE = user_data_dir()
 _CONFIG_FILE = os.path.join(_HERE, "config.json")
+# Dernière sélection de « Générer avec plusieurs moteurs » — fichier À PART :
+# config.json est réécrit EN ENTIER par chaque panneau ouvert (save_config), et
+# une fenêtre secondaire qui sauve son dict chargé plus tôt effacerait le choix
+# fait dans l'autre. Ici, seul le dialogue multi-moteurs écrit.
+_MULTI_FILE = os.path.join(_HERE, "multi_engines.json")
 # config.json de PANDORA (pour récupérer les clés au premier lancement)
 _PANDORA_CONFIG = _pandora_config_path()
 
@@ -160,3 +165,32 @@ def save_config(cfg: dict):
             json.dump(cfg, f, indent=2, ensure_ascii=False)
     except Exception:
         pass
+
+
+def load_multi_engines() -> list:
+    """Clés des moteurs cochés au dernier « Générer avec plusieurs moteurs »
+    validé — [] si jamais choisi (l'appelant retombe sur « un par famille »).
+    Global à l'application : gardé d'un projet à l'autre et après relance
+    (demande Matthieu 26/09/2026)."""
+    try:
+        with open(_MULTI_FILE, "r", encoding="utf-8") as f:
+            data = json.load(f)
+    except Exception:
+        return []
+    keys = data.get("engines") if isinstance(data, dict) else data
+    return [k for k in (keys or []) if isinstance(k, str) and k]
+
+
+def save_multi_engines(keys) -> None:
+    """Mémorise la sélection (écriture atomique : jamais de fichier à moitié écrit)."""
+    tmp = _MULTI_FILE + ".tmp"
+    try:
+        with open(tmp, "w", encoding="utf-8") as f:
+            json.dump({"engines": [str(k) for k in (keys or []) if k]}, f,
+                      indent=2, ensure_ascii=False)
+        os.replace(tmp, _MULTI_FILE)
+    except Exception:
+        try:
+            os.remove(tmp)
+        except Exception:
+            pass

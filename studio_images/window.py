@@ -1434,9 +1434,12 @@ class StudioImagesPanel(QWidget):
         prompt = self._prompt_or_warn()
         if not prompt:
             return
-        keys = self._choose_engines(engines.sweep_engines())
+        keys = self._choose_engines(self._multi_engine_preselection())
         if not keys:
             return
+        # La sélection validée devient celle de la prochaine fois, dans tout
+        # projet et après relance (demande Matthieu 26/09/2026).
+        cfg_mod.save_multi_engines(keys)
         # ×N images PAR moteur (compteur à côté du bouton, 2026-07-23) : chaque
         # clé est répétée N fois dans la file.
         n = self._count_all.value() if hasattr(self, "_count_all") else 1
@@ -1446,10 +1449,19 @@ class StudioImagesPanel(QWidget):
             busy_msg=f"Génération sur {len(keys)} moteur(s)"
                      + (f" × {n}" if n > 1 else "") + "…")
 
+    @staticmethod
+    def _multi_engine_preselection() -> list:
+        """Moteurs cochés d'office : la DERNIÈRE sélection validée (mémorisée hors
+        projet), réduite aux moteurs qui existent encore — un gabarit ComfyUI ou
+        un moteur retiré du catalogue disparaît sans bruit. À défaut : un moteur
+        par famille, comme avant."""
+        saved = [k for k in cfg_mod.load_multi_engines() if k in engines.ENGINES]
+        return saved or engines.sweep_engines()
+
     def _choose_engines(self, preselected):
         """Fenêtre de SÉLECTION MULTIPLE des moteurs de génération. Retourne la liste
         des clés cochées (ordre du catalogue) ou None si annulé. `preselected` = clés
-        cochées au départ (défaut : un moteur par famille)."""
+        cochées au départ (la dernière sélection validée, sinon un moteur par famille)."""
         pre = set(preselected or [])
         dlg = QDialog(self)
         dlg.setWindowTitle("Générer avec plusieurs moteurs")
@@ -1465,7 +1477,8 @@ class StudioImagesPanel(QWidget):
         lay.addWidget(title)
         help_lbl = QLabel(
             "Une image est générée par moteur coché, à la suite. Le nom du moteur "
-            "termine chaque fichier. ⚠ Chaque moteur est facturé séparément.")
+            "termine chaque fichier. ⚠ Chaque moteur est facturé séparément. "
+            "Ta sélection est gardée pour la prochaine fois, dans tous les projets.")
         help_lbl.setWordWrap(True)
         help_lbl.setStyleSheet(f"color:{CP['text_dim']};font-size:10px;background:transparent;")
         lay.addWidget(help_lbl)
@@ -1500,7 +1513,9 @@ class StudioImagesPanel(QWidget):
                   f"QCheckBox::indicator:checked{{background:{CP['accent']};border-color:{CP['accent']};}}")
         boxes = {}
         for k in engines.ENGINES:
-            cb = QCheckBox(engines.label_for(k))
+            # « & » nu = raccourci clavier Qt : « TEXTE & logos » s'affichait
+            # « TEXTE _logos » (vu au rendu du 26/09/2026) → doublé.
+            cb = QCheckBox(engines.label_for(k).replace("&", "&&"))
             cb.setChecked(k in pre)
             cb.setStyleSheet(_cb_ss)
             cb.setCursor(Qt.CursorShape.PointingHandCursor)
@@ -1542,6 +1557,13 @@ class StudioImagesPanel(QWidget):
         b_fam.clicked.connect(
             lambda: [cb.setChecked(k in set(engines.sweep_engines())) for k, cb in boxes.items()])
         _upd()
+        # Dans PANDORA, le dialogue suit la langue de l'interface (le Studio
+        # autonome n'a pas core : il reste en français).
+        try:
+            from core.i18n import retranslate_widget
+            retranslate_widget(dlg)
+        except Exception:
+            pass
 
         if dlg.exec() != QDialog.DialogCode.Accepted:
             return None

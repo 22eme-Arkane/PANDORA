@@ -19,14 +19,26 @@ import engines
 
 
 def _subscribe(endpoint: str, arguments: dict | None = None, **kw) -> dict:
-    """fal, ou ComfyUI pour un endpoint « comfy:… » (24/09/2026). Le pont vit
-    dans core/image_call — présent dans PANDORA ; en Studio autonome (sans
-    core), un moteur ComfyUI n'est simplement pas proposé."""
+    """UN point d'appel pour tout le Studio : fal, ou ComfyUI pour un endpoint
+    « comfy:… ». Dans PANDORA, tout passe par core/image_call (routage
+    fal/ComfyUI) ; en Studio AUTONOME (sans core), repli fal direct — un moteur
+    ComfyUI n'y est pas proposé.
+
+    ⚠ Bug du 24 au 26/09/2026 : un rechercher-remplacer de
+    « fal_client.subscribe( » en « _subscribe( » avait aussi touché la ligne fal
+    de CETTE fonction, qui s'appelait donc elle-même → « maximum recursion depth
+    exceeded » sur TOUS les moteurs du Studio (constat Matthieu). Le test
+    `studio_images_appel_fal_sans_recursion` exécute ce chemin pour de vrai."""
+    try:
+        from core.image_call import subscribe as _pandora_subscribe
+    except ImportError:
+        _pandora_subscribe = None
+    if _pandora_subscribe is not None:
+        return _pandora_subscribe(endpoint, arguments or {}, **kw)
     if str(endpoint).startswith("comfy:"):
-        from core.image_call import subscribe as _s
-        return _s(endpoint, arguments, **kw)
+        raise RuntimeError("Moteur ComfyUI : disponible uniquement dans PANDORA.")
     import fal_client
-    return _subscribe(endpoint, arguments=arguments or {}, **kw)
+    return fal_client.subscribe(endpoint, arguments=arguments or {}, **kw)
 
 
 def _fal_needed(jobs) -> bool:

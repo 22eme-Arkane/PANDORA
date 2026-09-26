@@ -5101,6 +5101,11 @@ _FR_TO_EN: dict[str, str] = {
     "Grok Imagine 1.5 · xAI · son compris": "Grok Imagine 1.5 · xAI · sound included",
     "Grok Imagine 1.5 · image-to-video (le cadre suit l'image)": "Grok Imagine 1.5 · image-to-video (frame follows the image)",
     "Topaz Astra 2  (génératif, ~$0.30/s)": "Topaz Astra 2  (generative, ~$0.30/s)",
+    # Studio Images — « Générer avec plusieurs moteurs » (sélection mémorisée, 26/09/2026).
+    "Choisis les moteurs de génération": "Choose the generation engines",
+    "Un par famille": "One per family",
+    "Une image est générée par moteur coché, à la suite. Le nom du moteur termine chaque fichier. ⚠ Chaque moteur est facturé séparément. Ta sélection est gardée pour la prochaine fois, dans tous les projets.":
+        "One image is generated per checked engine, one after another. The engine name ends each file name. ⚠ Each engine is billed separately. Your selection is kept for next time, in every project.",
     # Lèvres dans « Modifier des clips » (25/09/2026) — moteur au choix + audio fichier.
     "Synchronisation labiale — moteur au choix ci-contre · ⚠ réencode (qualité moindre) + audio sur piste séparée":
         "Lip sync — engine of your choice opposite · ⚠ re-encodes (lower quality) + audio on a separate track",
