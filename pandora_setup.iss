@@ -344,22 +344,18 @@ end;
 procedure InitializeWizard();
 begin
   CheckForUpdate();
-end;
-
-{ ── Page de fin : cases à cocher entières ─────────────────────────────────
-  Constat Matthieu (builds 2.3.0 puis 2.4.0) : les cases de la page de fin
-  sortaient ROGNÉES à gauche et le libellé touchait leur bord droit. Rendu
-  capturé le 26/09/2026 à 150 % : ni les images multi-échelles ni
-  WizardSizePercent (les deux corrections d'août) n'y changeaient rien, et la
-  hauteur de ligne seule non plus. C'est le décalage horizontal de la case
-  dans la liste (Offset) qui manquait. }
-procedure CurPageChanged(CurPageID: Integer);
-begin
-  if CurPageID = wpFinished then
-  begin
-    WizardForm.RunList.Offset := ScaleX(6);
-    WizardForm.RunList.MinItemHeight := ScaleY(26);
-  end;
+  { Page de fin : cases à cocher entières.
+    Constat Matthieu (builds 2.3.0 puis 2.4.0) : les cases sortaient ROGNÉES à
+    gauche et le libellé touchait leur bord droit. Ni les images multi-échelles
+    ni WizardSizePercent (corrections d'août) n'y changeaient rien, ni la
+    hauteur de ligne seule : c'est le décalage de la case (Offset) qui manquait.
+    ⚠ Réglé ICI, avant le premier affichage : fait au passage sur la page de
+    fin (CurPageChanged, build 2.4.1 du matin), la première ligne gardait les
+    pixels de son premier dessin (« ✓E:Exécuter PANDORA » vu par Matthieu), et
+    un Invalidate ne suffit pas. Vérifié par capture de l'ÉCRAN réel, pas par
+    PrintWindow qui redessine tout et masque ce défaut. }
+  WizardForm.RunList.Offset := ScaleX(6);
+  WizardForm.RunList.MinItemHeight := ScaleY(26);
 end;
 
 { ── Exécuté à la fin de l'installation principale ───────────────────────────}
