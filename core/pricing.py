@@ -101,6 +101,16 @@ try:
     _PER_SECOND.update(_edit_prices())
 except Exception:
     pass
+# « Changer le décor · acteurs intacts » (core/decor_swap, 28/09/2026) : ligne
+# INDICATIVE du seul détourage VEED (0,0225 $ / 30 images ≈ 0,0225 $/s à 30 i/s).
+# Le coût réel de la chaîne (détourage + décor + rééclairage) est calculé par le
+# worker et journalisé tel quel (`cost_usd`, core/history) ; cette ligne évite
+# seulement le repli « moteur inconnu » à 0,30 $/s.
+try:
+    from core.decor_swap import ENGINE_KEY as _DS_KEY, MATTING_PRICE_PER_30_FRAMES as _DS_P
+    _PER_SECOND[_DS_KEY] = {"source": _DS_P}
+except Exception:
+    pass
 # Moteurs de la famille _SimpleFalVideoWorker (api/video_engines) qui portaient
 # leur tarif UNIQUEMENT dans leur attribut PRICE_PER_S : absents de la grille,
 # ils étaient journalisés au repli 0,30 $/s (constat 14/09/2026). Les valeurs

@@ -406,6 +406,11 @@ class TabModifyLive(QScrollArea):
         self._engine_combo.setStyleSheet(_combo_style())
         for label, key in self._ENGINES:
             self._engine_combo.addItem(label, key)
+        # Changer le décor SANS faire passer les acteurs par un modèle génératif
+        # (core/decor_swap, 28/09/2026) — parité Cinéma.
+        self._engine_combo.addItem(
+            translate("Changer le décor · acteurs intacts (détourage + recomposition)"),
+            "decor-swap")
         # Éditeurs vidéo cloud (api/video_edit) — même table que le Cinéma.
         from api.video_edit import EDIT_ENGINES as _EDIT
         for _k in _EDIT:
@@ -420,6 +425,15 @@ class TabModifyLive(QScrollArea):
         from ui.external_banner import ExternalBanner
         self._external_banner = ExternalBanner()
         eng_col.addWidget(self._external_banner)
+        # Seedance et les visages réels (relevé du compte fal, 25/09/2026).
+        self._engine_warn = QLabel(translate(
+            "⚠ Seedance refuse le plus souvent les clips où l'on voit des visages "
+            "réalistes (filtre de ByteDance, le même chez tous les distributeurs). "
+            "Pour garder vos acteurs : « Changer le décor · acteurs intacts », "
+            "HappyHorse, Kling O3 ou Wan 2.7."))
+        self._engine_warn.setWordWrap(True)
+        self._engine_warn.setStyleSheet("color:#f5c518;font-size:10px;background:transparent;")
+        eng_col.addWidget(self._engine_warn)
         row.addLayout(eng_col, 1)
         dur_col = QVBoxLayout()
         dur_col.setSpacing(6)
@@ -438,6 +452,12 @@ class TabModifyLive(QScrollArea):
         dur_col.addWidget(self._dur_slider)
         row.addLayout(dur_col, 1)
         lay.addLayout(row)
+        # Réglages de « Changer le décor · acteurs intacts » (composant partagé
+        # avec le Cinéma) — visibles seulement quand ce moteur est choisi.
+        from ui.decor_swap_options import DecorSwapOptions
+        self._decor_opts = DecorSwapOptions()
+        self._decor_opts.setVisible(False)
+        lay.addWidget(self._decor_opts)
 
         lay.addWidget(_divider())
 
@@ -548,8 +568,15 @@ class TabModifyLive(QScrollArea):
         # 720p/1080p du Live vaut pour Seedance ; les éditeurs à paliers lisent
         # la résolution choisie si leur fiche la connaît, sinon la source).
         from api.video_edit import is_edit_engine
-        self._res_combo.setEnabled(not key.startswith("comfy_edit:"))
-        self._dur_slider.setEnabled(not (key.startswith("comfy_edit:") or is_edit_engine(key)))
+        _decor = key == "decor-swap"
+        # Changer le décor : recomposition à la définition et à la durée du source.
+        self._res_combo.setEnabled(not (key.startswith("comfy_edit:") or _decor))
+        self._dur_slider.setEnabled(not (key.startswith("comfy_edit:") or is_edit_engine(key)
+                                         or _decor))
+        if getattr(self, "_decor_opts", None) is not None:
+            self._decor_opts.setVisible(_decor)
+        if getattr(self, "_engine_warn", None) is not None:
+            self._engine_warn.setVisible(key in {k for _l, k in self._ENGINES})
 
     def _reload_list(self):
         self._clip_list.blockSignals(True)
@@ -674,6 +701,26 @@ class TabModifyLive(QScrollArea):
                 translate("Choisissez le fichier audio (doublage, voix) à synchroniser avec "
                           "« Parcourir… », ou repassez sur « Piste audio du clip source »."))
             return
+        # Changer le décor : le décor fourni doit exister AVANT le premier appel
+        # payant (le détourage serait facturé pour rien).
+        if str(self._engine_combo.currentData() or "") == "decor-swap":
+            from PyQt6.QtWidgets import QMessageBox
+            _pm = self._decor_opts.plate_mode()
+            if _pm == "file" and not self._decor_opts.plate_file():
+                QMessageBox.warning(
+                    self, translate("Décor manquant"),
+                    translate("Choisissez le fichier du nouveau décor (image ou vidéo) "
+                              "avec « Choisir le décor… »."))
+                return
+            if _pm == "ref_image":
+                _missing = [os.path.basename(self._clips[i]) for i in sel
+                            if not (self._build_params(i, self._clips[i]).get("ref_images"))]
+                if _missing:
+                    QMessageBox.warning(
+                        self, translate("Décor manquant"),
+                        translate("Ajoutez l'image du nouveau décor en « Image de référence » :")
+                        + "\n\n" + "\n".join(f"  • {n}" for n in _missing))
+                    return
         # Gabarit ComfyUI : sans serveur vivant, on GUIDE (fenêtre du module).
         if str(self._engine_combo.currentData() or "").startswith("comfy_edit:"):
             from core import comfy as _cf
@@ -748,6 +795,25 @@ class TabModifyLive(QScrollArea):
         if self._worker is not None:
             abandon_thread(self._worker)
         _key = str(params.get("model") or "")
+        if _key == "decor-swap":
+            # Changer le décor · acteurs intacts (api/decor_swap) : signal `done`
+            # (pas `finished`, qui est ici le signal natif du QThread).
+            from api.decor_swap import DecorSwapWorker
+            _refs = params.get("ref_images") or []
+            self._worker = DecorSwapWorker({
+                "video_path": clip,
+                "prompt":     params.get("prompt", ""),
+                "ref_image":  _refs[0] if _refs else "",
+                **self._decor_opts.options(),
+            })
+            self._worker.progress.connect(self._on_progress)
+            self._worker.done.connect(lambda r, _i=idx: self._on_one_finished(r, _i))
+            self._worker.failed.connect(lambda e, _i=idx: self._on_one_failed(e, _i))
+            self._worker.start()
+            n, tot = self._queue_pos + 1, len(self._queue)
+            self._set_item_prefix(idx, "⏳ ")
+            self._status_lbl.setText(f"⏳  {n}/{tot} — {os.path.basename(clip)}")
+            return
         from api.video_edit import is_edit_engine
         if is_edit_engine(_key):
             # Éditeur vidéo cloud (api/video_edit) : le clip garde sa durée.
@@ -791,7 +857,9 @@ class TabModifyLive(QScrollArea):
     def _on_one_finished(self, result: dict, idx: int):
         local = result.get("local_path", "")
         ir = {"success": bool(local), "mock": False, "local_path": local, "error": ""}
-        if not local and result.get("video_url"):
+        # `local_file` : clip produit sur la machine (Changer le décor) — rangé
+        # par core/download comme un clip téléchargé.
+        if not local and (result.get("video_url") or result.get("local_file")):
             try:
                 from core.download import download_result
                 from core.config import get_output_dir
@@ -814,16 +882,25 @@ class TabModifyLive(QScrollArea):
             # écrivait jamais : coût sous-estimé, pas de « ↑ HD »).
             try:
                 from core.history import save_to_history
-                save_to_history({
+                _entry = {
                     "mode": "edit", "prompt": result.get("prompt", ""),
                     "model": str(self._engine_combo.currentData() or "seedance-2.0"),
                     "video_path": local, "local_path": local,
                     "duration": result.get("duration", "") or self._dur_slider.value(),
                     "resolution": self._res_combo.currentData() or "",
                     "seed": result.get("seed", 0) or 0,
-                })
+                }
+                # Chaîne à plusieurs étapes (Changer le décor) : coût calculé par
+                # le worker, prioritaire sur la grille (core/history).
+                if isinstance(result.get("cost_usd"), (int, float)):
+                    _entry["cost_usd"] = float(result["cost_usd"])
+                save_to_history(_entry)
             except Exception:
                 pass
+            if result.get("note"):
+                _it = self._clip_list.item(idx)
+                if _it is not None:
+                    _it.setToolTip(str(result["note"]))
             self.generation_done.emit(result)
             # Lèvres (RENDU & AUDIO) : après le téléchargement, avant d'avancer —
             # la file reprend depuis _on_lipsync_done / _on_lipsync_failed.
@@ -913,6 +990,20 @@ class TabModifyLive(QScrollArea):
 
     def _on_one_failed(self, err: str, idx: int):
         self._set_item_prefix(idx, "✗ ")
+        # Refus du FILTRE DE CONTENU : la file s'arrête (parité Cinéma). Les
+        # clips suivants subiraient le même refus, chacun facturable.
+        from core.worker import is_content_policy_error, content_policy_message
+        if is_content_policy_error(err):
+            _eng = self._engine_combo.currentText().split("  (")[0].strip()
+            msg = content_policy_message(err, _eng)
+            for j in self._queue[self._queue_pos + 1:]:
+                self._set_item_prefix(j, "⏸ ")
+            self._failed = getattr(self, "_failed", []) + [msg]
+            self._queue_pos = len(self._queue)
+            self._status_lbl.setText(f"✗  {msg[:100]}")
+            show_api_error(self, msg)
+            self._process_next()
+            return
         self._failed = getattr(self, "_failed", []) + [err]
         self._queue_pos += 1
         self._status_lbl.setText(f"✗  {err[:100]}")

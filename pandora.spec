@@ -134,6 +134,9 @@ a = Analysis(
         "core.comfy", "core.comfy_workflow", "core.comfy_catalog", "core.comfy_image",
         "core.image_call", "core.local_llm", "ui.local_ai_panel", "core.markers",
         "core.comfy_video", "ui.external_autostart", "api.comfy_edit",
+        # « Changer le décor · acteurs intacts » (2026-09-28) : worker et panneau
+        # importés dans des corps de fonction des deux onglets « Modifier des clips ».
+        "core.decor_swap", "api.decor_swap", "ui.decor_swap_options",
         # ── Studio Images (onglet « Image IA ») ───────────────────────────────
         # Modules importés à plat au runtime via sys.path.insert dans
         # ui/tab_image.py → invisibles à l'analyse statique de PyInstaller.

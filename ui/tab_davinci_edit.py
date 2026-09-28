@@ -1211,6 +1211,12 @@ class TabDavinciEdit(QScrollArea):
         # « remplacer un visage / un fond ». Seedance 2.0 reste le défaut (1ʳᵉ entrée).
         self._cb_model.addItem(translate("Pixverse Swap · remplacer un visage (≤720p)"), "pixverse_face")
         self._cb_model.addItem(translate("Pixverse Swap · remplacer un fond (≤720p)"), "pixverse_bg")
+        # Changer le décor SANS faire passer les acteurs par un modèle génératif
+        # (core/decor_swap, 28/09/2026) : détourage + décor vide + recomposition.
+        # La voie conforme au filtre « personnes réelles » de Seedance.
+        self._cb_model.addItem(
+            translate("Changer le décor · acteurs intacts (détourage + recomposition)"),
+            "decor-swap")
         # Éditeurs vidéo cloud (api/video_edit, relevé fal.ai 24/09/2026) : Kling O3/O1
         # Edit (balises @Video1/@Image1 comme Seedance), Wan 2.7, HappyHorse,
         # Bernini-R, FLUX.3, Gemini Omni 1.1, Lucy — une table, un worker.
@@ -1249,6 +1255,12 @@ class TabDavinciEdit(QScrollArea):
             params_grid.addWidget(g, row, col)
 
         body_params.addLayout(params_grid)
+        # Réglages de « Changer le décor · acteurs intacts » (composant partagé
+        # avec le Live) — visibles seulement quand ce moteur est choisi.
+        from ui.decor_swap_options import DecorSwapOptions
+        self._decor_opts = DecorSwapOptions()
+        self._decor_opts.setVisible(False)
+        body_params.addWidget(self._decor_opts)
         # Bandeau du module externe (ComfyUI) sous le choix du moteur — même
         # composant que le Studio et l'onglet Moteurs (ui/external_banner).
         from ui.external_banner import ExternalBanner
@@ -1423,6 +1435,10 @@ class TabDavinciEdit(QScrollArea):
         btn_tarifs.clicked.connect(self._open_manual_tarifs)
         price_h.addWidget(btn_tarifs)
         lay.addWidget(price_frame)
+
+        # Indice du moteur par défaut (Seedance → avertissement « visages réels »)
+        # dès l'ouverture, pas seulement après un changement de moteur.
+        self._refresh_engine_hint()
 
         lay.addStretch()
 
@@ -1894,6 +1910,11 @@ class TabDavinciEdit(QScrollArea):
             fixed_res = False
             self._cb_ratio.setEnabled(False)
             options = [("720p", "720p"), ("540p", "540p"), ("360p", "360p")]
+        elif key == "decor-swap":
+            # Recomposition locale : définition, cadence et durée du clip source.
+            fixed_res = True
+            self._cb_ratio.setEnabled(False)
+            options = [("Définition du clip source", "source")]
         elif key.startswith("comfy_edit:"):
             # Gabarit ComfyUI : le clip garde sa définition et son cadrage.
             fixed_res = False
@@ -1923,6 +1944,8 @@ class TabDavinciEdit(QScrollArea):
         self._cb_res.setEnabled(not fixed_res)
         if hasattr(self, "_ref_compat_banner"):
             self._ref_compat_banner.setVisible(key in _TEXT_FALLBACK_ENGINES)
+        if getattr(self, "_decor_opts", None) is not None:
+            self._decor_opts.setVisible(key == "decor-swap")
         self._refresh_engine_hint()
 
     def _get_aspect_ratio(self) -> str:
@@ -2103,6 +2126,31 @@ class TabDavinciEdit(QScrollArea):
                 "Choisissez le fichier audio (doublage, voix) à synchroniser avec « Parcourir… », "
                 "ou repassez sur « Piste audio du clip source ».")
             return
+        # Changer le décor : le décor fourni doit exister AVANT le premier appel
+        # payant (le détourage serait facturé pour rien).
+        if self._get_model() == "decor-swap" and getattr(self, "_decor_opts", None) is not None:
+            _pm = self._decor_opts.plate_mode()
+            if _pm == "file" and not self._decor_opts.plate_file():
+                QMessageBox.warning(
+                    self, translate("Décor manquant"),
+                    translate("Choisissez le fichier du nouveau décor (image ou vidéo) "
+                              "avec « Choisir le décor… »."))
+                return
+            if _pm == "ref_image":
+                _g = self._global_ref_image if (self._global_ref_image
+                                                and os.path.isfile(self._global_ref_image)) else ""
+                _missing = []
+                for clip_idx, _card in selected:
+                    _pc = (self._per_clip_ref_images.get(clip_idx, "")
+                           if self._rb_per_clip.isChecked() else "")
+                    if not ((_pc and os.path.isfile(_pc)) or _g):
+                        _missing.append(self._clips_data[clip_idx].get("name", f"Clip {clip_idx + 1}"))
+                if _missing:
+                    QMessageBox.warning(
+                        self, translate("Décor manquant"),
+                        translate("Ajoutez l'image du nouveau décor en « Image de référence » :")
+                        + "\n\n" + "\n".join(f"  • {n}" for n in _missing))
+                    return
 
         # Info CONVERSION : prévenir quand un clip sera transcodé avant l'envoi
         # (format/codec non H.264, ou entrelacé → désentrelacé en progressif).
@@ -2157,6 +2205,7 @@ class TabDavinciEdit(QScrollArea):
         self._queue_pos   = 0
         self._mock_count  = 0
         self._failed_clips = []
+        self._skipped     = 0     # générations non lancées (file arrêtée sur un refus)
 
         # Seed fixé UNE SEULE FOIS pour toute la file si verrou activé
         if self._seed_lock_btn.isChecked():
@@ -2208,6 +2257,29 @@ class TabDavinciEdit(QScrollArea):
         if not hasattr(self, "_modif_hint"):
             return
         mode = self._pixverse_engine_mode()
+        _key = self._get_model()
+        # Avertissement (ambre) ou indice (couleur d'accent) : même étiquette.
+        _warn = _key in _SEEDANCE_ENGINES
+        self._modif_hint.setStyleSheet(
+            f"color:{'#f5c518' if _warn else C['accent']};font-size:10px;"
+            "background:transparent;border:none;")
+        if _key == "decor-swap":
+            self._modif_hint.setText(translate(
+                "Changer le décor · acteurs intacts : décrivez le décor seul, sans les "
+                "personnages. Détourage VEED puis recomposition sur votre machine : "
+                "visages, lèvres et son identiques au clip source."))
+            self._modif_hint.setVisible(True)
+            return
+        if _warn:
+            # Relevé du compte fal le 25/09/2026 : 4 refus sur 5 « likenesses of real
+            # people » (partner_validation_failed) sur un plan de trois acteurs.
+            self._modif_hint.setText(translate(
+                "⚠ Seedance refuse le plus souvent les clips où l'on voit des visages "
+                "réalistes (filtre de ByteDance, le même chez tous les distributeurs). "
+                "Pour garder vos acteurs : « Changer le décor · acteurs intacts », "
+                "HappyHorse, Kling O3 ou Wan 2.7."))
+            self._modif_hint.setVisible(True)
+            return
         if self._is_cloud_edit():
             from api.video_edit import EDIT_ENGINES as _EDIT
             e = _EDIT[self._get_model()]
@@ -2423,6 +2495,37 @@ class TabDavinciEdit(QScrollArea):
             self._progress.setValue(int(self._queue_pos / total * 100))
             self._lbl_progress.setText(
                 f"[{self._queue_pos + 1}/{total}]  {clip.get('name', '?')}  — {_lbl} (Pixverse)")
+            return
+
+        # ── Changer le décor · acteurs intacts (api/decor_swap) : détourage VEED,
+        #    décor SANS personne, recomposition ffmpeg. Le décor se décrit avec la
+        #    consigne de l'utilisateur et le style du projet — pas avec les
+        #    injections de RENDU (mouvements de caméra…), fausses pour un décor fixe.
+        if self._get_model() == "decor-swap":
+            from api.decor_swap import DecorSwapWorker
+            prev = getattr(self, "_worker", None)
+            if prev is not None:
+                abandon_thread(prev)
+            _desc = " ".join(p for p in [base_prompt, self._style_suffix] if p)
+            _opts = self._decor_opts.options() if getattr(self, "_decor_opts", None) else {}
+            self._worker = DecorSwapWorker({
+                "video_path": video_path,
+                "prompt":     _desc,
+                "ref_image":  ref_images[0] if ref_images else "",
+                **_opts,
+            })
+            self._worker.done.connect(
+                lambda r, ci=clip_idx, pi=prise_idx, p=_desc:
+                    self._on_clip_done(_norm_ext_result(r, p), ci, pi))
+            self._worker.progress.connect(self._on_progress)
+            self._worker.failed.connect(
+                lambda e, ci=clip_idx, pi=prise_idx: self._on_clip_failed(e, ci, pi))
+            self._worker.start()
+            total = len(self._queue)
+            self._progress.setValue(int(self._queue_pos / total * 100))
+            self._lbl_progress.setText(
+                f"[{self._queue_pos + 1}/{total}]  {clip.get('name', '?')}  — "
+                + translate("changer le décor"))
             return
 
         _model_key = self._get_model()
@@ -2652,6 +2755,12 @@ class TabDavinciEdit(QScrollArea):
             "resolution": self._cb_res.currentData() or "",
             "seed":       result.get("seed", 0) or 0,
         }
+        # Chaîne à plusieurs étapes (Changer le décor) : le worker a calculé son
+        # coût — il prime sur la grille dans le journal (core/history).
+        if isinstance(result.get("cost_usd"), (int, float)):
+            hist_entry["cost_usd"] = float(result["cost_usd"])
+        if result.get("note") and local_path:
+            card.setToolTip(f"Fichier : {local_path}\n{result['note']}")
         # Une simulation n'a rien coûté : ni historique, ni journal de dépenses.
         if not ir.get("mock"):
             try:
@@ -2672,6 +2781,11 @@ class TabDavinciEdit(QScrollArea):
     @staticmethod
     def _humanize_error(error: str) -> str:
         e = error.lower()
+        from core.worker import is_content_policy_error, is_real_person_refusal
+        if is_real_person_refusal(error):
+            return translate("Refusé : visages de personnes réelles (filtre du moteur)")
+        if is_content_policy_error(error):
+            return translate("Refusé par le filtre de contenu du moteur")
         is_validation = any(k in e for k in ("'loc'", '"loc"', "[{", "unprocessable", "422"))
         if is_validation:
             # Ce que fal reproche au clip se LIT dans le détail (durée, résolution,
@@ -2693,9 +2807,26 @@ class TabDavinciEdit(QScrollArea):
         n_pr = self._spin_prises.value()
         short_err = self._humanize_error(error)
         card.set_status(f"P{prise_idx + 1}/{n_pr} ✗ {short_err}", C["red"])
+        self._lbl_lipsync_stage.setVisible(False)
+        # Refus du FILTRE DE CONTENU : la file s'arrête. Les clips suivants
+        # subiraient le même refus — chacun après une à deux minutes, et un refus
+        # peut être facturé (fal le classe non rejouable). Le message dit QUI
+        # refuse et quoi faire à la place.
+        from core.worker import is_content_policy_error, content_policy_message
+        if is_content_policy_error(error):
+            _eng = self._cb_model.currentText().split("  (")[0].strip()
+            self._failed_clips.append((clip_idx, content_policy_message(error, _eng)))
+            rest = self._queue[self._queue_pos + 1:]
+            for ci, _pi in rest:
+                if ci < len(self._clip_cards):
+                    self._clip_cards[ci].set_status(
+                        "⏸ " + translate("non lancé (file arrêtée)"), C["text_dim"])
+            self._skipped = getattr(self, "_skipped", 0) + len(rest)
+            self._queue_pos = len(self._queue)
+            self._on_queue_done()
+            return
         self._failed_clips.append((clip_idx, error))
         self._queue_pos += 1
-        self._lbl_lipsync_stage.setVisible(False)
         self._process_next()
 
     def _cancel_queue(self):
@@ -2714,6 +2845,12 @@ class TabDavinciEdit(QScrollArea):
             abandon_thread(self._lipsync_worker)
             self._lipsync_worker = None
         if self._worker:
+            # `done` : workers aux signaux conformes à la règle maison (Changer le
+            # décor) — leur `finished` est le signal natif du QThread.
+            try:
+                self._worker.done.disconnect()
+            except Exception:
+                pass
             try:
                 self._worker.finished.disconnect()
                 self._worker.failed.disconnect()
@@ -2751,10 +2888,12 @@ class TabDavinciEdit(QScrollArea):
         self._btn_cancel.setVisible(False)
         self._lbl_lipsync_stage.setVisible(False)
         total = len(self._queue)
-        n_ok = max(0, total - len(self._failed_clips) - self._mock_count)
+        _skip = getattr(self, "_skipped", 0)
+        n_ok = max(0, total - len(self._failed_clips) - self._mock_count - _skip)
         self._lbl_queue_info.setText(
             f"File terminée — {n_ok} génération(s) réussie(s) sur {total}"
             + (f", {len(self._failed_clips)} échouée(s)" if self._failed_clips else "")
+            + (f", {_skip} non lancée(s)" if _skip else "")
             + (f", {self._mock_count} simulée(s)" if self._mock_count else "") + ".")
         self._progress.setValue(100)
         self._lbl_progress.setText("")

@@ -779,6 +779,27 @@ def _s_seedance() -> str:
             "Depuis DaVinci : Fichier → Exporter → sélectionner H.264 Master à 720p "
             "avant d'envoyer vos clips via pandora_send."
         ),
+        _h("Acteurs réels : « Changer le décor · acteurs intacts »"),
+        _p("Seedance refuse le plus souvent les clips où l'on voit des visages réalistes : c'est "
+           "le filtre de ByteDance, le même chez tous les distributeurs (fal.ai n'est pas en "
+           "cause). Le moteur <b>Changer le décor · acteurs intacts</b> ne fait passer vos "
+           "acteurs par AUCUN modèle génératif :"),
+        _ul(
+            "<b>1.</b> les acteurs sont détourés (VEED, ~0,02 $/s) ;",
+            "<b>2.</b> un décor <b>sans personne</b> est créé : image générée d'après la consigne, "
+            "vidéo Seedance 2.0, image de référence telle quelle, ou fichier fourni (image ou vidéo) ;",
+            "<b>3.</b> PANDORA recompose les acteurs sur ce décor, sur votre machine : visages, "
+            "lèvres et son identiques au clip source ;",
+            "<b>Options</b> : harmonisation de la couleur des acteurs (locale, gratuite) et "
+            "rééclairage IA ID-V2V (expérimental, ~0,20 $/s, sortie 720p, visages ressemblants "
+            "mais plus identiques au pixel).",
+        ),
+        _warn(
+            "Décrivez dans la consigne le décor seul, sans les personnages. Limites : les ombres "
+            "portées des acteurs disparaissent, et le décor ne suit pas un mouvement de caméra. "
+            "Quand un moteur refuse un clip pour son contenu, la file s'arrête et le message dit "
+            "quel moteur a refusé et pourquoi."
+        ),
         _h("ADN visuel — Seed Lock"),
         _ul(
             "<b>🔒 ADN visuel — garder pour tous les plans</b> : verrouille le seed Seedance "
@@ -1731,6 +1752,27 @@ def _e_seedance() -> str:
             "<b>720p maximum · less than 50 MB · H.264 MP4 or MOV</b>. "
             "From DaVinci: File → Export → select H.264 Master at 720p "
             "before sending your clips via pandora_send."
+        ),
+        _h("Real actors: “Change the set · actors untouched”"),
+        _p("Seedance usually refuses clips showing realistic faces: this is ByteDance's filter, "
+           "the same at every distributor (fal.ai is not the cause). The <b>Change the set · "
+           "actors untouched</b> engine sends your actors through NO generative model:"),
+        _ul(
+            "<b>1.</b> the actors are cut out (VEED, ~$0.02/s);",
+            "<b>2.</b> a set <b>with no people</b> is created: an image generated from the "
+            "instruction, a Seedance 2.0 video, the reference image as is, or your own file "
+            "(image or video);",
+            "<b>3.</b> PANDORA composites the actors onto that set, on your machine: faces, lips "
+            "and sound identical to the source clip;",
+            "<b>Options</b>: matching the actors' color to the set (local, free) and ID-V2V AI "
+            "relighting (experimental, ~$0.20/s, 720p output, faces look alike but are no longer "
+            "pixel-identical).",
+        ),
+        _warn(
+            "Describe the set alone in the instruction, without the characters. Limits: the "
+            "actors' cast shadows disappear, and the set does not follow a camera move. When an "
+            "engine refuses a clip for its content, the queue stops and the message says which "
+            "engine refused and why."
         ),
         _h("Visual DNA — Seed Lock"),
         _ul(

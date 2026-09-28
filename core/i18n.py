@@ -5137,6 +5137,57 @@ _FR_TO_EN: dict[str, str] = {
     # Messages de crédit : le BON compte est nommé (core/worker, 25/09/2026).
     "Crédits du fournisseur IA TEXTE (Anthropic/OpenAI…) épuisés — la préparation du prompt (traduction, analyse d'image, composition) a échoué. Le compte fal.ai n'est pas en cause.\nRechargez ce compte (console.anthropic.com → Plans & Billing) ou changez de fournisseur dans Paramètres → Assistant IA.":
         "Text-AI provider credits (Anthropic/OpenAI…) exhausted — preparing the prompt (translation, image analysis, composition) failed. The fal.ai account is not the cause.\nTop up that account (console.anthropic.com → Plans & Billing) or switch provider in Settings → AI Assistant.",
+    # « Changer le décor · acteurs intacts » + refus des visages réels (28/09/2026).
+    "Changer le décor · acteurs intacts (détourage + recomposition)":
+        "Change the set · actors untouched (cut-out + compositing)",
+    "CHANGER LE DÉCOR · ACTEURS INTACTS": "CHANGE THE SET · ACTORS UNTOUCHED",
+    "Les acteurs sont détourés puis recomposés tels quels sur le nouveau décor : aucun modèle génératif ne touche à leurs visages, à leurs lèvres ni au son. Décrivez dans la consigne le décor seul, sans les personnages.":
+        "The actors are cut out, then composited back as they are onto the new set: no generative model touches their faces, their lips or the sound. Describe the set alone in the instruction, without the characters.",
+    "Image générée d'après la consigne": "Image generated from the instruction",
+    "Vidéo générée d'après la consigne (Seedance 2.0, décor animé)":
+        "Video generated from the instruction (Seedance 2.0, animated set)",
+    "Image de référence telle quelle": "Reference image as is",
+    "Fichier fourni (image ou vidéo)…": "Your own file (image or video)…",
+    "Le décor est généré d'après la consigne ; l'image de référence, si vous en mettez une, lui sert de modèle.":
+        "The set is generated from the instruction; the reference image, if you add one, serves as its model.",
+    "Seedance 2.0 génère un décor animé SANS personne, de la durée du plan (4 à 15 s, bouclé au-delà) ; l'image de référence, si vous en mettez une, devient sa première image.":
+        "Seedance 2.0 generates an animated set with NO people, as long as the shot (4 to 15 s, looped beyond); the reference image, if you add one, becomes its first frame.",
+    "L'image de référence devient le décor, recadrée au format du plan (0 $).":
+        "The reference image becomes the set, cropped to the shot's format ($0).",
+    "Une image ou une vidéo de votre choix devient le décor, recadrée au format du plan (0 $).":
+        "An image or a video of your choice becomes the set, cropped to the shot's format ($0).",
+    "Moteur d'image": "Image engine",
+    "Choisir le décor…": "Choose the set…",
+    "Aucun fichier choisi": "No file chosen",
+    "Harmoniser la couleur des acteurs avec le décor (local, gratuit)":
+        "Match the actors' color to the set (local, free)",
+    "Rééclairage IA des acteurs, expérimental (ID-V2V · ~0,20 $/s · sortie 720p · visages ressemblants, plus identiques au pixel)":
+        "AI relighting of the actors, experimental (ID-V2V · ~$0.20/s · 720p output · faces look alike, no longer pixel-identical)",
+    "Détourage VEED ~0,02 $/s · décor : image ~0,03 à 0,08 $, vidéo Seedance ~0,30 $/s, ou 0 $ avec votre image ou votre fichier. Limites : les ombres portées des acteurs disparaissent, et le décor ne suit pas un mouvement de caméra.":
+        "VEED cut-out ~$0.02/s · set: image ~$0.03 to $0.08, Seedance video ~$0.30/s, or $0 with your image or file. Limits: the actors' cast shadows disappear, and the set does not follow a camera move.",
+    "Choisir le décor (image ou vidéo)": "Choose the set (image or video)",
+    "Images et vidéos": "Images and videos",
+    "Changer le décor · acteurs intacts : décrivez le décor seul, sans les personnages. Détourage VEED puis recomposition sur votre machine : visages, lèvres et son identiques au clip source.":
+        "Change the set · actors untouched: describe the set alone, without the characters. VEED cut-out, then compositing on your machine: faces, lips and sound identical to the source clip.",
+    "⚠ Seedance refuse le plus souvent les clips où l'on voit des visages réalistes (filtre de ByteDance, le même chez tous les distributeurs). Pour garder vos acteurs : « Changer le décor · acteurs intacts », HappyHorse, Kling O3 ou Wan 2.7.":
+        "⚠ Seedance usually refuses clips showing realistic faces (ByteDance's filter, the same at every distributor). To keep your actors: « Change the set · actors untouched », HappyHorse, Kling O3 or Wan 2.7.",
+    "Décor manquant": "Set missing",
+    "Choisissez le fichier du nouveau décor (image ou vidéo) avec « Choisir le décor… ».":
+        "Choose the new set's file (image or video) with « Choose the set… ».",
+    "Ajoutez l'image du nouveau décor en « Image de référence » :":
+        "Add the new set's image as « Reference image »:",
+    "changer le décor": "changing the set",
+    "Refusé : visages de personnes réelles (filtre du moteur)":
+        "Refused: real people's faces (engine filter)",
+    "Refusé par le filtre de contenu du moteur": "Refused by the engine's content filter",
+    "non lancé (file arrêtée)": "not started (queue stopped)",
+    "Le moteur": "The engine",
+    "a refusé ce clip : visages de personnes réelles.": "refused this clip: real people's faces.",
+    "C'est le filtre du propriétaire du modèle (ByteDance pour Seedance), le même chez tous les distributeurs : fal.ai n'est pas en cause.":
+        "This is the model owner's filter (ByteDance for Seedance), the same at every distributor: fal.ai is not the cause.",
+    "Pour garder vos acteurs : « Changer le décor · acteurs intacts », HappyHorse, Kling O3 ou Wan 2.7.":
+        "To keep your actors: « Change the set · actors untouched », HappyHorse, Kling O3 or Wan 2.7.",
+    "a refusé ce clip (filtre de contenu) :": "refused this clip (content filter):",
     "Image de fin (optionnel)": "End image (optional)",
     "Le prompt est requis.": "A prompt is required.",
     "Le prompt est requis pour Kling T2V.": "A prompt is required for Kling T2V.",

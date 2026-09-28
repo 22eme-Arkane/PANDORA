@@ -10868,5 +10868,375 @@ def studio_images_bulle_copiable():
     t.deleteLater()
 
 
+# ══════════════════════════════════════════════════════════════════════════════
+# « Changer le décor · acteurs intacts » (28/09/2026)
+# ══════════════════════════════════════════════════════════════════════════════
+
+# Le refus EXACT relevé sur le compte fal de Matthieu (essais du 25/09/2026).
+_REFUS_VISAGES = (
+    "422: [{'loc': ['body', 'video_urls'], 'msg': 'The images or videos provided may "
+    "contain likenesses of real people or other private information that cannot be "
+    "processed.', 'type': 'content_policy_violation', 'ctx': {'extra_info': "
+    "{'reason': 'partner_validation_failed'}}}]")
+
+
+def _decor_media(d: str, seconds: int = 3) -> dict:
+    """Clip 1280×720 25 i/s avec son, masque (carré blanc = « acteurs »), décor 1920×1080."""
+    import subprocess
+    from core import video_utils as vu
+    ff = vu.get_ffmpeg_exe()
+    p = {k: os.path.join(d, n) for k, n in (("src", "EEP_test.mp4"), ("mask", "out_1.mp4"),
+                                             ("rgb", "out_0.mp4"), ("plate", "plate.png"),
+                                             ("plate_v", "plate_v.mp4"), ("black", "black.mp4"))}
+    def _run(*a):
+        r = subprocess.run([ff, "-y", "-loglevel", "error", *a], capture_output=True, timeout=180,
+                           creationflags=getattr(vu, "_NO_WINDOW", 0))
+        assert r.returncode == 0, r.stderr[-300:]
+    _run("-f", "lavfi", "-i", f"testsrc2=size=1280x720:rate=25:duration={seconds}",
+         "-f", "lavfi", "-i", f"sine=frequency=440:duration={seconds}", "-c:v", "libx264",
+         "-pix_fmt", "yuv420p", "-c:a", "aac", "-shortest", p["src"])
+    _run("-f", "lavfi", "-i", f"color=c=black:size=1280x720:rate=25:duration={seconds}",
+         "-vf", "drawbox=x=440:y=160:w=400:h=400:color=white:t=fill",
+         "-c:v", "libx264", "-pix_fmt", "yuv420p", p["mask"])
+    _run("-f", "lavfi", "-i", f"testsrc=size=1280x720:rate=25:duration={seconds}",
+         "-c:v", "libx264", "-pix_fmt", "yuv420p", p["rgb"])
+    _run("-f", "lavfi", "-i", "color=c=0x2050C0:size=1920x1080", "-frames:v", "1", p["plate"])
+    _run("-f", "lavfi", "-i", "color=c=0x30A040:size=1280x720:rate=25:duration=1",
+         "-c:v", "libx264", "-pix_fmt", "yuv420p", p["plate_v"])
+    _run("-f", "lavfi", "-i", f"color=c=black:size=1280x720:rate=25:duration={seconds}",
+         "-c:v", "libx264", "-pix_fmt", "yuv420p", p["black"])
+    return p
+
+
+def _mean_diff(img_a: str, img_b: str, box: tuple) -> float:
+    from PIL import Image
+    with Image.open(img_a) as a, Image.open(img_b) as b:
+        pa = a.convert("RGB").crop(box).tobytes()
+        pb = b.convert("RGB").crop(box).tobytes()
+    return sum(abs(x - y) for x, y in zip(pa, pb)) / max(1, len(pa))
+
+
+@test
+def changer_le_decor_recomposition_pixels_intacts_28_09_2026():
+    """Demande Matthieu 28/09/2026 (« intègre ») : la voie conforme de son masquage
+    After Effects. Seedance refuse les visages réels (filtre de ByteDance, relevé
+    du compte fal) et tout éditeur génératif redessine les visages ; ici les
+    acteurs ne passent par AUCUN modèle génératif. Ce test EXÉCUTE la
+    recomposition avec le ffmpeg embarqué : pixels des acteurs = source, décor
+    recadré en « cover », son gardé, décor vidéo court bouclé."""
+    import tempfile
+    from PIL import Image
+    from core import decor_swap as ds
+    from core.video_utils import get_ffmpeg_exe
+    ff = get_ffmpeg_exe()
+    d = tempfile.mkdtemp(prefix="pandora_decor_t_")
+    m = _decor_media(d)
+    info = ds.probe(m["src"])
+    assert (info["width"], info["height"], info["frames"], info["has_audio"]) == (1280, 720, 75, True), info
+    assert info["fps_str"] == "25/1"
+
+    out = os.path.join(d, "out.mp4")
+    ds.run_ffmpeg(ds.composite_command(ff, m["src"], m["mask"], m["plate"], out, width=1280,
+                                       height=720, fps_str=info["fps_str"], plate_is_video=False))
+    o = ds.probe(out)
+    assert (o["width"], o["height"], o["frames"], o["has_audio"]) == (1280, 720, 75, True), o
+    fs, fo = os.path.join(d, "fs.png"), os.path.join(d, "fo.png")
+    ds.run_ffmpeg(ds.frame_command(ff, m["src"], 1.5, fs))
+    ds.run_ffmpeg(ds.frame_command(ff, out, 1.5, fo))
+    assert _mean_diff(fs, fo, (540, 260, 740, 460)) < 1.0, "les « acteurs » sont les pixels du source"
+    with Image.open(fo) as im:
+        r, g, b = im.convert("RGB").getpixel((20, 20))
+    assert abs(r - 0x20) < 8 and abs(g - 0x50) < 8 and abs(b - 0xC0) < 8, (r, g, b)
+
+    # Décor VIDÉO d'1 s sous un plan de 3 s : bouclé, la sortie garde la durée du plan.
+    out_v = os.path.join(d, "out_v.mp4")
+    ds.run_ffmpeg(ds.composite_command(ff, m["src"], m["mask"], m["plate_v"], out_v, width=1280,
+                                       height=720, fps_str="25/1", plate_is_video=True))
+    ov = ds.probe(out_v)
+    assert abs(ov["duration"] - 3.0) < 0.15 and ov["frames"] == 75, ov
+    # Harmonisation : gains bornés, neutres quand acteurs et décor ont la même dominante.
+    assert ds.harmonize_gains((100, 100, 100), (100, 100, 100)) == (1.0, 1.0, 1.0)
+    g = ds.harmonize_gains((200, 120, 60), (40, 60, 200), strength=1.0)
+    assert all(0.7 <= x <= 1.35 for x in g) and g[2] > g[0], g
+    out_g = os.path.join(d, "out_g.mp4")
+    cmd = ds.composite_command(ff, m["src"], m["mask"], m["plate"], out_g, width=1280, height=720,
+                               fps_str="25/1", plate_is_video=False, gains=(1.1, 1.0, 0.9))
+    assert any("colorchannelmixer" in c for c in cmd)
+    ds.run_ffmpeg(cmd)
+    assert not any("colorchannelmixer" in c for c in ds.composite_command(
+        ff, "a", "b", "c", "d", width=2, height=2, fps_str="25", plate_is_video=False,
+        gains=(1.0, 1.0, 1.0))), "gains neutres : aucune conversion de couleur des acteurs"
+
+    # Briques pures
+    assert ds.matting_cost(75) == 3 * 0.0225 and ds.matting_cost(30) == 0.0225
+    assert ds.price_from_hint("~$0.08") == 0.08
+    assert ds.price_from_hint("Seedream 5.0 Pro · 2K") == 0.08, "sans « $ », pas de prix lu dans une version"
+    assert ds.clean_user_prompt("@Video1 remplace le décor par @Image1, une plage") == \
+        "remplace le décor par , une plage"
+    pp = ds.plate_prompt_en("a beach at dusk", video=True)
+    assert pp.startswith("a beach at dusk.") and "no people" in pp and "no camera movement" in pp
+    assert ds.aspect_label(1280, 720) == "16:9" and ds.aspect_label(720, 1280) == "9:16"
+    assert ds.output_urls({"video": [{"url": "http://a/1.mp4"}, {"url": "http://a/2.mp4"}]}) == \
+        ["http://a/1.mp4", "http://a/2.mp4"]
+    assert ds.output_urls({"video": {"url": "http://a/x.mp4"}}) == ["http://a/x.mp4"]
+    assert ds.pick_alpha(["/t/x_rgb.mp4", "/t/x_alpha.mp4"]) == "/t/x_alpha.mp4"
+    assert ds.pick_alpha([m["rgb"], m["mask"]], saturation_of=ds.video_saturation) == m["mask"], \
+        "sans indice dans le nom : le moins saturé est le masque"
+    fm = os.path.join(d, "fm.png")
+    ds.run_ffmpeg(ds.frame_command(ff, m["mask"], 1.5, fm))
+    assert 0.15 < ds.mask_coverage(fm) < 0.2, "carré 400×400 sur 1280×720 ≈ 0,17"
+    assert ds.matting_args("u")["output_codec"] == "h264"
+    from core import pricing
+    _c, _mode = pricing.estimate(ds.ENGINE_KEY, "source", 10)
+    assert _mode == "s" and _c < 0.5, "jamais le repli « moteur inconnu » à 0,30 $/s"
+
+
+def _decor_fakes(m: dict, calls: list):
+    """Remplace fal, l'upload, le téléchargement, l'image et la traduction : AUCUN
+    réseau. Rend la fonction de restauration."""
+    import shutil
+    import fal_client
+    import core.config, core.download, core.image_call, core.lang
+    import api.video_engines as ve
+    files = {"http://fake/rgb/out_0.mp4": m["rgb"], "http://fake/mask/out_1.mp4": m["mask"],
+             "http://fake/plate.png": m["plate"], "http://fake/plate_v.mp4": m["plate_v"],
+             "http://fake/relit.mp4": m["relit"] if "relit" in m else m["rgb"],
+             "http://fake/key.png": m["plate"], "http://fake/black/out_1.mp4": m["black"]}
+    saved = (core.config.load_config, core.lang.translate_to_english, ve._fal_upload,
+             core.download.download_video, fal_client.subscribe, core.image_call.subscribe)
+
+    def _dl(url, dest_dir, filename=None):
+        calls.append(("download", url))
+        dst = os.path.join(dest_dir, filename or os.path.basename(url))
+        shutil.copy(files[url], dst)
+        return dst
+
+    def _sub(endpoint, arguments=None, **kw):
+        calls.append(("fal", endpoint, dict(arguments or {})))
+        if endpoint == "veed/video-background-removal":
+            mask = "http://fake/black/out_1.mp4" if m.get("empty_mask") else "http://fake/mask/out_1.mp4"
+            return {"video": [{"url": "http://fake/rgb/out_0.mp4"}, {"url": mask}]}
+        if endpoint == "fal-ai/id-v2v/relight":
+            return {"video": {"url": "http://fake/relit.mp4"}, "seed": 1}
+        raise AssertionError(f"appel fal inattendu : {endpoint}")
+
+    def _img(ep, args=None, **kw):
+        calls.append(("image", ep, dict(args or {})))
+        return {"images": [{"url": "http://fake/key.png" if "edit" in ep else "http://fake/plate.png"}]}
+
+    core.config.load_config = lambda: {"api_key": "FAKE-KEY"}
+    core.lang.translate_to_english = lambda t: "an awards ceremony stage"
+    ve._fal_upload = lambda fc, p: (calls.append(("upload", os.path.basename(p)))
+                                    or f"http://fake/upload/{os.path.basename(p)}")
+    core.download.download_video = _dl
+    fal_client.subscribe = _sub
+    core.image_call.subscribe = _img
+
+    def restore():
+        (core.config.load_config, core.lang.translate_to_english, ve._fal_upload,
+         core.download.download_video, fal_client.subscribe, core.image_call.subscribe) = saved
+    return restore
+
+
+def _run_decor(params: dict) -> tuple:
+    from api.decor_swap import DecorSwapWorker
+    got, err, prog = [], [], []
+    w = DecorSwapWorker(params)
+    w.done.connect(got.append)
+    w.failed.connect(err.append)
+    w.progress.connect(lambda p, msg: prog.append(msg))
+    w.run()          # synchrone : le chemin réel, sans thread
+    return got, err, prog
+
+
+@test
+def changer_le_decor_worker_fal_simule():
+    """Le worker complet, fal SIMULÉ et ffmpeg RÉEL : détourage VEED (masque H.264
+    retrouvé sans indice de nom), décor image (Nano Banana 2 en 1K pour du 720p),
+    recomposition, coût = détourage + image, rangement « <plan>_NN.mp4 » par
+    core/download, et journal de dépenses au coût calculé par le worker."""
+    import tempfile
+    from core import decor_swap as ds
+    d = tempfile.mkdtemp(prefix="pandora_decor_w_")
+    m = _decor_media(d)
+    calls = []
+    restore = _decor_fakes(m, calls)
+    try:
+        got, err, prog = _run_decor({
+            "video_path": m["src"], "prompt": "@Video1 remplace le décor par une cérémonie",
+            "plate_mode": ds.PLATE_GEN_IMAGE, "image_engine": "nb2",
+            "harmonize": True, "relight": False})
+    finally:
+        restore()
+    assert not err and got, err
+    r = got[0]
+    veed = [c for c in calls if c[0] == "fal" and c[1] == ds.MATTING_ENDPOINT]
+    assert len(veed) == 1 and veed[0][2]["output_codec"] == "h264" and veed[0][2]["subject_is_person"]
+    img = [c for c in calls if c[0] == "image"]
+    assert len(img) == 1 and img[0][1] == "fal-ai/nano-banana-2", img
+    assert img[0][2]["resolution"] == "1K" and img[0][2]["aspect_ratio"] == "16:9", img[0][2]
+    assert "no people" in img[0][2]["prompt"] and "@Video1" not in img[0][2]["prompt"]
+    assert r["model"] == "decor-swap" and r["resolution"] == "source" and r["video_url"] == ""
+    assert abs(r["cost_usd"] - round(ds.matting_cost(75) + ds.image_price("nb2"), 4)) < 1e-6, r
+    assert os.path.isfile(r["local_file"]) and ds.probe(r["local_file"])["frames"] == 75
+    assert any("Recomposition" in p for p in prog) and prog[-1].startswith("Changer le décor ✓")
+
+    from core.download import download_result
+    ir = download_result(r, os.path.join(d, "sortie"), shot_title="EEP_test")
+    assert ir["success"] and not ir["mock"] and os.path.basename(ir["local_path"]) == "EEP_test_01.mp4", ir
+    assert not os.path.exists(r["local_file"]), "déplacé, pas copié"
+    assert download_result({"video_url": ""}, d)["mock"], "sans fichier ni URL : toujours une simulation"
+
+    import core.history as H, core.spend as S
+    rec = []
+    _orig = S.record
+    S.record = lambda *a, **k: rec.append(a)
+    try:
+        H._note_spend({"model": "decor-swap", "cost_usd": 0.1475, "duration": 3.0,
+                       "resolution": "source", "prompt": "décor"})
+        H._note_spend({"model": "seedance-2.0", "duration": 5, "resolution": "720p", "prompt": "x"})
+    finally:
+        S.record = _orig
+    assert rec[0][3] == 0.1475, "coût calculé par le worker, pas la grille"
+    assert abs(rec[1][3] - 5 * 0.3034) < 1e-6, "sans coût explicite : la grille, comme avant"
+
+
+@test
+def changer_le_decor_video_reeclairage_et_garde_fous():
+    """Décor vidéo Seedance 2.0 (texte → vidéo, SANS personne, run_real simulé),
+    rééclairage ID-V2V (image clé rééclairée, num_frames du plan, vérificateur
+    coupé, son remis et durée recalée), et les garde-fous : décor manquant =
+    refus AVANT tout appel payant, masque vide = refus, sans clé = simulation."""
+    import tempfile, subprocess
+    from core import decor_swap as ds
+    from core.video_utils import get_ffmpeg_exe
+    import api.real as R
+    d = tempfile.mkdtemp(prefix="pandora_decor_v_")
+    m = _decor_media(d)
+    # ID-V2V rend une vidéo MUETTE de 2 s pour un plan de 3 s : recalage attendu.
+    m["relit"] = os.path.join(d, "relit.mp4")
+    subprocess.run([get_ffmpeg_exe(), "-y", "-loglevel", "error", "-f", "lavfi", "-i",
+                    "testsrc2=size=1280x720:rate=25:duration=2", "-c:v", "libx264",
+                    "-pix_fmt", "yuv420p", m["relit"]], capture_output=True, timeout=120)
+    calls, seen = [], {}
+    restore = _decor_fakes(m, calls)
+    _orig_rr = R.run_real
+    R.run_real = lambda params, emit, stop: (seen.update(params), {"video_url": "http://fake/plate_v.mp4"})[1]
+    try:
+        got, err, _p = _run_decor({"video_path": m["src"], "prompt": "une plage au crépuscule",
+                                   "plate_mode": ds.PLATE_GEN_VIDEO, "harmonize": False,
+                                   "relight": True})
+    finally:
+        R.run_real = _orig_rr
+        restore()
+    assert not err and got, err
+    assert seen["mode"] == "t2v" and seen["model"] == "seedance-2.0" and seen["audio"] is False
+    assert seen["prompt_is_final"] and "no people" in seen["prompt"] and seen["duration"] == 4, seen
+    rel = [c for c in calls if c[0] == "fal" and c[1] == ds.RELIGHT_ENDPOINT]
+    assert len(rel) == 1, calls
+    a = rel[0][2]
+    assert a["num_frames"] == 75 and a["enable_safety_checker"] is False and a["resolution"] == "720p"
+    assert a["image_url"] == "http://fake/key.png", "l'image clé rééclairée, pas l'image brute"
+    o = ds.probe(got[0]["local_file"])
+    assert o["has_audio"] and abs(o["duration"] - 3.0) < 0.2, o
+    # détourage + décor Seedance 720p de 4 s (durée minimale) + image clé + ID-V2V 3 s
+    _attendu = ds.matting_cost(75) + 4 * 0.3034 + ds.image_price("nb2") + ds.relight_cost(3.0)
+    assert abs(got[0]["cost_usd"] - round(_attendu, 4)) < 1e-3, got[0]
+
+    # Garde-fous : décor manquant → refus AVANT tout appel ; masque vide → refus.
+    calls.clear()
+    restore = _decor_fakes(m, calls)
+    try:
+        _g, err1, _ = _run_decor({"video_path": m["src"], "plate_mode": ds.PLATE_REF_IMAGE})
+        _g, err2, _ = _run_decor({"video_path": m["src"], "plate_mode": ds.PLATE_FILE,
+                                  "plate_file": os.path.join(d, "absent.png")})
+        assert not calls, "aucun appel payant avant d'avoir le décor"
+        m["empty_mask"] = True
+        _g, err3, _ = _run_decor({"video_path": m["src"], "plate_mode": ds.PLATE_REF_IMAGE,
+                                  "ref_image": m["plate"]})
+    finally:
+        restore()
+    assert err1 and "Image de référence" in err1[0], err1
+    assert err2 and "fichier du nouveau décor" in err2[0], err2
+    assert err3 and "n'a trouvé personne" in err3[0], err3
+
+    import core.config as C
+    _o = C.load_config
+    C.load_config = lambda: {}
+    try:
+        got4, err4, _ = _run_decor({"video_path": m["src"], "plate_mode": ds.PLATE_GEN_IMAGE})
+    finally:
+        C.load_config = _o
+    assert not err4 and got4 and got4[0]["mock"] and got4[0]["video_url"] == ""
+
+
+@test
+def changer_le_decor_onglet_cinema_et_refus_visages():
+    """L'onglet Cinéma : moteur « Changer le décor · acteurs intacts » (réglages,
+    définition du source), avertissement Seedance dès l'ouverture, et le refus
+    pour visages réels ARRÊTE la file (les clips suivants ne partent pas) avec
+    un message qui nomme le moteur, le vrai responsable et les alternatives."""
+    import inspect
+    import ui.tab_davinci_edit as DE
+    from core import worker as W
+    from core.i18n import _FR_TO_EN
+    assert W.is_content_policy_error(_REFUS_VISAGES) and W.is_real_person_refusal(_REFUS_VISAGES)
+    for s in ("Video duration out of range [2, 15]", "Exhausted balance", "timeout"):
+        assert not W.is_content_policy_error(s), s
+    assert not W.is_real_person_refusal("422 content_policy_violation: nsfw detected")
+    msg = W.content_policy_message(_REFUS_VISAGES, "Seedance 2.0")
+    assert msg.startswith("Seedance 2.0 a refusé ce clip : visages de personnes réelles.")
+    assert "fal.ai n'est pas en cause" in msg and "Changer le décor · acteurs intacts" in msg
+    assert DE.TabDavinciEdit._humanize_error(_REFUS_VISAGES) == \
+        "Refusé : visages de personnes réelles (filtre du moteur)"
+
+    t = DE.TabDavinciEdit()
+    keys = [t._cb_model.itemData(i) for i in range(t._cb_model.count())]
+    assert keys.index("decor-swap") == keys.index("pixverse_bg") + 1, keys[:8]
+    assert keys[0] == "seedance-2.0", "Seedance reste le moteur par défaut"
+    assert not t._modif_hint.isHidden() and "ByteDance" in t._modif_hint.text(), \
+        "avertissement visible dès l'ouverture"
+    assert "#f5c518" in t._modif_hint.styleSheet()
+    assert t._decor_opts.isHidden()
+    t._cb_model.setCurrentIndex(keys.index("decor-swap"))
+    assert not t._decor_opts.isHidden() and t._cb_res.currentData() == "source"
+    assert not t._cb_res.isEnabled() and not t._cb_ratio.isEnabled()
+    assert "décor seul" in t._modif_hint.text() and "#f5c518" not in t._modif_hint.styleSheet()
+    assert t._decor_opts.options()["plate_mode"] == "gen_image" and t._decor_opts.options()["harmonize"]
+    t._decor_opts.set_plate_mode("file")
+    assert not t._decor_opts._file_row.isHidden() and t._decor_opts._eng_row.isHidden()
+    _pn = inspect.getsource(DE.TabDavinciEdit._process_next)
+    assert "DecorSwapWorker(" in _pn and ".done.connect(" in _pn
+    assert "Décor manquant" in inspect.getsource(DE.TabDavinciEdit._start_queue)
+    assert "done.disconnect()" in inspect.getsource(DE.TabDavinciEdit._cancel_queue)
+
+    # Refus pour visages réels au 1er clip d'une file de trois : arrêt net.
+    t._cb_model.setCurrentIndex(0)
+    t._clips_data = [{"name": f"Plan {i}", "file_path": ""} for i in range(3)]
+    t._clip_cards = [DE.ClipCard(c, i) for i, c in enumerate(t._clips_data)]
+    t._queue, t._queue_pos = [(0, 0), (1, 0), (2, 0)], 0
+    t._failed_clips, t._mock_count, t._skipped = [], 0, 0
+    started = []
+    t._process_next = lambda: started.append(1)
+    t._on_clip_failed(_REFUS_VISAGES, 0, 0)
+    assert not started, "aucun clip suivant lancé"
+    assert t._queue_pos == 3 and t._skipped == 2 and len(t._failed_clips) == 1
+    assert "fal.ai n'est pas en cause" in t._failed_clips[0][1]
+    assert "non lancée(s)" in t._lbl_queue_info.text() and "0 génération(s) réussie(s)" in t._lbl_queue_info.text()
+    # Une erreur ordinaire, elle, laisse la file continuer.
+    t._queue, t._queue_pos, t._failed_clips = [(0, 0), (1, 0)], 0, []
+    t._on_clip_failed("Délai d'attente dépassé (timeout)", 0, 0)
+    assert started and t._queue_pos == 1
+
+    for s in ("Changer le décor · acteurs intacts (détourage + recomposition)",
+              "CHANGER LE DÉCOR · ACTEURS INTACTS", "Image générée d'après la consigne",
+              "Vidéo générée d'après la consigne (Seedance 2.0, décor animé)",
+              "Image de référence telle quelle", "Fichier fourni (image ou vidéo)…",
+              "Décor manquant", "non lancé (file arrêtée)", "a refusé ce clip : visages de personnes réelles.",
+              "Refusé : visages de personnes réelles (filtre du moteur)", "Choisir le décor…"):
+        assert s in _FR_TO_EN, s
+    t.deleteLater()
+
+
 if __name__ == "__main__":
     sys.exit(main())

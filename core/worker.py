@@ -90,6 +90,47 @@ def fal_error_detail(err: str) -> str:
     return (err or "").strip().replace("\n", " ")[:200]
 
 
+# Refus par le FILTRE DE CONTENU d'un moteur (relevé du compte fal, 25/09/2026 :
+# Seedance 2.0 → HTTP 422 `content_policy_violation`, « likenesses of real
+# people », raison `partner_validation_failed` = filtre de ByteDance). Relancer
+# ne sert à rien (fal classe l'erreur non rejouable) et peut être facturé.
+_CONTENT_POLICY_MARKERS = (
+    "content_policy_violation", "content policy", "partner_validation_failed",
+    "likenesses of real people", "privacyinformation", "sensitivecontentdetected",
+    "may contain real person",
+)
+_REAL_PERSON_MARKERS = (
+    "likenesses of real people", "partner_validation_failed", "privacyinformation",
+    "may contain real person", "real person",
+)
+
+
+def is_content_policy_error(err: str) -> bool:
+    low = (err or "").lower()
+    return any(m in low for m in _CONTENT_POLICY_MARKERS)
+
+
+def is_real_person_refusal(err: str) -> bool:
+    """Refus pour visage / ressemblance d'une personne réelle."""
+    low = (err or "").lower()
+    return is_content_policy_error(err) and any(m in low for m in _REAL_PERSON_MARKERS)
+
+
+def content_policy_message(err: str, engine_label: str = "") -> str:
+    """Refus de filtre, lisible : QUI refuse et quoi faire à la place."""
+    from core.i18n import translate as _t
+    eng = (engine_label or "").strip() or _t("Le moteur")
+    if is_real_person_refusal(err):
+        return " ".join([
+            eng, _t("a refusé ce clip : visages de personnes réelles."),
+            _t("C'est le filtre du propriétaire du modèle (ByteDance pour Seedance), le "
+               "même chez tous les distributeurs : fal.ai n'est pas en cause."),
+            _t("Pour garder vos acteurs : « Changer le décor · acteurs intacts », "
+               "HappyHorse, Kling O3 ou Wan 2.7."),
+        ])
+    return f"{eng} {_t('a refusé ce clip (filtre de contenu) :')} {fal_error_detail(err)}"
+
+
 def humanize_api_error(err: str) -> str:
     """Erreur d'un worker de génération, lisible : nomme le BON compte quand
     c'est une affaire de crédits, laisse passer tout le reste tel quel."""

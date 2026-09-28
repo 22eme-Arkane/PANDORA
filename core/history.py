@@ -41,7 +41,15 @@ def _note_spend(entry: dict):
             _dur = float(entry.get("duration") or 0)
         except (TypeError, ValueError):
             _dur = 0.0
-        _cost, _mode = pricing.estimate(_model, _res, _dur, 1)
+        # Coût calculé par le worker lui-même (chaîne à plusieurs étapes, ex.
+        # « Changer le décor » : détourage + décor + rééclairage) : il prime sur
+        # la grille, qui ne connaît qu'un prix par seconde et par moteur.
+        _explicit = entry.get("cost_usd")
+        if isinstance(_explicit, (int, float)) and not isinstance(_explicit, bool) \
+                and _explicit >= 0:
+            _cost = float(_explicit)
+        else:
+            _cost, _mode = pricing.estimate(_model, _res, _dur, 1)
         _bits = [b for b in (_res, f"{_dur:g}s" if _dur else "") if b]
         spend.record(
             spend.KIND_VIDEO, _model or "moteur vidéo",

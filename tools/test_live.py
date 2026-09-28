@@ -7532,5 +7532,77 @@ def studio_images_etat_par_projet_live():
         _ctx.set_project_path(old_path); _ctx.set_project_id(old_id)
 
 
+@test
+def changer_le_decor_live_parite_28_09_2026():
+    """Parité Cinéma (28/09/2026) : « Modifier des clips » Live propose « Changer
+    le décor · acteurs intacts » (même composant de réglages), avertit que
+    Seedance refuse les visages réels, range le clip recomposé EN LOCAL comme un
+    clip téléchargé (avec son coût calculé), et ARRÊTE la file sur un refus du
+    filtre de contenu en nommant le moteur et le vrai responsable."""
+    import shutil
+    import core.config as _cc
+    import core.history as _hist
+    import ui.tab_modify_live as M
+    refus = ("422: [{'loc': ['body', 'video_urls'], 'msg': 'The images or videos provided "
+             "may contain likenesses of real people or other private information that cannot "
+             "be processed.', 'type': 'content_policy_violation', 'ctx': {'extra_info': "
+             "{'reason': 'partner_validation_failed'}}}]")
+    t = M.TabModifyLive()
+    keys = [t._engine_combo.itemData(i) for i in range(t._engine_combo.count())]
+    assert keys.index("decor-swap") == len(M.TabModifyLive._ENGINES), keys[:6]
+    assert not t._engine_warn.isHidden() and "ByteDance" in t._engine_warn.text()
+    assert t._decor_opts.isHidden()
+    t._engine_combo.setCurrentIndex(keys.index("decor-swap"))
+    assert not t._decor_opts.isHidden() and t._engine_warn.isHidden()
+    assert not t._res_combo.isEnabled() and not t._dur_slider.isEnabled()
+    assert type(t._decor_opts).__module__ == "ui.decor_swap_options", "même composant que le Cinéma"
+    _pn = inspect.getsource(M.TabModifyLive._process_next)
+    assert "DecorSwapWorker(" in _pn and ".done.connect(" in _pn
+    assert "Décor manquant" in inspect.getsource(M.TabModifyLive._on_generate)
+
+    # Clip recomposé EN LOCAL → rangé dans le dossier de sortie, coût du worker journalisé.
+    d = tempfile.mkdtemp(prefix="pandora_live_decor_")
+    src = os.path.join(d, "clip.mp4")
+    local = os.path.join(d, "decor_tmp.mp4")
+    for p in (src, local):
+        with open(p, "wb") as f:
+            f.write(b"\x00" * 64)
+    out_dir = os.path.join(d, "sortie")
+    saved, _o_dir, _o_hist = [], _cc.get_output_dir, _hist.save_to_history
+    _cc.get_output_dir = lambda: out_dir
+    _hist.save_to_history = lambda e: saved.append(e)
+    t._clips = [src]
+    t._reload_list()
+    t._queue, t._queue_pos, t._failed = [0], 0, []
+    t._process_next = lambda: None
+    try:
+        t._on_one_finished({"local_file": local, "video_url": "", "prompt": "plage",
+                            "duration": 3.0, "cost_usd": 0.1475, "note": ""}, 0)
+    finally:
+        _cc.get_output_dir, _hist.save_to_history = _o_dir, _o_hist
+    assert saved and saved[0]["cost_usd"] == 0.1475 and saved[0]["model"] == "decor-swap", saved
+    assert os.path.dirname(saved[0]["local_path"]) == out_dir and os.path.isfile(saved[0]["local_path"])
+    assert not os.path.exists(local), "déplacé, pas copié"
+    assert t._clip_list.item(0).text().startswith("✓ ")
+
+    # Refus pour visages réels au 1er clip d'une file de trois : arrêt net.
+    t._clips = [src, src + "2", src + "3"]
+    t._reload_list()
+    t._queue, t._queue_pos, t._failed = [0, 1, 2], 0, []
+    shown, started = [], []
+    _o_show = M.show_api_error
+    M.show_api_error = lambda parent, msg: shown.append(msg)
+    t._process_next = lambda: started.append(t._queue_pos)
+    try:
+        t._on_one_failed(refus, 0)
+    finally:
+        M.show_api_error = _o_show
+    assert t._queue_pos == 3 and started == [3], (t._queue_pos, started)
+    assert t._clip_list.item(1).text().startswith("⏸ ") and t._clip_list.item(2).text().startswith("⏸ ")
+    assert shown and "fal.ai n'est pas en cause" in shown[0] and "Changer le décor" in shown[0]
+    shutil.rmtree(d, ignore_errors=True)
+    t.deleteLater()
+
+
 if __name__ == "__main__":
     sys.exit(main())
