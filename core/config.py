@@ -209,7 +209,7 @@ def load_config() -> dict:
     if os.path.exists(_CONFIG_FILE):
         try:
             with open(_CONFIG_FILE, "r", encoding="utf-8") as f:
-                return _migrate(json.load(f))
+                data = json.load(f)
         except (json.JSONDecodeError, OSError, UnicodeDecodeError):
             # Config corrompue (écriture interrompue d'avant l'atomicité) :
             # ne JAMAIS l'écraser — mise de côté horodatée pour récupérer les
@@ -221,6 +221,11 @@ def load_config() -> dict:
             except OSError:
                 pass
             return dict(_DEFAULTS)
+        # Migration APRÈS la fermeture du fichier : sous Windows, os.replace ne
+        # remplace pas un fichier encore ouvert. Appelée dans le `with`, elle
+        # échouait en silence — config.json jamais migré, config.json.tmp
+        # réécrit à CHAQUE lecture (constat 2.4.2 installée, 2026-10-03).
+        return _migrate(data)
     return dict(_DEFAULTS)
 
 

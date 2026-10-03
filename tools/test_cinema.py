@@ -7240,6 +7240,52 @@ def config_atomique_et_lecture_avec_filet():
 
 
 @test
+def config_migree_enregistree_sur_le_disque_03_10_2026():
+    """La migration de config.json s'ENREGISTRE (constat 2.4.2 installée).
+
+    load_config() appelait la migration DANS le `with open(...)` : sous
+    Windows, os.replace ne remplace pas un fichier encore ouvert. L'écriture
+    échouait en silence — config.json restait sur Opus 4.8 et un
+    config.json.tmp était réécrit à CHAQUE lecture de la config.
+    """
+    import json as _json
+    import core.config as C
+
+    td = tempfile.mkdtemp(prefix="t_cfg_migr_")
+    _orig = (C._DATA_DIR, C._CONFIG_FILE, C.save_config)
+    try:
+        C._DATA_DIR = td
+        C._CONFIG_FILE = os.path.join(td, "config.json")
+        # Écriture RÉELLE, mais dans le dossier temporaire seulement (le
+        # garde-fou du harnais neutralise save_config pour toute la session).
+        C.save_config = lambda cfg: C._atomic_write_json(C._CONFIG_FILE, cfg)
+        with open(C._CONFIG_FILE, "w", encoding="utf-8") as f:
+            _json.dump({"anthropic_key": "factice",
+                        "ai_model_creative": "claude-opus-4-8",
+                        "ai_task_engines": {"t": "anthropic:claude-sonnet-4-6"},
+                        "_opus_default_done": True}, f)
+        mem = C.load_config()
+        with open(C._CONFIG_FILE, encoding="utf-8") as f:
+            disk = _json.load(f)
+        assert mem.get("_claude_2026_10_done") and \
+            mem["ai_model_creative"] == "claude-opus-5-5", mem
+        assert disk.get("_claude_2026_10_done") is True, \
+            "migration faite en mémoire mais jamais enregistrée (fichier encore ouvert)"
+        assert disk["ai_model_creative"] == "claude-opus-5-5"
+        assert disk["ai_task_engines"]["t"] == "anthropic:claude-sonnet-5-5"
+        assert disk["anthropic_key"] == "factice", "la migration ne touche pas aux clés"
+        assert not os.path.exists(C._CONFIG_FILE + ".tmp"), "config.json.tmp abandonné"
+        # Une fois migrée, une lecture n'écrit plus rien.
+        _t0 = os.path.getmtime(C._CONFIG_FILE)
+        C.load_config()
+        assert os.path.getmtime(C._CONFIG_FILE) == _t0 and \
+            not os.path.exists(C._CONFIG_FILE + ".tmp"), "chaque lecture réécrit la config"
+    finally:
+        C.save_config = _orig[2]
+        C._DATA_DIR, C._CONFIG_FILE = _orig[0], _orig[1]
+
+
+@test
 def frames_apres_generation_jamais_silencieuses():
     """L'échec d'enregistrement des frames post-génération S'AFFICHE (Cinéma).
 
