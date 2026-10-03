@@ -524,9 +524,8 @@ class ShotDialog(QDialog):
         # Plafond = celui du MOTEUR VISÉ par le projet (2026-08-09) : 30 s si
         # le découpage est écrit pour Seedance 2.5, 15 s sinon. En dixièmes.
         try:
-            from core.seedance_family import duration_bounds as _sfb
-            from core.target_engine import get_target_engine as _teg
-            _dur_max10 = _sfb(_teg())[1] * 10
+            from core.target_engine import shot_duration_max as _sdm
+            _dur_max10 = _sdm() * 10
         except Exception:
             _dur_max10 = 150
         dur_header.addWidget(_lbl(f"/ {_dur_max10 / 10:.1f}s max",

@@ -5188,6 +5188,15 @@ _FR_TO_EN: dict[str, str] = {
     "Pour garder vos acteurs : « Changer le décor · acteurs intacts », HappyHorse, Kling O3 ou Wan 2.7.":
         "To keep your actors: « Change the set · actors untouched », HappyHorse, Kling O3 or Wan 2.7.",
     "a refusé ce clip (filtre de contenu) :": "refused this clip (content filter):",
+    "Refusé : droits d'auteur (filtre du moteur)": "Refused: copyright (engine filter)",
+    "a refusé la vidéo générée : ressemblance possible avec une œuvre protégée (droits d'auteur).":
+        "refused the generated video: possible resemblance to a protected work (copyright).",
+    "C'est le contrôle du propriétaire du modèle (ByteDance pour Seedance), appliqué à l'image produite et non au prompt ; il n'est pas déterministe.":
+        "This is the model owner's check (ByteDance for Seedance), applied to the generated image rather than the prompt; it is not deterministic.",
+    "Écartez ce qui évoque une œuvre connue (scène de film célèbre, personnage, marque, logo), puis relancez.":
+        "Remove anything that evokes a known work (famous film scene, character, brand, logo), then try again.",
+    "(refus prononcé sur la vidéo produite, après le calcul)":
+        "(refused on the generated video, after rendering)",
     "Image de fin (optionnel)": "End image (optional)",
     "Le prompt est requis.": "A prompt is required.",
     "Le prompt est requis pour Kling T2V.": "A prompt is required for Kling T2V.",
@@ -5462,7 +5471,7 @@ _FR_TO_EN: dict[str, str] = {
     "Si des personnages/décors sont assignés, le mode référence s'active.": 'If characters/locations are assigned, reference mode activates.',
     'Utilisez Ctrl+S pour une sauvegarde manuelle.': 'Use Ctrl+S for a manual save.',
     'Durée du plan': 'Shot duration',
-    'Durée (1 — 15 secondes) :': 'Duration (1 — 15 seconds):',
+    'Durée (1 — {max} secondes) :': 'Duration (1 — {max} seconds):',
     'Image supprimée.': 'Image deleted.',
     'Portrait ajouté ✓': 'Portrait added ✓',
     'Réaliste': 'Realistic',

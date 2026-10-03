@@ -32,6 +32,7 @@ from __future__ import annotations
 # Clé moteur PANDORA → caractéristiques réelles de l'endpoint fal.
 _FAMILY = {
     "seedance-2.0": {
+        "label":       "Seedance 2.0",
         "base":        "bytedance/seedance-2.0",
         "resolutions": ("4k", "1080p", "720p", "480p"),
         "max_images":  9,
@@ -41,6 +42,7 @@ _FAMILY = {
         "named_refs":  False,
     },
     "seedance-2.0-fast": {
+        "label":       "Seedance 2.0 Fast",
         "base":        "bytedance/seedance-2.0/fast",
         "resolutions": ("720p", "480p"),
         "max_images":  9,
@@ -50,6 +52,7 @@ _FAMILY = {
         "named_refs":  False,
     },
     "seedance-2.0-mini": {
+        "label":       "Seedance 2.0 Mini",
         "base":        "bytedance/seedance-2.0/mini",
         "resolutions": ("720p", "480p"),
         "max_images":  0,
@@ -59,6 +62,7 @@ _FAMILY = {
         "named_refs":  False,
     },
     "seedance-2.5": {
+        "label":       "Seedance 2.5",
         "base":        "bytedance/seedance-2.5",
         # 1080p ajouté par fal (fiche relue le 2026-09-24) ; toujours PAS de 4K.
         "resolutions": ("1080p", "720p", "480p"),
@@ -97,6 +101,16 @@ def video_input_limits(engine_key: str) -> tuple[int, int]:
 
 def is_seedance(engine_key: str) -> bool:
     return (engine_key or "").strip() in _FAMILY
+
+
+def engine_keys() -> tuple[str, ...]:
+    """Clés moteur de la famille, dans l'ordre de la table."""
+    return tuple(_FAMILY)
+
+
+def label(engine_key: str) -> str:
+    """Nom affiché du moteur (« Seedance 2.5 »). Repli sur la 2.0, comme spec()."""
+    return spec(engine_key)["label"]
 
 
 def spec(engine_key: str) -> dict:

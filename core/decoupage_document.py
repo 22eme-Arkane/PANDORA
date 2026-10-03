@@ -143,11 +143,15 @@ def validate_v2_document(text: str) -> list[str]:
     segments = parse_v2_document(text)
     if not segments:
         return ["structure_v2_non_reconnue"]
+    # Fenêtre du moteur VISÉ : une fiche de 25 s est valide pour Seedance 2.5.
+    # Le « > 15 » en dur faisait REJETER tout le Découpage (constat 2026-10-03).
+    from core.target_engine import SHOT_DURATION_MIN, shot_duration_max
+    _dmax = shot_duration_max()
     errors: list[str] = []
     for segment in segments:
         label = f"PLAN {int(segment.get('number') or 0):02d}"
         duration = float(segment.get("duration") or 0)
-        if duration < 2 or duration > 15:
+        if duration < SHOT_DURATION_MIN or duration > _dmax:
             errors.append(f"{label}:durée")
         if not str(segment.get("source") or "").strip():
             errors.append(f"{label}:source")

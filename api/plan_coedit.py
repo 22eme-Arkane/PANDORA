@@ -27,6 +27,13 @@ def _fmt_block(edition: str, mode: str, _pl: str, _PL: str) -> str:
     """Bloc « FORMAT DU PLAN » (Cinéma v2 / Live), partagé par
     la co-écriture d'un plan ET le correctif global par lots."""
     if edition == "cinema":
+        # Plafond du moteur VISÉ (30 s en Seedance 2.5), le même que celui du
+        # contrat du Découpage — sinon la fiche réécrite serait refusée.
+        try:
+            from core.target_engine import shot_duration_max
+            _dmax = shot_duration_max()
+        except Exception:
+            _dmax = 15
         return (
             "FORMAT DE LA FICHE RÉÉCRITE (respecte les libellés et l'ordre) :\n"
             "PLAN <NN>\n"
@@ -43,7 +50,7 @@ def _fmt_block(edition: str, mode: str, _pl: str, _PL: str) -> str:
             "numéro provisoire qui sera réattribué automatiquement.\n"
             "- SOURCE SCÉNARIO reste fidèle et séparée. INTENTION explique pourquoi le "
             "plan existe. PROMPT VISUEL décrit l'image, sans réglages caméra.\n"
-            "- Durée entre 2 et 15 secondes. Les champs caméra sont des propositions "
+            f"- Durée entre 2 et {_dmax} secondes. Les champs caméra sont des propositions "
             "éditables pour le Storyboard."
         )
     _m = ("vidéo-mapping projeté sur une façade (géométrie du bâtiment conservée)"

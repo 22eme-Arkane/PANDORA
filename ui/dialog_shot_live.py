@@ -525,9 +525,8 @@ class ShotDialog(QDialog):
         # Cinéma) : 30 s si Seedance 2.5 — le plan-séquence long est le vrai
         # gain pour le mapping. En dixièmes de seconde.
         try:
-            from core.seedance_family import duration_bounds as _sfb
-            from core.target_engine import get_target_engine as _teg
-            _dur_max10 = _sfb(_teg())[1] * 10
+            from core.target_engine import shot_duration_max as _sdm
+            _dur_max10 = _sdm() * 10
         except Exception:
             _dur_max10 = 150
         dur_header.addWidget(_lbl(f"/ {_dur_max10 / 10:.1f}s max",

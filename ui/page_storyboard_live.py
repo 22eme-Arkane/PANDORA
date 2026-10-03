@@ -1508,9 +1508,17 @@ class _ShotRow(QFrame):
         )
         dur_l.addWidget(dur_badge)
         def _edit_duration():
+            # Plafond du moteur VISÉ (30 s en Seedance 2.5) — lu au clic, pas à
+            # la construction de chaque ligne (fichier du projet).
+            try:
+                from core.target_engine import shot_duration_max as _sdm
+                _dmax = float(_sdm())
+            except Exception:
+                _dmax = 15.0
             val, ok = QInputDialog.getDouble(
-                self, translate("Durée du plan"), translate("Durée (1 — 15 secondes) :"),
-                float(data.get("duration", 5.0)), 1.0, 15.0, 1,
+                self, translate("Durée du plan"),
+                translate("Durée (1 — {max} secondes) :").format(max=f"{_dmax:g}"),
+                float(data.get("duration", 5.0)), 1.0, _dmax, 1,
             )
             if ok:
                 _save_field("duration", round(val, 1))

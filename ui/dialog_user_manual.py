@@ -372,7 +372,9 @@ def _s_storyboard() -> str:
             "<b>Accessoires</b> — props utilisés dans ce plan",
             "<b>Acteurs</b> — personnages présents dans le cadre",
             "<b>Axe</b> — angle de prise de vue (Face, 3/4, Latéral 90°, Dos, Plongée, Contre-plongée)",
-            "<b>Durée</b> — durée prévue du plan en secondes (2 à 15 s)",
+            "<b>Durée</b> — durée prévue du plan en secondes : 2 à 15 s, et jusqu'au "
+            "plafond du moteur visé par le projet (30 s en Seedance 2.5 et Wan 3.0, "
+            "20 s en Sora 2 et Flux 3)",
             "<b>Prompt</b> — prompt Seedance 2.0 pour la génération vidéo",
         ),
 
@@ -1358,7 +1360,9 @@ def _e_storyboard() -> str:
             "<b>Props</b> — props used in this shot",
             "<b>Actors</b> — characters present in frame",
             "<b>Axis</b> — camera angle (Face, 3/4, Lateral 90°, Back, High angle, Low angle)",
-            "<b>Duration</b> — planned shot duration in seconds (2 to 15 s)",
+            "<b>Duration</b> — planned shot duration in seconds: 2 to 15 s, and up to "
+            "the limit of the project's target engine (30 s with Seedance 2.5 and "
+            "Wan 3.0, 20 s with Sora 2 and Flux 3)",
             "<b>Prompt</b> — Seedance 2.0 prompt for video generation",
         ),
 

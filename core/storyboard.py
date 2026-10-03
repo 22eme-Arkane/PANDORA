@@ -440,7 +440,16 @@ def save_shot(data: dict, version_id: str = DEFAULT_VERSION_ID) -> dict:
         duration = float(duration)
     except (TypeError, ValueError):
         duration = 5.0
-    data["duration"] = min(duration, 15.0)
+    # Garde-fou d'enregistrement = la plus longue durée qu'un moteur accepte
+    # (30 s, Seedance 2.5). L'ancien « min(…, 15.0) » ramenait en silence à
+    # 15 s tout plan réglé plus long, à chaque enregistrement (constat Matthieu
+    # 2026-10-03). Le plafond du moteur VISÉ s'applique à la saisie et à l'envoi.
+    try:
+        from core.target_engine import shot_duration_ceiling
+        _ceiling = float(shot_duration_ceiling())
+    except Exception:
+        _ceiling = 30.0
+    data["duration"] = min(duration, _ceiling)
 
     if not data.get("id"):
         data["id"] = str(uuid.uuid4())

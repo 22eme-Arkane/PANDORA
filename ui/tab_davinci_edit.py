@@ -2781,9 +2781,12 @@ class TabDavinciEdit(QScrollArea):
     @staticmethod
     def _humanize_error(error: str) -> str:
         e = error.lower()
-        from core.worker import is_content_policy_error, is_real_person_refusal
+        from core.worker import (is_content_policy_error, is_real_person_refusal,
+                                 content_policy_cause)
         if is_real_person_refusal(error):
             return translate("Refusé : visages de personnes réelles (filtre du moteur)")
+        if is_content_policy_error(error) and content_policy_cause(error) == "copyright":
+            return translate("Refusé : droits d'auteur (filtre du moteur)")
         if is_content_policy_error(error):
             return translate("Refusé par le filtre de contenu du moteur")
         is_validation = any(k in e for k in ("'loc'", '"loc"', "[{", "unprocessable", "422"))

@@ -61,6 +61,21 @@ Claude model is current.**
 - **Project cost: text AI priced right.** The journal counted Opus 4.8 three
   times too high and Sonnet 5 one and a half times; it now follows Anthropic's
   current price list (Opus 5.5 is also cheaper than Opus 4.8).
+- **Shots longer than 15 s when the project targets Seedance 2.5.** The shot
+  window already offered 30 s, but every save cut the shot back to 15 s, the
+  breakdown rejected any sheet over 15 s, and the storyboard instructions
+  forbade it. The limit now follows the target engine everywhere — breakdown,
+  co-writing, storyboard, Duration cell, shot window and Studio, from one
+  table: 30 s for Seedance 2.5 and Wan 3.0, 20 s for Sora 2 and Flux 3, 15 s
+  for the others.
+- **Refusals say why.** A clip refused by ByteDance's filter now names the
+  real reason: Seedance 2.5 had rejected a finished video for *possible
+  copyright resemblance*, and PANDORA reported « violent or explicit content ».
+  The progress line now names the engine actually called (it always said
+  « Seedance 2.0 », even when Seedance 2.5 was rendering).
+- **Settings migration saved.** The one-time update of saved settings ran
+  while config.json was still open, which Windows refuses: it never reached
+  the disk and a config.json.tmp was rewritten on every read.
 
 ---
 

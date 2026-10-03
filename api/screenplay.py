@@ -169,7 +169,7 @@ Retourne UNIQUEMENT un tableau JSON valide. Chaque élément du tableau représe
   "scene_title": <str — titre court de la scène, extrait du scénario>,
   "decor_name": <str — nom exact du décor / lieu tel qu'il apparaît dans le scénario>,
   "shot_time": <str — exactement une valeur parmi : "Jour", "Nuit", "Lever du soleil", "Coucher du soleil">,
-  "duration": <float — durée estimée en secondes, STRICTEMENT entre 2.0 et 15.0>,
+  "duration": <float — durée estimée en secondes, STRICTEMENT entre 2.0 et {DUR_MAX}.0>,
   "character_names": <list[str] — noms exacts des personnages réellement présents ET visibles dans ce plan, tels qu'ils apparaissent dans le scénario. EXCLURE tout personnage hors champ / hors cadre / déjà sorti.>,
   "accessory_names": <list[str] — accessoires / props visibles dans ce plan, extraits du scénario>,
   "vehicle_names": <list[str] — véhicules présents dans ce plan, extraits du scénario>,
@@ -194,7 +194,7 @@ Retourne UNIQUEMENT un tableau JSON valide. Chaque élément du tableau représe
   "intention": <str — fonction dramatique et visuelle du plan en une ou deux phrases ; si la source est un Découpage PANDORA, recopie son champ INTENTION>
 }
 
-Contrainte absolue : duration ne peut jamais dépasser 15.0 secondes (limite de Seedance 2.0).
+Contrainte absolue : duration ne peut jamais dépasser {DUR_MAX}.0 secondes (limite du moteur vidéo visé, {ENGINE}).
 Retourne UNIQUEMENT le tableau JSON, sans aucun texte avant ou après.\
 """
 
@@ -248,7 +248,7 @@ RÈGLES DE DÉCOUPAGE :
   exige une réaction distincte. Si tu dois fusionner deux beats, DIS-LE explicitement
   dans l'INTENTION du plan concerné — jamais de fusion silencieuse.
 - Numérotation PLAN 01, PLAN 02… continue ; titres de séquence séparés.
-- Durée entre 2 et 15 secondes. La durée sert au rythme, pas à imposer un moteur.
+- Durée entre 2 et {DUR_MAX} secondes. La durée sert au rythme, pas à imposer un moteur.
 - SOURCE SCÉNARIO est une citation/extraction fidèle, pas une réécriture enrichie.
 - INTENTION explique pourquoi le plan existe ; PROMPT VISUEL décrit l'image à produire.
 - Le PROMPT VISUEL peut inclure les indications de caméra (valeur, mouvement, focale,
@@ -310,7 +310,7 @@ BREAKDOWN RULES:
   separate reaction. If two beats must be merged, SAY SO explicitly in the shot's
   INTENT — never merge silently.
 - Continuous PLAN 01, PLAN 02… numbering; separate sequence headings.
-- Duration from 2 to 15 seconds. Duration expresses pace, not a provider constraint.
+- Duration from 2 to {DUR_MAX} seconds. Duration expresses pace, not a provider constraint.
 - SCREENPLAY SOURCE is a faithful extraction, not an embellished rewrite.
 - INTENT says why the shot exists; VISUAL PROMPT says what image should be produced.
 - VISUAL PROMPT may include camera indications (shot size, movement, focal length,
@@ -325,9 +325,22 @@ BREAKDOWN RULES:
 """
 
 
+def _dur_max_text(engine_key: str = "") -> str:
+    """Plafond de durée du moteur visé, tel qu'il est écrit dans les consignes."""
+    try:
+        from core.target_engine import shot_duration_max
+        return str(shot_duration_max(engine_key or None))
+    except Exception:
+        return "15"
+
+
 def _format_pandora_prompt(lang: str) -> str:
-    """Sélectionne le contrat FR/EN du Découpage PANDORA 2."""
-    return _FORMAT_PANDORA_EN if lang == "en" else _FORMAT_PANDORA
+    """Sélectionne le contrat FR/EN du Découpage PANDORA 2.
+
+    La durée maximale est celle du moteur VISÉ (30 s en Seedance 2.5) : le
+    contrat valide les fiches avec la même borne (core/decoupage_document)."""
+    tmpl = _FORMAT_PANDORA_EN if lang == "en" else _FORMAT_PANDORA
+    return tmpl.replace("{DUR_MAX}", _dur_max_text())
 
 
 def _arrange_screenplay_prompt(lang: str) -> str:
@@ -335,8 +348,14 @@ def _arrange_screenplay_prompt(lang: str) -> str:
     return _ARRANGE_SCREENPLAY_TMPL.replace("{LANG_INSTRUCTION}", lang_instruction)
 
 
-def _storyboard_prompt(lang: str, strict_no_merge: bool = False) -> str:
+def _storyboard_prompt(lang: str, strict_no_merge: bool = False,
+                       engine_key: str = "") -> str:
     prompt_lang = "English" if lang == "en" else "French (français)"
+    try:
+        from core.target_engine import get_target_engine
+        _engine = (engine_key or get_target_engine() or "").strip()
+    except Exception:
+        _engine = engine_key or ""
     if strict_no_merge:
         merge_policy = (
             "- MODE STRICT ACTIVÉ (demande de l'utilisateur) : INTERDICTION TOTALE DE "
@@ -348,7 +367,9 @@ def _storyboard_prompt(lang: str, strict_no_merge: bool = False) -> str:
         merge_policy = ""
     return (_GENERATE_STORYBOARD_TMPL
             .replace("{PROMPT_LANG}", prompt_lang)
-            .replace("{MERGE_POLICY}", merge_policy))
+            .replace("{MERGE_POLICY}", merge_policy)
+            .replace("{DUR_MAX}", _dur_max_text(_engine))
+            .replace("{ENGINE}", _engine or "seedance-2.0"))
 
 
 # Section TECHNIQUE déterministe (champs caméra) — centralisée dans prompt_sections
@@ -1060,7 +1081,8 @@ class GenerateStoryboardWorker(QThread):
             # 2026-07-28, projet FIGHTER). Boucle anti-troncature + repli.
             from core.ai_provider import chat_until_complete_ex
             _res = chat_until_complete_ex(
-                _storyboard_prompt(lang, self._strict_no_merge),
+                _storyboard_prompt(lang, self._strict_no_merge,
+                                   self._target_engine),
                 [{"role": "user", "content": user_content}],
                 tier="creative", max_tokens=16000, task="storyboard_gen",
                 max_rounds=6)
@@ -1116,10 +1138,10 @@ class GenerateStoryboardWorker(QThread):
             # Plafond de durée = celui du MOTEUR VISÉ (2026-08-09) : 30 s si le
             # découpage est écrit pour Seedance 2.5, 15 s sinon (plancher 2 s
             # inchangé — le clamp d'envoi par moteur refera le minimum API).
+            # Même source que la consigne et le Studio (core/target_engine).
             try:
-                from core.seedance_family import duration_bounds as _sf_bounds
-                from core.target_engine import get_target_engine as _te_get
-                _dur_max = float(_sf_bounds(_te_get())[1])
+                from core.target_engine import shot_duration_max as _sdm
+                _dur_max = float(_sdm(self._target_engine or None))
             except Exception:
                 _dur_max = 15.0
             for s in shots:

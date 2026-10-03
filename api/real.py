@@ -813,7 +813,9 @@ def run_real(params: dict, emit_progress, is_cancelled) -> dict:
         }
 
     # ── Appel API fal.ai avec callbacks de progression ────────────────────────
-    emit_progress(12, "Envoi à l'API Seedance 2.0…")
+    # Le moteur RÉELLEMENT appelé : ce libellé disait « Seedance 2.0 » en dur,
+    # même quand l'endpoint était celui de la 2.5 (constat Matthieu 2026-10-03).
+    emit_progress(12, f"Envoi à l'API {_sf.label(model)}…")
     _pct = [12]
 
     # Ticker : incrémente doucement la barre pendant l'attente serveur (Seedance
@@ -858,18 +860,12 @@ def run_real(params: dict, emit_progress, is_cancelled) -> dict:
     except Exception as e:
         _api_done.set()
         err = str(e)
-        if "content_policy_violation" in err or "sensitive content" in err:
-            raise RuntimeError(
-                "Prompt refusé par Seedance (contenu sensible).\n\n"
-                "Le modèle a détecté du contenu violent, explicite ou contraire\n"
-                "à la politique de ByteDance/fal.ai.\n\n"
-                "Astuces :\n"
-                "• Reformule ton prompt pour supprimer les éléments bloquants.\n"
-                "• Si le problème vient d'une image de visage (célébrité, droits d'auteur) :\n"
-                "  remplace-la par un plan corps entier — le visage occupe\n"
-                "  moins de pixels et passe plus facilement la censure.\n"
-                "• Essaie en mode Standard plutôt que Fast."
-            )
+        from core.worker import is_content_policy_error, content_policy_message
+        if is_content_policy_error(err) or "sensitive content" in err.lower():
+            # La VRAIE raison du filtre (cause, étape) au lieu d'un texte figé :
+            # « contenu violent, explicite » s'affichait pour un refus de DROITS
+            # D'AUTEUR prononcé sur la vidéo produite (constat Matthieu 2026-10-03).
+            raise RuntimeError(content_policy_message(err, _sf.label(model)))
         raise
     finally:
         _api_done.set()

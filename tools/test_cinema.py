@@ -460,7 +460,11 @@ def prompts_storyboard_cinema():
     assert hasattr(s, "_technique_line"), "section Technique déterministe (champs caméra)"
     assert "prompt_sections" in inspect.getsource(s.GenerateStoryboardWorker.run), \
         "le worker assemble le prompt en sections"
-    assert "duration" in t and "15.0" in t, "contrainte durée Seedance"
+    # Durée = plafond du moteur VISÉ depuis le 03/10/2026 (30 s en Seedance 2.5) :
+    # le modèle porte un marqueur, la consigne rendue pour la 2.0 dit 15.
+    assert "duration" in t and "{DUR_MAX}" in t, "contrainte durée du moteur visé"
+    assert "15.0" in s._storyboard_prompt("fr", False, "seedance-2.0"), \
+        "contrainte durée Seedance"
     # Sound design généré AVEC le storyboard (retour 2026-06-13, parité Live)
     assert '"sound_prompt"' in t, "le storyboard génère aussi un prompt sound design"
     assert "NO speech" in t and "SFX" in t, "sound_prompt = ambiance/SFX sans voix"
@@ -8372,13 +8376,17 @@ def durees_par_moteur_et_flux3_generable():
         _ctx.set_project_path(_old_p or "")
         _ctx.set_project_id(_old_i or "")
 
-    # Le découpage Cinéma lit aussi la borne du moteur visé.
+    # Le découpage Cinéma lit aussi la borne du moteur visé — par la source
+    # UNIQUE core/target_engine.shot_duration_max depuis le 03/10/2026 (le
+    # comportement, lui, est suivi de bout en bout par plans_longs_seedance_25…).
     _ssrc = inspect.getsource(__import__("api.screenplay", fromlist=["_"])
                               .GenerateStoryboardWorker.run)
-    assert "duration_bounds" in _ssrc, "clamp Cinéma resté à 15 en dur"
+    assert "shot_duration_max" in _ssrc, "clamp Cinéma resté à 15 en dur"
     # …et les dialogs de plan + la page séquence Live suivent le moteur.
-    for _m in ("ui.dialog_shot", "ui.dialog_shot_live", "ui.page_live_sequence"):
-        assert "duration_bounds" in inspect.getsource(__import__(_m, fromlist=["_"])), \
+    for _m, _needle in (("ui.dialog_shot", "shot_duration_max"),
+                        ("ui.dialog_shot_live", "shot_duration_max"),
+                        ("ui.page_live_sequence", "duration_bounds")):
+        assert _needle in inspect.getsource(__import__(_m, fromlist=["_"])), \
             f"{_m} : slider de durée resté figé à 15 s"
 
     # Flux 3 : générable dans les DEUX éditions, mock sans clé, pièges encodés.
@@ -8400,6 +8408,185 @@ def durees_par_moteur_et_flux3_generable():
             f"{_mod.__name__} : combo durée figé (pas de 30 s en 2.5)"
     from core.engine_grammar import _GRAMMAR_BY_ENGINE as _G
     assert _G.get("flux-3") == "sentence", "grammaire Flux 3 absente de la table"
+
+
+@test
+def plans_longs_seedance_25_de_bout_en_bout_03_10_2026():
+    """Un plan de 25 s survit à TOUT le trajet quand le projet vise la 2.5.
+
+    Constat Matthieu (03/10/2026) : « je ne peux pas générer des plans de plus
+    de 15 secondes » avec un projet visant Seedance 2.5. Le correctif du 09/08
+    ne couvrait que quatre fichiers et son test ne cherchait qu'un MOT dans le
+    code : l'enregistrement d'un plan ramenait toujours la durée à 15 s, la
+    consigne du storyboard l'interdisait, le contrat du Découpage REJETAIT une
+    fiche de 20 s, la conversion directe et la case Durée plafonnaient aussi.
+    Ici, un plan long suit le trajet réel, du Découpage à la fiche du plan.
+    """
+    import os as _os, tempfile as _tf
+    import core.context as _ctx
+    import core.storyboard as _sb
+    from core import target_engine as _te
+    from core.decoupage_document import validate_v2_document
+    from core.decoupage_layout import layout_segments_to_cinema_shots
+    import api.screenplay as _SP
+    import api.plan_coedit as _PC
+
+    # ── La source unique, et le Studio qui lit la MÊME table ─────────────────
+    assert _te.shot_duration_max("seedance-2.5") == 30
+    assert _te.shot_duration_max("seedance-2.0") == 15
+    assert _te.shot_duration_max("wan-3.0") == 30
+    assert _te.shot_duration_max("sora-2") == 20 and _te.shot_duration_max("flux-3") == 20
+    assert _te.shot_duration_max("veo-3.1") == 15, "moteur hors table : 15 s"
+    assert _te.shot_duration_ceiling() == 30
+    import ui.tab_t2v as _t2v, ui.tab_t2v_live as _t2vl
+    assert _t2v._ENGINE_MAX_DURATION is _te.ENGINE_MAX_DURATION, \
+        "le Studio et le storyboard doivent lire la même table de durées"
+    assert _t2vl._ENGINE_MAX_DURATION is _te.ENGINE_MAX_DURATION
+
+    _doc = ("DÉCOUPAGE PANDORA 2\n\nSÉQUENCE 1 — LA BRUME\n\n"
+            "PLAN 01\nSOURCE SCÉNARIO : La brume descend.\n"
+            "INTENTION : Plan-séquence.\nRYTHME : Lent.\nDURÉE : 25s\n"
+            "PROMPT VISUEL : La brume avale la ville.\nPERSONNAGES : —\n"
+            "DÉCOR : —\nACCESSOIRES : —\nVÉHICULES : —\nHMC : —\n"
+            "VALEUR PROPOSÉE : —\nAXE PROPOSÉ : —\nMOUVEMENT PROPOSÉ : —\n"
+            "FOCALE PROPOSÉE : —\nMOOD : À CRÉER\n")
+
+    _old_p, _old_i = _ctx.get_project_path(), _ctx.get_project_id()
+    _old_ns = _sb.get_namespace()
+    _tmp = _tf.mkdtemp(prefix="pandora_long_")
+    _os.makedirs(_os.path.join(_tmp, "data"), exist_ok=True)
+    try:
+        _ctx.set_project_path(_tmp)
+        _ctx.set_project_id("test_long")
+        _sb.set_namespace("storyboard")
+
+        # ── Projet visant la 2.0 : le plafond historique tient ──────────────
+        _te.set_target_engine("seedance-2.0")
+        assert any(i.endswith(":durée") for i in validate_v2_document(_doc)), \
+            "une fiche de 25 s doit rester refusée quand le projet vise la 2.0"
+        assert layout_segments_to_cinema_shots(_doc)[0]["duration"] == 15
+        assert "entre 2 et 15 secondes" in _SP._format_pandora_prompt("fr")
+
+        # ── Projet visant la 2.5 : 25 s partout ─────────────────────────────
+        _te.set_target_engine("seedance-2.5")
+        assert not any(i.endswith(":durée") for i in validate_v2_document(_doc)), \
+            "le contrat du Découpage rejette encore une fiche de 25 s en 2.5"
+        assert layout_segments_to_cinema_shots(_doc)[0]["duration"] == 25, \
+            "la conversion directe rabote encore à 15 s"
+        assert "entre 2 et 30 secondes" in _SP._format_pandora_prompt("fr")
+        assert "from 2 to 30 seconds" in _SP._format_pandora_prompt("en")
+        _sp = _SP._storyboard_prompt("fr", False, "seedance-2.5")
+        assert "entre 2.0 et 30.0" in _sp and "dépasser 30.0 secondes" in _sp
+        assert "{DUR_MAX}" not in _sp and "{ENGINE}" not in _sp
+        assert "limite de Seedance 2.0" not in _sp
+        assert "entre 2 et 30 secondes" in _PC._fmt_block("cinema", "", "français", "FRANÇAIS")
+
+        # L'ENREGISTREMENT garde 25 s — c'est lui qui ramenait tout à 15.
+        _s = _sb.save_shot({"duration": 25, "scene_title": "Long", "seedance_prompt": "x"},
+                           "test_long_v")
+        assert _sb.get_shot(_s["id"])["duration"] == 25.0, \
+            "save_shot ramène encore les plans longs à 15 s"
+        assert _sb.save_shot({"duration": 45}, "test_long_v")["duration"] == 30.0, \
+            "au-delà de tout moteur, le garde-fou reste 30 s"
+
+        # La fiche du plan : curseur jusqu'à 30 s, et 25 s survivent à « Enregistrer ».
+        from ui.dialog_shot import ShotDialog
+        _d = ShotDialog(shot=dict(_sb.get_shot(_s["id"])))
+        assert _d._dur_slider.maximum() == 300 and _d._dur_slider.value() == 250
+        _d._on_save()
+        assert _sb.get_shot(_s["id"])["duration"] == 25.0, \
+            "la fiche du plan perd la durée longue à l'enregistrement"
+        _d.deleteLater()
+
+        # La case Durée du tableau lit le plafond du moteur (plus de 15.0 en dur).
+        for _mod in ("ui.page_storyboard", "ui.page_storyboard_live"):
+            _src = "\n".join(l.split("#", 1)[0] for l in inspect.getsource(
+                __import__(_mod, fromlist=["_"])).splitlines())
+            assert "1.0, 15.0, 1" not in _src and "shot_duration_max" in _src, \
+                f"{_mod} : case Durée encore plafonnée à 15 s"
+    finally:
+        try:
+            _sb.clear_version_shots("test_long_v")
+        except Exception:
+            pass
+        _te.clear()
+        _sb.set_namespace(_old_ns)
+        _ctx.set_project_path(_old_p or "")
+        _ctx.set_project_id(_old_i or "")
+
+    # Le libellé d'envoi nomme le moteur RÉELLEMENT appelé (il disait « Seedance
+    # 2.0 » en dur même quand l'endpoint était celui de la 2.5).
+    from core import seedance_family as _sf
+    assert _sf.label("seedance-2.5") == "Seedance 2.5"
+    assert _sf.label("seedance-2.0-fast") == "Seedance 2.0 Fast"
+    assert _sf.endpoints("seedance-2.5")["t2v"] == "bytedance/seedance-2.5/text-to-video"
+    _rsrc = inspect.getsource(__import__("api.real", fromlist=["_"]).run_real)
+    assert "Envoi à l'API Seedance 2.0…" not in _rsrc
+    assert "_sf.label(model)" in _rsrc
+
+
+#: Réponse RÉELLE de fal (compte de Matthieu, Seedance 2.5, 03/10/2026, après
+#: 11 min de calcul), entrée retirée.
+_REFUS_COPYRIGHT = (
+    "422: [{'loc': ['body', 'generated_video'], 'msg': 'The generated output was "
+    "rejected due to a potential copyright violation. Please revise your prompt and "
+    "try again.', 'type': 'content_policy_violation', 'url': "
+    "'https://docs.fal.ai/errors#content_policy_violation', 'ctx': {'extra_info': "
+    "{'reason': 'partner_validation_failed', 'cause': 'copyright'}}}]")
+
+
+@test
+def refus_droits_auteur_dit_la_vraie_raison_03_10_2026():
+    """Un refus pour DROITS D'AUTEUR se lit comme tel (constat 03/10/2026).
+
+    Le Studio affichait un texte figé : « Prompt refusé par Seedance (contenu
+    sensible) … contenu violent, explicite ». fal disait autre chose : la vidéo
+    PRODUITE a été rejetée par le contrôle de ByteDance, cause « copyright ».
+    Et comme `partner_validation_failed` comptait comme marqueur « visages »,
+    l'onglet Modifier des clips l'aurait annoncé « visages de personnes réelles »."""
+    import inspect
+    from core import worker as W
+    from core.i18n import _FR_TO_EN
+    import ui.tab_davinci_edit as DE
+
+    assert W.is_content_policy_error(_REFUS_COPYRIGHT)
+    assert not W.is_real_person_refusal(_REFUS_COPYRIGHT), \
+        "un refus copyright n'est pas un refus de visages"
+    assert W.is_real_person_refusal(_REFUS_VISAGES), "les visages restent reconnus"
+    assert W.content_policy_cause(_REFUS_COPYRIGHT) == "copyright"
+    # Le prompt recopié dans l'erreur ne fait pas la cause : un refus NSFW dont
+    # le prompt demande « no copyrighted logos » n'est pas un refus copyright.
+    _nsfw = ("422: [{'loc': ['body', 'prompt'], 'msg': 'Sensitive content detected', "
+             "'type': 'content_policy_violation', 'input': {'prompt': 'street, no "
+             "copyrighted logos'}}]")
+    assert W.is_content_policy_error(_nsfw) and W.content_policy_cause(_nsfw) == ""
+    assert W.refused_after_generation(_REFUS_COPYRIGHT)
+    assert not W.refused_after_generation(_REFUS_VISAGES), "refus visages = sur l'entrée"
+
+    msg = W.content_policy_message(_REFUS_COPYRIGHT, "Seedance 2.5")
+    assert msg.startswith("Seedance 2.5 a refusé la vidéo générée : ressemblance "
+                          "possible avec une œuvre protégée (droits d'auteur).")
+    assert "visages" not in msg and "violent" not in msg
+    assert DE.TabDavinciEdit._humanize_error(_REFUS_COPYRIGHT) == \
+        "Refusé : droits d'auteur (filtre du moteur)"
+
+    # Le Studio (api/real) passe par ce message — plus de texte figé. Code
+    # seul : le commentaire qui raconte l'ancien texte ne doit pas compter.
+    _rsrc = "\n".join(l.split("#", 1)[0] for l in inspect.getsource(
+        __import__("api.real", fromlist=["_"]).run_real).splitlines())
+    assert "content_policy_message(err, _sf.label(model))" in _rsrc
+    assert "contenu violent" not in _rsrc
+
+    for _k in ("a refusé la vidéo générée : ressemblance possible avec une œuvre "
+               "protégée (droits d'auteur).",
+               "C'est le contrôle du propriétaire du modèle (ByteDance pour Seedance), "
+               "appliqué à l'image produite et non au prompt ; il n'est pas déterministe.",
+               "Écartez ce qui évoque une œuvre connue (scène de film célèbre, "
+               "personnage, marque, logo), puis relancez.",
+               "(refus prononcé sur la vidéo produite, après le calcul)",
+               "Refusé : droits d'auteur (filtre du moteur)",
+               "Durée (1 — {max} secondes) :"):
+        assert _k in _FR_TO_EN, f"traduction manquante : {_k}"
 
 
 @test

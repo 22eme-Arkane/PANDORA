@@ -99,8 +99,12 @@ _CONTENT_POLICY_MARKERS = (
     "likenesses of real people", "privacyinformation", "sensitivecontentdetected",
     "may contain real person",
 )
+# « partner_validation_failed » n'en fait PLUS partie : c'est la raison
+# générique du contrôle ByteDance, qui porte aussi les refus pour droits
+# d'auteur (`cause: copyright`, Seedance 2.5, 03/10/2026) — ceux-là
+# s'affichaient « visages de personnes réelles ».
 _REAL_PERSON_MARKERS = (
-    "likenesses of real people", "partner_validation_failed", "privacyinformation",
+    "likenesses of real people", "privacyinformation",
     "may contain real person", "real person",
 )
 
@@ -116,8 +120,26 @@ def is_real_person_refusal(err: str) -> bool:
     return is_content_policy_error(err) and any(m in low for m in _REAL_PERSON_MARKERS)
 
 
+def content_policy_cause(err: str) -> str:
+    """Cause déclarée par le filtre (`ctx.extra_info.cause`, ex. « copyright »),
+    ou "" si fal n'en donne pas."""
+    import re as _re
+    m = _re.search(r"""['"]cause['"]\s*:\s*['"]([\w\- ]{2,40})['"]""", err or "")
+    if m:
+        return m.group(1).strip().lower()
+    # Repli sur le MESSAGE du filtre seulement : l'erreur fal recopie aussi le
+    # prompt envoyé, où le mot « copyright » peut figurer sans être la cause.
+    return "copyright" if "copyright" in fal_error_detail(err).lower() else ""
+
+
+def refused_after_generation(err: str) -> bool:
+    """Le filtre a jugé la vidéo PRODUITE (le calcul a eu lieu), pas l'entrée."""
+    low = (err or "").lower()
+    return "generated_video" in low or "generated output" in low
+
+
 def content_policy_message(err: str, engine_label: str = "") -> str:
-    """Refus de filtre, lisible : QUI refuse et quoi faire à la place."""
+    """Refus de filtre, lisible : QUI refuse, POURQUOI, et quoi faire à la place."""
     from core.i18n import translate as _t
     eng = (engine_label or "").strip() or _t("Le moteur")
     if is_real_person_refusal(err):
@@ -128,7 +150,19 @@ def content_policy_message(err: str, engine_label: str = "") -> str:
             _t("Pour garder vos acteurs : « Changer le décor · acteurs intacts », "
                "HappyHorse, Kling O3 ou Wan 2.7."),
         ])
-    return f"{eng} {_t('a refusé ce clip (filtre de contenu) :')} {fal_error_detail(err)}"
+    if content_policy_cause(err) == "copyright":
+        return " ".join([
+            eng, _t("a refusé la vidéo générée : ressemblance possible avec une œuvre "
+                    "protégée (droits d'auteur)."),
+            _t("C'est le contrôle du propriétaire du modèle (ByteDance pour Seedance), "
+               "appliqué à l'image produite et non au prompt ; il n'est pas déterministe."),
+            _t("Écartez ce qui évoque une œuvre connue (scène de film célèbre, "
+               "personnage, marque, logo), puis relancez."),
+        ])
+    msg = f"{eng} {_t('a refusé ce clip (filtre de contenu) :')} {fal_error_detail(err)}"
+    if refused_after_generation(err):
+        msg += " " + _t("(refus prononcé sur la vidéo produite, après le calcul)")
+    return msg
 
 
 def humanize_api_error(err: str) -> str:

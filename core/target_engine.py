@@ -105,6 +105,52 @@ def clear() -> None:
             pass
 
 
+# ── Durée d'un plan — SOURCE UNIQUE (Découpage, Storyboard ET Studio) ────────
+#: Plafonds au-delà de 15 s des moteurs HORS famille Seedance (fiches fal
+#: relues le 24/09/2026 ; Flux 3 : 5–20 s, core/flux3_family). La famille
+#: Seedance se lit dans core/seedance_family (30 s en 2.5). Le Studio
+#: (ui/tab_t2v*) propose ses durées depuis CETTE table : un plan écrit au
+#: storyboard ne dépasse jamais ce que le Studio sait envoyer au même moteur.
+ENGINE_MAX_DURATION = {"wan-3.0": 30, "sora-2": 20, "sora-2-pro": 20,
+                       "flux-3": 20, "flux-3-draft": 20}
+
+#: Plancher d'un plan au storyboard ; le clamp d'envoi refait le minimum API.
+SHOT_DURATION_MIN = 2
+_SHOT_DURATION_MAX_DEFAULT = 15
+
+
+def shot_duration_max(engine_key: str | None = None) -> int:
+    """Durée maximale d'un plan pour le moteur visé, en secondes.
+
+    30 s en Seedance 2.5 et Wan 3.0, 20 s en Sora 2 et Flux 3, 15 s ailleurs.
+    Sans clé : le moteur visé par le projet. Ne lève jamais.
+    """
+    key = (engine_key or get_target_engine() or "").strip()
+    try:
+        from core import seedance_family as _sf
+        if _sf.is_seedance(key):
+            return int(_sf.duration_bounds(key)[1])
+    except Exception:
+        pass
+    return int(ENGINE_MAX_DURATION.get(key, _SHOT_DURATION_MAX_DEFAULT))
+
+
+def shot_duration_ceiling() -> int:
+    """Plus longue durée qu'accepte un moteur de PANDORA (30 s).
+
+    Garde-fou de l'ENREGISTREMENT d'un plan (core/storyboard) : il ne doit
+    jamais raboter une durée que le moteur visé accepte. Le plafond du moteur
+    s'applique à la saisie et à l'envoi, pas au stockage.
+    """
+    vals = [_SHOT_DURATION_MAX_DEFAULT, *ENGINE_MAX_DURATION.values()]
+    try:
+        from core import seedance_family as _sf
+        vals += [int(_sf.duration_bounds(k)[1]) for k in _sf.engine_keys()]
+    except Exception:
+        vals.append(30)
+    return max(vals)
+
+
 # ── Consigne d'écriture transmise à l'IA de découpage ────────────────────────
 
 def briefing(engine_key: str | None = None) -> str:

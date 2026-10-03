@@ -157,7 +157,8 @@ _ENGINE_RESOLUTIONS = {
 _ENGINE_DEFAULT_RES = {"seedance-2.0": "720p"}
 # Durée maximale acceptée par l'endpoint pour les moteurs HORS famille
 # Seedance (relevé fal 24/09/2026) ; les autres gardent le plafond de 15 s.
-_ENGINE_MAX_DURATION = {"wan-3.0": 30, "sora-2": 20, "sora-2-pro": 20}
+# Table UNIQUE dans core/target_engine : le storyboard lit la même.
+from core.target_engine import ENGINE_MAX_DURATION as _ENGINE_MAX_DURATION  # noqa: E402
 # Moteurs disponibles dans le tab DaVinci Edit (workflow testé et validé uniquement)
 _DAVINCI_ENGINES = [e for e in _ENGINES if e[1] in _SEEDANCE_ENGINES]
 
@@ -4617,9 +4618,8 @@ class TabT2V(QScrollArea):
         famille Seedance gardent leur plafond historique de 15 s (leurs bornes
         réelles sont gérées par leurs propres workers)."""
         try:
-            from core.seedance_family import duration_bounds, is_seedance
-            key = self._get_model()
-            hi = duration_bounds(key)[1] if is_seedance(key) else _ENGINE_MAX_DURATION.get(key, 15)
+            from core.target_engine import shot_duration_max
+            hi = shot_duration_max(self._get_model())
         except Exception:
             hi = 15
         opts = [d for d in (4, 5, 8, 10, 12, 15, 20, 25, 30) if d <= hi]

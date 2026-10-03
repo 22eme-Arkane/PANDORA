@@ -268,13 +268,15 @@ def validate_layout(text: str) -> list[str]:
     segments = parse_layout_segments(text)
     if not segments:
         return ["aucun_plan"]
+    from core.target_engine import SHOT_DURATION_MIN, shot_duration_max
+    _dmax = shot_duration_max()        # 30 s quand le projet vise Seedance 2.5
     errors: list[str] = []
     for index, segment in enumerate(segments, 1):
         try:
             duration = float(segment.get("duration") or 0)
         except (TypeError, ValueError):
             duration = 0
-        if duration < 2 or duration > 15:
+        if duration < SHOT_DURATION_MIN or duration > _dmax:
             errors.append(f"P{index:02d}:duree")
         if not str(segment.get("prompt") or "").strip():
             errors.append(f"P{index:02d}:prompt")
@@ -389,11 +391,18 @@ def layout_segments_to_cinema_shots(layout_text: str) -> list:
     except Exception:
         _catalogs = {"characters": [], "decors": [], "accessories": [],
                      "hmc": [], "vehicles": []}
+    # Plafond du moteur VISÉ (30 s en Seedance 2.5) — l'ancien « 15.0 » en dur
+    # rabotait les fiches longues d'un découpage écrit pour la 2.5.
+    try:
+        from core.target_engine import shot_duration_max
+        _dmax = float(shot_duration_max())
+    except Exception:
+        _dmax = 15.0
     for i, seg in enumerate(parse_layout_segments(layout_text), 1):
         if not isinstance(seg, dict):
             continue
         try:
-            _dur = min(float(seg.get("duration") or 8.0), 15.0)   # plafond Seedance
+            _dur = min(float(seg.get("duration") or 8.0), _dmax)
         except (TypeError, ValueError):
             _dur = 8.0
         shot = {
