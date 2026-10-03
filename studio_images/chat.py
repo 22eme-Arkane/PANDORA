@@ -11,12 +11,12 @@ import time
 
 from PyQt6.QtCore import QThread, pyqtSignal
 
-_CHAT_MODEL  = "claude-sonnet-5"
-_SYNTH_MODEL = "claude-sonnet-5"
-# Sonnet 5 active la réflexion adaptative si `thinking` est omis → désactivée ici
-# pour que tout le budget de sortie serve à la réponse. (Plafonds relevés le
-# 2026-07-23 : chat 8192 / synthèse 2048 — à 700, les réponses étaient tronquées.)
-_NO_THINK = {"type": "disabled"}
+# Indicatifs : les workers passent par core/ai_provider (tâche « element_chat »),
+# qui choisit le modèle et règle la réflexion par modèle (03/10/2026). Plafonds
+# relevés le 2026-07-23 : chat 8192 / synthèse 2048 — à 700, les réponses
+# étaient tronquées.
+_CHAT_MODEL  = "claude-sonnet-5-5"
+_SYNTH_MODEL = "claude-sonnet-5-5"
 
 # Nombre de tours utilisateur récents pour lesquels on renvoie les images en pleine
 # résolution. Au-delà, les images deviennent un simple marqueur texte (économie de

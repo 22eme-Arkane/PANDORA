@@ -524,7 +524,8 @@ CORPUS: dict[str, dict] = {
         "context": "Clés API (partagées avec Cinéma) + assistant IA.",
         "tips": [
             "Les clés fal.ai et Anthropic sont partagées avec PANDORA | Cinéma.",
-            "Choisissez l'assistant IA : Claude, Fable 5, Mistral ou Ollama local.",
+            "Choisissez l'assistant IA : Claude (Opus 5.5, Sonnet 5.5, Haiku 4.5, Fable 5.1), "
+            "ChatGPT, Mistral ou une IA locale.",
         ],
         "guide": "",
     },

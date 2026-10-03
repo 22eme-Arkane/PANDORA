@@ -650,7 +650,12 @@ mic_placement     # Placement du micro
 - `core.context.get_data_root()` retourne `<projet>/data/` si un projet est ouvert, sinon `data/` local
 - Les sections collapsibles du panneau droit utilisent le pattern `_make_toggle(title, container, expanded)`
 - L'undo/redo du scénario est manuel (liste Python) — pas `QTextEdit.undo()` qui est vidé par `setPlainText()`
-- Sonnet (`claude-sonnet-5`) pour les sorties JSON longues (storyboard), Haiku (`claude-haiku-4-5`) pour tout le reste
+- Modèles Claude (03/10/2026) : routage par tâche dans `core/ai_registry` (Opus 5.5 pour
+  storyboard et découpage, Sonnet 5.5 pour scénario et chats, Haiku 4.5 pour traduction,
+  amélioration de prompt et vision ; Fable 5.1 au choix). Réflexion, effort et marge de
+  sortie réglés PAR MODÈLE dans `core/ai_provider._anthropic_thinking` — jamais de
+  `thinking: disabled` codé ailleurs (400 sur Opus 5.5 et Sonnet 5.5) ; tout appel passe
+  par `core/ai_provider`.
 - Les dialogs éléments (Décor/Accessoire/HMC/Véhicule) partagent les patterns style combo + variation buttons
 
 ---

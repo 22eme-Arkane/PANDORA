@@ -12,7 +12,7 @@
   "ai_provider": "anthropic",
   "ai_profile": "anthropic_optimized",
   "ai_engine": "",
-  "ai_model_creative": "claude-opus-4-8",
+  "ai_model_creative": "claude-opus-5-5",
   "openai_key": "",
   "openai_model": "",
   "mistral_key": "",

@@ -8,9 +8,11 @@ Anthropic — les autres fournisseurs gèrent la vision différemment (hors pér
 
 Config (config.json) :
     "ai_provider"        : "anthropic" (défaut) | "openai" | "mistral" | "kimi" | "ollama"
-    "ai_model_creative"  : modèle du tier créatif Anthropic (défaut "claude-opus-4-8" ; Sonnet 5 = "claude-sonnet-5" ;
-                           "claude-fable-5" pour Fable 5)
-    "anthropic_key"      : clé API Anthropic (Claude / Fable 5)
+    "ai_model_creative"  : modèle du tier créatif Anthropic (défaut "claude-opus-5-5" ; Sonnet 5.5 =
+                           "claude-sonnet-5-5" ; "claude-fable-5-1" pour Fable 5.1). Un ancien
+                           modèle enregistré (Opus 4.8, Sonnet 5, Fable 5…) passe à son successeur
+                           (core/ai_registry.current_model, 03/10/2026).
+    "anthropic_key"      : clé API Anthropic (Claude Opus, Sonnet, Haiku, Fable)
     "openai_key"         : clé API OpenAI (GPT-5.5)
     "openai_model"       : modèle OpenAI (défaut "gpt-5.5")
     "mistral_key"        : clé API Mistral
@@ -69,8 +71,12 @@ API :
 from __future__ import annotations
 
 
+import re as _re
+
 from core.ai_registry import (ENGINE_ORDER, ENGINES as _REGISTRY_ENGINES,
                               PANDORA_OPTIMIZED, TASK_DEFAULTS, TASKS,
+                              DEFAULT_CREATIVE_MODEL, HAIKU_MODEL,
+                              anthropic_display_name, current_model,
                               engine as _registry_engine,
                               profile_from_config as _profile_from_config,
                               recommended_engine_name,
@@ -88,10 +94,10 @@ _PROVIDERS = ("anthropic", "openai", "mistral", "kimi", "glm", "ollama", "local"
 _LOCAL_PROVIDERS = ("ollama", "local")
 _LOCAL_TIMEOUT = (10, 1800)      # un gros modèle sur CPU met de longues minutes
 
-# Modèle par défaut (créatif) — Opus 4.8.
-_DEFAULT_CREATIVE = "claude-opus-4-8"
+# Modèle par défaut (créatif) — Opus 5.5 depuis le 03/10/2026 (core/ai_registry).
+_DEFAULT_CREATIVE = DEFAULT_CREATIVE_MODEL
 
-_ANTHROPIC_UTILITY = "claude-haiku-4-5"
+_ANTHROPIC_UTILITY = HAIKU_MODEL
 _MISTRAL_MODELS = {"utility": "mistral-small-latest", "creative": "mistral-large-latest"}
 _OPENAI_MODELS  = {"utility": "gpt-5.5", "creative": "gpt-5.5"}
 # Kimi K2.7 (Moonshot) — un seul modèle pour les deux tiers (comme GPT/Ollama).
@@ -116,8 +122,9 @@ def get_provider() -> str:
 
 
 def get_creative_model() -> str:
-    """Modèle du tier créatif chez Anthropic (Sonnet par défaut, Fable 5 en option)."""
-    m = (_cfg().get("ai_model_creative") or "").strip()
+    """Modèle du tier créatif chez Anthropic (Opus 5.5 par défaut, Sonnet 5.5 ou
+    Fable 5.1 en option) — un ancien modèle enregistré passe à son successeur."""
+    m = current_model((_cfg().get("ai_model_creative") or "").strip())
     return m or _DEFAULT_CREATIVE
 
 
@@ -247,19 +254,13 @@ def humanize_ai_error(msg: str) -> str:
 
 def _engine_display_name(provider: str, creative_model: str) -> str:
     """Nom d'affichage lisible d'un moteur résolu (provider + modèle créatif).
-    Pour Anthropic, distingue Opus / Sonnet / Haiku / Fable 5."""
+    Pour Anthropic, le nom EXACT du modèle (« Claude Opus 5.5 », « Claude Fable 5.1 »…)."""
     if provider == "anthropic":
+        cm = current_model(creative_model or _DEFAULT_CREATIVE)
         for e in ENGINES.values():
-            if e["provider"] == "anthropic" and e["creative_model"] == creative_model:
+            if e["provider"] == "anthropic" and e["creative_model"] == cm:
                 return e["name"]
-        cm = creative_model or _DEFAULT_CREATIVE
-        if "opus" in cm:
-            return "Claude Opus 4.8"
-        if "fable" in cm:
-            return "Fable 5"
-        if "haiku" in cm:
-            return "Claude Haiku 4.5"
-        return "Claude Sonnet 5"
+        return anthropic_display_name(cm)
     if provider == "openai":
         return creative_model or "OpenAI"
     if provider == "mistral":
@@ -292,7 +293,7 @@ def key_error(task: str | None = None) -> str | None:
     cfg = _cfg()
     if provider == "anthropic":
         if not cfg.get("anthropic_key", "").strip():
-            return "Clé Anthropic (Claude / Fable 5) manquante — renseignez-la dans Paramètres."
+            return "Clé Anthropic (Claude) manquante — renseignez-la dans Paramètres."
         return None
     if provider == "openai":
         if not cfg.get("openai_key", "").strip():
@@ -348,16 +349,151 @@ def _anthropic_client():
     return anthropic.Anthropic(api_key=_cfg().get("anthropic_key", "").strip())
 
 
-def _anthropic_extra(model: str) -> dict:
-    """Sonnet 5 active la réflexion ADAPTATIVE quand `thinking` est OMIS (≠ Sonnet 4.6,
-    qui ne réfléchissait pas) — cela rognerait les sorties à max_tokens serré
-    (storyboard / scénario JSON). On la désactive donc explicitement pour préserver le
-    comportement. EXCEPTION : Fable 5 / Mythos refusent `thinking:{disabled}` (400) →
-    on omet le champ pour eux (réflexion toujours active)."""
-    m = (model or "").lower()
+# ── Réflexion, effort et plafond de sortie PAR MODÈLE Claude ──────────────────
+# PANDORA coupait la réflexion (`thinking: disabled`) pour que tout le budget de
+# sortie serve à la réponse : storyboard, découpage et scénario sont des sorties
+# longues à max_tokens serré. Les modèles de 2026 ne l'acceptent plus tous
+# (référence API Anthropic au 25/09/2026, mise à jour du 03/10/2026) :
+#   - Opus 5.5 : réflexion TOUJOURS active, « disabled » = 400 → on règle l'effort
+#     (« low » : le point de départ recommandé pour une route qui tournait sans
+#     réflexion ; le défaut de l'API serait « medium ») et on ajoute au plafond la
+#     place que prend la réflexion, sinon elle mangerait la réponse ;
+#   - Sonnet 5.5 : « disabled » = 400 ; « between_tools » est son réglage le plus
+#     bas — aucune réflexion étendue hors appels d'outils, et PANDORA n'en déclare
+#     pas : même comportement qu'avant ;
+#   - Fable 5 / 5.1, Mythos : réflexion toujours active, champ omis (effort par
+#     défaut) — avec la même marge ;
+#   - Opus 5 / 4.x, Sonnet 5 / 4.x, Haiku 4.5 : « disabled » accepté (Opus 5 : à
+#     effort ≤ high, son défaut) — comportement historique ;
+#   - tout modèle INCONNU (plus récent) : champ omis — jamais un 400 —, avec marge.
+_THINKING_OFF_OK = (
+    "claude-opus-5", "claude-opus-4-8", "claude-opus-4-7", "claude-opus-4-6",
+    "claude-opus-4-5", "claude-sonnet-5", "claude-sonnet-4-6", "claude-sonnet-4-5",
+    "claude-haiku-4-5",
+)
+_OPUS_EFFORT = "low"
+#: Jetons ajoutés au plafond quand la réflexion ne peut pas être coupée.
+_THINKING_ROOM = {"low": 8000, "": 16000}
+#: Au-delà, le SDK exige le streaming (délai attendu > 10 min) : on streame.
+_NONSTREAM_MAX_TOKENS = 16000
+_MAX_OUT_TOKENS = 64000
+
+
+def _same_model(model: str, base: str) -> bool:
+    """`model` est `base` ou l'un de ses instantanés datés (« base-20251001 »).
+    Pas un simple startswith : « claude-opus-5-5 » commence par « claude-opus-5 »."""
+    return model == base or bool(_re.fullmatch(_re.escape(base) + r"-\d{8}", model))
+
+
+def _anthropic_thinking(model: str) -> tuple[dict, int]:
+    """(paramètres de réflexion / effort, jetons à AJOUTER au plafond de sortie)."""
+    m = (model or "").strip().lower()
     if "fable" in m or "mythos" in m:
-        return {}
-    return {"thinking": {"type": "disabled"}}
+        return {}, _THINKING_ROOM[""]
+    if _same_model(m, "claude-sonnet-5-5"):
+        return {"thinking": {"type": "between_tools"}}, 0
+    if _same_model(m, "claude-opus-5-5"):
+        return {"output_config": {"effort": _OPUS_EFFORT}}, _THINKING_ROOM[_OPUS_EFFORT]
+    if any(_same_model(m, b) for b in _THINKING_OFF_OK):
+        return {"thinking": {"type": "disabled"}}, 0
+    return {}, _THINKING_ROOM[""]
+
+
+def _anthropic_extra(model: str) -> dict:
+    """Paramètres de réflexion seuls (compatibilité : appelants et harnais)."""
+    return _anthropic_thinking(model)[0]
+
+
+# ── Repli côté serveur si un filtre de sécurité décline (référence API) ───────
+# Opus 5.5, Sonnet 5.5, Fable 5.1 et Opus 5 peuvent décliner une demande
+# (stop_reason « refusal » : cyber, bio, frontier_llm…). Le repli côté serveur
+# (`fallbacks: "default"`) relance alors la MÊME demande, dans le même appel, sur
+# le modèle qu'Anthropic recommande pour cette catégorie : un faux positif (un
+# thriller avec un piratage, une épidémie) ne devient pas une panne. Le SDK
+# installé ne connaît pas encore le paramètre : il part dans `extra_body`. Si
+# l'API ou le SDK le refusent, il est coupé pour la session et l'appel repart sans.
+_FALLBACK_BETA = "server-side-fallback-2026-07-01"
+_FALLBACK_MODELS = ("claude-opus-5-5", "claude-opus-5", "claude-sonnet-5-5", "claude-fable-5-1")
+_fallback_off = False
+
+
+def _wants_fallback(model: str) -> bool:
+    m = (model or "").strip().lower()
+    return (not _fallback_off) and any(_same_model(m, b) for b in _FALLBACK_MODELS)
+
+
+def _fallback_rejected(exc: Exception) -> bool:
+    """L'erreur vient-elle du repli lui-même (SDK trop ancien, bêta refusée) ?"""
+    if isinstance(exc, TypeError):
+        return True
+    low = str(exc).lower()
+    return getattr(exc, "status_code", None) == 400 and (
+        "fallback" in low or "anthropic-beta" in low or ("beta" in low and "header" in low))
+
+
+class AIRefusalError(RuntimeError):
+    """Le modèle a décliné la demande (stop_reason « refusal ») — filtre de
+    sécurité d'Anthropic. Le message dit lequel et quoi faire."""
+
+
+def _raise_if_refused(msg, model: str) -> None:
+    """Une réponse « refusal » arrive en HTTP 200 avec un contenu vide ou partiel :
+    sans ce contrôle, l'écran recevait un texte vide sans explication."""
+    if getattr(msg, "stop_reason", "") != "refusal":
+        return
+    det = getattr(msg, "stop_details", None)
+    cat = (det.get("category") if isinstance(det, dict)
+           else getattr(det, "category", None)) or ""
+    from core.i18n import translate as _t
+    name = anthropic_display_name(getattr(msg, "model", "") or model)
+    raise AIRefusalError(
+        f"{name} {_t('a décliné cette demande : filtre de sécurité d’Anthropic')}"
+        + (f" ({cat})" if cat else "") + ". "
+        + _t("Reformulez la consigne, ou choisissez un autre modèle dans Paramètres → "
+             "Assistant IA."))
+
+
+def _anthropic_text(msg) -> str:
+    return "".join(getattr(b, "text", "") or "" for b in (getattr(msg, "content", None) or [])
+                   if getattr(b, "type", "") == "text")
+
+
+def _anthropic_send(system, messages, model, max_tokens, on_chunk=None):
+    """UNIQUE point d'envoi vers Anthropic (chat, complete, stream, chat_ex) :
+    réflexion et effort du modèle, place de la réflexion dans le plafond, streaming
+    au-delà de ce que le SDK accepte d'un bloc, repli côté serveur. Rend le message
+    final ; le texte arrive aussi, au fil de l'eau, à `on_chunk` s'il est fourni.
+    Ni journal ni contrôle de refus ici : chaque appelant les fait (le harnais
+    vérifie que chaque point d'appel journalise sa consommation)."""
+    global _fallback_off
+    extra, room = _anthropic_thinking(model)
+    req = dict(model=model, system=system, messages=messages,
+               max_tokens=min(_MAX_OUT_TOKENS, int(max_tokens) + room), **extra)
+    streaming = on_chunk is not None or req["max_tokens"] > _NONSTREAM_MAX_TOKENS
+
+    def _go(with_fallback: bool):
+        client = _anthropic_client()
+        api = client.beta.messages if with_fallback else client.messages
+        kw = dict(req)
+        if with_fallback:
+            kw["betas"] = [_FALLBACK_BETA]
+            kw["extra_body"] = {"fallbacks": "default"}
+        if streaming:
+            with api.stream(**kw) as st:
+                for t in st.text_stream:
+                    if on_chunk:
+                        on_chunk(t)
+                return st.get_final_message()
+        return api.create(**kw)
+
+    if _wants_fallback(model):
+        try:
+            return _go(True)
+        except Exception as e:
+            if not _fallback_rejected(e):
+                raise
+            _fallback_off = True
+    return _go(False)
 
 
 # ── Journalisation du coût : quelle tâche est en cours, dans CE thread ───────
@@ -420,30 +556,25 @@ def _note_ollama_usage(j: dict) -> None:
 
 
 def _anthropic_complete(system, messages, model, max_tokens) -> str:
-    msg = _anthropic_client().messages.create(
-        model=model, max_tokens=max_tokens, system=system, messages=messages,
-        **_anthropic_extra(model),
-    )
+    msg = _anthropic_send(system, messages, model, max_tokens)
     _note_usage(msg)
-    return "".join(b.text for b in msg.content if getattr(b, "type", "") == "text")
+    _raise_if_refused(msg, model)
+    return _anthropic_text(msg)
 
 
 def _anthropic_stream(system, messages, on_chunk, model, max_tokens) -> str:
-    full = ""
-    with _anthropic_client().messages.stream(
-        model=model, max_tokens=max_tokens, system=system, messages=messages,
-        **_anthropic_extra(model),
-    ) as st:
-        for t in st.text_stream:
-            full += t
-            if on_chunk:
-                on_chunk(t)
-        # Le décompte n'est disponible qu'une fois le flux terminé.
-        try:
-            _note_usage(st.get_final_message())
-        except Exception:
-            pass
-    return full
+    parts: list[str] = []
+
+    def _chunk(t: str):
+        parts.append(t)
+        if on_chunk:
+            on_chunk(t)
+
+    msg = _anthropic_send(system, messages, model, max_tokens, on_chunk=_chunk)
+    # Le décompte n'est disponible qu'une fois le flux terminé.
+    _note_usage(msg)
+    _raise_if_refused(msg, model)
+    return "".join(parts)
 
 
 def _openai_content(content):
@@ -932,11 +1063,10 @@ def chat_ex(system: str, messages: list, tier: str = "creative",
         return {"text": strip_thinking(j.get("message", {}).get("content", "") or ""),
                 "truncated": j.get("done_reason", "") == "length"}
     # Anthropic (défaut)
-    msg = _anthropic_client().messages.create(
-        model=model, max_tokens=max_tokens, system=sysp, messages=messages,
-        **_anthropic_extra(model))
+    msg = _anthropic_send(sysp, messages, model, max_tokens)
     _note_usage(msg)
-    text = "".join(b.text for b in msg.content if getattr(b, "type", "") == "text")
+    _raise_if_refused(msg, model)
+    text = _anthropic_text(msg)
     return {"text": text, "truncated": getattr(msg, "stop_reason", "") == "max_tokens"}
 
 
@@ -990,6 +1120,9 @@ def chat_stream(system: str, messages: list, on_chunk=None, tier: str = "creativ
     """Conversation multi-tours en streaming : on_chunk(str) à chaque fragment."""
     provider, creative = _resolve_engine(task)
     model = _model(tier, provider, creative)
+    # Sans ce dépôt, la consommation de ce flux était journalisée sous la tâche
+    # et le modèle de l'appel PRÉCÉDENT du même thread (03/10/2026).
+    _set_task_ctx(task, model, provider)
     return _dispatch_stream(provider, _adapt(system, task, provider, model),
                             messages, on_chunk, model, max_tokens)
 

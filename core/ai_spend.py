@@ -25,31 +25,52 @@ Trois principes, tenus par le code plus bas :
 from __future__ import annotations
 
 #: Grille Anthropic en $ par MILLION de jetons — (entrée, sortie).
-#: ⚠ Tarifs annoncés au 2026-08-30, NON confrontés à une facture réelle.
+#: Relevée sur la référence API Anthropic au 2026-09-25 (mise à jour du
+#: 03/10/2026). La grille précédente comptait Opus 4.8 et Opus 5 à 15 $ / 75 $
+#: (le tarif d'Opus 4) et Sonnet 5 à 3 $ / 15 $ : « Coût du projet » surestimait
+#: le texte IA de 3× sur Opus et de 1,5× sur Sonnet. NON confrontés à une facture.
 #: Une clé absente = tarif inconnu, pas gratuit (voir `price_for`).
 ANTHROPIC_PRICES: dict[str, tuple[float, float]] = {
-    "claude-opus-5":        (15.0, 75.0),
-    "claude-opus-4-8":      (15.0, 75.0),
-    "claude-sonnet-5":      (3.0, 15.0),
+    "claude-fable-5-1":     (10.0, 50.0),
+    "claude-fable-5":       (10.0, 50.0),
+    "claude-mythos-5-1":    (10.0, 50.0),
+    "claude-opus-5-5":      (4.0, 20.0),
+    "claude-opus-5":        (5.0, 25.0),
+    "claude-opus-4-8":      (5.0, 25.0),
+    "claude-opus-4-7":      (5.0, 25.0),
+    "claude-opus-4-6":      (5.0, 25.0),
+    "claude-sonnet-5-5":    (2.0, 10.0),
+    "claude-sonnet-5":      (2.0, 10.0),
+    "claude-sonnet-4-6":    (3.0, 15.0),
     "claude-haiku-4-5":     (1.0, 5.0),
 }
 
-#: Repli par famille : un identifiant versionné inconnu (« claude-sonnet-5-2026… »)
-#: doit tout de même être tarifé, sinon toute la ligne texte tombe à zéro.
+#: Repli par famille : un identifiant versionné inconnu (« claude-opus-6 »…) doit
+#: tout de même être tarifé, sinon toute la ligne texte tombe à zéro — au tarif
+#: du modèle ACTUEL de la famille.
 _FAMILIES: tuple[tuple[str, tuple[float, float]], ...] = (
-    ("opus",   (15.0, 75.0)),
-    ("sonnet", (3.0, 15.0)),
+    ("fable",  (10.0, 50.0)),
+    ("mythos", (10.0, 50.0)),
+    ("opus",   (4.0, 20.0)),
+    ("sonnet", (2.0, 10.0)),
     ("haiku",  (1.0, 5.0)),
 )
 
 
 def price_for(model: str) -> tuple[float, float] | None:
-    """(prix entrée, prix sortie) par million de jetons, ou None si inconnu."""
+    """(prix entrée, prix sortie) par million de jetons, ou None si inconnu.
+
+    Ordre : identifiant exact, puis le PLUS LONG identifiant connu dont il est
+    une version datée (« claude-opus-5-5-20261001 » → Opus 5.5, et non Opus 5,
+    dont il partage le début), puis la famille."""
     m = (model or "").strip().lower()
     if not m:
         return None
     if m in ANTHROPIC_PRICES:
         return ANTHROPIC_PRICES[m]
+    known = [k for k in ANTHROPIC_PRICES if m.startswith(k + "-")]
+    if known:
+        return ANTHROPIC_PRICES[max(known, key=len)]
     for needle, prices in _FAMILIES:
         if needle in m:
             return prices

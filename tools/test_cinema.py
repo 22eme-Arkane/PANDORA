@@ -1600,15 +1600,19 @@ def moteurs_ia_par_tache():
         assert key in ap.ENGINES
     assert ap.ENGINES["glm"]["provider"] == "glm", "GLM (Zhipu) — API ou local"
     assert ap.ENGINES["gpt"]["provider"] == "openai"
-    assert ap.ENGINES["opus"]["creative_model"] == "claude-opus-4-8"
+    # Modèles Claude actuels depuis le 03/10/2026 (Opus 5.5, Sonnet 5.5, Fable 5.1).
+    assert ap.ENGINES["opus"]["creative_model"] == "claude-opus-5-5"
+    assert ap.ENGINES["claude"]["creative_model"] == "claude-sonnet-5-5"
+    assert ap.ENGINES["fable5"]["creative_model"] == "claude-fable-5-1"
+    assert ap.ENGINES["haiku"]["creative_model"] == "claude-haiku-4-5"
     # Profil PANDORA optimisé (défaut) : moteur IDÉAL par tâche — Opus UNIQUEMENT
     # pour le storyboard, Sonnet pour scénario/sync, Haiku pour le reste (économe).
     assert ap.PANDORA_OPTIMIZED["storyboard_gen"] == "opus", "storyboard = Opus"
-    assert ap.PANDORA_OPTIMIZED["extraction"] == "claude", "extraction = Sonnet 5 (pas Opus)"
+    assert ap.PANDORA_OPTIMIZED["extraction"] == "claude", "extraction = Sonnet (pas Opus)"
     assert ap.PANDORA_OPTIMIZED["screenplay"] == "claude", "scénario = Sonnet"
     # 2026-07-23 : le Découpage est le pivot créatif (storyboard = conversion
-    # déterministe) → tâche dédiée routée sur Opus 4.8 (décision Matthieu).
-    assert ap.PANDORA_OPTIMIZED["decoupage"] == "opus", "découpage = Opus 4.8"
+    # déterministe) → tâche dédiée routée sur Opus (décision Matthieu).
+    assert ap.PANDORA_OPTIMIZED["decoupage"] == "opus", "découpage = Opus"
     assert not all(v == "opus" for v in ap.PANDORA_OPTIMIZED.values()), "plus Opus partout"
     keys = [t[0] for t in ap.TASKS]
     for k in ("enhance", "storyboard_chat", "assistant", "storyboard_gen",
@@ -1618,18 +1622,18 @@ def moteurs_ia_par_tache():
     orig = ap._cfg
     ap._cfg = lambda: {"ai_profile": "anthropic_optimized", "ai_task_engines": {}}
     try:
-        assert ap._resolve_engine("storyboard_gen") == ("anthropic", "claude-opus-4-8")
-        assert ap._resolve_engine("screenplay") == ("anthropic", "claude-sonnet-5")
-        assert ap._resolve_engine("decoupage") == ("anthropic", "claude-opus-4-8")
+        assert ap._resolve_engine("storyboard_gen") == ("anthropic", "claude-opus-5-5")
+        assert ap._resolve_engine("screenplay") == ("anthropic", "claude-sonnet-5-5")
+        assert ap._resolve_engine("decoupage") == ("anthropic", "claude-opus-5-5")
     finally:
         ap._cfg = orig
-    # Override par tâche
+    # Override par tâche — une config ANCIENNE (Sonnet 5 enregistré) donne le successeur.
     ap._cfg = lambda: {"ai_provider": "anthropic", "ai_model_creative": "claude-sonnet-5",
                        "ai_task_engines": {"enhance": "gpt", "storyboard_chat": "fable5"}}
     try:
         assert ap._resolve_engine("enhance") == ("openai", "gpt-5.5")
-        assert ap._resolve_engine("storyboard_chat") == ("anthropic", "claude-fable-5")
-        assert ap._resolve_engine("assistant") == ("anthropic", "claude-sonnet-5")
+        assert ap._resolve_engine("storyboard_chat") == ("anthropic", "claude-fable-5-1")
+        assert ap._resolve_engine("assistant") == ("anthropic", "claude-sonnet-5-5")
         assert ap._model("creative", "openai") == "gpt-5.5"
     finally:
         ap._cfg = orig
@@ -1639,7 +1643,7 @@ def moteurs_ia_par_tache():
                        "ai_task_engines": {"enhance": "opus"}}
     try:
         assert ap._resolve_engine() == ("custom", "local-model")
-        assert ap._resolve_engine("enhance") == ("anthropic", "claude-opus-4-8")
+        assert ap._resolve_engine("enhance") == ("anthropic", "claude-opus-5-5")
     finally:
         ap._cfg = orig
     # Appels câblés avec task=
@@ -2761,20 +2765,22 @@ def assistant_ia_routage_par_tache():
         return ap._model(tier, p, m)
 
     try:
+        # Une config ENREGISTRÉE avec l'ancien défaut (Opus 4.8) reste sur le profil
+        # optimisé, avec les modèles actuels (03/10/2026).
         d = {"ai_provider": "anthropic", "ai_model_creative": "claude-opus-4-8",
              "ai_task_engines": {}}
-        assert _mf("storyboard_gen", "creative", d) == "claude-opus-4-8", "storyboard = Opus"
-        assert _mf("extraction", "creative", d) == "claude-sonnet-5", "extraction = Sonnet 5"
-        assert _mf("screenplay", "creative", d) == "claude-sonnet-5", "scénario = Sonnet"
-        assert _mf("sync", "creative", d) == "claude-sonnet-5", "sync = Sonnet"
+        assert _mf("storyboard_gen", "creative", d) == "claude-opus-5-5", "storyboard = Opus 5.5"
+        assert _mf("extraction", "creative", d) == "claude-sonnet-5-5", "extraction = Sonnet 5.5"
+        assert _mf("screenplay", "creative", d) == "claude-sonnet-5-5", "scénario = Sonnet"
+        assert _mf("sync", "creative", d) == "claude-sonnet-5-5", "sync = Sonnet"
         assert _mf("translate", "utility", d) == "claude-haiku-4-5", "traduction = Haiku"
         # Config vide → même routage intelligent.
-        assert _mf("storyboard_gen", "creative", {}) == "claude-opus-4-8"
-        assert _mf("extraction", "creative", {}) == "claude-sonnet-5"
-        # Global explicite → s'applique partout (Sonnet pour TOUTES les tâches).
+        assert _mf("storyboard_gen", "creative", {}) == "claude-opus-5-5"
+        assert _mf("extraction", "creative", {}) == "claude-sonnet-5-5"
+        # Global explicite → s'applique partout ; Sonnet 5 enregistré → Sonnet 5.5.
         g = {"ai_provider": "anthropic", "ai_model_creative": "claude-sonnet-5"}
-        assert _mf("storyboard_gen", "creative", g) == "claude-sonnet-5"
-        assert _mf("extraction", "creative", g) == "claude-sonnet-5"
+        assert _mf("storyboard_gen", "creative", g) == "claude-sonnet-5-5"
+        assert _mf("extraction", "creative", g) == "claude-sonnet-5-5"
         # Override par tâche prioritaire.
         o = {"ai_provider": "anthropic", "ai_model_creative": "claude-opus-4-8",
              "ai_task_engines": {"storyboard_gen": "haiku"}}
@@ -8776,16 +8782,17 @@ def decoupage_par_lots_et_cout_du_texte():
         # Hors projet : on n'écrit RIEN (sinon le journal d'un film atterrirait
         # dans le dossier de l'application — piège déjà vécu sur ce projet).
         context.set_project_path("")
-        assert ai_spend.note_message(_M(), "claude-opus-4-8", "decoupage") > 0
+        assert ai_spend.note_message(_M(), "claude-opus-5-5", "decoupage") > 0
         context.set_project_path(_tmp)
         _avant = len(spend.load())
-        ai_spend.note_message(_M(), "claude-opus-4-8", "decoupage")
+        ai_spend.note_message(_M(), "claude-opus-5-5", "decoupage")
         ai_spend.note_message(_M(), "modele-inconnu", "analyse")
         _apres = spend.load()
         assert len(_apres) - _avant == 2, "les appels texte ne sont pas journalisés"
         assert any(e["kind"] == spend.KIND_TEXT for e in _apres)
-        _op = next(e for e in _apres if e["engine"] == "claude-opus-4-8")
-        assert 12.0 < _op["cost_usd"] < 12.7, f"tarif Opus faux : {_op['cost_usd']}"
+        _op = next(e for e in _apres if e["engine"] == "claude-opus-5-5")
+        # Opus 5.5 : 4 $ / 20 $ par million (référence API, 03/10/2026) → 3,29 $.
+        assert 3.2 < _op["cost_usd"] < 3.4, f"tarif Opus faux : {_op['cost_usd']}"
         _in = next(e for e in _apres if e["engine"] == "modele-inconnu")
         assert _in["cost_usd"] == 0.0 and "inconnu" in _in["detail"], \
             "un tarif inconnu doit être DIT, jamais présenté comme gratuit"
@@ -8795,7 +8802,13 @@ def decoupage_par_lots_et_cout_du_texte():
 
     # Un nom de modèle versionné doit retomber sur sa famille, sinon toute la
     # ligne texte vaudrait 0 dès la prochaine version d'un modèle.
-    assert ai_spend.price_for("claude-sonnet-5-20260101") == (3.0, 15.0)
+    assert ai_spend.price_for("claude-sonnet-5-20260101") == (2.0, 10.0)
+    # … sur le BON modèle : « claude-opus-5-5-… » commence par « claude-opus-5 ».
+    assert ai_spend.price_for("claude-opus-5-5-20261001") == (4.0, 20.0)
+    # La grille d'avant comptait Opus 4.8 au tarif d'Opus 4 (15 $ / 75 $).
+    assert ai_spend.price_for("claude-opus-4-8") == (5.0, 25.0)
+    assert ai_spend.price_for("claude-fable-5-1") == (10.0, 50.0)
+    assert ai_spend.price_for("claude-opus-7") == (4.0, 20.0), "inconnu → tarif actuel de la famille"
 
     # ── 6. La capture est branchée sur les VRAIS points d'appel ───────────────
     import inspect as _i
@@ -11236,6 +11249,205 @@ def changer_le_decor_onglet_cinema_et_refus_visages():
               "Refusé : visages de personnes réelles (filtre du moteur)", "Choisir le décor…"):
         assert s in _FR_TO_EN, s
     t.deleteLater()
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# Modèles Claude à jour (03/10/2026)
+# ══════════════════════════════════════════════════════════════════════════════
+
+class _FakeAnthropic:
+    """Client Anthropic SIMULÉ : enregistre chaque requête (API simple ou bêta,
+    bloc ou flux), rend un message choisi, peut lever sur l'API bêta."""
+
+    class _Blk:
+        def __init__(self, t, text=""):
+            self.type, self.text = t, text
+
+    class Msg:
+        def __init__(self, text="OK", stop="end_turn", details=None, model=""):
+            self.content = [_FakeAnthropic._Blk("thinking"), _FakeAnthropic._Blk("text", text)]
+            self.stop_reason, self.stop_details, self.model = stop, details, model
+
+            class _U:
+                input_tokens, output_tokens = 10, 20
+            self.usage = _U()
+
+    def __init__(self, reply=None, beta_error=None):
+        self.calls, self.reply, self.beta_error = [], reply, beta_error
+        outer = self
+
+        class _Stream:
+            def __init__(self, msg):
+                self.msg = msg
+            def __enter__(self):
+                return self
+            def __exit__(self, *a):
+                return False
+            @property
+            def text_stream(self):
+                yield from ["O", "K"]
+            def get_final_message(self):
+                return self.msg
+
+        class _API:
+            def __init__(self, kind):
+                self.kind = kind
+            def _go(self, how, kw):
+                outer.calls.append((self.kind, how, kw))
+                if self.kind == "beta" and outer.beta_error is not None:
+                    raise outer.beta_error
+                return outer.reply or _FakeAnthropic.Msg(model=kw.get("model", ""))
+            def create(self, **kw):
+                return self._go("create", kw)
+            def stream(self, **kw):
+                return _Stream(self._go("stream", kw))
+
+        self.messages = _API("plain")
+
+        class _Beta:
+            pass
+        self.beta = _Beta()
+        self.beta.messages = _API("beta")
+
+
+@test
+def modeles_claude_a_jour_03_10_2026():
+    """Demande Matthieu 03/10/2026 : « on travaille toujours avec la version 4.8 de
+    Claude » → Opus 5.5, Sonnet 5.5, Fable 5.1 partout (Haiku 4.5 reste le plus
+    récent). Le piège : PANDORA envoyait `thinking: disabled` à tout Claude sauf
+    Fable — Opus 5.5 et Sonnet 5.5 le refusent (400). Épinglés : réglage de
+    réflexion PAR MODÈLE, place de la réflexion dans le plafond, repli côté
+    serveur (et son abandon propre), refus lisible, anciennes configs migrées,
+    anciens modèles masqués, tarifs. Schémas validés le 03/10/2026 par un appel
+    réel minimal par modèle (hors harnais : aucun réseau ici)."""
+    import inspect as _i
+    import core.ai_registry as R
+    import core.ai_provider as AP
+    from core.i18n import _FR_TO_EN
+
+    # ── 1. Registre et successeurs ────────────────────────────────────────────
+    assert (R.OPUS_MODEL, R.SONNET_MODEL, R.HAIKU_MODEL, R.FABLE_MODEL) == (
+        "claude-opus-5-5", "claude-sonnet-5-5", "claude-haiku-4-5", "claude-fable-5-1")
+    assert R.ENGINES["fable5"]["name"] == "Claude Fable 5.1"
+    for old, new in (("claude-opus-4-8", "claude-opus-5-5"), ("claude-opus-5", "claude-opus-5-5"),
+                     ("claude-sonnet-5", "claude-sonnet-5-5"), ("claude-fable-5", "claude-fable-5-1"),
+                     ("claude-sonnet-4-5-20250929", "claude-sonnet-5-5"),
+                     ("claude-3-5-haiku-latest", "claude-haiku-4-5"),
+                     ("claude-opus-5-5", "claude-opus-5-5"), ("gpt-5.5", "gpt-5.5")):
+        assert R.current_model(old) == new, (old, R.current_model(old))
+    assert R.anthropic_display_name("claude-opus-5-5") == "Claude Opus 5.5"
+    assert R.engine("anthropic:claude-opus-4-8")["model"] == "claude-opus-5-5", \
+        "un choix par tâche enregistré sur Opus 4.8 passe à Opus 5.5"
+    rows = R.primary_menu_items({"anthropic": ["claude-opus-4-8", "claude-sonnet-5",
+                                               "claude-mythos-5-1", "claude-opus-5-5"]})
+    labels = [r["label"] for r in rows]
+    assert "claude-opus-4-8" not in labels and "claude-sonnet-5" not in labels, \
+        "les modèles remplacés ne sont plus proposés"
+    assert "claude-mythos-5-1" in labels and labels.count("Claude Opus 5.5") == 1
+
+    # ── 2. Réflexion par modèle : jamais « disabled » là où il est refusé ─────
+    th = AP._anthropic_thinking
+    assert th("claude-opus-5-5") == ({"output_config": {"effort": "low"}}, 8000)
+    assert th("claude-sonnet-5-5") == ({"thinking": {"type": "between_tools"}}, 0)
+    assert th("claude-fable-5-1") == ({}, 16000)
+    assert th("claude-haiku-4-5") == ({"thinking": {"type": "disabled"}}, 0)
+    assert th("claude-haiku-4-5-20251001") == ({"thinking": {"type": "disabled"}}, 0)
+    assert th("claude-opus-4-8") == ({"thinking": {"type": "disabled"}}, 0)
+    assert th("claude-opus-6") == ({}, 16000), "modèle inconnu : champ omis, jamais un 400"
+    for m in ("claude-opus-5-5", "claude-sonnet-5-5", "claude-fable-5-1", "claude-opus-6"):
+        assert "disabled" not in str(th(m)[0]), m
+
+    # ── 3. Envoi : repli côté serveur, flux, abandon du repli, refus ──────────
+    _orig_client, _orig_off = AP._anthropic_client, AP._fallback_off
+    try:
+        def send(model, max_tokens=2048, **kw):
+            fake = _FakeAnthropic(**kw)
+            AP._anthropic_client = lambda: fake
+            AP._fallback_off = False
+            return fake, AP._anthropic_send("S", [{"role": "user", "content": "u"}], model, max_tokens)
+
+        fake, msg = send("claude-opus-5-5")
+        kind, how, kw = fake.calls[-1]
+        assert (kind, how) == ("beta", "create") and kw["max_tokens"] == 2048 + 8000
+        assert kw["betas"] == ["server-side-fallback-2026-07-01"]
+        assert kw["extra_body"] == {"fallbacks": "default"} and "thinking" not in kw
+        assert AP._anthropic_text(msg) == "OK", "le texte se lit par TYPE de bloc (réflexion d'abord)"
+        fake, _ = send("claude-haiku-4-5")
+        assert fake.calls[-1][:2] == ("plain", "create") and "betas" not in fake.calls[-1][2]
+        fake, _ = send("claude-opus-5-5", max_tokens=16000)
+        assert fake.calls[-1][1] == "stream", "au-delà de 16 000 jetons : flux (délai du SDK)"
+
+        class _Rejet(Exception):
+            status_code = 400
+            def __str__(self):
+                return "Error code: 400 - fallbacks: Extra inputs are not permitted"
+        fake, msg = send("claude-sonnet-5-5", beta_error=_Rejet())
+        assert [c[0] for c in fake.calls] == ["beta", "plain"] and AP._fallback_off, \
+            "repli refusé → la même demande repart sans, et le repli est coupé pour la session"
+        assert fake.calls[-1][2]["thinking"] == {"type": "between_tools"}
+
+        class _Autre(Exception):
+            status_code = 400
+            def __str__(self):
+                return "Error code: 400 - messages.0.content: field required"
+        try:
+            send("claude-opus-5-5", beta_error=_Autre())
+            raise AssertionError("une vraie erreur 400 ne doit pas être avalée")
+        except _Autre:
+            pass
+
+        fake = _FakeAnthropic(reply=_FakeAnthropic.Msg(text="", stop="refusal",
+                                                        details={"category": "bio"},
+                                                        model="claude-opus-5-5"))
+        AP._anthropic_client = lambda: fake
+        AP._fallback_off = False
+        try:
+            AP._anthropic_complete("S", [{"role": "user", "content": "u"}], "claude-opus-5-5", 100)
+            raise AssertionError("un refus ne doit pas rendre un texte vide en silence")
+        except AP.AIRefusalError as e:
+            assert "Claude Opus 5.5" in str(e) and "(bio)" in str(e) and "Paramètres" in str(e), str(e)
+    finally:
+        AP._anthropic_client, AP._fallback_off = _orig_client, _orig_off
+    assert "a décliné cette demande : filtre de sécurité d’Anthropic" in _FR_TO_EN
+    for _fn in (AP._anthropic_complete, AP._anthropic_stream, AP.chat_ex):
+        _src = _i.getsource(_fn)
+        assert "_anthropic_send(" in _src and "_raise_if_refused(" in _src, _fn.__name__
+
+    # ── 4. Aucun « thinking: disabled » codé hors du point d'appel central ───
+    import api.screenplay as SP
+    _root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    for sub in ("api", "ui", "core", "studio_images"):
+        for name in os.listdir(os.path.join(_root, sub)):
+            if not name.endswith(".py") or (sub, name) == ("core", "ai_provider.py"):
+                continue
+            with open(os.path.join(_root, sub, name), encoding="utf-8") as f:
+                txt = f.read()
+            assert '"type": "disabled"' not in txt, f"{sub}/{name}"
+    _run = _i.getsource(SP.EnrichScenarioWithRefsWorker.run)
+    assert "Anthropic(" not in _run and 'task="screenplay"' in _run
+    import api.element_chat as EC
+    assert SP._MODEL == EC._CHAT_MODEL == "claude-sonnet-5-5"
+    with open(os.path.join(_root, "ui", "page_settings.py"), encoding="utf-8") as f:
+        assert 'model="claude-haiku-4-5",' in f.read(), "test de clé : identifiant Haiku courant"
+
+    # ── 5. Une config ancienne est migrée UNE fois (aucune écriture réelle) ──
+    import core.config as CC
+    _orig_save = CC.save_config
+    saved = []
+    CC.save_config = lambda c: saved.append(dict(c))
+    try:
+        cfg = {"ai_provider": "anthropic", "ai_model_creative": "claude-opus-4-8",
+               "_opus_default_done": True, "ai_engine": "anthropic:claude-sonnet-5",
+               "ai_task_engines": {"decoupage": "anthropic:claude-opus-4-8", "enhance": "gpt"}}
+        out = CC._migrate(cfg)
+        assert out["ai_model_creative"] == "claude-opus-5-5"
+        assert out["ai_engine"] == "anthropic:claude-sonnet-5-5"
+        assert out["ai_task_engines"] == {"decoupage": "anthropic:claude-opus-5-5", "enhance": "gpt"}
+        assert out["_claude_2026_10_done"] and len(saved) == 1
+        CC._migrate(out)
+        assert len(saved) == 1, "migration idempotente : rien de réécrit la deuxième fois"
+    finally:
+        CC.save_config = _orig_save
 
 
 if __name__ == "__main__":

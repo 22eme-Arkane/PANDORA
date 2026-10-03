@@ -34,7 +34,7 @@ _DEFAULTS = {
     "ai_provider":           "anthropic",          # compatibilité : fournisseur du choix simple
     "ai_profile":            "anthropic_optimized",# anthropic_optimized | openai_optimized | single | custom
     "ai_engine":             "",                   # clé du registre, ou provider:model-id découvert
-    "ai_model_creative":     "claude-opus-4-8",    # défaut Opus 4.8 (Sonnet 5 / Fable 5 en option)
+    "ai_model_creative":     "claude-opus-5-5",    # défaut Opus 5.5 (Sonnet 5.5 / Fable 5.1 en option)
     "openai_key":            "",                   # clé OpenAI
     "openai_model":          "",                   # modèle OpenAI simple ; vide = registre/profil
     "mistral_key":           "",
@@ -158,11 +158,32 @@ def _migrate(cfg: dict) -> dict:
     changed = False
     # Bascule UNIQUE de l'ancien défaut Sonnet 4.6 → Opus 4.8. Le choix de version
     # Claude est nouveau : personne n'avait choisi Sonnet délibérément avant.
+    from core.ai_registry import DEFAULT_CREATIVE_MODEL, current_model
     if not cfg.get("_opus_default_done"):
         if ((cfg.get("ai_model_creative") or "") in ("", "claude-sonnet-4-6")
                 and (cfg.get("ai_provider") or "anthropic") == "anthropic"):
-            cfg["ai_model_creative"] = "claude-opus-4-8"
+            cfg["ai_model_creative"] = DEFAULT_CREATIVE_MODEL
         cfg["_opus_default_done"] = True
+        changed = True
+    # Modèles Claude remplacés → successeurs (demande Matthieu 03/10/2026 : « on
+    # travaille toujours avec la 4.8 »). La résolution le fait déjà à chaque appel
+    # (core/ai_registry.current_model) ; l'écrire UNE fois garde les Paramètres
+    # cohérents : un choix « anthropic:claude-opus-4-8 » n'y apparaît plus.
+    if not cfg.get("_claude_2026_10_done"):
+        def _engine_key(k):
+            k = str(k or "")
+            if k.lower().startswith("anthropic:"):
+                return "anthropic:" + current_model(k.split(":", 1)[1])
+            return k
+        _m = (cfg.get("ai_model_creative") or "").strip()
+        if _m:
+            cfg["ai_model_creative"] = current_model(_m)
+        if cfg.get("ai_engine"):
+            cfg["ai_engine"] = _engine_key(cfg["ai_engine"])
+        if isinstance(cfg.get("ai_task_engines"), dict):
+            cfg["ai_task_engines"] = {t: _engine_key(v)
+                                      for t, v in cfg["ai_task_engines"].items()}
+        cfg["_claude_2026_10_done"] = True
         changed = True
     if changed:
         try:

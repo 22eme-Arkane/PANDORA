@@ -27,7 +27,7 @@ api/real.py garde le chemin historique (strip + traduction + suffixes). Ce modul
 ne touche JAMAIS le prompt affiché dans le storyboard.
 
 Appels IA : ai_provider.complete(task="video_prompt") — moteur choisissable dans
-Paramètres → Assistant IA → avancés (défaut : Claude Sonnet 5).
+Paramètres → Assistant IA → avancés (défaut : Claude Sonnet 5.5).
 """
 
 from __future__ import annotations

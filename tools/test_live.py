@@ -7604,5 +7604,31 @@ def changer_le_decor_live_parite_28_09_2026():
     t.deleteLater()
 
 
+@test
+def modeles_claude_a_jour_live_03_10_2026():
+    """Parité Live (03/10/2026) : la page Paramètres du Live propose les modèles
+    Claude actuels (Opus 5.5, Sonnet 5.5, Haiku 4.5, Fable 5.1) — plus Opus 4.8 —,
+    son test de clé utilise l'identifiant Haiku courant, et la résolution
+    partagée (core/ai_provider) sert les nouveaux modèles aux tâches du Live."""
+    import core.config as _cc
+    import core.ai_provider as AP
+    import ui.page_live_settings as PLS
+    _orig = _cc.load_config
+    _cc.load_config = lambda: {"ai_provider": "anthropic", "ai_profile": "anthropic_optimized"}
+    try:
+        p = PLS.PageLiveSettings()
+        labels = [p._ai_combo.itemText(i) for i in range(p._ai_combo.count())]
+        for name in ("Claude Opus 5.5", "Claude Sonnet 5.5", "Claude Haiku 4.5", "Claude Fable 5.1"):
+            assert name in labels, (name, labels[:8])
+        assert not any("Opus 4.8" in x or x.endswith("Sonnet 5") for x in labels), labels[:8]
+        assert AP._resolve_engine("decoupage") == ("anthropic", "claude-opus-5-5")
+        assert AP._resolve_engine("translate")[0] == "anthropic"
+        p.deleteLater()
+    finally:
+        _cc.load_config = _orig
+    src = inspect.getsource(PLS)
+    assert 'model="claude-haiku-4-5",' in src and "claude-haiku-4-5-2025" not in src
+
+
 if __name__ == "__main__":
     sys.exit(main())

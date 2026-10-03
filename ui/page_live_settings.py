@@ -1046,7 +1046,7 @@ class PageLiveSettings(QScrollArea):
             import anthropic
             client = anthropic.Anthropic(api_key=key)
             client.messages.create(
-                model="claude-haiku-4-5-20251001",
+                model="claude-haiku-4-5",   # le moins cher : la clé, pas le modèle, est testée
                 max_tokens=5,
                 messages=[{"role": "user", "content": "ping"}],
             )

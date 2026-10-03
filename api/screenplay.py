@@ -13,11 +13,12 @@ import unicodedata
 from PyQt6.QtCore import QThread, pyqtSignal
 from core.config import load_config
 
-_MODEL            = "claude-sonnet-5"     # Sonnet 5 — format/arrange/apply + analyses vision
-_MODEL_STORYBOARD = "claude-sonnet-5"     # Sonnet 5 (storyboard JSON ; routage réel via ai_provider task)
-# Sonnet 5 active la réflexion adaptative si `thinking` est omis → on la désactive sur
-# les appels DIRECTS (vision) pour ne pas rogner la sortie (max_tokens serrés).
-_NO_THINK = {"type": "disabled"}
+# Indicatifs : le modèle RÉEL de chaque appel vient de core/ai_provider (moteur choisi
+# par tâche dans Paramètres), qui règle aussi réflexion et effort par modèle. Le
+# dernier appel direct (enrichissement par les références) y passe depuis le
+# 03/10/2026 : il forçait `thinking: disabled`, refusé (400) par Sonnet 5.5.
+_MODEL            = "claude-sonnet-5-5"   # Sonnet 5.5 — format/arrange/apply
+_MODEL_STORYBOARD = "claude-sonnet-5-5"   # routage réel : ai_provider, tâche storyboard_gen
 
 
 def _get_lang() -> str:
@@ -1540,13 +1541,14 @@ pas les espaces). « replace » contient le passage entier réécrit.
 
     def run(self):
         try:
-            from anthropic import Anthropic
-            cfg = load_config()
-            key = cfg.get("anthropic_key", "")
-            if not key:
-                self.failed.emit("Clé Anthropic manquante (configurable dans Paramètres).")
+            # Par le point d'appel central (03/10/2026) : moteur de la tâche
+            # « screenplay », réflexion/effort du modèle, refus et coût journalisés.
+            # L'appel direct forçait Sonnet 5 et `thinking: disabled` (400 sur 5.5).
+            from core.ai_provider import key_error, stream as _ai_stream
+            err = key_error(task="screenplay")
+            if err:
+                self.failed.emit(err)
                 return
-            client = Anthropic(api_key=key)
             lang = _get_lang()
             user_content = (
                 _lang_hint(lang)
@@ -1555,17 +1557,8 @@ pas les espaces). « replace » contient le passage entier réécrit.
                 + "\n\n=== ANALYSE DES RÉFÉRENCES VISUELLES ===\n"
                 + self._analysis.strip()
             )
-            full_text = ""
-            with client.messages.stream(
-                model=_MODEL,
-                max_tokens=8192,
-                thinking=_NO_THINK,
-                system=self._SYSTEM,
-                messages=[{"role": "user", "content": user_content}],
-            ) as stream:
-                for text in stream.text_stream:
-                    full_text += text
-                    self.chunk.emit(text)
+            full_text = _ai_stream(self._SYSTEM, user_content, on_chunk=self.chunk.emit,
+                                   tier="creative", max_tokens=8192, task="screenplay")
             from core.text_edits import parse_edits
             self.done.emit({"edits": parse_edits(full_text), "raw": full_text.strip()})
         except Exception as e:

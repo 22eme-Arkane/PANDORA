@@ -219,7 +219,8 @@ def _l_settings() -> str:
             "Anthropic (assistant, traduction, découpage)",
             "<b>Aide API</b> — rouvre le <b>guide de démarrage</b> pas-à-pas "
             "(création des comptes fal.ai / Claude, collage direct des clés)",
-            "<b>Assistant IA</b> — Claude, Fable 5, Mistral ou Ollama local",
+            "<b>Assistant IA</b> — Claude (Opus 5.5, Sonnet 5.5, Haiku 4.5, Fable 5.1), "
+            "ChatGPT, Mistral ou une IA locale",
             "<b>Sauvegarder</b> applique le tout",
         ),
     ])
@@ -433,7 +434,8 @@ def _le_settings() -> str:
             "Anthropic (assistant, translation, breakdown)",
             "<b>API Help</b> — reopens the step-by-step <b>startup guide</b> "
             "(fal.ai / Claude account creation, paste keys directly)",
-            "<b>AI assistant</b> — Claude, Fable 5, Mistral or local Ollama",
+            "<b>AI assistant</b> — Claude (Opus 5.5, Sonnet 5.5, Haiku 4.5, Fable 5.1), "
+            "ChatGPT, Mistral or a local AI",
             "<b>Save</b> applies everything",
         ),
     ])

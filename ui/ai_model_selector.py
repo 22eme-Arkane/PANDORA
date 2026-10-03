@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
-from core.ai_registry import (ENGINES, PROFILES, engine, primary_menu_items,
-                              profile_from_config, resolve_engine)
+from core.ai_registry import (DEFAULT_CREATIVE_MODEL, ENGINES, PROFILES, current_model,
+                              engine, primary_menu_items, profile_from_config,
+                              resolve_engine)
 
 
 def _disable_last(combo) -> None:
@@ -20,6 +21,9 @@ def _selected_engine_from_legacy(cfg: dict) -> str:
     model = (cfg.get("ai_model_creative") or "").strip()
     if provider == "openai":
         model = (cfg.get("openai_model") or model or "gpt-5.5").strip()
+    elif provider == "anthropic":
+        # Un ancien Claude enregistré (Opus 4.8, Sonnet 5…) désigne son successeur.
+        model = current_model(model)
     for key, item in ENGINES.items():
         if item["provider"] == provider and item.get("model", "") == model:
             return key
@@ -85,7 +89,7 @@ def apply_primary_to_config(cfg: dict, combo) -> dict:
     cfg["ai_engine"] = key
     if profile == "anthropic_optimized":
         cfg["ai_provider"] = "anthropic"
-        cfg["ai_model_creative"] = "claude-opus-4-8"
+        cfg["ai_model_creative"] = DEFAULT_CREATIVE_MODEL
     elif profile == "openai_optimized":
         cfg["ai_provider"] = "openai"
         cfg["ai_model_creative"] = "gpt-5.6-sol"

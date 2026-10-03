@@ -21,11 +21,10 @@ from PyQt6.QtCore import QThread, pyqtSignal
 
 from core.config import load_config
 
-_CHAT_MODEL  = "claude-sonnet-5"
-_SYNTH_MODEL = "claude-sonnet-5"
-# Sonnet 5 active la réflexion adaptative si `thinking` est omis → désactivée ici
-# (max_tokens courts) pour ne pas rogner la réponse.
-_NO_THINK = {"type": "disabled"}
+# Indicatifs : les workers passent par core/ai_provider (tâche « element_chat »),
+# qui choisit le modèle et règle la réflexion par modèle (03/10/2026).
+_CHAT_MODEL  = "claude-sonnet-5-5"
+_SYNTH_MODEL = "claude-sonnet-5-5"
 _KEEP_IMAGE_TURNS = 2   # images pleine résolution : seulement les 2 derniers tours
 
 

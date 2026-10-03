@@ -5551,6 +5551,11 @@ _FR_TO_EN: dict[str, str] = {
         "API credits exhausted — top up the selected provider account and retry. The last saved analysis remains available.",
     "Service IA saturé ou limite de débit atteinte — réessaie dans quelques instants.":
         "AI service overloaded or rate limit reached — try again in a few moments.",
+    # Refus d'un filtre de sécurité Anthropic (stop_reason « refusal », 03/10/2026).
+    "a décliné cette demande : filtre de sécurité d’Anthropic":
+        "declined this request: Anthropic safety filter",
+    "Reformulez la consigne, ou choisissez un autre modèle dans Paramètres → Assistant IA.":
+        "Rephrase the instruction, or choose another model in Settings → AI Assistant.",
     "Clé API invalide — vérifie-la dans Paramètres → Clés API.":
         "Invalid API key — check it in Settings → API keys.",
     "Structure le scénario en blocs plans optimisés pour PANDORA": "Structures the screenplay into shot blocks optimized for PANDORA",

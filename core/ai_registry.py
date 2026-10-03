@@ -8,6 +8,80 @@ forme ``provider:model-id`` sans modifier ce registre.
 
 from __future__ import annotations
 
+import re
+
+
+# ── Modèles Claude ACTUELS (mise à jour du 03/10/2026, demande Matthieu : « mets à
+#    jour avec les nouvelles versions de Claude partout où on utilise Haiku, Sonnet,
+#    Fable et Opus »). Référence API Anthropic au 25/09/2026 : Opus 5.5, Sonnet 5.5,
+#    Fable 5.1 ; Haiku 4.5 reste le Haiku le plus récent. Identifiants EXACTS, sans
+#    suffixe de date.
+OPUS_MODEL = "claude-opus-5-5"
+SONNET_MODEL = "claude-sonnet-5-5"
+HAIKU_MODEL = "claude-haiku-4-5"
+FABLE_MODEL = "claude-fable-5-1"
+DEFAULT_CREATIVE_MODEL = OPUS_MODEL
+
+#: Ancien modèle Claude → son successeur. Appliqué à la RÉSOLUTION : une config,
+#: un choix par tâche ou un modèle découvert qui nomme l'ancien passe au nouveau,
+#: sans réécrire le fichier de l'utilisateur. Aucun successeur n'est plus cher que
+#: son prédécesseur (Opus 5.5 : 4 $ / 20 $ contre 5 $ / 25 $ pour Opus 4.8 et 5 ;
+#: Sonnet 5.5 et Fable 5.1 au même prix que Sonnet 5 et Fable 5).
+ANTHROPIC_SUCCESSORS: dict[str, str] = {
+    "claude-opus-5": OPUS_MODEL,
+    "claude-opus-4-8": OPUS_MODEL,
+    "claude-opus-4-7": OPUS_MODEL,
+    "claude-opus-4-6": OPUS_MODEL,
+    "claude-opus-4-5": OPUS_MODEL,
+    "claude-opus-4-1": OPUS_MODEL,
+    "claude-opus-4-0": OPUS_MODEL,
+    "claude-opus-4": OPUS_MODEL,
+    "claude-sonnet-5": SONNET_MODEL,
+    "claude-sonnet-4-6": SONNET_MODEL,
+    "claude-sonnet-4-5": SONNET_MODEL,
+    "claude-sonnet-4-0": SONNET_MODEL,
+    "claude-sonnet-4": SONNET_MODEL,
+    "claude-3-7-sonnet": SONNET_MODEL,
+    "claude-3-5-sonnet": SONNET_MODEL,
+    "claude-fable-5": FABLE_MODEL,
+    "claude-3-5-haiku": HAIKU_MODEL,
+    "claude-3-haiku": HAIKU_MODEL,
+}
+
+_DATE_SUFFIX = re.compile(r"-(?:\d{8}|latest)$")
+
+
+def current_model(model: str) -> str:
+    """Le modèle Claude ACTUEL pour un identifiant donné (successeur si remplacé).
+
+    Tolère les instantanés datés (« claude-sonnet-4-5-20250929 ») et les alias
+    « -latest ». Un modèle inconnu ou déjà actuel est rendu tel quel."""
+    raw = (model or "").strip()
+    low = raw.lower()
+    if not low.startswith("claude"):
+        return raw
+    if low in ANTHROPIC_SUCCESSORS:
+        return ANTHROPIC_SUCCESSORS[low]
+    base = _DATE_SUFFIX.sub("", low)
+    return ANTHROPIC_SUCCESSORS.get(base, raw)
+
+
+def is_superseded(model: str) -> bool:
+    return current_model(model) != (model or "").strip()
+
+
+_NAME_RE = re.compile(r"^claude-(opus|sonnet|haiku|fable|mythos)-(\d+)(?:-(\d{1,2}))?(?:-\d{8})?$")
+
+
+def anthropic_display_name(model: str) -> str:
+    """« claude-opus-5-5 » → « Claude Opus 5.5 » (repli lisible pour un modèle
+    que le registre ne nomme pas, ex. un modèle découvert)."""
+    m = _NAME_RE.match((model or "").strip().lower())
+    if not m:
+        return (model or "").strip() or "Claude"
+    family, major, minor = m.groups()
+    return f"Claude {family.capitalize()} {major}" + (f".{minor}" if minor else "")
+
 
 GROUPS = (
     ("anthropic", "Anthropic"),
@@ -37,10 +111,12 @@ TASKS: list[tuple[str, str]] = [
 # ``model`` est le modèle créatif. Le tier utilitaire peut être remplacé par
 # ``utility_model``. Les anciennes clés (claude, gpt…) restent valides.
 ENGINES: dict[str, dict] = {
-    "claude":       {"group": "anthropic", "provider": "anthropic", "model": "claude-sonnet-5",  "utility_model": "claude-haiku-4-5", "name": "Claude Sonnet 5"},
-    "opus":         {"group": "anthropic", "provider": "anthropic", "model": "claude-opus-4-8",  "utility_model": "claude-haiku-4-5", "name": "Claude Opus 4.8"},
-    "haiku":        {"group": "anthropic", "provider": "anthropic", "model": "claude-haiku-4-5", "utility_model": "claude-haiku-4-5", "name": "Claude Haiku 4.5"},
-    "fable5":       {"group": "anthropic", "provider": "anthropic", "model": "claude-fable-5",   "utility_model": "claude-fable-5",   "name": "Fable 5"},
+    # Les CLÉS (« claude », « opus », « fable5 »…) restent celles qu'enregistrent
+    # les configs et les choix par tâche ; seuls les modèles changent.
+    "claude":       {"group": "anthropic", "provider": "anthropic", "model": SONNET_MODEL, "utility_model": HAIKU_MODEL, "name": "Claude Sonnet 5.5"},
+    "opus":         {"group": "anthropic", "provider": "anthropic", "model": OPUS_MODEL,   "utility_model": HAIKU_MODEL, "name": "Claude Opus 5.5"},
+    "haiku":        {"group": "anthropic", "provider": "anthropic", "model": HAIKU_MODEL,  "utility_model": HAIKU_MODEL, "name": "Claude Haiku 4.5"},
+    "fable5":       {"group": "anthropic", "provider": "anthropic", "model": FABLE_MODEL,  "utility_model": FABLE_MODEL, "name": "Claude Fable 5.1"},
     "openai_sol":   {"group": "openai", "provider": "openai", "model": "gpt-5.6-sol",   "utility_model": "gpt-5.6-sol",   "name": "GPT-5.6 Sol"},
     "openai_terra": {"group": "openai", "provider": "openai", "model": "gpt-5.6-terra", "utility_model": "gpt-5.6-terra", "name": "GPT-5.6 Terra"},
     "openai_luna":  {"group": "openai", "provider": "openai", "model": "gpt-5.6-luna",  "utility_model": "gpt-5.6-luna",  "name": "GPT-5.6 Luna"},
@@ -70,7 +146,8 @@ ANTHROPIC_OPTIMIZED: dict[str, str] = {
     "screenplay": "claude",
     # Le Découpage est devenu le PIVOT créatif du pipeline (le storyboard en est
     # une conversion déterministe 1 plan = 1 fiche depuis 2026-07-22) → modèle de
-    # tête. Opus 4.8 et pas Fable 5 : décision Matthieu 2026-07-23 (crédits).
+    # tête. Opus et pas Fable : décision Matthieu 2026-07-23 (crédits) — Opus 5.5
+    # depuis le 03/10/2026, Fable 5.1 coûte toujours 2,5 × plus cher.
     "decoupage": "opus",
     "sync": "claude",
     "storyboard_chat": "claude",
@@ -153,6 +230,13 @@ def engine(key: str, cfg: dict | None = None) -> dict | None:
     if configured and key in ("gpt", "kimi", "glm", "ollama", "local", "custom"):
         item["model"] = str(configured).strip()
         item["utility_model"] = item["model"]
+    if provider == "anthropic":
+        # Un ancien modèle Claude enregistré (choix par tâche « anthropic:claude-
+        # opus-4-8 », moteur découvert…) passe à son successeur.
+        item["model"] = current_model(item.get("model", ""))
+        item["utility_model"] = current_model(item.get("utility_model", "")) or item["model"]
+        if ":" in (key or ""):
+            item["name"] = anthropic_display_name(item["model"])
     return item
 
 
@@ -165,7 +249,9 @@ def profile_from_config(cfg: dict) -> str:
     creative = (cfg.get("ai_model_creative") or "").strip()
     if provider in ("pandora", ""):
         return "anthropic_optimized"
-    if provider == "anthropic" and creative in ("", "claude-opus-4-8"):
+    # Le défaut historique (Opus 4.8) comme l'actuel (Opus 5.5) désignent le profil
+    # optimisé : current_model() ramène l'un à l'autre.
+    if provider == "anthropic" and current_model(creative) in ("", DEFAULT_CREATIVE_MODEL):
         return "anthropic_optimized"
     if provider == "custom":
         return "custom"
@@ -191,8 +277,11 @@ def _legacy_single_engine(cfg: dict) -> dict:
         model = (cfg.get("custom_model") or "").strip()
     else:
         provider = "anthropic"
-        model = model or "claude-opus-4-8"
-    return dynamic_engine(provider, model)
+        model = current_model(model or DEFAULT_CREATIVE_MODEL)
+    item = dynamic_engine(provider, model)
+    if provider == "anthropic":
+        item["name"] = anthropic_display_name(model)
+    return item
 
 
 def resolve_engine(cfg: dict, task: str | None = None) -> dict:
@@ -263,6 +352,10 @@ def primary_menu_items(discovered: dict[str, list[str]] | None = None) -> list[d
         for provider in providers:
             for model in discovered.get(provider, []) or []:
                 if model in seen:
+                    continue
+                # Un modèle Claude remplacé (Opus 4.8, Sonnet 5, Fable 5…) n'est
+                # plus proposé : le choisir donnerait de toute façon son successeur.
+                if provider == "anthropic" and is_superseded(model):
                     continue
                 seen.add(model)
                 rows.append({"label": model, "selectable": True, "profile": "single",
