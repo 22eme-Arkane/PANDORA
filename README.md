@@ -67,7 +67,10 @@ Claude model is current.**
   forbade it. The limit now follows the target engine everywhere — breakdown,
   co-writing, storyboard, Duration cell, shot window and Studio, from one
   table: 30 s for Seedance 2.5 and Wan 3.0, 20 s for Sora 2 and Flux 3, 15 s
-  for the others.
+  for the others. « Generate from Storyboard » now opens on the project's
+  target engine, rereads the shot's duration when you change engine (a 30 s
+  shot stayed at 15 s after switching from Seedance 2.0 to 2.5), and prices
+  the duration actually sent.
 - **Refusals say why.** A clip refused by ByteDance's filter now names the
   real reason: Seedance 2.5 had rejected a finished video for *possible
   copyright resemblance*, and PANDORA reported « violent or explicit content ».

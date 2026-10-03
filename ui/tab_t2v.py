@@ -3460,6 +3460,8 @@ class TabT2V(QScrollArea):
         lay.addStretch()
 
         self._refresh_style_badge()
+        # Moteur visé par le projet (tous les widgets existent désormais).
+        self._apply_target_engine()
 
     # ── Storyboard + context handlers ─────────────────────────────────────────
 
@@ -3836,6 +3838,8 @@ class TabT2V(QScrollArea):
         # À chaque retour sur l'onglet : si le style « Film réaliste » est actif, la
         # prise de vue réelle est cochée d'office (le style peut avoir changé ailleurs).
         self._sync_film_anchor_with_style()
+        # …et le moteur suit un moteur visé choisi entre-temps dans le Scénario.
+        self._apply_target_engine()
 
     def _decor_ref_mode(self) -> str:
         """Ce que le moteur doit faire de l'image du décor : « lieu » (défaut),
@@ -4630,13 +4634,30 @@ class TabT2V(QScrollArea):
         if not hasattr(self, "cb_dur"):
             return
         locked = not self.cb_dur.isEnabled()   # verrou « durée du storyboard »
+        # Multi-sélection : le repère « — s » reste en tête (chaque plan garde
+        # sa durée) — il disparaissait au changement de moteur.
+        multi = self.cb_dur.count() > 0 and self.cb_dur.itemText(0) == "— s"
+        # Verrou du storyboard : on RELIT la durée du plan. Repartir de la valeur
+        # affichée gardait 15 s pour un plan de 30 s sélectionné sous Seedance
+        # 2.0, même après le passage à la 2.5 (constat Matthieu 2026-10-03).
+        _shot = getattr(self, "_active_shot", None) or {}
+        if locked and not multi and _shot.get("duration"):
+            try:
+                cur = float(_shot["duration"])
+            except (TypeError, ValueError):
+                pass
         self.cb_dur.blockSignals(True)
         self.cb_dur.clear()
         self.cb_dur.addItems([f"{d} s" for d in opts])
         best = min(range(len(opts)), key=lambda i: abs(opts[i] - cur))
         self.cb_dur.setCurrentIndex(best)
+        if multi:
+            self.cb_dur.insertItem(0, "— s")
+            self.cb_dur.setCurrentIndex(0)
         self.cb_dur.blockSignals(False)
         self.cb_dur.setEnabled(not locked)
+        if locked and not multi and hasattr(self, "_dur_lock_lbl"):
+            self._dur_lock_lbl.setText(f"🔒 {opts[best]}s — depuis storyboard")
 
     def _on_engine_changed(self):
         key = self._get_model()
@@ -4690,6 +4711,34 @@ class TabT2V(QScrollArea):
         self.cb_res.setEnabled(not fixed_res)
         if hasattr(self, "_ref_compat_banner"):
             self._ref_compat_banner.setVisible(key in _TEXT_FALLBACK_ENGINES)
+        # « Éléments injectés » relit la durée et la résolution du NOUVEAU
+        # moteur : il ne se recalculait qu'au changement de grammaire (2.0 → 2.5,
+        # même grammaire : le panneau restait sur « Durée : 15s »).
+        self._refresh_prompt_preview()
+
+    def _apply_target_engine(self):
+        """Moteur de l'onglet = moteur VISÉ par le projet, celui pour lequel le
+        storyboard et ses prompts finaux ont été écrits.
+
+        Appliqué quand ce moteur visé CHANGE (ouverture du projet, nouveau choix
+        dans le Scénario) — jamais par-dessus un choix fait ici à la main pour
+        le même moteur visé. L'onglet démarrait toujours sur Seedance 2.0 : un
+        plan de 30 s écrit pour la 2.5 partait à 15 s (constat 2026-10-03)."""
+        try:
+            from core import target_engine as _te
+            if not _te.has_choice():
+                return
+            key = _te.get_target_engine()
+        except Exception:
+            return
+        if not key or key == getattr(self, "_target_applied", None):
+            return
+        idx = self.cb_model.findData(key)
+        if idx < 0:
+            return       # moteur visé absent du workflow storyboard
+        self._target_applied = key
+        if idx != self.cb_model.currentIndex():
+            self.cb_model.setCurrentIndex(idx)
 
     def _on_seed_toggle(self, checked: bool):
         if checked:
@@ -5008,6 +5057,14 @@ class TabT2V(QScrollArea):
             return
         try:
             from core import pricing
+            engine_key = self.cb_model.currentData() or self.cb_model.currentText()
+            # Durée FACTURÉE = celle que le moteur accepte : un plan de 30 s
+            # envoyé à Seedance 2.0 part à 15 s — l'estimation comptait 30 s.
+            try:
+                from core.target_engine import shot_duration_max
+                _cap = float(shot_duration_max(engine_key))
+            except Exception:
+                _cap = 0.0
             sel = []
             try:
                 sel = self._storyboard.get_selected_shots() or []
@@ -5018,7 +5075,8 @@ class TabT2V(QScrollArea):
                 total = 0.0
                 for s in sel:
                     try:
-                        total += float(s.get("duration") or 0) or 0.0
+                        _d = float(s.get("duration") or 0) or 0.0
+                        total += min(_d, _cap) if _cap else _d
                     except (TypeError, ValueError):
                         pass
                 if total <= 0:
@@ -5029,7 +5087,6 @@ class TabT2V(QScrollArea):
                     total = float(self._get_duration() or 5.0)
                 except Exception:
                     total = 5.0
-            engine_key = self.cb_model.currentData() or self.cb_model.currentText()
             engine_lbl = self.cb_model.currentText()
             res = self.cb_res.currentData() or self.cb_res.currentText()
             _txt = pricing.format_estimate(engine_lbl, engine_key, res, total, n)

@@ -8525,6 +8525,69 @@ def plans_longs_seedance_25_de_bout_en_bout_03_10_2026():
     assert "_sf.label(model)" in _rsrc
 
 
+@test
+def studio_suit_le_moteur_vise_et_la_duree_du_plan_03_10_2026():
+    """« Générer depuis Storyboard » : moteur visé présélectionné, et durée du
+    plan RELUE au changement de moteur (constat Matthieu, 03/10/2026).
+
+    Plan réglé à 30 s pour un projet visant Seedance 2.5 : l'onglet démarrait
+    sur Seedance 2.0 (« Durée : 15s (plan : 30.0s) »), et passer à la 2.5 ne
+    changeait rien — le combo repartait de la valeur affichée (15) au lieu du
+    plan, sous verrou. L'estimation, elle, comptait 30 s pour la 2.0."""
+    import os as _os, tempfile as _tf
+    import core.context as _ctx
+    import core.storyboard as _sb
+    from core import target_engine as _te
+    import ui.tab_t2v as M
+
+    _old_p, _old_i = _ctx.get_project_path(), _ctx.get_project_id()
+    _old_ns = _sb.get_namespace()
+    _tmp = _tf.mkdtemp(prefix="pandora_studio_dur_")
+    _os.makedirs(_os.path.join(_tmp, "data"), exist_ok=True)
+    try:
+        _ctx.set_project_path(_tmp)
+        _ctx.set_project_id("test_studio_dur")
+        _sb.set_namespace("storyboard")
+        _te.set_target_engine("seedance-2.5")
+
+        tab = M.TabT2V()
+        assert tab._get_model() == "seedance-2.5", \
+            "l'onglet doit démarrer sur le moteur visé par le projet"
+
+        # Le geste de Matthieu : Seedance 2.0, puis un plan de 30 s sélectionné…
+        tab.cb_model.setCurrentIndex(tab.cb_model.findData("seedance-2.0"))
+        shot = {"id": "p30", "number": 1, "duration": 30.0, "seedance_prompt": "x"}
+        tab._on_shot_selected(dict(shot))
+        assert tab._get_duration() == 15, "Seedance 2.0 plafonne à 15 s"
+        tab._storyboard.get_selected_shots = lambda: [dict(shot)]
+        tab._refresh_price_estimate()
+        assert "~15s" in tab._price_lbl.text(), \
+            f"l'estimation compte la durée du plan, pas celle envoyée : {tab._price_lbl.text()}"
+
+        # …puis passage à la 2.5 : le plan retrouve ses 30 s, toujours verrouillé.
+        tab.cb_model.setCurrentIndex(tab.cb_model.findData("seedance-2.5"))
+        assert tab._get_duration() == 30, "la durée du plan n'est pas relue (reste à 15 s)"
+        assert "30s" in tab._dur_lock_lbl.text() and not tab.cb_dur.isEnabled()
+        assert "~30s" in tab._price_lbl.text(), tab._price_lbl.text()
+        assert "Durée : 30s (plan : 30.0s)" in tab._build_full_preview_text(None), \
+            "« Éléments injectés » annonce encore 15 s"
+
+        # Un choix fait à la main n'est pas écrasé au retour sur l'onglet…
+        tab.cb_model.setCurrentIndex(tab.cb_model.findData("seedance-2.0"))
+        tab._apply_target_engine()
+        assert tab._get_model() == "seedance-2.0", "choix manuel écrasé"
+        # …mais un NOUVEAU moteur visé est suivi.
+        _te.set_target_engine("kling-o3-pro")
+        tab._apply_target_engine()
+        assert tab._get_model() == "kling-o3-pro", "nouveau moteur visé ignoré"
+        tab.deleteLater()
+    finally:
+        _te.clear()
+        _sb.set_namespace(_old_ns)
+        _ctx.set_project_path(_old_p or "")
+        _ctx.set_project_id(_old_i or "")
+
+
 #: Réponse RÉELLE de fal (compte de Matthieu, Seedance 2.5, 03/10/2026, après
 #: 11 min de calcul), entrée retirée.
 _REFUS_COPYRIGHT = (
