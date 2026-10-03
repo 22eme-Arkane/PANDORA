@@ -154,7 +154,11 @@ def edition_cinema_only():
     # état du Studio par projet, discussion copiable, sélection multi-moteurs
     # mémorisée, « Modifier des clips » (bon compte nommé, clip aux limites du
     # moteur, lip-sync au choix), installeur (logo, cases de la page de fin).
-    assert VERSION.split("-")[0] == "2.4.1", f"version attendue 2.4.1[-suffixe], lue {VERSION}"
+    # Build 2.4.2 (2026-10-03) : « Changer le décor · acteurs intacts » (détourage,
+    # décor sans personne, recomposition locale), file arrêtée au premier refus de
+    # filtre, modèles Claude à jour (Opus 5.5, Sonnet 5.5, Fable 5.1) et réglés
+    # par modèle, tarifs du texte IA corrigés.
+    assert VERSION.split("-")[0] == "2.4.2", f"version attendue 2.4.2[-suffixe], lue {VERSION}"
     # ── UN SEUL numéro de version dans tout le produit ────────────────────────
     # Chaque endroit qui recopie le numéro à la main finit par diverger : la 2.0.0
     # est partie en build avec une charte d'utilisation estampillée 1.3.5, un .app

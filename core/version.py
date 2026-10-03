@@ -1,3 +1,3 @@
-VERSION = "2.4.1"
+VERSION = "2.4.2"
 GITHUB_REPO = "22eme-Arkane/PANDORA"
 GITHUB_RELEASES_URL = f"https://api.github.com/repos/{GITHUB_REPO}/releases/latest"

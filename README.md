@@ -18,13 +18,49 @@
 
 ## Download
 
-**[⬇ Download PANDORA v2.4.1 for Windows](https://github.com/22eme-Arkane/PANDORA/releases/download/v2.4.1/PANDORA_Setup_2.4.1.exe)**
+**[⬇ Download PANDORA v2.4.2 for Windows](https://github.com/22eme-Arkane/PANDORA/releases/download/v2.4.2/PANDORA_Setup_2.4.2.exe)**
 
-**[⬇ Download PANDORA v2.4.1 for macOS](https://github.com/22eme-Arkane/PANDORA/releases/download/v2.4.1/PANDORA_2.4.1.dmg)** *(Apple Silicon — see [Installation](#installation) for the first launch)*
+**[⬇ Download PANDORA v2.4.2 for macOS](https://github.com/22eme-Arkane/PANDORA/releases/download/v2.4.2/PANDORA_2.4.2.dmg)** *(Apple Silicon — see [Installation](#installation) for the first launch)*
 
 All versions: [Releases](../../releases)
 
 🌐 **Official 22eme ARKANE website: [22eme-arkane.com](https://22eme-arkane.com)**
+
+---
+
+## What's new in v2.4.2
+
+**Change the set behind your actors without touching their faces — and every
+Claude model is current.**
+
+- **« Change the set · actors untouched » (Edit clips, both editions).**
+  Seedance declines most clips that show realistic faces: it is ByteDance's
+  filter (`partner_validation_failed`), the same at every distributor — fal.ai
+  is not the cause. This new engine sends your actors through no generative
+  model at all: VEED cuts them out, a set with nobody in it is created (an image
+  generated from your instruction, a Seedance 2.0 video, your reference image as
+  is, or your own image or video file), and PANDORA composites the actors back
+  onto it on your machine — faces, lips and sound identical to the source clip
+  (measured: no pixel difference on the actors). Options: matching the actors'
+  color to the set (local, free) and an experimental ID-V2V AI relighting. The
+  panel states the limits: cast shadows disappear, and the set does not follow
+  a camera move.
+- **The queue stops at the first content-filter refusal**, naming the engine and
+  the real reason, instead of paying for the same refusal on every following
+  clip; choosing Seedance in « Edit clips » shows the faces warning up front.
+- **Claude models updated: Opus 5.5, Sonnet 5.5 and Fable 5.1** (Haiku 4.5 stays
+  the newest Haiku), in both editions. The new models refuse the « thinking
+  disabled » setting PANDORA sent to every Claude model, so every text call
+  would have failed: thinking, effort and output room are now set per model —
+  Opus 5.5 at its lowest effort with room for its thinking, Sonnet 5.5 without
+  extended thinking as before. Saved choices that name an older model move to
+  its successor, and replaced models are no longer listed. When an Anthropic
+  safety filter declines a request, PANDORA says which model declined and why
+  instead of returning an empty text, and Anthropic retries some categories on
+  another model. Checked with one real minimal call per model.
+- **Project cost: text AI priced right.** The journal counted Opus 4.8 three
+  times too high and Sonnet 5 one and a half times; it now follows Anthropic's
+  current price list (Opus 5.5 is also cheaper than Opus 4.8).
 
 ---
 
@@ -587,7 +623,7 @@ per-engine mood prompts, same fixes.
 
 ### Windows
 
-1. Download `PANDORA_Setup_2.4.1.exe` from the link above and run it
+1. Download `PANDORA_Setup_2.4.2.exe` from the link above and run it
 2. If Windows shows *"Windows protected your PC"* (SmartScreen), click
    **More info** then **Run anyway** — the app is not code-signed yet
    (certificate in progress), this is the Windows equivalent of the macOS
@@ -598,7 +634,7 @@ per-engine mood prompts, same fixes.
 
 ### macOS
 
-1. Download `PANDORA_2.4.1.dmg` from the link above
+1. Download `PANDORA_2.4.2.dmg` from the link above
 2. Open the DMG and drag **PANDORA** into **Applications** (as usual)
 3. **First launch** — macOS will claim that *"PANDORA is damaged and can't be
    opened"*. **This is normal, the app is not damaged** — macOS blocks apps
