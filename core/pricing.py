@@ -176,13 +176,31 @@ def price_per_second(engine: str, resolution: str) -> float | None:
     return rates.get(res) or rates.get(res.lower()) or next(iter(rates.values()))
 
 
+def fal_estimate(engine: str, resolution: str, total_seconds: float,
+                 n_clips: int = 1) -> tuple[float, str]:
+    """Coût INDICATIF chez fal.ai seul (grille ci-dessus), quel que soit le
+    distributeur choisi. Même retour que estimate()."""
+    engine = canonical_engine(engine)
+    n_clips = max(1, int(n_clips or 1))
+    total_seconds = max(0.0, float(total_seconds or 0.0))
+    if engine in _PER_VIDEO:
+        return _PER_VIDEO[engine] * n_clips, "clip"
+    rates = _PER_SECOND.get(engine)
+    if rates:
+        res = (resolution or "").strip()
+        rate = rates.get(res) or rates.get(res.lower()) or next(iter(rates.values()))
+        return rate * total_seconds, "s"
+    return _DEFAULT_PER_S * total_seconds, "approx"
+
+
 def estimate(engine: str, resolution: str, total_seconds: float,
-             n_clips: int = 1) -> tuple[float, str]:
+             n_clips: int = 1, provider: str | None = None) -> tuple[float, str]:
     """Coût INDICATIF total (USD) + mode de facturation.
 
-    Tient compte du DISTRIBUTEUR choisi (Paramètres avancés) : si un
-    distributeur alternatif (PiAPI…) couvre le moteur, c'est SA grille
-    qui est utilisée — sinon la grille fal.ai ci-dessus.
+    Tient compte du DISTRIBUTEUR : `provider` quand on le connaît (le plan a
+    déjà été servi — journal de coût), sinon le distributeur EFFECTIF pour ce
+    moteur et cette résolution. S'il a une grille pour la demande, c'est la
+    sienne ; sinon la grille fal.ai ci-dessus.
 
     Retour : (coût_usd, mode) avec mode ∈ {"s", "clip", "approx"}.
       - "s"      : facturé à la seconde (prix connu) ;
@@ -194,32 +212,28 @@ def estimate(engine: str, resolution: str, total_seconds: float,
     # canonisée ICI, pas seulement dans price_per_second — sinon Hailuo (au
     # clip), ComfyUI et H3 local (0 $) tombaient tous à 0,30 $/s.
     engine = canonical_engine(engine)
-    n_clips = max(1, int(n_clips or 1))
     total_seconds = max(0.0, float(total_seconds or 0.0))
-    if engine in _PER_VIDEO:
-        return _PER_VIDEO[engine] * n_clips, "clip"
-    # Grille du distributeur actif (import paresseux — pas de cycle au chargement)
-    try:
-        from core import media_provider as _mp
-        if _mp.active_video_provider(engine) != "fal":
-            _rate, _pid = _mp.price_per_second(engine, resolution)
-            if _pid != "fal" and _rate is not None:
-                return _rate * total_seconds, "s"
-    except Exception:
-        pass
-    rates = _PER_SECOND.get(engine)
-    if rates:
-        res = (resolution or "").strip()
-        rate = rates.get(res) or rates.get(res.lower()) or next(iter(rates.values()))
-        return rate * total_seconds, "s"
-    return _DEFAULT_PER_S * total_seconds, "approx"
+    if engine not in _PER_VIDEO:
+        # Grille du distributeur (import paresseux — pas de cycle au chargement).
+        # La RÉSOLUTION compte : un distributeur peut couvrir le 720p et pas le
+        # 1080p, auquel cas c'est fal qui sert le plan.
+        try:
+            from core import media_provider as _mp
+            _pid = provider or _mp.active_video_provider(engine, resolution=resolution)
+            if _pid and _pid != "fal":
+                _rate, _served = _mp.price_per_second(engine, resolution, provider=_pid)
+                if _served != "fal" and _rate is not None:
+                    return _rate * total_seconds, "s"
+        except Exception:
+            pass
+    return fal_estimate(engine, resolution, total_seconds, n_clips)
 
 
-def _active_site(engine: str) -> str:
+def _active_site(engine: str, resolution: str = "") -> str:
     """Nom du site du distributeur EFFECTIF pour ce moteur (mention du rappel)."""
     try:
         from core import media_provider as _mp
-        return _mp.provider_site(_mp.active_video_provider(engine))
+        return _mp.provider_site(_mp.active_video_provider(engine, resolution=resolution))
     except Exception:
         return "fal.ai"
 
@@ -233,7 +247,7 @@ def format_estimate(engine_label: str, engine_key: str, resolution: str,
     plan_word = "plan" if n_clips <= 1 else "plans"
     eng = (engine_label or engine_key or "moteur").strip()
     res = (resolution or "").strip()
-    site = _active_site(engine_key)
+    site = _active_site(engine_key, res)
     head = f"💰  ≈ ${cost:.2f}  ·  {n_clips} {plan_word}"
     if mode != "clip":
         head += f" (~{total_seconds:.0f}s)"

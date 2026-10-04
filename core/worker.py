@@ -58,7 +58,14 @@ _CREDIT_KEYWORDS = (
     "insufficient credit", "insufficient funds", "top up your", "topup",
     "payment required", "402", "purchase credits", "billing_hard_limit",
     "insufficient_quota", "exceeded your current quota", "not enough credit",
+    # Distributeurs vidéo alternatifs (04/10/2026) : BytePlus suspend un
+    # compte en impayé (« AccountOverdueError »), Runware nomme le manque de
+    # crédit en un mot.
+    "accountoverdue", "account overdue", "insufficientcredits",
 )
+#: Distributeurs vidéo autres que fal : une erreur de crédit qui les nomme
+#: ne doit pas renvoyer l'utilisateur vers fal.ai.
+_ALT_DISTRIBUTORS = (("byteplus", "BytePlus"), ("runware", "Runware"), ("piapi", "PiAPI"))
 # Ce qui signe une erreur du fournisseur IA TEXTE (traduction, analyse
 # d'image, composition) et non de fal.ai.
 _TEXT_AI_MARKERS = (
@@ -98,6 +105,10 @@ _CONTENT_POLICY_MARKERS = (
     "content_policy_violation", "content policy", "partner_validation_failed",
     "likenesses of real people", "privacyinformation", "sensitivecontentdetected",
     "may contain real person",
+    # BytePlus (codes « InputImageSensitiveContentDetected.PrivacyInformation »,
+    # « OutputVideoSensitiveContentDetected.PolicyViolation ») est couvert par
+    # « sensitivecontentdetected » ; les revendeurs parlent de modération.
+    "content moderation", "contentmoderation", "policyviolation",
 )
 # « partner_validation_failed » n'en fait PLUS partie : c'est la raison
 # générique du contrôle ByteDance, qui porte aussi les refus pour droits
@@ -135,7 +146,8 @@ def content_policy_cause(err: str) -> str:
 def refused_after_generation(err: str) -> bool:
     """Le filtre a jugé la vidéo PRODUITE (le calcul a eu lieu), pas l'entrée."""
     low = (err or "").lower()
-    return "generated_video" in low or "generated output" in low
+    return ("generated_video" in low or "generated output" in low
+            or "outputvideosensitivecontentdetected" in low)
 
 
 def content_policy_message(err: str, engine_label: str = "") -> str:
@@ -177,6 +189,16 @@ def humanize_api_error(err: str) -> str:
                 "Rechargez ce compte (console.anthropic.com → Plans & Billing) ou "
                 "changez de fournisseur dans Paramètres → Assistant IA."
             )
+        low = (err or "").lower()
+        if "relais fal" not in low:
+            for _key, _name in _ALT_DISTRIBUTORS:
+                if _key in low:
+                    return (
+                        f"Crédits {_name} insuffisants — la génération n'a pas pu "
+                        f"démarrer. Rechargez votre compte {_name}, ou choisissez un "
+                        f"autre distributeur dans le Studio.\n"
+                        f"({fal_error_detail(err)})"
+                    )
         return (
             "Crédits fal.ai insuffisants — la génération n'a pas pu démarrer.\n"
             "Rechargez votre compte sur fal.ai/dashboard pour continuer.\n"
@@ -199,10 +221,12 @@ class GenerationWorker(QThread):
         self._cancelled = True
 
     def run(self):
-        # Bascule automatiquement sur la vraie API si une clé est configurée
+        # Bascule automatiquement sur la vraie API si une clé est configurée —
+        # celle de fal OU celle du distributeur qui servira ce moteur (avant le
+        # 04/10/2026, une clé BytePlus seule laissait PANDORA en simulation).
         try:
-            from core.config import load_config
-            has_key = bool(load_config().get("api_key", "").strip())
+            from core.media_provider import real_generation_possible
+            has_key = real_generation_possible(self.params.get("model", "seedance-2.0"))
         except Exception as e:
             self.failed.emit(f"Impossible de charger la configuration : {e}")
             return

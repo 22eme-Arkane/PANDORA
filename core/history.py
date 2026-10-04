@@ -49,7 +49,10 @@ def _note_spend(entry: dict):
                 and _explicit >= 0:
             _cost = float(_explicit)
         else:
-            _cost, _mode = pricing.estimate(_model, _res, _dur, 1)
+            # Le distributeur qui a RÉELLEMENT servi le plan (run_real l'écrit
+            # dans le résultat) — pas celui choisi au moment du journal.
+            _cost, _mode = pricing.estimate(_model, _res, _dur, 1,
+                                            provider=(entry.get("provider") or None))
         _bits = [b for b in (_res, f"{_dur:g}s" if _dur else "") if b]
         spend.record(
             spend.KIND_VIDEO, _model or "moteur vidéo",

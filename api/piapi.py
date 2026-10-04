@@ -1,38 +1,56 @@
 """
-api/piapi.py — Génération Seedance 2 via PiAPI (distributeur low cost).
+api/piapi.py — Génération Seedance via PiAPI (distributeur low cost).
 
-Doc vérifiée le 2026-07-16 : https://piapi.ai/docs/seedance-api/seedance-2
-  POST https://api.piapi.ai/api/v1/task            (header X-API-Key)
-  GET  https://api.piapi.ai/api/v1/task/{task_id}  (polling)
-  body : {"model": "seedance", "task_type": "seedance-2[-fast]",
-          "input": {prompt, mode, duration, aspect_ratio, resolution,
-                    image_urls, video_urls, audio_urls, audio}}
+Docs relues le 04/10/2026 :
+  https://piapi.ai/docs/seedance-api/seedance-2   (2.0, fast, mini)
+  https://piapi.ai/docs/seedance-api/seedance-25  (2.5)
+  POST https://api.piapi.ai/api/v1/task            (en-tête X-API-Key)
+  GET  https://api.piapi.ai/api/v1/task/{task_id}  (suivi)
+  corps : {"model": "seedance", "task_type": …, "input": {…}}
   statuts : Pending → Staged → Processing → Completed | Failed
   sortie  : data.output.video (URL mp4)
 
-Mapping des modes PANDORA → PiAPI :
-  t2v → text_to_video · i2v → first_last_frames (keyframes début[/fin])
-  ref/ext → omni_reference (images/vidéo/audio de référence)
+Seedance 2.0 / fast (task_type « seedance-2 », « seedance-2-fast ») :
+  input = prompt, mode (text_to_video | first_last_frames | omni_reference),
+  duration 4–15, aspect_ratio, resolution, image_urls (≤ 9), video_urls (≤ 3),
+  audio_urls (≤ 3), audio (booléen).
+Seedance 2.5 (task_type « seedance-2.5 ») — schéma DIFFÉRENT :
+  PAS de champ « mode » ni d'interrupteur du son ; duration 4–30 ;
+  image_urls ≤ 30, video_urls ≤ 10, audio_urls ≤ 10 ;
+  omni_reference_task_type (auto | reference | edit | extend), aspect_ratio
+  « adaptive » obligatoire en modification / prolongation. Sans champ de
+  première / dernière image, l'image→vidéo n'existe pas en 2.5 chez PiAPI
+  (core/media_provider ne le couvre donc pas).
 
-⚠ Les fichiers locaux sont uploadés par l'appelant (CDN fal.ai) AVANT cet
-appel — ce module ne reçoit que des URLs publiques, jamais de chemins.
-Grille (indicative) : seedance-2 0.10/0.20/0.50 $/s (480/720/1080p) ;
-fast 0.08/0.16 $/s (480/720p) — voir core/media_provider.
+Les images sont désignées dans le prompt par « @image1, @image2… » (minuscules
+dans la doc PiAPI) : les jetons « @Image1 » écrits pour fal sont convertis.
+
+⚠ PiAPI n'accepte QUE des URL publiques : les fichiers locaux sont déposés par
+api/distrib_upload (dépôt éphémère PiAPI, sinon relais fal) AVANT cet appel.
+Grille (04/10/2026) : 2.0 0,10 / 0,20 / 0,50 $/s (480 / 720 / 1080p) ;
+fast 0,048 / 0,096 ; 2.5 0,15 / 0,35 / 0,80 — voir core/media_provider.
 """
 
-import time
+import re
 
 import requests
 
+from api.distrib_common import poll_until
+
 _BASE = "https://api.piapi.ai/api/v1/task"
-_POLL_EVERY_S = 6          # PiAPI recommande un polling doux
-_TIMEOUT_S    = 60 * 12    # une génération Seedance ne dépasse pas ~10 min
+_POLL_EVERY_S = 6          # PiAPI recommande un suivi doux
 
 _MODE_MAP = {
     "t2v": "text_to_video",
     "i2v": "first_last_frames",
     "ref": "omni_reference",
     "ext": "omni_reference",
+}
+
+_TASK_TYPES = {
+    "seedance-2.0":      "seedance-2",
+    "seedance-2.0-fast": "seedance-2-fast",
+    "seedance-2.5":      "seedance-2.5",
 }
 
 
@@ -54,50 +72,62 @@ def test_key(api_key: str) -> tuple[bool, str]:
         return False, f"PiAPI injoignable : {e}"
 
 
-def build_input(mode: str, args: dict) -> dict:
+def piapi_prompt(prompt: str) -> str:
+    """« @Image1 » (convention fal) → « @image1 » (convention PiAPI)."""
+    return re.sub(r"@Image(\d+)", r"@image\1", prompt or "")
+
+
+def build_input(mode: str, args: dict, model: str = "seedance-2.0") -> dict:
     """Traduit les `args` préparés par api/real.py (format fal) vers le
     champ `input` PiAPI. Ne lève jamais : les champs absents sont ignorés."""
+    is_25 = (model == "seedance-2.5")
     inp: dict = {
-        "prompt":       args.get("prompt", ""),
-        "mode":         _MODE_MAP.get(mode, "text_to_video"),
+        "prompt":       piapi_prompt(args.get("prompt", "")),
         "resolution":   args.get("resolution", "720p"),
         "aspect_ratio": args.get("aspect_ratio", "16:9"),
-        "audio":        bool(args.get("generate_audio", True)),
     }
+    if not is_25:
+        inp["mode"] = _MODE_MAP.get(mode, "text_to_video")
+        inp["audio"] = bool(args.get("generate_audio", True))
     try:
-        inp["duration"] = max(4, min(15, int(args.get("duration", 10))))
+        inp["duration"] = max(4, min(30 if is_25 else 15, int(args.get("duration", 10))))
     except (TypeError, ValueError):
         inp["duration"] = 10
 
-    if mode == "i2v":
+    max_img, max_vid, max_aud = (30, 10, 10) if is_25 else (9, 3, 3)
+    if mode == "i2v" and not is_25:
         # first_last_frames : [départ] ou [départ, fin]
         urls = [u for u in (args.get("image_url"), args.get("end_image_url")) if u]
         if urls:
             inp["image_urls"] = urls
     else:
         if args.get("image_urls"):
-            inp["image_urls"] = list(args["image_urls"])[:9]
+            inp["image_urls"] = list(args["image_urls"])[:max_img]
         if args.get("video_urls"):
-            inp["video_urls"] = list(args["video_urls"])
+            inp["video_urls"] = list(args["video_urls"])[:max_vid]
         if args.get("audio_urls"):
-            inp["audio_urls"] = list(args["audio_urls"])
+            inp["audio_urls"] = list(args["audio_urls"])[:max_aud]
+    if is_25 and mode == "ext":
+        editing = (args.get("task") == "editing")
+        inp["omni_reference_task_type"] = "edit" if editing else "extend"
+        inp["aspect_ratio"] = "adaptive"
+        if editing:
+            inp["duration"] = -1     # la modification garde la durée du clip source
     return inp
 
 
-def run_piapi(mode: str, fast: bool, args: dict, api_key: str,
-              emit_progress, is_cancelled) -> dict:
-    """Crée la tâche Seedance 2 chez PiAPI puis attend le résultat.
+def run(mode: str, model: str, args: dict, api_key: str,
+        emit_progress, is_cancelled) -> dict:
+    """Crée la tâche Seedance chez PiAPI puis attend le résultat.
 
     Retourne un dict au MÊME format que le résultat fal de run_real :
     {"request_id": …, "video": {"url": …}, "seed": 0}. Lève RuntimeError
     avec un message humain en cas d'échec (affiché via humanize_api_error)."""
-    payload = {
-        "model":     "seedance",
-        "task_type": "seedance-2-fast" if fast else "seedance-2",
-        "input":     build_input(mode, args),
-    }
+    task_type = _TASK_TYPES.get(model, "seedance-2")
+    payload = {"model": "seedance", "task_type": task_type,
+               "input": build_input(mode, args, model)}
 
-    emit_progress(14, "Envoi à PiAPI (Seedance 2)…")
+    emit_progress(14, f"Envoi à PiAPI ({task_type})…")
     try:
         r = requests.post(_BASE, headers=_headers(api_key), json=payload,
                           timeout=45)
@@ -120,38 +150,40 @@ def run_piapi(mode: str, fast: bool, args: dict, api_key: str,
         raise RuntimeError(f"PiAPI a refusé la tâche ({r.status_code}) : "
                            f"{_msg or r.text[:200]}")
 
-    # ── Polling ───────────────────────────────────────────────────────────────
-    started = time.monotonic()
-    pct = 16
-    while True:
-        if is_cancelled():
-            return {}
-        if time.monotonic() - started > _TIMEOUT_S:
-            raise RuntimeError("PiAPI : délai dépassé (12 min) — la tâche "
-                               f"{task_id} n'a pas abouti.")
-        time.sleep(_POLL_EVERY_S)
-        try:
-            rr = requests.get(f"{_BASE}/{task_id}", headers=_headers(api_key),
-                              timeout=30)
-            d = (rr.json().get("data") or {}) if rr.ok else {}
-        except (requests.RequestException, ValueError):
-            continue  # erreur réseau passagère → on repollera
+    _labels = {"pending": "En file d'attente PiAPI…",
+               "staged": "Préparation PiAPI…",
+               "processing": "Génération en cours (PiAPI)…"}
+
+    def _check():
+        rr = requests.get(f"{_BASE}/{task_id}", headers=_headers(api_key), timeout=30)
+        if not rr.ok:
+            return "wait", "PiAPI répond lentement…"
+        d = rr.json().get("data") or {}
         status = (d.get("status") or "").lower()
         if status == "completed":
             video_url = (d.get("output") or {}).get("video", "")
             if not video_url:
-                raise RuntimeError("PiAPI : tâche terminée mais sans vidéo "
-                                   "dans la réponse.")
-            return {"request_id": task_id, "video": {"url": video_url},
-                    "seed": 0}
+                return "fail", "PiAPI : tâche terminée mais sans vidéo dans la réponse."
+            return "done", video_url
         if status == "failed":
-            _err = ((d.get("error") or {}).get("message")
-                    if isinstance(d.get("error"), dict) else d.get("error"))
-            raise RuntimeError(f"PiAPI : génération échouée — "
-                               f"{_err or 'raison non précisée'}")
-        pct = min(pct + 3, 88)
-        _lbl = {"pending": "En file d'attente PiAPI…",
-                "staged": "Préparation PiAPI…",
-                "processing": "Génération en cours (PiAPI)…"}.get(
-                    status, "Génération en cours (PiAPI)…")
-        emit_progress(pct, _lbl)
+            _err = d.get("error")
+            if isinstance(_err, dict):
+                _err = " — ".join(x for x in (str(_err.get("code") or ""),
+                                              str(_err.get("message") or ""),
+                                              str(_err.get("raw_message") or "")) if x)
+            return "fail", f"PiAPI : génération échouée — {_err or 'raison non précisée'}"
+        return "wait", _labels.get(status, "Génération en cours (PiAPI)…")
+
+    video_url = poll_until(_check, emit_progress, is_cancelled, "PiAPI",
+                           every_s=_POLL_EVERY_S)
+    if video_url is None:
+        return {}
+    return {"request_id": task_id, "video": {"url": video_url}, "seed": 0}
+
+
+def run_piapi(mode: str, fast: bool, args: dict, api_key: str,
+              emit_progress, is_cancelled) -> dict:
+    """Ancien point d'entrée (Seedance 2.0 / fast), conservé pour les appelants
+    existants : délègue à run()."""
+    return run(mode, "seedance-2.0-fast" if fast else "seedance-2.0", args, api_key,
+               emit_progress, is_cancelled)

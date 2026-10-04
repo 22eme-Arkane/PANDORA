@@ -213,10 +213,6 @@ def run_real(params: dict, emit_progress, is_cancelled) -> dict:
     from core import seedance_family as _sf
     endpoints = _sf.endpoints(model)
     endpoint = endpoints.get(mode, endpoints["t2v"])
-    # Conservé pour le routage PiAPI plus bas (run_piapi) : ce distributeur ne
-    # couvre que la 2.0 standard et fast — la 2.5 repli donc toujours sur fal
-    # (core/media_provider._COVERAGE ne la liste pas).
-    fast = "fast" in model.lower()
 
     # Auto-switch to ref endpoint when reference images are provided for t2v
     _raw_ref_images = params.get("ref_images", [])
@@ -472,6 +468,45 @@ def run_real(params: dict, emit_progress, is_cancelled) -> dict:
     if _res_clean != _res_asked:
         emit_progress(3, f"{_res_asked} indisponible sur ce moteur → {_res_clean}")
 
+    # ── Distributeur (Studio / Paramètres → avancés) ──────────────────────────
+    # Choisi AVANT les envois de fichiers : depuis le 04/10/2026 ils partent
+    # par le canal du distributeur (api/distrib_upload), plus par le stockage
+    # fal — compte fal bloqué faute de solde, le mood n'atteignait jamais PiAPI
+    # et le plan était facturé sans lui (constat Matthieu). Mode MONO : pas de
+    # repli — demande non couverte ou clé absente = erreur claire AVANT tout
+    # envoi, jamais de bascule fal non voulue.
+    from core import media_provider as _mp
+    _audio_on = bool(params.get("audio", True))
+    _blocked = _mp.mono_blocked_engine(model, mode, _res_clean, _audio_on)
+    if _blocked:
+        raise RuntimeError(_blocked)
+    _provider = _mp.active_video_provider(model, mode, _res_clean, _audio_on)
+    _alt_upload_errors: list[str] = []
+    if _provider == "fal":
+        def _upload(path: str) -> str:
+            return _fal_upload(fal_client, path)
+    else:
+        from api.distrib_upload import Uploader as _Uploader
+        _uploader = _Uploader(
+            _provider, _mp.provider_key(_provider),
+            fal_relay=(lambda p: _fal_upload(fal_client, p)) if api_key else None)
+
+        def _upload(path: str) -> str:
+            # Un échec est NOTÉ puis relevé : les branches de repli ci-dessous
+            # (mode texte seul, génération sans la vidéo…) continuent comme
+            # avant, mais l'appel au distributeur est annulé plus bas — rien
+            # ne part, rien n'est facturé.
+            try:
+                return _uploader.send(path)
+            except Exception as _ue:
+                _alt_upload_errors.append(str(_ue))
+                raise
+    # Plafond d'images de RÉFÉRENCE réellement envoyées (moteur ∩ distributeur).
+    _ref_cap = _max_refs
+    _prov_cap = _mp.max_ref_images(_provider, model)
+    if _prov_cap is not None:
+        _ref_cap = min(_ref_cap, _prov_cap)
+
     args = {
         "prompt":           _prompt_en,
         "resolution":       _res_clean,
@@ -484,14 +519,14 @@ def run_real(params: dict, emit_progress, is_cancelled) -> dict:
         args["seed"] = params["seed"]
 
     # ── Upload fichiers locaux → CDN fal.ai ───────────────────────────────────
-    emit_progress(5, "Upload des fichiers vers fal.ai…")
+    emit_progress(5, f"Envoi des fichiers ({_mp.provider_short(_provider)})…")
 
     if mode == "i2v":
         path = params.get("image_path", "")
         if path and os.path.isfile(path):
             try:
                 emit_progress(8, f"Upload image : {os.path.basename(path)}…")
-                args["image_url"] = _fal_upload(fal_client,path)
+                args["image_url"] = _upload(path)
             except Exception as _e:
                 _e_str = str(_e)
                 if "gcs" in _e_str.lower() or "storage target" in _e_str.lower():
@@ -514,7 +549,7 @@ def run_real(params: dict, emit_progress, is_cancelled) -> dict:
             end_path = params.get("end_image_path", "")
             if end_path and os.path.isfile(end_path):
                 try:
-                    args["end_image_url"] = _fal_upload(fal_client,end_path)
+                    args["end_image_url"] = _upload(end_path)
                 except Exception:
                     pass
             # Images de RÉFÉRENCE (inspiration) ajoutées au plan : en i2v, les images de
@@ -562,7 +597,7 @@ def run_real(params: dict, emit_progress, is_cancelled) -> dict:
             nonlocal _gcs_error_detail
             try:
                 emit_progress(progress_n, f"Upload {role} : {os.path.basename(path)}…")
-                uploaded_urls.append(_fal_upload(fal_client, path))
+                uploaded_urls.append(_upload(path))
                 uploaded_roles.append(role)
             except Exception as _ue:
                 _ue_str = str(_ue)
@@ -578,7 +613,7 @@ def run_real(params: dict, emit_progress, is_cancelled) -> dict:
                     _gcs_error_detail = _gcs_error_detail or _ue_str
 
         for _pp, _pr in _upload_queue:
-            if len(uploaded_urls) >= 9:
+            if len(uploaded_urls) >= _ref_cap:
                 break
             _try_upload(_pp, _pr, 7 + len(uploaded_urls))
 
@@ -684,13 +719,13 @@ def run_real(params: dict, emit_progress, is_cancelled) -> dict:
             if video_path and os.path.isfile(video_path):
                 try:
                     emit_progress(12, f"Upload vidéo : {os.path.basename(video_path)}…")
-                    args["video_urls"] = [_fal_upload(fal_client, video_path)]
+                    args["video_urls"] = [_upload(video_path)]
                 except Exception:
                     pass
             if audio_path and os.path.isfile(audio_path):
                 try:
                     emit_progress(14, f"Upload audio : {os.path.basename(audio_path)}…")
-                    args["audio_urls"] = [_fal_upload(fal_client, audio_path)]
+                    args["audio_urls"] = [_upload(audio_path)]
                 except Exception:
                     pass
 
@@ -717,7 +752,7 @@ def run_real(params: dict, emit_progress, is_cancelled) -> dict:
             if video_path and os.path.isfile(video_path):
                 try:
                     emit_progress(8, f"Upload clip référence : {os.path.basename(video_path)}…")
-                    args["video_urls"] = [_fal_upload(fal_client, video_path)]
+                    args["video_urls"] = [_upload(video_path)]
                     _video_upload_ok = True
                 except Exception as _vu:
                     _vu_str = str(_vu)
@@ -740,7 +775,7 @@ def run_real(params: dict, emit_progress, is_cancelled) -> dict:
             if video_path and os.path.isfile(video_path):
                 try:
                     emit_progress(8, f"Upload clip : {os.path.basename(video_path)}…")
-                    args["video_urls"] = [_fal_upload(fal_client, video_path)]
+                    args["video_urls"] = [_upload(video_path)]
                     _video_upload_ok = True
                 except Exception as _vu:
                     _vu_str = str(_vu)
@@ -767,28 +802,38 @@ def run_real(params: dict, emit_progress, is_cancelled) -> dict:
             for i, p in enumerate(ext_refs):
                 try:
                     emit_progress(9 + i, f"Upload image de référence {i + 1}/{len(ext_refs)}…")
-                    uploaded_refs.append(_fal_upload(fal_client, p))
+                    uploaded_refs.append(_upload(p))
                 except Exception:
                     pass
             if uploaded_refs:
                 args["image_urls"] = uploaded_refs
 
-    # ── Distributeur (Paramètres → avancés) ───────────────────────────────────
-    # fal.ai = socle ; si un distributeur alternatif couvert est choisi (PiAPI),
-    # seul l'APPEL FINAL change — toute la préparation ci-dessus (traduction,
-    # analyses vision, suffixes, uploads CDN fal → URLs publiques) est commune.
-    # Mode MONO-distributeur : pas de repli — moteur non couvert ou clé absente
-    # = erreur claire AVANT l'appel (jamais de bascule fal non voulue).
-    from core.media_provider import (active_video_provider, mono_blocked_engine,
-                                     provider_key as _pkey)
-    _blocked = mono_blocked_engine(model)
-    if _blocked:
-        raise RuntimeError(_blocked)
-    _provider = active_video_provider(model)
-    if _provider == "piapi":
-        from api.piapi import run_piapi
-        result = run_piapi(mode, fast, args, _pkey("piapi"),
-                           emit_progress, is_cancelled)
+    # ── Distributeur alternatif (BytePlus, Runware, PiAPI) ────────────────────
+    # Choisi plus haut, AVANT les envois. Seul l'APPEL FINAL change : toute la
+    # préparation ci-dessus (traduction, analyses vision, suffixes) est commune.
+    if _provider != "fal":
+        if _alt_upload_errors:
+            # Un fichier demandé n'a pu partir par AUCUN canal : on n'appelle
+            # pas le distributeur. Avant le 04/10/2026, le plan partait quand
+            # même — sans le mood — et était facturé.
+            _hint = ""
+            if _provider == "piapi":
+                _hint = (" BytePlus et Runware reçoivent les images directement dans la "
+                         "requête : choisis l'un d'eux comme distributeur, ou recharge "
+                         "fal.ai pour qu'il serve de relais.")
+            raise RuntimeError(f"{_alt_upload_errors[0]} Rien n'a été généré ni "
+                               f"facturé.{_hint}")
+        from api.distributors import runner as _runner
+        try:
+            result = _runner(_provider)(mode, model, args, _mp.provider_key(_provider),
+                                        emit_progress, is_cancelled)
+        except RuntimeError as e:
+            err = str(e)
+            from core.worker import is_content_policy_error, content_policy_message
+            if is_content_policy_error(err):
+                raise RuntimeError(content_policy_message(
+                    err, f"{_sf.label(model)} ({_mp.provider_short(_provider)})"))
+            raise
         if is_cancelled() or not result:
             return {}
         emit_progress(98, "Finalisation…")
@@ -800,7 +845,10 @@ def run_real(params: dict, emit_progress, is_cancelled) -> dict:
             "model":                 model,
             "prompt":                params.get("prompt", ""),
             "mode":                  mode,
-            "provider":              "piapi",
+            "provider":              _provider,
+            # Coût RÉEL renvoyé par le distributeur quand il le donne (BytePlus :
+            # jetons facturés ; Runware : includeCost) — sinon la grille.
+            "cost_usd":              result.get("cost_usd"),
             "generated_at":          datetime.now().isoformat(),
             "credits_used":          0,
             "seed":                  result.get("seed", 0),

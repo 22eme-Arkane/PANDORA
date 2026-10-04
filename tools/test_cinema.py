@@ -5908,9 +5908,12 @@ def distributeur_video_piapi():
                                     "duration": 8})
     assert inp["mode"] == "omni_reference" and inp["image_urls"] == ["a"]
     # Routage dans run_real : préparation commune, bascule sur l'appel final
+    # (depuis le 04/10/2026 : un seul point d'entrée api.distributors.runner pour
+    # BytePlus / Runware / PiAPI — le comportement est testé dans
+    # distributeurs_low_cost_et_envoi_sans_fal_04_10_2026).
     import api.real as real
     _src = inspect.getsource(real.run_real)
-    assert "active_video_provider" in _src and "run_piapi" in _src
+    assert "active_video_provider" in _src and "_runner(_provider)" in _src
     # Paramètres : combo distributeur + clé PiAPI persistés (auto-save)
     import ui.page_settings as PS
     _ssrc = inspect.getsource(PS.SettingsPage) if hasattr(PS, "SettingsPage") else \
@@ -5963,6 +5966,223 @@ def distributeur_video_piapi():
     assert "_apply_distribution_mode" in _wsrc and "setTabEnabled" in _wsrc
     # Paramètres : combo mode persisté
     assert "distribution_mode_combo" in _ssrc and '"distribution_mode"' in _ssrc
+
+
+@test
+def distributeurs_low_cost_et_envoi_sans_fal_04_10_2026():
+    """Distributeurs low cost (04/10/2026) : BytePlus (officiel ByteDance),
+    Runware et PiAPI 2.5 ; couverture par (moteur, mode, résolution, son) ;
+    prix par distributeur — et SURTOUT l'envoi des fichiers sans fal.
+
+    Cas réel (Matthieu) : mono-distributeur PiAPI, « Se référer au mood »
+    coché, compte fal bloqué (solde épuisé). PANDORA déposait les images sur
+    fal → 403 → le plan partait chez PiAPI SANS le mood, et il était facturé.
+    Attendu : arrêt AVANT l'appel au distributeur, avec la vraie raison ; et
+    chez BytePlus, le mood part en base64 dans la requête, sans fal."""
+    import os, tempfile
+    from PIL import Image
+    import core.media_provider as mp
+    from core import pricing
+    from api import byteplus, runware, piapi, distrib_upload as du
+
+    _orig_lc = mp.load_config
+
+    def _cfg(d):
+        mp.load_config = lambda: dict(d)
+    try:
+        # ── Couverture : (moteur, mode, résolution, son) ─────────────────────
+        _cfg({"video_provider": "piapi", "piapi_key": "k", "distribution_mode": "mono"})
+        msg = mp.mono_blocked_engine("seedance-2.5", "i2v", "720p")
+        assert "image de début" in msg, msg
+        assert mp.mono_blocked_engine("seedance-2.5", "ref", "1080p") == ""
+        assert "couper le son" in mp.mono_blocked_engine("seedance-2.5", "t2v", "720p",
+                                                         audio=False)
+        assert "4k" in mp.mono_blocked_engine("seedance-2.0", "t2v", "4K")
+        # Multi : une demande non couverte part chez le moins cher des AUTRES
+        # distributeurs configurés, sinon chez fal — jamais chez celui qui ne sait pas.
+        _cfg({"video_provider": "piapi", "piapi_key": "k", "byteplus_key": "b"})
+        assert mp.active_video_provider("seedance-2.5", "i2v", "720p") == "byteplus"
+        assert mp.active_video_provider("seedance-2.5", "ref", "720p") == "piapi"
+        _cfg({"video_provider": "piapi", "piapi_key": "k"})
+        assert mp.active_video_provider("seedance-2.5", "i2v", "720p") == "fal"
+        _cfg({"video_provider": "runware", "runware_key": "r"})
+        assert mp.active_video_provider("seedance-2.5", "ext", "720p") == "fal", \
+            "Runware ne prolonge pas les clips"
+        assert mp.active_video_provider("seedance-2.5", "i2v", "1080p") == "runware"
+
+        # ── Prix d'un plan 2.5 de 30 s en 720p chez chacun ───────────────────
+        _cfg({})
+        q = {e["id"]: e["cost"] for e in mp.quotes("seedance-2.5", "720p", 30)}
+        assert abs(q["fal"] - 14.19) < 0.01 and abs(q["byteplus"] - 6.933) < 0.01, q
+        assert abs(q["runware"] - 6.9) < 0.01 and abs(q["piapi"] - 10.5) < 0.01, q
+        # Le journal compte au tarif de CELUI qui a servi le plan
+        assert abs(pricing.estimate("seedance-2.5", "720p", 30, 1, provider="byteplus")[0]
+                   - 6.933) < 0.01
+        assert abs(pricing.estimate("seedance-2.5", "720p", 30, 1, provider="fal")[0]
+                   - 14.19) < 0.01
+
+        # ── Simulation ou réel : la clé du distributeur suffit ────────────────
+        _cfg({})
+        assert not mp.real_generation_possible("seedance-2.5")
+        _cfg({"video_provider": "byteplus", "byteplus_key": "b"})
+        assert mp.real_generation_possible("seedance-2.5"), "clé BytePlus seule → réel"
+        _cfg({"video_provider": "byteplus"})
+        assert not mp.real_generation_possible("seedance-2.5")
+        _cfg({"video_provider": "byteplus", "distribution_mode": "mono"})
+        assert mp.real_generation_possible("seedance-2.5"), \
+            "mono sans clé → réel, pour afficher « clé manquante »"
+    finally:
+        mp.load_config = _orig_lc
+
+    # ── Corps de requête (contrats relus le 04/10/2026) ──────────────────────
+    b = byteplus.build_body("i2v", "seedance-2.5", {
+        "prompt": "p", "image_url": "u1", "end_image_url": "u2", "duration": "30",
+        "resolution": "1080p", "aspect_ratio": "16:9", "generate_audio": False})
+    assert b["model"] == "dreamina-seedance-2-5-260628" and b["ratio"] == "adaptive"
+    assert b["duration"] == 30 and b["generate_audio"] is False and b["watermark"] is False
+    assert [c.get("role") for c in b["content"]] == [None, "first_frame", "last_frame"]
+    b = byteplus.build_body("ext", "seedance-2.5", {"prompt": "p", "video_urls": ["v"],
+                                                    "task": "editing", "duration": 10})
+    assert b["omni_reference_task_type"] == "edit" and b["duration"] == -1
+    b = byteplus.build_body("ext", "seedance-2.0", {"prompt": "p", "video_urls": ["v"],
+                                                    "duration": 10})
+    assert "omni_reference_task_type" not in b, "type de tâche = 2.5 seulement"
+
+    t = runware.build_task("t2v", "seedance-2.5", {"prompt": "p", "duration": 30,
+                                                   "resolution": "720p",
+                                                   "aspect_ratio": "16:9"})
+    assert (t["width"], t["height"]) == (1280, 720) and "resolution" not in t
+    t = runware.build_task("i2v", "seedance-2.5", {"prompt": "p", "image_url": "u",
+                                                   "resolution": "1080p",
+                                                   "generate_audio": False})
+    assert t["resolution"] == "1080p" and "width" not in t
+    assert t["inputs"]["frameImages"] == [{"image": "u", "frame": "first"}]
+    assert t["settings"] == {"audio": False}
+    t = runware.build_task("ref", "seedance-2.0", {"prompt": "p", "image_urls": ["a"],
+                                                   "resolution": "480p",
+                                                   "aspect_ratio": "16:9"})
+    assert (t["width"], t["height"]) == (864, 496), "table 2.0 ≠ table 2.5 en 480p"
+
+    i = piapi.build_input("ref", {"prompt": "see @Image1 and @Image12",
+                                  "image_urls": ["a"] * 40, "duration": 30,
+                                  "generate_audio": False}, model="seedance-2.5")
+    assert "mode" not in i and "audio" not in i, "PiAPI 2.5 : ni mode ni interrupteur du son"
+    assert i["duration"] == 30 and len(i["image_urls"]) == 30
+    assert i["prompt"] == "see @image1 and @image12"
+    i = piapi.build_input("ext", {"prompt": "p", "video_urls": ["v"], "task": "extension",
+                                  "duration": 12}, model="seedance-2.5")
+    assert i["omni_reference_task_type"] == "extend" and i["aspect_ratio"] == "adaptive"
+
+    # ── Envoi des fichiers sans fal ───────────────────────────────────────────
+    tmp = tempfile.mkdtemp(prefix="pandora_distrib_")
+    png = os.path.join(tmp, "mood.png")
+    Image.new("RGB", (64, 36), (40, 60, 90)).save(png)
+    mp4 = os.path.join(tmp, "clip.mp4")
+    with open(mp4, "wb") as f:
+        f.write(b"\x00" * 64)
+    assert du.Uploader("byteplus", "b").send(png).startswith("data:image/png;base64,")
+    assert du.Uploader("runware", "r").send(png).startswith("data:image/png;base64,")
+    try:
+        du.Uploader("byteplus", "b").send(mp4)
+        raise AssertionError("une vidéo exige une URL publique chez BytePlus")
+    except du.UploadError as e:
+        assert "relais" in str(e)
+
+    class _Resp:
+        status_code = 403
+        text = '{"code":403,"message":"your plan not allowed to upload, please upgrade"}'
+
+        def json(self):
+            return {"code": 403, "message": "your plan not allowed to upload, please upgrade"}
+
+    def _locked_relay(_p):
+        raise Exception("Client error '403 Forbidden' — User is locked. "
+                        "Reason: Exhausted balance. Top up your balance at fal.ai")
+
+    _orig_post = du.requests.post
+    du._PIAPI_PLAN_REFUSED.clear()
+    try:
+        du.requests.post = lambda *a, **k: _Resp()
+        try:
+            du.Uploader("piapi", "k", fal_relay=_locked_relay).send(png)
+            raise AssertionError("PiAPI sans dépôt ni relais ne peut rien recevoir")
+        except du.UploadError as e:
+            assert "abonnement" in str(e) and "solde fal épuisé" in str(e), str(e)
+    finally:
+        du.requests.post = _orig_post
+        du._PIAPI_PLAN_REFUSED.clear()
+
+    # ── run_real de bout en bout (rien ne sort de la machine) ─────────────────
+    import api.real as real
+    import core.config as cc
+    import core.lang as lang
+    import core.ai_provider as aip
+    saved = (cc.load_config, mp.load_config, lang.translate_to_english, aip.key_error,
+             real._fal_upload, piapi.run, byteplus.run, du.requests.post,
+             os.environ.get("FAL_KEY"))
+    called = []
+
+    def _no_call(*a, **k):
+        called.append(a)
+        raise AssertionError("le distributeur ne doit PAS être appelé")
+    try:
+        lang.translate_to_english = lambda t, *a, **k: t
+        aip.key_error = lambda *a, **k: "pas de clé (test)"
+        real._fal_upload = lambda _fc, _p: _locked_relay(_p)
+        du.requests.post = lambda *a, **k: _Resp()
+        du._PIAPI_PLAN_REFUSED.clear()
+        params = {"mode": "t2v", "model": "seedance-2.0", "prompt": "a quiet street",
+                  "ref_images": [png], "ref_image_roles": ["mood"],
+                  "resolution": "1080p", "duration": 5, "audio": True}
+        conf = {"api_key": "fal-test", "video_provider": "piapi", "piapi_key": "k",
+                "distribution_mode": "mono"}
+        cc.load_config = lambda: dict(conf)
+        mp.load_config = lambda: dict(conf)
+        piapi.run = _no_call
+        try:
+            real.run_real(dict(params), lambda *_a: None, lambda: False)
+            raise AssertionError("run_real aurait dû s'arrêter avant PiAPI")
+        except RuntimeError as e:
+            assert "Rien n'a été généré ni facturé" in str(e), str(e)
+            assert "BytePlus et Runware" in str(e), str(e)
+        assert not called, "PiAPI appelé malgré le mood non transmis"
+
+        # Même plan chez BytePlus : le mood part en base64 DANS la requête
+        conf = {"api_key": "", "video_provider": "byteplus", "byteplus_key": "b",
+                "distribution_mode": "mono"}
+        cc.load_config = lambda: dict(conf)
+        mp.load_config = lambda: dict(conf)
+        seen = {}
+
+        def _bp_run(mode, model, args, key, emit, cancelled):
+            seen.update(mode=mode, model=model, args=args, key=key)
+            return {"request_id": "t1", "video": {"url": "https://x/v.mp4"},
+                    "seed": 0, "cost_usd": 1.23}
+        byteplus.run = _bp_run
+        res = real.run_real(dict(params), lambda *_a: None, lambda: False)
+        assert seen["mode"] == "ref" and seen["key"] == "b"
+        assert seen["args"]["image_urls"][0].startswith("data:image/png;base64,")
+        assert "@Image1" in seen["args"]["prompt"], "le mood est annoncé au moteur"
+        assert res["provider"] == "byteplus" and res["cost_usd"] == 1.23
+        assert res["video_url"] == "https://x/v.mp4"
+    finally:
+        (cc.load_config, mp.load_config, lang.translate_to_english, aip.key_error,
+         real._fal_upload, piapi.run, byteplus.run, du.requests.post, _fk) = saved
+        du._PIAPI_PLAN_REFUSED.clear()
+        if _fk is None:
+            os.environ.pop("FAL_KEY", None)
+        else:
+            os.environ["FAL_KEY"] = _fk
+
+    # ── Messages : le BON compte, la BONNE raison ────────────────────────────
+    from core.worker import (humanize_api_error, is_content_policy_error,
+                             refused_after_generation)
+    h = humanize_api_error("Runware a refusé la tâche (400) : insufficientCredits — "
+                           "Not enough credits")
+    assert h.startswith("Crédits Runware insuffisants"), h
+    e = ("BytePlus : génération failed — OutputVideoSensitiveContentDetected."
+         "PolicyViolation — The output video may contain sensitive content")
+    assert is_content_policy_error(e) and refused_after_generation(e)
 
 
 @test
