@@ -2,7 +2,7 @@ import os
 import webbrowser
 from PyQt6.QtWidgets import (
     QScrollArea, QWidget, QVBoxLayout, QHBoxLayout,
-    QLabel, QLineEdit, QPushButton, QMessageBox, QComboBox,
+    QLabel, QLineEdit, QPushButton, QMessageBox, QComboBox, QCheckBox,
 )
 from PyQt6.QtCore import Qt, pyqtSignal
 from ui.styles import CP
@@ -12,7 +12,6 @@ from ui.projects_location_row import ProjectsLocationRow
 from ui.h3_local_row import H3LocalRow
 from ui.comfy_row import ComfyRow
 from core.config import load_config, save_config
-from davinci.bridge import install_pandora_send
 
 _FAL_KEYS_URL       = "https://fal.ai/dashboard/keys"
 _ANTHROPIC_KEYS_URL = "https://console.anthropic.com/settings/keys"
@@ -181,8 +180,8 @@ class SettingsPage(QScrollArea):
         self._sec_ai = _section("Assistant IA")
         self._sec_keys = _section("Clés API")
         self._sec_distrib = _section("Distribution des vidéos")
-        self._sec_davinci = _section("DaVinci Resolve Studio",
-                                     "envoi des clips dans la timeline")
+        self._sec_davinci = _section("DaVinci Resolve",
+                                     "import des clips · montage du storyboard · scripts")
         self._sec_adv = _section("Paramètres avancés",
                                  "MiniMax H3 en local · ComfyUI · modules externes")
         for _sec in (self._sec_general, self._sec_ai, self._sec_keys,
@@ -460,6 +459,27 @@ class SettingsPage(QScrollArea):
         self._local_panel = LocalAIPanel()
         self._local_panel.load(cfg)
         AI.addWidget(self._local_panel)
+
+        # Compte ChatGPT (forfait Plus / Pro, « Sign in with ChatGPT », 04/10/2026) :
+        # composant partagé avec le Live (ui/chatgpt_account_panel).
+        from ui.chatgpt_account_panel import ChatGPTAccountPanel
+        self._chatgpt_panel = ChatGPTAccountPanel()
+        self._chatgpt_panel.load(cfg)
+        AI.addWidget(self._chatgpt_panel)
+
+        # Mode économique : lots Claude (Message Batches API, −50 %) pour la
+        # génération du storyboard (04/10/2026, core/claude_batch). Décoché par
+        # défaut : les résultats arrivent en minutes, parfois en heures.
+        self._batch_cb = QCheckBox(
+            "Mode économique pour la génération du storyboard : lots Claude (−50 %)")
+        self._batch_cb.setToolTip(
+            "Les requêtes partent dans des lots Anthropic (Message Batches) : moitié prix,\n"
+            "mais les résultats arrivent en quelques minutes (24 h au plus). Claude\n"
+            "uniquement ; laissez PANDORA ouvert pendant l'attente.")
+        self._batch_cb.setChecked(bool(cfg.get("claude_batch_storyboard")))
+        self._batch_cb.setStyleSheet(
+            f"QCheckBox{{color:{CP['text_secondary']};font-size:11px;background:transparent;}}")
+        AI.addWidget(self._batch_cb)
 
         self._lbl_ai_restart = QLabel(
             "Le nom de l'assistant dans l'interface se met à jour au prochain démarrage."
@@ -749,10 +769,10 @@ class SettingsPage(QScrollArea):
         # Brancher l'auto-save sur tous les champs (après construction complète).
         self._wire_autosave()
 
-        # ── Connexion DaVinci Resolve Studio — section repliable ──────────────
+        # ── Connexion DaVinci Resolve — section repliable ─────────────────────
         dvr_row = QHBoxLayout()
         dvr_row.setSpacing(8)
-        _studio_badge = QLabel("Studio uniquement")
+        _studio_badge = QLabel("Studio requis dès Resolve 21.1")
         _studio_badge.setStyleSheet(
             f"color:{CP['text_dim']};font-size:9px;font-weight:600;"
             f"background:{CP['bg3']};border:1px solid {CP['border']};"
@@ -761,14 +781,19 @@ class SettingsPage(QScrollArea):
         dvr_row.addWidget(_studio_badge)
         dvr_row.addStretch()
         dvr_row.addWidget(_info_btn(
-            "Guide de connexion DaVinci Resolve Studio",
+            "Guide de connexion DaVinci Resolve",
             lambda: self._show_davinci_help(),
         ))
         D.addLayout(dvr_row)
 
+        # Texte exact (audit 04/10/2026) : jusqu'à Resolve 21.0, la version
+        # gratuite lance aussi le pont depuis le menu Scripts ; Resolve 21.1
+        # (08/09/2026) réserve le scripting Python à Studio. Sans pont, l'export
+        # de timeline XML du Storyboard reste ouvert à tous.
         _lbl_studio_note = QLabel(
-            "Fonctionnalité optionnelle — ne fonctionne pas avec DaVinci Resolve (version gratuite/Lite). "
-            "Requiert DaVinci Resolve Studio (version payante)."
+            "Fonctionnalité optionnelle. Jusqu'à Resolve 21.0, la version gratuite lance aussi "
+            "le pont ; depuis Resolve 21.1, le scripting est réservé à DaVinci Resolve Studio. "
+            "Sans pont : Storyboard → Action → « Exporter la timeline (XML) »."
         )
         _lbl_studio_note.setWordWrap(True)
         _lbl_studio_note.setStyleSheet(
@@ -784,29 +809,12 @@ class SettingsPage(QScrollArea):
         D.addWidget(self._davinci)
         self._refresh_summaries()
 
-        # (Le bouton « Installer le script / bridge PANDORA » a été retiré : les
-        # scripts DaVinci — pandora_send + seedance_bridge — sont installés
-        # AUTOMATIQUEMENT par l'installeur PANDORA. Les instructions restent dans
-        # le panneau DaVinci ci-dessus.)
+        # Scripts DaVinci : bouton « Installer / mettre à jour les scripts » DANS le
+        # panneau ci-dessus (rétabli le 04/10/2026 : l'installeur ne les copiait que
+        # si Resolve était déjà installé, au chemin par défaut, sans moyen de réparer).
         # (le bouton de vérification de mise à jour a aussi été retiré : il existe
         # déjà en haut à droite de la fenêtre — retour 2026-06-13)
         lay.addStretch()
-
-    def _install_pandora_send(self):
-        ok, msg = install_pandora_send()
-        if ok:
-            QMessageBox.information(
-                self, "Script installé",
-                f"pandora_send.py installé dans :\n{msg}\n\n"
-                "Dans DaVinci Resolve Studio, pour configurer un raccourci clavier :\n\n"
-                "  1. Espace de travail → Personnalisation du clavier\n"
-                "  2. Dans la barre de recherche, taper « pandora_send »\n"
-                "  3. Assigner votre raccourci (ex. Ctrl+Shift+P)\n\n"
-                "Le script s'exécute aussi via :\n"
-                "DaVinci Resolve Studio → Espace de travail → Scripts → pandora_send",
-            )
-        else:
-            QMessageBox.warning(self, "Erreur", msg)
 
     # ── Double écran (P5) ──────────────────────────────────────────────────────
 
@@ -844,6 +852,7 @@ class SettingsPage(QScrollArea):
             self._btn_ollama_models.setVisible(prov == "ollama")
         if hasattr(self, "_local_panel"):
             self._local_panel.setVisible(prov == "local")
+        self._update_chatgpt_visibility(prov)
         self.kimi_url_input.setVisible(prov == "kimi")
         self.kimi_model_input.setVisible(prov == "kimi")
         self.glm_url_input.setVisible(prov == "glm")
@@ -870,6 +879,20 @@ class SettingsPage(QScrollArea):
             # 0xC0000409 constaté dans tools/test_live.py).
             if self.isVisible():
                 self._refresh_ai_models()
+
+    def _update_chatgpt_visibility(self, prov: str = ""):
+        """Le compte ChatGPT s'affiche quand il sert : moteur principal OU moteur
+        d'une tâche (choix personnalisé)."""
+        if not hasattr(self, "_chatgpt_panel"):
+            return
+        if not prov:
+            from ui.ai_model_selector import selection_provider
+            prov = selection_provider(self.ai_combo)
+        used = prov == "chatgpt" or any(
+            c.currentData() == "chatgpt_plan" for c in getattr(self, "_task_combos", {}).values())
+        self._chatgpt_panel.setVisible(used)
+        if used:
+            self._chatgpt_panel.refresh()
 
     def _set_advanced(self, open_: bool):
         self._adv_open = open_
@@ -984,6 +1007,10 @@ class SettingsPage(QScrollArea):
         self._distrib_panel.set_fal_key_present(bool(self.api_input.text().strip()))
         if hasattr(self, "_local_panel"):
             self._local_panel.apply(cfg)     # local_preset / local_url / local_model / local_key
+        if hasattr(self, "_chatgpt_panel"):
+            self._chatgpt_panel.apply(cfg)   # chatgpt_model / chatgpt_api_fallback
+        if hasattr(self, "_batch_cb"):
+            cfg["claude_batch_storyboard"] = bool(self._batch_cb.isChecked())
         apply_primary_to_config(cfg, self.ai_combo)
         save_config(cfg)
         self._refresh_summaries()
@@ -1005,8 +1032,13 @@ class SettingsPage(QScrollArea):
             w.textChanged.connect(self.save)
         if hasattr(self, "_local_panel"):
             self._local_panel.changed.connect(self.save)
+        if hasattr(self, "_chatgpt_panel"):
+            self._chatgpt_panel.changed.connect(self.save)
+        if hasattr(self, "_batch_cb"):
+            self._batch_cb.toggled.connect(self.save)
         for combo in getattr(self, "_task_combos", {}).values():
             combo.currentIndexChanged.connect(self.save)
+            combo.currentIndexChanged.connect(lambda *_: self._update_chatgpt_visibility())
         # Distributeur, mode et clés BytePlus / Runware / PiAPI : le panneau
         # émet `changed` (et se tait pendant sa relecture de la config).
         self._distrib_panel.changed.connect(self.save)

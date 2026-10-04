@@ -137,6 +137,9 @@ EXPECTED_ONLY_CINEMA = {
         # trop générique (whitelisterait silencieusement toute future _refresh).
         "_DaVinciBar", "_check_davinci_connection",
         "_on_davinci_connection_changed", "_on_connect",
+        # Import DaVinci après génération, hors du thread de l'interface (pont v2,
+        # 04/10/2026) — DaVinci reste Cinéma-only.
+        "_start_davinci_import",
         # Sélection par GROUPE couleur (plans récurrents) dans le StoryboardSelector
         # — feature Cinéma (Rendu/Audio) ; reportable au Live si besoin.
         "_rebuild_group_chips", "_select_color_group",
@@ -174,6 +177,10 @@ EXPECTED_ONLY_CINEMA = {
         "_set_recurrent",
         "_on_detect_recurrent", "_on_recurrent_done", "_on_recurrent_fail",
         "_contrast_text",
+        # « Monter dans DaVinci Resolve » (menu Action, 04/10/2026) : DaVinci est
+        # Cinéma-only par décision ; l'export de timeline XML, lui, existe des
+        # deux côtés.
+        "_on_resolve_montage",
     },
     "ui/dialog_contact_live.py": {
         # Divergence LÉGÈRE voulue (2026-06-12) : le Live est une sous-classe

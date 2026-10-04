@@ -247,6 +247,10 @@ _CAM_MOTION_RE = re.compile(
     # un accessoire. Sans contexte caméra explicite, on ne touche à rien.
     r"|\bcrane\s+(?:or drone|aerial|shot|move|movement|up|down)\b|\bcamera cranes?\b"
     r"|\bgimbal\b|\bdrone (?:aerial )?(?:move|shot|flight)\b"
+    # Formulations sans « drone » des mouvements aériens (04/10/2026,
+    # core/shot_terms et core/camera_data) : retirées des prompts d'IMAGE.
+    r"|\bsweeping aerial camera (?:move|movement)\b"
+    r"|\b(?:first-person-view \(FPV\) )?aerial (?:camera )?flight\b"
     r"|\bcamera (?:movement|move|motion)\b"
     r"|\bno (?:pan|tilt|dolly|zoom)\b"
     r"|\blocked-off\b|\bfixed tripod\b|\bstatic camera\b"

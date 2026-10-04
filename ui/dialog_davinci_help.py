@@ -3,6 +3,7 @@
 )
 from PyQt6.QtCore import Qt
 from ui.styles import CP, PANDORA_STYLESHEET
+from core.i18n import translate
 
 
 def _sep():
@@ -30,14 +31,14 @@ def _step(num: str, title: str, detail: str = "") -> QWidget:
 
     col = QVBoxLayout()
     col.setSpacing(4)
-    t = QLabel(title)
+    t = QLabel(translate(title))
     t.setWordWrap(True)
     t.setStyleSheet(
         f"color:{CP['text_primary']};font-size:12px;font-weight:700;background:transparent;border:none;"
     )
     col.addWidget(t)
     if detail:
-        d = QLabel(detail)
+        d = QLabel(translate(detail))
         d.setWordWrap(True)
         d.setStyleSheet(
             f"color:{CP['text_dim']};font-size:11px;"
@@ -86,7 +87,7 @@ class DaVinciHelpDialog(QDialog):
         title.setStyleSheet(
             f"color:{CP['text_primary']};font-size:18px;font-weight:800;background:transparent;"
         )
-        sub = QLabel("Bridge TCP  ·  Media Pool  ·  Timeline")
+        sub = QLabel("Pont local  ·  Media Pool  ·  Timeline")
         sub.setStyleSheet(
             f"color:{CP['text_dim']};font-size:10px;font-family:'Consolas',monospace;"
             f"letter-spacing:1px;background:transparent;"
@@ -122,10 +123,10 @@ class DaVinciHelpDialog(QDialog):
             f"color:{CP['accent']};font-size:12px;font-weight:700;background:transparent;border:none;"
         )
         explain_body = QLabel(
-            "PANDORA communique avec DaVinci Resolve via un <b>bridge TCP local</b> "
-            "(un petit script Python qui tourne dans DaVinci). "
-            "Cette connexion permet d'importer automatiquement les médias générés "
-            "dans le Media Pool et de lire les clips de la timeline."
+            "PANDORA communique avec DaVinci Resolve par un <b>pont local</b> "
+            "(un petit script Python lancé dans Resolve). Il importe les clips générés "
+            "dans le Media Pool, rangés par séquence, monte le storyboard sur une "
+            "timeline, et lit les clips de la timeline pour les modifier."
         )
         explain_body.setWordWrap(True)
         explain_body.setStyleSheet(
@@ -153,24 +154,28 @@ class DaVinciHelpDialog(QDialog):
 
         sl.addWidget(_step(
             "1",
-            "Dans PANDORA → Paramètres, clique « Installer bridge »",
-            "Le fichier seedance_bridge.py sera copié dans le dossier Scripts de DaVinci.",
+            "Paramètres → DaVinci Resolve → « Installer / mettre à jour les scripts »",
+            "Copie seedance_bridge et pandora_send dans le dossier Scripts de Resolve. "
+            "Après une première installation, redémarrez Resolve.",
         ))
         sl.addWidget(_step(
             "2",
-            "Ouvre DaVinci Resolve et charge ton projet",
-            "Le bridge doit être lancé depuis un projet ouvert.",
+            "Ouvrez DaVinci Resolve et un projet",
+            "Jusqu'à Resolve 20.x, un Python 3 64 bits doit être installé sur le poste "
+            "(python.org, « pour tous les utilisateurs ») : Resolve s'en sert pour "
+            "exécuter les scripts.",
         ))
         sl.addWidget(_step(
             "3",
             "Dans DaVinci : Espace de travail → Scripts → seedance_bridge",
-            "Le script démarre le serveur TCP local (port 19876). "
-            "DaVinci affiche une notification de confirmation.",
+            "Une petite fenêtre « PANDORA Bridge » confirme que le pont est actif "
+            "(port 19876). Laissez-la ouverte : la fermer arrête le pont.",
         ))
         sl.addWidget(_step(
             "4",
-            "Dans PANDORA → Paramètres, clique « Connecter »",
-            "PANDORA se connecte au bridge. Le voyant passe au vert ●.",
+            "Dans PANDORA → Paramètres, cliquez sur « Connecter »",
+            "Le voyant passe au vert ●. Les clips générés arrivent dans le chutier "
+            "PANDORA, rangés par séquence (SQ01, SQ02…).",
         ))
         lay.addWidget(steps_frame)
 
@@ -182,17 +187,18 @@ class DaVinciHelpDialog(QDialog):
         )
         stl = QVBoxLayout(studio_frame)
         stl.setContentsMargins(14, 12, 14, 12)
-        studio_title = QLabel("⚠  DaVinci Resolve Studio requis")
+        studio_title = QLabel("⚠  Version gratuite ou Studio ?")
         studio_title.setStyleSheet(
             f"color:{CP['orange']};font-size:12px;font-weight:700;background:transparent;border:none;"
         )
         studio_body = QLabel(
-            "Le scripting Python de DaVinci Resolve (accès au Media Pool, aux timelines) "
-            "est <b>réservé à DaVinci Resolve Studio</b> (version payante).\n\n"
-            "Avec la version gratuite, le bridge TCP fonctionne mais l'import automatique "
-            "dans le Media Pool et la lecture des clips de la timeline ne sont pas disponibles.\n\n"
-            "La génération de vidéos et portraits Seedance 2.0 fonctionne normalement "
-            "dans les deux versions."
+            "Jusqu'à Resolve 21.0, la version gratuite lance aussi le pont depuis le menu "
+            "Scripts. Depuis <b>Resolve 21.1</b> (septembre 2026), Blackmagic réserve le "
+            "scripting Python à <b>DaVinci Resolve Studio</b> : le pont n'apparaît plus "
+            "dans le menu de la version gratuite.<br><br>"
+            "Sans pont, tout le reste fonctionne : la génération, et l'export de la "
+            "timeline (Storyboard → Action → « Exporter la timeline (XML) »), que Resolve "
+            "— gratuit ou Studio — et Premiere savent importer."
         )
         studio_body.setWordWrap(True)
         studio_body.setStyleSheet(
@@ -218,23 +224,30 @@ class DaVinciHelpDialog(QDialog):
 
         tips = [
             ("Connexion refusée",
-             "Vérifie que seedance_bridge tourne dans DaVinci (Espace de travail → Scripts)."),
-            ("Le script ne s'affiche pas",
-             "Clique « Installer bridge » dans Paramètres et relance DaVinci."),
-            ("Bridge actif mais scripting inactif",
-             "Ton installation DaVinci est en version gratuite — Studio requis pour le scripting."),
-            ("Déconnexion aléatoire",
-             "Recharge DaVinci ou clique « Actualiser » dans Paramètres."),
+             "Lancez seedance_bridge dans Resolve (Espace de travail → Scripts) et "
+             "laissez sa fenêtre ouverte."),
+            ("Le script n'est pas dans le menu",
+             "Paramètres → DaVinci Resolve → « Installer / mettre à jour les scripts », "
+             "puis redémarrez Resolve. Version gratuite 21.1 ou plus : le menu "
+             "n'affiche plus les scripts Python."),
+            ("« Pont à mettre à jour »",
+             "Mettez les scripts à jour, fermez la fenêtre « PANDORA Bridge », puis "
+             "relancez seedance_bridge."),
+            ("« Port déjà utilisé » dans la fenêtre du pont",
+             "Un ancien pont tourne encore : fermez sa fenêtre, ou redémarrez Resolve."),
+            ("« API DaVinci indisponible »",
+             "Ouvrez un projet, puis relancez le pont depuis le menu Scripts. Resolve "
+             "20.x et antérieurs : vérifiez qu'un Python 3 64 bits est installé."),
         ]
         for problem, solution in tips:
             tip_row = QVBoxLayout()
             tip_row.setSpacing(2)
-            p_lbl = QLabel(f"● {problem}")
+            p_lbl = QLabel(f"● {translate(problem)}")
             p_lbl.setStyleSheet(
                 f"color:{CP['text_secondary']};font-size:11px;font-weight:700;"
                 f"background:transparent;border:none;"
             )
-            s_lbl = QLabel(f"   → {solution}")
+            s_lbl = QLabel(f"   → {translate(solution)}")
             s_lbl.setWordWrap(True)
             s_lbl.setStyleSheet(
                 f"color:{CP['text_dim']};font-size:10px;font-family:'Consolas',monospace;"

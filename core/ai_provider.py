@@ -88,7 +88,8 @@ ENGINES: dict[str, dict] = {
     for key, item in _REGISTRY_ENGINES.items()
 }
 
-_PROVIDERS = ("anthropic", "openai", "mistral", "kimi", "glm", "ollama", "local", "custom")
+_PROVIDERS = ("anthropic", "openai", "mistral", "kimi", "glm", "ollama", "local", "custom",
+              "chatgpt")
 #: Fournisseurs qui tournent sur la machine : temps de réponse longs tolérés,
 #: aucune clé, directives renforcées (core/engine_prompts).
 _LOCAL_PROVIDERS = ("ollama", "local")
@@ -164,6 +165,9 @@ def _model(tier: str, provider: str | None = None, creative_model: str = "") -> 
         return creative_model or (_cfg().get("local_model") or "").strip()
     if provider == "custom":
         return creative_model or (_cfg().get("custom_model") or "").strip()
+    if provider == "chatgpt":
+        # Vide = premier modèle du catalogue du compte (api/chatgpt_plan.complete).
+        return creative_model or (_cfg().get("chatgpt_model") or "").strip()
     return creative_model or _DEFAULT_CREATIVE
 
 
@@ -276,7 +280,14 @@ def _engine_display_name(provider: str, creative_model: str) -> str:
         return creative_model or ("Serveur IA local · " + preset(preset_key(_cfg()))["name"])
     if provider == "custom":
         return creative_model or "Fournisseur personnalisé"
+    if provider == "chatgpt":
+        return "Compte ChatGPT" + (f" · {creative_model}" if creative_model else "")
     return "Claude"
+
+
+def provider_for_task(task: str | None = None) -> str:
+    """Fournisseur EFFECTIF d'une tâche (« anthropic », « openai », « chatgpt »…)."""
+    return _resolve_engine(task)[0]
 
 
 def ai_name_for_task(task: str | None = None) -> str:
@@ -339,6 +350,8 @@ def key_error(task: str | None = None) -> str | None:
         if not (cfg.get("custom_model") or "").strip():
             return "Modèle personnalisé manquant — renseignez-le dans Paramètres."
         return None
+    if provider == "chatgpt":
+        return _chatgpt_key_error(cfg)
     return None
 
 
@@ -469,6 +482,24 @@ def _anthropic_send(system, messages, model, max_tokens, on_chunk=None):
     extra, room = _anthropic_thinking(model)
     req = dict(model=model, system=system, messages=messages,
                max_tokens=min(_MAX_OUT_TOKENS, int(max_tokens) + room), **extra)
+    # ── Mode Batch de Claude (−50 %, core/claude_batch, 04/10/2026) ───────────
+    # Quand une session Batch est ouverte pour la tâche en cours (génération du
+    # storyboard en mode économique), la requête part dans un LOT ; on attend son
+    # résultat, qui est le même objet Message qu'un appel direct. Les appelants
+    # ne voient aucune différence, hors délai — et le journal de coût compte
+    # moitié prix (_note_usage).
+    try:
+        from core import claude_batch as _cb
+        _batched = _cb.wants(getattr(_task_ctx, "task", ""))
+    except Exception:
+        _batched = False
+    if _batched:
+        params = {k: v for k, v in req.items() if not (k == "system" and not v)}
+        msg = _cb.send(params)
+        _task_ctx.price_factor = 0.5
+        if on_chunk:
+            on_chunk(_anthropic_text(msg))
+        return msg
     streaming = on_chunk is not None or req["max_tokens"] > _NONSTREAM_MAX_TOKENS
 
     def _go(with_fallback: bool):
@@ -521,10 +552,14 @@ def _note_usage(msg) -> None:
     """
     try:
         from core.ai_spend import note_message
+        # Réponse venue d'un lot Batch (−50 %) : posé par _anthropic_send, consommé ici.
+        factor = getattr(_task_ctx, "price_factor", 1.0) or 1.0
+        _task_ctx.price_factor = 1.0
         note_message(msg,
                      getattr(_task_ctx, "model", "") or "",
                      getattr(_task_ctx, "task", "") or "",
-                     provider=getattr(_task_ctx, "provider", "") or "anthropic")
+                     provider=getattr(_task_ctx, "provider", "") or "anthropic",
+                     price_factor=factor)
     except Exception:
         pass
 
@@ -971,9 +1006,74 @@ def _ollama_stream(system, messages, on_chunk, model, max_tokens) -> str:
     return full
 
 
+# ── Compte ChatGPT (forfait Plus / Pro, « Sign in with ChatGPT ») ─────────────
+# Voie api/chatgpt_plan : jetons du compte, POST /v1/responses en flux. JAMAIS de
+# bascule silencieuse vers la clé API (conditions OpenAI du 29/09/2026) : le repli
+# n'a lieu que si l'utilisateur a coché « Utiliser ma clé API OpenAI quand le
+# forfait est indisponible » ET qu'une clé est renseignée.
+
+def _chatgpt_fallback_ok(cfg: dict | None = None) -> bool:
+    cfg = cfg if cfg is not None else _cfg()
+    return bool(cfg.get("chatgpt_api_fallback")) and bool((cfg.get("openai_key") or "").strip())
+
+
+def _chatgpt_key_error(cfg: dict) -> str | None:
+    try:
+        from api import chatgpt_plan as _cp
+        state = _cp.status().get("state")
+    except Exception:
+        state = "disconnected"
+    if state == "connected" or _chatgpt_fallback_ok(cfg):
+        return None
+    if state == "reauth_required":
+        return ("Session ChatGPT expirée — reconnectez-vous : Paramètres → Assistant IA → "
+                "« Continuer avec ChatGPT ».")
+    if state == "paused":
+        return ("Limite d'utilisation de votre forfait ChatGPT atteinte — Paramètres → "
+                "Assistant IA → « Réessayer le forfait », ou autorisez le repli sur la clé API.")
+    if state in ("not_eligible", "plan_off"):
+        return ("Ce compte ChatGPT ne peut pas utiliser son forfait dans PANDORA "
+                "(forfait Plus ou Pro requis).")
+    return ("Compte ChatGPT non connecté — Paramètres → Assistant IA → "
+            "« Continuer avec ChatGPT ».")
+
+
+def _chatgpt_call(system, messages, model, max_tokens, on_chunk=None) -> tuple[str, bool]:
+    """→ (texte, tronqué). Repli sur la clé API seulement s'il est AUTORISÉ et que
+    rien n'a encore été affiché (un texte partiel transmis ne se retire pas)."""
+    from api import chatgpt_plan as _cp
+    try:
+        text, resp = _cp.complete(model, system, messages, on_delta=on_chunk)
+    except _cp.SiwcError as exc:
+        if (exc.code == "response_incomplete" and exc.reason == "max_output_tokens"
+                and exc.partial_text):
+            return exc.partial_text, True          # la boucle de continuation reprend
+        if _chatgpt_fallback_ok() and not exc.partial_text and exc.code != "cancelled":
+            fb_model = (_cfg().get("openai_model") or "").strip() or _OPENAI_MODELS["creative"]
+            _set_task_ctx(getattr(_task_ctx, "task", ""), fb_model, "openai")
+            if on_chunk is None:
+                return _openai_complete(system, messages, fb_model, max_tokens), False
+            return _openai_stream(system, messages, on_chunk, fb_model, max_tokens), False
+        raise RuntimeError(_cp.user_message(exc)) from None
+    usage = (resp or {}).get("usage") or {}
+    if usage:
+        _note_counts(usage.get("input_tokens"), usage.get("output_tokens"))
+    return text, False
+
+
+def _chatgpt_complete(system, messages, model, max_tokens) -> str:
+    return _chatgpt_call(system, messages, model, max_tokens)[0]
+
+
+def _chatgpt_stream(system, messages, on_chunk, model, max_tokens) -> str:
+    return _chatgpt_call(system, messages, model, max_tokens, on_chunk)[0]
+
+
 # ── Dispatch ────────────────────────────────────────────────────────────────────
 
 def _dispatch_complete(provider, system, messages, model, max_tokens) -> str:
+    if provider == "chatgpt":
+        return _chatgpt_complete(system, messages, model, max_tokens)
     if provider == "openai":
         return _openai_complete(system, messages, model, max_tokens)
     if provider == "mistral":
@@ -992,6 +1092,8 @@ def _dispatch_complete(provider, system, messages, model, max_tokens) -> str:
 
 
 def _dispatch_stream(provider, system, messages, on_chunk, model, max_tokens) -> str:
+    if provider == "chatgpt":
+        return _chatgpt_stream(system, messages, on_chunk, model, max_tokens)
     if provider == "openai":
         return _openai_stream(system, messages, on_chunk, model, max_tokens)
     if provider == "mistral":
@@ -1043,6 +1145,9 @@ def chat_ex(system: str, messages: list, tier: str = "creative",
     model = _model(tier, provider, creative)
     sysp  = _adapt(system, task, provider, model)
     _set_task_ctx(task, model, provider)
+    if provider == "chatgpt":
+        text, truncated = _chatgpt_call(sysp, messages, model, max_tokens)
+        return {"text": text, "truncated": truncated}
     if provider in ("openai", "mistral", "kimi", "glm", "local", "custom"):
         from core.local_llm import strip_thinking
         builder = {"openai": _openai_payload, "mistral": _mistral_payload,

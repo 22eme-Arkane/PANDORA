@@ -559,6 +559,11 @@ class PageLiveSettings(QScrollArea):
         from ui.local_ai_panel import LocalAIPanel
         self._local_panel = LocalAIPanel()
         opt_lay.addWidget(self._local_panel)
+        # Compte ChatGPT (forfait Plus / Pro) — MÊME composant que le Cinéma
+        # (ui/chatgpt_account_panel), mêmes clés de config (04/10/2026).
+        from ui.chatgpt_account_panel import ChatGPTAccountPanel
+        self._chatgpt_panel = ChatGPTAccountPanel()
+        opt_lay.addWidget(self._chatgpt_panel)
         ac.addWidget(self._opt_keys_box)
 
         # ── Moteur IA PAR TÂCHE (repliable, section Assistant IA, parité Cinéma) ──
@@ -664,6 +669,15 @@ class PageLiveSettings(QScrollArea):
                 # Le panneau vit dans la boîte repliable : la choisir la déplie.
                 if prov == "local" and not self._opt_keys_open:
                     self._toggle_opt_keys()
+            if hasattr(self, "_chatgpt_panel"):
+                _gpt = prov == "chatgpt" or any(
+                    c.currentData() == "chatgpt_plan"
+                    for c in getattr(self, "_task_combos", {}).values())
+                self._chatgpt_panel.setVisible(_all or _gpt)
+                if _gpt:
+                    self._chatgpt_panel.refresh()
+                    if not self._opt_keys_open:
+                        self._toggle_opt_keys()
             if _all and not self._adv_open:
                 self._set_advanced(True)
             if _ and hasattr(self, "_task_combos"):
@@ -794,9 +808,13 @@ class PageLiveSettings(QScrollArea):
                   self._host_input):
             w.textChanged.connect(self._save_api_key)
         self._local_panel.changed.connect(self._save_api_key)
+        self._chatgpt_panel.changed.connect(self._save_api_key)
         self._port_spin.valueChanged.connect(self._save_api_key)
         for combo in getattr(self, "_task_combos", {}).values():
             combo.currentIndexChanged.connect(self._save_api_key)
+            # Sans argument : met à jour l'affichage (compte ChatGPT) SANS remettre
+            # les autres tâches sur « Par défaut ».
+            combo.currentIndexChanged.connect(lambda *_: self._on_ai_changed())
         # Distributeurs, ordre, mode et clés BytePlus / Runware / PiAPI : le
         # panneau émet `changed` (et se tait pendant sa relecture de la config).
         self._distrib_panel.changed.connect(self._save_api_key)
@@ -918,6 +936,7 @@ class PageLiveSettings(QScrollArea):
         self._custom_url_input.setText(cfg.get("custom_url", ""))
         self._custom_model_input.setText(cfg.get("custom_model", ""))
         self._local_panel.load(cfg)
+        self._chatgpt_panel.load(cfg)
         self._on_ai_changed()
         # Distributeurs (ordre, mode, clés) : relus par le panneau partagé.
         self._distrib_panel.sync_from_config(cfg)
@@ -954,6 +973,7 @@ class PageLiveSettings(QScrollArea):
         cfg["custom_url"]        = self._custom_url_input.text().strip()
         cfg["custom_model"]      = self._custom_model_input.text().strip()
         self._local_panel.apply(cfg)     # local_preset / local_url / local_model / local_key
+        self._chatgpt_panel.apply(cfg)   # chatgpt_model / chatgpt_api_fallback
         # Distribution des vidéos : ordre de priorité, distributeurs désactivés,
         # mode et clés — tout vient du panneau partagé (parité Cinéma).
         _dv = self._distrib_panel.values()

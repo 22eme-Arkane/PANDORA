@@ -280,7 +280,7 @@ _MOVEMENT_EN: dict[str, str] = {
     "Steadycam":   "steadicam shot",
     "Fixe":        "static shot",
     "Grue":        "crane shot",
-    "Drone":       "drone aerial shot",
+    "Drone":       "aerial shot",            # jamais « drone » : il apparaîtrait à l'image
     "Sous-Marin":  "underwater shot",
     "Panoramique": "pan shot",
 }
@@ -297,8 +297,12 @@ _SHOT_MOVEMENT_EN: dict[str, str] = {
     "Zoom avant":             "slow zoom in",
     "Zoom arrière":           "slow zoom out",
     "Steadicam":              "smooth flowing steadicam camera movement",
-    "Grue / Drone":           "sweeping crane / drone aerial camera movement",
-    "Drone FPV":              "immersive FPV drone shot, first-person-view racing drone flight, fast and agile with rapid acceleration, swooping dives, rolls and tight banking turns, low-altitude proximity fly-through weaving close to subjects and obstacles, continuous momentum and speed, ultra-wide action-camera perspective, dynamic and visceral",
+    # Jamais le mot « drone » dans ces directives (04/10/2026) : Seedance 2.5 le
+    # dessine comme un OBJET — constat sur le plan SQ4_P21 de Matthieu, un
+    # corbeau devenu quadricoptère puis posé dans l'herbe. On décrit le VOL de
+    # la caméra, pas l'appareil.
+    "Grue / Drone":           "sweeping aerial camera movement, high and fluid, like a crane rising or a bird gliding",
+    "Drone FPV":              "immersive first-person-view (FPV) aerial flight, the camera itself flying fast and agile with rapid acceleration, swooping dives, rolls and tight banking turns, low-altitude proximity fly-through weaving close to subjects and obstacles, continuous momentum and speed, ultra-wide action-camera perspective, dynamic and visceral",
     "Caméra portée":          "handheld camera, subtle organic shake",
     "Plongée":                "high-angle shot looking down on the subject",
     "Contre-plongée":         "low-angle shot looking up at the subject",

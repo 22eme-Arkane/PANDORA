@@ -440,10 +440,18 @@ class TabDavinciEdit(QScrollArea):
 
         self._build_ui()
 
+        # Boîte aux lettres de pandora_send. Le DOSSIER est surveillé aussi : sans
+        # fichier au démarrage, le premier envoi depuis Resolve passait inaperçu
+        # tant qu'on ne revenait pas sur l'onglet (audit 04/10/2026). Un envoi
+        # = une nouvelle date de modification (écriture atomique côté Resolve).
+        self._inbox_mtime = self._inbox_stamp()
         self._watcher = QFileSystemWatcher()
         if os.path.isfile(_INBOX):
             self._watcher.addPath(_INBOX)
+        if os.path.isdir(os.path.dirname(_INBOX)):
+            self._watcher.addPath(os.path.dirname(_INBOX))
         self._watcher.fileChanged.connect(self._on_inbox_changed)
+        self._watcher.directoryChanged.connect(self._on_inbox_dir_changed)
 
     # ── Sections collapsibles ─────────────────────────────────────────────────
 
@@ -1416,6 +1424,9 @@ class TabDavinciEdit(QScrollArea):
             "💰  Génération facturée via fal.ai (Seedance 2.0)"
             "  ·  Tarifs détaillés dans le Manuel d'utilisation"
         )
+        # Le distributeur RÉEL du moteur choisi remplace « fal.ai » écrit en dur
+        # (04/10/2026) — relu à chaque changement de moteur (_refresh_engine_hint).
+        self._billing_lbl = price_lbl
         price_lbl.setWordWrap(True)
         price_lbl.setStyleSheet(
             f"color:{C['text_dim']};font-size:9px;"
@@ -1462,13 +1473,27 @@ class TabDavinciEdit(QScrollArea):
         self._cb_import.setEnabled(connected)
         if not connected:
             self._cb_import.setChecked(False)
-            self._cb_import.setToolTip(
-                "DaVinci Resolve Studio requis — connectez le bridge pour activer cette option"
-            )
+            self._cb_import.setToolTip(translate(
+                "Lancez le pont dans DaVinci Resolve (Espace de travail → Scripts "
+                "→ seedance_bridge), puis connectez-vous pour activer cette option"))
         else:
             self._cb_import.setToolTip("")
 
     # ── Inbox (écrit par pandora_send.py dans DaVinci) ───────────────────────
+
+    @staticmethod
+    def _inbox_stamp() -> float:
+        try:
+            return os.path.getmtime(_INBOX)
+        except OSError:
+            return 0.0
+
+    def _on_inbox_dir_changed(self, _path: str):
+        # Le dossier temporaire bouge sans cesse : on ne relit que si la boîte
+        # aux lettres elle-même a une nouvelle date.
+        stamp = self._inbox_stamp()
+        if stamp and stamp != self._inbox_mtime:
+            self._on_inbox_changed(_INBOX)
 
     def _on_inbox_changed(self, path: str):
         from PyQt6.QtCore import QTimer
@@ -1477,11 +1502,15 @@ class TabDavinciEdit(QScrollArea):
     def _read_inbox(self):
         if not os.path.isfile(_INBOX):
             return
+        stamp = self._inbox_stamp()
+        if stamp and stamp == self._inbox_mtime:
+            return                       # déjà lue (fichier + dossier ont signalé)
         try:
             with open(_INBOX, "r", encoding="utf-8") as f:
                 data = json.load(f)
         except Exception:
             return
+        self._inbox_mtime = stamp
         clips   = data.get("clips", [])
         tl_name = data.get("timeline", "")
         if not clips:
@@ -2254,6 +2283,16 @@ class TabDavinciEdit(QScrollArea):
     def _refresh_engine_hint(self):
         """Indice affiché quand le moteur Pixverse Swap (visage/fond) est sélectionné :
         rappelle de fournir l'image de référence (le nouveau visage / fond)."""
+        if getattr(self, "_billing_lbl", None) is not None:
+            try:
+                from core.media_provider import billing_provider, provider_short
+                _pid = billing_provider(self._get_model(), self._cb_res.currentData() or "")
+                self._billing_lbl.setText(
+                    (translate("💰  Génération facturée par :") + f" {provider_short(_pid)}"
+                     if _pid else translate("💰  Moteur local : aucun crédit consommé"))
+                    + "  ·  " + translate("Tarifs détaillés dans le Manuel d'utilisation"))
+            except Exception:
+                pass
         if not hasattr(self, "_modif_hint"):
             return
         mode = self._pixverse_engine_mode()
@@ -2675,11 +2714,11 @@ class TabDavinciEdit(QScrollArea):
         self._lbl_lipsync_stage.setText("● Étape 3/3 — Import DaVinci…")
 
         # Import vidéo lip-synced
-        dav_ok = False
+        dav_ok, dav_err = False, ""
         if do_import and video_path and os.path.isfile(video_path):
             from davinci.bridge import resolve as _resolve
             if _resolve.is_connected():
-                dav_ok = _resolve.import_media_to_bin(video_path, "")
+                dav_ok, dav_err = _resolve.import_clip(video_path, "")
                 # Import piste audio séparée
                 if audio_path and os.path.isfile(audio_path):
                     import_audio_to_bin(audio_path)
@@ -2688,6 +2727,11 @@ class TabDavinciEdit(QScrollArea):
             card.set_status(f"P{prise_idx + 1}/{n_pr} ↷ → DaVinci", C["green"])
         elif video_path:
             card.set_status(f"P{prise_idx + 1}/{n_pr} ↷ ✓ sauvegardé", C["green"])
+            if dav_err:   # l'erreur du pont était avalée : elle reste lisible au survol
+                from davinci.bridge import translated
+                card.setToolTip(f"{translate('Fichier :')} {video_path}\n"
+                                f"{translate('Import DaVinci impossible :')} "
+                                f"{translated(dav_err).split(chr(10))[0]}")
         else:
             card.set_status(f"P{prise_idx + 1}/{n_pr} ↷ ✓", C["green"])
 
@@ -2737,7 +2781,12 @@ class TabDavinciEdit(QScrollArea):
             else:
                 card.set_status(f"P{prise_idx + 1}/{n_pr} ✓ sauvegardé", C["green"])
             if local_path:
-                card.setToolTip(f"Fichier : {local_path}")
+                tip = f"{translate('Fichier :')} {local_path}"
+                if ir.get("davinci_error"):   # erreur du pont : plus jamais avalée
+                    from davinci.bridge import translated
+                    tip += (f"\n{translate('Import DaVinci impossible :')} "
+                            f"{translated(ir['davinci_error']).split(chr(10))[0]}")
+                card.setToolTip(tip)
         else:
             err = ir.get("error", "erreur inconnue")
             card.set_status(f"P{prise_idx + 1}/{n_pr} ✗ {err[:40]}", C["red"])

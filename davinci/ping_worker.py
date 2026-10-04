@@ -1,42 +1,27 @@
-"""Worker QThread de ping bridge DaVinci — partagé par DaVinciPanel et TabDavinciEdit."""
+"""Worker QThread de ping du pont DaVinci — partagé par DaVinciPanel et TabDavinciEdit."""
 
 from PyQt6.QtCore import QThread, pyqtSignal
 
 
 class BridgePingWorker(QThread):
-    """Ping asynchrone du bridge TCP DaVinci (port 19876).
-    Émet result(connected: bool, timeline_name: str).
-    Durée max : 1 s (timeout court pour ne pas gêner le polling toutes les 5 s).
-    """
+    """Ping asynchrone du pont (davinci.bridge) : met à jour l'état partagé
+    `resolve` (version du pont, API, projet, timeline) puis émet
+    result(connecté, nom de la timeline). Durée : ≤ 1 s si le pont ne tourne
+    pas (davinci.bridge.CONNECT_TIMEOUT)."""
     result = pyqtSignal(bool, str)
 
     def run(self):
+        connected, timeline = False, ""
         try:
-            import json, socket
-            HOST, PORT = "127.0.0.1", 19876
-
-            def _quick_send(cmd: str) -> object:
-                req = json.dumps({"cmd": cmd, "params": {}}) + "\n"
-                with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-                    s.settimeout(1.0)           # timeout court pour le polling
-                    s.connect((HOST, PORT))
-                    s.sendall(req.encode("utf-8"))
-                    data = b""
-                    while True:
-                        chunk = s.recv(4096)
-                        if not chunk:
-                            break
-                        data += chunk
-                        if data.endswith(b"\n"):
-                            break
-                resp = json.loads(data.decode("utf-8"))
-                return resp.get("result") if resp.get("ok") else None
-
-            pong = _quick_send("ping")
-            if pong == "pong":
-                tl = _quick_send("get_timeline_name") or ""
-                self.result.emit(True, str(tl))
-            else:
-                self.result.emit(False, "")
+            from davinci.bridge import resolve
+            connected = resolve.ping(timeout=1.5)
+            if connected:
+                timeline = resolve.fetch_status().get("timeline", "")
         except Exception:
-            self.result.emit(False, "")
+            connected = False
+        self.result.emit(connected, str(timeline or ""))
+        try:
+            from davinci.jobs import notify
+            notify()
+        except Exception:
+            pass

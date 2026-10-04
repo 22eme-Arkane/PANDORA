@@ -18,15 +18,62 @@
 
 ## Download
 
-**[⬇ Download PANDORA v2.5.0 for Windows](https://github.com/22eme-Arkane/PANDORA/releases/download/v2.5.0/PANDORA_Setup_2.5.0.exe)**
+**[⬇ Download PANDORA v2.6.0 for Windows](https://github.com/22eme-Arkane/PANDORA/releases/download/v2.6.0/PANDORA_Setup_2.6.0.exe)**
 
-**[⬇ Download PANDORA v2.5.0 for macOS](https://github.com/22eme-Arkane/PANDORA/releases/download/v2.5.0/PANDORA_2.5.0.dmg)** *(Apple Silicon — see [Installation](#installation) for the first launch)*
+**[⬇ Download PANDORA v2.6.0 for macOS](https://github.com/22eme-Arkane/PANDORA/releases/download/v2.6.0/PANDORA_2.6.0.dmg)** *(Apple Silicon — see [Installation](#installation) for the first launch)*
 
 All versions: [Releases](../../releases)
 
 🌐 **Official 22eme ARKANE website: [22eme-arkane.com](https://22eme-arkane.com)**
 
 ---
+
+## What's new in v2.6.0
+
+**DaVinci Resolve that says what is wrong, a timeline export for everyone, your
+ChatGPT plan for text tasks and a half-price mode for the storyboard.**
+
+- **DaVinci Resolve bridge v2.** A failed import used to stay silent; PANDORA
+  now reports Resolve's real reason (bridge window closed, Studio required,
+  Python missing, script outdated, Resolve busy) and the help says what to do.
+  The connection test no longer freezes the window, and a second bridge window
+  takes over from the first one instead of failing.
+- **Scripts you can repair.** The two Resolve scripts are versioned: Settings →
+  DaVinci Resolve shows whether they are missing or outdated, and « Install /
+  update the scripts » writes them where Resolve looks for them.
+- **Clips sorted by sequence.** Each imported clip goes into its sequence's bin
+  (PANDORA/SQ03…) with scene, shot, take, action and the sequence colour.
+- **Assemble the storyboard in Resolve.** Storyboard → Action → « Assemble in
+  DaVinci Resolve » builds a timeline from the latest take of each shot, in
+  storyboard order (Resolve Studio + bridge).
+- **Export the timeline (XML) — free Resolve, Studio or Premiere.** Storyboard
+  → Action → « Export the timeline (XML) » writes a Final Cut Pro 7 XML
+  timeline: the latest take of each shot back to back, a marker per shot
+  (sequence, shot, take) with its action as a comment. No bridge, no plugin:
+  File → Import → Timeline in Resolve, File → Import in Premiere. Also in
+  PANDORA Live.
+- **ChatGPT account for text tasks.** In AI assistant, « ChatGPT account (Plus /
+  Pro plan) » uses your ChatGPT subscription instead of an API key — for every
+  task or just one. You sign in on OpenAI's page in your browser; the tokens
+  stay on your computer. When the plan's limit is reached PANDORA pauses it and
+  never switches to a paid key on its own, unless you tick that option. For now
+  OpenAI ends the session after one hour: one click signs you back in.
+- **Economy mode — Claude batches (−50 %).** A box in AI assistant sends the
+  storyboard generation (breakdown conversion and final prompts) through
+  Anthropic's Message Batches: half price, results usually within minutes (24 h
+  at most). The window shows the progress, « Cancel » also stops the batches at
+  Anthropic, and the project cost counts these calls at half price.
+- **Studio queue.** With automatic recomposition off, a queue no longer waits
+  90 seconds per shot for a prompt that will never come; while a shot's final
+  prompt is being prepared, the progress bar says so instead of staying hidden.
+- **The real distributor is announced.** Starting a queue said « fal.ai
+  credits » even when PiAPI, BytePlus or Runware served the shots: the message
+  now names the distributor that bills them, or says that a local engine costs
+  nothing. Same in « Edit clips ».
+- **Aerial moves without the word "drone".** « Crane / Drone » and « FPV Drone »
+  wrote "drone" into the prompt, and engines sometimes drew one in the shot.
+  They now describe the flight itself (sweeping aerial move, first-person-view
+  flight).
 
 ## What's new in v2.5.0
 
@@ -688,7 +735,7 @@ per-engine mood prompts, same fixes.
 
 ### Windows
 
-1. Download `PANDORA_Setup_2.5.0.exe` from the link above and run it
+1. Download `PANDORA_Setup_2.6.0.exe` from the link above and run it
 2. If Windows shows *"Windows protected your PC"* (SmartScreen), click
    **More info** then **Run anyway** — the app is not code-signed yet
    (certificate in progress), this is the Windows equivalent of the macOS
@@ -699,7 +746,7 @@ per-engine mood prompts, same fixes.
 
 ### macOS
 
-1. Download `PANDORA_2.5.0.dmg` from the link above
+1. Download `PANDORA_2.6.0.dmg` from the link above
 2. Open the DMG and drag **PANDORA** into **Applications** (as usual)
 3. **First launch** — macOS will claim that *"PANDORA is damaged and can't be
    opened"*. **This is normal, the app is not damaged** — macOS blocks apps

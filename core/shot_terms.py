@@ -51,7 +51,10 @@ MOVEMENT_EN = {
     "Zoom avant":             "zoom in",
     "Zoom arrière":           "zoom out",
     "Steadicam":              "smooth steadicam glide",
-    "Grue / Drone":           "crane or drone aerial move",
+    # Sans le mot « drone » (04/10/2026) : Seedance 2.5 dessinait l'appareil à
+    # l'image. « Drone FPV » n'avait pas d'entrée et partait tel quel.
+    "Grue / Drone":           "sweeping aerial camera move",
+    "Drone FPV":              "first-person-view (FPV) aerial flight",
     "Caméra portée":          "handheld camera, organic movement",
     "Plongée":                "downward tilt from high position",
     "Contre-plongée":         "upward tilt from low position",

@@ -60,6 +60,12 @@ for _mod_name in ("ui.page_settings", "ui.tab_settings"):
     except Exception:
         pass
 
+# ── GARDE-FOU compte ChatGPT (04/10/2026) : les jetons « Sign in with ChatGPT »
+#    vivent dans le dossier de données de l'utilisateur (api/chatgpt_plan). Tous
+#    les tests le lisent ou l'écrivent dans un dossier TEMPORAIRE — jamais les
+#    vrais jetons de l'utilisateur.
+os.environ["PANDORA_CHATGPT_DIR"] = tempfile.mkdtemp(prefix="pandora_chatgpt_test_")
+
 _TESTS = []
 
 
@@ -7639,6 +7645,96 @@ def modeles_claude_a_jour_live_03_10_2026():
         _cc.load_config = _orig
     src = inspect.getsource(PLS)
     assert 'model="claude-haiku-4-5",' in src and "claude-haiku-4-5-2025" not in src
+
+# ══════════════════════════════════════════════════════════════════════════════
+# Export de timeline XML (parité Cinéma) + attente visible de la file (04/10/2026)
+# ══════════════════════════════════════════════════════════════════════════════
+
+@test
+def export_timeline_xml_et_attente_visible_live_04_10_2026():
+    """Live : « Exporter la timeline (XML) » dans le menu Action du Storyboard (le
+    module est neutre, aucun pont DaVinci), et la file du Studio affiche l'attente
+    du prompt final dans la barre (elle n'apparaissait qu'au lancement)."""
+    import ui.page_storyboard_live as PSL
+    page = PSL.PageStoryboard() if hasattr(PSL, "PageStoryboard") else PSL.PageStoryboardLive()
+    assert hasattr(page, "_btn_export_xml") and hasattr(page, "_on_export_timeline_xml")
+    src = inspect.getsource(PSL)
+    assert "timeline_export_dialog" in src and "davinci" not in \
+        inspect.getsource(PSL.PageStoryboard._on_export_timeline_xml
+                          if hasattr(PSL, "PageStoryboard")
+                          else PSL.PageStoryboardLive._on_export_timeline_xml)
+    import ui.tab_t2v_live as L
+    tab = L.TabT2V()
+    calls = []
+    tab.start_generation = lambda: calls.append("go")
+    tab._batch_idx, tab._batch_total = 2, 3
+    tab._prompt_is_final, tab._final_assembly_failed = False, False
+    tab._is_batch_mode = True
+    try:
+        tab._await_final_then_generate(0)
+        assert not tab.progress.isHidden()
+        assert "2/3" in tab.progress.status.text()
+    finally:
+        tab._prompt_is_final = True          # la relance programmée part, sans boucle
+        import time
+        t0 = time.monotonic()
+        while not calls and time.monotonic() - t0 < 2:
+            APP.processEvents()
+        tab._is_batch_mode = False
+
+@test
+def file_sans_recomposition_auto_part_sans_attendre_live_04_10_2026():
+    """Parité Cinéma (04/10/2026) : recomposition automatique décochée → la file du
+    Studio Live part aussitôt au lieu d'attendre 90 s un prompt qui ne vient pas."""
+    import time
+    import ui.tab_t2v_live as L
+    tab = L.TabT2V()
+    if not hasattr(tab, "_compose_ctl"):
+        return
+    tab._compose_ctl.auto_cb.blockSignals(True)
+    tab._compose_ctl.auto_cb.setChecked(False)
+    tab._compose_ctl.auto_cb.blockSignals(False)
+    calls = []
+    tab.start_generation = lambda: calls.append(time.monotonic())
+    shot = {"id": "q1", "seq_num": 1, "number": 1,
+            "seedance_prompt": "Façade éclairée, lumière bleue qui pulse."}
+    tab._is_batch_mode, tab._batch_idx, tab._batch_total = True, 1, 2
+    try:
+        tab._on_shot_selected(dict(shot))
+        t0 = time.monotonic()
+        tab._await_final_then_generate(0)
+        while not calls and time.monotonic() - t0 < 6:
+            APP.processEvents()
+            time.sleep(0.02)
+        assert calls and calls[0] - t0 < 3, "la file part sans attendre 90 s"
+    finally:
+        tab._is_batch_mode = False
+
+@test
+def compte_chatgpt_dans_les_parametres_live_04_10_2026():
+    """Parité Cinéma (04/10/2026) : le panneau « Compte ChatGPT » (forfait Plus /
+    Pro) vit aussi dans les Paramètres Live, mêmes clés de config, repli sur la
+    clé API décoché par défaut."""
+    from ui.page_live_settings import PageLiveSettings
+    page = PageLiveSettings()
+    assert hasattr(page, "_chatgpt_panel")
+    idx = next(i for i in range(page._ai_combo.count())
+               if isinstance(page._ai_combo.itemData(i), dict)
+               and page._ai_combo.itemData(i).get("engine") == "chatgpt_plan")
+    page._ai_combo.setCurrentIndex(idx)
+    assert not page._chatgpt_panel.isHidden()
+    out = {}
+    page._chatgpt_panel.apply(out)
+    assert out == {"chatgpt_model": "", "chatgpt_api_fallback": False}
+    assert os.environ.get("PANDORA_CHATGPT_DIR"), "jetons isolés pendant les tests"
+
+@test
+def file_annonce_le_vrai_distributeur_live_04_10_2026():
+    """Parité Cinéma (04/10/2026) : la confirmation de file du Studio Live nomme
+    le distributeur réel au lieu de « crédits fal.ai » écrit en dur."""
+    import ui.tab_t2v_live as L
+    src = inspect.getsource(L.TabT2V._start_batch_generation)
+    assert "billing_notice(" in src and "crédits fal.ai" not in src
 
 
 if __name__ == "__main__":

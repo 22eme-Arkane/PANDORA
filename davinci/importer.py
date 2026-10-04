@@ -98,20 +98,51 @@ def import_audio_to_bin(audio_path: str) -> bool:
 
 def import_result(result: dict, dest_dir: str, shot_title: str = "",
                   filename: str | None = None,
-                  import_to_davinci: bool = True) -> dict:
+                  import_to_davinci: bool = True, shot: dict | None = None) -> dict:
     """
-    Télécharge le clip généré et l'importe optionnellement dans DaVinci.
+    Télécharge le clip généré et l'importe optionnellement dans DaVinci
+    (appel bloquant : préférer import_clip_async depuis l'interface).
 
     Retourne :
-        {"success": bool, "local_path": str, "mock": bool, "error": str, "davinci_imported": bool}
+        {"success": bool, "local_path": str, "mock": bool, "error": str,
+         "davinci_imported": bool, "davinci_error": str}
     """
     # Téléchargement local = core.download (partagé avec le Live)
     ir = download_result(result, dest_dir, shot_title=shot_title, filename=filename)
+    ir.setdefault("davinci_error", "")
     if not ir["success"] or ir["mock"]:
         return ir
 
-    # Import DaVinci — directement dans le bin PANDORA (sans sous-dossier)
+    # Import DaVinci — chutier PANDORA, sous-chutier de la séquence quand le
+    # plan est connu ; l'erreur du pont est gardée (elle était avalée).
     if import_to_davinci and resolve.is_connected():
-        ir["davinci_imported"] = resolve.import_media_to_bin(ir["local_path"], "")
-
+        from core.timeline_clips import import_meta
+        sub_bin, meta, color = import_meta(shot, ir["local_path"])
+        ok, err = resolve.import_clip(ir["local_path"], sub_bin, meta, color)
+        ir["davinci_imported"] = ok
+        ir["davinci_error"] = err
     return ir
+
+
+def import_clip_async(path: str, shot: dict | None = None, on_done=None):
+    """Importe `path` dans DaVinci SANS bloquer l'interface.
+    on_done(ok: bool, erreur: str, sous_chutier: str) est appelé sur le thread de
+    l'interface. Rangement : PANDORA/SQnn, métadonnées scène / plan / prise /
+    action, couleur de la séquence (core.timeline_clips)."""
+    from core.timeline_clips import import_meta
+    from davinci.jobs import run_job, notify
+    sub_bin, meta, color = import_meta(shot, path)
+
+    def work():
+        if not resolve.is_connected():
+            return {"ok": False, "error": resolve.explain().split("\n")[0]}
+        ok, err = resolve.import_clip(path, sub_bin, meta, color)
+        return {"ok": ok, "error": err}
+
+    def finished(res):
+        notify()
+        if on_done is not None:
+            res = res if isinstance(res, dict) else {}
+            on_done(bool(res.get("ok")), str(res.get("error") or ""), sub_bin)
+
+    return run_job(work, finished)

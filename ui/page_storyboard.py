@@ -2910,6 +2910,21 @@ class PageStoryboard(QWidget):
         )
         self._btn_pitch_deck.clicked.connect(self._on_export_pitch_deck)
 
+        # Export de timeline FCP 7 XML (Resolve gratuit/Studio + Premiere) et montage
+        # dans Resolve par le pont DaVinci v2 (04/10/2026) — vivent dans le menu
+        # « Action » comme les autres ; boutons cachés porteurs du texte et de l'état.
+        self._btn_export_xml = QPushButton("📤  Exporter la timeline (XML)")
+        self._btn_export_xml.setToolTip(
+            "Écrit une timeline Final Cut Pro 7 XML : la dernière prise de chaque plan,\n"
+            "dans l'ordre du storyboard. À importer dans DaVinci Resolve (gratuit ou Studio)\n"
+            "ou dans Adobe Premiere — aucun pont nécessaire.")
+        self._btn_export_xml.clicked.connect(self._on_export_timeline_xml)
+        self._btn_resolve_montage = QPushButton("🎞  Monter dans DaVinci Resolve")
+        self._btn_resolve_montage.setToolTip(
+            "Monte la dernière prise de chaque plan, dans l'ordre du storyboard, sur une\n"
+            "nouvelle timeline de DaVinci Resolve (pont PANDORA lancé dans Resolve).")
+        self._btn_resolve_montage.clicked.connect(self._on_resolve_montage)
+
         btn_new = QPushButton("＋  Ajouter un plan")
         btn_new.setFixedHeight(34)
         btn_new.setStyleSheet(
@@ -2944,7 +2959,8 @@ class PageStoryboard(QWidget):
         # durée) restent visibles tout à droite de la barre.
         for _b in (self._btn_batch_mood, self._btn_sync, self._btn_recurrent,
                    self._btn_save_sb_file, self._btn_open_sb_file,
-                   self._btn_pitch_deck, self._btn_new_shot, self._btn_clear_shots):
+                   self._btn_pitch_deck, self._btn_export_xml, self._btn_resolve_montage,
+                   self._btn_new_shot, self._btn_clear_shots):
             _b.setParent(bar)
             _b.hide()
 
@@ -2977,6 +2993,8 @@ class PageStoryboard(QWidget):
             (_amenu.addAction(""), self._btn_sync),
             (_amenu.addAction(""), self._btn_recurrent),
             (_amenu.addAction(""), self._btn_pitch_deck),
+            (_amenu.addAction(""), self._btn_export_xml),
+            (_amenu.addAction(""), self._btn_resolve_montage),
         ]
         for _act, _src in self._actions_pairs:
             _act.triggered.connect(_src.click)   # .click() respecte l'état désactivé
@@ -3375,6 +3393,26 @@ class PageStoryboard(QWidget):
             QMessageBox.information(self, "Ouvert", f"{n} plan(s) chargé(s).")
         except Exception as e:
             QMessageBox.critical(self, "Erreur", f"Échec de l'ouverture : {e}")
+
+    def _project_display_name(self) -> str:
+        try:
+            import core.context as _ctx
+            return _ctx.get_project_name() if hasattr(_ctx, "get_project_name") else ""
+        except Exception:
+            return ""
+
+    def _on_export_timeline_xml(self):
+        """Exporte la timeline en Final Cut Pro 7 XML, pour DaVinci Resolve (gratuit
+        ou Studio) et Adobe Premiere (ui/timeline_export_dialog)."""
+        from ui import timeline_export_dialog
+        timeline_export_dialog.export(self, list(self._all_shots or []),
+                                      self._project_display_name())
+
+    def _on_resolve_montage(self):
+        """Monte la dernière prise de chaque plan sur une timeline de DaVinci
+        Resolve, dans l'ordre du storyboard (ui/resolve_montage)."""
+        from ui import resolve_montage
+        resolve_montage.start(self, list(self._all_shots or []), self._project_display_name())
 
     def _on_export_pitch_deck(self):
         """L2 — exporte un dossier de présentation depuis les plans de la version

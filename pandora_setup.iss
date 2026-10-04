@@ -10,7 +10,7 @@
 ; Produit : dist\PANDORA_Setup_1.2.1.exe
 
 #define MyAppName      "PANDORA"
-#define MyAppVersion   "2.5.0"
+#define MyAppVersion   "2.6.0"
 #define MyAppPublisher "22eme Arkane"
 #define MyAppURL       "https://github.com/22eme-arkane/pandora"
 #define MyAppExeName   "PANDORA.exe"
@@ -100,7 +100,7 @@ english.UpdateCheckMsg=A newer version of {#MyAppName} is available: %1%n%nYou a
 english.UpdateCheckBtn=Download latest version
 english.WatchPresentation=Watch the presentation video (YouTube)
 english.DaVinciGroup=DaVinci Resolve Studio integration (requires Studio edition)
-english.DaVinciScriptsDesc=Install Pandora Send and Pandora Bridge scripts%n  Pandora Send — sends selected clips from DaVinci timeline to PANDORA AI Studio (Workspace > Scripts > pandora_send, or assign a keyboard shortcut)%n  Pandora Bridge — runs as a background service in DaVinci Resolve Studio; listens on port 9877 and automatically imports AI-generated videos into your Media Pool (Workspace > Scripts > seedance_bridge)
+english.DaVinciScriptsDesc=Install Pandora Send and Pandora Bridge scripts%n  Pandora Send — sends selected clips from DaVinci timeline to PANDORA AI Studio (Workspace > Scripts > pandora_send, or assign a keyboard shortcut)%n  Pandora Bridge — runs as a background service in DaVinci Resolve Studio; listens on port 19876 and automatically imports AI-generated videos into your Media Pool (Workspace > Scripts > seedance_bridge)
 
 ; ── French ───────────────────────────────────────────────────────────────────
 french.WelcomeLabel2=Ce programme va installer {#MyAppName} {#MyAppVersion} sur votre ordinateur.%n%nVeuillez fermer toutes les autres applications avant de continuer.
@@ -109,7 +109,7 @@ french.UpdateCheckMsg=Une nouvelle version de {#MyAppName} est disponible : %1%n
 french.UpdateCheckBtn=Télécharger la dernière version
 french.WatchPresentation=Voir la présentation vidéo (YouTube)
 french.DaVinciGroup=Intégration DaVinci Resolve Studio (requiert l'édition Studio)
-french.DaVinciScriptsDesc=Installer les scripts Pandora Send et Pandora Bridge%n  Pandora Send — envoie les clips sélectionnés depuis la timeline DaVinci vers le Studio IA de PANDORA (Espace de travail > Scripts > pandora_send, ou assignez un raccourci clavier)%n  Pandora Bridge — tourne en arrière-plan dans DaVinci Resolve Studio ; ecoute sur le port 9877 et importe automatiquement les videos generees par l'IA dans votre Media Pool (Espace de travail > Scripts > seedance_bridge)
+french.DaVinciScriptsDesc=Installer les scripts Pandora Send et Pandora Bridge%n  Pandora Send — envoie les clips sélectionnés depuis la timeline DaVinci vers le Studio IA de PANDORA (Espace de travail > Scripts > pandora_send, ou assignez un raccourci clavier)%n  Pandora Bridge — tourne en arrière-plan dans DaVinci Resolve Studio ; ecoute sur le port 19876 et importe automatiquement les videos generees par l'IA dans votre Media Pool (Espace de travail > Scripts > seedance_bridge)
 
 ; ── German ───────────────────────────────────────────────────────────────────
 german.WelcomeLabel2=Dieses Programm installiert {#MyAppName} {#MyAppVersion} auf Ihrem Computer.%n%nBitte schließen Sie alle anderen Anwendungen, bevor Sie fortfahren.
@@ -216,6 +216,12 @@ Filename: "https://youtu.be/ci9jA_Tye2E"; Description: "{cm:WatchPresentation}";
 ; Nettoyage propre — supprimer les données utilisateur seulement si vide
 ; (les données projet sont dans les dossiers choisis par l'utilisateurs — jamais supprimées)
 ; La config dans %LOCALAPPDATA%\PANDORA\ est intentionnellement conservée
+; Scripts PANDORA copiés dans DaVinci Resolve pour tous les utilisateurs
+; (installeur ou bouton des Paramètres) : ils ne servent qu'à PANDORA, ils
+; partent avec lui. La copie de repli dans le profil de l'utilisateur n'est pas
+; visée (installeur administrateur : {userappdata} serait celui de l'admin).
+Type: files; Name: "{commonappdata}\Blackmagic Design\DaVinci Resolve\Fusion\Scripts\Utility\seedance_bridge.py"
+Type: files; Name: "{commonappdata}\Blackmagic Design\DaVinci Resolve\Fusion\Scripts\Utility\pandora_send.py"
 
 [Code]
 
@@ -318,21 +324,30 @@ begin
   end;
 end;
 
-{ ── Détection DaVinci Resolve ─────────────────────────────────────────────── }
+{ ── Détection DaVinci Resolve ───────────────────────────────────────────────
+  Audit 04/10/2026 : seul le chemin par défaut était testé. La clé de registre
+  (écrite par l'installeur de Resolve, « Version ») couvre une installation
+  ailleurs ; le dossier ProgramData couvre une installation déjà lancée. Sans
+  Resolve au moment de l'installation de PANDORA, le bouton « Installer /
+  mettre à jour les scripts » des Paramètres prend le relais. }
 function DaVinciInstalled(): Boolean;
 begin
-  Result := FileExists('C:\Program Files\Blackmagic Design\DaVinci Resolve\Resolve.exe');
+  Result := FileExists(ExpandConstant('{commonpf}\Blackmagic Design\DaVinci Resolve\Resolve.exe'))
+    or RegKeyExists(HKEY_LOCAL_MACHINE, 'SOFTWARE\Blackmagic Design\DaVinci Resolve')
+    or DirExists(ExpandConstant('{commonappdata}\Blackmagic Design\DaVinci Resolve'));
 end;
 
 { ── Copie des scripts bridge après installation ──────────────────────────────
   seedance_bridge.py  → Espace de travail → Scripts → seedance_bridge
-  pandora_send.py     → Espace de travail → Scripts → pandora_send (Ctrl+Shift+P) }
+  pandora_send.py     → Espace de travail → Scripts → pandora_send (Ctrl+Shift+P)
+  Les deux portent un numéro de version (BRIDGE_VERSION / SCRIPT_VERSION) que
+  PANDORA compare au sien pour signaler un pont périmé. }
 procedure InstallDaVinciScripts();
 var
   ScriptsDir : String;
   AppDavinci : String;
 begin
-  ScriptsDir := 'C:\ProgramData\Blackmagic Design\DaVinci Resolve\Fusion\Scripts\Utility';
+  ScriptsDir := ExpandConstant('{commonappdata}\Blackmagic Design\DaVinci Resolve\Fusion\Scripts\Utility');
   AppDavinci := ExpandConstant('{app}\davinci');
 
   ForceDirectories(ScriptsDir);

@@ -4,42 +4,48 @@ from PyQt6.QtWidgets import (
 )
 from PyQt6.QtCore import pyqtSignal, Qt
 from ui.styles import C
-from davinci.bridge import resolve
+from core.i18n import translate
+from davinci.bridge import resolve, EXPECTED_BRIDGE, translated as _translate_lines
 from davinci.ping_worker import BridgePingWorker
+from davinci import jobs, scripts_install
 
 
 class DaVinciPanel(QWidget):
-    """Barre de statut + connexion DaVinci Resolve."""
+    """Connexion au pont DaVinci Resolve + état des scripts installés.
+
+    Version 2 (04/10/2026) : la connexion ne bloque plus l'interface, l'état
+    affiché vient du pont lui-même (version, API, projet), et le bouton
+    « Installer / mettre à jour les scripts » revient — l'installeur ne copiait
+    les scripts que si Resolve était déjà installé, sans moyen de réparer."""
 
     status_changed = pyqtSignal(bool)
 
     def __init__(self):
         super().__init__()
         self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Minimum)
-        self.setStyleSheet(f"background:transparent;")
+        self.setStyleSheet("background:transparent;")
+        self._was_connected = False
 
         root = QVBoxLayout(self)
         root.setContentsMargins(16, 12, 16, 12)
         root.setSpacing(8)
 
-        # ── Ligne principale : icône + titre + bouton ─────────────────────────
+        # ── Ligne principale : voyant + titre + bouton + état ─────────────────
         r1 = QHBoxLayout()
         r1.setSpacing(10)
-
         self._dot = QLabel("●")
         self._dot.setFixedSize(20, 20)
         self._dot.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self._dot.setStyleSheet(f"color:{C['red']};font-size:15px;border:none;background:transparent;")
         r1.addWidget(self._dot)
 
-        self._title_lbl = QLabel("DaVinci Resolve Studio")
+        self._title_lbl = QLabel("DaVinci Resolve")
         self._title_lbl.setStyleSheet(
             f"color:{C['text_primary']};font-size:14px;font-weight:700;"
             f"border:none;background:transparent;"
         )
         r1.addWidget(self._title_lbl)
 
-        self._btn = QPushButton("Connecter")
+        self._btn = QPushButton(translate("Connecter"))
         self._btn.setFixedHeight(30)
         self._btn.setMinimumWidth(100)
         self._btn.setStyleSheet(f"""
@@ -54,42 +60,29 @@ class DaVinciPanel(QWidget):
         self._btn.clicked.connect(self._on_connect)
         r1.addWidget(self._btn)
 
-        self._status_chip = QLabel("— Non connecté")
-        self._status_chip.setStyleSheet(
-            f"color:{C['red']};font-size:12px;font-weight:600;"
-            f"border:none;background:transparent;"
-        )
+        self._status_chip = QLabel()
         r1.addWidget(self._status_chip)
-
         r1.addStretch(1)
         root.addLayout(r1)
 
-        # ── Instructions de connexion (visible uniquement quand non connecté) ─
+        # ── Instructions (visibles tant que le pont ne répond pas) ────────────
         self._instructions_w = QWidget()
         self._instructions_w.setStyleSheet("background:transparent;")
         ins = QVBoxLayout(self._instructions_w)
         ins.setContentsMargins(30, 0, 0, 4)
         ins.setSpacing(4)
-
-        _red = (
-            f"color:{C['red']};font-size:10px;font-family:'Consolas',monospace;"
-            f"background:transparent;border:none;"
-        )
-
-        # Le bridge PANDORA est installé AUTOMATIQUEMENT à l'installation de PANDORA
-        # (le bouton d'installation manuelle a été retiré).
-        step1 = QLabel("1.  Dans DaVinci : Espace de travail → Scripts → seedance_bridge")
-        step1.setStyleSheet(_red)
-        ins.addWidget(step1)
-
-        step2 = QLabel("2.  Revenez ici et cliquez sur « Connecter » →")
-        step2.setStyleSheet(_red)
-        ins.addWidget(step2)
-
+        _hint = (f"color:{C['text_secondary']};font-size:10px;font-family:'Consolas',monospace;"
+                 f"background:transparent;border:none;")
+        for text in ("1.  Dans DaVinci : Espace de travail → Scripts → seedance_bridge",
+                     "2.  Revenez ici et cliquez sur « Connecter » →"):
+            step = QLabel(translate(text))
+            step.setStyleSheet(_hint)
+            ins.addWidget(step)
         root.addWidget(self._instructions_w)
 
-        # ── Infos de connexion (visible uniquement quand connecté) ────────────
+        # ── Détail de la connexion (timeline, version du pont, Resolve) ───────
         self._subtitle_lbl = QLabel("")
+        self._subtitle_lbl.setWordWrap(True)
         self._subtitle_lbl.setStyleSheet(
             f"color:{C['text_dim']};font-size:10px;font-family:'Consolas',monospace;"
             f"background:transparent;border:none;"
@@ -97,70 +90,148 @@ class DaVinciPanel(QWidget):
         self._subtitle_lbl.setContentsMargins(30, 0, 0, 0)
         root.addWidget(self._subtitle_lbl)
 
+        # ── Scripts installés dans Resolve ────────────────────────────────────
+        r3 = QHBoxLayout()
+        r3.setContentsMargins(30, 4, 0, 0)
+        r3.setSpacing(10)
+        self._scripts_lbl = QLabel("")
+        self._scripts_lbl.setWordWrap(True)
+        r3.addWidget(self._scripts_lbl, 1)
+        self._btn_install = QPushButton(translate("Installer / mettre à jour les scripts"))
+        self._btn_install.setFixedHeight(28)
+        self._btn_install.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._btn_install.setToolTip(translate(
+            "Copie seedance_bridge et pandora_send dans le dossier Scripts de "
+            "DaVinci Resolve (sans droits administrateur si possible)."))
+        self._btn_install.setStyleSheet(
+            f"QPushButton{{background:transparent;color:{C['accent']};"
+            f"border:1px solid {C['accent_dim']};border-radius:6px;"
+            f"font-size:10px;font-weight:700;padding:0 12px;}}"
+            f"QPushButton:hover{{background:rgba(78,205,196,0.12);}}"
+        )
+        self._btn_install.clicked.connect(self._on_install)
+        r3.addWidget(self._btn_install)
+        root.addLayout(r3)
+
+        jobs.hub().changed.connect(self._refresh_ui)
+        self._refresh_scripts()
         self._refresh_ui()
 
-        # Ping unique au démarrage — pas de timer récurrent
+        # Ping unique au démarrage, hors interface — pas de timer récurrent
         self._ping_worker: BridgePingWorker | None = None
         self._auto_ping()
 
+    # ── Connexion ─────────────────────────────────────────────────────────────
+
     def _on_connect(self):
-        if resolve.is_connected():
-            resolve.refresh()
-            self._refresh_ui()
-            dvr_err = resolve.get_dvr_error()
-            if dvr_err:
-                QMessageBox.warning(
-                    self, "DaVinci — Studio requis pour le scripting",
-                    "Le bridge TCP est actif mais le scripting DaVinci ne répond pas.\n\n"
-                    "Cette fonctionnalité nécessite DaVinci Resolve Studio.\n\n"
-                    "La génération de clips fonctionne normalement.\n"
-                    "L'import automatique dans le Media Pool et la lecture\n"
-                    "des clips DaVinci seront actifs avec la version Studio."
-                )
-        else:
-            self._btn.setEnabled(False)
-            self._btn.setText("…")
-            ok, err = resolve.connect()
-            self._btn.setEnabled(True)
-            self._refresh_ui()
-            self.status_changed.emit(ok)
-            if not ok:
-                QMessageBox.warning(self, "DaVinci — Connexion impossible", err)
+        self._btn.setEnabled(False)
+        self._btn.setText("…")
+        jobs.run_job(resolve.connect, self._on_connect_done)
+
+    def _on_connect_done(self, res):
+        self._btn.setEnabled(True)
+        ok, msg = res if isinstance(res, tuple) else (False, str((res or {}).get("error", "")))
+        jobs.notify()
+        self._refresh_ui()
+        if not ok:
+            QMessageBox.warning(self, translate("DaVinci — Connexion impossible"),
+                                _translate_lines(msg))
+        elif msg:
+            QMessageBox.information(self, translate("DaVinci Resolve"), _translate_lines(msg))
 
     def _refresh_ui(self):
-        connected = resolve.is_connected()
-        if connected:
-            proj = resolve.project_name() or "Connecté"
-            tl   = resolve.timeline_name()
-            self._dot.setStyleSheet(
-                f"color:{C['green']};font-size:15px;border:none;background:transparent;"
-            )
-            self._status_chip.setText(f"— {proj}")
-            self._status_chip.setStyleSheet(
-                f"color:{C['green']};font-size:12px;font-weight:600;"
-                f"border:none;background:transparent;"
-            )
-            self._btn.setText("Actualiser")
-            self._instructions_w.setVisible(False)
-            self._subtitle_lbl.setText(tl or "Aucune timeline ouverte")
-            self._subtitle_lbl.setVisible(True)
+        """Affiche l'état EN CACHE (aucun appel réseau ici)."""
+        connected = resolve._connected
+        if connected and resolve.outdated:
+            color, chip = C["orange"], translate("— pont à mettre à jour")
+        elif connected and not resolve.api_ok:
+            color, chip = C["orange"], translate("— API DaVinci indisponible")
+        elif connected:
+            color, chip = C["green"], "— " + (resolve.project or translate("Connecté"))
         else:
-            self._dot.setStyleSheet(
-                f"color:{C['red']};font-size:15px;border:none;background:transparent;"
-            )
-            self._status_chip.setText("— Non connecté")
-            self._status_chip.setStyleSheet(
-                f"color:{C['red']};font-size:12px;font-weight:600;"
-                f"border:none;background:transparent;"
-            )
-            self._btn.setText("Connecter")
-            self._instructions_w.setVisible(True)
-            self._subtitle_lbl.setVisible(False)
+            color, chip = C["red"], translate("— Non connecté")
+        self._dot.setStyleSheet(f"color:{color};font-size:15px;border:none;background:transparent;")
+        self._status_chip.setText(chip)
+        self._status_chip.setStyleSheet(
+            f"color:{color};font-size:12px;font-weight:600;border:none;background:transparent;")
+        self._btn.setText(translate("Actualiser") if connected else translate("Connecter"))
+        self._instructions_w.setVisible(not connected)
+        if connected:
+            bits = [resolve.timeline or translate("Aucune timeline ouverte")]
+            if resolve.bridge_version:
+                bits.append(translate("pont") + f" v{resolve.bridge_version}")
+            if resolve.product_label:
+                bits.append(resolve.product_label)
+            self._subtitle_lbl.setText("  ·  ".join(bits))
+        self._subtitle_lbl.setVisible(connected)
+        if connected != self._was_connected:
+            self._was_connected = connected
+            self.status_changed.emit(connected)
 
     def is_connected(self) -> bool:
         return resolve.is_connected()
 
-    # ── Polling automatique ───────────────────────────────────────────────────
+    # ── Scripts installés ─────────────────────────────────────────────────────
+
+    def _refresh_scripts(self):
+        try:
+            st = scripts_install.status()
+        except Exception:
+            st = {"state": "absent", "copies": [], "resolve": False}
+        state = st.get("state")
+        if state == "ok":
+            text = translate("Scripts PANDORA dans Resolve : à jour") + f" (v{EXPECTED_BRIDGE})"
+            color = C["text_dim"]
+        elif state == "outdated":
+            old = min((c["version"] for c in st.get("copies", [])
+                       if c["name"] == scripts_install.BRIDGE_FILE), default=0)
+            text = translate("Scripts PANDORA dans Resolve : à mettre à jour") + \
+                (f" (v{old} → v{EXPECTED_BRIDGE})" if old else "")
+            color = C["orange"]
+        elif not st.get("resolve"):
+            text = translate("DaVinci Resolve n'est pas détecté sur ce poste.")
+            color = C["text_dim"]
+        else:
+            text = translate("Scripts PANDORA non installés dans Resolve.")
+            color = C["orange"]
+        self._scripts_lbl.setText(text)
+        self._scripts_lbl.setStyleSheet(
+            f"color:{color};font-size:10px;background:transparent;border:none;")
+
+    def _on_install(self):
+        res = scripts_install.install()
+        self._refresh_scripts()
+        if res.get("no_resolve"):
+            QMessageBox.warning(self, translate("DaVinci Resolve introuvable"), translate(
+                "DaVinci Resolve n'est pas détecté sur ce poste. Installez-le, "
+                "lancez-le une fois, puis recommencez."))
+            return
+        if res.get("missing_source"):
+            QMessageBox.warning(self, translate("Installation impossible"),
+                                translate("Script introuvable dans PANDORA :") + " "
+                                + res["missing_source"])
+            return
+        lines = []
+        if res.get("written"):
+            lines.append(translate("Scripts installés dans :"))
+            lines += ["  " + d for d in res["written"]]
+        if res.get("failed"):
+            lines.append("")
+            lines.append(translate("Écriture impossible dans :"))
+            lines += [f"  {d} ({e})" for d, e in res["failed"]]
+        lines.append("")
+        if res.get("new"):
+            lines.append(translate(
+                "Redémarrez DaVinci Resolve : il ne liste les nouveaux scripts qu'à son "
+                "démarrage. Ensuite : Espace de travail → Scripts → seedance_bridge."))
+        else:
+            lines.append(translate(
+                "Si le pont tourne déjà dans Resolve, fermez sa fenêtre « PANDORA Bridge » "
+                "puis relancez Espace de travail → Scripts → seedance_bridge."))
+        box = QMessageBox.information if res.get("ok") else QMessageBox.warning
+        box(self, translate("Scripts DaVinci"), "\n".join(lines))
+
+    # ── Ping automatique ──────────────────────────────────────────────────────
 
     def _auto_ping(self):
         """Lance un ping asynchrone si aucun n'est en cours."""
@@ -171,14 +242,4 @@ class DaVinciPanel(QWidget):
         self._ping_worker.start()
 
     def _on_auto_ping_result(self, connected: bool, timeline_name: str):
-        was_connected = resolve._connected
-        resolve._connected = connected
-        if connected != was_connected:
-            # État changé → mettre à jour l'UI et émettre le signal
-            self._refresh_ui()
-            self.status_changed.emit(connected)
-        elif connected:
-            # Toujours connecté → mettre à jour juste la timeline si elle a changé
-            tl_text = timeline_name or "Aucune timeline ouverte"
-            if self._subtitle_lbl.text() != tl_text:
-                self._subtitle_lbl.setText(tl_text)
+        self._refresh_ui()

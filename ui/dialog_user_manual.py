@@ -119,7 +119,9 @@ def _s_welcome() -> str:
             "Générer des vidéos IA : Seedance 2.0 (recommandé), Kling, Happy Horse, PixVerse…",
             "Sonoriser vos plans avec le <b>Sound Design</b> (Mirelo SFX : prompt → SFX, vidéo → bande-son)",
             "Monter vos clips en résolution avec l'<b>Upscaling</b> (Topaz / SeedVR2, ×2/×4)",
-            "Importer automatiquement les vidéos dans <b>DaVinci Resolve</b> (Studio requis)",
+            "Importer automatiquement les vidéos dans <b>DaVinci Resolve</b> et y monter le "
+            "storyboard (pont PANDORA ; Studio requis dès Resolve 21.1), ou exporter la "
+            "timeline en XML pour Resolve et Premiere",
         ),
         _sep_html(),
         _h("La nouvelle interface"),
@@ -434,6 +436,21 @@ def _s_storyboard() -> str:
         ),
 
         _sep_html(),
+        _h("Exporter la timeline — Resolve et Premiere"),
+        _p("Action → <b>Exporter la timeline (XML)</b> écrit une timeline Final Cut Pro 7 XML : "
+           "la dernière prise de chaque plan, dans l'ordre du storyboard, bout à bout. Aucun "
+           "pont ni plugin : c'est la voie ouverte à tous, version gratuite de Resolve comprise."),
+        _ul(
+            "<b>DaVinci Resolve</b> (gratuit ou Studio) : Fichier → Importer → Timeline, puis choisissez le fichier",
+            "<b>Adobe Premiere</b> : Fichier → Importer",
+            "Le fichier est proposé à côté des clips (dossier vidéo du projet) : Resolve les retrouve d'eux-mêmes",
+            "Le son stéréo arrive sur deux pistes (A1 gauche, A2 droite) ; dans Resolve, « Attributs du clip → Audio » les regroupe en stéréo",
+            "Chaque plan porte un marqueur (séquence, plan, prise) et son action en commentaire",
+            "Le bilan signale les plans sans clip, les cadences différentes et les chemins avec accents",
+        ),
+        _tip("Avec DaVinci Resolve <b>Studio</b> et le pont PANDORA, Action → <b>Monter dans "
+             "DaVinci Resolve</b> fait la même chose directement dans Resolve, clips rangés par "
+             "séquence."),
         _h("Versions du storyboard"),
         _ul(
             "Gérez plusieurs versions : découpage principal, version courte, alternatives de montage…",
@@ -776,10 +793,10 @@ def _s_seedance() -> str:
             "Utilisez le spinbox <b>×N</b> pour générer plusieurs prises par clip",
         ),
         _warn(
-            "Format requis par Seedance 2.0 pour les clips de référence : "
-            "<b>720p maximum · moins de 50 MB · H.264 MP4 ou MOV</b>. "
-            "Depuis DaVinci : Fichier → Exporter → sélectionner H.264 Master à 720p "
-            "avant d'envoyer vos clips via pandora_send."
+            "Clips acceptés : <b>1080p maximum · moins de 50 Mo · H.264 MP4 ou MOV</b>. "
+            "PANDORA les ramène ensuite lui-même aux limites du moteur (720p et 15 s pour "
+            "Seedance 2.0). Depuis DaVinci : Fichier → Exporter → H.264 Master à 1080p au "
+            "plus, avant d'envoyer vos clips via pandora_send."
         ),
         _h("Acteurs réels : « Changer le décor · acteurs intacts »"),
         _p("Seedance refuse le plus souvent les clips où l'on voit des visages réalistes : c'est "
@@ -810,13 +827,14 @@ def _s_seedance() -> str:
             "Chaque clip modifié utilise le même seed → style et palette cohérents malgré des angles différents",
             "Décochez si vous souhaitez une variation aléatoire par clip",
         ),
-        _h("Bridge DaVinci"),
+        _h("Pont DaVinci"),
         _ul(
-            "Le bridge est nécessaire pour l'<b>import automatique dans le Media Pool</b>",
-            "Si le bridge n'est pas connecté, PANDORA propose : "
-            "<i>Fermer</i> / <i>↻ Vérifier la connexion</i> / <i>Générer sans import</i>",
+            "Le pont est nécessaire pour l'<b>import automatique dans le Media Pool</b>",
+            "Si le pont n'est pas connecté, PANDORA propose : "
+            "<i>Fermer</i> / <i>↻ Vérifier la connexion</i> / <i>Continuer</i> (générer sans import)",
             "Pour connecter : DaVinci Resolve → Espace de travail → Scripts → <b>seedance_bridge</b>",
-            "Laissez la fenêtre PANDORA Bridge ouverte pendant toute votre session",
+            "Laissez la fenêtre PANDORA Bridge ouverte : la fermer arrête le pont",
+            "Un import refusé par Resolve s'explique au survol de la carte du clip",
         ),
         _tip(
             "Prompt efficace pour la modification : soyez précis sur ce que vous voulez <i>garder</i> "
@@ -997,6 +1015,31 @@ def _s_settings() -> str:
             "Page <b>Billing</b> : « Add to credit balance » — <b>$5</b> suffisent largement (des centaines d'opérations)",
             "Sans cette clé : toutes les fonctions Claude IA sont désactivées (formatage scénario, arrangement, génération storyboard, extraction d'éléments)",
         ),
+        _h("Compte ChatGPT — forfait Plus ou Pro"),
+        _p("Choisissez <b>Compte ChatGPT (forfait Plus / Pro)</b> dans Assistant IA (pour tout, ou "
+           "pour une tâche) : les tâches texte utilisent votre abonnement ChatGPT, sans clé API."),
+        _ul(
+            "<b>Continuer avec ChatGPT</b> ouvre la page de connexion d'OpenAI dans votre navigateur ; "
+            "acceptez « Utiliser votre forfait ChatGPT »",
+            "Vos jetons restent sur cet ordinateur (chiffrés sous Windows) ; « Se déconnecter » les révoque chez OpenAI",
+            "Forfait <b>Plus ou Pro</b> requis. Le quota restant n'est pas publié par OpenAI : "
+            "« Gérer l'utilisation » ouvre vos réglages ChatGPT",
+            "Limite atteinte : le forfait se met en pause. PANDORA ne bascule JAMAIS seul sur une clé "
+            "payante — cochez « Utiliser ma clé API OpenAI quand le forfait est indisponible » si vous "
+            "le souhaitez",
+        ),
+        _warn("Pour l'instant (octobre 2026), OpenAI coupe la session au bout d'une heure : "
+              "PANDORA vous demande alors de vous reconnecter (un clic, sans nouveau consentement)."),
+        _h("Mode économique — lots Claude (−50 %)"),
+        _p("Case <b>Mode économique pour la génération du storyboard</b> (Assistant IA) : la "
+           "conversion des fiches et la composition des prompts finals partent dans des lots "
+           "Anthropic (Message Batches), facturés <b>moitié prix</b>."),
+        _ul(
+            "Les résultats arrivent en général en quelques minutes, 24 h au plus : la fenêtre affiche "
+            "l'avancement ; laissez PANDORA ouvert",
+            "Claude uniquement (profil Anthropic) ; « Annuler » arrête aussi les lots chez Anthropic",
+            "Le Coût du projet compte ces appels à moitié prix (mention « lot Batch −50 % »)",
+        ),
         _h("Clé API Nano Banana — Portraits IA"),
         _ul(
             "Créez un compte sur la plateforme Nano Banana",
@@ -1004,16 +1047,35 @@ def _s_settings() -> str:
             "Collez-la dans le champ <b>Clé Nano Banana</b>",
             "Sans cette clé : portraits en mode mock (images placeholder colorées)",
         ),
-        _h("DaVinci Resolve — Connexion bridge"),
+        _h("DaVinci Resolve — Connexion du pont"),
         _ul(
-            "Cliquez sur <b>Installer bridge</b> pour copier le script dans le dossier Scripts de DaVinci",
+            "Paramètres → DaVinci Resolve → <b>Installer / mettre à jour les scripts</b> : copie "
+            "seedance_bridge et pandora_send dans le dossier Scripts de Resolve. Après une "
+            "première installation, redémarrez Resolve",
+            "Jusqu'à Resolve 20.x, un <b>Python 3 64 bits</b> doit être installé sur le poste "
+            "(python.org, « pour tous les utilisateurs ») : Resolve s'en sert pour les scripts",
             "Ouvrez DaVinci Resolve avec un projet chargé",
             "Dans DaVinci : <b>Espace de travail → Scripts → seedance_bridge</b>",
-            "Le script lance un serveur TCP local (port 19876)",
-            "Cliquez sur <b>Connecter</b> dans PANDORA — le voyant passe au vert ●",
+            "Le script lance un pont local (port 19876) et affiche une petite fenêtre : la "
+            "fermer arrête le pont ; relancer le script remplace l'ancien pont",
+            "Cliquez sur <b>Connecter</b> dans PANDORA — le voyant passe au vert ● (orange : "
+            "pont à mettre à jour, ou API de Resolve indisponible)",
+        ),
+        _h("Monter le storyboard dans Resolve"),
+        _ul(
+            "Storyboard → Action → <b>Monter dans DaVinci Resolve</b> : la dernière prise de "
+            "chaque plan, dans l'ordre du storyboard, sur une nouvelle timeline",
+            "Clips rangés dans le chutier <b>PANDORA</b>, un sous-chutier par séquence "
+            "(SQ01, SQ02…), avec scène, plan, prise et action en métadonnées et une couleur "
+            "par séquence — comme l'import automatique après génération",
+            "Les plans sans clip sont ignorés ; le bilan les compte",
         ),
         _warn("Si Claude ne répond pas, <b>désactivez votre VPN</b> — certains serveurs VPN sont bloqués par l'API Anthropic."),
-        _warn("Le scripting Python de DaVinci (import Media Pool, lecture timeline) est réservé à <b>DaVinci Resolve Studio</b> (version payante). La version gratuite ne supporte pas ces fonctions."),
+        _warn("Depuis <b>Resolve 21.1</b> (septembre 2026), le scripting Python est réservé à "
+              "<b>DaVinci Resolve Studio</b> : le pont n'apparaît plus dans la version gratuite "
+              "(jusqu'à Resolve 21.0, elle le lance aussi). Sans pont : Storyboard → Action → "
+              "<b>Exporter la timeline (XML)</b>, puis Fichier → Importer → Timeline dans "
+              "Resolve, ou Fichier → Importer dans Premiere."),
         _h("Dossier de sortie"),
         _ul(
             "Par défaut, les vidéos sont sauvegardées dans <code>data/Seedance/</code> du projet en cours",
@@ -1126,7 +1188,9 @@ def _e_welcome() -> str:
             "Generate AI videos: Seedance 2.0 (recommended), Kling, Happy Horse, PixVerse…",
             "Add sound to your shots with <b>Sound Design</b> (Mirelo SFX: prompt → SFX, video → soundtrack)",
             "Upscale your clips with <b>Upscaling</b> (Topaz / SeedVR2, ×2/×4)",
-            "Automatically import videos into <b>DaVinci Resolve</b> (Studio required)",
+            "Automatically import videos into <b>DaVinci Resolve</b> and assemble the "
+            "storyboard there (PANDORA bridge; Studio required from Resolve 21.1), or export "
+            "the timeline as XML for Resolve and Premiere",
         ),
         _sep_html(),
         _h("The new interface"),
@@ -1428,6 +1492,21 @@ def _e_storyboard() -> str:
         ),
 
         _sep_html(),
+        _h("Export the timeline — Resolve and Premiere"),
+        _p("Action → <b>Export the timeline (XML)</b> writes a Final Cut Pro 7 XML timeline: the "
+           "latest take of each shot, in storyboard order, back to back. No bridge, no plugin: "
+           "it works for everyone, including the free version of Resolve."),
+        _ul(
+            "<b>DaVinci Resolve</b> (free or Studio): File → Import → Timeline, then choose the file",
+            "<b>Adobe Premiere</b>: File → Import",
+            "The file is offered next to the clips (project video folder): Resolve finds them by itself",
+            "Stereo sound arrives on two tracks (A1 left, A2 right); in Resolve, “Clip Attributes → Audio” groups them as stereo",
+            "Each shot carries a marker (sequence, shot, take) with its action as a comment",
+            "The summary flags shots without a clip, different frame rates and paths with accents",
+        ),
+        _tip("With DaVinci Resolve <b>Studio</b> and the PANDORA bridge, Action → <b>Assemble in "
+             "DaVinci Resolve</b> does the same thing directly in Resolve, clips sorted by "
+             "sequence."),
         _h("Storyboard versions"),
         _ul(
             "Manage multiple versions: main breakdown, short version, editing alternatives…",
@@ -1766,9 +1845,9 @@ def _e_seedance() -> str:
             "Use the <b>×N</b> spinbox to generate multiple takes per clip",
         ),
         _warn(
-            "Format required by Seedance 2.0 for reference clips: "
-            "<b>720p maximum · less than 50 MB · H.264 MP4 or MOV</b>. "
-            "From DaVinci: File → Export → select H.264 Master at 720p "
+            "Accepted clips: <b>1080p maximum · less than 50 MB · H.264 MP4 or MOV</b>. "
+            "PANDORA then brings them down to the engine's limits itself (720p and 15 s for "
+            "Seedance 2.0). From DaVinci: File → Export → H.264 Master at 1080p at most, "
             "before sending your clips via pandora_send."
         ),
         _h("Real actors: “Change the set · actors untouched”"),
@@ -1804,9 +1883,10 @@ def _e_seedance() -> str:
         _ul(
             "The bridge is required for <b>automatic import into the Media Pool</b>",
             "If the bridge is not connected, PANDORA offers: "
-            "<i>Close</i> / <i>↻ Check connection</i> / <i>Generate without import</i>",
+            "<i>Close</i> / <i>↻ Check connection</i> / <i>Continue</i> (generate without import)",
             "To connect: DaVinci Resolve → Workspace → Scripts → <b>seedance_bridge</b>",
-            "Keep the PANDORA Bridge window open throughout your session",
+            "Keep the PANDORA Bridge window open: closing it stops the bridge",
+            "An import refused by Resolve is explained when hovering the clip card",
         ),
         _tip(
             "Effective modification prompt: be precise about what you want to <i>keep</i> "
@@ -1976,6 +2056,30 @@ def _e_settings() -> str:
             "<b>Billing</b> page: \"Add to credit balance\" — <b>$5</b> is more than enough (hundreds of operations)",
             "Without this key: all Claude AI functions are disabled (screenplay formatting, arrangement, storyboard generation, element extraction)",
         ),
+        _h("ChatGPT account — Plus or Pro plan"),
+        _p("Choose <b>ChatGPT account (Plus / Pro plan)</b> in AI Assistant (for everything, or for "
+           "one task): text tasks use your ChatGPT subscription, without an API key."),
+        _ul(
+            "<b>Continue with ChatGPT</b> opens OpenAI's sign-in page in your browser; accept "
+            "“Use your ChatGPT plan”",
+            "Your tokens stay on this computer (encrypted on Windows); “Sign out” revokes them at OpenAI",
+            "<b>Plus or Pro</b> plan required. OpenAI does not publish the remaining quota: "
+            "“Manage usage” opens your ChatGPT settings",
+            "Limit reached: the plan is paused. PANDORA NEVER switches to a paid key on its own — "
+            "tick “Use my OpenAI API key when the plan is unavailable” if you want it",
+        ),
+        _warn("For now (October 2026), OpenAI ends the session after one hour: PANDORA then asks "
+              "you to sign in again (one click, no new consent)."),
+        _h("Economy mode — Claude batches (−50%)"),
+        _p("<b>Economy mode for storyboard generation</b> checkbox (AI Assistant): converting the "
+           "breakdown and composing the final prompts go out in Anthropic batches (Message "
+           "Batches), billed at <b>half price</b>."),
+        _ul(
+            "Results usually arrive within minutes, 24 h at most: the window shows the progress; "
+            "keep PANDORA open",
+            "Claude only (Anthropic profile); “Cancel” also stops the batches at Anthropic",
+            "Project cost counts these calls at half price (“Batch −50%” mention)",
+        ),
         _h("Nano Banana API key — AI portraits"),
         _ul(
             "Create an account on the Nano Banana platform",
@@ -1985,14 +2089,33 @@ def _e_settings() -> str:
         ),
         _h("DaVinci Resolve — Bridge connection"),
         _ul(
-            "Click <b>Install bridge</b> to copy the script to DaVinci's Scripts folder",
+            "Settings → DaVinci Resolve → <b>Install / update the scripts</b>: copies "
+            "seedance_bridge and pandora_send into Resolve's Scripts folder. After a first "
+            "installation, restart Resolve",
+            "Up to Resolve 20.x, a <b>64-bit Python 3</b> must be installed on the computer "
+            "(python.org, “for all users”): Resolve uses it to run scripts",
             "Open DaVinci Resolve with a project loaded",
             "In DaVinci: <b>Workspace → Scripts → seedance_bridge</b>",
-            "The script launches a local TCP server (port 19876)",
-            "Click <b>Connect</b> in PANDORA — the indicator turns green ●",
+            "The script starts a local bridge (port 19876) and shows a small window: closing "
+            "it stops the bridge; relaunching the script replaces the old bridge",
+            "Click <b>Connect</b> in PANDORA — the indicator turns green ● (orange: bridge "
+            "needs updating, or Resolve's API is unavailable)",
+        ),
+        _h("Assemble the storyboard in Resolve"),
+        _ul(
+            "Storyboard → Action → <b>Assemble in DaVinci Resolve</b>: the latest take of each "
+            "shot, in storyboard order, on a new timeline",
+            "Clips go to the <b>PANDORA</b> bin, one sub-bin per sequence (SQ01, SQ02…), with "
+            "scene, shot, take and action as metadata and one color per sequence — like the "
+            "automatic import after generation",
+            "Shots without a clip are skipped; the summary counts them",
         ),
         _warn("If Claude does not respond, <b>disable your VPN</b> — some VPN servers are blocked by the Anthropic API."),
-        _warn("DaVinci Python scripting (Media Pool import, timeline reading) is reserved for <b>DaVinci Resolve Studio</b> (paid version). The free version does not support these functions."),
+        _warn("Since <b>Resolve 21.1</b> (September 2026), Python scripting is reserved for "
+              "<b>DaVinci Resolve Studio</b>: the bridge no longer appears in the free version "
+              "(up to Resolve 21.0, the free version runs it too). Without the bridge: "
+              "Storyboard → Action → <b>Export the timeline (XML)</b>, then File → Import → "
+              "Timeline in Resolve, or File → Import in Premiere."),
         _h("Output folder"),
         _ul(
             "By default, videos are saved in <code>data/Seedance/</code> of the current project",

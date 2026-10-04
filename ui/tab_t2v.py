@@ -1543,7 +1543,7 @@ class _DaVinciBar(QWidget):
         lay.setContentsMargins(0, 0, 0, 0)
         lay.setSpacing(8)
 
-        logo = QLabel("DaVinci Resolve Studio")
+        logo = QLabel("DaVinci Resolve")
         logo.setStyleSheet(
             f"color:{C['text_secondary']};font-size:11px;font-weight:700;background:transparent;"
         )
@@ -1572,34 +1572,70 @@ class _DaVinciBar(QWidget):
         lay.addStretch()
 
         self._refresh()
+        # Une connexion faite ailleurs (Paramètres, autre onglet) met la barre à
+        # jour : avant le 04/10/2026, personne n'écoutait ce changement.
+        try:
+            from davinci.jobs import hub
+            hub().changed.connect(self._refresh_cached)
+        except Exception:
+            pass
 
     def _refresh(self):
-        connected = resolve.is_connected()
+        self._apply(resolve.is_connected())
+
+    def _refresh_cached(self):
+        """État EN CACHE, sans appel réseau (après un changement signalé)."""
+        self._apply(resolve._connected)
+
+    def _apply(self, connected: bool):
         if connected:
-            self._dot.setStyleSheet(f"color:{C['green']};font-size:10px;background:transparent;")
-            self._status_lbl.setText("Connecté")
+            stale = resolve.outdated or not resolve.api_ok
+            color = C['orange'] if stale else C['green']
+            self._dot.setStyleSheet(f"color:{color};font-size:10px;background:transparent;")
+            self._status_lbl.setText(translate(
+                "Pont à mettre à jour" if resolve.outdated
+                else ("API DaVinci indisponible" if not resolve.api_ok else "Connecté")))
             self._status_lbl.setStyleSheet(
-                f"color:{C['green']};font-size:10px;background:transparent;"
+                f"color:{color};font-size:10px;background:transparent;"
             )
-            self._btn_connect.setText("✓ Connecté")
+            self._btn_connect.setText("✓ " + translate("Connecté"))
             self._btn_connect.setEnabled(False)
         else:
             self._dot.setStyleSheet(f"color:{C['red']};font-size:10px;background:transparent;")
-            self._status_lbl.setText("Non connecté")
+            self._status_lbl.setText(translate("Non connecté"))
             self._status_lbl.setStyleSheet(
                 f"color:{C['text_dim']};font-size:10px;background:transparent;"
             )
-            self._btn_connect.setText("Connecter")
+            self._btn_connect.setText(translate("Connecter"))
             self._btn_connect.setEnabled(True)
+        self._status_lbl.setToolTip("")
         if connected != self._prev_connected:
             self._prev_connected = connected
             self.connection_changed.emit(connected)
 
+    def show_import_result(self, ok: bool, text: str):
+        """Résultat d'un import DaVinci fait en arrière-plan (ne touche pas à la
+        progression : la génération suivante d'une file l'utilise déjà)."""
+        color = C['green'] if ok else C['red']
+        self._status_lbl.setText(text if len(text) <= 70 else text[:67] + "…")
+        self._status_lbl.setToolTip(text)
+        self._status_lbl.setStyleSheet(f"color:{color};font-size:10px;background:transparent;")
+
     def _on_connect(self):
-        ok, msg = resolve.connect()
-        self._refresh()
-        if not ok:
-            QMessageBox.warning(self, "Connexion impossible", msg)
+        from davinci.jobs import run_job, notify
+        from davinci.bridge import translated
+        self._btn_connect.setEnabled(False)
+        self._btn_connect.setText("…")
+
+        def _done(res):
+            ok, msg = res if isinstance(res, tuple) else (False, str((res or {}).get("error", "")))
+            notify()
+            self._apply(resolve._connected)
+            if not ok:
+                QMessageBox.warning(self, translate("Connexion impossible"), translated(msg))
+            elif msg:
+                QMessageBox.information(self, "DaVinci Resolve", translated(msg))
+        run_job(resolve.connect, _done)
 
 
 # ── Thumbnail strip ───────────────────────────────────────────────────────────
@@ -3404,7 +3440,8 @@ class TabT2V(QScrollArea):
         self._import_cb.setEnabled(_dv_ok)
         self._import_cb.setToolTip(
             "" if _dv_ok
-            else "DaVinci Resolve Studio requis — connectez le bridge pour activer cette option"
+            else translate("Lancez le pont dans DaVinci Resolve (Espace de travail → Scripts "
+                           "→ seedance_bridge), puis connectez-vous pour activer cette option")
         )
         self._import_cb.setStyleSheet(f"color:{C['text_secondary']};font-size:11px;")
         lay.addWidget(self._import_cb)
@@ -3865,6 +3902,7 @@ class TabT2V(QScrollArea):
     def _schedule_final_assembly(self):
         """Programme l'assemblage du prompt FINAL de l'encart pour le plan qui vient
         d'être sélectionné (débounce court pour les balayages de plans)."""
+        self._final_compose_skipped = False
         self._assembly_source = self.prompt_ta.toPlainText().strip()
         # Son CAPTURÉ ici (et pas seulement au lancement de la traduction) : la
         # section [🎵 SOUND DESIGN] disparaît de l'encart à l'assemblage, et elle
@@ -3929,7 +3967,10 @@ class TabT2V(QScrollArea):
         # doit figurer traduit dans le prompt final (comme api/real.py).
         src = getattr(self, "_assembly_source", None)
         if not src or self.prompt_ta.toPlainText().strip() != src:
-            return   # édition utilisateur entre-temps → on n'écrase jamais
+            # édition utilisateur entre-temps → on n'écrase jamais ; et aucune
+            # composition ne viendra : la file ne doit pas l'attendre.
+            self._final_compose_skipped = True
+            return
         # « Recomposer le prompt » (04/10/2026) : composition FRAÎCHE demandée —
         # ni le final stocké ni le cache ne la remplacent. Consommé ici.
         _force = bool(getattr(self, "_force_compose", False))
@@ -3977,6 +4018,7 @@ class TabT2V(QScrollArea):
         # soumet au composeur → l'encart montrera la prose réellement envoyée.
         prompt_fr = self._build_pre_compose_prompt(_sfv_prev(src))
         if not prompt_fr:
+            self._final_compose_skipped = True
             return
         _ctx = self._compose_context()
         # ── Déjà composé à l'identique ? On réutilise, sans appel IA ──────────
@@ -3994,6 +4036,10 @@ class TabT2V(QScrollArea):
             self._final_cache_key_pending = ""
             self._compose_ctl.set_note(translate(
                 "prompt du plan — non recomposé (automatique désactivé)"))
+            # La file d'attente part AUSSITÔT : elle attendait ici un prompt
+            # final qui ne viendrait jamais — 90 s par plan (constat Matthieu
+            # 04/10/2026, « j'avais pourtant désactivé la recomposition »).
+            self._final_compose_skipped = True
             return
         self._final_cache_key_pending = _key
         self._final_from_cache = False
@@ -4999,6 +5045,26 @@ class TabT2V(QScrollArea):
             self._reprise_banner.setVisible(True)
 
 
+    def _start_davinci_import(self, path: str, shot: dict):
+        """Importe le clip dans DaVinci en arrière-plan ; le résultat (ou la vraie
+        erreur du pont) s'affiche dans la barre DaVinci du Studio."""
+        from davinci.importer import import_clip_async
+        from davinci.bridge import translated
+        name = os.path.basename(path)
+
+        def _done(ok: bool, err: str, sub_bin: str):
+            try:
+                if ok:
+                    where = f"PANDORA/{sub_bin}" if sub_bin else "PANDORA"
+                    self._davinci_bar.show_import_result(True, f"✓ {name} → {where}")
+                else:
+                    self._davinci_bar.show_import_result(
+                        False, translate("Import DaVinci impossible :") + " "
+                        + translated(err).split("\n")[0])
+            except Exception:
+                pass
+        import_clip_async(path, shot, _done)
+
     def _check_davinci_connection(self) -> bool:
         """Returns True if ok to proceed, False if user cancelled."""
         if resolve.is_connected():
@@ -5022,7 +5088,8 @@ class TabT2V(QScrollArea):
             ok, msg = resolve.connect()
             self._davinci_bar._refresh()
             if not ok:
-                QMessageBox.warning(self, "Connexion impossible", msg)
+                from davinci.bridge import translated
+                QMessageBox.warning(self, translate("Connexion impossible"), translated(msg))
         return True
 
     # ── Garde-fou crédit fal.ai ───────────────────────────────────────────────
@@ -5183,9 +5250,9 @@ class TabT2V(QScrollArea):
         self._import_cb.setEnabled(connected)
         if not connected:
             self._import_cb.setChecked(False)
-            self._import_cb.setToolTip(
-                "DaVinci Resolve Studio requis — connectez le bridge pour activer cette option"
-            )
+            self._import_cb.setToolTip(translate(
+                "Lancez le pont dans DaVinci Resolve (Espace de travail → Scripts "
+                "→ seedance_bridge), puis connectez-vous pour activer cette option"))
         else:
             self._import_cb.setChecked(True)
             self._import_cb.setToolTip("")
@@ -5212,12 +5279,14 @@ class TabT2V(QScrollArea):
         count = len(shots)
         dlg = QMessageBox(self)
         dlg.setWindowTitle(translate("Génération en série"))
+        # Qui facture : le distributeur RÉEL du moteur choisi (« fal.ai » était écrit
+        # en dur alors que PiAPI servait les plans — constat Matthieu 04/10/2026).
+        from core.media_provider import billing_notice
+        _audio = bool(self._audio_cb.isChecked()) if getattr(self, "_audio_cb", None) else True
         dlg.setText(
             f"{translate('Vous avez sélectionné')} {count} {translate('plans.')}\n\n"
-            + translate(
-                "La génération sera lancée en file d'attente — un clip après l'autre.\n\n"
-                "⚠  Chaque plan consomme des crédits fal.ai."
-            )
+            + translate("La génération sera lancée en file d'attente — un clip après l'autre.")
+            + "\n\n" + billing_notice(self._get_model(), self.cb_res.currentData() or "", _audio)
         )
         dlg.setStandardButtons(
             QMessageBox.StandardButton.Ok | QMessageBox.StandardButton.Cancel
@@ -5257,11 +5326,33 @@ class TabT2V(QScrollArea):
         from PyQt6.QtCore import QTimer
         if not self._is_batch_mode:
             return   # file annulée pendant l'attente
+        # Une composition ÉCHOUÉE ne viendra plus : la file attendait alors les
+        # 90 s du filet pour rien (le Live s'arrêtait déjà dessus) — 04/10/2026.
+        # Aucune composition ne viendra (automatique décoché, prompt vide, saisie
+        # manuelle) : on part tout de suite — l'envoi compose, comme à l'unité.
         if (getattr(self, "_prompt_is_final", False)
+                or getattr(self, "_final_assembly_failed", False)
+                or getattr(self, "_final_compose_skipped", False)
                 or waited_ms >= self._BATCH_FINAL_TIMEOUT_MS):
             QTimer.singleShot(0, self.start_generation)
             return
+        if waited_ms % 1050 == 0:
+            self._show_batch_wait(waited_ms)
         QTimer.singleShot(150, lambda: self._await_final_then_generate(waited_ms + 150))
+
+    def _show_batch_wait(self, waited_ms: int):
+        """La file attend le prompt final du plan : la barre le DIT. Constat Matthieu
+        (04/10/2026) : « je n'ai plus de barre de chargement » — elle n'apparaissait
+        qu'au lancement de la génération, après jusqu'à 90 s de silence."""
+        try:
+            if waited_ms == 0:
+                self.progress.reset()
+                self.progress.setVisible(True)
+            self.progress.update(
+                0, translate("Plan") + f" {self._batch_idx}/{self._batch_total} — "
+                + translate("préparation du prompt final…") + f" ({waited_ms // 1000} s)")
+        except Exception:
+            pass
 
     def _refresh_price_estimate(self, *args):
         """Estimation de PRIX (rouge) : nb de plans sélectionnés × durée × prix/s du
@@ -5693,19 +5784,22 @@ class TabT2V(QScrollArea):
         local_path = ""
         _import_checked = bool(self._import_cb and self._import_cb.isChecked())
 
-        # Toujours sauvegarder localement, que le bridge soit connecté ou non.
-        # import_to_davinci=True uniquement si la case est cochée ET bridge connecté.
+        # Toujours sauvegarder localement, que le pont soit connecté ou non.
+        # L'import DaVinci part ENSUITE hors du thread de l'interface (audit
+        # 04/10/2026) : il attendait ici la réponse de Resolve, sans jamais dire
+        # pourquoi il échouait. Rangement par séquence + métadonnées du plan.
         self.progress.update(100, "Sauvegarde du clip…")
         shot_title = result.get("shot_title") or self._active_shot_title
         ir = import_result(result, get_output_dir(), shot_title=shot_title,
-                           import_to_davinci=_import_checked)
+                           import_to_davinci=False)
         if ir["mock"]:
             if _import_checked:
                 davinci_msg = "\n\n◈ Import DaVinci : simulé (mode mock)"
         elif ir["success"]:
             local_path = ir.get("local_path", "")
-            if ir.get("davinci_imported"):
-                davinci_msg = f"\n\n◈ Sauvegardé + importé dans le Media Pool ✓\n{local_path}"
+            if _import_checked and local_path:
+                davinci_msg = f"\n\n◈ Vidéo sauvegardée — import DaVinci en cours :\n{local_path}"
+                self._start_davinci_import(local_path, dict(self._active_shot or {}))
             else:
                 davinci_msg = f"\n\n◈ Vidéo sauvegardée :\n{local_path}"
         else:

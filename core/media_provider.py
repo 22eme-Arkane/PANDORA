@@ -347,6 +347,36 @@ def active_video_provider(engine: str = "seedance-2.0", mode: str = "",
     return "fal"
 
 
+#: Moteurs routés par l'ordre des distributeurs (api/real). Les autres moteurs
+#: vidéo partent chez fal.ai ; les moteurs LOCAUX ne facturent rien.
+ROUTED_ENGINES = ("seedance-2.0", "seedance-2.0-fast", "seedance-2.5")
+LOCAL_ENGINES = ("comfy", "minimax-h3-local")
+
+
+def billing_provider(engine: str, resolution: str = "", audio: bool = True) -> str:
+    """Qui facture cette génération : id du distributeur (« fal », « piapi »…), ou
+    "" pour un moteur local (aucun crédit). Constat Matthieu 04/10/2026 : la file
+    annonçait « crédits fal.ai » alors que PiAPI servait les plans."""
+    engine = (engine or "").strip()
+    if engine in LOCAL_ENGINES or engine.startswith("comfy"):
+        return ""
+    if engine in ROUTED_ENGINES:
+        return active_video_provider(engine, "", resolution, audio)
+    return "fal"
+
+
+def billing_notice(engine: str, resolution: str = "", audio: bool = True) -> str:
+    """Ligne « qui facture » des confirmations de file (texte déjà traduit)."""
+    from core.i18n import translate
+    try:
+        pid = billing_provider(engine, resolution, audio)
+    except Exception:
+        return translate("⚠  Chaque plan est facturé par le distributeur choisi.")
+    if not pid:
+        return translate("Moteur local : aucun crédit consommé.")
+    return translate("⚠  Chaque plan est facturé par :") + f" {provider_short(pid)}."
+
+
 def mono_blocked_engine(engine: str, mode: str = "", resolution: str = "",
                         audio: bool = True) -> str:
     """En mode MONO : message d'erreur si cette demande ne peut pas être servie

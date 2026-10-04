@@ -2848,6 +2848,15 @@ class PageStoryboard(QWidget):
         )
         self._btn_pitch_deck.clicked.connect(self._on_export_pitch_deck)
 
+        # Export de timeline FCP 7 XML (parité Cinéma, 04/10/2026) : Resolve
+        # (gratuit ou Studio) et Premiere l'importent — aucun pont DaVinci ici.
+        self._btn_export_xml = QPushButton("📤  Exporter la timeline (XML)")
+        self._btn_export_xml.setToolTip(
+            "Écrit une timeline Final Cut Pro 7 XML : la dernière prise de chaque plan,\n"
+            "dans l'ordre du storyboard. À importer dans DaVinci Resolve (gratuit ou Studio)\n"
+            "ou dans Adobe Premiere — aucun pont nécessaire.")
+        self._btn_export_xml.clicked.connect(self._on_export_timeline_xml)
+
         btn_new = QPushButton("＋  Ajouter un plan")
         btn_new.setFixedHeight(34)
         btn_new.setStyleSheet(
@@ -2882,7 +2891,8 @@ class PageStoryboard(QWidget):
         self._btn_actions = make_actions_menu_button(
             bar,
             [self._btn_save_sb_file, self._btn_open_sb_file, self._btn_new_shot,
-             self._btn_batch_mood, self._btn_music_align, self._btn_pitch_deck],
+             self._btn_batch_mood, self._btn_music_align, self._btn_pitch_deck,
+             self._btn_export_xml],
             red_entry=self._btn_clear_shots)
         lay.insertWidget(0, self._btn_actions)
 
@@ -3053,6 +3063,20 @@ class PageStoryboard(QWidget):
             QMessageBox.information(self, "Ouvert", f"{n} plan(s) chargé(s).")
         except Exception as e:
             QMessageBox.critical(self, "Erreur", f"Échec de l'ouverture : {e}")
+
+    def _project_display_name(self) -> str:
+        try:
+            import core.context as _ctx
+            return _ctx.get_project_name() if hasattr(_ctx, "get_project_name") else ""
+        except Exception:
+            return ""
+
+    def _on_export_timeline_xml(self):
+        """Exporte la timeline en Final Cut Pro 7 XML, pour DaVinci Resolve (gratuit
+        ou Studio) et Adobe Premiere (ui/timeline_export_dialog, module neutre)."""
+        from ui import timeline_export_dialog
+        timeline_export_dialog.export(self, list(self._all_shots or []),
+                                      self._project_display_name())
 
     def _on_export_pitch_deck(self):
         """Exporter un dossier de présentation (PDF / PNG / HTML) — porté du Cinéma.

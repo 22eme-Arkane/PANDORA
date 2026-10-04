@@ -55,6 +55,12 @@ for _mod_name in ("ui.page_settings", "ui.tab_settings"):
     except Exception:
         pass
 
+# ── GARDE-FOU compte ChatGPT (04/10/2026) : les jetons « Sign in with ChatGPT »
+#    vivent dans le dossier de données de l'utilisateur (api/chatgpt_plan). Tous
+#    les tests le lisent ou l'écrivent dans un dossier TEMPORAIRE — jamais les
+#    vrais jetons de l'utilisateur.
+os.environ["PANDORA_CHATGPT_DIR"] = tempfile.mkdtemp(prefix="pandora_chatgpt_test_")
+
 _TESTS = []
 
 
@@ -101,10 +107,14 @@ def selecteur_ia_present():
     # Sauvegarde AUTOMATIQUE : plus de bouton « Sauvegarder »
     assert 'QPushButton("Sauvegarder")' not in src_pg, "bouton Sauvegarder retiré"
     assert "_wire_autosave" in src_pg and "Sauvegarde automatique" in src_pg, "auto-save branché"
-    # Profils optimisés groupés + bridge auto (bouton retiré).
+    # Profils optimisés groupés. Scripts DaVinci : bouton « Installer / mettre à
+    # jour les scripts » RÉTABLI le 04/10/2026 (l'installeur ne copiait les scripts
+    # que si Resolve était déjà installé, sans moyen de réparer) — l'ancien libellé
+    # « Installer le bridge » ne revient pas.
     assert "anthropic_optimized" in src_pg and "openai_optimized" in src_pg
     src_dv = inspect.getsource(__import__("ui.davinci_panel", fromlist=["_"]))
-    assert "Installer le bridge" not in src_dv, "bouton Installer le bridge retiré (auto à l'install)"
+    assert "Installer le bridge" not in src_dv, "ancien libellé « Installer le bridge »"
+    assert "Installer / mettre à jour les scripts" in src_dv, "bouton des scripts DaVinci"
     assert '_test_btn("✓  Tester API fal.ai"' in src_pg, "testeur fal.ai inline"
     assert '_test_btn("✓  Tester API Anthropic"' in src_pg, "testeur Anthropic inline"
     assert 'QPushButton("?")' in src_pg, "boutons d'aide « ? » lisibles"
@@ -163,7 +173,13 @@ def edition_cinema_only():
     # fal, menu Distributeur du Studio, Paramètres en sections repliables, écran
     # des distributeurs dans l'onboarding, menu « Prompt » du Storyboard,
     # recomposition du prompt à la demande (case automatique mémorisée).
-    assert VERSION.split("-")[0] == "2.5.0", f"version attendue 2.5.0[-suffixe], lue {VERSION}"
+    # Build 2.6.0 (2026-10-04) : pont DaVinci v2 (erreurs remontées, scripts
+    # versionnés et réparables, montage du storyboard dans Resolve), export de
+    # timeline FCP 7 XML (Resolve gratuit/Studio, Premiere), compte ChatGPT pour
+    # les tâches texte, mode économique Batch de Claude (−50 %), file du Studio
+    # (attente visible, sans recomposition auto elle part tout de suite), vrai
+    # distributeur annoncé avant une file, termes de mouvement aérien sans « drone ».
+    assert VERSION.split("-")[0] == "2.6.0", f"version attendue 2.6.0[-suffixe], lue {VERSION}"
     # ── UN SEUL numéro de version dans tout le produit ────────────────────────
     # Chaque endroit qui recopie le numéro à la main finit par diverger : la 2.0.0
     # est partie en build avec une charte d'utilisation estampillée 1.3.5, un .app
@@ -12109,6 +12125,1150 @@ def modeles_claude_a_jour_03_10_2026():
         assert len(saved) == 1, "migration idempotente : rien de réécrit la deuxième fois"
     finally:
         CC.save_config = _orig_save
+
+# ══════════════════════════════════════════════════════════════════════════════
+# Pont DaVinci v2 (04/10/2026) — audit « DaVinci et Premiere Pro »
+# ══════════════════════════════════════════════════════════════════════════════
+
+class _FakeDvrItem:
+    def __init__(self, path):
+        self.path, self.meta, self.third, self.color = path, {}, {}, ""
+
+    def GetClipProperty(self, key=None):
+        props = {"File Path": self.path, "Clip Name": os.path.basename(self.path),
+                 "Duration": "00:00:05:00", "Resolution": "1920x1080", "FPS": "24"}
+        return props if key is None else props.get(key, "")
+
+    def GetName(self):
+        return os.path.basename(self.path)
+
+    def SetMetadata(self, k, v):
+        self.meta[k] = v
+        return True
+
+    def SetThirdPartyMetadata(self, k, v):
+        self.third[k] = v
+        return True
+
+    def SetClipColor(self, c):
+        self.color = c
+        return True
+
+
+class _FakeDvrFolder:
+    def __init__(self, name):
+        self.name, self.subs, self.clips = name, [], []
+
+    def GetName(self):
+        return self.name
+
+    def GetSubFolderList(self):
+        return list(self.subs)
+
+    def GetClipList(self):
+        return list(self.clips)
+
+
+class _FakeDvrTimeline:
+    def __init__(self, name, items):
+        self.name, self.items = name, items
+
+    def GetName(self):
+        return self.name
+
+    def GetTrackCount(self, kind):
+        return 6
+
+    def GetItemListInTrack(self, kind, idx):
+        class _TI:
+            def __init__(self, it):
+                self.it = it
+
+            def GetMediaPoolItem(self):
+                return self.it
+        return [_TI(i) for i in self.items] if idx == 5 else []
+
+
+class _FakeDvrPool:
+    def __init__(self, project):
+        self.project = project
+        self.root = _FakeDvrFolder("Master")
+        self.user_folder = _FakeDvrFolder("Rushes du jour")
+        self.root.subs.append(self.user_folder)
+        self.current = self.user_folder
+        self.tl_folder = None
+
+    def GetRootFolder(self):
+        return self.root
+
+    def AddSubFolder(self, parent, name):
+        f = _FakeDvrFolder(name)
+        parent.subs.append(f)
+        return f
+
+    def GetCurrentFolder(self):
+        return self.current
+
+    def SetCurrentFolder(self, f):
+        self.current = f
+        return True
+
+    def ImportMedia(self, paths):
+        items = [_FakeDvrItem(p) for p in paths]
+        self.current.clips.extend(items)
+        return items
+
+    def CreateTimelineFromClips(self, name, items):
+        if name in [t.name for t in self.project.timelines]:
+            return None
+        tl = _FakeDvrTimeline(name, list(items))
+        self.project.timelines.append(tl)
+        self.tl_folder = self.current
+        return tl
+
+
+class _FakeDvrProject:
+    def __init__(self):
+        self.timelines, self.current_tl = [], None
+        self.pool = _FakeDvrPool(self)
+
+    def GetName(self):
+        return "Passer la brume"
+
+    def GetMediaPool(self):
+        return self.pool
+
+    def GetCurrentTimeline(self):
+        return self.current_tl
+
+    def GetTimelineCount(self):
+        return len(self.timelines)
+
+    def GetTimelineByIndex(self, i):
+        return self.timelines[i - 1]
+
+    def SetCurrentTimeline(self, tl):
+        self.current_tl = tl
+        return True
+
+
+class _FakeResolve:
+    def __init__(self):
+        self.project = _FakeDvrProject()
+
+    def GetProjectManager(self):
+        project = self.project
+
+        class _PM:
+            def GetCurrentProject(self):
+                return project
+        return _PM()
+
+    def GetProductName(self):
+        return "DaVinci Resolve Studio"
+
+    def GetVersionString(self):
+        return "20.3.2.9"
+
+
+def _free_port() -> int:
+    import socket
+    s = socket.socket()
+    s.bind(("127.0.0.1", 0))
+    port = s.getsockname()[1]
+    s.close()
+    return port
+
+
+def _load_bridge_server(name: str, port: int):
+    """Le VRAI script du pont, chargé comme dans Resolve mais sans démarrage auto."""
+    import importlib.util
+    os.environ["PANDORA_BRIDGE_NO_AUTORUN"] = "1"
+    os.environ["PANDORA_BRIDGE_PORT"] = str(port)
+    path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+                        "davinci", "bridge_server.py")
+    spec = importlib.util.spec_from_file_location(name, path)
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
+
+
+def _start_bridge(mod, resolve_obj):
+    """Démarre serveur + « boucle principale » (thread) ; → Event à effacer pour figer."""
+    import threading
+    import time
+    mod._resolve = resolve_obj
+    mod._PRODUCT, mod._VERSION = mod._product()
+    srv, err = mod._bind_with_takeover()
+    assert srv is not None, err
+    mod._server[0] = srv
+    threading.Thread(target=mod._accept_loop, args=(srv,), daemon=True).start()
+    running = threading.Event()
+    running.set()
+
+    def _loop():
+        while running.is_set() and not mod._stop.is_set():
+            mod._tick()
+            time.sleep(0.02)
+    threading.Thread(target=_loop, daemon=True).start()
+    return running
+
+
+@test
+def pont_davinci_v2_erreurs_remontees_zombie_et_montage_04_10_2026():
+    """Audit du 04/10/2026 : voyant vert alors que plus rien ne passait (pont
+    « zombie »), erreurs du pont avalées, délai client < délai serveur, pas de
+    version, chutier courant de l'utilisateur écrasé, pistes au-delà de V4
+    ignorées, aucun montage. Épinglé avec le VRAI serveur et le VRAI client,
+    Resolve simulé, sur un port libre (aucun Resolve touché)."""
+    import json
+    import socket
+    import threading
+    import time
+    import davinci.bridge as B
+
+    port = _free_port()
+    old_port = B.PORT
+    B.PORT = port
+    tmp = tempfile.mkdtemp(prefix="pandora_dvr_")
+    clip1 = os.path.join(tmp, "SQ3_P16_02.mp4")
+    clip2 = os.path.join(tmp, "SQ3_P17_01.mp4")
+    for c in (clip1, clip2):
+        open(c, "wb").write(b"x")
+    srv_a = srv_b = None
+    try:
+        assert B.CALL_TIMEOUT > _load_bridge_server("pont_v2_const", port).WAIT_DEFAULT, \
+            "le client attend plus longtemps que le pont"
+        fake = _FakeResolve()
+        srv_a = _load_bridge_server("pont_v2_a", port)
+        loop = _start_bridge(srv_a, fake)
+        conn = B.DaVinciConnection()
+
+        ok, msg = conn.connect()
+        assert ok and msg == "", msg
+        assert conn.bridge_version == B.EXPECTED_BRIDGE == 2 and conn.api_ok and not conn.outdated
+        assert conn.project == "Passer la brume"
+
+        # Import : sous-chutier, métadonnées, couleur, chutier de l'utilisateur rétabli
+        ok, err = conn.import_clip(clip1, "SQ03", meta={"Scene": "3", "Shot": "16", "Take": "2",
+                                                       "pandora_shot_id": "abc"}, color="Teal")
+        assert ok and not err, err
+        pool = fake.project.pool
+        pandora = next(f for f in pool.root.subs if f.name == "PANDORA")
+        sq = next(f for f in pandora.subs if f.name == "SQ03")
+        assert sq.clips[0].meta == {"Scene": "3", "Shot": "16", "Take": "2"}
+        assert sq.clips[0].third == {"pandora_shot_id": "abc"} and sq.clips[0].color == "Teal"
+        assert pool.current is pool.user_folder, "chutier de l'utilisateur rétabli"
+        assert conn.import_clip(clip1, "SQ03")[0] and len(sq.clips) == 1, "pas de doublon"
+        ok, err = conn.import_clip(os.path.join(tmp, "absent.mp4"), "SQ03")
+        assert not ok and "Fichier introuvable" in err, "l'erreur du pont remonte"
+        assert conn.is_connected(), "une erreur métier ne déconnecte pas"
+
+        # Montage dans l'ordre, nom unique, timeline ouverte et rangée dans PANDORA
+        clips = [{"path": clip1, "bin": "SQ03"}, {"path": os.path.join(tmp, "manque.mp4")},
+                 {"path": clip2, "bin": "SQ03"}]
+        ok, res = conn.build_timeline("Storyboard", clips)
+        assert ok and res["count"] == 2 and res["reused"] == 1 and len(res["missing"]) == 1, res
+        tl = fake.project.timelines[0]
+        assert [i.path for i in tl.items] == [clip1, clip2]
+        assert fake.project.current_tl is tl and pool.tl_folder is pandora
+        assert pool.current is pool.user_folder
+        assert conn.build_timeline("Storyboard", clips)[1]["timeline"] == "Storyboard (2)"
+        assert conn.get_timeline_clips()[0]["track"] == 5, "pistes au-delà de V4 lues"
+
+        # Boucle principale figée → plus de voyant vert trompeur
+        loop.clear()
+        time.sleep(3.3)
+        assert not conn.ping() and "Boucle du pont arrêtée" in conn.last_error
+
+        # Relance du script : le nouveau pont REMPLACE l'ancien (plus d'empilement)
+        srv_b = _load_bridge_server("pont_v2_b", port)
+        _start_bridge(srv_b, _FakeResolve())
+        time.sleep(0.2)
+        assert srv_a._stop.is_set(), "l'ancien pont s'est arrêté sur « shutdown »"
+        assert conn.connect()[0]
+
+        # Fenêtre fermée → pont arrêté, détecté vite (Windows réessaie ~2 s sinon)
+        srv_b._request_stop()
+        time.sleep(0.2)
+        t0 = time.monotonic()
+        assert not conn.ping() and conn.last_error == B.ERR_NOT_RUNNING
+        assert time.monotonic() - t0 < 1.5
+        assert not conn.is_connected()
+        ok, msg = conn.connect()
+        assert not ok and "seedance_bridge" in msg
+
+        # Ancien pont (réponse « pong ») = connecté mais PÉRIMÉ
+        v1 = socket.socket()
+        v1.bind(("127.0.0.1", port))
+        v1.listen(4)
+
+        def _v1():
+            for _ in range(4):
+                try:
+                    c, _a = v1.accept()
+                except OSError:
+                    return
+                with c:
+                    cmd = json.loads(c.recv(4096).decode())["cmd"]
+                    c.sendall(b'{"ok": true, "result": "pong"}\n' if cmd == "ping"
+                              else b'{"ok": true, "result": ""}\n')
+        threading.Thread(target=_v1, daemon=True).start()
+        ok, msg = conn.connect()
+        v1.close()
+        assert ok and conn.bridge_version == 1 and conn.outdated
+        assert B.ERR_OUTDATED in msg and "Installer / mettre à jour les scripts" in msg
+    finally:
+        for m in (srv_a, srv_b):
+            if m is not None:
+                m._request_stop()
+        B.PORT = old_port
+        os.environ.pop("PANDORA_BRIDGE_NO_AUTORUN", None)
+        os.environ.pop("PANDORA_BRIDGE_PORT", None)
+
+
+@test
+def scripts_davinci_versionnes_et_reparables_04_10_2026():
+    """Les scripts n'étaient copiés que par l'installeur, si Resolve était déjà
+    installé au chemin par défaut ; aucun moyen de réparer ni de voir qu'un pont
+    était périmé (constat sur le poste de Matthieu : copie du 15/05 ≠ dépôt).
+    Dossiers simulés via les variables d'environnement (aucun vrai Resolve)."""
+    from davinci import scripts_install as SI
+    saved = {k: os.environ.get(k) for k in ("PROGRAMDATA", "APPDATA")}
+    tmp = tempfile.mkdtemp(prefix="pandora_dvr_scripts_")
+    try:
+        os.environ["PROGRAMDATA"] = os.path.join(tmp, "ProgramData")
+        os.environ["APPDATA"] = os.path.join(tmp, "AppData", "Roaming")
+        exp = SI.bundled_versions()
+        assert exp == {"seedance_bridge.py": 2, "pandora_send.py": 2}, exp
+        # Resolve absent : rien n'est créé, et on le dit
+        res = SI.install()
+        assert res["no_resolve"] and not os.path.exists(os.environ["PROGRAMDATA"])
+        assert SI.status()["state"] == "absent" and not SI.status()["resolve"]
+        # Resolve présent (dossier utilisateur seulement) : install pour tous d'abord
+        os.makedirs(os.path.join(os.environ["APPDATA"], "Blackmagic Design", "DaVinci Resolve"))
+        res = SI.install()
+        all_dir = SI.utility_dirs()[0][1]
+        assert res["ok"] and res["new"] and res["written"] == [all_dir], res
+        st = SI.status()
+        assert st["state"] == "ok" and {c["version"] for c in st["copies"]} == {2}
+        # Une vieille copie (sans numéro = v1) dans le dossier utilisateur → périmé
+        user_dir = SI.utility_dirs()[1][1]
+        os.makedirs(user_dir)
+        with open(os.path.join(user_dir, SI.BRIDGE_FILE), "w", encoding="utf-8") as fh:
+            fh.write("# ancien pont\nPORT = 19876\n")
+        assert SI.status()["state"] == "outdated"
+        res = SI.install()
+        assert res["ok"] and not res["new"] and set(res["written"]) == {all_dir, user_dir}
+        assert SI.status()["state"] == "ok", "chaque copie existante est mise à jour"
+    finally:
+        for k, v in saved.items():
+            if v is None:
+                os.environ.pop(k, None)
+            else:
+                os.environ[k] = v
+
+
+@test
+def clips_du_storyboard_ordre_prise_et_metadonnees_04_10_2026():
+    """Montage / export : la DERNIÈRE prise de chaque plan, dans l'ordre du
+    storyboard, rangée par séquence, avec scène / plan / prise / action."""
+    from core import timeline_clips as TC
+    d = tempfile.mkdtemp(prefix="pandora_clips_")
+    for name in ("SQ3_P16_01.mp4", "SQ3_P16_02.mp4", "SQ3_P16_02.lb.mp4", "SQ3_P17_01.mp4",
+                 "P5_03.mp4", "SQ13_P16_01.mp4", "seedance_t2v_20261004.mp4"):
+        open(os.path.join(d, name), "wb").write(b"x")
+    shots = [{"id": "b", "seq_num": 3, "number": 17, "scene_title": "Le cerf lève la tête"},
+             {"id": "a", "seq_num": 3, "number": 16},
+             {"id": "c", "seq_num": 0, "number": 5},
+             {"id": "z", "seq_num": 4, "number": 1}]
+    out = TC.storyboard_clips(shots, d)
+    assert [c["shot"]["id"] for c in out] == ["b", "a", "c", "z"], "ordre du storyboard"
+    assert os.path.basename(out[1]["path"]) == "SQ3_P16_02.mp4" and out[1]["takes"] == 2, \
+        "dernière prise, sorties dérivées (.lb.mp4) ignorées, SQ13 ≠ SQ3"
+    assert out[2]["bin"] == "" and os.path.basename(out[2]["path"]) == "P5_03.mp4"
+    assert out[3]["path"] == "" and out[3]["take"] == 0, "plan sans clip"
+    assert out[0]["bin"] == "SQ03" and out[0]["color"] == TC.CLIP_COLORS[2]
+    assert out[0]["meta"] == {"Scene": "3", "Shot": "17", "Take": "1",
+                              "Comments": "Le cerf lève la tête", "pandora_shot_id": "b"}
+    # Clip hors storyboard : le nom du fichier suffit
+    sub, meta, _c = TC.import_meta(None, os.path.join(d, "SQ3_P16_02.mp4"))
+    assert sub == "SQ03" and meta == {"Scene": "3", "Shot": "16", "Take": "2"}
+    assert TC.import_meta(None, "C:/x/seedance_t2v_1.mp4") == ("", {}, "")
+
+
+@test
+def davinci_interface_textes_justes_et_sans_appel_reseau_bloquant():
+    """Paramètres, Studio et menu Action : textes exacts (Studio requis DÈS 21.1,
+    plus de « Installer bridge » inexistant), bouton d'installation des scripts,
+    import après génération hors du thread de l'interface, montage dans le menu."""
+    import ui.davinci_panel as DP
+    import ui.dialog_davinci_help as DH
+    import ui.tab_t2v as T2V
+    import ui.page_storyboard as PS
+    src_dp = inspect.getsource(DP)
+    assert "Installer / mettre à jour les scripts" in src_dp and "run_job(resolve.connect" in src_dp
+    src_dh = inspect.getsource(DH)
+    assert "Installer bridge" not in src_dh and "ExternalScriptingEnabled" not in src_dh
+    assert "Resolve 21.1" in src_dh and "Python 3 64 bits" in src_dh
+    src_srv = open(os.path.join(os.path.dirname(DP.__file__), "..", "davinci",
+                                "bridge_server.py"), encoding="utf-8").read()
+    assert "ExternalScriptingEnabled" not in src_srv, "réglage non documenté retiré"
+    of = inspect.getsource(T2V.TabT2V.on_finished)
+    assert "import_to_davinci=False" in of and "_start_davinci_import" in of
+    assert "import_clip_async" in inspect.getsource(T2V.TabT2V._start_davinci_import)
+    # Panneau construit hors écran : bouton présent, aucun ping sur ce thread
+    import davinci.bridge as B
+    calls = []
+    orig = B.call
+    B.call = lambda *a, **k: (calls.append(a[0]), (False, None, B.ERR_NOT_RUNNING))[1]
+    try:
+        panel = DP.DaVinciPanel()
+        assert panel._btn_install.text() and panel._scripts_lbl.text()
+        assert panel._title_lbl.text() == "DaVinci Resolve"
+        panel._ping_worker.wait(3000)
+    finally:
+        B.call = orig
+    assert calls == ["ping"], f"un seul ping, dans le worker : {calls}"
+    page = PS.PageStoryboard()
+    assert any(src is page._btn_resolve_montage for _a, src in page._actions_pairs), \
+        "« Monter dans DaVinci Resolve » dans le menu Action"
+
+# ══════════════════════════════════════════════════════════════════════════════
+# Export de timeline FCP 7 XML + attente visible de la file (04/10/2026)
+# ══════════════════════════════════════════════════════════════════════════════
+
+def _xml_test_clips(d: str) -> dict:
+    """Clips de test : stéréo 24 i/s, muets 24 i/s (2 prises), mono 25 i/s 720p."""
+    import subprocess
+    from core import video_utils as vu
+    ff = vu.get_ffmpeg_exe()
+
+    def _run(*a):
+        r = subprocess.run([ff, "-y", "-loglevel", "error", *a], capture_output=True,
+                           timeout=180, creationflags=getattr(vu, "_NO_WINDOW", 0))
+        assert r.returncode == 0, r.stderr[-300:]
+    os.makedirs(d, exist_ok=True)
+    p = {k: os.path.join(d, n) for k, n in (("stereo", "SQ1_P1_01.mp4"), ("mute1", "SQ1_P2_01.mp4"),
+                                             ("mute2", "SQ1_P2_02.mp4"), ("mono25", "SQ2_P3_01.mp4"))}
+    _run("-f", "lavfi", "-i", "testsrc2=size=1920x1080:rate=24:duration=2",
+         "-f", "lavfi", "-i", "sine=frequency=440:duration=2", "-ac", "2", "-c:v", "libx264",
+         "-pix_fmt", "yuv420p", "-c:a", "aac", "-shortest", p["stereo"])
+    for key in ("mute1", "mute2"):
+        _run("-f", "lavfi", "-i", "testsrc=size=1920x1080:rate=24:duration=2", "-c:v", "libx264",
+             "-pix_fmt", "yuv420p", p[key])
+    _run("-f", "lavfi", "-i", "testsrc=size=1280x720:rate=25:duration=1",
+         "-f", "lavfi", "-i", "sine=frequency=220:duration=1", "-ac", "1", "-c:v", "libx264",
+         "-pix_fmt", "yuv420p", "-c:a", "aac", "-shortest", p["mono25"])
+    return p
+
+
+@test
+def export_timeline_xml_resolve_et_premiere_04_10_2026():
+    """Export FCP 7 XML (xmeml) du storyboard : seule voie vers la version gratuite
+    de Resolve ≥ 21.1, et vers Premiere. Épinglés : <format> rempli (sans lui,
+    Resolve fait un clip noir), pas d'audio déclaré pour un clip muet (« format
+    mismatch » Premiere), stéréo en deux clipitems liés, out = nombre RÉEL
+    d'images, chemins file://localhost/ échappés, dernière prise, ordre du
+    storyboard, cadence mélangée signalée."""
+    import xml.etree.ElementTree as ET
+    from core import timeline_clips as TC, timeline_export as TE
+    d = os.path.join(tempfile.mkdtemp(prefix="pandora_xml_"), "vidéos du projet")
+    p = _xml_test_clips(d)
+    shots = [{"id": "a", "seq_num": 1, "number": 1, "scene_title": "Le drone survole le village"},
+             {"id": "b", "seq_num": 1, "number": 2},
+             {"id": "c", "seq_num": 2, "number": 3},
+             {"id": "z", "seq_num": 2, "number": 4}]
+    clips = TC.storyboard_clips(shots, d)
+    assert [os.path.basename(c["path"]) for c in clips] == \
+        ["SQ1_P1_01.mp4", "SQ1_P2_02.mp4", "SQ2_P3_01.mp4", ""], "dernière prise, ordre"
+    out = os.path.join(os.path.dirname(d), "Storyboard — test.xml")
+    rep = TE.export_storyboard(out, "Storyboard — test", [c for c in clips if c["path"]])
+    assert rep["ok"] and rep["count"] == 3 and not rep["skipped"]
+    assert rep["mixed_rate"] == [p["mono25"]] and rep["silent"] == 1
+    assert len(rep["non_ascii"]) == 3, "chemins accentués signalés"
+    assert (rep["timebase"], rep["ntsc"], rep["width"], rep["height"]) == (24, False, 1920, 1080)
+
+    text = open(out, encoding="utf-8").read()
+    assert text.startswith('<?xml version="1.0" encoding="UTF-8"?>\n<!DOCTYPE xmeml>\n')
+    root = ET.fromstring(text.split("\n", 2)[2])
+    assert root.tag == "xmeml" and root.get("version") == "5"
+    seq = root.find("sequence")
+    sc = seq.find("media/video/format/samplecharacteristics")
+    assert sc.findtext("width") == "1920" and sc.findtext("height") == "1080", "<format> rempli"
+    assert sc.findtext("rate/timebase") == "24" and sc.findtext("rate/ntsc") == "FALSE"
+    v = seq.findall("media/video/track/clipitem")
+    a1, a2 = (t.findall("clipitem") for t in seq.findall("media/audio/track"))
+    assert (len(v), len(a1), len(a2)) == (3, 2, 1), "stéréo = A1+A2, mono = A1, muet = rien"
+    spans = [(int(c.findtext("start")), int(c.findtext("end"))) for c in v]
+    assert spans == [(0, 48), (48, 96), (96, 120)], f"bout à bout, 25 i/s ramené à 24 : {spans}"
+    assert v[0].findtext("out") == "48" and v[2].findtext("out") == "25", "out = images réelles"
+    assert v[2].findtext("rate/timebase") == "25", "clipitem à la cadence de SON média"
+    mute = v[1]
+    assert mute.find("file/media/audio") is None and not mute.findall("link"), \
+        "clip muet : aucun audio déclaré, aucun lien"
+    assert len(v[0].findall("link")) == 3 and len(v[2].findall("link")) == 2
+    assert a1[0].get("premiereChannelType") == "stereo" and a1[1].get("premiereChannelType") == "mono"
+    assert a2[0].findtext("sourcetrack/trackindex") == "2"
+    ref = a1[0].find("file")
+    assert ref.get("id") == "file-1" and len(list(ref)) == 0, "renvoi au fichier déjà décrit"
+    ids = [c.get("id") for c in v + a1 + a2]
+    assert len(ids) == len(set(ids)), "ids de clipitem uniques"
+    url = v[0].findtext("file/pathurl")
+    assert url.startswith("file://localhost/") and "\\" not in url
+    assert "%C3%A9" in url and "%20" in url, url
+    assert seq.findtext("duration") == "120"
+    marks = seq.findall("marker")
+    assert [m.findtext("name") for m in marks] == \
+        ["SQ1 · P1 · prise 1", "SQ1 · P2 · prise 2", "SQ2 · P3 · prise 1"]
+    assert marks[0].findtext("comment") == "Le drone survole le village"
+    assert v[0].findtext("logginginfo/scene") == "1" and v[0].findtext("logginginfo/shottake") == "1-1"
+    # Clip illisible : écarté, signalé, jamais un XML avec un plan cassé
+    bad = os.path.join(d, "SQ9_P9_01.mp4")
+    open(bad, "wb").write(b"pas une video")
+    rep2 = TE.export_storyboard(out + "2.xml", "x", [{"path": bad, "shot": {}, "meta": {}}])
+    assert not rep2["ok"] and rep2["skipped"] == [bad] and not os.path.exists(out + "2.xml")
+    # Menu Action du Storyboard Cinéma : l'export y est, à côté du montage Resolve
+    import ui.page_storyboard as PS
+    page = PS.PageStoryboard()
+    sources = [src for _a, src in page._actions_pairs]
+    assert page._btn_export_xml in sources and page._btn_resolve_montage in sources
+    import ui.timeline_export_dialog as TD
+    assert "davinci" not in inspect.getsource(TD).split('"""', 2)[2], \
+        "module neutre (utilisé par le Live) : aucun import davinci.*"
+
+
+@test
+def file_studio_attente_du_prompt_final_visible_04_10_2026():
+    """Constat Matthieu 04/10/2026 : « j'ai lancé une file de 3 plans, je n'ai plus
+    de barre de chargement ». La file attend le prompt final (jusqu'à 90 s) AVANT
+    de générer : la barre le dit désormais. Et une composition ÉCHOUÉE ne fait plus
+    attendre les 90 s du filet (le Live s'arrêtait déjà dessus)."""
+    import ui.tab_t2v as M
+    tab = M.TabT2V()
+    calls = []
+    tab.start_generation = lambda: calls.append("go")
+    tab._is_batch_mode, tab._batch_idx, tab._batch_total = True, 1, 3
+    tab._prompt_is_final, tab._final_assembly_failed = False, False
+    try:
+        tab._await_final_then_generate(0)
+        assert not tab.progress.isHidden(), "barre visible pendant l'attente"
+        status = tab.progress.status.text()
+        assert "1/3" in status and "prompt final" in status, status
+        tab._final_assembly_failed = True
+        tab._await_final_then_generate(150)
+        import time
+        t0 = time.monotonic()
+        while not calls and time.monotonic() - t0 < 2:
+            APP.processEvents()
+        assert calls == ["go"], "composition échouée : génération lancée sans attendre 90 s"
+    finally:
+        tab._is_batch_mode = False      # coupe les relances programmées
+
+@test
+def file_sans_recomposition_auto_part_sans_attendre_04_10_2026():
+    """Constat Matthieu 04/10/2026 (2.5.0) : « j'avais pourtant désactivé la
+    recomposition automatique » — la file attendait 90 s par plan un prompt final
+    qui ne viendrait jamais (automatique décoché = aucun appel IA à la sélection).
+    Et les mouvements aériens du storyboard n'écrivent plus « drone » dans le
+    prompt : Seedance 2.5 dessinait l'appareil (corbeau devenu quadricoptère)."""
+    import time
+    import ui.tab_t2v as M
+    tab = M.TabT2V()
+    tab._compose_ctl.auto_cb.blockSignals(True)
+    tab._compose_ctl.auto_cb.setChecked(False)
+    tab._compose_ctl.auto_cb.blockSignals(False)
+    calls = []
+    tab.start_generation = lambda: calls.append(time.monotonic())
+    shot = {"id": "q1", "seq_num": 1, "number": 1,
+            "seedance_prompt": "Un cerf traverse la place du village et s'arrête."}
+    tab._is_batch_mode, tab._batch_idx, tab._batch_total = True, 1, 2
+    try:
+        tab._on_shot_selected(dict(shot))
+        t0 = time.monotonic()
+        tab._await_final_then_generate(0)
+        while not calls and time.monotonic() - t0 < 6:
+            APP.processEvents()
+            time.sleep(0.02)
+        assert calls, "génération lancée"
+        assert calls[0] - t0 < 3, f"partie en {calls[0] - t0:.1f} s (90 s avant la correction)"
+        assert tab._final_compose_skipped and not tab._prompt_is_final
+    finally:
+        tab._is_batch_mode = False
+    from core.camera_data import shot_movement_to_prompt
+    from core.shot_terms import MOVEMENT_EN
+    for mv in ("Grue / Drone", "Drone FPV"):
+        assert "drone" not in shot_movement_to_prompt(mv).lower(), mv
+        assert "drone" not in MOVEMENT_EN.get(mv, "").lower() and MOVEMENT_EN.get(mv), mv
+
+# ══════════════════════════════════════════════════════════════════════════════
+# Compte ChatGPT — « Sign in with ChatGPT » + forfait Plus / Pro (04/10/2026)
+# ══════════════════════════════════════════════════════════════════════════════
+
+_RFC7515_N = ("ofgWCuLjybRlzo0tZWJjNiuSfb4p4fAkd_wWJcyQoTbji9k0l8W26mPddxHmfHQp-Vaw-4qPCJrcS2mJPMEzP1Pt0Bm4d4QlL-yRT-SFd2lZS-pCgNMs"
+              "D1W_YpRPEwOWvG6b32690r2jZ47soMZo9wGzjb_7OMg0LOL-bSf63kpaSHSXndS5z5rexMdbBYUsLA9e-KXBdQOS-UTo7WTBEMa2R2CapHg665xsmtdV"
+              "MTBQY4uDZlxvb3qCo5ZwKh9kG4LT6_I5IhlJH7aGhyxXFvUK-DWNmoudF8NAco9_h9iaGNj8q2ethFkMLs91kzk2PAcDTW9gb54h4FRWyuXpoQ")
+_RFC7515_D = ("Eq5xpGnNCivDflJsRQBXHx1hdR1k6Ulwe2JZD50LpXyWPEAeP88vLNO97IjlA7_GQ5sLKMgvfTeXZx9SE-7YwVol2NXOoAJe46sui395IW_GO-pWJ1O0"
+              "BkTGoVEn2bKVRUCgu-GjBVaYLU6f3l9kJfFNS3E0QbVdxzubSu3Mkqzjkn439X0M_V51gfpRLI9JYanrC4D4qAdGcopV_0ZHHzQlBjudU2QvXt4ehNYT"
+              "CBr6XCLQUShb1juUO1ZdiYoFaFQT5Tw8bGUl_x_jTj3ccPDVZFD9pIuhLhBOneufuBiB4cS98l2SR_RQyGWSeWjnczT0QU91p1DhOVRuOopznQ")
+_RFC7515_JWS = ("eyJhbGciOiJSUzI1NiJ9.eyJpc3MiOiJqb2UiLA0KICJleHAiOjEzMDA4MTkzODAsDQogImh0dHA6Ly9leGFtcGxlLmNvbS9pc19yb290Ijp0cnVlfQ."
+                "cC4hiUPoj9Eetdgtv3hF80EGrhuB__dzERat0XF9g2VtQgr9PJbu3XOiZj5RZmh7AAuHIm4Bh-0Qc_lF5YKt_O8W2Fp5jujGbds9uJdbF9CUAr7t1dnZcAcQjbKBYNX4"
+                "BAynRFdiuB--f_nZLgrnbyTyWzO75vRK5h6xBArLIARNPvkSjtQBMHlb1L07Qe7K0GarZRmB_eSN9383LcOLn6_dO--xi12jzDwusC-eOkHWEsqtFZESc6BfI7noOPqv"
+                "hJ1phCnvWh6IeYI2w9QOYEUipUTI8np6LbgGY9Fs98rqVt5AXLIhWkWywlVmtVrBp0igcN_IoypGlUPQGe77Rw")
+
+
+@test
+def compte_chatgpt_protocole_hors_ligne_04_10_2026():
+    """« Sign in with ChatGPT » (forfait Plus / Pro) éprouvé HORS LIGNE : vecteurs
+    officiels (PKCE RFC 7636, RS256 RFC 7515), chiffrement DPAPI, flux SSE coupé à
+    l'octet, puis parcours complet contre un FAUX serveur OpenAI local (aucun
+    identifiant réel) : inscription dynamique, rappel au mauvais état refusé sans
+    consommer la tentative, ID token vérifié, reconnexion sans id_token_hint,
+    champs refusés retirés, rotation du jeton, limite atteinte en plein flux →
+    forfait en pause, compte non éligible, révocation, refresh invalidé (constat
+    réel du 04/10/2026) → reconnexion requise, annulation."""
+    import hashlib
+    import json
+    import threading
+    import time
+    import urllib.parse
+    from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+    from pathlib import Path
+    import requests
+    import api.chatgpt_plan as S
+
+    def b64u_int(s):
+        return int.from_bytes(S.b64url_decode(s), "big")
+
+    # 1. PKCE — RFC 7636 annexe B
+    v = "dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk"
+    assert S.b64url(hashlib.sha256(v.encode()).digest()) == "E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM"
+    ver, chal = S.pkce_pair()
+    assert len(ver) == 43 and S.b64url(hashlib.sha256(ver.encode()).digest()) == chal
+    # 2. RS256 — RFC 7515 annexe A.2 (et signature altérée refusée)
+    n, e, d = b64u_int(_RFC7515_N), 65537, b64u_int(_RFC7515_D)
+    h, p, s = _RFC7515_JWS.split(".")
+    assert S.rs256_verify(f"{h}.{p}".encode(), S.b64url_decode(s), n, e)
+    bad = bytearray(S.b64url_decode(s))
+    bad[10] ^= 1
+    assert not S.rs256_verify(f"{h}.{p}".encode(), bytes(bad), n, e)
+
+    def sign_jwt(claims, kid="k1"):
+        head = S.b64url(json.dumps({"alg": "RS256", "kid": kid, "typ": "JWT"}).encode())
+        body = S.b64url(json.dumps(claims).encode())
+        k = (n.bit_length() + 7) // 8
+        t = S._SHA256_DIGESTINFO + hashlib.sha256(f"{head}.{body}".encode()).digest()
+        em = b"\x00\x01" + b"\xff" * (k - len(t) - 3) + b"\x00" + t
+        sig = pow(int.from_bytes(em, "big"), d, n).to_bytes(k, "big")
+        return f"{head}.{body}.{S.b64url(sig)}"
+    # 3. DPAPI (Windows)
+    if sys.platform == "win32":
+        blob = S._dpapi(b"secret-de-test", True)
+        assert blob != b"secret-de-test" and S._dpapi(blob, False) == b"secret-de-test"
+    # 4. SSE : CRLF / CR / LF, coupé octet par octet, fin sans ligne vide
+    raw = (b"event: response.created\r\ndata: {\"type\":\"response.created\"}\r\n\r\n"
+           b"data: {\"type\":\"response.output_text.delta\",\"delta\":\"Bon\"}\r\r"
+           b": commentaire\n"
+           b"data: {\"type\":\"response.output_text.delta\",\"delta\":\"jour \\u00e9\"}\n\n"
+           b"data: {\"type\":\"response.completed\",\"response\":{\"id\":\"r1\"}}\r\n\r\n")
+    for cut in (1, 2, 3, 7, len(raw)):
+        evs = list(S.sse_events(raw[i:i + cut] for i in range(0, len(raw), cut)))
+        assert [x["type"] for x in evs] == ["response.created", "response.output_text.delta",
+                                             "response.output_text.delta", "response.completed"]
+    assert list(S.sse_events([b"data: {\"type\":\"x\"}"]))[0]["type"] == "x"
+
+    # 5. Faux serveur OpenAI (OAuth + API) sur 127.0.0.1
+    MOCK = {"mode": "ok", "refresh": "ok", "seen": {}}
+
+    class Mock(BaseHTTPRequestHandler):
+        def log_message(self, *a):
+            pass
+
+        def _json(self, status, obj, ctype="application/json"):
+            data = obj if isinstance(obj, bytes) else json.dumps(obj).encode()
+            self.send_response(status)
+            self.send_header("Content-Type", ctype)
+            self.send_header("x-request-id", "req_test")
+            self.send_header("Content-Length", str(len(data)))
+            self.end_headers()
+            self.wfile.write(data)
+
+        def do_GET(self):
+            base = f"http://127.0.0.1:{self.server.server_address[1]}"
+            if self.path == "/.well-known/openid-configuration":
+                return self._json(200, {"issuer": base,
+                                        "authorization_endpoint": base + "/api/accounts/authorize",
+                                        "token_endpoint": base + "/api/accounts/oauth/token",
+                                        "revocation_endpoint": base + "/api/accounts/oauth/revoke",
+                                        "jwks_uri": base + "/.well-known/jwks.json"})
+            if self.path == "/.well-known/jwks.json":
+                return self._json(200, {"keys": [{"kty": "RSA", "kid": "k1", "alg": "RS256",
+                                                  "use": "sig", "n": _RFC7515_N, "e": "AQAB"}]})
+            if self.path == "/v1/models":
+                return self._json(200, {"models": [
+                    {"slug": "gpt-6.1-sol", "display_name": "GPT-6.1 Sol", "visibility": "list"},
+                    {"slug": "cache", "display_name": "x", "visibility": "hide"}]})
+            self._json(404, {"detail": "not found"})
+
+        def do_POST(self):
+            base = f"http://127.0.0.1:{self.server.server_address[1]}"
+            body_raw = self.rfile.read(int(self.headers.get("Content-Length", 0)))
+            if self.path == "/api/accounts/oauth/token":
+                f = {k: v[0] for k, v in urllib.parse.parse_qs(body_raw.decode()).items()}
+                now = int(time.time())
+                if f["grant_type"] == "authorization_code":
+                    assert f["client_id"] == "oaiapp_TEST" and f["code"] == "CODE1"
+                    assert S.b64url(hashlib.sha256(f["code_verifier"].encode()).digest()) == MOCK["challenge"]
+                    assert f["redirect_uri"] == MOCK["redirect_uri"] and f["resource"] == S.RESOURCE
+                    idt = sign_jwt({"iss": base, "aud": "oaiapp_TEST", "sub": "user-sub-1",
+                                    "email": "test@example.invalid", "nonce": MOCK["nonce"],
+                                    "iat": now, "exp": now + 3600})
+                    return self._json(200, {"access_token": "at_1", "refresh_token": "rt_1",
+                                            "id_token": idt, "token_type": "Bearer", "expires_in": 3600,
+                                            "earliest_refresh_at": now - 10,
+                                            "scope": "chatgpt.tokens.use.direct email offline_access "
+                                                     "openid profile resource.invoke"})
+                assert f["grant_type"] == "refresh_token" and "scope" not in f
+                if MOCK["refresh"] == "invalidated":
+                    return self._json(400, {"error": "invalid_grant",
+                                            "error_reason": "refresh_token_invalidated",
+                                            "error_description": "A fresh sign-in is required."})
+                idt = sign_jwt({"iss": base, "aud": "oaiapp_TEST", "sub": "user-sub-1",
+                                "iat": now, "exp": now + 3600})
+                return self._json(200, {"access_token": "at_2", "refresh_token": "rt_2",
+                                        "id_token": idt, "token_type": "Bearer", "expires_in": 3600})
+            if self.path == "/api/accounts/oauth/revoke":
+                f = {k: v[0] for k, v in urllib.parse.parse_qs(body_raw.decode()).items()}
+                assert f == {"token": "rt_2", "token_type_hint": "refresh_token",
+                             "client_id": "oaiapp_TEST"}, f
+                self.send_response(200)
+                self.send_header("Content-Length", "0")
+                self.end_headers()
+                return
+            if self.path == "/v1/responses":
+                body = json.loads(body_raw)
+                MOCK["seen"]["responses"] = (dict(self.headers), body)
+                assert body["store"] is False and body["stream"] is True and "temperature" not in body
+                if MOCK["mode"] == "not_eligible":
+                    return self._json(403, {"error": {"code": "subscription_sharing_user_not_eligible",
+                                                      "message": "x", "param": None}})
+                if MOCK["mode"] == "limit":
+                    sse = (b"data: {\"type\":\"response.output_text.delta\",\"delta\":\"par\"}\n\n"
+                           b"data: {\"type\":\"response.failed\",\"response\":{\"error\":{\"code\":"
+                           b"\"subscription_sharing_usage_limit_exceeded\",\"message\":\"limit\"}}}\n\n")
+                    return self._json(200, sse, "text/event-stream")
+                sse = (b"data: {\"type\":\"response.output_text.delta\",\"delta\":\"Hello, \"}\r\n\r\n"
+                       b"data: {\"type\":\"response.output_text.delta\",\"delta\":\"world!\"}\r\n\r\n"
+                       b"data: {\"type\":\"response.completed\",\"response\":{\"id\":\"resp_1\","
+                       b"\"usage\":{\"input_tokens\":12,\"output_tokens\":3}}}\r\n\r\n")
+                return self._json(200, sse, "text/event-stream")
+            self._json(404, {"detail": "not found"})
+
+    mock = ThreadingHTTPServer(("127.0.0.1", 0), Mock)
+    threading.Thread(target=mock.serve_forever, daemon=True).start()
+    base = f"http://127.0.0.1:{mock.server_address[1]}"
+    saved = (S.ISSUER, S.API_BASE, S._DISCOVERY, dict(S._JWKS))
+    S.ISSUER, S.API_BASE, S._DISCOVERY = base, base + "/v1", None
+    S._JWKS.clear()
+    old_proxy = os.environ.get("NO_PROXY")
+    os.environ["NO_PROXY"] = "127.0.0.1"
+
+    def fake_browser(url):
+        q = {k: v[0] for k, v in urllib.parse.parse_qs(urllib.parse.urlsplit(url).query).items()}
+        MOCK["authorize"] = q
+        assert url.startswith(base + "/api/accounts/authorize?")
+        assert q["response_type"] == "code" and q["scope"] == S.SCOPES and q["resource"] == S.RESOURCE
+        assert q["code_challenge_method"] == "S256" and q["ext_agent_host_id"].startswith("urn:uuid:")
+        assert q["redirect_uri"].startswith("http://127.0.0.1:") and q["redirect_uri"].endswith("/auth/callback")
+        MOCK.update(challenge=q["code_challenge"], nonce=q["nonce"], redirect_uri=q["redirect_uri"])
+
+        def browser():
+            cb = q["redirect_uri"]
+            assert requests.get(cb.replace("/auth/callback", "/callback")).status_code == 404
+            assert requests.get(cb + "?code=X&state=FAUX").status_code == 400   # non consommé
+            r = requests.get(cb + "?code=CODE1&scope=chatgpt.tokens.use.direct+email+offline_access"
+                             "+openid+profile+resource.invoke&state=" + urllib.parse.quote(q["state"])
+                             + ("&client_id=oaiapp_TEST" if q["client_id"] == "dynamic_agent_client" else ""))
+            assert r.status_code == 200
+        threading.Thread(target=browser, daemon=True).start()
+        return True
+
+    tmp = tempfile.mkdtemp(prefix="pandora_siwc_")
+    try:
+        store = S.CredentialStore(Path(tmp) / "jamais_cree")
+        assert S.status(store)["state"] == "disconnected"
+        assert not (Path(tmp) / "jamais_cree").exists(), "lire l'état ne crée aucun dossier"
+        prof = S.sign_in(store, open_browser=fake_browser, wait_s=20)
+        a = MOCK["authorize"]
+        assert a["client_id"] == "dynamic_agent_client" and a["agent_name_hint"] == "PANDORA"
+        assert prof["client_id"] == "oaiapp_TEST" and prof["plan_enabled"] and prof["subject"] == "user-sub-1"
+        pid = store.read()["active"]
+        host1 = store.host_id()
+        assert host1 == a["ext_agent_host_id"]
+        if sys.platform == "win32":
+            assert b"oaiapp_TEST" not in (store.dir / "auth.bin").read_bytes(), "jetons chiffrés"
+        # reconnexion : client_id émis, pas d'agent_name_hint ni d'id_token_hint
+        S.sign_in(store, profile_id=pid, open_browser=fake_browser, wait_s=20)
+        a = MOCK["authorize"]
+        assert a["client_id"] == "oaiapp_TEST" and "agent_name_hint" not in a
+        assert a["login_hint"] == "test@example.invalid" and a["ext_agent_host_id"] == host1
+        assert "id_token_hint" not in a
+        assert S.list_models(S.access_token(store, pid)) == [{"slug": "gpt-6.1-sol",
+                                                              "display_name": "GPT-6.1 Sol"}]
+        out = []
+        text, resp = S.complete("gpt-6.1-sol", "Tu es l'assistant de PANDORA.",
+                                [{"role": "user", "content": "Dis bonjour"}],
+                                on_delta=out.append, st=store)
+        assert text == "Hello, world!" and "".join(out) == text and resp["usage"]["output_tokens"] == 3
+        hdrs, body = MOCK["seen"]["responses"]
+        assert body["instructions"] == "Tu es l'assistant de PANDORA." and hdrs["Authorization"] == "Bearer at_1"
+        assert all(it.get("role") != "system" for it in body["input"]), "jamais de rôle system"
+        # rotation du jeton à l'approche de l'expiration
+        st = store.read()
+        st["profiles"][pid]["expires_at"] = time.time() + 30
+        store.write(st)
+        assert S.access_token(store, pid) == "at_2" and store.read()["profiles"][pid]["refresh_token"] == "rt_2"
+        # limite atteinte EN PLEIN FLUX → forfait en pause, jamais de bascule silencieuse
+        MOCK["mode"] = "limit"
+        try:
+            S.complete("gpt-6.1-sol", "", [{"role": "user", "content": "x"}], st=store)
+            raise AssertionError("aurait dû échouer")
+        except S.SiwcError as exc:
+            assert exc.code == "subscription_sharing_usage_limit_exceeded" and exc.partial_text == "par"
+        assert S.status(store)["state"] == "paused"
+        try:
+            S.complete("gpt-6.1-sol", "", [{"role": "user", "content": "x"}], st=store)
+            raise AssertionError
+        except S.SiwcError as exc:
+            assert exc.code == "plan_paused"
+        S.resume_plan(store)
+        # non éligible (Free / Go) avant ouverture du flux
+        MOCK["mode"] = "not_eligible"
+        try:
+            S.complete("gpt-6.1-sol", "", [{"role": "user", "content": "x"}], st=store)
+            raise AssertionError
+        except S.SiwcError as exc:
+            assert exc.code == "subscription_sharing_user_not_eligible" and exc.status == 403
+            assert exc.request_id == "req_test"
+        assert S.status(store)["state"] == "not_eligible"
+        # déconnexion : révocation du refresh token
+        assert S.sign_out(store, pid) is True and S.status(store)["state"] == "disconnected"
+        # refresh invalidé (constat réel du 04/10/2026) → reconnexion requise, client_id gardé
+        MOCK["mode"], MOCK["refresh"] = "ok", "invalidated"
+        S.sign_in(store, profile_id=pid, open_browser=fake_browser, wait_s=20)
+        st = store.read()
+        st["profiles"][pid]["expires_at"] = time.time() + 10
+        store.write(st)
+        try:
+            S.access_token(store, pid)
+            raise AssertionError
+        except S.SiwcError as exc:
+            assert exc.code == "reauth_required"
+        p = store.read()["profiles"][pid]
+        assert p["status"] == "reauth_required" and p["client_id"] == "oaiapp_TEST"
+        assert "refresh_token" not in p and S.status(store)["state"] == "reauth_required"
+        # bouton Annuler pendant l'attente du navigateur
+        stop = threading.Event()
+        threading.Timer(0.5, stop.set).start()
+        try:
+            S.sign_in(store, open_browser=lambda url: True, wait_s=20, cancel=stop)
+            raise AssertionError
+        except S.SiwcError as exc:
+            assert exc.code == "cancelled"
+    finally:
+        mock.shutdown()
+        S.ISSUER, S.API_BASE, S._DISCOVERY = saved[0], saved[1], saved[2]
+        S._JWKS.clear()
+        S._JWKS.update(saved[3])
+        if old_proxy is None:
+            os.environ.pop("NO_PROXY", None)
+        else:
+            os.environ["NO_PROXY"] = old_proxy
+
+
+@test
+def compte_chatgpt_branche_dans_pandora_04_10_2026():
+    """Le forfait ChatGPT est un moteur comme les autres (famille ChatGPT / OpenAI,
+    choisi globalement ou par tâche) ; une limite atteinte n'est JAMAIS rattrapée
+    en silence par la clé API — seulement si l'utilisateur a coché le repli ; le
+    panneau « Compte ChatGPT » existe dans les deux éditions des Paramètres."""
+    import api.chatgpt_plan as CP
+    import core.ai_provider as AP
+    from core.ai_registry import engine, primary_menu_items
+    rows = [r for r in primary_menu_items() if r.get("engine") == "chatgpt_plan"]
+    assert rows and engine("chatgpt_plan", {"chatgpt_model": "gpt-6.1-sol"})["model"] == "gpt-6.1-sol"
+    assert engine("chatgpt_plan")["group"] == "openai" and engine("chatgpt_plan")["provider"] == "chatgpt"
+    cfg = {"ai_profile": "single", "ai_engine": "chatgpt_plan", "chatgpt_model": "gpt-6.1-sol",
+           "openai_key": "sk-test-pas-reel", "chatgpt_api_fallback": False}
+    calls = []
+    saved = (AP._cfg, CP.complete, CP.status, AP._openai_complete)
+    AP._cfg = lambda: cfg
+    try:
+        CP.status = lambda st=None: {"state": "connected", "email": "", "models": []}
+        CP.complete = lambda model, system, messages, on_delta=None, st=None: (
+            calls.append((model, system, messages)) or ("Bonjour", {"usage": {"input_tokens": 5,
+                                                                             "output_tokens": 1}}))
+        assert AP.key_error("enhance") is None
+        assert AP.complete("Système", "Salut", task="enhance") == "Bonjour"
+        assert calls[0][0] == "gpt-6.1-sol" and calls[0][2] == [{"role": "user", "content": "Salut"}]
+        assert AP.ai_name_for_task("enhance") == "Compte ChatGPT · gpt-6.1-sol"
+
+        def _limit(*a, **k):
+            raise CP.SiwcError("subscription_sharing_usage_limit_exceeded", "limit")
+        CP.complete = _limit
+        try:
+            AP.complete("S", "x", task="enhance")
+            raise AssertionError("aucun repli sans l'accord de l'utilisateur")
+        except RuntimeError as exc:
+            assert "Limite d'utilisation" in str(exc) and "chatgpt.com/settings/usage" in str(exc)
+        cfg["chatgpt_api_fallback"] = True
+        AP._openai_complete = lambda system, messages, model, max_tokens: f"API:{model}"
+        assert AP.complete("S", "x", task="enhance").startswith("API:"), "repli autorisé → clé API"
+        CP.status = lambda st=None: {"state": "disconnected"}
+        cfg["chatgpt_api_fallback"] = False
+        assert "Continuer avec ChatGPT" in (AP.key_error("enhance") or "")
+    finally:
+        AP._cfg, CP.complete, CP.status, AP._openai_complete = saved
+    from ui.page_settings import SettingsPage
+    page = SettingsPage()
+    assert hasattr(page, "_chatgpt_panel")
+    idx = next(i for i in range(page.ai_combo.count())
+               if isinstance(page.ai_combo.itemData(i), dict)
+               and page.ai_combo.itemData(i).get("engine") == "chatgpt_plan")
+    page.ai_combo.setCurrentIndex(idx)
+    assert not page._chatgpt_panel.isHidden(), "panneau affiché quand le compte ChatGPT sert"
+    assert not page._chatgpt_panel.fallback_cb.isChecked(), "repli DÉCOCHÉ par défaut"
+    out = {}
+    page._chatgpt_panel.apply(out)
+    assert out == {"chatgpt_model": "", "chatgpt_api_fallback": False}
+    assert not CP.store().has_data(), "aucun jeton écrit par l'affichage"
+
+@test
+def file_annonce_le_vrai_distributeur_04_10_2026():
+    """Constat Matthieu 04/10/2026 : la confirmation de file disait « Chaque plan
+    consomme des crédits fal.ai » alors que PiAPI servait les plans. Elle nomme
+    désormais le distributeur RÉEL (ordre de priorité, clé, capacités), fal.ai
+    pour les moteurs hors Seedance, et rien pour un moteur local."""
+    import json
+    import core.config as CC
+    from core import media_provider as MP
+    saved = CC.load_config
+    try:
+        cfg = {"api_key": "fal-x", "piapi_key": "p", "video_provider_order": ["piapi", "fal"],
+               "distribution_mode": "multi"}
+        CC.load_config = lambda *a, **k: json.loads(json.dumps(cfg))
+        MP.load_config = CC.load_config
+        assert MP.billing_provider("seedance-2.5", "720p", True) == "piapi"
+        assert MP.billing_notice("seedance-2.5", "720p", True).endswith("PiAPI.")
+        assert MP.billing_provider("kling-v3-pro", "1080p") == "fal"
+        assert MP.billing_provider("comfy") == "" and "aucun crédit" in MP.billing_notice("comfy")
+        cfg.pop("piapi_key")
+        assert MP.billing_provider("seedance-2.5", "720p", True) == "fal", "sans clé PiAPI → fal"
+    finally:
+        CC.load_config = saved
+        MP.load_config = saved
+    import ui.tab_t2v as M
+    src = inspect.getsource(M.TabT2V._start_batch_generation)
+    assert "billing_notice(" in src and "crédits fal.ai" not in src
+
+# ══════════════════════════════════════════════════════════════════════════════
+# Mode Batch de Claude (Message Batches API, −50 %) — 04/10/2026
+# ══════════════════════════════════════════════════════════════════════════════
+
+class _FakeBatches:
+    """Faux `client.messages.batches` : aucun réseau. `reply(params)` fabrique le
+    résultat de chaque requête (« succeeded » par défaut)."""
+
+    def __init__(self, reply):
+        from types import SimpleNamespace as NS
+        self._ns = NS
+        self.reply = reply
+        self.created = []
+        self.cancelled = []
+
+    def create(self, requests):
+        bid = f"msgbatch_{len(self.created) + 1}"
+        self.created.append((bid, list(requests)))
+        return self._ns(id=bid, processing_status="in_progress")
+
+    def retrieve(self, bid):
+        return self._ns(id=bid, processing_status="ended")
+
+    def results(self, bid):
+        for req in dict(self.created)[bid]:
+            yield self._ns(custom_id=req["custom_id"], result=self.reply(req["params"]))
+
+    def cancel(self, bid):
+        self.cancelled.append(bid)
+
+
+def _fake_msg(text, model="claude-haiku-4-5"):
+    from types import SimpleNamespace as NS
+    return NS(type="succeeded", message=NS(
+        content=[NS(type="text", text=text)], usage=NS(input_tokens=100, output_tokens=40),
+        stop_reason="end_turn", model=model, stop_details=None))
+
+
+def _user_text(params) -> str:
+    content = (params.get("messages") or [{}])[-1].get("content", "")
+    if isinstance(content, list):
+        return " ".join(b.get("text", "") for b in content if isinstance(b, dict))
+    return str(content)
+
+
+@test
+def mode_batch_claude_regroupe_rend_et_annule_04_10_2026():
+    """Session Batch : les requêtes simultanées de plusieurs threads partent dans
+    UN lot, chaque appelant reçoit SON message ; une requête en échec lève chez
+    son appelant seulement ; l'annulation ne laisse aucun appelant bloqué et
+    annule le lot chez Anthropic ; hors session, rien ne change."""
+    import threading
+    from concurrent.futures import ThreadPoolExecutor
+    from core import claude_batch as CB
+    saved = (CB.QUIET_SECONDS, CB.POLL_SECONDS)
+    CB.QUIET_SECONDS, CB.POLL_SECONDS = 0.3, 0.5
+    try:
+        def reply(params):
+            q = _user_text(params)
+            if q == "boom":
+                from types import SimpleNamespace as NS
+                return NS(type="errored", error=NS(error=NS(message="overloaded")))
+            return _fake_msg("r:" + q)
+        fb = _FakeBatches(reply)
+        client = type("C", (), {})()
+        client.messages = type("M", (), {})()
+        client.messages.batches = fb
+        assert not CB.wants("t") and CB.current() is None
+        with CB.session({"t"}, client_factory=lambda: client):
+            assert CB.wants("t") and not CB.wants("autre")
+
+            def ask(q):
+                return CB.send({"model": "m", "max_tokens": 10,
+                                "messages": [{"role": "user", "content": q}]}).content[0].text
+            with ThreadPoolExecutor(9) as pool:
+                futs = [pool.submit(CB.run_in_session(ask), f"q{i}") for i in range(8)]
+                futs.append(pool.submit(CB.run_in_session(ask), "boom"))
+                outs = []
+                for f in futs:
+                    try:
+                        outs.append(f.result(timeout=30))
+                    except CB.BatchRequestError as exc:
+                        outs.append("ERR:" + str(exc))
+            # un thread NON enveloppé n'hérite pas de la session
+            seen = []
+            th = threading.Thread(target=lambda: seen.append(CB.wants("t")))
+            th.start()
+            th.join()
+        assert outs[:8] == [f"r:q{i}" for i in range(8)], outs
+        assert outs[8].startswith("ERR:") and "overloaded" in outs[8]
+        assert len(fb.created) == 1 and len(fb.created[0][1]) == 9, "UN seul lot"
+        assert seen == [False] and CB.current() is None
+        # Annulation : l'appelant bloqué est libéré, le lot est annulé chez Anthropic
+        fb2 = _FakeBatches(lambda p: _fake_msg("x"))
+        fb2.retrieve = lambda bid: type("B", (), {"processing_status": "in_progress"})()
+        client.messages.batches = fb2
+        stop = threading.Event()
+        with CB.session({"t"}, client_factory=lambda: client, should_cancel=stop.is_set):
+            fut = CB.current().submit({"model": "m", "max_tokens": 5,
+                                       "messages": [{"role": "user", "content": "lent"}]})
+            import time
+            t0 = time.monotonic()
+            while not fb2.created and time.monotonic() - t0 < 10:
+                time.sleep(0.05)
+            stop.set()
+            try:
+                fut.result(timeout=10)
+                raise AssertionError("aurait dû être annulé")
+            except CB.BatchCancelled:
+                pass
+        assert fb2.cancelled == ["msgbatch_1"], fb2.cancelled
+    finally:
+        CB.QUIET_SECONDS, CB.POLL_SECONDS = saved
+
+
+@test
+def mode_batch_claude_branche_sur_anthropic_et_storyboard_04_10_2026():
+    """Le mode Batch passe par le point d'envoi UNIQUE vers Anthropic : mêmes
+    paramètres qu'un appel direct (modèle, réflexion), même Message rendu, coût
+    journalisé à MOITIÉ prix. Puis la génération du storyboard en mode
+    économique, de bout en bout et sans réseau : les lots partent ENSEMBLE (un
+    seul lot Anthropic pour leurs conversions), les plans restent dans l'ordre."""
+    from core import claude_batch as CB
+    import core.ai_provider as AP
+    import core.ai_spend as SP
+    saved = (CB.QUIET_SECONDS, CB.POLL_SECONDS, AP._cfg, SP.note_usage, CB._client,
+             AP._anthropic_client)
+    CB.QUIET_SECONDS, CB.POLL_SECONDS = 0.3, 0.5
+    noted = []
+
+    def _note(model, task, it, ot, provider="anthropic", label="", price_factor=1.0):
+        noted.append((task, price_factor))
+        return 0.0
+
+    def _no_direct_call():
+        raise AssertionError("appel Anthropic DIRECT pendant une session Batch")
+
+    def reply(params):
+        q = _user_text(params)
+        if "PLAN " in q:                      # conversion d'un lot du storyboard
+            import json
+            import re
+            nums = [int(n) for n in re.findall(r"^PLAN\s+(\d+)\s*$", q, re.M)]
+            return _fake_msg(json.dumps([{
+                "number": n, "seq_num": 1, "seq_name": "SÉQ 1", "scene_title": f"Plan {n}",
+                "duration": 5, "camera_movement": "Fixe", "shot_size": "PE",
+                "action": "a man walks", "character_names": []} for n in nums]),
+                model="claude-opus-5-5")
+        return _fake_msg("A man walks slowly across the frame, wide shot.",
+                         model="claude-sonnet-5-5")
+    fb = _FakeBatches(reply)
+    client = type("C", (), {})()
+    client.messages = type("M", (), {})()
+    client.messages.batches = fb
+    try:
+        CB._client = lambda: client
+        AP._anthropic_client = _no_direct_call
+        SP.note_usage = _note
+        cfg = {"anthropic_key": "sk-ant-test-pas-reel", "ai_profile": "single", "ai_engine": "haiku"}
+        AP._cfg = lambda: cfg
+        with CB.session({"enhance"}):
+            out = AP.complete("Système", "Bonjour", task="enhance")
+        assert out == "A man walks slowly across the frame, wide shot.", out
+        params = fb.created[0][1][0]["params"]
+        assert params["model"] == "claude-haiku-4-5" and params["thinking"] == {"type": "disabled"}
+        assert params["messages"] == [{"role": "user", "content": "Bonjour"}]
+        assert ("enhance", 0.5) in noted, f"coût journalisé à moitié prix : {noted}"
+
+        # ── Storyboard en mode économique, de bout en bout ──
+        cfg.update({"ai_profile": "anthropic_optimized", "ai_engine": ""})
+        doc = "DÉCOUPAGE PANDORA 2\n\nSÉQUENCE 1 — SÉQ 1\n" + "\n".join(
+            f"PLAN {n}\nSOURCE SCÉNARIO : Il marche.\nINTENTION : tension\n"
+            "DURÉE : 5\nPROMPT VISUEL : a man walks\n" for n in (1, 2, 3, 4))
+        fb.created.clear()
+        from api.storyboard_queue import StoryboardQueueWorker
+        w = StoryboardQueueWorker(doc, 0, per_batch=2, batch_mode=True)
+        got, failed, statuses = [], [], []
+        w.done.connect(got.append)
+        w.failed.connect(lambda m, s: failed.append(m))
+        w.batch_status.connect(lambda r, d, m: statuses.append((r, d)))
+        w.run()
+        for _ in range(20):          # signaux venus des threads de la session
+            APP.processEvents()
+        assert not failed, failed
+        assert [s.get("number") for s in got[0]] == [1, 2, 3, 4], "ordre du storyboard"
+        first = fb.created[0][1]
+        assert len(first) == 2, "les DEUX lots convertis dans le même lot Anthropic"
+        assert all(r["params"]["model"] == "claude-opus-5-5" for r in first)
+        assert len(fb.created) >= 2, "compositions des prompts finals dans un lot suivant"
+        assert sum(len(b[1]) for b in fb.created[1:]) >= 4, "un prompt final par plan"
+        assert statuses, "état des lots transmis à la fenêtre"
+    finally:
+        (CB.QUIET_SECONDS, CB.POLL_SECONDS, AP._cfg, SP.note_usage, CB._client,
+         AP._anthropic_client) = saved
+    # La fenêtre « Générer le storyboard » choisit la file en mode économique
+    import ui.dialog_storyboard_generate as D
+    src = inspect.getsource(D.StoryboardGenerateDialog._start)
+    assert "_batch_mode_wanted" in src and "batch_mode=_batch" in src
 
 
 if __name__ == "__main__":

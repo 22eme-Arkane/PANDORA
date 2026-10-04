@@ -250,10 +250,16 @@ def compose_finals_for_shots(shots: list, max_workers: int = 6,
     except Exception:
         return 0
     import concurrent.futures as _fut
+    from core import claude_batch as _cb
     done = 0
     total = len(shots)
+    # Mode Batch (−50 %) : TOUS les plans d'un coup, pour que leurs requêtes
+    # partent dans le même lot ; chaque thread hérite de la session Batch.
+    if _cb.current() is not None:
+        max_workers = max(int(max_workers), total)
     with _fut.ThreadPoolExecutor(max_workers=max(1, int(max_workers))) as pool:
-        futures = {pool.submit(compose_final_for_shot, s, False): s for s in shots}
+        futures = {pool.submit(_cb.run_in_session(compose_final_for_shot), s, False): s
+                   for s in shots}
         for f in _fut.as_completed(futures):
             try:
                 if f.result():

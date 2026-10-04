@@ -6061,6 +6061,309 @@ _FR_TO_EN: dict[str, str] = {
     "Générer depuis Storyboard\nSélectionnez un plan et cliquez '▶▶ Lancer'. Le prompt du plan est utilisé, traduit en anglais, et les références (personnages, décor) sont envoyées automatiquement. Quand des références visuelles sont disponibles, elles guident Seedance pour une cohérence visuelle accrue.\n\nModifier des clips\nImportez des clips existants et modifiez-les avec un prompt. Seedance applique la modification en préservant la structure visuelle. LatentSync resynchronise les lèvres sur une nouvelle piste audio.\n\nGénération directe\nAccès aux 13 moteurs (Seedance, Happy Horse, Kling, Veo 3.1, PixVerse, Sora 2…) avec leurs paramètres et tarifs spécifiques.\n\nVidéothèque\nGalerie de tous les clips générés pour ce projet. Cliquez sur un clip pour le prévisualiser, l'envoyer dans 'Modifier des clips', ou l'ouvrir.\n\nTarifs\nLa génération est facturée via fal.ai. Seedance 2.0 est le moteur recommandé pour la cohérence visuelle. Consultez le Manuel pour le comparatif des tarifs par moteur.": "Generate from Storyboard\nSelect a shot and click '▶▶ Launch'. The shot's prompt is used, translated to English, and the references (characters, location) are sent automatically. When visual references are available, they guide Seedance for increased visual coherence.\n\nEdit clips\nImport existing clips and modify them with a prompt. Seedance applies the change while preserving the visual structure. LatentSync re-syncs the lips to a new audio track.\n\nDirect generation\nAccess to the 13 engines (Seedance, Happy Horse, Kling, Veo 3.1, PixVerse, Sora 2…) with their specific parameters and pricing.\n\nVideo library\nGallery of all clips generated for this project. Click a clip to preview it, send it to 'Edit clips', or open it.\n\nPricing\nGeneration is billed via fal.ai. Seedance 2.0 is the recommended engine for visual coherence. See the Manual for the per-engine pricing comparison.",
     "Clé fal.ai\nCréez un compte sur fal.ai et générez une clé API dans votre tableau de bord. Donne accès à tous les moteurs vidéo (Seedance, Kling, Veo, PixVerse, Sora, Wan…) et aux modèles d'image (Flux).\n\nClé Anthropic\nCréez un compte sur console.anthropic.com. Utilisée pour : formatage du scénario, génération du storyboard, traduction des prompts, et l'assistant pédagogique.\n\nClé Nano Banana\nDédiée à la génération de portraits de personnages et d'images d'éléments (décors, accessoires, HMC, véhicules).\n\nDossier de sortie\nChoisissez où vos vidéos générées seront enregistrées. Par défaut, elles sont sauvegardées dans votre dossier Vidéos, sous-dossier PANDORA. Vous pouvez rediriger vers votre NAS ou dossier de projet DaVinci.\n\nMode sans clé\nSans clé fal.ai, PANDORA fonctionne en mode démonstration — les générations sont simulées sans consommation de crédits, pour découvrir l'interface.": 'fal.ai key\nCreate an account on fal.ai and generate an API key in your dashboard. Gives access to all video engines (Seedance, Kling, Veo, PixVerse, Sora, Wan…) and image models (Flux).\n\nAnthropic key\nCreate an account on console.anthropic.com. Used for: screenplay formatting, storyboard generation, prompt translation, and the learning assistant.\n\nNano Banana key\nDedicated to generating character portraits and element images (locations, props, HMC, vehicles).\n\nOutput folder\nChoose where your generated videos will be saved. By default they are saved in your Videos folder, PANDORA subfolder. You can redirect to your NAS or DaVinci project folder.\n\nKey-free mode\nWithout a fal.ai key, PANDORA runs in demo mode — generations are simulated without consuming credits, to explore the interface.',
     "Bienvenue dans PANDORA\nPANDORA est un outil de pré-production cinéma intégré à DaVinci Resolve. Il couvre l'ensemble du pipeline de pré-production : scénario, storyboard, castings, décors, accessoires, HMC, véhicules et génération vidéo IA.\n\nDémarrage rapide\n1. Créez ou ouvrez un projet depuis la page Projets.\n2. Rédigez votre scénario et utilisez Claude IA pour le formater.\n3. Générez le storyboard depuis le scénario.\n4. Ajoutez personnages, décors et accessoires avec images de référence.\n5. Générez vos clips vidéo depuis Studio IA.": 'Welcome to PANDORA\nPANDORA is a cinema pre-production tool integrated into DaVinci Resolve. It covers the entire pre-production pipeline: screenplay, storyboard, castings, locations, props, HMC, vehicles and AI video generation.\n\nQuick start\n1. Create or open a project from the Projects page.\n2. Write your screenplay and use Claude AI to format it.\n3. Generate the storyboard from the screenplay.\n4. Add characters, locations and props with reference images.\n5. Generate your video clips from AI Studio.',
+    # ── Pont DaVinci v2, montage dans Resolve (04/10/2026) ──
+    'Le pont PANDORA ne tourne pas dans DaVinci Resolve.':
+        'The PANDORA bridge is not running in DaVinci Resolve.',
+    'Le pont DaVinci ne répond pas (Resolve occupé, ou fenêtre du pont fermée).':
+        'The DaVinci bridge is not responding (Resolve busy, or the bridge window was closed).',
+    'Le pont DaVinci a coupé la connexion sans répondre.':
+        'The DaVinci bridge closed the connection without answering.',
+    'Réponse illisible du pont DaVinci.':
+        'Unreadable answer from the DaVinci bridge.',
+    'Le pont lancé dans DaVinci Resolve est une ancienne version.':
+        'The bridge running in DaVinci Resolve is an old version.',
+    'Import refusé par DaVinci Resolve.':
+        'Import refused by DaVinci Resolve.',
+    '1. Ouvrez DaVinci Resolve et un projet.\n2. Espace de travail → Scripts → seedance_bridge (laissez sa petite fenêtre ouverte).\n3. Revenez ici et cliquez sur « Connecter ».':
+        '1. Open DaVinci Resolve and a project.\n2. Workspace → Scripts → seedance_bridge (keep its small window open).\n3. Come back here and click “Connect”.',
+    "Le script n'est pas dans le menu ? Paramètres → DaVinci Resolve → « Installer / mettre à jour les scripts », puis redémarrez Resolve.":
+        'The script is not in the menu? Settings → DaVinci Resolve → “Install / update the scripts”, then restart Resolve.',
+    '1. Paramètres → DaVinci Resolve → « Installer / mettre à jour les scripts ».\n2. Fermez la fenêtre « PANDORA Bridge » dans Resolve (ou redémarrez Resolve).\n3. Relancez Espace de travail → Scripts → seedance_bridge.':
+        '1. Settings → DaVinci Resolve → “Install / update the scripts”.\n2. Close the “PANDORA Bridge” window in Resolve (or restart Resolve).\n3. Relaunch Workspace → Scripts → seedance_bridge.',
+    "Le pont tourne, mais l'API de DaVinci Resolve ne répond pas. Relancez seedance_bridge depuis Espace de travail → Scripts, avec un projet ouvert. Depuis Resolve 21.1, le scripting est réservé à DaVinci Resolve Studio.":
+        'The bridge is running, but the DaVinci Resolve API does not respond. Relaunch seedance_bridge from Workspace → Scripts, with a project open. Since Resolve 21.1, scripting requires DaVinci Resolve Studio.',
+    'Aucun projet ouvert dans DaVinci Resolve':
+        'No project open in DaVinci Resolve',
+    'Media Pool inaccessible':
+        'Media Pool unavailable',
+    'Délai dépassé — DaVinci Resolve est occupé (rendu, fenêtre ouverte…)':
+        'Timed out — DaVinci Resolve is busy (rendering, a dialog open…)',
+    'Boucle du pont arrêtée — relancez seedance_bridge':
+        'Bridge loop stopped — relaunch seedance_bridge',
+    "Pont PANDORA en cours d'arrêt":
+        'The PANDORA bridge is shutting down',
+    'Impossible de créer le chutier PANDORA':
+        'Could not create the PANDORA bin',
+    'Aucune timeline ouverte':
+        'No timeline open',
+    '— pont à mettre à jour':
+        '— bridge needs updating',
+    '— API DaVinci indisponible':
+        '— DaVinci API unavailable',
+    'pont':
+        'bridge',
+    '1.  Dans DaVinci : Espace de travail → Scripts → seedance_bridge':
+        '1.  In DaVinci: Workspace → Scripts → seedance_bridge',
+    '2.  Revenez ici et cliquez sur « Connecter » →':
+        '2.  Come back here and click “Connect” →',
+    'Installer / mettre à jour les scripts':
+        'Install / update the scripts',
+    'Copie seedance_bridge et pandora_send dans le dossier Scripts de DaVinci Resolve (sans droits administrateur si possible).':
+        "Copies seedance_bridge and pandora_send into DaVinci Resolve's Scripts folder (without administrator rights when possible).",
+    'Scripts PANDORA dans Resolve : à jour':
+        'PANDORA scripts in Resolve: up to date',
+    'Scripts PANDORA dans Resolve : à mettre à jour':
+        'PANDORA scripts in Resolve: update needed',
+    "DaVinci Resolve n'est pas détecté sur ce poste.":
+        'DaVinci Resolve was not detected on this computer.',
+    'Scripts PANDORA non installés dans Resolve.':
+        'PANDORA scripts are not installed in Resolve.',
+    'DaVinci Resolve introuvable':
+        'DaVinci Resolve not found',
+    "DaVinci Resolve n'est pas détecté sur ce poste. Installez-le, lancez-le une fois, puis recommencez.":
+        'DaVinci Resolve was not detected on this computer. Install it, launch it once, then try again.',
+    'Installation impossible':
+        'Installation failed',
+    'Script introuvable dans PANDORA :':
+        'Script missing from PANDORA:',
+    'Scripts installés dans :':
+        'Scripts installed in:',
+    'Écriture impossible dans :':
+        'Could not write to:',
+    "Redémarrez DaVinci Resolve : il ne liste les nouveaux scripts qu'à son démarrage. Ensuite : Espace de travail → Scripts → seedance_bridge.":
+        'Restart DaVinci Resolve: it only lists new scripts at startup. Then: Workspace → Scripts → seedance_bridge.',
+    'Si le pont tourne déjà dans Resolve, fermez sa fenêtre « PANDORA Bridge » puis relancez Espace de travail → Scripts → seedance_bridge.':
+        'If the bridge is already running in Resolve, close its “PANDORA Bridge” window, then relaunch Workspace → Scripts → seedance_bridge.',
+    'Scripts DaVinci':
+        'DaVinci scripts',
+    'DaVinci — Connexion impossible':
+        'DaVinci — Connection failed',
+    'import des clips · montage du storyboard · scripts':
+        'clip import · storyboard assembly · scripts',
+    'Studio requis dès Resolve 21.1':
+        'Studio required from Resolve 21.1',
+    "Fonctionnalité optionnelle. Jusqu'à Resolve 21.0, la version gratuite lance aussi le pont ; depuis Resolve 21.1, le scripting est réservé à DaVinci Resolve Studio. Sans pont : Storyboard → Action → « Exporter la timeline (XML) ».":
+        'Optional feature. Up to Resolve 21.0, the free version can also run the bridge; since Resolve 21.1, scripting requires DaVinci Resolve Studio. Without the bridge: Storyboard → Action → “Export the timeline (XML)”.',
+    'Connecter DaVinci Resolve — Guide':
+        'Connect DaVinci Resolve — Guide',
+    'Pont local  ·  Media Pool  ·  Timeline':
+        'Local bridge  ·  Media Pool  ·  Timeline',
+    'Comment ça fonctionne ?':
+        'How does it work?',
+    'PANDORA communique avec DaVinci Resolve par un <b>pont local</b> (un petit script Python lancé dans Resolve). Il importe les clips générés dans le Media Pool, rangés par séquence, monte le storyboard sur une timeline, et lit les clips de la timeline pour les modifier.':
+        'PANDORA talks to DaVinci Resolve through a <b>local bridge</b> (a small Python script launched in Resolve). It imports the generated clips into the Media Pool, sorted by sequence, assembles the storyboard on a timeline, and reads the timeline clips so you can modify them.',
+    'Étapes de configuration':
+        'Setup steps',
+    'Paramètres → DaVinci Resolve → « Installer / mettre à jour les scripts »':
+        'Settings → DaVinci Resolve → “Install / update the scripts”',
+    'Copie seedance_bridge et pandora_send dans le dossier Scripts de Resolve. Après une première installation, redémarrez Resolve.':
+        "Copies seedance_bridge and pandora_send into Resolve's Scripts folder. After a first installation, restart Resolve.",
+    'Ouvrez DaVinci Resolve et un projet':
+        'Open DaVinci Resolve and a project',
+    "Jusqu'à Resolve 20.x, un Python 3 64 bits doit être installé sur le poste (python.org, « pour tous les utilisateurs ») : Resolve s'en sert pour exécuter les scripts.":
+        'Up to Resolve 20.x, a 64-bit Python 3 must be installed on the computer (python.org, “for all users”): Resolve uses it to run scripts.',
+    'Dans DaVinci : Espace de travail → Scripts → seedance_bridge':
+        'In DaVinci: Workspace → Scripts → seedance_bridge',
+    'Une petite fenêtre « PANDORA Bridge » confirme que le pont est actif (port 19876). Laissez-la ouverte : la fermer arrête le pont.':
+        'A small “PANDORA Bridge” window confirms the bridge is active (port 19876). Keep it open: closing it stops the bridge.',
+    'Dans PANDORA → Paramètres, cliquez sur « Connecter »':
+        'In PANDORA → Settings, click “Connect”',
+    'Le voyant passe au vert ●. Les clips générés arrivent dans le chutier PANDORA, rangés par séquence (SQ01, SQ02…).':
+        'The light turns green ●. Generated clips arrive in the PANDORA bin, sorted by sequence (SQ01, SQ02…).',
+    '⚠  Version gratuite ou Studio ?':
+        '⚠  Free version or Studio?',
+    "Jusqu'à Resolve 21.0, la version gratuite lance aussi le pont depuis le menu Scripts. Depuis <b>Resolve 21.1</b> (septembre 2026), Blackmagic réserve le scripting Python à <b>DaVinci Resolve Studio</b> : le pont n'apparaît plus dans le menu de la version gratuite.<br><br>Sans pont, tout le reste fonctionne : la génération, et l'export de la timeline (Storyboard → Action → « Exporter la timeline (XML) »), que Resolve — gratuit ou Studio — et Premiere savent importer.":
+        "Up to Resolve 21.0, the free version can also run the bridge from the Scripts menu. Since <b>Resolve 21.1</b> (September 2026), Blackmagic reserves Python scripting for <b>DaVinci Resolve Studio</b>: the bridge no longer appears in the free version's menu.<br><br>Without the bridge, everything else works: generation, and the timeline export (Storyboard → Action → “Export the timeline (XML)”), which Resolve — free or Studio — and Premiere can import.",
+    'Dépannage':
+        'Troubleshooting',
+    'Connexion refusée':
+        'Connection refused',
+    'Lancez seedance_bridge dans Resolve (Espace de travail → Scripts) et laissez sa fenêtre ouverte.':
+        'Launch seedance_bridge in Resolve (Workspace → Scripts) and keep its window open.',
+    "Le script n'est pas dans le menu":
+        'The script is not in the menu',
+    "Paramètres → DaVinci Resolve → « Installer / mettre à jour les scripts », puis redémarrez Resolve. Version gratuite 21.1 ou plus : le menu n'affiche plus les scripts Python.":
+        'Settings → DaVinci Resolve → “Install / update the scripts”, then restart Resolve. Free version 21.1 or later: the menu no longer shows Python scripts.',
+    '« Pont à mettre à jour »':
+        '“Bridge needs updating”',
+    'Mettez les scripts à jour, fermez la fenêtre « PANDORA Bridge », puis relancez seedance_bridge.':
+        'Update the scripts, close the “PANDORA Bridge” window, then relaunch seedance_bridge.',
+    '« Port déjà utilisé » dans la fenêtre du pont':
+        '“Port already in use” in the bridge window',
+    'Un ancien pont tourne encore : fermez sa fenêtre, ou redémarrez Resolve.':
+        'An older bridge is still running: close its window, or restart Resolve.',
+    '« API DaVinci indisponible »':
+        '“DaVinci API unavailable”',
+    "Ouvrez un projet, puis relancez le pont depuis le menu Scripts. Resolve 20.x et antérieurs : vérifiez qu'un Python 3 64 bits est installé.":
+        'Open a project, then relaunch the bridge from the Scripts menu. Resolve 20.x and earlier: check that a 64-bit Python 3 is installed.',
+    'Pont à mettre à jour':
+        'Bridge needs updating',
+    'API DaVinci indisponible':
+        'DaVinci API unavailable',
+    'Connexion impossible':
+        'Connection failed',
+    'Lancez le pont dans DaVinci Resolve (Espace de travail → Scripts → seedance_bridge), puis connectez-vous pour activer cette option':
+        'Launch the bridge in DaVinci Resolve (Workspace → Scripts → seedance_bridge), then connect to enable this option',
+    'Import DaVinci impossible :':
+        'DaVinci import failed:',
+    'Fichier :':
+        'File:',
+    'Monter dans DaVinci Resolve':
+        'Assemble in DaVinci Resolve',
+    '🎞  Monter dans DaVinci Resolve':
+        '🎞  Assemble in DaVinci Resolve',
+    "Monte la dernière prise de chaque plan, dans l'ordre du storyboard, sur une\nnouvelle timeline de DaVinci Resolve (pont PANDORA lancé dans Resolve).":
+        'Assembles the latest take of each shot, in storyboard order, on a\nnew DaVinci Resolve timeline (PANDORA bridge running in Resolve).',
+    "Aucun plan de ce storyboard n'a encore de clip généré.":
+        'No shot of this storyboard has a generated clip yet.',
+    'Les clips sont cherchés dans le dossier vidéo du projet (SQ3_P16_02.mp4…).':
+        "Clips are looked up in the project's video folder (SQ3_P16_02.mp4…).",
+    'Plans montés (dernière prise) :':
+        'Shots assembled (latest take):',
+    'Plans sans clip, ignorés :':
+        'Shots without a clip, skipped:',
+    'Nom de la timeline dans DaVinci Resolve :':
+        'Timeline name in DaVinci Resolve:',
+    'Sans pont DaVinci : Action → « Exporter la timeline (XML) », puis Fichier → Importer → Timeline dans Resolve.':
+        'Without the DaVinci bridge: Action → “Export the timeline (XML)”, then File → Import → Timeline in Resolve.',
+    'Timeline créée dans DaVinci Resolve :':
+        'Timeline created in DaVinci Resolve:',
+    'Plans montés :':
+        'Shots assembled:',
+    'Clips déjà présents, réutilisés :':
+        'Clips already present, reused:',
+    'Fichiers introuvables :':
+        'Files not found:',
+    'Clips refusés par Resolve :':
+        'Clips refused by Resolve:',
+    # ── Export de timeline XML, attente de la file (04/10/2026) ──
+    'Exporter la timeline (XML)':
+        'Export the timeline (XML)',
+    '📤  Exporter la timeline (XML)':
+        '📤  Export the timeline (XML)',
+    "Écrit une timeline Final Cut Pro 7 XML : la dernière prise de chaque plan,\ndans l'ordre du storyboard. À importer dans DaVinci Resolve (gratuit ou Studio)\nou dans Adobe Premiere — aucun pont nécessaire.":
+        'Writes a Final Cut Pro 7 XML timeline: the latest take of each shot,\nin storyboard order. Import it into DaVinci Resolve (free or Studio)\nor Adobe Premiere — no bridge needed.',
+    'Timeline exportée :':
+        'Timeline exported:',
+    'Plans (dernière prise) :':
+        'Shots (latest take):',
+    'i/s':
+        'fps',
+    'Clips illisibles, ignorés :':
+        'Unreadable clips, skipped:',
+    'DaVinci Resolve (gratuit ou Studio) : Fichier → Importer → Timeline, puis choisissez ce fichier.':
+        'DaVinci Resolve (free or Studio): File → Import → Timeline, then choose this file.',
+    'Adobe Premiere : Fichier → Importer.':
+        'Adobe Premiere: File → Import.',
+    'Plans à une autre cadence que la timeline :':
+        'Shots at another frame rate than the timeline:',
+    "vérifiez « Mixed frame rate format » à l'import dans Resolve.":
+        'check “Mixed frame rate format” when importing into Resolve.',
+    'Clips en 10 bits :':
+        '10-bit clips:',
+    'la version gratuite de Resolve ne les lit pas.':
+        'the free version of Resolve cannot read them.',
+    'Chemins avec accents :':
+        'Paths with accents:',
+    'si Resolve ne retrouve pas ces clips, indiquez-lui le dossier des vidéos quand il le demande.':
+        'if Resolve cannot find these clips, point it to the video folder when it asks.',
+    'Timeline Final Cut Pro 7 XML (*.xml)':
+        'Final Cut Pro 7 XML timeline (*.xml)',
+    'Export impossible : aucun clip lisible (ffprobe).':
+        'Export failed: no readable clip (ffprobe).',
+    'préparation du prompt final…':
+        'preparing the final prompt…',
+    # ── Compte ChatGPT (forfait Plus / Pro, 04/10/2026) ──
+    'Compte ChatGPT (forfait Plus / Pro)':
+        'ChatGPT account (Plus / Pro plan)',
+    'Compte ChatGPT':
+        'ChatGPT account',
+    "Utilise votre abonnement ChatGPT Plus ou Pro pour les tâches texte de PANDORA, sans clé API. La connexion se fait dans votre navigateur, sur le site d'OpenAI.":
+        "Uses your ChatGPT Plus or Pro subscription for PANDORA's text tasks, without an API key. You sign in from your browser, on OpenAI's website.",
+    'Continuer avec ChatGPT':
+        'Continue with ChatGPT',
+    'Annuler la connexion':
+        'Cancel sign-in',
+    'Réessayer le forfait':
+        'Retry the plan',
+    'Se déconnecter':
+        'Sign out',
+    'Gérer l’utilisation':
+        'Manage usage',
+    "Utiliser ma clé API OpenAI quand le forfait ChatGPT est indisponible (facturé à l'usage)":
+        'Use my OpenAI API key when the ChatGPT plan is unavailable (billed per use)',
+    "Forfait Plus ou Pro requis. Pour l'instant, OpenAI coupe la session au bout d'une heure : PANDORA vous demandera alors de vous reconnecter.":
+        'Plus or Pro plan required. For now, OpenAI ends the session after one hour: PANDORA will then ask you to sign in again.',
+    'Forfait ChatGPT utilisé':
+        'Using ChatGPT plan',
+    'Session expirée : cliquez sur « Continuer avec ChatGPT » pour vous reconnecter.':
+        'Session expired: click “Continue with ChatGPT” to sign in again.',
+    "Limite d'utilisation atteinte : forfait en pause. Vérifiez vos réglages ChatGPT, puis « Réessayer le forfait ».":
+        'Usage limit reached: plan paused. Check your ChatGPT settings, then “Retry the plan”.',
+    'Ce compte ne peut pas utiliser son forfait dans PANDORA (Plus ou Pro requis).':
+        'This account cannot use its plan in PANDORA (Plus or Pro required).',
+    "Connecté, mais l'usage du forfait n'a pas été autorisé : reconnectez-vous et acceptez « Utiliser votre forfait ChatGPT ».":
+        'Signed in, but plan usage was not allowed: sign in again and accept “Use your ChatGPT plan”.',
+    'Premier modèle proposé par le compte':
+        'First model offered by the account',
+    "PANDORA va ouvrir la page de connexion d'OpenAI dans votre navigateur.\n\n• PANDORA reçoit votre nom, votre adresse e-mail et des jetons d'accès. Ils sont conservés UNIQUEMENT sur cet ordinateur (chiffrés sous Windows, dans un fichier réservé à votre compte sur macOS) et ne sont envoyés qu'à OpenAI.\n• Les requêtes texte de PANDORA (vos actions, et les automatismes que vous avez activés, comme « Recomposer automatiquement ») utiliseront votre forfait ChatGPT Plus ou Pro.\n• Vous pouvez vous déconnecter ici, ou dans ChatGPT : Réglages → Sécurité → Connexions.\n\nContinuer ?":
+        "PANDORA will open OpenAI's sign-in page in your browser.\n\n• PANDORA receives your name, your email address and access tokens. They are kept ONLY on this computer (encrypted on Windows, in a file only your account can read on macOS) and are only ever sent to OpenAI.\n• PANDORA's text requests (your actions, and the automations you enabled, such as “Recompose automatically”) will use your ChatGPT Plus or Pro plan.\n• You can sign out here, or in ChatGPT: Settings → Security → Login connections.\n\nContinue?",
+    'Vous utilisez votre forfait ChatGPT':
+        'You’re using your ChatGPT plan',
+    "Les requêtes éligibles de PANDORA utilisent votre forfait ChatGPT. Gérez l'utilisation dans vos réglages ChatGPT.":
+        'Eligible usage in PANDORA uses your ChatGPT plan. Manage usage in your ChatGPT settings.',
+    'Connexion impossible.':
+        'Sign-in failed.',
+    "Déconnecté sur ce poste. La révocation chez OpenAI n'a pas pu être confirmée : vous pouvez aussi déconnecter PANDORA dans ChatGPT (Réglages → Sécurité → Connexions).":
+        'Signed out on this computer. The revocation at OpenAI could not be confirmed: you can also disconnect PANDORA in ChatGPT (Settings → Security → Login connections).',
+    'Session ChatGPT expirée — reconnectez-vous : Paramètres → Assistant IA → « Continuer avec ChatGPT ».':
+        'ChatGPT session expired — sign in again: Settings → AI Assistant → “Continue with ChatGPT”.',
+    "Limite d'utilisation de votre forfait ChatGPT atteinte — Paramètres → Assistant IA → « Réessayer le forfait », ou autorisez le repli sur la clé API.":
+        'ChatGPT plan usage limit reached — Settings → AI Assistant → “Retry the plan”, or allow the fallback to the API key.',
+    'Ce compte ChatGPT ne peut pas utiliser son forfait dans PANDORA (forfait Plus ou Pro requis).':
+        'This ChatGPT account cannot use its plan in PANDORA (Plus or Pro plan required).',
+    'Compte ChatGPT non connecté — Paramètres → Assistant IA → « Continuer avec ChatGPT ».':
+        'ChatGPT account not connected — Settings → AI Assistant → “Continue with ChatGPT”.',
+    "Limite d'utilisation de votre forfait ChatGPT atteinte. Gérer l'utilisation : https://chatgpt.com/settings/usage":
+        'Your ChatGPT plan usage limit has been reached. Manage usage: https://chatgpt.com/settings/usage',
+    'Session ChatGPT expirée ou non connectée : Paramètres → Assistant IA → « Continuer avec ChatGPT ».':
+        'ChatGPT session expired or not connected: Settings → AI Assistant → “Continue with ChatGPT”.',
+    'Service ChatGPT momentanément indisponible : réessayez dans un instant.':
+        'ChatGPT service temporarily unavailable: try again in a moment.',
+    'Réponse ChatGPT incomplète : réessayez.':
+        'Incomplete ChatGPT answer: try again.',
+    'Aucun modèle ChatGPT disponible pour ce compte.':
+        'No ChatGPT model available for this account.',
+    # ── Qui facture la génération (distributeur réel, 04/10/2026) ──
+    "La génération sera lancée en file d'attente — un clip après l'autre.":
+        'Generation will run in a queue — one clip after another.',
+    '⚠  Chaque plan est facturé par :':
+        '⚠  Each shot is billed by:',
+    '⚠  Chaque plan est facturé par le distributeur choisi.':
+        '⚠  Each shot is billed by the selected distributor.',
+    'Moteur local : aucun crédit consommé.':
+        'Local engine: no credits used.',
+    '💰  Génération facturée par :':
+        '💰  Generation billed by:',
+    '💰  Moteur local : aucun crédit consommé':
+        '💰  Local engine: no credits used',
+    "Tarifs détaillés dans le Manuel d'utilisation":
+        'Detailed pricing in the User Manual',
+    # ── Mode Batch de Claude (−50 %), 04/10/2026 ──
+    'Mode économique pour la génération du storyboard : lots Claude (−50 %)':
+        'Economy mode for storyboard generation: Claude batches (−50%)',
+    "Les requêtes partent dans des lots Anthropic (Message Batches) : moitié prix,\nmais les résultats arrivent en quelques minutes (24 h au plus). Claude\nuniquement ; laissez PANDORA ouvert pendant l'attente.":
+        'Requests go out in Anthropic batches (Message Batches): half price,\nbut results arrive within minutes (24 h at most). Claude only;\nkeep PANDORA open while waiting.',
+    'Mode économique — lots Claude (−50 %)':
+        'Economy mode — Claude batches (−50%)',
+    'résultats en quelques minutes (24 h au plus) : laissez PANDORA ouvert.':
+        'results within minutes (24 h at most): keep PANDORA open.',
+    'Lots Claude (−50 %) :':
+        'Claude batches (−50%):',
+    'requêtes traitées':
+        'requests processed',
+    'laissez PANDORA ouvert.':
+        'keep PANDORA open.',
 }
 
 

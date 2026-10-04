@@ -107,6 +107,9 @@ def _l_sequences() -> str:
             "générée SUR la façade, elle sert ensuite de keyframe)",
             "<b>♫ Caler sur la musique</b> — quantise les durées en MESURES du morceau "
             "assigné et attire les cuts sur les DROPS (calcul local, exact)",
+            "<b>📤 Exporter la timeline (XML)</b> (menu Action) — la dernière prise de chaque "
+            "plan, dans l'ordre, pour DaVinci Resolve (Fichier → Importer → Timeline, gratuit "
+            "ou Studio) ou Adobe Premiere (Fichier → Importer)",
         ),
         _h("Au quotidien"),
         _ul(
@@ -221,6 +224,10 @@ def _l_settings() -> str:
             "(création des comptes fal.ai / Claude, collage direct des clés)",
             "<b>Assistant IA</b> — Claude (Opus 5.5, Sonnet 5.5, Haiku 4.5, Fable 5.1), "
             "ChatGPT, Mistral ou une IA locale",
+            "<b>Compte ChatGPT (forfait Plus / Pro)</b> — votre abonnement ChatGPT à la place "
+            "d'une clé API : connexion sur la page d'OpenAI, jetons gardés sur cet ordinateur ; "
+            "limite atteinte, le forfait se met en pause, sans jamais basculer seul sur une "
+            "clé payante",
             "<b>Sauvegarder</b> applique le tout",
         ),
     ])
@@ -324,6 +331,9 @@ def _le_sequences() -> str:
             "ON the facade, later used as a keyframe)",
             "<b>♫ Align to music</b> — quantizes durations to the BARS of the assigned track "
             "and pulls cuts onto the DROPS (local, exact computation)",
+            "<b>📤 Export the timeline (XML)</b> (Action menu) — the latest take of each shot, "
+            "in order, for DaVinci Resolve (File → Import → Timeline, free or Studio) or Adobe "
+            "Premiere (File → Import)",
         ),
         _h("Day to day"),
         _ul(
@@ -436,6 +446,9 @@ def _le_settings() -> str:
             "(fal.ai / Claude account creation, paste keys directly)",
             "<b>AI assistant</b> — Claude (Opus 5.5, Sonnet 5.5, Haiku 4.5, Fable 5.1), "
             "ChatGPT, Mistral or a local AI",
+            "<b>ChatGPT account (Plus / Pro plan)</b> — your ChatGPT subscription instead of "
+            "an API key: sign in on OpenAI's page, tokens kept on this computer; when the "
+            "limit is reached the plan is paused, never switching to a paid key on its own",
             "<b>Save</b> applies everything",
         ),
     ])

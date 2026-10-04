@@ -121,6 +121,10 @@ ENGINES: dict[str, dict] = {
     "openai_terra": {"group": "openai", "provider": "openai", "model": "gpt-5.6-terra", "utility_model": "gpt-5.6-terra", "name": "GPT-5.6 Terra"},
     "openai_luna":  {"group": "openai", "provider": "openai", "model": "gpt-5.6-luna",  "utility_model": "gpt-5.6-luna",  "name": "GPT-5.6 Luna"},
     "gpt":          {"group": "openai", "provider": "openai", "model": "gpt-5.5",       "utility_model": "gpt-5.5",       "name": "GPT-5.5"},
+    # Forfait ChatGPT Plus / Pro par « Sign in with ChatGPT » (04/10/2026,
+    # api/chatgpt_plan) : aucune clé, le modèle vient du catalogue DU COMPTE
+    # (config « chatgpt_model », choisi dans les Paramètres).
+    "chatgpt_plan": {"group": "openai", "provider": "chatgpt", "model": "", "utility_model": "", "name": "Compte ChatGPT (forfait Plus / Pro)"},
     "mistral":      {"group": "experimental", "provider": "mistral", "model": "mistral-large-latest", "utility_model": "mistral-small-latest", "name": "Mistral"},
     "kimi":         {"group": "experimental", "provider": "kimi", "model": "kimi-k2.7-code", "name": "Kimi"},
     "glm":          {"group": "experimental", "provider": "glm", "model": "glm-4.7", "name": "GLM"},
@@ -133,7 +137,7 @@ ENGINES: dict[str, dict] = {
 
 ENGINE_ORDER = [
     "opus", "claude", "haiku", "fable5",
-    "openai_sol", "openai_terra", "openai_luna", "gpt",
+    "openai_sol", "openai_terra", "openai_luna", "gpt", "chatgpt_plan",
     "mistral", "kimi", "glm", "ollama", "local", "custom",
 ]
 
@@ -200,6 +204,8 @@ def dynamic_engine(provider: str, model: str) -> dict:
     model = (model or "").strip()
     if provider in ("anthropic", "openai"):
         group = provider
+    elif provider == "chatgpt":
+        group = "openai"
     elif provider in LOCAL_PROVIDERS:
         group = "local"
     else:
@@ -226,8 +232,10 @@ def engine(key: str, cfg: dict | None = None) -> dict | None:
         "ollama": cfg.get("ollama_model"),
         "local": cfg.get("local_model"),
         "custom": cfg.get("custom_model"),
+        "chatgpt": cfg.get("chatgpt_model"),
     }.get(provider)
-    if configured and key in ("gpt", "kimi", "glm", "ollama", "local", "custom"):
+    if configured and key in ("gpt", "kimi", "glm", "ollama", "local", "custom",
+                              "chatgpt_plan"):
         item["model"] = str(configured).strip()
         item["utility_model"] = item["model"]
     if provider == "anthropic":
@@ -275,6 +283,8 @@ def _legacy_single_engine(cfg: dict) -> dict:
         model = (cfg.get("local_model") or "").strip()
     elif provider == "custom":
         model = (cfg.get("custom_model") or "").strip()
+    elif provider == "chatgpt":
+        model = (cfg.get("chatgpt_model") or "").strip()
     else:
         provider = "anthropic"
         model = current_model(model or DEFAULT_CREATIVE_MODEL)
@@ -323,7 +333,7 @@ def primary_menu_items(discovered: dict[str, list[str]] | None = None) -> list[d
     rows: list[dict] = []
     static_by_group = {
         "anthropic": ["opus", "claude", "haiku", "fable5"],
-        "openai": ["openai_sol", "openai_terra", "openai_luna", "gpt"],
+        "openai": ["openai_sol", "openai_terra", "openai_luna", "gpt", "chatgpt_plan"],
         "local": ["ollama", "local"],
         "experimental": ["mistral", "kimi", "glm", "custom"],
     }

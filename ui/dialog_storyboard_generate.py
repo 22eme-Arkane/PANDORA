@@ -327,9 +327,13 @@ class StoryboardGenerateDialog(QDialog):
         # reste celui de tous les projets existants (FIGHTER : 84 fiches).
         from core.storyboard_batches import count_fiches
         _n_fiches = count_fiches(self._scenario_text)
-        if _n_fiches > self._QUEUE_THRESHOLD_FICHES:
+        # Mode économique (lots Claude, −50 %, 04/10/2026) : TOUJOURS par la file,
+        # dont les lots tiennent chacun en un appel — une reprise de troncature
+        # coûterait un aller-retour de lot de plus.
+        _batch = self._batch_mode_wanted()
+        if _n_fiches > self._QUEUE_THRESHOLD_FICHES or (_batch and _n_fiches):
             self._start_queue(element_names or None, strict_no_merge, _engine,
-                              _n_fiches)
+                              _n_fiches, batch_mode=_batch)
             return
 
         w = GenerateStoryboardWorker(
@@ -351,7 +355,20 @@ class StoryboardGenerateDialog(QDialog):
     #: Dérivé du plafond réel, pas choisi au hasard — voir `_start`.
     _QUEUE_THRESHOLD_FICHES = 100
 
-    def _start_queue(self, element_names, strict_no_merge, engine, n_fiches):
+    @staticmethod
+    def _batch_mode_wanted() -> bool:
+        """Mode économique (lots Claude, −50 %) : coché dans Paramètres → Assistant
+        IA, et seulement si le storyboard passe par Claude (Anthropic)."""
+        try:
+            from core.config import load_config
+            from core.ai_provider import provider_for_task
+            return (bool(load_config().get("claude_batch_storyboard"))
+                    and provider_for_task("storyboard_gen") == "anthropic")
+        except Exception:
+            return False
+
+    def _start_queue(self, element_names, strict_no_merge, engine, n_fiches,
+                     batch_mode: bool = False):
         """Génération par lots — même aperçu, même confirmation, mêmes plans.
 
         Le contrat de cette fenêtre est « aperçu PUIS confirmation » : la file
@@ -364,24 +381,38 @@ class StoryboardGenerateDialog(QDialog):
         if prev is not None:
             abandon_thread(prev)
 
-        self._phase_lbl.setText(translate("Génération par lots"))
-        self._status_lbl.setText(
-            f"{n_fiches} {translate('fiches à convertir')} — "
-            + translate("traitement par lots successifs…"))
+        if batch_mode:
+            self._phase_lbl.setText(translate("Mode économique — lots Claude (−50 %)"))
+            self._status_lbl.setText(
+                f"{n_fiches} {translate('fiches à convertir')} — "
+                + translate("résultats en quelques minutes (24 h au plus) : "
+                            "laissez PANDORA ouvert."))
+        else:
+            self._phase_lbl.setText(translate("Génération par lots"))
+            self._status_lbl.setText(
+                f"{n_fiches} {translate('fiches à convertir')} — "
+                + translate("traitement par lots successifs…"))
 
         w = StoryboardQueueWorker(
             self._scenario_text, self._duration_secs,
             element_names=element_names, strict_no_merge=strict_no_merge,
-            target_engine=engine,
+            target_engine=engine, batch_mode=batch_mode,
         )
         self._worker = w
         # Méthodes liées : Qt les déconnecte à la destruction de la fenêtre.
+        w.batch_status.connect(self._on_batch_status)
         w.progress.connect(self._on_queue_progress)
         w.batch_done.connect(self._on_queue_batch)
         w.compose_progress.connect(self._on_compose_progress)
         w.done.connect(self._on_done)
         w.failed.connect(self._on_queue_failed)
         w.start()
+
+    def _on_batch_status(self, requests: int, done: int, minutes: int):
+        self._status_lbl.setText(
+            translate("Lots Claude (−50 %) :") + f" {done}/{requests} "
+            + translate("requêtes traitées") + f" · {minutes} min — "
+            + translate("laissez PANDORA ouvert."))
 
     def _on_compose_progress(self, i: int, n: int):
         self._status_lbl.setText(

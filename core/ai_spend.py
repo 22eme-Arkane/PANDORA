@@ -100,8 +100,10 @@ def _project_is_open() -> bool:
 
 
 def note_usage(model: str, task: str, input_tokens: int, output_tokens: int,
-               provider: str = "anthropic", label: str = "") -> float:
+               provider: str = "anthropic", label: str = "",
+               price_factor: float = 1.0) -> float:
     """Journalise un appel IA texte. Renvoie le coût estimé (0.0 si inconnu).
+    `price_factor` : 0.5 pour un lot Batch (Message Batches API, −50 %).
 
     Ne lève jamais.
     """
@@ -111,6 +113,8 @@ def note_usage(model: str, task: str, input_tokens: int, output_tokens: int,
         if not (it or ot):
             return 0.0
         cost = cost_usd(model, it, ot) if provider == "anthropic" else 0.0
+        if price_factor and price_factor != 1.0:
+            cost = round(cost * float(price_factor), 6)
 
         if not _project_is_open():
             return cost
@@ -120,6 +124,8 @@ def note_usage(model: str, task: str, input_tokens: int, output_tokens: int,
         detail = f"{it:,} → {ot:,} jetons".replace(",", " ")
         if not known:
             detail += "  ·  tarif inconnu"
+        if price_factor and price_factor != 1.0:
+            detail += "  ·  lot Batch −50 %"
         spend.record(
             spend.KIND_TEXT,
             (model or provider or "IA texte"),
@@ -135,11 +141,12 @@ def note_usage(model: str, task: str, input_tokens: int, output_tokens: int,
 
 
 def note_message(msg, model: str, task: str, provider: str = "anthropic",
-                 label: str = "") -> float:
+                 label: str = "", price_factor: float = 1.0) -> float:
     """Variante qui lit `msg.usage` d'une réponse Anthropic.
 
     Tolère un objet sans `usage` (autre fournisseur, réponse simulée) : dans ce
-    cas rien n'est journalisé et 0.0 est rendu.
+    cas rien n'est journalisé et 0.0 est rendu. `price_factor` : 0.5 pour une
+    réponse venue d'un lot Batch (Message Batches API, −50 %).
     """
     try:
         usage = getattr(msg, "usage", None)
@@ -148,6 +155,6 @@ def note_message(msg, model: str, task: str, provider: str = "anthropic",
         return note_usage(model, task,
                           getattr(usage, "input_tokens", 0) or 0,
                           getattr(usage, "output_tokens", 0) or 0,
-                          provider=provider, label=label)
+                          provider=provider, label=label, price_factor=price_factor)
     except Exception:
         return 0.0

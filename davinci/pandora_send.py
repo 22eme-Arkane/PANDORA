@@ -1,8 +1,8 @@
 """
 Envoie les clips de la timeline vers PANDORA — script DaVinci Resolve.
 
-Installation automatique :
-    Depuis PANDORA → Paramètres → bouton "Installer le script PANDORA dans DaVinci"
+Installation :
+    PANDORA → Paramètres → DaVinci Resolve → « Installer / mettre à jour les scripts »
     Ou manuellement : copier ce fichier dans
     C:\\ProgramData\\Blackmagic Design\\DaVinci Resolve\\Fusion\\Scripts\\Utility\\
 
@@ -20,7 +20,15 @@ Note technique :
     La fenêtre de confirmation est lancée dans un subprocess séparé pour
     éviter les conflits avec l'event loop Qt de DaVinci Resolve,
     notamment lors de l'exécution via raccourci clavier.
+
+Version 2 (04/10/2026) : toutes les pistes vidéo (V1 à V4 seulement avant),
+écriture atomique de la boîte aux lettres (PANDORA pouvait lire un JSON à
+moitié écrit), chemins de Resolve lus dans l'environnement, et la notification
+n'essaie plus de lancer l'exécutable de Resolve comme s'il était Python.
+Syntaxe compatible Python 3.6 (exécuté par le Python de Resolve ou du poste).
 """
+
+SCRIPT_VERSION = 2
 
 import builtins
 import json
@@ -32,24 +40,29 @@ import tempfile
 # ── Connexion DaVinci ─────────────────────────────────────────────────────────
 _resolve = None
 try:
-    _bmd = getattr(builtins, "bmd", None) or globals().get("bmd")
-    if _bmd:
-        _resolve = _bmd.scriptapp("Resolve")
+    _resolve = globals().get("resolve") or getattr(builtins, "resolve", None)
+    if _resolve is None:
+        _bmd = getattr(builtins, "bmd", None) or globals().get("bmd")
+        if _bmd:
+            _resolve = _bmd.scriptapp("Resolve")
 except Exception:
-    pass
+    _resolve = None
 
 if _resolve is None:
-    _INSTALL = r"C:\Program Files\Blackmagic Design\DaVinci Resolve"
-    _MODS    = r"C:\ProgramData\Blackmagic Design\DaVinci Resolve\Support\Developer\Scripting\Modules"
-    os.environ.setdefault(
-        "RESOLVE_SCRIPT_API",
-        r"C:\ProgramData\Blackmagic Design\DaVinci Resolve\Support\Developer\Scripting",
-    )
-    os.environ.setdefault(
-        "RESOLVE_SCRIPT_LIB",
-        os.path.join(_INSTALL, "fusionscript.dll"),
-    )
-    for _p in [_MODS, _INSTALL]:
+    if sys.platform.startswith("win"):
+        _PDATA = os.environ.get("PROGRAMDATA") or r"C:\ProgramData"
+        _INSTALL = os.path.join(os.environ.get("PROGRAMFILES") or r"C:\Program Files",
+                                "Blackmagic Design", "DaVinci Resolve")
+        _API = os.path.join(_PDATA, "Blackmagic Design", "DaVinci Resolve", "Support",
+                            "Developer", "Scripting")
+        _LIB = os.path.join(_INSTALL, "fusionscript.dll")
+    else:
+        _INSTALL = "/Applications/DaVinci Resolve/DaVinci Resolve.app/Contents/Libraries/Fusion"
+        _API = "/Library/Application Support/Blackmagic Design/DaVinci Resolve/Developer/Scripting"
+        _LIB = os.path.join(_INSTALL, "fusionscript.so")
+    os.environ.setdefault("RESOLVE_SCRIPT_API", _API)
+    os.environ.setdefault("RESOLVE_SCRIPT_LIB", _LIB)
+    for _p in [os.path.join(os.environ["RESOLVE_SCRIPT_API"], "Modules"), _INSTALL]:
         if os.path.isdir(_p) and _p not in sys.path:
             sys.path.insert(0, _p)
     try:
@@ -66,7 +79,8 @@ _has_any_flag = False
 
 try:
     if not _resolve:
-        error = "DaVinci Resolve non accessible — DaVinci Studio requis."
+        error = ("API DaVinci Resolve inaccessible — lancez ce script depuis "
+                 "Espace de travail → Scripts (Resolve 21.1 et suivants : Studio requis).")
     else:
         pm      = _resolve.GetProjectManager()
         project = pm.GetCurrentProject() if pm else None
@@ -86,9 +100,9 @@ try:
             #   Clic droit sur un clip → Flag → Red (ou toute autre couleur)
             #   → pandora_send n'envoie que les clips marqués.
             #   Si aucun clip n'a de flag → envoie toute la timeline (comportement par défaut).
-            _flagged_by_track: dict = {}
+            _flagged_by_track = {}
             _has_any_flag = False
-            for _ti in range(1, min(n_tracks + 1, 5)):
+            for _ti in range(1, n_tracks + 1):
                 try:
                     _all = tl.GetItemListInTrack("video", _ti) or []
                     _with_flag = []
@@ -105,7 +119,7 @@ try:
                     pass
 
             # ── Lecture des clips (flaggés ou tous si aucun flag) ─────────────
-            for track_idx in range(1, min(n_tracks + 1, 5)):
+            for track_idx in range(1, n_tracks + 1):
                 if _has_any_flag:
                     track_items = _flagged_by_track.get(track_idx, [])
                 else:
@@ -140,11 +154,15 @@ INBOX = os.path.join(os.environ.get("TEMP", tempfile.gettempdir()), "pandora_cli
 
 if not error and clips:
     try:
-        with open(INBOX, "w", encoding="utf-8") as f:
-            json.dump({"timeline": timeline_name, "clips": clips}, f,
+        # Écriture atomique : PANDORA ne lit jamais un JSON à moitié écrit.
+        _tmp = INBOX + ".tmp"
+        with open(_tmp, "w", encoding="utf-8") as f:
+            json.dump({"timeline": timeline_name, "clips": clips,
+                       "sent_by": "pandora_send", "version": SCRIPT_VERSION}, f,
                       ensure_ascii=False, indent=2)
+        os.replace(_tmp, INBOX)
     except Exception as e:
-        error = f"Impossible d'écrire le fichier inbox : {e}"
+        error = "Impossible d'écrire le fichier inbox : %s" % e
 
 # ── Prépare le message de notification ───────────────────────────────────────
 if error:
@@ -201,27 +219,31 @@ except Exception:
     _notif_script = None
 
 if _notif_script:
-    # Cherche un Python autonome capable d'afficher tkinter
+    # Cherche un Python autonome capable d'afficher tkinter. Seuls les
+    # exécutables qui S'APPELLENT python* sont retenus : dans Resolve,
+    # sys.executable peut être fuscript.exe ou Resolve.exe (constat 04/10/2026).
+    def _is_python(path):
+        return os.path.basename(path or "").lower().startswith("python") \
+            and os.path.isfile(path)
+
     _python_candidates = []
-    # 1. pythonw.exe (même répertoire que sys.executable, sans console Windows)
-    _sysdir  = os.path.dirname(sys.executable)
-    _pythonw = os.path.join(_sysdir, "pythonw.exe")
-    if os.path.isfile(_pythonw):
-        _python_candidates.append(_pythonw)
-    # 2. sys.executable (Python de DaVinci)
-    _python_candidates.append(sys.executable)
-    # 3. Python standard dans %LOCALAPPDATA%
-    for _ver in ("3.14", "3.13", "3.12", "3.11", "3.10"):
+    _sysdir = os.path.dirname(sys.executable or "")
+    for _name in ("pythonw.exe", "python.exe", "python3"):
+        _candidate = os.path.join(_sysdir, _name)
+        if _is_python(_candidate):
+            _python_candidates.append(_candidate)
+    if _is_python(sys.executable):
+        _python_candidates.append(sys.executable)
+    _local = os.environ.get("LOCALAPPDATA") or ""
+    for _ver in ("3.15", "3.14", "3.13", "3.12", "3.11", "3.10"):
         for _subdir in (
-            rf"C:\Users\{os.environ.get('USERNAME', '')}\AppData\Local\Python\pythoncore-{_ver}-64",
-            rf"C:\Users\{os.environ.get('USERNAME', '')}\AppData\Local\Programs\Python\Python{_ver.replace('.', '')}",
+            os.path.join(_local, "Python", "pythoncore-%s-64" % _ver),
+            os.path.join(_local, "Programs", "Python", "Python" + _ver.replace(".", "")),
         ):
-            _candidate = os.path.join(_subdir, "pythonw.exe")
-            if os.path.isfile(_candidate):
-                _python_candidates.append(_candidate)
-            _candidate = os.path.join(_subdir, "python.exe")
-            if os.path.isfile(_candidate):
-                _python_candidates.append(_candidate)
+            for _name in ("pythonw.exe", "python.exe"):
+                _candidate = os.path.join(_subdir, _name)
+                if _is_python(_candidate) and _candidate not in _python_candidates:
+                    _python_candidates.append(_candidate)
 
     _launched = False
     for _py in _python_candidates:

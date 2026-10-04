@@ -3822,6 +3822,8 @@ class TabT2V(QScrollArea):
             self._final_why = ""
             self._final_assembly_failed = False
             self._final_from_cache = False
+            # Aucune composition ne viendra sans texte : la file ne l'attend pas.
+            self._final_compose_skipped = not self._assembly_source
             if self._assembly_source:
                 self._final_assembly_timer.start()
         except Exception:
@@ -3933,9 +3935,13 @@ class TabT2V(QScrollArea):
         try:
             src = getattr(self, "_assembly_source", None)
             if not src or self.prompt_ta.toPlainText().strip() != src:
-                return   # l'utilisateur a tapé pendant le débounce : sa saisie prime
+                # l'utilisateur a tapé pendant le débounce : sa saisie prime ; et la
+                # file d'attente ne doit pas attendre une composition qui ne vient pas.
+                self._final_compose_skipped = True
+                return
             body, ctx = self._live_compose_inputs()
             if not body.strip():
+                self._final_compose_skipped = True
                 return
 
             import core.live_compose_ctx as _ctxmod
@@ -3960,6 +3966,9 @@ class TabT2V(QScrollArea):
                 self._final_cache_key_pending = ""
                 self._compose_ctl.set_note(translate(
                     "prompt du plan — non recomposé (automatique désactivé)"))
+                # La file part AUSSITÔT (parité Cinéma, 04/10/2026) : elle attendait
+                # ici un prompt final qui ne viendrait jamais — 90 s par plan.
+                self._final_compose_skipped = True
                 return
 
             self._final_cache_key_pending = key
@@ -5117,12 +5126,14 @@ class TabT2V(QScrollArea):
         count = len(shots)
         dlg = QMessageBox(self)
         dlg.setWindowTitle(translate("Génération en série"))
+        # Qui facture : le distributeur RÉEL du moteur choisi (parité Cinéma,
+        # 04/10/2026 — « fal.ai » était écrit en dur).
+        from core.media_provider import billing_notice
+        _audio = bool(self._audio_cb.isChecked()) if getattr(self, "_audio_cb", None) else True
         dlg.setText(
             f"{translate('Vous avez sélectionné')} {count} {translate('plans.')}\n\n"
-            + translate(
-                "La génération sera lancée en file d'attente — un clip après l'autre.\n\n"
-                "⚠  Chaque plan consomme des crédits fal.ai."
-            )
+            + translate("La génération sera lancée en file d'attente — un clip après l'autre.")
+            + "\n\n" + billing_notice(self._get_model(), self.cb_res.currentData() or "", _audio)
         )
         dlg.setStandardButtons(
             QMessageBox.StandardButton.Ok | QMessageBox.StandardButton.Cancel
@@ -5164,13 +5175,29 @@ class TabT2V(QScrollArea):
         try:
             _pret = (getattr(self, "_prompt_is_final", False)
                      or getattr(self, "_final_assembly_failed", False)
+                     or getattr(self, "_final_compose_skipped", False)
                      or waited_ms >= self._LIVE_BATCH_FINAL_TIMEOUT_MS)
         except Exception:
             _pret = True
         if _pret:
             QTimer.singleShot(120, self.start_generation)
             return
+        if waited_ms % 1050 == 0:
+            self._show_batch_wait(waited_ms)
         QTimer.singleShot(150, lambda: self._await_final_then_generate(waited_ms + 150))
+
+    def _show_batch_wait(self, waited_ms: int):
+        """La file attend le prompt final du plan : la barre le DIT (parité Cinéma,
+        04/10/2026 — elle n'apparaissait qu'au lancement de la génération)."""
+        try:
+            if waited_ms == 0:
+                self.progress.reset()
+                self.progress.setVisible(True)
+            self.progress.update(
+                0, translate("Plan") + f" {self._batch_idx}/{self._batch_total} — "
+                + translate("préparation du prompt final…") + f" ({waited_ms // 1000} s)")
+        except Exception:
+            pass
 
     def _refresh_price_estimate(self, *args):
         """Met à jour l'estimation de PRIX (rouge) : nb de plans sélectionnés × durée
