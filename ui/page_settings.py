@@ -22,14 +22,25 @@ _KIMI_KEYS_URL      = "https://platform.moonshot.ai/console/api-keys"
 _GLM_KEYS_URL       = "https://bigmodel.cn/usercenter/apikeys"
 
 
-def _section(text: str) -> QLabel:
+def _section_label(text: str) -> QLabel:
+    """Sous-titre À L'INTÉRIEUR d'une section (« Apparence », « ComfyUI »…)."""
     lbl = QLabel(text.upper())
     lbl.setStyleSheet(
-        f"color:{CP['accent']};font-size:9px;font-weight:700;"
+        f"color:{CP['text_dim']};font-size:9px;font-weight:700;"
         f"letter-spacing:3px;font-family:'Consolas',monospace;"
         f"background:transparent;"
     )
     return lbl
+
+
+#: Sections ouvertes au premier affichage : ce qu'on règle le plus souvent.
+_OPEN_BY_DEFAULT = ("Général", "Clés API", "Distribution des vidéos")
+
+
+def _section(title: str, summary: str = ""):
+    """Section REPLIABLE de la page (refonte du 04/10/2026, ui/settings_section)."""
+    from ui.settings_section import SettingsSection
+    return SettingsSection(title, summary, title in _OPEN_BY_DEFAULT, f"cinema:{title}")
 
 
 def _divider() -> QWidget:
@@ -160,8 +171,31 @@ class SettingsPage(QScrollArea):
         lay.addLayout(_title_row)
         lay.addWidget(_divider())
 
+        # ── Sections REPLIABLES (demande Matthieu 2026-10-04 : « c'est devenu
+        # le bazar… des menus déroulants pour chaque partie… regrouper dans des
+        # paramètres avancés »). L'usage courant d'abord, la technique à la fin ;
+        # « Assistant IA » reste avant « Clés API » (ordre décidé le 2026-06-13).
+        # Chaque bloc ci-dessous se range dans SA section.
+        self._sec_general = _section(
+            "Général", "thème · double écran · manuel · dossier des projets")
+        self._sec_ai = _section("Assistant IA")
+        self._sec_keys = _section("Clés API")
+        self._sec_distrib = _section("Distribution des vidéos")
+        self._sec_davinci = _section("DaVinci Resolve Studio",
+                                     "envoi des clips dans la timeline")
+        self._sec_adv = _section("Paramètres avancés",
+                                 "MiniMax H3 en local · ComfyUI · modules externes")
+        for _sec in (self._sec_general, self._sec_ai, self._sec_keys,
+                     self._sec_distrib, self._sec_davinci, self._sec_adv):
+            lay.addWidget(_sec)
+        G = self._sec_general.body      # Général
+        AI = self._sec_ai.body          # Assistant IA
+        K = self._sec_keys.body         # Clés API
+        D = self._sec_davinci.body      # DaVinci
+        A = self._sec_adv.body          # Paramètres avancés
+
         # ── Apparence ─────────────────────────────────────────────────────────
-        lay.addWidget(_section("Apparence"))
+        G.addWidget(_section_label("Apparence"))
 
         _appear_row = QHBoxLayout()
         _appear_row.setSpacing(8)
@@ -216,13 +250,13 @@ class SettingsPage(QScrollArea):
         _appear_row.addWidget(self._btn_dark)
         _appear_row.addWidget(self._btn_light)
         _appear_row.addStretch()
-        lay.addLayout(_appear_row)
+        G.addLayout(_appear_row)
 
         _lbl_theme = QLabel("Le changement de thème est appliqué au prochain démarrage.")
         _lbl_theme.setStyleSheet(
             f"color:{CP['text_dim']};font-size:10px;background:transparent;"
         )
-        lay.addWidget(_lbl_theme)
+        G.addWidget(_lbl_theme)
 
         _lbl_light_note = QLabel(
             "L'application est optimisée pour une apparence sombre.  "
@@ -233,9 +267,10 @@ class SettingsPage(QScrollArea):
         _lbl_light_note.setStyleSheet(
             f"color:{CP['text_dim']};font-size:10px;font-style:italic;background:transparent;"
         )
-        lay.addWidget(_lbl_light_note)
+        G.addWidget(_lbl_light_note)
 
         # ── Double écran (P5) — ouvrir une 2ᵉ fenêtre déplaçable ──────────────
+        G.addWidget(_section_label("Affichage et aide"))
         _screen_row = QHBoxLayout()
         _screen_row.setSpacing(8)
         self._btn_second_window = QPushButton("🖥  Ouvrir une 2ᵉ fenêtre (2 écrans)")
@@ -245,7 +280,10 @@ class SettingsPage(QScrollArea):
         self._btn_second_window.clicked.connect(self._open_second_window)
         _screen_row.addWidget(self._btn_second_window)
         _screen_row.addStretch()
-        lay.addLayout(_screen_row)
+        # Le Manuel rejoint le bouton 2ᵉ fenêtre sur la MÊME rangée (le bouton
+        # est créé plus bas ; la rangée le reçoit à ce moment-là).
+        self._screen_row = _screen_row
+        G.addLayout(_screen_row)
 
         _lbl_screen = QLabel(
             "Ouvre une copie de PANDORA sur le même projet, à déplacer sur un 2ᵉ écran. "
@@ -257,18 +295,14 @@ class SettingsPage(QScrollArea):
         _lbl_screen.setStyleSheet(
             f"color:{CP['text_dim']};font-size:10px;background:transparent;"
         )
-        lay.addWidget(_lbl_screen)
 
-        _manual_row = QHBoxLayout()
         self._btn_manual = QPushButton("☰  Manuel d'utilisation")
         self._btn_manual.setFixedHeight(36)
         self._btn_manual.setCursor(Qt.CursorShape.PointingHandCursor)
         self._btn_manual.setStyleSheet(_ss_theme_inactive)
         self._btn_manual.clicked.connect(self.manual_requested)
-        _manual_row.addWidget(self._btn_manual)
-        _manual_row.addStretch()
-        lay.addLayout(_manual_row)
-        lay.addWidget(_divider())
+        self._screen_row.insertWidget(1, self._btn_manual)   # après la 2ᵉ fenêtre, avant l'étirement
+        G.addWidget(_lbl_screen)
 
         cfg = load_config()
 
@@ -276,36 +310,36 @@ class SettingsPage(QScrollArea):
         # L'emplacement se choisissait UNIQUEMENT dans « Nouveau projet » : une
         # fois le premier projet créé, plus moyen de le retrouver. Réglage porté
         # ici et dans les Paramètres Live (même clé, même dossier).
-        lay.addWidget(_section("Dossier des projets"))
+        G.addWidget(_section_label("Dossier des projets"))
         self._projects_location = ProjectsLocationRow()
-        lay.addWidget(self._projects_location)
-        lay.addWidget(_divider())
+        G.addWidget(self._projects_location)
 
+        # ── PARAMÈTRES AVANCÉS : ce que PANDORA pilote sur la machine ─────────
+        # (H3 local, ComfyUI, modules externes : « un peu en vrac » en tête de
+        # page jusqu'au 04/10/2026 — regroupés ici, repliés par défaut.)
         # ── MiniMax H3 en local (13/09/2026) ──────────────────────────────────
         # Serveur stable-diffusion.cpp sur la machine. La rangée s'enregistre
         # elle-même (clé h3_local_url) : rien à ajouter dans save(), qui relit
         # la config entière avant d'écrire et conserve donc la clé.
-        lay.addWidget(_section("MiniMax H3 en local"))
+        A.addWidget(_section_label("MiniMax H3 en local"))
         self._h3_local = H3LocalRow(initial_url=cfg.get("h3_local_url", ""))
-        lay.addWidget(self._h3_local)
-        lay.addWidget(_divider())
+        A.addWidget(self._h3_local)
+        A.addWidget(_divider())
 
         # ── ComfyUI (13/09/2026) — rendu local par défaut, nodal ──────────────
-        lay.addWidget(_section("ComfyUI"))
+        A.addWidget(_section_label("ComfyUI"))
         self._comfy = ComfyRow()
-        lay.addWidget(self._comfy)
-        lay.addWidget(_divider())
+        A.addWidget(self._comfy)
+        A.addWidget(_divider())
 
         # ── Modules externes (24/09/2026) — état et installation de ce que
         # PANDORA utilise sans l'embarquer : ComfyUI, H3 local, Ollama ──────
         from ui.externals_section import ExternalsSection
-        lay.addWidget(_section("Modules externes"))
+        A.addWidget(_section_label("Modules externes"))
         self._externals = ExternalsSection()
-        lay.addWidget(self._externals)
-        lay.addWidget(_divider())
+        A.addWidget(self._externals)
 
-        # ── Assistant IA (texte) — juste après l'Apparence (retour 2026-06-13) ─
-        lay.addWidget(_section("Assistant IA"))
+        # ── Assistant IA (texte) — juste après le Général (retour 2026-06-13) ──
         _lbl_ai = QLabel(
             "Moteur IA des fonctions texte et d'analyse visuelle : prompts, scénario, "
             "arrangement, storyboard et assistant. Les profils optimisés choisissent "
@@ -315,7 +349,7 @@ class SettingsPage(QScrollArea):
         _lbl_ai.setStyleSheet(
             f"color:{CP['text_secondary']};font-size:12px;background:transparent;"
         )
-        lay.addWidget(_lbl_ai)
+        AI.addWidget(_lbl_ai)
 
         self.ai_combo = QComboBox()
         self.ai_combo.setFixedHeight(34)
@@ -330,7 +364,7 @@ class SettingsPage(QScrollArea):
         from ui.ai_model_selector import populate_primary
         populate_primary(self.ai_combo, cfg)
         self.ai_combo.currentIndexChanged.connect(self._on_ai_choice_changed)
-        lay.addWidget(self.ai_combo)
+        AI.addWidget(self.ai_combo)
 
         self._btn_refresh_ai_models = QPushButton("Actualiser les modèles accessibles")
         self._btn_refresh_ai_models.setCursor(Qt.CursorShape.PointingHandCursor)
@@ -354,13 +388,13 @@ class SettingsPage(QScrollArea):
         self.ollama_url_input.setPlaceholderText("URL Ollama (défaut : http://localhost:11434)")
         self.ollama_url_input.setText(cfg.get("ollama_url", ""))
         self.ollama_url_input.setStyleSheet(_field_style())
-        lay.addWidget(self.ollama_url_input)
+        AI.addWidget(self.ollama_url_input)
 
         self.ollama_model_input = QLineEdit()
         self.ollama_model_input.setPlaceholderText("Modèle Ollama (défaut : llama3.1)")
         self.ollama_model_input.setText(cfg.get("ollama_model", ""))
         self.ollama_model_input.setStyleSheet(_field_style())
-        lay.addWidget(self.ollama_model_input)
+        AI.addWidget(self.ollama_model_input)
 
         # Champs Kimi (Moonshot) — visibles quand le moteur Kimi est choisi. L'URL de
         # base sert d'aiguillage API↔local : cloud Moonshot par défaut, ou un serveur
@@ -370,13 +404,13 @@ class SettingsPage(QScrollArea):
             "URL Kimi (défaut : https://api.moonshot.ai/v1 — ou serveur local /v1)")
         self.kimi_url_input.setText(cfg.get("kimi_url", ""))
         self.kimi_url_input.setStyleSheet(_field_style())
-        lay.addWidget(self.kimi_url_input)
+        AI.addWidget(self.kimi_url_input)
 
         self.kimi_model_input = QLineEdit()
         self.kimi_model_input.setPlaceholderText("Modèle Kimi (défaut : kimi-k2.7-code)")
         self.kimi_model_input.setText(cfg.get("kimi_model", ""))
         self.kimi_model_input.setStyleSheet(_field_style())
-        lay.addWidget(self.kimi_model_input)
+        AI.addWidget(self.kimi_model_input)
 
         # Champs GLM (Zhipu) — visibles quand le moteur GLM est choisi. Même schéma
         # que Kimi : l'URL de base aiguille API cloud ↔ serveur local OpenAI-compatible
@@ -386,13 +420,13 @@ class SettingsPage(QScrollArea):
             "URL GLM (défaut : https://open.bigmodel.cn/api/paas/v4 — ou serveur local /v1)")
         self.glm_url_input.setText(cfg.get("glm_url", ""))
         self.glm_url_input.setStyleSheet(_field_style())
-        lay.addWidget(self.glm_url_input)
+        AI.addWidget(self.glm_url_input)
 
         self.glm_model_input = QLineEdit()
         self.glm_model_input.setPlaceholderText("Modèle GLM (défaut : glm-4.7)")
         self.glm_model_input.setText(cfg.get("glm_model", ""))
         self.glm_model_input.setStyleSheet(_field_style())
-        lay.addWidget(self.glm_model_input)
+        AI.addWidget(self.glm_model_input)
 
         # Fournisseur OpenAI-compatible libre : vLLM, LM Studio, passerelle privée…
         self.custom_url_input = QLineEdit()
@@ -400,13 +434,13 @@ class SettingsPage(QScrollArea):
             "URL OpenAI-compatible (ex. http://localhost:1234/v1)")
         self.custom_url_input.setText(cfg.get("custom_url", ""))
         self.custom_url_input.setStyleSheet(_field_style())
-        lay.addWidget(self.custom_url_input)
+        AI.addWidget(self.custom_url_input)
 
         self.custom_model_input = QLineEdit()
         self.custom_model_input.setPlaceholderText("Identifiant exact du modèle personnalisé")
         self.custom_model_input.setText(cfg.get("custom_model", ""))
         self.custom_model_input.setStyleSheet(_field_style())
-        lay.addWidget(self.custom_model_input)
+        AI.addWidget(self.custom_model_input)
 
         # Ollama : la fenêtre du module propose les modèles recommandés (jusqu'aux
         # plus lourds), les télécharge et règle la fenêtre de contexte (24/09/2026).
@@ -417,7 +451,7 @@ class SettingsPage(QScrollArea):
             f"border-radius:7px;padding:6px 10px;text-align:left;}}"
             f"QPushButton:hover{{border-color:{CP['accent2']};}}")
         self._btn_ollama_models.clicked.connect(self._open_ollama_models)
-        lay.addWidget(self._btn_ollama_models)
+        AI.addWidget(self._btn_ollama_models)
 
         # Serveur IA local OpenAI-compatible (LM Studio, llama.cpp, vLLM, Jan…) :
         # préréglage, adresse, modèle découvert, guide d'installation — composant
@@ -425,7 +459,7 @@ class SettingsPage(QScrollArea):
         from ui.local_ai_panel import LocalAIPanel
         self._local_panel = LocalAIPanel()
         self._local_panel.load(cfg)
-        lay.addWidget(self._local_panel)
+        AI.addWidget(self._local_panel)
 
         self._lbl_ai_restart = QLabel(
             "Le nom de l'assistant dans l'interface se met à jour au prochain démarrage."
@@ -438,9 +472,11 @@ class SettingsPage(QScrollArea):
         self._lbl_ai_restart.setParent(self)
         self._lbl_ai_restart.hide()
 
-        # ── Paramètres avancés : moteur IA PAR TÂCHE (repliable) ───────────────
+        # ── Moteur IA PAR TÂCHE (repliable, dans la section Assistant IA) ──────
+        # S'appelait « Paramètres avancés — moteur IA par tâche » : depuis le
+        # 04/10/2026 « Paramètres avancés » est la section du bas (H3, ComfyUI…).
         self._adv_open = False
-        self._btn_adv = QPushButton("▶  Paramètres avancés — moteur IA par tâche")
+        self._btn_adv = QPushButton("▶  Moteur IA par tâche")
         self._btn_adv.setCursor(Qt.CursorShape.PointingHandCursor)
         self._btn_adv.setStyleSheet(
             f"QPushButton{{background:transparent;color:{CP['accent2']};"
@@ -448,7 +484,7 @@ class SettingsPage(QScrollArea):
             f"QPushButton:hover{{color:#9d8fff;}}"
         )
         self._btn_adv.clicked.connect(self._toggle_advanced)
-        lay.addWidget(self._btn_adv)
+        AI.addWidget(self._btn_adv)
 
         self._adv_box = QWidget()
         self._adv_box.setVisible(False)
@@ -494,112 +530,41 @@ class SettingsPage(QScrollArea):
             self._task_combos[task_key] = combo
             row.addWidget(combo)
             adv_lay.addLayout(row)
+        AI.addWidget(self._adv_box)
 
-        # ── Distribution des générations VIDÉO (distributeur alternatif) ──────
-        adv_lay.addSpacing(12)
-        _dist_title = QLabel("Distribution des générations vidéo")
-        _dist_title.setStyleSheet(
-            f"color:{CP['text_secondary']};font-size:11px;font-weight:700;"
-            f"background:transparent;"
-        )
-        adv_lay.addWidget(_dist_title)
-        _dist_hint = QLabel(
-            "fal.ai reste le distributeur par défaut et le repli automatique. "
-            "Un distributeur low cost peut servir les mêmes générations Seedance 2.0 "
-            "moins cher — les prix affichés dans le Studio s'adaptent. "
-            "⚠ Les images de référence transitent toujours par fal.ai (clé fal "
-            "requise dès qu'un plan envoie des images)."
-        )
-        _dist_hint.setWordWrap(True)
-        _dist_hint.setStyleSheet(
-            f"color:{CP['text_dim']};font-size:10px;background:transparent;")
-        adv_lay.addWidget(_dist_hint)
-
-        from core.media_provider import PROVIDERS as _MEDIA_PROVIDERS
-        _combo_style = (
-            f"QComboBox{{background:{CP['bg2']};border:1px solid {CP['border']};"
-            f"border-radius:6px;color:{CP['text_primary']};font-size:11px;padding:0 8px;}}"
-            f"QComboBox::drop-down{{border:none;width:20px;}}"
-            f"QComboBox QAbstractItemView{{background:{CP['bg3']};"
-            f"border:1px solid {CP['border_bright']};color:{CP['text_primary']};"
-            f"selection-background-color:{CP['accent_dim']};}}"
-        )
-        mode_row = QHBoxLayout()
-        mode_row.setSpacing(8)
-        _mode_lbl = QLabel("Mode de distribution")
-        _mode_lbl.setStyleSheet(
-            f"color:{CP['text_secondary']};font-size:11px;background:transparent;")
-        mode_row.addWidget(_mode_lbl, 1)
-        self.distribution_mode_combo = QComboBox()
-        self.distribution_mode_combo.setFixedHeight(28)
-        self.distribution_mode_combo.setMinimumWidth(160)
-        self.distribution_mode_combo.setStyleSheet(_combo_style)
-        self.distribution_mode_combo.addItem(
-            "Multi-distributeurs (recommandé)", "multi")
-        self.distribution_mode_combo.addItem(
-            "Mono-distributeur (uniquement celui choisi)", "mono")
-        if cfg.get("distribution_mode", "multi") == "mono":
-            self.distribution_mode_combo.setCurrentIndex(1)
-        mode_row.addWidget(self.distribution_mode_combo)
-        adv_lay.addLayout(mode_row)
-        _mode_hint = QLabel(
-            "Mono-distributeur : les services que le distributeur choisi ne couvre "
-            "pas (Sound Design, Musique IA, Image IA, Upscaling…) sont grisés dans "
-            "le Studio au lieu de repasser par fal.ai."
-        )
-        _mode_hint.setWordWrap(True)
-        _mode_hint.setStyleSheet(
-            f"color:{CP['text_dim']};font-size:10px;background:transparent;")
-        adv_lay.addWidget(_mode_hint)
-
-        prov_row = QHBoxLayout()
-        prov_row.setSpacing(8)
-        _prov_lbl = QLabel("Distributeur vidéo")
-        _prov_lbl.setStyleSheet(
-            f"color:{CP['text_secondary']};font-size:11px;background:transparent;")
-        prov_row.addWidget(_prov_lbl, 1)
-        self.video_provider_combo = QComboBox()
-        self.video_provider_combo.setFixedHeight(28)
-        self.video_provider_combo.setMinimumWidth(160)
-        self.video_provider_combo.setStyleSheet(
-            f"QComboBox{{background:{CP['bg2']};border:1px solid {CP['border']};"
-            f"border-radius:6px;color:{CP['text_primary']};font-size:11px;padding:0 8px;}}"
-            f"QComboBox::drop-down{{border:none;width:20px;}}"
-            f"QComboBox QAbstractItemView{{background:{CP['bg3']};"
-            f"border:1px solid {CP['border_bright']};color:{CP['text_primary']};"
-            f"selection-background-color:{CP['accent_dim']};}}"
-        )
-        for _pid, _pmeta in _MEDIA_PROVIDERS.items():
-            self.video_provider_combo.addItem(_pmeta["label"], _pid)
-        _cur_prov = cfg.get("video_provider", "fal")
-        for i in range(self.video_provider_combo.count()):
-            if self.video_provider_combo.itemData(i) == _cur_prov:
-                self.video_provider_combo.setCurrentIndex(i)
-                break
-        prov_row.addWidget(self.video_provider_combo)
-        adv_lay.addLayout(prov_row)
-
-        _piapi_hint = QLabel(
-            "La clé PiAPI se renseigne dans « Clés API facultatives » ci-dessous."
-        )
-        _piapi_hint.setWordWrap(True)
-        _piapi_hint.setStyleSheet(
-            f"color:{CP['text_dim']};font-size:10px;background:transparent;")
-        adv_lay.addWidget(_piapi_hint)
-        lay.addWidget(self._adv_box)
+        # ── Distribution des vidéos (section dédiée depuis le 04/10/2026) ─────
+        # Le choix du distributeur vivait ici, sous « moteur IA par tâche », et
+        # sa clé PiAPI dans « Clés API facultatives » : tout est réuni dans un
+        # panneau commun aux deux éditions (ui/distrib_settings_panel), qui
+        # ajoute BytePlus et Runware, les prix, et les tests gratuits.
+        from ui.distrib_settings_panel import DistributionPanel
+        self._distrib_panel = DistributionPanel(cfg, _field_style())
+        self._sec_distrib.body.addWidget(self._distrib_panel)
+        # Ordre de priorité (cases + ▲▼) : remplace le menu « Distributeur
+        # vidéo » unique d'avant le 04/10/2026.
+        self.video_provider_order = self._distrib_panel.order_list
+        self.distribution_mode_combo = self._distrib_panel.mode_combo
+        self.piapi_input = self._distrib_panel.key_inputs["piapi"]
+        self.byteplus_input = self._distrib_panel.key_inputs["byteplus"]
+        self.runware_input = self._distrib_panel.key_inputs["runware"]
 
         self._on_ai_choice_changed()
-        lay.addWidget(_divider())
 
         # ── Clés API (testeurs à côté des liens « Obtenir une clé ») ──────────
         api_row = QHBoxLayout()
-        api_row.addWidget(_section("Clés API"))
-        api_row.addStretch()
+        _keys_intro = QLabel(
+            "Deux clés obligatoires — fal.ai (vidéos, images, son) et Claude (scénario, "
+            "storyboard, prompts). Les clés des distributeurs vidéo sont dans "
+            "« Distribution des vidéos ».")
+        _keys_intro.setWordWrap(True)
+        _keys_intro.setStyleSheet(
+            f"color:{CP['text_dim']};font-size:10px;background:transparent;")
+        api_row.addWidget(_keys_intro, 1)
         api_row.addWidget(_info_btn(
             "Comment obtenir les clés API",
             lambda: self._show_api_help(),
         ))
-        lay.addLayout(api_row)
+        K.addLayout(api_row)
 
         # ── Clés OBLIGATOIRES (fal.ai + Anthropic, pastille rouge) ────────────
         # fal.ai
@@ -615,14 +580,14 @@ class SettingsPage(QScrollArea):
         fal_lbl_row.addWidget(_badge("Obligatoire", "req"))
         fal_lbl_row.addWidget(_test_btn("✓  Tester API fal.ai", self.test_connection))
         fal_lbl_row.addWidget(_link_btn("⇗  Obtenir une clé fal.ai", _FAL_KEYS_URL))
-        lay.addLayout(fal_lbl_row)
+        K.addLayout(fal_lbl_row)
 
         self.api_input = QLineEdit()
         self.api_input.setPlaceholderText("fal_••••••••••••••••••••••••")
         self.api_input.setText(cfg.get("api_key", ""))
         self.api_input.setEchoMode(QLineEdit.EchoMode.Password)
         self.api_input.setStyleSheet(_field_style())
-        lay.addWidget(self.api_input)
+        K.addWidget(self.api_input)
 
         # Anthropic
         ant_lbl_row = QHBoxLayout()
@@ -635,19 +600,19 @@ class SettingsPage(QScrollArea):
         ant_lbl_row.addWidget(_badge("Obligatoire", "req"))
         ant_lbl_row.addWidget(_test_btn("✓  Tester API Anthropic", self.test_anthropic_connection))
         ant_lbl_row.addWidget(_link_btn("⇗  Obtenir une clé Anthropic", _ANTHROPIC_KEYS_URL))
-        lay.addLayout(ant_lbl_row)
+        K.addLayout(ant_lbl_row)
 
         self.anthropic_input = QLineEdit()
         self.anthropic_input.setPlaceholderText("sk-ant-••••••••••••••••••••••••")
         self.anthropic_input.setText(cfg.get("anthropic_key", ""))
         self.anthropic_input.setEchoMode(QLineEdit.EchoMode.Password)
         self.anthropic_input.setStyleSheet(_field_style())
-        lay.addWidget(self.anthropic_input)
+        K.addWidget(self.anthropic_input)
 
-        # ── Clés FACULTATIVES (menu déroulant : OpenAI, Mistral, à venir) ──────
+        # ── Clés FACULTATIVES (menu déroulant : assistants texte) ──────────────
         self._opt_keys_open = False
         self._btn_opt_keys = QPushButton(
-            "▶  Clés API facultatives  (PiAPI, OpenAI, Mistral…)")
+            "▶  Clés API facultatives  (OpenAI, Mistral, Kimi, GLM…)")
         self._btn_opt_keys.setCursor(Qt.CursorShape.PointingHandCursor)
         self._btn_opt_keys.setStyleSheet(
             f"QPushButton{{background:transparent;color:{CP['accent2']};"
@@ -655,7 +620,7 @@ class SettingsPage(QScrollArea):
             f"QPushButton:hover{{color:#9d8fff;}}"
         )
         self._btn_opt_keys.clicked.connect(self._toggle_opt_keys)
-        lay.addWidget(self._btn_opt_keys)
+        K.addWidget(self._btn_opt_keys)
 
         self._opt_keys_box = QWidget()
         self._opt_keys_box.setVisible(False)
@@ -664,36 +629,13 @@ class SettingsPage(QScrollArea):
         opt_lay.setContentsMargins(2, 2, 2, 4)
         opt_lay.setSpacing(8)
         _opt_hint = QLabel(
-            "Non requises pour faire fonctionner PANDORA — distributeur vidéo "
-            "low cost (PiAPI) ou moteurs d'assistant texte (global ou par tâche)."
+            "Non requises pour faire fonctionner PANDORA — moteurs d'assistant texte "
+            "(global ou par tâche). La clé PiAPI est passée dans « Distribution des "
+            "vidéos », avec BytePlus et Runware."
         )
         _opt_hint.setWordWrap(True)
         _opt_hint.setStyleSheet(f"color:{CP['text_dim']};font-size:10px;background:transparent;")
         opt_lay.addWidget(_opt_hint)
-
-        # PiAPI — distributeur vidéo low cost (en PREMIER, demande Matthieu
-        # 2026-07-16 ; le combo « Distributeur vidéo » reste dans les avancés)
-        piapi_lbl_row = QHBoxLayout()
-        piapi_lbl_row.setSpacing(8)
-        self._piapi_lbl = QLabel(
-            "PiAPI — Seedance 2.0 low cost  (distributeur vidéo, voir avancés)")
-        self._piapi_lbl.setStyleSheet(
-            f"color:{CP['text_secondary']};font-size:12px;background:transparent;")
-        piapi_lbl_row.addWidget(self._piapi_lbl, 1)
-        piapi_lbl_row.addWidget(_badge("Facultatif", "opt"))
-        self._piapi_test_btn = _test_btn("✓  Tester API PiAPI", self.test_piapi_connection)
-        piapi_lbl_row.addWidget(self._piapi_test_btn)
-        self._piapi_link_btn = _link_btn("⇗  Obtenir une clé PiAPI",
-                                         "https://piapi.ai/workspace")
-        piapi_lbl_row.addWidget(self._piapi_link_btn)
-        opt_lay.addLayout(piapi_lbl_row)
-
-        self.piapi_input = QLineEdit()
-        self.piapi_input.setPlaceholderText("Clé PiAPI (X-API-Key)")
-        self.piapi_input.setText(cfg.get("piapi_key", ""))
-        self.piapi_input.setEchoMode(QLineEdit.EchoMode.Password)
-        self.piapi_input.setStyleSheet(_field_style())
-        opt_lay.addWidget(self.piapi_input)
 
         # OpenAI
         oa_lbl_row = QHBoxLayout()
@@ -794,29 +736,22 @@ class SettingsPage(QScrollArea):
         self.custom_key_input.setStyleSheet(_field_style())
         opt_lay.addWidget(self.custom_key_input)
 
-        lay.addWidget(self._opt_keys_box)
-        lay.addWidget(_divider())
+        K.addWidget(self._opt_keys_box)
 
         # ── Sauvegarde AUTOMATIQUE (plus de bouton — tout changement est enregistré) ──
+        # Placée à droite du titre : visible sans dérouler la page.
         self._autosave_lbl = QLabel("✓  Sauvegarde automatique — chaque modification est enregistrée.")
         self._autosave_lbl.setStyleSheet(
             f"color:{CP['text_dim']};font-size:11px;font-style:italic;background:transparent;"
         )
-        lay.addWidget(self._autosave_lbl)
-        lay.addWidget(_divider())
+        _title_row.addWidget(self._autosave_lbl)
 
         # Brancher l'auto-save sur tous les champs (après construction complète).
         self._wire_autosave()
 
-        # ── Connexion DaVinci Resolve Studio — tout en bas ────────────────────
+        # ── Connexion DaVinci Resolve Studio — section repliable ──────────────
         dvr_row = QHBoxLayout()
         dvr_row.setSpacing(8)
-        _dvr_title = QLabel("Connexion DaVinci Resolve Studio".upper())
-        _dvr_title.setStyleSheet(
-            f"color:{CP['text_dim']};font-size:9px;font-weight:700;"
-            f"letter-spacing:3px;font-family:'Consolas',monospace;background:transparent;"
-        )
-        dvr_row.addWidget(_dvr_title)
         _studio_badge = QLabel("Studio uniquement")
         _studio_badge.setStyleSheet(
             f"color:{CP['text_dim']};font-size:9px;font-weight:600;"
@@ -829,7 +764,7 @@ class SettingsPage(QScrollArea):
             "Guide de connexion DaVinci Resolve Studio",
             lambda: self._show_davinci_help(),
         ))
-        lay.addLayout(dvr_row)
+        D.addLayout(dvr_row)
 
         _lbl_studio_note = QLabel(
             "Fonctionnalité optionnelle — ne fonctionne pas avec DaVinci Resolve (version gratuite/Lite). "
@@ -839,14 +774,15 @@ class SettingsPage(QScrollArea):
         _lbl_studio_note.setStyleSheet(
             f"color:{CP['text_dim']};font-size:10px;font-style:italic;background:transparent;"
         )
-        lay.addWidget(_lbl_studio_note)
+        D.addWidget(_lbl_studio_note)
 
         self._davinci = DaVinciPanel()
         self._davinci.setStyleSheet(
             f"background:{CP['bg2']};border:1px solid {CP['border']};"
             f"border-radius:10px;"
         )
-        lay.addWidget(self._davinci)
+        D.addWidget(self._davinci)
+        self._refresh_summaries()
 
         # (Le bouton « Installer le script / bridge PANDORA » a été retiré : les
         # scripts DaVinci — pandora_send + seedance_bridge — sont installés
@@ -938,9 +874,7 @@ class SettingsPage(QScrollArea):
     def _set_advanced(self, open_: bool):
         self._adv_open = open_
         self._adv_box.setVisible(open_)
-        self._btn_adv.setText(
-            ("▼" if open_ else "▶") + "  Paramètres avancés — moteur IA par tâche"
-        )
+        self._btn_adv.setText(("▼" if open_ else "▶") + "  Moteur IA par tâche")
 
     def _toggle_advanced(self):
         self._set_advanced(not self._adv_open)
@@ -976,8 +910,35 @@ class SettingsPage(QScrollArea):
         self._opt_keys_box.setVisible(self._opt_keys_open)
         self._btn_opt_keys.setText(
             ("▼" if self._opt_keys_open else "▶")
-            + "  Clés API facultatives  (PiAPI, OpenAI, Mistral…)"
+            + "  Clés API facultatives  (OpenAI, Mistral, Kimi, GLM…)"
         )
+
+    # ── Résumés d'en-tête + relecture du choix fait ailleurs (04/10/2026) ──────
+
+    def _refresh_summaries(self):
+        """L'essentiel de chaque section, lisible sans la déplier."""
+        try:
+            from core.i18n import translate as _t
+            ok = lambda w: "✓" if w.text().strip() else "✕"   # noqa: E731
+            # « Anthropic » et non « Claude » : la traduction remplace « Claude »
+            # par le nom de l'assistant configuré.
+            self._sec_keys.set_summary(_t("fal.ai {a} · Anthropic {b}").format(
+                a=ok(self.api_input), b=ok(self.anthropic_input)))
+            self._sec_ai.set_summary(self.ai_combo.currentText().strip())
+            self._sec_distrib.set_summary(self._distrib_panel.summary())
+        except Exception:
+            pass
+
+    def showEvent(self, e):
+        super().showEvent(e)
+        # Le distributeur a pu être changé dans le Studio depuis : la page
+        # enregistre TOUT à chaque frappe — sans cette relecture, elle
+        # remettrait l'ancien choix par-dessus (mémoire « save_config écrase tout »).
+        try:
+            self._distrib_panel.sync_from_config(load_config())
+            self._refresh_summaries()
+        except Exception:
+            pass
 
     # ── Sauvegarde ────────────────────────────────────────────────────────────
 
@@ -1007,14 +968,25 @@ class SettingsPage(QScrollArea):
             "ollama_url":        self.ollama_url_input.text(),
             "ollama_model":      self.ollama_model_input.text(),
             "ai_task_engines":   task_engines,
-            "video_provider":    self.video_provider_combo.currentData() or "fal",
-            "piapi_key":         self.piapi_input.text(),
-            "distribution_mode": self.distribution_mode_combo.currentData() or "multi",
         })
+        # Distribution des vidéos : ordre de priorité, distributeurs désactivés,
+        # mode et clés — tout vient du panneau partagé (ui/distrib_settings_panel).
+        _dv = self._distrib_panel.values()
+        cfg.update({
+            "video_provider":       _dv["video_provider"],
+            "video_provider_order": _dv["video_provider_order"],
+            "video_providers_off":  _dv["video_providers_off"],
+            "distribution_mode":    self.distribution_mode_combo.currentData() or "multi",
+            "piapi_key":            self.piapi_input.text(),
+            "byteplus_key":         self.byteplus_input.text(),
+            "runware_key":          self.runware_input.text(),
+        })
+        self._distrib_panel.set_fal_key_present(bool(self.api_input.text().strip()))
         if hasattr(self, "_local_panel"):
             self._local_panel.apply(cfg)     # local_preset / local_url / local_model / local_key
         apply_primary_to_config(cfg, self.ai_combo)
         save_config(cfg)
+        self._refresh_summaries()
         from core.ai_provider import refresh_name_cache
         refresh_name_cache()   # le nom de l'assistant change → libellés au prochain démarrage
         # Sauvegarde automatique : retour discret (pas de pop-up à chaque frappe)
@@ -1029,14 +1001,15 @@ class SettingsPage(QScrollArea):
                   self.kimi_model_input, self.glm_input, self.glm_url_input,
                   self.glm_model_input, self.ollama_url_input, self.ollama_model_input,
                   self.custom_key_input, self.custom_url_input,
-                  self.custom_model_input, self.piapi_input):
+                  self.custom_model_input):
             w.textChanged.connect(self.save)
         if hasattr(self, "_local_panel"):
             self._local_panel.changed.connect(self.save)
         for combo in getattr(self, "_task_combos", {}).values():
             combo.currentIndexChanged.connect(self.save)
-        self.video_provider_combo.currentIndexChanged.connect(self.save)
-        self.distribution_mode_combo.currentIndexChanged.connect(self.save)
+        # Distributeur, mode et clés BytePlus / Runware / PiAPI : le panneau
+        # émet `changed` (et se tait pendant sa relecture de la config).
+        self._distrib_panel.changed.connect(self.save)
 
     def _apply_pandora_preset(self):
         """Renseigne les combos « moteur par tâche » avec le preset PANDORA optimisé."""

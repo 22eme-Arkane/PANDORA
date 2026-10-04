@@ -3091,14 +3091,51 @@ _FR_TO_EN: dict[str, str] = {
     "○  Clé fal.ai manquante — reviens à l'étape 3":
         "○  fal.ai key missing — go back to step 3",
     "✅  Clé Claude enregistrée":                "✅  Claude key saved",
-    "○  Clé Claude manquante — reviens à l'étape 6":
-        "○  Claude key missing — go back to step 6",
+    "○  Clé Claude manquante — reviens à l'étape 7":
+        "○  Claude key missing — go back to step 7",
+    # Écran « distributeurs low cost » de l'onboarding (04/10/2026)
+    "DISTRIBUTEURS VIDÉO — FACULTATIF": "VIDEO DISTRIBUTORS — OPTIONAL",
+    "Tes vidéos jusqu'à deux fois moins cher": "Your videos up to half the price",
+    "fal.ai revend Seedance environ <b>deux fois</b> son prix officiel. Ces distributeurs "
+    "vendent <b>le même moteur</b> moins cher. C'est facultatif : tu peux aussi le faire "
+    "plus tard dans <b>Paramètres → Distribution des vidéos</b>.":
+        "fal.ai resells Seedance at about <b>twice</b> its official price. These "
+        "distributors sell <b>the same engine</b> for less. It's optional: you can also do "
+        "it later in <b>Settings → Video distribution</b>.",
+    "Un plan Seedance 2.5 de 30 s en 720p : <b>fal.ai ${fal:.2f}</b> · BytePlus "
+    "${byteplus:.2f} HT · Runware ${runware:.2f} · PiAPI ${piapi:.2f}":
+        "A 30-second Seedance 2.5 shot in 720p: <b>fal.ai ${fal:.2f}</b> · BytePlus "
+        "${byteplus:.2f} excl. VAT · Runware ${runware:.2f} · PiAPI ${piapi:.2f}",
+    "🔑  Créer ma clé →": "🔑  Create my key →",
+    "Colle ici ta clé BytePlus ModelArk": "Paste your BytePlus ModelArk key here",
+    "Colle ici ta clé Runware": "Paste your Runware key here",
+    "Colle ici ta clé PiAPI": "Paste your PiAPI key here",
+    "🖼️  Images de référence (personnages, moods) : BytePlus et Runware les reçoivent "
+    "directement. PiAPI exige son abonnement Creator, ou un compte fal.ai approvisionné qui "
+    "sert de relais — sinon les plans avec images passent au distributeur suivant, ou "
+    "s'arrêtent avant d'être payés.":
+        "🖼️  Reference images (characters, moods): BytePlus and Runware receive them "
+        "directly. PiAPI needs its Creator plan, or a funded fal.ai account acting as a "
+        "relay — otherwise shots with images move to the next distributor, or stop before "
+        "being paid.",
+    "✅  Clé enregistrée — {name} passe en tête pour Seedance (modifiable dans Paramètres → "
+    "Distribution des vidéos).":
+        "✅  Key saved — {name} now comes first for Seedance (editable in Settings → Video "
+        "distribution).",
+    "✅  Distributeur(s) : {names} — en tête pour Seedance : {first}":
+        "✅  Distributor(s): {names} — first for Seedance: {first}",
+    "○  Aucun distributeur low cost (facultatif — étape 5)":
+        "○  No low-cost distributor (optional — step 5)",
     "Sur la page d'accueil, clique sur <b>« Get started »</b> en haut à droite — connexion avec <b>Google</b> ou <b>GitHub</b>, 30 secondes.":
         "On the home page, click <b>\"Get started\"</b> (top right) — sign in with <b>Google</b> or <b>GitHub</b>, 30 seconds.",
     "Sur la page <b>Keys</b> : clique <b>« + Add key »</b> → nomme-la <b>PANDORA</b> → <b>« Create »</b> → copie la clé <b>fal_key_…</b>":
         "On the <b>Keys</b> page: click <b>\"+ Add key\"</b> → name it <b>PANDORA</b> → <b>\"Create\"</b> → copy the <b>fal_key_…</b> key",
-    "Sur la page <b>Billing</b> : clique <b>« Add credits »</b> — <b>$10</b> suffisent pour bien démarrer : environ <b>20 à 50 vidéos</b> Seedance 2.0 ($0.20–$0.50 la vidéo de 10 s).":
-        "On the <b>Billing</b> page: click <b>\"Add credits\"</b> — <b>$10</b> is plenty to start: about <b>20 to 50 videos</b> with Seedance 2.0 ($0.20–$0.50 per 10-second video).",
+    "Sur la page <b>Billing</b> : clique <b>« Add credits »</b> — <b>$10</b> permettent "
+    "quelques essais : environ <b>3 vidéos</b> Seedance 2.0 de 10 s en 720p (≈ $3 la vidéo "
+    "chez fal.ai). L'étape suivante montre comment payer moins cher.":
+        "On the <b>Billing</b> page: click <b>\"Add credits\"</b> — <b>$10</b> allows a few "
+        "tries: about <b>3 videos</b> with Seedance 2.0, 10 s in 720p (≈ $3 per video on "
+        "fal.ai). The next step shows how to pay less.",
     "Sur <b>platform.claude.com</b> : clique <b>« Continuer avec Google »</b> (ou avec ton adresse e-mail) — la page est en français.":
         "On <b>platform.claude.com</b>: click <b>\"Continue with Google\"</b> (or with your email address).",
     "Sur la page <b>API Keys</b> : clique <b>« Create Key »</b> → nomme-la <b>PANDORA</b> → <b>« Create Key »</b> → copie la clé <b>sk-ant-…</b>":
@@ -5472,6 +5509,150 @@ _FR_TO_EN: dict[str, str] = {
     'Utilisez Ctrl+S pour une sauvegarde manuelle.': 'Use Ctrl+S for a manual save.',
     'Durée du plan': 'Shot duration',
     'Durée (1 — {max} secondes) :': 'Duration (1 — {max} seconds):',
+    # Distributeurs vidéo — Studio, ordre de priorité, Paramètres (04/10/2026)
+    "Distributeur": "Distributor",
+    "Qui vend la génération : le moteur est le même partout, seuls le prix et les options "
+    "changent. Le distributeur choisi ici passe en tête de l'ordre de priorité "
+    "(Paramètres → Distribution des vidéos).":
+        "Who sells the generation: the engine is the same everywhere, only the price and "
+        "options change. The distributor chosen here moves to the top of the priority "
+        "order (Settings → Video distribution).",
+    "ne vend pas ce moteur": "does not sell this engine",
+    "clé manquante (Paramètres)": "key missing (Settings)",
+    "désactivé (Paramètres)": "disabled (Settings)",
+    "Mono : {name} seul.": "Mono: {name} only.",
+    "Ordre : {names} — pour chaque plan, le premier qui sait le faire.":
+        "Order: {names} — for each shot, the first one able to do it.",
+    "Aucun distributeur activé ne peut servir {engine} : {why}":
+        "No enabled distributor can serve {engine}: {why}",
+    "Plans sans image : {name} ({why}).": "Shots without images: {name} ({why}).",
+    "Plans avec images : {name} ({why}).": "Shots with images: {name} ({why}).",
+    "Aucun distributeur activé ne peut recevoir d'images ({why}) : les options qui en "
+    "envoient sont désactivées. BytePlus et Runware les reçoivent directement.":
+        "No enabled distributor can receive images ({why}): the options that send them "
+        "are disabled. BytePlus and Runware receive them directly.",
+    "Aucun distributeur activé ne peut recevoir d'images : {why}":
+        "No enabled distributor can receive images: {why}",
+    "Aucun distributeur activé ne propose l'image de début / fin sur ce moteur : {why}":
+        "No enabled distributor offers start / end frames on this engine: {why}",
+    "Aucun distributeur activé ne permet de couper le son sur ce moteur : {why}":
+        "No enabled distributor can turn the sound off on this engine: {why}",
+    # Recomposition du prompt à la demande / automatique (04/10/2026)
+    "✦  Recomposer le prompt": "✦  Recompose the prompt",
+    "Réécrit le prompt avec l'IA pour le moteur choisi (un appel payant). Votre texte "
+    "retouché à la main sera remplacé.":
+        "Rewrites the prompt with the AI for the chosen engine (one paid call). Your "
+        "hand-edited text will be replaced.",
+    "Recomposer automatiquement": "Recompose automatically",
+    "Coché : le prompt est réécrit par l'IA dès que le plan s'affiche. Décoché : "
+    "seulement quand vous cliquez « Recomposer » — un prompt déjà composé reste affiché "
+    "sans nouvel appel. Le choix est mémorisé.":
+        "Checked: the prompt is rewritten by the AI as soon as the shot is shown. "
+        "Unchecked: only when you click « Recompose » — an already composed prompt stays "
+        "shown without a new call. The choice is remembered.",
+    "prompt du plan — non recomposé (automatique désactivé)":
+        "shot prompt — not recomposed (automatic off)",
+    "texte du plan — recomposition automatique désactivée (« Recomposer » pour la lancer)":
+        "shot text — automatic recomposition off (« Recompose » to run it)",
+    # Menu « Prompt » de la barre Storyboard (04/10/2026)
+    "AFFICHAGE DE LA COLONNE": "COLUMN DISPLAY",
+    "FORME DU PROMPT": "PROMPT FORM",
+    "prompt final uniquement": "final prompt only",
+    "structuré": "structured",
+    "Vue de la colonne Prompt et forme du prompt final.":
+        "Prompt column view and final prompt form.",
+    # Sections repliables des Paramètres (04/10/2026)
+    "Général": "General",
+    "Assistant IA": "AI assistant",
+    "Distribution des vidéos": "Video distribution",
+    "DaVinci Resolve Studio": "DaVinci Resolve Studio",
+    "Paramètres avancés": "Advanced settings",
+    "thème · double écran · manuel · dossier des projets":
+        "theme · dual screen · manual · projects folder",
+    "envoi des clips dans la timeline": "sending clips to the timeline",
+    "MiniMax H3 en local · ComfyUI · modules externes":
+        "Local MiniMax H3 · ComfyUI · external modules",
+    "fal.ai {a} · Anthropic {b}": "fal.ai {a} · Anthropic {b}",
+    "▶  Moteur IA par tâche": "▶  AI engine per task",
+    "▼  Moteur IA par tâche": "▼  AI engine per task",
+    "▶  Clés API facultatives  (OpenAI, Mistral, Kimi, GLM…)":
+        "▶  Optional API keys  (OpenAI, Mistral, Kimi, GLM…)",
+    "▼  Clés API facultatives  (OpenAI, Mistral, Kimi, GLM…)":
+        "▼  Optional API keys  (OpenAI, Mistral, Kimi, GLM…)",
+    "Deux clés obligatoires — fal.ai (vidéos, images, son) et Claude (scénario, storyboard, "
+    "prompts). Les clés des distributeurs vidéo sont dans « Distribution des vidéos ».":
+        "Two required keys — fal.ai (videos, images, sound) and Claude (screenplay, "
+        "storyboard, prompts). Video distributor keys are under « Video distribution ».",
+    "Non requises pour faire fonctionner PANDORA — moteurs d'assistant texte (global ou "
+    "par tâche). La clé PiAPI est passée dans « Distribution des vidéos », avec BytePlus "
+    "et Runware.":
+        "Not required to run PANDORA — text assistant engines (global or per task). The "
+        "PiAPI key moved to « Video distribution », with BytePlus and Runware.",
+    "Un distributeur vend l'accès aux moteurs : Seedance est le même partout, seuls le "
+    "prix et les options changent. fal.ai reste le socle (tous les moteurs, image et son "
+    "compris) ; un distributeur moins cher peut servir Seedance à sa place. Le choix se "
+    "fait aussi dans le Studio, à côté du moteur.":
+        "A distributor sells access to the engines: Seedance is the same everywhere, only "
+        "the price and options change. fal.ai remains the base (every engine, image and "
+        "sound included); a cheaper distributor can serve Seedance instead. You can also "
+        "choose in the Studio, next to the engine.",
+    "Plan Seedance 2.5 de 30 secondes — prix indicatifs relevés le 04/10/2026 :":
+        "30-second Seedance 2.5 shot — indicative prices checked on 04/10/2026:",
+    "Mono-distributeur (uniquement le premier)": "Single distributor (the first one only)",
+    "Ordre de priorité — pour chaque plan, PANDORA prend le PREMIER distributeur coché "
+    "qui sait le faire (moteur, résolution, son coupé, image de début / fin, réception "
+    "des images de référence) ; sinon il passe automatiquement au suivant, et la "
+    "progression dit pourquoi. Un compte fal.ai bloqué faute de solde est sauté. En mono, "
+    "seul le premier est utilisé. L'ordre ne concerne que Seedance : les autres moteurs "
+    "(Kling, Veo…) ne sont vendus que par fal.ai.":
+        "Priority order — for each shot, PANDORA takes the FIRST checked distributor able "
+        "to do it (engine, resolution, sound off, start / end frame, receiving reference "
+        "images); otherwise it automatically moves to the next one, and the progress says "
+        "why. A fal.ai account locked for lack of balance is skipped. In single mode, only "
+        "the first one is used. The order only concerns Seedance: the other engines "
+        "(Kling, Veo…) are only sold by fal.ai.",
+    "Utiliser ce distributeur": "Use this distributor",
+    "fal.ai (par défaut)": "fal.ai (default)",
+    "BytePlus (officiel ByteDance)": "BytePlus (official ByteDance)",
+    "PiAPI (low cost)": "PiAPI (low cost)",
+    "clé ✓": "key ✓",
+    "clé manquante": "key missing",
+    "non utilisé en mono": "unused in single mode",
+    "Tous les moteurs (vidéo, image, son). Le plus complet, le plus cher sur Seedance.":
+        "Every engine (video, image, sound). The most complete, the most expensive on "
+        "Seedance.",
+    "Le vendeur OFFICIEL de Seedance : environ deux fois moins cher que fal. Prix HT (+20 % "
+    "de TVA en compte personnel) ; il faut plus de 30 $ de solde pour activer Seedance 2.x.":
+        "The OFFICIAL Seedance seller: about half the fal price. Prices excl. VAT (+20 % "
+        "VAT on a personal account); over $30 of balance is needed to enable Seedance 2.x.",
+    "Revendeur au prix officiel de ByteDance, sans TVA affichée. Recharge minimale 20 $. "
+    "Ne fait pas la prolongation de clip.":
+        "Reseller at the official ByteDance price, no VAT shown. Minimum top-up $20. "
+        "Does not extend clips.",
+    "Revendeur à bas prix. N'accepte que des liens publics vers les images (dépôt réservé "
+    "à l'abonnement Creator, sinon relais fal.ai).":
+        "Low-cost reseller. Only accepts public links to images (upload reserved to the "
+        "Creator plan, otherwise the fal.ai relay).",
+    "✓  Tester la clé": "✓  Test the key",
+    "⇗  Obtenir une clé": "⇗  Get a key",
+    "Clé API BytePlus ModelArk (Bearer)": "BytePlus ModelArk API key (Bearer)",
+    "Clé API Runware": "Runware API key",
+    "Compte fal.ai et dépôt PiAPI : non vérifiés. Un compte fal bloqué ne sert plus ni à "
+    "générer ni de relais ; PiAPI ne reçoit des images qu'avec son dépôt (abonnement "
+    "Creator) ou le relais fal.":
+        "fal.ai account and PiAPI upload: not checked. A locked fal account can neither "
+        "generate nor relay; PiAPI only receives images with its upload (Creator plan) or "
+        "the fal relay.",
+    "Vérifier (gratuit)": "Check (free)",
+    "Colle d'abord la clé, puis teste-la.": "Paste the key first, then test it.",
+    "Clé refusée": "Key refused",
+    "Vérification du compte fal.ai et du dépôt PiAPI…":
+        "Checking the fal.ai account and the PiAPI upload…",
+    "Compte fal.ai": "fal.ai account",
+    "utilisable": "usable",
+    "Dépôt PiAPI": "PiAPI upload",
+    "ouvert (PiAPI reçoit les images)": "open (PiAPI receives images)",
+    "vérification impossible pour l’instant": "cannot be checked right now",
     'Image supprimée.': 'Image deleted.',
     'Portrait ajouté ✓': 'Portrait added ✓',
     'Réaliste': 'Realistic',

@@ -8,7 +8,7 @@ from PyQt6.QtWidgets import (
 from PyQt6.QtCore import Qt, pyqtSignal, QObject, QTimer
 from PyQt6.QtGui import QPixmap
 from ui.styles import CP, COMBO_ARROW_URL as _ARROW_URL
-from ui.prompt_form_selector import PromptFormSelector
+from ui.prompt_menu import PromptMenu
 from ui.widgets import HelpBlock
 from ui.icons import load_icon, claude_icon_pixmap
 import core.storyboard as sb_api
@@ -2634,12 +2634,6 @@ class PageStoryboard(QWidget):
         lay.addWidget(btn_new_ver)
         btn_new_ver.setVisible(False)
 
-        # ── Forme du prompt (essai) — parité Cinéma ───────────────────────────
-        # Comparer fiche technique et phrase de réalisateur sur le MÊME plan.
-        # Le réglage vit dans le projet et n'affecte que la FORME du texte.
-        self._prompt_form = PromptFormSelector()
-        lay.addWidget(self._prompt_form)
-
         # ── Séparateur + versions snapshot ────────────────────────────────────
         _vs = QFrame()
         _vs.setFixedSize(1, 24)
@@ -2706,6 +2700,14 @@ class PageStoryboard(QWidget):
         self._btn_del_snap.clicked.connect(self._on_delete_snapshot)
         lay.addWidget(self._btn_del_snap)
         self._btn_del_snap.setVisible(False)
+
+        # ── Menu « Prompt » (parité Cinéma, 2026-10-04) — à gauche du nombre de
+        # plans. Le Live n'affiche pas de prompt final dans sa colonne : le menu
+        # ne porte que la FORME (essai fiche technique / phrase de réalisateur),
+        # réglage qui vit dans le projet et n'affecte que la forme du texte.
+        self._prompt_menu = PromptMenu(with_view=False)
+        self._prompt_form = self._prompt_menu
+        lay.addWidget(self._prompt_menu)
 
         self._dur_lbl = QLabel("")
         self._dur_lbl.setStyleSheet(

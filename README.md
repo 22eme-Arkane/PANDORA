@@ -18,15 +18,62 @@
 
 ## Download
 
-**[⬇ Download PANDORA v2.4.2 for Windows](https://github.com/22eme-Arkane/PANDORA/releases/download/v2.4.2/PANDORA_Setup_2.4.2.exe)**
+**[⬇ Download PANDORA v2.5.0 for Windows](https://github.com/22eme-Arkane/PANDORA/releases/download/v2.5.0/PANDORA_Setup_2.5.0.exe)**
 
-**[⬇ Download PANDORA v2.4.2 for macOS](https://github.com/22eme-Arkane/PANDORA/releases/download/v2.4.2/PANDORA_2.4.2.dmg)** *(Apple Silicon — see [Installation](#installation) for the first launch)*
+**[⬇ Download PANDORA v2.5.0 for macOS](https://github.com/22eme-Arkane/PANDORA/releases/download/v2.5.0/PANDORA_2.5.0.dmg)** *(Apple Silicon — see [Installation](#installation) for the first launch)*
 
 All versions: [Releases](../../releases)
 
 🌐 **Official 22eme ARKANE website: [22eme-arkane.com](https://22eme-arkane.com)**
 
 ---
+
+## What's new in v2.5.0
+
+**Seedance up to half the price, with the distributors you choose — and a
+cleaner Settings page.**
+
+- **Low-cost video distributors: BytePlus, Runware, PiAPI (now with Seedance
+  2.5).** The engine is the same everywhere (ByteDance's Seedance), only the
+  price changes: a 30-second Seedance 2.5 shot in 720p costs about $14.19 on
+  fal.ai, $6.93 excl. VAT on BytePlus (ByteDance's official seller), $6.90 on
+  Runware and $10.50 on PiAPI. Each distributor gets its key, a free key test
+  and a « Get a key » link.
+- **A priority order with automatic fallback.** In Settings → Video
+  distribution you tick the distributors you want and rank them. For every
+  shot PANDORA takes the first one able to do it — engine, resolution, sound
+  off, start/end frame, receiving your reference images — otherwise it moves
+  to the next one and the progress says why (« PiAPI cannot receive files →
+  BytePlus »). A fal.ai account locked for lack of balance is skipped. Single
+  mode keeps only the first one, with no fallback.
+- **Your images no longer depend on fal.ai.** PANDORA used to upload every
+  reference image (characters, set, mood) to fal's storage, even for another
+  distributor: with a locked fal account, the mood never reached PiAPI and the
+  shot was generated — and billed — without it. Files now travel through each
+  distributor's own channel (inside the request for BytePlus and Runware,
+  PiAPI's upload otherwise), and a shot whose images cannot be sent stops
+  before the paid call, with the real reason.
+- **Distributor menu in the Studio**, next to the generation engine: the price
+  of the current shot at each distributor; picking one puts it first. The
+  Resolution menu shows the price of the distributor that will serve it, and
+  options no enabled distributor can do are greyed with the reason.
+- **Settings reorganised** into six collapsible sections — General, AI
+  assistant, API keys, Video distribution, DaVinci Resolve Studio, Advanced
+  settings (local MiniMax H3, ComfyUI, external modules) — each header showing
+  its state at a glance.
+- **Onboarding**: a new optional step to add a low-cost distributor key, with
+  what each one is for and what it costs. The fal.ai credits step no longer
+  promises « 20 to 50 videos for $10 » (a 10-second Seedance 2.0 video in
+  720p costs about $3 on fal.ai).
+- **Storyboard: one « Prompt » menu** next to the shot count replaces the
+  structured / final switch and the prompt form selector.
+- **Recompose on demand.** The Mood window and the Studio get a « Recompose
+  the prompt » button and an « automatic » box, remembered once and for all:
+  untick it and no AI rewrite runs when a shot is shown; an already composed
+  prompt is still displayed.
+- Real cost logged when the distributor returns it (BytePlus tokens, Runware
+  cost); the project cost uses the price of the distributor that actually
+  served the shot.
 
 ## What's new in v2.4.2
 
@@ -641,7 +688,7 @@ per-engine mood prompts, same fixes.
 
 ### Windows
 
-1. Download `PANDORA_Setup_2.4.2.exe` from the link above and run it
+1. Download `PANDORA_Setup_2.5.0.exe` from the link above and run it
 2. If Windows shows *"Windows protected your PC"* (SmartScreen), click
    **More info** then **Run anyway** — the app is not code-signed yet
    (certificate in progress), this is the Windows equivalent of the macOS
@@ -652,7 +699,7 @@ per-engine mood prompts, same fixes.
 
 ### macOS
 
-1. Download `PANDORA_2.4.2.dmg` from the link above
+1. Download `PANDORA_2.5.0.dmg` from the link above
 2. Open the DMG and drag **PANDORA** into **Applications** (as usual)
 3. **First launch** — macOS will claim that *"PANDORA is damaged and can't be
    opened"*. **This is normal, the app is not damaged** — macOS blocks apps

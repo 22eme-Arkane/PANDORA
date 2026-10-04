@@ -8,8 +8,7 @@ from PyQt6.QtWidgets import (
 from PyQt6.QtCore import Qt, pyqtSignal, QObject, QTimer
 from PyQt6.QtGui import QPixmap
 from ui.styles import CP, COMBO_ARROW_URL as _ARROW_URL
-from ui.prompt_form_selector import PromptFormSelector
-from ui.prompt_view_toggle import PromptViewToggle
+from ui.prompt_menu import PromptMenu
 
 
 def _prompt_cell_text(shot: dict) -> str:
@@ -2664,15 +2663,6 @@ class PageStoryboard(QWidget):
         lay.addWidget(btn_new_ver)
         btn_new_ver.setVisible(False)
 
-        # ── Vue de la colonne Prompt (EN PREMIER — retour Matthieu 2026-08-11) ─
-        # « Structuré » = votre document de travail (blocs français, éditable).
-        # « Final » = le texte réellement envoyé au moteur. On choisit la VUE
-        # d'abord ; la forme, réglage d'essai qui n'agit qu'en vue finale,
-        # vient après elle dans la barre.
-        self._prompt_view_toggle = PromptViewToggle()
-        self._prompt_view_toggle.changed.connect(self._on_prompt_view_changed)
-        lay.addWidget(self._prompt_view_toggle)
-
         # ── Composer les finals d'un storyboard EXISTANT ──────────────────────
         # Les storyboards antérieurs à l'architecture « à l'endroit » n'ont pas
         # de final stocké : la vue finale n'affichait qu'un avertissement SANS
@@ -2691,14 +2681,6 @@ class PageStoryboard(QWidget):
         )
         self._btn_compose_finals.clicked.connect(self._on_compose_finals)
         lay.addWidget(self._btn_compose_finals)
-
-        # ── Forme du prompt (essai) ───────────────────────────────────────────
-        # Comparer fiche technique et phrase de réalisateur sur le MÊME plan.
-        # N'agit qu'en vue finale → désactivée en vue structurée (l'infobulle
-        # dit pourquoi), placée APRÈS la bascule qui l'active.
-        self._prompt_form = PromptFormSelector()
-        lay.addWidget(self._prompt_form)
-        self._sync_prompt_form_enabled()
 
         # ── Séparateur + versions snapshot ────────────────────────────────────
         _vs = QFrame()
@@ -2766,6 +2748,20 @@ class PageStoryboard(QWidget):
         self._btn_del_snap.clicked.connect(self._on_delete_snapshot)
         lay.addWidget(self._btn_del_snap)
         self._btn_del_snap.setVisible(False)
+
+        # ── Menu « Prompt » (demande Matthieu 2026-10-04) ─────────────────────
+        # « Prompt structuré », « Prompt final » et « Forme du prompt » faisaient
+        # trois éléments pour un réglage : un seul menu, comme « Action », À
+        # GAUCHE du nombre de plans. La vue se choisit d'abord ; la forme n'agit
+        # qu'en vue finale (grisée sinon, la raison est dans le menu). Les
+        # anciens noms d'attribut désignent le menu : un seul état, un seul
+        # endroit où le lire.
+        self._prompt_menu = PromptMenu()
+        self._prompt_menu.changed.connect(self._on_prompt_view_changed)
+        self._prompt_view_toggle = self._prompt_menu
+        self._prompt_form = self._prompt_menu
+        lay.addWidget(self._prompt_menu)
+        self._sync_prompt_form_enabled()
 
         self._dur_lbl = QLabel("")
         self._dur_lbl.setStyleSheet(
@@ -3068,8 +3064,7 @@ class PageStoryboard(QWidget):
         try:
             from core import final_prompt as _fp
             _final = _fp.current_view() == "final"
-            self._prompt_form.setEnabled(_final)
-            self._prompt_form.setToolTip("" if _final else translate(
+            self._prompt_menu.set_form_enabled(_final, translate(
                 "La forme ne concerne que le prompt final — passez en « Prompt "
                 "final » pour la changer."))
         except Exception:

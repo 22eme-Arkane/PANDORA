@@ -166,19 +166,110 @@ _PROVIDER_SERVICES: dict[str, set] = {
 }
 
 
+# ── Ordre de priorité (04/10/2026) ───────────────────────────────────────────
+# Questions de Matthieu : « si plusieurs API sont référencées, quel moteur est
+# utilisé en premier ? Peut-on sélectionner les distributeurs, les classer ?
+# Si PiAPI est en premier mais que j'utilise des images de référence, est-ce
+# que ça bascule automatiquement ? » Réponse, désormais : un ORDRE réglable.
+#   video_provider_order : les quatre distributeurs, du premier au dernier ;
+#   video_providers_off  : ceux que l'utilisateur a décochés ;
+#   video_provider       : le premier activé (lu par l'ancien code).
+# Pour chaque plan, route() prend le premier distributeur activé qui SAIT le
+# servir (clé, moteur, mode, résolution, son, réception des fichiers) et dit
+# pourquoi les précédents ont été sautés. En mono : le premier, seul.
+
+def provider_order(cfg: dict | None = None) -> list[str]:
+    """Les quatre distributeurs dans l'ordre de priorité (activés ou non)."""
+    cfg = load_config() if cfg is None else cfg
+    raw = cfg.get("video_provider_order")
+    if isinstance(raw, list) and raw:
+        order = [p for p in dict.fromkeys(str(x).strip().lower() for x in raw)
+                 if p in PROVIDERS]
+    else:
+        # Config d'avant le 04/10/2026 : le distributeur choisi d'abord, puis
+        # les autres, fal en dernier recours — ceux sans clé sont sautés de
+        # toute façon. Un utilisateur resté sur fal le garde en tête.
+        chosen = (cfg.get("video_provider") or _DEFAULT).strip().lower()
+        chosen = chosen if chosen in PROVIDERS else _DEFAULT
+        order = [chosen] + [p for p in ("byteplus", "runware", "piapi") if p != chosen]
+    for p in ORDER:
+        if p not in order:
+            order.append(p)
+    return order
+
+
+def enabled_order(cfg: dict | None = None) -> list[str]:
+    """Distributeurs ACTIVÉS dans l'ordre de priorité ; en mono, le premier seul."""
+    cfg = load_config() if cfg is None else cfg
+    off = {str(x).strip().lower() for x in (cfg.get("video_providers_off") or [])}
+    order = [p for p in provider_order(cfg) if p not in off] or [_DEFAULT]
+    if get_distribution_mode(cfg) == "mono":
+        return order[:1]
+    return order
+
+
+def promote_in_config(cfg: dict, provider_id: str) -> dict:
+    """Met ce distributeur EN TÊTE de l'ordre et l'active (choix fait dans le
+    Studio). Modifie et rend `cfg` ; l'appelant enregistre."""
+    order = provider_order(cfg)
+    cfg["video_provider_order"] = [provider_id] + [p for p in order if p != provider_id]
+    cfg["video_providers_off"] = [p for p in (cfg.get("video_providers_off") or [])
+                                  if p != provider_id]
+    cfg["video_provider"] = provider_id
+    return cfg
+
+
+def _key_of(cfg: dict, provider_id: str) -> str:
+    meta = PROVIDERS.get(provider_id) or {}
+    return (cfg.get(meta.get("key_cfg", "")) or "").strip()
+
+
+def route(engine: str, mode: str = "", resolution: str = "", audio: bool = True,
+          needs=(), can_receive=None, cfg: dict | None = None) -> tuple[str, list[str]]:
+    """Le premier distributeur ACTIVÉ capable de servir cette demande, et la
+    raison pour laquelle chacun des précédents a été sauté.
+
+    `needs` : fichiers à envoyer ("images", "video", "audio") ;
+    `can_receive(pid, needs)` → (True | False | None, raison) : sonde de ce que
+    le distributeur peut recevoir (api/distrib_probe) — None = on ne sait pas,
+    on essaie (l'envoi s'arrêtera avant de payer si les fichiers ne passent
+    pas). Rend ("", raisons) si personne ne peut."""
+    cfg = load_config() if cfg is None else cfg
+    skipped: list[str] = []
+    for pid in enabled_order(cfg):
+        name = provider_short(pid)
+        if not _key_of(cfg, pid):
+            skipped.append(f"{name} : clé manquante")
+            continue
+        ok, why = provider_supports(pid, engine, mode, resolution, audio)
+        if not ok:
+            skipped.append(why)
+            continue
+        if can_receive is not None:
+            try:
+                okr, whyr = can_receive(pid, tuple(needs or ()))
+            except Exception:
+                okr, whyr = None, ""
+            if okr is False:
+                skipped.append(f"{name} : {whyr}")
+                continue
+        return pid, skipped
+    return "", skipped
+
+
 # ── Sélection ─────────────────────────────────────────────────────────────────
 
 def get_video_provider() -> str:
-    """Distributeur vidéo CHOISI dans la config ("fal" par défaut)."""
-    pid = (load_config().get("video_provider") or _DEFAULT).strip().lower()
-    return pid if pid in PROVIDERS else _DEFAULT
+    """Distributeur vidéo EN TÊTE de l'ordre ("fal" par défaut)."""
+    return enabled_order()[0]
 
 
-def get_distribution_mode() -> str:
-    """"multi" (défaut) : fal.ai + alternatifs, repli automatique.
-    "mono" : le distributeur choisi est le SEUL utilisé — les services qu'il
-    ne couvre pas sont INDISPONIBLES (grisés) au lieu de replier sur fal."""
-    m = (load_config().get("distribution_mode") or "multi").strip().lower()
+def get_distribution_mode(cfg: dict | None = None) -> str:
+    """"multi" (défaut) : les distributeurs activés, dans l'ordre, avec bascule
+    automatique sur le suivant. "mono" : le premier est le SEUL utilisé — ce
+    qu'il ne sait pas faire est INDISPONIBLE (grisé), sans bascule."""
+    cfg = load_config() if cfg is None else cfg
+    m = (cfg.get("distribution_mode") or "multi").strip().lower()
     return m if m in ("multi", "mono") else "multi"
 
 
@@ -234,52 +325,46 @@ def _rate(provider_id: str, engine: str, resolution: str) -> float | None:
     return rates.get(_norm_res(resolution))
 
 
+def provider_rate(provider_id: str, engine: str, resolution: str) -> float | None:
+    """$/s chez un distributeur ALTERNATIF pour (moteur, résolution), ou None."""
+    return _rate(provider_id, engine, resolution)
+
+
 def active_video_provider(engine: str = "seedance-2.0", mode: str = "",
                           resolution: str = "", audio: bool = True) -> str:
-    """Distributeur EFFECTIF pour cette demande.
+    """Distributeur EFFECTIF pour cette demande (sans sonde réseau).
 
-    Multi (défaut) : le choix s'il couvre la demande ET que sa clé est
-    renseignée ; sinon le moins cher des autres distributeurs configurés qui
-    la couvre ; sinon fal. Mono : TOUJOURS le choix — le blocage précis
-    (non couvert, clé absente) est porté par mono_blocked_engine(), jamais
-    par un repli silencieux."""
-    pid = get_video_provider()
-    if pid == "fal":
-        return "fal"
-    if get_distribution_mode() == "mono":
+    Multi (défaut) : le premier distributeur ACTIVÉ de l'ordre qui a sa clé
+    et sait faire la demande ; fal si personne. Mono : TOUJOURS le premier —
+    le blocage précis (non couvert, clé absente) est porté par
+    mono_blocked_engine(), jamais par une bascule silencieuse."""
+    cfg = load_config()
+    pid, _skipped = route(engine, mode, resolution, audio, cfg=cfg)
+    if pid:
         return pid
-    if provider_key(pid) and provider_supports(pid, engine, mode, resolution, audio)[0]:
-        return pid
-    best, best_rate = "", None
-    for other in ORDER:
-        if other in ("fal", pid) or not provider_key(other):
-            continue
-        if not provider_supports(other, engine, mode, resolution, audio)[0]:
-            continue
-        r = _rate(other, engine, resolution)
-        if best_rate is None or (r is not None and r < best_rate):
-            best, best_rate = other, r
-    return best or "fal"
+    if get_distribution_mode(cfg) == "mono":
+        return enabled_order(cfg)[0]
+    return "fal"
 
 
 def mono_blocked_engine(engine: str, mode: str = "", resolution: str = "",
                         audio: bool = True) -> str:
     """En mode MONO : message d'erreur si cette demande ne peut pas être servie
-    par le distributeur choisi (non couverte, ou clé manquante) ; "" sinon.
-    En multi : jamais bloqué (repli). Appelé par api/real.py AVANT tout envoi."""
-    if get_distribution_mode() != "mono":
+    par le distributeur en tête (non couverte, ou clé manquante) ; "" sinon.
+    En multi : jamais bloqué ici (bascule). Appelé par api/real.py AVANT tout envoi."""
+    cfg = load_config()
+    if get_distribution_mode(cfg) != "mono":
         return ""
-    pid = get_video_provider()
-    if pid == "fal":
-        return ""
+    pid = enabled_order(cfg)[0]
     ok, why = provider_supports(pid, engine, mode, resolution, audio)
     if not ok:
         return (f"Moteur « {engine} » indisponible chez {provider_label(pid)} "
                 f"(mode mono-distributeur) : {why}. Change de réglage, ou repasse en "
-                f"« Multi-distributeurs » dans Paramètres → avancés.")
-    if not provider_key(pid):
+                f"« Multi-distributeurs » dans Paramètres → Distribution des vidéos.")
+    if pid != "fal" and not _key_of(cfg, pid):
         return (f"Clé {provider_label(pid)} manquante — renseigne-la dans "
-                f"Paramètres → avancés, ou repasse en « Multi-distributeurs ».")
+                f"Paramètres → Distribution des vidéos, ou repasse en "
+                f"« Multi-distributeurs ».")
     return ""
 
 
@@ -288,14 +373,15 @@ def real_generation_possible(engine: str = "seedance-2.0") -> bool:
 
     Jusqu'au 04/10/2026, seule la clé fal comptait : un utilisateur avec une
     clé BytePlus mais sans fal restait en simulation. En mono, on part en réel
-    même sans clé, pour que l'erreur « clé manquante » s'affiche au lieu d'une
-    fausse vidéo de simulation."""
-    if (load_config().get("api_key") or "").strip():
+    même sans clé du distributeur en tête, pour que l'erreur « clé manquante »
+    s'affiche au lieu d'une fausse vidéo de simulation."""
+    cfg = load_config()
+    if (cfg.get("api_key") or "").strip():
         return True
-    pid = active_video_provider(engine)
-    if pid == "fal":
-        return False
-    return bool(provider_key(pid)) or get_distribution_mode() == "mono"
+    order = enabled_order(cfg)
+    if get_distribution_mode(cfg) == "mono":
+        return order[0] != "fal"
+    return any(_key_of(cfg, p) for p in order if p != "fal")
 
 
 def provider_key(provider_id: str) -> str:

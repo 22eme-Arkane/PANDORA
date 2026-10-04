@@ -63,6 +63,16 @@ def _separator() -> QFrame:
     return sep
 
 
+#: Sections ouvertes au premier affichage (parité Cinéma, 04/10/2026).
+_OPEN_BY_DEFAULT = ("Général", "Clés API", "Distribution des vidéos")
+
+
+def _section(title: str, summary: str = ""):
+    """Section REPLIABLE de la page (parité Cinéma, ui/settings_section)."""
+    from ui.settings_section import SettingsSection
+    return SettingsSection(title, summary, title in _OPEN_BY_DEFAULT, f"live:{title}")
+
+
 class PageLiveSettings(QScrollArea):
     """Page Paramètres — connexion Resolume + clés API Live.
 
@@ -96,12 +106,23 @@ class PageLiveSettings(QScrollArea):
         lay.setSpacing(0)
 
         # ── Titre ──────────────────────────────────────────────────────────────
+        _head = QHBoxLayout()
+        _head.setSpacing(10)
         title = QLabel("Paramètres Live")
         title.setStyleSheet(
             f"color:{CP['text_primary']};font-size:22px;font-weight:800;"
             f"background:transparent;border:none;"
         )
-        lay.addWidget(title)
+        _head.addWidget(title)
+        _head.addStretch()
+        # ── Sauvegarde AUTOMATIQUE (plus de bouton — tout changement est
+        #    enregistré, comme le Cinéma) — à droite du titre, visible d'emblée.
+        self._autosave_lbl = QLabel("✓  Sauvegarde automatique — chaque modification est enregistrée.")
+        self._autosave_lbl.setStyleSheet(
+            f"color:{CP['text_dim']};font-size:11px;font-style:italic;background:transparent;"
+        )
+        _head.addWidget(self._autosave_lbl)
+        lay.addLayout(_head)
         lay.addSpacing(4)
 
         sub = QLabel("Configuration des clés API du module Live.")
@@ -110,11 +131,29 @@ class PageLiveSettings(QScrollArea):
             f"background:transparent;border:none;"
         )
         lay.addWidget(sub)
-        lay.addSpacing(32)
+        lay.addSpacing(20)
+
+        # ── Sections REPLIABLES (parité Cinéma, demande Matthieu 2026-10-04 :
+        # « des menus déroulants pour chaque partie… regrouper dans des
+        # paramètres avancés »). Chaque bloc ci-dessous se range dans SA section.
+        self._sec_general = _section(
+            "Général", "thème · double écran · manuel · dossier des projets")
+        self._sec_ai = _section("Assistant IA")
+        self._sec_keys = _section("Clés API")
+        self._sec_distrib = _section("Distribution des vidéos")
+        self._sec_adv = _section("Paramètres avancés",
+                                 "MiniMax H3 en local · ComfyUI · modules externes")
+        for _sec in (self._sec_general, self._sec_ai, self._sec_keys,
+                     self._sec_distrib, self._sec_adv):
+            lay.addWidget(_sec)
+            lay.addSpacing(12)
+        G = self._sec_general.body      # Général
+        AI = self._sec_ai.body          # Assistant IA
+        K = self._sec_keys.body         # Clés API
+        A = self._sec_adv.body          # Paramètres avancés
 
         # ── Affichage : thème + 2ᵉ fenêtre / 2 écrans (parité Cinéma) ───────────
-        lay.addWidget(_section_title("AFFICHAGE"))
-        lay.addSpacing(10)
+        G.addWidget(_section_title("AFFICHAGE"))
 
         # Thème Sombre / Clair — même clé config « theme » que le Cinéma,
         # appliqué au prochain démarrage (porté le 2026-07-14, parité Paramètres).
@@ -163,13 +202,11 @@ class PageLiveSettings(QScrollArea):
         _theme_row.addWidget(self._btn_dark)
         _theme_row.addWidget(self._btn_light)
         _theme_row.addStretch()
-        lay.addLayout(_theme_row)
+        G.addLayout(_theme_row)
         _lbl_theme = QLabel("Le changement de thème est appliqué au prochain démarrage.")
         _lbl_theme.setStyleSheet(
             f"color:{CP['text_dim']};font-size:10px;background:transparent;border:none;")
-        lay.addSpacing(6)
-        lay.addWidget(_lbl_theme)
-        lay.addSpacing(12)
+        G.addWidget(_lbl_theme)
 
         self._btn_second_window = QPushButton("🖥  Ouvrir une 2ᵉ fenêtre (2 écrans)")
         self._btn_second_window.setFixedHeight(36)
@@ -181,7 +218,11 @@ class PageLiveSettings(QScrollArea):
             f"QPushButton:hover{{background:{CP['bg3']};color:{CP['text_primary']};}}"
         )
         self._btn_second_window.clicked.connect(self._open_second_window)
-        lay.addWidget(self._btn_second_window)
+        # 2ᵉ fenêtre et Manuel sur la MÊME rangée (parité Cinéma, 04/10/2026).
+        _screen_row = QHBoxLayout()
+        _screen_row.setSpacing(8)
+        _screen_row.addWidget(self._btn_second_window)
+        G.addLayout(_screen_row)
         _scr_note = QLabel(
             "Ouvre une copie de PANDORA | Live sur le même projet, à déplacer sur un "
             "2ᵉ écran (ex. contrôleur d'un côté, mapping/preview de l'autre). Navigation "
@@ -190,13 +231,11 @@ class PageLiveSettings(QScrollArea):
         _scr_note.setWordWrap(True)
         _scr_note.setStyleSheet(
             f"color:{CP['text_dim']};font-size:10px;background:transparent;border:none;")
-        lay.addSpacing(6)
-        lay.addWidget(_scr_note)
-        lay.addSpacing(12)
+        G.addWidget(_scr_note)
 
         # ── Manuel d'utilisation — retiré de la topbar (2026-07-23), il vit
         # désormais ici comme côté Cinéma ────────────────────────────────────
-        _manual_row = QHBoxLayout()
+        _manual_row = _screen_row
         self._btn_manual = QPushButton("☰  Manuel d'utilisation")
         self._btn_manual.setFixedHeight(36)
         self._btn_manual.setCursor(Qt.CursorShape.PointingHandCursor)
@@ -209,50 +248,41 @@ class PageLiveSettings(QScrollArea):
         self._btn_manual.clicked.connect(self.manual_requested)
         _manual_row.addWidget(self._btn_manual)
         _manual_row.addStretch()
-        lay.addLayout(_manual_row)
-        lay.addSpacing(28)
 
         # ── Dossier des projets (parité Cinéma) ─────────────────────────────────
         # MÊME clé de config et MÊME dossier que le Cinéma : un projet porte son
         # mode dans son propre fichier, la page de démarrage filtre là-dessus.
         # Deux dossiers séparés obligeraient à régler deux fois la même chose.
-        lay.addWidget(_section_title("DOSSIER DES PROJETS"))
-        lay.addSpacing(10)
+        G.addWidget(_section_title("DOSSIER DES PROJETS"))
         self._projects_location = ProjectsLocationRow()
-        lay.addWidget(self._projects_location)
-        lay.addSpacing(28)
+        G.addWidget(self._projects_location)
 
+        # ── PARAMÈTRES AVANCÉS : H3 local, ComfyUI, modules externes (regroupés
+        # et repliés depuis le 04/10/2026, parité Cinéma) ─────────────────────
         # ── MiniMax H3 en local (parité Cinéma, 13/09/2026) ────────────────────
         # Même composant neutre, même clé de config h3_local_url ; la rangée
         # s'enregistre elle-même.
-        lay.addWidget(_section_title("MINIMAX H3 EN LOCAL"))
-        lay.addSpacing(10)
+        A.addWidget(_section_title("MINIMAX H3 EN LOCAL"))
         self._h3_local = H3LocalRow(initial_url=load_config().get("h3_local_url", ""))
-        lay.addWidget(self._h3_local)
-        lay.addSpacing(28)
+        A.addWidget(self._h3_local)
+        A.addWidget(_separator())
 
         # ── ComfyUI (parité Cinéma, 13/09/2026) ─────────────────────────────────
-        lay.addWidget(_section_title("COMFYUI"))
-        lay.addSpacing(10)
+        A.addWidget(_section_title("COMFYUI"))
         self._comfy = ComfyRow()
-        lay.addWidget(self._comfy)
-        lay.addSpacing(28)
+        A.addWidget(self._comfy)
+        A.addWidget(_separator())
 
         # ── Modules externes (24/09/2026, parité Cinéma) — état et installation
         # de ce que PANDORA utilise sans l'embarquer : ComfyUI, H3 local, Ollama
         from ui.externals_section import ExternalsSection
-        _ext_title = QLabel(translate("Modules externes"))
-        _ext_title.setStyleSheet(
-            f"color:{CP['accent']};font-size:11px;font-weight:800;letter-spacing:1px;background:transparent;")
-        lay.addWidget(_ext_title)
+        A.addWidget(_section_title("MODULES EXTERNES"))
         self._externals = ExternalsSection()
-        lay.addWidget(self._externals)
-        lay.addSpacing(28)
+        A.addWidget(self._externals)
 
         # ── Section Clés API ────────────────────────────────────────────────────
         _api_head = QHBoxLayout()
         _api_head.setSpacing(10)
-        _api_head.addWidget(_section_title("CLÉS API"))
         _api_head.addStretch()
         _btn_api_help = QPushButton("ℹ  Comment obtenir les clés API")
         _btn_api_help.setFixedHeight(28)
@@ -265,17 +295,11 @@ class PageLiveSettings(QScrollArea):
         )
         _btn_api_help.clicked.connect(self._show_api_help)
         _api_head.addWidget(_btn_api_help)
-        lay.addLayout(_api_head)
-        lay.addSpacing(14)
+        K.addLayout(_api_head)
 
-        api_card = QFrame()
-        api_card.setStyleSheet(
-            f"QFrame{{background:{CP['bg2']};border:1px solid {CP['border']};"
-            f"border-radius:12px;}}"
-        )
-        ac = QVBoxLayout(api_card)
-        ac.setContentsMargins(24, 20, 24, 20)
-        ac.setSpacing(14)
+        # La carte « Clés API » d'avant le 04/10/2026 est devenue la section
+        # repliable elle-même : son contenu s'y range directement.
+        ac = K
 
         api_info = QLabel(
             "Ces clés sont partagées avec PANDORA | Cinéma (mêmes clés, même config).\n"
@@ -287,8 +311,6 @@ class PageLiveSettings(QScrollArea):
             f"background:transparent;border:none;"
         )
         ac.addWidget(api_info)
-
-        ac.addWidget(_separator())
 
         def _key_label(text: str) -> QLabel:
             lbl = _label(text)
@@ -370,7 +392,7 @@ class PageLiveSettings(QScrollArea):
         from ui.ai_model_selector import populate_primary
         populate_primary(self._ai_combo, load_config())
         ai_row.addWidget(self._ai_combo, 1)
-        ac.addLayout(ai_row)
+        AI.addLayout(ai_row)
 
         self._btn_refresh_ai_models = QPushButton("Actualiser les modèles accessibles")
         self._btn_refresh_ai_models.setCursor(Qt.CursorShape.PointingHandCursor)
@@ -390,7 +412,7 @@ class PageLiveSettings(QScrollArea):
         # ── Clés API facultatives (repliable — MÊME section que le Cinéma) ────
         self._opt_keys_open = False
         self._btn_opt_keys = QPushButton(
-            "▶  Clés API facultatives  (PiAPI, OpenAI, Mistral…)")
+            "▶  Clés API facultatives  (OpenAI, Mistral, Kimi, GLM…)")
         self._btn_opt_keys.setCursor(Qt.CursorShape.PointingHandCursor)
         self._btn_opt_keys.setStyleSheet(
             f"QPushButton{{background:transparent;color:{CP['accent2']};"
@@ -406,17 +428,8 @@ class PageLiveSettings(QScrollArea):
         opt_lay = QVBoxLayout(self._opt_keys_box)
         opt_lay.setContentsMargins(2, 2, 2, 4)
         opt_lay.setSpacing(14)
-
-        # PiAPI — distributeur vidéo low cost, EN PREMIER (parité Cinéma)
-        piapi_row = QHBoxLayout()
-        piapi_row.setSpacing(12)
-        piapi_row.addWidget(_key_label("Clé PiAPI (distributeur) :"))
-        self._piapi_input = _input("Clé PiAPI (X-API-Key)", 0)
-        self._piapi_input.setEchoMode(QLineEdit.EchoMode.Password)
-        piapi_row.addWidget(self._piapi_input, 1)
-        piapi_row.addWidget(_test_btn("✓  Tester API PiAPI", self.test_piapi_connection))
-        piapi_row.addWidget(_link_btn("⇗  Clés", "https://piapi.ai/workspace"))
-        opt_lay.addLayout(piapi_row)
+        # (La clé PiAPI est passée dans « Distribution des vidéos » le 04/10/2026,
+        # avec BytePlus et Runware — parité Cinéma.)
 
         # OpenAI — clé visible quand le moteur OpenAI (ou « Choix
         # personnalisé ») est sélectionné ; même clé de config que Cinéma.
@@ -548,11 +561,11 @@ class PageLiveSettings(QScrollArea):
         opt_lay.addWidget(self._local_panel)
         ac.addWidget(self._opt_keys_box)
 
-        # ── Paramètres avancés : moteur IA PAR TÂCHE (repliable, parité Cinéma) ──
+        # ── Moteur IA PAR TÂCHE (repliable, section Assistant IA, parité Cinéma) ──
         # Le Live UTILISE le routage ai_task_engines (task=) mais ne pouvait pas le
         # RÉGLER — il fallait passer par l'édition Cinéma (constat 2026-07-14).
         self._adv_open = False
-        self._btn_adv = QPushButton("▶  Paramètres avancés — moteur IA par tâche")
+        self._btn_adv = QPushButton("▶  Moteur IA par tâche")
         self._btn_adv.setCursor(Qt.CursorShape.PointingHandCursor)
         self._btn_adv.setStyleSheet(
             f"QPushButton{{background:transparent;color:{CP['accent2']};"
@@ -560,7 +573,7 @@ class PageLiveSettings(QScrollArea):
             f"QPushButton:hover{{color:#9d8fff;}}"
         )
         self._btn_adv.clicked.connect(self._toggle_advanced)
-        ac.addWidget(self._btn_adv)
+        AI.addWidget(self._btn_adv)
 
         self._adv_box = QWidget()
         self._adv_box.setVisible(False)
@@ -608,85 +621,21 @@ class PageLiveSettings(QScrollArea):
             self._task_combos[task_key] = combo
             row.addWidget(combo)
             adv_lay.addLayout(row)
+        AI.addWidget(self._adv_box)
 
-        # ── Distribution des générations VIDÉO (parité Cinéma) ────────────────
-        adv_lay.addSpacing(12)
-        _dist_title = QLabel("Distribution des générations vidéo")
-        _dist_title.setStyleSheet(
-            f"color:{CP['text_secondary']};font-size:11px;font-weight:700;"
-            f"background:transparent;"
-        )
-        adv_lay.addWidget(_dist_title)
-        _dist_hint = QLabel(
-            "fal.ai reste le distributeur par défaut et le repli automatique. "
-            "Un distributeur low cost peut servir les mêmes générations Seedance 2.0 "
-            "moins cher — les prix affichés dans le Studio s'adaptent. "
-            "⚠ Les images de référence transitent toujours par fal.ai (clé fal "
-            "requise dès qu'un plan envoie des images)."
-        )
-        _dist_hint.setWordWrap(True)
-        _dist_hint.setStyleSheet(
-            f"color:{CP['text_dim']};font-size:10px;background:transparent;")
-        adv_lay.addWidget(_dist_hint)
-
-        from core.media_provider import PROVIDERS as _MEDIA_PROVIDERS
-        _combo_style = (
-            f"QComboBox{{background:{CP['bg2']};border:1px solid {CP['border']};"
-            f"border-radius:6px;color:{CP['text_primary']};font-size:11px;padding:0 8px;}}"
-            f"QComboBox::drop-down{{border:none;width:20px;}}"
-            f"QComboBox QAbstractItemView{{background:{CP['bg3']};"
-            f"border:1px solid {CP['border_bright']};color:{CP['text_primary']};"
-            f"selection-background-color:{CP['accent_dim']};}}"
-        )
-        mode_row = QHBoxLayout()
-        mode_row.setSpacing(8)
-        _mode_lbl = QLabel("Mode de distribution")
-        _mode_lbl.setStyleSheet(
-            f"color:{CP['text_secondary']};font-size:11px;background:transparent;")
-        mode_row.addWidget(_mode_lbl, 1)
-        self.distribution_mode_combo = QComboBox()
-        self.distribution_mode_combo.setFixedHeight(28)
-        self.distribution_mode_combo.setMinimumWidth(160)
-        self.distribution_mode_combo.setStyleSheet(_combo_style)
-        self.distribution_mode_combo.addItem(
-            "Multi-distributeurs (recommandé)", "multi")
-        self.distribution_mode_combo.addItem(
-            "Mono-distributeur (uniquement celui choisi)", "mono")
-        mode_row.addWidget(self.distribution_mode_combo)
-        adv_lay.addLayout(mode_row)
-        _mode_hint = QLabel(
-            "Mono-distributeur : les services que le distributeur choisi ne couvre "
-            "pas (Sound Design, Musique IA, Image IA, Upscaling…) sont grisés dans "
-            "le Studio au lieu de repasser par fal.ai."
-        )
-        _mode_hint.setWordWrap(True)
-        _mode_hint.setStyleSheet(
-            f"color:{CP['text_dim']};font-size:10px;background:transparent;")
-        adv_lay.addWidget(_mode_hint)
-
-        prov_row = QHBoxLayout()
-        prov_row.setSpacing(8)
-        _prov_lbl = QLabel("Distributeur vidéo")
-        _prov_lbl.setStyleSheet(
-            f"color:{CP['text_secondary']};font-size:11px;background:transparent;")
-        prov_row.addWidget(_prov_lbl, 1)
-        self.video_provider_combo = QComboBox()
-        self.video_provider_combo.setFixedHeight(28)
-        self.video_provider_combo.setMinimumWidth(160)
-        self.video_provider_combo.setStyleSheet(_combo_style)
-        for _pid, _pmeta in _MEDIA_PROVIDERS.items():
-            self.video_provider_combo.addItem(_pmeta["label"], _pid)
-        prov_row.addWidget(self.video_provider_combo)
-        adv_lay.addLayout(prov_row)
-
-        _piapi_hint = QLabel(
-            "La clé PiAPI se renseigne dans « Clés API facultatives » ci-dessus."
-        )
-        _piapi_hint.setWordWrap(True)
-        _piapi_hint.setStyleSheet(
-            f"color:{CP['text_dim']};font-size:10px;background:transparent;")
-        adv_lay.addWidget(_piapi_hint)
-        ac.addWidget(self._adv_box)
+        # ── Distribution des vidéos (section dédiée, parité Cinéma 04/10/2026) ──
+        # Même panneau que le Cinéma (ui/distrib_settings_panel) : choix du
+        # distributeur et du mode, clés BytePlus / Runware / PiAPI, prix, tests.
+        from ui.distrib_settings_panel import DistributionPanel
+        self._distrib_panel = DistributionPanel(load_config())
+        self._sec_distrib.body.addWidget(self._distrib_panel)
+        # Ordre de priorité (cases + ▲▼) : remplace le menu « Distributeur
+        # vidéo » unique d'avant le 04/10/2026 (parité Cinéma).
+        self.video_provider_order = self._distrib_panel.order_list
+        self.distribution_mode_combo = self._distrib_panel.mode_combo
+        self._piapi_input = self._distrib_panel.key_inputs["piapi"]
+        self._byteplus_input = self._distrib_panel.key_inputs["byteplus"]
+        self._runware_input = self._distrib_panel.key_inputs["runware"]
 
         def _on_ai_changed(*_):
             from ui.ai_model_selector import selected_primary, selection_provider
@@ -733,17 +682,6 @@ class PageLiveSettings(QScrollArea):
                     self._refresh_ai_models()
         self._ai_combo.currentIndexChanged.connect(_on_ai_changed)
         self._on_ai_changed = _on_ai_changed
-
-        # ── Sauvegarde AUTOMATIQUE (plus de bouton — tout changement est
-        #    enregistré, comme le Cinéma) ───────────────────────────────────────
-        self._autosave_lbl = QLabel("✓  Sauvegarde automatique — chaque modification est enregistrée.")
-        self._autosave_lbl.setStyleSheet(
-            f"color:{CP['text_dim']};font-size:11px;font-style:italic;background:transparent;"
-        )
-        ac.addWidget(self._autosave_lbl)
-
-        lay.addWidget(api_card)
-        lay.addSpacing(28)
 
         # ── Section Resolume — RETIRÉE de l'affichage pour le moment (demande
         # Matthieu 2026-07-30). La carte est toujours CONSTRUITE (widgets,
@@ -853,20 +791,20 @@ class PageLiveSettings(QScrollArea):
                   self._kimi_input, self._kimi_url_input, self._kimi_model_input,
                   self._glm_input, self._glm_url_input, self._glm_model_input,
                   self._custom_key_input, self._custom_url_input, self._custom_model_input,
-                  self._piapi_input, self._host_input):
+                  self._host_input):
             w.textChanged.connect(self._save_api_key)
         self._local_panel.changed.connect(self._save_api_key)
         self._port_spin.valueChanged.connect(self._save_api_key)
         for combo in getattr(self, "_task_combos", {}).values():
             combo.currentIndexChanged.connect(self._save_api_key)
-        self.video_provider_combo.currentIndexChanged.connect(self._save_api_key)
-        self.distribution_mode_combo.currentIndexChanged.connect(self._save_api_key)
+        # Distributeurs, ordre, mode et clés BytePlus / Runware / PiAPI : le
+        # panneau émet `changed` (et se tait pendant sa relecture de la config).
+        self._distrib_panel.changed.connect(self._save_api_key)
 
     def _set_advanced(self, open_: bool):
         self._adv_open = open_
         self._adv_box.setVisible(open_)
-        self._btn_adv.setText(
-            ("▼" if open_ else "▶") + "  Paramètres avancés — moteur IA par tâche")
+        self._btn_adv.setText(("▼" if open_ else "▶") + "  Moteur IA par tâche")
 
     def _toggle_advanced(self):
         self._set_advanced(not self._adv_open)
@@ -876,8 +814,34 @@ class PageLiveSettings(QScrollArea):
         self._opt_keys_box.setVisible(self._opt_keys_open)
         self._btn_opt_keys.setText(
             ("▼" if self._opt_keys_open else "▶")
-            + "  Clés API facultatives  (PiAPI, OpenAI, Mistral…)"
+            + "  Clés API facultatives  (OpenAI, Mistral, Kimi, GLM…)"
         )
+
+    # ── Résumés d'en-tête + relecture du choix fait ailleurs (parité Cinéma) ──
+
+    def _refresh_summaries(self):
+        """L'essentiel de chaque section, lisible sans la déplier."""
+        try:
+            ok = lambda w: "✓" if w.text().strip() else "✕"   # noqa: E731
+            # « Anthropic » et non « Claude » : la traduction remplace « Claude »
+            # par le nom de l'assistant configuré.
+            self._sec_keys.set_summary(translate("fal.ai {a} · Anthropic {b}").format(
+                a=ok(self._api_key_input), b=ok(self._anthropic_input)))
+            self._sec_ai.set_summary(self._ai_combo.currentText().strip())
+            self._sec_distrib.set_summary(self._distrib_panel.summary())
+        except Exception:
+            pass
+
+    def showEvent(self, e):
+        super().showEvent(e)
+        # Le distributeur a pu être changé dans le Studio depuis : la page
+        # enregistre TOUT à chaque frappe — sans cette relecture, elle
+        # remettrait l'ancien choix par-dessus (parité Cinéma).
+        try:
+            self._distrib_panel.sync_from_config(load_config())
+            self._refresh_summaries()
+        except Exception:
+            pass
 
     def _refresh_ai_models(self):
         """Interroge les API /models sans bloquer l'interface."""
@@ -955,14 +919,8 @@ class PageLiveSettings(QScrollArea):
         self._custom_model_input.setText(cfg.get("custom_model", ""))
         self._local_panel.load(cfg)
         self._on_ai_changed()
-        self._piapi_input.setText(cfg.get("piapi_key", ""))
-        _cur_prov = cfg.get("video_provider", "fal")
-        for i in range(self.video_provider_combo.count()):
-            if self.video_provider_combo.itemData(i) == _cur_prov:
-                self.video_provider_combo.setCurrentIndex(i)
-                break
-        if cfg.get("distribution_mode", "multi") == "mono":
-            self.distribution_mode_combo.setCurrentIndex(1)
+        # Distributeurs (ordre, mode, clés) : relus par le panneau partagé.
+        self._distrib_panel.sync_from_config(cfg)
         host = cfg.get("resolume_host", "localhost")
         port = cfg.get("resolume_port", 8080)
         self._host_input.setText(str(host))
@@ -996,9 +954,17 @@ class PageLiveSettings(QScrollArea):
         cfg["custom_url"]        = self._custom_url_input.text().strip()
         cfg["custom_model"]      = self._custom_model_input.text().strip()
         self._local_panel.apply(cfg)     # local_preset / local_url / local_model / local_key
-        cfg["video_provider"]    = self.video_provider_combo.currentData() or "fal"
-        cfg["piapi_key"]         = self._piapi_input.text().strip()
-        cfg["distribution_mode"] = self.distribution_mode_combo.currentData() or "multi"
+        # Distribution des vidéos : ordre de priorité, distributeurs désactivés,
+        # mode et clés — tout vient du panneau partagé (parité Cinéma).
+        _dv = self._distrib_panel.values()
+        cfg["video_provider"]       = _dv["video_provider"]
+        cfg["video_provider_order"] = _dv["video_provider_order"]
+        cfg["video_providers_off"]  = _dv["video_providers_off"]
+        cfg["distribution_mode"]    = _dv["distribution_mode"]
+        cfg["piapi_key"]            = _dv["piapi_key"]
+        cfg["byteplus_key"]         = _dv["byteplus_key"]
+        cfg["runware_key"]          = _dv["runware_key"]
+        self._distrib_panel.set_fal_key_present(bool(cfg["api_key"]))
         cfg["resolume_host"] = self._host_input.text().strip() or "localhost"
         cfg["resolume_port"] = self._port_spin.value()
         save_config(cfg)
@@ -1007,6 +973,7 @@ class PageLiveSettings(QScrollArea):
         # Sauvegarde automatique : retour discret (pas de pop-up à chaque frappe)
         if hasattr(self, "_autosave_lbl"):
             self._autosave_lbl.setText("✓  Enregistré automatiquement.")
+        self._refresh_summaries()
 
     # ── Testeurs de clés API (portés du Cinéma, mêmes comportements) ──────────
 

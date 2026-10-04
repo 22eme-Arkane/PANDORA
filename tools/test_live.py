@@ -3139,7 +3139,8 @@ def distributeur_video_piapi_live():
     # Paramètres Live : mêmes éléments que le Cinéma (combo, clé, test, visibilité)
     import ui.page_live_settings as PLS
     _src = inspect.getsource(PLS)
-    for _needle in ("video_provider_combo", '"piapi_key"', "test_piapi_connection"):
+    # Menu unique remplacé le 04/10/2026 par l'ORDRE de priorité (parité Cinéma).
+    for _needle in ("video_provider_order", '"piapi_key"', "test_piapi_connection"):
         assert _needle in _src, f"parité distributeurs : {_needle} manquant côté Live"
     # Studio Live : bandeau prix fixe sous les onglets + signal T2V Live
     import ui.live_studio_widget as LSW
@@ -3168,11 +3169,12 @@ def distributeur_video_piapi_live():
     # actif ; retour en multi → tout se réactive (parité Cinéma).
     for _n in ("distribution_mode_combo", '"distribution_mode"'):
         assert _n in _src, f"parité mono/multi : {_n} manquant côté Live"
-    # Section « Clés API facultatives » repliable, PiAPI en tête (parité Cinéma
-    # 2026-07-16) ; les rangées de CLÉS y restent toujours visibles.
+    # Section « Clés API facultatives » repliable (parité Cinéma). Depuis le
+    # 04/10/2026, la clé PiAPI vit dans « Distribution des vidéos » avec
+    # BytePlus et Runware — panneau PARTAGÉ avec le Cinéma.
     for _n in ("_toggle_opt_keys", "_btn_opt_keys",
-               "Clés API facultatives  (PiAPI, OpenAI, Mistral…)",
-               "Clé PiAPI (distributeur) :"):
+               "Clés API facultatives  (OpenAI, Mistral, Kimi, GLM…)",
+               "DistributionPanel", 'key_inputs["piapi"]'):
         assert _n in _src, f"parité clés facultatives : {_n} manquant côté Live"
     assert "_refresh_piapi_visibility" not in _src, \
         "ancien mécanisme de visibilité PiAPI encore présent"
@@ -7188,9 +7190,15 @@ def reinitialiser_recompose_a_neuf():
             "Réinitialiser doit RECOMPOSER, pas resservir le cache"
 
         # Le bouton passe réellement le drapeau (code réel, pas commentaire).
-        assert "_compose_fresh = True" in inspect.getsource(
-            DA.MoodDialog._reset_prompt), \
+        # Depuis le 04/10/2026 la fraîcheur suit la case « Recomposer
+        # automatiquement » (mémorisée) ; « Recomposer le prompt » la force
+        # toujours.
+        assert "self._reset_prompt(fresh=True)" in inspect.getsource(DA), \
             "Réinitialiser ne demande pas de composition fraîche"
+        assert "self._compose_fresh = bool(fresh) and auto" in inspect.getsource(
+            DA.MoodDialog._reset_prompt), "_reset_prompt ignore le drapeau de fraîcheur"
+        assert "self._compose_fresh = True" in inspect.getsource(
+            DA.MoodDialog._recompose_now), "« Recomposer » ne force pas la composition"
         assert "force_fresh" in inspect.getsource(DA._MoodPromptWorker.run), \
             "le worker de composition ignore le drapeau de fraîcheur"
     finally:
@@ -7395,8 +7403,11 @@ def forme_du_prompt_selecteur_live():
     from core import prompt_form as _pf, engine_grammar as _eg
 
     _src = _i.getsource(__import__("ui.page_storyboard_live", fromlist=["_"]))
-    assert "PromptFormSelector()" in _src, \
-        "sélecteur absent de la barre Storyboard Live"
+    # Depuis le 04/10/2026 : menu « Prompt » (parité Cinéma), réduit à la forme.
+    assert "PromptMenu(with_view=False)" in _src, \
+        "menu « Prompt » absent de la barre Storyboard Live"
+    assert _src.index("PromptMenu(with_view=False)") < _src.index("self._dur_lbl = QLabel"), \
+        "menu Prompt pas à gauche du nombre de plans (Live)"
 
     # Le module de réglage est PARTAGÉ — pas une copie Live (une seule table).
     assert _pf.AUTO == "auto" and callable(_pf.set_form)

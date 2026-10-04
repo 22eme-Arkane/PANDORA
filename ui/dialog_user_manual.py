@@ -972,8 +972,22 @@ def _s_settings() -> str:
             "Créez un compte sur <b>fal.ai</b> — « Get started » en haut à droite (connexion Google ou GitHub)",
             "Page <b>Keys</b> : « + Add key » → nommez-la <b>PANDORA</b> → « Create » → copiez la clé <b>fal_key_…</b> (affichée une seule fois)",
             "Collez-la dans le champ <b>Clé fal.ai</b> (ou directement dans le guide de démarrage)",
-            "Page <b>Billing</b> : « Add credits » — <b>$10</b> suffisent pour démarrer (≈ 20 à 50 vidéos Seedance 2.0)",
-            "Sans cette clé : mode mock (simulation locale, aucune vidéo réelle générée)",
+            "Page <b>Billing</b> : « Add credits » — <b>$10</b> permettent quelques essais (≈ 3 vidéos Seedance 2.0 de 10 s en 720p chez fal.ai)",
+            "Sans cette clé (ni clé de distributeur) : mode mock (simulation locale, aucune vidéo réelle générée)",
+        ),
+        _h("Distribution des vidéos — payer Seedance moins cher"),
+        _p("Seedance appartient à ByteDance ; fal.ai, <b>BytePlus</b> (vendeur officiel de "
+           "ByteDance), <b>Runware</b> et <b>PiAPI</b> le revendent à des prix différents. Un "
+           "plan Seedance 2.5 de 30 s en 720p : environ 14 $ chez fal.ai, 7 $ HT chez "
+           "BytePlus ou Runware, 10,50 $ chez PiAPI. La section <b>Distribution des "
+           "vidéos</b> réunit leurs clés (bouton « Tester la clé », gratuit), les prix et "
+           "l'ordre de priorité."),
+        _ul(
+            "<b>Ordre de priorité</b> : cochez les distributeurs à utiliser et classez-les avec ▲ ▼. Pour chaque plan, PANDORA prend le premier qui sait le faire (moteur, résolution, son coupé, image de début / fin, réception des images de référence) ; sinon il passe au suivant et la progression dit pourquoi",
+            "<b>Mono-distributeur</b> : seul le premier est utilisé — ce qu'il ne sait pas faire est grisé dans le Studio",
+            "Dans le Studio, le menu <b>Distributeur</b> (à côté du moteur) affiche le prix du plan chez chacun ; en choisir un le met en tête",
+            "<b>Images de référence</b> : BytePlus et Runware les reçoivent directement ; PiAPI exige son abonnement Creator ou un compte fal.ai approvisionné qui sert de relais. Un plan dont les images ne peuvent pas partir s'arrête AVANT d'être payé",
+            "Un compte fal.ai bloqué faute de solde est sauté automatiquement ; « Vérifier (gratuit) » dit si fal.ai et le dépôt PiAPI sont utilisables",
         ),
         _h("Clé API Anthropic — Claude IA"),
         _ul(
@@ -1938,8 +1952,21 @@ def _e_settings() -> str:
             "Create an account on <b>fal.ai</b> — \"Get started\" (top right), sign in with Google or GitHub",
             "<b>Keys</b> page: \"+ Add key\" → name it <b>PANDORA</b> → \"Create\" → copy the <b>fal_key_…</b> key (shown only once)",
             "Paste it in the <b>fal.ai key</b> field (or directly in the startup guide)",
-            "<b>Billing</b> page: \"Add credits\" — <b>$10</b> is plenty to start (≈ 20 to 50 Seedance 2.0 videos)",
-            "Without this key: mock mode (local simulation, no real video generated)",
+            "<b>Billing</b> page: \"Add credits\" — <b>$10</b> allows a few tries (≈ 3 Seedance 2.0 videos of 10 s in 720p on fal.ai)",
+            "Without this key (and no distributor key): mock mode (local simulation, no real video generated)",
+        ),
+        _h("Video distribution — paying less for Seedance"),
+        _p("Seedance belongs to ByteDance; fal.ai, <b>BytePlus</b> (ByteDance's official "
+           "seller), <b>Runware</b> and <b>PiAPI</b> resell it at different prices. A 30-second "
+           "Seedance 2.5 shot in 720p: about $14 on fal.ai, $7 excl. VAT on BytePlus or "
+           "Runware, $10.50 on PiAPI. The <b>Video distribution</b> section gathers their keys "
+           "(free « Test the key » button), the prices and the priority order."),
+        _ul(
+            "<b>Priority order</b>: tick the distributors to use and rank them with ▲ ▼. For each shot PANDORA takes the first one able to do it (engine, resolution, sound off, start / end frame, receiving reference images); otherwise it moves to the next one and the progress says why",
+            "<b>Single distributor</b>: only the first one is used — what it cannot do is greyed out in the Studio",
+            "In the Studio, the <b>Distributor</b> menu (next to the engine) shows the shot price at each one; picking one puts it first",
+            "<b>Reference images</b>: BytePlus and Runware receive them directly; PiAPI needs its Creator plan or a funded fal.ai account acting as a relay. A shot whose images cannot be sent stops BEFORE being paid",
+            "A fal.ai account locked for lack of balance is skipped automatically; « Check (free) » tells whether fal.ai and the PiAPI upload are usable",
         ),
         _h("Anthropic API key — Claude AI"),
         _ul(

@@ -158,7 +158,12 @@ def edition_cinema_only():
     # décor sans personne, recomposition locale), file arrêtée au premier refus de
     # filtre, modèles Claude à jour (Opus 5.5, Sonnet 5.5, Fable 5.1) et réglés
     # par modèle, tarifs du texte IA corrigés.
-    assert VERSION.split("-")[0] == "2.4.2", f"version attendue 2.4.2[-suffixe], lue {VERSION}"
+    # Build 2.5.0 (2026-10-04) : distributeurs low cost (BytePlus, Runware, PiAPI
+    # 2.5) avec ordre de priorité et bascule automatique, fichiers envoyés sans
+    # fal, menu Distributeur du Studio, Paramètres en sections repliables, écran
+    # des distributeurs dans l'onboarding, menu « Prompt » du Storyboard,
+    # recomposition du prompt à la demande (case automatique mémorisée).
+    assert VERSION.split("-")[0] == "2.5.0", f"version attendue 2.5.0[-suffixe], lue {VERSION}"
     # ── UN SEUL numéro de version dans tout le produit ────────────────────────
     # Chaque endroit qui recopie le numéro à la main finit par diverger : la 2.0.0
     # est partie en build avec une charte d'utilisation estampillée 1.3.5, un .app
@@ -5913,12 +5918,14 @@ def distributeur_video_piapi():
     # distributeurs_low_cost_et_envoi_sans_fal_04_10_2026).
     import api.real as real
     _src = inspect.getsource(real.run_real)
-    assert "active_video_provider" in _src and "_runner(_provider)" in _src
+    assert "_mp.route(" in _src and "_runner(_provider)" in _src
     # Paramètres : combo distributeur + clé PiAPI persistés (auto-save)
     import ui.page_settings as PS
     _ssrc = inspect.getsource(PS.SettingsPage) if hasattr(PS, "SettingsPage") else \
         inspect.getsource(PS)
-    assert "video_provider_combo" in _ssrc and '"piapi_key"' in _ssrc
+    # Menu unique « Distributeur vidéo » remplacé le 04/10/2026 par l'ORDRE de
+    # priorité (cases + ▲▼, ui/distrib_settings_panel).
+    assert "video_provider_order" in _ssrc and '"piapi_key"' in _ssrc
     assert "test_piapi_connection" in _ssrc
     # Studio : bandeau prix fixe sous les onglets, branché sur le signal T2V
     import ui.seedance_widget as SW
@@ -6034,6 +6041,39 @@ def distributeurs_low_cost_et_envoi_sans_fal_04_10_2026():
     finally:
         mp.load_config = _orig_lc
 
+    # ── ORDRE DE PRIORITÉ + bascule automatique (questions de Matthieu) ───────
+    # « Si PiAPI est en premier mais que j'utilise des images de référence,
+    # est-ce que ça bascule ? » — oui : au premier distributeur ACTIVÉ qui sait.
+    ordre = {"api_key": "f", "piapi_key": "p", "byteplus_key": "b",
+             "video_provider_order": ["piapi", "fal", "byteplus", "runware"],
+             "video_providers_off": ["runware"]}
+
+    def _cr(pid, needs):          # PiAPI sans dépôt ; compte fal bloqué
+        if pid == "piapi" and needs:
+            return False, "ne peut pas recevoir de fichiers"
+        if pid == "fal":
+            return False, "compte bloqué : solde fal épuisé"
+        return True, ""
+    pid, sautes = mp.route("seedance-2.0", "ref", "720p", needs=("images",),
+                           can_receive=_cr, cfg=ordre)
+    assert pid == "byteplus" and sautes[0].startswith("PiAPI") and "fal.ai" in sautes[1], sautes
+    assert mp.route("seedance-2.0", "t2v", "720p", can_receive=_cr, cfg=ordre)[0] == "piapi", \
+        "sans image, le premier de l'ordre sert"
+    assert mp.route("seedance-2.0", "ref", "720p", needs=("images",), can_receive=_cr,
+                    cfg=dict(ordre, video_providers_off=["byteplus", "runware"]))[0] == "", \
+        "un distributeur décoché n'est JAMAIS utilisé"
+    assert mp.route("seedance-2.0", "ref", "720p", needs=("images",), can_receive=_cr,
+                    cfg=dict(ordre, distribution_mode="mono"))[0] == "", \
+        "mono : le premier seul, pas de bascule"
+    # Ancienne config : le choix d'abord, les autres ensuite, fal en dernier recours
+    assert mp.provider_order({"video_provider": "piapi"}) == ["piapi", "byteplus", "runware", "fal"]
+    assert mp.provider_order({}) == ["fal", "byteplus", "runware", "piapi"]
+    # Studio : choisir un distributeur = le mettre EN TÊTE (et le réactiver)
+    c = mp.promote_in_config({"video_provider_order": ["fal", "piapi", "byteplus", "runware"],
+                              "video_providers_off": ["byteplus"]}, "byteplus")
+    assert c["video_provider_order"][:2] == ["byteplus", "fal"] and c["video_provider"] == "byteplus"
+    assert "byteplus" not in c["video_providers_off"]
+
     # ── Corps de requête (contrats relus le 04/10/2026) ──────────────────────
     b = byteplus.build_body("i2v", "seedance-2.5", {
         "prompt": "p", "image_url": "u1", "end_image_url": "u2", "duration": "30",
@@ -6113,7 +6153,10 @@ def distributeurs_low_cost_et_envoi_sans_fal_04_10_2026():
         du._PIAPI_PLAN_REFUSED.clear()
 
     # ── run_real de bout en bout (rien ne sort de la machine) ─────────────────
+    # requests.post est remplacé pour TOUS les modules (même objet) : les
+    # sondes de api/distrib_probe reçoivent elles aussi la réponse simulée.
     import api.real as real
+    import api.distrib_probe as dp
     import core.config as cc
     import core.lang as lang
     import core.ai_provider as aip
@@ -6131,6 +6174,7 @@ def distributeurs_low_cost_et_envoi_sans_fal_04_10_2026():
         real._fal_upload = lambda _fc, _p: _locked_relay(_p)
         du.requests.post = lambda *a, **k: _Resp()
         du._PIAPI_PLAN_REFUSED.clear()
+        dp.forget()
         params = {"mode": "t2v", "model": "seedance-2.0", "prompt": "a quiet street",
                   "ref_images": [png], "ref_image_roles": ["mood"],
                   "resolution": "1080p", "duration": 5, "audio": True}
@@ -6165,10 +6209,26 @@ def distributeurs_low_cost_et_envoi_sans_fal_04_10_2026():
         assert "@Image1" in seen["args"]["prompt"], "le mood est annoncé au moteur"
         assert res["provider"] == "byteplus" and res["cost_usd"] == 1.23
         assert res["video_url"] == "https://x/v.mp4"
+
+        # MULTI, PiAPI EN TÊTE, mood coché, PiAPI sans dépôt et fal bloqué : la
+        # question exacte de Matthieu — le plan BASCULE sur BytePlus, et la
+        # progression dit pourquoi PiAPI a été sauté.
+        conf = {"api_key": "fal-test", "piapi_key": "k", "byteplus_key": "b",
+                "video_provider_order": ["piapi", "byteplus", "fal", "runware"]}
+        cc.load_config = lambda: dict(conf)
+        mp.load_config = lambda: dict(conf)
+        dp.forget()
+        seen.clear()
+        msgs = []
+        res = real.run_real(dict(params), lambda _p, m="": msgs.append(m), lambda: False)
+        assert res["provider"] == "byteplus" and seen["key"] == "b", res.get("provider")
+        assert any(m.startswith("PiAPI") and "BytePlus" in m for m in msgs), msgs
+        assert not called, "PiAPI ne doit pas être appelé : il ne peut pas recevoir le mood"
     finally:
         (cc.load_config, mp.load_config, lang.translate_to_english, aip.key_error,
          real._fal_upload, piapi.run, byteplus.run, du.requests.post, _fk) = saved
         du._PIAPI_PLAN_REFUSED.clear()
+        dp.forget()
         if _fk is None:
             os.environ.pop("FAL_KEY", None)
         else:
@@ -6183,6 +6243,65 @@ def distributeurs_low_cost_et_envoi_sans_fal_04_10_2026():
     e = ("BytePlus : génération failed — OutputVideoSensitiveContentDetected."
          "PolicyViolation — The output video may contain sensitive content")
     assert is_content_policy_error(e) and refused_after_generation(e)
+
+
+@test
+def recomposition_du_prompt_a_la_demande_04_10_2026():
+    """Mood et Studio (demande Matthieu 04/10/2026) : la recomposition IA du
+    prompt partait seule — à l'ouverture d'un Mood, à la sélection d'un plan —
+    avec parfois « composition refusée : information perdue ». Désormais un
+    bouton « Recomposer » + une case « automatique » MÉMORISÉE ; décochée,
+    aucun appel IA ne part, un prompt déjà composé reste affiché."""
+    import core.config as cc
+    import api.image_prompt as ip
+    from api import apercu as ap
+
+    # ── 1. Mood, cache seul : JAMAIS d'appel IA ──────────────────────────────
+    calls = []
+    _orig = ip.compose
+    ip.compose = lambda *a, **k: calls.append(1) or "NE DOIT PAS PARTIR"
+    try:
+        shot = {"id": "", "number": 1, "scene_title": "Pluie",
+                "seedance_prompt": "[🎬 ACTION]\nUn homme marche sous la pluie, plan large."}
+        p, ok, _why, _cached = ap.compose_mood_prompt(shot, "", "nb2", cache_only=True)
+        assert not calls and not ok and p.strip(), (calls, ok, p)
+    finally:
+        ip.compose = _orig
+
+    # ── 2. Le réglage est MÉMORISÉ (défaut = comportement d'avant) ───────────
+    from ui.compose_controls import ComposeControls, auto_compose_enabled
+    store, saved = {}, []
+    _lc, _sc = cc.load_config, cc.save_config
+    cc.load_config = lambda: dict(store)
+    cc.save_config = lambda c: (saved.append(dict(c)), store.update(c))
+    try:
+        assert auto_compose_enabled("studio_auto_compose") is True
+        ctl = ComposeControls("studio_auto_compose")
+        ctl.auto_cb.setChecked(False)
+        assert saved and saved[-1]["studio_auto_compose"] is False
+        assert ComposeControls("studio_auto_compose").is_auto() is False, "relu à la création"
+    finally:
+        cc.load_config, cc.save_config = _lc, _sc
+
+    # ── 3. Studio, case décochée : aucune composition à la sélection ─────────
+    import ui.tab_t2v as M
+    tab = M.TabT2V()
+    tab._compose_ctl.auto_cb.blockSignals(True)
+    tab._compose_ctl.auto_cb.setChecked(False)
+    tab._compose_ctl.auto_cb.blockSignals(False)
+    tab._active_shot = {}
+    tab.prompt_ta.setPlainText("Un homme marche sous la pluie, plan large.")
+    tab._assembly_source = tab.prompt_ta.toPlainText().strip()
+    _before = getattr(tab, "_preview_translate_worker", None)
+    tab._start_preview_translate()
+    assert getattr(tab, "_preview_translate_worker", None) is _before, \
+        "aucune composition IA ne doit partir quand l'automatique est décoché"
+    assert "non recomposé" in tab._compose_ctl._note.text()
+    # « Recomposer » force la composition, même décoché (lu à la source : un
+    # vrai appel IA n'a rien à faire dans un harnais).
+    _src = inspect.getsource(M.TabT2V._start_preview_translate)
+    assert "_force_compose" in _src and "not _force and not self._compose_ctl.is_auto()" in _src
+    tab.deleteLater()
 
 
 @test
@@ -8359,12 +8478,25 @@ def forme_du_prompt_reglable_pour_essai():
         _ctx.set_project_id(_old_i or "")
 
     # Un essai en cours doit se VOIR, sinon on attribue le résultat au moteur.
-    from ui.prompt_form_selector import PromptFormSelector
-    _sel = PromptFormSelector()
-    assert _sel._combo.count() == len(_pf.FORMS)
-    # …et le sélecteur est réellement dans la barre du Storyboard.
+    # Depuis le 04/10/2026 la forme se choisit dans le menu « Prompt » de la
+    # barre (ui/prompt_menu) : toutes les formes y sont, et l'essai s'affiche
+    # dans le libellé du bouton.
+    from ui.prompt_menu import PromptMenu
+    _m = PromptMenu()
+    _keys = {k for k, _l, _d in _pf.FORMS}
+    _forms = [a for a in _m.menu().actions() if a.data() in _keys]
+    assert len(_forms) == len(_pf.FORMS), "toutes les formes doivent être dans le menu"
+    _old_form = _pf.get_form()
+    try:
+        _forms[-1].trigger()
+        assert _pf.get_form() == _forms[-1].data()
+        if _forms[-1].data() != _pf.AUTO:
+            assert "essai" in _m.text(), "un essai de forme doit se voir sur le bouton"
+    finally:
+        _pf.set_form(_old_form)
+    # …et le menu est réellement dans la barre du Storyboard.
     _src = inspect.getsource(__import__("ui.page_storyboard", fromlist=["_"]))
-    assert "PromptFormSelector()" in _src, "sélecteur absent de la barre Storyboard"
+    assert "PromptMenu()" in _src, "menu « Prompt » absent de la barre Storyboard"
 
 
 @test
@@ -8410,10 +8542,18 @@ def vue_prompt_structure_ou_final():
     from ui.page_storyboard import _ShotRow as _SR
     assert "_col_cells" in inspect.getsource(_SR._content_height), \
         "la hauteur ne mesure plus les cellules réelles"
-    assert "PromptViewToggle()" in _src, "bascule absente de la barre"
+    assert "PromptMenu()" in _src, "menu « Prompt » (vue + forme) absent de la barre"
     # La forme n'a de sens qu'en vue finale : elle doit être désactivée sinon
     # (c'est ce qui rendait le réglage incompréhensible au premier essai).
     assert "_sync_prompt_form_enabled" in _src
+    from ui.prompt_menu import PromptMenu as _PM
+    _pm = _PM()
+    _labels = [a.text() for a in _pm.menu().actions()]
+    assert "Prompt structuré" in _labels and "Prompt final" in _labels, _labels
+    _pm.set_form_enabled(False, "raison")
+    from core import prompt_form as _pf2
+    _fa = [a for a in _pm.menu().actions() if a.data() in {k for k, _l, _d in _pf2.FORMS}]
+    assert _fa and not any(a.isEnabled() for a in _fa), "forme grisée hors vue finale"
 
     # Le Studio CONSERVE le prompt composé, sinon la vue finale reste vide.
     _tsrc = inspect.getsource(__import__("ui.tab_t2v", fromlist=["_"]))
@@ -8957,7 +9097,7 @@ def composer_les_finals_dun_storyboard_existant():
     # que le bouton est un widget neuf : son défaut « structure » en dur le
     # faisait mentir — bouton sur « structuré », cellules affichant encore le
     # message « à composer ». Il fallait basculer deux fois pour resynchroniser.
-    from ui.prompt_view_toggle import PromptViewToggle as _PVT, FINAL as _V_FIN
+    from ui.prompt_menu import PromptMenu as _PVT, FINAL as _V_FIN
     from ui.page_storyboard import _prompt_cell_text as _cell_txt
     _fp.set_current_view("final")
     assert _PVT().view() == _V_FIN, \
@@ -8974,11 +9114,12 @@ def composer_les_finals_dun_storyboard_existant():
     assert _fp.current_view() == "structure" and \
         _pg2._prompt_view_toggle.view() == "structure"
 
-    # Barre : bascule AVANT le bouton AVANT la forme (retour Matthieu 2026-08-11),
-    # bouton branché avec confirmation chiffrée et rafraîchi à chaque rendu.
+    # Barre (04/10/2026) : vue + forme réunies dans le menu « Prompt », placé
+    # À GAUCHE du nombre de plans ; le bouton de composition reste avant lui,
+    # branché avec confirmation chiffrée et rafraîchi à chaque rendu.
     _src = inspect.getsource(__import__("ui.page_storyboard", fromlist=["_"]))
-    assert _src.index("PromptViewToggle()") < _src.index("_btn_compose_finals = ") \
-        < _src.index("PromptFormSelector()"), "ordre de barre inversé perdu"
+    assert _src.index("_btn_compose_finals = ") < _src.index("PromptMenu()") \
+        < _src.index("self._dur_lbl = QLabel"), "menu Prompt pas à gauche du nombre de plans"
     assert "QMessageBox.question" in inspect.getsource(
         __import__("ui.page_storyboard", fromlist=["_"]).PageStoryboard._on_compose_finals), \
         "la dépense en rafale doit être confirmée"

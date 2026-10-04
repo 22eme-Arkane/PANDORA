@@ -480,7 +480,32 @@ def run_real(params: dict, emit_progress, is_cancelled) -> dict:
     _blocked = _mp.mono_blocked_engine(model, mode, _res_clean, _audio_on)
     if _blocked:
         raise RuntimeError(_blocked)
-    _provider = _mp.active_video_provider(model, mode, _res_clean, _audio_on)
+    # ORDRE DE PRIORITÉ (04/10/2026) : le premier distributeur activé qui sait
+    # servir CE plan — y compris recevoir ses fichiers (sondes gratuites,
+    # api/distrib_probe). « PiAPI en premier mais des images de référence que
+    # PiAPI ne peut pas recevoir » passe au suivant, et la progression le dit.
+    _needs = set()
+    if ref_images or params.get("image_path") or params.get("end_image_path"):
+        _needs.add("images")
+    if params.get("video_path"):
+        _needs.add("video")
+    if params.get("audio_path"):
+        _needs.add("audio")
+    from api.distrib_probe import can_receive as _can_receive
+    _provider, _skipped = _mp.route(model, mode, _res_clean, _audio_on,
+                                    needs=_needs, can_receive=_can_receive)
+    if not _provider:
+        _hint = ""
+        if "images" in _needs and any("recevoir" in s or "relais" in s for s in _skipped):
+            _hint = (" BytePlus et Runware reçoivent les images directement dans la "
+                     "requête : active l'un d'eux (Paramètres → Distribution des "
+                     "vidéos), ou recharge fal.ai pour qu'il serve de relais.")
+        raise RuntimeError("Aucun distributeur activé ne peut servir ce plan — "
+                           + " ; ".join(_skipped or ["aucun distributeur activé"])
+                           + ". Rien n'a été généré ni facturé." + _hint)
+    if _skipped:
+        # Le premier de l'ordre a été sauté : on dit pourquoi, et qui sert.
+        emit_progress(4, f"{_skipped[0]} → {_mp.provider_short(_provider)}")
     _alt_upload_errors: list[str] = []
     if _provider == "fal":
         def _upload(path: str) -> str:

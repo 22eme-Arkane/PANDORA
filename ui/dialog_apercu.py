@@ -60,7 +60,8 @@ class _MoodPromptWorker(QThread):
     done = pyqtSignal(str, bool, str, bool)   # (prompt, composé, raison, du_cache)
 
     def __init__(self, shot: dict, style: str, engine: str,
-                 building_ref: str, is_mapping: bool, fresh: bool = False):
+                 building_ref: str, is_mapping: bool, fresh: bool = False,
+                 cache_only: bool = False):
         super().__init__()
         self._shot   = shot or {}
         self._style  = style or ""
@@ -68,6 +69,8 @@ class _MoodPromptWorker(QThread):
         self._bref   = building_ref or ""
         self._mapping = bool(is_mapping)
         self._fresh   = bool(fresh)
+        # Recomposition automatique décochée : lire le cache, JAMAIS d'appel IA.
+        self._cache_only = bool(cache_only)
 
     def run(self):
         """Délègue à `api.apercu.compose_mood_prompt` — le MÊME chemin que le lot.
@@ -79,7 +82,8 @@ class _MoodPromptWorker(QThread):
             from api.apercu import compose_mood_prompt
             _p, _ok, _why, _cache = compose_mood_prompt(
                 self._shot, self._style, self._engine, self._bref,
-                is_mapping=self._mapping, force_fresh=self._fresh)
+                is_mapping=self._mapping, force_fresh=self._fresh,
+                cache_only=self._cache_only)
             self.done.emit(_p, _ok, _why, _cache)
         except Exception as exc:
             self.done.emit("", False, str(exc)[:200], False)
@@ -141,6 +145,10 @@ class MoodDialog(QDialog):
         # (un refus mémorisé doit pouvoir être retenté). Consommé par
         # _start_compose, un seul envoi.
         self._compose_fresh  = False
+        # Recomposition automatique décochée (04/10/2026) : la prochaine
+        # composition ne fait que LIRE le cache ; consommé par _start_compose.
+        self._compose_cache_only = False
+        self._compose_off_note   = False
         # Barre de chargement de la composition : pulsation MANUELLE, comme la
         # barre de génération — le mode indéterminé de Qt ne s'anime pas
         # toujours avec un chunk stylé. Timer dédié : celui de la génération
@@ -370,7 +378,18 @@ class MoodDialog(QDialog):
             f"QTextEdit:focus{{border-color:{CP['accent']};}}"
         )
         self._prompt_edit.textChanged.connect(self._on_prompt_typed)
-        btn_reset_prompt.clicked.connect(self._reset_prompt)
+        # « Réinitialiser » RETENTE la composition (fraîche) si l'automatique
+        # est coché ; sinon il ne fait que recharger le texte du plan.
+        btn_reset_prompt.clicked.connect(lambda: self._reset_prompt(fresh=True))
+
+        # Recomposer à la demande + case « automatique » MÉMORISÉE, au-dessus du
+        # prompt (demande Matthieu 2026-10-04 : la recomposition partait seule à
+        # chaque ouverture, avec parfois un refus « information perdue »).
+        from ui.compose_controls import ComposeControls
+        self._compose_ctl = ComposeControls("mood_auto_compose", compact=True)
+        self._compose_ctl.recompose_requested.connect(self._recompose_now)
+        self._compose_ctl.auto_changed.connect(self._on_auto_compose_changed)
+        root.addWidget(self._compose_ctl)
         root.addWidget(self._prompt_edit)
 
         # Premier remplissage : prompt écrit pour le moteur sélectionné.
@@ -839,13 +858,29 @@ class MoodDialog(QDialog):
             # retour à la ligne — une erreur tronquée à quelques lettres ne se
             # corrige pas (constat Matthieu 2026-07-28 : « ⚠ comp… »).
             _txt += "  ·  ⚠ " + self._compose_why[:240]
+        elif getattr(self, "_compose_off_note", False):
+            _txt += "  ·  " + translate("texte du plan — recomposition automatique "
+                                        "désactivée (« Recomposer » pour la lancer)")
         self._grammar_lbl.setText(_txt)
         # Le texte intégral reste consultable au survol, verdict compris.
         self._grammar_lbl.setToolTip(
             _txt + (("\n\n" + self._compose_why) if self._compose_why else ""))
 
-    def _reset_prompt(self):
-        """(Re)construit le prompt depuis les données du plan, pour le moteur choisi."""
+    def _auto_compose(self) -> bool:
+        ctl = getattr(self, "_compose_ctl", None)
+        if ctl is not None:
+            return ctl.is_auto()
+        from ui.compose_controls import auto_compose_enabled
+        return auto_compose_enabled("mood_auto_compose")
+
+    def _reset_prompt(self, fresh: bool = False):
+        """(Re)construit le prompt depuis les données du plan, pour le moteur choisi.
+
+        `fresh` (bouton « Réinitialiser ») : RETENTE la composition au lieu de
+        resservir le cache — un refus du contrôle y est mémorisé, et le
+        resservir réaffichait la même erreur (constat Matthieu 2026-07-28).
+        Recomposition automatique DÉCOCHÉE (04/10/2026) : aucun appel IA — on
+        affiche la composition déjà faite s'il y en a une, sinon le texte du plan."""
         from api.apercu import build_mood_prompt
         import core.style as _style_mod
         self._set_prompt_text(build_mood_prompt(
@@ -854,12 +889,35 @@ class MoodDialog(QDialog):
         self._prompt_dirty = False
         self._refresh_grammar_label()
         # Le texte déterministe s'affiche TOUT DE SUITE — l'encart n'est jamais
-        # vide — puis la composition le remplace quand elle revient. FRAÎCHE :
-        # « Réinitialiser » doit RETENTER la composition, pas resservir le
-        # cache — un refus du contrôle y est mémorisé, et le resservir
-        # réaffichait la même erreur à l'identique (constat Matthieu
-        # 2026-07-28 : « le bouton Réinitialiser ne semble pas marcher »).
+        # vide — puis la composition (ou le cache) le remplace quand elle revient.
+        auto = self._auto_compose()
+        self._compose_fresh = bool(fresh) and auto
+        self._compose_cache_only = not auto
+        self._schedule_compose()
+
+    def _on_auto_compose_changed(self, on: bool):
+        """Cocher « automatique » sur un prompt pas encore composé (et pas
+        retouché) le compose aussitôt ; décocher ne retire rien d'affiché."""
+        try:
+            if on and not self._prompt_dirty and not self._compose_done:
+                self._reset_prompt()
+            else:
+                self._refresh_grammar_label()
+        except Exception:
+            pass
+
+    def _recompose_now(self):
+        """Bouton « Recomposer le prompt » : composition IA FRAÎCHE, même si
+        l'automatique est décoché — et même par-dessus un texte retouché, puisque
+        c'est précisément ce qui est demandé."""
+        from api.apercu import build_mood_prompt
+        import core.style as _style_mod
+        self._set_prompt_text(build_mood_prompt(
+            self._shot, _style_mod.get_image_suffix() or "",
+            self._current_engine()))
+        self._prompt_dirty = False
         self._compose_fresh = True
+        self._compose_cache_only = False
         self._schedule_compose()
 
     # ── Composition IA du prompt final image ─────────────────────────────────
@@ -915,9 +973,12 @@ class MoodDialog(QDialog):
             self._refresh_grammar_label()
             _fresh = bool(getattr(self, "_compose_fresh", False))
             self._compose_fresh = False   # le drapeau ne vaut que pour UN envoi
+            _cache_only = bool(getattr(self, "_compose_cache_only", False))
+            self._compose_cache_only = False
             self._compose_worker = _MoodPromptWorker(
                 self._shot, _style, self._current_engine(), _bref,
-                self._is_mapping(), fresh=_fresh)
+                self._is_mapping(), fresh=_fresh, cache_only=_cache_only)
+            self._compose_worker._cache_only_request = _cache_only
             self._compose_worker.done.connect(self._on_composed)
             self._compose_worker.start()
         except Exception:
@@ -933,6 +994,11 @@ class MoodDialog(QDialog):
             self._compose_why  = why or ""
             self._compose_done = bool(composed)
             self._compose_from_cache = bool(from_cache)
+            # Lecture du cache seule et rien de composé : dire pourquoi l'IA
+            # n'a pas réécrit le prompt (automatique décoché), pas un échec.
+            _w = self.sender()
+            self._compose_off_note = bool(
+                getattr(_w, "_cache_only_request", False) and not composed and not why)
             if self._prompt_dirty:
                 self._refresh_grammar_label()
                 return

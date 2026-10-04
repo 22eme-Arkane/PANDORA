@@ -128,14 +128,18 @@ def piapi_upload(path: str, api_key: str) -> str:
             data = f.read()
     # Nom ASCII (le champ est limité à 128 caractères, extension obligatoire).
     safe = "".join(c if c.isascii() and (c.isalnum() or c in "._-") else "_" for c in name)
-    safe = safe[-120:] or f"pandora{ext}"
+    return piapi_post(safe[-120:] or f"pandora{ext}", data, api_key)
+
+
+def piapi_post(file_name: str, data: bytes, api_key: str, timeout: int = 120) -> str:
+    """Dépose des octets au dépôt éphémère PiAPI → URL publique. Lève UploadError."""
     try:
         r = requests.post(_PIAPI_UPLOAD,
                           headers={"x-api-key": api_key.strip(),
                                    "Content-Type": "application/json"},
-                          json={"file_name": safe,
+                          json={"file_name": file_name,
                                 "file_data": base64.b64encode(data).decode("ascii")},
-                          timeout=120)
+                          timeout=timeout)
     except requests.RequestException as e:
         raise UploadError(f"dépôt PiAPI injoignable ({e})")
     try:

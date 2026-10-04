@@ -11,7 +11,7 @@ from ui.styles import C
 from ui.widgets import section_label, combo, toggle_row, prompt_block, ProgressBlock, HelpBlock, show_api_error
 from core.history import save_to_history
 from core.config import get_output_dir
-from core.worker import GenerationWorker, abandon_thread
+from core.worker import GenerationWorker, abandon_thread, is_running
 from core.i18n import translate
 from api.enhance import EnhanceWorker
 from davinci.bridge import resolve
@@ -2899,6 +2899,16 @@ class TabT2V(QScrollArea):
         # ── Prompt ────────────────────────────────────────────────────────────
         _ez_lay.addWidget(section_label("Prompt"))
 
+        # Recomposer à la demande + case « automatique » MÉMORISÉE (demande
+        # Matthieu 2026-10-04 : « quand je sélectionne un plan, il me fait
+        # automatiquement une réécriture »). Décoché : un final déjà composé
+        # (stocké ou en cache) s'affiche quand même, sans nouvel appel IA.
+        from ui.compose_controls import ComposeControls
+        self._compose_ctl = ComposeControls("studio_auto_compose")
+        self._compose_ctl.recompose_requested.connect(self._recompose_now)
+        self._compose_ctl.auto_changed.connect(self._on_auto_compose_changed)
+        _ez_lay.addWidget(self._compose_ctl)
+
         # ── Ref mode badge (teal) — visible quand Seedance passera en mode Référence.
         #    Créé ici, mais AJOUTÉ AU LAYOUT plus bas, sous « Éléments injectés » et
         #    juste au-dessus des vignettes qu'il décrit (demande Matthieu 2026-07-25) :
@@ -3290,11 +3300,21 @@ class TabT2V(QScrollArea):
             _di = self.cb_res.findData(_def_res)
             if _di >= 0:
                 self.cb_res.setCurrentIndex(_di)
+        # Distributeur — au même endroit que le moteur de génération (demande
+        # Matthieu 2026-10-04) : prix du plan chez chacun, choix écrit dans la
+        # config, options impossibles chez lui grisées (_apply_distrib_constraints).
+        from ui.distrib_picker import DistributorPicker
+        self._distrib = DistributorPicker()
+        self._distrib.changed.connect(self._on_distrib_changed)
+        self._distrib_probe = None
+        self._distrib_images: dict | None = None
+        self._distrib_forced: dict = {}
 
         for (row, col), lbl, widget in [
             ((0, 0), "Moteur de génération", self.cb_model),
             ((0, 1), "Ratio",      self.cb_ratio),
             ((1, 0), "Résolution", self.cb_res),
+            ((1, 1), "Distributeur", self._distrib),
         ]:
             g = QWidget()
             l = QVBoxLayout(g)
@@ -3304,6 +3324,7 @@ class TabT2V(QScrollArea):
             l.addWidget(widget)
             grid.addWidget(g, row, col)
         lay.addLayout(grid)
+        lay.addWidget(self._distrib.hint)
 
         # ── Module externe du moteur (ComfyUI, H3 local) : bandeau non bloquant
         # dès la sélection — « pas installé — PANDORA peut l'installer » ─────
@@ -3450,6 +3471,17 @@ class TabT2V(QScrollArea):
                     _sig.currentIndexChanged.connect(self._refresh_price_estimate)
             except Exception:
                 pass
+        # Le menu Distributeur affiche le prix du plan COURANT : il suit la
+        # résolution et la durée (le moteur passe déjà par _on_engine_changed).
+        for _sig in (getattr(self, "cb_res", None), getattr(self, "cb_dur", None)):
+            try:
+                if _sig is not None:
+                    _sig.currentIndexChanged.connect(self._refresh_distrib)
+            except Exception:
+                pass
+        # Premier remplissage : le menu Résolution vient d'être construit depuis
+        # la table fal — il doit déjà suivre le distributeur choisi.
+        self._on_distrib_changed()
         try:
             self._storyboard.shots_selected.connect(lambda *_: self._refresh_price_estimate())
             self._storyboard.shot_selected.connect(lambda *_: self._refresh_price_estimate())
@@ -3803,6 +3835,33 @@ class TabT2V(QScrollArea):
         self._final_from_cache = False
         self._refresh_prompt_preview()
 
+    def _recompose_now(self):
+        """Bouton « Recomposer le prompt » (04/10/2026) : recharge le prompt du
+        plan et le fait réécrire par l'IA — composition FRAÎCHE, même si
+        l'automatique est décoché ou qu'un final existe déjà."""
+        try:
+            shot = self._active_shot or {}
+            if shot.get("seedance_prompt"):
+                self._prompt_is_final = False
+                self._suppress_prompt_signal = True
+                try:
+                    self.prompt_ta.setPlainText(shot["seedance_prompt"])
+                finally:
+                    self._suppress_prompt_signal = False
+            self._force_compose = True
+            self._schedule_final_assembly()
+        except Exception:
+            pass
+
+    def _on_auto_compose_changed(self, on: bool):
+        """Cocher « automatique » sur un plan pas encore composé le compose
+        aussitôt ; décocher ne retire rien d'affiché."""
+        try:
+            if on and self._active_shot and not getattr(self, "_prompt_is_final", False):
+                self._schedule_final_assembly()
+        except Exception:
+            pass
+
     def _schedule_final_assembly(self):
         """Programme l'assemblage du prompt FINAL de l'encart pour le plan qui vient
         d'être sélectionné (débounce court pour les balayages de plans)."""
@@ -3840,6 +3899,14 @@ class TabT2V(QScrollArea):
         self._sync_film_anchor_with_style()
         # …et le moteur suit un moteur visé choisi entre-temps dans le Scénario.
         self._apply_target_engine()
+        # Distributeur changé entre-temps dans les Paramètres : résolutions,
+        # prix et options regrisées relus.
+        try:
+            from core.media_provider import get_video_provider
+            if get_video_provider() != getattr(self, "_distrib_seen", None):
+                self._on_distrib_changed()
+        except Exception:
+            pass
 
     def _decor_ref_mode(self) -> str:
         """Ce que le moteur doit faire de l'image du décor : « lieu » (défaut),
@@ -3863,6 +3930,12 @@ class TabT2V(QScrollArea):
         src = getattr(self, "_assembly_source", None)
         if not src or self.prompt_ta.toPlainText().strip() != src:
             return   # édition utilisateur entre-temps → on n'écrase jamais
+        # « Recomposer le prompt » (04/10/2026) : composition FRAÎCHE demandée —
+        # ni le final stocké ni le cache ne la remplacent. Consommé ici.
+        _force = bool(getattr(self, "_force_compose", False))
+        self._force_compose = False
+        if hasattr(self, "_compose_ctl"):
+            self._compose_ctl.set_note("")
         # ── Le plan porte déjà son prompt FINAL ? On le LIT (2026-08-09) ──────
         # Architecture à l'endroit : le Storyboard est la source, le Studio lit.
         # Conditions strictes — le texte de l'encart est bien le structuré du
@@ -3885,7 +3958,7 @@ class TabT2V(QScrollArea):
             }
             _studio_extra = [l for l, _t, _m in self._text_injections()
                              if l not in _COVERED]
-            if (_shot and not _studio_extra
+            if (_shot and not _studio_extra and not _force
                     and src == (_shot.get("seedance_prompt") or "").strip()
                     and _fp.state_of(_shot) == _fp.FRESH
                     and (_shot.get(_fp.F_ENGINE) or "") == self._get_model()
@@ -3908,11 +3981,19 @@ class TabT2V(QScrollArea):
         _ctx = self._compose_context()
         # ── Déjà composé à l'identique ? On réutilise, sans appel IA ──────────
         _key = self._final_cache_key(prompt_fr, _ctx)
-        _hit = self._final_cache.get(_key)
+        _hit = None if _force else self._final_cache.get(_key)
         if _hit is not None:
             self._final_cache_key_pending = ""
             self._final_from_cache = True
             self._on_preview_translated(*_hit)
+            return
+        # ── Recomposition automatique DÉCOCHÉE : pas d'appel IA à la sélection
+        # (04/10/2026). Le texte du plan reste affiché ; l'envoi le composera
+        # comme avant si rien ne l'a été ici.
+        if not _force and not self._compose_ctl.is_auto():
+            self._final_cache_key_pending = ""
+            self._compose_ctl.set_note(translate(
+                "prompt du plan — non recomposé (automatique désactivé)"))
             return
         self._final_cache_key_pending = _key
         self._final_from_cache = False
@@ -4689,10 +4770,27 @@ class TabT2V(QScrollArea):
                     self._schedule_final_assembly()
         except Exception:
             pass
-        fixed_res = key in _FIXED_RES_ENGINES
         self.cb_ratio.setEnabled(key not in _FIXED_RATIO_ENGINES)
-        # Mise à jour des options de résolution selon le moteur
+        self._rebuild_res_options(key)
+        if hasattr(self, "_ref_compat_banner"):
+            self._ref_compat_banner.setVisible(key in _TEXT_FALLBACK_ENGINES)
+        self._refresh_distrib()
+        # « Éléments injectés » relit la durée et la résolution du NOUVEAU
+        # moteur : il ne se recalculait qu'au changement de grammaire (2.0 → 2.5,
+        # même grammaire : le panneau restait sur « Durée : 15s »).
+        self._refresh_prompt_preview()
+
+    def _rebuild_res_options(self, key: str):
+        """Options du menu Résolution pour ce moteur — et pour le DISTRIBUTEUR
+        qui le sert : seules ses résolutions, à son prix (les libellés
+        affichaient le tarif fal quel que soit le choix, constat Matthieu
+        2026-10-04)."""
         options = _ENGINE_RESOLUTIONS.get(key, [("1080p", "1080p"), ("720p", "720p"), ("480p", "480p")])
+        try:
+            from ui.distrib_picker import resolution_options as _res_opts
+            options = _res_opts(key, options)
+        except Exception:
+            pass
         prev = self.cb_res.currentData() or self.cb_res.currentText()
         self.cb_res.blockSignals(True)
         self.cb_res.clear()
@@ -4708,13 +4806,129 @@ class TabT2V(QScrollArea):
             idx = self.cb_res.findData(_ENGINE_DEFAULT_RES.get(key, ""))
         self.cb_res.setCurrentIndex(max(0, idx))
         self.cb_res.blockSignals(False)
-        self.cb_res.setEnabled(not fixed_res)
-        if hasattr(self, "_ref_compat_banner"):
-            self._ref_compat_banner.setVisible(key in _TEXT_FALLBACK_ENGINES)
-        # « Éléments injectés » relit la durée et la résolution du NOUVEAU
-        # moteur : il ne se recalculait qu'au changement de grammaire (2.0 → 2.5,
-        # même grammaire : le panneau restait sur « Durée : 15s »).
-        self._refresh_prompt_preview()
+        self.cb_res.setEnabled(key not in _FIXED_RES_ENGINES)
+
+    # ── Distributeur (menu à côté du moteur, 2026-10-04) ──────────────────────
+
+    def _on_distrib_changed(self, _pid: str = ""):
+        """Nouveau distributeur : résolutions et prix relus, options regrisées,
+        estimation du bandeau recalculée."""
+        self._rebuild_res_options(self._get_model())
+        self._refresh_distrib()
+        try:
+            self._refresh_price_estimate()
+        except Exception:
+            pass
+
+    def _refresh_distrib(self, *_a):
+        """Prix du plan courant chez chaque distributeur + options impossibles
+        chez celui qui servira le moteur."""
+        picker = getattr(self, "_distrib", None)
+        if picker is None or not hasattr(self, "cb_res"):
+            return
+        key = self._get_model()
+        try:
+            from ui.distrib_picker import availability
+            from core.media_provider import get_video_provider
+            from api.distrib_probe import needs_probe
+            self._distrib_seen = get_video_provider()
+            if needs_probe():
+                self._start_distrib_probe()
+            res = self.cb_res.currentData() or self.cb_res.currentText()
+            av = availability(key, res)
+            # Aucun distributeur activé ne peut recevoir d'images : l'envoi les
+            # retire (_imgs_blocked), et les cases qui en envoient sont grisées.
+            self._distrib_images = {"ok": bool(av["ref"]), "why": av["why_ref"]}
+            audio = bool(self._audio_cb.isChecked()) if getattr(self, "_audio_cb", None) else True
+            picker.refresh(key, res, float(self._get_duration() or 0), audio=audio,
+                           engine_label=self.cb_model.currentText().split("  ")[0],
+                           avail=av)
+            self._apply_distrib_constraints(av)
+        except Exception:
+            pass
+
+    def _start_distrib_probe(self):
+        """Sondes GRATUITES (api/distrib_probe) : compte fal utilisable ? dépôt
+        PiAPI ouvert ? Une seule à la fois ; la précédente est PARQUÉE."""
+        # Onglet AFFICHÉ seulement, et jamais hors écran : les harnais créent
+        # l'onglet (parfois l'affichent) en mode « offscreen » — la sonde partait
+        # alors avec les VRAIES clés de la config, et son fil encore vivant à la
+        # destruction de l'onglet faisait avorter le processus (0xC0000409,
+        # 04/10/2026). Même garde que la découverte des modèles IA.
+        from PyQt6.QtGui import QGuiApplication
+        if not self.isVisible() or QGuiApplication.platformName() == "offscreen":
+            return
+        prev = getattr(self, "_distrib_probe", None)
+        if prev is not None and is_running(prev):
+            return
+        # Réseau coupé : rien n'est retenu, la sonde se relancerait à chaque
+        # rafraîchissement — une par minute au plus.
+        import time as _time
+        if _time.monotonic() - getattr(self, "_distrib_probe_at", -1e9) < 60:
+            return
+        self._distrib_probe_at = _time.monotonic()
+        if prev is not None:
+            abandon_thread(prev)
+        from api.distrib_probe import FactsProbe, keep_alive
+        w = keep_alive(FactsProbe())
+        w.done.connect(lambda _f: self._on_distrib_changed())
+        self._distrib_probe = w
+        w.start()
+
+    def _apply_distrib_constraints(self, av: dict):
+        """Grise (et décoche) ce qu'AUCUN distributeur activé ne sait faire, avec
+        la raison au survol ; rétablit l'état d'avant dès que c'est possible.
+
+        Demande Matthieu 2026-10-04 : « qu'on ne puisse pas cocher les options
+        qui ne sont pas possibles ». En multi-distributeurs, une option que le
+        premier ne sait pas faire part chez le suivant : elle reste cochable.
+        En mono, seul le premier compte."""
+        imgs_ok = bool(av.get("ref"))
+        i2v_ok = bool(av.get("i2v"))
+        mute_ok = bool(av.get("mute"))
+        why_imgs = translate("Aucun distributeur activé ne peut recevoir d'images : "
+                             "{why}").format(why=av.get("why_ref", ""))
+        why_i2v = translate("Aucun distributeur activé ne propose l'image de début / fin "
+                            "sur ce moteur : {why}").format(why=av.get("why_i2v", ""))
+        rules = [
+            # (case, rangée, autorisé, valeur imposée si interdit, raison)
+            (getattr(self, "_mood_ref_cb", None), getattr(self, "_mood_ref_toggle_row", None),
+             imgs_ok, False, why_imgs),
+            (getattr(self, "_decor_sync_cb", None), getattr(self, "_decor_sync_toggle_row", None),
+             imgs_ok, False, why_imgs),
+            (getattr(self, "_mood_chain_cb", None), getattr(self, "_mood_chain_toggle_row", None),
+             imgs_ok and i2v_ok, False, why_imgs if not imgs_ok else why_i2v),
+            (getattr(self, "_raccord_auto_cb", None),
+             getattr(self, "_raccord_auto_toggle_row", None),
+             imgs_ok and i2v_ok, False, why_imgs if not imgs_ok else why_i2v),
+            (getattr(self, "_no_ref_global_cb", None), getattr(self, "_no_ref_global_cb", None),
+             imgs_ok, True, why_imgs),
+            (getattr(self, "_audio_cb", None), getattr(self, "_audio_toggle_row", None),
+             mute_ok, True, translate("Aucun distributeur activé ne permet de couper le "
+                                      "son sur ce moteur : {why}").format(
+                                          why=av.get("why_mute", ""))),
+        ]
+        for cb, row, allowed, forced, why in rules:
+            if cb is None:
+                continue
+            forced_before = cb in self._distrib_forced
+            if not allowed:
+                if not forced_before:
+                    # État ET infobulle d'origine, rendus tels quels plus tard.
+                    self._distrib_forced[cb] = (cb.isChecked(),
+                                                row.toolTip() if row is not None else "")
+                if cb.isChecked() != forced:
+                    cb.setChecked(forced)
+                cb.setEnabled(False)
+                if row is not None:
+                    row.setToolTip(why)
+            elif forced_before:
+                prev_checked, prev_tip = self._distrib_forced.pop(cb)
+                cb.setEnabled(True)
+                if row is not None:
+                    row.setToolTip(prev_tip)
+                if cb.isChecked() != prev_checked:
+                    cb.setChecked(prev_checked)
 
     def _apply_target_engine(self):
         """Moteur de l'onglet = moteur VISÉ par le projet, celui pour lequel le
@@ -5217,11 +5431,18 @@ class TabT2V(QScrollArea):
         from core.context import get_data_root as _get_data_root
         _ref_dir = os.path.join(_get_data_root(), "seedance_refs")
         _no_ref_global = getattr(self, "_no_ref_global_cb", None) and self._no_ref_global_cb.isChecked()
-        if not _is_seedance or _no_ref_global:
+        # Distributeur qui ne peut recevoir AUCUNE image (sonde api/distrib_probe,
+        # ex. PiAPI sans dépôt et sans relais fal) : l'onglet a grisé les cases,
+        # le bandeau du distributeur le dit ; ceci couvre aussi le style et les
+        # images d'inspiration, qui n'ont pas de case.
+        _imgs_blocked = bool(getattr(self, "_distrib_images", None)
+                             and self._distrib_images.get("ok") is False)
+        if not _is_seedance or _no_ref_global or _imgs_blocked:
             ref_images, ref_image_roles = [], []
         else:
             ref_images, ref_image_roles = self._casting.get_ref_mosaics(output_dir=_ref_dir)
-        if _is_seedance and hasattr(self, "_style_ref_path") and self._style_ref_path and os.path.isfile(self._style_ref_path):
+        if (_is_seedance and not _imgs_blocked and hasattr(self, "_style_ref_path")
+                and self._style_ref_path and os.path.isfile(self._style_ref_path)):
             ref_images = ref_images + [self._style_ref_path]
             ref_image_roles = ref_image_roles + ["style"]
         # Se référer au mood — le mood validé du plan part comme image de référence
@@ -5236,7 +5457,7 @@ class TabT2V(QScrollArea):
         # Images de RÉFÉRENCE (inspiration) du plan → rôle « reference » : Seedance
         # s'en inspire (ambiance / composition / design) SANS les copier. Max 3,
         # Seedance uniquement ; silencieux si le plan n'en a pas.
-        if _is_seedance and self._active_shot:
+        if _is_seedance and self._active_shot and not _imgs_blocked:
             for _rp in (self._active_shot.get("reference_images") or [])[:3]:
                 if _rp and os.path.isfile(_rp):
                     ref_images = ref_images + [_rp]

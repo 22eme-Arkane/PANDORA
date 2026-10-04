@@ -4,9 +4,11 @@ ui/dialog_onboarding.py — Wizard de démarrage pour les novices.
 Affiché au premier lancement (ou tant que show_api_guide=True dans la config).
 Refonte 2026-07-16 (maquette validée par Matthieu) : une idée par écran —
 grande icône lumineuse, titre, description précise, UN bouton d'action.
-8 écrans : Bienvenue → fal.ai (compte/clé/crédits) → Claude (compte/clé/
-crédits) → Coller les clés. Les vraies captures assets/onboarding/*.png
-s'affichent quand elles existent (sinon rien — pas de fausse maquette).
+9 écrans : Bienvenue → fal.ai (compte/clé/crédits) → distributeurs low cost
+(facultatif, 04/10/2026 : BytePlus, Runware, PiAPI — prix, clé, explication)
+→ Claude (compte/clé/crédits) → Coller les clés. Les vraies captures
+assets/onboarding/*.png s'affichent quand elles existent (sinon rien — pas de
+fausse maquette).
 """
 from PyQt6.QtWidgets import (
     QApplication, QDialog, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
@@ -29,6 +31,7 @@ _ANT_BILLING  = "https://platform.claude.com/settings/billing"
 _TUTO_URL     = "https://www.youtube.com/watch?v=SC3pRI5bR1Q"
 
 _FAL_COLOR    = "#9C3FE4"     # violet fal.ai (couleur de marque)
+_DIST_COLOR   = "#F5B84B"     # or — écran des distributeurs low cost (facultatif)
 
 
 # ── Helpers visuels ────────────────────────────────────────────────────────────
@@ -163,11 +166,13 @@ def _shot(filename: str) -> QWidget | None:
 
 
 def _key_row(cfg_key: str, placeholder: str, color: str,
-             expect_prefix: str = "") -> QWidget:
+             expect_prefix: str = "", on_saved=None) -> QWidget:
     """Champ « colle ta clé ICI » : enregistre directement dans la config,
     sans obliger à passer par la page Paramètres (demande Matthieu 2026-07-16).
     Champ masqué (EchoMode.Password) comme dans Paramètres ; le bouton
-    « Coller » lit le presse-papiers, remplit le champ ET enregistre."""
+    « Coller » lit le presse-papiers, remplit le champ ET enregistre.
+    `on_saved()` (facultatif) est appelé après l'enregistrement ; s'il rend
+    un texte, celui-ci remplace le message de confirmation."""
     box = QWidget()
     box.setStyleSheet("background:transparent;")
     v = QVBoxLayout(box)
@@ -222,9 +227,18 @@ def _key_row(cfg_key: str, placeholder: str, color: str,
         cfg = load_config()
         cfg[cfg_key] = val
         save_config(cfg)
+        extra = ""
+        if on_saved is not None:
+            try:
+                extra = on_saved() or ""
+            except Exception:
+                extra = ""
         if expect_prefix and not val.startswith(expect_prefix):
             _set_status("⚠️  Clé enregistrée — mais elle ne ressemble pas à une clé "
                         "attendue, vérifie au besoin.", CP["orange"])
+        elif extra:
+            status.setText(extra)       # déjà traduit par l'appelant
+            status.setStyleSheet(f"color:{CP['green']};font-size:10.5px;background:transparent;")
         else:
             _set_status("✅  Clé enregistrée — tu peux passer à l'étape suivante.",
                         CP["green"])
@@ -385,8 +399,9 @@ class OnboardingDialog(QDialog):
         self._colors = [
             CP["accent"],                     # 1 Bienvenue
             _FAL_COLOR, _FAL_COLOR, _FAL_COLOR,   # 2-4 fal.ai
-            CP["accent2"], CP["accent2"], CP["accent2"],  # 5-7 Claude
-            CP["green"],                      # 8 Finale
+            _DIST_COLOR,                      # 5 Distributeurs low cost (facultatif)
+            CP["accent2"], CP["accent2"], CP["accent2"],  # 6-8 Claude
+            CP["green"],                      # 9 Finale
         ]
         n = len(self._colors)
         strip = QWidget()
@@ -446,12 +461,17 @@ class OnboardingDialog(QDialog):
                 "Ajoute quelques crédits",
                 "fal.ai fonctionne <b>à la consommation, sans abonnement</b> : "
                 "tu ne paies que ce que tu génères.",
+                # Chiffres corrigés le 04/10/2026 : l'écran promettait « 20 à 50
+                # vidéos pour $10 » — une vidéo Seedance 2.0 de 10 s en 720p coûte
+                # environ $3 chez fal (0,30 $/s, core/pricing).
                 detail="Sur la page <b>Billing</b> : clique <b>« Add credits »</b> — "
-                       "<b>$10</b> suffisent pour bien démarrer : environ <b>20 à 50 vidéos</b> "
-                       "Seedance 2.0 ($0.20–$0.50 la vidéo de 10 s).",
+                       "<b>$10</b> permettent quelques essais : environ <b>3 vidéos</b> "
+                       "Seedance 2.0 de 10 s en 720p (≈ $3 la vidéo chez fal.ai). "
+                       "L'étape suivante montre comment payer moins cher.",
                 cta_label="💳  Ouvrir la page Billing →",
                 cta_action=lambda: _open(_FAL_BILLING),
             ),
+            self._page_distributors(),
             # NB glyphes : rester sur des emoji à présentation emoji par défaut
             # (🔌🔑💳🧠✨✅…) — les glyphes « texte » (✦ ☁ 🗝 ✓ ⚙) sortent en
             # carré vide (tofu) hors Windows/GDI (vérifié au rendu offscreen).
@@ -633,6 +653,126 @@ class OnboardingDialog(QDialog):
         w.setWidget(inner)
         return w
 
+    # ── Distributeurs low cost (facultatif) — demande Matthieu 04/10/2026 ─────
+
+    @staticmethod
+    def _promote_distributor(pid: str) -> str:
+        """Première clé de distributeur collée alors que fal est en tête : ce
+        distributeur passe EN TÊTE pour Seedance — c'est pour payer moins cher
+        qu'on l'ajoute. Un ordre déjà personnalisé n'est jamais touché."""
+        from core.config import load_config, save_config
+        from core import media_provider as mp
+        cfg = load_config()
+        if mp.enabled_order(cfg)[0] != "fal":
+            return ""
+        save_config(mp.promote_in_config(cfg, pid))
+        return translate("✅  Clé enregistrée — {name} passe en tête pour Seedance "
+                         "(modifiable dans Paramètres → Distribution des vidéos).").format(
+            name=mp.provider_short(pid))
+
+    def _distrib_card(self, pid: str) -> QWidget:
+        """Carte d'un distributeur : à quoi il sert, son prix, sa clé."""
+        from core import media_provider as mp
+        card = QFrame()
+        card.setObjectName("distribCard")
+        card.setStyleSheet(
+            f"QFrame#distribCard{{background:{_rgba(_DIST_COLOR, 0.05)};"
+            f"border:1px solid {_rgba(_DIST_COLOR, 0.28)};border-radius:10px;}}")
+        v = QVBoxLayout(card)
+        v.setContentsMargins(14, 10, 14, 12)
+        v.setSpacing(6)
+        head = QHBoxLayout()
+        name = QLabel(translate(mp.provider_label(pid)))
+        name.setStyleSheet(f"color:{CP['text_primary']};font-size:13px;font-weight:700;"
+                           f"background:transparent;border:none;")
+        head.addWidget(name, 1)
+        btn = QPushButton(translate("🔑  Créer ma clé →"))
+        btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        btn.setFixedHeight(28)
+        btn.setStyleSheet(
+            f"QPushButton{{background:transparent;color:{_DIST_COLOR};"
+            f"border:1px solid {_DIST_COLOR};border-radius:8px;font-size:11px;"
+            f"font-weight:700;padding:0 12px;}}"
+            f"QPushButton:hover{{background:{_rgba(_DIST_COLOR, 0.12)};}}")
+        btn.clicked.connect(lambda _c=False, u=mp.provider_keys_url(pid): _open(u))
+        head.addWidget(btn)
+        v.addLayout(head)
+        blurb = QLabel(translate(mp.PROVIDERS[pid]["blurb"]))
+        blurb.setWordWrap(True)
+        blurb.setStyleSheet(f"color:{CP['text_secondary']};font-size:11px;"
+                            f"background:transparent;border:none;")
+        v.addWidget(blurb)
+        placeholders = {"byteplus": "Colle ici ta clé BytePlus ModelArk",
+                        "runware": "Colle ici ta clé Runware",
+                        "piapi": "Colle ici ta clé PiAPI"}
+        v.addWidget(_key_row(f"{pid}_key", placeholders[pid], _DIST_COLOR,
+                             on_saved=lambda p=pid: self._promote_distributor(p)))
+        return card
+
+    def _page_distributors(self) -> QWidget:
+        w = QScrollArea()
+        w.setWidgetResizable(True)
+        w.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        w.setStyleSheet(
+            f"QScrollArea{{background:transparent;border:none;}}"
+            f"QScrollBar:vertical{{width:4px;background:{CP['bg2']};}}"
+            f"QScrollBar::handle:vertical{{background:{CP['border_bright']};border-radius:2px;}}"
+        )
+        inner = QWidget()
+        inner.setStyleSheet("background:transparent;")
+        outer_lay = QHBoxLayout(inner)
+        outer_lay.setContentsMargins(48, 12, 48, 12)
+        col_w = QWidget()
+        col_w.setMaximumWidth(560)
+        col_w.setStyleSheet("background:transparent;")
+        lay = QVBoxLayout(col_w)
+        lay.setContentsMargins(0, 0, 0, 0)
+        lay.setSpacing(0)
+
+        lay.addSpacing(34)   # fixe, pas de stretch haut (voir _step_page)
+        lay.addWidget(_kicker("DISTRIBUTEURS VIDÉO — FACULTATIF"), 0, Qt.AlignmentFlag.AlignCenter)
+        lay.addSpacing(16)
+        lay.addWidget(_icon_chip("💰", _DIST_COLOR, 72), 0, Qt.AlignmentFlag.AlignCenter)
+        lay.addSpacing(16)
+        lay.addWidget(_title("Tes vidéos jusqu'à deux fois moins cher"))
+        lay.addSpacing(8)
+        lay.addWidget(_subtitle(
+            "fal.ai revend Seedance environ <b>deux fois</b> son prix officiel. Ces "
+            "distributeurs vendent <b>le même moteur</b> moins cher. C'est facultatif : "
+            "tu peux aussi le faire plus tard dans <b>Paramètres → Distribution des vidéos</b>."))
+        try:
+            from core import media_provider as mp
+            q = {e["id"]: e["cost"] for e in mp.quotes("seedance-2.5", "720p", 30)}
+            prices = translate(
+                "Un plan Seedance 2.5 de 30 s en 720p : <b>fal.ai ${fal:.2f}</b> · "
+                "BytePlus ${byteplus:.2f} HT · Runware ${runware:.2f} · PiAPI ${piapi:.2f}"
+            ).format(**{k: (v or 0.0) for k, v in q.items()})
+        except Exception:
+            prices = ""
+        if prices:
+            lay.addSpacing(12)
+            lay.addWidget(_detail_box(prices, _DIST_COLOR))
+        for pid in ("byteplus", "runware", "piapi"):
+            lay.addSpacing(12)
+            lay.addWidget(self._distrib_card(pid))
+        lay.addSpacing(12)
+        note = QLabel(translate(
+            "🖼️  Images de référence (personnages, moods) : BytePlus et Runware les reçoivent "
+            "directement. PiAPI exige son abonnement Creator, ou un compte fal.ai approvisionné "
+            "qui sert de relais — sinon les plans avec images passent au distributeur suivant, "
+            "ou s'arrêtent avant d'être payés."))
+        note.setWordWrap(True)
+        note.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        note.setStyleSheet(f"color:{CP['orange']};font-size:10.5px;background:transparent;")
+        lay.addWidget(note)
+        lay.addStretch()
+
+        outer_lay.addStretch()
+        outer_lay.addWidget(col_w, 1)
+        outer_lay.addStretch()
+        w.setWidget(inner)
+        return w
+
     # ── Page finale : état des clés + accès Paramètres ─────────────────────────
 
     def _page_finish(self) -> QWidget:
@@ -682,7 +822,8 @@ class OnboardingDialog(QDialog):
         sb.setSpacing(6)
         self._status_fal = QLabel("")
         self._status_ant = QLabel("")
-        for lbl in (self._status_fal, self._status_ant):
+        self._status_dist = QLabel("")
+        for lbl in (self._status_fal, self._status_ant, self._status_dist):
             lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
             lbl.setStyleSheet(
                 f"color:{CP['text_secondary']};font-size:12px;"
@@ -721,7 +862,7 @@ class OnboardingDialog(QDialog):
              "○  Clé fal.ai manquante — reviens à l'étape 3"),
             (self._status_ant, "anthropic_key",
              "✅  Clé Claude enregistrée",
-             "○  Clé Claude manquante — reviens à l'étape 6"),
+             "○  Clé Claude manquante — reviens à l'étape 7"),
         ):
             if (cfg.get(cfg_key) or "").strip():
                 lbl.setText(translate(ok_txt))
@@ -733,6 +874,25 @@ class OnboardingDialog(QDialog):
                 lbl.setStyleSheet(
                     f"color:{CP['orange']};font-size:12px;"
                     f"background:transparent;border:none;")
+        # Distributeurs low cost : facultatifs — jamais en orange s'il n'y en a pas.
+        try:
+            from core import media_provider as mp
+            names = [mp.provider_short(p) for p in ("byteplus", "runware", "piapi")
+                     if (cfg.get(f"{p}_key") or "").strip()]
+            first = mp.enabled_order(cfg)[0]
+        except Exception:
+            names, first = [], "fal"
+        if names:
+            self._status_dist.setText(translate(
+                "✅  Distributeur(s) : {names} — en tête pour Seedance : {first}").format(
+                names=", ".join(names), first=mp.provider_short(first)))
+            col = CP["green"]
+        else:
+            self._status_dist.setText(translate(
+                "○  Aucun distributeur low cost (facultatif — étape 5)"))
+            col = CP["text_dim"]
+        self._status_dist.setStyleSheet(
+            f"color:{col};font-size:12px;background:transparent;border:none;")
 
     # ── Navigation ─────────────────────────────────────────────────────────────
 

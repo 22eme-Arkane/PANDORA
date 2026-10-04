@@ -833,7 +833,8 @@ def _compose_cache_write(shot_id: str, key: str, prompt: str, why: str):
 
 def compose_mood_prompt(shot: dict, film_style: str = "", engine: str = "",
                         building_ref: str = "", is_mapping=None,
-                        force_fresh: bool = False, instant: str = "end") -> tuple:
+                        force_fresh: bool = False, instant: str = "end",
+                        cache_only: bool = False) -> tuple:
     """(prompt, composé, raison, depuis_le_cache) — repli déterministe garanti.
 
     Le repli n'est pas une option de secours mais la moitié du contrat : sans clé,
@@ -844,6 +845,9 @@ def compose_mood_prompt(shot: dict, film_style: str = "", engine: str = "",
     l'écriture reste. Un refus du contrôle y est mémorisé ; sans ce drapeau,
     « Réinitialiser » resservait la même erreur à l'identique, sans jamais
     redonner sa chance à l'IA (constat Matthieu 2026-07-28).
+
+    `cache_only` (recomposition automatique DÉCOCHÉE, 04/10/2026) : rend la
+    composition déjà faite s'il y en a une, sinon le repli — JAMAIS d'appel IA.
     """
     _repli = build_mood_prompt(shot, film_style, engine, instant=instant)
     _sid = (shot or {}).get("id", "")
@@ -866,6 +870,8 @@ def compose_mood_prompt(shot: dict, film_style: str = "", engine: str = "",
         if isinstance(_hit, dict) and (_hit.get("prompt") or "").strip():
             _why = _hit.get("why") or ""
             return _hit["prompt"], (not _why), _why, True
+    if cache_only:
+        return _repli, False, "", False
 
     try:
         from core import ai_provider
