@@ -61,6 +61,14 @@ actually read.**
   the distributor goes first in the order, and the queue starts again from the
   failed shot. No button when the refusal comes from the model owner's filter
   (real faces, copyright): it is the same at every distributor.
+- **Reuse a shot: same prompt, same seed.** « ↻ Reuse » (History and Video
+  Library) used to bring back only the working prompt — rewritten again by the
+  AI when sent — and a seed that never reached BytePlus. It now restores the
+  exact prompt that was sent (sent again word for word), the shot's settings
+  and its seed. The seed only goes where the engine reads it — BytePlus for
+  Seedance 2.5, fal only in reference mode — and the Studio says so under
+  « Visual DNA ». Even with the same seed, ByteDance promises a close result,
+  not an identical one.
 - **« ⊘ None » in every storyboard menu** (camera movement, shot size, focal
   length, lens, speed, axis, time of day — and music and transition in PANDORA
   Live): the field stays empty and nothing is injected into the prompt for it.
