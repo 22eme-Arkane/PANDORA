@@ -61,6 +61,13 @@ def frames_dir() -> str:
 
 DEFAULT_VERSION_ID = "default"
 
+# Entrée « aucun » EN TÊTE des menus du storyboard et de la fenêtre du plan
+# (demande Matthieu du 05/10/2026) : la valeur est VIDE, donc rien n'est
+# injecté dans le prompt pour ce champ (core/shot_terms ignore les champs vides).
+NONE_LABEL = "⊘ Aucun"
+NONE_LABEL_F = "⊘ Aucune"
+NONE_LABEL_DOF = "⊘ Aucune (selon la focale)"
+
 CAMERA_MOVEMENTS = [
     "Fixe",
     "Panoramique horizontal",
@@ -149,7 +156,7 @@ SHOT_SIZE_LABELS = {
     "PE":     "PE — Plan d'Ensemble",
     "PTG":    "PTG — Plan Très Général",
     "Insert": "Insert",
-    "":       "—",
+    "":       "—",     # affichage ; les MENUS montrent NONE_LABEL en tête
 }
 
 SPEEDS = [

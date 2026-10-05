@@ -53,6 +53,21 @@ actually read.**
   OpenVPN, Proton…) and says so, with the fix: turn it off while generating, or
   exclude PANDORA from the VPN (split tunneling). Same advice for fal.ai and the
   text AI.
+- **Try again with another distributor.** A failed generation now opens ONE
+  window (there were two in a row), with a button for each distributor able to
+  make the shot and its price there. Nothing switches on its own: you choose,
+  the distributor goes first in the order, and the queue starts again from the
+  failed shot.
+- **« ⊘ None » in every storyboard menu** (camera movement, shot size, focal
+  length, lens, speed, axis, time of day — and music and transition in PANDORA
+  Live): the field stays empty and nothing is injected into the prompt for it.
+- **« ⊘ No style » for the film** (Screenplay page): no style is added to the
+  prompts — neither a catalogue style nor the director's note, which also
+  carried the camera body, camera moves and editing rhythm into every shot.
+- **Prompts over 4,000 characters skip PiAPI**, its limit, with the reason
+  shown; BytePlus and fal.ai take longer prompts. And the prompt rewrite no
+  longer receives « Crane / Drone » as is: it wrote « drone/crane move », and
+  Seedance drew a drone.
 
 ## What's new in v2.6.0
 

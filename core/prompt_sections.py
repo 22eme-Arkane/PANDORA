@@ -238,7 +238,8 @@ def technique_line(shot: dict) -> str:
     sz = _SHOT_SIZE_FR.get(sz, sz)
     if sz:
         bits.append(sz)
-    mov = (shot.get("camera_movement") or "").strip()
+    from core.shot_terms import movement_label_for_prompt
+    mov = movement_label_for_prompt(shot.get("camera_movement") or "")
     if mov:
         bits.append("caméra fixe" if mov.lower() == "fixe" else mov.lower())
     foc = (shot.get("focal") or "").strip()

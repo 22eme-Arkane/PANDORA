@@ -18,7 +18,7 @@ import core.accessories as acc_api
 from core.storyboard import (
     DEFAULT_VERSION_ID,
     CAMERA_MOVEMENTS, SPEEDS, SHOT_SIZES, SHOT_SIZE_LABELS, FOCALS, DISTANCES, HEURE_PRESETS,
-    DEPTHS_OF_FIELD,
+    DEPTHS_OF_FIELD, NONE_LABEL, NONE_LABEL_F, NONE_LABEL_DOF,
 )
 from core.worker import abandon_thread
 from ui.dialog_shot_live import ShotDialog
@@ -837,7 +837,7 @@ class _ShotRow(QFrame):
             widget.mousePressEvent = _mpe
 
         def _dropdown(anchor: QWidget, options: list, current: str, key: str,
-                      labels: dict | None = None):
+                      labels: dict | None = None, none_label: str = NONE_LABEL):
             menu = QMenu(self)
             menu.setStyleSheet(
                 f"QMenu{{background:{CP['bg2']};border:1px solid {CP['border_bright']};"
@@ -846,7 +846,16 @@ class _ShotRow(QFrame):
                 f"QMenu::item:selected{{background:{CP['accent_dim']};color:{CP['text_primary']};}}"
                 f"QMenu::item:checked{{color:{CP['accent']};font-weight:700;}}"
             )
+            # « ⊘ Aucun » EN TÊTE (demande Matthieu du 05/10/2026) : valeur
+            # vide, donc rien d'injecté dans le prompt pour ce champ.
+            none_act = menu.addAction(translate(none_label))
+            none_act.setData("")
+            none_act.setCheckable(True)
+            none_act.setChecked(not current)
+            menu.addSeparator()
             for opt in options:
+                if opt == "":
+                    continue
                 label = labels.get(opt, opt) if labels else opt
                 act = menu.addAction(translate(label))
                 act.setData(opt)
@@ -1293,7 +1302,7 @@ class _ShotRow(QFrame):
         # ── Mouvement ────────────────────────────────────────────────────────
         mvt_w, mvt_l = _cell(_col_widths[6])
         _cur_mvt = data.get("camera_movement", "")
-        mvt_l.addWidget(_lbl(translate(_cur_mvt), size=10))
+        mvt_l.addWidget(_lbl(translate(_cur_mvt) or "—", size=10))
         _clickable(mvt_w, lambda _w=mvt_w, _c=_cur_mvt: _dropdown(
             _w, CAMERA_MOVEMENTS, _c, "camera_movement"))
         cells[6] = mvt_w
@@ -1324,7 +1333,7 @@ class _ShotRow(QFrame):
         dof_l.addWidget(_lbl(translate(_cur_dof) if _cur_dof else "—",
                              CP["accent"] if _cur_dof else CP["text_dim"], 10))
         _clickable(dof_w, lambda _w=dof_w, _c=_cur_dof: _dropdown(
-            _w, DEPTHS_OF_FIELD, _c, "depth_of_field"))
+            _w, DEPTHS_OF_FIELD, _c, "depth_of_field", none_label=NONE_LABEL_DOF))
         cells[23] = dof_w
 
         # ── Distance sujet-caméra ─────────────────────────────────────────────
@@ -1342,7 +1351,7 @@ class _ShotRow(QFrame):
                 f"QMenu::item:checked{{color:{CP['accent']};font-weight:700;}}"
             )
             for opt in DISTANCES:
-                label = opt if opt else "— Aucune —"
+                label = opt if opt else NONE_LABEL_F
                 act = menu.addAction(translate(label))
                 act.setData(opt)
                 act.setCheckable(True)
@@ -1368,13 +1377,13 @@ class _ShotRow(QFrame):
 
         # ── Vitesse ──────────────────────────────────────────────────────────
         spd_w, spd_l = _cell(_col_widths[10])
-        _cur_spd = data.get("speed", "Normale") or "Normale"
+        _cur_spd = data.get("speed", "Normale") or ""
         spd_color = (CP["orange"] if _cur_spd == "Ralenti"
                      else CP["accent"] if _cur_spd == "Accéléré"
                      else CP["text_dim"])
-        spd_l.addWidget(_lbl(translate(_cur_spd), spd_color, 10))
+        spd_l.addWidget(_lbl(translate(_cur_spd) or "—", spd_color, 10))
         _clickable(spd_w, lambda _w=spd_w, _c=_cur_spd: _dropdown(
-            _w, SPEEDS, _c, "speed"))
+            _w, SPEEDS, _c, "speed", none_label=NONE_LABEL_F))
         cells[10] = spd_w
 
         # ── Décor ────────────────────────────────────────────────────────────
@@ -1434,6 +1443,12 @@ class _ShotRow(QFrame):
                 f"QMenu::item:checked{{color:{CP['accent']};font-weight:700;}}"
             )
             cur = data.get("shot_time", "") or ""
+            # « ⊘ Aucune » en tête (05/10/2026) : pas d'éclairage horaire injecté.
+            none_act = menu.addAction(translate(NONE_LABEL_F))
+            none_act.setData("")
+            none_act.setCheckable(True)
+            none_act.setChecked(not cur)
+            menu.addSeparator()
             for preset in _HEURE_PRESETS:
                 act = menu.addAction(translate(preset))
                 act.setData(preset)
@@ -1540,7 +1555,7 @@ class _ShotRow(QFrame):
         _cur_mus = data.get("music_track", "") or ""
         mus_l.addWidget(_lbl(_cur_mus or "—", CP["accent"], 9))
         def _pick_music(_w=mus_w, _opts=[""] + _track_names, _c=_cur_mus):
-            _dropdown(_w, _opts, _c, "music_track", labels={"": "— Aucune —"})
+            _dropdown(_w, _opts, _c, "music_track", none_label=NONE_LABEL_F)
         _clickable(mus_w, _pick_music)
         cells[17] = mus_w
 
@@ -1564,7 +1579,7 @@ class _ShotRow(QFrame):
         tr_l.addWidget(_lbl(translate(_cur_tr) or "—", size=10))
         _clickable(tr_w, lambda _w=tr_w, _c=_cur_tr: _dropdown(
             _w, ["", "Cut", "Fondu", "Dissolve", "Glitch", "Flash", "Wipe"], _c,
-            "transition", labels={"": "— Aucune —"}))
+            "transition", none_label=NONE_LABEL_F))
         cells[19] = tr_w
 
         # ── Notes / Repère ────────────────────────────────────────────────────

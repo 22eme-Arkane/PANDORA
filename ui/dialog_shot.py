@@ -8,6 +8,7 @@ from ui.styles import CP, PANDORA_STYLESHEET
 from ui.icons import claude_icon_pixmap, install_hover_icon
 import core.storyboard as sb_api
 from core.storyboard import CAMERA_MOVEMENTS, OPTICS, FOCALS, DISTANCES, SHOT_SIZES, SHOT_SIZE_LABELS, SPEEDS, HEURE_PRESETS, DEPTHS_OF_FIELD
+from core.storyboard import NONE_LABEL, NONE_LABEL_F, NONE_LABEL_DOF
 from core.i18n import to_source
 
 
@@ -26,10 +27,20 @@ def _sep():
     return f
 
 
-def _combo(items: list[str], current: str = "") -> QComboBox:
+def _combo(items: list[str], current: str = "", none_label: str | None = None) -> QComboBox:
+    """Liste déroulante. `none_label` ajoute EN TÊTE une entrée de valeur vide
+    (« ⊘ Aucun », demande Matthieu du 05/10/2026) : rien n'est alors injecté
+    dans le prompt pour ce champ. La valeur de chaque entrée est portée en data."""
     cb = QComboBox()
-    cb.addItems(items)
-    if current in items:
+    if none_label:
+        cb.addItem(none_label, "")
+    for it in items:
+        if none_label and it == "":
+            continue
+        cb.addItem(it, it)
+    if none_label and not current:
+        cb.setCurrentIndex(0)
+    elif current in items:
         cb.setCurrentText(current)
     cb.setFixedHeight(34)
     cb.setStyleSheet(
@@ -40,6 +51,14 @@ def _combo(items: list[str], current: str = "") -> QComboBox:
         f"color:{CP['text_primary']};selection-background-color:{CP['accent_dim']};}}"
     )
     return cb
+
+
+def _value(cb) -> str:
+    """Valeur SOURCE d'une liste non éditable (« ⊘ Aucun » → "")."""
+    data = cb.currentData()
+    if data is not None and not cb.isEditable():
+        return str(data)
+    return to_source(cb.currentText())
 
 
 _FIELD_STYLE = (
@@ -224,15 +243,18 @@ class ShotDialog(QDialog):
         col_move = QVBoxLayout()
         col_move.setSpacing(4)
         col_move.addWidget(_lbl("Mouvement"))
-        self._cam_move = _combo(CAMERA_MOVEMENTS, self._shot.get("camera_movement", "Fixe"))
+        self._cam_move = _combo(CAMERA_MOVEMENTS, self._shot.get("camera_movement", "Fixe"),
+                                none_label=NONE_LABEL)
         col_move.addWidget(self._cam_move)
 
         col_size = QVBoxLayout()
         col_size.setSpacing(4)
         col_size.addWidget(_lbl("Valeur de plan"))
         self._shot_size = QComboBox()
+        self._shot_size.addItem(NONE_LABEL, "")      # « ⊘ Aucun » en tête
         for key in SHOT_SIZES:
-            self._shot_size.addItem(SHOT_SIZE_LABELS.get(key, key), key)
+            if key:
+                self._shot_size.addItem(SHOT_SIZE_LABELS.get(key, key), key)
         cur_size = self._shot.get("shot_size", "")
         for i in range(self._shot_size.count()):
             if self._shot_size.itemData(i) == cur_size:
@@ -251,7 +273,7 @@ class ShotDialog(QDialog):
         col_focal = QVBoxLayout()
         col_focal.setSpacing(4)
         col_focal.addWidget(_lbl("Focale"))
-        self._focal = _combo(FOCALS, self._shot.get("focal", "35mm"))
+        self._focal = _combo(FOCALS, self._shot.get("focal", "35mm"), none_label=NONE_LABEL)
         col_focal.addWidget(self._focal)
 
         col_dist = QVBoxLayout()
@@ -281,20 +303,21 @@ class ShotDialog(QDialog):
         col_optic = QVBoxLayout()
         col_optic.setSpacing(4)
         col_optic.addWidget(_lbl("Optique"))
-        self._optic = _combo(OPTICS, self._shot.get("optic", "Sphérique"))
+        self._optic = _combo(OPTICS, self._shot.get("optic", "Sphérique"), none_label=NONE_LABEL_F)
         col_optic.addWidget(self._optic)
 
         col_dof = QVBoxLayout()
         col_dof.setSpacing(4)
         col_dof.addWidget(_lbl("P. de champ"))
         # Vide = profondeur déduite de la focale par le prompt final.
-        self._dof = _combo(DEPTHS_OF_FIELD, self._shot.get("depth_of_field", ""))
+        self._dof = _combo(DEPTHS_OF_FIELD, self._shot.get("depth_of_field", ""),
+                           none_label=NONE_LABEL_DOF)
         col_dof.addWidget(self._dof)
 
         col_speed = QVBoxLayout()
         col_speed.setSpacing(4)
         col_speed.addWidget(_lbl("Vitesse"))
-        self._speed = _combo(SPEEDS, self._shot.get("speed", "Normale"))
+        self._speed = _combo(SPEEDS, self._shot.get("speed", "Normale"), none_label=NONE_LABEL_F)
         col_speed.addWidget(self._speed)
 
         row_cam.addLayout(col_move, 2)
@@ -337,6 +360,7 @@ class ShotDialog(QDialog):
         col_time.addWidget(_lbl("Heure"))
         self._time_combo = QComboBox()
         self._time_combo.setEditable(True)
+        self._time_combo.addItem(NONE_LABEL_F)       # « ⊘ Aucune » en tête
         for p in HEURE_PRESETS:
             self._time_combo.addItem(p)
         cur_ht = self._shot.get("shot_time", "")
@@ -440,8 +464,8 @@ class ShotDialog(QDialog):
         col_axis.setSpacing(4)
         col_axis.addWidget(_lbl("Axe caméra"))
         self._camera_axis = _combo(
-            ["—", "Face", "3/4", "Latéral 90°", "Dos", "Plongée", "Contre-plongée", "Vue subjective"],
-            self._shot.get("camera_axis", "—"),
+            ["Face", "3/4", "Latéral 90°", "Dos", "Plongée", "Contre-plongée", "Vue subjective"],
+            self._shot.get("camera_axis", ""), none_label=NONE_LABEL,
         )
         col_axis.addWidget(self._camera_axis)
 
@@ -890,7 +914,8 @@ class ShotDialog(QDialog):
             "shot_in_seq":     shot_in_seq,
             "decor_id":        decor_id or "",
             "decor_name":      decor_name,
-            "shot_time":       to_source(self._time_combo.currentText().strip()),
+            "shot_time":       ("" if to_source(self._time_combo.currentText().strip()) == NONE_LABEL_F
+                                else to_source(self._time_combo.currentText().strip())),
             "duration":        duration,
             "character_ids":   char_ids,
             "character_names": char_names,
@@ -898,20 +923,20 @@ class ShotDialog(QDialog):
             "accessory_names": acc_names,
             "vehicle_ids":     veh_ids,
             "vehicle_names":   veh_names,
-            "camera_movement":  to_source(self._cam_move.currentText()),
-            "optic":            to_source(self._optic.currentText()),
-            "focal":            to_source(self._focal.currentText()),
+            "camera_movement":  _value(self._cam_move),
+            "optic":            _value(self._optic),
+            "focal":            _value(self._focal),
             "camera_distance":  to_source(self._camera_distance.currentText()),
             "camera_height":    to_source(self._camera_height.currentText()),
             "shot_size":       self._shot_size.currentData() or "",
-            "speed":           to_source(self._speed.currentText()),
-            "depth_of_field":  to_source(self._dof.currentText()),
+            "speed":           _value(self._speed),
+            "depth_of_field":  _value(self._dof),
             "comments":          self._comments.toPlainText().strip(),
             "seedance_prompt":   self._seedance_prompt.toPlainText().strip(),
             "sound_prompt":      self._sound_prompt.toPlainText().strip(),
             "lipsync_audio_path": self._lipsync_audio.text().strip(),
             "image_path":        self._shot.get("image_path", ""),
-            "camera_axis":       to_source(self._camera_axis.currentText()) if self._camera_axis.currentText() != "—" else "",
+            "camera_axis":       _value(self._camera_axis),
             "camera_placement":  self._camera_placement.text().strip(),
             "actor_placement":   self._actor_placement.text().strip(),
             "chars_in":          self._chars_in.text().strip(),

@@ -164,7 +164,11 @@ def show_api_error(parent, message: str):
         ico.setStyleSheet("font-size:40px;background:transparent;")
         lay.addWidget(ico)
 
-        title = QLabel("Crédits fal.ai insuffisants")
+        # Le BON distributeur (05/10/2026) : « fal.ai » était écrit en dur, même
+        # pour un refus de BytePlus ou de Runware.
+        _low = (message or "").lower()
+        _who = next((n for n in ("BytePlus", "Runware", "PiAPI") if n.lower() in _low), "fal.ai")
+        title = QLabel(f"Crédits {_who} insuffisants")
         title.setAlignment(Qt.AlignmentFlag.AlignCenter)
         title.setStyleSheet(
             f"color:{CP.get('red','#ff4f6a')};font-size:15px;font-weight:700;"
@@ -172,9 +176,11 @@ def show_api_error(parent, message: str):
         )
         lay.addWidget(title)
 
+        _where = {"fal.ai": "sur fal.ai/dashboard", "BytePlus": "BytePlus (Billing overview)",
+                  "Runware": "Runware (my.runware.ai)", "PiAPI": "PiAPI (piapi.ai)"}[_who]
         body = QLabel(
             "La génération n'a pas pu démarrer.\n\n"
-            "Rechargez votre compte sur fal.ai/dashboard\n"
+            f"Rechargez votre compte {_where}\n"
             "pour continuer à utiliser PANDORA."
         )
         body.setAlignment(Qt.AlignmentFlag.AlignCenter)

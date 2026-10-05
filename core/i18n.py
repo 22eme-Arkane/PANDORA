@@ -5662,6 +5662,18 @@ _FR_TO_EN: dict[str, str] = {
         "activation”).",
     "Seedance non activé (console BytePlus)": "Seedance not activated (BytePlus console)",
     "crédit insuffisant (my.runware.ai)": "insufficient credit (my.runware.ai)",
+    # ── « ⊘ Aucun » dans le storyboard et le style du film (05/10/2026) ──
+    "⊘ Aucun": "⊘ None",
+    "⊘ Aucune": "⊘ None",
+    "⊘ Aucune (selon la focale)": "⊘ None (from the focal length)",
+    "⊘ Aucun style": "⊘ No style",
+    "Aucun style ajouté aux prompts : ni style du catalogue, ni note de réalisation. Le "
+    "prompt du plan est envoyé tel quel.":
+        "No style added to the prompts: neither a catalogue style nor the director's note. "
+        "The shot's prompt is sent as it is.",
+    # ── Fenêtre d'erreur : réessayer avec un autre distributeur (05/10/2026) ──
+    "Aucun autre distributeur n'est essayé sans ton accord. Réessayer avec :":
+        "No other distributor is tried without your consent. Try again with:",
     # ── Connexion coupée : le VPN (05/10/2026) ──
     "Connexion coupée avec le service IA.": "The connection to the AI service was cut.",
     "Un VPN est actif sur ce poste ({vpn}) : c'est la cause la plus probable. "

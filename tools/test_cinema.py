@@ -182,7 +182,10 @@ def edition_cinema_only():
     # Build 2.6.1 (2026-10-05) : activation des modèles BytePlus vérifiée (sonde
     # gratuite, ordre de priorité), crédit Runware dit clairement, VPN nommé dans
     # les coupures de connexion, images de référence aux normes de Seedance
-    # (mosaïque 512 × 640 au lieu de 210 × 260, garde-fou à l'envoi).
+    # (mosaïque 512 × 640 au lieu de 210 × 260, garde-fou à l'envoi) ; puis,
+    # même numéro (jamais publiée) : « ⊘ Aucun » dans tous les menus du
+    # storyboard, « ⊘ Aucun style », « Réessayer avec » dans la fenêtre d'erreur,
+    # limite de 4000 caractères de PiAPI, « drone » retiré de la réécriture.
     assert VERSION.split("-")[0] == "2.6.1", f"version attendue 2.6.1[-suffixe], lue {VERSION}"
     # ── UN SEUL numéro de version dans tout le produit ────────────────────────
     # Chaque endroit qui recopie le numéro à la main finit par diverger : la 2.0.0
@@ -13604,6 +13607,172 @@ def images_de_reference_aux_normes_seedance_05_10_2026():
     data, mime, _ext = du._image_payload(os.path.join(tmp, "vignette.png"), du._PIAPI_MAX)
     with Image.open(io.BytesIO(data)) as im:
         assert min(im.size) >= 300, im.size
+
+@test
+def aucun_dans_le_storyboard_et_style_du_film_05_10_2026():
+    """Demandes de Matthieu du 05/10/2026 : « ⊘ Aucun » dans TOUS les menus du
+    storyboard (si on ne veut rien injecter pour un champ) et « aucun style »
+    pour le film (la note de réalisation injectait caméra Sony, « plan drone »,
+    rythme…). Et la réécriture recevait encore « Grue / Drone » brut. Attendu :
+      · fenêtre du plan : « ⊘ Aucun » en tête des listes ; un plan aux champs
+        vides s'y affiche ainsi ; l'enregistrer garde ces champs VIDES ;
+      · un champ vide n'injecte rien (termes caméra, section TECHNIQUE) ;
+      · menus du storyboard : l'entrée vide est proposée en tête ;
+      · style du film : « ⊘ Aucun style » = clé vide = aucun suffixe ;
+      · le mot « drone » ne part plus vers la réécriture."""
+    import core.storyboard as sb
+    from core.storyboard import NONE_LABEL, NONE_LABEL_F, NONE_LABEL_DOF
+    from core.shot_terms import camera_terms
+    from core.prompt_sections import technique_line
+    from core.visual_context import build_visual_context
+    import ui.dialog_shot as D
+
+    vide = {"id": "t-aucun", "number": 1, "scene_title": "plan", "camera_movement": "",
+            "focal": "", "optic": "", "speed": "", "camera_axis": "", "shot_size": "",
+            "shot_time": "", "depth_of_field": "", "camera_distance": "", "camera_height": ""}
+    # Un champ vide n'injecte RIEN
+    assert camera_terms(vide) == [], camera_terms(vide)
+    assert technique_line(vide) == ""
+
+    saved_save = sb.save_shot
+    captured = {}
+    sb.save_shot = lambda data, *a, **k: captured.setdefault("data", dict(data)) or dict(data)
+    try:
+        d = D.ShotDialog(None, dict(vide))
+        for name, cb, label in (("mouvement", d._cam_move, NONE_LABEL), ("focale", d._focal, NONE_LABEL),
+                                ("optique", d._optic, NONE_LABEL_F), ("vitesse", d._speed, NONE_LABEL_F),
+                                ("axe", d._camera_axis, NONE_LABEL), ("valeur", d._shot_size, NONE_LABEL),
+                                ("profondeur", d._dof, NONE_LABEL_DOF)):
+            assert cb.itemText(0) == label and cb.itemData(0) == "", (name, cb.itemText(0))
+            assert cb.currentIndex() == 0, f"{name} : un champ vide doit s'afficher « {label} »"
+        # Choisir une valeur PUIS revenir sur « Aucun » : enregistré vide
+        d._cam_move.setCurrentText("Travelling avant")
+        d._cam_move.setCurrentIndex(0)
+        d._time_combo.setCurrentText(NONE_LABEL_F)
+        d._on_save()
+        data = captured["data"]
+        for k in ("camera_movement", "focal", "optic", "speed", "camera_axis", "shot_size",
+                  "depth_of_field", "shot_time"):
+            assert data.get(k) == "", (k, data.get(k))
+        # Une vraie valeur est gardée telle quelle
+        captured.clear()
+        d2 = D.ShotDialog(None, dict(vide, camera_movement="Travelling avant", focal="24mm",
+                                     speed="Ralenti", camera_axis="3/4"))
+        d2._on_save()
+        data = captured["data"]
+        assert (data["camera_movement"], data["focal"], data["speed"], data["camera_axis"]) == \
+            ("Travelling avant", "24mm", "Ralenti", "3/4"), data
+    finally:
+        sb.save_shot = saved_save
+
+    # Menus du storyboard : l'entrée vide en tête, « Aucune » pour l'heure
+    import ui.page_storyboard as PS
+    src = inspect.getsource(PS)
+    assert "none_label: str = NONE_LABEL" in src and 'none_act.setData("")' in src
+    assert src.count("none_act = menu.addAction") >= 2, "menus génériques ET menu de l'heure"
+    assert "— Aucune —" not in src
+
+    # Style du film : « ⊘ Aucun style » = clé vide
+    from PyQt6.QtWidgets import QComboBox
+    from ui.style_combo import populate
+    from ui.page_scenario import NO_STYLE_LABEL
+    cb = QComboBox()
+    populate(cb, first_label=NO_STYLE_LABEL, select_default=False)
+    idx = [i for i in range(cb.count()) if cb.itemData(i) == ""]
+    assert idx and cb.itemText(idx[0]) in (NO_STYLE_LABEL, "⊘ No style"), \
+        [cb.itemText(i) for i in range(min(4, cb.count()))]
+
+    # Le mot « drone » ne part plus vers la réécriture
+    for mv in ("Grue / Drone", "Drone FPV"):
+        tech = technique_line({"shot_size": "PE", "camera_movement": mv})
+        bible = build_visual_context({"camera_movement": mv}, catalogs={
+            "characters": [], "decors": [], "accessories": [], "hmc": [], "vehicles": []})
+        assert "drone" not in tech.lower(), tech
+        assert "drone" not in bible["camera"]["camera_movement"].lower(), bible["camera"]
+
+@test
+def erreur_de_generation_reessayer_avec_un_autre_distributeur_05_10_2026():
+    """Demande Matthieu du 05/10/2026 : dans le message d'erreur, une option
+    « essayer avec un autre distributeur » — sans bascule automatique. Attendu :
+      · proposés : les distributeurs à clé qui couvrent la demande, dans l'ordre
+        de priorité, SAUF celui qui vient d'échouer et ceux dont le refus est
+        déjà connu (crédit Runware…) ; le son coupé écarte PiAPI 2.5 ;
+      · chaque bouton porte le nom et le prix du plan, et rend son distributeur ;
+      · une SEULE fenêtre (le Studio en ouvrait deux à la suite) ;
+      · réessayer met le distributeur en tête de l'ordre et relance la file à
+        partir du plan en échec (ou le plan seul) ;
+      · la fenêtre des crédits nomme le bon distributeur, pas toujours fal.ai."""
+    import core.config as cc
+    import core.media_provider as mp
+    import api.distrib_probe as dp
+    from ui.generation_error_dialog import alternatives, build
+    conf = {"api_key": "f", "byteplus_key": "b", "runware_key": "r", "piapi_key": "p",
+            "video_provider_order": ["byteplus", "runware", "piapi", "fal"]}
+    saved = (cc.load_config, mp.load_config, cc.save_config)
+    written = []
+    try:
+        cc.load_config = lambda: dict(conf)
+        mp.load_config = lambda: dict(conf)
+        cc.save_config = lambda c, *a, **k: written.append(dict(c))
+        dp.forget()
+        ids = [c["id"] for c in alternatives("seedance-2.5", "1080p", 15, exclude="byteplus")]
+        assert ids == ["runware", "piapi", "fal"], ids
+        assert all(c["cost"] for c in alternatives("seedance-2.5", "1080p", 15, exclude="byteplus"))
+        assert "piapi" not in [c["id"] for c in alternatives("seedance-2.5", "1080p", 15,
+                                                             audio=False, exclude="byteplus")], \
+            "PiAPI 2.5 ne coupe pas le son"
+        dp.note_runware_no_credit("r")
+        assert [c["id"] for c in alternatives("seedance-2.5", "1080p", 15, exclude="byteplus")] \
+            == ["piapi", "fal"], "un refus connu n'est pas proposé"
+
+        box, by_button = build(None, "BytePlus a coupé la connexion pendant l'envoi.",
+                               [{"id": "piapi", "name": "PiAPI", "cost": 12.0},
+                                {"id": "fal", "name": "fal.ai", "cost": 17.46}])
+        labels = [b.text() for b in by_button]
+        assert any("PiAPI" in t and "12.00" in t for t in labels), labels
+        last = list(by_button)[-1]
+        last.click()
+        assert by_button.get(box.clickedButton()) == "fal"
+
+        # Le Studio (2 éditions) : une seule fenêtre, et la relance
+        import ui.tab_t2v as TC
+        import ui.tab_t2v_live as TL
+        from PyQt6 import QtCore
+        for mod in (TC, TL):
+            src = inspect.getsource(mod.TabT2V.on_failed)
+            assert "show_api_error(" not in src and "Une erreur est survenue" not in src, \
+                "une SEULE fenêtre d'erreur"
+            assert "_ask_retry" in src and "_retry_with" in src
+
+            class _Fake:
+                _on_distrib_changed = lambda self: None
+                _process_next_batch_shot = lambda self: None
+                start_generation = lambda self: None
+            scheduled = []
+            saved_shot = QtCore.QTimer.singleShot
+            QtCore.QTimer.singleShot = lambda ms, fn: scheduled.append(fn)
+            try:
+                f = _Fake()
+                written.clear()
+                mod.TabT2V._retry_with(f, "fal", [{"id": "s1"}, {"id": "s2"}])
+                assert written and written[-1]["video_provider_order"][0] == "fal", written
+                assert f._batch_queue == [{"id": "s1"}, {"id": "s2"}] and f._is_batch_mode
+                assert f._batch_idx == 0 and f._batch_total == 2 and scheduled
+                scheduled.clear()
+                g = _Fake()
+                mod.TabT2V._retry_with(g, "piapi", [])
+                assert not getattr(g, "_is_batch_mode", False) and scheduled, "plan seul relancé"
+            finally:
+                QtCore.QTimer.singleShot = saved_shot
+    finally:
+        cc.load_config, mp.load_config, cc.save_config = saved
+        dp.forget()
+
+    # Fenêtre des crédits : le BON distributeur
+    import ui.widgets as W
+    src = inspect.getsource(W.show_api_error)
+    assert 'title = QLabel("Crédits fal.ai insuffisants")' not in src
+    assert '("BytePlus", "Runware", "PiAPI")' in src
 
 
 if __name__ == "__main__":

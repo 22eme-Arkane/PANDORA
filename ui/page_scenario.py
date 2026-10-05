@@ -14,6 +14,11 @@ from ui.widgets import HelpBlock
 import core.scenario as scenario_api
 from ui.icons import load_icon, claude_icon_pixmap, install_hover_icon
 
+#: Entrée neutre du style du film (clé vide → set_style("") → aucun suffixe).
+NO_STYLE_LABEL = "⊘ Aucun style"
+NO_STYLE_TOOLTIP = ("Aucun style ajouté aux prompts : ni style du catalogue, ni note de "
+                    "réalisation. Le prompt du plan est envoyé tel quel.")
+
 
 _INTENSITY_LEGEND = [
     ("1",    "Orthographe & ponctuation uniquement"),
@@ -1165,8 +1170,16 @@ class PageScenario(QWidget):
         # en tête. Choisie ICI, elle devient le style DU PROJET → tous les
         # suffixes (image et vidéo) relisent la note en direct.
         from ui.style_combo import populate as _populate_styles
-        _populate_styles(self._film_style_combo, first_label="— Style —",
+        # « ⊘ Aucun style » (s'appelait « — Style — », demande Matthieu du
+        # 05/10/2026) : AUCUN style ajouté aux prompts — ni style du catalogue,
+        # ni note de réalisation (qui injectait aussi caméra, mouvement, rythme).
+        _populate_styles(self._film_style_combo, first_label=NO_STYLE_LABEL,
                          select_default=False)   # sélection posée au chargement
+        for _i in range(self._film_style_combo.count()):
+            if self._film_style_combo.itemData(_i) == "":
+                self._film_style_combo.setItemData(
+                    _i, translate(NO_STYLE_TOOLTIP), Qt.ItemDataRole.ToolTipRole)
+                break
         self._film_style_combo.setFixedHeight(30)
         self._film_style_combo.setStyleSheet(
             f"QComboBox{{background:{CP['bg2']};border:1px solid {CP['border']};"
@@ -1178,7 +1191,7 @@ class PageScenario(QWidget):
         )
         self._film_style_combo.currentIndexChanged.connect(self._schedule_autosave)
         # `activated` et non `currentIndexChanged` : la propagation au style de
-        # PROJET (set_style, y compris la désactivation par « — Style — ») ne
+        # PROJET (set_style, y compris la désactivation par « ⊘ Aucun style ») ne
         # doit suivre qu'un GESTE UTILISATEUR. Les setCurrentIndex
         # programmatiques (reset du formulaire, chargement d'un scénario sans
         # film_style) émettent currentIndexChanged et écraseraient le style du
@@ -1620,7 +1633,7 @@ class PageScenario(QWidget):
         key = self._film_style_combo.currentData() or ""
         if key == "__sep__":
             return
-        # « — Style — » (key vide) DÉSACTIVE réellement : l'ancienne garde
+        # « ⊘ Aucun style » (key vide) DÉSACTIVE réellement : l'ancienne garde
         # `if key` sautait set_style("") — le combo affichait « — Style — »
         # pendant que project_styles.json gardait l'ancien template pour
         # toujours, et l'import du storyboard continuait de l'injecter

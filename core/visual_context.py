@@ -16,6 +16,15 @@ import unicodedata
 CONTEXT_VERSION = 1
 
 
+def _movement_label(label) -> str:
+    """Nom du mouvement tel qu'il part vers la réécriture (sans « drone »)."""
+    try:
+        from core.shot_terms import movement_label_for_prompt
+        return movement_label_for_prompt(str(label or ""))
+    except Exception:
+        return label or ""
+
+
 def _norm(value) -> str:
     text = unicodedata.normalize("NFD", str(value or ""))
     text = "".join(c for c in text if not unicodedata.combining(c)).lower()
@@ -188,7 +197,10 @@ def build_visual_context(shot: dict, catalogs: dict[str, list[dict]] | None = No
             "sequence": shot.get("seq_num", ""), "sequence_name": shot.get("seq_name", ""),
             "shot": shot.get("number", ""), "time": shot.get("shot_time", ""),
         },
-        "camera": {k: shot.get(k, "") for k in (
+        # Mouvement nommé SANS « drone » (core/shot_terms, 05/10/2026) : la
+        # réécriture recopiait « Grue / Drone » en « drone/crane move ».
+        "camera": {k: (_movement_label(shot.get(k, "")) if k == "camera_movement"
+                       else shot.get(k, "")) for k in (
             "shot_size", "camera_movement", "camera_axis", "camera_placement",
             "actor_placement", "focal", "optic", "speed", "duration")},
         "characters": _many("characters", "character_ids"),

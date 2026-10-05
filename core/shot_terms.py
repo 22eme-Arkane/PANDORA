@@ -60,6 +60,23 @@ MOVEMENT_EN = {
     "Contre-plongée":         "upward tilt from low position",
 }
 
+# Nom d'un mouvement tel qu'il part vers la RÉÉCRITURE du prompt (section
+# TECHNIQUE du plan, bible visuelle). Constat Matthieu du 05/10/2026 : la
+# réécriture écrivait encore « aerial drone/crane move » — le nom brut
+# « Grue / Drone » lui parvenait, alors que seul le terme anglais avait été
+# nettoyé le 04/10. Le mot « drone » fait dessiner l'appareil à Seedance.
+MOVEMENT_LABEL_FOR_PROMPT = {
+    "Grue / Drone": "Grue (mouvement aérien)",
+    "Drone FPV":    "Vol subjectif rapide (FPV)",
+    "Drone":        "Plan aérien",
+}
+
+
+def movement_label_for_prompt(label: str) -> str:
+    """Nom du mouvement sans le mot « drone » (les autres passent tels quels)."""
+    label = (label or "").strip()
+    return MOVEMENT_LABEL_FOR_PROMPT.get(label, label)
+
 # « Fixe » mérite une formulation ferme : les moteurs dérivent volontiers en
 # travelling si rien n'est dit.
 STATIC_EN = ("locked-off static camera, fixed tripod shot, "

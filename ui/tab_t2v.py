@@ -5706,6 +5706,13 @@ class TabT2V(QScrollArea):
             )
         self._worker.progress.connect(self.on_progress)
         self._worker.failed.connect(self.on_failed)
+        # Distributeur tenté : la fenêtre d'erreur proposera les AUTRES (05/10/2026).
+        try:
+            from core.media_provider import billing_provider as _bp
+            _aud = bool(self._audio_cb.isChecked()) if getattr(self, "_audio_cb", None) else True
+            self._attempt_provider = _bp(self._get_model(), self.cb_res.currentData() or "", _aud)
+        except Exception:
+            self._attempt_provider = ""
         self._worker.start()
 
     def cancel_generation(self):
@@ -5979,7 +5986,6 @@ class TabT2V(QScrollArea):
 
     def on_failed(self, error: str):
         self.progress.set_error(error)
-        show_api_error(self, error)
         self._reset_ui()
         entry = {
             "mode":         "t2v",
@@ -5990,9 +5996,14 @@ class TabT2V(QScrollArea):
         }
         save_to_history(entry)
         self.generation_done.emit(entry)
+        retry_shots: list = []
         if self._is_batch_mode:
             done = self._batch_idx - 1
             remaining = len(self._batch_queue)
+            # Le plan en échec PUIS ceux qui restaient : ce que « Réessayer avec »
+            # relance si l'on choisit un autre distributeur.
+            retry_shots = ([self._active_shot] if getattr(self, "_active_shot", None) else []) \
+                + list(self._batch_queue)
             self._batch_queue.clear()
             self._is_batch_mode = False
             self._multi_panel.setVisible(False)
@@ -6005,13 +6016,50 @@ class TabT2V(QScrollArea):
                 self.cb_dur.removeItem(0)
             self.cb_dur.blockSignals(False)
             self.btn_generate.setText("▶▶  Lancer la file d'attente")
-            QMessageBox.critical(
-                self, "Erreur — génération en série interrompue",
-                f"Erreur sur le plan {self._batch_idx}/{self._batch_total} :\n\n{error}\n\n"
-                f"{done} clip(s) généré(s) avant l'erreur. {remaining} plan(s) annulé(s)."
-            )
+            title = "Erreur — génération en série interrompue"
+            text = (f"Erreur sur le plan {self._batch_idx}/{self._batch_total} :\n\n{error}\n\n"
+                    f"{done} clip(s) généré(s) avant l'erreur. {remaining} plan(s) annulé(s).")
         else:
-            QMessageBox.critical(self, "Erreur de génération", f"Une erreur est survenue :\n\n{error}")
+            title, text = "Erreur de génération", error
+        pid = self._ask_retry(title, text)
+        if pid:
+            self._retry_with(pid, retry_shots)
+
+    def _ask_retry(self, title: str, text: str) -> str:
+        """Fenêtre d'erreur UNIQUE, avec un bouton par autre distributeur capable
+        de faire le plan (demande Matthieu du 05/10/2026 : pas de bascule
+        automatique, mais l'option dans le message). Rend l'id choisi ou ""."""
+        try:
+            from ui.generation_error_dialog import alternatives, show
+            _aud = bool(self._audio_cb.isChecked()) if getattr(self, "_audio_cb", None) else True
+            choices = alternatives(self._get_model(), self.cb_res.currentData() or "",
+                                   float(self._get_duration() or 0), audio=_aud,
+                                   exclude=getattr(self, "_attempt_provider", ""))
+            return show(self, text, choices, title=title)
+        except Exception:
+            QMessageBox.critical(self, title, text)
+            return ""
+
+    def _retry_with(self, pid: str, retry_shots: list):
+        """Met `pid` en tête de l'ordre (comme le menu Distributeur) et relance :
+        la file à partir du plan en échec, ou le plan seul."""
+        from PyQt6.QtCore import QTimer
+        try:
+            from core.config import load_config, save_config
+            from core.media_provider import promote_in_config
+            save_config(promote_in_config(load_config(), pid))
+            self._on_distrib_changed()
+        except Exception:
+            pass
+        if retry_shots:
+            self._batch_queue = list(retry_shots)
+            self._batch_total = len(retry_shots)
+            self._batch_idx = 0
+            self._is_batch_mode = True
+            self._repeat_remaining = 0
+            QTimer.singleShot(0, self._process_next_batch_shot)
+        else:
+            QTimer.singleShot(0, self.start_generation)
 
     def _on_enhance(self):
         prompt = self.prompt_ta.toPlainText().strip()

@@ -7736,6 +7736,35 @@ def file_annonce_le_vrai_distributeur_live_04_10_2026():
     src = inspect.getsource(L.TabT2V._start_batch_generation)
     assert "billing_notice(" in src and "crédits fal.ai" not in src
 
+@test
+def aucun_dans_les_sequences_live_05_10_2026():
+    """Parité Live de « ⊘ Aucun » (05/10/2026) : fenêtre du plan Live et menus
+    de la page Séquences — entrée vide en tête, enregistrée vide."""
+    import core.storyboard as sb
+    from core.storyboard import NONE_LABEL, NONE_LABEL_F
+    import ui.dialog_shot_live as DL
+    vide = {"id": "t-aucun-live", "number": 1, "scene_title": "plan", "camera_movement": "",
+            "focal": "", "optic": "", "speed": "", "camera_axis": "", "shot_size": "",
+            "shot_time": ""}
+    saved_save = sb.save_shot
+    captured = {}
+    sb.save_shot = lambda data, *a, **k: captured.setdefault("data", dict(data)) or dict(data)
+    try:
+        d = DL.ShotDialog(None, dict(vide))
+        for cb, label in ((d._cam_move, NONE_LABEL), (d._focal, NONE_LABEL),
+                          (d._speed, NONE_LABEL_F), (d._camera_axis, NONE_LABEL)):
+            assert cb.itemText(0) == label and cb.currentIndex() == 0, cb.itemText(0)
+        d._on_save()
+        data = captured["data"]
+        for k in ("camera_movement", "focal", "speed", "camera_axis", "shot_size"):
+            assert data.get(k) == "", (k, data.get(k))
+    finally:
+        sb.save_shot = saved_save
+    import ui.page_storyboard_live as PSL
+    src = inspect.getsource(PSL)
+    assert "none_label: str = NONE_LABEL" in src and 'none_act.setData("")' in src
+    assert "— Aucune —" not in src, "musique et transition : « ⊘ Aucune » comme le reste"
+
 
 if __name__ == "__main__":
     sys.exit(main())
