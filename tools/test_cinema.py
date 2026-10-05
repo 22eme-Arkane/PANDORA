@@ -6246,6 +6246,27 @@ def distributeurs_low_cost_et_envoi_sans_fal_04_10_2026():
         assert res["provider"] == "byteplus" and seen["key"] == "b", res.get("provider")
         assert any(m.startswith("PiAPI") and "BytePlus" in m for m in msgs), msgs
         assert not called, "PiAPI ne doit pas être appelé : il ne peut pas recevoir le mood"
+
+        # Prompt plus long que les 4000 caractères de PiAPI (refus réel du
+        # 05/10/2026 : 7459 envoyés) : sauté AVANT tout envoi, BytePlus sert,
+        # la progression dit pourquoi ; appelé seul, PiAPI refuse sans réseau.
+        long_prompt = "a long and detailed shot description, " * 200
+        dp.forget()
+        seen.clear()
+        msgs = []
+        res = real.run_real(dict(params, ref_images=[], ref_image_roles=[], prompt=long_prompt,
+                                 prompt_is_final=True),
+                            lambda _p, m="": msgs.append(m), lambda: False)
+        assert res["provider"] == "byteplus", res.get("provider")
+        assert any("PiAPI" in m and "prompt trop long" in m for m in msgs), msgs
+        assert not called, "PiAPI ne doit pas être appelé avec un prompt trop long"
+        piapi.run = saved[5]
+        try:
+            piapi.run("t2v", "seedance-2.5", {"prompt": long_prompt}, "k",
+                      lambda *_a: None, lambda: False)
+            raise AssertionError("PiAPI doit refuser un prompt trop long sans appel réseau")
+        except RuntimeError as e:
+            assert "4000" in str(e) and "Rien n'a été généré" in str(e), str(e)
     finally:
         (cc.load_config, mp.load_config, lang.translate_to_english, aip.key_error,
          real._fal_upload, piapi.run, byteplus.run, du.requests.post, _fk) = saved

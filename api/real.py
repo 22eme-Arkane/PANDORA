@@ -493,8 +493,15 @@ def run_real(params: dict, emit_progress, is_cancelled) -> dict:
         _needs.add("audio")
     from api.distrib_probe import can_receive as _can_receive_any
     # Le moteur est passé à la sonde : chez BytePlus, un modèle non ACTIVÉ sur
-    # le compte fait passer au distributeur suivant (05/10/2026).
+    # le compte fait passer au distributeur suivant (05/10/2026). Et un prompt
+    # plus long que ce que PiAPI accepte (4000 caractères, refus réel du même
+    # jour : 7459 envoyés) fait passer au suivant AVANT tout envoi.
+    from api.piapi import PROMPT_MAX as _PIAPI_PROMPT_MAX
+
     def _can_receive(pid, needs):
+        if pid == "piapi" and len(_prompt_en or "") > _PIAPI_PROMPT_MAX:
+            return False, (f"prompt trop long ({len(_prompt_en)} caractères, "
+                           f"{_PIAPI_PROMPT_MAX} au plus chez PiAPI)")
         return _can_receive_any(pid, needs, engine=model)
     _provider, _skipped = _mp.route(model, mode, _res_clean, _audio_on,
                                     needs=_needs, can_receive=_can_receive)

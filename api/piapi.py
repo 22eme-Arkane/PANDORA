@@ -38,6 +38,17 @@ import requests
 from api.distrib_common import connection_message, poll_until
 
 _BASE = "https://api.piapi.ai/api/v1/task"
+
+#: Longueur maximale du prompt chez PiAPI (refus réel du 05/10/2026 : « prompt
+#: exceeds maximum length of 4000 characters (7459 provided) »). BytePlus a
+#: accepté 3 818 caractères et ne publie pas de plafond.
+PROMPT_MAX = 4000
+
+
+def too_long_message(n: int) -> str:
+    return (f"PiAPI accepte au plus {PROMPT_MAX} caractères de prompt ; celui-ci en fait {n}. "
+            f"Raccourcis-le, ou choisis un autre distributeur (BytePlus) dans le menu "
+            f"Distributeur. Rien n'a été généré ni facturé.")
 _POLL_EVERY_S = 6          # PiAPI recommande un suivi doux
 
 _MODE_MAP = {
@@ -126,6 +137,9 @@ def run(mode: str, model: str, args: dict, api_key: str,
     task_type = _TASK_TYPES.get(model, "seedance-2")
     payload = {"model": "seedance", "task_type": task_type,
                "input": build_input(mode, args, model)}
+    n = len(payload["input"].get("prompt") or "")
+    if n > PROMPT_MAX:
+        raise RuntimeError(too_long_message(n))
 
     emit_progress(14, f"Envoi à PiAPI ({task_type})…")
     try:
