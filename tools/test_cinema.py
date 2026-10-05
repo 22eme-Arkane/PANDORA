@@ -6132,7 +6132,9 @@ def distributeurs_low_cost_et_envoi_sans_fal_04_10_2026():
     # ── Envoi des fichiers sans fal ───────────────────────────────────────────
     tmp = tempfile.mkdtemp(prefix="pandora_distrib_")
     png = os.path.join(tmp, "mood.png")
-    Image.new("RGB", (64, 36), (40, 60, 90)).save(png)
+    # Taille CONFORME aux limites de Seedance (≥ 300 px de côté, 05/10/2026) :
+    # une image plus petite serait agrandie et réencodée en JPEG à l'envoi.
+    Image.new("RGB", (640, 360), (40, 60, 90)).save(png)
     mp4 = os.path.join(tmp, "clip.mp4")
     with open(mp4, "wb") as f:
         f.write(b"\x00" * 64)
@@ -13524,6 +13526,59 @@ def vpn_nomme_dans_les_coupures_de_connexion_05_10_2026():
     assert "{vpn}" in _FR_TO_EN[nd.VPN_ADVICE], "le nom de la carte doit trouver sa place en anglais"
     # Le vrai poste : la détection ne lève jamais (le résultat dépend du VPN).
     assert isinstance(nd.active_vpn(), str)
+
+@test
+def images_de_reference_aux_normes_seedance_05_10_2026():
+    """Refus réel BytePlus du 05/10/2026 : « the parameter image pixel count must
+    be greater than or equal to 90000 for model dreamina-seedance-2-5 in r2v, but
+    received a 210x260px image ». C'était la mosaïque d'UN personnage : cases de
+    210 × 260 px — Seedance voyait aussi, chez tous les distributeurs, un
+    timbre-poste de l'acteur (planche d'origine 896 × 1216). Attendu :
+      · mosaïques de 1 à 4 personnages ≥ 90 000 pixels, côtés ≥ 300 px,
+        rapport largeur/hauteur entre 0,4 et 2,5 ;
+      · à l'envoi (BytePlus, Runware, PiAPI), toute image hors limites est
+        ramenée dedans (agrandie, complétée de bandes, réduite) ; une image
+        déjà conforme part TELLE QUELLE, octet pour octet."""
+    import base64
+    import io
+    import os
+    import tempfile
+    from PIL import Image
+    from core import mosaic
+    from api import distrib_upload as du
+
+    tmp = tempfile.mkdtemp(prefix="pandora_seedance_img_")
+    portrait = os.path.join(tmp, "planche.png")
+    Image.new("RGB", (896, 1216), (90, 70, 60)).save(portrait)
+    for n in (1, 2, 3, 4):
+        out = os.path.join(tmp, f"mosaique_{n}.png")
+        assert mosaic._composite([(portrait, f"Perso {i}") for i in range(n)], out)
+        with Image.open(out) as im:
+            w, h = im.size
+        assert w * h >= 90000 and min(w, h) >= 300, (n, w, h)
+        assert 0.4 <= w / h <= 2.5, (n, w, h)
+
+    def _dims(uri):
+        with Image.open(io.BytesIO(base64.b64decode(uri.split(",", 1)[1]))) as im:
+            return im.size
+    for name, size in (("vignette", (210, 260)), ("mini", (64, 36)),
+                       ("large", (4000, 1000)), ("haute", (300, 1200))):
+        p = os.path.join(tmp, name + ".png")
+        Image.new("RGB", size, (120, 80, 40)).save(p)
+        w, h = _dims(du.data_uri(p))
+        assert min(w, h) >= 300 and w * h >= 90000, (name, w, h)
+        assert 0.4 <= w / h <= 2.5 + 1e-9, (name, w, h)
+        assert max(w, h) <= 6000, (name, w, h)
+    ok = os.path.join(tmp, "normale.png")
+    Image.new("RGB", (1920, 1080), (10, 20, 30)).save(ok)
+    raw = open(ok, "rb").read()
+    uri = du.data_uri(ok)
+    assert uri.startswith("data:image/png;base64,") and base64.b64decode(uri.split(",", 1)[1]) == raw, \
+        "une image conforme ne doit pas être retouchée"
+    # PiAPI passe par le même apprêt (_image_payload) avant son dépôt
+    data, mime, _ext = du._image_payload(os.path.join(tmp, "vignette.png"), du._PIAPI_MAX)
+    with Image.open(io.BytesIO(data)) as im:
+        assert min(im.size) >= 300, im.size
 
 
 if __name__ == "__main__":

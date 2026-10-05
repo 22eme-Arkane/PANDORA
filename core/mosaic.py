@@ -13,9 +13,15 @@ individual image paths (best-effort, up to 3).
 import os
 import time
 
-_CELL_W  = 210
-_CELL_H  = 260
-_LABEL_H = 34
+# Cases de 512 × 640 px (05/10/2026). Elles faisaient 210 × 260 : un personnage
+# seul partait en VIGNETTE de 54 600 pixels — Seedance voyait un timbre-poste de
+# l'acteur (planche d'origine 896 × 1216), et BytePlus la refusait (« image
+# pixel count must be ≥ 90000 », cas réel de Matthieu). Trois cases côte à côte
+# restent sous le rapport largeur/hauteur maximal de 2,5 accepté par Seedance.
+_CELL_W  = 512
+_CELL_H  = 640
+_LABEL_H = 64
+_FONT_PX = 28
 _BG      = (22, 22, 26)
 _BAR_BG  = (16, 16, 20)
 _TEXT    = (215, 215, 225)
@@ -91,7 +97,7 @@ def _composite(images_and_names: list[tuple[str, str]], output_path: str) -> boo
 
     canvas = Image.new("RGB", (cols * _CELL_W, rows * _CELL_H), _BG)
     draw   = ImageDraw.Draw(canvas)
-    font   = _load_font(14)
+    font   = _load_font(_FONT_PX)
 
     for i, (img_path, name) in enumerate(valid):
         col = i % cols
@@ -127,7 +133,7 @@ def _composite(images_and_names: list[tuple[str, str]], output_path: str) -> boo
         label_y = cy + img_area_h
         draw.rectangle([cx, label_y, cx + _CELL_W - 1, cy + _CELL_H - 1], fill=_BAR_BG)
 
-        label = name if len(name) <= 24 else name[:23] + "…"
+        label = name if len(name) <= 30 else name[:29] + "…"
         tx = cx + _CELL_W // 2
         ty = label_y + _LABEL_H // 2
         if font:

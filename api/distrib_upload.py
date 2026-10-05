@@ -55,18 +55,62 @@ def media_kind(path: str) -> str:
     return "image"
 
 
+#: Ce que Seedance (ByteDance) accepte en image d'entrée, chez tous ses
+#: distributeurs : 300 à 6000 px de côté (≥ 90 000 pixels) et un rapport
+#: largeur/hauteur entre 0,4 et 2,5. Refus réel du 05/10/2026 chez BytePlus :
+#: « image pixel count must be ≥ 90000, received a 210x260px image ».
+_MIN_SIDE, _MAX_SIDE = 300, 6000
+_RATIO_MIN, _RATIO_MAX = 0.4, 2.5
+_PAD = (22, 22, 26)          # fond neutre des mosaïques de référence (core/mosaic)
+
+
+def _conform_needed(size: tuple[int, int]) -> bool:
+    w, h = size
+    return (min(w, h) < _MIN_SIDE or max(w, h) > _MAX_SIDE
+            or not (_RATIO_MIN <= w / max(h, 1) <= _RATIO_MAX))
+
+
+def _conform(im):
+    """Image RVB ramenée dans les limites de Seedance : réduite au-delà de
+    4096 px, complétée de bandes neutres si elle est trop allongée, agrandie
+    (Lanczos) sous 300 px de côté."""
+    import math
+    from PIL import Image
+    if max(im.size) > 4096:
+        im.thumbnail((4096, 4096))
+    w, h = im.size
+    if w / h > _RATIO_MAX:                    # trop large : bandes en haut et en bas
+        nw, nh = w, math.ceil(w / _RATIO_MAX)
+    elif w / h < _RATIO_MIN:                  # trop haute : bandes sur les côtés
+        nw, nh = math.ceil(h * _RATIO_MIN), h
+    else:
+        nw, nh = w, h
+    if (nw, nh) != (w, h):
+        canvas = Image.new("RGB", (nw, nh), _PAD)
+        canvas.paste(im, ((nw - w) // 2, (nh - h) // 2))
+        im, w, h = canvas, nw, nh
+    if min(w, h) < _MIN_SIDE:
+        k = _MIN_SIDE / min(w, h)
+        im = im.resize((max(_MIN_SIDE, round(w * k)), max(_MIN_SIDE, round(h * k))),
+                       Image.LANCZOS)
+    return im
+
+
 def _image_payload(path: str, max_bytes: int) -> tuple[bytes, str, str]:
     """(octets, type MIME, extension) d'une image prête à l'envoi : telle quelle
-    si le format est accepté partout et le poids raisonnable, sinon réencodée
-    en JPEG (fond blanc sous la transparence, côté long ≤ 4096 px)."""
+    si le format est accepté partout, le poids raisonnable et les dimensions
+    dans les limites de Seedance ; sinon réencodée en JPEG (fond blanc sous la
+    transparence, dimensions ramenées dans les limites)."""
     ext = os.path.splitext(path)[1].lower()
     size = os.path.getsize(path)
-    if ext in _IMAGE_EXT and size <= max_bytes:
+    from PIL import Image
+    with Image.open(path) as probe:          # en-tête seulement : rapide
+        dims_ok = not _conform_needed(probe.size)
+    if ext in _IMAGE_EXT and size <= max_bytes and dims_ok:
         with open(path, "rb") as f:
             data = f.read()
         mime = "image/jpeg" if ext in (".jpg", ".jpeg") else f"image/{ext[1:]}"
         return data, mime, ext
-    from PIL import Image
     with Image.open(path) as im:
         im.load()
         if im.mode in ("RGBA", "LA", "P"):
@@ -76,8 +120,7 @@ def _image_payload(path: str, max_bytes: int) -> tuple[bytes, str, str]:
             im = bg
         else:
             im = im.convert("RGB")
-        if max(im.size) > 4096:
-            im.thumbnail((4096, 4096))
+        im = _conform(im)
         for quality in (92, 85, 75):
             buf = io.BytesIO()
             im.save(buf, format="JPEG", quality=quality)
