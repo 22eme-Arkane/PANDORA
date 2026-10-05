@@ -6044,9 +6044,15 @@ class TabT2V(QScrollArea):
         try:
             from ui.generation_error_dialog import alternatives, show
             _aud = bool(self._audio_cb.isChecked()) if getattr(self, "_audio_cb", None) else True
+            # Longueur du prompt RÉELLEMENT envoyé (suffixes compris), notée par
+            # api/real.py ; à défaut, celle du champ.
+            _sent = getattr(getattr(self, "_worker", None), "params", None) or {}
+            _plen = int(_sent.get("_sent_prompt_len")
+                        or len(self.prompt_ta.toPlainText().strip()))
             choices = alternatives(self._get_model(), self.cb_res.currentData() or "",
                                    float(self._get_duration() or 0), audio=_aud,
-                                   exclude=getattr(self, "_attempt_provider", ""))
+                                   exclude=getattr(self, "_attempt_provider", ""),
+                                   prompt_len=_plen)
             return show(self, text, choices, title=title)
         except Exception:
             QMessageBox.critical(self, title, text)

@@ -33,13 +33,15 @@ All versions: [Releases](../../releases)
 **Distributors that say what is wrong — and character references Seedance can
 actually read.**
 
-- **Character references 2.5× sharper, accepted everywhere.** PANDORA packs the
-  characters of a shot into a labelled mosaic; its cells were 210 × 260 pixels,
-  so a single character went out as a thumbnail — Seedance barely saw the actor,
-  and BytePlus refused it outright (« image pixel count must be ≥ 90000 »).
-  Cells are now 512 × 640. Every image sent to BytePlus, Runware or PiAPI is
-  also brought within Seedance's limits (300 to 6000 px per side, aspect ratio
-  0.4 to 2.5); an image already within them is sent untouched.
+- **Character references accepted by BytePlus.** PANDORA packs the characters
+  of a shot into a labelled mosaic of 210 × 260 cells; BytePlus refused a single
+  character outright (« image pixel count must be ≥ 90000 »). Every image sent
+  to BytePlus, Runware or PiAPI is now brought within Seedance's limits (300 to
+  6000 px per side, aspect ratio 0.4 to 2.5) by framing it on a neutral
+  background — never by enlarging it: larger cells, tried first, made
+  Seedance's owner refuse every shot with a character (« real people's faces »),
+  at BytePlus and fal.ai alike. An image already within the limits is sent
+  untouched.
 - **BytePlus: a valid key is not enough.** Each Seedance model must be activated
   in the BytePlus console, which requires at least $30 of credit. The key test
   now checks the models too (« key accepted — models to activate »), the
@@ -57,7 +59,8 @@ actually read.**
   window (there were two in a row), with a button for each distributor able to
   make the shot and its price there. Nothing switches on its own: you choose,
   the distributor goes first in the order, and the queue starts again from the
-  failed shot.
+  failed shot. No button when the refusal comes from the model owner's filter
+  (real faces, copyright): it is the same at every distributor.
 - **« ⊘ None » in every storyboard menu** (camera movement, shot size, focal
   length, lens, speed, axis, time of day — and music and transition in PANDORA
   Live): the field stays empty and nothing is injected into the prompt for it.

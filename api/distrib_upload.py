@@ -72,8 +72,10 @@ def _conform_needed(size: tuple[int, int]) -> bool:
 
 def _conform(im):
     """Image RVB ramenée dans les limites de Seedance : réduite au-delà de
-    4096 px, complétée de bandes neutres si elle est trop allongée, agrandie
-    (Lanczos) sous 300 px de côté."""
+    4096 px, complétée de bandes neutres si elle est trop allongée, et posée
+    au centre d'un fond neutre sous 300 px de côté — SANS l'agrandir : le
+    distributeur reçoit la même image que fal (une mosaïque agrandie faisait
+    refuser les personnages « visages de personnes réelles », 05/10/2026)."""
     import math
     from PIL import Image
     if max(im.size) > 4096:
@@ -90,9 +92,10 @@ def _conform(im):
         canvas.paste(im, ((nw - w) // 2, (nh - h) // 2))
         im, w, h = canvas, nw, nh
     if min(w, h) < _MIN_SIDE:
-        k = _MIN_SIDE / min(w, h)
-        im = im.resize((max(_MIN_SIDE, round(w * k)), max(_MIN_SIDE, round(h * k))),
-                       Image.LANCZOS)
+        nw, nh = max(w, _MIN_SIDE), max(h, _MIN_SIDE)
+        canvas = Image.new("RGB", (nw, nh), _PAD)
+        canvas.paste(im, ((nw - w) // 2, (nh - h) // 2))
+        im = canvas
     return im
 
 

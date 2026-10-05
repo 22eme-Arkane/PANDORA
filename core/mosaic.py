@@ -13,15 +13,17 @@ individual image paths (best-effort, up to 3).
 import os
 import time
 
-# Cases de 512 × 640 px (05/10/2026). Elles faisaient 210 × 260 : un personnage
-# seul partait en VIGNETTE de 54 600 pixels — Seedance voyait un timbre-poste de
-# l'acteur (planche d'origine 896 × 1216), et BytePlus la refusait (« image
-# pixel count must be ≥ 90000 », cas réel de Matthieu). Trois cases côte à côte
-# restent sous le rapport largeur/hauteur maximal de 2,5 accepté par Seedance.
-_CELL_W  = 512
-_CELL_H  = 640
-_LABEL_H = 64
-_FONT_PX = 28
+# Cases de 210 × 260 px — la taille qui a TOUJOURS fonctionné. Le 05/10/2026 au
+# matin, elles ont été portées à 512 × 640 (BytePlus exigeait 90 000 pixels) :
+# dès lors, TOUS les plans avec personnage ont été refusés « visages de personnes
+# réelles », chez BytePlus ET chez fal.ai, alors que fal en avait accepté quatre
+# le 03/10 avec la vignette 210 × 260 (historique de Matthieu). Retour à la
+# taille d'origine ; le minimum de BytePlus est assuré à l'envoi par un fond
+# neutre autour de l'image, sans l'agrandir (api/distrib_upload._conform).
+_CELL_W  = 210
+_CELL_H  = 260
+_LABEL_H = 34
+_FONT_PX = 14
 _BG      = (22, 22, 26)
 _BAR_BG  = (16, 16, 20)
 _TEXT    = (215, 215, 225)
@@ -133,7 +135,7 @@ def _composite(images_and_names: list[tuple[str, str]], output_path: str) -> boo
         label_y = cy + img_area_h
         draw.rectangle([cx, label_y, cx + _CELL_W - 1, cy + _CELL_H - 1], fill=_BAR_BG)
 
-        label = name if len(name) <= 30 else name[:29] + "…"
+        label = name if len(name) <= 24 else name[:23] + "…"
         tx = cx + _CELL_W // 2
         ty = label_y + _LABEL_H // 2
         if font:

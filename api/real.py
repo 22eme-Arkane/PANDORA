@@ -497,6 +497,9 @@ def run_real(params: dict, emit_progress, is_cancelled) -> dict:
     # plus long que ce que PiAPI accepte (4000 caractères, refus réel du même
     # jour : 7459 envoyés) fait passer au suivant AVANT tout envoi.
     from api.piapi import PROMPT_MAX as _PIAPI_PROMPT_MAX
+    # Relu par la fenêtre d'erreur du Studio : elle ne propose pas PiAPI pour
+    # réessayer quand le prompt RÉELLEMENT envoyé (suffixes compris) dépasse sa limite.
+    params["_sent_prompt_len"] = len(_prompt_en or "")
 
     def _can_receive(pid, needs):
         if pid == "piapi" and len(_prompt_en or "") > _PIAPI_PROMPT_MAX:

@@ -177,6 +177,31 @@ def content_policy_message(err: str, engine_label: str = "") -> str:
     return msg
 
 
+#: Phrases de content_policy_message qui signent le filtre du PROPRIÉTAIRE du
+#: modèle — relues telles quelles ou traduites.
+_MODEL_OWNER_PHRASES = (
+    "a refusé ce clip : visages de personnes réelles.",
+    "a refusé la vidéo générée : ressemblance possible avec une œuvre protégée "
+    "(droits d'auteur).",
+)
+
+
+def is_model_owner_refusal(text: str) -> bool:
+    """Refus du filtre du PROPRIÉTAIRE du modèle (ByteDance pour Seedance) :
+    visages de personnes réelles, ou droits d'auteur jugés sur la vidéo
+    produite — brut OU déjà rédigé par content_policy_message. Réessayer chez
+    un autre distributeur n'y change rien : c'est le même filtre partout
+    (05/10/2026 : BytePlus et fal ont refusé les mêmes images). La modération
+    PROPRE d'un revendeur (refus générique « filtre de contenu ») n'en est pas."""
+    if is_real_person_refusal(text):
+        return True
+    if is_content_policy_error(text) and content_policy_cause(text) == "copyright":
+        return True
+    from core.i18n import translate as _t
+    low = (text or "").lower()
+    return any(p.lower() in low for k in _MODEL_OWNER_PHRASES for p in (k, _t(k)))
+
+
 def humanize_api_error(err: str) -> str:
     """Erreur d'un worker de génération, lisible : nomme le BON compte quand
     c'est une affaire de crédits, laisse passer tout le reste tel quel."""

@@ -5672,8 +5672,9 @@ _FR_TO_EN: dict[str, str] = {
         "No style added to the prompts: neither a catalogue style nor the director's note. "
         "The shot's prompt is sent as it is.",
     # ── Fenêtre d'erreur : réessayer avec un autre distributeur (05/10/2026) ──
-    "Aucun autre distributeur n'est essayé sans ton accord. Réessayer avec :":
-        "No other distributor is tried without your consent. Try again with:",
+    "Aucun autre distributeur n'est essayé sans ton accord.":
+        "No other distributor is tried without your consent.",
+    "Réessayer avec :": "Try again with:",
     # ── Connexion coupée : le VPN (05/10/2026) ──
     "Connexion coupée avec le service IA.": "The connection to the AI service was cut.",
     "Un VPN est actif sur ce poste ({vpn}) : c'est la cause la plus probable. "

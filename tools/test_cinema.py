@@ -182,9 +182,11 @@ def edition_cinema_only():
     # Build 2.6.1 (2026-10-05) : activation des modèles BytePlus vérifiée (sonde
     # gratuite, ordre de priorité), crédit Runware dit clairement, VPN nommé dans
     # les coupures de connexion, images de référence aux normes de Seedance
-    # (mosaïque 512 × 640 au lieu de 210 × 260, garde-fou à l'envoi) ; puis,
-    # même numéro (jamais publiée) : « ⊘ Aucun » dans tous les menus du
-    # storyboard, « ⊘ Aucun style », « Réessayer avec » dans la fenêtre d'erreur,
+    # (garde-fou à l'envoi : fond neutre, jamais d'agrandissement — la mosaïque
+    # agrandie à 512 × 640 faisait refuser tous les personnages, revenue à
+    # 210 × 260) ; puis, même numéro (jamais publiée) : « ⊘ Aucun » dans tous
+    # les menus du storyboard, « ⊘ Aucun style », « Réessayer avec » dans la
+    # fenêtre d'erreur (restylée, sans bouton sur un refus du filtre ByteDance),
     # limite de 4000 caractères de PiAPI, « drone » retiré de la réécriture.
     assert VERSION.split("-")[0] == "2.6.1", f"version attendue 2.6.1[-suffixe], lue {VERSION}"
     # ── UN SEUL numéro de version dans tout le produit ────────────────────────
@@ -13559,14 +13561,15 @@ def vpn_nomme_dans_les_coupures_de_connexion_05_10_2026():
 def images_de_reference_aux_normes_seedance_05_10_2026():
     """Refus réel BytePlus du 05/10/2026 : « the parameter image pixel count must
     be greater than or equal to 90000 for model dreamina-seedance-2-5 in r2v, but
-    received a 210x260px image ». C'était la mosaïque d'UN personnage : cases de
-    210 × 260 px — Seedance voyait aussi, chez tous les distributeurs, un
-    timbre-poste de l'acteur (planche d'origine 896 × 1216). Attendu :
-      · mosaïques de 1 à 4 personnages ≥ 90 000 pixels, côtés ≥ 300 px,
-        rapport largeur/hauteur entre 0,4 et 2,5 ;
-      · à l'envoi (BytePlus, Runware, PiAPI), toute image hors limites est
-        ramenée dedans (agrandie, complétée de bandes, réduite) ; une image
-        déjà conforme part TELLE QUELLE, octet pour octet."""
+    received a 210x260px image » — la mosaïque d'UN personnage. La première
+    réponse (cases de 512 × 640) a fait refuser TOUS les personnages « visages de
+    personnes réelles », chez BytePlus ET chez fal (qui en avait accepté quatre le
+    03/10 en 210 × 260). Attendu :
+      · la mosaïque garde sa taille d'origine, 210 × 260 par personnage ;
+      · à l'envoi (BytePlus, Runware, PiAPI), une image trop petite est posée au
+        centre d'un fond neutre, SANS être agrandie (les pixels de la mosaïque
+        restent ceux que fal reçoit) ; trop allongée : bandes ; trop grande :
+        réduite ; déjà conforme : envoyée telle quelle, octet pour octet."""
     import base64
     import io
     import os
@@ -13578,13 +13581,21 @@ def images_de_reference_aux_normes_seedance_05_10_2026():
     tmp = tempfile.mkdtemp(prefix="pandora_seedance_img_")
     portrait = os.path.join(tmp, "planche.png")
     Image.new("RGB", (896, 1216), (90, 70, 60)).save(portrait)
-    for n in (1, 2, 3, 4):
-        out = os.path.join(tmp, f"mosaique_{n}.png")
-        assert mosaic._composite([(portrait, f"Perso {i}") for i in range(n)], out)
-        with Image.open(out) as im:
-            w, h = im.size
-        assert w * h >= 90000 and min(w, h) >= 300, (n, w, h)
-        assert 0.4 <= w / h <= 2.5, (n, w, h)
+    one = os.path.join(tmp, "mosaique_1.png")
+    assert mosaic._composite([(portrait, "Perso")], one)
+    with Image.open(one) as im:
+        assert im.size == (210, 260), f"taille d'origine de la mosaïque : {im.size}"
+        src = im.convert("RGB")
+    with Image.open(io.BytesIO(base64.b64decode(du.data_uri(one).split(",", 1)[1]))) as sent:
+        sent = sent.convert("RGB")
+        assert sent.size == (300, 300), sent.size
+        ox, oy = (300 - 210) // 2, (300 - 260) // 2
+        crop = sent.crop((ox, oy, ox + 210, oy + 260))
+        # Écart MOYEN (le JPEG d'envoi bruite un peu les bords du texte)
+        vals = [abs(a - b) for pa, pb in zip(crop.getdata(), src.getdata())
+                for a, b in zip(pa, pb)]
+        diff = sum(vals) / len(vals)
+        assert diff <= 3, f"la mosaïque ne doit PAS être agrandie (écart moyen {diff:.1f})"
 
     def _dims(uri):
         with Image.open(io.BytesIO(base64.b64decode(uri.split(",", 1)[1]))) as im:
@@ -13721,18 +13732,50 @@ def erreur_de_generation_reessayer_avec_un_autre_distributeur_05_10_2026():
         assert "piapi" not in [c["id"] for c in alternatives("seedance-2.5", "1080p", 15,
                                                              audio=False, exclude="byteplus")], \
             "PiAPI 2.5 ne coupe pas le son"
+        # Prompt envoyé plus long que ce que PiAPI accepte (4000) : pas proposé.
+        assert "piapi" not in [c["id"] for c in alternatives(
+            "seedance-2.5", "1080p", 15, exclude="byteplus", prompt_len=4500)]
+        assert "piapi" in [c["id"] for c in alternatives(
+            "seedance-2.5", "1080p", 15, exclude="byteplus", prompt_len=3900)]
         dp.note_runware_no_credit("r")
         assert [c["id"] for c in alternatives("seedance-2.5", "1080p", 15, exclude="byteplus")] \
             == ["piapi", "fal"], "un refus connu n'est pas proposé"
 
-        box, by_button = build(None, "BytePlus a coupé la connexion pendant l'envoi.",
-                               [{"id": "piapi", "name": "PiAPI", "cost": 12.0},
-                                {"id": "fal", "name": "fal.ai", "cost": 17.46}])
+        two = [{"id": "piapi", "name": "PiAPI", "cost": 12.0},
+               {"id": "fal", "name": "fal.ai", "cost": 17.46}]
+        box, by_button = build(None, "BytePlus a coupé la connexion pendant l'envoi.", two)
         labels = [b.text() for b in by_button]
         assert any("PiAPI" in t and "12.00" in t for t in labels), labels
+        # Restylée le même jour : OK plein TOUT À DROITE et bouton par défaut
+        # (Entrée = OK, jamais une relance payante) ; relances en contour néon.
+        row = box.layout().itemAt(box.layout().count() - 1).layout()
+        assert row.itemAt(row.count() - 1).widget() is box.ok_button, "OK à droite"
+        assert box.ok_button.isDefault()
+        assert not any(b.isDefault() or b.autoDefault() for b in by_button)
+        assert all("transparent" in b.styleSheet() for b in by_button), "contour néon"
         last = list(by_button)[-1]
         last.click()
-        assert by_button.get(box.clickedButton()) == "fal"
+        assert box.chosen == "fal"
+
+        # Refus du filtre du PROPRIÉTAIRE du modèle (visages réels, droits
+        # d'auteur) : le même chez tous les distributeurs → aucun bouton. La
+        # modération propre d'un revendeur garde les siens.
+        from core.worker import content_policy_message
+        from core.i18n import translate as _t
+        faces = content_policy_message(
+            "422 content_policy_violation: the input may contain likenesses of real people",
+            "Seedance 2.5")
+        copyr = content_policy_message(
+            "content_policy_violation {'cause': 'copyright'} generated_video", "Seedance 2.5")
+        for refusal in (faces, copyr, f"Erreur sur le plan 3/5 :\n\n{faces}\n\n2 clip(s)",
+                        _t("a refusé ce clip : visages de personnes réelles.")):
+            _b, buttons = build(None, refusal, two)
+            assert not buttons, refusal[:80]
+        _b, buttons = build(None, content_policy_message("content moderation failed", "Runware"),
+                            two)
+        assert len(buttons) == 2, "modération d'un revendeur : les autres restent proposés"
+        import api.real as _real
+        assert 'params["_sent_prompt_len"]' in inspect.getsource(_real.run_real)
 
         # Le Studio (2 éditions) : une seule fenêtre, et la relance
         import ui.tab_t2v as TC
@@ -13743,6 +13786,8 @@ def erreur_de_generation_reessayer_avec_un_autre_distributeur_05_10_2026():
             assert "show_api_error(" not in src and "Une erreur est survenue" not in src, \
                 "une SEULE fenêtre d'erreur"
             assert "_ask_retry" in src and "_retry_with" in src
+            assert "prompt_len=" in inspect.getsource(mod.TabT2V._ask_retry), \
+                "la longueur du prompt envoyé écarte PiAPI"
 
             class _Fake:
                 _on_distrib_changed = lambda self: None
