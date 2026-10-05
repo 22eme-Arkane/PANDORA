@@ -491,7 +491,11 @@ def run_real(params: dict, emit_progress, is_cancelled) -> dict:
         _needs.add("video")
     if params.get("audio_path"):
         _needs.add("audio")
-    from api.distrib_probe import can_receive as _can_receive
+    from api.distrib_probe import can_receive as _can_receive_any
+    # Le moteur est passé à la sonde : chez BytePlus, un modèle non ACTIVÉ sur
+    # le compte fait passer au distributeur suivant (05/10/2026).
+    def _can_receive(pid, needs):
+        return _can_receive_any(pid, needs, engine=model)
     _provider, _skipped = _mp.route(model, mode, _res_clean, _audio_on,
                                     needs=_needs, can_receive=_can_receive)
     if not _provider:

@@ -23,16 +23,31 @@ from core.i18n import translate
 from ui.styles import CP
 
 
-def _cached_can_receive(cfg: dict):
+def _cached_can_receive(cfg: dict, engine: str = ""):
     """Sonde SANS réseau (le Studio ne bloque jamais) : seul un refus connu
     écarte un distributeur ; l'inconnu passe (l'envoi tranchera, et
-    s'arrêtera avant de payer si les fichiers ne passent pas)."""
+    s'arrêtera avant de payer si les fichiers ne passent pas). Avec le
+    moteur : un modèle connu comme NON ACTIVÉ chez BytePlus l'écarte aussi."""
     from api import distrib_probe as dp
 
     def _cr(pid, needs):
-        ok, why = dp.can_receive(pid, needs, network=False, cfg=cfg)
+        ok, why = dp.can_receive(pid, needs, network=False, cfg=cfg, engine=engine)
         return (False, why) if ok is False else (True, "")
     return _cr
+
+
+def _known_refusal(pid: str, engine: str, cfg: dict) -> str:
+    """Libellé court si l'on SAIT déjà que ce distributeur refusera (sondes
+    gratuites ou refus reçu en génération, 05/10/2026) ; "" sinon."""
+    from api import distrib_probe as dp
+    if pid == "byteplus":
+        ok, _why = dp.byteplus_model_state((cfg.get("byteplus_key") or "").strip(), engine,
+                                           network=False)
+        return translate("Seedance non activé (console BytePlus)") if ok is False else ""
+    if pid == "runware":
+        ok, _why = dp.can_receive("runware", (), network=False, cfg=cfg)
+        return translate("crédit insuffisant (my.runware.ai)") if ok is False else ""
+    return ""
 
 
 def availability(engine: str, resolution: str = "", cfg: dict | None = None) -> dict:
@@ -43,7 +58,7 @@ def availability(engine: str, resolution: str = "", cfg: dict | None = None) -> 
     from core import media_provider as mp
     from core.config import load_config
     cfg = load_config() if cfg is None else cfg
-    cr = _cached_can_receive(cfg)
+    cr = _cached_can_receive(cfg, engine)
     text, s_text = mp.route(engine, "t2v", resolution, cfg=cfg, can_receive=cr)
     ref, s_ref = mp.route(engine, "ref", resolution, needs=("images",), cfg=cfg,
                           can_receive=cr)
@@ -61,7 +76,7 @@ def resolution_options(engine: str, base: list) -> list:
     from core import media_provider as mp
     from core.config import load_config
     cfg = load_config()
-    cr = _cached_can_receive(cfg)
+    cr = _cached_can_receive(cfg, engine)
     out = []
     for item in base:
         label, value = item if isinstance(item, tuple) else (item, item)
@@ -132,6 +147,8 @@ class DistributorPicker(QWidget):
                     text = f"{rank}. {short}  —  {translate('clé manquante (Paramètres)')}"
                 elif not q.get("supported"):
                     text = f"{rank}. {short}  —  {translate('ne vend pas ce moteur')}"
+                elif _known_refusal(pid, engine, cfg):
+                    text = f"{rank}. {short}  —  {_known_refusal(pid, engine, cfg)}"
                 elif q.get("cost") is not None:
                     text = f"{rank}. {short}  —  ≈ ${q['cost']:.2f}  ({seconds:g} s)"
                 else:

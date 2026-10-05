@@ -5637,17 +5637,49 @@ _FR_TO_EN: dict[str, str] = {
     "⇗  Obtenir une clé": "⇗  Get a key",
     "Clé API BytePlus ModelArk (Bearer)": "BytePlus ModelArk API key (Bearer)",
     "Clé API Runware": "Runware API key",
-    "Compte fal.ai et dépôt PiAPI : non vérifiés. Un compte fal bloqué ne sert plus ni à "
-    "générer ni de relais ; PiAPI ne reçoit des images qu'avec son dépôt (abonnement "
-    "Creator) ou le relais fal.":
-        "fal.ai account and PiAPI upload: not checked. A locked fal account can neither "
-        "generate nor relay; PiAPI only receives images with its upload (Creator plan) or "
-        "the fal relay.",
+    "Compte fal.ai, dépôt PiAPI et modèles BytePlus : non vérifiés. Un compte fal "
+    "bloqué ne sert plus ni à générer ni de relais ; PiAPI ne reçoit des images "
+    "qu'avec son dépôt (abonnement Creator) ou le relais fal ; BytePlus ne sert un "
+    "moteur que s'il est activé sur le compte (30 $ de crédit, puis « Model "
+    "activation »).":
+        "fal.ai account, PiAPI upload and BytePlus models: not checked. A locked fal "
+        "account can neither generate nor relay; PiAPI only receives images with its "
+        "upload (Creator plan) or the fal relay; BytePlus only serves an engine that is "
+        "activated on the account ($30 of credit, then “Model activation”).",
     "Vérifier (gratuit)": "Check (free)",
     "Colle d'abord la clé, puis teste-la.": "Paste the key first, then test it.",
     "Clé refusée": "Key refused",
-    "Vérification du compte fal.ai et du dépôt PiAPI…":
-        "Checking the fal.ai account and the PiAPI upload…",
+    "Vérification du compte fal.ai, du dépôt PiAPI et des modèles BytePlus…":
+        "Checking the fal.ai account, the PiAPI upload and the BytePlus models…",
+    # ── Modèles BytePlus non activés (05/10/2026) ──
+    "Clé acceptée — modèles à activer": "Key accepted — models to activate",
+    "Clé BytePlus acceptée. Seedance n'est pas activé sur ton compte BytePlus. BytePlus "
+    "exige au moins 30 $ de crédit (ou un AI Savings Plan, ou un pack de ressources de "
+    "30 $), puis l'activation des modèles dans la console ModelArk (« Model activation »).":
+        "BytePlus key accepted. Seedance is not activated on your BytePlus account. "
+        "BytePlus requires at least $30 of credit (or an AI Savings Plan, or a $30 "
+        "resource pack), then activating the models in the ModelArk console (“Model "
+        "activation”).",
+    "Seedance non activé (console BytePlus)": "Seedance not activated (BytePlus console)",
+    "crédit insuffisant (my.runware.ai)": "insufficient credit (my.runware.ai)",
+    # ── Connexion coupée : le VPN (05/10/2026) ──
+    "Connexion coupée avec le service IA.": "The connection to the AI service was cut.",
+    "Un VPN est actif sur ce poste ({vpn}) : c'est la cause la plus probable. "
+    "Désactive-le le temps de la génération, ou exclus PANDORA du VPN (réglage "
+    "« split tunneling » / tunnel fractionné), puis relance.":
+        "A VPN is active on this computer ({vpn}): it is the most likely cause. Turn it "
+        "off while generating, or exclude PANDORA from the VPN (“split tunneling” "
+        "setting), then try again.",
+    "Causes les plus fréquentes : un VPN ou un pare-feu qui filtre PANDORA "
+    "(désactive-le, ou exclus PANDORA du VPN), ou une coupure réseau "
+    "passagère — relance.":
+        "Most frequent causes: a VPN or a firewall filtering PANDORA (turn it off, or "
+        "exclude PANDORA from the VPN), or a temporary network cut — try again.",
+    "Modèles BytePlus": "BytePlus models",
+    "non activé": "not activated",
+    "activés": "activated",
+    "30 $ de crédit, puis « Model activation » dans la console BytePlus":
+        "$30 of credit, then “Model activation” in the BytePlus console",
     "Compte fal.ai": "fal.ai account",
     "utilisable": "usable",
     "Dépôt PiAPI": "PiAPI upload",

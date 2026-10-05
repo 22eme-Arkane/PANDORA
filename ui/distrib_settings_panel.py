@@ -30,8 +30,10 @@ _ALT = ("byteplus", "runware", "piapi")
 
 
 class _KeyTestWorker(QThread):
-    """Test GRATUIT d'une clé hors du fil de l'interface."""
-    done = pyqtSignal(str, bool, str)
+    """Test GRATUIT d'une clé hors du fil de l'interface. `ok` : True, False
+    (clé refusée) ou None (clé acceptée, compte pas prêt : modèles BytePlus
+    non activés, 05/10/2026)."""
+    done = pyqtSignal(str, object, str)
 
     def __init__(self, pid: str, key: str):
         super().__init__()
@@ -315,9 +317,11 @@ class DistributionPanel(QWidget):
         img_row = QHBoxLayout()
         img_row.setSpacing(8)
         self._img_status = _small(
-            "Compte fal.ai et dépôt PiAPI : non vérifiés. Un compte fal bloqué ne sert "
-            "plus ni à générer ni de relais ; PiAPI ne reçoit des images qu'avec son "
-            "dépôt (abonnement Creator) ou le relais fal.")
+            "Compte fal.ai, dépôt PiAPI et modèles BytePlus : non vérifiés. Un compte fal "
+            "bloqué ne sert plus ni à générer ni de relais ; PiAPI ne reçoit des images "
+            "qu'avec son dépôt (abonnement Creator) ou le relais fal ; BytePlus ne sert un "
+            "moteur que s'il est activé sur le compte (30 $ de crédit, puis « Model "
+            "activation »).")
         img_row.addWidget(self._img_status, 1)
         self._img_btn = _btn("Vérifier (gratuit)")
         self._img_btn.clicked.connect(self.check_images)
@@ -413,19 +417,23 @@ class DistributionPanel(QWidget):
         self._workers.append(w)
         w.start()
 
-    def _on_key_tested(self, pid: str, ok: bool, msg: str):
-        if ok:
+    def _on_key_tested(self, pid: str, ok, msg: str):
+        if ok is None:
+            QMessageBox.warning(self, translate("Clé acceptée — modèles à activer"),
+                                translate(msg))
+        elif ok:
             QMessageBox.information(self, translate("✓ Connexion OK"), msg)
         else:
             QMessageBox.critical(self, translate("Clé refusée"), msg)
 
     def check_images(self):
         """Sondes gratuites (api/distrib_probe) : compte fal utilisable ? dépôt
-        PiAPI ouvert ? (Aucune génération.)"""
+        PiAPI ouvert ? modèles Seedance activés chez BytePlus ? (Aucune génération.)"""
         from api import distrib_probe as dp
         dp.forget()
         self._park()
-        self._img_status.setText(translate("Vérification du compte fal.ai et du dépôt PiAPI…"))
+        self._img_status.setText(translate(
+            "Vérification du compte fal.ai, du dépôt PiAPI et des modèles BytePlus…"))
         w = dp.keep_alive(dp.FactsProbe())
         w.done.connect(self._on_images_checked)
         self._workers.append(w)
@@ -443,6 +451,24 @@ class DistributionPanel(QWidget):
         lines = [_line("Compte fal.ai", facts.get("fal", (None, "")), "utilisable"),
                  _line("Dépôt PiAPI", facts.get("piapi_upload", (None, "")),
                        "ouvert (PiAPI reçoit les images)")]
+        models = facts.get("byteplus_models") or {}
+        if models:
+            # Clé BytePlus présente : chaque modèle doit être ACTIVÉ sur le
+            # compte (30 $ de crédit, puis « Model activation »), 05/10/2026.
+            label = translate("Modèles BytePlus")
+            names = {e: "Seedance " + e.split("-")[1] for e in models}
+            off = [names[e] for e, (ok, _w) in models.items() if ok is False]
+            on = [names[e] for e, (ok, _w) in models.items() if ok is True]
+            if off:
+                lines.append((f"✕ {label} : {translate('non activé')} — " + ", ".join(off)
+                              + " — " + translate("30 $ de crédit, puis « Model activation » "
+                                                  "dans la console BytePlus"), CP["orange"]))
+            elif on:
+                lines.append((f"✓ {label} : {translate('activés')} — " + ", ".join(on),
+                              CP["green"]))
+            else:
+                lines.append((f"? {label} : {translate('vérification impossible pour l’instant')}",
+                              CP["text_dim"]))
         self._img_status.setTextFormat(Qt.TextFormat.RichText)
         self._img_status.setText("<br>".join(
             f"<span style='color:{col};'>{txt}</span>" for txt, col in lines))

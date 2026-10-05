@@ -52,6 +52,29 @@ def first_video_url(obj) -> str:
     return found[0] if found else ""
 
 
+def connection_message(provider: str, exc: Exception) -> str:
+    """Message lisible d'une demande qui n'a PAS reçu de réponse (réseau).
+
+    Constat Matthieu du 05/10/2026 : « BytePlus injoignable : ('Connection
+    aborted.', ConnectionResetError(10054, …)) », puis la même chose chez
+    Runware. La cause : NordVPN, actif sur son poste — VPN coupé, tout est
+    passé. Le message nomme désormais le VPN en service (core/net_diag)."""
+    low = str(exc).lower()
+    if isinstance(exc, requests.Timeout) or "timed out" in low:
+        what = "n'a pas répondu à temps"
+    elif "10054" in low or "reset" in low or "aborted" in low:
+        what = "a coupé la connexion pendant l'envoi"
+    else:
+        what = "est injoignable"
+    try:
+        from core.net_diag import advice
+        hint = advice()
+    except Exception:
+        hint = ""
+    return (f"{provider} {what}. {hint} Si ça se répète, choisis un autre distributeur "
+            f"dans le menu Distributeur. (Détail : {str(exc)[:160]})").replace("  ", " ")
+
+
 def http_error_message(provider: str, resp) -> str:
     """Message lisible d'une réponse HTTP en erreur : on garde le code ET le
     texte du distributeur — c'est lui qui dit pourquoi (modération, crédits,

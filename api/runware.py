@@ -33,10 +33,16 @@ import uuid
 
 import requests
 
-from api.distrib_common import http_error_message, poll_until
+from api.distrib_common import connection_message, http_error_message, poll_until
 
 PROVIDER = "Runware"
 _URL = "https://api.runware.ai/v1"
+
+#: Réponse de Runware sans crédit (« videoInferenceInsufficientCredits » :
+#: « requires a paid invoice or at least $5 credit », relevé le 05/10/2026).
+NO_CREDIT = ("crédit insuffisant — la génération vidéo exige au moins 5 $ de crédit (ou "
+             "une facture payée) sur ton compte Runware : my.runware.ai → Billing.")
+NO_CREDIT_SHORT = "crédit insuffisant (au moins 5 $ sur my.runware.ai)"
 
 MODEL_IDS = {
     "seedance-2.5": "bytedance:seedance@2.5",
@@ -162,7 +168,7 @@ def run(mode: str, model: str, args: dict, api_key: str,
     try:
         r = requests.post(_URL, headers=_headers(api_key), json=[task], timeout=120)
     except requests.RequestException as e:
-        raise RuntimeError(f"Runware injoignable : {e}")
+        raise RuntimeError(connection_message(PROVIDER, e))
     try:
         body = r.json()
     except ValueError:
@@ -171,6 +177,16 @@ def run(mode: str, model: str, args: dict, api_key: str,
         detail = _first_error(body)
         if r.status_code in (401, 403) or "invalidapikey" in detail.lower():
             raise RuntimeError(f"Clé Runware refusée — vérifie-la dans Paramètres. {detail}")
+        if "insufficientcredits" in detail.lower():
+            # Compte sans crédit (cas réel, 05/10/2026) : Runware le vérifie
+            # AVANT toute tâche. Retenu : le plan suivant passe au distributeur
+            # suivant de l'ordre sans redemander.
+            try:
+                from api.distrib_probe import note_runware_no_credit
+                note_runware_no_credit(api_key)
+            except Exception:
+                pass
+            raise RuntimeError(f"Runware : {NO_CREDIT} Rien n'a été généré ni facturé.")
         raise RuntimeError(f"Runware a refusé la tâche ({r.status_code}) : "
                            f"{detail or http_error_message(PROVIDER, r)}")
 

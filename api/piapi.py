@@ -35,7 +35,7 @@ import re
 
 import requests
 
-from api.distrib_common import poll_until
+from api.distrib_common import connection_message, poll_until
 
 _BASE = "https://api.piapi.ai/api/v1/task"
 _POLL_EVERY_S = 6          # PiAPI recommande un suivi doux
@@ -132,7 +132,7 @@ def run(mode: str, model: str, args: dict, api_key: str,
         r = requests.post(_BASE, headers=_headers(api_key), json=payload,
                           timeout=45)
     except requests.RequestException as e:
-        raise RuntimeError(f"PiAPI injoignable : {e}")
+        raise RuntimeError(connection_message("PiAPI", e))
     if r.status_code in (401, 403):
         raise RuntimeError("Clé PiAPI refusée — vérifie la clé dans "
                            "Paramètres → avancés.")

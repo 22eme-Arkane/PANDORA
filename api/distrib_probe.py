@@ -8,9 +8,14 @@ Deux faits suffisent, gardés 10 min en mémoire :
     cas réel du 04/10/2026) ne peut ni générer, ni servir de relais ;
   · dépôt PiAPI ouvert ? — dépôt d'une image d'1 pixel (gratuit, effacée par
     PiAPI sous 24 h) ; refusé hors abonnement Creator.
+Et un troisième, depuis le 05/10/2026 : le modèle visé est-il ACTIVÉ chez
+BytePlus ? (création au corps invalide : « ModelNotOpen » sinon). La clé de
+Matthieu passait le test, mais aucun Seedance n'était activé — BytePlus
+refusait chaque plan, et l'ordre de priorité ne passait jamais au suivant.
 D'où, pour chaque distributeur (can_receive) :
   · fal      : utilisable seulement si son compte l'est ;
-  · BytePlus : images et sons DANS la requête ; une vidéo exige le relais fal ;
+  · BytePlus : le modèle doit être activé ; images et sons DANS la requête ;
+               une vidéo exige le relais fal ;
   · Runware  : images dans la requête ; vidéo / son par le relais fal ;
   · PiAPI    : tout fichier exige son dépôt OU le relais fal.
 
@@ -97,9 +102,44 @@ def piapi_upload_state(piapi_key: str, network: bool = True) -> tuple[bool | Non
         return _put("piapi_upload", piapi_key, (False, msg))
 
 
+#: Moteurs dont l'activation BytePlus est vérifiée d'avance (Studio, Paramètres).
+BYTEPLUS_ENGINES = ("seedance-2.5", "seedance-2.0")
+
+
+def byteplus_model_state(key: str, engine: str,
+                         network: bool = True) -> tuple[bool | None, str]:
+    """(activé, raison) du modèle `engine` sur le compte BytePlus ; None = inconnu."""
+    from api import byteplus as bp
+    if not key:
+        return False, "pas de clé BytePlus"
+    if engine not in bp.MODEL_IDS:
+        return True, ""          # moteur que BytePlus ne vend pas : la couverture tranche
+    known = _get("byteplus_model", f"{key}|{engine}")
+    if known is not None or not network:
+        return known or (None, "")
+    return _put("byteplus_model", f"{key}|{engine}", bp.probe_model(key, engine))
+
+
+def note_byteplus_not_activated(key: str, engine: str):
+    """La génération a reçu « ModelNotOpen » : le plan suivant passe
+    directement au distributeur suivant de l'ordre."""
+    from api import byteplus as bp
+    if key and engine in bp.MODEL_IDS:
+        _put("byteplus_model", f"{key.strip()}|{engine}", (False, bp.NOT_ACTIVATED_SHORT))
+
+
+def note_runware_no_credit(key: str):
+    """Runware a répondu « crédit insuffisant » : les plans suivants passent au
+    distributeur suivant (pendant 10 min, ou jusqu'à « Vérifier » / clé changée)."""
+    from api import runware as rw
+    if key:
+        _put("runware_credit", key.strip(), (False, rw.NO_CREDIT_SHORT))
+
+
 def can_receive(provider: str, needs=(), network: bool = True,
-                cfg: dict | None = None) -> tuple[bool | None, str]:
-    """Ce distributeur peut-il servir une demande qui envoie ces fichiers ?
+                cfg: dict | None = None, engine: str = "") -> tuple[bool | None, str]:
+    """Ce distributeur peut-il servir une demande qui envoie ces fichiers — et,
+    chez BytePlus, le moteur `engine` est-il activé sur le compte ?
     (True | False | None = on ne sait pas, raison lisible)."""
     cfg = _cfg() if cfg is None else cfg
     needs = set(needs or ())
@@ -113,8 +153,16 @@ def can_receive(provider: str, needs=(), network: bool = True,
         ok, why = fal_state(fal_key, network)
         return (False, f"compte bloqué : {why}") if ok is False else (ok, why)
     if provider == "byteplus":
+        if engine:
+            ok, why = byteplus_model_state((cfg.get("byteplus_key") or "").strip(),
+                                           engine, network)
+            if ok is False:
+                return False, why
         return relay() if "video" in needs else (True, "")
     if provider == "runware":
+        known = _get("runware_credit", (cfg.get("runware_key") or "").strip())
+        if known is not None and known[0] is False:
+            return False, known[1]
         return relay() if ({"video", "audio"} & needs) else (True, "")
     if provider == "piapi":
         if not needs:
@@ -139,15 +187,23 @@ def needs_probe(cfg: dict | None = None) -> bool:
     piapi_key = (cfg.get("piapi_key") or "").strip()
     if fal_key and _get("fal", fal_key) is None:
         return True
+    bp_key = (cfg.get("byteplus_key") or "").strip()
+    if bp_key and any(_get("byteplus_model", f"{bp_key}|{e}") is None for e in BYTEPLUS_ENGINES):
+        return True
     from api import distrib_upload as du
     return bool(piapi_key) and not du._PIAPI_PLAN_REFUSED and _get("piapi_upload", piapi_key) is None
 
 
 def facts(network: bool = True, cfg: dict | None = None) -> dict:
-    """Les deux faits, pour l'affichage des Paramètres."""
+    """Les faits, pour l'affichage des Paramètres (et le cache du Studio)."""
     cfg = _cfg() if cfg is None else cfg
-    return {"fal": fal_state((cfg.get("api_key") or "").strip(), network),
-            "piapi_upload": piapi_upload_state((cfg.get("piapi_key") or "").strip(), network)}
+    out = {"fal": fal_state((cfg.get("api_key") or "").strip(), network),
+           "piapi_upload": piapi_upload_state((cfg.get("piapi_key") or "").strip(), network)}
+    bp_key = (cfg.get("byteplus_key") or "").strip()
+    if bp_key:
+        out["byteplus_models"] = {e: byteplus_model_state(bp_key, e, network)
+                                  for e in BYTEPLUS_ENGINES}
+    return out
 
 
 def forget():

@@ -13270,6 +13270,261 @@ def mode_batch_claude_branche_sur_anthropic_et_storyboard_04_10_2026():
     src = inspect.getsource(D.StoryboardGenerateDialog._start)
     assert "_batch_mode_wanted" in src and "batch_mode=_batch" in src
 
+@test
+def byteplus_modele_non_active_detecte_et_contourne_05_10_2026():
+    """Constat Matthieu du 05/10/2026 : « BytePlus injoignable : ('Connection
+    aborted.', ConnectionResetError(10054, …)) ». Derrière la coupure (passagère :
+    BytePlus répondait depuis son poste juste après), la vraie cause : AUCUN
+    modèle Seedance activé sur son compte (404 « ModelNotOpen » ; BytePlus exige
+    30 $ de crédit puis l'activation dans la console). Sa clé passait le test.
+    Attendu, sans réseau :
+      · la sonde gratuite distingue activé / non activé / clé refusée / inconnu,
+        avec un corps qui ne peut créer AUCUNE tâche (et annule par sécurité) ;
+      · l'ordre de priorité passe au distributeur suivant, dit pourquoi, et ne
+        resonde pas à chaque plan ;
+      · un « ModelNotOpen » reçu en génération est expliqué ET retenu ;
+      · une coupure réseau est dite comme telle (relancer, ou autre distributeur) ;
+      · le test de clé rend « clé acceptée, modèles à activer » (traduit) ;
+      · le menu Distributeur du Studio affiche « Seedance non activé »."""
+    import requests as _rq
+    import core.media_provider as mp
+    import api.byteplus as bp
+    import api.distrib_probe as dp
+    from core.i18n import _FR_TO_EN
+
+    class _R:
+        def __init__(self, status, data=None):
+            self.status_code = status
+            self._data = data
+            self.text = str(data)
+
+        def json(self):
+            if self._data is None:
+                raise ValueError("pas de JSON")
+            return self._data
+
+    sent, deleted, replies = [], [], {}
+
+    def _post(url, headers=None, json=None, timeout=None, **_k):
+        sent.append(json)
+        r = replies["post"]
+        if isinstance(r, Exception):
+            raise r
+        return r
+
+    def _delete(url, **_k):
+        deleted.append(url)
+        return _R(200, {})
+
+    saved = (bp.requests.post, bp.requests.delete)
+    dp.forget()
+    try:
+        bp.requests.post, bp.requests.delete = _post, _delete
+        # ── Sonde : chaque réponse, son verdict ──
+        replies["post"] = _R(404, {"error": {"code": "ModelNotOpen", "message": "x"}})
+        assert bp.probe_model("k", "seedance-2.5") == (False, bp.NOT_ACTIVATED_SHORT)
+        body = sent[-1]
+        assert body["model"] == bp.MODEL_IDS["seedance-2.5"] and body["content"] == [], body
+        assert body["duration"] == 0 and body["resolution"] not in ("480p", "720p", "1080p"), \
+            "corps invalide : aucune tâche ne peut naître d'une sonde"
+        replies["post"] = _R(400, {"error": {"code": "InvalidParameter"}})
+        assert bp.probe_model("k", "seedance-2.0") == (True, ""), "activé = refus de validation"
+        replies["post"] = _R(401, {"error": {"code": "AuthenticationError"}})
+        assert bp.probe_model("k", "seedance-2.0")[0] is False
+        replies["post"] = _rq.ConnectionError("réseau coupé")
+        assert bp.probe_model("k", "seedance-2.0") == (None, ""), "réseau = on ne sait pas"
+        replies["post"] = _R(200, {"id": "cgt-sonde"})
+        assert bp.probe_model("k", "seedance-2.0") == (True, "") and deleted, \
+            "une tâche née d'une sonde est annulée sur-le-champ"
+
+        # ── Ordre de priorité : BytePlus sauté, Runware sert, la raison est dite ──
+        replies["post"] = _R(404, {"error": {"code": "ModelNotOpen"}})
+        dp.forget()
+        cfg = {"byteplus_key": "k", "runware_key": "r",
+               "video_provider_order": ["byteplus", "runware", "piapi", "fal"]}
+
+        def cr(pid, needs):
+            return dp.can_receive(pid, needs, cfg=cfg, engine="seedance-2.5")
+        pid, skipped = mp.route("seedance-2.5", "t2v", "1080p", cfg=cfg, can_receive=cr)
+        assert pid == "runware", (pid, skipped)
+        assert skipped and skipped[0].startswith("BytePlus") and "non activé" in skipped[0], skipped
+        n = len(sent)
+        mp.route("seedance-2.5", "t2v", "720p", cfg=cfg, can_receive=cr)
+        assert len(sent) == n, "verdict gardé en mémoire : pas de sonde à chaque plan"
+        assert dp.can_receive("byteplus", (), network=False, cfg=cfg,
+                              engine="seedance-2.5")[0] is False
+        assert dp.can_receive("byteplus", (), network=False, cfg=cfg,
+                              engine="seedance-2.0")[0] is True, "inconnu = on essaie"
+
+        # ── Génération : ModelNotOpen expliqué ET retenu ; coupure dite comme telle ──
+        dp.forget()
+        replies["post"] = _R(404, {"error": {"code": "ModelNotOpen", "message": "x"}})
+        try:
+            bp.run("t2v", "seedance-2.0", {"prompt": "p", "duration": 5}, "k",
+                   lambda *_a: None, lambda: False)
+            raise AssertionError("ModelNotOpen doit lever")
+        except RuntimeError as e:
+            assert "30 $" in str(e) and "Model activation" in str(e), str(e)
+            assert "Rien n'a été généré ni facturé" in str(e), str(e)
+        assert dp.byteplus_model_state("k", "seedance-2.0", network=False)[0] is False, \
+            "le plan suivant passe directement au distributeur suivant"
+        replies["post"] = _rq.ConnectionError(
+            "('Connection aborted.', ConnectionResetError(10054, 'Une connexion existante "
+            "a dû être fermée par l’hôte distant', None, 10054, None))")
+        import core.net_diag as nd
+        saved_vpn = nd.active_vpn
+        try:
+            # La VRAIE cause, ce matin-là : NordVPN actif (VPN coupé, tout passait).
+            for vpn, attendu in (("NordLynx", "NordLynx"), ("", "un VPN ou un pare-feu")):
+                nd.active_vpn = lambda v=vpn: v
+                try:
+                    bp.run("t2v", "seedance-2.0", {"prompt": "p", "duration": 5}, "k",
+                           lambda *_a: None, lambda: False)
+                    raise AssertionError("une coupure doit lever")
+                except RuntimeError as e:
+                    msg = str(e)
+                    assert msg.startswith("BytePlus a coupé la connexion"), msg
+                    assert attendu in msg and "autre distributeur" in msg, msg
+                    if vpn:
+                        assert "split tunneling" in msg, msg
+        finally:
+            nd.active_vpn = saved_vpn
+
+        # ── Test de clé : « clé acceptée, modèles à activer » ──
+        dp.forget()
+        replies["post"] = _R(404, {"error": {"code": "ModelNotOpen"}})
+        ok, msg = bp.test_key("k")
+        assert ok is None and "30 $" in msg, (ok, msg)
+        assert msg in _FR_TO_EN, "message affiché traduit en anglais"
+        replies["post"] = _R(400, {"error": {"code": "InvalidParameter"}})
+        ok, msg = bp.test_key("k")
+        assert ok is True and "Seedance 2.5 et Seedance 2.0" in msg, msg
+    finally:
+        bp.requests.post, bp.requests.delete = saved
+        dp.forget()
+
+    # ── Runware sans crédit (même matinée) : message clair, refus retenu ──
+    # Réponse réelle relevée sur le compte de Matthieu : 400
+    # « videoInferenceInsufficientCredits » (5 $ minimum), avant toute tâche.
+    import api.runware as rw
+    saved_rw = rw.requests.post
+    try:
+        rw.requests.post = lambda *a, **k: _R(400, {"data": [], "errors": [{
+            "code": "videoInferenceInsufficientCredits",
+            "message": "Video Inference requires a paid invoice or at least $5 credit."}]})
+        dp.forget()
+        try:
+            rw.run("t2v", "seedance-2.5", {"prompt": "p", "duration": 5, "resolution": "720p",
+                                           "aspect_ratio": "16:9"}, "r",
+                   lambda *_a: None, lambda: False)
+            raise AssertionError("un compte sans crédit doit lever")
+        except RuntimeError as e:
+            assert "5 $" in str(e) and "Rien n'a été généré ni facturé" in str(e), str(e)
+        cfg2 = {"runware_key": "r", "piapi_key": "p",
+                "video_provider_order": ["runware", "piapi", "byteplus", "fal"]}
+        pid, skipped = mp.route(
+            "seedance-2.5", "t2v", "720p", cfg=cfg2,
+            can_receive=lambda p, n: dp.can_receive(p, n, network=False, cfg=cfg2,
+                                                    engine="seedance-2.5"))
+        assert pid == "piapi" and "crédit insuffisant" in skipped[0], (pid, skipped)
+    finally:
+        rw.requests.post = saved_rw
+        dp.forget()
+
+    # ── Studio : le menu Distributeur l'affiche (composant commun aux 2 éditions) ──
+    import core.config as cc
+    from ui.distrib_picker import DistributorPicker, availability
+    conf = {"byteplus_key": "k", "runware_key": "r",
+            "video_provider_order": ["byteplus", "runware", "piapi", "fal"]}
+    saved_lc = (cc.load_config, mp.load_config)
+    try:
+        cc.load_config = lambda: dict(conf)
+        mp.load_config = lambda: dict(conf)
+        dp._put("byteplus_model", "k|seedance-2.5", (False, bp.NOT_ACTIVATED_SHORT))
+        av = availability("seedance-2.5", "1080p", cfg=dict(conf))
+        assert av["text"] == "runware" and "non activé" in av["why_text"], av
+        pk = DistributorPicker()
+        pk.refresh("seedance-2.5", "1080p", 15, avail=av)
+        first = pk.combo.itemText(0)
+        assert "BytePlus" in first and ("Seedance non activé" in first
+                                        or "Seedance not activated" in first), first
+        assert "Runware" in pk.hint.text(), pk.hint.text()
+        pk.deleteLater()
+    finally:
+        cc.load_config, mp.load_config = saved_lc
+        dp.forget()
+
+@test
+def vpn_nomme_dans_les_coupures_de_connexion_05_10_2026():
+    """Constat Matthieu du 05/10/2026 : BytePlus puis Runware coupaient la
+    connexion de PANDORA (« ConnectionResetError 10054 ») ; c'était NordVPN —
+    VPN coupé, la génération est partie. Demande : « tu peux donc le rajouter
+    dans les messages d'erreur ». Attendu :
+      · core/net_diag repère un VPN EN SERVICE d'après les cartes réseau
+        (nom, ou description quand le nom ne dit rien), sans faux positif sur
+        le Wi-Fi ni les cartes virtuelles de Windows ;
+      · une connexion COUPÉE (et seulement elle) reçoit le conseil — VPN nommé
+        s'il est actif — dans les erreurs de génération ET de l'IA texte ;
+      · un serveur local éteint garde SON message (lancer le serveur) ;
+      · les phrases sont traduites (le nom de la carte est placé après)."""
+    import core.net_diag as nd
+    from core.worker import humanize_api_error
+    from core.ai_provider import humanize_ai_error
+    from core.i18n import _FR_TO_EN
+
+    saved = nd._windows_adapters
+    try:
+        nd._windows_adapters = lambda: [
+            ("NordLynx", "NordLynx Tunnel", True),
+            ("Connexion au réseau local* 3", "Microsoft Wi-Fi Direct Virtual Adapter #3", True),
+            ("Wi-Fi", "Killer(R) Wi-Fi 6E AX1675i 160MHz Wireless Network Adapter", True)]
+        assert nd.active_vpn() == "NordLynx"
+        nd._windows_adapters = lambda: [
+            ("NordLynx", "NordLynx Tunnel", False),          # VPN déconnecté
+            ("Connexion au réseau local", "TAP-NordVPN Windows Adapter V9", False),
+            ("Wi-Fi", "Killer(R) Wi-Fi 6E", True),
+            ("vEthernet (Default Switch)", "Hyper-V Virtual Ethernet Adapter", True)]
+        assert nd.active_vpn() == "", "carte VPN hors service, Wi-Fi et Hyper-V ≠ VPN"
+        nd._windows_adapters = lambda: [
+            ("Connexion au réseau local", "TAP-NordVPN Windows Adapter V9", True)]
+        assert nd.active_vpn() == "TAP-NordVPN Windows Adapter V9", \
+            "nom muet → la description, qui dit NordVPN"
+
+        brut = ("('Connection aborted.', ConnectionResetError(10054, 'Une connexion existante "
+                "a dû être fermée par l’hôte distant', None, 10054, None))")
+        assert nd.is_connection_cut(brut)
+        assert not nd.is_connection_cut("HTTPConnectionPool: Connection refused")
+        assert not nd.is_connection_cut("Clé BytePlus refusée (401)")
+
+        nd._windows_adapters = lambda: [("NordLynx", "NordLynx Tunnel", True)]
+        # Génération (fal et les autres moteurs) : le conseil s'ajoute, une fois.
+        out = humanize_api_error("fal : " + brut)
+        assert out.startswith("fal : ") and "NordLynx" in out and "split tunneling" in out, out
+        deja = "BytePlus a coupé la connexion pendant l'envoi. Un VPN est actif (NordLynx)…"
+        assert humanize_api_error(deja) == deja, "pas de conseil en double"
+        assert humanize_api_error("Clé PiAPI refusée") == "Clé PiAPI refusée"
+        # IA texte : coupure → conseil ; serveur local éteint → son propre message.
+        out = humanize_ai_error(brut)
+        assert ("Connexion coupée" in out or "connection to the AI service" in out) \
+            and "NordLynx" in out, out
+        assert "serveur local" in humanize_ai_error(
+            "HTTPConnectionPool(host='localhost', port=1234): Max retries exceeded "
+            "(Caused by NewConnectionError: Connection refused)").lower() \
+            or "local server" in humanize_ai_error(
+                "HTTPConnectionPool(host='localhost', port=1234): Max retries exceeded "
+                "(Caused by NewConnectionError: Connection refused)").lower()
+        nd._windows_adapters = lambda: [("Wi-Fi", "Killer(R) Wi-Fi 6E", True)]
+        out = humanize_api_error(brut)
+        assert "un VPN ou un pare-feu" in out, out
+    finally:
+        nd._windows_adapters = saved
+
+    for phrase in (nd.VPN_ADVICE, nd.NO_VPN_ADVICE, "Connexion coupée avec le service IA."):
+        assert phrase in _FR_TO_EN, f"phrase non traduite : {phrase[:50]}"
+    assert "{vpn}" in _FR_TO_EN[nd.VPN_ADVICE], "le nom de la carte doit trouver sa place en anglais"
+    # Le vrai poste : la détection ne lève jamais (le résultat dépend du VPN).
+    assert isinstance(nd.active_vpn(), str)
+
 
 if __name__ == "__main__":
     sys.exit(main())

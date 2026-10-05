@@ -204,6 +204,15 @@ def humanize_api_error(err: str) -> str:
             "Rechargez votre compte sur fal.ai/dashboard pour continuer.\n"
             f"({fal_error_detail(err)})"
         )
+    # Connexion COUPÉE en cours de route (« ConnectionResetError 10054 ») : le
+    # plus souvent un VPN (cas réel NordVPN, 05/10/2026) — nommé s'il est actif.
+    # Les distributeurs alternatifs le disent déjà (api/distrib_common).
+    try:
+        from core.net_diag import advice, is_connection_cut
+        if is_connection_cut(err) and "VPN" not in (err or ""):
+            return f"{err}\n\n{advice()}"
+    except Exception:
+        pass
     return err
 
 

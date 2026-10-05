@@ -251,6 +251,14 @@ def humanize_ai_error(msg: str) -> str:
         return _tr("Serveur IA injoignable — lancez le serveur local (Ollama, LM Studio, "
                    "llama.cpp…) ou vérifiez son adresse dans Paramètres → Assistant IA, "
                    "puis relancez.")
+    # Connexion COUPÉE en cours de route : le plus souvent un VPN (cas réel
+    # NordVPN, 05/10/2026), nommé s'il est actif sur le poste.
+    try:
+        from core.net_diag import advice, is_connection_cut
+        if is_connection_cut(low):
+            return _tr("Connexion coupée avec le service IA.") + " " + advice(_tr)
+    except Exception:
+        pass
     if "does not support images" in low or "ne voit pas les images" in low:
         return msg
     return msg

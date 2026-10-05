@@ -24,13 +24,18 @@ Pièges encodés ici :
     facturer — la durée ;
   · pas de seed sur la série 2.x (réservé aux 1.x, validation stricte) ;
   · un refus de modération n'est PAS facturé ; le même filtre que chez fal
-    s'applique (visages réels, droits d'auteur jugés sur la vidéo produite).
+    s'applique (visages réels, droits d'auteur jugés sur la vidéo produite) ;
+  · une clé valide ne suffit PAS : chaque modèle doit être ACTIVÉ dans la
+    console, ce que BytePlus n'autorise qu'à partir de 30 $ de crédit (ou un
+    AI Savings Plan / pack de ressources de 30 $). Sinon 404 « ModelNotOpen »
+    sur chaque plan — cas réel de Matthieu le 05/10/2026, dont la clé passait
+    le test. `probe_model` le vérifie gratuitement.
 """
 from __future__ import annotations
 
 import requests
 
-from api.distrib_common import (first_video_url, headers_json,
+from api.distrib_common import (connection_message, first_video_url, headers_json,
                                 http_error_message, poll_until, probe_key)
 
 PROVIDER = "BytePlus"
@@ -63,13 +68,88 @@ _POLL_EVERY_S = 15          # 20 interrogations/s autorisées ; le script offici
 _EXPIRES_AFTER_S = 3600     # tâche abandonnée par BytePlus si elle n'a pas démarré en 1 h
 
 
+#: Page de la console où l'on active les modèles, et conditions de BytePlus
+#: (doc « Activate, use, and cancel Dreamina Seedance 2.5 and 2.0 series
+#: models », mise à jour du 28/09/2026).
+ACTIVATION_URL = ("https://ai.byteplus.com/ark/region:ap-southeast-1/openManagement"
+                  "?LLM=%7B%7D&advancedActiveKey=model")
+NOT_ACTIVATED = (
+    "Seedance n'est pas activé sur ton compte BytePlus. BytePlus exige au moins 30 $ "
+    "de crédit (ou un AI Savings Plan, ou un pack de ressources de 30 $), puis "
+    "l'activation des modèles dans la console ModelArk (« Model activation »).")
+#: Raison courte, affichée quand l'ordre de priorité passe au distributeur suivant.
+NOT_ACTIVATED_SHORT = "Seedance non activé sur ton compte (30 $ de crédit, puis « Model activation »)"
+
+
 def _headers(api_key: str) -> dict:
     return headers_json(Authorization=f"Bearer {api_key.strip()}")
 
 
-def test_key(api_key: str) -> tuple[bool, str]:
-    """Clé valide = création refusée pour corps invalide (4xx), pas 401/403."""
-    return probe_key(PROVIDER, _BASE, _headers(api_key), {})
+def _error_code(resp) -> str:
+    try:
+        data = resp.json()
+    except ValueError:
+        return ""
+    err = data.get("error") if isinstance(data, dict) else None
+    return str((err or {}).get("code") or "") if isinstance(err, dict) else ""
+
+
+def probe_model(api_key: str, engine: str) -> tuple[bool | None, str]:
+    """Le modèle `engine` est-il ACTIVÉ sur ce compte ? (True | False | None =
+    on ne sait pas, raison). Sonde GRATUITE : le corps est invalide à plusieurs
+    titres (contenu vide, résolution, ratio et durée hors grille), si bien
+    qu'aucune tâche ne peut naître ; BytePlus contrôle l'activation AVANT de
+    lire le corps (vérifié le 05/10/2026 : 404 « ModelNotOpen » sur un compte
+    sans activation). Un modèle activé répond donc 400 de validation. Si une
+    tâche apparaissait malgré tout, elle serait annulée sur-le-champ."""
+    model_id = MODEL_IDS.get(engine)
+    if not model_id or not (api_key or "").strip():
+        return None, ""
+    body = {"model": model_id, "content": [],
+            "resolution": "pandora-sonde", "ratio": "pandora-sonde", "duration": 0}
+    try:
+        r = requests.post(_BASE, headers=_headers(api_key), json=body, timeout=15)
+    except requests.RequestException:
+        return None, ""
+    try:
+        task_id = (r.json() or {}).get("id") if r.status_code < 400 else None
+    except (ValueError, AttributeError):
+        task_id = None
+    if task_id:
+        try:
+            requests.delete(f"{_BASE}/{task_id}", headers=_headers(api_key), timeout=15)
+        except requests.RequestException:
+            pass
+        return True, ""
+    if r.status_code == 401:
+        return False, "clé BytePlus refusée"
+    if _error_code(r) == "ModelNotOpen":
+        return False, NOT_ACTIVATED_SHORT
+    if r.status_code in (400, 422):
+        return True, ""
+    return None, ""
+
+
+def test_key(api_key: str) -> tuple[bool | None, str]:
+    """Clé valide = création refusée pour corps invalide (4xx), pas 401/403.
+    Puis les modèles : une clé acceptée sans Seedance activé rend None (« clé
+    bonne, compte pas prêt ») — le test disait « OK » alors qu'aucun plan ne
+    pouvait partir (05/10/2026)."""
+    ok, msg = probe_key(PROVIDER, _BASE, _headers(api_key), {})
+    if not ok:
+        return ok, msg
+    states = {e: probe_model(api_key, e)[0] for e in ("seedance-2.5", "seedance-2.0")}
+
+    def _names(flag):
+        return " et ".join(f"Seedance {e.split('-')[1]}" for e, v in states.items() if v is flag)
+    if all(v is False for v in states.values()):
+        return None, "Clé BytePlus acceptée. " + NOT_ACTIVATED
+    if any(v is True for v in states.values()):
+        text = f"Connexion BytePlus OK — clé acceptée. Activé : {_names(True)}."
+        if any(v is False for v in states.values()):
+            text += f" Non activé : {_names(False)} (« Model activation » dans la console)."
+        return True, text
+    return True, msg
 
 
 def _ratio(value: str) -> str:
@@ -155,8 +235,17 @@ def run(mode: str, model: str, args: dict, api_key: str,
     try:
         r = requests.post(_BASE, headers=_headers(api_key), json=body, timeout=60)
     except requests.RequestException as e:
-        raise RuntimeError(f"BytePlus injoignable : {e}")
+        raise RuntimeError(connection_message(PROVIDER, e))
     if r.status_code >= 400:
+        if _error_code(r) == "ModelNotOpen":
+            # Retenu : le plan suivant passera directement au distributeur
+            # suivant de l'ordre, sans redemander.
+            try:
+                from api.distrib_probe import note_byteplus_not_activated
+                note_byteplus_not_activated(api_key, model)
+            except Exception:
+                pass
+            raise RuntimeError(f"BytePlus : {NOT_ACTIVATED} Rien n'a été généré ni facturé.")
         raise RuntimeError(http_error_message(PROVIDER, r))
     try:
         task_id = (r.json() or {}).get("id", "")
