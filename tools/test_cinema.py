@@ -179,7 +179,11 @@ def edition_cinema_only():
     # les tâches texte, mode économique Batch de Claude (−50 %), file du Studio
     # (attente visible, sans recomposition auto elle part tout de suite), vrai
     # distributeur annoncé avant une file, termes de mouvement aérien sans « drone ».
-    assert VERSION.split("-")[0] == "2.6.0", f"version attendue 2.6.0[-suffixe], lue {VERSION}"
+    # Build 2.6.1 (2026-10-05) : activation des modèles BytePlus vérifiée (sonde
+    # gratuite, ordre de priorité), crédit Runware dit clairement, VPN nommé dans
+    # les coupures de connexion, images de référence aux normes de Seedance
+    # (mosaïque 512 × 640 au lieu de 210 × 260, garde-fou à l'envoi).
+    assert VERSION.split("-")[0] == "2.6.1", f"version attendue 2.6.1[-suffixe], lue {VERSION}"
     # ── UN SEUL numéro de version dans tout le produit ────────────────────────
     # Chaque endroit qui recopie le numéro à la main finit par diverger : la 2.0.0
     # est partie en build avec une charte d'utilisation estampillée 1.3.5, un .app

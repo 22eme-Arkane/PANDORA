@@ -18,15 +18,41 @@
 
 ## Download
 
-**[⬇ Download PANDORA v2.6.0 for Windows](https://github.com/22eme-Arkane/PANDORA/releases/download/v2.6.0/PANDORA_Setup_2.6.0.exe)**
+**[⬇ Download PANDORA v2.6.1 for Windows](https://github.com/22eme-Arkane/PANDORA/releases/download/v2.6.1/PANDORA_Setup_2.6.1.exe)**
 
-**[⬇ Download PANDORA v2.6.0 for macOS](https://github.com/22eme-Arkane/PANDORA/releases/download/v2.6.0/PANDORA_2.6.0.dmg)** *(Apple Silicon — see [Installation](#installation) for the first launch)*
+**[⬇ Download PANDORA v2.6.1 for macOS](https://github.com/22eme-Arkane/PANDORA/releases/download/v2.6.1/PANDORA_2.6.1.dmg)** *(Apple Silicon — see [Installation](#installation) for the first launch)*
 
 All versions: [Releases](../../releases)
 
 🌐 **Official 22eme ARKANE website: [22eme-arkane.com](https://22eme-arkane.com)**
 
 ---
+
+## What's new in v2.6.1
+
+**Distributors that say what is wrong — and character references Seedance can
+actually read.**
+
+- **Character references 2.5× sharper, accepted everywhere.** PANDORA packs the
+  characters of a shot into a labelled mosaic; its cells were 210 × 260 pixels,
+  so a single character went out as a thumbnail — Seedance barely saw the actor,
+  and BytePlus refused it outright (« image pixel count must be ≥ 90000 »).
+  Cells are now 512 × 640. Every image sent to BytePlus, Runware or PiAPI is
+  also brought within Seedance's limits (300 to 6000 px per side, aspect ratio
+  0.4 to 2.5); an image already within them is sent untouched.
+- **BytePlus: a valid key is not enough.** Each Seedance model must be activated
+  in the BytePlus console, which requires at least $30 of credit. The key test
+  now checks the models too (« key accepted — models to activate »), the
+  Studio's distributor menu shows « Seedance not activated », and the priority
+  order skips BytePlus for an engine that is not activated, saying why.
+- **Runware without credit** is said plainly (at least $5 of credit), and the
+  next shots go to the next distributor.
+- **A VPN that cuts the connection is named.** A connection reset during a
+  request (ConnectionResetError 10054) used to read « BytePlus unreachable ».
+  PANDORA now detects an active VPN on the computer (NordVPN, WireGuard,
+  OpenVPN, Proton…) and says so, with the fix: turn it off while generating, or
+  exclude PANDORA from the VPN (split tunneling). Same advice for fal.ai and the
+  text AI.
 
 ## What's new in v2.6.0
 
@@ -735,7 +761,7 @@ per-engine mood prompts, same fixes.
 
 ### Windows
 
-1. Download `PANDORA_Setup_2.6.0.exe` from the link above and run it
+1. Download `PANDORA_Setup_2.6.1.exe` from the link above and run it
 2. If Windows shows *"Windows protected your PC"* (SmartScreen), click
    **More info** then **Run anyway** — the app is not code-signed yet
    (certificate in progress), this is the Windows equivalent of the macOS
@@ -746,7 +772,7 @@ per-engine mood prompts, same fixes.
 
 ### macOS
 
-1. Download `PANDORA_2.6.0.dmg` from the link above
+1. Download `PANDORA_2.6.1.dmg` from the link above
 2. Open the DMG and drag **PANDORA** into **Applications** (as usual)
 3. **First launch** — macOS will claim that *"PANDORA is damaged and can't be
    opened"*. **This is normal, the app is not damaged** — macOS blocks apps
