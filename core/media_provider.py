@@ -435,6 +435,24 @@ def provider_keys_url(provider_id: str) -> str:
     return (PROVIDERS.get(provider_id) or {}).get("keys_url", "")
 
 
+def seed_supported(provider_id: str, engine: str, mode: str = "t2v") -> bool:
+    """La seed (ADN visuel, reprise d'un plan) atteint-elle le moteur chez ce
+    distributeur ? Relevé des schémas le 05/10/2026 (question de Matthieu : « on
+    peut réutiliser une seed ? ») :
+      · fal      — Seedance 2.5 en RÉFÉRENCE seulement : texte→vidéo et
+                   image→vidéo 2.5, et toute la 2.0, n'ont pas de champ seed ;
+      · BytePlus — Seedance 2.5 : champ `seed` de l'API ModelArk, renvoyé dans
+                   chaque tâche, accepté par les relais Ark et par Replicate
+                   (pas encore vérifié en réel : un refus de validation est gratuit) ;
+      · Runware, PiAPI — aucun champ seed en entrée.
+    ByteDance ne promet pas un rendu identique à seed égale, seulement proche."""
+    if (engine or "").strip() != "seedance-2.5":
+        return False
+    if provider_id == "fal":
+        return mode == "ref"
+    return provider_id == "byteplus"
+
+
 def max_ref_images(provider_id: str, engine: str) -> int | None:
     """Plafond d'images de référence chez un distributeur ALTERNATIF (30 en
     2.5, 9 en 2.0) ; None pour fal (plafond de core/seedance_family)."""

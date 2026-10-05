@@ -9362,7 +9362,7 @@ def flux3_affinage_du_brouillon():
                          "draft_cache_url": "https://x/cache"})
     finally:
         _hist.find_entry_by_path = _orig
-    assert "↑ HD" in _sans, "les boutons ne sont pas construits — test sans valeur"
+    assert "↻ Reprendre" in _sans, "les boutons ne sont pas construits — test sans valeur"
     assert "✦ Affiner" not in _sans, "bouton proposé sur un clip NON affinable"
     assert "✦ Affiner" in _avec, "bouton absent sur un brouillon affinable"
 
@@ -13818,6 +13818,251 @@ def erreur_de_generation_reessayer_avec_un_autre_distributeur_05_10_2026():
     src = inspect.getsource(W.show_api_error)
     assert 'title = QLabel("Crédits fal.ai insuffisants")' not in src
     assert '("BytePlus", "Runware", "PiAPI")' in src
+
+
+@test
+def reprise_meme_seed_et_prompt_exact_05_10_2026():
+    """Question de Matthieu (05/10/2026) : « est-ce qu'on peut réutiliser une
+    seed ? Un plan était vraiment bien, je l'ai ressorti, il est moins bien. »
+    Constat : la reprise (« ↑ HD ») ne reproduisait rien, sans le dire — le
+    prompt repris était le texte de TRAVAIL (retraduit à l'envoi), la seed
+    n'atteignait jamais BytePlus, et fal n'a pas de champ seed en texte→vidéo
+    2.5. Attendu :
+      · seed_supported : BytePlus 2.5 oui ; fal 2.5 en référence seulement ;
+        2.0, Runware et PiAPI non ;
+      · BytePlus reçoit `seed` en 2.5 (jamais en 2.0) ; un refus de la seed est
+        nommé (et « seedance » dans un message n'est pas la seed) ;
+      · run_real transmet la seed là où elle est lue, DIT sinon, et enregistre
+        le texte réellement envoyé + les réglages ; une reprise exacte part mot
+        pour mot, sans aucun suffixe ;
+      · « Reprendre » remet ce texte, les réglages et la seed ; l'envoi le marque
+        exact tant qu'il n'est pas retouché ; le Studio dit si la seed passera ;
+      · le fichier téléchargé rejoint l'historique (la Vidéothèque ne retrouvait
+        aucun plan du Studio)."""
+    import json
+    import api.byteplus as bp
+    import api.real as real
+    import api.distrib_probe as dp
+    import core.config as cc
+    import core.lang as lang
+    import core.ai_provider as aip
+    import core.media_provider as mp
+    import fal_client as _fc
+    from core.media_provider import seed_supported
+
+    # ── 1. Qui lit la seed (schémas relevés le 05/10/2026) ───────────────────
+    assert seed_supported("byteplus", "seedance-2.5", "t2v")
+    assert seed_supported("byteplus", "seedance-2.5", "ref")
+    assert not seed_supported("byteplus", "seedance-2.0", "t2v")
+    assert seed_supported("fal", "seedance-2.5", "ref")
+    assert not seed_supported("fal", "seedance-2.5", "t2v")
+    assert not seed_supported("fal", "seedance-2.5", "i2v")
+    assert not seed_supported("fal", "seedance-2.0", "ref")
+    assert not any(seed_supported(p, "seedance-2.5", "t2v") for p in ("runware", "piapi"))
+
+    # ── 2. BytePlus : `seed` en 2.5 seulement ; un refus est nommé ───────────
+    base = {"prompt": "p", "resolution": "1080p", "duration": "20", "aspect_ratio": "16:9"}
+    assert bp.build_body("t2v", "seedance-2.5", dict(base, seed=891))["seed"] == 891
+    assert "seed" not in bp.build_body("t2v", "seedance-2.0", dict(base, seed=891))
+    assert "seed" not in bp.build_body("t2v", "seedance-2.5", dict(base))
+    assert "seed" not in bp.build_body("t2v", "seedance-2.5", dict(base, seed=True))
+
+    class _R:
+        def __init__(self, code, payload):
+            self.status_code, self._p, self.text = code, payload, json.dumps(payload)
+
+        def json(self):
+            return self._p
+    _post = bp.requests.post
+    try:
+        bp.requests.post = lambda *a, **k: _R(400, {"error": {
+            "code": "InvalidParameter",
+            "message": "The parameter `seed` specified in the request is not valid"}})
+        try:
+            bp.run("t2v", "seedance-2.5", dict(base, seed=891), "k", lambda *a: None, lambda: False)
+            raise AssertionError("un refus de la seed doit lever")
+        except RuntimeError as e:
+            assert "refuse la seed" in str(e) and "Rien n'a été généré" in str(e), str(e)
+        bp.requests.post = lambda *a, **k: _R(400, {"error": {
+            "code": "InvalidParameter",
+            "message": "dreamina-seedance-2-5-260628: content[1] is not valid"}})
+        try:
+            bp.run("t2v", "seedance-2.5", dict(base, seed=891), "k", lambda *a: None, lambda: False)
+            raise AssertionError("un 400 doit lever")
+        except RuntimeError as e:
+            assert "refuse la seed" not in str(e), "« seedance » n'est pas la seed : " + str(e)
+    finally:
+        bp.requests.post = _post
+
+    # ── 3. run_real de bout en bout (aucune sonde réseau, distributeurs simulés)
+    saved = (cc.load_config, mp.load_config, lang.translate_to_english, aip.key_error,
+             bp.run, _fc.subscribe, dp.byteplus_model_state, dp.fal_state,
+             os.environ.get("FAL_KEY"))
+    try:
+        lang.translate_to_english = lambda t, *a, **k: t
+        aip.key_error = lambda *a, **k: "pas de clé (test)"
+        dp.byteplus_model_state = lambda *a, **k: (True, "")
+        dp.fal_state = lambda *a, **k: (True, "")
+        dp.forget()
+        seen = {}
+
+        def _bp_run(mode, model, args, key, emit, cancelled):
+            seen.update(mode=mode, args=dict(args))
+            return {"request_id": "cgt-1", "video": {"url": "https://x/v.mp4"},
+                    "seed": 891, "cost_usd": 11.4}
+        bp.run = _bp_run
+        conf = {"api_key": "", "video_provider": "byteplus", "byteplus_key": "b",
+                "distribution_mode": "mono"}
+        cc.load_config = lambda: dict(conf)
+        mp.load_config = lambda: dict(conf)
+        params = {"mode": "t2v", "model": "seedance-2.5", "prompt_is_final": True,
+                  "prompt": "A raven glides over four mountain passes.",
+                  "ref_images": [], "ref_image_roles": [], "resolution": "1080p",
+                  "duration": 20, "aspect_ratio": "16:9", "audio": True, "seed": 891}
+        msgs = []
+        res = real.run_real(dict(params), lambda _p, m="": msgs.append(m), lambda: False)
+        assert seen["args"].get("seed") == 891, seen["args"]
+        assert res["seed_sent"] is True and res["seed"] == 891 and res["seed_requested"] == 891
+        assert res["prompt_sent"] == seen["args"]["prompt"] and res["prompt_sent"]
+        assert res["aspect_ratio"] == "16:9" and res["audio"] is True
+        assert any("Seed 891 transmise" in m for m in msgs), msgs
+
+        # Reprise EXACTE : mot pour mot, aucun suffixe recollé.
+        exact = 'EXACT ORIGINAL TEXT, sent once, with "a quote".'
+        seen.clear()
+        res = real.run_real(dict(params, prompt=exact, prompt_exact=True,
+                                 style_suffix="STYLE", time_suffix="TIME",
+                                 no_music_suffix="NOMUSIC", creative_suffix="CREATIVE",
+                                 char_consistency_suffix="CHAR"),
+                            lambda *_a: None, lambda: False)
+        assert seen["args"]["prompt"] == exact, seen["args"]["prompt"]
+        assert res["prompt_sent"] == exact
+        # …alors qu'un prompt final ordinaire reçoit bien les briques demandées.
+        seen.clear()
+        real.run_real(dict(params, prompt=exact, creative_suffix="CREATIVE"),
+                      lambda *_a: None, lambda: False)
+        assert "CREATIVE" in seen["args"]["prompt"], "contre-épreuve : le suffixe aurait dû partir"
+
+        # Même demande chez fal en texte→vidéo 2.5 : pas de champ seed → pas
+        # envoyée, et la progression le DIT.
+        conf = {"api_key": "fal-test", "video_provider": "fal", "distribution_mode": "mono"}
+        cc.load_config = lambda: dict(conf)
+        mp.load_config = lambda: dict(conf)
+        sent = {}
+
+        def _subscribe(endpoint, arguments=None, **k):
+            sent.update(endpoint=endpoint, args=dict(arguments or {}))
+            return {"video": {"url": "https://x/f.mp4"}, "seed": 777}
+        _fc.subscribe = _subscribe
+        msgs = []
+        res = real.run_real(dict(params), lambda _p, m="": msgs.append(m), lambda: False)
+        assert sent and "seed" not in sent["args"], sent.get("args")
+        assert res["seed_sent"] is False and res["seed_requested"] == 891 and res["seed"] == 777
+        assert any("non transmise" in m for m in msgs), msgs
+    finally:
+        (cc.load_config, mp.load_config, lang.translate_to_english, aip.key_error,
+         bp.run, _fc.subscribe, dp.byteplus_model_state, dp.fal_state, _fk) = saved
+        dp.forget()
+        if _fk is None:
+            os.environ.pop("FAL_KEY", None)
+        else:
+            os.environ["FAL_KEY"] = _fk
+
+    # ── 4. Studio : « Reprendre » puis envoi (worker simulé, rien ne part) ────
+    import ui.tab_t2v as t2v
+    from ui.seed_reprise import is_exact, refresh_status
+    entry = {"status": "done", "prompt": "texte de travail en français",
+             "prompt_sent": "A raven glides over four mountain passes, exact text.",
+             "seed": 891, "model": "seedance-2.5", "resolution": "1080p", "duration": 20,
+             "aspect_ratio": "16:9", "audio": True, "provider": "byteplus"}
+    made = []
+
+    class _Sig:
+        def connect(self, *a, **k):
+            pass
+
+    class _FakeWorker:
+        def __init__(self, params):
+            made.append(params)
+            self.finished, self.progress, self.failed = _Sig(), _Sig(), _Sig()
+
+        def start(self):
+            pass
+    saved = (cc.load_config, mp.load_config, t2v.GenerationWorker)
+    try:
+        conf = {"api_key": "f", "byteplus_key": "b",
+                "video_provider_order": ["byteplus", "fal", "runware", "piapi"]}
+        cc.load_config = lambda: dict(conf)
+        mp.load_config = lambda: dict(conf)
+        t2v.GenerationWorker = _FakeWorker
+        w = t2v.TabT2V()
+        if getattr(w, "_import_cb", None):
+            w._import_cb.setChecked(False)
+        w.prefill_from_seed(dict(entry))
+        assert w.prompt_ta.toPlainText() == entry["prompt_sent"], "texte réellement envoyé"
+        assert w._prompt_is_final and is_exact(w)
+        assert w._get_seed() == 891, w._get_seed()
+        assert w._get_model() == "seedance-2.5" and w.cb_res.currentData() == "1080p"
+        assert w._get_duration() == 20, w._get_duration()
+        assert not w._reprise_banner.isHidden()
+        assert "prompt d'origine exact" in w._reprise_banner.text(), w._reprise_banner.text()
+        assert "transmise par BytePlus" in w._seed_status_lbl.text(), w._seed_status_lbl.text()
+        # fal en tête : la seed ne passera pas — dit sous l'ADN ET dans le bandeau.
+        conf["video_provider_order"] = ["fal", "byteplus", "runware", "piapi"]
+        refresh_status(w)
+        assert w._seed_status_lbl.text().startswith("⚠"), w._seed_status_lbl.text()
+        assert "non transmise par fal" in w._reprise_banner.text(), w._reprise_banner.text()
+        conf["video_provider_order"] = ["byteplus", "fal", "runware", "piapi"]
+
+        w.start_generation()
+        p = made[-1]
+        assert p["prompt"] == entry["prompt_sent"] and p["prompt_is_final"] and p["prompt_exact"]
+        assert p["seed"] == 891 and p["model"] == "seedance-2.5" and p["resolution"] == "1080p"
+        assert p["duration"] == 20 and p["aspect_ratio"] == "16:9", p
+        # Retouché (« sans le Sony ») : prompt final ordinaire, plus « exact ».
+        w.prompt_ta.setPlainText(entry["prompt_sent"] + " No Sony camera.")
+        assert not is_exact(w) and "tel qu'il est écrit" in w._reprise_banner.text(), \
+            w._reprise_banner.text()
+        w.start_generation()
+        assert made[-1]["prompt_exact"] is False and made[-1]["prompt_is_final"] is True
+        # Seed déverrouillée : la reprise est finie, son bandeau disparaît.
+        w._seed_lock_btn.setChecked(False)
+        assert w._reprise_banner.isHidden() and w._seed_status_lbl.isHidden()
+        # Plan d'avant le 05/10 (aucun texte envoyé enregistré) : on le DIT.
+        old = {k: v for k, v in entry.items() if k != "prompt_sent"}
+        w.prefill_from_seed(old)
+        assert not w._prompt_is_final and "pas encore enregistré" in w._reprise_banner.text()
+    finally:
+        cc.load_config, mp.load_config, t2v.GenerationWorker = saved
+
+    # ── 5. Le fichier rejoint l'historique ; Historique et Vidéothèque proposent
+    #       « Reprendre » ───────────────────────────────────────────────────────
+    import core.history as H
+    tmp = tempfile.mkdtemp(prefix="pandora_hist_")
+    saved = (H._DATA_DIR, H._HISTORY_FILE)
+    try:
+        H._DATA_DIR, H._HISTORY_FILE = tmp, os.path.join(tmp, "history.json")
+        e = {"generated_at": "2026-10-05T10:24:52", "request_id": "cgt-1",
+             "seed": 891, "status": "done"}
+        with open(H._HISTORY_FILE, "w", encoding="utf-8") as f:
+            json.dump([dict(e), {"generated_at": "autre", "seed": 5}], f)
+        clip = os.path.join(tmp, "SQ4_P21_05.mp4")
+        assert H.find_entry_by_path(clip) is None
+        H.note_local_path(dict(e), clip)
+        found = H.find_entry_by_path(clip)
+        assert found and found["seed"] == 891, found
+        assert "local_path" not in H.load_history()[1], "une seule entrée touchée"
+    finally:
+        H._DATA_DIR, H._HISTORY_FILE = saved
+    for mod in (t2v, __import__("ui.tab_t2v_live", fromlist=["_"])):
+        src = inspect.getsource(mod.TabT2V.on_finished)
+        assert "note_local_path(entry, local_path)" in src, mod.__name__
+    import ui.tab_history as th
+    from PyQt6.QtWidgets import QPushButton
+    hist = th.TabHistory()           # gardé en vie : l'item lui appartient
+    item = hist._make_item(dict(entry))
+    labels = [b.text() for b in item.findChildren(QPushButton)]
+    assert "↻ Reprendre" in labels, labels
 
 
 if __name__ == "__main__":

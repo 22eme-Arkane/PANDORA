@@ -24,6 +24,27 @@ def save_to_history(entry: dict):
     _note_spend(entry)
 
 
+def note_local_path(entry: dict, local_path: str) -> None:
+    """Ajoute le fichier téléchargé à une entrée DÉJÀ enregistrée : le Studio
+    enregistre l'entrée avant de télécharger le clip, et n'y revenait jamais —
+    la Vidéothèque (find_entry_by_path) ne retrouvait donc AUCUN plan du Studio
+    pour « Reprendre » (constat du 05/10/2026 : 5 entrées sur 50 avaient un
+    chemin, aucune venant du Studio)."""
+    if not local_path or not isinstance(entry, dict):
+        return
+    entry["local_path"] = local_path
+    key = (entry.get("generated_at"), entry.get("request_id"))
+    if not key[0]:
+        return
+    history = load_history()
+    for e in history:
+        if (e.get("generated_at"), e.get("request_id")) == key:
+            e["local_path"] = local_path
+            with open(_HISTORY_FILE, "w", encoding="utf-8") as f:
+                json.dump(history, f, ensure_ascii=False, indent=2)
+            return
+
+
 def _note_spend(entry: dict):
     """Reporte la génération dans le journal de dépenses du PROJET.
 

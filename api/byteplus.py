@@ -22,7 +22,9 @@ Pièges encodés ici :
     « 16:9 » y fait échouer la tâche après son démarrage ;
   · durée TOUJOURS explicite : le défaut −1 laisse le modèle choisir — et
     facturer — la durée ;
-  · pas de seed sur la série 2.x (réservé aux 1.x, validation stricte) ;
+  · seed transmise en 2.5 seulement (champ `seed`, renvoyé par chaque tâche ;
+    jamais en 2.0, non documentée) — pas encore vérifiée en réel le 05/10/2026 :
+    la validation est stricte, un refus est gratuit et nommé ;
   · un refus de modération n'est PAS facturé ; le même filtre que chez fal
     s'applique (visages réels, droits d'auteur jugés sur la vidéo produite) ;
   · une clé valide ne suffit PAS : chaque modèle doit être ACTIVÉ dans la
@@ -32,6 +34,8 @@ Pièges encodés ici :
     le test. `probe_model` le vérifie gratuitement.
 """
 from __future__ import annotations
+
+import re as _re
 
 import requests
 
@@ -207,6 +211,13 @@ def build_body(mode: str, model: str, args: dict) -> dict:
                     body["duration"] = -1   # la modification garde la durée du clip source
         else:
             body["ratio"] = _ratio(args.get("aspect_ratio", "16:9"))
+    # Seed (05/10/2026) : la 2.5 la lit — champ `seed` de l'API, renvoyé dans
+    # chaque tâche. Elle part seulement quand PANDORA la demande (reprise d'un
+    # plan, ADN visuel verrouillé) ; jamais en 2.0, non documentée pour cette série.
+    seed = args.get("seed")
+    if engine == "seedance-2.5" and isinstance(seed, int) and not isinstance(seed, bool) \
+            and seed > 0:
+        body["seed"] = seed
     body["content"] = content
     return body
 
@@ -246,6 +257,13 @@ def run(mode: str, model: str, args: dict, api_key: str,
             except Exception:
                 pass
             raise RuntimeError(f"BytePlus : {NOT_ACTIVATED} Rien n'a été généré ni facturé.")
+        if "seed" in body and _re.search(r"\bseed\b", r.text or "", _re.I):
+            # La seed de la 2.5 n'avait jamais été essayée en réel : si BytePlus
+            # la refuse, on le dit (« seedance » ne compte pas, d'où le \b).
+            raise RuntimeError(
+                f"BytePlus refuse la seed pour {model} : {http_error_message(PROVIDER, r)} "
+                f"Rien n'a été généré ni facturé. Déverrouille l'ADN visuel (🔓) pour "
+                f"générer sans seed.")
         raise RuntimeError(http_error_message(PROVIDER, r))
     try:
         task_id = (r.json() or {}).get("id", "")

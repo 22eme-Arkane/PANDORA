@@ -2828,6 +2828,10 @@ class TabT2V(QScrollArea):
         self._t2v_adn_row = QHBoxLayout()
         self._t2v_adn_row.setAlignment(Qt.AlignmentFlag.AlignHCenter)
         self._t2v_adn_row.addWidget(self._seed_lock_btn)
+        # Seed verrouillée : transmise ou non par le distributeur (05/10/2026),
+        # juste sous le bouton.
+        from ui.seed_reprise import make_status_label as _seed_status_label
+        self._seed_status_lbl = _seed_status_label()
 
         # ── Panel multi-sélection (visible uniquement lors d'une sélection multiple) ──
         self._multi_panel = QFrame()
@@ -3036,6 +3040,7 @@ class TabT2V(QScrollArea):
         # ADN visuel en PREMIÈRE position de RENDU & AUDIO (parité Cinéma 2026-07-26) —
         # il vivait sur la ligne « Durée », qui vient d'être retirée de l'affichage.
         _raccords_lay.addLayout(self._t2v_adn_row)
+        _raccords_lay.addWidget(self._seed_status_lbl)
 
         def _raccord_toggle(title, subtitle, checked):
             w = QFrame()
@@ -3760,13 +3765,17 @@ class TabT2V(QScrollArea):
         # Écriture PROGRAMMATIQUE de l'encart (installation du prompt final) : on
         # sort tout de suite. Sans ce garde, poser le prompt final relance le
         # cycle qui vient de le produire — une boucle infinie, et facturée.
+        # Bandeau de reprise : le prompt part-il encore à l'identique ?
+        from ui.seed_reprise import on_prompt_edited
         if getattr(self, "_suppress_prompt_signal", False):
+            on_prompt_edited(self)
             return
         # Une saisie MANUELLE annule l'assemblage en cours : le texte affiché
         # n'est plus celui qui a été photographié, l'utilisateur reprend la main.
         self._prompt_is_final = False
         self._assembly_source = None
         self._preview_translated_text = None
+        on_prompt_edited(self)
         self._refresh_prompt_preview()
         self._preview_translate_timer.start()
 
@@ -4614,6 +4623,9 @@ class TabT2V(QScrollArea):
     def _update_injection_banner(self, *_):
         if not hasattr(self, "_ref_mode_banner"):
             return
+        # La seed suit les références (fal ne la lit qu'en mode référence).
+        from ui.seed_reprise import refresh_status as _seed_refresh
+        _seed_refresh(self)
         # Les VIGNETTES se rafraîchissent avec le bandeau (2026-07-26). Elles
         # n'avaient qu'un seul point d'appel — un changement de casting — et
         # restaient donc figées quand on changeait de plan, de mood ou de mode.
@@ -4827,6 +4839,9 @@ class TabT2V(QScrollArea):
                            engine_label=self.cb_model.currentText().split("  ")[0],
                            avail=av)
             self._apply_distrib_constraints(av)
+            # Autre distributeur ou autre moteur : la seed passe-t-elle encore ?
+            from ui.seed_reprise import refresh_status as _seed_refresh
+            _seed_refresh(self)
         except Exception:
             pass
 
@@ -4940,32 +4955,13 @@ class TabT2V(QScrollArea):
         return self._last_seed
 
     def prefill_from_seed(self, entry: dict):
-        """Reprend un plan validé (depuis l'Historique) : réinjecte son prompt et
-        VERROUILLE sa graine pour le régénérer en résolution supérieure. Rappel :
-        la graine garde la composition PROCHE, pas un rendu strictement identique
-        (limite Seedance) ; les références du plan d'origine ne sont pas restaurées
-        ici — ré-ajoute-les si besoin."""
-        if not isinstance(entry, dict):
-            return
-        prompt = (entry.get("prompt") or "").strip()
-        if prompt:
-            self.prompt_ta.setPlainText(prompt)
-        try:
-            seed = int(entry.get("seed") or 0)
-        except (TypeError, ValueError):
-            seed = 0
-        if seed > 0:
-            self._last_seed = seed
-            if not self._seed_lock_btn.isChecked():
-                self._seed_lock_btn.setChecked(True)   # → _on_seed_toggle (conserve _last_seed)
-            else:
-                self._update_injection_banner()
-        if hasattr(self, "_reprise_banner"):
-            self._reprise_banner.setText(translate(
-                "Plan repris — graine verrouillée. Choisis une résolution supérieure "
-                "(1080p ou 4K) puis relance. La composition sera proche, pas identique."
-            ))
-            self._reprise_banner.setVisible(True)
+        """Reprend un plan de l'Historique : prompt RÉELLEMENT envoyé (qui
+        repartira tel quel), réglages d'origine, seed verrouillée, et ce que le
+        distributeur en fera — ui/seed_reprise, commun aux deux éditions. La
+        seed garde le rendu PROCHE, pas identique (ByteDance ne le garantit pas) ;
+        les références du plan d'origine ne sont pas restaurées ici."""
+        from ui.seed_reprise import apply_reprise
+        apply_reprise(self, entry)
 
 
     # ── Garde-fou crédit fal.ai ───────────────────────────────────────────────
@@ -5277,6 +5273,7 @@ class TabT2V(QScrollArea):
         # drapeau `prompt_is_final` posé dans params dit à l'envoi de ne pas le
         # retraduire : c'est ce qui rend l'encart WYSIWYG.
         _final_mode = bool(getattr(self, "_prompt_is_final", False))
+        from ui.seed_reprise import is_exact as _seed_reprise_exact
 
         # UN seul prompt à sections → texte continu pour le moteur vidéo.
         # flatten() et NON video_of() (correctif 2026-07-26) : video_of ne gardait
@@ -5636,6 +5633,10 @@ class TabT2V(QScrollArea):
             # Sans ce drapeau, l'envoi repasserait le texte anglais déjà validé à
             # la traduction : ce qui part ne serait plus ce qui a été relu.
             "prompt_is_final":         _final_mode,
+            # Reprise d'un plan de l'Historique, prompt d'origine intact : il part
+            # mot pour mot, sans aucun ajout — le verrou du mapping y est DÉJÀ
+            # écrit, puisque c'est le texte réellement envoyé la première fois.
+            "prompt_exact":            _final_mode and _seed_reprise_exact(self),
             "safety_tolerance_override": str(self._creative.get_safety_tolerance()),
             "model":          self._get_model(),
             "duration":       self._get_duration(),
@@ -5802,6 +5803,13 @@ class TabT2V(QScrollArea):
             pass
         elif ir["success"]:
             local_path = ir.get("local_path", "")
+            # Le fichier rejoint l'entrée d'historique : la Vidéothèque peut
+            # alors proposer « Reprendre » sur ce clip.
+            try:
+                from core.history import note_local_path
+                note_local_path(entry, local_path)
+            except Exception:
+                pass
             davinci_msg = f"\n\n◈ Vidéo sauvegardée :\n{local_path}"
         else:
             davinci_msg = f"\n\n◈ Téléchargement échoué : {ir['error']}"

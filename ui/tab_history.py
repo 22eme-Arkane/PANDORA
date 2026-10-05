@@ -119,20 +119,24 @@ class TabHistory(QScrollArea):
         row.addLayout(info, 1)
         row.addWidget(badge)
 
-        # « Reprendre en HD » — seulement si le plan est réussi ET a une graine
-        # exploitable (les mock/anciennes entrées ont seed=0). Réinjecte prompt +
-        # graine dans l'onglet de génération pour régénérer en résolution supérieure.
+        # « Reprendre » — seulement si le plan est réussi ET a une seed connue
+        # (PiAPI n'en renvoie pas, les entrées mock ont seed=0). Remet dans le
+        # Studio le prompt RÉELLEMENT envoyé, les réglages et la seed
+        # (ui/seed_reprise) ; c'était « ↑ HD », qui ne reprenait que le prompt
+        # de travail — retraduit à l'envoi — et une seed que BytePlus ne
+        # recevait pas (05/10/2026).
         try:
             _seed = int(entry.get("seed") or 0)
         except (TypeError, ValueError):
             _seed = 0
         if status == "done" and _seed > 0:
-            btn = QPushButton("↑ HD")
+            btn = QPushButton(translate("↻ Reprendre"))
             btn.setCursor(Qt.CursorShape.PointingHandCursor)
             btn.setFixedHeight(28)
             btn.setToolTip(translate(
-                "Reprendre ce plan (même graine) pour le régénérer en résolution supérieure"
-            ))
+                "Reprendre ce plan : même prompt, mêmes réglages, même seed ({seed}). "
+                "Le rendu sera proche, pas identique — ByteDance ne garantit pas la "
+                "reproduction, et retoucher le prompt change le résultat.").format(seed=_seed))
             btn.setStyleSheet(
                 f"QPushButton{{background:transparent;border:1px solid {C['accent']};"
                 f"border-radius:6px;color:{C['accent']};font-size:10px;font-weight:700;"

@@ -321,6 +321,12 @@ def run_real(params: dict, emit_progress, is_cancelled) -> dict:
     # suffixes texte SAUTÉS (les params style/time/no_music/creative arrivent vides).
     # Restent appliqués : cohérence personnage, analyse vision du template, dialogues.
     _final = bool(params.get("prompt_is_final"))
+    # Reprise EXACTE d'un plan (Historique → « Reprendre », 05/10/2026) : le texte
+    # est celui qui est réellement parti la première fois, suffixes compris. Il
+    # repart TEL QUEL — ni composition, ni traduction, ni suffixe, ni analyse —
+    # sinon la réécriture par l'IA change le prompt et la seed ne sert à rien.
+    _exact = bool(params.get("prompt_exact"))
+    _final = _final or _exact
 
     _composed  = False
     _compose_attempted = False
@@ -405,7 +411,7 @@ def run_real(params: dict, emit_progress, is_cancelled) -> dict:
     _has_quotes = (any(q in _prompt_en for q in ('"', "«", "“", "‘"))
                    or bool(_re.search(r"(?<![A-Za-zÀ-ÿ])'[^']{1,300}'(?![A-Za-zÀ-ÿ])",
                                       _prompt_en)))
-    if _prompt_en and _has_translation and _has_quotes and not _dlg_done:
+    if _prompt_en and _has_translation and _has_quotes and not _dlg_done and not _exact:
         from core.lang import translate_dialogues_to
         emit_progress(5, "Traduction des dialogues…")
         _prompt_en = translate_dialogues_to(_prompt_en, _dialogue_lang)
@@ -418,7 +424,7 @@ def run_real(params: dict, emit_progress, is_cancelled) -> dict:
     _style_ref_for_vision = next(
         (p for p, r in zip(ref_images, ref_roles) if r == "style"), ""
     )
-    if _style_ref_for_vision and _has_vision:
+    if _style_ref_for_vision and _has_vision and not _exact:
         emit_progress(4, "Analyse de l'image de style…")
         _vision_style = _analyze_style_ref(_style_ref_for_vision)
         if _vision_style:
@@ -455,6 +461,9 @@ def run_real(params: dict, emit_progress, is_cancelled) -> dict:
     _creative_suffix = params.get("creative_suffix", "")
     if _creative_suffix and _prompt_en:
         _prompt_en = f"{_prompt_en}, {_creative_suffix}"
+    if _exact:
+        _prompt_en = (params.get("prompt") or "").strip()
+        emit_progress(5, "Reprise exacte — prompt d'origine envoyé tel quel.")
 
     _raw_res = params.get("resolution", "720p") or "720p"
     _res_clean = _raw_res.split()[0]  # strip price label: "720p (~$0.30/s)" → "720p"
@@ -554,8 +563,25 @@ def run_real(params: dict, emit_progress, is_cancelled) -> dict:
         "generate_audio":   params.get("audio", True),
         "safety_tolerance": params.get("safety_tolerance_override", "6"),
     }
-    if params.get("seed"):
-        args["seed"] = params["seed"]
+    # Seed (ADN visuel, reprise d'un plan) : transmise SEULEMENT là où le moteur
+    # la lit (core.media_provider.seed_supported). Avant le 05/10/2026 elle
+    # partait chez fal même en texte→vidéo 2.5 (champ absent du schéma : ignorée)
+    # et jamais chez BytePlus — la reprise d'un plan réussi n'en était pas une,
+    # sans que rien ne le dise.
+    try:
+        _seed_req = int(params.get("seed") or 0)
+    except (TypeError, ValueError):
+        _seed_req = 0
+    _seed_sent = False
+    if _seed_req > 0:
+        if _mp.seed_supported(_provider, model, mode):
+            args["seed"] = _seed_req
+            _seed_sent = True
+            emit_progress(5, f"Seed {_seed_req} transmise ({_mp.provider_short(_provider)}).")
+        else:
+            emit_progress(5, f"⚠ Seed {_seed_req} non transmise : "
+                             f"{_mp.provider_short(_provider)} ne la prend pas pour "
+                             f"{_sf.label(model)} dans ce mode — le rendu sera différent.")
 
     # ── Upload fichiers locaux → CDN fal.ai ───────────────────────────────────
     emit_progress(5, f"Envoi des fichiers ({_mp.provider_short(_provider)})…")
@@ -749,11 +775,19 @@ def run_real(params: dict, emit_progress, is_cancelled) -> dict:
                         f"framing and visual style."
                     )
 
-            if _prompt_additions:
+            # Reprise exacte : le texte d'origine contient DÉJÀ ces désignations.
+            if _prompt_additions and not _exact:
                 args["prompt"] = args["prompt"] + ". " + " ".join(_prompt_additions)
         elif _auto_ref:
             mode = "t2v"
             endpoint = endpoints["t2v"]
+            # Retour en texte→vidéo (aucune référence n'a pu partir) : chez fal
+            # la 2.5 n'y lit plus la seed.
+            if _seed_sent and not _mp.seed_supported(_provider, model, mode):
+                args.pop("seed", None)
+                _seed_sent = False
+                emit_progress(12, f"⚠ Seed {_seed_req} non transmise : sans référence, "
+                                  f"{_mp.provider_short(_provider)} ne la prend pas.")
         if not _auto_ref:
             if video_path and os.path.isfile(video_path):
                 try:
@@ -885,6 +919,13 @@ def run_real(params: dict, emit_progress, is_cancelled) -> dict:
             "prompt":                params.get("prompt", ""),
             "mode":                  mode,
             "provider":              _provider,
+            # Pour reprendre ce plan À L'IDENTIQUE (Historique → « Reprendre ») :
+            # le texte RÉELLEMENT envoyé et les réglages, pas le prompt de travail.
+            "prompt_sent":           args.get("prompt", ""),
+            "seed_requested":        _seed_req,
+            "seed_sent":             _seed_sent,
+            "aspect_ratio":          args.get("aspect_ratio", "16:9"),
+            "audio":                 bool(args.get("generate_audio", True)),
             # Coût RÉEL renvoyé par le distributeur quand il le donne (BytePlus :
             # jetons facturés ; Runware : includeCost) — sinon la grille.
             "cost_usd":              result.get("cost_usd"),
@@ -971,6 +1012,11 @@ def run_real(params: dict, emit_progress, is_cancelled) -> dict:
         "prompt":                params.get("prompt", ""),
         "mode":                  mode,
         "provider":              "fal",
+        "prompt_sent":           args.get("prompt", ""),
+        "seed_requested":        _seed_req,
+        "seed_sent":             _seed_sent,
+        "aspect_ratio":          args.get("aspect_ratio", "16:9"),
+        "audio":                 bool(args.get("generate_audio", True)),
         "generated_at":          datetime.now().isoformat(),
         "credits_used":          0,
         "seed":                  result.get("seed", 0),

@@ -137,11 +137,22 @@ _FR_TO_EN: dict[str, str] = {
     "＋ Réf":                                 "＋ Ref",
     "✕ Retirer":                              "✕ Remove",
 
-    # ── Historique → Reprendre en HD (régénération par graine) ────────────────
-    "Reprendre ce plan (même graine) pour le régénérer en résolution supérieure":
-        "Reuse this shot (same seed) to regenerate it at a higher resolution",
-    "Plan repris — graine verrouillée. Choisis une résolution supérieure (1080p ou 4K) puis relance. La composition sera proche, pas identique.":
-        "Shot reloaded — seed locked. Pick a higher resolution (1080p or 4K) then generate. The composition will be close, not identical.",
+    # ── Historique / Vidéothèque → « Reprendre » (même prompt, même seed) ────
+    # (05/10/2026 : c'était « ↑ HD », qui ne reprenait que le prompt de travail)
+    "↻ Reprendre": "↻ Reuse",
+    "Reprendre ce plan : même prompt, mêmes réglages, même seed ({seed}). Le rendu sera proche, pas identique — ByteDance ne garantit pas la reproduction, et retoucher le prompt change le résultat.":
+        "Reuse this shot: same prompt, same settings, same seed ({seed}). The result will be close, not identical — ByteDance does not guarantee reproduction, and editing the prompt changes the result.",
+    "Plan repris — prompt d'origine exact (envoyé tel quel), seed {seed} et réglages remis. Rendu proche, pas identique : ByteDance ne garantit pas la reproduction, même à seed égale.":
+        "Shot reloaded — exact original prompt (sent as is), seed {seed} and settings restored. Close result, not identical: ByteDance does not guarantee reproduction, even with the same seed.",
+    "Plan repris, prompt retouché : il part tel qu'il est écrit, avec la seed {seed}. Le rendu s'éloignera de l'original.":
+        "Shot reloaded, prompt edited: it is sent as written, with seed {seed}. The result will drift from the original.",
+    "Plan repris, prompt retouché : il sera retraduit et complété à l'envoi, avec la seed {seed}. Le rendu s'éloignera de l'original.":
+        "Shot reloaded, prompt edited: it will be translated again and completed when sent, with seed {seed}. The result will drift from the original.",
+    "Plan repris — seed {seed} verrouillée. Le prompt exactement envoyé n'était pas encore enregistré pour ce plan (avant le 05/10/2026) : il sera retraduit, le rendu peut s'éloigner.":
+        "Shot reloaded — seed {seed} locked. The exact prompt sent was not yet recorded for this shot (before 2026-10-05): it will be translated again, the result may drift.",
+    "🔒 Seed {seed} transmise par {who}.": "🔒 Seed {seed} passed on by {who}.",
+    "⚠ Seed {seed} non transmise par {who} pour ce moteur dans ce mode : le rendu sera différent. En Seedance 2.5, BytePlus la transmet ; fal seulement en mode référence.":
+        "⚠ Seed {seed} not passed on by {who} for this engine in this mode: the result will differ. For Seedance 2.5, BytePlus passes it on; fal only in reference mode.",
 
     # ── PANDORA | Live ───────────────────────────────────────────────────────
     # Sélecteur de module (chooser)

@@ -7766,5 +7766,79 @@ def aucun_dans_les_sequences_live_05_10_2026():
     assert "— Aucune —" not in src, "musique et transition : « ⊘ Aucune » comme le reste"
 
 
+@test
+def reprise_meme_seed_et_prompt_exact_live_05_10_2026():
+    """Parité Live de la reprise d'un plan (question de Matthieu du 05/10/2026 :
+    « on peut réutiliser une seed ? »). « Reprendre » remet le texte RÉELLEMENT
+    envoyé, les réglages et la seed ; l'envoi le marque exact (mot pour mot, le
+    verrou du mapping y est déjà écrit) tant qu'il n'est pas retouché ; une saisie
+    manuelle le repasse en prompt de travail — le Live retraduit alors, et le
+    bandeau le dit ; le fichier téléchargé rejoint l'historique ; Vidéothèque Live :
+    bouton « ↻ Reprendre »."""
+    import core.config as cc
+    import core.media_provider as mp
+    import ui.tab_t2v_live as t2vl
+    from ui.seed_reprise import is_exact
+    entry = {"status": "done", "prompt": "boucle façade",
+             "prompt_sent": "Locked camera on the facade, exact text sent once.",
+             "seed": 891, "model": "seedance-2.5", "resolution": "1080p", "duration": 20,
+             "aspect_ratio": "16:9", "audio": True, "provider": "byteplus"}
+    made = []
+
+    class _Sig:
+        def connect(self, *a, **k):
+            pass
+
+    class _FakeWorker:
+        def __init__(self, params):
+            made.append(params)
+            self.finished, self.progress, self.failed = _Sig(), _Sig(), _Sig()
+
+        def start(self):
+            pass
+    saved = (cc.load_config, mp.load_config, t2vl.GenerationWorker)
+    try:
+        conf = {"api_key": "f", "byteplus_key": "b",
+                "video_provider_order": ["byteplus", "fal", "runware", "piapi"]}
+        cc.load_config = lambda: dict(conf)
+        mp.load_config = lambda: dict(conf)
+        t2vl.GenerationWorker = _FakeWorker
+        w = t2vl.TabT2V()
+        w.prefill_from_seed(dict(entry))
+        assert w.prompt_ta.toPlainText() == entry["prompt_sent"] and w._prompt_is_final
+        assert is_exact(w) and w._get_seed() == 891
+        assert w._get_model() == "seedance-2.5" and w.cb_res.currentData() == "1080p"
+        assert w._get_duration() == 20, w._get_duration()
+        assert "prompt d'origine exact" in w._reprise_banner.text()
+        assert "transmise par BytePlus" in w._seed_status_lbl.text(), w._seed_status_lbl.text()
+        w.start_generation()
+        p = made[-1]
+        assert p["prompt"] == entry["prompt_sent"] and p["prompt_exact"] and p["seed"] == 891, p
+        # Saisie manuelle : le Live sort du mode final (retraduction à l'envoi).
+        w.prompt_ta.setPlainText(entry["prompt_sent"] + " No Sony camera.")
+        assert not w._prompt_is_final and not is_exact(w)
+        assert "retraduit et complété" in w._reprise_banner.text(), w._reprise_banner.text()
+        w.start_generation()
+        assert made[-1]["prompt_exact"] is False
+    finally:
+        cc.load_config, mp.load_config, t2vl.GenerationWorker = saved
+    src = inspect.getsource(t2vl.TabT2V.on_finished)
+    assert "note_local_path(entry, local_path)" in src
+    # Vidéothèque Live : le bouton s'appelle « ↻ Reprendre » (c'était « ↑ HD »).
+    import core.history as _H
+    from ui.tab_video_library_live import _LiveVideoCard
+    from PyQt6.QtWidgets import QPushButton
+    clip = os.path.join(tempfile.mkdtemp(prefix="pandora_lib_"), "SQ1_P01_01.mp4")
+    open(clip, "wb").write(b"\x00" * 32)
+    orig = _H.find_entry_by_path
+    try:
+        _H.find_entry_by_path = lambda p: dict(entry)
+        card = _LiveVideoCard(clip)
+        labels = [b.text() for b in card.findChildren(QPushButton)]
+    finally:
+        _H.find_entry_by_path = orig
+    assert "↻ Reprendre" in labels and "↑ HD" not in labels, labels
+
+
 if __name__ == "__main__":
     sys.exit(main())

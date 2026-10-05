@@ -183,19 +183,23 @@ class _LiveVideoCard(QFrame):
         row2.addWidget(btn_up)
         lay.addLayout(row2)
 
-        # « ↑ HD » — reprise par la GRAINE (comme l'Historique) : régénère un plan à
-        # partir de ce clip (même prompt + même graine) vers « Générer depuis Séquences ».
-        # Visible seulement si une entrée d'historique avec graine correspond au clip.
+        # « ↻ Reprendre » (c'était « ↑ HD ») — comme l'Historique : remet dans
+        # « Générer depuis Séquences » le prompt réellement envoyé, les réglages
+        # et la seed de ce clip (ui/seed_reprise). Visible seulement si une
+        # entrée d'historique avec seed correspond au clip.
         from core.history import find_entry_by_path as _find_entry
         _reprise = _find_entry(self._path)
         if _reprise:
             row3 = QHBoxLayout()
             row3.setContentsMargins(0, 0, 0, 0)
             row3.setSpacing(4)
-            btn_hd = QPushButton("↑ HD")
+            btn_hd = QPushButton(translate("↻ Reprendre"))
             btn_hd.setCursor(Qt.CursorShape.PointingHandCursor)
             btn_hd.setToolTip(translate(
-                "Reprendre ce plan (même graine) pour le régénérer en résolution supérieure"))
+                "Reprendre ce plan : même prompt, mêmes réglages, même seed ({seed}). "
+                "Le rendu sera proche, pas identique — ByteDance ne garantit pas la "
+                "reproduction, et retoucher le prompt change le résultat.").format(
+                    seed=_reprise.get("seed", 0)))
             btn_hd.setStyleSheet(
                 f"QPushButton{{background:transparent;border:1px solid {C['accent']};"
                 f"border-radius:6px;color:{C['accent']};font-size:11px;font-weight:700;"
