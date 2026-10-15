@@ -1,18 +1,31 @@
-# PANDORA — Standalone AI Cinema Pre-Production Studio × Seedance 2.0
+# PANDORA — AI Film Pre-Production Studio
 
 [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](https://www.gnu.org/licenses/gpl-3.0)
 
-**PANDORA** is a free, open-source, **standalone** cinema pre-production studio for Windows and macOS that integrates AI video generation (Seedance 2.0 / ByteDance via fal.ai) into a complete workflow: screenplay, storyboard, casting, sets, props, costumes & makeup, and vehicles. It runs entirely on its own — DaVinci Resolve integration (automatic clip import into the Media Pool) is available as an **option**, not a requirement.
+**PANDORA** takes a film from the written page to generated, edited shots — in one free, open-source desktop application for Windows and macOS.
+
+Write or import a screenplay, and PANDORA turns it into a shot breakdown, a storyboard, a cast, sets and props, then generates every shot with the AI video engine of your choice. You use your own accounts with the AI services: no subscription, you only pay for what you generate.
+
+**Two editions, one install**
+
+- **Cinema** — films, series, commercials: screenplay → breakdown → storyboard → AI shots → edit.
+- **Live** — VJ loops and projection mapping on building facades, cut to the tempo of your music set.
+
+**What it does**
+
+- **Writes with you** — Claude (or your ChatGPT Plus / Pro account, or a local AI) formats, analyses and co-writes the screenplay; nothing changes without your approval.
+- **Breaks it down** — a shot-by-shot breakdown that keeps your story, then a storyboard where each shot carries its size, camera move, lens, duration and a final prompt written for the target engine.
+- **Shows the film before you shoot it** — character portraits, set images, a mood image per shot, a lighting plan; these images travel with each shot to keep the same faces and places from one shot to the next.
+- **Generates the shots** — Seedance 2.0 / 2.5 (up to 30 s), Kling, Veo, Sora, Wan, MiniMax, PixVerse and more, or locally with ComfyUI. A queue runs whole sequences, and each shot's price is shown before you launch.
+- **Pays less for the same engine** — Seedance through fal.ai, BytePlus (ByteDance's official seller), Runware or PiAPI, in the priority order you choose; nothing switches distributor without your consent.
+- **Hands over to the edit** — clips are named by sequence, shot and take, and the storyboard exports as an XML timeline for your editing software.
+- **Keeps the bill visible** — every paid operation is logged in the project's cost report.
 
 ---
 
 ## Presentation
 
 [![Watch the PANDORA presentation on YouTube](https://img.youtube.com/vi/ci9jA_Tye2E/maxresdefault.jpg)](https://youtu.be/ci9jA_Tye2E)
-
-## Full Tutorial
-
-[![Watch the full PANDORA tutorial on YouTube](https://img.youtube.com/vi/SC3pRI5bR1Q/maxresdefault.jpg)](https://www.youtube.com/watch?v=SC3pRI5bR1Q)
 
 ---
 
@@ -758,28 +771,26 @@ per-engine mood prompts, same fixes.
 
 ## Features
 
-| Module | Description |
-|--------|-------------|
-| **Screenplay** | Cinema screenplay editor + auto-formatting via Claude AI + version management |
-| **Storyboard** | Shot grid with direct AI video generation (Seedance 2.0) from each shot |
-| **Castings** | Character sheets + AI portrait generation |
-| **Sets** | Location sheets + multi-angle AI image generation |
-| **Props / Costumes / Vehicles** | Element sheets + AI image generation |
-| **AI Studio** | 20+ video engines — Seedance 2.0/Mini, Kling, LTX-2, PixVerse, Veo 3.1, Sora 2… + AI Music, AI Images, Sound Design |
-| **"Generate All"** | One-click extraction + image generation for all screenplay elements |
-| **Dubbing** | Text-to-speech synthesis + background removal (BiRefNet) |
-| **Image & Sound** | Camera and optics preferences |
-| **DaVinci Resolve** *(optional)* | Automatic clip import into Media Pool (DaVinci Studio required) |
+| Area | What you get |
+|------|--------------|
+| **Screenplay** | Editor with import (.txt, .docx, .pdf), director's note, AI analysis and co-writing, film style (or none) |
+| **Breakdown** | PANDORA shot breakdown from the screenplay and director's note, batch mode for long scripts, shot-by-shot refinement |
+| **Storyboard** | Shot table edited in place, full shot sheet, structured and final prompts, mood images, recurring shots, XML timeline export, pitch deck |
+| **Cast & elements** | Characters (lead / extras), sets (single image, 4-view sheet, multi-angle workshop), props, costumes & makeup, vehicles — extracted from the screenplay and illustrated by AI |
+| **Lighting plan** | Top-down set plan with camera, actors and lights, synced with the storyboard |
+| **AI Studio** | Generation from the storyboard with automatic reference images, clip editing, direct generation, upscaling, sound design, AI music, video library, history and exact shot re-use |
+| **Image AI** | Multi-engine image studio with an art-direction chat |
+| **Dubbing** | AI voices, voice cloning, lip-sync in the Studio |
+| **Live edition** | Show rundown, music analysis (BPM and drops), Live and Mapping sequences, facade lock, VJ loops |
 
 ---
 
 ## Requirements
 
-- **Windows 10/11** 64-bit, or **macOS** (Apple Silicon)
-- **DaVinci Resolve Studio** (optional — only for Media Pool integration)
-- API keys (optional — the software runs in simulation mode without them):
-  - [fal.ai](https://fal.ai) — AI video & image generation (Seedance 2.0, portraits, elements…)
-  - [Anthropic](https://www.anthropic.com) — Claude AI (screenplay, storyboard, prompts)
+- **Windows 10/11** 64-bit, or **macOS** on Apple Silicon
+- To generate for real (without keys PANDORA runs in simulation mode):
+  - an AI video and image account — [fal.ai](https://fal.ai), and optionally [BytePlus](https://www.byteplus.com/en/product/modelark), [Runware](https://runware.ai) or [PiAPI](https://piapi.ai) for cheaper Seedance
+  - a text AI — [Anthropic](https://platform.claude.com) (Claude), a ChatGPT Plus / Pro account, or a local AI (Ollama, LM Studio…)
 
 ---
 
@@ -790,51 +801,47 @@ per-engine mood prompts, same fixes.
 1. Download `PANDORA_Setup_2.6.1.exe` from the link above and run it
 2. If Windows shows *"Windows protected your PC"* (SmartScreen), click
    **More info** then **Run anyway** — the app is not code-signed yet
-   (certificate in progress), this is the Windows equivalent of the macOS
-   notice below
 3. Follow the installer and accept the Terms of Use
-4. Launch **PANDORA** from the Start menu or desktop shortcut
-5. Enter your API keys in **Settings** (optional)
+4. Launch **PANDORA**, choose **Cinema** or **Live**, and follow the setup guide to paste your keys
 
 ### macOS
 
 1. Download `PANDORA_2.6.1.dmg` from the link above
-2. Open the DMG and drag **PANDORA** into **Applications** (as usual)
+2. Open the DMG and drag **PANDORA** into **Applications**
 3. **First launch** — macOS will claim that *"PANDORA is damaged and can't be
-   opened"*. **This is normal, the app is not damaged** — macOS blocks apps
-   that are not registered with Apple. To unblock it (one time only):
-   - Open **Terminal** (Cmd+Space, type "Terminal")
-   - Paste this line and press Enter:
+   opened"*. **The app is not damaged** — macOS blocks apps that are not
+   registered with Apple. To unblock it (one time only), open **Terminal**
+   and run:
 
-     ```bash
-     xattr -cr /Applications/PANDORA.app
-     ```
+   ```bash
+   xattr -cr /Applications/PANDORA.app
+   ```
 
-   - Launch PANDORA normally by double-clicking — it won't ask again.
-4. Enter your API keys in **Settings** (optional)
+4. Launch PANDORA, choose **Cinema** or **Live**, and follow the setup guide
 
 ---
 
-## Quick Start
+## Quick Start (Cinema)
 
-1. **Create a project** — from the home screen, click "New project"
-2. **Write the screenplay** — Screenplay page, with auto-formatting and Claude AI suggestions
-3. **Generate the storyboard** — from the screenplay, click "Generate storyboard"
-4. **Create element sheets** — Castings, Sets, Props, Costumes, Vehicles
-5. **Or use "Generate All"** — one-click extraction of all elements from the screenplay
-6. **Generate videos** — AI Studio tab, Text-to-Video or directly from each storyboard shot
+1. **Projects** → **New project**
+2. **Screenplay** — write or import it, fill in the director's note, pick a style
+3. **Create the PANDORA breakdown**
+4. **Generate characters, sets and props** (with or without images)
+5. **Generate the storyboard** — choose the target video engine the first time
+6. **Storyboard** — adjust shots, generate the moods
+7. **AI Studio → Generate from Storyboard** — select shots, check the price, launch the queue
+8. **Edit** — Storyboard → Action → export the XML timeline and open it in your editing software
 
 ---
 
 ## Architecture
 
 ```
-core/      Business logic (config, projects, screenplay, storyboard, i18n, migration…)
-api/       Network calls in QThread (Seedance, Claude, Nano Banana, update check)
-ui/        PyQt6 components (pages, dialogs, AI Studio tabs)
-davinci/   DaVinci Resolve Scripting API bridge
-assets/    Icons, badges, visual references
-tools/     Utility scripts (build, ICO conversion, wizard images)
+core/          Business logic (projects, screenplay, storyboard, prompts, pricing, i18n…)
+api/           Network calls in worker threads (video/image engines, distributors, text AI)
+ui/            PyQt6 interface — Cinema pages and dialogs, *_live.py for the Live edition
+studio_images/ Image AI studio
+tools/         Test harnesses, build and utility scripts
 ```
 
 ---
