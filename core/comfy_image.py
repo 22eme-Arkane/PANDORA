@@ -30,6 +30,11 @@ core/comfy_workflow), avec les définitions de nœuds du serveur :
 `subscribe()` a la signature de fal_client.subscribe pour que core/image_call
 le substitue sans que les points de génération changent (fiches, moods,
 Studio Images). Prix : 0 $.
+
+Calcul « Mes machines · AIODOS » (core/aiodos, 22/10/2026) : le graphe est
+préparé ICI de la même façon, puis core/comfy_aiodos le fait calculer par mes
+machines ; l'image rapatriée est servie par une URL locale (core/local_files),
+téléchargeable comme `/view`.
 """
 
 from __future__ import annotations
@@ -55,13 +60,52 @@ class NoPromptTarget(ValueError):
 
 # ── Définitions ──────────────────────────────────────────────────────────────
 
-def object_info(base: str) -> dict:
+def object_info(base: str | None) -> dict:
+    """Les définitions de nœuds du serveur. `base` None (calcul par AIODOS,
+    ComfyUI de ce PC fermé) : la dernière copie lue, gardée sur le disque —
+    AIODOS ne transmet pas encore l'object_info de mes machines."""
+    if not base:
+        return saved_object_info()
     now = time.time()
     t, oi = _OBJ_CACHE.get(base, (0, None))
     if oi is None or now - t > _OBJ_TTL_S:
         oi = _cf.fetch_object_info(base)
         _OBJ_CACHE[base] = (now, oi)
+        remember_object_info(oi)
     return oi
+
+
+def _object_info_path() -> str:
+    from core.externals import externals_dir
+    return os.path.join(externals_dir(), "comfy_object_info.json")
+
+
+def remember_object_info(oi: dict) -> None:
+    try:
+        path = _object_info_path()
+        tmp = path + ".tmp"
+        with open(tmp, "w", encoding="utf-8") as f:
+            json.dump(oi, f, ensure_ascii=False)
+        os.replace(tmp, path)
+    except Exception:
+        pass
+
+
+_NO_LOCAL_DEFS = ("Pour préparer ce gabarit, PANDORA lit ses définitions dans le ComfyUI de ce PC "
+                  "(AIODOS ne les transmet pas encore) : lancez ComfyUI une fois sur ce PC, puis "
+                  "relancez.")
+
+
+def saved_object_info() -> dict:
+    try:
+        with open(_object_info_path(), encoding="utf-8") as f:
+            oi = json.load(f)
+        if isinstance(oi, dict) and oi:
+            return oi
+    except (OSError, ValueError):
+        pass
+    from core.i18n import translate
+    raise RuntimeError(translate(_NO_LOCAL_DEFS))
 
 
 def _inputs_spec(oi: dict, cls: str) -> dict:
@@ -297,10 +341,16 @@ def template_dir() -> str:
     return d
 
 
-def load_template(base: str, name: str) -> dict:
-    """Le gabarit officiel, servi par ComfyUI (mis en cache localement)."""
+def load_template(base: str | None, name: str) -> dict:
+    """Le gabarit officiel, servi par ComfyUI (mis en cache localement). `base`
+    None (calcul par AIODOS, ComfyUI de ce PC fermé) : la copie en cache."""
     import urllib.request
     path = os.path.join(template_dir(), f"{name}.json")
+    if not base:
+        if os.path.isfile(path):
+            return _wf.load(path)
+        from core.i18n import translate
+        raise RuntimeError(translate(_NO_LOCAL_DEFS))
     try:
         with urllib.request.urlopen(f"{base}/templates/{name}.json", timeout=20) as r:
             data = r.read()
@@ -408,8 +458,12 @@ def subscribe(template_name: str, arguments: dict | None = None, progress=None,
     arguments : prompt, negative, width, height, seed, ref_urls (data-URL /
     chemins / http), workflow (dict déjà chargé, optionnel)."""
     args = dict(arguments or {})
+    from core import comfy_aiodos as _ca
+    remote = _ca.enabled()          # « Calcul : Mes machines · AIODOS »
+    if remote:
+        _ca.require_ready()
     base = _cf.discover()
-    if not base:
+    if not base and not remote:
         raise RuntimeError("ComfyUI injoignable. Lancez ComfyUI Desktop (ou corrigez l'adresse "
                            "dans Paramètres), puis relancez.")
     if progress:
@@ -419,14 +473,22 @@ def subscribe(template_name: str, arguments: dict | None = None, progress=None,
     api = _wf.to_api(wf, oi)
     info = analyze(api, oi)
     refs = [r for r in (args.get("ref_urls") or []) if r]
-    names = []
-    if refs and info["load_images"]:
+    used = refs[:len(info["load_images"])] if info["load_images"] else []
+    names, datas = [], []
+    if remote:
+        # Les références partent par jeton @in: (core/comfy_aiodos) : les noms
+        # ne servent qu'à remplir le graphe comme le ferait un envoi local.
+        datas = [_ref_bytes(r) for r in used]
+        names = [f"pandora_ref_{i}.png" for i in range(len(datas))]
+    elif used:
         if progress:
             progress("ComfyUI — envoi des références…")
-        names = [upload_ref(base, r, i) for i, r in enumerate(refs[:len(info["load_images"])])]
+        names = [upload_ref(base, r, i) for i, r in enumerate(used)]
     fill(api, oi, info, str(args.get("prompt") or ""), str(args.get("negative") or ""),
          args.get("width"), args.get("height"), args.get("seed"), names)
     api = _wf.prune_unreachable(api, oi)
+    if remote:
+        return _subscribe_aiodos(template_name, api, info, datas, progress, is_cancelled)
     missing = _wf.missing_models(api, oi)
     if missing:
         lines = "\n".join(f"  • {f}  →  models/{d}" for f, d, _c in missing)
@@ -443,4 +505,33 @@ def subscribe(template_name: str, arguments: dict | None = None, progress=None,
         raise RuntimeError("Le gabarit s'est terminé sans produire d'image.")
     return {"images": [{"url": _cf.view_url(base, it), "content_type": "image/png",
                         "file_name": it["filename"]} for it in files],
+            "seed": None, "engine": "comfy:" + template_name}
+
+
+def ref_files(info: dict, api: dict, datas: list) -> dict:
+    """Les octets que chaque LoadImage du graphe ÉLAGUÉ doit lire, comme `fill`
+    les a répartis : la i-ème référence, sinon la première."""
+    if not datas:
+        return {}
+    return {nid: datas[i] if i < len(datas) else datas[0]
+            for i, nid in enumerate(info["load_images"]) if nid in api}
+
+
+def _subscribe_aiodos(template_name: str, api: dict, info: dict, datas: list, progress,
+                      is_cancelled) -> dict:
+    """La fin de `subscribe` quand le calcul passe par AIODOS : même forme de
+    retour, l'URL étant celle d'un fichier déjà rapatrié (core/local_files)."""
+    from core import comfy_aiodos as _ca
+    from core.local_files import url_for
+    outs = _ca.run(api, ref_files(info, api, datas), kind="image",
+                   label=f"PANDORA · {template_name}", sensitive=bool(datas),
+                   progress=(lambda _p, m: progress(m)) if progress else None,
+                   is_cancelled=is_cancelled, stem=template_name)
+    images = [o for o in outs if o["type"].startswith("image/")
+              or (not o["type"] and not o["path"].lower().endswith(
+                  (".mp4", ".webm", ".mov", ".mkv")))]
+    if not images:
+        raise RuntimeError("Le gabarit s'est terminé sans produire d'image.")
+    return {"images": [{"url": url_for(o["path"]), "content_type": o["type"] or "image/png",
+                        "file_name": os.path.basename(o["path"])} for o in images],
             "seed": None, "engine": "comfy:" + template_name}

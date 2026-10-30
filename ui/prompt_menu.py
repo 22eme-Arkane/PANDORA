@@ -45,12 +45,14 @@ class PromptMenu(QPushButton):
             self._view = FINAL
         self.setFixedHeight(34)
         self.setCursor(Qt.CursorShape.PointingHandCursor)
+        # Violet (accent secondaire) : posé juste à côté d'« Action » (turquoise),
+        # deux boutons de même couleur se répétaient (Matthieu 27/10/2026).
         self.setStyleSheet(
-            f"QPushButton{{background:transparent;color:{CP['accent']};"
-            f"border:1px solid {CP['accent']};border-radius:8px;"
+            f"QPushButton{{background:transparent;color:{CP['accent2']};"
+            f"border:1px solid {CP['accent2']};border-radius:8px;"
             f"font-size:11px;font-weight:700;padding:0 14px;}}"
-            f"QPushButton:hover{{background:rgba(78,205,196,0.12);}}"
-            f"QPushButton:pressed{{background:rgba(78,205,196,0.22);}}"
+            f"QPushButton:hover{{background:rgba(124,107,255,0.12);}}"
+            f"QPushButton:pressed{{background:rgba(124,107,255,0.22);}}"
             f"QPushButton::menu-indicator{{image:none;width:0;}}")
 
         menu = QMenu(self)

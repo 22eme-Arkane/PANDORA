@@ -26,7 +26,9 @@ _T: dict[str, dict[str, str]] = {
     "nav.hmc":         {"fr": "HMC",               "en": "HMC"},
     "nav.vehicles":    {"fr": "Véhicules",         "en": "Vehicles"},
     "nav.camera":      {"fr": "Image & Son",       "en": "Camera & Sound"},
-    "nav.plan_de_feu": {"fr": "Plan de feu",       "en": "Lighting plan"},
+    # La page est en 3D depuis le 29/10/2026 ; brièvement nommée « 3D », elle reprend
+    # « Plan de feu » le soir même (Matthieu : « pour le moment ça ne sert qu'à ça »).
+    "nav.plan_de_feu": {"fr": "3D",                "en": "3D"},
     "nav.doublage":    {"fr": "Doublage",          "en": "Dubbing"},
     "nav.image_ia":    {"fr": "Image IA",           "en": "AI Image"},
     # Renommages 2026-07-22 : le groupe devient « Génération IA » et la
@@ -6420,6 +6422,639 @@ _FR_TO_EN: dict[str, str] = {
         'requests processed',
     'laissez PANDORA ouvert.':
         'keep PANDORA open.',
+    # ── AIODOS, mes machines (22/10/2026) ──
+    'La puissance de calcul mise en commun, par Internet':
+        'Computing power, pooled over the Internet',
+    'Ouvrir AIODOS':
+        'Open AIODOS',
+    'Connexion et réglages':
+        'Connection and settings',
+    'Lieux de calcul demandés':
+        'Requested compute locations',
+    'Mes machines':
+        'My machines',
+    'Amis':
+        'Friends',
+    'Réseau public':
+        'Public network',
+    "Les lieux cochés partent avec la prochaine demande d'accès. Pour changer ceux "
+    "d'un accès déjà donné : « Se déconnecter », puis « Se connecter à AIODOS ». "
+    "AIODOS calcule aujourd'hui les gabarits ComfyUI sur ce PC et vos machines ; une "
+    "image de référence ou un clip ne quitte jamais ce PC et vos machines.":
+        "The ticked locations go with the next access request. To change those of an "
+        "access already granted: “Sign out”, then “Connect to AIODOS”. Today AIODOS "
+        "computes ComfyUI templates on this PC and your machines; a reference image or a "
+        "clip never leaves this PC and your machines.",
+    "Lieux changés : « Se déconnecter », puis « Se connecter à AIODOS » pour les "
+    "appliquer. D'ici là, AIODOS garde ceux de l'accès déjà donné ({places}).":
+        "Locations changed: “Sign out”, then “Connect to AIODOS” to apply them. Until "
+        "then, AIODOS keeps those of the access already granted ({places}).",
+    # Travaux de PANDORA : lieu retenu, fichiers jamais récupérés (28/10/2026)
+    'Fichiers':
+        'Files',
+    'Récupérer':
+        'Retrieve',
+    '{n} à récupérer':
+        '{n} to retrieve',
+    '{n} récupéré(s)':
+        '{n} retrieved',
+    'Lieu retenu par AIODOS : {places}':
+        'Location chosen by AIODOS: {places}',
+    'lieu retenu : {places}':
+        'location: {places}',
+    "Range les fichiers du travail dans PANDORA/AIODOS, dans le dossier de sortie "
+    "de PANDORA.":
+        "Saves the job's files to PANDORA/AIODOS, in PANDORA's output folder.",
+    "{n} travail(s) ont des fichiers jamais récupérés ({size}) — PANDORA fermé "
+    "pendant le calcul, par exemple. AIODOS ne les efface jamais seul : "
+    "choisissez-les, puis « Récupérer » ou « Oublier », sinon sa réserve finit "
+    "par se remplir.":
+        "{n} job(s) have never-retrieved files ({size}) — PANDORA closed during the "
+        "computation, for example. AIODOS never erases them on its own: select them, "
+        "then “Retrieve” or “Forget”, or its storage ends up full.",
+    'Oublier ce travail ?':
+        'Forget this job?',
+    "Ce travail a {n} fichier(s) jamais récupéré(s). L'oublier les "
+    "efface aussi dans AIODOS (sinon ils y resteraient sans fin). "
+    "« Récupérer » d'abord si vous les voulez.\n\nOublier ce travail "
+    "et effacer ces fichiers ?":
+        "This job has {n} never-retrieved file(s). Forgetting it also erases them in "
+        "AIODOS (otherwise they would stay there forever). “Retrieve” first if you "
+        "want them.\n\nForget this job and erase these files?",
+    'Récupération des fichiers…':
+        'Retrieving the files…',
+    '{n} fichier(s) récupéré(s) dans {folder}':
+        '{n} file(s) retrieved to {folder}',
+    "Travail oublié ; {n} fichier(s) jamais récupéré(s) effacé(s) "
+    "dans AIODOS.":
+        'Job forgotten; {n} never-retrieved file(s) erased in AIODOS.',
+    'Travail oublié.':
+        'Job forgotten.',
+    "Ce travail n'a aucun fichier à récupérer.":
+        'This job has no file to retrieve.',
+    'AIODOS — calcul sur : {places}':
+        'AIODOS — computing on: {places}',
+    'une référence ou un clip reste sur vos machines':
+        'a reference or a clip stays on your machines',
+    'le réseau public ne calcule pas encore les gabarits ComfyUI':
+        'the public network does not compute ComfyUI templates yet',
+    'AIODOS — ce calcul était déjà lancé : PANDORA le reprend.':
+        'AIODOS — this computation was already started: PANDORA picks it up.',
+    'réseau public : pas encore pour ComfyUI':
+        'public network: not yet for ComfyUI',
+    'pas encore pour ComfyUI : calcul sur vos machines':
+        'not yet for ComfyUI: computed on your machines',
+    "AIODOS ne fait pas encore calculer les gabarits ComfyUI par le réseau "
+    "public : il les calcule sur ce PC et vos machines, et le dit après l'envoi.":
+        "AIODOS does not have ComfyUI templates computed by the public network yet: "
+        "it computes them on this PC and your machines, and says so after sending.",
+    # Droit manquant (28/10/2026)
+    'IA texte':
+        'text AI',
+    'images et vidéos (gabarits ComfyUI)':
+        'images and videos (ComfyUI templates)',
+    "Demander l'accès manquant":
+        'Request the missing access',
+    'droit manquant : {what}':
+        'missing right: {what}',
+    'connecté · droit manquant':
+        'connected · missing right',
+    "AIODOS va afficher la demande du droit qui manque à PANDORA. Vérifiez que le "
+    "code y est le même, puis autorisez-le.":
+        "AIODOS will show the request for the right PANDORA is missing. Check that the "
+        "code there is the same, then authorize it.",
+    "Un droit décoché sur la carte d'accord d'AIODOS (les images et vidéos, par "
+    "exemple) se redemande ici : « Demander l'accès manquant ». Les lieux de calcul "
+    "d'un accès déjà donné ne changent pas ainsi : pour les modifier, « Se "
+    "déconnecter », puis « Se connecter à AIODOS ».":
+        "A right unticked on AIODOS's consent card (images and videos, for example) is "
+        "requested again here: “Request the missing access”. The compute locations of "
+        "an access already granted do not change this way: to change them, “Sign out”, "
+        "then “Connect to AIODOS”.",
+    'Machines':
+        'Machines',
+    'Machine':
+        'Machine',
+    'En cours':
+        'Running',
+    'Faites':
+        'Done',
+    'Modèles IA':
+        'AI models',
+    'Travaux de PANDORA':
+        'PANDORA jobs',
+    'Travail':
+        'Job',
+    'Avancement':
+        'Progress',
+    'Lancé':
+        'Started',
+    'Pause':
+        'Pause',
+    'Reprendre':
+        'Resume',
+    'Relancer les échecs':
+        'Retry failures',
+    'Oublier':
+        'Forget',
+    'Connectez PANDORA à AIODOS pour voir vos machines et vos travaux.':
+        'Connect PANDORA to AIODOS to see your machines and jobs.',
+    "Aucune machine ne s'annonce encore : ouvrez ComfyUI ou un modèle de conversation dans AIODOS, sur ce PC ou une machine appairée.":
+        'No machine has announced itself yet: open ComfyUI or a chat model in AIODOS, on this PC or a paired machine.',
+    '{n} en cours · {m} au total':
+        '{n} running · {m} in total',
+    'à jour à {t}':
+        'updated at {t}',
+    'calcule':
+        'computing',
+    'prête':
+        'ready',
+    'connue':
+        'known',
+    '{n} modèle(s)':
+        '{n} model(s)',
+    'ami':
+        'friend',
+    'en file':
+        'queued',
+    'en cours':
+        'running',
+    'mise en pause…':
+        'pausing…',
+    'en pause':
+        'paused',
+    'annulation…':
+        'cancelling…',
+    'terminé':
+        'completed',
+    'échoué':
+        'failed',
+    'annulé':
+        'cancelled',
+    '{n} machine(s)':
+        '{n} machine(s)',
+    '{n} travail(s) en cours':
+        '{n} job(s) running',
+    'AIODOS · machines connectées':
+        'AIODOS · connected machines',
+    'Travail en cours : {label}':
+        'Current job: {label}',
+    'Aucun travail en cours.':
+        'No job running.',
+    'Paramètres → AIODOS.':
+        'Settings → AIODOS.',
+    "Aucune machine ne s'annonce encore.":
+        'No machine has announced itself yet.',
+    'Gabarit':
+        'Template',
+    'Calcul':
+        'Compute',
+    'Texte → image':
+        'Text → image',
+    "Édition d'image (références)":
+        'Image editing (references)',
+    'Édition':
+        'Editing',
+    'Inpainting':
+        'Inpainting',
+    'Agrandissement':
+        'Upscaling',
+    'Personnage / mouvement':
+        'Character / motion',
+    'Interpolation':
+        'Interpolation',
+    'Outils':
+        'Tools',
+    '{n} réf.':
+        '{n} ref.',
+    "Le gabarit ComfyUI qui calcule l'image ou la vidéo (0 $). Les modèles qui manquent se téléchargent depuis Paramètres → Modules externes → ComfyUI.":
+        'The ComfyUI template that computes the image or video ($0). Missing models download from Settings → External modules → ComfyUI.',
+    'ComfyUI · gabarit':
+        'ComfyUI · template',
+    "AIODOS n'est pas prêt : {message} Paramètres → AIODOS.":
+        'AIODOS is not ready: {message} Settings → AIODOS.',
+    "Cette version d'AIODOS ne calcule pas encore les gabarits ComfyUI : laissez-la se mettre à jour, ou choisissez « Calcul : Ce PC ».":
+        'This version of AIODOS cannot compute ComfyUI templates yet: let it update itself, or choose “Compute: This PC”.',
+    "PANDORA n'a pas le droit de faire calculer ses gabarits par AIODOS : Paramètres → AIODOS → « Demander l'accès manquant ».":
+        'PANDORA is not allowed to have AIODOS compute its templates: Settings → AIODOS → “Request the missing access”.',
+    "PANDORA n'a pas le droit de converser avec AIODOS : Paramètres → AIODOS → « Demander l'accès manquant ».":
+        'PANDORA is not allowed to chat with AIODOS: Settings → AIODOS → “Request the missing access”.',
+    'Modèle(s) manquant(s) : {names}{where}.':
+        'Missing model(s): {names}{where}.',
+    ' sur {machine}':
+        ' on {machine}',
+    'Paramètres → AIODOS → « Se connecter à AIODOS ».':
+        'Settings → AIODOS → “Connect to AIODOS”.',
+    "L'accès de PANDORA a été retiré dans AIODOS : reconnectez-vous depuis Paramètres → AIODOS.":
+        "PANDORA's access was removed in AIODOS: reconnect from Settings → AIODOS.",
+    "L'accès de PANDORA a expiré : reconnectez-vous depuis Paramètres → AIODOS.":
+        "PANDORA's access has expired: reconnect from Settings → AIODOS.",
+    "Paramètres → AIODOS → « Demander l'accès manquant » pour demander ce droit.":
+        'Settings → AIODOS → “Request the missing access” to ask for this right.',
+    "Ce lieu de calcul n'est pas autorisé dans AIODOS (Réglages → Applications et autres outils).":
+        'This compute location is not allowed in AIODOS (Settings → Applications and other tools).',
+    'Lancez AIODOS : Paramètres → AIODOS → « Lancer AIODOS ».':
+        'Start AIODOS: Settings → AIODOS → “Start AIODOS”.',
+    'Ouvrez ComfyUI et accordez-le dans AIODOS (Réglages → Moteurs des applications) sur au moins une machine.':
+        'Open ComfyUI and grant it in AIODOS (Settings → App engines) on at least one machine.',
+    'Une machine a décroché : relancez dans un instant.':
+        'A machine dropped out: try again in a moment.',
+    'Installez-les dans le ComfyUI de cette machine, ou choisissez « Calcul : Ce PC » si ce PC les a.':
+        "Install them in that machine's ComfyUI, or choose “Compute: This PC” if this PC has them.",
+    "La réserve de fichiers d'AIODOS est pleine : onglet AIODOS → « Récupérer » ou « Oublier » les travaux finis.":
+        "AIODOS's file storage is full: AIODOS tab → “Retrieve” or “Forget” the finished jobs.",
+    'AIODOS est occupé : réessayez dans un instant.':
+        'AIODOS is busy: try again in a moment.',
+    "Un fichier dépasse 100 Mo, la limite d'un envoi à AIODOS : réduisez le clip.":
+        'A file exceeds 100 MB, the limit for one upload to AIODOS: shorten the clip.',
+    "Cette fonction arrivera avec une prochaine version d'AIODOS ou de PANDORA.":
+        'This feature will come with a future version of AIODOS or PANDORA.',
+    "AIODOS — aucune machine n'a pris le calcul à temps : ouvrez ComfyUI sur ce PC ou sur une de vos machines (et accordez-le dans AIODOS, Réglages → Moteurs des applications), puis relancez.":
+        'AIODOS — no machine picked up the job in time: open ComfyUI on this PC or on one of your machines (and grant it in AIODOS, Settings → App engines), then try again.',
+    "aucune unité n'a pu se faire.":
+        'no unit could be done.',
+    'Échec côté ComfyUI ({where}) : {reason}':
+        'ComfyUI failure ({where}): {reason}',
+    "Ce gabarit attend un fichier d'entrée (nœud {node} « {cls} ») que PANDORA ne lui donne pas : ajoutez une image de référence, ou choisissez un autre gabarit.":
+        'This template expects an input file (node {node} “{cls}”) that PANDORA does not give it: add a reference image, or choose another template.',
+    'AIODOS — envoi du travail…':
+        'AIODOS — sending the job…',
+    'AIODOS — calcul en cours…':
+        'AIODOS — computing…',
+    'AIODOS ne répond plus — nouvel essai…':
+        'AIODOS is not responding — retrying…',
+    'AIODOS — rapatriement des fichiers…':
+        'AIODOS — fetching the files…',
+    'AIODOS ✓ calculé par {machines}':
+        'AIODOS ✓ computed by {machines}',
+    'Pour préparer ce gabarit, PANDORA lit ses définitions dans le ComfyUI de ce PC (AIODOS ne les transmet pas encore) : lancez ComfyUI une fois sur ce PC, puis relancez.':
+        "To prepare this template, PANDORA reads its definitions from this PC's ComfyUI (AIODOS does not relay them yet): start ComfyUI once on this PC, then try again.",
+    'Ce PC':
+        'This PC',
+    'Mes machines · AIODOS':
+        'My machines · AIODOS',
+    'Où se calculent les gabarits ComfyUI : sur ce PC, ou réparti entre vos machines par AIODOS (Paramètres → AIODOS).':
+        'Where ComfyUI templates are computed: on this PC, or shared across your machines by AIODOS (Settings → AIODOS).',
+    'ComfyUI injoignable : lancez ComfyUI Desktop, puis relancez.':
+        'ComfyUI unreachable: start ComfyUI Desktop, then try again.',
+    'Se connecter à AIODOS':
+        'Connect to AIODOS',
+    "AIODOS va afficher une demande d'accès de PANDORA. Vérifiez que le code y est le même, puis autorisez PANDORA.":
+        'AIODOS will show an access request from PANDORA. Check that the code there is the same, then authorize PANDORA.',
+    'Demande en cours…':
+        'Request in progress…',
+    "Autorisez PANDORA dans la fenêtre d'AIODOS.":
+        'Authorize PANDORA in the AIODOS window.',
+    "AIODOS (22eme Arkane) relie par Internet les machines de personnes qui ne se "
+    "connaissent pas, pour mettre leur puissance en commun ; vos propres machines "
+    "et le réseau local viennent ensuite. Installé, il prête par défaut une part de "
+    "ce PC au réseau public (60 % de sa puissance au plus, jamais sur batterie ; "
+    "tout se coupe dans ses Réglages). Les travaux de PANDORA restent là où vous le "
+    "choisissez ci-dessous : par défaut ce PC, et une référence ou un clip jamais "
+    "ailleurs que sur vos machines. AIODOS se met à jour seul : PANDORA lui parle "
+    "sans l'embarquer.":
+        "AIODOS (22eme Arkane) links the machines of people who do not know each other "
+        "over the Internet, to pool their power; your own machines and the local network "
+        "come next. Once installed, it lends part of this PC to the public network by "
+        "default (60% of its power at most, never on battery; everything can be turned "
+        "off in its Settings). PANDORA's jobs stay where you choose below: this PC by "
+        "default, and a reference or a clip never anywhere but your machines. AIODOS "
+        "updates itself: PANDORA talks to it without bundling it.",
+    "État d'AIODOS : non vérifié.":
+        'AIODOS status: not checked.',
+    'Lancer AIODOS':
+        'Start AIODOS',
+    'Calcul des gabarits ComfyUI':
+        'ComfyUI template computing',
+    "Ce que PANDORA envoie à AIODOS : le graphe du gabarit, le prompt et les images ou le clip qu'il lit. Avec une image de référence ou un clip, le calcul reste sur ce PC et vos machines, jamais chez des amis ni sur le réseau public. La clé d'accès est gardée chiffrée sur ce PC (jamais dans config.json).":
+        "What PANDORA sends to AIODOS: the template graph, the prompt and the images or clip it reads. With a reference image or a clip, computing stays on this PC and your machines, never at friends' or on the public network. The access key is kept encrypted on this PC (never in config.json).",
+    "Lecture de l'état d'AIODOS…":
+        'Reading AIODOS status…',
+    'ce PC':
+        'this PC',
+    'mes machines':
+        'my machines',
+    'amis':
+        'friends',
+    'réseau public':
+        'public network',
+    'connecté':
+        'connected',
+    'non installé':
+        'not installed',
+    'non connecté':
+        'not connected',
+    "Lancement d'AIODOS…":
+        'Starting AIODOS…',
+    'Déconnexion…':
+        'Disconnecting…',
+    'mes machines · gabarits ComfyUI · IA texte':
+        'my machines · ComfyUI templates · text AI',
+    "Le modèle « {m} » n'est plus dans AIODOS : choisissez-en un autre dans Paramètres → Assistant IA.":
+        'The model “{m}” is no longer in AIODOS: choose another one in Settings → AI Assistant.',
+    'Aucun modèle de conversation dans AIODOS : installez-en un dans AIODOS (page Modèles).':
+        'No chat model in AIODOS: install one in AIODOS (Models page).',
+    "Le modèle « {m} » d'AIODOS ne voit pas les images : choisissez un modèle avec la vision.":
+        'AIODOS model “{m}” cannot see images: choose a model with vision.',
+    'AIODOS — mes machines':
+        'AIODOS — my machines',
+    # Thèmes de couleur + fenêtre Nouveautés (27/10/2026)
+    "Nuit bleue": "Night blue",
+    "Le bleu sombre d'origine, turquoise et violet.":
+        "The original dark blue, teal and violet.",
+    "Noir & or": "Black & gold",
+    "Noir profond et or, aux couleurs du logo.":
+        "Deep black and gold, the logo's colours.",
+    "Néon": "Neon",
+    "Nuit violette, magenta et cyan électriques.":
+        "Violet night, electric magenta and cyan.",
+    "Émeraude": "Emerald",
+    "Vert profond, émeraude vive et ambre.":
+        "Deep green, bright emerald and amber.",
+    "Braise": "Ember",
+    "Brun sombre, orange vif et jaune soleil.":
+        "Dark brown, vivid orange and sun yellow.",
+    "Fond clair, pour les pièces lumineuses.":
+        "Light background, for bright rooms.",
+    "Le thème « {name} » sera appliqué au redémarrage de PANDORA.":
+        "The “{name}” theme will be applied when PANDORA restarts.",
+    "Redémarrer maintenant": "Restart now",
+    "Nouveautés de PANDORA": "What's new in PANDORA",
+    "Version {v} — et l'historique des versions précédentes.":
+        "Version {v} — and the history of previous versions.",
+    "cette version": "this version",
+    "Ne plus afficher jusqu'à la prochaine version": "Don't show again until the next version",
+    "Aucune note de version n'est disponible.": "No release notes are available.",
+    "Version {v}": "Version {v}",
+    "✦  Nouveautés": "✦  What's new",
+    "Apparence": "Appearance",
+    "Noir": "Black",
+    "Les couleurs de PANDORA sur fond noir.": "PANDORA's colours on a black background.",
+    "Redémarrez PANDORA pour appliquer ce thème.": "Restart PANDORA to apply this theme.",
+    "Retirer le fond": "Remove background",
+    "Retire le fond et la couleur du texte collé (sélection, sinon tout le texte)":
+        "Removes the background and colour of pasted text (selection, otherwise all the text)",
+    "AFFICHAGE ET AIDE": "DISPLAY AND HELP",
+    "LANGUE": "LANGUAGE",
+    # FilmCraft (27/10/2026)
+    "FilmCraft n'est pas installé sur cet ordinateur.": "FilmCraft is not installed on this computer.",
+    "FilmCraft est fermé : « Ouvrir FilmCraft relié à PANDORA ».":
+        "FilmCraft is closed: “Open FilmCraft linked to PANDORA”.",
+    "FilmCraft est ouvert sans le pont de PANDORA : fermez-le puis rouvrez-le depuis "
+    "PANDORA, ou cochez « Toujours relier FilmCraft » dans les Paramètres.":
+        "FilmCraft is open without PANDORA's bridge: close it and reopen it from PANDORA, "
+        "or tick “Always link FilmCraft” in Settings.",
+    "FilmCraft est ouvert et relié à PANDORA.": "FilmCraft is open and linked to PANDORA.",
+    "Import FilmCraft impossible :": "FilmCraft import failed:",
+    "Ouvrir FilmCraft relié à PANDORA maintenant ?": "Open FilmCraft linked to PANDORA now?",
+    "FilmCraft s'ouvre. Ouvrez ou créez votre projet, puis relancez la commande.":
+        "FilmCraft is opening. Open or create your project, then run the command again.",
+    "Nom de la séquence dans FilmCraft :": "Sequence name in FilmCraft:",
+    "Montage dans FilmCraft impossible :": "Could not edit in FilmCraft:",
+    "Séquence créée dans FilmCraft :": "Sequence created in FilmCraft:",
+    "Clips refusés par FilmCraft :": "Clips rejected by FilmCraft:",
+    "FilmCraft, le logiciel de montage de la suite ArtCraft : PANDORA y envoie "
+    "chaque clip généré (chutier PANDORA, un sous-chutier par séquence) et peut y "
+    "monter le storyboard (Storyboard → Action → « Monter dans FilmCraft »).":
+        "FilmCraft, the editing software of the ArtCraft suite: PANDORA sends it every "
+        "generated clip (PANDORA bin, one sub-bin per sequence) and can cut the storyboard "
+        "in it (Storyboard → Action → “Edit in FilmCraft”).",
+    "Ouvrir FilmCraft relié à PANDORA": "Open FilmCraft linked to PANDORA",
+    "Envoyer chaque clip généré à FilmCraft quand il est ouvert":
+        "Send every generated clip to FilmCraft when it is open",
+    "Toujours relier FilmCraft à PANDORA, même ouvert depuis le menu Démarrer":
+        "Always link FilmCraft to PANDORA, even when opened from the Start menu",
+    "Enregistre le port et le jeton du pont dans les variables d'environnement de "
+    "votre compte Windows. Prend effet au prochain lancement de FilmCraft.":
+        "Stores the bridge's port and token in your Windows account's environment "
+        "variables. Takes effect the next time FilmCraft starts.",
+    "FilmCraft s'ouvre…": "FilmCraft is opening…",
+    "import automatique des clips · montage": "automatic clip import · editing",
+    "🎞  Monter dans FilmCraft": "🎞  Edit in FilmCraft",
+    "Monte la dernière prise de chaque plan, dans l'ordre du storyboard, sur une\n"
+    "nouvelle séquence de FilmCraft (ouvert et relié à PANDORA).":
+        "Cuts the last take of each shot, in storyboard order, onto a new\n"
+        "FilmCraft sequence (open and linked to PANDORA).",
+    "thème · langue · double écran · manuel · dictée · dossier des projets":
+        "theme · language · dual screen · manual · dictation · projects folder",
+    "Découvrir AIODOS": "Discover AIODOS",
+    "Installer AIODOS": "Install AIODOS",
+    "AIODOS relie par Internet les ordinateurs de personnes qui ne se connaissent "
+    "pas, pour mettre leur puissance de calcul en commun ; il relie aussi vos "
+    "propres machines, chez vous ou en réseau local. Une fois installé, il prête "
+    "par défaut une part de ce PC au réseau public : 60 % de sa puissance au plus, "
+    "jamais sur batterie, et tout se coupe dans ses Réglages. Les travaux de "
+    "PANDORA, eux, restent là où PANDORA le demande : par défaut ce PC, et une "
+    "image de référence ou un clip jamais ailleurs que sur vos machines. Gratuit, "
+    "sans abonnement.":
+        "AIODOS links the computers of people who do not know each other over the "
+        "Internet, to pool their computing power; it also links your own machines, at "
+        "home or on the local network. Once installed, it lends part of this PC to the "
+        "public network by default: 60% of its power at most, never on battery, and "
+        "everything can be turned off in its Settings. PANDORA's jobs, for their part, "
+        "stay where PANDORA asks: this PC by default, and a reference image or a clip "
+        "never anywhere but your machines. Free, no subscription.",
+    "Après l'installation, lancez AIODOS puis revenez ici : « Se connecter à AIODOS ».":
+        "After installing, start AIODOS then come back here: “Connect to AIODOS”.",
+    # Moteur IA ComfyUI + réseau public d'AIODOS (27/10/2026)
+    "Moteur IA": "AI engine",
+    "Réseau public · AIODOS": "Public network · AIODOS",
+    "Où se calcule le moteur IA : sur ce PC, réparti entre vos machines par "
+    "AIODOS, ou sur le réseau public d'AIODOS (onglet AIODOS). Une image de "
+    "référence ou un clip ne quitte jamais ce PC et vos machines.":
+        "Where the AI engine computes: on this PC, spread over your machines by "
+        "AIODOS, or on AIODOS's public network (AIODOS tab). A reference image or a "
+        "clip never leaves this PC and your machines.",
+    "Le moteur IA (gabarit ComfyUI) qui calcule l'image ou la vidéo (0 $), rangé "
+    "par famille de modèles, du plus puissant au plus léger. Les modèles qui "
+    "manquent se téléchargent depuis Paramètres → Modules externes → ComfyUI.":
+        "The AI engine (ComfyUI template) that computes the image or video ($0), "
+        "grouped by model family, from the most powerful to the lightest. Missing "
+        "models download from Settings → External modules → ComfyUI.",
+    # Dictée vocale ORAKLE (27/10/2026)
+    "Dictée vocale (ORAKLE)": "Voice dictation (ORAKLE)",
+    "DICTÉE VOCALE (ORAKLE)": "VOICE DICTATION (ORAKLE)",
+    "Clic : parlez, puis recliquez pour écrire le texte":
+        "Click: speak, then click again to write the text",
+    "{key} maintenu : parlez, relâchez pour écrire": "Hold {key}: speak, release to write",
+    "{key} deux fois : mains libres, puis {key} pour écrire":
+        "{key} twice: hands-free, then {key} to write",
+    "Échap : annuler la dictée": "Esc: cancel dictation",
+    "Transcription en cours…": "Transcribing…",
+    "Transcription…": "Transcribing…",
+    "Micro indisponible : {e}": "Microphone unavailable: {e}",
+    "La dictée a échoué : {e}": "Dictation failed: {e}",
+    "Rien entendu": "Nothing heard",
+    "Texte dicté copié dans le presse-papiers": "Dictated text copied to the clipboard",
+    "Le modèle de dictée se télécharge…": "The dictation model is downloading…",
+    "La dictée a besoin du modèle Whisper « {name} » ({size} Mo environ). Il "
+    "se télécharge une seule fois ; ensuite tout reste sur cet ordinateur, "
+    "sans connexion.":
+        "Dictation needs the Whisper “{name}” model (about {size} MB). It downloads "
+        "only once; after that everything stays on this computer, offline.",
+    "Téléchargement du modèle de dictée…": "Downloading the dictation model…",
+    "Dictée prête : cliquez sur le micro et parlez":
+        "Dictation ready: click the microphone and speak",
+    "Téléchargement du modèle impossible : vérifiez la connexion":
+        "Could not download the model: check the connection",
+    "Micro de dictée dans les champs de texte": "Dictation microphone in text fields",
+    "Le moteur de dictée n'est pas présent dans cette installation.":
+        "The dictation engine is not part of this installation.",
+    "modèle Whisper « {name} » prêt": "Whisper “{name}” model ready",
+    "modèle Whisper « {name} » téléchargé à la première dictée ({size} Mo environ)":
+        "Whisper “{name}” model downloaded at the first dictation (about {size} MB)",
+    "réglages et dictionnaire d'ORAKLE repris": "ORAKLE's settings and dictionary reused",
+    "réglages par défaut d'ORAKLE (français, anglais, espagnol)":
+        "ORAKLE's default settings (French, English, Spanish)",
+    "Moteur ORAKLE {v} intégré": "Built-in ORAKLE {v} engine",
+    "Tout reste sur cet ordinateur.": "Everything stays on this computer.",
+    "thème · double écran · manuel · dictée · dossier des projets":
+        "theme · dual screen · manual · dictation · projects folder",
+    # ── Onglet « 3D » (29/10/2026) : vue d'ARKLIGHT, inspecteur, bibliothèque ──
+    "Aucune sélection": "No selection",
+    "Cadrer": "Frame",
+    "Centrer la vue sur l'élément": "Center the view on the item",
+    "Allumé": "On",
+    "Blanc (température)": "White (temperature)",
+    "Température (K)": "Temperature (K)",
+    "Teinte / saturation": "Hue / saturation",
+    "Hauteur (m)": "Height (m)",
+    "Viser le personnage": "Aim at the character",
+    "Oriente le projecteur vers le premier personnage": "Points the light at the first character",
+    "Personnage du casting": "Cast character",
+    "Pose": "Pose",
+    "Taille (cm)": "Height (cm)",
+    "Focale (mm)": "Focal length (mm)",
+    "Hauteur d'objectif (m)": "Lens height (m)",
+    "Caméra du plan (celle du prompt)": "Shot camera (the prompt's camera)",
+    "Voir par cette caméra": "Look through this camera",
+    "Aucune sélection — cliquez un élément dans la vue, ou ajoutez-en un avec les boutons « + ».": "No selection — click an item in the view, or add one with the “+” buttons.",
+    "— Figurant (sans fiche) —": "— Extra (no profile) —",
+    "Perspective": "Perspective",
+    "Côté": "Side",
+    "Point de vue de la vue 3D": "Point of view of the 3D view",
+    "👁  Caméra du plan": "👁  Shot camera",
+    "Voir exactement ce que filme la caméra du plan (Échap pour revenir à la vue libre)": "See exactly what the shot camera films (Esc to return to the free view)",
+    "Poignées de déplacement": "Move handles",
+    "Pivoter": "Rotate",
+    "Poignées de rotation": "Rotation handles",
+    "＋ Projecteur": "＋ Light",
+    "Ajouter un projecteur de la bibliothèque d'ARKLIGHT": "Add a light from the ARKLIGHT library",
+    "＋ Personnage": "＋ Character",
+    "Ajouter un personnage du plan ou un figurant": "Add a character of the shot or an extra",
+    "＋ Décor": "＋ Set",
+    "Ajouter un meuble, un élément de décor, un véhicule…": "Add furniture, a set piece, a vehicle…",
+    "＋ Grip": "＋ Grip",
+    "Ajouter un cadre, un drapeau, un réflecteur…": "Add a frame, a flag, a reflector…",
+    "SÉLECTION": "SELECTION",
+    "ÉCRIT DANS LE PROMPT": "WRITTEN IN THE PROMPT",
+    "WebGL indisponible : la vue 3D ne peut pas dessiner sur ce poste.": "WebGL unavailable: the 3D view cannot draw on this computer.",
+    "Vue 3D": "3D view",
+    "Figurant (homme)": "Extra (man)",
+    "Figurante (femme)": "Extra (woman)",
+    "Enfant": "Child",
+    "La vue 3D se prépare…": "The 3D view is getting ready…",
+    "Rien à écrire pour l'instant.": "Nothing to write yet.",
+    "Debout": "Standing",
+    "Marche": "Walking",
+    "Assis": "Sitting",
+    "Allongé": "Lying down",
+    "Bras croisés": "Arms crossed",
+    "Au téléphone": "On the phone",
+    "Montre du doigt": "Pointing",
+    "Bras levés": "Arms raised",
+    "Super 35": "Super 35",
+    "Plein format": "Full frame",
+    "Micro 4/3": "Micro 4/3",
+    "La vue 3D a besoin de QtWebEngine, absent de cette installation.": "The 3D view needs QtWebEngine, which is missing from this installation.",
+    "Vue 3D indisponible sans écran (rendu hors écran).": "3D view unavailable without a screen (offscreen rendering).",
+    "Caméra du plan": "Shot camera",
+    "Comédien": "Actor",
+    "Tubes": "Tubes",
+    "Barres": "Bars",
+    "Panneaux / Briques": "Panels / Bricks",
+    "Fresnels": "Fresnels",
+    "Spots / COB": "Spots / COB",
+    "Open face": "Open face",
+    "PAR / Spots": "PAR / Spots",
+    "Multi-lampes": "Multi-lamp",
+    "Ampoules": "Bulbs",
+    "Animaux": "Animals",
+    "Décor et architecture": "Set and architecture",
+    "Extérieur et nature": "Outdoor and nature",
+    "Plateau (caméra, son…)": "Film set (camera, sound…)",
+    "Cadres": "Frames",
+    "Drapeaux": "Flags",
+    "Réflecteurs": "Reflectors",
+    "Pieds seuls": "Stands",
+    "Cubes": "Apple boxes",
+    "Sacs": "Bags",
+    # ── Frise de mise en scène du Plan de feu (29/10/2026) ──
+    "Automatique (marche, course ou repos)": "Automatic (walk, run or rest)",
+    "Lire la mise en scène du plan": "Play the shot's staging",
+    "automatique": "automatic",
+    # ── Prévisualisation vidéo du Plan de feu → Seedance (30/10/2026) ──
+    "▶  Voir": "▶  Watch",
+    "Ouvre la prévisualisation du plan": "Opens the shot's previs",
+    "Aucune prévisualisation pour ce plan.": "No previs for this shot.",
+    "la scène a changé depuis : à refaire": "the scene has changed since: render it again",
+    "Préparation de la scène…": "Preparing the scene…",
+    "Rendu des images…": "Rendering the frames…",
+    "Assemblage de la vidéo…": "Assembling the video…",
+    "Prévisualisation prête.": "Previs ready.",
+    "La vue 3D ne répond pas (délai dépassé).": "The 3D view does not respond (time-out).",
+    # ── Claude chorégraphe du Plan de feu (30/10/2026) ──
+    "Mise en scène 3D (Claude chorégraphe)": "3D staging (Claude as choreographer)",
+    "Mise en scène par l'IA": "Staging by AI",
+    "✦  Mise en scène par l'IA": "✦  Staging by AI",
+    "Mettre en scène": "Stage it",
+    "L'IA met le plan en scène…": "The AI is staging the shot…",
+    "Mise en scène posée sur la frise.": "Staging set on the timeline.",
+    "Écarté : ": "Discarded: ",
+    "Mise en scène impossible : ": "Staging impossible: ",
+    # ── Inspecteur d'ARKLIGHT dans le Plan de feu (30/10/2026) ──
+    # ── Vue 3D : keyframes, export, inscription dans le storyboard (30/10/2026) ──
+    "＋ Keyframe": "＋ Keyframe",
+    "Supprimer la keyframe": "Delete the keyframe",
+    "{n} keyframe(s)": "{n} keyframe(s)",
+    "fixe (aucune keyframe)": "still (no keyframe)",
+    "Ce que fait le personnage à partir de cette keyframe": "What the character does from this keyframe on",
+    "Pose une keyframe au temps courant ; déplacez ensuite l'élément dans la vue pour la placer": "Sets a keyframe at the current time; then move the element in the view to place it",
+    "Sélectionnez un élément pour poser ses keyframes.": "Select an element to set its keyframes.",
+    "Aller à cette keyframe": "Go to this keyframe",
+    "Action à partir de cette keyframe": "Action from this keyframe on",
+    "Élément dont la frise montre les keyframes": "Element whose keyframes the timeline shows",
+    "— Choisir un élément —": "— Choose an element —",
+    "Durée du plan au storyboard : la frise et la prévisualisation durent autant. Jusqu'à {n} s": "Shot duration in the storyboard: the timeline and the video last as long. Up to {n} s",
+    "🎬  Exporter la vidéo": "🎬  Export the video",
+    "▶  Voir la vidéo exportée": "▶  Watch the exported video",
+    "Ouvre la vidéo exportée de ce plan": "Opens this shot's exported video",
+    "Rend le plan vu par sa caméra, avec la mise en scène de la frise (1280×720, 24 i/s). Studio IA → RENDU & AUDIO → « Prévisualisation de la vue 3D » l'envoie à Seedance comme référence.": "Renders the shot through its camera, with the timeline's staging (1280×720, 24 fps). AI Studio → RENDER & AUDIO → “3D view previs” sends it to Seedance as a reference.",
+    "Aucune vidéo exportée pour ce plan.": "No exported video for this shot.",
+    "Vidéo exportée le {when}": "Video exported on {when}",
+    "Export impossible : {err}": "Export impossible: {err}",
+    "Prévisualisation de la vue 3D": "3D view previs",
+    "Envoie à Seedance la vidéo exportée du plan (onglet 3D, menu Action) comme vidéo de référence : il en suit la caméra, le cadre et la place des personnages. Ses secondes sont facturées en plus du plan.": "Sends the shot's exported video (3D tab, Action menu) to Seedance as a reference video: it follows its camera, framing and character placement. Its seconds are billed on top of the shot.",
+    "Décrivez l'action du plan : l'IA pose les keyframes des personnages sur la frise, que vous ajustez ensuite": "Describe the shot's action: the AI sets the characters' keyframes on the timeline, and you adjust them",
+    "Décrivez ce qui se passe pendant le plan : qui entre, d'où, où il va, ce qu'il fait, à quel moment. L'IA pose les keyframes des personnages sur la frise ; vous les ajustez ensuite dans la vue.": "Describe what happens during the shot: who enters, from where, where they go, what they do and when. The AI sets the characters' keyframes on the timeline; you then adjust them in the view.",
+    "Revenir aux keyframes d'avant": "Back to the previous keyframes",
+    "Keyframes posées : ": "Keyframes set: ",
+    "Keyframes d'avant rétablies.": "Previous keyframes restored.",
+    "— vus de dessus, posés au sol des scènes de la vue 3D": "— seen from above, laid on the floor of the 3D view's scenes",
+    "Monter ou descendre la caméra sur son pied : ici, ou avec la flèche verticale de ses poignées dans la vue": "Raise or lower the camera on its stand: here, or with the vertical arrow of its handles in the view",
+    "Inscrire toutes les modifications dans le storyboard": "Write all the changes to the storyboard",
+    "Écrit dans le storyboard la mise en scène et la lumière de TOUS les plans qui ont une scène 3D": "Writes the staging and lighting of ALL shots with a 3D scene to the storyboard",
+    "TEXTE POUR LE PROMPT": "TEXT FOR THE PROMPT",
+    "Inscrire dans le storyboard": "Write to the storyboard",
+    "Écrit ce texte dans le prompt de CE plan (mise en scène, caméra, lumière). Pour tous les plans : menu Action.": "Writes this text to THIS shot's prompt (staging, camera, lighting). For all shots: Action menu.",
+    "Modifications à inscrire dans le storyboard": "Changes to write to the storyboard",
+    "Le storyboard est à jour": "The storyboard is up to date",
+    "Inscription impossible : {err}": "Could not write: {err}",
+    "{n} plan(s) inscrit(s) dans le storyboard.": "{n} shot(s) written to the storyboard.",
+    "{n} plan(s) en échec.": "{n} shot(s) failed.",
+    "Cadrer le personnage": "Frame the character",
+    "＋ Caméra": "＋ Camera",
+    "Ajouter une caméra sur pied ou un travelling": "Add a camera on a stand or a dolly",
 }
 
 

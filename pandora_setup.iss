@@ -10,12 +10,21 @@
 ; Produit : dist\PANDORA_Setup_1.2.1.exe
 
 #define MyAppName      "PANDORA"
-#define MyAppVersion   "2.6.1"
+#define MyAppVersion   "2.7.0"
 #define MyAppPublisher "22eme Arkane"
 #define MyAppURL       "https://github.com/22eme-arkane/pandora"
 #define MyAppExeName   "PANDORA.exe"
 #define MyBuildDir     "dist\PANDORA"
 #define MyGithubAPI    "https://api.github.com/repos/22eme-arkane/pandora/releases/latest"
+
+; ── AIODOS, proposé en FACULTATIF (décision Matthieu 27/10/2026) ──────────────
+; Son installeur est EMBARQUÉ quand build.ps1 l'a copié dans vendor\aiodos\
+; (depuis le projet AIODOS, dist\AIODOS-Setup-<version>.exe) et y a écrit
+; aiodos.iss.inc (AiodosSetupName, AiodosVersion). Sans ce fichier, la page
+; AIODOS n'existe pas et l'installeur se construit comme avant (CI GitHub).
+#ifexist "vendor\aiodos\aiodos.iss.inc"
+  #include "vendor\aiodos\aiodos.iss.inc"
+#endif
 
 [Setup]
 ; Identifiant unique — NE PAS CHANGER entre versions (permet la mise à jour en place)
@@ -41,13 +50,12 @@ ArchitecturesAllowed=x64compatible
 ; Icône de l'installeur
 SetupIconFile=assets\pandora_badge.ico
 
-; Images de l'assistant (générées par tools/make_wizard_images.py)
-; Une image PAR FACTEUR D'ÉCHELLE : Inno choisit celle qui correspond à l'écran.
-; Avec la seule image 100 %, la mise en page de l'assistant se calculait sur une
-; échelle qui n'était pas celle du poste — les cases à cocher de la page de fin
-; sortaient tronquées à 125/150 % (constat Matthieu, build 2.3.0).
-WizardImageFile=assets\wizard_large.bmp,assets\wizard_large_125.bmp,assets\wizard_large_150.bmp,assets\wizard_large_200.bmp
-WizardSmallImageFile=assets\wizard_small.bmp,assets\wizard_small_125.bmp,assets\wizard_small_150.bmp,assets\wizard_small_200.bmp
+; Images de l'assistant (générées par tools/make_wizard_images.py) : le nouveau
+; logo dans un halo doré (27/10/2026, même recette que l'installeur d'AIODOS).
+; Une image PAR ÉCHELLE d'écran, de 100 à 250 % : Inno Setup 6.6+ choisit celle
+; qui correspond au poste au lieu d'étirer la seule image 100 %.
+WizardImageFile=installer\wizard-202.png,installer\wizard-269.png,installer\wizard-336.png,installer\wizard-403.png,installer\wizard-430.png,installer\wizard-498.png,installer\wizard-534.png
+WizardSmallImageFile=installer\small-58.png,installer\small-77.png,installer\small-97.png,installer\small-116.png,installer\small-124.png,installer\small-143.png,installer\small-159.png
 
 ; Exige les droits administrateur (pour écrire dans Program Files)
 PrivilegesRequired=admin
@@ -65,8 +73,10 @@ OutputBaseFilename=PANDORA_Setup_{#MyAppVersion}
 ; EULA obligatoire avant installation
 LicenseFile=EULA.txt
 
-; Page de bienvenue
-WizardStyle=modern
+; Assistant SOMBRE, avec une page d'accueil qui présente PANDORA (refonte du
+; 27/10/2026 : « un installeur plus moderne, comme celui d'AIODOS »).
+WizardStyle=modern dark
+DisableWelcomePage=no
 ; Assistant élargi : l'EULA est plus lisible. (Les cases tronquées de la page
 ; de fin ne venaient PAS de la taille — voir CurPageChanged dans [Code].)
 WizardSizePercent=120
@@ -92,13 +102,20 @@ Name: "polish";     MessagesFile: "compiler:Languages\Polish.isl"
 Name: "turkish";    MessagesFile: "compiler:Languages\Turkish.isl"
 Name: "japanese";   MessagesFile: "compiler:Languages\Japanese.isl"
 
+[Messages]
+; La page d'accueil : présentation de PANDORA (anglais et français ; les autres
+; langues gardent le texte d'Inno Setup).
+english.WelcomeLabel1=Welcome to {#MyAppName}
+english.WelcomeLabel2={#MyAppName} takes a film from the written page to generated, edited shots: screenplay, shot breakdown, storyboard, cast, sets and props, then every shot generated with the AI video engine of your choice.%n%nTwo editions in one install: Cinema (films, series, commercials) and Live (VJ loops and projection mapping).%n%nYou use your own accounts with the AI services: no subscription, you only pay for what you generate.%n%nThis wizard will install [name/ver] on your computer.
+french.WelcomeLabel1=Bienvenue dans {#MyAppName}
+french.WelcomeLabel2={#MyAppName} mène un film de la page écrite aux plans générés et montés : scénario, découpage, storyboard, casting, décors et accessoires, puis chaque plan généré avec le moteur vidéo IA de votre choix.%n%nDeux éditions dans une seule installation : Cinéma (films, séries, publicités) et Live (boucles VJ et mapping vidéo).%n%nVous utilisez vos propres comptes de services IA : pas d'abonnement, vous ne payez que ce que vous générez.%n%nCet assistant va installer [name/ver] sur votre ordinateur.
+
 [CustomMessages]
 ; ── English ──────────────────────────────────────────────────────────────────
 english.WelcomeLabel2=This will install {#MyAppName} {#MyAppVersion} on your computer.%n%nPlease close all other applications before continuing.
 english.UpdateCheckTitle=Update available
 english.UpdateCheckMsg=A newer version of {#MyAppName} is available: %1%n%nYou are about to install version {#MyAppVersion} (older).%n%nDo you want to download the latest version instead?%n(Click No to continue installing this older version.)
 english.UpdateCheckBtn=Download latest version
-english.WatchPresentation=Watch the presentation video (YouTube)
 english.DaVinciGroup=DaVinci Resolve Studio integration (requires Studio edition)
 english.DaVinciScriptsDesc=Install Pandora Send and Pandora Bridge scripts%n  Pandora Send — sends selected clips from DaVinci timeline to PANDORA AI Studio (Workspace > Scripts > pandora_send, or assign a keyboard shortcut)%n  Pandora Bridge — runs as a background service in DaVinci Resolve Studio; listens on port 19876 and automatically imports AI-generated videos into your Media Pool (Workspace > Scripts > seedance_bridge)
 
@@ -107,7 +124,6 @@ french.WelcomeLabel2=Ce programme va installer {#MyAppName} {#MyAppVersion} sur 
 french.UpdateCheckTitle=Mise à jour disponible
 french.UpdateCheckMsg=Une nouvelle version de {#MyAppName} est disponible : %1%n%nVous êtes sur le point d'installer la version {#MyAppVersion} (ancienne).%n%nVoulez-vous télécharger la dernière version à la place ?%n(Cliquez Non pour continuer quand même avec cette ancienne version.)
 french.UpdateCheckBtn=Télécharger la dernière version
-french.WatchPresentation=Voir la présentation vidéo (YouTube)
 french.DaVinciGroup=Intégration DaVinci Resolve Studio (requiert l'édition Studio)
 french.DaVinciScriptsDesc=Installer les scripts Pandora Send et Pandora Bridge%n  Pandora Send — envoie les clips sélectionnés depuis la timeline DaVinci vers le Studio IA de PANDORA (Espace de travail > Scripts > pandora_send, ou assignez un raccourci clavier)%n  Pandora Bridge — tourne en arrière-plan dans DaVinci Resolve Studio ; ecoute sur le port 19876 et importe automatiquement les videos generees par l'IA dans votre Media Pool (Espace de travail > Scripts > seedance_bridge)
 
@@ -116,7 +132,6 @@ german.WelcomeLabel2=Dieses Programm installiert {#MyAppName} {#MyAppVersion} au
 german.UpdateCheckTitle=Update verfügbar
 german.UpdateCheckMsg=Eine neuere Version von {#MyAppName} ist verfügbar: %1%n%nSie sind dabei, Version {#MyAppVersion} (älter) zu installieren.%n%nMöchten Sie stattdessen die neueste Version herunterladen?%n(Klicken Sie Nein, um trotzdem diese ältere Version zu installieren.)
 german.UpdateCheckBtn=Neueste Version herunterladen
-german.WatchPresentation=Präsentationsvideo ansehen (YouTube)
 german.DaVinciGroup=DaVinci Resolve Studio Integration (erfordert Studio-Edition)
 german.DaVinciScriptsDesc=Pandora Send und Pandora Bridge Skripte installieren%n  Pandora Send — sendet ausgewählte Clips aus DaVinci zur PANDORA KI-Studio%n  Pandora Bridge — Hintergrunddienst in DaVinci; importiert KI-Videos automatisch in den Media Pool
 
@@ -125,7 +140,6 @@ spanish.WelcomeLabel2=Este programa instalará {#MyAppName} {#MyAppVersion} en s
 spanish.UpdateCheckTitle=Actualización disponible
 spanish.UpdateCheckMsg=Hay una versión más reciente de {#MyAppName} disponible: %1%n%nEstá a punto de instalar la versión {#MyAppVersion} (antigua).%n%n¿Desea descargar la última versión en su lugar?%n(Haga clic en No para continuar instalando esta versión antigua.)
 spanish.UpdateCheckBtn=Descargar la última versión
-spanish.WatchPresentation=Ver el vídeo de presentación (YouTube)
 spanish.DaVinciGroup=Integracion DaVinci Resolve Studio (requiere edicion Studio)
 spanish.DaVinciScriptsDesc=Instalar scripts Pandora Send y Pandora Bridge%n  Pandora Send — envia clips seleccionados de DaVinci al Estudio IA de PANDORA%n  Pandora Bridge — servicio en segundo plano; importa videos IA automaticamente al Media Pool
 
@@ -134,7 +148,6 @@ italian.WelcomeLabel2=Questo programma installerà {#MyAppName} {#MyAppVersion} 
 italian.UpdateCheckTitle=Aggiornamento disponibile
 italian.UpdateCheckMsg=È disponibile una nuova versione di {#MyAppName}: %1%n%nStai per installare la versione {#MyAppVersion} (precedente).%n%nVuoi scaricare invece l'ultima versione?%n(Clicca No per continuare comunque con questa versione precedente.)
 italian.UpdateCheckBtn=Scarica l'ultima versione
-italian.WatchPresentation=Guarda il video di presentazione (YouTube)
 italian.DaVinciGroup=Integrazione DaVinci Resolve Studio (richiede edizione Studio)
 italian.DaVinciScriptsDesc=Installa script Pandora Send e Pandora Bridge%n  Pandora Send — invia clip selezionate da DaVinci allo Studio IA di PANDORA%n  Pandora Bridge — servizio in background; importa video IA automaticamente nel Media Pool
 
@@ -143,7 +156,6 @@ portuguese.WelcomeLabel2=Este programa instalará {#MyAppName} {#MyAppVersion} n
 portuguese.UpdateCheckTitle=Atualização disponível
 portuguese.UpdateCheckMsg=Uma versão mais recente de {#MyAppName} está disponível: %1%n%nVocê está prestes a instalar a versão {#MyAppVersion} (mais antiga).%n%nDeseja baixar a versão mais recente?%n(Clique em Não para continuar instalando esta versão mais antiga.)
 portuguese.UpdateCheckBtn=Baixar a versão mais recente
-portuguese.WatchPresentation=Assistir ao vídeo de apresentação (YouTube)
 portuguese.DaVinciGroup=Integracao DaVinci Resolve Studio (requer edicao Studio)
 portuguese.DaVinciScriptsDesc=Instalar scripts Pandora Send e Pandora Bridge%n  Pandora Send — envia clips selecionados do DaVinci para o Studio IA do PANDORA%n  Pandora Bridge — servico em segundo plano; importa videos IA automaticamente para o Media Pool
 
@@ -152,7 +164,6 @@ dutch.WelcomeLabel2=Dit programma installeert {#MyAppName} {#MyAppVersion} op uw
 dutch.UpdateCheckTitle=Update beschikbaar
 dutch.UpdateCheckMsg=Er is een nieuwere versie van {#MyAppName} beschikbaar: %1%n%nU staat op het punt versie {#MyAppVersion} (ouder) te installeren.%n%nWilt u in plaats daarvan de nieuwste versie downloaden?%n(Klik op Nee om toch deze oudere versie te installeren.)
 dutch.UpdateCheckBtn=Nieuwste versie downloaden
-dutch.WatchPresentation=Bekijk de presentatievideo (YouTube)
 dutch.DaVinciGroup=DaVinci Resolve Studio integratie (vereist Studio-editie)
 dutch.DaVinciScriptsDesc=Pandora Send en Pandora Bridge scripts installeren%n  Pandora Send — stuurt geselecteerde clips van DaVinci naar PANDORA AI Studio%n  Pandora Bridge — achtergrondservice; importeert AI-videos automatisch in de Media Pool
 
@@ -161,7 +172,6 @@ russian.WelcomeLabel2=Эта программа установит {#MyAppName} 
 russian.UpdateCheckTitle=Доступно обновление
 russian.UpdateCheckMsg=Доступна более новая версия {#MyAppName}: %1%n%nВы собираетесь установить версию {#MyAppVersion} (устаревшую).%n%nХотите загрузить последнюю версию?%n(Нажмите Нет, чтобы продолжить установку этой старой версии.)
 russian.UpdateCheckBtn=Загрузить последнюю версию
-russian.WatchPresentation=Смотреть видео-презентацию (YouTube)
 russian.DaVinciGroup=Интеграция DaVinci Resolve Studio (требует Studio-версии)
 russian.DaVinciScriptsDesc=Установить скрипты Pandora Send и Pandora Bridge%n  Pandora Send — отправляет выбранные клипы из DaVinci в AI Studio PANDORA%n  Pandora Bridge — фоновый сервис; автоматически импортирует AI-видео в Media Pool
 
@@ -170,7 +180,6 @@ polish.WelcomeLabel2=Ten program zainstaluje {#MyAppName} {#MyAppVersion} na two
 polish.UpdateCheckTitle=Dostępna aktualizacja
 polish.UpdateCheckMsg=Dostępna jest nowsza wersja {#MyAppName}: %1%n%nZamierzasz zainstalować wersję {#MyAppVersion} (starszą).%n%nCzy chcesz pobrać najnowszą wersję?%n(Kliknij Nie, aby kontynuować instalację tej starszej wersji.)
 polish.UpdateCheckBtn=Pobierz najnowszą wersję
-polish.WatchPresentation=Obejrzyj film prezentacyjny (YouTube)
 polish.DaVinciGroup=Integracja DaVinci Resolve Studio (wymaga edycji Studio)
 polish.DaVinciScriptsDesc=Zainstaluj skrypty Pandora Send i Pandora Bridge%n  Pandora Send — wysyla wybrane klipy z DaVinci do AI Studio PANDORA%n  Pandora Bridge — usluga w tle; automatycznie importuje wideo AI do Media Pool
 
@@ -179,7 +188,6 @@ turkish.WelcomeLabel2=Bu program bilgisayarınıza {#MyAppName} {#MyAppVersion} 
 turkish.UpdateCheckTitle=Güncelleme mevcut
 turkish.UpdateCheckMsg={#MyAppName} uygulamasının daha yeni bir sürümü mevcut: %1%n%n{#MyAppVersion} (eski) sürümünü yüklemek üzeresiniz.%n%nBunun yerine en son sürümü indirmek ister misiniz?%n(Bu eski sürümü yüklemeye devam etmek için Hayır'a tıklayın.)
 turkish.UpdateCheckBtn=En son sürümü indir
-turkish.WatchPresentation=Tanıtım videosunu izle (YouTube)
 turkish.DaVinciGroup=DaVinci Resolve Studio entegrasyonu (Studio surumu gerektirir)
 turkish.DaVinciScriptsDesc=Pandora Send ve Pandora Bridge betiklerini yukle%n  Pandora Send — secili klipleri DaVinci'den PANDORA AI Studio'ya gonderir%n  Pandora Bridge — arka plan servisi; AI videolarini Media Pool'a otomatik olarak aktar
 
@@ -188,9 +196,20 @@ japanese.WelcomeLabel2=このプログラムはコンピューターに {#MyAppN
 japanese.UpdateCheckTitle=アップデートが利用可能
 japanese.UpdateCheckMsg={#MyAppName} の新しいバージョンが利用可能です: %1%n%nバージョン {#MyAppVersion}（古いバージョン）をインストールしようとしています。%n%n代わりに最新バージョンをダウンロードしますか？%n（いいえをクリックすると、この古いバージョンのインストールを続行します。）
 japanese.UpdateCheckBtn=最新バージョンをダウンロード
-japanese.WatchPresentation=プレゼンテーション動画を見る (YouTube)
 japanese.DaVinciGroup=DaVinci Resolve Studio 統合（Studio版が必要）
 japanese.DaVinciScriptsDesc=Pandora SendとPandora Bridgeスクリプトをインストール%n  Pandora Send — DaVinciからPANDORA AIスタジオへクリップを送信%n  Pandora Bridge — バックグラウンドサービス；AI動画をMedia Poolへ自動インポート
+
+; ── AIODOS (facultatif) : anglais pour toutes les langues, français à part ────
+AiodosCaption=AIODOS (optional)
+AiodosDescription=Pool computing power over the Internet
+AiodosText=AIODOS, by 22eme Arkane, links the computers of people who do not know each other over the Internet, to pool their computing power; your own machines and the local network come next. Once installed, it lends part of this PC to the public network by default (60% of its power at most, never on battery; everything can be turned off in its Settings).%n%nIn PANDORA it can:%n•  compute ComfyUI templates (moods, sheets, Edit a clip, Studio…) on several machines: “Compute” setting;%n•  run the text AI (translation, prompts, image analysis) with no key and no credits: Settings → AI Assistant.%n%nPANDORA's jobs stay where PANDORA asks: this PC by default, and your sheets, faces and clips never anywhere but your machines. AIODOS updates itself.%n%nOptional: PANDORA works without it, and you can install it later.
+AiodosCheck=Install AIODOS %1 for my account (its setup opens at the end of this installation)
+AiodosInstalling=Installing AIODOS…
+french.AiodosCaption=AIODOS (facultatif)
+french.AiodosDescription=Mettre la puissance de calcul en commun, par Internet
+french.AiodosText=AIODOS, de 22eme Arkane, relie par Internet les ordinateurs de personnes qui ne se connaissent pas, pour mettre leur puissance de calcul en commun ; vos propres machines et le réseau local viennent ensuite. Une fois installé, il prête par défaut une part de ce PC au réseau public (60 % de sa puissance au plus, jamais sur batterie ; tout se coupe dans ses Réglages).%n%nDans PANDORA, il peut :%n•  calculer les gabarits ComfyUI (moods, fiches, Modifier un clip, Studio…) sur plusieurs machines : réglage « Calcul » ;%n•  faire tourner l'IA texte (traduction, prompts, analyse d'image) sans clé ni crédit : Paramètres → Assistant IA.%n%nLes travaux de PANDORA restent là où PANDORA le demande : par défaut ce PC, et vos fiches, visages et clips jamais ailleurs que sur vos machines. AIODOS se met à jour seul.%n%nFacultatif : PANDORA fonctionne sans, et vous pourrez l'installer plus tard.
+french.AiodosCheck=Installer AIODOS %1 pour mon compte (son assistant s'ouvre à la fin de cette installation)
+french.AiodosInstalling=Installation d'AIODOS…
 
 [Tasks]
 Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}"; Flags: unchecked
@@ -198,6 +217,10 @@ Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{
 [Files]
 ; Tous les fichiers du build PyInstaller
 Source: "{#MyBuildDir}\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
+#ifdef AiodosSetupName
+; L'installeur d'AIODOS, posé dans le dossier temporaire SEULEMENT si la case est cochée.
+Source: "vendor\aiodos\{#AiodosSetupName}"; DestDir: "{tmp}"; Flags: deleteafterinstall; Check: AiodosWanted
+#endif
 
 [Icons]
 ; Raccourci menu Démarrer
@@ -206,11 +229,16 @@ Name: "{group}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; IconFilename: "
 Name: "{autodesktop}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; Tasks: desktopicon
 
 [Run]
+#ifdef AiodosSetupName
+; AIODOS : son propre assistant (options, Ollama…), lancé pour le compte de
+; l'utilisateur et NON élevé (runasoriginaluser) : AIODOS s'installe dans son
+; profil (%LOCALAPPDATA%\Programs\AIODOS), jamais dans celui de l'administrateur.
+Filename: "{tmp}\{#AiodosSetupName}"; Parameters: "/LANG={code:AiodosLang}"; StatusMsg: "{cm:AiodosInstalling}"; Flags: runasoriginaluser waituntilterminated skipifdoesntexist; Check: AiodosWanted
+#endif
 ; Lancer PANDORA à la fin de l'installation (optionnel)
 Filename: "{app}\{#MyAppExeName}"; Description: "{cm:LaunchProgram,{#StringChange(MyAppName, '&', '&&')}}"; Flags: nowait postinstall skipifsilent
-; Lien vidéo — page de fin d'installation. « Voir le tutoriel complet » est
-; retiré (décision Matthieu 26/09/2026) : un nouveau tutoriel viendra plus tard.
-Filename: "https://youtu.be/ci9jA_Tye2E"; Description: "{cm:WatchPresentation}"; Flags: shellexec nowait postinstall skipifsilent unchecked
+; Plus aucun lien vidéo sur la page de fin : la présentation YouTube est retirée
+; (décision Matthieu 30/10/2026), comme le tutoriel l'avait été le 26/09/2026.
 
 [UninstallDelete]
 ; Nettoyage propre — supprimer les données utilisateur seulement si vide
@@ -355,10 +383,75 @@ begin
   CopyFile(AppDavinci + '\pandora_send.py',  ScriptsDir + '\pandora_send.py',  False);
 end;
 
+#ifdef AiodosSetupName
+{ ── AIODOS, facultatif (27/10/2026) ─────────────────────────────────────────
+  Une page à lui, après les tâches : ce qu'il apporte à PANDORA et comment
+  PANDORA s'en sert, puis une case DÉCOCHÉE par défaut. Pas de page s'il est
+  déjà installé (il se met à jour seul : jamais de retour à la version
+  embarquée), ni en installation silencieuse (la case reste décochée). }
+const
+  AiodosUninstallKey = 'Software\Microsoft\Windows\CurrentVersion\Uninstall\{8E1BB2BE-7BA8-4AF2-ACC7-463BA169FCF3}_is1';
+
+var
+  AiodosPage: TInputOptionWizardPage;
+
+{ L'emplacement d'AIODOS dit par le registre (InstallLocation de sa clé de
+  désinstallation, là où le client aiodos-client le cherche aussi), ou ''. }
+function AiodosRegistryRoot(RootKey: Integer): String;
+begin
+  if not RegQueryStringValue(RootKey, AiodosUninstallKey, 'InstallLocation', Result) then
+    Result := '';
+end;
+
+{ Une installation d'AIODOS à cet endroit : son Python embarqué ou sa fiche. }
+function AiodosAt(Root: String): Boolean;
+begin
+  Root := Trim(Root);
+  Result := (Root <> '') and (FileExists(AddBackslash(Root) + 'runtime\python.exe')
+    or FileExists(AddBackslash(Root) + 'app\installation.json'));
+end;
+
+{ Relecture du 28/10/2026 : le chemin par défaut, PUIS l'emplacement donné par
+  le registre (HKCU, HKLM 64 et 32 bits) — AIODOS installé ailleurs est vu ; une
+  clé restée sans fichiers ne compte plus. }
+function AiodosInstalled(): Boolean;
+begin
+  Result := AiodosAt(ExpandConstant('{localappdata}\Programs\AIODOS'))
+    or AiodosAt(AiodosRegistryRoot(HKEY_CURRENT_USER))
+    or AiodosAt(AiodosRegistryRoot(HKLM64))
+    or AiodosAt(AiodosRegistryRoot(HKLM32));
+end;
+
+function AiodosWanted(): Boolean;
+begin
+  Result := (AiodosPage <> nil) and AiodosPage.Values[0];
+end;
+
+function AiodosLang(Param: String): String;
+begin
+  if ActiveLanguage = 'french' then
+    Result := 'fr'
+  else
+    Result := 'en';
+end;
+
+procedure CreateAiodosPage();
+begin
+  if AiodosInstalled() then Exit;
+  AiodosPage := CreateInputOptionPage(wpSelectTasks, CustomMessage('AiodosCaption'),
+    CustomMessage('AiodosDescription'), CustomMessage('AiodosText'), False, False);
+  AiodosPage.Add(FmtMessage(CustomMessage('AiodosCheck'), ['{#AiodosVersion}']));
+  AiodosPage.Values[0] := False;
+end;
+#endif
+
 { ── Appelé après la sélection de langue, avant le premier écran du wizard ── }
 procedure InitializeWizard();
 begin
   CheckForUpdate();
+#ifdef AiodosSetupName
+  CreateAiodosPage();
+#endif
   { Page de fin : cases à cocher entières.
     Constat Matthieu (builds 2.3.0 puis 2.4.0) : les cases sortaient ROGNÉES à
     gauche et le libellé touchait leur bord droit. Ni les images multi-échelles

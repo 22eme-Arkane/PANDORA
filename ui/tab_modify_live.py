@@ -421,6 +421,10 @@ class TabModifyLive(QScrollArea):
             self._comfy_edit_entries[_key] = _entry
         self._engine_combo.currentIndexChanged.connect(self._on_engine_changed)
         eng_col.addWidget(self._engine_combo)
+        # UNE entrée « ComfyUI » au lieu des 24 gabarits d'édition vidéo, et la
+        # ligne Gabarit / Calcul dessous (ui/comfy_choice) — parité Cinéma.
+        from ui.comfy_choice import attach_comfy
+        attach_comfy(self._engine_combo, "video_edit", layout=eng_col, after=self._engine_combo)
         # Bandeau du module externe (ComfyUI) sous le moteur — composant partagé.
         from ui.external_banner import ExternalBanner
         self._external_banner = ExternalBanner()
@@ -723,11 +727,9 @@ class TabModifyLive(QScrollArea):
                     return
         # Gabarit ComfyUI : sans serveur vivant, on GUIDE (fenêtre du module).
         if str(self._engine_combo.currentData() or "").startswith("comfy_edit:"):
-            from core import comfy as _cf
-            if not _cf.discover():
-                from ui.external_autostart import ensure_ready
-                if not ensure_ready("comfyui", self):
-                    return
+            from ui.comfy_choice import ensure_comfy_ready
+            if not ensure_comfy_ready(self)[0]:
+                return
         self._queue = sel
         self._queue_pos = 0
         self._failed = []

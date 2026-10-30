@@ -72,6 +72,44 @@ def group_by_category(items: list, key: str = "category",
     return out
 
 
+def watch_viewport(scroll, page) -> None:
+    """Re-dispose la grille de `page` quand la ZONE D'AFFICHAGE de `scroll` change.
+
+    Constaté par Matthieu le 29/10/2026 sur la 2.7.0 (panneau FICHE ouvert par
+    défaut) : Décors, Castings… restaient sur 3 colonnes avec deux tiers d'écran
+    vides. La grille était posée sur la largeur de départ du viewport (640 px) et
+    la page ne se re-disposait que sur SON redimensionnement — qui arrive AVANT
+    celui de sa zone de défilement (d'où une largeur périmée), et jamais quand on
+    ouvre ou ferme la FICHE. On écoute donc le viewport lui-même ; la page
+    recalcule comme sur un redimensionnement (son resizeEvent ne re-pose les
+    cartes que si le nombre de colonnes change)."""
+    from PyQt6.QtCore import QEvent, QObject, QTimer
+    from PyQt6.QtGui import QResizeEvent
+
+    class _Watch(QObject):
+        def __init__(self):
+            super().__init__(page)
+            self._timer = QTimer(self)
+            self._timer.setSingleShot(True)
+            self._timer.setInterval(0)          # regroupe les rafales d'un redimensionnement
+            self._timer.timeout.connect(self._fire)
+
+        def eventFilter(self, obj, ev):     # noqa: N802
+            if ev.type() == QEvent.Type.Resize:
+                self._timer.start()
+            return False
+
+        def _fire(self):
+            try:
+                page.resizeEvent(QResizeEvent(page.size(), page.size()))
+            except Exception:
+                pass
+
+    w = _Watch()
+    scroll.viewport().installEventFilter(w)
+    page._viewport_watch = w      # gardé en vie avec la page
+
+
 class ColumnsWatcher:
     """Mémorise le dernier nombre de colonnes rendu.
 

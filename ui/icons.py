@@ -7,6 +7,7 @@ import os
 import sys
 from PyQt6.QtGui import QPixmap, QPainter, QColor, QIcon
 from PyQt6.QtCore import Qt, QObject, QEvent, QSize
+from ui import themes as _themes
 
 # En mode gelé (PyInstaller), les assets sont dans sys._MEIPASS (dossier _internal/).
 if getattr(sys, "frozen", False):
@@ -58,6 +59,9 @@ def dim(pix: QPixmap, opacity: float = 0.45) -> QPixmap:
     return result
 
 
+_BADGE_CACHE: dict = {}
+
+
 def load_icon(filename: str, size: int = 20, color: str | None = None) -> QPixmap:
     """Charge une icône, la centre dans un carré transparent size×size et la teinte.
     Gère automatiquement le ratio HiDPI de l'écran."""
@@ -77,6 +81,13 @@ def load_icon(filename: str, size: int = 20, color: str | None = None) -> QPixma
         Qt.AspectRatioMode.KeepAspectRatio,
         Qt.TransformationMode.SmoothTransformation,
     )
+    if not color and filename in _themes.BADGE_FILES:
+        # Badge aux teintes du thème (27/10/2026) — mis en cache : la recoloration
+        # se fait pixel par pixel.
+        key = (filename, phys)
+        if key not in _BADGE_CACHE:
+            _BADGE_CACHE[key] = _themes.recolor_badge(scaled)
+        scaled = _BADGE_CACHE[key]
     if scaled.width() == phys and scaled.height() == phys:
         out = tint(scaled, color) if color else scaled
     else:

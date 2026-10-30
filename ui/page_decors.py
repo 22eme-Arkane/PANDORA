@@ -260,6 +260,9 @@ class PageDecors(QWidget):
 
         scroll.setWidget(self._grid_container)
         self._scroll = scroll
+        # la grille suit la largeur RÉELLE de la zone (FICHE ouverte ou non, 29/10/2026)
+        from ui.grid_flow import watch_viewport
+        watch_viewport(scroll, self)
         root.addWidget(scroll, 1)
 
         # État vide CENTRÉ dans la fenêtre + « Générer depuis le scénario »
@@ -400,7 +403,9 @@ class PageDecors(QWidget):
         # une carte dit mieux « vu de dessus » qu'un symbole de trame.
         self._fp_toggle = QPushButton()
         self._fp_toggle.setCheckable(True)
-        self._fp_toggle.setChecked(True)
+        # Repliée par défaut (Matthieu 29/10/2026) : on ne consulte les plans que
+        # par moments ; le bouton « Générer les plans manquants » reste visible.
+        self._fp_toggle.setChecked(False)
         self._fp_toggle.setCursor(Qt.CursorShape.PointingHandCursor)
         self._fp_toggle.setFlat(True)
         self._fp_toggle.setStyleSheet(
@@ -410,7 +415,7 @@ class PageDecors(QWidget):
             f"QPushButton:hover{{color:{CP['text_primary']};}}")
         self._fp_title = "🗺  " + translate("Plan des décors")
         head.addWidget(self._fp_toggle)
-        sub = QLabel(translate("— vus de dessus, synchronisés avec Mise en scène et Plan de feu"))
+        sub = QLabel(translate("— vus de dessus, posés au sol des scènes de la vue 3D"))
         sub.setStyleSheet(f"color:{CP['text_dim']};font-size:9px;background:transparent;")
         head.addWidget(sub)
         head.addStretch()

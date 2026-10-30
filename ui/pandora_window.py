@@ -13,12 +13,15 @@ from ui.page_accessories import PageAccessories
 from ui.page_hmc import PageHMC
 from ui.page_vehicles import PageVehicles
 from ui.page_camera import PageCamera
-from ui.decors_hub import DecorsHub
+# Décors (29/10/2026) : la page classique seule — l'onglet « Avancé » (atelier
+# 7 vues, ui/decors_hub + ui/page_decors_multiview) est retiré de la navigation.
+from ui.page_decors import PageDecors
 from ui.page_scenario import PageScenario
 from ui.page_storyboard import PageStoryboard
 from ui.page_doublage import PageDoublage
 from ui.tab_image import TabImage
 from ui.icons import load_icon, badge_pixmap, app_icon, dim, tint
+from ui import themes
 from ui.assistant_panel import AssistantPanel, AssistantToggleStrip
 from core.i18n import tr, get_lang, set_lang, retranslate_widget, translate
 
@@ -37,7 +40,7 @@ def _get_nav_items():
         ("HMC.png",        tr("nav.hmc"),         "hmc"),
         ("vehicule.png",   tr("nav.vehicles"),    "vehicles"),
         None,
-        ("plan_de_feu.png", tr("nav.plan_de_feu"), "plan_de_feu"),
+        ("vue_3d.png", tr("nav.plan_de_feu"), "plan_de_feu"),
         # « Image & Son » RETIRÉ (décision Matthieu 2026-07-31 : « il ne sert
         # pas »). Pour le remettre : décommenter la ligne ci-dessous ET remettre
         # `_FEATURE_ENABLED = True` dans core/camera_prefs.py — sans quoi la
@@ -47,6 +50,10 @@ def _get_nav_items():
         None,
         ("draw_to_video.png", tr("nav.image_ia"), "image_ia"),
         ("seedance.png",   tr("nav.video_ia"),    "seedance"),
+        # AIODOS (27/10/2026) : machines, travaux et réglages de la puissance
+        # partagée — ui/page_aiodos, logo d'AIODOS. Placé À PART dans la barre,
+        # entre Studio IA et « Coût du projet » (voir `_Sidebar`).
+        ("aiodos.png",     "AIODOS",              "aiodos"),
         ("settings.png",   tr("nav.settings"),    "settings"),
     ]
     # NB : « Coût du projet » N'EST PAS dans cette liste. Ce n'est pas une page
@@ -75,7 +82,7 @@ def _get_nav_groups():
         if entry is None:
             groups.append((_label(), current))
             current = []
-        elif entry[2] != "settings":
+        elif entry[2] not in ("settings", "aiodos"):     # posés à part
             current.append(entry)
     if current:
         groups.append((_label(), current))
@@ -88,7 +95,7 @@ _FALLBACK = {
     "scenario.png":    "≡",
     "storyboard.png":  "⊞",
     "mise_en_scene.png": "▦",
-    "plan_de_feu.png": "💡",
+    "vue_3d.png": "◈",
     "castings.png":    "⊕",
     "decors.png":      "◻",
     "accesoires.png":  "◈",
@@ -98,6 +105,7 @@ _FALLBACK = {
     "doublage.png":    "🎙",
     "draw_to_video.png":"◈",
     "seedance.png":    "✦",
+    "aiodos.png":      "✺",
     "settings.png":    "⚙",
 }
 
@@ -107,8 +115,8 @@ _FALLBACK = {
 _COLOR_ICONS: frozenset[str] = frozenset({
     "projets.png", "scenario.png", "storyboard.png", "mise_en_scene.png",
     "castings.png", "decors.png", "accesoires.png", "HMC.png", "vehicule.png",
-    "camera.png", "plan_de_feu.png", "doublage.png", "draw_to_video.png",
-    "seedance.png", "settings.png",
+    "camera.png", "vue_3d.png", "doublage.png", "draw_to_video.png",
+    "seedance.png", "aiodos.png", "settings.png",
 })
 
 
@@ -153,17 +161,18 @@ class NavItem(QWidget):
 
         _pix_raw  = load_icon(icon_file, 24)
         _is_color = icon_file in _COLOR_ICONS
-        # Onglet ACTIF : vert « Nous contacter » (#25d366) à 75 % d'opacité —
-        # remplace le jaune néon (demande Matthieu 2026-07-22).
+        # Onglet ACTIF : couleur du thème à 75 % d'opacité — le vert « Nous
+        # contacter » (#25d366) en Nuit bleue (demande Matthieu 2026-07-22).
+        _nav = themes.nav_active()
         if not _pix_raw.isNull():
             if _is_color:
-                # Fond coloré propre — on préserve les couleurs d'origine
+                # Badge : déjà aux teintes du thème (load_icon, 27/10/2026)
                 self._pix_white  = _pix_raw
-                self._pix_accent = dim(_neon_foreground(_pix_raw, "#25d366"), 0.75)
+                self._pix_accent = dim(_neon_foreground(_pix_raw, _nav), 0.75)
             else:
                 # Silhouette sur transparent — on normalise en blanc
                 self._pix_white  = tint(_pix_raw, "#ffffff")
-                self._pix_accent = dim(tint(_pix_raw, "#25d366"), 0.75)
+                self._pix_accent = dim(tint(_pix_raw, _nav), 0.75)
         else:
             self._pix_white  = _pix_raw
             self._pix_accent = _pix_raw
@@ -200,10 +209,10 @@ class NavItem(QWidget):
             else:
                 self._ico.setText(_FALLBACK.get(self._ico_file, "●"))
                 self._ico.setStyleSheet(
-                    "color:rgba(37,211,102,0.75);font-size:14px;background:transparent;border:none;"
+                    f"color:{themes.nav_rgba(0.75)};font-size:14px;background:transparent;border:none;"
                 )
             self._lbl.setStyleSheet(
-                "color:rgba(37,211,102,0.75);font-size:10px;font-weight:700;"
+                f"color:{themes.nav_rgba(0.75)};font-size:10px;font-weight:700;"
                 f"letter-spacing:0.3px;background:transparent;border:none;"
             )
         else:
@@ -283,65 +292,23 @@ class _Sidebar(QWidget):
             f.setStyleSheet("background:rgba(255,255,255,0.08);")
             return f
 
-        # ── Gauche : sélecteur de langue (drapeaux) ───────────────────────────
-        self._lang_btns: dict[str, QPushButton] = {}
-        _flag_map = {"fr": "Fr.png", "en": "En.png"}
-        _cur_lang = get_lang()
-        for code, flag_file in _flag_map.items():
-            btn = QPushButton()
-            btn.setFixedSize(32, 32)
-            btn.setCursor(Qt.CursorShape.PointingHandCursor)
-            btn.setToolTip("Français" if code == "fr" else "English")
-            _flag_pix = load_icon(flag_file, 22)
-            if not _flag_pix.isNull():
-                from PyQt6.QtGui import QIcon as _QIcon
-                from PyQt6.QtCore import QSize as _QSize
-                btn.setIcon(_QIcon(_flag_pix))
-                btn.setIconSize(_QSize(22, 22))
-                btn.setText("")
-            else:
-                btn.setText("FR" if code == "fr" else "EN")
-            self._apply_lang_btn_style(btn, code == _cur_lang)
-            btn.clicked.connect(lambda checked, c=code: self.lang_change_requested.emit(c))
-            lay.addWidget(btn)
-            self._lang_btns[code] = btn
-
-        lay.addSpacing(4)
-        lay.addWidget(_vsep())
-        lay.addStretch()
-
-        # ── Centre : quatre groupes lisibles. Paramètres reste seul à droite.
+        # ── Trois zones (montage de Matthieu, 27/10/2026) ──────────────────────
+        #   gauche : « Coût du projet » · centre : les onglets, EXACTEMENT au
+        #   milieu de la fenêtre · droite : AIODOS | Paramètres.
+        # Les drapeaux de langue sont partis dans Paramètres → Général → Langue,
+        # la disquette aussi (Ctrl+S, et la fermeture propose d'enregistrer).
+        # Gauche et droite reçoivent la MÊME largeur et le même ressort : le
+        # centre tombe pile au milieu, quelle que soit leur taille propre.
+        self._lang_btns: dict[str, QPushButton] = {}     # (plus de drapeaux ici)
         self._items: dict[str, NavItem] = {}
-        for group_index, (group_label, entries) in enumerate(_get_nav_groups()):
-            if group_index:
-                lay.addWidget(_vsep())
-            group = QWidget()
-            group.setStyleSheet("background:transparent;")
-            gl = QVBoxLayout(group)
-            gl.setContentsMargins(2, 0, 2, 0)
-            gl.setSpacing(0)
-            # Intitulés de groupe RETIRÉS (2026-07-23) — les séparateurs verticaux
-            # suffisent à distinguer les familles. group_label reste disponible
-            # comme info-bulle du groupe.
-            group.setToolTip(group_label)
-            row = QHBoxLayout()
-            row.setContentsMargins(0, 0, 0, 0)
-            row.setSpacing(1)
-            for icon_file, label, key in entries:
-                item = NavItem(icon_file, label, key)
-                item.nav_clicked.connect(self.nav_clicked)
-                self._items[key] = item
-                row.addWidget(item)
-            gl.addLayout(row)
-            lay.addWidget(group)
 
-        lay.addStretch()
-
-        # ── « Coût du projet » — juste avant Paramètres ───────────────────────
-        # Bouton DISCRET (demande Matthieu 2026-07-31) : même forme que « Nous
-        # contacter » — bordure fine, fond transparent — mais dans le gris des
-        # libellés de la barre, sans émoticône. Ce n'est pas une étape du
-        # travail, ça ne doit pas attirer l'œil plus que Paramètres.
+        left = QWidget()
+        left.setStyleSheet("background:transparent;")
+        ll = QHBoxLayout(left)
+        ll.setContentsMargins(0, 0, 0, 0)
+        ll.setSpacing(4)
+        # « Coût du projet » : bouton DISCRET (2026-07-31) — bordure fine, fond
+        # transparent, gris des libellés ; un relevé qu'on consulte, pas une étape.
         self._btn_cost = QPushButton(tr("nav.cost"))
         self._btn_cost.setFixedHeight(26)
         self._btn_cost.setCursor(Qt.CursorShape.PointingHandCursor)
@@ -354,22 +321,74 @@ class _Sidebar(QWidget):
             f"background:rgba(255,255,255,0.05);}}"
             f"QPushButton:pressed{{background:rgba(255,255,255,0.09);}}")
         self._btn_cost.clicked.connect(lambda: self.nav_clicked.emit("cost"))
-        lay.addWidget(self._btn_cost)
+        ll.addWidget(self._btn_cost)
+        ll.addStretch(1)
 
-        # Séparateur ENTRE le coût et Paramètres (demande Matthieu) : le coût
-        # se rattache visuellement aux onglets de travail, Paramètres reste
-        # isolé tout au bord.
-        lay.addSpacing(4)
-        lay.addWidget(_vsep())
-        lay.addSpacing(4)
+        center = QWidget()
+        center.setStyleSheet("background:transparent;")
+        cl = QHBoxLayout(center)
+        cl.setContentsMargins(0, 0, 0, 0)
+        cl.setSpacing(4)
+        for group_index, (group_label, entries) in enumerate(_get_nav_groups()):
+            if group_index:
+                cl.addWidget(_vsep())
+            group = QWidget()
+            group.setStyleSheet("background:transparent;")
+            gl = QVBoxLayout(group)
+            gl.setContentsMargins(2, 0, 2, 0)
+            gl.setSpacing(0)
+            # Intitulés de groupe RETIRÉS (2026-07-23) — les séparateurs verticaux
+            # suffisent ; group_label reste l'info-bulle du groupe.
+            group.setToolTip(group_label)
+            row = QHBoxLayout()
+            row.setContentsMargins(0, 0, 0, 0)
+            row.setSpacing(1)
+            for icon_file, label, key in entries:
+                item = NavItem(icon_file, label, key)
+                item.nav_clicked.connect(self.nav_clicked)
+                self._items[key] = item
+                row.addWidget(item)
+            gl.addLayout(row)
+            cl.addWidget(group)
 
-        # ── Droite : Paramètres tout au bord ──────────────────────────────────
-        icon_file, label, key = next(e for e in _get_nav_items()
-                                     if e is not None and e[2] == "settings")
-        item = NavItem(icon_file, label, key)
-        item.nav_clicked.connect(self.nav_clicked)
-        self._items[key] = item
-        lay.addWidget(item)
+        right = QWidget()
+        right.setStyleSheet("background:transparent;")
+        rl = QHBoxLayout(right)
+        rl.setContentsMargins(0, 0, 0, 0)
+        rl.setSpacing(4)
+        rl.addStretch(1)
+        for k in ("aiodos", "settings"):
+            if k == "settings":
+                rl.addSpacing(4)
+                rl.addWidget(_vsep())
+                rl.addSpacing(4)
+            icon_file, label, key = next(e for e in _get_nav_items()
+                                         if e is not None and e[2] == k)
+            item = NavItem(icon_file, label, key)
+            item.nav_clicked.connect(self.nav_clicked)
+            self._items[key] = item
+            rl.addWidget(item)
+
+        side = max(left.sizeHint().width(), right.sizeHint().width())
+        left.setMinimumWidth(side)
+        right.setMinimumWidth(side)
+        lay.addWidget(left, 1)
+        lay.addWidget(center, 0)
+        lay.addWidget(right, 1)
+        self._left, self._center, self._right = left, center, right
+        self._center_w = center.sizeHint().width()
+
+    def resizeEvent(self, e):   # noqa: N802
+        super().resizeEvent(e)
+        # Côtés STRICTEMENT égaux : quand la place restante est impaire, le pixel en
+        # trop va au centre (sinon un côté dépasse l'autre d'un pixel — constaté le
+        # 29/10/2026 quand « Plan de feu » est devenu « 3D »).
+        lay = self.layout()
+        m = lay.contentsMargins()
+        avail = self.width() - m.left() - m.right() - 2 * lay.spacing()
+        want = self._center_w + (avail - self._center_w) % 2
+        if self._center.minimumWidth() != want:
+            self._center.setMinimumWidth(want)
 
     @staticmethod
     def _apply_lang_btn_style(btn: QPushButton, active: bool):
@@ -427,6 +446,10 @@ class PandoraWindow(QMainWindow):
 
         central = QWidget()
         self.setCentralWidget(central)
+        # La fenêtre naît avec la surface de la vue 3D : sans cela, le premier passage
+        # sur le Plan de feu la fermait et la rouvrait (Matthieu, 30/10/2026).
+        from ui.scene3d_web import prepare_window
+        prepare_window(self)
 
         outer = QVBoxLayout(central)
         outer.setContentsMargins(0, 0, 0, 0)
@@ -444,9 +467,10 @@ class PandoraWindow(QMainWindow):
         body_lay.setSpacing(0)
 
         self._sidebar = _Sidebar()   # barre de navigation BASSE (refonte 2026-06-12)
-        # Disquette de sauvegarde dans la barre basse, à droite des drapeaux de
-        # langue et de leur séparateur (index 4 du layout — demande 2026-07-23).
-        self._sidebar.layout().insertWidget(4, self._btn_save_global)
+        # Disquette RETIRÉE de la barre (Matthieu 27/10/2026) : Ctrl+S et la
+        # fermeture enregistrent. Le bouton reste l'objet que Ctrl+S anime.
+        self._btn_save_global.setParent(self)
+        self._btn_save_global.hide()
         self._stack   = QStackedWidget()
         self._stack.setStyleSheet(f"background:{CP['bg0']};")
 
@@ -540,15 +564,17 @@ class PandoraWindow(QMainWindow):
         setCurrentWidget + 9 s de premier affichage sur un petit projet, le
         Studio seul 3,5 s. Le câblage des signaux vit dans chaque fabrique."""
         from ui.lazy_pages import LazyPages
-        from ui.page_staging import PageLighting
+        # Plan de feu en 3D (29/10/2026) : remplace le Plan de feu 2D (ui/page_staging,
+        # gardé pour ses fonctions de texte) ; même clé, même nom « Plan de feu ».
+        from ui.page_3d import Page3D
         factories = {
             "projects":    self._make_page_projects,
             "scenario":    self._make_page_scenario,
             "storyboard":  PageStoryboard,
-            "plan_de_feu": PageLighting,
-            # Deux onglets depuis le 2026-07-31 : « Décors » (page classique) et
-            # « 7 vues » (atelier de rotations) — voir ui/decors_hub.py.
-            "decors":      DecorsHub,
+            "plan_de_feu": Page3D,
+            # Page Décors classique seule depuis le 29/10/2026 (l'atelier « 7 vues »
+            # de ui/decors_hub.py n'est plus monté).
+            "decors":      PageDecors,
             # Page « Image & Son » plus construite — la classe PageCamera reste
             # importée et intacte ; rien d'autre ne la référence.
             "castings":    PageCastings,
@@ -561,6 +587,7 @@ class PandoraWindow(QMainWindow):
             "image_ia":    TabImage,
             "settings":    self._make_page_settings,
             "seedance":    SeedanceWidget,
+            "aiodos":      self._make_page_aiodos,
         }
         # Compatibilité : les anciens raccourcis « Mise en scène » ouvrent le
         # plateau unifié sans recréer une seconde page ni un second état.
@@ -594,9 +621,16 @@ class PandoraWindow(QMainWindow):
         scenario.style_changed.connect(self._on_scenario_style_changed)
         return scenario
 
+    def _make_page_aiodos(self):
+        from ui.page_aiodos import PageAiodos
+        return PageAiodos()
+
     def _make_page_settings(self):
         settings = SettingsPage()
         settings.manual_requested.connect(self._on_manual)
+        # La langue se choisit désormais dans Paramètres → Général (27/10/2026).
+        if hasattr(settings, "lang_change_requested"):
+            settings.lang_change_requested.connect(self._on_lang_change)
         # Paramètres pleine largeur depuis le 2026-07-22 : la barre de défilement
         # doit être collée au bord DROIT de la fenêtre. Le centrage du contenu
         # (largeur max 1360) est géré À L'INTÉRIEUR de SettingsPage.
@@ -706,7 +740,7 @@ class PandoraWindow(QMainWindow):
         _rlay.setSpacing(0)
         _rlay.setAlignment(Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignRight)
 
-        # ── Couche 1 : logo PANDORA — centré géométriquement dans toute la barre
+        # ── Couche 1 : nom PANDORA — centré géométriquement dans toute la barre
         _center = QWidget()
         _center.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents)
         _center.setStyleSheet("background:transparent;")
@@ -715,27 +749,15 @@ class PandoraWindow(QMainWindow):
         _clay.setSpacing(0)
         _clay.setAlignment(Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignHCenter)
 
-        badge_lbl = QLabel()
-        badge_lbl.setFixedSize(44, 44)
-        badge_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        badge_lbl.setStyleSheet("background:transparent;border:none;")
-        pix_badge = app_icon().pixmap(44, 44)
-        if not pix_badge.isNull():
-            badge_lbl.setPixmap(pix_badge)
-        else:
-            badge_lbl.setText("P")
-            badge_lbl.setStyleSheet(
-                f"background:qlineargradient(x1:0,y1:0,x2:1,y2:1,"
-                f"stop:0 {CP['accent']},stop:1 {CP['accent2']});"
-                f"border-radius:10px;color:#07080f;font-size:20px;font-weight:900;"
-            )
-        _clay.addWidget(badge_lbl)
-        _clay.addSpacing(10)
-
+        # Le nom SEUL, centré (27/10/2026 : « on enlèvera le logo et on gardera
+        # juste PANDORA centré ») — le logo vit dans l'icône de la fenêtre.
+        # padding-left = l'espacement des lettres, ajouté aussi après la
+        # dernière : sans lui le mot penche de 3 px vers la gauche.
         title_lbl = QLabel("PANDORA")
+        title_lbl.setObjectName("PandoraTitle")
         title_lbl.setStyleSheet(
             f"color:{CP['text_primary']};font-size:15px;font-weight:800;"
-            f"letter-spacing:3px;background:transparent;border:none;"
+            f"letter-spacing:3px;padding-left:3px;background:transparent;border:none;"
         )
         _clay.addWidget(title_lbl)
 
@@ -790,7 +812,7 @@ class PandoraWindow(QMainWindow):
         _lr_lay.addWidget(_right, 1)
 
         bar_lay.addWidget(_lr)       # couche 0 — gauche/droite
-        bar_lay.addWidget(_center)   # couche 1 — logo centré, passe-transparent
+        bar_lay.addWidget(_center)   # couche 1 — nom centré, passe-transparent
         bar_lay.setCurrentIndex(1)   # couche 1 au-dessus (z-order)
         return bar
 

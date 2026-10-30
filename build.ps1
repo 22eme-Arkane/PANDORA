@@ -3,6 +3,7 @@
 # Usage :
 #   .\build.ps1              # PyInstaller uniquement
 #   .\build.ps1 -Installer   # PyInstaller + Inno Setup
+#   .\build.ps1 -Installer -WithAiodos   # + AIODOS proposé en facultatif
 #
 # Prérequis :
 #   - Python 3.14 installé (pythoncore-3.14-64)
@@ -10,7 +11,8 @@
 #   - Inno Setup 6 (si -Installer) : https://jrsoftware.org/isinfo.php
 
 param(
-    [switch]$Installer   # Compile aussi l'installeur Inno Setup
+    [switch]$Installer,  # Compile aussi l'installeur Inno Setup
+    [switch]$WithAiodos  # Y propose AIODOS en facultatif (son installeur embarqué)
 )
 
 $ErrorActionPreference = "Stop"
@@ -116,6 +118,32 @@ if ($Installer) {
         Write-Warning "Inno Setup introuvable : $ISCC"
         Write-Warning "Installez Inno Setup 6 depuis https://jrsoftware.org/isinfo.php"
     } else {
+        # AIODOS, proposé en facultatif (27/10/2026) — SEULEMENT avec -WithAiodos
+        # (consigne Matthieu : pas d'installeur avec AIODOS tant qu'il y travaille).
+        # Son installeur est copié depuis le projet AIODOS (dist\AIODOS-Setup-
+        # <version>.exe, le plus récent) dans vendor\aiodos\ — jamais commité —
+        # avec aiodos.iss.inc, que pandora_setup.iss inclut. Sans le drapeau, ou
+        # introuvable : installeur sans AIODOS (comme la CI GitHub).
+        $aiodosDist = Join-Path $PSScriptRoot "..\..\AIODOS\dist"
+        $vendor     = Join-Path $PSScriptRoot "vendor\aiodos"
+        $aiodosExe  = Get-ChildItem -Path $aiodosDist -Filter "AIODOS-Setup-*.exe" -ErrorAction SilentlyContinue |
+                      Sort-Object LastWriteTime -Descending | Select-Object -First 1
+        if ($WithAiodos -and $aiodosExe) {
+            if (Test-Path $vendor) { Get-ChildItem $vendor -File | Remove-Item -Force }
+            New-Item -ItemType Directory -Force -Path $vendor | Out-Null
+            Copy-Item $aiodosExe.FullName (Join-Path $vendor $aiodosExe.Name) -Force
+            $aiodosVer = $aiodosExe.BaseName -replace '^AIODOS-Setup-', ''
+            $inc = "#define AiodosSetupName `"$($aiodosExe.Name)`"`r`n#define AiodosVersion `"$aiodosVer`"`r`n"
+            [System.IO.File]::WriteAllText((Join-Path $vendor "aiodos.iss.inc"), $inc)
+            Write-Host "  AIODOS $aiodosVer embarqué (facultatif) : $($aiodosExe.Name)" -ForegroundColor Gray
+        } else {
+            if (Test-Path (Join-Path $vendor "aiodos.iss.inc")) { Remove-Item (Join-Path $vendor "aiodos.iss.inc") -Force }
+            if ($WithAiodos) {
+                Write-Warning "Installeur d'AIODOS introuvable ($aiodosDist) : l'installeur de PANDORA ne le proposera pas."
+            } else {
+                Write-Host "  AIODOS non embarqué (ajoutez -WithAiodos pour le proposer)." -ForegroundColor DarkGray
+            }
+        }
         & $ISCC pandora_setup.iss
         if ($LASTEXITCODE -ne 0) {
             Write-Error "Échec Inno Setup"

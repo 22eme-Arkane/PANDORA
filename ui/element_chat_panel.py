@@ -263,8 +263,18 @@ class ElementChatPanel(QWidget):
         self._thread.insertWidget(self._thread.count() - 1, holder)
         # défilement en bas
         from PyQt6.QtCore import QTimer
-        QTimer.singleShot(30, lambda: self._scroll.verticalScrollBar().setValue(
-            self._scroll.verticalScrollBar().maximum()))
+        QTimer.singleShot(30, self._scroll_to_bottom)
+
+    def _scroll_to_bottom(self):
+        """Différé de 30 ms : la fiche a pu être fermée entre-temps. Une exception
+        ici (rappel Qt) fait appeler qFatal par PyQt6 — c'était l'arrêt 0xC0000409
+        du harnais Cinéma à sa FERMETURE, après le résumé vert (cause trouvée le
+        27/10/2026 avec QT_FORCE_STDERR_LOGGING=1)."""
+        try:
+            bar = self._scroll.verticalScrollBar()
+            bar.setValue(bar.maximum())
+        except (RuntimeError, AttributeError):    # zone déjà détruite
+            pass
 
     # ── Images jointes en attente ─────────────────────────────────────────────
     def _refresh_attach(self):

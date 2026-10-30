@@ -101,7 +101,9 @@ class ElementSidePanel(QWidget):
         _scroll.setWidget(self._desc)
         lay.addWidget(_scroll, 1)
 
-        self.setVisible(False)   # fermée par défaut (rien de sélectionné)
+        # OUVERTE par défaut (Matthieu 29/10/2026 : « ouvrir par défaut le panneau
+        # fiche à droite » — Castings, Décors, Accessoires, HMC, Véhicules) ; sans
+        # sélection elle invite à choisir un élément. La poignée la replie.
 
     # ── API ───────────────────────────────────────────────────────────────────
 
@@ -156,7 +158,7 @@ def attach_side_panel(page, content: QWidget, empty_text: str,
     outer.addWidget(content, 1)
     panel = ElementSidePanel(empty_text, placeholder)
     outer.addWidget(panel)
-    toggle = _PanelToggle("FICHE", opened=False)
+    toggle = _PanelToggle("FICHE", opened=True)       # ouverte par défaut (29/10/2026)
     toggle.toggled.connect(panel.setVisible)
     outer.addWidget(toggle)
     panel._toggle = toggle

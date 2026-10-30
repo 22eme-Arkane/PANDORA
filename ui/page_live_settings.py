@@ -24,11 +24,13 @@ _RESOLUME_UI = False
 
 
 def _section_title(text: str) -> QLabel:
+    """Sous-titre d'une section — lisible (parité Cinéma, 27/10/2026) : couleur
+    d'accent, plus grand, un peu d'air au-dessus."""
     lbl = QLabel(text)
     lbl.setStyleSheet(
-        f"color:{CP['text_secondary']};font-size:10px;font-weight:700;"
+        f"color:{CP['accent']};font-size:11px;font-weight:800;"
         f"letter-spacing:3px;font-family:'Consolas',monospace;"
-        f"background:transparent;border:none;"
+        f"background:transparent;border:none;padding-top:6px;"
     )
     return lbl
 
@@ -80,6 +82,7 @@ class PageLiveSettings(QScrollArea):
     occupe toute la fenêtre, donc sa barre est collée au bord DROIT ; le
     contenu est centré (largeur max 1360) À L'INTÉRIEUR du scroll."""
     manual_requested = pyqtSignal()
+    lang_change_requested = pyqtSignal(str)      # Langue (parité Cinéma, 27/10/2026)
 
     def __init__(self):
         super().__init__()
@@ -137,73 +140,52 @@ class PageLiveSettings(QScrollArea):
         # « des menus déroulants pour chaque partie… regrouper dans des
         # paramètres avancés »). Chaque bloc ci-dessous se range dans SA section.
         self._sec_general = _section(
-            "Général", "thème · double écran · manuel · dossier des projets")
+            "Général", "thème · langue · double écran · manuel · dictée · dossier des projets")
         self._sec_ai = _section("Assistant IA")
         self._sec_keys = _section("Clés API")
         self._sec_distrib = _section("Distribution des vidéos")
+        # AIODOS (22/10/2026, parité Cinéma) : la puissance partagée de mes machines.
+        self._sec_aiodos = _section("AIODOS", "mes machines · gabarits ComfyUI · IA texte")
+        # FilmCraft (27/10/2026, parité Cinéma) : montage relié, import automatique.
+        self._sec_filmcraft = _section("FilmCraft", "import automatique des clips · montage")
         self._sec_adv = _section("Paramètres avancés",
                                  "MiniMax H3 en local · ComfyUI · modules externes")
         for _sec in (self._sec_general, self._sec_ai, self._sec_keys,
-                     self._sec_distrib, self._sec_adv):
+                     self._sec_distrib, self._sec_aiodos, self._sec_filmcraft, self._sec_adv):
             lay.addWidget(_sec)
             lay.addSpacing(12)
+        from ui.filmcraft_ui import FilmCraftPanel
+        self._filmcraft = FilmCraftPanel()
+        self._sec_filmcraft.body.addWidget(self._filmcraft)
+        from ui.aiodos_panel import AiodosPanel
+        self._aiodos = AiodosPanel()
+        self._sec_aiodos.body.addWidget(self._aiodos)
+        self._aiodos.summary_changed.connect(self._sec_aiodos.set_summary)
         G = self._sec_general.body      # Général
         AI = self._sec_ai.body          # Assistant IA
         K = self._sec_keys.body         # Clés API
         A = self._sec_adv.body          # Paramètres avancés
 
         # ── Affichage : thème + 2ᵉ fenêtre / 2 écrans (parité Cinéma) ───────────
-        G.addWidget(_section_title("AFFICHAGE"))
+        G.addWidget(_section_title("APPARENCE"))
 
-        # Thème Sombre / Clair — même clé config « theme » que le Cinéma,
-        # appliqué au prochain démarrage (porté le 2026-07-14, parité Paramètres).
-        from core.config import load_config as _lc_theme
-        _theme_now = _lc_theme().get("theme", "dark")
-        _ss_theme_active = (
-            f"QPushButton{{background:{CP['accent']};color:#07080f;"
-            f"border:none;border-radius:7px;font-size:12px;font-weight:700;"
-            f"padding:0 18px;}}"
-            f"QPushButton:hover{{background:{CP['accent_dim']};color:#fff;}}"
-        )
-        _ss_theme_inactive = (
-            f"QPushButton{{background:transparent;color:{CP['text_secondary']};"
-            f"border:1px solid {CP['border']};border-radius:7px;"
-            f"font-size:12px;font-weight:600;padding:0 18px;}}"
-            f"QPushButton:hover{{background:{CP['bg3']};color:{CP['text_primary']};}}"
-        )
-        self._btn_dark  = QPushButton("◐  Sombre")
-        self._btn_light = QPushButton("◑  Clair")
-        for _b in (self._btn_dark, self._btn_light):
-            _b.setFixedHeight(36)
-            _b.setCursor(Qt.CursorShape.PointingHandCursor)
-        self._btn_dark.setStyleSheet(
-            _ss_theme_active if _theme_now == "dark" else _ss_theme_inactive)
-        self._btn_light.setStyleSheet(
-            _ss_theme_active if _theme_now == "light" else _ss_theme_inactive)
-
-        def _set_theme(theme: str):
-            from PyQt6.QtWidgets import QMessageBox
-            from core.config import load_config, save_config
-            cfg = load_config()
-            cfg["theme"] = theme
-            save_config(cfg)
-            self._btn_dark.setStyleSheet(
-                _ss_theme_active if theme == "dark" else _ss_theme_inactive)
-            self._btn_light.setStyleSheet(
-                _ss_theme_active if theme == "light" else _ss_theme_inactive)
-            QMessageBox.information(
-                self, translate("Thème enregistré"),
-                translate("Le nouveau thème sera appliqué au prochain démarrage de PANDORA."))
-
-        self._btn_dark.clicked.connect(lambda: _set_theme("dark"))
-        self._btn_light.clicked.connect(lambda: _set_theme("light"))
-        _theme_row = QHBoxLayout()
-        _theme_row.setSpacing(8)
-        _theme_row.addWidget(self._btn_dark)
-        _theme_row.addWidget(self._btn_light)
-        _theme_row.addStretch()
-        G.addLayout(_theme_row)
-        _lbl_theme = QLabel("Le changement de thème est appliqué au prochain démarrage.")
+        # Thèmes de couleur — même clé config « theme » et mêmes cartes que le
+        # Cinéma (ui/theme_picker, 27/10/2026), appliqués au redémarrage.
+        from ui.theme_picker import ThemePicker
+        self._theme_picker = ThemePicker()
+        G.addWidget(self._theme_picker)
+        # (L'avertissement de redémarrage vit DANS le sélecteur, en rouge.)
+        G.addWidget(_separator())
+        # ── Langue (parité Cinéma, 27/10/2026) : remplace les drapeaux ──────────
+        G.addWidget(_section_title("LANGUE"))
+        from ui.language_row import LanguageRow
+        self._language = LanguageRow()
+        self._language.chosen.connect(self.lang_change_requested)
+        G.addWidget(self._language)
+        G.addWidget(_separator())
+        G.addWidget(_section_title("AFFICHAGE ET AIDE"))
+        _lbl_theme = QLabel("")
+        _lbl_theme.setVisible(False)
         _lbl_theme.setStyleSheet(
             f"color:{CP['text_dim']};font-size:10px;background:transparent;border:none;")
         G.addWidget(_lbl_theme)
@@ -247,12 +229,27 @@ class PageLiveSettings(QScrollArea):
         )
         self._btn_manual.clicked.connect(self.manual_requested)
         _manual_row.addWidget(self._btn_manual)
+        # Nouveautés de la version et des précédentes (règle Matthieu 27/10/2026)
+        self._btn_whats_new = QPushButton("✦  Nouveautés")
+        self._btn_whats_new.setFixedHeight(36)
+        self._btn_whats_new.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._btn_whats_new.setStyleSheet(self._btn_manual.styleSheet())
+        self._btn_whats_new.clicked.connect(self._open_whats_new)
+        _manual_row.addWidget(self._btn_whats_new)
         _manual_row.addStretch()
+
+        # ── Dictée vocale (ORAKLE, 27/10/2026, parité Cinéma) ───────────────────
+        G.addWidget(_separator())
+        G.addWidget(_section_title("DICTÉE VOCALE (ORAKLE)"))
+        from ui.dictation_panel import DictationPanel
+        self._dictation = DictationPanel()
+        G.addWidget(self._dictation)
 
         # ── Dossier des projets (parité Cinéma) ─────────────────────────────────
         # MÊME clé de config et MÊME dossier que le Cinéma : un projet porte son
         # mode dans son propre fichier, la page de démarrage filtre là-dessus.
         # Deux dossiers séparés obligeraient à régler deux fois la même chose.
+        G.addWidget(_separator())
         G.addWidget(_section_title("DOSSIER DES PROJETS"))
         self._projects_location = ProjectsLocationRow()
         G.addWidget(self._projects_location)
@@ -895,6 +892,10 @@ class PageLiveSettings(QScrollArea):
         # l'ancienne ApiHelpDialog depuis la refonte 2026-07-16 (parité Cinéma).
         from ui.dialog_onboarding import OnboardingDialog
         OnboardingDialog(parent=self).exec()
+
+    def _open_whats_new(self):
+        from ui.dialog_whats_new import open_whats_new
+        open_whats_new(self.window())
 
     def _open_second_window(self):
         """Demande à la fenêtre Live parente d'ouvrir une 2ᵉ fenêtre (2 écrans)."""

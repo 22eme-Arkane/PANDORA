@@ -134,7 +134,8 @@ def _set_palette(app: QApplication):
     palette.setColor(QPalette.ColorRole.Button,          QColor(CP["bg3"]))
     palette.setColor(QPalette.ColorRole.ButtonText,      QColor(CP["text_primary"]))
     palette.setColor(QPalette.ColorRole.Highlight,       QColor(CP["accent"]))
-    palette.setColor(QPalette.ColorRole.HighlightedText, QColor("#07080f"))
+    from ui import themes
+    palette.setColor(QPalette.ColorRole.HighlightedText, QColor(themes.ink()))
     app.setPalette(palette)
 
 
@@ -174,10 +175,35 @@ if __name__ == "__main__":
         pass
 
     qInstallMessageHandler(_qt_msg_handler)
+    # Onglet « 3D » (29/10/2026) : le schéma pandora3d: de la vue d'ARKLIGHT doit être
+    # déclaré AVANT la QApplication (exigence de QtWebEngine). Sans QtWebEngine : rien.
+    try:
+        from ui.scene3d_web import register_scheme as _register_3d
+        _register_3d()
+    except Exception:
+        pass
     app = QApplication(sys.argv)
     app.setStyle("Fusion")
+    # Thème de couleur (27/10/2026) : traduit les couleurs écrites en dur du
+    # thème d'origine à chaque setStyleSheet — AVANT le premier widget.
+    from ui import themes as _themes
+    _themes.install()
     from ui.input_policy import install_wheel_scroll_policy
     install_wheel_scroll_policy(app)
+    # Coller sans le fond blanc ni le texte noir d'une page web (27/10/2026).
+    try:
+        from ui.paste_clean import install as _install_paste_clean
+        _install_paste_clean()
+    except Exception:
+        pass
+    # Dictée vocale d'ORAKLE (27/10/2026) : un micro dans chaque champ de texte
+    # modifiable + le raccourci d'ORAKLE. Rien ne s'ouvre (ni micro ni Whisper)
+    # avant le premier clic.
+    try:
+        from ui.dictation import install as _install_dictation
+        _install_dictation(app)
+    except Exception:
+        pass
     _force_qt_file_dialogs()   # dialogues Qt non-natifs → évite les crashs COM Windows
     _set_palette(app)
 
@@ -301,6 +327,13 @@ if __name__ == "__main__":
                 pass
         win.showMaximized()
         close_splash()
+        # Nouveautés de la version (règle Matthieu 27/10/2026) : à la première
+        # ouverture ou création de projet après une mise à jour.
+        try:
+            from ui.dialog_whats_new import maybe_show
+            maybe_show(win)
+        except Exception:
+            pass
         # Force taskbar icon refresh — Windows sometimes ignores the icon set before show()
         from PyQt6.QtCore import QTimer
         QTimer.singleShot(150, lambda: win.setWindowIcon(icon) if not icon.isNull() else None)

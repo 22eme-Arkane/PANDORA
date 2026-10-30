@@ -3217,6 +3217,18 @@ class TabT2V(QScrollArea):
         self._decor_sync_cb = _decor_sync_cb_inner
         _raccords_lay.addWidget(self._decor_sync_toggle_row)
 
+        # Vidéo exportée de la vue 3D en référence vidéo (Matthieu 30/10/2026 :
+        # « une option à cocher dans RENDU & AUDIO, décochée par défaut »). Les
+        # secondes de la vidéo de référence sont facturées en plus : jamais d'office.
+        self._previs_toggle_row, self._previs_cb = _raccord_toggle(
+            "Prévisualisation de la vue 3D",
+            "Envoie à Seedance la vidéo exportée du plan (onglet 3D, menu Action) comme "
+            "vidéo de référence : il en suit la caméra, le cadre et la place des "
+            "personnages. Ses secondes sont facturées en plus du plan.",
+            False,
+        )
+        _raccords_lay.addWidget(self._previs_toggle_row)
+
         # Se référer au mood — envoie le mood validé du plan comme image de référence
         # Seedance (rôle « mood ») pour une cohésion exacte avec le mood (composition,
         # cadrage, lumière, couleurs). Comme côté Live, mais ici en référence d'image.
@@ -5666,6 +5678,16 @@ class TabT2V(QScrollArea):
             params["image_path"] = i2v_frame
         if mood_end_path:
             params["end_image_path"] = mood_end_path
+        # Prévisualisation 3D du plan (RENDU & AUDIO) : api/real la joint en référence
+        # vidéo — jamais en image→vidéo, l'image de départ décidant déjà du cadre.
+        if getattr(self, "_previs_cb", None) is not None and self._previs_cb.isChecked():
+            try:
+                from core import scene3d as _s3d
+                _pv = _s3d.previs_for((self._active_shot or {}).get("id", ""))
+            except Exception:
+                _pv = ""
+            if _pv:
+                params["previs_video"] = _pv
 
         self.btn_generate.setEnabled(False)
         self.btn_cancel.setVisible(True)
@@ -5674,14 +5696,13 @@ class TabT2V(QScrollArea):
 
         _model_key = self._get_model()
         if _model_key == "comfy":
-            # Sans serveur vivant : PANDORA le LANCE et l'attend (ui/external_autostart) ;
-            # la fenêtre d'installation ne s'ouvre que s'il n'est pas installé.
-            from core import comfy as _cf
-            if not _cf.discover():
-                from ui.external_autostart import ensure_ready
-                if not ensure_ready("comfyui", self):
-                    self.on_failed("ComfyUI injoignable : lancez ComfyUI Desktop, puis relancez.")
-                    return
+            # Selon « Calcul » (ui/comfy_choice) : ComfyUI de ce PC lancé et attendu
+            # s'il le faut (ui/external_autostart), ou AIODOS prêt (mes machines).
+            from ui.comfy_choice import ensure_comfy_ready
+            _comfy_ok, _comfy_why = ensure_comfy_ready(self)
+            if not _comfy_ok:
+                self.on_failed(_comfy_why)
+                return
         elif _model_key == "minimax-h3-local":
             from core import h3_local as _h3l
             if not _h3l.ping(_h3l.get_url())[0]:
@@ -5808,6 +5829,15 @@ class TabT2V(QScrollArea):
                 note_local_path(entry, local_path)
             except Exception:
                 pass
+            # FilmCraft (27/10/2026) : import automatique s'il est ouvert et relié,
+            # résultat dans la même barre que DaVinci.
+            if local_path:
+                try:
+                    from ui.filmcraft_ui import send_clip
+                    send_clip(local_path, dict(self._active_shot or {}),
+                              lambda ok, text: self._davinci_bar.show_import_result(ok, text))
+                except Exception:
+                    pass
             if _import_checked and local_path:
                 davinci_msg = f"\n\n◈ Vidéo sauvegardée — import DaVinci en cours :\n{local_path}"
                 self._start_davinci_import(local_path, dict(self._active_shot or {}))

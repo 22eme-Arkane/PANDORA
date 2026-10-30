@@ -1,0 +1,61 @@
+{
+  "v": 1,
+  "_doc": "Actions des personnages du Plan de feu. SOURCE UNIQUE : lue par la vue 3D (scene3d_web/characters.js, animation jouée) ET par le prompt (core/scene3d_prompt.py, verbe écrit). clip = animation Quaternius (ual1/ual2, CC0) ; move = action de déplacement (vitesse naturelle en m/s : la cadence suit la vitesse réelle du trajet) ; once = jouée une fois puis tenue.",
+  "groups": [
+    ["move", "Déplacements", "Movement"],
+    ["stand", "Sur place", "In place"],
+    ["sit", "Assis, au sol", "Seated, on the ground"],
+    ["gesture", "Gestes", "Gestures"],
+    ["fight", "Combat, action", "Fight, action"]
+  ],
+  "actions": [
+    {"id": "walk", "group": "move", "fr": "Marche", "en": "Walk", "clip": "Walk_Loop", "move": true, "speed": 1.35, "verb": "marche"},
+    {"id": "walk_formal", "group": "move", "fr": "Marche posée", "en": "Calm walk", "clip": "Walk_Formal_Loop", "move": true, "speed": 1.15, "verb": "marche d'un pas posé"},
+    {"id": "jog", "group": "move", "fr": "Course", "en": "Run", "clip": "Jog_Fwd_Loop", "move": true, "speed": 3.0, "verb": "court"},
+    {"id": "sprint", "group": "move", "fr": "Sprint", "en": "Sprint", "clip": "Sprint_Loop", "move": true, "speed": 5.5, "verb": "sprinte"},
+    {"id": "crouch_walk", "group": "move", "fr": "Avance accroupi", "en": "Crouch walk", "clip": "Crouch_Fwd_Loop", "move": true, "speed": 0.8, "verb": "avance accroupi"},
+    {"id": "carry", "group": "move", "fr": "Marche en portant", "en": "Walk carrying", "clip": "Walk_Carry_Loop", "move": true, "speed": 1.2, "verb": "marche en portant quelque chose"},
+    {"id": "stagger", "group": "move", "fr": "Titube", "en": "Stagger", "clip": "Zombie_Walk_Fwd_Loop", "move": true, "speed": 0.6, "verb": "titube"},
+    {"id": "swim", "group": "move", "fr": "Nage", "en": "Swim", "clip": "Swim_Fwd_Loop", "move": true, "speed": 1.0, "verb": "nage"},
+
+    {"id": "idle", "group": "stand", "fr": "Debout", "en": "Standing", "clip": "Idle_Loop", "verb": "se tient debout"},
+    {"id": "talk", "group": "stand", "fr": "Parle", "en": "Talks", "clip": "Idle_Talking_Loop", "verb": "parle"},
+    {"id": "phone", "group": "stand", "fr": "Au téléphone", "en": "On the phone", "clip": "Idle_TalkingPhone_Loop", "verb": "parle au téléphone"},
+    {"id": "fold_arms", "group": "stand", "fr": "Bras croisés", "en": "Arms crossed", "clip": "Idle_FoldArms_Loop", "verb": "croise les bras"},
+    {"id": "crouch", "group": "stand", "fr": "Accroupi", "en": "Crouching", "clip": "Crouch_Idle_Loop", "verb": "s'accroupit"},
+    {"id": "push", "group": "stand", "fr": "Pousse", "en": "Pushes", "clip": "Push_Loop", "verb": "pousse de tout son poids"},
+    {"id": "dance", "group": "stand", "fr": "Danse", "en": "Dances", "clip": "Dance_Loop", "verb": "danse"},
+
+    {"id": "sit_down", "group": "sit", "fr": "S'assoit", "en": "Sits down", "clip": "Sitting_Enter", "once": true, "verb": "s'assoit"},
+    {"id": "seated", "group": "sit", "fr": "Assis", "en": "Seated", "clip": "Sitting_Idle_Loop", "verb": "reste assis"},
+    {"id": "seated_talk", "group": "sit", "fr": "Assis, parle", "en": "Seated, talks", "clip": "Sitting_Talking_Loop", "verb": "parle, assis"},
+    {"id": "stand_up", "group": "sit", "fr": "Se lève", "en": "Stands up", "clip": "Sitting_Exit", "once": true, "verb": "se lève"},
+    {"id": "drive", "group": "sit", "fr": "Conduit", "en": "Drives", "clip": "Driving_Loop", "verb": "conduit"},
+    {"id": "get_up", "group": "sit", "fr": "Se relève du sol", "en": "Gets up from the ground", "clip": "LayToIdle", "once": true, "verb": "se relève du sol"},
+    {"id": "kneel_fix", "group": "sit", "fr": "À genoux, répare", "en": "Kneels, fixes", "clip": "Fixing_Kneeling", "verb": "répare quelque chose à genoux"},
+
+    {"id": "yes", "group": "gesture", "fr": "Acquiesce", "en": "Nods yes", "clip": "Yes", "once": true, "verb": "acquiesce de la tête"},
+    {"id": "no", "group": "gesture", "fr": "Fait non", "en": "Shakes head", "clip": "Idle_No_Loop", "verb": "fait non de la tête"},
+    {"id": "pickup", "group": "gesture", "fr": "Ramasse", "en": "Picks up", "clip": "PickUp_Table", "once": true, "verb": "ramasse un objet"},
+    {"id": "interact", "group": "gesture", "fr": "Manipule", "en": "Handles", "clip": "Interact", "once": true, "verb": "manipule quelque chose"},
+    {"id": "throw", "group": "gesture", "fr": "Lance", "en": "Throws", "clip": "OverhandThrow", "once": true, "verb": "lance un objet"},
+    {"id": "consume", "group": "gesture", "fr": "Boit, mange", "en": "Drinks, eats", "clip": "Consume", "once": true, "verb": "boit ou mange"},
+
+    {"id": "jab", "group": "fight", "fr": "Coup de poing (jab)", "en": "Jab", "clip": "Punch_Jab", "once": true, "verb": "lance un jab"},
+    {"id": "cross", "group": "fight", "fr": "Direct", "en": "Cross punch", "clip": "Punch_Cross", "once": true, "verb": "frappe d'un direct"},
+    {"id": "hook", "group": "fight", "fr": "Crochet", "en": "Hook", "clip": "Melee_Hook", "once": true, "verb": "envoie un crochet"},
+    {"id": "sword", "group": "fight", "fr": "Coup d'épée", "en": "Sword strike", "clip": "Sword_Attack", "once": true, "verb": "frappe à l'épée"},
+    {"id": "sword_combo", "group": "fight", "fr": "Enchaînement à l'épée", "en": "Sword combo", "clip": "Sword_Regular_Combo", "once": true, "verb": "enchaîne des coups d'épée"},
+    {"id": "sword_block", "group": "fight", "fr": "Pare à l'épée", "en": "Sword block", "clip": "Sword_Block", "once": true, "verb": "pare à l'épée"},
+    {"id": "aim", "group": "fight", "fr": "Vise (arme de poing)", "en": "Aims a handgun", "clip": "Pistol_Aim_Neutral", "verb": "met en joue avec une arme de poing"},
+    {"id": "shoot", "group": "fight", "fr": "Tire", "en": "Shoots", "clip": "Pistol_Shoot", "once": true, "verb": "tire"},
+    {"id": "hit_chest", "group": "fight", "fr": "Encaisse au torse", "en": "Hit in the chest", "clip": "Hit_Chest", "once": true, "verb": "encaisse un coup au torse"},
+    {"id": "hit_head", "group": "fight", "fr": "Encaisse à la tête", "en": "Hit in the head", "clip": "Hit_Head", "once": true, "verb": "encaisse un coup à la tête"},
+    {"id": "knockback", "group": "fight", "fr": "Projeté en arrière", "en": "Knocked back", "clip": "Hit_Knockback", "once": true, "verb": "est projeté en arrière"},
+    {"id": "fall", "group": "fight", "fr": "S'effondre", "en": "Collapses", "clip": "Death01", "once": true, "verb": "s'effondre"},
+    {"id": "roll", "group": "fight", "fr": "Roulade", "en": "Roll", "clip": "Roll", "once": true, "verb": "fait une roulade"},
+    {"id": "jump", "group": "fight", "fr": "Saute", "en": "Jumps", "clip": "Jump_Start", "once": true, "verb": "saute"}
+  ],
+  "_doc_poses": "Pose fixe d'ARKLIGHT (props.pose) -> action jouée quand le personnage n'a pas de marque sur la frise.",
+  "poses": {"standing": "idle", "walking": "walk", "sitting": "seated", "lying": "get_up", "crossed": "fold_arms", "phone": "phone", "pointing": "interact", "handsup": "idle"}
+}

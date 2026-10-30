@@ -4,7 +4,7 @@ Compte ChatGPT (« Sign in with ChatGPT » + usage du forfait Plus / Pro).
 Écrit d'après la documentation PUBLIQUE d'OpenAI (developers.openai.com/siwc,
 lue le 04/10/2026 ; synthèse dans research_notes/Sign in with ChatGPT/
 protocole_siwc.md). Aucune ligne du DevKit d'OpenAI : sa licence « Noncommercial »
-est incompatible avec la GPL v3 de PANDORA.
+est incompatible avec la licence libre de PANDORA (Apache 2.0 depuis la 2.7.0).
 
 Ce que fait ce module (tout est BLOQUANT : à appeler hors du thread de l'interface) :
   • connexion OAuth : inscription dynamique (`dynamic_agent_client` → client_id

@@ -640,6 +640,14 @@ class StudioImagesPanel(QWidget):
         _eng_head.addWidget(self._btn_img_actions)
         lay.addLayout(_eng_head)
         lay.addWidget(self._model)
+        # Dans PANDORA : UNE entrée « ComfyUI » au lieu des 101 gabarits, et la
+        # ligne Gabarit / Calcul dessous (ui/comfy_choice). Le Studio autonome
+        # n'a ni core ni ui : il garde sa liste.
+        try:
+            from ui.comfy_choice import attach_comfy
+            attach_comfy(self._model, "image", layout=lay, after=self._model)
+        except ImportError:
+            pass
 
         # Format (templates) + nombre d'images. Choisir un template pré-remplit
         # Largeur/Hauteur ci-dessous (ils restent la source de vérité de la taille).
@@ -1005,6 +1013,14 @@ class StudioImagesPanel(QWidget):
         idx = combo.findData(data)
         if idx >= 0:
             combo.setCurrentIndex(idx)
+            return
+        # Un gabarit ComfyUI enregistré (session, projet) : une seule entrée le
+        # porte, il se choisit dans la ligne Gabarit (ui/comfy_choice).
+        try:
+            from ui.comfy_choice import select_key
+            select_key(combo, data)
+        except ImportError:
+            pass
 
     def _add_bubble(self, role, text, images=None):
         box = QVBoxLayout()
@@ -1671,7 +1687,35 @@ class StudioImagesPanel(QWidget):
                   f"border-radius:4px;background:{CP['bg0']};}}"
                   f"QCheckBox::indicator:checked{{background:{CP['accent']};border-color:{CP['accent']};}}")
         boxes = {}
+        # Dans PANDORA, les gabarits ComfyUI tiennent sur UNE ligne : une case
+        # « ComfyUI » et son menu « Gabarit » (ui/comfy_choice) — il y avait une
+        # case par gabarit, 101. Le Studio autonome garde une case par moteur.
+        try:
+            from ui.comfy_choice import template_combo as _tpl_combo
+        except ImportError:
+            _tpl_combo = None
+        comfy_keys = ([k for k in engines.ENGINES if str(k).startswith("comfy:")]
+                      if _tpl_combo is not None else [])
+        comfy_cb = comfy_tpl = None
         for k in engines.ENGINES:
+            if k in comfy_keys:
+                if comfy_cb is None:
+                    _crow = QWidget()
+                    _crow.setStyleSheet("background:transparent;")
+                    _crl = QHBoxLayout(_crow)
+                    _crl.setContentsMargins(0, 0, 0, 0)
+                    _crl.setSpacing(8)
+                    _pre_c = next((c for c in comfy_keys if c in pre), "")
+                    comfy_cb = QCheckBox("ComfyUI · gabarit")
+                    comfy_cb.setChecked(bool(_pre_c))
+                    comfy_cb.setStyleSheet(_cb_ss)
+                    comfy_cb.setCursor(Qt.CursorShape.PointingHandCursor)
+                    comfy_tpl = _tpl_combo(
+                        "image", [(c, engines.label_for(c)) for c in comfy_keys], _pre_c)
+                    _crl.addWidget(comfy_cb)
+                    _crl.addWidget(comfy_tpl, 1)
+                    il.addWidget(_crow)
+                continue
             # « & » nu = raccourci clavier Qt : « TEXTE & logos » s'affichait
             # « TEXTE _logos » (vu au rendu du 26/09/2026) → doublé.
             cb = QCheckBox(engines.label_for(k).replace("&", "&&"))
@@ -1707,14 +1751,32 @@ class StudioImagesPanel(QWidget):
 
         def _upd():
             n = sum(1 for cb in boxes.values() if cb.isChecked())
+            n += 1 if comfy_cb is not None and comfy_cb.isChecked() else 0
             count_lbl.setText(f"{n} moteur(s) sélectionné(s)")
             gen_btn.setEnabled(n > 0)
         for cb in boxes.values():
             cb.toggled.connect(_upd)
-        b_all.clicked.connect(lambda: [cb.setChecked(True) for cb in boxes.values()])
-        b_none.clicked.connect(lambda: [cb.setChecked(False) for cb in boxes.values()])
-        b_fam.clicked.connect(
-            lambda: [cb.setChecked(k in set(engines.sweep_engines())) for k, cb in boxes.items()])
+
+        def _set_all(on: bool):
+            for cb in boxes.values():
+                cb.setChecked(on)
+            if comfy_cb is not None:
+                comfy_cb.setChecked(on)
+
+        def _one_per_family():
+            sweep = set(engines.sweep_engines())
+            for k, cb in boxes.items():
+                cb.setChecked(k in sweep)
+            if comfy_cb is not None:
+                picked = next((c for c in comfy_keys if c in sweep), "")
+                comfy_cb.setChecked(bool(picked))
+                if picked and comfy_tpl.findData(picked) >= 0:
+                    comfy_tpl.setCurrentIndex(comfy_tpl.findData(picked))
+        if comfy_cb is not None:
+            comfy_cb.toggled.connect(_upd)
+        b_all.clicked.connect(lambda: _set_all(True))
+        b_none.clicked.connect(lambda: _set_all(False))
+        b_fam.clicked.connect(_one_per_family)
         _upd()
         # Dans PANDORA, le dialogue suit la langue de l'interface (le Studio
         # autonome n'a pas core : il reste en français).
@@ -1726,7 +1788,17 @@ class StudioImagesPanel(QWidget):
 
         if dlg.exec() != QDialog.DialogCode.Accepted:
             return None
-        return [k for k in engines.ENGINES if boxes[k].isChecked()]
+        chosen = []
+        for k in engines.ENGINES:
+            if k in comfy_keys:
+                # La case ComfyUI vaut UN moteur : le gabarit choisi, à la place
+                # du premier gabarit dans l'ordre du catalogue.
+                if k == comfy_keys[0] and comfy_cb is not None and comfy_cb.isChecked():
+                    chosen.append(comfy_tpl.currentData() or k)
+                continue
+            if boxes[k].isChecked():
+                chosen.append(k)
+        return chosen
 
     def _launch_image_worker(self, prompt, count=1, engine_keys=None,
                              busy_msg="Génération…"):

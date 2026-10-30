@@ -1646,11 +1646,21 @@ class _ShotRow(QFrame):
         self.setMinimumHeight(self._content_height())
 
     def _on_col_resize(self, col_idx: int, new_w: int):
-        cell = self._col_cells.get(col_idx)
+        # Abonnée au hub GLOBAL _col_hub, une rangée dont l'enveloppe Python a
+        # déjà été vidée par le ramasse-miettes (objet Qt encore vivant) reçoit
+        # encore le signal — p. ex. d'un QTimer.singleShot(0, … emit) en
+        # attente. Une exception dans un slot fait appeler qFatal par PyQt6 :
+        # arrêt 0xC0000409 du harnais Cinéma (27/10/2026), fenêtre d'erreur
+        # dans l'application. D'où la lecture prudente, comme _content_height.
+        cells = getattr(self, "_col_cells", None)
+        cell = cells.get(col_idx) if cells else None
         if cell is None:
             return
-        cell.setFixedWidth(new_w)
-        self.setMinimumHeight(self._content_height())
+        try:
+            cell.setFixedWidth(new_w)
+            self.setMinimumHeight(self._content_height())
+        except RuntimeError:                 # objet Qt déjà détruit
+            pass
 
     def _on_apercu_changed(self, shot_id: str, image_path: str):
         if shot_id != self._data.get("id"):
@@ -2172,6 +2182,10 @@ class _MoodBatchDialog(QDialog):
             f"border:1px solid {CP['border_bright']};color:{CP['text_primary']};"
             f"selection-background-color:{CP['accent_dim']};}}")
         lay.addWidget(self._opt_engine)
+        # UNE entrée « ComfyUI » + la ligne Gabarit / Calcul (ui/comfy_choice) —
+        # parité Cinéma ; en mapping façade il n'y a pas de gabarit : rien ne change.
+        from ui.comfy_choice import attach_comfy
+        attach_comfy(self._opt_engine, "image", layout=lay, after=self._opt_engine)
 
         # Définition — juste sous le moteur. En mapping c'est le réglage qui
         # décide si le Mood se superposera à la façade sans recalage.
@@ -2910,6 +2924,10 @@ class PageStoryboard(QWidget):
              self._btn_export_xml],
             red_entry=self._btn_clear_shots)
         lay.insertWidget(0, self._btn_actions)
+        # Menu « Prompt » À CÔTÉ d'« Action » (Matthieu 27/10/2026) — il était
+        # tout à droite, près du nombre de plans.
+        if getattr(self, "_prompt_menu", None) is not None:
+            lay.insertWidget(1, self._prompt_menu)
 
         # ── Mode de génération MAPPING, à droite d'Action (demande Matthieu
         # 2026-07-30 : « comme les boutons Guide et IA ») : bascule segmentée
@@ -3250,9 +3268,16 @@ class PageStoryboard(QWidget):
                 b.setStyleSheet(_seg(on))
 
     def _on_col_width_changed(self, col_idx: int, new_w: int):
+        # Même raison que _ShotRow._on_col_resize : abonnée au hub global.
+        container = getattr(self, "_list_container", None)
+        if container is None:
+            return
         total = sum(_col_widths) + len(_col_widths) - 1
-        self._list_container.setMinimumWidth(total)
-        self._list_container.updateGeometry()
+        try:
+            container.setMinimumWidth(total)
+            container.updateGeometry()
+        except RuntimeError:                 # objet Qt déjà détruit
+            pass
 
     def _load_conductor_tracks(self) -> list:
         """Morceaux (nom + BPM) du conducteur d'où vient ce découpage — colonne Musique."""

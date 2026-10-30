@@ -52,12 +52,29 @@ _FFMPEG_BINS = [
     if os.path.isfile(exe)
 ]
 
+# ── Dictée vocale d'ORAKLE (27/10/2026) : Whisper local (faster-whisper +
+# CTranslate2, détecteur de voix Silero en .onnx) et micro (sounddevice +
+# PortAudio). collect_all embarque leurs DLL et leurs fichiers de données ; les
+# modèles Whisper NE sont PAS embarqués (téléchargés au premier usage, dans le
+# cache partagé avec ORAKLE). Même choix que orakle.spec dans le dépôt d'ORAKLE.
+from PyInstaller.utils.hooks import collect_all
+
+_DICTATION_DATAS, _DICTATION_BINS, _DICTATION_HIDDEN = [], [], []
+for _pkg in ("faster_whisper", "ctranslate2"):
+    try:
+        _d, _b, _h = collect_all(_pkg)
+    except Exception:
+        continue
+    _DICTATION_DATAS += _d
+    _DICTATION_BINS += _b
+    _DICTATION_HIDDEN += _h
+
 a = Analysis(
     ["main.py"],
     # studio_images/ contient l'app « Image IA » importée à plat (import config,
     # window, …) → on l'ajoute au chemin d'analyse pour résoudre ses modules.
     pathex=[".", "studio_images"],
-    binaries=_FFMPEG_BINS,
+    binaries=_FFMPEG_BINS + _DICTATION_BINS,
     datas=[
         # Tout le dossier assets (icônes, badges, style_refs, svg)
         ("assets", "assets"),
@@ -67,7 +84,15 @@ a = Analysis(
         # Scripts DaVinci — copiés dans Fusion/Scripts/Utility par PANDORA
         ("davinci/bridge_server.py", "davinci"),
         ("davinci/pandora_send.py",  "davinci"),
-    ],
+        # Licence et notice du moteur d'ORAKLE copié dans orakle_engine/ (GPL-3.0 ;
+        # PANDORA lui-même est sous Apache 2.0 depuis la 2.7.0, voir NOTICE)
+        ("orakle_engine/LICENSE", "orakle_engine"),
+        ("orakle_engine/NOTICE", "orakle_engine"),
+        # Onglet « 3D » (29/10/2026) : vue d'ARKLIGHT reprise à l'identique (three.js,
+        # modules partagés) et couche web de PANDORA, servies par le schéma pandora3d:
+        ("arklight_engine", "arklight_engine"),
+        ("scene3d_web", "scene3d_web"),
+    ] + _DICTATION_DATAS,
     hiddenimports=[
         # Pillow
         "PIL",
@@ -146,7 +171,20 @@ a = Analysis(
         # frozen-aware et les recrée dans %LOCALAPPDATA%\PANDORA\studio_images\.
         "window", "styles", "config", "engines", "imagegen",
         "prompts", "projects", "chat",
-    ],
+        # ── Dictée vocale d'ORAKLE (27/10/2026) : installée par main.py dans un
+        # try, moteur importé au premier clic → invisibles à l'analyse statique.
+        "ui.dictation", "ui.dictation_panel", "core.dictation",
+        # FilmCraft (27/10/2026) : importés dans des corps de fonction.
+        "core.filmcraft", "ui.filmcraft_ui", "ui.language_row", "ui.paste_clean",
+        # Onglet « 3D » (29/10/2026) : page construite à la demande (ui/lazy_pages),
+        # QtWebEngine importé seulement au premier affichage de la vue.
+        "ui.page_3d", "ui.scene3d_web", "core.scene3d", "core.scene3d_prompt",
+        # frise, prévisualisation et Claude chorégraphe (29-30/10/2026)
+        "ui.timeline_bar", "ui.previs_render", "ui.choreo_dialog", "api.choreo_worker", "core.choreo",
+        "PyQt6.QtWebEngineCore", "PyQt6.QtWebEngineWidgets", "PyQt6.QtWebChannel", "PyQt6.QtQuickWidgets", "PyQt6.QtSvg",
+        "orakle_engine", "orakle_engine.recorder", "orakle_engine.transcriber",
+        "sounddevice", "_cffi_backend", "faster_whisper", "ctranslate2",
+    ] + _DICTATION_HIDDEN,
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],
@@ -202,7 +240,9 @@ coll = COLLECT(
     a.datas,
     strip=False,
     upx=True,
-    upx_exclude=["vcruntime*.dll", "api-ms-*.dll"],
+    # Les DLL de Whisper (CTranslate2, onnxruntime, PyAV) ne supportent pas UPX.
+    upx_exclude=["vcruntime*.dll", "api-ms-*.dll", "ctranslate2*", "onnxruntime*",
+                 "libiomp5md.dll", "av*.dll", "libportaudio*"],
     name="PANDORA",
 )
 
@@ -217,6 +257,10 @@ if _IS_MAC:
             "CFBundleShortVersionString": _VERSION,
             "CFBundleVersion": _VERSION,
             "NSHighResolutionCapable": True,
+            # Dictée vocale d'ORAKLE : sans cette phrase, macOS refuse le micro.
+            "NSMicrophoneUsageDescription":
+                "PANDORA utilise le micro pour la dictée vocale (ORAKLE), "
+                "transcrite sur cet ordinateur.",
             "LSMinimumSystemVersion": "12.0",
         },
     )

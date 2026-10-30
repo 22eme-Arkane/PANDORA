@@ -1,58 +1,15 @@
-# ── PANDORA Palette — dark ────────────────────────────────────────────────────
-_CP_DARK = {
-    "bg0":           "#07080f",
-    "bg1":           "#0c0e1a",
-    "bg2":           "#111320",
-    "bg3":           "#181b2c",
-    "bg4":           "#1e2238",
-    "sidebar":       "#080910",
-    "border":        "#1a1e30",
-    "border_bright": "#2a2f4a",
-    "accent":        "#4ecdc4",    # Teal — PANDORA signature
-    "accent_dim":    "#2a7a75",
-    "accent2":       "#7c6bff",    # Purple — Seedance
-    "accent2_dim":   "#4a3fa0",
-    "green":         "#3ddc97",
-    "red":           "#ff4f6a",
-    "orange":        "#ff8c42",
-    "text_primary":  "#e6ecf5",
-    "text_secondary":"#8a93ac",
-    "text_dim":      "#3d4460",
-}
+# ── PANDORA Palette ──────────────────────────────────────────────────────────
+# Les palettes vivent dans ui/themes (27/10/2026 : thèmes au choix dans les
+# Paramètres — Nuit bleue d'origine, Noir & or, Néon, Émeraude, Braise, Clair).
+from ui import themes as _themes
 
-# ── PANDORA Palette — light ───────────────────────────────────────────────────
-_CP_LIGHT = {
-    "bg0":           "#f0f2f9",    # fond légèrement cassé (moins éblouissant que blanc pur)
-    "bg1":           "#e8ebf4",
-    "bg2":           "#dde1ee",
-    "bg3":           "#d0d5e8",
-    "bg4":           "#c4cae0",
-    "sidebar":       "#e4e7f2",
-    "border":        "#b8c0d8",
-    "border_bright": "#8e9abf",
-    "accent":        "#2fa89f",    # Teal — contraste suffisant sur fond clair
-    "accent_dim":    "#1d7a73",
-    "accent2":       "#5e4edc",    # Purple
-    "accent2_dim":   "#3d2fa0",
-    "green":         "#1a8a55",
-    "red":           "#cc2840",
-    "orange":        "#c06018",
-    "text_primary":  "#12152a",    # très foncé — bon contraste
-    "text_secondary":"#3a4068",    # foncé — lisible
-    "text_dim":      "#5e6898",    # assez foncé pour être lisible
-}
+_CP_DARK = _themes.palette("nuit")
+_CP_LIGHT = _themes.palette("clair")
 
 
 def _load_theme_cp() -> dict:
-    """Read the saved theme from config and return the appropriate palette dict."""
-    try:
-        from core.config import load_config
-        cfg = load_config()
-        if cfg.get("theme") == "light":
-            return dict(_CP_LIGHT)
-    except Exception:
-        pass
-    return dict(_CP_DARK)
+    """La palette du thème de cette session (config `theme`, lue au démarrage)."""
+    return _themes.palette()
 
 
 CP = _load_theme_cp()
@@ -180,12 +137,12 @@ QLineEdit {{
 }}
 QLineEdit:focus {{ border-color: {CP['accent_dim']}; }}
 QPushButton {{
-    background-color: {CP['accent']}; color: #ffffff;
+    background-color: {CP['accent']}; color: {CP['on_accent']};
     border: none; border-radius: 8px; font-size: 13px;
     font-weight: 700; padding: 13px 20px;
 }}
-QPushButton:hover {{ background-color: {CP['accent_dim']}; color: #ffffff; }}
-QPushButton:pressed {{ background-color: {CP['accent_dim']}; color: #ffffff; }}
+QPushButton:hover {{ background-color: {CP['accent_dim']}; color: {CP['on_accent']}; }}
+QPushButton:pressed {{ background-color: {CP['accent_dim']}; color: {CP['on_accent']}; }}
 QPushButton:disabled {{ background-color: {CP['bg3']}; color: {CP['text_secondary']}; }}
 QCheckBox {{
     color: {CP['text_primary']};
@@ -232,7 +189,7 @@ QFileDialog QPushButton:hover {{ border-color: {CP['accent']}; }}
 QFileDialog QPushButton:default {{
     background-color: {CP['accent']}; color: #07080f; border: none;
 }}
-QFileDialog QPushButton:default:hover {{ background-color: {CP['accent_dim']}; color: #ffffff; }}
+QFileDialog QPushButton:default:hover {{ background-color: {CP['accent_dim']}; color: {CP['on_accent']}; }}
 QFileDialog QComboBox {{
     background: {CP['bg3']}; border: 1px solid {CP['border']};
     border-radius: 6px; color: {CP['text_primary']}; padding: 4px 8px;

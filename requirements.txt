@@ -18,3 +18,10 @@ httpx
 websockets
 aiofiles
 opencv-python-headless   # stabilisation façade (core/live_stabilize)
+
+# Dictée vocale d'ORAKLE (micro + Whisper local, moteur dans orakle_engine/)
+faster-whisper>=1.0
+sounddevice>=0.4
+
+# Onglet « 3D » : vue d'ARKLIGHT (three.js) dans QtWebEngine — même version que PyQt6
+PyQt6-WebEngine>=6.11.0

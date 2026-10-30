@@ -71,11 +71,12 @@ class DecoupageQueueWorker(QThread):
         coupé au milieu, que la validation accepterait sans broncher puisque
         chaque plan qu'il contient est, lui, bien formé.
         """
-        from core.ai_provider import chat_until_complete_ex
-        res = chat_until_complete_ex(
-            system, [{"role": "user", "content": user_content}],
-            tier="creative", max_tokens=16000, task="decoupage",
-            max_rounds=_MAX_ROUNDS_PER_BATCH)
+        from core.ai_provider import aiodos_lot, chat_until_complete_ex
+        with aiodos_lot():          # AIODOS : priorité de fond, c'est un lot
+            res = chat_until_complete_ex(
+                system, [{"role": "user", "content": user_content}],
+                tier="creative", max_tokens=16000, task="decoupage",
+                max_rounds=_MAX_ROUNDS_PER_BATCH)
         if res.get("truncated"):
             raise ValueError(
                 "Ce lot dépasse encore la longueur maximale du moteur. "

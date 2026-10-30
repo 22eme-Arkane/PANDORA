@@ -184,6 +184,9 @@ class ExtractGenerateDialog(QDialog):
             combo.setStyleSheet(combo_ss)
             row.addWidget(combo, 1)
             choice_lay.addLayout(row)
+            # UNE entrée « ComfyUI » + la ligne Gabarit / Calcul (ui/comfy_choice).
+            from ui.comfy_choice import attach_comfy
+            attach_comfy(combo, "image", layout=choice_lay, after=row)
             return combo
 
         self._image_model_combo = _engine_row(

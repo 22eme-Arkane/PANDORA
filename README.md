@@ -1,43 +1,163 @@
-# PANDORA — AI Film Pre-Production Studio
+<p align="center">
+  <img src="docs/readme/pandora_logo.png" alt="PANDORA" width="300">
+</p>
 
-[![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](https://www.gnu.org/licenses/gpl-3.0)
+<p align="center">
+  <b>From the written page to generated, edited shots — one free, open-source studio for Windows and macOS.</b>
+</p>
 
-**PANDORA** takes a film from the written page to generated, edited shots — in one free, open-source desktop application for Windows and macOS.
+<p align="center">
+  <a href="LICENSE"><img alt="License: Apache 2.0" src="https://img.shields.io/badge/License-Apache%202.0-4ecdc4.svg"></a>
+  <img alt="Windows · macOS" src="https://img.shields.io/badge/Windows%20%C2%B7%20macOS-desktop-7c6bff.svg">
+  <img alt="AIODOS ready" src="https://img.shields.io/badge/AIODOS-shared%20computing-25d366.svg">
+</p>
 
-Write or import a screenplay, and PANDORA turns it into a shot breakdown, a storyboard, a cast, sets and props, then generates every shot with the AI video engine of your choice. You use your own accounts with the AI services: no subscription, you only pay for what you generate.
+---
+
+## Presentation
+
+**PANDORA** is an AI pre-production and generation studio. Write or import a
+screenplay, and PANDORA turns it into a shot breakdown, a storyboard, a cast, sets
+and props — then generates every shot with the AI engine of your choice, on a cloud
+service you pay per use, on your own computer, or across all your machines with
+**AIODOS**. No subscription, no lock-in: your projects stay on your disk.
 
 **Two editions, one install**
 
 - **Cinema** — films, series, commercials: screenplay → breakdown → storyboard → AI shots → edit.
 - **Live** — VJ loops and projection mapping on building facades, cut to the tempo of your music set.
 
-**What it does**
+### From the page to the shot
 
-- **Writes with you** — Claude (or your ChatGPT Plus / Pro account, or a local AI) formats, analyses and co-writes the screenplay; nothing changes without your approval.
+- **Writes with you** — Claude, your ChatGPT Plus / Pro account or a local AI formats, analyses and co-writes the screenplay; nothing changes without your approval.
 - **Breaks it down** — a shot-by-shot breakdown that keeps your story, then a storyboard where each shot carries its size, camera move, lens, duration and a final prompt written for the target engine.
-- **Shows the film before you shoot it** — character portraits, set images, a mood image per shot, a lighting plan; these images travel with each shot to keep the same faces and places from one shot to the next.
-- **Generates the shots** — Seedance 2.0 / 2.5 (up to 30 s), Kling, Veo, Sora, Wan, MiniMax, PixVerse and more, or locally with ComfyUI. A queue runs whole sequences, and each shot's price is shown before you launch.
-- **Pays less for the same engine** — Seedance through fal.ai, BytePlus (ByteDance's official seller), Runware or PiAPI, in the priority order you choose; nothing switches distributor without your consent.
-- **Hands over to the edit** — clips are named by sequence, shot and take, and the storyboard exports as an XML timeline for your editing software.
+- **Shows the film before you shoot it** — character portraits, set images, a mood image per shot, a 3D scene with its lighting; these images travel with each shot to keep the same faces and places from one shot to the next.
+- **Generates the shots** — Seedance 2.0 / 2.5 (up to 30 s), Kling, Veo, Sora, Wan, MiniMax, PixVerse and more in the cloud, or free on your own hardware with ComfyUI: one « ComfyUI » entry, its AI engines grouped by model family and ranked from the strongest on the market to the lightest.
+- **Pays less for the same engine** — Seedance through fal.ai, BytePlus (ByteDance's official seller), Runware or PiAPI, in the priority order you choose.
+- **Hands over to the edit** — each clip lands, as it is generated, in **DaVinci Resolve** or **FilmCraft** (the ArtCraft suite's editor), named by sequence, shot and take; the storyboard cuts itself into a timeline there, or exports as XML for any other editor.
 - **Keeps the bill visible** — every paid operation is logged in the project's cost report.
 
----
+### Your machines, together — AIODOS
 
-## Presentation
+**AIODOS** (by 22eme Arkane) pools the computing power of your machines: this PC,
+your other computers, and soon other people's over the Internet. PANDORA speaks to
+it directly:
 
-[![Watch the PANDORA presentation on YouTube](https://img.youtube.com/vi/ci9jA_Tye2E/maxresdefault.jpg)](https://youtu.be/ci9jA_Tye2E)
+- **Compute anywhere** — the « Compute » menu of every ComfyUI engine offers *This
+  PC*, *My machines · AIODOS* or *Public network · AIODOS*. The same image and video
+  templates are split across the machines that have the models; when the public
+  network is enabled in the AIODOS tab, it becomes the default.
+- **A text AI that costs nothing** — AIODOS's chat models can write and translate
+  PANDORA's prompts instead of a paid API.
+- **See who computes** — an *AIODOS* tab lists the connected machines and the
+  running jobs (pause, resume, cancel, retry); in the AI Studio, a panel opens by
+  itself when machines connect, like the peers of a BitTorrent client.
+- **Your references stay home** — a reference image or a clip is only ever computed
+  on this PC and your own machines, never by friends or the public network. Access
+  is granted in AIODOS with a code, on a click, never at startup.
+
+Not installed yet? The AIODOS tab presents it and links to its download.
+
+### Speak instead of typing — ORAKLE
+
+Every text field carries a small microphone: click, speak, click again, the text
+is written at the cursor. ORAKLE's shortcuts work too — **hold Ctrl+1** to talk,
+**Ctrl+1 twice** for hands-free. Speech is transcribed **on your computer**
+(Whisper), in French, English or Spanish; if ORAKLE is installed, its dictionary
+and model are shared.
+
+### Make it yours
+
+Three appearances — **Black** (default), **Night blue** and **Light** — in Settings,
+a bilingual interface (French / English), a second window for a second screen, and
+each version's news shown right inside the application.
 
 ---
 
 ## Download
 
-**[⬇ Download PANDORA v2.6.1 for Windows](https://github.com/22eme-Arkane/PANDORA/releases/download/v2.6.1/PANDORA_Setup_2.6.1.exe)**
+**[⬇ Download PANDORA v2.7.0 for Windows](https://github.com/22eme-Arkane/PANDORA/releases/download/v2.7.0/PANDORA_Setup_2.7.0.exe)**
 
-**[⬇ Download PANDORA v2.6.1 for macOS](https://github.com/22eme-Arkane/PANDORA/releases/download/v2.6.1/PANDORA_2.6.1.dmg)** *(Apple Silicon — see [Installation](#installation) for the first launch)*
+**[⬇ Download PANDORA v2.7.0 for macOS](https://github.com/22eme-Arkane/PANDORA/releases/download/v2.7.0/PANDORA_2.7.0.dmg)** *(Apple Silicon — see [Installation](#installation) for the first launch)*
 
 All versions: [Releases](../../releases)
 
 🌐 **Official 22eme ARKANE website: [22eme-arkane.com](https://22eme-arkane.com)**
+
+---
+
+## What's new in v2.7.0
+
+**A 3D scene for every shot, PANDORA in black, ORAKLE's voice dictation in every
+field, a new logo, your own machines to compute — and each version's news right
+inside PANDORA.**
+
+- **A 3D tab for every shot.** Lights, set, furniture, characters and camera at real
+  scale, in ARKLIGHT's 3D view: real lights with their simulated front panels and
+  menus, jointed characters with over 40 actions. **Every element has its own
+  keyframes**: a character walks, throws a punch, then runs; the camera travels,
+  rises on its stand, tilts. Everything is read as text for the prompt, written to
+  the storyboard when you ask for it. The shot can be exported as a video and sent
+  to Seedance as a motion reference (optional, up to 30 s with Seedance 2.5), and
+  an AI can stage the shot from a written description.
+- **PANDORA opens in black.** The new **Black** theme keeps PANDORA's colours
+  (turquoise, violet) on a black background, start page included. Settings →
+  General → Appearance offers a drop-down menu with a preview of each theme:
+  **Black**, **Night blue** (the original dark blue) and **Light**. The chosen
+  theme applies on restart, and PANDORA offers to restart right away.
+- **ORAKLE's voice dictation.** A small microphone appears in the fields you type
+  in: click, speak, click again — the text is written at the cursor. ORAKLE's
+  shortcuts in a field: **hold Ctrl+1** (speak while it is held), **Ctrl+1 twice**
+  (hands-free, Ctrl+1 to write), **Esc** to cancel. Everything is computed on this
+  computer; if ORAKLE is installed, its dictionary and model serve PANDORA too. The
+  Whisper model (≈ 480 MB) downloads only once, with your consent. Settings →
+  General → Voice dictation hides the microphones.
+- **A new logo.** The application, taskbar and installer icon changes; at the top
+  of the window, the PANDORA name now stands alone, centred.
+- **A new background for the start page**: black, crossed by golden circuits,
+  to match the new logo.
+- **A more modern installer**, dark, in the new logo's colours, with a welcome page.
+- **What's new, in the application.** The first time you open or create a project
+  after an update, this window shows the version's news and the history of
+  previous ones. « Don't show again until the next version » puts it away until the
+  next update; Settings → « What's new » reopens it at any time.
+- **AIODOS — compute on my machines.** When AIODOS is installed, PANDORA can send
+  ComfyUI templates (images, videos, clip editing) to your machines instead of this
+  PC alone, and use AIODOS's chat models as the text AI. Everything is set in
+  Settings → AIODOS; nothing goes to another machine unless you choose it.
+- **An « AIODOS » tab** shows the connected machines and running jobs, with Pause,
+  Resume, Cancel, Retry failed and Forget. In the AI Studio, a collapsible panel at
+  the bottom lists the machines at work, like the peers of a BitTorrent client — it
+  only appears when computing goes through AIODOS.
+- **ComfyUI fits in one entry.** The long list of ComfyUI templates in the engine
+  menus is replaced by ONE « ComfyUI » entry, followed by two menus: « AI engine »
+  and « Compute » (This PC, My machines · AIODOS or Public network · AIODOS). The
+  engines are grouped by model family, a line between families, ranked from the
+  strongest on the market to the weakest. The last one chosen is remembered.
+- **AIODOS's public network.** Ticked in the AIODOS tab, it becomes the default
+  « Compute ». A reference image or a clip always stays on this PC and your
+  machines.
+- **The AIODOS tab stands apart** in the bottom bar, right after AI Studio. If
+  AIODOS is not installed, the tab presents it and offers to install it. In the AI
+  Studio, the connected-machines panel is folded and opens by itself when
+  machines connect.
+- **Paste without a white background.** Text pasted from a browser or a word
+  processor loses its background and colour; the « Remove background » button of
+  the text tools removes them from text already pasted.
+- **FilmCraft linked to PANDORA.** The ArtCraft suite's editing software
+  automatically receives every generated clip (PANDORA bin, one sub-bin per
+  sequence), like DaVinci Resolve; Storyboard → Action → « Edit in FilmCraft » cuts
+  the last take of each shot. Settings → FilmCraft: « Open FilmCraft linked to
+  PANDORA ».
+- **Bottom bar**: the tabs in the centre, « Project cost » on the left, AIODOS and
+  Settings on the right. The language is chosen in Settings → General → Language.
+- **Storyboard**: the « Prompt » menu moves next to « Action ».
+- **PANDORA is now under the Apache License 2.0**: free to use, modify and
+  redistribute, commercially too, keeping the license and the NOTICE file.
+- **Fixes.** Resizing a storyboard column could, in rare cases, close PANDORA
+  without a message after the table was rebuilt; same for the deferred scrolling of
+  an element sheet's chat. Fixed in both editions. Closing the Mood window opened
+  from the Storyboard could also close PANDORA: fixed.
 
 ---
 
@@ -777,11 +897,14 @@ per-engine mood prompts, same fixes.
 | **Breakdown** | PANDORA shot breakdown from the screenplay and director's note, batch mode for long scripts, shot-by-shot refinement |
 | **Storyboard** | Shot table edited in place, full shot sheet, structured and final prompts, mood images, recurring shots, XML timeline export, pitch deck |
 | **Cast & elements** | Characters (lead / extras), sets (single image, 4-view sheet, multi-angle workshop), props, costumes & makeup, vehicles — extracted from the screenplay and illustrated by AI |
-| **Lighting plan** | Top-down set plan with camera, actors and lights, synced with the storyboard |
+| **3D** | One 3D scene per shot: real lights with simulated menus, set, furniture, animated characters and camera, each with its keyframes; prompt written from the scene, video export as a Seedance reference |
 | **AI Studio** | Generation from the storyboard with automatic reference images, clip editing, direct generation, upscaling, sound design, AI music, video library, history and exact shot re-use |
 | **Image AI** | Multi-engine image studio with an art-direction chat |
 | **Dubbing** | AI voices, voice cloning, lip-sync in the Studio |
 | **Live edition** | Show rundown, music analysis (BPM and drops), Live and Mapping sequences, facade lock, VJ loops |
+| **AIODOS** | ComfyUI templates computed on this PC, your machines or the public network; free text AI; machines and jobs at a glance |
+| **Voice dictation** | ORAKLE's microphone in every text field, local Whisper transcription, Ctrl+1 shortcuts |
+| **Appearance** | Black, Night blue and Light themes; French / English interface; second-screen window |
 
 ---
 
@@ -791,6 +914,7 @@ per-engine mood prompts, same fixes.
 - To generate for real (without keys PANDORA runs in simulation mode):
   - an AI video and image account — [fal.ai](https://fal.ai), and optionally [BytePlus](https://www.byteplus.com/en/product/modelark), [Runware](https://runware.ai) or [PiAPI](https://piapi.ai) for cheaper Seedance
   - a text AI — [Anthropic](https://platform.claude.com) (Claude), a ChatGPT Plus / Pro account, or a local AI (Ollama, LM Studio…)
+- Optional, free: [ComfyUI](https://www.comfy.org) to generate on your own GPU, **AIODOS** to share the work across your machines, a microphone for voice dictation
 
 ---
 
@@ -798,7 +922,7 @@ per-engine mood prompts, same fixes.
 
 ### Windows
 
-1. Download `PANDORA_Setup_2.6.1.exe` from the link above and run it
+1. Download `PANDORA_Setup_2.7.0.exe` from the link above and run it
 2. If Windows shows *"Windows protected your PC"* (SmartScreen), click
    **More info** then **Run anyway** — the app is not code-signed yet
 3. Follow the installer and accept the Terms of Use
@@ -806,7 +930,7 @@ per-engine mood prompts, same fixes.
 
 ### macOS
 
-1. Download `PANDORA_2.6.1.dmg` from the link above
+1. Download `PANDORA_2.7.0.dmg` from the link above
 2. Open the DMG and drag **PANDORA** into **Applications**
 3. **First launch** — macOS will claim that *"PANDORA is damaged and can't be
    opened"*. **The app is not damaged** — macOS blocks apps that are not
@@ -841,6 +965,8 @@ core/          Business logic (projects, screenplay, storyboard, prompts, pricin
 api/           Network calls in worker threads (video/image engines, distributors, text AI)
 ui/            PyQt6 interface — Cinema pages and dialogs, *_live.py for the Live edition
 studio_images/ Image AI studio
+aiodos_client/ Official AIODOS client (Apache 2.0)
+orakle_engine/ ORAKLE's microphone and Whisper modules (voice dictation)
 tools/         Test harnesses, build and utility scripts
 ```
 
@@ -864,7 +990,12 @@ See [EULA.txt](EULA.txt) (English: [EULA_EN.txt](EULA_EN.txt)) — accepted at f
 
 ## License
 
-PANDORA is free software distributed under the **GNU General Public License v3 (GPL v3)**.  
-You are free to use, study, modify, and redistribute it under the same terms.  
-Copyright © 2026 22eme Arkane — Matthieu Terrien.  
-See [LICENSE](LICENSE) for the full license text, and [EULA.txt](EULA.txt) for the Terms of Use.
+PANDORA is free software distributed under the **Apache License 2.0**.
+You may use it, modify it and redistribute it — including commercially — provided
+you keep the license, the copyright notices and the [NOTICE](NOTICE) file.
+Copyright © 2026 22eme Arkane — Matthieu Terrien.
+
+Versions published before 2.7.0 remain available under the GNU GPL v3. The
+installers also bundle third-party components under their own licenses (PyQt6 and
+FFmpeg under the GNU GPL, among others) — see [NOTICE](NOTICE). Terms of Use:
+[EULA.txt](EULA.txt) / [EULA_EN.txt](EULA_EN.txt).

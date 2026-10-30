@@ -1,0 +1,8 @@
+ORAKLE — dictée vocale locale — Copyright 2026 22eme Arkane
+
+recorder.py et transcriber.py sont copiés d'ORAKLE (https://github.com/22eme-Arkane/ORAKLE),
+distribué sous la licence GNU GPL version 3 (voir LICENSE). PANDORA les embarque
+pour sa dictée vocale ; ils sont rafraîchis par tools/update_orakle_engine.py.
+
+recorder.py and transcriber.py are copied from ORAKLE, licensed under the GNU GPL
+version 3 (see LICENSE). PANDORA bundles them for its voice dictation.

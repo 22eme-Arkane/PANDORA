@@ -20,6 +20,9 @@ import traceback
 import inspect
 
 os.environ["QT_QPA_PLATFORM"] = "offscreen"
+# Thème de couleur FIXÉ (27/10/2026) : « Nuit bleue », celui d'origine, quel que
+# soit le thème choisi dans la vraie config — les tests de couleurs restent stables.
+os.environ["PANDORA_THEME"] = "nuit"
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 try:
@@ -72,6 +75,21 @@ _TESTS = []
 def test(fn):
     _TESTS.append(fn)
     return fn
+
+
+def _menu_keys(combo):
+    """Ce que propose un menu de moteurs : ses clés, l'entrée « ComfyUI » unique
+    (ui/comfy_choice, 22/10/2026) remplacée par TOUS ses gabarits, dans l'ordre
+    du catalogue — à comparer au catalogue complet."""
+    from ui.comfy_choice import comfy_choice_of
+    ch = comfy_choice_of(combo)
+    out = []
+    for i in range(combo.count()):
+        if ch is not None and i == ch.item_index():
+            out.extend(ch.original_keys)
+        else:
+            out.append(combo.itemData(i))
+    return out
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -448,10 +466,10 @@ def mood_batch_choix_moteur_live():
     finally:
         PSL.sb_api.load_apercus = _orig_la   # ne PAS fuiter sur les tests suivants (chaînage mood)
     assert hasattr(d, "_opt_engine"), "combo moteur absent (remplace les 2 boutons)"
-    _keys = [d._opt_engine.itemData(i) for i in range(d._opt_engine.count())]
+    _keys = _menu_keys(d._opt_engine)
     # Contexte non-mapping ici (aucune façade résolue) → tout le catalogue raster.
     assert _keys == IE.raster_engines(), "combo moteur Live ≠ catalogue image complet"
-    d._opt_engine.setCurrentIndex(_keys.index("recraft"))
+    d._opt_engine.setCurrentIndex(d._opt_engine.findData("recraft"))
     d._btn_gen.click()
     assert d.engine == "recraft", "clic « Générer » → engine = moteur du combo"
     # Le handler passe le moteur choisi au worker.
@@ -1515,19 +1533,25 @@ def fenetre_live():
     assert "37,211,102" in w._btn_contact_top.styleSheet(), "Contact en vert"
     assert not hasattr(w._sidebar, "_btn_manual") and not hasattr(w._sidebar, "_btn_contact"), \
         "plus de Manuel/Contact dans la barre basse"
+    # Barre en trois zones depuis le 27/10/2026 (montage de Matthieu) : Paramètres
+    # est le DERNIER élément de la zone droite, elle-même la dernière de la barre.
     _bar_lay = w._sidebar.layout()
-    assert all(_bar_lay.indexOf(w._sidebar._items[k])
-               < _bar_lay.indexOf(w._sidebar._items["settings"])
-               for k in w._sidebar._items if k != "settings"), \
-        "Paramètres tout au bord, en bas à droite"
+    _right = w._sidebar._right
+    assert _bar_lay.indexOf(_right) == _bar_lay.count() - 1
+    _rl = _right.layout()
+    _last = [_rl.itemAt(i).widget() for i in range(_rl.count()) if _rl.itemAt(i).widget()][-1]
+    assert _last is w._sidebar._items["settings"], "Paramètres tout au bord, en bas à droite"
     # 2026-07-23 (2e passe) : onglet Projets RÉINTRODUIT à gauche du Conducteur
     # (la page de démarrage n'est plus qu'un lanceur d'édition) ; Image IA
     # reste à côté de Studio IA.
     from live_window import _NAV_ITEMS as _NI
     assert _NI[0][2] == "projects" and _NI[1][2] == "conducteur", \
         "Projets en premier, Conducteur juste après"
-    assert _NI[-3][2] == "image_ia" and _NI[-2][2] == "studio", \
-        "Image IA à côté de Studio IA"
+    # 27/10/2026 : l'onglet AIODOS se range juste après Studio IA.
+    _keys = [e[2] for e in _NI if e]
+    assert _keys.index("studio") == _keys.index("image_ia") + 1, "Image IA à côté de Studio IA"
+    assert _keys[-3:] == ["studio", "aiodos", "settings"], \
+        "AIODOS entre Studio IA et Paramètres"
     # Paramètres pleine largeur (2026-07-23) : la barre de défilement colle au
     # bord droit, le centrage 1360 vit À L'INTÉRIEUR de la page.
     # Construction paresseuse (24/09/2026) : on force TOUTES les pages ici.
@@ -1777,8 +1801,13 @@ def parametres_live_parite_cinema():
     from ui.page_live_settings import PageLiveSettings
     from ui.page_settings import SettingsPage
     liv = PageLiveSettings()
-    # Thème Sombre/Clair (même clé config « theme »)
-    assert hasattr(liv, "_btn_dark") and hasattr(liv, "_btn_light"), "boutons thème"
+    # Thèmes de couleur : mêmes cartes que le Cinéma (même clé config « theme »,
+    # ui/theme_picker, 27/10/2026 — remplacent les boutons Sombre / Clair)
+    assert hasattr(liv, "_theme_picker") and not hasattr(liv, "_btn_dark"), "menu des thèmes"
+    _cin = SettingsPage()._theme_picker.combo
+    _liv = liv._theme_picker.combo
+    assert ([_liv.itemData(i) for i in range(_liv.count())]
+            == [_cin.itemData(i) for i in range(_cin.count())])
     # Clé OpenAI + moteur par tâche (mêmes tâches que le Cinéma)
     assert hasattr(liv, "_openai_input"), "clé OpenAI réglable côté Live"
     cin = SettingsPage()
@@ -1823,9 +1852,12 @@ def serveurs_locaux_demarres_automatiquement_live():
     import inspect, importlib
     for mod, h3 in (("ui.tab_t2v_live", True), ("ui.tab_video_engines_live", True), ("ui.tab_modify_live", False)):
         s = inspect.getsource(importlib.import_module(mod))
-        assert 'ensure_ready("comfyui"' in s and "ComfyInstallDialog(self)" not in s, mod
+        assert "ensure_comfy_ready(self)" in s and "ComfyInstallDialog(self)" not in s, mod
         if h3:
             assert 'ensure_ready("h3_local"' in s, f"{mod} : garde H3 local absente"
+    # « Calcul : Ce PC » : ComfyUI toujours lancé et attendu (22/10/2026).
+    import ui.comfy_choice as _cch
+    assert 'ensure_ready("comfyui", parent)' in inspect.getsource(_cch.ensure_comfy_ready)
 
 
 @test
@@ -7447,7 +7479,7 @@ def h3_et_comfy_generables_depuis_les_sequences_live():
     w = _T._make_ext_worker("comfy", {**base, "image_path": "C:/x/mood.png"})
     assert isinstance(w, ComfyWorker) and w.params["mode"] == "i2v" \
         and w.params["workflow_path"].endswith("minimax_h3_i2v.json")
-    assert 'ensure_ready("comfyui"' in inspect.getsource(_T), "guidage ComfyUI absent du Studio Live"
+    assert "ensure_comfy_ready(self)" in inspect.getsource(_T), "guidage ComfyUI absent du Studio Live"
 
 
 @test
@@ -7838,6 +7870,141 @@ def reprise_meme_seed_et_prompt_exact_live_05_10_2026():
     finally:
         _H.find_entry_by_path = orig
     assert "↻ Reprendre" in labels and "↑ HD" not in labels, labels
+
+
+@test
+def aiodos_parametres_live():
+    """AIODOS (22/10/2026), parité Live : la section « AIODOS » des Paramètres Live
+    (le même panneau neutre que le Cinéma, ui/aiodos_panel) et le réglage « Calcul »
+    partagé ; les onglets Live qui lancent un gabarit ComfyUI suivent ce réglage
+    (ui/comfy_choice.ensure_comfy_ready) au lieu d'exiger le ComfyUI de ce PC."""
+    import inspect
+    import importlib
+    from ui.page_live_settings import PageLiveSettings
+    from ui.aiodos_panel import AiodosPanel
+    page = PageLiveSettings()
+    assert isinstance(page._aiodos, AiodosPanel) and page._sec_aiodos is not None
+    assert page._sec_aiodos.is_open() is False, "repliée par défaut, comme les sections avancées"
+    page.deleteLater()
+    for mod in ("ui.tab_t2v_live", "ui.tab_video_engines_live", "ui.tab_modify_live",
+                "ui.tab_upscale_live"):
+        s = inspect.getsource(importlib.import_module(mod))
+        assert "ensure_comfy_ready(self)" in s, mod
+
+
+@test
+def aiodos_onglet_et_panneau_live():
+    """Parité Live (27/10/2026) : l'onglet « AIODOS » (logo d'AIODOS, page neutre
+    ui/page_aiodos partagée avec le Cinéma) est dans la barre du Live, et le Studio
+    IA Live porte le panneau pliable des machines (ui/aiodos_peers_panel)."""
+    import live_window as LW
+    assert ("✺", "AIODOS", "aiodos", "aiodos.png") in LW._NAV_ITEMS
+    assert hasattr(LW.LiveWindow, "_make_page_aiodos")
+    src = inspect.getsource(LW.LiveWindow._build_pages)
+    assert '"aiodos":      self._make_page_aiodos' in src
+    import ui.live_studio_widget as LS
+    code = "\n".join(l.split("#", 1)[0] for l in inspect.getsource(LS).splitlines())
+    assert "AiodosPeersPanel()" in code, "Studio IA Live : panneau des machines absent"
+    from ui.page_aiodos import PageAiodos
+    page = PageAiodos()
+    page.apply_snapshot({"ready": False, "state": "not_running", "message": "AIODOS n'est pas lancé.",
+                         "machines": [], "jobs": [], "errors": []})
+    assert "AIODOS n'est pas lancé." in page._machines_empty.text()
+    page.deleteLater()
+
+
+@test
+def storyboard_live_hub_colonnes_sans_qfatal_27_10_2026():
+    """Arrêt 0xC0000409 du harnais Cinéma au test n° 212 (27/10/2026), intermittent
+    depuis des semaines : les rangées du storyboard et la page s'abonnent au hub
+    GLOBAL `_col_hub` ; des `QTimer.singleShot(0, … _col_hub.resized.emit)` laissés
+    en attente le déclenchaient plus tard, jusque dans une rangée dont l'enveloppe
+    Python avait été vidée par le ramasse-miettes (AttributeError `_col_cells`). Une
+    exception dans un slot fait appeler qFatal par PyQt6 → arrêt sans trace (Qt 6
+    termine par __fastfail) ; dans l'application, la fenêtre « erreur inattendue ».
+    Les deux slots tolèrent désormais un objet incomplet ou détruit."""
+    from types import SimpleNamespace
+    from PyQt6.QtWidgets import QWidget
+    import ui.page_storyboard_live as PS
+    PS._ShotRow._on_col_resize(SimpleNamespace(), 4, 120)          # enveloppe vidée
+    PS.PageStoryboard._on_col_width_changed(SimpleNamespace(), 4, 120)
+    # Le chemin normal fonctionne toujours : la cellule prend la largeur, la
+    # hauteur de la rangée est recalculée.
+    cell, seen = QWidget(), []
+    row = SimpleNamespace(_col_cells={4: cell}, _content_height=lambda: 42,
+                          setMinimumHeight=seen.append)
+    PS._ShotRow._on_col_resize(row, 4, 133)
+    assert cell.minimumWidth() == 133 and cell.maximumWidth() == 133 and seen == [42]
+    PS._ShotRow._on_col_resize(row, 9, 77)                          # colonne absente
+    assert seen == [42]
+    cont = QWidget()
+    PS.PageStoryboard._on_col_width_changed(SimpleNamespace(_list_container=cont), 4, 133)
+    assert cont.minimumWidth() == sum(PS._col_widths) + len(PS._col_widths) - 1
+    cell.deleteLater()
+    cont.deleteLater()
+
+
+@test
+def themes_et_nouveautes_live_27_10_2026():
+    """Parité Live (27/10/2026) : le même menu des thèmes et le même bouton
+    « Nouveautés » dans les Paramètres Live ; l'onglet actif et les badges de la
+    barre suivent le thème ; le nom PANDORA seul en haut, sans badge."""
+    import inspect
+    import core.config as C
+    import live_window as LW
+    from ui import themes
+    from ui.page_live_settings import PageLiveSettings
+    store = {"theme": "light", "anthropic_key": "garde-moi"}
+    saved = []
+    old = (C.load_config, C.save_config)
+    C.load_config = lambda: dict(store)
+    C.save_config = lambda cfg: (saved.append(dict(cfg)), store.update(cfg))
+    try:
+        page = PageLiveSettings()
+        pk = page._theme_picker
+        assert pk.current() == "clair" and pk.combo.currentData() == "clair", "« light » = Clair"
+        pk.select("noir")
+        assert saved[-1]["theme"] == "noir" and saved[-1]["anthropic_key"] == "garde-moi"
+        assert hasattr(page, "_btn_whats_new") and hasattr(page, "_open_whats_new")
+        page.deleteLater()
+    finally:
+        C.load_config, C.save_config = old
+    src = inspect.getsource(LW._LiveNavItem)
+    assert "themes.nav_active()" in src and "themes.nav_rgba(0.75)" in src
+    assert "rgba(37,211,102" not in src, "plus de vert codé en dur pour l'onglet actif"
+    assert themes.nav_rgba(0.75) == "rgba(37,211,102,0.75)", "Nuit bleue : le vert d'origine"
+    top = inspect.getsource(LW.LiveWindow)
+    assert "badge_lbl" not in top and 'title_lbl.setObjectName("PandoraTitle")' in top
+
+
+@test
+def dictee_et_aiodos_a_part_live_27_10_2026():
+    """Parité Live (27/10/2026) : « Dictée vocale (ORAKLE) » et « Langue » dans les
+    Paramètres Live ; barre du bas du montage de Matthieu — onglets EXACTEMENT
+    centrés, AIODOS à droite à côté de Paramètres, sans drapeaux ni disquette."""
+    import live_window as LW
+    from ui import page_live_settings as PLS
+    # Source seulement : une page de Paramètres complète dans le dernier test
+    # laisse ses vérifications de fond tourner à la fermeture du harnais.
+    src = inspect.getsource(PLS)
+    assert "self._dictation = DictationPanel()" in src and "self._language = LanguageRow()" in src
+    bar = LW._LiveSidebar()
+    bar.resize(1600, 64)
+    bar.show()
+    QApplication.processEvents()
+    try:
+        assert not bar._lang_btns
+        assert bar._items["aiodos"].parentWidget() is bar._right
+        assert bar._items["settings"].parentWidget() is bar._right
+        assert abs(bar._center.geometry().center().x() - bar.width() / 2) <= 2
+        assert bar._left.width() == bar._right.width()
+    finally:
+        bar.close()
+        bar.deleteLater()
+    wsrc = inspect.getsource(LW)
+    assert "insertWidget(4, self._btn_save_global)" not in wsrc
+    assert "settings.lang_change_requested.connect(self._on_lang_change)" in wsrc
+
 
 
 if __name__ == "__main__":

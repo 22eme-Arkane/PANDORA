@@ -1033,6 +1033,10 @@ class _ShotRow(QFrame):
             dlg = MoodDialog(row_self.window(), shot_data)
             dlg.apercu_changed.connect(row_self._on_apercu_changed)
             dlg.exec()
+            # Plantage vécu le 27/10/2026 (déjà corrigé côté Live le 26/07) : la
+            # ligne a pu être reconstruite PENDANT la fenêtre — voir _alive.
+            if not _alive(row_self):
+                return
             # Rafraîchit la cellule à la fermeture — une variation peut avoir été
             # générée ou activée sans passer par le signal apercu_changed.
             apercu = sb_api.load_apercus(shot_data["id"])
@@ -1678,14 +1682,27 @@ class _ShotRow(QFrame):
         self.setMinimumHeight(self._content_height())
 
     def _on_col_resize(self, col_idx: int, new_w: int):
-        cell = self._col_cells.get(col_idx)
+        # Abonnée au hub GLOBAL _col_hub, une rangée dont l'enveloppe Python a
+        # déjà été vidée par le ramasse-miettes (objet Qt encore vivant) reçoit
+        # encore le signal — p. ex. d'un QTimer.singleShot(0, … emit) en
+        # attente. Une exception dans un slot fait appeler qFatal par PyQt6 :
+        # arrêt 0xC0000409 du harnais Cinéma (27/10/2026), fenêtre d'erreur
+        # dans l'application. D'où la lecture prudente, comme _content_height.
+        cells = getattr(self, "_col_cells", None)
+        cell = cells.get(col_idx) if cells else None
         if cell is None:
             return
-        cell.setFixedWidth(new_w)
-        self.setMinimumHeight(self._content_height())
+        try:
+            cell.setFixedWidth(new_w)
+            self.setMinimumHeight(self._content_height())
+        except RuntimeError:                 # objet Qt déjà détruit
+            pass
 
     def _on_apercu_changed(self, shot_id: str, image_path: str):
-        if shot_id != self._data.get("id") or not hasattr(self, "_apercu_lbl"):
+        if shot_id != self._data.get("id"):
+            return
+        # La ligne ET sa vignette doivent exister côté Qt (voir _alive).
+        if not _alive(self) or not _alive(getattr(self, "_apercu_lbl", None)):
             return
         if image_path and os.path.isfile(image_path):
             pix = QPixmap(image_path).scaled(
@@ -1699,6 +1716,31 @@ class _ShotRow(QFrame):
         else:
             self._apercu_lbl.clear()
             self._apercu_lbl.setText("Cliquer\npour Mood")
+
+
+def _alive(obj) -> bool:
+    """True si l'objet Qt existe encore CÔTÉ C++ (même aide que côté Live).
+
+    `hasattr(self, "_apercu_lbl")` ne prouve rien : quand Qt détruit un widget,
+    l'attribut Python survit et pointe sur un wrapper mort — « wrapped C/C++
+    object of type QLabel has been deleted ». La fenêtre Mood tourne dans une
+    boucle IMBRIQUÉE (`dlg.exec()`) : les reconstructions du tableau en attente
+    (`deleteLater`) y sont exécutées, la ligne meurt PENDANT que la fenêtre est
+    ouverte, et le code qui la rappelait à la fermeture plantait (Cinéma,
+    27/10/2026 ; Live, 26/07/2026)."""
+    if obj is None:
+        return False
+    try:
+        from PyQt6 import sip
+        return not sip.isdeleted(obj)
+    except Exception:
+        try:
+            obj.objectName()
+            return True
+        except RuntimeError:
+            return False
+        except AttributeError:
+            return True
 
 
 # ── Conteneur de plans avec drop-zone ────────────────────────────────────────
@@ -2145,6 +2187,9 @@ class _MoodBatchDialog(QDialog):
         )
         eng_row.addWidget(self._opt_engine, 1)
         lay.addLayout(eng_row)
+        # UNE entrée « ComfyUI » + la ligne Gabarit / Calcul (ui/comfy_choice).
+        from ui.comfy_choice import attach_comfy
+        attach_comfy(self._opt_engine, "image", layout=lay, after=eng_row)
 
         # Définition — sous le moteur, les deux réglages du RENDU au même endroit.
         from ui.widgets import ResolutionCombo
@@ -2941,6 +2986,12 @@ class PageStoryboard(QWidget):
             "Monte la dernière prise de chaque plan, dans l'ordre du storyboard, sur une\n"
             "nouvelle timeline de DaVinci Resolve (pont PANDORA lancé dans Resolve).")
         self._btn_resolve_montage.clicked.connect(self._on_resolve_montage)
+        # FilmCraft (27/10/2026) : même montage, dans le logiciel d'ArtCraft.
+        self._btn_filmcraft_montage = QPushButton("🎞  Monter dans FilmCraft")
+        self._btn_filmcraft_montage.setToolTip(
+            "Monte la dernière prise de chaque plan, dans l'ordre du storyboard, sur une\n"
+            "nouvelle séquence de FilmCraft (ouvert et relié à PANDORA).")
+        self._btn_filmcraft_montage.clicked.connect(self._on_filmcraft_montage)
 
         btn_new = QPushButton("＋  Ajouter un plan")
         btn_new.setFixedHeight(34)
@@ -2977,6 +3028,7 @@ class PageStoryboard(QWidget):
         for _b in (self._btn_batch_mood, self._btn_sync, self._btn_recurrent,
                    self._btn_save_sb_file, self._btn_open_sb_file,
                    self._btn_pitch_deck, self._btn_export_xml, self._btn_resolve_montage,
+                   self._btn_filmcraft_montage,
                    self._btn_new_shot, self._btn_clear_shots):
             _b.setParent(bar)
             _b.hide()
@@ -3012,6 +3064,7 @@ class PageStoryboard(QWidget):
             (_amenu.addAction(""), self._btn_pitch_deck),
             (_amenu.addAction(""), self._btn_export_xml),
             (_amenu.addAction(""), self._btn_resolve_montage),
+            (_amenu.addAction(""), self._btn_filmcraft_montage),
         ]
         for _act, _src in self._actions_pairs:
             _act.triggered.connect(_src.click)   # .click() respecte l'état désactivé
@@ -3046,6 +3099,10 @@ class PageStoryboard(QWidget):
         _amenu.aboutToShow.connect(_sync_actions_menu)
         self._btn_actions.setMenu(_amenu)
         lay.insertWidget(0, self._btn_actions)
+        # Menu « Prompt » À CÔTÉ d'« Action » (Matthieu 27/10/2026) — il était
+        # tout à droite, près du nombre de plans.
+        if getattr(self, "_prompt_menu", None) is not None:
+            lay.insertWidget(1, self._prompt_menu)
 
         self._btn_del_sb = QPushButton("Supprimer")
         self._btn_del_sb.setFixedHeight(34)
@@ -3425,6 +3482,11 @@ class PageStoryboard(QWidget):
         timeline_export_dialog.export(self, list(self._all_shots or []),
                                       self._project_display_name())
 
+    def _on_filmcraft_montage(self):
+        """Monte la dernière prise de chaque plan dans FilmCraft (ui/filmcraft_ui)."""
+        from ui import filmcraft_ui
+        filmcraft_ui.montage(self, list(self._all_shots or []), self._project_display_name())
+
     def _on_resolve_montage(self):
         """Monte la dernière prise de chaque plan sur une timeline de DaVinci
         Resolve, dans l'ordre du storyboard (ui/resolve_montage)."""
@@ -3503,9 +3565,16 @@ class PageStoryboard(QWidget):
                 pass
 
     def _on_col_width_changed(self, col_idx: int, new_w: int):
+        # Même raison que _ShotRow._on_col_resize : abonnée au hub global.
+        container = getattr(self, "_list_container", None)
+        if container is None:
+            return
         total = sum(_col_widths) + len(_col_widths) - 1
-        self._list_container.setMinimumWidth(total)
-        self._list_container.updateGeometry()
+        try:
+            container.setMinimumWidth(total)
+            container.updateGeometry()
+        except RuntimeError:                 # objet Qt déjà détruit
+            pass
 
     def _render(self):
         # Le bouton « Composer les prompts finaux » suit l'état des plans :
@@ -3898,15 +3967,7 @@ class PageStoryboard(QWidget):
         if not self._all_shots:
             return
 
-        # Garde-fou : sans clé fal.ai, la génération NB2 échoue silencieusement —
-        # on le dit clairement plutôt que d'afficher un faux « Moods générés ».
         from core.config import load_config, save_config
-        if not load_config().get("api_key", "").strip():
-            from PyQt6.QtWidgets import QMessageBox
-            QMessageBox.information(
-                self, translate("Générer les Moods"),
-                translate("Configure ta clé fal.ai dans Paramètres pour générer les moods."))
-            return
 
         # Dialog d'info (une seule fois, sauf si l'utilisateur a coché "Ne plus afficher")
         cfg = load_config()
@@ -3939,6 +4000,18 @@ class PageStoryboard(QWidget):
             "hmc":        dlg._opt_hmc.isChecked(),
             "floor_plan": dlg._opt_floor.isChecked(),
         }
+
+        # Garde-fou : sans clé fal.ai, un moteur fal échoue silencieusement — on
+        # le dit clairement plutôt que d'afficher un faux « Moods générés ». Testé
+        # APRÈS le choix du moteur : avant la fenêtre, il bloquait aussi les
+        # gabarits ComfyUI, qui s'en passent (0 $, ce PC ou mes machines).
+        from core.image_call import needs_fal as _needs_fal
+        if _needs_fal(_mood_opts["engine"]) and not load_config().get("api_key", "").strip():
+            from PyQt6.QtWidgets import QMessageBox
+            QMessageBox.information(
+                self, translate("Générer les Moods"),
+                translate("Configure ta clé fal.ai dans Paramètres pour générer les moods."))
+            return
 
         # Compteurs de résultat (message final honnête : succès / échecs).
         self._mood_ok = 0

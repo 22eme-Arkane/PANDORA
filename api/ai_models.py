@@ -82,6 +82,13 @@ def discover_provider(provider: str, cfg: dict, timeout: int = 20) -> list[str]:
         from core.local_llm import local_base_url
         return _openai_compatible_models("local", local_base_url(cfg),
                                          (cfg.get("local_key") or "").strip(), timeout)
+    if provider == "aiodos":
+        # AIODOS (mes machines) : ses modèles de conversation permis, seulement
+        # quand PANDORA y est déjà connecté — jamais de demande d'accès d'ici.
+        from core import aiodos as _ad
+        if _ad.status().state != "ready":
+            return []
+        return sorted({m.id for m in _ad.client().models("chat")}, key=str.lower)
     if provider == "anthropic":
         import requests
         key = (cfg.get("anthropic_key") or "").strip()
@@ -107,7 +114,7 @@ def discover_provider(provider: str, cfg: dict, timeout: int = 20) -> list[str]:
 
 def discover_all(cfg: dict, providers: tuple[str, ...] | None = None) -> tuple[dict, dict]:
     providers = providers or ("anthropic", "openai", "mistral", "kimi", "glm",
-                              "ollama", "local", "custom")
+                              "ollama", "local", "aiodos", "custom")
     models, errors = {}, {}
     for provider in providers:
         try:

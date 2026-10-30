@@ -32,6 +32,9 @@ Config (config.json) :
     "local_url"          : son adresse (vide = celle du préréglage, voir core/local_llm)
     "local_model"        : identifiant du modèle chargé sur ce serveur
     "local_key"          : clé facultative (un serveur local n'en demande pas)
+    (AIODOS, 22/10/2026)  : moteur « aiodos » (AIODOS choisit le modèle) ou
+                           « aiodos:<modèle> » — aucune clé ici, l'accès se donne dans
+                           Paramètres → AIODOS (clé chiffrée hors de config.json)
     "ai_task_engines"    : {task_key: engine_key} — moteur par tâche (override du défaut)
 
 Moteurs (engine_key) — granularité du choix par tâche :
@@ -89,10 +92,11 @@ ENGINES: dict[str, dict] = {
 }
 
 _PROVIDERS = ("anthropic", "openai", "mistral", "kimi", "glm", "ollama", "local", "custom",
-              "chatgpt")
+              "chatgpt", "aiodos")
 #: Fournisseurs qui tournent sur la machine : temps de réponse longs tolérés,
-#: aucune clé, directives renforcées (core/engine_prompts).
-_LOCAL_PROVIDERS = ("ollama", "local")
+#: aucune clé, directives renforcées (core/engine_prompts). AIODOS : sur ce PC
+#: ou sur mes machines appairées.
+_LOCAL_PROVIDERS = ("ollama", "local", "aiodos")
 _LOCAL_TIMEOUT = (10, 1800)      # un gros modèle sur CPU met de longues minutes
 
 # Modèle par défaut (créatif) — Opus 5.5 depuis le 03/10/2026 (core/ai_registry).
@@ -168,6 +172,8 @@ def _model(tier: str, provider: str | None = None, creative_model: str = "") -> 
     if provider == "chatgpt":
         # Vide = premier modèle du catalogue du compte (api/chatgpt_plan.complete).
         return creative_model or (_cfg().get("chatgpt_model") or "").strip()
+    if provider == "aiodos":
+        return creative_model        # vide = le meilleur modèle permis (AIODOS choisit)
     return creative_model or _DEFAULT_CREATIVE
 
 
@@ -290,6 +296,8 @@ def _engine_display_name(provider: str, creative_model: str) -> str:
         return creative_model or "Fournisseur personnalisé"
     if provider == "chatgpt":
         return "Compte ChatGPT" + (f" · {creative_model}" if creative_model else "")
+    if provider == "aiodos":
+        return f"AIODOS · {creative_model}" if creative_model else ENGINES["aiodos"]["name"]
     return "Claude"
 
 
@@ -360,6 +368,10 @@ def key_error(task: str | None = None) -> str | None:
         return None
     if provider == "chatgpt":
         return _chatgpt_key_error(cfg)
+    if provider == "aiodos":
+        from core import aiodos as _ad
+        ok, why = _ad.ready_for_chat()
+        return None if ok else why
     return None
 
 
@@ -1077,11 +1089,145 @@ def _chatgpt_stream(system, messages, on_chunk, model, max_tokens) -> str:
     return _chatgpt_call(system, messages, model, max_tokens, on_chunk)[0]
 
 
+# ── AIODOS (l'IA de mes machines, 22/10/2026) ───────────────────────────────────
+# Le client officiel (aiodos_client, via core/aiodos) parle à l'AIODOS installé :
+# conversation toujours en flux, réflexion coupée (`think=False`, comme
+# `thinking: disabled`), blocs d'Anthropic acceptés tels quels (texte, image en
+# base64). La sortie demandée est plafonnée d'après le contexte RÉEL du modèle :
+# PANDORA demande jusqu'à 16 000 jetons, qu'un modèle à 16 k de contexte ne peut
+# pas rendre en plus de l'entrée.
+
+#: Les lots partent avec la priorité de fond d'AIODOS (`batch=True`,
+#: X-Aiodos-Priority: background — integrer-aiodos.md § 6 et § 13) : ils laissent
+#: passer les conversations. Un lot : la génération du storyboard (ses tâches),
+#: une session Batch ouverte (core/claude_batch), ou un appel fait dans
+#: `aiodos_lot()` (le découpage tranche par tranche, api/decoupage_queue).
+_AIODOS_LOT_TASKS = ("storyboard_gen",)
+import contextlib as _contextlib
+import contextvars as _contextvars
+
+_AIODOS_LOT = _contextvars.ContextVar("pandora_aiodos_lot", default=False)
+
+
+@_contextlib.contextmanager
+def aiodos_lot():
+    """Les appels IA faits dans ce bloc (ce fil) sont des lots pour AIODOS."""
+    token = _AIODOS_LOT.set(True)
+    try:
+        yield
+    finally:
+        _AIODOS_LOT.reset(token)
+
+
+def _aiodos_batch() -> bool:
+    task = getattr(_task_ctx, "task", "") or ""
+    if _AIODOS_LOT.get() or task in _AIODOS_LOT_TASKS:
+        return True
+    try:
+        from core import claude_batch as _cb
+        return bool(_cb.wants(task))
+    except Exception:
+        return False
+
+
+def _aiodos_has_images(messages) -> bool:
+    for m in messages or []:
+        content = m.get("content") if isinstance(m, dict) else None
+        if isinstance(content, list) and any(
+                isinstance(b, dict) and b.get("type") in ("image", "image_url") for b in content):
+            return True
+    return False
+
+
+def _aiodos_budget(context, system, messages, max_tokens) -> int:
+    """La sortie demandée, ramenée à ce que laisse le contexte (≈ 3 caractères
+    par jeton en entrée, 256 jetons de marge)."""
+    if not context:
+        return max_tokens
+    chars = len(system or "")
+    for m in messages or []:
+        content = m.get("content", "") if isinstance(m, dict) else ""
+        if isinstance(content, str):
+            chars += len(content)
+        else:
+            chars += sum(len(b.get("text", "")) for b in content or [] if isinstance(b, dict))
+    room = int(context) - chars // 3 - 256
+    return max(256, min(int(max_tokens), room))
+
+
+def _aiodos_call(system, messages, model, max_tokens, on_chunk=None):
+    """→ ChatResult d'AIODOS ; lève RuntimeError (message pour l'utilisateur)."""
+    from aiodos_client import errors as _aerr
+    from core import aiodos as _ad
+    from core.i18n import translate as _tr
+    ok, why = _ad.ready_for_chat()
+    if not ok:
+        raise RuntimeError(why)
+    ai = _ad.client()
+    try:
+        catalog = ai.models("chat")
+        images = _aiodos_has_images(messages)
+        if model:
+            chosen = catalog.by_id.get(model)
+            if chosen is None:
+                raise RuntimeError(_tr("Le modèle « {m} » n'est plus dans AIODOS : choisissez-en "
+                                       "un autre dans Paramètres → Assistant IA.").format(m=model))
+        else:
+            chosen = catalog.best(needs=["vision"] if images else [])
+            if chosen is None:
+                raise RuntimeError(_tr("Aucun modèle de conversation dans AIODOS : installez-en "
+                                       "un dans AIODOS (page Modèles)."))
+        if images and not chosen.can("vision"):
+            raise RuntimeError(_tr("Le modèle « {m} » d'AIODOS ne voit pas les images : choisissez "
+                                   "un modèle avec la vision.").format(m=chosen.id))
+        _task_ctx.model = chosen.id
+        filt = None
+        if on_chunk is not None:
+            from core.local_llm import ThinkFilter
+            filt = ThinkFilter()
+
+        def _text(piece):
+            vis = filt.feed(piece)
+            if vis:
+                on_chunk(vis)
+        res = ai.chat(messages, model=chosen.id, system=system or None, think=False,
+                      max_tokens=_aiodos_budget(chosen.context, system, messages, max_tokens),
+                      batch=_aiodos_batch(),
+                      on_text=_text if on_chunk is not None else None)
+        if filt is not None:
+            rest = filt.flush()
+            if rest:
+                on_chunk(rest)
+    except _aerr.AiodosError as exc:
+        raise RuntimeError(_ad.humanize(exc)) from None
+    # Qui a calculé (integrer-aiodos.md § 6 : « Affichez-le ») : la machine part
+    # avec le modèle dans « Coût du projet » (« qwen3.5:9b · PC-BUREAU »).
+    if res.machine:
+        _task_ctx.model = f"{res.model or chosen.id} · {res.machine}"
+    usage = res.usage or {}
+    if usage:
+        _note_counts(usage.get("prompt_tokens") or usage.get("input_tokens"),
+                     usage.get("completion_tokens") or usage.get("output_tokens"))
+    return res
+
+
+def _aiodos_complete(system, messages, model, max_tokens) -> str:
+    from core.local_llm import strip_thinking
+    return strip_thinking(_aiodos_call(system, messages, model, max_tokens).text or "")
+
+
+def _aiodos_stream(system, messages, on_chunk, model, max_tokens) -> str:
+    from core.local_llm import strip_thinking
+    return strip_thinking(_aiodos_call(system, messages, model, max_tokens, on_chunk).text or "")
+
+
 # ── Dispatch ────────────────────────────────────────────────────────────────────
 
 def _dispatch_complete(provider, system, messages, model, max_tokens) -> str:
     if provider == "chatgpt":
         return _chatgpt_complete(system, messages, model, max_tokens)
+    if provider == "aiodos":
+        return _aiodos_complete(system, messages, model, max_tokens)
     if provider == "openai":
         return _openai_complete(system, messages, model, max_tokens)
     if provider == "mistral":
@@ -1102,6 +1248,8 @@ def _dispatch_complete(provider, system, messages, model, max_tokens) -> str:
 def _dispatch_stream(provider, system, messages, on_chunk, model, max_tokens) -> str:
     if provider == "chatgpt":
         return _chatgpt_stream(system, messages, on_chunk, model, max_tokens)
+    if provider == "aiodos":
+        return _aiodos_stream(system, messages, on_chunk, model, max_tokens)
     if provider == "openai":
         return _openai_stream(system, messages, on_chunk, model, max_tokens)
     if provider == "mistral":
@@ -1156,6 +1304,10 @@ def chat_ex(system: str, messages: list, tier: str = "creative",
     if provider == "chatgpt":
         text, truncated = _chatgpt_call(sysp, messages, model, max_tokens)
         return {"text": text, "truncated": truncated}
+    if provider == "aiodos":
+        from core.local_llm import strip_thinking
+        res = _aiodos_call(sysp, messages, model, max_tokens)
+        return {"text": strip_thinking(res.text or ""), "truncated": bool(res.truncated)}
     if provider in ("openai", "mistral", "kimi", "glm", "local", "custom"):
         from core.local_llm import strip_thinking
         builder = {"openai": _openai_payload, "mistral": _mistral_payload,

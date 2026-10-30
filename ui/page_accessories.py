@@ -178,6 +178,9 @@ class PageAccessories(QWidget):
 
         scroll.setWidget(self._grid_container)
         self._scroll = scroll
+        # la grille suit la largeur RÉELLE de la zone (FICHE ouverte ou non, 29/10/2026)
+        from ui.grid_flow import watch_viewport
+        watch_viewport(scroll, self)
         root.addWidget(scroll, 1)
 
         # État vide CENTRÉ + « Générer depuis le scénario » (demande 2026-07-23).

@@ -181,6 +181,10 @@ EXPECTED_ONLY_CINEMA = {
         # Cinéma-only par décision ; l'export de timeline XML, lui, existe des
         # deux côtés.
         "_on_resolve_montage",
+        # « Monter dans FilmCraft » (27/10/2026) : même choix que DaVinci — le
+        # montage du storyboard est Cinéma ; l'import AUTOMATIQUE des clips dans
+        # FilmCraft, lui, existe dans les deux Studios.
+        "_on_filmcraft_montage",
     },
     "ui/dialog_contact_live.py": {
         # Divergence LÉGÈRE voulue (2026-06-12) : le Live est une sous-classe

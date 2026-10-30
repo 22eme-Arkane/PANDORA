@@ -330,18 +330,16 @@ class DecorDialog(QDialog):
         self._gen_mode = QComboBox()
         self._gen_mode.addItem("🖼  Image unique", "single")
         self._gen_mode.addItem("🗺  Sheet 4 vues  (avant · arrière · gauche · droite)", "sheet")
-        self._gen_mode.addItem(
-            "📦  Les 7 vues de la pièce  (6 faces + plan d'ensemble)",
-            "seven_views")
+        # « Les 7 vues de la pièce » RETIRÉ (Matthieu 29/10/2026 : « la partie 7 vues
+        # ne marche vraiment pas du tout, on l'enlève ; on garde la génération de
+        # décors classique avec les plans des décors »). Le plan d'architecte vu
+        # de dessus reste généré avec le décor (« Créer le plan du décor »).
         self._gen_mode.setCurrentIndex(0)   # Image unique par défaut
         self._gen_mode.setFixedHeight(34)
         self._gen_mode.setToolTip(
-            "Image unique : vue principale du décor.\n"
-            "Sheet 4 vues (défaut) : image 2×2 montrant le même lieu depuis 4 angles.\n"
-            "Les 7 vues de la pièce : 6 faces (avant, arrière, gauche, droite, haut,\n"
-            "bas) comme un personnage au centre qui regarde chaque face, PUIS un\n"
-            "plan d'ensemble — le tout dans la galerie d'UN SEUL décor (même pièce).\n"
-            "Idéal pour les champs/contrechamps."
+            "Image unique (défaut) : vue principale du décor.\n"
+            "Sheet 4 vues : image 2×2 montrant le même lieu depuis 4 angles.\n"
+            "Le plan d'architecte vu de dessus est créé avec le décor."
         )
         self._gen_mode.setStyleSheet(
             f"QComboBox{{background:{CP['bg3']};border:1px solid {CP['border']};"
@@ -376,6 +374,9 @@ class DecorDialog(QDialog):
         self._model_combo.setStyleSheet(_combo_ss())
         _m_row.addWidget(self._model_combo, 1)
         self._sec_settings.add_layout(_m_row)
+        # UNE entrée « ComfyUI » + la ligne Gabarit / Calcul (ui/comfy_choice).
+        from ui.comfy_choice import attach_comfy
+        attach_comfy(self._model_combo, "image", layout=self._sec_settings)
 
         # Format (ratio) + Définition (résolution) — composants PARTAGÉS
         # (ui/widgets.py), identiques dans tous les dialogues d'éléments.

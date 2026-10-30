@@ -5676,14 +5676,13 @@ class TabT2V(QScrollArea):
 
         _model_key = self._get_model()
         if _model_key == "comfy":
-            # Sans serveur vivant : PANDORA le LANCE et l'attend (ui/external_autostart) ;
-            # la fenêtre d'installation ne s'ouvre que s'il n'est pas installé.
-            from core import comfy as _cf
-            if not _cf.discover():
-                from ui.external_autostart import ensure_ready
-                if not ensure_ready("comfyui", self):
-                    self.on_failed("ComfyUI injoignable : lancez ComfyUI Desktop, puis relancez.")
-                    return
+            # Selon « Calcul » (ui/comfy_choice) : ComfyUI de ce PC lancé et attendu
+            # s'il le faut (ui/external_autostart), ou AIODOS prêt (mes machines).
+            from ui.comfy_choice import ensure_comfy_ready
+            _comfy_ok, _comfy_why = ensure_comfy_ready(self)
+            if not _comfy_ok:
+                self.on_failed(_comfy_why)
+                return
         elif _model_key == "minimax-h3-local":
             from core import h3_local as _h3l
             if not _h3l.ping(_h3l.get_url())[0]:
@@ -5811,6 +5810,13 @@ class TabT2V(QScrollArea):
             except Exception:
                 pass
             davinci_msg = f"\n\n◈ Vidéo sauvegardée :\n{local_path}"
+            # FilmCraft (27/10/2026, parité Cinéma) : import automatique s'il est
+            # ouvert et relié — chutier PANDORA/SQnn.
+            try:
+                from ui.filmcraft_ui import send_clip
+                send_clip(local_path, dict(getattr(self, "_active_shot", None) or {}))
+            except Exception:
+                pass
         else:
             davinci_msg = f"\n\n◈ Téléchargement échoué : {ir['error']}"
 

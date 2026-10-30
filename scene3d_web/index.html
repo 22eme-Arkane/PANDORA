@@ -1,0 +1,22 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<title>PANDORA 3D</title>
+<!-- Vue 3D de PANDORA : la vue d'ARKLIGHT (arklight_engine/) + son inspecteur complet des
+     projecteurs (réglages, menus embarqués simulés, console « Canaux ») + la couche PANDORA
+     (pandora/app.js). Servi par le schéma pandora3d: (ui/scene3d_web.py), sans serveur. -->
+<script type="importmap">
+{ "imports": { "three": "/vendor/three/build/three.module.js",
+               "three/addons/": "/vendor/three/examples/jsm/" } }
+</script>
+<link rel="stylesheet" href="/css/app.css">
+<link rel="stylesheet" href="/pandora/pandora.css">
+<script src="/qwebchannel.js"></script>
+</head>
+<body>
+<div class="p3-wrap"><div id="vp" class="viewport"></div><div id="hud" class="hud hidden"></div></div>
+<aside id="inspector" class="inspector p3-insp"></aside>
+<script type="module" src="/pandora/app.js"></script>
+</body>
+</html>

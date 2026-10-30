@@ -251,6 +251,13 @@ class LiveStudioWidget(QWidget):
 
         root.addWidget(self.tabs)
 
+        # ── Machines d'AIODOS (27/10/2026, parité Cinéma) : panneau pliable,
+        # présent seulement quand le calcul ComfyUI passe par AIODOS. ───────────
+        from ui.aiodos_peers_panel import AiodosPeersPanel
+        self._aiodos_peers = AiodosPeersPanel()
+        root.addWidget(self._aiodos_peers)
+        self._aiodos_peers._on_compute()
+
         # ── Bandeau ESTIMATION DE PRIX fixe sous les onglets (parité Cinéma) ──
         # Toujours visible (jamais dans le scroll) : sélection de plans × durée ×
         # grille du DISTRIBUTEUR actif. Alimenté par le signal

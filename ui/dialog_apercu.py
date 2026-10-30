@@ -328,6 +328,11 @@ class MoodDialog(QDialog):
         )
         prompt_hdr.addWidget(btn_reset_prompt)
         root.addLayout(prompt_hdr)
+        # UNE entrée « ComfyUI » au lieu des 101 gabarits, et sous l'en-tête la
+        # ligne Gabarit / Calcul (ui/comfy_choice, 22/10/2026).
+        from ui.comfy_choice import attach_comfy
+        attach_comfy(self._engine_combo, "image", layout=root, after=prompt_hdr,
+                     on_template=self._on_comfy_template)
 
         # Barre de chargement de la COMPOSITION — à la place du libellé
         # « composition du prompt… » : un texte gris ne se voit pas, une barre
@@ -429,6 +434,9 @@ class MoodDialog(QDialog):
         self._refs_lay.addStretch()
         _rf_scroll.setWidget(self._refs_inner)
         _rf_outer.addWidget(_rf_scroll)
+        # Sans image envoyée, la bande de vignettes se replie : 74 px vides
+        # poussaient les boutons sous l'aperçu (constat Matthieu 27/10/2026).
+        self._refs_scroll = _rf_scroll
         root.addWidget(self._refs_row)
         self._refresh_refs_row()
 
@@ -441,7 +449,10 @@ class MoodDialog(QDialog):
         # Minimum abaissé (760×427 → 640×360) pour compenser l'encart prompt plus
         # haut : la fenêtre doit rester ouvrable sur un écran de portable. L'aperçu
         # reste en Expanding et occupe tout l'espace disponible dès qu'il y en a.
-        self._img_lbl.setMinimumSize(640, 360)
+        # 27/10/2026 : la ligne « Moteur IA / Calcul » de ComfyUI ajoute une
+        # rangée ; avec 360 px de minimum l'aperçu ne cédait plus et ÉCRASAIT
+        # les boutons du bas (tronqués, aperçu par-dessus). Il cède désormais.
+        self._img_lbl.setMinimumSize(480, 160)
         self._img_lbl.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
         self._img_lbl.setStyleSheet(
             f"background:{CP['bg0']};border:1px solid {CP['border']};border-radius:8px;"
@@ -685,6 +696,8 @@ class MoodDialog(QDialog):
         except Exception:
             _plan = []
 
+        if hasattr(self, "_refs_scroll"):
+            self._refs_scroll.setVisible(bool(_plan) and _max > 0)
         if _max <= 0:
             self._refs_title.setText(translate(
                 "🖼  Ce moteur n'accepte aucune image de référence — "
@@ -1034,6 +1047,14 @@ class MoodDialog(QDialog):
         self._refresh_grammar_label()
         # Pas de composition ici : le texte appartient à l'utilisateur, on
         # l'ADAPTE au nouveau moteur sans le réécrire.
+
+    def _on_comfy_template(self, _key: str):
+        """Un autre gabarit ComfyUI : même grammaire (« plain »), le prompt reste
+        tel quel — pas de recomposition ; la préférence et les références suivent
+        (le nombre d'images que lit le gabarit change)."""
+        self._save_engine_pref()
+        self._refresh_refs_row()
+        self._refresh_grammar_label()
 
     def _save_engine_pref(self):
         try:

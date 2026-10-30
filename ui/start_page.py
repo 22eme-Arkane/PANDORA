@@ -45,6 +45,7 @@ from core.i18n import get_lang, set_lang, translate
 from core.version import VERSION
 from ui.icons import app_icon, load_icon
 from ui.splash import NewProjectDialog
+from ui import themes
 from ui.styles import CP
 
 
@@ -64,6 +65,23 @@ def _alpha(color: str, value: int) -> QColor:
     result = QColor(color)
     result.setAlpha(max(0, min(255, value)))
     return result
+
+
+# Fond des cartes (27/10/2026) : les QColor du dessin ne passent pas par la
+# traduction des feuilles de style des thèmes. « Nuit bleue » garde son bleu
+# nuit d'origine ; les autres thèmes prennent leur propre fond.
+_SURFACE = (
+    "#0c131f" if CP["bg1"] == themes.palette(themes.REFERENCE)["bg1"] else CP["bg1"]
+)
+# Textes posés directement sur l'image de fond, toujours sombre : avec un thème
+# clair ils deviendraient sombres et illisibles → teintes de « Nuit bleue ».
+# Écrites en rgb() : en hexadécimal, la traduction des thèmes les reconvertirait.
+_ON_BG = {
+    key: "rgb({},{},{})".format(*QColor(value).getRgb()[:3])
+    for key, value in (
+        CP if QColor(CP["bg1"]).lightness() < 128 else themes.palette(themes.DEFAULT)
+    ).items()
+}
 
 
 def _relative_time(iso_value: str) -> str:
@@ -170,10 +188,10 @@ class _Background(QWidget):
 
     def __init__(self, parent=None):
         super().__init__(parent)
-        # v3 (2026-07-23) : texture organique bleu nuit + circuits dorés générée
-        # par Matthieu dans le Studio Images (bords denses, centre dégagé).
+        # v4 (27/10/2026) : fond noir + circuits dorés fourni par Matthieu (bords
+        # denses, centre dégagé), assorti au nouveau logo.
         self._background_pixmap = QPixmap(
-            os.path.join(_ASSETS, "start_background_v3.jpg")
+            os.path.join(_ASSETS, "start_background_v4.jpg")
         )
 
     def paintEvent(self, event):
@@ -201,10 +219,12 @@ class _Background(QWidget):
             base.setColorAt(1.0, QColor("#080d16"))
             painter.fillRect(rect, base)
 
+        # Voiles NEUTRES (27/10/2026) : le fond v4 est noir et or, un voile
+        # bleuté le salirait.
         veil = QLinearGradient(rect.topLeft(), rect.bottomLeft())
-        veil.setColorAt(0.0, QColor(3, 8, 15, 48))
-        veil.setColorAt(0.54, QColor(3, 8, 15, 16))
-        veil.setColorAt(1.0, QColor(3, 7, 13, 74))
+        veil.setColorAt(0.0, QColor(6, 6, 6, 48))
+        veil.setColorAt(0.54, QColor(6, 6, 6, 16))
+        veil.setColorAt(1.0, QColor(5, 5, 5, 74))
         painter.fillRect(rect, veil)
 
         cyan = QRadialGradient(rect.width() * 0.27, rect.height() * 0.48,
@@ -220,9 +240,9 @@ class _Background(QWidget):
         painter.fillRect(rect, violet)
 
         floor = QLinearGradient(0, rect.height() * 0.62, 0, rect.height())
-        floor.setColorAt(0.0, QColor(7, 12, 21, 0))
-        floor.setColorAt(0.40, QColor(7, 12, 21, 70))
-        floor.setColorAt(1.0, QColor(3, 7, 13, 120))
+        floor.setColorAt(0.0, QColor(6, 6, 6, 0))
+        floor.setColorAt(0.40, QColor(6, 6, 6, 70))
+        floor.setColorAt(1.0, QColor(5, 5, 5, 120))
         painter.fillRect(rect, floor)
 
 
@@ -395,7 +415,7 @@ class _ModeCard(QWidget):
         rect = QRectF(self.rect()).adjusted(1.5, 1.5, -1.5, -1.5)
         path = QPainterPath()
         path.addRoundedRect(rect, 12, 12)
-        painter.fillPath(path, QColor(12, 19, 31, 238))
+        painter.fillPath(path, _alpha(_SURFACE, 238))
 
         color = _MODE_COLORS[self.mode]
         if self._selected:
@@ -409,7 +429,7 @@ class _ModeCard(QWidget):
             painter.setPen(QPen(QColor(CP["border"]), 1.0))
             painter.drawPath(path)
         if not self._available:
-            painter.fillPath(path, QColor(5, 8, 14, 125))
+            painter.fillPath(path, _alpha(CP["bg0"], 125))
 
     def enterEvent(self, event):
         self._hovered = True
@@ -566,7 +586,7 @@ class _RecentCard(QWidget):
         painter = QPainter(self)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
         rect = QRectF(self.rect()).adjusted(0.5, 0.5, -0.5, -0.5)
-        painter.setBrush(QColor(14, 22, 36, 220))
+        painter.setBrush(_alpha(_SURFACE, 220))
         painter.setPen(QPen(_alpha(self._color, 105 if self._hovered else 36), 1))
         painter.drawRoundedRect(rect, 8, 8)
 
@@ -619,6 +639,7 @@ class StartPage(_Background):
 
         brand = QWidget()
         brand.setStyleSheet("background:transparent;")
+        self._brand = brand
         brand_layout = QVBoxLayout(brand)
         brand_layout.setContentsMargins(0, 0, 0, 0)
         brand_layout.setSpacing(8)
@@ -636,7 +657,7 @@ class StartPage(_Background):
         title = QLabel("P A N D O R A")
         title.setAlignment(Qt.AlignmentFlag.AlignCenter)
         title.setStyleSheet(
-            f"color:{CP['text_primary']};font-size:30px;font-weight:400;"
+            f"color:{_ON_BG['text_primary']};font-size:30px;font-weight:400;"
             "letter-spacing:7px;background:transparent;"
         )
         brand_layout.addWidget(title)
@@ -644,7 +665,7 @@ class StartPage(_Background):
         byline = QLabel("by 22eme ARKANE")
         byline.setAlignment(Qt.AlignmentFlag.AlignCenter)
         byline.setStyleSheet(
-            f"color:{CP['text_secondary']};font-size:10px;letter-spacing:2px;background:transparent;"
+            f"color:{_ON_BG['text_secondary']};font-size:10px;letter-spacing:2px;background:transparent;"
         )
         brand_layout.addWidget(byline)
 
@@ -656,7 +677,7 @@ class StartPage(_Background):
         self._tagline = QLabel()
         self._tagline.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self._tagline.setStyleSheet(
-            f"color:{CP['text_secondary']};font-size:11px;background:transparent;"
+            f"color:{_ON_BG['text_secondary']};font-size:11px;background:transparent;"
         )
         brand_layout.addWidget(self._tagline)
         root.addWidget(brand)
@@ -794,7 +815,7 @@ class StartPage(_Background):
             footer.addWidget(button)
         footer.addStretch()
         version = QLabel(f"v{VERSION}")
-        version.setStyleSheet(f"color:{CP['text_dim']};font-size:10px;background:transparent;")
+        version.setStyleSheet(f"color:{_ON_BG['text_dim']};font-size:10px;background:transparent;")
         footer.addWidget(version)
         root.addLayout(footer)
 
@@ -805,6 +826,24 @@ class StartPage(_Background):
         # d'accueil. Le clic resélectionne via _launch_mode → set_mode.
         self._cinema.set_selected(False)
         self._live.set_selected(False)
+
+    def paintEvent(self, event):
+        super().paintEvent(event)
+        # Halo sombre derrière le titre (27/10/2026) : les circuits du fond v4
+        # passent sous « by 22eme ARKANE » ; on les estompe sans les effacer.
+        area = self._brand.geometry()
+        if area.isEmpty():
+            return
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        radius = max(260.0, min(440.0, self.width() * 0.24))
+        painter.translate(QPointF(area.center()))
+        painter.scale(1.0, max(0.3, area.height() * 0.9 / radius))
+        halo = QRadialGradient(QPointF(0, 0), radius)
+        halo.setColorAt(0.0, QColor(5, 5, 5, 175))
+        halo.setColorAt(0.55, QColor(5, 5, 5, 105))
+        halo.setColorAt(1.0, QColor(5, 5, 5, 0))
+        painter.fillRect(QRectF(-radius, -radius, radius * 2, radius * 2), halo)
 
     def resizeEvent(self, event):
         super().resizeEvent(event)
@@ -937,9 +976,9 @@ class StartPage(_Background):
                 "QPushButton:hover{background:%s;}"
                 % (
                     "rgba(78,205,196,0.10)" if active else "transparent",
-                    CP["text_primary"] if active else CP["text_dim"],
-                    CP["accent"] if active else CP["border"],
-                    CP["bg3"],
+                    _ON_BG["text_primary"] if active else _ON_BG["text_dim"],
+                    CP["accent"] if active else _ON_BG["border"],
+                    _ON_BG["bg3"],
                 )
             )
 

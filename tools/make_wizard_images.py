@@ -1,133 +1,118 @@
-"""Génère les images de l'assistant d'installation Inno Setup, à TOUTES les échelles.
+"""Génère les images de l'assistant d'installation (Inno Setup, style « modern dark »).
 
-Sources prioritaires :
-  - assets/icons/wizard_large.png  → wizard_large*.bmp
-  - assets/icons/wizard_small.png  → wizard_small*.bmp
-Repli (génération depuis app_icon.png) uniquement si les sources sont absentes.
+Refonte du 27/10/2026 (demande Matthieu : « un nouvel installeur plus moderne comme
+celui que nous avons fait pour le projet AIODOS ») — même recette que
+AIODOS/tools/installer_pages.py :
 
-⚠ POURQUOI PLUSIEURS TAILLES (constat Matthieu 2026-08-30, build 2.3.0)
-Sur la page de fin de l'installeur, les cases à cocher apparaissaient tronquées.
-Le projet ne fournissait qu'une seule image, à l'échelle 100 % (164×314), alors
-que Windows tourne couramment à 125 % ou 150 % : Inno devait étirer l'image et
-la mise en page se calculait sur une échelle qui n'était pas celle de l'écran.
+  - grande image (pages d'accueil et de fin) : le logo dans un halo doré, sur un
+    noir chaud en dégradé, et le nom PANDORA aux lettres espacées dessous ;
+  - petite image (en haut à droite des autres pages) : le logo seul, sur fond
+    transparent.
 
-Inno Setup accepte une LISTE d'images séparées par des virgules et choisit
-celle qui correspond au facteur d'échelle courant. On produit donc les quatre
-échelles usuelles — 100, 125, 150 et 200 % — dérivées de la taille de base.
+Source : assets/app_icon.png (tools/make_logo_assets.py, le logo du 27/10/2026).
+Sortie : installer/wizard-<largeur>.png et installer/small-<côté>.png (gitignorés,
+régénérés à chaque build : build.ps1 étape 2 et .github/workflows/build.yml).
+
+⚠ POURQUOI SEPT TAILLES (constat Matthieu 2026-08-30, build 2.3.0) : Inno Setup
+choisit dans la liste l'image qui correspond à l'échelle de l'écran (100 à
+250 %) ; avec une seule taille, il l'étirait. Ce n'était PAS la cause des cases
+tronquées de la page de fin (c'était RunList.Offset, voir [Code] de
+pandora_setup.iss), mais une image nette à chaque échelle reste la règle.
 """
 import os
 import sys
 
-ROOT   = os.path.dirname(os.path.dirname(__file__))
+ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 ASSETS = os.path.join(ROOT, "assets")
+OUT = os.path.join(ROOT, "installer")
 
 try:
-    from PIL import Image
+    from PIL import Image, ImageDraw, ImageFilter, ImageFont
 except ImportError:
-    print("ERREUR : Pillow non installé. pip install Pillow")
+    print("ERREUR : Pillow non installe. pip install Pillow")
     sys.exit(1)
 
-BG = (7, 8, 15)  # #07080f — fond sombre PANDORA
+#: Grande image et petite image, de 100 à 250 % (les tailles qu'Inno Setup 6.6+
+#: sait choisir) — mêmes valeurs que l'installeur d'AIODOS.
+LARGE = ((202, 386), (269, 515), (336, 643), (403, 772), (430, 824), (498, 953), (534, 1022))
+SMALL = (58, 77, 97, 116, 124, 143, 159)
+#: Le thème « Noir & or » de PANDORA (ui/themes.py).
+BG = (8, 7, 6)
+PANEL = (26, 22, 16)
+GOLD = (216, 173, 79)
+TEXT = (242, 234, 216)
+FONTS = (r"C:\Windows\Fonts\seguisb.ttf", r"C:\Windows\Fonts\segoeui.ttf",
+         "/System/Library/Fonts/Supplemental/Arial.ttf")
 
-#: Échelles produites. La clé est le suffixe de fichier ; « » = l'image de base,
-#: celle que `WizardImageFile` cite en premier.
-SCALES = (("", 1.0), ("_125", 1.25), ("_150", 1.5), ("_200", 2.0))
 
-BASE_LARGE = (164, 314)
-BASE_SMALL = (55, 58)
-
-
-def _sizes(base: tuple[int, int]) -> list[tuple[str, tuple[int, int]]]:
-    return [(suf, (round(base[0] * f), round(base[1] * f))) for suf, f in SCALES]
+def _font(size: int):
+    for path in FONTS:
+        try:
+            return ImageFont.truetype(path, size)
+        except OSError:
+            continue
+    return ImageFont.load_default(size)
 
 
-def _from_source(src: str, base: tuple[int, int], stem: str) -> bool:
-    """Décline une source PNG à toutes les échelles. Faux si la source manque."""
+def _spaced(draw, center: float, top: float, text: str, font, spacing: float):
+    """Un mot aux lettres espacées, centré sur `center`."""
+    widths = [font.getlength(ch) for ch in text]
+    x = center - (sum(widths) + spacing * (len(text) - 1)) / 2
+    for ch, width in zip(text, widths):
+        draw.text((x, top), ch, font=font, fill=TEXT, anchor="lt")
+        x += width + spacing
+
+
+def large(logo: "Image.Image", size: tuple) -> "Image.Image":
+    w, h = size
+    shade = Image.linear_gradient("L").resize(size)          # noir en haut, clair en bas
+    image = Image.composite(Image.new("RGB", size, PANEL), Image.new("RGB", size, BG), shade)
+    cx, cy = w / 2, h * 0.40
+    glow = Image.new("L", size, 0)
+    r = w * 0.46
+    ImageDraw.Draw(glow).ellipse((cx - r, cy - r, cx + r, cy + r), fill=70)
+    glow = glow.filter(ImageFilter.GaussianBlur(w * 0.14))
+    image = Image.composite(Image.new("RGB", size, GOLD), image, glow)
+    side = round(w * 0.58)
+    emblem = logo.resize((side, side), Image.LANCZOS)
+    image.paste(emblem, (round(cx - side / 2), round(cy - side / 2)), emblem)
+    draw = ImageDraw.Draw(image)
+    name_top = cy + side / 2 + w * 0.10
+    font = _font(round(w * 0.105))
+    _spaced(draw, cx, name_top, "PANDORA", font, w * 0.022)
+    # Un filet d'or sous le nom
+    line_y = name_top + font.size * 1.45
+    half = w * 0.09
+    draw.line((cx - half, line_y, cx + half, line_y), fill=GOLD, width=max(1, round(w / 200)))
+    return image
+
+
+def small(logo: "Image.Image", side: int) -> "Image.Image":
+    """Le logo sur fond transparent, avec une marge : à pleine taille, la tuile
+    touchait le bord de la fenêtre en haut à droite."""
+    inner = round(side * 0.84)
+    out = Image.new("RGBA", (side, side), (0, 0, 0, 0))
+    out.paste(logo.resize((inner, inner), Image.LANCZOS), ((side - inner) // 2,) * 2)
+    return out
+
+
+def main() -> None:
+    src = os.path.join(ASSETS, "app_icon.png")
     if not os.path.isfile(src):
-        return False
-    img = Image.open(src).convert("RGB")
-    for suf, size in _sizes(base):
-        dst = os.path.join(ASSETS, f"{stem}{suf}.bmp")
-        # On repart TOUJOURS de la source pleine résolution : agrandir la
-        # version 100 % donnerait une image molle aux échelles hautes.
-        img.resize(size, Image.LANCZOS).save(dst, format="BMP")
-        print(f"  {stem}{suf}.bmp  {size[0]}x{size[1]}")
-    return True
+        print("ERREUR : assets/app_icon.png absent (python tools/make_logo_assets.py)")
+        sys.exit(1)
+    logo = Image.open(src).convert("RGBA")
+    os.makedirs(OUT, exist_ok=True)
+    # ASCII pur : build.ps1 lance ce script dans une console cp1252 et s'arrête à
+    # la première erreur d'encodage.
+    print("Images de l'assistant d'installation - 7 echelles")
+    for size in LARGE:
+        large(logo, size).save(os.path.join(OUT, f"wizard-{size[0]}.png"))
+        print(f"  installer/wizard-{size[0]}.png  {size[0]}x{size[1]}")
+    for side in SMALL:
+        small(logo, side).save(os.path.join(OUT, f"small-{side}.png"))
+        print(f"  installer/small-{side}.png  {side}x{side}")
 
 
-def _badge() -> "Image.Image":
-    for name in ("app_icon.png", "pandora_badge.png"):
-        p = os.path.join(ASSETS, name)
-        if os.path.isfile(p):
-            return Image.open(p).convert("RGBA")
-    print("ERREUR : ni wizard_*.png ni app_icon.png/pandora_badge.png")
-    sys.exit(1)
-
-
-def _fallback_large(stem: str, base: tuple[int, int]) -> None:
-    badge = _badge()
-    for suf, (W, H) in _sizes(base):
-        canvas = Image.new("RGBA", (W, H), BG + (255,))
-        logo_size = min(W - round(24 * W / base[0]), round(130 * W / base[0]))
-        logo = badge.resize((logo_size, logo_size), Image.LANCZOS)
-        canvas.paste(logo, ((W - logo_size) // 2,
-                            H // 2 - logo_size // 2 - round(20 * H / base[1])), logo)
-        out = Image.new("RGB", (W, H), BG)
-        out.paste(canvas, mask=canvas.split()[3])
-        out.save(os.path.join(ASSETS, f"{stem}{suf}.bmp"), format="BMP")
-        print(f"  {stem}{suf}.bmp  {W}x{H}  [repli]")
-
-
-def _fallback_small(stem: str, base: tuple[int, int]) -> None:
-    badge = _badge()
-    for suf, (W, H) in _sizes(base):
-        out = Image.new("RGB", (W, H), BG)
-        logo = badge.resize((W, H), Image.LANCZOS)
-        out.paste(logo, (0, 0), logo)
-        out.save(os.path.join(ASSETS, f"{stem}{suf}.bmp"), format="BMP")
-        print(f"  {stem}{suf}.bmp  {W}x{H}  [repli]")
-
-
-#: Blanc de l'en-tête des pages de l'assistant (style « modern », thème clair).
-HEADER_BG = (255, 255, 255)
-
-
-def _small_from_app_icon(stem: str, base: tuple[int, int]) -> bool:
-    """Image en haut à droite des pages : le LOGO ACTUEL de l'application —
-    assets/pandora_badge.ico, celui de la barre de titre, de l'en-tête de
-    PANDORA et de son raccourci — centré sur le blanc de l'en-tête.
-
-    Jusqu'au 26/09/2026 cette image venait de assets/icons/wizard_small.png, un
-    ANCIEN « P » seul sur fond sombre (constat Matthieu). Lire l'icône de
-    l'application elle-même garde l'installeur à jour si le logo change."""
-    ico = os.path.join(ASSETS, "pandora_badge.ico")
-    if not os.path.isfile(ico):
-        return False
-    src = Image.open(ico)
-    sizes = sorted(src.info.get("sizes") or [src.size])
-    try:
-        src.size = sizes[-1]            # la plus grande image de l'icône
-    except Exception:
-        pass
-    src = src.convert("RGBA")
-    for suf, (W, H) in _sizes(base):
-        out = Image.new("RGB", (W, H), HEADER_BG)
-        margin = max(1, round(2 * W / base[0]))
-        side = min(W, H) - 2 * margin
-        logo = src.resize((side, side), Image.LANCZOS)
-        out.paste(logo, ((W - side) // 2, (H - side) // 2), logo)
-        out.save(os.path.join(ASSETS, f"{stem}{suf}.bmp"), format="BMP")
-        print(f"  {stem}{suf}.bmp  {W}x{H}  [logo actuel]")
-    return True
-
-
-# ASCII pur : build.ps1 lance ce script dans une console cp1252 et s'arrête à
-# la première erreur. Un simple caractère de filet (U+2500) suffit à tuer le
-# build sur un UnicodeEncodeError.
-print("Images de l'assistant d'installation - 4 echelles")
-if not _from_source(os.path.join(ASSETS, "icons", "wizard_large.png"),
-                    BASE_LARGE, "wizard_large"):
-    _fallback_large("wizard_large", BASE_LARGE)
-
-if not _small_from_app_icon("wizard_small", BASE_SMALL):
-    _fallback_small("wizard_small", BASE_SMALL)
+if __name__ == "__main__":
+    main()

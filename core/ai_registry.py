@@ -105,6 +105,8 @@ TASKS: list[tuple[str, str]] = [
     ("video_prompt",    "Prompt final (storyboard → moteur)"),
     ("element_chat",    "Direction artistique des éléments"),
     ("vision",          "Analyse visuelle"),
+    # Plan de feu (30/10/2026) : la mise en scène décrite en mots -> marques de la frise
+    ("choreography",    "Mise en scène 3D (Claude chorégraphe)"),
 ]
 
 
@@ -132,17 +134,21 @@ ENGINES: dict[str, dict] = {
     # Serveur OpenAI-compatible LOCAL (préréglages LM Studio / llama.cpp / vLLM /
     # Jan dans core/local_llm) : le modèle vient de la config (local_model).
     "local":        {"group": "local", "provider": "local", "model": "", "name": "Serveur IA local (LM Studio, llama.cpp, vLLM, Jan…)"},
+    # AIODOS (22/10/2026, core/aiodos) : l'IA de mes machines. Modèle vide = celui
+    # qu'AIODOS choisit (le meilleur permis, vision si la demande a des images) ;
+    # « aiodos:<modèle> » pour un modèle précis (découverte des modèles).
+    "aiodos":       {"group": "local", "provider": "aiodos", "model": "", "name": "AIODOS — mes machines"},
     "custom":       {"group": "experimental", "provider": "custom", "model": "", "name": "Fournisseur personnalisé"},
 }
 
 ENGINE_ORDER = [
     "opus", "claude", "haiku", "fable5",
     "openai_sol", "openai_terra", "openai_luna", "gpt", "chatgpt_plan",
-    "mistral", "kimi", "glm", "ollama", "local", "custom",
+    "mistral", "kimi", "glm", "ollama", "local", "aiodos", "custom",
 ]
 
 #: Fournisseurs qui tournent sur la machine (aucune clé, aucun crédit).
-LOCAL_PROVIDERS = ("ollama", "local")
+LOCAL_PROVIDERS = ("ollama", "local", "aiodos")
 
 
 ANTHROPIC_OPTIMIZED: dict[str, str] = {
@@ -162,6 +168,7 @@ ANTHROPIC_OPTIMIZED: dict[str, str] = {
     "video_prompt": "claude",
     "element_chat": "claude",
     "vision": "haiku",
+    "choreography": "claude",
 }
 
 # Profil demandé par Matthieu : aucune tâche ne sort d'OpenAI.
@@ -178,6 +185,7 @@ OPENAI_OPTIMIZED: dict[str, str] = {
     "translate": "openai_luna",
     "element_chat": "openai_terra",
     "vision": "openai_terra",
+    "choreography": "openai_sol",
 }
 
 PROFILES: dict[str, dict] = {
@@ -281,6 +289,8 @@ def _legacy_single_engine(cfg: dict) -> dict:
         model = (cfg.get("ollama_model") or "llama3.1").strip()
     elif provider == "local":
         model = (cfg.get("local_model") or "").strip()
+    elif provider == "aiodos":
+        model = (cfg.get("aiodos_model") or "").strip()
     elif provider == "custom":
         model = (cfg.get("custom_model") or "").strip()
     elif provider == "chatgpt":
@@ -334,7 +344,7 @@ def primary_menu_items(discovered: dict[str, list[str]] | None = None) -> list[d
     static_by_group = {
         "anthropic": ["opus", "claude", "haiku", "fable5"],
         "openai": ["openai_sol", "openai_terra", "openai_luna", "gpt", "chatgpt_plan"],
-        "local": ["ollama", "local"],
+        "local": ["ollama", "local", "aiodos"],
         "experimental": ["mistral", "kimi", "glm", "custom"],
     }
     providers_by_group = {
@@ -361,13 +371,17 @@ def primary_menu_items(discovered: dict[str, list[str]] | None = None) -> list[d
         providers = providers_by_group.get(group_key, (group_key,))
         for provider in providers:
             for model in discovered.get(provider, []) or []:
-                if model in seen:
+                # Un modèle d'AIODOS porte souvent le même nom qu'un modèle Ollama
+                # (« qwen3.5:9b ») : il est distingué, jamais confondu.
+                tag = f"aiodos:{model}" if provider == "aiodos" else model
+                if tag in seen:
                     continue
                 # Un modèle Claude remplacé (Opus 4.8, Sonnet 5, Fable 5…) n'est
                 # plus proposé : le choisir donnerait de toute façon son successeur.
                 if provider == "anthropic" and is_superseded(model):
                     continue
-                seen.add(model)
-                rows.append({"label": model, "selectable": True, "profile": "single",
+                seen.add(tag)
+                rows.append({"label": f"AIODOS · {model}" if provider == "aiodos" else model,
+                             "selectable": True, "profile": "single",
                              "engine": f"{provider}:{model}"})
     return rows

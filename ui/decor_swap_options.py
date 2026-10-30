@@ -85,9 +85,15 @@ class DecorSwapOptions(QFrame):
 
         # Moteur d'image (décor généré en image)
         self._eng_row = QWidget()
-        er = QHBoxLayout(self._eng_row)
+        # Colonne : le menu, puis (ComfyUI choisi) la ligne Gabarit / Calcul — les
+        # deux se masquent ensemble avec le mode « décor généré en image ».
+        _ec = QVBoxLayout(self._eng_row)
+        _ec.setContentsMargins(0, 0, 0, 0)
+        _ec.setSpacing(6)
+        er = QHBoxLayout()
         er.setContentsMargins(0, 0, 0, 0)
         er.setSpacing(8)
+        _ec.addLayout(er)
         er.addWidget(_label(translate("Moteur d'image")), 0)
         self._engine = QComboBox()
         self._engine.setMinimumHeight(28)
@@ -102,6 +108,9 @@ class DecorSwapOptions(QFrame):
         except Exception:
             self._engine.addItem("Nano Banana 2", "nb2")
         er.addWidget(self._engine, 1)
+        # UNE entrée « ComfyUI » + la ligne Gabarit / Calcul (ui/comfy_choice).
+        from ui.comfy_choice import attach_comfy
+        attach_comfy(self._engine, "image", layout=_ec, after=er)
         lay.addWidget(self._eng_row)
 
         # Fichier fourni (image ou vidéo)

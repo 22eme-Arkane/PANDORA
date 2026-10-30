@@ -1538,12 +1538,11 @@ class TabVideoEngines(QWidget):
             from api.h3_local import H3LocalWorker
             self._worker = H3LocalWorker(params)
         elif key in ("comfy_h3_t2v", "comfy_h3_i2v", "comfy_custom"):
-            # Sans serveur vivant : lancé et attendu ; guide seulement si absent.
-            from core import comfy as _cf
-            if not _cf.discover():
-                from ui.external_autostart import ensure_ready
-                if not ensure_ready("comfyui", self):
-                    return
+            # Selon « Calcul » (ui/comfy_choice) : ComfyUI de ce PC lancé et attendu
+            # (guide seulement s'il est absent), ou AIODOS prêt (mes machines).
+            from ui.comfy_choice import ensure_comfy_ready
+            if not ensure_comfy_ready(self)[0]:
+                return
             from core import comfy_h3 as _h3c
             _h3c.prepare_params(params, key)
             from api.comfy import ComfyWorker

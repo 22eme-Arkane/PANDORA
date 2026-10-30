@@ -1209,7 +1209,12 @@ def run_mood(shot: dict, prompt: str, output_dir: str, api_key: str, progress_cb
     opts = options or {}
     _res = (opts.get("resolution") or "").strip()
     _ar  = (opts.get("aspect_ratio") or "").strip()
-    engine = (opts.get("engine") or "").strip().lower()
+    engine = (opts.get("engine") or "").strip()
+    # Un gabarit ComfyUI garde sa casse (« comfy:image_Qwen… ») : mis en
+    # minuscules, il n'était plus dans le catalogue et le mood partait chez
+    # Nano Banana 2, payant (7 gabarits touchés, relevé du 22/10/2026).
+    if not engine.startswith("comfy:"):
+        engine = engine.lower()
     if not engine:
         engine = "nb2" if _is_cinema_mood() else "flux"
     _is_mapping = bool(building_ref and os.path.isfile(building_ref))

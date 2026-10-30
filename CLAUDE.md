@@ -159,7 +159,11 @@ n'autorise PAS à franchir les limites suivantes, qui priment sur tout :
 ### UI / style
 - `disable_default_buttons(dlg)` sur toute fenêtre champ + boutons (sinon Entrée
   déclenche Annuler/Appliquer).
-- Fond = `PANDORA_STYLESHEET`, CP['bg1'] = #0c0e1a (bleu-violet), JAMAIS noir #000000.
+- Fond = `PANDORA_STYLESHEET`, JAMAIS noir #000000. Thème d'ouverture « Noir »
+  (27/10/2026, `ui/themes`) : fonds gris neutres (CP['bg1'] = #111111), couleurs de
+  PANDORA gardées ; « Nuit bleue » (CP['bg1'] = #0c0e1a) reste le thème de RÉFÉRENCE
+  du code et des harnais (PANDORA_THEME=nuit) — écrire les couleurs en dur dans ses
+  teintes, le thème Noir les traduit.
 - JAMAIS de suffixe hex-opacity (`{color}12/33/44`) sur fond sombre (rend « vert caca de
   bois ») → style outline (`border: 1px solid {accent}`, fond transparent) ou `rgba()`
   explicite.

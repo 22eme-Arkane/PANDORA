@@ -193,6 +193,22 @@ def _analyze_reference_refs(paths: list, _legacy_key: str = "") -> str:
         return ""
 
 
+def previs_directive(token: str) -> str:
+    """Consigne jointe quand la prévisualisation 3D du Plan de feu part en référence vidéo.
+    Seedance doit en EMPRUNTER la caméra, le cadre, la place des personnages et leur
+    minutage — pas l'apparence (mannequins de couleur, matières grises, sol quadrillé) ni la
+    raideur des gestes, qu'il recopie sinon (sources concordantes, recherche du 29/10/2026)."""
+    return (
+        f"3D PREVIS {token}: a rough grey 3D blocking of THIS shot, seen through its camera. "
+        f"Follow ONLY its camera position and movement, the framing, where each character "
+        f"stands in the frame, their path and the timing of their moves. The coloured "
+        f"mannequins are placeholders for the characters described above (match each one by "
+        f"its place in the frame): do NOT show mannequins, plain grey materials, a grid floor "
+        f"or an empty studio. Render the real characters, location and lighting described in "
+        f"the prompt, with natural, fluid human motion instead of the stiff gestures of {token}."
+    )
+
+
 def run_real(params: dict, emit_progress, is_cancelled) -> dict:
     import fal_client
 
@@ -266,7 +282,26 @@ def run_real(params: dict, emit_progress, is_cancelled) -> dict:
         except Exception:
             pass
 
-    _auto_ref = mode == "t2v" and bool(ref_images)  # track auto-switch to restore on upload failure
+    # ── Prévisualisation 3D du Plan de feu (30/10/2026) ─────────────────────────
+    # Cochée dans le Studio (RENDU & AUDIO, décochée par défaut) : la maquette du
+    # plan vue par SA caméra part en vidéo de référence ; Seedance en suit la
+    # caméra et les placements. Jamais en image→vidéo (l'image de départ décide
+    # déjà du cadre), et conformée aux plafonds du moteur comme tout clip envoyé.
+    _previs = params.get("previs_video", "") if mode in ("t2v", "ref") else ""
+    if _previs and not os.path.isfile(_previs):
+        _previs = ""
+    if _previs:
+        try:
+            from core.video_utils import ensure_engine_video
+            _vh, _vs = _sf.video_input_limits(model)
+            _previs = ensure_engine_video(_previs, emit=lambda m: emit_progress(2, m),
+                                          max_height=_vh, max_seconds=_vs) or _previs
+        except Exception:
+            pass
+    _previs_sent = False
+
+    # Bascule en « référence » : images de référence OU prévisualisation à joindre
+    _auto_ref = mode == "t2v" and (bool(ref_images) or bool(_previs))
     if _auto_ref:
         mode = "ref"
         endpoint = endpoints["ref"]
@@ -686,6 +721,17 @@ def run_real(params: dict, emit_progress, is_cancelled) -> dict:
         if _ref_images_sent == 0 and _ref_images_attempted > 0:
             _gcs_blocked = True
 
+        # Prévisualisation 3D : téléversée ici, jointe APRÈS l'éventuel clip de
+        # l'onglet Référence (son jeton @VideoN suit l'ordre d'envoi).
+        _previs_url = ""
+        if _previs:
+            try:
+                emit_progress(12, "Upload prévisualisation 3D du Plan de feu…")
+                _previs_url = _upload(_previs)
+            except Exception as _pe:
+                emit_progress(12, f"⚠ Prévisualisation 3D non transmise ({str(_pe)[:60]}) "
+                                  "— génération sans elle")
+
         if uploaded_urls:
             args["image_urls"] = uploaded_urls
             # Build @ImageN mentions with role-appropriate instructions
@@ -778,7 +824,7 @@ def run_real(params: dict, emit_progress, is_cancelled) -> dict:
             # Reprise exacte : le texte d'origine contient DÉJÀ ces désignations.
             if _prompt_additions and not _exact:
                 args["prompt"] = args["prompt"] + ". " + " ".join(_prompt_additions)
-        elif _auto_ref:
+        elif _auto_ref and not _previs_url:
             mode = "t2v"
             endpoint = endpoints["t2v"]
             # Retour en texte→vidéo (aucune référence n'a pu partir) : chez fal
@@ -801,6 +847,12 @@ def run_real(params: dict, emit_progress, is_cancelled) -> dict:
                     args["audio_urls"] = [_upload(audio_path)]
                 except Exception:
                     pass
+        if _previs_url:
+            _vids = list(args.get("video_urls") or []) + [_previs_url]
+            args["video_urls"] = _vids
+            _previs_sent = True
+            if not _exact:
+                args["prompt"] = args["prompt"] + ". " + previs_directive(_sf.ref_token("video", len(_vids)))
 
     elif mode == "ext":
         video_path = params.get("video_path", "")
@@ -934,6 +986,7 @@ def run_real(params: dict, emit_progress, is_cancelled) -> dict:
             "seed":                  result.get("seed", 0),
             "ref_images_attempted":  _ref_images_attempted,
             "ref_images_sent":       _ref_images_sent,
+            "previs_sent":           _previs_sent,
             "prompt_composition":    "advanced" if _composed else (
                 "fallback" if _compose_attempted else "legacy"),
             "gcs_blocked":           _gcs_blocked,
@@ -1022,6 +1075,7 @@ def run_real(params: dict, emit_progress, is_cancelled) -> dict:
         "seed":                  result.get("seed", 0),
         "ref_images_attempted":  _ref_images_attempted,
         "ref_images_sent":       _ref_images_sent,
+        "previs_sent":           _previs_sent,
         "prompt_composition":    "advanced" if _composed else (
             "fallback" if _compose_attempted else "legacy"),
         "gcs_blocked":           _gcs_blocked,

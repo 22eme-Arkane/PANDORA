@@ -1,5 +1,5 @@
 TERMS OF USE — PANDORA SOFTWARE
-Version 2.6.1 — October 2026
+Version 2.7.0 — October 2026
 22eme Arkane — Matthieu Terrien
 Contact: 22eme.arkane@gmail.com
 
@@ -11,8 +11,8 @@ This document constitutes the Terms of Use of PANDORA between you, the User, and
 22eme Arkane (Matthieu Terrien), hereinafter referred to as "the Publisher",
 concerning the PANDORA software and any future updates.
 
-PANDORA is free software distributed under the GNU General Public License
-version 3 (GPL v3). The source code is publicly available at:
+PANDORA is free software distributed under the Apache License, Version 2.0
+(Apache 2.0). The source code is publicly available at:
 https://github.com/22eme-Arkane/PANDORA
 
 By installing or using PANDORA, you declare that you have read, understood, and
@@ -31,24 +31,30 @@ generating video and image content through third-party artificial intelligence s
 
 ARTICLE 2 — SOFTWARE LICENSE
 
-PANDORA is distributed under the GNU General Public License version 3 (GPL v3),
-the full text of which is available at:
-https://www.gnu.org/licenses/gpl-3.0.txt
+PANDORA is distributed under the Apache License, Version 2.0 (Apache 2.0), the
+full text of which is in the LICENSE file and available at:
+https://www.apache.org/licenses/LICENSE-2.0
 
 Under this license, you are free to:
 
-  a) Use PANDORA for any personal or professional purpose;
+  a) Use PANDORA for any personal or professional purpose, including commercial;
   b) Study the source code and modify it according to your needs;
-  c) Redistribute PANDORA, modified or not, under the same GPL v3 terms;
+  c) Redistribute PANDORA, modified or not, as source code or as a compiled
+     application;
   d) Contribute to the project via the official GitHub repository.
 
-Any redistribution must retain the original copyright notice and be accompanied by
-the text of the GPL v3 license. The source code must be made available under the
-same conditions.
+Any redistribution must include the text of the Apache 2.0 license and the NOTICE
+file, retain the copyright notices, and state which files were modified. The
+license includes a patent grant from contributors; it grants no rights to the
+PANDORA name or to the trademarks of 22eme Arkane.
+
+The installers also contain third-party components distributed under their own
+licenses (notably PyQt6 and FFmpeg, under the GNU GPL): they are listed in the
+NOTICE file.
 
 These Terms of Use specify the conditions of use applicable to the compiled
-application (Windows installer) and to the integrated third-party services, in
-addition to the GPL v3 license.
+application (Windows and macOS installers) and to the integrated third-party
+services, in addition to the Apache 2.0 license.
 
 ════════════════════════════════════════════════════════════════
 
@@ -112,14 +118,15 @@ ARTICLE 6 — INTELLECTUAL PROPERTY AND COPYRIGHT
 PANDORA is the original creation of 22eme Arkane (Matthieu Terrien).
 Copyright (C) 2026 22eme Arkane — Matthieu Terrien. All copyright reserved.
 
-The source code is distributed under the GPL v3 license, which means that copyright
-is maintained while granting the freedoms defined by that license. Any copy or
-distribution of PANDORA must retain the original copyright notice in accordance with
-the terms of the GPL v3.
+The source code is distributed under the Apache 2.0 license, which means that
+copyright is maintained while granting the freedoms defined by that license. Any
+copy or distribution of PANDORA must retain the original copyright notice and the
+NOTICE file, in accordance with the terms of the Apache 2.0 license.
 
 The visual elements, the graphical interface, the PANDORA name, and the associated
-trademarks remain the property of 22eme Arkane and are not covered by the GPL v3
-license outside of their integration into the software.
+trademarks remain the property of 22eme Arkane and are not covered by the Apache
+2.0 license (section 6 of that license) outside of their integration into the
+software.
 
 ════════════════════════════════════════════════════════════════
 
@@ -170,7 +177,7 @@ To the extent permitted by French law, the Publisher shall not be held liable fo
 ARTICLE 10 — UPDATES
 
 The Publisher may release updates, patches, and new versions of PANDORA. These
-updates are subject to the terms of these Terms of Use and of the GPL v3 license.
+updates are subject to the terms of these Terms of Use and of the Apache 2.0 license.
 The User is not required to install them but may benefit from them freely.
 
 The automatic update check at startup may be disabled in the software settings. It
@@ -192,7 +199,7 @@ the exclusive jurisdiction of the competent French courts.
 
 ARTICLE 12 — GENERAL PROVISIONS
 
-12.1 Entire agreement — These Terms of Use, together with the GPL v3 license,
+12.1 Entire agreement — These Terms of Use, together with the Apache 2.0 license,
      constitute the entire agreement between the parties regarding the use of PANDORA.
 
 12.2 Severability — If any provision of these Terms of Use is declared invalid, illegal,
@@ -209,4 +216,4 @@ ARTICLE 12 — GENERAL PROVISIONS
 ════════════════════════════════════════════════════════════════
 
 22eme Arkane — Matthieu Terrien
-Version 2.6.1 — October 2026
+Version 2.7.0 — October 2026

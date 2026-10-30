@@ -1263,6 +1263,10 @@ class TabDavinciEdit(QScrollArea):
             params_grid.addWidget(g, row, col)
 
         body_params.addLayout(params_grid)
+        # UNE entrée « ComfyUI » au lieu des 24 gabarits d'édition vidéo, et sous
+        # la grille la ligne Gabarit / Calcul (ui/comfy_choice, 22/10/2026).
+        from ui.comfy_choice import attach_comfy
+        attach_comfy(self._cb_model, "video_edit", layout=body_params, after=params_grid)
         # Réglages de « Changer le décor · acteurs intacts » (composant partagé
         # avec le Live) — visibles seulement quand ce moteur est choisi.
         from ui.decor_swap_options import DecorSwapOptions
@@ -2219,11 +2223,9 @@ class TabDavinciEdit(QScrollArea):
         # Gabarit ComfyUI : sans serveur vivant, on GUIDE (fenêtre du module) au
         # lieu d'échouer clip par clip dans un thread — même contrat que le Studio.
         if self._is_comfy_edit():
-            from core import comfy as _cf
-            if not _cf.discover():
-                from ui.external_autostart import ensure_ready
-                if not ensure_ready("comfyui", self):
-                    return
+            from ui.comfy_choice import ensure_comfy_ready
+            if not ensure_comfy_ready(self)[0]:
+                return
 
         n_prises = self._spin_prises.value()
         self._queue = []

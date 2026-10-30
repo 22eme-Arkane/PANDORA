@@ -204,6 +204,13 @@ class SeedanceWidget(QWidget):
 
         root.addWidget(self.tabs)
 
+        # ── Machines d'AIODOS (27/10/2026) : panneau pliable, présent seulement
+        # quand le calcul ComfyUI passe par AIODOS (ui/aiodos_peers_panel). ──────
+        from ui.aiodos_peers_panel import AiodosPeersPanel
+        self._aiodos_peers = AiodosPeersPanel()
+        root.addWidget(self._aiodos_peers)
+        self._aiodos_peers._on_compute()
+
         # ── Bandeau ESTIMATION DE PRIX fixe sous les onglets ──────────────────
         # Toujours visible (jamais dans le scroll) : sélection de plans × durée ×
         # grille du DISTRIBUTEUR actif (fal.ai ou alternatif choisi dans

@@ -1,5 +1,5 @@
 CHARTE D'UTILISATION — LOGICIEL PANDORA
-Version 2.6.1 — Octobre 2026
+Version 2.7.0 — Octobre 2026
 22eme Arkane — Matthieu Terrien
 Contact : 22eme.arkane@gmail.com
 
@@ -11,8 +11,8 @@ Le présent document constitue la Charte d'utilisation de PANDORA entre vous,
 l'Utilisateur, et 22eme Arkane (Matthieu Terrien), ci-après désigné « l'Éditeur »,
 concernant le logiciel PANDORA et ses mises à jour éventuelles.
 
-PANDORA est un logiciel libre distribué sous licence GNU General Public License
-version 3 (GPL v3). Le code source est disponible publiquement à l'adresse :
+PANDORA est un logiciel libre distribué sous licence Apache, version 2.0
+(Apache 2.0). Le code source est disponible publiquement à l'adresse :
 https://github.com/22eme-Arkane/PANDORA
 
 En installant ou utilisant PANDORA, vous déclarez avoir lu, compris et accepté
@@ -32,24 +32,32 @@ contenus vidéo et image via des services d'intelligence artificielle tiers.
 
 ARTICLE 2 — LICENCE LOGICIELLE
 
-PANDORA est distribué sous licence GNU General Public License version 3 (GPL v3),
-dont le texte intégral est disponible à l'adresse :
-https://www.gnu.org/licenses/gpl-3.0.txt
+PANDORA est distribué sous licence Apache, version 2.0 (Apache 2.0), dont le
+texte intégral figure dans le fichier LICENSE et à l'adresse :
+https://www.apache.org/licenses/LICENSE-2.0
 
 En vertu de cette licence, vous êtes libre de :
 
-  a) Utiliser PANDORA pour tout usage personnel ou professionnel ;
+  a) Utiliser PANDORA pour tout usage personnel ou professionnel, y compris
+     commercial ;
   b) Étudier le code source et le modifier selon vos besoins ;
-  c) Redistribuer PANDORA, modifié ou non, sous les mêmes conditions GPL v3 ;
+  c) Redistribuer PANDORA, modifié ou non, sous forme de code source ou
+     d'application compilée ;
   d) Contribuer au projet via le dépôt GitHub officiel.
 
-Toute redistribution doit conserver la mention du copyright original et être
-accompagnée du texte de la licence GPL v3. Le code source doit être rendu
-accessible dans les mêmes conditions.
+Toute redistribution doit être accompagnée du texte de la licence Apache 2.0 et
+du fichier NOTICE, conserver les mentions de copyright, et signaler les fichiers
+modifiés. La licence comprend une concession de brevets de la part des
+contributeurs ; elle n'accorde aucun droit sur le nom PANDORA ni sur les marques
+de 22eme Arkane.
+
+Les installeurs contiennent aussi des composants tiers distribués sous leur
+propre licence (notamment PyQt6 et FFmpeg, sous licence GNU GPL) : ils sont
+énumérés dans le fichier NOTICE.
 
 La présente charte précise les conditions d'utilisation applicables à
-l'application compilée (installeur Windows) et aux services tiers intégrés,
-en complément de la licence GPL v3.
+l'application compilée (installeurs Windows et macOS) et aux services tiers
+intégrés, en complément de la licence Apache 2.0.
 
 ════════════════════════════════════════════════════════════════
 
@@ -115,14 +123,16 @@ ARTICLE 6 — PROPRIÉTÉ INTELLECTUELLE ET COPYRIGHT
 PANDORA est la création originale de 22eme Arkane (Matthieu Terrien).
 Copyright (C) 2026 22eme Arkane — Matthieu Terrien. Tous droits d'auteur réservés.
 
-Le code source est distribué sous licence GPL v3, ce qui signifie que les droits
-d'auteur sont maintenus tout en autorisant les libertés définies par cette licence.
-Toute copie ou distribution de PANDORA doit conserver la mention de copyright
-originale conformément aux termes de la GPL v3.
+Le code source est distribué sous licence Apache 2.0, ce qui signifie que les
+droits d'auteur sont maintenus tout en autorisant les libertés définies par cette
+licence. Toute copie ou distribution de PANDORA doit conserver la mention de
+copyright originale et le fichier NOTICE, conformément aux termes de la licence
+Apache 2.0.
 
 Les éléments visuels, l'interface graphique, le nom PANDORA et les marques
 associées demeurent la propriété de 22eme Arkane et ne sont pas couverts par la
-licence GPL v3 en dehors de leur intégration dans le logiciel.
+licence Apache 2.0 (article 6 de cette licence) en dehors de leur intégration
+dans le logiciel.
 
 ════════════════════════════════════════════════════════════════
 
@@ -177,7 +187,7 @@ ARTICLE 10 — MISES À JOUR
 
 L'Éditeur peut publier des mises à jour, corrections et nouvelles versions de
 PANDORA. Ces mises à jour sont soumises aux termes de la présente charte et de
-la licence GPL v3. L'Utilisateur n'est pas tenu de les installer mais peut en
+la licence Apache 2.0. L'Utilisateur n'est pas tenu de les installer mais peut en
 bénéficier librement.
 
 La vérification automatique de mise à jour au démarrage peut être désactivée dans
@@ -200,7 +210,7 @@ la compétence exclusive des tribunaux français compétents.
 ARTICLE 12 — DISPOSITIONS GÉNÉRALES
 
 12.1 Intégralité de l'accord — La présente charte, conjointement avec la licence
-     GPL v3, constitue l'intégralité de l'accord entre les parties concernant
+     Apache 2.0, constitue l'intégralité de l'accord entre les parties concernant
      l'utilisation de PANDORA.
 
 12.2 Divisibilité — Si une disposition de la présente charte est déclarée invalide,
@@ -217,4 +227,4 @@ ARTICLE 12 — DISPOSITIONS GÉNÉRALES
 ════════════════════════════════════════════════════════════════
 
 22eme Arkane — Matthieu Terrien
-Version 2.6.1 — Octobre 2026
+Version 2.7.0 — Octobre 2026

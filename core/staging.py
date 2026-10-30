@@ -429,12 +429,25 @@ def staging_summary(shot_id: str) -> str:
     return " ".join(parts)
 
 
+def _scene3d_texts(shot_id: str):
+    """Textes de la scène 3D du plan (core/scene3d_prompt), ou None s'il n'en a pas."""
+    try:
+        from core import scene3d_prompt
+        return scene3d_prompt.for_shot(shot_id)
+    except Exception:
+        return None
+
+
 def staging_actors_summary(shot_id: str) -> str:
     """Placement des PERSONNAGES (+ éléments) SEUL — pour la section [MISE EN SCÈNE]
     du prompt. Chaque personnage est situé PAR RAPPORT aux éléments du décor posés
     sur le plan (« à droite de la table ») et vu de la caméra — pas en zone abstraite.
     La caméra, elle, part dans les champs TECHNIQUES du plan (camera_axis /
-    camera_placement) — cf. PageStaging._sync_to_storyboard."""
+    camera_placement) — cf. PageStaging._sync_to_storyboard.
+    Depuis le 29/10/2026, la scène 3D du plan (onglet « 3D ») fait foi quand elle existe."""
+    scene_txt = _scene3d_texts(shot_id)
+    if scene_txt is not None:
+        return scene_txt.get("actors", "")
     rec = get(shot_id)
     parts = []
     actors = rec.get("actors") or []
@@ -546,8 +559,12 @@ def lighting_summary(shot_id: str) -> str:
     Le placement de CHAQUE projecteur est exprimé RELATIVEMENT À L'AXE CAMÉRA
     (frontal / latéral / contre-jour, côté caméra gauche-droite), avec des DISTANCES
     chiffrées aux acteurs (échelle RÉELLE du décor). Les projecteurs ÉTEINTS sont
-    exclus. Si la caméra bouge, la direction de la lumière change → résumé recalculé."""
+    exclus. Si la caméra bouge, la direction de la lumière change → résumé recalculé.
+    Depuis le 29/10/2026, la scène 3D du plan (onglet « 3D ») fait foi quand elle existe."""
     import math
+    scene_txt = _scene3d_texts(shot_id)
+    if scene_txt is not None:
+        return scene_txt.get("lighting", "")
     rec = get(shot_id)
     # Projecteurs ALLUMÉS uniquement (éteint = grisé + exclu du prompt).
     lights = [l for l in (rec.get("lights") or [])

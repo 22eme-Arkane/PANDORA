@@ -1081,6 +1081,9 @@ class CharacterDialog(QDialog):
         )
         _m_row.addWidget(self._model_combo, 1)
         lay.addLayout(_m_row)
+        # UNE entrée « ComfyUI » + la ligne Gabarit / Calcul (ui/comfy_choice).
+        from ui.comfy_choice import attach_comfy
+        attach_comfy(self._model_combo, "image", layout=lay, after=_m_row)
 
         # Format (ratio) + Définition (résolution) — composants PARTAGÉS.
         # « Automatique » reste le défaut : le format historique du portrait dépend

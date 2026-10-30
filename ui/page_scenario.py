@@ -700,6 +700,20 @@ class PageScenario(QWidget):
         tl.addWidget(self._btn_align_center)
         tl.addWidget(self._btn_align_right)
 
+        # « Retirer le fond » (27/10/2026) : si un texte collé garde son fond
+        # blanc ou sa couleur, on les retire (sélection, sinon tout le texte).
+        self._btn_strip_colors = QPushButton("Retirer le fond")
+        self._btn_strip_colors.setFixedHeight(26)
+        self._btn_strip_colors.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._btn_strip_colors.setToolTip(
+            "Retire le fond et la couleur du texte collé (sélection, sinon tout le texte)")
+        self._btn_strip_colors.setStyleSheet(_fmt_ss + "QPushButton{padding:0 10px;font-size:10px;}")
+        self._btn_strip_colors.clicked.connect(
+            lambda: __import__("ui.paste_clean", fromlist=["x"]).strip_colors(
+                self._active_text_edit()))
+        tl.addWidget(_tb_sep())
+        tl.addWidget(self._btn_strip_colors)
+
         tl.addStretch(1)
 
         # La barre reflète l'état du curseur de l'onglet actif.

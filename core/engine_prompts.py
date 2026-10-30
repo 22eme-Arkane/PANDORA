@@ -78,6 +78,10 @@ TASK_ROLES: dict[str, str] = {
         "Tu analyses les IMAGES fournies : décris uniquement ce qui s'y voit, "
         "dans le format demandé — n'invente rien qui ne soit pas visible."
     ),
+    "choreography": (
+        "Tu mets en scène un plan : ta réponse est le JSON strict demandé (marques "
+        "des personnages et de la caméra) — rien d'autre."
+    ),
 }
 
 

@@ -15,6 +15,10 @@ Déroulé :
 
 Coût : 0 $. `core/pricing` porte l'entrée `comfy` à zéro pour que le journal ne
 retombe pas sur le tarif d'un moteur inconnu.
+
+Calcul « Mes machines · AIODOS » (22/10/2026) : étapes 1-2 identiques, puis le
+graphe part chez AIODOS (core/comfy_aiodos), qui le fait calculer par mes
+machines et rend le fichier — `_run_aiodos`.
 """
 
 from __future__ import annotations
@@ -70,13 +74,20 @@ class ComfyWorker(_CancellableWorker):
         sub = j.get("subfolder") or ""
         return f"{sub}/{name}" if sub else name
 
-    def _load_and_fill(self, base: str) -> dict:
+    def _load_and_fill(self, base: str | None) -> dict:
         from core import comfy_h3 as _h3c
+        from core import comfy_image as _ci
         path = self.params.get("workflow_path") or ""
         if not path or not os.path.isfile(path):
             raise ValueError("Aucun workflow ComfyUI : choisissez un gabarit H3 ou un fichier .json.")
         wf = _wf.load(path)
-        info = _cf.fetch_object_info(base)
+        # Toujours relu (un modèle tout juste installé doit se voir) ; gardé sur
+        # le disque pour le calcul par AIODOS quand ComfyUI de ce PC est fermé.
+        if base:
+            info = _cf.fetch_object_info(base)
+            _ci.remember_object_info(info)
+        else:
+            info = _ci.saved_object_info()
         self._object_info = info
         api = _wf.to_api(wf, info)
 
@@ -93,13 +104,75 @@ class ComfyWorker(_CancellableWorker):
         # résolution, remplacé par des littéraux) ne part pas.
         return _wf.prune_unreachable(api, info)
 
+    def _run_aiodos(self, base: str | None) -> None:
+        """Le même workflow, calculé par mes machines (core/comfy_aiodos) : les
+        images d'entrée partent par jeton @in: au lieu de /upload/image, le
+        fichier rendu revient dans le dossier de sortie vidéo."""
+        import shutil
+        from core import comfy_aiodos as _ca
+        _ca.require_ready()
+        self.progress.emit(6, f"{self._label} — lecture du workflow…")
+        images = {}
+        for key, pkey, name in (("image_path", "_comfy_image", "pandora_start.png"),
+                                ("end_image_path", "_comfy_end_image", "pandora_end.png")):
+            p = self.params.get(key) or ""
+            if p and os.path.isfile(p):
+                self.params[pkey] = name
+                images[name] = p
+        api = self._load_and_fill(base)
+        files = {nid: images[str((n.get("inputs") or {}).get("image"))] for nid, n in api.items()
+                 if n.get("class_type") == "LoadImage"
+                 and str((n.get("inputs") or {}).get("image")) in images}
+        last = {"pct": 8}
+
+        def prog(pct, msg):
+            if pct is not None:
+                last["pct"] = max(8, min(97, int(pct)))
+            self.progress.emit(last["pct"], f"{self._label} — {msg}")
+
+        def stopped():
+            return self._cancelled or self.isInterruptionRequested()
+
+        mode = "i2v" if self.params.get("image_path") else "t2v"
+        try:
+            outs = _ca.run(api, files, kind="video", label=f"PANDORA · {self._label}",
+                           sensitive=bool(files), progress=prog, is_cancelled=stopped,
+                           stem=f"{MODEL}_{mode}")
+        except RuntimeError as e:
+            if str(e) == _ca.CANCELLED and stopped():
+                return
+            raise
+        if not outs:
+            raise RuntimeError("Le workflow s'est terminé sans produire de fichier de sortie.")
+        item = next((o for o in outs if o["type"].startswith("video/")), outs[0])
+        ext = os.path.splitext(item["path"])[1].lower() or ".mp4"
+        local = os.path.join(_video_output_dir(), f"{MODEL}_{mode}_{int(time.time())}{ext}")
+        shutil.move(item["path"], local)
+        if ext in (".webm", ".gif", ".webp"):
+            from api.h3_local import _to_mp4
+            local = _to_mp4(local)
+        self.progress.emit(100, f"{self._label} ✓  0 $")
+        if not self._cancelled:
+            self.finished.emit({
+                "url":          "",
+                "local_path":   local,
+                "duration":     self.params.get("duration") or 0,
+                "resolution":   self.params.get("resolution") or "",
+                "model":        f"{MODEL}-{mode}",
+                "credits_used": 0.0,
+            })
+
     # ── Exécution ────────────────────────────────────────────────────────────
 
     def run(self):
         try:
             import requests
+            from core import comfy_aiodos as _ca
 
             base = _cf.discover()
+            if _ca.enabled():               # « Calcul : Mes machines · AIODOS »
+                self._run_aiodos(base)
+                return
             if not base:
                 raise RuntimeError(
                     "ComfyUI injoignable. Lancez ComfyUI Desktop (ou corrigez "

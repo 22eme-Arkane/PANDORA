@@ -19,6 +19,9 @@ import traceback
 import inspect
 
 os.environ["QT_QPA_PLATFORM"] = "offscreen"
+# Thème de couleur FIXÉ (27/10/2026) : « Nuit bleue », celui d'origine, quel que
+# soit le thème choisi dans la vraie config — les tests de couleurs restent stables.
+os.environ["PANDORA_THEME"] = "nuit"
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 try:
@@ -67,6 +70,21 @@ _TESTS = []
 def test(fn):
     _TESTS.append(fn)
     return fn
+
+
+def _menu_keys(combo):
+    """Ce que propose un menu de moteurs : ses clés, l'entrée « ComfyUI » unique
+    (ui/comfy_choice, 22/10/2026) remplacée par TOUS ses gabarits, dans l'ordre
+    du catalogue — à comparer au catalogue complet."""
+    from ui.comfy_choice import comfy_choice_of
+    ch = comfy_choice_of(combo)
+    out = []
+    for i in range(combo.count()):
+        if ch is not None and i == ch.item_index():
+            out.extend(ch.original_keys)
+        else:
+            out.append(combo.itemData(i))
+    return out
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -188,7 +206,11 @@ def edition_cinema_only():
     # les menus du storyboard, « ⊘ Aucun style », « Réessayer avec » dans la
     # fenêtre d'erreur (restylée, sans bouton sur un refus du filtre ByteDance),
     # limite de 4000 caractères de PiAPI, « drone » retiré de la réécriture.
-    assert VERSION.split("-")[0] == "2.6.1", f"version attendue 2.6.1[-suffixe], lue {VERSION}"
+    # Build 2.7.0 (2026-10-27) : AIODOS (gabarits ComfyUI calculés par mes
+    # machines, IA texte « aiodos », section des Paramètres, case facultative de
+    # l'installeur) et UNE entrée « ComfyUI » + ligne Gabarit / Calcul dans les
+    # menus de moteurs.
+    assert VERSION.split("-")[0] == "2.7.0", f"version attendue 2.7.0[-suffixe], lue {VERSION}"
     # ── UN SEUL numéro de version dans tout le produit ────────────────────────
     # Chaque endroit qui recopie le numéro à la main finit par diverger : la 2.0.0
     # est partie en build avec une charte d'utilisation estampillée 1.3.5, un .app
@@ -1441,6 +1463,12 @@ def decor_sept_vues():
     # decors_sept_vues_groupees.
     import inspect
     src = inspect.getsource(__import__("ui.dialog_decor", fromlist=["_"]))
+    # 29/10/2026 : le MODE « 7 vues » n'est plus proposé dans la fiche décor (la
+    # génération classique reste, avec le plan d'architecte) ; le moteur reste
+    # pour les pièces déjà générées des anciens projets (régénération d'une face).
+    import re as _re
+    assert not _re.search(r'_gen_mode\.addItem\((?:[^()]|\([^()]*\))*"seven_views"', src), \
+        "mode 7 vues retiré du menu de la fiche décor"
     assert '"seven_views"' in src and "GenerateRoomViewsWorker" in src
     assert "_on_room_decors_done" in src and "room_group" in src, \
         "la fiche décor crée 7 décors frères marqués room_group"
@@ -4403,13 +4431,13 @@ def moods_fenetre_options():
     dlg = PS._MoodBatchDialog(_par, [{"id": "a", "number": 1, "scene_title": "T"}])
     for a in ("_opt_engine", "_opt_chars", "_opt_decor", "_opt_floor"):
         assert hasattr(dlg, a), "option manquante : " + a
-    _keys = [dlg._opt_engine.itemData(i) for i in range(dlg._opt_engine.count())]
+    _keys = _menu_keys(dlg._opt_engine)
     assert _keys == IE.raster_engines(), "combo moteur ≠ catalogue image complet"
     # 2026-07-23 : Seedream 5 Pro en TÊTE du catalogue (décision Matthieu).
     assert _keys[0] == "seedream5_pro" and "flux" not in _keys and len(_keys) >= 14
     assert dlg._opt_chars.isChecked() and dlg._opt_decor.isChecked() and dlg._opt_floor.isChecked()
     # Moteur SANS référence (Recraft) → réfs de cohérence grisées ; moteur à réfs (nb2) → actives.
-    dlg._opt_engine.setCurrentIndex(_keys.index("recraft"))
+    dlg._opt_engine.setCurrentIndex(dlg._opt_engine.findData("recraft"))
     assert not (dlg._opt_chars.isEnabled() or dlg._opt_decor.isEnabled() or dlg._opt_floor.isEnabled())
     dlg._opt_engine.setCurrentIndex(_keys.index("nb2"))
     assert dlg._opt_chars.isEnabled() and dlg._opt_decor.isEnabled() and dlg._opt_floor.isEnabled()
@@ -4901,19 +4929,15 @@ def atelier_7_vues_trois_moteurs():
     from PyQt6.QtWidgets import QApplication
     QApplication.instance() or QApplication([])
 
-    # 1) Hub 2 onglets, page classique intacte, branché dans la fenêtre.
-    from ui.decors_hub import DecorsHub
-    import ui.page_decors as PD
+    # 1) 29/10/2026 (Matthieu : « la partie 7 vues ne marche vraiment pas du tout,
+    #    on l'enlève ») : la navigation monte la page Décors CLASSIQUE seule ; le
+    #    hub et l'atelier restent dans le code (moteurs figés ci-dessous) mais ne
+    #    sont plus atteignables.
     import ui.page_decors_multiview as PM
-    hub = DecorsHub()
-    assert hub.tabs.count() == 2, "la partie Décors doit avoir 2 onglets"
-    assert isinstance(hub.tabs.widget(0), PD.PageDecors), "onglet 1 = page classique"
-    assert isinstance(hub.tabs.widget(1), PM.PageDecorsMultiview), "onglet 2 = atelier"
-    assert hasattr(hub, "refresh"), "la navigation appelle refresh() sur la page"
     import ui.pandora_window as PW
     _src_pages = inspect.getsource(PW.PandoraWindow._build_pages)
-    assert "DecorsHub" in _src_pages and "PageDecors" not in _src_pages, \
-        "la navigation doit monter le hub, pas PageDecors directement"
+    assert '"decors":      PageDecors' in _src_pages and "DecorsHub" not in _src_pages, \
+        "la navigation monte la page Décors classique, sans l'onglet « Avancé »"
 
     # 2) Angles Qwen — schéma CORRIGÉ SUR ESSAI RÉEL (2026-07-31, décor « Dojo
     #    — Crèche de Noël ») : Matthieu a constaté que « la gauche est en fait
@@ -5467,6 +5491,25 @@ def _teardown_qt() -> None:
     Chaque étape est blindée : ce bloc ne doit JAMAIS rougir un run vert."""
     from PyQt6.QtCore import QThreadPool, QEvent
 
+    # 0. Laisser finir les QThread encore en marche AVANT de détruire les fenêtres
+    #    (27/10/2026) : un ping DaVinci lancé par une page de Paramètres, ou une
+    #    vérification de modules démarrée par un minuteur d'un test précédent quand
+    #    un test suivant fait tourner la boucle d'événements, était détruit en
+    #    marche → « QThread: Destroyed while thread is still running » → 0xC0000409.
+    try:
+        import gc
+        from PyQt6.QtCore import QThread
+        for _t in [o for o in gc.get_objects() if isinstance(o, QThread)]:
+            try:
+                if _t.isRunning():
+                    _t.requestInterruption()
+                    _t.quit()
+                    _t.wait(8000)
+            except Exception:
+                pass
+    except Exception:
+        pass
+
     # 1. Fermer et détruire tous les widgets top-level, puis traiter les
     #    DeferredDelete (sendPostedEvents les force même hors boucle d'événements).
     for w in list(APP.topLevelWidgets()):
@@ -5654,7 +5697,7 @@ def moteurs_image_catalogue_unifie():
     # 4) Les 5 dialogs d'éléments peuplent LEUR combo depuis le catalogue COMPLET.
     from ui.dialog_character import CharacterDialog
     d = CharacterDialog(None)
-    combo_keys = [d._model_combo.itemData(i) for i in range(d._model_combo.count())]
+    combo_keys = _menu_keys(d._model_combo)
     assert combo_keys == keys, "combo casting ≠ catalogue image complet"
     for _f in ("dialog_character", "dialog_decor", "dialog_accessory",
                "dialog_hmc", "dialog_vehicle"):
@@ -10068,7 +10111,8 @@ def comfyui_moteur_nodal_et_journal_de_cout():
         src = inspect.getsource(m.TabVideoEngines._on_generate)
         # Depuis le 24/09/2026 le serveur est LANCÉ et attendu (ui/external_autostart)
         # au lieu d'ouvrir la fenêtre d'installation.
-        assert "ComfyWorker" in src and 'ensure_ready("comfyui"' in src, f"{mod}: dispatch ComfyUI manquant"
+        # Depuis le 22/10/2026 : selon « Calcul » (ui/comfy_choice.ensure_comfy_ready).
+        assert "ComfyWorker" in src and "ensure_comfy_ready(self)" in src, f"{mod}: dispatch ComfyUI manquant"
         keys = [k for _, k, _ in m.TabVideoEngines._ENGINES]
         for k in ("comfy_h3_t2v", "comfy_h3_i2v", "comfy_custom"):
             assert k in keys, f"{mod}: {k} absent"
@@ -10236,7 +10280,7 @@ def h3_et_comfy_generables_depuis_le_storyboard():
         "avec une image de départ : gabarit I2V"
     # Sans serveur, il est LANCÉ et attendu depuis ce Studio aussi (ui/external_autostart) ;
     # la fenêtre d'installation n'apparaît que s'il n'est pas installé.
-    assert 'ensure_ready("comfyui"' in _insp.getsource(_T), "guidage ComfyUI absent du Studio"
+    assert "ensure_comfy_ready(self)" in _insp.getsource(_T), "guidage ComfyUI absent du Studio"
 
 
 @test
@@ -10417,7 +10461,7 @@ def editeurs_video_cloud_table_worker_et_routage():
     assert w._model == "seedvr_local" and w._output_path().endswith("Plan 03.mp4")
     assert "_local" in inspect.getsource(UP.UpscaleVideoWorker.run)
     for mod in ("ui.tab_upscale", "ui.tab_upscale_live"):
-        assert 'ensure_ready("comfyui"' in inspect.getsource(importlib.import_module(mod)), mod
+        assert "ensure_comfy_ready(self)" in inspect.getsource(importlib.import_module(mod)), mod
 
 
 @test
@@ -10494,9 +10538,12 @@ def serveurs_locaux_demarres_automatiquement():
                     ("ui.tab_video_engines_live", True), ("ui.tab_davinci_edit", False),
                     ("ui.tab_modify_live", False)):
         s = inspect.getsource(importlib.import_module(mod))
-        assert 'ensure_ready("comfyui"' in s and "ComfyInstallDialog(self)" not in s, mod
+        assert "ensure_comfy_ready(self)" in s and "ComfyInstallDialog(self)" not in s, mod
         if h3:
             assert 'ensure_ready("h3_local"' in s, f"{mod} : garde H3 local absente"
+    # « Calcul : Ce PC » : ComfyUI toujours lancé et attendu (22/10/2026).
+    import ui.comfy_choice as _cch
+    assert 'ensure_ready("comfyui", parent)' in inspect.getsource(_cch.ensure_comfy_ready)
     # 6. IA texte : Ollama / LM Studio relancés depuis le worker, une seule fois.
     from core import ai_provider as AP
     assert "_with_autostart" in inspect.getsource(AP._ollama_post) \
@@ -10804,7 +10851,11 @@ def ia_locales_comme_claude_contexte_pensee_vision_et_serveurs():
         assert "_oai_stream(" in inspect.getsource(getattr(AP, fn)), f"{fn} : adaptateur commun attendu"
     for fn in ("_oai_json", "_ollama_complete", "_ollama_stream"):
         assert "_note_" in inspect.getsource(getattr(AP, fn)), f"{fn} : consommation non journalisée"
-    assert src.count("filt = ThinkFilter()") == 2, "flux OpenAI-compatible + flux Ollama filtrés"
+    # Trois flux filtrés, pas de copie : l'adaptateur OpenAI-compatible commun,
+    # Ollama, et AIODOS (22/10/2026), qui passe par son propre client.
+    assert src.count("filt = ThinkFilter()") == 3, \
+        "flux OpenAI-compatible + flux Ollama + flux AIODOS filtrés"
+    assert "ThinkFilter()" in inspect.getsource(AP._aiodos_call), "pensée AIODOS non filtrée"
     from core.engine_prompts import _needs_reinforcement, TASK_ROLES
     assert _needs_reinforcement("local", "gros-modele-70b") and _needs_reinforcement("ollama", "x")
     for t in ("decoupage", "video_prompt", "element_chat", "vision"):
@@ -14063,6 +14114,2775 @@ def reprise_meme_seed_et_prompt_exact_05_10_2026():
     item = hist._make_item(dict(entry))
     labels = [b.text() for b in item.findChildren(QPushButton)]
     assert "↻ Reprendre" in labels, labels
+
+
+@test
+def aiodos_mes_machines():
+    """AIODOS (demande Matthieu, 22/10/2026) : « intégrer AIODOS, qui permet de
+    partager la puissance… ; AIODOS n'est pas fini et doit se mettre à jour même
+    une fois intégré ». PANDORA parle à l'AIODOS INSTALLÉ (client officiel copié
+    dans aiodos_client/), il ne l'embarque pas. Contre le faux AIODOS du client
+    (127.0.0.1, aucun réseau ; config, coffre de clé et définitions isolés) :
+    (1) l'accès se demande, la clé va au coffre ; (2) un gabarit ComfyUI d'image
+    calculé par « mes machines » — référence par jeton @in:, image servie en
+    local —, annulation DANS AIODOS, échec et modèles absents lisibles ; (3) le
+    clip (Modifier un clip) et le Studio H3 par le même transport ; (4) l'IA
+    texte « aiodos » ; (5) Paramètres : section AIODOS, réglage « Calcul » unique
+    suivi par tous ses menus ; (6) aucun repli silencieux."""
+    import hashlib
+    import shutil
+    import requests
+    import core.config as cc
+    from aiodos_client import Keystore
+    from aiodos_client.fake import FakeAiodos, png
+    from core import aiodos as AD, comfy as _cf, comfy_image as _ci, comfy_video as _cv
+    from core import comfy_aiodos as CA, comfy_workflow as _wf, local_files as LF
+    from core import ai_provider as AP, ai_registry as AR
+    import api.comfy as APC
+    from core import comfy_h3 as _h3c
+
+    tmp = tempfile.mkdtemp(prefix="pandora_aiodos_")
+    store = {}
+    env_saved = {v: os.environ.get(v) for v in ("AIODOS_DISCOVERY_FILE", "AIODOS_URL", "AIODOS_KEY")}
+    saved = (cc.load_config, cc.save_config, AD._keystore, _cf.discover, _ci._object_info_path,
+             APC._video_output_dir, CA.run)
+    cc.load_config = lambda: dict(store)
+    cc.save_config = lambda c: (store.clear(), store.update(c))
+    AD._keystore = lambda: Keystore.memory()
+    _cf.discover = lambda *a, **k: None            # jamais le vrai ComfyUI de ce PC
+    _ci._object_info_path = lambda: os.path.join(tmp, "comfy_object_info.json")
+    for v in ("AIODOS_URL", "AIODOS_KEY"):
+        os.environ.pop(v, None)
+    fake = FakeAiodos(auto_approve=True).start()
+    os.environ.update(fake.environ())
+    AD.reset()
+    fx = os.path.join(os.path.dirname(os.path.abspath(__file__)), "fixtures", "comfy")
+    try:
+        # ── 1. Accès : rien sans demande ; la demande montre le code ; la clé au coffre
+        assert AD.status(max_age=0).state == "needs_access"
+        ok, why = AD.ready_for_comfy()
+        assert not ok and "Paramètres → AIODOS" in why, why
+        from ui.aiodos_panel import _ConnectWorker
+        got = {}
+        cw = _ConnectWorker()
+        cw.code.connect(lambda c: got.setdefault("code", c))
+        cw.done.connect(lambda s: got.setdefault("done", s))
+        cw.failed.connect(lambda m: got.setdefault("failed", m))
+        cw.run()                                   # dans ce fil : signaux directs
+        assert "done" in got and got.get("code") == "482 197", got
+        st = AD.status(max_age=0)
+        assert st.state == "ready" and "engines:comfyui" in st.scopes and set(st.where) <= {"here", "mine"}
+        assert AD.ready_for_comfy() == (True, "") and AD.ready_for_chat() == (True, "")
+        assert "aiodos_key" not in store and not any("key" in k for k in store), store
+
+        # ── 2. Gabarit d'image calculé par mes machines ──────────────────────
+        import json as _json
+        with open(os.path.join(fx, "images", "object_info_images.json"), encoding="utf-8") as f:
+            oi = {k: v for k, v in _json.load(f).items() if not k.startswith("_")}
+        wf = _wf.load(os.path.join(fx, "images", "image_qwen_image_edit_2509.json"))
+        ref = os.path.join(tmp, "fiche.png")
+        with open(ref, "wb") as f:
+            f.write(png(16, 16, (10, 200, 30)))
+        AD.set_compute_mode("aiodos")
+        assert store["comfy_compute"] == "aiodos" and CA.enabled()
+        # Sans définitions gardées ni ComfyUI de ce PC : on le DIT (AIODOS ne les relaie pas).
+        try:
+            _ci.subscribe("image_qwen_image_edit_2509", {"prompt": "a cat", "ref_urls": [ref]})
+            raise AssertionError("sans définitions, rien ne doit partir")
+        except RuntimeError as e:
+            assert "lancez ComfyUI une fois sur ce PC" in str(e), e
+        _ci.remember_object_info(oi)
+        assert CA.has_saved_definitions()
+        args = {"prompt": "a cat", "ref_urls": [ref], "workflow": wf}
+        # Modèles absents de toutes les machines : nommés, et UNE seule fois.
+        try:
+            _ci.subscribe("image_qwen_image_edit_2509", args)
+            raise AssertionError("modèles absents : refus attendu")
+        except RuntimeError as e:
+            msg = str(e)
+        assert "qwen_image_vae.safetensors" in msg and msg.count("qwen_image_vae.safetensors") == 1, msg
+        assert "PC-BUREAU" in msg and "« Calcul : Ce PC »" in msg, msg
+        api0 = _wf.prune_unreachable(_wf.to_api(wf, oi), oi)
+        names = sorted({v for n in api0.values() for v in n["inputs"].values()
+                        if isinstance(v, str) and v.lower().endswith((".safetensors", ".gguf"))})
+        fake.comfy_models = [{"folder": "x", "name": n} for n in names]
+        msgs = []
+        res = _ci.subscribe("image_qwen_image_edit_2509", args, progress=msgs.append)
+        url = res["images"][0]["url"]
+        assert url.startswith("http://127.0.0.1:") and res["engine"] == "comfy:image_qwen_image_edit_2509"
+        assert requests.get(url, timeout=10).content.startswith(b"\x89PNG"), "l'URL locale se télécharge"
+        assert LF.path_of(url) and os.path.isfile(LF.path_of(url))
+        assert any("calculé par PC-BUREAU" in m for m in msgs), msgs
+        job = fake.job_record()
+        graph = fake._jobs[fake.last_job_id]["graphs"][0]
+        loads = [n for n in graph.values() if n["class_type"] == "LoadImage"]
+        assert loads and all(str(n["inputs"]["image"]).startswith("@in:") for n in loads), loads
+        assert job["label"] == "PANDORA · image_qwen_image_edit_2509" and job["where"] == ["here", "mine"]
+        sha = hashlib.sha256(open(ref, "rb").read()).hexdigest()
+        assert sha in fake.inputs_of(fake.seen_keys[-1]), "la référence part par empreinte"
+        # Annulation : le travail est annulé DANS AIODOS, même message que ComfyUI local.
+        fake.job_delay = None
+        calls = {"n": 0}
+
+        def stop():
+            calls["n"] += 1
+            return calls["n"] > 3
+        try:
+            _ci.subscribe("image_qwen_image_edit_2509", args, is_cancelled=stop)
+            raise AssertionError("annulation attendue")
+        except RuntimeError as e:
+            assert str(e) == "Génération annulée.", e
+        # Annulé DANS AIODOS ; fini, il y est aussi oublié avec ses fichiers déjà
+        # rendus (28/10/2026 : personne ne les récupérerait, ils rempliraient la réserve).
+        gone = fake.last_job_id
+        assert any(e["method"] == "POST" and e["path"].endswith(f"/{gone}/cancel") for e in fake.log)
+        assert gone not in fake._jobs or fake.job_record(gone)["status"] in ("cancelled", "cancelling")
+        fake.job_delay = 0.05
+        # Une unité en échec : l'erreur de ComfyUI, lisible.
+        fake.fail_unit(0, "engine_error", "KSampler : CUDA out of memory (nœud 3)")
+        try:
+            _ci.subscribe("image_qwen_image_edit_2509", args)
+            raise AssertionError("échec attendu")
+        except RuntimeError as e:
+            assert "CUDA out of memory" in str(e) and "AIODOS" in str(e), e
+        # Un nœud de lecture sans fichier : refusé AVANT l'envoi.
+        bare = {"1": {"class_type": "LoadImage", "inputs": {"image": "exemple.png"}},
+                "2": {"class_type": "SaveImage", "inputs": {"images": ["1", 0], "filename_prefix": "x"}}}
+        n_jobs = len(fake._jobs)
+        try:
+            CA.run(bare, None)
+            raise AssertionError("refus attendu")
+        except RuntimeError as e:
+            assert "fichier d'entrée" in str(e) and len(fake._jobs) == n_jobs, e
+
+        # ── 3. Clip (Modifier un clip) et Studio H3 : même transport ─────────
+        clip = os.path.join(tmp, "plan 03.mp4")
+        with open(clip, "wb") as f:
+            f.write(b"\x00\x00\x00\x18ftypmp42" + b"\x00" * 64)
+        oi_v = {"LoadVideo": {"input": {"required": {"file": [["ex.mp4"], {"video_upload": True}]}},
+                              "output": ["VIDEO"], "output_node": False},
+                "SaveVideo": {"input": {"required": {"video": ["VIDEO"],
+                                                     "filename_prefix": ["STRING", {"default": "v"}]}},
+                              "output": [], "output_node": True}}
+        _ci.remember_object_info(oi_v)
+        wf_v = {"1": {"class_type": "LoadVideo", "inputs": {"file": "ex.mp4"}},
+                "2": {"class_type": "SaveVideo", "inputs": {"video": ["1", 0], "filename_prefix": "v"}}}
+        try:
+            _cv.subscribe("video_x_upscale", {"video_path": clip, "prompt": "", "workflow": wf_v})
+            raise AssertionError("le faux AIODOS rend une image : « sans vidéo » attendu")
+        except RuntimeError as e:
+            assert "sans produire de vidéo" in str(e), e
+        graph = fake._jobs[fake.last_job_id]["graphs"][0]
+        assert str(graph["1"]["inputs"]["file"]).startswith("@in:"), graph["1"]
+        csha = hashlib.sha256(open(clip, "rb").read()).hexdigest()
+        assert csha in fake.inputs_of(fake.seen_keys[-1]), "le clip part par empreinte"
+        assert fake.job_record()["where"] == ["here", "mine"], "un clip reste chez moi (sensitive)"
+        # Résultat vidéo (transport simulé) : servi en local, rapatrié par simple copie.
+        out_mp4 = os.path.join(tmp, "rendu.mp4")
+        with open(out_mp4, "wb") as f:
+            f.write(b"\x00\x00\x00\x18ftypmp42video")
+        seen = {}
+
+        def fake_run(api, files=None, **kw):
+            seen.update(api=api, files=files, **kw)
+            return [{"path": out_mp4, "type": "video/mp4", "machine": "Portable", "place": "mine",
+                     "node": "2"}]
+        CA.run = fake_run
+        r = _cv._subscribe_aiodos("video_x_upscale", wf_v, {"1": clip}, None, None)
+        assert r["video_url"].startswith("http://127.0.0.1:") and seen["sensitive"] is True
+        dest = _cv.download(r["video_url"], os.path.join(tmp, "sortie"), "plan_03_x2")
+        assert open(dest, "rb").read() == open(out_mp4, "rb").read() and dest.endswith(".mp4")
+        # Studio H3 (api.comfy) : l'image de départ part par jeton, le clip rejoint la sortie vidéo.
+        with open(os.path.join(fx, "object_info_h3.json"), encoding="utf-8") as f:
+            _ci.remember_object_info({k: v for k, v in _json.load(f).items() if not k.startswith("_")})
+        mood = os.path.join(tmp, "mood.png")
+        with open(mood, "wb") as f:
+            f.write(png(8, 8))
+        vout = os.path.join(tmp, "videos")
+        os.makedirs(vout, exist_ok=True)
+        APC._video_output_dir = lambda *a, **k: vout
+        params = _h3c.prepare_params({"prompt": "a cat", "prompt_is_final": True, "image_path": mood,
+                                      "resolution": "480p", "aspect_ratio": "16:9", "duration": 5,
+                                      "seed": 7}, "comfy_h3_i2v")
+        w = APC.ComfyWorker(params)
+        done, fail = [], []
+        w.finished.connect(done.append)
+        w.failed.connect(fail.append)
+        w.run()
+        assert not fail and done, (fail, done)
+        assert list(seen["files"].values()) == [mood], seen["files"]
+        nid = next(iter(seen["files"]))
+        assert seen["api"][nid]["class_type"] == "LoadImage" and seen["kind"] == "video"
+        assert os.path.dirname(done[0]["local_path"]) == vout and os.path.isfile(done[0]["local_path"])
+        CA.run = saved[6]
+
+        # ── 4. IA texte « aiodos » ───────────────────────────────────────────
+        rows = AR.primary_menu_items({"ollama": ["qwen3.5:9b"], "aiodos": ["qwen3.5:9b"]})
+        labels = [x["label"] for x in rows]
+        assert "AIODOS — mes machines" in labels and "AIODOS · qwen3.5:9b" in labels \
+            and "qwen3.5:9b" in labels, "un modèle d'AIODOS n'est jamais confondu avec Ollama"
+        store.update({"ai_profile": "single", "ai_engine": "aiodos", "ai_provider": "aiodos"})
+        assert AP.key_error("translate") is None and AP.is_local_provider("translate")
+        assert AP.complete("Tu traduis.", "Bonjour", task="translate").strip() == "Bonjour !"
+        chunks = []
+        assert AP.stream("s", "Bonjour", on_chunk=chunks.append, task="enhance") == "".join(chunks)
+        assert AP.chat_ex("s", [{"role": "user", "content": "Bonjour"}], task="translate")["truncated"] is False
+        assert 256 <= AP._aiodos_budget(16384, "s" * 3000, [{"role": "user", "content": "x" * 30000}],
+                                        16000) < 16000, "sortie plafonnée par le contexte"
+        store["ai_engine"] = "aiodos:mistral:7b"
+        AP.complete("s", "Bonjour", task="translate")
+        sent = [e for e in fake.log if e.get("path") == "/v1/chat/completions"][-1]
+        assert (sent.get("json") or {}).get("model") == "mistral:7b", sent.get("json")
+        img = {"role": "user", "content": [{"type": "text", "text": "Décris"}, {
+            "type": "image", "source": {"type": "base64", "media_type": "image/png",
+                                        "data": "iVBORw0KGgo="}}]}
+        try:
+            AP.chat("s", [img], task="vision")
+            raise AssertionError("garde vision attendue")
+        except RuntimeError as e:
+            assert "ne voit pas les images" in str(e), e
+
+        # ── 5. Paramètres Cinéma : section AIODOS, « Calcul » unique et suivi ──
+        from ui.page_settings import SettingsPage
+        from ui.aiodos_panel import AiodosPanel
+        from ui.comfy_choice import ComputeCombo, ensure_comfy_ready
+        page = SettingsPage()
+        assert isinstance(page._aiodos, AiodosPanel) and page._sec_aiodos is not None
+        page.deleteLater()
+        c1, c2 = ComputeCombo(), ComputeCombo()
+        c1.setCurrentIndex(c1.findData("local"))
+        assert store["comfy_compute"] == "local" and c2.currentData() == "local"
+        c2.setCurrentIndex(c2.findData("aiodos"))
+        assert store["comfy_compute"] == "aiodos" and c1.currentData() == "aiodos", "les menus se suivent"
+        panel = AiodosPanel()
+        summaries = []
+        panel.summary_changed.connect(summaries.append)
+        panel._apply(AD.status(max_age=0))
+        assert panel._btn_disconnect.isVisibleTo(panel) and not panel._btn_connect.isVisibleTo(panel)
+        assert summaries and summaries[-1].startswith("connecté"), summaries
+        for b in (panel, c1, c2):
+            b.deleteLater()
+
+        # ── 6. Aucun repli silencieux ─────────────────────────────────────────
+        assert ensure_comfy_ready(None) == (True, ""), "prêt : AIODOS connecté + définitions gardées"
+        AD.disconnect()
+        assert AD.status(max_age=0).state == "needs_access"
+        ok, why = ensure_comfy_ready(None)
+        assert not ok and "Paramètres → AIODOS" in why, why
+        try:
+            _ci.subscribe("image_qwen_image_edit_2509", args)
+            raise AssertionError("AIODOS non connecté : rien ne doit partir vers ComfyUI local")
+        except RuntimeError as e:
+            assert "AIODOS" in str(e), e
+    finally:
+        try:
+            fake.stop()
+        finally:
+            LF.shutdown()
+            (cc.load_config, cc.save_config, AD._keystore, _cf.discover, _ci._object_info_path,
+             APC._video_output_dir, CA.run) = saved
+            for v, val in env_saved.items():
+                if val is None:
+                    os.environ.pop(v, None)
+                else:
+                    os.environ[v] = val
+            AD.reset()
+            shutil.rmtree(tmp, ignore_errors=True)
+
+
+@test
+def comfyui_une_entree_et_son_gabarit():
+    """Demande Matthieu (22/10/2026) : « une très longue liste de ComfyUI ;
+    j'aimerais juste un réglage ComfyUI et pouvoir choisir le moteur ». Dans
+    chaque menu de moteurs, les gabarits deviennent UNE entrée « ComfyUI » dont
+    la donnée EST la clé du gabarit choisi (le code qui lit currentData() ne
+    change pas), avec dessous la ligne Gabarit (rangée par familles) + Calcul.
+    Le gabarit déjà choisi est gardé, sinon le dernier utilisé ; rien ne se perd
+    (le menu « déplié » redonne le catalogue complet)."""
+    import inspect
+    import importlib
+    import core.config as cc
+    from PyQt6.QtWidgets import QComboBox, QHBoxLayout, QLabel, QVBoxLayout, QWidget
+    from ui import comfy_choice as CC
+    store = {}
+    saved = (cc.load_config, cc.save_config)
+    cc.load_config = lambda: dict(store)
+    cc.save_config = lambda c: (store.clear(), store.update(c))
+    items = [("Nano Banana 2 · $0.08", "nb2"),
+             ("ComfyUI · Alpha  ·  texte → image · 2 Go sur votre GPU  ·  $0", "comfy:t_alpha"),
+             ("ComfyUI · Beta  ·  édition · réfs · 3 Go sur votre GPU  ·  $0", "comfy:t_beta"),
+             ("Seedream 5 Pro · $0.04", "seedream5_pro")]
+    hosts = []
+    try:
+        host = QWidget()
+        hosts.append(host)
+        lay = QVBoxLayout(host)
+        combo = QComboBox()
+        for lbl, k in items:
+            combo.addItem(lbl, k)
+        combo.setCurrentIndex(2)                       # comfy:t_beta choisi
+        lay.addWidget(combo)
+        fired = []
+        combo.currentIndexChanged.connect(lambda i: fired.append(combo.itemData(i)))
+        ch = CC.attach_comfy(combo, "image", layout=lay, after=combo)
+        assert ch is not None and combo.count() == 3, [combo.itemText(i) for i in range(combo.count())]
+        assert combo.currentData() == "comfy:t_beta" and "Beta" in combo.currentText(), combo.currentText()
+        assert ch.row.isVisibleTo(host) and lay.indexOf(ch.row) == lay.indexOf(combo) + 1
+        assert ch.original_keys == ["comfy:t_alpha", "comfy:t_beta"]
+        assert _menu_keys(combo) == [k for _l, k in items], "rien ne se perd"
+        heads = [i for i in range(ch.templates.count()) if ch.templates.itemData(i) is None]
+        assert heads and all(not ch.templates.model().item(i).isEnabled() for i in heads), \
+            "les en-têtes de familles ne se choisissent pas"
+        assert not fired, "le rangement ne déclenche rien"
+        # Un autre gabarit : la donnée de l'entrée change, la page est prévenue, le choix est retenu.
+        ch.templates.setCurrentIndex(ch.templates.findData("comfy:t_alpha"))
+        assert combo.currentData() == "comfy:t_alpha" and fired and fired[-1] == "comfy:t_alpha"
+        assert store.get("comfy_last_image_template") == "comfy:t_alpha"
+        # Un moteur fal : la ligne se cache ; restaurer un gabarit enregistré le rechoisit.
+        combo.setCurrentIndex(combo.findData("nb2"))
+        assert not ch.row.isVisibleTo(host)
+        assert CC.select_key(combo, "comfy:t_beta") and combo.currentData() == "comfy:t_beta"
+        assert ch.row.isVisibleTo(host)
+        assert not CC.select_key(combo, "comfy:inconnu") and not CC.select_key(combo, "nb2")
+        # Un nouveau menu sans gabarit choisi reprend le DERNIER utilisé.
+        combo2 = QComboBox()
+        for lbl, k in items:
+            combo2.addItem(lbl, k)
+        lay.addWidget(combo2)
+        ch2 = CC.attach_comfy(combo2, "image", layout=lay, after=combo2)
+        assert combo2.currentData() == "nb2" and ch2.current_key() == "comfy:t_beta", ch2.current_key()
+        assert not ch2.row.isVisibleTo(host)
+        # Rappeler un gabarit par la ligne seule ne change pas le moteur choisi.
+        ch2.templates.setCurrentIndex(ch2.templates.findData("comfy:t_alpha"))
+        assert combo2.currentData() == "nb2" and _menu_keys(combo2) == [k for _l, k in items]
+        # Un menu sans gabarit (mapping façade, ComfyUI jamais vu) : rien ne change.
+        combo3 = QComboBox()
+        combo3.addItem("Nano Banana 2", "nb2")
+        assert CC.attach_comfy(combo3, "image") is None and combo3.count() == 1
+        # Placement trouvé seul : SOUS la rangée horizontale qui porte le menu.
+        host4 = QWidget()
+        hosts.append(host4)
+        v4 = QVBoxLayout(host4)
+        h4 = QHBoxLayout()
+        v4.addLayout(h4)
+        combo4 = QComboBox()
+        h4.addWidget(QLabel("Moteur"))
+        h4.addWidget(combo4)
+        for lbl, k in items:
+            combo4.addItem(lbl, k)
+        ch4 = CC.attach_comfy(combo4, "image")
+        assert v4.indexOf(ch4.row) == 1, "la ligne Gabarit va sous la rangée du menu"
+        # Vidéo : « comfy_edit: », prix « 0 $ » comme les autres libellés vidéo.
+        combo5 = QComboBox()
+        combo5.addItem("Seedance 2.0", "seedance-2.0")
+        combo5.addItem("ComfyUI · X  ·  édition · 9 Go sur votre GPU  ·  0 $", "comfy_edit:video_x")
+        ch5 = CC.attach_comfy(combo5, "video_edit")
+        assert ch5 is not None and combo5.itemText(1).endswith("0 $") \
+            and combo5.itemData(1) == "comfy_edit:video_x"
+    finally:
+        cc.load_config, cc.save_config = saved
+        for h in hosts:
+            h.deleteLater()
+    # Branché partout où les gabarits s'empilaient (13 menus) ; la fenêtre Mood ne
+    # recompose pas le prompt pour un simple changement de gabarit (même grammaire).
+    for mod in ("ui.dialog_apercu", "ui.page_storyboard", "ui.page_storyboard_live",
+                "ui.dialog_character", "ui.dialog_accessory", "ui.dialog_hmc", "ui.dialog_vehicle",
+                "ui.dialog_decor", "ui.dialog_extract_generate", "ui.dialog_room_variations",
+                "ui.decor_swap_options", "ui.tab_davinci_edit", "ui.tab_modify_live"):
+        code = "\n".join(l.split("#", 1)[0]
+                         for l in inspect.getsource(importlib.import_module(mod)).splitlines())
+        assert "attach_comfy(" in code, f"{mod} : liste ComfyUI non regroupée"
+    with open(os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+                           "studio_images", "window.py"), encoding="utf-8") as f:
+        _w = f.read()
+    assert "attach_comfy(self._model" in _w and "select_key(combo, data)" in _w \
+        and "template_combo" in _w, "Studio Images : menu ou choix multiple non regroupé"
+    from ui.dialog_apercu import MoodDialog
+    assert "_reset_prompt" not in inspect.getsource(MoodDialog._on_comfy_template)
+    # Les menus réels : au plus UNE entrée ComfyUI (zéro si ComfyUI n'a jamais répondu).
+    from ui.dialog_character import CharacterDialog
+    d = CharacterDialog(None)
+    n = sum(1 for i in range(d._model_combo.count())
+            if str(d._model_combo.itemData(i) or "").startswith("comfy:"))
+    assert n <= 1, f"{n} entrées ComfyUI dans le menu des fiches"
+    d.deleteLater()
+    # Lots de moods : la clé fal n'est exigée QUE pour un moteur fal (un gabarit
+    # ComfyUI s'en passe — le garde-fou d'avant la fenêtre bloquait ComfyUI seul).
+    import ui.page_storyboard as _PS
+    _obm = inspect.getsource(_PS.PageStoryboard._on_batch_mood)
+    assert "_needs_fal(_mood_opts[\"engine\"])" in _obm, "garde-fou fal non lié au moteur choisi"
+    assert _obm.index("_needs_fal(") > _obm.index("dlg.exec()"), \
+        "la clé fal ne doit être vérifiée qu'une fois le moteur choisi"
+
+
+@test
+def aiodos_onglet_machines_travaux_et_panneau_du_studio():
+    """Demande Matthieu (27/10/2026) : « un nouvel onglet AIODOS pour voir les tâches
+    en cours, les clients connectés et quelques réglages » (logo d'AIODOS), et dans
+    le Studio IA, quand le calcul passe par AIODOS, « un panneau pliable avec les
+    personnes connectées, comme les clients de BitTorrent ». Contre le faux AIODOS
+    du client : la liste des machines est COMPOSÉE (moteurs + modèles + travaux,
+    l'API n'a pas de route « pairs »), les commandes d'un travail partent dans
+    AIODOS, l'onglet et le panneau affichent le relevé ; aucun fil n'est détruit
+    en marche ; le panneau n'existe que pour « Calcul : Mes machines · AIODOS »."""
+    import shutil
+    import core.config as cc
+    from aiodos_client import Keystore
+    from aiodos_client.fake import FakeAiodos
+    from aiodos_client._fake_jobs import MODELS
+    from core import aiodos as AD, aiodos_view as AV
+    from PyQt6.QtWidgets import QVBoxLayout, QWidget
+
+    store = {"comfy_compute": "aiodos"}
+    env_saved = {v: os.environ.get(v) for v in ("AIODOS_DISCOVERY_FILE", "AIODOS_URL", "AIODOS_KEY")}
+    saved = (cc.load_config, cc.save_config, AD._keystore)
+    cc.load_config = lambda: dict(store)
+    cc.save_config = lambda c: (store.clear(), store.update(c))
+    AD._keystore = lambda: Keystore.memory()
+    for v in ("AIODOS_URL", "AIODOS_KEY"):
+        os.environ.pop(v, None)
+    fake = FakeAiodos(auto_approve=True, job_delay=None).start()
+    os.environ.update(fake.environ())
+    AD.reset()
+    hosts = []
+    try:
+        # Non connecté : un relevé vide et lisible, jamais d'exception.
+        s0 = AV.snapshot()
+        assert not s0["ready"] and s0["state"] == "needs_access" and not s0["machines"]
+        assert AV.summary(s0) == "non connecté"
+        AD.connect()
+        fake.comfy_peers = [{"name": "Portable", "models": list(MODELS)}]
+        graph = {"1": {"class_type": "CheckpointLoaderSimple",
+                       "inputs": {"ckpt_name": "sd_xl_base_1.0.safetensors"}},
+                 "2": {"class_type": "SaveImage", "inputs": {"images": ["1", 0],
+                                                             "filename_prefix": "x"}}}
+        job = AD.client().comfy.submit(graph=graph, label="PANDORA · Mood · Plan 3",
+                                       items=[{"seed": 1}, {"seed": 2}, {"seed": 3}])
+        fake.advance(job.id, steps=2)                 # 1 unité faite, 1 en cours
+        snap = AV.snapshot()
+        assert snap["ready"] and not snap["errors"], snap["errors"]
+        by = {m["name"]: m for m in snap["machines"]}
+        assert set(by) == {"PC-BUREAU", "Portable"}, list(by)
+        here, peer = by["PC-BUREAU"], by["Portable"]
+        assert here["place"] == "here" and here["comfy"] and here["vram_mib"] \
+            and here["running"] == 1 and here["done"] == 1 and here["busy"]
+        assert peer["place"] == "mine" and peer["comfy"] and "qwen3.5:9b" in peer["chat_models"]
+        assert snap["machines"][0]["place"] == "here", "ce PC en tête"
+        (j,) = snap["jobs"]
+        assert j["status"] == "in_progress" and j["percent"] == 33 and j["machines"][0]["name"] == "PC-BUREAU"
+        assert AV.summary(snap) == "2 machine(s) · 1 travail(s) en cours"
+        # Les commandes partent dans AIODOS.
+        AV.job_action(job.id, "pause")
+        assert fake.job_record(job.id)["status"] in ("pausing", "paused")
+        AV.job_action(job.id, "resume")
+        assert fake.job_record(job.id)["status"] == "in_progress"
+        try:
+            AV.job_action("job_inexistant", "cancel")
+            raise AssertionError("travail inconnu : erreur attendue")
+        except RuntimeError as e:
+            assert "AIODOS" in str(e), e
+
+        # L'onglet : tableaux remplis, boutons selon l'état du travail choisi.
+        from ui.page_aiodos import PageAiodos, keep_thread, _RUNNING
+        page = PageAiodos()
+        hosts.append(page)
+        page.apply_snapshot(snap)
+        assert page.machines.rowCount() == 2 and page.jobs.rowCount() == 1
+        assert "calcule" in page.machines.item(0, 2).text()
+        assert not any(b.isEnabled() for b in page._job_btns.values()), "rien de choisi"
+        page.jobs.selectRow(0)
+        assert page._job_btns["pause"].isEnabled() and page._job_btns["cancel"].isEnabled()
+        assert not page._job_btns["resume"].isEnabled() and not page._job_btns["delete"].isEnabled()
+        page.apply_snapshot(s0)
+        assert page.machines.rowCount() == 0 and "Connectez PANDORA" in page._machines_empty.text()
+        # Les lieux demandés à la prochaine connexion (au moins un).
+        page._circles["mine"].setChecked(False)
+        assert store["aiodos_where"] == ["here"]
+        page._circles["here"].setChecked(False)
+        assert page._circles["here"].isChecked() and store["aiodos_where"] == ["here"]
+        page._circles["mine"].setChecked(True)
+        # Un fil en marche n'est jamais oublié ; un fil fini l'est au suivant.
+        from PyQt6.QtCore import QThread
+        t1 = QThread()
+        keep_thread(t1)
+        keep_thread(QThread())
+        assert t1 not in _RUNNING, "fil jamais lancé (donc fini) : oublié au suivant"
+
+        # Le panneau du Studio IA : seulement quand le calcul passe par AIODOS.
+        from ui.aiodos_peers_panel import AiodosPeersPanel
+        from ui.comfy_choice import hub
+        host = QWidget()
+        hosts.append(host)
+        import ui.aiodos_peers_panel as _PP
+        _PP._OPEN["open"] = False
+        QVBoxLayout(host).addWidget(p := AiodosPeersPanel())
+        p._on_compute()
+        p.apply_snapshot(snap)
+        assert p.isVisibleTo(host) and p.table.rowCount() == 2 and p._job_bar.value() == 33
+        assert p._summary.text() == "2 machine(s) · 1 travail(s) en cours"
+        assert not p.is_open(), "replié même quand des machines se connectent (29/10/2026)"
+        p.toggle()
+        assert p._body.isVisibleTo(host) and p._arrow.text() == "▼", "dépliable à la main"
+        p.toggle()
+        assert not p._body.isVisibleTo(host) and p._arrow.text() == "▶", "repliable"
+        store["comfy_compute"] = "local"
+        hub.compute_changed.emit("local")
+        assert not p.isVisibleTo(host), "calcul « Ce PC » : pas de panneau"
+        store["comfy_compute"] = "aiodos"
+        hub.compute_changed.emit("aiodos")
+        assert p.isVisibleTo(host)
+        orphan = AiodosPeersPanel()
+        hosts.append(orphan)
+        assert not orphan.isVisible(), "jamais une fenêtre à part avant d'être rangé"
+    finally:
+        try:
+            fake.stop()
+        finally:
+            cc.load_config, cc.save_config, AD._keystore = saved
+            for v, val in env_saved.items():
+                if val is None:
+                    os.environ.pop(v, None)
+                else:
+                    os.environ[v] = val
+            AD.reset()
+            for h in hosts:
+                h.deleteLater()
+    # Branché : l'onglet (logo d'AIODOS) et le panneau, dans les deux Studios IA.
+    import ui.pandora_window as PW
+    assert ("aiodos.png", "AIODOS", "aiodos") in PW._get_nav_items()
+    assert "aiodos.png" in PW._COLOR_ICONS and hasattr(PW.PandoraWindow, "_make_page_aiodos")
+    _root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    assert os.path.isfile(os.path.join(_root, "assets", "icons", "aiodos.png"))
+    for mod in ("ui.seedance_widget", "ui.live_studio_widget"):
+        code = "\n".join(l.split("#", 1)[0]
+                         for l in inspect.getsource(__import__(mod, fromlist=["_"])).splitlines())
+        assert "AiodosPeersPanel()" in code, f"{mod} : panneau des machines absent"
+
+
+# ── AIODOS : relecture du 28/10/2026 (droit manquant, reprise après redémarrage,
+#    lieu retenu, débit du panneau, lots) — contre le faux AIODOS du client ─────
+
+import contextlib as _ctxlib
+
+
+@_ctxlib.contextmanager
+def _aiodos_bench(store: dict, **fake_kw):
+    """Un faux AIODOS (celui du client : 127.0.0.1, aucun réseau, aucun vrai
+    fichier de découverte), la config de PANDORA dans `store`, un coffre de clé
+    en mémoire ; tout est rendu à la sortie, les fils de l'onglet attendus."""
+    import core.config as cc
+    from aiodos_client import Keystore
+    from aiodos_client.fake import FakeAiodos
+    from core import aiodos as AD
+    env_saved = {v: os.environ.get(v) for v in ("AIODOS_DISCOVERY_FILE", "AIODOS_URL", "AIODOS_KEY")}
+    saved = (cc.load_config, cc.save_config, AD._keystore)
+    cc.load_config = lambda: dict(store)
+    cc.save_config = lambda c: (store.clear(), store.update(c))
+    AD._keystore = lambda: Keystore.memory()
+    for v in ("AIODOS_URL", "AIODOS_KEY"):
+        os.environ.pop(v, None)
+    fake = FakeAiodos(**fake_kw).start()
+    os.environ.update(fake.environ())
+    AD.reset()
+    try:
+        yield fake
+    finally:
+        try:
+            from ui import aiodos_panel as _AP, page_aiodos as _PA
+            for t in list(_PA._RUNNING) + list(_AP._RUNNING):
+                try:
+                    t.wait(10000)
+                except RuntimeError:
+                    pass
+        except Exception:
+            pass
+        try:
+            fake.stop()
+        finally:
+            cc.load_config, cc.save_config, AD._keystore = saved
+            for v, val in env_saved.items():
+                if val is None:
+                    os.environ.pop(v, None)
+                else:
+                    os.environ[v] = val
+            AD.reset()
+            AD._PUBLIC_COMFY["served"] = None
+
+
+_AIODOS_GRAPH = {"1": {"class_type": "CheckpointLoaderSimple",
+                       "inputs": {"ckpt_name": "sd_xl_base_1.0.safetensors"}},
+                 "2": {"class_type": "SaveImage", "inputs": {"images": ["1", 0],
+                                                             "filename_prefix": "x"}}}
+
+
+def _aiodos_graph(prefix: str) -> dict:
+    import copy
+    g = copy.deepcopy(_AIODOS_GRAPH)
+    g["2"]["inputs"]["filename_prefix"] = prefix
+    return g
+
+
+@test
+def aiodos_droit_manquant_et_lieux_28_10_2026():
+    """Relecture du 28/10/2026, point 1. Connecté avec un droit décoché sur la carte
+    d'AIODOS (`engines:comfyui`), PANDORA disait « cliquez sur Se connecter » mais
+    cachait le bouton. Désormais il reste — « Demander l'accès manquant » — et le
+    même connect() le redemande (la même clé le reçoit). Un changement de lieux
+    seul ne passe pas par là (le client rend l'accès actuel sans rien demander) :
+    l'onglet dit honnêtement « Se déconnecter », puis « Se connecter »."""
+    from PyQt6.QtWidgets import QLabel
+    from core import aiodos as AD
+    store = {}
+    hosts = []
+    with _aiodos_bench(store, auto_approve=True) as fake:
+        key = fake.add_key(scopes=("chat",), where=("here", "mine"))
+        os.environ["AIODOS_KEY"] = key           # accès donné, images et vidéos décochées
+        AD.reset()
+        try:
+            st = AD.status(max_age=0)
+            assert st.state == "ready" and AD.missing_scopes(st) == ["engines:comfyui"], st
+            ok, why = AD.ready_for_comfy()
+            assert not ok and "« Demander l'accès manquant »" in why, why
+            from ui.aiodos_panel import AiodosPanel, _ConnectWorker
+            panel = AiodosPanel()
+            hosts.append(panel)
+            sums = []
+            panel.summary_changed.connect(sums.append)
+            panel._apply(st)
+            assert panel._btn_connect.isVisibleTo(panel), "le bouton reste pour le droit manquant"
+            assert panel._btn_connect.text() == "Demander l'accès manquant"
+            assert "droit manquant" in panel._state.text() and sums[-1] == "connecté · droit manquant"
+            notes = [lbl.text() for lbl in panel.findChildren(QLabel)]
+            assert any("Demander l'accès manquant" in t and "Se déconnecter" in t for t in notes), \
+                "le texte d'aide explique les deux gestes"
+            # Le même connect : une demande de droits en plus, la même clé les reçoit.
+            got = {}
+            cw = _ConnectWorker()
+            cw.code.connect(lambda c: got.setdefault("code", c))
+            cw.done.connect(lambda s: got.setdefault("done", s))
+            cw.failed.connect(lambda m: got.setdefault("failed", m))
+            cw.run()
+            assert "done" in got and got["done"].upgraded, got
+            assert "engines:comfyui" in fake.key_record(key)["scopes"]
+            st = AD.status(max_age=0)
+            assert AD.missing_scopes(st) == [] and AD.ready_for_comfy() == (True, "")
+            panel._apply(st)
+            assert not panel._btn_connect.isVisibleTo(panel)
+            assert panel._btn_connect.text() == "Se connecter à AIODOS" and sums[-1].startswith("connecté · ")
+            # Les lieux seuls : le client rend l'accès actuel SANS rien demander…
+            store["aiodos_where"] = ["here", "mine", "public"]
+            n = len(fake.requests_to("/aiodos/v1/access/requests"))
+            AD.connect()
+            assert len(fake.requests_to("/aiodos/v1/access/requests")) == n, \
+                "aucune demande : les lieux d'un accès ne changent pas ainsi"
+            assert AD.where_differs(["here", "mine", "public"], st)
+            assert not AD.where_differs(["mine", "here"], st)
+            # … et l'onglet le dit, seulement après un changement fait ici.
+            store["aiodos_where"] = ["here", "mine"]
+            from ui.page_aiodos import PageAiodos
+            page = PageAiodos()
+            hosts.append(page)
+            page.apply_snapshot({"ready": True, "state": "ready", "where": ["here", "mine"],
+                                 "machines": [], "jobs": []})
+            assert page._circles_hint.isHidden(), "rien tant que l'utilisateur n'a rien changé"
+            page._circles["public"].setChecked(True)
+            assert not page._circles_hint.isHidden()
+            assert "Se déconnecter" in page._circles_hint.text() \
+                and "ce PC + mes machines" in page._circles_hint.text(), page._circles_hint.text()
+            page._circles["public"].setChecked(False)
+            assert page._circles_hint.isHidden(), "revenu aux lieux accordés : plus rien à dire"
+        finally:
+            for h in hosts:
+                h.deleteLater()
+    from core.i18n import _FR_TO_EN
+    for s in ("Demander l'accès manquant", "connecté · droit manquant", "droit manquant : {what}"):
+        assert s in _FR_TO_EN, s
+
+
+@test
+def aiodos_reprise_apres_redemarrage_28_10_2026():
+    """Relecture du 28/10/2026, point 2 (integrer-aiodos.md § 8). Le client_ref
+    était tiré au hasard : PANDORA fermé pendant un calcul, le travail continuait
+    dans AIODOS mais ses fichiers n'étaient jamais récupérés — et AIODOS n'efface
+    jamais seul un fichier jamais récupéré (jusqu'au quota). Désormais : un
+    client_ref STABLE pour un même calcul (le même travail est retrouvé et
+    rapatrié), un échec relancé à neuf, l'onglet AIODOS qui liste les fichiers
+    jamais récupérés avec « Récupérer », et « Oublier » qui les efface (files=True)
+    en le disant."""
+    import json
+    import shutil
+    from PyQt6.QtWidgets import QMessageBox
+    from aiodos_client import jobs as _jobs
+    from core import aiodos as AD, aiodos_view as AV, comfy_aiodos as CA
+    tmp = tempfile.mkdtemp(prefix="pandora_aiodos_reprise_")
+    store = {"comfy_compute": "aiodos"}
+    hosts = []
+    try:
+        # ── 1. Le client_ref : le même pour la même demande, d'un lancement à l'autre
+        b = CA.BOUNDS["image"]
+        r1 = CA.client_ref_for("image", _AIODOS_GRAPH, {"n": b"abc"}, where=["here", "mine"],
+                               bounds=b, project="p")
+        assert r1.startswith("pandora:image:") and len(r1) <= 200
+        assert r1 == CA.client_ref_for("image", json.loads(json.dumps(_AIODOS_GRAPH)), {"n": b"abc"},
+                                       where=["mine", "here"], bounds=dict(b), project="p")
+        ref_png = os.path.join(tmp, "ref.png")
+        with open(ref_png, "wb") as f:
+            f.write(b"abc")
+        assert r1 == CA.client_ref_for("image", _AIODOS_GRAPH, {"n": ref_png},
+                                       where=["here", "mine"], bounds=b, project="p"), \
+            "un chemin vaut ses octets"
+        for other in (CA.client_ref_for("image", _aiodos_graph("y"), {"n": b"abc"},
+                                        where=["here", "mine"], bounds=b, project="p"),
+                      CA.client_ref_for("image", _AIODOS_GRAPH, {"n": b"abd"},
+                                        where=["here", "mine"], bounds=b, project="p"),
+                      CA.client_ref_for("image", _AIODOS_GRAPH, {"n": b"abc"}, where=["here"],
+                                        bounds=b, project="p"),
+                      CA.client_ref_for("image", _AIODOS_GRAPH, {"n": b"abc"},
+                                        where=["here", "mine"], sensitive=True, bounds=b,
+                                        project="p"),
+                      CA.client_ref_for("image", _AIODOS_GRAPH, {"n": b"abc"},
+                                        where=["here", "mine"], bounds=b, project="q")):
+            assert other != r1, "une autre demande, un autre calcul"
+        import inspect as _insp
+        assert "uuid.uuid4().hex}\"" not in _insp.getsource(CA.run), "plus de client_ref au hasard"
+
+        with _aiodos_bench(store, auto_approve=True, job_delay=None) as fake:
+            AD.connect()
+            # ── 2. PANDORA fermé pendant le calcul : le travail continue dans AIODOS
+            class _Closed(Exception):
+                pass
+
+            def closed(self, *a, **k):
+                raise _Closed()
+            old_watch = _jobs.Job.watch
+            _jobs.Job.watch = closed
+            try:
+                CA.run(_AIODOS_GRAPH, None, kind="image", label="PANDORA · Plan 7", stem="plan7")
+                raise AssertionError("fermeture simulée attendue")
+            except _Closed:
+                pass
+            finally:
+                _jobs.Job.watch = old_watch
+            first = fake.last_job_id
+            fake.advance(first, steps=2)            # fini dans AIODOS, PANDORA fermé
+            assert fake.job_record(first)["status"] == "completed"
+            fake._jobs[first]["created"] -= 600     # lancé « avant le redémarrage »
+            snap = AV.snapshot()
+            row = next(j for j in snap["jobs"] if j["id"] == first)
+            assert row["unfetched"] == 1 and row["files"] == 1, row
+            assert snap["unfetched"]["jobs"] == 1 and snap["unfetched"]["files"] == 1
+            assert row["client_ref"].startswith("pandora:image:") and row["where_effective"] == ["here", "mine"]
+            # ── 3. Relancé à l'identique après le redémarrage : le MÊME travail, rapatrié
+            n_jobs = len(fake._jobs)
+            msgs = []
+            outs = CA.run(_AIODOS_GRAPH, None, kind="image", label="PANDORA · Plan 7", stem="plan7",
+                          progress=lambda _p, m: msgs.append(m))
+            assert len(fake._jobs) == n_jobs and fake.last_job_id == first, "rien n'est recalculé"
+            assert outs and os.path.isfile(outs[0]["path"]) and outs[0]["where_effective"] == ["here", "mine"]
+            assert any("déjà lancé" in m for m in msgs), msgs
+            snap = AV.snapshot()
+            assert snap["unfetched"]["jobs"] == 0, "rapatrié : plus rien d'oublié dans AIODOS"
+            # ── 4. Un échec relancé à l'identique : oublié, puis refait (pas d'échec figé)
+            fake.job_delay = 0.05
+            fake.fail_unit(0, "engine_error", "KSampler : CUDA out of memory (nœud 3)")
+            try:
+                CA.run(_aiodos_graph("p8"), None, kind="image", label="PANDORA · Plan 8")
+                raise AssertionError("échec attendu")
+            except RuntimeError as e:
+                assert "CUDA out of memory" in str(e), e
+            failed_id = fake.last_job_id
+            outs = CA.run(_aiodos_graph("p8"), None, kind="image", label="PANDORA · Plan 8")
+            assert outs and fake.last_job_id != failed_id and failed_id not in fake._jobs
+            fake.job_delay = None
+            # ── 5. « Récupérer » : les fichiers d'un travail laissé, rangés à part
+            ai = AD.client()
+            left = ai.comfy.submit(graph=_aiodos_graph("m3"), label="PANDORA · Mood · Plan 3",
+                                   items=[{"seed": 1}, {"seed": 2}])
+            fake.advance(left.id, steps=3)
+            assert fake.job_record(left.id)["status"] == "completed"
+            dest = os.path.join(tmp, "sortie")
+            folder, n = AV.fetch(left.id, dest)
+            assert n == 2 and os.path.dirname(folder) == dest and len(os.listdir(folder)) == 2, folder
+            assert os.path.basename(folder).startswith("Mood · Plan 3_"), folder
+            assert all(f["fetched"] for f in fake.job_record(left.id)["files"])
+            # ── 6. « Oublier » : jamais récupérés → effacés AVEC le travail, et comptés ;
+            #       déjà récupérés → leur garde (files=keep)
+            gone = ai.comfy.submit(graph=_aiodos_graph("g"), label="PANDORA · g")
+            fake.advance(gone.id, steps=2)
+            files = [f["id"] for f in fake.job_record(gone.id)["files"]]
+            assert files and AV.job_action(gone.id, "delete") == 1
+            assert gone.id not in fake._jobs and not any(f in fake._files for f in files)
+            assert any(e["method"] == "DELETE" and gone.id in e["path"] and "files=delete" in e["path"]
+                       for e in fake.log)
+            kept = [f["id"] for f in fake.job_record(left.id)["files"]]
+            assert AV.forget(left.id) == 0 and all(f in fake._files for f in kept)
+            assert any(e["method"] == "DELETE" and left.id in e["path"] and "files=keep" in e["path"]
+                       for e in fake.log)
+            # ── 7. L'onglet : listé même au-delà des plus récents, signalé, « Récupérer »
+            old = ai.comfy.submit(graph=_aiodos_graph("o"), label="PANDORA · Ancien")
+            fake.advance(old.id, steps=2)
+            ai.comfy.submit(graph=_aiodos_graph("r"), label="PANDORA · Récent")   # en file
+            snap = AV.snapshot(jobs_limit=1)
+            ids = [j["id"] for j in snap["jobs"]]
+            assert len(ids) == 2 and old.id in ids, "un travail plus ancien à récupérer reste listé"
+            from ui.page_aiodos import JOB_COLUMNS, PageAiodos, _RUNNING
+            page = PageAiodos()
+            hosts.append(page)
+            page.apply_snapshot(snap)
+            r = ids.index(old.id)
+            assert page.jobs.columnCount() == len(JOB_COLUMNS)
+            fcol, lcol = JOB_COLUMNS.index("Fichiers"), JOB_COLUMNS.index("Lieu")
+            assert page.jobs.item(r, fcol).text() == "1 à récupérer"
+            assert page.jobs.item(r, lcol).text() == "ce PC + mes machines"
+            assert not page._unfetched_note.isHidden() and "1 travail(s)" in page._unfetched_note.text()
+            page.jobs.selectRow(r)
+            assert page._job_btns["fetch"].isEnabled() and page._job_btns["delete"].isEnabled()
+            # Oublier : on DEMANDE d'abord (fichiers jamais récupérés) ; « Non » → rien.
+            asked = []
+            old_q = QMessageBox.question
+            QMessageBox.question = staticmethod(
+                lambda *a, **k: (asked.append(a), QMessageBox.StandardButton.No)[1])
+            try:
+                page._job_action("delete")
+            finally:
+                QMessageBox.question = old_q
+            assert asked and "1 fichier(s) jamais récupéré(s)" in asked[0][2], asked
+            assert old.id in fake._jobs, "refusé : rien n'est oublié"
+            page._job_action("delete")                   # « Oui » (harnais)
+            for t in list(_RUNNING):
+                t.wait(10000)
+            APP.processEvents()
+            assert old.id not in fake._jobs
+            assert "1 fichier(s) jamais récupéré(s) effacé(s)" in page._notice.text(), page._notice.text()
+            for t in list(_RUNNING):
+                t.wait(10000)
+    finally:
+        for h in hosts:
+            h.deleteLater()
+        shutil.rmtree(tmp, ignore_errors=True)
+
+
+@test
+def aiodos_lieu_retenu_et_reseau_public_28_10_2026():
+    """Relecture du 28/10/2026, point 3. AIODOS ne fait calculer les gabarits
+    ComfyUI que par ce PC et mes machines (il laisse de côté les autres cercles) :
+    PANDORA dit ce qu'il a réellement retenu (`where_effective`, `where_reason`)
+    après l'envoi, et le choix « Réseau public » le mentionne tant qu'AIODOS le dit
+    — le menu fermé garde le libellé court."""
+    from types import SimpleNamespace
+    from aiodos_client.fake import png
+    from core import aiodos as AD, aiodos_view as AV, comfy_aiodos as CA
+    from ui import comfy_choice as CC
+    store = {"comfy_compute": "aiodos_public", "aiodos_where": ["here", "mine", "public"]}
+    hosts = []
+    with _aiodos_bench(store, auto_approve=True,
+                       granted_where=("here", "mine", "friends", "public")) as fake:
+        try:
+            AD.connect()
+            assert "public" in AD.status(max_age=0).where
+            assert AD.compute_mode() == "aiodos_public" and AD.job_where() is None
+            msgs = []
+            outs = CA.run(_AIODOS_GRAPH, None, kind="image", label="PANDORA · public",
+                          progress=lambda _p, m: msgs.append(m))
+            said = [m for m in msgs if m.startswith("AIODOS — calcul sur : ")]
+            assert said and said[0].startswith("AIODOS — calcul sur : ce PC + mes machines") \
+                and "le réseau public ne calcule pas encore les gabarits ComfyUI" in said[0], msgs
+            assert "réseau public : pas encore pour ComfyUI" in msgs[-1], msgs[-1]
+            assert outs[0]["where_effective"] == ["here", "mine"]
+            assert not AD.public_comfy_served() and AD._PUBLIC_COMFY["served"] is False
+            # Un travail sensible (référence) en « Réseau public » : il reste chez moi, et
+            # ce n'est pas un « non » d'AIODOS au réseau public.
+            AD._PUBLIC_COMFY["served"] = None
+            g = {"1": {"class_type": "LoadImage", "inputs": {"image": "x.png"}},
+                 "2": {"class_type": "SaveImage", "inputs": {"images": ["1", 0], "filename_prefix": "s"}}}
+            msgs.clear()
+            CA.run(g, {"1": png(8, 8)}, kind="image", label="PANDORA · réf", sensitive=True,
+                   progress=lambda _p, m: msgs.append(m))
+            assert AD._PUBLIC_COMFY["served"] is None
+            assert any("une référence ou un clip reste sur vos machines" in m for m in msgs), msgs
+            assert fake.job_record()["where"] == ["here", "mine"]
+            # La raison d'AIODOS, quand il la donne, passe telle quelle.
+            why = SimpleNamespace(where_effective=("here",),
+                                  where_reason="les inconnus ne calculent pas encore les travaux ComfyUI.")
+            assert CA.where_note(why, "aiodos_public") == \
+                "AIODOS — calcul sur : ce PC (les inconnus ne calculent pas encore les travaux ComfyUI)"
+            assert CA.where_note(SimpleNamespace(where_effective=(), where_reason=None)) == ""
+            # Le choix « Réseau public » : la mention dans la liste, le libellé court fermé.
+            combo = CC.ComputeCombo()
+            hosts.append(combo)
+            i = combo.findData("aiodos_public")
+            assert combo.itemText(i) == "Réseau public · AIODOS — pas encore pour ComfyUI : calcul sur vos machines"
+            assert combo.itemData(i, CC._SHORT_ROLE) == "Réseau public · AIODOS"
+            assert combo.currentData() == "aiodos_public" and CC.compute_label() == "Réseau public · AIODOS"
+            assert combo.itemData(i, CC.Qt.ItemDataRole.ToolTipRole)
+            assert not combo.grab().isNull(), "le menu fermé se dessine (libellé court)"
+            AD.note_where_effective(["here", "mine", "public"])       # le jour où il le prend
+            combo.sync()
+            assert combo.itemText(i) == "Réseau public · AIODOS" and AD.public_comfy_served()
+            # L'onglet AIODOS : la colonne « Lieu » dit ce qu'AIODOS a retenu.
+            from ui.page_aiodos import JOB_COLUMNS, PageAiodos
+            page = PageAiodos()
+            hosts.append(page)
+            snap = AV.snapshot()
+            page.apply_snapshot(snap)
+            lcol = JOB_COLUMNS.index("Lieu")
+            assert page.jobs.item(0, lcol).text() == "ce PC + mes machines"
+            assert "Lieu retenu par AIODOS" in page.jobs.item(0, lcol).toolTip()
+        finally:
+            for h in hosts:
+                h.deleteLater()
+
+
+@test
+def aiodos_panneau_studio_debit_28_10_2026():
+    """Relecture du 28/10/2026, point 4. Le panneau des machines du Studio IA se
+    relisait toutes les 3 s, même replié (≈ 80 requêtes à clé par minute sur les
+    120 permises à une appli : `rate_limited` possible pendant un envoi). Il se
+    relit désormais toutes les 3 s déplié ET visible, toutes les 10 s sinon, et
+    jamais pendant un envoi vers AIODOS."""
+    import core.config as cc
+    from PyQt6.QtCore import Qt
+    from PyQt6.QtWidgets import QVBoxLayout, QWidget
+    from core import aiodos_view as AV, comfy_aiodos as CA
+    from ui import aiodos_peers_panel as PP
+    from ui.page_aiodos import _RUNNING
+    store = {"comfy_compute": "aiodos"}
+    calls = []
+    saved = (cc.load_config, AV.snapshot)
+    cc.load_config = lambda: dict(store)
+    # Jamais le vrai AIODOS de ce PC : un relevé fixe.
+    AV.snapshot = lambda *a, **k: (calls.append(1), {"ready": True, "state": "ready",
+                                                     "machines": [], "jobs": []})[1]
+    PP._OPEN["open"] = False
+    host = QWidget()
+    try:
+        p = PP.AiodosPeersPanel()
+        QVBoxLayout(host).addWidget(p)
+        p._on_compute()
+        assert PP.REFRESH_MS == 3000 and PP.REFRESH_IDLE_MS == 10000
+        assert p.interval() == 10000, "replié : 10 s"
+        p.set_open(True)
+        assert p.interval() == 10000, "déplié, fenêtre cachée : 10 s"
+        host.show()
+        APP.processEvents()
+        assert p.isVisible() and p.interval() == 3000 and p._timer.interval() == 3000, \
+            "déplié et visible : 3 s"
+        p.set_open(False)
+        assert p._timer.interval() == 10000, "replié : le minuteur ralentit aussitôt"
+        p.set_open(True)
+        host.setWindowState(Qt.WindowState.WindowMinimized)
+        assert p.interval() == 10000, "fenêtre réduite : 10 s"
+        host.setWindowState(Qt.WindowState.WindowNoState)
+        # Pendant un envoi : aucun relevé.
+        for t in list(_RUNNING):
+            t.wait(10000)
+        p._worker = None
+        n = len(calls)
+        CA._sending(+1)
+        try:
+            assert CA.sending()
+            p.refresh()
+            assert p._worker is None, "un envoi en cours : pas de relecture"
+        finally:
+            CA._sending(-1)
+        assert not CA.sending()
+        p.refresh()
+        assert p._worker is not None, "envoi fini : la relecture reprend"
+        p._worker.wait(10000)
+        APP.processEvents()
+        assert len(calls) > n
+    finally:
+        for t in list(_RUNNING):
+            t.wait(10000)
+        host.hide()
+        host.deleteLater()
+        cc.load_config, AV.snapshot = saved
+        PP._OPEN["open"] = False
+
+
+@test
+def aiodos_lots_et_machine_28_10_2026():
+    """Relecture du 28/10/2026, point 5. La recette (integrer-aiodos.md § 6 et § 13)
+    demande les lots en `batch=True` (X-Aiodos-Priority: background) et d'afficher
+    qui a calculé : le découpage tranche par tranche et la génération du
+    storyboard partent en fond ; la machine part avec le modèle dans « Coût du
+    projet »."""
+    import inspect as _insp
+    from core import ai_provider as AP
+    import core.ai_spend as AS
+    store = {"ai_profile": "single", "ai_engine": "aiodos", "ai_provider": "aiodos"}
+    noted = []
+    old_note = AS.note_usage
+    AS.note_usage = lambda model, task, *a, **k: noted.append((model, task)) or 0.0
+    try:
+        with _aiodos_bench(store, auto_approve=True) as fake:
+            from core import aiodos as AD
+            AD.connect()
+
+            def last_priority():
+                sent = fake.requests_to("/v1/chat/completions")[-1]
+                return {k.lower(): v for k, v in sent["headers"].items()}.get("x-aiodos-priority")
+            AP.complete("Tu traduis.", "Bonjour", task="translate")
+            assert last_priority() is None, "une traduction : interactive"
+            assert noted and noted[-1] == ("qwen3.5:9b · PC-BUREAU", "translate"), noted
+            with AP.aiodos_lot():
+                AP.complete("s", "Bonjour", task="decoupage")
+            assert last_priority() == "background", "un lot du découpage : en fond"
+            AP.complete("s", "Bonjour", task="decoupage")
+            assert last_priority() is None, "hors d'un lot, la co-écriture reste interactive"
+            AP.complete("s", "Bonjour", task="storyboard_gen")
+            assert last_priority() == "background", "la génération du storyboard : en fond"
+    finally:
+        AS.note_usage = old_note
+    from api.decoupage_queue import DecoupageQueueWorker
+    assert "with aiodos_lot():" in _insp.getsource(DecoupageQueueWorker._call_batch)
+
+
+@test
+def storyboard_hub_colonnes_sans_qfatal_27_10_2026():
+    """Arrêt 0xC0000409 du harnais Cinéma au test n° 212 (27/10/2026), intermittent
+    depuis des semaines : les rangées du storyboard et la page s'abonnent au hub
+    GLOBAL `_col_hub` ; des `QTimer.singleShot(0, … _col_hub.resized.emit)` laissés
+    en attente le déclenchaient plus tard, jusque dans une rangée dont l'enveloppe
+    Python avait été vidée par le ramasse-miettes (AttributeError `_col_cells`). Une
+    exception dans un slot fait appeler qFatal par PyQt6 → arrêt sans trace (Qt 6
+    termine par __fastfail) ; dans l'application, la fenêtre « erreur inattendue ».
+    Les deux slots tolèrent désormais un objet incomplet ou détruit."""
+    from types import SimpleNamespace
+    from PyQt6.QtWidgets import QWidget
+    import ui.page_storyboard as PS
+    PS._ShotRow._on_col_resize(SimpleNamespace(), 4, 120)          # enveloppe vidée
+    PS.PageStoryboard._on_col_width_changed(SimpleNamespace(), 4, 120)
+    # Le chemin normal fonctionne toujours : la cellule prend la largeur, la
+    # hauteur de la rangée est recalculée.
+    cell, seen = QWidget(), []
+    row = SimpleNamespace(_col_cells={4: cell}, _content_height=lambda: 42,
+                          setMinimumHeight=seen.append)
+    PS._ShotRow._on_col_resize(row, 4, 133)
+    assert cell.minimumWidth() == 133 and cell.maximumWidth() == 133 and seen == [42]
+    PS._ShotRow._on_col_resize(row, 9, 77)                          # colonne absente
+    assert seen == [42]
+    cont = QWidget()
+    PS.PageStoryboard._on_col_width_changed(SimpleNamespace(_list_container=cont), 4, 133)
+    assert cont.minimumWidth() == sum(PS._col_widths) + len(PS._col_widths) - 1
+    cell.deleteLater()
+    cont.deleteLater()
+
+
+@test
+def fiche_chat_defilement_differe_sans_qfatal_27_10_2026():
+    """Arrêt 0xC0000409 du harnais Cinéma à sa FERMETURE, après le résumé vert
+    (piège n° 19, connu depuis le 28/09/2026). Cause lue enfin avec
+    QT_FORCE_STDERR_LOGGING=1 : le défilement différé (QTimer 30 ms) du chat des
+    fiches visait une zone déjà détruite → RuntimeError dans un rappel Qt →
+    qFatal par PyQt6. Le défilement tolère désormais une fiche fermée."""
+    from types import SimpleNamespace
+    from ui.element_chat_panel import ElementChatPanel
+
+    def _gone():
+        raise RuntimeError("wrapped C/C++ object of type QScrollArea has been deleted")
+    ElementChatPanel._scroll_to_bottom(SimpleNamespace(_scroll=SimpleNamespace(verticalScrollBar=_gone)))
+    ElementChatPanel._scroll_to_bottom(SimpleNamespace())          # enveloppe vidée
+    seen = []
+    bar = SimpleNamespace(maximum=lambda: 640, setValue=seen.append)
+    ElementChatPanel._scroll_to_bottom(SimpleNamespace(_scroll=SimpleNamespace(verticalScrollBar=lambda: bar)))
+    assert seen == [640], "le chemin normal descend toujours en bas du fil"
+    src = inspect.getsource(ElementChatPanel)
+    assert "QTimer.singleShot(30, self._scroll_to_bottom)" in src
+
+
+@test
+def themes_de_couleur_palettes_et_traduction_27_10_2026():
+    """« Changer la couleur de l'interface » (Matthieu, 27/10/2026), puis le soir
+    même : « on garde la nouvelle en noir, l'ancienne en bleu et la claire ». Trois
+    thèmes complets, « Noir » à l'ouverture, les anciennes valeurs Sombre / Clair
+    reprises, les thèmes retirés ramenés au Noir, la traduction des couleurs écrites
+    en dur — et « Nuit bleue », le thème d'origine, strictement inchangé."""
+    from PyQt6.QtGui import QColor, QPixmap
+    from ui import themes
+    from ui.styles import CP
+    from ui.pandora_window import _COLOR_ICONS
+    keys = set(themes.THEMES["nuit"]["cp"])
+    assert themes.ORDER == ("noir", "nuit", "clair") and set(themes.ORDER) == set(themes.THEMES)
+    for gone in ("noir_or", "neon", "emeraude", "braise"):
+        assert themes.normalize(gone) == "noir", f"thème retiré resté en config : {gone}"
+    for k, t in themes.THEMES.items():
+        assert set(t["cp"]) == keys, f"palette incomplète : {k}"
+        for field in ("name", "desc", "accent_hover", "accent2_hover", "nav_active"):
+            assert t[field], (k, field)
+        assert t["cp"]["bg0"].lower() != "#000000", "jamais de noir pur en fond"
+    # Thème d'ouverture = « Noir » (Matthieu 27/10/2026) ; « Sombre » (dark) aussi.
+    assert themes.normalize("dark") == "noir" and themes.normalize("light") == "clair"
+    assert themes.normalize("inconnu") == "noir" and themes.normalize(None) == "noir"
+    noir = themes.THEMES["noir"]["cp"]
+    assert noir["accent"] == "#4ecdc4" and noir["accent2"] == "#7c6bff", "couleurs de PANDORA"
+    assert len({noir["bg1"][1:3], noir["bg1"][3:5], noir["bg1"][5:7]}) == 1, "fond gris neutre"
+    assert noir["bg1"] != "#000000"
+    to_noir = themes.translator("noir")
+    assert to_noir("background:#14192a;color:#4ecdc4;") == "background:#1d1d1d;color:#4ecdc4;"
+    assert to_noir("background:rgba(7,12,21,0.38);") == "background:rgba(13,13,13,0.38);"
+    assert to_noir("color:#7c6bff;") == "color:#7c6bff;", "le violet reste violet"
+    # Le harnais fixe « Nuit bleue » : la palette est celle d'origine, rien n'est traduit
+    assert themes.current_key() == "nuit" and CP["accent"] == "#4ecdc4" and CP["bg1"] == "#0c0e1a"
+    assert themes.literal_table("nuit") == {} and themes.translator("nuit") is None
+    assert themes.nav_rgba(0.75, "nuit") == "rgba(37,211,102,0.75)", "onglet actif d'origine"
+    out = to_noir("QPushButton{background:#4ECDC4;color: #07080f;border:1px solid "
+                  "rgba(78,205,196,0.3);}QLabel{color:#ff4f6a;background:#07080f;}")
+    assert "#4ecdc4" in out.lower() and "rgba(78,205,196,0.3)" in out, "turquoise gardé"
+    assert "color: " + themes.ink("noir") in out, "texte posé sur l'accent → encre du thème"
+    assert "background:" + noir["bg0"] in out and "#07080f" not in out, "fond noir"
+    assert "#ff4f6a" in out, "le rouge d'erreur reste rouge"
+    assert themes.translator("clair")("color:#07080f;") == f"color:{themes.ink('clair')};", \
+        "le Clair garde un texte SOMBRE sur ses boutons d'accent"
+    # Badges : inchangés en Nuit bleue, recolorés ailleurs, jamais le logo d'AIODOS
+    pix = QPixmap(4, 4)
+    pix.fill(QColor(20, 40, 85))
+    assert themes.recolor_badge(pix, "nuit") is pix
+    got = themes.recolor_badge(pix, "noir").toImage().pixelColor(1, 1).name()
+    assert got == themes.THEMES["noir"]["badge"][0], got
+    assert _COLOR_ICONS - {"aiodos.png"} == themes.BADGE_FILES, "mêmes badges que la barre"
+    # Démarrage : la traduction est branchée AVANT le premier widget
+    root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    with open(os.path.join(root, "main.py"), encoding="utf-8") as f:
+        main_src = f.read()
+    assert main_src.index("_themes.install()") < main_src.index("StartPage(allow_live")
+    assert "QColor(themes.ink())" in main_src
+
+
+@test
+def themes_choix_dans_les_parametres_27_10_2026():
+    """Le choix du thème : un MENU DÉROULANT dans Paramètres → Général (Cinéma et
+    Live ; Matthieu 27/10/2026), la config ENTIÈRE réécrite (save_config remplace
+    tout le fichier), un redémarrage proposé — jamais imposé."""
+    from PyQt6.QtWidgets import QComboBox
+    import core.config as C
+    from ui import theme_picker as TP
+    from ui.page_settings import SettingsPage
+    store = {"theme": "dark", "anthropic_key": "garde-moi", "language": "fr"}
+    saved, restarts = [], []
+    restart_src = inspect.getsource(TP.restart_app)
+    old = (C.load_config, C.save_config, TP.restart_app)
+    C.load_config = lambda: dict(store)
+    C.save_config = lambda cfg: (saved.append(dict(cfg)), store.update(cfg))
+    TP.restart_app = lambda *a: restarts.append(a)
+    try:
+        page = SettingsPage()
+        pk = page._theme_picker
+        assert not hasattr(page, "_btn_dark") and hasattr(page, "_btn_whats_new")
+        assert isinstance(pk.combo, QComboBox), "un menu déroulant, plus des cartes"
+        assert [pk.combo.itemData(i) for i in range(pk.combo.count())] == list(TP.themes.ORDER)
+        assert all(not pk.combo.itemIcon(i).isNull() for i in range(pk.combo.count())), \
+            "chaque thème a son aperçu"
+        assert pk.current() == "noir" and pk.combo.currentData() == "noir", "« dark » = Noir"
+        pk.select("clair")
+        assert saved and saved[-1]["theme"] == "clair"
+        assert saved[-1]["anthropic_key"] == "garde-moi", "config entière, jamais partielle"
+        assert pk.combo.currentData() == "clair" and pk.desc.text()
+        assert restarts == [], "la boîte (exec neutralisé) n'a pas choisi « Redémarrer »"
+        n = len(saved)
+        pk.select("clair")
+        assert len(saved) == n, "rechoisir le thème choisi n'écrit rien"
+        page.deleteLater()
+    finally:
+        C.load_config, C.save_config, TP.restart_app = old
+    assert "closeAllWindows()" in restart_src and "startDetached" in restart_src, \
+        "redémarrer = fermer proprement (chaque fenêtre peut refuser), puis relancer"
+    from core.i18n import _FR_TO_EN
+    for t in TP.themes.THEMES.values():
+        assert t["name"] in _FR_TO_EN and t["desc"] in _FR_TO_EN, t["name"]
+    for s in ("Redémarrer maintenant", "Le thème « {name} » sera appliqué au redémarrage de PANDORA.",
+              "Apparence", "✦  Nouveautés"):
+        assert s in _FR_TO_EN, s
+
+
+@test
+def nouveautes_a_chaque_version_27_10_2026():
+    """Règle Matthieu (27/10/2026) : à chaque mise à jour, à la première ouverture ou
+    création d'un projet, une fenêtre montre les nouveautés de la version ET des
+    précédentes, avec « Ne plus afficher » jusqu'à la version suivante. Ce test
+    ROUGIT si une version sort sans son entrée FR + EN."""
+    import core.config as C
+    from core import release_notes as rn
+    from core.version import VERSION
+    import ui.dialog_whats_new as W
+    fr, en = rn.entries("fr"), rn.entries("en")
+    assert fr and fr[0]["version"] == VERSION, f"pas d'entrée FR pour {VERSION}"
+    assert en and en[0]["version"] == VERSION, f"pas d'entrée EN pour {VERSION}"
+    assert [e["version"] for e in fr] == [e["version"] for e in en], "FR et EN alignés"
+    assert [e["date"] for e in fr] == [e["date"] for e in en]
+    assert all(e["body"].strip() for e in fr + en), "une version sans texte"
+    assert rn.format_date("2026-10-01") == "1er octobre 2026"
+    assert rn.format_date("2026-10-27", "en") == "October 27, 2026"
+    store = {"anthropic_key": "garde-moi"}
+    saved = []
+    old = (C.load_config, C.save_config, rn._shown_this_session, W._pending)
+    C.load_config = lambda: dict(store)
+
+    def _save(cfg):
+        saved.append(dict(cfg))
+        store.clear()
+        store.update(cfg)
+    C.save_config = _save
+    try:
+        rn._shown_this_session = False
+        assert not rn.is_hidden() and rn.should_show()
+        dlg = W.WhatsNewDialog()
+        assert dlg.versions.count() == len(rn.entries()) and dlg.versions.currentRow() == 0
+        assert f"Version {VERSION}" in dlg.text.toPlainText()
+        dlg.versions.setCurrentRow(1)
+        assert f"Version {rn.entries()[1]['version']}" in dlg.text.toPlainText()
+        assert not dlg.hide_box.isChecked()
+        dlg.hide_box.setChecked(True)
+        dlg.done(0)
+        assert store.get(rn.CONFIG_KEY) == VERSION and store["anthropic_key"] == "garde-moi"
+        assert rn.is_hidden() and not rn.should_show(), "masquée pour CETTE version"
+        assert W.maybe_show(None) is False
+        store[rn.CONFIG_KEY] = "0.0.1"
+        assert not rn.is_hidden() and rn.should_show(), "revient à la version suivante"
+        store[rn.CONFIG_KEY] = VERSION
+        rn.set_hidden(False)
+        assert rn.CONFIG_KEY not in store, "décocher la case la fait revenir"
+        rn.mark_shown()
+        assert not rn.should_show(), "une fois par session"
+        dlg.deleteLater()
+    finally:
+        C.load_config, C.save_config, rn._shown_this_session, W._pending = old
+    root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    with open(os.path.join(root, "main.py"), encoding="utf-8") as f:
+        main_src = f.read()
+    i = main_src.index("def _open_project(")
+    assert "maybe_show(win)" in main_src[i:], "branchée à l'ouverture / création de projet"
+    from core.i18n import _FR_TO_EN
+    for s in ("Nouveautés de PANDORA", "Ne plus afficher jusqu'à la prochaine version",
+              "Version {v} — et l'historique des versions précédentes.", "cette version"):
+        assert s in _FR_TO_EN, s
+
+
+@test
+def nouveau_logo_et_titre_seul_27_10_2026():
+    """Nouveau logo partout (icône, badge, .ico) et, en haut au centre de la fenêtre,
+    le nom PANDORA SEUL, centré — plus de badge à sa gauche (Cinéma et Live)."""
+    from PIL import Image
+    from ui import pandora_window as PW
+    import live_window as LW
+    root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    icon = Image.open(os.path.join(root, "assets", "app_icon.png"))
+    assert icon.size == (1024, 1024) and icon.mode == "RGBA"
+    assert icon.getpixel((0, 0))[3] == 0, "coins arrondis transparents"
+    assert icon.getpixel((512, 512))[3] == 255
+    ico = Image.open(os.path.join(root, "assets", "icons", "pandora_icone.ico"))
+    assert {(16, 16), (32, 32), (256, 256)} <= set(ico.info["sizes"])
+    assert os.path.isfile(os.path.join(root, "docs", "logo", "pandora_logo_2026-10.webp"))
+    for src in (inspect.getsource(PW.PandoraWindow._build_global_topbar),
+                inspect.getsource(LW.LiveWindow)):
+        assert "badge_lbl" not in src and "pix_badge" not in src, "plus de badge en haut"
+        assert 'title_lbl.setObjectName("PandoraTitle")' in src
+
+
+@test
+def installeur_moderne_sombre_27_10_2026():
+    """Installeur refait « comme celui d'AIODOS » : style sombre, page d'accueil qui
+    présente PANDORA, images du nouveau logo à sept échelles — et le correctif des
+    cases de la page de fin (RunList.Offset) conservé."""
+    import importlib.util
+    root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    with open(os.path.join(root, "pandora_setup.iss"), encoding="utf-8") as f:
+        iss = f.read()
+    assert "WizardStyle=modern dark" in iss and "DisableWelcomePage=no" in iss
+    assert "french.WelcomeLabel2=" in iss and "english.WelcomeLabel2=" in iss
+    assert iss.index("[Messages]") < iss.index("french.WelcomeLabel1=") < iss.index("[CustomMessages]")
+    spec = importlib.util.spec_from_file_location(
+        "mwi", os.path.join(root, "tools", "make_wizard_images.py"))
+    mwi = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mwi)
+    assert len(mwi.LARGE) == 7 and len(mwi.SMALL) == 7
+    for w, _h in mwi.LARGE:
+        assert f"installer\\wizard-{w}.png" in iss
+    for s in mwi.SMALL:
+        assert f"installer\\small-{s}.png" in iss
+    assert "WizardForm.RunList.Offset := ScaleX(6);" in iss
+    with open(os.path.join(root, ".gitignore"), encoding="utf-8") as f:
+        assert "installer/" in f.read().split(), "images générées, jamais versionnées"
+
+
+@test
+def fond_de_demarrage_noir_et_or_27_10_2026():
+    """Demande Matthieu (27/10/2026) : l'image noire aux circuits dorés en fond de
+    la page de démarrage. Les cartes, dessinées en QColor (hors traduction des
+    feuilles de style), suivent le thème ; les textes posés sur l'image restent
+    clairs même en thème Clair, et sont écrits en rgb() pour que la traduction ne
+    les reconvertisse pas."""
+    import ui.start_page as SP
+    from PyQt6.QtGui import QImage
+    from ui import themes
+    path = os.path.join(SP._ASSETS, "start_background_v4.jpg")
+    img = QImage(path)
+    assert not img.isNull() and img.width() >= 1920, "fond v4 embarqué en HD"
+    assert "start_background_v4.jpg" in inspect.getsource(SP._Background)
+    src = inspect.getsource(SP)
+    for old in ("QColor(12, 19, 31", "QColor(14, 22, 36", "QColor(5, 8, 14", "QColor(3, 8, 15"):
+        assert old not in src, f"bleu nuit en dur restant : {old}"
+    assert SP._SURFACE == "#0c131f", "Nuit bleue (harnais) : le bleu nuit d'origine"
+    to_light = themes.translator("clair")
+    assert to_light("color:#e6ecf5;") != "color:#e6ecf5;", "en hexadécimal, Clair l'assombrit"
+    for key in ("text_primary", "text_secondary", "text_dim"):
+        value = SP._ON_BG[key]
+        assert value.startswith("rgb("), value
+        css = f"color:{value};"
+        assert to_light(css) == css, f"{key} reconverti par le thème Clair"
+    # La page se dessine (fond + halo du titre) sans erreur.
+    page = SP.StartPage(allow_live=True)
+    page.resize(1280, 760)
+    assert not page.grab().isNull()
+    page.deleteLater()
+
+
+@test
+def moteur_ia_familles_et_reseau_public_27_10_2026():
+    """Retours Matthieu (27/10/2026, après essai) : « le nom gabarit ne va pas →
+    moteur IA » ; « trier par modèles, un trait entre les familles (plusieurs
+    Z-Image…), du plus puissant au moins puissant » ; « réseau public activé dans
+    AIODOS → accessible dans le Calcul, et par défaut à la place de ce PC »."""
+    from PyQt6.QtWidgets import QCheckBox, QComboBox, QLabel, QVBoxLayout, QWidget
+    from ui import comfy_choice as CC
+    from core import aiodos as AD, comfy_aiodos as CA
+    import core.config as C
+    from ui.page_aiodos import PageAiodos
+    # ── Rangement : familles séparées par un trait, de la plus lourde à la plus légère
+    cat = {"image_sdxl": {"name": "image_sdxl", "title": "SDXL Simple", "size": 7e9},
+           "image_z_image_int8": {"name": "image_z_image_int8", "title": "Z-Image Int8", "size": 12e9},
+           "image_flux2": {"name": "image_flux2", "title": "Flux.2 Dev", "size": 71e9},
+           "image_z_image": {"name": "image_z_image", "title": "Z-Image", "size": 20e9}}
+    old_cat = CC._catalog
+    CC._catalog = lambda kind: cat
+    try:
+        box = QComboBox()
+        CC.fill_templates(box, "image", [("comfy:" + k, "ComfyUI · " + v["title"])
+                                         for k, v in cat.items()])
+    finally:
+        CC._catalog = old_cat
+    rows = [(box.itemText(i), box.itemData(i)) for i in range(box.count())]
+    keys = [d for _t, d in rows if d]
+    assert keys == ["comfy:image_flux2", "comfy:image_z_image", "comfy:image_z_image_int8",
+                    "comfy:image_sdxl"], keys
+    seps = [i for i, (t, d) in enumerate(rows) if not d and not t]
+    assert len(seps) == 2, rows                      # Flux.2 | Z-Image ×2 | SDXL
+    zi = [i for i, (_t, d) in enumerate(rows) if d and "z_image" in d]
+    assert zi[1] == zi[0] + 1, "les Z-Image restent ensemble, sans trait entre elles"
+    assert CC.family(None, "ComfyUI · Z-Image-Turbo Int8", "comfy:x") == "Z-Image"
+    assert CC.family(None, "ComfyUI · Flux.1 Krea Dev", "comfy:flux1_krea_dev") == "Flux.1"
+    assert CC.family(None, "ComfyUI · Krea-2: Text to Image", "comfy:image_krea2_t2i") == "Krea-2"
+    # ── « Moteur IA » à la place de « Gabarit »
+    host = QWidget()
+    lay = QVBoxLayout(host)
+    combo = QComboBox()
+    combo.addItem("Nano Banana", "nb2")
+    combo.addItem("ComfyUI · A", "comfy:t_a")
+    lay.addWidget(combo)
+    ch = CC.attach_comfy(combo, "image", layout=lay, after=combo)
+    texts = [l.text() for l in ch.row.findChildren(QLabel)]
+    assert "Moteur IA" in texts and "Gabarit" not in texts, texts
+    assert ch.compute.count() == 3 and ch.compute.findData("aiodos_public") >= 0
+    host.deleteLater()
+    # ── Réseau public : par défaut quand il est coché dans l'onglet AIODOS
+    assert [v for _l, v in CC.COMPUTE_CHOICES] == ["local", "aiodos", "aiodos_public"]
+    assert AD.default_compute_mode({"aiodos_where": ["here", "mine", "public"]}) == "aiodos_public"
+    assert AD.default_compute_mode({"aiodos_where": ["here", "mine"]}) == "local"
+    assert AD.default_compute_mode({}) == "local"
+    store = {"aiodos_where": ["here", "mine", "friends", "public"], "anthropic_key": "garde"}
+    old = (C.load_config, C.save_config, AD.status)
+    C.load_config = lambda: dict(store)
+    C.save_config = lambda cfg: (store.clear(), store.update(cfg))
+    try:
+        assert AD.compute_mode() == "aiodos_public", "réseau public coché → choix par défaut"
+        assert AD.uses_aiodos() and CA.enabled(), "le réseau public passe par AIODOS"
+        assert AD.job_where("aiodos_public") is None, "public : tout ce que l'accord permet"
+        from types import SimpleNamespace
+        AD.status = lambda max_age=4.0: SimpleNamespace(where=("here", "mine", "public"))
+        assert AD.job_where("aiodos") == ["here", "mine"], "mes machines : jamais le public"
+        store["comfy_compute"] = "local"
+        assert AD.compute_mode() == "local", "un choix enregistré reste le choix"
+        # Cocher « Réseau public » dans l'onglet AIODOS : le Calcul passe au public.
+        store["aiodos_where"] = ["here", "mine"]
+        fake = SimpleNamespace(_circles={k: QCheckBox() for k in ("here", "mine", "friends",
+                                                                   "public")})
+        for k in ("here", "mine", "public"):
+            fake._circles[k].setChecked(True)
+        PageAiodos._on_circles(fake, True)
+        assert store["aiodos_where"] == ["here", "mine", "public"]
+        assert store["comfy_compute"] == "aiodos_public" and store["anthropic_key"] == "garde"
+        fake._circles["public"].setChecked(False)
+        PageAiodos._on_circles(fake, False)
+        assert store["comfy_compute"] == "aiodos", "public décoché → mes machines"
+    finally:
+        C.load_config, C.save_config, AD.status = old
+    src = inspect.getsource(CA.run)
+    assert "where = _ad.job_where(mode)" in src and "where=where" in src \
+        and "sensitive=sensitive" in src
+    from core.i18n import _FR_TO_EN
+    for s in ("Moteur IA", "Réseau public · AIODOS"):
+        assert s in _FR_TO_EN, s
+
+
+@test
+def mood_storyboard_ligne_detruite_27_10_2026():
+    """Plantage vécu le 27/10/2026 (journal pandora_crash.log) : la vignette Mood du
+    Storyboard Cinéma rappelait une étiquette DÉTRUITE à la fermeture de la fenêtre
+    Mood (la ligne reconstruite pendant sa boucle imbriquée). Corrigé côté Live le
+    26/07 (`_alive`), jamais reporté au Cinéma."""
+    from PyQt6.QtWidgets import QLabel
+    import ui.page_storyboard as PS
+    lbl = QLabel()
+    assert PS._alive(lbl) and not PS._alive(None)
+    from PyQt6 import sip
+    sip.delete(lbl)
+    assert not PS._alive(lbl), "un widget détruit côté C++ n'est plus vivant"
+    row_src = inspect.getsource(PS)
+    assert "if not _alive(row_self):" in row_src, "retour de la fenêtre Mood gardé"
+    fn = row_src[row_src.index("    def _on_apercu_changed"):]
+    fn = fn[:fn.index("\n    def ", 10)] if "\n    def " in fn[10:] else fn
+    assert "_alive(getattr(self, \"_apercu_lbl\", None))" in fn
+
+
+@test
+def aiodos_onglet_a_part_27_10_2026():
+    """Barre du bas selon le montage de Matthieu (27/10/2026) : « Coût du projet »
+    à gauche, les onglets EXACTEMENT centrés, AIODOS à droite à côté de Paramètres
+    (une barre entre eux) ; plus de drapeaux de langue (→ Paramètres → Langue) ni
+    de disquette (Ctrl+S et la fermeture enregistrent)."""
+    from PyQt6.QtWidgets import QFrame
+    from ui import pandora_window as PW
+    groups = PW._get_nav_groups()
+    assert all(e[2] not in ("aiodos", "settings") for _l, entries in groups for e in entries)
+    bar = PW._Sidebar()
+    bar.resize(1600, 64)
+    bar.show()
+    QApplication.processEvents()
+    try:
+        assert not bar._lang_btns, "plus de drapeaux dans la barre"
+        assert bar._btn_cost.parentWidget() is bar._left, "Coût du projet à gauche"
+        assert bar._items["aiodos"].parentWidget() is bar._right
+        assert bar._items["settings"].parentWidget() is bar._right
+        rl = bar._right.layout()
+        order = [rl.itemAt(k).widget() for k in range(rl.count())]
+        ia, ise = order.index(bar._items["aiodos"]), order.index(bar._items["settings"])
+        assert ia < ise and any(isinstance(w, QFrame) and w.width() <= 2
+                                for w in order[ia + 1:ise]), "AIODOS | Paramètres"
+        mid = bar._center.geometry().center().x()
+        assert abs(mid - bar.width() / 2) <= 2, (mid, bar.width())
+        assert bar._left.width() == bar._right.width(), "deux côtés de même largeur"
+    finally:
+        bar.close()
+        bar.deleteLater()
+    src = inspect.getsource(PW)
+    assert "insertWidget(4, self._btn_save_global)" not in src, "plus de disquette dans la barre"
+    assert 'QShortcut(QKeySequence("Ctrl+S"), self)' in src, "Ctrl+S enregistre toujours"
+    assert "settings.lang_change_requested.connect(self._on_lang_change)" in src
+    from ui import page_settings as PSET
+    assert "self._language = LanguageRow()" in inspect.getsource(PSET)
+    from ui.language_row import LanguageRow
+    row = LanguageRow()
+    got = []
+    row.chosen.connect(got.append)
+    from core.i18n import get_lang
+    other = "en" if get_lang() == "fr" else "fr"
+    row.buttons[other].click()
+    assert got == [other], "la langue choisie part vers la fenêtre"
+    row.deleteLater()
+
+
+@test
+def dictee_orakle_dans_les_champs_27_10_2026():
+    """« On intègre ORAKLE » (Matthieu, 27/10/2026) : un micro dans les champs où l'on
+    écrit ; un clic = ORAKLE mains-libres (on parle, on reclique, le texte s'écrit) ;
+    au survol, les raccourcis ; moteur EMBARQUÉ. Ici un faux moteur : ni micro, ni
+    Whisper, ni réseau."""
+    import json
+    import time
+    import numpy as np
+    from PyQt6.QtCore import Qt
+    from PyQt6.QtTest import QTest
+    from PyQt6.QtWidgets import (QComboBox, QLineEdit, QPlainTextEdit, QSpinBox, QTextBrowser,
+                                 QTextEdit, QVBoxLayout, QWidget)
+    from core import dictation as DC
+    from ui import dictation as D
+    # ── Machine à états du raccourci (celle d'ORAKLE) ─────────────────────────
+    m = DC.HotkeyMachine(300, 400)
+    assert m.press(0.0) == ["start"] and m.tick(0.1) == [] and m.tick(0.35) == ["confirm"]
+    assert m.release(1.0) == ["commit"], "maintien : on relâche, ça écrit"
+    m = DC.HotkeyMachine(300, 400)
+    assert m.press(0.0) == ["start"] and m.release(0.05) == ["cancel"], "appui bref seul : rien"
+    assert m.press(0.2) == ["start"] and m.release(0.25) == ["cancel", "start", "confirm"]
+    assert m.mode == "toggle" and m.press(3.0) == [] and m.release(3.05) == ["commit"]
+    m = DC.HotkeyMachine(300, 400)
+    m.press(0.0); m.release(0.05)
+    m.press(1.0)
+    assert m.release(1.05) == ["cancel"], "deux appuis trop espacés : pas de mains-libres"
+    assert DC.hotkey_parts("<ctrl>+1") == (frozenset({"ctrl"}), "1")
+    assert DC.hotkey_label("<ctrl>+<shift>+<f9>") == "Ctrl+Maj+F9"
+    # ── Espaces autour du texte dicté ─────────────────────────────────────────
+    assert DC.spaced("Salut", "bonjour", "") == " bonjour "
+    assert DC.spaced("l'", "arbre", ", vert", True) == "arbre"
+    assert DC.spaced("", "Bonjour", "", False) == "Bonjour"
+    assert DC.apply_corrections("made mapper ici", {"made mapper": "MadMapper"}) == "MadMapper ici"
+    # ── Réglages et dictionnaire d'ORAKLE lus, jamais écrits ──────────────────
+    tmp = tempfile.mkdtemp(prefix="pandora_orakle_")
+    with open(os.path.join(tmp, "settings.json"), "w", encoding="utf-8") as f:
+        json.dump({"hotkey": "<ctrl>+2", "model": "base", "languages": ["FR"], "hold_threshold_ms": "x"}, f)
+    with open(os.path.join(tmp, "dictionary.json"), "w", encoding="utf-8") as f:
+        json.dump({"bias_terms": ["Seedance"], "corrections": {"cid dance": "Seedance"}}, f)
+    old_dir = DC.orakle_dir
+    DC.orakle_dir = lambda: tmp
+    try:
+        cfg = DC.settings()
+        assert cfg["hotkey"] == "<ctrl>+2" and cfg["model"] == "base" and cfg["languages"] == ["fr"]
+        assert cfg["hold_threshold_ms"] == 300, "valeur au mauvais type → défaut d'ORAKLE"
+        assert DC.dictionary()["corrections"] == {"cid dance": "Seedance"}
+        assert DC.orakle_installed()
+    finally:
+        DC.orakle_dir = old_dir
+    assert DC.model_repo("small") == "Systran/faster-whisper-small"
+    # ── Les champs équipés, et ceux qui ne le sont pas ────────────────────────
+    class FakeEngine:
+        model_loaded = True
+        level = 0.2
+
+        def __init__(self):
+            self.rec = False
+
+        is_recording = property(lambda self: self.rec)
+
+        def start(self): self.rec = True
+        def stop(self):
+            self.rec = False
+            return np.zeros(16000, dtype=np.float32)
+        def cancel(self): self.rec = False
+        def warm_async(self): pass
+        def transcribe(self, audio): return "bonjour le monde"
+        def release_mic(self): pass
+        def release_model(self): pass
+
+    app = QApplication.instance()
+    ctl = D.DictationController(engine=FakeEngine(), cfg=dict(DC.DEFAULTS), enabled=True)
+    app.installEventFilter(ctl)
+    try:
+        win = QWidget()
+        lay = QVBoxLayout(win)
+        le = QLineEdit("Salut")
+        pw = QLineEdit()
+        pw.setEchoMode(QLineEdit.EchoMode.Password)
+        ro = QLineEdit()
+        ro.setReadOnly(True)
+        sp, cb = QSpinBox(), QComboBox()
+        cb.setEditable(True)
+        te, tb = QTextEdit(), QTextBrowser()
+        no = QLineEdit()
+        no.setProperty("orakle", False)
+        for w in (le, pw, ro, sp, cb, te, tb, no):
+            lay.addWidget(w)
+        win.resize(500, 500)
+        win.show()
+        for _ in range(4):
+            app.processEvents()
+        has = lambda w: bool(w.property("_orakle_mic"))
+        assert has(le) and has(te) and has(ro), "champs de texte équipés"
+        assert not any(has(w) for w in (pw, sp.lineEdit(), cb.lineEdit(), tb, no)), \
+            "jamais les clés, compteurs, listes, lecture HTML ni champs exclus"
+        assert not ctl._control(ro).isVisible(), "lecture seule : micro caché"
+        ro.setReadOnly(False)
+        app.processEvents()
+        assert ctl._control(ro).isVisible(), "devenu modifiable : micro visible"
+        tip = ctl._control(le).toolTip()
+        assert "Clic" in tip and "Ctrl+1 maintenu" in tip and "deux fois" in tip and "Échap" in tip
+        # ── Clic = mains-libres ; 2ᵉ clic = écrire au curseur ─────────────────
+        le.setCursorPosition(len(le.text()))
+        ctl.toggle_for(le)
+        assert ctl.state == "recording"
+        ctl.toggle_for(le)
+        t0 = time.time()
+        while ctl.state != "idle" and time.time() - t0 < 5:
+            app.processEvents()
+            time.sleep(0.01)
+        app.processEvents()
+        assert le.text() == "Salut bonjour le monde ", repr(le.text())
+        # ── Raccourci maintenu dans une zone de texte ─────────────────────────
+        te.setPlainText("Début")
+        cur = te.textCursor()
+        cur.movePosition(cur.MoveOperation.End)
+        te.setTextCursor(cur)
+        QTest.keyPress(te, Qt.Key.Key_1, Qt.KeyboardModifier.ControlModifier)
+        assert ctl.machine.engaged and ctl.state == "idle", "capture tentative, pas encore confirmée"
+        # Le minuteur du seuil (315 ms) peut être retardé par les destructions en
+        # attente des tests précédents : on attend l'état, sans délai fixe.
+        t0 = time.time()
+        while ctl.state != "recording" and time.time() - t0 < 3:
+            QTest.qWait(20)
+        assert ctl.state == "recording", "maintenu au-delà du seuil : on écoute"
+        QTest.keyRelease(te, Qt.Key.Key_1, Qt.KeyboardModifier.ControlModifier)
+        t0 = time.time()
+        while ctl.state != "idle" and time.time() - t0 < 5:
+            app.processEvents()
+            time.sleep(0.01)
+        assert te.toPlainText() == "Début bonjour le monde ", repr(te.toPlainText())
+        # ── Échap annule ──────────────────────────────────────────────────────
+        before = le.text()
+        ctl.toggle_for(le)
+        QTest.keyPress(le, Qt.Key.Key_Escape)
+        assert ctl.state == "idle" and le.text() == before
+        ctl.set_enabled(False)
+        assert not ctl._control(le).isVisible(), "réglage décoché : micros masqués"
+        win.close()
+        win.deleteLater()
+    finally:
+        app.removeEventFilter(ctl)
+        ctl.shutdown()
+        ctl.deleteLater()
+    # ── Paramètres, démarrage, empaquetage ────────────────────────────────────
+    # Pas de SettingsPage complète ici : construite dans le DERNIER test, ses
+    # vérifications en tâche de fond tournaient encore à la fermeture du harnais
+    # (« QThread: Destroyed while thread is still running » → 0xC0000409).
+    from ui import page_settings as PSET
+    from ui.dictation_panel import DictationPanel
+    assert "self._dictation = DictationPanel()" in inspect.getsource(PSET)
+    panel = DictationPanel()
+    assert panel.check.text() and panel.status.text()
+    panel.deleteLater()
+    root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    with open(os.path.join(root, "main.py"), encoding="utf-8") as f:
+        assert "_install_dictation(app)" in f.read()
+    with open(os.path.join(root, "pandora.spec"), encoding="utf-8") as f:
+        spec = f.read()
+    for name in ('"orakle_engine.recorder"', '"orakle_engine.transcriber"', '"ui.dictation"',
+                 '"sounddevice"', "NSMicrophoneUsageDescription", 'collect_all'):
+        assert name in spec, name
+    for name in ("LICENSE", "NOTICE", "recorder.py", "transcriber.py"):
+        assert os.path.isfile(os.path.join(root, "orakle_engine", name)), name
+    for name in ("recorder.py", "transcriber.py"):
+        with open(os.path.join(root, "orakle_engine", name), encoding="utf-8") as f:
+            assert "from orakle" not in f.read(), "copie autonome, sans le reste d'ORAKLE"
+    from core.i18n import _FR_TO_EN
+    for s in ("Dictée vocale (ORAKLE)", "Échap : annuler la dictée", "Rien entendu",
+              "Micro de dictée dans les champs de texte", "DICTÉE VOCALE (ORAKLE)"):
+        assert s in _FR_TO_EN, s
+
+
+@test
+def retours_essai_soir_27_10_2026():
+    """Retours de Matthieu après essai (27/10/2026, soir) : collage sans fond blanc
+    + bouton « Retirer le fond » ; texte dicté à la couleur du thème ; menu
+    « Prompt » à côté d'« Action », en violet ; fenêtre Mood dont les boutons ne
+    sont plus écrasés ; redémarrage annoncé en rouge ; AIODOS présenté quand il
+    n'est pas installé ; panneau AIODOS du Studio centré."""
+    from PyQt6.QtCore import QMimeData
+    from PyQt6.QtWidgets import QTextEdit
+    from ui import paste_clean as PC
+    # ── Collage : fonds et couleurs retirés, gras gardé ───────────────────────
+    html = ('<p style="background-color:#ffffff;color:#000000;font-weight:bold">Bonjour '
+            '<span style="background:white">monde</span> <font color="red">x</font></p>')
+    out = PC.clean_html(html)
+    assert "background" not in out and "#000000" not in out and 'color="red"' not in out
+    assert "font-weight:bold" in out, "le gras reste"
+    PC.install()
+    te = QTextEdit()
+    md = QMimeData()
+    md.setHtml(html)
+    te.insertFromMimeData(md)
+    assert "background" not in te.toHtml() and "Bonjour" in te.toPlainText()
+    te.setHtml('<p style="background-color:#ffffff;color:#000000">Texte</p>')
+    PC.strip_colors(te)
+    assert "background-color" not in te.toHtml() and "color:#000000" not in te.toHtml()
+    import ui.page_scenario as PSC
+    import ui.page_scenario_live as PSL
+    for mod in (PSC, PSL):
+        assert "self._btn_strip_colors" in inspect.getsource(mod), mod.__name__
+    root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    with open(os.path.join(root, "main.py"), encoding="utf-8") as f:
+        assert "_install_paste_clean()" in f.read()
+    # ── Texte dicté : couleur du thème, pas celle du texte voisin ─────────────
+    from ui import dictation as D
+    te = QTextEdit()
+    te.setHtml('<p style="color:#000000">Début</p>')
+    cur = te.textCursor()
+    cur.movePosition(cur.MoveOperation.End)
+    te.setTextCursor(cur)
+    D.insert_text(te, "dicté")
+    cur = te.textCursor()
+    cur.movePosition(cur.MoveOperation.End)
+    assert not cur.charFormat().hasProperty(cur.charFormat().Property.ForegroundBrush), \
+        "le texte dicté n'hérite pas du noir collé"
+    # ── Menu Prompt à côté d'Action, en violet ────────────────────────────────
+    from ui import prompt_menu as PM
+    from ui.styles import CP
+    assert f"color:{{CP['accent2']}}" in inspect.getsource(PM.PromptMenu.__init__)
+    import ui.page_storyboard as PS
+    import ui.page_storyboard_live as PSB
+    for mod in (PS, PSB):
+        src = inspect.getsource(mod)
+        assert "lay.insertWidget(1, self._prompt_menu)" in src, mod.__name__
+    # ── Fenêtre Mood : l'aperçu cède, la bande vide se replie ─────────────────
+    import ui.dialog_apercu as DA
+    src = inspect.getsource(DA)
+    assert "self._img_lbl.setMinimumSize(480, 160)" in src
+    assert "self._refs_scroll.setVisible(bool(_plan) and _max > 0)" in src
+    # ── Redémarrage annoncé en rouge, avec son bouton ─────────────────────────
+    from ui import theme_picker as TP
+    import core.config as C
+    old = (C.load_config, C.save_config)
+    store = {"theme": "noir"}
+    C.load_config = lambda: dict(store)
+    C.save_config = lambda cfg: store.update(cfg)
+    try:
+        pk = TP.ThemePicker()
+        assert pk.needs_restart() and not pk.notice.isHidden(), "noir enregistré, nuit affiché"
+        assert CP["red"] in pk.notice.styleSheet()
+        store["theme"] = "nuit"
+        pk2 = TP.ThemePicker()
+        assert not pk2.needs_restart() and pk2.notice.isHidden()
+        pk.deleteLater()
+        pk2.deleteLater()
+    finally:
+        C.load_config, C.save_config = old
+    # ── AIODOS pas installé : présenté, avec « Installer AIODOS » ─────────────
+    from ui.page_aiodos import PageAiodos
+    from core import aiodos as AD
+    assert AD.DOWNLOAD_URL.startswith("https://")
+    page = PageAiodos()
+    page.apply_snapshot({"state": "not_installed", "ready": False, "message": ""})
+    assert not page._intro.isHidden() and page._btn_install.text()
+    page.apply_snapshot({"state": "ready", "ready": True, "machines": [], "jobs": []})
+    assert page._intro.isHidden()
+    page.deleteLater()
+    # ── Panneau AIODOS du Studio : titre centré ───────────────────────────────
+    import ui.aiodos_peers_panel as PP
+    src = inspect.getsource(PP)
+    i = src.index("hl.addWidget(self._title)")
+    assert "hl.addStretch(1)" in src[i - 200:i] and "hl.addStretch(1)" in src[i:i + 200]
+    # Replié par défaut ; s'ouvre de lui-même à l'arrivée de machines, une fois.
+    PP._OPEN["open"] = False
+    panel = PP.AiodosPeersPanel()
+    assert not panel.is_open()
+    panel.apply_snapshot({"state": "ready", "ready": True, "machines": [], "jobs": []})
+    assert not panel.is_open(), "aucune machine : reste replié"
+    # 29/10/2026 : ce PC seul ne compte pas (il est toujours là quand AIODOS tourne)
+    here = {"name": "22emeArkane", "place": "here", "engines": [], "models": [], "busy": False}
+    panel.apply_snapshot({"state": "ready", "ready": True, "machines": [here], "jobs": []})
+    assert not panel.is_open(), "ce PC seul : le panneau reste replié"
+    from PyQt6.QtWidgets import QSizePolicy, QTextEdit, QVBoxLayout, QWidget
+    assert panel.sizePolicy().verticalPolicy() == QSizePolicy.Policy.Maximum, \
+        "le panneau ne grandit jamais au-delà de son contenu"
+    _host = QWidget()
+    _hl = QVBoxLayout(_host)
+    _hl.addWidget(QTextEdit(), 1)
+    _hl.addWidget(panel)
+    _host.resize(1400, 900)
+    panel.set_open(True)
+    _host.show()
+    panel.setVisible(True)      # (le calcul du harnais n'est pas réglé sur AIODOS)
+    QApplication.processEvents()
+    assert panel.isVisible() and 60 < panel.height() < 220, \
+        f"déplié avec une machine : compact ({panel.height()} px)"
+    assert panel.table.height() >= panel.table.horizontalHeader().height() + 20, \
+        "la table garde la place de son en-tête ET de sa ligne"
+    panel.set_open(False)
+    _host.hide()
+    _hl.removeWidget(panel)
+    panel.setParent(None)
+    _host.deleteLater()
+    # Matthieu 29/10/2026 : il ne se déplie JAMAIS de lui-même, même quand une autre
+    # machine se connecte (sinon il s'ouvrirait à chaque connexion).
+    machine = {"name": "PC-2", "place": "mine", "engines": [], "models": [], "busy": False}
+    try:
+        panel.apply_snapshot({"state": "ready", "ready": True, "machines": [machine], "jobs": []})
+        assert not panel.is_open(), "une machine se connecte : il reste replié"
+        panel.set_open(True)
+        panel.apply_snapshot({"state": "ready", "ready": True, "machines": [machine, here], "jobs": []})
+        assert panel.is_open(), "déplié à la main : il le reste"
+        assert "set_open(True)" not in inspect.getsource(PP.AiodosPeersPanel.apply_snapshot), \
+            "aucune ouverture automatique dans la lecture de l'état"
+    finally:
+        PP._OPEN["open"] = False
+        panel.deleteLater()
+    from core.i18n import _FR_TO_EN
+    for s in ("Retirer le fond", "Redémarrez PANDORA pour appliquer ce thème.",
+              "Installer AIODOS", "Découvrir AIODOS"):
+        assert s in _FR_TO_EN, s
+
+
+@test
+def filmcraft_pont_comme_davinci_27_10_2026():
+    """« Linker PANDORA avec ArtCraft : import automatique dans le logiciel de montage
+    quand il est lancé, comme pour DaVinci Resolve » (Matthieu, 27/10/2026) — le pont
+    vers FilmCraft. Un FAUX FilmCraft répond ici à la place de filmcraft-cli (le
+    vrai a été essayé à la main le 27/10 : import, séquence, mauvais jeton refusé)."""
+    import json
+    from core import filmcraft as F
+    # ── Le jeton : 64 caractères hexadécimaux, hors de config.json, gardé ─────
+    tmp = tempfile.mkdtemp(prefix="pandora_fc_")
+    old_path = F.token_path
+    F.token_path = lambda: os.path.join(tmp, "filmcraft.token")
+    try:
+        t1 = F.token()
+        assert len(t1) == 64 and all(c in "0123456789abcdef" for c in t1)
+        assert F.token() == t1, "le même jeton d'un appel à l'autre"
+        env = F.control_env()
+        assert env["FILMCRAFT_CONTROL_TOKEN"] == t1 and env["FILMCRAFT_CONTROL_PORT"] == str(F.port())
+    finally:
+        F.token_path = old_path
+    # ── Un faux FilmCraft : arbre des chutiers + commandes ────────────────────
+    state = {"next": 10, "root": {"id": 0, "name": "Projet", "children": []}, "calls": []}
+
+    def find(node, bid):
+        if node.get("id") == bid and "type" not in node:
+            return node
+        for c in node.get("children", []):
+            got = find(c, bid)
+            if got:
+                return got
+        return None
+
+    def fake_cli(*args, timeout=60.0):
+        state["calls"].append(args)
+        if args[:2] == ("inspect", "project"):
+            return True, {"root": json.loads(json.dumps(state["root"]))}
+        if args[0] == "exec":
+            cmd, params = args[1], json.loads(args[2])
+            if cmd == "file.newBin":
+                state["next"] += 1
+                parent = find(state["root"], params.get("parent", 0)) or state["root"]
+                parent["children"].append({"id": state["next"], "name": params["name"],
+                                           "children": []})
+                return True, {"bin": state["next"]}
+            if cmd == "file.import":
+                b = find(state["root"], params["bin"])
+                ids = []
+                for p in params["paths"]:
+                    state["next"] += 1
+                    b["children"].append({"item": state["next"], "type": "Movie",
+                                          "name": os.path.basename(p)})
+                    ids.append(state["next"])
+                return True, {"items": ids, "errors": []}
+            if cmd == "file.newSequence":
+                return True, {"sequence": 99}
+            if cmd == "timeline.place":
+                state["placed"] = params["items"]
+                return True, {"clips": params["items"]}
+        return False, "commande inconnue"
+
+    clips_dir = tempfile.mkdtemp(prefix="pandora_fc_clips_")
+    c1, c2 = os.path.join(clips_dir, "SQ1_P1_01.mp4"), os.path.join(clips_dir, "SQ2_P2_01.mp4")
+    for p in (c1, c2):
+        with open(p, "wb") as f:
+            f.write(b"\0")
+    old_cli = F.cli
+    F.cli = fake_cli
+    try:
+        assert F.import_clip(c1, "SQ01") == (True, "")
+        pandora = F._find_child_bin(state["root"], "PANDORA")
+        assert pandora and F._find_child_bin(pandora, "SQ01"), "chutier PANDORA/SQ01 créé"
+        n_imports = sum(1 for a in state["calls"] if a[:2] == ("exec", "file.import"))
+        res = F.import_files([c1], "SQ01")
+        assert res["reused"] == 1 and sum(1 for a in state["calls"]
+                                          if a[:2] == ("exec", "file.import")) == n_imports, \
+            "un clip déjà présent n'est pas réimporté"
+        ok, out = F.build_sequence("Storyboard", [
+            {"path": c1, "bin": "SQ01"},
+            {"path": os.path.join(clips_dir, "absent.mp4"), "bin": "SQ01"},
+            {"path": c2, "bin": "SQ02"}])
+        assert ok and out["count"] == 2 and out["sequence"] == 99, out
+        sq01 = F._find_child_bin(pandora, "SQ01")
+        sq02 = F._find_child_bin(pandora, "SQ02")
+        assert state["placed"] == [sq01["children"][0]["item"], sq02["children"][0]["item"]], \
+            "les plans dans l'ordre du storyboard, le fichier absent ignoré"
+    finally:
+        F.cli = old_cli
+    # ── État affiché ──────────────────────────────────────────────────────────
+    saved = (F.is_installed, F.port_open, F.running, F.cli)
+    try:
+        F.is_installed = lambda: False
+        assert F.status() == "not_installed"
+        F.is_installed, F.port_open, F.running = (lambda: True), (lambda timeout=0.3: False), (lambda: False)
+        assert F.status() == "closed"
+        F.running = lambda: True
+        assert F.status() == "no_bridge", "ouvert sans le pont de PANDORA"
+        F.port_open, F.cli = (lambda timeout=0.3: True), (lambda *a, timeout=60.0: (True, {}))
+        assert F.status() == "ready"
+    finally:
+        F.is_installed, F.port_open, F.running, F.cli = saved
+    # ── Branchements : Studio des deux éditions, Storyboard, Paramètres ───────
+    import ui.tab_t2v as T2V
+    import ui.tab_t2v_live as T2VL
+    import ui.page_storyboard as PSB
+    import ui.page_settings as PSET
+    import ui.page_live_settings as PLS
+    for mod in (T2V, T2VL):
+        assert "send_clip(local_path" in inspect.getsource(mod), mod.__name__
+    assert "filmcraft_ui.montage(self" in inspect.getsource(PSB)
+    for mod in (PSET, PLS):
+        assert "self._filmcraft = FilmCraftPanel()" in inspect.getsource(mod), mod.__name__
+    from ui.filmcraft_ui import FilmCraftPanel, explain
+    panel = FilmCraftPanel()
+    assert panel.btn_open.text() and panel.auto.text()
+    panel.deleteLater()
+    for st in ("not_installed", "closed", "no_bridge", "ready"):
+        assert explain(st) != st
+    from core.i18n import _FR_TO_EN
+    for s in ("Ouvrir FilmCraft relié à PANDORA", "🎞  Monter dans FilmCraft",
+              "Envoyer chaque clip généré à FilmCraft quand il est ouvert"):
+        assert s in _FR_TO_EN, s
+    root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    with open(os.path.join(root, "pandora.spec"), encoding="utf-8") as f:
+        assert '"core.filmcraft", "ui.filmcraft_ui"' in f.read()
+
+
+@test
+def grilles_pleine_largeur_et_replis_29_10_2026():
+    """Retours de Matthieu sur l'installeur du 29/10/2026 : Décors, Castings…
+    restaient sur 3 colonnes (grille posée sur la largeur de départ du viewport,
+    jamais recalculée) ; « Plan des décors » replié par défaut."""
+    from PyQt6.QtWidgets import QGridLayout, QLabel, QMainWindow, QStackedWidget
+    import core.decors as D
+    from ui.page_decors import PageDecors
+    root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    for name in ("page_castings", "page_decors", "page_accessories", "page_hmc", "page_vehicles"):
+        with open(os.path.join(root, "ui", name + ".py"), encoding="utf-8") as f:
+            assert "watch_viewport(scroll, self)" in f.read(), f"{name} : grille non reliée au viewport"
+    saved = D.list_decors
+    D.list_decors = lambda: [{"id": f"d{i}", "name": f"Décor {i}", "category": "Extérieur"} for i in range(7)]
+    win = QMainWindow()
+    try:
+        stack = QStackedWidget()
+        win.setCentralWidget(stack)
+        win.resize(1900, 1000)
+        stack.addWidget(QLabel("accueil"))
+        win.show()
+        QApplication.processEvents()
+        page = PageDecors()            # construite et remplie hors de la pile, comme à la demande
+        page.refresh()
+        stack.addWidget(page)
+        stack.setCurrentWidget(page)
+        for _ in range(5):
+            QApplication.processEvents()
+        cols = max(g.columnCount() for g in page._grid_container.findChildren(QGridLayout))
+        assert page._grid_columns() >= 7 and cols == 7, \
+            f"7 décors sur une ligne quand ils tiennent (rendu : {cols} colonnes)"
+        assert not page._fp_toggle.isChecked() and not page._fp_body.isVisibleTo(page), \
+            "« Plan des décors » replié par défaut"
+    finally:
+        D.list_decors = saved
+        win.close()
+        win.deleteLater()
+
+
+@test
+def personnages_animes_et_frise_29_10_2026():
+    """Plan de feu : personnages articulés et animés (Quaternius CC0, principe d'ArtCraft) le
+    long de marques posées sur une frise ; le catalogue d'actions est la SOURCE UNIQUE de
+    l'animation jouée et du verbe écrit dans le prompt (Matthieu 29/10/2026)."""
+    import json
+    import struct
+    root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    chars = os.path.join(root, "scene3d_web", "characters")
+    # ── 1. Fichiers CC0 présents, provenance écrite ─────────────────────────────
+    for n in ("ual1.glb", "ual2.glb", "mannequin_f.glb", "LICENSE-CC0.txt", "SOURCE.md", "actions.json"):
+        assert os.path.isfile(os.path.join(chars, n)), n
+    with open(os.path.join(chars, "LICENSE-CC0.txt"), encoding="utf-8") as f:
+        assert "CC0 1.0" in f.read()
+    with open(os.path.join(chars, "SOURCE.md"), encoding="utf-8") as f:
+        src = f.read()
+    assert "opengameart.org" in src and "QAL" in src, "provenance CC0 et mise en garde QAL"
+
+    # ── 2. Chaque action vise une animation qui existe vraiment dans les GLB ────
+    def glb_json(p):
+        with open(p, "rb") as fh:
+            fh.read(12)
+            n, _t = struct.unpack("<I4s", fh.read(8))
+            return json.loads(fh.read(n))
+    clips = set()
+    for n in ("ual1.glb", "ual2.glb"):
+        clips |= {a.get("name") for a in glb_json(os.path.join(chars, n)).get("animations", [])}
+    with open(os.path.join(chars, "actions.json"), encoding="utf-8") as f:
+        cat = json.load(f)
+    ids = [a["id"] for a in cat["actions"]]
+    assert len(ids) == len(set(ids)), "identifiants d'action uniques"
+    groups = {g[0] for g in cat["groups"]}
+    for a in cat["actions"]:
+        assert a["clip"] in clips, f"animation absente des fichiers Quaternius : {a['clip']}"
+        assert a["group"] in groups and a.get("fr") and a.get("en") and a.get("verb"), a["id"]
+        if a.get("move"):
+            assert a.get("speed", 0) > 0, f"{a['id']} : vitesse naturelle requise (cadence)"
+    for pose, aid in cat["poses"].items():
+        assert aid in ids, f"pose {pose} -> action inconnue {aid}"
+    for must in ("walk", "jog", "sprint", "idle", "sit_down", "seated"):
+        assert must in ids, must      # actions automatiques de la vue
+    # le fondu, la cadence et la traduction de squelette vivent dans la vue
+    with open(os.path.join(root, "scene3d_web", "characters.js"), encoding="utf-8") as f:
+        js = f.read()
+    assert "retargetClip" in js and "mixer.update(0)" in js and "/pandora/characters/actions.json" in js
+    with open(os.path.join(root, "ui", "scene3d_web.py"), encoding="utf-8") as f:
+        assert "FetchApiAllowed" in f.read(), "fetch() refusé sans ce drapeau (chargement des GLB)"
+    with open(os.path.join(root, "arklight_engine", "manifest.json"), encoding="utf-8") as f:
+        man = json.load(f)["fichiers"]
+    assert "/vendor/three/examples/jsm/loaders/GLTFLoader.js" in man
+    assert "/vendor/three/examples/jsm/utils/SkeletonUtils.js" in man
+
+    # ── 3. Le prompt lit la frise avec les verbes du catalogue ──────────────────
+    import core.scene3d_prompt as P
+    P._ACTIONS = None
+    assert P.actions()["sit_down"]["verb"] == "s'assoit"
+    scene = {
+        "objects": [
+            {"id": "cam", "type": "camera-tripod", "position": [0.4, 0, 5.5], "rotation": [0, 3.1416, 0],
+             "props": {"focal": 32, "lens": 1.5}},
+            {"id": "paul", "type": "person-man", "name": "Paul", "position": [-2.8, 0, 0.6], "rotation": [0, 0, 0]},
+            {"id": "lea", "type": "person-woman", "name": "Léa", "position": [1.0, 0, -0.4], "rotation": [0, 0, 0]},
+        ],
+        "pandora": {"shot_camera": "cam", "duration": 5, "tracks": {
+            "paul": [{"t": 0, "p": [-2.8, 0, 0.6]}, {"t": 2.2, "p": [-0.6, 0, 0]},
+                     {"t": 2.6, "p": [-0.6, 0, 0], "action": "sit_down"},
+                     {"t": 4.0, "p": [-0.6, 0, 0], "action": "seated_talk"}],
+            "lea": [{"t": 0, "p": [1.0, 0, -0.4], "action": "phone"}, {"t": 3.0, "p": [1.0, 0, -0.4], "action": "seated"}],
+            "cam": [{"t": 0, "p": [0.4, 0, 5.5], "yaw": 3.1416}, {"t": 5, "p": [0.4, 0, 4.0], "yaw": 3.4}]}},
+    }
+    m = P.motion_summary(scene)
+    assert "Paul, de 0 s à 2,2 s marche sur 2,5 m, entre dans le champ par la gauche" in m, m
+    assert "puis de 2,6 s à 4 s s'assoit" in m and "à partir de 4 s parle, assis" in m, m
+    assert "Léa, de 0 s à 3 s parle au téléphone" in m and "reste assise" in m, "accord au féminin : " + m
+    c = P.camera_summary(scene)
+    assert "travelling avant de 1,5 m" in c and "panoramique vers la gauche de 15°" in c, c
+    scene["pandora"]["tracks"]["cam"][1]["yaw"] = 2.9
+    assert "panoramique vers la droite" in P.camera_summary(scene)
+
+    # ── 4. La frise de la page (sans moteur web) ────────────────────────────────
+    from ui.timeline_bar import TimelineBar
+    bar = TimelineBar()
+    bar.set_actions({"groups": cat["groups"], "actions": cat["actions"]})
+    assert bar.combo.findData("sit_down") > 0 and bar.combo.itemData(0) == ""
+    assert not bar.btn_mark.isEnabled(), "rien de sélectionné : pas de marque possible"
+    bar.set_duration(5)
+    bar.set_target("paul", "Paul", [{"t": 0, "p": [0, 0, 0]}, {"t": 2.0, "p": [1, 0, 0], "action": "sit_down"}])
+    assert bar.btn_mark.isEnabled() and "2 keyframe(s)" in bar.lbl_target.text()
+    got = []
+    bar.mark_requested.connect(lambda oid, t, act: got.append((oid, round(t, 2), act)))
+    bar.set_time(2.0)
+    assert bar.combo.currentData() == "sit_down", "le menu montre l'action de la marque courante"
+    assert bar.btn_unmark.isEnabled()
+    bar.combo.setCurrentIndex(bar.combo.findData("seated"))
+    bar._action_picked(0)
+    assert got[-1] == ("paul", 2.0, "seated")
+    bar.set_time(1.0)
+    assert not bar.btn_unmark.isEnabled(), "pas de marque à 1 s"
+    bar.set_time(2.5, playing=True)
+    assert bar.btn_play.text() == "⏸" and bar.lbl_time.text() == "2,5 s / 5,0 s"
+    bar.deleteLater()
+    from ui.page_3d import Page3D
+    page = Page3D()
+    page._catalog = {"objects": [{"id": "person-man", "category": "people", "model": "person"},
+                                 {"id": "camera-tripod", "category": "filmset", "model": "camera"},
+                                 {"id": "table-rect", "category": "furniture", "model": "table"}]}
+    page._on_selection({"kind": "object", "id": "paul", "data": {"type": "person-man", "name": "Paul"}, "marks": []})
+    assert page.timeline._id == "paul"
+    page._on_selection({"kind": "object", "id": "cam", "data": {"type": "camera-tripod", "name": "Caméra"}})
+    assert page.timeline._id == "cam", "la caméra a aussi ses marques (travelling, panoramique)"
+    page._on_selection({"kind": "object", "id": "t", "data": {"type": "table-rect", "name": "Table"}})
+    assert page.timeline._id == "t" and not page.timeline.combo.isEnabled(), \
+        "chaque élément a ses keyframes (un meuble aussi) ; seuls les personnages jouent des actions"
+    page._on_page_event({"kind": "time", "t": 1.5, "playing": False})
+    assert page.timeline.lbl_time.text().startswith("1,5 s")
+    page.deleteLater()
+    from core.i18n import _FR_TO_EN
+    for s in ("＋ Keyframe", "Supprimer la keyframe", "Automatique (marche, course ou repos)",
+              "Lire la mise en scène du plan", "{n} keyframe(s)", "fixe (aucune keyframe)"):
+        assert s in _FR_TO_EN, s
+
+
+@test
+def previsualisation_plan_de_feu_vers_seedance_30_10_2026():
+    """La prévisualisation du Plan de feu (vue par la caméra du plan) part à Seedance comme
+    vidéo de RÉFÉRENCE seulement si la case de RENDU & AUDIO est cochée — décochée par défaut
+    (Matthieu 30/10/2026). fal simulé : rien ne part, rien n'est facturé."""
+    import inspect as _insp
+    import api.real as real
+    import api.distrib_probe as dp
+    import core.config as cc
+    import core.lang as lang
+    import core.ai_provider as aip
+    import core.media_provider as mp
+    import core.video_utils as vu
+    import fal_client as _fc
+    # ── 1. Studio : la case existe, décochée par défaut, et ne joint QUE si cochée ──
+    import ui.tab_t2v as t2v
+    src = _insp.getsource(t2v)
+    import re as _re
+    m = _re.search(r'_raccord_toggle\(\s*"Prévisualisation de la vue 3D",.*?,\s*(True|False)\s*,?\s*\)',
+                   src, _re.S)
+    assert m and m.group(1) == "False", "décochée par défaut"
+    j = src.index('params["previs_video"]')
+    assert "self._previs_cb.isChecked()" in src[j - 400:j], "jointe seulement si la case est cochée"
+    # ── 2. run_real : jointe en référence, désignée, jamais en image→vidéo ───────
+    with tempfile.TemporaryDirectory() as tmp:
+        prev = os.path.join(tmp, "P1_01.mp4")
+        img = os.path.join(tmp, "mood.png")
+        for p in (prev, img):
+            with open(p, "wb") as f:
+                f.write(b"x" * 64)
+        saved = (cc.load_config, mp.load_config, lang.translate_to_english, aip.key_error,
+                 _fc.subscribe, dp.fal_state, real._fal_upload, vu.ensure_engine_video,
+                 os.environ.get("FAL_KEY"))
+        try:
+            lang.translate_to_english = lambda t, *a, **k: t
+            aip.key_error = lambda *a, **k: "pas de clé (test)"
+            dp.fal_state = lambda *a, **k: (True, "")
+            dp.forget()
+            conf = {"api_key": "fal-test", "video_provider": "fal", "distribution_mode": "mono"}
+            cc.load_config = lambda: dict(conf)
+            mp.load_config = lambda: dict(conf)
+            vu.ensure_engine_video = lambda p, **k: p
+            fail = {"on": False}
+
+            def _up(_c, path):
+                if fail["on"] and path == prev:
+                    raise RuntimeError("réseau coupé")
+                return "https://up/" + os.path.basename(path)
+            real._fal_upload = _up
+            sent = {}
+
+            def _sub(endpoint, arguments=None, **k):
+                sent.clear()
+                sent.update(endpoint=endpoint, args=dict(arguments or {}))
+                return {"video": {"url": "https://x/f.mp4"}, "seed": 1}
+            _fc.subscribe = _sub
+            base = {"mode": "t2v", "model": "seedance-2.5", "prompt_is_final": True,
+                    "prompt": "Paul walks to the chair and sits down.", "ref_images": [],
+                    "ref_image_roles": [], "resolution": "720p", "duration": 5,
+                    "aspect_ratio": "16:9", "audio": False}
+            run = lambda **kw: real.run_real(dict(base, **kw), lambda *_a: None, lambda: False)
+            res = run()
+            assert "video_urls" not in sent["args"] and res["previs_sent"] is False, "sans case : rien"
+            res = run(previs_video=prev)
+            assert sent["endpoint"].endswith("reference-to-video"), sent["endpoint"]
+            assert sent["args"]["video_urls"] == ["https://up/P1_01.mp4"] and res["previs_sent"] is True
+            assert "3D PREVIS @Video1" in sent["args"]["prompt"] and "mannequins" in sent["args"]["prompt"]
+            res = run(previs_video=prev, ref_images=[img], ref_image_roles=["mood"])
+            assert sent["args"]["image_urls"] == ["https://up/mood.png"]
+            assert sent["args"]["video_urls"] == ["https://up/P1_01.mp4"] and "@Video1" in sent["args"]["prompt"]
+            res = run(previs_video=prev, mode="i2v", image_path=img)
+            assert "video_urls" not in sent["args"] and res["previs_sent"] is False, \
+                "image→vidéo : l'image de départ décide du cadre, pas de prévisu"
+            exact = "EXACT TEXT."
+            res = run(previs_video=prev, prompt=exact, prompt_exact=True)
+            assert sent["args"]["prompt"] == exact and sent["args"]["video_urls"], "reprise exacte : mot pour mot"
+            fail["on"] = True
+            res = run(previs_video=prev)
+            assert res["previs_sent"] is False and sent["endpoint"].endswith("text-to-video"), \
+                "téléversement raté : retour en texte→vidéo, sans la prévisu"
+        finally:
+            (cc.load_config, mp.load_config, lang.translate_to_english, aip.key_error,
+             _fc.subscribe, dp.fal_state, real._fal_upload, vu.ensure_engine_video, _fk) = saved
+            dp.forget()
+            if _fk is None:
+                os.environ.pop("FAL_KEY", None)
+            else:
+                os.environ["FAL_KEY"] = _fk
+    # ── 3. Plan de feu : bouton, état, rendu impossible sans écran ──────────────
+    import core.staging as STG
+    import core.scene3d as S
+    from ui.page_3d import Page3D
+    from ui.previs_render import PrevisRenderer, WIDTH, HEIGHT, FPS
+    assert (WIDTH, HEIGHT, FPS) == (1280, 720, 24), "848×480 et 640×360 sont refusés en référence"
+    old_dir = STG._dir
+    with tempfile.TemporaryDirectory() as tmp:
+        STG._dir = lambda: tmp
+        try:
+            page = Page3D()
+            page._shot = {"id": "P7_01", "duration": 5}
+            page._previs_state()
+            assert not page._btn_previs_open.isEnabled() and "Aucune vidéo" in page._previs_lbl.text()
+            with open(S.previs_path("P7_01"), "wb") as f:
+                f.write(b"mp4")
+            assert S.previs_for("P7_01").endswith("P7_01.mp4")
+            page._previs_state()
+            assert page._btn_previs_open.isEnabled() and "Vidéo exportée le" in page._previs_lbl.text()
+            page.deleteLater()
+            errs = []
+            job = PrevisRenderer({"objects": [], "fixtures": []}, os.path.join(tmp, "x.mp4"))
+            job.failed.connect(errs.append)
+            job.start()
+            assert errs and ("sans écran" in errs[0] or "QtWebEngine" in errs[0]), errs
+        finally:
+            STG._dir = old_dir
+    with open(os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+                           "scene3d_web", "app.js"), encoding="utf-8") as f:
+        js = f.read()
+    k = js.index("async function captureFrames")
+    assert "o.visible = false" in js[k:k + 1500] and "entry.stand.visible = false" in js[k:k + 1500], \
+        "aucun appareil d'éclairage visible dans la prévisu envoyée à Seedance"
+    from core.i18n import _FR_TO_EN
+    for s in ("🎬  Exporter la vidéo", "Prévisualisation de la vue 3D", "Aucune vidéo exportée pour ce plan."):
+        assert s in _FR_TO_EN, s
+
+
+@test
+def claude_choregraphe_30_10_2026():
+    """Claude chorégraphe : la mise en scène décrite en mots devient des marques — DONNÉES
+    vérifiées une à une (objet connu et mobile, action du catalogue, temps et place dans le
+    plan) avant d'atteindre la frise. IA simulée : rien ne part, rien n'est facturé."""
+    import json
+    import core.choreo as C
+    import core.ai_registry as AR
+    from core.engine_prompts import TASK_ROLES
+    assert ("choreography", "Mise en scène 3D (Claude chorégraphe)") in AR.TASKS
+    assert AR.ANTHROPIC_OPTIMIZED["choreography"] == "claude", "Sonnet par défaut (coût)"
+    assert "choreography" in AR.OPENAI_OPTIMIZED and "choreography" in TASK_ROLES
+    scene = {
+        "objects": [
+            {"id": "cam", "type": "camera-tripod", "name": "Caméra", "position": [0.4, 0, 5.5],
+             "rotation": [0, 3.1416, 0], "props": {"focal": 32, "lens": 1.5}},
+            {"id": "paul", "type": "person-man", "name": "Paul", "position": [-2.8, 0, 0.6], "rotation": [0, 0, 0]},
+            {"id": "lea", "type": "person-woman", "name": "Léa", "position": [1.0, 0, -0.4], "rotation": [0, 0, 0]},
+            {"id": "chair", "type": "chair", "name": "Chaise", "position": [-0.6, 0, -0.45], "rotation": [0, 0, 0]},
+        ],
+        "fixtures": [{"id": "key", "type": "arri.skypanel-s60c", "position": [2, 2.5, 2],
+                      "settings": {"dmxAddress": 12}}],
+        "pandora": {"shot_camera": "cam", "duration": 5, "span_m": 10},
+    }
+    # ── 1. Ce que Claude reçoit : la scène en mètres, le catalogue, la demande ──
+    system, msgs = C.messages(scene, "Paul entre par la gauche et s'assoit sur la chaise.",
+                              {"scene_title": "Paul attend"})
+    assert "atan2(dx, dz)" in system and "JSON" in system and "(-cos(yaw), sin(yaw))" in system
+    user = msgs[0]["content"]
+    b = json.loads(user.split("SCÈNE DU PLAN :\n", 1)[1].split("\n\nACTIONS DISPONIBLES", 1)[0])
+    assert [p["id"] for p in b["personnages"]] == ["paul", "lea"] and b["camera"]["id"] == "cam"
+    assert b["camera"]["champ_horizontal_deg"] == 43 and b["duree_s"] == 5
+    assert [d["id"] for d in b["decor"]] == ["chair"], "la caméra n'est pas un élément de décor"
+    assert "dmxAddress" not in user, "jamais les réglages DMX des projecteurs (coût, bruit)"
+    assert '"id": "sit_down"' in user and "Paul entre par la gauche" in user
+    # ── 2. Réponse vérifiée une à une ───────────────────────────────────────────
+    reply = "Voici :\n```json\n" + json.dumps({
+        "notes": "Paul entre par la gauche, rejoint la chaise et s'assoit.",
+        "tracks": {
+            "paul": [{"t": 2.2, "p": [-0.6, 3, 0.0], "action": "sit_down"},
+                     {"t": 0.5, "p": [-3.5, 0, 0.6], "action": "walk"},
+                     {"t": 3.6, "p": [-0.6, 0, 0.0], "action": "danse_du_ventre"},
+                     {"t": 9.0, "p": [-0.6, 0, 0.0]}],
+            "chair": [{"t": 0, "p": [0, 0, 0]}, {"t": 1, "p": [1, 0, 0]}],
+            "ghost": [{"t": 0, "p": [0, 0, 0]}, {"t": 1, "p": [1, 0, 0]}],
+            "lea": [{"t": 0, "p": [1.0, 0, -0.4]}, {"t": 2, "p": [99, 0, 0]}],
+        }}) + "\n```"
+    out = C.parse(reply, scene)
+    assert set(out["tracks"]) == {"paul"}, out
+    paul = out["tracks"]["paul"]
+    assert [m["t"] for m in paul] == [0.0, 0.5, 2.2, 3.6], "triées, départ à 0 s ajouté, 9 s écarté"
+    assert paul[0]["p"] == [-2.8, 0.0, 0.6], "le départ = la place actuelle du personnage"
+    assert paul[2]["p"][1] == 0.0, "un personnage reste au sol"
+    assert paul[1]["action"] == "walk" and paul[2]["action"] == "sit_down" and "action" not in paul[3]
+    w = " | ".join(out["warnings"])
+    for frag in ("chair", "ghost", "danse_du_ventre", "hors de la durée", "hors du plateau"):
+        assert frag in w, (frag, w)
+    assert out["notes"].startswith("Paul entre")
+    for bad in ("Je ne peux pas.", '{"tracks": ['):
+        try:
+            C.parse(bad, scene)
+            raise AssertionError("réponse illisible acceptée")
+        except ValueError:
+            pass
+    # ── 3. Le fil : IA simulée, échecs lisibles, jamais d'appel sans tâche ─────
+    import core.ai_provider as aip
+    from api.choreo_worker import ChoreoWorker
+    saved = (aip.chat_ex, aip.key_error)
+    try:
+        calls = []
+        aip.key_error = lambda task=None: None
+        aip.chat_ex = lambda system, messages, **k: (calls.append(k), {"text": reply, "truncated": False})[1]
+        got, errs = [], []
+        wk = ChoreoWorker(scene, "Paul entre…")
+        wk.done.connect(got.append)
+        wk.failed.connect(errs.append)
+        wk.run()
+        assert got and set(got[0]["tracks"]) == {"paul"} and not errs
+        assert calls[0]["task"] == "choreography", "toujours task= (sinon moteur global coûteux)"
+        aip.chat_ex = lambda system, messages, **k: {"text": reply, "truncated": True}
+        got.clear()
+        wk.run()
+        assert errs and "coupée" in errs[-1] and not got
+        aip.key_error = lambda task=None: "Clé Anthropic absente."
+        wk.run()
+        assert errs[-1] == "Clé Anthropic absente."
+    finally:
+        aip.chat_ex, aip.key_error = saved
+    # ── 4. Fenêtre : demande par défaut, pose, retour en arrière ────────────────
+    from ui.choreo_dialog import ChoreoDialog
+    from core.prompt_sections import build
+    shot = {"id": "P1", "scene_title": "Paul attend",
+            "seedance_prompt": build(action="Paul traverse la terrasse et s'assoit.")}
+    scene["pandora"]["tracks"] = {"paul": [{"t": 0, "p": [-2.8, 0, 0.6]}, {"t": 1, "p": [-2, 0, 0.6]}]}
+    dlg = ChoreoDialog(scene, shot)
+    assert dlg.text.toPlainText() == "Paul traverse la terrasse et s'assoit.", "l'action du storyboard"
+    sent, kept = [], []
+    dlg.apply_tracks.connect(sent.append)
+    dlg.remember.connect(kept.append)
+    dlg._done("Paul entre…", {"tracks": {"paul": paul}, "notes": "ok", "warnings": ["x"]})
+    assert sent[-1] == {"paul": paul} and not dlg.btn_undo.isHidden(), "« Revenir » proposé"
+    assert kept[-1]["request"] == "Paul entre…" and kept[-1]["notes"] == "ok"
+    dlg._revert()
+    assert sent[-1] == {"paul": [{"t": 0, "p": [-2.8, 0, 0.6]}, {"t": 1, "p": [-2, 0, 0.6]}]}, "marques d'avant"
+    assert dlg.btn_undo.isHidden(), "une seule annulation"
+    scene["pandora"]["choreo"] = {"request": "Dernière demande."}
+    dlg2 = ChoreoDialog(scene, shot)
+    assert dlg2.text.toPlainText() == "Dernière demande.", "rouverte sans relancer"
+    dlg.deleteLater()
+    dlg2.deleteLater()
+    root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    with open(os.path.join(root, "scene3d_web", "app.js"), encoding="utf-8") as f:
+        assert "case 'tracks.set':" in f.read()
+    import ui.page_3d as P3
+    assert '"choreo"' in inspect.getsource(P3.Page3D._on_scene_edited), "le souvenir du chorégraphe survit à la vue"
+    from core.i18n import _FR_TO_EN
+    for s in ("Mise en scène 3D (Claude chorégraphe)", "✦  Mise en scène par l'IA", "Revenir aux keyframes d'avant"):
+        assert s in _FR_TO_EN, s
+
+
+@test
+def inspecteur_arklight_dans_le_plan_de_feu_30_10_2026():
+    """Matthieu 30/10/2026 (« l'application ARKLIGHT est terminée, récupère ce qu'il faut ») :
+    l'inspecteur COMPLET d'ARKLIGHT dans la vue du Plan de feu — réglages, menus embarqués
+    simulés (faces avant), console « Canaux », patch — repris À L'IDENTIQUE, aux couleurs de
+    PANDORA ; le prompt décrit la lumière réellement émise par la simulation."""
+    import json
+    root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    with open(os.path.join(root, "arklight_engine", "manifest.json"), encoding="utf-8") as f:
+        man = json.load(f)["fichiers"]
+    for u in ("/js/ui/inspector.js", "/js/ui/control-panel.js", "/js/ui/panel-face.js",
+              "/js/ui/console-control.js", "/js/actions.js", "/shared/onboard/engine.js",
+              "/shared/onboard/panels/arri.js", "/shared/onboard/astera-v5.js", "/css/app.css"):
+        assert u in man, f"module d'ARKLIGHT absent de la copie : {u}"
+    with open(os.path.join(root, "scene3d_web", "app.js"), encoding="utf-8") as f:
+        js = f.read()
+    assert "mountInspector({ store, net, viewport: vp, onboard, actions, control: consoleControl" in js
+    assert "vp.onboard = onboard" in js, "les menus embarqués pilotent la lumière de la vue"
+    for msg in ("'fixtures.add'", "'fixtures.remove'", "'object.remove'", "'group.create'",
+                "'group.update'", "'group.delete'", "'env.update'", "'dmx.forget'"):
+        assert f"case {msg}" in js, f"message du serveur d'ARKLIGHT non traité : {msg}"
+    assert "function emitted(id)" in js and "...(real ? { ...real, source: em.source } : {})" in js, \
+        "l'analyse lit la lumière ÉMISE (menus, console, Astera), pas le seul réglage manuel"
+    with open(os.path.join(root, "scene3d_web", "index.html"), encoding="utf-8") as f:
+        html = f.read()
+    assert html.index("/css/app.css") < html.index("/pandora/pandora.css"), "PANDORA repeint ARKLIGHT"
+    assert 'id="inspector"' in html
+    with open(os.path.join(root, "scene3d_web", "pandora.css"), encoding="utf-8") as f:
+        css = f.read()
+    assert "--accent: #4ecdc4" in css, "accent turquoise de PANDORA, pas l'orange d'ARKLIGHT"
+    import ui.scene3d_web as W
+    assert "index.html?lang=" in inspect.getsource(W.Scene3DView._start), "l'inspecteur parle la langue de PANDORA"
+    # UN SEUL panneau à droite (Matthieu 30/10/2026) : un projecteur efface les réglages de PANDORA,
+    # posés sur la colonne de l'inspecteur d'ARKLIGHT, qui apparaît à la même place et même largeur
+    from ui.page_3d import Page3D, RIGHT_W
+    assert f"width: {RIGHT_W}px" in css, "les deux panneaux ont la même largeur"
+    assert 'class="inspector p3-insp"' in html and "hidden" not in html[html.index('id="inspector"'):html.index("</aside>")], \
+        "la colonne reste en place : la vue 3D ne change jamais de taille (flash noir)"
+    page = Page3D()
+    page._on_selection({"kind": "fixture", "id": "k", "data": {"type": "arri.skypanel-s60c", "name": "Face"}})
+    assert page._sel_panel.isHidden(), "projecteur : on voit l'inspecteur d'ARKLIGHT"
+    page._on_selection({"kind": "object", "id": "p", "data": {"type": "person-man", "name": "Paul"}})
+    assert not page._sel_panel.isHidden()
+    assert not hasattr(page._inspector, "_fx_int"), "plus de curseurs Qt en double"
+    page.deleteLater()
+    # Sections : commandes, réglages, état simulé, position ; le patch DMX ne sert pas dans PANDORA
+    order = [js.index(f"['{t}', {r}]") for t, r in (("Commandes du projecteur", 10), ("Réglages du projecteur", 20),
+                                                    ("État simulé", 30), ("Position", 40), ("Patch DMX", -1))]
+    assert order == sorted(order) and "g.style.display = rank < 0 ? 'none' : ''" in js
+    # Redimensionner un canevas WebGL l'efface : l'image est redessinée aussitôt (pas de flash noir)
+    assert "new ResizeObserver(() => {" in js and "vp._frame();" in js
+    assert "'ark:delete'" in js, "la corbeille de l'inspecteur supprime vraiment"
+    # Le prompt suit la lumière émise : une teinte saturée reçue de la simulation l'emporte
+    import core.scene3d_prompt as P
+    import core.scene3d as S
+    scene = {"objects": [{"id": "cam", "type": "camera-tripod", "position": [0, 0, 4], "rotation": [0, 3.1416, 0]},
+                         {"id": "a", "type": "person-man", "name": "A", "position": [0, 0, 0]}],
+             "fixtures": [{"id": "x", "position": [2, 2.4, 2], "state": {"manual": {"mode": "cct", "cct": 5600, "intensity": 0.6}}}],
+             "pandora": {"shot_camera": "cam", "analysis": {"fixtures": [
+                 {"id": "x", "lux_at_1m": 20000, "beam_deg": 60, "size_m": 0.3, "mode": "hsi", "hue": 220, "sat": 0.9,
+                  "intensity": 0.8, "power": True, "source": "onboard"}]}}}
+    scene["fixtures"][0]["rotation"] = S.aim_rotation(scene["fixtures"][0]["position"], P.subject_point(scene))
+    assert "colorée bleu saturée" in P.lighting_summary(scene), P.lighting_summary(scene)
+
+
+@test
+def onglet_3d_arklight_29_10_2026():
+    """Onglet « 3D » (Matthieu 29/10/2026) : la vue d'ARKLIGHT reprise à l'identique, une
+    scène par plan en mètres, et le prompt écrit d'après la vraie géométrie (directions
+    VUES DE LA CAMÉRA, éclairement, douceur, déplacements minutés)."""
+    import hashlib
+    import json
+    import math as _m
+    root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    # ── 1. Copie du moteur d'ARKLIGHT : identique au manifeste, sans module Node ─────
+    eng = os.path.join(root, "arklight_engine")
+    with open(os.path.join(eng, "manifest.json"), encoding="utf-8") as f:
+        man = json.load(f)
+    assert man["fichiers"], "manifeste vide"
+    for url, digest in man["fichiers"].items():
+        p = os.path.join(eng, *url.lstrip("/").split("/"))
+        with open(p, "rb") as fh:
+            data = fh.read()
+        assert hashlib.sha256(data).hexdigest()[:16] == digest, f"copie modifiée à la main : {url}"
+        if url.endswith(".js"):
+            assert b"from 'node:" not in data and b'from "node:' not in data, url
+    for must in ("/js/viewport/viewport.js", "/js/store.js", "/vendor/three/build/three.module.js",
+                 "/shared/fixtures/index.js", "/shared/props.js"):
+        assert must in man["fichiers"], must
+    # ── 2. Schéma pandora3d: : sert le moteur et la couche PANDORA, jamais au-delà ────
+    import ui.scene3d_web as W
+    assert W.resolve("/js/store.js").endswith(os.path.join("js", "store.js"))
+    assert W.resolve("/pandora/app.js").endswith(os.path.join("scene3d_web", "app.js"))
+    assert W.resolve("/qwebchannel.js") == ":qwebchannel"
+    for bad in ("/js/../../core/config.py", "/pandora/../data/config.json", "/core/config.py",
+                "/media/inconnu.png"):
+        assert W.resolve(bad) is None, bad
+    with tempfile.TemporaryDirectory() as tmp:
+        img = os.path.join(tmp, "plan.png")
+        from PIL import Image
+        Image.new("RGB", (40, 20)).save(img)
+        url = W.share_image(img)
+        assert url.startswith("pandora3d:///media/") and W.resolve(url[len("pandora3d://"):]) == img
+        assert W.share_image(img) == url, "un jeton par image"
+    # ── 3. Modèle de scène : visée (même calcul que three.js), semis, enregistrement ─
+    import core.staging as STG
+    import core.scene3d as S
+    import core.scene3d_prompt as P
+    for src, dst in (([2, 3, 2], [0, 1.5, 0]), ([-1, 2.5, -4], [0.5, 1.6, 0.2]), ([0, 4, 0], [0, 0, 0.01])):
+        fw = S.forward_from_rotation(S.aim_rotation(src, dst))
+        d = [dst[i] - src[i] for i in range(3)]
+        n = _m.sqrt(sum(c * c for c in d))
+        assert all(abs(fw[i] - d[i] / n) < 1e-3 for i in range(3)), (src, dst, fw)
+    old_dir = STG._dir
+    with tempfile.TemporaryDirectory() as tmp:
+        STG._dir = lambda: tmp
+        try:
+            shot = {"id": "P9_01", "character_names": ["Paul", "Léa"], "camera_axis": "3/4",
+                    "focal": "50mm", "duration": 6}
+            seed = S.seed_from_shot(shot, legacy={})
+            cam = next(o for o in seed["objects"] if o["id"] == "cam_shot")
+            actors = [o for o in seed["objects"] if o.get("pandora", {}).get("kind") == "character"]
+            assert cam["props"]["focal"] == 50 and len(actors) == 2
+            assert all(o["rotation"][1] == 0 for o in actors), \
+                "personnages tournés vers le devant du décor : c'est la caméra qui fait l'axe"
+            centre = (sum(o["position"][0] for o in actors) / 2, 0, sum(o["position"][2] for o in actors) / 2)
+            assert abs(_m.remainder(cam["rotation"][1] - S.yaw_facing(cam["position"], centre), 2 * _m.pi)) < 0.01, \
+                "la caméra semée regarde les personnages"
+            assert P.axis_label(seed) == "3/4", "l'axe du découpage est conservé"
+            legacy = {"camera": {"x": 0.5, "y": 0.85, "angle": 0}, "actors": [{"name": "Paul", "x": 0.45, "y": 0.5}],
+                      "props": [{"name": "Grande table", "x": 0.5, "y": 0.4}],
+                      "lights": [{"type": "key", "family": "led_panel", "model": "ARRI SkyPanel S60-C",
+                                  "x": 0.7, "y": 0.7, "settings": {"on": True, "intensity": 80, "cct": 3200}}]}
+            s2 = S.seed_from_shot(shot, legacy=legacy)
+            assert [o["type"] for o in s2["objects"] if o["id"].startswith("prop_")] == ["table-rect"]
+            fx = s2["fixtures"][0]
+            assert fx["type"] == "arri.skypanel-s60c" and fx["state"]["manual"]["cct"] == 3200
+            fw = S.forward_from_rotation(fx["rotation"])
+            to_subj = [-0.5 - fx["position"][0], 1.5 - fx["position"][1], 0.0 - fx["position"][2]]
+            n = _m.sqrt(sum(c * c for c in to_subj))
+            assert sum(fw[i] * to_subj[i] / n for i in range(3)) > 0.999, "projecteur repris visant le sujet"
+            s2.setdefault("plot", {})["underlay"] = {"url": "pandora3d:///media/abc.png", "width": 10}
+            S.save("P9_01", s2)
+            back = S.load("P9_01")
+            assert back["pandora"]["shot_id"] == "P9_01" and back["plot"]["underlay"]["url"] == "", \
+                "l'URL de session du plan du décor n'est jamais enregistrée"
+            assert not [n for n in os.listdir(os.path.join(tmp, "scenes")) if n.startswith(".scene_")], \
+                "écriture atomique (pas de fichier temporaire oublié)"
+            # ── 4. Le prompt d'après la géométrie ────────────────────────────────────
+            scene = {
+                "fixtures": [
+                    {"id": "key", "position": [2.2, 2.6, 2.0], "state": {"manual": {"mode": "cct", "intensity": 0.5, "cct": 4300}}},
+                    {"id": "back", "position": [-1.0, 3.2, -3.5], "state": {"manual": {"mode": "cct", "intensity": 0.6, "cct": 6500}}},
+                ],
+                "objects": [
+                    {"id": "cam", "type": "camera-tripod", "position": [0.5, 0, 4.5], "rotation": [0, _m.pi, 0],
+                     "props": {"focal": 35, "lens": 1.5}},
+                    {"id": "paul", "type": "person-man", "name": "Paul", "position": [-0.6, 0, 0],
+                     "rotation": [0, 0.35, 0], "props": {"height": 180}},
+                    {"id": "lea", "type": "person-woman", "name": "Léa", "position": [0.9, 0, -1.2],
+                     "rotation": [0, -1.5, 0], "props": {"height": 166, "pose": "sitting"}},
+                ],
+                "pandora": {"shot_camera": "cam", "analysis": {"fixtures": [
+                    {"id": "key", "beam_deg": 105, "lux_at_1m": 23340, "size_m": 1.33, "soft": True},
+                    {"id": "back", "beam_deg": 55, "lux_at_1m": 35496, "size_m": 0.14, "soft": False}]},
+                    "tracks": {"paul": [{"t": 0, "p": [-2.5, 0, 0.5]},
+                                        {"t": 2.0, "p": [-0.6, 0, 0], "action": "sit_down"},
+                                        {"t": 4.0, "p": [-0.6, 0, 0], "action": "seated"}]}},
+            }
+            subj = P.subject_point(scene)
+            for f in scene["fixtures"]:
+                f["rotation"] = S.aim_rotation(f["position"], subj)
+            acts = P.actors_summary(scene)
+            assert "Paul, au premier plan à gauche du cadre, face caméra" in acts, acts
+            assert "Léa, assise" in acts and "de profil" in acts, acts
+            assert "entre dans le champ par la gauche" in acts and "s'assoit" in acts, acts
+            light = P.lighting_summary(scene)
+            assert "lumière principale de 3/4 face côté droit de l'image" in light, light
+            assert "contre-jour depuis l'arrière du sujet" in light and "dure, ombres nettes" in light, light
+            assert "douce, ombres fondues" in light and "clair-obscur" in light, light
+            assert "aucun projecteur ni appareil d'éclairage n'est visible" in light
+            scene["fixtures"][0]["rotation"] = S.aim_rotation(scene["fixtures"][0]["position"], [6, 1, 6])
+            assert "principale" in P.lighting_summary(scene), "projecteur détourné : le contre-jour devient seul"
+            # ── 5. Les anciens résumés passent par la scène 3D quand elle existe ─────
+            S.save("P9_02", scene)
+            assert STG.lighting_summary("P9_02") == P.lighting_summary(scene)
+            assert STG.staging_actors_summary("P9_02") == P.staging_text(scene)
+            assert P.for_shot("P9_absent") is None
+        finally:
+            STG._dir = old_dir
+    # ── 6. Navigation, démarrage, traduction, empaquetage ────────────────────────
+    import ui.pandora_window as PW
+    src_pages = inspect.getsource(PW.PandoraWindow._build_pages)
+    assert '"plan_de_feu": Page3D' in src_pages and "PageLighting" not in src_pages
+    from core.i18n import _T, _FR_TO_EN
+    # « 3D » pour de bon (Matthieu 30/10/2026 : on y met aussi décor et personnages) ; clé conservée
+    assert _T["nav.plan_de_feu"] == {"fr": "3D", "en": "3D"}
+    assert os.path.isfile(os.path.join(root, "assets", "icons", "vue_3d.png"))
+    assert '("vue_3d.png", tr("nav.plan_de_feu"), "plan_de_feu")' in inspect.getsource(PW)
+    import ui.themes as TH
+    assert "vue_3d.png" in TH.BADGE_FILES and "vue_3d.png" in PW._COLOR_ICONS
+    with open(os.path.join(root, "main.py"), encoding="utf-8") as f:
+        msrc = f.read()
+    assert msrc.index("_register_3d()") < msrc.index("app = QApplication(sys.argv)"), \
+        "le schéma pandora3d: doit être déclaré AVANT la QApplication"
+    from ui.page_3d import Page3D
+    assert Page3D.DEFER_NAV_REFRESH is True
+    page = Page3D()
+    assert page.view.web_view() is None, "le moteur web ne démarre qu'au premier affichage"
+    # Points de vue : « Caméra » (plus « Caméra du plan »), le point de vue actif en
+    # cadre néon, un seul à la fois (Matthieu 29/10/2026).
+    btns = page._view_btns
+    assert not page._btn_look.icon().isNull() and btns["camera"] is page._btn_look, "pictogrammes d'ARKLIGHT"
+    assert not page._btn_move.icon().isNull() and not page._btn_rot.icon().isNull()
+    assert all(b.isCheckable() for b in btns.values())
+    assert "border:2px solid" in page._btn_look.styleSheet(), "cadre néon quand coché"
+    page._scene = {"pandora": {"shot_camera": "cam_shot"}}
+    page._btn_look.click()
+    assert [k for k, b in btns.items() if b.isChecked()] == ["camera"]
+    assert page.view._queue and '"look"' in page.view._queue[-1] and "cam_shot" in page.view._queue[-1]
+    page._on_page_event({"kind": "look", "id": None})          # Échap dans la vue
+    assert not any(b.isChecked() for b in btns.values()), "vue libre : aucun point de vue coché"
+    btns["top"].click()
+    assert [k for k, b in btns.items() if b.isChecked()] == ["top"]
+    btns["top"].click()                                       # re-clic : reste le point de vue actif
+    assert btns["top"].isChecked()
+    page._on_page_event({"kind": "look", "id": "cam_shot"})   # scène rouverte en vue caméra
+    assert [k for k, b in btns.items() if b.isChecked()] == ["camera"]
+    page._btn_look.click()                                    # re-clic sur Caméra : vue libre
+    assert not page._btn_look.isChecked() and '"id": null' in page.view._queue[-1]
+    page.deleteLater()
+    assert "sans écran" in W.unavailable_reason() or W.unavailable_reason() == "" or not W.available()
+    for s in ("＋ Projecteur", "Caméra du plan (celle du prompt)", "TEXTE POUR LE PROMPT", "Bras levés",
+              "Voir exactement ce que filme la caméra du plan (Échap pour revenir à la vue libre)"):
+        assert s in _FR_TO_EN, s
+    with open(os.path.join(root, "pandora.spec"), encoding="utf-8") as f:
+        spec = f.read()
+    assert '("arklight_engine", "arklight_engine")' in spec and '("scene3d_web", "scene3d_web")' in spec
+    assert '"ui.page_3d", "ui.scene3d_web", "core.scene3d", "core.scene3d_prompt"' in spec
+    with open(os.path.join(root, "requirements.txt"), encoding="utf-8") as f:
+        assert "PyQt6-WebEngine" in f.read()
+
+
+@test
+def vue_3d_keyframes_et_inscription_30_10_2026():
+    """Retours de Matthieu (30/10/2026) sur la vue 3D. La tête de lecture posée sur une keyframe
+    ne s'attrapait plus (le personnage « ne bougeait pas ») ; les keyframes se glissent ; la caméra
+    monte, descend et bascule ; le prompt ne change plus qu'à la demande ; la durée va jusqu'à 30 s ;
+    l'onglet s'ouvre en Perspective et ne repasse jamais seul en vue caméra."""
+    import core.scene3d_prompt as P
+    import core.scene3d as S
+    import core.staging as STG
+    import core.storyboard as SB
+    import ui.scene3d_web as W
+    from PyQt6.QtCore import QPoint, Qt
+    from PyQt6.QtTest import QTest
+    from ui.timeline_bar import SCALE_H, TimelineBar
+    from ui.page_3d import Page3D
+    root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    # ── 1. Frise : deux bandes. La règle défile TOUJOURS, la piste déplace les keyframes ──
+    bar = TimelineBar()
+    bar.resize(900, 120)
+    bar.set_duration(10, 30, "Seedance 2.5")
+    assert bar.spin_dur.maximum() == 30 and bar.spin_dur.value() == 10
+    bar.set_time(4.0)
+    bar.set_target("paul", "Paul", [{"t": 0, "p": [0, 0, 0]}, {"t": 4.0, "p": [1, 0, 0]}])
+    seeks, moved = [], []
+    bar.seek.connect(seeks.append)
+    bar.key_moved.connect(lambda oid, a, b: moved.append((oid, a, round(b, 2))))
+    r = bar.ruler
+    r.resize(800, 70)
+    x4 = int(r._x(4.0))
+    # tête de lecture exactement sur la keyframe : on l'attrape dans la règle et elle défile
+    assert r._mark_at(x4, 8) is None and r._mark_at(x4, r._key_y()) is not None
+    QTest.mousePress(r, Qt.MouseButton.LeftButton, pos=QPoint(x4, 8))
+    QTest.mouseMove(r, QPoint(int(r._x(6.0)), 8))
+    QTest.mouseRelease(r, Qt.MouseButton.LeftButton, pos=QPoint(int(r._x(6.0)), 8))
+    assert seeks and abs(seeks[-1] - 6.0) < 0.05, f"la tête de lecture posée sur une keyframe défile : {seeks}"
+    # un clic sur un losange y amène la tête de lecture, sans rien déplacer
+    y = int(r._key_y())
+    QTest.mouseClick(r, Qt.MouseButton.LeftButton, pos=QPoint(x4, y))
+    assert abs(seeks[-1] - 4.0) < 0.01 and not moved
+    # glisser un losange déplace CETTE keyframe, et c'est tout
+    QTest.mousePress(r, Qt.MouseButton.LeftButton, pos=QPoint(x4, y))
+    QTest.mouseMove(r, QPoint(int(r._x(7.0)), y))
+    QTest.mouseRelease(r, Qt.MouseButton.LeftButton, pos=QPoint(int(r._x(7.0)), y))
+    assert moved and moved[-1][0] == "paul" and moved[-1][1] == 4.0 and abs(moved[-1][2] - 7.0) < 0.06, moved
+    assert SCALE_H < r._key_y()
+    # durée : valeur saisie = durée du plan
+    got = []
+    bar.duration_changed.connect(got.append)
+    bar.spin_dur.setValue(30)
+    assert got == [30.0] and bar.ruler.duration == 30
+    # un plan plus long que le moteur visé reste lisible, sans être raboté
+    bar.set_duration(30, 15)
+    assert bar.spin_dur.value() == 30 and bar.spin_dur.maximum() == 30
+    bar.deleteLater()
+    # ── 2. La caméra dans le prompt : pied, bascule, travelling sans se tourner ──
+    import math as _m
+    scene = {"objects": [
+        {"id": "cam", "type": "camera-tripod", "position": [0, 0, 5], "rotation": [0, _m.pi, 0], "props": {"lens": 1.2, "focal": 35}},
+        {"id": "paul", "type": "person-man", "name": "Paul", "position": [0, 0, 0], "props": {"height": 180}},
+        {"id": "tbl", "type": "table-rect", "name": "Table", "position": [1, 0, 0]},
+        {"id": "flag", "type": "flag-4x4", "name": "Drapeau", "position": [-1, 0, 0]},
+        {"id": "chair", "type": "chair", "name": "Chaise", "position": [0, 0, 9]}],
+        "fixtures": [],
+        "pandora": {"shot_camera": "cam", "duration": 6, "analysis": {"objects": [
+            {"id": "tbl", "name": "Table", "category": "furniture"}, {"id": "chair", "name": "Chaise", "category": "furniture"}]},
+            "tracks": {"cam": [{"t": 0, "p": [0, 0, 5], "yaw": _m.pi, "lens": 1.2, "pitch": 0},
+                               {"t": 4, "p": [2, 0, 5], "yaw": _m.pi, "lens": 2.0, "pitch": 0.2}],
+                       "paul": [{"t": 0, "p": [0, 0, 0]}, {"t": 2, "p": [0, 0, 0], "action": "jab"},
+                                {"t": 3, "p": [3, 0, 0]}, {"t": 5, "p": [3, 0, 0]}]}}}
+    mv = P.camera_motion_summary(scene)
+    assert "montée de la caméra de 0,8 m (de 1,2 m à 2 m du sol)" in mv, mv
+    assert "panoramique vertical vers le bas" in mv and "travelling latéral" in mv, mv
+    scene["pandora"]["tracks"]["cam"][1].update(lens=0.8, pitch=-0.2)
+    mv = P.camera_motion_summary(scene)
+    assert "descente de la caméra" in mv and "vers le haut" in mv, mv
+    # ── 3. Décor et actions par keyframe dans le texte ; ni matériel, ni hors champ ──
+    txt = P.staging_text(scene)
+    assert "Éléments du décor : Table" in txt, txt
+    assert "Drapeau" not in txt and "Chaise" not in txt, "le grip et ce qui est derrière la caméra sont tus"
+    assert "Mouvement de caméra" in txt and "Déplacements : Paul" in txt, txt
+    punch = P.actions()["jab"]["verb"]
+    assert punch in txt, (punch, txt)
+    # un meuble déplacé ne « marche » pas
+    scene["pandora"]["tracks"]["tbl"] = [{"t": 0, "p": [1, 0, 0]}, {"t": 2, "p": [2, 0, 0]}]
+    assert "Table, de 0 s à 2 s se déplace" in P.motion_summary(scene), P.motion_summary(scene)
+    # ── 4. Le prompt n'est écrit QUE sur demande ──
+    shot = {"id": "P3", "duration": 6, "seedance_prompt": "[🎬 ACTION]\nPaul frappe."}
+    assert P.pending(shot, scene)
+    assert P.write_to_shot(shot, scene) is True
+    assert "Éléments du décor" in shot["seedance_prompt"] and "Paul frappe." in shot["seedance_prompt"]
+    assert not P.pending(shot, scene) and P.write_to_shot(shot, scene) is False
+    scene["pandora"]["tracks"]["paul"][1]["action"] = "cross"
+    assert P.pending(shot, scene), "une nouvelle action reste à inscrire"
+    written = shot["seedance_prompt"]
+    old_dir, old_save, old_list, old_ver = STG._dir, SB.save_shot, SB.list_shots, SB.list_versions
+    saved = []
+    with tempfile.TemporaryDirectory() as tmp:
+        STG._dir = lambda: tmp
+        SB.save_shot = lambda d: saved.append(dict(d))
+        try:
+            # une recomposition relit le texte INSCRIT, pas la scène en cours de travail
+            S.save("P3", scene)
+            assert "Éléments du décor" in P.for_shot("P3")["actors"]
+            assert P.for_shot("P3")["actors"] == scene["pandora"]["inscribed"]["actors"]
+            # page : modifier la scène n'écrit rien ; le bouton écrit CE plan seulement
+            other = {"id": "P4", "duration": 5, "seedance_prompt": "[🎬 ACTION]\nAutre."}
+            S.save("P4", {"objects": scene["objects"][:2], "fixtures": [], "pandora": {"shot_camera": "cam", "shot_id": "P4"}})
+            SB.list_versions = lambda: []
+            SB.list_shots = lambda _v: [shot, other]
+            page = Page3D()
+            assert not hasattr(page, "_save_timer"), "plus d'écriture automatique du prompt"
+            page.refresh()
+            assert page._current_id() == "P3" and shot["seedance_prompt"] == written
+            sent = []
+            page.view.set_scene = sent.append
+            page._on_scene_edited(dict(page._scene))
+            assert saved == [] and shot["seedance_prompt"] == written, "modifier la scène n'écrit pas le prompt"
+            assert page._btn_write.isEnabled(), "le bouton signale qu'il reste à inscrire"
+            page._btn_write.click()
+            assert len(saved) == 1 and saved[0]["id"] == "P3" and shot["seedance_prompt"] != written
+            assert other["seedance_prompt"] == "[🎬 ACTION]\nAutre.", "un plan à la fois"
+            # menu Action : tous les plans
+            page._write_all_now()
+            assert saved[-1]["id"] == "P4" and "Caméra à" in other["seedance_prompt"]
+            assert [a.text() for a in page._btn_action.menu().actions()] is not None
+            # rafraîchir l'onglet sur le même plan ne recharge jamais la vue (ni temps, ni point de vue)
+            sent.clear()
+            page.refresh()
+            assert sent == [], "même plan : rien n'est renvoyé à la vue"
+            # durée changée dans la frise : c'est la durée du plan au storyboard
+            page._on_page_event({"kind": "loaded", "duration": 6})
+            page.timeline.spin_dur.setMaximum(30)
+            page.timeline.spin_dur.setValue(22)
+            assert shot["duration"] == 22 and saved[-1]["duration"] == 22
+            assert page._scene["pandora"]["duration"] == 22
+            page.deleteLater()
+        finally:
+            STG._dir, SB.save_shot, SB.list_shots, SB.list_versions = old_dir, old_save, old_list, old_ver
+    # ── 5. Point de vue : plus de vue caméra enregistrée, ni rouverte seule ──
+    assert '"look"' not in inspect.getsource(S.seed_from_shot)
+    with open(os.path.join(root, "scene3d_web", "app.js"), encoding="utf-8") as f:
+        js = f.read()
+    k = js.index("bridge.loadScene.connect")
+    assert "lookThrough" not in js[k:js.index("bridge.command.connect")], "ouvrir un plan ne passe jamais en vue caméra"
+    for op in ("case 'key.move':", "function moveKey(id, from, to)", "function objectMoved(id, changes)"):
+        assert op in js, op
+    with open(os.path.join(root, "scene3d_web", "characters.js"), encoding="utf-8") as f:
+        ch = f.read()
+    assert "s.moving && followsPath(o)" in ch, "un travelling ne tourne pas la caméra"
+    assert "this.vp.draggingObjectId !== o.id" in ch, "la poignée garde l'objet qu'on déplace"
+    # ── 6. Fenêtre : prête pour la vue 3D avant son premier affichage (pas de fermeture-ouverture) ──
+    import ui.pandora_window as PW
+    src = inspect.getsource(PW.PandoraWindow.__init__)
+    assert "prepare_window(self)" in src and src.index("prepare_window(self)") < src.index("_build_global_topbar")
+    assert "QQuickWidget" in inspect.getsource(W.prepare_window)
+    from PyQt6.QtWidgets import QWidget
+    w = QWidget()
+    W.prepare_window(w)
+    assert not hasattr(w, "_scene3d_surface"), "sans écran : aucune surface préparée"
+    w.deleteLater()
+    with open(os.path.join(root, "pandora.spec"), encoding="utf-8") as f:
+        assert "PyQt6.QtQuickWidgets" in f.read(), "le témoin Qt Quick doit être dans l'installeur"
+    # ── 6 bis. Mouvement du storyboard en keyframes, action puis reprise du trajet, raccourcis ──
+    cam = {"id": "c", "type": "camera-tripod", "position": [0, 0, 5], "rotation": [0, _m.pi, 0], "props": {"lens": 1.45}}
+    sc = {"objects": [cam], "pandora": {"shot_camera": "c", "duration": 5.0, "tracks": {}}}
+    assert S.apply_camera_movement({"camera_movement": "Travelling arrière"}, sc) is True
+    tk = sc["pandora"]["tracks"]["c"]
+    assert len(tk) == 2 and tk[1]["t"] == 5.0 and tk[1]["p"][2] > tk[0]["p"][2], "recule : s'éloigne dans l'axe"
+    assert "travelling arrière" in P.camera_motion_summary(sc), P.camera_motion_summary(sc)
+    assert S.apply_camera_movement({"camera_movement": "Travelling arrière"}, sc) is False
+    assert S.apply_camera_movement({"camera_movement": "Fixe"}, sc) is True and "c" not in sc["pandora"]["tracks"]
+    sc["pandora"]["tracks"]["c"] = [{"t": 0, "p": [0, 0, 5]}, {"t": 2, "p": [3, 0, 5]}]
+    assert S.apply_camera_movement({"camera_movement": "Travelling avant"}, sc) is False, "retouchée à la main : elle prime"
+    assert sc["pandora"]["tracks"]["c"][1]["p"][0] == 3
+    sc2 = {"objects": [dict(cam), {"id": "p", "type": "person-man", "name": "Paul", "position": [0, 0, 0]}],
+           "pandora": {"shot_camera": "c", "duration": 6, "tracks": {"p": [
+               {"t": 0, "p": [0, 0, 0]}, {"t": 2, "p": [1, 0, 0], "action": "jab"}, {"t": 5, "p": [4, 0, 0]}]}}}
+    assert "lance un jab, puis" in P.motion_summary(sc2), P.motion_summary(sc2)
+    with open(os.path.join(root, "scene3d_web", "characters.js"), encoding="utf-8") as f:
+        ch2 = f.read()
+    assert "s.a.t + s.hold" in ch2 and "_clipDur" in ch2, "l'action finie, le personnage repart vers la keyframe suivante"
+    for needle in ("preserveDrawingBuffer: true", "case 'frame.person':", "case 'play.toggle':", "case 'key.delete':",
+                   "vp.addEventListener('context'", "e.code === 'Space'", "e.key === 'Delete'", "p3-aim"):
+        assert needle in js, needle
+    assert "CalculateNativeWinOcclusion" in inspect.getsource(W.register_scheme)
+    for n in ("cube", "view-top", "view-front", "view-side", "camera", "move", "rotate"):
+        assert os.path.isfile(os.path.join(root, "assets", "icons", "vue3d", n + ".svg")), n
+    # ── 7. Export : ffmpeg sans figer l'interface ; installeur sans vidéo YouTube ──
+    import ui.previs_render as PR
+    src = inspect.getsource(PR)
+    assert "QProcess" in src and "subprocess" not in src
+    with open(os.path.join(root, "pandora_setup.iss"), encoding="utf-8") as f:
+        iss = f.read()
+    assert "youtu" not in iss and "WatchPresentation" not in iss
+    from core.i18n import _FR_TO_EN
+    for s in ("Inscrire dans le storyboard", "Inscrire toutes les modifications dans le storyboard",
+              "🎬  Exporter la vidéo", "▶  Voir la vidéo exportée", "— Choisir un élément —",
+              "Modifications à inscrire dans le storyboard", "Le storyboard est à jour"):
+        assert s in _FR_TO_EN, s
 
 
 if __name__ == "__main__":

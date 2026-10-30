@@ -1,0 +1,55 @@
+PANDORA
+Copyright 2026 22eme Arkane — Matthieu Terrien
+
+This product is licensed under the Apache License, Version 2.0 (see LICENSE).
+Versions published before 2.7.0 remain available under the GNU GPL v3, the
+license they were released under.
+
+------------------------------------------------------------------------------
+Included source code with its own license
+------------------------------------------------------------------------------
+
+aiodos_client/   AIODOS client — Copyright 2026 22eme Arkane
+                 Apache License 2.0 (aiodos_client/LICENSE, aiodos_client/NOTICE)
+
+orakle_engine/   recorder.py and transcriber.py from ORAKLE (voice dictation)
+                 Copyright 2026 22eme Arkane
+                 GNU GPL v3 (orakle_engine/LICENSE, orakle_engine/NOTICE)
+
+arklight_engine/ 3D view, lighting plan and shared modules from ARKLIGHT PC
+                 (lighting simulator) — Copyright 2026 22eme Arkane
+                 Included in PANDORA under the Apache License 2.0 by decision of
+                 their author (29/10/2026). Fixture DMX profiles derived from the
+                 Open Fixture Library (MIT). three.js (MIT, see
+                 arklight_engine/vendor/three/LICENSE).
+
+scene3d_web/characters/
+                 Mannequins and animations from Quaternius' Universal Animation
+                 Library 1 & 2 (Standard), CC0 1.0 — public domain (see
+                 scene3d_web/characters/SOURCE.md). The playback principle of the
+                 animated characters follows ArtCraft's CharacterAnimationManager
+                 (storytold/artcraft, MIT or Apache 2.0).
+
+------------------------------------------------------------------------------
+Third-party components bundled in the installers
+------------------------------------------------------------------------------
+
+The Windows and macOS installers also contain third-party software, each under
+its own license, among which:
+
+  PyQt6 (Riverbank Computing) ........ GNU GPL v3
+  Qt 6 (The Qt Company) .............. GNU LGPL v3
+  Qt WebEngine / Chromium ............ GNU LGPL v3 / BSD and others
+  FFmpeg / FFprobe ................... GNU GPL (gyan.dev "essentials" build)
+  faster-whisper, CTranslate2 ........ MIT
+  ONNX Runtime ....................... MIT
+  PyAV ............................... BSD
+  NumPy, SciPy ....................... BSD
+  librosa ............................ ISC
+  sounddevice / PortAudio ............ MIT
+  Pillow ............................. HPND
+  anthropic, fal-client, httpx ....... MIT / Apache 2.0 / BSD
+
+Because PyQt6 and FFmpeg are GPL-licensed, the installed application as a whole
+is distributed in compliance with the GNU GPL v3 for those parts; the Apache
+License 2.0 applies to PANDORA's own source code.

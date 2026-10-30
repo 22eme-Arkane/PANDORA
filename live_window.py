@@ -29,6 +29,7 @@ from PyQt6.QtGui import QIcon, QShortcut, QKeySequence, QColor, QPixmap, QImage
 
 from ui.styles import CP, PANDORA_STYLESHEET
 from ui.icons import app_icon, load_icon, dim
+from ui import themes
 from ui.assistant_panel import AssistantPanel, AssistantToggleStrip
 from core.i18n import get_lang, set_lang, retranslate_widget, translate, tr
 
@@ -80,9 +81,10 @@ class _LiveNavItem(QWidget):
 
         # Icône : PNG des logos Cinéma si disponible (logos dédiés Live à venir),
         # sinon repli sur le glyphe texte.
-        # Onglet ACTIF : vert « Nous contacter » (#25d366) à 75 % d'opacité —
-        # remplace l'ancienne pastille accent (demande Matthieu 2026-07-23,
-        # parité pandora_window.NavItem).
+        # Onglet ACTIF : couleur du thème à 75 % d'opacité — le vert « Nous
+        # contacter » (#25d366) en Nuit bleue (demande Matthieu 2026-07-23,
+        # parité pandora_window.NavItem). Badges déjà aux teintes du thème
+        # (load_icon, 27/10/2026).
         self._use_png = False
         self._pix_on = self._pix_off = self._pix_accent = None
         if icon_file:
@@ -91,7 +93,7 @@ class _LiveNavItem(QWidget):
                 self._use_png = True
                 self._pix_on     = _pix
                 self._pix_off    = dim(_pix, 0.55)
-                self._pix_accent = dim(_neon_foreground(_pix, "#25d366"), 0.75)
+                self._pix_accent = dim(_neon_foreground(_pix, themes.nav_active()), 0.75)
 
         self._ico = QLabel("" if self._use_png else icon)
         self._ico.setFixedSize(24, 24)
@@ -113,18 +115,18 @@ class _LiveNavItem(QWidget):
 
     def _apply(self, active: bool):
         if active:
-            # Plus de pastille : libellé + pictogramme intérieur en VERT
-            # « Nous contacter » (#25d366) à 75 % d'opacité (2026-07-23).
+            # Plus de pastille : libellé + pictogramme intérieur à la couleur
+            # d'onglet actif du thème, 75 % d'opacité (2026-07-23).
             self._bg("background:transparent;border:1px solid transparent;")
             if self._use_png:
                 self._ico.setPixmap(self._pix_accent)
             else:
                 self._ico.setStyleSheet(
-                    "color:rgba(37,211,102,0.75);font-size:14px;"
+                    f"color:{themes.nav_rgba(0.75)};font-size:14px;"
                     "background:transparent;border:none;"
                 )
             self._lbl.setStyleSheet(
-                "color:rgba(37,211,102,0.75);font-size:10px;font-weight:700;"
+                f"color:{themes.nav_rgba(0.75)};font-size:10px;font-weight:700;"
                 "letter-spacing:0.3px;background:transparent;border:none;"
             )
         else:
@@ -192,6 +194,8 @@ _NAV_ITEMS = [
     # resolume/, api/resolume_push.py restent intacts pour un retour futur.
     ("◈", "Image IA",            "image_ia",    "draw_to_video.png"),
     ("✦", "Studio IA",           "studio",      "seedance.png"),
+    # AIODOS (27/10/2026, parité Cinéma) : machines, travaux, réglages.
+    ("✺", "AIODOS",              "aiodos",      "aiodos.png"),
     ("⚙", "Paramètres",          "settings",    "settings.png"),
 ]
 
@@ -228,68 +232,82 @@ class _LiveSidebar(QWidget):
             f.setStyleSheet("background:rgba(255,255,255,0.08);")
             return f
 
-        # ── Gauche : sélecteur de langue (drapeaux) ───────────────────────────
-        self._lang_btns: dict[str, QPushButton] = {}
-        _flag_map = {"fr": "Fr.png", "en": "En.png"}
-        _cur_lang = get_lang()
-        for code, flag_file in _flag_map.items():
-            btn = QPushButton()
-            btn.setFixedSize(32, 32)
-            btn.setCursor(Qt.CursorShape.PointingHandCursor)
-            btn.setToolTip("Français" if code == "fr" else "English")
-            _flag_pix = load_icon(flag_file, 22)
-            if not _flag_pix.isNull():
-                btn.setIcon(QIcon(_flag_pix))
-                btn.setIconSize(QSize(22, 22))
-                btn.setText("")
-            else:
-                btn.setText("FR" if code == "fr" else "EN")
-            self._apply_lang_btn_style(btn, code == _cur_lang)
-            btn.clicked.connect(lambda checked, c=code: self.lang_change_requested.emit(c))
-            lay.addWidget(btn)
-            self._lang_btns[code] = btn
-
-        lay.addSpacing(4)
-        lay.addWidget(_vsep())
-        lay.addStretch()
-
-        # ── Centre : items de navigation (séparateurs verticaux entre groupes).
-        # Paramètres est extrait du groupe central : il vit en BAS À DROITE.
+        # ── Trois zones (parité Cinéma, montage de Matthieu 27/10/2026) ───────
+        #   gauche : vide (le Live n'a pas de « Coût du projet ») · centre : les
+        #   onglets, EXACTEMENT au milieu · droite : AIODOS | Paramètres.
+        # Drapeaux de langue → Paramètres → Général → Langue ; disquette retirée
+        # (Ctrl+S, et la fermeture propose d'enregistrer).
+        self._lang_btns: dict[str, QPushButton] = {}     # (plus de drapeaux ici)
         self._items: dict[str, _LiveNavItem] = {}
-        _settings_entry = None
+
+        left = QWidget()
+        left.setStyleSheet("background:transparent;")
+        QHBoxLayout(left).setContentsMargins(0, 0, 0, 0)
+
+        center = QWidget()
+        center.setStyleSheet("background:transparent;")
+        cl = QHBoxLayout(center)
+        cl.setContentsMargins(0, 0, 0, 0)
+        cl.setSpacing(4)
+        _side_entries = {}
         _pending_sep = False
         for entry in _NAV_ITEMS:
             if entry is None:
                 _pending_sep = True
                 continue
             icon, label, key, icon_file = entry
-            if key == "settings":
-                _settings_entry = entry
+            if key in ("settings", "aiodos"):      # posés à droite
+                _side_entries[key] = entry
                 continue
             if _pending_sep and self._items:
-                lay.addSpacing(4)
-                lay.addWidget(_vsep())
-                lay.addSpacing(4)
+                cl.addSpacing(4)
+                cl.addWidget(_vsep())
+                cl.addSpacing(4)
             _pending_sep = False
             item = _LiveNavItem(icon, translate(label), key, icon_file=icon_file)
             item.nav_clicked.connect(self.nav_clicked)
             self._items[key] = item
-            lay.addWidget(item)
+            cl.addWidget(item)
 
-        lay.addStretch()
-        lay.addWidget(_vsep())
-        lay.addSpacing(4)
-
-        # ── Droite : Paramètres tout au bord ──────────────────────────────────
-        # (Manuel d'utilisation et Nous contacter vivent dans la topbar, en
-        # haut à gauche)
-        if _settings_entry:
-            icon, label, key, icon_file = _settings_entry
-            lay.addSpacing(4)
+        right = QWidget()
+        right.setStyleSheet("background:transparent;")
+        rl = QHBoxLayout(right)
+        rl.setContentsMargins(0, 0, 0, 0)
+        rl.setSpacing(4)
+        rl.addStretch(1)
+        for k in ("aiodos", "settings"):
+            entry = _side_entries.get(k)
+            if entry is None:
+                continue
+            if k == "settings":
+                rl.addSpacing(4)
+                rl.addWidget(_vsep())
+                rl.addSpacing(4)
+            icon, label, key, icon_file = entry
             item = _LiveNavItem(icon, translate(label), key, icon_file=icon_file)
             item.nav_clicked.connect(self.nav_clicked)
             self._items[key] = item
-            lay.addWidget(item)
+            rl.addWidget(item)
+
+        side = max(left.sizeHint().width(), right.sizeHint().width())
+        left.setMinimumWidth(side)
+        right.setMinimumWidth(side)
+        lay.addWidget(left, 1)
+        lay.addWidget(center, 0)
+        lay.addWidget(right, 1)
+        self._left, self._center, self._right = left, center, right
+        self._center_w = center.sizeHint().width()
+
+    def resizeEvent(self, e):   # noqa: N802
+        super().resizeEvent(e)
+        # Côtés STRICTEMENT égaux : quand la place restante est impaire, le pixel en
+        # trop va au centre (même correction que la barre du Cinéma, 29/10/2026).
+        lay = self.layout()
+        m = lay.contentsMargins()
+        avail = self.width() - m.left() - m.right() - 2 * lay.spacing()
+        want = self._center_w + (avail - self._center_w) % 2
+        if self._center.minimumWidth() != want:
+            self._center.setMinimumWidth(want)
 
     @staticmethod
     def _apply_lang_btn_style(btn: QPushButton, active: bool):
@@ -382,7 +400,10 @@ class LiveWindow(QMainWindow):
         self._sidebar = _LiveSidebar()   # barre de navigation BASSE (taskbar)
         # Disquette de sauvegarde dans la barre basse, à droite des drapeaux de
         # langue et de leur séparateur (index 4 du layout — demande 2026-07-23).
-        self._sidebar.layout().insertWidget(4, self._btn_save_global)
+        # Disquette RETIRÉE de la barre (Matthieu 27/10/2026, parité Cinéma) :
+        # Ctrl+S et la fermeture enregistrent.
+        self._btn_save_global.setParent(self)
+        self._btn_save_global.hide()
         self._stack   = QStackedWidget()
         self._stack.setStyleSheet(f"background:{CP['bg0']};")
 
@@ -553,7 +574,7 @@ class LiveWindow(QMainWindow):
         _rlay.setSpacing(0)
         _rlay.setAlignment(Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignRight)
 
-        # ── Couche 1 : logo PANDORA centré ────────────────────────────────────
+        # ── Couche 1 : nom PANDORA centré ─────────────────────────────────────
         _center = QWidget()
         _center.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents)
         _center.setStyleSheet("background:transparent;")
@@ -562,27 +583,15 @@ class LiveWindow(QMainWindow):
         _clay.setSpacing(0)
         _clay.setAlignment(Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignHCenter)
 
-        badge_lbl = QLabel()
-        badge_lbl.setFixedSize(44, 44)
-        badge_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        badge_lbl.setStyleSheet("background:transparent;border:none;")
-        pix_badge = app_icon().pixmap(44, 44)
-        if not pix_badge.isNull():
-            badge_lbl.setPixmap(pix_badge)
-        else:
-            badge_lbl.setText("P")
-            badge_lbl.setStyleSheet(
-                f"background:qlineargradient(x1:0,y1:0,x2:1,y2:1,"
-                f"stop:0 {CP['accent']},stop:1 {CP['accent2']});"
-                f"border-radius:10px;color:#07080f;font-size:20px;font-weight:900;"
-            )
-        _clay.addWidget(badge_lbl)
-        _clay.addSpacing(10)
-
+        # Le nom SEUL, centré (27/10/2026 : « on enlèvera le logo et on gardera
+        # juste PANDORA centré ») — le logo vit dans l'icône de la fenêtre.
+        # padding-left = l'espacement des lettres, ajouté aussi après la
+        # dernière : sans lui le mot penche de 3 px vers la gauche.
         title_lbl = QLabel("PANDORA")
+        title_lbl.setObjectName("PandoraTitle")
         title_lbl.setStyleSheet(
             f"color:{CP['text_primary']};font-size:15px;font-weight:800;"
-            f"letter-spacing:3px;background:transparent;border:none;"
+            f"letter-spacing:3px;padding-left:3px;background:transparent;border:none;"
         )
         _clay.addWidget(title_lbl)
 
@@ -818,6 +827,7 @@ class LiveWindow(QMainWindow):
             "vehicules":   VehiculesLivePage,
             "image_ia":    TabImage,
             "studio":      LiveStudioWidget,
+            "aiodos":      self._make_page_aiodos,
             "settings":    self._make_page_settings,
         }
         # ── Contrôleur Resolume : RETIRÉ pour le moment (demande Matthieu
@@ -867,10 +877,16 @@ class LiveWindow(QMainWindow):
         page.sound_to_studio.connect(self._open_sound_design)
         return page
 
+    def _make_page_aiodos(self):
+        from ui.page_aiodos import PageAiodos
+        return PageAiodos()
+
     def _make_page_settings(self):
         from ui.page_live_settings import PageLiveSettings
         settings = PageLiveSettings()
         settings.manual_requested.connect(self._on_manual)
+        if hasattr(settings, "lang_change_requested"):     # Langue (27/10/2026)
+            settings.lang_change_requested.connect(self._on_lang_change)
         # Paramètres pleine largeur (2026-07-23, parité Cinéma) : la barre de
         # défilement est collée au bord DROIT de la fenêtre ; le centrage du
         # contenu (max 1360) est géré À L'INTÉRIEUR de PageLiveSettings.
