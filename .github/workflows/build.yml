@@ -102,9 +102,10 @@ jobs:
           pip install -r requirements.txt pyinstaller
 
       - name: ffmpeg (binaires statiques macOS)
+        # evermeet.cx a fermé son adresse « getrelease » (410, octobre 2026)
         run: |
-          curl -L -o ffmpeg.zip  "https://evermeet.cx/ffmpeg/getrelease/ffmpeg/zip"
-          curl -L -o ffprobe.zip "https://evermeet.cx/ffmpeg/getrelease/ffprobe/zip"
+          curl -fL -o ffmpeg.zip  "https://ffmpeg.martin-riedl.de/redirect/latest/macos/arm64/release/ffmpeg.zip"
+          curl -fL -o ffprobe.zip "https://ffmpeg.martin-riedl.de/redirect/latest/macos/arm64/release/ffprobe.zip"
           unzip -o ffmpeg.zip
           unzip -o ffprobe.zip
           chmod +x ffmpeg ffprobe
