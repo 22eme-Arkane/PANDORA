@@ -155,6 +155,23 @@ def _first_error(body) -> str:
     return ""
 
 
+def edit_task(model_air: str, prompt: str, video_url: str, frame_urls: list[str] | None = None) -> dict:
+    """Tâche d'ÉDITION d'un clip (Runway Aleph 2.0 : `runway:aleph@2.0`, relu le 14/11/2026 sur
+    runware.ai/docs/models/runway-aleph-2-0) : pas de durée ni de résolution — celles du clip
+    source (2–30 s, ≤ 32 Mio) ; jusqu'à 5 images-clés (la 1re = première image)."""
+    inputs: dict = {"video": video_url}
+    frames = [u for u in (frame_urls or []) if u][:5]
+    if len(frames) == 1:
+        inputs["frameImages"] = [{"image": frames[0], "frame": "first"}]
+    elif len(frames) == 2:
+        inputs["frameImages"] = [{"image": frames[0], "frame": "first"}, {"image": frames[1], "frame": "last"}]
+    elif frames:
+        inputs["frameImages"] = list(frames)
+    return {"taskType": "videoInference", "taskUUID": str(uuid.uuid4()), "model": model_air,
+            "positivePrompt": (prompt or "")[:1000], "outputFormat": "MP4",
+            "deliveryMethod": "async", "includeCost": True, "inputs": inputs}
+
+
 def run(mode: str, model: str, args: dict, api_key: str,
         emit_progress, is_cancelled) -> dict:
     """Crée la tâche chez Runware puis attend le résultat.
@@ -162,7 +179,11 @@ def run(mode: str, model: str, args: dict, api_key: str,
     Rend le MÊME format que le résultat fal de run_real :
     {"request_id", "video": {"url"}, "seed", "cost_usd"}. Lève RuntimeError
     avec un message humain en cas d'échec."""
-    task = build_task(mode, model, args)
+    return run_task(build_task(mode, model, args), api_key, emit_progress, is_cancelled)
+
+
+def run_task(task: dict, api_key: str, emit_progress, is_cancelled) -> dict:
+    """Envoie une tâche Runware déjà construite et attend son résultat (même format que run)."""
     task_uuid = task["taskUUID"]
     emit_progress(14, "Envoi à Runware…")
     try:

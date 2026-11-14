@@ -62,6 +62,18 @@ LIPSYNC_ENGINES: dict[str, dict] = {
                    "name": "Kling Lipsync", "price": "~$0.84/min", "tag": "2026 · clips de 2 à 10 s"},
     "latentsync": {"endpoint": "fal-ai/latentsync",          "name": "LatentSync", "price": "$0.20 / clip",
                    "tag": "éco (2025) · jusqu'à 40 s"},
+    # Ajoutés le 14/11/2026 (fiches fal relues) : remplacer la voix d'un plan déjà tourné.
+    # HeyGen v3 : « replace or dub audio on an existing video » ; durée calée sur l'audio.
+    "heygen-precision": {"endpoint": "fal-ai/heygen/v3/lipsync/precision", "name": "HeyGen v3 Precision",
+                         "price": "$6/min", "tag": "2026 · doublage d'un plan tourné, haute précision",
+                         "args": {"enable_dynamic_duration": False}},
+    "heygen-speed": {"endpoint": "fal-ai/heygen/v3/lipsync/speed", "name": "HeyGen v3 Speed",
+                     "price": "$3/min", "tag": "2026 · doublage rapide",
+                     "args": {"enable_dynamic_duration": False}},
+    # Sync React-1 en mode « lips » : seulement les lèvres, le reste du visage bouge à peine.
+    "react1-lips": {"endpoint": "fal-ai/sync-lipsync/react-1", "name": "Sync React-1 · lèvres seules",
+                    "price": "$10/min", "tag": "2026 · retouche minimale du visage · ≤ 15 s",
+                    "args": {"model_mode": "lips", "emotion": "neutral"}, "max_s": 15},
 }
 
 
@@ -72,7 +84,8 @@ def engine_label(key: str) -> str:
     return f"{e['name']} · {e['price']}" + (f" — {tag}" if tag else "")
 # Ordre = du plus cher au plus économique (VEED se place entre Sync 2 Pro et
 # Sync 2 : 0,07 $/s ≈ 4,20 $/min ; PixVerse 0,04 $/s ; Kling 0,014 $/s).
-LIPSYNC_ENGINE_ORDER = ["sync2pro", "sync3", "veed2", "sync2", "pixverse", "kling", "latentsync"]
+LIPSYNC_ENGINE_ORDER = ["sync2pro", "heygen-precision", "react1-lips", "sync3", "heygen-speed",
+                        "veed2", "sync2", "pixverse", "kling", "latentsync"]
 LIPSYNC_DEFAULT = "sync2pro"
 
 
@@ -297,12 +310,21 @@ class LipSyncWorker(QThread):
 
         # ── 3. Appel du moteur lip-sync choisi ─────────────────────────────────
         _eng = LIPSYNC_ENGINES.get(self._engine) or LIPSYNC_ENGINES[LIPSYNC_DEFAULT]
+        _local = self._video_url if os.path.isfile(self._video_url or "") else ""
+        if _eng.get("max_s") and _local:
+            from core.video_utils import video_duration_s
+            _d = video_duration_s(_local) or 0
+            if _d > _eng["max_s"] + 0.05:
+                self.failed.emit(f"{_eng['name']} n'accepte que {_eng['max_s']} s au plus (ce clip : "
+                                 f"{_d:.1f} s) : choisissez HeyGen v3 ou Sync 2 Pro.")
+                return
         self.progress.emit(35, f"Synchronisation labiale ({_eng['name']})…")
         result = fal_client.subscribe(
             lipsync_endpoint(self._engine),
             arguments={
                 "video_url": video_url,
                 "audio_url": audio_url,
+                **(_eng.get("args") or {}),     # réglages propres au moteur (mode lèvres…)
             },
             with_logs=False,
         )

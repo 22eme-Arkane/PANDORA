@@ -1225,6 +1225,12 @@ class TabDavinciEdit(QScrollArea):
         self._cb_model.addItem(
             translate("Changer le décor · acteurs intacts (détourage + recomposition)"),
             "decor-swap")
+        # Synchro labiale SEULE (14/11/2026) : un plan déjà généré, revoicé en français, dont
+        # les lèvres ne collent plus. Rien n'est régénéré : le moteur de lèvres choisi dans
+        # RENDU & AUDIO recale la bouche sur le son DU CLIP (ou sur un fichier audio).
+        self._cb_model.addItem(
+            translate("Synchro labiale seule · garde l'image, cale les lèvres sur le son du clip"),
+            "lipsync-only")
         # Éditeurs vidéo cloud (api/video_edit, relevé fal.ai 24/09/2026) : Kling O3/O1
         # Edit (balises @Video1/@Image1 comme Seedance), Wan 2.7, HappyHorse,
         # Bernini-R, FLUX.3, Gemini Omni 1.1, Lucy — une table, un worker.
@@ -1273,6 +1279,30 @@ class TabDavinciEdit(QScrollArea):
         self._decor_opts = DecorSwapOptions()
         self._decor_opts.setVisible(False)
         body_params.addWidget(self._decor_opts)
+        # Acteurs du casting (14/11/2026) : leurs portraits partent comme photos de référence
+        # des moteurs qui remplacent les personnes (H3 Max Recast), dans l'ordre de gauche à
+        # droite à l'image — les acteurs gardent ainsi les visages de leurs fiches.
+        self._recast_cast: list[tuple[str, str]] = []      # (nom, portrait)
+        self._cast_row = QWidget()
+        _cr = QHBoxLayout(self._cast_row)
+        _cr.setContentsMargins(0, 0, 0, 0)
+        self._btn_cast = QPushButton(translate("Acteurs du casting…"))
+        self._btn_cast.setFixedHeight(28)
+        self._btn_cast.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._btn_cast.setToolTip(translate("Portraits envoyés comme photos de référence, de gauche à "
+                                            "droite à l'image (4 au plus)"))
+        self._btn_cast.clicked.connect(self._pick_cast)
+        self._btn_cast.setStyleSheet(
+            f"QPushButton{{background:{C['bg2']};color:{C['text_primary']};border:1px solid {C['border']};"
+            f"border-radius:6px;font-size:11px;padding:0 12px;}}"
+            f"QPushButton:hover{{border-color:{C['accent']};}}")
+        _cr.addWidget(self._btn_cast)
+        self._lbl_cast = QLabel(translate("Aucun acteur choisi : l'image de référence sert de photo."))
+        self._lbl_cast.setWordWrap(True)
+        self._lbl_cast.setStyleSheet(f"color:{C['text_dim']};font-size:10px;background:transparent;")
+        _cr.addWidget(self._lbl_cast, 1)
+        self._cast_row.setVisible(False)
+        body_params.addWidget(self._cast_row)
         # Bandeau du module externe (ComfyUI) sous le choix du moteur — même
         # composant que le Studio et l'onglet Moteurs (ui/external_banner).
         from ui.external_banner import ExternalBanner
@@ -1943,6 +1973,11 @@ class TabDavinciEdit(QScrollArea):
             fixed_res = False
             self._cb_ratio.setEnabled(False)
             options = [("720p", "720p"), ("540p", "540p"), ("360p", "360p")]
+        elif key == "lipsync-only":
+            # Seules les lèvres changent : définition, cadrage et durée du clip.
+            fixed_res = True
+            self._cb_ratio.setEnabled(False)
+            options = [("Définition du clip source", "source")]
         elif key == "decor-swap":
             # Recomposition locale : définition, cadence et durée du clip source.
             fixed_res = True
@@ -1979,6 +2014,9 @@ class TabDavinciEdit(QScrollArea):
             self._ref_compat_banner.setVisible(key in _TEXT_FALLBACK_ENGINES)
         if getattr(self, "_decor_opts", None) is not None:
             self._decor_opts.setVisible(key == "decor-swap")
+        if getattr(self, "_cast_row", None) is not None:
+            from api.video_edit import EDIT_ENGINES as _EDIT
+            self._cast_row.setVisible(bool((_EDIT.get(key) or {}).get("needs_refs")))
         self._refresh_engine_hint()
 
     def _get_aspect_ratio(self) -> str:
@@ -2149,8 +2187,9 @@ class TabDavinciEdit(QScrollArea):
             )
             return
         # Lèvres sur un FICHIER audio : il faut l'avoir choisi avant de payer.
-        if (getattr(self, "_cb_lipsync", None) is not None and self._cb_lipsync.isChecked()
-                and self._cb_lipsync.isEnabled()
+        _ls_only = self._get_model() == "lipsync-only"
+        if (getattr(self, "_cb_lipsync", None) is not None
+                and (_ls_only or (self._cb_lipsync.isChecked() and self._cb_lipsync.isEnabled()))
                 and getattr(self, "_lipsync_audio_combo", None) is not None
                 and self._lipsync_audio_combo.currentData() == "file"
                 and not self._lipsync_audio_file()):
@@ -2158,6 +2197,17 @@ class TabDavinciEdit(QScrollArea):
                 self, "Audio des lèvres manquant",
                 "Choisissez le fichier audio (doublage, voix) à synchroniser avec « Parcourir… », "
                 "ou repassez sur « Piste audio du clip source ».")
+            return
+        # Remplacer les acteurs (H3 Recast) : au moins une photo, sinon fal refuse — et
+        # rien ne doit partir avant (le clip serait téléversé pour rien).
+        from api.video_edit import EDIT_ENGINES as _EDIT_CHK
+        if (_EDIT_CHK.get(self._get_model()) or {}).get("needs_refs") and not self._recast_cast \
+                and not (self._global_ref_image and os.path.isfile(self._global_ref_image)) \
+                and not any(os.path.isfile(p) for p in self._per_clip_ref_images.values() if p):
+            QMessageBox.warning(
+                self, translate("Photos des acteurs manquantes"),
+                translate("Choisissez les acteurs avec « Acteurs du casting… » (de gauche à droite à "
+                          "l'image), ou une image de référence."))
             return
         # Changer le décor : le décor fourni doit exister AVANT le premier appel
         # payant (le détourage serait facturé pour rien).
@@ -2281,6 +2331,64 @@ class TabDavinciEdit(QScrollArea):
         (visage / fond) ; '' sinon (= flux Seedance / autre moteur normal)."""
         return {"pixverse_face": "person",
                 "pixverse_bg": "background"}.get(self._get_model(), "")
+
+    def _pick_cast(self):
+        """Choix des acteurs du casting, dans l'ordre où ils apparaissent de gauche à droite."""
+        from PyQt6.QtWidgets import QDialog, QDialogButtonBox, QListWidget, QListWidgetItem
+        from PyQt6.QtGui import QIcon, QPixmap
+        from core import casting
+        from ui.widgets import disable_default_buttons
+        chars = [c for c in casting.list_characters()
+                 if c.get("image_path") and os.path.isfile(c.get("image_path"))]
+        dlg = QDialog(self)
+        dlg.setWindowTitle(translate("Acteurs du casting"))
+        lay = QVBoxLayout(dlg)
+        lab = QLabel(translate("Cochez les acteurs DANS L'ORDRE où ils apparaissent à l'image, de "
+                               "gauche à droite (4 au plus). Leurs portraits remplaceront les "
+                               "personnes du clip."))
+        lab.setWordWrap(True)
+        lay.addWidget(lab)
+        lst = QListWidget()
+        lst.setIconSize(QSize(48, 48))
+        order = [n for n, _p in self._recast_cast]
+        for c in chars:
+            it = QListWidgetItem(QIcon(QPixmap(c["image_path"])), c.get("name", "?"))
+            it.setData(Qt.ItemDataRole.UserRole, c["image_path"])
+            it.setFlags(it.flags() | Qt.ItemFlag.ItemIsUserCheckable)
+            it.setCheckState(Qt.CheckState.Checked if c.get("name") in order else Qt.CheckState.Unchecked)
+            lst.addItem(it)
+        if not chars:
+            lst.addItem(translate("Aucun personnage du casting n'a de portrait."))
+
+        def _changed(it):
+            name = it.text()
+            if it.checkState() == Qt.CheckState.Checked and name not in order:
+                if len(order) >= 4:
+                    lst.blockSignals(True)
+                    it.setCheckState(Qt.CheckState.Unchecked)
+                    lst.blockSignals(False)
+                    return
+                order.append(name)
+            elif it.checkState() != Qt.CheckState.Checked and name in order:
+                order.remove(name)
+        lst.itemChanged.connect(_changed)
+        lay.addWidget(lst)
+        bb = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel)
+        bb.accepted.connect(dlg.accept)
+        bb.rejected.connect(dlg.reject)
+        lay.addWidget(bb)
+        disable_default_buttons(dlg)
+        if dlg.exec() != QDialog.DialogCode.Accepted:
+            return
+        paths = {lst.item(i).text(): lst.item(i).data(Qt.ItemDataRole.UserRole) for i in range(lst.count())}
+        self._set_cast([(n, paths[n]) for n in order if paths.get(n)])
+
+    def _set_cast(self, cast: list[tuple[str, str]]):
+        self._recast_cast = list(cast)[:4]
+        if self._recast_cast:
+            self._lbl_cast.setText(translate("De gauche à droite : ") + " · ".join(n for n, _p in self._recast_cast))
+        else:
+            self._lbl_cast.setText(translate("Aucun acteur choisi : l'image de référence sert de photo."))
 
     def _refresh_engine_hint(self):
         """Indice affiché quand le moteur Pixverse Swap (visage/fond) est sélectionné :
@@ -2438,6 +2546,18 @@ class TabDavinciEdit(QScrollArea):
                                  clip_idx, prise_idx)
             return
 
+        # Synchro labiale seule : rien n'est régénéré ; le clip lui-même part au moteur de
+        # lèvres avec son propre son (la voix française) ou le fichier choisi.
+        if self._get_model() == "lipsync-only":
+            self._gen_durations[clip_idx] = 0.0       # pas de recalage : le son est déjà au clip
+            total = len(self._queue)
+            self._progress.setValue(int(self._queue_pos / total * 100))
+            self._lbl_progress.setText(
+                f"[{self._queue_pos + 1}/{total}]  {clip.get('name', '?')}  — " + translate("synchro labiale"))
+            self._start_lipsync({"video_url": video_path, "local_path": video_path, "prompt": "",
+                                 "model": "lipsync-only", "credits_used": 0.0}, clip_idx, prise_idx)
+            return
+
         # Inject @Video1 so Seedance knows to reference the uploaded clip
         if has_video and "@Video1" not in prompt:
             prompt = f"@Video1 {prompt}" if prompt else "@Video1"
@@ -2579,6 +2699,10 @@ class TabDavinciEdit(QScrollArea):
             # ── Éditeur vidéo cloud (api/video_edit : Kling O3/O1, Wan 2.7…) ────
             from api.video_edit import VideoEditWorker, EDIT_ENGINES as _EDIT
             _raw = params.get("prompt", "")
+            if _EDIT[_model_key].get("needs_refs") and self._recast_cast:
+                # portraits du casting d'abord, dans l'ordre choisi (gauche → droite)
+                ref_images = [p for _n, p in self._recast_cast if os.path.isfile(p)] + \
+                    [p for p in ref_images if p not in {c[1] for c in self._recast_cast}]
             self._worker = VideoEditWorker({
                 "engine":       _model_key,
                 "engine_label": _EDIT[_model_key]["label"].split("  (")[0],
@@ -2758,6 +2882,10 @@ class TabDavinciEdit(QScrollArea):
         n_pr = self._spin_prises.value()
         card.set_status(f"P{prise_idx + 1}/{n_pr} ↷ ✗", C["red"])
         self._lbl_lipsync_stage.setVisible(False)
+        if seedance_result.get("model") == "lipsync-only":
+            # rien d'autre n'a été fait : c'est un échec, pas un résultat à importer
+            self._on_clip_failed(error, clip_idx, prise_idx)
+            return
         # Fallback : import Seedance result normalement
         self._import_and_advance(seedance_result, clip_idx, prise_idx)
 

@@ -76,13 +76,25 @@ each version's news shown right inside the application.
 
 ## Download
 
-**[⬇ Download PANDORA v2.7.0 for Windows](https://github.com/22eme-Arkane/PANDORA/releases/download/v2.7.0/PANDORA_Setup_2.7.0.exe)**
+**[⬇ Download PANDORA v2.7.1 for Windows](https://github.com/22eme-Arkane/PANDORA/releases/download/v2.7.1/PANDORA_Setup_2.7.1.exe)**
 
-**[⬇ Download PANDORA v2.7.0 for macOS](https://github.com/22eme-Arkane/PANDORA/releases/download/v2.7.0/PANDORA_2.7.0.dmg)** *(Apple Silicon — see [Installation](#installation) for the first launch)*
+**[⬇ Download PANDORA v2.7.1 for macOS](https://github.com/22eme-Arkane/PANDORA/releases/download/v2.7.1/PANDORA_2.7.1.dmg)** *(Apple Silicon — see [Installation](#installation) for the first launch)*
 
 All versions: [Releases](../../releases)
 
 🌐 **Official 22eme ARKANE website: [22eme-arkane.com](https://22eme-arkane.com)**
+
+---
+
+## What's new in v2.7.1
+
+**Re-sync the lips of a re-voiced shot, and replace actors with their photos.**
+
+- **Lip-sync only** in "Edit clips": the shot's picture is kept and the lips are re-synced
+  to the clip's own sound (a French dub, for example) or to an audio file.
+- **New lip-sync engines**: HeyGen v3 Precision and Speed, and Sync React-1 "lips only".
+- **H3 Max Recast** replaces the people in a clip with your actors' photos, sent straight
+  from the cast; **Lucy Restyle** and **Runway Aleph 2** (through Runware) join the editors.
 
 ---
 
@@ -922,7 +934,7 @@ per-engine mood prompts, same fixes.
 
 ### Windows
 
-1. Download `PANDORA_Setup_2.7.0.exe` from the link above and run it
+1. Download `PANDORA_Setup_2.7.1.exe` from the link above and run it
 2. If Windows shows *"Windows protected your PC"* (SmartScreen), click
    **More info** then **Run anyway** — the app is not code-signed yet
 3. Follow the installer and accept the Terms of Use
@@ -930,7 +942,7 @@ per-engine mood prompts, same fixes.
 
 ### macOS
 
-1. Download `PANDORA_2.7.0.dmg` from the link above
+1. Download `PANDORA_2.7.1.dmg` from the link above
 2. Open the DMG and drag **PANDORA** into **Applications**
 3. **First launch** — macOS will claim that *"PANDORA is damaged and can't be
    opened"*. **The app is not damaged** — macOS blocks apps that are not

@@ -210,7 +210,9 @@ def edition_cinema_only():
     # machines, IA texte « aiodos », section des Paramètres, case facultative de
     # l'installeur) et UNE entrée « ComfyUI » + ligne Gabarit / Calcul dans les
     # menus de moteurs.
-    assert VERSION.split("-")[0] == "2.7.0", f"version attendue 2.7.0[-suffixe], lue {VERSION}"
+    # Build 2.7.1 (2026-11-14) : synchro labiale seule, lèvres HeyGen v3 / React-1,
+    # H3 Max Recast avec les portraits du casting, Lucy Restyle, Aleph 2 via Runware.
+    assert VERSION.split("-")[0] == "2.7.1", f"version attendue 2.7.1[-suffixe], lue {VERSION}"
     # ── UN SEUL numéro de version dans tout le produit ────────────────────────
     # Chaque endroit qui recopie le numéro à la main finit par diverger : la 2.0.0
     # est partie en build avec une charte d'utilisation estampillée 1.3.5, un .app
@@ -4221,8 +4223,10 @@ def lipsync_rendu_audio_storyboard():
     # video_url + audio_url, donc interchangeable sans toucher au worker.
     # PixVerse et Kling Lipsync rejoignent le catalogue le 2026-09-24 (fiches
     # fal : video_url + audio_url, sortie video.url — même contrat).
-    assert set(ls.LIPSYNC_ENGINES) == {"sync2pro", "sync3", "veed2",
-                                       "sync2", "pixverse", "kling", "latentsync"}
+    # HeyGen v3 (Precision, Speed) et Sync React-1 « lèvres seules » le 2026-11-14 (fiches fal :
+    # video_url + audio_url + réglages propres passés par « args »).
+    assert set(ls.LIPSYNC_ENGINES) == {"sync2pro", "sync3", "veed2", "sync2", "pixverse", "kling",
+                                       "latentsync", "heygen-precision", "heygen-speed", "react1-lips"}
     assert ls.lipsync_endpoint("veed2") == "veed/lipsync/v2"
     assert ls.LipSyncWorker is ls.LatentSyncWorker  # rétro-compat « Modifier depuis DaVinci »
     # Upload audio robuste (non-ASCII + fallback data-URL) présent
@@ -16882,6 +16886,64 @@ def vue_3d_keyframes_et_inscription_30_10_2026():
     for s in ("Inscrire dans le storyboard", "Inscrire toutes les modifications dans le storyboard",
               "🎬  Exporter la vidéo", "▶  Voir la vidéo exportée", "— Choisir un élément —",
               "Modifications à inscrire dans le storyboard", "Le storyboard est à jour"):
+        assert s in _FR_TO_EN, s
+
+
+@test
+def modifier_clips_synchro_seule_et_recast_14_11_2026():
+    """Matthieu (14/11/2026) : un plan revoicé en français dont les lèvres ne collent plus doit
+    repartir SANS être régénéré — seule la synchro labiale, sur le son du clip ; nouveaux
+    éditeurs (H3 Max Recast avec les portraits du casting, Lucy Restyle, Aleph 2 via Runware)
+    et moteurs de lèvres (HeyGen v3, Sync React-1 « lèvres seules »). Rien ne part sur le réseau."""
+    import api.video_edit as VE
+    import api.lipsync as LS
+    import api.runware as RW
+    # ── 1. Éditeurs : contrats des fiches du 14/11/2026 ──
+    ep, args = VE.build_args("h3-max-recast", "", "https://v/clip.mp4", ["a", "b", "c", "d", "e"], "1080P")
+    assert ep == "minimax/h3-max/recast" and args["reference_image_urls"] == ["a", "b", "c", "d"], args
+    assert "prompt" not in args and args["resolution"] == "1080P", "prompt facultatif : pas de champ vide"
+    assert VE.EDIT_ENGINES["h3-max-recast"]["needs_refs"] and VE.price_table()["h3-max-recast"]["768P"] == 0.085
+    ep, args = VE.build_args("lucy-restyle", "make it noir", "https://v/c.mp4", [], "720p")
+    assert ep == "decart/lucy-restyle" and args["prompt"] == "make it noir"
+    t = RW.edit_task("runway:aleph@2.0", "add fog", "https://v/c.mp4", ["https://i/1.png", "https://i/2.png"])
+    assert t["model"] == "runway:aleph@2.0" and t["inputs"]["video"] == "https://v/c.mp4"
+    assert t["inputs"]["frameImages"] == [{"image": "https://i/1.png", "frame": "first"},
+                                          {"image": "https://i/2.png", "frame": "last"}]
+    assert "duration" not in t and "resolution" not in t, "Aleph : durée et définition du clip"
+    # ── 2. Lèvres : nouveaux moteurs et leurs réglages propres ──
+    for k in ("heygen-precision", "heygen-speed", "react1-lips"):
+        assert k in LS.LIPSYNC_ENGINES and k in LS.LIPSYNC_ENGINE_ORDER, k
+    assert LS.LIPSYNC_ENGINES["react1-lips"]["args"]["model_mode"] == "lips"
+    assert "**(_eng.get(\"args\") or {})" in inspect.getsource(LS.LipSyncWorker._run)
+    # ── 3. Onglet : synchro seule, aucune régénération, échec jamais importé comme résultat ──
+    from ui.tab_davinci_edit import TabDavinciEdit
+    tab = TabDavinciEdit()
+    keys = [tab._cb_model.itemData(i) for i in range(tab._cb_model.count())]
+    for k in ("lipsync-only", "h3-max-recast", "lucy-restyle", "aleph-2"):
+        assert k in keys, k
+    tab._cb_model.setCurrentIndex(keys.index("lipsync-only"))
+    assert not tab._cb_res.isEnabled() and tab._cb_res.currentData() == "source"
+    assert tab._cast_row.isHidden()
+    src = inspect.getsource(TabDavinciEdit._process_next)
+    a = src.index('if self._get_model() == "lipsync-only":')
+    assert a < src.index("@Video1") and a < src.index("GenerationWorker(params)"), \
+        "la synchro seule part AVANT toute génération"
+    assert '"model": "lipsync-only"' in src[a:a + 900] and "_start_lipsync" in src[a:a + 900]
+    failed = []
+    tab._on_clip_failed = lambda e, ci, pi: failed.append(e)
+    tab._import_and_advance = lambda *a: failed.append("IMPORT")
+    tab._clip_cards = [type("C", (), {"set_status": lambda *a: None})()]
+    tab._on_lipsync_failed({"model": "lipsync-only"}, 0, 0, "refus")
+    assert failed == ["refus"], failed
+    # ── 4. Acteurs du casting : ordre gauche → droite, 4 au plus ──
+    tab._cb_model.setCurrentIndex(keys.index("h3-max-recast"))
+    assert not tab._cast_row.isHidden()
+    tab._set_cast([("A", "a.png"), ("B", "b.png"), ("C", "c.png"), ("D", "d.png"), ("E", "e.png")])
+    assert [n for n, _p in tab._recast_cast] == ["A", "B", "C", "D"] and "A · B · C · D" in tab._lbl_cast.text()
+    assert "self._recast_cast" in src and "needs_refs" in inspect.getsource(TabDavinciEdit._start_queue)
+    tab.deleteLater()
+    from core.i18n import _FR_TO_EN
+    for s in ("Synchro labiale seule · garde l'image, cale les lèvres sur le son du clip", "Acteurs du casting…"):
         assert s in _FR_TO_EN, s
 
 

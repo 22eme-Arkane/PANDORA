@@ -1,3 +1,20 @@
+## 2.7.1 · 2026-11-14
+
+**Recaler les lèvres d'un plan revoicé, et remplacer les acteurs par leurs photos.**
+
+- **Synchro labiale seule.** Dans « Modifier des clips », le moteur « Synchro labiale
+  seule » garde l'image du plan et recale les lèvres sur le son du clip — une
+  post-synchro en français, par exemple — ou sur un fichier audio. Rien n'est
+  régénéré : seule la bouche change.
+- **Nouveaux moteurs de lèvres** : HeyGen v3 Precision et Speed, faits pour revoicer
+  un plan déjà tourné, et Sync React-1 « lèvres seules », qui touche le moins possible
+  au reste du visage (15 s au plus).
+- **H3 Max Recast** remplace les personnes d'un clip par les photos de vos acteurs, en
+  gardant le mouvement, la caméra, les coupes et le son. « Acteurs du casting… »
+  envoie leurs portraits, dans l'ordre où ils apparaissent de gauche à droite.
+- **Lucy Restyle** (Decart, 0,01 $/s) et **Runway Aleph 2** (via Runware : on retouche
+  une image, le clip suit) rejoignent les éditeurs de clips.
+
 ## 2.7.0 · 2026-10-27
 
 **PANDORA en noir, la dictée vocale d'ORAKLE dans tous les champs, un nouveau

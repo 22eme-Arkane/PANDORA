@@ -1,3 +1,19 @@
+## 2.7.1 · 2026-11-14
+
+**Re-sync the lips of a re-voiced shot, and replace actors with their photos.**
+
+- **Lip-sync only.** In "Edit clips", the "Lip-sync only" engine keeps the shot's
+  picture and re-syncs the lips to the clip's own sound — a French dub, for example —
+  or to an audio file. Nothing is regenerated: only the mouth changes.
+- **New lip-sync engines**: HeyGen v3 Precision and Speed, made to re-voice a shot
+  already filmed, and Sync React-1 "lips only", which touches the rest of the face as
+  little as possible (15 s at most).
+- **H3 Max Recast** replaces the people in a clip with photos of your actors, keeping
+  the motion, camera, cuts and sound. "Cast actors…" sends their portraits, in the
+  order they appear from left to right.
+- **Lucy Restyle** (Decart, $0.01/s) and **Runway Aleph 2** (through Runware: edit one
+  frame, the clip follows) join the clip editors.
+
 ## 2.7.0 · 2026-10-27
 
 **PANDORA in black, ORAKLE's voice dictation in every field, a new logo, your

@@ -7055,6 +7055,18 @@ _FR_TO_EN: dict[str, str] = {
     "Cadrer le personnage": "Frame the character",
     "＋ Caméra": "＋ Camera",
     "Ajouter une caméra sur pied ou un travelling": "Add a camera on a stand or a dolly",
+    # ── Modifier des clips : synchro seule, acteurs du casting (14/11/2026) ──
+    "Synchro labiale seule · garde l'image, cale les lèvres sur le son du clip": "Lip-sync only · keeps the picture, matches the lips to the clip's sound",
+    "Acteurs du casting…": "Cast actors…",
+    "Portraits envoyés comme photos de référence, de gauche à droite à l'image (4 au plus)": "Portraits sent as reference photos, left to right in the frame (4 at most)",
+    "Aucun acteur choisi : l'image de référence sert de photo.": "No actor chosen: the reference image is used as the photo.",
+    "Photos des acteurs manquantes": "Actor photos missing",
+    "Choisissez les acteurs avec « Acteurs du casting… » (de gauche à droite à l'image), ou une image de référence.": "Choose the actors with “Cast actors…” (left to right in the frame), or a reference image.",
+    "synchro labiale": "lip-sync",
+    "Acteurs du casting": "Cast actors",
+    "Cochez les acteurs DANS L'ORDRE où ils apparaissent à l'image, de gauche à droite (4 au plus). Leurs portraits remplaceront les personnes du clip.": "Tick the actors IN THE ORDER they appear in the frame, left to right (4 at most). Their portraits will replace the people in the clip.",
+    "Aucun personnage du casting n'a de portrait.": "No cast character has a portrait.",
+    "De gauche à droite : ": "Left to right: ",
 }
 
 

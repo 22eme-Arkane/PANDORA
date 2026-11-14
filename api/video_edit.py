@@ -19,6 +19,16 @@ mémoire « modifier-un-clip-audit ») :
     Edit (360p → 4K), Lucy Edit Pro (Decart).
 Écartés : Grok edit (rabaisse à 854×480, 8 s), Luma Ray 3.2 (5 s ou 10 s
 seulement), Gemini 1.0 (restriction EEE sur les vidéos téléversées).
+
+Ajoutés le 14/11/2026 (demande Matthieu : « se rapprocher de Genjutsu de Higgsfield », visages
+des acteurs), fiches relues le jour même :
+  H3 Max Recast (MiniMax, fal `minimax/h3-max/recast`) : remplace les personnes du clip par 1 à 4
+    photos — ordre gauche → droite —, garde mouvement, caméra, coupes et son. Avec les portraits
+    du CASTING, les acteurs gardent les visages de leurs fiches. 5–30 s, plans ≤ 15 s.
+  Lucy Restyle (Decart, fal) : restyle à 0,01 $/s (Lucy 2.5 / 2.6 n'existent qu'en flux WebRTC,
+    sans envoi de fichier : inutilisables ici).
+  Runway Aleph 2.0 — chez RUNWARE (`runway:aleph@2.0`, absent de fal) : on édite une image, le
+    clip suit ; jusqu'à 5 images-clés. Durée et définition : celles du clip.
 """
 
 from __future__ import annotations
@@ -114,6 +124,30 @@ EDIT_ENGINES: dict[str, dict] = {
         "res": [("720p", "720p"), ("480p", "480p")], "refs": 0, "tags": False,
         "fields": {"resolution": True, "extra": {"enhance_prompt": True}}, "limits": "",
     },
+    "h3-max-recast": {
+        "label": "H3 Max Recast · remplacer les acteurs par leurs photos  (~$0.17/s 1080p · $0.085/s 768p)",
+        "endpoint": "minimax/h3-max/recast",
+        "price": {"1080P": 0.17, "768P": 0.085},
+        "res": [("1080p", "1080P"), ("768p", "768P")], "refs": 4, "tags": False,
+        "needs_refs": True, "prompt_optional": True,
+        "fields": {"image_urls": "reference_image_urls", "resolution": True},
+        "limits": "5–30 s (plans ≤ 15 s) · 1 à 4 photos, de gauche à droite",
+    },
+    "lucy-restyle": {
+        "label": "Lucy Restyle (Decart)  (~$0.01/s · 720p)",
+        "endpoint": "decart/lucy-restyle",
+        "price": {"720p": 0.01},
+        "res": [("720p", "720p")], "refs": 0, "tags": False,
+        "fields": {"resolution": True, "extra": {"enhance_prompt": True}},
+        "limits": "jusqu'à 30 min",
+    },
+    "aleph-2": {
+        "label": "Runway Aleph 2 · via Runware  (~$0.28/s · images-clés)",
+        "provider": "runware", "model": "runway:aleph@2.0",
+        "endpoint": "runware · runway:aleph@2.0",          # informatif : pas d'appel fal
+        "price": {"source": 0.28}, "res": _SOURCE, "refs": 5, "tags": False,
+        "fields": {}, "limits": "2–30 s · ≤ 32 Mo · 1080p",
+    },
 }
 
 ENGINE_ORDER = list(EDIT_ENGINES)
@@ -144,7 +178,9 @@ def build_args(key: str, prompt_en: str, video_url: str, ref_urls: list[str],
     spec = EDIT_ENGINES[key]
     f = spec.get("fields") or {}
     prompt = prompt_en if spec.get("tags") else strip_tags(prompt_en)
-    args: dict = {"prompt": prompt, "video_url": video_url}
+    args: dict = {"video_url": video_url}
+    if prompt or not spec.get("prompt_optional"):
+        args["prompt"] = prompt
     refs = [u for u in (ref_urls or []) if u][: int(spec.get("refs") or 0)]
     endpoint = spec["endpoint"]
     if refs:
@@ -205,6 +241,12 @@ class VideoEditWorker(_CancellableWorker):
             res = str(self.params.get("resolution") or "source").split()[0]
             rate = self._spec["price"].get(res) or next(iter(self._spec["price"].values()))
             cost = round(dur * rate, 3) if dur else 0.0
+            n_refs = len([p for p in (self.params.get("ref_images") or []) if p and os.path.isfile(p)])
+            if self._spec.get("needs_refs") and not n_refs:
+                raise RuntimeError(f"{self._label} : il faut au moins une photo de référence "
+                                   "(portraits du casting ou image de référence).")
+            if self._spec.get("provider") == "runware":
+                return self._run_runware(key, dur, cost)
             if not key:
                 for pct, msg in [(20, f"{self._label} (mode mock)…"),
                                  (100, "Terminé — mode mock (aucune clé fal.ai)")]:
@@ -249,3 +291,39 @@ class VideoEditWorker(_CancellableWorker):
         except Exception as e:
             if not self._cancelled:
                 self.failed.emit(humanize_api_error(f"Erreur {self._label} : {e}"))
+
+    def _run_runware(self, fal_key: str, dur: float, cost: float) -> None:
+        """Aleph 2 chez Runware : le clip passe par le relais fal (Runware ne reçoit pas de
+        vidéo en ligne), les images-clés en data URI ; puis la tâche et son suivi."""
+        from api import runware
+        from api.distrib_upload import Uploader
+        from core.media_provider import provider_key
+        rw_key = provider_key("runware")
+        if not rw_key:
+            raise RuntimeError("Aleph 2 passe par Runware : saisissez la clé Runware dans "
+                               "Paramètres → Distributeurs.")
+        relay = None
+        if fal_key:
+            import fal_client
+            os.environ["FAL_KEY"] = fal_key
+            relay = lambda p: _fal_upload(fal_client, p)   # noqa: E731
+        up = Uploader("runware", rw_key, fal_relay=relay)
+        self.progress.emit(6, f"{self._label} — traduction du prompt…")
+        prompt_en = strip_tags(engine_prompt(self.params))
+        self.progress.emit(10, f"{self._label} — envoi du clip…")
+        video_url = up.send(self.params["video_path"])
+        frames = [up.send(p) for p in (self.params.get("ref_images") or []) if p and os.path.isfile(p)][:5]
+        task = runware.edit_task(self._spec["model"], prompt_en, video_url, frames)
+        result = runware.run_task(task, rw_key, self.progress.emit, lambda: self._cancelled)
+        url = _extract_video_url(result)
+        if not url:
+            if self._cancelled:
+                return
+            raise RuntimeError("Runware n'a pas rendu de vidéo.")
+        real = result.get("cost_usd")
+        cost = float(real) if isinstance(real, (int, float)) else cost
+        self.progress.emit(100, f"{self._label} ✓  ~${cost:.2f}")
+        if not self._cancelled:
+            self.finished.emit({"video_url": url, "url": url, "prompt": self.params.get("prompt", ""),
+                                "mode": "t2v", "model": self._key, "duration": dur,
+                                "resolution": "source", "credits_used": cost, "seed": 0})
